@@ -1,12 +1,15 @@
 import { useState } from 'react';
 import { FinGuide } from './FinGuide';
+import { readAsDataUrl, shrinkImage } from './Proof';
 import { api, type FinControls, type FinDesk } from '../api';
 import { Chip, ErrorNotice, dateLabel, useAction, useLoad, type Tone } from '../ui';
 
 /**
- * Daily cash pay (Fauzan, 2 Nov 2026): Finance lists the people paid in cash for the week or month; only the Finance
- * Director approves; Finance then prepares the cash and hands it to the COO or CEO, who pays each listed person and
- * gives back what was not paid; Finance counts and banks it.
+ * Daily cash pay (Fauzan, 2 Nov 2026): Finance lists the people paid each day for the week or month; only the Finance
+ * Director approves. Fauzan, 6 Nov 2026 ("Buffer also the same" as guard pay): each person is paid to a bank account or
+ * e-wallet; cash only when the Director Office lists them and the COO or CEO gives it, and only that cash is prepared
+ * and handed to the COO or CEO; a relative's or friend's account needs a consent letter stamped by a Commissioner for
+ * Oaths and approved by the COO.
  */
 
 type Co = FinDesk['companies'][number];
@@ -17,7 +20,7 @@ const rm = (n: number | null | undefined) => (n == null ? '–' : `RM${n.toLocal
 const STATUS: Record<List['status'], [Tone, string]> = {
   draft: ['neutral', 'Being listed'],
   to_approve: ['warn', 'With the FD'],
-  approved: ['info', 'Approved: prepare the cash'],
+  approved: ['info', 'Approved: pay out'],
   with_collector: ['info', 'With the COO / CEO'],
   returned: ['warn', 'To settle'],
   settled: ['ok', 'Settled'],
@@ -30,7 +33,21 @@ function useGo(companyId: string) {
   return { act, go };
 }
 
-type Person = { name: string; idLast4: string; work: string; dailyRate: number; days: string[] };
+type Acc = {
+  bank: string;
+  last4: string;
+  holder: 'own' | 'joint' | 'relative' | 'friend';
+  holderName: string;
+  relationship: string;
+  consentRef: string;
+  signedOn: string;
+  commissioner: string;
+  stampRef: string;
+  stampedOn: string;
+};
+type Person = { name: string; idLast4: string; work: string; dailyRate: number; days: string[]; pay: '' | 'bank' | 'ewallet' | 'cash'; account: Acc };
+const NO_ACC: Acc = { bank: '', last4: '', holder: 'own', holderName: '', relationship: '', consentRef: '', signedOn: '', commissioner: '', stampRef: '', stampedOn: '' };
+const PAY_LABEL: Record<string, string> = { bank: 'Bank', ewallet: 'E-wallet', cash: 'Cash (Director Office lists, COO or CEO gives)' };
 
 const datesBetween = (from: string, to: string) => {
   const out: string[] = [];
@@ -51,7 +68,7 @@ function parsePeople(t: string, days: string[]): Person[] {
     .filter(Boolean)
     .map((l) => {
       const [name, idLast4, work, rate] = l.split(/[;|\t]/).map((x) => x.trim());
-      return { name: name ?? '', idLast4: idLast4 ?? '', work: work ?? '', dailyRate: Number(rate) || 0, days };
+      return { name: name ?? '', idLast4: idLast4 ?? '', work: work ?? '', dailyRate: Number(rate) || 0, days, pay: '' as const, account: NO_ACC };
     });
 }
 
@@ -122,6 +139,7 @@ function PeopleEditor({ from, to, people, onChange }: { from: string; to: string
               None
             </button>
           </div>
+          <PayEditor i={i} p={p} set={(patch) => set(i, patch)} />
         </div>
       ))}
       <textarea
@@ -146,7 +164,7 @@ function PeopleEditor({ from, to, people, onChange }: { from: string; to: string
         <button
           className="btn btn-sm"
           disabled={!all.length}
-          onClick={() => onChange([...people, { name: '', idLast4: '', work: '', dailyRate: 0, days: all }])}
+          onClick={() => onChange([...people, { name: '', idLast4: '', work: '', dailyRate: 0, days: all, pay: '', account: NO_ACC }])}
         >
           Add one person
         </button>
@@ -158,10 +176,106 @@ function PeopleEditor({ from, to, people, onChange }: { from: string; to: string
   );
 }
 
+/**
+ * How one person is paid (Fauzan, 6 Nov 2026): bank or e-wallet (the name and the last 4 digits only), or cash, which
+ * the Director Office then lists and the COO or CEO gives. A relative's or friend's account needs the stamped letter.
+ */
+function PayEditor({ i, p, set }: { i: number; p: Person; set: (patch: Partial<Person>) => void }) {
+  const a = p.account;
+  const setA = (patch: Partial<Acc>) => set({ account: { ...a, ...patch } });
+  const n = p.name || `Person ${i + 1}`;
+  return (
+    <div className="stack" style={{ gap: 4, marginTop: 4 }}>
+      <div className="row" style={{ gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+        <select className="select" aria-label={`${n}: paid by`} value={p.pay} onChange={(e) => set({ pay: e.target.value as Person['pay'] })}>
+          <option value="">Paid by…</option>
+          <option value="bank">Bank account</option>
+          <option value="ewallet">E-wallet</option>
+          <option value="cash">Cash (needs the Director Office and the COO or CEO)</option>
+        </select>
+        {(p.pay === 'bank' || p.pay === 'ewallet') && (
+          <>
+            <input
+              className="input"
+              aria-label={`${n}: ${p.pay === 'ewallet' ? 'e-wallet' : 'bank'}`}
+              placeholder={p.pay === 'ewallet' ? "E-wallet (e.g. Touch 'n Go)" : 'Bank (e.g. Maybank)'}
+              value={a.bank}
+              onChange={(e) => setA({ bank: e.target.value })}
+            />
+            <input
+              className="input"
+              aria-label={`${n}: last 4 digits of the account`}
+              placeholder="Last 4 digits only"
+              maxLength={4}
+              inputMode="numeric"
+              style={{ width: 120 }}
+              value={a.last4}
+              onChange={(e) => setA({ last4: e.target.value.replace(/\D/g, '') })}
+            />
+            <select className="select" aria-label={`${n}: whose account`} value={a.holder} onChange={(e) => setA({ holder: e.target.value as Acc['holder'] })}>
+              <option value="own">Their own</option>
+              <option value="joint">Joint</option>
+              <option value="relative">A relative's (consent letter)</option>
+              <option value="friend">A friend's (consent letter)</option>
+            </select>
+          </>
+        )}
+        {p.pay === 'cash' && <span className="muted small">The Director Office lists them with the reason, then the COO or CEO decides.</span>}
+      </div>
+      {(p.pay === 'bank' || p.pay === 'ewallet') && (a.holder === 'relative' || a.holder === 'friend') && (
+        <div className="row" style={{ gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+          <input className="input" aria-label={`${n}: account holder's name`} placeholder="Account holder's name" value={a.holderName} onChange={(e) => setA({ holderName: e.target.value })} />
+          <input className="input" aria-label={`${n}: relationship`} placeholder="Relationship (e.g. father)" value={a.relationship} onChange={(e) => setA({ relationship: e.target.value })} />
+          <input className="input" aria-label={`${n}: consent letter reference`} placeholder="Consent letter ref." value={a.consentRef} onChange={(e) => setA({ consentRef: e.target.value })} />
+          <label className="small">
+            Signed <input className="input" type="date" aria-label={`${n}: date signed`} value={a.signedOn} onChange={(e) => setA({ signedOn: e.target.value })} />
+          </label>
+          <input
+            className="input"
+            aria-label={`${n}: Commissioner for Oaths`}
+            placeholder="Pesuruhjaya Sumpah (name)"
+            value={a.commissioner}
+            onChange={(e) => setA({ commissioner: e.target.value })}
+          />
+          <input className="input" aria-label={`${n}: stamp number`} placeholder="Stamp no." style={{ width: 120 }} value={a.stampRef} onChange={(e) => setA({ stampRef: e.target.value })} />
+          <label className="small">
+            Stamped <input className="input" type="date" aria-label={`${n}: date stamped`} value={a.stampedOn} onChange={(e) => setA({ stampedOn: e.target.value })} />
+          </label>
+          <span className="muted small">The COO approves the letter before the FD can approve the list.</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
 const toInput = (people: Person[], from: string, to: string) => {
   const all = datesBetween(from, to);
-  return people.map((p) => ({ ...p, days: p.days.filter((d) => all.includes(d)) }));
+  return people.map((p) => ({ ...p, days: p.days.filter((d) => all.includes(d)), pay: p.pay || undefined, account: p.pay === 'bank' || p.pay === 'ewallet' ? p.account : undefined }));
 };
+
+/** A saved person back into the editor (the account's last 4 digits and the consent letter, if any). */
+const fromSaved = (p: List['people'][number]): Person => ({
+  name: p.name,
+  idLast4: p.idLast4,
+  work: p.work,
+  dailyRate: p.dailyRate,
+  days: p.days,
+  pay: p.pay ?? '',
+  account: p.account
+    ? {
+        bank: p.account.bank,
+        last4: p.account.accountMasked.slice(-4),
+        holder: p.account.holder,
+        holderName: p.account.holderName ?? '',
+        relationship: p.account.relationship ?? '',
+        consentRef: p.account.consent?.docRef ?? '',
+        signedOn: p.account.consent?.signedOn ?? '',
+        commissioner: p.account.consent?.oaths.commissioner ?? '',
+        stampRef: p.account.consent?.oaths.stampRef ?? '',
+        stampedOn: p.account.consent?.oaths.stampedOn ?? '',
+      }
+    : NO_ACC,
+});
 
 export function DailyCash({ v, co }: { v: FinControls; co: Co }) {
   const d = v.dailyCash;
@@ -175,9 +289,11 @@ export function DailyCash({ v, co }: { v: FinControls; co: Co }) {
         <div>
           <h3>Daily cash pay</h3>
           <div className="muted small">
-            People who are paid in cash each day. Finance lists them for the week or month; only the Finance Director approves; then Finance prepares the cash
-            (up to the approved total) and hands it to the COO or CEO, who pays each person and gives back what was not paid. Daily rate up to{' '}
-            {rm(d.rules.maxDailyRate)}; settle within {d.rules.settleDays} days of the list ending.
+            People paid each day. Finance lists them for the week or month; only the Finance Director approves. Each person is paid to a bank account or
+            e-wallet, and Finance records each day's transfer. Cash only when the Director Office lists the person and the COO or CEO gives it; only that cash
+            is prepared and handed to the COO or CEO, who pays and gives back what was not paid. A relative's or friend's account needs a consent letter
+            stamped by a Pesuruhjaya Sumpah and approved by the COO. Cash daily rate up to {rm(d.rules.maxDailyRate)}; settle within {d.rules.settleDays}{' '}
+            days of the list ending.
           </div>
         </div>
         {!adding && (
@@ -247,9 +363,10 @@ function ListLine({ l, co, v }: { l: List; co: Co; v: FinControls }) {
   const { act, go } = useGo(co.companyId);
   const [mode, setMode] = useState<string | null>(null);
   const [f, setF] = useState({ comment: '', on: '', amount: 0, ref: '', toId: v.dailyCash.collectors[0]?.id ?? '', counted: 0, depositRef: '', line: '' });
-  const [people, setPeople] = useState<Person[]>(() =>
-    l.people.map((p) => ({ name: p.name, idLast4: p.idLast4, work: p.work, dailyRate: p.dailyRate, days: p.days })),
-  );
+  const [people, setPeople] = useState<Person[]>(() => l.people.map(fromSaved));
+  const [tx, setTx] = useState({ personId: '', day: '', ref: '' });
+  const transferOnly = l.cashTotal < 0.005 && l.withdrawals.length === 0;
+  const live = ['approved', 'with_collector', 'returned'].includes(l.status);
   const [tone, label] = STATUS[l.status];
   const step = (action: string, extra: Record<string, unknown>, msg: string) => go(action, { listId: l.id, ...extra }, msg).then((x) => x && setMode(null));
   const btn = (k: string, text: string) => (
@@ -278,7 +395,8 @@ function ListLine({ l, co, v }: { l: List; co: Co; v: FinControls }) {
             {l.returnedForChange && l.status === 'draft' ? `; returned by the FD: ${l.returnedForChange.comment}` : ''}
           </div>
           <div className="muted small">
-            Withdrawn {rm(l.withdrawn)} · handed over {rm(l.handed)} · paid {rm(l.paid)}
+            Paid by transfer {rm(l.transferred)} · cash approved {rm(l.cashTotal)} · withdrawn {rm(l.withdrawn)} · handed over {rm(l.handed)} · paid in cash{' '}
+            {rm(l.paid)}
             {l.giveBack ? ` · given back ${rm(l.giveBack.amount)}` : ''}
             {l.settled
               ? ` · counted ${rm(l.settled.counted)}, banked ${l.settled.depositRef}${l.settled.difference ? `, difference ${rm(l.settled.difference)}` : ''}`
@@ -290,6 +408,9 @@ function ListLine({ l, co, v }: { l: List; co: Co; v: FinControls }) {
           {l.state.lateSettle && <Chip tone="crit">Not settled by {dateLabel(l.state.settleBy)}</Chip>}
           {l.withdrawals.some((w) => !w.statement) && <Chip tone="warn">Withdrawal not yet on the statement</Chip>}
           {l.state.differenceOpen && <Chip tone="crit">Difference for the FD</Chip>}
+          {l.state.blocked > 0 && <Chip tone="warn">{l.state.blocked} not ready to approve</Chip>}
+          {l.state.transfersDue > 0 && <Chip tone="warn">{l.state.transfersDue} day(s) to pay by transfer</Chip>}
+          {l.state.noReceipt > 0 && <Chip tone="warn">{l.state.noReceipt} signed receipt(s) not uploaded</Chip>}
         </div>
       </div>
       {l.log.length > 0 && (
@@ -304,15 +425,33 @@ function ListLine({ l, co, v }: { l: List; co: Co; v: FinControls }) {
           </ul>
         </details>
       )}
-      <details className="small">
+      <details className="small" open={l.state.blocked > 0}>
         <summary>People and payments</summary>
         <ul>
           {l.people.map((p) => {
             const paid = l.payouts.filter((x) => x.personId === p.id);
+            const check = l.checks[p.id];
             return (
               <li key={p.id}>
                 {p.name} (…{p.idLast4}), {p.work}: {rm(p.dailyRate)} a day × {p.days.length} ({p.days.map((d) => d.slice(8)).join(', ')}) = {rm(p.amount)}; paid{' '}
                 {paid.length} day(s), {rm(paid.reduce((n, x) => n + x.amount, 0))}
+                {paid.some((x) => x.method === 'cash' || !x.method) ? ` (signed receipts ${paid.filter((x) => x.receipt).length} of ${paid.filter((x) => x.method === 'cash' || !x.method).length})` : ''}.{' '}
+                {p.pay === 'cash'
+                  ? 'Cash'
+                  : p.account
+                    ? `${p.pay === 'ewallet' ? 'E-wallet' : 'Bank'} ${p.account.bank} ${p.account.accountMasked}${p.account.holder !== 'own' ? ` (${p.account.holder}${p.account.holderName ? `: ${p.account.holderName}` : ''})` : ''}`
+                    : ''}
+                {check?.problem && (
+                  <>
+                    {' '}
+                    <Chip tone="warn">{check.problem}</Chip>
+                  </>
+                )}
+                {check?.flags.map((f, k) => (
+                  <div key={k} className="muted">
+                    {f}
+                  </div>
+                ))}
               </li>
             );
           })}
@@ -323,12 +462,14 @@ function ListLine({ l, co, v }: { l: List; co: Co; v: FinControls }) {
         {l.status === 'draft' && btn('submit', 'Send to the FD')}
         {l.status === 'to_approve' && btn('approve', 'Approve (FD)')}
         {l.status === 'to_approve' && btn('return', 'Return (FD)')}
-        {(l.status === 'approved' || l.status === 'with_collector') && l.withdrawn < l.total && btn('withdraw', 'Cash withdrawn')}
+        {live && l.state.transfersDue > 0 && btn('transfer', 'Paid by transfer')}
+        {(l.status === 'approved' || l.status === 'with_collector') && l.withdrawn < l.cashTotal && btn('withdraw', 'Cash withdrawn')}
         {(l.status === 'approved' || l.status === 'with_collector') && l.handed < l.withdrawn && btn('handover', 'Hand to COO / CEO')}
         {l.withdrawals.some((w) => !w.statement) && unmatchedOut.length > 0 && btn('bank', 'Found on the statement')}
         {l.status === 'returned' && !l.settled && btn('settle', 'Count and bank')}
+        {l.state.toClose && btn('settle', 'Close list')}
         {l.state.differenceOpen && btn('acceptDifference', 'Accept difference (FD)')}
-        {['draft', 'to_approve', 'approved'].includes(l.status) && l.withdrawals.length === 0 && btn('cancel', 'Cancel list')}
+        {['draft', 'to_approve', 'approved'].includes(l.status) && l.withdrawals.length === 0 && l.payouts.length === 0 && btn('cancel', 'Cancel list')}
       </div>
       {mode === 'edit' && (
         <div className="stack fin-gap fin-mt">
@@ -347,7 +488,39 @@ function ListLine({ l, co, v }: { l: List; co: Co; v: FinControls }) {
           </div>
         </div>
       )}
-      {mode && mode !== 'edit' && (
+      {mode === 'transfer' && (
+        <div className="row" style={{ gap: 6, flexWrap: 'wrap', marginTop: 6 }}>
+          <select className="select" aria-label="Person paid" value={tx.personId} onChange={(e) => setTx({ ...tx, personId: e.target.value, day: '' })}>
+            <option value="">Person…</option>
+            {l.people
+              .filter((p) => p.pay === 'bank' || p.pay === 'ewallet')
+              .map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name} · {p.account?.bank} {p.account?.accountMasked} · {rm(p.dailyRate)} a day
+                </option>
+              ))}
+          </select>
+          <select className="select" aria-label="Day paid for" value={tx.day} onChange={(e) => setTx({ ...tx, day: e.target.value })}>
+            <option value="">Day…</option>
+            {(l.people.find((p) => p.id === tx.personId)?.days ?? [])
+              .filter((d) => !l.payouts.some((x) => x.personId === tx.personId && x.day === d))
+              .map((d) => (
+                <option key={d} value={d}>
+                  {dateLabel(d)}
+                </option>
+              ))}
+          </select>
+          <input className="input" aria-label="Transfer reference" placeholder="Transfer reference (IBG, DuitNow…)" value={tx.ref} onChange={(e) => setTx({ ...tx, ref: e.target.value })} />
+          <button
+            className="btn btn-primary btn-sm"
+            disabled={act.busy || !tx.personId || !tx.day || !tx.ref.trim()}
+            onClick={() => go('transfer', { listId: l.id, ...tx }, 'Transfer recorded.').then((x) => x && setTx({ ...tx, day: '', ref: '' }))}
+          >
+            Save
+          </button>
+        </div>
+      )}
+      {mode && mode !== 'edit' && mode !== 'transfer' && (
         <div className="row fin-mt">
           {(mode === 'withdraw' || mode === 'handover') && (
             <input
@@ -355,7 +528,7 @@ function ListLine({ l, co, v }: { l: List; co: Co; v: FinControls }) {
               type="number"
               step="0.01"
               aria-label="Amount RM"
-              placeholder={`Amount RM (up to ${rm(mode === 'withdraw' ? l.total - l.withdrawn : l.withdrawn - l.handed)})`}
+              placeholder={`Amount RM (up to ${rm(mode === 'withdraw' ? l.cashTotal - l.withdrawn : l.withdrawn - l.handed)})`}
               value={f.amount || ''}
               onChange={(e) => setF({ ...f, amount: Number(e.target.value) || 0 })}
             />
@@ -391,7 +564,7 @@ function ListLine({ l, co, v }: { l: List; co: Co; v: FinControls }) {
               ))}
             </select>
           )}
-          {mode === 'settle' && (
+          {mode === 'settle' && !transferOnly && (
             <>
               <input
                 className="input"
@@ -416,7 +589,9 @@ function ListLine({ l, co, v }: { l: List; co: Co; v: FinControls }) {
               className="input"
               aria-label={mode === 'settle' ? 'Reason for any difference' : 'Comment'}
               placeholder={
-                mode === 'settle'
+                mode === 'settle' && transferOnly
+                  ? `Reason if not all of ${rm(l.total)} was transferred`
+                  : mode === 'settle'
                   ? `Reason if it is not ${rm(Math.round((l.withdrawn - l.paid) * 100) / 100)} (withdrawn less paid)`
                   : mode === 'return' || mode === 'cancel'
                     ? 'Reason'
@@ -441,6 +616,7 @@ function ListLine({ l, co, v }: { l: List; co: Co; v: FinControls }) {
                 const w = l.withdrawals.find((x) => !x.statement && Math.abs(x.amount - (unmatchedOut.find((u) => u.key === f.line)?.amount ?? -1)) < 0.005);
                 return step('bank', { withdrawalId: w?.id, statementId, lineId }, 'Found on the statement.');
               }
+              if (mode === 'settle' && transferOnly) return step('settle', { comment: f.comment }, 'Closed.');
               if (mode === 'settle') return step('settle', { counted: f.counted, depositRef: f.depositRef, comment: f.comment }, 'Settled.');
               if (mode === 'acceptDifference') return step('acceptDifference', { comment: f.comment }, 'Difference accepted.');
             }}
@@ -456,23 +632,222 @@ function ListLine({ l, co, v }: { l: List; co: Co; v: FinControls }) {
 
 /** The COO's or CEO's own daily cash: count what Finance handed over, pay each listed person, give back the rest. */
 export function MyDailyCash() {
-  const { data, error } = useLoad(() => api.finDailyCashMine(), []);
+  const { data, error, reload } = useLoad(() => api.finDailyCashMine(), []);
   if (error) return <ErrorNotice error={error} />;
-  if (!data || data.lists.length === 0) return null;
+  if (!data || (data.lists.length === 0 && data.decisions.length === 0 && data.receipts.length === 0)) return null;
+  return (
+    <>
+      {data.decisions.length > 0 && <DailyPayDecisions decisions={data.decisions} reload={reload} />}
+      {data.receipts.length > 0 && <ReceiptUploads receipts={data.receipts} reload={reload} />}
+      {data.lists.length > 0 && <HeldCash lists={data.lists} />}
+    </>
+  );
+}
+
+type Decision = Awaited<ReturnType<typeof api.finDailyCashMine>>['decisions'][number];
+type ReceiptDue = Awaited<ReturnType<typeof api.finDailyCashMine>>['receipts'][number];
+
+/**
+ * The Director Office uploads the signed receipt for each cash payment (Fauzan, 6 Nov 2026: "Signed paper of the
+ * receive collected and upload as proof. Upload done by director office.").
+ */
+function ReceiptUploads({ receipts, reload }: { receipts: ReceiptDue[]; reload: () => void }) {
+  return (
+    <section className="panel">
+      <div className="panel-head">
+        <div>
+          <h3>Signed cash receipts to upload</h3>
+          <div className="muted small">
+            The COO or CEO paid these people in cash. Collect each signed receipt and upload a scan or photo (PDF, JPEG or PNG). Finance cannot settle the list
+            until every receipt is in.
+          </div>
+        </div>
+        <span className="muted small">{receipts.length}</span>
+      </div>
+      <div className="list">
+        {receipts.map((r) => (
+          <ReceiptLine key={`${r.listId}-${r.payoutId}`} r={r} reload={reload} />
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function ReceiptLine({ r, reload }: { r: ReceiptDue; reload: () => void }) {
+  const { act, go } = useGo(r.companyId);
+  const [err, setErr] = useState<string | null>(null);
+  const upload = async (f: File | undefined) => {
+    setErr(null);
+    if (!f) return;
+    if (!['application/pdf', 'image/jpeg', 'image/png'].includes(f.type)) return setErr('Attach a PDF, JPEG or PNG file.');
+    let data = await readAsDataUrl(f);
+    if (f.type !== 'application/pdf') data = await shrinkImage(data);
+    const x = await go('receipt', { listId: r.listId, payoutId: r.payoutId, name: f.name, data }, 'Signed receipt uploaded.');
+    if (x) reload();
+  };
+  return (
+    <div className="list-item" style={{ display: 'block' }}>
+      <div>
+        <strong>{r.name}</strong> (…{r.idLast4}) · {r.site} · {dateLabel(r.day)} · {rm(r.amount)}
+        <div className="muted small">
+          {r.companyId} · paid in cash by {r.paidBy}
+        </div>
+      </div>
+      <label className="btn btn-sm" style={{ marginTop: 6 }}>
+        Upload signed receipt
+        <input
+          type="file"
+          accept="application/pdf,image/jpeg,image/png"
+          aria-label={`Signed receipt for ${r.name} ${r.day}`}
+          style={{ display: 'none' }}
+          disabled={act.busy}
+          onChange={(e) => void upload(e.target.files?.[0])}
+        />
+      </label>
+      {err && <p className="notice" data-tone="crit">{err}</p>}
+      <ErrorNotice error={act.error} />
+    </div>
+  );
+}
+
+/**
+ * Daily pay waiting for you (Fauzan, 6 Nov 2026): the Director Office lists people for cash with the reason; the COO
+ * or CEO gives or refuses it; the COO approves a consent letter stamped by a Commissioner for Oaths.
+ */
+function DailyPayDecisions({ decisions, reload }: { decisions: Decision[]; reload: () => void }) {
+  return (
+    <section className="panel">
+      <div className="panel-head">
+        <div>
+          <h3>Daily pay waiting for you</h3>
+          <div className="muted small">
+            Daily workers are paid to a bank account or e-wallet. Cash only when the Director Office lists the person with the reason and the COO or CEO gives
+            it. A relative's or friend's account needs the consent letter stamped by a Pesuruhjaya Sumpah, approved by the COO.
+          </div>
+        </div>
+      </div>
+      <div className="list">
+        {decisions.flatMap((l) => l.people.map((p) => <DecisionLine key={`${l.id}-${p.id}`} l={l} p={p} reload={reload} />))}
+      </div>
+    </section>
+  );
+}
+
+function DecisionLine({ l, p, reload }: { l: Decision; p: Decision['people'][number]; reload: () => void }) {
+  const { act, go } = useGo(l.companyId);
+  const [note, setNote] = useState('');
+  const [site, setSite] = useState(p.work);
+  const [amount, setAmount] = useState(p.amount);
+  const run = (action: string, extra: Record<string, unknown>, msg: string) =>
+    go(action, { listId: l.id, personId: p.id, ...extra }, msg).then((x) => {
+      if (x) {
+        setNote('');
+        reload();
+      }
+    });
+  const c = p.account?.consent;
+  return (
+    <div className="list-item" style={{ display: 'block' }}>
+      <div>
+        <strong>{p.name}</strong> (…{p.idLast4}), {p.work}: {rm(p.dailyRate)} a day × {p.days} = {rm(p.amount)}
+        <div className="muted small">
+          {l.companyId} · {dateLabel(l.from)} to {dateLabel(l.to)} · {l.purpose}
+        </div>
+        {p.need === 'list' && p.cash?.decision && (
+          <div className="muted small">
+            Refused by {p.cash.decision.by}: {p.cash.decision.comment}
+          </div>
+        )}
+        {p.cash && (p.need === 'decide' || p.listedByMe) && (
+          <div className="muted small">
+            Listed for cash by {p.cash.listed.by}
+            {p.cash.site ? ` at ${p.cash.site}` : ''}
+            {p.cash.amount != null ? `, ${rm(p.cash.amount)}` : ''}: {p.cash.reason}
+          </div>
+        )}
+        {p.need === 'consent' && c && p.account && (
+          <div className="muted small">
+            To {p.account.bank} {p.account.accountMasked}, held by {p.account.holderName} ({p.account.relationship}). Consent letter {c.docRef} signed{' '}
+            {dateLabel(c.signedOn)}, stamped by Pesuruhjaya Sumpah {c.oaths.commissioner} (stamp {c.oaths.stampRef}, {dateLabel(c.oaths.stampedOn)}); recorded by{' '}
+            {c.recorded.by}. Check the stamp on the letter before approving.
+          </div>
+        )}
+      </div>
+      <div className="row" style={{ gap: 6, flexWrap: 'wrap', marginTop: 6 }}>
+        {p.need && (
+          <input
+            className="input"
+            aria-label={p.need === 'list' ? 'Why cash is needed' : 'Comment'}
+            placeholder={p.need === 'list' ? 'Why this person needs cash' : 'Comment (needed)'}
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+          />
+        )}
+        {p.need === 'list' && (
+          <>
+            <input className="input" aria-label="Site" placeholder="Site" value={site} onChange={(e) => setSite(e.target.value)} />
+            <input
+              className="input"
+              type="number"
+              step="0.01"
+              aria-label="Cash amount RM"
+              placeholder={`Cash RM (up to ${rm(p.amount)})`}
+              style={{ width: 150 }}
+              value={amount || ''}
+              onChange={(e) => setAmount(Number(e.target.value) || 0)}
+            />
+          </>
+        )}
+        {p.need === 'list' && (
+          <button
+            className="btn btn-primary btn-sm"
+            disabled={act.busy || note.trim().length < 5 || site.trim().length < 2 || !amount}
+            onClick={() => run('listCash', { reason: note, site, amount }, 'Listed for cash.')}
+          >
+            List for cash
+          </button>
+        )}
+        {p.need === 'decide' && (
+          <>
+            <button className="btn btn-primary btn-sm" disabled={act.busy || !note.trim()} onClick={() => run('decideCash', { give: true, comment: note }, 'Cash given.')}>
+              Give cash
+            </button>
+            <button className="btn btn-sm" disabled={act.busy || !note.trim()} onClick={() => run('decideCash', { give: false, comment: note }, 'Refused: Finance gives a bank account or e-wallet.')}>
+              Refuse
+            </button>
+          </>
+        )}
+        {p.need === 'consent' && (
+          <button className="btn btn-primary btn-sm" disabled={act.busy || !note.trim()} onClick={() => run('approveConsent', { comment: note }, 'Consent letter approved.')}>
+            Approve letter
+          </button>
+        )}
+        {p.listedByMe && (
+          <button className="btn btn-sm" disabled={act.busy} onClick={() => run('unlistCash', {}, 'Taken off the cash list.')}>
+            Take off the cash list
+          </button>
+        )}
+      </div>
+      <ErrorNotice error={act.error} />
+    </div>
+  );
+}
+
+function HeldCash({ lists }: { lists: Mine[] }) {
   return (
     <section className="panel">
       <div className="panel-head">
         <div>
           <h3>Daily cash you hold</h3>
           <div className="muted small">
-            Count the cash Finance gives you, pay each listed person for each listed day after checking the last 4 characters of their IC or passport, keep the
-            signed or thumb-printed pay sheet, and give back what was not paid when the list ends.
+            Count the cash Finance gives you, pay each listed person for each listed day after checking the last 4 characters of their IC or passport, have
+            them sign the receipt and pass it to the Director Office, who uploads it, and give back what was not paid when the list ends.
           </div>
         </div>
       </div>
       <FinGuide id="fin.dailycash.collector" />
       <div className="list">
-        {data.lists.map((l) => (
+        {lists.map((l) => (
           <MineLine key={l.id} l={l} />
         ))}
       </div>
@@ -485,7 +860,7 @@ function MineLine({ l }: { l: Mine }) {
   const [counted, setCounted] = useState<Record<string, number>>({});
   const [why, setWhy] = useState<Record<string, string>>({});
   const [pay, setPay] = useState<{ personId: string; day: string; idLast4: string; proof: string }>({
-    personId: l.people[0]?.id ?? '',
+    personId: l.people.find((p) => p.pay === 'cash' && p.cash?.decision?.give)?.id ?? '',
     day: '',
     idLast4: '',
     proof: '',
@@ -537,7 +912,7 @@ function MineLine({ l }: { l: Mine }) {
       {l.status === 'with_collector' && (
         <div className="row fin-mt">
           <select className="select" aria-label="Person" value={pay.personId} onChange={(e) => setPay({ ...pay, personId: e.target.value, day: '' })}>
-            {l.people.map((p) => (
+            {l.people.filter((p) => p.pay === 'cash' && p.cash?.decision?.give).map((p) => (
               <option key={p.id} value={p.id}>
                 {p.name} · {rm(p.dailyRate)} a day{l.dueToday.includes(p.id) ? ' · due today' : ''}
               </option>
@@ -561,13 +936,13 @@ function MineLine({ l }: { l: Mine }) {
           <input
             className="input"
             aria-label="Pay sheet"
-            placeholder="Pay sheet no. or photo name"
+            placeholder="Pay sheet no. (optional; the Director Office uploads the signed receipt)"
             value={pay.proof}
             onChange={(e) => setPay({ ...pay, proof: e.target.value })}
           />
           <button
             className="btn btn-primary btn-sm"
-            disabled={act.busy || !pay.day || !pay.idLast4.trim() || !pay.proof.trim()}
+            disabled={act.busy || !pay.day || !pay.idLast4.trim()}
             onClick={() =>
               go('pay', { listId: l.id, ...pay }, `Paid ${person?.name ?? ''}.`).then((x) => x && setPay({ ...pay, day: '', idLast4: '', proof: '' }))
             }

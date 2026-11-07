@@ -71,6 +71,24 @@ export const RULES = {
     'Policy',
     'Approved by Fauzan, 3 Nov 2026: a document attached to a passport check or follow-up counts as the worker\'s consent to company safekeeping. The app does not read the document, so it cannot tell whether it is a real, voluntary consent signed by the worker; the FWM officer attaching it is responsible for that. Legal flag kept (Passports Act 1966 s.12(1)(f)): reviewed by the directors, not shown to routine staff.',
   ),
+  fwmRecruitSteps: rule(
+    'FWM-RECRUIT-STEPS',
+    ['AGENCY_LICENCE', 'EMBASSY', 'INTERVIEW', 'AGE', 'CONTRACT'],
+    'Policy',
+    'Fauzan, 6 Nov 2026 (IWAY answer 7, "done in FWM"): FWM records each foreign worker\'s recruitment steps: the agency\'s licence, the embassy\'s confirmation, the interview, the age check from the passport, and the contract signed in English and Malay before travel. A worker is cleared to travel only when all five are on record; zero recruitment fees is confirmed after arrival by the arrival fee check (FWM-ZERO-FEE).',
+  ),
+  fwmRecruitAge: rule(
+    'FWM-RECRUIT-AGE',
+    { min: 18, max: 60 },
+    'Policy',
+    'Fauzan, 6 Nov 2026: a recruited worker is 18 to 60, taken from the date of birth on the passport and counted to the planned travel date (HR-AGE-MAX: no guards over 60).',
+  ),
+  fwmContractLanguages: rule(
+    'FWM-CONTRACT-LANG',
+    ['en', 'ms'],
+    'Policy',
+    'Fauzan, 6 Nov 2026: English and Malay are a must; the worker\'s mother tongue may be added. The contract is signed before the worker travels.',
+  ),
   fwmZeroFee: rule(
     'FWM-ZERO-FEE',
     true,
@@ -421,7 +439,13 @@ export const RULES = {
     'HR-VACANCY',
     { needsCeo: true, headSigns: true },
     'Policy',
-    "Fauzan, 2 Nov 2026: a vacancy is approved by the CEO, and the company head signs the approval (the company is the employer). HR or the company manager raises it; for PWVSB central posts the Chief of Staff signs as head. Every step carries a comment; nobody approves their own request.",
+    "Fauzan, 2 Nov 2026: a vacancy is approved by the CEO, and the company head signs the approval (the company is the employer). HR or the company manager raises it; for PWVSB central posts the HR Director (Chief of Staff or Deputy Chief of Staff) signs as head (confirmed by Fauzan in the 5 Nov 2026 audit, decision 6). Every step carries a comment; nobody approves their own request.",
+  ),
+  jobAdvert: rule(
+    'HR-JOB-ADVERT',
+    { staffApprover: 'hr_director', guardApprover: 'om_of_state', channelsConnected: 0, maxChars: 3000, maxClosingDays: 90 },
+    'Policy',
+    "Fauzan, 5 Nov 2026 (audit decision 6): post vacancies for guards and all staff, with AI drafting and publishing to social media. Fauzan confirmed 5 Nov 2026: a person approves each post before it goes out; for guard and patrolling officer posts the Operations Manager approves (the OM covering the post's state, or the Regional OM of its region as backup), for all other staff the HR Director. An approved post goes out by itself once each account is connected; JobStreet is paid per post. HR or the company manager drafts for an open vacancy; the approver is never the person who wrote the current wording; approval is bound to the exact wording and any edit sends it back. Social accounts are not connected, so publishing is switched off and Prima never shows a post as published; HR may record a post it made by hand, marked as not checked by Prima. Wording is checked for IC and mobile numbers (blocked) and for discriminatory wording, pay below the minimum wage and missing pay (warnings for the approver).",
   ),
   hrCases: rule(
     'HR-CASE',
@@ -776,6 +800,62 @@ export const RULES = {
     { cooAfterDays: 3, ceoAfterDays: 7, confirmDays: 3, accessReviewDays: 90, ticketCooAfterHours: 24 },
     'Policy',
     'Fauzan, 28 Oct 2026, making IT the pilot: the IT Manager is an administrator who makes sure the team does the job, not a technical post; the IT Lead holds the technical know-how; the CEO is the owner and master administrator of every system, domain and account, and IT staff only operate them. Approved by Fauzan on 28 Oct 2026 (D1 to D5): every job has a named doer and a due date and is submitted with proof; a technical job is checked by the IT Lead before the IT Manager accepts it; nobody accepts their own work; a job late 3 days goes to the COO and 7 days to the CEO; a help request past its time limit by 24 hours goes to the COO; the person who asked confirms the fix within 3 days or it counts as confirmed; the CEO alone grants or removes access and reviews each access list every 90 days; while the IT Manager is away the COO accepts finished work; the IT Manager is not given technical jobs but runs the IT tenders: finds them, deals with the companies holding IT codes and gives each part to an IT Executive.',
+  ),
+  payFormulas: rule(
+    'PAY-FORMULA',
+    { scopes: ['site', 'company', 'region', 'group'], standardRestHours: [2, 2.5, 3], shiftHours: 12, fullMonthDays: 26, orpDivisor: 26 },
+    'Policy',
+    'Fauzan, 5 Nov 2026: the guard salary formula can be set per site, per company, per region or for the whole group, all set by the ACT Director; the standard formula is a full month of 12-hour shifts with 2, 2.5 or 3 hours of rest a day; drivers have an overtime formula; ACT sets the amounts in every formula. Later the same day: ACT sets the overtime formula for everyone (staff overtime too); the ACT Director’s amounts are saved as chosen and labour law is only a flag to the CEO; security guards are exempt from the hours limits. Fauzan, 6 Nov 2026, the usual guard rules (the standard default, ACT can change them): basic covers 45 hours a week, one rest day a week (6 days of 7.5 hours); overtime on a working day 1.5x the hourly rate; on a rest day the first 7.5 hours are one day’s pay and overtime past them 2x; on a public holiday 2 days’ pay for the normal hours and overtime 3x. Hourly rate = basic / 26 / 7.5 = basic / 195, the same as basic x 12 / 52 weeks / 45 hours. The ACT team prepares, the ACT Director makes it live and decides where it is used, with a reason each time; the narrowest choice wins (site, company, region, group). A formula starts this month or later, never in the past. Employment Act 1955 points flagged: minimum wage (Minimum Wages Order 2024, RM1,700), normal hours at most 8 a day and 45 a week (s.60A(1)), overtime at least 1.5x on a working day (s.60A(3)), 2x on a rest day (s.60(3)), 3x on a public holiday (s.60D(3)), rest-day work one extra day and holiday work two extra days; daily rate = monthly / 26, hourly = daily / normal hours (s.60I). Pay below that floor is flagged on the formula and on the CEO’s home, never refused; guard formulas carry no hours-limit flags (exemption), only the rest-break rule. Only entries that cannot be counted are refused.',
+  ),
+  guardPayroll: rule(
+    'PAY-GUARD',
+    {
+      payByDay: 7,
+      /** Off while the JA Group app still pays guards: runs are side-by-side trials, never marked paid. Fauzan picks the switch date. */
+      primaPays: false,
+      /** SQL Account codes for the journal draft; Finance replaces these with the group's chart of accounts. */
+      accounts: {
+        wages: '910-000',
+        epfEr: '911-000',
+        socsoEr: '912-000',
+        eisEr: '913-000',
+        hrd: '914-000',
+        wagesPayable: '410-100',
+        epfPayable: '410-200',
+        socsoPayable: '410-300',
+        lindungPayable: '410-310',
+        eisPayable: '410-400',
+        pcbPayable: '410-500',
+        hrdPayable: '410-600',
+        utilityRecovered: '415-000',
+      },
+    },
+    'Policy',
+    "Fauzan, 5 Nov 2026 (third audit, item 1: Build): Prima runs its own monthly guard pay from attendance under the ACT pay formulas (PAY-FORMULA), with payslips and a bank file. Fauzan, 26 Oct 2026: the COO approves all guard and officer salaries. HR prepares each company's month, the COO approves with a reason, Finance pays through the bank; Prima only drafts the files. Fauzan, 5 Nov 2026 00:55Z: the JA Group app keeps running until he picks a switch date, so until then a run is a side-by-side trial compared with JA's figures and cannot be marked paid. Employment Act 1955 s.19: wages paid within 7 days after the wage period. KWSP: overtime is not wages for EPF. Public holidays are entered by HR from the gazette for each month; none are assumed.",
+  ),
+  payLaw: rule(
+    'PAY-LAW-CEO',
+    { setter: 'ceo', byMonth: true, defaults: 'EA 1955 as at Nov 2026' },
+    'Policy',
+    'Fauzan, 6 Nov 2026: the CEO sets the base salary and, when a new law comes in, how salary and the base are counted: the day divisor, minimum wage, overtime minimums and limits, from a month with a reason. Formulas and flags follow the version in force. EPF, SOCSO and other contributions are set in the pay runs.',
+  ),
+  payRestBreak: rule(
+    'PAY-REST-BREAK',
+    { relievedOnly: true, minBreakHours: 0.5 },
+    'Law',
+    'Rest inside a shift is unpaid only when it is a real break: the guard is relieved from the post (a relief guard covers, or the guard may leave). A guard who must stay at the post is working, so the rest is paid as work. Employment Act 1955 s.60A(1)(a): a break of at least 30 minutes after 5 hours of work. Counsel to confirm for the shift-work exemption.',
+  ),
+  siteHours: rule(
+    'SITE-HOURS',
+    { approverPrivate: 'ops_director', approverGovernment: 'ogm', reasonRequired: true },
+    'Policy',
+    'Fauzan, 6 Nov 2026: guard total hours are watched when salary is done. A site that needs 2 guards per 12-hour shift for a 30-day month needs 4 people and cannot go over 1,440 man-hours (guards per shift x hours covered a day x days in the month, added up for every post). Any total above that is flagged, and the Operations Director (private site) or the OGM (government site) approves the extra hours with a reason before salary, usually for training, annual leave or on-the-job training.',
+  ),
+  payPublicHolidays: rule(
+    'PAY-PUBLIC-HOLIDAYS',
+    { perYear: 11, dueDay: 10, remindFrom: 1, setters: ['ops_director', 'ogm'] },
+    'Law',
+    'Employment Act 1955 s.60D: 11 paid public holidays a year, five of them National Day, the Agong’s birthday, the Ruler’s birthday or Federal Territory Day, Labour Day and Malaysia Day; the list is posted at the workplace before the year starts. A holiday on a rest day moves to the next working day; a holiday during annual or sick leave is a holiday, not leave; absence without consent on the working day before or after loses that holiday’s pay (s.60D(2)). Fauzan, 6 Nov 2026: the Operations Director or the OGM (not the OM) sets the 11 days for each year by 10 December; a guard not working on a holiday is still paid 7.5 hours, one normal day.',
   ),
   lindung: rule(
     'PAY-LINDUNG',
@@ -1155,7 +1235,7 @@ export const RULES = {
       reasonMin: 10,
     },
     'Unverified',
-    'Fauzan, 2 Nov 2026: "There is one cash payment. We have daily cash buffer that need to be paid. If not, they dont want to work. So create a system that this type of people can be paid. Cash will be collected by coo or ceo to be paid." and "Only fd can approve this. They need to list it for the week or month. Before than prepare cash." Finance lists the people for the week or month, only the Finance Director approves (never the preparer, not the CEO), Finance then withdraws the cash (never above the approved total, found on the bank statement) and hands it to the COO or CEO, who counts it, pays each listed person for each listed day with the signed pay sheet as proof, and gives back what was not paid; Finance counts and banks it, and any difference is explained and accepted by the FD. The limits are proposals for the FD.',
+    'Fauzan, 2 Nov 2026: "There is one cash payment. We have daily cash buffer that need to be paid. If not, they dont want to work. So create a system that this type of people can be paid. Cash will be collected by coo or ceo to be paid." and "Only fd can approve this. They need to list it for the week or month. Before than prepare cash." Finance lists the people for the week or month, only the Finance Director approves (never the preparer, not the CEO), Finance then withdraws the cash (never above the approved total, found on the bank statement) and hands it to the COO or CEO, who counts it, pays each listed person for each listed day with the signed pay sheet as proof, and gives back what was not paid; Finance counts and banks it, and any difference is explained and accepted by the FD. The limits are proposals for the FD. Fauzan, 6 Nov 2026 ("Buffer also the same" as the guard pay-out rules): each person is paid to a bank account or e-wallet only, and Finance records each day\'s transfer with its reference (never by the FD who approved); cash only when the Director Office lists the person with the reason and the COO or the CEO gives it with a note (never whoever listed), and only that cash is withdrawn and handed over; a relative\'s or friend\'s account needs the person\'s consent letter stamped by a Commissioner for Oaths (Pesuruhjaya Sumpah) and approved by the COO (the CEO only through the pilot rule: Fauzan\'s review note 7 Nov 2026, item 2). Later the same day: "Director list will send cash person list per site per name and the amount, cash will be given out by ceo or coo. Signed paper of the receive collected and upload as proof. Upload done by director office." The Director Office lists each cash person with the site and the cash amount (at most their approved pay, and the cash withdrawn is at most these amounts); the COO or CEO pays; the Director Office uploads each signed receipt (PDF, JPEG or PNG, kept with its SHA-256), and the list is not settled until every receipt is in. The FD cannot approve a list until every person can be paid. Prima keeps only the last 4 digits of an account. EA s.25 asks for the worker\'s own or joint bank account: e-wallet and third-party accounts are flagged as legal points for the CEO.',
   ),
   financeIntercompany: rule(
     'FIN-IC',
@@ -1231,6 +1311,23 @@ export const RULES = {
     { commissionerHours: 72, subjectsDays: 7 },
     'Law',
     'Personal Data Protection (Amendment) Act 2024 s.12B and the PDP Commissioner breach notification guideline: notify the Commissioner within 72 hours of finding a breach, and the affected people within 7 days of notifying the Commissioner where it causes or is likely to cause significant harm. Fauzan, 26 Oct 2026: use as the basis; the PDPA officer handles it, the Operations Director monitors.',
+  ),
+  crm: rule(
+    'CRM-LIFECYCLE',
+    {
+      /** A renewal opens this many days before the contract ends (Fauzan, 5 Nov 2026). */
+      renewalOpenDays: 90,
+      /** The company manager decides renew, new price, rebid or let go by this many days before the end (Fauzan, 5 Nov 2026). */
+      decideByDays: 60,
+      /** The renewal offer goes to the client by this many days before the end (Fauzan, 5 Nov 2026). */
+      proposalByDays: 45,
+      /** A client request with no date is due after this many days (proposed). */
+      requestDays: 14,
+      /** A client with no main contact on record is a warning; with none at all, unknown. */
+      needsMainContact: true,
+    },
+    'Policy',
+    'Fauzan, 4 Nov 2026: "Yes build that. We want complete" (a complete client CRM). One client lifecycle: sales lead, quotation or tender, won, contract, onboarding, service (visits, reports, ratings, complaints, client requests, invoices), renewal, offboarding, with the reason the client was lost. Each company sees only its own clients; group leadership sees all (group data rule, 26 Oct 2026). Fauzan, 5 Nov 2026, confirmed: a renewal opens 90 days before the contract ends; the company manager decides (renew, renew at a new price, rebid, or let go) with a reason by 60 days before; the offer reaches the client by 45 days before. Fauzan, 5 Nov 2026 (D4): sales is the company admin executives, monitored by the company manager; they open a won lead as the client. Still proposed: a renewal is accepted only with the signed paper and the new end date; a client request is due in 14 days unless the client gives a date; more or fewer guards is done only with the signed contract variation. Billing stays in SQL Account.',
   ),
   leads: rule(
     'CRM-LEADS',
@@ -1439,6 +1536,35 @@ export const RULES = {
     60,
     'Policy',
     'Fauzan, 25 Oct 2026: a patrolling officer commands at most 60 guards. Counted as the different guards rostered today at the sites on the patrol, across companies when the officer also patrols another company. Over the limit is shown to operations; the company changes the patrol areas.',
+  ),
+  siteGate: rule(
+    'SITE-GATE',
+    { keepYears: 7, keepYearsMin: 2, keepYearsMax: 7, shownIdChars: 4, postLogMaxChars: 1000, insideAlertHours: 12, sentLaterMin: 10, offlineMaxDays: 7, paperPagesMax: 10 },
+    'Policy',
+    'Fauzan, 6 Nov 2026: the shared site device is the one-stop guard duty device: post log, visitor log with evidence, vehicle plates against the site list. Police require the full details of people coming in and out kept for 2 to 7 years, so the full ID number, the IC picture and written in/out book pages are kept, sealed on the device for the in-house server only (screens show the last 4 characters). Kept 7 years here, the top of the police range, until the PDPA officer and counsel set it within 2 to 7. With no internet the device keeps entries encrypted and sends them when the signal returns (up to 7 days, proposed). Visitors need a notice at the gate.',
+  ),
+  siteTasks: rule(
+    'SITE-TASK',
+    { maxActivePerSite: 40, titleMax: 120, detailMax: 600, boardDays: 7, needsAnswerMax: 600 },
+    'Policy',
+    'Fauzan, 6 Nov 2026: the OM discusses with the client what the site needs and what can be done, then sets tasks for the patrolling officer, the officer or the guard; the shared device shows the tasks due today. A higher rank may do a lower rank\'s task. A task not done by the end of its day shows as missed to the OM. Limits are proposals.',
+  ),
+  siteDispatch: rule(
+    'CMS-DISPATCH',
+    {
+      /** Seconds the site device has to acknowledge before CMS is told to phone the guard or supervisor. */
+      ackSec: { urgent: 60, alert: 180, instruction: 900 },
+      /** Minutes from acknowledgement to proof before CMS is told proof is late. */
+      proofMin: { urgent: 5, alert: 15, instruction: 60 },
+      /** How often an unanswered urgent or alert sounds again on the device. */
+      repeatSec: { urgent: 15, alert: 60, instruction: 0 },
+      maxVideoSec: 30,
+      maxVideoBytes: 2_000_000,
+      /** PDPA: clips not attached to a case are deleted after this many days. */
+      videoKeepDays: 90,
+    },
+    'Policy',
+    'Fauzan, 6 Nov 2026: CMS can send an instruction, an alert or an urgent alert to a site shared device, also when AI analytics on CCTV or a sensor pin-points something. The guard verifies with a time-stamped photo, or a video from the device or a bodycam linked to it. CMS monitors and tells; the company decides. Timings, video length and the 90-day keep period are proposed; video is personal data under PDPA (notice, viewers and keep period need the PDPA officer).',
   ),
   evidenceGeo: rule(
     'EVID-GEO',

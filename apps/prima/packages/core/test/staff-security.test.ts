@@ -165,7 +165,8 @@ describe('department walls', () => {
     expect(walls('u-it-ex1')).toEqual(['bcm', 'login_handover']);
     // Arisha main, 84b056e: IT reads the login handover, never the movement row (pay, private reason).
     expect(walls('u-it-ex1')).not.toContain('staff_movements');
-    expect(walls('u-pwvsb-hr')).toEqual(['offboard', 'staff_ids', 'staff_accounts', 'staff_faces', 'hr_cases', 'staff_movements', 'login_handover']);
+    // HR reads the pay formulas, pay law and statutory settings to prepare pay (guard pay module, Fauzan 6 Nov 2026).
+    expect(walls('u-pwvsb-hr')).toEqual(['pay_read', 'offboard', 'staff_ids', 'staff_accounts', 'staff_faces', 'hr_cases', 'applicants', 'staff_movements', 'login_handover']);
     // HR wall (slice 3A part 3): Finance reads salary accounts, never the full IC.
     expect(walls('u-fd')).toContain('staff_accounts');
     expect(walls('u-fd')).not.toContain('staff_ids');

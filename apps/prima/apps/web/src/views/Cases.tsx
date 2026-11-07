@@ -6,6 +6,7 @@ import { useApp } from '../App';
 import { Empty, Facts, PageHead, Search, Stat, Stats, Toolbar } from '../kit';
 import { Chip, Drawer, ErrorNotice, Loading, Sev, dateLabel, dateTimeLabel, hhmm, useAction, useLoad } from '../ui';
 import { EvidenceCamera, PhotoCard } from './Camera';
+import { VideoCard } from './SiteDispatch';
 import { DocList, ProofPicker } from './Proof';
 import '../styles/cases.css';
 
@@ -560,6 +561,9 @@ function CasePhotos({ data, caseId }: { data: CaseDetail; caseId: string }) {
       )}
       {data.photos.map((p) => (
         <PhotoCard key={p.id} p={p} />
+      ))}
+      {data.videos.map((v) => (
+        <VideoCard key={v.id} v={v} />
       ))}
       <DocList docs={data.docs} />
     </section>

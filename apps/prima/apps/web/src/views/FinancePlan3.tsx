@@ -93,10 +93,18 @@ export function Plan3({ v, pv, canAct, me }: { v: FinControls; pv: PV; canAct: b
         throw new Error(`Quarter ${i + 1}: give ${PERIOD.length} amounts in the order shown.`);
       return Object.fromEntries(PERIOD.map((k, j) => [k, n[j]]));
     });
+    const kind = f.fcKind || 'quarterly';
+    const asOf = f.fcAsOf || v.period;
+    const scenario = f.fcScenario || 'base';
+    // The open version shown on this screen for the same start, kind and scenario; the server refuses it if it changed since.
+    const open = pv.threeStatements.find(
+      (x) => x.kind === kind && x.asOf === asOf && x.scenario === scenario && ['draft', 'returned', 'submitted'].includes(x.status),
+    );
     return {
-      kind: f.fcKind || 'quarterly',
-      asOf: f.fcAsOf || v.period,
-      scenario: f.fcScenario || 'base',
+      ...(open ? { id: open.id, seq: open.seq ?? 0 } : {}),
+      kind,
+      asOf,
+      scenario,
       assumptions: f.fcAssumptions,
       openingSource: f.fcSource,
       opening: Object.fromEntries(OPENING.map((k) => [k, num(`op-${k}`)])),
@@ -135,7 +143,7 @@ export function Plan3({ v, pv, canAct, me }: { v: FinControls; pv: PV; canAct: b
               <button
                 className="btn btn-sm"
                 disabled={act.busy || (f[`rw-${r.no}`] ?? '').trim().length < 10}
-                onClick={() => go('withdrawRevision', { no: r.no, comment: f[`rw-${r.no}`] }, 'Revision withdrawn.')}
+                onClick={() => go('withdrawRevision', { no: r.no, seq: r.seq ?? 0, comment: f[`rw-${r.no}`] }, 'Revision withdrawn.')}
               >
                 Withdraw
               </button>
@@ -153,14 +161,14 @@ export function Plan3({ v, pv, canAct, me }: { v: FinControls; pv: PV; canAct: b
               <button
                 className="btn btn-sm btn-primary"
                 disabled={act.busy || !(f[`rc-${r.no}`] ?? '').trim()}
-                onClick={() => go('approveRevision', { no: r.no, comment: f[`rc-${r.no}`] }, 'Revision approved.')}
+                onClick={() => go('approveRevision', { no: r.no, seq: r.seq ?? 0, comment: f[`rc-${r.no}`] }, 'Revision approved.')}
               >
                 Approve
               </button>
               <button
                 className="btn btn-sm"
                 disabled={act.busy || (f[`rc-${r.no}`] ?? '').trim().length < 10}
-                onClick={() => go('returnRevision', { no: r.no, comment: f[`rc-${r.no}`] }, 'Revision returned.')}
+                onClick={() => go('returnRevision', { no: r.no, seq: r.seq ?? 0, comment: f[`rc-${r.no}`] }, 'Revision returned.')}
               >
                 Return
               </button>
@@ -169,7 +177,11 @@ export function Plan3({ v, pv, canAct, me }: { v: FinControls; pv: PV; canAct: b
         </div>
       ))}
       {canAct && drafter && open?.status === 'draft' && (
-        <button className="btn btn-sm btn-primary" disabled={act.busy} onClick={() => go('submitRevision', {}, 'Revision sent to the FD and the CEO.')}>
+        <button
+          className="btn btn-sm btn-primary"
+          disabled={act.busy}
+          onClick={() => go('submitRevision', { no: open.no, seq: open.seq ?? 0 }, 'Revision sent to the FD and the CEO.')}
+        >
           Send revision {open.no} for approval
         </button>
       )}
@@ -193,7 +205,13 @@ export function Plan3({ v, pv, canAct, me }: { v: FinControls; pv: PV; canAct: b
           <button
             className="btn btn-sm btn-primary"
             disabled={act.busy}
-            onClick={() => go('revise', () => ({ fromMonth: f.revFrom, months: revFigures(), reason: f.revReason }), 'Revision saved.')}
+            onClick={() =>
+              go(
+                'revise',
+                () => ({ ...(open ? { no: open.no, seq: open.seq ?? 0 } : {}), fromMonth: f.revFrom, months: revFigures(), reason: f.revReason }),
+                'Revision saved.',
+              )
+            }
           >
             Save revision
           </button>
@@ -274,14 +292,14 @@ export function Plan3({ v, pv, canAct, me }: { v: FinControls; pv: PV; canAct: b
               <button
                 className="btn btn-sm"
                 disabled={act.busy || (f[`fw-${x.id}`] ?? '').trim().length < 10}
-                onClick={() => go('fc3Withdraw', { id: x.id, comment: f[`fw-${x.id}`] }, 'Forecast withdrawn.')}
+                onClick={() => go('fc3Withdraw', { id: x.id, seq: x.seq ?? 0, comment: f[`fw-${x.id}`] }, 'Forecast withdrawn.')}
               >
                 Withdraw
               </button>
             </span>
           )}
           {canAct && preparer && x.status === 'draft' && (
-            <button className="btn btn-sm" disabled={act.busy} onClick={() => go('fc3Submit', { id: x.id }, 'Forecast sent for approval.')}>
+            <button className="btn btn-sm" disabled={act.busy} onClick={() => go('fc3Submit', { id: x.id, seq: x.seq ?? 0 }, 'Forecast sent for approval.')}>
               Send for approval
             </button>
           )}
@@ -297,14 +315,14 @@ export function Plan3({ v, pv, canAct, me }: { v: FinControls; pv: PV; canAct: b
               <button
                 className="btn btn-sm btn-primary"
                 disabled={act.busy || !(f[`fc-${x.id}`] ?? '').trim()}
-                onClick={() => go('fc3Approve', { id: x.id, comment: f[`fc-${x.id}`] }, 'Forecast approved.')}
+                onClick={() => go('fc3Approve', { id: x.id, seq: x.seq ?? 0, comment: f[`fc-${x.id}`] }, 'Forecast approved.')}
               >
                 Approve
               </button>
               <button
                 className="btn btn-sm"
                 disabled={act.busy || (f[`fc-${x.id}`] ?? '').trim().length < 10}
-                onClick={() => go('fc3Return', { id: x.id, comment: f[`fc-${x.id}`] }, 'Forecast returned.')}
+                onClick={() => go('fc3Return', { id: x.id, seq: x.seq ?? 0, comment: f[`fc-${x.id}`] }, 'Forecast returned.')}
               >
                 Return
               </button>

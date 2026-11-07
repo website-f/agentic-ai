@@ -11,6 +11,33 @@ const fresh = () => {
   const svc = new PrimaService(new MemoryStore(ds), () => NOW);
   return { ds, svc, F: () => ds.finStatus.find((x) => x.companyId === T1)! };
 };
+/**
+ * What a screen opened just now sends with a step: the open revision's number or the forecast id, and the edit number (seq)
+ * it shows. Steps that give their own seq are sent as they are, so the stale-screen tests below act on what an old tab saw.
+ */
+type Fin = ReturnType<ReturnType<typeof fresh>['F']>;
+function onScreen(f: Fin, action: string, input: Record<string, unknown>): Record<string, unknown> {
+  if ('seq' in input) return input;
+  const p = f.plans?.find((x) => x.year === Number(input.year ?? 2026));
+  if (['draft', 'submit', 'approve', 'return'].includes(action)) return p?.budget.prepared ? { ...input, seq: p.budget.seq ?? 0 } : input;
+  if (action.endsWith('Revision') || action === 'revise') {
+    const r = input.no != null ? p?.revisions?.find((x) => x.no === Number(input.no)) : finOpenRevision(p?.revisions ?? []);
+    return r ? { no: r.no, ...input, seq: r.seq ?? 0 } : input;
+  }
+  if (action.startsWith('fc3')) {
+    const list = p?.threeStatements ?? [];
+    const kind = input.kind ?? 'quarterly';
+    const x =
+      input.id != null
+        ? list.find((y) => y.id === input.id)
+        : list.find(
+            (y) =>
+              y.kind === kind && y.asOf === input.asOf && y.scenario === (input.scenario ?? 'base') && ['draft', 'returned', 'submitted'].includes(y.status),
+          );
+    return x ? { id: x.id, ...input, seq: x.seq ?? 0 } : input;
+  }
+  return input;
+}
 const who = (svc: PrimaService, ...ids: string[]) => Promise.all(ids.map((id) => svc.user(id)));
 const months = (n: number) => Array(12).fill(n);
 
@@ -40,7 +67,8 @@ const reviewedSep = (bsCash = 50_000) => {
 async function approvedBudget() {
   const env = fresh();
   const [de, dep, lead, fd, ceo] = await who(env.svc, 'u-fin-t1-de1', 'u-fin-t1-dep', 'u-fin-t1-lead', 'u-fd', 'u-fauzan');
-  const plan = (u: typeof de, action: string, input: Record<string, unknown>) => env.svc.financeControls.planAction(u, T1, action, { year: 2026, ...input });
+  const plan = (u: typeof de, action: string, input: Record<string, unknown>) =>
+    env.svc.financeControls.planAction(u, T1, action, onScreen(env.F(), action, { year: 2026, ...input }));
   await plan(dep, 'draft', { months: { revenue: months(100_000), guard_cost: months(70_000) }, assumptions: '120 guards at RM2,900; no new contracts' });
   await plan(dep, 'submit', {});
   await plan(fd, 'approve', { comment: 'Approved for 2026.' });
@@ -285,7 +313,8 @@ describe('No two-author deadlock: the FD and the CEO never both write one record
   it('applies the same rule to the yearly budget and to three-statement forecasts', async () => {
     const env = fresh();
     const [lead, fd, ceo] = await who(env.svc, 'u-fin-t1-lead', 'u-fd', 'u-fauzan');
-    const plan = (u: typeof fd, action: string, input: Record<string, unknown>) => env.svc.financeControls.planAction(u, T1, action, { year: 2026, ...input });
+    const plan = (u: typeof fd, action: string, input: Record<string, unknown>) =>
+      env.svc.financeControls.planAction(u, T1, action, onScreen(env.F(), action, { year: 2026, ...input }));
     await plan(fd, 'draft', { months: { revenue: months(100_000) }, assumptions: 'Drafted by the FD (mock data)' });
     await expect(plan(ceo, 'draft', { months: { revenue: months(90_000) }, assumptions: 'Changed by the CEO (mock data)' })).rejects.toThrow(
       /already wrote this budget/,
@@ -332,5 +361,145 @@ describe('the open revision (screen and server share one rule)', () => {
     expect(finOpenRevision([r(1, 'approved'), r(2, 'withdrawn'), r(3, 'submitted')])?.no).toBe(3);
     expect(finOpenRevision([r(1, 'returned')])?.no).toBe(1);
     expect(finOpenRevision([r(1, 'withdrawn'), r(2, 'superseded'), r(3, 'approved')])).toBeNull();
+  });
+});
+
+describe('Stale screens: every step names the exact edit it was shown (Arisha main, 4 Nov 2026)', () => {
+  const rev = { fromMonth: '2026-12', months: { revenue: months(120_000) }, reason: 'New contract from December (mock data).' };
+  const seqOf = (F: () => Fin, no: number) =>
+    F()
+      .plans!.find((p) => p.year === 2026)!
+      .revisions!.find((r) => r.no === no)!;
+
+  it('refuses a stale approval after return, edit and resubmit under the same revision number', async () => {
+    const { F, dep, lead, fd, ceo, plan } = await approvedBudget();
+    await plan(lead, 'revise', rev);
+    await plan(lead, 'submitRevision', {});
+    // The FD's tab shows revision 1, sent, at RM120,000.
+    const seen = seqOf(F, 1).seq!;
+    expect(seqOf(F, 1).months.revenue![11]).toBe(120_000);
+    await plan(ceo, 'returnRevision', { no: 1, comment: 'Check the December start date first.' });
+    await plan(dep, 'revise', { ...rev, months: { revenue: months(130_000) } });
+    await plan(dep, 'submitRevision', {});
+    // The old tab's approval is refused and changes nothing: RM130,000 was never shown to the FD.
+    await expect(plan(fd, 'approveRevision', { no: 1, seq: seen, comment: 'Agreed.' })).rejects.toThrow(/changed after you opened it/);
+    await expect(plan(fd, 'returnRevision', { no: 1, seq: seen, comment: 'Old figures are wrong.' })).rejects.toThrow(/changed after you opened it/);
+    expect(seqOf(F, 1)).toMatchObject({ status: 'submitted', fdApproved: null, ceoApproved: null });
+    // Without an edit number nothing is approved either.
+    await expect(plan(fd, 'approveRevision', { no: 1, seq: undefined, comment: 'Agreed.' })).rejects.toThrow(/which edit/);
+    // Reloaded, the FD approves exactly what is shown now.
+    const now = seqOf(F, 1);
+    expect(now.months.revenue![11]).toBe(130_000);
+    expect(((await plan(fd, 'approveRevision', { no: 1, seq: now.seq, comment: 'Agreed at RM130,000.' })) as { status: string }).status).toBe('approved');
+  });
+
+  it("refuses an old tab's send, change or withdrawal of a withdrawn revision; it never reaches the new draft", async () => {
+    const { F, lead, plan } = await approvedBudget();
+    await plan(lead, 'revise', rev);
+    const old = { no: 1, seq: seqOf(F, 1).seq };
+    await plan(lead, 'withdrawRevision', { comment: 'Figures changed; redrafting.' });
+    await plan(lead, 'revise', { ...rev, months: { revenue: months(125_000) } });
+    // The old tab still shows revision 1.
+    await expect(plan(lead, 'submitRevision', old)).rejects.toThrow(/not the open revision/);
+    await expect(plan(lead, 'revise', { ...rev, ...old })).rejects.toThrow(/Revision 2 is already open/);
+    await expect(plan(lead, 'withdrawRevision', { ...old, comment: 'Withdraw again from the old tab.' })).rejects.toThrow(/not yet approved/);
+    // A tab that saw no open revision does not overwrite the new draft either.
+    await expect(plan(lead, 'revise', { ...rev, no: null, seq: 0 })).rejects.toThrow(/Revision 2 is already open/);
+    expect(seqOf(F, 2)).toMatchObject({ status: 'draft', submitted: null });
+    expect(seqOf(F, 2).months.revenue![11]).toBe(125_000);
+    // Two tabs on revision 2: the first change wins, the second is refused.
+    const two = { no: 2, seq: seqOf(F, 2).seq };
+    await plan(lead, 'revise', { ...rev, ...two, months: { revenue: months(126_000) } });
+    await expect(plan(lead, 'revise', { ...rev, ...two, months: { revenue: months(127_000) } })).rejects.toThrow(/changed after you opened it/);
+    await expect(plan(lead, 'submitRevision', two)).rejects.toThrow(/changed after you opened it/);
+    expect(seqOf(F, 2).months.revenue![11]).toBe(126_000);
+  });
+
+  it('lets only the first of two reviewers act on one submission shown to both', async () => {
+    const { F, lead, fd, ceo, plan } = await approvedBudget();
+    await plan(lead, 'revise', rev);
+    await plan(lead, 'submitRevision', {});
+    const both = { no: 1, seq: seqOf(F, 1).seq };
+    // The test store runs one step after the other; PostgreSQL holds the row so two requests at once do the same (API test).
+    await plan(fd, 'approveRevision', { ...both, comment: 'FD agrees.' });
+    await expect(plan(ceo, 'returnRevision', { ...both, comment: 'CEO wants another look.' })).rejects.toThrow(/not waiting|changed after you opened it/);
+    await expect(plan(ceo, 'approveRevision', { ...both, comment: 'CEO agrees too.' })).rejects.toThrow(/not waiting|changed after you opened it/);
+    const r = seqOf(F, 1);
+    // Exactly one decision stands, on the figures both saw.
+    expect(r).toMatchObject({ status: 'approved', ceoApproved: null, returned: null });
+    expect(r.seq).toBe(both.seq! + 1);
+  });
+
+  it('applies the same edit check to the yearly budget and to three-statement forecasts', async () => {
+    const env = fresh();
+    const [dep, lead, fd, ceo] = await who(env.svc, 'u-fin-t1-dep', 'u-fin-t1-lead', 'u-fd', 'u-fauzan');
+    const plan = (u: typeof fd, action: string, input: Record<string, unknown>) =>
+      env.svc.financeControls.planAction(u, T1, action, onScreen(env.F(), action, { year: 2026, ...input }));
+    const budget = () => env.F().plans!.find((p) => p.year === 2026)!.budget;
+    await plan(dep, 'draft', { months: { revenue: months(100_000) }, assumptions: 'First draft (mock data)' });
+    await plan(dep, 'submit', {});
+    const seen = budget().seq!;
+    await plan(ceo, 'return', { comment: 'Add the hospital contract.' });
+    await plan(dep, 'draft', { months: { revenue: months(110_000) }, assumptions: 'Second draft (mock data)' });
+    await plan(dep, 'submit', {});
+    await expect(plan(fd, 'approve', { seq: seen, comment: 'Approved.' })).rejects.toThrow(/budget changed after you opened it/);
+    expect(budget()).toMatchObject({ status: 'submitted', approved: null });
+    await expect(plan(lead, 'draft', { seq: seen, months: { revenue: months(90_000) }, assumptions: 'Old tab draft (mock data)' })).rejects.toThrow(
+      /submitted/,
+    );
+    await plan(fd, 'approve', { comment: 'Approved at RM110,000 a month.' });
+    expect(budget().status).toBe('approved');
+
+    env.F().ledgerFigures = [reviewedSep()] as never;
+    const fc = {
+      kind: 'quarterly',
+      asOf: '2026-09',
+      scenario: 'base',
+      assumptions: '120 guards, collections 75 days (mock data)',
+      openingSource: 'SQL Account balance sheet Sep 2026 (mock)',
+      opening: {
+        cash: 50_000,
+        receivables: 200_000,
+        inventory: 10_000,
+        fixedAssets: 90_000,
+        otherAssets: 0,
+        payables: 60_000,
+        borrowings: 100_000,
+        otherLiabilities: 40_000,
+        equity: 150_000,
+      },
+      periods: [Array(16).fill(0), Array(16).fill(0)].map(() => ({
+        revenue: 300_000,
+        operatingCosts: 260_000,
+        depreciation: 6_000,
+        financeCost: 2_000,
+        tax: 7_000,
+        capex: 0,
+        disposals: 0,
+        receivables: 200_000,
+        inventory: 10_000,
+        otherAssets: 0,
+        payables: 60_000,
+        otherLiabilities: 40_000,
+        borrowingsIn: 0,
+        borrowingsRepaid: 0,
+        dividends: 0,
+        equityIn: 0,
+      })),
+    };
+    const x = (await plan(dep, 'fc3Save', fc)) as { id: string };
+    await plan(dep, 'fc3Submit', { id: x.id });
+    const fseq = () =>
+      env
+        .F()
+        .plans!.find((p) => p.year === 2026)!
+        .threeStatements!.find((y) => y.id === x.id)!;
+    const old = fseq().seq!;
+    await plan(ceo, 'fc3Return', { id: x.id, comment: 'Use the downside collections.' });
+    await plan(lead, 'fc3Save', { ...fc, assumptions: 'Collections 90 days now (mock data)' });
+    await plan(lead, 'fc3Submit', { id: x.id });
+    await expect(plan(fd, 'fc3Approve', { id: x.id, seq: old, comment: 'Agreed.' })).rejects.toThrow(/forecast changed after you opened it/);
+    expect(fseq()).toMatchObject({ status: 'submitted', approved: null });
+    expect(((await plan(fd, 'fc3Approve', { id: x.id, comment: 'Agreed at 90 days.' })) as { status: string }).status).toBe('approved');
   });
 });

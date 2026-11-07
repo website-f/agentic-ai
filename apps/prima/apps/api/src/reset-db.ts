@@ -3,7 +3,7 @@
 import { CENTRAL_EMPLOYER_IDS, generateDataset, dateOf, type Dataset, type DataWall, type TableName } from '@prima/core';
 import { Client } from 'pg';
 import { nowMyt } from './db';
-import { companyOfficeModuleSql, companyRunLinksModuleSql, migrationSql } from './schema';
+import { companyOfficeModuleSql, companyRunLinksModuleSql, guardPayModuleSql, migrationSql, payFormulasModuleSql } from './schema';
 
 const COMPANY_TABLES: TableName[] = [
   'branches',
@@ -36,6 +36,14 @@ const COMPANY_TABLES: TableName[] = [
   'phoneCalls',
   'siteSystems',
   'siteAlarms',
+  'siteDispatches',
+  'postLogs',
+  'siteVehicles',
+  'gateEntries',
+  'siteNeedsReviews',
+  'siteTasks',
+  'siteTaskLogs',
+  'evidenceVideos',
   'attendanceFollowUps',
   'evidencePhotos',
   'evidenceDocs',
@@ -44,6 +52,7 @@ const COMPANY_TABLES: TableName[] = [
   'fwRenewals',
   'fwmTasks',
   'fwWelfareChecks',
+  'fwRecruitFiles',
   'hostels',
   'hostelStays',
   'hostelBills',
@@ -90,6 +99,14 @@ const TABLE_NAME: Partial<Record<TableName, string>> = {
   phoneCalls: 'phone_calls',
   siteSystems: 'site_systems',
   siteAlarms: 'site_alarms',
+  siteDispatches: 'site_dispatches',
+  postLogs: 'post_logs',
+  siteVehicles: 'site_vehicles',
+  gateEntries: 'gate_entries',
+  siteNeedsReviews: 'site_needs_reviews',
+  siteTasks: 'site_tasks',
+  siteTaskLogs: 'site_task_logs',
+  evidenceVideos: 'evidence_videos',
   attendanceFollowUps: 'attendance_followups',
   evidencePhotos: 'evidence_photos',
   evidenceDocs: 'evidence_docs',
@@ -99,6 +116,7 @@ const TABLE_NAME: Partial<Record<TableName, string>> = {
   fwRenewals: 'fw_renewals',
   fwmTasks: 'fwm_tasks',
   fwWelfareChecks: 'fw_welfare_checks',
+  fwRecruitFiles: 'fw_recruit_files',
   hostelStays: 'hostel_stays',
   hostelBills: 'hostel_bills',
   utilityCharges: 'utility_charges',
@@ -144,6 +162,9 @@ export async function resetDb(url: string, now = nowMyt()): Promise<Dataset> {
     // Development and tests only: the optional company office module, so local databases match the code under review.
     await client.query(companyOfficeModuleSql());
     await client.query(companyRunLinksModuleSql());
+    // Development and tests only: the optional pay formulas module, so local databases match the code under review.
+    await client.query(payFormulasModuleSql());
+    await client.query(guardPayModuleSql());
     const ds = generateDataset({ today: dateOf(now), now });
     await insertDataset(client, ds);
     return ds;
@@ -225,6 +246,7 @@ async function fill(client: Pick<Client, 'query'>, ds: Dataset): Promise<void> {
   await bulk('login_handovers', ds.loginHandovers, (r) => [r.id, r], 'id,data');
   await bulk('hr_filings', ds.hrFilings, (r) => [r.id, r.companyId, r], 'id,company_id,data');
   await bulk('hr_cases', ds.hrCases, (r) => [r.id, r.companyId, r], 'id,company_id,data');
+  await bulk('applicants', ds.applicants, (r) => [r.id, r.companyId, r], 'id,company_id,data');
   await bulk('office_osh', ds.officeOsh, (r) => [r.id, r.companyId, r], 'id,company_id,data');
   await bulk('staff_training', ds.staffTraining, (r) => [r.id, r.companyId, r], 'id,company_id,data');
   await bulk('staff_appraisals', ds.staffAppraisals, (r) => [r.id, r.companyId, r], 'id,company_id,data');
@@ -259,6 +281,15 @@ async function fill(client: Pick<Client, 'query'>, ds: Dataset): Promise<void> {
   await bulk('it_access_requests', ds.itAccessRequests, (r) => [r.id, r], 'id,data');
   await bulk('it_code_holders', ds.itCodeHolders, (r) => [r.id, r], 'id,data');
   await bulk('it_settings', ds.itSettings, (r) => [r.id, r], 'id,data');
+  await bulk('pay_formulas', ds.payFormulas, (r) => [r.id, r], 'id,data');
+  await bulk('pay_formula_uses', ds.payFormulaUses, (r) => [r.id, r], 'id,data');
+  await bulk('pay_law_versions', ds.payLawVersions, (r) => [r.id, r], 'id,data');
+  await bulk('public_holiday_lists', ds.publicHolidayLists, (r) => [r.id, r.companyId, r], 'id,company_id,data');
+  await bulk('site_hours_approvals', ds.siteHoursApprovals, (r) => [r.id, r.companyId, r], 'id,company_id,data');
+  await bulk('guard_pay_runs', ds.guardPayRuns, (r) => [r.id, r.companyId, r], 'id,company_id,data');
+  await bulk('guard_pay_advances', ds.guardPayAdvances, (r) => [r.id, r.companyId, r], 'id,company_id,data');
+  await bulk('guard_loans', ds.guardLoans, (r) => [r.id, r.companyId, r], 'id,company_id,data');
+  await bulk('statutory_versions', ds.statutoryVersions, (r) => [r.id, r], 'id,data');
   await bulk('web_companies', ds.webCompanies, (r) => [r.id, r], 'id,data');
   await bulk('web_domains', ds.webDomains, (r) => [r.id, r], 'id,data');
   await bulk('web_sites', ds.webSites, (r) => [r.id, r], 'id,data');

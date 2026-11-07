@@ -16,6 +16,9 @@ const step = (name, ok, detail = '') => { results.push({ name, ok, detail }); co
     console.log(`\n== viewport ${viewport.width}px ==`);
     const ctx = await b.newContext({ viewport });
     const p = await ctx.newPage();
+    // Friday in Malaysia, before the fixed annual-leave dates below. Date stays fixed while timers run normally.
+    // Otherwise sick leave defaults to a weekend on some runners, or annual leave eventually becomes backdated.
+    await p.clock.setFixedTime(new Date('2026-11-06T09:00:00+08:00'));
     const errors = []; p.on('pageerror', e => errors.push(e.message));
     const externalUrls = []; await p.route('**/*', r => { const u = new URL(r.request().url()); if (u.origin === BASE) return r.continue(); externalUrls.push(u.origin + u.pathname); return r.abort(); });
     await p.goto(BASE + '/');

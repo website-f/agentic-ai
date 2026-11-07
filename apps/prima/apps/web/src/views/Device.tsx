@@ -8,11 +8,15 @@ import { demoPin, jaOwns } from '@prima/core';
 import { EvidenceCamera } from './Camera';
 import { LeaveForm } from './Leave';
 import { ProofPicker } from './Proof';
+import { ScanBox } from './ScanBox';
+import type { ItemDevicePending } from '../api/types';
 import { FLAG_LABEL, SHIFT_STATE } from './shared';
 import { Card, Empty } from '../kit';
 import '../styles/ops.css';
+import { DeviceDispatch, DeviceInbox } from './SiteDispatch';
+import { DutyHome, GateInForm, GateOutForm, PaperLogForm, PostLogForm, TaskDoForm } from './DutyDevice';
 
-type Mode = 'home' | 'in' | 'out' | 'scan' | 'report' | 'leave';
+type Mode = 'home' | 'in' | 'out' | 'scan' | 'report' | 'leave' | 'items';
 type FaceTest = 'match' | 'nomatch' | 'photo';
 
 // Web NFC is in Chrome on Android only; the type is not in TypeScript's DOM library yet.
@@ -125,6 +129,8 @@ export function Device() {
   const siteId = me.user.siteIds[0];
   const site = useLoad(() => api.site(siteId), [siteId]);
   const [mode, setMode] = useState<Mode>('home');
+  const [dispatchId, setDispatchId] = useState<string | null>(null);
+  const [duty, setDuty] = useState<{ view: 'gate' | 'log' | 'paper' } | { view: 'out'; id: string; label: string } | { view: 'task'; task: Parameters<typeof TaskDoForm>[0]['task'] } | null>(null);
   const [now, setNow] = useState(() => new Date());
   useEffect(() => {
     const t = setInterval(() => setNow(new Date()), 10_000);
@@ -157,8 +163,18 @@ export function Device() {
             {clock}
           </div>
         </header>
-        {mode === 'home' && (
+        {/* Messages from CMS stay on top of every screen until taken (Fauzan, 6 Nov 2026). */}
+        {!dispatchId && <DeviceInbox site={s} onOpen={(m) => setDispatchId(m.id)} />}
+        {dispatchId && <DeviceDispatch id={dispatchId} site={s} onDone={() => setDispatchId(null)} />}
+        {!dispatchId && duty?.view === 'gate' && <GateInForm site={s} onDone={() => setDuty(null)} />}
+        {!dispatchId && duty?.view === 'log' && <PostLogForm site={s} onDone={() => setDuty(null)} />}
+        {!dispatchId && duty?.view === 'paper' && <PaperLogForm site={s} onDone={() => setDuty(null)} />}
+        {!dispatchId && duty?.view === 'task' && <TaskDoForm site={s} task={duty.task} onDone={() => setDuty(null)} />}
+        {!dispatchId && duty?.view === 'out' && <GateOutForm id={duty.id} label={duty.label} onDone={() => setDuty(null)} />}
+        {!dispatchId && !duty && mode === 'home' && (
           <>
+            {/* One-stop guard duty device (Fauzan, 6 Nov 2026): gate and post log first. */}
+            <DutyHome site={s} onGate={() => setDuty({ view: 'gate' })} onLog={() => setDuty({ view: 'log' })} onPaper={() => setDuty({ view: 'paper' })} onTask={(task) => setDuty({ view: 'task', task })} onOut={(id, label) => setDuty({ view: 'out', id, label })} />
             <div className="dv-actions">
               <button className="dv-action" data-primary="true" onClick={() => setMode('in')}>
                 <span className="dv-action-icon" aria-hidden="true">
@@ -193,6 +209,9 @@ export function Device() {
                 </span>
                 Leave or absence reason
               </button>
+              <button className="btn" onClick={() => setMode('items')}>
+                Confirm items I received
+              </button>
             </div>
             <Sos siteId={s.id} companyId={s.companyId} />
             <Card title="Today at this post" sub={api.mode === 'demo' ? 'Patrol PINs shown in the test version only' : undefined} flush>
@@ -216,8 +235,9 @@ export function Device() {
             </Card>
           </>
         )}
-        {mode === 'leave' && <DeviceLeave onDone={() => setMode('home')} />}
-        {mode !== 'home' && mode !== 'leave' && (
+        {!dispatchId && !duty && mode === 'leave' && <DeviceLeave onDone={() => setMode('home')} />}
+        {!dispatchId && !duty && mode === 'items' && <DeviceItems onDone={() => setMode('home')} />}
+        {!dispatchId && !duty && mode !== 'home' && mode !== 'leave' && mode !== 'items' && (
           <Flow mode={mode} site={s} checkpoints={site.data.checkpoints.map((c) => c.checkpoint)} onDone={() => setMode('home')} />
         )}
       </div>
@@ -276,7 +296,7 @@ function Flow({
   checkpoints,
   onDone,
 }: {
-  mode: Exclude<Mode, 'home' | 'leave'>;
+  mode: Exclude<Mode, 'home' | 'leave' | 'items'>;
   site: {
     id: string;
     code: string;
@@ -581,5 +601,79 @@ function DeviceLeave({ onDone }: { onDone: () => void }) {
         <LeaveForm key={staffNo} staffNo={staffNo || undefined} face={() => captureFace(faceTest)} onDone={onDone} />
       </div>
     </Card>
+  );
+}
+
+/**
+ * Confirm items on the post's shared device (Fauzan, 6 Nov 2026): the guard types their staff number and looks at the
+ * camera; only after the face check passes are their waiting items shown, and each one is confirmed by scanning its
+ * label or tag. Nobody can confirm an item handed to another guard.
+ */
+function DeviceItems({ onDone }: { onDone: () => void }) {
+  const a = useAction();
+  const [staffNo, setStaffNo] = useState('');
+  const [faceTest, setFaceTest] = useState<FaceTest>('match');
+  const [face, setFace] = useState<FaceCapture | null>(null);
+  const [list, setList] = useState<ItemDevicePending | null>(null);
+  const check = async () => {
+    const f = captureFace(faceTest);
+    const r = await a.run(() => api.itemDevicePending(staffNo, f));
+    if (r) {
+      setFace(f);
+      setList(r);
+    }
+  };
+  const confirm = async (label: string) => {
+    const r = await a.run(() => api.itemAct(`dev-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`, { kind: 'device.confirm', staffNo, face, label }), 'Confirmed. Thank you.');
+    if (r) setList(await api.itemDevicePending(staffNo, face).catch(() => list));
+  };
+  return (
+    <section className="panel" style={{ display: 'grid', gap: 10 }}>
+      <div className="panel-head">
+        <h3>Confirm items I received</h3>
+        <button
+          className="btn btn-sm"
+          onClick={() => {
+            setList(null);
+            setFace(null);
+            onDone();
+          }}
+        >
+          Done
+        </button>
+      </div>
+      {!list ? (
+        <>
+          <label className="field">
+            <span className="label">Staff number</span>
+            <input className="input mono" value={staffNo} onChange={(e) => setStaffNo(e.target.value.toUpperCase())} autoComplete="off" maxLength={30} />
+          </label>
+          <FaceScan value={faceTest} onChange={setFaceTest} />
+          <button className="btn btn-primary" disabled={a.busy || !staffNo.trim()} onClick={check}>
+            Check my face
+          </button>
+        </>
+      ) : (
+        <>
+          <div>
+            Hello {list.firstName} ({list.staffNo}). {list.waiting.length ? 'Scan each item you received:' : 'Nothing is waiting for you.'}
+          </div>
+          <div className="list">
+            {list.waiting.map((w) => (
+              <div key={w.label} className="list-item">
+                <div>
+                  <strong>{w.sku}</strong>
+                  <div className="muted small mono">{w.label}</div>
+                </div>
+                <Chip tone="warn">Waiting</Chip>
+              </div>
+            ))}
+          </div>
+          {list.waiting.length > 0 && <ScanBox label="Scan the item" button="Confirm" busy={a.busy} onScan={confirm} autoFocus />}
+          <span className="muted small">If something is wrong or missing, do not confirm it. Tell your supervisor.</span>
+        </>
+      )}
+      <ErrorNotice error={a.error} />
+    </section>
   );
 }

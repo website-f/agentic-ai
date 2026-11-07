@@ -36,7 +36,7 @@ BEGIN
                            'attendance','cases','checkpoints','scans','tenders','quotations',
                            'vaults','firearms','arms_movements','armed_jobs','dealer_licences','vault_watches',
                            'vault_events','ammo_stocks','arms_agreements','arms_requests',
-                           'insurance_policies','insurance_claims','insurance_guarantees','phone_extensions','phone_calls','site_systems','site_alarms','attendance_followups','evidence_photos','site_visits','evidence_docs','leave_requests','socso_claims','fw_renewals','fwm_tasks',
+                           'insurance_policies','insurance_claims','insurance_guarantees','phone_extensions','phone_calls','site_systems','site_alarms','site_dispatches','evidence_videos','post_logs','site_vehicles','gate_entries','site_needs_reviews','site_tasks','site_task_logs','attendance_followups','evidence_photos','site_visits','evidence_docs','leave_requests','socso_claims','fw_renewals','fwm_tasks',
                            'hostels','hostel_stays','hostel_bills','utility_charges','staff_claims','trip_approvals','ja_records','staff_pay_runs','fin_status','contracts','branch_settlements','branch_actions','corp_profiles','corp_filings','corp_changes','credit_loans','credit_defaults','pur_suppliers','pur_requests','stock_items','stock_issues','gov_mandates','grc_obligations','osh_assessments','corp_audits','legal_matters','sales_leads','pay_changes',
                            -- HR Phase 3, slice 3B (Fauzan, 2 Nov 2026): vacancies and statutory HR filings per employer.
                            'vacancies','hr_filings',
@@ -1428,6 +1428,17 @@ CREATE POLICY flex_request_wall ON prima.flex_requests
          OR (company_id IS NULL AND current_setting('app.group_user', true) = 'on')
          OR data->>'userId' = current_setting('app.user_id', true));
 GRANT SELECT, INSERT, UPDATE ON prima.flex_requests TO prima_app;
+-- Applicants for vacancies (Fauzan, 5 Nov 2026: HR only): the employer's company rows, and only for those passing the
+-- 'applicants' wall (HR, the HR Director, the CEO). Company managers and OMs see vacancies, never applicants.
+CREATE TABLE IF NOT EXISTS prima.applicants (id text PRIMARY KEY, company_id text NOT NULL, data jsonb NOT NULL, CHECK (data->>'id' = id), CHECK (data->>'companyId' = company_id));
+CREATE INDEX IF NOT EXISTS applicants_vacancy_idx ON prima.applicants ((data->>'vacancyId'));
+ALTER TABLE prima.applicants ENABLE ROW LEVEL SECURITY;
+ALTER TABLE prima.applicants FORCE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS applicant_wall ON prima.applicants;
+CREATE POLICY applicant_wall ON prima.applicants
+  USING (company_id = ANY (prima.visible_companies()) AND prima.has_wall('applicants'))
+  WITH CHECK (company_id = ANY (prima.visible_companies()) AND prima.has_wall('applicants'));
+GRANT SELECT, INSERT, UPDATE ON prima.applicants TO prima_app;
 -- HR cases (slice 3E, Fauzan 2 Nov 2026): each staff member's discipline and complaint file, behind the company
 -- wall; confidential cases (sexual harassment) also need the 'hr_cases' wall (HR, the HR Director, the CEO).
 CREATE TABLE IF NOT EXISTS prima.hr_cases (id text PRIMARY KEY, company_id text NOT NULL, data jsonb NOT NULL, CHECK (data->>'id' = id));

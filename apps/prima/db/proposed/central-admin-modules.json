@@ -2,7 +2,7 @@
   "status": "WIRED into db/release-manifest.json (Arisha main review round 2, 2 Nov 2026): both modules are pinned there and checked by the release gate. This file keeps the install order, dependencies, catalogue checks and rollback notes; its hashes must equal the manifest. Not installed anywhere. No install, migration or deploy is authorized by this file. Fauzan 2 Nov 2026 14:09Z: include both modules in the release.",
   "base": {
     "path": "db/migrations/001_init.sql",
-    "sha256": "3960b675c11162bc05dd7a50fcd604136370800a49317779a648081ed5c59a02"
+    "sha256": "76161ab46dd145158cd06277b0c80654e5a5150c2a2dae593ee087d54052ccfc"
   },
   "after": [
     "procurement",

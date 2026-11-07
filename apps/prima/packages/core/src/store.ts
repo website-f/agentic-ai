@@ -32,6 +32,8 @@ export function inRange(row: unknown, range: { field: string; from?: string; bef
 }
 
 export interface Store {
+  /** Whether a table is installed: a separately applied database module may not be yet. Absent = always installed. */
+  hasTable?(table: TableName): Promise<boolean>;
   workflowMetricProblems?():Promise<string[]>;
   workflowMetricNextSegment?(ref:import('./it-workflow-metrics-types').MetricRef):Promise<number>;
   workflowMetricLock?(ref:import('./it-workflow-metrics-types').MetricRef|null):Promise<void>;
@@ -42,6 +44,10 @@ export interface Store {
   /** Synthetic cleanup unit-of-work rollback; production uses the PostgreSQL transaction. */
   cleanupTransaction?<R>(fn:(store:Store)=>Promise<R>):Promise<R>;
   itCleanupProblems?(): Promise<string[]>;
+  /** Whether the optional pay formulas tables exist (PostgreSQL module pay-formulas-v1); memory always has them. */
+  payFormulasReady?(): Promise<boolean>;
+  /** Whether the optional guard pay table exists (PostgreSQL module guard-pay-v1); memory always has it. */
+  guardPayReady?(): Promise<boolean>;
   itCleanupDependencies?(kind:CleanupKind,id:string):Promise<{complete:boolean;reasons:string[]}>;
   itCleanupArchived?(kind:CleanupKind,id:string):Promise<boolean>;
   itManualProblems?(): Promise<string[]>;

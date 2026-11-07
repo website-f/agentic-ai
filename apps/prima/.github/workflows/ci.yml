@@ -31,6 +31,10 @@ jobs:
           cache: npm
       - run: node --test scripts/staging-schema-gate.test.mjs scripts/release-workflow-contract.test.mjs scripts/arisha-readiness.test.mjs
       - run: npm ci
+      - name: Test item readiness gate and scanner cancellation (mock APIs, no camera hardware)
+        run: |
+          node apps/api/test/item-register-repair.cjs
+          node apps/web/test/scan-cancellation.cjs
       - run: node --test scripts/job-emails-vite-startup.test.mjs scripts/website-policy-vite-transform.test.mjs scripts/it-manual-vite-boundary.test.mjs
       - run: node --test scripts/mail-connection-state.test.mjs scripts/mail-connection-render.test.cjs scripts/connections-state.test.mjs scripts/connections-v2.test.mjs scripts/m365-connections-state.test.mjs scripts/m365-connections-render.test.cjs scripts/sharepoint-request-state.test.mjs scripts/sharepoint-request-http.test.mjs scripts/job-email-integration.test.mjs
       - run: node --test scripts/website-schedule-state.test.mjs scripts/website-policy-ui.test.cjs scripts/website-pilot-ui.test.cjs scripts/it-manual-state.test.mjs scripts/it-manual-render.test.cjs scripts/it-manual-provenance.test.cjs scripts/it-operations-display.test.mjs scripts/it-operations-contract.test.mjs scripts/it-operations-render.test.cjs scripts/it-guide-state.test.mjs scripts/it-guide-render.test.cjs scripts/hr-it-state.test.mjs scripts/hr-it-render.test.cjs scripts/it-onboarding-evidence.test.cjs scripts/it-corrections-state.test.mjs scripts/it-corrections-render.test.cjs scripts/rental-correction-state.test.mjs scripts/rental-correction-render.test.cjs scripts/procurement-state.test.mjs scripts/procurement-render.test.cjs scripts/metrics-state.test.mjs scripts/metrics-render.test.cjs scripts/cleanup-state.test.mjs scripts/cleanup-render.test.cjs
@@ -41,12 +45,22 @@ jobs:
       # Fails on a high or critical advisory in anything that ships to the server (dev-only tools are reported in docs).
       - run: npm audit --omit=dev --audit-level=high
       - run: npm run build -w @prima/core
+      - name: Test encrypted offline identity and key initialization (synthetic only)
+        run: node tests/offline-synthetic.cjs && node tests/offline-core.cjs
       - run: node --test scripts/procurement-core-contract.test.mjs scripts/metrics-core-contract.test.mjs scripts/cleanup-core-contract.test.mjs
       - name: Test import adapter against this candidate's real core (synthetic data only)
         run: PRIMA_REVIEWED_CORE_MODULE="$GITHUB_WORKSPACE/packages/core/dist/index.js" node --test scripts/it-import-reviewed-core.test.mjs scripts/it-manual-contract-integration.test.mjs scripts/it-operations-core.test.mjs scripts/hr-it-core.test.mjs scripts/it-corrections-core.test.mjs scripts/rental-correction-core.test.mjs
       - run: npm test -w @prima/core
       - run: npm test -w @prima/api
       - run: npm test -w @prima/cms
+      - name: Test item register on a fresh disposable PostgreSQL database only
+        env:
+          ITEM_REPAIR_DATABASE_URL: postgres://postgres:ci@localhost:5432/prima_repair_items
+        run: |
+          node -e "const {Client}=require('pg');(async()=>{const c=new Client({connectionString:process.env.DATABASE_URL});try{await c.connect();await c.query('CREATE DATABASE prima_repair_items')}finally{await c.end()}})().catch(e=>{console.error(e);process.exitCode=1})"
+          node apps/api/test/item-register-postgres-repair.cjs
+      - name: Test offline replay over isolated HTTP and PostgreSQL
+        run: node tests/run-offline-http.cjs
       - run: npm run typecheck -w @prima/web
       - run: npm run build:demo -w @prima/web
       - run: node --test scripts/it-purchase-reason.test.cjs
@@ -81,6 +95,7 @@ jobs:
           CI_SYNTHETIC_BROWSER: 'true'
         run: |
           export PLAYWRIGHT_MODULE="$RUNNER_TEMP/prima-browser/node_modules/playwright/index.mjs"
+          node tests/offline-browser.cjs
           node scripts/arisha-review-smoke.mjs
           node scripts/it-import-smoke.mjs
           node scripts/it-extraction-browser-smoke.mjs

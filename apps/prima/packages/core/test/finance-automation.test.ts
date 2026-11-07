@@ -132,8 +132,8 @@ describe('5. every variance has an owner and a due day; the FD or the CEO accept
     const { svc } = fresh();
     const [de, dep, lead, fd, ceo] = await who(svc, 'u-fin-t1-de1', 'u-fin-t1-dep', 'u-fin-t1-lead', 'u-fd', 'u-fauzan');
     await svc.financeControls.planAction(dep, T1, 'draft', { year: 2026, months: { revenue: months(100_000) }, assumptions: '120 guards at RM2,900; no new contracts' });
-    await svc.financeControls.planAction(dep, T1, 'submit', { year: 2026 });
-    await svc.financeControls.planAction(fd, T1, 'approve', { year: 2026, comment: 'Approved.' });
+    await svc.financeControls.planAction(dep, T1, 'submit', { year: 2026, seq: 1 });
+    await svc.financeControls.planAction(fd, T1, 'approve', { year: 2026, seq: 2, comment: 'Approved.' });
     await svc.financeControls.planAction(de, T1, 'actuals', { year: 2026, month: '2026-09', values: { revenue: 80_000 }, source: 'SQL P&L Sep.pdf' });
     const plan = (await svc.financeControls.view(fd, T1)).plan;
     expect(plan.toExplain[0]).toMatchObject({ key: '2026-09:revenue', owner: 'Team 1 leader', dueOn: '2026-10-15', overdue: true });
@@ -160,8 +160,8 @@ describe("review findings on e53c5f6 (Arisha main, 1 Nov 2026)", () => {
     const { svc } = fresh();
     const [de, dep, lead, fd, ceo] = await who(svc, 'u-fin-t1-de1', 'u-fin-t1-dep', 'u-fin-t1-lead', 'u-fd', 'u-fauzan');
     await svc.financeControls.planAction(dep, T1, 'draft', { year: 2026, months: { revenue: months(100_000) }, assumptions: '120 guards at RM2,900; no new contracts' });
-    await svc.financeControls.planAction(dep, T1, 'submit', { year: 2026 });
-    await svc.financeControls.planAction(fd, T1, 'approve', { year: 2026, comment: 'Approved.' });
+    await svc.financeControls.planAction(dep, T1, 'submit', { year: 2026, seq: 1 });
+    await svc.financeControls.planAction(fd, T1, 'approve', { year: 2026, seq: 2, comment: 'Approved.' });
     await svc.financeControls.planAction(de, T1, 'actuals', { year: 2026, month: '2026-09', values: { revenue: 80_000 }, source: 'SQL P&L Sep.pdf' });
     await svc.financeControls.planAction(lead, T1, 'explain', { year: 2026, key: '2026-09:revenue', text: 'Kepong client terminated mid-September' });
     await expect(svc.financeControls.planAction(lead, T1, 'explain', { year: 2026, key: '2026-13:revenue', text: 'Not a real month here' })).rejects.toThrow(/Which variance/);

@@ -2,7 +2,7 @@
   "version": 1,
   "base": {
     "path": "db/migrations/001_init.sql",
-    "sha256": "3960b675c11162bc05dd7a50fcd604136370800a49317779a648081ed5c59a02"
+    "sha256": "76161ab46dd145158cd06277b0c80654e5a5150c2a2dae593ee087d54052ccfc"
   },
   "modules": [
     {
@@ -94,6 +94,32 @@
       "id": "fw_welfare",
       "path": "db/modules/fw-welfare-v1.sql",
       "sha256": "5ab0f22874be281bf87036378f8fb8d162d8ed4c5292bc83644230b41ef5fe1f",
+      "requires": []
+    },
+    {
+      "id": "pay_formulas",
+      "path": "db/modules/pay-formulas-v1.sql",
+      "sha256": "4449424d3584820331563c81cd392ff9dd1983a01532117c398c5a614a6dc3d3",
+      "requires": []
+    },
+    {
+      "id": "guard_pay",
+      "path": "db/modules/guard-pay-v1.sql",
+      "sha256": "fb0c080b5939fb60459410db347c6cde69d632f24ec72ccb644cac41dd10b0ac",
+      "requires": [
+        "pay_formulas"
+      ]
+    },
+    {
+      "id": "fw_recruit",
+      "path": "db/modules/fw-recruit-v1.sql",
+      "sha256": "99acb852f40b5bf87de45fe1c52e18fc127b3c423ea404f0fc8851ddad0eb87c",
+      "requires": []
+    },
+    {
+      "id": "item_register",
+      "path": "db/modules/item-register-v1.sql",
+      "sha256": "ad1df742e95a6ae122173629cbecf4b74b550c7a873462eae2d963c65259d33a",
       "requires": []
     }
   ]

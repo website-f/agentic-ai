@@ -9,6 +9,7 @@ import { BenefitsTab, HoursTab, LeaveTab, TrainingTab, WarningsTab, WorkTab } fr
 import { SocsoTab } from './Socso';
 import { MyItemsPanel } from './MyItems';
 import '../styles/selfservice.css';
+import { MyGuardPayslips } from './GuardPay';
 
 const PERSON_ROLE: Record<string, string> = { guard: 'Guard', supervisor: 'Officer', patrol_officer: 'Patrolling officer', office: 'Office staff' };
 
@@ -270,6 +271,9 @@ export function MyDuty() {
           </Card>
         </>
       )}
+
+      {/* Guard pay run (Fauzan, 5 Nov 2026): a guard's or officer's own payslips, once Prima pays them. */}
+      {!staff && <MyGuardPayslips />}
 
       <p className="ss-note">
         {staff

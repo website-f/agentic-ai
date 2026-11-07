@@ -1,6 +1,7 @@
+import { invalidateDutyContext } from '../duty/context';
 import type { ExtractionStatus, ExtractionRequest, ExtractionPreview } from './it-extraction';
 import type { SharePointStatus, SharePointCheck, SharePointLibraries, SharePointItems } from './connections';
-import type { Home, User, CmsServiceKind, EvidenceDoc, ProofInput, ReportDef, FinCloseAction, FinPackKind, FinPaymentAction, FinRequestAction, GrowthMargin, GrowthPanel } from '@prima/core';
+import type { Home, User, ClientLostReason, CmsServiceKind, EvidenceDoc, ProofInput, ReportDef, FinCloseAction, FinPackKind, FinPaymentAction, FinRequestAction, GrowthMargin, GrowthPanel } from '@prima/core';
 import {
   type FinControlArea,
   ApiError,
@@ -8,6 +9,8 @@ import {
   type WorkAdjustInput,
   type WorkReassignInput,
   type ClientAccountInput,
+  type CrmBoard,
+  type CrmClient,
   type CmsSettingsPatch,
   type ContractInput,
   type FollowUpInput,
@@ -32,6 +35,18 @@ import {
   type AmRentCheck,
   type AmBuyInput,
   type AmWhatsAppBoard,
+  type CmsDispatches,
+  type DeviceDispatches,
+  type DispatchInput,
+  type VideoInput,
+  type DutyDevice,
+  type SiteDutyLog,
+  type PostLogInput,
+  type GateInInput,
+  type SiteTaskBoard,
+  type NeedsReviewInput,
+  type SiteTaskInput,
+  type DoSiteTaskInput,
 } from './types';
 import { MicrosoftSignIn, type SignInConfig } from './microsoft';
 
@@ -100,12 +115,14 @@ export class HttpApi implements Api {
   }
 
   async signInMicrosoft() {
+    invalidateDutyContext();
     const { ms } = await this.ready();
     if (!ms) throw new ApiError('Microsoft sign-in is not set up on this server.', 400, []);
     await ms.signIn();
   }
 
   async signOut() {
+    invalidateDutyContext();
     // In the office, signing out of Prima is signing out of the office: back to it.
     if (this.office) {
       window.top?.location.assign('/');
@@ -182,6 +199,7 @@ export class HttpApi implements Api {
       const err = new ApiError(data.message ?? `Request failed (${res.status})`, res.status, data.findings ?? []);
       // The sign-in has ended (Microsoft session expired or was removed): the app goes back to the sign-in screen
       // instead of leaving every screen showing an error.
+      if (res.status === 401) invalidateDutyContext();
       if (res.status === 401) window.dispatchEvent(new CustomEvent(SESSION_ENDED, { detail: err.message }));
       throw err;
     }
@@ -221,7 +239,7 @@ export class HttpApi implements Api {
     if(!identity.ok||me?.user?.id!==expectedUserId||accountKey()!==selected||signal?.aborted)throw new ApiError('Microsoft identity no longer matches this screen.',401,[]);
     const res = await fetch(`${this.base}/api${path}`, {method,signal,credentials:'omit',headers,body:body===undefined?undefined:JSON.stringify(body)});
     const data = await res.json().catch(()=>({}));
-    if (!res.ok) { if(res.status===401) window.dispatchEvent(new CustomEvent(SESSION_ENDED)); throw new ApiError('Microsoft operation could not be verified. Check your account and approved setup.',res.status,[]); }
+    if (!res.ok) { if(res.status===401) invalidateDutyContext(); if(res.status===401) window.dispatchEvent(new CustomEvent(SESSION_ENDED)); throw new ApiError('Microsoft operation could not be verified. Check your account and approved setup.',res.status,[]); }
     return data;
   }
 
@@ -271,6 +289,7 @@ export class HttpApi implements Api {
     return this.call<User[]>('GET', '/auth/users');
   }
   async signIn(userId: string): Promise<Me> {
+    invalidateDutyContext();
     const { token } = await this.call<{ token: string }>('POST', '/auth/dev-login', { userId });
     this.token = token;
     try {
@@ -505,6 +524,18 @@ export class HttpApi implements Api {
   vacancyStep(id: string, action: Parameters<Api['vacancyStep']>[1], note: string) {
     return this.call('POST', `/vacancies/${encodeURIComponent(id)}/${action}`, { note });
   }
+  advertStep(id: string, action: Parameters<Api['advertStep']>[1], input: Parameters<Api['advertStep']>[2]) {
+    return this.call('POST', `/vacancies/${encodeURIComponent(id)}/advert/${action}`, input);
+  }
+  applicants(vacancyId: string) {
+    return this.call<Awaited<ReturnType<Api['applicants']>>>('GET', `/vacancies/${encodeURIComponent(vacancyId)}/applicants`);
+  }
+  addApplicant(vacancyId: string, input: Parameters<Api['addApplicant']>[1]) {
+    return this.call('POST', `/vacancies/${encodeURIComponent(vacancyId)}/applicants`, input);
+  }
+  applicantStep(id: string, status: Parameters<Api['applicantStep']>[1], note: string, interviewAt: string | null) {
+    return this.call('POST', `/applicants/${encodeURIComponent(id)}/${status}`, { note, interviewAt });
+  }
   staffClockIn(input: Parameters<Api['staffClockIn']>[0]) {
     return this.call('POST', '/me/clock/in', input);
   }
@@ -702,6 +733,9 @@ export class HttpApi implements Api {
   addSocsoCheckIn(id: string, note: string) {
     return this.call<unknown>('POST', `/socso/${encodeURIComponent(id)}/checkins`, { note });
   }
+  workKpi(period?: string) {
+    return this.call<Awaited<ReturnType<Api['workKpi']>>>('GET', `/kpi/work${period ? `?period=${encodeURIComponent(period)}` : ''}`);
+  }
   fwmBoard() {
     return this.call<Awaited<ReturnType<Api['fwmBoard']>>>('GET', '/fwm');
   }
@@ -891,6 +925,53 @@ export class HttpApi implements Api {
   decidePayChange(id: string, verify: boolean, note: string) {
     return this.call<unknown>('POST', `/pay-changes/${encodeURIComponent(id)}/${verify ? 'verify' : 'reject'}`, { note });
   }
+  salaryCalcData() {
+    return this.call<Awaited<ReturnType<Api['salaryCalcData']>>>('GET', '/salary-calc');
+  }
+  payFormulaBoard() {
+    return this.call<Awaited<ReturnType<Api['payFormulaBoard']>>>('GET', '/pay-formulas');
+  }
+  payFormulaAt(input: Parameters<Api['payFormulaAt']>[0]) {
+    const q = new URLSearchParams({ kind: input.kind });
+    if (input.siteId) q.set('siteId', input.siteId);
+    if (input.companyId) q.set('companyId', input.companyId);
+    if (input.regionId) q.set('regionId', input.regionId);
+    if (input.month) q.set('month', input.month);
+    return this.call<Awaited<ReturnType<Api['payFormulaAt']>>>('GET', `/pay-formulas/at?${q.toString()}`);
+  }
+  savePayFormula(input: Parameters<Api['savePayFormula']>[0]) {
+    return this.call<unknown>('POST', '/pay-formulas', input);
+  }
+  decidePayFormula(id: string, approve: boolean, note: string) {
+    return this.call<unknown>('POST', `/pay-formulas/${encodeURIComponent(id)}/decide`, { approve, note });
+  }
+  withdrawPayFormula(id: string) {
+    return this.call<unknown>('POST', `/pay-formulas/${encodeURIComponent(id)}/withdraw`, {});
+  }
+  setPayFormulaUse(input: Parameters<Api['setPayFormulaUse']>[0]) {
+    return this.call<unknown>('POST', '/pay-formula-uses', input);
+  }
+  savePayLaw(input: Parameters<Api['savePayLaw']>[0]) {
+    return this.call<unknown>('POST', '/pay-law', input);
+  }
+  siteHoursBoard(input: Parameters<Api['siteHoursBoard']>[0]) {
+    const q = new URLSearchParams();
+    if (input.companyId) q.set('companyId', input.companyId);
+    if (input.month) q.set('month', input.month);
+    return this.call<Awaited<ReturnType<Api['siteHoursBoard']>>>('GET', `/site-hours?${q.toString()}`);
+  }
+  approveSiteHours(input: Parameters<Api['approveSiteHours']>[0]) {
+    return this.call<unknown>('POST', '/site-hours/approve', input);
+  }
+  publicHolidayBoard(input: Parameters<Api['publicHolidayBoard']>[0]) {
+    const q = new URLSearchParams();
+    if (input.companyId) q.set('companyId', input.companyId);
+    if (input.year) q.set('year', String(input.year));
+    return this.call<Awaited<ReturnType<Api['publicHolidayBoard']>>>('GET', `/public-holidays?${q.toString()}`);
+  }
+  setPublicHolidays(input: Parameters<Api['setPublicHolidays']>[0]) {
+    return this.call<unknown>('POST', '/public-holidays', input);
+  }
   recordKinds() {
     return this.call<Awaited<ReturnType<Api['recordKinds']>>>('GET', '/records/kinds');
   }
@@ -1051,6 +1132,21 @@ export class HttpApi implements Api {
   }
   purBoard() {
     return this.call<Awaited<ReturnType<Api['purBoard']>>>('GET', '/purchasing');
+  }
+  itemBoard() {
+    return this.call<Awaited<ReturnType<Api['itemBoard']>>>('GET', '/items');
+  }
+  itemByLabel(label: string) {
+    return this.call<Awaited<ReturnType<Api['itemByLabel']>>>('GET', `/items/label/${encodeURIComponent(label.slice(0, 80))}`);
+  }
+  itemPaper(id: string) {
+    return this.call<Awaited<ReturnType<Api['itemPaper']>>>('GET', `/items/paper/${encodeURIComponent(id.slice(0, 40))}`);
+  }
+  itemDevicePending(staffNo: string, face: import('@prima/core').FaceCapture | null) {
+    return this.call<Awaited<ReturnType<Api['itemDevicePending']>>>('POST', '/items/device/pending', { staffNo, face });
+  }
+  itemAct(requestId: string, action: Parameters<Api['itemAct']>[1]) {
+    return this.call<Awaited<ReturnType<Api['itemAct']>>>('POST', '/items/act', { requestId, action });
   }
   raisePurRequest(companyId: string, input: Parameters<Api['raisePurRequest']>[1]) {
     return this.call<unknown>('POST', `/purchasing/${encodeURIComponent(companyId)}/requests`, input);
@@ -1513,6 +1609,74 @@ export class HttpApi implements Api {
   staffPayExport(runId: string, kind: Parameters<Api['staffPayExport']>[1]) {
     return this.call<Awaited<ReturnType<Api['staffPayExport']>>>('POST', `/staff-pay/${encodeURIComponent(runId)}/files/${kind}`, {});
   }
+  guardPayroll() {
+    return this.call<Awaited<ReturnType<Api['guardPayroll']>>>('GET', '/guard-pay');
+  }
+  guardPayRun(runId: string) {
+    return this.call<Awaited<ReturnType<Api['guardPayRun']>>>('GET', `/guard-pay/${encodeURIComponent(runId)}`);
+  }
+  myGuardPayslips() {
+    return this.call<Awaited<ReturnType<Api['myGuardPayslips']>>>('GET', '/guard-pay/mine');
+  }
+  prepareGuardPay(companyId: string, period: string, holidays?: { date: string; label: string }[]) {
+    return this.call<unknown>('POST', '/guard-pay', { companyId, period, holidays });
+  }
+  setGuardPayLine(runId: string, personId: string, patch: Parameters<Api['setGuardPayLine']>[2]) {
+    return this.call<unknown>('POST', `/guard-pay/${encodeURIComponent(runId)}/lines/${encodeURIComponent(personId)}`, patch);
+  }
+  guardPayStep(runId: string, action: Parameters<Api['guardPayStep']>[1], body: Parameters<Api['guardPayStep']>[2]) {
+    return this.call<unknown>('POST', `/guard-pay/${encodeURIComponent(runId)}/${action}`, body);
+  }
+  guardPayExport(runId: string, kind: Parameters<Api['guardPayExport']>[1]) {
+    return this.call<Awaited<ReturnType<Api['guardPayExport']>>>('POST', `/guard-pay/${encodeURIComponent(runId)}/files/${kind}`, {});
+  }
+  guardPayCash(runId: string, personId: string, action: Parameters<Api['guardPayCash']>[2], body: Parameters<Api['guardPayCash']>[3]) {
+    return this.call<unknown>('POST', `/guard-pay/${encodeURIComponent(runId)}/cash/${encodeURIComponent(personId)}/${action}`, body);
+  }
+  recordPayConsent(personId: string, body: Parameters<Api['recordPayConsent']>[1]) {
+    return this.call<unknown>('POST', `/guard-pay/consent/${encodeURIComponent(personId)}`, body);
+  }
+  statutoryBoard() {
+    return this.call<Awaited<ReturnType<Api['statutoryBoard']>>>('GET', '/statutory');
+  }
+  setStatutory(body: Parameters<Api['setStatutory']>[0]) {
+    return this.call<unknown>('POST', '/statutory', body);
+  }
+  payConsentsWaiting() {
+    return this.call<Awaited<ReturnType<Api['payConsentsWaiting']>>>('GET', '/guard-pay/consents');
+  }
+  approvePayConsent(personId: string, note: string) {
+    return this.call<unknown>('POST', `/guard-pay/consent/${encodeURIComponent(personId)}/approve`, { note });
+  }
+  guardAdvances(input: Parameters<Api['guardAdvances']>[0]) {
+    const q = new URLSearchParams();
+    if (input.companyId) q.set('companyId', input.companyId);
+    if (input.period) q.set('period', input.period);
+    return this.call<Awaited<ReturnType<Api['guardAdvances']>>>('GET', `/guard-pay/advances${q.size ? `?${q}` : ''}`);
+  }
+  setGuardAdvances(body: Parameters<Api['setGuardAdvances']>[0]) {
+    return this.call<Awaited<ReturnType<Api['setGuardAdvances']>>>('POST', '/guard-pay/advances', body);
+  }
+  changeGuardAdvance(id: string, body: Parameters<Api['changeGuardAdvance']>[1]) {
+    return this.call<unknown>('POST', `/guard-pay/advances/${encodeURIComponent(id)}`, body);
+  }
+  approveGuardAdvances(ids: string[], note: string) {
+    return this.call<unknown>('POST', '/guard-pay/advances/approve', { ids, note });
+  }
+  payGuardAdvance(id: string, body: Parameters<Api['payGuardAdvance']>[1]) {
+    return this.call<unknown>('POST', `/guard-pay/advances/${encodeURIComponent(id)}/pay`, body);
+  }
+  guardLoans(input: Parameters<Api['guardLoans']>[0]) {
+    const q = new URLSearchParams();
+    if (input.companyId) q.set('companyId', input.companyId);
+    return this.call<Awaited<ReturnType<Api['guardLoans']>>>('GET', `/guard-pay/loans${q.size ? `?${q}` : ''}`);
+  }
+  recordGuardLoan(body: Parameters<Api['recordGuardLoan']>[0]) {
+    return this.call<unknown>('POST', '/guard-pay/loans', body);
+  }
+  guardLoanStep(id: string, action: Parameters<Api['guardLoanStep']>[1], body: Parameters<Api['guardLoanStep']>[2]) {
+    return this.call<unknown>('POST', `/guard-pay/loans/${encodeURIComponent(id)}/${action}`, body);
+  }
   jaBoard() {
     return this.call<Awaited<ReturnType<Api['jaBoard']>>>('GET', '/ja');
   }
@@ -1537,8 +1701,38 @@ export class HttpApi implements Api {
   addClientAccount(input: ClientAccountInput) {
     return this.call<unknown>('POST', '/clients', input);
   }
-  startOffboarding(accountId: string, reason: string) {
-    return this.call<unknown>('POST', `/clients/${encodeURIComponent(accountId)}/offboard`, { reason });
+  startOffboarding(accountId: string, reason: string, lost?: { reason: ClientLostReason; winBackOn?: string | null }) {
+    return this.call<unknown>('POST', `/clients/${encodeURIComponent(accountId)}/offboard`, { reason, ...(lost ? { lostReason: lost.reason, winBackOn: lost.winBackOn ?? null } : {}) });
+  }
+  crmBoard() {
+    return this.call<CrmBoard>('GET', '/crm');
+  }
+  crmClient(accountId: string) {
+    return this.call<CrmClient>('GET', `/crm/clients/${encodeURIComponent(accountId)}`);
+  }
+  setClientOwner(accountId: string, userId: string) {
+    return this.call<unknown>('POST', `/crm/clients/${encodeURIComponent(accountId)}/owner`, { userId });
+  }
+  addClientPerson(accountId: string, input: Parameters<Api['addClientPerson']>[1]) {
+    return this.call<unknown>('POST', `/crm/clients/${encodeURIComponent(accountId)}/people`, input);
+  }
+  updateClientPerson(accountId: string, personId: string, action: 'remove' | 'main') {
+    return this.call<unknown>('POST', `/crm/clients/${encodeURIComponent(accountId)}/people/${encodeURIComponent(personId)}`, { action });
+  }
+  addClientRequest(accountId: string, input: Parameters<Api['addClientRequest']>[1]) {
+    return this.call<unknown>('POST', `/crm/clients/${encodeURIComponent(accountId)}/requests`, input);
+  }
+  closeClientRequest(accountId: string, requestId: string, input: Parameters<Api['closeClientRequest']>[2]) {
+    return this.call<unknown>('POST', `/crm/clients/${encodeURIComponent(accountId)}/requests/${encodeURIComponent(requestId)}`, input);
+  }
+  decideClientRenewal(accountId: string, input: Parameters<Api['decideClientRenewal']>[1]) {
+    return this.call<unknown>('POST', `/crm/clients/${encodeURIComponent(accountId)}/renewal/decide`, input);
+  }
+  sendClientRenewalOffer(accountId: string, proof: ProofInput[]) {
+    return this.call<unknown>('POST', `/crm/clients/${encodeURIComponent(accountId)}/renewal/offer`, { proof });
+  }
+  answerClientRenewal(accountId: string, input: Parameters<Api['answerClientRenewal']>[1]) {
+    return this.call<unknown>('POST', `/crm/clients/${encodeURIComponent(accountId)}/renewal/answer`, input);
   }
   clientContact(accountId: string, kind: 'visit' | 'meeting' | 'call', note: string) {
     return this.call<unknown>('POST', `/clients/${encodeURIComponent(accountId)}/contact`, { kind, note });
@@ -1638,6 +1832,27 @@ export class HttpApi implements Api {
   }
   closeFwCheck(id: string, input: Parameters<Api['closeFwCheck']>[1], proof: ProofInput[]) {
     return this.call<unknown>('POST', `/fw-checks/${encodeURIComponent(id)}/close`, { ...input, proof });
+  }
+  fwmRecruitment() {
+    return this.call<Awaited<ReturnType<Api['fwmRecruitment']>>>('GET', '/fwm/recruitment');
+  }
+  openFwRecruitFile(input: Parameters<Api['openFwRecruitFile']>[0]) {
+    return this.call<unknown>('POST', '/fwm/recruitment', input);
+  }
+  setFwRecruitTravel(id: string, input: Parameters<Api['setFwRecruitTravel']>[1]) {
+    return this.call<unknown>('POST', `/fwm/recruitment/${encodeURIComponent(id)}/travel`, input);
+  }
+  recordFwRecruitStep(id: string, step: Parameters<Api['recordFwRecruitStep']>[1], input: Parameters<Api['recordFwRecruitStep']>[2], proof: ProofInput[]) {
+    return this.call<unknown>('POST', `/fwm/recruitment/${encodeURIComponent(id)}/steps/${encodeURIComponent(step)}`, { ...input, proof });
+  }
+  clearFwRecruitFile(id: string, input: Parameters<Api['clearFwRecruitFile']>[1]) {
+    return this.call<unknown>('POST', `/fwm/recruitment/${encodeURIComponent(id)}/clear`, input);
+  }
+  recordFwRecruitArrival(id: string, input: Parameters<Api['recordFwRecruitArrival']>[1]) {
+    return this.call<unknown>('POST', `/fwm/recruitment/${encodeURIComponent(id)}/arrived`, input);
+  }
+  stopFwRecruitFile(id: string, input: Parameters<Api['stopFwRecruitFile']>[1]) {
+    return this.call<unknown>('POST', `/fwm/recruitment/${encodeURIComponent(id)}/stop`, input);
   }
   advanceSocsoClaim(id: string, to: Parameters<Api['advanceSocsoClaim']>[1], input: Parameters<Api['advanceSocsoClaim']>[2]) {
     return this.call<unknown>('POST', `/socso/${encodeURIComponent(id)}/status`, { to, ...input });
@@ -1766,6 +1981,69 @@ export class HttpApi implements Api {
   }
   acknowledgeAlarm(id: string) {
     return this.call<unknown>('POST', `/cms/alarms/${id}/ack`, {});
+  }
+  cmsDispatches() {
+    return this.call<CmsDispatches>('GET', '/cms/dispatches');
+  }
+  sendDispatch(input: DispatchInput) {
+    return this.call<unknown>('POST', '/cms/dispatches', input);
+  }
+  closeDispatch(id: string, outcome: 'real' | 'nothing_found' | 'done', note: string) {
+    return this.call<unknown>('POST', `/cms/dispatches/${encodeURIComponent(id)}/close`, { outcome, note });
+  }
+  cancelDispatch(id: string, note: string) {
+    return this.call<unknown>('POST', `/cms/dispatches/${encodeURIComponent(id)}/cancel`, { note });
+  }
+  deviceDispatches() {
+    return this.call<DeviceDispatches>('GET', '/device/dispatches');
+  }
+  dispatchSeen(id: string) {
+    return this.call<unknown>('POST', `/device/dispatches/${encodeURIComponent(id)}/seen`, {});
+  }
+  acknowledgeDispatch(id: string, input: { staffNo: string; pin: string }) {
+    return this.call<unknown>('POST', `/device/dispatches/${encodeURIComponent(id)}/ack`, input);
+  }
+  addDispatchPhoto(id: string, input: PhotoInput) {
+    return this.call<unknown>('POST', `/device/dispatches/${encodeURIComponent(id)}/photos`, input);
+  }
+  addDispatchVideo(id: string, input: VideoInput) {
+    return this.call<unknown>('POST', `/device/dispatches/${encodeURIComponent(id)}/videos`, input);
+  }
+  replyDispatch(id: string, reply: string) {
+    return this.call<unknown>('POST', `/device/dispatches/${encodeURIComponent(id)}/reply`, { reply });
+  }
+  dutyDevice() {
+    return this.call<DutyDevice>('GET', '/device/duty');
+  }
+  addPostLog(input: PostLogInput) {
+    return this.call<unknown>('POST', '/device/post-log', input);
+  }
+  gateIn(input: GateInInput) {
+    return this.call<Awaited<ReturnType<Api['gateIn']>>>('POST', '/device/gate/in', input);
+  }
+  gateOut(id: string, input: Parameters<Api['gateOut']>[1]) {
+    return this.call<unknown>('POST', `/device/gate/${encodeURIComponent(id)}/out`, input);
+  }
+  siteTaskBoard(siteId: string) {
+    return this.call<SiteTaskBoard>('GET', `/sites/${encodeURIComponent(siteId)}/tasks`);
+  }
+  saveNeedsReview(siteId: string, input: NeedsReviewInput) {
+    return this.call<unknown>('POST', `/sites/${encodeURIComponent(siteId)}/needs-reviews`, input);
+  }
+  setSiteTask(siteId: string, input: SiteTaskInput) {
+    return this.call<unknown>('POST', `/sites/${encodeURIComponent(siteId)}/tasks`, input);
+  }
+  setGateLog(siteId: string, on: boolean, reason: string) {
+    return this.call<unknown>('POST', `/sites/${encodeURIComponent(siteId)}/gate-log`, { on, reason });
+  }
+  stopSiteTask(id: string, reason: string) {
+    return this.call<unknown>('POST', `/site-tasks/${encodeURIComponent(id)}/stop`, { reason });
+  }
+  doSiteTask(id: string, input: DoSiteTaskInput) {
+    return this.call<unknown>('POST', `/device/tasks/${encodeURIComponent(id)}`, input);
+  }
+  siteDutyLog(siteId: string, days = 2) {
+    return this.call<SiteDutyLog>('GET', `/sites/${encodeURIComponent(siteId)}/duty-log?days=${days}`);
   }
   requestTrip(input: { date: string; destination: string; purpose: string; forPersonId?: string }) {
     return this.call<unknown>('POST', '/claims/trips', input);

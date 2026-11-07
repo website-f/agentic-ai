@@ -8,6 +8,7 @@ import { ManagementFeeBillsPanel } from './ManagementFees';
 import { Card, Empty, PageHead, Stat, Stats } from '../kit';
 import { Chip, ErrorNotice, Loading, dayLabel, hhmm, money, useLoad } from '../ui';
 import '../styles/ops.css';
+import { VacanciesPanel } from './HrJoinLeave';
 
 type Item = RegionalOps['attention'][number];
 
@@ -48,6 +49,14 @@ export function OpsView() {
   const detailed = data.rows.filter((r) => r.hasDetail);
   return (
     <div className="page">
+      {data.reminders.map((r) => (
+        <p key={r.title} className="notice" data-tone={r.tone === 'crit' ? 'crit' : 'warn'}>
+          <strong>{r.title}.</strong> {r.detail}{' '}
+          <button className="btn btn-sm" onClick={() => go({ view: 'sitehours' })}>
+            Open
+          </button>
+        </p>
+      ))}
       <PageHead
         title={
           <>
@@ -248,6 +257,7 @@ export function OpsView() {
       </div>
 
       <LeavePanel title="Leave and absence requests from guards and officers" />
+      {(me.user.opsTier === 'om' || me.user.opsTier === 'regional') && <VacanciesPanel />}
 
       {data.sector !== 'private' && <GovOpsMonitorPanel sector="government" />}
       {data.sector !== 'government' && <GovOpsMonitorPanel sector="private" />}

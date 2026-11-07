@@ -17,6 +17,19 @@
 //      counts it and records the bank deposit. Withdrawn = paid + returned; any difference needs a reason and the FD's
 //      acceptance. An unsettled list, a withdrawal not on the bank statement or an unaccepted difference stops the close.
 // Prima never approves or pays: every step is a person's, with a comment where a decision is made.
+//
+// How each person is paid (Fauzan, 6 Nov 2026, "Buffer also the same" as the guard pay-out rules of PR #120):
+//   - By bank account or e-wallet only. Finance records each day's transfer with its bank reference; no cash moves.
+//   - Cash only when the Director Office lists the person, with the reason, and the COO or the CEO gives it, with a
+//     note (never the person who listed). Only these people's pay is withdrawn, handed over and paid in cash as above.
+//   - Fauzan, later on 6 Nov 2026: "Director list will send cash person list per site per name and the amount, cash will
+//     be given out by ceo or coo. Signed paper of the receive collected and upload as proof. Upload done by director
+//     office." The Director Office lists each cash person with the site and the cash amount; the COO or CEO pays; the
+//     Director Office uploads the signed receipt for each payment. The list is not settled until every receipt is in.
+//   - A relative's or friend's account needs the person's consent letter, stamped by a Commissioner for Oaths
+//     (Pesuruhjaya Sumpah) and approved by the COO. EA s.25 asks for the worker's own or joint account, and names a
+//     bank account, so e-wallet and third-party accounts stay flagged as legal points for the CEO (not legal advice).
+//   The FD cannot approve a list until every person has a usable account or a cash decision of "give".
 import { AccessDenied } from './access';
 import { isoDate, noSecrets, requireComment, requireReason, text, type FinActor } from './finance';
 import { RULES } from './rules';
@@ -29,6 +42,45 @@ const round2 = (n: number) => Math.round(n * 100) / 100;
 
 export type FinDailyCashStatus = 'draft' | 'to_approve' | 'approved' | 'with_collector' | 'returned' | 'settled' | 'cancelled';
 
+/** How one person on the list is paid (Fauzan, 6 Nov 2026): bank account or e-wallet; cash only by exception. */
+export type FinDailyPayMethod = 'bank' | 'ewallet' | 'cash';
+
+/**
+ * The account a person is paid into. Prima keeps only the bank or e-wallet name and the last 4 digits; the full
+ * number stays with Finance and the bank portal.
+ */
+export interface FinDailyPayAccount {
+  kind: 'bank' | 'ewallet';
+  /** The bank, or the e-wallet provider. */
+  bank: string;
+  accountMasked: string;
+  /** Whose account: the person's own, a joint account, an immediate relative's or a close friend's. */
+  holder: 'own' | 'joint' | 'relative' | 'friend';
+  holderName: string | null;
+  relationship: string | null;
+  /**
+   * For a relative's or friend's account: the person's consent letter, stamped by a Commissioner for Oaths and
+   * approved by the COO. Finance records it from the signed letter; the account is used only once the COO approves.
+   */
+  consent: {
+    docRef: string;
+    signedOn: IsoDate;
+    oaths: { commissioner: string; stampRef: string; stampedOn: IsoDate };
+    recorded: FinSign;
+    approved: FinSign | null;
+  } | null;
+}
+
+/** A cash exception: listed by the Director Office with the reason, then given (or refused) by the COO or the CEO. */
+export interface FinDailyCashListing {
+  reason: string;
+  /** The site the person works at, and the cash to be paid to them on this list (at most their approved pay). */
+  site?: string;
+  amount?: number;
+  listed: FinSign;
+  decision: (FinSign & { give: boolean; tier: 'coo' | 'ceo' }) | null;
+}
+
 export interface FinDailyCashPerson {
   id: Id;
   name: string;
@@ -39,6 +91,10 @@ export interface FinDailyCashPerson {
   /** The days this person may be paid for, inside the list's dates. */
   days: IsoDate[];
   amount: number;
+  /** Missing on lists made before 6 Nov 2026: such a person cannot be approved until Finance sets how they are paid. */
+  pay?: FinDailyPayMethod;
+  account?: FinDailyPayAccount | null;
+  cash?: FinDailyCashListing | null;
 }
 
 export interface FinDailyCashList {
@@ -61,7 +117,19 @@ export interface FinDailyCashList {
   withdrawals: { id: Id; on: IsoDate; amount: number; ref: string; sign: FinSign; statement: { statementId: Id; lineId: Id; date: IsoDate } | null }[];
   /** Cash handed by Finance to the COO or CEO, and their own count. */
   handovers: { id: Id; on: IsoDate; amount: number; toId: Id; toName: string; sign: FinSign; received: (FinSign & { counted: number }) | null }[];
-  payouts: { id: Id; personId: Id; day: IsoDate; amount: number; proof: string[]; sign: FinSign }[];
+  /** Each day paid: in cash by the COO or CEO (method missing or 'cash'), or by transfer recorded by Finance with its reference. */
+  payouts: {
+    id: Id;
+    personId: Id;
+    day: IsoDate;
+    amount: number;
+    proof: string[];
+    sign: FinSign;
+    method?: FinDailyPayMethod;
+    ref?: string;
+    /** The signed receipt for a cash payment, uploaded by the Director Office (a file in evidenceDocs). */
+    receipt?: (FinSign & { docId: Id; name: string; sha256: string }) | null;
+  }[];
   /** Each holder (COO or CEO) gives back their own unpaid cash (Arisha main, 3 Nov 2026: split custody). */
   giveBacks?: (FinSign & { amount: number })[];
   /** All the unpaid cash given back: set once every holder has given back theirs (the total of `giveBacks`). */
@@ -84,6 +152,12 @@ export interface FinDailyCashCtx {
   userById: (id: Id) => User | undefined;
   /** Is this account the COO or the CEO? */
   isCollector: (u: User) => boolean;
+  /** The Director Office, who lists people for cash (Fauzan, 6 Nov 2026). */
+  directorOffice?: boolean;
+  /** The COO, who approves a stamped consent letter (Fauzan, 6 Nov 2026); the CEO only through the pilot rule. */
+  consentApprover?: boolean;
+  /** 'coo' or 'ceo' for a collector, for the record of a cash decision. */
+  tier?: 'coo' | 'ceo' | null;
 }
 
 type Out<T> = { patch: Partial<FinStatus>; action: string; summary: string; result: T };
@@ -117,8 +191,53 @@ const datesBetween = (from: IsoDate, to: IsoDate) => {
 
 export const finDailyCashWithdrawn = (l: FinDailyCashList) => round2(l.withdrawals.reduce((n, w) => n + w.amount, 0));
 export const finDailyCashHanded = (l: FinDailyCashList) => round2(l.handovers.reduce((n, h) => n + h.amount, 0));
-export const finDailyCashPaid = (l: FinDailyCashList) => round2(l.payouts.reduce((n, p) => n + p.amount, 0));
+const isCashPayout = (x: FinDailyCashList['payouts'][number]) => (x.method ?? 'cash') === 'cash';
+/** Cash paid out by the COO or CEO (transfers are separate: they never touch the cash withdrawn). */
+export const finDailyCashPaid = (l: FinDailyCashList) => round2(l.payouts.filter(isCashPayout).reduce((n, p) => n + p.amount, 0));
+/** Paid by bank transfer or e-wallet, recorded by Finance. */
+export const finDailyCashTransferred = (l: FinDailyCashList) => round2(l.payouts.filter((x) => !isCashPayout(x)).reduce((n, p) => n + p.amount, 0));
+/** The approved pay of the people given cash: the most that may be withdrawn. */
+export const finDailyCashCashTotal = (l: FinDailyCashList) => round2(l.people.filter((p) => finDailyCashGiven(p)).reduce((n, p) => n + finDailyCashAmountOf(p), 0));
+/** The cash a person given cash may be paid on this list: the Director Office's amount, else their approved pay. */
+export const finDailyCashAmountOf = (p: FinDailyCashPerson) => round2(Math.min(p.amount, p.cash?.amount ?? p.amount));
+/** Cash payments still waiting for the signed receipt from the Director Office. */
+export const finDailyCashNoReceipt = (l: FinDailyCashList) => l.payouts.filter((x) => isCashPayout(x) && !x.receipt);
 const paidTo = (l: FinDailyCashList, personId: Id) => round2(l.payouts.filter((p) => p.personId === personId).reduce((n, p) => n + p.amount, 0));
+
+/** True when this person is paid in cash: listed by the Director Office and given by the COO or CEO. */
+export const finDailyCashGiven = (p: FinDailyCashPerson) => p.pay === 'cash' && !!p.cash?.decision?.give;
+
+/**
+ * Why a person cannot be paid yet (Fauzan, 6 Nov 2026), or null when they can; and what the approver should know.
+ * Mirrors the guard pay run's account check (PR #120) for people who are not on the staff records.
+ */
+export function finDailyCashPersonCheck(p: FinDailyCashPerson): { problem: string | null; flags: string[] } {
+  const flags: string[] = [];
+  if (!p.pay) return { problem: 'No payment method: give a bank account or e-wallet (cash only when the Director Office lists them)', flags };
+  if (p.pay === 'cash') {
+    if (!p.cash) return { problem: 'Cash asked for: waiting for the Director Office to list them with the reason', flags };
+    if (!p.cash.decision) return { problem: 'Listed for cash by the Director Office: waiting for the COO or the CEO', flags };
+    if (!p.cash.decision.give) return { problem: `Cash refused by ${p.cash.decision.by}: give a bank account or e-wallet`, flags };
+    flags.push(
+      `Paid in cash${p.cash.amount != null ? ` up to RM${p.cash.amount.toFixed(2)}` : ''}${p.cash.site ? ` at ${p.cash.site}` : ''}: listed by ${p.cash.listed.by} (${p.cash.reason}), given by ${p.cash.decision.by}`,
+    );
+    return { problem: null, flags };
+  }
+  const acc = p.account;
+  if (!acc) return { problem: 'No bank account or e-wallet given', flags };
+  if (acc.kind === 'ewallet') flags.push(`Paid to an e-wallet (${acc.bank}): EA s.25 names a bank account; legal point for the CEO`);
+  if (acc.holder === 'relative' || acc.holder === 'friend') {
+    const who = `${acc.holderName || 'someone else'}${acc.relationship ? `, ${acc.relationship}` : ''}`;
+    if (!acc.consent) return { problem: `Paid into ${who}'s account with no written consent on file`, flags };
+    if (!acc.consent.oaths.commissioner || !acc.consent.oaths.stampRef)
+      return { problem: `Consent letter for ${who}'s account has no Commissioner for Oaths stamp recorded`, flags };
+    if (!acc.consent.approved) return { problem: `Consent letter for ${who}'s account is waiting for the COO's approval`, flags };
+    flags.push(
+      `Paid into ${who}'s account: consent letter ${acc.consent.docRef}, stamped by Commissioner for Oaths ${acc.consent.oaths.commissioner}, approved by ${acc.consent.approved.by}. EA s.25 wants the worker's own or joint account; legal point for the CEO`,
+    );
+  }
+  return { problem: null, flags };
+}
 /** Cash the collector is holding: received from Finance, less paid out and given back. */
 export const finDailyCashHeld = (l: FinDailyCashList) =>
   round2(l.handovers.reduce((n, h) => n + (h.received?.counted ?? 0), 0) - finDailyCashPaid(l) - (l.giveBack?.amount ?? finDailyCashGivenBack(l)));
@@ -135,10 +254,61 @@ export const finDailyCashHeldBy = (l: FinDailyCashList, userId: Id) =>
     ? 0
     : round2(
         l.handovers.filter((h) => h.toId === userId).reduce((n, h) => n + (h.received?.counted ?? 0), 0) -
-          l.payouts.filter((x) => x.sign.byId === userId).reduce((n, x) => n + x.amount, 0),
+          l.payouts.filter((x) => isCashPayout(x) && x.sign.byId === userId).reduce((n, x) => n + x.amount, 0),
       );
 
-function readPeople(v: unknown, from: IsoDate, to: IsoDate): FinDailyCashPerson[] {
+const personKey = (p: { name: string; idLast4: string }) => `${p.name.toUpperCase()}|${p.idLast4}`;
+const accountKey = (a: FinDailyPayAccount | null | undefined) =>
+  a ? [a.kind, a.bank.toUpperCase(), a.accountMasked, a.holder, (a.holderName ?? '').toUpperCase(), a.consent?.docRef ?? '', a.consent?.oaths.stampRef ?? ''].join('|') : '';
+
+/** Read how one person is paid. Prima keeps only the last 4 digits of the account. */
+function readPay(p: Record<string, unknown>, name: string, today: IsoDate, sign: () => FinSign): { pay: FinDailyPayMethod; account: FinDailyPayAccount | null } {
+  const pay = p.pay === 'bank' || p.pay === 'ewallet' || p.pay === 'cash' ? p.pay : null;
+  if (!pay) throw new BadRequest(`${name}: choose how they are paid: bank account or e-wallet (cash only when the Director Office lists them).`);
+  if (pay === 'cash') return { pay, account: null };
+  const acc = (p.account ?? {}) as Record<string, unknown>;
+  const bank = noSecrets(text(acc.bank, `${name}: ${pay === 'ewallet' ? 'e-wallet' : 'bank'}`, 2, 60), 'Bank');
+  const last4 = typeof acc.last4 === 'string' ? acc.last4.trim() : '';
+  if (!/^\d{4}$/.test(last4)) throw new BadRequest(`${name}: give only the last 4 digits of the ${pay === 'ewallet' ? 'e-wallet' : 'account'} number.`);
+  const holder = acc.holder === 'joint' || acc.holder === 'relative' || acc.holder === 'friend' ? acc.holder : 'own';
+  let holderName: string | null = null;
+  let relationship: string | null = null;
+  let consent: FinDailyPayAccount['consent'] = null;
+  if (holder === 'relative' || holder === 'friend') {
+    holderName = noSecrets(text(acc.holderName, `${name}: the account holder's name`, 2, 80), 'Holder');
+    relationship = noSecrets(text(acc.relationship, `${name}: how the account holder is related`, 2, 40), 'Relationship');
+    const docRef = noSecrets(text(acc.consentRef, `${name}: the signed consent letter's reference`, 2, 60), 'Consent letter');
+    const signedOn = isoDate(acc.signedOn, `${name}: date the consent letter was signed`);
+    // Fauzan, 6 Nov 2026: "The letter must have notory stamp by pesuruhjaya sumpah".
+    const commissioner = noSecrets(text(acc.commissioner, `${name}: the Commissioner for Oaths (Pesuruhjaya Sumpah) who stamped the letter`, 2, 80), 'Commissioner');
+    const stampRef = noSecrets(text(acc.stampRef, `${name}: the Commissioner for Oaths stamp number`, 2, 40), 'Stamp number');
+    const stampedOn = isoDate(acc.stampedOn, `${name}: date the letter was stamped`);
+    if (signedOn > today || stampedOn > today || stampedOn < signedOn)
+      throw new BadRequest(`${name}: the letter is signed, then stamped by the Commissioner for Oaths, both by today.`);
+    consent = { docRef, signedOn, oaths: { commissioner, stampRef, stampedOn }, recorded: sign(), approved: null };
+  } else if (holder === 'joint') {
+    holderName = typeof acc.holderName === 'string' && acc.holderName.trim() ? noSecrets(text(acc.holderName, 'Joint holder', 2, 80), 'Holder') : null;
+  }
+  return { pay, account: { kind: pay, bank, accountMasked: `****${last4}`, holder, holderName, relationship, consent } };
+}
+
+/**
+ * Keep what others already decided for the same person when Finance changes the list: the Director Office's cash
+ * listing and the COO's or CEO's decision (while they are still to be paid in cash), and the COO's approval of a
+ * consent letter (only for the very same account and letter).
+ */
+function carryOver(next: FinDailyCashPerson[], prev: FinDailyCashPerson[]): FinDailyCashPerson[] {
+  return next.map((p) => {
+    const old = prev.find((q) => personKey(q) === personKey(p));
+    if (!old) return p;
+    if (p.pay === 'cash' && old.pay === 'cash' && old.cash) return { ...p, cash: old.cash };
+    if (p.account?.consent && old.account?.consent?.approved && accountKey(p.account) === accountKey(old.account))
+      return { ...p, account: { ...p.account, consent: { ...p.account.consent, recorded: old.account.consent.recorded, approved: old.account.consent.approved } } };
+    return p;
+  });
+}
+
+function readPeople(v: unknown, from: IsoDate, to: IsoDate, today: IsoDate, sign: () => FinSign): FinDailyCashPerson[] {
   const list = Array.isArray(v) ? v : [];
   if (!list.length) throw new BadRequest('List at least one person to be paid in cash.');
   if (list.length > R().maxPeople) throw new BadRequest(`At most ${R().maxPeople} people on one list.`);
@@ -154,7 +324,9 @@ function readPeople(v: unknown, from: IsoDate, to: IsoDate): FinDailyCashPerson[
     seen.add(key);
     const work = noSecrets(text(p.work, `Person ${n}: work or site`, 2, 120), 'Work');
     const dailyRate = money(p.dailyRate, `${name}: daily rate`);
-    if (dailyRate > R().maxDailyRate) throw new BadRequest(`${name}: the daily rate is above ${rm(R().maxDailyRate)}; pay by bank instead.`);
+    const { pay, account } = readPay(p, name, today, sign);
+    if (pay === 'cash' && dailyRate > R().maxDailyRate)
+      throw new BadRequest(`${name}: the daily rate is above ${rm(R().maxDailyRate)}, the most paid in cash; pay by bank or e-wallet instead.`);
     const all = datesBetween(from, to);
     const days = Array.isArray(p.days)
       ? [...new Set(p.days.map((d, k) => isoDate(d, `${name}: day ${k + 1}`)))].sort()
@@ -163,7 +335,7 @@ function readPeople(v: unknown, from: IsoDate, to: IsoDate): FinDailyCashPerson[
         : all;
     if (!days.length) throw new BadRequest(`${name}: give the days to be paid.`);
     if (days.some((d) => d < from || d > to)) throw new BadRequest(`${name}: every day is between ${from} and ${to}.`);
-    return { id: `p${n}`, name, idLast4, work, dailyRate, days, amount: round2(dailyRate * days.length) };
+    return { id: `p${n}`, name, idLast4, work, dailyRate, days, amount: round2(dailyRate * days.length), pay, account, cash: null };
   });
 }
 
@@ -186,7 +358,7 @@ export function finDailyCashAction(ctx: FinDailyCashCtx, f: FinStatus, action: s
     const bank = (f.banks ?? []).find((b) => b.id === input.bankId);
     if (!bank) throw new BadRequest('Choose the company bank account the cash will come from.');
     const purpose = noSecrets(text(input.purpose, 'Why these people are paid in cash', R().reasonMin, 300), 'Purpose');
-    const people = readPeople(input.people, from, to);
+    const people = readPeople(input.people, from, to, ctx.today, () => ctx.sign());
     if (
       lists.some(
         (l) =>
@@ -238,10 +410,119 @@ export function finDailyCashAction(ctx: FinDailyCashCtx, f: FinStatus, action: s
     result: n,
   });
 
+  // ----- How each person is paid (Fauzan, 6 Nov 2026) -----
+  const personOf = () => {
+    const p = l.people.find((x) => x.id === input.personId);
+    if (!p) throw new BadRequest('Choose a person on this list.');
+    return p;
+  };
+  const savePerson = (p: FinDailyCashPerson, act: string, summary: string, logText: string) =>
+    out({ ...l, people: l.people.map((x) => (x.id === p.id ? p : x)), log: [...l.log, logOf(logText)] }, act, summary);
+  const beforeApproval = () => {
+    if (l.status !== 'draft' && l.status !== 'to_approve') throw new BadRequest('This is decided before the Finance Director approves the list.');
+  };
+  if (action === 'listCash' || action === 'unlistCash') {
+    // The Director Office lists a person for cash with the reason ("The list will be collected and submited by director office staff").
+    if (!ctx.directorOffice) throw new AccessDenied('view', '(only the Director Office lists people for cash)');
+    beforeApproval();
+    const p = personOf();
+    if (p.pay !== 'cash') throw new BadRequest(`${p.name} is paid by ${p.pay === 'ewallet' ? 'e-wallet' : 'bank'}; Finance asks for cash first.`);
+    if (action === 'unlistCash') {
+      if (!p.cash || p.cash.decision) throw new BadRequest('Only a listing not yet decided by the COO or the CEO is taken off.');
+      return savePerson({ ...p, cash: null }, 'unlistCash', `Daily cash ${l.id}: ${p.name} taken off the cash list.`, `${p.name} taken off the cash list by the Director Office`);
+    }
+    if (p.cash && (!p.cash.decision || p.cash.decision.give)) throw new BadRequest(`${p.name} is already listed for cash.`);
+    const reason = noSecrets(text(input.reason, 'Why this person needs cash', 5, 300), 'Reason');
+    // "Director list will send cash person list per site per name and the amount."
+    const site = noSecrets(text(input.site, 'The site', 2, 120), 'Site');
+    const amount = money(input.amount, 'Cash amount');
+    if (amount > p.amount + 0.005) throw new BadRequest(`${p.name}'s approved pay on this list is ${rm(p.amount)}; the cash cannot be more.`);
+    return savePerson(
+      { ...p, cash: { reason, site, amount, listed: ctx.sign(reason), decision: null } },
+      'listCash',
+      `Daily cash ${l.id}: ${p.name} (${site}) listed for ${rm(amount)} cash by the Director Office: ${reason}`,
+      `${p.name} (${site}) listed for ${rm(amount)} cash by the Director Office: ${reason}`,
+    );
+  }
+  if (action === 'decideCash') {
+    // "Only coo and ceo can give the cash if there is a need for it."
+    collector(ctx);
+    beforeApproval();
+    const p = personOf();
+    if (p.pay !== 'cash' || !p.cash || p.cash.decision) throw new BadRequest(`${p.name} is not waiting for a cash decision.`);
+    if (p.cash.listed.byId === ctx.user.id) throw new AccessDenied('view', '(whoever listed the person does not decide the cash)');
+    const note = requireComment(input.comment, 'decide');
+    const give = input.give === true;
+    const tier = ctx.tier ?? 'ceo';
+    return savePerson(
+      { ...p, cash: { ...p.cash, decision: { ...ctx.sign(note), give, tier } } },
+      'decideCash',
+      `Daily cash ${l.id}: cash for ${p.name} ${give ? 'given' : 'refused'} by the ${tier.toUpperCase()}: ${note}`,
+      `Cash for ${p.name} ${give ? 'given' : 'refused'} by the ${tier.toUpperCase()}: ${note}`,
+    );
+  }
+  if (action === 'approveConsent') {
+    // "Consent letter must be approve by coo. The letter must have notory stamp by pesuruhjaya sumpah."
+    if (!ctx.consentApprover) throw new AccessDenied('view', '(only the COO approves a consent letter)');
+    beforeApproval();
+    const p = personOf();
+    const c = p.account?.consent;
+    if (!p.account || !c) throw new BadRequest(`No consent letter is recorded for ${p.name}.`);
+    if (c.approved) throw new BadRequest('That consent letter is already approved.');
+    if (c.recorded.byId === ctx.user.id) throw new AccessDenied('view', '(whoever recorded the letter does not approve it)');
+    const note = requireComment(input.comment, 'approve the consent letter');
+    return savePerson(
+      { ...p, account: { ...p.account, consent: { ...c, approved: ctx.sign(note) } } },
+      'approveConsent',
+      `Daily cash ${l.id}: consent letter ${c.docRef} for ${p.name} (Commissioner for Oaths ${c.oaths.commissioner}) approved: ${note}`,
+      `Consent letter ${c.docRef} for ${p.name}'s pay into ${p.account.holderName}'s account approved: ${note}`,
+    );
+  }
+  if (action === 'receipt') {
+    // "Signed paper of the receive collected and upload as proof. Upload done by director office."
+    if (!ctx.directorOffice) throw new AccessDenied('view', '(only the Director Office uploads the signed receipts)');
+    const x = l.payouts.find((y) => y.id === input.payoutId);
+    if (!x || !isCashPayout(x)) throw new NotFound('Cash payment');
+    if (x.receipt) throw new BadRequest('That payment already has its signed receipt.');
+    const doc = input.doc as { id: Id; name: string; sha256: string } | undefined;
+    if (!doc?.id || !doc.sha256) throw new BadRequest('Attach the signed receipt (PDF, JPEG or PNG).');
+    const p = l.people.find((y) => y.id === x.personId)!;
+    const receipt = { ...ctx.sign(), docId: doc.id, name: doc.name, sha256: doc.sha256 };
+    return out(
+      { ...l, payouts: l.payouts.map((y) => (y.id === x.id ? { ...y, receipt } : y)), log: [...l.log, logOf(`Signed receipt for ${p.name}, ${x.day} uploaded: ${doc.name} (SHA-256 ${doc.sha256.slice(0, 12)})`)] },
+      'receipt',
+      `Daily cash ${l.id}: signed receipt for ${p.name} ${x.day} ${rm(x.amount)} uploaded by the Director Office.`,
+    );
+  }
+  if (action === 'transfer') {
+    // Bank or e-wallet: Finance records each day's transfer with its reference. The FD who approved does not pay.
+    finance(ctx);
+    notApprover(ctx, l);
+    if (!['approved', 'with_collector', 'returned'].includes(l.status)) throw new BadRequest('Transfers are made after the Finance Director approves the list.');
+    const p = personOf();
+    if (p.pay !== 'bank' && p.pay !== 'ewallet') throw new BadRequest(`${p.name} is paid in cash by the COO or the CEO, not by transfer.`);
+    const check = finDailyCashPersonCheck(p);
+    if (check.problem) throw new BadRequest(`${p.name}: ${check.problem}.`);
+    const day = isoDate(input.day, 'Day worked');
+    if (!p.days.includes(day)) throw new BadRequest(`${p.name} is not listed for ${day}.`);
+    if (day > ctx.today) throw new BadRequest('Pay for a day once it has come.');
+    if (l.payouts.some((x) => x.personId === p.id && x.day === day)) throw new BadRequest(`${p.name} is already paid for ${day}.`);
+    const amount = money(input.amount ?? p.dailyRate, 'Amount transferred');
+    if (amount > p.dailyRate + 0.005) throw new BadRequest(`${p.name}'s approved daily rate is ${rm(p.dailyRate)}.`);
+    if (paidTo(l, p.id) + amount > p.amount + 0.005) throw new BadRequest(`${p.name}'s approved total is ${rm(p.amount)}.`);
+    const ref = noSecrets(text(input.ref, 'Transfer reference', 2, 60), 'Reference');
+    const x = { id: `pay${l.payouts.length + 1}`, personId: p.id, day, amount, proof: [], sign: ctx.sign(), method: p.pay, ref };
+    return out(
+      { ...l, payouts: [...l.payouts, x], log: [...l.log, logOf(`Paid ${p.name} ${rm(amount)} for ${day} by ${p.pay === 'ewallet' ? 'e-wallet' : 'bank'} (${ref})`)] },
+      'transfer',
+      `Daily cash ${l.id}: ${p.name} paid ${rm(amount)} for ${day} to ${p.account!.bank} ${p.account!.accountMasked} (${ref}).`,
+    );
+  }
+
   if (action === 'edit') {
     finance(ctx);
     if (l.status !== 'draft') throw new BadRequest('Only a list not yet sent (or returned by the FD) can be changed.');
-    const people = readPeople(input.people, l.from, l.to);
+    const people = carryOver(readPeople(input.people, l.from, l.to, ctx.today, () => ctx.sign()), l.people);
     const total = round2(people.reduce((n, p) => n + p.amount, 0));
     return out(
       {
@@ -280,6 +561,15 @@ export function finDailyCashAction(ctx: FinDailyCashCtx, f: FinStatus, action: s
         `Daily cash list ${l.id} returned: ${why}`,
       );
     }
+    // Bank or e-wallet only; cash only when listed and given; a third-party account only with the COO-approved letter.
+    const blocked = l.people.map((p) => ({ p, problem: finDailyCashPersonCheck(p).problem })).filter((x) => x.problem);
+    if (blocked.length)
+      throw new BadRequest(
+        `Not every person can be paid yet: ${blocked
+          .slice(0, 5)
+          .map((x) => `${x.p.name}: ${x.problem}`)
+          .join('; ')}${blocked.length > 5 ? `; and ${blocked.length - 5} more` : ''}.`,
+      );
     const c = requireComment(input.comment);
     return out(
       { ...l, status: 'approved', approved: ctx.sign(c), log: [...l.log, logOf(`Approved by the FD: ${c}`)] },
@@ -289,8 +579,8 @@ export function finDailyCashAction(ctx: FinDailyCashCtx, f: FinStatus, action: s
   }
   if (action === 'cancel') {
     finance(ctx);
-    if (!['draft', 'to_approve', 'approved'].includes(l.status) || l.withdrawals.length)
-      throw new BadRequest('A list is cancelled before any cash is withdrawn; after that, settle it.');
+    if (!['draft', 'to_approve', 'approved'].includes(l.status) || l.withdrawals.length || l.payouts.length)
+      throw new BadRequest('A list is cancelled before any cash is withdrawn or anyone is paid; after that, settle or close it.');
     const why = requireReason(input.comment, 'cancel the list');
     return out({ ...l, status: 'cancelled', log: [...l.log, logOf(`Cancelled: ${why}`)] }, 'cancel', `Daily cash list ${l.id} cancelled: ${why}`);
   }
@@ -302,8 +592,11 @@ export function finDailyCashAction(ctx: FinDailyCashCtx, f: FinStatus, action: s
     const on = isoDate(input.on, 'Date withdrawn');
     if (on > ctx.today || on < l.approved!.at.slice(0, 10)) throw new BadRequest('The withdrawal is dated between the approval and today.');
     const amount = money(input.amount, 'Cash withdrawn');
-    if (finDailyCashWithdrawn(l) + amount > l.total + 0.005)
-      throw new BadRequest(`That is more than the approved ${rm(l.total)} (already withdrawn ${rm(finDailyCashWithdrawn(l))}).`);
+    // Only the pay of people the COO or CEO gave cash to is withdrawn; everyone else is paid by transfer.
+    const cashTotal = finDailyCashCashTotal(l);
+    if (cashTotal < 0.005) throw new BadRequest('Nobody on this list is paid in cash: pay each person by bank or e-wallet transfer.');
+    if (finDailyCashWithdrawn(l) + amount > cashTotal + 0.005)
+      throw new BadRequest(`That is more than the approved cash of ${rm(cashTotal)} (already withdrawn ${rm(finDailyCashWithdrawn(l))}).`);
     const ref = noSecrets(text(input.ref, 'Cheque or withdrawal reference', 2, 60), 'Reference');
     const w = { id: `w${l.withdrawals.length + 1}`, on, amount, ref, sign: ctx.sign(), statement: null };
     return out(
@@ -389,13 +682,14 @@ export function finDailyCashAction(ctx: FinDailyCashCtx, f: FinStatus, action: s
     if (l.status !== 'with_collector') throw new BadRequest('That list has no cash with the COO or CEO.');
     const p = l.people.find((x) => x.id === input.personId);
     if (!p) throw new BadRequest('Only people on the approved list are paid.');
+    if (!finDailyCashGiven(p)) throw new BadRequest(`${p.name} is paid by bank or e-wallet; cash only for people the COO or the CEO gave cash to.`);
     const day = isoDate(input.day, 'Day worked');
     if (!p.days.includes(day)) throw new BadRequest(`${p.name} is not listed for ${day}.`);
     if (day > ctx.today) throw new BadRequest('Pay for a day once it has come.');
     if (l.payouts.some((x) => x.personId === p.id && x.day === day)) throw new BadRequest(`${p.name} is already paid for ${day}.`);
     const amount = money(input.amount ?? p.dailyRate, 'Cash paid');
     if (amount > p.dailyRate + 0.005) throw new BadRequest(`${p.name}'s approved daily rate is ${rm(p.dailyRate)}.`);
-    if (paidTo(l, p.id) + amount > p.amount + 0.005) throw new BadRequest(`${p.name}'s approved total is ${rm(p.amount)}.`);
+    if (paidTo(l, p.id) + amount > finDailyCashAmountOf(p) + 0.005) throw new BadRequest(`${p.name}'s cash on this list is ${rm(finDailyCashAmountOf(p))}.`);
     // The actual custodian (Arisha main, 3 Nov 2026): only cash handed to this person and counted by them is paid out by them.
     const mine = finDailyCashHeldBy(l, ctx.user.id);
     if (amount > mine + 0.005)
@@ -407,10 +701,10 @@ export function finDailyCashAction(ctx: FinDailyCashCtx, f: FinStatus, action: s
     const proof = (Array.isArray(input.proof) ? input.proof : typeof input.proof === 'string' && input.proof.trim() ? [input.proof] : [])
       .slice(0, 5)
       .map((d, i) => noSecrets(text(d, `Proof ${i + 1}`, 2, 300), 'Proof'));
-    if (!proof.length) throw new BadRequest('Attach the proof: the pay sheet the person signed or thumb-printed, or a photo of it.');
+    // The signed receipt itself is uploaded by the Director Office afterwards (Fauzan, 6 Nov 2026); a sheet number is optional.
     const idCheck = typeof input.idLast4 === 'string' ? input.idLast4.trim().toUpperCase() : '';
     if (idCheck !== p.idLast4) throw new BadRequest(`Check ${p.name}'s IC or passport: the last 4 characters do not match the list.`);
-    const x = { id: `pay${l.payouts.length + 1}`, personId: p.id, day, amount, proof, sign: ctx.sign() };
+    const x = { id: `pay${l.payouts.length + 1}`, personId: p.id, day, amount, proof, sign: ctx.sign(), method: 'cash' as const, receipt: null };
     return out(
       { ...l, payouts: [...l.payouts, x], log: [...l.log, logOf(`Paid ${p.name} ${rm(amount)} for ${day}`)] },
       'pay',
@@ -456,10 +750,31 @@ export function finDailyCashAction(ctx: FinDailyCashCtx, f: FinStatus, action: s
       `Daily cash ${l.id}: ${rm(amount)} unpaid cash given back to Finance by ${ctx.user.name}${done ? '' : ' (another holder still to give back)'}.`,
     );
   }
+  if (action === 'settle' && !l.withdrawals.length && finDailyCashCashTotal(l) < 0.005) {
+    // A list paid only by transfer is closed by Finance once it has ended: no cash to count.
+    finance(ctx);
+    notApprover(ctx, l);
+    if (l.status !== 'approved') throw new BadRequest('That list is not waiting to be closed.');
+    if (ctx.today < l.to) throw new BadRequest(`Close the list once it ends on ${l.to}.`);
+    const unpaid = round2(l.total - finDailyCashTransferred(l));
+    const c = unpaid >= 0.005 ? requireReason(input.comment, `close the list with ${rm(unpaid)} of the approved pay not transferred`) : String(input.comment ?? '').trim().slice(0, 300);
+    return out(
+      {
+        ...l,
+        status: 'settled',
+        settled: { ...ctx.sign(c), counted: 0, depositRef: '-', difference: 0 },
+        log: [...l.log, logOf(`Closed: transferred ${rm(finDailyCashTransferred(l))} of ${rm(l.total)}${c ? `: ${c}` : ''}`)],
+      },
+      'settle',
+      `Daily cash ${l.id} closed: ${rm(finDailyCashTransferred(l))} transferred of ${rm(l.total)} approved.`,
+    );
+  }
   if (action === 'settle') {
     // Finance (not the collector) counts the cash given back and banks it.
     finance(ctx);
     if (l.status !== 'returned' || !l.giveBack) throw new BadRequest('That list is not waiting to be settled.');
+    const missing = finDailyCashNoReceipt(l).length;
+    if (missing) throw new BadRequest(`${missing} cash payment(s) have no signed receipt yet: the Director Office uploads them first.`);
     if (ctx.collector || l.giveBack.byId === ctx.user.id || l.handovers.some((h) => h.toId === ctx.user.id))
       throw new AccessDenied('view', '(someone other than the COO or CEO who held the cash counts it)');
     notApprover(ctx, l);
@@ -512,9 +827,19 @@ export function finDailyCashAction(ctx: FinDailyCashCtx, f: FinStatus, action: s
 export function finDailyCashState(l: FinDailyCashList, today: IsoDate) {
   const settleBy = addDays(l.to, R().settleDays);
   const unbanked = l.withdrawals.filter((w) => !w.statement && daysBetween(w.on, today) > R().statementDays).length;
+  const live = ['approved', 'with_collector', 'returned'].includes(l.status);
+  const transferPeople = l.people.filter((p) => p.pay === 'bank' || p.pay === 'ewallet');
   return {
     settleBy,
-    lateSettle: ['with_collector', 'returned'].includes(l.status) && today > settleBy,
+    lateSettle: (['with_collector', 'returned'].includes(l.status) || (l.status === 'approved' && !l.withdrawals.length && finDailyCashCashTotal(l) < 0.005)) && today > settleBy,
+    /** People who cannot be approved yet (no usable account, cash not given, consent not approved). */
+    blocked: ['draft', 'to_approve'].includes(l.status) ? l.people.filter((p) => finDailyCashPersonCheck(p).problem).length : 0,
+    /** Days already come that a bank or e-wallet person is not yet paid for. */
+    transfersDue: live ? transferPeople.reduce((n, p) => n + p.days.filter((d) => d <= today && !l.payouts.some((x) => x.personId === p.id && x.day === d)).length, 0) : 0,
+    /** Cash payments with no signed receipt uploaded by the Director Office. */
+    noReceipt: finDailyCashNoReceipt(l).length,
+    /** A list paid only by transfer, ended and not closed. */
+    toClose: l.status === 'approved' && !l.withdrawals.length && finDailyCashCashTotal(l) < 0.005 && today >= l.to,
     unbanked,
     unconfirmed: l.handovers.filter((h) => !h.received).length,
     differenceOpen: !!l.settled && Math.abs(l.settled.difference) >= 0.005 && !l.differenceAccepted,
@@ -530,9 +855,13 @@ export function finDailyCashExceptions(f: FinStatus, period: string, today: IsoD
     const ended = l.to.slice(0, 7) <= period;
     if (ended && ['approved', 'with_collector', 'returned'].includes(l.status) && l.withdrawals.length)
       out.push({ key: `dcash:${l.id}:open`, text: `Daily cash ${l.id} (${l.from} to ${l.to}): cash not settled${s.lateSettle ? ` (due ${s.settleBy})` : ''}` });
+    else if (ended && s.toClose)
+      out.push({ key: `dcash:${l.id}:open`, text: `Daily cash ${l.id} (${l.from} to ${l.to}): transfers not closed${s.lateSettle ? ` (due ${s.settleBy})` : ''}` });
     for (const w of l.withdrawals)
       if (!w.statement && w.on.slice(0, 7) <= period)
         out.push({ key: `dcash:${l.id}:${w.id}`, text: `Daily cash ${l.id}: withdrawal ${w.ref} ${rm(w.amount)} not found on the bank statement` });
+    if (s.noReceipt)
+      out.push({ key: `dcash:${l.id}:receipt`, text: `Daily cash ${l.id}: ${s.noReceipt} cash payment(s) without the signed receipt (Director Office to upload)` });
     if (s.differenceOpen)
       out.push({ key: `dcash:${l.id}:diff`, text: `Daily cash ${l.id}: ${rm(l.settled!.difference)} not accounted for, waiting for the FD` });
   }
@@ -545,7 +874,9 @@ export function finDailyCashHome(f: FinStatus, user: User, a: FinActor, today: I
   return {
     toApprove:
       a.kind === 'director' ? lists.filter((l) => l.status === 'to_approve' && l.prepared.byId !== user.id && l.submitted?.byId !== user.id).length : 0,
-    toPrepare: lists.filter((l) => l.status === 'approved' && finDailyCashWithdrawn(l) < l.total - 0.005).length,
+    toPrepare: lists.filter((l) => l.status === 'approved' && finDailyCashWithdrawn(l) < finDailyCashCashTotal(l) - 0.005).length,
+    toTransfer: lists.filter((l) => finDailyCashState(l, today).transfersDue > 0).length,
+    toClose: lists.filter((l) => finDailyCashState(l, today).toClose).length,
     toSettle: lists.filter((l) => l.status === 'returned' && !l.settled).length,
     lateSettle: lists.filter((l) => finDailyCashState(l, today).lateSettle).length,
     differences: a.kind === 'director' ? lists.filter((l) => finDailyCashState(l, today).differenceOpen).length : 0,
@@ -563,7 +894,7 @@ export function finDailyCashCollectorView(f: FinStatus, user: User, today: IsoDa
       toConfirm: l.handovers.filter((h) => h.toId === user.id && !h.received).map((h) => h.id),
       dueToday:
         l.status === 'with_collector'
-          ? l.people.filter((p) => p.days.includes(today) && !l.payouts.some((x) => x.personId === p.id && x.day === today)).map((p) => p.id)
+          ? l.people.filter((p) => finDailyCashGiven(p) && p.days.includes(today) && !l.payouts.some((x) => x.personId === p.id && x.day === today)).map((p) => p.id)
           : [],
       giveBackDue: l.status === 'with_collector' && today >= l.to && !finDailyCashGaveBack(l, user.id),
       gaveBack: finDailyCashGaveBack(l, user.id),
@@ -583,7 +914,53 @@ export function finDailyCashView(f: FinStatus, today: IsoDate) {
       withdrawn: finDailyCashWithdrawn(l),
       handed: finDailyCashHanded(l),
       paid: finDailyCashPaid(l),
+      transferred: finDailyCashTransferred(l),
+      cashTotal: finDailyCashCashTotal(l),
       held: finDailyCashHeld(l),
       state: finDailyCashState(l, today),
+      checks: Object.fromEntries(l.people.map((p) => [p.id, finDailyCashPersonCheck(p)])) as Record<Id, { problem: string | null; flags: string[] }>,
     }));
+}
+
+/**
+ * What waits for the Director Office (people to list for cash), the COO or CEO (cash to give or refuse) and the COO
+ * (consent letters to approve), on lists not yet approved (Fauzan, 6 Nov 2026).
+ */
+/** Cash payments waiting for the Director Office to upload the signed receipt (Fauzan, 6 Nov 2026). */
+export function finDailyCashReceiptsDue(f: FinStatus) {
+  return (f.dailyCash ?? [])
+    .filter((l) => l.status !== 'cancelled')
+    .flatMap((l) =>
+      finDailyCashNoReceipt(l).map((x) => {
+        const p = l.people.find((y) => y.id === x.personId);
+        return { companyId: f.companyId, listId: l.id, payoutId: x.id, name: p?.name ?? '', idLast4: p?.idLast4 ?? '', site: p?.cash?.site ?? p?.work ?? '', day: x.day, amount: x.amount, paidBy: x.sign.by };
+      }),
+    );
+}
+
+export function finDailyCashDecisions(f: FinStatus, user: User, who: { directorOffice: boolean; collector: boolean; consentApprover: boolean }) {
+  return (f.dailyCash ?? [])
+    .filter((l) => l.status === 'draft' || l.status === 'to_approve')
+    .map((l) => ({
+      id: l.id,
+      companyId: f.companyId,
+      from: l.from,
+      to: l.to,
+      purpose: l.purpose,
+      status: l.status,
+      people: l.people
+        .map((p) => {
+          const need: 'list' | 'decide' | 'consent' | null =
+            who.directorOffice && p.pay === 'cash' && (!p.cash || (p.cash.decision && !p.cash.decision.give))
+              ? 'list'
+              : who.collector && p.pay === 'cash' && p.cash && !p.cash.decision && p.cash.listed.byId !== user.id
+                ? 'decide'
+                : who.consentApprover && p.account?.consent && !p.account.consent.approved && p.account.consent.recorded.byId !== user.id
+                  ? 'consent'
+                  : null;
+          return { id: p.id, name: p.name, idLast4: p.idLast4, work: p.work, dailyRate: p.dailyRate, days: p.days.length, amount: p.amount, pay: p.pay ?? null, account: p.account ?? null, cash: p.cash ?? null, need, listedByMe: !!p.cash && p.cash.listed.byId === user.id && !p.cash.decision };
+        })
+        .filter((p) => p.need || p.listedByMe),
+    }))
+    .filter((l) => l.people.length);
 }

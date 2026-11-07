@@ -233,7 +233,7 @@ function same(a: string, b: string): boolean {
   return timingSafeEqual(x, y);
 }
 
-export function verifyFeed(headers: Record<string, unknown>, rawBody: Buffer | undefined, now = Date.now(), feed: 'JA' | 'DOOR' | 'PLANNER' = 'JA'): boolean {
+export function verifyFeed(headers: Record<string, unknown>, rawBody: Buffer | undefined, now = Date.now(), feed: 'JA' | 'DOOR' | 'PLANNER' | 'ANALYTICS' | 'INHOUSE' = 'JA'): boolean {
   const key = process.env[`${feed}_API_KEY`];
   const secret = process.env[`${feed}_SIGNING_SECRET`];
   if (!key || !secret || !rawBody) return false;
@@ -261,6 +261,28 @@ export class DoorFeedGuard implements CanActivate {
   canActivate(ctx: ExecutionContext): boolean {
     const req = ctx.switchToHttp().getRequest<Request & { rawBody?: Buffer }>();
     if (!verifyFeed(req.headers as Record<string, unknown>, req.rawBody, Date.now(), 'DOOR'))
+      throw new UnauthorizedException('Feed key or signature not valid.');
+    return true;
+  }
+}
+
+/** The CCTV and sensor analytics feed: the same signed calls, with ANALYTICS_API_KEY and ANALYTICS_SIGNING_SECRET. */
+@Injectable()
+export class AnalyticsFeedGuard implements CanActivate {
+  canActivate(ctx: ExecutionContext): boolean {
+    const req = ctx.switchToHttp().getRequest<Request & { rawBody?: Buffer }>();
+    if (!verifyFeed(req.headers as Record<string, unknown>, req.rawBody, Date.now(), 'ANALYTICS'))
+      throw new UnauthorizedException('Feed key or signature not valid.');
+    return true;
+  }
+}
+
+/** The in-house records server: the same signed calls, with INHOUSE_API_KEY and INHOUSE_SIGNING_SECRET. */
+@Injectable()
+export class InhouseFeedGuard implements CanActivate {
+  canActivate(ctx: ExecutionContext): boolean {
+    const req = ctx.switchToHttp().getRequest<Request & { rawBody?: Buffer }>();
+    if (!verifyFeed(req.headers as Record<string, unknown>, req.rawBody, Date.now(), 'INHOUSE'))
       throw new UnauthorizedException('Feed key or signature not valid.');
     return true;
   }

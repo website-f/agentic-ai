@@ -39,12 +39,32 @@ export function apiPinKeeper(env: NodeJS.ProcessEnv = process.env): PinKeeper {
   return pinKeeper(key || DEMO_PIN_KEY);
 }
 
+/**
+ * The in-house server's public key, which site devices seal full visitor details with (Fauzan, 6 Nov 2026). Only a
+ * public key: the private key stays on the in-house server. INHOUSE_PUBLIC_KEY_JWK holds the RSA-OAEP-256 key as JSON
+ * and INHOUSE_KEY_ID its name. Missing or not valid means null: devices then warn that the full ID is not kept.
+ */
+export function apiInhouseKey(env: NodeJS.ProcessEnv = process.env): PrimaService['inhouseKey'] {
+  const raw = env.INHOUSE_PUBLIC_KEY_JWK;
+  const keyId = env.INHOUSE_KEY_ID;
+  if (!raw || !keyId || !/^[A-Za-z0-9._-]{1,80}$/.test(keyId)) return null;
+  try {
+    const j = JSON.parse(raw) as { kty?: string; n?: string; e?: string };
+    // Never accept a private key here by mistake.
+    if (j.kty !== 'RSA' || !j.n || !j.e || 'd' in j || 'p' in j) return null;
+    return { keyId, jwk: { kty: 'RSA', n: j.n, e: j.e, alg: 'RSA-OAEP-256', ext: true, key_ops: ['encrypt'] } };
+  } catch {
+    return null;
+  }
+}
+
 @Injectable()
 export class Db implements OnModuleDestroy {
   readonly pool = makePool();
   readonly pins = apiPinKeeper();
   /** PRIMA_ORG_LINKS=true, read once at start (org-links.ts); off by default. */
   readonly orgLinks = orgLinksEnabled(process.env);
+  readonly inhouseKey = apiInhouseKey();
 
   async onModuleDestroy(): Promise<void> {
     await this.pool.end();
@@ -87,6 +107,7 @@ export class Db implements OnModuleDestroy {
       svc.pins = this.pins;
       svc.teamsApprovals = process.env.TEAMS_APPROVALS_READ === 'true';
       svc.teamsServiceOid = process.env.TEAMS_FLOW_SERVICE_OID ?? '';
+      svc.inhouseKey = this.inhouseKey;
       const out = await fn(svc, user, store);
       await client.query('COMMIT');
       return out;

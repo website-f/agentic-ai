@@ -8,6 +8,7 @@ import { CooNoticesPanel } from './CooNotices';
 import { DocList, ProofPicker } from './Proof';
 import { FwmWelfarePanel } from './FwmWelfare';
 import '../styles/hrx.css';
+import { FwmRecruitmentPanel } from './FwmRecruitment';
 
 /**
  * Foreign Worker Management (Fauzan, 26 Oct 2026). FWM renews every foreign worker's papers and sends the OMs dated
@@ -35,7 +36,7 @@ function stageTone(i: Item): Tone {
 
 export function FwmView() {
   const { data, error } = useLoad(() => api.fwmBoard(), []);
-  const [tab, setTab] = useState<'papers' | 'year10' | 'tasks' | 'welfare' | null>(null);
+  const [tab, setTab] = useState<'papers' | 'year10' | 'tasks' | 'welfare' | 'recruit' | null>(null);
   const [mine, setMine] = useState(true);
   const [q, setQ] = useState('');
   if (error)
@@ -138,9 +139,15 @@ export function FwmView() {
             Recruitment and welfare
           </button>
         )}
+        {board && (
+          <button role="tab" aria-selected={view === 'recruit'} onClick={() => setTab('recruit')}>
+            Recruitment steps
+          </button>
+        )}
       </div>
 
       {view === 'welfare' && <FwmWelfarePanel />}
+      {view === 'recruit' && <FwmRecruitmentPanel />}
 
       {view !== 'welfare' && (
         <Toolbar

@@ -3,6 +3,7 @@
 // clients and sites are fictional. Same seed + same "today" always gives the same data.
 
 import { GOV_OPS_COMPANY_ID, GROUP_EMPLOYER_ID, IT_COMPANY_ID, PRIVATE_OPS_COMPANY_ID, hasOwnStaffRecord } from './access';
+import { seedItems } from './item-seed';
 import { itPurchaseRequest } from './purchase';
 import { appendAudit, sha256Hex } from './audit';
 import { DEMO_PIN_KEEPER, demoPin, demoPinSalt } from './pin';
@@ -17,8 +18,9 @@ import { seedWebsites, websiteSampleUsers } from './websites-seed';
 import { evaluateClockIn, evaluateClockOut, slaDue } from './checks';
 import { weekdayOf } from './remote';
 import { CLIENT_ONBOARD_STEPS, CLIENT_OFFBOARD_STEPS } from './clients';
-import { addDays, addMinutes, dateOf, daysBetween, fromMs, myt, toMs } from './time';
+import { addDays, addMinutes, dateOf, daysBetween, fromMs, myt, toMs, weekday } from './time';
 import { buildStaffPayLine } from './payroll';
+import { payFormulaLawCheck, standardDriverAmounts, standardGuardAmounts, type PayFormula, type PayFormulaUse } from './pay-formulas';
 import { contractBilling, mobilisationFor, reviewsFor } from './contracts';
 import { monthDepn, netBookValue, periodBefore } from './assets';
 import type {
@@ -78,6 +80,7 @@ import type {
   Person,
   PublicHoliday,
   FwmTask,
+  FwRecruitFile,
   HostelBill,
   LeaveKind,
   LeaveRequest,
@@ -732,6 +735,9 @@ export function generateDataset(opts: SeedOptions): Dataset {
     fwRenewals: [],
     fwmTasks: [],
     fwWelfareChecks: [],
+    // Empty: the table comes with db/modules/fw-recruit-v1.sql, which a reset does not install. The browser demo adds
+    // demoFwRecruitFiles() itself.
+    fwRecruitFiles: [],
     locationPings: [],
     hostels: [],
     hostelStays: [],
@@ -764,6 +770,7 @@ export function generateDataset(opts: SeedOptions): Dataset {
     allowanceTypes: [],
     flexRequests: [],
     vacancies: [],
+    applicants: [],
     staffMovements: [],
     loginHandovers: [],
     hrFilings: [],
@@ -785,6 +792,7 @@ export function generateDataset(opts: SeedOptions): Dataset {
     staffPayRuns: [],
     finStatus: [],
     arishaDrafts: [],
+    itemSkus: [], physicalItems: [], itemLots: [], itemEvents: [], itemMovements: [], itemCases: [], itemCounts: [], itemSyncJobs: [], itemRequests: [], itemSettings: [], itemDocs: [], uniformRecords: [],
     itImportReviews: [],
     contracts: [],
     branchSettlements: [],
@@ -799,6 +807,15 @@ export function generateDataset(opts: SeedOptions): Dataset {
     itJobs: [],
     itCodeHolders: [],
     itSettings: [],
+    payFormulas: [],
+    payFormulaUses: [],
+    siteHoursApprovals: [],
+    publicHolidayLists: [],
+    guardPayRuns: [],
+    guardPayAdvances: [],
+    guardLoans: [],
+    statutoryVersions: [],
+    payLawVersions: [],
     itManualReceipts: [],
     itRentalBills: [],
     itRentalRates: [],
@@ -850,6 +867,14 @@ export function generateDataset(opts: SeedOptions): Dataset {
     phoneCalls: [],
     siteSystems: [],
     siteAlarms: [],
+    siteDispatches: [],
+    postLogs: [],
+    siteVehicles: [],
+    gateEntries: [],
+    siteNeedsReviews: [],
+    siteTasks: [],
+    siteTaskLogs: [],
+    evidenceVideos: [],
     attendanceFollowUps: [],
     evidencePhotos: [],
     evidenceDocs: [],
@@ -3156,6 +3181,26 @@ export function generateDataset(opts: SeedOptions): Dataset {
       companyIds: [],
       siteIds: [],
     },
+    // The CCTV and sensor analytics feed (Fauzan, 6 Nov 2026): a system sign-in, never a person; mock until connected.
+    {
+      id: 'u-analytics-feed',
+      name: 'CCTV and sensor analytics feed',
+      title: 'System: sends AI detections from site CCTV and sensors (mock until connected)',
+      role: 'pwvsb_officer',
+      integration: 'analytics',
+      companyIds: [],
+      siteIds: [],
+    },
+    // The company's in-house server (Fauzan, 6 Nov 2026): collects the sealed full visitor details police may ask for.
+    {
+      id: 'u-inhouse-server',
+      name: 'In-house records server',
+      title: 'System: collects sealed gate details for the 2 to 7 year police record (mock until the server exists)',
+      role: 'pwvsb_officer',
+      integration: 'inhouse',
+      companyIds: [],
+      siteIds: [],
+    },
     // The office door system's feed through CMS (Fauzan, 27 Oct 2026): a system sign-in, never a person.
     {
       id: 'u-door-sync',
@@ -3574,6 +3619,11 @@ export function generateDataset(opts: SeedOptions): Dataset {
       validFrom: grantFrom,
       validTo: grantTo,
     });
+    // The analytics feed and the in-house server read each company's sites and gate records only as systems.
+    ds.grants.push(
+      { id: `gr-analytics-${cid}`, userId: 'u-analytics-feed', companyId: cid, scope: 'monitor', basis: 'CCTV and sensor analytics feed (system), Fauzan 6 Nov 2026', validFrom: grantFrom, validTo: grantTo },
+      { id: `gr-inhouse-${cid}`, userId: 'u-inhouse-server', companyId: cid, scope: 'monitor', basis: 'In-house records server (system), Fauzan 6 Nov 2026', validFrom: grantFrom, validTo: grantTo },
+    );
     ds.grants.push({
       id: `gr-pdpa-${cid}`,
       userId: 'u-pdpa',
@@ -5224,6 +5274,46 @@ export function generateDataset(opts: SeedOptions): Dataset {
               },
       });
     });
+    // Client CRM (Fauzan, 4 Nov 2026; mock): contacts, the person in charge, client requests, renewals and lost reasons.
+    // All names, numbers and emails are made up.
+    {
+      const POS = ['Facility Manager', 'Building Manager', 'Admin Manager', 'Estate Manager'];
+      ds.clientAccounts.forEach((a, i) => {
+        const slug = a.name.toLowerCase().replace(/\(mock\)/, '').replace(/[^a-z0-9]+/g, '').slice(0, 12) || 'client';
+        a.origin = { kind: 'direct', id: null, ref: null };
+        a.owner = i % 6 === 5 ? null : { name: 'Operations Manager (mock)', userId: null, since: dateOf(ago(300)), by: 'Operations Director (mock)' };
+        a.people =
+          i % 9 === 4
+            ? []
+            : [
+                { id: `cp-${a.id}-1`, name: `Contact ${i + 1}A (mock)`, position: POS[i % POS.length], role: 'site' as const, phone: `03-0000 ${String(1000 + i).slice(-4)}`, email: `pic@${slug}.example`, main: i % 7 !== 3, addedBy: pic, addedAt: ago(390), removedAt: null, removedBy: null },
+                { id: `cp-${a.id}-2`, name: `Contact ${i + 1}B (mock)`, position: 'Accounts Executive', role: 'finance' as const, phone: '', email: `accounts@${slug}.example`, main: false, addedBy: 'Admin executive (mock)', addedAt: ago(380), removedAt: null, removedBy: null },
+              ];
+        a.requests =
+          i % 5 === 1
+            ? [{ id: `cq-${a.id}-1`, kind: 'more_guards' as const, what: 'One more guard at the loading bay at night', from: `Contact ${i + 1}A (mock)`, at: ago(20), by: pic, neededBy: null, status: 'open' as const, closedAt: null, closedBy: null, outcome: null, variationRef: null }]
+            : i % 5 === 3
+              ? [{ id: `cq-${a.id}-1`, kind: 'temporary' as const, what: 'Two guards for the year-end event', from: `Contact ${i + 1}A (mock)`, at: ago(4), by: pic, neededBy: addDays(today, 20), status: 'open' as const, closedAt: null, closedBy: null, outcome: null, variationRef: null }]
+              : [];
+        a.renewals = [];
+        a.renewal = null;
+        // A renewal decided and offered for some clients whose contract ends soon.
+        if (a.stage === 'active' && a.contractEndsOn && a.contractEndsOn >= today && daysBetween(today, a.contractEndsOn) <= 90 && i % 3 === 0)
+          a.renewal = {
+            id: `rn-${a.id}`,
+            endsOn: a.contractEndsOn,
+            openedAt: ago(15),
+            decision: { choice: 'renew_new_price', pricePct: 5, reason: 'Minimum wage rise; client rated us 4 of 5', by: 'Company manager (mock)', at: ago(15) },
+            proposal: i % 2 === 0 ? { at: ago(8), by: 'Admin executive (mock)', docId: 'seed-renewal-offer' } : null,
+            answer: null,
+            closedAt: null,
+          };
+        if (a.stage === 'offboarding') {
+          a.lostReason = 'in_house';
+          a.winBackOn = addDays(today, 180);
+        }
+      });
+    }
     // The COO's monthly operations meetings: Sasa held with minutes, Arrow Shield scheduled, Inas not yet.
     const opsMeeting = (id: string, companyId: string, day: number, held: boolean) => ({
       id,
@@ -9267,6 +9357,331 @@ export function generateDataset(opts: SeedOptions): Dataset {
     });
     ds.users.push({ id, name, title: `Admin Executive, ${co?.name ?? companyId}`, role: 'admin_exec', companyIds: [companyId], siteIds: [], personId });
   });
+  // Pay formulas (Fauzan, 5 Nov 2026): the three standard 12-hour guard formulas and a driver overtime formula, set by
+  // the ACT Director for the whole group. Placeholder amounts (minimum wage, no allowances): ACT sets the real ones.
+  {
+    // From last month, so the guard pay run for last month has formulas in the test data (seed only; a real formula
+    // never starts in a past month).
+    const month = addDays(`${today.slice(0, 7)}-01`, -1).slice(0, 7);
+    const at = myt(addDays(today, -3), '10:00');
+    const by = { preparedBy: 'ACT Lead (mock)', preparedById: 'u-audit', preparedAt: at, decidedBy: 'ACT Lead (mock)', decidedById: 'u-audit', decidedAt: at, decisionNote: null };
+    const f = (code: string, kind: PayFormula['kind'], name: string, amounts: PayFormula['amounts']): PayFormula => ({
+      id: `pf-${code.toLowerCase()}-v1`,
+      code,
+      version: 1,
+      kind,
+      name,
+      effectiveFrom: month,
+      amounts,
+      status: 'live',
+      reason: 'Standard formula (Fauzan, 5 Nov 2026). Test amounts.',
+      ...by,
+      lawFlags: payFormulaLawCheck(kind, amounts, month).flags,
+    });
+    ds.payFormulas.push(
+      f('STD-12H-R2', 'guard_shift', '12-hour shift, 2 hours rest, full month', standardGuardAmounts(2)),
+      f('STD-12H-R2.5', 'guard_shift', '12-hour shift, 2.5 hours rest, full month', standardGuardAmounts(2.5)),
+      f('STD-12H-R3', 'guard_shift', '12-hour shift, 3 hours rest, full month', standardGuardAmounts(3)),
+      f('DRV-OT', 'driver_ot', 'Driver overtime', standardDriverAmounts()),
+      f('STAFF-OT', 'staff_ot', 'Staff overtime', standardDriverAmounts()),
+    );
+    const use = (id: string, kind: PayFormula['kind'], scope: PayFormulaUse['scope'], scopeId: string | null, formulaCode: string, reason: string): PayFormulaUse => ({
+      id, kind, scope, scopeId, formulaCode, effectiveFrom: month, reason, setBy: 'ACT Lead (mock)', setById: 'u-audit', setAt: at, endedBy: null,
+    });
+    ds.payFormulaUses.push(use('pfu-group-guard', 'guard_shift', 'group', null, 'STD-12H-R2', 'Group default: 12-hour shift with 2 hours rest.'));
+    ds.payFormulaUses.push(use('pfu-group-driver', 'driver_ot', 'group', null, 'DRV-OT', 'Group default for drivers.'));
+    ds.payFormulaUses.push(use('pfu-group-staff', 'staff_ot', 'group', null, 'STAFF-OT', 'Group default overtime for all other staff.'));
+    const site = ds.sites.find((s) => s.companyId === 'co-sasa');
+    if (site) ds.payFormulaUses.push(use('pfu-site-example', 'guard_shift', 'site', site.id, 'STD-12H-R3', 'Example: this site gives 3 hours rest with a relief guard.'));
+  }
+  // Guard and officer salary accounts for the guard pay run (Fauzan, 5 Nov 2026), masked test numbers on their own
+  // random stream. One Sasa guard has none, so HR sees the warning.
+  {
+    const r = new Rng(MASTER_SEED + 1201);
+    const BANKS = ['Maybank', 'CIMB Bank', 'Public Bank', 'RHB Bank', 'Bank Islam', 'BSN'];
+    ds.people
+      .filter((p) => p.role !== 'office')
+      .forEach((p, k) => {
+        const n = r.int(1000, 9999);
+        p.bank = k === 5 ? null : { bank: BANKS[k % BANKS.length], accountMasked: `****${String(n)}` };
+        // Fauzan, 6 Nov 2026: an e-wallet, and a relative's account with the guard's written consent (test data).
+        if (k === 7) p.bank = { bank: "Touch 'n Go eWallet (test)", accountMasked: `****${String(n)}`, kind: 'ewallet' };
+        if (k === 9)
+          p.bank = {
+            bank: BANKS[0],
+            accountMasked: `****${String(n)}`,
+            holder: 'relative',
+            holderName: 'Test Relative',
+            relationship: 'mother',
+            consent: {
+              docRef: 'CONSENT-TEST-01',
+              signedOn: addDays(today, -60),
+              oaths: { commissioner: 'Test Commissioner for Oaths', stampRef: 'PS-TEST-0001', stampedOn: addDays(today, -59) },
+              recordedBy: 'HR officer (mock)',
+              recordedById: 'u-pwvsb-hr',
+              recordedAt: myt(addDays(today, -59), '10:00'),
+              approved: { by: 'COO (mock)', byId: 'u-coo', at: myt(addDays(today, -58), '10:00'), note: 'Letter stamped and checked (test data).' },
+            },
+          };
+      });
+  }
+
+
+  // Site man-hours (Fauzan, 6 Nov 2026): two Sasa sites with a new guard on on-the-job training alongside the rostered
+  // guards (hours with no shift), one of them already approved by the Operations Director. Test data only.
+  {
+    const month = today.slice(0, 7);
+    const co = 'co-sasa';
+    const postSites = new Set(ds.posts.filter((p) => p.companyId === co).map((p) => p.siteId));
+    const priv = ds.sites.filter((s) => s.companyId === co && s.sector !== 'government' && postSites.has(s.id));
+    const trainees = ds.people.filter((p) => p.companyId === co && p.role === 'guard' && p.status === 'active');
+    const busy = new Set(ds.shifts.filter((s) => s.companyId === co && s.personId).map((s) => `${s.personId}|${s.date}`));
+    const ojt = (site: Site, days: number[], tag: string) => {
+      let added = 0;
+      for (const off of days) {
+        const date = addDays(today, -off);
+        if (date.slice(0, 7) !== month) continue;
+        const t = trainees.find((p) => !busy.has(`${p.id}|${date}`));
+        if (!t) continue;
+        busy.add(`${t.id}|${date}`);
+        ds.attendance.push({
+          id: `at-ojt-${tag}-${date}`,
+          companyId: co,
+          siteId: site.id,
+          shiftId: null,
+          personId: t.id,
+          deviceId: `DEV-${site.code}`,
+          clockIn: myt(date, '07:00'),
+          clockOut: myt(date, '19:00'),
+          lat: site.lat,
+          lng: site.lng,
+          distanceM: 0,
+          photo: true,
+          flags: ['NOT_ROSTERED'],
+          locked: true,
+        });
+        added += 12;
+      }
+      return added;
+    };
+    if (priv[1]) ojt(priv[1], [1, 2, 3, 4, 5], 'a');
+    if (priv[2]) {
+      const h = ojt(priv[2], [1, 2, 3, 4, 5], 'b');
+      if (h)
+        ds.siteHoursApprovals.push({
+          id: `sha-${priv[2].id}-${month}-1`,
+          companyId: co,
+          siteId: priv[2].id,
+          month,
+          extraHours: h + 24,
+          cause: 'on_job_training',
+          reason: 'New guard on on-the-job training alongside the rostered guard for the first week (test data).',
+          approvedBy: 'Operations Director (mock)',
+          approvedById: 'u-opsdir',
+          approverTier: 'ops_director',
+          approvedAt: myt(addDays(today, -5), '09:00'),
+        });
+    }
+  }
+
+  // Public holidays (Fauzan, 6 Nov 2026): Sasa's whole-company list for this year, set by the OGM. Test data: the dates
+  // that move each year are placeholders, not the gazette.
+  {
+    const y = Number(today.slice(0, 4));
+    const days: [string, string][] = [
+      ['01-01', "New Year's Day"],
+      ['02-01', 'Federal Territory Day'],
+      ['02-17', 'Chinese New Year (test date)'],
+      ['02-18', 'Chinese New Year, second day (test date)'],
+      ['03-21', 'Hari Raya Aidilfitri (test date)'],
+      ['03-22', 'Hari Raya Aidilfitri, second day (test date)'],
+      ['05-01', 'Labour Day'],
+      ['06-01', "Yang di-Pertuan Agong's birthday (test date)"],
+      ['08-31', 'National Day'],
+      ['09-16', 'Malaysia Day'],
+      ['12-25', 'Christmas Day'],
+    ];
+    ds.publicHolidayLists.push({
+      id: `phl-co-sasa-${y}-all-v1`,
+      companyId: 'co-sasa',
+      year: y,
+      state: null,
+      version: 1,
+      days: days.map(([md, label]) => ({ date: `${y}-${md}`, label })),
+      reason: 'Whole-company list for the year (test data).',
+      setBy: 'OGM (mock)',
+      setById: 'u-ogm',
+      setByTier: 'ogm',
+      setAt: myt(`${y - 1}-12-05`, '10:00'),
+      replacedBy: null,
+      lawFlags: [],
+    });
+  }
+
+  // One item register (Fauzan, 6 Nov 2026), synthetic only.
+  seedItems(ds, today, now);
+  // CMS messages to site devices (Fauzan, 6 Nov 2026). A bodycam linked to the
+  // Sasa site device (mock bridge); AI on CCTV saw a person at the fence 4 minutes ago and CMS sent the device an alert;
+  // a sensor event at another Sasa site is acknowledged and waiting for CMS to decide.
+  {
+    const dev = ds.users.find((u) => u.id === 'u-dev-sasa-001');
+    const site = dev && ds.sites.find((x) => x.id === dev.siteIds[0]);
+    const other = ds.sites.find((x) => x.companyId === 'co-sasa' && x.id !== site?.id);
+    const nowMs = toMs(now);
+    if (site) {
+      ds.siteSystems.push({
+        id: `sys-${site.id}-bodycam-1`,
+        companyId: site.companyId,
+        siteId: site.id,
+        kind: 'BODYCAM',
+        name: 'Bodycam BC-01 (mock)',
+        linked: true,
+        status: 'online',
+        cameras: null,
+        camerasOnline: null,
+        lastHeartbeatAt: fromMs(nowMs - 60_000),
+      });
+      const at = nowMs - 4 * 60_000;
+      ds.siteAlarms.push({
+        id: `alm-ai-${site.id}-seed`,
+        companyId: site.companyId,
+        siteId: site.id,
+        kind: 'AI_CCTV',
+        source: 'CCTV analytics: CAM-07 rear fence (mock)',
+        at: fromMs(at),
+        status: 'acknowledged',
+        ackAt: fromMs(at + 40_000),
+        ackBy: 'Daniel Wong',
+        verdict: null,
+        caseId: null,
+        note: null,
+        detection: { system: 'cctv', device: 'CAM-07 rear fence', label: 'Person climbing fence', confidence: 0.87, verified: false },
+      });
+      ds.siteDispatches.push({
+        id: `dsp-${site.id}-seed-1`,
+        ref: 'SASA-M0001',
+        companyId: site.companyId,
+        siteId: site.id,
+        level: 'alert',
+        title: 'Check the rear fence',
+        message: 'Camera 7 shows a person at the rear fence. Go and check now. Take a photo or video of what you see.',
+        proof: 'photo_or_video',
+        alarmId: `alm-ai-${site.id}-seed`,
+        origin: 'ai_cctv',
+        sentBy: 'Daniel Wong',
+        sentAt: fromMs(at + 60_000),
+        receivedAt: null,
+        ack: null,
+        photoIds: [],
+        videoIds: [],
+        reply: null,
+        replyAt: null,
+        status: 'sent',
+        closed: null,
+      });
+    }
+    // The one-stop duty device (Fauzan, 6 Nov 2026): the site vehicle list, two post log lines and a contractor inside.
+    if (site) {
+      const vehicles: [string, string, 'allowed' | 'watch'][] = [
+        ['WXY1234', 'Client manager car', 'allowed'],
+        ['BKL8820', 'Clinic supplies lorry', 'allowed'],
+        ['VBA3311', 'Reported by client: banned after theft (sample)', 'watch'],
+      ];
+      vehicles.forEach(([plate, label, status], i) =>
+        ds.siteVehicles.push({ id: `veh-${site.id}-${i + 1}`, companyId: site.companyId, siteId: site.id, plate, label, status, source: i === 1 ? 'vehicle_system_mock' : 'company' }),
+      );
+      const g = ds.people.find((p) => p.companyId === site.companyId && p.status === 'active' && p.staffNo && p.role === 'guard');
+      if (g) {
+        const line = (mins: number, kind: 'handover' | 'routine', text: string, n: number) =>
+          ds.postLogs.push({ id: `pl-${site.id}-seed-${n}`, companyId: site.companyId, siteId: site.id, at: fromMs(toMs(now) - mins * 60_000), personId: g.id, staffNo: g.staffNo!, name: g.name, kind, text, correctsId: null, photoIds: [] });
+        line(150, 'handover', 'Took over from night shift. Keys 14 of 14, radio OK, nothing outstanding.', 1);
+        line(60, 'routine', 'Round of the car park and rear fence done, all clear.', 2);
+        ds.gateEntries.push({
+          id: `gate-${site.id}-seed-1`,
+          ref: `${site.code}-G0001`,
+          companyId: site.companyId,
+          siteId: site.id,
+          kind: 'visitor',
+          inAt: fromMs(toMs(now) - 45 * 60_000),
+          receivedAt: fromMs(toMs(now) - 45 * 60_000),
+          outAt: null,
+          clientRef: 'seed-gate-0001',
+          paper: null,
+          // A sample has no sealed full ID, so it carries the warning a real entry would show.
+          sealed: null,
+          inhouse: { status: 'nothing_sealed', at: null },
+          visitor: { name: 'Contractor (sample)', idKind: 'mykad', idLast4: '5521', idRead: 'scan', company: 'Sample Aircond Services', host: 'Facility office', purpose: 'Aircond servicing, level 2', faceCheck: 'match' },
+          vehicle: { plate: 'BKL8820', plateRead: 'scan', listed: 'allowed' },
+          photoIds: [],
+          inBy: { personId: g.id, staffNo: g.staffNo!, name: g.name },
+          outBy: null,
+          flags: ['FULL_ID_NOT_SEALED'],
+          keepUntil: `${Number(today.slice(0, 4)) + 7}${today.slice(4)}`,
+        });
+        // Client needs discussed by the OM and the tasks set from it (Fauzan, 6 Nov 2026).
+        const om = ds.users.find((u) => u.id === 'u-om-klang');
+        const by = { userId: om?.id ?? 'u-om-klang', name: om?.name ?? 'Operations Manager' };
+        const setAt = fromMs(toMs(now) - 3 * 86_400_000);
+        ds.siteNeedsReviews.push({
+          id: `needs-${site.id}-seed-1`,
+          companyId: site.companyId,
+          siteId: site.id,
+          at: setAt,
+          by,
+          clientContact: 'Facility manager (sample)',
+          answers: {
+            'risk.history': { answer: 'Two cable thefts at the back fence in August, at night (sample).', concern: 'high' },
+            'systems.physical': { answer: 'Rear fence low near the generator; two lights out at the car park (sample).', concern: 'medium' },
+            'guarding.supervision': { answer: 'Client wants an officer check every day and a patrolling officer visit weekly.', concern: 'low' },
+          },
+          agreed: 'Fence round every night with photo, CCTV check each morning, officer daily check, patrolling officer weekly visit (sample).',
+        });
+        const t = (n: number, title: string, forRole: 'guard' | 'officer' | 'patrol_officer', days: number[], byTime: string | null, proof: 'none' | 'photo', needTopic: string) =>
+          ds.siteTasks.push({
+            id: `task-${site.id}-seed-${n}`,
+            ref: `${site.code}-T${String(n).padStart(3, '0')}`,
+            companyId: site.companyId,
+            siteId: site.id,
+            title,
+            detail: '',
+            forRole,
+            days,
+            onDate: null,
+            byTime,
+            proof,
+            needTopic,
+            from: dateOf(setAt),
+            until: null,
+            status: 'active',
+            setBy: by,
+            setAt,
+            stopped: null,
+          });
+        const all = [0, 1, 2, 3, 4, 5, 6];
+        t(1, 'Check the CCTV screen: all cameras showing and recording', 'guard', all, '09:00', 'photo', 'systems.cctv');
+        t(2, 'Walk the rear fence line and photograph any damage', 'guard', all, '22:00', 'photo', 'risk.history');
+        t(3, 'Officer site check: guards awake, in uniform, post log written', 'officer', all, null, 'photo', 'guarding.supervision');
+        t(4, 'Patrolling officer visit: check the post, the guards and the post log', 'patrol_officer', [weekday(today)], null, 'photo', 'guarding.supervision');
+      }
+    }
+    if (other)
+      ds.siteAlarms.push({
+        id: `alm-ai-${other.id}-seed`,
+        companyId: other.companyId,
+        siteId: other.id,
+        kind: 'AI_SENSOR',
+        source: 'Sensor analytics: PIR store room (mock)',
+        at: fromMs(nowMs - 12 * 60_000),
+        status: 'acknowledged',
+        ackAt: fromMs(nowMs - 11 * 60_000),
+        ackBy: 'Daniel Wong',
+        verdict: null,
+        caseId: null,
+        note: null,
+        detection: { system: 'sensor', device: 'PIR store room', label: 'Movement after closing', confidence: 0.64, verified: false },
+      });
+  }
+
   // Test PINs are kept only as hashes, as real ones are (pin.ts); testers work them out from the staff number.
   for (const p of ds.people) if (p.staffNo) p.pinHash = DEMO_PIN_KEEPER.hash(demoPin(p.staffNo), demoPinSalt(p.id));
   return ds;
@@ -9274,3 +9689,57 @@ export function generateDataset(opts: SeedOptions): Dataset {
 
 export type { Company, CompanyLicence, AuthorityGrant };
 
+
+/**
+ * Mock recruitment files for the FWM recruitment steps screen (Fauzan, 6 Nov 2026), added by the browser demo only.
+ * Synthetic candidates; the demo papers are not attached, so every step says so in its note.
+ */
+export function demoFwRecruitFiles(today: IsoDate, now: IsoDateTime): FwRecruitFile[] {
+  const by = { by: 'Prakash a/l Raman', byId: 'u-fwm-ex1', at: now };
+  const base = {
+    companyId: 'co-sasa',
+    country: 'NP',
+    history: [],
+    clearedBy: null,
+    clearedById: null,
+    clearedAt: null,
+    arrivedOn: null,
+    personId: null,
+    stopReason: null,
+    stoppedBy: null,
+    stoppedAt: null,
+    ...by,
+  };
+  const note = 'Demo record: no paper attached in mock data.';
+  return [
+    {
+      ...base,
+      id: 'fwr-demo-1',
+      candidateName: 'Candidate One (mock)',
+      passportLast4: '0001',
+      agency: 'UAT Recruiting Agency (mock)',
+      plannedTravelOn: addDays(today, 30),
+      steps: {
+        AGENCY_LICENCE: { step: 'AGENCY_LICENCE', on: addDays(today, -6), passed: true, licenceNo: 'UAT-LIC-001', licenceExpiresOn: addDays(today, 200), note, docIds: [], ...by },
+        INTERVIEW: { step: 'INTERVIEW', on: addDays(today, -3), passed: true, interviewer: 'Hairul Nizam bin Saad', note, docIds: [], ...by },
+      },
+      status: 'open',
+    },
+    {
+      ...base,
+      id: 'fwr-demo-2',
+      candidateName: 'Candidate Two (mock)',
+      passportLast4: '0002',
+      agency: 'UAT Recruiting Agency (mock)',
+      plannedTravelOn: addDays(today, 10),
+      steps: {
+        AGENCY_LICENCE: { step: 'AGENCY_LICENCE', on: addDays(today, -20), passed: true, licenceNo: 'UAT-LIC-001', licenceExpiresOn: addDays(today, 200), note, docIds: [], ...by },
+        EMBASSY: { step: 'EMBASSY', on: addDays(today, -12), passed: true, reference: 'UAT-EMB-0002', note, docIds: [], ...by },
+        INTERVIEW: { step: 'INTERVIEW', on: addDays(today, -18), passed: true, interviewer: 'Hairul Nizam bin Saad', note, docIds: [], ...by },
+        AGE: { step: 'AGE', on: addDays(today, -18), passed: true, dob: '1998-04-15', age: 28, note, docIds: [], ...by },
+        CONTRACT: { step: 'CONTRACT', on: addDays(today, -5), passed: true, languages: ['en', 'ms', 'ne'], note, docIds: [], ...by },
+      },
+      status: 'open',
+    },
+  ];
+}

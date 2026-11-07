@@ -19,6 +19,10 @@ const PREFIX:Record<ReleaseModuleId,{tables:string[];functions:string|null;polic
  company_run_links:{tables:['company_run_links'],functions:null},
  org_links:{tables:['org_events','org_tasks','org_notices','org_imports'],functions:'org_'},
  fw_welfare:{tables:['fw_welfare_checks'],functions:null},
+ pay_formulas:{tables:['pay_formulas','pay_formula_uses','pay_law_versions','site_hours_approvals','public_holiday_lists'],functions:null},
+ guard_pay:{tables:['guard_pay_runs','guard_pay_advances','guard_loans','statutory_versions'],functions:null},
+ fw_recruit:{tables:['fw_recruit_files'],functions:null},
+ item_register:{tables:['item_skus','item_units','item_lots','item_events','item_movements','item_cases','item_counts','item_sync_jobs','item_requests','item_settings','item_docs','item_uniform_records'],functions:'item_'},
  special_ops:{tables:[],functions:null,policies:['arms_wall']},
 };
 type Client=Pick<PoolClient,'query'>;

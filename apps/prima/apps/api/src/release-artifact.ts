@@ -16,6 +16,11 @@ export const MODULE_SPECS=[
  {id:'org_links',path:'db/modules/org-links-v1.sql',requires:[]},
  {id:'special_ops',path:'db/modules/special-ops-v1.sql',requires:[]},
  {id:'fw_welfare',path:'db/modules/fw-welfare-v1.sql',requires:[]},
+ // P85: the boss's pay formulas, guard pay, foreign worker recruitment and item register modules.
+ {id:'pay_formulas',path:'db/modules/pay-formulas-v1.sql',requires:[]},
+ {id:'guard_pay',path:'db/modules/guard-pay-v1.sql',requires:['pay_formulas']},
+ {id:'fw_recruit',path:'db/modules/fw-recruit-v1.sql',requires:[]},
+ {id:'item_register',path:'db/modules/item-register-v1.sql',requires:[]},
 ] as const;
 export type ReleaseModuleId=typeof MODULE_SPECS[number]['id'];
 export type ReleaseArtifact={version:1;base:{path:string;sha256:string};modules:Array<{id:ReleaseModuleId;path:string;sha256:string;requires:readonly string[]}>};

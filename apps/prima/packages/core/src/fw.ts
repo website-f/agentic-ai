@@ -2,8 +2,8 @@
 // and the labels FWM uses. FWM does the renewals; the company stays the employer.
 
 import { RULES } from './rules';
-import { addDays, daysBetween } from './time';
-import type { FwCheckKind, FwConcern, FwmTaskKind, FwPaper, FwWelfareCheck, IsoDate } from './types';
+import { addDays, ageOn, daysBetween } from './time';
+import type { FwCheckKind, FwConcern, FwContractLanguage, FwmTaskKind, FwPaper, FwRecruitFile, FwRecruitStep, FwWelfareCheck, IsoDate } from './types';
 
 export const FW_PAPER_LABEL: Record<FwPaper, string> = {
   PLKS_PERMIT: 'Work permit (PLKS)',
@@ -156,4 +156,64 @@ export function agencyScorecard(checks: FwWelfareCheck[]): AgencyScore[] {
     by.set(key, s);
   }
   return [...by.values()].sort((a, b) => b.feesFound - a.feesFound || b.paid - a.paid || a.agency.localeCompare(b.agency));
+}
+
+// ---------- Foreign worker recruitment steps (Fauzan, 6 Nov 2026, IWAY answer 7) ----------
+
+export const FW_RECRUIT_STEPS: FwRecruitStep[] = ['AGENCY_LICENCE', 'EMBASSY', 'INTERVIEW', 'AGE', 'CONTRACT'];
+
+export const FW_RECRUIT_STEP_LABEL: Record<FwRecruitStep, string> = {
+  AGENCY_LICENCE: 'Agency licence',
+  EMBASSY: 'Embassy confirmation',
+  INTERVIEW: 'Interview',
+  AGE: 'Age check (passport)',
+  CONTRACT: 'Contract signed (English and Malay)',
+};
+
+export const FW_CONTRACT_LANGUAGE_LABEL: Record<FwContractLanguage, string> = {
+  en: 'English',
+  ms: 'Malay',
+  ne: 'Nepali',
+  bn: 'Bengali',
+  my: 'Burmese',
+  id: 'Indonesian',
+  other: 'Other mother tongue',
+};
+
+/** Age from the passport's date of birth on the day that counts (the planned travel date, or today). */
+export function fwRecruitAge(dob: IsoDate, on: IsoDate): { age: number; ok: boolean } {
+  const age = ageOn(dob, on);
+  const { min, max } = RULES.fwmRecruitAge.value;
+  return { age, ok: age >= min && age <= max };
+}
+
+/** What is still missing before the worker may be cleared to travel, in step order. */
+export function fwRecruitMissing(f: Pick<FwRecruitFile, 'steps' | 'plannedTravelOn'>, today: IsoDate): string[] {
+  const out: string[] = [];
+  for (const s of FW_RECRUIT_STEPS) {
+    const r = f.steps[s];
+    if (!r) out.push(`${FW_RECRUIT_STEP_LABEL[s]} not recorded`);
+    else if (!r.passed) out.push(`${FW_RECRUIT_STEP_LABEL[s]} not passed`);
+  }
+  const lic = f.steps.AGENCY_LICENCE;
+  if (lic?.licenceExpiresOn && lic.licenceExpiresOn < (f.plannedTravelOn && f.plannedTravelOn > today ? f.plannedTravelOn : today))
+    out.push('Agency licence expires before the worker travels');
+  if (!f.plannedTravelOn) out.push('Planned travel date not set');
+  const c = f.steps.CONTRACT;
+  if (c && f.plannedTravelOn && c.on > f.plannedTravelOn) out.push('Contract signed after the planned travel date');
+  const a = f.steps.AGE;
+  if (a?.dob && f.plannedTravelOn && !fwRecruitAge(a.dob, f.plannedTravelOn).ok) out.push('Age outside 18 to 60 on the planned travel date');
+  return out;
+}
+
+/**
+ * Zero recruitment fees, from the arrival fee check (rule FWM-ZERO-FEE): 'waiting' until the worker has arrived and been
+ * asked; 'confirmed' when they paid nothing; 'fee_open' while a fee found is being followed up; 'fee_closed' once the
+ * follow-up is closed (fully paid back or with the reason it was not).
+ */
+export function fwRecruitZeroFee(check: Pick<FwWelfareCheck, 'kind' | 'paidAnything' | 'status' | 'amount' | 'repaid'> | null) {
+  if (!check || check.kind !== 'ARRIVAL_FEE') return { state: 'waiting' as const, repaidInFull: false };
+  if (!check.paidAnything) return { state: 'confirmed' as const, repaidInFull: false };
+  const repaidInFull = (check.repaid ?? 0) >= (check.amount ?? 0) && (check.amount ?? 0) > 0;
+  return { state: check.status === 'closed' ? ('fee_closed' as const) : ('fee_open' as const), repaidInFull };
 }

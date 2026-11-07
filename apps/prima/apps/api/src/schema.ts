@@ -21,3 +21,19 @@ export function companyOfficeModuleSql(): string {
 export function companyRunLinksModuleSql(): string {
   return readFileSync(join(__dirname, '../../../../db/modules/company-run-links-v1.sql'), 'utf8');
 }
+
+/**
+ * The optional pay formulas module (db/modules/pay-formulas-v1.sql), PROPOSED and not in the release manifest. Only the
+ * development reset and the tests apply it; a staging or live database gets it in a separately authorized window.
+ */
+export function payFormulasModuleSql(): string {
+  return readFileSync(join(__dirname, '../../../../db/modules/pay-formulas-v1.sql'), 'utf8');
+}
+
+/**
+ * The optional guard pay module (db/modules/guard-pay-v1.sql), PROPOSED and not in the release manifest. Only the
+ * development reset and the tests apply it; a staging or live database gets it in a separately authorized window.
+ */
+export function guardPayModuleSql(): string {
+  return readFileSync(join(__dirname, '../../../../db/modules/guard-pay-v1.sql'), 'utf8');
+}

@@ -90,4 +90,43 @@ describe('allowances under PostgreSQL', () => {
     const now = (await admin<{ data: { allowances?: unknown } }>(`SELECT data FROM prima.people WHERE id = $1`, [personId]))[0].data.allowances ?? null;
     assert.deepEqual(now, before);
   });
+
+  it('submission and a same-month consent racing on PostgreSQL never leave a submitted month with unpaid new allowances', async () => {
+    const personId = await db.asUser('u-it-ex1', async (_svc, u) => u.personId!);
+    const [{ company_id: companyId }] = await admin<{ company_id: string }>(`SELECT company_id FROM prima.people WHERE id = $1`, [personId]);
+    const month = nowMyt().slice(0, 7);
+    await admin(`UPDATE prima.staff_pay_runs SET data = jsonb_set(data, '{stage}', '"draft"') WHERE company_id = $1 AND data->>'period' = $2`, [companyId, month]);
+    await admin(
+      `UPDATE prima.people SET data = jsonb_set(data, '{bank}', '{"bank":"Test Bank","accountMasked":"****0000"}') WHERE company_id = $1 AND data->>'role' = 'office' AND (data->'bank' IS NULL OR data->'bank' = 'null'::jsonb)`,
+      [companyId],
+    );
+    // The earlier test's change waited while the month was submitted; with the month back with HR it is applied now.
+    await db.asUser('u-pwvsb-hr', (svc, u) => svc.applyDueStaffMovements(u));
+    const run = await db.asUser('u-pwvsb-hr', (svc, u) => svc.prepareStaffPay(u, companyId, month));
+    const blockers = (await db.asUser('u-pwvsb-hr', (svc, u) => svc.staffPayRun(u, run.id))).blockers;
+    assert.deepEqual(blockers, []);
+    const c = await db.asUser('u-pwvsb-hr', (svc, u) =>
+      svc.requestAllowanceChange(u, personId, { allowances: [{ typeId: 'alw-phone', amount: 66 }], effectiveOn: `${month}-01`, reason: 'Race (synthetic)' }),
+    );
+    await db.asUser('u-cos', (svc, u) => svc.decidePayChange(u, c.id, true, 'Semak (synthetic)'));
+    const [submit, consent] = await Promise.allSettled([
+      db.asUser('u-pwvsb-hr', (svc, u) => svc.staffPayStep(u, run.id, 'submit', { note: 'Hantar (synthetic)' })),
+      db.asUser('u-fauzan', (svc, u) => svc.decidePayChange(u, c.id, true, 'Setuju (synthetic)')),
+    ]);
+    assert.equal(consent.status, 'fulfilled');
+    const stage = (await admin<{ data: { stage: string } }>(`SELECT data FROM prima.staff_pay_runs WHERE id = $1`, [run.id]))[0].data.stage;
+    const change = (await admin<{ data: { applied: unknown } }>(`SELECT data FROM prima.pay_changes WHERE id = $1`, [c.id]))[0].data;
+    const amounts = ((await admin<{ data: { allowances?: { amount: number }[] } }>(`SELECT data FROM prima.people WHERE id = $1`, [personId]))[0].data.allowances ?? []).map((a) => a.amount);
+    if (submit.status === 'fulfilled') {
+      // Submitted first: the consent saw the submitted month under the lock and waits; the record is unchanged.
+      assert.equal(stage, 'submitted');
+      assert.equal(change.applied, null);
+      assert.ok(!amounts.includes(66));
+    } else {
+      // Consented first: the submission rechecked under the lock and found the draft stale.
+      assert.equal(stage, 'draft');
+      assert.match(String(submit.reason?.message ?? submit.reason), /changed|Recalculate/);
+      assert.ok(amounts.includes(66));
+    }
+  });
 });

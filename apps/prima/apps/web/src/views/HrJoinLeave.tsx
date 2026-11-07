@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { isOwnerAdmin } from "@prima/core";
-import { api } from "../api";
+import { api, type Vacancies } from "../api";
 import { useApp } from "../App";
 import { Card, Empty } from "../kit";
 import { Chip, ErrorNotice, Loading, dateLabel, useAction, useLoad } from "../ui";
@@ -294,7 +294,7 @@ const VACANCY_STATUS = {
 export function VacanciesPanel() {
   const { me } = useApp();
   const u = me.user;
-  const allowed = keepsHr(u) || u.opsTier === "ceo" || u.role === "company_manager";
+  const allowed = keepsHr(u) || u.opsTier === "ceo" || u.opsTier === "om" || u.opsTier === "regional" || u.role === "company_manager";
   const list = useLoad(() => (allowed ? api.vacancies() : Promise.resolve(null)), [allowed]);
   const act = useAction();
   const [note, setNote] = useState<Record<string, string>>({});
@@ -307,6 +307,8 @@ export function VacanciesPanel() {
     reason: "",
     payFrom: "",
     payTo: "",
+    category: "staff" as "staff" | "guard" | "officer",
+    state: "",
   });
   if (!allowed) return null;
   if (list.error) return <ErrorNotice error={list.error} />;
@@ -358,6 +360,27 @@ export function VacanciesPanel() {
                 <input className="input" value={f.department} onChange={(e) => setF({ ...f, department: e.target.value })} aria-label="Department" />
               </label>
               <label className="field">
+                <span className="label">Kind of post</span>
+                <select className="select" value={f.category} onChange={(e) => setF({ ...f, category: e.target.value as typeof f.category })} aria-label="Kind of post">
+                  <option value="staff">Office staff</option>
+                  <option value="guard">Guard</option>
+                  <option value="officer">Patrolling officer</option>
+                </select>
+              </label>
+              {f.category !== "staff" && (
+                <label className="field">
+                  <span className="label">State (its OM approves the job post)</span>
+                  <select className="select" value={f.state} onChange={(e) => setF({ ...f, state: e.target.value })} aria-label="State">
+                    <option value="">Choose…</option>
+                    {MY_STATES.map((x) => (
+                      <option key={x} value={x}>
+                        {x}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )}
+              <label className="field">
                 <span className="label">How many</span>
                 <input className="input" inputMode="numeric" value={f.headcount} onChange={(e) => setF({ ...f, headcount: e.target.value })} aria-label="How many" />
               </label>
@@ -377,7 +400,7 @@ export function VacanciesPanel() {
             <div className="hx-form-actions">
               <button
                 className="btn btn-primary btn-sm"
-                disabled={act.busy || f.title.trim().length < 3 || f.reason.trim().length < 5 || !/^\d+$/.test(f.headcount)}
+                disabled={act.busy || f.title.trim().length < 3 || f.reason.trim().length < 5 || (f.category !== "staff" && !f.state) || !/^\d+$/.test(f.headcount)}
                 onClick={async () => {
                   const r = await act.run(
                     () =>
@@ -389,6 +412,8 @@ export function VacanciesPanel() {
                         reason: f.reason,
                         payFrom: f.payFrom ? Number(f.payFrom) : null,
                         payTo: f.payTo ? Number(f.payTo) : null,
+                        category: f.category,
+                        state: f.category === "staff" ? null : f.state,
                       }),
                     "Sent to the CEO.",
                   );
@@ -415,6 +440,7 @@ export function VacanciesPanel() {
               <div className="hx-row-main">
                 <span className="hx-row-title">
                   {r.headcount} x {r.title} · {r.companyName}
+                  {r.category && r.category !== "staff" ? ` · ${r.category === "guard" ? "guard" : "patrolling officer"}, ${r.state ?? ""}` : ""}
                 </span>
                 <span className="hx-row-meta">
                   {r.reason}
@@ -453,6 +479,16 @@ export function VacanciesPanel() {
                   </div>
                 </div>
               )}
+              {r.applicantCount !== null && (r.status === "open" || (r.applicantCount ?? 0) > 0) && (
+                <div className="hx-row-body">
+                  <ApplicantList vacancyId={r.id} count={r.applicantCount ?? 0} hired={r.hiredCount ?? 0} headcount={r.headcount} />
+                </div>
+              )}
+              {(r.status === "open" || r.advert) && (
+                <div className="hx-row-body">
+                  <JobPost key={`${r.id}:${r.advert?.version ?? 0}:${r.advert?.status ?? ""}`} row={r} channels={d.channels} onDone={() => list.reload()} />
+                </div>
+              )}
             </li>
           ))}
         </ul>
@@ -463,5 +499,386 @@ export function VacanciesPanel() {
         </div>
       )}
     </Card>
+  );
+}
+
+const MY_STATES = [
+  "Johor", "Kedah", "Kelantan", "Kuala Lumpur", "Labuan", "Melaka", "Negeri Sembilan", "Pahang",
+  "Perak", "Perlis", "Pulau Pinang", "Putrajaya", "Sabah", "Sarawak", "Selangor", "Terengganu",
+];
+
+type VacancyRow = Vacancies["rows"][number];
+type ChannelRow = Vacancies["channels"][number];
+
+const ADVERT_STATUS: Record<string, string> = {
+  draft: "draft",
+  waiting_approval: "waiting for approval",
+  approved: "approved, not published",
+  withdrawn: "withdrawn",
+};
+
+/**
+ * The job post for an open vacancy (rule HR-JOB-ADVERT, Fauzan 5 Nov 2026). HR or the company manager drafts; the
+ * HR Director (staff) or the state's OM (guards, patrolling officers) approves. Social publishing is switched off:
+ * nothing here posts anything, and a post HR makes by hand is recorded as HR's own statement.
+ */
+function JobPost({
+  row,
+  channels,
+  onDone,
+}: {
+  row: VacancyRow;
+  channels: ChannelRow[];
+  onDone: () => void;
+}) {
+  const a = row.advert ?? null;
+  const act = useAction();
+  const [editing, setEditing] = useState(false);
+  const [text, setText] = useState(a?.text ?? "");
+  const [chosen, setChosen] = useState<string[]>(a?.channels ?? ["facebook"]);
+  const [applyHow, setApplyHow] = useState(a?.applyHow ?? "");
+  // A closing date is required (within 90 days); a new post starts at 30 days from today, Malaysia time.
+  const [closingDate, setClosingDate] = useState(a?.closingDate ?? new Date(Date.now() + 8 * 3_600_000 + 30 * 86_400_000).toISOString().slice(0, 10));
+  const [note, setNote] = useState("");
+  const [postChannel, setPostChannel] = useState<string>(a?.channels[0] ?? "facebook");
+  const [link, setLink] = useState("");
+  const [where, setWhere] = useState("");
+  const noLink = postChannel === "whatsapp" || postChannel === "notice_board" || postChannel === "other_place";
+  const step = (
+    action: "draft" | "submit" | "approve" | "return" | "record_posted" | "withdraw",
+    input: Record<string, unknown>,
+    done: string,
+  ) =>
+    void act
+      .run(() => api.advertStep(row.id, action, { ...input, version: a?.version }), done)
+      .then((r) => {
+        if (r) {
+          setEditing(false);
+          setNote("");
+          setLink("");
+          onDone();
+        }
+      });
+  const draftInput = (useText: boolean) => ({
+    text: useText ? text : "",
+    channels: chosen,
+    applyHow,
+    closingDate: closingDate || null,
+  });
+  return (
+    <div className="card" style={{ padding: 10, display: "flex", flexDirection: "column", gap: 6 }}>
+      <div className="row" style={{ justifyContent: "space-between" }}>
+        <div style={{ fontWeight: 600 }}>Job post</div>
+        <div className="row" style={{ gap: 6 }}>
+          {a && <Chip tone={a.status === "approved" ? "ok" : a.status === "withdrawn" ? "neutral" : "warn"}>{ADVERT_STATUS[a.status]}</Chip>}
+          <Chip tone="neutral">Publishing off</Chip>
+        </div>
+      </div>
+      <div className="muted small">
+        Approved by the {row.approverLabel}, never by the person who wrote the wording. Social accounts are not connected yet, so
+        Prima does not post anything.
+      </div>
+      {row.advertApproverMissing && (
+        <div className="small" style={{ color: "var(--warn, #b54708)" }}>
+          No Operations Manager covers {row.state} yet, so nobody can approve this post. Ask for an OM to be assigned to the state.
+        </div>
+      )}
+      {row.advertExpired && a?.status !== "withdrawn" && (
+        <div className="small" style={{ color: "var(--warn, #b54708)" }}>
+          The closing date has passed. Withdraw the post and take down any copies made by hand, or edit it with a new date.
+        </div>
+      )}
+      {a && !editing && (
+        <>
+          <pre className="small" style={{ whiteSpace: "pre-wrap", margin: 0 }}>{a.text}</pre>
+          <div className="muted small">
+            Version {a.version} ·{" "}
+            {a.origin === "template" ? "drafted from Prima's template (AI not connected)" : a.origin === "ai" ? "drafted by AI, not yet checked" : "written by hand"} · by{" "}
+            {a.writtenBy} · to {a.channels.join(", ")}
+            {a.closingDate ? ` · closes ${a.closingDate}` : ""}
+            {a.approved ? ` · approved by ${a.approved.by}: ${a.approved.note}` : ""}
+          </div>
+          {row.advertChecks.map((c) => (
+            <div key={c.code} className="small" style={{ color: c.level === "block" ? "var(--crit, #b42318)" : "var(--warn, #b54708)" }}>
+              {c.level === "block" ? "Must fix: " : "Check: "}
+              {c.message}
+            </div>
+          ))}
+          {a.status === "approved" && (a.outbox ?? []).length > 0 && (
+            <div className="muted small">
+              Queued, not sent (automatic posting is not switched on):{" "}
+              {(a.outbox ?? []).map((o) => `${o.channel} (${o.status === "posted" ? "posted" : o.status === "failed" ? "failed" : "waiting for the account to be connected"})`).join(" · ")}
+            </div>
+          )}
+          {a.manualPosts.length > 0 && (
+            <div className="muted small">
+              Posted by hand (recorded by HR, not checked by Prima):{" "}
+              {a.manualPosts
+                .map((p) => `${p.link ? `${p.channel} ${p.link}` : `${p.channel.replace("_", " ")}: ${p.where} (no link)`} (wording v${p.version}${p.version !== a.version ? ", older wording" : ""})`)
+                .join(" · ")}
+            </div>
+          )}
+        </>
+      )}
+      {editing && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+          <div className="row" style={{ gap: 10, flexWrap: "wrap" }}>
+            {channels.map((c) => (
+              <label key={c.id} className="small" title={c.why}>
+                <input
+                  type="checkbox"
+                  checked={chosen.includes(c.id)}
+                  onChange={(e) =>
+                    setChosen((x) => (e.target.checked ? [...x, c.id] : x.filter((y) => y !== c.id)))
+                  }
+                />{" "}
+                {c.name} ({c.paid ? "paid per post, " : ""}not connected)
+              </label>
+            ))}
+          </div>
+          <input
+            className="input"
+            placeholder="How to apply: official company email, form link or recruitment number"
+            aria-label="How to apply"
+            value={applyHow}
+            onChange={(e) => setApplyHow(e.target.value)}
+          />
+          <label className="field">
+            <span className="label">Closing date</span>
+            <input className="input" type="date" aria-label="Closing date" value={closingDate} onChange={(e) => setClosingDate(e.target.value)} />
+          </label>
+          <textarea
+            className="input"
+            rows={8}
+            placeholder="Leave empty and press Draft for me, or write the post yourself"
+            aria-label="Post wording"
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+          />
+          <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
+            <button className="btn btn-sm" disabled={act.busy || chosen.length === 0} onClick={() => step("draft", draftInput(false), "Drafted. Read it before sending.")}>
+              Draft for me
+            </button>
+            <button
+              className="btn btn-sm btn-primary"
+              disabled={act.busy || chosen.length === 0 || text.trim().length < 20}
+              onClick={() => step("draft", draftInput(true), "Saved.")}
+            >
+              Save my wording
+            </button>
+            <button className="btn btn-sm" onClick={() => setEditing(false)}>
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+      {!editing && (
+        <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
+          {row.canAdvertDraft && (
+            <button
+              className="btn btn-sm"
+              onClick={() => {
+                setText(a?.text ?? "");
+                setEditing(true);
+              }}
+            >
+              {a ? "Edit the post" : "Write the job post"}
+            </button>
+          )}
+          {row.canAdvertSubmit && (
+            <button
+              className="btn btn-sm btn-primary"
+              disabled={act.busy || row.advertChecks.some((c) => c.level === "block")}
+              onClick={() => step("submit", {}, `Sent to the ${row.approverLabel}.`)}
+            >
+              Send for approval
+            </button>
+          )}
+          {(row.canAdvertApprove || row.canAdvertWithdraw) && (
+            <input className="input" placeholder="Comment (needed)" aria-label="Job post comment" value={note} onChange={(e) => setNote(e.target.value)} />
+          )}
+          {row.canAdvertApprove && (
+            <>
+              <div className="small" style={{ flexBasis: "100%", color: "var(--warn, #b54708)" }}>
+                Approving queues this wording for {a?.channels.join(", ")}. Once an account is connected and automatic posting is switched on, this exact wording goes out without another check.
+                {row.approvingAsBackup ? " You are approving as the Regional OM backup." : ""}
+              </div>
+              <button className="btn btn-sm btn-primary" disabled={act.busy || !note.trim()} onClick={() => step("approve", { note }, "Approved. It is queued; nothing is posted until an account is connected.")}>
+                Approve wording
+              </button>
+              <button className="btn btn-sm" disabled={act.busy || !note.trim()} onClick={() => step("return", { note }, "Sent back.")}>
+                Send back
+              </button>
+            </>
+          )}
+          {row.canAdvertWithdraw && (
+            <button className="btn btn-sm" disabled={act.busy || !note.trim()} onClick={() => step("withdraw", { note }, "Withdrawn.")}>
+              Withdraw
+            </button>
+          )}
+        </div>
+      )}
+      {!editing && row.canAdvertRecord && a && (
+        <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
+          <button className="btn btn-sm" onClick={() => void navigator.clipboard?.writeText(a.text)}>
+            Copy the wording
+          </button>
+          <select className="select" aria-label="Posted on" value={postChannel} onChange={(e) => setPostChannel(e.target.value)} style={{ width: "auto" }}>
+            {a.channels.map((c) => (
+              <option key={c} value={c}>
+                {c}
+              </option>
+            ))}
+            <option value="whatsapp">WhatsApp group (no link)</option>
+            <option value="notice_board">Notice board (no link)</option>
+            <option value="other_place">Other place (no link)</option>
+          </select>
+          {noLink ? (
+            <input className="input" placeholder="Where: group or board name" aria-label="Where it was posted" value={where} onChange={(e) => setWhere(e.target.value)} />
+          ) : (
+            <input className="input" placeholder="https link to the post you made" aria-label="Post link" value={link} onChange={(e) => setLink(e.target.value)} />
+          )}
+          <button
+            className="btn btn-sm"
+            disabled={act.busy || (noLink ? where.trim().length < 3 : !link.startsWith("https://"))}
+            onClick={() => step("record_posted", noLink ? { channel: postChannel, where } : { channel: postChannel, link }, "Recorded as posted by hand.")}
+          >
+            Record a post I made
+          </button>
+        </div>
+      )}
+      <ErrorNotice error={act.error} />
+    </div>
+  );
+}
+
+type ApplicantStatus = "new" | "shortlisted" | "interview" | "offered" | "hired" | "rejected" | "withdrawn";
+const APPLICANT_LABEL: Record<ApplicantStatus, string> = {
+  new: "new",
+  shortlisted: "shortlisted",
+  interview: "interview",
+  offered: "offered",
+  hired: "hired",
+  rejected: "not taken",
+  withdrawn: "withdrew",
+};
+const SOURCES = ["facebook", "instagram", "linkedin", "tiktok", "jobstreet", "walk_in", "referral", "other"] as const;
+
+/**
+ * Applicants for one vacancy (Fauzan, 5 Nov 2026: HR only). Name and one way to reach them; no IC or CV kept here.
+ * Hiring someone does not create a staff record: HR then uses the joining steps.
+ */
+function ApplicantList({ vacancyId, count, hired, headcount }: { vacancyId: string; count: number; hired: number; headcount: number }) {
+  const [open, setOpen] = useState(false);
+  const list = useLoad(() => (open ? api.applicants(vacancyId) : Promise.resolve(null)), [open, vacancyId]);
+  const act = useAction();
+  const [note, setNote] = useState<Record<string, string>>({});
+  const [when, setWhen] = useState<Record<string, string>>({});
+  const today = new Date(Date.now() + 8 * 3_600_000).toISOString().slice(0, 10); // Malaysia date
+  const [f, setF] = useState({ name: "", phone: "", email: "", source: "facebook" as (typeof SOURCES)[number], appliedOn: today });
+  if (!open)
+    return (
+      <button className="btn btn-sm" style={{ alignSelf: "flex-start" }} onClick={() => setOpen(true)}>
+        Applicants ({count}, {hired} of {headcount} hired)
+      </button>
+    );
+  if (list.error) return <ErrorNotice error={list.error} />;
+  if (!list.data) return <Loading what="applicants" />;
+  const d = list.data;
+  const step = (id: string, status: Exclude<ApplicantStatus, "new">, done: string) =>
+    void act
+      // datetime-local has no time zone: convert in the browser (Malaysia time) so the server stores the right moment.
+      .run(() => api.applicantStep(id, status, note[id] ?? "", status === "interview" && when[id] ? new Date(when[id]).toISOString() : null), done)
+      .then((r) => r && list.reload());
+  return (
+    <div className="card" style={{ padding: 10, display: "flex", flexDirection: "column", gap: 6 }}>
+      <div className="row" style={{ justifyContent: "space-between" }}>
+        <div style={{ fontWeight: 600 }}>Applicants</div>
+        <Chip tone="neutral">HR only</Chip>
+      </div>
+      <div className="muted small">
+        Keep only the name and a way to reach them. Hiring here does not make a staff record: use the joining steps after.
+      </div>
+      {d.rows.length === 0 && <div className="empty">No applicants yet.</div>}
+      {d.rows.map((a) => (
+        <div key={a.id} style={{ display: "flex", flexDirection: "column", gap: 4, borderTop: "1px solid var(--line, #eee)", paddingTop: 6 }}>
+          <div className="row" style={{ justifyContent: "space-between" }}>
+            <div>
+              <div style={{ fontWeight: 600 }}>{a.name}</div>
+              <div className="muted small">
+                {[a.phone, a.email].filter(Boolean).join(" · ")} · from {a.source.replace("_", " ")} · applied {a.appliedOn}
+                {a.interviewAt ? ` · interview ${new Date(a.interviewAt).toLocaleString("en-MY", { dateStyle: "medium", timeStyle: "short" })}` : ""}
+              </div>
+            </div>
+            <Chip tone={a.status === "hired" ? "ok" : a.status === "rejected" || a.status === "withdrawn" ? "neutral" : "info"}>
+              {APPLICANT_LABEL[a.status]}
+            </Chip>
+          </div>
+          {a.next.length > 0 && (
+            <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
+              <input
+                className="input"
+                placeholder="Comment (needed to refuse, offer or hire)"
+                aria-label={`Comment on ${a.name}`}
+                value={note[a.id] ?? ""}
+                onChange={(e) => setNote((x) => ({ ...x, [a.id]: e.target.value }))}
+              />
+              {a.next.includes("interview") && (
+                <input
+                  className="input"
+                  type="datetime-local"
+                  aria-label={`Interview time for ${a.name}`}
+                  value={when[a.id] ?? ""}
+                  onChange={(e) => setWhen((x) => ({ ...x, [a.id]: e.target.value }))}
+                  style={{ width: "auto" }}
+                />
+              )}
+              {a.next.map((s) => (
+                <button
+                  key={s}
+                  className={`btn btn-sm${s === "hired" || s === "offered" ? " btn-primary" : ""}`}
+                  disabled={act.busy || (["rejected", "offered", "hired", "withdrawn"].includes(s) && !(note[a.id] ?? "").trim()) || (s === "interview" && !when[a.id])}
+                  onClick={() => step(a.id, s as Exclude<ApplicantStatus, "new">, "Saved.")}
+                >
+                  {{ shortlisted: "Shortlist", interview: a.status === "interview" ? "Move interview" : "Set interview", offered: "Offer", hired: "Hired", rejected: "Not taken", withdrawn: "Withdrew", new: "" }[s]}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      ))}
+      {d.canAdd && (
+        <div className="grid-2" style={{ marginTop: 6 }}>
+          <input className="input" placeholder="Name" aria-label="Applicant name" value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} />
+          <input className="input" placeholder="Phone" aria-label="Applicant phone" inputMode="tel" value={f.phone} onChange={(e) => setF({ ...f, phone: e.target.value })} />
+          <input className="input" placeholder="Email" aria-label="Applicant email" inputMode="email" value={f.email} onChange={(e) => setF({ ...f, email: e.target.value })} />
+          <select className="select" aria-label="Where they saw the post" value={f.source} onChange={(e) => setF({ ...f, source: e.target.value as typeof f.source })}>
+            {SOURCES.map((s) => (
+              <option key={s} value={s}>
+                {s.replace("_", " ")}
+              </option>
+            ))}
+          </select>
+          <input className="input" type="date" aria-label="Applied on" value={f.appliedOn} onChange={(e) => setF({ ...f, appliedOn: e.target.value })} />
+          <button
+            className="btn btn-sm btn-primary"
+            disabled={act.busy || f.name.trim().length < 2 || (!f.phone.trim() && !f.email.trim())}
+            onClick={async () => {
+              const r = await act.run(() => api.addApplicant(vacancyId, f), "Added.");
+              if (r) {
+                setF({ name: "", phone: "", email: "", source: f.source, appliedOn: today });
+                list.reload();
+              }
+            }}
+          >
+            Add applicant
+          </button>
+        </div>
+      )}
+      <button className="btn btn-sm" style={{ alignSelf: "flex-start" }} onClick={() => setOpen(false)}>
+        Hide
+      </button>
+      <ErrorNotice error={act.error} />
+    </div>
   );
 }

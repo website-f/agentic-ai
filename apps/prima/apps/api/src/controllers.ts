@@ -1,3 +1,4 @@
+import { dutyOfflineContext } from './duty-offline-context';
 import {releaseState} from './release-state';
 import { companyOfficeProblems, companyRunLinkProblems } from './company-office-readiness';
 import { BadRequestException, Body, Controller, ForbiddenException, Get, HttpException, Param, Post, Query, Req, ServiceUnavailableException, UseGuards, Res } from '@nestjs/common';
@@ -20,13 +21,18 @@ import type {
   ReportDef,
   RecordValues,
   User,
+  ClientLostReason,
+  ClientPersonRole,
+  ClientRenewalAnswer,
+  ClientRenewalDecision,
+  ClientRequestKind,
 } from '@prima/core';
-import { CENTRAL_ALIASES, CENTRAL_EMPLOYER_IDS, CENTRAL_FULL_NAMES } from '@prima/core';
-import { RECORD_KINDS, RULES, accessClosed, arishaFormView, arishaMayConsult, dataModeOf, dateOf, fromMs, arishaKind, arishaToolsFor, type ArishaTurn, type ArishaReviewDraft, isRealDate, CLIENT_VIA, inPilot, rebalanceAiNames } from '@prima/core';
-import { ArishaBusy, ArishaUnavailable, IdentityToken, askArisha, askArishaOn, type ArishaModel } from './arisha';
+import { CENTRAL_ALIASES, CENTRAL_EMPLOYER_IDS, CENTRAL_FULL_NAMES, RECORD_KINDS, RULES, accessClosed, arishaFormView, arishaMayConsult, dataModeOf, dateOf, fromMs, arishaKind, arishaToolsFor, type ArishaTurn, type ArishaReviewDraft, isRealDate, CLIENT_VIA, inPilot, rebalanceAiNames, CLIENT_LOST_REASON, CLIENT_PERSON_ROLE, CLIENT_RENEWAL_ANSWER, CLIENT_RENEWAL_DECISION, CLIENT_REQUEST_KIND, type ItemAction, type DispatchLevel, type DispatchProof, type PostLogKind, type SealedBundle, type VisitorIdKind } from '@prima/core';
+import { ArishaBusy, ArishaUnavailable, IdentityToken, askArisha, askArishaOn, type ArishaModel, arishaConfig } from './arisha';
 import { arishaProvider, officeModel, type ArishaProvider } from './arisha-office';
-import { AuthGuard, DoorFeedGuard, pilotAdmits, FeedGuard, OfficeSystemGuard, PlannerFeedGuard, UserId, devLoginOn, entraSetup, issueToken, pilotSignInOnly, type AuthedRequest } from './auth';
+import { AuthGuard, DoorFeedGuard, pilotAdmits, FeedGuard, OfficeSystemGuard, PlannerFeedGuard, UserId, devLoginOn, entraSetup, issueToken, pilotSignInOnly, type AuthedRequest, AnalyticsFeedGuard, InhouseFeedGuard } from './auth';
 import { officeSecret } from './office';
+import { arishaPilotAllowed } from './arisha-pilot';
 import { Db, schemaState } from './db';
 import { shareBase, shareCsp, shareGonePage, shareReportPage, shareSecret, signShare, verifyShare } from './share-links';
 import type { Response } from 'express';
@@ -59,6 +65,8 @@ const SOCSO_RESTRICTIONS = ['NO_DUTY', 'NO_PATROL', 'NO_ARMED', 'NO_NIGHT'] as c
 const FW_PAPERS = ['PLKS_PERMIT', 'PASSPORT', 'FOMEMA', 'FW_INSURANCE'] as const;
 const FWM_TASK_KINDS = ['FOMEMA', 'JIM', 'TNG', 'BIOMETRIC', 'OTHER'] as const;
 const FW_CHECK_KINDS = ['ARRIVAL_FEE', 'PASSPORT', 'WELFARE'] as const;
+const FW_RECRUIT_STEPS = ['AGENCY_LICENCE', 'EMBASSY', 'INTERVIEW', 'AGE', 'CONTRACT'] as const;
+const FW_CONTRACT_LANGUAGES = ['en', 'ms', 'ne', 'bn', 'my', 'id', 'other'] as const;
 const FW_CONCERNS = ['PAY', 'HOURS', 'HOUSING', 'TREATMENT', 'FEES', 'DOCUMENTS', 'HEALTH', 'OTHER'] as const;
 const HIRING_DOC_KINDS = ['AGREEMENT', 'AGREEMENT_STAMPED', 'VETTING_CERT'] as const;
 const HOSPITAL_DOC_ITEMS = ['ADMISSION_LETTER', 'GUARANTEE_LETTER', 'MEDICAL_CERT', 'DISCHARGE_SUMMARY', 'ITEMISED_BILL', 'CLAIM_FORM'] as const;
@@ -594,6 +602,12 @@ export class AppController {
     return this.db.asUser(uid, (svc, u) => svc.overrideSocsoDoc(u, id, str(b.item, 'item', 20), str(b.reason, 'reason', 300)));
   }
 
+  /** Workflow KPIs across departments (speed from arrival, quality), for the KPI keepers only. Read-only. */
+  @Get('kpi/work')
+  workKpi(@UserId() uid: string, @Query('period') period?: string) {
+    return this.db.asUser(uid, (svc, u) => svc.workKpi(u, typeof period === 'string' ? period.slice(0, 7) : undefined));
+  }
+
   @Get('fwm')
   fwmBoard(@UserId() uid: string) {
     return this.db.asUser(uid, (svc, u) => svc.fwmBoard(u));
@@ -702,6 +716,75 @@ export class AppController {
     if (b.custody != null && b.custody !== 'worker' && b.custody !== 'company') throw new BadRequestException('custody must be worker or company');
     const input = { note: str(b.note, 'note', 500), repaid: (b.repaid as number | undefined) ?? null, custody: (b.custody as 'worker' | 'company' | undefined) ?? null };
     return this.db.asUser(uid, (svc, u) => svc.closeFwCheck(u, id.slice(0, 120), input, b.proof == null ? [] : proofList(b.proof)));
+  }
+
+  // ----- Foreign worker recruitment steps (Fauzan, 6 Nov 2026, IWAY answer 7) -----
+  @Get('fwm/recruitment')
+  fwmRecruitment(@UserId() uid: string) {
+    return this.db.asUser(uid, (svc, u) => svc.fwmRecruitment(u));
+  }
+
+  @Post('fwm/recruitment')
+  openFwRecruitFile(@UserId() uid: string, @Body() b: Record<string, unknown>) {
+    const input = {
+      companyId: str(b.companyId, 'companyId', 120),
+      candidateName: str(b.candidateName, 'candidateName', 120),
+      passportLast4: str(b.passportLast4, 'passportLast4', 20),
+      country: str(b.country, 'country', 2),
+      agency: str(b.agency, 'agency', 120),
+      plannedTravelOn: b.plannedTravelOn == null || b.plannedTravelOn === '' ? null : date(b.plannedTravelOn, 'plannedTravelOn'),
+    };
+    return this.db.asUser(uid, (svc, u) => svc.openFwRecruitFile(u, input));
+  }
+
+  @Post('fwm/recruitment/:id/travel')
+  setFwRecruitTravel(@UserId() uid: string, @Param('id') id: string, @Body() b: Record<string, unknown>) {
+    const input = { plannedTravelOn: date(b.plannedTravelOn, 'plannedTravelOn'), reason: b.reason == null ? '' : str(b.reason, 'reason', 300) };
+    return this.db.asUser(uid, (svc, u) => svc.setFwRecruitTravel(u, id.slice(0, 120), input));
+  }
+
+  @Post('fwm/recruitment/:id/steps/:step')
+  recordFwRecruitStep(@UserId() uid: string, @Param('id') id: string, @Param('step') stepParam: string, @Body() b: Record<string, unknown>) {
+    const step = FW_RECRUIT_STEPS.find((k) => k === stepParam);
+    if (!step) throw new BadRequestException('unknown step');
+    if (b.passed != null && typeof b.passed !== 'boolean') throw new BadRequestException('passed must be true or false');
+    if (b.languages != null && !Array.isArray(b.languages)) throw new BadRequestException('languages must be a list');
+    const languages = ((b.languages as unknown[] | undefined) ?? []).slice(0, 7).map((l) => {
+      const k = FW_CONTRACT_LANGUAGES.find((x) => x === l);
+      if (!k) throw new BadRequestException('unknown language');
+      return k;
+    });
+    const input = {
+      on: date(b.on, 'on'),
+      licenceNo: b.licenceNo == null ? undefined : str(b.licenceNo, 'licenceNo', 60),
+      licenceExpiresOn: b.licenceExpiresOn == null ? undefined : date(b.licenceExpiresOn, 'licenceExpiresOn'),
+      reference: b.reference == null ? undefined : str(b.reference, 'reference', 80),
+      interviewer: b.interviewer == null ? undefined : str(b.interviewer, 'interviewer', 120),
+      passed: b.passed as boolean | undefined,
+      dob: b.dob == null ? undefined : date(b.dob, 'dob'),
+      languages,
+      note: b.note == null ? '' : str(b.note, 'note', 500),
+      reason: b.reason == null ? '' : str(b.reason, 'reason', 300),
+    };
+    return this.db.asUser(uid, (svc, u) => svc.recordFwRecruitStep(u, id.slice(0, 120), step, input, b.proof == null ? [] : proofList(b.proof)));
+  }
+
+  @Post('fwm/recruitment/:id/clear')
+  clearFwRecruitFile(@UserId() uid: string, @Param('id') id: string, @Body() b: Record<string, unknown>) {
+    const input = { note: b.note == null ? '' : str(b.note, 'note', 300) };
+    return this.db.asUser(uid, (svc, u) => svc.clearFwRecruitFile(u, id.slice(0, 120), input));
+  }
+
+  @Post('fwm/recruitment/:id/arrived')
+  recordFwRecruitArrival(@UserId() uid: string, @Param('id') id: string, @Body() b: Record<string, unknown>) {
+    const input = { arrivedOn: date(b.arrivedOn, 'arrivedOn'), staffNo: str(b.staffNo, 'staffNo', 40) };
+    return this.db.asUser(uid, (svc, u) => svc.recordFwRecruitArrival(u, id.slice(0, 120), input));
+  }
+
+  @Post('fwm/recruitment/:id/stop')
+  stopFwRecruitFile(@UserId() uid: string, @Param('id') id: string, @Body() b: Record<string, unknown>) {
+    const input = { reason: str(b.reason, 'reason', 300) };
+    return this.db.asUser(uid, (svc, u) => svc.stopFwRecruitFile(u, id.slice(0, 120), input));
   }
 
   // ----- Hostels and utility excess (Fauzan, 26 Oct 2026) -----
@@ -1296,6 +1379,37 @@ export class AppController {
     const a = (['verify_bank', 'review', 'coi', 'abc', 'block', 'unblock'] as const).find((x) => x === action);
     if (!a) throw new BadRequestException('action must be verify_bank, review, coi, abc, block or unblock');
     return this.db.asUser(uid, (svc, u) => svc.purSupplierStep(u, id.slice(0, 160), a, str(b.note ?? '', 'note', 300)));
+  }
+
+  /** One item register for the whole group (Fauzan, 6 Nov 2026). The core checks every field, role and state. */
+  @Get('items')
+  itemBoard(@UserId() uid: string) {
+    return this.db.asUser(uid, (svc, u) => svc.items.board(u));
+  }
+
+  @Get('items/label/:label')
+  itemByLabel(@UserId() uid: string, @Param('label') label: string) {
+    return this.db.asUser(uid, (svc, u) => svc.items.resolve(u, label.slice(0, 80)));
+  }
+
+  /** A scanned sale paper (invoice, payment slip, signed letter), for the seller and the buyer only. */
+  @Get('items/paper/:id')
+  itemPaper(@UserId() uid: string, @Param('id') id: string) {
+    return this.db.asUser(uid, (svc, u) => svc.items.paperDocument(u, id.slice(0, 40)));
+  }
+
+  /** Shared post device: what is waiting for this guard, shown only after the face check passes. */
+  @Post('items/device/pending')
+  itemDevicePending(@UserId() uid: string, @Body() b: { staffNo?: unknown; face?: unknown }) {
+    const staffNo = str(b.staffNo ?? '', 'staffNo', 30);
+    return this.db.asUser(uid, (svc, u) => svc.items.devicePending(u, staffNo, face(b.face)));
+  }
+
+  @Post('items/act')
+  itemAct(@UserId() uid: string, @Body() b: { requestId?: unknown; action?: unknown }) {
+    if (!b.action || typeof b.action !== 'object' || Array.isArray(b.action)) throw new BadRequestException('action must be an object');
+    const requestId = str(b.requestId ?? '', 'requestId', 80);
+    return this.db.asUser(uid, (svc, u) => svc.items.act(u, requestId, b.action as ItemAction));
   }
 
   @Post('purchasing/:companyId/issues')
@@ -2335,6 +2449,202 @@ export class AppController {
     return this.db.asUser(uid, (svc, u) => svc.setFinPack(u, companyId.slice(0, 120), p, itemId.slice(0, 80), st, comment));
   }
 
+  // ----- Guard pay run: HR prepares, the COO approves, Finance pays (Fauzan, 5 Nov 2026) -----
+  @Get('guard-pay')
+  guardPayroll(@UserId() uid: string) {
+    return this.db.asUser(uid, (svc, u) => svc.guardPayroll(u));
+  }
+
+  // Wage advances (Fauzan, 6 Nov 2026): the OM sets, the OD or OGM approves, Finance pays.
+  @Get('guard-pay/advances')
+  guardAdvances(@UserId() uid: string, @Query('companyId') companyId?: string, @Query('period') period?: string) {
+    return this.db.asUser(uid, (svc, u) => svc.guardAdvances(u, { companyId: companyId?.slice(0, 120) || null, period: period?.slice(0, 7) || null }));
+  }
+
+  @Post('guard-pay/advances')
+  setGuardAdvances(@UserId() uid: string, @Body() b: Record<string, unknown>) {
+    return this.db.asUser(uid, (svc, u) =>
+      svc.setGuardAdvances(u, {
+        companyId: str(b.companyId, 'companyId', 120),
+        period: b.period == null ? undefined : str(b.period, 'period', 7),
+        basis: str(b.basis, 'basis', 10),
+        ref: str(b.ref, 'ref', 120),
+        amount: Number(b.amount),
+        payOn: b.payOn == null || b.payOn === '' ? undefined : date(b.payOn, 'payOn'),
+        reason: b.reason == null ? '' : str(b.reason, 'reason', 300),
+      }),
+    );
+  }
+
+  // Advance and loan scheme (Fauzan, 6 Nov 2026): HR records with the signed agreement, CoS then CEO approve, Finance pays out.
+  @Get('guard-pay/loans')
+  guardLoans(@UserId() uid: string, @Query('companyId') companyId?: string) {
+    return this.db.asUser(uid, (svc, u) => svc.guardLoans(u, { companyId: companyId?.slice(0, 120) || null }));
+  }
+
+  @Post('guard-pay/loans')
+  recordGuardLoan(@UserId() uid: string, @Body() b: Record<string, unknown>) {
+    return this.db.asUser(uid, (svc, u) =>
+      svc.recordGuardLoan(u, {
+        companyId: str(b.companyId, 'companyId', 120),
+        personId: str(b.personId, 'personId', 120),
+        kind: str(b.kind, 'kind', 10),
+        limit: Number(b.limit),
+        amount: b.amount == null || b.amount === '' ? undefined : Number(b.amount),
+        purpose: b.purpose == null ? '' : str(b.purpose, 'purpose', 200),
+        months: Number(b.months),
+        firstPeriod: b.firstPeriod == null || b.firstPeriod === '' ? undefined : str(b.firstPeriod, 'firstPeriod', 7),
+        docRef: b.docRef == null ? '' : str(b.docRef, 'docRef', 80),
+        signedOn: b.signedOn == null || b.signedOn === '' ? '' : date(b.signedOn, 'signedOn'),
+      }),
+    );
+  }
+
+  @Post('guard-pay/loans/:id/:action')
+  guardLoanStep(@UserId() uid: string, @Param('id') id: string, @Param('action') action: string, @Body() b: Record<string, unknown>) {
+    const lid = id.slice(0, 200);
+    if (action === 'decide')
+      return this.db.asUser(uid, (svc, u) => svc.decideGuardLoan(u, lid, { decision: str(b.decision, 'decision', 10), note: b.note == null ? '' : str(b.note, 'note', 300) }));
+    if (action === 'payout')
+      return this.db.asUser(uid, (svc, u) => svc.payOutGuardLoan(u, lid, { bankRef: b.bankRef == null ? '' : str(b.bankRef, 'bankRef', 60), paidOn: b.paidOn == null ? undefined : date(b.paidOn, 'paidOn') }));
+    if (action === 'cancel') return this.db.asUser(uid, (svc, u) => svc.cancelGuardLoan(u, lid, b.note == null ? '' : str(b.note, 'note', 300)));
+    throw new BadRequestException('unknown loan action');
+  }
+
+  @Post('guard-pay/advances/approve')
+  approveGuardAdvances(@UserId() uid: string, @Body() b: Record<string, unknown>) {
+    const ids = Array.isArray(b.ids) ? b.ids.slice(0, 500).map((x) => String(x).slice(0, 200)) : [];
+    return this.db.asUser(uid, (svc, u) => svc.approveGuardAdvances(u, ids, b.note == null ? '' : str(b.note, 'note', 300)));
+  }
+
+  @Post('guard-pay/advances/:id/pay')
+  payGuardAdvance(@UserId() uid: string, @Param('id') id: string, @Body() b: Record<string, unknown>) {
+    return this.db.asUser(uid, (svc, u) =>
+      svc.payGuardAdvance(u, id.slice(0, 200), { bankRef: b.bankRef == null ? '' : str(b.bankRef, 'bankRef', 60), paidOn: b.paidOn == null ? undefined : date(b.paidOn, 'paidOn') }),
+    );
+  }
+
+  @Post('guard-pay/advances/:id')
+  changeGuardAdvance(@UserId() uid: string, @Param('id') id: string, @Body() b: Record<string, unknown>) {
+    return this.db.asUser(uid, (svc, u) =>
+      svc.changeGuardAdvance(u, id.slice(0, 200), {
+        action: b.action === 'cancel' ? 'cancel' : 'change',
+        amount: b.amount == null ? undefined : Number(b.amount),
+        payOn: b.payOn == null || b.payOn === '' ? undefined : date(b.payOn, 'payOn'),
+        reason: b.reason == null ? '' : str(b.reason, 'reason', 300),
+      }),
+    );
+  }
+
+  // HR records a guard's written consent to be paid into a relative's or friend's account (Fauzan, 6 Nov 2026).
+  @Post('guard-pay/consent/:personId')
+  recordPayConsent(@UserId() uid: string, @Param('personId') personId: string, @Body() b: Record<string, unknown>) {
+    const s = (k: string, n: number) => (b[k] == null ? undefined : str(b[k], k, n));
+    return this.db.asUser(uid, (svc, u) =>
+      svc.recordPayConsent(u, personId.slice(0, 120), {
+        holder: s('holder', 10),
+        holderName: s('holderName', 80),
+        relationship: s('relationship', 40),
+        docRef: s('docRef', 60),
+        signedOn: s('signedOn', 10),
+        kind: s('kind', 10),
+        commissioner: s('commissioner', 80),
+        stampRef: s('stampRef', 40),
+        stampedOn: s('stampedOn', 10),
+      }),
+    );
+  }
+
+  // Statutory rates and new contribution types: the CEO sets them by month (Fauzan, 6 Nov 2026).
+  @Get('statutory')
+  statutoryBoard(@UserId() uid: string) {
+    return this.db.asUser(uid, (svc, u) => svc.statutoryBoard(u));
+  }
+
+  @Post('statutory')
+  setStatutory(@UserId() uid: string, @Body() b: Record<string, unknown>) {
+    if (JSON.stringify(b ?? {}).length > 20000) throw new BadRequestException('too large');
+    return this.db.asUser(uid, (svc, u) =>
+      svc.setStatutory(u, {
+        effectiveFrom: str(b.effectiveFrom, 'effectiveFrom', 7),
+        settings: b.settings as Parameters<typeof svc.setStatutory>[1]['settings'],
+        reason: b.reason == null ? '' : str(b.reason, 'reason', 500),
+      }),
+    );
+  }
+
+  // The COO approves a stamped consent letter (Fauzan, 6 Nov 2026).
+  @Get('guard-pay/consents')
+  payConsentsWaiting(@UserId() uid: string) {
+    return this.db.asUser(uid, (svc, u) => svc.payConsentsWaiting(u));
+  }
+
+  @Post('guard-pay/consent/:personId/approve')
+  approvePayConsent(@UserId() uid: string, @Param('personId') personId: string, @Body() b: Record<string, unknown>) {
+    return this.db.asUser(uid, (svc, u) => svc.approvePayConsent(u, personId.slice(0, 120), b.note == null ? '' : str(b.note, 'note', 300)));
+  }
+
+  @Get('guard-pay/mine')
+  myGuardPayslips(@UserId() uid: string) {
+    return this.db.asUser(uid, (svc, u) => svc.myGuardPayslips(u));
+  }
+
+  @Get('guard-pay/:id')
+  guardPayRun(@UserId() uid: string, @Param('id') id: string) {
+    return this.db.asUser(uid, (svc, u) => svc.guardPayRun(u, id.slice(0, 120)));
+  }
+
+  @Post('guard-pay')
+  prepareGuardPay(@UserId() uid: string, @Body() b: { companyId?: unknown; period?: unknown; holidays?: unknown }) {
+    const holidays = b.holidays === undefined ? undefined : Array.isArray(b.holidays) ? b.holidays.slice(0, 11) : b.holidays;
+    return this.db.asUser(uid, (svc, u) => svc.prepareGuardPay(u, str(b.companyId, 'companyId', 120), str(b.period, 'period', 7), holidays));
+  }
+
+  @Post('guard-pay/:id/lines/:personId')
+  setGuardPayLine(@UserId() uid: string, @Param('id') id: string, @Param('personId') personId: string, @Body() b: Record<string, unknown>) {
+    const pcb = b.pcb === undefined ? undefined : b.pcb === null ? null : Number(b.pcb);
+    const extra = Array.isArray(b.extra)
+      ? b.extra.slice(0, 6).map((a: Record<string, unknown>) => ({ label: String(a?.label ?? '').slice(0, 80), amount: Number(a?.amount), uniformNo: a?.uniformNo == null ? undefined : Number(a.uniformNo) }))
+      : undefined;
+    return this.db.asUser(uid, (svc, u) => svc.setGuardPayLine(u, id.slice(0, 120), personId.slice(0, 120), { pcb, extra }));
+  }
+
+  @Post('guard-pay/:id/files/:kind')
+  guardPayExport(@UserId() uid: string, @Param('id') id: string, @Param('kind') kind: string) {
+    const k = (['bank', 'ewallet', 'cash', 'sql', 'epf', 'socso', 'pcb'] as const).find((x) => x === kind);
+    if (!k) throw new BadRequestException('unknown file');
+    return this.db.asUser(uid, (svc, u) => svc.guardPayExport(u, id.slice(0, 120), k));
+  }
+
+  // Cash only when the COO or CEO gives it; the Director Office lists the guard (Fauzan, 6 Nov 2026).
+  @Post('guard-pay/:id/cash/:personId/:action')
+  guardPayCash(@UserId() uid: string, @Param('id') id: string, @Param('personId') personId: string, @Param('action') action: string, @Body() b: Record<string, unknown>) {
+    const a = (['list', 'unlist', 'decide', 'handout', 'receipt'] as const).find((x) => x === action);
+    if (!a) throw new BadRequestException('unknown cash action');
+    return this.db.asUser(uid, (svc, u) =>
+      svc.guardPayCash(u, id.slice(0, 120), personId.slice(0, 120), a, {
+        reason: b.reason == null ? '' : str(b.reason, 'reason', 300),
+        give: b.give === true,
+        on: b.on == null || b.on === '' ? undefined : date(b.on, 'on'),
+        proof: a === 'receipt' ? proofList(b.proof) : undefined,
+      }),
+    );
+  }
+
+  @Post('guard-pay/:id/:action')
+  guardPayStep(@UserId() uid: string, @Param('id') id: string, @Param('action') action: string, @Body() b: Record<string, unknown>) {
+    const a = (['submit', 'approve', 'pay', 'return'] as const).find((x) => x === action);
+    if (!a) throw new BadRequestException('unknown step');
+    return this.db.asUser(uid, (svc, u) =>
+      svc.guardPayStep(u, id.slice(0, 120), a, {
+        note: b.note == null ? '' : str(b.note, 'note', 500),
+        bankRef: b.bankRef == null ? undefined : str(b.bankRef, 'bankRef', 60),
+        paidOn: b.paidOn == null ? undefined : date(b.paidOn, 'paidOn'),
+        pcbChecked: b.pcbChecked === true,
+      }),
+    );
+  }
+
   // ----- Staff payroll (Fauzan, 27 Oct 2026) -----
   @Get('staff-pay')
   staffPayroll(@UserId() uid: string) {
@@ -2695,6 +3005,119 @@ export class AppController {
     );
   }
 
+  // ----- Pay formulas: ACT sets the guard salary and driver overtime formulas and where each is used (Fauzan, 5 Nov 2026) -----
+  @Get('pay-formulas')
+  payFormulaBoard(@UserId() uid: string) {
+    return this.db.asUser(uid, (svc, u) => svc.payFormulaBoard(u));
+  }
+
+  @Get('salary-calc')
+  salaryCalcData(@UserId() uid: string) {
+    return this.db.asUser(uid, (svc, u) => svc.salaryCalcData(u));
+  }
+
+  @Get('pay-formulas/at')
+  payFormulaAt(@UserId() uid: string, @Query('kind') kind?: string, @Query('siteId') siteId?: string, @Query('companyId') companyId?: string, @Query('regionId') regionId?: string, @Query('month') month?: string) {
+    const k = (['guard_shift', 'driver_ot', 'staff_ot'] as const).find((x) => x === kind);
+    if (!k) throw new BadRequestException('kind must be guard_shift, driver_ot or staff_ot');
+    const id = (v?: string) => (v ? v.slice(0, 80) : null);
+    return this.db.asUser(uid, (svc, u) => svc.payFormulaAt(u, { kind: k, siteId: id(siteId), companyId: id(companyId), regionId: id(regionId), month: month?.slice(0, 7) }));
+  }
+
+  @Post('pay-formulas')
+  savePayFormula(@UserId() uid: string, @Body() b: Record<string, unknown>) {
+    const kind = (['guard_shift', 'driver_ot', 'staff_ot'] as const).find((x) => x === b.kind);
+    if (!kind) throw new BadRequestException('kind must be guard_shift, driver_ot or staff_ot');
+    if (b.amounts == null || typeof b.amounts !== 'object' || Array.isArray(b.amounts)) throw new BadRequestException('amounts is missing');
+    return this.db.asUser(uid, (svc, u) =>
+      svc.savePayFormula(u, {
+        code: b.code == null || b.code === '' ? null : str(b.code, 'code', 30),
+        kind,
+        name: str(b.name, 'name', 100),
+        effectiveFrom: str(b.effectiveFrom, 'effectiveFrom', 7),
+        amounts: b.amounts,
+        reason: str(b.reason, 'reason', 500),
+      }),
+    );
+  }
+
+  @Post('pay-formulas/:id/decide')
+  decidePayFormula(@UserId() uid: string, @Param('id') id: string, @Body() b: { approve?: unknown; note?: unknown }) {
+    if (typeof b.approve !== 'boolean') throw new BadRequestException('approve must be true or false');
+    const approve = b.approve;
+    return this.db.asUser(uid, (svc, u) => svc.decidePayFormula(u, id.slice(0, 80), approve, str(b.note, 'note', 500)));
+  }
+
+  @Post('pay-formulas/:id/withdraw')
+  withdrawPayFormula(@UserId() uid: string, @Param('id') id: string) {
+    return this.db.asUser(uid, (svc, u) => svc.withdrawPayFormula(u, id.slice(0, 80)));
+  }
+
+  @Post('pay-law')
+  savePayLaw(@UserId() uid: string, @Body() b: Record<string, unknown>) {
+    if (b.settings == null || typeof b.settings !== 'object' || Array.isArray(b.settings)) throw new BadRequestException('settings is missing');
+    const settings = b.settings as Record<string, unknown>;
+    return this.db.asUser(uid, (svc, u) => svc.savePayLaw(u, { effectiveFrom: str(b.effectiveFrom, 'effectiveFrom', 7), settings, reason: str(b.reason, 'reason', 500) }));
+  }
+
+  @Post('pay-formula-uses')
+  setPayFormulaUse(@UserId() uid: string, @Body() b: Record<string, unknown>) {
+    const kind = (['guard_shift', 'driver_ot', 'staff_ot'] as const).find((x) => x === b.kind);
+    const scope = (['group', 'region', 'company', 'site'] as const).find((x) => x === b.scope);
+    if (!kind || !scope) throw new BadRequestException('kind and scope are required');
+    return this.db.asUser(uid, (svc, u) =>
+      svc.setPayFormulaUse(u, {
+        kind,
+        scope,
+        scopeId: b.scopeId == null || b.scopeId === '' ? null : str(b.scopeId, 'scopeId', 80),
+        formulaCode: b.formulaCode == null || b.formulaCode === '' ? null : str(b.formulaCode, 'formulaCode', 30),
+        effectiveFrom: str(b.effectiveFrom, 'effectiveFrom', 7),
+        reason: str(b.reason, 'reason', 500),
+      }),
+    );
+  }
+
+  // ----- Site man-hours: allowed hours per site per month, OD/OGM approve hours over it (Fauzan, 6 Nov 2026) -----
+  @Get('site-hours')
+  siteHoursBoard(@UserId() uid: string, @Query('companyId') companyId?: string, @Query('month') month?: string) {
+    return this.db.asUser(uid, (svc, u) => svc.siteHoursBoard(u, { companyId: companyId ? companyId.slice(0, 80) : null, month: month ? month.slice(0, 7) : null }));
+  }
+
+  @Post('site-hours/approve')
+  approveSiteHours(@UserId() uid: string, @Body() b: Record<string, unknown>) {
+    const cause = (['training', 'annual_leave', 'on_job_training', 'client_extra', 'other'] as const).find((x) => x === b.cause);
+    if (!cause) throw new BadRequestException('cause must be training, annual_leave, on_job_training, client_extra or other');
+    const extraHours = Number(b.extraHours);
+    if (!Number.isFinite(extraHours)) throw new BadRequestException('extraHours must be a number');
+    return this.db.asUser(uid, (svc, u) =>
+      svc.approveSiteHours(u, { siteId: str(b.siteId, 'siteId', 80), month: str(b.month, 'month', 7), extraHours, cause, reason: str(b.reason, 'reason', 500) }),
+    );
+  }
+
+  // ----- Public holidays: the OM or OGM sets each company's 11 days for a year (Fauzan, 6 Nov 2026) -----
+  @Get('public-holidays')
+  publicHolidayBoard(@UserId() uid: string, @Query('companyId') companyId?: string, @Query('year') year?: string) {
+    return this.db.asUser(uid, (svc, u) => svc.publicHolidayBoard(u, { companyId: companyId ? companyId.slice(0, 80) : null, year: year ? Number(year.slice(0, 4)) : null }));
+  }
+
+  @Post('public-holidays')
+  setPublicHolidays(@UserId() uid: string, @Body() b: Record<string, unknown>) {
+    if (!Array.isArray(b.days) || b.days.length > 20) throw new BadRequestException('days must be a list of up to 20 holidays');
+    const days = b.days.map((d: unknown) => {
+      const x = (d && typeof d === 'object' ? d : {}) as Record<string, unknown>;
+      return { date: str(x.date, 'date', 10), label: str(x.label, 'label', 80) };
+    });
+    return this.db.asUser(uid, (svc, u) =>
+      svc.setPublicHolidays(u, {
+        companyId: str(b.companyId, 'companyId', 80),
+        year: Number(b.year),
+        state: b.state == null || b.state === '' ? null : str(b.state, 'state', 40),
+        days,
+        reason: str(b.reason, 'reason', 500),
+      }),
+    );
+  }
+
   // ----- Staff pay changes: HR proposes, the Chief of Staff or Deputy verifies (Fauzan, 27 Oct 2026) -----
   @Get('pay-changes')
   payChanges(@UserId() uid: string) {
@@ -2847,7 +3270,7 @@ export class AppController {
   }
 
   @Post('clients')
-  addClientAccount(@UserId() uid: string, @Body() b: { companyId?: unknown; name?: unknown; siteIds?: unknown; contractEndsOn?: unknown }) {
+  addClientAccount(@UserId() uid: string, @Body() b: { companyId?: unknown; name?: unknown; siteIds?: unknown; contractEndsOn?: unknown; leadId?: unknown }) {
     const sites = Array.isArray(b.siteIds) ? (b.siteIds as unknown[]).slice(0, 50).map((x) => String(x).slice(0, 120)) : [];
     return this.db.asUser(uid, (svc, u) =>
       svc.addClientAccount(u, {
@@ -2855,13 +3278,112 @@ export class AppController {
         name: str(b.name, 'name', 120),
         siteIds: sites,
         contractEndsOn: b.contractEndsOn == null || b.contractEndsOn === '' ? null : date(b.contractEndsOn, 'contractEndsOn'),
+        leadId: b.leadId == null || b.leadId === '' ? null : str(b.leadId, 'leadId', 120),
       }),
     );
   }
 
   @Post('clients/:id/offboard')
-  startOffboarding(@UserId() uid: string, @Param('id') id: string, @Body() b: { reason?: unknown }) {
-    return this.db.asUser(uid, (svc, u) => svc.startOffboarding(u, id.slice(0, 120), str(b.reason, 'reason', 300)));
+  startOffboarding(@UserId() uid: string, @Param('id') id: string, @Body() b: { reason?: unknown; lostReason?: unknown; winBackOn?: unknown }) {
+    const lostReason = b.lostReason == null ? null : (Object.keys(CLIENT_LOST_REASON) as ClientLostReason[]).find((k) => k === b.lostReason);
+    if (b.lostReason != null && !lostReason) throw new BadRequestException('lostReason is not valid');
+    const winBackOn = b.winBackOn == null || b.winBackOn === '' ? null : date(b.winBackOn, 'winBackOn');
+    return this.db.asUser(uid, (svc, u) => svc.startOffboarding(u, id.slice(0, 120), str(b.reason, 'reason', 300), lostReason ? { reason: lostReason, winBackOn } : undefined));
+  }
+
+  // ----- Client CRM (Fauzan, 4 Nov 2026: "We want complete") -----
+  @Get('crm')
+  crmBoard(@UserId() uid: string) {
+    return this.db.asUser(uid, (svc, u) => svc.crmBoard(u));
+  }
+
+  @Get('crm/clients/:id')
+  crmClient(@UserId() uid: string, @Param('id') id: string) {
+    return this.db.asUser(uid, (svc, u) => svc.crmClient(u, id.slice(0, 120)));
+  }
+
+  @Post('crm/clients/:id/owner')
+  setClientOwner(@UserId() uid: string, @Param('id') id: string, @Body() b: { userId?: unknown }) {
+    return this.db.asUser(uid, (svc, u) => svc.setClientOwner(u, id.slice(0, 120), str(b.userId, 'userId', 80)));
+  }
+
+  @Post('crm/clients/:id/people')
+  addClientPerson(@UserId() uid: string, @Param('id') id: string, @Body() b: Record<string, unknown>) {
+    const role = (Object.keys(CLIENT_PERSON_ROLE) as ClientPersonRole[]).find((k) => k === b.role);
+    if (!role) throw new BadRequestException('role is not valid');
+    return this.db.asUser(uid, (svc, u) =>
+      svc.addClientPerson(u, id.slice(0, 120), {
+        name: str(b.name, 'name', 120),
+        position: str(b.position, 'position', 80),
+        role,
+        phone: b.phone == null ? '' : str(b.phone, 'phone', 24),
+        email: b.email == null ? '' : str(b.email, 'email', 120),
+        main: b.main === true,
+      }),
+    );
+  }
+
+  @Post('crm/clients/:id/people/:personId')
+  updateClientPerson(@UserId() uid: string, @Param('id') id: string, @Param('personId') personId: string, @Body() b: { action?: unknown }) {
+    if (b.action !== 'remove' && b.action !== 'main') throw new BadRequestException('action must be remove or main');
+    const action = b.action;
+    return this.db.asUser(uid, (svc, u) => svc.updateClientPerson(u, id.slice(0, 120), personId.slice(0, 80), action));
+  }
+
+  @Post('crm/clients/:id/requests')
+  addClientRequest(@UserId() uid: string, @Param('id') id: string, @Body() b: Record<string, unknown>) {
+    const kind = (Object.keys(CLIENT_REQUEST_KIND) as ClientRequestKind[]).find((k) => k === b.kind);
+    if (!kind) throw new BadRequestException('kind is not valid');
+    return this.db.asUser(uid, (svc, u) =>
+      svc.addClientRequest(u, id.slice(0, 120), {
+        kind,
+        what: str(b.what, 'what', 500),
+        from: str(b.from, 'from', 120),
+        neededBy: b.neededBy == null || b.neededBy === '' ? null : date(b.neededBy, 'neededBy'),
+      }),
+    );
+  }
+
+  @Post('crm/clients/:id/requests/:requestId')
+  closeClientRequest(@UserId() uid: string, @Param('id') id: string, @Param('requestId') requestId: string, @Body() b: Record<string, unknown>) {
+    if (b.status !== 'done' && b.status !== 'declined') throw new BadRequestException('status must be done or declined');
+    const status = b.status;
+    return this.db.asUser(uid, (svc, u) =>
+      svc.closeClientRequest(u, id.slice(0, 120), requestId.slice(0, 80), {
+        status,
+        outcome: str(b.outcome, 'outcome', 500),
+        variationRef: b.variationRef == null || b.variationRef === '' ? null : str(b.variationRef, 'variationRef', 60),
+      }),
+    );
+  }
+
+  @Post('crm/clients/:id/renewal/decide')
+  decideClientRenewal(@UserId() uid: string, @Param('id') id: string, @Body() b: Record<string, unknown>) {
+    const choice = (Object.keys(CLIENT_RENEWAL_DECISION) as ClientRenewalDecision[]).find((k) => k === b.choice);
+    if (!choice) throw new BadRequestException('choice is not valid');
+    if (b.pricePct != null && typeof b.pricePct !== 'number') throw new BadRequestException('pricePct must be a number');
+    return this.db.asUser(uid, (svc, u) =>
+      svc.decideClientRenewal(u, id.slice(0, 120), { choice, pricePct: (b.pricePct as number | undefined) ?? 0, reason: str(b.reason, 'reason', 500) }),
+    );
+  }
+
+  @Post('crm/clients/:id/renewal/offer')
+  sendClientRenewalOffer(@UserId() uid: string, @Param('id') id: string, @Body() b: { proof?: unknown }) {
+    return this.db.asUser(uid, (svc, u) => svc.sendClientRenewalOffer(u, id.slice(0, 120), proofList(b.proof)));
+  }
+
+  @Post('crm/clients/:id/renewal/answer')
+  answerClientRenewal(@UserId() uid: string, @Param('id') id: string, @Body() b: Record<string, unknown>) {
+    const choice = (Object.keys(CLIENT_RENEWAL_ANSWER) as ClientRenewalAnswer[]).find((k) => k === b.choice);
+    if (!choice) throw new BadRequestException('choice is not valid');
+    return this.db.asUser(uid, (svc, u) =>
+      svc.answerClientRenewal(u, id.slice(0, 120), {
+        choice,
+        note: b.note == null ? '' : str(b.note, 'note', 500),
+        newEndsOn: b.newEndsOn == null || b.newEndsOn === '' ? null : date(b.newEndsOn, 'newEndsOn'),
+        proof: b.proof == null ? [] : proofList(b.proof),
+      }),
+    );
   }
 
   @Post('clients/:id/contact')
@@ -3568,6 +4090,59 @@ export class AppController {
         reason: str(b.reason, 'reason', 500),
         payFrom: num(b.payFrom, 'payFrom'),
         payTo: num(b.payTo, 'payTo'),
+        category: b.category == null ? undefined : (str(b.category, 'category', 10) as never),
+        state: b.state == null ? null : str(b.state, 'state', 40),
+      }),
+    );
+  }
+
+  // Applicants for a vacancy (Fauzan, 5 Nov 2026): HR only, behind the applicants wall.
+  @Get('vacancies/:id/applicants')
+  applicants(@UserId() uid: string, @Param('id') id: string) {
+    return this.db.asUser(uid, (svc, u) => svc.applicants(u, id.slice(0, 80)));
+  }
+
+  @Post('vacancies/:id/applicants')
+  addApplicant(@UserId() uid: string, @Param('id') id: string, @Body() b: Record<string, unknown>) {
+    return this.db.asUser(uid, (svc, u) =>
+      svc.addApplicant(u, id.slice(0, 80), {
+        name: str(b.name, 'name', 80),
+        phone: b.phone == null ? '' : str(b.phone, 'phone', 20),
+        email: b.email == null ? '' : str(b.email, 'email', 120),
+        source: str(b.source, 'source', 20) as never,
+        appliedOn: str(b.appliedOn, 'appliedOn', 10),
+      }),
+    );
+  }
+
+  @Post('applicants/:id/:status')
+  applicantStep(@UserId() uid: string, @Param('id') id: string, @Param('status') status: string, @Body() b: Record<string, unknown>) {
+    if (!['shortlisted', 'interview', 'offered', 'hired', 'rejected', 'withdrawn'].includes(status)) throw new BadRequestException('Unknown step');
+    return this.db.asUser(uid, (svc, u) =>
+      svc.applicantStep(u, id.slice(0, 120), status as never, b.note == null ? '' : str(b.note, 'note', 300), b.interviewAt == null ? null : str(b.interviewAt, 'interviewAt', 40)),
+    );
+  }
+
+  // Job posts for open vacancies (rule HR-JOB-ADVERT, Fauzan 5 Nov 2026). Social publishing is switched off.
+  @Post('vacancies/:id/advert/:action')
+  advertStep(@UserId() uid: string, @Param('id') id: string, @Param('action') action: string, @Body() b: Record<string, unknown>) {
+    if (!['draft', 'submit', 'approve', 'return', 'record_posted', 'withdraw'].includes(action)) throw new BadRequestException('Unknown step');
+    const opt = (v: unknown, n: string, max: number) => (v == null ? undefined : str(v, n, max));
+    if (b.version != null && (typeof b.version !== 'number' || !Number.isInteger(b.version))) throw new BadRequestException('version must be a whole number');
+    if (b.channels != null && (!Array.isArray(b.channels) || b.channels.length > 10 || b.channels.some((c) => typeof c !== 'string' || c.length > 20))) {
+      throw new BadRequestException('channels must be a list of channel names');
+    }
+    return this.db.asUser(uid, (svc, u) =>
+      svc.advertStep(u, id.slice(0, 80), action as never, {
+        text: opt(b.text, 'text', 3000),
+        channels: b.channels as string[] | undefined,
+        applyHow: opt(b.applyHow, 'applyHow', 200),
+        closingDate: b.closingDate == null ? null : str(b.closingDate, 'closingDate', 10),
+        note: opt(b.note, 'note', 500),
+        channel: opt(b.channel, 'channel', 20),
+        link: opt(b.link, 'link', 300),
+        where: opt(b.where, 'where', 120),
+        version: b.version as number | undefined,
       }),
     );
   }
@@ -4282,6 +4857,238 @@ export class AppController {
     return this.db.asUser(uid, (svc, u) => svc.clockOut(u, input));
   }
 
+  // ---------- CMS messages to site shared devices (Fauzan, 6 Nov 2026) ----------
+
+  @Get('device/dispatches')
+  deviceDispatches(@UserId() uid: string) {
+    return this.db.asUser(uid, (svc, u) => svc.deviceDispatches(u));
+  }
+
+  @Post('device/dispatches/:id/seen')
+  dispatchSeen(@UserId() uid: string, @Param('id') id: string) {
+    return this.db.asUser(uid, (svc, u) => svc.dispatchSeen(u, id));
+  }
+
+  @Post('device/dispatches/:id/ack')
+  ackDispatch(@UserId() uid: string, @Param('id') id: string, @Body() b: Record<string, unknown>) {
+    const input = { staffNo: str(b.staffNo, 'staffNo', 20), pin: str(b.pin, 'pin', 10) };
+    return this.db.asUser(uid, (svc, u) => svc.acknowledgeDispatch(u, id, input));
+  }
+
+  @Post('device/dispatches/:id/photos')
+  dispatchPhoto(@UserId() uid: string, @Param('id') id: string, @Body() b: Record<string, unknown>) {
+    const bodycam = b.source === 'bodycam';
+    const input = { ...evidence(b), source: bodycam ? ('bodycam' as const) : ('in_app_camera' as const), bodycamId: bodycam ? str(b.bodycamId, 'bodycamId', 120) : null };
+    return this.db.asUser(uid, (svc, u) => svc.addDispatchPhoto(u, id, input));
+  }
+
+  @Post('device/dispatches/:id/videos')
+  dispatchVideo(@UserId() uid: string, @Param('id') id: string, @Body() b: Record<string, unknown>) {
+    // Test clips exist only in the browser test version; the live API takes the device camera or a linked bodycam.
+    if (b.source === 'test_clip') throw new BadRequestException('Record the video with the in-app camera.');
+    const bodycam = b.source === 'bodycam';
+    const input = {
+      video: str(b.video, 'video', 2_800_000),
+      durationSec: typeof b.durationSec === 'number' ? b.durationSec : NaN,
+      lat: coord(b.lat),
+      lng: coord(b.lng),
+      accuracyM: coord(b.accuracyM),
+      capturedAt: typeof b.capturedAt === 'string' && b.capturedAt.length < 40 ? b.capturedAt : null,
+      caption: typeof b.caption === 'string' ? b.caption.slice(0, 200) : '',
+      source: bodycam ? ('bodycam' as const) : ('device_camera' as const),
+      bodycamId: bodycam ? str(b.bodycamId, 'bodycamId', 120) : null,
+    };
+    return this.db.asUser(uid, (svc, u) => svc.addDispatchVideo(u, id, input));
+  }
+
+  @Post('device/dispatches/:id/reply')
+  replyDispatch(@UserId() uid: string, @Param('id') id: string, @Body() b: Record<string, unknown>) {
+    const reply = str(b.reply, 'reply', 500);
+    return this.db.asUser(uid, (svc, u) => svc.replyDispatch(u, id, reply));
+  }
+
+  // ---------- One-stop guard duty device: post log, visitors and vehicles (Fauzan, 6 Nov 2026) ----------
+
+  @Get('device/duty')
+  dutyDevice(@UserId() uid: string) {
+    return this.db.asUser(uid, (svc, u) => svc.dutyDevice(u));
+  }
+
+  @Post('device/post-log')
+  addPostLog(@UserId() uid: string, @Body() b: Record<string, unknown>) {
+    const kind = str(b.kind, 'kind', 20) as PostLogKind;
+    const input = {
+      offlineContext: dutyOfflineContext(b.offlineContext),
+      staffNo: str(b.staffNo, 'staffNo', 20),
+      pin: str(b.pin, 'pin', 10),
+      kind,
+      text: str(b.text, 'text', 1000),
+      correctsId: b.correctsId == null ? null : str(b.correctsId, 'correctsId', 200),
+      photo: b.photo && typeof b.photo === 'object' ? evidence(b.photo as Record<string, unknown>) : null,
+      // Written offline: the device's own reference and time.
+      clientRef: b.clientRef == null ? undefined : str(b.clientRef, 'clientRef', 64),
+      recordedAt: b.recordedAt == null ? null : str(b.recordedAt, 'recordedAt', 40),
+    };
+    return this.db.asUser(uid, (svc, u) => svc.addPostLog(u, input));
+  }
+
+  @Post('device/gate/in')
+  gateIn(@UserId() uid: string, @Body() b: Record<string, unknown>) {
+    if (b.kind !== 'visitor' && b.kind !== 'vehicle' && b.kind !== 'paper_log') throw new BadRequestException('kind must be visitor, vehicle or paper_log');
+    if (b.kind !== 'paper_log' && (!b.photo || typeof b.photo !== 'object')) throw new BadRequestException('photo is missing');
+    const v = b.visitor && typeof b.visitor === 'object' ? (b.visitor as Record<string, unknown>) : null;
+    const veh = b.vehicle && typeof b.vehicle === 'object' ? (b.vehicle as Record<string, unknown>) : null;
+    const pp = b.paper && typeof b.paper === 'object' ? (b.paper as Record<string, unknown>) : null;
+    const read = (x: unknown): 'photo' | 'scan' | 'typed' => (x === 'scan' || x === 'photo' ? x : 'typed');
+    const input = {
+      offlineContext: dutyOfflineContext(b.offlineContext),
+      staffNo: str(b.staffNo, 'staffNo', 20),
+      pin: str(b.pin, 'pin', 10),
+      kind: b.kind as 'visitor' | 'vehicle' | 'paper_log',
+      clientRef: b.clientRef == null ? undefined : str(b.clientRef, 'clientRef', 64),
+      recordedAt: b.recordedAt == null ? null : str(b.recordedAt, 'recordedAt', 40),
+      visitor: v
+        ? {
+            name: str(v.name, 'visitor.name', 120),
+            idKind: str(v.idKind, 'visitor.idKind', 20) as VisitorIdKind,
+            // Prima keeps the last 4 characters; the full number travels only inside the sealed bundle.
+            idLast4: typeof v.idLast4 === 'string' ? v.idLast4.slice(0, 8) : undefined,
+            idNumber: typeof v.idNumber === 'string' ? v.idNumber.slice(0, 30) : undefined,
+            idRead: read(v.idRead),
+            company: typeof v.company === 'string' ? v.company.slice(0, 120) : '',
+            host: str(v.host, 'visitor.host', 120),
+            purpose: str(v.purpose, 'visitor.purpose', 200),
+            face: face(v.face),
+          }
+        : null,
+      vehicle: veh ? { plate: str(veh.plate, 'vehicle.plate', 20), plateRead: read(veh.plateRead) } : null,
+      paper: pp ? { coversDate: str(pp.coversDate, 'paper.coversDate', 10), lines: Number(pp.lines), note: typeof pp.note === 'string' ? pp.note.slice(0, 300) : '' } : null,
+      // Checked for shape by the service; its contents cannot be read here.
+      sealed: b.sealed && typeof b.sealed === 'object' ? (b.sealed as SealedBundle) : null,
+      photo: b.photo && typeof b.photo === 'object' ? evidence(b.photo as Record<string, unknown>) : null,
+    };
+    return this.db.asUser(uid, (svc, u) => svc.gateIn(u, input));
+  }
+
+  @Post('device/gate/:id/out')
+  gateOut(@UserId() uid: string, @Param('id') id: string, @Body() b: Record<string, unknown>) {
+    const input = {
+      offlineContext: dutyOfflineContext(b.offlineContext),
+      staffNo: str(b.staffNo, 'staffNo', 20),
+      pin: str(b.pin, 'pin', 10),
+      recordedAt: b.recordedAt == null ? null : str(b.recordedAt, 'recordedAt', 40),
+    };
+    return this.db.asUser(uid, (svc, u) => svc.gateOut(u, id, input));
+  }
+
+  // ---------- Client needs and site tasks (Fauzan, 6 Nov 2026) ----------
+
+  @Get('sites/:id/tasks')
+  siteTaskBoard(@UserId() uid: string, @Param('id') id: string) {
+    return this.db.asUser(uid, (svc, u) => svc.siteTaskBoard(u, id));
+  }
+
+  @Post('sites/:id/needs-reviews')
+  saveNeedsReview(@UserId() uid: string, @Param('id') id: string, @Body() b: Record<string, unknown>) {
+    const raw = b.answers && typeof b.answers === 'object' ? (b.answers as Record<string, unknown>) : {};
+    if (Object.keys(raw).length > 60) throw new BadRequestException('Too many topics.');
+    const answers: Record<string, { answer: string; concern: 'none' | 'low' | 'medium' | 'high' }> = {};
+    for (const [k, v] of Object.entries(raw)) {
+      const o = v && typeof v === 'object' ? (v as Record<string, unknown>) : {};
+      const c = o.concern;
+      answers[k.slice(0, 60)] = { answer: typeof o.answer === 'string' ? o.answer.slice(0, 600) : '', concern: c === 'low' || c === 'medium' || c === 'high' ? c : 'none' };
+    }
+    const input = { clientContact: str(b.clientContact, 'clientContact', 160), answers, agreed: str(b.agreed, 'agreed', 2000) };
+    return this.db.asUser(uid, (svc, u) => svc.saveNeedsReview(u, id, input));
+  }
+
+  @Post('sites/:id/tasks')
+  setSiteTask(@UserId() uid: string, @Param('id') id: string, @Body() b: Record<string, unknown>) {
+    const forRole = b.forRole;
+    if (forRole !== 'guard' && forRole !== 'officer' && forRole !== 'patrol_officer') throw new BadRequestException('forRole must be guard, officer or patrol_officer');
+    const input = {
+      title: str(b.title, 'title', 120),
+      detail: typeof b.detail === 'string' ? b.detail.slice(0, 600) : '',
+      forRole: forRole as 'guard' | 'officer' | 'patrol_officer',
+      days: Array.isArray(b.days) ? b.days.slice(0, 7).map(Number) : [],
+      onDate: b.onDate == null || b.onDate === '' ? null : str(b.onDate, 'onDate', 10),
+      byTime: b.byTime == null || b.byTime === '' ? null : str(b.byTime, 'byTime', 5),
+      proof: b.proof === 'photo' ? ('photo' as const) : ('none' as const),
+      needTopic: b.needTopic == null || b.needTopic === '' ? null : str(b.needTopic, 'needTopic', 60),
+      until: b.until == null || b.until === '' ? null : str(b.until, 'until', 10),
+    };
+    return this.db.asUser(uid, (svc, u) => svc.setSiteTask(u, id, input));
+  }
+
+  @Post('sites/:id/gate-log')
+  setGateLog(@UserId() uid: string, @Param('id') id: string, @Body() b: Record<string, unknown>) {
+    if (typeof b.on !== 'boolean') throw new BadRequestException('on must be true or false');
+    const on = b.on;
+    const reason = str(b.reason, 'reason', 300);
+    return this.db.asUser(uid, (svc, u) => svc.setGateLog(u, id, on, reason));
+  }
+
+  @Post('site-tasks/:id/stop')
+  stopSiteTask(@UserId() uid: string, @Param('id') id: string, @Body() b: Record<string, unknown>) {
+    const reason = str(b.reason, 'reason', 300);
+    return this.db.asUser(uid, (svc, u) => svc.stopSiteTask(u, id, reason));
+  }
+
+  @Post('device/tasks/:id')
+  doSiteTask(@UserId() uid: string, @Param('id') id: string, @Body() b: Record<string, unknown>) {
+    const input = {
+      offlineContext: dutyOfflineContext(b.offlineContext),
+      staffNo: str(b.staffNo, 'staffNo', 20),
+      pin: str(b.pin, 'pin', 10),
+      result: b.result === 'not_done' ? ('not_done' as const) : ('done' as const),
+      note: typeof b.note === 'string' ? b.note.slice(0, 500) : '',
+      photo: b.photo && typeof b.photo === 'object' ? evidence(b.photo as Record<string, unknown>) : null,
+      recordedAt: b.recordedAt == null ? null : str(b.recordedAt, 'recordedAt', 40),
+    };
+    return this.db.asUser(uid, (svc, u) => svc.doSiteTask(u, id, input));
+  }
+
+  @Get('sites/:id/duty-log')
+  siteDutyLog(@UserId() uid: string, @Param('id') id: string, @Query('days') days?: string) {
+    return this.db.asUser(uid, (svc, u) => svc.siteDutyLog(u, id, days ? Number(days) || 2 : 2));
+  }
+
+  @Get('cms/dispatches')
+  cmsDispatches(@UserId() uid: string) {
+    return this.db.asUser(uid, (svc, u) => svc.cmsDispatches(u));
+  }
+
+  @Post('cms/dispatches')
+  sendDispatch(@UserId() uid: string, @Body() b: Record<string, unknown>) {
+    const level = b.level;
+    const proof = b.proof;
+    if (level !== 'instruction' && level !== 'alert' && level !== 'urgent') throw new BadRequestException('level must be instruction, alert or urgent');
+    if (proof !== 'none' && proof !== 'photo' && proof !== 'video' && proof !== 'photo_or_video') throw new BadRequestException('proof must be none, photo, video or photo_or_video');
+    const input = {
+      siteId: str(b.siteId, 'siteId', 120),
+      level: level as DispatchLevel,
+      proof: proof as DispatchProof,
+      title: str(b.title, 'title', 120),
+      message: str(b.message, 'message', 600),
+      alarmId: b.alarmId == null ? null : str(b.alarmId, 'alarmId', 160),
+    };
+    return this.db.asUser(uid, (svc, u) => svc.sendDispatch(u, input));
+  }
+
+  @Post('cms/dispatches/:id/close')
+  closeDispatch(@UserId() uid: string, @Param('id') id: string, @Body() b: Record<string, unknown>) {
+    const outcome = b.outcome;
+    if (outcome !== 'real' && outcome !== 'nothing_found' && outcome !== 'done') throw new BadRequestException('outcome must be real, nothing_found or done');
+    const note = str(b.note, 'note', 600);
+    return this.db.asUser(uid, (svc, u) => svc.closeDispatch(u, id, outcome, note));
+  }
+
+  @Post('cms/dispatches/:id/cancel')
+  cancelDispatch(@UserId() uid: string, @Param('id') id: string, @Body() b: Record<string, unknown>) {
+    const note = str(b.note, 'note', 300);
+    return this.db.asUser(uid, (svc, u) => svc.cancelDispatch(u, id, note));
+  }
+
   @Post('device/scan')
   scan(@UserId() uid: string, @Body() b: Record<string, unknown>) {
     // Patrols are recorded by NFC tag only; QR codes can be photographed and scanned away from the post.
@@ -4963,6 +5770,53 @@ export class DoorFeedController {
   ingest(@Body() body: { records?: unknown }) {
     if (!Array.isArray(body?.records)) throw new BadRequestException('Send { "records": [...] }.');
     return this.db.asUser(process.env.DOOR_FEED_USER_ID ?? 'u-door-sync', (svc, u) => svc.doorIngest(u, body.records as unknown[]));
+  }
+}
+
+/**
+ * Where the CCTV and sensor analytics system sends what it detects (Fauzan, 6 Nov 2026). Off until ANALYTICS_API_KEY and
+ * ANALYTICS_SIGNING_SECRET are set; same signed-call rules as the other feeds. A detection is never verified by itself.
+ */
+@Controller('api/integrations/analytics/v1')
+@UseGuards(AnalyticsFeedGuard)
+export class AnalyticsFeedController {
+  constructor(private db: Db) {}
+
+  @Post('detections')
+  ingest(@Body() b: Record<string, unknown>) {
+    if (b.system !== 'cctv' && b.system !== 'sensor') throw new BadRequestException('system must be cctv or sensor');
+    const system = b.system;
+    const input = {
+      siteId: str(b.siteId, 'siteId', 120),
+      system: system as 'cctv' | 'sensor',
+      device: str(b.device, 'device', 60),
+      label: str(b.label, 'label', 120),
+      confidence: typeof b.confidence === 'number' ? b.confidence : NaN,
+    };
+    return this.db.asUser(process.env.ANALYTICS_FEED_USER_ID ?? 'u-analytics-feed', (svc, u) => svc.recordAnalyticsDetection(u, input));
+  }
+}
+
+/**
+ * The company's in-house records server collects the sealed gate details (full identity number, IC picture, written
+ * book pages) and confirms it holds them (Fauzan, 6 Nov 2026: police need the full data, kept 2 to 7 years). Off until
+ * INHOUSE_API_KEY and INHOUSE_SIGNING_SECRET are set; same signed-call rules as the other feeds.
+ */
+@Controller('api/integrations/inhouse/v1')
+@UseGuards(InhouseFeedGuard)
+export class InhouseFeedController {
+  constructor(private db: Db) {}
+
+  @Post('gate-records/collect')
+  collect(@Body() b: Record<string, unknown>) {
+    const limit = typeof b.limit === 'number' ? b.limit : 100;
+    return this.db.asUser(process.env.INHOUSE_FEED_USER_ID ?? 'u-inhouse-server', (svc, u) => svc.inhouseQueue(u, limit));
+  }
+
+  @Post('gate-records/confirm')
+  confirm(@Body() b: Record<string, unknown>) {
+    if (!Array.isArray(b.ids) || b.ids.some((x) => typeof x !== 'string')) throw new BadRequestException('Send { "ids": ["..."] }.');
+    return this.db.asUser(process.env.INHOUSE_FEED_USER_ID ?? 'u-inhouse-server', (svc, u) => svc.inhouseConfirm(u, b.ids as string[]));
   }
 }
 

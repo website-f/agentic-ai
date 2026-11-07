@@ -347,9 +347,13 @@ describe('Finance Phase 2 on PostgreSQL', () => {
     const v = await db.asUser('u-fin-t1-de1', (svc, u) => svc.financeControls.view(u, 'pwvsb'));
     const bankId = v.statements[0].bank.id;
     const l = (await db.asUser('u-fin-t1-de1', (svc, u) =>
-      svc.financeControls.dailyCashAction(u, 'pwvsb', 'add', { period: 'week', from: day, to, bankId, purpose: 'Casual workers paid daily in cash (API mock)', people: [{ name: 'Mock Worker', idLast4: '4321', work: 'Mock site', dailyRate: 80 }] }),
+      svc.financeControls.dailyCashAction(u, 'pwvsb', 'add', { period: 'week', from: day, to, bankId, purpose: 'Casual workers paid daily in cash (API mock)', people: [{ name: 'Mock Worker', idLast4: '4321', work: 'Mock site', dailyRate: 80, pay: 'cash' }] }),
     )) as { id: string; total: number; people: { id: string }[] };
     await db.asUser('u-fin-t1-de1', (svc, u) => svc.financeControls.dailyCashAction(u, 'pwvsb', 'submit', { listId: l.id }));
+    // Cash only when the Director Office lists the person and the COO or CEO gives it (Fauzan, 6 Nov 2026), through their own logins.
+    await assert.rejects(db.asUser('u-fd', (svc, u) => svc.financeControls.dailyCashAction(u, 'pwvsb', 'approve', { listId: l.id, comment: 'ok' })), /Director Office/);
+    await db.asUser('u-pwvsb-doa', (svc, u) => svc.financeControls.dailyCashAction(u, 'pwvsb', 'listCash', { listId: l.id, personId: l.people[0].id, reason: 'No bank account yet (API mock)', site: 'Mock site', amount: l.total }));
+    await db.asUser('u-coo', (svc, u) => svc.financeControls.dailyCashAction(u, 'pwvsb', 'decideCash', { listId: l.id, personId: l.people[0].id, give: true, comment: 'Cash this week (API mock)' }));
     await assert.rejects(db.asUser('u-fauzan', (svc, u) => svc.financeControls.dailyCashAction(u, 'pwvsb', 'approve', { listId: l.id, comment: 'ok' })), /only the Finance Director/);
     await db.asUser('u-fd', (svc, u) => svc.financeControls.dailyCashAction(u, 'pwvsb', 'approve', { listId: l.id, comment: 'Approved (API mock).' }));
     await db.asUser('u-fin-t1-de1', (svc, u) => svc.financeControls.dailyCashAction(u, 'pwvsb', 'withdraw', { listId: l.id, on: today, amount: l.total, ref: 'CHQ API-1' }));
@@ -357,9 +361,12 @@ describe('Finance Phase 2 on PostgreSQL', () => {
     await db.asUser('u-coo', (svc, u) => svc.financeControls.dailyCashAction(u, 'pwvsb', 'received', { listId: l.id, handoverId: 'h1', counted: l.total }));
     await db.asUser('u-coo', (svc, u) => svc.financeControls.dailyCashAction(u, 'pwvsb', 'pay', { listId: l.id, personId: l.people[0].id, day, idLast4: '4321', proof: 'Pay sheet API-1' }));
     await assert.rejects(db.asUser('u-coo', (svc, u) => svc.financeControls.dailyCashAction(u, 'pwvsb', 'withdraw', { listId: l.id, on: day, amount: 1, ref: 'x' })));
+    // The Director Office uploads the signed receipt through its own login; the file stays behind the company wall.
+    await db.asUser('u-pwvsb-doa', (svc, u) => svc.financeControls.dailyCashAction(u, 'pwvsb', 'receipt', { listId: l.id, payoutId: 'pay1', name: 'Signed receipt (API mock).png', data: `data:image/png;base64,${Buffer.from('api mock receipt').toString('base64')}` }));
     const saved = (await rowOf('fin-pwvsb')).dailyCash.find((x: { id: string }) => x.id === l.id);
     assert.equal(saved.payouts.length, 1);
     assert.equal(saved.payouts[0].sign.byId, 'u-coo');
+    assert.match(saved.payouts[0].receipt.docId, /^doc-/);
     assert.equal(saved.approved.byId, 'u-fd');
   });
 
@@ -449,5 +456,41 @@ describe('Finance Phase 2 on PostgreSQL', () => {
     await assert.rejects(db.asUser('u-cm-sasa', (svc, u) => svc.saveRecord(u, 'post', null, 'co-sasa', post)), /Finance warning/);
     await db.asUser('u-cm-sasa', (svc, u) => svc.saveRecord(u, 'post', null, 'co-sasa', { ...post, creditReason: 'Variation order signed by the client (mock)' }));
     assert.equal((await rowOf('fin-co-sasa')).creditOverrides.length, 1);
+  });
+
+  it('approves a budget revision only at the exact edit shown, and lets one of two reviewers acting at once decide (Arisha main, 4 Nov 2026)', async () => {
+    const year = 2027;
+    const as = (id: string, action: string, input: Record<string, unknown>) =>
+      db.asUser(id, (svc, u) => svc.financeControls.planAction(u, 'pwvsb', action, { year, ...input }));
+    const plan = async () => ((await rowOf('fin-pwvsb')).plans as { year: number; budget: { seq: number }; revisions?: { no: number; seq: number; status: string; months: { revenue: number[] }; fdApproved: unknown; ceoApproved: unknown; returned: { comment?: string } | null }[] }[]).find((p) => p.year === year)!;
+    const rev = (no: number) => (async () => (await plan()).revisions!.find((r) => r.no === no)!)();
+    const m = (n: number) => Array(12).fill(n);
+    await as('u-fin-t1-dep', 'draft', { months: { revenue: m(100_000) }, assumptions: 'Mock 2027 budget for the API test' });
+    await as('u-fin-t1-dep', 'submit', { seq: (await plan()).budget.seq });
+    await as('u-fd', 'approve', { seq: (await plan()).budget.seq, comment: 'Approved (mock).' });
+    const r = { fromMonth: '2027-06', months: { revenue: m(120_000) }, reason: 'Mock contract won from June 2027' };
+    await as('u-fin-t1-lead', 'revise', r);
+    await as('u-fin-t1-lead', 'submitRevision', { no: 1, seq: (await rev(1)).seq });
+    const seen = (await rev(1)).seq;
+    // Returned, edited to RM130,000 and sent again under revision 1: the FD's old screen cannot approve it.
+    await as('u-fauzan', 'returnRevision', { no: 1, seq: seen, comment: 'Check the June start date (mock).' });
+    await as('u-fin-t1-dep', 'revise', { ...r, no: 1, seq: (await rev(1)).seq, months: { revenue: m(130_000) } });
+    await as('u-fin-t1-dep', 'submitRevision', { no: 1, seq: (await rev(1)).seq });
+    await assert.rejects(as('u-fd', 'approveRevision', { no: 1, seq: seen, comment: 'Agreed.' }), /changed after you opened it/);
+    assert.equal((await rev(1)).status, 'submitted');
+    assert.equal((await rev(1)).fdApproved, null);
+    // The FD and the CEO act on the same edit at the same time: the row is held, one decides, the other is refused.
+    const both = (await rev(1)).seq;
+    const out = await Promise.allSettled([
+      as('u-fd', 'approveRevision', { no: 1, seq: both, comment: 'FD agrees at RM130,000 (mock).' }),
+      as('u-fauzan', 'returnRevision', { no: 1, seq: both, comment: 'CEO wants another look (mock).' }),
+    ]);
+    assert.deepEqual(out.map((o) => o.status).sort(), ['fulfilled', 'rejected']);
+    const done = await rev(1);
+    assert.equal(done.seq, both + 1);
+    // Exactly one decision on that edit: approved by the FD, or returned by the CEO (the earlier return stays on record).
+    const back = (done.returned as { comment?: string } | null)?.comment ?? '';
+    if (done.status === 'approved') assert.ok(done.fdApproved && !/another look/.test(back));
+    else assert.ok(done.status === 'returned' && !done.fdApproved && /another look/.test(back));
   });
 });

@@ -1,10 +1,11 @@
+import { invalidateDutyContext } from '../duty/context';
 // In-browser demo: the same PrimaService and rules as the server, running on generated
 // mock data. Changes are kept as a short replay log in this browser only, so a reload
 // keeps what you did today; a new day starts from fresh mock data.
-import { AccessDenied, BadRequest, ImportError, MemoryStore, NotFound, OrgLinkError, PrimaService, RuleBlocked, dateOf, fromMs, demoPin, generateDataset, registeredRollouts, withOrgLinks, type User, testReceiptReader, type OrgImportReceipt } from '@prima/core';
-import type { ProofInput, ReportDef, CmsServiceKind, FinCloseAction, FinPackKind, FinPaymentAction, FinRequestAction } from '@prima/core';
+import { AccessDenied, BadRequest, ImportError, MemoryStore, NotFound, OrgLinkError, PrimaService, RuleBlocked, dateOf, fromMs, demoPin, generateDataset, registeredRollouts, withOrgLinks, type User, testReceiptReader, type OrgImportReceipt, demoFwRecruitFiles, makeTestInhouseKey, sampleLabelToken, type ItemAction } from '@prima/core';
+import type { ProofInput, ReportDef, CmsServiceKind, FinCloseAction, FinPackKind, FinPaymentAction, FinRequestAction, ClientLostReason } from '@prima/core';
 import type { ExpenseInput, PdpaCaseInput, PdpaStepName, ProductCertInput, ProductInput, VehicleRequestInput, VehicleWorkInput, ArmsRequestAction, ArmsRequestStepExtra, AmBuyInput, RaiseArmsRequestInput, OfficeDeskInput, WorkAdjustInput, WorkReassignInput, FinControlArea } from './types';
-import { ApiError, type Api, type CmsSettingsPatch, type FollowUpInput, type LeaveInput, type Me, type PhotoInput, type TenderProtocolInput } from './types';
+import { ApiError, type Api, type CmsSettingsPatch, type FollowUpInput, type LeaveInput, type Me, type PhotoInput, type TenderProtocolInput, type DispatchInput, type DetectionInput, type VideoInput, type PostLogInput, type GateInInput, type NeedsReviewInput, type SiteTaskInput, type DoSiteTaskInput } from './types';
 
 const LOG_KEY = 'prima-demo-log-v1';
 const USER_KEY = 'prima-demo-user';
@@ -121,6 +122,9 @@ type Mutations =
   | 'decideProbation'
   | 'raiseVacancy'
   | 'vacancyStep'
+  | 'advertStep'
+  | 'addApplicant'
+  | 'applicantStep'
   | 'prepareStaffMovement'
   | 'staffMovementStep'
   | 'cancelStaffMovement'
@@ -154,6 +158,12 @@ type Mutations =
   | 'reviewFwmTask'
   | 'recordFwCheck'
   | 'closeFwCheck'
+  | 'openFwRecruitFile'
+  | 'setFwRecruitTravel'
+  | 'recordFwRecruitStep'
+  | 'clearFwRecruitFile'
+  | 'recordFwRecruitArrival'
+  | 'stopFwRecruitFile'
   | 'addHostelBill'
   | 'requestHostelPayment'
   | 'checkHostelBill'
@@ -247,6 +257,13 @@ type Mutations =
   | 'arishaReturn'
   | 'saveRecord'
   | 'decidePayChange'
+  | 'savePayFormula'
+  | 'decidePayFormula'
+  | 'withdrawPayFormula'
+  | 'setPayFormulaUse'
+  | 'approveSiteHours'
+  | 'savePayLaw'
+  | 'setPublicHolidays'
   | 'amReversePayment'
   | 'amBankCash'
   | 'amFollowUp'
@@ -276,6 +293,7 @@ type Mutations =
   | 'addPurSupplier'
   | 'purSupplierStep'
   | 'stockIssue'
+  | 'itemAct'
   | 'confirmMyItem'
   | 'handoverStep'
   | 'setManagementFee'
@@ -302,6 +320,20 @@ type Mutations =
   | 'setStaffPayLine'
   | 'staffPayStep'
   | 'staffPayExport'
+  | 'prepareGuardPay'
+  | 'setGuardPayLine'
+  | 'guardPayStep'
+  | 'guardPayExport'
+  | 'guardPayCash'
+  | 'recordPayConsent'
+  | 'approvePayConsent'
+  | 'setStatutory'
+  | 'setGuardAdvances'
+  | 'changeGuardAdvance'
+  | 'approveGuardAdvances'
+  | 'payGuardAdvance'
+  | 'recordGuardLoan'
+  | 'guardLoanStep'
   | 'cosDecideClaim'
   | 'hrDecideClaim'
   | 'cooDecideClaim'
@@ -322,6 +354,14 @@ type Mutations =
   | 'submitExpense'
   | 'decideExpense'
   | 'startOffboarding'
+  | 'setClientOwner'
+  | 'addClientPerson'
+  | 'updateClientPerson'
+  | 'addClientRequest'
+  | 'closeClientRequest'
+  | 'decideClientRenewal'
+  | 'sendClientRenewalOffer'
+  | 'answerClientRenewal'
   | 'clientContact'
   | 'clientReport'
   | 'clientRating'
@@ -406,6 +446,23 @@ type Mutations =
   | 'recordCmsHandover'
   | 'logCallback'
   | 'acknowledgeAlarm'
+  | 'sendDispatch'
+  | 'closeDispatch'
+  | 'cancelDispatch'
+  | 'simulateDetection'
+  | 'dispatchSeen'
+  | 'acknowledgeDispatch'
+  | 'addDispatchPhoto'
+  | 'addDispatchVideo'
+  | 'replyDispatch'
+  | 'addPostLog'
+  | 'gateIn'
+  | 'gateOut'
+  | 'saveNeedsReview'
+  | 'setSiteTask'
+  | 'stopSiteTask'
+  | 'setGateLog'
+  | 'doSiteTask'
   | 'followUpAttendance'
   | 'requestLeave'
   | 'decideLeave'
@@ -484,11 +541,17 @@ export class DemoApi implements Api {
   private boot(): void {
     const now = this.realNow();
     // Hand-overs between departments are on in the test version (org-links.ts); the server needs PRIMA_ORG_LINKS=true.
-    const store = withOrgLinks(new MemoryStore(generateDataset({ today: dateOf(now), now })));
+    // 40 days of shifts and attendance, so last month's guard pay run has a whole month to count (Fauzan, 5 Nov 2026).
+    const ds = generateDataset({ today: dateOf(now), now, daysBack: 40 });
+    // Mock recruitment files: the table is a separate database module, so the shared seed leaves it empty.
+    ds.fwRecruitFiles.push(...demoFwRecruitFiles(dateOf(now), now));
+    const store = withOrgLinks(new MemoryStore(ds));
     this.store = store;
     this.booted = new PrimaService(store, () => this.clockOverride ?? this.realNow());
     // The test link reads the receipt's file name as if it were the receipt (the server uses Azure once set up).
     this.booted.receiptReader = testReceiptReader;
+    // Labels made from the request so replaying today's saved actions gives the same labels.
+    this.booted.itemLabelMaker = (seed) => sampleLabelToken(`demo:${seed}`);
     this.log = readLog(dateOf(now));
   }
 
@@ -501,6 +564,14 @@ export class DemoApi implements Api {
     if (!this.booted) await new Promise((r) => setTimeout(r, 0));
     if (!this.booted) this.boot();
     const ids = new Map<string, string>();
+    // A throwaway in-house key, so the test version can seal full visitor details the way the live device does. Only
+    // the public half is kept; nothing in the test version can open what it seals.
+    try {
+      const k = await makeTestInhouseKey('test-inhouse-key');
+      this.svc.inhouseKey = { keyId: k.keyId, jwk: k.jwk };
+    } catch {
+      /* no Web Crypto: devices show that full ID cannot be kept */
+    }
     for (const call of this.log) {
       this.clockOverride = call.at;
       try {
@@ -659,6 +730,12 @@ export class DemoApi implements Api {
         return this.svc.raiseVacancy(u, a[0]);
       case 'vacancyStep':
         return this.svc.vacancyStep(u, a[0], a[1], a[2]);
+      case 'advertStep':
+        return this.svc.advertStep(u, a[0], a[1], a[2]);
+      case 'addApplicant':
+        return this.svc.addApplicant(u, a[0], a[1]);
+      case 'applicantStep':
+        return this.svc.applicantStep(u, a[0], a[1], a[2], a[3]);
       case 'prepareStaffMovement':
         return this.svc.prepareStaffMovement(u, a[0]);
       case 'staffMovementStep':
@@ -717,6 +794,18 @@ export class DemoApi implements Api {
         return this.svc.recordFwCheck(u, a[0], a[1], a[2]);
       case 'closeFwCheck':
         return this.svc.closeFwCheck(u, a[0], a[1], a[2]);
+      case 'openFwRecruitFile':
+        return this.svc.openFwRecruitFile(u, a[0]);
+      case 'setFwRecruitTravel':
+        return this.svc.setFwRecruitTravel(u, a[0], a[1]);
+      case 'recordFwRecruitStep':
+        return this.svc.recordFwRecruitStep(u, a[0], a[1], a[2], a[3]);
+      case 'clearFwRecruitFile':
+        return this.svc.clearFwRecruitFile(u, a[0], a[1]);
+      case 'recordFwRecruitArrival':
+        return this.svc.recordFwRecruitArrival(u, a[0], a[1]);
+      case 'stopFwRecruitFile':
+        return this.svc.stopFwRecruitFile(u, a[0], a[1]);
       case 'addHostelBill':
         return this.svc.addHostelBill(u, a[0], a[1]);
       case 'requestHostelPayment':
@@ -813,6 +902,20 @@ export class DemoApi implements Api {
         return this.svc.saveRecord(u, a[0], a[1], a[2], a[3]);
       case 'decidePayChange':
         return this.svc.decidePayChange(u, a[0], a[1], a[2]);
+      case 'savePayFormula':
+        return this.svc.savePayFormula(u, a[0]);
+      case 'decidePayFormula':
+        return this.svc.decidePayFormula(u, a[0], a[1], a[2]);
+      case 'withdrawPayFormula':
+        return this.svc.withdrawPayFormula(u, a[0]);
+      case 'setPayFormulaUse':
+        return this.svc.setPayFormulaUse(u, a[0]);
+      case 'savePayLaw':
+        return this.svc.savePayLaw(u, a[0]);
+      case 'approveSiteHours':
+        return this.svc.approveSiteHours(u, a[0]);
+      case 'setPublicHolidays':
+        return this.svc.setPublicHolidays(u, a[0]);
       case 'amRecordPayment':
         return this.svc.amRecordPayment(u, a[0], a[1]);
       case 'amReversePayment':
@@ -883,6 +986,8 @@ export class DemoApi implements Api {
         return this.svc.setManagementFee(u, a[0], a[1]);
       case 'stockIssue':
         return this.svc.stockIssue(u, a[0], a[1]);
+      case 'itemAct':
+        return this.svc.items.act(u, a[0], a[1]);
       case 'stockReturn':
         return this.svc.stockReturn(u, a[0], a[1], a[2]);
       case 'corpFilingStep':
@@ -1015,6 +1120,38 @@ export class DemoApi implements Api {
         return this.svc.staffPayStep(u, a[0], a[1], a[2]);
       case 'staffPayExport':
         return this.svc.staffPayExport(u, a[0], a[1]);
+      case 'prepareGuardPay':
+        return this.svc.prepareGuardPay(u, a[0], a[1], a[2] ?? undefined);
+      case 'setGuardPayLine':
+        return this.svc.setGuardPayLine(u, a[0], a[1], a[2]);
+      case 'guardPayStep':
+        return this.svc.guardPayStep(u, a[0], a[1], a[2]);
+      case 'guardPayExport':
+        return this.svc.guardPayExport(u, a[0], a[1]);
+      case 'guardPayCash':
+        return this.svc.guardPayCash(u, a[0], a[1], a[2], a[3] ?? {});
+      case 'recordPayConsent':
+        return this.svc.recordPayConsent(u, a[0], a[1]);
+      case 'approvePayConsent':
+        return this.svc.approvePayConsent(u, a[0], a[1]);
+      case 'setStatutory':
+        return this.svc.setStatutory(u, a[0]);
+      case 'setGuardAdvances':
+        return this.svc.setGuardAdvances(u, a[0]);
+      case 'changeGuardAdvance':
+        return this.svc.changeGuardAdvance(u, a[0], a[1]);
+      case 'approveGuardAdvances':
+        return this.svc.approveGuardAdvances(u, a[0], a[1]);
+      case 'payGuardAdvance':
+        return this.svc.payGuardAdvance(u, a[0], a[1]);
+      case 'recordGuardLoan':
+        return this.svc.recordGuardLoan(u, a[0]);
+      case 'guardLoanStep':
+        return a[1] === 'decide'
+          ? this.svc.decideGuardLoan(u, a[0], a[2])
+          : a[1] === 'payout'
+            ? this.svc.payOutGuardLoan(u, a[0], a[2])
+            : this.svc.cancelGuardLoan(u, a[0], (a[2] as { note?: string } | undefined)?.note ?? '');
       case 'submitStaffClaim':
         return this.svc.submitStaffClaim(u, a[0], a[1]);
       case 'addReceipts':
@@ -1063,7 +1200,23 @@ export class DemoApi implements Api {
       case 'clientStep':
         return this.svc.clientStep(u, a[0], a[1], a[2], a[3], a[4]);
       case 'startOffboarding':
-        return this.svc.startOffboarding(u, a[0], a[1]);
+        return this.svc.startOffboarding(u, a[0], a[1], a[2]);
+      case 'setClientOwner':
+        return this.svc.setClientOwner(u, a[0], a[1]);
+      case 'addClientPerson':
+        return this.svc.addClientPerson(u, a[0], a[1]);
+      case 'updateClientPerson':
+        return this.svc.updateClientPerson(u, a[0], a[1], a[2]);
+      case 'addClientRequest':
+        return this.svc.addClientRequest(u, a[0], a[1]);
+      case 'closeClientRequest':
+        return this.svc.closeClientRequest(u, a[0], a[1], a[2]);
+      case 'decideClientRenewal':
+        return this.svc.decideClientRenewal(u, a[0], a[1]);
+      case 'sendClientRenewalOffer':
+        return this.svc.sendClientRenewalOffer(u, a[0], a[1]);
+      case 'answerClientRenewal':
+        return this.svc.answerClientRenewal(u, a[0], a[1]);
       case 'clientContact':
         return this.svc.clientContact(u, a[0], a[1], a[2]);
       case 'clientReport':
@@ -1238,6 +1391,41 @@ export class DemoApi implements Api {
         return this.svc.decideLeave(u, a[0], a[1], a[2]);
       case 'acknowledgeAlarm':
         return this.svc.acknowledgeAlarm(u, a[0]);
+      case 'sendDispatch':
+        return this.svc.sendDispatch(u, a[0]);
+      case 'closeDispatch':
+        return this.svc.closeDispatch(u, a[0], a[1], a[2]);
+      case 'cancelDispatch':
+        return this.svc.cancelDispatch(u, a[0], a[1]);
+      case 'simulateDetection':
+        // Runs as the analytics feed's own system sign-in, as the live feed would.
+        return this.svc.user('u-analytics-feed').then((feed) => this.svc.recordAnalyticsDetection(feed, a[0]));
+      case 'dispatchSeen':
+        return this.svc.dispatchSeen(u, a[0]);
+      case 'acknowledgeDispatch':
+        return this.svc.acknowledgeDispatch(u, a[0], a[1]);
+      case 'addDispatchPhoto':
+        return this.svc.addDispatchPhoto(u, a[0], a[1]);
+      case 'addDispatchVideo':
+        return this.svc.addDispatchVideo(u, a[0], a[1]);
+      case 'replyDispatch':
+        return this.svc.replyDispatch(u, a[0], a[1]);
+      case 'addPostLog':
+        return this.svc.addPostLog(u, a[0]);
+      case 'gateIn':
+        return this.svc.gateIn(u, a[0]);
+      case 'gateOut':
+        return this.svc.gateOut(u, a[0], a[1]);
+      case 'saveNeedsReview':
+        return this.svc.saveNeedsReview(u, a[0], a[1]);
+      case 'setSiteTask':
+        return this.svc.setSiteTask(u, a[0], a[1]);
+      case 'setGateLog':
+        return this.svc.setGateLog(u, a[0], a[1], a[2]);
+      case 'stopSiteTask':
+        return this.svc.stopSiteTask(u, a[0], a[1]);
+      case 'doSiteTask':
+        return this.svc.doSiteTask(u, a[0], a[1]);
       case 'requestTrip':
         return this.svc.requestTrip(u, a[0]);
       case 'decideTrip':
@@ -1304,6 +1492,7 @@ export class DemoApi implements Api {
   }
 
   async signIn(userId: string): Promise<Me> {
+    invalidateDutyContext();
     this.userId = userId;
     try {
       localStorage.setItem(USER_KEY, userId);
@@ -1540,6 +1729,18 @@ export class DemoApi implements Api {
   vacancyStep(id: string, action: Parameters<Api['vacancyStep']>[1], note: string) {
     return this.write('vacancyStep', [id, action, note]);
   }
+  advertStep(id: string, action: Parameters<Api['advertStep']>[1], input: Parameters<Api['advertStep']>[2]) {
+    return this.write('advertStep', [id, action, input]);
+  }
+  applicants(vacancyId: string) {
+    return this.read((s, u) => s.applicants(u, vacancyId));
+  }
+  addApplicant(vacancyId: string, input: Parameters<Api['addApplicant']>[1]) {
+    return this.write('addApplicant', [vacancyId, input]);
+  }
+  applicantStep(id: string, status: Parameters<Api['applicantStep']>[1], note: string, interviewAt: string | null) {
+    return this.write('applicantStep', [id, status, note, interviewAt]);
+  }
   staffClockIn(input: Parameters<Api['staffClockIn']>[0]) {
     return this.write('staffClockIn', [input]);
   }
@@ -1737,6 +1938,9 @@ export class DemoApi implements Api {
   addSocsoCheckIn(id: string, note: string) {
     return this.write<unknown>('addSocsoCheckIn', [id, note]);
   }
+  workKpi(period?: string) {
+    return this.read((s, u) => s.workKpi(u, period));
+  }
   fwmBoard() {
     return this.read((s, u) => s.fwmBoard(u));
   }
@@ -1857,6 +2061,42 @@ export class DemoApi implements Api {
   }
   decidePayChange(id: string, verify: boolean, note: string) {
     return this.write<unknown>('decidePayChange', [id, verify, note]);
+  }
+  salaryCalcData() {
+    return this.read((s, u) => s.salaryCalcData(u));
+  }
+  payFormulaBoard() {
+    return this.read((s, u) => s.payFormulaBoard(u));
+  }
+  payFormulaAt(input: Parameters<Api['payFormulaAt']>[0]) {
+    return this.read((s, u) => s.payFormulaAt(u, input));
+  }
+  savePayFormula(input: Parameters<Api['savePayFormula']>[0]) {
+    return this.write<unknown>('savePayFormula', [input]);
+  }
+  decidePayFormula(id: string, approve: boolean, note: string) {
+    return this.write<unknown>('decidePayFormula', [id, approve, note]);
+  }
+  withdrawPayFormula(id: string) {
+    return this.write<unknown>('withdrawPayFormula', [id]);
+  }
+  setPayFormulaUse(input: Parameters<Api['setPayFormulaUse']>[0]) {
+    return this.write<unknown>('setPayFormulaUse', [input]);
+  }
+  savePayLaw(input: Parameters<Api['savePayLaw']>[0]) {
+    return this.write<unknown>('savePayLaw', [input]);
+  }
+  siteHoursBoard(input: Parameters<Api['siteHoursBoard']>[0]) {
+    return this.read((s, u) => s.siteHoursBoard(u, input));
+  }
+  approveSiteHours(input: Parameters<Api['approveSiteHours']>[0]) {
+    return this.write<unknown>('approveSiteHours', [input]);
+  }
+  publicHolidayBoard(input: Parameters<Api['publicHolidayBoard']>[0]) {
+    return this.read((s, u) => s.publicHolidayBoard(u, input));
+  }
+  setPublicHolidays(input: Parameters<Api['setPublicHolidays']>[0]) {
+    return this.write<unknown>('setPublicHolidays', [input]);
   }
   // The test link has no Prima server: Arisha uses Claude through the page instead.
   arishaSummary(input: Parameters<Api['arishaSummary']>[0]) {
@@ -2008,6 +2248,21 @@ export class DemoApi implements Api {
   }
   purBoard() {
     return this.read((s, u) => s.purBoard(u));
+  }
+  itemBoard() {
+    return this.read((s, u) => s.items.board(u));
+  }
+  itemByLabel(label: string) {
+    return this.read((s, u) => s.items.resolve(u, label));
+  }
+  itemPaper(id: string) {
+    return this.read((s, u) => s.items.paperDocument(u, id));
+  }
+  itemDevicePending(staffNo: string, face: import('@prima/core').FaceCapture | null) {
+    return this.read((s, u) => s.items.devicePending(u, staffNo, face));
+  }
+  itemAct(requestId: string, action: ItemAction) {
+    return this.write<{ replay: boolean; result: unknown }>('itemAct', [requestId, action]);
   }
   raisePurRequest(companyId: string, input: Parameters<Api['raisePurRequest']>[1]) {
     return this.write<unknown>('raisePurRequest', [companyId, input]);
@@ -2463,6 +2718,69 @@ export class DemoApi implements Api {
   staffPayExport(runId: string, kind: Parameters<Api['staffPayExport']>[1]) {
     return this.write<Awaited<ReturnType<Api['staffPayExport']>>>('staffPayExport', [runId, kind]);
   }
+  guardPayroll() {
+    return this.read((s, u) => s.guardPayroll(u));
+  }
+  guardPayRun(runId: string) {
+    return this.read((s, u) => s.guardPayRun(u, runId));
+  }
+  myGuardPayslips() {
+    return this.read((s, u) => s.myGuardPayslips(u));
+  }
+  prepareGuardPay(companyId: string, period: string, holidays?: { date: string; label: string }[]) {
+    return this.write<unknown>('prepareGuardPay', [companyId, period, holidays]);
+  }
+  setGuardPayLine(runId: string, personId: string, patch: Parameters<Api['setGuardPayLine']>[2]) {
+    return this.write<unknown>('setGuardPayLine', [runId, personId, patch]);
+  }
+  guardPayStep(runId: string, action: Parameters<Api['guardPayStep']>[1], body: Parameters<Api['guardPayStep']>[2]) {
+    return this.write<unknown>('guardPayStep', [runId, action, body]);
+  }
+  guardPayExport(runId: string, kind: Parameters<Api['guardPayExport']>[1]) {
+    return this.write<Awaited<ReturnType<Api['guardPayExport']>>>('guardPayExport', [runId, kind]);
+  }
+  guardPayCash(runId: string, personId: string, action: Parameters<Api['guardPayCash']>[2], body: Parameters<Api['guardPayCash']>[3]) {
+    return this.write<unknown>('guardPayCash', [runId, personId, action, body]);
+  }
+  recordPayConsent(personId: string, body: Parameters<Api['recordPayConsent']>[1]) {
+    return this.write<unknown>('recordPayConsent', [personId, body]);
+  }
+  statutoryBoard() {
+    return this.read((s, u) => s.statutoryBoard(u));
+  }
+  setStatutory(body: Parameters<Api['setStatutory']>[0]) {
+    return this.write<unknown>('setStatutory', [body]);
+  }
+  payConsentsWaiting() {
+    return this.read((s, u) => s.payConsentsWaiting(u));
+  }
+  approvePayConsent(personId: string, note: string) {
+    return this.write<unknown>('approvePayConsent', [personId, note]);
+  }
+  guardAdvances(input: Parameters<Api['guardAdvances']>[0]) {
+    return this.read((s, u) => s.guardAdvances(u, input));
+  }
+  setGuardAdvances(body: Parameters<Api['setGuardAdvances']>[0]) {
+    return this.write<Awaited<ReturnType<Api['setGuardAdvances']>>>('setGuardAdvances', [body]);
+  }
+  changeGuardAdvance(id: string, body: Parameters<Api['changeGuardAdvance']>[1]) {
+    return this.write<unknown>('changeGuardAdvance', [id, body]);
+  }
+  approveGuardAdvances(ids: string[], note: string) {
+    return this.write<unknown>('approveGuardAdvances', [ids, note]);
+  }
+  payGuardAdvance(id: string, body: Parameters<Api['payGuardAdvance']>[1]) {
+    return this.write<unknown>('payGuardAdvance', [id, body]);
+  }
+  guardLoans(input: Parameters<Api['guardLoans']>[0]) {
+    return this.read((s, u) => s.guardLoans(u, input));
+  }
+  recordGuardLoan(body: Parameters<Api['recordGuardLoan']>[0]) {
+    return this.write<unknown>('recordGuardLoan', [body]);
+  }
+  guardLoanStep(id: string, action: Parameters<Api['guardLoanStep']>[1], body: Parameters<Api['guardLoanStep']>[2]) {
+    return this.write<unknown>('guardLoanStep', [id, action, body]);
+  }
   submitStaffClaim(input: Parameters<Api['submitStaffClaim']>[0], proof: ProofInput[]) {
     return this.write<unknown>('submitStaffClaim', [input, proof]);
   }
@@ -2559,8 +2877,38 @@ export class DemoApi implements Api {
   clientStep(accountId: string, phase: 'onboarding' | 'offboarding', key: string, note: string, proof: ProofInput[]) {
     return this.write<unknown>('clientStep', [accountId, phase, key, note, proof]);
   }
-  startOffboarding(accountId: string, reason: string) {
-    return this.write<unknown>('startOffboarding', [accountId, reason]);
+  startOffboarding(accountId: string, reason: string, lost?: { reason: ClientLostReason; winBackOn?: string | null }) {
+    return this.write<unknown>('startOffboarding', [accountId, reason, lost]);
+  }
+  crmBoard() {
+    return this.read((s, u) => s.crmBoard(u));
+  }
+  crmClient(accountId: string) {
+    return this.read((s, u) => s.crmClient(u, accountId));
+  }
+  setClientOwner(accountId: string, userId: string) {
+    return this.write<unknown>('setClientOwner', [accountId, userId]);
+  }
+  addClientPerson(accountId: string, input: Parameters<Api['addClientPerson']>[1]) {
+    return this.write<unknown>('addClientPerson', [accountId, input]);
+  }
+  updateClientPerson(accountId: string, personId: string, action: 'remove' | 'main') {
+    return this.write<unknown>('updateClientPerson', [accountId, personId, action]);
+  }
+  addClientRequest(accountId: string, input: Parameters<Api['addClientRequest']>[1]) {
+    return this.write<unknown>('addClientRequest', [accountId, input]);
+  }
+  closeClientRequest(accountId: string, requestId: string, input: Parameters<Api['closeClientRequest']>[2]) {
+    return this.write<unknown>('closeClientRequest', [accountId, requestId, input]);
+  }
+  decideClientRenewal(accountId: string, input: Parameters<Api['decideClientRenewal']>[1]) {
+    return this.write<unknown>('decideClientRenewal', [accountId, input]);
+  }
+  sendClientRenewalOffer(accountId: string, proof: ProofInput[]) {
+    return this.write<unknown>('sendClientRenewalOffer', [accountId, proof]);
+  }
+  answerClientRenewal(accountId: string, input: Parameters<Api['answerClientRenewal']>[1]) {
+    return this.write<unknown>('answerClientRenewal', [accountId, input]);
   }
   clientContact(accountId: string, kind: 'visit' | 'meeting' | 'call', note: string) {
     return this.write<unknown>('clientContact', [accountId, kind, note]);
@@ -2660,6 +3008,27 @@ export class DemoApi implements Api {
   }
   closeFwCheck(id: string, input: Parameters<Api['closeFwCheck']>[1], proof: ProofInput[]) {
     return this.write<unknown>('closeFwCheck', [id, input, proof]);
+  }
+  fwmRecruitment() {
+    return this.read((s, u) => s.fwmRecruitment(u));
+  }
+  openFwRecruitFile(input: Parameters<Api['openFwRecruitFile']>[0]) {
+    return this.write<unknown>('openFwRecruitFile', [input]);
+  }
+  setFwRecruitTravel(id: string, input: Parameters<Api['setFwRecruitTravel']>[1]) {
+    return this.write<unknown>('setFwRecruitTravel', [id, input]);
+  }
+  recordFwRecruitStep(id: string, step: Parameters<Api['recordFwRecruitStep']>[1], input: Parameters<Api['recordFwRecruitStep']>[2], proof: ProofInput[]) {
+    return this.write<unknown>('recordFwRecruitStep', [id, step, input, proof]);
+  }
+  clearFwRecruitFile(id: string, input: Parameters<Api['clearFwRecruitFile']>[1]) {
+    return this.write<unknown>('clearFwRecruitFile', [id, input]);
+  }
+  recordFwRecruitArrival(id: string, input: Parameters<Api['recordFwRecruitArrival']>[1]) {
+    return this.write<unknown>('recordFwRecruitArrival', [id, input]);
+  }
+  stopFwRecruitFile(id: string, input: Parameters<Api['stopFwRecruitFile']>[1]) {
+    return this.write<unknown>('stopFwRecruitFile', [id, input]);
   }
   advanceSocsoClaim(id: string, to: Parameters<Api['advanceSocsoClaim']>[1], input: Parameters<Api['advanceSocsoClaim']>[2]) {
     return this.write<unknown>('advanceSocsoClaim', [id, to, input]);
@@ -2767,6 +3136,72 @@ export class DemoApi implements Api {
   }
   acknowledgeAlarm(id: string) {
     return this.write<unknown>('acknowledgeAlarm', [id]);
+  }
+  cmsDispatches() {
+    return this.read((s, u) => s.cmsDispatches(u));
+  }
+  sendDispatch(input: DispatchInput) {
+    return this.write<unknown>('sendDispatch', [input]);
+  }
+  closeDispatch(id: string, outcome: 'real' | 'nothing_found' | 'done', note: string) {
+    return this.write<unknown>('closeDispatch', [id, outcome, note]);
+  }
+  cancelDispatch(id: string, note: string) {
+    return this.write<unknown>('cancelDispatch', [id, note]);
+  }
+  simulateDetection(input: DetectionInput) {
+    return this.write<unknown>('simulateDetection', [input]);
+  }
+  deviceDispatches() {
+    return this.read((s, u) => s.deviceDispatches(u));
+  }
+  dispatchSeen(id: string) {
+    return this.write<unknown>('dispatchSeen', [id]);
+  }
+  acknowledgeDispatch(id: string, input: { staffNo: string; pin: string }) {
+    return this.write<unknown>('acknowledgeDispatch', [id, input]);
+  }
+  addDispatchPhoto(id: string, input: PhotoInput) {
+    return this.write<unknown>('addDispatchPhoto', [id, input]);
+  }
+  addDispatchVideo(id: string, input: VideoInput) {
+    return this.write<unknown>('addDispatchVideo', [id, input]);
+  }
+  replyDispatch(id: string, reply: string) {
+    return this.write<unknown>('replyDispatch', [id, reply]);
+  }
+  dutyDevice() {
+    return this.read((s, u) => s.dutyDevice(u));
+  }
+  siteTaskBoard(siteId: string) {
+    return this.read((s, u) => s.siteTaskBoard(u, siteId));
+  }
+  saveNeedsReview(siteId: string, input: NeedsReviewInput) {
+    return this.write<unknown>('saveNeedsReview', [siteId, input]);
+  }
+  setSiteTask(siteId: string, input: SiteTaskInput) {
+    return this.write<unknown>('setSiteTask', [siteId, input]);
+  }
+  stopSiteTask(id: string, reason: string) {
+    return this.write<unknown>('stopSiteTask', [id, reason]);
+  }
+  setGateLog(siteId: string, on: boolean, reason: string) {
+    return this.write<unknown>('setGateLog', [siteId, on, reason]);
+  }
+  doSiteTask(id: string, input: DoSiteTaskInput) {
+    return this.write<unknown>('doSiteTask', [id, input]);
+  }
+  addPostLog(input: PostLogInput) {
+    return this.write<unknown>('addPostLog', [input]);
+  }
+  gateIn(input: GateInInput) {
+    return this.write<Awaited<ReturnType<Api['gateIn']>>>('gateIn', [input]);
+  }
+  gateOut(id: string, input: Parameters<Api['gateOut']>[1]) {
+    return this.write<unknown>('gateOut', [id, input]);
+  }
+  siteDutyLog(siteId: string, days?: number) {
+    return this.read((s, u) => s.siteDutyLog(u, siteId, days));
   }
   requestTrip(input: { date: string; destination: string; purpose: string; forPersonId?: string }) {
     return this.write<unknown>('requestTrip', [input]);

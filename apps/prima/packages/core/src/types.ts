@@ -249,6 +249,11 @@ export interface Site {
   patrolIntervalMin?: number | null;
   /** Why the interval differs, e.g. the client's letter or request. */
   patrolIntervalNote?: string | null;
+  /**
+   * Visitor and vehicle check-in and check-out on the shared device (Fauzan, 6 Nov 2026). The OM turns it off where the
+   * site has its own desktop system for this. Missing means on.
+   */
+  gateLog?: { on: boolean; by: string; at: IsoDateTime; reason: string } | null;
   /** Government sites escalate to the Operations General Manager, private sites to the Operations Director. Missing means private. */
   sector?: 'government' | 'private';
   /**
@@ -270,6 +275,36 @@ export interface Post {
 /** 'office' is company staff other than guards and officers: managers, admin executives (Fauzan, 25 Oct 2026). */
 export type PersonRole = 'guard' | 'supervisor' | 'patrol_officer' | 'office';
 export type PersonStatus = 'active' | 'suspended' | 'left';
+
+/** Where wages go (Fauzan, 6 Nov 2026): a bank account or an e-wallet, never cash. */
+export interface PayAccount {
+  /** The bank, or the e-wallet provider. */
+  bank: string;
+  accountMasked: string;
+  /** Missing means a bank account. */
+  kind?: 'bank' | 'ewallet';
+  /** Whose account it is. Missing means the worker's own. */
+  holder?: 'own' | 'joint' | 'relative' | 'friend';
+  /** For a relative's or friend's account: the account holder's name and how they are related. */
+  holderName?: string | null;
+  relationship?: string | null;
+  /**
+   * The worker's written consent letter to pay into someone else's account, recorded by HR from the signed letter
+   * (Fauzan, 6 Nov 2026: "Consent letter must be approve by coo. The letter must have notory stamp by pesuruhjaya
+   * sumpah"). The account is used only once the COO has approved the letter.
+   */
+  consent?: {
+    docRef: string;
+    signedOn: IsoDate;
+    /** The Commissioner for Oaths (Pesuruhjaya Sumpah) who stamped the letter, the stamp number and the date stamped. */
+    oaths: { commissioner: string; stampRef: string; stampedOn: IsoDate };
+    recordedBy: string;
+    recordedById: Id;
+    recordedAt: IsoDateTime;
+    /** The COO's approval of the letter, with a reason. Null until approved. */
+    approved: { by: string; byId: Id; at: IsoDateTime; note: string } | null;
+  } | null;
+}
 
 export interface Person {
   id: Id;
@@ -325,8 +360,12 @@ export interface Person {
   zakatHistory?: { body: string | null; percent: number | null; by: string; byId: Id; at: IsoDateTime }[];
   /** Driver's written consent to dashcam and health monitoring while driving, filed by the PDPA officer. */
   monitoringConsent?: { docId: Id; by: string; at: IsoDateTime } | null;
-  /** Salary account for staff payroll (test data: masked; full numbers live with Finance and the bank). */
-  bank?: { bank: string; accountMasked: string } | null;
+  /**
+   * Salary account (test data: masked; full numbers live with Finance and the bank). Fauzan, 6 Nov 2026: wages go to a
+   * bank account or an e-wallet only, never cash; an immediate relative's or close friend's account needs the worker's
+   * written consent on file.
+   */
+  bank?: PayAccount | null;
   /**
    * Fixed monthly allowances paid with the staff salary. HR sets them from its allowance list (Fauzan, 3 Nov 2026); a
    * change takes effect only after the HR Director verifies it and the Vice Chairman consents. A line without a typeId was
@@ -726,7 +765,16 @@ export interface EvidencePhoto {
   /** Stamped JPEG as a data URL. Production keeps the file in Malaysian object storage instead. */
   image: string;
   caption: string;
-  source: 'in_app_camera' | 'test_picture';
+  source: 'in_app_camera' | 'test_picture' | 'bodycam';
+  /** The gate entry or post log line this photo belongs to (Fauzan, 6 Nov 2026). */
+  gateEntryId?: Id | null;
+  postLogId?: Id | null;
+  /** A site task this photo proves (Fauzan, 6 Nov 2026). */
+  siteTaskLogId?: Id | null;
+  /** The CMS message this photo answers, when the site device sent it as proof (Fauzan, 6 Nov 2026). */
+  dispatchId?: Id | null;
+  /** The bodycam's serial, when the picture came from a bodycam linked to the site device. */
+  bodycamId?: string | null;
 }
 
 /**
@@ -759,6 +807,10 @@ export interface EvidenceDoc {
   vehicleId?: Id | null;
   /** A product certificate. */
   productId?: Id | null;
+  /** A guard's signed cash receipt on a pay run (Fauzan, 6 Nov 2026). */
+  guardPayRunId?: Id | null;
+  /** A daily cash list's signed receipt, uploaded by the Director Office (Fauzan, 6 Nov 2026). */
+  dailyCashId?: Id | null;
   name: string;
   mime: 'application/pdf' | 'image/jpeg' | 'image/png';
   bytes: number;
@@ -1292,6 +1344,75 @@ export interface FwWelfareCheck {
    * (their signed receipt attached); 'company' = the worker signed consent for company safekeeping.
    */
   custodyAfter?: 'worker' | 'company';
+}
+
+// ---------- Foreign worker recruitment steps (Fauzan, 6 Nov 2026, IWAY answer 7) ----------
+
+/**
+ * The steps FWM records for each foreign worker recruited, before the worker travels: the agency's licence, the
+ * embassy's confirmation, the interview, the age check from the passport (18 to 60) and the contract signed in English
+ * and Malay. Zero recruitment fees is confirmed after arrival by the arrival fee check (FwWelfareCheck ARRIVAL_FEE).
+ */
+export type FwRecruitStep = 'AGENCY_LICENCE' | 'EMBASSY' | 'INTERVIEW' | 'AGE' | 'CONTRACT';
+
+/** Contract languages. English and Malay are a must; the worker's mother tongue may be added (Fauzan, 6 Nov 2026). */
+export type FwContractLanguage = 'en' | 'ms' | 'ne' | 'bn' | 'my' | 'id' | 'other';
+
+export interface FwRecruitStepRecord {
+  step: FwRecruitStep;
+  /** Date of the step: licence checked, embassy confirmed, interview held, passport seen, contract signed. */
+  on: IsoDate;
+  /** False only for an interview the candidate did not pass or an age outside 18 to 60; the file then stops. */
+  passed: boolean;
+  /** Agency licence: the licence number and its expiry. */
+  licenceNo?: string;
+  licenceExpiresOn?: IsoDate;
+  /** Embassy confirmation: the reference on the embassy's letter or approval. */
+  reference?: string;
+  /** Interview: who interviewed. */
+  interviewer?: string;
+  /** Age check: the date of birth as printed on the passport, and the age it gives on the planned travel date. */
+  dob?: IsoDate;
+  age?: number;
+  /** Contract: the languages of the signed contract. */
+  languages?: FwContractLanguage[];
+  note: string;
+  docIds: Id[];
+  by: string;
+  byId: Id;
+  at: IsoDateTime;
+}
+
+export interface FwRecruitFile {
+  id: Id;
+  /** The company that will hold the worker's permit. */
+  companyId: Id;
+  candidateName: string;
+  /** Last 4 characters only, the same as the permit board (never the full passport number). */
+  passportLast4: string;
+  /** Country of origin, ISO 3166 alpha-2 (Nepal = NP). */
+  country: string;
+  agency: string;
+  /** Planned travel date: the age check counts to it and the contract must be signed on or before it. */
+  plannedTravelOn: IsoDate | null;
+  steps: Partial<Record<FwRecruitStep, FwRecruitStepRecord>>;
+  /** Earlier versions of a step, kept when a step is recorded again with a reason. Never deleted. */
+  history: (FwRecruitStepRecord & { replacedAt: IsoDateTime; replacedBy: string; reason: string })[];
+  /** open: steps in progress. cleared: all five pre-travel steps done, cleared to travel by the FWM Manager or Deputy.
+   *  arrived: the worker is in Malaysia and linked to a staff record. stopped: not going ahead, with the reason. */
+  status: 'open' | 'cleared' | 'arrived' | 'stopped';
+  clearedBy: string | null;
+  clearedById: Id | null;
+  clearedAt: IsoDateTime | null;
+  arrivedOn: IsoDate | null;
+  /** The staff record created for the worker on arrival. */
+  personId: Id | null;
+  stopReason: string | null;
+  stoppedBy: string | null;
+  stoppedAt: IsoDateTime | null;
+  by: string;
+  byId: Id;
+  at: IsoDateTime;
 }
 
 // ---------- Staff clock (Fauzan, 26 Oct 2026) ----------
@@ -2161,7 +2282,8 @@ export interface SiteSystem {
   id: Id;
   companyId: Id;
   siteId: Id;
-  kind: 'CCTV' | 'ALARM_PANEL';
+  /** BODYCAM: a body camera paired to the site's shared device (Fauzan, 6 Nov 2026); the bridge is a mock until a brand is chosen. */
+  kind: 'CCTV' | 'ALARM_PANEL' | 'BODYCAM';
   name: string;
   /** False until the link to CMS has been set up and tested at the site (V13: LIVE only once tested). */
   linked: boolean;
@@ -2181,7 +2303,7 @@ export interface SiteAlarm {
   id: Id;
   companyId: Id;
   siteId: Id;
-  kind: 'GUARD_SOS' | 'PANIC' | 'INTRUSION' | 'FIRE' | 'CAMERA_TAMPER' | 'LINK_LOST' | 'CMS_EVENT';
+  kind: 'GUARD_SOS' | 'PANIC' | 'INTRUSION' | 'FIRE' | 'CAMERA_TAMPER' | 'LINK_LOST' | 'CMS_EVENT' | 'AI_CCTV' | 'AI_SENSOR' | 'VEHICLE_WATCH';
   /** From the CMS Command Centre app (slice 4E): its event kind, its event id (so a resent event never counts twice) and its summary. */
   cmsKind?: string | null;
   cmsEventId?: string | null;
@@ -2190,6 +2312,11 @@ export interface SiteAlarm {
   summary?: string | null;
   source: string;
   at: IsoDateTime;
+  /**
+   * What an analytics system says it saw (Fauzan, 6 Nov 2026). Never verified by itself: a person checks it, usually by
+   * sending the site device to take a photo or video. Only the label, place and score are kept, never the clip.
+   */
+  detection?: AnalyticsDetection | null;
   status: 'new' | 'acknowledged' | 'closed';
   ackAt: IsoDateTime | null;
   ackBy: string | null;
@@ -2201,6 +2328,278 @@ export interface SiteAlarm {
   /** Head Control, a second person, reviews every false alarm (insider abuse audit, 27 Oct 2026). */
   falseReview?: { by: string; at: IsoDateTime; agree: boolean; note: string } | null;
 }
+
+/** An analytics event from site CCTV or a sensor, as the analytics system reports it. Unverified until a person checks. */
+export interface AnalyticsDetection {
+  system: 'cctv' | 'sensor';
+  /** Camera or sensor name at the site, e.g. "CAM-07 rear fence" or "PIR zone 4". */
+  device: string;
+  /** What the analytics says it saw, e.g. "Person climbing fence". */
+  label: string;
+  /** The analytics' own score from 0 to 1. A score is not proof. */
+  confidence: number;
+  /** Always false here: the analytics' claim is never treated as verified evidence. */
+  verified: false;
+}
+
+export type DispatchLevel = 'instruction' | 'alert' | 'urgent';
+export type DispatchProof = 'none' | 'photo' | 'video' | 'photo_or_video';
+export type DispatchStatus = 'sent' | 'received' | 'acknowledged' | 'proof_sent' | 'closed' | 'cancelled';
+export type DispatchOutcome = 'real' | 'nothing_found' | 'done' | 'cancelled';
+
+/**
+ * A message from CMS to a site's shared device (Fauzan, 6 Nov 2026): an instruction, an alert or an urgent alert,
+ * often after AI analytics on CCTV or a sensor pin-points something. The guard on duty acknowledges with staff
+ * number and PIN, then verifies with a time- and GPS-stamped photo or video from the device or a linked bodycam.
+ * CMS monitors and tells; a real event opens the company's own case and the company decides the response.
+ */
+export interface SiteDispatch {
+  id: Id;
+  ref: string;
+  companyId: Id;
+  siteId: Id;
+  level: DispatchLevel;
+  title: string;
+  message: string;
+  proof: DispatchProof;
+  /** The alarm or analytics event this message follows up, if any. */
+  alarmId: Id | null;
+  origin: 'cms_operator' | 'ai_cctv' | 'ai_sensor' | 'alarm';
+  sentBy: string;
+  sentAt: IsoDateTime;
+  /** First time the site device showed it (server time). */
+  receivedAt: IsoDateTime | null;
+  ack: { at: IsoDateTime; personId: Id; staffNo: string; name: string; onDuty: boolean } | null;
+  photoIds: Id[];
+  videoIds: Id[];
+  /** The guard's short report of what they found. */
+  reply: string | null;
+  replyAt: IsoDateTime | null;
+  status: DispatchStatus;
+  closed: { at: IsoDateTime; by: string; outcome: DispatchOutcome; note: string; caseId: Id | null } | null;
+}
+
+/**
+ * A short video taken on the site device or a bodycam linked to it, as proof for a CMS message (Fauzan, 6 Nov 2026).
+ * Same checks as a photo: server time is trusted, GPS against the site geofence, SHA-256 of the file. Video records
+ * people's faces and voices, so it is personal data under PDPA: limited viewers and a keep period (rule CMS-DISPATCH).
+ */
+export interface EvidenceVideo {
+  id: Id;
+  companyId: Id;
+  siteId: Id;
+  dispatchId: Id;
+  caseId: Id | null;
+  takenBy: string;
+  capturedAt: IsoDateTime;
+  receivedAt: IsoDateTime;
+  lat: number;
+  lng: number;
+  accuracyM: number | null;
+  distanceM: number;
+  place: EvidencePlace;
+  time: EvidenceTime;
+  sha256: string;
+  bytes: number;
+  /** Length the device reports; not checked by the server. */
+  durationSec: number;
+  mime: 'video/webm' | 'video/mp4';
+  /** The clip as a data URL. Production keeps the file in object storage with the same keep period. */
+  video: string;
+  caption: string;
+  source: 'device_camera' | 'bodycam' | 'test_clip';
+  bodycamId: string | null;
+  /** Date after which the clip is deleted unless a case or claim needs it (proposed, PDPA). */
+  keepUntil: IsoDate;
+}
+
+export type PostLogKind = 'routine' | 'handover' | 'observation' | 'incident_note' | 'instruction' | 'other';
+
+/**
+ * The post log (occurrence book) kept on the site's shared device (Fauzan, 6 Nov 2026). Each line is signed by the guard
+ * with staff number and PIN and stamped with the server's time. Lines are never edited; a mistake is put right with a
+ * new line that refers to the old one.
+ */
+export interface PostLogEntry {
+  id: Id;
+  companyId: Id;
+  siteId: Id;
+  at: IsoDateTime;
+  personId: Id;
+  staffNo: string;
+  name: string;
+  kind: PostLogKind;
+  text: string;
+  /** A line this one corrects. */
+  correctsId: Id | null;
+  photoIds: Id[];
+  /** Server receive time; differs from "at" when the device was offline. */
+  receivedAt?: IsoDateTime;
+  clientRef?: string;
+}
+
+/** A vehicle the site knows: allowed in, or on watch (refused and CMS told). Kept by the company, or from the vehicle system. */
+export interface SiteVehicle {
+  id: Id;
+  companyId: Id;
+  siteId: Id;
+  /** Plate in capitals without spaces, e.g. WXY1234. */
+  plate: string;
+  label: string;
+  status: 'allowed' | 'watch';
+  source: 'company' | 'vehicle_system_mock';
+}
+
+export type VisitorIdKind = 'mykad' | 'mykas' | 'passport' | 'driving_licence' | 'other';
+
+/**
+ * Personal data sealed on the site device for the in-house server only (Fauzan, 6 Nov 2026: police need the full
+ * details of people coming in and out, kept 2 to 7 years, and the data goes to the in-house server). The device
+ * encrypts with the in-house server's public key (RSA-OAEP-256 wraps a one-time AES-256-GCM key). Prima keeps and
+ * forwards the sealed bundle but cannot open it: only the in-house server holds the private key.
+ */
+export interface SealedBundle {
+  alg: 'RSA-OAEP-256+A256GCM';
+  /** Which in-house key it was sealed for. */
+  keyId: string;
+  wrappedKey: string;
+  iv: string;
+  ciphertext: string;
+  /** SHA-256 of the plain bundle, made on the device, so the in-house server can check it opened the same thing. */
+  plainSha256: string;
+  /** What is inside, for the record only: e.g. ["id_number", "id_photo"] or ["paper_pages"]. */
+  contents: string[];
+}
+
+/**
+ * One visitor or vehicle at the site gate, recorded on the shared device (Fauzan, 6 Nov 2026), or a page of the site's
+ * own written in/out book photographed by the guard. The full identity number, the IC picture and book pages travel
+ * only inside the sealed bundle to the in-house server; Prima shows the name, the last 4 characters and the checks.
+ * Kept 2 to 7 years, as the police require (rule SITE-GATE). Entries made with no internet carry the device's time and
+ * the server's receive time.
+ */
+// ---------- Client needs and site tasks (Fauzan, 6 Nov 2026) ----------
+
+/** A level of concern the OM records for one topic discussed with the client. */
+export type NeedConcern = 'none' | 'low' | 'medium' | 'high';
+
+/**
+ * One discussion between the OM and the client about what the site needs. Each discussion is saved as a new record,
+ * never changed, so the history of what the client asked for is kept.
+ */
+export interface SiteNeedsReview {
+  id: Id;
+  companyId: Id;
+  siteId: Id;
+  at: IsoDateTime;
+  by: { userId: Id; name: string };
+  /** Who the OM spoke to at the client: role and name as the client gives it. */
+  clientContact: string;
+  answers: Record<string, { answer: string; concern: NeedConcern }>;
+  /** What was agreed with the client, in plain words. */
+  agreed: string;
+}
+
+/** Who a site task is for. A higher rank may also do a lower rank's task. */
+export type SiteTaskFor = 'guard' | 'officer' | 'patrol_officer';
+
+/** A piece of work the OM sets for a site, shown on the site's shared device on the days it is due. */
+export interface SiteTask {
+  id: Id;
+  ref: string;
+  companyId: Id;
+  siteId: Id;
+  title: string;
+  detail: string;
+  forRole: SiteTaskFor;
+  /** Days of the week it is due (0 Sunday to 6 Saturday); empty with onDate set means once. */
+  days: number[];
+  onDate: IsoDate | null;
+  /** Do by this time (HH:MM, Malaysia time), or any time that day. */
+  byTime: string | null;
+  proof: 'none' | 'photo';
+  /** The client-needs topic it answers, if any. */
+  needTopic: string | null;
+  from: IsoDate;
+  until: IsoDate | null;
+  status: 'active' | 'stopped';
+  setBy: { userId: Id; name: string };
+  setAt: IsoDateTime;
+  stopped: { at: IsoDateTime; by: string; reason: string } | null;
+}
+
+/** A task done (or not done, with a reason) on a day, signed on the shared device. */
+export interface SiteTaskLog {
+  id: Id;
+  companyId: Id;
+  siteId: Id;
+  taskId: Id;
+  date: IsoDate;
+  at: IsoDateTime;
+  receivedAt: IsoDateTime;
+  result: 'done' | 'not_done';
+  note: string;
+  personId: Id;
+  staffNo: string;
+  name: string;
+  photoIds: Id[];
+  late: boolean;
+}
+
+export interface GateEntry {
+  id: Id;
+  ref: string;
+  companyId: Id;
+  siteId: Id;
+  kind: 'visitor' | 'vehicle' | 'paper_log';
+  /** Time on the device when it was recorded (the device may have been offline). */
+  inAt: IsoDateTime;
+  /** Time the server received it; the trusted time. */
+  receivedAt: IsoDateTime;
+  outAt: IsoDateTime | null;
+  /** The device's own reference, so an entry sent twice after a lost signal is saved once. */
+  clientRef: string;
+  visitor: {
+    name: string;
+    idKind: VisitorIdKind;
+    /** Shown on screens. The full number is in the sealed bundle for the in-house server. */
+    idLast4: string;
+    /** How the identity was read: from a photo of the card, a card reader, or typed by the guard. */
+    idRead: 'photo' | 'scan' | 'typed';
+    company: string;
+    host: string;
+    purpose: string;
+    /** Face against the photo on the identity document: matched, did not match, or not checked. */
+    faceCheck: 'match' | 'no_match' | 'not_checked';
+  } | null;
+  vehicle: {
+    plate: string;
+    plateRead: 'photo' | 'scan' | 'typed';
+    /** Against the site vehicle list. */
+    listed: 'allowed' | 'watch' | 'unknown';
+  } | null;
+  /** A page of the site's written in/out book: the date it covers and how many lines it holds. */
+  paper: { coversDate: IsoDate; lines: number; note: string } | null;
+  photoIds: Id[];
+  sealed: SealedBundle | null;
+  /** Hand-over to the in-house server. Queued until that server confirms it holds the bundle. */
+  inhouse: { status: 'queued' | 'delivered' | 'nothing_sealed'; at: IsoDateTime | null };
+  inBy: { personId: Id; staffNo: string; name: string };
+  outBy: { personId: Id; staffNo: string; name: string } | null;
+  /** Problems the guard and the company should see. */
+  flags: GateFlag[];
+  keepUntil: IsoDate;
+}
+
+export type GateFlag =
+  | 'FACE_NOT_MATCHED'
+  | 'FACE_NOT_CHECKED'
+  | 'ID_TYPED'
+  | 'FULL_ID_NOT_SEALED'
+  | 'PLATE_ON_WATCH'
+  | 'PLATE_UNKNOWN'
+  | 'PLATE_TYPED'
+  | 'SENT_LATER';
 
 /** A call to a company extension, from the phone system's call records. */
 export interface PhoneCall {
@@ -2283,6 +2682,8 @@ export interface SalesLead {
   nextAction: { on: IsoDate; what: string } | null;
   notes: { at: IsoDateTime; by: string; text: string }[];
   closed: { on: IsoDate; by: string; reason: string } | null;
+  /** The client account opened from this won lead (Client CRM). */
+  clientAccountId?: Id | null;
 }
 
 /**
@@ -2291,7 +2692,18 @@ export interface SalesLead {
  */
 export type UserRole = 'director' | 'pwvsb_officer' | 'company_manager' | 'admin_exec' | 'supervisor' | 'site_device' | 'guard';
 
+/** Immutable enrollment identity. Re-enrollment must issue a new enrollmentId; never reuse it. */
+export interface DutyOfflineContext {
+  accountId: string;
+  companyId: string;
+  siteId: string;
+  deviceId: string;
+  enrollmentId: string;
+}
+
 export interface User {
+  /** Offline stays disabled unless an authorized enrollment flow supplies both immutable identifiers. */
+  dutyEnrollment?: { deviceId: string; enrollmentId: string } | null;
   id: Id;
   name: string;
   title: string;
@@ -2396,7 +2808,7 @@ export interface User {
    */
   monthlySalary?: number;
   /** A system sign-in for a connected app (the JA Group app feed), never a person; it cannot sign in to screens. */
-  integration?: 'ja' | 'door' | 'planner' | 'cms' | 'tracker' | 'am' | 'whatsapp';
+  integration?: 'ja' | 'door' | 'planner' | 'cms' | 'tracker' | 'am' | 'whatsapp' | 'analytics' | 'inhouse';
   /** For a far-branch manager (Fauzan, 27 Oct 2026): the branch they run. */
   branchId?: Id;
 
@@ -2534,6 +2946,19 @@ export interface Dataset {
   itMetricTargets:{id:string;target:MetricTarget}[];
   itMetricCalendars:{id:string;calendar:MetricCalendar}[];
   arishaDrafts: import('./arisha-policy').ArishaReviewDraft[];
+  /** One item register for the whole group (Fauzan, 6 Nov 2026; Fitri's paper v1.0): catalogue, units, stock, movements, cases, counts, SQL outbox. */
+  itemSkus: import('./items').ItemSku[];
+  physicalItems: import('./items').PhysicalItem[];
+  itemLots: import('./items').ItemLot[];
+  itemEvents: import('./items').ItemEvent[];
+  itemMovements: import('./items').ItemMovement[];
+  itemCases: import('./items').ItemCase[];
+  itemCounts: import('./items').ItemCount[];
+  itemSyncJobs: import('./items').ItemSyncJob[];
+  itemRequests: import('./items').ItemRequest[];
+  itemSettings: import('./items').ItemSettings[];
+  uniformRecords: import('./items').UniformRecord[];
+  itemDocs: import('./items').ItemDoc[];
   itImportReviews: import('./it-import-review').ItImportReview[];
   companies: Company[];
   branches: Branch[];
@@ -2561,6 +2986,14 @@ export interface Dataset {
   phoneCalls: PhoneCall[];
   siteSystems: SiteSystem[];
   siteAlarms: SiteAlarm[];
+  siteDispatches: SiteDispatch[];
+  postLogs: PostLogEntry[];
+  siteVehicles: SiteVehicle[];
+  gateEntries: GateEntry[];
+  siteNeedsReviews: SiteNeedsReview[];
+  siteTasks: SiteTask[];
+  siteTaskLogs: SiteTaskLog[];
+  evidenceVideos: EvidenceVideo[];
   attendanceFollowUps: AttendanceFollowUp[];
   evidencePhotos: EvidencePhoto[];
   evidenceDocs: EvidenceDoc[];
@@ -2600,6 +3033,7 @@ export interface Dataset {
   fwRenewals: FwRenewal[];
   fwmTasks: FwmTask[];
   fwWelfareChecks: FwWelfareCheck[];
+  fwRecruitFiles: FwRecruitFile[];
   locationPings: LocationPing[];
   hostels: Hostel[];
   hostelStays: HostelStay[];
@@ -2624,6 +3058,8 @@ export interface Dataset {
   allowanceTypes: AllowanceType[];
   flexRequests: FlexRequest[];
   vacancies: Vacancy[];
+  /** People who applied for a vacancy (behind the 'applicants' wall: HR, the HR Director, the CEO). */
+  applicants: Applicant[];
   staffMovements: StaffMovement[];
   loginHandovers: LoginHandover[];
   hrFilings: HrFiling[];
@@ -2658,6 +3094,19 @@ export interface Dataset {
   itJobs: ItJob[];
   itCodeHolders: ItCodeHolder[];
   itSettings: ItSettings[];
+  /** Pay formulas and where each is used, set by ACT (Fauzan, 5 Nov 2026). */
+  payFormulas: import("./pay-formulas").PayFormula[];
+  payFormulaUses: import("./pay-formulas").PayFormulaUse[];
+  siteHoursApprovals: import("./site-hours").SiteHoursApproval[];
+  publicHolidayLists: import("./public-holidays").PublicHolidayList[];
+  /** Prima's own guard pay runs (Fauzan, 5 Nov 2026). */
+  guardPayRuns: import("./guard-pay").GuardPayRun[];
+  /** Wage advances set by the OM and approved by the OD or OGM (Fauzan, 6 Nov 2026). */
+  guardPayAdvances: import("./guard-pay").GuardPayAdvance[];
+  guardLoans: import("./guard-pay").GuardLoan[];
+  /** Statutory rates and new contribution types the CEO sets by month (Fauzan, 6 Nov 2026). */
+  statutoryVersions: import("./statutory").StatutoryVersion[];
+  payLawVersions: import("./pay-formulas").PayLawVersion[];
   itManualReceipts: ItManualReceipt[];
   itRentalBills: ItRentalBill[];
   itRentalCorrectionRequests: RentalCorrectionRequest[];
@@ -3140,7 +3589,81 @@ export interface ClientAccount {
   invoicePortal?: string | null;
   /** Billing as last recorded from the accounts (SQL Account is the record; not connected yet). */
   billing: { asOf: IsoDate; invoicedTo: string | null; overdueAmount: number; overdueDays: number; by: string } | null;
+  // ----- Client CRM (Fauzan, 4 Nov 2026: "We want complete"). All optional, so older records stay valid. -----
+  /** The person in charge of this client in Operations (an OM, the Operations Director or an officer). */
+  owner?: { name: string; userId: Id | null; since: IsoDate; by: string } | null;
+  /** Where the client came from: a won sales lead, a won tender, or opened directly. */
+  origin?: { kind: 'lead' | 'tender' | 'direct'; id: Id | null; ref: string | null } | null;
+  /** Business contacts at the client: who decides, who is on site, who pays. Work details only, no IC or home address. */
+  people?: ClientPerson[];
+  /** What the client asked us to change: more or fewer guards, a temporary post, a schedule change. */
+  requests?: ClientRequest[];
+  /** The renewal now being worked, opened from 90 days before the contract ends (proposed). */
+  renewal?: ClientRenewal | null;
+  /** Renewals finished before, newest last. */
+  renewals?: ClientRenewal[];
+  /** Why the client left, in one of a few groups, so the group can see why clients are lost. */
+  lostReason?: ClientLostReason | null;
+  /** A date to approach a lost client again, if worth it. */
+  winBackOn?: IsoDate | null;
 }
+
+export type ClientPersonRole = 'decision' | 'site' | 'finance' | 'procurement' | 'other';
+
+export interface ClientPerson {
+  id: Id;
+  name: string;
+  position: string;
+  role: ClientPersonRole;
+  phone: string;
+  email: string;
+  /** The main contact for the client. */
+  main: boolean;
+  addedBy: string;
+  addedAt: IsoDateTime;
+  /** Left the client or no longer the contact; kept for history. */
+  removedAt: IsoDateTime | null;
+  removedBy: string | null;
+}
+
+export type ClientRequestKind = 'more_guards' | 'fewer_guards' | 'temporary' | 'schedule' | 'other';
+
+export interface ClientRequest {
+  id: Id;
+  kind: ClientRequestKind;
+  what: string;
+  /** The person at the client who asked. */
+  from: string;
+  at: IsoDateTime;
+  by: string;
+  /** When the client needs it by. */
+  neededBy: IsoDate | null;
+  status: 'open' | 'done' | 'declined';
+  closedAt: IsoDateTime | null;
+  closedBy: string | null;
+  outcome: string | null;
+  /** More or fewer guards changes the contract: the signed variation's reference. */
+  variationRef: string | null;
+}
+
+export type ClientRenewalDecision = 'renew' | 'renew_new_price' | 'rebid' | 'let_go';
+export type ClientRenewalAnswer = 'accepted' | 'declined' | 'tender_called';
+
+export interface ClientRenewal {
+  id: Id;
+  /** The contract end date this renewal is for. */
+  endsOn: IsoDate;
+  openedAt: IsoDateTime;
+  /** The company manager decides whether to renew, on what price, or let it go. */
+  decision: { choice: ClientRenewalDecision; pricePct: number; reason: string; by: string; at: IsoDateTime } | null;
+  /** The renewal offer sent to the client, with proof. */
+  proposal: { at: IsoDateTime; by: string; docId: Id } | null;
+  /** The client's answer. Accepted needs the signed renewal and the new end date. */
+  answer: { choice: ClientRenewalAnswer; at: IsoDateTime; by: string; note: string; newEndsOn: IsoDate | null; docId: Id | null } | null;
+  closedAt: IsoDateTime | null;
+}
+
+export type ClientLostReason = 'price' | 'service' | 'tender_lost' | 'in_house' | 'client_closed' | 'not_renewed_by_us' | 'other';
 
 /**
  * Group products sold or rented to clients (Fauzan, 26 Oct 2026): the PDPA officer keeps each product's personal data
@@ -3320,6 +3843,8 @@ export interface StaffPayLine {
   eisEe: number;
   eisEr: number;
   hrd: number;
+  /** New contribution types the CEO added (Fauzan, 6 Nov 2026). */
+  others?: { code: string; name: string; payee: string; ee: number; er: number }[];
   pcb: number;
   pcbSource: 'estimate' | 'entered';
   /** Zakat the staff member chose to have deducted (2 Nov 2026); PCB is reduced by it. Missing on older runs = none. */
@@ -4429,6 +4954,8 @@ export interface FinPlan {
     authorIds?: Id[];
     /** Which of the two approvers (FD, CEO) drafted or sent it; both never do, or nobody could approve it. */
     leadAuthors?: ('director' | 'ceo')[];
+    /** Edit number: moves on with every change; each step names the one it was shown (stale screens, 4 Nov 2026). */
+    seq?: number;
     submitted?: FinSign | null;
     prepared: FinSign | null;
     approved: FinSign | null;
@@ -6341,6 +6868,89 @@ export interface Vacancy {
   ceo: { by: string; byId: Id; at: IsoDateTime; note: string; approve: boolean } | null;
   head: { by: string; byId: Id; at: IsoDateTime; note: string } | null;
   closed: { by: string; byId: Id; at: IsoDateTime; note: string } | null;
+  /** Guard, officer or office staff post (audit decision 6, 5 Nov 2026); older rows are staff. */
+  category?: 'guard' | 'officer' | 'staff';
+  /** The state the guard or patrolling officer post is in; the Operations Manager covering it approves the post. */
+  state?: string | null;
+  /** The job advert for social media, once the vacancy is open (rule HR-JOB-ADVERT). */
+  advert?: VacancyAdvert | null;
+}
+
+/**
+ * Someone who applied for a vacancy (Fauzan, 5 Nov 2026: build the applicant list; HR only). Kept to what hiring needs:
+ * name and one way to reach them. No IC number, CV file or photo is stored here.
+ */
+export interface Applicant {
+  id: Id;
+  vacancyId: Id;
+  /** The vacancy's employer; 'pwvsb' for central posts. */
+  companyId: Id;
+  name: string;
+  phone: string;
+  email: string;
+  /** Where they saw the post. */
+  source: 'facebook' | 'instagram' | 'linkedin' | 'tiktok' | 'jobstreet' | 'walk_in' | 'referral' | 'other';
+  appliedOn: IsoDate;
+  status: 'new' | 'shortlisted' | 'interview' | 'offered' | 'hired' | 'rejected' | 'withdrawn';
+  interviewAt: IsoDateTime | null;
+  addedBy: string;
+  addedById: Id;
+  addedAt: IsoDateTime;
+  history: { at: IsoDateTime; by: string; byId: Id; status: Applicant['status']; note: string }[];
+}
+
+/** One entry in a job advert's history. */
+export interface VacancyAdvertEvent {
+  at: IsoDateTime;
+  by: string;
+  byId: Id;
+  action: 'draft' | 'edit' | 'submit' | 'approve' | 'return' | 'record_posted' | 'withdraw';
+  version: number;
+  note: string;
+}
+
+/**
+ * A job advert (rule HR-JOB-ADVERT): drafted, checked by a person, approved by someone other than the writer of the
+ * current wording, then held because social publishing is switched off. HR may record a post made by hand.
+ */
+export interface VacancyAdvert {
+  version: number;
+  text: string;
+  /** Where the current wording came from: Prima's template, an AI model (unverified), or a person's edit. */
+  origin: 'template' | 'ai' | 'edited';
+  channels: ('facebook' | 'instagram' | 'linkedin' | 'tiktok' | 'jobstreet')[];
+  applyHow: string;
+  closingDate: IsoDate | null;
+  hash: string;
+  writtenBy: string;
+  writtenById: Id;
+  writtenAt: IsoDateTime;
+  /** Everyone who saved a version since the last approval; none of them may approve it. */
+  writers?: Id[];
+  status: 'draft' | 'waiting_approval' | 'approved' | 'withdrawn';
+  approved: { by: string; byId: Id; at: IsoDateTime; note: string; version: number; hash: string } | null;
+  /**
+   * Automatic posting (Fauzan, 5 Nov 2026: an approved post goes out by itself once the account is connected). One
+   * entry per chosen channel, made on approval. 'waiting_connection' until that channel is connected and checked;
+   * only a connected publisher may set 'posted', with the link the channel returns.
+   */
+  outbox?: { channel: VacancyAdvert['channels'][number]; status: 'waiting_connection' | 'posted' | 'failed'; version: number; hash: string; at: IsoDateTime; link: string | null }[];
+  /** Posts HR says it made by hand; Prima has not checked them. */
+  manualPosts: {
+    /** A connected-type channel (with its link), or a place with no link (Fauzan, 5 Nov 2026). */
+    channel: VacancyAdvert['channels'][number] | 'whatsapp' | 'notice_board' | 'other_place';
+    /** The https link on that channel; null for a place with no link. */
+    link: string | null;
+    /** For a place with no link: where HR posted it (group or board name). */
+    where?: string;
+    /** A photo of the posting, once file storage is switched on (draft PR #75); null until then. */
+    photo?: null;
+    by: string;
+    byId: Id;
+    at: IsoDateTime;
+    version: number;
+  }[];
+  history: VacancyAdvertEvent[];
 }
 
 /** One approval step on a staff movement. */

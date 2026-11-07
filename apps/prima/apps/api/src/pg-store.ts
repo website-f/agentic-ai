@@ -7,6 +7,7 @@ import { randomUUID } from 'node:crypto';
 import { hrItProblems } from './hr-it-readiness';
 import { itOperationsProblems } from './it-operations-readiness';
 import { itManualProblems } from './it-manual-readiness';
+import { ITEM_TABLE_NAMES, itemRegisterInstalled, itemRegisterProblems } from './item-register-readiness';
 import { GENESIS_HASH, RefusedAfterSave, chainEntry, type AuditBody, type AuditEntry, type Filter, type Id, type Range, type Row, type Store, type TableName, type ItTicket } from '@prima/core';
 import type { PoolClient } from 'pg';
 
@@ -16,6 +17,18 @@ export const TABLE: Record<TableName, string> = {
   itMetricTargets:'prima.it_metric_targets',
   itMetricCalendars:'prima.it_metric_calendars',
   arishaDrafts: 'prima.arisha_drafts',
+  itemSkus: 'prima.item_skus',
+  physicalItems: 'prima.item_units',
+  itemLots: 'prima.item_lots',
+  itemEvents: 'prima.item_events',
+  itemMovements: 'prima.item_movements',
+  itemCases: 'prima.item_cases',
+  itemCounts: 'prima.item_counts',
+  itemSyncJobs: 'prima.item_sync_jobs',
+  itemRequests: 'prima.item_requests',
+  itemSettings: 'prima.item_settings',
+  itemDocs: 'prima.item_docs',
+  uniformRecords: 'prima.item_uniform_records',
   itImportReviews: 'prima.it_import_reviews',
   companies: 'prima.companies',
   branches: 'prima.branches',
@@ -58,6 +71,14 @@ export const TABLE: Record<TableName, string> = {
   phoneCalls: 'prima.phone_calls',
   siteSystems: 'prima.site_systems',
   siteAlarms: 'prima.site_alarms',
+  siteDispatches: 'prima.site_dispatches',
+  postLogs: 'prima.post_logs',
+  siteVehicles: 'prima.site_vehicles',
+  gateEntries: 'prima.gate_entries',
+  siteNeedsReviews: 'prima.site_needs_reviews',
+  siteTasks: 'prima.site_tasks',
+  siteTaskLogs: 'prima.site_task_logs',
+  evidenceVideos: 'prima.evidence_videos',
   attendanceFollowUps: 'prima.attendance_followups',
   evidencePhotos: 'prima.evidence_photos',
   evidenceDocs: 'prima.evidence_docs',
@@ -66,6 +87,7 @@ export const TABLE: Record<TableName, string> = {
   fwRenewals: 'prima.fw_renewals',
   fwmTasks: 'prima.fwm_tasks',
   fwWelfareChecks: 'prima.fw_welfare_checks',
+  fwRecruitFiles: 'prima.fw_recruit_files',
   hostels: 'prima.hostels',
   hostelStays: 'prima.hostel_stays',
   hostelBills: 'prima.hostel_bills',
@@ -136,6 +158,15 @@ export const TABLE: Record<TableName, string> = {
   itAccessRequests: 'prima.it_access_requests',
   itCodeHolders: 'prima.it_code_holders',
   itSettings: 'prima.it_settings',
+  payFormulas: 'prima.pay_formulas',
+  payFormulaUses: 'prima.pay_formula_uses',
+  siteHoursApprovals: 'prima.site_hours_approvals',
+  publicHolidayLists: 'prima.public_holiday_lists',
+  guardPayRuns: 'prima.guard_pay_runs',
+  guardPayAdvances: 'prima.guard_pay_advances',
+  guardLoans: 'prima.guard_loans',
+  statutoryVersions: 'prima.statutory_versions',
+  payLawVersions: 'prima.pay_law_versions',
   itManualReceipts: 'prima.it_manual_receipts',
   claimRates: 'prima.claim_rates',
   memos: 'prima.memos',
@@ -161,6 +192,7 @@ export const TABLE: Record<TableName, string> = {
   loginHandovers: 'prima.login_handovers',
   hrFilings: 'prima.hr_filings',
   hrCases: 'prima.hr_cases',
+  applicants: 'prima.applicants',
   officeOsh: 'prima.office_osh',
   staffTraining: 'prima.staff_training',
   staffAppraisals: 'prima.staff_appraisals',
@@ -225,6 +257,11 @@ const HAS_COMPANY_COLUMN = new Set<TableName>([
   'legalHolds',
   'legalHoldVersions',
   'companyDesks',
+  'siteHoursApprovals',
+  'publicHolidayLists',
+  'guardPayRuns',
+  'guardPayAdvances',
+  'guardLoans',
   'payChanges',
   'creditLoans',
   'creditDefaults',
@@ -251,6 +288,7 @@ const HAS_COMPANY_COLUMN = new Set<TableName>([
   'fwRenewals',
   'fwmTasks',
   'fwWelfareChecks',
+  'fwRecruitFiles',
   'hostels',
   'hostelStays',
   'hostelBills',
@@ -264,6 +302,7 @@ const HAS_COMPANY_COLUMN = new Set<TableName>([
   'remoteDays',
   'flexRequests',
   'vacancies',
+  'applicants',
   'staffMovements',
   'checkinPlaces',
   'checkinRules',
@@ -312,6 +351,14 @@ const HAS_COMPANY_COLUMN = new Set<TableName>([
   'phoneCalls',
   'siteSystems',
   'siteAlarms',
+  'siteDispatches',
+  'postLogs',
+  'siteVehicles',
+  'gateEntries',
+  'siteNeedsReviews',
+  'siteTasks',
+  'siteTaskLogs',
+  'evidenceVideos',
   'attendanceFollowUps',
   'evidencePhotos',
   'evidenceDocs',
@@ -325,6 +372,10 @@ const HAS_COMPANY_COLUMN = new Set<TableName>([
  * switched to the prima_app role and set app.company_ids, so row-level security applies
  * to every statement here.
  */
+const PAY_FORMULAS_MISSING = 'Pay formulas are not switched on in this database yet (module pay-formulas-v1 not installed).';
+const GUARD_PAY_MISSING = 'The guard pay run is not switched on in this database yet (module guard-pay-v1 not installed).';
+const missingMessage = (table: TableName) => (table === 'guardPayRuns' || table === 'guardPayAdvances' || table === 'guardLoans' || table === 'statutoryVersions' ? GUARD_PAY_MISSING : PAY_FORMULAS_MISSING);
+
 export class PgStore implements Store {
   constructor(private client: PoolClient) {}
 
@@ -342,6 +393,18 @@ export class PgStore implements Store {
       this.runLinksReady = (await this.client.query("SELECT to_regclass('prima.company_run_links') IS NOT NULL AS ok")).rows[0].ok === true;
     return this.runLinksReady;
   }
+  private itemsPresence: Promise<boolean> | null = null;
+  /** Whether the optional item register module (db/modules/item-register-v1.sql) is applied. */
+  private itemsReady(): Promise<boolean> {
+    return (this.itemsPresence ??= (async () => {
+      if (!(await itemRegisterInstalled(this.client))) return false;
+      const problems = await itemRegisterProblems(this.client);
+      if (problems.length) throw new Error('Item register protections need setup: ' + problems.join(' '));
+      return true;
+    })());
+  }
+  private static readonly ITEMS = new Set<TableName>(ITEM_TABLE_NAMES);
+  private static readonly ITEMS_OFF = 'The item register is not installed in this database yet.';
   private cleanupPresence?:Promise<boolean>;
   async itCleanupProblems(){return [...new Set([...(await cleanupSchemaProblems(this.client)),...(await itManualProblems(this.client)),...(await itOperationsProblems(this.client)),...(await procurementProblems(this.client)),...(await rentalCorrectionProblems(this.client))])];}
   private cleanupInstalled(){return this.cleanupPresence??=(async()=>{
@@ -372,10 +435,34 @@ export class PgStore implements Store {
     return r.rows[0]?.present === true;
   }
 
+  private payFormulasPresent: boolean | null = null;
+  /** Whether the optional pay formulas module (db/modules/pay-formulas-v1.sql) is applied in this database. */
+  async payFormulasReady(): Promise<boolean> {
+    if (this.payFormulasPresent === null)
+      this.payFormulasPresent = (await this.client.query("SELECT to_regclass('prima.pay_formulas') IS NOT NULL AND to_regclass('prima.pay_formula_uses') IS NOT NULL AND to_regclass('prima.site_hours_approvals') IS NOT NULL AND to_regclass('prima.public_holiday_lists') IS NOT NULL AND to_regclass('prima.pay_law_versions') IS NOT NULL AS ok")).rows[0].ok === true;
+    return this.payFormulasPresent;
+  }
+  private guardPayPresent: boolean | null = null;
+  /** Whether the optional guard pay module (db/modules/guard-pay-v1.sql) is applied in this database. */
+  async guardPayReady(): Promise<boolean> {
+    if (this.guardPayPresent === null)
+      this.guardPayPresent = (await this.client.query("SELECT to_regclass('prima.guard_pay_runs') IS NOT NULL AND to_regclass('prima.guard_pay_advances') IS NOT NULL AND to_regclass('prima.statutory_versions') IS NOT NULL AND to_regclass('prima.guard_loans') IS NOT NULL AS ok")).rows[0].ok === true;
+    return this.guardPayPresent;
+  }
+  private async payFormulaTable(table: TableName): Promise<'ready' | 'missing' | 'other'> {
+    if (table === 'guardPayRuns' || table === 'guardPayAdvances' || table === 'guardLoans' || table === 'statutoryVersions') return (await this.guardPayReady()) ? 'ready' : 'missing';
+    if (table !== 'payFormulas' && table !== 'payFormulaUses' && table !== 'siteHoursApprovals' && table !== 'publicHolidayLists' && table !== 'payLawVersions') return 'other';
+    return (await this.payFormulasReady()) ? 'ready' : 'missing';
+  }
+
   async list<T extends TableName>(table: T, filter?: Filter<T>, range?: Range<T>): Promise<Row<T>[]> {
     // Before the optional module is applied there are simply no desks; querying the missing table would abort the request.
     if (table === 'companyDesks' && !(await this.companyOfficeReady())) return [];
     if (table === 'companyRunLinks' && !(await this.companyRunLinksReady())) return [];
+    // Before the optional module is applied there are simply no formulas; querying the missing table would abort the request.
+    if ((await this.payFormulaTable(table)) === 'missing') return [];
+    // Before the optional item register module is applied there is nothing to read; querying a missing table would abort the request.
+    if (PgStore.ITEMS.has(table) && !(await this.itemsReady())) return [];
     const where: string[] = [];
     const params: unknown[] = [];
     const contains: Record<string, unknown> = {};
@@ -436,6 +523,8 @@ export class PgStore implements Store {
   async get<T extends TableName>(table: T, id: Id): Promise<Row<T> | undefined> {
     if (table === 'companyDesks' && !(await this.companyOfficeReady())) return undefined;
     if (table === 'companyRunLinks' && !(await this.companyRunLinksReady())) return undefined;
+    if ((await this.payFormulaTable(table)) === 'missing') return undefined;
+    if (PgStore.ITEMS.has(table) && !(await this.itemsReady())) return undefined;
     const key = table === 'audit' ? 'seq' : 'id';
     const res = await this.client.query(`SELECT data FROM ${TABLE[table]} WHERE ${key} = $1`, [table === 'audit' ? Number(id) : id]);
     return res.rows[0]?.data as Row<T> | undefined;
@@ -470,10 +559,24 @@ export class PgStore implements Store {
 
   async lock<T extends TableName>(table: T, id: Id): Promise<void> {
     if (table === 'audit') return;
+    if (PgStore.ITEMS.has(table)) {
+      if (!(await this.itemsReady())) throw new Error(PgStore.ITEMS_OFF);
+      // Serialize per record, so two people sending or issuing one item at once go one after the other.
+      await this.client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [`items:${table}:${id}`]);
+      return;
+    }
+    // Pay formula saves serialize on one key, even before any row exists (new codes and place choices).
+    if ((await this.payFormulaTable(table)) === 'missing') throw new Error(missingMessage(table));
+    // A company's month serializes even before its run row exists (two HR officers preparing at once).
+    if (table === 'guardPayRuns' || table === 'guardPayAdvances' || table === 'guardLoans' || table === 'statutoryVersions') await this.client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [`guard-pay:${id}`]);
     // Company-wide branch keys (invoice numbers, SQL project codes): one company-scoped transaction lock, since two
     // branches have two different rows and a row lock alone cannot keep a key unique across them.
     if (table === 'branches' && id.startsWith('company-keys:')) {
       await this.client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [`branch-keys:${id}`]);
+      return;
+    }
+    if ((table === 'payFormulas' || table === 'payFormulaUses' || table === 'siteHoursApprovals' || table === 'publicHolidayLists' || table === 'payLawVersions') && id.startsWith('pay-formulas:')) {
+      await this.client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [id]);
       return;
     }
     // Immutable rental ledgers intentionally have no UPDATE privilege. Serialize
@@ -537,7 +640,13 @@ export class PgStore implements Store {
 
   async insert<T extends TableName>(table: T, row: Row<T>): Promise<void> {
     if (table === 'audit') throw new Error('Use audit() to append to the audit log');
-    const r = row as unknown as { id: string; companyId?: string };
+    if ((await this.payFormulaTable(table)) === 'missing') throw new Error(missingMessage(table));
+    const r = row as unknown as { id: string; companyId?: string; partyIds?: string[] };
+    if (PgStore.ITEMS.has(table)) {
+      if (!(await this.itemsReady())) throw new Error(PgStore.ITEMS_OFF);
+      await this.client.query(`INSERT INTO ${TABLE[table]} (id, party_ids, data) VALUES ($1, $2, $3)`, [r.id, r.partyIds ?? [], row]);
+      return;
+    }
     if (HAS_COMPANY_COLUMN.has(table)) {
       await this.client.query(`INSERT INTO ${TABLE[table]} (id, company_id, data) VALUES ($1, $2, $3)`, [r.id, r.companyId, row]);
     } else {
@@ -566,6 +675,17 @@ export class PgStore implements Store {
 
   async update<T extends TableName>(table: T, id: Id, patch: Partial<Row<T>>): Promise<Row<T>> {
     if ('id' in patch || 'companyId' in patch) throw new Error('id and companyId cannot be changed');
+    if ((await this.payFormulaTable(table)) === 'missing') throw new Error(missingMessage(table));
+    if (PgStore.ITEMS.has(table)) {
+      if (!(await this.itemsReady())) throw new Error(PgStore.ITEMS_OFF);
+      const parties = (patch as { partyIds?: string[] }).partyIds;
+      const res = await this.client.query(
+        `UPDATE ${TABLE[table]} SET data = data || $2::jsonb, party_ids = coalesce($3::text[], party_ids) WHERE id = $1 RETURNING data`,
+        [id, JSON.stringify(patch), parties ?? null],
+      );
+      if (res.rowCount === 0) throw new Error(`Not found: ${table} ${id}`);
+      return res.rows[0].data as Row<T>;
+    }
     const res = await this.client.query(`UPDATE ${TABLE[table]} SET data = data || $2::jsonb WHERE id = $1 RETURNING data`, [id, JSON.stringify(patch)]);
     if (res.rowCount === 0) throw new Error(`Not found: ${table} ${id}`);
     return res.rows[0].data as Row<T>;
@@ -649,4 +769,5 @@ export class PgStore implements Store {
     }
   }
 }
+
 

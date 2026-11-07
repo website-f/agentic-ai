@@ -7,6 +7,7 @@ import { Chip, Drawer, ErrorNotice, Loading, dateLabel, dateTimeLabel, humanize,
 import { ProofPicker } from './Proof';
 import { ImportButton } from './ImportDrawer';
 import '../styles/biz.css';
+import { CRM_TABS, CrmView, type CrmTab } from './Crm';
 
 /**
  * Client board (Fauzan, 26 Oct 2026). Operations Managers, the Operations Director and officers act on clients:
@@ -49,6 +50,7 @@ export function ClientsView() {
   const [q, setQ] = useState('');
   const [adding, setAdding] = useState(false);
   const [openId, setOpenId] = useState<string | null>(null);
+  const [tab, setTab] = useState<CrmTab | 'board'>('board');
   if (error)
     return (
       <div className="page">
@@ -59,6 +61,24 @@ export function ClientsView() {
     return (
       <div className="page">
         <Loading what="clients" />
+      </div>
+    );
+  // Client CRM (Fauzan, 4 Nov 2026): the lifecycle tabs sit beside the board; the Group tab is for group leadership only.
+  const tabs = (
+    <div className="tabbar crm-tabs" role="tablist" aria-label="Client CRM">
+      {CRM_TABS.filter(([k]) => k !== 'group' || data.leader).map(([k, label]) => (
+        <button key={k} role="tab" aria-selected={tab === k} onClick={() => setTab(k)}>
+          {label}
+        </button>
+      ))}
+    </div>
+  );
+  if (tab !== 'board')
+    return (
+      <div className="page">
+        <PageHead title="Clients" />
+        {tabs}
+        <CrmView tab={tab} />
       </div>
     );
   const act = data.role === 'act';
@@ -98,6 +118,7 @@ export function ClientsView() {
           )
         }
       />
+      {tabs}
       <Stats>
         <Stat label="Clients" value={data.accounts.length} icon={<UsersThreeIcon size={16} />} tone="info" onClick={() => setFilter('all')} />
         <Stat

@@ -279,3 +279,83 @@ describe('allowance review (Arisha main, d6c8765)', () => {
     expect((await svc.staffPayStep(hr, run.id, 'submit', { note: 'Hantar (synthetic)' })).stage).toBe('submitted');
   });
 });
+
+describe('allowance retest (Arisha main, a07f0e8)', () => {
+  const ready = (ds: ReturnType<typeof generateDataset>, companyId: string) => {
+    for (const p of ds.people) if (p.companyId === companyId && p.role === 'office' && !p.bank) p.bank = { bank: 'Test Bank', accountMasked: '****0000' } as never;
+  };
+
+  it('a cap cannot go below a fixed allowance; a fixed-only line over the cap blocks the draft', async () => {
+    const { svc, store, ds, hr, person } = fresh();
+    ready(ds, person.companyId);
+    const t = await svc.saveAllowanceType(hr, { ...TYPE, name: 'Fixed cap (synthetic)', frequency: 'monthly', usualAmount: null, cap: 300 });
+    await store.update('people', person.id, { allowances: [{ typeId: t.id, label: t.name, amount: 250 }] });
+    await expect(svc.saveAllowanceType(hr, { ...TYPE, name: 'Fixed cap (synthetic)', frequency: 'monthly', usualAmount: null, cap: 200, id: t.id, note: 'Lower (synthetic)' })).rejects.toThrow(/below what/);
+    await svc.saveAllowanceType(hr, { ...TYPE, name: 'Fixed cap (synthetic)', frequency: 'monthly', usualAmount: null, cap: 250, id: t.id, note: 'Lower to the amount paid (synthetic)' });
+    const run = await svc.prepareStaffPay(hr, person.companyId, TODAY.slice(0, 7));
+    expect((await svc.staffPayRun(hr, run.id)).blockers.join(' ')).not.toMatch(/Over the allowance cap/);
+    // A cap that got below a fixed amount some other way (older data) still blocks the month with no one-off on the line.
+    await store.update('allowanceTypes', t.id, { cap: 200 });
+    expect((await svc.staffPayRun(hr, run.id)).blockers.join(' ')).toMatch(/Over the allowance cap now: .*RM250, cap RM200/);
+    await expect(svc.staffPayStep(hr, run.id, 'submit', { note: 'Hantar (synthetic)' })).rejects.toThrow(/cap/);
+  });
+
+  it('backdating is limited: not before last month, never before a change already approved', async () => {
+    (RULES.pilot.value as { on: boolean }).on = false;
+    const { svc, hr, cos, vc, person } = fresh();
+    const req = (effectiveOn: string, amount = 40) => svc.requestAllowanceChange(hr, person.id, { allowances: [{ typeId: 'alw-phone', amount }], effectiveOn, reason: 'Telefon (synthetic)' });
+    await expect(req('2026-09-30')).rejects.toThrow(/2026-10-01 at the earliest/);
+    const c = await req('2026-11-02');
+    await svc.decidePayChange(cos, c.id, true, 'Semak (synthetic)');
+    expect((await svc.decidePayChange(vc, c.id, true, 'Setuju (synthetic)')).applied).not.toBeNull();
+    await expect(req('2026-11-01', 45)).rejects.toThrow(/already approved/);
+    await req('2026-11-02', 45);
+  });
+
+  it('payroll history follows effective dates, not the order changes were applied', async () => {
+    const { svc, store, ds, hr, person } = fresh();
+    ready(ds, person.companyId);
+    ds.staffPayRuns = ds.staffPayRuns.filter((r) => !(r.companyId === person.companyId && r.period === '2026-10'));
+    const A = [{ typeId: 'alw-phone', label: 'Phone allowance', amount: 100 }];
+    const B = [{ typeId: 'alw-phone', label: 'Phone allowance', amount: 200 }];
+    const base = { companyId: person.companyId, personId: person.id, reason: 'Synthetic history', requestedBy: 'HR', requestedById: 'u-pwvsb-hr', requestedAt: NOW, status: 'verified' as const, decidedBy: 'VC', note: null, kind: 'ALLOWANCE' as const };
+    // Applied out of order (older data): the December change was decided first, the 20 November change later.
+    await store.insert('payChanges', { ...base, id: 'pc-hist-dec', from: 100, to: 200, effectiveOn: '2026-12-01', decidedAt: '2026-11-01T01:00:00.000Z', allowancesFrom: A, allowancesTo: B, applied: { at: NOW, by: 'HR' } });
+    await store.insert('payChanges', { ...base, id: 'pc-hist-nov', from: 0, to: 100, effectiveOn: '2026-11-20', decidedAt: '2026-11-02T01:00:00.000Z', allowancesFrom: [], allowancesTo: A, applied: { at: NOW, by: 'HR' } });
+    await store.update('people', person.id, { allowances: B });
+    const fixed = async (period: string) => (await svc.prepareStaffPay(hr, person.companyId, period)).lines.find((l) => l.personId === person.id)!.allowanceLines.filter((a) => a.fixed).map((a) => a.amount);
+    expect(await fixed('2026-10')).toEqual([]);
+    expect(await fixed('2026-11')).toEqual([100]);
+  });
+});
+
+describe('older pay history applied out of date order (Arisha main retest of beea18d)', () => {
+  it('a basic pay change dated October but applied after a November one blocks November until HR keys a correction', async () => {
+    const { svc, store, ds, hr, person } = fresh();
+    for (const p of ds.people) if (p.companyId === person.companyId && p.role === 'office' && !p.bank) p.bank = { bank: 'Test Bank', accountMasked: '****0000' } as never;
+    const base = { companyId: person.companyId, personId: person.id, reason: 'Older data (synthetic)', requestedBy: 'HR', requestedById: 'u-pwvsb-hr', requestedAt: NOW, status: 'verified' as const, decidedBy: 'VC', note: null, kind: 'PAY' as const };
+    // Older code: the 1 November change was decided first; a 15 October change was decided after it and wrote the record.
+    await store.insert('payChanges', { ...base, id: 'pc-old-nov', from: 4000, to: 5000, effectiveOn: '2026-11-01', decidedAt: '2026-11-01T01:00:00.000Z' });
+    await store.insert('payChanges', { ...base, id: 'pc-old-oct', from: 3000, to: 4000, effectiveOn: '2026-10-15', decidedAt: '2026-11-02T01:00:00.000Z' });
+    await store.update('people', person.id, { basicPay: 4000 });
+    const run = await svc.prepareStaffPay(hr, person.companyId, '2026-11');
+    expect((await svc.staffPayRun(hr, run.id)).blockers.join(' ')).toMatch(/Pay history out of date order for .*record basic RM4000, by date basic RM5000/);
+    await expect(svc.staffPayStep(hr, run.id, 'submit', { note: 'Hantar (synthetic)' })).rejects.toThrow(/out of date order/);
+    // HR keys a correcting change dated today; once it is in force the month is consistent again.
+    await store.insert('payChanges', { ...base, id: 'pc-fix', from: 4000, to: 5000, effectiveOn: TODAY, decidedAt: '2026-11-03T03:00:00.000Z' });
+    await store.update('people', person.id, { basicPay: 5000 });
+    await svc.prepareStaffPay(hr, person.companyId, '2026-11');
+    expect((await svc.staffPayRun(hr, run.id)).blockers.join(' ')).not.toMatch(/out of date order/);
+  });
+
+  it('history kept in date order never blocks', async () => {
+    const { svc, store, ds, hr, person } = fresh();
+    for (const p of ds.people) if (p.companyId === person.companyId && p.role === 'office' && !p.bank) p.bank = { bank: 'Test Bank', accountMasked: '****0000' } as never;
+    const base = { companyId: person.companyId, personId: person.id, reason: 'In order (synthetic)', requestedBy: 'HR', requestedById: 'u-pwvsb-hr', requestedAt: NOW, status: 'verified' as const, decidedBy: 'VC', note: null, kind: 'PAY' as const };
+    await store.insert('payChanges', { ...base, id: 'pc-in-1', from: 3000, to: 4000, effectiveOn: '2026-10-15', decidedAt: '2026-10-15T01:00:00.000Z' });
+    await store.insert('payChanges', { ...base, id: 'pc-in-2', from: 4000, to: 5000, effectiveOn: '2026-11-01', decidedAt: '2026-11-01T01:00:00.000Z' });
+    await store.update('people', person.id, { basicPay: 5000 });
+    const run = await svc.prepareStaffPay(hr, person.companyId, '2026-11');
+    expect((await svc.staffPayRun(hr, run.id)).blockers.join(' ')).not.toMatch(/out of date order/);
+  });
+});

@@ -338,7 +338,11 @@ Fauzan (06:24Z): "HR also have the ability to set allowance, the amount and what
   a change consented for a later date waits and is applied by HR's "apply changes due today" step on or after that date,
   never into a payroll month already submitted; a consent given after the start date goes through the same check and
   waits, with the reason, while that month is submitted. Payroll for an earlier month uses the pay and allowances in
-  force in that month. Dates must be real calendar dates, not before the person joined. A consent or an apply is refused if the record changed since HR keyed it,
+  force in that month, rebuilt by effective date. Dates must be real calendar dates, not before the person joined, not
+  before the first day of last month (decided by Fauzan, 4 Nov 2026) and not before a change already approved for
+  that person. Submission, consent and
+  apply share one lock on the payroll month and each rechecks under it. A month cannot be submitted while a person's
+  older basic pay history was applied out of date order and disagrees with the record; HR keys a correcting change. A consent or an apply is refused if the record changed since HR keyed it,
   and no second change can be keyed while one is waiting for approval or for its date. Allowances entered before the list carry no type and
   still count for everything, as before; HR moves them onto a listed allowance when it next sets that person's allowances.
 - **Payroll:** EPF, SOCSO, EIS, LINDUNG, PCB and the HRD levy are worked out on gross pay less the allowances whose box is
@@ -348,10 +352,65 @@ Fauzan (06:24Z): "HR also have the ability to set allowance, the amount and what
   allowances and one-offs whose type is ticked for HRD (to be confirmed against HRD Corp's wage definition; an unlisted
   one-off stays out). If HR changes a type's ticks after a draft was calculated, the draft cannot be submitted until it is
   recalculated; a submitted month is never changed by a type change. If HR lowers a cap after a draft was made, the draft
-  cannot be submitted while a line is over it.
+  cannot be submitted while a line is over it; a cap cannot be lowered below anyone's fixed amount of that type.
 - **Pilot note:** with no Chief of Staff signed in yet, the CEO can consent for the Vice Chairman but cannot also verify as
   HR Director, so allowance and basic pay changes wait until the CoS or DCoS signs in (unchanged from basic pay).
 - **Database:** `prima.allowance_types` (group-wide, like `prima.hr_policies`; no one's pay in it). Base hash changes.
+
+## Job posts for vacancies (audit decision 6, Fauzan 5 Nov 2026)
+
+Rule `HR-JOB-ADVERT`. Code: `packages/core/src/hr-job-adverts.ts`, `PrimaService.advertStep`, route
+`POST /api/vacancies/:id/advert/:action`, screen `JobPost` inside the Vacancies panel (HR, Company, and Operations for OMs).
+
+- A vacancy now says whether it is for office staff, a guard or a patrolling officer. Guard and officer posts also
+  name the state.
+- Once a vacancy is open (CEO approved, company head or HR Director signed), HR or the company manager writes the
+  job post: "Draft for me" makes a bilingual BM + English draft from the job facts only (title, department, pay
+  range, headcount, employer, how to apply, closing date). No AI model is connected yet, so the draft is labelled
+  as Prima's template; `PrimaService.advertDrafter` is where a model plugs in later, and its output would be
+  labelled "drafted by AI, not yet checked".
+- Approval (Fauzan, 5 Nov 2026): the HR Director approves office staff posts; the Operations Manager covering the
+  post's state approves guard and patrolling officer posts. The person who wrote the current wording never
+  approves it. Approve and send back need a comment.
+- Approval is bound to the exact version and SHA-256 of the wording, channels and closing date. Any edit sends
+  the post back to draft and clears the approval. Every action carries the version the person saw.
+- Wording checks: an IC number or a mobile number that is not the official number in "How to apply" blocks
+  sending; discriminatory wording, pay below the minimum wage, no pay and no way to apply are warnings for the
+  approver.
+- Social publishing is switched off. Facebook, Instagram, LinkedIn, TikTok and JobStreet all show "not
+  connected" and Prima never shows a post as published. After approval HR can copy the wording, post by hand,
+  and record the link; that record is marked "recorded by HR, not checked by Prima".
+- No new table: the post is kept on the vacancy row (`prima.vacancies.data`), so it adds no migration beyond the
+  vacancies table already in this PR.
+
+Fauzan's answers, 5 Nov 2026 (review questions 1-6):
+1. The Regional OM of the state's region approves guard and patrolling officer posts as backup when the OM is away
+   or no OM covers the state. The screen says when someone approves as backup.
+2. No privacy line in posts.
+3. The guard template wording stays ("aged 18 to 60", KDN vetting, CSG training).
+4. JobStreet stays and is marked "paid per post"; the writer picks the channels each post needs.
+5. An approved post goes out by itself once each account is connected: approval puts one entry per chosen channel
+   in the post's `outbox` as "waiting for the account to be connected". An edit, send-back, withdrawal or closed
+   vacancy empties the queue. No publisher exists yet, so nothing is posted and nothing can be marked posted.
+6. Applicant list per vacancy, HR only: new table `prima.applicants` behind the new `applicants` wall (HR, the HR
+   Director, the CEO; company managers and OMs never see applicants). HR keeps the list: name, phone or email,
+   where they saw the post, the date applied, and new -> shortlisted -> interview (with date and time) -> offered ->
+   hired, or not taken / withdrew at any step. Refusing, offering and hiring need a comment; no more hires than
+   places; the same phone or email is refused twice on one vacancy. No IC number, CV file or photo is stored.
+   Hiring does not create a staff record: HR then uses the joining steps. Base schema repinned to `6d454ec2…`.
+
+Browser UAT (5 Nov 2026): `scripts/hr-job-posts-browser-uat.cjs`, 38/38 at 1400px and 390px on the demo build
+with the IT-pilot sign-in limit off in a local copy only (HR, CEO, company manager, HR Director, Selangor and Johor
+OMs, central Regional OM; Malaysia time zone). Review fixes from that round: the Regional OM now sees the job post
+screen and its to-do line; interview times must carry a time zone (the screen converts Malaysia time); a withdrawn
+post can be written again while the vacancy is open.
+
+Proof of a post made by hand (Fauzan, 5 Nov 2026): the link stays the proof. For places with no link (WhatsApp
+group, notice board, other place) HR records where it was posted; a photo field is kept empty until file storage
+(draft PR #75) is switched on. Phone and IC numbers are refused in the place name.
+
+Still open: connecting the social accounts (needs Fauzan's account access and a separate check before any
+channel is switched on), and connecting an AI model for drafting.
 
 ## Not built yet
 

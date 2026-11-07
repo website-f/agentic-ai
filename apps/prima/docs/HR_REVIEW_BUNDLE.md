@@ -9,6 +9,7 @@ data only.
 - Reviewed by Arisha main at `e29f49d`. The fixes since then are listed below.
 - Base schema `db/migrations/001_init.sql`:
   - sha256 `18db58b12c9593f540b9ca715b591cce4c8313ba346cc1e5328e37a03363e340`, pinned in `db/release-manifest.json`.
+  - The job posts PR stacked on this branch (5 Nov 2026) adds `prima.applicants` with its `applicant_wall` policy and repins the base to `6d454ec23a4352c27037856f884c3baf8715fe097a92e29ef780794fcf4ab983`.
   - Main's base is `4b4cf4d3…78fe`.
   - HR's earlier bases `8d1…`, `beb38cec…`, `59e65bff…` and `69a3035a…` are replaced by this one (3 Nov: `prima.staff_movements` with its two receiving-company policies, then `prima.allowance_types`, then the `movement_wall` policy and `prima.login_handovers`).
 - The other department branches keep main's base (`4b4…`) and ship add-on files under `db/modules/`. HR is the only branch that changes the base file.
@@ -56,6 +57,22 @@ Promotion, transfer to another group company and secondment, as described in `do
 | Transfer: new record at the new company, fresh hire date, group start kept, IC and account copied, old record ends as transferred | core `hr-movement.test.ts`; PostgreSQL `hr-movement-pg.test.ts` |
 | Receiving head sees and accepts under RLS; another company's head sees nothing; the CEO stands in for the HR Director in the pilot | PostgreSQL `hr-movement-pg.test.ts` |
 | Company head reaches movements and vacancy signing from Company today (they cannot open the HR screen) | Web typecheck and demo build; no browser run yet |
+
+## Arisha main retest at `beea18d` (4 Nov 2026, 02:54Z): older history applied out of date order
+
+Can such records exist? Allowance changes (`kind: 'ALLOWANCE'`) do not exist on main, and from 9c3bc42 on they are kept in date order, so there is no older allowance data. Basic pay changes on main (`payEffectiveOn` on the staff record form) take any start date, so a basic pay change dated earlier could have been applied after a later-dated one. Nothing was assumed about live data.
+
+| Finding | Fix | Test |
+|---|---|---|
+| A change dated October but applied after a November one: rebuilding November fell back to the record | A payroll preflight (`payHistoryDisorder`, part of the submit blockers): where a person's verified basic pay or allowance changes were applied out of date order and the record disagrees with the last change in force by date, the month cannot be submitted. It names the person, the record figure and the figure by date, and HR keys a correcting change. Prima never picks either figure silently. History applied in date order never triggers it | core: a 1 Nov change decided before a 15 Oct change that wrote the record (RM4000 against RM5000 by date) blocks November and its submission; after a correcting change dated today it clears; changes in date order do not block |
+
+## Arisha main retest at `a07f0e8` (4 Nov 2026, 02:04Z): fixed-only caps, backdating order, the submit/consent race
+
+| Finding | Fix | Test |
+|---|---|---|
+| A fixed RM250 with the cap lowered to RM200 and no one-off did not block | HR cannot lower a cap below any active staff member's fixed amount of that type, or below a change waiting for approval or its date; HR lowers those through an approved change first. The draft check now covers fixed-only lines too | core: lowering to 200 refused with the person named; lowering to 250 allowed and no block; a cap below a fixed amount from older data blocks a fixed-only line and its submission |
+| Backdated changes applied out of order gave values that did not match their dates | Backdating is limited: an allowance change cannot start before the first day of last month (the earliest month payroll prepares; **DECIDED** by Fauzan, 4 Nov 2026 03:16Z) or before a change already approved for that person, so changes apply in date order. Payroll history is rebuilt by effective date, not by approval or apply order: the value at a month end is the last change starting on or before it, and before the first change it is what that change replaced | core: a start before 1 Oct refused; a start before an approved 2 Nov change refused, the same date allowed; with a December change decided before a 20 November change, October shows none and November shows the 20 November amount |
+| Submission and consent guards were outside a shared lock | Both take the same row lock on the payroll month (`SELECT … FOR UPDATE` through `PgStore.lock`) and recheck under it. A submission rereads the run, confirms it is still a draft and reruns every blocker on the transaction; the consent and apply-due paths lock every month from the start month on and reread their stages | PostgreSQL: a submission and a same-month consent run concurrently; whichever wins, the invariant holds (submitted first: the change waits and the record is unchanged; consented first: the submission is refused as stale and the record has the new amount). Run 4 times locally, passing each time |
 
 ## Arisha main review at `d6c8765` (4 Nov 2026, 01:28Z): late consent, last month's pay, dates, lowered caps
 
@@ -128,10 +145,10 @@ HR's allowance list and per-staff monthly allowances, as described in `docs/HR_P
 | HR screen panel and the one-off picker in the payroll month | Web typecheck and demo build; no browser run yet |
 
 ## Test results (local, isolated; never staging)
-- **Core:** 774/774 on Vitest 3.2.7, which is the version installed in this container.
+- **Core:** 779/779 on Vitest 3.2.7, which is the version installed in this container.
   - `package.json` declares 4.1.12, but a separate 4.1.12 install failed here because of an npm error.
   - Arisha main ran 739/739 on 4.1.12 at `e29f49d`. Please rerun on 4.1.12 at the head.
-- **API on local PostgreSQL 16.15:** 704/704.
+- **API on local PostgreSQL 16.15:** 705/705.
   - Run alone: two suites run at once against the same database interfere with each other.
 - **Web:** the typecheck is clean and the demo build is clean.
 - **Browser (demo build):** leave journey 38/38 and login handover 18/18, per the tables above; both also run in hosted CI (`synthetic-browser`, artifact `hr-browser-results`). It is synthetic, with no backend, and blocked web-font requests were the only outside calls.
@@ -147,6 +164,7 @@ HR's allowance list and per-staff monthly allowances, as described in `docs/HR_P
 - **Overtime claims inside the payroll run:** wait for Finance PR #49.
 - **Papers recorded in Prima flowing back to JA:** wait for the live JA link.
 - **Arisha AI and the guide cards:** the HR cards are in #56's shape but not registered yet, because `guide-cards.ts` is only on #56. After #56 merges, one line (`registerGuideCards(HR_GUIDE_CARDS)`) puts them in GET /api/org/guide for Arisha and the record drawers.
+- **Decided (Fauzan, 4 Nov 2026 03:16Z):** an allowance change can start from the first day of last month at the earliest.
 - **Payroll subject-matter checks:** the HRD basis for one-offs and the allowance ticks need HR/HRD Corp confirmation before payroll is called finished.
 - **Browser runs:** only the leave journey and the login handover have browser runs. The other HR journeys are covered by service and database tests only.
 - **Vacancy signer for PWVSB central posts:** the HR Director, as an assumption. The CEO's decision is pending.

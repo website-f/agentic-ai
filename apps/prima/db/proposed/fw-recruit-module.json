@@ -1,0 +1,18 @@
+{
+  "status": "PROPOSED: manifest entry for the foreign worker recruitment steps module. No install is authorized by this file.",
+  "base": {
+    "path": "db/migrations/001_init.sql",
+    "sha256": "76161ab46dd145158cd06277b0c80654e5a5150c2a2dae593ee087d54052ccfc"
+  },
+  "after": ["fw_welfare"],
+  "modules": [
+    {
+      "id": "fw_recruit",
+      "version": 1,
+      "path": "db/modules/fw-recruit-v1.sql",
+      "sha256": "99acb852f40b5bf87de45fe1c52e18fc127b3c423ea404f0fc8851ddad0eb87c",
+      "requires": [],
+      "catalog": "apps/api/src/fw-recruit-readiness.ts fwRecruitProblems"
+    }
+  ]
+}

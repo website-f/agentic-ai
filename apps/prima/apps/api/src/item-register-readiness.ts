@@ -1,0 +1,69 @@
+import type { PoolClient } from 'pg';
+import type { TableName } from '@prima/core';
+
+/** Tables of the optional item register module (db/modules/item-register-v1.sql), by store name and SQL name. */
+export const ITEM_TABLES: Record<string, string> = {
+  itemSkus: 'item_skus',
+  physicalItems: 'item_units',
+  itemLots: 'item_lots',
+  itemEvents: 'item_events',
+  itemMovements: 'item_movements',
+  itemCases: 'item_cases',
+  itemCounts: 'item_counts',
+  itemSyncJobs: 'item_sync_jobs',
+  itemRequests: 'item_requests',
+  itemSettings: 'item_settings',
+  itemDocs: 'item_docs',
+  uniformRecords: 'item_uniform_records',
+};
+export const ITEM_TABLE_NAMES = Object.keys(ITEM_TABLES) as TableName[];
+
+/** Whether every table of the module exists. */
+export async function itemRegisterInstalled(client: Pick<PoolClient, 'query'>): Promise<boolean> {
+  const r = await client.query(`SELECT bool_and(to_regclass('prima.' || t) IS NOT NULL) AS ok FROM unnest($1::text[]) t`, [Object.values(ITEM_TABLES)]);
+  return r.rows[0]?.ok === true;
+}
+
+/** What is missing or wrong in the database for the module; empty when ready. Catalogue check only, installs nothing. */
+export async function itemRegisterProblems(client: Pick<PoolClient, 'query'>): Promise<string[]> {
+  const out: string[] = [];
+  const appendOnly = new Set(['item_events', 'item_requests', 'item_docs', 'item_uniform_records']);
+  for (const t of Object.values(ITEM_TABLES)) {
+    const q = `prima.${t}`;
+    const r = await client.query(
+      `SELECT to_regclass($1) IS NOT NULL AS has,
+              coalesce((SELECT relrowsecurity AND relforcerowsecurity FROM pg_class WHERE oid = to_regclass($1)), false) AS rls,
+              EXISTS (SELECT 1 FROM pg_policy WHERE polrelid = to_regclass($1) AND polname = 'item_wall') AS wall,
+              to_regclass($1) IS NOT NULL AND has_table_privilege('prima_app', $1, 'SELECT') AND has_table_privilege('prima_app', $1, 'INSERT') AS rights,
+              to_regclass($1) IS NOT NULL AND has_table_privilege('prima_app', $1, 'UPDATE') AS can_update,
+              to_regclass($1) IS NOT NULL AND (has_table_privilege('prima_app', $1, 'DELETE') OR has_table_privilege('prima_app', $1, 'TRUNCATE')) AS too_much`,
+      [q],
+    );
+    const x = r.rows[0];
+    if (!x.has) {
+      out.push(`${q} is missing: apply db/modules/item-register-v1.sql in an authorized migration.`);
+      continue;
+    }
+    if (!x.rls) out.push(`Row-level security is not forced on ${q}.`);
+    if (!x.wall) out.push(`The item wall policy is missing on ${q}.`);
+    if (!x.rights) out.push(`The app role cannot read or add to ${q}.`);
+    if (appendOnly.has(t) && x.can_update) out.push(`The app role may change ${q}; it must be append-only.`);
+    if (!appendOnly.has(t) && !x.can_update) out.push(`The app role cannot change ${q}.`);
+    if (x.too_much) out.push(`The app role may delete from ${q}.`);
+  }
+  // Named uniqueness protections must be present, usable and attached to the intended table.
+  for (const [index, table] of [
+    ['item_units_token_unique', 'item_units'], ['item_units_rfid_unique', 'item_units'],
+    ['item_units_it_asset_unique', 'item_units'], ['item_sync_jobs_key_unique', 'item_sync_jobs'],
+    ['item_skus_code_unique', 'item_skus'],
+  ]) {
+    const r = await client.query(
+      `SELECT EXISTS (SELECT 1 FROM pg_index WHERE indexrelid = to_regclass($1)
+        AND indrelid = to_regclass($2) AND indisunique AND indisvalid AND indisready) AS ok`,
+      [`prima.${index}`, `prima.${table}`],
+    );
+    if (r.rows[0]?.ok !== true) out.push(`Required unique index prima.${index} is missing or invalid.`);
+  }
+  return out;
+}
+

@@ -484,8 +484,8 @@ export const FIN_GUIDES: FinGuide[] = [
     for: ['fin_data_entry', 'fin_deputy', 'fin_leader'],
     title: b('Senarai bayaran tunai harian', 'Daily cash pay list'),
     purpose: b(
-      'Satu-satunya bayaran tunai: pekerja yang dibayar tunai setiap hari, disenaraikan untuk seminggu atau sebulan.',
-      'The only cash payment: workers paid in cash each day, listed for a week or a month.',
+      'Pekerja yang dibayar setiap hari, disenaraikan untuk seminggu atau sebulan. Bayaran ke akaun bank atau e-dompet sahaja; tunai hanya jika Pejabat Pengarah menyenaraikan dan COO atau CEO meluluskan.',
+      'Workers paid each day, listed for a week or a month. Paid to a bank account or e-wallet only; cash only when the Director Office lists them and the COO or CEO gives it.',
     ),
     where: b(
       'Finance > Checks > pilih syarikat > Paying out > Daily cash pay > "New list"',
@@ -523,21 +523,63 @@ export const FIN_GUIDES: FinGuide[] = [
           'Nama; 4 aksara akhir IC atau pasport; kerja; kadar harian; tandakan hari bekerja setiap orang',
           "Name; last 4 of IC or passport; work; daily rate; tick each person's working days",
         ),
-        example: [{ name: 'Ali bin Abu (contoh)', idLast4: '1234', work: 'Tuaian dusun', dailyRate: 120, days: ['2026-10-29', '2026-10-30'] }],
+        example: [
+          {
+            name: 'Ali bin Abu (contoh)',
+            idLast4: '1234',
+            work: 'Tuaian dusun',
+            dailyRate: 120,
+            days: ['2026-10-29', '2026-10-30'],
+            pay: 'bank',
+            account: { bank: 'Maybank', last4: '6789', holder: 'own' },
+          },
+        ],
+      },
+      {
+        key: 'pay',
+        label: b('Cara bayaran setiap orang', 'How each person is paid'),
+        required: true,
+        format: b(
+          'bank atau ewallet: nama bank atau e-dompet dan 4 digit akhir sahaja. cash: hanya jika Pejabat Pengarah menyenaraikan dan COO atau CEO meluluskan',
+          'bank or ewallet: the bank or e-wallet name and the last 4 digits only. cash: only when the Director Office lists them and the COO or CEO gives it',
+        ),
+        example: 'bank',
+      },
+      {
+        key: 'account.holder',
+        label: b('Akaun siapa', 'Whose account'),
+        required: true,
+        format: b(
+          "own, joint, relative atau friend. Akaun saudara atau kawan: surat persetujuan yang dicop Pesuruhjaya Sumpah (nama, no. cop, tarikh), diluluskan oleh COO",
+          "own, joint, relative or friend. A relative's or friend's account: the consent letter stamped by a Pesuruhjaya Sumpah (name, stamp no., date), approved by the COO",
+        ),
+        example: 'own',
       },
     ],
     sources: [b('Senarai pekerja dan hari: daripada penyelia tapak yang menggunakan mereka.', 'Workers and days: from the site supervisor who uses them.')],
     ask: [b('Hari atau kadar dipersoalkan: penyelia tapak, kemudian FD.', 'Days or rate in question: the site supervisor, then the FD.')],
     reused: [b('Selepas lulus, tunai disediakan hingga jumlah yang diluluskan sahaja.', 'After approval the cash is prepared up to the approved total only.')],
     steps: [
+      b(
+        'Orang yang minta tunai: pilih "cash". Pejabat Pengarah menyenaraikan dengan tapak, jumlah tunai dan sebab; COO atau CEO memutuskan. Jika ditolak, beri akaun bank atau e-dompet. Pejabat Pengarah memuat naik setiap resit bertandatangan; senarai diselesaikan selepas itu sahaja.',
+        'Someone who asks for cash: choose "cash". The Director Office lists them with the site, the cash amount and the reason; the COO or CEO decides. If refused, give a bank account or e-wallet. The Director Office uploads each signed receipt; the list is settled only after that.',
+      ),
       b('"Send to the FD". Hanya FD meluluskan (bukan CEO, bukan penyedia).', '"Send to the FD". Only the FD approves (not the CEO, never the preparer).'),
+      b(
+        'FD tidak boleh meluluskan selagi ada orang tanpa akaun, tunai belum diputuskan, atau surat persetujuan belum diluluskan COO.',
+        'The FD cannot approve while anyone has no account, a cash decision is open, or a consent letter waits for the COO.',
+      ),
+      b(
+        'Selepas lulus, bank atau e-dompet: "Paid by transfer" untuk setiap hari bekerja, dengan rujukan pindahan. Senarai tanpa tunai ditutup dengan "Close list" selepas tamat.',
+        'After approval, bank or e-wallet: "Paid by transfer" for each worked day, with the transfer reference. A list with no cash is closed with "Close list" once it ends.',
+      ),
       b(
         'Jika FD memulangkan: "Edit (returned by the FD)", ubah orang atau hari, "Save changes", hantar semula. Sejarah kekal.',
         'If the FD returns it: "Edit (returned by the FD)", change people or days, "Save changes", send again. The history stays.',
       ),
       b(
-        'Selepas lulus: "Cash withdrawn", "Hand to COO / CEO". FD yang meluluskan tidak memegang tunai.',
-        'After approval: "Cash withdrawn", "Hand to COO / CEO". The FD who approved never handles the cash.',
+        'Tunai (hanya orang yang diberi tunai): "Cash withdrawn", "Hand to COO / CEO". FD yang meluluskan tidak memegang tunai.',
+        'Cash (only the people given cash): "Cash withdrawn", "Hand to COO / CEO". The FD who approved never handles the cash.',
       ),
       b(
         'Tunai yang dipulangkan dikira oleh orang lain dalam Finance, bukan yang mengeluarkan atau menyerahkannya: "Count and bank".',
@@ -576,8 +618,11 @@ export const FIN_GUIDES: FinGuide[] = [
       {
         key: 'proof',
         label: b('Helaian bayaran', 'Pay sheet'),
-        required: true,
-        format: b('Nombor helaian yang ditandatangani atau cap jari, atau nama foto', 'Number of the signed or thumb-printed sheet, or the photo name'),
+        required: false,
+        format: b(
+          'Pilihan: nombor helaian. Resit bertandatangan diserahkan kepada Pejabat Pengarah, yang memuat naiknya',
+          'Optional: the sheet number. The signed receipt goes to the Director Office, who uploads it',
+        ),
         example: 'Helaian 1 (contoh)',
       },
     ],

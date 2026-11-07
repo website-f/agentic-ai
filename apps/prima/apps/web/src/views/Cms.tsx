@@ -27,10 +27,12 @@ import { AlertState, FollowUpDrawer } from "./FollowUp";
 import { RecordButton } from "./RecordForm";
 import { ImportButton } from "./ImportDrawer";
 import "../styles/ops.css";
+import { CmsDevicesTab } from "./SiteDispatch";
 
 type Tab =
   | "now"
   | "emergencies"
+  | "devices"
   | "sites"
   | "roster"
   | "phones"
@@ -42,6 +44,7 @@ type Tab =
 const TABS: { id: Tab; label: string }[] = [
   { id: "now", label: "Now" },
   { id: "emergencies", label: "Emergencies and incidents" },
+  { id: "devices", label: "Site devices" },
   { id: "sites", label: "Sites" },
   { id: "phones", label: "Phone desk" },
   { id: "roster", label: "Roster" },
@@ -201,6 +204,7 @@ export function CmsView() {
       </div>
       {tab === "now" && <Now data={data} />}
       {tab === "emergencies" && <Emergencies data={data} />}
+      {tab === "devices" && <CmsDevicesTab />}
       {tab === "sites" && (
         <>
           <AttendanceAlertsPanel data={data} />
@@ -876,6 +880,9 @@ const ALARM: Record<Cms["ops"]["alarms"][number]["alarm"]["kind"], string> = {
   CAMERA_TAMPER: "Camera tamper",
   LINK_LOST: "Site link lost",
   CMS_EVENT: "CMS event",
+  AI_CCTV: "AI on CCTV",
+  AI_SENSOR: "AI on sensor",
+  VEHICLE_WATCH: "Vehicle on watch at gate",
 };
 
 const secs = (n: number) =>

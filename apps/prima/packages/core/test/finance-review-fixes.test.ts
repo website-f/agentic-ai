@@ -140,7 +140,21 @@ describe('Payment requests: correction keeps documents; nobody acts on their own
 });
 
 describe('Daily cash custody', () => {
-  const people = [{ name: 'Ali bin Abu', idLast4: '1234', work: 'Harvest', dailyRate: 100, days: ['2026-10-30', '2026-10-31'] }];
+  const people = [{ name: 'Ali bin Abu', idLast4: '1234', work: 'Harvest', dailyRate: 100, days: ['2026-10-30', '2026-10-31'], pay: 'cash' }];
+  // Cash only when the Director Office lists the person and the COO or CEO gives it (Fauzan, 6 Nov 2026).
+  const amountOf = async (svc: PrimaService, doa: Awaited<ReturnType<PrimaService['user']>>, listId: string, personId: string) =>
+    (await svc.financeControls.dailyCashMine(doa)).decisions.find((d) => d.id === listId)!.people.find((p) => p.id === personId)!.amount;
+  const giveCash = async (svc: Awaited<ReturnType<typeof fresh>>['svc'], listId: string, personId: string) => {
+    const [doa, ceo] = await who(svc, 'u-pwvsb-doa', 'u-fauzan');
+    await svc.financeControls.dailyCashAction(doa, CO, 'listCash', { listId, personId, reason: 'Will not work unless paid in cash daily (mock)', site: 'Harvest site (mock)', amount: await amountOf(svc, doa, listId, personId) });
+    await svc.financeControls.dailyCashAction(ceo, CO, 'decideCash', { listId, personId, give: true, comment: 'Cash given for this list (mock)' });
+  };
+  // The Director Office uploads each signed receipt before Finance settles (Fauzan, 6 Nov 2026).
+  const uploadReceipts = async (svc: Awaited<ReturnType<typeof fresh>>['svc'], listId: string) => {
+    const doa = await svc.user('u-pwvsb-doa');
+    for (const r of (await svc.financeControls.dailyCashMine(doa)).receipts.filter((x) => x.listId === listId))
+      await svc.financeControls.dailyCashAction(doa, CO, 'receipt', { listId, payoutId: r.payoutId, name: 'Signed receipt (mock).png', data: `data:image/png;base64,${Buffer.from(`mock ${listId} ${r.payoutId}`).toString('base64')}` });
+  };
   it('keeps the approver, the person who withdrew and the collector apart from counting the cash back', async () => {
     const { svc, F } = fresh();
     const [de1, de2, dep, fd, ceo, coo] = await who(svc, 'u-fin-t1-de1', 'u-fin-t1-de2', 'u-fin-t1-dep', 'u-fd', 'u-fauzan', 'u-coo');
@@ -155,6 +169,7 @@ describe('Daily cash custody', () => {
     const act = (u: typeof de1, action: string, input: Record<string, unknown> = {}) =>
       svc.financeControls.dailyCashAction(u, CO, action, { listId: l.id, ...input });
     // Returned by the FD: corrected with each person's days, the log keeps the return.
+    await giveCash(svc, l.id, l.people[0].id);
     await act(de1, 'submit');
     await act(fd, 'return', { comment: 'Ali did not work on the 31st.' });
     const edited = (await act(de1, 'edit', { people: [{ ...people[0], days: ['2026-10-30'] }] })) as { total: number; log: { text: string }[] };
@@ -181,6 +196,7 @@ describe('Daily cash custody', () => {
     await act(coo, 'pay', { personId: l.people[0].id, day: '2026-10-30', idLast4: '1234', proof: 'Pay sheet 1 (mock)' });
     await act(coo, 'giveBack', { amount: 0 });
     // The collector, the person who withdrew and handed over, and the approving FD do not count it back.
+    await uploadReceipts(svc, l.id);
     for (const u of [coo, de1, fd]) await expect(act(u, 'settle', { counted: 0 })).rejects.toThrow();
     expect(((await act(dep, 'settle', { counted: 0 })) as { status: string }).status).toBe('settled');
   });
@@ -219,6 +235,7 @@ describe('Daily cash custody', () => {
     })) as { id: string; people: { id: string }[] };
     const act2 = (u: typeof de1, action: string, input: Record<string, unknown> = {}) =>
       svc.financeControls.dailyCashAction(u, CO, action, { listId: l2.id, ...input });
+    await giveCash(svc, l2.id, l2.people[0].id);
     await act2(de1, 'submit');
     await act2(fd, 'approve', { comment: 'Approved, unchanged by me.' });
     await act2(de1, 'withdraw', { on: TODAY, amount: 100, ref: 'CHQ 2' });
@@ -240,10 +257,11 @@ describe('Daily cash custody', () => {
       to: '2026-10-31',
       bankId: F(CO).banks[0].id,
       purpose: 'Harvest workers paid in cash daily (mock)',
-      people: [{ name: 'Siti binti Abu', idLast4: '4321', work: 'Harvest', dailyRate: 50, days: ['2026-10-30', '2026-10-31'] }],
+      people: [{ name: 'Siti binti Abu', idLast4: '4321', work: 'Harvest', dailyRate: 50, days: ['2026-10-30', '2026-10-31'], pay: 'cash' }],
     })) as { id: string; people: { id: string }[] };
     const act = (u: typeof de1, action: string, input: Record<string, unknown> = {}) =>
       svc.financeControls.dailyCashAction(u, CO, action, { listId: l.id, ...input });
+    await giveCash(svc, l.id, l.people[0].id);
     await act(de1, 'submit');
     await act(fd, 'approve', { comment: 'Approved for two days.' });
     await act(de1, 'withdraw', { on: TODAY, amount: 100, ref: 'CHQ 3' });
@@ -267,6 +285,7 @@ describe('Daily cash custody', () => {
     expect(all.status).toBe('returned');
     expect(all.giveBack.amount).toBe(50);
     // Neither holder, nor whoever withdrew and handed it over, counts it back; another Finance person settles once.
+    await uploadReceipts(svc, l.id);
     for (const u of [coo, ceo, de1, fd]) await expect(act(u, 'settle', { counted: 50, depositRef: 'DEP 3' })).rejects.toThrow();
     const done = (await act(dep, 'settle', { counted: 50, depositRef: 'DEP 3' })) as { status: string; settled: { difference: number } };
     expect(done).toMatchObject({ status: 'settled', settled: { difference: 0 } });

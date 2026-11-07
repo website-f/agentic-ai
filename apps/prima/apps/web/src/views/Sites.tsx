@@ -4,6 +4,8 @@ import { api } from '../api';
 import { useApp } from '../App';
 import { Card, Empty, Facts, PageHead, Search, Stat, Stats, Toolbar } from '../kit';
 import { SiteVisitsSection } from './Visits';
+import { SiteDutyLogView } from './DutyDevice';
+import { SiteTasksView } from './SiteTasks';
 import { RecordButton } from './RecordForm';
 import { ImportButton } from './ImportDrawer';
 import { Chip, Drawer, ErrorNotice, Loading, Sev, hhmm, useAction, useLoad } from '../ui';
@@ -172,6 +174,24 @@ export function SiteDrawer({ siteId, onClose }: { siteId: string; onClose: () =>
               ]}
             />
           </div>
+
+          <SiteVisitsSection siteId={siteId} />
+
+          {/* What the client needs and the tasks the OM sets from it (Fauzan, 6 Nov 2026). */}
+          <details className="op-sec">
+            <summary className="op-sec-head" style={{ cursor: 'pointer' }}>
+              <h3>Client needs and site tasks</h3>
+            </summary>
+            <SiteTasksView siteId={siteId} />
+          </details>
+
+          {/* Post log and gate log from the site's shared device (Fauzan, 6 Nov 2026). */}
+          <details className="op-sec">
+            <summary className="op-sec-head" style={{ cursor: 'pointer' }}>
+              <h3>Duty log: post log and gate</h3>
+            </summary>
+            <SiteDutyLogView siteId={siteId} />
+          </details>
 
           <section className="op-sec">
             <div className="op-sec-head">

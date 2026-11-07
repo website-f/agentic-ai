@@ -22,6 +22,7 @@ import type { AmRentReminder, AmmoStock, SiteSystem, CmsService, CmsServiceKind,
 import { CMS_SERVICE_EQUIPMENT, CMS_SERVICE_KINDS, commissioningGaps, contractedCoverage, observe, serviceTestGaps, windowProblem } from './cms-commissioning';
 import { growthPanel, marginSummary, type GrowthMargin, type GrowthPanel } from './growth';
 import { readMemo } from './read-memo';
+import type { DutyOfflineContext } from './types';
 import {WorkflowMetricsService,metricCohorts,MetricInputError} from './it-workflow-metrics';
 import {StoreMetricPort} from './it-workflow-metrics-store';
 import {ItMetricAuthorityResolver} from './it-workflow-metrics-adapters';
@@ -92,18 +93,21 @@ import {
   seesHrLegal,
   seesStaffMovements,
   seesLoginHandovers,
+  seesApplicants,
   dataWalls,
   seesStaffAccounts,
   seesStaffNumbersOf,
   accessClosed,
   AccessClosed,
   isForeign,
+  salaryCalcTier,
 } from './access';
 import { sha256Bytes, sha256Hex, toHex, verifyChain } from './audit';
 import { hrKeeps, isHrAdmin, staffClockUser, staffPayRole, vcConsents } from './hr';
 import { FILING_LABEL, eaFigures, filingsDue, noticeWeeks, probationsDue, retirementsDue, serviceYears, terminationBenefit } from './hr-joining';
 import { OSH_INCIDENT_LABEL, oshEmployers, oshForm, oshNextReview, oshReportBy } from './hr-osh';
 import { CALENDAR_DAY_LEAVE, familyLeaveEntitlement, holidayDates, holidayYearCheck, officeLeaveDays, withOverride } from './hr-leave';
+import { ADVERT_CHANNELS, advertChannelState, advertFacts, advertHash, advertLinkMatches, checkAdvert, findIcNumbers, findMobileNumbers, templateDrafter, type AdvertDrafter } from './hr-job-adverts';
 import { faceScore, validFaceDescriptor } from './face';
 import { CheckinService, checkinState, type CheckinAddress, type CheckinFix, type CheckinInput, type CheckinPlaceInput, type CheckinRuleInput } from './checkin-service';
 import type { CheckinPolicy } from './checkin';
@@ -133,6 +137,7 @@ import {
   worst,
   type ExpiryStatus,
   type Finding,
+  shiftHours,
 } from './checks';
 import { CREDENTIAL_LABEL, INSURANCE_LABEL, LICENCE_LABEL, RULES, type JaArea } from './rules';
 import { CLAIM_DOCS, coveredOn, missingClaimDocs } from './insurance-claims';
@@ -152,6 +157,39 @@ import {
   managementFeeBillScope,
   onOpsSide,
 } from './ops-access';
+import {
+  PAY_FORMULA_KIND_LABEL,
+  PAY_SCOPE_LABEL,
+  PAY_SCOPES_FOR,
+  payFormulaLawCheck,
+  payFormulaPreview,
+  payFormulaVersionFor,
+  resolvePayFormulaUse,
+  type PayFormula,
+  type PayFormulaAmounts,
+  type PayFormulaKind,
+  type PayFormulaScope,
+  type PayFormulaUse,
+  type PayPlace,
+  DEFAULT_PAY_LAW,
+  payLawFor,
+  payLawSettingsProblem,
+  type PayLawSettings,
+  type PayLawVersion,
+} from './pay-formulas';
+import {
+  SITE_HOURS_CAUSE_LABEL,
+  attendanceHours,
+  attendanceMonth,
+  siteAllowedHours,
+  siteHoursApproverTier,
+  siteHoursCheck,
+  type SiteHoursApproval,
+  type SiteHoursCause,
+  type SiteHoursStatus,
+} from './site-hours';
+import { holidayListCheck, holidayListDue, holidayListFor, holidaysInMonth, type PublicHolidayDay, type PublicHolidayList } from './public-holidays';
+import { CLIENT_LOST_REASON, CLIENT_PERSON_ROLE, CLIENT_RENEWAL_ANSWER, CLIENT_RENEWAL_DECISION, CLIENT_REQUEST_KIND, clientKey, crmStage, renewalDeclined, renewalState } from './crm';
 import { simpleMinutesReader, type MinutesReader } from './meetings';
 import { WebsiteService } from './websites';
 import { FIN_AUTO, FinanceDeskService, finActor, finPackItems } from './finance';
@@ -161,6 +199,7 @@ import { FinanceTeamsService } from './finance-teams';
 import { FinanceControlsService } from './finance-controls';
 import { finPayrollRemittances } from './finance-regular';
 import { finCreditStatus, finCreditWarning, type FinCreditOverride } from './finance-credit';
+import { ItemService } from './item-service';
 import {
   SOCSO_RESTRICTION_LABEL,
   SOCSO_STATUS_LABEL,
@@ -174,7 +213,7 @@ import {
   socsoPayrollTreatment,
   socsoRtwOffered,
 } from './socso';
-import { FWM_TASK_LABEL, FW_CHECK_LABEL, FW_CONCERN_LABEL, FW_PAPER_LABEL, agencyScorecard, fwCheckOpens, fwPassportCustody, fwDeadline, fwServicePlan, fwStage, type FwLevel } from './fw';
+import { FWM_TASK_LABEL, FW_CHECK_LABEL, FW_CONTRACT_LANGUAGE_LABEL, FW_RECRUIT_STEPS, FW_RECRUIT_STEP_LABEL, fwRecruitAge, fwRecruitMissing, fwRecruitZeroFee, FW_CONCERN_LABEL, FW_PAPER_LABEL, agencyScorecard, fwCheckOpens, fwPassportCustody, fwDeadline, fwServicePlan, fwStage, type FwLevel } from './fw';
 import {
   TENDER_BID_PART_LABEL,
   TENDER_PAPER_LABEL,
@@ -189,11 +228,14 @@ import {
   type TenderReader,
 } from './tender';
 import type { Store } from './store';
-import { addDays, addMinutes, ageOn, dateOf, daysBetween, fromMs, isRealDate, minutesBetween, myt, toMs } from './time';
-import { buildStaffPayLine, periodEnd, staffPayInputsKey, eisShare, epfShare, hrdLevy, socsoShare } from './payroll';
+import { addDays, addMinutes, ageOn, dateOf, daysBetween, fromMs, isRealDate, minutesBetween, myt, toMs, weekday } from './time';
+import { NEED_TOPIC_KEYS, SITE_TASK_FOR_LABEL } from './client-needs';
+import { buildStaffPayLine, payAccountCheck, periodEnd, staffPayInputsKey, eisShare, epfShare, hrdLevy, socsoShare } from './payroll';
 import { minimumWageFor, minimumWageShort, overtimePay } from './hr-payroll-checks';
 import { HR_LEGAL_POINTS, HR_LEGAL_STATUS_LABEL, type HrLegalPoint } from './hr-legal';
 import { STAT_TABLE_IDS, builtInStatTables, staffPayDirectorChecks, parseStatRows, statTableChanges, statTableFor, type StatRow, type StatTable } from './statutory-tables';
+import { DEFAULT_STATUTORY, statutoryFor, statutoryProblem, type StatutorySettings, type StatutoryVersion } from './statutory';
+import { GUARD_PAY_CALCULATION_VERSION, GUARD_PAY_ROLES, attendanceDate, buildGuardPayLine, guardPayOverDeductionCap, guardPayTotals, loanDue, type GuardLoan, type GuardPayAdvance, type GuardPayCash, type GuardPayLine, type GuardPayRun } from './guard-pay';
 import { itPurchaseRequest } from './purchase';
 import { itTenderClock, itTenderTimeline } from './it-tender';
 import { planDues, planNext, planLoad, planPeriod, type PlanSpan } from './it-plan';
@@ -215,6 +257,7 @@ import {
   treasuryView,
   type TerminationStep,
 } from './branch-ledger';
+import { buildWorkKpi, workKpiPeriod, workKpiScope, workKpiTables } from './work-kpi';
 import { RECORD_KINDS, checkRecordValues, type RecordKind, type RecordValues } from './records';
 import {
   OFFICE_DESKS,
@@ -348,6 +391,14 @@ import type {
   ClientAccount,
   ClientComplaint,
   ClientFeedbackVia,
+  ClientLostReason,
+  ClientPerson,
+  ClientPersonRole,
+  ClientRenewal,
+  ClientRenewalAnswer,
+  ClientRenewalDecision,
+  ClientRequest,
+  ClientRequestKind,
   ExpenseKind,
   ExpenseRequest,
   OfficeCategory,
@@ -431,6 +482,10 @@ import type {
   FwCheckKind,
   FwConcern,
   FwWelfareCheck,
+  FwRecruitFile,
+  FwRecruitStep,
+  FwRecruitStepRecord,
+  FwContractLanguage,
   SocsoRehab,
   SocsoRestriction,
   SocsoRestrictionKind,
@@ -478,6 +533,8 @@ import type {
   OshOfficeAssessment,
   HrCaseStepKind,
   Vacancy,
+  VacancyAdvert,
+  Applicant,
   StaffMovement,
   LoginHandover,
   StaffMovementStep,
@@ -487,6 +544,22 @@ import type {
   Post,
   Severity,
   SiteAlarm,
+  SiteDispatch,
+  PostLogEntry,
+  PostLogKind,
+  SiteVehicle,
+  GateEntry,
+  GateFlag,
+  SealedBundle,
+  SiteNeedsReview,
+  SiteTask,
+  SiteTaskFor,
+  SiteTaskLog,
+  VisitorIdKind,
+  DispatchLevel,
+  DispatchProof,
+  DispatchOutcome,
+  EvidenceVideo,
   Shift,
   Site,
   User,
@@ -924,7 +997,10 @@ export type HomeView =
   | 'continuity'
   | 'office'
   | 'continuity'
-  | 'mine';
+  | 'mine'
+  | 'payformulas'
+  | 'sitehours'
+  | 'guardpay';
 export interface HomeLink {
   view: HomeView;
   siteId?: Id;
@@ -1163,6 +1239,12 @@ export class PrimaService {
   teamsApprovals = false;
   /** The Finance flow's service account (Entra object ID) that alone writes Teams results; API: TEAMS_FLOW_SERVICE_OID. */
   teamsServiceOid = '';
+  /**
+   * The in-house server's public key (RSA-OAEP-256, as a JSON web key). Site devices seal the full identity number, the
+   * IC picture and written book pages with it, so only the in-house server can open them. Null until it is set up: the
+   * API reads it from INHOUSE_PUBLIC_KEY_JWK and INHOUSE_KEY_ID; the browser test version makes a test key.
+   */
+  inhouseKey: { keyId: string; jwk: JsonWebKey } | null = null;
 
   private pinOk(person: Person, pin: string): boolean {
     try {
@@ -1191,6 +1273,14 @@ export class PrimaService {
 
   today(): IsoDate {
     return dateOf(this.clock());
+  }
+
+  private itemService: ItemService | null = null;
+  /** The browser test version only: makes labels from a seed so a reload replays to the same labels. Never set by the API. */
+  itemLabelMaker: ((seed: string) => string) | null = null;
+  /** One item register for every kind of thing in every company (Fauzan, 6 Nov 2026; Fitri's paper v1.0). */
+  get items(): ItemService {
+    return (this.itemService ??= new ItemService(this.store, this.clock, () => this.grants(), this.itemLabelMaker ?? undefined));
   }
 
   private webService: WebsiteService | null = null;
@@ -2220,11 +2310,26 @@ export class PrimaService {
     const hr = this.keepsHr(user);
     const ceo = user.opsTier === 'ceo' && !user.integration;
     const cm = user.role === 'company_manager' && !user.integration;
-    if (!hr && !ceo && !cm && !isHrDirector(user)) throw new AccessDenied('hr.monitor', '(vacancies)');
+    const om = (user.opsTier === 'om' || user.opsTier === 'regional') && !user.integration;
+    if (!hr && !ceo && !cm && !om && !isHrDirector(user)) throw new AccessDenied('hr.monitor', '(vacancies)');
     const companies = await this.store.list('companies');
-    const rows = (await this.store.list('vacancies', {})).filter((v) => hr || ceo || isHrDirector(user) || (cm && user.companyIds.includes(v.companyId)));
+    const rows = (await this.store.list('vacancies', {})).filter(
+      (v) => hr || ceo || isHrDirector(user) || (cm && user.companyIds.includes(v.companyId)) || (om && this.omApprovesAdvert(user, v)),
+    );
+    const minimumWage = RULES.minimumWage.value.monthly;
+    const allUsers = await this.store.list('users');
+    const omStates = new Set(allUsers.filter((x) => x.opsTier === 'om' && !x.integration).flatMap((x) => x.areaStates ?? []));
+    const applicantRows = seesApplicants(user) ? await this.store.list('applicants', {}) : [];
+    const applicantCounts = new Map<string, number>();
+    const hiredCounts = new Map<string, number>();
+    for (const a of applicantRows) {
+      applicantCounts.set(a.vacancyId, (applicantCounts.get(a.vacancyId) ?? 0) + 1);
+      if (a.status === 'hired') hiredCounts.set(a.vacancyId, (hiredCounts.get(a.vacancyId) ?? 0) + 1);
+    }
+    const romRegions = new Set(allUsers.filter((x) => x.opsTier === 'regional' && !x.integration).flatMap((x) => x.regionIds ?? []));
     return {
       canRaise: hr || cm || this.hrMaker(user),
+      channels: ADVERT_CHANNELS.map((c) => ({ ...c, ...advertChannelState(c.id) })),
       rows: rows
         .sort((a, b) => b.raisedAt.localeCompare(a.raisedAt))
         .map((v) => ({
@@ -2233,11 +2338,18 @@ export class PrimaService {
           canCeo: ceo && v.status === 'waiting_ceo' && v.raisedById !== user.id,
           canSign: v.status === 'waiting_head' && this.companyHeadSigns(user, v) && v.ceo?.byId !== user.id,
           canClose: (hr || this.companyHeadSigns(user, v)) && (v.status === 'open' || v.status === 'waiting_ceo' || v.status === 'waiting_head'),
+          ...this.advertView(user, v, companies.find((c) => c.id === v.companyId)?.name ?? 'PWVSB', minimumWage),
+          // A guard or officer post in a state no OM covers has nobody to approve its job post.
+          advertApproverMissing:
+            (v.category ?? 'staff') !== 'staff' && !!v.state && !omStates.has(v.state) && !romRegions.has(regionOfState(v.state)?.id ?? ''),
+          // Applicant counts only for those behind the applicants wall.
+          applicantCount: seesApplicants(user) ? applicantCounts.get(v.id) ?? 0 : null,
+          hiredCount: seesApplicants(user) ? hiredCounts.get(v.id) ?? 0 : null,
         })),
     };
   }
 
-  async raiseVacancy(user: User, input: { companyId: Id; title: string; department: string; headcount: number; reason: string; payFrom: number | null; payTo: number | null }) {
+  async raiseVacancy(user: User, input: { companyId: Id; title: string; department: string; headcount: number; reason: string; payFrom: number | null; payTo: number | null; category?: Vacancy['category']; state?: string | null }) {
     const hr = this.keepsHr(user);
     const cm = user.role === 'company_manager' && !user.integration && user.companyIds.includes(input.companyId);
     if (!hr && !cm && !this.hrMaker(user)) throw new AccessDenied('hr.monitor', '(vacancies)');
@@ -2248,11 +2360,21 @@ export class PrimaService {
     if (!Number.isInteger(input.headcount) || input.headcount < 1 || input.headcount > 50) throw new BadRequest('Give how many people.');
     for (const x of [input.payFrom, input.payTo]) if (x !== null && !(Number.isFinite(x) && x > 0 && x < 100000)) throw new BadRequest('Give the pay in RM a month.');
     if (input.payFrom !== null && input.payTo !== null && input.payTo < input.payFrom) throw new BadRequest('The top of the pay range is below the bottom.');
+    const category = input.category ?? 'staff';
+    if (!['guard', 'officer', 'staff'].includes(category)) throw new BadRequest('Choose guard, patrolling officer or staff.');
+    const state = category === 'staff' ? null : (input.state ?? '').trim();
+    if (state !== null && !REGIONS.some((r) => r.states.includes(state))) throw new BadRequest('Choose the state the post is in; its Operations Manager approves the job post.');
     const companies = await this.store.list('companies');
     if (input.companyId !== GROUP_EMPLOYER_ID && !companies.some((c) => c.id === input.companyId)) throw new NotFound('Company');
     const at = this.now();
+    // Two vacancies raised in the same millisecond (or under a fixed clock) must not share an id.
+    let vid = `vac-${input.companyId}-${toMs(at)}`;
+    for (let n = 2; await this.store.get('vacancies', vid); n++) vid = `vac-${input.companyId}-${toMs(at)}-${n}`;
     const v: Vacancy = {
-      id: `vac-${input.companyId}-${toMs(at)}`,
+      category,
+      state,
+      advert: null,
+      id: vid,
       companyId: input.companyId,
       title,
       department: (input.department ?? '').trim().slice(0, 60),
@@ -2284,6 +2406,7 @@ export class PrimaService {
     const at = this.now();
     let patch: Partial<Vacancy>;
     let summary: string;
+    let closeNote: string | null = null;
     if ((action === 'ceo_approve' || action === 'ceo_refuse') && view.canCeo) {
       const text = requireApprovalReason(note, action === 'ceo_approve' ? 'approve' : 'refuse');
       patch = { status: action === 'ceo_approve' ? 'waiting_head' : 'refused', ceo: { by: user.name, byId: user.id, at, note: text, approve: action === 'ceo_approve' } };
@@ -2295,13 +2418,355 @@ export class PrimaService {
     } else if (action === 'close' && view.canClose) {
       const text = requireApprovalReason(note, 'close it');
       patch = { status: v.status === 'open' ? 'filled' : 'cancelled', closed: { by: user.name, byId: user.id, at, note: text } };
+      closeNote = text;
       summary = `${v.status === 'open' ? 'filled' : 'cancelled'}: ${text}`;
     } else throw new BadRequest(v.raisedById === user.id && action.startsWith('ceo') ? 'Someone else approves your own request.' : 'You cannot do that on this vacancy now.');
     await this.store.transaction(async (tx) => {
+      // Serialize with job post steps on the same vacancy and build from the row as it is now.
+      await tx.lock?.('vacancies', id);
+      const fresh = await tx.get('vacancies', id);
+      if (!fresh || fresh.status !== v.status) throw new BadRequest('This vacancy changed since you opened it. Reload and look again.');
+      // A closed vacancy takes its job post down with it; HR is reminded to remove posts made by hand.
+      const ad = fresh.advert;
+      if (closeNote !== null && ad && ad.status !== 'withdrawn') {
+        const left = ad.manualPosts.length;
+        patch.advert = {
+          ...ad,
+          status: 'withdrawn',
+          outbox: (ad.outbox ?? []).filter((o) => o.status === 'posted'),
+          history: [...ad.history, { at, by: user.name, byId: user.id, action: 'withdraw', version: ad.version, note: `Vacancy closed: ${closeNote}${left ? `. Take down ${left} post${left === 1 ? '' : 's'} made by hand.` : ''}` }],
+        };
+      }
       await tx.update('vacancies', id, patch);
       await tx.audit({ at, actor: user.name, companyId: v.companyId === GROUP_EMPLOYER_ID ? null : v.companyId, action: `hr.vacancy_${action}`, entity: 'vacancy', entityId: id, summary: `Vacancy ${v.title}: ${summary}` });
     });
     return (await this.store.get('vacancies', id))!;
+  }
+
+  // ---------- Job adverts for open vacancies (rule HR-JOB-ADVERT, audit decision 6, Fauzan 5 Nov 2026) ----------
+
+  /**
+   * Guard and patrolling officer posts: the Operations Manager covering the post's state approves; the Regional OM of
+   * that state's region approves as backup when the OM is away or no OM covers the state (Fauzan, 5 Nov 2026).
+   */
+  private omApprovesAdvert(user: User, v: Vacancy): boolean {
+    if (user.integration) return false;
+    if ((v.category ?? 'staff') === 'staff' || !v.state) return false;
+    if (user.opsTier === 'om') return (user.areaStates ?? []).includes(v.state);
+    if (user.opsTier === 'regional') {
+      const region = regionOfState(v.state);
+      return !!region && (user.regionIds ?? []).includes(region.id);
+    }
+    return false;
+  }
+
+  /** Who approves a job advert: the OM of the state for guard and officer posts, the HR Director for everyone else. */
+  private approvesAdvert(user: User, v: Vacancy): boolean {
+    if (user.integration) return false;
+    return (v.category ?? 'staff') === 'staff' ? isHrDirector(user) : this.omApprovesAdvert(user, v);
+  }
+
+  /** HR, or the company manager of the employer, writes the advert. */
+  private writesAdvert(user: User, v: Vacancy): boolean {
+    if (user.integration) return false;
+    return this.keepsHr(user) || (user.role === 'company_manager' && v.companyId !== GROUP_EMPLOYER_ID && user.companyIds.includes(v.companyId));
+  }
+
+  private advertView(user: User, v: Vacancy, employer: string, minimumWage: number) {
+    const a = v.advert ?? null;
+    const open = v.status === 'open';
+    const writes = this.writesAdvert(user, v);
+    const approves = this.approvesAdvert(user, v);
+    const expired = !!a?.closingDate && a.closingDate < this.today();
+    return {
+      advertExpired: expired,
+      approverLabel: (v.category ?? 'staff') === 'staff' ? 'HR Director' : `Operations Manager for ${v.state ?? 'the state'} (Regional OM as backup)`,
+      approvingAsBackup: user.opsTier === 'regional' && approves,
+      advertChecks: a ? checkAdvert(a.text, advertFacts(v, employer, a.applyHow, a.closingDate), minimumWage) : [],
+      // A withdrawn post can be written again while the vacancy is still open; the new version needs approval again.
+      canAdvertDraft: open && writes,
+      // A post past its closing date is never sent or approved: edit it with a new date, or withdraw it.
+      canAdvertSubmit: open && !expired && writes && a?.status === 'draft',
+      // Nobody approves wording they wrote: anyone who saved a version since the last approval is out.
+      canAdvertApprove: open && !expired && approves && a?.status === 'waiting_approval' && a.writtenById !== user.id && !(a.writers ?? []).includes(user.id),
+      canAdvertRecord: open && !expired && this.keepsHr(user) && a?.status === 'approved',
+      canAdvertWithdraw: (writes || approves) && !!a && a.status !== 'withdrawn',
+    };
+  }
+
+  /** Optional AI drafter; until a model is connected the bilingual template is used and labelled as such. */
+  advertDrafter: AdvertDrafter = templateDrafter;
+
+  async advertStep(
+    user: User,
+    id: Id,
+    action: 'draft' | 'submit' | 'approve' | 'return' | 'record_posted' | 'withdraw',
+    input: { text?: string; channels?: string[]; applyHow?: string; closingDate?: string | null; note?: string; channel?: string; link?: string; where?: string; version?: number },
+  ) {
+    const v = await this.store.get('vacancies', id);
+    if (!v) throw new NotFound('Vacancy');
+    const view = (await this.vacancies(user)).rows.find((r) => r.id === id);
+    if (!view) throw new NotFound('Vacancy');
+    const at = this.now();
+    const a = v.advert ?? null;
+    const today = this.today();
+    const rule = RULES.jobAdvert.value;
+    const employer = view.companyName;
+    let next: VacancyAdvert;
+    let summary: string;
+    const event = (act: VacancyAdvert['history'][number]['action'], version: number, note: string) => ({ at, by: user.name, byId: user.id, action: act, version, note });
+    // Bind every review action to the version the person looked at.
+    if (a && input.version !== a.version) throw new BadRequest('The post changed since you opened it. Reload and look again.');
+    if (action === 'draft' && view.canAdvertDraft) {
+      const channels = [...new Set(input.channels ?? [])];
+      if (channels.length === 0 || channels.some((c) => !ADVERT_CHANNELS.some((x) => x.id === c))) throw new BadRequest('Choose where the post should go.');
+      const applyHow = (input.applyHow ?? '').trim().slice(0, 200);
+      // A closing date is required, real, and within the limit, so no post stays out (or queued) forever.
+      const closingDate = input.closingDate ? String(input.closingDate) : null;
+      if (closingDate === null || !realCalendarDate(closingDate) || closingDate < today || closingDate > addDays(today, rule.maxClosingDays)) {
+        throw new BadRequest(`Give a closing date between today and ${rule.maxClosingDays} days from now.`);
+      }
+      const facts = advertFacts(v, employer, applyHow, closingDate);
+      const typed = (input.text ?? '').trim();
+      let text: string;
+      let origin: VacancyAdvert['origin'];
+      if (typed) {
+        text = typed;
+        origin = 'edited';
+      } else {
+        text = (await this.advertDrafter.draft(facts)).trim();
+        origin = this.advertDrafter.origin;
+      }
+      if (text.length < 20 || text.length > rule.maxChars) throw new BadRequest(`The post must be 20 to ${rule.maxChars} characters.`);
+      const version = (a?.version ?? 0) + 1;
+      next = {
+        version,
+        text,
+        origin,
+        channels: channels as VacancyAdvert['channels'],
+        applyHow,
+        closingDate,
+        hash: advertHash(text, channels as VacancyAdvert['channels'], closingDate, applyHow),
+        writtenBy: user.name,
+        writtenById: user.id,
+        writtenAt: at,
+        status: 'draft',
+        approved: null,
+        // Everyone who wrote a version since the last approval is barred from approving it. A withdrawal keeps the
+        // list, so withdrawing and re-saving the same text never clears the writer's own name.
+        writers: [...new Set([...(a && a.status !== 'approved' ? (a.writers ?? [a.writtenById]) : []), user.id])],
+        // Any queued automatic post is cancelled: only approved wording may go out.
+        outbox: [],
+        manualPosts: a?.manualPosts ?? [],
+        history: [
+          ...(a?.history ?? []),
+          event(
+            a ? 'edit' : 'draft',
+            version,
+            `${origin === 'edited' ? 'Wording written by hand.' : `Drafted by the ${origin === 'ai' ? 'AI model (not checked)' : 'Prima template'}.`}${
+              a?.status === 'approved' && a.manualPosts.some((p) => p.version === a.version)
+                ? ` Approval cleared: update or take down the ${a.manualPosts.filter((p) => p.version === a.version).length} post(s) made by hand with version ${a.version}.`
+                : ''
+            }`,
+          ),
+        ],
+      };
+      summary = `${a ? 'edited' : 'drafted'} (version ${version}, ${origin}${a?.status === 'approved' ? ', approval cleared' : ''})`;
+    } else if (action === 'submit' && view.canAdvertSubmit && a) {
+      const blocks = view.advertChecks.filter((c) => c.level === 'block');
+      if (blocks.length) throw new BadRequest(blocks.map((b) => b.message).join(' '));
+      next = { ...a, status: 'waiting_approval', history: [...a.history, event('submit', a.version, (input.note ?? '').trim().slice(0, 300))] };
+      summary = `sent to the ${view.approverLabel} for approval (version ${a.version})`;
+    } else if ((action === 'approve' || action === 'return') && view.canAdvertApprove && a) {
+      const text = requireApprovalReason(input.note, action === 'approve' ? 'approve' : 'send it back');
+      if (advertHash(a.text, a.channels, a.closingDate, a.applyHow) !== a.hash) throw new BadRequest('The post does not match its recorded wording. Ask HR to draft it again.');
+      if (action === 'approve' && view.advertChecks.some((c) => c.level === 'block')) throw new BadRequest('The post still has wording that must be removed.');
+      next =
+        action === 'approve'
+          ? {
+              ...a,
+              status: 'approved',
+              approved: { by: user.name, byId: user.id, at, note: text, version: a.version, hash: a.hash },
+              // Posted by itself once each channel is connected (Fauzan, 5 Nov 2026); held until then.
+              outbox: a.channels.map((channel) => ({ channel, status: 'waiting_connection' as const, version: a.version, hash: a.hash, at, link: null })),
+              history: [...a.history, event('approve', a.version, text)],
+            }
+          : { ...a, status: 'draft', approved: null, outbox: [], history: [...a.history, event('return', a.version, text)] };
+      summary =
+        action === 'approve'
+          ? `approved (version ${a.version}): ${text}. Queued to post by itself on ${a.channels.join(', ')} once connected; no channel is connected, so nothing was posted.`
+          : `sent back: ${text}`;
+    } else if (action === 'record_posted' && view.canAdvertRecord && a) {
+      const channel = String(input.channel ?? '');
+      const NO_LINK = { whatsapp: 'WhatsApp group', notice_board: 'notice board', other_place: 'other place' } as const;
+      let entry: VacancyAdvert['manualPosts'][number];
+      let said: string;
+      if (channel in NO_LINK) {
+        // A place with no link (Fauzan, 5 Nov 2026): HR says where; a photo follows once file storage is switched on.
+        const where = String(input.where ?? '').trim().replace(/\s+/g, ' ');
+        if (where.length < 3 || where.length > 120) throw new BadRequest('Say where it was posted, for example the WhatsApp group or the office notice board.');
+        if (findIcNumbers(where).length || findMobileNumbers(where).length) throw new BadRequest('Name the place, not a phone or IC number.');
+        entry = { channel: channel as keyof typeof NO_LINK, link: null, where, photo: null, by: user.name, byId: user.id, at, version: a.version };
+        said = `${NO_LINK[channel as keyof typeof NO_LINK]}: ${where} (no link; recorded by HR, not checked by Prima)`;
+      } else {
+        if (!a.channels.includes(channel as never)) throw new BadRequest('Record only a channel the approval covers.');
+        const link = String(input.link ?? '').trim();
+        if (link.length > 300 || !advertLinkMatches(channel as VacancyAdvert['channels'][number], link)) throw new BadRequest(`Give the https link to the post on ${channel}.`);
+        entry = { channel: channel as VacancyAdvert['channels'][number], link, by: user.name, byId: user.id, at, version: a.version };
+        said = `${channel}: ${link} (recorded by HR, not checked by Prima)`;
+      }
+      next = { ...a, manualPosts: [...a.manualPosts, entry], history: [...a.history, event('record_posted', a.version, said)] };
+      summary = `HR recorded a post made by hand: ${said}`;
+    } else if (action === 'withdraw' && view.canAdvertWithdraw && a) {
+      const text = requireApprovalReason(input.note, 'withdraw it');
+      next = { ...a, status: 'withdrawn', outbox: (a.outbox ?? []).filter((o) => o.status === 'posted'), history: [...a.history, event('withdraw', a.version, text)] };
+      summary = `withdrawn: ${text}${a.manualPosts.length ? ' (take down the posts made by hand)' : ''}`;
+    } else {
+      throw new BadRequest(
+        (action === 'approve' || action === 'return') && (a?.writtenById === user.id || (a?.writers ?? []).includes(user.id)) ? 'Someone else approves the wording you wrote.' : 'You cannot do that on this job post now.',
+      );
+    }
+    await this.store.transaction(async (tx) => {
+      // Serialize with any other step on this vacancy, then make sure nothing changed since it was checked.
+      await tx.lock?.('vacancies', id);
+      const fresh = await tx.get('vacancies', id);
+      if (
+        !fresh ||
+        fresh.status !== v.status ||
+        (fresh.advert?.version ?? 0) !== (a?.version ?? 0) ||
+        (fresh.advert?.status ?? null) !== (a?.status ?? null) ||
+        (fresh.advert?.history.length ?? 0) !== (a?.history.length ?? 0)
+      ) {
+        throw new BadRequest('The post changed since you opened it. Reload and look again.');
+      }
+      await tx.update('vacancies', id, { advert: next });
+      await tx.audit({ at, actor: user.name, companyId: v.companyId === GROUP_EMPLOYER_ID ? null : v.companyId, action: `hr.advert_${action}`, entity: 'vacancy', entityId: id, summary: `Job post for ${v.title}: ${summary}` });
+    });
+    return (await this.store.get('vacancies', id))!;
+  }
+
+  // ---------- Applicants for vacancies (Fauzan, 5 Nov 2026: build the applicant list; HR only) ----------
+
+  private static readonly APPLICANT_NEXT: Record<Applicant['status'], Applicant['status'][]> = {
+    new: ['shortlisted', 'rejected', 'withdrawn'],
+    shortlisted: ['interview', 'rejected', 'withdrawn'],
+    interview: ['offered', 'rejected', 'withdrawn', 'interview'],
+    offered: ['hired', 'rejected', 'withdrawn'],
+    hired: [],
+    rejected: [],
+    withdrawn: [],
+  };
+
+  /** HR, the HR Director and the CEO read the list; HR (the HR Administrator and the HR Director) keeps it. */
+  async applicants(user: User, vacancyId: Id) {
+    if (!seesApplicants(user)) throw new AccessDenied('hr.monitor', '(applicants)');
+    const vacancy = (await this.vacancies(user)).rows.find((r) => r.id === vacancyId);
+    if (!vacancy) throw new NotFound('Vacancy');
+    const rows = (await this.store.list('applicants', {})).filter((a) => a.vacancyId === vacancyId);
+    const keeps = this.keepsHr(user);
+    return {
+      vacancyId,
+      title: vacancy.title,
+      headcount: vacancy.headcount,
+      canAdd: keeps && vacancy.status === 'open',
+      rows: rows
+        .sort((a, b) => b.addedAt.localeCompare(a.addedAt))
+        .map((a) => ({ ...a, next: keeps ? PrimaService.APPLICANT_NEXT[a.status] : [] })),
+    };
+  }
+
+  async addApplicant(user: User, vacancyId: Id, input: { name: string; phone?: string; email?: string; source: Applicant['source']; appliedOn: IsoDate }) {
+    if (!seesApplicants(user) || !this.keepsHr(user)) throw new AccessDenied('hr.monitor', '(applicants)');
+    const v = (await this.vacancies(user)).rows.find((r) => r.id === vacancyId);
+    if (!v) throw new NotFound('Vacancy');
+    if (v.status !== 'open') throw new BadRequest('Add applicants only to an open vacancy.');
+    const name = (input.name ?? '').trim().replace(/\s+/g, ' ').slice(0, 80);
+    if (name.length < 2) throw new BadRequest('Give the applicant’s name.');
+    const phone = (input.phone ?? '').replace(/[\s-]/g, '');
+    const email = (input.email ?? '').trim().toLowerCase().slice(0, 120);
+    if (phone && !/^(\+?60|0)\d{8,10}$/.test(phone)) throw new BadRequest('Give a Malaysian phone number, for example 012-345 6789.');
+    if (email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) throw new BadRequest('The email address does not look right.');
+    if (!phone && !email) throw new BadRequest('Give a phone number or an email so HR can reach them.');
+    if (/\b\d{6}-?\d{2}-?\d{4}\b/.test(name)) throw new BadRequest('Do not put an IC number in the name.');
+    const sources: Applicant['source'][] = ['facebook', 'instagram', 'linkedin', 'tiktok', 'jobstreet', 'walk_in', 'referral', 'other'];
+    if (!sources.includes(input.source)) throw new BadRequest('Say where they saw the post.');
+    const today = this.today();
+    if (!realCalendarDate(input.appliedOn ?? '') || input.appliedOn > today || input.appliedOn < addDays(today, -365)) throw new BadRequest('Give the date they applied.');
+    const norm = (p: string) => p.replace(/^\+?60/, '0');
+    const duplicate = (rows: Applicant[]) =>
+      rows.some((a) => a.vacancyId === vacancyId && ((phone && a.phone && norm(a.phone) === norm(phone)) || (email && a.email === email)));
+    if (duplicate(await this.store.list('applicants', {}))) throw new BadRequest('This person is already on the list for this vacancy.');
+    const at = this.now();
+    let id = `app-${vacancyId}-${toMs(at)}`;
+    for (let n = 2; await this.store.get('applicants', id); n++) id = `app-${vacancyId}-${toMs(at)}-${n}`;
+    const a: Applicant = {
+      id,
+      vacancyId,
+      companyId: v.companyId,
+      name,
+      phone,
+      email,
+      source: input.source,
+      appliedOn: input.appliedOn,
+      status: 'new',
+      interviewAt: null,
+      addedBy: user.name,
+      addedById: user.id,
+      addedAt: at,
+      history: [{ at, by: user.name, byId: user.id, status: 'new', note: 'Added to the list.' }],
+    };
+    await this.store.transaction(async (tx) => {
+      // Two HR users adding the same person at once: serialize on the vacancy and check again.
+      await tx.lock?.('vacancies', vacancyId);
+      if (duplicate(await tx.list('applicants', {}))) throw new BadRequest('This person is already on the list for this vacancy.');
+      await tx.insert('applicants', a);
+      await tx.audit({ at, actor: user.name, companyId: null, action: 'hr.applicant_add', entity: 'applicant', entityId: id, summary: `Applicant added (vacancy ${v.id})` });
+    });
+    return a;
+  }
+
+  /** Moves an applicant on. Refusing, offering and hiring need a comment; hiring does not create a staff record. */
+  async applicantStep(user: User, id: Id, status: Applicant['status'], note: string, interviewAt: IsoDateTime | null = null) {
+    if (!seesApplicants(user) || !this.keepsHr(user)) throw new AccessDenied('hr.monitor', '(applicants)');
+    const a = await this.store.get('applicants', id);
+    if (!a) throw new NotFound('Applicant');
+    const v = (await this.vacancies(user)).rows.find((r) => r.id === a.vacancyId);
+    if (!v) throw new NotFound('Applicant');
+    if (!PrimaService.APPLICANT_NEXT[a.status].includes(status)) throw new BadRequest('You cannot move this applicant there now.');
+    // A hire may still be recorded for someone offered before the vacancy was closed as filled.
+    const stillHiring = v.status === 'open' || (status === 'hired' && a.status === 'offered' && v.status === 'filled');
+    if ((status === 'shortlisted' || status === 'interview' || status === 'offered' || status === 'hired') && !stillHiring) throw new BadRequest('The vacancy is closed.');
+    const text = ['rejected', 'offered', 'hired', 'withdrawn'].includes(status) ? requireApprovalReason(note, 'record it') : (note ?? '').trim().slice(0, 300);
+    if (status === 'interview') {
+      // Needs an explicit time zone, so 10am in Malaysia is never stored as 10am UTC.
+      const when = interviewAt ? Date.parse(interviewAt) : NaN;
+      const nowMs = Date.parse(this.now());
+      if (!interviewAt || !/(Z|[+-]\d{2}:\d{2})$/.test(interviewAt) || !Number.isFinite(when) || when < nowMs - 30 * 86_400_000 || when > nowMs + 180 * 86_400_000) {
+        throw new BadRequest('Give the interview date and time (within the next six months).');
+      }
+    }
+
+    const at = this.now();
+    const patch: Partial<Applicant> = {
+      status,
+      interviewAt: status === 'interview' ? new Date(Date.parse(interviewAt!)).toISOString() : a.interviewAt,
+      history: [...a.history, { at, by: user.name, byId: user.id, status, note: text }],
+    };
+    await this.store.transaction(async (tx) => {
+      // Hires on one vacancy serialize on the vacancy row, so two hires at once cannot pass the place count.
+      await tx.lock?.('vacancies', a.vacancyId);
+      await tx.lock?.('applicants', id);
+      if (status === 'hired') {
+        const hired = (await tx.list('applicants', {})).filter((x) => x.vacancyId === a.vacancyId && x.status === 'hired').length;
+        if (hired >= v.headcount) throw new BadRequest(`All ${v.headcount} places are already filled.`);
+      }
+      const fresh = await tx.get('applicants', id);
+      if (!fresh || fresh.status !== a.status || fresh.history.length !== a.history.length) throw new BadRequest('This applicant changed since you opened it. Reload and look again.');
+      await tx.update('applicants', id, patch);
+      // Filed at group level without the note, so the company's own audit view never shows applicant decisions.
+      await tx.audit({ at, actor: user.name, companyId: null, action: `hr.applicant_${status}`, entity: 'applicant', entityId: id, summary: `Applicant ${status} (vacancy ${v.id})` });
+    });
+    return (await this.store.get('applicants', id))!;
   }
 
   // ---------- Staff movement: promotion, transfer to another group company, secondment (Fauzan, 3 Nov 2026) ----------
@@ -2612,7 +3077,11 @@ export class PrimaService {
   /** Why an allowance change from this date cannot be applied yet: a payroll month from then on is already submitted. */
   private async allowancePayrollProblem(tx: Store, companyId: Id, effectiveOn: IsoDate): Promise<string | null> {
     const period = effectiveOn.slice(0, 7);
-    const run = (await tx.list('staffPayRuns', { companyId })).filter((r) => r.period >= period && r.stage !== 'draft').sort((a, b) => a.period.localeCompare(b.period))[0];
+    // Take the same lock as a submission on every month from then on, then read the stage again under it.
+    const ids = (await tx.list('staffPayRuns', { companyId })).filter((r) => r.period >= period).map((r) => r.id).sort();
+    for (const id of ids) await tx.lock?.('staffPayRuns', id);
+    const runs = (await Promise.all(ids.map((id) => tx.get('staffPayRuns', id)))).filter((r): r is StaffPayRun => !!r);
+    const run = runs.filter((r) => r.stage !== 'draft').sort((a, b) => a.period.localeCompare(b.period))[0];
     return run ? `Payroll ${run.period} is already submitted. Return it to HR first, then apply this change and recalculate.` : null;
   }
 
@@ -2621,18 +3090,68 @@ export class PrimaService {
    * that takes effect after the month end is rolled back to what it replaced, so last month's payroll prepared today
    * does not pick up next month's pay.
    */
-  private async peopleForPeriod(people: Person[], period: string): Promise<Person[]> {
+  private async peopleForPeriod(people: Person[], period: string, st: Store = this.store): Promise<Person[]> {
     const end = periodEnd(period);
-    const later = (await this.store.list('payChanges', {}))
-      .filter((c) => c.status === 'verified' && c.effectiveOn > end && people.some((p) => p.id === c.personId))
-      .sort((a, b) => a.effectiveOn.localeCompare(b.effectiveOn) || a.requestedAt.localeCompare(b.requestedAt));
+    const ids = new Set(people.map((p) => p.id));
+    // History is rebuilt by effective date, not by the order changes were approved or applied (Arisha main retest of
+    // a07f0e8): the value in force at the month end is the last change starting on or before it; before the first
+    // change it is what that change replaced. Only used when a change starts after the month end.
+    const all = (await st.list('payChanges', {}))
+      .filter((c) => c.status === 'verified' && ids.has(c.personId) && c.kind !== 'BANK')
+      .sort((a, b) => a.effectiveOn.localeCompare(b.effectiveOn) || (a.decidedAt ?? a.requestedAt).localeCompare(b.decidedAt ?? b.requestedAt));
     return people.map((p) => {
-      const mine = later.filter((c) => c.personId === p.id);
-      const alw = mine.find((c) => c.kind === 'ALLOWANCE' && c.applied !== null);
-      const pay = mine.find((c) => (c.kind ?? 'PAY') === 'PAY' && c.from != null);
-      if (!alw && !pay) return p;
-      return { ...p, ...(alw ? { allowances: alw.allowancesFrom ?? [] } : {}), ...(pay ? { basicPay: pay.from! } : {}) };
+      const mine = all.filter((c) => c.personId === p.id);
+      const alw = mine.filter((c) => c.kind === 'ALLOWANCE' && c.applied !== null);
+      const pay = mine.filter((c) => (c.kind ?? 'PAY') === 'PAY' && c.from != null);
+      const asOf = <T,>(list: PayChange[], to: (c: PayChange) => T, from: (c: PayChange) => T): T | undefined => {
+        if (!list.some((c) => c.effectiveOn > end)) return undefined;
+        const before = list.filter((c) => c.effectiveOn <= end);
+        return before.length ? to(before[before.length - 1]) : from(list[0]);
+      };
+      const allowances = asOf(alw, (c) => c.allowancesTo ?? [], (c) => c.allowancesFrom ?? []);
+      const basicPay = asOf(pay, (c) => c.to, (c) => c.from!);
+      if (allowances === undefined && basicPay === undefined) return p;
+      return { ...p, ...(allowances !== undefined ? { allowances } : {}), ...(basicPay !== undefined ? { basicPay } : {}) };
     });
+  }
+
+
+  /**
+   * People whose record for a month disagrees with their verified changes read in date order, where those changes were
+   * applied out of date order (possible only in older basic pay data; allowance changes are new and kept in order).
+   */
+  private async payHistoryDisorder(people: Person[], period: string, st: Store = this.store): Promise<string[]> {
+    const end = periodEnd(period);
+    const ids = new Set(people.map((p) => p.id));
+    const all = (await st.list('payChanges', {})).filter((c) => c.status === 'verified' && ids.has(c.personId) && c.kind !== 'BANK');
+    const out: string[] = [];
+    for (const p of people) {
+      const mine = all.filter((c) => c.personId === p.id);
+      const check = <T,>(list: PayChange[], when: (c: PayChange) => string, to: (c: PayChange) => T, now: T, label: (v: T) => string) => {
+        const byDate = [...list].sort((a, b) => a.effectiveOn.localeCompare(b.effectiveOn) || when(a).localeCompare(when(b)));
+        const byApply = [...list].sort((a, b) => when(a).localeCompare(when(b)));
+        if (byDate.map((c) => c.id).join() === byApply.map((c) => c.id).join()) return;
+        const upTo = byDate.filter((c) => c.effectiveOn <= end);
+        if (!upTo.length) return;
+        const expected = to(upTo[upTo.length - 1]);
+        if (JSON.stringify(expected) !== JSON.stringify(now)) out.push(`${p.name} (record ${label(now)}, by date ${label(expected)})`);
+      };
+      check(
+        mine.filter((c) => (c.kind ?? 'PAY') === 'PAY'),
+        (c) => c.decidedAt ?? c.requestedAt,
+        (c) => c.to,
+        p.basicPay ?? 0,
+        (v) => `basic RM${v}`,
+      );
+      check(
+        mine.filter((c) => c.kind === 'ALLOWANCE' && c.applied),
+        (c) => c.applied?.at ?? c.decidedAt ?? c.requestedAt,
+        (c) => allowanceKey(c.allowancesTo),
+        allowanceKey(p.allowances),
+        (v) => `allowances RM${(v as unknown as [string, string, number][]).reduce((n, a) => n + a[2], 0)}`,
+      );
+    }
+    return out;
   }
 
   /**
@@ -2969,6 +3488,18 @@ export class PrimaService {
       const v = await this.vacancies(user).catch(() => null);
       for (const r of v?.rows.filter((x) => x.canCeo || x.canSign) ?? [])
         items.push({ tone: 'warn', tag: 'Vacancy', title: `${r.companyName}: ${r.headcount} x ${r.title} to ${r.canCeo ? 'approve' : 'sign'}`, detail: r.reason, go: { view: user.role === 'company_manager' ? 'company' : 'hr' } });
+    }
+    // Job posts waiting for this approver (HR Director for staff, the state's OM for guards and patrolling officers).
+    if ((user.opsTier === 'om' || user.opsTier === 'regional' || isHrDirector(user)) && !user.integration) {
+      const v = await this.vacancies(user).catch(() => null);
+      for (const r of v?.rows.filter((x) => x.canAdvertApprove) ?? [])
+        items.push({
+          tone: 'warn',
+          tag: 'Job post',
+          title: `${r.companyName}: job post for ${r.title} to check${r.approvingAsBackup ? ' (as backup)' : ''}`,
+          detail: 'Read the wording, then approve or send it back. Nothing is posted: no social media account is connected yet.',
+          go: { view: user.opsTier === 'om' || user.opsTier === 'regional' ? 'ops' : 'hr' },
+        });
     }
     if (seesLoginHandovers(user)) {
       const lh = await this.loginHandovers(user).catch(() => null);
@@ -6025,6 +6556,8 @@ export class PrimaService {
       case: view,
       photos: (await this.store.list('evidencePhotos', { companyId: c.companyId, caseId: c.id })).sort((a, b) => a.receivedAt.localeCompare(b.receivedAt)),
       docs: (await this.store.list('evidenceDocs', { companyId: c.companyId, caseId: c.id })).sort((a, b) => a.receivedAt.localeCompare(b.receivedAt)),
+      // Videos from the site device or a bodycam, after CMS found the event real (Fauzan, 6 Nov 2026).
+      videos: (await this.store.list('evidenceVideos', { companyId: c.companyId, caseId: c.id })).sort((a, b) => a.receivedAt.localeCompare(b.receivedAt)),
       proofRule: RULES.caseProof,
       site: c.siteId ? await this.store.get('sites', c.siteId) : null,
       can: {
@@ -6889,6 +7422,7 @@ export class PrimaService {
       ...(await this.developmentHome(user)),
       ...(await this.guardTrainingHome(user)),
       ...(await this.hrConsentHome(user)),
+      ...(await this.guardPayHome(user)),
       ...(await this.branchHome(user)),
       ...(await this.itHome(user)),
       ...(await this.corpHome(user)),
@@ -6906,6 +7440,8 @@ export class PrimaService {
       ...(await this.grcHome(user)),
       ...(await this.corpAuditLegalHome(user)),
       ...(await this.actHome(user)),
+      ...(await this.payFormulaHome(user)),
+      ...(await this.holidayHome(user)),
     );
     const digest = this.financeDigest(todo.filter((t) => t.tag === 'Finance'));
     if (digest) todo.unshift(digest);
@@ -8487,6 +9023,8 @@ export class PrimaService {
         user,
       ),
       patrolSpanMax: RULES.patrolSpan.value,
+      // The OD and OGM have no home page; their reminders (next year's public holidays) show here.
+      reminders: await this.holidayHome(user),
       attention: attention.sort(
         (a, b) => Number(a.tone !== 'crit') - Number(b.tone !== 'crit') || KIND_ORDER[a.kind] - KIND_ORDER[b.kind] || a.at.localeCompare(b.at),
       ),
@@ -9494,6 +10032,15 @@ export class PrimaService {
         `${s.site.name} · ${s.companyName}`,
       );
 
+    // Messages to site devices not taken, or taken without proof, in time (rule CMS-DISPATCH).
+    for (const d of (await this.store.list('siteDispatches', { companyId: ids })).filter((x) => x.status !== 'closed' && x.status !== 'cancelled')) {
+      const t = this.dispatchTiming(d, nowMs);
+      const site = await this.store.get('sites', d.siteId);
+      if (t.ackLate)
+        alert(d.level === 'instruction' ? 'warn' : 'crit', 'Site device', `${d.ref} not taken at the site device`, `${site?.name ?? d.siteId} · ${name.get(d.companyId) ?? ''} · phone the guard or supervisor`);
+      else if (t.proofLate) alert('warn', 'Site device', `${d.ref} proof not sent yet`, `${site?.name ?? d.siteId} · taken by ${d.ack?.name ?? ''}`);
+    }
+
     // Attendance alerts to each company's PIC; CMS sees them and can call the guard, the company decides the rest.
     const attendanceAlerts = (await this.attendanceIssues(ids, today, today)).filter((i) => i.repeating);
     const attLate = attendanceAlerts.filter((i) => i.alertsSent >= 3);
@@ -9804,6 +10351,1247 @@ export class PrimaService {
       });
       return updated;
     });
+  }
+
+  // ---------- CMS messages to site shared devices (Fauzan, 6 Nov 2026) ----------
+
+  /** How long a message has waited and whether it is late, by rule CMS-DISPATCH. */
+  private dispatchTiming(d: SiteDispatch, nowMs: number) {
+    const r = RULES.siteDispatch.value;
+    const waitedSec = Math.max(0, Math.floor((nowMs - toMs(d.sentAt)) / 1000));
+    const open = d.status !== 'closed' && d.status !== 'cancelled';
+    const ackLate = open && !d.ack && waitedSec > r.ackSec[d.level];
+    const proofDone = this.dispatchProofDone(d);
+    const proofLate =
+      open && !!d.ack && d.status !== 'proof_sent' && (nowMs - toMs(d.ack.at)) / 60_000 > r.proofMin[d.level];
+    return { waitedSec, ackLate, proofLate, proofDone, repeatSec: open && !d.ack ? r.repeatSec[d.level] : 0 };
+  }
+
+  private dispatchProofDone(d: SiteDispatch): boolean {
+    if (d.proof === 'none') return true;
+    if (d.proof === 'photo') return d.photoIds.length > 0;
+    if (d.proof === 'video') return d.videoIds.length > 0;
+    return d.photoIds.length + d.videoIds.length > 0;
+  }
+
+  /** The shared device of a site and the bodycams linked to it. */
+  private async siteDeviceKit(siteIds: Id[]) {
+    const [users, systems] = await Promise.all([this.store.list('users'), this.store.list('siteSystems', { siteId: siteIds })]);
+    return siteIds.map((siteId) => ({
+      siteId,
+      device: users.some((u) => u.role === 'site_device' && u.siteIds.length === 1 && u.siteIds[0] === siteId),
+      bodycams: systems
+        .filter((x) => x.kind === 'BODYCAM' && x.siteId === siteId)
+        .map((x) => ({ id: x.id, name: x.name, linked: x.linked, status: x.status })),
+    }));
+  }
+
+  /**
+   * CMS desk view of messages to site devices: open ones, today's closed ones, AI and sensor detections waiting for a
+   * check, and the sites a message can go to. Video is shown to the CMS desk only (PDPA); watchers see the record.
+   */
+  async cmsDispatches(user: User) {
+    const watchOnly = !canUseCms(user) && seesArmsDetail(user);
+    if (!canUseCms(user) && !watchOnly) throw new AccessDenied('cms.desk', '(CMS)');
+    const g = await this.grants();
+    const today = this.today();
+    const nowMs = toMs(this.now());
+    const companies = (await this.visibleCompanies(user)).filter((c) => watchOnly || can(user, g, today, 'cms.desk', c.id));
+    const ids = companies.map((c) => c.id);
+    const cname = new Map(companies.map((c) => [c.id, c.name]));
+    const [sites, rows, alarms, photos, videos] = await Promise.all([
+      this.store.list('sites', { companyId: ids }),
+      this.store.list('siteDispatches', { companyId: ids }),
+      this.store.list('siteAlarms', { companyId: ids }),
+      this.store.list('evidencePhotos', { companyId: ids }),
+      this.store.list('evidenceVideos', { companyId: ids }),
+    ]);
+    const siteById = new Map(sites.map((s) => [s.id, s]));
+    const dayStart = toMs(myt(today, '00:00'));
+    const kit = await this.siteDeviceKit(sites.map((s) => s.id));
+    const kitBySite = new Map(kit.map((k) => [k.siteId, k]));
+    const view = (d: SiteDispatch) => ({
+      dispatch: d,
+      siteName: siteById.get(d.siteId)?.name ?? d.siteId,
+      siteCode: siteById.get(d.siteId)?.code ?? '',
+      companyName: cname.get(d.companyId) ?? d.companyId,
+      ...this.dispatchTiming(d, nowMs),
+      photos: photos.filter((p) => p.dispatchId === d.id).sort((a, b) => a.receivedAt.localeCompare(b.receivedAt)),
+      videos: videos
+        .filter((v) => v.dispatchId === d.id)
+        .sort((a, b) => a.receivedAt.localeCompare(b.receivedAt))
+        .map((v) => (watchOnly ? { ...v, video: '' } : v)),
+    });
+    const open = rows.filter((d) => d.status !== 'closed' && d.status !== 'cancelled');
+    const rank = { urgent: 0, alert: 1, instruction: 2 } as const;
+    return {
+      canDesk: canUseCms(user),
+      rule: RULES.siteDispatch,
+      open: open
+        .map(view)
+        .sort((a, b) => Number(b.ackLate || b.proofLate) - Number(a.ackLate || a.proofLate) || rank[a.dispatch.level] - rank[b.dispatch.level] || b.dispatch.sentAt.localeCompare(a.dispatch.sentAt)),
+      closedToday: rows
+        .filter((d) => !open.includes(d) && d.closed && toMs(d.closed.at) >= dayStart)
+        .map(view)
+        .sort((a, b) => b.dispatch.closed!.at.localeCompare(a.dispatch.closed!.at)),
+      // AI and sensor events not closed yet: CMS checks each one, usually by sending the site device.
+      detections: alarms
+        .filter((a) => (a.kind === 'AI_CCTV' || a.kind === 'AI_SENSOR') && a.status !== 'closed')
+        .sort((a, b) => b.at.localeCompare(a.at))
+        .map((a) => ({
+          alarm: a,
+          siteName: siteById.get(a.siteId)?.name ?? a.siteId,
+          companyName: cname.get(a.companyId) ?? a.companyId,
+          device: kitBySite.get(a.siteId)?.device ?? false,
+          sent: open.some((d) => d.alarmId === a.id),
+        })),
+      sites: sites
+        .filter((s) => kitBySite.get(s.id)?.device)
+        .map((s) => ({ id: s.id, code: s.code, name: s.name, companyId: s.companyId, companyName: cname.get(s.companyId) ?? s.companyId, bodycams: kitBySite.get(s.id)!.bodycams }))
+        .sort((a, b) => a.companyName.localeCompare(b.companyName) || a.code.localeCompare(b.code)),
+    };
+  }
+
+  /**
+   * CMS sends an instruction, alert or urgent alert to a site's shared device (Fauzan, 6 Nov 2026). It may follow up
+   * an alarm or an AI/sensor detection, which CMS then counts as seen. CMS tells the site; it does not decide for the company.
+   */
+  async sendDispatch(
+    user: User,
+    input: { siteId: Id; level: DispatchLevel; title: string; message: string; proof: DispatchProof; alarmId?: Id | null },
+  ) {
+    const site = await this.store.get('sites', input.siteId);
+    if (!site) throw new NotFound('Site');
+    assertCan(user, await this.grants(), this.today(), 'cms.desk', site.companyId);
+    if (!['instruction', 'alert', 'urgent'].includes(input.level)) throw new BadRequest('Choose instruction, alert or urgent.');
+    if (!['none', 'photo', 'video', 'photo_or_video'].includes(input.proof)) throw new BadRequest('Choose the proof the guard must send.');
+    if (input.level !== 'instruction' && input.proof === 'none') throw new BadRequest('An alert asks the guard to verify: choose photo, video or either.');
+    const title = (input.title ?? '').trim().slice(0, 120);
+    const message = (input.message ?? '').trim().slice(0, 600);
+    if (title.length < 3) throw new BadRequest('Give the message a short title.');
+    if (message.length < 5) throw new BadRequest('Say what the guard must do.');
+    const [kit] = await this.siteDeviceKit([site.id]);
+    if (!kit.device) throw new BadRequest('This site has no shared device. Phone the guard or supervisor instead.');
+    let alarm: SiteAlarm | null = null;
+    if (input.alarmId) {
+      alarm = (await this.store.get('siteAlarms', input.alarmId)) ?? null;
+      if (!alarm || alarm.siteId !== site.id) throw new BadRequest('That alarm is not at this site.');
+      if (alarm.status === 'closed') throw new BadRequest('That alarm is already closed.');
+    }
+    const at = this.now();
+    return this.store.transaction(async (tx) => {
+      const company = await tx.get('companies', site.companyId);
+      const n = (await tx.list('siteDispatches', { companyId: site.companyId })).length + 1;
+      const d: SiteDispatch = {
+        id: `dsp-${site.id}-${toMs(at)}-${n}`,
+        ref: `${company?.code ?? 'CO'}-M${String(n).padStart(4, '0')}`,
+        companyId: site.companyId,
+        siteId: site.id,
+        level: input.level,
+        title,
+        message,
+        proof: input.proof,
+        alarmId: alarm?.id ?? null,
+        origin: !alarm ? 'cms_operator' : alarm.kind === 'AI_CCTV' ? 'ai_cctv' : alarm.kind === 'AI_SENSOR' ? 'ai_sensor' : 'alarm',
+        sentBy: user.name,
+        sentAt: at,
+        receivedAt: null,
+        ack: null,
+        photoIds: [],
+        videoIds: [],
+        reply: null,
+        replyAt: null,
+        status: 'sent',
+        closed: null,
+      };
+      await tx.insert('siteDispatches', d);
+      // Sending the site to check counts as CMS having seen the alarm.
+      if (alarm && alarm.status === 'new') await tx.update('siteAlarms', alarm.id, { status: 'acknowledged', ackAt: at, ackBy: user.name });
+      await tx.audit({
+        at,
+        actor: user.name,
+        companyId: site.companyId,
+        action: 'cms.dispatch_send',
+        entity: 'site_dispatch',
+        entityId: d.id,
+        summary: `${d.ref} ${DISPATCH_LEVEL_LABEL[d.level]} to ${site.code} device: ${title}${alarm ? ` (follows ${ALARM_LABEL[alarm.kind]})` : ''}; proof ${DISPATCH_PROOF_LABEL[d.proof]}`,
+      });
+      return d;
+    });
+  }
+
+  /**
+   * An analytics system reports what it saw on CCTV or a sensor. Only its own system sign-in may send this. The event
+   * becomes an unverified CMS alarm; a person decides whether to send the site device to check.
+   */
+  async recordAnalyticsDetection(
+    user: User,
+    input: { siteId: Id; system: 'cctv' | 'sensor'; device: string; label: string; confidence: number; at?: IsoDateTime },
+  ) {
+    if (user.integration !== 'analytics') throw new AccessDenied('view', '(only the analytics feed sends detections)');
+    const site = await this.store.get('sites', input.siteId);
+    if (!site) throw new NotFound('Site');
+    if (input.system !== 'cctv' && input.system !== 'sensor') throw new BadRequest('system must be cctv or sensor');
+    const device = String(input.device ?? '').trim().slice(0, 60);
+    const label = String(input.label ?? '').trim().slice(0, 120);
+    const confidence = Number(input.confidence);
+    if (!device || !label) throw new BadRequest('Send the camera or sensor and what was seen.');
+    if (!Number.isFinite(confidence) || confidence < 0 || confidence > 1) throw new BadRequest('confidence must be between 0 and 1');
+    const now = this.now();
+    // The analytics' own time is kept in the source text; the alarm time is the server's.
+    const a: SiteAlarm = {
+      id: `alm-ai-${site.id}-${toMs(now)}`,
+      companyId: site.companyId,
+      siteId: site.id,
+      kind: input.system === 'cctv' ? 'AI_CCTV' : 'AI_SENSOR',
+      source: `${input.system === 'cctv' ? 'CCTV analytics' : 'Sensor analytics'}: ${device}`,
+      at: now,
+      status: 'new',
+      ackAt: null,
+      ackBy: null,
+      verdict: null,
+      caseId: null,
+      note: null,
+      detection: { system: input.system, device, label, confidence: Math.round(confidence * 100) / 100, verified: false },
+    };
+    return this.store.transaction(async (tx) => {
+      if (await tx.get('siteAlarms', a.id)) throw new BadRequest('This detection is already recorded.');
+      await tx.insert('siteAlarms', a);
+      await tx.audit({
+        at: now,
+        actor: user.name,
+        companyId: site.companyId,
+        action: 'cms.analytics_detection',
+        entity: 'site_alarm',
+        entityId: a.id,
+        summary: `${ALARM_LABEL[a.kind]} at ${site.code}: ${label} (${device}, score ${Math.round(confidence * 100)}%, unverified)`,
+      });
+      return a;
+    });
+  }
+
+  /** CMS withdraws a message sent by mistake or no longer needed, with a reason. */
+  async cancelDispatch(user: User, id: Id, note: string) {
+    const d = await this.store.get('siteDispatches', id);
+    if (!d) throw new NotFound('Message');
+    assertCan(user, await this.grants(), this.today(), 'cms.desk', d.companyId);
+    if (d.status === 'closed' || d.status === 'cancelled') throw new BadRequest('This message is already closed.');
+    const text = (note ?? '').trim().slice(0, 300);
+    if (text.length < 3) throw new BadRequest('Say why it is withdrawn.');
+    const at = this.now();
+    return this.store.transaction(async (tx) => {
+      const updated = await tx.update('siteDispatches', d.id, { status: 'cancelled', closed: { at, by: user.name, outcome: 'cancelled', note: text, caseId: null } });
+      await tx.audit({ at, actor: user.name, companyId: d.companyId, action: 'cms.dispatch_close', entity: 'site_dispatch', entityId: d.id, summary: `${d.ref} withdrawn: ${text}` });
+      return updated;
+    });
+  }
+
+  /**
+   * CMS reviews what the guard sent and closes the message. A real event opens the company's own case with the photos
+   * and videos attached; the company decides the response. When the message followed an alarm, the alarm closes with the
+   * same verdict, so a "nothing found" still goes to Head Control's false-alarm review.
+   */
+  async closeDispatch(user: User, id: Id, outcome: Exclude<DispatchOutcome, 'cancelled'>, note: string) {
+    const d = await this.store.get('siteDispatches', id);
+    if (!d) throw new NotFound('Message');
+    assertCan(user, await this.grants(), this.today(), 'cms.desk', d.companyId);
+    if (d.status === 'closed' || d.status === 'cancelled') throw new BadRequest('This message is already closed.');
+    if (!['real', 'nothing_found', 'done'].includes(outcome)) throw new BadRequest('Choose real, nothing found or done.');
+    if (outcome === 'done' && d.level !== 'instruction') throw new BadRequest('An alert closes as real or nothing found.');
+    if (!d.ack) throw new BadRequest('Nobody at the site has acknowledged it yet. Phone the guard or supervisor, or withdraw it with a reason.');
+    if (outcome !== 'real' && !this.dispatchProofDone(d)) throw new BadRequest('The guard has not sent the proof asked for yet.');
+    const text = (note ?? '').trim().slice(0, 600);
+    if (text.length < 3) throw new BadRequest('Note what the proof shows.');
+    const site = await this.store.get('sites', d.siteId);
+    const alarm = d.alarmId ? ((await this.store.get('siteAlarms', d.alarmId)) ?? null) : null;
+    const at = this.now();
+    return this.store.transaction(async (tx) => {
+      let caseId: Id | null = null;
+      if (outcome === 'real') {
+        const c = await this.newCaseTx(tx, `${user.name} (CMS)`, {
+          companyId: d.companyId,
+          siteId: d.siteId,
+          type: alarm?.kind === 'GUARD_SOS' ? 'SOS' : 'INCIDENT',
+          severity: d.level === 'urgent' ? 'P1' : 'P2',
+          title: `${d.title} at ${site?.name ?? d.siteId}`,
+          description: `Verified by ${d.ack!.name} (${d.ack!.staffNo}) on the site device after CMS message ${d.ref}${alarm?.detection ? ` following ${ALARM_LABEL[alarm.kind].toLowerCase()} "${alarm.detection.label}" (${alarm.detection.device})` : ''}. ${d.reply ? `Guard: ${d.reply} ` : ''}CMS: ${text}`,
+        });
+        caseId = c.id;
+        for (const pid of d.photoIds) await tx.update('evidencePhotos', pid, { caseId });
+        for (const vid of d.videoIds) await tx.update('evidenceVideos', vid, { caseId });
+      }
+      if (alarm && alarm.status !== 'closed') {
+        const verdict = outcome === 'real' ? 'real' : outcome === 'nothing_found' ? 'false' : null;
+        if (verdict)
+          await tx.update('siteAlarms', alarm.id, {
+            status: 'closed',
+            verdict,
+            note: `${d.ref}: ${text}`,
+            caseId,
+            ackAt: alarm.ackAt ?? at,
+            ackBy: alarm.ackBy ?? user.name,
+            closedBy: user.name,
+            falseReview: verdict === 'false' ? null : undefined,
+          });
+      }
+      const updated = await tx.update('siteDispatches', d.id, { status: 'closed', closed: { at, by: user.name, outcome, note: text, caseId } });
+      await tx.audit({
+        at,
+        actor: user.name,
+        companyId: d.companyId,
+        action: 'cms.dispatch_close',
+        entity: 'site_dispatch',
+        entityId: d.id,
+        summary: `${d.ref} closed as ${DISPATCH_OUTCOME_LABEL[outcome].toLowerCase()}${caseId ? ', incident opened for the company' : ''}: ${text}`,
+      });
+      return updated;
+    });
+  }
+
+  /** The site device of this message's site, or refused. */
+  private async dispatchForDevice(user: User, id: Id): Promise<{ d: SiteDispatch; site: Site }> {
+    if (user.role !== 'site_device' || user.siteIds.length !== 1) throw new AccessDenied('view', '(CMS messages open on the site device)');
+    const d = await this.store.get('siteDispatches', id);
+    if (!d || d.siteId !== user.siteIds[0]) throw new NotFound('Message');
+    const site = await this.siteFor(user, d.siteId);
+    return { d, site };
+  }
+
+  /** Messages for this site device: open ones first, and those closed in the last 12 hours. */
+  async deviceDispatches(user: User) {
+    if (user.role !== 'site_device' || user.siteIds.length !== 1) throw new AccessDenied('view', '(CMS messages open on the site device)');
+    const site = await this.siteFor(user, user.siteIds[0]);
+    const nowMs = toMs(this.now());
+    const rows = await this.store.list('siteDispatches', { companyId: site.companyId, siteId: site.id });
+    const [kit] = await this.siteDeviceKit([site.id]);
+    const rank = { urgent: 0, alert: 1, instruction: 2 } as const;
+    const open = rows.filter((d) => d.status !== 'closed' && d.status !== 'cancelled');
+    const recent = rows.filter((d) => !open.includes(d) && d.closed && nowMs - toMs(d.closed.at) < 12 * 3_600_000);
+    // The device sees what it must do, not CMS's notes or the analytics detail.
+    const slim = (d: SiteDispatch) => ({
+      id: d.id,
+      ref: d.ref,
+      level: d.level,
+      title: d.title,
+      message: d.message,
+      proof: d.proof,
+      fromAi: d.origin === 'ai_cctv' || d.origin === 'ai_sensor',
+      sentAt: d.sentAt,
+      status: d.status,
+      ack: d.ack ? { at: d.ack.at, staffNo: d.ack.staffNo, name: d.ack.name } : null,
+      photos: d.photoIds.length,
+      videos: d.videoIds.length,
+      reply: d.reply,
+      closedAt: d.closed?.at ?? null,
+      closedAs: d.closed ? DISPATCH_OUTCOME_LABEL[d.closed.outcome] : null,
+      ...this.dispatchTiming(d, nowMs),
+    });
+    return {
+      open: open.map(slim).sort((a, b) => Number(!!a.ack) - Number(!!b.ack) || rank[a.level] - rank[b.level] || a.sentAt.localeCompare(b.sentAt)),
+      recent: recent.map(slim),
+      bodycams: kit.bodycams.filter((b) => b.linked),
+      rule: RULES.siteDispatch.value,
+    };
+  }
+
+  /** The device has shown the message: CMS sees it arrived. */
+  async dispatchSeen(user: User, id: Id) {
+    const { d } = await this.dispatchForDevice(user, id);
+    if (d.receivedAt) return d;
+    const at = this.now();
+    return this.store.transaction(async (tx) => {
+      const fresh = (await tx.get('siteDispatches', d.id))!;
+      if (fresh.receivedAt) return fresh;
+      return tx.update('siteDispatches', d.id, { receivedAt: at, ...(fresh.status === 'sent' ? { status: 'received' as const } : {}) });
+    });
+  }
+
+  /** The guard on duty takes the message with staff number and PIN, so CMS knows who is checking. */
+  async acknowledgeDispatch(user: User, id: Id, input: { staffNo: string; pin: string }) {
+    const { d, site } = await this.dispatchForDevice(user, id);
+    if (d.status === 'closed' || d.status === 'cancelled') throw new BadRequest('CMS has already closed this message.');
+    if (d.ack) throw new BadRequest(`${d.ack.name} has already taken this message.`);
+    const person = await this.personByPin(site, input.staffNo, input.pin);
+    const onDuty = (await this.store.list('attendance', { personId: person.id, siteId: site.id })).some((a) => a.clockIn && !a.clockOut);
+    const at = this.now();
+    return this.store.transaction(async (tx) => {
+      const ack = { at, personId: person.id, staffNo: person.staffNo, name: person.name, onDuty };
+      const updated = await tx.update('siteDispatches', d.id, { ack, status: 'acknowledged', receivedAt: d.receivedAt ?? at });
+      await tx.audit({
+        at,
+        actor: `${person.name} (${person.staffNo}) on ${user.name}`,
+        companyId: d.companyId,
+        action: 'cms.dispatch_ack',
+        entity: 'site_dispatch',
+        entityId: d.id,
+        summary: `${d.ref} taken by ${person.staffNo} at ${site.code}${onDuty ? '' : ' (not clocked in here)'}`,
+      });
+      return updated;
+    });
+  }
+
+  /** Only the guard who took the message sends its proof, and only while it is open. */
+  private dispatchActor(d: SiteDispatch, user: User): string {
+    if (d.status === 'closed' || d.status === 'cancelled') throw new BadRequest('CMS has already closed this message.');
+    if (!d.ack) throw new BadRequest('Take the message first with your staff number and PIN.');
+    return `${d.ack.name} (${d.ack.staffNo}) on ${user.name}`;
+  }
+
+  /** A linked bodycam of this site, or refused. The bodycam bridge is a mock until a brand is chosen. */
+  private async siteBodycam(site: Site, bodycamId: string | null | undefined) {
+    const cam = bodycamId ? await this.store.get('siteSystems', bodycamId) : undefined;
+    if (!cam || cam.kind !== 'BODYCAM' || cam.siteId !== site.id || !cam.linked) throw new BadRequest('This bodycam is not linked to this site device.');
+    return cam;
+  }
+
+  /** A stamped, geo-tagged photo from the device camera or a linked bodycam, as proof for a CMS message. */
+  async addDispatchPhoto(
+    user: User,
+    id: Id,
+    input: EvidenceInput & { image: string; caption?: string; source?: EvidencePhoto['source']; bodycamId?: string | null },
+  ) {
+    const { d, site } = await this.dispatchForDevice(user, id);
+    const actor = this.dispatchActor(d, user);
+    const cam = input.source === 'bodycam' ? await this.siteBodycam(site, input.bodycamId) : null;
+    const base = this.photoRecord(site, user, { ...input, source: input.source === 'test_picture' ? 'test_picture' : undefined }, {});
+    const photo: EvidencePhoto = { ...base, takenBy: actor, dispatchId: d.id, source: cam ? 'bodycam' : base.source, bodycamId: cam?.id ?? null };
+    if (await this.store.get('evidencePhotos', photo.id)) throw new BadRequest('This photo was already sent. Take a new one.');
+    return this.store.transaction(async (tx) => {
+      await tx.insert('evidencePhotos', photo);
+      const fresh = (await tx.get('siteDispatches', d.id))!;
+      await tx.update('siteDispatches', d.id, { photoIds: [...fresh.photoIds, photo.id] });
+      await tx.audit({
+        at: this.now(),
+        actor,
+        companyId: d.companyId,
+        action: 'cms.dispatch_proof',
+        entity: 'site_dispatch',
+        entityId: d.id,
+        summary: `Photo for ${d.ref}${cam ? ` from bodycam ${cam.name}` : ''}: ${EVIDENCE_PLACE_LABEL[photo.place]} (${photo.distanceM} m), taken ${photo.capturedAt.slice(11, 16)}, SHA-256 ${photo.sha256.slice(0, 12)}`,
+      });
+      return { ...photo, image: '' };
+    });
+  }
+
+  /**
+   * A short video from the device camera or a linked bodycam, as proof for a CMS message. Same checks as a photo: GPS
+   * against the geofence, server time, SHA-256. Video is personal data (PDPA), so it carries a keep-until date.
+   */
+  async addDispatchVideo(
+    user: User,
+    id: Id,
+    input: EvidenceInput & { video: string; durationSec: number; caption?: string; source?: EvidenceVideo['source']; bodycamId?: string | null },
+  ) {
+    const { d, site } = await this.dispatchForDevice(user, id);
+    const actor = this.dispatchActor(d, user);
+    const r = RULES.siteDispatch.value;
+    const m = /^data:(video\/(?:webm|mp4));base64,[A-Za-z0-9+/=]+$/.exec(input.video ?? '');
+    if (!m) throw new BadRequest('Record the video with the in-app camera or the linked bodycam.');
+    const bytes = Math.floor(((input.video.length - input.video.indexOf(',') - 1) * 3) / 4);
+    if (bytes > r.maxVideoBytes) throw new BadRequest(`The video is too large. Record at most ${r.maxVideoSec} seconds.`);
+    const durationSec = Number(input.durationSec);
+    if (!Number.isFinite(durationSec) || durationSec <= 0 || durationSec > r.maxVideoSec + 1) throw new BadRequest(`Record at most ${r.maxVideoSec} seconds.`);
+    const cam = input.source === 'bodycam' ? await this.siteBodycam(site, input.bodycamId) : null;
+    const pt = this.placeAndTime(site, input);
+    const sha256 = sha256Hex(input.video);
+    const now = this.now();
+    const v: EvidenceVideo = {
+      id: `vid-${sha256.slice(0, 16)}`,
+      companyId: site.companyId,
+      siteId: site.id,
+      dispatchId: d.id,
+      caseId: null,
+      takenBy: actor,
+      capturedAt: pt.capturedAt,
+      receivedAt: now,
+      lat: pt.lat,
+      lng: pt.lng,
+      accuracyM: pt.accuracyM,
+      distanceM: pt.distanceM,
+      place: pt.place,
+      time: pt.time,
+      sha256,
+      bytes,
+      durationSec: Math.round(durationSec),
+      mime: m[1] as EvidenceVideo['mime'],
+      video: input.video,
+      caption: (input.caption ?? '').trim().slice(0, 200),
+      source: cam ? 'bodycam' : input.source === 'test_clip' ? 'test_clip' : 'device_camera',
+      bodycamId: cam?.id ?? null,
+      keepUntil: addDays(this.today(), r.videoKeepDays),
+    };
+    if (await this.store.get('evidenceVideos', v.id)) throw new BadRequest('This video was already sent. Record a new one.');
+    return this.store.transaction(async (tx) => {
+      await tx.insert('evidenceVideos', v);
+      const fresh = (await tx.get('siteDispatches', d.id))!;
+      await tx.update('siteDispatches', d.id, { videoIds: [...fresh.videoIds, v.id] });
+      await tx.audit({
+        at: now,
+        actor,
+        companyId: d.companyId,
+        action: 'cms.dispatch_proof',
+        entity: 'site_dispatch',
+        entityId: d.id,
+        summary: `Video for ${d.ref}${cam ? ` from bodycam ${cam.name}` : ''} (${v.durationSec} s): ${EVIDENCE_PLACE_LABEL[v.place]} (${v.distanceM} m), SHA-256 ${sha256.slice(0, 12)}`,
+      });
+      return { ...v, video: '' };
+    });
+  }
+
+  /** The guard says what they found and sends it to CMS, once the proof asked for is attached. */
+  async replyDispatch(user: User, id: Id, reply: string) {
+    const { d, site } = await this.dispatchForDevice(user, id);
+    const actor = this.dispatchActor(d, user);
+    const text = (reply ?? '').trim().slice(0, 500);
+    if (text.length < 3) throw new BadRequest('Say what you found.');
+    if (!this.dispatchProofDone(d))
+      throw new BadRequest(d.proof === 'video' ? 'Send a video first.' : d.proof === 'photo' ? 'Send a photo first.' : 'Send a photo or a video first.');
+    const at = this.now();
+    return this.store.transaction(async (tx) => {
+      const updated = await tx.update('siteDispatches', d.id, { reply: text, replyAt: at, status: 'proof_sent' });
+      await tx.audit({ at, actor, companyId: d.companyId, action: 'cms.dispatch_reply', entity: 'site_dispatch', entityId: d.id, summary: `${d.ref} answered at ${site.code}: ${text}` });
+      return updated;
+    });
+  }
+
+  // ---------- One-stop guard duty device: post log, visitors and vehicles (Fauzan, 6 Nov 2026) ----------
+
+  /** The site of a shared device, or refused. */
+  private async dutyDeviceSite(user: User): Promise<Site> {
+    if (user.role !== 'site_device' || user.siteIds.length !== 1) throw new AccessDenied('view', '(this works on the site device)');
+    return this.siteFor(user, user.siteIds[0]);
+  }
+
+  private dutyOfflineContext(user: User, site: Site): DutyOfflineContext | null {
+    const e = user.dutyEnrollment;
+    if (!e?.deviceId || !e.enrollmentId) return null;
+    return { accountId: user.id, companyId: site.companyId, siteId: site.id, deviceId: e.deviceId, enrollmentId: e.enrollmentId };
+  }
+
+  /** Check before idempotent lookup as well as before writes. Client context never grants authority. */
+  private assertDutyOfflineContext(user: User, site: Site, supplied: DutyOfflineContext | undefined) {
+    if (supplied === undefined) return; // ordinary online operation
+    const expected = this.dutyOfflineContext(user, site);
+    if (!expected || !supplied || (Object.keys(expected) as (keyof DutyOfflineContext)[]).some((k) => supplied[k] !== expected[k]))
+      throw new AccessDenied('view', '(offline entry belongs to another account, device enrollment, company or site)');
+  }
+
+  /** A stamped photo for the duty device (post log or gate), checked like every evidence photo. */
+  private dutyPhoto(site: Site, user: User, actor: string, input: (EvidenceInput & { image: string; caption?: string; source?: EvidencePhoto['source'] }) | null | undefined, link: { gateEntryId?: Id; postLogId?: Id }): EvidencePhoto | null {
+    if (!input) return null;
+    const base = this.photoRecord(site, user, { ...input, source: input.source === 'test_picture' ? 'test_picture' : undefined }, {});
+    return { ...base, takenBy: actor, gateEntryId: link.gateEntryId ?? null, postLogId: link.postLogId ?? null };
+  }
+
+  /** What the guard duty device shows: today's post log, who is inside, today's gate log and the site vehicle list. */
+  async dutyDevice(user: User) {
+    const site = await this.dutyDeviceSite(user);
+    const today = this.today();
+    const since = toMs(myt(addDays(today, -1), '00:00'));
+    const [logs, gates, vehicles] = await Promise.all([
+      this.store.list('postLogs', { companyId: site.companyId, siteId: site.id }),
+      this.store.list('gateEntries', { companyId: site.companyId, siteId: site.id }),
+      this.store.list('siteVehicles', { companyId: site.companyId, siteId: site.id }),
+    ]);
+    const nowMs = toMs(this.now());
+    const r = RULES.siteGate.value;
+    return {
+      offlineContext: this.dutyOfflineContext(user, site),
+      // Newest first; lines written in the same second keep the order they were saved in.
+      postLog: logs.filter((l) => toMs(l.at) >= since).reverse().sort((a, b) => b.at.localeCompare(a.at)),
+      inside: gates
+        .filter((g) => !g.outAt)
+        .sort((a, b) => a.inAt.localeCompare(b.inAt))
+        .map(({ sealed: _s, ...g }) => ({ ...g, longStay: nowMs - toMs(g.inAt) > r.insideAlertHours * 3_600_000 })),
+      today: gates
+        .filter((g) => g.outAt && toMs(g.inAt) >= toMs(myt(today, '00:00')))
+        .sort((a, b) => b.inAt.localeCompare(a.inAt))
+        .map(({ sealed: _s, ...g }) => g),
+      /** The in-house server's public key the device seals with; null until it is set up. */
+      inhouseKey: this.inhouseKey,
+      /** Whether the OM has visitor and vehicle check-in on for this device (Fauzan, 6 Nov 2026). */
+      gateOn: this.gateLogOn(site),
+      /** Tasks the OM set for today (Fauzan, 6 Nov 2026). */
+      tasks: await this.deviceTasksToday(site),
+      vehicles: vehicles.map((v) => ({ plate: v.plate, label: v.label, status: v.status })),
+      rule: r,
+    };
+  }
+
+  /** The device's own reference for an entry: letters, digits and dashes, so a resend after a lost signal is saved once. */
+  private clientRefOf(raw: unknown): string {
+    const ref = String(raw ?? '');
+    if (!/^[A-Za-z0-9-]{8,64}$/.test(ref)) throw new BadRequest('The entry has no valid device reference.');
+    return ref;
+  }
+
+  /**
+   * When the device recorded it. With no internet the device keeps entries and sends them later, so the device time is
+   * kept with the server's receive time. A time in the future or older than the offline limit is refused.
+   */
+  private recordedAt(raw: unknown): { at: IsoDateTime; late: boolean } {
+    const now = this.now();
+    if (raw == null || raw === '') return { at: now, late: false };
+    const at = String(raw);
+    const ms = toMs(at);
+    if (Number.isNaN(ms)) throw new BadRequest('The entry time is not valid.');
+    const r = RULES.siteGate.value;
+    const lagMin = (toMs(now) - ms) / 60_000;
+    if (lagMin < -RULES.evidenceGeo.value.clockAheadMin) throw new BadRequest('The device clock is ahead. Ask the supervisor to set the time.');
+    if (lagMin > r.offlineMaxDays * 1440) throw new BadRequest(`Entries older than ${r.offlineMaxDays} days are not accepted. Tell the supervisor.`);
+    return { at: lagMin < 0 ? now : at, late: lagMin > r.sentLaterMin };
+  }
+
+  /** Checks a sealed bundle's shape. Its contents cannot be read here: only the in-house server holds the key. */
+  private sealedOf(raw: unknown): SealedBundle | null {
+    if (raw == null) return null;
+    const b = raw as Record<string, unknown>;
+    const b64 = (v: unknown, max: number) => typeof v === 'string' && v.length > 0 && v.length <= max && /^[A-Za-z0-9+/=_-]+$/.test(v);
+    if (
+      b.alg !== 'RSA-OAEP-256+A256GCM' ||
+      typeof b.keyId !== 'string' ||
+      !/^[A-Za-z0-9._-]{1,80}$/.test(b.keyId) ||
+      !b64(b.wrappedKey, 2048) ||
+      !b64(b.iv, 64) ||
+      !b64(b.ciphertext, 2_600_000) ||
+      typeof b.plainSha256 !== 'string' ||
+      !/^[0-9a-f]{64}$/.test(b.plainSha256) ||
+      !Array.isArray(b.contents) ||
+      b.contents.length > 10 ||
+      b.contents.some((c) => typeof c !== 'string' || !/^[a-z_]{1,30}$/.test(c))
+    )
+      throw new BadRequest('The sealed details are not valid. Take the entry again.');
+    return { alg: b.alg, keyId: b.keyId, wrappedKey: b.wrappedKey as string, iv: b.iv as string, ciphertext: b.ciphertext as string, plainSha256: b.plainSha256, contents: b.contents as string[] };
+  }
+
+  private keepUntilDate(from: IsoDateTime): IsoDate {
+    const r = RULES.siteGate.value;
+    const years = Math.min(r.keepYearsMax, Math.max(r.keepYearsMin, r.keepYears));
+    const d = dateOf(from);
+    // 29 February has no match in most years: keep until 28 February instead.
+    return `${Number(d.slice(0, 4)) + years}${d.slice(4) === '-02-29' ? '-02-28' : d.slice(4)}`;
+  }
+
+  /** The guard writes a line in the post log, signed with staff number and PIN. It may have been written offline. */
+  async addPostLog(
+    user: User,
+    input: {
+      offlineContext?: DutyOfflineContext;
+      staffNo: string;
+      pin: string;
+      kind: PostLogKind;
+      text: string;
+      correctsId?: Id | null;
+      photo?: (EvidenceInput & { image: string; caption?: string; source?: EvidencePhoto['source'] }) | null;
+      clientRef?: string;
+      recordedAt?: IsoDateTime | null;
+    },
+  ) {
+    const site = await this.dutyDeviceSite(user);
+    this.assertDutyOfflineContext(user, site, input.offlineContext);
+    if (!POST_LOG_KINDS.includes(input.kind)) throw new BadRequest('Choose what kind of entry this is.');
+    const text = (input.text ?? '').trim();
+    if (text.length < 3) throw new BadRequest('Write what happened.');
+    if (text.length > RULES.siteGate.value.postLogMaxChars) throw new BadRequest('Keep the entry shorter.');
+    const at = this.recordedAt(input.recordedAt);
+    const prior = (await this.store.list('postLogs', { companyId: site.companyId, siteId: site.id })).length;
+    const clientRef = input.clientRef ? this.clientRefOf(input.clientRef) : null;
+    const id = clientRef ? `pl-${site.id}-${clientRef}` : `pl-${site.id}-${toMs(at.at)}-${sha256Hex(`${input.staffNo}|${prior}|${text}`).slice(0, 12)}`;
+    // A resend after a lost signal returns what was saved, without asking again.
+    const saved = await this.store.get('postLogs', id);
+    if (saved && clientRef) return saved;
+    const person = await this.personByPin(site, input.staffNo, input.pin);
+    if (input.correctsId) {
+      const old = await this.store.get('postLogs', input.correctsId);
+      if (!old || old.siteId !== site.id) throw new BadRequest('The line to correct is not in this post log.');
+    }
+    const now = this.now();
+    const actor = `${person.name} (${person.staffNo}) on ${user.name}`;
+    const photo = this.dutyPhoto(site, user, actor, input.photo, { postLogId: id });
+    const e: PostLogEntry = {
+      id,
+      companyId: site.companyId,
+      siteId: site.id,
+      at: at.at,
+      personId: person.id,
+      staffNo: person.staffNo,
+      name: person.name,
+      kind: input.kind,
+      text,
+      correctsId: input.correctsId ?? null,
+      photoIds: photo ? [photo.id] : [],
+      receivedAt: now,
+      ...(clientRef ? { clientRef } : {}),
+    };
+    return this.store.transaction(async (tx) => {
+      if (await tx.get('postLogs', id)) throw new BadRequest('This entry is already saved.');
+      if (photo) {
+        if (await tx.get('evidencePhotos', photo.id)) throw new BadRequest('This photo was already used. Take a new one.');
+        await tx.insert('evidencePhotos', photo);
+      }
+      await tx.insert('postLogs', e);
+      await tx.audit({
+        at: now,
+        actor,
+        companyId: site.companyId,
+        action: 'site.post_log',
+        entity: 'post_log',
+        entityId: id,
+        summary: `${site.code} post log, ${POST_LOG_LABEL[e.kind].toLowerCase()}${e.correctsId ? ' (correction)' : ''}${at.late ? `, written ${at.at.slice(11, 16)} offline` : ''}: ${text.slice(0, 120)}`,
+      });
+      return e;
+    });
+  }
+
+  /** Plate in capitals without spaces or dashes. */
+  private plateOf(raw: string): string {
+    const p = String(raw ?? '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+    if (p.length < 2 || p.length > 12) throw new BadRequest('Check the plate number.');
+    return p;
+  }
+
+  /**
+   * A visitor or vehicle comes in, or the guard sends a page of the site's written in/out book. The guard signs with
+   * staff number and PIN. A visitor needs a name, the last 4 characters of the identity number, the face check against
+   * the card and a stamped photo; the full number and the IC picture travel sealed for the in-house server. A plate is
+   * checked against the site vehicle list; a plate on watch tells CMS at once. The guard decides at the gate; the app
+   * records and warns, it does not open or close the gate. Entries made offline are accepted once, by device reference.
+   */
+  async gateIn(
+    user: User,
+    input: {
+      offlineContext?: DutyOfflineContext;
+      staffNo: string;
+      pin: string;
+      kind: 'visitor' | 'vehicle' | 'paper_log';
+      clientRef?: string;
+      recordedAt?: IsoDateTime | null;
+      visitor?: {
+        name: string;
+        idKind: VisitorIdKind;
+        /** Last 4 characters; the full number goes in the sealed bundle only. A full number sent here is cut to 4. */
+        idLast4?: string;
+        idNumber?: string;
+        idRead: 'photo' | 'scan' | 'typed';
+        company?: string;
+        host: string;
+        purpose: string;
+        face: FaceCapture | null;
+      } | null;
+      vehicle?: { plate: string; plateRead: 'photo' | 'scan' | 'typed' } | null;
+      paper?: { coversDate: IsoDate; lines: number; note?: string } | null;
+      sealed?: SealedBundle | null;
+      photo?: (EvidenceInput & { image: string; caption?: string; source?: EvidencePhoto['source'] }) | null;
+    },
+  ) {
+    const site = await this.dutyDeviceSite(user);
+    this.assertDutyOfflineContext(user, site, input.offlineContext);
+    if (input.kind !== 'visitor' && input.kind !== 'vehicle' && input.kind !== 'paper_log') throw new BadRequest('Choose visitor, vehicle or written book page.');
+    const r = RULES.siteGate.value;
+    const clientRef = this.clientRefOf(input.clientRef ?? `srv-${toMs(this.now())}-${sha256Hex(JSON.stringify([input.staffNo, input.kind, input.visitor?.name ?? '', input.vehicle?.plate ?? '', input.photo?.image?.length ?? 0])).slice(0, 12)}`);
+    const id = `gate-${site.id}-${clientRef}`;
+    const saved = await this.store.get('gateEntries', id);
+    if (saved && input.clientRef) return { entry: saved, alarmId: saved.flags.includes('PLATE_ON_WATCH') ? `alm-veh-${id}` : null, resent: true };
+    if (!this.gateLogOn(site)) throw new BadRequest('Visitor and vehicle check-in is off for this site: the gate is recorded on the site system. Ask the OM.');
+    const person = await this.personByPin(site, input.staffNo, input.pin);
+    const when = this.recordedAt(input.recordedAt);
+    const sealed = this.sealedOf(input.sealed);
+    const flags: GateFlag[] = [];
+    if (when.late) flags.push('SENT_LATER');
+    let visitor: GateEntry['visitor'] = null;
+    if (input.kind === 'visitor') {
+      const v = input.visitor;
+      if (!v) throw new BadRequest('Fill in the visitor.');
+      const name = (v.name ?? '').trim().slice(0, 120);
+      if (name.length < 2) throw new BadRequest("Write the visitor's name as on the IC or licence.");
+      if (!VISITOR_ID_KINDS.includes(v.idKind)) throw new BadRequest('Choose the identity document.');
+      const idClean = String(v.idLast4 || v.idNumber || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+      if (idClean.length < 4) throw new BadRequest('Read or type the identity number.');
+      const host = (v.host ?? '').trim().slice(0, 120);
+      const purpose = (v.purpose ?? '').trim().slice(0, 200);
+      if (!host || !purpose) throw new BadRequest('Write who they are visiting and why.');
+      // Face against the document photo. The face engine scores on the server in production; no capture means not checked.
+      const ff = v.face ? evaluateFace(v.face, true) : null;
+      const faceCheck: 'match' | 'no_match' | 'not_checked' = !ff ? 'not_checked' : ff.length ? 'no_match' : 'match';
+      if (faceCheck === 'no_match') flags.push('FACE_NOT_MATCHED');
+      if (faceCheck === 'not_checked') flags.push('FACE_NOT_CHECKED');
+      const idRead = v.idRead === 'scan' || v.idRead === 'photo' ? v.idRead : 'typed';
+      if (idRead === 'typed') flags.push('ID_TYPED');
+      if (!sealed || !sealed.contents.includes('id_number')) flags.push('FULL_ID_NOT_SEALED');
+      visitor = { name, idKind: v.idKind, idLast4: idClean.slice(-r.shownIdChars), idRead, company: (v.company ?? '').trim().slice(0, 120), host, purpose, faceCheck };
+    }
+    let paper: GateEntry['paper'] = null;
+    if (input.kind === 'paper_log') {
+      const pp = input.paper;
+      if (!pp || !/^\d{4}-\d{2}-\d{2}$/.test(String(pp.coversDate))) throw new BadRequest('Say which day the written page covers.');
+      if (pp.coversDate > this.today() || pp.coversDate < addDays(this.today(), -31)) throw new BadRequest('The page must be from the last 31 days.');
+      const lines = Number(pp.lines);
+      if (!Number.isInteger(lines) || lines < 0 || lines > 500) throw new BadRequest('Count the lines on the page.');
+      if (!sealed || !sealed.contents.includes('paper_pages')) throw new BadRequest('Photograph the written pages first.');
+      paper = { coversDate: pp.coversDate, lines, note: (pp.note ?? '').trim().slice(0, 300) };
+    }
+    let vehicle: GateEntry['vehicle'] = null;
+    let watch: SiteVehicle | null = null;
+    if (input.kind !== 'paper_log' && (input.vehicle?.plate || input.kind === 'vehicle')) {
+      const plate = this.plateOf(input.vehicle?.plate ?? '');
+      const plateRead = input.vehicle?.plateRead === 'scan' || input.vehicle?.plateRead === 'photo' ? input.vehicle.plateRead : 'typed';
+      const [known] = await this.store.list('siteVehicles', { companyId: site.companyId, siteId: site.id, plate });
+      const listed = known ? (known.status === 'watch' ? 'watch' : 'allowed') : 'unknown';
+      if (listed === 'watch') {
+        flags.push('PLATE_ON_WATCH');
+        watch = known!;
+      }
+      if (listed === 'unknown') flags.push('PLATE_UNKNOWN');
+      if (plateRead === 'typed') flags.push('PLATE_TYPED');
+      vehicle = { plate, plateRead, listed };
+    }
+    if (input.kind !== 'paper_log' && !input.photo) throw new BadRequest(input.kind === 'visitor' ? 'Take a photo of the visitor.' : 'Take a photo of the vehicle and its plate.');
+    const now = this.now();
+    const actor = `${person.name} (${person.staffNo}) on ${user.name}`;
+    const shot = input.photo ? this.dutyPhoto(site, user, actor, input.photo, {}) : null;
+    const photo: EvidencePhoto | null = shot ? { ...shot, gateEntryId: id } : null;
+    return this.store.transaction(async (tx) => {
+      if (await tx.get('gateEntries', id)) throw new BadRequest('This entry is already saved.');
+      if (photo && (await tx.get('evidencePhotos', photo.id))) throw new BadRequest('This photo was already used. Take a new one.');
+      const n = (await tx.list('gateEntries', { companyId: site.companyId, siteId: site.id })).length + 1;
+      const e: GateEntry = {
+        id,
+        ref: `${site.code}-G${String(n).padStart(4, '0')}`,
+        companyId: site.companyId,
+        siteId: site.id,
+        kind: input.kind,
+        inAt: when.at,
+        receivedAt: now,
+        outAt: null,
+        clientRef,
+        visitor,
+        vehicle,
+        paper,
+        photoIds: photo ? [photo.id] : [],
+        sealed,
+        inhouse: { status: sealed ? 'queued' : 'nothing_sealed', at: null },
+        inBy: { personId: person.id, staffNo: person.staffNo, name: person.name },
+        outBy: null,
+        flags,
+        keepUntil: this.keepUntilDate(when.at),
+      };
+      // A written book page is a record of the day, not someone inside now.
+      if (paper) e.outAt = when.at;
+      if (photo) await tx.insert('evidencePhotos', photo);
+      await tx.insert('gateEntries', e);
+      let alarmId: Id | null = null;
+      if (watch) {
+        // A plate on watch reaches CMS as an alarm; CMS checks and the company decides.
+        alarmId = `alm-veh-${id}`;
+        await tx.insert('siteAlarms', {
+          id: alarmId,
+          companyId: site.companyId,
+          siteId: site.id,
+          kind: 'VEHICLE_WATCH',
+          source: `Gate log ${e.ref}: plate ${watch.plate} (${watch.label})`,
+          at: now,
+          status: 'new',
+          ackAt: null,
+          ackBy: null,
+          verdict: null,
+          caseId: null,
+          note: null,
+        });
+      }
+      await tx.audit({
+        at: now,
+        actor,
+        companyId: site.companyId,
+        action: 'site.gate_in',
+        entity: 'gate_entry',
+        entityId: id,
+        summary: `${e.ref} ${paper ? `written book page for ${paper.coversDate} (${paper.lines} lines)` : 'in'} at ${site.code}: ${visitor ? `visitor ${visitor.name} (${VISITOR_ID_LABEL[visitor.idKind]} …${visitor.idLast4}, face ${visitor.faceCheck.replace('_', ' ')})` : paper ? 'pages sealed for the in-house server' : 'vehicle'}${vehicle ? `, plate ${vehicle.plate} (${vehicle.listed})` : ''}${sealed ? `; sealed ${sealed.contents.join('+')} for in-house key ${sealed.keyId}` : ''}${flags.length ? `; ${flags.join(', ')}` : ''}`,
+      });
+      return { entry: e, alarmId, resent: false };
+    });
+  }
+
+  /** The visitor or vehicle leaves; the guard signs with staff number and PIN. A resend after a lost signal changes nothing. */
+  async gateOut(user: User, id: Id, input: { offlineContext?: DutyOfflineContext; staffNo: string; pin: string; recordedAt?: IsoDateTime | null }) {
+    const site = await this.dutyDeviceSite(user);
+    this.assertDutyOfflineContext(user, site, input.offlineContext);
+    const e = await this.store.get('gateEntries', id);
+    if (!e || e.siteId !== site.id) throw new NotFound('Gate entry');
+    if (e.outAt) {
+      if (input.recordedAt) return e;
+      throw new BadRequest('Already recorded as left.');
+    }
+    const person = await this.personByPin(site, input.staffNo, input.pin);
+    const when = this.recordedAt(input.recordedAt);
+    const outAt = toMs(when.at) < toMs(e.inAt) ? e.inAt : when.at;
+    const now = this.now();
+    return this.store.transaction(async (tx) => {
+      const updated = await tx.update('gateEntries', id, { outAt, outBy: { personId: person.id, staffNo: person.staffNo, name: person.name } });
+      await tx.audit({
+        at: now,
+        actor: `${person.name} (${person.staffNo}) on ${user.name}`,
+        companyId: site.companyId,
+        action: 'site.gate_out',
+        entity: 'gate_entry',
+        entityId: id,
+        summary: `${e.ref} out at ${site.code}${e.visitor ? `: ${e.visitor.name}` : ''}${e.vehicle ? `, ${e.vehicle.plate}` : ''}${when.late ? ` (recorded ${outAt.slice(11, 16)} offline)` : ''}`,
+      });
+      return updated;
+    });
+  }
+
+  // ---------- Client needs and site tasks (Fauzan, 6 Nov 2026) ----------
+
+  /**
+   * Who may record a client discussion and set site tasks: the Operations Manager who covers the site, the managers
+   * above them in operations (each only for the sites they cover), and the Director. The company manager sees them.
+   */
+  private async siteTaskWriter(user: User, siteId: Id): Promise<Site> {
+    const site = await this.siteFor(user, siteId);
+    const opsLead = user.role === 'pwvsb_officer' && user.department === 'operations' && ['om', 'regional', 'ogm', 'ops_director', 'coo', 'ceo'].includes(user.opsTier ?? '');
+    if (user.role !== 'director' && !opsLead) throw new AccessDenied('site.patrol', site.companyId);
+    assertCan(user, await this.grants(), this.today(), 'site.patrol', site.companyId, siteId);
+    if (!(await this.opsCovers(user, site.companyId, [site.id])) || !(await this.inUserRegions(user, site))) throw new AccessDenied('site.patrol', site.companyId);
+    return site;
+  }
+
+  private async canSetSiteTasks(user: User, siteId: Id): Promise<boolean> {
+    try {
+      await this.siteTaskWriter(user, siteId);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  /** Whether a task is due on a day. */
+  taskDueOn(t: SiteTask, date: IsoDate): boolean {
+    if (date < t.from || (t.until && date > t.until)) return false;
+    if (t.stopped && date >= dateOf(t.stopped.at)) return false;
+    return t.onDate ? t.onDate === date : t.days.includes(weekday(date));
+  }
+
+  /** Today's state of a task: done, not done (with a reason), still open, late (past its time) or missed (day over). */
+  private taskState(t: SiteTask, date: IsoDate, log: SiteTaskLog | undefined): 'done' | 'done_late' | 'not_done' | 'open' | 'late' | 'missed' | 'not_due' {
+    // A sign-off sent more than the offline margin after it was written is shown apart, so a missed task cannot be
+    // quietly filled in later with an old device time.
+    if (log) return log.result === 'done' && log.late ? 'done_late' : log.result;
+    if (!this.taskDueOn(t, date)) return 'not_due';
+    const today = this.today();
+    if (date < today) return 'missed';
+    if (date === today && t.byTime && toMs(this.now()) > toMs(myt(date, t.byTime))) return 'late';
+    return 'open';
+  }
+
+  /** The OM's board for one site: the client discussions, the tasks and the last days done or missed. */
+  async siteTaskBoard(user: User, siteId: Id) {
+    const site = await this.siteFor(user, siteId);
+    const today = this.today();
+    const n = RULES.siteTasks.value.boardDays;
+    const days = Array.from({ length: n }, (_, i) => addDays(today, i - n + 1));
+    const tasks = (await this.store.list('siteTasks', { companyId: site.companyId, siteId })).sort((a, b) => (a.status === b.status ? a.ref.localeCompare(b.ref) : a.status === 'active' ? -1 : 1));
+    const logs = await this.store.list('siteTaskLogs', { companyId: site.companyId, siteId });
+    const byKey = new Map(logs.map((l) => [`${l.taskId}|${l.date}`, l]));
+    const reviews = (await this.store.list('siteNeedsReviews', { companyId: site.companyId, siteId })).sort((a, b) => b.at.localeCompare(a.at));
+    return {
+      site: { id: site.id, code: site.code, name: site.name, companyId: site.companyId },
+      canSet: await this.canSetSiteTasks(user, siteId),
+      gateLog: { on: this.gateLogOn(site), by: site.gateLog?.by ?? null, at: site.gateLog?.at ?? null, reason: site.gateLog?.reason ?? null },
+      days,
+      tasks: tasks.map((t) => ({
+        ...t,
+        week: days.map((d) => {
+          const log = byKey.get(`${t.id}|${d}`);
+          return { date: d, state: this.taskState(t, d, log), by: log ? `${log.name} (${log.staffNo})` : null, note: log?.note ?? '', at: log?.at ?? null };
+        }),
+      })),
+      reviews: reviews.slice(0, 5),
+      rule: RULES.siteTasks,
+    };
+  }
+
+  /** The OM records what was discussed with the client. Each discussion is a new record; nothing is overwritten. */
+  async saveNeedsReview(user: User, siteId: Id, input: { clientContact: string; answers: Record<string, { answer: string; concern: SiteNeedsReview['answers'][string]['concern'] }>; agreed: string }) {
+    const site = await this.siteTaskWriter(user, siteId);
+    const r = RULES.siteTasks.value;
+    const clientContact = String(input.clientContact ?? '').trim().slice(0, 160);
+    if (clientContact.length < 3) throw new BadRequest('Write who you spoke to at the client (role and name).');
+    const answers: SiteNeedsReview['answers'] = {};
+    for (const [k, v] of Object.entries(input.answers ?? {})) {
+      if (!NEED_TOPIC_KEYS.has(k)) throw new BadRequest(`Unknown topic: ${k}`);
+      const answer = String(v?.answer ?? '').trim().slice(0, r.needsAnswerMax);
+      const concern = (['none', 'low', 'medium', 'high'] as const).includes(v?.concern) ? v.concern : 'none';
+      if (answer || concern !== 'none') answers[k] = { answer, concern };
+    }
+    if (!Object.keys(answers).length) throw new BadRequest('Write what the client said on at least one topic.');
+    const agreed = String(input.agreed ?? '').trim().slice(0, 2000);
+    if (agreed.length < 5) throw new BadRequest('Write what was agreed with the client.');
+    const at = this.now();
+    const id = `needs-${site.id}-${toMs(at)}-${sha256Hex(`${user.id}|${agreed}`).slice(0, 8)}`;
+    const rec: SiteNeedsReview = { id, companyId: site.companyId, siteId: site.id, at, by: { userId: user.id, name: user.name }, clientContact, answers, agreed };
+    return this.store.transaction(async (tx) => {
+      await tx.insert('siteNeedsReviews', rec);
+      const high = Object.entries(answers).filter(([, v]) => v.concern === 'high').map(([k]) => k);
+      await tx.audit({
+        at,
+        actor: user.name,
+        companyId: site.companyId,
+        action: 'site.needs_review',
+        entity: 'site',
+        entityId: site.id,
+        summary: `${site.code} client needs discussed with ${clientContact}: ${Object.keys(answers).length} topics${high.length ? `, high concern: ${high.join(', ')}` : ''}`,
+      });
+      return rec;
+    });
+  }
+
+  /** The OM sets a task for the guard, officer or patrolling officer at a site; it shows on the shared device when due. */
+  async setSiteTask(
+    user: User,
+    siteId: Id,
+    input: { title: string; detail?: string; forRole: SiteTaskFor; days?: number[]; onDate?: IsoDate | null; byTime?: string | null; proof: 'none' | 'photo'; needTopic?: string | null; from?: IsoDate | null; until?: IsoDate | null },
+  ) {
+    const site = await this.siteTaskWriter(user, siteId);
+    const r = RULES.siteTasks.value;
+    const title = String(input.title ?? '').trim();
+    if (title.length < 4) throw new BadRequest('Say what has to be done.');
+    if (title.length > r.titleMax) throw new BadRequest('Keep the task title shorter; put the rest in the detail.');
+    const detail = String(input.detail ?? '').trim().slice(0, r.detailMax);
+    if (!(['guard', 'officer', 'patrol_officer'] as const).includes(input.forRole)) throw new BadRequest('Choose who does it: guard, officer or patrolling officer.');
+    const today = this.today();
+    const onDate = input.onDate ? String(input.onDate) : null;
+    const days = onDate ? [] : [...new Set((input.days ?? []).map(Number))].filter((d) => Number.isInteger(d) && d >= 0 && d <= 6).sort();
+    if (onDate && (!/^\d{4}-\d{2}-\d{2}$/.test(onDate) || onDate < today)) throw new BadRequest('A one-off task needs a date from today on.');
+    if (!onDate && !days.length) throw new BadRequest('Pick the days it is due, or a date for a one-off task.');
+    const byTime = input.byTime ? String(input.byTime) : null;
+    if (byTime && !/^([01]\d|2[0-3]):[0-5]\d$/.test(byTime)) throw new BadRequest('Time must be like 19:30.');
+    if (input.proof !== 'none' && input.proof !== 'photo') throw new BadRequest('Choose whether a photo is needed.');
+    const needTopic = input.needTopic ? String(input.needTopic) : null;
+    if (needTopic && !NEED_TOPIC_KEYS.has(needTopic)) throw new BadRequest('Unknown client-needs topic.');
+    const from = input.from && input.from > today ? input.from : today;
+    const until = input.until ? String(input.until) : null;
+    if (until && !/^\d{4}-\d{2}-\d{2}$/.test(until)) throw new BadRequest('The end date is not valid.');
+    if (until && until < from) throw new BadRequest('The end date is before the start.');
+    const at = this.now();
+    return this.store.transaction(async (tx) => {
+      const all = await tx.list('siteTasks', { companyId: site.companyId, siteId: site.id });
+      if (all.filter((t) => t.status === 'active').length >= r.maxActivePerSite) throw new BadRequest(`This site already has ${r.maxActivePerSite} tasks. Stop some first.`);
+      const n = all.length + 1;
+      const t: SiteTask = {
+        id: `task-${site.id}-${n}-${toMs(at)}`,
+        ref: `${site.code}-T${String(n).padStart(3, '0')}`,
+        companyId: site.companyId,
+        siteId: site.id,
+        title,
+        detail,
+        forRole: input.forRole,
+        days,
+        onDate,
+        byTime,
+        proof: input.proof,
+        needTopic,
+        from: onDate ?? from,
+        until: onDate ?? until,
+        status: 'active',
+        setBy: { userId: user.id, name: user.name },
+        setAt: at,
+        stopped: null,
+      };
+      await tx.insert('siteTasks', t);
+      await tx.audit({
+        at,
+        actor: user.name,
+        companyId: site.companyId,
+        action: 'site.task_set',
+        entity: 'site_task',
+        entityId: t.id,
+        summary: `${t.ref} for ${SITE_TASK_FOR_LABEL[t.forRole].toLowerCase()}: ${title} (${onDate ? `on ${onDate}` : `days ${days.join(',')}`}${byTime ? ` by ${byTime}` : ''}${t.proof === 'photo' ? ', photo' : ''})`,
+      });
+      return t;
+    });
+  }
+
+  /** The OM stops a task, with a reason. Its history stays. */
+  async stopSiteTask(user: User, taskId: Id, reason: string) {
+    const t = await this.store.get('siteTasks', taskId);
+    if (!t) throw new NotFound('Task');
+    const site = await this.siteTaskWriter(user, t.siteId);
+    if (t.status === 'stopped') throw new BadRequest('This task is already stopped.');
+    const why = String(reason ?? '').trim();
+    if (why.length < 3) throw new BadRequest('Say why the task stops.');
+    const at = this.now();
+    return this.store.transaction(async (tx) => {
+      const u = await tx.update('siteTasks', t.id, { status: 'stopped', stopped: { at, by: user.name, reason: why.slice(0, 300) } });
+      await tx.audit({ at, actor: user.name, companyId: site.companyId, action: 'site.task_stop', entity: 'site_task', entityId: t.id, summary: `${t.ref} stopped: ${why.slice(0, 200)}` });
+      return u;
+    });
+  }
+
+  /** Whether visitor and vehicle check-in is on for the site's shared device. */
+  gateLogOn(site: Site): boolean {
+    return site.gateLog?.on !== false;
+  }
+
+  /**
+   * The OM turns visitor and vehicle check-in and check-out on the shared device on or off for a site (Fauzan, 6 Nov
+   * 2026: a proper site should have its own desktop to monitor this). Turning it off hides the gate on the device;
+   * anyone still signed in can still be signed out. The reason is kept.
+   */
+  async setGateLog(user: User, siteId: Id, on: boolean, reason: string) {
+    const site = await this.siteTaskWriter(user, siteId);
+    const why = String(reason ?? '').trim();
+    if (why.length < 3) throw new BadRequest(on ? 'Say why the device should record the gate.' : 'Say how the gate is recorded instead (for example the site desktop system).');
+    if (this.gateLogOn(site) === on) throw new BadRequest(on ? 'Gate check-in is already on.' : 'Gate check-in is already off.');
+    const at = this.now();
+    const gateLog = { on, by: user.name, at, reason: why.slice(0, 300) };
+    return this.store.transaction(async (tx) => {
+      await tx.update('sites', site.id, { gateLog });
+      await tx.audit({ at, actor: user.name, companyId: site.companyId, action: 'site.gate_log', entity: 'site', entityId: site.id, summary: `${site.code} visitor and vehicle check-in on the shared device turned ${on ? 'on' : 'off'}: ${why.slice(0, 200)}` });
+      return { siteId: site.id, gateLog };
+    });
+  }
+
+  /** Tasks due today at the device's site, with their state. */
+  private async deviceTasksToday(site: Site) {
+    const today = this.today();
+    const tasks = (await this.store.list('siteTasks', { companyId: site.companyId, siteId: site.id })).filter((t) => this.taskDueOn(t, today));
+    const logs = await this.store.list('siteTaskLogs', { companyId: site.companyId, siteId: site.id, date: today });
+    const by = new Map(logs.map((l) => [l.taskId, l]));
+    const order = { late: 0, open: 1, not_done: 2, done: 3, done_late: 3, missed: 4, not_due: 5 } as const;
+    return tasks
+      .map((t) => {
+        const log = by.get(t.id);
+        return { id: t.id, ref: t.ref, title: t.title, detail: t.detail, forRole: t.forRole, byTime: t.byTime, proof: t.proof, state: this.taskState(t, today, log), doneBy: log ? `${log.name} (${log.staffNo})` : null, doneAt: log?.at ?? null };
+      })
+      .sort((a, b) => order[a.state] - order[b.state] || (a.byTime ?? '99').localeCompare(b.byTime ?? '99'));
+  }
+
+  /**
+   * A task is done (or cannot be done, with a reason) on the shared device, signed with staff number and PIN. A guard
+   * does guard tasks; an officer does officer and guard tasks; a patrolling officer may do any. Written offline it is
+   * accepted once for its day.
+   */
+  async doSiteTask(
+    user: User,
+    taskId: Id,
+    input: { offlineContext?: DutyOfflineContext; staffNo: string; pin: string; result: 'done' | 'not_done'; note?: string; photo?: (EvidenceInput & { image: string; caption?: string; source?: EvidencePhoto['source'] }) | null; recordedAt?: IsoDateTime | null },
+  ) {
+    const site = await this.dutyDeviceSite(user);
+    this.assertDutyOfflineContext(user, site, input.offlineContext);
+    const t = await this.store.get('siteTasks', taskId);
+    if (!t || t.siteId !== site.id) throw new NotFound('Task');
+    const when = this.recordedAt(input.recordedAt);
+    const date = dateOf(when.at);
+    const id = `tlog-${t.id}-${date}`;
+    const saved = await this.store.get('siteTaskLogs', id);
+    // A resend from the device's outbox is answered with what was saved; someone else signing the same task is told.
+    if (saved && input.recordedAt && saved.staffNo === String(input.staffNo ?? '').trim().toUpperCase()) return saved;
+    if (saved) throw new BadRequest('This task is already recorded for today.');
+    if (!this.taskDueOn(t, date)) throw new BadRequest('This task is not due on that day.');
+    const person = await this.personByPin(site, input.staffNo, input.pin);
+    const rank = { guard: 0, supervisor: 1, patrol_officer: 2, office: -1 } as const;
+    const need = { guard: 0, officer: 1, patrol_officer: 2 } as const;
+    if ((rank[person.role as keyof typeof rank] ?? -1) < need[t.forRole]) throw new BadRequest(`This task is for the ${SITE_TASK_FOR_LABEL[t.forRole].toLowerCase()}.`);
+    const result = input.result === 'not_done' ? 'not_done' : 'done';
+    const note = String(input.note ?? '').trim().slice(0, 500);
+    if (result === 'not_done' && note.length < 3) throw new BadRequest('Say why it could not be done.');
+    if (result === 'done' && t.proof === 'photo' && !input.photo) throw new BadRequest('This task needs a photo.');
+    const actor = `${person.name} (${person.staffNo}) on ${user.name}`;
+    const shot = input.photo ? this.dutyPhoto(site, user, actor, input.photo, {}) : null;
+    const photo: EvidencePhoto | null = shot ? { ...shot, siteTaskLogId: id } : null;
+    const now = this.now();
+    const log: SiteTaskLog = {
+      id,
+      companyId: site.companyId,
+      siteId: site.id,
+      taskId: t.id,
+      date,
+      at: when.at,
+      receivedAt: now,
+      result,
+      note,
+      personId: person.id,
+      staffNo: person.staffNo ?? '',
+      name: person.name,
+      photoIds: photo ? [photo.id] : [],
+      late: when.late,
+    };
+    return this.store.transaction(async (tx) => {
+      if (await tx.get('siteTaskLogs', id)) throw new BadRequest('This task is already recorded for today.');
+      if (photo && (await tx.get('evidencePhotos', photo.id))) throw new BadRequest('This photo was already used. Take a new one.');
+      if (photo) await tx.insert('evidencePhotos', photo);
+      await tx.insert('siteTaskLogs', log);
+      await tx.audit({
+        at: now,
+        actor,
+        companyId: site.companyId,
+        action: 'site.task_done',
+        entity: 'site_task',
+        entityId: t.id,
+        summary: `${t.ref} ${result === 'done' ? 'done' : `not done: ${note.slice(0, 120)}`} on ${date}${when.late ? ' (written offline)' : ''}`,
+      });
+      return log;
+    });
+  }
+
+  /**
+   * The in-house server confirms it holds the sealed bundles it collected. Only its own system sign-in may confirm.
+   * Mock until the in-house server exists: nothing calls this yet outside tests.
+   */
+  async inhouseConfirm(user: User, ids: Id[]) {
+    if (user.integration !== 'inhouse') throw new AccessDenied('view', '(only the in-house server confirms delivery)');
+    const at = this.now();
+    let confirmed = 0;
+    for (const id of ids.slice(0, 500)) {
+      const e = await this.store.get('gateEntries', id);
+      if (!e || !e.sealed || e.inhouse.status === 'delivered') continue;
+      await this.store.transaction(async (tx) => {
+        await tx.update('gateEntries', id, { inhouse: { status: 'delivered', at } });
+        await tx.audit({ at, actor: user.name, companyId: e.companyId, action: 'site.gate_inhouse', entity: 'gate_entry', entityId: id, summary: `${e.ref} sealed details held by the in-house server` });
+      });
+      confirmed += 1;
+    }
+    return { confirmed };
+  }
+
+  /** Sealed bundles waiting for the in-house server to collect. Only its own system sign-in may read them. */
+  async inhouseQueue(user: User, limit = 100) {
+    if (user.integration !== 'inhouse') throw new AccessDenied('view', '(only the in-house server collects sealed details)');
+    const rows = (await this.store.list('gateEntries')).filter((e) => e.sealed && e.inhouse.status === 'queued');
+    return rows
+      .sort((a, b) => a.receivedAt.localeCompare(b.receivedAt))
+      .slice(0, Math.max(1, Math.min(limit, 500)))
+      .map((e) => ({ id: e.id, ref: e.ref, companyId: e.companyId, siteId: e.siteId, kind: e.kind, inAt: e.inAt, keepUntil: e.keepUntil, sealed: e.sealed! }));
+  }
+
+  /**
+   * The site's duty log for the company's operations and CMS: post log, gate entries with their photos, and the vehicle
+   * list. Read only; nobody edits a guard's entries.
+   */
+  async siteDutyLog(user: User, siteId: Id, days = 2) {
+    const site = await this.store.get('sites', siteId);
+    if (!site) throw new NotFound('Site');
+    if (!canUseCms(user)) assertCan(user, await this.grants(), this.today(), 'view', site.companyId, siteId);
+    else assertCan(user, await this.grants(), this.today(), 'cms.desk', site.companyId);
+    const since = toMs(myt(addDays(this.today(), -Math.max(0, Math.min(days, 31))), '00:00'));
+    const [logs, gates, vehicles, photos] = await Promise.all([
+      this.store.list('postLogs', { companyId: site.companyId, siteId }),
+      this.store.list('gateEntries', { companyId: site.companyId, siteId }),
+      this.store.list('siteVehicles', { companyId: site.companyId, siteId }),
+      this.store.list('evidencePhotos', { companyId: site.companyId, siteId }),
+    ]);
+    const ph = (ids: Id[]) => photos.filter((p) => ids.includes(p.id));
+    return {
+      site: { id: site.id, code: site.code, name: site.name },
+      postLog: logs.filter((l) => toMs(l.at) >= since).reverse().sort((a, b) => b.at.localeCompare(a.at)).map((l) => ({ ...l, photos: ph(l.photoIds) })),
+      // Screens never carry the sealed bundle; only whether it is waiting for, or held by, the in-house server.
+      gates: gates
+        .filter((g) => !g.outAt || toMs(g.inAt) >= since)
+        .sort((a, b) => b.inAt.localeCompare(a.inAt))
+        .map(({ sealed, ...g }) => ({ ...g, sealedContents: sealed?.contents ?? [], photos: ph(g.photoIds) })),
+      vehicles,
+      rule: RULES.siteGate,
+    };
   }
 
   /** Change the CMS parameters. Staffing never goes below 1 Head Control and 1 Monitor Officer (CMS-STAFFING). */
@@ -14966,6 +16754,27 @@ export class PrimaService {
     return null;
   }
 
+  /**
+   * Workflow KPIs across departments (Fauzan, 5 Nov 2026: start KPI timing now): speed from when work reaches each
+   * person and quality, read-only from the records each workflow already keeps. Only the KPI keepers see it.
+   */
+  async workKpi(user: User, period?: unknown) {
+    const scope = workKpiScope(user, await this.grants(), this.today());
+    if (!scope) throw new AccessDenied('view', '(workflow KPIs: department head or lead, Finance Director, CEO, COO, ACT Director and HR)');
+    // Only the tables the registered department adapters read, through this user's own database walls.
+    // A table from a database module not yet installed is skipped (its department simply shows nothing), so one
+    // module's pending migration never breaks the whole screen.
+    const wanted = workKpiTables();
+    const installed = await Promise.all(wanted.map((t) => (this.store.hasTable ? this.store.hasTable(t) : Promise.resolve(true))));
+    const tables = wanted.filter((_, i) => installed[i]);
+    const rows = await Promise.all(tables.map((t) => this.store.list(t)));
+    const data = Object.fromEntries(tables.map((t, i) => [t, rows[i]])) as Partial<import('./types').Dataset>;
+    return {
+      ...buildWorkKpi(data, scope, workKpiPeriod(period, this.today())),
+      notInstalled: wanted.filter((_, i) => !installed[i]),
+    };
+  }
+
   /** Every foreign worker's papers on the reminder ladder, the Year 10 plan, and FWM's tasks to the OMs. */
   async fwmBoard(user: User) {
     const role = this.fwmRoleOf(user);
@@ -15286,6 +17095,8 @@ export class PrimaService {
     if (!role || role === 'despatch') throw new AccessDenied('view', '(FWM papers)');
     // Welfare check papers (fee repayment slips, passport consents) stay with FWM and the group leaders.
     if (ref.startsWith('fwc-') && role !== 'staff' && role !== 'escalation') throw new AccessDenied('view', '(foreign worker welfare papers)');
+    // Recruitment papers (agency licence, embassy letter, passport page, signed contract) likewise.
+    if (ref.startsWith('fwr-') && role !== 'staff' && role !== 'escalation') throw new AccessDenied('view', '(foreign worker recruitment papers)');
     const ids = visibleCompanyIds(user, await this.grants(), this.today());
     return (await this.store.list('evidenceDocs', { companyId: ids })).filter((d) => d.fwmId === ref);
   }
@@ -15560,6 +17371,355 @@ export class PrimaService {
         entityId: c.personId,
         summary: `${FW_CHECK_LABEL[c.kind]} follow-up closed for ${c.personId}${custodyAfter ? (custodyAfter === 'worker' ? ': passport given back to the worker' : ': worker signed consent for safekeeping') : ''}${c.kind === 'ARRIVAL_FEE' ? `: RM${repaid} of RM${c.amount ?? 0} paid back` : ''}${coo ? ` by the ${user.opsTier === 'ceo' ? 'CEO' : 'COO'} in place of FWM` : ''}`,
       });
+      return updated;
+    });
+  }
+
+  // ---------- Foreign worker recruitment steps (Fauzan, 6 Nov 2026, IWAY answer 7) ----------
+
+  private fwRecruitDate(value: string | null | undefined, what: string, opts: { notAfterToday?: boolean } = {}): IsoDate {
+    const v = value ?? '';
+    const parsed = /^\d{4}-\d{2}-\d{2}$/.test(v) ? new Date(`${v}T00:00:00Z`) : null;
+    if (!parsed || Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== v || v < '1940-01-01' || v > '2100-12-31')
+      throw new BadRequest(`Give ${what} as a real date.`);
+    if (opts.notAfterToday && v > this.today()) throw new BadRequest(`Give ${what}, today or earlier.`);
+    return v;
+  }
+
+  private async fwRecruitFileFor(user: User, id: Id) {
+    const f = await this.store.get('fwRecruitFiles', id);
+    if (!f) throw new NotFound('Recruitment file');
+    if (!visibleCompanyIds(user, await this.grants(), this.today()).includes(f.companyId)) throw new AccessDenied('view', f.companyId);
+    return f;
+  }
+
+  /**
+   * FWM's recruitment steps board: one file per worker being recruited, the five steps before travel, who cleared the
+   * worker to travel, the arrival and the zero-fee confirmation from the arrival fee check. FWM and the group leaders
+   * see everything; a company manager sees their own company's files with step status only (no notes, no date of
+   * birth, no fee answer).
+   */
+  async fwmRecruitment(user: User) {
+    const role = this.fwmRoleOf(user);
+    if (role !== 'staff' && role !== 'escalation' && role !== 'company') throw new AccessDenied('hr.monitor', '(foreign worker recruitment)');
+    const today = this.today();
+    const ids = visibleCompanyIds(user, await this.grants(), today);
+    const [companies, files, checks, people] = await Promise.all([
+      this.store.list('companies', { id: ids }),
+      this.store.list('fwRecruitFiles', { companyId: ids }),
+      this.store.list('fwWelfareChecks', { companyId: ids }),
+      this.store.list('people', { companyId: ids }),
+    ]);
+    const confidential = role === 'staff' || role === 'escalation';
+    const clearer = user.department === 'fwm' && (user.fwmRole === 'manager' || user.fwmRole === 'deputy');
+    const companyName = (id: Id) => companies.find((c) => c.id === id)?.name ?? id;
+    const rows = files.map((f) => {
+      const person = f.personId ? people.find((p) => p.id === f.personId) ?? null : null;
+      const fee = f.personId ? checks.find((c) => c.personId === f.personId && c.kind === 'ARRIVAL_FEE') ?? null : null;
+      const zero = fwRecruitZeroFee(fee);
+      const missing = f.status === 'open' ? fwRecruitMissing(f, today) : [];
+      const steps = FW_RECRUIT_STEPS.map((s) => {
+        const r = f.steps[s] ?? null;
+        if (!r) return { step: s, label: FW_RECRUIT_STEP_LABEL[s], record: null };
+        // A company manager sees that a step was done and when, never the notes or the passport's date of birth.
+        const record = confidential ? r : { ...r, note: '', dob: undefined, licenceNo: undefined, reference: undefined };
+        return { step: s, label: FW_RECRUIT_STEP_LABEL[s], record };
+      });
+      return {
+        // The company copy drops the raw steps (date of birth, licence and embassy numbers, notes) and the history.
+        file: confidential ? f : { ...f, steps: {}, history: [], stopReason: f.stopReason ? 'Stopped' : null },
+        companyName: companyName(f.companyId),
+        steps,
+        missing,
+        person: person ? { id: person.id, name: person.name, staffNo: person.staffNo } : null,
+        // Fee answers stay with FWM and the group leaders (rule FWM-ZERO-FEE: nobody can tell who spoke up).
+        zeroFee: confidential ? zero.state : f.status === 'arrived' ? (zero.state === 'waiting' ? 'waiting' : 'asked') : null,
+        feeCheckId: confidential ? fee?.id ?? null : null,
+        complete: f.status === 'arrived' && (zero.state === 'confirmed' || zero.state === 'fee_closed'),
+        canRecord: role === 'staff' && f.status === 'open',
+        canClear: clearer && f.status === 'open' && missing.length === 0,
+        canArrive: role === 'staff' && f.status === 'cleared',
+        canStop: role === 'staff' && (f.status === 'open' || f.status === 'cleared'),
+      };
+    });
+    const rank = { open: 0, cleared: 1, arrived: 2, stopped: 3 } as const;
+    rows.sort((a, b) => rank[a.file.status] - rank[b.file.status] || (a.file.plannedTravelOn ?? '9999').localeCompare(b.file.plannedTravelOn ?? '9999') || a.file.id.localeCompare(b.file.id));
+    return {
+      role,
+      canOpen: role === 'staff',
+      confidential,
+      companies: role === 'staff' ? companies.filter((c) => c.id !== GROUP_EMPLOYER_ID).map((c) => ({ id: c.id, name: c.name })) : [],
+      counts: {
+        inProgress: rows.filter((r) => r.file.status === 'open').length,
+        readyToClear: rows.filter((r) => r.file.status === 'open' && !r.missing.length).length,
+        cleared: rows.filter((r) => r.file.status === 'cleared').length,
+        waitingFeeCheck: rows.filter((r) => r.file.status === 'arrived' && r.zeroFee === 'waiting').length,
+        feesFound: confidential ? rows.filter((r) => r.zeroFee === 'fee_open' || r.zeroFee === 'fee_closed').length : null,
+        complete: rows.filter((r) => r.complete).length,
+        stopped: rows.filter((r) => r.file.status === 'stopped').length,
+      },
+      files: rows,
+      rules: { steps: RULES.fwmRecruitSteps, age: RULES.fwmRecruitAge, languages: RULES.fwmContractLanguages, zeroFee: RULES.fwmZeroFee },
+    };
+  }
+
+  /** FWM opens a recruitment file for a worker the agency has put forward. Passport: the last 4 characters only. */
+  async openFwRecruitFile(
+    user: User,
+    input: { companyId: Id; candidateName: string; passportLast4: string; country: string; agency: string; plannedTravelOn?: IsoDate | null },
+  ) {
+    if (this.fwmRoleOf(user) !== 'staff') throw new AccessDenied('hr.monitor', '(foreign worker recruitment)');
+    const companyId = (input.companyId ?? '').trim();
+    if (companyId === GROUP_EMPLOYER_ID || !visibleCompanyIds(user, await this.grants(), this.today()).includes(companyId))
+      throw new AccessDenied('view', companyId || '(company)');
+    const company = await this.store.get('companies', companyId);
+    if (!company) throw new NotFound('Company');
+    const candidateName = (input.candidateName ?? '').trim().replace(/\s+/g, ' ').slice(0, 120);
+    if (candidateName.length < 3) throw new BadRequest('Give the worker\'s name as on the passport.');
+    const passportLast4 = (input.passportLast4 ?? '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+    if (passportLast4.length !== 4) throw new BadRequest('Give the last 4 characters of the passport number only.');
+    const country = (input.country ?? '').trim().toUpperCase();
+    if (!/^[A-Z]{2}$/.test(country) || country === 'MY') throw new BadRequest('Give the worker\'s country, such as NP for Nepal.');
+    const agency = (input.agency ?? '').trim().slice(0, 120);
+    if (agency.length < 2) throw new BadRequest('Name the recruiting agency.');
+    const plannedTravelOn = input.plannedTravelOn ? this.fwRecruitDate(input.plannedTravelOn, 'the planned travel date') : null;
+    if (plannedTravelOn && plannedTravelOn < this.today()) throw new BadRequest('The planned travel date has passed. Give a date from today.');
+    await this.store.lock?.('companies', companyId);
+    const existing = await this.store.list('fwRecruitFiles', { companyId });
+    const same = existing.find(
+      (f) => (f.status === 'open' || f.status === 'cleared') && f.passportLast4 === passportLast4 && f.candidateName.toLowerCase() === candidateName.toLowerCase(),
+    );
+    if (same) throw new BadRequest(`${candidateName} already has a recruitment file in progress (${same.id}).`);
+    const at = this.now();
+    const f: FwRecruitFile = {
+      id: `fwr-${companyId}-${toMs(at)}-${existing.length + 1}`,
+      companyId,
+      candidateName,
+      passportLast4,
+      country,
+      agency,
+      plannedTravelOn,
+      steps: {},
+      history: [],
+      status: 'open',
+      clearedBy: null,
+      clearedById: null,
+      clearedAt: null,
+      arrivedOn: null,
+      personId: null,
+      stopReason: null,
+      stoppedBy: null,
+      stoppedAt: null,
+      by: user.name,
+      byId: user.id,
+      at,
+    };
+    return this.store.transaction(async (tx) => {
+      await tx.insert('fwRecruitFiles', f);
+      await tx.audit({ at, actor: user.name, companyId, action: 'fwm.recruit.open', entity: 'fw_recruit_file', entityId: f.id, summary: `Recruitment file opened for ${candidateName} (passport …${passportLast4}), agency ${agency}` });
+      return f;
+    });
+  }
+
+  /** FWM moves the planned travel date, with a reason. The steps are checked again against the new date. */
+  async setFwRecruitTravel(user: User, fileId: Id, input: { plannedTravelOn: IsoDate; reason: string }) {
+    if (this.fwmRoleOf(user) !== 'staff') throw new AccessDenied('hr.monitor', '(foreign worker recruitment)');
+    await this.store.lock?.('fwRecruitFiles', fileId);
+    const f = await this.fwRecruitFileFor(user, fileId);
+    if (f.status !== 'open' && f.status !== 'cleared') throw new BadRequest('The travel date can only change before the worker arrives.');
+    const plannedTravelOn = this.fwRecruitDate(input.plannedTravelOn, 'the planned travel date');
+    if (plannedTravelOn < this.today()) throw new BadRequest('The planned travel date has passed. Give a date from today.');
+    const reason = (input.reason ?? '').trim().slice(0, 300);
+    if (f.plannedTravelOn && reason.length < 5) throw new BadRequest('Say why the travel date changed.');
+    // A cleared worker whose new date no longer fits (contract signed after it, age, agency licence) goes back to open.
+    const stillFits = fwRecruitMissing({ ...f, plannedTravelOn }, this.today()).length === 0;
+    const back = f.status === 'cleared' && !stillFits;
+    const at = this.now();
+    return this.store.transaction(async (tx) => {
+      const updated = await tx.update('fwRecruitFiles', f.id, {
+        plannedTravelOn,
+        ...(back ? { status: 'open' as const, clearedBy: null, clearedById: null, clearedAt: null } : {}),
+      });
+      await tx.audit({
+        at,
+        actor: user.name,
+        companyId: f.companyId,
+        action: 'fwm.recruit.travel',
+        entity: 'fw_recruit_file',
+        entityId: f.id,
+        summary: `Planned travel for ${f.candidateName} set to ${plannedTravelOn}${f.plannedTravelOn ? ` (was ${f.plannedTravelOn})` : ''}${reason ? `: ${reason}` : ''}${back ? '. Clearance withdrawn: the steps no longer fit the new date.' : ''}`,
+      });
+      return updated;
+    });
+  }
+
+  /**
+   * FWM records one recruitment step with its paper. The agency licence must be valid, the age from the passport 18 to
+   * 60 on the planned travel date, and the contract in English and Malay, signed on or before the planned travel date.
+   * A failed interview or an age outside 18 to 60 is recorded and stops the file. Recording a step again keeps the
+   * earlier version with the reason.
+   */
+  async recordFwRecruitStep(
+    user: User,
+    fileId: Id,
+    step: FwRecruitStep,
+    input: {
+      on: IsoDate;
+      licenceNo?: string;
+      licenceExpiresOn?: IsoDate;
+      reference?: string;
+      interviewer?: string;
+      passed?: boolean;
+      dob?: IsoDate;
+      languages?: FwContractLanguage[];
+      note?: string;
+      reason?: string;
+    },
+    proof: ProofInput[],
+  ) {
+    if (this.fwmRoleOf(user) !== 'staff') throw new AccessDenied('hr.monitor', '(foreign worker recruitment)');
+    if (!FW_RECRUIT_STEP_LABEL[step]) throw new BadRequest('Choose the step.');
+    await this.store.lock?.('fwRecruitFiles', fileId);
+    const f = await this.fwRecruitFileFor(user, fileId);
+    if (f.status !== 'open') throw new BadRequest(f.status === 'stopped' ? 'This recruitment file is stopped.' : 'Steps are recorded before the worker is cleared to travel.');
+    const on = this.fwRecruitDate(input.on, 'the date of the step', { notAfterToday: true });
+    const note = (input.note ?? '').trim().slice(0, 500);
+    const earlier = f.steps[step];
+    const reason = (input.reason ?? '').trim().slice(0, 300);
+    if (earlier && reason.length < 5) throw new BadRequest(`${FW_RECRUIT_STEP_LABEL[step]} is already on record. Say why it is recorded again.`);
+    const rec = this.proofRecords(user, f.companyId, null, proof, {}, { documentsOnly: true });
+    const needsPaper: Record<FwRecruitStep, string | null> = {
+      AGENCY_LICENCE: 'Attach a copy of the agency\'s licence.',
+      EMBASSY: 'Attach the embassy\'s confirmation.',
+      INTERVIEW: null,
+      AGE: 'Attach the passport page with the date of birth.',
+      CONTRACT: 'Attach the signed contract.',
+    };
+    if (needsPaper[step] && !rec.docs.length) throw new BadRequest(needsPaper[step]!);
+    let fields: Partial<FwRecruitStepRecord> = {};
+    let passed = true;
+    let summary = '';
+    let stop: string | null = null;
+    if (step === 'AGENCY_LICENCE') {
+      const licenceNo = (input.licenceNo ?? '').trim().slice(0, 60);
+      if (licenceNo.length < 3) throw new BadRequest('Give the agency\'s licence number.');
+      const licenceExpiresOn = this.fwRecruitDate(input.licenceExpiresOn, 'the licence expiry date');
+      if (licenceExpiresOn < this.today()) throw new BadRequest('The agency\'s licence has expired. Do not recruit through this agency until it is renewed.');
+      fields = { licenceNo, licenceExpiresOn };
+      summary = `agency licence valid to ${licenceExpiresOn}`;
+    } else if (step === 'EMBASSY') {
+      const reference = (input.reference ?? '').trim().slice(0, 80);
+      if (reference.length < 3) throw new BadRequest('Give the reference on the embassy\'s confirmation.');
+      fields = { reference };
+      summary = 'embassy confirmation on record';
+    } else if (step === 'INTERVIEW') {
+      const interviewer = (input.interviewer ?? '').trim().slice(0, 120);
+      if (interviewer.length < 3) throw new BadRequest('Say who interviewed the worker.');
+      if (typeof input.passed !== 'boolean') throw new BadRequest('Say whether the worker passed the interview.');
+      passed = input.passed;
+      if (!passed && note.length < 5) throw new BadRequest('Say why the worker did not pass.');
+      fields = { interviewer };
+      summary = passed ? 'interview passed' : 'interview not passed';
+      if (!passed) stop = 'Did not pass the interview.';
+    } else if (step === 'AGE') {
+      const dob = this.fwRecruitDate(input.dob, 'the date of birth on the passport', { notAfterToday: true });
+      const countOn = f.plannedTravelOn && f.plannedTravelOn > this.today() ? f.plannedTravelOn : this.today();
+      const { age, ok } = fwRecruitAge(dob, countOn);
+      passed = ok;
+      fields = { dob, age };
+      const { min, max } = RULES.fwmRecruitAge.value;
+      summary = ok ? `age ${age} on ${countOn}, within ${min} to ${max}` : `age ${age} on ${countOn}, outside ${min} to ${max}`;
+      if (!ok) stop = `Age ${age} from the passport on ${countOn}; a recruited worker must be ${min} to ${max} (rule ${RULES.fwmRecruitAge.id}).`;
+    } else {
+      const langs = [...new Set(input.languages ?? [])];
+      if (langs.some((l) => !FW_CONTRACT_LANGUAGE_LABEL[l])) throw new BadRequest('Choose the contract languages from the list.');
+      const must = RULES.fwmContractLanguages.value as FwContractLanguage[];
+      if (must.some((l) => !langs.includes(l))) throw new BadRequest('The contract must be signed in English and Malay. The worker\'s mother tongue may be added.');
+      if (f.plannedTravelOn && on > f.plannedTravelOn) throw new BadRequest('The contract must be signed before the worker travels.');
+      fields = { languages: langs };
+      summary = `contract signed in ${langs.map((l) => FW_CONTRACT_LANGUAGE_LABEL[l]).join(', ')}`;
+    }
+    const at = this.now();
+    return this.store.transaction(async (tx) => {
+      const docIds = await this.saveProof(tx, { photos: [], docs: rec.docs.map((d) => ({ ...d, fwmId: f.id, caption: d.caption || FW_RECRUIT_STEP_LABEL[step] })) });
+      const record: FwRecruitStepRecord = { step, on, passed, ...fields, note, docIds, by: user.name, byId: user.id, at };
+      const updated = await tx.update('fwRecruitFiles', f.id, {
+        steps: { ...f.steps, [step]: record },
+        history: earlier ? [...f.history, { ...earlier, replacedAt: at, replacedBy: user.name, reason }] : f.history,
+        ...(stop ? { status: 'stopped' as const, stopReason: stop, stoppedBy: user.name, stoppedAt: at } : {}),
+      });
+      await tx.audit({
+        at,
+        actor: user.name,
+        companyId: f.companyId,
+        action: `fwm.recruit.${step.toLowerCase()}`,
+        entity: 'fw_recruit_file',
+        entityId: f.id,
+        // The audit trail names the step and its result, never the date of birth.
+        summary: `${FW_RECRUIT_STEP_LABEL[step]} for ${f.candidateName} on ${on}: ${step === 'AGE' ? (passed ? 'within 18 to 60' : 'outside 18 to 60') : summary}${earlier ? ` (recorded again: ${reason})` : ''}${stop ? '. File stopped.' : ''}`,
+      });
+      return updated;
+    });
+  }
+
+  /** The FWM Manager or Deputy clears the worker to travel once all five steps are on record and fit the travel date. */
+  async clearFwRecruitFile(user: User, fileId: Id, input: { note?: string } = {}) {
+    if (!(user.department === 'fwm' && (user.fwmRole === 'manager' || user.fwmRole === 'deputy')))
+      throw new AccessDenied('hr.monitor', '(clear a foreign worker to travel: FWM Manager or Deputy)');
+    await this.store.lock?.('fwRecruitFiles', fileId);
+    const f = await this.fwRecruitFileFor(user, fileId);
+    if (f.status !== 'open') throw new BadRequest('Only a file in progress can be cleared to travel.');
+    const missing = fwRecruitMissing(f, this.today());
+    if (missing.length) throw new BadRequest(`Not ready to travel: ${missing.join('; ')}.`);
+    const note = (input.note ?? '').trim().slice(0, 300);
+    const at = this.now();
+    return this.store.transaction(async (tx) => {
+      const updated = await tx.update('fwRecruitFiles', f.id, { status: 'cleared', clearedBy: user.name, clearedById: user.id, clearedAt: at });
+      await tx.audit({ at, actor: user.name, companyId: f.companyId, action: 'fwm.recruit.clear', entity: 'fw_recruit_file', entityId: f.id, summary: `${f.candidateName} cleared to travel on ${f.plannedTravelOn}${note ? `: ${note}` : ''}` });
+      return updated;
+    });
+  }
+
+  /**
+   * FWM records the arrival and links the worker's staff record (by staff number in the permit company). Zero
+   * recruitment fees is then confirmed by the arrival fee check on that staff record.
+   */
+  async recordFwRecruitArrival(user: User, fileId: Id, input: { arrivedOn: IsoDate; staffNo: string }) {
+    if (this.fwmRoleOf(user) !== 'staff') throw new AccessDenied('hr.monitor', '(foreign worker recruitment)');
+    await this.store.lock?.('fwRecruitFiles', fileId);
+    const f = await this.fwRecruitFileFor(user, fileId);
+    if (f.status !== 'cleared') throw new BadRequest('Only a worker cleared to travel can be recorded as arrived.');
+    const arrivedOn = this.fwRecruitDate(input.arrivedOn, 'the arrival date', { notAfterToday: true });
+    const signed = f.steps.CONTRACT?.on;
+    if (!signed || signed > arrivedOn) throw new BadRequest('The contract must be signed before the worker travels.');
+    const staffNo = (input.staffNo ?? '').trim();
+    if (!staffNo) throw new BadRequest('Give the worker\'s staff number.');
+    const person = (await this.store.list('people', { companyId: f.companyId })).find((p) => p.staffNo === staffNo);
+    if (!person) throw new NotFound(`Staff number ${staffNo} in this company`);
+    if (person.nationality === 'MY') throw new BadRequest('That staff number is not a foreign worker.');
+    if (person.status === 'left') throw new BadRequest('That staff record has left.');
+    const linked = (await this.store.list('fwRecruitFiles', { companyId: f.companyId })).find((x) => x.id !== f.id && x.personId === person.id);
+    if (linked) throw new BadRequest(`${person.staffNo} is already linked to another recruitment file (${linked.id}).`);
+    const at = this.now();
+    return this.store.transaction(async (tx) => {
+      const updated = await tx.update('fwRecruitFiles', f.id, { status: 'arrived', arrivedOn, personId: person.id });
+      await tx.audit({ at, actor: user.name, companyId: f.companyId, action: 'fwm.recruit.arrived', entity: 'fw_recruit_file', entityId: f.id, summary: `${f.candidateName} arrived on ${arrivedOn}, staff record ${person.staffNo}` });
+      return updated;
+    });
+  }
+
+  /** FWM stops a file that is not going ahead, with the reason. A stopped file stays on record. */
+  async stopFwRecruitFile(user: User, fileId: Id, input: { reason: string }) {
+    if (this.fwmRoleOf(user) !== 'staff') throw new AccessDenied('hr.monitor', '(foreign worker recruitment)');
+    await this.store.lock?.('fwRecruitFiles', fileId);
+    const f = await this.fwRecruitFileFor(user, fileId);
+    if (f.status !== 'open' && f.status !== 'cleared') throw new BadRequest('Only a file before arrival can be stopped.');
+    const reason = (input.reason ?? '').trim().slice(0, 300);
+    if (reason.length < 5) throw new BadRequest('Say why the recruitment is not going ahead.');
+    const at = this.now();
+    return this.store.transaction(async (tx) => {
+      const updated = await tx.update('fwRecruitFiles', f.id, { status: 'stopped', stopReason: reason, stoppedBy: user.name, stoppedAt: at });
+      await tx.audit({ at, actor: user.name, companyId: f.companyId, action: 'fwm.recruit.stop', entity: 'fw_recruit_file', entityId: f.id, summary: `Recruitment of ${f.candidateName} stopped: ${reason}` });
       return updated;
     });
   }
@@ -19687,11 +21847,24 @@ export class PrimaService {
           );
       }
       issues.push(...this.satisfactionIssues(a, siteVisits));
-      if (a.contractEndsOn) {
+      // Renewal (Client CRM): inside the renewal window the renewal's own next step replaces the plain end-date warning.
+      const rn = renewalState(a, today);
+      if (rn) {
+        if (rn.tone !== 'info' || rn.daysLeft <= r.contractWarnDays)
+          issues.push({ tone: rn.tone === 'info' ? 'warn' : rn.tone, what: `Renewal: ${rn.late ?? `contract ends in ${rn.daysLeft} days`}; ${rn.next.toLowerCase()}` });
+      } else if (a.contractEndsOn) {
         const left = daysBetween(today, a.contractEndsOn);
         if (left < 0 && a.stage === 'active') issues.push({ tone: 'crit', what: `Contract ended ${-left} days ago` });
         else if (left <= r.contractWarnDays && a.stage === 'active') issues.push({ tone: 'warn', what: `Contract ends in ${left} days` });
       }
+      const dueDays = RULES.crm.value.requestDays;
+      for (const q of (a.requests ?? []).filter((x) => x.status === 'open')) {
+        const due = q.neededBy ?? addDays(dateOf(q.at), dueDays);
+        if (due < today) issues.push({ tone: 'warn', what: `Client request overdue: ${q.what.slice(0, 60)}` });
+      }
+      const people = (a.people ?? []).filter((x) => !x.removedAt);
+      if (!people.length) issues.push({ tone: 'unknown', what: 'No client contact person on record' });
+      else if (!people.some((x) => x.main)) issues.push({ tone: 'warn', what: 'No main contact named at the client' });
     }
     if (!a.billing) issues.push({ tone: 'unknown', what: 'Billing not known (SQL Account not connected)' });
     else if (a.billing.overdueDays > r.billingOverdueDays)
@@ -19806,7 +21979,7 @@ export class PrimaService {
         sites: addSites.filter((x) => x.companyId === c.id && scopes.get(c.id)!(x)).map((x) => ({ id: x.id, name: x.name })),
       }))
       .filter((c) => user.role === 'company_manager' || isOwnerAdmin(user) || c.sites.length);
-    return { role, canBill: user.role === 'company_manager' || user.role === 'admin_exec' || role === 'act', canAdd, accounts: rows, byCompany, opsMeetings };
+    return { role, leader: coo, canBill: user.role === 'company_manager' || user.role === 'admin_exec' || role === 'act', canAdd, accounts: rows, byCompany, opsMeetings };
   }
 
   /** Tick an onboarding or offboarding step. The contract, the notice and the handover letter need the paper attached. */
@@ -19859,11 +22032,15 @@ export class PrimaService {
    * Open a new client and start its onboarding (staff login retest, 27 Oct 2026: nobody could add a client). The company
    * manager opens one for their own company; an Operations Manager or higher opens one for a company they work for.
    */
-  async addClientAccount(user: User, input: { companyId: Id; name: string; siteIds: Id[]; contractEndsOn: IsoDate | null }) {
+  async addClientAccount(user: User, input: { companyId: Id; name: string; siteIds: Id[]; contractEndsOn: IsoDate | null; leadId?: Id | null }) {
     const companyId = String(input.companyId ?? '');
+    // Sales is the company's admin executives, monitored by the company manager (Fauzan, 5 Nov 2026, D4): they may open
+    // a won lead of their own company as the client; a client with no won lead is still opened by the manager or Operations.
     // P78: the owner opens a client for any company it sees, with or without its sites yet, like the company manager.
+    const ownSales = !!input.leadId && user.role === 'admin_exec' && user.companyIds.includes(companyId);
     const ownManager =
       (user.role === 'company_manager' && user.companyIds.includes(companyId)) ||
+      ownSales ||
       (isOwnerAdmin(user) && visibleCompanyIds(user, await this.grants(), this.today()).includes(companyId));
     const ops =
       this.clientRoleOf(user) === 'act' && user.role === 'pwvsb_officer' && visibleCompanyIds(user, await this.grants(), this.today()).includes(companyId);
@@ -19884,6 +22061,14 @@ export class PrimaService {
     const all = await this.store.list('clientAccounts', { companyId });
     if (all.some((a) => a.stage !== 'ended' && a.name.toLowerCase() === name.toLowerCase()))
       throw new BadRequest(`${name} is already a client of this company.`);
+    // Client CRM: a won sales lead becomes the client, once, and the client remembers where it came from.
+    const leadId = input.leadId ? String(input.leadId) : null;
+    const lead = leadId ? await this.store.get('salesLeads', leadId) : null;
+    if (leadId) {
+      if (!lead || lead.companyId !== companyId) throw new BadRequest('Choose a won lead of this company.');
+      if (lead.stage !== 'won') throw new BadRequest('Only a won lead (quotation accepted) becomes a client.');
+      if (lead.clientAccountId) throw new BadRequest(`${lead.ref} is already a client.`);
+    }
     const at = this.now();
     const account: ClientAccount = {
       id: `cl-${companyId}-${all.length + 1}-${toMs(at)}`,
@@ -19902,8 +22087,19 @@ export class PrimaService {
       invoices: [],
       invoicePortal: sites.some((x) => x.sector === 'government') ? 'ePerolehan' : null,
       billing: null,
+      origin: lead ? { kind: 'lead', id: lead.id, ref: lead.ref } : { kind: 'direct', id: null, ref: null },
+      people: [],
+      requests: [],
+      renewal: null,
+      renewals: [],
     };
     return this.store.transaction(async (tx) => {
+      if (lead) {
+        await tx.lock?.('salesLeads', lead.id);
+        const cur = await tx.get('salesLeads', lead.id);
+        if (!cur || cur.clientAccountId) throw new BadRequest(`${lead.ref} is already a client.`);
+        await tx.update('salesLeads', lead.id, { clientAccountId: account.id });
+      }
       await tx.insert('clientAccounts', account);
       await tx.audit({
         at,
@@ -19912,21 +22108,34 @@ export class PrimaService {
         action: 'client.add',
         entity: 'client',
         entityId: account.id,
-        summary: `${name}: new client, onboarding started${sites.length ? ` (${sites.map((x) => x.name).join(', ')})` : ''}.`,
+        summary: `${name}: new client${lead ? ` from ${lead.ref}` : ''}, onboarding started${sites.length ? ` (${sites.map((x) => x.name).join(', ')})` : ''}.`,
       });
       return account;
     });
   }
 
-  async startOffboarding(user: User, accountId: Id, reason: string) {
+  async startOffboarding(user: User, accountId: Id, reason: string, lost?: { reason: ClientLostReason; winBackOn?: IsoDate | null }) {
     const a = await this.clientFor(user, accountId, 'act');
     if (a.stage === 'offboarding' || a.stage === 'ended') throw new BadRequest('Already offboarding.');
     const why = String(reason ?? '').trim();
     if (why.length < 3) throw new BadRequest('Say why the client is leaving.');
+    // Client CRM: the reason group, so leadership sees why clients are lost. Older callers may leave it out.
+    const lostReason = lost ? (Object.keys(CLIENT_LOST_REASON) as ClientLostReason[]).find((k) => k === lost.reason) : undefined;
+    if (lost && !lostReason) throw new BadRequest('Choose why the client is leaving.');
+    const winBackOn = lost?.winBackOn ? String(lost.winBackOn) : null;
+    if (winBackOn && (!/^\d{4}-\d{2}-\d{2}$/.test(winBackOn) || winBackOn <= this.today())) throw new BadRequest('The win-back date must be a future date.');
     const at = this.now();
     const offboarding = CLIENT_OFFBOARD_STEPS.map(([key, label]) => ({ key, label, doneAt: null, by: null, note: '', docId: null }));
+    // An open renewal ends here: it is kept in the history.
+    const renewalClose = a.renewal && !a.renewal.closedAt ? { renewal: null, renewals: [...(a.renewals ?? []), { ...a.renewal, closedAt: at }] } : {};
     return this.store.transaction(async (tx) => {
-      const updated = await tx.update('clientAccounts', a.id, { stage: 'offboarding', offboarding, offboardReason: why.slice(0, 300) });
+      const updated = await tx.update('clientAccounts', a.id, {
+        stage: 'offboarding',
+        offboarding,
+        offboardReason: why.slice(0, 300),
+        ...(lostReason ? { lostReason, winBackOn } : {}),
+        ...renewalClose,
+      });
       await tx.audit({
         at,
         actor: user.name,
@@ -20204,6 +22413,544 @@ export class PrimaService {
       });
       return updated;
     });
+  }
+
+  // ---------- Client CRM (Fauzan, 4 Nov 2026: "Yes build that. We want complete") ----------
+  // One client lifecycle on top of what exists: sales leads and quotations (Tenders & quotes), tenders, contracts and
+  // mobilisation (Contracts), and the client board (onboarding, visits, reports, ratings, complaints, invoices,
+  // offboarding). Added here: the pipeline from lead to ended client, the client's contact people, the person in charge,
+  // client requests, renewals and why clients are lost. Each company sees only its own; group leadership sees all.
+
+  /** The client's monthly value: the live contract's bill for this month, else the last invoice, else unknown. */
+  private crmMonthly(a: ClientAccount, contracts: Contract[], today: IsoDate): { amount: number | null; from: 'contract' | 'invoice' | null } {
+    const c = contracts.find((x) => x.clientAccountId === a.id && x.state !== 'terminated');
+    if (c) {
+      const v = [...c.versions].filter((x) => x.effectiveFrom <= today).sort((x, y) => y.version - x.version)[0] ?? c.versions[0];
+      if (v) return { amount: contractBilling(v, today.slice(0, 7), RULES.contracts.value.daysPerMonthM1).total, from: 'contract' };
+    }
+    const inv = [...(a.invoices ?? [])].sort((x, y) => x.period.localeCompare(y.period)).at(-1);
+    return inv ? { amount: inv.amount, from: 'invoice' } : { amount: null, from: null };
+  }
+
+  /** Site staff have operational CRM access, never client financial values. */
+  private crmFieldOnly(user: User) {
+    return user.role === 'supervisor' || user.opsTier === 'patrol';
+  }
+
+  /** Company manager of the client's own company. */
+  private ownManager(user: User, companyId: Id) {
+    return user.role === 'company_manager' && user.companyIds.includes(companyId);
+  }
+
+  /** What this user may do on one client in the CRM. Monitors (COO, leaders) see; they do not act. */
+  private async crmCan(user: User, a: ClientAccount) {
+    const act = this.clientRoleOf(user) === 'act' && (await this.opsCovers(user, a.companyId, a.siteIds));
+    const own = (user.role === 'company_manager' || user.role === 'admin_exec') && user.companyIds.includes(a.companyId);
+    const live = a.stage !== 'ended';
+    const rn = a.renewal && !a.renewal.closedAt ? a.renewal : null;
+    const window = !!renewalState(a, this.today()) || !!rn;
+    return {
+      owner: live && (act || this.ownManager(user, a.companyId)),
+      people: live && (act || own),
+      request: live && (act || own),
+      closeRequest: live && act,
+      decide: a.stage === 'active' && window && this.ownManager(user, a.companyId) && !rn?.answer && !renewalDeclined(a),
+      offer: a.stage === 'active' && own && !!rn?.decision && rn.decision.choice !== 'let_go' && !rn.proposal,
+      answer: a.stage === 'active' && own && !!rn?.decision && rn.decision.choice !== 'let_go' && (!rn.answer || rn.answer.choice === 'tender_called'),
+      offboard: a.stage === 'active' && act,
+    };
+  }
+
+  /** Write one change to a client under its row lock, re-reading it first, with an audit line. */
+  private async crmWrite(user: User, a: ClientAccount, action: string, change: (cur: ClientAccount, at: IsoDateTime) => { patch: Partial<ClientAccount>; summary: string }, docs: ReturnType<PrimaService['proofRecords']>['docs'] = []) {
+    const at = this.now();
+    return this.store.transaction(async (tx) => {
+      await tx.lock?.('clientAccounts', a.id);
+      const cur = await tx.get('clientAccounts', a.id);
+      if (!cur) throw new NotFound('Client');
+      const { patch, summary } = change(cur, at);
+      if (docs.length) await this.saveProof(tx, { photos: [], docs });
+      const updated = await tx.update('clientAccounts', a.id, patch);
+      await tx.audit({ at, actor: user.name, companyId: a.companyId, action: `client.${action}`, entity: 'client', entityId: a.id, summary: `${cur.name}: ${summary}` });
+      return updated;
+    });
+  }
+
+  /**
+   * The CRM board: the pipeline from sales lead to ended client, renewals, client requests and complaints, lost clients,
+   * and for group leadership the group view. Same walls as the client board: the company sees its own clients,
+   * Operations those in its area, leadership all.
+   */
+  async crmBoard(user: User) {
+    const role = this.clientRoleOf(user);
+    if (!role) throw new AccessDenied('view', '(clients)');
+    const today = this.today();
+    const g = await this.grants();
+    const leader = isGroupLeader(user);
+    const accounts = await this.clientScope(user);
+    const companyIds = leader ? (await this.store.list('companies', {})).map((c) => c.id) : visibleCompanyIds(user, g, today);
+    // Leads are commercial: only where this user may see the company's commercial work.
+    const leadCos = user.role === 'supervisor' || user.opsTier === 'patrol' ? [] : companyIds.filter((id) => can(user, g, today, 'commercial.view', id));
+    const accCos = [...new Set(accounts.map((a) => a.companyId))];
+    const [companies, leadsAll, contractsAll, sites, visits] = await Promise.all([
+      this.store.list('companies', {}),
+      leadCos.length ? this.store.list('salesLeads', { companyId: leadCos }) : Promise.resolve([] as SalesLead[]),
+      accCos.length || leadCos.length ? this.store.list('contracts', { companyId: [...new Set([...accCos, ...leadCos])] }) : Promise.resolve([] as Contract[]),
+      accCos.length ? this.store.list('sites', { companyId: accCos }) : Promise.resolve([] as Site[]),
+      accCos.length ? this.store.list('siteVisits', { companyId: accCos }) : Promise.resolve([]),
+    ]);
+    const name = (id: Id) => companies.find((c) => c.id === id)?.name ?? id;
+    const ids = new Set(accounts.map((a) => a.id));
+    // Contracts: those of clients in scope, and for company-level users the company's contracts not yet tied to a client.
+    const companyLevel = leader || user.role === 'company_manager' || user.role === 'admin_exec';
+    const contracts = contractsAll.filter((c) => (c.clientAccountId && ids.has(c.clientAccountId)) || (companyLevel && !c.clientAccountId && accCos.concat(leadCos).includes(c.companyId) && this.contractRoleOf(user, c.companyId)));
+    const covers = await this.opsCoverage(user, accCos);
+    const fieldOnly = this.crmFieldOnly(user);
+    const rows = await Promise.all(
+      accounts.map(async (a) => {
+        const issues = this.clientIssues(a, visits);
+        const money = fieldOnly ? { amount: null, from: null } : this.crmMonthly(a, contracts, today);
+        const people = (a.people ?? []).filter((x) => !x.removedAt);
+        const main = people.find((x) => x.main) ?? null;
+        return {
+          id: a.id,
+          name: a.name,
+          companyId: a.companyId,
+          companyName: name(a.companyId),
+          stage: crmStage(a, today),
+          tone: issues.tone,
+          issues: issues.issues,
+          monthly: money.amount,
+          monthlyFrom: money.from,
+          owner: a.owner?.name ?? null,
+          mainContact: main ? { name: main.name, position: main.position } : null,
+          sites: sites.filter((x) => a.siteIds.includes(x.id)).map((x) => x.name),
+          openRequests: (a.requests ?? []).filter((x) => x.status === 'open').length,
+          openComplaints: (a.complaints ?? []).filter((x) => !x.resolvedAt).length,
+          renewal: renewalState(a, today),
+          renewalDecision: a.renewal && !a.renewal.closedAt ? (a.renewal.decision?.choice ?? null) : null,
+          lostReason: a.lostReason ?? null,
+          winBackOn: a.winBackOn ?? null,
+          offboardReason: a.offboardReason,
+          canAct: role === 'act' && covers(a.companyId, a.siteIds),
+        };
+      }),
+    );
+    const rank = { crit: 0, warn: 1, unknown: 2, ok: 3, info: 3 } as const;
+    rows.sort((x, y) => rank[x.tone] - rank[y.tone] || x.name.localeCompare(y.name));
+
+    // Leads, with the next thing each needs (from the Tenders & quotes page) and the won ones waiting to become clients.
+    const leads = leadsAll
+      .map((l) => {
+        const st = this.leadState(l, today);
+        return {
+          id: l.id,
+          ref: l.ref,
+          companyId: l.companyId,
+          companyName: name(l.companyId),
+          prospect: l.prospect,
+          stage: l.stage,
+          estMonthly: l.estMonthly,
+          open: st.open,
+          waiting: st.open ? st.waiting : l.stage === 'won' && !l.clientAccountId ? 'Open the client and start onboarding' : null,
+          tone: st.open ? st.tone : l.stage === 'won' && !l.clientAccountId ? ('warn' as const) : ('ok' as const),
+          clientAccountId: l.clientAccountId ?? null,
+          closedOn: l.closed?.on ?? null,
+          closedReason: l.closed?.reason ?? null,
+          canConvert: l.stage === 'won' && !l.clientAccountId && (this.ownManager(user, l.companyId) || (user.role === 'admin_exec' && user.companyIds.includes(l.companyId)) || role === 'act'),
+        };
+      })
+      .sort((x, y) => Number(y.open) - Number(x.open) || x.ref.localeCompare(y.ref));
+    const sum = (xs: (number | null)[]): number | null => fieldOnly ? null : Math.round(xs.reduce<number>((n, x) => n + (x ?? 0), 0));
+    const openLeads = leads.filter((l) => l.open);
+    const awaiting = contracts.filter((c) => !c.clientAccountId && ['awarded', 'mobilising', 'ready'].includes(c.state));
+    const stage = (k: string) => rows.filter((r) => r.stage === k);
+    const year = addDays(today, -365);
+    const lost = rows.filter((r) => r.stage === 'offboarding' || r.stage === 'ended');
+    const pipeline = [
+      { key: 'lead', label: 'Leads being worked', count: openLeads.filter((l) => l.stage !== 'proposal').length, monthly: sum(openLeads.filter((l) => l.stage !== 'proposal').map((l) => l.estMonthly)), note: 'Estimated' },
+      { key: 'proposal', label: 'Quotation with the client', count: openLeads.filter((l) => l.stage === 'proposal').length, monthly: sum(openLeads.filter((l) => l.stage === 'proposal').map((l) => l.estMonthly)), note: 'Estimated' },
+      { key: 'won', label: 'Won, client not opened yet', count: leads.filter((l) => l.stage === 'won' && !l.clientAccountId).length + awaiting.length, monthly: null, note: 'Open the client' },
+      { key: 'onboarding', label: 'Onboarding', count: stage('onboarding').length, monthly: sum(stage('onboarding').map((r) => r.monthly)), note: null },
+      { key: 'active', label: 'Active', count: stage('active').length, monthly: sum(stage('active').map((r) => r.monthly)), note: null },
+      { key: 'renewal', label: 'Renewal due', count: stage('renewal').length, monthly: sum(stage('renewal').map((r) => r.monthly)), note: 'Within 90 days of the end' },
+      { key: 'offboarding', label: 'Leaving', count: stage('offboarding').length, monthly: sum(stage('offboarding').map((r) => r.monthly)), note: null },
+      { key: 'ended', label: 'Ended', count: stage('ended').length, monthly: null, note: null },
+    ];
+    const unknownValue = fieldOnly ? 0 : rows.filter((r) => r.stage !== 'ended' && r.monthly == null).length;
+
+    // Client requests and complaints still open, oldest first.
+    const reqDays = RULES.crm.value.requestDays;
+    const open = accounts.flatMap((a) => [
+      ...(a.requests ?? [])
+        .filter((q) => q.status === 'open')
+        .map((q) => {
+          const due = q.neededBy ?? addDays(dateOf(q.at), reqDays);
+          return { kind: 'request' as const, id: q.id, accountId: a.id, client: a.name, companyName: name(a.companyId), what: `${CLIENT_REQUEST_KIND[q.kind]}: ${q.what}`, from: q.from, at: q.at, due, late: due < today };
+        }),
+      ...(a.complaints ?? [])
+        .filter((c) => !c.resolvedAt)
+        .map((c) => {
+          const due = addDays(dateOf(c.at), RULES.clientCare.value.complaintDays);
+          return { kind: 'complaint' as const, id: c.id, accountId: a.id, client: a.name, companyName: name(a.companyId), what: c.what, from: c.from, at: c.at, due, late: due < today };
+        }),
+    ]);
+    open.sort((x, y) => Number(y.late) - Number(x.late) || x.at.localeCompare(y.at));
+
+    // Why clients were lost in the last year, by reason group.
+    const lostYear = accounts.filter((a) => (a.stage === 'offboarding' || a.stage === 'ended') && (a.offboarding?.[0]?.doneAt ?? a.renewals?.at(-1)?.closedAt ?? today) >= year);
+    const lostBy = (Object.keys(CLIENT_LOST_REASON) as ClientLostReason[])
+      .map((k) => ({ reason: k, label: CLIENT_LOST_REASON[k], count: lostYear.filter((a) => a.lostReason === k).length }))
+      .filter((x) => x.count);
+    const lostUnknown = lostYear.filter((a) => !a.lostReason).length;
+
+    // Group view (leadership only): clients served by two or more of our companies, the biggest clients, concentration.
+    let group = null as null | {
+      shared: { name: string; companies: string[] }[];
+      top: { id: Id; name: string; companyName: string; monthly: number }[];
+      byCompany: { companyId: Id; companyName: string; clients: number; monthly: number; topShare: number | null; unknownValue: number }[];
+    };
+    if (leader) {
+      const live = rows.filter((r) => r.stage !== 'ended');
+      const byKey = new Map<string, typeof live>();
+      for (const r of live) byKey.set(clientKey(r.name), [...(byKey.get(clientKey(r.name)) ?? []), r]);
+      group = {
+        shared: [...byKey.values()]
+          .filter((rs) => new Set(rs.map((r) => r.companyId)).size > 1)
+          .map((rs) => ({ name: rs[0].name, companies: [...new Set(rs.map((r) => r.companyName))] })),
+        top: live
+          .filter((r) => r.monthly != null)
+          .sort((x, y) => y.monthly! - x.monthly!)
+          .slice(0, 10)
+          .map((r) => ({ id: r.id, name: r.name, companyName: r.companyName, monthly: r.monthly! })),
+        byCompany: [...new Set(live.map((r) => r.companyId))]
+          .map((id) => {
+            const rs = live.filter((r) => r.companyId === id);
+            const total = sum(rs.map((r) => r.monthly)) ?? 0;
+            const top = Math.max(0, ...rs.map((r) => r.monthly ?? 0));
+            return { companyId: id, companyName: name(id), clients: rs.length, monthly: total, topShare: total ? Math.round((top / total) * 100) : null, unknownValue: rs.filter((r) => r.monthly == null).length };
+          })
+          .sort((x, y) => y.monthly - x.monthly),
+      };
+    }
+    // Sites a won lead can be opened on: the company's sites (Operations: only those in its own area).
+    const convCos = [...new Set(leads.filter((l) => l.canConvert).map((l) => l.companyId))];
+    const convSites = convCos.length ? await this.store.list('sites', { companyId: convCos }) : [];
+    const convertSites: Record<Id, { id: Id; name: string }[]> = {};
+    for (const id of convCos) {
+      const inScope = user.role === 'pwvsb_officer' ? await this.opsSiteScope(user, id) : () => true;
+      convertSites[id] = convSites.filter((x) => x.companyId === id && inScope(x)).map((x) => ({ id: x.id, name: x.name }));
+    }
+    return {
+      role,
+      leader,
+      seesMoney: !fieldOnly,
+      convertSites,
+      rule: RULES.crm.value,
+      pipeline,
+      unknownValue,
+      leads,
+      awaitingContracts: awaiting.map((c) => ({ id: c.id, ref: c.ref, client: c.clientName, companyName: name(c.companyId), state: c.state, startOn: c.startOn })),
+      clients: rows,
+      renewals: rows.filter((r) => r.renewal).sort((x, y) => x.renewal!.daysLeft - y.renewal!.daysLeft),
+      open,
+      lost: lost.map((r) => ({ id: r.id, name: r.name, companyName: r.companyName, stage: r.stage, reason: r.offboardReason, lostReason: r.lostReason, winBackOn: r.winBackOn })),
+      lostBy,
+      lostUnknown,
+      group,
+    };
+  }
+
+  /** One client in full: who they are, where they came from, contracts, people, everything that happened, and what is due. */
+  async crmClient(user: User, accountId: Id) {
+    if (!this.clientRoleOf(user)) throw new AccessDenied('view', '(clients)');
+    const a = (await this.clientScope(user)).find((x) => x.id === String(accountId));
+    if (!a) throw new NotFound('Client');
+    const today = this.today();
+    const g = await this.grants();
+    const [company, sites, contractsAll, visits] = await Promise.all([
+      this.store.get('companies', a.companyId),
+      this.store.list('sites', { id: a.siteIds }),
+      this.store.list('contracts', { companyId: [a.companyId] }),
+      this.store.list('siteVisits', { companyId: [a.companyId] }),
+    ]);
+    const contracts = contractsAll.filter((c) => c.clientAccountId === a.id);
+    const fieldOnly = this.crmFieldOnly(user);
+    // Where the client came from. The lead and quotation are commercial: shown only to those who see commercial work.
+    const seesCommercial = user.role !== 'supervisor' && user.opsTier !== 'patrol' && can(user, g, today, 'commercial.view', a.companyId);
+    const lead = a.origin?.kind === 'lead' && a.origin.id && seesCommercial ? await this.store.get('salesLeads', a.origin.id) : null;
+    const quotation = lead?.quotationId ? await this.store.get('quotations', lead.quotationId) : null;
+    const issues = this.clientIssues(a, visits);
+    const siteName = (id: Id | null) => sites.find((x) => x.id === id)?.name ?? null;
+    type Ev = { at: IsoDateTime; kind: string; what: string; by: string; docId?: Id | null };
+    const ev: Ev[] = [
+      ...a.onboarding.filter((s) => s.doneAt).map((s) => ({ at: s.doneAt!, kind: 'Onboarding', what: s.label, by: s.by ?? '', docId: s.docId })),
+      ...(a.offboarding ?? []).filter((s) => s.doneAt).map((s) => ({ at: s.doneAt!, kind: 'Offboarding', what: s.label, by: s.by ?? '', docId: s.docId })),
+      ...a.contacts.map((c) => ({ at: c.at, kind: c.kind === 'call' ? 'Call' : c.kind === 'visit' ? 'Visit' : 'Meeting', what: c.note, by: c.by })),
+      ...visits.filter((v) => a.siteIds.includes(v.siteId) && v.status === 'closed').map((v) => ({ at: v.startedAt, kind: 'Site visit', what: siteName(v.siteId) ?? '', by: '' })),
+      ...a.reports.map((r) => ({ at: r.at, kind: 'Report', what: `Monthly report ${r.period}`, by: r.by, docId: r.docId })),
+      ...a.ratings.map((r) => ({ at: r.at, kind: 'Rating', what: `${r.score} of 5${r.from ? ` from ${r.from}` : ''}${r.comment ? `: ${r.comment}` : ''}`, by: r.by, docId: r.docId ?? null })),
+      ...(a.complaints ?? []).flatMap((c) => [
+        { at: c.at, kind: 'Complaint', what: `${c.what} (from ${c.from})`, by: c.by, docId: c.docIds[0] ?? null },
+        ...(c.resolvedAt ? [{ at: c.resolvedAt, kind: 'Complaint closed', what: c.resolution ?? '', by: c.resolvedBy ?? '' }] : []),
+      ]),
+      ...(a.requests ?? []).flatMap((q) => [
+        { at: q.at, kind: 'Request', what: `${CLIENT_REQUEST_KIND[q.kind]}: ${q.what} (from ${q.from})`, by: q.by },
+        ...(q.closedAt ? [{ at: q.closedAt, kind: q.status === 'done' ? 'Request done' : 'Request declined', what: `${q.outcome ?? ''}${q.variationRef ? ` (variation ${q.variationRef})` : ''}`, by: q.closedBy ?? '' }] : []),
+      ]),
+      ...(fieldOnly ? [] : (a.invoices ?? []).map((i) => ({ at: i.at, kind: 'Invoice', what: `${i.period} RM${i.amount.toFixed(2)}`, by: i.by }))),
+      ...[...(a.renewals ?? []), ...(a.renewal ? [a.renewal] : [])].flatMap((r) => [
+        ...(r.decision ? [{ at: r.decision.at, kind: 'Renewal decision', what: `${CLIENT_RENEWAL_DECISION[r.decision.choice]}${r.decision.pricePct ? ` (${r.decision.pricePct > 0 ? '+' : ''}${r.decision.pricePct}%)` : ''}: ${r.decision.reason}`, by: r.decision.by }] : []),
+        ...(r.proposal ? [{ at: r.proposal.at, kind: 'Renewal offer', what: 'Offer sent to the client', by: r.proposal.by, docId: r.proposal.docId }] : []),
+        ...(r.answer ? [{ at: r.answer.at, kind: 'Renewal answer', what: `${CLIENT_RENEWAL_ANSWER[r.answer.choice]}${r.answer.newEndsOn ? `, new end ${r.answer.newEndsOn}` : ''}${r.answer.note ? `: ${r.answer.note}` : ''}`, by: r.answer.by, docId: r.answer.docId }] : []),
+      ]),
+    ];
+    ev.sort((x, y) => y.at.localeCompare(x.at));
+    // Who may be named in charge: Operations officers who work for this company.
+    const can_ = await this.crmCan(user, a);
+    const owners = can_.owner
+      ? (await this.store.list('users', { role: 'pwvsb_officer' }))
+          .filter((u) => u.department === 'operations' && ['om', 'regional', 'ogm', 'ops_director'].includes(u.opsTier ?? '') && !accessClosed(u, today) && visibleCompanyIds(u, g, today).includes(a.companyId))
+          .map((u) => ({ id: u.id, name: u.name }))
+      : [];
+    const money = fieldOnly ? { amount: null, from: null } : this.crmMonthly(a, contracts, today);
+    return {
+      account: {
+        id: a.id,
+        name: a.name,
+        companyId: a.companyId,
+        companyName: company?.name ?? a.companyId,
+        stage: crmStage(a, today),
+        startedOn: a.startedOn,
+        contractEndsOn: a.contractEndsOn,
+        owner: a.owner ?? null,
+        origin: a.origin ?? null,
+        offboardReason: a.offboardReason,
+        lostReason: a.lostReason ?? null,
+        winBackOn: a.winBackOn ?? null,
+        invoicePortal: a.invoicePortal ?? null,
+        billing: fieldOnly ? null : a.billing,
+      },
+      tone: issues.tone,
+      issues: issues.issues,
+      monthly: money.amount,
+      monthlyFrom: money.from,
+      seesMoney: !fieldOnly,
+      sites: sites.map((x) => ({ id: x.id, name: x.name, sector: x.sector ?? 'private' })),
+      people: (a.people ?? []).filter((x) => !x.removedAt),
+      pastPeople: (a.people ?? []).filter((x) => x.removedAt).map((x) => ({ id: x.id, name: x.name, position: x.position, removedAt: x.removedAt })),
+      requests: [...(a.requests ?? [])].sort((x, y) => Number(x.status !== 'open') - Number(y.status !== 'open') || y.at.localeCompare(x.at)),
+      complaints: [...(a.complaints ?? [])].sort((x, y) => Number(!!x.resolvedAt) - Number(!!y.resolvedAt) || y.at.localeCompare(x.at)),
+      renewal: a.renewal && !a.renewal.closedAt ? a.renewal : null,
+      renewalState: renewalState(a, today),
+      pastRenewals: a.renewals ?? [],
+      contracts: contracts.map((c) => ({ id: c.id, ref: c.ref, state: c.state, startOn: c.startOn, endOn: c.endOn })),
+      lead: lead ? { id: lead.id, ref: lead.ref, source: lead.source, owner: lead.owner, createdAt: lead.createdAt, closedOn: lead.closed?.on ?? null } : null,
+      quotation: quotation ? { id: quotation.id, ref: quotation.ref, monthlyTotal: quotation.monthlyTotal, status: quotation.status } : null,
+      timeline: ev.slice(0, 200),
+      owners,
+      can: can_,
+    };
+  }
+
+  private async crmFor(user: User, accountId: Id, need: keyof Awaited<ReturnType<PrimaService['crmCan']>>) {
+    if (!this.clientRoleOf(user)) throw new AccessDenied('view', '(clients)');
+    const a = (await this.clientScope(user)).find((x) => x.id === String(accountId));
+    if (!a) throw new NotFound('Client');
+    const c = await this.crmCan(user, a);
+    if (!c[need]) {
+      const who: Record<typeof need, string> = {
+        owner: 'Operations or the company manager names the person in charge',
+        people: "Operations, the company manager or the company's admin executives keep the client's contacts",
+        request: "Operations, the company manager or the company's admin executives log client requests",
+        closeRequest: 'Operations in the area closes client requests',
+        decide: 'the company manager decides renewals, within 90 days of the contract end',
+        offer: "the company manager or the company's admin executives send the renewal offer after the decision",
+        answer: "the company manager or the company's admin executives record the client's answer",
+        offboard: 'Operations in the area starts offboarding',
+      };
+      throw new AccessDenied('view', `(${who[need]})`);
+    }
+    return a;
+  }
+
+  /** Name the person in Operations in charge of this client. */
+  async setClientOwner(user: User, accountId: Id, ownerUserId: Id) {
+    const a = await this.crmFor(user, accountId, 'owner');
+    const o = await this.store.get('users', String(ownerUserId ?? ''));
+    const today = this.today();
+    if (
+      !o ||
+      o.role !== 'pwvsb_officer' ||
+      o.department !== 'operations' ||
+      !['om', 'regional', 'ogm', 'ops_director'].includes(o.opsTier ?? '') ||
+      accessClosed(o, today) ||
+      !visibleCompanyIds(o, await this.grants(), today).includes(a.companyId)
+    )
+      throw new BadRequest('Choose an Operations Manager or higher who works for this company.');
+    return this.crmWrite(user, a, 'owner', () => ({ patch: { owner: { name: o.name, userId: o.id, since: today, by: user.name } }, summary: `${o.name} in charge.` }));
+  }
+
+  /** Add a contact person at the client. Work details only. One main contact: naming a new main one replaces the old. */
+  async addClientPerson(user: User, accountId: Id, input: { name: string; position: string; role: ClientPersonRole; phone: string; email: string; main: boolean }) {
+    const a = await this.crmFor(user, accountId, 'people');
+    const name = String(input.name ?? '').trim().slice(0, 120);
+    if (name.length < 2) throw new BadRequest("Give the person's name.");
+    const position = String(input.position ?? '').trim().slice(0, 80);
+    if (!position) throw new BadRequest('Give their position at the client.');
+    const role = (Object.keys(CLIENT_PERSON_ROLE) as ClientPersonRole[]).find((k) => k === input.role);
+    if (!role) throw new BadRequest('Choose what they do for us: decides, on site, finance, procurement or other.');
+    const phone = String(input.phone ?? '').trim();
+    const email = String(input.email ?? '').trim().toLowerCase().slice(0, 120);
+    if (!phone && !email) throw new BadRequest('Give a work phone number or a work email.');
+    if (phone && !/^\+?[0-9][0-9 -]{6,18}$/.test(phone)) throw new BadRequest('The phone number is not valid.');
+    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new BadRequest('The email is not valid.');
+    return this.crmWrite(user, a, 'person', (cur, at) => {
+      const people = cur.people ?? [];
+      if (people.some((x) => !x.removedAt && x.name.toLowerCase() === name.toLowerCase())) throw new BadRequest(`${name} is already a contact.`);
+      const main = !!input.main || !people.some((x) => !x.removedAt);
+      const p: ClientPerson = { id: `cp-${toMs(at)}-${Math.random().toString(36).slice(2, 7)}`, name, position, role, phone, email, main, addedBy: user.name, addedAt: at, removedAt: null, removedBy: null };
+      return { patch: { people: [...people.map((x) => (main ? { ...x, main: false } : x)), p] }, summary: `contact ${name} (${position}) added${main ? ' as main contact' : ''}.` };
+    });
+  }
+
+  /** A contact left the client or changed: kept in history, no longer current. Or name them the main contact. */
+  async updateClientPerson(user: User, accountId: Id, personId: Id, action: 'remove' | 'main') {
+    const a = await this.crmFor(user, accountId, 'people');
+    if (action !== 'remove' && action !== 'main') throw new BadRequest('Choose remove or main.');
+    return this.crmWrite(user, a, 'person', (cur, at) => {
+      const people = cur.people ?? [];
+      const p = people.find((x) => x.id === personId && !x.removedAt);
+      if (!p) throw new NotFound('Contact');
+      if (action === 'main')
+        return { patch: { people: people.map((x) => ({ ...x, main: x.id === p.id && !x.removedAt ? true : x.removedAt ? x.main : false })) }, summary: `${p.name} is now the main contact.` };
+      return { patch: { people: people.map((x) => (x.id === p.id ? { ...x, main: false, removedAt: at, removedBy: user.name } : x)) }, summary: `contact ${p.name} no longer current.` };
+    });
+  }
+
+  /** Log what the client asked us to change. */
+  async addClientRequest(user: User, accountId: Id, input: { kind: ClientRequestKind; what: string; from: string; neededBy: IsoDate | null }) {
+    const a = await this.crmFor(user, accountId, 'request');
+    const kind = (Object.keys(CLIENT_REQUEST_KIND) as ClientRequestKind[]).find((k) => k === input.kind);
+    if (!kind) throw new BadRequest('Choose what the client asked for.');
+    const what = String(input.what ?? '').trim().slice(0, 500);
+    if (what.length < 3) throw new BadRequest('Say what the client asked for.');
+    const from = String(input.from ?? '').trim().slice(0, 120);
+    if (from.length < 2) throw new BadRequest('Say who at the client asked.');
+    const neededBy = input.neededBy ? String(input.neededBy) : null;
+    if (neededBy && (!/^\d{4}-\d{2}-\d{2}$/.test(neededBy) || neededBy < this.today())) throw new BadRequest('The date needed is today or later.');
+    return this.crmWrite(user, a, 'request', (cur, at) => {
+      const q: ClientRequest = { id: `cq-${toMs(at)}-${Math.random().toString(36).slice(2, 7)}`, kind, what, from, at, by: user.name, neededBy, status: 'open', closedAt: null, closedBy: null, outcome: null, variationRef: null };
+      return { patch: { requests: [...(cur.requests ?? []), q] }, summary: `request from ${from}: ${CLIENT_REQUEST_KIND[kind]}, ${what.slice(0, 120)}.` };
+    });
+  }
+
+  /**
+   * Operations closes a client request: done with what was done, or declined with why. More or fewer guards changes
+   * the contract, so it is done only with the signed variation's reference (recorded in Contracts).
+   */
+  async closeClientRequest(user: User, accountId: Id, requestId: Id, input: { status: 'done' | 'declined'; outcome: string; variationRef?: string | null }) {
+    const a = await this.crmFor(user, accountId, 'closeRequest');
+    if (input.status !== 'done' && input.status !== 'declined') throw new BadRequest('Choose done or declined.');
+    const outcome = String(input.outcome ?? '').trim().slice(0, 500);
+    if (outcome.length < 3) throw new BadRequest(input.status === 'done' ? 'Say what was done.' : 'Say why it was declined.');
+    const ref = String(input.variationRef ?? '').trim().slice(0, 60) || null;
+    return this.crmWrite(user, a, 'request.close', (cur, at) => {
+      const q = (cur.requests ?? []).find((x) => x.id === requestId);
+      if (!q) throw new NotFound('Request');
+      if (q.status !== 'open') throw new BadRequest('That request is already closed.');
+      if (input.status === 'done' && (q.kind === 'more_guards' || q.kind === 'fewer_guards') && !ref)
+        throw new BadRequest('More or fewer guards changes the contract: give the signed variation reference (record it in Contracts).');
+      return {
+        patch: { requests: (cur.requests ?? []).map((x) => (x.id === q.id ? { ...x, status: input.status, closedAt: at, closedBy: user.name, outcome, variationRef: input.status === 'done' ? ref : null } : x)) },
+        summary: `request ${input.status}: ${q.what.slice(0, 80)}. ${outcome}`,
+      };
+    });
+  }
+
+  /**
+   * The company manager decides the renewal: renew, renew at a new price, bid again, or let it end, with the reason.
+   * It can be changed until the client answers.
+   */
+  async decideClientRenewal(user: User, accountId: Id, input: { choice: ClientRenewalDecision; pricePct: number; reason: string }) {
+    const a = await this.crmFor(user, accountId, 'decide');
+    const choice = (Object.keys(CLIENT_RENEWAL_DECISION) as ClientRenewalDecision[]).find((k) => k === input.choice);
+    if (!choice) throw new BadRequest('Choose renew, renew at a new price, bid again or let it end.');
+    const reason = String(input.reason ?? '').trim().slice(0, 500);
+    if (reason.length < 3) throw new BadRequest('Give the reason for the decision.');
+    const pct = Math.round(Number(input.pricePct ?? 0) * 10) / 10;
+    if (choice === 'renew_new_price' && !(pct !== 0 && pct >= -50 && pct <= 100)) throw new BadRequest('Give the price change in percent (for example 5 or -3).');
+    if (!a.contractEndsOn) throw new BadRequest('The contract end date is not on record.');
+    return this.crmWrite(user, a, 'renewal.decide', (cur, at) => {
+      const rn: ClientRenewal = cur.renewal && !cur.renewal.closedAt ? cur.renewal : { id: `rn-${toMs(at)}`, endsOn: cur.contractEndsOn!, openedAt: at, decision: null, proposal: null, answer: null, closedAt: null };
+      if (rn.answer) throw new BadRequest('The client has answered; the decision can no longer change.');
+      const changed = rn.decision ? ` (was: ${CLIENT_RENEWAL_DECISION[rn.decision.choice].toLowerCase()})` : '';
+      // A changed decision clears an offer sent on the old one.
+      const keepOffer = rn.decision && rn.decision.choice === choice && rn.decision.pricePct === (choice === 'renew_new_price' ? pct : 0);
+      return {
+        patch: { renewal: { ...rn, decision: { choice, pricePct: choice === 'renew_new_price' ? pct : 0, reason, by: user.name, at }, proposal: keepOffer ? rn.proposal : null } },
+        summary: `renewal decided: ${CLIENT_RENEWAL_DECISION[choice].toLowerCase()}${choice === 'renew_new_price' ? ` (${pct > 0 ? '+' : ''}${pct}%)` : ''}${changed}. ${reason}`,
+      };
+    });
+  }
+
+  /** The renewal offer went to the client: attach it. */
+  async sendClientRenewalOffer(user: User, accountId: Id, proof: ProofInput[]) {
+    const a = await this.crmFor(user, accountId, 'offer');
+    const rec = this.proofRecords(user, a.companyId, null, proof, {}, { documentsOnly: true });
+    if (!rec.docs.length) throw new BadRequest('Attach the renewal offer as sent to the client.');
+    const docs = rec.docs.map((d) => ({ ...d, caption: d.caption || `${a.name}: renewal offer` }));
+    return this.crmWrite(
+      user,
+      a,
+      'renewal.offer',
+      (cur, at) => {
+        const rn = cur.renewal;
+        if (!rn || rn.closedAt || !rn.decision || rn.decision.choice === 'let_go' || rn.proposal) throw new BadRequest('There is no renewal offer to send.');
+        return { patch: { renewal: { ...rn, proposal: { at, by: user.name, docId: docs[0].id } } }, summary: 'renewal offer sent to the client.' };
+      },
+      docs,
+    );
+  }
+
+  /**
+   * The client's answer. Signed: attach the signed renewal and give the new end date; the client's contract end moves.
+   * Will not renew: the renewal closes and Operations starts offboarding. Tender called: bid, then record the result.
+   */
+  async answerClientRenewal(user: User, accountId: Id, input: { choice: ClientRenewalAnswer; note: string; newEndsOn?: IsoDate | null; proof?: ProofInput[] }) {
+    const a = await this.crmFor(user, accountId, 'answer');
+    const choice = (Object.keys(CLIENT_RENEWAL_ANSWER) as ClientRenewalAnswer[]).find((k) => k === input.choice);
+    if (!choice) throw new BadRequest("Choose the client's answer.");
+    const note = String(input.note ?? '').trim().slice(0, 500);
+    const rec = this.proofRecords(user, a.companyId, null, input.proof ?? [], {}, { documentsOnly: true });
+    const docs = rec.docs.map((d) => ({ ...d, caption: d.caption || `${a.name}: renewal ${choice}` }));
+    const newEndsOn = input.newEndsOn ? String(input.newEndsOn) : null;
+    if (choice === 'accepted') {
+      if (!docs.length) throw new BadRequest('Attach the signed renewal.');
+      if (!newEndsOn || !/^\d{4}-\d{2}-\d{2}$/.test(newEndsOn)) throw new BadRequest('Give the new contract end date.');
+    }
+    if (choice === 'declined' && note.length < 3) throw new BadRequest('Say why the client will not renew.');
+    return this.crmWrite(
+      user,
+      a,
+      `renewal.${choice}`,
+      (cur, at) => {
+        const rn = cur.renewal;
+        if (!rn || rn.closedAt || !rn.decision || rn.decision.choice === 'let_go') throw new BadRequest('There is no renewal waiting for an answer.');
+        if (rn.answer && rn.answer.choice !== 'tender_called') throw new BadRequest('The answer is already recorded.');
+        if (rn.decision.choice !== 'rebid' && !rn.proposal && choice !== 'tender_called') throw new BadRequest('Send the renewal offer first.');
+        if (choice === 'tender_called' && rn.answer?.choice === 'tender_called') throw new BadRequest('The tender is already recorded; record the result when it is known.');
+        if (choice === 'accepted' && newEndsOn! <= rn.endsOn) throw new BadRequest('The new end date must be after the current one.');
+        const answer = { choice, at, by: user.name, note, newEndsOn: choice === 'accepted' ? newEndsOn : null, docId: docs[0]?.id ?? null };
+        if (choice === 'tender_called') return { patch: { renewal: { ...rn, answer } }, summary: `client called a tender for the renewal. ${note}` };
+        const done = { ...rn, answer, closedAt: at };
+        return {
+          patch: { renewal: null, renewals: [...(cur.renewals ?? []), done], ...(choice === 'accepted' ? { contractEndsOn: newEndsOn } : {}) },
+          summary: choice === 'accepted' ? `renewal signed, contract now ends ${newEndsOn}.` : `client will not renew. ${note}`,
+        };
+      },
+      docs,
+    );
   }
 
   // ---------- Operation claims and office requests (Fauzan, 26 Oct 2026) ----------
@@ -22838,6 +25585,18 @@ export class PrimaService {
     const old = input.id ? all.find((t) => t.id === input.id) : undefined;
     if (input.id && !old) throw new NotFound('Allowance');
     if (old && note.length < 3) throw new BadRequest('Say why the allowance is changed.');
+    // A lower cap must still cover every staff member's fixed amount and every change waiting for approval or its date
+    // (Arisha main retest of a07f0e8): HR lowers those through the usual approved change first.
+    if (old && cap != null && (old.cap == null || cap < old.cap)) {
+      const over = (await this.store.list('people', {})).filter((p) => p.status === 'active' && (p.allowances ?? []).some((a) => a.typeId === old.id && a.amount > cap));
+      const waiting = (await this.store.list('payChanges', {})).filter(
+        (c) => c.kind === 'ALLOWANCE' && (c.status === 'pending' || (c.status === 'verified' && c.applied === null)) && (c.allowancesTo ?? []).some((a) => a.typeId === old.id && a.amount > cap),
+      );
+      if (over.length || waiting.length)
+        throw new BadRequest(
+          `RM${cap} is below what ${[...over.map((p) => p.name), ...waiting.map((c) => `a waiting change for ${c.personId}`)].slice(0, 5).join(', ')} ${over.length + waiting.length === 1 ? 'gets' : 'get'} as ${old.name}. Lower those first through an allowance change.`,
+        );
+    }
     const fields = { name, frequency: input.frequency, usualAmount, cap, epf: input.epf, socso: input.socso, pcb: input.pcb, hrd: input.hrd, basis, active: input.active };
     const ticks = (t: Pick<AllowanceType, 'epf' | 'socso' | 'pcb' | 'hrd'>) =>
       (['epf', 'socso', 'pcb', 'hrd'] as const).map((k) => `${k.toUpperCase()} ${t[k] ? 'yes' : 'no'}`).join(', ');
@@ -22877,6 +25636,14 @@ export class PrimaService {
     if (reason.length < 5) throw new BadRequest('Give the reason, e.g. offer letter, new post or yearly review.');
     if (!realDate(input.effectiveOn)) throw new BadRequest('Give a real date it starts.');
     if (input.effectiveOn < p.hiredOn) throw new BadRequest(`The start date cannot be before ${p.name} joined (${p.hiredOn}).`);
+    // Backdating is limited (Arisha main retest of a07f0e8; the last-month floor decided by Fauzan, 4 Nov 2026): not before last month, the earliest month payroll can still
+    // prepare, and never before a change already approved for this person, so changes always apply in date order.
+    const floor = `${this.prevPeriod(this.today().slice(0, 7))}-01`;
+    if (input.effectiveOn < floor) throw new BadRequest(`An allowance change can start from ${floor} at the earliest. Older pay is corrected through the payroll month it belongs to.`);
+    const latest = (await this.store.list('payChanges', { companyId: p.companyId }))
+      .filter((c) => c.personId === p.id && c.kind === 'ALLOWANCE' && c.status === 'verified')
+      .reduce<string>((d, c) => (c.effectiveOn > d ? c.effectiveOn : d), '');
+    if (latest && input.effectiveOn < latest) throw new BadRequest(`An allowance change from ${latest} is already approved for ${p.name}. A new change starts on or after that date.`);
     if (!Array.isArray(input.allowances) || input.allowances.length > 20) throw new BadRequest('Give the allowances.');
     const types = await this.store.list('allowanceTypes', {});
     const current = p.allowances ?? [];
@@ -35939,11 +38706,11 @@ export class PrimaService {
    * Why an employer's month cannot be submitted yet: part-month pay not entered, staff changed since it was calculated,
    * or a staff movement in or out of this employer that takes effect by the month end and is not applied or ended.
    */
-  private async staffPayBlockers(run: StaffPayRun): Promise<string[]> {
+  private async staffPayBlockers(run: StaffPayRun, st: Store = this.store): Promise<string[]> {
     const out: string[] = [];
     const part = run.lines.filter((l) => l.partMonth && !l.partPay);
     if (part.length) out.push(`Enter the part-month pay for ${part.map((l) => l.name).join(', ')} (no proration rule is set).`);
-    const people = await this.peopleForPeriod(await this.store.list('people', { companyId: run.companyId }), run.period);
+    const people = await this.peopleForPeriod(await st.list('people', { companyId: run.companyId }), run.period, st);
     // Who is paid, and for which days, as the records stand now; compared with the month as it was calculated.
     const start = `${run.period}-01`;
     const end0 = periodEnd(run.period);
@@ -35961,8 +38728,8 @@ export class PrimaService {
     if (gaps.length)
       out.push(`Not recorded yet: ${gaps.map((p) => `${p.name} (${staffPayGaps(p).join(', ')})`).join('; ')}. HR adds them on the staff record first.`);
     // Pay inputs too (Arisha main review, 3 Nov 2026): basic pay, allowances and their ticks, unpaid leave.
-    const types = await this.store.list('allowanceTypes', {});
-    const leaves = (await this.store.list('leaveRequests', { companyId: run.companyId })).filter(
+    const types = await st.list('allowanceTypes', {});
+    const leaves = (await st.list('leaveRequests', { companyId: run.companyId })).filter(
       (l) => l.kind === 'UNPAID' && l.status === 'approved' && l.from.slice(0, 7) === run.period,
     );
     const moved: string[] = [];
@@ -35990,20 +38757,24 @@ export class PrimaService {
     const overCap: string[] = [];
     for (const l of run.lines)
       for (const t of types.filter((x) => x.cap != null)) {
-        const oneOffs = l.allowanceLines.filter((a) => !a.fixed && a.typeId === t.id);
-        if (!oneOffs.length) continue;
+        if (!l.allowanceLines.some((a) => a.typeId === t.id)) continue;
         const sum = Math.round(l.allowanceLines.filter((a) => a.typeId === t.id).reduce((n, a) => n + a.amount, 0) * 100) / 100;
         if (sum > t.cap!) overCap.push(`${l.name} (${t.name} RM${sum}, cap RM${t.cap})`);
       }
-    if (overCap.length) out.push(`Over the allowance cap now: ${overCap.join('; ')}. Lower the one-off first.`);
+    // Older data (Arisha main retest of beea18d): basic pay changes on main take any start date, so one could have been
+    // applied after a later-dated one. Where the history by date disagrees with the record for this month, the month waits
+    // for HR to check and key a correcting change, rather than paying either figure silently.
+    const disorder = await this.payHistoryDisorder(people.filter((p) => run.lines.some((l) => l.personId === p.id)), run.period, st);
+    if (disorder.length) out.push(`Pay history out of date order for ${disorder.join('; ')}. HR checks the record and keys a correcting change first.`);
+    if (overCap.length) out.push(`Over the allowance cap now: ${overCap.join('; ')}. Lower the one-off, or the fixed allowance through an approved change, first.`);
     if (changed) out.push('Staff joined, left or moved since this month was calculated. Recalculate it first.');
     const end = periodEnd(run.period);
-    const open = (await this.store.list('staffMovements', {})).filter(
+    const open = (await st.list('staffMovements', {})).filter(
       (m) => (m.status === 'waiting' || m.status === 'approved') && m.effectiveOn <= end && (m.companyId === run.companyId || m.toCompanyId === run.companyId),
     );
     for (const m of open)
       out.push(`${m.personName}: ${m.kind} from ${m.effectiveOn} is ${m.status === 'waiting' ? 'still waiting for approval' : 'approved but not applied'}. Apply or cancel it first.`);
-    const allowancesDue = (await this.store.list('payChanges', { companyId: run.companyId })).filter(
+    const allowancesDue = (await st.list('payChanges', { companyId: run.companyId })).filter(
       (c) => c.kind === 'ALLOWANCE' && c.status === 'verified' && c.applied === null && c.effectiveOn <= end,
     );
     for (const c of allowancesDue)
@@ -36021,12 +38792,13 @@ export class PrimaService {
     const id = `sp-${companyId}-${period}`;
     const existing = await this.store.get('staffPayRuns', id);
     if (existing && existing.stage !== 'draft') throw new BadRequest('This month is already submitted. It must be returned to HR before it changes.');
-    const [people0, leaves, claims, runs, tables] = await Promise.all([
+    const [people0, leaves, claims, runs, tables, statutory] = await Promise.all([
       this.store.list('people', { companyId }),
       this.store.list('leaveRequests', { companyId }),
       this.store.list('staffClaims', { companyId }),
       this.store.list('staffPayRuns', { companyId }),
       this.storedStatTables(),
+      this.statutorySettingsFor(period),
     ]);
     const people = await this.peopleForPeriod(people0, period);
     // A claim goes into one run only.
@@ -36063,6 +38835,7 @@ export class PrimaService {
           allowanceFlagAbove: RULES.insiderControls.value.allowanceFlagAbove,
           types: allowanceTypes,
           tables,
+          statutory,
         });
       })
       .map((l) => this.flagOwnLine(user, l));
@@ -36173,6 +38946,7 @@ export class PrimaService {
       kept: { extra, pcb: pcb == null ? null : Math.round(pcb * 100) / 100, partPay },
       allowanceFlagAbove: RULES.insiderControls.value.allowanceFlagAbove,
       types: allowanceTypes,
+      statutory: await this.statutorySettingsFor(run.period),
     });
     line.flags = [
       ...new Set([...this.flagOwnLine(user, line).flags, ...old.flags.filter((f) => f.startsWith('Basic pay changed') || f.startsWith('Salary account changed'))]),
@@ -36209,8 +38983,9 @@ export class PrimaService {
     let patch: Partial<StaffPayRun>;
     let summary: string;
     if (action === 'submit' && view.can.submit) {
-      const noBank = run.lines.filter((l) => !l.bank).length;
-      if (noBank) throw new BadRequest(`${noBank} staff have no salary account on record. Add it before submitting.`);
+      // Bank account or e-wallet only; someone else's account needs written consent (Fauzan, 6 Nov 2026).
+      const noBank = run.lines.filter((l) => !!payAccountCheck(l.bank as Person['bank']).problem).length;
+      if (noBank) throw new BadRequest(`${noBank} staff have no salary account on record that they can be paid into (no account, or someone else's without written consent). Fix it before submitting.`);
       const blockers = await this.staffPayBlockers(run);
       if (blockers.length) throw new BadRequest(blockers.join(' '));
       patch = { stage: 'submitted', submitted: step };
@@ -36241,6 +39016,15 @@ export class PrimaService {
       throw new BadRequest(`This month is waiting for ${view.waitingOn ?? 'nobody'}; you cannot ${action} it now.`);
     }
     return this.store.transaction(async (tx) => {
+      // One lock on the month shared with consent and apply (Arisha main retest of a07f0e8): each path takes it, then
+      // rechecks. A submission rechecks every blocker under the lock, so a pay change consented a moment earlier is seen.
+      await tx.lock?.('staffPayRuns', runId);
+      const cur = await tx.get('staffPayRuns', runId);
+      if (!cur || cur.stage !== run.stage) throw new BadRequest('This month changed while you were working. Open it again.');
+      if (action === 'submit') {
+        const again = await this.staffPayBlockers(cur, tx);
+        if (again.length) throw new BadRequest(again.join(' '));
+      }
       await tx.update('staffPayRuns', runId, patch);
       await tx.audit({
         at: step.at,
@@ -36435,6 +39219,1527 @@ export class PrimaService {
         title: `${b.prev} staff salaries not paid by the ${b.rule.payByDay}th: ${late.length} employer${late.length === 1 ? '' : 's'}`,
         detail: late.map((e) => `${e.companyName} (${e.last ? (this.staffPayWaiting(e.last.stage) ?? 'paid') : 'not prepared'})`).join(', '),
         go: { view: 'staffpay' },
+      });
+    return items;
+  }
+
+  // ---------- Guard pay run (Fauzan, 5 Nov 2026, third audit item 1) ----------
+  // Prima's own monthly pay for guards, stationed officers and patrolling officers, from locked attendance under the
+  // ACT pay formula used at the site (PR #112). HR prepares each company's month, the COO approves with a reason
+  // (salary-approval rule, 26 Oct 2026), Finance pays through the bank. While the JA Group app still pays guards, a run
+  // is a side-by-side trial (rule PAY-GUARD primaPays off): compared with JA's figures and never marked paid.
+
+  /** What a user does in the guard pay run. 'view' is group leadership and a company manager for their own company. */
+  private guardPayRoleOf(user: User): 'hr' | 'coo' | 'finance' | 'doa' | 'view' | null {
+    if (user.integration || user.role === 'guard' || user.role === 'site_device') return null;
+    if (user.role === 'pwvsb_officer' && user.department === 'hr') return 'hr';
+    if (user.opsTier === 'coo') return 'coo';
+    if (user.leadership === 'finance_director' || (user.department === 'finance' && user.financeTeam != null)) return 'finance';
+    // The Director Office collects and submits the list of guards to be paid in cash (Fauzan, 6 Nov 2026).
+    if (user.role === 'pwvsb_officer' && user.department === 'director_office') return 'doa';
+    if (isGroupLeader(user) || user.role === 'company_manager') return 'view';
+    return null;
+  }
+
+  /** The CEO stands in for the COO while the pilot runs (as for staff payroll). */
+  private guardPayApprover(user: User): boolean {
+    return this.guardPayRoleOf(user) === 'coo' || this.pilotApproves(user);
+  }
+
+  private async guardPayOn(): Promise<boolean> {
+    return this.store.guardPayReady ? this.store.guardPayReady() : true;
+  }
+
+  private async guardPayEmployers(user: User): Promise<Id[]> {
+    const role = this.guardPayRoleOf(user);
+    if (!role) return [];
+    const ids = user.role === 'company_manager' ? user.companyIds : tenantCompanyIds(user, await this.grants(), this.today());
+    return ids.filter((id) => !isCentralEmployer(id));
+  }
+
+  private guardPayWaiting(run: GuardPayRun): string | null {
+    if (run.stage === 'approved' && run.trial) return 'Trial: compare with the JA Group app (Prima does not pay guards yet)';
+    return { draft: 'HR to submit', submitted: 'COO to approve', approved: 'Finance to pay', paid: null }[run.stage];
+  }
+
+  private guardPayLate(run: GuardPayRun | null, period: string, today: IsoDate): boolean {
+    if (!RULES.guardPayroll.value.primaPays) return false;
+    return today > addDays(periodEnd(period), RULES.guardPayroll.value.payByDay) && (!run || run.stage !== 'paid');
+  }
+
+  /** JA's figures for the same company and month, for the side-by-side check. */
+  private async guardPayJa(companyId: Id, period: string) {
+    const rec = (await this.store.list('jaRecords', { companyId, dataset: 'payroll' })).find((r) => r.payroll?.period === period);
+    return rec?.payroll ? { headcount: rec.payroll.headcount, gross: rec.payroll.gross, net: rec.payroll.net, status: rec.payroll.status, receivedAt: rec.receivedAt } : null;
+  }
+
+  /** The guard pay screen: each company's month, what waits on whom. */
+  async guardPayroll(user: User) {
+    const role = this.guardPayRoleOf(user);
+    if (!role) throw new AccessDenied('view', '(guard pay)');
+    const on = await this.guardPayOn();
+    const today = this.today();
+    const period = today.slice(0, 7);
+    const prev = this.prevPeriod(period);
+    const ids = await this.guardPayEmployers(user);
+    const [runs, people, companies] = await Promise.all([
+      on ? this.store.list('guardPayRuns', { companyId: ids }) : Promise.resolve([] as GuardPayRun[]),
+      this.store.list('people', { companyId: ids }),
+      this.store.list('companies', { id: ids }),
+    ]);
+    const nameOf = (id: Id) => companies.find((c) => c.id === id)?.name ?? id;
+    const paid = people.filter((p) => GUARD_PAY_ROLES.includes(p.role) && p.status === 'active');
+    const employers = [...new Set(paid.map((p) => p.companyId))].sort((a, b) => nameOf(a).localeCompare(nameOf(b)));
+    const rows = runs
+      .sort((a, b) => b.period.localeCompare(a.period) || nameOf(a.companyId).localeCompare(nameOf(b.companyId)))
+      .map((r) => ({
+        id: r.id,
+        companyId: r.companyId,
+        companyName: nameOf(r.companyId),
+        period: r.period,
+        stage: r.stage,
+        trial: r.trial,
+        waitingOn: this.guardPayWaiting(r),
+        late: this.guardPayLate(r, r.period, today),
+        totals: guardPayTotals(r.lines),
+        mineToAct:
+          // An open month is a preview: HR's turn comes once the month has ended.
+          (role === 'hr' && r.stage === 'draft' && r.period < period) ||
+          (this.guardPayApprover(user) && r.stage === 'submitted') ||
+          (role === 'finance' && r.stage === 'approved' && !r.trial),
+      }));
+    const status = employers.map((id) => {
+      const cur = runs.find((r) => r.companyId === id && r.period === period) ?? null;
+      const last = runs.find((r) => r.companyId === id && r.period === prev) ?? null;
+      return {
+        companyId: id,
+        companyName: nameOf(id),
+        guards: paid.filter((p) => p.companyId === id).length,
+        current: cur ? { id: cur.id, stage: cur.stage } : null,
+        last: last ? { id: last.id, stage: last.stage } : null,
+        lastLate: this.guardPayLate(last, prev, today),
+      };
+    });
+    return {
+      role,
+      approver: this.guardPayApprover(user),
+      on,
+      period,
+      prev,
+      rule: { payByDay: RULES.guardPayroll.value.payByDay, primaPays: RULES.guardPayroll.value.primaPays },
+      employers: status,
+      runs: rows,
+    };
+  }
+
+  private async guardPayRunFor(user: User, runId: Id) {
+    const run = await this.store.get('guardPayRuns', runId);
+    if (!run || !(await this.guardPayEmployers(user)).includes(run.companyId)) throw new NotFound('Guard pay run');
+    return run;
+  }
+
+  /** One run in full: every line, the steps taken, JA's figures and what this user may do. */
+  async guardPayRun(user: User, runId: Id) {
+    const role = this.guardPayRoleOf(user);
+    if (!role) throw new AccessDenied('view', '(guard pay)');
+    const run = await this.guardPayRunFor(user, runId);
+    const co = await this.store.get('companies', run.companyId);
+    const approver = this.guardPayApprover(user);
+    const totals = guardPayTotals(run.lines);
+    const ja = await this.guardPayJa(run.companyId, run.period);
+    const open = run.period >= this.today().slice(0, 7);
+    // Nobody approves a month they prepared or submitted.
+    const ownWork = [run.prepared.byId, run.submitted?.byId].includes(user.id);
+    const cash = run.cash ?? [];
+    const cashGiven = new Set(cash.filter((c) => c.decision?.give).map((c) => c.personId));
+    const cashListed = new Set(cash.filter((c) => !c.decision || c.decision.give).map((c) => c.personId));
+    // Wages go to a bank account or an e-wallet only; cash only when the COO or CEO gives it (Fauzan, 6 Nov 2026).
+    const problemOf = (l: GuardPayLine) => (l.accountProblem !== undefined ? l.accountProblem : l.bank ? null : 'No bank account or e-wallet on record');
+    const payable = run.lines.filter((l) => l.net > 0 && !cashGiven.has(l.personId) && !problemOf(l) && l.bank?.kind !== 'ewallet');
+    const ewallet = run.lines.filter((l) => l.net > 0 && !cashGiven.has(l.personId) && !problemOf(l) && l.bank?.kind === 'ewallet');
+    const cashLines = run.lines.filter((l) => l.net > 0 && cashGiven.has(l.personId));
+    const unpayable = run.lines.filter((l) => l.net > 0 && problemOf(l) && !cashListed.has(l.personId));
+    const undecided = cash.filter((c) => !c.decision);
+    const cashDecider = !user.integration && (user.opsTier === 'coo' || user.opsTier === 'ceo');
+    const payBy = addDays(periodEnd(run.period), RULES.guardPayroll.value.payByDay);
+    const r2 = (n: number) => Math.round(n * 100) / 100;
+    return {
+      run,
+      payBy,
+      pay: {
+        bank: { count: payable.length, net: r2(payable.reduce((n, l) => n + l.net, 0)) },
+        ewallet: { count: ewallet.length, net: r2(ewallet.reduce((n, l) => n + l.net, 0)) },
+        cash: { count: cashLines.length, net: r2(cashLines.reduce((n, l) => n + l.net, 0)) },
+        cashHandedOut: cash.filter((c) => c.decision?.give && c.handedOut).length,
+        cashReceipts: cash.filter((c) => c.decision?.give && c.receipt).length,
+        // The Director Office's cash list, per site, per name and amount (Fauzan, 6 Nov 2026).
+        cashBySite: [...new Set(cashLines.map((l) => l.mainSiteName || 'No site'))].sort().map((site) => {
+          const ls = cashLines.filter((l) => (l.mainSiteName || 'No site') === site);
+          return { site, count: ls.length, net: r2(ls.reduce((n, l) => n + l.net, 0)) };
+        }),
+        unpayable: unpayable.map((l) => ({ personId: l.personId, staffNo: l.staffNo, name: l.name, net: l.net, problem: problemOf(l) })),
+        cashUndecided: undecided.length,
+      },
+      companyName: co?.name ?? run.companyId,
+      totals,
+      waitingOn: this.guardPayWaiting(run),
+      late: this.guardPayLate(run, run.period, this.today()),
+      role,
+      monthOpen: open,
+      ja: ja ? { ...ja, diffGross: Math.round((totals.gross - ja.gross) * 100) / 100, diffNet: Math.round((totals.net - ja.net) * 100) / 100, diffHeadcount: totals.headcount - ja.headcount } : null,
+      // Only lines with pay go to the bank: a nil line (no shift, no paid leave) stays on the run but is not a payment.
+      bankLines: payable,
+      ewalletLines: ewallet,
+      cashLines,
+      control: {
+        count: payable.length,
+        net: Math.round(payable.reduce((n, l) => n + l.net, 0) * 100) / 100,
+        code: sha256Hex(payable.map((l) => `${l.staffNo}|${l.bank?.accountMasked ?? ''}|${l.net.toFixed(2)}`).join('\n')).slice(0, 12).toUpperCase(),
+      },
+      can: {
+        prepare: role === 'hr' && run.stage === 'draft',
+        submit: role === 'hr' && run.stage === 'draft' && run.lines.length > 0,
+        approve: approver && run.stage === 'submitted' && !ownWork,
+        pay: role === 'finance' && run.stage === 'approved' && !run.trial,
+        return: (approver && run.stage === 'submitted' && !ownWork) || (role === 'finance' && run.stage === 'approved'),
+        export: (role === 'finance' || role === 'hr') && (run.stage === 'approved' || run.stage === 'paid'),
+        bankFile: role === 'finance' && (run.stage === 'approved' || run.stage === 'paid'),
+        // The Director Office lists a guard for cash; the COO or the CEO decides each one before the month is paid.
+        listCash: role === 'doa' && run.stage !== 'paid',
+        decideCash: cashDecider && run.stage !== 'paid' && undecided.length > 0,
+        cashFile: (role === 'finance' || role === 'doa' || cashDecider) && (run.stage === 'approved' || run.stage === 'paid') && cashLines.length > 0,
+        handOutCash: cashDecider && !run.trial && (run.stage === 'approved' || run.stage === 'paid') && cash.some((c) => c.decision?.give && !c.handedOut),
+        uploadReceipt: role === 'doa' && cash.some((c) => c.handedOut && !c.receipt),
+      },
+    };
+  }
+
+  private cleanHolidays(period: string, raw: unknown): { date: IsoDate; label: string }[] {
+    if (!Array.isArray(raw)) throw new BadRequest('Give the public holidays as a list.');
+    if (raw.length > 10) throw new BadRequest('At most 10 public holidays in a month.');
+    const out = raw.map((x) => {
+      const o = (x && typeof x === 'object' ? x : {}) as Record<string, unknown>;
+      const date = String(o.date ?? '');
+      const label = String(o.label ?? '').trim().slice(0, 60);
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || date.slice(0, 7) !== period || Number.isNaN(Date.parse(`${date}T00:00:00Z`)))
+        throw new BadRequest(`Each public holiday must be a date in ${period}.`);
+      if (!label) throw new BadRequest('Name each public holiday as gazetted.');
+      return { date, label };
+    });
+    if (new Set(out.map((h) => h.date)).size !== out.length) throw new BadRequest('A date is entered twice.');
+    return out.sort((a, b) => a.date.localeCompare(b.date));
+  }
+
+  /** Every line for a company's month, from its people, attendance, leave, hostel deductions and the ACT formulas. */
+  private async guardPayLines(
+    companyId: Id,
+    period: string,
+    holidays: IsoDate[],
+    kept: Map<Id, { extra: { label: string; amount: number }[]; pcb: number | null }>,
+    only?: Id,
+  ): Promise<GuardPayLine[]> {
+    const end = periodEnd(period);
+    const start = `${period}-01`;
+    const [people, attendance, shifts, sites, branches, company, leaves, utility, runs] = await Promise.all([
+      this.store.list('people', { companyId }),
+      this.store.list('attendance', { companyId }),
+      this.store.list('shifts', { companyId }),
+      this.store.list('sites', { companyId }),
+      this.store.list('branches', { companyId }),
+      this.store.get('companies', companyId),
+      this.store.list('leaveRequests', { companyId }),
+      this.store.list('utilityCharges', { companyId }),
+      this.store.list('guardPayRuns', { companyId }),
+    ]);
+    const [formulas, uses] = (await this.payFormulasOn())
+      ? await Promise.all([this.store.list('payFormulas', {}), this.store.list('payFormulaUses', { kind: 'guard_shift' })])
+      : [[], []];
+    const shiftById = new Map(shifts.map((s) => [s.id, s]));
+    const siteById = new Map(sites.map((s) => [s.id, s]));
+    const formulaCache = new Map<Id, { formula: PayFormula; scope: string } | null>();
+    const formulaAt = (siteId: Id) => {
+      if (!formulaCache.has(siteId)) {
+        const s = siteById.get(siteId);
+        const b = s ? branches.find((x) => x.id === s.branchId) : undefined;
+        const place: PayPlace = { siteId, companyId, regionId: regionOfState(b?.state ?? company?.state ?? '')?.id ?? null };
+        const use = resolvePayFormulaUse(uses, 'guard_shift', place, period);
+        const formula = use?.formulaCode ? payFormulaVersionFor(formulas, use.formulaCode, period) : null;
+        formulaCache.set(siteId, formula ? { formula, scope: PAY_SCOPE_LABEL[use!.scope] } : null);
+      }
+      return formulaCache.get(siteId)!;
+    };
+    const companyRegion = regionOfState(company?.state ?? '')?.id ?? null;
+    const formulaFallback = () => {
+      const use = resolvePayFormulaUse(uses, 'guard_shift', { companyId, regionId: companyRegion }, period);
+      const formula = use?.formulaCode ? payFormulaVersionFor(formulas, use.formulaCode, period) : null;
+      return formula ? { formula, scope: PAY_SCOPE_LABEL[use!.scope] } : null;
+    };
+    // Attendance in the month, grouped by person.
+    const byPerson = new Map<Id, { a: (typeof attendance)[number]; shift?: (typeof shifts)[number] }[]>();
+    for (const a of attendance) {
+      const shift = a.shiftId ? shiftById.get(a.shiftId) : undefined;
+      const d = attendanceDate(a, shift);
+      if (!d || d < start || d > end) continue;
+      if (!byPerson.has(a.personId)) byPerson.set(a.personId, []);
+      byPerson.get(a.personId)!.push({ a, shift });
+    }
+    const last = runs.find((r) => r.period === this.prevPeriod(period));
+    const monthOpen = period >= this.today().slice(0, 7);
+    // Guard public holidays: the yearly lists the Operations Director or OGM set (state list, else whole company). HR's
+    // own entry is used only when the company has no yearly list. Staff holidays are separate and never read here.
+    const ctx = await this.guardPayContext(companyId, period);
+    const stateOfSite = (siteId: Id | null) => {
+      const site = siteId ? siteById.get(siteId) : undefined;
+      return (site ? branches.find((x) => x.id === site.branchId)?.state : undefined) ?? company?.state ?? null;
+    };
+    const holidaysFor = ctx.yearly.length ? (siteId: Id | null) => holidaysInMonth(ctx.yearly, companyId, period, stateOfSite(siteId)).map((d) => d.date) : undefined;
+    const rosteredBy = new Map<Id, IsoDate[]>();
+    for (const sh of shifts) if (sh.personId && sh.date >= start && sh.date <= end) rosteredBy.set(sh.personId, [...(rosteredBy.get(sh.personId) ?? []), sh.date]);
+    const siteOver = (siteId: Id) => {
+      const o = ctx.sitesOver.find((x) => x.siteId === siteId);
+      return o ? `${o.siteName} is ${o.overBy} man-hours over its total without ${o.approver === 'ogm' ? 'OGM' : 'Operations Director'} approval` : null;
+    };
+    return people
+      .filter((p) => GUARD_PAY_ROLES.includes(p.role) && (!only || p.id === only))
+      .filter((p) => p.hiredOn <= end && (p.status === 'active' || byPerson.has(p.id)))
+      .sort((a, b) => a.staffNo.localeCompare(b.staffNo))
+      .map((person) =>
+        buildGuardPayLine({
+          person,
+          period,
+          attendance: byPerson.get(person.id) ?? [],
+          leaves,
+          holidays,
+          formulaAt,
+          formulaFallback,
+          siteName: (id) => siteById.get(id)?.name ?? id,
+          utility,
+          kept: kept.get(person.id) ?? null,
+          lastBank: last?.lines.find((l) => l.personId === person.id)?.bank?.accountMasked ?? null,
+          monthOpen,
+          holidaysFor,
+          rostered: rosteredBy.get(person.id) ?? [],
+          advances: ctx.advances.filter((x) => x.personId === person.id).map((x) => ({ id: x.id, amount: x.amount, payOn: x.payOn, paid: x.status === 'paid' && !!x.paid })),
+          loans: ctx.loans
+            .filter((x) => x.l.personId === person.id)
+            .sort((a, b) => (a.l.paidOut?.paidOn ?? '').localeCompare(b.l.paidOut?.paidOn ?? '') || a.l.id.localeCompare(b.l.id))
+            .map((x) => ({ id: x.l.id, label: `${x.l.kind === 'loan' ? 'Loan' : 'Advance (scheme)'} repayment: ${x.l.purpose.slice(0, 40)}`, due: x.due })),
+          siteOver,
+          divisor: ctx.divisor,
+          statutory: ctx.statutory,
+        }),
+      );
+  }
+
+  /** What a company's month reads besides attendance: the yearly guard holiday lists, advances, and sites over man-hours. */
+  private async guardPayContext(companyId: Id, period: string) {
+    const year = Number(period.slice(0, 4));
+    const formulasOn = await this.payFormulasOn();
+    const payOn = await this.guardPayOn();
+    const [lists, advances, sitesOver, laws, statutory, loans] = await Promise.all([
+      formulasOn ? this.store.list('publicHolidayLists', { companyId }) : Promise.resolve([] as PublicHolidayList[]),
+      payOn ? this.store.list('guardPayAdvances', { companyId, period }) : Promise.resolve([] as GuardPayAdvance[]),
+      formulasOn ? this.siteHoursOver(companyId, period) : Promise.resolve([]),
+      formulasOn ? this.store.list('payLawVersions', {}) : Promise.resolve([] as PayLawVersion[]),
+      this.statutorySettingsFor(period),
+      payOn ? this.store.list('guardLoans', { companyId }) : Promise.resolve([] as GuardLoan[]),
+    ]);
+    return {
+      loans: loans.map((l) => ({ l, due: loanDue(l, period) })).filter((x) => x.due > 0),
+      // The CEO's pay law for the month (PR #112): the day divisor; and the statutory settings (EPF, SOCSO and the rest).
+      divisor: payLawFor(laws, period).ordinaryRateDivisor,
+      statutory,
+      yearly: lists.filter((l) => l.year === year && !l.replacedBy),
+      advances: advances.filter((a) => a.status === 'approved' || a.status === 'paid'),
+      sitesOver,
+    };
+  }
+
+  /**
+   * Sites whose hours worked in the month are over the allowed total plus what OD/OGM approved (rule SITE-HOURS,
+   * Fauzan 6 Nov 2026: "The most important we monitor guard total hours when we do salary"). The pay run flags them; it
+   * does not hold wages, which are due by the 7th (EA s.19).
+   */
+  private async siteHoursOver(companyId: Id, month: string) {
+    const [sites, posts, shifts, attendance, approvals] = await Promise.all([
+      this.store.list('sites', { companyId }),
+      this.store.list('posts', { companyId }),
+      this.store.list('shifts', { companyId }),
+      this.store.list('attendance', { companyId }),
+      this.store.list('siteHoursApprovals', { companyId, month }),
+    ]);
+    const now = this.now();
+    const shiftById = new Map(shifts.map((x) => [x.id, x]));
+    const worked = new Map<Id, number>();
+    for (const a of attendance) {
+      const sh = a.shiftId ? (shiftById.get(a.shiftId) ?? null) : null;
+      if (attendanceMonth(a, sh) !== month) continue;
+      worked.set(a.siteId, (worked.get(a.siteId) ?? 0) + attendanceHours(a, sh, now));
+    }
+    const out: { siteId: Id; siteName: string; overBy: number; approver: 'ops_director' | 'ogm' }[] = [];
+    for (const site of sites) {
+      const allowed = siteAllowedHours(posts.filter((x) => x.siteId === site.id), month);
+      if (!allowed.posts.length) continue;
+      const check = siteHoursCheck({ allowedHours: allowed.allowedHours, hoursPerDay: allowed.hoursPerDay, month, now, workedHours: worked.get(site.id) ?? 0, rosteredHours: 0, approvals: approvals.filter((x) => x.siteId === site.id) });
+      if (check.overBy > 0) out.push({ siteId: site.id, siteName: site.name, overBy: check.overBy, approver: siteHoursApproverTier(site) });
+    }
+    return out.sort((a, b) => b.overBy - a.overBy);
+  }
+
+  private keptOf(run: GuardPayRun | undefined | null) {
+    return new Map(
+      (run?.lines ?? []).map((l) => [
+        l.personId,
+        { extra: l.items.filter((x) => x.kind === 'extra').map((x) => ({ label: x.label, amount: x.amount })), pcb: l.pcbSource === 'entered' ? l.pcb : null },
+      ]),
+    );
+  }
+
+  /** HR builds or rebuilds a company's month. Public holidays are entered by HR from the gazette; nothing is assumed. */
+  async prepareGuardPay(user: User, companyId: Id, period: string, holidays?: unknown) {
+    if (this.guardPayRoleOf(user) !== 'hr') throw new AccessDenied('hr.monitor', '(guard pay)');
+    if (!(await this.guardPayOn())) throw new BadRequest('The guard pay run is not switched on in this database yet. Ask IT to install the guard pay module after approval.');
+    if (!(await this.guardPayEmployers(user)).includes(companyId)) throw new NotFound('Company');
+    if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(period)) throw new BadRequest('Give the month as YYYY-MM.');
+    const now = this.today().slice(0, 7);
+    if (period > now || period < this.prevPeriod(now)) throw new BadRequest('Guard pay can be prepared for this month or last month only.');
+    const id = `gp-${companyId}-${period}`;
+    await this.store.lock?.('guardPayRuns', id);
+    const existing = await this.store.get('guardPayRuns', id);
+    if (existing && existing.stage !== 'draft') throw new BadRequest('This month is already submitted. It must be returned to HR before it changes.');
+    const ctx = await this.guardPayContext(companyId, period);
+    // With a yearly guard list set by the OD or OGM, HR's monthly entry is not used (and not accepted).
+    if (ctx.yearly.length && Array.isArray(holidays) && holidays.length)
+      throw new BadRequest("This company's guard public holidays for the year are set by the Operations Director or the OGM. Change them there.");
+    const hol = ctx.yearly.length ? [] : holidays === undefined ? (existing?.holidays ?? []) : this.cleanHolidays(period, holidays);
+    const holidaySource: GuardPayRun['holidaySource'] = ctx.yearly.length ? 'yearly' : hol.length ? 'hr' : 'none';
+    const lines = await this.guardPayLines(companyId, period, hol.map((h) => h.date), this.keptOf(existing));
+    const step = { by: user.name, byId: user.id, at: this.now(), note: '' };
+    const trial = !RULES.guardPayroll.value.primaPays;
+    return this.store.transaction(async (tx) => {
+      if (existing) await tx.update('guardPayRuns', id, { lines, holidays: hol, prepared: step, trial, holidaySource, sitesOver: ctx.sitesOver });
+      else
+        await tx.insert('guardPayRuns', { id, companyId, period, stage: 'draft', holidays: hol, lines, prepared: step, submitted: null, approved: null, paid: null, returns: [], trial, holidaySource, sitesOver: ctx.sitesOver, cash: [] });
+      const t = guardPayTotals(lines);
+      await tx.audit({
+        at: step.at,
+        actor: user.name,
+        companyId,
+        action: 'guardpay.prepare',
+        entity: 'guard_pay_run',
+        entityId: id,
+        summary: `Guard pay ${period} ${existing ? 'recalculated' : 'prepared'}${trial ? ' (trial beside JA)' : ''}: ${lines.length} guards and officers, gross RM${t.gross.toFixed(2)}, ${hol.length} public holiday(s).`,
+      });
+      return (await tx.get('guardPayRuns', id))!;
+    });
+  }
+
+  /** HR adds one-off pay (with a reason in the label) or enters the PCB from LHDN's calculator, while the month is a draft. */
+  async setGuardPayLine(user: User, runId: Id, personId: Id, patch: { pcb?: number | null; extra?: { label: string; amount: number; uniformNo?: number }[] }) {
+    if (this.guardPayRoleOf(user) !== 'hr') throw new AccessDenied('hr.monitor', '(guard pay)');
+    const run = await this.guardPayRunFor(user, runId);
+    await this.store.lock?.('guardPayRuns', runId);
+    const fresh = (await this.store.get('guardPayRuns', runId))!;
+    if (fresh.stage !== 'draft') throw new BadRequest('Only a draft can change.');
+    const old = fresh.lines.find((l) => l.personId === personId);
+    if (!old) throw new NotFound('Pay line');
+    const keptOld = this.keptOf(fresh).get(personId)!;
+    const pcb = patch.pcb === undefined ? keptOld.pcb : patch.pcb;
+    if (pcb != null && !(Number.isFinite(pcb) && pcb >= 0 && pcb < 100000)) throw new BadRequest('Give the PCB in RM.');
+    const extra = (patch.extra ?? keptOld.extra).map((a) => ({ label: String(a.label ?? '').trim().slice(0, 60), amount: Math.round(Number(a.amount) * 100) / 100 }));
+    if (extra.length > 5) throw new BadRequest('At most 5 one-off items on a line.');
+    if (extra.some((a) => !a.label || !Number.isFinite(a.amount) || a.amount === 0 || Math.abs(a.amount) > 20000))
+      throw new BadRequest('Each one-off item needs a reason and an amount in RM (a minus amount is a deduction).');
+    // No salary deduction for uniforms, equipment or lost or damaged items. The approved paper "Kertas Pelaksanaan Prima
+    // Uniform dan Peralatan" (6 Nov 2026) says "Potongan gaji automatik ... bukan sebahagian daripada skop" and "Tiada
+    // potongan gaji automatik kerana item hilang atau rosak"; this replaces the earlier 4th or 5th uniform deduction
+    // (PR #120). A guard who pays for an item does so outside payroll, with the payment proof recorded on the item (PR #125).
+    // Advances and loans, which the guard agreed to in writing, are still taken back from their approved records.
+    const given = (patch.extra ?? []) as { label: string; amount: number; uniformNo?: number }[];
+    for (const [k, a] of extra.entries()) {
+      if (a.amount >= 0) continue;
+      if (given[k]?.uniformNo != null || /uniform|seragam|pakaian/i.test(a.label))
+        throw new BadRequest('Uniforms are never deducted from pay (Kertas Pelaksanaan Prima Uniform dan Peralatan, 6 Nov 2026). Remove this deduction.');
+      if (/radio|walkie|torch|lampu suluh|baton|cota|equipment|peralatan|bodycam|kasut|boot|item|barang|lost|hilang|damage|rosak/i.test(a.label))
+        throw new BadRequest('Equipment and lost or damaged items are never deducted from pay (Kertas Pelaksanaan Prima Uniform dan Peralatan, 6 Nov 2026). Remove this deduction.');
+      // The pay run takes back advances and loans only against an approved record (Fauzan, 6 Nov 2026).
+      if (/loan|pinjam|advance|pendahuluan|hutang|debt/i.test(a.label))
+        throw new BadRequest('Advances and loans are taken back only from an approved record on the Advances and loans screen, not as a one-off item.');
+    }
+    const [line] = await this.guardPayLines(run.companyId, run.period, fresh.holidays.map((h) => h.date), new Map([[personId, { extra, pcb: pcb == null ? null : Math.round(pcb * 100) / 100 }]]), personId);
+    if (!line) throw new NotFound('Pay line');
+    const big = RULES.insiderControls.value.allowanceFlagAbove;
+    for (const a of extra.filter((x) => Math.abs(x.amount) > big)) line.flags.push(`One-off item above RM${big}: ${a.label} RM${a.amount.toFixed(2)}`);
+    if (extra.length) line.flags.push(`One-off items entered by ${user.name}: the COO checks them`);
+    const lines = fresh.lines.map((l) => (l.personId === personId ? line : l));
+    return this.store.transaction(async (tx) => {
+      await tx.update('guardPayRuns', runId, { lines });
+      await tx.audit({
+        at: this.now(),
+        actor: user.name,
+        companyId: run.companyId,
+        action: 'guardpay.line',
+        entity: 'guard_pay_run',
+        entityId: runId,
+        summary: `Guard pay ${run.period}, ${line.staffNo}: ${pcb == null ? 'PCB estimated' : `PCB entered RM${line.pcb.toFixed(2)}`}, ${extra.length} one-off item(s)${extra.length ? `: ${extra.map((x) => `${x.label} RM${x.amount.toFixed(2)}`).join('; ')}` : ''}.`,
+      });
+      return line;
+    });
+  }
+
+  /** Recheck hard holds and paid advances at every unpaid-run release boundary, not just submission. */
+  private async assertGuardPayReady(run: GuardPayRun) {
+    if (run.lines.some((l) => l.calculationVersion !== GUARD_PAY_CALCULATION_VERSION))
+      throw new BadRequest('This pay snapshot predates the payroll checks. Return it to HR and recalculate before proceeding.');
+    const totals = guardPayTotals(run.lines);
+    if (totals.noFormula) throw new BadRequest(`${totals.noFormula} guards work at a site with no pay formula. ACT must set one first.`);
+    if (run.lines.some(guardPayOverDeductionCap))
+      throw new BadRequest('Employer deductions exceed 50% of wages. Return to HR and resolve the deductions before proceeding.');
+    const held = run.lines.find((l) => l.holds?.length);
+    if (held) throw new BadRequest(`${held.staffNo}: ${held.holds!.join(' ')}`);
+    const advances = (await this.store.list('guardPayAdvances', { companyId: run.companyId, period: run.period })).filter((a) => a.status === 'paid' && a.paid);
+    const cents = (n: number) => Math.round(n * 100);
+    const stale = run.lines.some((l) => {
+      const paid = advances.filter((a) => a.personId === l.personId);
+      const ids = l.advanceIds ?? [];
+      return ids.length !== paid.length || new Set(ids).size !== ids.length || paid.some((a) => !ids.includes(a.id)) ||
+        cents(l.advance ?? 0) !== paid.reduce((n, a) => n + cents(a.amount), 0);
+    }) || advances.some((a) => !run.lines.some((l) => l.personId === a.personId));
+    if (stale) throw new BadRequest('Paid advances have changed since this pay run was calculated. Return to HR and recalculate before proceeding.');
+  }
+
+  /** Submit (HR), approve with a reason (COO), pay (Finance, only once Prima pays guards), or send back to HR. */
+  async guardPayStep(user: User, runId: Id, action: 'submit' | 'approve' | 'pay' | 'return', body: { note?: string; bankRef?: string; paidOn?: IsoDate; pcbChecked?: boolean } = {}) {
+    await this.store.lock?.('guardPayRuns', runId);
+    const view = await this.guardPayRun(user, runId);
+    const run = view.run;
+    const note = (body.note ?? '').trim().slice(0, 500);
+    const step = { by: user.name, byId: user.id, at: this.now(), note };
+    let patch: Partial<GuardPayRun>;
+    let summary: string;
+    if (action === 'submit' && view.can.submit) {
+      if (view.monthOpen) throw new BadRequest('The month is not over yet. Submit it once the last day is worked and locked.');
+      const t = view.totals;
+      if (view.pay.unpayable.length)
+        throw new BadRequest(
+          `${view.pay.unpayable.length} guard${view.pay.unpayable.length === 1 ? '' : 's'} cannot be paid: ${view.pay.unpayable.slice(0, 3).map((u) => `${u.staffNo} (${u.problem})`).join('; ')}. Wages go to a bank account or e-wallet only; record the account or written consent, or the Director Office lists them for cash.`,
+        );
+      if (t.noFormula) throw new BadRequest(`${t.noFormula} guards work at a site with no pay formula. ACT must set one first.`);
+      if (t.unlocked) throw new BadRequest(`${t.unlocked} shifts are not locked or have no clock-out. The supervisors must close them first.`);
+      if (run.lines.some((l) => l.net < 0)) throw new BadRequest('A line has deductions above its pay. Fix it first.');
+      await this.assertGuardPayReady(run);
+      patch = { stage: 'submitted', submitted: step };
+      summary = 'submitted to the COO';
+    } else if (action === 'approve' && view.can.approve) {
+      // Every approver gives a reason (Fauzan, 31 Oct 2026).
+      if (note.length < 3) throw new BadRequest('Give a reason or comment with the approval.');
+      if (view.pay.cashUndecided) throw new BadRequest(`${view.pay.cashUndecided} guard(s) are listed for cash. The COO or the CEO decides each one first.`);
+      if (view.pay.unpayable.length) throw new BadRequest(`${view.pay.unpayable.length} guard(s) have no account they can be paid into and no cash given. Return the month to HR.`);
+      await this.assertGuardPayReady(run);
+      patch = { stage: 'approved', approved: step };
+      summary = `${this.pilotApproves(user) && view.role !== 'coo' ? 'approved by the CEO for the COO (pilot)' : 'approved by the COO'}${run.trial ? ' (trial beside JA, not paid from Prima)' : ''}: ${note}`;
+    } else if (action === 'pay' && view.can.pay) {
+      const bankRef = (body.bankRef ?? '').trim().slice(0, 60);
+      if (!bankRef) throw new BadRequest("Give the bank's payment reference.");
+      if (!body.pcbChecked) throw new BadRequest("Confirm the PCB was checked in LHDN's e-PCB before paying.");
+      const paidOn = body.paidOn ?? this.today();
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(paidOn) || paidOn > this.today() || paidOn < `${run.period}-01`) throw new BadRequest('Give the date the bank paid.');
+      if (view.pay.cashUndecided) throw new BadRequest('A guard listed for cash has no COO or CEO decision yet.');
+      await this.assertGuardPayReady(run);
+      patch = { stage: 'paid', paid: { ...step, bankRef, paidOn, pcbChecked: true } };
+      summary = `paid, bank reference ${bankRef}${paidOn > view.payBy ? ` (LATE: due by ${view.payBy}, EA s.19)` : ''}`;
+    } else if (action === 'return' && view.can.return) {
+      if (!note) throw new BadRequest('Say what needs to change.');
+      patch = { stage: 'draft', submitted: null, approved: null, returns: [...run.returns, { ...step, from: run.stage }] };
+      summary = `returned to HR: ${note}`;
+    } else if (action === 'pay' && run.trial && run.stage === 'approved') {
+      throw new BadRequest('The JA Group app still pays guards. This month is a trial to compare; it cannot be paid from Prima until the switch date.');
+    } else if (action === 'approve' && run.stage === 'submitted' && this.guardPayApprover(user)) {
+      throw new BadRequest('You prepared or submitted this month, so you cannot approve it.');
+    } else {
+      throw new BadRequest(`This month is waiting for ${view.waitingOn ?? 'nobody'}; you cannot ${action} it now.`);
+    }
+    return this.store.transaction(async (tx) => {
+      await tx.update('guardPayRuns', runId, patch);
+      // A paid month takes each advance and loan scheme repayment off its record, and Finance is told.
+      if (patch.stage === 'paid') await this.recordLoanRepayments(tx, run, user.name, step.at);
+      await tx.audit({
+        at: step.at,
+        actor: user.name,
+        companyId: run.companyId,
+        action: `guardpay.${action}`,
+        entity: 'guard_pay_run',
+        entityId: runId,
+        summary: `Guard pay ${run.period} (${view.companyName}) ${summary}.`,
+      });
+      return (await tx.get('guardPayRuns', runId))!;
+    });
+  }
+
+  /**
+   * Draft files once the COO has approved: the bank's payroll upload, the SQL Account journal, and the EPF, SOCSO and
+   * EIS, and PCB lists. Only Finance takes the bank file. A trial run's bank file says plainly it must not be uploaded.
+   */
+  async guardPayExport(user: User, runId: Id, kind: 'bank' | 'ewallet' | 'cash' | 'sql' | 'epf' | 'socso' | 'pcb') {
+    await this.store.lock?.('guardPayRuns', runId);
+    const view = await this.guardPayRun(user, runId);
+    if (kind === 'cash') {
+      if (!view.can.cashFile) throw new BadRequest('The cash list is ready once the COO has approved a month with cash given.');
+    } else {
+      if (!view.can.export) throw new BadRequest('Files are ready once the COO has approved.');
+      if ((kind === 'bank' || kind === 'ewallet') && view.role !== 'finance') throw new AccessDenied('hr.pay', '(only Finance downloads the bank and e-wallet files)');
+    }
+    const run = view.run;
+    if (run.stage !== 'paid') await this.assertGuardPayReady(run);
+    const csv = (rows: (string | number)[][]) =>
+      rows.map((r) => r.map((c) => (typeof c === 'number' ? c.toFixed(2) : /[",\n]/.test(c) ? `"${c.replace(/"/g, '""')}"` : c)).join(',')).join('\n') + '\n';
+    const t = view.totals;
+    const a = RULES.guardPayroll.value.accounts;
+    const end = periodEnd(run.period);
+    const trialRow = run.trial ? [['TRIAL RUN: the JA Group app still pays guards. DO NOT UPLOAD this file to the bank.']] : [];
+    let rows: (string | number)[][];
+    if (kind === 'bank')
+      rows = [
+        ...trialRow,
+        ['Staff no', 'Name', 'Bank', 'Account', 'Amount', 'Reference'],
+        ...view.bankLines.map((l) => [l.staffNo, l.name, l.bank?.bank ?? '', l.bank?.accountMasked ?? '', l.net, `WAGES ${run.period}`]),
+        ['Control total', `${view.control.count} guards`, '', `check ${view.control.code}`, view.control.net, ''],
+      ];
+    else if (kind === 'ewallet')
+      rows = [
+        ...trialRow,
+        ['Staff no', 'Name', 'E-wallet', 'Account', 'Amount', 'Reference'],
+        ...view.ewalletLines.map((l) => [l.staffNo, l.name, l.bank?.bank ?? '', l.bank?.accountMasked ?? '', l.net, `WAGES ${run.period}`]),
+        ['Total', `${view.pay.ewallet.count} guards`, '', '', view.pay.ewallet.net, ''],
+      ];
+    else if (kind === 'cash')
+      rows = [
+        ...trialRow,
+        ['Site', 'Staff no', 'Name', 'Amount', 'Listed by (Director Office)', 'Reason', 'Given by', 'Handed out', 'Received (signature)'],
+        ...[...view.cashLines]
+          .sort((x, y) => (x.mainSiteName || '').localeCompare(y.mainSiteName || '') || x.staffNo.localeCompare(y.staffNo))
+          .map((l) => {
+            const c = (run.cash ?? []).find((x) => x.personId === l.personId)!;
+            return [l.mainSiteName || 'No site', l.staffNo, l.name, l.net, c.listedBy, c.reason, `${c.decision!.by} (${c.decision!.tier.toUpperCase()})`, c.handedOut ? `${c.handedOut.on} by ${c.handedOut.by}` : '', c.receipt ? `Uploaded: ${c.receipt.name}` : ''];
+          }),
+        ['Total', '', `${view.pay.cash.count} guards`, view.pay.cash.net, '', '', '', '', ''],
+      ];
+    else if (kind === 'sql')
+      rows = [
+        ...trialRow,
+        ['Date', 'Account', 'Description', 'Debit', 'Credit'],
+        [end, a.wages, `Guard and officer wages ${run.period}`, t.gross, 0],
+        [end, a.epfEr, `EPF employer ${run.period}`, t.epfEr, 0],
+        [end, a.socsoEr, `SOCSO employer ${run.period}`, t.socsoEr, 0],
+        [end, a.eisEr, `EIS employer ${run.period}`, t.eisEr, 0],
+        [end, a.hrd, `HRD levy ${run.period}`, t.hrd, 0],
+        [end, a.wagesPayable, `Net wages payable ${run.period}`, 0, t.net],
+        [end, a.epfPayable, `EPF payable ${run.period}`, 0, t.epf],
+        [end, a.socsoPayable, `SOCSO payable ${run.period}`, 0, t.socso],
+        [end, a.lindungPayable, `LINDUNG 24 Jam payable ${run.period}`, 0, t.lindung],
+        [end, a.eisPayable, `EIS payable ${run.period}`, 0, t.eis],
+        [end, a.pcbPayable, `PCB payable ${run.period}`, 0, t.pcb],
+        [end, a.hrdPayable, `HRD levy payable ${run.period}`, 0, t.hrd],
+        [end, a.utilityRecovered, `Hostel utility recovered ${run.period}`, 0, t.utility],
+        [end, '415-100', `One-off deductions recovered ${run.period}`, 0, t.otherDeductions],
+        [end, '130-500', `Wage advances recovered ${run.period}`, 0, t.advance],
+        // Advance and loan scheme repayments (Fauzan, 6 Nov 2026): back to the staff loans receivable.
+        [end, '130-600', `Staff advances and loans recovered ${run.period}`, 0, t.loan],
+        // New contribution types the CEO added (Fauzan, 6 Nov 2026): employer cost, and both shares payable.
+        ...t.others.flatMap((o) => [
+          [end, '919-000', `${o.name} (${o.code}) employer ${run.period}`, o.er, 0] as (string | number)[],
+          [end, '410-900', `${o.name} (${o.code}) payable to ${o.payee} ${run.period}`, 0, Math.round((o.ee + o.er) * 100) / 100] as (string | number)[],
+        ]),
+      ];
+    else if (kind === 'epf')
+      rows = [...trialRow, ['Staff no', 'Name', 'EPF wages (no overtime)', 'Employee', 'Employer'], ...run.lines.map((l) => [l.staffNo, l.name, l.epfWages, l.epfEe, l.epfEr])];
+    else if (kind === 'socso')
+      rows = [
+        ...trialRow,
+        ['Staff no', 'Name', 'Wages', 'SOCSO employer', 'SOCSO employee', 'LINDUNG 24 Jam employee', 'EIS employer', 'EIS employee'],
+        ...run.lines.map((l) => [
+          l.staffNo,
+          l.name,
+          l.gross,
+          l.socsoEr,
+          l.socsoEe,
+          l.lindungStatus === 'opted_out' ? 'Opted out' : l.lindungEe,
+          l.nationality === 'MY' ? l.eisEr : 'Not applicable',
+          l.nationality === 'MY' ? l.eisEe : 'Not applicable',
+        ]),
+        ['Total', '', t.gross, t.socsoEr, t.socsoEe, t.lindung, t.eisEr, t.eisEe],
+      ];
+    else if (kind === 'pcb')
+      rows = [...trialRow, ['Staff no', 'Name', 'Taxable pay', 'PCB', 'Source'], ...run.lines.map((l) => [l.staffNo, l.name, l.gross, l.pcb, l.pcbSource === 'entered' ? 'LHDN e-PCB' : 'Estimate'])];
+    else throw new BadRequest('Unknown file.');
+    await this.store.transaction(async (tx) =>
+      tx.audit({
+        at: this.now(),
+        actor: user.name,
+        companyId: run.companyId,
+        action: 'guardpay.export',
+        entity: 'guard_pay_run',
+        entityId: runId,
+        summary: `Guard pay ${run.period}: ${kind} draft file taken${run.trial ? ' (trial)' : ''}.`,
+      }),
+    );
+    return {
+      filename: `${run.companyId}-${run.period}-guards-${kind}${run.trial ? '-TRIAL' : ''}.csv`,
+      body: csv(rows),
+      note: run.trial
+        ? 'Trial file to compare with the JA Group app. Do not upload it.'
+        : 'Draft for Finance to check. Prima does not send it to the bank, KWSP, PERKESO or LHDN.',
+    };
+  }
+
+  /**
+   * Cash pay (Fauzan, 6 Nov 2026): wages go to a bank account or an e-wallet only. When there is a need, the Director
+   * Office lists a guard for cash with the reason; the COO or the CEO decides each one, with a note. A guard given cash
+   * leaves the bank file and goes on the cash list.
+   */
+  async guardPayCash(
+    user: User,
+    runId: Id,
+    personId: Id,
+    action: 'list' | 'unlist' | 'decide' | 'handout' | 'receipt',
+    body: { reason?: string; give?: boolean; on?: string; proof?: ProofInput[] } = {},
+  ) {
+    await this.store.lock?.('guardPayRuns', runId);
+    const view = await this.guardPayRun(user, runId);
+    const run = view.run;
+    const cash: GuardPayCash[] = [...(run.cash ?? [])];
+    const line = run.lines.find((l) => l.personId === personId);
+    if (!line) throw new NotFound('Pay line');
+    const reason = String(body.reason ?? '').trim().slice(0, 300);
+    const at = this.now();
+    const i = cash.findIndex((c) => c.personId === personId);
+    let summary: string;
+    if (action === 'list') {
+      if (!view.can.listCash) throw new AccessDenied('hr.pay', '(only the Director Office lists guards for cash)');
+      if (reason.length < 5) throw new BadRequest('Say why this guard needs cash.');
+      if (line.net <= 0) throw new BadRequest('This guard has no pay to give this month.');
+      if (i >= 0 && (!cash[i].decision || cash[i].decision!.give)) throw new BadRequest('This guard is already on the cash list.');
+      const entry: GuardPayCash = { personId, staffNo: line.staffNo, name: line.name, siteName: line.mainSiteName, amount: line.net, reason, listedBy: user.name, listedById: user.id, listedAt: at, decision: null, handedOut: null, receipt: null };
+      if (i >= 0) cash[i] = entry;
+      else cash.push(entry);
+      summary = `${line.staffNo} listed for cash by the Director Office: ${reason}`;
+    } else if (action === 'unlist') {
+      if (!view.can.listCash) throw new AccessDenied('hr.pay', '(only the Director Office changes the cash list)');
+      if (i < 0 || cash[i].decision) throw new BadRequest('Only a listing not yet decided can be taken off.');
+      cash.splice(i, 1);
+      summary = `${line.staffNo} taken off the cash list`;
+    } else if (action === 'decide') {
+      if (!view.can.decideCash) throw new AccessDenied('hr.pay', '(only the COO or the CEO gives cash)');
+      if (i < 0 || cash[i].decision) throw new BadRequest('This guard is not waiting for a cash decision.');
+      if (cash[i].listedById === user.id) throw new BadRequest('You listed this guard, so you cannot decide it.');
+      if (reason.length < 3) throw new BadRequest('Give a reason or comment with the decision.');
+      const give = body.give === true;
+      cash[i] = { ...cash[i], decision: { by: user.name, byId: user.id, at, note: reason, give, tier: user.opsTier === 'coo' ? 'coo' : 'ceo' } };
+      summary = `${line.staffNo} cash ${give ? 'given' : 'refused'} by the ${user.opsTier === 'coo' ? 'COO' : 'CEO'}: ${reason}`;
+    } else if (action === 'handout') {
+      // The CEO or the COO hands the cash out (Fauzan, 6 Nov 2026), once the month is approved, never on a trial month.
+      if (!view.can.handOutCash) throw new AccessDenied('hr.pay', '(only the COO or the CEO hands out cash, once the month is approved)');
+      if (view.run.stage !== 'paid') await this.assertGuardPayReady(view.run);
+      if (i < 0 || !cash[i].decision?.give) throw new BadRequest('This guard was not given cash.');
+      if (cash[i].handedOut) throw new BadRequest('The cash for this guard is already recorded as handed out.');
+      const on = String(body.on || this.today());
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(on) || on > this.today() || on < `${run.period}-01`) throw new BadRequest('Give the date the cash was handed out.');
+      cash[i] = { ...cash[i], handedOut: { by: user.name, byId: user.id, at, note: reason, on, tier: user.opsTier === 'coo' ? 'coo' : 'ceo' } };
+      summary = `${line.staffNo} cash RM${line.net.toFixed(2)} handed out on ${on} by the ${user.opsTier === 'coo' ? 'COO' : 'CEO'}`;
+    } else if (action === 'receipt') {
+      // The Director Office collects the guard's signed receipt paper and uploads it as proof.
+      if (view.role !== 'doa') throw new AccessDenied('hr.pay', '(only the Director Office uploads cash receipts)');
+      if (i < 0 || !cash[i].handedOut) throw new BadRequest('Record the cash as handed out first.');
+      if (cash[i].receipt) throw new BadRequest('The signed receipt for this guard is already uploaded.');
+      const proof = this.proofRecords(user, run.companyId, null, body.proof, {}, { documentsOnly: true });
+      if (proof.docs.length !== 1) throw new BadRequest("Upload the guard's signed receipt paper (one PDF, JPEG or PNG).");
+      const doc = { ...proof.docs[0], guardPayRunId: runId, caption: proof.docs[0].caption || `Cash receipt ${run.period} ${line.staffNo}` };
+      cash[i] = { ...cash[i], receipt: { docId: doc.id, name: doc.name, sha256: doc.sha256, uploadedBy: user.name, uploadedById: user.id, uploadedAt: at } };
+      summary = `${line.staffNo} signed cash receipt uploaded by the Director Office ("${doc.name}", SHA-256 ${doc.sha256.slice(0, 12)})`;
+      return this.store.transaction(async (tx) => {
+        await this.saveProof(tx, { photos: [], docs: [doc] });
+        await tx.update('guardPayRuns', runId, { cash });
+        await tx.audit({ at, actor: user.name, companyId: run.companyId, action: 'guardpay.cash.receipt', entity: 'guard_pay_run', entityId: runId, summary: `Guard pay ${run.period}: ${summary}.` });
+        return cash;
+      });
+    } else throw new BadRequest('Unknown cash action.');
+    return this.store.transaction(async (tx) => {
+      await tx.update('guardPayRuns', runId, { cash });
+      await tx.audit({ at, actor: user.name, companyId: run.companyId, action: `guardpay.cash.${action}`, entity: 'guard_pay_run', entityId: runId, summary: `Guard pay ${run.period}: ${summary}.` });
+      return cash;
+    });
+  }
+
+  /**
+   * HR records a guard's signed written consent to be paid into an immediate relative's or close friend's account
+   * (Fauzan, 6 Nov 2026). The account itself is not changed here. EA s.25 asks for the worker's own or joint account, so
+   * every such line stays flagged as a legal point for the CEO.
+   */
+  async recordPayConsent(
+    user: User,
+    personId: Id,
+    body: { holder?: string; holderName?: string; relationship?: string; docRef?: string; signedOn?: string; kind?: string; commissioner?: string; stampRef?: string; stampedOn?: string },
+  ) {
+    if (this.guardPayRoleOf(user) !== 'hr') throw new AccessDenied('hr.monitor', '(pay consent)');
+    const p = await this.store.get('people', personId);
+    if (!p || !(await this.guardPayEmployers(user)).includes(p.companyId)) throw new NotFound('Person');
+    if (!p.bank) throw new BadRequest('There is no account on record for this person yet.');
+    const holder = body.holder === 'relative' || body.holder === 'friend' || body.holder === 'joint' || body.holder === 'own' ? body.holder : null;
+    if (!holder) throw new BadRequest("Say whose account it is: the worker's own, joint, an immediate relative's or a close friend's.");
+    const kind = body.kind === 'ewallet' ? 'ewallet' : 'bank';
+    let consent: NonNullable<Person['bank']>['consent'] = null;
+    const holderName = String(body.holderName ?? '').trim().slice(0, 80) || null;
+    const relationship = String(body.relationship ?? '').trim().slice(0, 40) || null;
+    if (holder === 'relative' || holder === 'friend') {
+      const docRef = String(body.docRef ?? '').trim().slice(0, 60);
+      const signedOn = String(body.signedOn ?? '');
+      if (!holderName || !relationship) throw new BadRequest("Give the account holder's name and how they are related.");
+      if (!docRef) throw new BadRequest('Give the reference of the signed consent form on file.');
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(signedOn) || signedOn > this.today()) throw new BadRequest('Give the date the guard signed the consent.');
+      // The letter carries a Commissioner for Oaths (Pesuruhjaya Sumpah) stamp (Fauzan, 6 Nov 2026).
+      const commissioner = String(body.commissioner ?? '').trim().slice(0, 80);
+      const stampRef = String(body.stampRef ?? '').trim().slice(0, 40);
+      const stampedOn = String(body.stampedOn ?? '');
+      if (!commissioner || !stampRef) throw new BadRequest("The consent letter needs the Commissioner for Oaths' stamp: give their name and the stamp number.");
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(stampedOn) || stampedOn > this.today() || stampedOn < signedOn) throw new BadRequest('Give the date the Commissioner for Oaths stamped the letter (on or after it was signed).');
+      consent = { docRef, signedOn, oaths: { commissioner, stampRef, stampedOn }, recordedBy: user.name, recordedById: user.id, recordedAt: this.now(), approved: null };
+    }
+    const bank = { ...p.bank, kind, holder, holderName: holder === 'own' ? null : holderName, relationship: holder === 'own' ? null : relationship, consent } as NonNullable<Person['bank']>;
+    return this.store.transaction(async (tx) => {
+      await tx.update('people', personId, { bank });
+      await tx.audit({
+        at: this.now(),
+        actor: user.name,
+        companyId: p.companyId,
+        action: 'guardpay.account',
+        entity: 'person',
+        entityId: personId,
+        summary: `${p.staffNo} pay account recorded as ${kind === 'ewallet' ? 'an e-wallet' : 'a bank account'}, ${holder}${consent ? ` (${relationship}), consent letter ${consent.docRef} signed ${consent.signedOn}, stamped by Commissioner for Oaths ${consent.oaths.commissioner} (${consent.oaths.stampRef}); waiting for the COO's approval` : ''}.`,
+      });
+      return bank;
+    });
+  }
+
+  /** Consent letters waiting for the COO, for the guard pay screen. */
+  async payConsentsWaiting(user: User) {
+    const role = this.guardPayRoleOf(user);
+    if (!role) throw new AccessDenied('view', '(pay consent)');
+    const ids = await this.guardPayEmployers(user);
+    const people = await this.store.list('people', { companyId: ids });
+    return people
+      .filter((p) => p.bank?.consent && !p.bank.consent.approved && p.status !== 'left')
+      .map((p) => ({ personId: p.id, staffNo: p.staffNo, name: p.name, companyId: p.companyId, account: p.bank!, canApprove: this.consentApprover(user) && p.bank!.consent!.recordedById !== user.id }))
+      .sort((a, b) => a.staffNo.localeCompare(b.staffNo));
+  }
+
+  /**
+   * The COO approves a consent letter for pay into a third party's salary account (Fauzan, 6 Nov 2026; PR #120). The CEO
+   * may stand in only through the existing pilot rule (pilotApproves: pilot on, CEO tier), as for the other approvals the
+   * CEO covers while the pilot runs (Fauzan's review note 7 Nov 2026, item 2). No other role approves.
+   */
+  private consentApprover(user: User): boolean {
+    return !user.integration && (user.opsTier === 'coo' || this.pilotApproves(user));
+  }
+
+  /** The COO approves a guard's stamped consent letter with a reason (Fauzan, 6 Nov 2026). */
+  async approvePayConsent(user: User, personId: Id, note: string) {
+    if (!this.consentApprover(user)) throw new AccessDenied('hr.pay', '(only the COO approves consent letters; the CEO only in the pilot)');
+    const p = await this.store.get('people', personId);
+    if (!p || !(await this.guardPayEmployers(user)).includes(p.companyId)) throw new NotFound('Person');
+    const c = p.bank?.consent;
+    if (!c) throw new BadRequest('No consent letter is recorded for this person.');
+    if (c.approved) throw new BadRequest('This consent letter is already approved.');
+    if (c.recordedById === user.id) throw new BadRequest('You recorded this letter, so you cannot approve it.');
+    const reason = String(note ?? '').trim().slice(0, 300);
+    if (reason.length < 3) throw new BadRequest('Give a reason or comment with the approval.');
+    const bank = { ...p.bank!, consent: { ...c, approved: { by: user.name, byId: user.id, at: this.now(), note: reason } } };
+    return this.store.transaction(async (tx) => {
+      await tx.update('people', personId, { bank });
+      await tx.audit({
+        at: this.now(),
+        actor: user.name,
+        companyId: p.companyId,
+        action: 'guardpay.consent.approve',
+        entity: 'person',
+        entityId: personId,
+        summary: `${p.staffNo} consent letter ${c.docRef} (Commissioner for Oaths ${c.oaths.commissioner}) approved by the ${user.opsTier === 'coo' ? 'COO' : 'CEO for the COO (pilot)'}: ${reason}`,
+      });
+      return bank;
+    });
+  }
+
+  // ---------- Statutory rates set by the CEO (Fauzan, 6 Nov 2026) ----------
+  // "Ceo can set the base salary. When new law came in ... Even with socso or epf or add new way." The CEO sets EPF,
+  // SOCSO, EIS, LINDUNG and HRD rates, caps and ages from a month, and can add a new contribution type, with a reason and
+  // the law reference. The day divisor and other pay law settings are on the Pay formulas screen (PR #112).
+
+  /** The statutory settings in force for a wage month (the law as at Nov 2026 when none is set or the module is off). */
+  private async statutorySettingsFor(month: string): Promise<StatutorySettings> {
+    if (!(await this.guardPayOn())) return DEFAULT_STATUTORY;
+    return statutoryFor(await this.store.list('statutoryVersions', {}), month);
+  }
+
+  private statutoryViewer(user: User): boolean {
+    if (user.integration) return false;
+    return isGroupLeader(user) || user.opsTier === 'coo' || user.opsTier === 'ceo' || user.department === 'audit' || this.guardPayRoleOf(user) === 'hr' || this.guardPayRoleOf(user) === 'finance';
+  }
+
+  /** The statutory settings screen: what is in force this month, the versions, and whether this user may set them. */
+  async statutoryBoard(user: User) {
+    if (!this.statutoryViewer(user)) throw new AccessDenied('view', '(statutory rates)');
+    const on = await this.guardPayOn();
+    const month = this.today().slice(0, 7);
+    const versions = on ? await this.store.list('statutoryVersions', {}) : [];
+    return {
+      on,
+      month,
+      inForce: statutoryFor(versions, month),
+      defaults: DEFAULT_STATUTORY,
+      versions: versions.sort((a, b) => b.effectiveFrom.localeCompare(a.effectiveFrom) || b.setAt.localeCompare(a.setAt)),
+      canSet: on && user.opsTier === 'ceo' && !user.integration,
+    };
+  }
+
+  /** The CEO sets the statutory settings from a month (this month or later), with a reason and the law reference. */
+  async setStatutory(user: User, body: { effectiveFrom?: string; settings?: StatutorySettings; reason?: string }) {
+    if (user.integration || user.opsTier !== 'ceo') throw new AccessDenied('hr.pay', '(only the CEO sets statutory rates)');
+    if (!(await this.guardPayOn())) throw new BadRequest('Statutory settings are not switched on in this database yet (guard pay module not installed).');
+    const month = String(body.effectiveFrom ?? '');
+    if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) throw new BadRequest('Pick the month the change starts (YYYY-MM).');
+    // A month already worked is not changed after the fact: from this month on (the CEO can set last month's while open).
+    if (month < this.prevPeriod(this.today().slice(0, 7))) throw new BadRequest('A change can start from last month at the earliest.');
+    const reason = String(body.reason ?? '').trim().slice(0, 500);
+    if (reason.length < 5) throw new BadRequest('Say why the rates change.');
+    const raw = body.settings;
+    if (!raw || typeof raw !== 'object') throw new BadRequest('Give the settings.');
+    const settings: StatutorySettings = {
+      epf: { ...DEFAULT_STATUTORY.epf, ...(raw.epf ?? {}) },
+      socso: { ...DEFAULT_STATUTORY.socso, ...(raw.socso ?? {}) },
+      eis: { ...DEFAULT_STATUTORY.eis, ...(raw.eis ?? {}) },
+      lindung: { ...DEFAULT_STATUTORY.lindung, ...(raw.lindung ?? {}) },
+      hrd: { ...DEFAULT_STATUTORY.hrd, ...(raw.hrd ?? {}) },
+      others: (Array.isArray(raw.others) ? raw.others : []).map((o) => ({
+        code: String(o.code ?? '').trim().toUpperCase().slice(0, 16),
+        name: String(o.name ?? '').trim().slice(0, 80),
+        eeRate: Number(o.eeRate),
+        erRate: Number(o.erRate),
+        wageCap: o.wageCap == null || (o.wageCap as unknown) === '' ? null : Number(o.wageCap),
+        includeOt: o.includeOt === true,
+        appliesTo: o.appliesTo,
+        maxAge: o.maxAge == null || (o.maxAge as unknown) === '' ? null : Number(o.maxAge),
+        payee: String(o.payee ?? '').trim().slice(0, 80),
+      })),
+      lawRef: String(raw.lawRef ?? '').trim().slice(0, 300),
+    };
+    const problem = statutoryProblem(settings);
+    if (problem) throw new BadRequest(problem);
+    const at = this.now();
+    const id = `stat-${month}-${sha256Hex(`${user.id}|${at}`).slice(0, 8)}`;
+    return this.store.transaction(async (tx) => {
+      await tx.lock?.('statutoryVersions', 'statutory');
+      const all = await tx.list('statutoryVersions', {});
+      const row: StatutoryVersion = { id, effectiveFrom: month, settings, reason, setBy: user.name, setById: user.id, setAt: at, replacedBy: null };
+      await tx.insert('statutoryVersions', row);
+      for (const p of all) if (!p.replacedBy && p.effectiveFrom === month) await tx.update('statutoryVersions', p.id, { replacedBy: id });
+      const before = statutoryFor(all, month);
+      const changed = (['epf', 'socso', 'eis', 'lindung', 'hrd'] as const).filter((k) => JSON.stringify(before[k]) !== JSON.stringify(settings[k]));
+      await tx.audit({
+        at,
+        actor: user.name,
+        companyId: null,
+        action: 'statutory.set',
+        entity: 'statutory_version',
+        entityId: id,
+        summary: `Statutory settings from ${month} set by the CEO (${changed.length ? `changed: ${changed.join(', ').toUpperCase()}` : 'rates unchanged'}${settings.others.length ? `; new contributions: ${settings.others.map((o) => o.code).join(', ')}` : ''}). Law: ${settings.lawRef}. Reason: ${reason}`,
+      });
+      return row;
+    });
+  }
+
+  // ---------- Wage advances (Fauzan, 6 Nov 2026) ----------
+  // "There can be advance that usually be paid on the 20th of the month. That can be set by om the amount for each guard
+  // or bulk decision follow site zon or region and also date. Approve once by ogm or od. Need one more approval if
+  // there is changes." A zone is a branch (assumption). EA s.22: no more than last month's wages.
+
+  private advanceRoleOf(user: User): 'om' | 'approver' | 'finance' | 'view' | null {
+    if (user.integration) return null;
+    if (user.opsTier === 'om' || user.opsTier === 'regional') return 'om';
+    if (user.opsTier === 'ops_director' || user.opsTier === 'ogm') return 'approver';
+    const r = this.guardPayRoleOf(user);
+    if (r === 'finance') return 'finance';
+    if (r) return 'view';
+    return null;
+  }
+
+  private async advanceCompanies(user: User): Promise<Id[]> {
+    const g = await this.grants();
+    const today = this.today();
+    return (await this.visibleCompanies(user)).filter((c) => can(user, g, today, 'view', c.id) && !isCentralEmployer(c.id)).map((c) => c.id);
+  }
+
+  private advancePeriod(raw: unknown): string {
+    const now = this.today().slice(0, 7);
+    const p = raw == null || raw === '' ? now : String(raw);
+    if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(p)) throw new BadRequest('Pick the month (YYYY-MM).');
+    const [y, m] = now.split('-').map(Number);
+    const next = m === 12 ? `${y + 1}-01` : `${y}-${String(m + 1).padStart(2, '0')}`;
+    if (p !== now && p !== next) throw new BadRequest('Advances are set for this month or next month.');
+    return p;
+  }
+
+  /** The advances screen: a company's month, what waits on whom. */
+  async guardAdvances(user: User, input: { companyId?: Id | null; period?: string | null } = {}) {
+    const role = this.advanceRoleOf(user);
+    if (!role) throw new AccessDenied('view', '(advances)');
+    const ids = await this.advanceCompanies(user);
+    if (!ids.length) throw new AccessDenied('view', '(any)');
+    const companyId = input.companyId && ids.includes(input.companyId) ? input.companyId : ids[0];
+    if (input.companyId && !ids.includes(input.companyId)) throw new AccessDenied('view', input.companyId);
+    const now = this.today().slice(0, 7);
+    const period = input.period ? String(input.period) : now;
+    if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(period)) throw new BadRequest('Pick the month (YYYY-MM).');
+    const on = await this.guardPayOn();
+    const [rows, companies, sites, branches, people] = await Promise.all([
+      on ? this.store.list('guardPayAdvances', { companyId, period }) : Promise.resolve([] as GuardPayAdvance[]),
+      this.store.list('companies', { id: ids }),
+      this.store.list('sites', { companyId }),
+      this.store.list('branches', { companyId }),
+      role === 'om' ? this.store.list('people', { companyId }) : Promise.resolve([] as Person[]),
+    ]);
+    const regions = [...new Set(branches.map((b) => regionOfState(b.state)?.id).filter((x): x is string => !!x))];
+    return {
+      on,
+      role,
+      period,
+      companyId,
+      companies: companies.map((c) => ({ id: c.id, name: c.name })).sort((a, b) => a.name.localeCompare(b.name)),
+      choices: {
+        guards: people
+          .filter((p) => GUARD_PAY_ROLES.includes(p.role) && p.status === 'active')
+          .map((p) => ({ id: p.id, name: `${p.staffNo} ${p.name}` }))
+          .sort((a, b) => a.name.localeCompare(b.name)),
+        sites: sites.map((x) => ({ id: x.id, name: x.name })).sort((a, b) => a.name.localeCompare(b.name)),
+        zones: branches.map((b) => ({ id: b.id, name: b.name })).sort((a, b) => a.name.localeCompare(b.name)),
+        regions: regions.map((r) => ({ id: r, name: REGIONS.find((x) => x.id === r)?.name ?? r })),
+      },
+      payDay: 20,
+      primaPays: RULES.guardPayroll.value.primaPays,
+      advances: rows
+        .sort((a, b) => a.staffNo.localeCompare(b.staffNo) || a.id.localeCompare(b.id))
+        .map((a) => ({
+          ...a,
+          can: {
+            change: role === 'om' && (a.status === 'pending' || a.status === 'approved'),
+            approve: role === 'approver' && a.status === 'pending' && user.opsTier === a.approverTier && !this.advanceOwnWork(a, user.id),
+            pay: role === 'finance' && a.status === 'approved' && RULES.guardPayroll.value.primaPays,
+          },
+        })),
+      totals: {
+        pending: rows.filter((a) => a.status === 'pending').length,
+        approved: rows.filter((a) => a.status === 'approved').length,
+        paid: rows.filter((a) => a.status === 'paid').length,
+        amount: Math.round(rows.filter((a) => a.status !== 'cancelled').reduce((n, a) => n + a.amount, 0) * 100) / 100,
+      },
+    };
+  }
+
+  /** Nobody approves an advance they set or last changed. */
+  private advanceOwnWork(a: GuardPayAdvance, userId: Id): boolean {
+    return a.set.byId === userId || a.changes.some((c) => c.byId === userId);
+  }
+
+  /** The guards an OM's bulk choice covers: each guard's latest rostered site decides site, zone (branch) and region. */
+  private async advanceTargets(companyId: Id, basis: GuardPayAdvance['basis'], ref: string) {
+    const [people, shifts, sites, branches] = await Promise.all([
+      this.store.list('people', { companyId }),
+      this.store.list('shifts', { companyId }),
+      this.store.list('sites', { companyId }),
+      this.store.list('branches', { companyId }),
+    ]);
+    const since = addDays(this.today(), -45);
+    const lastSite = new Map<Id, { date: IsoDate; siteId: Id }>();
+    for (const sh of shifts) {
+      if (!sh.personId || sh.date < since) continue;
+      const cur = lastSite.get(sh.personId);
+      if (!cur || sh.date > cur.date) lastSite.set(sh.personId, { date: sh.date, siteId: sh.siteId });
+    }
+    const siteById = new Map(sites.map((x) => [x.id, x]));
+    const branchById = new Map(branches.map((b) => [b.id, b]));
+    const active = people.filter((p) => GUARD_PAY_ROLES.includes(p.role) && p.status === 'active');
+    const placed = active.map((p) => {
+      const site = siteById.get(lastSite.get(p.id)?.siteId ?? '') ?? null;
+      const branch = branchById.get(site?.branchId ?? p.branchId) ?? null;
+      return { p, site, branch, region: branch ? (regionOfState(branch.state)?.id ?? null) : null };
+    });
+    if (basis === 'guard') {
+      const x = placed.find((t) => t.p.id === ref);
+      if (!x) throw new NotFound('Guard');
+      return { label: `${x.p.staffNo} ${x.p.name}`, targets: [x] };
+    }
+    if (basis === 'site') {
+      const site = siteById.get(ref);
+      if (!site) throw new NotFound('Site');
+      return { label: `Site ${site.name}`, targets: placed.filter((t) => t.site?.id === ref) };
+    }
+    if (basis === 'zone') {
+      const b = branchById.get(ref);
+      if (!b) throw new NotFound('Zone');
+      return { label: `Zone ${b.name}`, targets: placed.filter((t) => t.branch?.id === ref) };
+    }
+    const region = REGIONS.find((r) => r.id === ref);
+    if (!region) throw new NotFound('Region');
+    return { label: `Region ${region.name}`, targets: placed.filter((t) => t.region === ref) };
+  }
+
+  /** The OM sets advances for one guard, or in bulk for a site, zone or region, with the amount and pay date. */
+  async setGuardAdvances(user: User, body: { companyId?: string; period?: string; basis?: string; ref?: string; amount?: number; payOn?: string; reason?: string }) {
+    if (this.advanceRoleOf(user) !== 'om') throw new AccessDenied('hr.pay', '(only the OM sets advances)');
+    if (!(await this.guardPayOn())) throw new BadRequest('Advances are not switched on in this database yet. Ask IT to install the guard pay module after approval.');
+    const companyId = String(body.companyId ?? '');
+    if (!(await this.advanceCompanies(user)).includes(companyId)) throw new NotFound('Company');
+    const period = this.advancePeriod(body.period);
+    const basis = (['guard', 'site', 'zone', 'region'] as const).find((b) => b === body.basis);
+    if (!basis) throw new BadRequest('Pick one guard, a site, a zone or a region.');
+    const amount = Math.round(Number(body.amount) * 100) / 100;
+    if (!Number.isFinite(amount) || amount <= 0 || amount > 5000) throw new BadRequest('Give the advance in RM (above zero, at most RM5,000).');
+    const payOn = String(body.payOn || `${period}-20`);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(payOn) || payOn.slice(0, 7) !== period || payOn > periodEnd(period) || payOn < this.today())
+      throw new BadRequest(`Give a pay date in ${period}, not in the past.`);
+    const { label, targets } = await this.advanceTargets(companyId, basis, String(body.ref ?? ''));
+    if (!targets.length) throw new BadRequest(`No active guard or officer works at ${label}.`);
+    const prev = this.prevPeriod(period);
+    const [existing, runs] = await Promise.all([this.store.list('guardPayAdvances', { companyId, period }), this.store.list('guardPayRuns', { companyId })]);
+    const lastRun = runs.find((r) => r.period === prev);
+    const batchId = `gpa-${companyId}-${period}-${sha256Hex(`${user.id}|${this.now()}|${basis}|${body.ref}`).slice(0, 8)}`;
+    const step = { by: user.name, byId: user.id, at: this.now(), note: String(body.reason ?? '').trim().slice(0, 300) };
+    const made: GuardPayAdvance[] = [];
+    const skipped: { staffNo: string; why: string }[] = [];
+    for (const t of targets) {
+      const p = t.p;
+      if (existing.some((a) => a.personId === p.id && a.status !== 'cancelled')) {
+        skipped.push({ staffNo: p.staffNo, why: 'already has an advance this month (change it instead)' });
+        continue;
+      }
+      const acc = payAccountCheck(p.bank);
+      if (acc.problem) {
+        skipped.push({ staffNo: p.staffNo, why: `${acc.problem}; advances go to a bank account or e-wallet only` });
+        continue;
+      }
+      const lastGross = lastRun?.lines.find((l) => l.personId === p.id)?.gross ?? null;
+      if (lastGross != null && amount > lastGross) {
+        skipped.push({ staffNo: p.staffNo, why: `more than last month's wages RM${lastGross.toFixed(2)} (EA s.22)` });
+        continue;
+      }
+      const flags = [...acc.flags];
+      if (lastGross == null) flags.push(`Last month's wages are not in Prima: check the EA s.22 cap (no more than last month's wages)`);
+      made.push({
+        id: `${batchId}-${p.id}`,
+        companyId,
+        personId: p.id,
+        staffNo: p.staffNo,
+        name: p.name,
+        period,
+        payOn,
+        amount,
+        basis,
+        basisLabel: label,
+        batchId,
+        siteId: t.site?.id ?? null,
+        approverTier: t.site ? siteHoursApproverTier(t.site) : 'ops_director',
+        status: 'pending',
+        version: 1,
+        set: step,
+        approvals: [],
+        changes: [],
+        paid: null,
+        lastMonthGross: lastGross,
+        flags,
+      });
+    }
+    if (!made.length) throw new BadRequest(`No advance set: ${skipped.slice(0, 3).map((x) => `${x.staffNo} ${x.why}`).join('; ')}.`);
+    await this.store.lock?.('guardPayAdvances', `${companyId}:${period}`);
+    return this.store.transaction(async (tx) => {
+      for (const a of made) await tx.insert('guardPayAdvances', a);
+      await tx.audit({
+        at: step.at,
+        actor: user.name,
+        companyId,
+        action: 'guardpay.advance.set',
+        entity: 'guard_pay_advance',
+        entityId: batchId,
+        summary: `Advance ${period} set for ${label}: ${made.length} guard(s) at RM${amount.toFixed(2)} on ${payOn}${skipped.length ? `, ${skipped.length} skipped` : ''}. Waiting for OD/OGM approval.`,
+      });
+      return { made: made.length, skipped, batchId };
+    });
+  }
+
+  /** The OM changes or cancels an advance. A change after approval needs one more approval. */
+  async changeGuardAdvance(user: User, id: Id, body: { action?: string; amount?: number; payOn?: string; reason?: string }) {
+    if (this.advanceRoleOf(user) !== 'om') throw new AccessDenied('hr.pay', '(only the OM changes advances)');
+    await this.store.lock?.('guardPayAdvances', id);
+    const a = await this.store.get('guardPayAdvances', id);
+    if (!a || !(await this.advanceCompanies(user)).includes(a.companyId)) throw new NotFound('Advance');
+    if (a.status !== 'pending' && a.status !== 'approved') throw new BadRequest('Only an advance not yet paid can change.');
+    const reason = String(body.reason ?? '').trim().slice(0, 300);
+    if (reason.length < 3) throw new BadRequest('Say why it changes.');
+    const step = { by: user.name, byId: user.id, at: this.now(), note: reason };
+    let patch: Partial<GuardPayAdvance>;
+    let summary: string;
+    if (body.action === 'cancel') {
+      patch = { status: 'cancelled', changes: [...a.changes, { ...step, from: { amount: a.amount, payOn: a.payOn }, to: { amount: 0, payOn: a.payOn } }] };
+      summary = `cancelled: ${reason}`;
+    } else {
+      const amount = body.amount == null ? a.amount : Math.round(Number(body.amount) * 100) / 100;
+      const payOn = body.payOn ? String(body.payOn) : a.payOn;
+      if (!Number.isFinite(amount) || amount <= 0 || amount > 5000) throw new BadRequest('Give the advance in RM (above zero, at most RM5,000).');
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(payOn) || payOn.slice(0, 7) !== a.period || payOn < this.today()) throw new BadRequest(`Give a pay date in ${a.period}, not in the past.`);
+      if (a.lastMonthGross != null && amount > a.lastMonthGross) throw new BadRequest(`An advance may not be more than last month's wages, RM${a.lastMonthGross.toFixed(2)} (EA s.22).`);
+      if (amount === a.amount && payOn === a.payOn) throw new BadRequest('Nothing changed.');
+      patch = { amount, payOn, status: 'pending', version: a.version + 1, changes: [...a.changes, { ...step, from: { amount: a.amount, payOn: a.payOn }, to: { amount, payOn } }] };
+      summary = `changed from RM${a.amount.toFixed(2)} on ${a.payOn} to RM${amount.toFixed(2)} on ${payOn}${a.status === 'approved' ? ', needs one more approval' : ''}: ${reason}`;
+    }
+    return this.store.transaction(async (tx) => {
+      await tx.update('guardPayAdvances', id, patch);
+      await tx.audit({ at: step.at, actor: user.name, companyId: a.companyId, action: 'guardpay.advance.change', entity: 'guard_pay_advance', entityId: id, summary: `Advance ${a.period} for ${a.staffNo} ${summary}.` });
+      return (await tx.get('guardPayAdvances', id))!;
+    });
+  }
+
+  /** The Operations Director (private sites) or the OGM (government sites) approves advances, one or many, with a reason. */
+  async approveGuardAdvances(user: User, ids: Id[], note: string) {
+    if (this.advanceRoleOf(user) !== 'approver') throw new AccessDenied('hr.pay', '(only the Operations Director or the OGM approves advances)');
+    const reason = String(note ?? '').trim().slice(0, 300);
+    if (reason.length < 3) throw new BadRequest('Give a reason or comment with the approval.');
+    const list = [...new Set((Array.isArray(ids) ? ids : []).map(String))].slice(0, 500);
+    if (!list.length) throw new BadRequest('Pick the advances to approve.');
+    const companies = await this.advanceCompanies(user);
+    const at = this.now();
+    return this.store.transaction(async (tx) => {
+      let done = 0;
+      for (const id of list) {
+        await tx.lock?.('guardPayAdvances', id);
+        const a = await tx.get('guardPayAdvances', id);
+        if (!a || !companies.includes(a.companyId)) throw new NotFound('Advance');
+        if (a.status !== 'pending') throw new BadRequest(`${a.staffNo}: this advance is not waiting for approval.`);
+        if (user.opsTier !== a.approverTier) throw new BadRequest(`${a.staffNo}: approved by the ${a.approverTier === 'ogm' ? 'OGM (government site)' : 'Operations Director (private site)'}.`);
+        if (this.advanceOwnWork(a, user.id)) throw new BadRequest(`${a.staffNo}: you set or changed this advance, so you cannot approve it.`);
+        await tx.update('guardPayAdvances', id, { status: 'approved', approvals: [...a.approvals, { by: user.name, byId: user.id, at, note: reason, version: a.version, amount: a.amount, payOn: a.payOn }] });
+        await tx.audit({
+          at,
+          actor: user.name,
+          companyId: a.companyId,
+          action: 'guardpay.advance.approve',
+          entity: 'guard_pay_advance',
+          entityId: id,
+          summary: `Advance ${a.period} for ${a.staffNo} RM${a.amount.toFixed(2)} on ${a.payOn} approved${a.version > 1 ? ` again after change ${a.version - 1}` : ''}: ${reason}`,
+        });
+        done += 1;
+      }
+      return { approved: done };
+    });
+  }
+
+  /** Finance records an approved advance as paid by the bank (only once Prima pays guards). */
+  async payGuardAdvance(user: User, id: Id, body: { bankRef?: string; paidOn?: string }) {
+    if (this.advanceRoleOf(user) !== 'finance') throw new AccessDenied('hr.pay', '(only Finance pays advances)');
+    if (!RULES.guardPayroll.value.primaPays) throw new BadRequest('The JA Group app still pays guards. Advances cannot be paid from Prima until the switch date.');
+    const found = await this.store.get('guardPayAdvances', id);
+    if (!found || !(await this.advanceCompanies(user)).includes(found.companyId)) throw new NotFound('Advance');
+    // Share the pay-run lock with submit/approve/pay/export, including when the run does not exist yet.
+    const runId = `gp-${found.companyId}-${found.period}`;
+    await this.store.lock?.('guardPayRuns', runId);
+    await this.store.lock?.('guardPayAdvances', id);
+    const a = (await this.store.get('guardPayAdvances', id))!;
+    const run = await this.store.get('guardPayRuns', runId);
+    if (run && run.stage !== 'draft') throw new BadRequest('The monthly pay run is already submitted or paid. Return it to HR before paying an advance; a paid month cannot accept another advance.');
+    if (a.status !== 'approved') throw new BadRequest('Only an approved advance can be paid.');
+    const bankRef = String(body.bankRef ?? '').trim().slice(0, 60);
+    if (!bankRef) throw new BadRequest("Give the bank's payment reference.");
+    const paidOn = String(body.paidOn || this.today());
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(paidOn) || paidOn > this.today() || paidOn.slice(0, 7) !== a.period) throw new BadRequest(`Give the date the bank paid, within the advance month ${a.period}.`);
+    const step = { by: user.name, byId: user.id, at: this.now(), note: '' };
+    return this.store.transaction(async (tx) => {
+      await tx.update('guardPayAdvances', id, { status: 'paid', paid: { ...step, bankRef, paidOn } });
+      await tx.audit({ at: step.at, actor: user.name, companyId: a.companyId, action: 'guardpay.advance.pay', entity: 'guard_pay_advance', entityId: id, summary: `Advance ${a.period} for ${a.staffNo} RM${a.amount.toFixed(2)} paid, bank reference ${bankRef}.` });
+      return (await tx.get('guardPayAdvances', id))!;
+    });
+  }
+
+  // ---------- Advance and loan scheme (Fauzan, 6 Nov 2026, IWAY item 4) ----------
+  // "Yes. Approve by cos and ceo. Finance must be notify and monitored about this." Separate from the wage advance on the
+  // 20th. Each record has a limit, a purpose, a repayment period and the worker's signature. The pay run deducts only
+  // against these records and keeps all deductions within 50% of wages (EA s.24(8)).
+
+  private loanRoleOf(user: User): 'hr' | 'cos' | 'ceo' | 'finance' | 'view' | null {
+    if (user.integration || user.role === 'guard' || user.role === 'site_device') return null;
+    if (user.opsTier === 'ceo') return 'ceo';
+    if (user.role === 'pwvsb_officer' && user.leadership === 'cos') return 'cos';
+    const r = this.guardPayRoleOf(user);
+    if (r === 'hr') return 'hr';
+    if (r === 'finance') return 'finance';
+    if (r) return 'view';
+    return null;
+  }
+
+  /** The advances and loans screen: a company's records, what waits on whom, and what is still owed. */
+  async guardLoans(user: User, input: { companyId?: Id | null } = {}) {
+    const role = this.loanRoleOf(user);
+    if (!role) throw new AccessDenied('view', '(advances and loans)');
+    const ids = await this.advanceCompanies(user);
+    if (!ids.length) throw new AccessDenied('view', '(any)');
+    if (input.companyId && !ids.includes(input.companyId)) throw new AccessDenied('view', input.companyId);
+    const companyId = input.companyId || ids[0];
+    const on = await this.guardPayOn();
+    const [rows, companies, people] = await Promise.all([
+      on ? this.store.list('guardLoans', { companyId }) : Promise.resolve([] as GuardLoan[]),
+      this.store.list('companies', { id: ids }),
+      role === 'hr' ? this.store.list('people', { companyId }) : Promise.resolve([] as Person[]),
+    ]);
+    const open = rows.filter((l) => l.status === 'paid_out');
+    return {
+      on,
+      role,
+      companyId,
+      companies: companies.map((c) => ({ id: c.id, name: c.name })).sort((a, b) => a.name.localeCompare(b.name)),
+      guards: people
+        .filter((p) => GUARD_PAY_ROLES.includes(p.role) && p.status === 'active')
+        .map((p) => ({ id: p.id, name: `${p.staffNo} ${p.name}` }))
+        .sort((a, b) => a.name.localeCompare(b.name)),
+      primaPays: RULES.guardPayroll.value.primaPays,
+      loans: rows
+        .sort((a, b) => b.requested.at.localeCompare(a.requested.at) || a.id.localeCompare(b.id))
+        .map((l) => ({
+          ...l,
+          can: {
+            cos: role === 'cos' && l.status === 'pending_cos' && l.requested.byId !== user.id,
+            ceo: role === 'ceo' && l.status === 'pending_ceo' && l.requested.byId !== user.id && l.cos?.byId !== user.id,
+            payOut: role === 'finance' && l.status === 'approved' && RULES.guardPayroll.value.primaPays,
+            cancel: role === 'hr' && (l.status === 'pending_cos' || l.status === 'pending_ceo' || l.status === 'approved'),
+          },
+        })),
+      totals: {
+        waiting: rows.filter((l) => l.status === 'pending_cos' || l.status === 'pending_ceo').length,
+        open: open.length,
+        lent: Math.round(open.reduce((n, l) => n + l.amount, 0) * 100) / 100,
+        owed: Math.round(open.reduce((n, l) => n + l.balance, 0) * 100) / 100,
+      },
+    };
+  }
+
+  /** HR records an advance or loan with the worker's signed agreement; it then waits for the Chief of Staff. */
+  async recordGuardLoan(
+    user: User,
+    body: { companyId?: string; personId?: string; kind?: string; limit?: number; amount?: number; purpose?: string; months?: number; firstPeriod?: string; docRef?: string; signedOn?: string },
+  ) {
+    if (this.loanRoleOf(user) !== 'hr') throw new AccessDenied('hr.pay', '(only HR records advances and loans)');
+    if (!(await this.guardPayOn())) throw new BadRequest('Advances and loans are not switched on in this database yet. Ask IT to install the guard pay module after approval.');
+    const companyId = String(body.companyId ?? '');
+    if (!(await this.advanceCompanies(user)).includes(companyId)) throw new NotFound('Company');
+    const person = await this.store.get('people', String(body.personId ?? ''));
+    if (!person || person.companyId !== companyId || !GUARD_PAY_ROLES.includes(person.role) || person.status !== 'active') throw new NotFound('Guard');
+    const kind = body.kind === 'loan' ? 'loan' : body.kind === 'advance' ? 'advance' : null;
+    if (!kind) throw new BadRequest('Pick advance or loan.');
+    const money = (v: unknown) => Math.round(Number(v) * 100) / 100;
+    const limit = money(body.limit);
+    const amount = body.amount == null || (body.amount as unknown) === '' ? limit : money(body.amount);
+    if (!Number.isFinite(limit) || limit <= 0 || limit > 20000) throw new BadRequest('Give the limit in RM (above zero, at most RM20,000).');
+    if (!Number.isFinite(amount) || amount <= 0 || amount > limit) throw new BadRequest('The amount lent must be above zero and not more than the limit.');
+    const purpose = String(body.purpose ?? '').trim().slice(0, 200);
+    if (purpose.length < 5) throw new BadRequest('Give the purpose of the advance or loan.');
+    const months = Number(body.months);
+    if (!Number.isInteger(months) || months < 1 || months > 24) throw new BadRequest('Give the repayment period in whole months (1 to 24).');
+    const now = this.today().slice(0, 7);
+    const firstPeriod = String(body.firstPeriod || now);
+    if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(firstPeriod) || firstPeriod < now) throw new BadRequest('Give the first pay month it is taken back from (this month or later).');
+    const docRef = String(body.docRef ?? '').trim().slice(0, 80);
+    const signedOn = String(body.signedOn ?? '');
+    if (docRef.length < 3) throw new BadRequest("Give the reference of the worker's signed agreement.");
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(signedOn) || signedOn > this.today()) throw new BadRequest('Give the date the worker signed.');
+    const acc = payAccountCheck(person.bank);
+    if (acc.problem) throw new BadRequest(`${acc.problem}. Advances and loans are paid into a bank account or e-wallet only.`);
+    const instalment = Math.ceil((amount * 100) / months) / 100;
+    const [existing, runs] = await Promise.all([this.store.list('guardLoans', { companyId }), this.store.list('guardPayRuns', { companyId })]);
+    const lastGross = runs
+      .filter((r) => r.period < now)
+      .sort((a, b) => b.period.localeCompare(a.period))[0]
+      ?.lines.find((l) => l.personId === person.id)?.gross;
+    const flags = [...acc.flags];
+    const openOnes = existing.filter((l) => l.personId === person.id && ['pending_cos', 'pending_ceo', 'approved', 'paid_out'].includes(l.status));
+    if (openOnes.length) flags.push(`Already has ${openOnes.length} open advance or loan record(s)`);
+    if (lastGross == null) flags.push("Last month's wages are not in Prima: check the repayment fits within 50% of wages");
+    else if (instalment > lastGross * 0.5) flags.push(`Monthly repayment RM${instalment.toFixed(2)} is more than half of last month's wages (RM${lastGross.toFixed(2)}): it will be taken in smaller parts and the period will run longer`);
+    const at = this.now();
+    const id = `gl-${companyId}-${sha256Hex(`${person.id}|${at}|${docRef}`).slice(0, 12)}`;
+    const step = { by: user.name, byId: user.id, at, note: '' };
+    const rec: GuardLoan = {
+      id,
+      companyId,
+      personId: person.id,
+      staffNo: person.staffNo,
+      name: person.name,
+      kind,
+      limit,
+      amount,
+      purpose,
+      months,
+      instalment,
+      firstPeriod,
+      signature: { docRef, signedOn, recordedBy: user.name, recordedById: user.id, recordedAt: at },
+      status: 'pending_cos',
+      requested: step,
+      cos: null,
+      ceo: null,
+      rejected: null,
+      paidOut: null,
+      repaid: [],
+      balance: amount,
+      financeNotices: [{ at, text: `${kind === 'loan' ? 'Loan' : 'Advance'} of RM${amount.toFixed(2)} for ${person.staffNo} recorded by HR, waiting for the Chief of Staff` }],
+      flags,
+    };
+    await this.store.lock?.('guardLoans', id);
+    return this.store.transaction(async (tx) => {
+      await tx.insert('guardLoans', rec);
+      await tx.audit({
+        at,
+        actor: user.name,
+        companyId,
+        action: 'guardpay.loan.record',
+        entity: 'guard_loan',
+        entityId: id,
+        summary: `${kind === 'loan' ? 'Loan' : 'Advance'} for ${person.staffNo}: limit RM${limit.toFixed(2)}, lent RM${amount.toFixed(2)} over ${months} month(s) at RM${instalment.toFixed(2)} from ${firstPeriod}, purpose "${purpose}", signed agreement ${docRef} (${signedOn}). Waiting for the Chief of Staff; Finance told.`,
+      });
+      return rec;
+    });
+  }
+
+  /** The Chief of Staff, then the CEO, approve or reject with a reason. Nobody decides a record they made or already approved. */
+  async decideGuardLoan(user: User, id: Id, body: { decision?: string; note?: string }) {
+    const role = this.loanRoleOf(user);
+    if (role !== 'cos' && role !== 'ceo') throw new AccessDenied('hr.pay', '(the Chief of Staff and then the CEO approve advances and loans)');
+    const note = String(body.note ?? '').trim().slice(0, 300);
+    if (note.length < 3) throw new BadRequest('Give a reason or comment with the decision.');
+    const approve = body.decision === 'approve';
+    if (!approve && body.decision !== 'reject') throw new BadRequest('Approve or reject.');
+    await this.store.lock?.('guardLoans', id);
+    const l = await this.store.get('guardLoans', id);
+    if (!l || !(await this.advanceCompanies(user)).includes(l.companyId)) throw new NotFound('Advance or loan');
+    const want = role === 'cos' ? 'pending_cos' : 'pending_ceo';
+    if (l.status !== want) throw new BadRequest(l.status === 'pending_cos' ? 'This record waits for the Chief of Staff first.' : l.status === 'pending_ceo' ? 'This record waits for the CEO.' : 'This record is not waiting for a decision.');
+    if (l.requested.byId === user.id || l.cos?.byId === user.id) throw new BadRequest('You recorded or already approved this record, so you cannot decide it.');
+    const at = this.now();
+    const step = { by: user.name, byId: user.id, at, note };
+    const who = role === 'cos' ? 'Chief of Staff' : 'CEO';
+    const text = `${who} ${approve ? 'approved' : 'rejected'} RM${l.amount.toFixed(2)} for ${l.staffNo}: ${note}`;
+    const patch: Partial<GuardLoan> = approve
+      ? role === 'cos'
+        ? { status: 'pending_ceo', cos: step }
+        : { status: 'approved', ceo: step }
+      : { status: 'rejected', rejected: { ...step, tier: role } };
+    patch.financeNotices = [...l.financeNotices, { at, text: approve && role === 'ceo' ? `${text}. Finance: ready to pay out` : text }];
+    return this.store.transaction(async (tx) => {
+      await tx.update('guardLoans', id, patch);
+      await tx.audit({ at, actor: user.name, companyId: l.companyId, action: `guardpay.loan.${approve ? 'approve' : 'reject'}`, entity: 'guard_loan', entityId: id, summary: `${l.kind === 'loan' ? 'Loan' : 'Advance'} for ${l.staffNo}: ${text}. Finance told.` });
+      return (await tx.get('guardLoans', id))!;
+    });
+  }
+
+  /** Finance pays out an approved record by bank (only once Prima pays guards, as repayments come off Prima's pay run). */
+  async payOutGuardLoan(user: User, id: Id, body: { bankRef?: string; paidOn?: string }) {
+    if (this.loanRoleOf(user) !== 'finance') throw new AccessDenied('hr.pay', '(only Finance pays out advances and loans)');
+    if (!RULES.guardPayroll.value.primaPays) throw new BadRequest('The JA Group app still pays guards, so repayments cannot come off a Prima pay run yet. Pay out from Prima after the switch date.');
+    await this.store.lock?.('guardLoans', id);
+    const l = await this.store.get('guardLoans', id);
+    if (!l || !(await this.advanceCompanies(user)).includes(l.companyId)) throw new NotFound('Advance or loan');
+    if (l.status !== 'approved') throw new BadRequest('Only a record approved by the Chief of Staff and the CEO can be paid out.');
+    const bankRef = String(body.bankRef ?? '').trim().slice(0, 60);
+    if (!bankRef) throw new BadRequest("Give the bank's payment reference.");
+    const paidOn = String(body.paidOn || this.today());
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(paidOn) || paidOn > this.today()) throw new BadRequest('Give the date the bank paid.');
+    const at = this.now();
+    return this.store.transaction(async (tx) => {
+      await tx.update('guardLoans', id, {
+        status: 'paid_out',
+        paidOut: { by: user.name, byId: user.id, at, note: '', bankRef, paidOn },
+        financeNotices: [...l.financeNotices, { at, text: `Paid out RM${l.amount.toFixed(2)} by ${user.name}, bank reference ${bankRef}` }],
+      });
+      await tx.audit({ at, actor: user.name, companyId: l.companyId, action: 'guardpay.loan.payout', entity: 'guard_loan', entityId: id, summary: `${l.kind === 'loan' ? 'Loan' : 'Advance'} for ${l.staffNo} RM${l.amount.toFixed(2)} paid out, bank reference ${bankRef}.` });
+      return (await tx.get('guardLoans', id))!;
+    });
+  }
+
+  /** HR cancels a record before it is paid out, with a reason. */
+  async cancelGuardLoan(user: User, id: Id, note: string) {
+    if (this.loanRoleOf(user) !== 'hr') throw new AccessDenied('hr.pay', '(only HR cancels advances and loans)');
+    const reason = String(note ?? '').trim().slice(0, 300);
+    if (reason.length < 3) throw new BadRequest('Say why it is cancelled.');
+    await this.store.lock?.('guardLoans', id);
+    const l = await this.store.get('guardLoans', id);
+    if (!l || !(await this.advanceCompanies(user)).includes(l.companyId)) throw new NotFound('Advance or loan');
+    if (!['pending_cos', 'pending_ceo', 'approved'].includes(l.status)) throw new BadRequest('Only a record not yet paid out can be cancelled.');
+    const at = this.now();
+    return this.store.transaction(async (tx) => {
+      await tx.update('guardLoans', id, { status: 'cancelled', rejected: { by: user.name, byId: user.id, at, note: reason, tier: 'hr' }, financeNotices: [...l.financeNotices, { at, text: `Cancelled by HR: ${reason}` }] });
+      await tx.audit({ at, actor: user.name, companyId: l.companyId, action: 'guardpay.loan.cancel', entity: 'guard_loan', entityId: id, summary: `${l.kind === 'loan' ? 'Loan' : 'Advance'} for ${l.staffNo} cancelled: ${reason}.` });
+      return (await tx.get('guardLoans', id))!;
+    });
+  }
+
+  /** A paid month takes each repayment off its record; a record paid in full is settled. Finance is told. */
+  private async recordLoanRepayments(tx: Store, run: GuardPayRun, by: string, at: string) {
+    for (const line of run.lines) {
+      for (const part of line.loanParts ?? []) {
+        await tx.lock?.('guardLoans', part.id);
+        const l = await tx.get('guardLoans', part.id);
+        if (!l || l.status !== 'paid_out' || l.repaid.some((x) => x.period === run.period)) continue;
+        const balance = Math.round((l.balance - part.amount) * 100) / 100;
+        const settled = balance <= 0;
+        await tx.update('guardLoans', l.id, {
+          repaid: [...l.repaid, { period: run.period, runId: run.id, amount: part.amount }],
+          balance: Math.max(0, balance),
+          status: settled ? 'settled' : 'paid_out',
+          financeNotices: [...l.financeNotices, { at, text: `RM${part.amount.toFixed(2)} taken back in the ${run.period} pay (paid by ${by}); ${settled ? 'settled' : `RM${Math.max(0, balance).toFixed(2)} still owed`}` }],
+        });
+      }
+    }
+  }
+
+  /** A guard's or officer's own payslips, from paid months only. */
+  async myGuardPayslips(user: User) {
+    if (!user.personId || user.integration) throw new AccessDenied('view', '(payslips)');
+    const me = await this.store.get('people', user.personId);
+    if (!me || !GUARD_PAY_ROLES.includes(me.role) || !user.companyIds.includes(me.companyId)) throw new AccessDenied('view', '(payslips)');
+    if (!(await this.guardPayOn())) return { payslips: [] };
+    const [runs, co] = await Promise.all([this.store.list('guardPayRuns', { companyId: me.companyId }), this.store.get('companies', me.companyId)]);
+    return {
+      payslips: runs
+        .filter((r) => r.stage === 'paid')
+        .flatMap((r) => r.lines.filter((l) => l.personId === me.id).map((line) => ({ runId: r.id, period: r.period, companyName: co?.name ?? me.companyId, paidOn: r.paid!.paidOn, line })))
+        .sort((a, b) => b.period.localeCompare(a.period)),
+    };
+  }
+
+  /** Home lines: HR to submit, the COO to approve, Finance to pay, and last month not paid by the 7th. */
+  private async guardPayHome(user: User): Promise<HomeItem[]> {
+    const role = this.guardPayRoleOf(user);
+    if (!role || !(await this.guardPayOn())) return [];
+    const b = await this.guardPayroll(user);
+    const items: HomeItem[] = b.runs
+      .filter((r) => r.mineToAct)
+      .map((r) => ({
+        tone: r.late ? 'crit' : 'warn',
+        tag: 'Guard pay',
+        title: `${r.companyName} ${r.period}: ${{ draft: 'prepare and submit', submitted: 'approve', approved: 'pay through the bank', paid: '' }[r.stage]}${r.trial ? ' (trial)' : ''}`,
+        detail: `${r.totals.headcount} guards and officers · net RM${r.totals.net.toLocaleString('en-MY', { minimumFractionDigits: 2 })}`,
+        go: { view: 'guardpay' },
+      }));
+    const late = b.employers.filter((e) => e.lastLate);
+    if (late.length)
+      items.unshift({
+        tone: 'crit',
+        tag: 'Guard pay',
+        title: `${b.prev} guard wages not paid by the ${b.rule.payByDay}th: ${late.length} compan${late.length === 1 ? 'y' : 'ies'}`,
+        detail: late.map((e) => e.companyName).join(', '),
+        go: { view: 'guardpay' },
       });
     return items;
   }
@@ -37192,6 +41497,739 @@ export class PrimaService {
     };
   }
 
+  // ----- Pay formulas set by ACT (Fauzan, 5 Nov 2026) -----
+
+  /** ACT Director sets; the ACT team prepares amount changes; group leadership (CEO, COO, FD, CoS...) sees. */
+  private payFormulaRole(user: User): 'director' | 'team' | 'leader' | null {
+    if (user.integration) return null;
+    if (isActHead(user)) return 'director';
+    // The CEO sets formulas and the base the same as the ACT Director (Fauzan, 6 Nov 2026).
+    if (user.opsTier === 'ceo') return 'director';
+    if (user.role === 'pwvsb_officer' && user.department === 'audit') return 'team';
+    if (isGroupLeader(user)) return 'leader';
+    return null;
+  }
+
+  private cleanPayAmounts(kind: PayFormulaKind, raw: unknown): PayFormulaAmounts {
+    const a = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
+    const n = (k: string) => {
+      const v = a[k];
+      if (typeof v === 'number' && Number.isFinite(v)) return Math.round(v * 100) / 100;
+      if (typeof v === 'string' && v.trim() !== '' && Number.isFinite(Number(v))) return Math.round(Number(v) * 100) / 100;
+      throw new BadRequest(`Enter a number for ${k}.`);
+    };
+    const opt = (k: string, d: number) => (a[k] == null || a[k] === '' ? d : n(k));
+    const allowances = Array.isArray(a.fixedAllowances) ? a.fixedAllowances : [];
+    if (allowances.length > 10) throw new BadRequest('At most 10 fixed allowances on one formula.');
+    const out: PayFormulaAmounts = {
+      basicMonthly: n('basicMonthly'),
+      normalHoursPerDay: n('normalHoursPerDay'),
+      workDaysPerWeek: n('workDaysPerWeek'),
+      otNormalRate: n('otNormalRate'),
+      otRestDayRate: n('otRestDayRate'),
+      otPublicHolidayRate: n('otPublicHolidayRate'),
+      restDayDays: n('restDayDays'),
+      publicHolidayDays: n('publicHolidayDays'),
+      fixedAllowances: allowances.map((x) => {
+        const o = (x && typeof x === 'object' ? x : {}) as Record<string, unknown>;
+        const amount = typeof o.amount === 'number' ? o.amount : Number(o.amount);
+        return { label: String(o.label ?? '').trim().slice(0, 60), amount: Number.isFinite(amount) ? Math.round(amount * 100) / 100 : NaN };
+      }),
+    };
+    if (kind === 'guard_shift') {
+      out.shiftHours = n('shiftHours');
+      out.restHours = n('restHours');
+      out.restRelieved = a.restRelieved === true;
+      out.fullMonthDays = n('fullMonthDays');
+      if (a.multiSite != null && a.multiSite !== 'main_site' && a.multiSite !== 'per_site') throw new BadRequest('Pick main site or each site for a month at more than one site.');
+      out.multiSite = a.multiSite === 'per_site' ? 'per_site' : 'main_site';
+      out.holidaysArePaidDays = a.holidaysArePaidDays !== false;
+      out.deductShortDays = a.deductShortDays !== false;
+      out.epfOnRestHolidayPay = a.epfOnRestHolidayPay !== false;
+    } else {
+      out.otMealAllowance = opt('otMealAllowance', 0);
+      out.mealAfterHours = opt('mealAfterHours', 0);
+      out.outstationPerNight = opt('outstationPerNight', 0);
+    }
+    return out;
+  }
+
+  private async payFormulasOn(): Promise<boolean> {
+    return this.store.payFormulasReady ? this.store.payFormulasReady() : true;
+  }
+  private async payFormulasWritable(): Promise<void> {
+    if (!(await this.payFormulasOn())) throw new BadRequest('Pay formulas are not switched on in this database yet. Ask IT to install the pay formulas module after approval.');
+  }
+
+  private payMonthOk(month: unknown, label: string): string {
+    if (typeof month !== 'string' || !/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) throw new BadRequest(`Pick the month ${label} (YYYY-MM).`);
+    // Pay already worked out is never changed from here: a formula or a choice starts this month or later.
+    if (month < this.today().slice(0, 7)) throw new BadRequest('A formula cannot start in a past month. Pick this month or a later one.');
+    return month;
+  }
+
+  /**
+   * Home items (Fauzan, 5 Nov 2026: "Labour law is a flag in ceo"): the CEO sees each formula in force or waiting whose
+   * amounts raise a labour law point; the ACT Director sees drafts waiting for a decision.
+   */
+  private async payFormulaHome(user: User): Promise<HomeItem[]> {
+    const role = this.payFormulaRole(user);
+    const ceo = user.opsTier === 'ceo';
+    if (!ceo && role !== 'director') return [];
+    if (!(await this.payFormulasOn())) return [];
+    const month = this.today().slice(0, 7);
+    const [formulas, laws] = await Promise.all([this.store.list('payFormulas', {}), this.store.list('payLawVersions', {})]);
+    const items: HomeItem[] = [];
+    if (role === 'director')
+      for (const f of formulas.filter((x) => x.status === 'draft').slice(0, 3))
+        items.push({ tone: 'warn', tag: 'Pay formula', title: `${f.code} v${f.version}: ${f.name}`, detail: `Prepared by ${f.preparedBy}. Set it live or send it back.`, go: { view: 'payformulas' } });
+    if (ceo) {
+      const watch = formulas.filter((f) => f.status === 'draft' || (f.status === 'live' && (payFormulaVersionFor(formulas, f.code, month)?.id === f.id || f.effectiveFrom > month)));
+      for (const f of watch) {
+        const m = f.effectiveFrom < month ? month : f.effectiveFrom;
+        const flags = payFormulaLawCheck(f.kind, f.amounts, m, payLawFor(laws, m)).flags;
+        if (!flags.length) continue;
+        items.push({
+          tone: 'warn',
+          tag: 'Labour law',
+          title: `${f.code} v${f.version}: ${f.name}${f.status === 'draft' ? ' (waiting for the ACT Director)' : ''}`,
+          detail: flags.length === 1 ? flags[0] : `${flags[0]} (+${flags.length - 1} more)`,
+          go: { view: 'payformulas' },
+        });
+      }
+    }
+    return items.slice(0, 6);
+  }
+
+  /** The pay formulas board: every formula with its law check and a worked month, and where each is used. */
+  async payFormulaBoard(user: User) {
+    const role = this.payFormulaRole(user);
+    if (!role) throw new AccessDenied('view', '(pay formulas)');
+    const month = this.today().slice(0, 7);
+    const [formulas, uses, companies, sites, laws] = await Promise.all([
+      this.store.list('payFormulas', {}),
+      this.store.list('payFormulaUses', {}),
+      this.store.list('companies', {}),
+      this.store.list('sites', {}),
+      this.store.list('payLawVersions', {}),
+    ]);
+    const lawAt = (m: string) => payLawFor(laws, m);
+    const placeName = (u: { scope: PayFormulaScope; scopeId: Id | null }) =>
+      u.scope === 'group'
+        ? 'Whole group'
+        : u.scope === 'region'
+          ? (REGIONS.find((r) => r.id === u.scopeId)?.name ?? u.scopeId ?? '')
+          : u.scope === 'company'
+            ? (companies.find((c) => c.id === u.scopeId)?.name ?? u.scopeId ?? '')
+            : (() => {
+                const s = sites.find((x) => x.id === u.scopeId);
+                return s ? `${s.name} (${companies.find((c) => c.id === s.companyId)?.name ?? s.companyId})` : (u.scopeId ?? '');
+              })();
+    const live = (code: string) => payFormulaVersionFor(formulas, code, month);
+    // The newest choice for each place is current; older ones for the same place are history.
+    const latestUse = new Map<string, PayFormulaUse>();
+    for (const u of [...uses].sort((x, y) => x.effectiveFrom.localeCompare(y.effectiveFrom) || x.setAt.localeCompare(y.setAt)))
+      latestUse.set(`${u.kind}|${u.scope}|${u.scopeId ?? ''}`, u);
+    return {
+      role,
+      month,
+      ready: await this.payFormulasOn(),
+      formulas: formulas
+        .map((f) => ({
+          formula: f,
+          inForce: live(f.code)?.id === f.id,
+          check: payFormulaLawCheck(f.kind, f.amounts, f.effectiveFrom < month ? month : f.effectiveFrom, lawAt(f.effectiveFrom < month ? month : f.effectiveFrom)),
+          example: payFormulaPreview(f.kind, f.amounts, f.kind !== 'guard_shift' ? { otHoursNormal: 20, otHoursRestDay: 0, restDaysWorked: 2, mealDays: 5 } : {}, lawAt(f.effectiveFrom < month ? month : f.effectiveFrom)),
+          mine: f.preparedById === user.id,
+        }))
+        .sort((a, b) => Number(b.formula.status === 'draft') - Number(a.formula.status === 'draft') || a.formula.code.localeCompare(b.formula.code) || b.formula.version - a.formula.version),
+      uses: uses
+        .map((u) => ({
+          use: u,
+          placeName: placeName(u),
+          current: latestUse.get(`${u.kind}|${u.scope}|${u.scopeId ?? ''}`)?.id === u.id,
+          formulaName: u.formulaCode ? (live(u.formulaCode)?.name ?? formulas.find((f) => f.code === u.formulaCode)?.name ?? u.formulaCode) : 'Use the wider choice',
+        }))
+        .sort((a, b) => ['group', 'region', 'company', 'site'].indexOf(a.use.scope) - ['group', 'region', 'company', 'site'].indexOf(b.use.scope) || a.placeName.localeCompare(b.placeName) || b.use.effectiveFrom.localeCompare(a.use.effectiveFrom)),
+      places: {
+        regions: REGIONS.map((r) => ({ id: r.id, name: r.name })),
+        companies: companies.map((c) => ({ id: c.id, name: c.name })).sort((a, b) => a.name.localeCompare(b.name)),
+        sites: sites.map((s) => ({ id: s.id, name: s.name, companyId: s.companyId })).sort((a, b) => a.name.localeCompare(b.name)),
+      },
+      rule: RULES.payFormulas,
+      restRule: RULES.payRestBreak,
+      // Pay law settings: the CEO sets them by month when the law changes (Fauzan, 6 Nov 2026).
+      law: lawAt(month),
+      lawVersions: laws.sort((a, b) => b.effectiveFrom.localeCompare(a.effectiveFrom) || b.setAt.localeCompare(a.setAt)),
+      lawDefaults: DEFAULT_PAY_LAW,
+      canSetLaw: user.opsTier === 'ceo' && !user.integration,
+    };
+  }
+
+  /**
+   * Salary calculator data (Fauzan, 6 Nov 2026): the OM and above, ACT and group leadership read the guard formulas in
+   * force this month and the CEO's pay law, read only. Amounts only: no drafts, no who prepared, no place choices.
+   * Before the pay formulas module is installed it returns the standard law and no formulas.
+   */
+  async salaryCalcData(user: User) {
+    if (user.integration || !(this.payFormulaRole(user) || salaryCalcTier(user))) throw new AccessDenied('view', '(salary calculator)');
+    const month = this.today().slice(0, 7);
+    if (!(await this.payFormulasOn())) return { month, ready: false, law: DEFAULT_PAY_LAW, formulas: [] as { id: Id; code: string; name: string; effectiveFrom: string; amounts: PayFormulaAmounts }[] };
+    const [formulas, laws] = await Promise.all([this.store.list('payFormulas', {}), this.store.list('payLawVersions', {})]);
+    const codes = [...new Set(formulas.filter((f) => f.kind === 'guard_shift').map((f) => f.code))].sort();
+    return {
+      month,
+      ready: true,
+      law: payLawFor(laws, month),
+      formulas: codes
+        .map((c) => payFormulaVersionFor(formulas, c, month))
+        .filter((f): f is NonNullable<typeof f> => !!f && f.kind === 'guard_shift')
+        .map((f) => ({ id: f.id, code: f.code, name: f.name, effectiveFrom: f.effectiveFrom, amounts: f.amounts })),
+    };
+  }
+
+  /** Which formula pays a site, company or region for a month, and why (the narrowest choice wins). */
+  async payFormulaAt(user: User, input: { kind: PayFormulaKind; siteId?: Id | null; companyId?: Id | null; regionId?: string | null; month?: string }) {
+    if (!this.payFormulaRole(user)) throw new AccessDenied('view', '(pay formulas)');
+    if (!(input.kind in PAY_FORMULA_KIND_LABEL)) throw new BadRequest('Pick guard salary, driver overtime or staff overtime.');
+    const month = input.month && /^\d{4}-(0[1-9]|1[0-2])$/.test(input.month) ? input.month : this.today().slice(0, 7);
+    const place: PayPlace = {};
+    if (input.siteId) {
+      const s = await this.store.get('sites', input.siteId);
+      if (!s) throw new NotFound('Site');
+      place.siteId = s.id;
+      place.companyId = s.companyId;
+      const b = await this.store.get('branches', s.branchId);
+      const co = await this.store.get('companies', s.companyId);
+      place.regionId = regionOfState(b?.state ?? co?.state ?? '')?.id ?? null;
+    } else if (input.companyId) {
+      const co = await this.store.get('companies', input.companyId);
+      if (!co) throw new NotFound('Company');
+      place.companyId = co.id;
+      place.regionId = input.regionId ?? regionOfState(co.state)?.id ?? null;
+    } else if (input.regionId) place.regionId = input.regionId;
+    const uses = await this.store.list('payFormulaUses', { kind: input.kind });
+    const use = resolvePayFormulaUse(uses, input.kind, place, month);
+    const formula = use?.formulaCode ? payFormulaVersionFor(await this.store.list('payFormulas', {}), use.formulaCode, month) : null;
+    const law = payLawFor(await this.store.list('payLawVersions', {}), month);
+    return { month, place, use, formula, law, example: formula ? payFormulaPreview(formula.kind, formula.amounts, {}, law) : null };
+  }
+
+  /**
+   * Save a formula or a new version of one. The ACT Director's save is live from its month; an ACT team member's save is
+   * a draft for the Director. Pay below the law is refused.
+   */
+  async savePayFormula(user: User, input: { code?: string | null; kind: PayFormulaKind; name: string; effectiveFrom: string; amounts: unknown; reason: string }) {
+    await this.payFormulasWritable();
+    const role = this.payFormulaRole(user);
+    if (role !== 'director' && role !== 'team') throw new AccessDenied('view', '(only ACT sets pay formulas)');
+    if (!(input.kind in PAY_FORMULA_KIND_LABEL)) throw new BadRequest('Pick guard salary, driver overtime or staff overtime.');
+    const name = String(input.name ?? '').trim().slice(0, 100);
+    if (name.length < 3) throw new BadRequest('Give the formula a name.');
+    const reason = String(input.reason ?? '').trim().slice(0, 500);
+    if (reason.length < 5) throw new BadRequest('Say why: the reason is kept with the formula.');
+    const month = this.payMonthOk(input.effectiveFrom, 'it starts');
+    const amounts = this.cleanPayAmounts(input.kind, input.amounts);
+    const check = payFormulaLawCheck(input.kind, amounts, month, payLawFor(await this.store.list('payLawVersions', {}), month));
+    if (check.refuse.length) throw new BadRequest(check.refuse.join(' '));
+    const at = this.now();
+    return this.store.transaction(async (tx) => {
+      await tx.lock?.('payFormulas', 'pay-formulas:save');
+      const all = await tx.list('payFormulas', {});
+      let code = String(input.code ?? '').trim().toUpperCase();
+      if (code) {
+        const same = all.filter((f) => f.code === code);
+        if (!same.length) throw new NotFound('Formula');
+        if (same[0].kind !== input.kind) throw new BadRequest('A new version keeps the formula’s kind.');
+      } else {
+        const prefix = input.kind === 'guard_shift' ? 'GRD' : input.kind === 'driver_ot' ? 'DRV' : 'STF';
+        let i = all.filter((f) => f.code.startsWith(`${prefix}-`)).length + 1;
+        while (all.some((f) => f.code === `${prefix}-${String(i).padStart(3, '0')}`)) i += 1;
+        code = `${prefix}-${String(i).padStart(3, '0')}`;
+      }
+      const version = Math.max(0, ...all.filter((f) => f.code === code).map((f) => f.version)) + 1;
+      const director = role === 'director';
+      const row: PayFormula = {
+        id: `pf-${code.toLowerCase()}-v${version}`,
+        code,
+        version,
+        kind: input.kind,
+        name,
+        effectiveFrom: month,
+        amounts,
+        status: director ? 'live' : 'draft',
+        reason,
+        preparedBy: user.name,
+        preparedById: user.id,
+        preparedAt: at,
+        decidedBy: director ? user.name : null,
+        decidedById: director ? user.id : null,
+        decidedAt: director ? at : null,
+        decisionNote: director ? reason : null,
+        lawFlags: check.flags,
+      };
+      if (await tx.get('payFormulas', row.id)) throw new ReviewConflict('Someone saved this formula at the same time. Open it again.');
+      await tx.insert('payFormulas', row);
+      await tx.audit({
+        at,
+        actor: user.name,
+        companyId: null,
+        action: director ? 'pay.formula.set' : 'pay.formula.draft',
+        entity: 'pay_formula',
+        entityId: row.id,
+        summary: `${director ? 'Set' : 'Prepared'} pay formula ${code} v${version} "${name}" from ${month}: ${reason}`,
+      });
+      return row;
+    });
+  }
+
+  /** The ACT Director makes a team member's draft live, or sends it back, with a reason either way. */
+  async decidePayFormula(user: User, id: Id, approve: boolean, note: string) {
+    await this.payFormulasWritable();
+    if (this.payFormulaRole(user) !== 'director') throw new AccessDenied('view', '(only the ACT Director or the CEO sets pay formulas)');
+    const text = String(note ?? '').trim().slice(0, 500);
+    if (text.length < 3) throw new BadRequest('Give the reason for your decision.');
+    const at = this.now();
+    return this.store.transaction(async (tx) => {
+      await tx.lock?.('payFormulas', id);
+      const f = await tx.get('payFormulas', id);
+      if (!f) throw new NotFound('Formula');
+      if (f.status !== 'draft') throw new ReviewConflict('This formula is already decided.');
+      let patch: Partial<PayFormula> = { status: 'rejected', decidedBy: user.name, decidedById: user.id, decidedAt: at, decisionNote: text };
+      if (approve) {
+        const month = this.payMonthOk(f.effectiveFrom, 'it starts');
+        const check = payFormulaLawCheck(f.kind, f.amounts, month, payLawFor(await tx.list('payLawVersions', {}), month));
+        if (check.refuse.length) throw new BadRequest(check.refuse.join(' '));
+        patch = { ...patch, status: 'live', lawFlags: check.flags };
+      }
+      const saved = await tx.update('payFormulas', id, patch);
+      await tx.audit({
+        at,
+        actor: user.name,
+        companyId: null,
+        action: approve ? 'pay.formula.set' : 'pay.formula.reject',
+        entity: 'pay_formula',
+        entityId: id,
+        summary: `${approve ? 'Set' : 'Sent back'} pay formula ${f.code} v${f.version} prepared by ${f.preparedBy}: ${text}`,
+      });
+      return saved;
+    });
+  }
+
+  /** The person who prepared a draft takes it back before the Director decides. */
+  async withdrawPayFormula(user: User, id: Id) {
+    await this.payFormulasWritable();
+    const at = this.now();
+    return this.store.transaction(async (tx) => {
+      await tx.lock?.('payFormulas', id);
+      const f = await tx.get('payFormulas', id);
+      if (!f) throw new NotFound('Formula');
+      if (f.preparedById !== user.id) throw new AccessDenied('view', '(only the person who prepared it)');
+      if (f.status !== 'draft') throw new ReviewConflict('This formula is already decided.');
+      const saved = await tx.update('payFormulas', id, { status: 'withdrawn', decidedBy: user.name, decidedById: user.id, decidedAt: at, decisionNote: 'Withdrawn' });
+      await tx.audit({ at, actor: user.name, companyId: null, action: 'pay.formula.withdraw', entity: 'pay_formula', entityId: id, summary: `Withdrew draft pay formula ${f.code} v${f.version}.` });
+      return saved;
+    });
+  }
+
+  /**
+   * The ACT Director picks which formula is used for the whole group, a region, a company or a site, from a month. A
+   * choice of "none" on a region, company or site hands it back to the wider choice.
+   */
+  async setPayFormulaUse(user: User, input: { kind: PayFormulaKind; scope: PayFormulaScope; scopeId?: string | null; formulaCode: string | null; effectiveFrom: string; reason: string }) {
+    await this.payFormulasWritable();
+    if (this.payFormulaRole(user) !== 'director') throw new AccessDenied('view', '(only the ACT Director or the CEO decides where a formula is used)');
+    if (!(input.kind in PAY_FORMULA_KIND_LABEL)) throw new BadRequest('Pick guard salary, driver overtime or staff overtime.');
+    if (!PAY_SCOPES_FOR[input.kind].includes(input.scope))
+      throw new BadRequest(input.kind !== 'guard_shift' ? 'Overtime formulas for drivers and staff are set for the whole group, a region or a company.' : 'Pick the whole group, a region, a company or a site.');
+    const reason = String(input.reason ?? '').trim().slice(0, 500);
+    if (reason.length < 5) throw new BadRequest('Say why: the reason is kept with the choice.');
+    const month = this.payMonthOk(input.effectiveFrom, 'it starts');
+    let scopeId: string | null = null;
+    if (input.scope === 'region') {
+      scopeId = REGIONS.find((r) => r.id === input.scopeId)?.id ?? null;
+      if (!scopeId) throw new NotFound('Region');
+    } else if (input.scope === 'company') {
+      scopeId = (await this.store.get('companies', String(input.scopeId ?? '')))?.id ?? null;
+      if (!scopeId) throw new NotFound('Company');
+    } else if (input.scope === 'site') {
+      scopeId = (await this.store.get('sites', String(input.scopeId ?? '')))?.id ?? null;
+      if (!scopeId) throw new NotFound('Site');
+    }
+    const code = input.formulaCode ? String(input.formulaCode).trim().toUpperCase() : null;
+    if (!code && input.scope === 'group') throw new BadRequest('The whole group always has a formula. Pick one.');
+    const at = this.now();
+    return this.store.transaction(async (tx) => {
+      await tx.lock?.('payFormulaUses', 'pay-formulas:save');
+      if (code) {
+        const f = payFormulaVersionFor(await tx.list('payFormulas', {}), code, month);
+        if (!f) throw new BadRequest('That formula is not live by that month. Set it first.');
+        if (f.kind !== input.kind) throw new BadRequest('That formula is for a different kind of pay.');
+      }
+      const prior = (await tx.list('payFormulaUses', { kind: input.kind, scope: input.scope })).filter((u) => (u.scopeId ?? null) === scopeId);
+      const id = `pfu-${input.kind === 'guard_shift' ? 'g' : input.kind === 'driver_ot' ? 'd' : 's'}-${input.scope}-${scopeId ?? 'group'}-${month}-${prior.length + 1}`;
+      if (await tx.get('payFormulaUses', id)) throw new ReviewConflict('Someone changed this place at the same time. Open it again.');
+      const row: PayFormulaUse = { id, kind: input.kind, scope: input.scope, scopeId, formulaCode: code, effectiveFrom: month, reason, setBy: user.name, setById: user.id, setAt: at, endedBy: null };
+      await tx.insert('payFormulaUses', row);
+      // The choice it replaces stays as history, marked with what replaced it.
+      for (const p of prior) if (!p.endedBy && p.effectiveFrom <= month) await tx.update('payFormulaUses', p.id, { endedBy: id });
+      await tx.audit({
+        at,
+        actor: user.name,
+        companyId: input.scope === 'company' ? scopeId : null,
+        action: 'pay.formula.use',
+        entity: 'pay_formula_use',
+        entityId: id,
+        summary: `${PAY_FORMULA_KIND_LABEL[input.kind]} for ${PAY_SCOPE_LABEL[input.scope].toLowerCase()} ${scopeId ?? ''}: ${code ?? 'use the wider choice'} from ${month}. ${reason}`,
+      });
+      return row;
+    });
+  }
+
+
+  /**
+   * The CEO sets the pay law settings from a month (Fauzan, 6 Nov 2026: "When new law came in. Ceo have the flexibility
+   * control to set how salary is set and how the base is set"): day divisor, minimum wage, overtime minimums and limits.
+   * A new version for the same month replaces the earlier one; nothing starts in a past month.
+   */
+  async savePayLaw(user: User, input: { effectiveFrom: string; settings: Partial<PayLawSettings> | Record<string, unknown>; reason: string }) {
+    await this.payFormulasWritable();
+    if (user.integration || user.opsTier !== 'ceo') throw new AccessDenied('view', '(only the CEO sets the pay law settings)');
+    const month = this.payMonthOk(input.effectiveFrom, 'it starts');
+    const raw = (input.settings && typeof input.settings === 'object' ? input.settings : {}) as Record<string, unknown>;
+    const settings: PayLawSettings = { ...DEFAULT_PAY_LAW };
+    for (const k of Object.keys(DEFAULT_PAY_LAW) as (keyof PayLawSettings)[]) {
+      if (!(k in raw)) continue;
+      if (k === 'lawNote') settings.lawNote = String(raw.lawNote ?? '').trim().slice(0, 500);
+      else if (k === 'nextMinimumWage') {
+        const n = raw.nextMinimumWage as { from?: unknown; amount?: unknown; gazetted?: unknown } | null;
+        settings.nextMinimumWage = n ? { from: String(n.from ?? ''), amount: Number(n.amount), gazetted: n.gazetted === true } : null;
+      } else (settings as unknown as Record<string, number>)[k] = Number(raw[k]);
+    }
+    const problem = payLawSettingsProblem(settings);
+    if (problem) throw new BadRequest(problem);
+    const reason = String(input.reason ?? '').trim().slice(0, 500);
+    if (reason.length < 5) throw new BadRequest('Say why: name the new law or gazette.');
+    const at = this.now();
+    return this.store.transaction(async (tx) => {
+      await tx.lock?.('payLawVersions', 'pay-formulas:law');
+      const all = await tx.list('payLawVersions', {});
+      const id = `pay-law-${month}-${all.filter((v) => v.effectiveFrom === month).length + 1}`;
+      if (await tx.get('payLawVersions', id)) throw new ReviewConflict('Someone changed the pay law settings at the same time. Open them again.');
+      const row: PayLawVersion = { id, effectiveFrom: month, settings, reason, setBy: user.name, setById: user.id, setAt: at, replacedBy: null };
+      await tx.insert('payLawVersions', row);
+      for (const p of all) if (!p.replacedBy && p.effectiveFrom === month) await tx.update('payLawVersions', p.id, { replacedBy: id });
+      await tx.audit({ at, actor: user.name, companyId: null, action: 'pay.law.set', entity: 'pay_law', entityId: id, summary: `Pay law settings from ${month}: divisor ${settings.ordinaryRateDivisor}, minimum wage RM${settings.minimumWage}. ${reason}` });
+      return row;
+    });
+  }
+
+  // ----- Site man-hours (Fauzan, 6 Nov 2026): allowed hours per site per month, flags, OD/OGM approval of extra -----
+
+  /** Operations, HR (salary), ACT, the company office and group leadership see the site man-hours. Guards and site devices do not. */
+  private siteHoursViewer(user: User): boolean {
+    if (user.integration) return false;
+    if (user.role === 'guard' || user.role === 'site_device' || user.role === 'supervisor') return false;
+    if (isGroupLeader(user) || user.opsTier) return true;
+    if (user.role === 'company_manager' || user.role === 'admin_exec') return true;
+    return user.role === 'pwvsb_officer' && (user.department === 'operations' || user.department === 'hr' || user.department === 'audit');
+  }
+
+  private async siteHoursOn(): Promise<boolean> {
+    return this.store.payFormulasReady ? this.store.payFormulasReady() : true;
+  }
+
+  private siteHoursMonth(month: unknown): string {
+    const now = this.today().slice(0, 7);
+    if (month == null || month === '') return now;
+    if (typeof month !== 'string' || !/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) throw new BadRequest('Pick the month (YYYY-MM).');
+    const [y, m] = now.split('-').map(Number);
+    const next = m === 12 ? `${y + 1}-01` : `${y}-${String(m + 1).padStart(2, '0')}`;
+    if (month > next) throw new BadRequest('Pick this month, next month or an earlier one.');
+    return month;
+  }
+
+  /**
+   * One company's sites for a month: allowed man-hours from the posts, hours rostered and worked, what OD/OGM approved,
+   * and a flag for every site over its total (rule SITE-HOURS).
+   */
+  async siteHoursBoard(user: User, input: { companyId?: Id | null; month?: string | null } = {}) {
+    if (!this.siteHoursViewer(user)) throw new AccessDenied('view', '(site man-hours)');
+    const g = await this.grants();
+    const today = this.today();
+    const companies = (await this.visibleCompanies(user)).filter((c) => can(user, g, today, 'view', c.id)).sort((a, b) => a.name.localeCompare(b.name));
+    if (!companies.length) throw new AccessDenied('view', '(any)');
+    const company = input.companyId ? companies.find((c) => c.id === input.companyId) : companies[0];
+    if (!company) throw new AccessDenied('view', String(input.companyId));
+    const month = this.siteHoursMonth(input.month);
+    const ready = await this.siteHoursOn();
+    const [sites, posts, shifts, attendance, approvals] = await Promise.all([
+      this.store.list('sites', { companyId: company.id }),
+      this.store.list('posts', { companyId: company.id }),
+      this.store.list('shifts', { companyId: company.id }),
+      this.store.list('attendance', { companyId: company.id }),
+      ready ? this.store.list('siteHoursApprovals', { companyId: company.id, month }) : Promise.resolve([] as SiteHoursApproval[]),
+    ]);
+    const now = this.now();
+    const shiftById = new Map(shifts.map((s) => [s.id, s]));
+    const rostered = new Map<Id, number>();
+    for (const s of shifts) if (s.personId && s.date.slice(0, 7) === month) rostered.set(s.siteId, (rostered.get(s.siteId) ?? 0) + shiftHours(s));
+    const worked = new Map<Id, number>();
+    const people = new Map<Id, Set<Id>>();
+    const notRostered = new Map<Id, number>();
+    for (const a of attendance) {
+      const sh = a.shiftId ? (shiftById.get(a.shiftId) ?? null) : null;
+      if (attendanceMonth(a, sh) !== month) continue;
+      const h = attendanceHours(a, sh, now);
+      worked.set(a.siteId, (worked.get(a.siteId) ?? 0) + h);
+      if (!people.has(a.siteId)) people.set(a.siteId, new Set());
+      people.get(a.siteId)!.add(a.personId);
+      if (!sh) notRostered.set(a.siteId, (notRostered.get(a.siteId) ?? 0) + h);
+    }
+    const order: Record<SiteHoursStatus, number> = { over: 0, roster_over: 1, pace: 2, approved: 3, within: 4 };
+    const rows = sites
+      .map((site) => {
+        const allowed = siteAllowedHours(posts.filter((p) => p.siteId === site.id), month);
+        const mine = approvals.filter((x) => x.siteId === site.id).sort((a, b) => a.approvedAt.localeCompare(b.approvedAt));
+        const check = siteHoursCheck({ allowedHours: allowed.allowedHours, hoursPerDay: allowed.hoursPerDay, month, now, workedHours: worked.get(site.id) ?? 0, rosteredHours: rostered.get(site.id) ?? 0, approvals: mine });
+        const approverTier = siteHoursApproverTier(site);
+        return {
+          siteId: site.id,
+          siteName: site.name,
+          siteCode: site.code,
+          sector: site.sector ?? 'private',
+          approver: approverTier === 'ogm' ? 'OGM' : 'Operations Director',
+          canApprove: ready && user.opsTier === approverTier,
+          allowed,
+          check,
+          peopleWorked: people.get(site.id)?.size ?? 0,
+          notRosteredHours: Math.round((notRostered.get(site.id) ?? 0) * 10) / 10,
+          approvals: mine,
+        };
+      })
+      .filter((r) => r.allowed.posts.length || r.check.workedHours || r.check.rosteredHours)
+      .sort((a, b) => order[a.check.status] - order[b.check.status] || b.check.needsApproval - a.check.needsApproval || a.siteName.localeCompare(b.siteName));
+    const sum = (f: (r: (typeof rows)[number]) => number) => Math.round(rows.reduce((s, r) => s + f(r), 0) * 10) / 10;
+    return {
+      month,
+      today,
+      ready,
+      companyId: company.id,
+      companyName: company.name,
+      companies: companies.map((c) => ({ id: c.id, name: c.name })),
+      rows,
+      totals: {
+        sites: rows.length,
+        over: rows.filter((r) => r.check.status === 'over').length,
+        rosterOver: rows.filter((r) => r.check.status === 'roster_over').length,
+        pace: rows.filter((r) => r.check.status === 'pace').length,
+        allowedHours: sum((r) => r.allowed.allowedHours),
+        workedHours: sum((r) => r.check.workedHours),
+        rosteredHours: sum((r) => r.check.rosteredHours),
+        people: sum((r) => r.allowed.people),
+      },
+      causes: (Object.keys(SITE_HOURS_CAUSE_LABEL) as SiteHoursCause[]).map((id) => ({ id, label: SITE_HOURS_CAUSE_LABEL[id] })),
+      approverTier: user.opsTier === 'ops_director' || user.opsTier === 'ogm' ? user.opsTier : null,
+      rule: RULES.siteHours,
+    };
+  }
+
+  /** The Operations Director (private site) or the OGM (government site) approves hours over the site's total, with a reason. */
+  async approveSiteHours(user: User, input: { siteId: Id; month: string; extraHours: number; cause: SiteHoursCause; reason: string }) {
+    if (!(await this.siteHoursOn())) throw new BadRequest('Site man-hours approvals are not switched on in this database yet. Ask IT to install the pay formulas module after approval.');
+    const site = await this.store.get('sites', String(input.siteId ?? ''));
+    if (!site) throw new NotFound('Site');
+    assertCan(user, await this.grants(), this.today(), 'view', site.companyId);
+    const tier = siteHoursApproverTier(site);
+    if (user.integration || user.opsTier !== tier)
+      throw new AccessDenied('view', tier === 'ogm' ? '(only the OGM approves extra hours at a government site)' : '(only the Operations Director approves extra hours at a private site)');
+    const month = this.siteHoursMonth(input.month);
+    const extra = Math.round(Number(input.extraHours) * 10) / 10;
+    if (!Number.isFinite(extra) || extra <= 0 || extra > 20000) throw new BadRequest('Enter the extra hours to approve (more than 0).');
+    if (!(input.cause in SITE_HOURS_CAUSE_LABEL)) throw new BadRequest('Pick why the site needs the extra hours.');
+    const reason = String(input.reason ?? '').trim().slice(0, 500);
+    if (reason.length < 5) throw new BadRequest('Say why: the reason is kept with the approval.');
+    const at = this.now();
+    return this.store.transaction(async (tx) => {
+      await tx.lock?.('siteHoursApprovals', `pay-formulas:site-hours:${site.id}:${month}`);
+      const prior = await tx.list('siteHoursApprovals', { siteId: site.id, month });
+      const id = `sha-${site.id}-${month}-${prior.length + 1}`;
+      if (await tx.get('siteHoursApprovals', id)) throw new ReviewConflict('Someone approved this site at the same time. Open it again.');
+      const row: SiteHoursApproval = {
+        id,
+        companyId: site.companyId,
+        siteId: site.id,
+        month,
+        extraHours: extra,
+        cause: input.cause,
+        reason,
+        approvedBy: user.name,
+        approvedById: user.id,
+        approverTier: tier,
+        approvedAt: at,
+      };
+      await tx.insert('siteHoursApprovals', row);
+      await tx.audit({
+        at,
+        actor: user.name,
+        companyId: site.companyId,
+        action: 'ops.site_hours.approve',
+        entity: 'site_hours_approval',
+        entityId: id,
+        summary: `${site.name} ${month}: ${extra} extra man-hours approved (${SITE_HOURS_CAUSE_LABEL[input.cause]}). ${reason}`,
+      });
+      return row;
+    });
+  }
+
+  // ----- Public holidays (Fauzan, 6 Nov 2026): the Operations Director or the OGM (not the OM) sets each company's 11 days by 10 December -----
+
+  /** Who may set a list (Fauzan, 6 Nov 2026: "Od or ogm. Not om"): the Operations Director or the OGM, for any company and state. */
+  private holidaySetter(user: User, _state: string | null): boolean {
+    return !user.integration && (user.opsTier === 'ops_director' || user.opsTier === 'ogm');
+  }
+
+  /** Each company's states (from its sites' branches) for the holiday lists. */
+  private async companyStates(companyIds: Id[]): Promise<Map<Id, string[]>> {
+    const [sites, branches] = await Promise.all([this.store.list('sites', { companyId: companyIds }), this.store.list('branches', { companyId: companyIds })]);
+    const stateOf = new Map(branches.map((b) => [b.id, b.state]));
+    const out = new Map<Id, Set<string>>();
+    for (const s of sites) {
+      const st = stateOf.get(s.branchId);
+      if (!st) continue;
+      if (!out.has(s.companyId)) out.set(s.companyId, new Set());
+      out.get(s.companyId)!.add(st);
+    }
+    return new Map([...out].map(([k, v]) => [k, [...v].sort()]));
+  }
+
+  private async holidayHome(user: User): Promise<HomeItem[]> {
+    const setter = user.opsTier === 'ops_director' || user.opsTier === 'ogm';
+    if (!setter && user.opsTier !== 'ceo') return [];
+    if (!(await this.siteHoursOn())) return [];
+    const today = this.today();
+    const year = Number(today.slice(0, 4)) + 1;
+    const due = holidayListDue(year, today);
+    if (!due.remind || (!setter && !due.late)) return [];
+    const companies = await this.visibleCompanies(user);
+    if (!companies.length) return [];
+    const [lists, states] = await Promise.all([this.store.list('publicHolidayLists', { year }), this.companyStates(companies.map((c) => c.id))]);
+    let missing = 0;
+    const names: string[] = [];
+    for (const c of companies)
+      for (const st of states.get(c.id) ?? []) {
+        if (setter && !this.holidaySetter(user, st)) continue;
+        if (holidayListFor(lists, c.id, year, st)) continue;
+        missing += 1;
+        if (names.length < 3 && !names.includes(c.name)) names.push(c.name);
+      }
+    if (!missing) return [];
+    return [
+      {
+        tone: due.late ? 'crit' : 'warn',
+        tag: 'Public holidays',
+        title: due.late ? `${year} public holidays not set (due ${due.dueOn})` : `Set the ${year} public holidays by ${due.dueOn}`,
+        detail: `${missing} company and state list${missing === 1 ? '' : 's'} missing, e.g. ${names.join(', ')}. The Operations Director or the OGM sets 11 days for each.`,
+        go: { view: 'sitehours' },
+      },
+    ];
+  }
+
+  /** A company's public holiday lists for a year: the list in force for each state it works in, history, and who may set. */
+  async publicHolidayBoard(user: User, input: { companyId?: Id | null; year?: number | null } = {}) {
+    if (!this.siteHoursViewer(user)) throw new AccessDenied('view', '(public holidays)');
+    const g = await this.grants();
+    const today = this.today();
+    const companies = (await this.visibleCompanies(user)).filter((c) => can(user, g, today, 'view', c.id)).sort((a, b) => a.name.localeCompare(b.name));
+    if (!companies.length) throw new AccessDenied('view', '(any)');
+    const company = input.companyId ? companies.find((c) => c.id === input.companyId) : companies[0];
+    if (!company) throw new AccessDenied('view', String(input.companyId));
+    const thisYear = Number(today.slice(0, 4));
+    const year = input.year && Number.isInteger(Number(input.year)) ? Number(input.year) : today.slice(5) >= '12-01' ? thisYear + 1 : thisYear;
+    const ready = await this.siteHoursOn();
+    const lists = ready ? (await this.store.list('publicHolidayLists', { companyId: company.id })).filter((l) => l.year === year) : [];
+    const states = (await this.companyStates([company.id])).get(company.id) ?? [];
+    const due = holidayListDue(year, today);
+    const editable = year >= thisYear;
+    const place = (state: string | null) => {
+      const own = lists.find((l) => l.state === state && !l.replacedBy) ?? null;
+      const inForce = holidayListFor(lists, company.id, year, state);
+      return {
+        state,
+        list: own,
+        inForce,
+        fromCompanyList: !!inForce && inForce.state === null && state !== null,
+        check: inForce ? holidayListCheck(year, inForce.days) : null,
+        canSet: ready && editable && this.holidaySetter(user, state),
+      };
+    };
+    return {
+      ready,
+      year,
+      years: [thisYear, thisYear + 1],
+      companyId: company.id,
+      companyName: company.name,
+      companies: companies.map((c) => ({ id: c.id, name: c.name })),
+      due: { ...due, editable },
+      company: place(null),
+      states: states.map((s) => place(s)),
+      missing: states.filter((s) => !holidayListFor(lists, company.id, year, s)),
+      history: lists.filter((l) => l.replacedBy).sort((a, b) => b.setAt.localeCompare(a.setAt)),
+      rule: RULES.payPublicHolidays,
+    };
+  }
+
+  /** The OM (states of their area) or the OGM sets a company's public holidays for a year, with a reason. */
+  async setPublicHolidays(user: User, input: { companyId: Id; year: number; state?: string | null; days: PublicHolidayDay[]; reason: string }) {
+    if (!(await this.siteHoursOn())) throw new BadRequest('Public holiday lists are not switched on in this database yet. Ask IT to install the pay formulas module after approval.');
+    const company = await this.company(user, String(input.companyId ?? ''));
+    const state = input.state ? String(input.state) : null;
+    if (!this.holidaySetter(user, state))
+      throw new AccessDenied('view', '(only the Operations Director or the OGM sets public holidays)');
+    if (state && !((await this.companyStates([company.id])).get(company.id) ?? []).includes(state)) throw new BadRequest(`${company.name} has no sites in ${state}.`);
+    const year = Number(input.year);
+    if (year < Number(this.today().slice(0, 4))) throw new BadRequest('A past year cannot be changed.');
+    const days = (Array.isArray(input.days) ? input.days : []).map((d) => ({ date: String(d?.date ?? '').slice(0, 10), label: String(d?.label ?? '').trim().slice(0, 80) })).sort((a, b) => a.date.localeCompare(b.date));
+    const check = holidayListCheck(year, days);
+    if (check.refuse) throw new BadRequest(check.refuse);
+    const reason = String(input.reason ?? '').trim().slice(0, 500);
+    if (reason.length < 5) throw new BadRequest('Say why: the reason is kept with the list.');
+    const at = this.now();
+    return this.store.transaction(async (tx) => {
+      await tx.lock?.('publicHolidayLists', `pay-formulas:holidays:${company.id}:${year}:${state ?? '-'}`);
+      const prior = (await tx.list('publicHolidayLists', { companyId: company.id, year })).filter((l) => (l.state ?? null) === state);
+      const version = prior.length + 1;
+      const id = `phl-${company.id}-${year}-${state ? state.toLowerCase().replace(/[^a-z]+/g, '-') : 'all'}-v${version}`;
+      if (await tx.get('publicHolidayLists', id)) throw new ReviewConflict('Someone set this list at the same time. Open it again.');
+      const row: PublicHolidayList = {
+        id,
+        companyId: company.id,
+        year,
+        state,
+        version,
+        days,
+        reason,
+        setBy: user.name,
+        setById: user.id,
+        setByTier: user.opsTier === 'ogm' ? 'ogm' : 'ops_director',
+        setAt: at,
+        replacedBy: null,
+        lawFlags: check.flags,
+      };
+      await tx.insert('publicHolidayLists', row);
+      for (const p of prior) if (!p.replacedBy) await tx.update('publicHolidayLists', p.id, { replacedBy: id });
+      await tx.audit({
+        at,
+        actor: user.name,
+        companyId: company.id,
+        action: 'ops.public_holidays.set',
+        entity: 'public_holiday_list',
+        entityId: id,
+        summary: `${company.name} ${year}${state ? ` (${state})` : ''}: ${days.length} public holidays set, version ${version}. ${reason}`,
+      });
+      return row;
+    });
+  }
 }
 
 function minutesLabel(m: number): string {
@@ -37251,6 +42289,30 @@ function canUseCms(user: User): boolean {
   return canRunCms(user) || (user.role === 'pwvsb_officer' && user.department === 'cms');
 }
 
+export const POST_LOG_KINDS: PostLogKind[] = ['routine', 'handover', 'observation', 'incident_note', 'instruction', 'other'];
+export const POST_LOG_LABEL: Record<PostLogKind, string> = {
+  routine: 'Routine',
+  handover: 'Shift handover',
+  observation: 'Observation',
+  incident_note: 'Incident note',
+  instruction: 'Instruction received',
+  other: 'Other',
+};
+export const VISITOR_ID_KINDS: VisitorIdKind[] = ['mykad', 'mykas', 'passport', 'driving_licence', 'other'];
+export const VISITOR_ID_LABEL: Record<VisitorIdKind, string> = { mykad: 'MyKad', mykas: 'MyKAS', passport: 'Passport', driving_licence: 'Driving licence', other: 'Other ID' };
+export const GATE_FLAG_LABEL: Record<GateFlag, string> = {
+  FACE_NOT_MATCHED: 'Face does not match the ID',
+  FACE_NOT_CHECKED: 'Face not checked',
+  ID_TYPED: 'ID typed, not scanned',
+  PLATE_ON_WATCH: 'Plate on watch: CMS told',
+  PLATE_UNKNOWN: 'Plate not on the site list',
+  PLATE_TYPED: 'Plate typed, not scanned',
+  FULL_ID_NOT_SEALED: 'Full ID not kept for the in-house server',
+  SENT_LATER: 'Written offline, sent later',
+};
+export const DISPATCH_LEVEL_LABEL: Record<DispatchLevel, string> = { instruction: 'Instruction', alert: 'Alert', urgent: 'Urgent' };
+export const DISPATCH_PROOF_LABEL: Record<DispatchProof, string> = { none: 'none', photo: 'photo', video: 'video', photo_or_video: 'photo or video' };
+export const DISPATCH_OUTCOME_LABEL: Record<DispatchOutcome, string> = { real: 'Real', nothing_found: 'Nothing found', done: 'Done', cancelled: 'Withdrawn' };
 export const ALARM_LABEL: Record<SiteAlarm['kind'], string> = {
   GUARD_SOS: 'Guard SOS',
   PANIC: 'Panic button',
@@ -37259,6 +42321,9 @@ export const ALARM_LABEL: Record<SiteAlarm['kind'], string> = {
   CAMERA_TAMPER: 'Camera tamper',
   LINK_LOST: 'Site link lost',
   CMS_EVENT: 'CMS event',
+  AI_CCTV: 'AI on CCTV',
+  AI_SENSOR: 'AI on sensor',
+  VEHICLE_WATCH: 'Vehicle on watch at gate',
 };
 const ALARM_RANK: Record<SiteAlarm['status'], number> = { new: 0, acknowledged: 1, closed: 2 };
 

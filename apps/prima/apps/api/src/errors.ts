@@ -1,5 +1,5 @@
 import { ArgumentsHost, Catch, ExceptionFilter, HttpException, Logger } from '@nestjs/common';
-import { AccessDenied, BadRequest, NotFound, RuleBlocked } from '@prima/core';
+import { AccessDenied, BadRequest, NotFound, ReviewConflict, RuleBlocked } from '@prima/core';
 import type { Response } from 'express';
 import { UnknownUser } from './db';
 import { randomUUID } from 'node:crypto';
@@ -44,6 +44,9 @@ export class DomainErrors implements ExceptionFilter {
       res.status(403).json({ message: err.message });
     } else if (err instanceof NotFound) {
       res.status(404).json({ message: err.message });
+    } else if (err instanceof ReviewConflict) {
+      // A stale screen: the record changed after it was shown; the screen loads it again.
+      res.status(409).json({ message: err.message });
     } else if (err instanceof BadRequest) {
       res.status(400).json({ message: err.message });
     } else if (err instanceof UnknownUser) {

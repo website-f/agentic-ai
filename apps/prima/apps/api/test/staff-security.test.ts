@@ -49,6 +49,9 @@ async function admin<T = Record<string, unknown>>(sql: string, params: unknown[]
 
 const count = async (walls: string, table: string, userId?: string) => Number((await asApp(walls, `SELECT count(*) AS n FROM prima.${table}`, [], userId)).rows[0].n);
 
+/** Job posts need a closing date within 90 days of the real server clock (Malaysia date). */
+const CLOSES = new Date(Date.now() + 8 * 3_600_000 + 10 * 86_400_000).toISOString().slice(0, 10);
+
 describe('staff data security gates (database)', () => {
   let db: Db;
   before(async () => {
@@ -191,6 +194,64 @@ describe('staff data security gates (database)', () => {
     await assert.rejects(db.asUser('u-fd', (svc, u) => svc.hrJoinLeave(u)));
     const reg = await db.asUser('u-pwvsb-hr', (svc, u) => svc.employeeRegister(u, 'pwvsb'));
     assert.ok(reg.body.split('\n').length > 2);
+  });
+
+  it('runs job posts through PostgreSQL: OM of the state approves guard posts, nothing is published (HR-JOB-ADVERT)', async () => {
+    const v = await db.asUser('u-cm-arsh', (svc, u) => svc.raiseVacancy(u, { companyId: 'co-arsh', title: 'Security guard', department: 'Operations', headcount: 2, reason: 'New site', payFrom: 1800, payTo: 2000, category: 'guard', state: 'Selangor' }));
+    await db.asUser('u-fauzan', (svc, u) => svc.vacancyStep(u, v.id, 'ceo_approve', 'Approved'));
+    await db.asUser('u-cm-arsh', (svc, u) => svc.vacancyStep(u, v.id, 'sign', 'Signed'));
+    await db.asUser('u-cm-arsh', (svc, u) => svc.advertStep(u, v.id, 'draft', { channels: ['facebook'], applyHow: 'Careers form', closingDate: CLOSES }));
+    await db.asUser('u-cm-arsh', (svc, u) => svc.advertStep(u, v.id, 'submit', { version: 1 }));
+    await assert.rejects(db.asUser('u-cm-sasa', (svc, u) => svc.advertStep(u, v.id, 'approve', { version: 1, note: 'ok' })));
+    await assert.rejects(db.asUser('u-om-johor', (svc, u) => svc.advertStep(u, v.id, 'approve', { version: 1, note: 'ok' })));
+    await assert.rejects(db.asUser('u-cos', (svc, u) => svc.advertStep(u, v.id, 'approve', { version: 1, note: 'ok' })));
+    const ok = await db.asUser('u-om-klang', (svc, u) => svc.advertStep(u, v.id, 'approve', { version: 1, note: 'Approved for Selangor' }));
+    assert.equal(ok.advert?.status, 'approved');
+    assert.deepEqual(ok.advert?.manualPosts, []);
+    // Approve and edit at the same time: whichever order the row lock gives, approval never lands on unseen wording.
+    await db.asUser('u-cm-arsh', (svc, u) => svc.advertStep(u, v.id, 'draft', { channels: ['facebook'], applyHow: 'Careers form', closingDate: CLOSES, version: 1 }));
+    await db.asUser('u-cm-arsh', (svc, u) => svc.advertStep(u, v.id, 'submit', { version: 2 }));
+    const race = await Promise.allSettled([
+      db.asUser('u-om-klang', (svc, u) => svc.advertStep(u, v.id, 'approve', { version: 2, note: 'Fine' })),
+      db.asUser('u-cm-arsh', (svc, u) => svc.advertStep(u, v.id, 'draft', { channels: ['facebook'], applyHow: 'Careers form', closingDate: CLOSES, text: 'We are hiring guards in Selangor. Apply at the careers form.', version: 2 })),
+    ]);
+    assert.ok(race.some((r) => r.status === 'fulfilled'), 'one of the racing steps wins');
+    const after = await db.asUser('u-cm-arsh', (svc, u) => svc.vacancies(u));
+    const ad = after.rows.find((r) => r.id === v.id)?.advert;
+    if (ad?.status === 'approved') assert.equal(ad.approved?.hash, ad.hash);
+    else assert.equal(ad?.approved, null);
+  });
+
+  it('keeps applicants behind the applicants wall: HR only, never the company manager or OM (5 Nov 2026)', async () => {
+    const v = await db.asUser('u-cm-arsh', (svc, u) => svc.raiseVacancy(u, { companyId: 'co-arsh', title: 'Clerk', department: 'Admin', headcount: 1, reason: 'Replacement', payFrom: 1800, payTo: null }));
+    await db.asUser('u-fauzan', (svc, u) => svc.vacancyStep(u, v.id, 'ceo_approve', 'Approved'));
+    await db.asUser('u-cm-arsh', (svc, u) => svc.vacancyStep(u, v.id, 'sign', 'Signed'));
+    const today = new Date().toISOString().slice(0, 10);
+    const a = await db.asUser('u-pwvsb-hr', (svc, u) => svc.addApplicant(u, v.id, { name: 'Synthetic Applicant', phone: '0123456789', source: 'jobstreet', appliedOn: today }));
+    const seen = async (walls: string) => {
+      const c = new Client({ connectionString: URL });
+      await c.connect();
+      try {
+        await c.query('BEGIN');
+        await c.query('SET LOCAL ROLE prima_app');
+        await c.query(`SELECT set_config('app.walls', $1, true)`, [walls]);
+        await c.query(`SELECT set_config('app.company_ids', 'co-arsh', true)`);
+        const n = Number((await c.query(`SELECT count(*) AS n FROM prima.applicants WHERE id = $1`, [a.id])).rows[0].n);
+        await c.query('COMMIT');
+        return n;
+      } finally {
+        await c.end();
+      }
+    };
+    assert.equal(await seen('staff_company'), 0, 'the company manager does not see applicants');
+    assert.equal(await seen(''), 0, 'no wall, no rows');
+    assert.equal(await seen('applicants'), 1, 'HR sees them');
+    await assert.rejects(db.asUser('u-cm-arsh', (svc, u) => svc.applicants(u, v.id)));
+    await assert.rejects(db.asUser('u-om-klang', (svc, u) => svc.applicants(u, v.id)));
+    const list = await db.asUser('u-fauzan', (svc, u) => svc.applicants(u, v.id));
+    assert.equal(list.rows.length, 1, 'the CEO reads the list');
+    const moved = await db.asUser('u-pwvsb-hr', (svc, u) => svc.applicantStep(u, a.id, 'shortlisted', ''));
+    assert.equal(moved.status, 'shortlisted');
   });
 
   it('keeps a sexual harassment case behind the hr_cases wall, even for the company that can see the staff member (slice 3E)', async () => {

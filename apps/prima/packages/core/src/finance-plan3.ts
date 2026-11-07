@@ -16,7 +16,7 @@
 import { AccessDenied } from './access';
 import type { FinActor } from './finance';
 import { isLead, noSecrets, requireComment, requireReason, text } from './finance';
-import { BadRequest, NotFound } from './service';
+import { BadRequest, NotFound, ReviewConflict } from './service';
 import { FIN_PLAN_LINES, type FinPlan, type FinPlanFigures, type FinPlanLine, type FinSign, type FinStatus, type Id } from './types';
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
@@ -40,6 +40,8 @@ export interface FinBudgetRevision {
   months: FinPlanFigures;
   reason: string;
   status: 'draft' | 'submitted' | 'approved' | 'returned' | 'withdrawn';
+  /** Edit number: moves on with every change; each step names the one it was shown (finSeqNext). */
+  seq?: number;
   prepared: FinSign;
   authorIds: Id[];
   /** Which of the two approvers (FD, CEO) wrote or sent it; both never do (no two-author deadlock). */
@@ -122,6 +124,22 @@ export function finOpenRevision<R extends { status: string }>(revisions: R[]): R
   return revisions.find((r) => r.status === 'draft' || r.status === 'submitted' || r.status === 'returned') ?? null;
 }
 
+/**
+ * Stale screens (Arisha main, 4 Nov 2026): every change to a yearly budget, a revision or a forecast moves its edit number
+ * (`seq`) on, and every step names the number the person was shown. If anything changed after it was shown (returned, edited
+ * and sent again under the same number, or another tab acted first), the step is refused and the screen loads it again, so
+ * an approval always covers exactly the figures the approver saw. Returns the next edit number.
+ */
+export function finSeqNext(rec: { seq?: number } | null | undefined, input: Record<string, unknown>, what: string): number {
+  const now = rec?.seq ?? 0;
+  const shown = input.seq;
+  if (typeof shown !== 'number' || !Number.isInteger(shown) || shown < 0)
+    throw new BadRequest(`Say which edit of the ${what} you are acting on (seq); load it again if you are not sure.`);
+  if (shown !== now)
+    throw new ReviewConflict(`This ${what} changed after you opened it (edit ${now}, you saw edit ${shown}). Load it again and check it before you act.`);
+  return now + 1;
+}
+
 export function finBudgetRevisionAction(
   ctx: FinPlan3Ctx,
   plan: FinPlan,
@@ -137,6 +155,14 @@ export function finBudgetRevisionAction(
       throw new AccessDenied('view', '(the deputy, the team leader, the Finance Director or the CEO drafts a budget revision)');
     if (plan.budget.status !== 'approved') throw new BadRequest(`The ${plan.year} budget is not approved yet; change the draft instead.`);
     if (open?.status === 'submitted') throw new BadRequest(`Revision ${open.no} is waiting for approval; it is approved or returned first.`);
+    // A change names the open revision it was shown; a new revision is only started when none is open (stale screens).
+    const shownNo = input.no == null || input.no === '' ? null : Number(input.no);
+    if (open && shownNo !== open.no)
+      throw new ReviewConflict(
+        `Revision ${open.no} is already open${shownNo ? ` (you saw revision ${shownNo})` : ''}. Load it again and change revision ${open.no}.`,
+      );
+    if (!open && shownNo !== null) throw new ReviewConflict(`Revision ${shownNo} is no longer open. Load it again; a new revision can be drafted.`);
+    const seq = open ? finSeqNext(open, input, 'revision') : 1;
     const fromMonth = monthOf(input.fromMonth, plan.year);
     if (fromMonth <= ctx.close) throw new BadRequest(`${fromMonth} has closed; a revision applies from an open month (after ${ctx.close}).`);
     const months = revisedFigures(input.months, finBudgetInForce(plan), Number(fromMonth.slice(5)) - 1);
@@ -149,6 +175,7 @@ export function finBudgetRevisionAction(
           months,
           reason,
           status: 'draft',
+          seq,
           prepared: ctx.sign(),
           authorIds: [...new Set([...open.authorIds, user.id])],
           leadAuthors,
@@ -162,6 +189,7 @@ export function finBudgetRevisionAction(
           months,
           reason,
           status: 'draft',
+          seq,
           prepared: ctx.sign(),
           authorIds: [user.id],
           leadAuthors,
@@ -176,11 +204,15 @@ export function finBudgetRevisionAction(
     if (!['leader', 'deputy', 'director', 'ceo'].includes(a.kind))
       throw new AccessDenied('view', '(the deputy, the team leader, the Finance Director or the CEO sends a budget revision for approval)');
     if (!open || (open.status !== 'draft' && open.status !== 'returned')) throw new BadRequest('There is no draft revision to send.');
+    if (Number(input.no) !== open.no)
+      throw new ReviewConflict(`Revision ${input.no ?? '?'} is not the open revision (revision ${open.no} is). Load it again before sending.`);
+    const seq = finSeqNext(open, input, 'revision');
     if (open.status === 'returned') throw new BadRequest('Change the returned revision first (save it again), then send it.');
     if (open.fromMonth <= ctx.close) throw new BadRequest(`${open.fromMonth} has closed; save the revision again from an open month.`);
     const r: FinBudgetRevision = {
       ...open,
       status: 'submitted',
+      seq,
       submitted: ctx.sign(
         String(input.comment ?? '')
           .trim()
@@ -197,15 +229,16 @@ export function finBudgetRevisionAction(
     if (!r) throw new NotFound('Budget revision');
     if (r.status !== 'submitted') throw new BadRequest('That revision is not waiting for approval.');
     if (r.authorIds.includes(user.id) || r.submitted?.byId === user.id) throw new AccessDenied('view', '(nobody approves a revision they drafted or sent)');
+    const seq = finSeqNext(r, input, 'revision');
     if (action === 'returnRevision') {
       const why = requireReason(input.comment, 'return the revision');
-      const n: FinBudgetRevision = { ...r, status: 'returned', returned: ctx.sign(why), fdApproved: null, ceoApproved: null };
+      const n: FinBudgetRevision = { ...r, status: 'returned', seq, returned: ctx.sign(why), fdApproved: null, ceoApproved: null };
       return { plan: put(n), summary: `Budget ${plan.year} revision ${r.no} returned: ${why}`, result: n };
     }
     const slot = a.kind === 'director' ? 'fdApproved' : 'ceoApproved';
     if (r.fromMonth <= ctx.close) throw new BadRequest(`${r.fromMonth} closed while the revision waited; return it so it is redone from an open month.`);
     const c = requireComment(input.comment, 'approve the revision');
-    const n: FinBudgetRevision = { ...r, [slot]: ctx.sign(c), status: 'approved' };
+    const n: FinBudgetRevision = { ...r, [slot]: ctx.sign(c), status: 'approved', seq };
     return {
       plan: put(n),
       summary: `Budget ${plan.year} revision ${r.no} approved by the ${a.kind === 'director' ? 'Finance Director' : 'CEO'}, in force from ${n.fromMonth}: ${c}`,
@@ -220,8 +253,9 @@ export function finBudgetRevisionAction(
     if (!['draft', 'submitted', 'returned'].includes(r.status)) throw new BadRequest('Only a revision not yet approved is withdrawn.');
     if (!r.authorIds.includes(user.id) && r.submitted?.byId !== user.id)
       throw new AccessDenied('view', '(only someone who wrote or sent the revision withdraws it)');
+    const seq = finSeqNext(r, input, 'revision');
     const why = requireReason(input.comment, 'withdraw the revision');
-    const n: FinBudgetRevision = { ...r, status: 'withdrawn', withdrawn: ctx.sign(why) };
+    const n: FinBudgetRevision = { ...r, status: 'withdrawn', seq, withdrawn: ctx.sign(why) };
     return { plan: put(n), summary: `Budget ${plan.year} revision ${r.no} withdrawn: ${why}`, result: n };
   }
   throw new BadRequest('Unknown budget revision action.');
@@ -276,6 +310,8 @@ export interface FinThreeStatement {
   opening: Fin3Opening;
   periods: Fin3Period[];
   status: 'draft' | 'submitted' | 'approved' | 'returned' | 'superseded' | 'withdrawn';
+  /** Edit number: moves on with every change; each step names the one it was shown (finSeqNext). */
+  seq?: number;
   prepared: FinSign;
   authorIds: Id[];
   /** Which of the two approvers (FD, CEO) prepared or sent it; both never do (no two-author deadlock). */
@@ -480,6 +516,12 @@ export function finThreeStatementAction(
     const same = list.filter((x) => x.kind === kind && x.asOf === asOf && x.scenario === scenario);
     const open = same.find((x) => x.status === 'draft' || x.status === 'returned' || x.status === 'submitted');
     if (open?.status === 'submitted') throw new BadRequest(`Version ${open.version} is waiting for approval; it is approved or returned first.`);
+    // A change names the open version it was shown; a new version is only started when none is open (stale screens).
+    const shownId = typeof input.id === 'string' && input.id ? input.id : null;
+    if (open && shownId !== open.id)
+      throw new ReviewConflict(`Version ${open.version} of this forecast is already open. Load it again and change that version.`);
+    if (!open && shownId !== null) throw new ReviewConflict('That forecast version is no longer open. Load it again; a new version can be prepared.');
+    const seq = open ? finSeqNext(open, input, 'forecast') : 1;
     const version = open ? open.version : Math.max(0, ...same.map((x) => x.version)) + 1;
     const x: FinThreeStatement = {
       id: open?.id ?? `fc3-${plan.year}-${kind}-${asOf}-${scenario}-v${version}`,
@@ -492,6 +534,7 @@ export function finThreeStatementAction(
       opening,
       periods,
       status: 'draft',
+      seq,
       prepared: ctx.sign(),
       authorIds: [...new Set([...(open?.authorIds ?? []), user.id])],
       leadAuthors: finLeadAuthors(a, open?.leadAuthors, 'forecast'),
@@ -511,11 +554,13 @@ export function finThreeStatementAction(
   if (action === 'fc3Submit') {
     if (!ctx.reviewer) throw new AccessDenied('view', '(the deputy, the team leader, the Finance Director or the CEO sends a forecast for approval)');
     if (x.status !== 'draft') throw new BadRequest('Only a saved draft is sent; save a returned forecast again first.');
+    const seq = finSeqNext(x, input, 'forecast');
     const r = fin3Compute(x, f);
     if (r.problems.length) throw new BadRequest(`Fix the checks first: ${r.problems.join(' ')}`);
     const n: FinThreeStatement = {
       ...x,
       status: 'submitted',
+      seq,
       submitted: ctx.sign(
         String(input.comment ?? '')
           .trim()
@@ -530,15 +575,16 @@ export function finThreeStatementAction(
     if (!isLead(a)) throw new AccessDenied('view', '(the Finance Director or the CEO approves a three-statement forecast)');
     if (x.status !== 'submitted') throw new BadRequest('That forecast is not waiting for approval.');
     if (x.authorIds.includes(user.id) || x.submitted?.byId === user.id) throw new AccessDenied('view', '(nobody approves a forecast they prepared or sent)');
+    const seq = finSeqNext(x, input, 'forecast');
     if (action === 'fc3Return') {
       const why = requireReason(input.comment, 'return the forecast');
-      const n: FinThreeStatement = { ...x, status: 'returned', returned: ctx.sign(why) };
+      const n: FinThreeStatement = { ...x, status: 'returned', seq, returned: ctx.sign(why) };
       return { plan: put(n), summary: `Three-statement forecast ${x.id} returned: ${why}`, result: n };
     }
     const r = fin3Compute(x, f);
     if (r.problems.length) throw new BadRequest(`It cannot be approved: ${r.problems.join(' ')}`);
     const c = requireComment(input.comment, 'approve the forecast');
-    const n: FinThreeStatement = { ...x, status: 'approved', approved: ctx.sign(c) };
+    const n: FinThreeStatement = { ...x, status: 'approved', seq, approved: ctx.sign(c) };
     // The approved version replaces the earlier approved one for the same start, kind and scenario.
     const superseded = list
       .filter((y) => y.id !== x.id && y.status === 'approved' && y.kind === x.kind && y.asOf === x.asOf && y.scenario === x.scenario)
@@ -549,8 +595,9 @@ export function finThreeStatementAction(
     if (!['draft', 'submitted', 'returned'].includes(x.status)) throw new BadRequest('Only a forecast not yet approved is withdrawn.');
     if (!x.authorIds.includes(user.id) && x.submitted?.byId !== user.id)
       throw new AccessDenied('view', '(only someone who prepared or sent the forecast withdraws it)');
+    const seq = finSeqNext(x, input, 'forecast');
     const why = requireReason(input.comment, 'withdraw the forecast');
-    const n: FinThreeStatement = { ...x, status: 'withdrawn', withdrawn: ctx.sign(why) };
+    const n: FinThreeStatement = { ...x, status: 'withdrawn', seq, withdrawn: ctx.sign(why) };
     return { plan: put(n), summary: `Three-statement forecast ${x.id} withdrawn: ${why}`, result: n };
   }
   throw new BadRequest('Unknown three-statement forecast action.');

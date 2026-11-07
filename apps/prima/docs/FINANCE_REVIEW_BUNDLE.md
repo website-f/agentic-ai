@@ -24,8 +24,9 @@ Draft PR #49, branch `claude/project-thread-gmzh82`. **Not merged, not deployed,
 | Budget revisions: FD or CEO, either is enough (Fauzan 3 Nov 06:06Z) | `0e9118674b1b3a72d112cedb02bff3c8efcaee65` |
 | Two-author deadlock: FD+CEO cannot both write one record; withdraw with reason; CI green with bundle 632635f (run 41598701483) | `c16f69b84ab40c3e66a51180c5f5d3ae71bdeb5a` |
 | Guide card sources name their desk (combined round 4); CI green (run 41600616533) | `b04ce44c42c80f053c81ee409555644233d79fcc` |
-| **Screen acts only on an open revision; browser regression; last code commit** | **`5216e9547a98a3d56493b4b9054701ea2660443d`** |
-| This bundle update (docs only, on top of 5216e95) | the branch head |
+| Screen acts only on an open revision; browser regression; CI green with bundle 50719b4 (run 41755833547) | `5216e9547a98a3d56493b4b9054701ea2660443d` |
+| **Stale screens: every step names the exact edit shown; last code commit** | **`5d4c029085a3df63d4957563dfe057a1882f28f8`** |
+| This bundle update (docs only, on top of 5d4c029) | the branch head |
 
 ## 2. Finding to fix to test matrix
 
@@ -51,13 +52,14 @@ Draft PR #49, branch `claude/project-thread-gmzh82`. **Not merged, not deployed,
 | D-1 | Approval chains pending Fauzan's decision | 0e91186: Fauzan, 3 Nov 2026 06:06Z, "Either is enough for both". A revision goes into force on one approval by the FD or the CEO (never its drafter or sender); the FD or CEO may draft. Forecasts unchanged (FD or CEO) | `finance-plan3.test.ts`: FD approval alone puts it in force; CEO cannot approve again; FD-drafted revision refused to the FD and approved by the CEO |
 | D-2 | Arisha main 3 Nov 06:21Z: if the FD drafts a revision and the CEO edits it before sending, both are authors, neither can approve or return it, and there is no withdrawal, so it is stuck | c16f69b, `finance-plan3.ts` `finLeadAuthors`: once the FD (or CEO) has written or sent a revision, forecast or yearly budget, the other lead is refused when trying to change or send it, with guidance to return it after it is sent; so one lead always stays free to approve or return. Recovery: `withdrawRevision` / `fc3Withdraw` let an author or the sender withdraw a draft, sent or returned record with a reason (status 'withdrawn', never in force). No self-approval or override path added. Withdraw buttons in `FinancePlan3.tsx`. Budget limits (Fauzan via Arisha 07:31Z: "any budget need a limit") are an open decision; no limit amounts are invented | `finance-plan3.test.ts` "two-author deadlock": FD drafts, CEO edit and CEO send refused; withdraw needs a reason, outsider refused, author withdraws; same rule for forecasts and the yearly budget |
 | D-3 | Arisha main 4 Nov (rendering the actual Plan3 at b04ce44): revision 1 withdrawn, revision 2 drafted; the screen still selected the withdrawn revision ("Change revision 1") and hid "Send revision 2". Also: budget limit amounts and the policy for setting them are undefined, so the controls must not be called complete | 5216e95, `finance-plan3.ts` `finOpenRevision` (draft, sent or returned only), used by the server and by `FinancePlan3.tsx`. `FINANCE_PHASE2.md` row 5 now says budget limits are not complete (open decision D-2, Finance gives amounts later, Fauzan 3 Nov 08:04Z) | `finance-plan3.test.ts` "the open revision"; new CI browser check `scripts/finance-plan3-browser-smoke.mjs` (demo build, real core rules, synthetic data, 1440px and 390px): budget approved, revision 1 drafted then withdrawn with a reason, revision 2 drafted shows "Change revision 2" and no "Change revision 1", "Send revision 2 for approval" sends it, FD approves, revision 1 stays withdrawn, no page errors, no outside requests (the font stylesheet is blocked). It fails on the old screen (checked locally). The phone menu is icons only, so navigation is at desktop width and the panel is used at 390px |
+| D-4 | Arisha main 4 Nov (retest at 50719b4): (1) an old tab's send for withdrawn revision 1 sent the new revision 2, and revise could hit the current draft from stale input; (2) the FD's tab showed revision 1 sent at RM120,000; it was returned, edited to RM130,000 and resent under the same number, and the FD's stale approval approved RM130,000 | 5d4c029: `finance-plan3.ts` `finSeqNext`: the yearly budget, each revision and each forecast carry an edit number (`seq`) that moves on with every change; change, send, approve, return and withdraw name the record (`no` or `id`) and the `seq` shown, or are refused (`ReviewConflict`, HTTP 409 in `apps/api/src/errors.ts`). A new revision or forecast version starts only when none is open. `FinancePlan3.tsx` and `FinanceChecks.tsx` send the shown `no`/`id` and `seq`. Two reviewers at once: the finance row is held (`tx.lock`), so the second sees the first's decision and is refused | `finance-plan3.test.ts` "Stale screens" (4): return, edit, resubmit then stale approve and return refused, nothing approved, missing `seq` refused, fresh approve of RM130,000; old tab send/change/withdraw of withdrawn revision 1 refused and revision 2 untouched; two tabs on one draft (first wins); second reviewer on the same edit refused; the same for the yearly budget and forecasts. PostgreSQL (`apps/api/test/finance-phase2.test.ts`): return, edit, resubmit, stale approve refused; FD approve and CEO return sent at once on the same edit, exactly one stands (passed 3 runs in a row). No browser stale-tab repro: the demo keeps each tab's data in that tab, so it cannot show a second tab's change; the PostgreSQL test is the repro |
 | R3-3 | Round 3 docs | 5a2d723, `docs/FINANCE_PHASE2.md`: the 13-week forecast, variance owners and forecast due dates are built (not missing); the statutory fallback stays an unresolved director item, never verified; still missing: live SQL Account (E62, no reader installed), payroll/claims/billing interfaces into SQL Account and the close, direct bank feeds, Microsoft Graph; A8 waits for Azure OpenAI | docs |
 
-## 3. Toolchain and results at 5216e95 (local, synthetic data)
+## 3. Toolchain and results at 5d4c029 (local, synthetic data)
 
 - Node `v22.23.4`, vitest `3.2.7`.
-- Core: `npm run build -w @prima/core && (cd packages/core && npx vitest run)`: **881 passed (62 files)**.
-- API: `cd apps/api && npm run build && DATABASE_URL=postgres://postgres@localhost:5433/prima_test DEV_TOKEN_SECRET=ci-only npm test`: **704 passed**, on a throwaway local PostgreSQL only, never staging.
+- Core: `npm run build -w @prima/core && (cd packages/core && npx vitest run)`: **885 passed (62 files)**.
+- API: `cd apps/api && npm run build && DATABASE_URL=postgres://postgres@localhost:5433/prima_test DEV_TOKEN_SECRET=ci-only npm test`: **705 passed**, on a throwaway local PostgreSQL only, never staging.
 - Web type check `npx tsc -p apps/web/tsconfig.json --noEmit` and `npm run build:demo -w @prima/web`: pass. Every `node --test` group of the CI `test` job also passes locally.
 - These are local results. PostgreSQL results come from the local throwaway database; no browser run was repeated for round 3 (core-only change).
 
@@ -71,27 +73,28 @@ Draft PR #49, branch `claude/project-thread-gmzh82`. **Not merged, not deployed,
 - fd7b13c (with 0e91186): run 41588718836 had one failure, the synthetic-browser IT manual smoke (not touched by Finance; passes locally at 1440px/390px), treated as a flake.
 - 632635f (with c16f69b): **green**, runs 41598701483 and 41598691904; the IT manual browser smoke passed (the 41588718836 failure was a flake).
 - b04ce44: **green**, runs 41600616533 and 41600611247.
-- Branch head after 5216e95: see the PR checks.
+- 50719b4 (with 5216e95): **green**, runs 41755833547 and 41755826411; the new budget revision browser check passed in CI.
+- Branch head after 5d4c029: see the PR checks.
 - f9d6ff9: **green**, runs [41561637400](https://github.com/fauzan4377/prima-secure-app/actions/runs/41561637400) and [41561631520](https://github.com/fauzan4377/prima-secure-app/actions/runs/41561631520), all 8 jobs.
 - Earlier failures on f738ee7, 06aa7f3, 11c6376 and 3f71733 never reached a runner (GitHub Actions billing), fixed when the budget was raised.
 
-## 5. Schema and module hashes at 5216e95
+## 5. Schema and module hashes at 5d4c029
 
 - `db/` is identical to `main` (`git diff origin/main -- db` is empty). sha256 of `cat db/migrations/*.sql`: `4b4cf4d3c67d0c5b09ca3c9592c74504a2c7335430dcffeccdd4f48710ed78fe`. **Finance adds no migration.**
 
 | File | sha256 |
 |---|---|
-| `packages/core/src/finance-daily-cash.ts` | `bcaf2a59494bfaf2f9467b48b03981c2515f16ef8f2a074e859f458032de0262` |
-| `packages/core/src/finance.ts` | `631fde71591aa13262562120a37359881c37f8272336b9867c3be2c79b4e39c7` |
-| `packages/core/src/finance-controls.ts` | `2fce61d031fce583f6c4ea9ac2908fdc6341bfc1a8792a1feec6839138993776` |
-| `packages/core/src/finance-plan3.ts` | `2ec5408eb2cf772ab5da76c69e988d6b0ad43b4d121d0a6e20a0259b0a961365` |
-| `packages/core/src/finance-ledger.ts` | `dd8cc5a342d58cf0a2223dc29e26d7bd524740bfd9996ea4b9279dbed6f07e6e` |
-| `packages/core/src/finance-requests.ts` | `9bc29c44d1468b0bd67bcfab83db4854aa21be451d85b110c18d065d2607813c` |
-| `packages/core/src/finance-guides.ts` | `1cb0ac8bb0b82989ec97a813bda96b444aa61b132f5fff6926d417c427ee715f` |
-| `packages/core/src/finance-guide-cards.ts` | `775ffacbe03bb2a66b643460e5d84d405ce023be82eb2ca73c805c4ff4827a6b` |
-| `packages/core/src/statutory-tables.ts` | `7ec4ad1a1a5e7f2bb75dcb86743b065d39beee52cc2121fa037741448e45c084` |
-| `apps/api/src/pg-store.ts` | `9aee683f81b27b65dc26317a15ff6a5a382d4b6fe05eb66de51e36f6ff7dbf73` |
-| `packages/core/src/service.ts` | `5c84eeee180928a1de2f1318068d2836ccbd133ab46c6ba3f44757ad0e153424` |
+| `packages/core/src/finance-daily-cash.ts` | `bcaf2a59494bfaf2f9467b48b03981c2515f16ef8f2a074e859f458032de0262`` |
+| `packages/core/src/finance.ts` | `631fde71591aa13262562120a37359881c37f8272336b9867c3be2c79b4e39c7`` |
+| `packages/core/src/finance-controls.ts` | `2dfc9a1be16b2443a78ecb369091a4be6f29e2f5981b08876d61ea3bbf75b5bc`` |
+| `packages/core/src/finance-plan3.ts` | `0fab967c02914a96d7895dadad6b8e95465de2f8193a2f1cba6816ef79472982`` |
+| `packages/core/src/finance-ledger.ts` | `dd8cc5a342d58cf0a2223dc29e26d7bd524740bfd9996ea4b9279dbed6f07e6e`` |
+| `packages/core/src/finance-requests.ts` | `9bc29c44d1468b0bd67bcfab83db4854aa21be451d85b110c18d065d2607813c`` |
+| `packages/core/src/finance-guides.ts` | `1cb0ac8bb0b82989ec97a813bda96b444aa61b132f5fff6926d417c427ee715f`` |
+| `packages/core/src/finance-guide-cards.ts` | `775ffacbe03bb2a66b643460e5d84d405ce023be82eb2ca73c805c4ff4827a6b`` |
+| `packages/core/src/statutory-tables.ts` | `7ec4ad1a1a5e7f2bb75dcb86743b065d39beee52cc2121fa037741448e45c084`` |
+| `apps/api/src/pg-store.ts` | `9aee683f81b27b65dc26317a15ff6a5a382d4b6fe05eb66de51e36f6ff7dbf73`` |
+| `packages/core/src/service.ts` | `5c84eeee180928a1de2f1318068d2836ccbd133ab46c6ba3f44757ad0e153424`` |
 
 ## 6. Installation boundaries
 

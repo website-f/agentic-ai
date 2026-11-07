@@ -504,6 +504,8 @@ export function seesStaffNumbersOf(user: User, companyId: string, which: 'ids' |
 }
 
 export type DataWall =
+  /** Pay formulas, pay law and statutory settings: read, for HR preparing guard and staff pay (guard pay module). */
+  | 'pay_read'
   /** Asset Management records: read. ACT reads them too, to audit (actSignals); it never writes them. */
   | 'asset_read'
   /** Asset Management records: write. */
@@ -527,6 +529,8 @@ export type DataWall =
   | 'staff_faces'
   /** HR, the HR Director and the CEO: confidential HR cases, such as sexual harassment complaints (prima.hr_cases). */
   | 'hr_cases'
+  /** HR, the HR Director and the CEO: people who applied for vacancies (prima.applicants). */
+  | 'applicants'
   /** FWM: read the passport numbers of foreign workers (slice 3G). */
   | 'fw_ids'
   /** The JA Group app feed: writes the guard rows of the HR wall it is the source for (slice 3G). */
@@ -561,6 +565,18 @@ export function seesLoginHandovers(user: User): boolean {
   return user.department === 'it' || (user.role === 'pwvsb_officer' && user.department === 'hr') || isHrDirector(user) || user.opsTier === 'ceo';
 }
 
+/** Ops tiers that use the salary calculator: the OM and above (Fauzan, 6 Nov 2026). */
+export const SALARY_CALC_TIERS = ['om', 'regional', 'ogm', 'ops_director', 'coo', 'ceo'] as const;
+export function salaryCalcTier(user: Pick<User, 'opsTier'>): boolean {
+  return !!user.opsTier && (SALARY_CALC_TIERS as readonly string[]).includes(user.opsTier);
+}
+
+/** Applicants for vacancies (Fauzan, 5 Nov 2026: HR only): HR, the HR Director and the CEO. */
+export function seesApplicants(user: User): boolean {
+  if (user.integration) return false;
+  return (user.role === 'pwvsb_officer' && user.department === 'hr') || isHrDirector(user) || user.opsTier === 'ceo';
+}
+
 /** The department walls this person passes, sent to the database with every request. */
 export function dataWalls(user: User): DataWall[] {
   const out: DataWall[] = [];
@@ -568,9 +584,12 @@ export function dataWalls(user: User): DataWall[] {
   // ACT audits Asset Management; it never changes its records, ACT head included.
   if (assetRole(user) && user.department !== 'audit') out.push('asset_write');
   if (actRole(user)) out.push('act');
+  if (!user.integration && user.role === 'pwvsb_officer' && user.department === 'hr') out.push('pay_read');
   if (pdpaRole(user)) out.push('pdpa');
   if (bcmRole(user)) out.push('bcm');
   if (canCloseAccess(user)) out.push('offboard');
+  // The OM and above read the live guard formulas and pay law for the salary calculator (Fauzan, 6 Nov 2026); read only.
+  if (!user.integration && salaryCalcTier(user) && !out.includes('pay_read')) out.push('pay_read');
   // Walls a department registered from its own module (walls.ts registerWall); never one already listed.
   for (const w of registeredWallsOf(user)) if (!out.includes(w as DataWall)) out.push(w as DataWall);
   // Walls a department registered from its own module (walls.ts registerWall); never one already listed.
@@ -585,6 +604,7 @@ export function dataWalls(user: User): DataWall[] {
   if (seesOwnCompanyStaffNumbers(user)) out.push('staff_company');
   if (!user.integration && ((user.role === 'pwvsb_officer' && user.department === 'hr') || isHrDirector(user))) out.push('staff_faces');
   if (!user.integration && ((user.role === 'pwvsb_officer' && user.department === 'hr') || isHrDirector(user) || user.opsTier === 'ceo')) out.push('hr_cases');
+  if (seesApplicants(user)) out.push('applicants');
   if (!user.integration && user.role === 'pwvsb_officer' && user.department === 'fwm' && user.fwmRole !== 'despatch') out.push('fw_ids');
   if (user.integration === 'ja') out.push('guard_feed');
   if (seesHrLegal(user)) out.push('hr_legal');

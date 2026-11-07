@@ -12,7 +12,7 @@
 //
 // SQL Account stays the books; nothing here posts to it, pays anything or files anything with LHDN or Customs.
 
-import { finBudgetInForce, finBudgetRevisionAction, finLeadAuthors, finPlan3View, finThreeStatementAction } from './finance-plan3';
+import { finBudgetInForce, finBudgetRevisionAction, finLeadAuthors, finPlan3View, finSeqNext, finThreeStatementAction } from './finance-plan3';
 import { AccessDenied, GROUP_EMPLOYER_ID } from './access';
 import {
   FinanceDeskService,
@@ -100,13 +100,14 @@ const prevMonth = (period: string) => {
   const [y, m] = period.split('-').map(Number);
   return m === 1 ? `${y - 1}-12` : `${y}-${String(m - 1).padStart(2, '0')}`;
 };
-import type { FinCheckSection, HostelBill, StaffPayLine, StaffPayRun } from './types';
+import type { EvidenceDoc, FinCheckSection, HostelBill, StaffPayLine, StaffPayRun } from './types';
 import { finStampAction, finStampHome, finStampView } from './finance-stamp';
 import { finIcAction, finIcExceptions, finIcPairs, finIcView } from './finance-intercompany';
 import { finCoaAction, finFiguresAction, finLedgerView, finSqlApply, finSqlBlockers, finSqlDiscoveryAction, type SqlAccountReader } from './finance-ledger';
 import { finCash13, finCash13Action } from './finance-forecast13';
 import { finDashboardRow, finPackData, finPackReview } from './finance-pack';
-import { finDailyCashAction, finDailyCashCollectorView, finDailyCashHome, finDailyCashView, type FinDailyCashCtx } from './finance-daily-cash';
+import { finDailyCashAction, finDailyCashCollectorView, finDailyCashDecisions, finDailyCashHome, finDailyCashReceiptsDue, finDailyCashView, type FinDailyCashCtx } from './finance-daily-cash';
+import { sha256Hex } from './audit';
 import { finAllocateAction, finBillingAction, finGovtAction, finMatchGovt, finMoneyInHome, finMoneyInView, finUnmatchGovt } from './finance-billing';
 
 const KINDS: FinPayeeKind[] = ['supplier', 'statutory', 'payroll', 'tax', 'intercompany', 'other'];
@@ -410,7 +411,7 @@ export const FIN_CHECK_SECTION_OF: Record<string, FinCheckSection> = {
   'ss.toCheck': 'out', 'ss.toReview': 'out', 'cr.overridesToSee': 'in', 'cr.balanceStale': 'in', 'ye.toPost': 'tax', 'ye.whtLate': 'tax', 'ye.whtSoon': 'tax', 'ye.whtToCheck': 'tax', 'ye.auditMine': 'tax', 'ye.auditLate': 'tax',
   verify: 'out', 'reg.late': 'out', 'reg.dueSoon': 'out', 'reg.toPay': 'out', 'reg.noBill': 'out', 'reg.toCheck': 'out', 'reg.gToCheck': 'out', 'reg.expiring': 'out',
   'reg.gExpiring': 'out', 'reg.gClaim': 'out', 'reg.gWaiting': 'out', 'reg.hostelUnseen': 'out', 'reg.hostelOverdue': 'out', 'dc.toApprove': 'out', 'dc.toPrepare': 'out',
-  'dc.toSettle': 'out', 'dc.lateSettle': 'out', 'dc.differences': 'out', 'cash.mandateIssues': 'out', 'cash.mandateToCheck': 'out', 'cash.mandateMissing': 'out',
+  'dc.toTransfer': 'out', 'dc.toClose': 'out', 'dc.toSettle': 'out', 'dc.lateSettle': 'out', 'dc.differences': 'out', 'cash.mandateIssues': 'out', 'cash.mandateToCheck': 'out', 'cash.mandateMissing': 'out',
   bankFail: 'bank', 'reg.notSeen': 'bank', 'bk.fdDecide': 'bank', 'bk.fdMatured': 'bank', 'bk.fdToCheck': 'bank', 'bk.chargesOver': 'bank',
   arStale: 'in', arToReview: 'in', writeOffs: 'in', arApprove: 'in', ageReview: 'in', receiptsWaiting: 'in', 'mi.billMissing': 'in', 'mi.billToCheck': 'in',
   'mi.govtStale': 'in', 'mi.govtOverdue': 'in', 'mi.govtFollowToday': 'in', 'mi.unidentified': 'in', 'mi.unidentifiedLate': 'in', 'mi.allocToCheck': 'in',
@@ -942,9 +943,33 @@ export class FinanceControlsService {
   private isCollector(u: User) {
     return isFinCoo(u) || finActor(u)?.kind === 'ceo';
   }
+  /** The Director Office lists people for cash (Fauzan, 6 Nov 2026), as for the guard pay run. */
+  private isDirectorOffice(u: User) {
+    return !u.integration && u.role === 'pwvsb_officer' && u.department === 'director_office';
+  }
+  /**
+   * The COO approves a stamped consent letter for pay into a third party's account (Fauzan, 6 Nov 2026), as on the guard
+   * pay run. The CEO may stand in only through the existing pilot rule (RULES.pilot on, CEO tier: the service's
+   * pilotApproves), per Fauzan's review note 7 Nov 2026, item 2.
+   */
+  private isConsentApprover(u: User) {
+    return isFinCoo(u) || (RULES.pilot.value.on && !u.integration && u.opsTier === 'ceo');
+  }
   private async dailyCtx(user: User, a: FinActor | null): Promise<FinDailyCashCtx> {
     const users = new Map((await this.store.list('users')).map((u) => [u.id, u]));
-    return { user, a, collector: this.isCollector(user), today: this.today(), sign: (comment = '') => this.sign(user, comment), userById: (id) => users.get(id), isCollector: (u) => this.isCollector(u) };
+    const collector = this.isCollector(user);
+    return {
+      user,
+      a,
+      collector,
+      today: this.today(),
+      sign: (comment = '') => this.sign(user, comment),
+      userById: (id) => users.get(id),
+      isCollector: (u) => this.isCollector(u),
+      directorOffice: this.isDirectorOffice(user),
+      consentApprover: this.isConsentApprover(user),
+      tier: collector ? (isFinCoo(user) ? 'coo' : 'ceo') : null,
+    };
   }
 
   /**
@@ -953,6 +978,22 @@ export class FinanceControlsService {
    * the company's row directly, for companies he can see).
    */
   async dailyCashAction(user: User, companyId: Id, action: string, input: Record<string, unknown>) {
+    // How each person is paid (Fauzan, 6 Nov 2026): the Director Office lists for cash, the COO or CEO decides, the COO
+    // approves a consent letter. None of them is a Finance actor, so these go through the company's row directly.
+    const outside: Record<string, [(u: User) => boolean, string]> = {
+      listCash: [(u) => this.isDirectorOffice(u), '(only the Director Office lists people for cash)'],
+      unlistCash: [(u) => this.isDirectorOffice(u), '(only the Director Office lists people for cash)'],
+      decideCash: [(u) => this.isCollector(u), '(only the COO or the CEO gives cash)'],
+      approveConsent: [(u) => this.isConsentApprover(u), '(only the COO approves a consent letter)'],
+    };
+    if (action === 'receipt') return this.dailyCashReceipt(user, companyId, input);
+    if (outside[action]) {
+      const [may, why] = outside[action];
+      if (!may(user)) throw new AccessDenied('view', why);
+      if (!(await this.desk.companies(user)).includes(companyId)) throw new NotFound('Company books');
+      const ctx = await this.dailyCtx(user, finActor(user));
+      return this.ownChange<unknown>(user, companyId, (f) => finDailyCashAction(ctx, f, action, input));
+    }
     if (['received', 'pay', 'giveBack'].includes(action)) {
       if (!this.isCollector(user)) throw new AccessDenied('view', '(only the COO or the CEO collects and pays the daily cash)');
       if (!(await this.desk.companies(user)).includes(companyId)) throw new NotFound('Company books');
@@ -963,20 +1004,79 @@ export class FinanceControlsService {
     return this.change<unknown>(user, companyId, (f, a) => finDailyCashAction({ ...ctx, a }, f, action, input));
   }
 
+  /**
+   * The Director Office uploads the signed receipt for a cash payment (Fauzan, 6 Nov 2026: "Signed paper of the receive
+   * collected and upload as proof. Upload done by director office."). The file is kept in evidenceDocs behind the
+   * company wall, with its SHA-256; the same file cannot be given twice.
+   */
+  private async dailyCashReceipt(user: User, companyId: Id, input: Record<string, unknown>) {
+    if (!this.isDirectorOffice(user)) throw new AccessDenied('view', '(only the Director Office uploads the signed receipts)');
+    if (!(await this.desk.companies(user)).includes(companyId)) throw new NotFound('Company books');
+    const data = typeof input.data === 'string' ? input.data : '';
+    const m = /^data:(application\/pdf|image\/jpeg|image\/png);base64,[A-Za-z0-9+/=]+$/.exec(data);
+    if (!m) throw new BadRequest('The signed receipt must be a PDF, JPEG or PNG file.');
+    const bytes = Math.floor(((data.length - data.indexOf(',') - 1) * 3) / 4);
+    const max = RULES.caseProof.value.maxDocBytes;
+    if (bytes > max) throw new BadRequest(`The file is too large (over ${Math.round(max / 1000)} KB). Scan it smaller.`);
+    const sha256 = sha256Hex(data);
+    const name = (typeof input.name === 'string' ? input.name : '').trim().slice(0, 120) || 'Signed receipt';
+    const ctx = await this.dailyCtx(user, finActor(user));
+    const doc: EvidenceDoc = {
+      id: `doc-${sha256.slice(0, 16)}`,
+      companyId,
+      caseId: null,
+      followUpId: null,
+      dailyCashId: typeof input.listId === 'string' ? input.listId.slice(0, 120) : null,
+      name,
+      mime: m[1] as EvidenceDoc['mime'],
+      bytes,
+      sha256,
+      data,
+      caption: 'Daily cash signed receipt',
+      uploadedBy: user.name,
+      receivedAt: this.now(),
+    };
+    return this.store.transaction(async (tx) => {
+      await tx.lock?.('finStatus', `fin-${companyId}`);
+      const f = await tx.get('finStatus', `fin-${companyId}`);
+      if (!f) throw new NotFound('Company books');
+      const out = finDailyCashAction(ctx, f, 'receipt', { listId: input.listId, payoutId: input.payoutId, doc: { id: doc.id, name, sha256 } });
+      if (await tx.get('evidenceDocs', doc.id)) throw new BadRequest(`"${name}" was already given as proof.`);
+      await tx.insert('evidenceDocs', doc);
+      await tx.update('finStatus', f.id, out.patch);
+      await this.desk.log(tx, user, f, out.action, out.summary.slice(0, 900));
+      return out.result;
+    });
+  }
+
   /** The COO's or CEO's own daily cash: handed to them, people to pay today, what to give back. */
   async dailyCashMine(user: User) {
-    if (!this.isCollector(user)) return { lists: [], collectors: [] };
+    const who = { directorOffice: this.isDirectorOffice(user), collector: this.isCollector(user), consentApprover: this.isConsentApprover(user) };
+    if (!who.directorOffice && !who.collector && !who.consentApprover) return { lists: [], collectors: [], decisions: [], receipts: [] };
     const ids = await this.desk.companies(user);
-    const rows = await this.store.list('finStatus', { companyId: ids });
+    const rows = (await this.store.list('finStatus', { companyId: ids })).filter((f) => ids.includes(f.companyId));
     const today = this.today();
-    return { lists: rows.filter((f) => ids.includes(f.companyId)).flatMap((f) => finDailyCashCollectorView(f, user, today).map((l) => ({ ...l, companyId: f.companyId }))), collectors: [] };
+    return {
+      lists: who.collector ? rows.flatMap((f) => finDailyCashCollectorView(f, user, today).map((l) => ({ ...l, companyId: f.companyId }))) : [],
+      collectors: [],
+      /** People waiting for the Director Office, the COO or CEO, or the COO (Fauzan, 6 Nov 2026). */
+      decisions: rows.flatMap((f) => finDailyCashDecisions(f, user, who)),
+      /** Cash payments waiting for the Director Office to upload the signed receipt. */
+      receipts: who.directorOffice ? rows.flatMap((f) => finDailyCashReceiptsDue(f)) : [],
+    };
   }
 
   /** Home lines for the COO or CEO holding daily cash. */
-  async dailyCashCollectorHome(user: User): Promise<{ tone: 'crit' | 'warn' | 'info'; tag: string; title: string; detail: string; go: { view: 'finance' } }[]> {
-    const { lists } = await this.dailyCashMine(user);
-    const go = { view: 'finance' as const };
-    const out: { tone: 'crit' | 'warn' | 'info'; tag: string; title: string; detail: string; go: { view: 'finance' } }[] = [];
+  async dailyCashCollectorHome(user: User): Promise<{ tone: 'crit' | 'warn' | 'info'; tag: string; title: string; detail: string; go: { view: 'finance' | 'doa' } }[]> {
+    const { lists, decisions, receipts } = await this.dailyCashMine(user);
+    // The Director Office works from its own screen; the COO and CEO from Finance.
+    const go = { view: this.isDirectorOffice(user) ? ('doa' as const) : ('finance' as const) };
+    const out: { tone: 'crit' | 'warn' | 'info'; tag: string; title: string; detail: string; go: { view: 'finance' | 'doa' } }[] = [];
+    const need = (k: string) => decisions.reduce((n, l) => n + l.people.filter((p) => p.need === k).length, 0);
+    if (need('list')) out.push({ tone: 'warn', tag: 'Finance', title: `${need('list')} person(s) asked to be paid daily in cash`, detail: 'List each one for cash with the reason, for the COO or CEO to decide', go });
+    if (receipts.length) out.push({ tone: 'warn', tag: 'Finance', title: `${receipts.length} daily cash payment(s) waiting for the signed receipt`, detail: 'Collect the signed paper and upload it', go });
+    if (need('decide')) out.push({ tone: 'warn', tag: 'Finance', title: `${need('decide')} daily cash request(s) to give or refuse`, detail: 'Listed by the Director Office; everyone else is paid by bank or e-wallet', go });
+    if (need('consent')) out.push({ tone: 'warn', tag: 'Finance', title: `${need('consent')} consent letter(s) to approve for daily pay`, detail: "Paid into a relative's or friend's account; check the Commissioner for Oaths stamp", go });
     const confirm = lists.reduce((n, l) => n + l.toConfirm.length, 0);
     const today = lists.reduce((n, l) => n + l.dueToday.length, 0);
     const back = lists.filter((l) => l.giveBackDue).length;
@@ -2273,17 +2373,20 @@ export class FinanceControlsService {
         const assumptions = text(input.assumptions, 'Assumptions (guards, rates, new contracts, wage changes)', 10, 2000);
         const authorIds = [...new Set([...(plan.budget.authorIds ?? []), ...(plan.budget.prepared ? [plan.budget.prepared.byId] : []), user.id])];
         const leadAuthors = finLeadAuthors(a, plan.budget.leadAuthors, 'budget');
-        const next = { ...plan, budget: { ...plan.budget, months, assumptions, status: 'draft' as const, prepared: this.sign(user), authorIds, leadAuthors } };
+        // A change to a budget already drafted names the edit it was shown (stale screens); the first draft starts at 1.
+        const seq = plan.budget.prepared ? finSeqNext(plan.budget, input, 'budget') : 1;
+        const next = { ...plan, budget: { ...plan.budget, months, assumptions, status: 'draft' as const, seq, prepared: this.sign(user), authorIds, leadAuthors } };
         return { patch: save(next), action: 'finance.budget.drafted', summary: `Budget ${year} drafted: revenue RM${sum(months.revenue).toFixed(2)}.`, result: next };
       }
       if (action === 'submit') {
         if (plan.budget.status !== 'draft' && plan.budget.status !== 'returned') throw new BadRequest('Only a draft or returned budget is submitted.');
         if (!plan.budget.prepared) throw new BadRequest('Draft it first.');
+        const seq = finSeqNext(plan.budget, input, 'budget');
         // The recorded preparer stays; the submitter is added to the authors, so neither can approve it.
         const authorIds = [...new Set([...(plan.budget.authorIds ?? []), plan.budget.prepared.byId, user.id])];
         const next = {
           ...plan,
-          budget: { ...plan.budget, status: 'submitted' as const, authorIds, leadAuthors: finLeadAuthors(a, plan.budget.leadAuthors, 'budget'), submitted: this.sign(user, typeof input.comment === 'string' ? input.comment.trim().slice(0, 500) : '') },
+          budget: { ...plan.budget, status: 'submitted' as const, seq, authorIds, leadAuthors: finLeadAuthors(a, plan.budget.leadAuthors, 'budget'), submitted: this.sign(user, typeof input.comment === 'string' ? input.comment.trim().slice(0, 500) : '') },
         };
         return { patch: save(next), action: 'finance.budget.submitted', summary: `Budget ${year} submitted for approval.`, result: next };
       }
@@ -2292,10 +2395,11 @@ export class FinanceControlsService {
         if (!isLead(a)) throw new AccessDenied('view', '(the Finance Director or the CEO approves the budget)');
         const authors = new Set([...(plan.budget.authorIds ?? []), plan.budget.prepared?.byId, plan.budget.submitted?.byId]);
         if (authors.has(user.id)) throw new AccessDenied('view', '(nobody approves a budget they drafted or submitted)');
+        const seq = finSeqNext(plan.budget, input, 'budget');
         const next =
           action === 'approve'
-            ? { ...plan, budget: { ...plan.budget, status: 'approved' as const, approved: this.sign(user, requireComment(input.comment, 'approve')) } }
-            : { ...plan, budget: { ...plan.budget, status: 'returned' as const, returned: this.sign(user, requireReason(input.comment, 'return it')) } };
+            ? { ...plan, budget: { ...plan.budget, status: 'approved' as const, seq, approved: this.sign(user, requireComment(input.comment, 'approve')) } }
+            : { ...plan, budget: { ...plan.budget, status: 'returned' as const, seq, returned: this.sign(user, requireReason(input.comment, 'return it')) } };
         return { patch: save(next), action: `finance.budget.${action}`, summary: `Budget ${year} ${action === 'approve' ? 'approved' : 'returned'}.`, result: next };
       }
       if (action === 'actuals') {
@@ -2663,7 +2767,7 @@ export class FinanceControlsService {
     const cash = { mandateMissing: 0, mandateIssues: [] as string[], mandateToCheck: 0, advOverdue: 0, advToCheck: 0, pettyToCheck: 0, pettyCount: 0, pettyTopUp: 0, cardToCheck: 0, cardToReview: 0, cardLoad: 0 };
     const allContracts = await this.contractsOf(rows.map((r) => r.companyId));
     const stamp = { stampLate: 0, stampDue: 0, stampToCheck: 0, refundOpen: 0, refundLate: 0 };
-    const dc = { toApprove: 0, toPrepare: 0, toSettle: 0, lateSettle: 0, differences: 0 };
+    const dc = { toApprove: 0, toPrepare: 0, toTransfer: 0, toClose: 0, toSettle: 0, lateSettle: 0, differences: 0 };
     const c13 = { short: [] as string[], review: 0 };
     const icGroup = await this.store.get('finStatus', `fin-${GROUP_EMPLOYER_ID}`);
     let icOpen = 0;
@@ -2872,7 +2976,10 @@ export class FinanceControlsService {
     if (c13.review) items.push({ tone: 'info', tag: 'Finance', title: `${c13.review} 13-week cash forecast(s) to review this week`, detail: 'Look over the weeks ahead and add what Prima cannot know', go: go('c13.review') });
     // Daily cash pay (Fauzan, 2 Nov 2026).
     if (dc.toApprove) items.push({ tone: 'crit', tag: 'Finance', title: `${dc.toApprove} daily cash list(s) to approve`, detail: 'Only the Finance Director approves; cash is prepared after', go: go('dc.toApprove') });
-    if (dc.toPrepare && a.kind !== 'ceo') items.push({ tone: 'warn', tag: 'Finance', title: `${dc.toPrepare} approved daily cash list(s): prepare the cash`, detail: 'Withdraw up to the approved total and hand it to the COO or CEO', go: go('dc.toPrepare') });
+    if (dc.toPrepare && a.kind !== 'ceo') items.push({ tone: 'warn', tag: 'Finance', title: `${dc.toPrepare} approved daily cash list(s): prepare the cash`, detail: 'Withdraw only the pay of the people given cash and hand it to the COO or CEO', go: go('dc.toPrepare') });
+    // Bank or e-wallet only (Fauzan, 6 Nov 2026).
+    if (dc.toTransfer && a.kind !== 'ceo') items.push({ tone: 'warn', tag: 'Finance', title: `${dc.toTransfer} daily cash list(s) with days to pay by transfer`, detail: 'Pay each worked day to the bank account or e-wallet and record the reference', go: go('dc.toTransfer') });
+    if (dc.toClose && a.kind !== 'ceo') items.push({ tone: 'info', tag: 'Finance', title: `${dc.toClose} daily cash list(s) ended: close them`, detail: 'Paid by transfer only; no cash to count', go: go('dc.toClose') });
     if (dc.toSettle && a.kind !== 'ceo') items.push({ tone: 'warn', tag: 'Finance', title: `${dc.toSettle} daily cash list(s) to settle`, detail: 'Count the unpaid cash given back and bank it', go: go('dc.toSettle') });
     if (dc.lateSettle) items.push({ tone: 'crit', tag: 'Finance', title: `${dc.lateSettle} daily cash list(s) not settled in time`, detail: 'Cash still out after the list ended', go: go('dc.lateSettle') });
     if (dc.differences) items.push({ tone: 'crit', tag: 'Finance', title: `${dc.differences} daily cash difference(s) to accept`, detail: 'Cash withdrawn not matched by payments and cash given back', go: go('dc.differences') });

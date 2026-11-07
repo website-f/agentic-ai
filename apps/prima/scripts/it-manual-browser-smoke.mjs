@@ -28,15 +28,23 @@ function Fixture(){const[mode,setMode]=useState('intake'),[revision,setRevision]
 createRoot(document.getElementById('root')).render(<React.StrictMode><Fixture/></React.StrictMode>);
 `;
 let server,browser;
+const diagnostics=[];
 try{
  await writeFile(resolve(dir,'index.html'),'<html><head><meta name="viewport" content="width=device-width,initial-scale=1"></head><body><div id="root"></div><script type="module" src="/main.tsx"></script></body></html>');
  await writeFile(resolve(dir,'main.tsx'),harness);
  server=await createServer({configFile:false,root:dir,cacheDir:resolve(dir,'.vite-cache'),optimizeDeps:{entries:[resolve(dir,'main.tsx')],include:['react','react-dom/client','react/jsx-runtime','react/jsx-dev-runtime']},logLevel:'error',esbuild:{jsx:'automatic'},server:{host:'127.0.0.1',port:0,fs:{allow:[root]}},plugins:[{name:'manual-synthetic-only',enforce:'pre',resolveId(id,importer){if((importer?.endsWith('/src/views/ItManual.tsx')||importer?.endsWith('/src/views/ItCorrections.tsx')||importer?.endsWith('/src/views/ItCleanup.tsx'))&&id==='../App')return'\0manual-app';if(((importer?.endsWith('/src/views/ItManual.tsx')||importer?.endsWith('/src/views/ItCorrections.tsx')||importer?.endsWith('/src/views/ItCleanup.tsx'))&&id==='../api')||(importer?.endsWith('/src/ui.tsx')&&id==='./api'))return'\0manual-api';},load(id){if(id==='\0manual-app')return'export const useApp=()=>({me:{user:{id:window.__manualUser()}}});';if(id==='\0manual-api')return'export class ApiError extends Error{}; export const api={itManualAct:(...args)=>window.__manualCall(...args)};';}}]});
- await server.listen();await server.transformRequest('/main.tsx');await server.waitForRequestsIdle();const origin=`http://127.0.0.1:${server.httpServer.address().port}`;
+ await server.listen();
+ const transformed=await server.transformRequest('/main.tsx');
+ assert.ok(transformed?.code.includes('ItManualPanel'),'Synthetic manual fixture must transform before browser navigation');
+ await server.waitForRequestsIdle();const origin=`http://127.0.0.1:${server.httpServer.address().port}`;
  const{chromium}=await import(pathToFileURL(process.env.PLAYWRIGHT_MODULE).href);browser=await chromium.launch({headless:true});
  for(const viewport of[{width:1440,height:1000},{width:390,height:844}]){
   const context=await browser.newContext({viewport});const page=await context.newPage();const errors=[];let external=0;
-  page.on('pageerror',e=>errors.push(e.message));await page.route('**/*',r=>{const u=new URL(r.request().url());if(u.origin===origin&&!u.pathname.startsWith('/api/'))return r.continue();external++;return r.abort();});
+  page.on('pageerror',e=>{errors.push(e.message);diagnostics.push({kind:'pageerror',width:viewport.width,message:e.message});});
+  page.on('console',m=>{if(m.type()==='error')diagnostics.push({kind:'console',width:viewport.width,message:m.text()});});
+  page.on('requestfailed',r=>diagnostics.push({kind:'requestfailed',width:viewport.width,url:r.url(),failure:r.failure()?.errorText}));
+  page.on('response',r=>{if(r.status()>=400)diagnostics.push({kind:'http',width:viewport.width,status:r.status(),url:r.url()});});
+  await page.route('**/*',r=>{const u=new URL(r.request().url());if(u.origin===origin&&!u.pathname.startsWith('/api/'))return r.continue();external++;return r.abort();});
   await page.goto(origin);
   const writes=()=>page.evaluate(()=>window.__manual.calls.filter(x=>x.action.startsWith('create')));
   const save=()=>page.getByRole('button',{name:'Save manual record',exact:true});
@@ -63,4 +71,10 @@ try{
   await page.getByRole('button',{name:'Add joining / leaving request',exact:true}).click();await page.getByLabel('Existing authorized staff identity (optional)').selectOption('person-1');await page.evaluate(()=>window.__changeUser('owner-b',true));await page.getByText('Loading manual IT options for your account',{exact:false}).waitFor();assert.equal(await page.getByText('Synthetic A Person',{exact:true}).count(),0);await page.waitForFunction(()=>typeof window.__manual.release==='function');await page.evaluate(()=>{window.__manual.holdBoard=false;window.__manual.release()});await page.getByLabel('Existing authorized staff identity (optional)').waitFor();assert.equal(await page.getByRole('option',{name:'Synthetic B Person',exact:true}).count(),1);assert.equal(await page.getByRole('option',{name:'Synthetic A Person',exact:true}).count(),0);
   assert.equal(external,0);assert.deepEqual(errors,[]);await context.close();console.log(`ok manual IT four intakes, keyboard submission, cancel, duplicate prevention, reload recovery and identity isolation at ${viewport.width}px`);
  }
+}catch(error){
+ for(const context of browser?.contexts()??[])for(const page of context.pages()){
+  try{diagnostics.push({kind:'page-snapshot',url:page.url(),body:(await page.locator('body').innerText()).slice(0,4000),actions:await page.evaluate(()=>window.__manual?.calls?.map(c=>c.action)??null)});}catch{diagnostics.push({kind:'snapshot-unavailable'});}
+ }
+ console.error('Synthetic manual IT failure diagnostics',JSON.stringify(diagnostics));
+ throw error;
 }finally{await browser?.close();await server?.close();await rm(dir,{recursive:true,force:true});}

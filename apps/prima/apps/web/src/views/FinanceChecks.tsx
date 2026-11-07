@@ -1985,16 +1985,16 @@ function Plan({ v, co, lead, me }: { v: FinControls; co: Co; lead: boolean; me: 
           {b?.status === 'submitted' && (
             <div className="row fin-mb">
               <input className="input" placeholder="Comment (needed; 10+ characters to return)" value={f.comment ?? ''} onChange={set('comment')} />
-              <button className="btn btn-sm btn-primary" disabled={act.busy || !(f.comment ?? '').trim()} onClick={() => go('plan', 'approve', { year: pv.year, comment: f.comment }, 'Budget approved.')}>
+              <button className="btn btn-sm btn-primary" disabled={act.busy || !(f.comment ?? '').trim()} onClick={() => go('plan', 'approve', { year: pv.year, seq: b.seq ?? 0, comment: f.comment }, 'Budget approved.')}>
                 Approve budget
               </button>
-              <button className="btn btn-sm" disabled={act.busy || (f.comment ?? '').trim().length < 10} onClick={() => go('plan', 'return', { year: pv.year, comment: f.comment }, 'Budget returned.')}>
+              <button className="btn btn-sm" disabled={act.busy || (f.comment ?? '').trim().length < 10} onClick={() => go('plan', 'return', { year: pv.year, seq: b.seq ?? 0, comment: f.comment }, 'Budget returned.')}>
                 Return
               </button>
             </div>
           )}
           {(b?.status === 'draft' || b?.status === 'returned') && b.prepared && (
-            <button className="btn btn-sm btn-primary fin-mb" disabled={act.busy} onClick={() => go('plan', 'submit', { year: pv.year }, 'Budget submitted for approval.')}>
+            <button className="btn btn-sm btn-primary fin-mb" disabled={act.busy} onClick={() => go('plan', 'submit', { year: pv.year, seq: b.seq ?? 0 }, 'Budget submitted for approval.')}>
               Submit budget for approval
             </button>
           )}
@@ -2015,7 +2015,7 @@ function Plan({ v, co, lead, me }: { v: FinControls; co: Co; lead: boolean; me: 
                 <button
                   className="btn btn-sm btn-primary"
                   disabled={act.busy}
-                  onClick={() => act.run(async () => api.finControlAction(v.companyId, 'plan', 'draft', { year: pv.year, months: figures(), assumptions: f.assumptions }), 'Budget draft saved.')}
+                  onClick={() => act.run(async () => api.finControlAction(v.companyId, 'plan', 'draft', { year: pv.year, ...(b?.prepared ? { seq: b.seq ?? 0 } : {}), months: figures(), assumptions: f.assumptions }), 'Budget draft saved.')}
                 >
                   Save draft
                 </button>

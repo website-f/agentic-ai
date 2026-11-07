@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { FileTextIcon, HourglassIcon, LightningIcon, TrayIcon } from '@phosphor-icons/react';
 import { JointTenders } from './JointTenders';
 import { DirectorDesk } from './DirectorDesk';
+import { MyDailyCash } from './FinanceDailyCash';
 import { api } from '../api';
 import { useApp } from '../App';
 import { Chip, ErrorNotice, Loading, dateLabel, useLoad } from '../ui';
@@ -178,6 +179,7 @@ export function DirectorOfficeView() {
       </Card>
 
       <DirectorDesk />
+      <MyDailyCash />
       <JointTenders board={data} />
     </div>
   );

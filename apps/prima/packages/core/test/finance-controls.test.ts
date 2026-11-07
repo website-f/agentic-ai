@@ -337,10 +337,10 @@ describe('budget and forecast', () => {
     await expect(svc.financeControls.planAction(de, T1, 'draft', draft)).rejects.toBeInstanceOf(AccessDenied);
     await expect(svc.financeControls.planAction(dep, T1, 'draft', { ...draft, months: { revenue: [1, 2] } })).rejects.toThrow(/12 monthly amounts/);
     await svc.financeControls.planAction(dep, T1, 'draft', draft);
-    await svc.financeControls.planAction(dep, T1, 'submit', { year: 2026 });
-    await expect(svc.financeControls.planAction(ceo, T1, 'approve', { year: 2026, comment: '' })).rejects.toThrow(/comment/);
-    await expect(svc.financeControls.planAction(chair, T1, 'approve', { year: 2026, comment: 'ok' })).rejects.toBeInstanceOf(AccessDenied);
-    await svc.financeControls.planAction(fd, T1, 'approve', { year: 2026, comment: 'Approved with 5% contingency' });
+    await svc.financeControls.planAction(dep, T1, 'submit', { year: 2026, seq: 1 });
+    await expect(svc.financeControls.planAction(ceo, T1, 'approve', { year: 2026, seq: 2, comment: '' })).rejects.toThrow(/comment/);
+    await expect(svc.financeControls.planAction(chair, T1, 'approve', { year: 2026, seq: 2, comment: 'ok' })).rejects.toBeInstanceOf(AccessDenied);
+    await svc.financeControls.planAction(fd, T1, 'approve', { year: 2026, seq: 2, comment: 'Approved with 5% contingency' });
     await expect(svc.financeControls.planAction(dep, T1, 'draft', draft)).rejects.toThrow(/use the forecast/);
     await svc.financeControls.planAction(de, T1, 'actuals', { year: 2026, month: '2026-09', values: { revenue: 85_000, guard_cost: 70_500 }, source: 'SQL P&L Sep.pdf' });
     await expect(svc.financeControls.planAction(de, T1, 'actuals', { year: 2026, month: '2026-10', values: { revenue: 1 }, source: 'x.pdf' })).rejects.toThrow(/ended/);
@@ -359,8 +359,8 @@ describe('budget and forecast', () => {
     const [dep, fd] = await who(svc, 'u-fin-t1-dep', 'u-fd');
     const figs = { revenue: months(100_000) };
     await svc.financeControls.planAction(dep, T1, 'draft', { year: 2026, months: figs, assumptions: '120 guards at RM2,900; no new contracts' });
-    await svc.financeControls.planAction(dep, T1, 'submit', { year: 2026 });
-    await svc.financeControls.planAction(fd, T1, 'approve', { year: 2026, comment: 'Approved.' });
+    await svc.financeControls.planAction(dep, T1, 'submit', { year: 2026, seq: 1 });
+    await svc.financeControls.planAction(fd, T1, 'approve', { year: 2026, seq: 2, comment: 'Approved.' });
     let plan = (await svc.financeControls.view(fd, T1)).plan;
     expect([plan.forecastDue, plan.yearlyDue, plan.quarterEnd]).toEqual([true, true, true]); // September closed = Q3
     const f = (x: Record<string, unknown>) => svc.financeControls.planAction(dep, T1, 'forecast', { year: 2026, months: figs, note: 'Q3 outlook after Kepong loss', ...x });
@@ -495,9 +495,9 @@ describe('review findings (Arisha main, 1 Nov 2026)', () => {
     const [dep, fd, ceo] = await who(svc, 'u-fin-t1-dep', 'u-fd', 'u-fauzan');
     const draft = { year: 2027, months: { revenue: Array(12).fill(1_000) }, assumptions: 'Flat revenue for the test year' };
     await svc.financeControls.planAction(fd, T1, 'draft', draft);
-    await svc.financeControls.planAction(dep, T1, 'submit', { year: 2027 });
-    await expect(svc.financeControls.planAction(fd, T1, 'approve', { year: 2027, comment: 'ok' })).rejects.toBeInstanceOf(AccessDenied);
-    expect((await svc.financeControls.planAction(ceo, T1, 'approve', { year: 2027, comment: 'Approved.' })) as { budget: { status: string } }).toMatchObject({ budget: { status: 'approved' } });
+    await svc.financeControls.planAction(dep, T1, 'submit', { year: 2027, seq: 1 });
+    await expect(svc.financeControls.planAction(fd, T1, 'approve', { year: 2027, seq: 2, comment: 'ok' })).rejects.toBeInstanceOf(AccessDenied);
+    expect((await svc.financeControls.planAction(ceo, T1, 'approve', { year: 2027, seq: 2, comment: 'Approved.' })) as { budget: { status: string } }).toMatchObject({ budget: { status: 'approved' } });
   });
 });
 
@@ -878,8 +878,8 @@ describe('review findings on 4f07420 (Arisha main, 1 Nov 2026)', () => {
     const [dep, fd] = await who(svc, 'u-fin-t1-dep', 'u-fd');
     const figs = { revenue: Array(12).fill(100_000) };
     await svc.financeControls.planAction(dep, T1, 'draft', { year: 2026, months: figs, assumptions: '120 guards at RM2,900; no new contracts' });
-    await svc.financeControls.planAction(dep, T1, 'submit', { year: 2026 });
-    await svc.financeControls.planAction(fd, T1, 'approve', { year: 2026, comment: 'Approved.' });
+    await svc.financeControls.planAction(dep, T1, 'submit', { year: 2026, seq: 1 });
+    await svc.financeControls.planAction(fd, T1, 'approve', { year: 2026, seq: 2, comment: 'Approved.' });
     const at = async (day: string) => {
       const s2 = new PrimaService(new MemoryStore(ds), () => myt(day, '10:00'));
       return { s2, plan: (await s2.financeControls.view(await s2.user('u-fd'), T1)).plan };

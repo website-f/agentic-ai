@@ -1,0 +1,33 @@
+{
+  "status": "PROPOSED, not in db/release-manifest.json. Fauzan approved installing it on 5 Nov 2026 (thread answer 2: \"Yes\"); the install still goes through the release path and its migration window (run-db-migration.sh, CEO-run). This file does not install anything. Site man-hours approvals, public holiday lists and CEO pay law settings (Fauzan, 6 Nov 2026) were added to the same module afterwards, before any install.",
+  "base": {
+    "path": "db/migrations/001_init.sql",
+    "sha256": "76161ab46dd145158cd06277b0c80654e5a5150c2a2dae593ee087d54052ccfc"
+  },
+  "after": [
+    "procurement",
+    "rental_corrections",
+    "cleanup",
+    "metrics",
+    "job_email"
+  ],
+  "modules": [
+    {
+      "id": "pay_formulas",
+      "version": 1,
+      "path": "db/modules/pay-formulas-v1.sql",
+      "sha256": "4449424d3584820331563c81cd392ff9dd1983a01532117c398c5a614a6dc3d3",
+      "requires": [],
+      "switch": "None separate: the API detects prima.pay_formulas, prima.pay_formula_uses, prima.site_hours_approvals, prima.public_holiday_lists and prima.pay_law_versions. Before the install the Pay formulas screen shows none, Site man-hours shows no approvals or holiday lists, and every save, approval or list is refused with a plain message.",
+      "uses": [
+        "prima.has_wall(text) (base)",
+        "prima.visible_companies() (base)",
+        "role prima_app (base)",
+        "prima.audit (base, written by the API)"
+      ],
+      "definer": "None.",
+      "repeatSafe": true,
+      "rollback": "Revoke INSERT, UPDATE on prima.pay_formulas, prima.pay_formula_uses, prima.pay_law_versions and prima.public_holiday_lists and INSERT on prima.site_hours_approvals from prima_app (the screens go read-only and saving fails). Keep the tables: formula versions, place choices, man-hours approvals and holiday lists are pay records and their history is in the audit log."
+    }
+  ]
+}
