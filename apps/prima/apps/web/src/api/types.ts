@@ -205,6 +205,15 @@ export type PurBoard = R<'purBoard'>;
 export type ItemBoard = Awaited<ReturnType<PrimaService['items']['board']>>;
 export type ItemPassport = Awaited<ReturnType<PrimaService['items']['resolve']>>;
 export type ItemDevicePending = Awaited<ReturnType<PrimaService['items']['devicePending']>>;
+// P85: scanning, labels, site board, counts, reports and the export-only Finance outbox of the item register.
+type ItemsSvc = PrimaService['items'];
+export type ItemScanVerdict = Awaited<ReturnType<ItemsSvc['scanCheck']>>;
+export type ItemLabelBatch = Awaited<ReturnType<ItemsSvc['labelBatch']>>;
+export type ItemSiteBoard = Awaited<ReturnType<ItemsSvc['siteBoard']>>;
+export type ItemCountDetail = Awaited<ReturnType<ItemsSvc['countDetail']>>;
+export type ItemReportOut = Awaited<ReturnType<ItemsSvc['report']>>;
+export type ItemFinance = Awaited<ReturnType<ItemsSvc['finance']>>;
+export type ItemExportFile = Awaited<ReturnType<ItemsSvc['batchFile']>>;
 export type GovBoard = R<'govBoard'>;
 export type GrcBoard = R<'grcBoard'>;
 export type PdpaRights = R<'pdpaRights'>;
@@ -645,6 +654,17 @@ export interface Api extends ConnectionsClient, ExtractionClient, CheckinClient 
   itemDevicePending(staffNo: string, face: import('@prima/core').FaceCapture | null): Promise<ItemDevicePending>;
   /** One change; the request id makes a retry or a double tap safe. */
   itemAct(requestId: string, action: import('@prima/core').ItemAction): Promise<{ replay: boolean; result: unknown }>;
+  /** P85: judge one scan before anything is saved; an item you may not see is "not found". */
+  itemScanCheck(purpose: import('@prima/core').ScanPurpose, contextId: string | null, entry: import('@prima/core').ScanEntry): Promise<ItemScanVerdict>;
+  /** P85: find an item by a scanned code (sent in the body, never in the URL). */
+  itemResolve(code: string): Promise<ItemPassport>;
+  itemPassport(itemId: string): Promise<ItemPassport>;
+  itemLabels(batchId: string): Promise<ItemLabelBatch>;
+  itemSiteBoard(siteId: string): Promise<ItemSiteBoard>;
+  itemCount(countId: string): Promise<ItemCountDetail>;
+  itemReport(kind: import('@prima/core').ItemReportKind, partyId: string | null, format: 'json' | 'csv'): Promise<ItemReportOut>;
+  itemFinance(partyId: string | null): Promise<ItemFinance>;
+  itemExportFile(batchId: string, name: string): Promise<ItemExportFile>;
   govBoard(): Promise<GovBoard>;
   grcBoard(): Promise<GrcBoard>;
   pdpaRights(): Promise<PdpaRights>;

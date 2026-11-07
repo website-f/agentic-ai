@@ -14,8 +14,8 @@ const PATTERNS = [
 const START_B = 104;
 const STOP = 106;
 
-/** Bars for printable ASCII (32-126). Anything else is refused. */
-export function code128B(text: string): string {
+/** The symbol values: start B, the characters, the mod 103 check symbol and stop (P85: tested against a known vector). */
+export function code128Codes(text: string): number[] {
   const codes = [START_B];
   for (const ch of text) {
     const c = ch.charCodeAt(0);
@@ -25,7 +25,12 @@ export function code128B(text: string): string {
   let sum = START_B;
   for (let k = 1; k < codes.length; k++) sum += codes[k] * k;
   codes.push(sum % 103, STOP);
-  return codes.map((c) => PATTERNS[c]).join('');
+  return codes;
+}
+
+/** Bars for printable ASCII (32-126). Anything else is refused. */
+export function code128B(text: string): string {
+  return code128Codes(text).map((c) => PATTERNS[c]).join('');
 }
 
 export function code128Svg(text: string, height = 56, module = 2): string {

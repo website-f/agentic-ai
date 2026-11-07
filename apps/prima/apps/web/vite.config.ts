@@ -47,10 +47,28 @@ function receiptReaderFiles(): Plugin {
   };
 }
 
+/**
+ * P85: the camera barcode reader for phones and PCs without a built-in one (iPhone, Windows, Firefox). ZXing-C++ as
+ * WebAssembly (zxing-wasm, MIT) is served from this website as zxing/zxing_reader.wasm, never from a CDN, and is
+ * fetched only the first time a camera scan needs it. Not in the single-file test build (typed entry or the
+ * browser's own reader there).
+ */
+function barcodeReaderFiles(): Plugin {
+  const req = createRequire(import.meta.url);
+  return {
+    name: 'prima-barcode-reader-files',
+    apply: 'build',
+    generateBundle() {
+      // The package exports the .wasm file itself; it is copied as it is, byte for byte.
+      this.emitFile({ type: 'asset', fileName: 'zxing/zxing_reader.wasm', source: readFileSync(req.resolve('zxing-wasm/reader/zxing_reader.wasm')) });
+    },
+  };
+}
+
 export default defineConfig(({ command, mode }) => (checkApiUrl(command, mode), {
   // Agentic Office serves Prima under a sub-path (PRIMA_BASE=/prima/); the default is the site root.
   base: mode === 'demo' ? './' : process.env.PRIMA_BASE || '/',
-  plugins: [react(), ...(mode === 'demo' ? [viteSingleFile()] : [receiptReaderFiles()])],
+  plugins: [react(), ...(mode === 'demo' ? [viteSingleFile()] : [receiptReaderFiles(), barcodeReaderFiles()])],
   resolve: {
     alias: { '@prima/core': fileURLToPath(new URL('../../packages/core/src/index.ts', import.meta.url)) },
   },

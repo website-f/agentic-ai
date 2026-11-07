@@ -1,0 +1,471 @@
+/* Items and equipment (P85): the item register on the office kit. Phone first: big tap targets, the camera full screen
+   (reusing styles/camera.css), labels printed in millimetres. Colours come from styles.css tokens only; printed labels
+   are black on white whatever the theme. */
+
+.items-view {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.it-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+.it-pad {
+  padding: 12px 18px;
+}
+.it-form {
+  display: grid;
+  gap: 10px;
+  margin-top: 6px;
+}
+.it-big {
+  min-height: 48px;
+  font-size: 16px;
+  justify-content: center;
+}
+.it-qty {
+  font-family: var(--font-mono);
+  font-weight: 600;
+  min-width: 3ch;
+  text-align: right;
+}
+.it-qty-in {
+  width: 6.5em;
+}
+.it-seg {
+  flex-wrap: wrap;
+}
+.it-multi {
+  min-height: 7em;
+}
+.it-chips,
+.it-mark {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.it-mark .btn {
+  min-height: 40px;
+}
+.it-file {
+  cursor: pointer;
+  align-self: start;
+}
+.it-foot {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  border-top: 1px solid var(--line);
+}
+
+/* Rows inside cards, edge to edge. */
+.it-rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.it-rows > li + li {
+  border-top: 1px solid var(--line);
+}
+.it-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px 18px;
+  min-height: 56px;
+  min-width: 0;
+}
+.it-row[data-tone='warn'] {
+  box-shadow: inset 3px 0 0 var(--warn);
+}
+.it-row[data-tone='crit'] {
+  box-shadow: inset 3px 0 0 var(--crit);
+}
+.it-row-col {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+}
+.it-row-line {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+}
+.it-row-main {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.it-row-main > * {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.it-row-side {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+}
+.it-row-btn {
+  width: 100%;
+  border: 0;
+  background: var(--surface);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.it-row-btn:hover {
+  background: var(--surface-2);
+}
+.it-row-btn:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+.it-pick {
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  padding: 10px 12px;
+  display: grid;
+  gap: 8px;
+}
+.it-pick-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.it-pick-row > .input {
+  flex: 1 1 140px;
+}
+.it-override {
+  border-left: 3px solid var(--warn);
+  padding-left: 10px;
+}
+.it-passport-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.it-big-id {
+  font-size: 18px;
+  letter-spacing: 0.04em;
+}
+.it-slots {
+  list-style: none;
+  margin: 10px 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+.it-slots li {
+  display: grid;
+  grid-template-columns: 2.2em 1fr auto;
+  grid-template-areas: 'n id chip' 'n sku chip';
+  align-items: center;
+  column-gap: 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+}
+.it-slots li > .mono {
+  grid-area: id;
+}
+.it-slots li > .muted {
+  grid-area: sku;
+}
+.it-slots li > .chip,
+.it-slots li > span:last-child {
+  grid-area: chip;
+}
+.it-slots li[data-state='now'] {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-soft);
+}
+.it-slots li[data-state='done'] {
+  background: var(--ok-soft);
+}
+.it-slot-n {
+  grid-area: n;
+  font-weight: 700;
+  text-align: center;
+}
+.it-table table tr.it-bad td {
+  background: var(--crit-soft);
+}
+
+/* Moved screens (care, catalogue, uniforms, sale papers) keep their markup; inside the item view they take the card look. */
+.items-view .panel {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow);
+  padding: 14px 18px;
+}
+.items-view .panel .panel {
+  box-shadow: none;
+  background: var(--surface-2);
+}
+.items-view .list-item {
+  min-height: 52px;
+}
+
+/* ---------- The scanner ---------- */
+.isc {
+  display: grid;
+  gap: 8px;
+}
+.isc-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.isc-input {
+  flex: 1 1 220px;
+  min-height: 52px;
+  font-family: var(--font-mono);
+  font-size: 17px;
+  letter-spacing: 0.03em;
+}
+.isc-go,
+.isc-cam {
+  min-height: 52px;
+  min-width: 52px;
+  gap: 6px;
+}
+.isc-cam {
+  flex: 1 1 140px;
+  font-size: 16px;
+}
+@media (min-width: 720px) {
+  .isc-cam {
+    flex: 0 0 auto;
+  }
+}
+.isc-last {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.isc-field {
+  display: grid;
+  gap: 4px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.isc-field > .input,
+.isc-field > select {
+  color: var(--ink);
+  font-size: 15px;
+}
+.isc-choice {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+}
+.isc-choice input {
+  width: 22px;
+  height: 22px;
+}
+.isc-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.isc-actions .btn {
+  min-height: 44px;
+}
+.isc-dialog {
+  position: fixed;
+  inset: 0;
+  z-index: 1100;
+  background: rgb(0 0 0 / 0.5);
+  display: grid;
+  place-items: end center;
+  padding: 0;
+}
+@media (min-width: 720px) {
+  .isc-dialog {
+    place-items: center;
+  }
+}
+.isc-dialog-box {
+  width: min(520px, 100vw);
+  max-height: 92dvh;
+  overflow: auto;
+  background: var(--surface);
+  color: var(--ink);
+  border-radius: var(--r-lg) var(--r-lg) 0 0;
+  padding: 18px 16px calc(18px + env(safe-area-inset-bottom, 0px));
+  display: grid;
+  gap: 10px;
+}
+@media (min-width: 720px) {
+  .isc-dialog-box {
+    border-radius: var(--r-lg);
+  }
+}
+.isc-dialog-box h3 {
+  margin: 0;
+}
+.isc-reasons {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 2px;
+}
+
+/* The camera: full screen like the face camera, with a wide aiming frame for labels. */
+.isc-cam-screen {
+  z-index: 1050;
+}
+.isc-frame-wrap {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+  padding-bottom: 10dvh;
+}
+.isc-frame {
+  width: min(78vw, 420px);
+  aspect-ratio: 4 / 3;
+  border-radius: 18px;
+  border: 3px solid var(--cam-ring);
+  box-shadow: 0 0 0 200vmax var(--cam-dim);
+  transition: border-color 0.2s ease;
+}
+.cam[data-tone='ok'] .isc-frame {
+  border-color: var(--cam-ok);
+  border-width: 4px;
+}
+.cam[data-tone='adjust'] .isc-frame {
+  border-color: var(--cam-adjust);
+}
+.isc-cam-done {
+  min-height: 52px;
+  min-width: 160px;
+  font-size: 17px;
+}
+
+/* ---------- Labels ---------- */
+.lbl-sheet {
+  display: grid;
+  gap: 10px;
+}
+.lbl-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: end;
+}
+.lbl-print {
+  min-height: 48px;
+}
+.lbl-preview {
+  overflow: auto;
+  max-height: 70dvh;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  padding: 10px;
+}
+.lbl-preview .lbl-page {
+  transform: scale(0.6);
+  transform-origin: top left;
+  margin-bottom: -40%;
+  box-shadow: var(--shadow);
+}
+.lbl-page {
+  display: grid;
+  box-sizing: border-box;
+  background: #fff;
+  color: #000;
+  overflow: hidden;
+  break-after: page;
+}
+.lbl-cell {
+  display: flex;
+  align-items: center;
+  gap: 1.5mm;
+  padding: 1.5mm 2mm;
+  box-sizing: border-box;
+  overflow: hidden;
+  background: #fff;
+  color: #000;
+  font-family: var(--font-mono);
+}
+.lbl-preview .lbl-cell {
+  outline: 0.2mm dashed #bbb;
+}
+.lbl-empty {
+  background: transparent;
+}
+.lbl-qr {
+  height: 100%;
+  max-height: 34mm;
+  aspect-ratio: 1;
+  flex: none;
+}
+.lbl-qr svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+.lbl-text {
+  min-width: 0;
+  display: grid;
+  gap: 0.6mm;
+}
+.lbl-bar svg {
+  width: 100%;
+  height: 8mm;
+  display: block;
+}
+.lbl-id {
+  font-size: 2.6mm;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  white-space: nowrap;
+}
+.lbl-sku {
+  font-size: 2.2mm;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Printing: only the print layer, at 100%, no page margins (the sheet's own margins are in the layout). */
+#print-root {
+  display: none;
+}
+@media print {
+  body:has(> #print-root:not(:empty)) > :not(#print-root) {
+    display: none !important;
+  }
+  body:has(> #print-root:not(:empty)) {
+    background: #fff !important;
+    margin: 0;
+  }
+  #print-root:not(:empty) {
+    display: block;
+  }
+  #print-root .lbl-page {
+    transform: none;
+    margin: 0;
+    box-shadow: none;
+  }
+}

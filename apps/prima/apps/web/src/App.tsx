@@ -6,7 +6,7 @@ import { HrItIntake } from './views/HrItIntake';
 import { ItExtractionWorkspace } from './views/ItExtractionWorkspace';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import type { Company, User } from '@prima/core';
-import { RULES, finRequestInMenu, hasOwnStaffRecord, isActHead, isGroupLeader, jaOwns, seesArmsDetail, workKpiScope } from '@prima/core';
+import { RULES, finRequestInMenu, hasOwnStaffRecord, isActHead, isGroupLeader, isOwnerAdmin, jaOwns, seesArmsDetail, workKpiScope } from '@prima/core';
 import { ApiError, api, type Me } from './api';
 import { ArrowLeftIcon } from '@phosphor-icons/react';
 import { publishPage, rulesFor } from './prima-page';
@@ -680,7 +680,7 @@ function Shell({ me, onSignOut, onReset }: { me: Me; onSignOut: () => void; onRe
       'meetings',
       'clock',
     ],
-    hr: ['hr', 'ja', 'people', 'socso', 'staffclock', 'hostels', 'claims', 'staffpay', 'sitehours', 'guardpay', 'advances', 'loans', 'statutory', 'reports', 'meetings', 'clock'],
+    hr: ['hr', 'ja', 'people', 'socso', 'staffclock', 'hostels', 'claims', 'staffpay', 'sitehours', 'guardpay', 'advances', 'loans', 'statutory', 'items', 'reports', 'meetings', 'clock'],
     // Arms Control sees arms matters only (Fauzan, 25 Oct 2026).
     arms_control: ['arms', 'cms', 'cases', 'audit', 'reports', 'meetings', 'clock'],
     cms: ['cms', 'ja', 'arms', 'fleet', 'clock'],
@@ -724,7 +724,8 @@ function Shell({ me, onSignOut, onReset }: { me: Me; onSignOut: () => void; onRe
         (n.view === 'corporate' && !!me.user.corpSecretary) ||
         // Payment requests: the department heads and Finance checkers who act on them (UAT, 2 Nov 2026).
         (n.view === 'payreq' && finRequestInMenu(me.user)) ||
-        (n.view === 'items' && ['om', 'regional', 'ogm', 'ops_director'].includes(me.user.opsTier ?? '')) ||
+        // Items (P85, paper section 9): stores, OM and patrol in their area, Finance, HR for uniforms, audit and the owner.
+        (n.view === 'items' && (['om', 'regional', 'ogm', 'ops_director', 'coo'].includes(me.user.opsTier ?? '') || isOwnerAdmin(me.user))) ||
         (n.view === 'branchwork' && (dept === 'audit' || dept === 'cms' || ['om', 'regional', 'ogm', 'ops_director', 'coo'].includes(me.user.opsTier ?? ''))) ||
         (LINE[dept!] ?? ['clock']).includes(n.view)) &&
       // Far branches: the branch manager, the company manager, OM and above, ACT and CMS; not other admin executives.

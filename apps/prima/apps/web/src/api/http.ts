@@ -197,6 +197,8 @@ export class HttpApi implements Api {
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
       const err = new ApiError(data.message ?? `Request failed (${res.status})`, res.status, data.findings ?? []);
+      // P85: a scanned receipt's conflict names the lines that changed, so the phone can offer to scan them again.
+      if (res.status === 409 && data.details && typeof data.details === 'object') (err as ApiError & { details?: unknown }).details = data.details;
       // The sign-in has ended (Microsoft session expired or was removed): the app goes back to the sign-in screen
       // instead of leaving every screen showing an error.
       if (res.status === 401) invalidateDutyContext();
@@ -1147,6 +1149,34 @@ export class HttpApi implements Api {
   }
   itemAct(requestId: string, action: Parameters<Api['itemAct']>[1]) {
     return this.call<Awaited<ReturnType<Api['itemAct']>>>('POST', '/items/act', { requestId, action });
+  }
+  itemScanCheck(purpose: Parameters<Api['itemScanCheck']>[0], contextId: string | null, entry: Parameters<Api['itemScanCheck']>[2]) {
+    return this.call<Awaited<ReturnType<Api['itemScanCheck']>>>('POST', '/items/scan-check', { purpose, contextId, entry });
+  }
+  itemResolve(code: string) {
+    return this.call<Awaited<ReturnType<Api['itemResolve']>>>('POST', '/items/resolve', { code: code.slice(0, 80) });
+  }
+  itemPassport(itemId: string) {
+    return this.call<Awaited<ReturnType<Api['itemPassport']>>>('GET', `/items/passport/${encodeURIComponent(itemId.slice(0, 80))}`);
+  }
+  itemLabels(batchId: string) {
+    return this.call<Awaited<ReturnType<Api['itemLabels']>>>('GET', `/items/labels/${encodeURIComponent(batchId.slice(0, 80))}`);
+  }
+  itemSiteBoard(siteId: string) {
+    return this.call<Awaited<ReturnType<Api['itemSiteBoard']>>>('GET', `/items/site/${encodeURIComponent(siteId.slice(0, 80))}`);
+  }
+  itemCount(countId: string) {
+    return this.call<Awaited<ReturnType<Api['itemCount']>>>('GET', `/items/counts/${encodeURIComponent(countId.slice(0, 80))}`);
+  }
+  itemReport(kind: Parameters<Api['itemReport']>[0], partyId: string | null, format: 'json' | 'csv') {
+    const q = new URLSearchParams({ format, ...(partyId ? { partyId } : {}) });
+    return this.call<Awaited<ReturnType<Api['itemReport']>>>('GET', `/items/reports/${encodeURIComponent(kind)}?${q}`);
+  }
+  itemFinance(partyId: string | null) {
+    return this.call<Awaited<ReturnType<Api['itemFinance']>>>('GET', `/items/finance${partyId ? `?partyId=${encodeURIComponent(partyId)}` : ''}`);
+  }
+  itemExportFile(batchId: string, name: string) {
+    return this.call<Awaited<ReturnType<Api['itemExportFile']>>>('GET', `/items/finance/batches/${encodeURIComponent(batchId)}/files/${encodeURIComponent(name)}`);
   }
   raisePurRequest(companyId: string, input: Parameters<Api['raisePurRequest']>[1]) {
     return this.call<unknown>('POST', `/purchasing/${encodeURIComponent(companyId)}/requests`, input);

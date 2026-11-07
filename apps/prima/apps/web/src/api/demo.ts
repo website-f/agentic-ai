@@ -2264,6 +2264,34 @@ export class DemoApi implements Api {
   itemAct(requestId: string, action: ItemAction) {
     return this.write<{ replay: boolean; result: unknown }>('itemAct', [requestId, action]);
   }
+  // P85: reads of the item register. A scan check may note an unknown label for the limiter; that is not replayed.
+  itemScanCheck(purpose: Parameters<Api['itemScanCheck']>[0], contextId: string | null, entry: Parameters<Api['itemScanCheck']>[2]) {
+    return this.read((s, u) => s.items.scanCheck(u, purpose, contextId, entry));
+  }
+  itemResolve(code: string) {
+    return this.read((s, u) => s.items.resolve(u, code));
+  }
+  itemPassport(itemId: string) {
+    return this.read((s, u) => s.items.passport(u, itemId));
+  }
+  itemLabels(batchId: string) {
+    return this.read((s, u) => s.items.labelBatch(u, batchId));
+  }
+  itemSiteBoard(siteId: string) {
+    return this.read((s, u) => s.items.siteBoard(u, siteId));
+  }
+  itemCount(countId: string) {
+    return this.read((s, u) => s.items.countDetail(u, countId));
+  }
+  itemReport(kind: Parameters<Api['itemReport']>[0], partyId: string | null, format: 'json' | 'csv') {
+    return this.read((s, u) => s.items.report(u, kind, partyId, format));
+  }
+  itemFinance(partyId: string | null) {
+    return this.read((s, u) => s.items.finance(u, partyId));
+  }
+  itemExportFile(batchId: string, name: string) {
+    return this.read((s, u) => s.items.batchFile(u, batchId, name));
+  }
   raisePurRequest(companyId: string, input: Parameters<Api['raisePurRequest']>[1]) {
     return this.write<unknown>('raisePurRequest', [companyId, input]);
   }
