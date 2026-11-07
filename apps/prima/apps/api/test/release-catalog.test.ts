@@ -13,6 +13,9 @@ import * as companyOffice from '../src/company-office-readiness';
 import * as orgLinks from '../src/org-links-readiness';
 import * as specialOps from '../src/special-ops-readiness';
 import * as fwWelfare from '../src/fw-welfare-readiness';
+import * as fwRecruit from '../src/fw-recruit-readiness';
+import * as payModules from '../src/pay-modules-readiness';
+import * as items from '../src/item-register-readiness';
 import {releaseCatalogState,moduleCatalogProblems,RELEASE_MODULE_IDS} from '../src/release-catalog';
 const hash='a'.repeat(64);
 afterEach(()=>mock.restoreAll());
@@ -23,7 +26,7 @@ function fixture(options:{base?:unknown[];fail?:string;releaseFails?:boolean;ses
   for(const [mod,name] of [[manual,'itManualProblems'],[operations,'itOperationsProblems'],[procurement,'procurementProblems'],[rental,'rentalCorrectionProblems'],[cleanup,'cleanupSchemaProblems'],[metrics,'workflowMetricProblems']] as const)mock.method(mod as any,name,async()=>[]);
   mock.method(mail,'jobEmailCatalogReadiness',async()=>({ready:true}));
   for(const name of ['centralAdminWallsProblems','centralAdminPanelProblems','centralAdminDelegationsProblems','centralAdminLegalHoldsProblems'] as const)mock.method(centralAdmin as any,name,async()=>[]);
-  for(const [mod,name] of [[companyOffice,'companyOfficeProblems'],[companyOffice,'companyRunLinkProblems'],[orgLinks,'orgLinksProblems'],[specialOps,'specialOpsModuleProblems'],[fwWelfare,'fwWelfareProblems']] as const)mock.method(mod as any,name,async()=>[]);
+  for(const [mod,name] of [[companyOffice,'companyOfficeProblems'],[companyOffice,'companyRunLinkProblems'],[orgLinks,'orgLinksProblems'],[specialOps,'specialOpsModuleProblems'],[fwWelfare,'fwWelfareProblems'],[fwRecruit,'fwRecruitProblems'],[payModules,'payFormulasProblems'],[payModules,'guardPayProblems'],[items,'itemRegisterProblems'],[items,'itemRegisterV2Problems']] as const)mock.method(mod as any,name,async()=>[]);
   return {client,calls,pool:{connect:async()=>client} as never,get released(){return released;},get releaseCount(){return releaseCount;}};
 }
 it('one checked-out restricted login and readonly transaction compose all five catalogs',async()=>{
@@ -34,7 +37,7 @@ for(const base of [[],[{id:1,migration_sha256:'b'.repeat(64)}],[{id:2,migration_
 it('invalid manifest never acquires database connection',async()=>{const r=await releaseCatalogState({connect:async()=>{throw new Error('must not connect');}},{baseSha256:'invalid'});assert.deepEqual(r.codes,['RELEASE_INVALID_MANIFEST']);});
 for(const [mod,name,id] of [[procurement,'procurementProblems','procurement'],[rental,'rentalCorrectionProblems','rental_corrections'],[cleanup,'cleanupSchemaProblems','cleanup'],[metrics,'workflowMetricProblems','metrics']] as const)it('mandatory module drift '+id,async()=>{const f=fixture();mock.method(mod as any,name,async()=>['internal details']);const r=await releaseCatalogState(f.pool,{baseSha256:hash});assert.equal(r.ready,false);assert.equal(r.modules[id].ready,false);assert(!JSON.stringify(r).includes('internal details'));});
 it('mail v1/missing/drift cannot pass fifth module',async()=>{const f=fixture();mock.method(mail,'jobEmailCatalogReadiness',async()=>({ready:false,reason:'private catalog detail'}));const r=await releaseCatalogState(f.pool,{baseSha256:hash});assert.equal(r.modules.job_email.ready,false);assert(!JSON.stringify(r).includes('private'));});
-it('manual and operations dependencies cannot be omitted',async()=>{const f=fixture();mock.method(operations,'itOperationsProblems',async()=>['bad']);for(const id of RELEASE_MODULE_IDS.filter(id=>id!=='job_email'&&!id.startsWith('central_admin_')&&!['company_office','company_run_links','org_links','special_ops','fw_welfare'].includes(id)))assert.notDeepEqual(await moduleCatalogProblems(f.client as never,id),[]);});
+it('manual and operations dependencies cannot be omitted',async()=>{const f=fixture();mock.method(operations,'itOperationsProblems',async()=>['bad']);for(const id of RELEASE_MODULE_IDS.filter(id=>id!=='job_email'&&!id.startsWith('central_admin_')&&!['company_office','company_run_links','org_links','special_ops','fw_welfare','pay_formulas','guard_pay','fw_recruit','item_register','item_register_v2'].includes(id)))assert.notDeepEqual(await moduleCatalogProblems(f.client as never,id),[]);});
 it('unknown module is rejected without querying',async()=>{assert.deepEqual(await moduleCatalogProblems({query:async()=>{throw Error('must not query');}} as never,'other' as never),['RELEASE_UNKNOWN_MODULE']);});
 it('wrong runtime login is rejected before role switch and raw error is not returned',async()=>{const f=fixture();mock.method(db,'assertRestrictedLogin',async()=>{throw Error('SECRET wrong login');});const r=await releaseCatalogState(f.pool,{baseSha256:hash});assert.equal(r.ready,false);assert(!f.calls.includes('SET LOCAL ROLE prima_app'));assert(!JSON.stringify(r).includes('SECRET'));assert.equal(f.calls.at(-1),'ROLLBACK');});
 it('query failure rolls back and sanitizes output',async()=>{const f=fixture({fail:'SELECT id, migration_sha256 FROM prima.schema_info'});const r=await releaseCatalogState(f.pool,{baseSha256:hash});assert.equal(r.ready,false);assert(!JSON.stringify(r).includes('SECRET'));assert.equal(f.releaseCount,1);});

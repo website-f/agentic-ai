@@ -13,10 +13,10 @@ import {orgLinksProblems} from './org-links-readiness';
 import {specialOpsModuleProblems} from './special-ops-readiness';
 import {fwWelfareProblems} from './fw-welfare-readiness';
 import {fwRecruitProblems} from './fw-recruit-readiness';
-import {itemRegisterProblems} from './item-register-readiness';
+import {itemRegisterProblems,itemRegisterV2Problems} from './item-register-readiness';
 import {guardPayProblems,payFormulasProblems} from './pay-modules-readiness';
 
-export const RELEASE_MODULE_IDS = ['procurement','rental_corrections','cleanup','metrics','job_email','central_admin_walls','central_admin_panel','central_admin_delegations','central_admin_legal_holds','company_office','company_run_links','org_links','special_ops','fw_welfare','pay_formulas','guard_pay','fw_recruit','item_register'] as const;
+export const RELEASE_MODULE_IDS = ['procurement','rental_corrections','cleanup','metrics','job_email','central_admin_walls','central_admin_panel','central_admin_delegations','central_admin_legal_holds','company_office','company_run_links','org_links','special_ops','fw_welfare','pay_formulas','guard_pay','fw_recruit','item_register','item_register_v2'] as const;
 export type ReleaseModuleId = typeof RELEASE_MODULE_IDS[number];
 type CatalogClient = Pick<PoolClient,'query'>;
 type ReleaseClient = Pick<PoolClient,'query'|'release'>;
@@ -48,6 +48,7 @@ export async function moduleCatalogProblems(client:CatalogClient,id:ReleaseModul
     if(id==='guard_pay')return (await payFormulasProblems(client)).length||(await guardPayProblems(client)).length?[moduleCode(id)]:[];
     if(id==='fw_recruit')return (await fwRecruitProblems(client)).length?[moduleCode(id)]:[];
     if(id==='item_register')return (await itemRegisterProblems(client)).length?[moduleCode(id)]:[];
+    if(id==='item_register_v2')return (await itemRegisterProblems(client)).length||(await itemRegisterV2Problems(client)).length?[moduleCode(id)]:[];
     if(id==='central_admin_panel')return (await centralAdminWallsProblems(client)).length||(await centralAdminPanelProblems(client)).length?[moduleCode(id)]:[];
     if((await itManualProblems(client)).length || (await itOperationsProblems(client)).length)return [moduleCode(id)];
     const checks={procurement:procurementProblems,rental_corrections:rentalCorrectionProblems,cleanup:cleanupSchemaProblems,metrics:workflowMetricProblems};

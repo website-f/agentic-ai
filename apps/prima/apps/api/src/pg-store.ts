@@ -7,7 +7,7 @@ import { randomUUID } from 'node:crypto';
 import { hrItProblems } from './hr-it-readiness';
 import { itOperationsProblems } from './it-operations-readiness';
 import { itManualProblems } from './it-manual-readiness';
-import { ITEM_TABLE_NAMES, itemRegisterInstalled, itemRegisterProblems } from './item-register-readiness';
+import { ITEM_TABLE_NAMES, ITEM_V2_TABLE_NAMES, itemRegisterInstalled, itemRegisterProblems, itemRegisterV2Installed, itemRegisterV2Problems } from './item-register-readiness';
 import { GENESIS_HASH, RefusedAfterSave, chainEntry, type AuditBody, type AuditEntry, type Filter, type Id, type Range, type Row, type Store, type TableName, type ItTicket } from '@prima/core';
 import type { PoolClient } from 'pg';
 
@@ -29,6 +29,12 @@ export const TABLE: Record<TableName, string> = {
   itemSettings: 'prima.item_settings',
   itemDocs: 'prima.item_docs',
   uniformRecords: 'prima.item_uniform_records',
+  itemLabelPrints: 'prima.item_label_prints',
+  itemSqlBooks: 'prima.item_sql_books',
+  itemSyncBatches: 'prima.item_sync_batches',
+  itemSqlSnapshots: 'prima.item_sql_snapshots',
+  itemCounters: 'prima.item_counters',
+  itemScanDenials: 'prima.item_scan_denials',
   itImportReviews: 'prima.it_import_reviews',
   companies: 'prima.companies',
   branches: 'prima.branches',
@@ -403,6 +409,22 @@ export class PgStore implements Store {
       return true;
     })());
   }
+  private itemsV2Presence: Promise<boolean> | null = null;
+  /** Whether the second part (db/modules/item-register-v2.sql, P85) is applied on top of the first. */
+  private itemsV2Ready(): Promise<boolean> {
+    return (this.itemsV2Presence ??= (async () => {
+      if (!(await this.itemsReady())) return false;
+      if (!(await itemRegisterV2Installed(this.client))) return false;
+      const problems = await itemRegisterV2Problems(this.client);
+      if (problems.length) throw new Error('Item register protections need setup: ' + problems.join(' '));
+      return true;
+    })());
+  }
+  private static readonly ITEMS_V2 = new Set<TableName>(ITEM_V2_TABLE_NAMES);
+  /** The readiness of the module a table belongs to. */
+  private itemsOn(table: TableName): Promise<boolean> {
+    return PgStore.ITEMS_V2.has(table) ? this.itemsV2Ready() : this.itemsReady();
+  }
   private static readonly ITEMS = new Set<TableName>(ITEM_TABLE_NAMES);
   private static readonly ITEMS_OFF = 'The item register is not installed in this database yet.';
   private cleanupPresence?:Promise<boolean>;
@@ -462,7 +484,7 @@ export class PgStore implements Store {
     // Before the optional module is applied there are simply no formulas; querying the missing table would abort the request.
     if ((await this.payFormulaTable(table)) === 'missing') return [];
     // Before the optional item register module is applied there is nothing to read; querying a missing table would abort the request.
-    if (PgStore.ITEMS.has(table) && !(await this.itemsReady())) return [];
+    if (PgStore.ITEMS.has(table) && !(await this.itemsOn(table))) return [];
     const where: string[] = [];
     const params: unknown[] = [];
     const contains: Record<string, unknown> = {};
@@ -524,7 +546,7 @@ export class PgStore implements Store {
     if (table === 'companyDesks' && !(await this.companyOfficeReady())) return undefined;
     if (table === 'companyRunLinks' && !(await this.companyRunLinksReady())) return undefined;
     if ((await this.payFormulaTable(table)) === 'missing') return undefined;
-    if (PgStore.ITEMS.has(table) && !(await this.itemsReady())) return undefined;
+    if (PgStore.ITEMS.has(table) && !(await this.itemsOn(table))) return undefined;
     const key = table === 'audit' ? 'seq' : 'id';
     const res = await this.client.query(`SELECT data FROM ${TABLE[table]} WHERE ${key} = $1`, [table === 'audit' ? Number(id) : id]);
     return res.rows[0]?.data as Row<T> | undefined;
@@ -560,7 +582,7 @@ export class PgStore implements Store {
   async lock<T extends TableName>(table: T, id: Id): Promise<void> {
     if (table === 'audit') return;
     if (PgStore.ITEMS.has(table)) {
-      if (!(await this.itemsReady())) throw new Error(PgStore.ITEMS_OFF);
+      if (!(await this.itemsOn(table))) throw new Error(PgStore.ITEMS_OFF);
       // Serialize per record, so two people sending or issuing one item at once go one after the other.
       await this.client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [`items:${table}:${id}`]);
       return;
@@ -643,7 +665,7 @@ export class PgStore implements Store {
     if ((await this.payFormulaTable(table)) === 'missing') throw new Error(missingMessage(table));
     const r = row as unknown as { id: string; companyId?: string; partyIds?: string[] };
     if (PgStore.ITEMS.has(table)) {
-      if (!(await this.itemsReady())) throw new Error(PgStore.ITEMS_OFF);
+      if (!(await this.itemsOn(table))) throw new Error(PgStore.ITEMS_OFF);
       await this.client.query(`INSERT INTO ${TABLE[table]} (id, party_ids, data) VALUES ($1, $2, $3)`, [r.id, r.partyIds ?? [], row]);
       return;
     }
@@ -677,7 +699,7 @@ export class PgStore implements Store {
     if ('id' in patch || 'companyId' in patch) throw new Error('id and companyId cannot be changed');
     if ((await this.payFormulaTable(table)) === 'missing') throw new Error(missingMessage(table));
     if (PgStore.ITEMS.has(table)) {
-      if (!(await this.itemsReady())) throw new Error(PgStore.ITEMS_OFF);
+      if (!(await this.itemsOn(table))) throw new Error(PgStore.ITEMS_OFF);
       const parties = (patch as { partyIds?: string[] }).partyIds;
       const res = await this.client.query(
         `UPDATE ${TABLE[table]} SET data = data || $2::jsonb, party_ids = coalesce($3::text[], party_ids) WHERE id = $1 RETURNING data`,

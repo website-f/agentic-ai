@@ -27,7 +27,7 @@ import type {
   ClientRenewalDecision,
   ClientRequestKind,
 } from '@prima/core';
-import { CENTRAL_ALIASES, CENTRAL_EMPLOYER_IDS, CENTRAL_FULL_NAMES, RECORD_KINDS, RULES, accessClosed, arishaFormView, arishaMayConsult, dataModeOf, dateOf, fromMs, arishaKind, arishaToolsFor, type ArishaTurn, type ArishaReviewDraft, isRealDate, CLIENT_VIA, inPilot, rebalanceAiNames, CLIENT_LOST_REASON, CLIENT_PERSON_ROLE, CLIENT_RENEWAL_ANSWER, CLIENT_RENEWAL_DECISION, CLIENT_REQUEST_KIND, type ItemAction, type DispatchLevel, type DispatchProof, type PostLogKind, type SealedBundle, type VisitorIdKind } from '@prima/core';
+import { CENTRAL_ALIASES, CENTRAL_EMPLOYER_IDS, CENTRAL_FULL_NAMES, RECORD_KINDS, RULES, accessClosed, arishaFormView, arishaMayConsult, dataModeOf, dateOf, fromMs, arishaKind, arishaToolsFor, type ArishaTurn, type ArishaReviewDraft, isRealDate, CLIENT_VIA, inPilot, rebalanceAiNames, CLIENT_LOST_REASON, CLIENT_PERSON_ROLE, CLIENT_RENEWAL_ANSWER, CLIENT_RENEWAL_DECISION, CLIENT_REQUEST_KIND, ITEM_REPORT_KINDS, type ItemAction, type ScanPurpose, type DispatchLevel, type DispatchProof, type PostLogKind, type SealedBundle, type VisitorIdKind } from '@prima/core';
 import { ArishaBusy, ArishaUnavailable, IdentityToken, askArisha, askArishaOn, type ArishaModel, arishaConfig } from './arisha';
 import { arishaProvider, officeModel, type ArishaProvider } from './arisha-office';
 import { AuthGuard, DoorFeedGuard, pilotAdmits, FeedGuard, OfficeSystemGuard, PlannerFeedGuard, UserId, devLoginOn, entraSetup, issueToken, pilotSignInOnly, type AuthedRequest, AnalyticsFeedGuard, InhouseFeedGuard } from './auth';
@@ -1410,6 +1410,67 @@ export class AppController {
     if (!b.action || typeof b.action !== 'object' || Array.isArray(b.action)) throw new BadRequestException('action must be an object');
     const requestId = str(b.requestId ?? '', 'requestId', 80);
     return this.db.asUser(uid, (svc, u) => svc.items.act(u, requestId, b.action as ItemAction));
+  }
+
+  /**
+   * P85: judge one scan before anything is saved (read only, apart from the unknown-label limiter). An item the user
+   * may not see answers "not found", the same as an unknown label.
+   */
+  @Post('items/scan-check')
+  itemScanCheck(@UserId() uid: string, @Body() b: { purpose?: unknown; contextId?: unknown; entry?: unknown }) {
+    const purpose = str(b.purpose ?? '', 'purpose', 20) as ScanPurpose;
+    const contextId = b.contextId == null || b.contextId === '' ? null : str(b.contextId, 'contextId', 80);
+    if (!b.entry || typeof b.entry !== 'object' || Array.isArray(b.entry)) throw new BadRequestException('entry must be an object');
+    return this.db.asUser(uid, (svc, u) => svc.items.scanCheck(u, purpose, contextId, b.entry));
+  }
+
+  /** P85: find an item by its scanned code. The code goes in the body, so it stays out of the URL and access logs. */
+  @Post('items/resolve')
+  itemResolve(@UserId() uid: string, @Body() b: { code?: unknown }) {
+    const code = str(b.code ?? '', 'code', 80);
+    return this.db.asUser(uid, (svc, u) => svc.items.resolve(u, code));
+  }
+
+  @Get('items/passport/:itemId')
+  itemPassport(@UserId() uid: string, @Param('itemId') itemId: string) {
+    return this.db.asUser(uid, (svc, u) => svc.items.passport(u, itemId.slice(0, 80)));
+  }
+
+  /** The labels of one print run, to print on the chosen sheet. IDs, item type and size only. */
+  @Get('items/labels/:batchId')
+  itemLabels(@UserId() uid: string, @Param('batchId') batchId: string) {
+    return this.db.asUser(uid, (svc, u) => svc.items.labelBatch(u, batchId.slice(0, 80)));
+  }
+
+  @Get('items/site/:siteId')
+  itemSiteBoard(@UserId() uid: string, @Param('siteId') siteId: string) {
+    return this.db.asUser(uid, (svc, u) => svc.items.siteBoard(u, siteId.slice(0, 80)));
+  }
+
+  @Get('items/counts/:id')
+  itemCount(@UserId() uid: string, @Param('id') id: string) {
+    return this.db.asUser(uid, (svc, u) => svc.items.countDetail(u, id.slice(0, 80)));
+  }
+
+  /** Reports with "data as of" and scope; the CSV form is written to the audit trail. */
+  @Get('items/reports/:kind')
+  itemReport(@UserId() uid: string, @Param('kind') kind: string, @Query('partyId') partyId?: string, @Query('format') format?: string) {
+    const k = ITEM_REPORT_KINDS.find((x) => x === kind);
+    if (!k) throw new BadRequestException('Unknown report');
+    const f = format === 'csv' ? 'csv' : 'json';
+    return this.db.asUser(uid, (svc, u) => svc.items.report(u, k, partyId ? partyId.slice(0, 80) : null, f));
+  }
+
+  /** The export-only SQL outbox, export files, SQL book and reconciliation of one company (Finance, managers, leaders). */
+  @Get('items/finance')
+  itemFinance(@UserId() uid: string, @Query('partyId') partyId?: string) {
+    return this.db.asUser(uid, (svc, u) => svc.items.finance(u, partyId ? partyId.slice(0, 80) : null));
+  }
+
+  /** One stored export file, exactly as generated (with its SHA-256). That company's Finance only; audited. */
+  @Get('items/finance/batches/:id/files/:name')
+  itemExportFile(@UserId() uid: string, @Param('id') id: string, @Param('name') name: string) {
+    return this.db.asUser(uid, (svc, u) => svc.items.batchFile(u, id.slice(0, 80), name.slice(0, 120)));
   }
 
   @Post('purchasing/:companyId/issues')

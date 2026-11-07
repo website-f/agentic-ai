@@ -21,6 +21,8 @@ export const MODULE_SPECS=[
  {id:'guard_pay',path:'db/modules/guard-pay-v1.sql',requires:['pay_formulas']},
  {id:'fw_recruit',path:'db/modules/fw-recruit-v1.sql',requires:[]},
  {id:'item_register',path:'db/modules/item-register-v1.sql',requires:[]},
+ // P85: QR labels, print log, SQL books and the export-only outbox files, after the first part.
+ {id:'item_register_v2',path:'db/modules/item-register-v2.sql',requires:['item_register']},
 ] as const;
 export type ReleaseModuleId=typeof MODULE_SPECS[number]['id'];
 export type ReleaseArtifact={version:1;base:{path:string;sha256:string};modules:Array<{id:ReleaseModuleId;path:string;sha256:string;requires:readonly string[]}>};

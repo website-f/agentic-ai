@@ -121,6 +121,14 @@
       "path": "db/modules/item-register-v1.sql",
       "sha256": "ad1df742e95a6ae122173629cbecf4b74b550c7a873462eae2d963c65259d33a",
       "requires": []
+    },
+    {
+      "id": "item_register_v2",
+      "path": "db/modules/item-register-v2.sql",
+      "sha256": "8ea3eaba553e68eb46c1316e0926f7ea59a432e490faf099c144a1c4fe98580a",
+      "requires": [
+        "item_register"
+      ]
     }
   ]
 }

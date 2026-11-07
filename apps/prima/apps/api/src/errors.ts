@@ -46,7 +46,9 @@ export class DomainErrors implements ExceptionFilter {
       res.status(404).json({ message: err.message });
     } else if (err instanceof ReviewConflict) {
       // A stale screen: the record changed after it was shown; the screen loads it again.
-      res.status(409).json({ message: err.message });
+      // P85: a scanned receipt names the lines that changed, so the phone can offer "scan again" or "leave out".
+      const details = (err as { details?: unknown }).details;
+      res.status(409).json(details && typeof details === 'object' ? { message: err.message, details } : { message: err.message });
     } else if (err instanceof BadRequest) {
       res.status(400).json({ message: err.message });
     } else if (err instanceof UnknownUser) {

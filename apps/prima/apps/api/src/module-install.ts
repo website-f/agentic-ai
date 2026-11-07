@@ -23,6 +23,7 @@ const PREFIX:Record<ReleaseModuleId,{tables:string[];functions:string|null;polic
  guard_pay:{tables:['guard_pay_runs','guard_pay_advances','guard_loans','statutory_versions'],functions:null},
  fw_recruit:{tables:['fw_recruit_files'],functions:null},
  item_register:{tables:['item_skus','item_units','item_lots','item_events','item_movements','item_cases','item_counts','item_sync_jobs','item_requests','item_settings','item_docs','item_uniform_records'],functions:'item_'},
+ item_register_v2:{tables:['item_label_prints','item_sql_books','item_sync_batches','item_sql_snapshots','item_counters','item_scan_denials'],functions:null},
  special_ops:{tables:[],functions:null,policies:['arms_wall']},
 };
 type Client=Pick<PoolClient,'query'>;
