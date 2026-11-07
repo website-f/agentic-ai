@@ -67,7 +67,14 @@ export interface ItemSqlCode {
   uom: BaseUom;
   /** Who in Finance recorded the code. Recording a code is not a working connection. */
   by: string;
+  byId?: Id;
   at: IsoDateTime;
+  /** Base units of the SKU in one SQL unit (PCS/PAIR/SET 1, a box of 12 = 12). A positive whole number. */
+  factor?: number;
+  /** A second Finance person approves the mapping before anything can be exported (maker-checker). */
+  approvedById?: Id | null;
+  approvedBy?: string | null;
+  approvedAt?: IsoDateTime | null;
 }
 
 /**
@@ -92,7 +99,10 @@ export interface UniformRecord {
   pieces: number;
   itemId: Id | null;
   receiptRef: string | null;
+  /** Older rows only. New rows keep money as whole sen in amountSen (paper section 6: no floating point for money). */
   amount: number | null;
+  /** Amount on the guard's own receipt, in whole sen as a decimal string (e.g. "4500" = RM45.00). Never taken from pay. */
+  amountSen?: string | null;
   batchId: Id | null;
   scope: string | null;
   reason: string;
@@ -191,6 +201,8 @@ export type ItemState =
   | 'with_person'
   | 'at_site'
   | 'repair'
+  /** Sent to be washed; it comes back to quarantine and is checked before it is issued again. */
+  | 'laundry'
   /** Reported missing; a manager decides (never automatic). */
   | 'missing'
   | 'lost'
@@ -199,7 +211,7 @@ export type ItemState =
 export type ItemCondition = 'new' | 'good' | 'worn' | 'damaged' | 'unknown';
 
 export interface Custody {
-  kind: 'store' | 'person' | 'site' | 'transit' | 'repairer';
+  kind: 'store' | 'person' | 'site' | 'transit' | 'repairer' | 'laundry';
   /** The legal entity whose people, store or site physically hold it. Never the owner by default. */
   partyId: Id;
   /** Store id, person id, site id, movement id or repairer name. */
@@ -223,6 +235,14 @@ export interface PhysicalItem {
   condition: ItemCondition;
   version: number;
   labelPrints: number;
+  /**
+   * Label generation (P85): 0 = registered, no label printed yet; 1 = first label; each reprint adds one (at most 31).
+   * A scan of an older generation is a superseded copy of the label: it never moves the item. Missing on older rows
+   * means 1 when a label was printed.
+   */
+  labelGen?: number;
+  /** When the printed label was scanned back and matched (paper 3.1: print and scan again). Null until then. */
+  labelVerifiedAt?: IsoDateTime | null;
   registeredBy: string;
   registeredAt: IsoDateTime;
   /** Opening balance counted without a witnessed receipt (migration): never treated as received by a person. */
@@ -297,7 +317,12 @@ export type ItemEventKind =
   | 'lot_receive'
   | 'rfid_bind'
   | 'rfid_remove'
-  | 'service';
+  | 'service'
+  | 'label_print'
+  | 'label_verify'
+  | 'laundry_out'
+  | 'laundry_back'
+  | 'swap';
 
 /** Append-only history. A correction is a new event with a reason, never an edit or a delete. */
 export interface ItemEvent {
@@ -347,8 +372,9 @@ export interface SalePaper {
 /** A scanned paper of the item register (invoice, payment slip, signed letter). Stored once by its fingerprint. */
 export interface ItemDoc {
   id: Id;
+  /** The movement for sale papers; the sync job's source for a SQL receipt; 'book:<partyId>' for book evidence. */
   movementId: Id;
-  kind: SalePaperKind;
+  kind: SalePaperKind | 'sql_receipt' | 'book_evidence';
   name: string;
   mime: 'application/pdf' | 'image/jpeg' | 'image/png';
   bytes: number;
@@ -378,7 +404,23 @@ export interface ItemMovement {
   purpose: string;
   dueBackOn: IsoDate | null;
   status: 'draft' | 'dispatched' | 'partly_received' | 'received' | 'cancelled';
-  lines: { itemId: Id; result: LineResult; by: string | null; at: IsoDateTime | null; note: string }[];
+  /**
+   * The pick list (P85): which item types and how many the sender must scan. Scans are checked against it; more than
+   * asked, or a type not asked for, needs a reason. Empty means no list was given (free pick, as before).
+   */
+  expected?: { skuId: Id; qty: number }[];
+  /** A draft cancelled before it left: every unit was put back. Once sent, a return movement is used instead. */
+  cancelled?: { by: string; byId: Id; at: IsoDateTime; reason: string } | null;
+  lines: {
+    itemId: Id;
+    result: LineResult;
+    by: string | null;
+    at: IsoDateTime | null;
+    note: string;
+    /** How the unit was read when picked and when received. A typed ID is manual and is flagged. */
+    pick?: { source: ScanSource; manual: boolean; override?: string } | null;
+    scan?: { source: ScanSource; manual: boolean } | null;
+  }[];
   lotLines: { lotId: Id; skuId: Id; qtySent: number; qtyReceived: number | null; receivedLotId?: Id }[];
   createdBy: string;
   createdById: Id;
@@ -408,7 +450,14 @@ export type ItemCaseKind =
   | 'count_extra'
   | 'label_mismatch'
   | 'dispose'
-  | 'service';
+  | 'service'
+  | 'unexpected_item'
+  | 'label_superseded'
+  | 'label_unreadable'
+  | 'count_unknown_label'
+  | 'seen_elsewhere'
+  | 'recon_diff'
+  | 'sync_review';
 
 export interface ItemCase {
   actorPartyIds?: Id[];
@@ -441,7 +490,21 @@ export interface ItemCount {
   extra: Id[];
   startedBy: string;
   startedById: Id;
-  closed: { by: string; byId: Id; at: IsoDateTime; notFound: Id[]; movedAfterCutoff: Id[] } | null;
+  closed: { by: string; byId: Id; at: IsoDateTime; notFound: Id[]; movedAfterCutoff: Id[]; flagged?: boolean } | null;
+  /** P85: only these item types (empty = all). */
+  skuIds?: Id[];
+  /** When the expected list was taken. A planned cut-off later than the start is taken on the first scan after it. */
+  snapshotAt?: IsoDateTime | null;
+  /** Moves of units in scope are refused until the count closes (small scopes only, at most 200 units). */
+  freeze?: boolean;
+  /** The counter does not see what is expected until the count is closed. */
+  blind?: boolean;
+  /** Each scan with how it was read. Typed entries are manual and never close a not-found unit by themselves. */
+  scans?: { itemId: Id; byId: Id; at: IsoDateTime; deviceAt: IsoDateTime | null; source: ScanSource; manual: boolean }[];
+  /** A recount covers only the not-found and extra units of its parent. */
+  parentCountId?: Id | null;
+  /** A manager who did not count reviews the result; only then are cases opened. Nothing is adjusted automatically. */
+  review?: { by: string; byId: Id; at: IsoDateTime; note: string; cases: number } | null;
   partyIds: Id[];
 }
 
@@ -470,11 +533,164 @@ export interface ItemSyncJob {
   /** party + book + document type + source + revision. */
   key: string;
   payloadHash: string;
-  payload: { commercialRef: string | null; lines: { skuId: Id; itemCode: string | null; uom: BaseUom; qty: number }[] };
+  payload: { commercialRef: string | null; lines: { skuId: Id; itemCode: string | null; uom: BaseUom; qty: number; itemIds?: Id[] }[] };
   status: SyncStatus;
   reasons: string[];
   at: IsoDateTime;
+  /** The SQL book the document belongs to ('book-unset' until Finance records the company's book). */
+  book?: string;
+  docDate?: IsoDate;
+  /** A new revision says explicitly what it does to the earlier one; never a second invoice by default. */
+  revisionAction?: 'insert' | 'update' | 'reverse';
+  supersedesJobId?: Id | null;
+  /** What still stops this job from being exported. Empty means ready. */
+  blockers?: SyncBlocker[];
+  batchId?: Id | null;
+  attempts?: { at: IsoDateTime; byId: Id; by: string; channel: 'export'; result: 'generated' | 'sent' | 'rejected' | 'unknown' | 'acknowledged' | 'absent' | 'review'; note: string }[];
+  /** What SQL Account returned, typed by Finance from the SQL screen, with the evidence. Never guessed. */
+  dest?: { docNo: string; totals: { net: Sen; tax: Sen; gross: Sen } | null; evidenceDocId: Id; by: string; byId: Id; at: IsoDateTime } | null;
+  reconciledAt?: IsoDateTime | null;
+  version?: number;
   partyIds: Id[];
+}
+
+/** Money as whole sen in a decimal string (paper section 6: no floating point for money). */
+export type Sen = string;
+
+export type SyncBlocker =
+  | 'book_unverified'
+  | 'mapping_missing'
+  | 'mapping_unapproved'
+  | 'mapping_ambiguous'
+  | 'uom_fraction'
+  | 'counterparty_missing'
+  | 'period_locked'
+  | 'channel_not_connected';
+
+export const SYNC_BLOCKER_LABEL: Record<SyncBlocker, string> = {
+  book_unverified: "The company's SQL book is not recorded and verified by a second Finance person (D01).",
+  mapping_missing: 'An item type has no SQL item code for this book.',
+  mapping_unapproved: 'An SQL item code is not yet approved by a second Finance person.',
+  mapping_ambiguous: 'An SQL item code points at more than one item type in this book.',
+  uom_fraction: 'The quantity does not divide into whole SQL units with the approved factor.',
+  counterparty_missing: 'The other company has no customer or supplier code in this book.',
+  period_locked: 'The document date is in a closed accounting period: Finance must review.',
+  channel_not_connected: 'SQL Account is not connected; documents go out as an export file only (paper section 5).',
+};
+
+/**
+ * The SQL book of one legal entity (paper D01, section 6). Recorded by Finance and verified by a second Finance person
+ * with evidence. Until both, every document of this company stays not ready. The channel stays export only until the
+ * connection is proved in both books (Phase 0); there is no API posting in this build.
+ */
+export interface ItemSqlBook {
+  id: Id;
+  partyId: Id;
+  legalName: string;
+  regNo: string;
+  sqlBookId: string;
+  currency: 'MYR';
+  timeZone: 'Asia/Kuala_Lumpur';
+  channel: 'export_only';
+  counterparties: { partyId: Id; role: 'customer' | 'supplier'; sqlCode: string }[];
+  periodLockedThrough: IsoDate | null;
+  setBy: string;
+  setById: Id;
+  setAt: IsoDateTime;
+  verified: { by: string; byId: Id; at: IsoDateTime; evidenceDocId: Id } | null;
+  version: number;
+  partyIds: Id[];
+}
+
+/** One export file set for Finance to import by hand into SQL Account. The files never claim to carry serials. */
+export interface ItemSyncBatch {
+  id: Id;
+  ref: string;
+  partyId: Id;
+  book: string;
+  format: 'prima_csv_v1';
+  jobIds: Id[];
+  files: { name: string; sha256: string; rows: number; content: string }[];
+  preCheck: { ok: boolean; problems: string[] };
+  status: 'generated' | 'sent' | 'void';
+  createdBy: string;
+  createdById: Id;
+  at: IsoDateTime;
+  sent: { by: string; byId: Id; at: IsoDateTime } | null;
+  partyIds: Id[];
+}
+
+/** A stock balance or document listing exported from SQL Account by Finance, for the reconciliation. Append-only. */
+export interface ItemSqlSnapshot {
+  id: Id;
+  partyId: Id;
+  book: string;
+  kind: 'stock_balance' | 'doc_listing';
+  asOf: IsoDate;
+  sha256: string;
+  rows: { itemCode?: string; uom?: string; qty?: number; docType?: string; docNo?: string; ref?: string; net?: Sen; tax?: Sen; gross?: Sen }[];
+  by: string;
+  byId: Id;
+  at: IsoDateTime;
+  partyIds: Id[];
+}
+
+/** Running references (MV, CT, IC, EXP), one row per key, taken under a lock: no listing a whole table to number. */
+export interface ItemCounter {
+  id: string;
+  n: number;
+  partyIds: Id[];
+}
+
+/** Unknown labels per user over a rolling 10 minutes (paper section 9: guessing). Hashes only, never the raw label. */
+export interface ItemScanDenial {
+  id: Id;
+  userId: Id;
+  misses: { at: IsoDateTime; hash: string }[];
+  blockedAt: IsoDateTime | null;
+  partyIds: Id[];
+}
+
+export type LabelTemplateId = 'thermal_50x25' | 'thermal_60x30' | 'a4_l7651_65' | 'a4_l7160_21' | 'a4_l7163_14';
+export const LABEL_TEMPLATES: LabelTemplateId[] = ['a4_l7160_21', 'a4_l7651_65', 'a4_l7163_14', 'thermal_50x25', 'thermal_60x30'];
+export type LabelSymbol = 'qr' | 'code128';
+
+/** One printed label: first print or reprint, with its generation. Kept for the print log and the scan-back check. */
+export interface ItemLabelPrint {
+  id: Id;
+  itemId: Id;
+  gen: number;
+  kind: 'first' | 'reprint';
+  template: LabelTemplateId;
+  symbols: LabelSymbol[];
+  batchId: Id;
+  reason: string | null;
+  identity: { serialSeen?: string; skuSizeConfirmed?: boolean } | null;
+  by: string;
+  byId: Id;
+  at: IsoDateTime;
+  verified: { at: IsoDateTime; byId: Id; source: ScanSource } | null;
+  partyIds: Id[];
+}
+
+// ---------- Scanning (P85) ----------
+
+/** How a code reached the screen. A client signal, kept in the history; it is not a security control. */
+export type ScanSource = 'camera' | 'wedge' | 'rfid' | 'list' | 'typed';
+export const SCAN_SOURCES: ScanSource[] = ['camera', 'wedge', 'rfid', 'list', 'typed'];
+
+/**
+ * One read, as every scanning action takes it. A typed ID (label unreadable) needs a reason and physical proof: the
+ * maker serial when the item has one, otherwise a tick that the item type and size match. It is marked manual.
+ */
+export interface ScanEntry {
+  code: string;
+  source: ScanSource;
+  manual?: { reason: string; serialSeen?: string; skuSizeConfirmed?: boolean } | null;
+  /** The phone's own time, for drafts kept while offline. The server time is always recorded too. */
+  deviceAt?: IsoDateTime | null;
+  /** The item version when it was scanned: a change since then is a conflict, never last-write-wins. */
+  baseVersion?: number | null;
 }
 
 // ---------- How each company tags its items ----------
@@ -492,11 +708,47 @@ export const TAG_METHOD_LABEL: Record<TagMethod, string> = {
   rfid: 'RFID tag (printed ID kept as backup)',
 };
 
+/**
+ * Settings each company's manager may change, with safe defaults until the open decisions (paper D04, D07, D09, D10)
+ * are made. Nothing here can switch on posting to SQL Account: the outbox stays export only.
+ */
+export interface ItemConfig {
+  /** Paper 3.1: a printed label is scanned back before the item can be checked into stock. */
+  verifyLabelsBeforeCheck: boolean;
+  /** D04: default label sheet and symbols. */
+  labelTemplate: LabelTemplateId;
+  labelSymbols: LabelSymbol[];
+  /** D07: a reprint after this many copies needs a manager of the holding company. */
+  reprintManagerAfter: number;
+  /** A session with more typed (manual) entries than max(minimum, share) is flagged for a manager before it closes. */
+  manualShare: number;
+  manualMin: number;
+  /** Unknown labels allowed per person in 10 minutes before scanning is paused. */
+  missLimit: number;
+  /** Days a document may stay posted on one side only before it is shown as an exception. */
+  oneSidedDays: number;
+  /** D10: hours an offline scan draft is kept on a phone. */
+  draftHours: number;
+}
+
+export const DEFAULT_ITEM_CONFIG: ItemConfig = {
+  verifyLabelsBeforeCheck: true,
+  labelTemplate: 'a4_l7160_21',
+  labelSymbols: ['qr', 'code128'],
+  reprintManagerAfter: 3,
+  manualShare: 0.1,
+  manualMin: 2,
+  missLimit: 20,
+  oneSidedDays: 3,
+  draftHours: 12,
+};
+
 export interface ItemSettings {
   /** The party id. One row per company. */
   id: Id;
   partyId: Id;
   tagMethod: TagMethod;
+  config?: Partial<ItemConfig>;
   reason: string;
   by: string;
   byId: Id;
@@ -521,10 +773,21 @@ export interface ItemRequest {
 export const LABEL_ALPHABET = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
 export const LABEL_PREFIX = 'P1-';
 
-function checkChar(body: string): string {
+/**
+ * Luhn mod 32 check character (P85). Catches every single wrong character and almost every swap of two neighbours.
+ * The earlier weighted sum missed about 1 in 27 single typos, because its weights share factors with 32.
+ */
+export function checkChar(body: string): string {
+  const n = 32;
+  let factor = 2;
   let sum = 0;
-  for (let k = 0; k < body.length; k++) sum += LABEL_ALPHABET.indexOf(body[k]) * (k + 1);
-  return LABEL_ALPHABET[sum % 32];
+  for (let k = body.length - 1; k >= 0; k--) {
+    let addend = factor * LABEL_ALPHABET.indexOf(body[k]);
+    factor = factor === 2 ? 1 : 2;
+    addend = Math.floor(addend / n) + (addend % n);
+    sum += addend;
+  }
+  return LABEL_ALPHABET[(n - (sum % n)) % n];
 }
 
 /** Make a new label token from 15 random values (0-31). Format version 1: P1- + 15 characters + 1 check character. */
@@ -551,7 +814,8 @@ export function sampleLabelToken(seed: string): string {
 }
 
 export type LabelParse =
-  | { ok: true; token: string }
+  /** gen: the label generation printed in the code (1 when the code has none); null for a typed display ID. */
+  | { ok: true; token: string; gen: number | null }
   | { ok: false; reason: 'empty' | 'too_long' | 'link' | 'unknown_format' | 'bad_check' };
 
 /**
@@ -563,12 +827,34 @@ export function parseLabel(raw: unknown): LabelParse {
   if (!s) return { ok: false, reason: 'empty' };
   if (s.length > 40) return { ok: false, reason: 'too_long' };
   if (/:\/\/|^www\.|^[a-z]+:/i.test(s) && !/^P1[-:]?/i.test(s)) return { ok: false, reason: 'link' };
-  const compact = s.toUpperCase().replace(/[\s-]/g, '');
-  const m = /^P1([0-9A-HJKMNP-TV-Z]{16})$/.exec(compact);
+  const upper = s.toUpperCase();
+  // The printed code carries the ID without dashes (QR alphanumeric mode), plus a generation character from the
+  // second print on. The ID typed from under the code has dashes and no generation.
+  const fromCode = /^P1[0-9A-HJKMNP-TV-Z]{16,17}$/.test(upper);
+  const compact = upper.replace(/[\s-]/g, '');
+  const m = /^P1([0-9A-HJKMNP-TV-Z]{16})([0-9A-HJKMNP-TV-Z])?$/.exec(compact);
   if (!m) return { ok: false, reason: 'unknown_format' };
   const body = m[1].slice(0, 15);
   if (checkChar(body) !== m[1][15]) return { ok: false, reason: 'bad_check' };
-  return { ok: true, token: `${LABEL_PREFIX}${m[1]}` };
+  const genChar = m[2];
+  if (genChar && LABEL_ALPHABET.indexOf(genChar) < 2) return { ok: false, reason: 'unknown_format' };
+  return { ok: true, token: `${LABEL_PREFIX}${m[1]}`, gen: genChar ? LABEL_ALPHABET.indexOf(genChar) : fromCode ? 1 : null };
+}
+
+/**
+ * What the QR code and the Code 128 barcode carry (P85): P1 + the 16-character ID with no dashes, so the QR code uses
+ * alphanumeric mode; from the second print on, one more character gives the generation (2 to 31).
+ */
+export function labelPayload(token: string, gen: number): string {
+  const body = token.slice(LABEL_PREFIX.length);
+  if (!/^[0-9A-HJKMNP-TV-Z]{16}$/.test(body)) throw new Error('Not a label token.');
+  if (!Number.isInteger(gen) || gen < 1 || gen > 31) throw new Error('Label generation must be 1 to 31.');
+  return `P1${body}${gen >= 2 ? LABEL_ALPHABET[gen] : ''}`;
+}
+
+/** The current label generation of an item (older rows: 1 once a label was printed). */
+export function labelGenOf(i: Pick<PhysicalItem, 'labelGen' | 'labelPrints'>): number {
+  return i.labelGen ?? (i.labelPrints > 0 ? 1 : 0);
 }
 
 export const LABEL_REFUSAL: Record<Exclude<LabelParse, { ok: true }>['reason'], string> = {
@@ -594,12 +880,12 @@ export function parseRfid(raw: unknown): string | null {
   return c;
 }
 
-export type ScanParse = { ok: true; by: 'label'; token: string } | { ok: true; by: 'rfid'; tag: string } | { ok: false; reason: Exclude<LabelParse, { ok: true }>['reason'] };
+export type ScanParse = { ok: true; by: 'label'; token: string; gen: number | null } | { ok: true; by: 'rfid'; tag: string } | { ok: false; reason: Exclude<LabelParse, { ok: true }>['reason'] };
 
 /** One scan box for both: a printed label (P1-...) or an RFID tag read. */
 export function parseScan(raw: unknown): ScanParse {
   const p = parseLabel(raw);
-  if (p.ok) return { ok: true, by: 'label', token: p.token };
+  if (p.ok) return { ok: true, by: 'label', token: p.token, gen: p.gen };
   if (p.reason === 'unknown_format' || p.reason === 'too_long') {
     const tag = parseRfid(raw);
     if (tag) return { ok: true, by: 'rfid', tag };
@@ -627,7 +913,7 @@ export function validItemCode(code: string): boolean {
 }
 
 /** States from which nothing may be issued, sent or handed over. */
-export const NOT_MOVABLE: ItemState[] = ['quarantine', 'reserved', 'in_transit', 'repair', 'missing', 'lost', 'disposed'];
+export const NOT_MOVABLE: ItemState[] = ['quarantine', 'reserved', 'in_transit', 'repair', 'laundry', 'missing', 'lost', 'disposed'];
 
 export const STATE_LABEL: Record<ItemState, string> = {
   quarantine: 'To check (quarantine)',
@@ -637,14 +923,36 @@ export const STATE_LABEL: Record<ItemState, string> = {
   with_person: 'With a person',
   at_site: 'At a site',
   repair: 'At repair',
+  laundry: 'At the laundry',
   missing: 'Reported missing',
   lost: 'Lost (confirmed)',
   disposed: 'Disposed',
 };
 
+/** No SQL book recorded yet for the company: its documents stay not ready. */
+export const BOOK_UNSET = 'book-unset';
+
 /** Idempotency key for one SQL Account document: party + book + type + source + revision (paper section 7). */
-export function syncKey(partyId: Id, docType: ItemSyncJob['docType'], sourceId: Id, revision: number): string {
-  return `${partyId}|sql-book-unconfirmed|${docType}|${sourceId}|r${revision}`;
+export function syncKey(partyId: Id, docType: ItemSyncJob['docType'], sourceId: Id, revision: number, book: string = BOOK_UNSET): string {
+  return `${partyId}|${book}|${docType}|${sourceId}|r${revision}`;
+}
+
+/** Whole sen from a ringgit amount typed as text ("45", "45.5", "45.50"); null when it is not a plain amount. */
+export function senFromText(v: unknown): Sen | null {
+  const s = String(v ?? '').trim().replace(/^RM\s*/i, '').replace(/,/g, '');
+  const m = /^(\d{1,9})(?:\.(\d{1,2}))?$/.exec(s);
+  if (!m) return null;
+  const sen = BigInt(m[1]) * 100n + BigInt((m[2] ?? '').padEnd(2, '0') || '0');
+  return sen.toString();
+}
+
+/** RM1,234.50 from whole sen, without floating point. */
+export function senLabel(sen: Sen | null | undefined): string {
+  if (sen == null || !/^-?\d+$/.test(sen)) return '';
+  const neg = sen.startsWith('-');
+  const d = (neg ? sen.slice(1) : sen).padStart(3, '0');
+  const whole = d.slice(0, -2).replace(/^0+(?=\d)/, '').replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  return `${neg ? '-' : ''}RM${whole}.${d.slice(-2)}`;
 }
 
 export function payloadHash(payload: ItemSyncJob['payload']): string {

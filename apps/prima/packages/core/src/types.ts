@@ -2959,6 +2959,13 @@ export interface Dataset {
   itemSettings: import('./items').ItemSettings[];
   uniformRecords: import('./items').UniformRecord[];
   itemDocs: import('./items').ItemDoc[];
+  /** P85: label print log, SQL books, export batches, SQL snapshots, running references and the unknown-label limiter. */
+  itemLabelPrints: import('./items').ItemLabelPrint[];
+  itemSqlBooks: import('./items').ItemSqlBook[];
+  itemSyncBatches: import('./items').ItemSyncBatch[];
+  itemSqlSnapshots: import('./items').ItemSqlSnapshot[];
+  itemCounters: import('./items').ItemCounter[];
+  itemScanDenials: import('./items').ItemScanDenial[];
   itImportReviews: import('./it-import-review').ItImportReview[];
   companies: Company[];
   branches: Branch[];

@@ -31,6 +31,11 @@ function fresh() {
   const act = async (userId: string, a: ItemAction, requestId = `req-test-${++rid}`) => {
     const u = await svc.user(userId);
     const out = (await svc.items.act(u, requestId, a)) as { replay: boolean; result: unknown };
+    // P85: registering is followed by printing each label and scanning it back (paper 3.1), as the register screen does.
+    if (a.kind === 'item.register' && Array.isArray(out.result) && out.result.length) {
+      const printed = (await svc.items.act(u, `${requestId}-print`, { kind: 'label.print', itemIds: (out.result as PhysicalItem[]).map((i) => i.id) })) as { result: { labels: { printId: string; payload: string }[] } };
+      for (const l of printed.result.labels) await svc.items.act(u, `${requestId}-verify-${l.printId.slice(-8)}`, { kind: 'label.verify', printId: l.printId, scan: { code: l.payload, source: 'camera' } });
+    }
     return out.result as never;
   };
   const board = async (userId: string) => svc.items.board(await svc.user(userId));
@@ -71,8 +76,9 @@ describe('labels', () => {
   it('makes and reads one opaque label format, with a check character (U12, U21)', () => {
     const t = labelFromRandom([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]);
     expect(t).toMatch(/^P1-[0-9A-HJKMNP-TV-Z]{16}$/);
-    expect(parseLabel(t)).toEqual({ ok: true, token: t });
-    expect(parseLabel(labelDisplay(t).toLowerCase())).toEqual({ ok: true, token: t });
+    // The stored token and the typed ID carry no print generation; the code printed on the label does.
+    expect(parseLabel(t)).toEqual({ ok: true, token: t, gen: null });
+    expect(parseLabel(labelDisplay(t).toLowerCase())).toEqual({ ok: true, token: t, gen: null });
     const wrong = t.slice(0, -1) + (t.endsWith('0') ? '1' : '0');
     expect(parseLabel(wrong)).toEqual({ ok: false, reason: 'bad_check' });
     expect(parseLabel('https://evil.example/x')).toEqual({ ok: false, reason: 'link' });
@@ -298,9 +304,12 @@ describe('one item register', () => {
     const [radio] = (await t.act(STORE, { kind: 'item.register', skuId: 'sku-radio', partyId: 'goodwill', count: 1, serials: ['UHF-TEST-1'] })) as PhysicalItem[];
     await t.act(STORE, { kind: 'item.inspect', label: radio.token, condition: 'new', note: '' });
     await expect(t.act(STORE, { kind: 'item.reprint', label: radio.token, reason: '' })).rejects.toThrow(/why/);
-    const r = (await t.act(STORE, { kind: 'item.reprint', label: radio.token, reason: 'Label scratched; serial matched' })) as PhysicalItem;
+    // The identity is checked: a radio has a maker serial, which must match.
+    await expect(t.act(STORE, { kind: 'item.reprint', label: radio.token, reason: 'Label scratched', identity: { serialSeen: 'UHF-OTHER' } })).rejects.toThrow(/serial/);
+    const r = (await t.act(STORE, { kind: 'item.reprint', label: radio.token, reason: 'Label scratched; serial matched', identity: { serialSeen: 'uhf-test-1' } })) as PhysicalItem;
     expect(r.token).toBe(radio.token);
     expect(r.labelPrints).toBe(2);
+    expect(r.labelGen).toBe(2);
     await expect(t.act(STORE, { kind: 'item.register', skuId: 'sku-radio', partyId: 'goodwill', count: 1, serials: ['UHF-TEST-1'] })).rejects.toThrow(/already registered/);
   });
 
@@ -316,7 +325,12 @@ describe('one item register', () => {
     const closed = (await t.act(STORE, { kind: 'count.close', countId: c.id })) as { closed: { notFound: string[] } };
     expect(closed.closed.notFound).toEqual([items[2].id]);
     expect((await t.store.get('physicalItems', items[2].id))!.state).toBe('available');
+    // P85: closing opens no case; a manager who did not count reviews it first.
+    expect((await t.store.list('itemCases', { itemId: items[2].id, kind: 'count_not_found' })).length).toBe(0);
+    await expect(t.act(STORE, { kind: 'count.review', countId: c.id, note: 'Checked the shelf' })).rejects.toThrow(/manager|did not count/);
+    await t.act(PROC, { kind: 'count.review', countId: c.id, note: 'Checked the shelf' });
     expect((await t.store.list('itemCases', { itemId: items[2].id, kind: 'count_not_found' })).length).toBe(1);
+    expect((await t.store.get('physicalItems', items[2].id))!.state).toBe('available');
   });
 
   it('U13: Finance maps SQL item codes per book; a code may not point at two item types', async () => {
@@ -648,7 +662,8 @@ describe('one item register', () => {
     await t.act(SASA_CM, { kind: 'issue', label: items[4].token, personId: g.id, paidByGuard: { receiptRef: 'RC-MOCK-02', amount: 45 } });
     await expect(t.act(SASA_CM, { kind: 'issue', label: items[5].token, personId: g.id, paidByGuard: { receiptRef: 'RC-MOCK-03', amount: 45 } })).rejects.toThrow(/most is 5/);
     const recs = t.ds.uniformRecords.filter((r) => r.personId === g.id);
-    expect(recs.map((r) => [r.kind, r.receiptRef, r.amount])).toEqual([['paid', 'RC-MOCK-01', 45], ['paid', 'RC-MOCK-02', 45]]);
+    // P85: money is kept as whole sen (no floating point).
+    expect(recs.map((r) => [r.kind, r.receiptRef, r.amountSen])).toEqual([['paid', 'RC-MOCK-01', '4500'], ['paid', 'RC-MOCK-02', '4500']]);
     expect(t.ds.audit.some((x) => x.action === 'item.issue' && /paid by the guard: receipt RC-MOCK-01, RM45.00. Not taken from pay/.test(x.summary))).toBe(true);
     expect(t.ds.audit.filter((x) => x.action === 'item.issue' && /paid by the guard/.test(x.summary)).every((x) => !/Never charged/.test(x.summary))).toBe(true);
     const r = (await t.board(SASA_CM)).uniforms.rows.find((x) => x.personId === g.id)!;

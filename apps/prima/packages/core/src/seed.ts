@@ -792,7 +792,7 @@ export function generateDataset(opts: SeedOptions): Dataset {
     staffPayRuns: [],
     finStatus: [],
     arishaDrafts: [],
-    itemSkus: [], physicalItems: [], itemLots: [], itemEvents: [], itemMovements: [], itemCases: [], itemCounts: [], itemSyncJobs: [], itemRequests: [], itemSettings: [], itemDocs: [], uniformRecords: [],
+    itemSkus: [], physicalItems: [], itemLots: [], itemEvents: [], itemMovements: [], itemCases: [], itemCounts: [], itemSyncJobs: [], itemRequests: [], itemSettings: [], itemDocs: [], uniformRecords: [], itemLabelPrints: [], itemSqlBooks: [], itemSyncBatches: [], itemSqlSnapshots: [], itemCounters: [], itemScanDenials: [],
     itImportReviews: [],
     contracts: [],
     branchSettlements: [],

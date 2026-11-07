@@ -31,6 +31,11 @@ function fresh() {
   const act = async (userId: string, a: ItemAction, requestId = `req-test-${++rid}`) => {
     const u = await svc.user(userId);
     const out = (await svc.items.act(u, requestId, a)) as { replay: boolean; result: unknown };
+    // P85: registering is followed by printing each label and scanning it back (paper 3.1), as the register screen does.
+    if (a.kind === 'item.register' && Array.isArray(out.result) && out.result.length) {
+      const printed = (await svc.items.act(u, `${requestId}-print`, { kind: 'label.print', itemIds: (out.result as PhysicalItem[]).map((i) => i.id) })) as { result: { labels: { printId: string; payload: string }[] } };
+      for (const l of printed.result.labels) await svc.items.act(u, `${requestId}-verify-${l.printId.slice(-8)}`, { kind: 'label.verify', printId: l.printId, scan: { code: l.payload, source: 'camera' } });
+    }
     return out.result as never;
   };
   const board = async (userId: string) => svc.items.board(await svc.user(userId));

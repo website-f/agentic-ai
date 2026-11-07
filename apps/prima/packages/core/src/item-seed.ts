@@ -51,6 +51,8 @@ export function seedItems(ds: Dataset, today: IsoDate, now: IsoDateTime): void {
       condition: 'new',
       version: 2,
       labelPrints: 1,
+      labelGen: 1,
+      labelVerifiedAt: since,
       registeredBy: 'Storekeeper 1 (mock)',
       registeredAt: since,
       legacyUnverified: false,
