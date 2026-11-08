@@ -13,21 +13,24 @@ const cwd = process.env.PRIMA_API_DIR || '/app/apps/api';
 const run = (args) => execFileSync('node', args, { cwd, stdio: 'inherit', env: process.env });
 
 run(['dist/src/db-setup.js']);
-const plan = JSON.parse(execFileSync('node', ['dist/src/module-install.js'], { cwd, env: process.env }).toString());
-for (const m of plan.manifest.modules) {
-  console.log(`prima-setup: module ${m.id}`);
-  run([
-    'dist/src/module-install.js',
-    '--module', m.id,
-    '--release-sha', plan.releaseSha256,
-    '--module-sha', m.sha256,
-    '--confirm', 'INSTALL_SELECTED_MODULE',
-  ]);
+function installModules() {
+  const plan = JSON.parse(execFileSync('node', ['dist/src/module-install.js'], { cwd, env: process.env }).toString());
+  for (const m of plan.manifest.modules) {
+    console.log(`prima-setup: module ${m.id}`);
+    run([
+      'dist/src/module-install.js',
+      '--module', m.id,
+      '--release-sha', plan.releaseSha256,
+      '--module-sha', m.sha256,
+      '--confirm', 'INSTALL_SELECTED_MODULE',
+    ]);
+  }
 }
 // P88: the boss's release candidate changed three things inside modules the office database already has (an installed
 // module is never re-run): payroll Finance may read statutory rates, and the IT cleanup and rental correction scopes
 // know the pgl company. Each is repeat-safe (CREATE OR REPLACE, DROP POLICY IF EXISTS) and runs only where its module
-// is installed, as the schema owner, in one transaction.
+// is installed, as the schema owner, in one transaction, BEFORE the module checks: the release catalogue pins these
+// function bodies, so an installed module is only recognised once its functions match the release.
 const REFRESH = [
   {
     "when": "to_regprocedure('prima.ic_scope(text,text)') IS NOT NULL",
@@ -64,5 +67,6 @@ const REFRESH = [
   } finally {
     await c.end();
   }
+  installModules();
   console.log('prima-setup: base and all modules in place');
 })().catch((e) => { console.error('prima-setup: module refresh failed:', e.message); process.exit(1); });
