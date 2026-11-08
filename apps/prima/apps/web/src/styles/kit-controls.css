@@ -1,0 +1,383 @@
+/* P90: the searchable pick-list (SearchSelect.tsx) and the sideways-scrolling tab strips (scroll-strip.ts).
+   Colours, radius and sizes come from the tokens in styles.css, so both themes follow. */
+
+/* ---------- The field: looks like .select ---------- */
+.ksel-trigger {
+  display: inline-block;
+  vertical-align: middle;
+  position: relative;
+  text-align: left;
+  white-space: nowrap;
+  max-width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  cursor: pointer;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+.ksel-trigger:disabled {
+  cursor: not-allowed;
+}
+.ksel-trigger[aria-expanded='true'] {
+  border-color: var(--accent);
+  box-shadow: var(--ring);
+}
+.ksel-trigger[data-clearable] {
+  padding-right: 62px;
+}
+.ksel-in {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  min-width: 0;
+}
+.ksel-value,
+.ksel-sizer {
+  grid-area: 1 / 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ksel-sizer {
+  visibility: hidden;
+  height: 0;
+}
+.ksel-clear {
+  position: absolute;
+  right: 34px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  color: var(--muted);
+}
+.ksel-clear svg {
+  width: 13px;
+  height: 13px;
+}
+.ksel-clear:hover {
+  background: var(--surface-2);
+  color: var(--ink);
+}
+/* The real <select> kept for forms: present, never seen. */
+select.ksel-native {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  min-height: 0 !important;
+  min-width: 0 !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  border: 0 !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+  overflow: hidden !important;
+  clip-path: inset(50%) !important;
+}
+/* Places that sized a native select by its tag. */
+.gv-inline > .ksel-trigger,
+.ix-form .field .ksel-trigger,
+.ix-fields .field .ksel-trigger,
+.ix-proposal .field .ksel-trigger,
+.ix-review .field .ksel-trigger {
+  width: 100%;
+}
+.isc-field > .ksel-trigger {
+  color: var(--ink);
+  font-size: 15px;
+}
+
+/* ---------- The list ---------- */
+.ksel-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  pointer-events: none;
+}
+.ksel-pop {
+  pointer-events: auto;
+  position: fixed;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--surface);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm, 8px);
+  box-shadow: var(--shadow), 0 18px 40px -16px rgba(0, 0, 0, 0.28);
+  overflow: hidden;
+  outline: none;
+  font-size: 0.875rem;
+  animation: ksel-in 0.12s ease-out;
+}
+@keyframes ksel-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+}
+.ksel-search {
+  position: relative;
+  display: flex;
+  align-items: center;
+  padding: 8px;
+  border-bottom: 1px solid var(--line);
+  flex: none;
+}
+.ksel-search svg {
+  position: absolute;
+  left: 20px;
+  width: 16px;
+  height: 16px;
+  color: var(--muted);
+  pointer-events: none;
+}
+.ksel-pop .ksel-search input[type='text'] {
+  width: 100%;
+  min-height: 36px;
+  padding-left: 34px;
+}
+.ksel-list {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 4px;
+  min-height: 0;
+  flex: 1 1 auto;
+  outline: none;
+  -webkit-overflow-scrolling: touch;
+}
+.ksel-group {
+  box-sizing: border-box;
+  padding: 10px 10px 4px;
+  font-size: 0.72rem;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ksel-opt {
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 36px;
+  padding: 7px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  line-height: 1.35;
+}
+.ksel-opt[data-grouped] {
+  padding-left: 18px;
+}
+.ksel-opt-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.ksel-list > div[style] .ksel-opt-text {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ksel-opt[data-active] {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+.ksel-opt[aria-selected='true'] {
+  font-weight: 600;
+  color: var(--primary);
+}
+.ksel-opt[aria-disabled] {
+  color: var(--muted);
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.ksel-opt mark {
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+  color: inherit;
+  border-radius: 3px;
+  padding: 0 1px;
+}
+.ksel-tick {
+  width: 16px;
+  height: 16px;
+  flex: none;
+}
+.ksel-empty {
+  margin: 0;
+  padding: 14px 12px 16px;
+  color: var(--muted);
+  text-align: center;
+}
+
+/* ---------- Phones: a bottom sheet with a big search box and big rows ---------- */
+.ksel-layer[data-sheet] {
+  pointer-events: auto;
+}
+.ksel-scrim {
+  position: absolute;
+  inset: 0;
+  background: rgba(8, 14, 12, 0.42);
+  animation: ksel-fade 0.15s ease-out;
+}
+@keyframes ksel-fade {
+  from {
+    opacity: 0;
+  }
+}
+.ksel-layer[data-sheet] .ksel-pop {
+  left: 0;
+  right: 0;
+  width: auto;
+  border-radius: 16px 16px 0 0;
+  border-bottom: 0;
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  font-size: 1rem;
+  animation: ksel-up 0.18s ease-out;
+}
+@keyframes ksel-up {
+  from {
+    transform: translateY(24px);
+    opacity: 0.6;
+  }
+}
+.ksel-sheet-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 12px 4px 16px;
+  flex: none;
+}
+.ksel-sheet-head strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ksel-layer[data-sheet] .ksel-search {
+  padding: 8px 12px 10px;
+}
+.ksel-layer[data-sheet] .ksel-search svg {
+  left: 26px;
+  width: 18px;
+  height: 18px;
+}
+.ksel-layer[data-sheet] .ksel-search input[type='text'] {
+  min-height: 48px;
+  font-size: 16px;
+  padding-left: 42px;
+}
+.ksel-layer[data-sheet] .ksel-list {
+  padding: 4px 8px 12px;
+}
+.ksel-layer[data-sheet] .ksel-opt {
+  min-height: 48px;
+  padding: 10px 12px;
+}
+.ksel-layer[data-sheet] .ksel-opt[data-grouped] {
+  padding-left: 20px;
+}
+.ksel-layer[data-sheet] .ksel-group {
+  padding: 14px 12px 6px;
+}
+
+/* ---------- Sideways strips (tabs, chips): arrows and faded edges where more is hidden ---------- */
+[data-strip] {
+  scroll-behavior: smooth;
+  overscroll-behavior-x: contain;
+}
+[data-strip][data-dragging] {
+  cursor: grabbing;
+  scroll-behavior: auto;
+  user-select: none;
+}
+[data-strip][data-dragging] * {
+  pointer-events: none;
+}
+/* Selectors carry [data-strip] > button so the strips' own "button" rules (.tabbar button ...) do not restyle the arrows. */
+[data-strip] > button.strip-arrow[data-side] {
+  position: sticky;
+  z-index: 2;
+  flex: none;
+  align-self: stretch;
+  width: 44px;
+  min-width: 0;
+  min-height: 0;
+  height: auto;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  display: none;
+  align-items: center;
+  cursor: pointer;
+  color: var(--ink);
+  background: transparent;
+}
+[data-strip] > button.strip-arrow[data-side='start'] {
+  left: 0;
+  margin-right: calc(-44px - var(--strip-gap, 0px));
+  justify-content: flex-start;
+  background: linear-gradient(to right, var(--strip-bg, var(--bg)) 40%, transparent);
+}
+[data-strip] > button.strip-arrow[data-side='end'] {
+  right: 0;
+  margin-left: calc(-44px - var(--strip-gap, 0px));
+  justify-content: flex-end;
+  background: linear-gradient(to left, var(--strip-bg, var(--bg)) 40%, transparent);
+}
+[data-strip][data-more-start] > button.strip-arrow[data-side='start'],
+[data-strip][data-more-end] > button.strip-arrow[data-side='end'] {
+  display: flex;
+}
+[data-strip] > button.strip-arrow > span {
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow);
+  transition: background-color 0.15s, border-color 0.15s;
+}
+[data-strip] > button.strip-arrow:hover > span {
+  border-color: color-mix(in srgb, var(--muted) 45%, var(--line));
+  background: var(--surface-2);
+}
+[data-strip] > button.strip-arrow svg {
+  width: 14px;
+  height: 14px;
+}
+/* On a touch screen the strip is swiped: the faded edge shows there is more; the round buttons stay out of the way. */
+@media (pointer: coarse) {
+  [data-strip] > button.strip-arrow > span {
+    display: none;
+  }
+  [data-strip] > button.strip-arrow[data-side] {
+    width: 28px;
+    pointer-events: none;
+  }
+  [data-strip] > button.strip-arrow[data-side='start'] {
+    margin-right: calc(-28px - var(--strip-gap, 0px));
+  }
+  [data-strip] > button.strip-arrow[data-side='end'] {
+    margin-left: calc(-28px - var(--strip-gap, 0px));
+  }
+}
+
+/* ---------- The top bar on a narrow phone: the company picker gets the room (the phone shows the time itself) ---------- */
+@media (max-width: 480px) {
+  .topbar {
+    gap: 8px;
+  }
+  .topbar > .mono {
+    display: none;
+  }
+}

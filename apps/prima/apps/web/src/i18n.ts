@@ -1040,6 +1040,11 @@ const ROWS: Row[] = [
   ['The CEO owns every system', 'CEO memiliki setiap sistem', 'CEO owner setiap sistem'],
   ['Found in the records: late or returned work, choices that needed a reason, approvals recorded from Teams, and settings to fix. Open the record\'s proof from its own tab.', 'Ditemui dalam rekod: kerja lewat atau dipulangkan, pilihan yang memerlukan sebab, kelulusan yang direkod daripada Teams, dan tetapan yang perlu dibetulkan. Buka bukti rekod daripada tabnya sendiri.', 'Dijumpai dalam rekod: kerja lewat atau send back, pilihan yang perlu sebab, approval yang direkod dari Teams, dan setting yang perlu dibetulkan. Buka proof rekod dari tab masing-masing.'],
   ['Nothing found.', 'Tiada apa ditemui.', 'Tiada apa dijumpai.'],
+  // P90: the searchable pick-list and the sideways tab strips.
+  ['Type to search', 'Taip untuk cari', null],
+  ['No match', 'Tiada padanan', 'Tak jumpa'],
+  ['Scroll left', 'Skrol ke kiri', 'Scroll ke kiri'],
+  ['Scroll right', 'Skrol ke kanan', 'Scroll ke kanan'],
 
   ['Every IT action', 'Setiap tindakan IT', 'Setiap action IT'],
   ['Person or reference', 'Orang atau rujukan', 'Staf atau rujukan'],

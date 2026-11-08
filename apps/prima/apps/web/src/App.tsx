@@ -1,3 +1,5 @@
+import { Select } from './SearchSelect';
+import { installScrollStrips } from './scroll-strip';
 import { ArrivalCashView } from './views/ArrivalCash';
 import { ItMetrics } from './views/ItMetrics';
 import { WorkKpiView } from './views/WorkKpi';
@@ -600,6 +602,8 @@ export function App() {
   }, []);
   // The translator watches the whole page, so drawers, toasts and pop-ups follow the language too.
   useEffect(() => startTranslator(document.body, lang), [lang]);
+  // P90: section tabs and chip strips that run off the side get arrows, wheel and drag scrolling on a computer.
+  useEffect(() => installScrollStrips(document.body), []);
   const langValue = useMemo(() => ({ lang, setLang }), [lang, setLang]);
   return (
     <LangCtx.Provider value={langValue}>
@@ -1270,7 +1274,7 @@ function Shell({ me, onSignOut, onReset }: { me: Me; onSignOut: () => void; onRe
             {companyScoped && isGroup && me.companies.length > 0 ? (
               <label className="row" style={{ gap: 6 }}>
                 <span className="label">Company</span>
-                <select id="company-select" className="select" value={companyId} onChange={(e) => setCompanyId(e.target.value)}>
+                <Select id="company-select" className="select" value={companyId} onChange={(e) => setCompanyId(e.target.value)}>
                   <optgroup label="Pilot companies">
                     {pilots.map((c) => (
                       <option key={c.id} value={c.id}>
@@ -1287,7 +1291,7 @@ function Shell({ me, onSignOut, onReset }: { me: Me; onSignOut: () => void; onRe
                         </option>
                       ))}
                   </optgroup>
-                </select>
+                </Select>
               </label>
             ) : (
               <strong>{(companyScoped || route.view === 'device') && company ? company.name : 'PWVSB Security Group'}</strong>
