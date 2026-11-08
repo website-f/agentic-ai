@@ -1670,7 +1670,6 @@ button.list-item:last-child {
 .arisha-draft[data-state='failed'] { border-color: var(--crit); }
 
 /* ---------- P85: upstream additions (CRM, duty device, site tasks, items), placed before the office polish so the office kit still wins ---------- */
-
 /* Item register: owner, holder, state facts (Fauzan, 6 Nov 2026). */
 dl.facts {
   display: grid;
@@ -1704,6 +1703,7 @@ dl.facts dd {
   .item-label button {
     display: none;
   }
+}
 /* Client CRM (Fauzan, 4 Nov 2026): large tap targets for phones. */
 .crm-tabs button {
   min-height: 40px;

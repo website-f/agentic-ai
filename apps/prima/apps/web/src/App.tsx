@@ -178,8 +178,8 @@ const inOffice = (api as { office?: boolean }).office === true;
 
 const NAV_GROUPS: { title: string; views: ViewName[] }[] = [
   { title: 'Today', views: ['home', 'overview', 'company', 'office', 'work', 'mine', 'clock', 'staffclock', 'doa', 'reports', 'meetings'] },
-  { title: 'Operations', views: ['sites', 'roster', 'people', 'attendance', 'cases', 'ops', 'device', 'branchwork', 'fleet', 'arms', 'cms'] },
-  { title: 'People and HR', views: ['hr', 'claims', 'staffpay', 'fwm', 'socso', 'hostels', 'requests', 'handovers', 'memos', 'pdpa'] },
+  { title: 'Operations', views: ['sites', 'roster', 'people', 'attendance', 'cases', 'ops', 'device', 'branchwork', 'fleet', 'arms', 'cms', 'sitehours', 'items'] },
+  { title: 'People and HR', views: ['hr', 'claims', 'staffpay', 'guardpay', 'advances', 'loans', 'payformulas', 'salarycalc', 'statutory', 'work-kpi', 'fwm', 'socso', 'hostels', 'requests', 'handovers', 'memos', 'pdpa'] },
   { title: 'Business and finance', views: ['commercial', 'clients', 'contracts', 'finance', 'credit', 'purchasing', 'payreq', 'branches', 'assets', 'insurance', 'ja'] },
   { title: 'Compliance and governance', views: ['compliance', 'renewals', 'audit', 'grc', 'act', 'governance', 'corporate', 'continuity'] },
   { title: 'IT and systems', views: ['it', 'it-procurement', 'it-metrics', 'hr-it-intake', 'websites', 'connections', 'it-extraction'] },
