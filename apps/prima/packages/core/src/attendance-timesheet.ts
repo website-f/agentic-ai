@@ -200,7 +200,7 @@ export function timesheetColumns(header: string[]): TimesheetColumn[] {
 export type DateOrder = 'dmy' | 'mdy';
 
 /** Whether a column of a/b/yyyy dates is day first or month first, from the whole column. 'mixed' when it says both. */
-export function dateOrderOf(values: string[]): { order: DateOrder; assumed: boolean } | { order: 'mixed'; assumed: false } {
+export function timesheetDateOrderOf(values: string[]): { order: DateOrder; assumed: boolean } | { order: 'mixed'; assumed: false } {
   let dayFirst = false;
   let monthFirst = false;
   for (const v of values) {
@@ -325,7 +325,7 @@ export function attendanceFromTable(grid: string[][], opts: { company?: string; 
   const earlyMinutes = /min|minit/i.test(columns.find((c) => c.field === 'early')?.heading ?? '');
   const body = grid.slice(headerRow + 1, headerRow + 1 + MAX_ROWS);
   if (grid.length - headerRow - 1 > MAX_ROWS) throw new TimesheetError(`This file has more than ${MAX_ROWS.toLocaleString('en-MY')} rows. Export one month at a time.`);
-  const order = dateOrderOf(body.map((r) => at(r, 'date')));
+  const order = timesheetDateOrderOf(body.map((r) => at(r, 'date')));
   if (order.order === 'mixed')
     throw new TimesheetError('The Date column has dates written day first in some rows and month first in others, so no date can be trusted. Export the dates in one format (for example 31-01-2026).');
   const skipped: TimesheetRead['skipped'] = [];

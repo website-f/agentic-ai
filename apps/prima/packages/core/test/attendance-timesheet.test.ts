@@ -3,7 +3,7 @@ import {
   TimesheetError,
   attendanceChecks,
   attendanceFromTable,
-  dateOrderOf,
+  timesheetDateOrderOf,
   employeeTotals,
   parsedReportFromJson,
   timesheetColumns,
@@ -28,10 +28,10 @@ describe('Excel and CSV timesheets (P90)', () => {
   });
 
   it('works out the date order from the whole column, never row by row', () => {
-    expect(dateOrderOf(['01-02-2026', '13-02-2026'])).toEqual({ order: 'dmy', assumed: false });
-    expect(dateOrderOf(['02/01/2026', '02/13/2026'])).toEqual({ order: 'mdy', assumed: false });
-    expect(dateOrderOf(['01-02-2026', '03-04-2026'])).toEqual({ order: 'dmy', assumed: true });
-    expect(dateOrderOf(['13-02-2026', '02/13/2026']).order).toBe('mixed');
+    expect(timesheetDateOrderOf(['01-02-2026', '13-02-2026'])).toEqual({ order: 'dmy', assumed: false });
+    expect(timesheetDateOrderOf(['02/01/2026', '02/13/2026'])).toEqual({ order: 'mdy', assumed: false });
+    expect(timesheetDateOrderOf(['01-02-2026', '03-04-2026'])).toEqual({ order: 'dmy', assumed: true });
+    expect(timesheetDateOrderOf(['13-02-2026', '02/13/2026']).order).toBe('mixed');
     expect(timesheetDate('03-04-2026', 'dmy')).toBe('2026-04-03');
     expect(timesheetDate('03-04-2026', 'mdy')).toBe('2026-03-04');
     expect(timesheetDate('2026-02-28', 'mdy')).toBe('2026-02-28');
