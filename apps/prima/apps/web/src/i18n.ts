@@ -1580,6 +1580,10 @@ const ROWS: Row[] = [
   ['Checked by the system', 'Disemak oleh sistem', null],
   ['First mobilisation', 'Penggerakan pertama', 'Mobilisation pertama'],
   ['Roster', 'Jadual tugas', 'Roster'],
+  // P90: Roster loading and error states
+  ['The roster could not load. Check your connection, then try again.', 'Jadual tugas tidak dapat dimuatkan. Semak sambungan anda, kemudian cuba lagi.', 'Roster tak dapat load. Check connection anda, lepas itu cuba lagi.'],
+  ['Try again', 'Cuba lagi', 'Cuba lagi'],
+  ['Loading roster…', 'Memuatkan jadual tugas…', 'Loading roster…'],
   ['Guard clearance', 'Kelulusan pengawal', 'Clearance guard'],
   ['Client contacts', 'Orang hubungan pelanggan', 'Contact client'],
   ['Passes', 'Lulus', null],

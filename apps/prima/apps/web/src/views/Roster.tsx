@@ -7,6 +7,7 @@ import { Card, Empty, PageHead, Person, Search, Stat, Stats, Toolbar } from '../
 import { RecordButton } from './RecordForm';
 import { Chip, Drawer, ErrorNotice, Findings, Loading, dayLabel, hhmm, useAction, useLoad } from '../ui';
 import '../styles/attendance.css';
+import '../styles/loading.css';
 
 type RosterShift = Roster['shifts'][number];
 
@@ -17,14 +18,15 @@ export function RosterView({ siteId: initialSite }: { siteId?: string }) {
   const [siteId, setSiteId] = useState<string | undefined>(initialSite);
   const [editing, setEditing] = useState<RosterShift | null>(null);
   const [adding, setAdding] = useState(false);
-  const sites = useLoad(() => api.sites(companyId), [companyId]);
+  // P90 (Roster "loading nonstop"): the site list is tagged with its company, so a company switch never keeps showing
+  // the last company's site and roster, and a company with no sites shows its empty state instead of a spinner that
+  // never stops. The site shown is the one picked, else the first; there is no effect that sets state after render.
+  const sites = useLoad(() => api.sites(companyId).then((list) => ({ companyId, list })), [companyId]);
+  const siteList = sites.data?.companyId === companyId ? sites.data.list : null;
+  const site = siteList ? (siteList.find((s) => s.site.id === siteId) ?? siteList[0]) : undefined;
+  const activeSite = site?.site.id;
 
-  useEffect(() => {
-    if (!sites.data?.length) return;
-    if (!siteId || !sites.data.some((s) => s.site.id === siteId)) setSiteId(sites.data[0].site.id);
-  }, [sites.data, siteId]);
-
-  const roster = useLoad(() => (siteId ? api.roster(siteId, from, 7) : Promise.resolve(null)), [siteId, from]);
+  const roster = useLoad(() => (activeSite ? api.roster(activeSite, from, 7) : Promise.resolve(null)), [activeSite, from]);
   const publish = useAction();
 
   const days = Array.from({ length: 7 }, (_, i) => addDays(from, i));
@@ -48,9 +50,14 @@ export function RosterView({ siteId: initialSite }: { siteId?: string }) {
     return (
       <div className="page">
         <ErrorNotice error={sites.error} />
+        <button className="btn" onClick={sites.reload}>
+          Try again
+        </button>
       </div>
     );
-  const r = roster.data;
+  // Only the roster of the site and week on screen: while another week or site loads, the grid shows its skeleton.
+  const r = roster.data && roster.data.site.id === activeSite && roster.data.from === from ? roster.data : null;
+  const noSites = siteList !== null && siteList.length === 0;
   const drafts = r?.shifts.filter((s) => s.status === 'draft') ?? [];
   const blocked = r?.shifts.filter((s) => s.personId && isBlocked(s.findings) && s.end > me.now) ?? [];
   const unfilled = r?.shifts.filter((s) => !s.personId) ?? [];
@@ -62,13 +69,13 @@ export function RosterView({ siteId: initialSite }: { siteId?: string }) {
         sub="Pick a shift to assign or change a guard. The app checks papers, age, hours and rest before it allows a change."
         actions={
           <>
-            <select id="roster-site" className="select ros-site" aria-label="Site" value={siteId ?? ''} onChange={(e) => setSiteId(e.target.value)}>
-              {sites.data?.map((s) => (
+            {!noSites && <select id="roster-site" className="select ros-site" aria-label="Site" value={activeSite ?? ''} disabled={!siteList?.length} onChange={(e) => setSiteId(e.target.value)}>
+              {siteList?.map((s) => (
                 <option key={s.site.id} value={s.site.id}>
                   {s.site.code} · {s.site.name}
                 </option>
               ))}
-            </select>
+            </select>}
             {r?.canEdit && (
               <button className="btn btn-primary" onClick={() => setAdding(true)}>
                 <PlusIcon size={16} weight="bold" aria-hidden="true" />
@@ -78,7 +85,7 @@ export function RosterView({ siteId: initialSite }: { siteId?: string }) {
           </>
         }
       />
-      {sites.data && sites.data.length === 0 && (
+      {noSites && (
         <Card>
           <Empty title="No sites yet." action={<RecordButton kind="site" companyId={companyId} label="Add site" primary />}>
             A roster belongs to a site. Add the site and its posts first, then add the shifts here.
@@ -86,6 +93,8 @@ export function RosterView({ siteId: initialSite }: { siteId?: string }) {
         </Card>
       )}
 
+      {!noSites && (
+        <>
       {r && (
         <Stats>
           <Stat label="Unfilled" value={unfilled.length} tone={unfilled.length ? 'crit' : 'ok'} icon={<UserCircleDashedIcon size={16} />} note="This week" />
@@ -155,11 +164,16 @@ export function RosterView({ siteId: initialSite }: { siteId?: string }) {
           </div>
         }
       >
-        {!r && (
+        {!r && roster.error && (
           <div className="att-pad">
-            <Loading what="roster" />
+            <p className="help">The roster could not load. Check your connection, then try again.</p>
+            <ErrorNotice error={roster.error} />
+            <button className="btn" onClick={roster.reload}>
+              Try again
+            </button>
           </div>
         )}
+        {!r && !roster.error && <RosterSkeleton />}
         {r && rows.length === 0 && (
           <Empty
             title={r.posts.length ? 'No shifts this week.' : 'This site has no posts yet.'}
@@ -251,8 +265,26 @@ export function RosterView({ siteId: initialSite }: { siteId?: string }) {
           </div>
         )}
       </Card>
+        </>
+      )}
       {editing && <AssignDrawer shift={editing} onClose={() => setEditing(null)} />}
       {adding && r && <AddShiftsDrawer roster={r} from={from < today ? today : from} onClose={() => setAdding(false)} />}
+    </div>
+  );
+}
+
+/** P90: the shape of the week grid while it loads, so the page never looks stuck. */
+function RosterSkeleton() {
+  return (
+    <div className="ros-skel" role="status" aria-live="polite" aria-busy="true">
+      <span className="skel-sr">Loading roster…</span>
+      {Array.from({ length: 4 }, (_, i) => (
+        <div key={i} className="ros-skel-row" aria-hidden="true">
+          {Array.from({ length: 8 }, (_, j) => (
+            <span key={j} className="ros-skel-cell" />
+          ))}
+        </div>
+      ))}
     </div>
   );
 }
@@ -368,7 +400,13 @@ function AddShiftsDrawer({ roster: r, from: initialFrom, onClose }: { roster: Ro
 
 function AssignDrawer({ shift, onClose }: { shift: RosterShift; onClose: () => void }) {
   const [q, setQ] = useState('');
-  const { data, error } = useLoad(() => api.candidates(shift.id, q), [shift.id, q]);
+  // P90: the guard list is asked for once typing pauses, not on every key.
+  const [query, setQuery] = useState('');
+  useEffect(() => {
+    const t = setTimeout(() => setQuery(q), 300);
+    return () => clearTimeout(t);
+  }, [q]);
+  const { data, error } = useLoad(() => api.candidates(shift.id, query), [shift.id, query]);
   const act = useAction();
   const [warnings, setWarnings] = useState<string[]>([]);
 

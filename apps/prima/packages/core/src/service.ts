@@ -2038,7 +2038,8 @@ export class PrimaService {
     const branches = await this.store.list('branches', { companyId });
     const posts = await this.store.list('posts', { companyId });
     const todayShifts = await this.shiftViews(await this.store.list('shifts', { companyId, date: this.today() }));
-    const openCases = (await this.store.list('cases', { companyId })).filter(
+    // P90: only the open cases are read, not the company's whole case history.
+    const openCases = (await this.store.list('cases', { companyId, status: ['open', 'acknowledged', 'escalated'] })).filter(
       (c) => c.status === 'open' || c.status === 'acknowledged' || c.status === 'escalated',
     );
     return sites.map((s) => {
@@ -3357,10 +3358,13 @@ export class PrimaService {
     const site = await this.siteFor(user, siteId);
     const to = addDays(from, days - 1);
     const posts = await this.store.list('posts', { siteId });
-    const shifts = (await this.store.list('shifts', { siteId })).filter((s) => s.date >= from && s.date <= to);
+    // P90 (Roster loading slowly): only this window's shifts (the site and date index), not every shift the site ever
+    // had, and only the rostered guards and their papers, not the whole company's people and credentials.
+    const shifts = (await this.store.list('shifts', { siteId: [siteId] }, { field: 'date', from, before: addDays(to, 1) })).filter((s) => s.date >= from && s.date <= to);
     const views = await this.shiftViews(shifts);
-    const people = await this.store.list('people', { companyId: site.companyId });
-    const creds = await this.store.list('credentials', { companyId: site.companyId });
+    const personIds = [...new Set(shifts.flatMap((s) => (s.personId ? [s.personId] : [])))];
+    const people = personIds.length ? (await this.store.list('people', { id: personIds })).filter((p) => p.companyId === site.companyId) : [];
+    const creds = personIds.length ? await this.store.list('credentials', { companyId: site.companyId, personId: personIds }) : [];
     const personById = new Map(people.map((p) => [p.id, p]));
     const withChecks = views.map((v) => {
       const p = v.personId ? personById.get(v.personId) : undefined;

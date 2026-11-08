@@ -1,0 +1,45 @@
+/* P90: skeleton rows while a list or grid loads (Roster first), so a slow answer never looks stuck. */
+.ros-skel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px;
+}
+.ros-skel-row {
+  display: grid;
+  grid-template-columns: minmax(110px, 1.4fr) repeat(7, minmax(0, 1fr));
+  gap: 8px;
+}
+.ros-skel-cell {
+  display: block;
+  height: 44px;
+  border-radius: 8px;
+  background: linear-gradient(90deg, var(--surface-2) 0%, var(--line) 50%, var(--surface-2) 100%);
+  background-size: 200% 100%;
+  animation: skel-shine 1.4s ease-in-out infinite;
+}
+@media (max-width: 640px) {
+  .ros-skel-row {
+    grid-template-columns: minmax(90px, 1.2fr) repeat(3, minmax(0, 1fr));
+  }
+  .ros-skel-row .ros-skel-cell:nth-child(n + 5) {
+    display: none;
+  }
+}
+@keyframes skel-shine {
+  from { background-position: 100% 0; }
+  to { background-position: -100% 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ros-skel-cell {
+    animation: none;
+  }
+}
+.skel-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
