@@ -358,7 +358,7 @@ export async function parseAttendancePdf(
       if (state.cur) out.employees.push(state.cur);
       return out;
     };
-    return { take, finish };
+    return { take, finish, shown: () => next - 1 };
   };
   if (workers > 1 && pages >= (opts.minPagesForWorkers ?? WORKER_MIN_PAGES)) {
     await doc.destroy().catch(() => undefined);
@@ -367,8 +367,10 @@ export async function parseAttendancePdf(
       await workerSource(bytes, workers)(pages, run.take);
       return run.finish();
     } catch {
-      // Threads could not run here: read it on the main thread instead, from the start.
-      return parseAttendancePdf(bytes, onProgress, { workers: 1 });
+      // Threads could not run here: read it on the main thread instead, from the start. Pages already reported to the
+      // progress bar are not reported again (P90: under load a thread may stop after the first pages).
+      const shown = run.shown();
+      return parseAttendancePdf(bytes, onProgress && ((p) => { if (p.page > shown) onProgress(p); }), { workers: 1 });
     }
   }
   try {
