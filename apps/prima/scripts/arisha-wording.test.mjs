@@ -9,7 +9,8 @@ const web = read('../apps/web/src/Arisha.tsx');
 const itPlan = read('../apps/web/src/views/ItPlan.tsx');
 const api = read('../apps/api/src/arisha.ts');
 // P80: the web brief gained one line (Arisha consults everyone about Prima); its permission text is otherwise unchanged.
-const policyHashes = {"web": "93a9107755ce5cc719245e11e0c022535c3cc663a4b937a1962125fe658fed4a", "itPlan": "d6dac0b58d3c63e65512bf058562f1c1b3a532fd1c7ec67b55eb7760f9c6b6ce", "api": "ce89f94e7f27c12c9e959f120e0ccf56cb19454337befa7a0f75daf103cdfe1e"};
+// P87: it gained the plain-words teaching line and the screen guide (arisha-screens.ts); permission text still unchanged.
+const policyHashes = {"web": "c353bd2a4f7e2feab649c71213f10d2e8e4363b93013bd61985b3756eae4a69e", "itPlan": "d6dac0b58d3c63e65512bf058562f1c1b3a532fd1c7ec67b55eb7760f9c6b6ce", "api": "ce89f94e7f27c12c9e959f120e0ccf56cb19454337befa7a0f75daf103cdfe1e"};
 const hash = value => createHash('sha256').update(value).digest('hex');
 const prompt = (source, pattern) => { const result = source.match(pattern); assert.ok(result, 'prompt must exist'); return result[1]; };
 const policyAfterIdentity = value => value.slice(value.indexOf('.') + 1);

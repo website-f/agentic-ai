@@ -576,7 +576,7 @@ function Holidays({ data, onChanged }: { data: GuardPayRunView; onChanged: () =>
         </div>
         <p className="muted small">
           From the guard public holiday lists the Operations Director or the OGM set for the year (each site's state, else
-          the whole company). Staff holidays are separate. Change the list on the Pay formulas screen, then recalculate.
+          the whole company). Staff holidays are separate. Change the list under Site man-hours, Public holidays, then recalculate.
         </p>
         {dates.length ? (
           <div className="list">

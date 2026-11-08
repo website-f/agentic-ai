@@ -29,7 +29,7 @@ jobs:
         with:
           node-version: 22
           cache: npm
-      - run: node --test scripts/staging-schema-gate.test.mjs scripts/release-workflow-contract.test.mjs scripts/arisha-readiness.test.mjs
+      - run: node --test scripts/staging-schema-gate.test.mjs scripts/release-workflow-contract.test.mjs scripts/arisha-readiness.test.mjs scripts/arisha-wording.test.mjs scripts/arisha-screens.test.mjs
       - run: npm ci
       - name: Test item readiness gate and scanner cancellation (mock APIs, no camera hardware)
         run: |
