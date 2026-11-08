@@ -268,7 +268,13 @@ export async function extractPageLines(bytes: Uint8Array, from: number, to: numb
 }
 
 /** Long reports are read by up to this many worker threads at once (each reads a run of pages). */
-const PDF_WORKERS = Math.max(1, Math.min(3, (typeof os.availableParallelism === 'function' ? os.availableParallelism() : os.cpus().length) - 1));
+// P90: PRIMA_PDF_WORKERS sets the thread count (each thread holds its own copy of the PDF reader: ~200 MB for a 500-page
+// month), so the container's memory limit decides it, not the host's core count. Unset: at most 2.
+const PDF_WORKERS = (() => {
+  const set = Number(process.env.PRIMA_PDF_WORKERS);
+  if (Number.isInteger(set) && set >= 1) return Math.min(4, set);
+  return Math.max(1, Math.min(2, (typeof os.availableParallelism === 'function' ? os.availableParallelism() : os.cpus().length) - 1));
+})();
 /** Reports shorter than this are read on the main thread (starting threads costs more than it saves). */
 const WORKER_MIN_PAGES = 60;
 

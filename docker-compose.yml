@@ -729,6 +729,8 @@ services:
       # P88: the staff directory (office staff and their Microsoft 365 mailboxes; gives nobody a sign-in). Its module
       # (staff-directory-v1) is installed on the office database with the owner's approval of 8 Nov 2026. false = off.
       STAFF_DIRECTORY_ENABLED: ${PRIMA_STAFF_DIRECTORY_ENABLED:-true}
+      # P90: timesheet PDFs are read by this many threads (each ~200 MB for a 500-page month); see mem_limit below.
+      PRIMA_PDF_WORKERS: ${PRIMA_PDF_WORKERS:-2}
       # P80: Prima's assistant Arisha runs on the office's AI: each model turn goes to the office
       # api on the private network (edge; nginx never serves /internal/), signed with
       # OFFICE_SIGNING_SECRET, and counts toward the person's daily AI allowance. Empty = Arisha
@@ -742,7 +744,8 @@ services:
       timeout: 5s
       retries: 5
       start_period: 20s
-    mem_limit: 384m
+    # P90: 1 GB, not 384 MB: reading a 500-page timesheet PDF takes ~300 MB on one thread, ~500 MB on three.
+    mem_limit: 1g
     # P83: one Node process plus its garbage collector; half a core was throttled 318 s under load.
     cpus: 1.5
     # prima: its database. edge: the office api reaches it (P66, signed calls only), and it
