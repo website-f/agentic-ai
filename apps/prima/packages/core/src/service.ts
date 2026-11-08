@@ -708,7 +708,7 @@ import { OrgLinkService } from "./org-links";
 import { orgLinksOn } from "./org-links";
 import { arishaGuideView } from "./guide-cards";
 import { guideCardsFor } from "./guide-cards";
-import { OrgImportService } from "./org-import";
+import { OrgImportService, type FwWorkerInput } from "./org-import";
 import { OFFICE_DESKS } from "./company-office";
 import { OFFICE_TEAM } from "./company-office";
 import { deskId } from "./company-office";
@@ -49085,7 +49085,7 @@ export class PrimaService {
     }
     if (input.mode !== 'new') throw new BadRequest('Choose new paper, correction or the JA date.');
     // A date taken from the JA app has no real issue date (the recording day stands in), so only its expiry is compared.
-    if (current && current.source !== 'ja' && input.issuedOn <= current.issuedOn) throw new BadRequest(`The paper on record was issued ${current.issuedOn}. A new paper is issued after it; to fix a mistake, use Correct.`);
+    if (current && current.source !== 'ja' && current.source !== 'typed' && input.issuedOn <= current.issuedOn) throw new BadRequest(`The paper on record was issued ${current.issuedOn}. A new paper is issued after it; to fix a mistake, use Correct.`);
     if (current?.expiresOn && input.expiresOn <= current.expiresOn) throw new BadRequest(`A renewed paper must expire after ${current.expiresOn}. To fix a mistake, use Correct.`);
     const rec = this.proofRecords(user, person.companyId, null, proof, {}, { documentsOnly: true });
     if (!rec.docs.length) throw new BadRequest(`Attach a copy of the ${label.toLowerCase()}.`);
@@ -49251,6 +49251,139 @@ export class PrimaService {
       });
       return { person, papers: papers.length };
     });
+  }
+
+  /**
+   * P90 (Fitri, 9 Nov 2026: "in FWM there is no button to add the records"): FWM adds a foreign worker by hand or from
+   * the old list, without a JA record. Same people as adding one from the JA app (FWM staff, not despatch), the same
+   * checks (Nepali, age 18 to 60, a branch of the worker's company, a staff number not used), and the paper dates given.
+   * Papers typed this way have no copy in Prima: they are marked "typed" (copy not seen), as JA dates are, until FWM
+   * records the copy. Only the last 4 characters of a passport number are kept. If the JA app later sends the same staff
+   * number, the board links the two as it does for any worker.
+   */
+  async addFwWorker(user: User, input: FwWorkerInput) {
+    if (this.fwmRoleOf(user) !== 'staff') throw new AccessDenied('hr.pay', '(adding foreign workers)');
+    const companyId = String(input?.companyId ?? '');
+    if (!visibleCompanyIds(user, await this.grants(), this.today()).includes(companyId)) throw new AccessDenied('view', companyId || '(company)');
+    const nat = String(input.nationality ?? '').trim();
+    if (nat && !/^(np|npl|nepal|nepali|nepalese)$/i.test(nat)) throw new BadRequest(`Prima holds Nepali foreign workers for now; this row says ${nat.slice(0, 40)}.`);
+    const branch = await this.store.get('branches', String(input.branchId ?? ''));
+    if (!branch || branch.companyId !== companyId) throw new BadRequest('Choose a branch of the worker’s company.');
+    const staffNo = String(input.staffNo ?? '').trim().slice(0, 40);
+    if (staffNo.length < 2 || !/[A-Za-z0-9]/.test(staffNo)) throw new BadRequest('Give the staff number.');
+    const name = String(input.name ?? '').trim().replace(/\s+/g, ' ').slice(0, 120);
+    if (name.length < 2) throw new BadRequest('Give the worker’s name as in the passport.');
+    const today = this.today();
+    const isDate = (d: unknown): d is IsoDate => typeof d === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d) && !Number.isNaN(Date.parse(`${d}T00:00:00Z`)) && new Date(`${d}T00:00:00Z`).toISOString().slice(0, 10) === d;
+    if (!isDate(input.hiredOn) || input.hiredOn > today) throw new BadRequest('Give the date the worker joined (not in the future).');
+    if (!isDate(input.dob)) throw new BadRequest('Give the date of birth from the passport.');
+    const age = ageOn(input.dob, today);
+    if (age < 18 || age > 60) throw new BadRequest(`The date of birth gives age ${age}. Check it against the passport.`);
+    const phone = String(input.phone ?? '').trim().slice(0, 30);
+    if (phone && !/^\+?[0-9][0-9 ()-]{6,20}$/.test(phone)) throw new BadRequest('The phone number is digits, e.g. 012-345 6789.');
+    const optDate = (d: unknown, what: string): IsoDate | null => {
+      if (d === null || d === undefined || d === '') return null;
+      if (!isDate(d)) throw new BadRequest(`${what} is not a real date.`);
+      return d;
+    };
+    const papers: { paper: FwPaper; number: string; issuedOn: IsoDate | null; expiresOn: IsoDate }[] = [];
+    const paper = (p: FwPaper, number: unknown, issued: unknown, expires: unknown) => {
+      const label = FW_PAPER_LABEL[p];
+      const exp = optDate(expires, `${label} expiry`);
+      const iss = optDate(issued, `${label} issue date`);
+      const no = fwPaperNumber(p, String(number ?? '')).slice(0, 60);
+      if (!exp) {
+        if (iss) throw new BadRequest(`Give the ${label.toLowerCase()} expiry date with its issue date.`);
+        return;
+      }
+      if (iss && iss > today) throw new BadRequest(`The ${label.toLowerCase()} issue date is in the future.`);
+      if (iss && exp <= iss) throw new BadRequest(`The ${label.toLowerCase()} expiry must be after its issue date.`);
+      papers.push({ paper: p, number: no, issuedOn: iss, expiresOn: exp });
+    };
+    paper('PASSPORT', input.passportNo, input.passportIssuedOn, input.passportExpiresOn);
+    paper('PLKS_PERMIT', input.permitNo, input.permitIssuedOn, input.permitExpiresOn);
+    paper('FOMEMA', null, null, input.fomemaExpiresOn);
+    paper('FW_INSURANCE', null, null, input.insuranceExpiresOn);
+    paper('SPIKPA', null, null, input.spikpaExpiresOn);
+    const passportTail = String(input.passportNo ?? '').replace(/[^A-Za-z0-9]/g, '');
+    await this.store.lock?.('branches', branch.id);
+    const people = await this.store.list('people', { companyId: [companyId] });
+    if (people.some((p) => p.staffNo.trim().toUpperCase() === staffNo.toUpperCase())) throw new BadRequest(`Staff number ${staffNo} is already in Prima for this company.`);
+    const at = this.now();
+    const slug = staffNo.replace(/[^A-Za-z0-9-]/g, '').slice(0, 40) || String(toMs(at));
+    const person: Person = {
+      id: `p-fw-${companyId}-${slug}`,
+      companyId,
+      branchId: branch.id,
+      staffNo,
+      name,
+      nationality: 'NP',
+      idMasked: passportTail ? maskIdNumber(passportTail) : '',
+      dob: input.dob,
+      phone,
+      role: 'guard',
+      status: 'active',
+      hiredOn: input.hiredOn,
+      faceEnrolledOn: null,
+    };
+    if (await this.store.get('people', person.id)) throw new BadRequest(`A person with staff number ${staffNo} is already in Prima.`);
+    const creds = papers.map(
+      (x): Credential => ({
+        id: `cr-fw-${person.id}-${x.paper.toLowerCase()}-${toMs(at)}-${Math.random().toString(36).slice(2, 8)}`,
+        companyId,
+        personId: person.id,
+        type: x.paper,
+        number: x.number,
+        // No issue date on the old list: the day it was recorded stands in, as for a JA date.
+        issuedOn: x.issuedOn ?? today,
+        expiresOn: x.expiresOn,
+        source: 'typed',
+        docIds: [],
+        recordedBy: user.name,
+        recordedById: user.id,
+        recordedAt: at,
+      }),
+    );
+    return this.store.transaction(async (tx) => {
+      await tx.insert('people', person);
+      for (const c of creds) await tx.insert('credentials', c);
+      await tx.audit({
+        at,
+        actor: user.name,
+        companyId,
+        action: 'fwm.worker.add',
+        entity: 'person',
+        entityId: person.id,
+        summary: `Foreign worker ${staffNo} added by FWM with ${creds.length} paper date${creds.length === 1 ? '' : 's'} (typed, copy not seen)`,
+      });
+      return { person, papers: creds.length };
+    });
+  }
+
+  /**
+   * P90: one existing IT device from an old list, through the IT manual record (its own permission, duplicate tag and
+   * serial checks, receipt and audit). A refused row throws, so an import of several is all or none.
+   */
+  async importItAsset(
+    user: User,
+    companyId: Id,
+    input: { tag: string; serial: string; kind: string; model: string; location: string; unitLabel: string; boughtOn: IsoDate | null; warrantyTo: IsoDate | null },
+  ) {
+    const manual = new ItManualService(this.store, () => this.now());
+    const r = await manual.create(user, 'asset', {
+      requestId: globalThis.crypto.randomUUID(),
+      tag: input.tag,
+      serial: input.serial,
+      kind: input.kind,
+      model: input.model,
+      companyId,
+      unitLabel: input.unitLabel ?? '',
+      location: input.location,
+      boughtOn: input.boughtOn ?? null,
+      warrantyTo: input.warrantyTo ?? null,
+    });
+    if (r.terminal !== 'committed' || !r.recordId) throw new BadRequest(('message' in r && r.message) || 'This device was not recorded.');
+    return { id: r.recordId };
   }
 
   /**
@@ -54240,7 +54373,7 @@ function fwPaperView(a: {
   // When the two apps differ, count to the earlier date until FWM settles it: never later than either says.
   const counted = primaExpiresOn && ja?.expiresOn ? (ja.expiresOn < primaExpiresOn ? ja.expiresOn : primaExpiresOn) : (primaExpiresOn ?? ja?.expiresOn ?? null);
   const countedFrom: 'prima' | 'ja' | null = !counted ? null : counted === primaExpiresOn ? 'prima' : 'ja';
-  const source: 'prima' | 'ja' | 'sample' | null = c ? (c.source ?? 'sample') : null;
+  const source: 'prima' | 'ja' | 'typed' | 'sample' | null = c ? (c.source ?? 'sample') : null;
   const base = {
     paper: a.paper,
     label: FW_PAPER_LABEL[a.paper],
@@ -54304,7 +54437,7 @@ export interface FwWorkerRow {
     number: string | null;
     issuedOn: IsoDate | null;
     expiresOn: IsoDate | null;
-    source: 'prima' | 'ja' | 'sample' | null;
+    source: 'prima' | 'ja' | 'typed' | 'sample' | null;
     jaExpiresOn: IsoDate | null;
     datesDiffer: boolean;
   }[];

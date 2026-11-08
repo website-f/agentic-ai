@@ -818,6 +818,34 @@ export class AppController {
     );
   }
 
+  /** P90: FWM adds a foreign worker by hand (no JA record needed); the service checks FWM staff and the worker. */
+  @Post('fwm/workers')
+  fwAddWorker(@UserId() uid: string, @Body() b: Record<string, unknown>) {
+    const opt = (v: unknown, name: string, max: number) => (v == null || v === '' ? null : str(v, name, max));
+    const optDate = (v: unknown, name: string) => (v == null || v === '' ? null : date(v, name));
+    // Checked here, before the service runs: a malformed field is refused with nothing opened.
+    const input = {
+      companyId: str(b.companyId, 'companyId', 80),
+      branchId: str(b.branchId, 'branchId', 80),
+      staffNo: str(b.staffNo, 'staffNo', 40),
+      name: str(b.name, 'name', 120),
+      nationality: opt(b.nationality, 'nationality', 40),
+      dob: date(b.dob, 'dob'),
+      hiredOn: date(b.hiredOn, 'hiredOn'),
+      phone: opt(b.phone, 'phone', 30),
+      passportNo: opt(b.passportNo, 'passportNo', 30),
+      passportIssuedOn: optDate(b.passportIssuedOn, 'passportIssuedOn'),
+      passportExpiresOn: optDate(b.passportExpiresOn, 'passportExpiresOn'),
+      permitNo: opt(b.permitNo, 'permitNo', 60),
+      permitIssuedOn: optDate(b.permitIssuedOn, 'permitIssuedOn'),
+      permitExpiresOn: optDate(b.permitExpiresOn, 'permitExpiresOn'),
+      fomemaExpiresOn: optDate(b.fomemaExpiresOn, 'fomemaExpiresOn'),
+      insuranceExpiresOn: optDate(b.insuranceExpiresOn, 'insuranceExpiresOn'),
+      spikpaExpiresOn: optDate(b.spikpaExpiresOn, 'spikpaExpiresOn'),
+    };
+    return this.db.asUser(uid, (svc, u) => svc.addFwWorker(u, input));
+  }
+
   @Post('people/:id/fwm-tasks')
   fwmTask(@UserId() uid: string, @Param('id') id: string, @Body() b: Record<string, unknown>) {
     const kind = FWM_TASK_KINDS.find((k) => k === b.kind);

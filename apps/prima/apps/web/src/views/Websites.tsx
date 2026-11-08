@@ -7,6 +7,8 @@ import { useApp } from '../App';
 import { loadWebsiteVisit, websiteNoticeIsMonth, type WebsiteVisit } from './website-schedule-state';
 import { Chip, Drawer, ErrorNotice, Loading, dataNotice, dateLabel, dateTimeLabel, useAction, useLoad, type Tone } from '../ui';
 import { Card, PageHead, Stat, Stats, Steps, type StepState } from '../kit';
+import { ImportButton } from './ImportDrawer';
+import { RecordButton } from './RecordForm';
 import { ArrowsClockwiseIcon, BuildingsIcon, CalendarCheckIcon, CheckSquareIcon, GlobeIcon, SealCheckIcon, WarningIcon } from '@phosphor-icons/react';
 
 
@@ -126,6 +128,12 @@ export function WebsitesView() {
     <div className="page ws-page">
       <PageHead
         title="Websites"
+        actions={
+          <>
+            <ImportButton kind="itDomain" />
+            <RecordButton kind="itDomain" label="Add domain" primary />
+          </>
+        }
         sub={
           r.itHead || r.group
             ? `Domains, websites, quarterly content reviews, monthly checks and issues for every company in the group. ${data.quarter.key} runs ${dateLabel(data.quarter.start)} to ${dateLabel(data.quarter.end)}.`

@@ -16,6 +16,7 @@ import { ItPlanView } from './ItPlan';
 import { LoginHandoverPanel } from './LoginHandover';
 import { ItImport } from './ItImport';
 import { ItManualPanel, manualItVisible } from './ItManual';
+import { ImportButton } from './ImportDrawer';
 import { ItOperations } from './ItOperations';
 import { ItGuide } from './ItGuide';
 import { Chip, Drawer, ErrorNotice, Loading, dataNotice, dateLabel, dateTimeLabel, useAction, useLoad } from '../ui';
@@ -243,7 +244,7 @@ export function ItView() {
           </>
         )}
         {current === 'systems' && <>{manualItVisible(me.user)&&<ItManualPanel mode="systems"/>}<Systems data={data} /></>}
-        {current === 'assets' && <>{manualItVisible(me.user)&&<ItManualPanel mode="assets"/>}<Assets data={data} staff={staff} /></>}
+        {current === 'assets' && <>{manualItVisible(me.user)&&<ItManualPanel mode="assets"/>}{manualItVisible(me.user)&&<div className="imp-inline"><ImportButton kind="itAsset" label="Import IT equipment from file" /></div>}<Assets data={data} staff={staff} /></>}
         {current === 'purchases' && <Purchases data={data} staff={staff} />}
         {current === 'maintenance' && <><Maintenance data={data} staff={staff} /><ItOperations mode="inspection"/></>}
         {current === 'websites' && <WebsitesView />}

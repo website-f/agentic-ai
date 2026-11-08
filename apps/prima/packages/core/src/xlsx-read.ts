@@ -185,3 +185,55 @@ export async function readXlsx(bytes: Uint8Array, inflateRaw: InflateRaw): Promi
   if (!sheets.length) throw new XlsxError('The workbook has no sheets Prima can read.');
   return sheets;
 }
+
+/**
+ * P90: the tables of a Word document (.docx), each as a sheet ("Table 1", "Table 2"), for lists kept in Word. Cell text
+ * is its paragraphs joined with a space; a cell spanning columns (gridSpan) leaves empty cells after it, so the columns
+ * stay in line. Tables inside tables are read as text of their cell.
+ */
+export async function readDocxTables(bytes: Uint8Array, inflateRaw: InflateRaw): Promise<XlsxSheet[]> {
+  const files = unzip(bytes, inflateRaw);
+  const doc = files.get('word/document.xml');
+  if (!doc) throw new XlsxError('This is not a Word (.docx) file. Save it as .docx, .xlsx or CSV and try again.');
+  const xml = new TextDecoder().decode(await doc());
+  const sheets: XlsxSheet[] = [];
+  let cells = 0;
+  const wText = (frag: string) =>
+    [...frag.matchAll(/<w:p\b[\s\S]*?<\/w:p>/g)]
+      .map((p) => [...p[0].matchAll(/<w:t(?:\s[^>]*)?>([\s\S]*?)<\/w:t>|<w:tab\/>/g)].map((t) => (t[1] !== undefined ? unescapeXml(t[1]) : ' ')).join(''))
+      .filter((t) => t.trim())
+      .join(' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+  // Top-level tables only: walk the <w:tbl> tags keeping depth.
+  const re = /<w:tbl\b[^>]*>|<\/w:tbl>/g;
+  let depth = 0;
+  let start = -1;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(xml))) {
+    if (m[0].startsWith('</')) {
+      depth--;
+      if (depth === 0 && start >= 0) {
+        const tbl = xml.slice(start, m.index);
+        const rows: string[][] = [];
+        for (const tr of tbl.matchAll(/<w:tr\b[\s\S]*?<\/w:tr>/g)) {
+          const row: string[] = [];
+          for (const tc of tr[0].matchAll(/<w:tc\b[\s\S]*?<\/w:tc>/g)) {
+            row.push(wText(tc[0]));
+            const span = Number(/<w:gridSpan\s+w:val="(\d+)"/.exec(tc[0])?.[1] ?? 1);
+            for (let k = 1; k < Math.min(span, 50); k++) row.push('');
+            if (++cells > MAX_CELLS) throw new XlsxError('The document is too big. Copy the table you need into a new file of up to 500 rows.');
+          }
+          rows.push(row);
+        }
+        sheets.push({ name: `Table ${sheets.length + 1}`, rows });
+        start = -1;
+      }
+    } else {
+      if (depth === 0) start = m.index;
+      depth++;
+    }
+  }
+  if (!sheets.length) throw new XlsxError('This Word document has no table. Put the list in a table, or save it as Excel.');
+  return sheets;
+}

@@ -21,6 +21,7 @@ import { CooNoticesPanel } from './CooNotices';
 import { DocList, ProofPicker } from './Proof';
 import { FwmWelfarePanel } from './FwmWelfare';
 import { FwmRecruitmentPanel } from './FwmRecruitment';
+import { FwAddButtons } from './FwmAdd';
 import '../styles/hrx.css';
 
 /**
@@ -42,8 +43,9 @@ const KINDS: FwmTaskKind[] = ['FOMEMA', 'JIM', 'TNG', 'BIOMETRIC', 'OTHER'];
 const PAPERS: FwPaper[] = FW_PAPERS;
 const PAGE = 100;
 
-const SOURCE: Record<'prima' | 'ja' | 'sample', { label: string; tone: Tone; title: string }> = {
+const SOURCE: Record<'prima' | 'ja' | 'typed' | 'sample', { label: string; tone: Tone; title: string }> = {
   prima: { label: 'From the paper', tone: 'ok', title: 'Recorded in Prima from a copy of the paper' },
+  typed: { label: 'Typed in', tone: 'warn', title: 'Typed by FWM from an old list or by hand; copy not seen in Prima. Record the paper to attach its copy.' },
   ja: { label: 'From JA', tone: 'info', title: 'Date taken from the JA Group app; copy not seen in Prima' },
   sample: { label: 'Sample data', tone: 'unknown', title: 'Sample data from the demo set; record the real paper' },
 };
@@ -125,6 +127,7 @@ export function FwmView() {
     <div className="page">
       <PageHead
         title="Foreign workers"
+        actions={data.role === 'staff' ? <FwAddButtons branches={data.branches} /> : undefined}
         sub={
           data.role === 'om'
             ? 'Tasks from Foreign Worker Management: get the guard there, then send the proof.'

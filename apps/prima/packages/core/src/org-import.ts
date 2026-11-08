@@ -28,11 +28,40 @@ import { cleanupCanonical } from './it-cleanup-hash';
 import { COMPANY_FIELD, alignColumns, findHeaderRow, matchCompany, matchOption, normBool, normDate, normHeader, normMoney, type AlignField, type ColumnMatch } from './import-align';
 import { RECORD_KINDS, type FieldSpec, type RecordKind, type RecordValues } from './records';
 import type { Store } from './store';
-import type { BillingMethod, Dataset, Id, IsoDate, IsoDateTime, LeaveOverrideKind, User } from './types';
+import type { BillingMethod, Dataset, Id, IsoDate, IsoDateTime, LeaveOverrideKind, PurCategory, User } from './types';
 import { orgLinksOn, withoutHandOvers } from './org-links';
 
 /** P81: records that are not plain record forms but have their own add path, imported row by row through it. */
-export type ExtraImportKind = 'client' | 'contract' | 'leaveEntitlement';
+export type ExtraImportKind = 'client' | 'contract' | 'leaveEntitlement' | P90ImportKind;
+/**
+ * P90 ("Import from any file", Fitri 9 Nov 2026): more screens that keep records staff bring from old spreadsheets.
+ * Each row goes through the screen's own add (addFwWorker, addPurSupplier, addPublicHoliday, addBranch, the IT manual
+ * asset record), with that add's own permission check: the import never lets anyone write what they could not add by hand.
+ */
+export type P90ImportKind = 'fwWorker' | 'purSupplier' | 'publicHoliday' | 'branch' | 'itAsset';
+
+/** Supplier categories, as the Procurement screen names them. */
+export const PUR_CATEGORY_WORDS: [string, string][] = [
+  ['UNIFORM', 'Uniform'],
+  ['GUARD_EQUIPMENT', 'Guard equipment'],
+  ['DEVICE', 'Device'],
+  ['PATROL_DEVICE', 'Patrol device'],
+  ['CLEANING', 'Cleaning'],
+  ['SERVICES', 'Services'],
+  ['IT', 'IT'],
+  ['OTHER', 'Other'],
+];
+
+export const IT_ASSET_KINDS: [string, string][] = [
+  ['LAPTOP', 'Laptop'],
+  ['DESKTOP', 'Desktop'],
+  ['PHONE', 'Phone'],
+  ['TABLET', 'Tablet'],
+  ['PRINTER', 'Printer'],
+  ['NETWORK', 'Network device'],
+  ['CCTV', 'CCTV'],
+  ['OTHER', 'Other'],
+];
 export type ImportKind = RecordKind | ExtraImportKind;
 
 export interface ImportSpec {
@@ -110,6 +139,109 @@ export const EXTRA_IMPORTS: Record<ExtraImportKind, ImportSpec> = {
       { key: 'note', label: 'Reason', type: 'text', required: true, help: 'For example the contract clause or the old system.' },
     ],
   },
+  fwWorker: {
+    kind: 'fwWorker',
+    label: 'Foreign worker',
+    table: 'people',
+    companyScoped: true,
+    keptBy: 'FWM',
+    screen: 'Foreign workers',
+    note: 'Each worker is added as FWM adds one by hand, with the paper dates given. Prima keeps only the last 4 characters of a passport number. Papers typed from an old list show as "Typed in, copy not seen" until FWM records the copy.',
+    fields: [
+      { key: 'staffNo', label: 'Staff number', type: 'text', required: true, words: ['worker no', 'worker id', 'no pekerja asing', 'fw no'] },
+      { key: 'name', label: 'Name', type: 'text', required: true, words: ['worker name', 'nama pekerja asing', 'name as passport', 'nama seperti pasport'] },
+      { key: 'branch', label: 'Branch', type: 'text', required: true, help: 'The branch name as in Prima.' },
+      { key: 'nationality', label: 'Nationality', type: 'text', help: 'Prima holds Nepali foreign workers for now.' },
+      { key: 'dob', label: 'Date of birth', type: 'date', required: true },
+      { key: 'hiredOn', label: 'Joined on', type: 'date', required: true, words: ['arrival date', 'tarikh tiba', 'date of arrival', 'tarikh masuk kerja'] },
+      { key: 'phone', label: 'Phone', type: 'text' },
+      { key: 'passportNo', label: 'Passport number', type: 'text', restricted: true, help: 'Only the last 4 characters are kept.' },
+      { key: 'passportIssuedOn', label: 'Passport issued on', type: 'date' },
+      { key: 'passportExpiresOn', label: 'Passport expires on', type: 'date' },
+      { key: 'permitNo', label: 'Work permit (PLKS) number', type: 'text' },
+      { key: 'permitIssuedOn', label: 'Work permit issued on', type: 'date' },
+      { key: 'permitExpiresOn', label: 'Work permit (PLKS) expires on', type: 'date' },
+      { key: 'fomemaExpiresOn', label: 'FOMEMA medical expires on', type: 'date' },
+      { key: 'insuranceExpiresOn', label: 'Foreign worker insurance expires on', type: 'date' },
+      { key: 'spikpaExpiresOn', label: 'SPIKPA expires on', type: 'date' },
+    ],
+  },
+  purSupplier: {
+    kind: 'purSupplier',
+    label: 'Supplier',
+    table: 'purSuppliers',
+    companyScoped: true,
+    keptBy: 'Procurement',
+    screen: 'Procurement',
+    note: 'Each supplier is registered as Procurement registers one by hand. Finance still verifies each bank account and reviews each supplier; nothing is paid from an imported row.',
+    fields: [
+      { key: 'name', label: 'Supplier', type: 'text', required: true, words: ['supplier', 'supplier name', 'nama pembekal', 'pembekal', 'vendor', 'vendor name', 'company name', 'nama syarikat'] },
+      { key: 'ssmNo', label: 'SSM number', type: 'text', required: true },
+      { key: 'categories', label: 'Categories', type: 'text', help: 'Uniform, Guard equipment, Device, Patrol device, Cleaning, Services, IT or Other; several separated by commas.' },
+      { key: 'bankName', label: 'Bank', type: 'text', required: true },
+      { key: 'bankAccount', label: 'Bank account number', type: 'text', required: true, restricted: true },
+      { key: 'coiDeclared', label: 'Conflict of interest declared', type: 'bool' },
+      { key: 'abcAck', label: 'Anti-bribery acknowledged', type: 'bool' },
+    ],
+  },
+  publicHoliday: {
+    kind: 'publicHoliday',
+    label: 'Public holiday',
+    table: 'publicHolidays',
+    companyScoped: false,
+    keptBy: 'HR',
+    screen: 'HR, Holidays',
+    note: 'Each holiday is added as HR adds one by hand. Leave the states empty for a national holiday.',
+    fields: [
+      { key: 'date', label: 'Date', type: 'date', required: true },
+      { key: 'name', label: 'Holiday', type: 'text', required: true, words: ['holiday', 'cuti', 'nama cuti', 'perayaan', 'occasion', 'cuti umum', 'public holiday'] },
+      { key: 'states', label: 'States', type: 'text', help: 'Empty for the whole country; several separated by commas.' },
+      { key: 'note', label: 'Note', type: 'text' },
+    ],
+  },
+  branch: {
+    kind: 'branch',
+    label: 'Branch',
+    table: 'branches',
+    companyScoped: true,
+    keptBy: 'Company manager',
+    screen: 'Branches',
+    note: 'Each branch starts as proposed, as the Add branch form makes it; its setup and approval follow as usual.',
+    fields: [
+      { key: 'name', label: 'Branch', type: 'text', required: true, words: ['branch', 'branch name', 'cawangan', 'nama cawangan'] },
+      { key: 'state', label: 'State', type: 'text', required: true },
+      {
+        key: 'model',
+        label: 'Model',
+        type: 'select',
+        required: true,
+        options: [
+          ['A', 'Model A'],
+          ['B', 'Model B'],
+          ['C', 'Model C'],
+        ],
+      },
+    ],
+  },
+  itAsset: {
+    kind: 'itAsset',
+    label: 'IT equipment',
+    table: 'itAssets',
+    companyScoped: true,
+    keptBy: 'IT',
+    screen: 'IT',
+    note: 'Each device is recorded as IT records existing equipment by hand (spare, not connected to anything). A purchase is never made from an imported row.',
+    fields: [
+      { key: 'tag', label: 'Asset tag', type: 'text', required: true },
+      { key: 'serial', label: 'Serial number', type: 'text', required: true },
+      { key: 'kind', label: 'Device kind', type: 'select', required: true, options: IT_ASSET_KINDS, words: ['device type', 'jenis peranti', 'equipment type'] },
+      { key: 'model', label: 'Model', type: 'text', required: true },
+      { key: 'location', label: 'Location', type: 'text', required: true },
+      { key: 'unitLabel', label: 'Unit or department', type: 'text', words: ['department', 'jabatan', 'unit', 'bahagian', 'user', 'pengguna'] },
+      { key: 'boughtOn', label: 'Bought on', type: 'date' },
+      { key: 'warrantyTo', label: 'Warranty until', type: 'date' },
+    ],
+  },
 };
 
 /** Record kinds that may be imported in bulk. */
@@ -139,6 +271,12 @@ export const IMPORTABLE_KINDS: readonly ImportKind[] = Object.freeze([
   'client',
   'contract',
   'leaveEntitlement',
+  // P90: Fitri's audit (9 Nov 2026), see docs/P90_IMPORT_AUDIT.md.
+  'fwWorker',
+  'purSupplier',
+  'publicHoliday',
+  'branch',
+  'itAsset',
 ] as ImportKind[]);
 
 export const IMPORT_MAX_ROWS = 500;
@@ -220,6 +358,41 @@ export interface ImportSaver {
     opts?: { imported?: boolean },
   ): Promise<{ id: Id }>;
   setLeaveOverride(user: User, personId: Id, kind: LeaveOverrideKind, days: number | null, note: string): Promise<unknown>;
+  /** P90 kinds: the screen's own add, permission check included. */
+  addFwWorker(user: User, input: FwWorkerInput): Promise<{ person: { id: Id } }>;
+  addPurSupplier(
+    user: User,
+    companyId: Id,
+    input: { name: string; ssmNo: string; categories: PurCategory[]; bankName: string; bankAccount: string; coiDeclared: boolean; abcAck: boolean },
+  ): Promise<{ id: Id }>;
+  addPublicHoliday(user: User, input: { date: IsoDate; name: string; states: string[] | null; compulsory: null; note: string }): Promise<unknown>;
+  addBranch(user: User, companyId: Id, input: { name: string; state: string; model: 'A' | 'B' | 'C' }): Promise<{ id: Id }>;
+  importItAsset(
+    user: User,
+    companyId: Id,
+    input: { tag: string; serial: string; kind: string; model: string; location: string; unitLabel: string; boughtOn: IsoDate | null; warrantyTo: IsoDate | null },
+  ): Promise<{ id: Id }>;
+}
+
+/** P90: a foreign worker added by FWM by hand or from an old list (no JA record needed). */
+export interface FwWorkerInput {
+  companyId: Id;
+  branchId: Id;
+  staffNo: string;
+  name: string;
+  nationality?: string | null;
+  dob: IsoDate;
+  hiredOn: IsoDate;
+  phone?: string | null;
+  passportNo?: string | null;
+  passportIssuedOn?: IsoDate | null;
+  passportExpiresOn?: IsoDate | null;
+  permitNo?: string | null;
+  permitIssuedOn?: IsoDate | null;
+  permitExpiresOn?: IsoDate | null;
+  fomemaExpiresOn?: IsoDate | null;
+  insuranceExpiresOn?: IsoDate | null;
+  spikpaExpiresOn?: IsoDate | null;
 }
 
 export class ImportError extends Error {
@@ -574,6 +747,83 @@ export class OrgImportService {
       }, { imported: true });
       return c.id;
     }
+    if (kind === 'fwWorker') {
+      const want = String(v.branch ?? '').trim();
+      const branches = (await this.store.list('branches', { companyId: [companyId] })) as unknown as { id: Id; name: string; state: string; status?: string }[];
+      const open = branches.filter((b) => b.status !== 'closed');
+      const k = normHeader(want);
+      let hit = open.filter((b) => b.id === want || normHeader(b.name) === k);
+      // "Kuala Lumpur" for the "KL Branch": a branch named by its state, when only one branch is in that state.
+      if (!hit.length) hit = open.filter((b) => normHeader(b.state) === k || normHeader(b.name).includes(k));
+      if (hit.length !== 1) throw new ImportError(hit.length ? `Branch "${want}" matches more than one branch; use its full name.` : `Branch "${want}" is not a branch of this company.`, 400);
+      const d = (x: unknown) => (x === null || x === undefined || x === '' ? null : String(x));
+      const r = await this.saver.addFwWorker(user, {
+        companyId,
+        branchId: hit[0].id,
+        staffNo: String(v.staffNo ?? ''),
+        name: String(v.name ?? ''),
+        nationality: d(v.nationality),
+        dob: String(v.dob ?? ''),
+        hiredOn: String(v.hiredOn ?? ''),
+        phone: d(v.phone),
+        passportNo: d(v.passportNo),
+        passportIssuedOn: d(v.passportIssuedOn),
+        passportExpiresOn: d(v.passportExpiresOn),
+        permitNo: d(v.permitNo),
+        permitIssuedOn: d(v.permitIssuedOn),
+        permitExpiresOn: d(v.permitExpiresOn),
+        fomemaExpiresOn: d(v.fomemaExpiresOn),
+        insuranceExpiresOn: d(v.insuranceExpiresOn),
+        spikpaExpiresOn: d(v.spikpaExpiresOn),
+      });
+      return r.person.id;
+    }
+    if (kind === 'purSupplier') {
+      const cats = String(v.categories ?? '')
+        .split(/[,;\n/]+/)
+        .map((x) => x.trim())
+        .filter(Boolean);
+      const categories = cats.map((c) => {
+        const hit = matchOption(c, PUR_CATEGORY_WORDS);
+        if (!hit) throw new ImportError(`Category "${c.slice(0, 40)}" is not one of: ${PUR_CATEGORY_WORDS.map(([, l]) => l).join(', ')}.`, 400);
+        return hit as PurCategory;
+      });
+      const s = await this.saver.addPurSupplier(user, companyId, {
+        name: String(v.name ?? ''),
+        ssmNo: String(v.ssmNo ?? ''),
+        categories: [...new Set(categories)],
+        bankName: String(v.bankName ?? ''),
+        bankAccount: String(v.bankAccount ?? '').replace(/[\s-]/g, ''),
+        coiDeclared: v.coiDeclared === true,
+        abcAck: v.abcAck === true,
+      });
+      return s.id;
+    }
+    if (kind === 'publicHoliday') {
+      const states = String(v.states ?? '')
+        .split(/[,;\n]+/)
+        .map((x) => x.trim())
+        .filter(Boolean);
+      const r = (await this.saver.addPublicHoliday(user, { date: String(v.date ?? ''), name: String(v.name ?? ''), states: states.length ? states : null, compulsory: null, note: String(v.note ?? '') })) as { id?: Id } | undefined;
+      return r?.id ?? null;
+    }
+    if (kind === 'branch') {
+      const b = await this.saver.addBranch(user, companyId, { name: String(v.name ?? ''), state: String(v.state ?? ''), model: String(v.model ?? '') as 'A' | 'B' | 'C' });
+      return b.id;
+    }
+    if (kind === 'itAsset') {
+      const a = await this.saver.importItAsset(user, companyId, {
+        tag: String(v.tag ?? ''),
+        serial: String(v.serial ?? ''),
+        kind: String(v.kind ?? ''),
+        model: String(v.model ?? ''),
+        location: String(v.location ?? ''),
+        unitLabel: String(v.unitLabel ?? ''),
+        boughtOn: (v.boughtOn as IsoDate | null) ?? null,
+        warrantyTo: (v.warrantyTo as IsoDate | null) ?? null,
+      });
+      return a.id;
+    }
     // leaveEntitlement: the staff member by staff number (or the exact name) within this company.
     const who = String(v.staffNo ?? '').trim();
     const people = ((await this.store.list('people', { companyId: [companyId] })) as unknown as { id: Id; staffNo: string; name: string; role: string }[]).filter(
@@ -681,7 +931,8 @@ export class OrgImportService {
           }
         }
       });
-      const recordIds = isRecordKind(kind)
+      // Public holidays give back the year's list, not the new row: their ids are read from the table, as records' are.
+      const recordIds = isRecordKind(kind) || kind === 'publicHoliday'
         ? (await tx.list(p.spec.table as never, {})).map((r) => (r as { id: Id }).id).filter((id) => !before.has(id))
         : [...new Set(returned)];
       const at = this.now();

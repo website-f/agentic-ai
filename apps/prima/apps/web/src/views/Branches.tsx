@@ -5,6 +5,7 @@ import { BRANCH_APPROVER_LABEL, BRANCH_COST_KINDS, BRANCH_COST_LABEL, TERMINATIO
 import { api, type BranchBoard, type BranchJv } from '../api';
 import { useApp } from '../App';
 import { Card, Empty, PageHead, Stat, Stats } from '../kit';
+import { ImportButton } from './ImportDrawer';
 import { Chip, Drawer, ErrorNotice, Loading, dateLabel, dateTimeLabel, useAction, useLoad, type Tone } from '../ui';
 import '../styles/biz.css';
 
@@ -73,10 +74,13 @@ export function BranchesView() {
         sub="A branch works inside its licensed company: same licence, employer and accounts. The company approves each month's settlement under the signed agreement and reviews every branch action. A month prepared from SQL Account lines shows its references; older test months are marked as not prepared from SQL. Prima records payments; it never makes them."
         actions={
           data.canAdd.length > 0 && (
-            <button className="btn btn-primary" onClick={() => setAdding(true)}>
-              <PlusIcon size={16} weight="bold" aria-hidden="true" />
-              Propose a new branch
-            </button>
+            <>
+              <ImportButton kind="branch" choices={data.canAdd.map((c): [string, string] => [c.id, c.name])} />
+              <button className="btn btn-primary" onClick={() => setAdding(true)}>
+                <PlusIcon size={16} weight="bold" aria-hidden="true" />
+                Propose a new branch
+              </button>
+            </>
           )
         }
       />
