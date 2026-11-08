@@ -614,9 +614,10 @@ export interface Credential {
   recordedAt?: IsoDateTime | null;
   /**
    * Where the date came from (FWM real use, 5 Nov 2026): 'prima' = recorded in Prima from a copy of the paper,
-   * 'ja' = taken from the JA Group app feed (copy not seen in Prima). Missing on older and sample rows.
+   * 'ja' = taken from the JA Group app feed (copy not seen in Prima). P90: 'typed' = typed by FWM from an old list or by
+   * hand when adding the worker (copy not seen in Prima). Missing on older and sample rows.
    */
-  source?: 'prima' | 'ja';
+  source?: 'prima' | 'ja' | 'typed';
   /** Copy of the paper (evidence documents, fwmId = this id). */
   docIds?: Id[];
   /** The JA record and its JA change time, when the date came from the JA feed. */
