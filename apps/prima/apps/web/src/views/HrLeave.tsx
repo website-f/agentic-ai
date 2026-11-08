@@ -67,6 +67,8 @@ export function HolidaysPanel() {
       title={`Public holidays ${d.year}`}
       sub={`Staff leave skips these days and weekends. The Act needs at least ${d.rule.value.minPerYear} a year with the five fixed ones; HR may add more.`}
       actions={
+        <>
+        {d.canEdit && <ImportButton kind="publicHoliday" />}
         <select
           className="select"
           value={year}
@@ -82,6 +84,7 @@ export function HolidaysPanel() {
             );
           })}
         </select>
+        </>
       }
       flush
     >

@@ -171,6 +171,8 @@ export class HttpApi implements Api {
     importPreview: (kind, companyId, csv, opts) => this.call('POST', `/org/import/${encodeURIComponent(kind)}/preview`, { companyId, csv, ...opts }),
     importCommit: (kind, companyId, csv, fingerprint, opts) =>
       this.call('POST', `/org/import/${encodeURIComponent(kind)}/commit`, { companyId, csv, fingerprint, ...opts }),
+    importAiState: () => this.call('GET', '/org/import-ai'),
+    importAiColumns: (kind, columns) => this.call('POST', `/org/import/${encodeURIComponent(kind)}/ai-columns`, { columns }),
   };
 
   /** P81: past attendance from the monthly PDF reports, sent in 1 MB pieces (the office signs JSON of at most 3 MB). */
@@ -2195,6 +2197,9 @@ export class HttpApi implements Api {
   }
   addFwWorkerFromJa(jaRecordId: string, input: FwAddFromJaInput) {
     return this.call<unknown>('POST', `/fwm/ja-workers/${encodeURIComponent(jaRecordId)}/add`, input);
+  }
+  addFwWorker(input: Parameters<Api['addFwWorker']>[0]) {
+    return this.call<unknown>('POST', '/fwm/workers', input);
   }
   createFwmTask(personId: string, input: Parameters<Api['createFwmTask']>[1]) {
     return this.call<unknown>('POST', `/people/${encodeURIComponent(personId)}/fwm-tasks`, input);

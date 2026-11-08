@@ -1,10 +1,22 @@
 // Hand-overs between departments and real-data import (connect-departments, 2 Nov 2026).
 // Every route runs as the signed-in person (Db.asUser): the database walls and the service checks decide what they see.
-import { Body, Controller, Get, HttpException, Param, Post, Query, UseGuards } from '@nestjs/common';
-import { IMPORTABLE_KINDS, ImportError, OrgLinkError, registeredRollouts, type ImportKind, type ImportOptions } from '@prima/core';
-import { AuthGuard, UserId } from './auth';
+import { Body, Controller, ForbiddenException, Get, HttpException, Param, Post, Query, Req, ServiceUnavailableException, UseGuards } from '@nestjs/common';
+import { IMPORTABLE_KINDS, ImportError, OrgLinkError, importAiBrief, importSpec, parseImportAiAnswer, registeredRollouts, valueShape, type ImportKind, type ImportOptions } from '@prima/core';
+import { ArishaBusy, ArishaUnavailable, IdentityToken, askArisha, askArishaOn } from './arisha';
+import { arishaProvider, officeModel } from './arisha-office';
+import { AuthGuard, UserId, type AuthedRequest } from './auth';
 import { Db } from './db';
 import { orgLinksProblems } from './org-links-readiness';
+
+/**
+ * P90: the optional AI helper for columns the in-browser matcher could not place (Fitri, owner of this office
+ * deployment, asked for AI here, 9 Nov 2026). Off unless PRIMA_IMPORT_AI_ENABLED=true and Arisha AI itself is on. It
+ * sends only the unmatched column names and value shapes ("AA9999999", "99/99/9999"; reshaped here again, so a real
+ * value can never reach the model even from a changed browser) and the record's field names; no tools, no records.
+ * The person still sees and confirms every suggestion, and every row is checked by the record's own save.
+ */
+export const importAiOn = (env: NodeJS.ProcessEnv = process.env) => env.PRIMA_IMPORT_AI_ENABLED?.trim() === 'true' && !!arishaProvider(env);
+const importAiToken = new IdentityToken();
 
 function str(v: unknown, max: number): string {
   return typeof v === 'string' ? v.slice(0, max) : '';
@@ -87,6 +99,54 @@ export class OrgController {
     return mapped(
       this.db.asUser(uid, (svc, u) => svc.orgImport.commit(u, k, str(b?.companyId, 60) || null, str(b?.csv, 1_000_001), str(b?.fingerprint, 64), importOptions(b))),
     );
+  }
+
+  /** P90: is the optional AI helper switched on here (the screen shows its button only then). */
+  @Get('import-ai')
+  importAiState() {
+    return { on: importAiOn() };
+  }
+
+  /** P90: suggestions for the columns the matcher left, from names and value shapes only. Advice; the person decides. */
+  @Post('import/:kind/ai-columns')
+  async importAiColumns(@UserId() uid: string, @Param('kind') kind: string, @Body() b: Record<string, unknown>, @Req() req: AuthedRequest) {
+    const k = kindOf(kind);
+    const provider = arishaProvider();
+    if (!provider || !importAiOn()) throw new ServiceUnavailableException('The AI helper for imports is not switched on here.');
+    const raw = Array.isArray(b?.columns) ? b.columns.slice(0, 40) : [];
+    const columns = raw
+      .map((c) => c as Record<string, unknown>)
+      .filter((c) => Number.isInteger(c?.index) && (c.index as number) >= 0 && (c.index as number) < 300)
+      .map((c) => ({
+        index: c.index as number,
+        header: str(c.header, 60),
+        // Shapes only, made again here: whatever was sent, no value reaches the model.
+        sample: (Array.isArray(c.shapes) ? c.shapes.slice(0, 3) : []).map((s) => valueShape(str(s, 40))),
+      }));
+    if (!columns.length) return { matches: [], source: 'none' };
+    // The template is the same read every importer has; the save still checks each row's permission.
+    const spec = await this.db.asUser(uid, async () => importSpec(k));
+    const fields = spec.fields.map((f) => ({ key: f.key, label: f.label, type: f.type }));
+    const brief = importAiBrief(spec.label, columns, fields);
+    try {
+      const input = { history: [], brief, tools: null };
+      let answer;
+      if (provider.kind === 'azure') answer = await askArisha(provider.azure, () => importAiToken.get(), input);
+      else {
+        if (req.office?.via !== 'person') throw new ForbiddenException('Open Prima from the office to use the AI helper.');
+        answer = await askArishaOn(officeModel(provider.office, uid), input);
+      }
+      return {
+        matches: parseImportAiAnswer(answer.text, columns.map((c) => c.index), fields.map((f) => f.key)),
+        source: 'Arisha AI (column names and value shapes only; no values were sent)',
+      };
+    } catch (e) {
+      if (e instanceof ForbiddenException) throw e;
+      if (e instanceof ArishaBusy) throw new HttpException(e.message, 429);
+      if (e instanceof ArishaUnavailable) throw new ServiceUnavailableException(e.message);
+      console.error('Import AI request failed'); // Never log the brief or the answer.
+      throw new ServiceUnavailableException('The AI helper could not answer. Match the columns yourself; the rest of the import works without it.');
+    }
   }
 }
 

@@ -1094,6 +1094,8 @@ export interface Api extends ConnectionsClient, ExtractionClient, DraftHelpClien
   recordFwPaper(personId: string, paper: FwPaper, input: FwPaperInput, proof: ProofInput[]): Promise<unknown>;
   ackFwPaper(credentialId: string, note: string): Promise<unknown>;
   addFwWorkerFromJa(jaRecordId: string, input: FwAddFromJaInput): Promise<unknown>;
+  /** P90: FWM adds a foreign worker by hand. */
+  addFwWorker(input: FwWorkerInput): Promise<unknown>;
   doneFwmTask(id: string, note: string, proof: ProofInput[]): Promise<unknown>;
   reviewFwmTask(id: string, accept: boolean, note: string): Promise<unknown>;
   fwmWelfare(): Promise<FwmWelfare>;
@@ -1402,6 +1404,9 @@ export interface OrgClient {
   importTemplate(kind: ImportKind): Promise<OrgImportTemplate>;
   importPreview(kind: ImportKind, companyId: string | null, csv: string, opts?: ImportOptions): Promise<OrgImportPreview>;
   importCommit(kind: ImportKind, companyId: string | null, csv: string, fingerprint: string, opts?: ImportOptions): Promise<OrgImportReceipt>;
+  /** P90: whether the optional AI helper is on here, and its suggestions from column names and value shapes only. */
+  importAiState(): Promise<{ on: boolean }>;
+  importAiColumns(kind: ImportKind, columns: { index: number; header: string; shapes: string[] }[]): Promise<{ matches: { index: number; field: string }[]; source: string }>;
 }
 
 export type CmsCommissioning = R<'cmsCommissioning'>;
@@ -1460,6 +1465,7 @@ export type CmsDeviceInput = Parameters<PrimaService['saveCmsReadinessDevice']>[
 export type CmsAnswerInput = Parameters<PrimaService['setCmsReadinessAnswer']>[3];
 export type FwPaperInput = Parameters<PrimaService['recordFwPaper']>[3];
 export type FwAddFromJaInput = Parameters<PrimaService['addFwWorkerFromJa']>[2];
+export type FwWorkerInput = Parameters<PrimaService['addFwWorker']>[1];
 /** Governance registers (Fauzan, 5 Nov 2026). */
 export type RegBoard = Awaited<ReturnType<PrimaService['registers']['board']>>;
 export type CmsHours = R<'cmsHours'>;

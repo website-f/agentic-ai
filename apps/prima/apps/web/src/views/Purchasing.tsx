@@ -835,10 +835,13 @@ function Suppliers({ data }: { data: PurBoard }) {
       <Toolbar
         end={
           (isProc(data.roles) || data.supplierFor.length > 0) && (
-            <button className="btn btn-primary" onClick={() => setForm(true)}>
-              <PlusIcon size={16} weight="bold" aria-hidden="true" />
-              Add supplier
-            </button>
+            <>
+              <ImportButton kind="purSupplier" />
+              <button className="btn btn-primary" onClick={() => setForm(true)}>
+                <PlusIcon size={16} weight="bold" aria-hidden="true" />
+                Add supplier
+              </button>
+            </>
           )
         }
       >

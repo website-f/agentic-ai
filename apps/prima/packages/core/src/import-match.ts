@@ -737,12 +737,19 @@ export function composeHeader(table: string[][], headerRow: number): string[] {
   const aboveFilled = above.filter(Boolean).length;
   const headFilled = head.filter(Boolean).length;
   if (!aboveFilled || aboveFilled >= headFilled || aboveFilled === 1 && above.length === 1) return head;
-  // Spread each group title over the empty cells to its right (a merged cell keeps its text in the first cell).
+  // Spread each group title to the right (a merged cell keeps its text in the first cell), but only over sub-headings
+  // that say nothing on their own ("No.", "Tamat", "Expiry", "Date"): "Warganegara" next to a "Passport" group is its
+  // own column, not part of the group.
+  const GENERIC = new Set(['number', 'expiry', 'date', 'start', 'end', 'issue', 'rowno', 'type', 'kind', 'note', 'status']);
+  const generic = (h: string) => {
+    const c = conceptsOf(h);
+    return c.length > 0 && c.every((x) => GENERIC.has(x));
+  };
   const group: string[] = [];
   let cur = '';
   for (let i = 0; i < Math.max(head.length, above.length); i++) {
     if (above[i]) cur = above[i];
-    else if (!head[i]) cur = '';
+    else if (!head[i] || !generic(head[i])) cur = '';
     group[i] = cur;
   }
   return head.map((h, i) => (group[i] && h && normHeader(group[i]) !== normHeader(h) ? `${group[i]} ${h}` : h || group[i] || ''));
@@ -807,8 +814,10 @@ export function prepareSheet(rows: string[][], fields: AlignField[], headerRow?:
   const head = composeHeader(rows, hr);
   const droppedRows: number[] = [];
   const body: string[][] = [];
+  // The header printed again on every page of a PDF or a printed report is not a record either.
+  const headKey = (rows[hr] ?? []).map((c) => normHeader(String(c ?? ''))).join('|');
   rows.slice(hr + 1).forEach((r, i) => {
-    if (isTotalsRow(r)) droppedRows.push(hr + 2 + i);
+    if (isTotalsRow(r) || (headKey.replace(/\|/g, '') && r.map((c) => normHeader(String(c ?? ''))).join('|') === headKey)) droppedRows.push(hr + 2 + i);
     else body.push(r.map((c) => String(c ?? '').replace(/\s+/g, ' ').trim()));
   });
   const width = Math.max(head.length, ...body.map((r) => r.length), 0);

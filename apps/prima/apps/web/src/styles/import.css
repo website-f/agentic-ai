@@ -251,3 +251,192 @@
     padding-right: 16px;
   }
 }
+
+/* P90: drag and drop, the field-by-field match list with a searchable column picker, the AI helper line. */
+.imp-drop-on {
+  border-color: var(--primary);
+  background: var(--accent-soft);
+}
+.imp-more summary {
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--muted);
+}
+.imp-more[open] summary {
+  margin-bottom: 8px;
+}
+.imp-ai {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  background: var(--surface-2);
+}
+.imp-map {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.imp-map-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 6px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-left-width: 3px;
+  border-radius: var(--r);
+  background: var(--surface);
+}
+.imp-map-row[data-state='ok'] {
+  border-left-color: var(--ok);
+}
+.imp-map-row[data-state='check'] {
+  border-left-color: var(--warn);
+  background: var(--warn-soft);
+}
+.imp-map-row[data-state='missing'] {
+  border-left-color: var(--crit);
+  background: var(--crit-soft);
+}
+.imp-map-row[data-state='none'] {
+  opacity: 0.8;
+}
+.imp-map-field {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+.imp-map-field strong {
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+.imp-need {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--crit);
+}
+.imp-map-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  min-width: 0;
+}
+.imp-why {
+  font-size: 12px;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+.imp-pick {
+  position: relative;
+  min-width: 0;
+}
+.imp-pick-btn {
+  width: 100%;
+  min-height: 40px;
+  padding: 8px 32px 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  background: var(--surface) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='M3 4.5l3 3 3-3' fill='none' stroke='%235a6762' stroke-width='1.5'/%3E%3C/svg%3E") no-repeat right 10px center;
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.imp-pick-btn:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 1px;
+}
+.imp-pick-pop {
+  position: absolute;
+  z-index: 30;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  max-height: min(320px, 50vh);
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+.imp-pick-search {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px;
+  border-bottom: 1px solid var(--line);
+  color: var(--muted);
+}
+.imp-pick-search .input {
+  flex: 1;
+  min-width: 0;
+}
+.imp-pick-pop ul {
+  list-style: none;
+  margin: 0;
+  padding: 4px;
+  overflow-y: auto;
+}
+.imp-pick-pop li button {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  width: 100%;
+  min-height: 40px;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.imp-pick-pop li button:hover,
+.imp-pick-pop li button:focus-visible,
+.imp-pick-pop li button[aria-selected='true'] {
+  background: var(--accent-soft);
+}
+.imp-pick-none {
+  padding: 8px 10px;
+}
+@media (min-width: 720px) {
+  .imp-map-row {
+    grid-template-columns: minmax(140px, 0.9fr) minmax(160px, 1.1fr);
+    align-items: center;
+  }
+  .imp-map-meta {
+    grid-column: 1 / -1;
+  }
+}
+.imp-inline {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px 12px;
+  margin: 0 0 12px;
+}
+.page.imp-page-bar {
+  padding-block: 16px 0;
+}
+.imp-page-bar .imp-inline {
+  margin: 0;
+}

@@ -1,16 +1,29 @@
-import { useContext, useEffect, useMemo, useState } from 'react';
-import { CheckCircleIcon, DownloadSimpleIcon, FileXlsIcon, UploadSimpleIcon } from '@phosphor-icons/react';
+import { useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { CheckCircleIcon, DownloadSimpleIcon, FileArrowUpIcon, MagnifyingGlassIcon, SparkleIcon, UploadSimpleIcon } from '@phosphor-icons/react';
 import {
   COMPANY_FIELD,
   IMPORTABLE_KINDS,
   RECORD_KINDS,
   cleanGrid,
+  extractPdfTable,
+  headerSignature,
+  normHeader,
+  normaliseTable,
   parseCsv,
+  pickSheet,
+  prepareSheet,
+  readDocxTables,
   readXlsx,
+  smartMatch,
   toCsv,
+  valueShape,
+  type AlignField,
   type ImportKind,
   type OrgImportReceipt,
+  type PreparedSheet,
   type RecordKind,
+  type SmartColumn,
+  type SmartLevel,
   type XlsxSheet,
 } from '@prima/core';
 import { api, ApiError, type OrgImportPreview, type OrgImportTemplate } from '../api';
@@ -21,26 +34,98 @@ import { useRecordKinds } from './RecordForm';
 import '../styles/import.css';
 
 /**
- * P81: "Import" next to "Add". The old system's spreadsheet (Excel or CSV, any layout) goes in as it is: Prima finds the
- * header row, matches each column to the record's fields (shown, and changeable), checks every row through the same save
- * as the Add form without keeping anything, lets the person fix or skip rows, then imports the chosen rows all or none.
+ * P81: "Import" next to "Add". P90 (Fitri, 9 Nov 2026: "upload any kind of file that matches and contains the data"):
+ * the file may be Excel, CSV, a Word table or a PDF list, in any layout. Prima reads it here on the device, finds the
+ * sheet and the header row, and matches every column to the record's fields with the in-browser matcher (core
+ * import-match.ts: words in English and Malay, typos, what the values look like, the best whole assignment, a confidence
+ * per match). The person checks the matches (the unsure ones are marked), then every row is checked by the server
+ * through the same save as the Add form without keeping anything; rows are fixed or skipped; the chosen rows are
+ * imported all or none, with a receipt and an audit entry. A layout the person confirmed is remembered on this device.
  */
 
 const isRecordKind = (k: ImportKind): k is RecordKind => Object.prototype.hasOwnProperty.call(RECORD_KINDS, k);
 const MAX_FILE = 8_000_000;
 const MAX_CSV = 1_000_000;
 const SEVERAL = '*';
+const ACCEPT = '.xlsx,.xlsm,.csv,.txt,.tsv,.docx,.pdf,text/csv,application/pdf,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.openxmlformats-officedocument.wordprocessingml.document';
 
-/** The browser's own raw-deflate decoder, for the zip inside an .xlsx. */
+/** The browser's own decoders: raw deflate for the zip inside .xlsx and .docx, zlib deflate for PDF streams. */
 async function inflateRaw(bytes: Uint8Array): Promise<Uint8Array> {
   const stream = new Blob([bytes as BlobPart]).stream().pipeThrough(new DecompressionStream('deflate-raw'));
   return new Uint8Array(await new Response(stream).arrayBuffer());
+}
+async function inflatePdf(b: Uint8Array): Promise<Uint8Array> {
+  const reader = new Blob([b as BlobPart]).stream().pipeThrough(new DecompressionStream('deflate')).getReader();
+  const parts: Uint8Array[] = [];
+  let size = 0;
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      parts.push(value);
+      size += value.length;
+      if (size > 8_000_000) break;
+    }
+  } catch {
+    if (!parts.length) throw new Error('unreadable');
+  }
+  const out = new Uint8Array(size);
+  let at = 0;
+  for (const x of parts) {
+    out.set(x, at);
+    at += x.length;
+  }
+  return out;
+}
+
+/** Any supported file to its sheets of cell text. */
+async function sheetsOf(f: File): Promise<XlsxSheet[]> {
+  const name = f.name.toLowerCase();
+  if (name.endsWith('.xls') || name.endsWith('.numbers') || name.endsWith('.ods') || name.endsWith('.doc'))
+    throw new Error('This is an older or other office format. Open it and save it as Excel (.xlsx), Word (.docx), PDF or CSV, then choose it again.');
+  if (name.endsWith('.csv') || name.endsWith('.txt') || name.endsWith('.tsv') || f.type === 'text/csv') {
+    const text = await f.text();
+    const tabs = name.endsWith('.tsv') || (text.split('\n', 3).join('').includes('\t') && !text.split('\n', 1)[0].includes(','));
+    const rows = tabs ? text.split(/\r?\n/).map((l) => l.split('\t')) : parseCsv(text);
+    return [{ name: f.name, rows }];
+  }
+  const bytes = new Uint8Array(await f.arrayBuffer());
+  if (name.endsWith('.pdf') || f.type === 'application/pdf') {
+    const rows = await extractPdfTable(bytes, inflatePdf);
+    if (rows.filter((r) => r.length >= 2).length < 2)
+      throw new Error('No table could be read from this PDF. A scanned paper is a picture: type it into the template, or ask for the Excel copy.');
+    return [{ name: f.name, rows }];
+  }
+  if (name.endsWith('.docx')) return readDocxTables(bytes, inflateRaw);
+  return readXlsx(bytes, inflateRaw);
+}
+
+/** The layout this person confirmed for this record and these column names, on this device. */
+const layoutKey = (kind: ImportKind, header: string[]) => `prima.import.layout.${kind}.${headerSignature(header)}`;
+function rememberedLayout(kind: ImportKind, header: string[]): Record<string, string> | null {
+  try {
+    const v = localStorage.getItem(layoutKey(kind, header));
+    return v ? (JSON.parse(v) as Record<string, string>) : null;
+  } catch {
+    return null;
+  }
+}
+function rememberLayout(kind: ImportKind, header: string[], mapping: string[]) {
+  try {
+    const m: Record<string, string> = {};
+    header.forEach((h, i) => {
+      if (mapping[i] && normHeader(h)) m[normHeader(h)] = mapping[i];
+    });
+    localStorage.setItem(layoutKey(kind, header), JSON.stringify(m));
+  } catch {
+    /* private window or storage full: the matcher still works, it is just not remembered */
+  }
 }
 
 export function ImportButton({
   kind,
   companyId = null,
-  label = 'Import',
+  label = 'Import from file',
   choices,
 }: {
   kind: ImportKind;
@@ -63,7 +148,7 @@ export function ImportButton({
           e.stopPropagation();
           setOpen(true);
         }}
-        title="Load existing records from an Excel or CSV file"
+        title="Load existing records from Excel, CSV, Word or PDF"
       >
         <UploadSimpleIcon size={16} weight="bold" aria-hidden="true" />
         {label}
@@ -75,16 +160,17 @@ export function ImportButton({
 
 type Step = 'file' | 'map' | 'check' | 'done';
 const STEP_ORDER: Step[] = ['file', 'map', 'check', 'done'];
-const HOW: Record<string, [string, 'ok' | 'info' | 'warn' | 'neutral']> = {
-  name: ['Same name', 'ok'],
-  synonym: ['Known word', 'ok'],
-  fuzzy: ['Close spelling', 'info'],
-  shape: ['From the values', 'warn'],
-  manual: ['You chose', 'neutral'],
+const LEVEL: Record<SmartLevel, [string, 'ok' | 'info' | 'warn']> = {
+  sure: ['Sure', 'ok'],
+  likely: ['Likely', 'info'],
+  check: ['Check this', 'warn'],
 };
 
 type Err = { message: string; findings: [] } | null;
 const errOf = (e: unknown): Err => ({ message: e instanceof ApiError || e instanceof Error ? e.message : String(e), findings: [] });
+
+/** What each column is matched to, and how sure: from the matcher, then the person's own choices. */
+type ColState = { field: string; level: SmartLevel | null; how: SmartColumn['how']; why: string };
 
 function ImportDrawer({
   kind,
@@ -108,16 +194,21 @@ function ImportDrawer({
   const [fileName, setFileName] = useState('');
   const [sheets, setSheets] = useState<XlsxSheet[] | null>(null);
   const [sheet, setSheet] = useState(0);
+  const [prep, setPrep] = useState<PreparedSheet | null>(null);
+  const [cols, setCols] = useState<SmartColumn[] | null>(null);
+  const [state, setState] = useState<ColState[]>([]);
   const [grid, setGrid] = useState<string[][] | null>(null);
   const [preview, setPreview] = useState<OrgImportPreview | null>(null);
-  const [mapping, setMapping] = useState<string[] | null>(null);
-  const [headerRow, setHeaderRow] = useState<number | null>(null);
   const [skip, setSkip] = useState<number[]>([]);
   const [fixing, setFixing] = useState<number | null>(null);
   const [receipt, setReceipt] = useState<OrgImportReceipt | null>(null);
+  const [aiOn, setAiOn] = useState(false);
+  const [aiNote, setAiNote] = useState<string | null>(null);
+  const [dragging, setDragging] = useState(false);
 
   useEffect(() => {
     let live = true;
+    api.org.importAiState().then((s) => live && setAiOn(!!s?.on), () => undefined);
     api.org.importTemplate(kind).then(
       async (t) => {
         if (!live) return;
@@ -143,53 +234,54 @@ function ImportDrawer({
   }, [kind, given]);
 
   const cid = companyId === SEVERAL ? null : companyId || null;
-  const csv = useMemo(() => (grid ? toCsv(grid) : ''), [grid]);
+  /** The record's fields as the matcher sees them (choices as their labels), and the Company column when it applies. */
+  const fields: AlignField[] = useMemo(
+    () =>
+      tpl
+        ? [
+            ...tpl.columns.map((c) => ({
+              key: c.key,
+              label: c.label,
+              type: c.type as AlignField['type'],
+              required: c.required,
+              options: c.choices?.map((l): [string, string] => [l, l]),
+            })),
+            ...(tpl.companyScoped ? [{ key: COMPANY_FIELD, label: 'Company', type: 'text' as const }] : []),
+          ]
+        : [],
+    [tpl],
+  );
+  const fieldLabel = (key: string) => (key === COMPANY_FIELD ? 'Company (each row to the company it names)' : (fields.find((f) => f.key === key)?.label ?? key));
 
-  async function check(over: { mapping?: string[] | null; headerRow?: number | null; skip?: number[]; grid?: string[][] } = {}, next: Step = 'check') {
-    const g = over.grid ?? grid;
-    if (!g) return;
-    const body = toCsv(g);
-    if (body.length > MAX_CSV) return setError(errOf('The sheet is too big for one import. Split it into files of up to 500 rows.'));
-    const m = over.mapping === undefined ? mapping : over.mapping;
-    const h = over.headerRow === undefined ? headerRow : over.headerRow;
-    const s = over.skip ?? skip;
-    setBusy(`Checking ${Math.max(0, g.length - 1)} row${g.length === 2 ? '' : 's'} against the form's own rules…`);
-    setError(null);
-    try {
-      const p = await api.org.importPreview(kind, cid, body, { mapping: m, headerRow: h, skip: s });
-      setPreview(p);
-      setMapping(p.columns.map((c) => c.field ?? ''));
-      setHeaderRow(p.headerRow);
-      setStep(next);
-    } catch (e) {
-      setError(errOf(e));
-    } finally {
-      setBusy(null);
-    }
+  /** Match a sheet here on the device: no network, a fraction of a second. */
+  function matchSheet(rows: string[][], headerRow?: number | null) {
+    const p = prepareSheet(rows, fields, headerRow ?? null);
+    if (p.table.length < 2) return setError(errOf('This sheet has no rows under the column names.'));
+    const m = smartMatch(p.table, fields, { headerRow: 0, remembered: rememberedLayout(kind, p.table[0]) });
+    setPrep(p);
+    setCols(m.columns);
+    setState(m.columns.map((c) => ({ field: c.field ?? '', level: c.level, how: c.how, why: c.why })));
+    setPreview(null);
+    setSkip([]);
+    setFixing(null);
+    setAiNote(null);
+    setStep('map');
   }
 
   async function readFile(f: File | undefined) {
     if (!f) return;
     setError(null);
     if (f.size > MAX_FILE) return setError(errOf('The file is too big. Keep only the sheet you need, up to 500 rows.'));
-    const name = f.name.toLowerCase();
-    if (name.endsWith('.xls') || name.endsWith('.numbers') || name.endsWith('.ods'))
-      return setError(errOf('Prima reads Excel .xlsx and CSV files. Open this file in Excel and save it as .xlsx (Excel Workbook).'));
-    setBusy('Reading the file…');
+    setBusy('Reading the file on this device…');
     try {
-      let rows: string[][];
-      if (name.endsWith('.csv') || name.endsWith('.txt') || f.type === 'text/csv') {
-        rows = cleanGrid(parseCsv(await f.text()));
-        setSheets(null);
-      } else {
-        const all = (await readXlsx(new Uint8Array(await f.arrayBuffer()), inflateRaw)).map((s) => ({ ...s, rows: cleanGrid(s.rows) }));
-        const first = Math.max(0, all.findIndex((s) => s.rows.length > 1));
-        setSheets(all);
-        setSheet(first);
-        rows = all[first].rows;
-      }
+      const all = (await sheetsOf(f)).map((s) => ({ ...s, rows: cleanGrid(s.rows) }));
+      const usable = all.filter((s) => s.rows.length >= 2);
+      if (!usable.length) throw new Error('No list with rows was found in this file.');
+      const best = pickSheet(all, fields);
+      setSheets(all);
+      setSheet(best);
       setFileName(f.name);
-      await loadGrid(rows);
+      matchSheet(all[best].rows);
     } catch (e) {
       setError(errOf(e));
     } finally {
@@ -197,21 +289,86 @@ function ImportDrawer({
     }
   }
 
-  async function loadGrid(rows: string[][]) {
-    if (rows.length < 2) return setError(errOf('This sheet has no rows under the column names.'));
-    setGrid(rows);
-    setSkip([]);
-    setFixing(null);
-    setPreview(null);
-    await check({ grid: rows, mapping: null, headerRow: null, skip: [] }, 'map');
+  const mapping = state.map((s) => s.field);
+  const used = new Set(mapping.filter(Boolean));
+  const missing = fields.filter((f) => f.required && !used.has(f.key));
+  const toCheck = state.filter((s) => s.field && s.level === 'check').length;
+
+  function choose(col: number, field: string) {
+    setState((cur) =>
+      cur.map((s, i) => {
+        // One column per field: choosing a field for this column frees it from any other.
+        if (i === col) return { field, level: field ? 'sure' : null, how: field ? 'manual' : null, why: field ? 'You chose this.' : '' };
+        if (field && s.field === field) return { field: '', level: null, how: null, why: '' };
+        return s;
+      }),
+    );
+  }
+  /** The field side: put this field on that column (or on none). */
+  function chooseForField(field: string, col: number | null) {
+    setState((cur) =>
+      cur.map((s, i) => {
+        if (i === col) return { field, level: 'sure', how: 'manual', why: 'You chose this.' };
+        if (s.field === field) return { field: '', level: null, how: null, why: '' };
+        return s;
+      }),
+    );
+  }
+
+  async function askAi() {
+    if (!prep || !cols) return;
+    const free = cols.filter((c, i) => !state[i].field && c.profile.fill > 0).map((c) => ({ index: c.index, header: c.header, shapes: c.profile.sample.map(valueShape) }));
+    if (!free.length) return;
+    setBusy('Asking Arisha AI about the column names and value shapes (no values are sent)…');
+    setError(null);
+    try {
+      const r = await api.org.importAiColumns(kind, free);
+      const taken = new Set(mapping.filter(Boolean));
+      let n = 0;
+      setState((cur) =>
+        cur.map((s, i) => {
+          const hit = r.matches.find((m) => m.index === i);
+          if (!hit || s.field || taken.has(hit.field)) return s;
+          taken.add(hit.field);
+          n++;
+          return { field: hit.field, level: 'check', how: 'ai', why: 'Suggested by Arisha AI from the column name and value shapes only. Check it.' };
+        }),
+      );
+      setAiNote(n ? `${n} suggestion${n === 1 ? '' : 's'} from Arisha AI, marked "Check this".` : 'Arisha AI had no sure suggestion. Choose the columns yourself.');
+    } catch (e) {
+      setError(errOf(e));
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function check(over: { skip?: number[]; grid?: string[][] } = {}) {
+    if (!prep || !cols) return;
+    const g = over.grid ?? grid ?? normaliseTable(prep.table, 0, cols.map((c, i) => ({ index: c.index, field: state[i].field || null, profile: c.profile })), fields);
+    const body = toCsv(g);
+    if (body.length > MAX_CSV) return setError(errOf('The sheet is too big for one import. Split it into files of up to 500 rows.'));
+    const s = over.skip ?? skip;
+    setBusy(`Checking ${Math.max(0, g.length - 1)} row${g.length === 2 ? '' : 's'} against the form's own rules…`);
+    setError(null);
+    try {
+      const p = await api.org.importPreview(kind, cid, body, { mapping, headerRow: 0, skip: s });
+      setGrid(g);
+      setPreview(p);
+      setStep('check');
+    } catch (e) {
+      setError(errOf(e));
+    } finally {
+      setBusy(null);
+    }
   }
 
   async function commit() {
-    if (!preview || !grid) return;
+    if (!preview || !grid || !prep) return;
     setBusy(`Importing ${preview.okRows} row${preview.okRows === 1 ? '' : 's'}. All of them are saved, or none…`);
     setError(null);
     try {
-      const r = await api.org.importCommit(kind, cid, csv, preview.fingerprint, { mapping, headerRow, skip });
+      const r = await api.org.importCommit(kind, cid, toCsv(grid), preview.fingerprint, { mapping, headerRow: 0, skip });
+      rememberLayout(kind, prep.table[0], mapping);
       setReceipt(r);
       setStep('done');
     } catch (e) {
@@ -234,14 +391,15 @@ function ImportDrawer({
 
   const needCompany = !!tpl?.companyScoped && !given;
   const ready = tpl && choices !== null && (!needCompany || !!companyId);
+  const unmatched = cols ? cols.filter((c, i) => !state[i]?.field && c.profile.fill > 0).length : 0;
 
   return (
     <Drawer title={tpl ? `Import: ${tpl.label.toLowerCase()} records` : 'Import'} sub={tpl ? `Kept by: ${tpl.keptBy}` : undefined} onClose={close}>
       <Steps
         steps={[
-          { label: 'Choose the file', state: stepState('file') },
-          { label: 'Match the columns', state: stepState('map') },
-          { label: 'Check the rows', state: stepState('check') },
+          { label: 'Upload', state: stepState('file') },
+          { label: 'Check columns', state: stepState('map') },
+          { label: 'Check rows', state: stepState('check') },
           { label: 'Done', state: stepState('done') },
         ]}
       />
@@ -257,9 +415,9 @@ function ImportDrawer({
       {tpl && step === 'file' && (
         <div className="imp-step">
           <p className="muted small">
-            Use the file from the old system as it is: Excel (.xlsx) or CSV, any column order, English or Malay column names, a title above the
-            table is fine. Prima matches the columns, you check them, then every row is checked exactly as the Add form checks it. Nothing is saved
-            until you press Import.
+            Use the file you already have: Excel, CSV, a table in Word, or a list saved as PDF. Any column order, English or Malay column names, a
+            title above the table is fine. Prima reads it on this device and matches the columns; you check them, then every row is checked exactly as
+            the Add form checks it. Nothing is saved until you press Import.
           </p>
           {tpl.note && <p className="muted small">{tpl.note}</p>}
           {needCompany && choices && (
@@ -277,15 +435,27 @@ function ImportDrawer({
             </label>
           )}
           {needCompany && choices?.length === 0 && <p className="notice" data-tone="warn">You do not keep this record for any company.</p>}
-          <label className={`imp-drop${ready ? '' : ' imp-drop-off'}`}>
-            <FileXlsIcon size={28} aria-hidden="true" />
-            <strong>{fileName || 'Choose an Excel or CSV file'}</strong>
-            <span className="muted small">.xlsx or .csv, up to 500 rows</span>
+          <label
+            className={`imp-drop${ready ? '' : ' imp-drop-off'}${dragging ? ' imp-drop-on' : ''}`}
+            onDragOver={(e) => {
+              e.preventDefault();
+              if (ready && !busy) setDragging(true);
+            }}
+            onDragLeave={() => setDragging(false)}
+            onDrop={(e) => {
+              e.preventDefault();
+              setDragging(false);
+              if (ready && !busy) void readFile(e.dataTransfer.files?.[0]);
+            }}
+          >
+            <FileArrowUpIcon size={30} aria-hidden="true" />
+            <strong>{fileName || 'Drop the file here, or choose it'}</strong>
+            <span className="muted small">Excel (.xlsx), CSV, Word (.docx) or PDF, up to 500 rows</span>
             <input
               type="file"
-              accept=".xlsx,.csv,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+              accept={ACCEPT}
               disabled={!ready || !!busy}
-              aria-label="Excel or CSV file"
+              aria-label="File to import"
               onChange={(e) => {
                 void readFile(e.target.files?.[0]);
                 e.target.value = '';
@@ -296,7 +466,7 @@ function ImportDrawer({
         </div>
       )}
 
-      {tpl && step === 'map' && preview && grid && (
+      {tpl && step === 'map' && prep && cols && (
         <div className="imp-step">
           {sheets && sheets.length > 1 && (
             <label className="field">
@@ -307,7 +477,7 @@ function ImportDrawer({
                 onChange={(e) => {
                   const i = Number(e.target.value);
                   setSheet(i);
-                  void loadGrid(sheets[i].rows);
+                  matchSheet(sheets[i].rows);
                 }}
               >
                 {sheets.map((s, i) => (
@@ -318,65 +488,105 @@ function ImportDrawer({
               </select>
             </label>
           )}
-          <label className="field">
-            <span className="label">The column names are on</span>
-            <select
-              className="select"
-              value={preview.headerRow}
-              onChange={(e) => void check({ headerRow: Number(e.target.value), mapping: null, skip: [] }, 'map')}
-            >
-              {grid.slice(0, 15).map((r, i) => (
-                <option key={i} value={i}>
-                  Row {i + 1}: {r.filter((c) => c.trim()).slice(0, 4).join(' · ').slice(0, 70)}
-                </option>
-              ))}
-            </select>
-          </label>
-          {preview.missingColumns.length > 0 && (
-            <p className="notice" data-tone="crit">
-              No column is matched to: {preview.missingColumns.join(', ')}. Choose the column for each below; these are needed.
+          <details className="imp-more">
+            <summary>The column names are not on the right row?</summary>
+            <label className="field">
+              <span className="label">The column names are on</span>
+              <select className="select" defaultValue="" onChange={(e) => e.target.value !== '' && matchSheet(sheets?.[sheet]?.rows ?? [], Number(e.target.value))}>
+                <option value="">Found by Prima</option>
+                {(sheets?.[sheet]?.rows ?? []).slice(0, 15).map((r, i) => (
+                  <option key={i} value={i}>
+                    Row {i + 1}: {r.filter((c) => c.trim()).slice(0, 4).join(' · ').slice(0, 70)}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </details>
+          <div className="imp-tally">
+            <span data-tone="ok">
+              <strong>{state.filter((s) => s.field).length}</strong> columns matched
+            </span>
+            <span data-tone={toCheck ? 'crit' : 'ok'}>
+              <strong>{toCheck}</strong> to check
+            </span>
+            <span data-tone="neutral">
+              <strong>{Math.max(0, prep.table.length - 1)}</strong> rows
+            </span>
+          </div>
+          {(prep.droppedRows.length > 0 || prep.splits.length > 0) && (
+            <p className="muted small">
+              {prep.droppedRows.length > 0 && `Left out as totals, signatures or repeated headings: row${prep.droppedRows.length === 1 ? '' : 's'} ${prep.droppedRows.join(', ')}. `}
+              {prep.splits.map(([a, b]) => `"${a}" had a second value in brackets, now its own column "${b}". `).join('')}
             </p>
           )}
-          <ul className="imp-cols">
-            {preview.columns.map((c, i) => {
-              const how = c.field ? HOW[c.how ?? 'manual'] : null;
+          {missing.length > 0 && (
+            <p className="notice" data-tone="crit">
+              Not found in the file: {missing.map((f) => f.label).join(', ')}. Choose the column for each below; these are needed.
+            </p>
+          )}
+          {aiOn && unmatched > 0 && (
+            <div className="imp-ai">
+              <span className="muted small">
+                {unmatched} column{unmatched === 1 ? '' : 's'} not matched. Arisha AI can suggest from the column names and the shape of the values (for example
+                &quot;AA9999999&quot;), never the values themselves.
+              </span>
+              <button className="btn btn-sm" disabled={!!busy} onClick={() => void askAi()}>
+                <SparkleIcon size={16} aria-hidden="true" />
+                Ask Arisha AI
+              </button>
+            </div>
+          )}
+          {aiNote && <p className="muted small">{aiNote}</p>}
+          <ul className="imp-map" aria-label="Fields and the columns matched to them">
+            {fields.map((f) => {
+              const col = state.findIndex((s) => s.field === f.key);
+              const c = col >= 0 ? cols[col] : null;
+              const st = col >= 0 ? state[col] : null;
+              const lv = st?.level ? LEVEL[st.level] : null;
               return (
-                <li key={c.index} className="imp-col" data-used={c.field ? 'yes' : 'no'}>
-                  <div className="imp-col-head">
-                    <strong>{c.header || `Column ${c.index + 1}`}</strong>
-                    {how && <Chip tone={how[1]}>{how[0]}</Chip>}
+                <li key={f.key} className="imp-map-row" data-state={!c ? (f.required ? 'missing' : 'none') : st?.level === 'check' ? 'check' : 'ok'}>
+                  <div className="imp-map-field">
+                    <strong>{fieldLabel(f.key)}</strong>
+                    {f.required && <span className="imp-need">Needed</span>}
                   </div>
-                  {c.sample.length > 0 && <span className="imp-col-sample">{c.sample.join(' · ')}</span>}
-                  <select
-                    className="select"
-                    aria-label={`Field for column ${c.header || c.index + 1}`}
-                    value={mapping?.[i] ?? ''}
-                    onChange={(e) => {
-                      const m = [...(mapping ?? preview.columns.map((x) => x.field ?? ''))];
-                      // One column per field: choosing a field here frees it from any other column.
-                      const v = e.target.value;
-                      for (let j = 0; j < m.length; j++) if (v && m[j] === v) m[j] = '';
-                      m[i] = v;
-                      setMapping(m);
-                    }}
-                  >
-                    <option value="">Not used</option>
-                    {preview.fields.map((f) => (
-                      <option key={f.key} value={f.key}>
-                        {f.key === COMPANY_FIELD ? 'Company (each row to the company it names)' : f.label}
-                        {f.required ? ' (needed)' : ''}
-                      </option>
-                    ))}
-                  </select>
+                  <ColumnPicker
+                    columns={cols}
+                    value={col >= 0 ? col : null}
+                    usedBy={(i) => (state[i]?.field && state[i].field !== f.key ? fieldLabel(state[i].field) : null)}
+                    onChange={(i) => chooseForField(f.key, i)}
+                    label={`Column for ${f.label}`}
+                  />
+                  <div className="imp-map-meta">
+                    {lv && (
+                      <Chip tone={lv[1]} title={st?.why}>
+                        {lv[0]}
+                        {cols && c && st?.how !== 'manual' && st?.how !== 'remembered' ? ` ${Math.round((c.confidence || 0) * 100)}%` : ''}
+                      </Chip>
+                    )}
+                    {st?.how === 'remembered' && <Chip tone="neutral">Remembered</Chip>}
+                    {st?.how === 'ai' && <Chip tone="info">AI</Chip>}
+                    {c && c.profile.sample.length > 0 && <span className="imp-col-sample">{c.profile.sample.join(' · ').slice(0, 90)}</span>}
+                    {st?.why && st.how !== 'manual' && <span className="imp-why">{st.why}</span>}
+                  </div>
                 </li>
               );
             })}
           </ul>
-          <div className="imp-actions">
+          {cols.some((c, i) => !state[i].field && c.header) && (
+            <p className="muted small">
+              Not used:{' '}
+              {cols
+                .filter((c, i) => !state[i].field && c.header)
+                .map((c) => c.header)
+                .join(', ')}
+              .
+            </p>
+          )}
+          <div className="imp-actions imp-sticky">
             <button className="btn" disabled={!!busy} onClick={() => setStep('file')}>
               Back
             </button>
-            <button className="btn btn-primary" disabled={!!busy} onClick={() => void check({}, 'check')}>
+            <button className="btn btn-primary" disabled={!!busy || missing.length > 0} onClick={() => void check({ skip: [] })}>
               Check the rows
             </button>
           </div>
@@ -390,6 +600,7 @@ function ImportDrawer({
           busy={!!busy}
           fixing={fixing}
           setFixing={setFixing}
+          label={fieldLabel}
           onSkip={(row, on) => {
             const s = on ? [...skip, row] : skip.filter((x) => x !== row);
             setSkip(s);
@@ -403,11 +614,13 @@ function ImportDrawer({
               while (r.length <= Number(col)) r.push('');
               r[Number(col)] = v;
             }
-            setGrid(g);
             setFixing(null);
             void check({ grid: g });
           }}
-          onBack={() => setStep('map')}
+          onBack={() => {
+            setGrid(null);
+            setStep('map');
+          }}
           onImport={() => void commit()}
         />
       )}
@@ -421,7 +634,8 @@ function ImportDrawer({
           <p className="muted small">
             From {fileName}, by {receipt.by}, {dateTimeLabel(receipt.at)}.
             {receipt.skippedRows?.length ? ` Rows skipped: ${receipt.skippedRows.join(', ')}.` : ''} Every row went through the Add form&apos;s own
-            checks and is in the audit log. The receipt ({receipt.id}) stops the same file being imported twice.
+            checks and is in the audit log. The receipt ({receipt.id}) stops the same file being imported twice. Next time a file with these column names
+            is matched the same way on this device.
           </p>
           <div className="imp-actions">
             <button className="btn btn-primary" onClick={close}>
@@ -431,6 +645,95 @@ function ImportDrawer({
         </div>
       )}
     </Drawer>
+  );
+}
+
+/** A column chooser with a search box: the column name and its first values, for a phone as for a PC. */
+function ColumnPicker({
+  columns,
+  value,
+  usedBy,
+  onChange,
+  label,
+}: {
+  columns: SmartColumn[];
+  value: number | null;
+  usedBy: (i: number) => string | null;
+  onChange: (i: number | null) => void;
+  label: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const [q, setQ] = useState('');
+  const box = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const off = (e: MouseEvent) => {
+      if (box.current && !box.current.contains(e.target as Node)) setOpen(false);
+    };
+    // Escape closes the list only (not the whole drawer).
+    const esc = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      e.stopPropagation();
+      setOpen(false);
+    };
+    document.addEventListener('mousedown', off);
+    box.current?.addEventListener('keydown', esc);
+    const el = box.current;
+    return () => {
+      document.removeEventListener('mousedown', off);
+      el?.removeEventListener('keydown', esc);
+    };
+  }, [open]);
+  const name = (c: SmartColumn) => c.header || `Column ${c.index + 1}`;
+  const shown = columns.filter((c) => !q.trim() || `${name(c)} ${c.profile.sample.join(' ')}`.toLowerCase().includes(q.trim().toLowerCase()));
+  return (
+    <div className="imp-pick" ref={box}>
+      <button type="button" className="imp-pick-btn" aria-haspopup="listbox" aria-expanded={open} aria-label={label} onClick={() => setOpen(!open)}>
+        {value === null ? <span className="muted">Not in the file</span> : <span>{name(columns[value])}</span>}
+      </button>
+      {open && (
+        <div className="imp-pick-pop">
+          <div className="imp-pick-search">
+            <MagnifyingGlassIcon size={16} aria-hidden="true" />
+            <input className="input" autoFocus value={q} placeholder="Search the columns" aria-label="Search the columns" onChange={(e) => setQ(e.target.value)} />
+          </div>
+          <ul role="listbox" aria-label={label}>
+            <li>
+              <button
+                type="button"
+                role="option"
+                aria-selected={value === null}
+                onClick={() => {
+                  onChange(null);
+                  setOpen(false);
+                }}
+              >
+                <span className="muted">Not in the file</span>
+              </button>
+            </li>
+            {shown.map((c) => (
+              <li key={c.index}>
+                <button
+                  type="button"
+                  role="option"
+                  aria-selected={value === c.index}
+                  onClick={() => {
+                    onChange(c.index);
+                    setOpen(false);
+                    setQ('');
+                  }}
+                >
+                  <strong>{name(c)}</strong>
+                  {c.profile.sample.length > 0 && <span className="imp-col-sample">{c.profile.sample.join(' · ').slice(0, 70)}</span>}
+                  {usedBy(c.index) && <span className="imp-why">Now used for {usedBy(c.index)}</span>}
+                </button>
+              </li>
+            ))}
+            {!shown.length && <li className="muted small imp-pick-none">No column has that.</li>}
+          </ul>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -464,6 +767,7 @@ function CheckStep({
   busy,
   fixing,
   setFixing,
+  label,
   onSkip,
   onFix,
   onBack,
@@ -474,6 +778,7 @@ function CheckStep({
   busy: boolean;
   fixing: number | null;
   setFixing: (row: number | null) => void;
+  label: (key: string) => string;
   onSkip: (row: number, on: boolean) => void;
   onFix: (row: number, cells: Record<number, string>) => void;
   onBack: () => void;
@@ -483,7 +788,6 @@ function CheckStep({
   const skipped = preview.rows.filter((r) => r.skipped);
   const good = preview.rows.filter((r) => r.ok);
   const used = preview.columns.filter((c) => c.field);
-  const label = (key: string) => preview.fields.find((f) => f.key === key)?.label ?? key;
   return (
     <div className="imp-step">
       <div className="imp-tally">
@@ -542,6 +846,11 @@ function CheckStep({
             ))}
           </ul>
           {bad.length > 100 && <p className="muted small">And {bad.length - 100} more. Fix the file and choose it again for that many.</p>}
+          {bad.length > 1 && (
+            <button className="btn btn-sm btn-ghost" disabled={busy} onClick={() => bad.forEach((r) => onSkip(r.row, true))}>
+              Skip all {bad.length} rows to fix
+            </button>
+          )}
         </section>
       )}
       {skipped.length > 0 && (
@@ -621,5 +930,154 @@ function RowFix({
         </button>
       </div>
     </div>
+  );
+}
+
+/**
+ * P90: "Add" for records whose screen had no add form (FWM foreign workers): the record's own fields (from its import
+ * template), with lists for the choices the page knows (branches), saved through the page's own create call.
+ */
+export function QuickAddButton({
+  kind,
+  label,
+  options,
+  fixed,
+  save,
+}: {
+  kind: ImportKind;
+  label: string;
+  /** Choices for a field, by key ([value, label]); e.g. branches. */
+  options?: Record<string, [string, string][]>;
+  /** Values the page sets itself (e.g. the company of the chosen branch). */
+  fixed?: (values: Record<string, string>) => Record<string, string>;
+  save: (values: Record<string, string | null>) => Promise<unknown>;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <button className="btn btn-sm btn-primary" onClick={() => setOpen(true)}>
+        {label}
+      </button>
+      {open && <QuickAddDrawer kind={kind} title={label} options={options} fixed={fixed} save={save} onClose={() => setOpen(false)} />}
+    </>
+  );
+}
+
+function QuickAddDrawer({
+  kind,
+  title,
+  options,
+  fixed,
+  save,
+  onClose,
+}: {
+  kind: ImportKind;
+  title: string;
+  options?: Record<string, [string, string][]>;
+  fixed?: (values: Record<string, string>) => Record<string, string>;
+  save: (values: Record<string, string | null>) => Promise<unknown>;
+  onClose: () => void;
+}) {
+  const { bump } = useContext(RefreshContext);
+  const [tpl, setTpl] = useState<OrgImportTemplate | null>(null);
+  const [v, setV] = useState<Record<string, string>>({});
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<Err>(null);
+  const [done, setDone] = useState(false);
+  useEffect(() => {
+    api.org.importTemplate(kind).then(setTpl, (e) => setError(errOf(e)));
+  }, [kind]);
+  const submit = async () => {
+    if (!tpl) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const out: Record<string, string | null> = {};
+      for (const c of tpl.columns) out[c.key] = (v[c.key] ?? '').trim() || null;
+      await save({ ...out, ...(fixed ? fixed(v) : {}) });
+      setDone(true);
+      bump();
+    } catch (e) {
+      setError(errOf(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <Drawer title={title} sub={tpl ? `Kept by: ${tpl.keptBy}` : undefined} onClose={onClose}>
+      {!tpl && !error && <Loading what="the form" />}
+      <ErrorNotice error={error} />
+      {done ? (
+        <div className="imp-step imp-done">
+          <CheckCircleIcon size={40} weight="fill" aria-hidden="true" />
+          <h3>Saved</h3>
+          <p className="muted small">The record is in Prima and in the audit log.</p>
+          <div className="imp-actions">
+            <button
+              className="btn"
+              onClick={() => {
+                setV({});
+                setDone(false);
+              }}
+            >
+              Add another
+            </button>
+            <button className="btn btn-primary" onClick={onClose}>
+              Close
+            </button>
+          </div>
+        </div>
+      ) : (
+        tpl && (
+          <form
+            className="imp-step"
+            onSubmit={(e) => {
+              e.preventDefault();
+              void submit();
+            }}
+          >
+            {tpl.note && <p className="muted small">{tpl.note}</p>}
+            {tpl.columns.map((c) => {
+              const list = options?.[c.key] ?? (c.type === 'select' ? (c.choices ?? []).map((l): [string, string] => [l, l]) : null);
+              return (
+                <label key={c.key} className="field">
+                  <span className="label">
+                    {c.label}
+                    {c.required ? '' : ' (if known)'}
+                  </span>
+                  {list ? (
+                    <select className="select" required={c.required} value={v[c.key] ?? ''} onChange={(e) => setV({ ...v, [c.key]: e.target.value })}>
+                      <option value="">Choose…</option>
+                      {list.map(([k, l]) => (
+                        <option key={k} value={k}>
+                          {l}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <input
+                      className="input"
+                      type={c.type === 'date' ? 'date' : c.type === 'number' ? 'number' : 'text'}
+                      required={c.required}
+                      value={v[c.key] ?? ''}
+                      onChange={(e) => setV({ ...v, [c.key]: e.target.value })}
+                    />
+                  )}
+                  {c.help && <span className="muted small">{c.help}</span>}
+                </label>
+              );
+            })}
+            <div className="imp-actions imp-sticky">
+              <button type="button" className="btn" onClick={onClose}>
+                Cancel
+              </button>
+              <button type="submit" className="btn btn-primary" disabled={busy}>
+                Save
+              </button>
+            </div>
+          </form>
+        )
+      )}
+    </Drawer>
   );
 }

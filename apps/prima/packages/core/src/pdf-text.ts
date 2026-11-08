@@ -331,3 +331,6 @@ export async function extractPdfText(bytes: Uint8Array, inflate: Inflate, maxCha
     .trim()
     .slice(0, maxChars);
 }
+/** P90: the internals the PDF table reader (pdf-table.ts) shares with this text reader. */
+export { objectsOf as pdfObjectsOf, fontsOf as pdfFontsOf, literal as pdfLiteral, words as pdfWords };
+export type { FontMap as PdfFontMap };

@@ -1,8 +1,10 @@
 import{useEffect,useMemo,useReducer,useState}from'react';import{api}from'../api';import{useApp}from'../App';import{ErrorNotice,Loading,useLoad}from'../ui';
+import { ImportButton } from './ImportDrawer';
+import { manualItVisible } from './ItManual';
 import{createProcurementSession,decodeProcurementBoard,procurementAllowed,procurementFingerprint,exactMoney}from'../it-procurement/client';import type{ProcurementBoard,ProcurementKind,ProcurementRow}from'../it-procurement/contract';import type{ManualSession}from'../it-manual/session';
 const labels:Record<ProcurementKind,string>={po:'Issue approved purchase order',receipt:'Record actual goods receipt',invoice:'Check actual supplier invoice',advance_request:'Request a separate advance exception',advance_decision:'Review exact advance exception',payment:'Record actual payment reference'};
 const money=(v:number|null)=>v===null?'Not verified in a tracked packet':new Intl.NumberFormat('en-MY',{style:'currency',currency:'MYR'}).format(v);
-export function ItProcurement(){const{me}=useApp();return <ProcurementPanel key={me.user.id} owner={me.user.id}/>}
+export function ItProcurement(){const{me}=useApp();return <>{manualItVisible(me.user)&&<div className="page imp-page-bar"><div className="imp-inline"><span className="muted small">Equipment bought before Prima: load the list. New purchases still go through their approvals.</span><ImportButton kind="itAsset" label="Import IT equipment from file" /></div></div>}<ProcurementPanel key={me.user.id} owner={me.user.id}/></>}
 export function ProcurementPanel({owner}:{owner:string}){const[choice,setChoice]=useState<{kind:ProcurementKind;id:string}|null>(null),[epoch,setEpoch]=useState(0),[,render]=useReducer(x=>x+1,0);
 const{data,error,reload}=useLoad(async()=>decodeProcurementBoard(await api.itProcurementAct(owner,'procurementBoard',{}),owner),[owner]);
 const session=useMemo(()=>createProcurementSession(owner,(a,i)=>api.itProcurementAct(owner,a,i),()=>render()),[owner,epoch]);
