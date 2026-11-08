@@ -733,7 +733,7 @@ export const SCREEN_GUIDES: ScreenGuide[] = [
         "means": "Close the day after checking."
       }
     ],
-    "notes": "Clock-ins come only from the site device, never typed here. Nothing pays, deducts or disciplines automatically. Only past days can be locked. \"You can see this alert but not act on it\" means the company's PIC acts. For staff leave the buttons may read \"Authorise\" or \"Consent\" instead of \"Approve\". \"Import attendance report\" shows only to HR, the company manager or the owner."
+    "notes": "Clock-ins come only from the site device, never typed here. Nothing pays, deducts or disciplines automatically. Only past days can be locked. \"You can see this alert but not act on it\" means the company's PIC acts. For staff leave the buttons may read \"Authorise\" or \"Consent\" instead of \"Approve\". \"Import timesheet (PDF, Excel, CSV)\" shows only to HR, the company manager or the owner; it shows every person, the dates and the totals, and what to check, before \"Save\"."
   },
   {
     "view": "cases",
@@ -2120,7 +2120,7 @@ export const SCREEN_GUIDES: ScreenGuide[] = [
         "means": "You checked in outside your allowed place."
       }
     ],
-    "notes": "Location is recorded only while you are clocked in. If the browser blocked location, follow the help shown and press \"Try again\". If your company is set to refuse check-ins outside the area, you can only \"Record this attempt for my manager\". \"Working from home\" only shows once you are eligible."
+    "notes": "Location is recorded only while you are clocked in. If the browser blocked location, follow the help shown and press \"Try again\". If your company is set to refuse check-ins outside the area, you can only \"Record this attempt for my manager\". \"Working from home\" only shows once you are eligible. The owner has no staff clock: the owner sees \"Check in (test)\" and \"Check out (test)\" with the route on a map and \"My test check-ins\"; a test is never attendance or pay."
   },
   {
     "view": "staffclock",

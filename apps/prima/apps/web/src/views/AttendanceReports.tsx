@@ -9,13 +9,14 @@ import {
   ClockCountdownIcon,
   CoinsIcon,
   FilePdfIcon,
+  FileXlsIcon,
   HourglassMediumIcon,
   SignOutIcon,
   UploadSimpleIcon,
   UserMinusIcon,
   UserSwitchIcon,
 } from '@phosphor-icons/react';
-import { reasonLabel } from '@prima/core';
+import { ATTENDANCE_CHECK_LABEL, attendanceFromTable, cleanGrid, parseCsv, readXlsx, reasonLabel, timesheetColumns, type AttendanceCheckKind } from '@prima/core';
 import { api } from '../api';
 import type {
   AttendanceOverviewView,
@@ -112,7 +113,7 @@ export function AttendanceReports({ compact = false }: { compact?: boolean }) {
               )}
               {o.canImport && (
                 <button type="button" className="btn btn-primary btn-sm" onClick={() => setImporting(true)}>
-                  <UploadSimpleIcon size={16} /> Import attendance report
+                  <UploadSimpleIcon size={16} /> Import timesheet (PDF, Excel, CSV)
                 </button>
               )}
             </>
@@ -158,13 +159,13 @@ export function AttendanceReports({ compact = false }: { compact?: boolean }) {
             action={
               o.canImport ? (
                 <button type="button" className="btn btn-primary" onClick={() => setImporting(true)}>
-                  <UploadSimpleIcon size={16} /> Import attendance report
+                  <UploadSimpleIcon size={16} /> Import timesheet (PDF, Excel, CSV)
                 </button>
               ) : undefined
             }
           >
             {o.canImport
-              ? 'Import the monthly "Individual Attendance Report" PDFs from the attendance system. Each month shows here once saved.'
+              ? 'Import the monthly "Individual Attendance Report" PDFs from the old attendance system, or a timesheet exported to Excel or CSV. Each month shows here once saved.'
               : 'HR, the company manager or the owner imports the monthly attendance reports. Nothing has been imported for the companies you see.'}
           </Empty>
         </Card>
@@ -821,11 +822,69 @@ interface Job {
   key: string;
   file: File;
   state: JobState;
+  /** P90: an Excel or CSV timesheet, read on this device: what was found, shown above the preview. */
+  table?: TableNote;
   /** A refused save, shown under the preview it belongs to. */
   error?: string;
 }
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+interface TableNote {
+  rows: number;
+  people: number;
+  days: number;
+  skipped: number;
+  firstSkipped: string[];
+  dateOrder: 'dmy' | 'mdy';
+  assumed: boolean;
+  columns: string[];
+}
+
+const isPdf = (f: File) => /\.pdf$/i.test(f.name) || f.type === 'application/pdf';
+const isTable = (f: File) => /\.(xlsx|csv)$/i.test(f.name);
+
+/** The browser's own raw-deflate decoder, for the zip inside an .xlsx. */
+async function inflateRaw(bytes: Uint8Array): Promise<Uint8Array> {
+  const stream = new Blob([bytes as BlobPart]).stream().pipeThrough(new DecompressionStream('deflate-raw'));
+  return new Uint8Array(await new Response(stream).arrayBuffer());
+}
+
+/**
+ * P90: an Excel or CSV timesheet is read here, on this device: the columns found by their headings, the dates in the
+ * column's own order. Only the rows go to Prima (as a small file of their own), never the spreadsheet.
+ */
+async function readTimesheet(file: File): Promise<{ payload: File; note: TableNote }> {
+  if (file.size > 20 * 1024 * 1024) throw new Error('This file is larger than 20 MB. Export one month at a time.');
+  let grid: string[][];
+  if (/\.csv$/i.test(file.name)) grid = cleanGrid(parseCsv(await file.text()));
+  else {
+    const sheets = await readXlsx(new Uint8Array(await file.arrayBuffer()), inflateRaw);
+    // The sheet with the most rows that has the timesheet headings.
+    const ok = sheets
+      .map((sh) => cleanGrid(sh.rows))
+      .filter((g) => g.slice(0, 20).some((r) => timesheetColumns(r).some((c) => c.field === 'date')))
+      .sort((a, b) => b.length - a.length);
+    if (!ok.length) throw new Error('No sheet in this workbook has a Date column with a Name or Employee number column.');
+    grid = ok[0];
+  }
+  const name = file.name.replace(/\.(xlsx|csv)$/i, '');
+  const r = attendanceFromTable(grid, { title: `Timesheet: ${name.slice(0, 80)}` });
+  const json = JSON.stringify(r.report);
+  return {
+    payload: new File([json], file.name, { type: 'application/json' }),
+    note: {
+      rows: r.rows,
+      people: r.report.employees.length,
+      days: r.report.employees.reduce((n, e) => n + e.days.length, 0),
+      skipped: r.skippedCount,
+      firstSkipped: r.skipped.slice(0, 3).map((x) => `row ${x.row}: ${x.reason}`),
+      dateOrder: r.dateOrder,
+      assumed: r.dateOrderAssumed,
+      columns: r.columns.map((c) => c.heading),
+    },
+  };
+}
 
 async function sha256Hex(file: File): Promise<string> {
   const buf = await file.arrayBuffer();
@@ -858,11 +917,19 @@ function ImportDrawer({ onClose }: { onClose: () => void }) {
   const run = useCallback(
     async (job: Job) => {
       try {
-        const sha = await sha256Hex(job.file);
-        let up = await client!.start({ name: job.file.name, size: job.file.size, sha256: sha });
+        let file = job.file;
+        let kind: 'pdf' | 'table' = 'pdf';
+        if (isTable(job.file)) {
+          const t = await readTimesheet(job.file);
+          file = t.payload;
+          kind = 'table';
+          setJobs((js) => js.map((j) => (j.key === job.key ? { ...j, table: t.note } : j)));
+        }
+        const sha = await sha256Hex(file);
+        let up = await client!.start({ name: job.file.name, size: file.size, sha256: sha, kind });
         set(job.key, { step: 'sending', up, sent: 0 });
         for (let i = 0; i < up.chunks; i++) {
-          const data = await base64(job.file.slice(i * up.chunkBytes, (i + 1) * up.chunkBytes));
+          const data = await base64(file.slice(i * up.chunkBytes, (i + 1) * up.chunkBytes));
           up = await client!.chunk(up.id, i, data);
           set(job.key, { step: 'sending', up, sent: up.received });
         }
@@ -887,7 +954,7 @@ function ImportDrawer({ onClose }: { onClose: () => void }) {
     const list = [...files].filter((f) => f.size > 0);
     const fresh: Job[] = list.map((file) => ({ key: `${file.name}:${file.size}:${file.lastModified}:${Math.random()}`, file, state: { step: 'hashing' } }));
     for (const j of fresh)
-      if (!/\.pdf$/i.test(j.file.name) && j.file.type !== 'application/pdf') j.state = { step: 'failed', message: 'Only PDF reports are imported here.' };
+      if (!isPdf(j.file) && !isTable(j.file)) j.state = { step: 'failed', message: 'Only PDF reports, Excel (.xlsx) and CSV timesheets are imported here.' };
     setJobs((js) => [...js, ...fresh]);
     // One file at a time: the server reads two at once at most, and the page stays responsive.
     for (const j of fresh) if (j.state.step === 'hashing') queue.current = queue.current.then(() => run(j));
@@ -932,7 +999,11 @@ function ImportDrawer({ onClose }: { onClose: () => void }) {
   };
 
   return (
-    <Drawer title="Import attendance reports" sub='The monthly "Individual Attendance Report" PDFs from the attendance system. Nothing is saved until you press Save.' onClose={onClose}>
+    <Drawer
+      title="Import timesheets"
+      sub='The monthly "Individual Attendance Report" PDFs from the old attendance system, or a timesheet exported to Excel or CSV. You see every person, the dates and the totals before anything is saved.'
+      onClose={onClose}
+    >
       <div
         className="ar-drop"
         data-drag={drag || undefined}
@@ -945,15 +1016,15 @@ function ImportDrawer({ onClose }: { onClose: () => void }) {
         }}
       >
         <UploadSimpleIcon size={28} aria-hidden="true" />
-        <strong>Drop the PDF reports here</strong>
-        <span className="muted small">One file per month; several at once is fine. Up to 25 MB each.</span>
+        <strong>Drop the timesheets here (PDF, Excel or CSV)</strong>
+        <span className="muted small">One file per month; several at once is fine. Up to 25 MB each. Excel and CSV files are read on this device.</span>
         <button type="button" className="btn btn-sm" onClick={() => input.current?.click()}>
           Choose files
         </button>
         <input
           ref={input}
           type="file"
-          accept="application/pdf,.pdf"
+          accept="application/pdf,.pdf,.xlsx,.csv,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
           multiple
           hidden
           onChange={(e) => {
@@ -985,7 +1056,7 @@ function Progress({ value, label }: { value: number; label: string }) {
 
 function JobCard({ job, onChoose, onSave, onCancel }: { job: Job; onChoose: (source: string, id: string | null) => void; onSave: (replace: boolean) => void; onCancel: () => void }) {
   const s = job.state;
-  const size = `${nf(job.file.size / 1024 / 1024, 1)} MB`;
+  const size = job.file.size < 1024 * 1024 ? `${nf(Math.max(1, Math.round(job.file.size / 1024)))} KB` : `${nf(job.file.size / 1024 / 1024, 1)} MB`;
   let body: ReactNode = null;
   if (s.step === 'hashing') body = <Progress value={0} label="Waiting to send" />;
   else if (s.step === 'sending') body = <Progress value={s.sent / Math.max(1, s.up.size)} label="Sending" />;
@@ -1003,7 +1074,7 @@ function JobCard({ job, onChoose, onSave, onCancel }: { job: Job; onChoose: (sou
   return (
     <li className="ar-job" data-step={s.step}>
       <div className="ar-job-head">
-        <FilePdfIcon size={22} aria-hidden="true" />
+        {isTable(job.file) ? <FileXlsIcon size={22} aria-hidden="true" /> : <FilePdfIcon size={22} aria-hidden="true" />}
         <span className="ar-job-name">
           <strong>{job.file.name}</strong>
           <span className="muted small">{size}</span>
@@ -1014,8 +1085,30 @@ function JobCard({ job, onChoose, onSave, onCancel }: { job: Job; onChoose: (sou
           </button>
         )}
       </div>
+      {job.table && s.step !== 'saved' && <TableNoteView t={job.table} />}
       {body}
     </li>
+  );
+}
+
+/** P90: what was read from an Excel or CSV timesheet on this device, before it is sent. */
+function TableNoteView({ t }: { t: TableNote }) {
+  return (
+    <div className="ar-table-note small">
+      <span>{`Read on this device: ${nf(t.rows)} rows, ${nf(t.people)} people, ${nf(t.days)} days.`}</span>
+      <span>
+        {t.dateOrder === 'dmy' ? 'Dates read day first (31-01-2026)' : 'Dates read month first (01-31-2026)'}
+        {t.assumed ? '. No day above 12 in the file, so day first was assumed, as in Malaysia. Check a few dates below.' : ', from the dates in the file.'}
+      </span>
+      <span className="muted">
+        <span>Columns used:</span> <span>{t.columns.join(', ')}</span>
+      </span>
+      {t.skipped > 0 && (
+        <span data-tone="warn">
+          <span>{`${nf(t.skipped)} ${t.skipped === 1 ? 'row' : 'rows'} left out:`}</span> <span>{t.firstSkipped.join('; ')}</span>
+        </span>
+      )}
+    </div>
   );
 }
 
@@ -1047,13 +1140,16 @@ function PreviewBody({
         <span>
           <strong>{nf(p.days)}</strong> days
         </span>
-        <span>
-          <strong>{p.pages}</strong> pages
-        </span>
+        {p.pages > 0 && (
+          <span>
+            <strong>{p.pages}</strong> pages
+          </span>
+        )}
         <span data-tone={matched < p.rows.length ? 'warn' : 'ok'}>
           <strong>{matched}</strong> matched to staff
         </span>
       </div>
+      <PreviewSummary p={p} />
       {p.alreadyImported && (
         <div className="notice" data-tone="crit">
           This file is already imported ({p.alreadyImported.companyName}, {monthLabel(p.alreadyImported.month)}, by {p.alreadyImported.by}). The same file is never imported twice.
@@ -1121,9 +1217,20 @@ function PreviewBody({
               <tr>
                 <th>On the report</th>
                 <th>Staff record</th>
+                <th>Dates</th>
                 <th className="num">Days</th>
-                <th className="num">Late</th>
+                <th className="num">Worked</th>
                 <th className="num">Absent</th>
+                <th className="num">Rest</th>
+                <th className="num">Leave</th>
+                <th className="num">Late</th>
+                <th className="num">Early out</th>
+                {RATES.map((r) => (
+                  <th key={r} className="num">
+                    OT {r}
+                  </th>
+                ))}
+                <th className="num">Allowances (RM)</th>
               </tr>
             </thead>
             <tbody>
@@ -1134,9 +1241,22 @@ function PreviewBody({
                     <div className="muted small mono">{r.empCode ?? ''}</div>
                   </td>
                   <td>{r.personName ? <span>{r.personName} <span className="muted small">({r.how === 'staff_no' ? 'staff no' : r.how === 'name' ? 'same name' : 'remembered'})</span></span> : <Chip tone="unknown">Not matched</Chip>}</td>
+                  <td className="small ar-nowrap">{r.from && r.to ? `${dateLabel(r.from)} to ${dateLabel(r.to)}` : '-'}</td>
                   <td className="num">{r.days}</td>
-                  <td className="num">{r.lateCount}</td>
+                  <td className="num">{r.totals?.present ?? r.present}</td>
                   <td className="num">{r.absent}</td>
+                  <td className="num">{r.totals?.rest ?? '-'}</td>
+                  <td className="num">{r.totals?.leave ?? '-'}</td>
+                  <td className="num" title={r.totals ? `${r.totals.lateCount} days` : undefined}>
+                    {r.totals ? (r.totals.lateMin ? hm(r.totals.lateMin) : '-') : r.lateCount}
+                  </td>
+                  <td className="num">{r.totals?.earlyMin ? hm(r.totals.earlyMin) : '-'}</td>
+                  {RATES.map((_, i) => (
+                    <td key={i} className="num">
+                      {r.totals?.ot[i] ? nf(r.totals.ot[i], 1) : '-'}
+                    </td>
+                  ))}
+                  <td className="num">{r.allowances ? nf(r.allowances, 2) : '-'}</td>
                 </tr>
               ))}
             </tbody>
@@ -1166,6 +1286,77 @@ function PreviewBody({
   );
 }
 
+const CHECK_ORDER: AttendanceCheckKind[] = ['weekday_mismatch', 'outside_period', 'duplicate_day', 'totals_mismatch', 'missing_out', 'missing_in', 'overnight', 'missing_days'];
+
+/** P90: the whole file summed, and what to look at before saving. */
+function PreviewSummary({ p }: { p: AttendancePreview }) {
+  const k = p.kpi;
+  const c = p.checks;
+  if (!k || !c) return null;
+  const found = CHECK_ORDER.filter((x) => c.counts[x] > 0);
+  return (
+    <div className="ar-summary">
+      <div className="ar-summary-grid">
+        <span>
+          <span className="muted small">Dates on the rows</span>
+          <strong>{c.from && c.to ? `${dateLabel(c.from)} to ${dateLabel(c.to)}` : '-'}</strong>
+        </span>
+        <span>
+          <span className="muted small">Worked days</span>
+          <strong>{nf(k.present)}</strong>
+        </span>
+        <span data-tone={k.absent ? 'crit' : undefined}>
+          <span className="muted small">Absent days</span>
+          <strong>{nf(k.absent)}</strong>
+        </span>
+        <span>
+          <span className="muted small">Leave days</span>
+          <strong>{nf(k.leave)}</strong>
+        </span>
+        <span data-tone={k.lateCount ? 'warn' : undefined}>
+          <span className="muted small">Late</span>
+          <strong>
+            {nf(k.lateCount)} times, {hm(k.lateMin)}
+          </strong>
+        </span>
+        <span>
+          <span className="muted small">Overtime hours (1.0 / 1.5 / 2.0 / 3.0)</span>
+          <strong>{k.ot.map((h) => nf(h, 1)).join(' / ')}</strong>
+        </span>
+        <span>
+          <span className="muted small">Allowances</span>
+          <strong>{rm(k.allowances)}</strong>
+        </span>
+      </div>
+      {found.length === 0 ? (
+        <div className="notice small" data-tone="ok">
+          Dates checked: every date is inside the report period, on the calendar and on its printed weekday, and nobody has the same day twice.
+        </div>
+      ) : (
+        <details className="ar-checks" open={!c.clean}>
+          <summary>
+            {c.clean ? <Chip tone="ok">Dates checked</Chip> : <Chip tone="warn">Look at these before saving</Chip>}
+            {found.map((x) => (
+              <Chip key={x} tone={ATTENDANCE_CHECK_LABEL[x].tone}>
+                {ATTENDANCE_CHECK_LABEL[x].label}: {nf(c.counts[x])}
+              </Chip>
+            ))}
+          </summary>
+          <ul className="ar-pages">
+            {c.examples
+              .filter((e) => found.includes(e.kind))
+              .map((e, i) => (
+                <li key={i}>
+                  <span className="mono">{e.date ?? ''}</span> {e.name || e.empCode}: {e.detail}
+                </li>
+              ))}
+          </ul>
+        </details>
+      )}
+    </div>
+  );
+}
+
 /** Used by the HR screen: the import button and a short summary, with a way into the Attendance screen. */
 export function AttendanceReportsSummary({ onOpen }: { onOpen: () => void }) {
   const { data, error } = useLoad(() => (client ? client.overview({}) : Promise.resolve(null)), []);
@@ -1176,7 +1367,7 @@ export function AttendanceReportsSummary({ onOpen }: { onOpen: () => void }) {
       <span className="row">
         {data?.canImport && (
           <button type="button" className="btn btn-primary btn-sm" onClick={() => setImporting(true)}>
-            <UploadSimpleIcon size={16} /> Import attendance report
+            <UploadSimpleIcon size={16} /> Import timesheet (PDF, Excel, CSV)
           </button>
         )}
         <button type="button" className="btn btn-sm" onClick={onOpen}>

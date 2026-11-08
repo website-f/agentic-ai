@@ -7,8 +7,13 @@
 // times, the shift code, sixteen numbers, then the reason), and each employee's day rows are added up and compared
 // with the printed totals. A page that cannot be read is listed with the reason; nothing is guessed.
 //
-// Memory stays bounded: one page's text at a time (released before the next page), and only the parsed rows are kept.
+// Memory stays bounded: a page's text is released once it is read, and only the parsed rows are kept. P90: a long report
+// is read by a few worker threads (attendance-pdf-worker.ts), each a run of pages; pages that arrive early wait their turn.
 
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { Worker } from 'node:worker_threads';
 import {
   ATTENDANCE_ALLOWANCE_KEYS,
   type AttendanceAllowances,
@@ -30,7 +35,7 @@ interface Word {
   /** Distance from the top of the page to the text's baseline. */
   y: number;
 }
-type Line = Word[];
+export type Line = Word[];
 
 interface TextItem {
   str?: string;
@@ -144,7 +149,9 @@ function dayRow(l: Line, layout: Layout, page: number): ReportDay | string {
   const date = isoOf(l[0].s);
   if (!date) return `the date ${l[0].s} is not on the calendar`;
   let rest = l.slice(1);
-  if (rest[0] && WEEKDAY.test(rest[0].s)) rest = rest.slice(1);
+  // P90: the printed weekday is kept, so the preview can check it against the date (a day and month swap would show).
+  const weekday = rest[0] && WEEKDAY.test(rest[0].s) ? rest[0].s : null;
+  if (weekday) rest = rest.slice(1);
   // The reason is printed last, after the sixteenth number: trailing words with letters.
   let end = rest.length;
   while (end > 0 && /[A-Za-z]/.test(rest[end - 1].s) && num(rest[end - 1].s) === null) end--;
@@ -160,6 +167,7 @@ function dayRow(l: Line, layout: Layout, page: number): ReportDay | string {
   const t = sixteen(numbers as number[]);
   return {
     date,
+    weekday,
     clocks: (times.slice(0, layout.clocks).filter((x) => x) as string[]),
     in: times[layout.clocks] ?? null,
     out: times[layout.clocks + 1] ?? null,
@@ -213,11 +221,7 @@ export interface ParseProgress {
   pages: number;
 }
 
-/**
- * Reads a whole report, page by page. onProgress is told after each page. Throws only when the file is not a PDF at all
- * (or is too long); every page problem is listed instead.
- */
-export async function parseAttendancePdf(bytes: Uint8Array, onProgress?: (p: ParseProgress) => void): Promise<ParsedAttendanceReport> {
+async function openPdf(bytes: Uint8Array): Promise<PdfDoc> {
   const lib = await loadPdfJs();
   // pdfjs takes the buffer over; the caller keeps its own copy.
   const task = lib.getDocument({
@@ -229,42 +233,146 @@ export async function parseAttendancePdf(bytes: Uint8Array, onProgress?: (p: Par
     stopAtErrors: false,
     verbosity: 0,
   });
-  let doc: PdfDoc;
   try {
-    doc = await task.promise;
+    return await task.promise;
   } catch {
     throw new Error('This file could not be opened as a PDF. Export the report from the attendance system again.');
   }
+}
+
+/** One page's text as lines of words; null when the page cannot be opened. */
+async function pageLines(doc: PdfDoc, n: number): Promise<Line[] | null> {
   try {
-    if (doc.numPages > ATTENDANCE_PDF_MAX_PAGES) throw new Error(`This report has ${doc.numPages} pages; split it into files of at most ${ATTENDANCE_PDF_MAX_PAGES} pages.`);
-    const out: ParsedAttendanceReport = { title: null, pages: doc.numPages, employees: [], unreadable: [], warnings: [] };
-    const state: { company: string; period: [string | null, string | null]; layout: Layout | null; cur: ReportEmployee | null; monthlyWanted: number[] | null } = {
-      company: '',
-      period: [null, null],
-      layout: null,
-      cur: null,
-      monthlyWanted: null,
-    };
-    for (let n = 1; n <= doc.numPages; n++) {
-      let lines: Line[] = [];
-      try {
-        const page = await doc.getPage(n);
-        const { height } = page.getViewport({ scale: 1 });
-        const content = await page.getTextContent();
-        lines = linesOf(wordsOf(content.items, height));
-        page.cleanup();
-      } catch {
-        out.unreadable.push({ page: n, reason: 'The page could not be opened (the file may be damaged).' });
-        onProgress?.({ page: n, pages: doc.numPages });
-        continue;
+    const page = await doc.getPage(n);
+    const { height } = page.getViewport({ scale: 1 });
+    const content = await page.getTextContent();
+    const lines = linesOf(wordsOf(content.items, height));
+    page.cleanup();
+    return lines;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * P90: the text of pages from..to, page by page, for a worker thread (attendance-pdf-worker.ts). The text of a page is
+ * the slow part (about 40 ms a page); the reading of the lines stays in order on the main thread.
+ */
+export async function extractPageLines(bytes: Uint8Array, from: number, to: number, each: (n: number, lines: Line[] | null) => void): Promise<void> {
+  const doc = await openPdf(bytes);
+  try {
+    for (let n = from; n <= Math.min(to, doc.numPages); n++) each(n, await pageLines(doc, n));
+  } finally {
+    await doc.destroy().catch(() => undefined);
+  }
+}
+
+/** Long reports are read by up to this many worker threads at once (each reads a run of pages). */
+const PDF_WORKERS = Math.max(1, Math.min(3, (typeof os.availableParallelism === 'function' ? os.availableParallelism() : os.cpus().length) - 1));
+/** Reports shorter than this are read on the main thread (starting threads costs more than it saves). */
+const WORKER_MIN_PAGES = 60;
+
+type PageSource = (pages: number, each: (n: number, lines: Line[] | null) => void) => Promise<void>;
+
+/** Page text from worker threads, each a run of pages. Rejects when a worker cannot start or stops early. */
+function workerSource(bytes: Uint8Array, workers: number): PageSource {
+  return (pages, each) => {
+    const file = path.join(__dirname, 'attendance-pdf-worker.js');
+    if (!fs.existsSync(file)) return Promise.reject(new Error('no worker file'));
+    const per = Math.ceil(pages / workers);
+    const runs = Array.from({ length: workers }, (_, i) => [i * per + 1, Math.min(pages, (i + 1) * per)] as const).filter(([a, b]) => a <= b);
+    return new Promise<void>((resolve, reject) => {
+      let left = runs.length;
+      const started: Worker[] = [];
+      let failed = false;
+      const fail = (e: unknown) => {
+        if (failed) return;
+        failed = true;
+        for (const w of started) void w.terminate();
+        reject(e instanceof Error ? e : new Error(String(e)));
+      };
+      for (const [from, to] of runs) {
+        const w = new Worker(file, { workerData: { bytes, from, to } });
+        started.push(w);
+        w.on('message', (m: { n?: number; lines?: Line[] | null; done?: boolean; error?: string }) => {
+          if (failed) return;
+          if (m.error) return fail(new Error(m.error));
+          if (m.done) {
+            void w.terminate();
+            if (--left === 0) resolve();
+            return;
+          }
+          if (typeof m.n === 'number') each(m.n, m.lines ?? null);
+        });
+        w.on('error', fail);
+        w.on('exit', (code) => {
+          if (code !== 0 && !failed && left > 0) fail(new Error(`worker stopped (${code})`));
+        });
       }
-      readPage(lines, n, state, out);
-      onProgress?.({ page: n, pages: doc.numPages });
+    });
+  };
+}
+
+/**
+ * Reads a whole report, page by page. onProgress is told after each page. Throws only when the file is not a PDF at all
+ * (or is too long); every page problem is listed instead. P90: a long report's page text is read by worker threads in
+ * parallel (a 250-page month in a few seconds instead of ten or more), and the pages are still read in order; if the
+ * threads cannot run, the main thread reads it as before.
+ */
+export async function parseAttendancePdf(
+  bytes: Uint8Array,
+  onProgress?: (p: ParseProgress) => void,
+  opts: { workers?: number; minPagesForWorkers?: number } = {},
+): Promise<ParsedAttendanceReport> {
+  const doc = await openPdf(bytes);
+  const pages = doc.numPages;
+  const workers = Math.max(1, opts.workers ?? PDF_WORKERS);
+  if (pages > ATTENDANCE_PDF_MAX_PAGES) {
+    await doc.destroy().catch(() => undefined);
+    throw new Error(`This report has ${pages} pages; split it into files of at most ${ATTENDANCE_PDF_MAX_PAGES} pages.`);
+  }
+  const fresh = () => {
+    const out: ParsedAttendanceReport = { title: null, pages, employees: [], unreadable: [], warnings: [] };
+    const state: State = { company: '', period: [null, null], layout: null, cur: null, monthlyWanted: null };
+    let next = 1;
+    const held = new Map<number, Line[] | null>();
+    /** Pages arrive in any order from the threads; they are read strictly in page order. */
+    const take = (n: number, lines: Line[] | null) => {
+      held.set(n, lines);
+      while (held.has(next)) {
+        const l = held.get(next)!;
+        held.delete(next);
+        if (l === null) out.unreadable.push({ page: next, reason: 'The page could not be opened (the file may be damaged).' });
+        else readPage(l, next, state, out);
+        onProgress?.({ page: next, pages });
+        next++;
+      }
+    };
+    const finish = () => {
+      if (state.cur) out.employees.push(state.cur);
+      return out;
+    };
+    return { take, finish };
+  };
+  if (workers > 1 && pages >= (opts.minPagesForWorkers ?? WORKER_MIN_PAGES)) {
+    await doc.destroy().catch(() => undefined);
+    const run = fresh();
+    try {
+      await workerSource(bytes, workers)(pages, run.take);
+      return run.finish();
+    } catch {
+      // Threads could not run here: read it on the main thread instead, from the start.
+      return parseAttendancePdf(bytes, onProgress, { workers: 1 });
+    }
+  }
+  try {
+    const run = fresh();
+    for (let n = 1; n <= pages; n++) {
+      run.take(n, await pageLines(doc, n));
       // Let other requests in between pages of a long report.
       if (n % 10 === 0) await new Promise((r) => setImmediate(r));
     }
-    if (state.cur) out.employees.push(state.cur);
-    return out;
+    return run.finish();
   } finally {
     await doc.destroy().catch(() => undefined);
   }

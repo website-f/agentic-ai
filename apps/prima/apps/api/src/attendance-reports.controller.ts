@@ -9,7 +9,7 @@
 
 import { createHash, randomUUID } from 'node:crypto';
 import { Body, Controller, Get, HttpException, Injectable, OnModuleDestroy, Param, Post, Query, UseGuards } from '@nestjs/common';
-import { AttendanceReportError, type ParsedAttendanceReport } from '@prima/core';
+import { AttendanceReportError, TimesheetError, parsedReportFromJson, type ParsedAttendanceReport } from '@prima/core';
 import { AuthGuard, UserId } from './auth';
 import { Db } from './db';
 import { parseAttendancePdf, type ParseProgress } from './attendance-pdf';
@@ -28,6 +28,8 @@ type Status = 'uploading' | 'reading' | 'read' | 'failed';
 interface Upload {
   id: string;
   userId: string;
+  /** P90: 'table' is an Excel or CSV timesheet read on the person's device and sent as its rows (JSON), not the file. */
+  kind: 'pdf' | 'table';
   name: string;
   size: number;
   sha256: string;
@@ -76,9 +78,10 @@ export class AttendanceUploads implements OnModuleDestroy {
     return n;
   }
 
-  start(userId: string, name: string, size: number, sha256: string): Upload {
+  start(userId: string, name: string, size: number, sha256: string, kind: 'pdf' | 'table' = 'pdf'): Upload {
     this.sweep();
-    if (!/\.pdf$/i.test(name)) refuse('Only PDF reports are imported here. Export the attendance report as a PDF.');
+    if (kind === 'pdf' && !/\.pdf$/i.test(name)) refuse('Only PDF reports, Excel (.xlsx) and CSV timesheets are imported here.');
+    if (kind === 'table' && !/\.(xlsx|csv)$/i.test(name)) refuse('Only Excel (.xlsx) and CSV timesheets are read on the device.');
     if (!Number.isSafeInteger(size) || size < 100) refuse('This file is empty.');
     if (size > ATTENDANCE_MAX_BYTES) refuse(`This file is larger than ${ATTENDANCE_MAX_BYTES / 1024 / 1024} MB. Export one month at a time.`, 413);
     if (!/^[0-9a-f]{64}$/.test(sha256)) refuse('The file fingerprint is not valid. Choose the file again.');
@@ -88,6 +91,7 @@ export class AttendanceUploads implements OnModuleDestroy {
     const u: Upload = {
       id: randomUUID(),
       userId,
+      kind,
       name: name.slice(0, 200),
       size,
       sha256,
@@ -130,6 +134,18 @@ export class AttendanceUploads implements OnModuleDestroy {
     const bytes = Buffer.concat(u.chunks as Buffer[]);
     u.chunks = [];
     if (createHash('sha256').update(bytes).digest('hex') !== u.sha256) return this.fail(u, 'The file changed while it was being sent. Send it again.');
+    if (u.kind === 'table') {
+      // The rows the device read from the timesheet: checked field by field here; nothing unexpected is kept.
+      try {
+        const r = parsedReportFromJson(JSON.parse(bytes.toString('utf8')));
+        if (!r.employees.length) return this.fail(u, 'No timesheet rows could be read from this file.');
+        u.parsed = r;
+        u.status = 'read';
+        return u;
+      } catch (e) {
+        return this.fail(u, e instanceof TimesheetError ? e.message : 'The timesheet rows could not be read. Choose the file again.');
+      }
+    }
     if (bytes.subarray(0, 5).toString('latin1') !== '%PDF-') return this.fail(u, 'This is not a PDF file. Export the attendance report as a PDF.');
     u.status = 'reading';
     this.queue.push(u);
@@ -188,6 +204,7 @@ export class AttendanceUploads implements OnModuleDestroy {
       name: u.name,
       size: u.size,
       sha256: u.sha256,
+      kind: u.kind,
       status: u.status,
       received: u.status === 'uploading' ? u.received : u.size,
       chunkBytes: ATTENDANCE_CHUNK_BYTES,
@@ -278,7 +295,7 @@ export class AttendanceReportsController {
       }),
     );
     if (known) refuse(`This file is already imported (${known.companyName}, ${known.month}, by ${known.by}). The same file is never imported twice.`, 409);
-    return this.uploads.view(this.uploads.start(uid, str(b?.name, 300), Number(b?.size), sha));
+    return this.uploads.view(this.uploads.start(uid, str(b?.name, 300), Number(b?.size), sha, b?.kind === 'table' ? 'table' : 'pdf'));
   }
 
   /** One piece of the file (base64, 1 MB before encoding). */
