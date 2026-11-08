@@ -285,3 +285,290 @@
 .cam:focus {
   outline: none;
 }
+
+/* ---------- P90: the camera, polished (item scanner and face check) ---------- */
+
+/* Tools on the right of the top bar (torch, switch camera). */
+.cam-tools {
+  display: flex;
+  gap: 8px;
+  flex: none;
+}
+.cam-icon[aria-pressed='true'] {
+  background: rgb(255 214 102 / 0.92);
+  color: #1b1400;
+}
+
+/* Scanner frame: bright corners on a soft outline, and a scan line moving through it. */
+.cam-scan-frame {
+  position: relative;
+  border-color: rgb(255 255 255 / 0.22) !important;
+  border-width: 1px !important;
+  overflow: hidden;
+}
+.cam-corner {
+  position: absolute;
+  width: 34px;
+  height: 34px;
+  border: 0 solid var(--cam-ring);
+  transition: border-color 0.2s ease;
+}
+.cam-corner[data-c='tl'] {
+  top: 0;
+  left: 0;
+  border-top-width: 5px;
+  border-left-width: 5px;
+  border-top-left-radius: 16px;
+}
+.cam-corner[data-c='tr'] {
+  top: 0;
+  right: 0;
+  border-top-width: 5px;
+  border-right-width: 5px;
+  border-top-right-radius: 16px;
+}
+.cam-corner[data-c='bl'] {
+  bottom: 0;
+  left: 0;
+  border-bottom-width: 5px;
+  border-left-width: 5px;
+  border-bottom-left-radius: 16px;
+}
+.cam-corner[data-c='br'] {
+  bottom: 0;
+  right: 0;
+  border-bottom-width: 5px;
+  border-right-width: 5px;
+  border-bottom-right-radius: 16px;
+}
+.cam[data-tone='ok'] .cam-corner {
+  border-color: var(--cam-ok);
+}
+.cam[data-tone='adjust'] .cam-corner {
+  border-color: var(--cam-adjust);
+}
+.cam-scan-line {
+  position: absolute;
+  left: 8%;
+  right: 8%;
+  top: 10%;
+  height: 2px;
+  border-radius: 2px;
+  background: linear-gradient(90deg, transparent, var(--cam-ok), transparent);
+  box-shadow: 0 0 12px 2px rgb(91 227 164 / 0.55);
+  animation: cam-scan 2.2s ease-in-out infinite alternate;
+}
+@keyframes cam-scan {
+  from {
+    top: 10%;
+  }
+  to {
+    top: 88%;
+  }
+}
+/* A read: the frame lights up for a moment. */
+.cam[data-flash='yes'] .cam-scan-frame {
+  background: rgb(91 227 164 / 0.22);
+}
+.cam[data-flash='yes'] .cam-corner {
+  border-color: var(--cam-ok);
+}
+.cam-scan-frame {
+  transition: background-color 0.25s ease;
+}
+
+/* Waiting for the camera: a ring that turns, in the middle of the frame or the oval. */
+.cam-spinner {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 44px;
+  height: 44px;
+  margin: -22px 0 0 -22px;
+  border-radius: 50%;
+  border: 4px solid rgb(255 255 255 / 0.25);
+  border-top-color: #fff;
+  animation: cam-spin 0.9s linear infinite;
+}
+@keyframes cam-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* The result of the last read, large, under the frame. */
+.cam-result {
+  grid-area: status;
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 0 16px 14px;
+  padding: 14px 16px;
+  border-radius: 18px;
+  background: rgb(18 22 20 / 0.82);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgb(255 255 255 / 0.14);
+  box-shadow: 0 10px 30px rgb(0 0 0 / 0.35);
+  animation: cam-pop 0.22s ease-out;
+  max-width: 560px;
+  justify-self: center;
+  width: calc(100% - 32px);
+  box-sizing: border-box;
+}
+.cam-result[data-tone='ok'] {
+  border-color: rgb(91 227 164 / 0.7);
+}
+.cam-result[data-tone='warn'],
+.cam-result[data-tone='info'] {
+  border-color: rgb(255 210 122 / 0.75);
+}
+.cam-result[data-tone='crit'] {
+  border-color: rgb(255 120 100 / 0.85);
+}
+.cam-result-icon {
+  flex: none;
+  display: grid;
+  place-items: center;
+  color: var(--cam-ok);
+}
+.cam-result[data-tone='warn'] .cam-result-icon,
+.cam-result[data-tone='info'] .cam-result-icon {
+  color: var(--cam-adjust);
+}
+.cam-result[data-tone='crit'] .cam-result-icon {
+  color: #ff8a78;
+}
+.cam-result-main {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.cam-result-title {
+  font-size: clamp(20px, 5.4vw, 26px);
+  font-weight: 700;
+  line-height: 1.15;
+}
+.cam-result-code {
+  font-size: 15px;
+  color: rgb(255 255 255 / 0.92);
+  overflow-wrap: anywhere;
+}
+.cam-result-sub {
+  font-size: 15px;
+  line-height: 1.35;
+  color: rgb(255 255 255 / 0.8);
+}
+@keyframes cam-pop {
+  from {
+    transform: translateY(8px) scale(0.98);
+    opacity: 0;
+  }
+  to {
+    transform: none;
+    opacity: 1;
+  }
+}
+
+/* Face check: the oval breathes while it waits, a countdown sits in it, and a white flash when the photo is taken. */
+.cam-oval {
+  position: relative;
+}
+.cam[data-tone='ok'] .cam-oval {
+  animation: cam-breathe 1.4s ease-in-out infinite;
+}
+@keyframes cam-breathe {
+  50% {
+    border-color: #a5f3cf;
+  }
+}
+.cam-count {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-size: clamp(64px, 22vw, 120px);
+  font-weight: 800;
+  color: #fff;
+  text-shadow: 0 2px 18px rgb(0 0 0 / 0.55);
+  animation: cam-pop 0.25s ease-out;
+}
+.cam-flash {
+  position: absolute;
+  inset: 0;
+  background: #fff;
+  pointer-events: none;
+  animation: cam-flash 0.35s ease-out forwards;
+}
+@keyframes cam-flash {
+  from {
+    opacity: 0.9;
+  }
+  to {
+    opacity: 0;
+  }
+}
+/* The photo taken, shown to keep or take again. */
+.cam-review {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  background: #111;
+}
+.cam-review[data-mirror='yes'] {
+  transform: scaleX(-1);
+}
+.cam-review-actions {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+.cam-review-actions .btn {
+  min-height: 52px;
+  min-width: 150px;
+  font-size: 17px;
+  border-radius: 999px;
+}
+.cam-review-actions .btn:not(.btn-primary) {
+  background: rgb(0 0 0 / 0.5);
+  color: #fff;
+  border-color: rgb(255 255 255 / 0.5);
+}
+.cam-steps {
+  display: flex;
+  justify-content: center;
+  gap: 6px;
+  margin-top: 10px;
+}
+.cam-steps span {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: rgb(255 255 255 / 0.35);
+}
+.cam-steps span[data-done='yes'] {
+  background: var(--cam-ok);
+}
+.cam-help {
+  width: 100%;
+  max-height: 38dvh;
+  overflow: auto;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cam-scan-line,
+  .cam-spinner,
+  .cam[data-tone='ok'] .cam-oval,
+  .cam-result,
+  .cam-count,
+  .cam-flash {
+    animation: none;
+  }
+  .cam-flash {
+    opacity: 0;
+  }
+}

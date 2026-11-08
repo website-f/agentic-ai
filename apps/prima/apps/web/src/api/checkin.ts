@@ -10,6 +10,9 @@ export type CheckinSetup = R<'checkinSetup'>;
 export type CheckinDay = R<'checkinDay'>;
 export type CheckinReviews = R<'checkinReviews'>;
 export type CheckinSites = R<'checkinSites'>;
+/** P90: the owner's test check-ins (never attendance or pay). */
+export type MyTestCheckins = Awaited<ReturnType<PrimaService['ownerTestCheckins']['mine']>>;
+export type TestCheckinFix = { lat: number; lng: number; accuracyM: number | null; capturedAt?: string | null };
 export type { CheckinAddress, CheckinInput, CheckinPlaceInput, CheckinPolicy, CheckinRuleInput };
 
 /** One result of the address search (the API asks OpenStreetMap; the browser never does). */
@@ -38,4 +41,7 @@ export interface CheckinClient {
   geoSearch(q: string): Promise<{ results: GeoResult[] }>;
   /** The street address at a dropped pin; status 'off' when lookups are switched off here. */
   geoReverse(lat: number, lng: number): Promise<{ address: string | null; status: 'found' | 'none' | 'off' }>;
+  /** P90: the owner's TEST check-in, readings on the way, and check-out. Owner only; never attendance or pay. */
+  myTestCheckins(): Promise<MyTestCheckins>;
+  testCheckin(step: 'in' | 'ping' | 'out', fix: TestCheckinFix): Promise<unknown>;
 }

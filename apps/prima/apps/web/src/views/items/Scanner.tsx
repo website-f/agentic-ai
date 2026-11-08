@@ -4,11 +4,15 @@
 // server (items/scan-check) before the screen uses it, so the screen and the server judge it the same way. A link or
 // anything that is not an item code is refused and never opened.
 import { useEffect, useRef, useState } from 'react';
-import { CameraIcon, KeyboardIcon, XIcon, LightningIcon } from '@phosphor-icons/react';
+import { createPortal } from 'react-dom';
+import { CameraIcon, CameraRotateIcon, CheckCircleIcon, KeyboardIcon, LightningIcon, WarningCircleIcon, XIcon } from '@phosphor-icons/react';
 import { LABEL_REFUSAL, SCAN_OUTCOME_LABEL, parseScan, type ScanEntry, type ScanPurpose, type ScanSource } from '@prima/core';
 import { api, type ItemScanVerdict } from '../../api';
 import { Chip, ErrorNotice } from '../../ui';
-import { makeDecoder, type Decoder } from './decoder';
+import { makeDecoder, prewarmDecoder } from './decoder';
+import { hasTorch, keepFocus, listCameras, openCamera, stopStream, whenIdle } from '../camera-stream';
+import { CAMERA_PROBLEM_TEXT, cameraProblem, type CameraProblem } from '../checkin-permissions';
+import { PermissionHelp } from '../PermissionHelp';
 import { REPEAT_MS, classifyKeys, cleanScan } from './keys';
 import '../../styles/camera.css';
 import '../../styles/items.css';
@@ -90,6 +94,8 @@ export function Scanner({
   const input = useRef<HTMLInputElement>(null);
   const cb = useRef(onResult);
   cb.current = onResult;
+  // P90: the code reader gets ready while the screen is idle, so the camera opens without waiting for it.
+  useEffect(() => whenIdle(prewarmDecoder), []);
 
   async function check(code: string, source: ScanSource, man: ScanEntry['manual'] = null) {
     const v = cleanScan(code);
@@ -292,104 +298,227 @@ function ManualDialog({ info, onCancel, onSubmit }: { info: { code: string; hasS
 }
 
 /**
- * The camera, full screen as on a phone (like the face camera). The back camera, a frame to aim with, a torch where
- * the phone has one, and the last result in large words. The stream is stopped as soon as the screen closes.
+ * The camera, full screen as on a phone (like the face camera). P90: the camera is asked for at once and the code reader
+ * loads beside it (it used to load first, so the "Allow camera" question came late); the back camera with sizes every
+ * phone has; an aiming frame with corners and a moving scan line; the torch and a camera switch where the phone has them;
+ * a flash and buzz on each read; the result in a large card; and help when the camera is blocked. The stream stays open
+ * while this screen is open (continuous scanning) and every track is stopped as soon as it closes.
  */
 export function CameraScan({ title, last, error, onRead, onClose }: { title: string; last: ItemScanVerdict | null; error: string | null; onRead: (code: string) => void; onClose: () => void }) {
   const video = useRef<HTMLVideoElement>(null);
-  const [state, setState] = useState<'starting' | 'live' | 'none' | 'denied'>('starting');
+  const dialog = useRef<HTMLDivElement>(null);
+  const stream = useRef<MediaStream | null>(null);
+  const [state, setState] = useState<'starting' | 'live' | 'none' | 'problem'>('starting');
+  const [problem, setProblem] = useState<CameraProblem | null>(null);
   const [torch, setTorch] = useState<{ on: boolean; track: MediaStreamTrack } | null>(null);
+  const [cameras, setCameras] = useState<MediaDeviceInfo[]>([]);
+  const [deviceId, setDeviceId] = useState<string | null>(null);
+  const [attempt, setAttempt] = useState(0);
+  const [hit, setHit] = useState(0);
+  const [flash, setFlash] = useState(false);
   const cb = useRef(onRead);
   cb.current = onRead;
+  const close = useRef(onClose);
+  close.current = onClose;
+  const chosen = useRef<string | null>(null);
+
   useEffect(() => {
     let stop = false;
-    let stream: MediaStream | null = null;
-    let decoder: Decoder | null = null;
+    // The reader loads while the camera opens, never before it.
+    const reader = makeDecoder();
+    setState('starting');
+    setTorch(null);
     (async () => {
+      let s: MediaStream;
       try {
-        decoder = await makeDecoder();
+        s = await openCamera('environment', chosen.current);
+      } catch (e) {
         if (stop) return;
-        if (!decoder) {
-          setState('none');
-          return;
+        setProblem(cameraProblem(e));
+        setState('problem');
+        return;
+      }
+      if (stop || !video.current) return stopStream(s);
+      stream.current = s;
+      const track = s.getVideoTracks()[0];
+      keepFocus(track);
+      video.current.srcObject = s;
+      await video.current.play().catch(() => undefined);
+      if (stop) return;
+      if (hasTorch(track)) setTorch({ on: false, track });
+      setDeviceId(track?.getSettings?.().deviceId ?? chosen.current);
+      void listCameras().then((all) => !stop && setCameras(all));
+      setProblem(null);
+      setState('live');
+      const decoder = await reader;
+      if (stop) return;
+      if (!decoder) {
+        stopStream(s);
+        stream.current = null;
+        setState('none');
+        return;
+      }
+      while (!stop) {
+        if (document.visibilityState === 'visible' && video.current && video.current.readyState >= 2) {
+          const found = await decoder.detect(video.current).catch(() => [] as string[]);
+          if (stop) return;
+          const code = found.map(cleanScan).find((v) => parseScan(v).ok);
+          if (code) {
+            setHit((n) => n + 1);
+            cb.current(code);
+          }
         }
-        stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment', width: { ideal: 1280 } }, audio: false });
-        if (stop || !video.current) {
-          stream.getTracks().forEach((t) => t.stop());
-          return;
-        }
-        video.current.srcObject = stream;
-        await video.current.play();
-        const track = stream.getVideoTracks()[0];
-        const caps = (track.getCapabilities?.() ?? {}) as { torch?: boolean };
-        if (caps.torch) setTorch({ on: false, track });
-        setState('live');
-        while (!stop) {
-          const found = video.current ? await decoder.detect(video.current).catch(() => [] as string[]) : [];
-          if (stop || !video.current) return;
-          const hit = found.map(cleanScan).find((v) => parseScan(v).ok);
-          if (hit) cb.current(hit);
-          await new Promise((r) => setTimeout(r, decoder?.kind === 'native' ? 120 : 160));
-        }
-      } catch {
-        if (!stop) setState('denied');
+        await new Promise((r) => setTimeout(r, decoder.kind === 'native' ? 100 : 150));
       }
     })();
     return () => {
       stop = true;
-      stream?.getTracks().forEach((t) => t.stop());
+      stopStream(stream.current);
+      stream.current = null;
+    };
+  }, [attempt]);
+
+  // Full screen: no page scroll behind it, Escape closes it, focus starts on it.
+  useEffect(() => {
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    const from = document.activeElement as HTMLElement | null;
+    dialog.current?.focus();
+    const key = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      e.preventDefault();
+      e.stopPropagation();
+      close.current();
+    };
+    window.addEventListener('keydown', key, true);
+    return () => {
+      document.body.style.overflow = prev;
+      window.removeEventListener('keydown', key, true);
+      from?.focus?.();
     };
   }, []);
+
+  // A short flash of the frame on each read.
+  useEffect(() => {
+    if (!hit) return;
+    setFlash(true);
+    const t = window.setTimeout(() => setFlash(false), 450);
+    return () => window.clearTimeout(t);
+  }, [hit]);
+
+  const flip = () => {
+    if (cameras.length < 2) return;
+    const at = cameras.findIndex((c) => c.deviceId === deviceId);
+    chosen.current = cameras[(at + 1) % cameras.length].deviceId || null;
+    setAttempt((n) => n + 1);
+  };
+
   const tone = last ? (last.outcome === 'ok' ? 'ok' : 'adjust') : undefined;
-  const words =
-    state === 'none'
-      ? 'This phone cannot read codes here'
-      : state === 'denied'
-        ? 'The camera could not be opened'
-        : last
-          ? SCAN_OUTCOME_LABEL[last.outcome]
-          : 'Point at the code';
+  const blocked = state === 'none' || state === 'problem';
+  const words = state === 'none' ? 'This phone cannot read codes here' : state === 'problem' ? 'Camera not available' : state === 'starting' ? 'Opening the camera' : 'Point at the code';
   const sub =
-    state === 'none' || state === 'denied'
+    state === 'none'
       ? 'Close this and type the ID printed under the code, or use a handheld scanner.'
-      : error ?? (last ? `${last.label ?? ''}${last.sku ? ` · ${last.sku}` : ''}${last.outcome !== 'ok' ? ` · ${last.message}` : ''}` : 'Hold the label inside the frame. It reads on its own.');
-  return (
-    <div className="cam isc-cam-screen" data-tone={tone} role="dialog" aria-modal="true" aria-label={title}>
-      <video ref={video} className="cam-video" muted playsInline />
+      : state === 'problem'
+        ? CAMERA_PROBLEM_TEXT[problem ?? 'other']
+        : 'Hold the label inside the frame. It reads on its own.';
+  const canFlip = cameras.length > 1 && state === 'live';
+  return createPortal(
+    <div
+      ref={dialog}
+      className="cam isc-cam-screen"
+      data-tone={tone}
+      data-state={state}
+      data-flash={flash ? 'yes' : undefined}
+      role="dialog"
+      aria-modal="true"
+      aria-label={title}
+      tabIndex={-1}
+    >
+      <video ref={video} className="cam-video" muted playsInline autoPlay />
       <div className="isc-frame-wrap" aria-hidden="true">
-        <div className="isc-frame" />
+        <div className="isc-frame cam-scan-frame">
+          <span className="cam-corner" data-c="tl" />
+          <span className="cam-corner" data-c="tr" />
+          <span className="cam-corner" data-c="bl" />
+          <span className="cam-corner" data-c="br" />
+          {state === 'live' && <span className="cam-scan-line" />}
+          {state === 'starting' && <span className="cam-spinner" />}
+        </div>
       </div>
       <div className="cam-top">
         <button className="cam-icon" type="button" onClick={onClose} aria-label="Close the camera">
-          <XIcon size={24} />
+          <XIcon size={24} weight="bold" />
         </button>
         <div className="cam-title">{title}</div>
-        {torch ? (
-          <button
-            className="cam-icon"
-            type="button"
-            aria-pressed={torch.on}
-            aria-label="Torch"
-            onClick={() => {
-              const on = !torch.on;
-              void torch.track.applyConstraints({ advanced: [{ torch: on } as MediaTrackConstraintSet] }).then(() => setTorch({ ...torch, on }), () => undefined);
-            }}
-          >
-            <LightningIcon size={22} weight={torch.on ? 'fill' : 'regular'} />
-          </button>
+        <div className="cam-tools">
+          {torch && (
+            <button
+              className="cam-icon"
+              type="button"
+              aria-pressed={torch.on}
+              aria-label={torch.on ? 'Torch off' : 'Torch on'}
+              onClick={() => {
+                const on = !torch.on;
+                void torch.track.applyConstraints({ advanced: [{ torch: on } as MediaTrackConstraintSet] }).then(
+                  () => setTorch({ ...torch, on }),
+                  () => undefined,
+                );
+              }}
+            >
+              <LightningIcon size={22} weight={torch.on ? 'fill' : 'bold'} />
+            </button>
+          )}
+          {canFlip && (
+            <button className="cam-icon" type="button" onClick={flip} aria-label="Switch camera">
+              <CameraRotateIcon size={22} weight="bold" />
+            </button>
+          )}
+          {!torch && !canFlip && <span className="cam-icon-gap" />}
+        </div>
+      </div>
+      {last && !blocked ? (
+        <div className="cam-result" data-tone={TONE[last.outcome]} aria-live="polite">
+          <span className="cam-result-icon" aria-hidden="true">
+            {last.outcome === 'ok' ? <CheckCircleIcon size={30} weight="fill" /> : <WarningCircleIcon size={30} weight="fill" />}
+          </span>
+          <span className="cam-result-main">
+            <span className="cam-result-title">{SCAN_OUTCOME_LABEL[last.outcome]}</span>
+            {last.label && <span className="cam-result-code mono">{last.label}</span>}
+            <span className="cam-result-sub">
+              {[last.sku ? `${last.sku}${last.size ? ` ${last.size}` : ''}` : '', last.outcome !== 'ok' ? last.message : ''].filter(Boolean).join(' · ') || 'Ready for the next label'}
+            </span>
+            {error && <span className="cam-result-sub">{error}</span>}
+          </span>
+        </div>
+      ) : (
+        <div className="cam-status" aria-live="polite">
+          <p className="cam-status-text">{words}</p>
+          <p className="cam-status-sub">{error ?? sub}</p>
+        </div>
+      )}
+      <div className="cam-bottom">
+        {state === 'problem' ? (
+          <div className="cam-sheet">
+            {problem === 'denied' && (
+              <div className="cam-help">
+                <PermissionHelp kind="camera" compact />
+              </div>
+            )}
+            <button type="button" className="btn btn-primary" onClick={() => setAttempt((n) => n + 1)}>
+              Try again
+            </button>
+            <button type="button" className="btn" onClick={onClose}>
+              Close
+            </button>
+          </div>
         ) : (
-          <span className="cam-icon-gap" />
+          <button className="btn isc-cam-done" type="button" onClick={onClose}>
+            Done
+          </button>
         )}
       </div>
-      <div className="cam-status" aria-live="polite">
-        <p className="cam-status-text">{words}</p>
-        <p className="cam-status-sub">{sub}</p>
-      </div>
-      <div className="cam-bottom">
-        <button className="btn isc-cam-done" type="button" onClick={onClose}>
-          Done
-        </button>
-      </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

@@ -815,6 +815,7 @@ export function generateDataset(opts: SeedOptions): Dataset {
     checkinRules: [],
     checkinSettings: [],
     checkinEvents: [],
+    ownerTestCheckins: [],
     jaRecords: [],
     jaSyncs: [],
     amUnits: [],

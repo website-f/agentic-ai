@@ -89,6 +89,37 @@ describe('attendance report uploads', () => {
     }
   });
 
+  it('takes an Excel or CSV timesheet as the rows read on the device, checked field by field (P90)', async () => {
+    const u = new AttendanceUploads(async () => {
+      throw new Error('the PDF reader is not used for a timesheet');
+    });
+    try {
+      const day = { date: '2026-02-13', weekday: 'Fri', clocks: [], in: '08:00', out: '17:00', shift: 'S01', normalH: 8, lateH: 0, earlyH: 0, actualH: 8, ot: [0, 0, 0, 0], allow: { flat: 0, attendance: 0, shift: 0, meal: 0, transport: 0, other1: 0, other2: 0, health: 0 }, reason: null, page: 2 };
+      const report = { title: 'Timesheet', pages: 0, unreadable: [], warnings: [], employees: [{ company: '', empCode: 'SYN1', name: 'SYNTHETIC ONE', designation: null, department: null, periodFrom: '2026-02-01', periodTo: '2026-02-28', pages: [], days: [day], totals: null, monthly: null }] };
+      const ok = Buffer.from(JSON.stringify(report));
+      const up = u.start('u-a', 'february.xlsx', ok.length, sha(ok), 'table');
+      u.chunk('u-a', up.id, 0, ok);
+      const v = u.view(u.finish('u-a', up.id));
+      assert.equal(v.status, 'read', v.error ?? '');
+      assert.equal(v.kind, 'table');
+      assert.deepEqual(v.read, { pages: 0, employees: 1, unreadable: 0 });
+      // A date that is not on the calendar is refused, never repaired.
+      const bad = Buffer.from(JSON.stringify({ ...report, employees: [{ ...report.employees[0], days: [{ ...day, date: '2026-02-30' }] }] }));
+      const b = u.start('u-a', 'bad.csv', bad.length, sha(bad), 'table');
+      u.chunk('u-a', b.id, 0, bad);
+      const bv = u.view(u.finish('u-a', b.id));
+      assert.equal(bv.status, 'failed');
+      assert.match(bv.error ?? '', /not on the calendar/);
+      const junk = Buffer.from(JSON.stringify({ not: 'a timesheet', pad: 'x'.repeat(200) }));
+      const j = u.start('u-a', 'junk.csv', junk.length, sha(junk), 'table');
+      u.chunk('u-a', j.id, 0, junk);
+      assert.equal(u.view(u.finish('u-a', j.id)).status, 'failed');
+      assert.throws(() => u.start('u-a', 'sheet.pdf', 500, 'a'.repeat(64), 'table'), /Excel/);
+    } finally {
+      u.onModuleDestroy();
+    }
+  });
+
   it('forgets uploads after 30 minutes untouched', () => {
     let t = 1_000_000;
     const u = new AttendanceUploads(async () => ({ title: null, pages: 0, employees: [], unreadable: [], warnings: [] }), () => t);

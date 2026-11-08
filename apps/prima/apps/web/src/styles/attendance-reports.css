@@ -805,3 +805,62 @@
     transform: scale(0.92);
   }
 }
+
+/* P90: the timesheet import: what was read on the device, the file summed, and the checks before saving. */
+.ar-table-note {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 10px;
+  border-radius: var(--r);
+  background: var(--surface-2);
+}
+.ar-table-note [data-tone='warn'] {
+  color: var(--warn);
+}
+.ar-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.ar-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 8px;
+}
+.ar-summary-grid > span {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  background: var(--surface);
+  min-width: 0;
+}
+.ar-summary-grid strong {
+  overflow-wrap: anywhere;
+}
+.ar-summary-grid [data-tone='warn'] strong {
+  color: var(--warn);
+}
+.ar-summary-grid [data-tone='crit'] strong {
+  color: var(--crit);
+}
+.ar-checks summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  cursor: pointer;
+}
+.ar-checks .ar-pages {
+  margin-top: 6px;
+}
+.ar-nowrap {
+  white-space: nowrap;
+}
+@media (max-width: 420px) {
+  .ar-summary-grid {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+}

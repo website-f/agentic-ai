@@ -17,6 +17,7 @@ import { hrKeeps } from './hr';
 import type { Store } from './store';
 import { dateOf } from './time';
 import type { AuthorityGrant, Company, Id, IsoDate, IsoDateTime, Person, User } from './types';
+import { attendanceChecks, type AttendanceChecks } from './attendance-timesheet';
 
 // ---------------------------------------------------------------- what the parser hands over
 
@@ -29,6 +30,8 @@ export type OtHours = [number, number, number, number];
 /** One printed day row, as read. Times are HH:MM (null when the report shows 0.00); hours are decimal hours. */
 export interface ReportDay {
   date: IsoDate;
+  /** P90: the weekday as printed (Mon, Tue ...), checked against the date before saving (a day and month swap shows). */
+  weekday?: string | null;
   /** The raw clock punches, when the report prints them ("Actual Clock" layout). */
   clocks: string[];
   in: string | null;
@@ -469,7 +472,17 @@ export interface AttendancePreview {
     personName: string | null;
     how: AttendanceMatchHow | null;
     totalsMatch: boolean | null;
+    /** P90: the person's month summed: worked, absent, rest and leave days, late minutes, OT by rate, allowances. */
+    totals: AttendanceTotals;
+    allowances: number;
+    /** First and last date on the person's rows. */
+    from: IsoDate | null;
+    to: IsoDate | null;
   }[];
+  /** P90: what to look at before saving (dates outside the period, the same day twice, a weekday that is not the date's ...). */
+  checks: AttendanceChecks;
+  /** The whole file summed (every person, before matching). */
+  kpi: AttendanceKpi;
   unreadable: { page: number; reason: string }[];
   warnings: { page: number; reason: string }[];
   alreadyImported: { at: IsoDateTime; by: string; companyName: string; month: string } | null;
@@ -678,6 +691,10 @@ export class AttendanceReportService {
           personName: m.personId ? (names.get(m.personId) ?? null) : null,
           how: m.how,
           totalsMatch: totalsAddUp(e),
+          totals: t,
+          allowances: allowancesOf(t),
+          from: e.days.length ? e.days.reduce((a, d) => (d.date < a ? d.date : a), e.days[0].date) : null,
+          to: e.days.length ? e.days.reduce((a, d) => (d.date > a ? d.date : a), e.days[0].date) : null,
         });
       }
       const existing = r.company && month ? active.find((i) => i.companyId === r.company!.id && i.month === month) : undefined;
@@ -706,6 +723,8 @@ export class AttendanceReportService {
       days: parsed.employees.reduce((n, e) => n + e.days.length, 0),
       companies,
       rows: rows.slice(0, 2000),
+      checks: attendanceChecks(parsed),
+      kpi: kpiOf(parsed.employees.map((e) => ({ t: employeeTotals(e) }))),
       unreadable: parsed.unreadable.slice(0, AUTO_PAGES_CAP),
       warnings: parsed.warnings.slice(0, AUTO_PAGES_CAP),
       alreadyImported,

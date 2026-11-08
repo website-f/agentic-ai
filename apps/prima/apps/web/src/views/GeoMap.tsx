@@ -25,7 +25,16 @@ export interface MapPoint {
   label?: string;
 }
 
+/** P90: a route drawn as a line (the owner's test check-in movements). */
+export interface MapLine {
+  path: { lat: number; lng: number }[];
+  tone?: MapTone;
+  label?: string;
+}
+
 export interface GeoMapProps {
+  /** Routes to draw (oldest point first). */
+  lines?: MapLine[];
   /** Circles to show (offices, places, zones). */
   circles?: MapCircle[];
   /** Readings (a check-in point with its accuracy). */
@@ -65,7 +74,7 @@ const pinIcon = (tone: MapTone) =>
     iconAnchor: [14, 26],
   });
 
-export default function GeoMap({ circles = [], points = [], pin, onPin, onMapClick, focus, fitKey, height = 320, label }: GeoMapProps) {
+export default function GeoMap({ lines = [], circles = [], points = [], pin, onPin, onMapClick, focus, fitKey, height = 320, label }: GeoMapProps) {
   const box = useRef<HTMLDivElement>(null);
   const map = useRef<L.Map | null>(null);
   const layer = useRef<L.LayerGroup | null>(null);
@@ -103,11 +112,20 @@ export default function GeoMap({ circles = [], points = [], pin, onPin, onMapCli
   }, []);
 
   // Circles and readings: redrawn only when what they show changes (typing elsewhere on the screen leaves them be).
-  const shapes = JSON.stringify([circles, points]);
+  const shapes = JSON.stringify([circles, points, lines]);
   useEffect(() => {
     const g = layer.current;
     if (!g) return;
     g.clearLayers();
+    for (const l of lines) {
+      if (l.path.length < 2) continue;
+      const route = L.polyline(
+        l.path.map((p) => [p.lat, p.lng] as L.LatLngTuple),
+        { color: color(l.tone), weight: 4, opacity: 0.85, lineJoin: 'round', lineCap: 'round', interactive: !!l.label },
+      );
+      if (l.label) route.bindTooltip(l.label, { sticky: true });
+      route.addTo(g);
+    }
     for (const c of circles) {
       const col = color(c.tone);
       const shape = L.circle([c.lat, c.lng], { radius: c.radiusM, color: col, weight: 2, fillColor: col, fillOpacity: 0.12, interactive: !!c.label });
@@ -168,6 +186,7 @@ export default function GeoMap({ circles = [], points = [], pin, onPin, onMapCli
     if (!m) return;
     const b = L.latLngBounds([]);
     for (const c of circles) b.extend(L.latLng(c.lat, c.lng).toBounds(c.radiusM * 2));
+    for (const l of lines) for (const p of l.path) b.extend(L.latLng(p.lat, p.lng));
     for (const p of points) b.extend(L.latLng(p.lat, p.lng).toBounds(Math.max(60, (p.accuracyM ?? 0) * 2)));
     if (pin) b.extend(L.latLng(pin.lat, pin.lng).toBounds(pin.radiusM * 2.4));
     if (!b.isValid()) return;

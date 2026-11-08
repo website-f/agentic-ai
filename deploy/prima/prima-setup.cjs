@@ -48,6 +48,11 @@ const REFRESH = [
     "what": "payroll Finance reads statutory rates (statutory_read wall)"
   }
 ];
+// P90: the office's own repeat-safe modules (CREATE ... IF NOT EXISTS, CREATE OR REPLACE, DROP POLICY IF EXISTS), run on
+// every start as the schema owner, each file in its own transaction (the file holds BEGIN and COMMIT). A second run changes
+// nothing. They add new tables only; no existing table, row or policy is changed.
+//   owner-test-checkin-v1.sql: the owner's TEST check-in and check-out with the route between (never attendance or pay).
+const OFFICE_MODULES = ['owner-test-checkin-v1.sql'];
 (async () => {
   const { Client } = require(require.resolve('pg', { paths: [cwd] }));
   const c = new Client({ connectionString: process.env.DATABASE_URL });
@@ -61,6 +66,11 @@ const REFRESH = [
       console.log(`prima-setup: refreshed: ${s.what}`);
     }
     await c.query('COMMIT');
+    const dir = require('node:path').resolve(cwd, '../../db/modules');
+    for (const f of OFFICE_MODULES) {
+      await c.query(require('node:fs').readFileSync(require('node:path').join(dir, f), 'utf8'));
+      console.log(`prima-setup: office module ${f} in place`);
+    }
   } catch (e) {
     await c.query('ROLLBACK').catch(() => {});
     throw e;

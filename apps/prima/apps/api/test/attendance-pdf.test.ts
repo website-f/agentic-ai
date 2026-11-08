@@ -134,4 +134,21 @@ describe('attendance report parser (synthetic PDF)', () => {
     assert.equal(r.employees.reduce((n, e) => n + e.days.length, 0), 300 * 31);
     assert.ok(Date.now() - t0 < 60_000, 'well under a minute for 300 pages');
   });
+  it('reads a long report with worker threads to the same result, page by page in order (P90)', async () => {
+    const people: SynEmployee[] = Array.from({ length: 6 }, (_, k) => ({
+      code: `SYN10${k}`,
+      name: `SYNTHETIC PERSON ${k}`,
+      designation: 'GUARD',
+      days: month(31, (d) => (d % 7 === 0 ? { reason: 'RES' } : d === k + 3 ? { late: 0.25, in: '8.15' } : {})),
+    }));
+    const pdf = syntheticReport({ company: 'SYNTHETIC GUARD SDN BHD', from: `01-${MM}-${YYYY}`, to: `31-${MM}-${YYYY}`, employees: people });
+    const one = await parseAttendancePdf(pdf, undefined, { workers: 1 });
+    const seen: number[] = [];
+    const many = await parseAttendancePdf(pdf, (p) => seen.push(p.page), { workers: 3, minPagesForWorkers: 1 });
+    assert.ok(one.pages >= 3, `pages ${one.pages}`);
+    assert.deepEqual(seen, Array.from({ length: one.pages }, (_, i) => i + 1));
+    assert.deepEqual(many, one);
+    assert.equal(many.employees.length, 6);
+    assert.equal(many.employees[2].days.find((d) => d.date === `${YYYY}-${MM}-05`)?.weekday, 'Thu');
+  });
 });

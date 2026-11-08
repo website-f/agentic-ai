@@ -127,6 +127,7 @@ import type { CheckinRuleInput } from "./checkin-service";
 import type { CheckinPolicy } from "./checkin";
 import { staffPayGaps } from "./real-data";
 import { AttendanceReportService } from "./attendance-reports";
+import { OwnerTestCheckinService } from "./owner-test-checkin";
 import { checkAssignment } from "./checks";
 import { checkRequirement } from "./checks";
 import { csgDeadline } from "./checks";
@@ -42869,6 +42870,8 @@ export class PrimaService {
   get orgImport(): OrgImportService { return new OrgImportService(this.store, this, () => this.now()); }
   /** P81: past attendance from the InfoTech monthly PDF reports (attendance-reports.ts). */
   get attendanceReports(): AttendanceReportService { return new AttendanceReportService(this.store, () => this.now()); }
+  /** P90: the owner's TEST check-in and check-out with the route between (owner-test-checkin.ts); never attendance or pay. */
+  get ownerTestCheckins(): OwnerTestCheckinService { return new OwnerTestCheckinService(this.store, () => this.now()); }
   /** Guide cards for this person (Arisha review section A): the same role-scoped mapping the screen and Arisha read. */
   guideCards(user: User) { return guideCardsFor(user, this.recordKindsFor(user), { handovers: orgLinksOn(this.store) }); }
   /** Arisha's task_guide tool: the same guideCards call, cut to what she needs. */

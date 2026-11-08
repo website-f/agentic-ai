@@ -3374,6 +3374,8 @@ export interface Dataset {
   checkinRules: import('./checkin').CheckinRule[];
   checkinSettings: import('./checkin').CheckinSettings[];
   checkinEvents: import('./checkin').CheckinEvent[];
+  /** P90: the owner's TEST check-ins (owner-test-checkin.ts): never a clock, attendance or pay record. */
+  ownerTestCheckins: import('./owner-test-checkin').OwnerTestCheckin[];
   fwWelfareChecks: FwWelfareCheck[];
   fwPlacements: FwPlacement[];
   fwPlacementHosts: FwPlacementHostView[];

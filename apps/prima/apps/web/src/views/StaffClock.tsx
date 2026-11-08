@@ -11,7 +11,7 @@ import {
   UserCheckIcon,
   UserMinusIcon,
 } from '@phosphor-icons/react';
-import { checkinScope, fromMs, type CheckinEvent, type StaffClockFlag } from '@prima/core';
+import { checkinScope, fromMs, isOwnerAdmin, type CheckinEvent, type StaffClockFlag } from '@prima/core';
 import { api, type MyStaffClock, type StaffClockBoard } from '../api';
 import { Card, Empty, PageHead, Person, Search, Stat, Stats } from '../kit';
 import { Chip, Drawer, ErrorNotice, Loading, dateTimeLabel, useAction, useLoad, type Tone } from '../ui';
@@ -26,6 +26,7 @@ import { useApp } from '../App';
 import { MyCheckinCard, OUTCOME, VERDICT, whereText } from './CheckIn';
 import { CheckinPlacesView, CheckinReviewView } from './CheckinPlaces';
 import { MyTimeSlipSection, TimeSlipBoardView } from './TimeSlip';
+import { OwnerTestCheckinView } from './OwnerTestCheckin';
 import '../styles/selfservice.css';
 
 const FLAG_LABEL: Record<StaffClockFlag, string> = {
@@ -79,6 +80,9 @@ export function MyClockView() {
   const { data, error, reload } = useLoad(() => api.myStaffClock(), []);
   const [where, setWhere] = useState<TestPlace>(api.mode === 'demo' ? 'base' : 'gps');
   const act = useAction();
+  const { me } = useApp();
+  // P90: the owner has no staff clock; they test check-in and check-out here instead (never attendance or pay).
+  if (isOwnerAdmin(me.user) && (!data || !data.allowed)) return <OwnerTestCheckinView />;
   if (error)
     return (
       <div className="page ss">

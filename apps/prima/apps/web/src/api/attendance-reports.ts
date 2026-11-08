@@ -10,6 +10,8 @@ export type { AttendancePreview };
 
 export interface AttendanceUploadView {
   id: string;
+  /** P90: 'table' is an Excel or CSV timesheet read on this device and sent as its rows. */
+  kind?: 'pdf' | 'table';
   name: string;
   size: number;
   sha256: string;
@@ -36,7 +38,7 @@ export interface AttendanceReportsClient {
   unmatched(): Promise<AttendanceUnmatched>;
   staff(companyId: string, q: string): Promise<AttendanceStaffHit[]>;
   match(companyId: string, key: string, personId: string): Promise<{ ok: boolean }>;
-  start(file: { name: string; size: number; sha256: string }): Promise<AttendanceUploadView>;
+  start(file: { name: string; size: number; sha256: string; kind?: 'pdf' | 'table' }): Promise<AttendanceUploadView>;
   chunk(id: string, index: number, data: string): Promise<AttendanceUploadView>;
   finish(id: string): Promise<AttendanceUploadView>;
   status(id: string): Promise<AttendanceUploadView>;

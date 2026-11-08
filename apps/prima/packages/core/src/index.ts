@@ -260,9 +260,11 @@ export * from './import-align';
 export * from './xlsx-read';
 // P81 (office): past attendance from the InfoTech monthly PDF reports.
 export * from './attendance-reports';
+export * from './attendance-timesheet';
 // P81 (office): staff check-in by place (offices on a map, who checks in where, out-of-area review).
 export * from './checkin';
 export * from './checkin-service';
+export * from './owner-test-checkin';
 // P81 (office): the group's real companies and staff, loaded into an empty database instead of sample data.
 export * from './real-data';
 export * from './import-match';
