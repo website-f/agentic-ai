@@ -144,6 +144,8 @@ const ROWS: Row[] = [
   ['Switch from JA', 'Beralih daripada JA', 'Switch dari JA'],
   ['Staff directory', 'Direktori staf', 'Staff directory'],
   ['Arrival cash', 'Wang tunai ketibaan', 'Arrival cash'],
+  ["This company's Finance books are not started yet", 'Buku Kewangan syarikat ini belum dimulakan', "Finance books syarikat ini belum dimulakan"],
+  ["Arrival cash is kept in each company's Finance books. The Finance Director starts them in Finance, Settings. Pick another company above, or ask Finance.", 'Wang tunai ketibaan disimpan dalam buku Kewangan setiap syarikat. Pengarah Kewangan memulakannya di Kewangan, Tetapan. Pilih syarikat lain di atas, atau tanya Kewangan.', "Arrival cash disimpan dalam Finance books setiap syarikat. Finance Director memulakannya di Finance, Settings. Pilih syarikat lain di atas, atau tanya Finance."],
   ['Do a self-audit', 'Buat audit kendiri', 'Buat self-audit'],
   ['Save self-audit', 'Simpan audit kendiri', 'Simpan self-audit'],
   ['Self-audits done', 'Audit kendiri yang telah dibuat', 'Self-audit yang sudah dibuat'],

@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { useApp } from '../App';
 import { api } from '../api';
 import { ErrorNotice, useLoad, useAction } from '../ui';
+import { Empty } from '../kit';
 import { readAsDataUrl } from './Proof';
 type View=Awaited<ReturnType<typeof api.finArrivalCash>>;
 type Row=View['rows'][number];
@@ -13,6 +14,8 @@ export function ArrivalCashView() {
 }
 function ArrivalCompany({companyId}:{companyId:string}) {
   const {data,error,reload}=useLoad(()=>api.finArrivalCash(companyId),[companyId]);
+  // P90: a company whose Finance books are not started yet is a plain state, not a red error.
+  if(error&&/^Company books not found/.test(error))return <Empty title="This company's Finance books are not started yet">Arrival cash is kept in each company's Finance books. The Finance Director starts them in Finance, Settings. Pick another company above, or ask Finance.</Empty>;
   if(error)return <ErrorNotice error={error}/>;
   if(!data)return <p>Loading arrival records…</p>;
   return <section><p className="notice">{data.gate}</p><p>FWM requests each amount and purpose. The CEO decides each request. Only actual cash handover creates an amount owed. A missing genuine signed receipt stays pending and holds recovery. No bank account is needed. Recovery begins in the first wage month, over the months FWM sets, within a reviewed lawful cap.</p>
