@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { RULES, SURVEY_RISKS, SURVEY_RISK_LABEL, SURVEY_SITE_TYPES, SURVEY_SITE_TYPE_LABEL, SURVEY_STATUS_LABEL, SURVEY_UNIT_LABEL, fromMs, guardsPerDay } from '@prima/core';
 import { api, type SiteSurveyBoard, type SiteSurveySetup } from '../api';
 import { Chip, Drawer, ErrorNotice, dateTimeLabel, useAction, useLoad, type Tone } from '../ui';
+import { Empty, PageHead } from '../kit';
 import { EvidenceCamera, gps } from './Camera';
 import {
   NUMBER_LABEL,
@@ -143,11 +144,24 @@ export function SurveysView({ ownerId, offline = false }: { ownerId: string; off
     );
 
   return (
-    <div className="survey" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-      <div className="page-head">
-        <h1>Site survey</h1>
-        <p className="muted">Fill it in at the site, even with no signal. Photos and measurements stay on this phone and are sent by themselves when there is a signal.</p>
-      </div>
+    // P90: the page frame (padding, width, rhythm) and the kit's page head, with New site survey as the main action.
+    <div className={offline ? 'survey' : 'page survey'} style={{ display: 'flex', flexDirection: 'column', gap: offline ? 12 : undefined }}>
+      <PageHead
+        title="Site survey"
+        sub="Fill it in at the site, even with no signal. Photos and measurements stay on this phone and are sent by themselves when there is a signal."
+        actions={
+          <>
+            {!offline && waiting > 0 && (
+              <button className="btn btn-lg" onClick={() => send(true)}>
+                Send now
+              </button>
+            )}
+            <button className="btn btn-primary btn-lg" onClick={start} disabled={!setup || setup.companies.length === 0}>
+              New site survey
+            </button>
+          </>
+        }
+      />
       <div className="notice" data-tone={online && !offline ? 'ok' : 'warn'} role="status">
         {online && !offline ? 'Signal: on.' : 'No signal. You can still fill in surveys; they are sent later.'}
         {waiting > 0 && ` ${waiting} survey${waiting === 1 ? '' : 's'} waiting to send.`}
@@ -157,17 +171,6 @@ export function SurveysView({ ownerId, offline = false }: { ownerId: string; off
       {old > 0 && <div className="notice" data-tone="warn">{old} survey{old === 1 ? ' has' : 's have'} been on this phone for over {keepDays} days. Finish and send, or delete.</div>}
       {others > 0 && <div className="notice">{others} survey{others === 1 ? '' : 's'} on this phone belong to another person. They are sent when that person signs in here.</div>}
       {setup && setup.companies.length === 0 && <div className="notice">You have no company to survey for. Ask your manager.</div>}
-
-      <div className="row" style={{ flexWrap: 'wrap', gap: 8 }}>
-        <button className="btn btn-primary btn-lg" onClick={start} disabled={!setup || setup.companies.length === 0}>
-          New site survey
-        </button>
-        {!offline && waiting > 0 && (
-          <button className="btn btn-lg" onClick={() => send(true)}>
-            Send now
-          </button>
-        )}
-      </div>
 
       {!offline && (
         <div className="seg" role="tablist" style={{ alignSelf: 'flex-start' }}>
@@ -183,14 +186,16 @@ export function SurveysView({ ownerId, offline = false }: { ownerId: string; off
         </div>
       )}
 
-      {(offline || tab === 'phone') && <LocalList rows={local} onOpen={setEditing} onChanged={reload} />}
-      {!offline && tab !== 'phone' && <ServerList decide={tab === 'decide'} onRedo={async (s) => {
-        const id = newSurveyId();
-        const redo: LocalSurvey = { id, ownerId, state: 'draft', startedAt: fromMs(Date.now()), finishedAt: null, updatedAt: Date.now(), form: s, photos: [], serverReceived: false, ref: null, error: null, tries: 0, nextTryAt: 0, sentAt: null };
-        await putLocal(redo);
-        setTab('phone');
-        setEditing(redo);
-      }} />}
+      <section className="panel survey-list">
+        {(offline || tab === 'phone') && <LocalList rows={local} onOpen={setEditing} onChanged={reload} />}
+        {!offline && tab !== 'phone' && <ServerList decide={tab === 'decide'} onRedo={async (s) => {
+          const id = newSurveyId();
+          const redo: LocalSurvey = { id, ownerId, state: 'draft', startedAt: fromMs(Date.now()), finishedAt: null, updatedAt: Date.now(), form: s, photos: [], serverReceived: false, ref: null, error: null, tries: 0, nextTryAt: 0, sentAt: null };
+          await putLocal(redo);
+          setTab('phone');
+          setEditing(redo);
+        }} />}
+      </section>
     </div>
   );
 }
@@ -213,7 +218,7 @@ function placeOf(f: SurveyForm, setup?: SiteSurveySetup | null): string {
 
 function LocalList({ rows, onOpen, onChanged }: { rows: LocalSurvey[] | null; onOpen: (s: LocalSurvey) => void; onChanged: () => void }) {
   if (!rows) return null;
-  if (!rows.length) return <div className="empty">No surveys on this phone.</div>;
+  if (!rows.length) return <Empty title="No surveys on this phone.">Press New site survey at the site; it saves here even with no signal.</Empty>;
   return (
     <div className="list">
       {rows.map((s) => (
@@ -265,7 +270,7 @@ function ServerList({ decide, onRedo }: { decide: boolean; onRedo: (f: SurveyFor
     <>
       {decide && !data.isProjectDirector && <div className="notice">Only the Project Director (COO, Operations General Manager, Operations Director) decides surveys.</div>}
       <div className="list">
-        {rows.length === 0 && <div className="empty">{decide ? 'No surveys waiting for you.' : 'No surveys sent yet.'}</div>}
+        {rows.length === 0 && <Empty title={decide ? 'No surveys waiting for you.' : 'No surveys sent yet.'} />}
         {rows.map((r: SiteSurveyBoard['rows'][number]) => (
           <button key={r.survey.id} className="list-item" style={{ textAlign: 'left', width: '100%', cursor: 'pointer' }} onClick={() => setOpen(r.survey.id)}>
             <div style={{ flex: 1 }}>

@@ -1,0 +1,425 @@
+/* =====================================================================================================================
+   P90: page-by-page spacing and layout pass (Fitri, 9 Nov 2026: "no generous spacing ... check them one by one").
+   Loaded last (main.tsx), so these shared rules settle the older ones. Every screen gets the same frame: page padding
+   (28px on a computer, 16px on a phone), a sensible width, one rhythm between blocks, roomy cards, readable tables
+   that scroll sideways inside their card (first column kept in view on a phone) and calm notices.
+   The checklist of every screen is in apps/prima/docs/P90_UX_PASS.md.
+   ===================================================================================================================== */
+
+/* ---------- The page frame ---------- */
+/* App.tsx wraps every screen in .view-host. A screen that draws its own .page keeps it; one that does not (or returns
+   only a loading line or an error) gets the same padding, width and rhythm from the frame. */
+.view-host {
+  flex: 1 0 auto;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.view-host:not(:has(> .page)) {
+  padding-block: 28px 96px;
+  padding-left: max(28px, env(safe-area-inset-left, 0px));
+  padding-right: max(28px, env(safe-area-inset-right, 0px));
+  gap: 24px;
+  max-width: 1360px;
+  width: 100%;
+}
+/* Room under the last card for the Arisha button (bottom right). */
+.page {
+  padding-bottom: 96px;
+}
+/* Very wide screens: the page stays a comfortable width instead of stretching tables across 1900px. */
+@media (min-width: 1700px) {
+  .page,
+  .view-host:not(:has(> .page)) {
+    max-width: 1480px;
+  }
+}
+
+/* Long running text on the page reads in comfortable lines, not 180 characters across. */
+.page > p,
+.page > .muted,
+.page > span.muted,
+.page > .small,
+.page-section > p {
+  max-width: 82ch;
+}
+/* A loose span or line straight on the page sits as its own block. */
+.page > span.muted,
+.page > span.small {
+  display: block;
+}
+
+/* ---------- Page heads ---------- */
+.page-head p,
+.k-head-sub {
+  line-height: 1.6;
+}
+/* Title and its line of explanation never touch (some heads wrap them in a div of their own). */
+.page-head h1 + p,
+.page-head h1 + .muted {
+  margin-top: 6px;
+}
+/* A company or month picker in a page head is the size of its content, not a full-width bar. */
+.page-head > .select,
+.page-head > select,
+.page-head > .input,
+.page-head > label {
+  align-self: flex-start;
+  max-width: min(100%, 440px);
+}
+/* Title, one line of what the page is for, then the actions: a little air between them. */
+.k-head {
+  row-gap: 12px;
+}
+.k-head-actions {
+  align-items: center;
+}
+
+/* ---------- Notices ---------- */
+/* A notice with no tone is a quiet note (it drew a hard black frame before). */
+.notice:not([data-tone]) {
+  background: color-mix(in srgb, var(--accent-soft) 45%, var(--surface));
+  border-color: var(--line);
+  border-left-color: var(--accent);
+  color: var(--ink);
+}
+/* Unknown keeps its own violet (never mistaken for fine); neutral is a quiet grey note. */
+.notice[data-tone='unknown'] {
+  background: var(--unknown-soft);
+  border-color: color-mix(in srgb, var(--unknown) 45%, var(--line));
+  border-left-color: var(--unknown);
+  color: var(--ink);
+}
+.notice[data-tone='neutral'] {
+  background: var(--surface-2);
+  border-color: var(--line);
+  border-left-color: var(--muted);
+  color: var(--ink);
+}
+.notice {
+  overflow-wrap: break-word;
+}
+.notice + .notice {
+  margin-top: 0;
+}
+
+/* ---------- Cards: everything placed straight inside a card gets the card's padding ---------- */
+/* Forms, fields, buttons and plain blocks placed straight in a .panel (no .panel-body) sat flush on its edges. */
+.panel
+  > :is(div:not([class]), label, form, fieldset, .field, .grid-2, .grid-3, .btn, button:not([class]), input.input, select, .select, textarea, .textarea, details:not([class]), dl, .seg, .tabbar, .k-toolbar, .toolbar) {
+  margin-inline: 18px;
+}
+.panel
+  > :is(div:not([class]), label, form, fieldset, .field, .grid-2, .grid-3, .btn, button:not([class]), input.input, select, .select, textarea, .textarea, details:not([class]), dl, .seg, .tabbar, .k-toolbar, .toolbar):first-child {
+  margin-top: 16px;
+}
+.panel
+  > :is(.panel-head, .k-card-head)
+  + :is(div:not([class]), label, form, fieldset, .field, .grid-2, .grid-3, .btn, button:not([class]), input.input, select, .select, textarea, .textarea, details:not([class]), dl, .seg, .tabbar, .k-toolbar, .toolbar) {
+  margin-top: 14px;
+}
+.panel
+  > :is(div:not([class]), label, form, fieldset, .field, .grid-2, .grid-3, .btn, button:not([class]), input.input, select, .select, textarea, .textarea, details:not([class]), dl, .seg, .tabbar, .k-toolbar, .toolbar, p, .muted, .small, .notice, .row):last-child {
+  margin-bottom: 16px;
+}
+/* A button straight in a card is its own size, not a bar across the card. */
+.panel > .btn,
+.panel > button:not([class]) {
+  align-self: flex-start;
+  width: auto;
+  max-width: calc(100% - 36px);
+}
+/* A table placed straight in a card: its outer cells line up with the card's text. */
+.panel > table {
+  margin: 0;
+}
+.panel > table :is(td, th):first-child,
+.panel > .table-wrap > table :is(td, th):first-child {
+  padding-left: 18px;
+}
+.panel > table :is(td, th):last-child,
+.panel > .table-wrap > table :is(td, th):last-child {
+  padding-right: 18px;
+}
+/* A line of text followed only by an empty list is the card's last line: it gets the bottom padding. */
+.panel > :is(p, .muted, .small, .notice):has(+ .list:empty:last-child) {
+  margin-bottom: 16px;
+}
+/* Blocks stacked straight on a card keep a gap between them. */
+.panel > .list + :is(.row, .btn, p, .muted, .small, .notice, div:not([class])) {
+  margin-top: 12px;
+}
+
+/* Cards and sections stacked inside a column or a list never touch. */
+.k-card + .k-card,
+.panel + .panel {
+  margin-top: 0;
+}
+section.panel + section.panel:not(.page > *):not(.view-host > *) {
+  margin-top: 14px;
+}
+
+/* ---------- List rows drawn as buttons with link styling (Cleaning sites and similar) ---------- */
+.list-item.link-button {
+  padding: 12px 18px;
+  color: inherit;
+  text-decoration: none;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+}
+.list-item.link-button:last-child {
+  border-bottom: 0;
+}
+.list-item.link-button:hover {
+  background: color-mix(in srgb, var(--surface-2) 70%, transparent);
+}
+.list-item.link-button > .row {
+  flex: 1 1 260px;
+  justify-content: flex-end;
+}
+
+/* ---------- Tables ---------- */
+/* A table wider than its card scrolls inside the card; a soft shadow on the edge shows there is more to the side. */
+.table-wrap,
+.k-card-body.k-flush,
+.panel:has(> table) {
+  background:
+    linear-gradient(to right, var(--surface) 30%, transparent) left center / 28px 100% no-repeat local,
+    linear-gradient(to left, var(--surface) 30%, transparent) right center / 28px 100% no-repeat local,
+    radial-gradient(farthest-side at 0 50%, color-mix(in srgb, var(--ink) 16%, transparent), transparent) left center / 12px 100% no-repeat scroll,
+    radial-gradient(farthest-side at 100% 50%, color-mix(in srgb, var(--ink) 16%, transparent), transparent) right center / 12px 100% no-repeat scroll,
+    var(--surface);
+}
+.table-wrap {
+  -webkit-overflow-scrolling: touch;
+}
+/* Short figures (11 / 11, RM1,200.00, 09:30) stay on one line. */
+td.num,
+th.num,
+td.mono,
+td .mono {
+  white-space: nowrap;
+}
+/* On a phone the first column (the name of the row) stays in view while the rest scrolls sideways, and chips inside a
+   table stay on one line (the table scrolls instead of every chip growing into a tall pill). */
+@media (max-width: 860px) {
+  :is(.table-wrap, .k-card-body.k-flush, .panel) > table:not(.roster) :is(td, th):first-child {
+    position: sticky;
+    left: 0;
+    z-index: 1;
+    background: var(--surface);
+    box-shadow: inset -1px 0 0 var(--line);
+    min-width: 9.5rem;
+    max-width: 62vw;
+  }
+  :is(.table-wrap, .k-card-body.k-flush, .panel) > table:not(.roster) th:first-child {
+    z-index: 2;
+    background: var(--surface-2);
+  }
+  :is(.table-wrap, .k-card-body.k-flush, .panel) > table td .chip {
+    white-space: nowrap;
+  }
+  :is(.table-wrap, .k-card-body.k-flush, .panel) > table td {
+    min-width: 4.5rem;
+  }
+}
+
+/* ---------- Figures in tiles ---------- */
+/* A long figure (RM1,466,400) is set a size smaller so it never breaks inside the number. */
+.kpi-value[data-long],
+.k-stat-value[data-long] {
+  font-size: clamp(1.2rem, 0.95rem + 0.55vw, 1.5rem);
+  overflow-wrap: normal;
+  word-break: normal;
+}
+@media (max-width: 860px) {
+  .kpi-value[data-long],
+  .k-stat-value[data-long] {
+    font-size: 1.2rem;
+  }
+}
+
+/* ---------- Segmented choices and tab strips ---------- */
+/* A segmented choice never hides its last options on a narrow screen: it scrolls. */
+.seg {
+  max-width: 100%;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.seg::-webkit-scrollbar {
+  display: none;
+}
+.seg button {
+  flex: none;
+  white-space: nowrap;
+}
+
+/* ---------- Phones ---------- */
+@media (max-width: 860px) {
+  .view-host:not(:has(> .page)) {
+    padding: 18px max(16px, env(safe-area-inset-right, 0px)) 136px max(16px, env(safe-area-inset-left, 0px));
+    gap: 18px;
+  }
+  /* Room under the last card for the bottom tabs and the Arisha button. */
+  .page {
+    padding-bottom: 136px;
+  }
+  /* The page's main action: full width under the title, first in line, easy to reach with a thumb. */
+  .k-head-actions {
+    width: 100%;
+  }
+  .k-head-actions > .btn {
+    flex: 1 1 auto;
+  }
+  .k-head-actions > .btn-primary {
+    order: -1;
+    flex-basis: 100%;
+  }
+  .page-head > .row > .btn-primary:only-child,
+  .page-head > .btn-primary {
+    flex: 1 1 100%;
+    width: 100%;
+  }
+  .page-head > .select,
+  .page-head > select,
+  .page-head > label {
+    max-width: 100%;
+    align-self: stretch;
+  }
+  .panel
+    > :is(div:not([class]), label, form, fieldset, .field, .grid-2, .grid-3, .btn, button:not([class]), input.input, select, .select, textarea, .textarea, details:not([class]), dl, .seg, .tabbar, .k-toolbar, .toolbar) {
+    margin-inline: 14px;
+  }
+  .panel > .btn,
+  .panel > button:not([class]) {
+    max-width: calc(100% - 28px);
+  }
+  .panel > table :is(td, th):first-child,
+  .panel > .table-wrap > table :is(td, th):first-child {
+    padding-left: 14px;
+  }
+  .panel > table :is(td, th):last-child,
+  .panel > .table-wrap > table :is(td, th):last-child {
+    padding-right: 14px;
+  }
+  .list-item.link-button {
+    padding: 12px 14px;
+  }
+  .list-item.link-button > .row {
+    justify-content: flex-start !important; /* the row sets flex-end inline for the computer layout */
+  }
+  /* Memo rows: title first, then its status and the arrow on their own line (the title was squeezed to one word). */
+  .ss-memo > .ss-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .ss-memo > .ss-row > .ss-actions {
+    justify-content: space-between;
+  }
+}
+
+/* ---------- Per-screen touches (kept small; the screens' own files are untouched where they come from upstream) ---------- */
+/* Arrival cash advances: its title reads as the page title, the company picker is its own size, and its cards have
+   padding like every other card. */
+.arrival-cash > h2:first-of-type {
+  font-size: 1.65rem;
+  font-weight: 650;
+  letter-spacing: -0.015em;
+}
+.arrival-cash > label {
+  align-self: flex-start;
+  width: min(100%, 440px);
+  font-weight: 600;
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+.arrival-cash > section {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.arrival-cash > section > p:not(.notice) {
+  max-width: 82ch;
+  color: var(--muted);
+}
+.arrival-cash .panel.stack {
+  padding: 16px 18px;
+}
+.arrival-cash .panel.stack > * {
+  margin-inline: 0;
+}
+.arrival-cash .panel.stack .panel {
+  padding: 12px 14px;
+  box-shadow: none;
+}
+
+/* ---------- Chips beside a title ---------- */
+/* A status chip next to a card or company title keeps its whole word ("Ambil tindakan" was cut to "Ambil tindaka");
+   the title wraps instead. */
+.panel-head > .chip,
+.k-card-head > .chip,
+.k-card-actions > .chip,
+.ld-co-head > .chip {
+  flex-shrink: 0;
+}
+
+/* ---------- Tiles on a phone ---------- */
+/* Two tiles a row on a phone: an odd last tile takes the whole row instead of leaving a blank half. */
+@media (max-width: 860px) {
+  .k-stats > .k-stat:last-child:nth-child(odd),
+  .kpis > :last-child:nth-child(odd) {
+    grid-column: 1 / -1;
+  }
+}
+
+/* Asset Management register rows: the money or due-date column fits its text ("tarikh akhir 22 Okt 2026" ran over the
+   130px column in Malay). */
+@media (min-width: 1101px) {
+  .bz-am-row {
+    grid-template-columns: minmax(0, 1fr) minmax(130px, max-content) 360px;
+  }
+}
+
+/* IT screen on a phone: a long link or code in a purchase or joiner row wraps instead of running 8px past the card. */
+@media (max-width: 860px) {
+  .it-item,
+  .it-people,
+  .it-person {
+    grid-template-columns: minmax(0, 1fr);
+    overflow-wrap: anywhere;
+  }
+}
+
+/* Rows drawn as .item inside a list (Panel firms, Legal holds, Company files): they had no style of their own and sat
+   flush on the card edge with no divider. They now look like every other list row. */
+.list > .item {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--line);
+  min-width: 0;
+}
+.list > .item:last-child {
+  border-bottom: 0;
+}
+.list > .item > .item-main {
+  flex: 1 1 320px;
+  min-width: 0;
+  display: grid;
+  gap: 6px;
+}
+.list > .item .row {
+  gap: 8px;
+}
+@media (max-width: 860px) {
+  .list > .item {
+    padding: 12px 14px;
+  }
+}
+
+/* Site survey: the list card is hidden while the phone's list is still being read (no empty box). */
+.survey-list:empty {
+  display: none;
+}

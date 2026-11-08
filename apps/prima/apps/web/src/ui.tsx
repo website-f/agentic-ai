@@ -211,12 +211,17 @@ export function Kpi({ label, value, note, tone }: { label: string; value: number
   return (
     <div className="kpi" data-tone={value === 'UNKNOWN' ? 'unknown' : tone}>
       <span className="label">{label}</span>
-      <span className="kpi-value" data-text={value === 'UNKNOWN' || (typeof value === 'string' && !/\d/.test(value) && value.length > 3) || undefined}>
+      <span className="kpi-value" data-text={value === 'UNKNOWN' || (typeof value === 'string' && !/\d/.test(value) && value.length > 3) || undefined} data-long={isLong(value) || undefined}>
         {typeof value === 'number' || value === 'UNKNOWN' ? n(value) : value}
       </span>
       {note && <span className="kpi-note">{note}</span>}
     </div>
   );
+}
+
+/** P90: a long figure (RM1,466,400) is set a size smaller so it never breaks inside the number. */
+export function isLong(v: unknown): boolean {
+  return (typeof v === 'string' || typeof v === 'number') && String(typeof v === 'number' ? n(v) : v).length > 9;
 }
 
 export function Findings({ items }: { items: Pick<Finding, 'level' | 'message'>[] }) {

@@ -71,7 +71,7 @@ export function SalaryCalcView() {
       </div>
 
       {settingsState !== 'current' && (
-        <div role="status" className="notice warn">
+        <div role="status" className="notice" data-tone="warn">
           {settingsState === 'loading'
             ? 'Checking current pay settings. Figures below are estimates using default settings, not verified current settings.'
             : 'Current pay settings are unavailable. Figures below are estimates using default settings, not the approved current pay law or site formula. Do not use this estimate to approve or pay wages.'}
