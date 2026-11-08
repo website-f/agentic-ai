@@ -155,140 +155,19 @@ describe('Daily cash custody', () => {
     for (const r of (await svc.financeControls.dailyCashMine(doa)).receipts.filter((x) => x.listId === listId))
       await svc.financeControls.dailyCashAction(doa, CO, 'receipt', { listId, payoutId: r.payoutId, name: 'Signed receipt (mock).png', data: `data:image/png;base64,${Buffer.from(`mock ${listId} ${r.payoutId}`).toString('base64')}` });
   };
-  it('keeps the approver, the person who withdrew and the collector apart from counting the cash back', async () => {
-    const { svc, F } = fresh();
-    const [de1, de2, dep, fd, ceo, coo] = await who(svc, 'u-fin-t1-de1', 'u-fin-t1-de2', 'u-fin-t1-dep', 'u-fd', 'u-fauzan', 'u-coo');
-    const l = (await svc.financeControls.dailyCashAction(de1, CO, 'add', {
-      period: 'week',
-      from: '2026-10-30',
-      to: '2026-11-02',
-      bankId: F(CO).banks[0].id,
-      purpose: 'Harvest workers paid in cash daily (mock)',
-      people,
-    })) as { id: string; people: { id: string }[] };
-    const act = (u: typeof de1, action: string, input: Record<string, unknown> = {}) =>
-      svc.financeControls.dailyCashAction(u, CO, action, { listId: l.id, ...input });
-    // Returned by the FD: corrected with each person's days, the log keeps the return.
-    await giveCash(svc, l.id, l.people[0].id);
-    await act(de1, 'submit');
-    await act(fd, 'return', { comment: 'Ali did not work on the 31st.' });
-    const edited = (await act(de1, 'edit', { people: [{ ...people[0], days: ['2026-10-30'] }] })) as { total: number; log: { text: string }[] };
-    expect(edited.total).toBe(100);
-    expect(edited.log.map((x) => x.text).join('\n')).toMatch(/Returned by the FD: Ali did not work/);
-    await act(de1, 'submit');
-    // Only the FD approves, never the CEO or the preparer.
-    await expect(act(ceo, 'approve', { comment: 'ok' })).rejects.toThrow();
-    await act(fd, 'approve', { comment: 'Approved for one day.' });
-    // No edits after approval.
-    await expect(act(de1, 'edit', { people })).rejects.toThrow(/not yet sent/);
-    // The FD who approved never handles the cash.
-    await expect(act(fd, 'withdraw', { on: TODAY, amount: 100, ref: 'CHQ 1' })).rejects.toThrow(/approved the list/);
-    await act(de1, 'withdraw', { on: TODAY, amount: 100, ref: 'CHQ 1' });
-    await expect(act(fd, 'handover', { toId: coo.id, amount: 100 })).rejects.toThrow(/approved the list/);
-    await expect(act(de1, 'handover', { toId: de2.id, amount: 100 })).rejects.toThrow(/only to the COO or the CEO/);
-    await act(de1, 'handover', { toId: coo.id, amount: 100 });
-    // Finance never pays the workers; the CEO cannot confirm cash handed to the COO.
-    await expect(act(de2, 'pay', { personId: l.people[0].id, day: '2026-10-30', idLast4: '1234', proof: 'sheet 1' })).rejects.toThrow();
-    await expect(act(ceo, 'received', { handoverId: 'h1', counted: 100 })).rejects.toThrow();
-    // A count that differs needs a reason.
-    await expect(act(coo, 'received', { handoverId: 'h1', counted: 90 })).rejects.toThrow(/Say why/);
-    await act(coo, 'received', { handoverId: 'h1', counted: 100 });
-    await act(coo, 'pay', { personId: l.people[0].id, day: '2026-10-30', idLast4: '1234', proof: 'Pay sheet 1 (mock)' });
-    await act(coo, 'giveBack', { amount: 0 });
-    // The collector, the person who withdrew and handed over, and the approving FD do not count it back.
-    await uploadReceipts(svc, l.id);
-    for (const u of [coo, de1, fd]) await expect(act(u, 'settle', { counted: 0 })).rejects.toThrow();
-    expect(((await act(dep, 'settle', { counted: 0 })) as { status: string }).status).toBe('settled');
+  it('8 November: legacy add cannot bypass the manual guard-cash handover', async () => {
+    const { svc } = fresh();
+    for (const id of ['u-fin-t1-de1','u-fd','u-fauzan','u-coo','u-pwvsb-doa']) await expect(svc.financeControls.dailyCashAction(await svc.user(id), CO, 'add', {})).rejects.toThrow(/Legacy daily cash/);
   });
 
-  it('Round 3: the FD who changed a list does not approve it, and only the person holding the cash pays from it', async () => {
-    const { svc, F } = fresh();
-    const [de1, de2, fd, ceo, coo] = await who(svc, 'u-fin-t1-de1', 'u-fin-t1-de2', 'u-fd', 'u-fauzan', 'u-coo');
-    const l = (await svc.financeControls.dailyCashAction(de1, CO, 'add', {
-      period: 'week',
-      from: '2026-10-30',
-      to: '2026-11-02',
-      bankId: F(CO).banks[0].id,
-      purpose: 'Harvest workers paid in cash daily (mock)',
-      people,
-    })) as { id: string; people: { id: string }[] };
-    const act = (u: typeof de1, action: string, input: Record<string, unknown> = {}) =>
-      svc.financeControls.dailyCashAction(u, CO, action, { listId: l.id, ...input });
-    // Defect 1: the FD changes another preparer's draft, staff send it, and the FD may not approve it.
-    const changed = (await act(fd, 'edit', { people: [{ ...people[0], dailyRate: 150 }] })) as { total: number; edits: { byId: string }[] };
-    expect(changed.total).toBe(300);
-    expect(changed.edits.map((e) => e.byId)).toEqual([fd.id]);
-    await act(de2, 'submit');
-    await expect(act(fd, 'approve', { comment: 'ok' })).rejects.toThrow(/changed/);
-    // Returning it stays open, and the CEO is still not an approver.
-    await expect(act(ceo, 'approve', { comment: 'ok' })).rejects.toThrow();
-    await act(fd, 'return', { comment: 'I changed the rate, so someone else must approve it.' });
-
-    // Defect 2: cash handed to and counted by the COO only; the CEO, who received nothing, cannot pay or give back.
-    const l2 = (await svc.financeControls.dailyCashAction(de1, CO, 'add', {
-      period: 'week',
-      from: '2026-10-30',
-      to: '2026-10-31',
-      bankId: F(CO).banks[0].id,
-      purpose: 'Harvest workers paid in cash daily (mock)',
-      people: [{ ...people[0], name: 'Abu bin Ali', idLast4: '5678', days: ['2026-10-31'] }],
-    })) as { id: string; people: { id: string }[] };
-    const act2 = (u: typeof de1, action: string, input: Record<string, unknown> = {}) =>
-      svc.financeControls.dailyCashAction(u, CO, action, { listId: l2.id, ...input });
-    await giveCash(svc, l2.id, l2.people[0].id);
-    await act2(de1, 'submit');
-    await act2(fd, 'approve', { comment: 'Approved, unchanged by me.' });
-    await act2(de1, 'withdraw', { on: TODAY, amount: 100, ref: 'CHQ 2' });
-    await act2(de1, 'handover', { toId: coo.id, amount: 100 });
-    await act2(coo, 'received', { handoverId: 'h1', counted: 100 });
-    const pay2 = { personId: l2.people[0].id, day: '2026-10-31', idLast4: '5678', proof: 'Pay sheet 2 (mock)' };
-    await expect(act2(ceo, 'pay', pay2)).rejects.toThrow(/hold none/);
-    await expect(act2(ceo, 'giveBack', { amount: 100 })).rejects.toThrow();
-    await act2(coo, 'pay', pay2);
-    await act2(coo, 'giveBack', { amount: 0 });
+  it('8 November: legacy approve cannot bypass the manual guard-cash handover', async () => {
+    const { svc } = fresh();
+    for (const id of ['u-fin-t1-de1','u-fd','u-fauzan','u-coo','u-pwvsb-doa']) await expect(svc.financeControls.dailyCashAction(await svc.user(id), CO, 'approve', {})).rejects.toThrow(/Legacy daily cash/);
   });
 
-  it('Round 4: cash split between the COO and the CEO is given back by each holder for their own share, then settled once', async () => {
-    const { svc, F } = fresh();
-    const [de1, dep, fd, ceo, coo] = await who(svc, 'u-fin-t1-de1', 'u-fin-t1-dep', 'u-fd', 'u-fauzan', 'u-coo');
-    const l = (await svc.financeControls.dailyCashAction(de1, CO, 'add', {
-      period: 'week',
-      from: '2026-10-30',
-      to: '2026-10-31',
-      bankId: F(CO).banks[0].id,
-      purpose: 'Harvest workers paid in cash daily (mock)',
-      people: [{ name: 'Siti binti Abu', idLast4: '4321', work: 'Harvest', dailyRate: 50, days: ['2026-10-30', '2026-10-31'], pay: 'cash' }],
-    })) as { id: string; people: { id: string }[] };
-    const act = (u: typeof de1, action: string, input: Record<string, unknown> = {}) =>
-      svc.financeControls.dailyCashAction(u, CO, action, { listId: l.id, ...input });
-    await giveCash(svc, l.id, l.people[0].id);
-    await act(de1, 'submit');
-    await act(fd, 'approve', { comment: 'Approved for two days.' });
-    await act(de1, 'withdraw', { on: TODAY, amount: 100, ref: 'CHQ 3' });
-    await act(de1, 'handover', { toId: coo.id, amount: 50 });
-    await act(de1, 'handover', { toId: ceo.id, amount: 50 });
-    await act(coo, 'received', { handoverId: 'h1', counted: 50 });
-    await act(ceo, 'received', { handoverId: 'h2', counted: 50 });
-    // The COO pays one day from his own RM50 and gives back nothing; the list waits for the CEO.
-    await act(coo, 'pay', { personId: l.people[0].id, day: '2026-10-30', idLast4: '4321', proof: 'Pay sheet 3 (mock)' });
-    const half = (await act(coo, 'giveBack', { amount: 0 })) as { status: string; giveBack: unknown; giveBacks: { byId: string; amount: number }[] };
-    expect(half.status).toBe('with_collector');
-    expect(half.giveBack).toBeNull();
-    expect(half.giveBacks).toMatchObject([{ byId: coo.id, amount: 0 }]);
-    // The COO holds nothing more: no second give back, no paying from the CEO's cash; nobody settles yet.
-    await expect(act(coo, 'giveBack', { amount: 0 })).rejects.toThrow(/already given back/);
-    await expect(act(coo, 'pay', { personId: l.people[0].id, day: '2026-10-31', idLast4: '4321', proof: 'Pay sheet 4 (mock)' })).rejects.toThrow(/hold none/);
-    await expect(act(dep, 'settle', { counted: 0 })).rejects.toThrow(/not waiting to be settled/);
-    // Giving back a different amount from what the CEO holds needs a reason.
-    await expect(act(ceo, 'giveBack', { amount: 100 })).rejects.toThrow(/Say why|reason/i);
-    const all = (await act(ceo, 'giveBack', { amount: 50 })) as { status: string; giveBack: { amount: number } };
-    expect(all.status).toBe('returned');
-    expect(all.giveBack.amount).toBe(50);
-    // Neither holder, nor whoever withdrew and handed it over, counts it back; another Finance person settles once.
-    await uploadReceipts(svc, l.id);
-    for (const u of [coo, ceo, de1, fd]) await expect(act(u, 'settle', { counted: 50, depositRef: 'DEP 3' })).rejects.toThrow();
-    const done = (await act(dep, 'settle', { counted: 50, depositRef: 'DEP 3' })) as { status: string; settled: { difference: number } };
-    expect(done).toMatchObject({ status: 'settled', settled: { difference: 0 } });
+  it('8 November: legacy pay cannot bypass the manual guard-cash handover', async () => {
+    const { svc } = fresh();
+    for (const id of ['u-fin-t1-de1','u-fd','u-fauzan','u-coo','u-pwvsb-doa']) await expect(svc.financeControls.dailyCashAction(await svc.user(id), CO, 'pay', {})).rejects.toThrow(/Legacy daily cash/);
   });
 });
 

@@ -201,8 +201,8 @@ describe('Worker master file', () => {
   });
 });
 
-describe('Yearly staff ethics declaration', () => {
-  it('every statement ticked, interests declared or none, once a year; ACT reviews interests, never its own', async () => {
+describe('Staff ethics declaration', () => {
+  it('every statement ticked, interests declared or none, signed once on entering service; ACT reviews interests, never its own', async () => {
     const { svc, cm, act, hr, ds } = await setup();
     const keys = (await svc.ethicsBoard(cm)).statements.map((s) => s.key);
     expect((await svc.home(cm)).todo.some((t) => t.tag === 'Ethics')).toBe(true);
@@ -212,6 +212,11 @@ describe('Yearly staff ethics declaration', () => {
     const d = await svc.signEthicsDeclaration(cm, { statements: keys, interests: 'Brother runs a uniform supplier (synthetic)' });
     await expect(svc.signEthicsDeclaration(cm, { statements: keys, interestsNone: true })).rejects.toThrow(/already signed/);
     expect((await svc.home(cm)).todo.some((t) => t.tag === 'Ethics')).toBe(false);
+    // Signed once, not yearly (Fauzan, 8 Nov 2026): a declaration from an earlier year still counts.
+    ds.ethicsDeclarations.find((x) => x.id === d.id)!.year -= 1;
+    expect((await svc.home(cm)).todo.some((t) => t.tag === 'Ethics')).toBe(false);
+    expect((await svc.ethicsBoard(cm)).mine?.id).toBe(d.id);
+    await expect(svc.signEthicsDeclaration(cm, { statements: keys, interestsNone: true })).rejects.toThrow(/already signed/);
     await expect(svc.reviewEthicsInterests(hr, d.id, { action: 'managed', note: 'Brother excluded from uniform quotes' })).rejects.toBeInstanceOf(AccessDenied);
     const r = await svc.reviewEthicsInterests(act, d.id, { action: 'managed', note: 'Kept out of uniform supplier choice and quotes' });
     expect(r.review?.action).toBe('managed');
@@ -231,6 +236,9 @@ describe('The RBA committee', () => {
     await expect(svc.nameRbaCommittee(coo, { memberUserIds: [od.id, cm.id] })).rejects.toBeInstanceOf(AccessDenied);
     await expect(svc.nameRbaCommittee(cos, { memberUserIds: [cm.id] })).rejects.toThrow(/Operations Director/);
     await expect(svc.nameRbaCommittee(cos, { memberUserIds: [od.id] })).rejects.toThrow(/company head/);
+    // At most 6 members (Fauzan, 8 Nov 2026).
+    const five = ['Member A', 'Member B', 'Member C', 'Member D', 'Member E'].map((name) => ({ name }));
+    await expect(svc.nameRbaCommittee(cos, { memberUserIds: [od.id, cm.id], others: five })).rejects.toThrow(/At most 6/);
     const c1 = await svc.nameRbaCommittee(cos, { memberUserIds: [od.id, cm.id], note: 'First committee (synthetic)' });
     expect(c1.members.map((m) => m.seat)).toEqual(['ops_director', 'company_head']);
     expect((await svc.home(cos)).todo.some((t) => t.tag === 'RBA' && /committee/.test(t.title))).toBe(false);

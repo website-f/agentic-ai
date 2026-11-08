@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { FileTextIcon, HourglassIcon, LightningIcon, TrayIcon } from '@phosphor-icons/react';
+import { ExceptionalGuardCash } from './ExceptionalGuardCash';
 import { JointTenders } from './JointTenders';
 import { DirectorDesk } from './DirectorDesk';
 import { MyDailyCash } from './FinanceDailyCash';
@@ -21,9 +22,10 @@ type Show = 'mine' | 'live' | 'all';
  * leads and where each stands, the reports companies send in, and the meeting schedule.
  */
 export function DirectorOfficeView() {
-  const { setCompanyId, go, canOpen } = useApp();
+  const { companyId, me, setCompanyId, go, canOpen } = useApp();
   // Tenders and quotations are added on the company's Tenders and quotations screen (each bids in its own name).
   const toCommercial = canOpen ? canOpen('commercial') : true;
+  const [cashCompany, setCashCompany] = useState(companyId);
   const { data, error } = useLoad(() => api.tenderBoard(), []);
   const [show, setShow] = useState<Show | null>(null);
   if (error)
@@ -182,6 +184,8 @@ export function DirectorOfficeView() {
       </Card>
 
       <DirectorDesk />
+      <label>Cash handover company<select className="select" value={cashCompany} onChange={e => setCashCompany(e.target.value)}>{me.companies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></label>
+      <ExceptionalGuardCash key={cashCompany} companyId={cashCompany} />
       <MyDailyCash />
       <TenderOpportunitiesPanel />
       <TenderCounterPanel />

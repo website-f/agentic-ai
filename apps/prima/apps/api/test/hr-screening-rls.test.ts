@@ -54,8 +54,11 @@ describe("screening and guard code of conduct (database)", () => {
       }),
     )) as ScreeningCase;
     for (const kind of [
+      "application",
+      "interview",
       "consent",
       "identity",
+      "kdn_vetting",
       "police",
       "bankruptcy",
       "company_search",

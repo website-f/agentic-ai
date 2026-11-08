@@ -18,12 +18,17 @@ let n = 0;
   const db = new Db();
   try {
     await admin.query(fs.readFileSync(path.join(root, 'db/modules/item-register-v1.sql'), 'utf8'));
+    // Release candidate: the QR labels (item_register_v2, paper 3.1) are installed after item_register.
+    await admin.query(fs.readFileSync(path.join(root, 'db/modules/item-register-v2.sql'), 'utf8'));
     for (const s of ds.itemSkus) await admin.query('INSERT INTO prima.item_skus(id,party_ids,data) VALUES($1,$2,$3)', [s.id, s.partyIds, s]);
     const act = (userId, a) => db.asUser(userId, async (svc, user) => (await svc.items.act(user, `pg-uni-${++n}`, a)).result);
     const board = (userId) => db.asUser(userId, async (svc, user) => svc.items.board(user));
 
     // Sasa's store registers six shirts and checks them in.
     const shirts = await act(CM, { kind: 'item.register', skuId: 'sku-shirt-l', partyId: 'co-sasa', count: 6 });
+    // Paper 3.1: each label is printed and scanned back before the item is checked into stock.
+    const printed = await act(CM, { kind: 'label.print', itemIds: shirts.map((s) => s.id) });
+    for (const l of printed.labels) await act(CM, { kind: 'label.verify', printId: l.printId, scan: { code: l.payload, source: 'camera' } });
     for (const s of shirts) await act(CM, { kind: 'item.inspect', label: s.token, condition: 'new', note: '' });
 
     // A guard with no handovers; the manager records 2 past pieces for them.

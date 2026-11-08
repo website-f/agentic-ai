@@ -80,6 +80,27 @@ export interface ScreeningCase {
     at: IsoDateTime;
   } | null;
   repeatDueOn: IsoDate | null;
+  /**
+   * PIKM 2:5.1 (Fauzan, 8 Nov 2026): after "cleared to start, KDN vetting pending", HR records the final KDN result.
+   * A pass makes the decision "cleared"; a fail makes it "not cleared" and employment must end at once.
+   */
+  vetting?: {
+    passed: boolean;
+    ref: string;
+    resultOn: IsoDate;
+    note: string;
+    by: string;
+    byId: Id;
+    at: IsoDateTime;
+  } | null;
+  /** Set when the KDN vetting failed: HR ends the employment through the leaving steps and records it here. */
+  endEmployment?: {
+    dueOn: IsoDate;
+    doneOn: IsoDate | null;
+    note: string;
+    by: string;
+    at: IsoDateTime | null;
+  } | null;
   status: "open" | "decided" | "withdrawn";
   openedBy: string;
   openedById: Id;
@@ -97,13 +118,13 @@ export const SCREENING_CHECK_LABEL: Record<ScreeningCheckKind, string> = {
   application: "Application form",
   interview: "Interview",
   consent: "Written consent to the checks",
-  identity: "Identity (IC or passport) seen",
+  identity: "Identity confirmed with JPN biometrics (passport and immigration for non-citizens)",
   kdn_vetting: "KDN vetting (eSIMS)",
   police: "Police record check",
   references: "Previous employer references",
   qualifications: "Certificates and qualifications verified",
   medical: "Medical fitness",
-  bankruptcy: "Bankruptcy search (MDI)",
+  bankruptcy: "Bankruptcy and court judgment searches (MDI, courts)",
   company_search: "SSM search: disqualified or struck-off links",
 };
 export const SCREENING_RESULT_LABEL: Record<ScreeningResult, string> = {
@@ -112,7 +133,11 @@ export const SCREENING_RESULT_LABEL: Record<ScreeningResult, string> = {
   not_cleared: "Not cleared",
 };
 
-/** The checks each kind of person needs (approved by Fauzan, 8 Nov 2026; the PIKM code text may add or change some). */
+/**
+ * The checks each kind of person needs. Approved by Fauzan, 8 Nov 2026, then updated the same day to PIKM-KDN 2 (2022
+ * draft, Part 2) at his choice: KDN vetting and a police check for everyone (2:5.1, 2:5.3.5); directors and shareholders
+ * also give an application form and are interviewed (2:5.3.1, 2:5.3.9, Figure 3).
+ */
 export const SCREENING_CHECKS: Record<ScreeningSubject, ScreeningCheckKind[]> =
   {
     guard: [
@@ -140,19 +165,33 @@ export const SCREENING_CHECKS: Record<ScreeningSubject, ScreeningCheckKind[]> =
       "interview",
       "consent",
       "identity",
+      "kdn_vetting",
+      "police",
       "references",
       "qualifications",
     ],
-    director: ["consent", "identity", "police", "bankruptcy", "company_search"],
-    shareholder: [
+    director: [
+      "application",
+      "interview",
       "consent",
       "identity",
+      "kdn_vetting",
+      "police",
+      "bankruptcy",
+      "company_search",
+    ],
+    shareholder: [
+      "application",
+      "interview",
+      "consent",
+      "identity",
+      "kdn_vetting",
       "police",
       "bankruptcy",
       "company_search",
     ],
   };
-/** Months until screening is repeated (proposal for approval). */
+/** Months until screening is repeated (approved by Fauzan, 8 Nov 2026). */
 export const SCREENING_REPEAT_MONTHS: Record<ScreeningSubject, number> = {
   guard: 36,
   officer: 36,
@@ -193,7 +232,9 @@ export function screeningReadiness(
 ) {
   const open = c.checks.filter((k) => k.status === "pending");
   const concerns = c.checks.filter((k) => k.status === "concern");
-  const field = c.subject === "guard" || c.subject === "officer";
+  // PIKM 2:5.3.10: any employee may start on a conditional offer while KDN vetting is pending (Fauzan, 24 Oct 2026 for
+  // guards; extended to office staff 8 Nov 2026 with Part 2). Directors and shareholders are vetted before appointment.
+  const field = c.subject !== "director" && c.subject !== "shareholder";
   return {
     open: open.map((k) => k.kind),
     concerns: concerns.map((k) => k.kind),
@@ -222,7 +263,7 @@ export class ScreeningService {
       );
   }
 
-  async board(user: User) {
+  async board(user: User, opts: { screeners?: boolean } = {}) {
     const role = screeningRole(user);
     if (!role) throw new AccessDenied("hr.monitor", "(screening)");
     await this.mustBeReady();
@@ -253,6 +294,15 @@ export class ScreeningService {
             c.status === "open" &&
             role === "decide" &&
             c.openedById !== user.id,
+          canRecordVetting:
+            c.status === "decided" &&
+            c.decision?.result === "cleared_pending" &&
+            (role === "hr" || role === "decide"),
+          mustEndEmployment: !!c.endEmployment && !c.endEmployment.doneOn,
+          canRecordEnd:
+            !!c.endEmployment &&
+            !c.endEmployment.doneOn &&
+            (role === "hr" || role === "decide"),
           canRepeat:
             c.status === "decided" &&
             (role === "hr" || role === "decide") &&
@@ -288,7 +338,9 @@ export class ScreeningService {
         repeatDue: rows.filter(
           (r) => r.repeatState === "overdue" || r.repeatState === "due_soon",
         ).length,
+        endEmployment: rows.filter((r) => r.mustEndEmployment).length,
       },
+      screeners: role === "view" || opts.screeners === false ? [] : await this.screeners(cases),
     };
   }
 
@@ -303,6 +355,10 @@ export class ScreeningService {
         return this.decide(user, b);
       case "withdraw":
         return this.withdraw(user, b);
+      case "vettingResult":
+        return this.vettingResult(user, b);
+      case "employmentEnded":
+        return this.employmentEnded(user, b);
       default:
         throw new BadRequest("Unknown action.");
     }
@@ -574,7 +630,7 @@ export class ScreeningService {
         );
       if (result === "cleared_pending" && !r.canClearPending)
         throw new BadRequest(
-          "Only for a guard or officer whose KDN vetting has been submitted and every other check is done.",
+          "Only for an employee whose KDN vetting has been submitted and every other check is done.",
         );
       if (
         result !== "not_cleared" &&
@@ -649,6 +705,135 @@ export class ScreeningService {
     });
   }
 
+  /**
+   * PIKM 2:7: whoever does screening is screened, has accepted the confidentiality rule and is trained in screening.
+   * Shown to HR and the HR Director for everyone who has worked a case; it does not block the work.
+   */
+  private async screeners(cases: ScreeningCase[]) {
+    const ids = new Set<Id>();
+    for (const c of cases) {
+      ids.add(c.openedById);
+      if (c.decision) ids.add(c.decision.byId);
+      for (const k of c.checks) if (k.byId !== "prima") ids.add(k.byId);
+    }
+    const out: { userId: Id; name: string; screened: boolean; confidentiality: boolean; trained: boolean }[] = [];
+    for (const id of ids) {
+      const u = await this.store.get("users", id);
+      if (!u) continue;
+      const acks = await this.store.list("confidentialityAcks", { userId: id });
+      const training = u.personId ? await this.store.list("staffTraining", { personId: [u.personId] }) : [];
+      out.push({
+        userId: id,
+        name: u.name,
+        screened: cases.some(
+          (c) => !!u.personId && c.personId === u.personId && c.status === "decided" && c.decision?.result !== "not_cleared",
+        ),
+        confidentiality: acks.length > 0,
+        trained: training.some((t) => /screen|saring|tapis|vetting/i.test(t.course)),
+      });
+    }
+    return out.sort((a, b) => a.name.localeCompare(b.name));
+  }
+
+  /** HR records the final KDN vetting result for someone working on "cleared to start, KDN vetting pending". */
+  private async vettingResult(user: User, b: Record<string, unknown>) {
+    const role = screeningRole(user);
+    if (role !== "hr" && role !== "decide")
+      throw new AccessDenied("hr.monitor", "(HR records the KDN result)");
+    const id = text(b.id, 80);
+    const passed = b.passed === true ? true : b.passed === false ? false : null;
+    if (passed === null) throw new BadRequest("Say whether the KDN vetting passed or failed.");
+    const ref = text(b.ref, 120);
+    if (ref.length < 3) throw new BadRequest("Give the KDN reference or letter number.");
+    const resultOn = isDate(b.resultOn) ? b.resultOn : this.today();
+    if (resultOn > this.today()) throw new BadRequest("The result date cannot be in the future.");
+    const note = text(b.note, 500);
+    if (!passed && note.length < 5) throw new BadRequest("Write what KDN said.");
+    const at = this.clock();
+    return this.store.transaction(async (tx) => {
+      await tx.lock?.("hrScreenings", id);
+      const c = await tx.get("hrScreenings", id);
+      if (!c) throw new NotFound("Screening case");
+      if (c.status !== "decided" || c.decision?.result !== "cleared_pending")
+        throw new BadRequest("Only for someone cleared to start while KDN vetting is pending.");
+      const k = c.checks.find((x) => x.kind === "kdn_vetting");
+      const checks = c.checks.map((x) =>
+        x.kind !== "kdn_vetting"
+          ? x
+          : {
+              ...x,
+              status: (passed ? "clear" : "concern") as ScreeningCheckStatus,
+              authority: x.authority || "KDN",
+              ref,
+              resultOn,
+              note: note || (passed ? "Vetting passed" : ""),
+              by: user.name,
+              byId: user.id,
+              at,
+              history: [...x.history, { status: x.status, note: x.note, by: x.by, at: x.at }].slice(-20),
+            },
+      );
+      if (!k) throw new BadRequest("This case has no KDN vetting check.");
+      await tx.update("hrScreenings", id, {
+        checks,
+        vetting: { passed, ref, resultOn, note, by: user.name, byId: user.id, at },
+        decision: {
+          ...c.decision,
+          result: passed ? "cleared" : "not_cleared",
+          note: passed ? c.decision.note : `KDN vetting failed (${ref}). ${c.decision.note}`.slice(0, 500),
+        },
+        repeatDueOn: passed ? c.repeatDueOn : null,
+        endEmployment: passed ? null : { dueOn: this.today(), doneOn: null, note: "", by: "", at: null },
+      });
+      await tx.audit({
+        at,
+        actor: user.name,
+        companyId: c.companyId,
+        action: passed ? "hr.screening.vetting_passed" : "hr.screening.vetting_failed",
+        entity: "hr_screening",
+        entityId: id,
+        summary: passed
+          ? `${c.name}: KDN vetting passed (${ref}); now cleared.`
+          : `${c.name}: KDN vetting failed (${ref}); employment must end now.`,
+      });
+      return (await tx.get("hrScreenings", id))!;
+    });
+  }
+
+  /** HR records that the employment ended after a failed vetting (the leaving steps themselves are done in HR). */
+  private async employmentEnded(user: User, b: Record<string, unknown>) {
+    const role = screeningRole(user);
+    if (role !== "hr" && role !== "decide")
+      throw new AccessDenied("hr.monitor", "(HR records the end of employment)");
+    const id = text(b.id, 80);
+    const note = text(b.note, 500);
+    if (note.length < 5) throw new BadRequest("Write how and when the employment ended (the leaving record or letter).");
+    const doneOn = isDate(b.doneOn) ? b.doneOn : this.today();
+    if (doneOn > this.today()) throw new BadRequest("The date cannot be in the future.");
+    const at = this.clock();
+    return this.store.transaction(async (tx) => {
+      await tx.lock?.("hrScreenings", id);
+      const c = await tx.get("hrScreenings", id);
+      if (!c) throw new NotFound("Screening case");
+      if (!c.endEmployment || c.endEmployment.doneOn)
+        throw new BadRequest("Nothing to record: this case has no open end of employment.");
+      if (doneOn < c.endEmployment.dueOn) throw new BadRequest("The date cannot be before the failed vetting.");
+      await tx.update("hrScreenings", id, {
+        endEmployment: { ...c.endEmployment, doneOn, note, by: user.name, at },
+      });
+      await tx.audit({
+        at,
+        actor: user.name,
+        companyId: c.companyId,
+        action: "hr.screening.employment_ended",
+        entity: "hr_screening",
+        entityId: id,
+        summary: `${c.name}: employment ended ${doneOn} after failed KDN vetting.`,
+      });
+      return (await tx.get("hrScreenings", id))!;
+    });
+  }
+
   /** Repeat screening: a new case for the same person, prefilled the same way. */
   async repeat(user: User, id: Id) {
     await this.mustBeReady();
@@ -683,7 +868,7 @@ export class ScreeningService {
     const role = screeningRole(user);
     if (role !== "hr" && role !== "decide") return [];
     try {
-      const b = await this.board(user);
+      const b = await this.board(user, { screeners: false });
       const items: {
         tone: "warn" | "info";
         tag: string;
@@ -700,6 +885,18 @@ export class ScreeningService {
           tag: "Screening",
           title: `${ready.length} screening case${ready.length === 1 ? "" : "s"} ready for your decision`,
           detail: ready
+            .slice(0, 3)
+            .map((r) => r.case.name)
+            .join(", "),
+          go: { view: "hr" },
+        });
+      const end = b.rows.filter((r) => r.mustEndEmployment);
+      if (end.length)
+        items.push({
+          tone: "warn",
+          tag: "Screening",
+          title: `KDN vetting failed: end the employment of ${end.length} ${end.length === 1 ? "person" : "people"} now`,
+          detail: end
             .slice(0, 3)
             .map((r) => r.case.name)
             .join(", "),

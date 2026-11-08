@@ -19,6 +19,9 @@ const OWNER = 'prima_combined_upgrade_test_owner';
 const HOST = 'psql-prima-staging-sea.postgres.database.azure.com';
 const PW = 'local-test-only';
 let admin, observer, created = false;
+// Released modules frozen with stage 1, and those released since (installed separately after this upgrade).
+const frozenIds = JSON.parse(fs.readFileSync(path.join(ROOT, 'ops/existing-admin/modules/working/db/release-manifest.json'), 'utf8')).modules.map((m) => m.id);
+const newIds = JSON.parse(fs.readFileSync(path.join(ROOT, 'db/release-manifest.json'), 'utf8')).modules.map((m) => m.id).filter((id) => !frozenIds.includes(id));
 
 const url = (user, database = 'appdb') => { const u = new URL(base); u.pathname = '/' + database; u.username = user; u.password = user === 'postgres' ? base.password : PW; return u.toString(); };
 const stamp = async () => (await observer.query('SELECT migration_sha256 FROM prima.schema_info')).rows[0].migration_sha256;
@@ -175,18 +178,15 @@ it('the exact upgrade commits, keeps every old row and role, and passes the API 
   process.env.PRIMA_API_DB_USER = 'prima_api';
   const pool = new Pool({ connectionString: url('prima_api') });
   try {
+    // Modules released after the frozen stage-1 artifact (now the item register) are a separate, explicit install:
+    // this upgrade must leave the base ready, the five frozen modules ready and every newer module not ready.
     const state = await releaseCatalogState(pool, { baseSha256: NEXT });
-    // The release now carries modules the frozen five did not (item register, 8 Nov 2026). The base upgrade alone
-    // never installs them: the base and the five frozen modules are ready, and the release stays held until an operator
-    // installs each new module with the pinned installer.
-    const FROZEN = ['procurement', 'rental_corrections', 'cleanup', 'metrics', 'job_email'];
     assert.equal(state.baseReady, true, JSON.stringify(state));
-    for (const id of FROZEN) assert.equal(state.modules[id].ready, true, id + ' ' + JSON.stringify(state));
-    const added = Object.keys(state.modules).filter((id) => !FROZEN.includes(id));
-    for (const id of added) assert.equal(state.modules[id].ready, false, id + ' must stay not ready until explicitly installed');
-    assert.equal(state.ready, added.length === 0, JSON.stringify(state));
+    for (const id of frozenIds) assert.equal(state.modules[id].ready, true, id + ' ' + JSON.stringify(state));
+    for (const id of newIds) assert.equal(state.modules[id].ready, false, id + ' must stay not ready until explicitly installed');
+    assert.equal(state.ready, newIds.length === 0, JSON.stringify(state));
   } finally { await pool.end(); if (prev === undefined) delete process.env.PRIMA_API_DB_USER; else process.env.PRIMA_API_DB_USER = prev; }
-  t.diagnostic('Company wall on site tasks and gate records, and the compiled API release catalogue, verified');
+  t.diagnostic(`Company wall on site tasks and gate records verified; catalogue: base and ${frozenIds.length} frozen modules ready, not yet installed: ${newIds.join(', ') || 'none'}`);
 });
 
 it('a second run is refused and changes nothing', async () => {

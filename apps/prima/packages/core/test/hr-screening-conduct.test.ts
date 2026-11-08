@@ -95,9 +95,13 @@ describe("screening case file", () => {
       name: "Encik Pengarah Ujian (mock)",
       idMasked: "xxxxxx-xx-1234",
     })) as ScreeningCase;
+    // PIKM 2 (Fauzan, 8 Nov 2026): directors also give an application form, are interviewed and KDN-vetted.
     expect(c.checks.map((k) => k.kind)).toEqual([
+      "application",
+      "interview",
       "consent",
       "identity",
+      "kdn_vetting",
       "police",
       "bankruptcy",
       "company_search",
@@ -125,7 +129,7 @@ describe("screening case file", () => {
         status: "clear",
       }),
     ).rejects.toThrow(/reference/);
-    for (const kind of ["consent", "identity", "police", "company_search"])
+    for (const kind of ["application", "interview", "consent", "identity", "kdn_vetting", "police", "company_search"])
       await svc.screening.act(hr, "check", {
         id: c.id,
         kind,
@@ -360,5 +364,80 @@ describe("review fixes (screening and conduct)", () => {
     expect((await svc.recordBriefingAcks(sv, pol.id, [other.personId], "Sheet 2 (mock)")).recorded).toBe(1);
     const ack = ds.policyAcks.find((a) => a.policyId === pol.id && a.personId === other.personId)!;
     expect(ack).toMatchObject({ version: 2, witness: { ref: "Sheet 2 (mock)" } });
+  });
+});
+
+describe("screening to PIKM Part 2 (Fauzan, 8 Nov 2026)", () => {
+  const clearAllBut = async (svc: PrimaService, id: string, keep: string[]) => {
+    const hr = await svc.user("u-pwvsb-hr");
+    const c = (await svc.screening.board(hr)).rows.find((r) => r.case.id === id)!.case;
+    for (const k of c.checks)
+      if (!keep.includes(k.kind) && k.status === "pending")
+        await svc.screening.act(hr, "check", { id, kind: k.kind, status: "clear", ref: `REF-${k.kind} (mock)`, authority: "mock" });
+  };
+
+  it("office staff need KDN vetting and a police check, and may start while vetting is pending", async () => {
+    const { svc, ds } = fresh();
+    const hr = await svc.user("u-pwvsb-hr");
+    const p = ds.people.find((x) => x.role === "office" && x.status === "active")!;
+    const c = (await svc.screening.act(hr, "open", { subject: "office", personId: p.id })) as ScreeningCase;
+    expect(c.checks.map((k) => k.kind)).toEqual(expect.arrayContaining(["kdn_vetting", "police"]));
+    await clearAllBut(svc, c.id, ["kdn_vetting"]);
+    await svc.screening.act(hr, "check", { id: c.id, kind: "kdn_vetting", status: "pending", ref: "ESIMS-OFF-1 (mock)", authority: "KDN eSIMS" });
+    const dcos = await svc.user("u-dcos");
+    const d = (await svc.screening.act(dcos, "decide", { id: c.id, result: "cleared_pending", note: "Submitted to KDN (mock)" })) as ScreeningCase;
+    expect(d.decision!.result).toBe("cleared_pending");
+  });
+
+  it("a passed KDN result clears; a failed one ends the employment, shown at home until HR records it", async () => {
+    const { svc, ds } = fresh();
+    const hr = await svc.user("u-pwvsb-hr");
+    const dcos = await svc.user("u-dcos");
+    const guards = ds.people.filter(
+      (x) => x.role === "guard" && x.status === "active" && ds.credentials.some((c) => c.personId === x.id && c.type === "KDN_VETTING"),
+    );
+    const start = async (personId: string) => {
+      const c = (await svc.screening.act(hr, "open", { subject: "guard", personId })) as ScreeningCase;
+      await clearAllBut(svc, c.id, ["kdn_vetting"]);
+      return (await svc.screening.act(dcos, "decide", { id: c.id, result: "cleared_pending", note: "Submitted (mock)" })) as ScreeningCase;
+    };
+    const a = await start(guards[0].id);
+    const b = await start(guards[1].id);
+    // Only for a cleared-to-start case, by HR, with a reference; a fail needs what KDN said.
+    await expect(svc.screening.act(await svc.user("u-audit"), "vettingResult", { id: a.id, passed: true, ref: "KDN-1" })).rejects.toThrow(/Not allowed/);
+    await expect(svc.screening.act(hr, "vettingResult", { id: a.id, passed: true, ref: "" })).rejects.toThrow(/reference/);
+    await expect(svc.screening.act(hr, "vettingResult", { id: b.id, passed: false, ref: "KDN-2 (mock)" })).rejects.toThrow(/what KDN said/);
+    const ok = (await svc.screening.act(hr, "vettingResult", { id: a.id, passed: true, ref: "KDN-1 (mock)" })) as ScreeningCase;
+    expect(ok.decision!.result).toBe("cleared");
+    expect(ok.checks.find((k) => k.kind === "kdn_vetting")!.status).toBe("clear");
+    expect(ok.endEmployment).toBeNull();
+    await expect(svc.screening.act(hr, "vettingResult", { id: a.id, passed: false, ref: "KDN-1 (mock)", note: "again" })).rejects.toThrow(/Only for someone/);
+    const bad = (await svc.screening.act(hr, "vettingResult", { id: b.id, passed: false, ref: "KDN-2 (mock)", note: "Not approved by KDN (mock)" })) as ScreeningCase;
+    expect(bad.decision!.result).toBe("not_cleared");
+    expect(bad.repeatDueOn).toBeNull();
+    expect(bad.endEmployment).toMatchObject({ dueOn: TODAY, doneOn: null });
+    const board = await svc.screening.board(hr);
+    expect(board.kpis.endEmployment).toBe(1);
+    const home = await svc.screening.homeItems(hr);
+    expect(home.some((i) => /end the employment/.test(i.title))).toBe(true);
+    await expect(svc.screening.act(hr, "employmentEnded", { id: b.id, note: "" })).rejects.toThrow(/how and when/);
+    const ended = (await svc.screening.act(hr, "employmentEnded", { id: b.id, note: "Leaving record LV-1 (mock)" })) as ScreeningCase;
+    expect(ended.endEmployment!.doneOn).toBe(TODAY);
+    expect((await svc.screening.board(hr)).kpis.endEmployment).toBe(0);
+    await expect(svc.screening.act(hr, "employmentEnded", { id: b.id, note: "Leaving record LV-1 (mock)" })).rejects.toThrow(/Nothing to record/);
+  });
+
+  it("directors are not cleared to start before KDN vetting; screeners are listed with screened, confidentiality and training", async () => {
+    const { svc } = fresh();
+    const hr = await svc.user("u-pwvsb-hr");
+    const c = (await svc.screening.act(hr, "open", { subject: "director", companyId: "co-sasa", name: "Puan Pengarah Ujian (mock)", idMasked: "xxxxxx-xx-5678" })) as ScreeningCase;
+    await clearAllBut(svc, c.id, ["kdn_vetting"]);
+    await svc.screening.act(hr, "check", { id: c.id, kind: "kdn_vetting", status: "pending", ref: "KDN-DIR (mock)", authority: "KDN" });
+    await expect(svc.screening.act(await svc.user("u-dcos"), "decide", { id: c.id, result: "cleared_pending", note: "Submitted (mock)" })).rejects.toThrow(/Only for an employee/);
+    const b = await svc.screening.board(await svc.user("u-dcos"));
+    const me = b.screeners.find((x) => x.userId === "u-pwvsb-hr")!;
+    expect(me).toMatchObject({ screened: false, trained: false });
+    expect(typeof me.confidentiality).toBe("boolean");
+    expect((await svc.screening.board(await svc.user("u-audit"))).screeners).toEqual([]);
   });
 });

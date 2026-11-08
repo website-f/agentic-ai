@@ -340,34 +340,10 @@ describe('Finance Phase 2 on PostgreSQL', () => {
     assert.equal(line.match.checked.byId, 'u-fin-t1-dep');
   });
 
-  it('saves a daily cash list: Finance lists, the FD approves, the COO counts and pays through the restricted login', async () => {
-    const day = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
-    const today = new Date(Date.now() + 8 * 3600000).toISOString().slice(0, 10); // Malaysia time
-    const to = new Date(Date.now() + 4 * 86400000).toISOString().slice(0, 10);
-    const v = await db.asUser('u-fin-t1-de1', (svc, u) => svc.financeControls.view(u, 'pwvsb'));
-    const bankId = v.statements[0].bank.id;
-    const l = (await db.asUser('u-fin-t1-de1', (svc, u) =>
-      svc.financeControls.dailyCashAction(u, 'pwvsb', 'add', { period: 'week', from: day, to, bankId, purpose: 'Casual workers paid daily in cash (API mock)', people: [{ name: 'Mock Worker', idLast4: '4321', work: 'Mock site', dailyRate: 80, pay: 'cash' }] }),
-    )) as { id: string; total: number; people: { id: string }[] };
-    await db.asUser('u-fin-t1-de1', (svc, u) => svc.financeControls.dailyCashAction(u, 'pwvsb', 'submit', { listId: l.id }));
-    // Cash only when the Director Office lists the person and the COO or CEO gives it (Fauzan, 6 Nov 2026), through their own logins.
-    await assert.rejects(db.asUser('u-fd', (svc, u) => svc.financeControls.dailyCashAction(u, 'pwvsb', 'approve', { listId: l.id, comment: 'ok' })), /Director Office/);
-    await db.asUser('u-pwvsb-doa', (svc, u) => svc.financeControls.dailyCashAction(u, 'pwvsb', 'listCash', { listId: l.id, personId: l.people[0].id, reason: 'No bank account yet (API mock)', site: 'Mock site', amount: l.total }));
-    await db.asUser('u-coo', (svc, u) => svc.financeControls.dailyCashAction(u, 'pwvsb', 'decideCash', { listId: l.id, personId: l.people[0].id, give: true, comment: 'Cash this week (API mock)' }));
-    await assert.rejects(db.asUser('u-fauzan', (svc, u) => svc.financeControls.dailyCashAction(u, 'pwvsb', 'approve', { listId: l.id, comment: 'ok' })), /only the Finance Director/);
-    await db.asUser('u-fd', (svc, u) => svc.financeControls.dailyCashAction(u, 'pwvsb', 'approve', { listId: l.id, comment: 'Approved (API mock).' }));
-    await db.asUser('u-fin-t1-de1', (svc, u) => svc.financeControls.dailyCashAction(u, 'pwvsb', 'withdraw', { listId: l.id, on: today, amount: l.total, ref: 'CHQ API-1' }));
-    await db.asUser('u-fin-t1-de1', (svc, u) => svc.financeControls.dailyCashAction(u, 'pwvsb', 'handover', { listId: l.id, toId: 'u-coo', amount: l.total }));
-    await db.asUser('u-coo', (svc, u) => svc.financeControls.dailyCashAction(u, 'pwvsb', 'received', { listId: l.id, handoverId: 'h1', counted: l.total }));
-    await db.asUser('u-coo', (svc, u) => svc.financeControls.dailyCashAction(u, 'pwvsb', 'pay', { listId: l.id, personId: l.people[0].id, day, idLast4: '4321', proof: 'Pay sheet API-1' }));
-    await assert.rejects(db.asUser('u-coo', (svc, u) => svc.financeControls.dailyCashAction(u, 'pwvsb', 'withdraw', { listId: l.id, on: day, amount: 1, ref: 'x' })));
-    // The Director Office uploads the signed receipt through its own login; the file stays behind the company wall.
-    await db.asUser('u-pwvsb-doa', (svc, u) => svc.financeControls.dailyCashAction(u, 'pwvsb', 'receipt', { listId: l.id, payoutId: 'pay1', name: 'Signed receipt (API mock).png', data: `data:image/png;base64,${Buffer.from('api mock receipt').toString('base64')}` }));
-    const saved = (await rowOf('fin-pwvsb')).dailyCash.find((x: { id: string }) => x.id === l.id);
-    assert.equal(saved.payouts.length, 1);
-    assert.equal(saved.payouts[0].sign.byId, 'u-coo');
-    assert.match(saved.payouts[0].receipt.docId, /^doc-/);
-    assert.equal(saved.approved.byId, 'u-fd');
+  it('refuses legacy daily-cash creation and payout through restricted logins', async () => {
+    for (const uid of ['u-fin-t1-de1','u-fd','u-coo','u-pwvsb-doa']) {
+      for (const action of ['add','approve','listCash','decideCash','pay']) await assert.rejects(db.asUser(uid,(svc,u)=>svc.financeControls.dailyCashAction(u,'pwvsb',action,{})), /Legacy daily cash/);
+    }
   });
 
   it('keeps both sides of an intercompany balance on the group row through the restricted login, and a 13-week forecast line', async () => {

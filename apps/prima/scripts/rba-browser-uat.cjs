@@ -44,7 +44,7 @@ const step = (name, ok, detail = '') => { results.push({ name, ok }); console.lo
       await tab('Committee');
       let t = await page();
       step('committee shows not named, and only the CoS names it', /Not named yet/.test(t) && !/Name the committee/.test(t));
-      // 2. A staff member signs the yearly ethics declaration.
+      // 2. A staff member signs the ethics declaration (once, on entering service).
       await as('IT Executive 3'); await nav('RBA readiness');
       t = await page();
       step('staff without an RBA role still reach the ethics declaration', /ethics declaration/i.test(t));

@@ -18,6 +18,7 @@ import type { StaffPayRun } from "./types";
 const round2 = (n: number) => Math.round(n * 100) / 100;
 const COST_LINES: FinPlanLine[] = [
   'guard_cost',
+  'misc_payroll',
   'staff_cost',
   'statutory',
   'premises',
@@ -54,7 +55,11 @@ function profitOf(f: FinStatus, period: string) {
   const plan = (f.plans ?? []).find((p) => p.year === year);
   if (!plan) return null;
   const i = monthIndex(period);
-  const act = (line: FinPlanLine, k: number) => plan.actuals[line]?.[k] ?? null;
+  const act = (line: FinPlanLine, k: number) => {
+    const cashPaid = (f.exceptionalGuardCash ?? []).some(r => r.payout && r.occasion.slice(0,7) === `${year}-${String(k+1).padStart(2,'0')}`);
+    // Old periods with no support retain zero; a paid-support period needs an explicit reconciled Finance actual.
+    return plan.actuals[line]?.[k] ?? (line === 'misc_payroll' && !cashPaid ? 0 : null);
+  };
   const bud = (line: FinPlanLine, k: number) => (plan.budget.status === 'approved' ? (plan.budget.months[line]?.[k] ?? 0) : null);
   const sum = (get: (l: FinPlanLine, k: number) => number | null, lines: FinPlanLine[], ks: number[]) => {
     let n = 0;
@@ -160,7 +165,7 @@ export function finPackData(f: FinStatus, x: FinPackInput) {
     arTotal != null && rev3Known && rev3Known.reduce((n, v) => n + v, 0) > 0
       ? Math.round((arTotal / rev3Known.reduce((n, v) => n + v, 0)) * rev3Known.length * 30.4)
       : null;
-  const pay = plan ? [plan.actuals.guard_cost?.[i], plan.actuals.staff_cost?.[i], plan.actuals.statutory?.[i]] : [];
+  const pay = plan ? [plan.actuals.guard_cost?.[i], plan.actuals.misc_payroll?.[i] ?? 0, plan.actuals.staff_cost?.[i], plan.actuals.statutory?.[i]] : [];
   const payroll = pay.length && pay.every((v) => v != null) ? (pay as number[]).reduce((n, v) => n + v, 0) : null;
   const payrollPct = payroll != null && revMonth ? round2((payroll / revMonth) * 100) : null;
   // Profit per site: the contract's money for the month (collected where Prima knows it, else billed) less its guards'
@@ -169,7 +174,7 @@ export function finPackData(f: FinStatus, x: FinPackInput) {
   const guardsOf = (c: Contract) =>
     (c.versions[c.versions.length - 1]?.posts ?? []).reduce((n, p) => n + p.guards * Math.max(1, Math.round((p.hoursPerDay || 12) / 12)), 0);
   const totalGuards = running.reduce((n, c) => n + guardsOf(c), 0);
-  const costLines = plan ? (['guard_cost', 'statutory', ...SHARED_LINES] as FinPlanLine[]).map((l) => plan.actuals[l]?.[i] ?? null) : [];
+  const costLines = plan ? (['guard_cost', 'statutory', ...SHARED_LINES] as FinPlanLine[]).map((l) => plan.actuals[l]?.[i] ?? (l === 'misc_payroll' ? 0 : null)) : [];
   const costPool = costLines.length && costLines.every((v) => v != null) ? (costLines as number[]).reduce((n, v) => n + v, 0) : null;
   const perGuard = costPool != null && totalGuards > 0 ? costPool / totalGuards : null;
   const sites = running
@@ -180,8 +185,14 @@ export function finPackData(f: FinStatus, x: FinPackInput) {
       const billed = (f.billing ?? []).find((b) => b.contractId === c.id && b.period === period)?.invoice?.amount ?? null;
       const revenue = collected > 0 ? round2(collected) : billed;
       const guards = guardsOf(c);
-      const cost = perGuard != null ? round2(perGuard * guards) : null;
+      // Additional payroll is assigned by immutable approved site, never spread over other sites by headcount.
+      const siteCash = (f.exceptionalGuardCash ?? []).filter(r => r.companyId === f.companyId && r.occasion.slice(0,7) === period && c.siteIds.includes(r.siteId) && r.payout);
+      const cashUnresolved = siteCash.some(r => !r.accounting || running.filter(other => other.siteIds.includes(r.siteId)).length !== 1);
+      const cashPayroll = round2(siteCash.filter(r => r.accounting && running.filter(other => other.siteIds.includes(r.siteId)).length === 1).reduce((n,r) => n+r.accounting!.amount,0));
+      const cost = perGuard != null && !cashUnresolved ? round2(perGuard * guards + cashPayroll) : null;
       return {
+        cashPayroll,
+        cashUnresolved,
         contractId: c.id,
         contractRef: c.ref,
         client: c.clientName,

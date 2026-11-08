@@ -5,11 +5,11 @@
  *     payslip and bank payment for one month. "Does the document say the same thing as what actually happened?"
  *  3. One worker master file page for each foreign worker, in the checklist's nine folders, filled from records Prima
  *     already keeps. A missing record shows as missing, never as fine.
- *  5. A yearly staff ethics declaration.
+ *  5. A staff ethics declaration, signed once on entering service (Fauzan, 8 Nov 2026).
  *  7. The monthly RBA dashboard with the checklist's nine targets. A target with no data source is unknown, not green.
  *
  * Pure functions only; the service reads the records and checks who may see them. Nothing here pays, files, certifies
- * or contacts anyone. The thresholds are proposals.
+ * or contacts anyone. The thresholds are in RULES.RBA-READY (approved by Fauzan, 8 Nov 2026).
  */
 import type { GuardPayLine, GuardPayRun } from './guard-pay';
 import type { Attendance, Credential, FwRecruitFile, FwRenewal, FwWelfareCheck, HostelStay, IsoDate, Person, RbaTraceRow, Shift, StaffTraining } from './types';
@@ -216,7 +216,7 @@ export function workerFile(i: WorkerFileInput): WorkerFolder[] {
   ];
 }
 
-// ---------- 5. Yearly staff ethics declaration ----------
+// ---------- 5. Staff ethics declaration (once, on entering service) ----------
 
 export const ETHICS_STATEMENTS: { key: string; text: string }[] = [
   { key: 'bribery', text: 'I will not give or take a bribe, kickback or improper gift, and I will report any offer (MACC Act 2009).' },

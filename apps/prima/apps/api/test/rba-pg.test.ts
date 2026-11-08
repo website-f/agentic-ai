@@ -39,7 +39,7 @@ describe('RBA readiness on PostgreSQL', () => {
     await db.onModuleDestroy();
   });
 
-  it('staff sign the yearly ethics declaration once; ACT reviews declared interests', async () => {
+  it('staff sign the ethics declaration once on entering service; ACT reviews declared interests', async () => {
     const d = await db.asUser('u-it-ex3', (svc, u) =>
       svc.signEthicsDeclaration(u, { statements: ETHICS_STATEMENTS.map((s) => s.key), interests: 'My cousin works at a synthetic supplier' }),
     );

@@ -216,7 +216,7 @@ export type FinCooDesk = Awaited<ReturnType<PrimaService['finance']['cooDesk']>>
 export type FinControls = Awaited<ReturnType<PrimaService['financeControls']['view']>>;
 export type FinDashboard = Awaited<ReturnType<PrimaService['financeControls']['dashboard']>>;
 export type FinPack = Awaited<ReturnType<PrimaService['financeControls']['pack']>>;
-export type FinControlArea = 'payees' | 'statements' | 'ageing' | 'sst' | 'plan' | 'einvoice' | 'ar' | 'bankrec' | 'regular' | 'guarantees' | 'tax' | 'mandates' | 'advances' | 'petty' | 'cards' | 'billing' | 'govt' | 'moneyin' | 'stamp' | 'dailycash' | 'intercompany' | 'cash13' | 'pack' | 'hostel' | 'deposits' | 'fd' | 'charges' | 'wht' | 'schedules' | 'assets' | 'audit' | 'credit' | 'supstatements' | 'figures' | 'coa' | 'sql';
+export type FinControlArea = 'payees' | 'statements' | 'ageing' | 'sst' | 'plan' | 'einvoice' | 'ar' | 'bankrec' | 'regular' | 'guarantees' | 'tax' | 'mandates' | 'advances' | 'petty' | 'cards' | 'billing' | 'govt' | 'moneyin' | 'stamp' | 'dailycash' | 'exceptionalcash' | 'arrivalcash' | 'intercompany' | 'cash13' | 'pack' | 'hostel' | 'deposits' | 'fd' | 'charges' | 'wht' | 'schedules' | 'assets' | 'audit' | 'credit' | 'supstatements' | 'figures' | 'coa' | 'sql';
 export type ContractBoard = R<'contracts'>;
 export type BranchBoard = R<'branchBoard'>;
 export type BranchJv = R<'branchJv'>;
@@ -579,7 +579,7 @@ export interface Api extends ConnectionsClient, ExtractionClient, DraftHelpClien
   lodgeDisciplineAppeal(followUpId: string, input: { grounds: string; lang?: StaffLangId | null }): Promise<unknown>;
   decideDisciplineAppeal(followUpId: string, input: DisciplineAppealDecision): Promise<unknown>;
   screening(): Promise<ScreeningBoard>;
-  screeningAct(action: 'open' | 'check' | 'decide' | 'withdraw', body: Record<string, unknown>): Promise<unknown>;
+  screeningAct(action: 'open' | 'check' | 'decide' | 'withdraw' | 'vettingResult' | 'employmentEnded', body: Record<string, unknown>): Promise<unknown>;
   screeningRepeat(id: string): Promise<unknown>;
   recordHrFiling(input: HrFilingInput): Promise<unknown>;
   eaDraft(companyId: string, year: string): Promise<{ filename: string; body: string; note: string }>;
@@ -935,6 +935,10 @@ export interface Api extends ConnectionsClient, ExtractionClient, DraftHelpClien
   financeToday(): Promise<Awaited<ReturnType<PrimaService['financeToday']>>>;
   /** My advances, cards and petty cash (anyone), and overdue staff advances (HR and Finance), 2 Nov 2026. */
   finCashMine(): Promise<Awaited<ReturnType<PrimaService['financeControls']['cashMine']>>>;
+  finExceptionalCashEvidence(companyId: string, docId: string): ReturnType<PrimaService['financeControls']['exceptionalCashEvidence']>;
+  finArrivalCashEvidence(companyId: string, docId: string): ReturnType<PrimaService['financeControls']['arrivalCashEvidence']>;
+  finArrivalCash(companyId: string): ReturnType<PrimaService['financeControls']['arrivalCashView']>;
+  finExceptionalCash(companyId: string): ReturnType<PrimaService['financeControls']['exceptionalCashView']>;
   finDailyCashMine(): Promise<Awaited<ReturnType<PrimaService['financeControls']['dailyCashMine']>>>;
   finAdvancesOverdue(): Promise<Awaited<ReturnType<PrimaService['financeControls']['advancesForHr']>>>;
   finCooDesk(): Promise<FinCooDesk>;
@@ -969,7 +973,7 @@ export interface Api extends ConnectionsClient, ExtractionClient, DraftHelpClien
   setGuardPayLine(runId: string, personId: string, patch: GuardPayLinePatch): Promise<unknown>;
   guardPayStep(runId: string, action: GuardPayAction, body: GuardPayStepBody): Promise<unknown>;
   guardPayExport(runId: string, kind: GuardPayFile): Promise<{ filename: string; body: string; note: string }>;
-  guardPayCash(runId: string, personId: string, action: GuardPayCashAction, body: { reason?: string; give?: boolean; on?: string; proof?: ProofInput[] }): Promise<unknown>;
+  guardPayCash(runId: string, personId: string, action: GuardPayCashAction, body: { reason?: string; give?: boolean; on?: string; proof?: ProofInput[]; transactionSpecific?: boolean; amount?: number; signedByPersonId?: string }): Promise<unknown>;
   recordPayConsent(personId: string, body: PayConsentInput): Promise<unknown>;
   payConsentsWaiting(): Promise<R<'payConsentsWaiting'>>;
   statutoryBoard(): Promise<R<'statutoryBoard'>>;

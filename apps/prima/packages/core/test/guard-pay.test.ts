@@ -431,7 +431,7 @@ describe('guard pay: bank or e-wallet only, cash by the COO or CEO, advances (Fa
     await svc.guardPayStep(hr, run.id, 'submit');
   });
 
-  it('pays an e-wallet in its own file and cash only when the COO or CEO gives it, listed by the Director Office', async () => {
+  it('pays an e-wallet separately and requires CEO approval for wage cash', async () => {
     const { svc, ds } = fresh();
     const hr = await svc.user('u-pwvsb-hr');
     const coo = await svc.user('u-coo');
@@ -449,28 +449,18 @@ describe('guard pay: bank or e-wallet only, cash by the COO or CEO, advances (Fa
     if (!noAcc[0]) await store.update('people', cashGuard.personId, { bank: null });
     await svc.prepareGuardPay(hr, 'co-arsh', '2026-10');
     await expect(svc.guardPayStep(hr, run.id, 'submit')).rejects.toThrow(/cannot be paid/);
-    await expect(svc.guardPayCash(hr, run.id, cashGuard.personId, 'list', { reason: 'No bank account yet' })).rejects.toBeInstanceOf(AccessDenied);
-    await expect(svc.guardPayCash(doa, run.id, cashGuard.personId, 'list', { reason: '' })).rejects.toThrow(/why/);
-    await svc.guardPayCash(doa, run.id, cashGuard.personId, 'list', { reason: 'Bank account not opened yet (test)' });
+    await svc.guardPayCash(doa, run.id, cashGuard.personId, 'list', { reason: 'Cash requested' });
+    await expect(svc.guardPayCash(coo, run.id, cashGuard.personId, 'decide', {give:true,reason:'COO cannot approve'})).rejects.toThrow(/CEO/);
+    await svc.guardPayCash(await svc.user(CEO), run.id, cashGuard.personId, 'decide', {give:true,reason:'CEO approved named amount'});
+    await store.update('people', cashGuard.personId, { bank: { bank: 'Test Bank', accountMasked: '****9999' } });
+    await svc.prepareGuardPay(hr, 'co-arsh', '2026-10');
     await svc.guardPayStep(hr, run.id, 'submit');
-    // The COO cannot approve the month while a cash listing waits; HR and Finance cannot decide it.
-    await expect(svc.guardPayStep(coo, run.id, 'approve', { note: 'okay' })).rejects.toThrow(/listed for cash/);
-    await expect(svc.guardPayCash(fin, run.id, cashGuard.personId, 'decide', { reason: 'ok', give: true })).rejects.toBeInstanceOf(AccessDenied);
-    await expect(svc.guardPayCash(coo, run.id, cashGuard.personId, 'decide', { give: true })).rejects.toThrow(/reason/);
-    await svc.guardPayCash(coo, run.id, cashGuard.personId, 'decide', { reason: 'Give cash this month only', give: true });
     await svc.guardPayStep(coo, run.id, 'approve', { note: 'Checked' });
-    const view = await svc.guardPayRun(fin, run.id);
-    expect(view.pay.cash.count).toBe(1);
-    expect(view.pay.ewallet.count).toBe(1);
-    const bank = await svc.guardPayExport(fin, run.id, 'bank');
-    expect(bank.body).not.toContain(cashGuard.staffNo + ',');
-    expect(bank.body).not.toContain('****2222');
     const ew = await svc.guardPayExport(fin, run.id, 'ewallet');
     expect(ew.body).toContain('****2222');
-    const cash = await svc.guardPayExport(doa, run.id, 'cash');
-    expect(cash.body).toContain(cashGuard.staffNo);
-    await expect(svc.guardPayExport(doa, run.id, 'bank')).rejects.toThrow();
-    expect(ds.audit.some((a) => a.action === 'guardpay.cash.decide')).toBe(true);
+    const view = await svc.guardPayRun(doa, run.id);
+    expect(view.can.listCash).toBe(false);expect(view.can.decideCash).toBe(false);expect(view.can.handOutCash).toBe(false);
+
   });
 
   it('advances: the OM sets them in bulk, the OD or OGM approves, a change needs one more approval, the pay run takes them back', async () => {
@@ -530,40 +520,108 @@ describe('cash by exception and the advance and loan scheme (Fauzan, 6 Nov 2026)
   });
   const PDF = 'data:application/pdf;base64,' + Buffer.from('%PDF-1.4 signed cash receipt (synthetic)').toString('base64');
 
-  it('cash list is per site with name and amount; the COO or CEO hands it out; the Director Office uploads the signed receipt', async () => {
+  async function approvedCash() {
     RULES.guardPayroll.value.primaPays = true;
     const { svc, ds } = fresh();
-    const hr = await svc.user('u-pwvsb-hr');
-    const coo = await svc.user('u-coo');
-    const doa = await svc.user('u-pwvsb-doa');
+    const hr = await svc.user('u-pwvsb-hr'), doa = await svc.user('u-pwvsb-doa');
+    const ceo = await svc.user(CEO), coo = await svc.user('u-coo'), fin = await svc.user('u-fin-t1-lead');
     for (const p of ds.people) if (!p.bank) p.bank = { bank: 'Test Bank', accountMasked: '****9999' };
-    const run0 = await svc.prepareGuardPay(hr, 'co-sasa', '2026-10', []);
-    const g = run0.lines.find((l) => l.net > 0)!;
-    ds.people.find((x) => x.id === g.personId)!.bank = null;
-    const run = await svc.prepareGuardPay(hr, 'co-sasa', '2026-10');
-    const listed = await svc.guardPayCash(doa, run.id, g.personId, 'list', { reason: 'No bank account yet (test)' });
-    const entry = listed.find((c) => c.personId === g.personId)!;
-    expect(entry.siteName).toBe(g.mainSiteName);
-    expect(entry.amount).toBe(run.lines.find((l) => l.personId === g.personId)!.net);
-    await svc.guardPayCash(coo, run.id, g.personId, 'decide', { reason: 'Give cash this month', give: true });
-    // Not before the month is approved, and the receipt not before the hand-out.
-    await expect(svc.guardPayCash(coo, run.id, g.personId, 'handout', {})).rejects.toBeInstanceOf(AccessDenied);
+    const run = await svc.prepareGuardPay(hr, 'co-arsh', '2026-10', []);
+    const guard = run.lines.find(l => l.net > 100)!;
+    await svc.guardPayCash(doa, run.id, guard.personId, 'list', { reason: 'Synthetic cash request' });
+    await svc.guardPayCash(ceo, run.id, guard.personId, 'decide', { give: true, reason: 'Named wage approved' });
     await svc.guardPayStep(hr, run.id, 'submit');
-    await svc.guardPayStep(coo, run.id, 'approve', { note: 'Approved' });
-    await expect(svc.guardPayCash(doa, run.id, g.personId, 'receipt', { proof: [{ kind: 'document', name: 'receipt.pdf', data: PDF, caption: '' }] })).rejects.toThrow(/handed out first/);
-    await expect(svc.guardPayCash(doa, run.id, g.personId, 'handout', {})).rejects.toBeInstanceOf(AccessDenied);
-    await svc.guardPayCash(coo, run.id, g.personId, 'handout', { on: '2026-11-05' });
-    await expect(svc.guardPayCash(hr, run.id, g.personId, 'receipt', { proof: [{ kind: 'document', name: 'receipt.pdf', data: PDF, caption: '' }] })).rejects.toBeInstanceOf(AccessDenied);
-    await expect(svc.guardPayCash(doa, run.id, g.personId, 'receipt', { proof: [] })).rejects.toThrow(/signed receipt/);
-    const after = await svc.guardPayCash(doa, run.id, g.personId, 'receipt', { proof: [{ kind: 'document', name: 'receipt.pdf', data: PDF, caption: '' }] });
-    expect(after.find((c) => c.personId === g.personId)!.receipt?.uploadedBy).toBe(doa.name);
-    expect(ds.evidenceDocs.some((d) => d.guardPayRunId === run.id)).toBe(true);
-    const view = await svc.guardPayRun(doa, run.id);
-    expect(view.pay.cashBySite.length).toBe(1);
-    expect(view.pay.cashReceipts).toBe(1);
-    const file = await svc.guardPayExport(doa, run.id, 'cash');
-    expect(file.body.split('\n').some((r) => r.startsWith('Site,'))).toBe(true);
-    expect(file.body).toContain('Uploaded: receipt.pdf');
+    await svc.guardPayStep(coo, run.id, 'approve', { note: 'Payroll checked' });
+    return { svc, ds, hr, doa, ceo, coo, fin, run, guard };
+  }
+
+  it('supersedes an unpaid stale wage-cash approval with an audited fresh CEO decision', async () => {
+    const { svc, ds, hr, doa, ceo, coo, fin, run, guard } = await approvedCash();
+    const original = structuredClone(ds.guardPayRuns.find(r => r.id === run.id)!.cash![0]);
+    await svc.guardPayStep(fin, run.id, 'return', { note: 'Correct PCB before paying' });
+    const changed = await svc.setGuardPayLine(hr, run.id, guard.personId, { pcb: guard.pcb + 1 });
+    await expect(svc.guardPayStep(hr, run.id, 'submit')).rejects.toThrow(/stale/);
+    await expect(svc.guardPayCash(ceo, run.id, guard.personId, 'supersede', { reason: 'Corrected amount' })).rejects.toThrow(/Director Office/);
+    await expect(svc.guardPayCash(doa, run.id, guard.personId, 'supersede', { reason: '' })).rejects.toThrow(/why|reason/i);
+    await svc.guardPayCash(doa, run.id, guard.personId, 'supersede', { reason: 'Corrected PCB; seek new CEO approval' });
+    const stored = ds.guardPayRuns.find(r => r.id === run.id)!;
+    expect(stored.cashHistory).toHaveLength(1);
+    expect(stored.cashHistory![0].entry).toEqual(original);
+    expect(stored.cashHistory![0].superseded.byId).toBe(doa.id);
+    expect(stored.cash![0].amount).toBe(changed.net);
+    expect(stored.cash![0].decision).toBeNull();
+    await expect(svc.guardPayCash(doa, run.id, guard.personId, 'supersede', { reason: 'Replayed correction' })).rejects.toThrow(/fresh|pending/);
+    await svc.guardPayStep(hr, run.id, 'submit');
+    await expect(svc.guardPayStep(coo, run.id, 'approve', { note: 'Checked' })).rejects.toThrow(/CEO/);
+    await svc.guardPayCash(ceo, run.id, guard.personId, 'decide', { give: true, reason: 'Corrected amount checked' });
+    await svc.guardPayStep(coo, run.id, 'approve', { note: 'Revised payroll checked' });
+    await svc.guardPayCash(coo, run.id, guard.personId, 'handout', { on: TODAY });
+    await svc.guardPayStep(fin, run.id, 'return', { note: 'Synthetic return must preserve cash history' });
+    await expect(svc.guardPayCash(doa, run.id, guard.personId, 'supersede', { reason: 'Must not erase handover' })).rejects.toThrow(/handed|receipt|reconciliation/);
+    const handed = ds.guardPayRuns.find(r => r.id === run.id)!;
+    expect(handed.cashHistory).toHaveLength(1);
+    expect(handed.cash![0].handedOut).toBeTruthy();
+    expect(ds.audit.some(a => a.action === 'guardpay.cash.supersede' && a.entityId === run.id)).toBe(true);
+    handed.stage = 'paid';
+    await expect(svc.guardPayCash(doa, run.id, guard.personId, 'supersede', { reason: 'Must not alter paid run' })).rejects.toThrow();
+  });
+
+  it('rejects impossible dates and handovers before either cash or payroll approval', async () => {
+    const { svc, ds, coo, run, guard } = await approvedCash();
+    const stored = ds.guardPayRuns.find(r => r.id === run.id)!;
+    for (const on of ['2026-10-32', '2026-11-04', '2026-11-06']) {
+      await expect(svc.guardPayCash(coo, run.id, guard.personId, 'handout', { on })).rejects.toThrow(/date|approval/i);
+      expect(stored.cash![0].handedOut).toBeNull();
+    }
+    stored.cash![0].decision!.at = myt('2026-11-03', '10:00');
+    await expect(svc.guardPayCash(coo, run.id, guard.personId, 'handout', { on: '2026-11-04' })).rejects.toThrow(/approval/i);
+    stored.approved!.at = myt('2026-11-02', '10:00');
+    stored.cash![0].decision!.at = NOW;
+    await expect(svc.guardPayCash(coo, run.id, guard.personId, 'handout', { on: '2026-11-04' })).rejects.toThrow(/approval/i);
+    await svc.guardPayCash(coo, run.id, guard.personId, 'handout', { on: TODAY });
+    expect(ds.guardPayRuns.find(r => r.id === run.id)!.cash![0].handedOut!.on).toBe(TODAY);
+  });
+
+  it('retains site changes and zero-pay approvals in history without authorizing another handout', async () => {
+    const { svc, ds, hr, doa, fin, run, guard } = await approvedCash();
+    await svc.guardPayStep(fin, run.id, 'return', { note: 'Correct site and wages' });
+    const stored = ds.guardPayRuns.find(r => r.id === run.id)!;
+    const line = stored.lines.find(l => l.personId === guard.personId)!;
+    const oldSite = line.mainSiteId;
+    line.mainSiteId = ds.sites.find(s => s.companyId === run.companyId && s.id !== oldSite)!.id;
+    await svc.guardPayCash(doa, run.id, guard.personId, 'supersede', { reason: 'Corrected site requires new approval' });
+    let current = ds.guardPayRuns.find(r => r.id === run.id)!;
+    expect(current.cashHistory![0].entry.approvedSiteId).toBe(oldSite);
+    expect(current.cash![0].approvedSiteId).toBe(line.mainSiteId);
+    expect(current.cash![0].decision).toBeNull();
+    await svc.setGuardPayLine(hr, run.id, guard.personId, { pcb: guard.pcb + guard.net });
+    await svc.guardPayCash(doa, run.id, guard.personId, 'supersede', { reason: 'Corrected wages leave no cash payable' });
+    current = ds.guardPayRuns.find(r => r.id === run.id)!;
+    expect(current.cash).toHaveLength(0);
+    expect(current.cashHistory).toHaveLength(2);
+  });
+
+  it('does not supersede an unpaid receipt or a historically paid run', async () => {
+    const { svc, ds, doa, fin, run, guard } = await approvedCash();
+    await svc.guardPayStep(fin, run.id, 'return', { note: 'Preserve historical evidence' });
+    const stored = ds.guardPayRuns.find(r => r.id === run.id)!;
+    stored.cash![0].receipt = { docId: 'historical', name: 'receipt.pdf', sha256: 'historical', uploadedBy: doa.name, uploadedById: doa.id, uploadedAt: NOW };
+    await expect(svc.guardPayCash(doa, run.id, guard.personId, 'supersede', { reason: 'Must preserve receipt' })).rejects.toThrow(/receipt/);
+    stored.cash![0].receipt = null;
+    stored.paid = { by: fin.name, byId: fin.id, at: NOW, note: 'Historical', bankRef: 'HISTORY', paidOn: TODAY, pcbChecked: true };
+    await expect(svc.guardPayCash(doa, run.id, guard.personId, 'supersede', { reason: 'Must preserve payment' })).rejects.toThrow(/unpaid/);
+    expect(stored.cashHistory ?? []).toHaveLength(0);
+  });
+
+  it('retains legacy signed receipts while rejecting replayed historical handouts', async () => {
+    const { svc, ds } = fresh(); const hr=await svc.user('u-pwvsb-hr'), doa=await svc.user('u-pwvsb-doa'), coo=await svc.user('u-coo');
+    const run=await svc.prepareGuardPay(hr,'co-sasa','2026-10',[]); const g=run.lines.find(l=>l.net>0)!;
+    const stored=ds.guardPayRuns.find(r=>r.id===run.id)!;
+    stored.cash=[{personId:g.personId,staffNo:g.staffNo,name:g.name,siteName:g.mainSiteName,amount:g.net,reason:'Historical fixture only',listedBy:doa.name,listedById:doa.id,listedAt:NOW,decision:{by:coo.name,byId:coo.id,at:NOW,note:'Historical',give:true,tier:'coo'},handedOut:{by:coo.name,byId:coo.id,at:NOW,note:'Historical',on:TODAY,tier:'coo'},receipt:null}];
+    await expect(svc.guardPayCash(coo,run.id,g.personId,'handout',{})).rejects.toThrow();
+    const after=await svc.guardPayCash(doa,run.id,g.personId,'receipt',{transactionSpecific:true,signedByPersonId:g.personId,amount:g.net,proof:[{kind:'document',name:'receipt.pdf',data:PDF,caption:''}]});
+    expect(after[0].receipt?.uploadedBy).toBe(doa.name);
+    await expect(svc.guardPayStep(coo,run.id,'approve',{note:'Again'})).rejects.toThrow(/reconciliation/);
   });
 
   it('a loan needs a limit, purpose, period and signature; CoS then CEO approve; Finance pays out and is told; the pay run takes it back', async () => {

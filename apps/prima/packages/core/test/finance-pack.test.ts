@@ -86,4 +86,12 @@ describe('Monthly pack and dashboard (suggestions 25 and 27)', () => {
     const mine = await svc.financeControls.dashboard(de1);
     expect(mine.rows.every((r) => ['pwvsb', 'co-09', 'co-16', 'co-23', 'co-30', 'co-37'].includes(r.companyId))).toBe(true);
   });
+  it('accepts miscellaneous payroll as a separate budget expense without altering ordinary guard/staff costs', async()=>{
+    const ds=generateDataset({today:TODAY,now:NOW}),svc=new PrimaService(new MemoryStore(ds),()=>NOW);const de=await svc.user('u-fin-t1-de1');
+    const f=ds.finStatus.find(f=>f.companyId===C)!;const sign={by:'Synthetic',byId:'test',at:NOW,comment:''};
+    f.plans=[{year:2026,budget:{months:{revenue:months(1000),guard_cost:months(200),misc_payroll:months(50)},assumptions:'Additional support',status:'approved',prepared:sign,approved:sign,returned:null},actuals:Object.fromEntries(['revenue','guard_cost','staff_cost','statutory','premises','vehicles','equipment','insurance','other_opex','finance_cost','tax'].map(k=>[k,months(k==='revenue'?1000:k==='guard_cost'?200:0)])),forecast:null} as unknown as FinPlan];
+    const before=await svc.financeControls.pack(de,C,'2026-09');f.plans[0].actuals.misc_payroll=months(40);const after=await svc.financeControls.pack(de,C,'2026-09');
+    expect(after.data.profit!.month.profit).toBe(before.data.profit!.month.profit!-40);expect(after.data.profit!.month.budgetProfit).toBe(750);expect(f.plans[0].actuals.guard_cost).toEqual(months(200));
+  });
+
 });

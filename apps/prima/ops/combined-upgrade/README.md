@@ -88,6 +88,6 @@ The test client reports the production host and TLS metadata while it actually t
 - **Live stamp:** confirm which base staging is stamped with today, using a read-only check.
 - **Owner:** confirm the schema owner login and its rights.
 - **Backup:** take a backup and agree the maintenance window. Close ingress and stop the old API first: the old API is not compatible with the new base.
-- **Order:** step 1 (if needed), then step 2, then install each release module the frozen five did not have (`item_register`, then `item_register_v2`) with the pinned module installer, then the new API image. The release catalogue stays not ready until those modules are in. Optional modules are separate approvals.
+- **Order:** step 1 (if needed), then step 2, then the explicit install of modules released after the frozen artifact (now `item_register`, then `item_register_v2`, through the pinned module installer), then the new API image. The API refuses to start until every released module is ready. Optional modules are separate approvals.
 - **Retention:** the gate record retention and PDPA notice, and the in-house server key (`INHOUSE_PUBLIC_KEY_JWK`), must be decided before real visitors are recorded.
 - **Existing-admin route:** the `ops/existing-admin` route is still pinned to the previous base and is not updated here.

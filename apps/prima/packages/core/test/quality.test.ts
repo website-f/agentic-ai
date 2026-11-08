@@ -29,15 +29,17 @@ describe('requirements register: who sees what', () => {
     expect(ceo.rows.every((r) => !r.canLink && !r.canDecide)).toBe(true);
   });
 
-  it('keeps ISO and PIKM apart; PIKM Part 1 rows follow the 2022 draft and only Part 2 waits for its text', async () => {
+  it('keeps ISO and PIKM apart; PIKM rows follow the 2022 drafts of Parts 1 and 2', async () => {
     const { svc } = fresh();
     const b = await svc.quality.register(await svc.user('u-audit'), { companyId: 'co-sasa' });
     const pikm = b.rows.filter((r) => r.requirement.standard === 'PIKM');
     expect(pikm.length).toBeGreaterThan(0);
-    expect(pikm.every((r) => r.requirement.edition === '1:2022 draft')).toBe(true);
-    expect(pikm.filter((r) => r.requirement.placeholder).map((r) => r.requirement.ref)).toEqual(['Part 2']);
-    expect(pikm.find((r) => r.requirement.ref === 'Part 2')!.state).toBe('awaiting_text');
+    expect(pikm.every((r) => r.requirement.edition === (r.requirement.ref.startsWith('2:') ? '2:2022 draft' : '1:2022 draft'))).toBe(true);
+    expect(pikm.some((r) => r.requirement.placeholder)).toBe(false);
     expect(pikm.find((r) => r.requirement.ref === '9.5.1')!.state).toBe('unknown');
+    // Part 2 refs never clash with Part 1 clause numbers.
+    expect(pikm.find((r) => r.requirement.ref === '2:5.1')!.requirement.id).toBe('qr-pikm-2-5-1');
+    expect(new Set(pikm.map((r) => r.requirement.id)).size).toBe(pikm.length);
     const isoOnly = await svc.quality.register(await svc.user('u-audit'), { companyId: 'co-sasa', standard: 'ISO9001' });
     expect(isoOnly.rows.every((r) => r.requirement.standard === 'ISO9001' && r.requirement.edition === '2015')).toBe(true);
     // Clause order reads naturally.
@@ -87,13 +89,17 @@ describe('requirements register: evidence is never self-checked and never auto-c
   it('a placeholder PIKM row cannot be marked checked until ACT confirms it against the code text', async () => {
     const { svc } = fresh();
     const cm = await svc.user('u-cm-sasa');
-    const req = 'qr-pikm-part-2';
+    const act0 = await svc.user('u-audit');
+    // A PIKM row added without saying where in the code text it came from stays a placeholder.
+    const added = (await svc.quality.act(act0, 'addRequirement', { standard: 'PIKM', ref: 'Part 3', title: 'A future part (mock)' })) as { id: string; placeholder: boolean };
+    expect(added.placeholder).toBe(true);
+    const req = added.id;
     await svc.quality.act(cm, 'linkEvidence', { requirementId: req, companyId: 'co-sasa', kind: 'prima_record', label: 'Screening files (mock)', ref: 'HR-SCR' });
     const act = await svc.user('u-audit');
     const ev = (await svc.quality.register(act, { companyId: 'co-sasa' })).rows.find((r) => r.requirement.id === req)!.entry!.evidence[0];
     await expect(svc.quality.act(act, 'checkEvidence', { requirementId: req, companyId: 'co-sasa', evidenceId: ev.id, ok: true, note: 'Seen' })).rejects.toThrow(/placeholder/);
-    await expect(svc.quality.act(act, 'editRequirement', { id: req, ref: 'Part 2', title: 'Screening of personnel', placeholder: false })).rejects.toThrow(/code text/);
-    await svc.quality.act(act, 'editRequirement', { id: req, ref: 'Part 2', title: 'Screening of personnel', placeholder: false, note: 'Checked against Part 2 code text (mock)' });
+    await expect(svc.quality.act(act, 'editRequirement', { id: req, ref: 'Part 3', title: 'A future part (mock)', placeholder: false })).rejects.toThrow(/code text/);
+    await svc.quality.act(act, 'editRequirement', { id: req, ref: 'Part 3', title: 'A future part (mock)', placeholder: false, note: 'Checked against Part 3 code text (mock)' });
     await svc.quality.act(act, 'checkEvidence', { requirementId: req, companyId: 'co-sasa', evidenceId: ev.id, ok: true, note: 'Screening files complete (mock)' });
     const row = (await svc.quality.register(act, { companyId: 'co-sasa' })).rows.find((r) => r.requirement.id === req)!;
     expect(row.state).toBe('checked');

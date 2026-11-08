@@ -66,7 +66,7 @@ try {
   server = await createServer({ configFile: false, root: dir, logLevel: 'warn', esbuild: { jsx: 'automatic' },
     // A private cache per run: a cache left by another Vite setup made this run re-bundle React with the page open.
     cacheDir: resolve(dir, '.vite'),
-    optimizeDeps: { include: ['react', 'react-dom/client', 'react/jsx-runtime', 'react/jsx-dev-runtime'] },
+    optimizeDeps: { include: ['react', 'react-dom', 'react-dom/client', 'react/jsx-runtime', 'react/jsx-dev-runtime'] },
     server: { host: '127.0.0.1', port: 0, fs: { allow: [root] } },
     plugins: [{ name: 'synthetic-api', enforce: 'pre',
       resolveId(id, importer) { if ((id === '../api' && importer?.endsWith('/views/Connections.tsx')) || (id === './api' && importer?.endsWith('/src/ui.tsx'))) return '\0synthetic-api'; },

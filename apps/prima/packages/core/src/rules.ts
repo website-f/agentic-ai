@@ -1263,9 +1263,9 @@ export const RULES = {
   ),
   rba: rule(
     'RBA-READY',
-    { traceSampleSize: 20, traceToleranceHours: 4, normalHoursPerDay: 8, grievanceOverdueDays: 30, ethicsDueMonth: 1, maxCommittee: 12 },
+    { traceSampleSize: 20, traceToleranceHours: 4, normalHoursPerDay: 8, grievanceOverdueDays: 30, maxCommittee: 6 },
     'Policy',
-    "Fauzan, 8 Nov 2026 (\"Yes\" to the RBA build order after the RBA Code of Conduct v8.0 readiness checklist): RBA is a client code beside IWAY, with green, yellow, orange and red grades, and red items go to ACT, the Chief of Staff and the COO the same day. ACT traces a sample of about 20 workers a month, foreign workers first, from roster to clock to overtime to pay to bank, and settles every mismatch. Each foreign worker has one master file in the nine RBA folders. Staff sign a yearly ethics declaration. The discipline appeal step itself is HR-APPEAL (IWAY, PR #131). No fee, deposit, fine or penalty for leaving is taken from pay. Fauzan, 7 Nov 2026: the RBA committee is the Operations Director and a few company heads, chosen by the Chief of Staff every year. Fauzan, 8 Nov 2026 (\"Policy yes proceed\"): the 20-worker sample, 4-hour tolerance, 8-hour normal day and 30-day grievance target are approved.",
+    "Fauzan, 8 Nov 2026 (\"Yes\" to the RBA build order after the RBA Code of Conduct v8.0 readiness checklist): RBA is a client code beside IWAY, with green, yellow, orange and red grades, and red items go to ACT, the Chief of Staff and the COO the same day. ACT traces a sample of about 20 workers a month, foreign workers first, from roster to clock to overtime to pay to bank, and settles every mismatch. Each foreign worker has one master file in the nine RBA folders. Staff sign an ethics declaration once, on entering service. The discipline appeal step itself is HR-APPEAL (IWAY, PR #131). No fee, deposit, fine or penalty for leaving is taken from pay. Fauzan, 7 Nov 2026: the RBA committee is the Operations Director and a few company heads, chosen by the Chief of Staff every year. Fauzan, 8 Nov 2026 (\"Policy yes proceed\"): the 20-worker sample, 4-hour tolerance, 8-hour normal day and 30-day grievance target are approved; staff sign the ethics declaration once on entering service, and the committee has at most 6 members.",
   ),
   siteDispatch: rule(
     'CMS-DISPATCH',
@@ -2064,10 +2064,10 @@ export const RULES = {
   quality: rule(
     'QMS-REGISTER',
     {
-      /** Standards kept in one register, each with its own edition. PIKM Part 1 text received from Fauzan, 8 Nov 2026 (2022 draft). */
+      /** Standards kept in one register, each with its own edition. PIKM Parts 1 and 2 received from Fauzan, 8 Nov 2026 (2022 drafts); each row keeps its own part and edition. */
       standards: [
         { code: 'ISO9001', edition: '2015', name: 'ISO 9001:2015 Quality management systems', text: 'headings' },
-        { code: 'PIKM', edition: '1:2022 draft', name: 'PIKM-KDN/SIRIM 1 Code of practice for private security companies, Part 1: management', text: 'headings' },
+        { code: 'PIKM', edition: '1:2022 draft', name: 'PIKM-KDN/SIRIM Code of practice for private security agencies, Part 1: management and Part 2: security screening', text: 'headings' },
       ],
       /** Each requirement with checked evidence is looked at again this often (approved by Fauzan, 8 Nov 2026). */
       reviewEveryMonths: 12,

@@ -26,6 +26,7 @@ const rm = (n: number | null | undefined) => (n == null ? '–' : `RM${n.toLocal
 export const LINE_LABEL: Record<FinPlanLine, string> = {
   revenue: 'Revenue',
   guard_cost: 'Guard pay',
+  misc_payroll: 'Miscellaneous payroll expenses',
   staff_cost: 'Staff pay',
   statutory: 'EPF, SOCSO, EIS, HRD',
   premises: 'Premises',

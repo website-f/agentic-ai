@@ -14,6 +14,7 @@ const rm = (n: number | null | undefined) => (n == null ? '–' : `RM${n.toLocal
 const LINES = [
   'revenue',
   'guard_cost',
+  'misc_payroll',
   'staff_cost',
   'statutory',
   'premises',
@@ -194,7 +195,7 @@ export function Plan3({ v, pv, canAct, me }: { v: FinControls; pv: PV; canAct: b
           </label>
           {LINES.map((l) => (
             <label key={l} className="field">
-              <span>{l} (one yearly amount or 12 monthly amounts; earlier months keep the budget in force)</span>
+              <span>{l === 'misc_payroll' ? 'Miscellaneous payroll expenses' : l} (one yearly amount or 12 monthly amounts; earlier months keep the budget in force)</span>
               <input className="input" value={f[`rev-${l}`] ?? ''} onChange={set(`rev-${l}`)} />
             </label>
           ))}

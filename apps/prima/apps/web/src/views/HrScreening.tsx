@@ -87,6 +87,13 @@ export function ScreeningPanel() {
           value={d.kpis.repeatDue}
           tone={d.kpis.repeatDue ? "warn" : undefined}
         />
+        {d.kpis.endEmployment > 0 && (
+          <Kpi
+            label="Vetting failed: end employment"
+            value={d.kpis.endEmployment}
+            tone="crit"
+          />
+        )}
       </div>
       <div className="list">
         {d.rows.length === 0 && (
@@ -122,6 +129,9 @@ export function ScreeningPanel() {
                   <Chip tone="info">withdrawn</Chip>
                 )}{" "}
                 {r.concerns.length > 0 && <Chip tone="crit">concern</Chip>}{" "}
+                {r.mustEndEmployment && (
+                  <Chip tone="crit">vetting failed: end employment now</Chip>
+                )}{" "}
                 {r.repeatState === "overdue" && (
                   <Chip tone="crit">repeat overdue</Chip>
                 )}
@@ -209,6 +219,113 @@ export function ScreeningPanel() {
                           Repeat screening due {dateLabel(c.repeatDueOn)}
                         </div>
                       )}
+                    </div>
+                  )}
+                  {c.endEmployment?.doneOn && (
+                    <div className="small">
+                      Employment ended {dateLabel(c.endEmployment.doneOn)}{" "}
+                      ({c.endEmployment.by}): {c.endEmployment.note}
+                    </div>
+                  )}
+                  {r.canRecordVetting && (
+                    <div style={{ display: "grid", gap: 6 }}>
+                      <div className="small" style={{ fontWeight: 600 }}>
+                        KDN vetting result
+                      </div>
+                      <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
+                        <input
+                          className="input"
+                          placeholder="KDN reference or letter number"
+                          aria-label="KDN reference"
+                          value={v("kdnRef")}
+                          onChange={(e) => set("kdnRef", e.target.value)}
+                        />
+                        <input
+                          className="input"
+                          placeholder="What KDN said (needed if failed)"
+                          aria-label="KDN note"
+                          value={v("kdnNote")}
+                          onChange={(e) => set("kdnNote", e.target.value)}
+                        />
+                      </div>
+                      <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
+                        <button
+                          className="btn btn-sm btn-primary"
+                          disabled={act.busy || v("kdnRef").trim().length < 3}
+                          onClick={() =>
+                            run(
+                              () =>
+                                api.screeningAct("vettingResult", {
+                                  id: c.id,
+                                  passed: true,
+                                  ref: v("kdnRef"),
+                                  note: v("kdnNote"),
+                                }),
+                              "Vetting passed. Now cleared.",
+                              ["kdnRef", "kdnNote"],
+                            )
+                          }
+                        >
+                          Vetting passed
+                        </button>
+                        <button
+                          className="btn btn-sm"
+                          disabled={
+                            act.busy ||
+                            v("kdnRef").trim().length < 3 ||
+                            v("kdnNote").trim().length < 5
+                          }
+                          onClick={() =>
+                            run(
+                              () =>
+                                api.screeningAct("vettingResult", {
+                                  id: c.id,
+                                  passed: false,
+                                  ref: v("kdnRef"),
+                                  note: v("kdnNote"),
+                                }),
+                              "Vetting failed recorded. End the employment now.",
+                              ["kdnRef", "kdnNote"],
+                            )
+                          }
+                        >
+                          Vetting failed
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                  {r.canRecordEnd && (
+                    <div style={{ display: "grid", gap: 6 }}>
+                      <div className="notice small" data-tone="crit">
+                        KDN vetting failed. End the employment now through the
+                        leaving steps, then record it here.
+                      </div>
+                      <input
+                        className="input"
+                        placeholder="Leaving record or letter, and the date it ended"
+                        aria-label="How the employment ended"
+                        value={v("endNote")}
+                        onChange={(e) => set("endNote", e.target.value)}
+                      />
+                      <div>
+                        <button
+                          className="btn btn-sm btn-primary"
+                          disabled={act.busy || v("endNote").trim().length < 5}
+                          onClick={() =>
+                            run(
+                              () =>
+                                api.screeningAct("employmentEnded", {
+                                  id: c.id,
+                                  note: v("endNote"),
+                                }),
+                              "End of employment recorded.",
+                              ["endNote"],
+                            )
+                          }
+                        >
+                          Employment ended
+                        </button>
+                      </div>
                     </div>
                   )}
                   {r.canWork && (
@@ -403,6 +520,31 @@ export function ScreeningPanel() {
           );
         })}
       </div>
+      {d.screeners.length > 0 && (
+        <div style={{ display: "grid", gap: 4, marginTop: 8 }}>
+          <div className="small" style={{ fontWeight: 600 }}>
+            People doing screening
+          </div>
+          <div className="muted small">
+            Each should be screened, have accepted confidentiality and be
+            trained in screening.
+          </div>
+          {d.screeners.map((x) => (
+            <div key={x.userId} className="small">
+              {x.name}{" "}
+              <Chip tone={x.screened ? "ok" : "warn"}>
+                {x.screened ? "screened" : "not screened"}
+              </Chip>{" "}
+              <Chip tone={x.confidentiality ? "ok" : "warn"}>
+                {x.confidentiality ? "confidentiality accepted" : "confidentiality not accepted"}
+              </Chip>{" "}
+              <Chip tone={x.trained ? "ok" : "warn"}>
+                {x.trained ? "trained" : "no screening training"}
+              </Chip>
+            </div>
+          ))}
+        </div>
+      )}
       {works && (
         <div style={{ display: "grid", gap: 6, marginTop: 8 }}>
           <div className="small" style={{ fontWeight: 600 }}>

@@ -54,7 +54,7 @@ const ISO: Row[] = [
 
 // PIKM-KDN/SIRIM 1:2022 (draft), Code of practice for private security companies, Part 1: management. Received from
 // Fauzan on 8 Nov 2026 (published draft on pikm.my). Clause numbers are the code's; titles are our own one-line summaries,
-// not the code's text. Part 2 (security screening) is cited by the code but not received yet, so it stays a placeholder.
+// not the code's text.
 const PIKM: Row[] = [
   ['4.1', 'Follow the laws, regulations, directives and authority instructions that apply (the code lists them in Annex A)', 'Chief Executive Officer', 'Governance obligations; licences', 'CORPORATE', 'licences'],
   ['4.2', 'Top management sets policies and resources; licence kept valid, never rented out; branches opened only with approval', 'Chief Executive Officer', 'Licences; branches; company secretary', 'CORPORATE', 'licences'],
@@ -81,7 +81,16 @@ const PIKM: Row[] = [
   ['9.4', 'Site risk assessment before deployment (Annex D checklist), recorded and told to the officers', 'Operations Manager', 'Mobilisation: site survey and risk', 'ROSTER', 'none'],
   ['9.5.1', 'Assignment instructions agreed with the client, changes endorsed by both, a copy at the site, required contents, officers briefed', 'Company Manager', 'Assignment instructions (contract)', 'ROSTER', 'none'],
   ['10', 'Management effectiveness monitored, measured and evaluated, with an improvement action plan', 'Chief Executive Officer', 'Management review; Work KPIs', 'CORPORATE', 'act_findings'],
-  ['Part 2', 'Security screening of individuals (PIKM 2): text not received yet', 'HR Director', 'Screening case file', 'LICENSING', 'none'],
+  // PIKM-KDN 2 (2022 draft), Part 2: security screening of individuals employed in a private security agency. Received from
+  // Fauzan on 8 Nov 2026. Refs carry a "2:" prefix so they never clash with Part 1 clause numbers.
+  ['2:4', 'Selection: authority vetting and screening passed, good character and appearance, fit for the duties; nobody unsuitable employed; screeners honest', 'HR Director', 'Screening case file; medical', 'LICENSING', 'none'],
+  ['2:5.1', 'Everyone screened (staff, directors, shareholders) in the set order: application, interview, consent, background check, conditional offer, KDN vetting; failed vetting ends employment', 'HR Director', 'Screening case file', 'LICENSING', 'none'],
+  ['2:5.2', 'Screening records kept for everyone, confidential and protected from change; the process reviewed and updated', 'HR Director', 'Screening case file (HR wall)', 'LICENSING', 'none'],
+  ['2:5.3', 'Application form with the listed details, PDPA followed, written consent, identity confirmed by JPN biometrics, KDN screening applied, interview before any offer, conditional offer terms', 'HR Director', 'Screening case file; job applicants', 'LICENSING', 'none'],
+  ['2:5.4', 'Information verified with authorities, past employers and schools; written confirmations kept', 'HR Director', 'Screening case file (check references)', 'LICENSING', 'none'],
+  ['2:5.5-5.6', 'Screening procedure reviewed regularly; people in high-risk roles screened again', 'HR Director', 'Repeat screening (36 and 12 months)', 'LICENSING', 'none'],
+  ['2:6', 'Recruitment agencies used only for foreign security personnel, and they give evidence of meeting the authority rules', 'Foreign Worker Manager', 'Foreign workers (agents)', 'FWM', 'none'],
+  ['2:7', 'The screening officer is screened, signs a confidentiality agreement and is trained in screening', 'HR Director', 'Screening case file; confidentiality accept; training log', 'LICENSING', 'none'],
 ];
 
 const PROFILES: Record<PersonRole, CompItem[]> = {
@@ -114,17 +123,17 @@ const PROFILES: Record<PersonRole, CompItem[]> = {
 
 const ROLE_NAME: Record<PersonRole, string> = { guard: 'Guard', supervisor: 'Officer (stationed)', patrol_officer: 'Patrolling officer', office: 'Office staff' };
 
-/** The starter requirement list: ISO 9001:2015 and PIKM 1:2022 (draft) clauses with our own summaries; PIKM Part 2 stays a placeholder. */
+/** The starter requirement list: ISO 9001:2015 and PIKM Parts 1 and 2 (2022 drafts) clauses with our own summaries. */
 export function starterRequirements(by: { by: string; byId: string }, at: string): QmsRequirement[] {
   const rows = (std: 'ISO9001' | 'PIKM', list: Row[]) =>
     list.map(
       ([ref, title, ownerTitle, workflow, actArea, signal]): QmsRequirement => ({
         id: `qr-${std.toLowerCase()}-${ref.replace(/[^0-9a-z]+/gi, '-').toLowerCase()}`,
         standard: std,
-        edition: std === 'ISO9001' ? '2015' : '1:2022 draft',
+        edition: std === 'ISO9001' ? '2015' : ref.startsWith('2:') ? '2:2022 draft' : '1:2022 draft',
         ref,
         title,
-        placeholder: std === 'PIKM' && ref === 'Part 2',
+        placeholder: false,
         ownerTitle,
         workflow,
         actArea,

@@ -4896,6 +4896,8 @@ export interface FinStatus {
   stampDuty?: import('./finance-stamp').FinStampItem[];
   /** Daily cash pay lists: Finance lists, the FD approves, the COO or CEO pays (Fauzan, 2 Nov 2026). */
   dailyCash?: import('./finance-daily-cash').FinDailyCashList[];
+  arrivalCash?: import('./arrival-cash').ArrivalCash[];
+  exceptionalGuardCash?: import('./exceptional-guard-cash').ExceptionalGuardCash[];
   /** Intercompany month-end balances, kept on PWVSB's row for the whole group (Fauzan, 2 Nov 2026). */
   intercompany?: import('./finance-intercompany').FinIcEntry[];
   icExplained?: import('./finance-intercompany').FinIcExplain[];
@@ -6938,6 +6940,7 @@ export interface FinSst {
 export const FIN_PLAN_LINES = [
   'revenue',
   'guard_cost',
+  'misc_payroll',
   'staff_cost',
   'statutory',
   'premises',

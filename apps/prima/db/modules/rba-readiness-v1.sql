@@ -5,7 +5,7 @@
 --
 -- Three tenant tables behind the same company wall as every other company record:
 --   rba_trace_reviews    ACT's month trace of a worker sample (roster, clock, overtime, pay, bank); outcomes appended.
---   ethics_declarations  a person's yearly ethics declaration (company of the signer, PWVSB for central staff).
+--   ethics_declarations  a person's ethics declaration, signed once on entering service (company of the signer, PWVSB for central staff).
 --   rba_committees       the yearly RBA committee the Chief of Staff names (kept on PWVSB's record).
 BEGIN;
 DO $$

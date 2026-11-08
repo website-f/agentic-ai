@@ -1,3 +1,5 @@
+import { ArrivalCashService } from './arrival-cash';
+import { ExceptionalGuardCashService } from './exceptional-guard-cash';
 import { finBudgetInForce } from "./finance-plan3";
 import { finBudgetRevisionAction } from "./finance-plan3";
 import { finLeadAuthors } from "./finance-plan3";
@@ -1030,13 +1032,29 @@ export class FinanceControlsService {
    * The COO or CEO holding the cash: received, pay, give_back (the COO is not a Finance actor, so these go through
    * the company's row directly, for companies he can see).
    */
+  arrivalCashView(user: User, companyId: Id) { return new ArrivalCashService(this.store, () => this.now()).view(user, companyId); }
+  arrivalCashEvidence(user: User, companyId: Id, docId: Id) { return new ArrivalCashService(this.store, () => this.now()).evidence(user, companyId, docId); }
+  arrivalCashAction(user: User, companyId: Id, action: string, input: Record<string, unknown>) { return new ArrivalCashService(this.store, () => this.now()).action(user, companyId, action, input); }
+  exceptionalCashEvidence(user: User, companyId: Id, docId: Id) {
+    return new ExceptionalGuardCashService(this.store, this.desk, () => this.now()).evidence(user, companyId, docId);
+  }
+  exceptionalCashView(user: User, companyId: Id) {
+    return new ExceptionalGuardCashService(this.store, this.desk, () => this.now()).view(user, companyId);
+  }
+  exceptionalCashAction(user: User, companyId: Id, action: string, input: Record<string, unknown>) {
+    return new ExceptionalGuardCashService(this.store, this.desk, () => this.now()).action(user, companyId, action, input);
+  }
+
   async dailyCashAction(user: User, companyId: Id, action: string, input: Record<string, unknown>) {
+    if (!['receipt', 'giveBack', 'settle', 'acceptDifference', 'bank', 'cancel'].includes(action))
+      throw new BadRequest('Legacy daily cash is closed to new activity. DOA submits the manually OM-requested, CEO-approved guard list through exceptional cash.');
+
     // How each person is paid (Fauzan, 6 Nov 2026): the Director Office lists for cash, the COO or CEO decides, the COO
     // approves a consent letter. None of them is a Finance actor, so these go through the company's row directly.
     const outside: Record<string, [(u: User) => boolean, string]> = {
       listCash: [(u) => this.isDirectorOffice(u), '(only the Director Office lists people for cash)'],
       unlistCash: [(u) => this.isDirectorOffice(u), '(only the Director Office lists people for cash)'],
-      decideCash: [(u) => this.isCollector(u), '(only the COO or the CEO gives cash)'],
+      decideCash: [(u) => !u.integration && u.opsTier === 'ceo' && ['director','pwvsb_officer'].includes(u.role), '(only the CEO approves cash)'],
       approveConsent: [(u) => this.isConsentApprover(u), '(only the COO approves a consent letter)'],
     };
     if (action === 'receipt') return this.dailyCashReceipt(user, companyId, input);
@@ -1113,7 +1131,7 @@ export class FinanceControlsService {
       lists: who.collector ? rows.flatMap((f) => finDailyCashCollectorView(f, user, today).map((l) => ({ ...l, companyId: f.companyId }))) : [],
       collectors: [],
       /** People waiting for the Director Office, the COO or CEO, or the COO (Fauzan, 6 Nov 2026). */
-      decisions: rows.flatMap((f) => finDailyCashDecisions(f, user, who)),
+      decisions: [] as ReturnType<typeof finDailyCashDecisions>,
       /** Cash payments waiting for the Director Office to upload the signed receipt. */
       receipts: who.directorOffice ? rows.flatMap((f) => finDailyCashReceiptsDue(f)) : [],
     };

@@ -351,3 +351,38 @@ jobs:
             artifacts/fw-recruitment-cost
           retention-days: 14
           if-no-files-found: warn
+
+  exceptional_guard_cash_workbook:
+    # Local synthetic Excel preparation and DOA handover only; no providers or deployment.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -r scripts/cash-workbook-requirements.txt
+      - name: Test controlled workbook refresh, approval scope and conversion
+        run: python -m unittest discover -s scripts/tests -p test_cash_workbook.py -v
+      - run: npm ci
+      - run: npm run build -w @prima/core
+      - run: npm run build:demo -w @prima/web
+      - name: Install pinned synthetic browser tooling
+        run: |
+          npm install --prefix "$RUNNER_TEMP/prima-cash-browser" --no-save --package-lock=false --ignore-scripts playwright@1.56.1
+          node "$RUNNER_TEMP/prima-cash-browser/node_modules/playwright/cli.js" install --with-deps chromium
+      - name: Test Excel-to-DOA handover, payment evidence and site accounting at desktop and phone widths
+        env:
+          CI_SYNTHETIC_BROWSER: 'true'
+        run: |
+          export PLAYWRIGHT_MODULE="$RUNNER_TEMP/prima-cash-browser/node_modules/playwright/index.mjs"
+          export CASH_WORKBOOK_PYTHON="$(command -v python)"
+          node scripts/exceptional-guard-cash-browser.mjs
+          node scripts/arrival-cash-browser.mjs
+          node scripts/wage-cash-review-browser.mjs

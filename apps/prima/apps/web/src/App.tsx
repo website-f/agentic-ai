@@ -1,3 +1,4 @@
+import { ArrivalCashView } from './views/ArrivalCash';
 import { ItMetrics } from './views/ItMetrics';
 import { WorkKpiView } from './views/WorkKpi';
 import { CleanupReceiptRecovery } from './views/ItCleanup';
@@ -125,7 +126,7 @@ import { QualityView } from './views/Quality';
 
 
 
-export type ViewName = 'home' | 'overview' | 'company' | 'sites' | 'roster' | 'cleaning' | 'duty' | 'sitestock' | 'people' | 'attendance' | 'cases' | 'compliance' | 'commercial' | 'ops' | 'hr' | 'insurance' | 'arms' | 'cms' | 'cmsready' | 'audit' | 'device' | 'mine' | 'clock' | 'staffclock' | 'work' | 'branchwork' | 'socso' | 'fwm' | 'doa' | 'reports' | 'meetings' | 'hostels' | 'fwcost' | 'fwstat' | 'claims' | 'memos' | 'pdpa' | 'fleet' | 'clients' | 'office' | 'requests' | 'payreq' | 'ja' | 'jaswitch' | 'assets' | 'staffpay' | 'guardpay' | 'advances' | 'statutory' | 'loans' | 'finance' | 'contracts' | 'branches' | 'it' | 'it-metrics' | 'work-kpi' | 'it-procurement' | 'hr-it-intake' | 'staff-directory' | 'websites' | 'corporate' | 'renewals' | 'credit' | 'purchasing' | 'items' | 'governance' | 'grc' | 'registers' | 'act' | 'payformulas' | 'sitehours' | 'salarycalc' | 'continuity' | 'connections' | 'it-extraction' | 'surveys' | 'handovers' | 'quality' | 'selfaudit' | 'rba';
+export type ViewName = 'home' | 'overview' | 'company' | 'sites' | 'roster' | 'cleaning' | 'duty' | 'sitestock' | 'people' | 'attendance' | 'cases' | 'compliance' | 'commercial' | 'ops' | 'hr' | 'insurance' | 'arms' | 'cms' | 'cmsready' | 'audit' | 'device' | 'mine' | 'clock' | 'staffclock' | 'work' | 'branchwork' | 'socso' | 'fwm' | 'doa' | 'reports' | 'meetings' | 'hostels' | 'fwcost' | 'fwstat' | 'claims' | 'memos' | 'pdpa' | 'fleet' | 'clients' | 'office' | 'requests' | 'payreq' | 'ja' | 'jaswitch' | 'assets' | 'staffpay' | 'guardpay' | 'advances' | 'statutory' | 'arrivalcash' | 'loans' | 'finance' | 'contracts' | 'branches' | 'it' | 'it-metrics' | 'work-kpi' | 'it-procurement' | 'hr-it-intake' | 'staff-directory' | 'websites' | 'corporate' | 'renewals' | 'credit' | 'purchasing' | 'items' | 'governance' | 'grc' | 'registers' | 'act' | 'payformulas' | 'sitehours' | 'salarycalc' | 'continuity' | 'connections' | 'it-extraction' | 'surveys' | 'handovers' | 'quality' | 'selfaudit' | 'rba';
 
 export interface Route {
   view: ViewName;
@@ -160,7 +161,7 @@ const inOffice = (api as { office?: boolean }).office === true;
 const NAV_GROUPS: { title: string; views: ViewName[] }[] = [
   { title: 'Today', views: ['home', 'overview', 'company', 'office', 'work', 'mine', 'clock', 'staffclock', 'doa', 'reports', 'meetings'] },
   { title: 'Operations', views: ['sites', 'roster', 'people', 'attendance', 'cases', 'ops', 'device', 'branchwork', 'duty', 'cleaning', 'sitestock', 'surveys', 'fleet', 'arms', 'cms', 'cmsready', 'sitehours', 'items'] },
-  { title: 'People and HR', views: ['hr', 'claims', 'staffpay', 'guardpay', 'advances', 'loans', 'payformulas', 'salarycalc', 'statutory', 'work-kpi', 'staff-directory', 'fwm', 'fwcost', 'fwstat', 'socso', 'hostels', 'requests', 'handovers', 'memos', 'pdpa'] },
+  { title: 'People and HR', views: ['hr', 'claims', 'staffpay', 'guardpay', 'advances', 'arrivalcash', 'loans', 'payformulas', 'salarycalc', 'statutory', 'work-kpi', 'staff-directory', 'fwm', 'fwcost', 'fwstat', 'socso', 'hostels', 'requests', 'handovers', 'memos', 'pdpa'] },
   { title: 'Business and finance', views: ['commercial', 'clients', 'contracts', 'finance', 'credit', 'purchasing', 'payreq', 'branches', 'assets', 'insurance', 'ja', 'jaswitch'] },
   { title: 'Compliance and governance', views: ['compliance', 'renewals', 'audit', 'selfaudit', 'rba', 'quality', 'grc', 'act', 'registers', 'governance', 'corporate', 'continuity'] },
   { title: 'IT and systems', views: ['it', 'it-procurement', 'it-metrics', 'hr-it-intake', 'websites', 'connections', 'it-extraction'] },
@@ -198,7 +199,7 @@ const NAV: { view: ViewName; label: string; icon: string; roles: User['role'][];
   { view: 'compliance', label: 'Licences', icon: 'compliance', roles: ['director', 'pwvsb_officer', 'company_manager', 'admin_exec'] },
   // Yearly self-audit (Fauzan, 6 Nov 2026): the company does it every year; ACT and group leadership watch.
   { view: 'selfaudit', label: 'Yearly self-audit', icon: 'compliance', roles: ['director', 'pwvsb_officer', 'company_manager', 'admin_exec'] },
-  // RBA readiness (Fauzan, 8 Nov 2026): every office sign-in signs the yearly ethics declaration here; the rest is by role.
+  // RBA readiness (Fauzan, 8 Nov 2026): every office sign-in signs the ethics declaration once on entering service here; the rest is by role.
   { view: 'rba', label: 'RBA readiness', icon: 'compliance', roles: ['director', 'pwvsb_officer', 'company_manager', 'admin_exec'] },
   { view: 'commercial', label: 'Tenders & quotes', icon: 'tender', roles: ['director', 'pwvsb_officer', 'company_manager', 'admin_exec'] },
   { view: 'ops', label: 'Regional ops', icon: 'sites', roles: ['director', 'pwvsb_officer'], depts: ['operations'] },
@@ -359,6 +360,7 @@ const NAV: { view: ViewName; label: string; icon: string; roles: User['role'][];
   // Statutory rates (Fauzan, 6 Nov 2026): the CEO sets EPF, SOCSO and the rest by month; HR, Finance and ACT see them.
   { view: 'statutory', label: 'Statutory rates', icon: 'audit', roles: ['director', 'pwvsb_officer'] },
   // Advance and loan scheme (Fauzan, 6 Nov 2026): HR records, the Chief of Staff then the CEO approve, Finance pays out and watches.
+  { view: 'arrivalcash', label: 'Arrival cash', icon: 'audit', roles: ['director', 'pwvsb_officer'] },
   { view: 'loans', label: 'Advances and loans', icon: 'audit', roles: ['director', 'pwvsb_officer'] },
   { view: 'memos', label: 'Memos', icon: 'compliance', roles: ['guard', 'supervisor', 'director', 'pwvsb_officer', 'company_manager', 'admin_exec'] },
 { view: 'handovers', label: 'Hand-overs', icon: 'group', roles: ['director', 'pwvsb_officer', 'company_manager', 'admin_exec'] },
@@ -448,6 +450,7 @@ const VIEW_TOKENS: ViewName[] = [
   'guardpay',
   'advances',
   'statutory',
+  'arrivalcash',
   'loans',
   'finance',
   'contracts',
@@ -778,6 +781,7 @@ function Shell({ me, onSignOut, onReset }: { me: Me; onSignOut: () => void; onRe
       'salarycalc',
       'advances',
   'statutory',
+  'arrivalcash',
   'loans',
       'cases',
       'fwm',
@@ -787,18 +791,18 @@ function Shell({ me, onSignOut, onReset }: { me: Me; onSignOut: () => void; onRe
       'clock',
       'surveys', 'quality'
     ],
-    hr: ['hr', 'ja', 'people', 'socso', 'staffclock', 'hostels', 'claims', 'staffpay', 'sitehours', 'guardpay', 'advances', 'loans', 'statutory', 'items', 'reports', 'meetings', 'clock', 'quality'],
+    hr: ['hr', 'ja', 'people', 'socso', 'staffclock', 'hostels', 'claims', 'staffpay', 'sitehours', 'guardpay', 'advances', 'arrivalcash', 'loans', 'statutory', 'items', 'reports', 'meetings', 'clock', 'quality'],
     // Arms Control sees arms matters only (Fauzan, 25 Oct 2026).
     arms_control: ['arms', 'cms', 'cases', 'audit', 'reports', 'meetings', 'clock', 'cmsready'],
     cms: ['cms', 'ja', 'arms', 'fleet', 'clock', 'cmsready'],
     director_office: ['doa', 'commercial', 'guardpay', 'reports', 'meetings', 'clock'],
     chief_of_staff: ['requests', 'claims', 'staffpay', 'insurance', 'reports', 'meetings', 'clock'],
     // FWM: foreign workers, their movements and hostels only, no tenders or other modules (Fauzan, 26 Oct 2026).
-    fwm: ['fwm', 'fwcost', 'fwstat', 'ja', 'hostels', 'people', 'reports', 'meetings', 'clock'],
+    fwm: ['arrivalcash', 'fwm', 'fwcost', 'fwstat', 'ja', 'hostels', 'people', 'reports', 'meetings', 'clock'],
     pdpa: ['pdpa', 'fleet', 'reports', 'meetings', 'clock'],
     transport: ['fleet', 'reports', 'meetings', 'clock'],
     asset: ['assets', 'reports', 'meetings', 'clock'],
-    finance: ['finance', 'staffpay', 'guardpay', 'advances', 'loans', 'statutory', 'assets', 'credit', 'purchasing', 'items', 'websites', 'reports', 'meetings', 'clock', 'fwcost', 'fwstat'],
+    finance: ['finance', 'staffpay', 'guardpay', 'advances', 'arrivalcash', 'loans', 'statutory', 'assets', 'credit', 'purchasing', 'items', 'websites', 'reports', 'meetings', 'clock', 'fwcost', 'fwstat'],
     it: ['it', 'items', 'websites', 'connections', 'continuity', 'reports', 'meetings', 'clock'],
     legal: ['credit', 'governance', 'corporate', 'reports', 'meetings', 'clock', 'registers'],
     audit: ['act', 'payformulas', 'statutory', 'sitehours', 'salarycalc', 'grc', 'audit', 'selfaudit', 'items', 'websites', 'reports', 'meetings', 'clock', 'renewals', 'cleaning', 'registers', 'quality'],
@@ -863,6 +867,7 @@ function Shell({ me, onSignOut, onReset }: { me: Me; onSignOut: () => void; onRe
       // Guard pay: HR, Finance teams, group leadership (the COO approves) and the company manager for their own company.
       (n.view !== 'guardpay' || leader || dept === 'hr' || dept === 'director_office' || (dept === 'finance' && me.user.financeTeam != null) || role === 'company_manager') &&
       // Advances: the OM, the Operations Director and OGM, HR, Finance teams and group leadership.
+      (n.view !== 'arrivalcash' || me.user.opsTier === 'ceo' || dept === 'finance' || (dept === 'fwm' && me.user.fwmRole === 'manager')) &&
       (n.view !== 'loans' || leader || dept === 'hr' || (dept === 'finance' && me.user.financeTeam != null) || ['coo', 'ceo'].includes(me.user.opsTier ?? '')) &&
       (n.view !== 'statutory' || leader || dept === 'hr' || dept === 'audit' || (dept === 'finance' && me.user.financeTeam != null) || ['coo', 'ceo'].includes(me.user.opsTier ?? '')) &&
       (n.view !== 'advances' || leader || dept === 'hr' || (dept === 'finance' && me.user.financeTeam != null) || ['om', 'regional', 'ogm', 'ops_director', 'coo', 'ceo'].includes(me.user.opsTier ?? '')) &&
@@ -1061,6 +1066,8 @@ function Shell({ me, onSignOut, onReset }: { me: Me; onSignOut: () => void; onRe
         return <GuardPayView />;
       case 'advances':
         return <GuardAdvancesView />;
+      case 'arrivalcash':
+        return <ArrivalCashView />;
       case 'loans':
         return <GuardLoansView />;
       case 'statutory':
@@ -1170,6 +1177,7 @@ function Shell({ me, onSignOut, onReset }: { me: Me; onSignOut: () => void; onRe
     'guardpay',
     'advances',
   'statutory',
+  'arrivalcash',
   'loans',
     'finance',
     'contracts',

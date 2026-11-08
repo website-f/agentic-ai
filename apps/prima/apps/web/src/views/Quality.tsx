@@ -112,7 +112,7 @@ export function QualityView() {
           their normal work once; Prima links it here. Prima never says a company is compliant: a person checks the evidence.
         </p>
         <p className="notice" data-tone="info">
-          Test data. PIKM rows follow the 2022 draft code; Part 2 waits for its text. Review and refresher periods approved by the CEO, 8 Nov 2026.
+          Test data. PIKM rows follow the 2022 drafts of Parts 1 and 2. Review and refresher periods approved by the CEO, 8 Nov 2026.
         </p>
       </div>
       {companies.length > 1 && tab !== 'foundation' && tab !== 'suppliers' && tab !== 'objectives' && tab !== 'documents' && tab !== 'review' && (

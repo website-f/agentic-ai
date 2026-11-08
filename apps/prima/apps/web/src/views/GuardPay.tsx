@@ -500,7 +500,7 @@ function RunBody({
             ))}
             {can.cashFile && (
               <button className="btn btn-sm" disabled={act.busy} onClick={() => download("cash")}>
-                Cash list (COO or CEO gives)
+                Cash list (CEO approval)
               </button>
             )}
           </div>
@@ -508,7 +508,7 @@ function RunBody({
       )}
       {!can.export && can.cashFile && (
         <button className="btn btn-sm" disabled={act.busy} onClick={() => download("cash")}>
-          Cash list (COO or CEO gives)
+          Cash list (CEO approval)
         </button>
       )}
       <section className="panel">
@@ -808,6 +808,7 @@ export function GuardPayslip({
         {l.utility > 0 && row("Hostel utility (approved)", l.utility, undefined, true)}
         {l.items.filter((x) => x.kind === "extra" && x.amount < 0).map((x) => row(x.label, -x.amount, "one-off deduction", true))}
         {l.items.filter((x) => x.kind === "advance").map((x) => row(x.label, -x.amount, "advance taken back", true))}
+        {l.items.filter((x) => x.kind === "arrival").map((x) => row(x.label, -x.amount, "arrival advance recovery under reviewed cap", true))}
         {l.items.filter((x) => x.kind === "loan").map((x) => row(x.label, -x.amount, "repayment (within 50% of wages)", true))}
         <div className="list-item" style={{ fontWeight: 700 }}>
           <span>Net pay</span>
@@ -874,7 +875,7 @@ function PayOut({ data, onChanged }: { data: GuardPayRunView; onChanged: () => v
   const act = useAction();
   const [reason, setReason] = useState<Record<string, string>>({});
   const cash = run.cash ?? [];
-  const go = async (personId: string, action: "list" | "unlist" | "decide", give?: boolean) => {
+  const go = async (personId: string, action: "list" | "unlist" | "supersede" | "decide", give?: boolean) => {
     if (await act.run(() => api.guardPayCash(run.id, personId, action, { reason: reason[personId] ?? "", give }), action === "decide" ? "Decision recorded." : "Cash list updated.")) {
       setReason((r) => ({ ...r, [personId]: "" }));
       onChanged();
@@ -897,12 +898,11 @@ function PayOut({ data, onChanged }: { data: GuardPayRunView; onChanged: () => v
         <span className="muted small">Due by {dateLabel(data.payBy)} (EA s.19)</span>
       </div>
       <p className="small">
-        Bank: {pay.bank.count} guards, {rm(pay.bank.net)} · E-wallet: {pay.ewallet.count}, {rm(pay.ewallet.net)} · Cash given by the COO or CEO:{" "}
+        Bank: {pay.bank.count} guards, {rm(pay.bank.net)} · E-wallet: {pay.ewallet.count}, {rm(pay.ewallet.net)} · Wage cash:{" "}
         {pay.cash.count}, {rm(pay.cash.net)}
       </p>
       <p className="muted small">
-        Wages go to a bank account or e-wallet only. Someone else's account needs the guard's written consent, recorded by HR. Cash only when the
-        Director Office lists the guard and the COO or the CEO gives it.
+        Wages use a verified bank account or e-wallet, or the Director Office lists the named wage amount for CEO approval. Only the CEO approves wage cash; the CEO or COO hands it over and Director Office uploads the genuine receipt. Additional DOA support is separate and never deducted from ordinary wages.
       </p>
       {pay.unpayable.length > 0 && (
         <div className="list">
@@ -973,13 +973,28 @@ function PayOut({ data, onChanged }: { data: GuardPayRunView; onChanged: () => v
                     Take off the list
                   </button>
                 )}
-                {!c.decision && !can.decideCash && <Chip tone="warn">Waiting for the COO or CEO</Chip>}
+                {!c.decision && !can.decideCash && <Chip tone="warn">Waiting for the CEO</Chip>}
+                {can.listCash && !run.paid && !c.handedOut && !c.receipt && (c.decision || c.amount !== run.lines.find(l => l.personId === c.personId)?.net || c.approvedSiteId !== run.lines.find(l => l.personId === c.personId)?.mainSiteId || c.approvalVersion !== 2) && (
+                  <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
+                    {field(c.personId, "Reason for replacing unpaid cash listing")}
+                    <button className="btn btn-sm" disabled={act.busy || (reason[c.personId] ?? "").trim().length < 5} onClick={() => go(c.personId, "supersede")}>
+                      Replace and request fresh CEO approval
+                    </button>
+                  </div>
+                )}
                 {c.decision?.give && <CashHandOut runId={run.id} c={c} canHandOut={can.handOutCash} canUpload={can.uploadReceipt} onChanged={onChanged} />}
               </div>
             ))}
           </div>
         </>
       )}
+      {!!run.cashHistory?.length && <details>
+        <summary>Previous unpaid cash listings ({run.cashHistory.length})</summary>
+        {run.cashHistory.map((h, i) => <p className="small" key={i}>
+          {h.entry.staffNo} · {rm(h.entry.amount ?? 0)} · {h.entry.siteName || 'No site'} · {h.entry.decision ? `${h.entry.decision.give ? 'Approved' : 'Refused'} by ${h.entry.decision.by}: ${h.entry.decision.note}` : 'Undecided'}.
+          {' '}Replaced by {h.superseded.by} at {h.superseded.at}: {h.superseded.note}
+        </p>)}
+      </details>}
       <ErrorNotice error={act.error} />
     </section>
   );
@@ -1002,6 +1017,7 @@ function CashHandOut({
   const act = useAction();
   const [on, setOn] = useState(new Date(Date.now() + 8 * 3_600_000).toISOString().slice(0, 10));
   const [proof, setProof] = useState<ProofInput[]>([]);
+  const [genuine, setGenuine] = useState(false);
   return (
     <div style={{ width: "100%" }}>
       {c.handedOut ? (
@@ -1030,12 +1046,13 @@ function CashHandOut({
         </div>
       ) : c.handedOut && canUpload ? (
         <div>
+          <label><input type="checkbox" checked={genuine} onChange={e=>setGenuine(e.target.checked)} /> Genuine acknowledgement supplied for this worker, wage month and amount; no stored signature pasted.</label>
           <ProofPicker site={null} refText={`Cash receipt ${c.staffNo}`} items={proof} onChange={setProof} documentsOnly required />
           <button
             className="btn btn-sm"
-            disabled={act.busy || proof.length !== 1}
+            disabled={act.busy || proof.length !== 1 || !genuine}
             onClick={async () => {
-              if (await act.run(() => api.guardPayCash(runId, c.personId, "receipt", { proof }), "Signed receipt uploaded.")) {
+              if (await act.run(() => api.guardPayCash(runId, c.personId, "receipt", { proof, transactionSpecific: genuine, signedByPersonId: c.personId, amount: c.amount }), "Signed receipt uploaded.")) {
                 setProof([]);
                 onChanged();
               }
@@ -1065,7 +1082,7 @@ function ConsentEdit({ line, onChanged }: { line: GuardPayLine; onChanged: () =>
   const [commissioner, setCommissioner] = useState(b?.consent?.oaths?.commissioner ?? "");
   const [stampRef, setStampRef] = useState(b?.consent?.oaths?.stampRef ?? "");
   const [stampedOn, setStampedOn] = useState(b?.consent?.oaths?.stampedOn ?? "");
-  if (!b) return <div className="muted small">No account on record: add it from the guard's file, or the Director Office lists the guard for cash.</div>;
+  if (!b) return <div className="muted small">No account on record: add a verified payment account or ask Director Office to list the named wage amount for CEO cash approval.</div>;
   const other = holder === "relative" || holder === "friend";
   return (
     <details>
@@ -1627,7 +1644,7 @@ export function GuardLoansView() {
           Each advance or loan has a limit, a purpose, a repayment period and the worker's signed agreement. HR records it, the Chief of Staff
           approves, then the CEO. Finance is told at each step, pays it out and watches what is owed. The guard pay run takes repayments only from
           these records, and all deductions together stay within half the month's wages (EA s.24(8)). The wage advance on the 20th is on its own
-          screen.
+          screen. Exceptional guard cash support is additional pay, never a repayable loan or a wage deduction; use the separate manually approved DOA handover for that support.
         </p>
       </div>
       {!data.primaPays && (

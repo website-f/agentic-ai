@@ -150,6 +150,7 @@ function Body({
                 <th>Site</th>
                 <th className="num">Income</th>
                 <th className="num hide-sm">Guard pay</th>
+                <th className="num">Salary cost – cash payment</th>
                 <th className="num hide-sm">EPF, SOCSO, EIS, levy</th>
                 <th className="num hide-sm">Hostel</th>
                 <th className="num hide-sm">Goodwill items</th>
@@ -179,6 +180,7 @@ function Body({
                     {x.revenueBasis ? <div className="muted small">{x.revenueBasis === 'invoice' ? 'invoiced' : 'contract value'}</div> : null}
                   </td>
                   <td className="num hide-sm">{rm(x.guardCost)}</td>
+                  <td className="num">{rm(x.cashPayroll)}{x.cashPayrollPending > 0 && <div className="muted small">{rm(x.cashPayrollPending)} awaiting accounting</div>}<div className="muted small">{x.cashPayrollTrace.map(r => `${r.id}: ${r.journalRef}`).join("; ")}</div></td>
                   <td className="num hide-sm">{rm(x.statutory)}</td>
                   <td className="num hide-sm">{rm(x.hostel)}</td>
                   <td className="num hide-sm">{rm(x.itemCharges)}</td>

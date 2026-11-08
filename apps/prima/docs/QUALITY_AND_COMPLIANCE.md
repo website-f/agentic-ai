@@ -21,19 +21,21 @@ This first package holds the pieces both standards share: the register, the QMS 
 | Group leaders | View only, every company they hold grants for. |
 | Guards, officers, admin executives, other staff | Do not see the register. |
 
-States per requirement and company: Waiting for the code text (PIKM Part 2 only), Does not apply, Gap being fixed,
+States per requirement and company: Waiting for the code text (only rows ACT adds without a source), Does not apply, Gap being fixed,
 **Unknown: no evidence**, Evidence not checked yet, Review due, **Evidence checked**. There is no "compliant" state.
 
 - Each requirement carries its standard and edition. ISO rows are clause numbers and headings with our own one-line
   summaries; the standard's text is not copied into Prima.
-- **PIKM rows follow PIKM-KDN/SIRIM 1:2022 draft, Part 1** (private security company management), received from
-  Fauzan on 8 Nov 2026. Rows are clause numbers with our own one-line summaries; the code is copyright PIKM/SIRIM and its
-  text is not copied into Prima. Part 2 (screening) has not been received, so its single row stays a placeholder. A
-  placeholder cannot be marked checked. When ACT replaces it, it must say which page or section of the code it checked
-  against; that note stays in the history. When the final (non-draft) code is published, ACT re-checks the rows.
+- **PIKM rows follow the 2022 drafts of PIKM-KDN/SIRIM Part 1** (private security company management) **and Part 2**
+  (security screening of individuals), both received from Fauzan on 8 Nov 2026. Part 2 refs carry a `2:` prefix
+  (for example `2:5.1`) so they never clash with Part 1 clause numbers, and each row keeps its own part and edition.
+  Rows are clause numbers with our own one-line summaries; the code is copyright PIKM/SIRIM and its text is not copied
+  into Prima. A PIKM row ACT adds without naming its source stays a placeholder and cannot be marked checked until ACT
+  says which page or section it checked against; that note stays in the history. When the final (non-draft) code is
+  published, ACT re-checks the rows.
 - "Prima figures" evidence (competency matrix coverage, open ACT findings, company licences) is filled in by the server
   at that moment, never typed, and still needs an ACT check. A saved link is not proof that the content was checked.
-- A fresh install starts empty. ACT presses **Load starter list** once (31 ISO rows, 25 PIKM Part 1 rows and 1 Part 2 placeholder); rows already
+- A fresh install starts empty. ACT presses **Load starter list** once (31 ISO rows, 25 PIKM Part 1 rows and 8 Part 2 rows); rows already
   there are left alone.
 
 ## 2. QMS foundation (Central Admin and ACT)
@@ -130,7 +132,35 @@ Gaps and owner questions:
 8. **8.1, training policy authorised by top management.** Can use the controlled documents list with CEO approval.
 9. **9.3, client information pack on request** (licence, company registration, membership, insurance). Not prepared as
    one pack.
-10. **Part 2 (screening)** text not received.
+10. **Part 2 (screening)**: received 8 Nov 2026; see the Part 2 gap list below.
+
+## PIKM Part 2 gap list (8 Nov 2026, screening, against the 2022 draft)
+
+Compared with the screening case file (`docs/HR_SCREENING_AND_CONDUCT.md`). Already covered: a case for every guard,
+officer, office staff member, director and shareholder; written consent; interview; references; medical for field
+staff; a reference kept for each check; HR Director decides, never the person who opened the case; "cleared to start,
+KDN vetting pending" as the conditional offer; records behind the HR wall with history; repeat screening (36 and 12
+months); the register review (2:5.5).
+
+Fauzan chose "Yes, update all" on 8 Nov 2026. Built on this PR:
+
+1. **2:5.1, vetting result.** For someone cleared to start while KDN vetting is pending, HR records the final KDN
+   result with its reference. A pass makes the decision "cleared". A fail (with what KDN said) makes it "not cleared",
+   stops repeat screening and puts "end the employment now" on HR's and the HR Director's home until HR records how and
+   when it ended (the leaving steps themselves stay in HR; Prima does not end anyone's employment).
+2. **2:5.1 and 2:5.3, KDN screening for everyone.** Office staff now need KDN vetting and a police check; directors and
+   shareholders also need an application form, an interview and KDN vetting. Office staff may start on a conditional
+   offer while KDN vetting is pending (2:5.3.10), like guards; directors and shareholders may not (Figure 3: vetting
+   before appointment).
+3. **2:5.3.4, identity.** The check now reads "Identity confirmed with JPN biometrics (passport and immigration for
+   non-citizens)".
+4. **2:5.3.7, directors.** The search now reads "Bankruptcy and court judgment searches (MDI, courts)".
+5. **2:7, the screening officer.** The screening screen lists everyone who has worked a case, showing whether they have
+   been screened (a decided case on their own record), accepted the confidentiality rule and have a screening course
+   in the training log. It does not block their work.
+
+Still outside Prima: the conditional offer letter wording (2:5.3.12), each recruitment agent's evidence (2:6, FWM) and
+the Annex B application form fields (HR's form).
 
 ## Where the other pieces are
 
@@ -153,4 +183,4 @@ Gaps and owner questions:
 - Browser: demo build walk-through at 1280 and 390 px as ACT, company manager, stationed officer, HR Director, CEO
   (agrees the policy) and a guard (no menu entry). Mock data only.
 - 8 Nov 2026 PIKM rows: core quality tests 27 passed, full core 2187 passed, PostgreSQL quality tests 9 passed.
-- Not done: staff UAT, migration, deployment, PIKM Part 2 text.
+- Not done: staff UAT, migration, deployment.

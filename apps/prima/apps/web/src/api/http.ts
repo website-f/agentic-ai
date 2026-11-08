@@ -530,7 +530,7 @@ export class HttpApi implements Api {
   screening() {
     return this.call<Awaited<ReturnType<Api['screening']>>>('GET', '/hr/screening');
   }
-  screeningAct(action: 'open' | 'check' | 'decide' | 'withdraw', body: Record<string, unknown>) {
+  screeningAct(action: 'open' | 'check' | 'decide' | 'withdraw' | 'vettingResult' | 'employmentEnded', body: Record<string, unknown>) {
     return this.call('POST', `/hr/screening/${action}`, body);
   }
   screeningRepeat(id: string) {
@@ -1743,6 +1743,14 @@ export class HttpApi implements Api {
   }
   setFinPack(companyId: string, pack: FinPackKind, itemId: string, status: 'todo' | 'prepared' | 'reviewed' | 'sent', comment?: string) {
     return this.call<unknown>('POST', `/finance/${encodeURIComponent(companyId)}/${pack}/${encodeURIComponent(itemId)}`, { status, comment });
+  }
+  finExceptionalCashEvidence(companyId: string, docId: string) {
+    return this.call<Awaited<ReturnType<Api['finExceptionalCashEvidence']>>>('GET', `/finance/exceptionalcash/${encodeURIComponent(companyId)}/evidence/${encodeURIComponent(docId)}`);
+  }
+  finArrivalCashEvidence(companyId: string, docId: string) { return this.call<Awaited<ReturnType<Api['finArrivalCashEvidence']>>>('GET', `/finance/arrivalcash/${encodeURIComponent(companyId)}/evidence/${encodeURIComponent(docId)}`); }
+  finArrivalCash(companyId: string) { return this.call<Awaited<ReturnType<Api['finArrivalCash']>>>('GET', `/finance/arrivalcash/${encodeURIComponent(companyId)}`); }
+  finExceptionalCash(companyId: string) {
+    return this.call<Awaited<ReturnType<Api['finExceptionalCash']>>>('GET', `/finance/exceptionalcash/${encodeURIComponent(companyId)}`);
   }
   finDailyCashMine() {
     return this.call<Awaited<ReturnType<Api['finDailyCashMine']>>>('GET', '/finance/dailycash/mine');

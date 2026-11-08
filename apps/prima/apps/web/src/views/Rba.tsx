@@ -5,7 +5,7 @@ import { Chip, ErrorNotice, Kpi, Loading, useAction, useLoad, type Tone } from '
 /**
  * RBA readiness (Fauzan, 8 Nov 2026, after the RBA Code v8.0 checklist review): the monthly dashboard, red items that
  * go to ACT, the Chief of Staff and the COO the same day, the OM's monthly site safety check, the yearly committee the
- * CoS names, ACT's trace review, the worker master file and the yearly ethics declaration. Discipline appeals are the
+ * CoS names, ACT's trace review, the worker master file and the ethics declaration staff sign once on entering service. Discipline appeals are the
  * HR appeal step (HR-APPEAL, IWAY). Prima keeps the
  * records; it is not an RBA certificate, and nothing is shown green until there is something to count.
  */
@@ -32,7 +32,7 @@ export function RbaView() {
   const [companyId, setCompanyId] = useState<string | null>(null);
   const [tab, setTab] = useState<Tab>('dashboard');
   const board = useLoad(() => api.rbaBoard(companyId), [companyId]);
-  // Everyone in the office signs the yearly ethics declaration, even without an RBA role.
+  // Everyone in the office signs the ethics declaration once on entering service, even without an RBA role.
   if (board.error)
     return (
       <div className="page">
@@ -185,7 +185,7 @@ function Committee({ b }: { b: RbaBoard }) {
         )}
       </div>
       <span className="muted small" style={{ padding: '0 12px' }}>
-        The Operations Director and a few company heads; the Chief of Staff chooses the members every year (Fauzan, 7 Nov 2026). Each company head sees their own company here; the Operations Director sees every company.
+        The Operations Director and a few company heads; the Chief of Staff chooses up to 6 members every year (Fauzan, 7 and 8 Nov 2026). Each company head sees their own company here; the Operations Director sees every company.
       </span>
       <ErrorNotice error={act.error} />
       {!edit && (
@@ -408,7 +408,7 @@ function EthicsTab({ companyId }: { companyId: string | null }) {
     <>
       <section className="panel">
         <div className="panel-head">
-          <h3>My {e.year} ethics declaration</h3>
+          <h3>My ethics declaration</h3>
         </div>
         <ErrorNotice error={act.error} />
         {e.mine ? (
@@ -446,7 +446,7 @@ function EthicsTab({ companyId }: { companyId: string | null }) {
         <section className="panel">
           <div className="panel-head">
             <h3>
-              {e.year}: {e.list.signed.length} signed, {e.list.missing.length} not yet
+              {e.list.signed.length} signed, {e.list.missing.length} not yet
             </h3>
           </div>
           <div className="list">

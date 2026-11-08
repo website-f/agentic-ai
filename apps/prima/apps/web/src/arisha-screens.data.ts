@@ -5400,6 +5400,72 @@ export const SCREEN_GUIDES: ScreenGuide[] = [
     "notes": "Only the CEO sees the change form. If the page says it is not switched on, pay uses the law as at November 2026. After a change, any draft pay month should be recalculated. The day divisor and other pay law settings are on the Pay formulas screen."
   },
   {
+    "view": "arrivalcash",
+    "title": "Arrival cash",
+    "what": "Cash help for newly arrived foreign workers who are waiting for their PLKS and have no wages yet. FWM asks for each amount, the CEO decides, and the amount is recovered from wages later.",
+    "who": "The CEO, Finance and the FWM manager. FWM records the requests and handovers, the CEO approves or refuses each request, and Finance does the finance and legal review.",
+    "tabs": [],
+    "tasks": [
+      {
+        "task": "How to ask for arrival cash for a worker (FWM)",
+        "steps": [
+          "Pick the company at the top of the page.",
+          "In \"New arrival request\", choose the \"Worker\" and the \"Site\".",
+          "Fill in \"Actual arrival date\", \"FWM recovery months\", \"Unique request reference\", \"Amount (RM)\" and \"Purpose\".",
+          "Tick the box that says you checked recent arrival, awaiting PLKS and no wages.",
+          "Press \"Submit request\". Finance can see it, but nothing is owed yet."
+        ]
+      },
+      {
+        "task": "How to decide a request (CEO)",
+        "steps": [
+          "Open the worker's card and find the request that says \"Awaiting CEO decision\".",
+          "Write the \"Decision reason\".",
+          "Press \"Approve\" or refuse it."
+        ]
+      },
+      {
+        "task": "How to record that the cash was handed over (FWM)",
+        "steps": [
+          "On an approved request, fill in \"Actual handover date\" and \"Payment reference\".",
+          "Attach the evidence in \"Evidence (genuine receipt or review)\" and tick that you verified it for this exact transaction.",
+          "Save the handover. Only a real handover makes an amount owed."
+        ]
+      },
+      {
+        "task": "How to attach the signed receipt later",
+        "steps": [
+          "Find the request that says the receipt is pending.",
+          "Choose the scan or photo in \"Evidence (genuine receipt or review)\" and tick the check box.",
+          "Press the button to attach the genuine signed receipt. Recovery from wages stays on hold until it is attached."
+        ]
+      },
+      {
+        "task": "How Finance records the review (Finance)",
+        "steps": [
+          "Open the worker's card where \"Finance/legal review\" is shown.",
+          "Fill in \"Reviewed cap percentage\", \"Effective month\" and the expiry month, and attach the review evidence.",
+          "Save. The card then shows \"Review recorded\"."
+        ]
+      }
+    ],
+    "terms": [
+      {
+        "term": "PLKS",
+        "means": "The foreign worker's work permit (Pas Lawatan Kerja Sementara)."
+      },
+      {
+        "term": "Recovery months",
+        "means": "How many wage months the amount is taken back over, starting in the first wage month."
+      },
+      {
+        "term": "Reviewed cap",
+        "means": "The most that may be taken from one month's wages, as Finance and legal reviewed it."
+      }
+    ],
+    "notes": "Only the CEO, Finance and the FWM manager see this page. A request is only a request: nothing is owed until the cash is really handed over. A missing signed receipt keeps the amount pending and holds recovery. No bank account is needed. The handover button stays off until the Finance/legal review is recorded. Other guard cash help (\"Exceptional guard cash\") is on the Director Office and Finance pages."
+  },
+  {
     "view": "loans",
     "title": "Advances and loans",
     "what": "The advance and loan scheme for guards. Each has a limit, a purpose, a repayment period and the worker's signed agreement. The wage advance on the 20th is on its own screen.",

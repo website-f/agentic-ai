@@ -56,8 +56,8 @@ describe('Finance guide cards', () => {
     expect(p.status).toBe('prepared');
     const r = await svc.financeRequests.create(cm, 'co-09', example(card('fin.request.create')));
     expect(r.status).toBe('head_review');
-    const l = (await svc.financeControls.dailyCashAction(de1, 'co-09', 'add', example(card('fin.dailycash.list')))) as { status: string };
-    expect(l.status).toBe('draft');
+    await expect(svc.financeControls.dailyCashAction(de1, 'co-09', 'add', example(card('fin.dailycash.list')))).rejects.toThrow(/Legacy/);
+    expect(JSON.stringify(card('fin.dailycash.list'))).toContain('manual OM request');
   });
 
   it('are scoped to the role: staff see their own tasks, managers theirs, others none', async () => {

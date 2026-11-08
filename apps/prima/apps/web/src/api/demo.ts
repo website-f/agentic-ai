@@ -834,7 +834,7 @@ export class DemoApi implements Api {
         return this.svc.finance.cooStep(u, a[0], a[1], a[2], a[3]);
       case 'finControlAction': {
         const c = this.svc.financeControls;
-        const fn = { payees: c.payeeAction, statements: c.statementAction, ageing: c.ageingAction, figures: c.figuresAction, coa: c.coaAction, sql: c.sqlAction, sst: c.sstAction, plan: c.planAction, einvoice: c.einvoiceAction, ar: c.arAction, bankrec: c.bankRecAction, regular: c.regularAction, guarantees: c.guaranteeAction, tax: c.taxAction, mandates: c.mandateAction, advances: c.advanceAction, petty: c.pettyAction, cards: c.cardAction, billing: c.billingAction, govt: c.govtAction, moneyin: c.moneyInAction, stamp: c.stampAction, dailycash: c.dailyCashAction, intercompany: c.icAction, cash13: c.cash13Action, pack: c.packAction, hostel: c.hostelAction, deposits: c.depositAction, fd: c.fdAction, charges: c.chargeAction, wht: c.whtAction, schedules: c.scheduleAction, assets: c.assetAction, audit: c.auditAction, credit: c.creditAction, supstatements: c.supplierStatementAction }[a[1] as 'payees'];
+        const fn = { payees: c.payeeAction, statements: c.statementAction, ageing: c.ageingAction, figures: c.figuresAction, coa: c.coaAction, sql: c.sqlAction, sst: c.sstAction, plan: c.planAction, einvoice: c.einvoiceAction, ar: c.arAction, bankrec: c.bankRecAction, regular: c.regularAction, guarantees: c.guaranteeAction, tax: c.taxAction, mandates: c.mandateAction, advances: c.advanceAction, petty: c.pettyAction, cards: c.cardAction, billing: c.billingAction, govt: c.govtAction, moneyin: c.moneyInAction, stamp: c.stampAction, dailycash: c.dailyCashAction, exceptionalcash: c.exceptionalCashAction, arrivalcash: c.arrivalCashAction, intercompany: c.icAction, cash13: c.cash13Action, pack: c.packAction, hostel: c.hostelAction, deposits: c.depositAction, fd: c.fdAction, charges: c.chargeAction, wht: c.whtAction, schedules: c.scheduleAction, assets: c.assetAction, audit: c.auditAction, credit: c.creditAction, supstatements: c.supplierStatementAction }[a[1] as 'payees'];
         if (!fn) throw new BadRequest('Unknown area');
         return fn.call(c, u, a[0], a[2], a[3]);
       }
@@ -1572,7 +1572,7 @@ export class DemoApi implements Api {
   screening() {
     return this.read((s, u) => s.screening.board(u));
   }
-  screeningAct(action: 'open' | 'check' | 'decide' | 'withdraw', body: Record<string, unknown>) {
+  screeningAct(action: 'open' | 'check' | 'decide' | 'withdraw' | 'vettingResult' | 'employmentEnded', body: Record<string, unknown>) {
     return this.write('screeningAct', [action, body]);
   }
   screeningRepeat(id: string) {
@@ -2622,6 +2622,14 @@ export class DemoApi implements Api {
   }
   financeToday() {
     return this.read((s, u) => s.financeToday(u));
+  }
+  finExceptionalCashEvidence(companyId: string, docId: string) {
+    return this.read((s, u) => s.financeControls.exceptionalCashEvidence(u, companyId, docId));
+  }
+  finArrivalCashEvidence(companyId: string, docId: string) { return this.read((s,u)=>s.financeControls.arrivalCashEvidence(u,companyId,docId)); }
+  finArrivalCash(companyId: string) { return this.read((s,u)=>s.financeControls.arrivalCashView(u,companyId)); }
+  finExceptionalCash(companyId: string) {
+    return this.read((s, u) => s.financeControls.exceptionalCashView(u, companyId));
   }
   finDailyCashMine() {
     return this.read((s, u) => s.financeControls.dailyCashMine(u));

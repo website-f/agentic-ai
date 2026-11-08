@@ -2702,6 +2702,25 @@ export class AppController {
   }
 
   // Daily cash held by the signed-in COO or CEO (Fauzan, 2 Nov 2026).
+  @Get('finance/arrivalcash/:companyId')
+  finArrivalCash(@UserId() uid: string, @Param('companyId') companyId: string) {
+    return this.db.asUser(uid, (svc, u) => svc.financeControls.arrivalCashView(u, companyId));
+  }
+  @Get('finance/arrivalcash/:companyId/evidence/:docId')
+  finArrivalCashEvidence(@UserId() uid: string, @Param('companyId') companyId: string, @Param('docId') docId: string) {
+    return this.db.asUser(uid, (svc, u) => svc.financeControls.arrivalCashEvidence(u, companyId, docId));
+  }
+
+  @Get('finance/exceptionalcash/:companyId/evidence/:docId')
+  finExceptionalCashEvidence(@UserId() uid: string, @Param('companyId') companyId: string, @Param('docId') docId: string) {
+    return this.db.asUser(uid, (svc, u) => svc.financeControls.exceptionalCashEvidence(u, companyId, docId));
+  }
+
+  @Get('finance/exceptionalcash/:companyId')
+  finExceptionalCash(@UserId() uid: string, @Param('companyId') companyId: string) {
+    return this.db.asUser(uid, (svc, u) => svc.financeControls.exceptionalCashView(u, companyId));
+  }
+
   @Get('finance/dailycash/mine')
   finDailyCashMine(@UserId() uid: string) {
     return this.db.asUser(uid, (svc, u) => svc.financeControls.dailyCashMine(u));
@@ -2860,6 +2879,8 @@ export class AppController {
       if (area === 'govt') return c.govtAction(u, cid, action, b);
       if (area === 'moneyin') return c.moneyInAction(u, cid, action, b);
       if (area === 'stamp') return c.stampAction(u, cid, action, b);
+      if (area === 'arrivalcash') return c.arrivalCashAction(u, cid, action, b);
+      if (area === 'exceptionalcash') return c.exceptionalCashAction(u, cid, action, b);
       if (area === 'dailycash') return c.dailyCashAction(u, cid, action, b);
       if (area === 'intercompany') return c.icAction(u, cid, action, b);
       if (area === 'cash13') return c.cash13Action(u, cid, action, b);
@@ -3093,7 +3114,7 @@ export class AppController {
   // Cash only when the COO or CEO gives it; the Director Office lists the guard (Fauzan, 6 Nov 2026).
   @Post('guard-pay/:id/cash/:personId/:action')
   guardPayCash(@UserId() uid: string, @Param('id') id: string, @Param('personId') personId: string, @Param('action') action: string, @Body() b: Record<string, unknown>) {
-    const a = (['list', 'unlist', 'decide', 'handout', 'receipt'] as const).find((x) => x === action);
+    const a = (['list', 'unlist', 'supersede', 'decide', 'handout', 'receipt'] as const).find((x) => x === action);
     if (!a) throw new BadRequestException('unknown cash action');
     return this.db.asUser(uid, (svc, u) =>
       svc.guardPayCash(u, id.slice(0, 120), personId.slice(0, 120), a, {
@@ -3101,6 +3122,9 @@ export class AppController {
         give: b.give === true,
         on: b.on == null || b.on === '' ? undefined : date(b.on, 'on'),
         proof: a === 'receipt' ? proofList(b.proof) : undefined,
+        transactionSpecific: b.transactionSpecific === true,
+        amount: typeof b.amount === 'number' ? b.amount : undefined,
+        signedByPersonId: typeof b.signedByPersonId === 'string' ? b.signedByPersonId : undefined,
       }),
     );
   }

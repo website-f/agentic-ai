@@ -191,6 +191,9 @@ function readPeople(v: unknown, from: IsoDate, to: IsoDate, today: IsoDate, sign
 
 /** Add, change and send a list (Finance); approve or return it (FD only); prepare, hand over, pay, give back and settle the cash. */
 export function finDailyCashAction(ctx: FinDailyCashCtx, f: FinStatus, action: string, input: Record<string, unknown>): Out<unknown> {
+  // 8 November owner correction: historical evidence/reconciliation only, including direct reducer calls.
+  if (!['receipt', 'giveBack', 'settle', 'acceptDifference', 'bank', 'cancel'].includes(action))
+    throw new BadRequest('Legacy daily cash is closed to new activity. Use the manually approved exceptional guard cash handover.');
   const lists = f.dailyCash ?? [];
   const now = ctx.sign().at;
   const logOf = (t: string) => ({ text: t.slice(0, 400), by: ctx.user.name, at: now });
@@ -295,6 +298,7 @@ export function finDailyCashAction(ctx: FinDailyCashCtx, f: FinStatus, action: s
     );
   }
   if (action === 'decideCash') {
+    if (ctx.user.opsTier !== 'ceo' || ctx.user.integration) throw new AccessDenied('view', '(only the CEO approves cash)');
     // "Only coo and ceo can give the cash if there is a need for it."
     collector(ctx);
     beforeApproval();

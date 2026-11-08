@@ -1,3 +1,4 @@
+import { applyArrivalRecovery, checkArrivalSnapshot, recordArrivalRepayments, cashCeo } from './arrival-cash';
 import { withLeavePersonLock } from './leave-lock';
 import { staffZakatReleaseProblem, staffSqlOtherSharesProblem } from './staff-zakat-guards';
 import { medicalSickDays, medicalLeaveUsage } from './medical-leave';
@@ -31005,10 +31006,10 @@ export class PrimaService {
         export: (role === 'finance' || role === 'hr') && (run.stage === 'approved' || run.stage === 'paid'),
         bankFile: role === 'finance' && (run.stage === 'approved' || run.stage === 'paid'),
         // The Director Office lists a guard for cash; the COO or the CEO decides each one before the month is paid.
-        listCash: role === 'doa' && run.stage !== 'paid',
-        decideCash: cashDecider && run.stage !== 'paid' && undecided.length > 0,
+        listCash: role === 'doa' && ['draft','submitted'].includes(run.stage),
+        decideCash: cashCeo(user) && ['draft','submitted'].includes(run.stage),
         cashFile: (role === 'finance' || role === 'doa' || cashDecider) && (run.stage === 'approved' || run.stage === 'paid') && cashLines.length > 0,
-        handOutCash: cashDecider && !run.trial && (run.stage === 'approved' || run.stage === 'paid') && cash.some((c) => c.decision?.give && !c.handedOut),
+        handOutCash: cashDecider && !run.trial && ['approved','paid'].includes(run.stage),
         uploadReceipt: role === 'doa' && cash.some((c) => c.handedOut && !c.receipt),
       },
     };
@@ -31038,6 +31039,7 @@ export class PrimaService {
     kept: Map<Id, { extra: { label: string; amount: number }[]; pcb: number | null }>,
     only?: Id,
   ): Promise<GuardPayLine[]> {
+    const arrivalRows = (await this.store.get('finStatus', `fin-${companyId}`))?.arrivalCash ?? [];
     const end = periodEnd(period);
     const start = `${period}-01`;
     const [people, attendance, shifts, sites, branches, company, leaves, utility, runs] = await Promise.all([
@@ -31128,7 +31130,7 @@ export class PrimaService {
           divisor: ctx.divisor,
           statutory: ctx.statutory,
         }),
-      );
+      ).map(line => applyArrivalRecovery(line, arrivalRows, period));
   }
 
   /** What a company's month reads besides attendance: the yearly guard holiday lists, advances, and sites over man-hours. */
@@ -31304,6 +31306,7 @@ export class PrimaService {
 
   /** Recheck hard holds and paid advances at every unpaid-run release boundary, not just submission. */
   private async assertGuardPayReady(run: GuardPayRun) {
+    await checkArrivalSnapshot(this.store, run.companyId, run.lines, run.period);
     if (run.lines.some((l) => l.calculationVersion !== GUARD_PAY_CALCULATION_VERSION))
       throw new BadRequest('This pay snapshot predates the payroll checks. Return it to HR and recalculate before proceeding.');
     const totals = guardPayTotals(run.lines);
@@ -31328,6 +31331,7 @@ export class PrimaService {
     await this.store.lock?.('guardPayRuns', runId);
     const view = await this.guardPayRun(user, runId);
     const run = view.run;
+    if (action !== 'return' && run.cash?.some(c => c.decision?.give && (c.approvalVersion !== 2 || c.decision.tier !== 'ceo' || c.amount !== run.lines.find(l => l.personId === c.personId)?.net || c.approvedSiteId !== run.lines.find(l => l.personId === c.personId)?.mainSiteId))) throw new BadRequest('Legacy or stale cash salary approval requires Finance reconciliation and a fresh CEO decision.');
     const note = (body.note ?? '').trim().slice(0, 500);
     const step = { by: user.name, byId: user.id, at: this.now(), note };
     let patch: Partial<GuardPayRun>;
@@ -31348,7 +31352,7 @@ export class PrimaService {
     } else if (action === 'approve' && view.can.approve) {
       // Every approver gives a reason (Fauzan, 31 Oct 2026).
       if (note.length < 3) throw new BadRequest('Give a reason or comment with the approval.');
-      if (view.pay.cashUndecided) throw new BadRequest(`${view.pay.cashUndecided} guard(s) are listed for cash. The COO or the CEO decides each one first.`);
+      if (view.pay.cashUndecided) throw new BadRequest(`${view.pay.cashUndecided} guard(s) are listed for cash. The CEO decides each one first.`);
       if (view.pay.unpayable.length) throw new BadRequest(`${view.pay.unpayable.length} guard(s) have no account they can be paid into and no cash given. Return the month to HR.`);
       await this.assertGuardPayReady(run);
       patch = { stage: 'approved', approved: step };
@@ -31359,7 +31363,8 @@ export class PrimaService {
       if (!body.pcbChecked) throw new BadRequest("Confirm the PCB was checked in LHDN's e-PCB before paying.");
       const paidOn = body.paidOn ?? this.today();
       if (!/^\d{4}-\d{2}-\d{2}$/.test(paidOn) || paidOn > this.today() || paidOn < `${run.period}-01`) throw new BadRequest('Give the date the bank paid.');
-      if (view.pay.cashUndecided) throw new BadRequest('A guard listed for cash has no COO or CEO decision yet.');
+      if (view.pay.cashUndecided) throw new BadRequest('A guard listed for cash has no CEO decision yet.');
+      if (run.cash?.some(c => c.decision?.give && (!c.handedOut || !c.receipt))) throw new BadRequest('Actual wage-cash handover and genuine signed receipt are required before marking payroll paid.');
       await this.assertGuardPayReady(run);
       patch = { stage: 'paid', paid: { ...step, bankRef, paidOn, pcbChecked: true } };
       summary = `paid, bank reference ${bankRef}${paidOn > view.payBy ? ` (LATE: due by ${view.payBy}, EA s.19)` : ''}`;
@@ -31377,7 +31382,10 @@ export class PrimaService {
     return this.store.transaction(async (tx) => {
       await tx.update('guardPayRuns', runId, patch);
       // A paid month takes each advance and loan scheme repayment off its record, and Finance is told.
-      if (patch.stage === 'paid') await this.recordLoanRepayments(tx, run, user.name, step.at);
+      if (patch.stage === 'paid') {
+        await recordArrivalRepayments(tx, run.companyId, run.id, run.period, run.lines, user, step.at);
+        await this.recordLoanRepayments(tx, run, user.name, step.at);
+      }
       await tx.audit({
         at: step.at,
         actor: user.name,
@@ -31460,6 +31468,7 @@ export class PrimaService {
         [end, '130-500', `Wage advances recovered ${run.period}`, 0, t.advance],
         // Advance and loan scheme repayments (Fauzan, 6 Nov 2026): back to the staff loans receivable.
         [end, '130-600', `Staff advances and loans recovered ${run.period}`, 0, t.loan],
+        ...run.lines.flatMap(l => (l.arrivalParts ?? []).map(p => [end, p.recoveryAccount, `Arrival recovery ${p.id} ${run.period} ${l.staffNo} ${l.mainSiteName}`, 0, p.amount])),
         // New contribution types the CEO added (Fauzan, 6 Nov 2026): employer cost, and both shares payable.
         ...t.others.flatMap((o) => [
           [end, '919-000', `${o.name} (${o.code}) employer ${run.period}`, o.er, 0] as (string | number)[],
@@ -31516,38 +31525,57 @@ export class PrimaService {
     user: User,
     runId: Id,
     personId: Id,
-    action: 'list' | 'unlist' | 'decide' | 'handout' | 'receipt',
-    body: { reason?: string; give?: boolean; on?: string; proof?: ProofInput[] } = {},
+    action: 'list' | 'unlist' | 'supersede' | 'decide' | 'handout' | 'receipt',
+    body: { reason?: string; give?: boolean; on?: string; proof?: ProofInput[]; transactionSpecific?: boolean; amount?: number; signedByPersonId?: string } = {},
   ) {
+    return this.store.transaction(async tx => {
+      await tx.lock?.('guardPayRuns', runId);
+      const actor = await tx.get('users', user.id);
+      if (!actor || actor.integration || (actor.accessClosedFrom && actor.accessClosedFrom <= this.today())) throw new AccessDenied('hr.pay', '(closed cash actor)');
+      return new PrimaService(tx, this.clock).guardPayCashLocked(actor, runId, personId, action, body);
+    });
+  }
+  private async guardPayCashLocked(user: User, runId: Id, personId: Id, action: string, body: { reason?: string; give?: boolean; on?: string; proof?: ProofInput[]; transactionSpecific?: boolean; amount?: number; signedByPersonId?: string }) {
     await this.store.lock?.('guardPayRuns', runId);
     const view = await this.guardPayRun(user, runId);
     const run = view.run;
     const cash: GuardPayCash[] = [...(run.cash ?? [])];
+    const cashHistory = [...(run.cashHistory ?? [])];
     const line = run.lines.find((l) => l.personId === personId);
-    if (!line) throw new NotFound('Pay line');
+    if (!line || (user.siteIds.length && (!line.mainSiteId || !user.siteIds.includes(line.mainSiteId)))) throw new NotFound('Pay line');
     const reason = String(body.reason ?? '').trim().slice(0, 300);
     const at = this.now();
     const i = cash.findIndex((c) => c.personId === personId);
     let summary: string;
-    if (action === 'list') {
+    if (action === 'list' || action === 'supersede') {
       if (!view.can.listCash) throw new AccessDenied('hr.pay', '(only the Director Office lists guards for cash)');
       if (reason.length < 5) throw new BadRequest('Say why this guard needs cash.');
-      if (line.net <= 0) throw new BadRequest('This guard has no pay to give this month.');
-      if (i >= 0 && (!cash[i].decision || cash[i].decision!.give)) throw new BadRequest('This guard is already on the cash list.');
-      const entry: GuardPayCash = { personId, staffNo: line.staffNo, name: line.name, siteName: line.mainSiteName, amount: line.net, reason, listedBy: user.name, listedById: user.id, listedAt: at, decision: null, handedOut: null, receipt: null };
-      if (i >= 0) cash[i] = entry;
+      if (action === 'list' && line.net <= 0) throw new BadRequest('This guard has no pay to give this month.');
+      if (action === 'list' && i >= 0) throw new BadRequest('This guard is already on the cash list.');
+      if (action === 'supersede') {
+        if (run.paid || i < 0) throw new BadRequest('Only an existing unpaid cash listing can be superseded.');
+        const prior = cash[i];
+        if (prior.handedOut || prior.receipt) throw new BadRequest('Cash already handed out or receipted requires Finance reconciliation; its history cannot be superseded.');
+        if (!prior.decision && prior.approvalVersion === 2 && prior.amount === line.net && prior.approvedSiteId === line.mainSiteId)
+          throw new BadRequest('This fresh listing is already pending a CEO decision.');
+        cashHistory.push({ entry: prior, superseded: { by: user.name, byId: user.id, at, note: reason } });
+      }
+      const entry: GuardPayCash = { approvalVersion: 2, approvedSiteId: line.mainSiteId, personId, staffNo: line.staffNo, name: line.name, siteName: line.mainSiteName, amount: line.net, reason, listedBy: user.name, listedById: user.id, listedAt: at, decision: null, handedOut: null, receipt: null };
+      if (action === 'supersede' && line.net <= 0) cash.splice(i, 1);
+      else if (i >= 0) cash[i] = entry;
       else cash.push(entry);
-      summary = `${line.staffNo} listed for cash by the Director Office: ${reason}`;
+      summary = `${line.staffNo} ${action === 'supersede' ? `unpaid listing superseded; previous decision retained; ${line.net <= 0 ? 'no positive wages to list' : 'fresh CEO decision required'}` : 'listed for cash'} by the Director Office: ${reason}`;
     } else if (action === 'unlist') {
       if (!view.can.listCash) throw new AccessDenied('hr.pay', '(only the Director Office changes the cash list)');
       if (i < 0 || cash[i].decision) throw new BadRequest('Only a listing not yet decided can be taken off.');
       cash.splice(i, 1);
       summary = `${line.staffNo} taken off the cash list`;
     } else if (action === 'decide') {
-      if (!view.can.decideCash) throw new AccessDenied('hr.pay', '(only the COO or the CEO gives cash)');
+      if (!view.can.decideCash || !cashCeo(user)) throw new AccessDenied('hr.pay', '(only the CEO approves wage cash)');
       if (i < 0 || cash[i].decision) throw new BadRequest('This guard is not waiting for a cash decision.');
       if (cash[i].listedById === user.id) throw new BadRequest('You listed this guard, so you cannot decide it.');
       if (reason.length < 3) throw new BadRequest('Give a reason or comment with the decision.');
+      if (typeof body.give !== 'boolean' || (cash[i].amount !== line.net || cash[i].approvedSiteId !== line.mainSiteId)) throw new BadRequest('Explicit decision and unchanged wage amount are required.');
       const give = body.give === true;
       cash[i] = { ...cash[i], decision: { by: user.name, byId: user.id, at, note: reason, give, tier: user.opsTier === 'coo' ? 'coo' : 'ceo' } };
       summary = `${line.staffNo} cash ${give ? 'given' : 'refused'} by the ${user.opsTier === 'coo' ? 'COO' : 'CEO'}: ${reason}`;
@@ -31555,10 +31583,13 @@ export class PrimaService {
       // The CEO or the COO hands the cash out (Fauzan, 6 Nov 2026), once the month is approved, never on a trial month.
       if (!view.can.handOutCash) throw new AccessDenied('hr.pay', '(only the COO or the CEO hands out cash, once the month is approved)');
       if (view.run.stage !== 'paid') await this.assertGuardPayReady(view.run);
-      if (i < 0 || !cash[i].decision?.give) throw new BadRequest('This guard was not given cash.');
+      if (i < 0 || !cash[i].decision?.give || cash[i].decision?.tier !== 'ceo' || cash[i].approvalVersion !== 2 || (cash[i].amount !== line.net || cash[i].approvedSiteId !== line.mainSiteId)) throw new BadRequest('Fresh CEO approval for this exact wage amount is required.');
       if (cash[i].handedOut) throw new BadRequest('The cash for this guard is already recorded as handed out.');
       const on = String(body.on || this.today());
-      if (!/^\d{4}-\d{2}-\d{2}$/.test(on) || on > this.today() || on < `${run.period}-01`) throw new BadRequest('Give the date the cash was handed out.');
+      if (!realDate(on) || on > this.today() || on < `${run.period}-01`) throw new BadRequest('Give a real date the cash was handed out.');
+      const approvals = [cash[i].decision?.at, run.approved?.at];
+      if (approvals.some(t => !t || !Number.isFinite(Date.parse(t)) || Date.parse(t) > Date.parse(at) || on < dateOf(t)))
+        throw new BadRequest('The handout date cannot precede the CEO cash approval or payroll approval.');
       cash[i] = { ...cash[i], handedOut: { by: user.name, byId: user.id, at, note: reason, on, tier: user.opsTier === 'coo' ? 'coo' : 'ceo' } };
       summary = `${line.staffNo} cash RM${line.net.toFixed(2)} handed out on ${on} by the ${user.opsTier === 'coo' ? 'COO' : 'CEO'}`;
     } else if (action === 'receipt') {
@@ -31566,7 +31597,9 @@ export class PrimaService {
       if (view.role !== 'doa') throw new AccessDenied('hr.pay', '(only the Director Office uploads cash receipts)');
       if (i < 0 || !cash[i].handedOut) throw new BadRequest('Record the cash as handed out first.');
       if (cash[i].receipt) throw new BadRequest('The signed receipt for this guard is already uploaded.');
+      if (body.transactionSpecific !== true || body.signedByPersonId !== personId || body.amount !== cash[i].amount) throw new BadRequest('Attest a genuine signed acknowledgement for this worker, wage month and amount; never paste a stored signature.');
       const proof = this.proofRecords(user, run.companyId, null, body.proof, {}, { documentsOnly: true });
+      if (proof.docs.some(d => !d.sha256) || (await this.store.list('evidenceDocs', {companyId: run.companyId})).some(d => proof.docs.some(p => p.sha256 === d.sha256))) throw new BadRequest('Receipt evidence already used.');
       if (proof.docs.length !== 1) throw new BadRequest("Upload the guard's signed receipt paper (one PDF, JPEG or PNG).");
       const doc = { ...proof.docs[0], guardPayRunId: runId, caption: proof.docs[0].caption || `Cash receipt ${run.period} ${line.staffNo}` };
       cash[i] = { ...cash[i], receipt: { docId: doc.id, name: doc.name, sha256: doc.sha256, uploadedBy: user.name, uploadedById: user.id, uploadedAt: at } };
@@ -31579,7 +31612,7 @@ export class PrimaService {
       });
     } else throw new BadRequest('Unknown cash action.');
     return this.store.transaction(async (tx) => {
-      await tx.update('guardPayRuns', runId, { cash });
+      await tx.update('guardPayRuns', runId, { cash, cashHistory });
       await tx.audit({ at, actor: user.name, companyId: run.companyId, action: `guardpay.cash.${action}`, entity: 'guard_pay_run', entityId: runId, summary: `Guard pay ${run.period}: ${summary}.` });
       return cash;
     });
@@ -35104,18 +35137,18 @@ export class PrimaService {
     return { company: { id: company.id, name: company.name, code: company.code }, folders: WORKER_FOLDERS, rows, contractsMissing: contracts, today };
   }
 
-  // 5. Yearly staff ethics declaration.
+  // 5. Staff ethics declaration, signed once on entering service (Fauzan, 8 Nov 2026).
 
   private ethicsCompanyOf(user: User): Id {
     return user.companyIds[0] ?? GROUP_EMPLOYER_ID;
   }
 
-  /** The person's own declaration for this year, and for HR, ACT and leaders who has not signed. */
+  /** The person's own declaration (signed once on entering service), and for HR, ACT and leaders who has not signed. */
   async ethicsBoard(user: User, companyId?: Id | null) {
     if (user.integration || user.role === 'guard' || user.role === 'site_device') throw new AccessDenied('view', '(ethics declaration)');
     const year = Number(this.today().slice(0, 4));
     const mineCompany = this.ethicsCompanyOf(user);
-    const mine = (await this.store.list('ethicsDeclarations', { companyId: mineCompany })).find((d) => d.userId === user.id && d.year === year) ?? null;
+    const mine = (await this.store.list('ethicsDeclarations', { companyId: mineCompany })).find((d) => d.userId === user.id) ?? null;
     const role = this.rbaRoleOf(user);
     const watch = role === 'act' || role === 'leader' || role === 'hr' || (role === 'company' && !!companyId && user.companyIds.includes(companyId));
     let list: { companyId: Id; signed: { userId: Id; name: string; at: IsoDateTime; interests: string; interestsNone: boolean; review: EthicsDeclaration['review']; id: Id }[]; missing: { userId: Id; name: string; title: string }[] } | null = null;
@@ -35124,11 +35157,10 @@ export class PrimaService {
       if (role === 'company' && !user.companyIds.includes(cid)) throw new AccessDenied('view', cid);
       const [decl, users] = await Promise.all([this.store.list('ethicsDeclarations', { companyId: cid }), this.store.list('users')]);
       const staff = users.filter((u) => !u.integration && !['guard', 'site_device'].includes(u.role) && (cid === GROUP_EMPLOYER_ID ? !u.companyIds.length && u.role !== 'director' : u.companyIds[0] === cid) && !(u.accessClosedFrom && u.accessClosedFrom <= this.today()));
-      const thisYear = decl.filter((d) => d.year === year);
       list = {
         companyId: cid,
-        signed: thisYear.map((d) => ({ id: d.id, userId: d.userId, name: d.name, at: d.at, interests: d.interests, interestsNone: d.interestsNone, review: d.review })),
-        missing: staff.filter((u) => !thisYear.some((d) => d.userId === u.id)).map((u) => ({ userId: u.id, name: u.name, title: u.title })),
+        signed: decl.map((d) => ({ id: d.id, userId: d.userId, name: d.name, at: d.at, interests: d.interests, interestsNone: d.interestsNone, review: d.review })),
+        missing: staff.filter((u) => !decl.some((d) => d.userId === u.id)).map((u) => ({ userId: u.id, name: u.name, title: u.title })),
       };
     }
     return { year, statements: ETHICS_STATEMENTS, mine, list, canReview: role === 'act' };
@@ -35147,10 +35179,11 @@ export class PrimaService {
     const companyId = this.ethicsCompanyOf(user);
     const at = this.now();
     return this.store.transaction(async (tx) => {
-      if ((await tx.list('ethicsDeclarations', { companyId })).some((d) => d.userId === user.id && d.year === year)) throw new BadRequest(`You already signed for ${year}.`);
-      const d: EthicsDeclaration = { id: `ethics-${user.id}-${year}`, companyId, userId: user.id, personId: user.personId ?? null, name: user.name, year, statements: ETHICS_STATEMENTS.map((s) => s.key), interests, interestsNone: none, review: null, at };
+      // Signed once on entering service; a transfer is fresh employment, so the new company gets its own declaration.
+      if ((await tx.list('ethicsDeclarations', { companyId })).some((d) => d.userId === user.id)) throw new BadRequest('You already signed your ethics declaration.');
+      const d: EthicsDeclaration = { id: `ethics-${user.id}-${companyId}`, companyId, userId: user.id, personId: user.personId ?? null, name: user.name, year, statements: ETHICS_STATEMENTS.map((s) => s.key), interests, interestsNone: none, review: null, at };
       await tx.insert('ethicsDeclarations', d);
-      await tx.audit({ at, actor: user.name, companyId, action: 'rba.ethics', entity: 'ethics_declaration', entityId: d.id, summary: `Yearly ethics declaration ${year} signed${none ? ', no interests' : ', interests declared for ACT review'}` });
+      await tx.audit({ at, actor: user.name, companyId, action: 'rba.ethics', entity: 'ethics_declaration', entityId: d.id, summary: `Ethics declaration signed on entering service${none ? ', no interests' : ', interests declared for ACT review'}` });
       return d;
     });
   }
@@ -35201,9 +35234,9 @@ export class PrimaService {
     }
     if (isHrDirector(user) && !(await this.rbaCommitteeNow(year)))
       items.push({ tone: 'warn', tag: 'RBA', title: `Name the ${year} RBA committee`, detail: 'The Operations Director and a few company heads (Fauzan, 7 Nov 2026)', go: { view: 'rba' } });
-    if (Number(this.today().slice(5, 7)) >= RULES.rba.value.ethicsDueMonth) {
-      const mine = (await this.store.list('ethicsDeclarations', { companyId: this.ethicsCompanyOf(user) })).some((d) => d.userId === user.id && d.year === year);
-      if (!mine) items.push({ tone: 'info', tag: 'Ethics', title: `Sign your ${year} ethics declaration`, detail: 'Anti-bribery, gifts, confidentiality, respect, speaking up and interests', go: { view: 'rba' } });
+    {
+      const mine = (await this.store.list('ethicsDeclarations', { companyId: this.ethicsCompanyOf(user) })).some((d) => d.userId === user.id);
+      if (!mine) items.push({ tone: 'info', tag: 'Ethics', title: 'Sign your ethics declaration', detail: 'Anti-bribery, gifts, confidentiality, respect, speaking up and interests', go: { view: 'rba' } });
     }
     return items;
   }
@@ -41430,6 +41463,9 @@ export class PrimaService {
       const hostel = byHours(hostelCost);
       // The operations company's management fee, from the agreement Finance entered.
       const finRow = finRows.find((f) => f.companyId === site.companyId);
+      const cashRows = (finRow?.exceptionalGuardCash ?? []).filter(r => r.companyId === site.companyId && r.siteId === site.id && r.occasion.slice(0, 7) === m && r.payout);
+      const cashPayroll = r2(cashRows.reduce((n, r) => n + (r.accounting?.amount ?? 0), 0));
+      const cashPayrollPending = r2(cashRows.filter(r => !r.accounting).reduce((n, r) => n + r.payout!.amount, 0));
       const fee = feeInEffect(finRow, opsCo, m);
       let mgmtFee: number | null = null;
       if (fee && revenue != null) {
@@ -41454,8 +41490,9 @@ export class PrimaService {
       const clocked = here.reduce((n, r) => n + r.normal + r.ot, 0);
       const coverage = contractedHours > 0 ? clocked / contractedHours : null;
       const known = revenue != null && here.length > 0 && unpriced === 0 && (coverage == null || coverage >= 0.9) && mgmtFee != null && otherFees != null;
-      const margin = revenue == null ? null : r2(revenue - guardCost - statutory - hostel - items - (feeInProfit ? (mgmtFee ?? 0) : 0) - (otherFees ?? 0));
+      const margin = revenue == null ? null : r2(revenue - guardCost - cashPayroll - statutory - hostel - items - (feeInProfit ? (mgmtFee ?? 0) : 0) - (otherFees ?? 0));
       const notes = [
+        ...(cashPayrollPending ? [`Additional payroll cash paid RM${cashPayrollPending.toFixed(2)} awaiting evidence/accounting; margin incomplete`] : []),
         ...(revenue == null ? ['No contract recorded for this site'] : live.some((c) => c.siteIds.length > 1) ? ['Contract shared with other sites, split by hours worked'] : []),
         ...(here.length === 0 ? ['No attendance this month'] : []),
         ...(unpriced ? [`${unpriced} shift${unpriced > 1 ? 's' : ''} by guards with no basic pay recorded`] : []),
@@ -41478,6 +41515,9 @@ export class PrimaService {
         revenue: revenue == null ? null : r2(revenue),
         revenueBasis,
         guardCost: r2(guardCost),
+        cashPayroll,
+        cashPayrollPending,
+        cashPayrollTrace: cashRows.filter(r => r.accounting).map(r => ({ id: r.id, journalRef: r.accounting!.journalRef, amount: r.accounting!.amount })),
         statutory: r2(statutory),
         hostel: r2(hostel),
         managementFee: mgmtFee == null ? null : r2(mgmtFee),
@@ -41489,7 +41529,7 @@ export class PrimaService {
         contractedHours: Math.round(contractedHours),
         clockedHours: Math.round(clocked),
         notes,
-        tone: (!known ? 'unknown' : margin! < 0 ? 'crit' : 'ok') as 'ok' | 'crit' | 'unknown',
+        tone: (!known || cashPayrollPending > 0 ? 'unknown' : margin! < 0 ? 'crit' : 'ok') as 'ok' | 'crit' | 'unknown',
       };
     });
 

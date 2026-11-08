@@ -4,7 +4,7 @@ import type { User } from "./types";
 
 
 
-export const FIN_GUIDES_VERSION = '2026-11-02.1';
+export const FIN_GUIDES_VERSION = '2026-11-08.1';
 
 export type FinGuideRole = 'fin_data_entry' | 'fin_deputy' | 'fin_leader' | 'fd' | 'ceo' | 'coo' | 'company_head' | 'dept_head';
 
@@ -471,165 +471,30 @@ export const FIN_GUIDES: FinGuide[] = [
     status: 'built',
   },
   {
-    id: 'fin.dailycash.list',
-    version: FIN_GUIDES_VERSION,
-    for: ['fin_data_entry', 'fin_deputy', 'fin_leader'],
-    title: b('Senarai bayaran tunai harian', 'Daily cash pay list'),
-    purpose: b(
-      'Pekerja yang dibayar setiap hari, disenaraikan untuk seminggu atau sebulan. Bayaran ke akaun bank atau e-dompet sahaja; tunai hanya jika Pejabat Pengarah menyenaraikan dan COO atau CEO meluluskan.',
-      'Workers paid each day, listed for a week or a month. Paid to a bank account or e-wallet only; cash only when the Director Office lists them and the COO or CEO gives it.',
-    ),
-    where: b(
-      'Finance > Checks > pilih syarikat > Paying out > Daily cash pay > "New list"',
-      'Finance > Checks > choose the company > Paying out > Daily cash pay > "New list"',
-    ),
-    fields: [
-      { key: 'period', label: b('Minggu atau bulan', 'Week or month'), required: true, format: b('week atau month', 'week or month'), example: 'week' },
-      { key: 'from', label: b('Hari pertama', 'First day'), required: true, format: b('Tarikh', 'Date'), example: '2026-10-29' },
-      {
-        key: 'to',
-        label: b('Hari terakhir', 'Last day'),
-        required: true,
-        format: b('Seminggu: hingga 7 hari; sebulan: hingga 31', 'Week: up to 7 days; month: up to 31'),
-        example: '2026-11-04',
-      },
-      {
-        key: 'bankId',
-        label: b('Akaun bank', 'Bank account'),
-        required: true,
-        format: b('Akaun syarikat tunai diambil', 'The company account the cash comes from'),
-        example: 'fb-co-09-1',
-      },
-      {
-        key: 'purpose',
-        label: b('Kenapa dibayar tunai', 'Why they are paid in cash'),
-        required: true,
-        format: b('Ayat pendek', 'A short sentence'),
-        example: 'Pekerja tuaian dibayar tunai setiap hari (contoh)',
-      },
-      {
-        key: 'people',
-        label: b('Orang dan hari', 'People and days'),
-        required: true,
-        format: b(
-          'Nama; 4 aksara akhir IC atau pasport; kerja; kadar harian; tandakan hari bekerja setiap orang',
-          "Name; last 4 of IC or passport; work; daily rate; tick each person's working days",
-        ),
-        example: [
-          {
-            name: 'Ali bin Abu (contoh)',
-            idLast4: '1234',
-            work: 'Tuaian dusun',
-            dailyRate: 120,
-            days: ['2026-10-29', '2026-10-30'],
-            pay: 'bank',
-            account: { bank: 'Maybank', last4: '6789', holder: 'own' },
-          },
-        ],
-      },
-      {
-        key: 'pay',
-        label: b('Cara bayaran setiap orang', 'How each person is paid'),
-        required: true,
-        format: b(
-          'bank atau ewallet: nama bank atau e-dompet dan 4 digit akhir sahaja. cash: hanya jika Pejabat Pengarah menyenaraikan dan COO atau CEO meluluskan',
-          'bank or ewallet: the bank or e-wallet name and the last 4 digits only. cash: only when the Director Office lists them and the COO or CEO gives it',
-        ),
-        example: 'bank',
-      },
-      {
-        key: 'account.holder',
-        label: b('Akaun siapa', 'Whose account'),
-        required: true,
-        format: b(
-          "own, joint, relative atau friend. Akaun saudara atau kawan: surat persetujuan yang dicop Pesuruhjaya Sumpah (nama, no. cop, tarikh), diluluskan oleh COO",
-          "own, joint, relative or friend. A relative's or friend's account: the consent letter stamped by a Pesuruhjaya Sumpah (name, stamp no., date), approved by the COO",
-        ),
-        example: 'own',
-      },
-    ],
-    sources: [b('Senarai pekerja dan hari: daripada penyelia tapak yang menggunakan mereka.', 'Workers and days: from the site supervisor who uses them.')],
-    ask: [b('Hari atau kadar dipersoalkan: penyelia tapak, kemudian FD.', 'Days or rate in question: the site supervisor, then the FD.')],
-    reused: [b('Selepas lulus, tunai disediakan hingga jumlah yang diluluskan sahaja.', 'After approval the cash is prepared up to the approved total only.')],
-    steps: [
-      b(
-        'Orang yang minta tunai: pilih "cash". Pejabat Pengarah menyenaraikan dengan tapak, jumlah tunai dan sebab; COO atau CEO memutuskan. Jika ditolak, beri akaun bank atau e-dompet. Pejabat Pengarah memuat naik setiap resit bertandatangan; senarai diselesaikan selepas itu sahaja.',
-        'Someone who asks for cash: choose "cash". The Director Office lists them with the site, the cash amount and the reason; the COO or CEO decides. If refused, give a bank account or e-wallet. The Director Office uploads each signed receipt; the list is settled only after that.',
-      ),
-      b('"Send to the FD". Hanya FD meluluskan (bukan CEO, bukan penyedia).', '"Send to the FD". Only the FD approves (not the CEO, never the preparer).'),
-      b(
-        'FD tidak boleh meluluskan selagi ada orang tanpa akaun, tunai belum diputuskan, atau surat persetujuan belum diluluskan COO.',
-        'The FD cannot approve while anyone has no account, a cash decision is open, or a consent letter waits for the COO.',
-      ),
-      b(
-        'Selepas lulus, bank atau e-dompet: "Paid by transfer" untuk setiap hari bekerja, dengan rujukan pindahan. Senarai tanpa tunai ditutup dengan "Close list" selepas tamat.',
-        'After approval, bank or e-wallet: "Paid by transfer" for each worked day, with the transfer reference. A list with no cash is closed with "Close list" once it ends.',
-      ),
-      b(
-        'Jika FD memulangkan: "Edit (returned by the FD)", ubah orang atau hari, "Save changes", hantar semula. Sejarah kekal.',
-        'If the FD returns it: "Edit (returned by the FD)", change people or days, "Save changes", send again. The history stays.',
-      ),
-      b(
-        'Tunai (hanya orang yang diberi tunai): "Cash withdrawn", "Hand to COO / CEO". FD yang meluluskan tidak memegang tunai.',
-        'Cash (only the people given cash): "Cash withdrawn", "Hand to COO / CEO". The FD who approved never handles the cash.',
-      ),
-      b(
-        'Tunai yang dipulangkan dikira oleh orang lain dalam Finance, bukan yang mengeluarkan atau menyerahkannya: "Count and bank".',
-        'Cash given back is counted by someone else in Finance, not whoever withdrew or handed it over: "Count and bank".',
-      ),
-    ],
-    done: b('Status "Settled", pengeluaran dijumpai pada penyata bank.', 'Status "Settled", the withdrawal found on the bank statement.'),
-    recover: [b('Beza kiraan: nyatakan sebab; FD menerima beza itu.', 'A count difference: give the reason; the FD accepts the difference.')],
-    status: 'built',
+    id: 'fin.dailycash.list', version: FIN_GUIDES_VERSION, for: ['fin_data_entry','fin_deputy','fin_leader'],
+    title: b('Sokongan tunai khas pengawal', 'Exceptional guard cash handover'),
+    purpose: b('Sokongan gaji tambahan; gaji biasa kekal dibayar penuh.', 'Additional payroll support; ordinary wages remain payable in full.'),
+    where: b('Finance > Checks > Paying out > Exceptional guard cash', 'Finance > Checks > Paying out > Exceptional guard cash'),
+    fields: [],
+    sources: [b('Senarai Excel terkawal daripada DOA, permintaan manual OM dan kelulusan manual CEO atau COO.', 'DOA controlled Excel listing, manual OM request and manual CEO or COO approval.')],
+    ask: [b('DOA untuk bukti kelulusan; Finance untuk rekod gaji dan statutori.', 'DOA for approval evidence; Finance for payroll and statutory records.')],
+    reused: [b('Identiti pengawal dan tapak daripada rekod Prima yang dibenarkan.', 'Guard and site identity from authorized Prima records.')],
+    steps: [b('DOA menyerahkan senarai diluluskan. Finance merekod persediaan, jagaan dan bayaran sebenar. DOA mengumpul resit bertandatangan khusus transaksi. Finance lain mengesahkan pulangan dan rekonsiliasi.', 'DOA submits the approved list. Finance records preparation, custody and actual payment. DOA collects a transaction-specific signed receipt. Another Finance officer counts the return and reconciles.')],
+    done: b('Bukti bayaran, resit, rekonsiliasi dan rekod gaji/statutori serta jurnal lengkap.', 'Payment evidence, receipt, reconciliation, supplemental payroll/statutory records and journal complete.'),
+    recover: [b('Penerima atau jumlah berubah: kelulusan manual baharu. Tiada mod gaji tunai.', 'Changed recipient or amount: obtain new manual approval. There is no cash salary mode.')],
+    notes: [b('Bajet: Miscellaneous payroll expenses. P&L tapak: Salary cost – cash payment, sekali sahaja.', 'Budget: Miscellaneous payroll expenses. Site P&L: Salary cost – cash payment, once only.')], status: 'built',
   },
   {
-    id: 'fin.dailycash.collector',
-    version: FIN_GUIDES_VERSION,
-    for: ['ceo', 'coo'],
-    title: b('Pegang dan bayar tunai harian', 'Hold and pay the daily cash'),
-    purpose: b(
-      'COO atau CEO mengira tunai yang diserahkan, membayar orang tersenarai, dan memulangkan baki.',
-      'The COO or CEO counts the cash handed over, pays the listed people and gives back the rest.',
-    ),
-    where: b('Finance > "Daily cash you hold"', 'Finance > "Daily cash you hold"'),
-    fields: [
-      {
-        key: 'counted',
-        label: b('Tunai dikira (RM)', 'Cash counted (RM)'),
-        required: true,
-        format: b('RM; jika berbeza, nyatakan sebab', 'RM; if it differs, give the reason'),
-        example: 1060,
-      },
-      {
-        key: 'idLast4',
-        label: b('4 aksara akhir IC atau pasport', 'Last 4 of IC or passport'),
-        required: true,
-        format: b('Semak dengan kad pekerja', "Check against the worker's card"),
-        example: '1234',
-      },
-      {
-        key: 'proof',
-        label: b('Helaian bayaran', 'Pay sheet'),
-        required: false,
-        format: b(
-          'Pilihan: nombor helaian. Resit bertandatangan diserahkan kepada Pejabat Pengarah, yang memuat naiknya',
-          'Optional: the sheet number. The signed receipt goes to the Director Office, who uploads it',
-        ),
-        example: 'Helaian 1 (contoh)',
-      },
-    ],
-    sources: [b('Senarai yang diluluskan FD, ditunjukkan dalam Prima.', 'The list the FD approved, shown in Prima.')],
-    ask: [b('Wang kurang atau lebih: Finance yang menyerahkannya, kemudian FD.', 'Cash short or over: the Finance person who handed it over, then the FD.')],
-    reused: [b('Hanya orang dan hari dalam senarai; kadar harian daripada senarai.', 'Only listed people and days; the daily rate comes from the list.')],
-    steps: [
-      b(
-        '"Confirm count", bayar setiap orang setiap hari ("Paid"), kemudian "Give back" baki.',
-        '"Confirm count", pay each person each day ("Paid"), then "Give back" the rest.',
-      ),
-    ],
-    done: b('Baki dipulangkan; Finance mengira dan memasukkannya ke bank.', 'The rest given back; Finance counts and banks it.'),
-    recover: [b('Butang "Confirm count" tidak aktif: tulis sebab beza kiraan.', '"Confirm count" disabled: write why the count differs.')],
-    status: 'built',
+    id: 'fin.dailycash.collector', version: FIN_GUIDES_VERSION, for: ['ceo','coo'],
+    title: b('Kelulusan manual sokongan pengawal', 'Manual guard-support approval'),
+    purpose: b('OM meminta secara manual; CEO atau COO meluluskan nama, jumlah dan waktu bayaran secara manual.', 'OM requests manually; CEO or COO manually approves the named guard, amount and payment occasion.'),
+    where: b('Di luar aplikasi, kemudian hantar senarai diluluskan kepada DOA.', 'Outside the app, then send the approved list to DOA.'), fields: [],
+    sources: [b('Permintaan manual OM bagi pengawal berkenaan.', 'The OM’s manual request for that guard.')],
+    ask: [b('OM dan DOA.', 'Operations Manager and DOA.')],
+    reused: [b('Data pengawal sedia ada dalam Prima.', 'Existing guard data in Prima.')],
+    steps: [b('Hantar nama diluluskan, jumlah, waktu bayaran dan bukti kepada DOA; DOA menyediakan senarai untuk Finance.', 'Send approved names, amounts, payment occasions and evidence to DOA; DOA prepares the Finance handover.')],
+    done: b('DOA menerima senarai dan bukti. Kelulusan bukan bayaran.', 'DOA receives the list and evidence. Approval is not payment.'),
+    recover: [b('Perubahan memerlukan kelulusan baharu.', 'Changes require new manual approval.')], status: 'built',
   },
 ];
 

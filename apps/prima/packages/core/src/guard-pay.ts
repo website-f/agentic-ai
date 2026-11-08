@@ -30,7 +30,7 @@ export interface GuardPayStep {
 /** One line of a guard's pay: what it is, how many, at what rate. Overtime lines are not wages for EPF. */
 export interface GuardPayItem {
   label: string;
-  kind: 'basic' | 'unpaid' | 'ot' | 'rest_day' | 'holiday' | 'allowance' | 'extra' | 'advance' | 'loan';
+  kind: 'basic' | 'unpaid' | 'ot' | 'rest_day' | 'holiday' | 'allowance' | 'extra' | 'advance' | 'loan' | 'arrival';
   qty: number | null;
   unit: 'day' | 'hour' | null;
   rate: number | null;
@@ -97,6 +97,7 @@ export interface GuardPayLine {
   advanceIds?: Id[];
   /** Approved advance and loan scheme repayments taken this month (Fauzan, 6 Nov 2026), within the 50% cap. */
   loan?: number;
+  arrivalParts?: { id: string; amount: number; balanceBefore: number; totalDisbursed: number; policyId: string; recoveryAccount: string }[];
   loanParts?: { id: Id; amount: number }[];
   /** The public holidays this line was paid on (the guard list of the main site's state), and any lost under s.60D(2). */
   holidayDates?: IsoDate[];
@@ -138,6 +139,8 @@ export interface GuardPayRun {
   sitesOver?: { siteId: Id; siteName: string; overBy: number; approver: 'ops_director' | 'ogm' }[];
   /** Guards to be paid in cash this month: listed by the Director Office, decided by the COO or the CEO. */
   cash?: GuardPayCash[];
+  /** Unpaid listings replaced by DOA; retain every original decision and the reason for replacement. */
+  cashHistory?: { entry: GuardPayCash; superseded: GuardPayStep }[];
 }
 
 /**
@@ -145,6 +148,8 @@ export interface GuardPayRun {
  * it. The list will be collected and submited by director office staff."
  */
 export interface GuardPayCash {
+  approvalVersion?: 2;
+  approvedSiteId?: Id | null;
   personId: Id;
   staffNo: string;
   name: string;
@@ -543,7 +548,7 @@ export function buildGuardPayLine(i: GuardPayInput): GuardPayLine {
   if (restDays) flags.push(`${restDays} rest day${restDays === 1 ? '' : 's'} worked (days past the full month of ${full})`);
   if (unpaidDays && !i.monthOpen) flags.push(`${unpaidDays} day${unpaidDays === 1 ? '' : 's'} short of the full month: deducted`);
   const account = payAccountCheck(p.bank);
-  if (account.problem && net > 0) flags.push(`${account.problem}: cannot be paid until fixed (or the COO or CEO gives cash)`);
+  if (account.problem && net > 0) flags.push(`${account.problem}: ordinary wages require a verified account or separate CEO-approved wage-cash listing; additional DOA support does not replace wages`);
   flags.push(...account.flags);
   if (p.bank?.consent && p.bank.consent.recordedAt.slice(0, 7) === i.period) flags.push(`Written consent recorded this month by ${p.bank.consent.recordedBy}`);
   if (account.problem) {

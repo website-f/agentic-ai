@@ -49,4 +49,5 @@ Package 1b of the PIKM (SIRIM code) and ISO 9001:2015 review (Fauzan, 5 Nov 2026
 ## Decided by Fauzan (8 Nov 2026)
 
 - The check lists per kind of person and the repeat intervals (36 and 12 months): approved as built. The PIKM code text may still change them.
+- PIKM Part 2 (screening, 2022 draft) received 8 Nov 2026. Fauzan chose "Yes, update all" the same day: KDN vetting and a police check for everyone; directors and shareholders also give an application form and are interviewed; identity is confirmed with JPN biometrics; the director search covers court judgments; office staff may start while KDN vetting is pending; HR records the final KDN result (a fail means "not cleared" and ending the employment at once, shown at home until recorded); and the screen lists each screener's screening, confidentiality and training. Details in `docs/QUALITY_AND_COMPLIANCE.md` (PIKM Part 2 gap list).
 - The OM and company manager may record briefings for any guard of their company, as well as officers: approved as built.
