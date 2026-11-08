@@ -9,6 +9,7 @@ import { useApp } from '../App';
 import { Chip, ErrorNotice, Loading, n, useLoad, type Tone } from '../ui';
 import { Card, Empty, PageHead, Stat, Stats } from '../kit';
 import '../styles/home.css';
+import { AllScreens } from './AllScreens';
 
 const RANK: Record<string, number> = { crit: 0, warn: 1, info: 2, neutral: 3, ok: 4 };
 const worst = (items: HomeItem[]): Tone => items.reduce<Tone>((w, t) => ((RANK[t.tone] ?? 5) < (RANK[w] ?? 5) ? t.tone : w), 'ok');
@@ -161,6 +162,8 @@ export function HomeView() {
           ))}
         </Stats>
       </section>
+      {/* P90 (Fitri, 9 Nov 2026): every screen this person may open, by category, after the decisions and key numbers. */}
+      <AllScreens />
       {/* Growth for group leadership (Fauzan, 3 Nov 2026): after the decisions and key numbers, before the monitor list. */}
       {isGroupLeader(me.user) && !companyScoped && <GrowthPanel />}
       {me.user.opsTier === 'ceo' && !companyScoped && <ApprovalLimitsPanel />}
