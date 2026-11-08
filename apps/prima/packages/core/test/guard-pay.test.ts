@@ -258,13 +258,24 @@ describe('guard pay run: HR prepares, the COO approves, Finance pays', () => {
     // A one-off item needs a reason and is flagged for the COO.
     const pid = back.lines[0].personId;
     await expect(svc.setGuardPayLine(hr, run.id, pid, { extra: [{ label: '', amount: 50 }] })).rejects.toThrow(/reason/);
-    // No salary deduction for uniforms (any set) or for lost or damaged items: Kertas Pelaksanaan Prima Uniform dan
-    // Peralatan (6 Nov 2026), which replaces the earlier 4th or 5th uniform deduction.
-    await expect(svc.setGuardPayLine(hr, run.id, pid, { extra: [{ label: 'Uniform deduction (test)', amount: -20 }] })).rejects.toThrow(/never deducted/);
-    await expect(svc.setGuardPayLine(hr, run.id, pid, { extra: [{ label: 'Uniform', amount: -20, uniformNo: 2 }] })).rejects.toThrow(/never deducted/);
-    await expect(svc.setGuardPayLine(hr, run.id, pid, { extra: [{ label: 'Uniform set (test)', amount: -20, uniformNo: 4 }] })).rejects.toThrow(/never deducted/);
-    await expect(svc.setGuardPayLine(hr, run.id, pid, { extra: [{ label: 'Lost radio', amount: -50 }] })).rejects.toThrow(/never deducted/);
-    await expect(svc.setGuardPayLine(hr, run.id, pid, { extra: [{ label: 'Damaged item (test)', amount: -30 }] })).rejects.toThrow(/never deducted/);
+    // Uniform and item deductions stay switched off until management and legal decide (Fauzan, 8 Nov 2026; rule PAY-GUARD
+    // uniformDeduction 'awaiting_decision'). Equipment is never charged to the guard either way (EA s.24).
+    await expect(svc.setGuardPayLine(hr, run.id, pid, { extra: [{ label: 'Uniform deduction (test)', amount: -20 }] })).rejects.toThrow(/switched off until management and legal decide/);
+    await expect(svc.setGuardPayLine(hr, run.id, pid, { extra: [{ label: 'Uniform', amount: -20, uniformNo: 2 }] })).rejects.toThrow(/switched off/);
+    await expect(svc.setGuardPayLine(hr, run.id, pid, { extra: [{ label: 'Uniform set (test)', amount: -20, uniformNo: 4 }] })).rejects.toThrow(/switched off/);
+    await expect(svc.setGuardPayLine(hr, run.id, pid, { extra: [{ label: 'Lost radio', amount: -50 }] })).rejects.toThrow(/Equipment is never charged/);
+    await expect(svc.setGuardPayLine(hr, run.id, pid, { extra: [{ label: 'Damaged item (test)', amount: -30 }] })).rejects.toThrow(/switched off/);
+    // If management turns on PR #120's path, only a 4th or 5th uniform set is charged, flagged as a legal point for the CEO.
+    const policy = RULES.guardPayroll.value as { uniformDeduction: string };
+    policy.uniformDeduction = 'fourth_fifth_set';
+    try {
+      await expect(svc.setGuardPayLine(hr, run.id, pid, { extra: [{ label: 'Uniform', amount: -20, uniformNo: 2 }] })).rejects.toThrow(/4th or 5th set/);
+      await expect(svc.setGuardPayLine(hr, run.id, pid, { extra: [{ label: 'Damaged item (test)', amount: -30 }] })).rejects.toThrow(/switched off/);
+      const u = await svc.setGuardPayLine(hr, run.id, pid, { extra: [{ label: 'Uniform set (test)', amount: -20, uniformNo: 4 }] });
+      expect(u.flags.join(' ')).toMatch(/legal point for the CEO/);
+    } finally {
+      policy.uniformDeduction = 'awaiting_decision';
+    }
     // Another one-off deduction still goes through, flagged for the COO.
     const l = await svc.setGuardPayLine(hr, run.id, pid, { extra: [{ label: 'Overpayment last month (test)', amount: -20 }] });
     expect(l.items.some((x) => x.kind === 'extra' && x.amount === -20)).toBe(true);

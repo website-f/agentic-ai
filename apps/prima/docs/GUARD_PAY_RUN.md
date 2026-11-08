@@ -43,10 +43,13 @@ coo. The letter must have notory stamp by pesuruhjaya sumpah."
   done by director office." The cash list is grouped by site with each name and amount; the CEO or COO records the
   hand-out; the Director Office uploads the guard's signed receipt; the run shows how many are handed out and receipted. A line with no usable account blocks submission unless the Director Office lists it.
 - The same account rule applies to staff payroll at submission.
-- One-off deductions: no salary deduction for uniforms (any set), equipment, or lost or damaged items. The approved paper
-  "Kertas Pelaksanaan Prima Uniform dan Peralatan" (6 Nov 2026): "Potongan gaji automatik ... bukan sebahagian daripada
-  skop" and "Tiada potongan gaji automatik kerana item hilang atau rosak". This replaces the earlier 4th or 5th uniform
-  deduction. Advances and loans are taken back only from their approved, signed records.
+- One-off deductions: equipment is never charged to the guard (EA s.24). Uniform and lost or damaged item deductions are
+  a management and legal decision, not settled in code (Fauzan, 8 Nov 2026). Rule PAY-GUARD `uniformDeduction` stays
+  `awaiting_decision`, so no uniform or item deduction is accepted, until they decide between the paper "Kertas
+  Pelaksanaan Prima Uniform dan Peralatan" (6 Nov 2026: no automatic salary deduction) and PR #120's path
+  (`fourth_fifth_set`: only a 4th or 5th uniform set, flagged on the line as an EA s.24 legal point for the CEO). A guard
+  who pays for an item does so on the item, outside payroll. Advances and loans are taken back only from their approved,
+  signed records.
 - Legal flags kept on every such line for the CEO: EA s.25 asks for the worker's own or joint account, so an e-wallet or a
   third-party account is a legal point even with consent.
 - Pay by the 7th of the next month (rule PAY-GUARD payByDay, EA s.19); the run shows the due date.

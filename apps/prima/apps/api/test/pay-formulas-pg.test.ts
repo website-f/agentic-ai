@@ -42,11 +42,12 @@ const proposal = JSON.parse(readFileSync(resolve(ROOT, 'db/proposed/pay-formulas
 const manifest = JSON.parse(readFileSync(resolve(ROOT, 'db/release-manifest.json'), 'utf8')) as { base: { sha256: string }; modules: { id: string }[] };
 
 describe('pay formulas module (files)', () => {
-  it('pins the module bytes on the release base and stays out of the release manifest', () => {
+  // P85 (Agentic Office): the module ships in the release manifest, pinned to the same bytes as its proposal.
+  it('pins the module bytes on the release base and ships them in the release manifest', () => {
     assert.equal(proposal.base.sha256, manifest.base.sha256);
     const m = proposal.modules[0];
     assert.equal(createHash('sha256').update(readFileSync(resolve(ROOT, m.path))).digest('hex'), m.sha256);
-    assert.ok(!manifest.modules.some((x) => x.id === m.id), 'proposed only');
+    assert.equal((manifest.modules.find((x) => x.id === m.id) as { sha256?: string } | undefined)?.sha256, m.sha256, 'in the release manifest with the same bytes');
     assert.equal(readFileSync(resolve(ROOT, m.path), 'utf8'), payFormulasModuleSql());
   });
 });

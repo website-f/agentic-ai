@@ -39650,26 +39650,36 @@ export class PrimaService {
     if (extra.length > 5) throw new BadRequest('At most 5 one-off items on a line.');
     if (extra.some((a) => !a.label || !Number.isFinite(a.amount) || a.amount === 0 || Math.abs(a.amount) > 20000))
       throw new BadRequest('Each one-off item needs a reason and an amount in RM (a minus amount is a deduction).');
-    // No salary deduction for uniforms, equipment or lost or damaged items. The approved paper "Kertas Pelaksanaan Prima
-    // Uniform dan Peralatan" (6 Nov 2026) says "Potongan gaji automatik ... bukan sebahagian daripada skop" and "Tiada
-    // potongan gaji automatik kerana item hilang atau rosak"; this replaces the earlier 4th or 5th uniform deduction
-    // (PR #120). A guard who pays for an item does so outside payroll, with the payment proof recorded on the item (PR #125).
-    // Advances and loans, which the guard agreed to in writing, are still taken back from their approved records.
+    // Uniform and item deductions are a management and legal decision, not settled in code (Fauzan, 8 Nov 2026): rule
+    // PAY-GUARD uniformDeduction stays 'awaiting_decision' (no uniform or item deduction; Fitri's paper "Kertas Pelaksanaan
+    // Prima Uniform dan Peralatan", 6 Nov 2026) until they decide; 'fourth_fifth_set' is PR #120's path (only a 4th or 5th
+    // uniform set, EA s.24), flagged for the CEO. Equipment is never charged to the guard either way (EA s.24, rule PUR);
+    // a guard who pays for an item does so outside payroll, with the payment proof on the item (PR #125). Advances and
+    // loans, which the guard agreed to in writing, are taken back only from their approved records.
+    const uniformPolicy = RULES.guardPayroll.value.uniformDeduction;
     const given = (patch.extra ?? []) as { label: string; amount: number; uniformNo?: number }[];
     for (const [k, a] of extra.entries()) {
       if (a.amount >= 0) continue;
-      if (given[k]?.uniformNo != null || /uniform|seragam|pakaian/i.test(a.label))
-        throw new BadRequest('Uniforms are never deducted from pay (Kertas Pelaksanaan Prima Uniform dan Peralatan, 6 Nov 2026). Remove this deduction.');
-      if (/radio|walkie|torch|lampu suluh|baton|cota|equipment|peralatan|bodycam|kasut|boot|item|barang|lost|hilang|damage|rosak/i.test(a.label))
-        throw new BadRequest('Equipment and lost or damaged items are never deducted from pay (Kertas Pelaksanaan Prima Uniform dan Peralatan, 6 Nov 2026). Remove this deduction.');
+      const no = Number(given[k]?.uniformNo ?? (/uniform no\. ([0-9]+)/i.exec(a.label)?.[1] ?? NaN));
+      const isUniform = Number.isFinite(no) || /uniform|seragam|pakaian/i.test(a.label);
+      if (/radio|walkie|torch|lampu suluh|baton|cota|equipment|peralatan|bodycam|kasut|boot/i.test(a.label))
+        throw new BadRequest('Equipment is never charged to the guard (EA s.24). Remove this deduction.');
       // The pay run takes back advances and loans only against an approved record (Fauzan, 6 Nov 2026).
       if (/loan|pinjam|advance|pendahuluan|hutang|debt/i.test(a.label))
         throw new BadRequest('Advances and loans are taken back only from an approved record on the Advances and loans screen, not as a one-off item.');
+      if (isUniform || /item|barang|lost|hilang|damage|rosak/i.test(a.label)) {
+        if (uniformPolicy !== 'fourth_fifth_set' || !isUniform)
+          throw new BadRequest('Uniform and item deductions are switched off until management and legal decide the policy (rule PAY-GUARD). Remove this deduction; a guard who pays for an item does so on the item, outside payroll.');
+        if (!(no === 4 || no === 5)) throw new BadRequest('A uniform is charged to the guard only for the 4th or 5th set. Give the uniform number (4 or 5).');
+        if (!/uniform no\. [45]/i.test(a.label)) extra[k] = { ...a, label: `${a.label} (uniform no. ${no}, paid by the guard)`.slice(0, 80) };
+      }
     }
     const [line] = await this.guardPayLines(run.companyId, run.period, fresh.holidays.map((h) => h.date), new Map([[personId, { extra, pcb: pcb == null ? null : Math.round(pcb * 100) / 100 }]]), personId);
     if (!line) throw new NotFound('Pay line');
     const big = RULES.insiderControls.value.allowanceFlagAbove;
     for (const a of extra.filter((x) => Math.abs(x.amount) > big)) line.flags.push(`One-off item above RM${big}: ${a.label} RM${a.amount.toFixed(2)}`);
+    if (extra.some((x) => x.amount < 0 && /uniform no\. [45]/i.test(x.label)))
+      line.flags.push('Uniform charged to the guard (4th or 5th set): EA s.24 deduction, check the guard asked in writing; legal point for the CEO');
     if (extra.length) line.flags.push(`One-off items entered by ${user.name}: the COO checks them`);
     const lines = fresh.lines.map((l) => (l.personId === personId ? line : l));
     return this.store.transaction(async (tx) => {

@@ -813,6 +813,13 @@ export const RULES = {
       payByDay: 7,
       /** Off while the JA Group app still pays guards: runs are side-by-side trials, never marked paid. Fauzan picks the switch date. */
       primaPays: false,
+      /**
+       * Uniform deductions from guard pay: 'awaiting_decision' (no uniform or item deduction) until management and legal
+       * decide (Fauzan, 8 Nov 2026: "Do not decide the unresolved uniform-deduction policy in code"). Fitri's paper
+       * "Kertas Pelaksanaan Prima Uniform dan Peralatan" (6 Nov 2026) says no deduction; PR #120 charges only a 4th or 5th
+       * set (EA s.24). 'fourth_fifth_set' turns on that path, flagged for the CEO's legal point on every line.
+       */
+      uniformDeduction: 'awaiting_decision' as 'awaiting_decision' | 'fourth_fifth_set',
       /** SQL Account codes for the journal draft; Finance replaces these with the group's chart of accounts. */
       accounts: {
         wages: '910-000',
