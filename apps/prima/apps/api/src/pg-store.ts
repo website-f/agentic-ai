@@ -18,6 +18,18 @@ import type { PoolClient } from 'pg';
  * words instead of failing as a server error, and never reads as an empty (all clear) register.
  */
 const MODULE_TABLES: Partial<Record<TableName, string>> = {
+  // P88 (office): every table of the new upstream modules says so in words until the CEO approves installing it.
+  fwStatCharges: 'Foreign worker EPF and SOCSO recharges are not switched on in this database yet (module fw-epf-socso-recharge-v1).',
+  fwCostCharges: 'Foreign worker recruitment costs are not switched on in this database yet (module fw-recruitment-cost-v1).',
+  fwCostRates: 'Foreign worker recruitment costs are not switched on in this database yet (module fw-recruitment-cost-v1).',
+  fwPlacementHosts: 'Foreign worker recruitment costs are not switched on in this database yet (module fw-recruitment-cost-v1).',
+  fwPlacements: 'Foreign worker recruitment costs are not switched on in this database yet (module fw-recruitment-cost-v1).',
+  siteSurveyPhotos: 'Site surveys are not switched on in this database yet (module site-surveys-v1).',
+  siteSurveys: 'Site surveys are not switched on in this database yet (module site-surveys-v1).',
+  staffDirectory: 'The staff directory is not switched on in this database yet (module staff-directory-v1).',
+  staffDirectoryBatches: 'The staff directory is not switched on in this database yet (module staff-directory-v1).',
+  tenderOpportunities: 'Tender opportunities are not switched on in this database yet (module tender-opportunities-v1).',
+  tenderSources: 'Tender opportunities are not switched on in this database yet (module tender-opportunities-v1).',
   clientCodes: 'Client requirements and the yearly self-audit are not installed in this database yet (module client-codes-v1).',
   clientCodeChecks: 'Client requirements and the yearly self-audit are not installed in this database yet (module client-codes-v1).',
   clientInspections: 'Client requirements and the yearly self-audit are not installed in this database yet (module client-codes-v1).',
