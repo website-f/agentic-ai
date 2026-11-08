@@ -1,0 +1,84 @@
+/* P90: Arisha's instant answers from the screen guide (how-to buttons, "Ask Arisha more") and her thinking dots. */
+.arisha-msg[data-local] {
+  max-width: 100%;
+}
+.arisha-chips {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 8px;
+}
+.arisha-chip {
+  text-align: left;
+  font: inherit;
+  font-size: 0.86rem;
+  line-height: 1.35;
+  padding: 8px 10px;
+  min-height: 40px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: var(--bg);
+  color: var(--text, inherit);
+  cursor: pointer;
+}
+.arisha-chip:hover:not(:disabled) {
+  border-color: var(--primary);
+}
+.arisha-chip:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 1px;
+}
+.arisha-chip:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+.arisha-local-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+}
+.arisha-local-foot .muted {
+  flex: 1 1 180px;
+}
+.arisha-thinking {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.arisha-still {
+  flex-basis: 100%;
+}
+.arisha-dots {
+  display: inline-flex;
+  gap: 3px;
+}
+.arisha-dots i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--primary);
+  opacity: 0.35;
+  animation: arisha-dot 1s ease-in-out infinite;
+}
+.arisha-dots i:nth-child(2) {
+  animation-delay: 0.15s;
+}
+.arisha-dots i:nth-child(3) {
+  animation-delay: 0.3s;
+}
+@keyframes arisha-dot {
+  0%, 100% { opacity: 0.35; transform: translateY(0); }
+  50% { opacity: 1; transform: translateY(-2px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .arisha-dots i {
+    animation: none;
+    opacity: 0.7;
+  }
+}

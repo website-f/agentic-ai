@@ -40,6 +40,11 @@ SIG = re.compile(r"^[0-9a-f]{64}$")
 
 TASK = "prima.arisha"  # llm_calls.task: Arisha's turns in the AI usage pages
 GROUPS = ("smart", "fast")  # the workspace's chat models: smart first, fast when it has none
+# P90 (Fitri, 9 Nov 2026: Arisha answers too slowly): a quick turn is a question about using a Prima screen,
+# sent with no tools and the screen guide already in the brief, so the fast models answer it first.
+QUICK_GROUPS = ("fast", "smart")
+# P90: thinking models that take the setting think briefly: Arisha explains from a written guide.
+REASONING_EFFORT = "low"
 MAX_TOKENS = 2000  # Prima asks for 2000 at most (max_completion_tokens)
 TURN_SECONDS = 25.0  # under Prima's 30 s per call, so the person gets our plain answer
 PER_MINUTE = 30  # model turns per person a minute (one question is up to 6 turns)
@@ -209,6 +214,15 @@ def clean_tools(raw: Any) -> list[dict[str, Any]] | None:
 
 
 def parse_body(body: bytes) -> tuple[list[dict[str, Any]], list[dict[str, Any]] | None, int]:
+    messages, tools, tokens, _quick = parse_turn(body)
+    return messages, tools, tokens
+
+
+def parse_turn(
+    body: bytes,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]] | None, int, bool]:
+    """The messages, tools, token cap and whether Prima marked it a quick turn (speed "quick",
+    only honoured with no tools: a turn that may call tools keeps the smart models first)."""
     if len(body) > MAX_BODY:
         raise Refused(413, "Arisha's question is too long. Start a new chat and ask again.")
     try:
@@ -221,10 +235,13 @@ def parse_body(body: bytes) -> tuple[list[dict[str, Any]], list[dict[str, Any]] 
         tokens = int(data.get("max_tokens") or MAX_TOKENS)
     except (TypeError, ValueError):
         tokens = MAX_TOKENS
+    messages = clean_messages(data.get("messages"))
+    tools = clean_tools(data.get("tools"))
     return (
-        clean_messages(data.get("messages")),
-        clean_tools(data.get("tools")),
+        messages,
+        tools,
         max(64, min(MAX_TOKENS, tokens)),
+        data.get("speed") == "quick" and tools is None,
     )
 
 

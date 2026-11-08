@@ -96,7 +96,8 @@ export interface ArishaFunctionTool { type: 'function'; function: { name: string
  * gateway (arisha-office.ts). The loop below, its rules, tools and budgets are the same for both.
  */
 export type ArishaModel = (
-  turn: { messages: ChatMessage[]; tools?: ArishaFunctionTool[]; maxTokens: number },
+  // P90: quick = a question about using a screen, asked without tools; the office may answer it on its fast models.
+  turn: { messages: ChatMessage[]; tools?: ArishaFunctionTool[]; maxTokens: number; quick?: boolean },
   signal: AbortSignal,
 ) => Promise<{ choices?: { message?: ChatMessage }[] }>;
 
@@ -109,7 +110,7 @@ const ROUNDS = 6;
  */
 export interface ArishaBudgets { overallMs: number; callMs: number }
 const DEFAULT_BUDGETS: ArishaBudgets = { overallMs: 90_000, callMs: 30_000 };
-type ArishaInput = { history: ArishaTurn[]; brief: string; tools: ArishaToolRunner | null; toolSpecs?: ArishaToolSpec[] };
+type ArishaInput = { history: ArishaTurn[]; brief: string; tools: ArishaToolRunner | null; toolSpecs?: ArishaToolSpec[]; quick?: boolean };
 export async function askArisha(
   cfg: ArishaConfig,
   token: (signal?: AbortSignal) => Promise<string>,
@@ -162,7 +163,7 @@ async function askArishaWithinBudget(
   for (let round = 0; round < ROUNDS; round++) {
     const last = round === ROUNDS - 1;
     checkArishaBudget(overallSignal);
-    const body = await withinArishaBudget(budgets.callMs, signal => model({ messages, tools: tools && !last ? tools : undefined, maxTokens: 2000 }, signal), overallSignal);
+    const body = await withinArishaBudget(budgets.callMs, signal => model({ messages, tools: tools && !last ? tools : undefined, maxTokens: 2000, quick: input.quick === true && !tools }, signal), overallSignal);
     checkArishaBudget(overallSignal);
     const msg = body?.choices?.[0]?.message;
     if (!msg) throw new Error('The AI service gave no answer.');

@@ -811,7 +811,7 @@ export interface Api extends ConnectionsClient, ExtractionClient, DraftHelpClien
   arishaResubmit(id: string, version: number): ReturnType<PrimaService['arishaDrafts']['resubmit']>;
   arishaReturn(id: string, version: number): ReturnType<PrimaService['arishaDrafts']['returnDraft']>;
   arishaStatus(): Promise<{ enabled: boolean }>;
-  arisha(input: { brief: string; history: ArishaTurn[] }): Promise<ArishaAnswer>;
+  arisha(input: { brief: string; history: ArishaTurn[]; quick?: boolean }, signal?: AbortSignal): Promise<ArishaAnswer>;
   recordKinds(): Promise<RecordKind[]>;
   payChanges(): Promise<PayChangesData>;
   decidePayChange(id: string, verify: boolean, note: string): Promise<unknown>;

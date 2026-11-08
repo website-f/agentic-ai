@@ -14,6 +14,7 @@ from sqlalchemy import select
 
 from agentic.core.config import settings
 from agentic.core.db import SessionLocal
+from agentic.engine import gateway
 from agentic.models import LLMCall, Membership, PrimaLink, User
 from agentic.prima import model
 
@@ -241,3 +242,33 @@ async def test_too_many_turns_a_minute_are_refused(client, llm, prima_on, monkey
     assert (await _ask(client, body, signed(body))).status_code == 200
     r = await _ask(client, body, signed(body))
     assert r.status_code == 429 and "Wait a minute" in r.json()["message"]
+
+
+async def test_a_quick_turn_asks_the_fast_models_first_and_thinks_briefly(
+    client, llm, prima_on, monkeypatch
+):
+    """P90: a screen question Prima marks quick (speed "quick", no tools) goes to the fast models
+    first; every Arisha turn asks thinking models to think briefly. A turn with tools keeps the
+    smart models first even when it says quick."""
+    await office(client)
+    await _link("owner@example.com", "u-owner")
+    seen: list[tuple[tuple[str, ...], dict]] = []
+    real = gateway.chat_first
+
+    async def spy(db, workspace_id, groups, messages, **kw):
+        seen.append((groups, kw))
+        return await real(db, workspace_id, groups, messages, **kw)
+
+    monkeypatch.setattr(gateway, "chat_first", spy)
+    llm.say("Press **Add shifts**.").say("Open **Leave**.")
+    body = json.dumps({"messages": MESSAGES, "max_tokens": 1200, "speed": "quick"}).encode()
+    r = await _ask(client, body, signed(body))
+    assert r.status_code == 200, r.text
+    assert r.json()["choices"][0]["message"]["content"].startswith("Press **Add shifts**")
+    assert seen[-1][0] == model.QUICK_GROUPS == ("fast", "smart")
+    assert seen[-1][1]["reasoning_effort"] == "low" and seen[-1][1]["max_tokens"] == 1200
+    body = _body(speed="quick")
+    r = await _ask(client, body, signed(body))
+    assert r.status_code == 200, r.text
+    assert seen[-1][0] == model.GROUPS and seen[-1][1]["tools"]
+    assert model.parse_turn(_body())[3] is False

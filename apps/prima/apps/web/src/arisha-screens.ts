@@ -18,6 +18,12 @@ export interface ScreenGuide {
   notes: string;
 }
 
+/** P90: the guides a question needs besides the open screen (arisha-local.ts picks them): other screens, how-tos. */
+export interface GuideFocus {
+  views: string[];
+  tasks: { view: string; task: number }[];
+}
+
 export { SCREEN_GUIDES };
 const BY_VIEW = new Map(SCREEN_GUIDES.map((g) => [g.view, g]));
 
@@ -72,14 +78,18 @@ const short = (s: string, n: number) => {
 /**
  * The screen guide part of Arisha's brief: the open screen in full, the person's other screens one line each, within
  * `room` characters (the server takes at most 20,000 for the whole brief, so the caller passes what is left).
+ * P90: with a `focus` (the guides arisha-local.ts matched to the question) only those other screens are listed and the
+ * matched how-tos from other screens are given in full, instead of a line for every screen in the menu: a much
+ * smaller brief, so the AI answers sooner. The menu labels themselves stay in the brief for "where do I ...?".
  */
-export function screenGuideText(view: string, menu: string[], lang: Lang, room = 12_000): string {
+export function screenGuideText(view: string, menu: string[], lang: Lang, room = 12_000, focus?: GuideFocus): string {
   const intro =
     'SCREEN GUIDE (written from the screens themselves; quoted words are the exact labels on screen. Explain only from this guide, the cards and the rules; if it does not cover something, say so and suggest asking their manager or IT.)';
   const open = BY_VIEW.get(view);
   const mine = new Set(menu);
-  const others = SCREEN_GUIDES.filter((g) => g.view !== view && mine.has(g.title));
   const name = (g: ScreenGuide) => (tr(g.title, lang) !== g.title ? `${tr(g.title, lang)} (${g.title})` : g.title);
+  if (focus) return focused(view, open, mine, lang, room, focus, intro, name);
+  const others = SCREEN_GUIDES.filter((g) => g.view !== view && mine.has(g.title));
   // The open screen first (up to two thirds of the room), then as much of the menu index as fits.
   const openText = open ? full(open, lang, Math.max(1500, Math.floor(room * 0.66) - intro.length)) : `SCREEN OPEN NOW: ${view} (no guide written for this screen yet; say so if asked about it).`;
   const rest = room - intro.length - openText.length - 120;
@@ -98,4 +108,25 @@ export function screenGuideText(view: string, menu: string[], lang: Lang, room =
   return [intro, openText, lines.length ? `OTHER SCREENS IN THIS PERSON'S MENU (use to answer "where do I ...?"):\n${lines.join('\n')}` : '']
     .filter(Boolean)
     .join('\n');
+}
+
+/** P90: the open screen, then the matched how-tos and screens from elsewhere in the person's menu, within `room`. */
+function focused(view: string, open: ScreenGuide | undefined, mine: Set<string>, lang: Lang, room: number, focus: GuideFocus, intro: string, name: (g: ScreenGuide) => string): string {
+  const allowed = (g: ScreenGuide | undefined): g is ScreenGuide => !!g && g.view !== view && mine.has(g.title);
+  const openText = open ? full(open, lang, Math.max(1500, Math.floor(room * 0.7) - intro.length)) : `SCREEN OPEN NOW: ${view} (no guide written for this screen yet; say so if asked about it).`;
+  const parts = [intro, openText];
+  let used = intro.length + openText.length;
+  const add = (text: string) => {
+    if (used + text.length + 1 > room) return;
+    parts.push(text);
+    used += text.length + 1;
+  };
+  const howTos = focus.tasks
+    .map(({ view: v, task }) => ({ g: BY_VIEW.get(v), t: BY_VIEW.get(v)?.tasks[task] }))
+    .filter((x): x is { g: ScreenGuide; t: ScreenGuide['tasks'][number] } => allowed(x.g) && !!x.t);
+  if (howTos.length) add('MATCHING HOW-TOS ON OTHER SCREENS (open that screen from the menu first):');
+  for (const { g, t } of howTos) add(onScreen([`* ${t.task} (screen: ${name(g)})`, ...t.steps.map((s, i) => `  ${i + 1}. ${s}`)].join('\n'), lang));
+  const places = focus.views.map((v) => BY_VIEW.get(v)).filter(allowed);
+  if (places.length) add(`OTHER SCREENS THAT MAY HELP (use to answer "where do I ...?"):\n${places.map((g) => `- ${name(g)}: ${short(g.what, 110)}`).join('\n')}`);
+  return parts.join('\n');
 }

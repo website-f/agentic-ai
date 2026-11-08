@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { arishaToolsFor } from '@prima/core';
 import { ArishaBusy, ArishaUnavailable, ARISHA_SYSTEM_RULES, askArishaOn } from '../src/arisha';
-import { OFFICE_MODEL_VIA, arishaProvider, officeModel, officeModelConfig } from '../src/arisha-office';
+import { OFFICE_MODEL_VIA, QUICK_MAX_TOKENS, arishaProvider, officeModel, officeModelConfig } from '../src/arisha-office';
 import { officePayload, officeSign } from '../src/office';
 
 const SECRET = 'o'.repeat(40);
@@ -83,5 +83,25 @@ describe('Arisha on the office AI', () => {
     // A refusal without words (or a long one) gets our own plain line, never the raw body.
     await assert.rejects(askArishaOn(officeModel(cfg, 'u-staff', (async () => new Response('x'.repeat(500), { status: 502 })) as typeof fetch), input()),
       (e: unknown) => e instanceof ArishaUnavailable && /could not reach the office AI/.test(e.message));
+  });
+
+  it('P90: a quick screen question is one turn without tools, asks the office for its fast models and a shorter answer', async () => {
+    const cfg = officeModelConfig({ OFFICE_MODEL_URL: URL_, OFFICE_SIGNING_SECRET: SECRET })!;
+    const bodies: Record<string, unknown>[] = [];
+    const http = (async (_url: string, init: RequestInit) => {
+      bodies.push(JSON.parse(String(init.body)));
+      return json({ choices: [{ message: { role: 'assistant', content: 'Press "Add shifts".' } }] });
+    }) as typeof fetch;
+    const answer = await askArishaOn(officeModel(cfg, 'u-staff', http), { history: [], brief: 'How do I add shifts?', tools: null, toolSpecs: [], quick: true });
+    assert.equal(answer.text, 'Press "Add shifts".');
+    assert.equal(bodies.length, 1);
+    assert.equal(bodies[0].speed, 'quick');
+    assert.equal(bodies[0].tools, undefined);
+    assert.equal(bodies[0].max_tokens, QUICK_MAX_TOKENS);
+    // A turn that offers tools is never marked quick, even when asked: it keeps the office's usual models.
+    await askArishaOn(officeModel(cfg, 'u-staff', http), { ...input(async () => ({ cards: [] })), quick: true });
+    assert.equal(bodies[1].speed, undefined);
+    assert.equal(bodies[1].max_tokens, 2000);
+    assert.ok(Array.isArray(bodies[1].tools));
   });
 });
