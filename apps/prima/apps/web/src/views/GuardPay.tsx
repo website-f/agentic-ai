@@ -22,6 +22,7 @@ import {
   useLoad,
   type Tone,
 } from "../ui";
+import { Empty } from "../kit";
 
 /**
  * Guard pay run (Fauzan, 5 Nov 2026). Guards, stationed officers and patrolling officers are paid from locked
@@ -137,6 +138,11 @@ function Runs({
         <div className="panel-head">
           <h3>By company</h3>
         </div>
+        {data.employers.length === 0 && (
+          <Empty title="No guards or officers on the pay list yet">
+            A company appears here once it has active guards or officers in People. HR then prepares each month's pay from their locked attendance.
+          </Empty>
+        )}
         <div className="list">
           {data.employers.map((e) => (
             <div

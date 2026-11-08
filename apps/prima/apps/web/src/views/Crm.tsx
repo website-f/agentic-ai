@@ -576,6 +576,7 @@ function Group({
         <div className="panel-head">
           <h3>Biggest clients</h3>
         </div>
+        {g.top.length === 0 && <p className="panel-empty">No client has a contract value recorded yet, so none rank here.</p>}
         <div className="list">
           {g.top.map((t) => (
             <button

@@ -76,8 +76,8 @@ export function ArishaReviewQueue({ user, companies }: { user: User; companies: 
   };
   if (!visible) return null;
   return <section aria-label="Draft reviews" className="draft-queue" data-open={open}>
-    <button className="btn btn-sm" aria-expanded={open} onClick={() => { if (open) close(); else { setOpen(true); void refresh(); } }}>Draft reviews {open ? '−' : '+'}</button>
-    {open && <div style={{ maxHeight: '60vh', overflow: 'auto', paddingTop: 8 }}>
+    <button className="btn btn-sm" aria-expanded={open} onClick={() => { if (open) close(); else { setOpen(true); void refresh(); } }}><span className="hide-sm">Draft reviews</span><span className="show-sm">Drafts</span> {open ? '−' : '+'}</button>
+    {open && <div className="draft-queue-panel">
       <p className="small">Drafts are proposals, not approvals. An authorized person using their existing save rights must check the details and explicitly save. AI access is not granted by this panel.</p>
       <button className="btn btn-sm" disabled={busy} onClick={() => void refresh()}>Refresh</button>{' '}
       <button className="btn btn-sm btn-ghost" onClick={close}>Close</button>

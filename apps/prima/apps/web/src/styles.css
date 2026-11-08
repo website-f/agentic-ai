@@ -2996,3 +2996,266 @@ button.k-stat:active {
     display: none;
   }
 }
+
+/* ---------- P86: layout fixes found by a page-by-page check (8 Nov 2026) ---------- */
+/* Stat tiles: label, number and note sit on shared rows, so every number in a row lines up even when one label wraps. */
+.k-stats {
+  row-gap: 12px;
+}
+.k-stats > .k-stat {
+  grid-row: span 3;
+  grid-template-rows: subgrid;
+  row-gap: 6px;
+}
+.k-stat-top {
+  align-items: flex-start;
+}
+.k-stat-icon {
+  margin-top: -3px;
+}
+.kpis > .kpi,
+.kpis > .kpi-link {
+  grid-row: span 3;
+  display: grid;
+  grid-template-rows: subgrid;
+  row-gap: 4px;
+}
+.kpis > .kpi-link > .kpi {
+  grid-row: span 3;
+  display: grid;
+  grid-template-rows: subgrid;
+  row-gap: 4px;
+}
+.kpi-value,
+.k-stat-value {
+  align-self: start;
+}
+/* An empty list says so with a mark, not a blank square. */
+.k-empty-mark {
+  display: grid;
+  place-items: center;
+  color: var(--muted);
+}
+.k-empty-mark::before {
+  content: '';
+  width: 22px;
+  height: 22px;
+  background: currentColor;
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 13h4l2 3h6l2-3h4'/%3E%3Cpath d='M5 13V6a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v7'/%3E%3Cpath d='M3 13v5a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-5'/%3E%3C/svg%3E") center / contain no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 13h4l2 3h6l2-3h4'/%3E%3Cpath d='M5 13V6a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v7'/%3E%3Cpath d='M3 13v5a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-5'/%3E%3C/svg%3E") center / contain no-repeat;
+}
+.panel > .k-empty {
+  padding-block: 28px;
+}
+/* Draft reviews: a button in the top bar that opens a pop-over, never a strip of its own. */
+.topbar .draft-queue,
+.topbar .draft-queue[data-open='true'] {
+  position: relative;
+  padding: 0;
+  border: 0;
+  display: block;
+}
+.draft-queue-panel {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 30;
+  width: min(560px, calc(100vw - 32px));
+  max-height: min(70vh, 640px);
+  overflow: auto;
+  padding: 16px;
+  display: grid;
+  gap: 10px;
+  justify-items: start;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.35);
+}
+.draft-queue-panel > article,
+.draft-queue-panel > fieldset {
+  justify-self: stretch;
+}
+@media (max-width: 860px) {
+  .draft-queue-panel {
+    position: fixed;
+    top: 64px;
+    left: 16px;
+    right: 16px;
+    width: auto;
+  }
+}
+/* Work KPIs: each department is a card; its three tables are sub-blocks with small headings. */
+.wk-month {
+  display: grid;
+  gap: 4px;
+  min-width: 170px;
+}
+.wk-blocks {
+  display: grid;
+  gap: 18px;
+}
+.wk-block {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+.wk-block h3,
+.wk-block h4 {
+  font-size: 0.78rem;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.wk-block > .muted {
+  font-size: 0.88rem;
+}
+.wk-people > summary,
+.wk-notes > summary {
+  cursor: pointer;
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--muted);
+  padding-block: 4px;
+}
+.wk-people[open] > summary,
+.wk-notes[open] > summary {
+  margin-bottom: 8px;
+}
+.wk-people {
+  display: grid;
+  gap: 12px;
+}
+.wk-notes {
+  margin-top: 4px;
+}
+.k-card-body > .wk-notes:first-child {
+  margin-top: 0;
+}
+.wk-notes ul {
+  display: grid;
+  gap: 6px;
+  padding-left: 0;
+  list-style: none;
+  font-size: 0.86rem;
+  color: var(--muted);
+}
+.wk-tag {
+  display: inline-block;
+  margin-right: 6px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  background: var(--surface-2);
+  color: var(--ink);
+}
+.k-card-body:empty { display: none; }
+/* An empty list inside a card says so instead of leaving a bare card. */
+.panel-empty {
+  padding: 20px 18px;
+  margin: 0 !important;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+.panel > .list:empty,
+.k-card-body > .list:empty {
+  display: none;
+}
+.panel:not(:has(> :not(.panel-head):not(:empty))) > .panel-head::after {
+  content: 'Nothing to show yet.';
+  flex-basis: 100%;
+  font-size: 0.88rem;
+  font-weight: 400;
+  color: var(--muted);
+}
+/* Loading has its own spinning mark, so it never looks like an empty list. */
+.empty.is-loading::before {
+  background: none;
+  border: 3px solid var(--surface-2);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  width: 28px;
+  height: 28px;
+  animation: p86-spin 0.8s linear infinite;
+}
+@keyframes p86-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .empty.is-loading::before {
+    animation: none;
+  }
+}
+.show-sm {
+  display: none;
+}
+@media (max-width: 860px) {
+  .show-sm {
+    display: inline;
+  }
+  .topbar strong {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+/* Phones: the company picker shrinks so the top bar never runs off the screen. */
+@media (max-width: 860px) {
+  .topbar {
+    flex-wrap: nowrap;
+  }
+  .topbar > label.row {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+  .topbar > label.row .label {
+    display: none;
+  }
+  .topbar .select {
+    min-width: 0;
+    width: 100%;
+    max-width: none;
+  }
+  .topbar > .grow {
+    display: none;
+  }
+  .topbar > strong {
+    flex: 1 1 auto;
+  }
+}
+/* Cards stacked in a list keep a gap between them (hand-over guide and similar). */
+.list > .card + .card,
+.list > article.card + article.card {
+  margin-top: 10px;
+}
+/* Headings and lists placed straight inside a card get the card's padding, like its paragraphs. */
+.panel > h2,
+.panel > h3,
+.panel > h4 {
+  padding: 14px 18px 0;
+}
+.panel > ul,
+.panel > ol {
+  margin: 10px 18px 14px 36px;
+}
+/* CRM pipeline stages: the number sits on the same line in every stage, even when a stage name wraps. */
+.crm-stages > .crm-stage {
+  display: grid;
+  grid-template-rows: 2.6em auto auto;
+  align-content: start;
+}
+.crm-stages > .crm-stage > .label {
+  align-self: start;
+}
+/* The phone "More" sheet never covers a desktop page (opened on a phone, then the window widened or turned). */
+@media (min-width: 861px) {
+  .shell > .scrim,
+  .shell > .sheet {
+    display: none;
+  }
+}

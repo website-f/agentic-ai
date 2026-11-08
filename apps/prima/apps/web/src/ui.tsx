@@ -244,7 +244,7 @@ export function ErrorNotice({ error }: { error: { message: string; findings: Pic
 }
 
 export function Loading({ what }: { what: string }) {
-  return <div className="empty">Loading {what}…</div>;
+  return <div className="empty is-loading" role="status" aria-live="polite">Loading {what}…</div>;
 }
 
 export function Drawer({ title, sub, onClose, children }: { title: ReactNode; sub?: ReactNode; onClose: () => void; children: ReactNode }) {

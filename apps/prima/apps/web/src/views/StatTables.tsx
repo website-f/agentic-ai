@@ -255,6 +255,7 @@ function EmployerNos({ employers, canEdit, onDone }: { employers: { companyId: s
       <div className="panel-head">
         <h3>Employer numbers</h3>
       </div>
+      {employers.length === 0 && <p className="panel-empty">No employer is in your view yet. Each company's EPF, SOCSO, LHDN and HRD Corp numbers are kept here.</p>}
       <div className="list">
         {employers.map((e) => (
           <div key={e.companyId} className="list-item" style={{ display: "block" }}>

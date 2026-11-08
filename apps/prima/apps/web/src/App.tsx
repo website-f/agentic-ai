@@ -328,8 +328,8 @@ const NAV: { view: ViewName; label: string; icon: string; roles: User['role'][];
   { view: 'it-procurement', label: 'IT purchase fulfilment', icon: 'device', roles: ['director','pwvsb_officer'] },
   // Workflow KPIs across departments (Fauzan, 5 Nov 2026): only the KPI keepers; workKpiScope decides who.
   { view: 'work-kpi', label: 'Work KPIs', icon: 'audit', roles: ['director', 'pwvsb_officer', 'company_manager'] },
-  { view: 'it-metrics', label: 'Workflow time & quality', icon: 'device', roles: ['director','pwvsb_officer','company_manager','admin_exec','supervisor','guard'] },
-  { view: 'hr-it-intake', label: 'HR / IT coordination', icon: 'device', roles: ['director','pwvsb_officer','company_manager','admin_exec','supervisor','guard'] },
+  { view: 'it-metrics', label: 'Workflow time & quality', icon: 'device', roles: ['director','pwvsb_officer','company_manager','admin_exec','supervisor'] },
+  { view: 'hr-it-intake', label: 'HR / IT coordination', icon: 'device', roles: ['director','pwvsb_officer','company_manager','admin_exec','supervisor'] },
   // Group websites (Fauzan, 27 Oct 2026): IT runs the register and reviews; each company answers for its own websites.
   { view: 'websites', label: 'Websites', icon: 'device', roles: ['director', 'pwvsb_officer', 'company_manager', 'admin_exec'] },
   { view: 'staffpay', label: 'Staff payroll', icon: 'audit', roles: ['director', 'pwvsb_officer', 'company_manager', 'admin_exec'] },
@@ -1104,7 +1104,6 @@ function Shell({ me, onSignOut, onReset }: { me: Me; onSignOut: () => void; onRe
         </aside>
         <div className="main">
           {!me.user.integration && <CleanupReceiptRecovery key={`${me.user.id}:${route.view}`} owner={me.user.id}/>}
-          {!me.user.integration && <ArishaReviewQueue key={me.user.id} user={me.user} companies={me.companies} />}
           {api.mode === 'demo' && (
             <div className="demo-band">
               <strong>Test version.</strong>
@@ -1143,6 +1142,8 @@ function Shell({ me, onSignOut, onReset }: { me: Me; onSignOut: () => void; onRe
             <span className="mono num muted small" title="Malaysia time">
               {hhmm(clock)} MYT
             </span>
+            {/* P86: the draft review queue sits in the top bar as a pop-over, not a strip of its own above it. */}
+            {!me.user.integration && <ArishaReviewQueue key={me.user.id} user={me.user} companies={me.companies} />}
             <button className="btn btn-sm hide-sm" onClick={onSignOut}>
               {api.mode === 'demo' ? 'Switch person' : 'Sign out'}
             </button>

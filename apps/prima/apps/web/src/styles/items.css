@@ -469,3 +469,17 @@
     box-shadow: none;
   }
 }
+
+/* P86: on a phone the status chip goes under the item name instead of squeezing it into two narrow columns. */
+@media (max-width: 719px) {
+  .it-row-btn {
+    flex-wrap: wrap;
+    row-gap: 6px;
+  }
+  .it-row-btn > .it-row-main {
+    flex: 1 1 100%;
+  }
+  .it-row-btn > .chip {
+    white-space: nowrap;
+  }
+}

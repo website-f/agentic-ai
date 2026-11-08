@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { api, type WorkKpi } from '../api';
 import { ErrorNotice, Loading, useLoad } from '../ui';
+import { Card, PageHead, Stat, Stats } from '../kit';
 
 type Dept = WorkKpi['departments'][number];
 type Stage = Dept['work'][number];
@@ -99,56 +100,87 @@ export function WorkKpiView() {
         <Loading what="work KPIs" />
       </div>
     );
+  const done = (d: Dept) => d.work.reduce((n, r) => n + r.count, 0) + d.checking.reduce((n, r) => n + r.count, 0);
+  const finished = (d: Dept) => d.quality.reduce((n, q) => n + q.finished, 0);
+  const active = data.departments.filter((d) => done(d) + finished(d) > 0).length;
   return (
     <div className="page">
-      <div className="page-head">
-        <div>
-          <h1>Work KPIs</h1>
-          <p>
-            Speed and quality ({data.scope}). Time counts from {data.measuredFrom}. Nobody presses start or stop.
-          </p>
-        </div>
-        <label className="field">
-          Month
-          <input type="month" value={period || data.period} onChange={(e) => setPeriod(e.target.value)} />
-        </label>
+      <PageHead
+        title="Work KPIs"
+        sub={`Speed and quality (${data.scope}). Time counts from ${data.measuredFrom}. Nobody presses start or stop.`}
+        actions={
+          <label className="field wk-month">
+            <span className="label">Month</span>
+            <input className="input" type="month" value={period || data.period} onChange={(e) => setPeriod(e.target.value)} />
+          </label>
+        }
+      />
+      <div className="notice" data-tone="info" role="note">
+        {data.provisional ? `Targets are provisional (version ${data.targetsVersion}). ` : `Targets: version ${data.targetsVersion}. `}
+        {data.targetsNote} Approvals are not timed: each person is timed on their own part only. {data.note}
       </div>
-      <p role="note">
-        {data.provisional ? `Targets are provisional (version ${data.targetsVersion}). ` : `Targets: version ${data.targetsVersion}. `}{data.targetsNote}{' '}
-        Approvals are not timed: each person is timed on their own part only. {data.note}
-      </p>
-      {data.departments.map((d) => (
-        <section className="panel" key={d.dept}>
-          <h2>{d.label}</h2>
-          <h3>Staff work</h3>
-          <StageTable rows={d.work} empty="No timed work this month." />
-          <h3>Checking work</h3>
-          <StageTable rows={d.checking} empty="No timed checking this month." />
-          <h3>Quality</h3>
-          <QualityTable rows={d.quality} />
-          {d.people.length > 0 && (
-            <details>
-              <summary>By person ({d.people.length}), listed by name</summary>
-              {d.people.map((p) => (
-                <div key={p.name}>
-                  <h4>{p.name}</h4>
-                  <StageTable rows={p.stages} empty="" />
+      <Stats>
+        <Stat label="Departments" value={data.departments.length} note={`${active} with timed work this month`} />
+        <Stat label="Steps timed" value={data.departments.reduce((n, d) => n + done(d), 0)} />
+        <Stat label="Work finished" value={data.departments.reduce((n, d) => n + finished(d), 0)} />
+      </Stats>
+      {data.departments.map((d) => {
+        const quiet = done(d) + finished(d) === 0;
+        return (
+          <Card
+            key={d.dept}
+            title={d.label}
+            sub={quiet ? 'No timed work, checking or finished work this month.' : `${done(d)} steps timed · ${finished(d)} finished`}
+          >
+            {!quiet && (
+              <div className="wk-blocks">
+                <div className="wk-block">
+                  <h3>Staff work</h3>
+                  <StageTable rows={d.work} empty="No timed work this month." />
                 </div>
-              ))}
-            </details>
-          )}
-          {(d.unknown.length > 0 || d.notTimed.length > 0) && (
-            <ul className="muted">
-              {d.unknown.map((u) => (
-                <li key={u}>Not measured yet: {u}.</li>
-              ))}
-              {d.notTimed.map((u) => (
-                <li key={u}>Not timed by decision: {u}.</li>
-              ))}
-            </ul>
-          )}
-        </section>
-      ))}
+                <div className="wk-block">
+                  <h3>Checking work</h3>
+                  <StageTable rows={d.checking} empty="No timed checking this month." />
+                </div>
+                <div className="wk-block">
+                  <h3>Quality</h3>
+                  <QualityTable rows={d.quality} />
+                </div>
+                {d.people.length > 0 && (
+                  <details className="wk-people">
+                    <summary>By person ({d.people.length}), listed by name</summary>
+                    {d.people.map((p) => (
+                      <div key={p.name} className="wk-block">
+                        <h4>{p.name}</h4>
+                        <StageTable rows={p.stages} empty="" />
+                      </div>
+                    ))}
+                  </details>
+                )}
+              </div>
+            )}
+            {(d.unknown.length > 0 || d.notTimed.length > 0) && (
+              <details className="wk-notes">
+                <summary>
+                  What is not counted ({d.unknown.length + d.notTimed.length})
+                </summary>
+                <ul>
+                  {d.unknown.map((u) => (
+                    <li key={u}>
+                      <span className="wk-tag">Not measured yet</span> {u}.
+                    </li>
+                  ))}
+                  {d.notTimed.map((u) => (
+                    <li key={u}>
+                      <span className="wk-tag">Not timed by decision</span> {u}.
+                    </li>
+                  ))}
+                </ul>
+              </details>
+            )}
+          </Card>
+        );
+      })}
     </div>
   );
 }
