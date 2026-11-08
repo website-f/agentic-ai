@@ -149,6 +149,31 @@ export class CheckinController {
     return r;
   }
 
+  // P90: the owner's TEST check-in and check-out, with the route between (owner-test-checkin.ts). Only the owner may use
+  // them (the service refuses anyone else, and the table's row-level security agrees); nothing else is changed.
+  @Get('me/test-checkin')
+  testMine(@UserId() uid: string) {
+    return this.db.asUser(uid, (svc, u) => svc.ownerTestCheckins.mine(u));
+  }
+
+  @Post('me/test-checkin/in')
+  testIn(@UserId() uid: string, @Body() b: Record<string, unknown>) {
+    const fix = fixOf(b);
+    return this.db.asUser(uid, (svc, u) => svc.ownerTestCheckins.start(u, fix));
+  }
+
+  @Post('me/test-checkin/ping')
+  testPing(@UserId() uid: string, @Body() b: Record<string, unknown>) {
+    const fix = fixOf(b);
+    return this.db.asUser(uid, (svc, u) => svc.ownerTestCheckins.ping(u, fix));
+  }
+
+  @Post('me/test-checkin/out')
+  testOut(@UserId() uid: string, @Body() b: Record<string, unknown>) {
+    const fix = fixOf(b);
+    return this.db.asUser(uid, (svc, u) => svc.ownerTestCheckins.end(u, fix));
+  }
+
   @Get('checkin/setup')
   setup(@UserId() uid: string) {
     return this.db.asUser(uid, (svc, u) => svc.checkinSetup(u));

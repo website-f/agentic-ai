@@ -899,7 +899,8 @@ function Shell({ me, onSignOut, onReset }: { me: Me; onSignOut: () => void; onRe
       (n.view !== 'hostels' || dept !== 'operations' || leader || ['ops_director', 'ogm'].includes(me.user.opsTier ?? '')) &&
       // Everyone has their own details and clock, except the CEO, Chairman and Vice Chairman (Fauzan, 26 Oct 2026).
       (n.view !== 'mine' || !!me.user.personId) &&
-      (n.view !== 'clock' || hasOwnStaffRecord(me.user)) &&
+      // P90: the owner sees Clock to test check-in and check-out (a test only, never attendance or pay).
+      (n.view !== 'clock' || hasOwnStaffRecord(me.user) || isOwnerAdmin(me.user)) &&
       // Arms detail: CMS, Arms Control, COO or higher, the company manager and the supervisor for their own people (Fauzan, 26 Oct 2026).
       (n.view !== 'arms' || !isGroup || seesArmsDetail(me.user)) &&
       // Operations sees foreign workers only as OM or Regional OM; the FWM despatch sees tasks.

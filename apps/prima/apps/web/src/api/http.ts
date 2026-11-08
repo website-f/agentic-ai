@@ -636,6 +636,13 @@ export class HttpApi implements Api {
     return this.call('POST', '/me/clock/ping', input);
   }
   // P81: staff check-in by place (apps/api/src/checkin.controller.ts).
+  // P90: the owner's test check-in (owner only; the server refuses anyone else).
+  myTestCheckins() {
+    return this.call<Awaited<ReturnType<Api['myTestCheckins']>>>('GET', '/me/test-checkin');
+  }
+  testCheckin(step: 'in' | 'ping' | 'out', fix: Parameters<Api['testCheckin']>[1]) {
+    return this.call<unknown>('POST', `/me/test-checkin/${step}`, fix);
+  }
   myCheckin() {
     return this.call<Awaited<ReturnType<Api['myCheckin']>>>('GET', '/me/checkin');
   }
