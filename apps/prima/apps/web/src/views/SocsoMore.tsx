@@ -1,3 +1,4 @@
+import { Select } from '../SearchSelect';
 import { useState } from 'react';
 import {
   DEPENDANT_PAY_LABEL,
@@ -86,14 +87,14 @@ export function LindungPanel({ d }: { d: SocsoClaimDetail }) {
           <div className="grid-2" style={{ marginTop: 6 }}>
             <label className="field">
               <span className="label">How the worker applied</span>
-              <select className="input" aria-label="How the worker applied" value={channel} onChange={(e) => setChannel(e.target.value as LindungChannel)}>
+              <Select className="input" aria-label="How the worker applied" value={channel} onChange={(e) => setChannel(e.target.value as LindungChannel)}>
                 <option value="">Choose</option>
                 {(Object.keys(LINDUNG_CHANNEL_LABEL) as LindungChannel[]).map((k) => (
                   <option key={k} value={k}>
                     {LINDUNG_CHANNEL_LABEL[k]}
                   </option>
                 ))}
-              </select>
+              </Select>
             </label>
             <label className="field">
               <span className="label">Date applied</span>
@@ -136,13 +137,13 @@ export function LindungPanel({ d }: { d: SocsoClaimDetail }) {
         )}
         {manage && r.verifyAskedAt && !r.verify && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 6 }}>
-            <select className="input" aria-label="Answer to PERKESO" value={answer} onChange={(e) => setAnswer(e.target.value as keyof typeof LINDUNG_VERIFY_LABEL)}>
+            <Select className="input" aria-label="Answer to PERKESO" value={answer} onChange={(e) => setAnswer(e.target.value as keyof typeof LINDUNG_VERIFY_LABEL)}>
               {(Object.keys(LINDUNG_VERIFY_LABEL) as (keyof typeof LINDUNG_VERIFY_LABEL)[]).map((k) => (
                 <option key={k} value={k}>
                   {LINDUNG_VERIFY_LABEL[k]}
                 </option>
               ))}
-            </select>
+            </Select>
             <input className="input" aria-label="Note" placeholder="Note (needed unless the answer is employed)" value={note} onChange={(e) => setNote(e.target.value)} />
             <div>
               <button className="btn btn-primary btn-sm" disabled={act.busy} onClick={() => act.run(() => api.verifyLindung(c.id, answer, note), 'Answer recorded.')}>
@@ -323,13 +324,13 @@ function DependantRow({ d, p, share, manage }: { d: SocsoClaimDetail; p: Dep; sh
       )}
       {mode === 'route' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          <select className="input" aria-label="How PERKESO pays" value={route} onChange={(e) => setRoute(e.target.value as DependantPayRoute)}>
+          <Select className="input" aria-label="How PERKESO pays" value={route} onChange={(e) => setRoute(e.target.value as DependantPayRoute)}>
             {ROUTES.map((k) => (
               <option key={k} value={k}>
                 {DEPENDANT_ROUTE_LABEL[k]}
               </option>
             ))}
-          </select>
+          </Select>
           <input className="input" aria-label="PERKESO officer" placeholder="PERKESO officer or letter that confirmed it" value={officer} onChange={(e) => setOfficer(e.target.value)} />
           <input className="input" type="date" aria-label="Date confirmed" value={on} onChange={(e) => setOn(e.target.value)} />
           <div className="row" style={{ gap: 6 }}>
@@ -368,13 +369,13 @@ function AddDependant({ claimId }: { claimId: string }) {
     <div className="panel" style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: 6, marginTop: 6 }}>
       <input className="input" aria-label="Name" placeholder="Name as on the papers" value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} />
       <div className="grid-2">
-        <select className="input" aria-label="Relationship" value={f.relation} onChange={(e) => setF({ ...f, relation: e.target.value as DependantRelation })}>
+        <Select className="input" aria-label="Relationship" value={f.relation} onChange={(e) => setF({ ...f, relation: e.target.value as DependantRelation })}>
           {RELATIONS.map((k) => (
             <option key={k} value={k}>
               {DEPENDANT_RELATION_LABEL[k]}
             </option>
           ))}
-        </select>
+        </Select>
         <input className="input" aria-label="Country" placeholder="Country they live in" value={f.country} onChange={(e) => setF({ ...f, country: e.target.value })} />
         <label className="field">
           <span className="label">Date of birth (children)</span>
@@ -477,21 +478,21 @@ function AddPayment({ d }: { d: SocsoClaimDetail }) {
   return (
     <div className="panel" style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: 6, marginTop: 6 }}>
       <div className="grid-2">
-        <select className="input" aria-label="What PERKESO paid" value={f.kind} onChange={(e) => setF({ ...f, kind: e.target.value as DependantPayKind })}>
+        <Select className="input" aria-label="What PERKESO paid" value={f.kind} onChange={(e) => setF({ ...f, kind: e.target.value as DependantPayKind })}>
           {PAYS.map((k) => (
             <option key={k} value={k}>
               {DEPENDANT_PAY_LABEL[k]}
             </option>
           ))}
-        </select>
-        <select className="input" aria-label="Paid to" value={f.dependantId} onChange={(e) => setF({ ...f, dependantId: e.target.value })}>
+        </Select>
+        <Select className="input" aria-label="Paid to" value={f.dependantId} onChange={(e) => setF({ ...f, dependantId: e.target.value })}>
           <option value="">The family / the person who paid</option>
           {d.dependants!.record.people.map((p) => (
             <option key={p.id} value={p.id}>
               {p.name}
             </option>
           ))}
-        </select>
+        </Select>
         <input className="input" type="number" min={0} step="0.01" aria-label="Amount (RM)" placeholder="Amount (RM)" value={f.amount} onChange={(e) => setF({ ...f, amount: e.target.value })} />
         <input className="input" type="date" aria-label="Date paid" value={f.paidOn} onChange={(e) => setF({ ...f, paidOn: e.target.value })} />
         <input className="input" aria-label="PERKESO payment reference" placeholder="PERKESO payment reference" value={f.ref} onChange={(e) => setF({ ...f, ref: e.target.value })} />
@@ -583,13 +584,13 @@ export function DoshPanel({ d }: { d: SocsoClaimDetail }) {
         )}
         {manage && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 6 }}>
-            <select className="input" aria-label="DOSH level" value={kind} onChange={(e) => setKind(e.target.value as DoshKind)}>
+            <Select className="input" aria-label="DOSH level" value={kind} onChange={(e) => setKind(e.target.value as DoshKind)}>
               {KINDS.map((k) => (
                 <option key={k} value={k}>
                   {DOSH_KIND_LABEL[k]}
                 </option>
               ))}
-            </select>
+            </Select>
             {kind !== n?.kind && <span className="muted small">{DOSH_KIND_DETAIL[kind]}</span>}
             <input className="input" aria-label="Reason" placeholder="Reason: the injury, the MC days, the doctor's finding" value={why} onChange={(e) => setWhy(e.target.value)} />
             <div>
@@ -691,7 +692,7 @@ export function DoshRegisterPanel() {
     <section className="panel" style={{ padding: 12 }}>
       <div className="panel-head">
         <h2>DOSH accident register (JKKP 8)</h2>
-        <select className="input" aria-label="Year" value={year} onChange={(e) => setYear(Number(e.target.value))} style={{ width: 'auto' }}>
+        <Select className="input" aria-label="Year" value={year} onChange={(e) => setYear(Number(e.target.value))} style={{ width: 'auto' }}>
           {[0, 1, 2, 3, 4, 5].map((k) => {
             const y = Number(today().slice(0, 4)) - k;
             return (
@@ -700,7 +701,7 @@ export function DoshRegisterPanel() {
               </option>
             );
           })}
-        </select>
+        </Select>
       </div>
       <ErrorNotice error={error ?? null} />
       {!data && !error && <Loading what="register" />}

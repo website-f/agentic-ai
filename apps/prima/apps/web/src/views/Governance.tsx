@@ -1,3 +1,4 @@
+import { Select } from '../SearchSelect';
 import { useState } from 'react';
 import { CalendarXIcon, HourglassIcon, KeyIcon, PlusIcon, ScalesIcon, SealCheckIcon, WarningIcon } from '@phosphor-icons/react';
 import type { GovArea } from '@prima/core';
@@ -339,13 +340,13 @@ function NewMandate({ data, onDone }: { data: GovBoard; onDone: () => void }) {
     <div className="gv-stack-sm" aria-label="Add a mandate">
       <label className="field">
         <span className="label">Company</span>
-        <select className="select" aria-label="Company" value={companyId} onChange={(e) => setCompanyId(e.target.value)}>
+        <Select className="select" aria-label="Company" value={companyId} onChange={(e) => setCompanyId(e.target.value)}>
           {companies.map((c) => (
             <option key={c.id} value={c.id}>
               {c.name}
             </option>
           ))}
-        </select>
+        </Select>
       </label>
       <label className="field">
         <span className="label">Kind</span>

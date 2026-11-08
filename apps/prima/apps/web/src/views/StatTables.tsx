@@ -1,3 +1,4 @@
+import { Select } from '../SearchSelect';
 import { useState } from "react";
 import type { StatTable } from "@prima/core";
 import { api } from "../api";
@@ -196,11 +197,11 @@ function LoadForm({ onDone }: { onDone: () => void }) {
       <div style={{ padding: "0 12px 12px" }}>
         <label className="field">
           <span>Table</span>
-          <select className="select" value={f.id} onChange={set("id")}>
+          <Select className="select" value={f.id} onChange={set("id")}>
             {TABLES.map((t) => (
               <option key={t}>{t}</option>
             ))}
-          </select>
+          </Select>
         </label>
         <label className="field">
           <span>Published effective wage month, for reference (YYYY-MM)</span>

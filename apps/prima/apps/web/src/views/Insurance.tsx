@@ -1,3 +1,4 @@
+import { Select } from '../SearchSelect';
 import { useState } from 'react';
 import { BuildingsIcon, CoinsIcon, FileTextIcon, ScalesIcon, ShieldWarningIcon, UmbrellaIcon } from '@phosphor-icons/react';
 import { RecordButton } from './RecordForm';
@@ -421,14 +422,14 @@ function ClaimDrawer({ row: r, onClose }: { row: ClaimRow; onClose: () => void }
         <div className="bz-act">
           <label className="field">
             <span className="label">Document</span>
-            <select className="select" aria-label="Document" value={f.name ?? ''} onChange={set('name')}>
+            <Select className="select" aria-label="Document" value={f.name ?? ''} onChange={set('name')}>
               <option value="">Choose or type a document</option>
               {r.typicalDocs.map((d) => (
                 <option key={d} value={d}>
                   {d}
                 </option>
               ))}
-            </select>
+            </Select>
           </label>
           {input('name', 'Document name')}
           {input('ref', 'Document reference or file number')}

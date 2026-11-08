@@ -1,3 +1,4 @@
+import { Select } from '../SearchSelect';
 import { useState } from 'react';
 import { api, type PublicHolidayBoard } from '../api';
 import { Chip, ErrorNotice, Loading, dateTimeLabel, useAction, useLoad } from '../ui';
@@ -40,20 +41,20 @@ export function PublicHolidaysPanel({ companyId, onCompany }: { companyId: strin
         </p>
       )}
       <div className="row" style={{ gap: 8, flexWrap: 'wrap', margin: '8px 0 12px' }}>
-        <select className="input" aria-label="Company" value={data.companyId} onChange={(e) => onCompany(e.target.value)}>
+        <Select className="input" aria-label="Company" value={data.companyId} onChange={(e) => onCompany(e.target.value)}>
           {data.companies.map((c) => (
             <option key={c.id} value={c.id}>
               {c.name}
             </option>
           ))}
-        </select>
-        <select className="input" aria-label="Year" value={data.year} onChange={(e) => setYear(Number(e.target.value))}>
+        </Select>
+        <Select className="input" aria-label="Year" value={data.year} onChange={(e) => setYear(Number(e.target.value))}>
           {data.years.map((y) => (
             <option key={y} value={y}>
               {y}
             </option>
           ))}
-        </select>
+        </Select>
         <Chip tone={data.missing.length ? (data.due.late ? 'crit' : 'warn') : 'ok'}>
           {data.missing.length ? `Missing for ${data.missing.join(', ')} · due ${data.due.dueOn}` : `Set for every state · due ${data.due.dueOn}`}
         </Chip>

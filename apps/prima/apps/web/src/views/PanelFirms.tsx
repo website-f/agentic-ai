@@ -1,3 +1,4 @@
+import { Select } from '../SearchSelect';
 import { useState } from 'react';
 import { api } from '../api';
 import { Chip, ErrorNotice, Loading, dateLabel, useAction, useLoad } from '../ui';
@@ -38,13 +39,13 @@ export function PanelFirmsPanel() {
       )}
       {data.installed && kinds.length > 0 && (
         <div className="row">
-          <select aria-label="Kind of firm" value={kinds.includes(kind) ? kind : kinds[0]} onChange={(e) => setKind(e.target.value as Kind)}>
+          <Select aria-label="Kind of firm" value={kinds.includes(kind) ? kind : kinds[0]} onChange={(e) => setKind(e.target.value as Kind)}>
             {kinds.map((k) => (
               <option key={k} value={k}>
                 {KIND[k]}
               </option>
             ))}
-          </select>
+          </Select>
           <input aria-label="Firm name" placeholder="Firm name" value={name} onChange={(e) => setName(e.target.value)} />
           <input aria-label="Registration" placeholder="AF number or licence" value={regNo} onChange={(e) => setRegNo(e.target.value)} />
           <input aria-label="Contact" placeholder="Contact person" value={contact} onChange={(e) => setContact(e.target.value)} />

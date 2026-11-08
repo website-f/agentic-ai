@@ -2,6 +2,7 @@
 // import the reports (several PDFs at once: sent in pieces with a progress bar, read on the server page by page, shown
 // as a preview, then saved). Everyone who sees a company's pay sees its months: tiles, the monthly trend, company and
 // department breakdowns, who is often late, and each person's month as a calendar.
+import { Select } from '../SearchSelect';
 import { useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react';
 import {
   ArrowsClockwiseIcon,
@@ -121,29 +122,29 @@ export function AttendanceReports({ compact = false }: { compact?: boolean }) {
       >
         {o && o.months.length > 0 && (
           <>
-            <select className="select" aria-label="Month" value={o.month ?? ''} onChange={(e) => setMonth(e.target.value || null)}>
+            <Select className="select" aria-label="Month" value={o.month ?? ''} onChange={(e) => setMonth(e.target.value || null)}>
               {o.months.map((m) => (
                 <option key={m} value={m}>
                   {monthLabel(m, true)}
                 </option>
               ))}
-            </select>
-            <select className="select" aria-label="Company" value={companyId ?? ''} onChange={(e) => (setCompanyId(e.target.value || null), setDepartment(null))}>
+            </Select>
+            <Select className="select" aria-label="Company" value={companyId ?? ''} onChange={(e) => (setCompanyId(e.target.value || null), setDepartment(null))}>
               <option value="">All companies</option>
               {o.companies.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.name}
                 </option>
               ))}
-            </select>
-            <select className="select" aria-label="Department" value={department ?? ''} onChange={(e) => setDepartment(e.target.value || null)}>
+            </Select>
+            <Select className="select" aria-label="Department" value={department ?? ''} onChange={(e) => setDepartment(e.target.value || null)}>
               <option value="">All departments</option>
               {o.departments.map((d) => (
                 <option key={d} value={d}>
                   {d}
                 </option>
               ))}
-            </select>
+            </Select>
             <Search value={q} onChange={setQ} placeholder="Search name or staff no" />
           </>
         )}
@@ -1068,7 +1069,7 @@ function PreviewBody({
             </span>
             <label className="field">
               <span className="muted small">Saved under</span>
-              <select className="select" value={c.companyId ?? ''} disabled={s.step !== 'preview'} onChange={(e) => onChoose(c.source, e.target.value || null)}>
+              <Select className="select" value={c.companyId ?? ''} disabled={s.step !== 'preview'} onChange={(e) => onChoose(c.source, e.target.value || null)}>
                 <option value="">Choose the company…</option>
                 {p.choices.map((x) => (
                   <option key={x.id} value={x.id}>
@@ -1076,7 +1077,7 @@ function PreviewBody({
                   </option>
                 ))}
                 {c.companyId && !p.choices.some((x) => x.id === c.companyId) && <option value={c.companyId}>{c.companyName}</option>}
-              </select>
+              </Select>
             </label>
             <span className="small">
               {c.employees} people · {c.matched} matched · {c.unmatched} to match

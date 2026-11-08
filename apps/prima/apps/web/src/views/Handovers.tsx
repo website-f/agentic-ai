@@ -1,3 +1,4 @@
+import { Select } from '../SearchSelect';
 import { useContext, useState } from 'react';
 import { ArrowSquareOutIcon, BellIcon, ClockCountdownIcon, TrayIcon } from '@phosphor-icons/react';
 import { Ctx, useApp, type ViewName } from '../App';
@@ -399,18 +400,18 @@ function ImportView() {
           <div className="hx-form-grid">
             <label className="field">
               <span className="label">Kind</span>
-              <select className="select" aria-label="Kind of record" value={kind} onChange={(e) => (setKind(e.target.value as ImportKind), reset())}>
+              <Select className="select" aria-label="Kind of record" value={kind} onChange={(e) => (setKind(e.target.value as ImportKind), reset())}>
                 {IMPORT_KINDS.map(([k, l]) => (
                   <option key={k} value={k}>
                     {l}
                   </option>
                 ))}
-              </select>
+              </Select>
             </label>
             {tpl.data?.companyScoped && (
               <label className="field">
                 <span className="label">Company</span>
-                <select className="select" value={companyId} onChange={(e) => (setCompanyId(e.target.value), reset())}>
+                <Select className="select" value={companyId} onChange={(e) => (setCompanyId(e.target.value), reset())}>
                   <option value="">Choose the company</option>
                   {kind === 'officeStaff' && <option value={GROUP_EMPLOYER_ID}>PWVSB (central staff)</option>}
                   {me.companies.map((c) => (
@@ -418,7 +419,7 @@ function ImportView() {
                       {c.name}
                     </option>
                   ))}
-                </select>
+                </Select>
               </label>
             )}
             <label className="field">

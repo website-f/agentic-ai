@@ -1,3 +1,4 @@
+import { Select } from '../SearchSelect';
 import { useState } from 'react';
 import { FW_CONTRACT_LANGUAGE_LABEL, FW_RECRUIT_STEP_LABEL, type FwContractLanguage, type FwRecruitStep, type ProofInput } from '@prima/core';
 import { api, type FwmRecruitment } from '../api';
@@ -97,14 +98,14 @@ function OpenForm({ companies, onDone }: { companies: { id: string; name: string
   const ready = !!companyId && candidateName.trim().length >= 3 && passportLast4.replace(/[^A-Za-z0-9]/g, '').length === 4 && /^[A-Za-z]{2}$/.test(country) && agency.trim().length >= 2;
   return (
     <div className="panel" style={{ margin: 12, padding: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
-      <select className="select" aria-label="Permit company" value={companyId} onChange={(e) => setCompanyId(e.target.value)}>
+      <Select className="select" aria-label="Permit company" value={companyId} onChange={(e) => setCompanyId(e.target.value)}>
         <option value="">Company that will hold the permit</option>
         {companies.map((c) => (
           <option key={c.id} value={c.id}>
             {c.name}
           </option>
         ))}
-      </select>
+      </Select>
       <input className="input" aria-label="Worker's name" placeholder="Worker's name as on the passport" value={candidateName} onChange={(e) => setName(e.target.value)} />
       <div className="grid-2">
         <input className="input" aria-label="Passport last 4" placeholder="Passport: last 4 characters only" maxLength={4} value={passportLast4} onChange={(e) => setLast4(e.target.value)} />

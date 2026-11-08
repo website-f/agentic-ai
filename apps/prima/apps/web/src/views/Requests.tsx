@@ -1,3 +1,4 @@
+import { Select } from '../SearchSelect';
 import { useState } from 'react';
 import { CaretDownIcon, CaretUpIcon, HourglassIcon, PlusIcon, ReceiptIcon } from '@phosphor-icons/react';
 import type { ProofInput } from '@prima/core';
@@ -327,13 +328,13 @@ function ExpenseForm({ kind, companies, row, onDone }: { kind: 'OPS_CLAIM' | 'OF
         <div className="ss-grid">
           <label className="field">
             <span className="label">Company</span>
-            <select className="select" aria-label="Company" value={companyId} disabled={!!row} onChange={(e) => setCompanyId(e.target.value)}>
+            <Select className="select" aria-label="Company" value={companyId} disabled={!!row} onChange={(e) => setCompanyId(e.target.value)}>
               {companies.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.name}
                 </option>
               ))}
-            </select>
+            </Select>
           </label>
           <label className="field">
             <span className="label">Month</span>
@@ -397,13 +398,13 @@ function Prefill({ companies }: { companies: { id: string; name: string }[] }) {
   return (
     <>
       {companies.length > 1 && (
-        <select className="select ss-prefill-co" aria-label="Company" value={companyId} onChange={(e) => setCompanyId(e.target.value)}>
+        <Select className="select ss-prefill-co" aria-label="Company" value={companyId} onChange={(e) => setCompanyId(e.target.value)}>
           {companies.map((c) => (
             <option key={c.id} value={c.id}>
               {c.name}
             </option>
           ))}
-        </select>
+        </Select>
       )}
       <button className="btn btn-sm" disabled={act.busy || !companyId} onClick={() => start('RENT')}>
         Rent from last month

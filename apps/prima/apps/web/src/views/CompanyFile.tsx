@@ -1,3 +1,4 @@
+import { Select } from '../SearchSelect';
 import { useState } from 'react';
 import { PlusIcon } from '@phosphor-icons/react';
 import { api, type CompanyFileInput, type CompanyFiles } from '../api';
@@ -381,13 +382,13 @@ function StartFile({ companies, onClose, onDone }: { companies: { id: string; na
       <div className="gv-stack-sm">
         <label className="field">
           <span className="label">Company</span>
-          <select className="select" aria-label="Company" value={companyId} onChange={(e) => setCompanyId(e.target.value)}>
+          <Select className="select" aria-label="Company" value={companyId} onChange={(e) => setCompanyId(e.target.value)}>
             {companies.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.name}
               </option>
             ))}
-          </select>
+          </Select>
         </label>
         {needRegNo ? (
           <label className="field">
@@ -405,13 +406,13 @@ function StartFile({ companies, onClose, onDone }: { companies: { id: string; na
         </label>
         <label className="field">
           <span className="label">Financial year ends in</span>
-          <select className="select" aria-label="Financial year end month" value={f.fyeMonth} onChange={(e) => setF({ ...f, fyeMonth: e.target.value })}>
+          <Select className="select" aria-label="Financial year end month" value={f.fyeMonth} onChange={(e) => setF({ ...f, fyeMonth: e.target.value })}>
             {MONTHS.map((m, i) => (
               <option key={m} value={String(i + 1)}>
                 {m}
               </option>
             ))}
-          </select>
+          </Select>
         </label>
         <label className="field">
           <span className="label">Company secretary firm</span>

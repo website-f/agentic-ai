@@ -1,3 +1,4 @@
+import { Select } from '../SearchSelect';
 import { useState } from 'react';
 import type { ProofInput } from '@prima/core';
 import { api, type VehicleUsage } from '../api';
@@ -59,13 +60,13 @@ export function FuelUsagePanel() {
       <section className="panel">
         <div className="panel-head" style={{ flexWrap: 'wrap', gap: 6 }}>
           <h3>Fuel and usage</h3>
-          <select className="select" aria-label="Month" value={month} onChange={(e) => setMonth(e.target.value)} style={{ width: 'auto' }}>
+          <Select className="select" aria-label="Month" value={month} onChange={(e) => setMonth(e.target.value)} style={{ width: 'auto' }}>
             {monthsBack(thisMonth, 6).map((m) => (
               <option key={m} value={m}>
                 {m}
               </option>
             ))}
-          </select>
+          </Select>
         </div>
         {data.total && (
           <div className="kpis">
@@ -262,13 +263,13 @@ function FillLine({ f, showPlate, onDone }: { f: Fill; showPlate?: boolean; onDo
       {open && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
-            <select className="input" aria-label="Outcome" value={outcome} onChange={(e) => setOutcome(e.target.value as typeof outcome)} style={{ width: 'auto' }}>
+            <Select className="input" aria-label="Outcome" value={outcome} onChange={(e) => setOutcome(e.target.value as typeof outcome)} style={{ width: 'auto' }}>
               {Object.entries(OUTCOME).map(([k, l]) => (
                 <option key={k} value={k}>
                   {l}
                 </option>
               ))}
-            </select>
+            </Select>
             {outcome === 'RECOVER' && (
               <input className="input" inputMode="decimal" aria-label="Amount to recover (RM)" placeholder="RM to recover" value={recover} onChange={(e) => setRecover(e.target.value)} style={{ width: 140 }} />
             )}
@@ -329,30 +330,30 @@ function FillForm({
     <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
       <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
         <input className="input" type="datetime-local" aria-label="Date and time on the receipt (Malaysia time)" value={at} onChange={(e) => setAt(e.target.value)} style={{ width: 'auto' }} />
-        <select className="input" aria-label="Paid with" value={paidWith} onChange={(e) => setPaidWith(e.target.value as Paid)} style={{ width: 'auto' }}>
+        <Select className="input" aria-label="Paid with" value={paidWith} onChange={(e) => setPaidWith(e.target.value as Paid)} style={{ width: 'auto' }}>
           {PAID.map(([k, l]) => (
             <option key={k} value={k}>
               {l}
             </option>
           ))}
-        </select>
+        </Select>
         {byCard && (
-          <select className="input" aria-label="Card" value={card?.id ?? ''} onChange={(e) => setCardId(e.target.value)} style={{ width: 'auto' }}>
+          <Select className="input" aria-label="Card" value={card?.id ?? ''} onChange={(e) => setCardId(e.target.value)} style={{ width: 'auto' }}>
             {usable.length === 0 && <option value="">No card kept for this vehicle</option>}
             {usable.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.label}
               </option>
             ))}
-          </select>
+          </Select>
         )}
-        <select className="input" aria-label="Fuel" value={fuel} onChange={(e) => setFuel(e.target.value as FuelType)} style={{ width: 'auto' }}>
+        <Select className="input" aria-label="Fuel" value={fuel} onChange={(e) => setFuel(e.target.value as FuelType)} style={{ width: 'auto' }}>
           {FUELS.map(([k, l]) => (
             <option key={k} value={k}>
               {l}
             </option>
           ))}
-        </select>
+        </Select>
       </div>
       <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
         <input className="input" inputMode="decimal" aria-label="Litres" placeholder="Litres" value={litres} onChange={(e) => setLitres(e.target.value)} style={{ width: 110 }} />
@@ -419,13 +420,13 @@ function CardForm({ vehicleId, defaultFuel, onDone }: { vehicleId: string; defau
           <option value="FUEL">Fuel (petrol) card</option>
           <option value="SUBSIDY">Fleet subsidy card (diesel or petrol)</option>
         </select>
-        <select className="input" aria-label="Fuel the card buys" value={fuel} onChange={(e) => setFuel(e.target.value as FuelType)} style={{ width: 'auto' }}>
+        <Select className="input" aria-label="Fuel the card buys" value={fuel} onChange={(e) => setFuel(e.target.value as FuelType)} style={{ width: 'auto' }}>
           {(kind === 'SUBSIDY' ? FUELS.filter(([k]) => k === 'DIESEL' || k === 'RON95') : FUELS).map(([k, l]) => (
             <option key={k} value={k}>
               {l}
             </option>
           ))}
-        </select>
+        </Select>
         <input
           className="input"
           inputMode="numeric"
@@ -542,13 +543,13 @@ function FuelForm({ v, onDone }: { v: Row; onDone: () => void }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
       <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
-        <select className="input" aria-label="Vehicle fuel" value={fuelType} onChange={(e) => setFuelType(e.target.value as FuelType)} style={{ width: 'auto' }}>
+        <Select className="input" aria-label="Vehicle fuel" value={fuelType} onChange={(e) => setFuelType(e.target.value as FuelType)} style={{ width: 'auto' }}>
           {FUELS.map(([k, l]) => (
             <option key={k} value={k}>
               {l}
             </option>
           ))}
-        </select>
+        </Select>
         <input className="input" inputMode="decimal" aria-label="Tank size (litres)" placeholder="Tank litres (if known)" value={tank} onChange={(e) => setTank(e.target.value)} style={{ width: 180 }} />
       </div>
       <input className="input" aria-label="Reason" placeholder="Reason, e.g. from the vehicle papers" value={reason} onChange={(e) => setReason(e.target.value)} />

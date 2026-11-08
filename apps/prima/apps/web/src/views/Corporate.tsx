@@ -1,3 +1,4 @@
+import { Select } from '../SearchSelect';
 import { useState } from 'react';
 import { CalendarCheckIcon, CalendarXIcon, GavelIcon, PlusIcon, ReceiptIcon } from '@phosphor-icons/react';
 import type { CorpChangeKind, CorpFilingKind } from '@prima/core';
@@ -258,14 +259,14 @@ function Filings({ data, onAdd }: { data: CorpBoard; onAdd: () => void }) {
           </div>
         }
       >
-        <select className="select gv-filter" aria-label="Company" value={company} onChange={(e) => setCompany(e.target.value)}>
+        <Select className="select gv-filter" aria-label="Company" value={company} onChange={(e) => setCompany(e.target.value)}>
           <option value="">All companies</option>
           {companies.map((c) => (
             <option key={c} value={c}>
               {c}
             </option>
           ))}
-        </select>
+        </Select>
       </Toolbar>
       <Card title="SSM filings" sub={`${rows.length} filing${rows.length === 1 ? '' : 's'}${all ? '' : ' still open'}, by the month they fall due`} flush>
         {!rows.length && (
@@ -556,23 +557,23 @@ function ChangeForm({ companies, onDone }: { companies: CorpBoard['canRaise']; o
     <div className="gv-stack-sm" aria-label="Ask PWVSB to approve a change">
       <label className="field">
         <span className="label">Company</span>
-        <select className="select" aria-label="Company" value={companyId} onChange={(e) => setCompanyId(e.target.value)}>
+        <Select className="select" aria-label="Company" value={companyId} onChange={(e) => setCompanyId(e.target.value)}>
           {companies.map((c) => (
             <option key={c.id} value={c.id}>
               {c.name}
             </option>
           ))}
-        </select>
+        </Select>
       </label>
       <label className="field">
         <span className="label">What changes</span>
-        <select className="select" aria-label="What changes" value={kind} onChange={(e) => setKind(e.target.value as CorpChangeKind)}>
+        <Select className="select" aria-label="What changes" value={kind} onChange={(e) => setKind(e.target.value as CorpChangeKind)}>
           {(Object.keys(CHANGE) as CorpChangeKind[]).map((x) => (
             <option key={x} value={x}>
               {CHANGE[x]}
             </option>
           ))}
-        </select>
+        </Select>
       </label>
       <label className="field">
         <span className="label">Change</span>
@@ -638,23 +639,23 @@ function FilingForm({ companies, onDone }: { companies: CorpBoard['canFile']; on
     <div className="gv-stack-sm" aria-label="Add a filing">
       <label className="field">
         <span className="label">Company</span>
-        <select className="select" aria-label="Company" value={companyId} onChange={(e) => setCompanyId(e.target.value)}>
+        <Select className="select" aria-label="Company" value={companyId} onChange={(e) => setCompanyId(e.target.value)}>
           {companies.map((c) => (
             <option key={c.id} value={c.id}>
               {c.name}
             </option>
           ))}
-        </select>
+        </Select>
       </label>
       <label className="field">
         <span className="label">What is being filed</span>
-        <select className="select" aria-label="What is being filed" value={kind} onChange={(e) => pick(e.target.value as CorpFilingKind)}>
+        <Select className="select" aria-label="What is being filed" value={kind} onChange={(e) => pick(e.target.value as CorpFilingKind)}>
           {(Object.keys(FILING_KIND) as CorpFilingKind[]).map((x) => (
             <option key={x} value={x}>
               {FILING_KIND[x]}
             </option>
           ))}
-        </select>
+        </Select>
       </label>
       <label className="field">
         <span className="label">Title</span>

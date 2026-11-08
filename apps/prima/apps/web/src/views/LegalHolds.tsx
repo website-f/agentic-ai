@@ -1,3 +1,4 @@
+import { Select } from '../SearchSelect';
 import { useState } from 'react';
 import type { LegalHoldTable } from '@prima/core';
 import { api } from '../api';
@@ -33,28 +34,28 @@ export function LegalHoldsPanel() {
       )}
       {data.canPlace && data.matters.length > 0 && (
         <div className="row" style={{ gap: 6, flexWrap: 'wrap' }} aria-label="Place a legal hold">
-          <select className="select" aria-label="Legal matter" value={matterId} onChange={(e) => setF({ ...f, matterId: e.target.value, refId: '' })}>
+          <Select className="select" aria-label="Legal matter" value={matterId} onChange={(e) => setF({ ...f, matterId: e.target.value, refId: '' })}>
             {data.matters.map((m) => (
               <option key={m.id} value={m.id}>
                 {m.ref} {m.title}
               </option>
             ))}
-          </select>
-          <select className="select" aria-label="Kind of record" value={f.tbl} onChange={(e) => setF({ ...f, tbl: e.target.value as LegalHoldTable, refId: '' })}>
+          </Select>
+          <Select className="select" aria-label="Kind of record" value={f.tbl} onChange={(e) => setF({ ...f, tbl: e.target.value as LegalHoldTable, refId: '' })}>
             {data.kinds.map((k) => (
               <option key={k.tbl} value={k.tbl}>
                 {k.label}
               </option>
             ))}
-          </select>
-          <select className="select" aria-label="Record to hold" value={f.refId} onChange={(e) => setF({ ...f, refId: e.target.value })}>
+          </Select>
+          <Select className="select" aria-label="Record to hold" value={f.refId} onChange={(e) => setF({ ...f, refId: e.target.value })}>
             <option value="">Choose the record</option>
             {records.map((r) => (
               <option key={r.id} value={r.id}>
                 {r.label}
               </option>
             ))}
-          </select>
+          </Select>
           <input className="input" aria-label="Why held" placeholder="Why it is held" value={f.reason} onChange={(e) => setF({ ...f, reason: e.target.value })} />
           <button
             className="btn btn-sm"

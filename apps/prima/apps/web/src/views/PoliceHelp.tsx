@@ -1,3 +1,4 @@
+import { Select } from '../SearchSelect';
 import { useState } from "react";
 import {
   POLICE_HELP_GUIDE,
@@ -344,7 +345,7 @@ function AskDrawer({
           <label className="label" htmlFor="ph-co">
             Company
           </label>
-          <select
+          <Select
             id="ph-co"
             className="select"
             value={form.companyId}
@@ -355,7 +356,7 @@ function AskDrawer({
                 {c.name}
               </option>
             ))}
-          </select>
+          </Select>
         </div>
       )}
       <div className="field">
@@ -395,7 +396,7 @@ function AskDrawer({
         <label className="label" htmlFor="ph-reason">
           What the police want · Apa yang polis mahu
         </label>
-        <select
+        <Select
           id="ph-reason"
           className="select"
           value={form.reason}
@@ -409,7 +410,7 @@ function AskDrawer({
               </option>
             ),
           )}
-        </select>
+        </Select>
       </div>
       <div className="grid-2">
         <div className="field">

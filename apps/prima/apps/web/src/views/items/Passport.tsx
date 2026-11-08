@@ -1,6 +1,7 @@
 // Find an item and its passport (P85; paper section 10): owner, holder, place, condition, the handover history, repairs,
 // laundry and swaps, the label's print history and the movements and cases it was part of. A scan only finds the
 // record; what you may do still depends on your role. Other companies' staff are never named.
+import { Select } from '../../SearchSelect';
 import { useState } from 'react';
 import { MagnifyingGlassIcon, PrinterIcon } from '@phosphor-icons/react';
 import { STATE_LABEL, labelDisplay, type ItemAction } from '@prima/core';
@@ -253,7 +254,7 @@ function ItemActions({ data, p, handle, onDone }: { data: ItemBoard; p: ItemPass
   return (
     <Card title="What to do" sub={`Owner: ${partyName(data, i.ownerPartyId)}. Ownership changes only when Finance records it.`}>
       <div className="it-form">
-        <select className="input" aria-label="Action" value={what} onChange={(e) => setWhat(e.target.value)}>
+        <Select className="input" aria-label="Action" value={what} onChange={(e) => setWhat(e.target.value)}>
           <option value="">Choose what to do…</option>
           {options
             .filter((o) => o[2])
@@ -262,7 +263,7 @@ function ItemActions({ data, p, handle, onDone }: { data: ItemBoard; p: ItemPass
                 {l}
               </option>
             ))}
-        </select>
+        </Select>
         {(what === 'issue_person' || what === 'issue_site' || what === 'observe') && (
           <input
             className="input"
@@ -290,13 +291,13 @@ function ItemActions({ data, p, handle, onDone }: { data: ItemBoard; p: ItemPass
           </>
         )}
         {(what === 'inspect' || what === 'return') && (
-          <select className="input" aria-label="Condition" value={cond} onChange={(e) => setCond(e.target.value as typeof cond)}>
+          <Select className="input" aria-label="Condition" value={cond} onChange={(e) => setCond(e.target.value as typeof cond)}>
             {(what === 'inspect' ? ['new', 'good', 'worn', 'damaged'] : ['good', 'worn', 'damaged']).map((c) => (
               <option key={c} value={c}>
                 {c}
               </option>
             ))}
-          </select>
+          </Select>
         )}
         {what === 'print' && p.gen > 0 && (i.serial ? (
           <input className="input mono" aria-label="Maker serial you can see" placeholder="Maker serial you can see on the item" value={serialSeen} onChange={(e) => setSerialSeen(e.target.value)} />

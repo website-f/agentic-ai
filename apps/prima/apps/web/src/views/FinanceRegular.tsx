@@ -1,3 +1,4 @@
+import { Select } from '../SearchSelect';
 import { useState } from 'react';
 import { api, type FinControls, type FinDesk } from '../api';
 import { Chip, ErrorNotice, dateLabel, useAction, type Tone } from '../ui';
@@ -103,22 +104,22 @@ export function RegularPayments({ v, co }: { v: FinControls; co: Co }) {
       {adding && (
         <div className="fin-pad">
           <Field label="Type">
-            <select className="select" value={f.kind} onChange={set('kind')}>
+            <Select className="select" value={f.kind} onChange={set('kind')}>
               {v.kinds.map((k) => (
                 <option key={k} value={k}>
                   {KIND[k] ?? k}
                 </option>
               ))}
-            </select>
+            </Select>
           </Field>
           {(f.kind === 'statutory' || f.kind === 'zakat') && (
             <Field label={f.kind === 'zakat' ? 'Zakat body' : 'Paid to'}>
-              <select className="select" value={f.body ?? ''} onChange={set('body')}>
+              <Select className="select" value={f.body ?? ''} onChange={set('body')}>
                 <option value="">Choose</option>
                 {(f.kind === 'zakat' ? v.zakatBodies : v.statutoryBodies).map((b) => (
                   <option key={b}>{b}</option>
                 ))}
-              </select>
+              </Select>
             </Field>
           )}
           {f.kind === 'statutory' && ['EPF', 'PERKESO', 'HRD Corp', 'LHDN PCB'].includes(f.body ?? '') && (
@@ -142,14 +143,14 @@ export function RegularPayments({ v, co }: { v: FinControls; co: Co }) {
             <input className="input" value={f.name ?? ''} onChange={set('name')} />
           </Field>
           <Field label="Payee (from the payee list)">
-            <select className="select" value={f.payeeId ?? ''} onChange={set('payeeId')}>
+            <Select className="select" value={f.payeeId ?? ''} onChange={set('payeeId')}>
               <option value="">Choose</option>
               {v.payees.map((p) => (
                 <option key={p.id} value={p.id}>
                   {p.name} ({p.status})
                 </option>
               ))}
-            </select>
+            </Select>
           </Field>
           <Field label="Agreement, account, policy or employer number">
             <input className="input" value={f.reference ?? ''} onChange={set('reference')} />
@@ -161,14 +162,14 @@ export function RegularPayments({ v, co }: { v: FinControls; co: Co }) {
             </select>
           </Field>
           <Field label="Bank account">
-            <select className="select" value={f.bankId ?? ''} onChange={set('bankId')}>
+            <Select className="select" value={f.bankId ?? ''} onChange={set('bankId')}>
               <option value="">Choose</option>
               {v.statements.map((s) => (
                 <option key={s.bank.id} value={s.bank.id}>
                   {s.bank.bank} {s.bank.accountMasked}
                 </option>
               ))}
-            </select>
+            </Select>
           </Field>
           <Field label="How often">
             <select className="select" value={f.every} onChange={set('every')}>
@@ -209,11 +210,11 @@ export function RegularPayments({ v, co }: { v: FinControls; co: Co }) {
           )}
           {!['statutory', 'zakat', 'tax', 'levy'].includes(f.kind) && (
             <Field label="Who approves (subject)">
-              <select className="select" value={f.subject ?? 'finance'} onChange={set('subject')}>
+              <Select className="select" value={f.subject ?? 'finance'} onChange={set('subject')}>
                 {['finance', 'operations', 'it', 'fwm', 'inventory', 'transport', 'goodwill'].map((s) => (
                   <option key={s}>{s}</option>
                 ))}
-              </select>
+              </Select>
             </Field>
           )}
           <button
@@ -388,7 +389,7 @@ export function Guarantees({ v, co }: { v: FinControls; co: Co }) {
             </select>
           </Field>
           <Field label="Contract it secures (fills the client; its release opens when the contract ends)">
-            <select
+            <Select
               className="select"
               value={f.contractId ?? ''}
               onChange={(e) => {
@@ -402,7 +403,7 @@ export function Guarantees({ v, co }: { v: FinControls; co: Co }) {
                   {c.client} · {c.ref}
                 </option>
               ))}
-            </select>
+            </Select>
           </Field>
           {(
             [
@@ -420,14 +421,14 @@ export function Guarantees({ v, co }: { v: FinControls; co: Co }) {
             </Field>
           ))}
           <Field label="Collateral paid back into">
-            <select className="select" value={f.bankId ?? ''} onChange={set('bankId')}>
+            <Select className="select" value={f.bankId ?? ''} onChange={set('bankId')}>
               <option value="">Choose</option>
               {v.statements.map((s) => (
                 <option key={s.bank.id} value={s.bank.id}>
                   {s.bank.bank} {s.bank.accountMasked}
                 </option>
               ))}
-            </select>
+            </Select>
           </Field>
           <Field label="Issued">
             <input className="input" type="date" value={f.issuedOn ?? ''} onChange={set('issuedOn')} />
@@ -542,14 +543,14 @@ function HostelLine({ b, v }: { b: FinControls['hostel'][number]; v: FinControls
       {open && b.mayRecord && (
         <div className="row fin-end">
           <Field label="Paid from">
-            <select className="select" value={bankId} onChange={(e) => setBankId(e.target.value)}>
+            <Select className="select" value={bankId} onChange={(e) => setBankId(e.target.value)}>
               <option value="">Choose</option>
               {banks.map((k) => (
                 <option key={k.id} value={k.id}>
                   {k.bank} {k.accountMasked}
                 </option>
               ))}
-            </select>
+            </Select>
           </Field>
           <Field label="Day paid">
             <input className="input" type="date" value={on} onChange={(e) => setOn(e.target.value)} />

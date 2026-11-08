@@ -1,3 +1,4 @@
+import { Select } from '../SearchSelect';
 import { useState } from 'react';
 import { api, type PayFormulaBoard, type PayFormulaSaveInput } from '../api';
 import { Chip, ErrorNotice, Loading, dateTimeLabel, useAction, useLoad } from '../ui';
@@ -473,7 +474,7 @@ function Uses({ data }: { data: PayFormulaBoard }) {
               <option value="driver_ot">{KIND.driver_ot}</option>
               <option value="staff_ot">{KIND.staff_ot}</option>
             </select>
-            <select
+            <Select
               className="input"
               aria-label="Applies to"
               value={scope}
@@ -487,25 +488,25 @@ function Uses({ data }: { data: PayFormulaBoard }) {
                   {SCOPE[s]}
                 </option>
               ))}
-            </select>
+            </Select>
             {scope !== 'group' && (
-              <select className="input" aria-label="Place" value={scopeId} onChange={(e) => setScopeId(e.target.value)}>
+              <Select className="input" aria-label="Place" value={scopeId} onChange={(e) => setScopeId(e.target.value)}>
                 <option value="">Pick the {SCOPE[scope].toLowerCase()}</option>
                 {places.map((p) => (
                   <option key={p.id} value={p.id}>
                     {p.name}
                   </option>
                 ))}
-              </select>
+              </Select>
             )}
-            <select className="input" aria-label="Formula" value={code} onChange={(e) => setCode(e.target.value)}>
+            <Select className="input" aria-label="Formula" value={code} onChange={(e) => setCode(e.target.value)}>
               <option value="">{scope === 'group' ? 'Pick the formula' : 'None: use the wider choice'}</option>
               {codes.map(([c, n]) => (
                 <option key={c} value={c}>
                   {n} ({c})
                 </option>
               ))}
-            </select>
+            </Select>
             <input className="input" aria-label="Starts from (month)" type="month" min={data.month} value={month} onChange={(e) => setMonth(e.target.value)} />
           </div>
           <input className="input" style={{ marginTop: 8, display: 'block', width: '100%', boxSizing: 'border-box' }} aria-label="Reason" placeholder="Reason (kept with the choice)" value={reason} onChange={(e) => setReason(e.target.value)} />
@@ -548,16 +549,16 @@ function Checker({ data }: { data: PayFormulaBoard }) {
           <option value="driver_ot">{KIND.driver_ot}</option>
           <option value="staff_ot">{KIND.staff_ot}</option>
         </select>
-        <select className="input" aria-label="Company" value={companyId} onChange={(e) => { setCompanyId(e.target.value); setSiteId(''); }}>
+        <Select className="input" aria-label="Company" value={companyId} onChange={(e) => { setCompanyId(e.target.value); setSiteId(''); }}>
           <option value="">Any company</option>
           {data.places.companies.map((c) => (
             <option key={c.id} value={c.id}>
               {c.name}
             </option>
           ))}
-        </select>
+        </Select>
         {kind === 'guard_shift' && (
-          <select className="input" aria-label="Site" value={siteId} onChange={(e) => setSiteId(e.target.value)}>
+          <Select className="input" aria-label="Site" value={siteId} onChange={(e) => setSiteId(e.target.value)}>
             <option value="">Any site</option>
             {data.places.sites
               .filter((s) => !companyId || s.companyId === companyId)
@@ -566,7 +567,7 @@ function Checker({ data }: { data: PayFormulaBoard }) {
                   {s.name}
                 </option>
               ))}
-          </select>
+          </Select>
         )}
         <input className="input" aria-label="Month" type="month" value={month} onChange={(e) => setMonth(e.target.value)} />
       </div>

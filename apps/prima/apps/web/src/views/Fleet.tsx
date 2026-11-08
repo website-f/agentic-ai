@@ -1,3 +1,4 @@
+import { Select } from '../SearchSelect';
 import { useRef, useState } from 'react';
 import { CalendarCheckIcon, CarIcon, ClipboardTextIcon, QuestionIcon } from '@phosphor-icons/react';
 import { useApp } from '../App';
@@ -308,14 +309,14 @@ function VehicleDetail({ v, edit, approved }: { v: Row; edit: boolean; approved:
             {!v.out && (
               <label className="field">
                 <span className="label">Approved request</span>
-                <select className="select" aria-label="Approved request" value={requestId} onChange={(e) => setRequestId(e.target.value)}>
+                <Select className="select" aria-label="Approved request" value={requestId} onChange={(e) => setRequestId(e.target.value)}>
                   {approved.map((r) => (
                     <option key={r.id} value={r.id}>
                       {r.name}: {r.purpose}
                     </option>
                   ))}
                   <option value="">No request (name the driver)</option>
-                </select>
+                </Select>
               </label>
             )}
             {!v.out && !requestId && (
@@ -367,22 +368,22 @@ function VehicleDetail({ v, edit, approved }: { v: Row; edit: boolean; approved:
           <div className="op-form-grid">
             <label className="field">
               <span className="label">Work</span>
-              <select className="select" aria-label="Work" value={work} onChange={(e) => setWork(e.target.value as typeof work)}>
+              <Select className="select" aria-label="Work" value={work} onChange={(e) => setWork(e.target.value as typeof work)}>
                 <option value="RENEWAL">Renewal</option>
                 <option value="SERVICE">Service</option>
                 {v.payment && <option value="PAYMENT">Instalment paid</option>}
-              </select>
+              </Select>
             </label>
             {work === 'RENEWAL' && (
               <label className="field">
                 <span className="label">Renewal</span>
-                <select className="select" aria-label="Renewal" value={renewal} onChange={(e) => setRenewal(e.target.value as VehicleRenewal)}>
+                <Select className="select" aria-label="Renewal" value={renewal} onChange={(e) => setRenewal(e.target.value as VehicleRenewal)}>
                   {Object.keys(v.renewals ?? {}).map((k) => (
                     <option key={k} value={k}>
                       {RENEWAL_LABEL[k as VehicleRenewal]}
                     </option>
                   ))}
-                </select>
+                </Select>
               </label>
             )}
             {work !== 'PAYMENT' && (
@@ -481,13 +482,13 @@ function RequestLine({ r, edit, vehicles }: { r: Request; edit: boolean; vehicle
       </div>
       {edit && (
         <div className="op-act">
-          <select className="select" aria-label="Vehicle" value={vehicleId} onChange={(e) => setVehicleId(e.target.value)}>
+          <Select className="select" aria-label="Vehicle" value={vehicleId} onChange={(e) => setVehicleId(e.target.value)}>
             {vehicles.map((v) => (
               <option key={v.id} value={v.id}>
                 {v.plate} · {v.model}
               </option>
             ))}
-          </select>
+          </Select>
           <input className="input" aria-label="Note" placeholder="Comment (needed to approve or reject)" value={note} onChange={(e) => setNote(e.target.value)} />
           <button
             className="btn btn-primary btn-sm"
@@ -622,7 +623,7 @@ function Mine({ data }: { data: FleetBoard }) {
           </div>
           <label className="field">
             <span className="label">Vehicle</span>
-            <select className="select" aria-label="Vehicle" value={vehicleId} onChange={(e) => setVehicleId(e.target.value)}>
+            <Select className="select" aria-label="Vehicle" value={vehicleId} onChange={(e) => setVehicleId(e.target.value)}>
               <option value="">Any vehicle (Transport chooses)</option>
               {data.vehicles.map((v) => (
                 <option key={v.id} value={v.id}>
@@ -630,7 +631,7 @@ function Mine({ data }: { data: FleetBoard }) {
                   {v.busy ? ' (out now)' : ''}
                 </option>
               ))}
-            </select>
+            </Select>
           </label>
           <ErrorNotice error={act.error} />
         </div>

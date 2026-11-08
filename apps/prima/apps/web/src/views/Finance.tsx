@@ -1,3 +1,4 @@
+import { Select } from '../SearchSelect';
 import { useState } from 'react';
 import {
   ArrowRightIcon,
@@ -776,13 +777,13 @@ function AddBankAccount({ companies, fixed, onDone, onCancel }: { companies: For
       <ErrorNotice error={act.error} />
       {!fixed && (
         <FormField label="Company">
-          <select className="select" value={f.companyId} onChange={set('companyId')}>
+          <Select className="select" value={f.companyId} onChange={set('companyId')}>
             {companies.map((c) => (
               <option key={c.companyId} value={c.companyId}>
                 {c.companyName}
               </option>
             ))}
-          </select>
+          </Select>
         </FormField>
       )}
       <FormField label="Bank" error={tried ? bad.bank : undefined}>
@@ -836,13 +837,13 @@ function AddPaper({ companies, fixed, onDone, onCancel }: { companies: FormCo[];
       <ErrorNotice error={act.error} />
       {!fixed && (
         <FormField label="Company">
-          <select className="select" value={f.companyId} onChange={set('companyId')}>
+          <Select className="select" value={f.companyId} onChange={set('companyId')}>
             {companies.map((c) => (
               <option key={c.companyId} value={c.companyId}>
                 {c.companyName}
               </option>
             ))}
-          </select>
+          </Select>
         </FormField>
       )}
       <FormField label="For">

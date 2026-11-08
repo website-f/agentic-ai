@@ -1,3 +1,4 @@
+import { Select } from '../SearchSelect';
 import { useState } from 'react';
 import {
   ATTENDANCE_ISSUE_LABEL,
@@ -166,7 +167,7 @@ export function FollowUpDrawer({
             {kind === 'REPLACEMENT' && (
               <label className="field">
                 <span className="label">Replacement or buffer guard</span>
-                <select className="select" value={person} onChange={(e) => setPerson(e.target.value)} aria-label="Replacement guard">
+                <Select className="select" value={person} onChange={(e) => setPerson(e.target.value)} aria-label="Replacement guard">
                   <option value="">{cands.loading ? 'Loading…' : 'Choose a guard who passes the checks'}</option>
                   {options.map((c) => (
                     <option key={c.person.id} value={c.person.id}>
@@ -174,7 +175,7 @@ export function FollowUpDrawer({
                       {c.sameBranch ? '' : ' · other branch'}
                     </option>
                   ))}
-                </select>
+                </Select>
               </label>
             )}
             {kind === 'DISCIPLINE' && i.personId && (
@@ -250,7 +251,7 @@ function DisciplinePicker({
       )}
       <label className="field">
         <span className="label">Step the company decided</span>
-        <select className="select" value={step ?? ''} onChange={(e) => setStep(e.target.value as DisciplineStep)} aria-label="Disciplinary step">
+        <Select className="select" value={step ?? ''} onChange={(e) => setStep(e.target.value as DisciplineStep)} aria-label="Disciplinary step">
           <option value="">Choose a step</option>
           {d.options.map((o) => (
             <option key={o.id} value={o.id} disabled={!o.allowed}>
@@ -259,7 +260,7 @@ function DisciplinePicker({
               {o.allowed ? '' : ` — ${o.reason}`}
             </option>
           ))}
-        </select>
+        </Select>
       </label>
       {chosen && <div className="muted small">{chosen.law}</div>}
       {step === 'SUSPENSION' && (

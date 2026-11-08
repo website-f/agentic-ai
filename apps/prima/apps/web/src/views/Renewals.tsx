@@ -1,3 +1,4 @@
+import { Select } from '../SearchSelect';
 import { useMemo, useState } from 'react';
 import { ArrowsClockwiseIcon, ClockCountdownIcon, QuestionIcon, WarningOctagonIcon } from '@phosphor-icons/react';
 import { api, type RenewalAction, type RenewalBoard, type RenewalBody } from '../api';
@@ -178,14 +179,14 @@ export function RenewalsView() {
       >
         <Search value={q} onChange={setQ} placeholder="Search licence, company or reference" label="Search renewals" />
         {data.companies.length > 1 && (
-          <select className="select hx-filter" aria-label="Company" value={company} onChange={(e) => setCompany(e.target.value)}>
+          <Select className="select hx-filter" aria-label="Company" value={company} onChange={(e) => setCompany(e.target.value)}>
             <option value="">All companies</option>
             {data.companies.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.name}
               </option>
             ))}
-          </select>
+          </Select>
         )}
         {focus && (
           <button className="btn btn-sm" onClick={() => setFocus('')}>

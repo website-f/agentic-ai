@@ -1,3 +1,4 @@
+import { Select } from '../SearchSelect';
 import { useState, type ReactNode } from 'react';
 import { BankIcon, CalendarCheckIcon, GavelIcon, MagnifyingGlassIcon, PlusIcon, StampIcon } from '@phosphor-icons/react';
 import { api, type CreditBoard, type CreditLoanInput } from '../api';
@@ -555,13 +556,13 @@ function LoanDetail({ r, licence, owner = false }: { r: Row; licence: LicenceCtx
           <h3 className="bz-cr-acth">Record a repayment</h3>
           <div className="bz-form">
             <F label="Instalment" span>
-              <select className="select" value={pay.no} onChange={(e) => setPay({ ...pay, no: Number(e.target.value) })}>
+              <Select className="select" value={pay.no} onChange={(e) => setPay({ ...pay, no: Number(e.target.value) })}>
                 {unpaid.map((i) => (
                   <option key={i.no} value={i.no}>
                     Instalment {i.no}, {dateLabel(i.dueOn)}
                   </option>
                 ))}
-              </select>
+              </Select>
             </F>
             <F label="Amount received">
               <input className="input num" placeholder="Amount received" inputMode="decimal" value={pay.amount} onChange={(e) => setPay({ ...pay, amount: e.target.value })} />
@@ -722,13 +723,13 @@ function LoanDetail({ r, licence, owner = false }: { r: Row; licence: LicenceCtx
             <div className="bz-act" aria-label="Correct collateral">
               <div className="bz-form">
                 <F label="Collateral kind">
-                  <select className="select" value={fix.kind} onChange={(e) => setFix({ ...fix, kind: e.target.value as CreditLoanInput['collateral'] })}>
+                  <Select className="select" value={fix.kind} onChange={(e) => setFix({ ...fix, kind: e.target.value as CreditLoanInput['collateral'] })}>
                     {(Object.keys(COLLATERAL) as CreditLoanInput['collateral'][]).map((k) => (
                       <option key={k} value={k}>
                         {COLLATERAL[k]}
                       </option>
                     ))}
-                  </select>
+                  </Select>
                 </F>
                 {fix.kind !== 'NONE' && (
                   <F label="Collateral agreement reference">
@@ -757,11 +758,11 @@ function LoanDetail({ r, licence, owner = false }: { r: Row; licence: LicenceCtx
             <div className="bz-act" aria-label="Correct a recorded entry">
               <div className="bz-form">
                 <F label="What to correct" span>
-                  <select className="select" value={rec.field} onChange={(e) => openRec(e.target.value as typeof rec.field)}>
+                  <Select className="select" value={rec.field} onChange={(e) => openRec(e.target.value as typeof rec.field)}>
                     {l.stamped && <option value="stamp">Stamping</option>}
                     {l.charge && <option value="charge">SSM charge</option>}
                     <option value="signedOn">Signing date</option>
-                  </select>
+                  </Select>
                 </F>
                 {rec.field === 'charge' && (
                   <F label="Charge created on">
@@ -828,13 +829,13 @@ function AddLoan({ onDone }: { onDone: () => void }) {
     <>
       <div className="bz-form">
         <F label="Company" span>
-          <select className="select" value={companyId} onChange={(e) => setCompanyId(e.target.value)}>
+          <Select className="select" value={companyId} onChange={(e) => setCompanyId(e.target.value)}>
             {me.companies.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.name}
               </option>
             ))}
-          </select>
+          </Select>
         </F>
         <F label="Kind">
           <select className="select" value={f.kind} onChange={(e) => setF({ ...f, kind: e.target.value as CreditLoanInput['kind'] })}>
@@ -875,13 +876,13 @@ function AddLoan({ onDone }: { onDone: () => void }) {
           />
         </F>
         <F label="Collateral" span={f.collateral === 'NONE'}>
-          <select className="select" value={f.collateral} onChange={(e) => setF({ ...f, collateral: e.target.value as CreditLoanInput['collateral'] })}>
+          <Select className="select" value={f.collateral} onChange={(e) => setF({ ...f, collateral: e.target.value as CreditLoanInput['collateral'] })}>
             {Object.entries(COLLATERAL).map(([v, l]) => (
               <option key={v} value={v}>
                 {l}
               </option>
             ))}
-          </select>
+          </Select>
         </F>
         {f.collateral !== 'NONE' && (
           <F label="Collateral agreement reference">

@@ -1,6 +1,7 @@
 // Site stock and fittings (Inventory monitors every site, guard uniforms included), the per-site fittings plan with
 // contract-end take back, and guard / patrolling officer duty plans (Fauzan, 4 Nov 2026). Execution of guard duties
 // stays in the JA app or another app; Prima prepares and publishes the plan.
+import { Select } from '../SearchSelect';
 import { useEffect, useState } from 'react';
 import { SITE_KIT_CATEGORY_LABEL, SITE_KIT_OWNER_LABEL, dateOf, KPM_GUARD_RULES, kpmGuardKit, kpmGuardTerms, type SiteKitCategory, type SiteKitItem, type SiteKitOwner } from '@prima/core';
 import { api, type CleaningProofInput, type GuardTermsInput, type OfficerHoursInput } from '../api';
@@ -146,14 +147,14 @@ function FittingsPicker({ siteId, setSiteId, today }: { siteId: string | null; s
   return (
     <>
       <div className="row">
-        <select className="select" aria-label="Site" value={siteId ?? ''} onChange={(e) => setSiteId(e.target.value)} style={{ maxWidth: 380 }}>
+        <Select className="select" aria-label="Site" value={siteId ?? ''} onChange={(e) => setSiteId(e.target.value)} style={{ maxWidth: 380 }}>
           {siteId && !sites.data?.some((s) => s.site.id === siteId) && <option value={siteId}>{siteId}</option>}
           {sites.data?.map((s) => (
             <option key={s.site.id} value={s.site.id}>
               {s.site.code} · {s.site.name}
             </option>
           ))}
-        </select>
+        </Select>
       </div>
       {siteId && <Fittings siteId={siteId} today={today} />}
     </>
@@ -209,25 +210,25 @@ function Fittings({ siteId, today }: { siteId: string; today: string }) {
                       <input className="input" disabled={!manage} value={it.name} onChange={(e) => set(i, { name: e.target.value })} aria-label="Item name" />
                     </td>
                     <td>
-                      <select className="select" disabled={!manage} value={it.category} onChange={(e) => set(i, { category: e.target.value as SiteKitCategory })}>
+                      <Select className="select" disabled={!manage} value={it.category} onChange={(e) => set(i, { category: e.target.value as SiteKitCategory })}>
                         {CATS.map((c) => (
                           <option key={c} value={c}>
                             {SITE_KIT_CATEGORY_LABEL[c]}
                           </option>
                         ))}
-                      </select>
+                      </Select>
                     </td>
                     <td>
                       <input className="input" type="number" min={0} disabled={!manage} value={it.required} onChange={(e) => set(i, { required: Number(e.target.value) })} style={{ width: 70 }} aria-label={`${it.name} needed`} />
                     </td>
                     <td>
-                      <select className="select" disabled={!manage} value={it.owner} onChange={(e) => set(i, { owner: e.target.value as SiteKitOwner })}>
+                      <Select className="select" disabled={!manage} value={it.owner} onChange={(e) => set(i, { owner: e.target.value as SiteKitOwner })}>
                         {OWNERS.map((o) => (
                           <option key={o} value={o}>
                             {SITE_KIT_OWNER_LABEL[o]}
                           </option>
                         ))}
-                      </select>
+                      </Select>
                     </td>
                     <td>
                       {st?.inPlace == null ? (
@@ -536,13 +537,13 @@ export function DutyView() {
       </div>
       {mode === 'posts' && (
         <>
-          <select className="select" aria-label="Site" value={siteId} onChange={(e) => setSiteId(e.target.value)} style={{ maxWidth: 380 }}>
+          <Select className="select" aria-label="Site" value={siteId} onChange={(e) => setSiteId(e.target.value)} style={{ maxWidth: 380 }}>
             {sites.data?.map((s) => (
               <option key={s.site.id} value={s.site.id}>
                 {s.site.code} · {s.site.name}
               </option>
             ))}
-          </select>
+          </Select>
           {siteId && <PostPlan siteId={siteId} date={date} />}
         </>
       )}
@@ -551,13 +552,13 @@ export function DutyView() {
           <ErrorNotice error={officers.error} />
           {officers.data && !officers.data.length && <div className="empty">No patrolling officers on sites you cover.</div>}
           {!!officers.data?.length && (
-            <select className="select" aria-label="Officer" value={officerId} onChange={(e) => setOfficerId(e.target.value)} style={{ maxWidth: 380 }}>
+            <Select className="select" aria-label="Officer" value={officerId} onChange={(e) => setOfficerId(e.target.value)} style={{ maxWidth: 380 }}>
               {officers.data.map((o) => (
                 <option key={o.id} value={o.id}>
                   {o.name} · {o.sites} sites
                 </option>
               ))}
-            </select>
+            </Select>
           )}
           {officerId && <RoutePlan officerId={officerId} date={date} />}
         </>

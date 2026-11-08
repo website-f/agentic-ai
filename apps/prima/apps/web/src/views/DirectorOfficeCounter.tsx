@@ -1,3 +1,4 @@
+import { Select } from '../SearchSelect';
 import { Fragment, useState } from "react";
 import { api } from "../api";
 import type { DirectorOfficeCounter } from "../api/types";
@@ -59,7 +60,7 @@ export function DirectorOfficeCounterPanel() {
     <section className="panel">
       <div className="panel-head">
         <h3>Reports and meetings counter</h3>
-        <select
+        <Select
           value={i}
           onChange={(e) => setM(Number(e.target.value))}
           aria-label="Month"
@@ -69,7 +70,7 @@ export function DirectorOfficeCounterPanel() {
               {monthLabel(x)}
             </option>
           ))}
-        </select>
+        </Select>
       </div>
       <p className="muted small" style={{ margin: "0 0 8px" }}>
         A weekly report counts in the month its week starts; a monthly report in

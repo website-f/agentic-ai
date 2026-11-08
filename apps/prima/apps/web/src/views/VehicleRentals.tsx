@@ -1,3 +1,4 @@
+import { Select } from '../SearchSelect';
 import { useState } from 'react';
 import { api, type VehicleRentals } from '../api';
 import { Chip, ErrorNotice, Kpi, Loading, dateLabel, useAction, useLoad } from '../ui';
@@ -30,13 +31,13 @@ export function VehicleRentalsPanel() {
       <section className="panel">
         <div className="panel-head" style={{ flexWrap: 'wrap', gap: 6 }}>
           <h3>Rented vehicles</h3>
-          <select className="select" aria-label="Month" value={month} onChange={(e) => setMonth(e.target.value)} style={{ width: 'auto' }}>
+          <Select className="select" aria-label="Month" value={month} onChange={(e) => setMonth(e.target.value)} style={{ width: 'auto' }}>
             {monthsAround(today, 6, 0).reverse().map((m) => (
               <option key={m} value={m}>
                 {m}
               </option>
             ))}
-          </select>
+          </Select>
         </div>
         <div className="panel-body">
         <p className="muted small">
@@ -115,21 +116,21 @@ function StartRental({ data }: { data: VehicleRentals }) {
   return (
     <div style={{ display: 'grid', gap: 6, marginBottom: 8 }}>
       <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
-        <select className="input" aria-label="Vehicle" value={vehicleId} onChange={(e) => setVehicleId(e.target.value)} style={{ width: 'auto' }}>
+        <Select className="input" aria-label="Vehicle" value={vehicleId} onChange={(e) => setVehicleId(e.target.value)} style={{ width: 'auto' }}>
           <option value="">Vehicle…</option>
           {data.notRented.map((v) => (
             <option key={v.vehicleId} value={v.vehicleId}>
               {v.plate} · {v.companyName}
             </option>
           ))}
-        </select>
-        <select className="input" aria-label="Rented from" value={ownerId} onChange={(e) => setOwnerId(e.target.value)} style={{ width: 'auto' }}>
+        </Select>
+        <Select className="input" aria-label="Rented from" value={ownerId} onChange={(e) => setOwnerId(e.target.value)} style={{ width: 'auto' }}>
           {data.owners.map((o) => (
             <option key={o.id} value={o.id}>
               {o.name}
             </option>
           ))}
-        </select>
+        </Select>
         <input className="input" type="date" aria-label="Rented from date" value={since} onChange={(e) => setSince(e.target.value)} style={{ width: 'auto' }} />
       </div>
       <input className="input" aria-label="Reason" placeholder="Reason (required)" value={reason} onChange={(e) => setReason(e.target.value)} />
@@ -225,13 +226,13 @@ function RentalLine({ v, data }: { v: Row; data: VehicleRentals }) {
         <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
           <input className="input" aria-label="Monthly rent" inputMode="decimal" placeholder="RM a month" value={monthly} onChange={(e) => setMonthly(e.target.value)} style={{ width: 120 }} />
           <input className="input" aria-label="Agreement reference" placeholder="Agreement reference" value={ref} onChange={(e) => setRef(e.target.value)} />
-          <select className="input" aria-label="Applies from" value={from} onChange={(e) => setFrom(e.target.value)} style={{ width: 'auto' }}>
+          <Select className="input" aria-label="Applies from" value={from} onChange={(e) => setFrom(e.target.value)} style={{ width: 'auto' }}>
             {monthsAround(mytNow().slice(0, 7), 1, 11).map((m) => (
               <option key={m} value={m}>
                 From {m}
               </option>
             ))}
-          </select>
+          </Select>
           <input className="input" aria-label="Reason" placeholder="Reason (required)" value={reason} onChange={(e) => setReason(e.target.value)} />
           <button
             className="btn btn-sm btn-primary"
@@ -244,7 +245,7 @@ function RentalLine({ v, data }: { v: Row; data: VehicleRentals }) {
       )}
       {open === 'move' && (
         <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
-          <select className="input" aria-label="Company that will use it" value={moveTo} onChange={(e) => setMoveTo(e.target.value)} style={{ width: 'auto' }}>
+          <Select className="input" aria-label="Company that will use it" value={moveTo} onChange={(e) => setMoveTo(e.target.value)} style={{ width: 'auto' }}>
             <option value="">Used by…</option>
             {data.companies
               .filter((c) => c.id !== v.companyId)
@@ -253,7 +254,7 @@ function RentalLine({ v, data }: { v: Row; data: VehicleRentals }) {
                   {c.name}
                 </option>
               ))}
-          </select>
+          </Select>
           <input className="input" type="date" aria-label="From date" value={on} onChange={(e) => setOn(e.target.value)} style={{ width: 'auto' }} />
           <input className="input" aria-label="Reason" placeholder="Reason (required)" value={reason} onChange={(e) => setReason(e.target.value)} />
           <button

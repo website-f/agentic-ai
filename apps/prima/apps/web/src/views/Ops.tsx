@@ -1,3 +1,4 @@
+import { Select } from '../SearchSelect';
 import { useState } from 'react';
 import { ClockCountdownIcon, FootprintsIcon, SirenIcon, UserCheckIcon, UserMinusIcon } from '@phosphor-icons/react';
 import { api, type RegionalOps } from '../api';
@@ -73,13 +74,13 @@ export function OpsView() {
         }
         actions={
           data.regions.length > 1 && (
-            <select className="select op-filter" aria-label="Region" value={data.region.id} onChange={(e) => setRegion(e.target.value)}>
+            <Select className="select op-filter" aria-label="Region" value={data.region.id} onChange={(e) => setRegion(e.target.value)}>
               {data.regions.map((r) => (
                 <option key={r.id} value={r.id}>
                   {r.name}
                 </option>
               ))}
-            </select>
+            </Select>
           )
         }
       />

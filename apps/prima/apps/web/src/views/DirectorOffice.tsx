@@ -1,3 +1,4 @@
+import { Select } from '../SearchSelect';
 import { useState } from 'react';
 import { FileTextIcon, HourglassIcon, LightningIcon, TrayIcon } from '@phosphor-icons/react';
 import { ExceptionalGuardCash } from './ExceptionalGuardCash';
@@ -184,7 +185,7 @@ export function DirectorOfficeView() {
       </Card>
 
       <DirectorDesk />
-      <label>Cash handover company<select className="select" value={cashCompany} onChange={e => setCashCompany(e.target.value)}>{me.companies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></label>
+      <label>Cash handover company<Select className="select" value={cashCompany} onChange={e => setCashCompany(e.target.value)}>{me.companies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</Select></label>
       <ExceptionalGuardCash key={cashCompany} companyId={cashCompany} />
       <MyDailyCash />
       <TenderOpportunitiesPanel />

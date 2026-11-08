@@ -2,6 +2,7 @@
 // contract), uploads the site map, makes and publishes each day's minute-by-minute plan for every cleaner and supervisor,
 // and records what the supervisor reports with time-marked photos. Gov Ops (OGM) monitors every site; the company manager
 // views only. Cleaners and supervisors do not sign in yet.
+import { Select } from '../SearchSelect';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   CLEANING_DEFAULT_RATE,
@@ -232,13 +233,13 @@ function StartCleaning({ sites, today, onStarted }: { sites: { siteId: string; s
         <div className="grid-2">
           <label className="field">
             <span className="label">Site</span>
-            <select className="select" value={siteId} onChange={(e) => setSiteId(e.target.value)}>
+            <Select className="select" value={siteId} onChange={(e) => setSiteId(e.target.value)}>
               {sites.map((s) => (
                 <option key={s.siteId} value={s.siteId}>
                   {s.siteName} · {s.companyName}
                 </option>
               ))}
-            </select>
+            </Select>
           </label>
           <label className="field">
             <span className="label">Contract or letter reference</span>
@@ -716,13 +717,13 @@ function SetupEditor({ d }: { d: CleaningSiteView }) {
                     <div className="small muted">{a.scopeRef}</div>
                   </td>
                   <td>
-                    <select className="select" disabled={!manage} value={a.work} onChange={(e) => setArea(i, { work: e.target.value as CleaningWorkKind, unit: CLEANING_DEFAULT_RATE[e.target.value as CleaningWorkKind].unit })}>
+                    <Select className="select" disabled={!manage} value={a.work} onChange={(e) => setArea(i, { work: e.target.value as CleaningWorkKind, unit: CLEANING_DEFAULT_RATE[e.target.value as CleaningWorkKind].unit })}>
                       {KINDS.map((k) => (
                         <option key={k} value={k}>
                           {CLEANING_WORK_LABEL[k].en}
                         </option>
                       ))}
-                    </select>
+                    </Select>
                   </td>
                   <td>
                     <div className="row" style={{ gap: 4, flexWrap: 'nowrap' }}>
@@ -942,7 +943,7 @@ function SiteMap({ d }: { d: CleaningSiteView }) {
             {manage && (
               <label className="field">
                 <span className="label">Place an area on the map: pick it, then tap its place</span>
-                <select className="select" value={placing} onChange={(e) => setPlacing(e.target.value)} style={{ maxWidth: 420 }}>
+                <Select className="select" value={placing} onChange={(e) => setPlacing(e.target.value)} style={{ maxWidth: 420 }}>
                   <option value="">Choose an area…</option>
                   {setup.areas.map((a) => (
                     <option key={a.id} value={a.id}>
@@ -950,7 +951,7 @@ function SiteMap({ d }: { d: CleaningSiteView }) {
                       {a.pin ? ' (placed)' : ''}
                     </option>
                   ))}
-                </select>
+                </Select>
               </label>
             )}
             <div onClick={place} style={{ position: 'relative', cursor: placing ? 'crosshair' : 'default', maxWidth: 900 }} data-testid="site-map">

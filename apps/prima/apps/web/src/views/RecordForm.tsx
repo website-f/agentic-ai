@@ -1,3 +1,4 @@
+import { Select } from '../SearchSelect';
 import { useEffect, useState } from 'react';
 import { PlusIcon } from '@phosphor-icons/react';
 import type { RecordKind, RecordValues } from '@prima/core';
@@ -82,14 +83,14 @@ function RecordDrawer({ kind, id, companyId: given, onClose }: { kind: RecordKin
       {form?.chooseCompany && (
         <label className="field">
           <span className="label">Which company is this for?</span>
-          <select className="select" aria-label="Company" value="" onChange={(e) => e.target.value && setCompanyId(e.target.value)}>
+          <Select className="select" aria-label="Company" value="" onChange={(e) => e.target.value && setCompanyId(e.target.value)}>
             <option value="">Choose…</option>
             {form.chooseCompany.map(([k, l]) => (
               <option key={k} value={k}>
                 {l}
               </option>
             ))}
-          </select>
+          </Select>
         </label>
       )}
       {form && !form.chooseCompany && <RecordFields form={form} kind={kind} id={id} onDone={onClose} />}
@@ -135,14 +136,14 @@ function RecordFields({ form, kind, id, onDone }: { form: RecordFormData; kind: 
             <label key={f.key} className="field">
               {label}
               {f.type === 'select' || f.type === 'ref' ? (
-                <select className="select" aria-label={f.label} value={v == null ? '' : String(v)} onChange={(e) => set(f.key, e.target.value || null)}>
+                <Select className="select" aria-label={f.label} value={v == null ? '' : String(v)} onChange={(e) => set(f.key, e.target.value || null)}>
                   {(!f.required || v == null) && <option value="">{f.required ? 'Choose…' : 'None'}</option>}
                   {opts.map(([k, l]) => (
                     <option key={k} value={k}>
                       {l}
                     </option>
                   ))}
-                </select>
+                </Select>
               ) : f.type === 'textarea' ? (
                 <textarea className="input" rows={3} aria-label={f.label} value={v == null ? '' : String(v)} onChange={(e) => set(f.key, e.target.value)} />
               ) : (

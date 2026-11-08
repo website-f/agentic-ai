@@ -1,3 +1,4 @@
+import { Select } from '../SearchSelect';
 import { useEffect, useState } from 'react';
 import { DEFAULT_PAY_LAW, guardSalaryCalc, standardGuardAmounts, type PayFormulaAmounts, type PayLawSettings } from '@prima/core';
 import { api } from '../api';
@@ -86,7 +87,7 @@ export function SalaryCalcView() {
             <span className="small" style={{ fontWeight: 600 }}>
               Formula
             </span>
-            <select
+            <Select
               className="input"
               value={choice.id}
               onChange={(e) => {
@@ -100,7 +101,7 @@ export function SalaryCalcView() {
                   {c.name}
                 </option>
               ))}
-            </select>
+            </Select>
           </label>
           <label style={{ display: 'grid', gap: 2 }}>
             <span className="small" style={{ fontWeight: 600 }}>

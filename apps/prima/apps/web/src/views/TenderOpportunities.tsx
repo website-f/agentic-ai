@@ -1,3 +1,4 @@
+import { Select } from '../SearchSelect';
 import { useState } from "react";
 import { api } from "../api";
 import type {
@@ -625,7 +626,7 @@ function CheckForm({
     <div style={{ display: "grid", gap: 8, width: "100%" }}>
       <label className="field">
         <span className="label">What the check found</span>
-        <select
+        <Select
           className="select"
           value={f.status}
           onChange={(e) =>
@@ -639,7 +640,7 @@ function CheckForm({
               </option>
             ),
           )}
-        </select>
+        </Select>
       </label>
       <label className="field">
         <span className="label">Result and gaps</span>

@@ -1,3 +1,4 @@
+import { Select } from '../SearchSelect';
 import { useState } from 'react';
 import { api } from '../api';
 import { useApp } from '../App';
@@ -125,14 +126,14 @@ function Instructions({ data, reload }: { data: NonNullable<Awaited<ReturnType<t
           <div className="ld-form ld-form-4">
             <label className="field">
               <span className="label">Who</span>
-              <select className="select" aria-label="Who" value={userId} onChange={(e) => setUserId(e.target.value)}>
+              <Select className="select" aria-label="Who" value={userId} onChange={(e) => setUserId(e.target.value)}>
                 <option value="">Who does it</option>
                 {data.people.map((p) => (
                   <option key={p.id} value={p.id}>
                     {p.name}
                   </option>
                 ))}
-              </select>
+              </Select>
             </label>
             <label className="field">
               <span className="label">Instruction</span>

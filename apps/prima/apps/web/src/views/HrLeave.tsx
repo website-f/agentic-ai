@@ -1,3 +1,4 @@
+import { Select } from '../SearchSelect';
 import { useState } from "react";
 import { COMPULSORY_HOLIDAY_LABEL, LEAVE_LABEL, isOwnerAdmin } from "@prima/core";
 import { api } from "../api";
@@ -67,7 +68,7 @@ export function HolidaysPanel() {
       title={`Public holidays ${d.year}`}
       sub={`Staff leave skips these days and weekends. The Act needs at least ${d.rule.value.minPerYear} a year with the five fixed ones; HR may add more.`}
       actions={
-        <select
+        <Select
           className="select"
           value={year}
           onChange={(e) => setYear(e.target.value)}
@@ -81,7 +82,7 @@ export function HolidaysPanel() {
               </option>
             );
           })}
-        </select>
+        </Select>
       }
       flush
     >
@@ -190,7 +191,7 @@ export function HolidaysPanel() {
               </label>
               <label className="field">
                 <span className="label">Fixed by the Act?</span>
-                <select
+                <Select
                   className="select"
                   value={f.compulsory}
                   onChange={(e) =>
@@ -206,7 +207,7 @@ export function HolidaysPanel() {
                       </option>
                     ),
                   )}
-                </select>
+                </Select>
               </label>
               <div className="lv-form-foot">
                 <ErrorNotice error={act.error} />
@@ -366,7 +367,7 @@ export function HrLeaveSettingsPanel() {
                   <div className="lv-staff-group">
                     <span className="label">Leave days above the Act</span>
                     <div className="lv-inline">
-                      <select
+                      <Select
                         className="select"
                         value={kind}
                         onChange={(e) =>
@@ -379,7 +380,7 @@ export function HrLeaveSettingsPanel() {
                             {LEAVE_LABEL[k]}
                           </option>
                         ))}
-                      </select>
+                      </Select>
                       <input
                         className="input lv-days"
                         inputMode="numeric"

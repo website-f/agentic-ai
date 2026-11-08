@@ -1,3 +1,4 @@
+import { Select } from '../SearchSelect';
 import { useState } from 'react';
 import { api, type SiteHoursBoard } from '../api';
 import { Chip, ErrorNotice, Loading, dateTimeLabel, useAction, useLoad } from '../ui';
@@ -89,13 +90,13 @@ function SiteHoursBoardView({ companyId, setCompanyId, tabs }: { companyId: stri
 
       {tabs}
       <div className="row" style={{ gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
-        <select className="input" aria-label="Company" value={data.companyId} onChange={(e) => setCompanyId(e.target.value)}>
+        <Select className="input" aria-label="Company" value={data.companyId} onChange={(e) => setCompanyId(e.target.value)}>
           {data.companies.map((c) => (
             <option key={c.id} value={c.id}>
               {c.name}
             </option>
           ))}
-        </select>
+        </Select>
         <input className="input" type="month" aria-label="Month" value={data.month} onChange={(e) => e.target.value && setMonth(e.target.value)} />
       </div>
 
@@ -200,13 +201,13 @@ function SiteRow({ r, month, causes }: { r: Row; month: string; causes: SiteHour
       {r.canApprove && (c.needsApproval > 0 || open) && (
         <div style={{ display: 'grid', gap: 6, gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', marginTop: 4 }}>
           <input className="input" type="number" min={1} step={0.5} aria-label="Extra hours" placeholder="Extra hours" value={extra} onChange={(e) => setExtra(e.target.value)} />
-          <select className="input" aria-label="Why" value={cause} onChange={(e) => setCause(e.target.value as Cause)}>
+          <Select className="input" aria-label="Why" value={cause} onChange={(e) => setCause(e.target.value as Cause)}>
             {causes.map((x) => (
               <option key={x.id} value={x.id}>
                 {x.label}
               </option>
             ))}
-          </select>
+          </Select>
           <input className="input" aria-label="Reason" placeholder="Reason (kept with the approval)" value={reason} onChange={(e) => setReason(e.target.value)} />
           <ErrorNotice error={act.error} />
           <button

@@ -1,5 +1,6 @@
 // CMS site readiness (audit decision 4, Fauzan 5 Nov 2026): what each site has and what is prepared before CMS links to
 // it. The device brand is the client's choice. Nothing on this screen connects a device.
+import { Select } from '../SearchSelect';
 import { useState } from 'react';
 import { api } from '../api';
 import type { CmsDeviceInput, CmsReadinessBoard } from '../api/types';
@@ -276,13 +277,13 @@ function DeviceForm({ siteId, kinds, device, onDone }: { siteId: string; kinds: 
       <ErrorNotice error={error} />
       <div className="field">
         <label htmlFor={id('kind')}>Kind</label>
-        <select id={id('kind')} className="select" value={kind} onChange={set('kind')}>
+        <Select id={id('kind')} className="select" value={kind} onChange={set('kind')}>
           {(Object.keys(kinds) as DeviceKind[]).map((k) => (
             <option key={k} value={k}>
               {kinds[k].label}
             </option>
           ))}
-        </select>
+        </Select>
         <div className="muted small">{kinds[kind].linkHint}</div>
       </div>
       <div className="field">

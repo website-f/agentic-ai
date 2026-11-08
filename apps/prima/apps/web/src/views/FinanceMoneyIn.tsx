@@ -1,3 +1,4 @@
+import { Select } from '../SearchSelect';
 import { useState } from 'react';
 import { finStampPenalty } from '@prima/core';
 import { api, type FinControls, type FinDesk } from '../api';
@@ -48,13 +49,13 @@ function Billing({ v, co }: { v: FinControls; co: Co }) {
             contract with neither is named at the close.
           </div>
         </div>
-        <select className="select" aria-label="Billing month" value={period} onChange={(e) => setPeriod(e.target.value)}>
+        <Select className="select" aria-label="Billing month" value={period} onChange={(e) => setPeriod(e.target.value)}>
           {v.moneyIn.periods.map((p) => (
             <option key={p} value={p}>
               {p}
             </option>
           ))}
-        </select>
+        </Select>
       </div>
       <ErrorNotice error={other.error} />
       {m && missing > 0 && (
@@ -267,14 +268,14 @@ function GovtClaims({ m, co }: { m: MoneyIn; co: Co }) {
             value={form.submittedOn}
             onChange={(e) => setForm({ ...form, submittedOn: e.target.value })}
           />
-          <select className="select" aria-label="Contract" value={form.contractId} onChange={(e) => setForm({ ...form, contractId: e.target.value })}>
+          <Select className="select" aria-label="Contract" value={form.contractId} onChange={(e) => setForm({ ...form, contractId: e.target.value })}>
             <option value="">Contract (optional)…</option>
             {m.contracts.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.client} · {c.ref}
               </option>
             ))}
-          </select>
+          </Select>
           <button
             className="btn btn-primary btn-sm"
             disabled={act.busy || !form.agency.trim() || !form.invoiceNo.trim() || !form.amount || !form.claimRef.trim() || !form.submittedOn}
@@ -622,22 +623,22 @@ export function StampDuty({ v, co }: { v: FinControls; co: Co }) {
       )}
       {adding && (
         <div className="row fin-mb">
-          <select className="select" aria-label="Kind" value={form.kind} onChange={(e) => setForm({ ...form, kind: e.target.value })}>
+          <Select className="select" aria-label="Kind" value={form.kind} onChange={(e) => setForm({ ...form, kind: e.target.value })}>
             {Object.entries(STAMP_KIND).map(([k, l]) => (
               <option key={k} value={k}>
                 {l}
               </option>
             ))}
-          </select>
+          </Select>
           {form.kind === 'client_contract' ? (
-            <select className="select" aria-label="Contract" value={form.contractId} onChange={(e) => setForm({ ...form, contractId: e.target.value })}>
+            <Select className="select" aria-label="Contract" value={form.contractId} onChange={(e) => setForm({ ...form, contractId: e.target.value })}>
               <option value="">Choose the contract…</option>
               {s.contracts.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.client} · {c.ref}
                 </option>
               ))}
-            </select>
+            </Select>
           ) : (
             <>
               <input

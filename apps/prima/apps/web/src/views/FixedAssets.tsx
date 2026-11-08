@@ -1,3 +1,4 @@
+import { Select } from '../SearchSelect';
 import { useState } from 'react';
 import { api, type DisposalBody, type FixedAssets } from '../api';
 import { Chip, ErrorNotice, Loading, dateLabel, useAction, useLoad } from '../ui';
@@ -329,13 +330,13 @@ function DisposalLine({ d, data }: { d: Disposal; data: FixedAssets }) {
       {team && (d.state === 'no_request' || d.state === 'rejected') && (
         <div className="row">
           <input className="input" aria-label="Reason" placeholder="Reason" value={f.reason} onChange={(e) => setF({ ...f, reason: e.target.value })} />
-          <select className="input" aria-label="Method" value={f.method} onChange={(e) => setF({ ...f, method: e.target.value as typeof f.method })}>
+          <Select className="input" aria-label="Method" value={f.method} onChange={(e) => setF({ ...f, method: e.target.value as typeof f.method })}>
             {Object.entries(METHOD).map(([v, t]) => (
               <option key={v} value={v}>
                 {t}
               </option>
             ))}
-          </select>
+          </Select>
           <input
             className="input"
             aria-label="Expected proceeds"

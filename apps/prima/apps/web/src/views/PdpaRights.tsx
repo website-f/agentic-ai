@@ -1,3 +1,4 @@
+import { Select } from '../SearchSelect';
 import { useState } from 'react';
 import { api, type PdpaRequestInput, type PdpaRights } from '../api';
 import { Chip, ErrorNotice, Loading, dateLabel, useAction, useLoad } from '../ui';
@@ -114,13 +115,13 @@ function RequestLine({ r: row, data }: { r: PdpaRights['requests'][number]; data
             </button>
           </div>
           <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
-            <select className="input" aria-label="Refusal ground" value={ground} onChange={(e) => setGround(e.target.value)}>
+            <Select className="input" aria-label="Refusal ground" value={ground} onChange={(e) => setGround(e.target.value)}>
               {data.rule.refusalGrounds.map((g) => (
                 <option key={g} value={g}>
                   {g}
                 </option>
               ))}
-            </select>
+            </Select>
             <button className="btn btn-sm" disabled={act.busy} onClick={() => act.run(() => api.pdpaRequestStep(r.id, 'refuse', ground), 'Refusal recorded.')}>
               Refuse on this ground
             </button>
@@ -144,20 +145,20 @@ function NewRequest({ data, onDone }: { data: PdpaRights; onDone: () => void }) 
   });
   return (
     <div style={{ display: 'grid', gap: 6, marginBottom: 8 }}>
-      <select className="input" aria-label="Company" value={f.companyId} onChange={(e) => setF({ ...f, companyId: e.target.value })}>
+      <Select className="input" aria-label="Company" value={f.companyId} onChange={(e) => setF({ ...f, companyId: e.target.value })}>
         {data.companies.map((c) => (
           <option key={c.id} value={c.id}>
             {c.name}
           </option>
         ))}
-      </select>
-      <select className="input" aria-label="Kind" value={f.kind} onChange={(e) => setF({ ...f, kind: e.target.value as PdpaRequestInput['kind'] })}>
+      </Select>
+      <Select className="input" aria-label="Kind" value={f.kind} onChange={(e) => setF({ ...f, kind: e.target.value as PdpaRequestInput['kind'] })}>
         {Object.entries(KIND).map(([v, l]) => (
           <option key={v} value={v}>
             {l}
           </option>
         ))}
-      </select>
+      </Select>
       <input
         className="input"
         aria-label="Who asked"

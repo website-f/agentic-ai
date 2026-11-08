@@ -1,3 +1,4 @@
+import { Select } from '../SearchSelect';
 import { useState } from 'react';
 import type { ProofInput } from '@prima/core';
 import { api, type FwCostBoard } from '../api';
@@ -416,16 +417,16 @@ function PlacementForm({ data, onDone }: { data: FwCostBoard; onDone: () => void
   const ownCompany = worker && hostCompanyId === worker.companyId;
   return (
     <div className="panel" style={{ padding: 10, display: 'flex', flexDirection: 'column', gap: 8, margin: '0 12px' }}>
-      <select className="select" aria-label="Worker" value={personId} onChange={(e) => setPersonId(e.target.value)}>
+      <Select className="select" aria-label="Worker" value={personId} onChange={(e) => setPersonId(e.target.value)}>
         <option value="">Choose the worker</option>
         {data.workers.map((w) => (
           <option key={w.id} value={w.id}>
             {w.name} · {w.staffNo} · {w.companyName}
           </option>
         ))}
-      </select>
+      </Select>
       <div className="grid-2">
-        <select
+        <Select
           className="select"
           aria-label="Works under company"
           value={hostCompanyId}
@@ -440,15 +441,15 @@ function PlacementForm({ data, onDone }: { data: FwCostBoard; onDone: () => void
               {c.name}
             </option>
           ))}
-        </select>
-        <select className="select" aria-label="Branch" value={hostBranchId} onChange={(e) => setBranch(e.target.value)} disabled={!branches.length}>
+        </Select>
+        <Select className="select" aria-label="Branch" value={hostBranchId} onChange={(e) => setBranch(e.target.value)} disabled={!branches.length}>
           <option value="">{branches.length ? (ownCompany ? 'Choose the branch (needed)' : 'No branch, the company itself') : 'No branch'}</option>
           {branches.map((b) => (
             <option key={b.id} value={b.id}>
               {b.name}
             </option>
           ))}
-        </select>
+        </Select>
       </div>
       <div className="muted small">The worker keeps wearing their own company's uniform at the host's site.</div>
       {hostBranchId && (

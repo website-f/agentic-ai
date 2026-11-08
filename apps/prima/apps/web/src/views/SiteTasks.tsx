@@ -1,3 +1,4 @@
+import { Select } from '../SearchSelect';
 import { useState } from 'react';
 import { CLIENT_NEEDS, NEED_TOPICS, SITE_TASK_FOR_LABEL, type NeedConcern, type NeedTopic, type SiteTaskFor } from '@prima/core';
 import { api, type SiteTaskBoard } from '../api';
@@ -296,14 +297,14 @@ function TaskForm({ siteId, idea, onDone }: { siteId: string; idea: { topic: Nee
         </label>
         <label className="field">
           <span className="label">Client need it answers (optional)</span>
-          <select className="select" value={needTopic} onChange={(e) => setNeedTopic(e.target.value)}>
+          <Select className="select" value={needTopic} onChange={(e) => setNeedTopic(e.target.value)}>
             <option value="">None</option>
             {NEED_TOPICS.map((t) => (
               <option key={t.key} value={t.key}>
                 {t.title}
               </option>
             ))}
-          </select>
+          </Select>
         </label>
         <ErrorNotice error={act.error} />
         <button

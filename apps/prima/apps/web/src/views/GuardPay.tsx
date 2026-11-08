@@ -1,3 +1,4 @@
+import { Select } from '../SearchSelect';
 import { useState } from "react";
 import type { ProofInput } from "@prima/core";
 import { ProofPicker } from "./Proof";
@@ -1172,13 +1173,13 @@ export function GuardAdvancesView() {
         </div>
       )}
       <div className="row" style={{ gap: 6, flexWrap: "wrap", marginBottom: 8 }}>
-        <select className="input" style={{ maxWidth: 260 }} aria-label="Company" value={data.companyId} onChange={(e) => setCompanyId(e.target.value)}>
+        <Select className="input" style={{ maxWidth: 260 }} aria-label="Company" value={data.companyId} onChange={(e) => setCompanyId(e.target.value)}>
           {data.companies.map((c) => (
             <option key={c.id} value={c.id}>
               {c.name}
             </option>
           ))}
-        </select>
+        </Select>
         <input className="input" type="month" style={{ maxWidth: 170 }} aria-label="Month" value={thisMonth} onChange={(e) => setPeriod(e.target.value || null)} />
       </div>
       <div className="kpis">
@@ -1213,14 +1214,14 @@ function AdvanceForm({ data, onDone }: { data: GuardAdvanceBoard; onDone: () => 
           <option value="zone">A zone (branch)</option>
           <option value="region">A region</option>
         </select>
-        <select className="input" style={{ maxWidth: 240 }} aria-label="Which" value={ref} onChange={(e) => setRef(e.target.value)}>
+        <Select className="input" style={{ maxWidth: 240 }} aria-label="Which" value={ref} onChange={(e) => setRef(e.target.value)}>
           <option value="">Pick…</option>
           {choices.map((c) => (
             <option key={c.id} value={c.id}>
               {c.name}
             </option>
           ))}
-        </select>
+        </Select>
         <input className="input" style={{ maxWidth: 120 }} aria-label="Amount each" inputMode="decimal" placeholder="RM each" value={amount} onChange={(e) => setAmount(e.target.value)} />
         <input className="input" type="date" style={{ maxWidth: 170 }} aria-label="Pay date" value={payOn} onChange={(e) => setPayOn(e.target.value)} />
         <input className="input" style={{ maxWidth: 240 }} aria-label="Reason" placeholder="Reason (optional)" value={reason} onChange={(e) => setReason(e.target.value)} />
@@ -1659,13 +1660,13 @@ export function GuardLoansView() {
         </div>
       )}
       <div className="row" style={{ gap: 6, flexWrap: "wrap", marginBottom: 8 }}>
-        <select className="input" style={{ maxWidth: 260 }} aria-label="Company" value={data.companyId} onChange={(e) => setCompanyId(e.target.value)}>
+        <Select className="input" style={{ maxWidth: 260 }} aria-label="Company" value={data.companyId} onChange={(e) => setCompanyId(e.target.value)}>
           {data.companies.map((c) => (
             <option key={c.id} value={c.id}>
               {c.name}
             </option>
           ))}
-        </select>
+        </Select>
       </div>
       <div className="kpis">
         <Kpi label="Waiting for approval" value={data.totals.waiting} tone={data.totals.waiting ? "warn" : "ok"} />
@@ -1692,14 +1693,14 @@ function LoanForm({ data, onDone }: { data: GuardLoanBoard; onDone: () => void }
         <h3>Record an advance or loan</h3>
       </div>
       <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
-        <select className="input" style={{ maxWidth: 240 }} aria-label="Guard" value={f.personId} onChange={set("personId")}>
+        <Select className="input" style={{ maxWidth: 240 }} aria-label="Guard" value={f.personId} onChange={set("personId")}>
           <option value="">Pick a guard…</option>
           {data.guards.map((g) => (
             <option key={g.id} value={g.id}>
               {g.name}
             </option>
           ))}
-        </select>
+        </Select>
         <select className="input" style={{ maxWidth: 120 }} aria-label="Kind" value={f.kind} onChange={set("kind")}>
           <option value="loan">Loan</option>
           <option value="advance">Advance</option>

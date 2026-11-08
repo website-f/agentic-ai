@@ -1,3 +1,4 @@
+import { Select } from '../SearchSelect';
 import { useState } from 'react';
 import { staffHistoryRole } from '@prima/core';
 import { api, type GroupHistory, type HistoryLookupResult } from '../api';
@@ -209,12 +210,12 @@ function GroupHistoryBody({ d, reload }: { d: GroupHistory; reload: () => void }
             <div className="list-item" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 8 }}>
               <label className="field">
                 <span className="label">Decision</span>
-                <select className="input" aria-label="Rehire decision" value={rehire.status} onChange={(e) => setRehire({ ...rehire, status: e.target.value })}>
+                <Select className="input" aria-label="Rehire decision" value={rehire.status} onChange={(e) => setRehire({ ...rehire, status: e.target.value })}>
                   <option value="">Choose</option>
                   <option value="eligible">Can be hired again</option>
                   <option value="check_first">Check with HR before hiring</option>
                   {d.can.setDoNotRehire && <option value="do_not_rehire">Do not hire again (HR Director, COO, OGM, Ops Director or CEO)</option>}
-                </select>
+                </Select>
               </label>
               <label className="field">
                 <span className="label">Reason (kept by HR; a lookup shows only the decision)</span>
@@ -242,7 +243,7 @@ function GroupHistoryBody({ d, reload }: { d: GroupHistory; reload: () => void }
               <div className="grid-2">
                 <label className="field">
                   <span className="label">Company</span>
-                  <select
+                  <Select
                     className="input"
                     aria-label="Old employment company"
                     value={old.companyId}
@@ -254,17 +255,17 @@ function GroupHistoryBody({ d, reload }: { d: GroupHistory; reload: () => void }
                         {c.name}
                       </option>
                     ))}
-                  </select>
+                  </Select>
                 </label>
                 <label className="field">
                   <span className="label">Job</span>
-                  <select className="input" aria-label="Old employment job" value={old.role} onChange={(e) => setOld({ ...old, role: e.target.value })}>
+                  <Select className="input" aria-label="Old employment job" value={old.role} onChange={(e) => setOld({ ...old, role: e.target.value })}>
                     {Object.entries(ROLE).map(([k, v]) => (
                       <option key={k} value={k}>
                         {v}
                       </option>
                     ))}
-                  </select>
+                  </Select>
                 </label>
                 <label className="field">
                   <span className="label">First day</span>
@@ -288,13 +289,13 @@ function GroupHistoryBody({ d, reload }: { d: GroupHistory; reload: () => void }
                 </label>
                 <label className="field">
                   <span className="label">How it ended</span>
-                  <select className="input" aria-label="Old employment ended" value={old.ended} onChange={(e) => setOld({ ...old, ended: e.target.value })}>
+                  <Select className="input" aria-label="Old employment ended" value={old.ended} onChange={(e) => setOld({ ...old, ended: e.target.value })}>
                     {['resigned', 'terminated', 'contract_end', 'retired', 'absconded', 'unknown'].map((k) => (
                       <option key={k} value={k}>
                         {ENDED[k]}
                       </option>
                     ))}
-                  </select>
+                  </Select>
                 </label>
                 <label className="field">
                   <span className="label">Old file or register</span>
@@ -478,10 +479,10 @@ export function HistoryLookupPanel() {
         </label>
         <label className="field">
           <span className="label">Nationality</span>
-          <select className="input" aria-label="Nationality to look up" value={f.nationality} onChange={(e) => setF({ ...f, nationality: e.target.value })}>
+          <Select className="input" aria-label="Nationality to look up" value={f.nationality} onChange={(e) => setF({ ...f, nationality: e.target.value })}>
             {role !== 'fwm' && <option value="MY">Malaysian</option>}
             <option value="NP">Nepali</option>
-          </select>
+          </Select>
         </label>
         <button className="btn btn-primary btn-sm" disabled={act.busy || f.idFull.trim().length < 6} onClick={() => lookup({ ...f })}>
           Look up

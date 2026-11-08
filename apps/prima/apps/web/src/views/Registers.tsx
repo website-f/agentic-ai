@@ -1,3 +1,4 @@
+import { Select } from '../SearchSelect';
 import { useState } from "react";
 import {
   COMMITTEE_KIND_LABEL,
@@ -214,7 +215,7 @@ function CompanyPick({
 }) {
   if (companies.length < 2) return null;
   return (
-    <select
+    <Select
       className="select"
       aria-label="Company"
       value={value}
@@ -225,7 +226,7 @@ function CompanyPick({
           {c.name}
         </option>
       ))}
-    </select>
+    </Select>
   );
 }
 
@@ -579,7 +580,7 @@ function DealForm({
         value={counterparty}
         onChange={(e) => setCounterparty(e.target.value)}
       />
-      <select
+      <Select
         className="select"
         aria-label="Who they are"
         value={party}
@@ -590,7 +591,7 @@ function DealForm({
             {RPT_PARTY_LABEL[x]}
           </option>
         ))}
-      </select>
+      </Select>
       <input
         className="input"
         aria-label="How related"
@@ -598,7 +599,7 @@ function DealForm({
         value={relationship}
         onChange={(e) => setRelationship(e.target.value)}
       />
-      <select
+      <Select
         className="select"
         aria-label="Kind of deal"
         value={nature}
@@ -609,7 +610,7 @@ function DealForm({
             {RPT_NATURE_LABEL[x]}
           </option>
         ))}
-      </select>
+      </Select>
       <input
         className="input"
         inputMode="decimal"
@@ -865,7 +866,7 @@ function InterestForm({
       {!none &&
         items.map((it, n) => (
           <div key={n} className="row" style={{ gap: 6, flexWrap: "wrap" }}>
-            <select
+            <Select
               className="select"
               aria-label="Kind of interest"
               value={it.kind}
@@ -884,7 +885,7 @@ function InterestForm({
                   {INTEREST_KIND_LABEL[x]}
                 </option>
               ))}
-            </select>
+            </Select>
             <input
               className="input"
               aria-label="Interest"
@@ -1119,7 +1120,7 @@ function CommitteeForm({
         value={name}
         onChange={(e) => setName(e.target.value)}
       />
-      <select
+      <Select
         className="select"
         aria-label="Kind"
         value={kind}
@@ -1130,7 +1131,7 @@ function CommitteeForm({
             {COMMITTEE_KIND_LABEL[x]}
           </option>
         ))}
-      </select>
+      </Select>
       <input
         className="input"
         inputMode="numeric"
@@ -1398,7 +1399,7 @@ function RiskLine({ row, team }: { row: RiskRow; team: Risks["team"] }) {
         </div>
       )}
       {mode === "assign" && (
-        <select
+        <Select
           className="select"
           aria-label="Team member"
           value={toId}
@@ -1409,7 +1410,7 @@ function RiskLine({ row, team }: { row: RiskRow; team: Risks["team"] }) {
               {t.name}
             </option>
           ))}
-        </select>
+        </Select>
       )}
       {mode && (
         <>
@@ -1482,7 +1483,7 @@ function Score({
       style={{ display: "flex", flexDirection: "column", gap: 2 }}
     >
       {label}
-      <select
+      <Select
         className="select"
         aria-label={label}
         value={value}
@@ -1493,7 +1494,7 @@ function Score({
             {n}
           </option>
         ))}
-      </select>
+      </Select>
     </label>
   );
 }
@@ -1529,7 +1530,7 @@ function RiskForm({
         value={title}
         onChange={(e) => setTitle(e.target.value)}
       />
-      <select
+      <Select
         className="select"
         aria-label="Kind of risk"
         value={category}
@@ -1540,7 +1541,7 @@ function RiskForm({
             {RISK_CATEGORY_LABEL[x]}
           </option>
         ))}
-      </select>
+      </Select>
       <input
         className="input"
         aria-label="Owner"

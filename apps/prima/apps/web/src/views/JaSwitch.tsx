@@ -1,3 +1,4 @@
+import { Select } from '../SearchSelect';
 import { useState } from 'react';
 import { api, type JaSwitchBoard, type JaSwitchReport, type JaGuardHistory } from '../api';
 import { Chip, Drawer, ErrorNotice, Kpi, Loading, dateLabel, dateTimeLabel, useAction, useLoad, type Tone } from '../ui';
@@ -427,23 +428,23 @@ function FilesPanel({ data }: { data: JaSwitchBoard }) {
           <div className="row">
             <label className="field">
               <span className="label">Company</span>
-              <select className="select" value={companyId} onChange={(e) => setCompanyId(e.target.value)}>
+              <Select className="select" value={companyId} onChange={(e) => setCompanyId(e.target.value)}>
                 {data.companies.map((c) => (
                   <option key={c.id} value={c.id}>
                     {c.name}
                   </option>
                 ))}
-              </select>
+              </Select>
             </label>
             <label className="field">
               <span className="label">What the file holds</span>
-              <select className="select" value={kind} onChange={(e) => setKind(e.target.value as typeof kind)}>
+              <Select className="select" value={kind} onChange={(e) => setKind(e.target.value as typeof kind)}>
                 {data.importKinds.map((k) => (
                   <option key={k.kind} value={k.kind}>
                     {KIND_LABEL[k.kind]}
                   </option>
                 ))}
-              </select>
+              </Select>
             </label>
             <label className="field">
               <span className="label">First day covered</span>
@@ -543,13 +544,13 @@ function HistoryPanel({ data }: { data: JaSwitchBoard }) {
         {data.history.incidents} incidents, {data.history.patrol} patrol days, {data.history.hostels} hostel months.
       </p>
       <div className="row">
-        <select className="select" value={companyId} onChange={(e) => setCompanyId(e.target.value)}>
+        <Select className="select" value={companyId} onChange={(e) => setCompanyId(e.target.value)}>
           {data.companies.map((c) => (
             <option key={c.id} value={c.id}>
               {c.name}
             </option>
           ))}
-        </select>
+        </Select>
         <input className="input" placeholder="Staff number" value={staffNo} onChange={(e) => setStaffNo(e.target.value)} />
         <button className="btn" disabled={busy || !staffNo.trim()} onClick={async () => setFound((await run(() => api.jaGuardHistory(companyId, staffNo.trim()))) ?? null)}>
           Look up

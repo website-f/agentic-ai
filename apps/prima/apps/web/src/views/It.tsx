@@ -1,3 +1,4 @@
+import { Select } from '../SearchSelect';
 import {ItPurchaseDecision} from './ItPurchaseDecision';
 import {WebTicketReview,WebTicketHistory} from './WebTicketReview';
 import{RentalCorrections}from'./RentalCorrections';
@@ -298,15 +299,15 @@ function Assets({ data, staff }: { data: ItBoard; staff: boolean }) {
         <div className="it-card-bar">
           <Toolbar>
             <Search value={q} onChange={setQ} placeholder="Tag, model, holder or company" label="Search" />
-            <select className="select it-filter" aria-label="Kind" value={kind} onChange={(e) => setKind(e.target.value as Asset['kind'] | 'ALL')}>
+            <Select className="select it-filter" aria-label="Kind" value={kind} onChange={(e) => setKind(e.target.value as Asset['kind'] | 'ALL')}>
               <option value="ALL">Every kind</option>
               {(Object.keys(KIND) as Asset['kind'][]).map((x) => (
                 <option key={x} value={x}>
                   {KIND[x]}
                 </option>
               ))}
-            </select>
-            <select className="select it-filter" aria-label="Status" value={status} onChange={(e) => setStatus(e.target.value as Asset['status'] | 'ALL')}>
+            </Select>
+            <Select className="select it-filter" aria-label="Status" value={status} onChange={(e) => setStatus(e.target.value as Asset['status'] | 'ALL')}>
               <option value="ALL">Every status</option>
               {(Object.keys(STATUS) as Asset['status'][])
                 .filter((s) => s !== 'disposed')
@@ -315,7 +316,7 @@ function Assets({ data, staff }: { data: ItBoard; staff: boolean }) {
                     {STATUS[s][1]}
                   </option>
                 ))}
-            </select>
+            </Select>
           </Toolbar>
         </div>
         {rows.length > 0 && (
@@ -609,13 +610,13 @@ function PurchaseForm({ onDone }: { onDone: () => void }) {
       </label>
       <label className="field">
         <span className="label">Kind</span>
-        <select className="select" aria-label="Kind" value={kind} onChange={(e) => setKind(e.target.value as Asset['kind'])}>
+        <Select className="select" aria-label="Kind" value={kind} onChange={(e) => setKind(e.target.value as Asset['kind'])}>
           {(Object.keys(KIND) as Asset['kind'][]).map((x) => (
             <option key={x} value={x}>
               {KIND[x]}
             </option>
           ))}
-        </select>
+        </Select>
       </label>
       <label className="field it-span">
         <span className="label">Item and model</span>
@@ -915,13 +916,13 @@ function Mine({ data }: { data: ItBoard }) {
         <div className="it-form">
           <label className="field">
             <span className="label">About</span>
-            <select className="select" aria-label="About" value={category} onChange={(e) => setCategory(e.target.value as keyof typeof CATEGORY)}>
+            <Select className="select" aria-label="About" value={category} onChange={(e) => setCategory(e.target.value as keyof typeof CATEGORY)}>
               {(Object.keys(CATEGORY) as (keyof typeof CATEGORY)[]).map((c) => (
                 <option key={c} value={c}>
                   {CATEGORY[c]}
                 </option>
               ))}
-            </select>
+            </Select>
           </label>
           <label className="field">
             <span className="label">Urgency</span>

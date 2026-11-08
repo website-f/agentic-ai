@@ -1,3 +1,4 @@
+import { Select } from '../SearchSelect';
 import { useMemo, useState } from 'react';
 import { ClockCounterClockwiseIcon, FingerprintIcon, SealCheckIcon, UsersThreeIcon } from '@phosphor-icons/react';
 import { api, type AuditLog } from '../api';
@@ -106,22 +107,22 @@ export function AuditView() {
           placeholder="Search what, who, record or entry number"
           label="Search the audit trail"
         />
-        <select className="select gv-filter" aria-label="Who" value={who} onChange={(e) => (setWho(e.target.value), setLimit(PAGE))}>
+        <Select className="select gv-filter" aria-label="Who" value={who} onChange={(e) => (setWho(e.target.value), setLimit(PAGE))}>
           <option value="">Everyone</option>
           {actors.map((a) => (
             <option key={a} value={a}>
               {a}
             </option>
           ))}
-        </select>
-        <select className="select gv-filter" aria-label="Area" value={area} onChange={(e) => (setArea(e.target.value), setLimit(PAGE))}>
+        </Select>
+        <Select className="select gv-filter" aria-label="Area" value={area} onChange={(e) => (setArea(e.target.value), setLimit(PAGE))}>
           <option value="">All areas</option>
           {areas.map((a) => (
             <option key={a} value={a}>
               {humanize(a)}
             </option>
           ))}
-        </select>
+        </Select>
       </Toolbar>
 
       <section className="k-card" aria-label="Audit entries">

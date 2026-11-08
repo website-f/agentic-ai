@@ -1,6 +1,7 @@
 // Printing labels (P85; paper section 2): A4 label sheets or a label printer roll, the QR code and, where the label is
 // wide enough, the Code 128 barcode of the same payload, the typed ID, the item type and the size. Nothing else: no
 // names, prices, owner or site. Printed through a print-only layer so the rest of the screen is not printed.
+import { Select } from '../../SearchSelect';
 import { useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { LABEL_TEMPLATES, type LabelTemplateId } from '@prima/core';
@@ -84,13 +85,13 @@ export function LabelSheet({ labels, template: initial, symbols, onPrinted }: { 
       <div className="lbl-controls">
         <label className="isc-field">
           Label sheet
-          <select className="input" value={template} onChange={(e) => setTemplate(e.target.value as LabelTemplateId)}>
+          <Select className="input" value={template} onChange={(e) => setTemplate(e.target.value as LabelTemplateId)}>
             {LABEL_TEMPLATES.map((id) => (
               <option key={id} value={id}>
                 {TEMPLATES[id].name}
               </option>
             ))}
-          </select>
+          </Select>
         </label>
         {perPage(t) > 1 && (
           <label className="isc-field">

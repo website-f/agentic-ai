@@ -1,3 +1,4 @@
+import { Select } from '../SearchSelect';
 import { useState } from 'react';
 import { ClockCountdownIcon, FilesIcon, FirstAidKitIcon, PhoneIcon, PlusIcon } from '@phosphor-icons/react';
 import {
@@ -165,14 +166,14 @@ export function SocsoView() {
             }
           >
             <Search value={q} onChange={setQ} placeholder="Search name, staff no. or PERKESO ref" label="Search claims" />
-            <select className="select hx-filter" aria-label="Status" value={status} onChange={(e) => setStatus(e.target.value as SocsoStatus | '')}>
+            <Select className="select hx-filter" aria-label="Status" value={status} onChange={(e) => setStatus(e.target.value as SocsoStatus | '')}>
               <option value="">Every status</option>
               {statuses.map((s) => (
                 <option key={s} value={s}>
                   {SOCSO_STATUS_LABEL[s]}
                 </option>
               ))}
-            </select>
+            </Select>
           </Toolbar>
           <Card title="Claims" actions={<span className="hx-count">{count}</span>} flush>
             {rows.length === 0 ? (
@@ -458,14 +459,14 @@ export function StartSocsoForm({
       <h4 className="hx-form-title">Start a SOCSO claim</h4>
       <label className="field">
         <span className="label">Kind of case</span>
-        <select className="select" aria-label="Kind of case" value={type} onChange={(e) => setType(e.target.value as SocsoCaseType | '')}>
+        <Select className="select" aria-label="Kind of case" value={type} onChange={(e) => setType(e.target.value as SocsoCaseType | '')}>
           <option value="">Choose…</option>
           {types.map((t) => (
             <option key={t} value={t}>
               {SOCSO_TYPE_LABEL[t]}
             </option>
           ))}
-        </select>
+        </Select>
       </label>
       {type && <span className="muted small">{SOCSO_TYPE_DETAIL[type]}</span>}
       {!unsure && (
@@ -1153,7 +1154,7 @@ function RehabPanel({ d }: { d: SocsoClaimDetail }) {
             <div className="hx-form-grid">
               <label className="field">
                 <span className="label">New restriction</span>
-                <select
+                <Select
                   className="select"
                   aria-label="Restriction"
                   value={rs.kind}
@@ -1164,7 +1165,7 @@ function RehabPanel({ d }: { d: SocsoClaimDetail }) {
                       {SOCSO_RESTRICTION_LABEL[k]}
                     </option>
                   ))}
-                </select>
+                </Select>
               </label>
               <label className="field">
                 <span className="label">From</span>

@@ -1,3 +1,4 @@
+import { Select } from '../SearchSelect';
 import { useState } from "react";
 import { api } from "../api";
 import type { StaffLangId } from "../api/types";
@@ -72,14 +73,14 @@ export function TrainingPanel({ mine = false }: { mine?: boolean }) {
             <div className="hx-form-grid">
               <label className="field">
                 <span className="label">Staff member</span>
-                <select className="select" aria-label="Staff member trained" value={v("p")} onChange={(e) => set("p", e.target.value)}>
+                <Select className="select" aria-label="Staff member trained" value={v("p")} onChange={(e) => set("p", e.target.value)}>
                   <option value="">Choose staff</option>
                   {(staff.data ?? []).map((s) => (
                     <option key={s.personId} value={s.personId}>
                       {s.name}
                     </option>
                   ))}
-                </select>
+                </Select>
               </label>
               <label className="field">
                 <span className="label">Course</span>
@@ -214,14 +215,14 @@ export function AppraisalsPanel({ mine = false }: { mine?: boolean }) {
                       <div className="hx-form-grid">
                         <label className="field">
                           <span className="label">Rating</span>
-                          <select className="select" aria-label={`Rating for ${r.name}`} value={v(`${r.id}:rt`)} onChange={(e) => set(`${r.id}:rt`, e.target.value)}>
+                          <Select className="select" aria-label={`Rating for ${r.name}`} value={v(`${r.id}:rt`)} onChange={(e) => set(`${r.id}:rt`, e.target.value)}>
                             <option value="">Rating</option>
                             {[1, 2, 3, 4, 5].map((n) => (
                               <option key={n} value={n}>
                                 {n}
                               </option>
                             ))}
-                          </select>
+                          </Select>
                         </label>
                         <label className="field">
                           <span className="label">What went well</span>
@@ -281,18 +282,18 @@ export function AppraisalsPanel({ mine = false }: { mine?: boolean }) {
               <div className="hx-form-grid">
                 <label className="field">
                   <span className="label">Staff member</span>
-                  <select className="select" aria-label="Staff member to appraise" value={v("p")} onChange={(e) => set("p", e.target.value)}>
+                  <Select className="select" aria-label="Staff member to appraise" value={v("p")} onChange={(e) => set("p", e.target.value)}>
                     <option value="">Staff member</option>
                     {d.staff.map((s) => (
                       <option key={s.personId} value={s.personId}>
                         {s.name}
                       </option>
                     ))}
-                  </select>
+                  </Select>
                 </label>
                 <label className="field">
                   <span className="label">Appraiser</span>
-                  <select className="select" aria-label="Appraiser" value={v("a")} onChange={(e) => set("a", e.target.value)}>
+                  <Select className="select" aria-label="Appraiser" value={v("a")} onChange={(e) => set("a", e.target.value)}>
                     <option value="">Appraiser</option>
                     {d.appraisers
                       .filter((x) => x.personId !== v("p"))
@@ -301,7 +302,7 @@ export function AppraisalsPanel({ mine = false }: { mine?: boolean }) {
                           {x.name}
                         </option>
                       ))}
-                  </select>
+                  </Select>
                 </label>
                 <label className="field">
                   <span className="label">Year</span>
@@ -425,13 +426,13 @@ export function PoliciesPanel({ mine = false, briefing = false }: { mine?: boole
                     </div>
                   )}
                   <div className="hx-row-actions">
-                    <select className="select" aria-label="Language" value={lang} onChange={(e) => setReadLang({ ...readLang, [r.id]: e.target.value as Lang })}>
+                    <Select className="select" aria-label="Language" value={lang} onChange={(e) => setReadLang({ ...readLang, [r.id]: e.target.value as Lang })}>
                       {r.copies.map((c) => (
                         <option key={c.lang} value={c.lang}>
                           {c.label}
                         </option>
                       ))}
-                    </select>
+                    </Select>
                     <button className="btn btn-sm" aria-expanded={open === r.id} onClick={() => setOpen(open === r.id ? null : r.id)}>
                       {open === r.id ? "Hide" : "Read"}
                     </button>
@@ -497,25 +498,25 @@ export function PoliciesPanel({ mine = false, briefing = false }: { mine?: boole
                       <div className="hx-form-grid">
                         <label className="field">
                           <span className="label">Staff member</span>
-                          <select className="select" aria-label="Staff member" value={mt.personId} onChange={(e) => setMt({ ...mt, personId: e.target.value })}>
+                          <Select className="select" aria-label="Staff member" value={mt.personId} onChange={(e) => setMt({ ...mt, personId: e.target.value })}>
                             <option value="">Staff member</option>
                             {r.missing.slice(0, 200).map((m) => (
                               <option key={m.personId} value={m.personId}>
                                 {m.name} ({langLabel(m.lang)})
                               </option>
                             ))}
-                          </select>
+                          </Select>
                         </label>
                         <label className="field">
                           <span className="label">Mother tongue</span>
-                          <select className="select" aria-label="Mother tongue" value={mt.lang} onChange={(e) => setMt({ ...mt, lang: e.target.value })}>
+                          <Select className="select" aria-label="Mother tongue" value={mt.lang} onChange={(e) => setMt({ ...mt, lang: e.target.value })}>
                             <option value="">Language</option>
                             {d.languages.map((l) => (
                               <option key={l.id} value={l.id}>
                                 {l.label}
                               </option>
                             ))}
-                          </select>
+                          </Select>
                         </label>
                       </div>
                       <div className="hx-form-actions">
@@ -535,7 +536,7 @@ export function PoliciesPanel({ mine = false, briefing = false }: { mine?: boole
                       <div className="hx-form-grid">
                         <label className="field">
                           <span className="label">Language</span>
-                          <select className="select" aria-label="Translation language" value={tr.lang} onChange={(e) => setTr({ ...tr, lang: e.target.value })}>
+                          <Select className="select" aria-label="Translation language" value={tr.lang} onChange={(e) => setTr({ ...tr, lang: e.target.value })}>
                             {d.languages
                               .filter((l) => l.id !== "en")
                               .map((l) => (
@@ -544,7 +545,7 @@ export function PoliciesPanel({ mine = false, briefing = false }: { mine?: boole
                                   {have.includes(l.id) ? " (replace)" : ""}
                                 </option>
                               ))}
-                          </select>
+                          </Select>
                         </label>
                         <label className="field">
                           <span className="label">Title</span>
@@ -600,13 +601,13 @@ export function PoliciesPanel({ mine = false, briefing = false }: { mine?: boole
                       <div className="hx-form-grid">
                         <label className="field">
                           <span className="label">Briefed in</span>
-                          <select className="select" aria-label="Briefing language" value={brief.lang} onChange={(e) => setBrief({ ...brief, lang: e.target.value })}>
+                          <Select className="select" aria-label="Briefing language" value={brief.lang} onChange={(e) => setBrief({ ...brief, lang: e.target.value })}>
                             {r.copies.map((c) => (
                               <option key={c.lang} value={c.lang}>
                                 Briefed in {c.label}
                               </option>
                             ))}
-                          </select>
+                          </Select>
                         </label>
                         <label className="field">
                           <span className="label">Briefing reference</span>
@@ -642,23 +643,23 @@ export function PoliciesPanel({ mine = false, briefing = false }: { mine?: boole
               <div className="hx-form-grid">
                 <label className="field">
                   <span className="label">Kind</span>
-                  <select className="select" aria-label="Policy kind" value={v("kind") || "handbook"} onChange={(e) => set("kind", e.target.value)}>
+                  <Select className="select" aria-label="Policy kind" value={v("kind") || "handbook"} onChange={(e) => set("kind", e.target.value)}>
                     {Object.entries(KIND_LABEL).map(([k, l]) => (
                       <option key={k} value={k}>
                         {l}
                       </option>
                     ))}
-                  </select>
+                  </Select>
                 </label>
                 <label className="field">
                   <span className="label">Who must read it</span>
-                  <select className="select" aria-label="Who must read it" value={v("audience") || "office"} onChange={(e) => set("audience", e.target.value)}>
+                  <Select className="select" aria-label="Who must read it" value={v("audience") || "office"} onChange={(e) => set("audience", e.target.value)}>
                     {Object.entries(AUDIENCE_LABEL).map(([k, l]) => (
                       <option key={k} value={k}>
                         {l}
                       </option>
                     ))}
-                  </select>
+                  </Select>
                 </label>
                 <div className="field hx-form-wide">
                   <span className="label">Only for (leave empty for everyone)</span>
@@ -677,7 +678,7 @@ export function PoliciesPanel({ mine = false, briefing = false }: { mine?: boole
                 </label>
                 <label className="field">
                   <span className="label">Sites</span>
-                  <select
+                  <Select
                     className="select"
                     aria-label="Add a site"
                     value=""
@@ -689,7 +690,7 @@ export function PoliciesPanel({ mine = false, briefing = false }: { mine?: boole
                         {x.name}
                       </option>
                     ))}
-                  </select>
+                  </Select>
                 </label>
                 {sites.length > 0 && (
                   <div className="sx-chips hx-form-wide">
@@ -822,24 +823,24 @@ export function HrLegalPanel() {
                   <div className="hx-form-grid hp-grid-legal">
                     <label className="field">
                       <span className="label">Status</span>
-                      <select className="select" aria-label="Status" value={e.status} onChange={(x) => upd({ status: x.target.value })}>
+                      <Select className="select" aria-label="Status" value={e.status} onChange={(x) => upd({ status: x.target.value })}>
                         {Object.entries(d.statusLabel).map(([k, l]) => (
                           <option key={k} value={k}>
                             {l}
                           </option>
                         ))}
-                      </select>
+                      </Select>
                     </label>
                     <label className="field">
                       <span className="label">Responsible director</span>
-                      <select className="select" aria-label="Responsible director" value={e.directorId} onChange={(x) => upd({ directorId: x.target.value })}>
+                      <Select className="select" aria-label="Responsible director" value={e.directorId} onChange={(x) => upd({ directorId: x.target.value })}>
                         <option value="">Responsible director…</option>
                         {d.directors.map((x) => (
                           <option key={x.id} value={x.id}>
                             {x.name}
                           </option>
                         ))}
-                      </select>
+                      </Select>
                     </label>
                     <label className="field">
                       <span className="label">Note</span>
@@ -962,14 +963,14 @@ export function OvertimePanel() {
             <div className="hx-form-grid">
               <label className="field">
                 <span className="label">Staff member</span>
-                <select className="select" aria-label="Staff member" value={calc.personId} onChange={(e) => setCalc({ ...calc, personId: e.target.value })}>
+                <Select className="select" aria-label="Staff member" value={calc.personId} onChange={(e) => setCalc({ ...calc, personId: e.target.value })}>
                   <option value="">Work out pay for…</option>
                   {d.staff.map((p) => (
                     <option key={p.personId} value={p.personId}>
                       {p.name}
                     </option>
                   ))}
-                </select>
+                </Select>
               </label>
               <label className="field">
                 <span className="label">Hours</span>
@@ -1084,14 +1085,14 @@ export function GuardTrainingPanel() {
                       <div className="hx-form-grid">
                         <label className="field">
                           <span className="label">Paper</span>
-                          <select className="select" aria-label={`Paper for ${r.name}`} value={kind} onChange={(e) => set("type", e.target.value)}>
+                          <Select className="select" aria-label={`Paper for ${r.name}`} value={kind} onChange={(e) => set("type", e.target.value)}>
                             {d.types.map((t) => (
                               <option key={t.type} value={t.type}>
                                 {t.label}
                               </option>
                             ))}
                             <option value="COURSE">Other course</option>
-                          </select>
+                          </Select>
                         </label>
                         {kind === "COURSE" ? (
                           <>

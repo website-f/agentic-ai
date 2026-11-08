@@ -1,3 +1,4 @@
+import { Select } from '../SearchSelect';
 import { useState } from 'react';
 import { api } from '../api';
 import { ErrorNotice, Loading, dateTimeLabel, useAction, useLoad } from '../ui';
@@ -156,13 +157,13 @@ function StartBooks({ rows, onSaved }: { rows: { companyId: string; name: string
               <span className="fin-inline-form">
                 <label className="field">
                   <span className="label">Team</span>
-                  <select className="select fin-w-sm" value={team} onChange={(e) => setTeam(e.target.value)}>
+                  <Select className="select fin-w-sm" value={team} onChange={(e) => setTeam(e.target.value)}>
                     {[1, 2, 3, 4, 5, 6, 7].map((t) => (
                       <option key={t} value={t}>
                         Team {t}
                       </option>
                     ))}
-                  </select>
+                  </Select>
                 </label>
                 <label className="field">
                   <span className="label">Year ends (month-day)</span>
@@ -237,7 +238,7 @@ function TeamPanel({ rows, onSaved }: { rows: { companyId: string; name: string;
         {rows.map((r) => (
           <div key={r.companyId} className="fin-kv">
             <span className="fin-min0">{r.name}</span>
-            <select
+            <Select
               className="select fin-w-sm"
               aria-label={`Team for ${r.name}`}
               value={moves[r.companyId] ?? r.team}
@@ -248,7 +249,7 @@ function TeamPanel({ rows, onSaved }: { rows: { companyId: string; name: string;
                   Team {t}
                 </option>
               ))}
-            </select>
+            </Select>
           </div>
         ))}
       </div>

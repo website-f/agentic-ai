@@ -1,3 +1,4 @@
+import { Select } from '../SearchSelect';
 import { useState } from 'react';
 import { api, type FinControls, type FinDesk } from '../api';
 import { Chip, ErrorNotice, dateLabel, useAction } from '../ui';
@@ -84,14 +85,14 @@ function WithholdingTax({ v, co }: { v: FinControls; co: Co }) {
       {adding && (
         <div className="fin-pad">
           <Field label="Payment in Prima (fills the payee, amount and day)">
-            <select className="select" value={f.paymentId ?? ''} onChange={set('paymentId')}>
+            <Select className="select" value={f.paymentId ?? ''} onChange={set('paymentId')}>
               <option value="">Not in Prima: type it</option>
               {released.map((p) => (
                 <option key={p.id} value={p.id}>
                   {p.payee} · {rm(p.amount)} · {p.releasedOn ? dateLabel(p.releasedOn) : ''}
                 </option>
               ))}
-            </select>
+            </Select>
           </Field>
           {!f.paymentId && (
             <>
@@ -110,13 +111,13 @@ function WithholdingTax({ v, co }: { v: FinControls; co: Co }) {
             <input className="input" value={f.country ?? ''} onChange={set('country')} />
           </Field>
           <Field label="What it pays for">
-            <select className="select" value={f.type} onChange={set('type')}>
+            <Select className="select" value={f.type} onChange={set('type')}>
               {Object.keys(ye.whtRates).map((k) => (
                 <option key={k} value={k}>
                   {WHT_LABEL[k] ?? k} · {ye.whtRates[k as keyof Ye['whtRates']]}%
                 </option>
               ))}
-            </select>
+            </Select>
           </Field>
           <Field label="Lower treaty rate (%), only with a certificate of residence">
             <input className="input" inputMode="decimal" value={f.treatyRate ?? ''} onChange={set('treatyRate')} />
@@ -429,13 +430,13 @@ function FixedAssets({ v }: { v: FinControls }) {
             </Field>
           ))}
           <Field label="Class">
-            <select className="select" value={f.cls} onChange={set('cls')}>
+            <Select className="select" value={f.cls} onChange={set('cls')}>
               {Object.entries(CLASS_LABEL).map(([k, label]) => (
                 <option key={k} value={k}>
                   {label}
                 </option>
               ))}
-            </select>
+            </Select>
           </Field>
           {f.cls === 'motor_car' && (
             <Field label="Bought new, RM150,000 or less">
@@ -549,14 +550,14 @@ function AuditorRequests({ v }: { v: FinControls }) {
             <textarea className="textarea" rows={4} value={f.item ?? ''} onChange={set('item')} />
           </Field>
           <Field label="Who prepares them">
-            <select className="select" value={f.ownerId ?? ''} onChange={set('ownerId')}>
+            <Select className="select" value={f.ownerId ?? ''} onChange={set('ownerId')}>
               <option value="">Choose</option>
               {v.cash.people.map((p) => (
                 <option key={p.id} value={p.id}>
                   {p.name} · {p.title}
                 </option>
               ))}
-            </select>
+            </Select>
           </Field>
           <Field label="Due on (blank: 14 days)">
             <input className="input" type="date" value={f.dueOn ?? ''} onChange={set('dueOn')} />

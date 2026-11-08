@@ -1,3 +1,4 @@
+import { Select } from '../SearchSelect';
 import { useState } from "react";
 import { isOwnerAdmin } from "@prima/core";
 import { api } from "../api";
@@ -108,7 +109,7 @@ export function HrCasesPanel() {
             <div className="hx-form-grid">
               <label className="field">
                 <span className="label">Staff member</span>
-                <select className="select" value={f.personId} onChange={(e) => setF({ ...f, personId: e.target.value })} aria-label="Staff member">
+                <Select className="select" value={f.personId} onChange={(e) => setF({ ...f, personId: e.target.value })} aria-label="Staff member">
                   <option value="">Choose</option>
                   {people
                     .filter((p) => !p.own)
@@ -117,21 +118,21 @@ export function HrCasesPanel() {
                         {p.name} ({p.staffNo})
                       </option>
                     ))}
-                </select>
+                </Select>
               </label>
               <label className="field">
                 <span className="label">Kind</span>
-                <select className="select" value={f.kind} onChange={(e) => setF({ ...f, kind: e.target.value as keyof typeof KIND_LABEL })} aria-label="Kind">
+                <Select className="select" value={f.kind} onChange={(e) => setF({ ...f, kind: e.target.value as keyof typeof KIND_LABEL })} aria-label="Kind">
                   {(Object.keys(KIND_LABEL) as (keyof typeof KIND_LABEL)[]).map((k) => (
                     <option key={k} value={k}>
                       {KIND_LABEL[k]}
                     </option>
                   ))}
-                </select>
+                </Select>
               </label>
               <label className="field">
                 <span className="label">Complainant (if any)</span>
-                <select className="select" value={f.complainantId} onChange={(e) => setF({ ...f, complainantId: e.target.value })} aria-label="Complainant">
+                <Select className="select" value={f.complainantId} onChange={(e) => setF({ ...f, complainantId: e.target.value })} aria-label="Complainant">
                   <option value="">None</option>
                   {people
                     .filter((p) => !p.own && p.personId !== f.personId)
@@ -140,7 +141,7 @@ export function HrCasesPanel() {
                         {p.name}
                       </option>
                     ))}
-                </select>
+                </Select>
               </label>
               <label className="field">
                 <span className="label">Received on</span>
@@ -237,7 +238,7 @@ export function HrCasesPanel() {
                       <div className="hx-form-grid">
                         <label className="field">
                           <span className="label">Step</span>
-                          <select className="select" value={st.kind} onChange={(e) => setSt({ ...st, kind: e.target.value as StepKind })} aria-label="Step">
+                          <Select className="select" value={st.kind} onChange={(e) => setSt({ ...st, kind: e.target.value as StepKind })} aria-label="Step">
                             {(Object.keys(STEP_LABEL) as StepKind[])
                               .filter(
                                 (k) =>
@@ -251,7 +252,7 @@ export function HrCasesPanel() {
                                   {STEP_LABEL[k]}
                                 </option>
                               ))}
-                          </select>
+                          </Select>
                         </label>
                         {st.kind === "inquiry_set" && (
                           <>
@@ -403,13 +404,13 @@ function AppealBox({ c, onDone }: { c: CaseRow; onDone: () => void }) {
             </label>
             <label className="field">
               <span className="label">Language of the letter</span>
-              <select className="select" aria-label="Language of the letter" value={a.lang} onChange={(e) => setA({ ...a, lang: e.target.value })}>
+              <Select className="select" aria-label="Language of the letter" value={a.lang} onChange={(e) => setA({ ...a, lang: e.target.value })}>
                 {Object.entries(APPEAL_LANGS).map(([k, l]) => (
                   <option key={k} value={k}>
                     {l}
                   </option>
                 ))}
-              </select>
+              </Select>
             </label>
           </div>
           <div className="hx-form-actions">
@@ -432,26 +433,26 @@ function AppealBox({ c, onDone }: { c: CaseRow; onDone: () => void }) {
           <div className="hx-form-grid">
             <label className="field">
               <span className="label">Decision</span>
-              <select className="select" aria-label="Appeal decision" value={a.result} onChange={(e) => setA({ ...a, result: e.target.value })}>
+              <Select className="select" aria-label="Appeal decision" value={a.result} onChange={(e) => setA({ ...a, result: e.target.value })}>
                 <option value="">Decision</option>
                 {Object.entries(APPEAL_RESULT).map(([k, l]) => (
                   <option key={k} value={k}>
                     {l}
                   </option>
                 ))}
-              </select>
+              </Select>
             </label>
             {a.result === "varied" && (
               <label className="field">
                 <span className="label">Varied to</span>
-                <select className="select" aria-label="Varied to" value={a.variedTo} onChange={(e) => setA({ ...a, variedTo: e.target.value })}>
+                <Select className="select" aria-label="Varied to" value={a.variedTo} onChange={(e) => setA({ ...a, variedTo: e.target.value })}>
                   <option value="">Lighter decision</option>
                   {Object.entries(VARIED_TO).map(([k, l]) => (
                     <option key={k} value={k}>
                       {l}
                     </option>
                   ))}
-                </select>
+                </Select>
               </label>
             )}
             <label className="field hx-form-wide">

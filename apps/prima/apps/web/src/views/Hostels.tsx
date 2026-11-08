@@ -1,3 +1,4 @@
+import { Select } from '../SearchSelect';
 import { useState } from 'react';
 import { ClockCountdownIcon, LightningIcon, TrayIcon } from '@phosphor-icons/react';
 import type { ProofInput } from '@prima/core';
@@ -321,7 +322,7 @@ function AddBill({ hostelId, onDone }: { hostelId: string; onDone: () => void })
       <div className="hx-form-grid">
         <label className="field">
           <span className="label">Kind</span>
-          <select
+          <Select
             className="select"
             aria-label="Kind"
             value={input.kind}
@@ -332,7 +333,7 @@ function AddBill({ hostelId, onDone }: { hostelId: string; onDone: () => void })
                 {l}
               </option>
             ))}
-          </select>
+          </Select>
         </label>
         <label className="field">
           <span className="label">Month billed</span>

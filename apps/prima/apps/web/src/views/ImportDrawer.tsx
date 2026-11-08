@@ -1,3 +1,4 @@
+import { Select } from '../SearchSelect';
 import { useContext, useEffect, useMemo, useState } from 'react';
 import { CheckCircleIcon, DownloadSimpleIcon, FileXlsIcon, UploadSimpleIcon } from '@phosphor-icons/react';
 import {
@@ -265,7 +266,7 @@ function ImportDrawer({
           {needCompany && choices && (
             <label className="field">
               <span className="label">Which company are these records for?</span>
-              <select className="select" aria-label="Company" value={companyId} onChange={(e) => setCompanyId(e.target.value)}>
+              <Select className="select" aria-label="Company" value={companyId} onChange={(e) => setCompanyId(e.target.value)}>
                 <option value="">Choose…</option>
                 {choices.map(([k, l]) => (
                   <option key={k} value={k}>
@@ -273,7 +274,7 @@ function ImportDrawer({
                   </option>
                 ))}
                 {choices.length > 1 && <option value={SEVERAL}>Several: the file has a Company column</option>}
-              </select>
+              </Select>
             </label>
           )}
           {needCompany && choices?.length === 0 && <p className="notice" data-tone="warn">You do not keep this record for any company.</p>}
@@ -301,7 +302,7 @@ function ImportDrawer({
           {sheets && sheets.length > 1 && (
             <label className="field">
               <span className="label">Sheet</span>
-              <select
+              <Select
                 className="select"
                 value={sheet}
                 onChange={(e) => {
@@ -315,12 +316,12 @@ function ImportDrawer({
                     {s.name} ({Math.max(0, s.rows.length - 1)} rows)
                   </option>
                 ))}
-              </select>
+              </Select>
             </label>
           )}
           <label className="field">
             <span className="label">The column names are on</span>
-            <select
+            <Select
               className="select"
               value={preview.headerRow}
               onChange={(e) => void check({ headerRow: Number(e.target.value), mapping: null, skip: [] }, 'map')}
@@ -330,7 +331,7 @@ function ImportDrawer({
                   Row {i + 1}: {r.filter((c) => c.trim()).slice(0, 4).join(' · ').slice(0, 70)}
                 </option>
               ))}
-            </select>
+            </Select>
           </label>
           {preview.missingColumns.length > 0 && (
             <p className="notice" data-tone="crit">
@@ -347,7 +348,7 @@ function ImportDrawer({
                     {how && <Chip tone={how[1]}>{how[0]}</Chip>}
                   </div>
                   {c.sample.length > 0 && <span className="imp-col-sample">{c.sample.join(' · ')}</span>}
-                  <select
+                  <Select
                     className="select"
                     aria-label={`Field for column ${c.header || c.index + 1}`}
                     value={mapping?.[i] ?? ''}
@@ -367,7 +368,7 @@ function ImportDrawer({
                         {f.required ? ' (needed)' : ''}
                       </option>
                     ))}
-                  </select>
+                  </Select>
                 </li>
               );
             })}

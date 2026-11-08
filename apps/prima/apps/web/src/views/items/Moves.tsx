@@ -2,6 +2,7 @@
 // a different person, scans what arrived. Receipt scans are staged on the phone, marked "not saved", and committed in
 // one go with a result per line; a unit not on the delivery opens a case and is not received. A sale never changes the
 // owner by itself: Finance records ownership with the sale papers.
+import { Select } from '../../SearchSelect';
 import { useEffect, useMemo, useState } from 'react';
 import { ArrowRightIcon, PackageIcon, TruckIcon, XIcon } from '@phosphor-icons/react';
 import { labelDisplay, type ScanEntry } from '@prima/core';
@@ -131,25 +132,25 @@ function NewMove({ data, onDone }: { data: ItemBoard; onDone: (id?: string) => v
         </div>
         <label className="isc-field">
           From
-          <select className="input" value={from} onChange={(e) => setFrom(e.target.value)}>
+          <Select className="input" value={from} onChange={(e) => setFrom(e.target.value)}>
             {mine.map((p) => (
               <option key={p.id} value={p.id}>
                 {p.name}
               </option>
             ))}
-          </select>
+          </Select>
         </label>
         {type !== 'transfer' && (
           <label className="isc-field">
             To
-            <select className="input" value={to} onChange={(e) => setTo(e.target.value)}>
+            <Select className="input" value={to} onChange={(e) => setTo(e.target.value)}>
               <option value="">Choose the company…</option>
               {targets.map((p) => (
                 <option key={p.id} value={p.id}>
                   {p.name}
                 </option>
               ))}
-            </select>
+            </Select>
           </label>
         )}
         <label className="isc-field">
@@ -178,7 +179,7 @@ function NewMove({ data, onDone }: { data: ItemBoard; onDone: (id?: string) => v
         {type === 'supplier_return' && (
           <label className="isc-field">
             Original sale
-            <select className="input" value={orig} onChange={(e) => setOrig(e.target.value)}>
+            <Select className="input" value={orig} onChange={(e) => setOrig(e.target.value)}>
               <option value="">Choose the sale…</option>
               {data.movements
                 .filter((m) => m.type === 'sale' && m.toPartyId === from)
@@ -187,14 +188,14 @@ function NewMove({ data, onDone }: { data: ItemBoard; onDone: (id?: string) => v
                     {m.ref} from {partyName(data, m.fromPartyId)}
                   </option>
                 ))}
-            </select>
+            </Select>
           </label>
         )}
         <fieldset className="it-pick">
           <legend>Pick list (optional): what to send</legend>
           {pick.map((p, k) => (
             <div key={k} className="it-pick-row">
-              <select className="input" aria-label="Item type" value={p.skuId} onChange={(e) => setPick(pick.map((x, j) => (j === k ? { ...x, skuId: e.target.value } : x)))}>
+              <Select className="input" aria-label="Item type" value={p.skuId} onChange={(e) => setPick(pick.map((x, j) => (j === k ? { ...x, skuId: e.target.value } : x)))}>
                 <option value="">Item type…</option>
                 {data.skus
                   .filter((s) => s.tracking !== 'BULK')
@@ -203,7 +204,7 @@ function NewMove({ data, onDone }: { data: ItemBoard; onDone: (id?: string) => v
                       {s.code}
                     </option>
                   ))}
-              </select>
+              </Select>
               <input className="input it-qty-in" aria-label="How many" inputMode="numeric" value={p.qty} onChange={(e) => setPick(pick.map((x, j) => (j === k ? { ...x, qty: e.target.value } : x)))} />
               <button className="btn btn-ghost" type="button" aria-label="Remove line" onClick={() => setPick(pick.filter((_, j) => j !== k))}>
                 <XIcon size={16} />

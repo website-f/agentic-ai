@@ -1,3 +1,4 @@
+import { Select } from '../SearchSelect';
 import { Plan3 } from './FinancePlan3';
 import { Fragment, useState } from 'react';
 import { FIN_PLAN_LINES, finPayeeFromEInvoice, type FinCheckSection, type FinPlanLine } from '@prima/core';
@@ -84,7 +85,7 @@ export function ChecksTab({ desk, target }: { desk: FinDesk; target?: { section?
       <div className="fin-checks-bar">
         <label className="field fin-checks-co">
           <span>Company</span>
-          <select
+          <Select
             className="select"
             value={companyId}
             onChange={(e) => {
@@ -97,7 +98,7 @@ export function ChecksTab({ desk, target }: { desk: FinDesk; target?: { section?
                 {c.companyName} (Team {c.team}){total(c.companyId) ? ` · ${total(c.companyId)} to do` : ''}
               </option>
             ))}
-          </select>
+          </Select>
         </label>
         <div className="tabbar fin-tabs" role="tablist" aria-label="Checks section">
           {SECTIONS.map(([k, label, what]) => (
@@ -220,11 +221,11 @@ function Payees({ v, co }: { v: FinControls; co: Co }) {
           )}
           {f.einvError && <p className="small fin-crit">{f.einvError}</p>}
           <Field label="Type">
-            <select className="select" value={f.kind} onChange={set('kind')}>
+            <Select className="select" value={f.kind} onChange={set('kind')}>
               {['supplier', 'statutory', 'payroll', 'tax', 'intercompany', 'other'].map((k) => (
                 <option key={k}>{k}</option>
               ))}
-            </select>
+            </Select>
           </Field>
           <Field label="Name">
             <input className="input" value={f.name ?? ''} onChange={set('name')} />
@@ -708,14 +709,14 @@ function Statements({ v, co }: { v: FinControls; co: Co }) {
                     )}
                     {co.canAct && !l.match && l.amount < 0 && (
                       <div className="row">
-                        <select className="select" value={st.paymentId ?? ''} onChange={(e) => setL('paymentId', e.target.value)}>
+                        <Select className="select" value={st.paymentId ?? ''} onChange={(e) => setL('paymentId', e.target.value)}>
                           <option value="">Match to a payment…</option>
                           {released.map((p) => (
                             <option key={p.id} value={p.id}>
                               {p.payee} {rm(p.amount)}
                             </option>
                           ))}
-                        </select>
+                        </Select>
                         <input className="input" placeholder="Comment, or why it is not a payment (10+ characters)" value={st.comment ?? ''} onChange={(e) => setL('comment', e.target.value)} />
                         <button
                           className="btn btn-sm"
@@ -859,13 +860,13 @@ function InvoiceCases({ v, co, lead }: { v: FinControls; co: Co; lead: boolean }
             <input className="input" value={f.eInvoiceUuid ?? ''} onChange={set('eInvoiceUuid')} />
           </Field>
           <Field label="What is wrong">
-            <select className="select" value={f.reason} onChange={set('reason')}>
+            <Select className="select" value={f.reason} onChange={set('reason')}>
               {Object.entries(AR_REASON).map(([k, l]) => (
                 <option key={k} value={k}>
                   {l}
                 </option>
               ))}
-            </select>
+            </Select>
           </Field>
           <Field label="What happened (at least 10 characters)">
             <input className="input" value={f.detail ?? ''} onChange={set('detail')} />
@@ -1062,14 +1063,14 @@ function CaseDetail({ v, co, c }: { v: FinControls; co: Co; c: ArCase }) {
                 <input className="input" type="date" value={f.on ?? ''} onChange={set('on')} />
               </Field>
               <Field label="Paid into">
-                <select className="select" value={f.bankId ?? ''} onChange={set('bankId')}>
+                <Select className="select" value={f.bankId ?? ''} onChange={set('bankId')}>
                   <option value="">Choose the bank account</option>
                   {co.banks.map((b) => (
                     <option key={b.id} value={b.id}>
                       {b.bank} {b.accountMasked}
                     </option>
                   ))}
-                </select>
+                </Select>
               </Field>
               <p className="muted small">The invoice stays unpaid until Prima finds this money on the bank statement of that account. Nobody confirms it by hand.</p>
               <button
@@ -1804,14 +1805,14 @@ function SstReturnActions({
       )}
       {rec?.reviewed && !rec.paymentId && (
         <div className="row fin-mt">
-          <select className="select" value={f.paymentId ?? ''} onChange={set('paymentId')}>
+          <Select className="select" value={f.paymentId ?? ''} onChange={set('paymentId')}>
             <option value="">Payment to Customs…</option>
             {tax.map((p) => (
               <option key={p.id} value={p.id}>
                 {p.payee} {rm(p.amount)} ({p.status})
               </option>
             ))}
-          </select>
+          </Select>
           <button className="btn btn-sm" disabled={busy || !f.paymentId} onClick={() => go('sst', 'linkPayment', { returnId: rec.id, paymentId: f.paymentId }, 'Payment linked.')}>
             Link payment
           </button>

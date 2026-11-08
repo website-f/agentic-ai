@@ -1,3 +1,4 @@
+import { Select } from '../SearchSelect';
 import { useState } from "react";
 import { isOwnerAdmin } from "@prima/core";
 import { api, type Vacancies } from "../api";
@@ -264,14 +265,14 @@ function RegisterButtons() {
   return (
     <>
       <div className="hp-inline">
-        <select className="select" value={cid} onChange={(e) => setCid(e.target.value)} aria-label="Employer">
+        <Select className="select" value={cid} onChange={(e) => setCid(e.target.value)} aria-label="Employer">
           <option value="pwvsb">PWVSB (central)</option>
           {companies.map((c) => (
             <option key={c.id} value={c.id}>
               {c.name}
             </option>
           ))}
-        </select>
+        </Select>
         <button className="btn btn-sm" disabled={act.busy} onClick={() => void act.run(() => api.employeeRegister(cid)).then((r) => r && save(r))}>
           Download register
         </button>
@@ -340,7 +341,7 @@ export function VacanciesPanel() {
             <div className="hx-form-grid">
               <label className="field">
                 <span className="label">Employer</span>
-                <select className="select" value={f.companyId} onChange={(e) => setF({ ...f, companyId: e.target.value })} aria-label="Employer">
+                <Select className="select" value={f.companyId} onChange={(e) => setF({ ...f, companyId: e.target.value })} aria-label="Employer">
                   {(keepsHr(u) || isOwnerAdmin(u)) && <option value="pwvsb">PWVSB (central)</option>}
                   {companies
                     .filter((c) => keepsHr(u) || isOwnerAdmin(u) || u.companyIds.includes(c.id))
@@ -349,7 +350,7 @@ export function VacanciesPanel() {
                         {c.name}
                       </option>
                     ))}
-                </select>
+                </Select>
               </label>
               <label className="field">
                 <span className="label">Job title</span>
@@ -370,14 +371,14 @@ export function VacanciesPanel() {
               {f.category !== "staff" && (
                 <label className="field">
                   <span className="label">State (its OM approves the job post)</span>
-                  <select className="select" value={f.state} onChange={(e) => setF({ ...f, state: e.target.value })} aria-label="State">
+                  <Select className="select" value={f.state} onChange={(e) => setF({ ...f, state: e.target.value })} aria-label="State">
                     <option value="">Choose…</option>
                     {MY_STATES.map((x) => (
                       <option key={x} value={x}>
                         {x}
                       </option>
                     ))}
-                  </select>
+                  </Select>
                 </label>
               )}
               <label className="field">
@@ -723,7 +724,7 @@ function JobPost({
           <button className="btn btn-sm" onClick={() => void navigator.clipboard?.writeText(a.text)}>
             Copy the wording
           </button>
-          <select className="select" aria-label="Posted on" value={postChannel} onChange={(e) => setPostChannel(e.target.value)} style={{ width: "auto" }}>
+          <Select className="select" aria-label="Posted on" value={postChannel} onChange={(e) => setPostChannel(e.target.value)} style={{ width: "auto" }}>
             {a.channels.map((c) => (
               <option key={c} value={c}>
                 {c}
@@ -732,7 +733,7 @@ function JobPost({
             <option value="whatsapp">WhatsApp group (no link)</option>
             <option value="notice_board">Notice board (no link)</option>
             <option value="other_place">Other place (no link)</option>
-          </select>
+          </Select>
           {noLink ? (
             <input className="input" placeholder="Where: group or board name" aria-label="Where it was posted" value={where} onChange={(e) => setWhere(e.target.value)} />
           ) : (
@@ -852,13 +853,13 @@ function ApplicantList({ vacancyId, count, hired, headcount }: { vacancyId: stri
           <input className="input" placeholder="Name" aria-label="Applicant name" value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} />
           <input className="input" placeholder="Phone" aria-label="Applicant phone" inputMode="tel" value={f.phone} onChange={(e) => setF({ ...f, phone: e.target.value })} />
           <input className="input" placeholder="Email" aria-label="Applicant email" inputMode="email" value={f.email} onChange={(e) => setF({ ...f, email: e.target.value })} />
-          <select className="select" aria-label="Where they saw the post" value={f.source} onChange={(e) => setF({ ...f, source: e.target.value as typeof f.source })}>
+          <Select className="select" aria-label="Where they saw the post" value={f.source} onChange={(e) => setF({ ...f, source: e.target.value as typeof f.source })}>
             {SOURCES.map((s) => (
               <option key={s} value={s}>
                 {s.replace("_", " ")}
               </option>
             ))}
-          </select>
+          </Select>
           <input className="input" type="date" aria-label="Applied on" value={f.appliedOn} onChange={(e) => setF({ ...f, appliedOn: e.target.value })} />
           <button
             className="btn btn-sm btn-primary"

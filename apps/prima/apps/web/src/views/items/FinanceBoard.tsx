@@ -2,6 +2,7 @@
 // the company's SQL book (verified by a second Finance person), approves item codes, builds export files from ready
 // documents, imports them by hand, and records the document number SQL Account gave, with the evidence. A document is
 // reconciled only when its number is found in an SQL document listing Finance loads here.
+import { Select } from '../../SearchSelect';
 import { useState } from 'react';
 import { ArrowsClockwiseIcon, DownloadSimpleIcon, FileArrowUpIcon, ScalesIcon } from '@phosphor-icons/react';
 import { SYNC_STATUS_LABEL, type SyncStatus } from '@prima/core';
@@ -37,13 +38,13 @@ export function FinanceBoard({ data }: { data: ItemBoard }) {
         {f.note}
       </p>
       <Card title="Company" sub="Each company has its own SQL book, item codes and outbox.">
-        <select className="input it-big" aria-label="Company" value={f.partyId} onChange={(e) => setPartyId(e.target.value)}>
+        <Select className="input it-big" aria-label="Company" value={f.partyId} onChange={(e) => setPartyId(e.target.value)}>
           {f.parties.map((p) => (
             <option key={p.id} value={p.id}>
               {p.name}
             </option>
           ))}
-        </select>
+        </Select>
       </Card>
       <Book f={f} onDone={reload} />
       <Pipeline f={f} data={data} onDone={reload} />
@@ -111,13 +112,13 @@ function Book({ f, onDone }: { f: ItemFinance; onDone: () => void }) {
           </label>
           {cps.map((c, k) => (
             <div key={k} className="it-pick-row">
-              <select className="input" value={c.partyId} onChange={(e) => setCps(cps.map((x, j) => (j === k ? { ...x, partyId: e.target.value } : x)))}>
+              <Select className="input" value={c.partyId} onChange={(e) => setCps(cps.map((x, j) => (j === k ? { ...x, partyId: e.target.value } : x)))}>
                 {f.parties.filter((p) => p.id !== f.partyId).map((p) => (
                   <option key={p.id} value={p.id}>
                     {p.name}
                   </option>
                 ))}
-              </select>
+              </Select>
               <select className="input" value={c.role} onChange={(e) => setCps(cps.map((x, j) => (j === k ? { ...x, role: e.target.value as 'customer' } : x)))}>
                 <option value="customer">customer</option>
                 <option value="supplier">supplier</option>
@@ -362,11 +363,11 @@ function Mappings({ f, onDone }: { f: ItemFinance; onDone: () => void }) {
             {edit?.skuId === m.skuId && (
               <div className="it-pick-row">
                 <input className="input mono" placeholder="ItemCode (kept as text)" value={edit.itemCode} onChange={(e) => setEdit({ ...edit, itemCode: e.target.value })} />
-                <select className="input" value={edit.uom} onChange={(e) => setEdit({ ...edit, uom: e.target.value })}>
+                <Select className="input" value={edit.uom} onChange={(e) => setEdit({ ...edit, uom: e.target.value })}>
                   {['PCS', 'PAIR', 'SET', 'BOX', 'BOTTLE', 'LITRE', 'ROLL'].map((u) => (
                     <option key={u}>{u}</option>
                   ))}
-                </select>
+                </Select>
                 <input className="input it-qty-in" aria-label="Base units per SQL unit" inputMode="numeric" value={edit.factor} onChange={(e) => setEdit({ ...edit, factor: e.target.value })} />
                 <button className="btn btn-primary" type="button" disabled={a.busy} onClick={() => a.run(() => act({ kind: 'sku.map', skuId: m.skuId, partyId: f.partyId, itemCode: edit.itemCode, uom: edit.uom as 'PCS', factor: Number(edit.factor) }), 'Code saved. A second Finance person approves it.').then((r) => r && (setEdit(null), onDone()))}>
                   Save

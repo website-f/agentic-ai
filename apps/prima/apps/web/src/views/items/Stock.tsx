@@ -1,5 +1,6 @@
 // Stock and registration (P85): the balance by owner, holder and condition, registering new items with their labels
 // printed and scanned back (paper 3.1), and the labels still to print or to scan back.
+import { Select } from '../../SearchSelect';
 import { useState } from 'react';
 import { PlusIcon, PrinterIcon, TagIcon } from '@phosphor-icons/react';
 import { ITEM_CATEGORIES, STATE_LABEL, labelDisplay, type PhysicalItem } from '@prima/core';
@@ -33,22 +34,22 @@ export function Stock({ data }: { data: ItemBoard }) {
       >
         <div className="it-pad">
           <Toolbar>
-            <select className="input" aria-label="Company" value={party} onChange={(e) => setParty(e.target.value)}>
+            <Select className="input" aria-label="Company" value={party} onChange={(e) => setParty(e.target.value)}>
               <option value="">All companies I can see</option>
               {data.parties.map((p) => (
                 <option key={p.id} value={p.id}>
                   {p.name}
                 </option>
               ))}
-            </select>
-            <select className="input" aria-label="Category" value={cat} onChange={(e) => setCat(e.target.value)}>
+            </Select>
+            <Select className="input" aria-label="Category" value={cat} onChange={(e) => setCat(e.target.value)}>
               <option value="">All kinds</option>
               {ITEM_CATEGORIES.map((c) => (
                 <option key={c} value={c}>
                   {CAT_LABEL[c]}
                 </option>
               ))}
-            </select>
+            </Select>
           </Toolbar>
         </div>
         {!rows.length ? (
@@ -157,17 +158,17 @@ function RegisterPrint({ data, onClose }: { data: ItemBoard; onClose: () => void
       <div className="it-form">
         <label className="isc-field">
           Company
-          <select className="input" value={partyId} onChange={(e) => setPartyId(e.target.value)}>
+          <Select className="input" value={partyId} onChange={(e) => setPartyId(e.target.value)}>
             {parties.map((p) => (
               <option key={p.id} value={p.id}>
                 {p.name}
               </option>
             ))}
-          </select>
+          </Select>
         </label>
         <label className="isc-field">
           Item type
-          <select className="input" value={skuId} onChange={(e) => setSkuId(e.target.value)}>
+          <Select className="input" value={skuId} onChange={(e) => setSkuId(e.target.value)}>
             <option value="">Choose the item type…</option>
             {data.skus
               .filter((s) => s.tracking !== 'KIT')
@@ -176,7 +177,7 @@ function RegisterPrint({ data, onClose }: { data: ItemBoard; onClose: () => void
                   {s.code}: {s.name} ({s.tracking === 'BULK' ? 'by quantity' : 'each unit'})
                 </option>
               ))}
-          </select>
+          </Select>
         </label>
         <label className="isc-field">
           {sku?.tracking === 'BULK' ? 'Quantity' : 'How many units'}

@@ -1,3 +1,4 @@
+import { Select as KSelect } from '../SearchSelect';
 import {ItCleanup} from './ItCleanup';
 import {ItCorrections} from './ItCorrections';
 import {correctionVisible} from '../it-corrections/client';
@@ -63,7 +64,7 @@ export function ItManualPanel({mode}:{mode:'intake'|'systems'|'assets'}) {
   </section>;
 }
 function Select({label,value,onChange,items,optional=false}:{label:string;value:string;onChange:(value:string)=>void;items:Choice[];optional?:boolean}) {
-  return <label className="field">{label}<select className="select" aria-label={label} value={value} onChange={e=>onChange(e.target.value)} required={!optional}><option value="">{optional?'Not linked / not provided':'Choose an authorized record'}</option>{items.map(x=><option key={x.id} value={x.id}>{x.name}{x.title?` — ${x.title}`:''}</option>)}</select></label>;
+  return <label className="field">{label}<KSelect className="select" aria-label={label} value={value} onChange={e=>onChange(e.target.value)} required={!optional}><option value="">{optional?'Not linked / not provided':'Choose an authorized record'}</option>{items.map(x=><option key={x.id} value={x.id}>{x.name}{x.title?` — ${x.title}`:''}</option>)}</KSelect></label>;
 }
 function ManualEditor({kind,board,onClose}:{kind:ManualKind;board:Board;onClose:()=>void}) {
   const [,render]=useReducer(x=>x+1,0);
@@ -104,9 +105,9 @@ function ManualEditor({kind,board,onClose}:{kind:ManualKind;board:Board;onClose:
         </>:kind==='asset'?<>
           <p className="small">Existing stock only. No purchase, cost, payment or rental record is created. The device starts unassigned.</p>
           {field('Asset tag','tag','text',true)}{field('Serial number','serial','text',true)}{field('Model','model','text',true)}
-          <label className="field"><span className="label">Device type</span><select className="select" value={form.assetKind} onChange={e=>put('assetKind',e.target.value)}>{['LAPTOP','DESKTOP','PHONE','TABLET','PRINTER','NETWORK','CCTV','OTHER'].map(k=><option key={k} value={k}>{k}</option>)}</select></label>
+          <label className="field"><span className="label">Device type</span><KSelect className="select" value={form.assetKind} onChange={e=>put('assetKind',e.target.value)}>{['LAPTOP','DESKTOP','PHONE','TABLET','PRINTER','NETWORK','CCTV','OTHER'].map(k=><option key={k} value={k}>{k}</option>)}</KSelect></label>
           {field('Current location','location','text',true)}{field('Purchase date (optional; unknown if empty)','boughtOn','date')}{field('Warranty expiry (optional)','warrantyTo','date')}
-        </>:<>{field(kind==='system'?'System name':'SharePoint guidance record name','name','text',true)}{kind==='system'&&<label className="field"><span className="label">System type</span><select className="select" value={form.systemKind} onChange={e=>put('systemKind',e.target.value)}>{['m365','azure','registrar','dns','hosting','github','sql_account','network','cctv','prima','other'].map(x=><option key={x} value={x}>{x}</option>)}</select></label>}</>}
+        </>:<>{field(kind==='system'?'System name':'SharePoint guidance record name','name','text',true)}{kind==='system'&&<label className="field"><span className="label">System type</span><KSelect className="select" value={form.systemKind} onChange={e=>put('systemKind',e.target.value)}>{['m365','azure','registrar','dns','hosting','github','sql_account','network','cctv','prima','other'].map(x=><option key={x} value={x}>{x}</option>)}</KSelect></label>}</>}
         <Select label="Company (optional)" value={form.companyId??''} onChange={v=>put('companyId',v)} items={board.companies} optional/>
         {!form.companyId&&field('Unlinked organization / unit label (optional)','unitLabel')}
         {(kind==='intake'||kind==='guidance')&&<Select label="Responsible IT staff" value={form.itResponsibleId??''} onChange={v=>put('itResponsibleId',v)} items={board.itStaff}/>}

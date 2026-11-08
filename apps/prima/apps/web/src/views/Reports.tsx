@@ -1,3 +1,4 @@
+import { Select } from '../SearchSelect';
 import { useState } from 'react';
 import { CaretDownIcon, FileTextIcon, WarningIcon } from '@phosphor-icons/react';
 import type { ProofInput } from '@prima/core';
@@ -352,7 +353,7 @@ function ReportListEditor({ list, departments, onDone }: { list: Def[]; departme
               {d.from === 'department' && (
                 <label className="field">
                   <span className="label">Department</span>
-                  <select
+                  <Select
                     className="select"
                     aria-label="Department"
                     value={d.department ?? ''}
@@ -368,7 +369,7 @@ function ReportListEditor({ list, departments, onDone }: { list: Def[]; departme
                         {x.label}
                       </option>
                     ))}
-                  </select>
+                  </Select>
                 </label>
               )}
               <label className="field">
@@ -400,7 +401,7 @@ function ReportListEditor({ list, departments, onDone }: { list: Def[]; departme
               ) : (
                 <label className="field">
                   <span className="label">Due</span>
-                  <select className="select" aria-label="Due" value={d.dueDay} onChange={(e) => set(i, { dueDay: Number(e.target.value) })}>
+                  <Select className="select" aria-label="Due" value={d.dueDay} onChange={(e) => set(i, { dueDay: Number(e.target.value) })}>
                     {d.frequency === 'weekly' || d.frequency === 'fortnightly'
                       ? DAY.slice(1).map((x, k) => (
                           <option key={x} value={k + 1}>
@@ -412,7 +413,7 @@ function ReportListEditor({ list, departments, onDone }: { list: Def[]; departme
                             Due day {k + 1} of the {d.frequency === 'quarterly' ? 'month after the quarter' : 'next month'}
                           </option>
                         ))}
-                  </select>
+                  </Select>
                 </label>
               )}
             </div>

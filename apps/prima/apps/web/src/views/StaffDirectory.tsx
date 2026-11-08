@@ -1,3 +1,4 @@
+import { Select } from '../SearchSelect';
 import { useMemo, useRef, useState } from "react";
 import {
   STAFF_DIRECTORY_ISSUE_LABELS,
@@ -113,7 +114,7 @@ function Directory() {
               value={find}
               onChange={(e) => setFind(e.target.value)}
             />
-            <select
+            <Select
               className="select"
               aria-label="Show only"
               value={issue}
@@ -132,7 +133,7 @@ function Directory() {
                   {b.issueCounts[k] ?? 0})
                 </option>
               ))}
-            </select>
+            </Select>
           </div>
           {shown.length === 0 ? (
             <p className="muted">
@@ -508,7 +509,7 @@ function AddOne() {
       </div>
       <div className="panel-body">
         <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
-          <select
+          <Select
             className="select"
             aria-label="Group"
             value={f.group}
@@ -519,7 +520,7 @@ function AddOne() {
                 {l}
               </option>
             ))}
-          </select>
+          </Select>
           <input
             className="input"
             aria-label="Company, unit or region"

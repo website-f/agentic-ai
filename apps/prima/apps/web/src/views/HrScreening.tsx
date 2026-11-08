@@ -1,3 +1,4 @@
+import { Select } from '../SearchSelect';
 import { useState } from "react";
 import {
   SCREENING_CHECK_LABEL,
@@ -331,7 +332,7 @@ export function ScreeningPanel() {
                   {r.canWork && (
                     <div style={{ display: "grid", gap: 6 }}>
                       <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
-                        <select
+                        <Select
                           className="input"
                           aria-label="Check"
                           value={v("kind")}
@@ -343,7 +344,7 @@ export function ScreeningPanel() {
                               {SCREENING_CHECK_LABEL[k.kind]}
                             </option>
                           ))}
-                        </select>
+                        </Select>
                         <select
                           className="input"
                           aria-label="Result"
@@ -440,7 +441,7 @@ export function ScreeningPanel() {
                             .join(", ")}
                         </div>
                       )}
-                      <select
+                      <Select
                         className="input"
                         aria-label="Decision"
                         value={v("result")}
@@ -460,7 +461,7 @@ export function ScreeningPanel() {
                         <option value="not_cleared">
                           {SCREENING_RESULT_LABEL.not_cleared}
                         </option>
-                      </select>
+                      </Select>
                       <input
                         className="input"
                         placeholder="Reason for the decision"
@@ -551,7 +552,7 @@ export function ScreeningPanel() {
             Open a screening case
           </div>
           <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
-            <select
+            <Select
               className="input"
               aria-label="Who is screened"
               value={subject}
@@ -562,10 +563,10 @@ export function ScreeningPanel() {
                   {l}
                 </option>
               ))}
-            </select>
+            </Select>
             {company ? (
               <>
-                <select
+                <Select
                   className="input"
                   aria-label="Company"
                   value={v("companyId")}
@@ -577,7 +578,7 @@ export function ScreeningPanel() {
                       {c.name}
                     </option>
                   ))}
-                </select>
+                </Select>
                 <input
                   className="input"
                   placeholder="Name as on IC or passport"

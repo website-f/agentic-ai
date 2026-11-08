@@ -1,3 +1,4 @@
+import { Select } from '../SearchSelect';
 import { useEffect, useRef, useState } from 'react';
 import { EVIDENCE_PLACE_LABEL, EVIDENCE_TIME_LABEL, fromMs, type EvidenceVideo } from '@prima/core';
 import { api, type CmsDispatches, type DeviceDispatches, type VideoInput } from '../api';
@@ -92,14 +93,14 @@ function DutyLogPicker({ sites }: { sites: CmsDispatches['sites'] }) {
     <section className="panel">
       <div className="panel-head">
         <h2>Site duty logs</h2>
-        <select className="select" aria-label="Site duty log" value={siteId} onChange={(e) => setSiteId(e.target.value)}>
+        <Select className="select" aria-label="Site duty log" value={siteId} onChange={(e) => setSiteId(e.target.value)}>
           <option value="">Choose a site</option>
           {sites.map((s) => (
             <option key={s.id} value={s.id}>
               {s.code} {s.name}
             </option>
           ))}
-        </select>
+        </Select>
       </div>
       {siteId && (
         <div className="panel-body">
@@ -159,13 +160,13 @@ function Detections({ data, onSend }: { data: CmsDispatches; onSend: (d: { siteI
       {api.simulateDetection && data.canDesk && data.sites.length > 0 && (
         <div className="panel-body row" style={{ flexWrap: 'wrap' }}>
           <span className="label">Test only: an analytics detection arrives</span>
-          <select className="select" aria-label="Site for the test detection" value={simSite} onChange={(e) => setSimSite(e.target.value)}>
+          <Select className="select" aria-label="Site for the test detection" value={simSite} onChange={(e) => setSimSite(e.target.value)}>
             {data.sites.map((s) => (
               <option key={s.id} value={s.id}>
                 {s.code} {s.name}
               </option>
             ))}
-          </select>
+          </Select>
           <button
             className="btn btn-sm"
             disabled={act.busy}
@@ -200,14 +201,14 @@ function SendForm({ data, draft, onSent }: { data: CmsDispatches; draft: { siteI
       <div className="panel-body" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
         <label className="field">
           <span className="label">Site</span>
-          <select className="select" value={f.siteId} disabled={!!f.alarmId} onChange={(e) => set({ siteId: e.target.value })}>
+          <Select className="select" value={f.siteId} disabled={!!f.alarmId} onChange={(e) => set({ siteId: e.target.value })}>
             {data.sites.map((s) => (
               <option key={s.id} value={s.id}>
                 {s.companyName} · {s.code} {s.name}
                 {s.bodycams.length ? ' · bodycam' : ''}
               </option>
             ))}
-          </select>
+          </Select>
         </label>
         <div className="field">
           <span className="label">Level</span>

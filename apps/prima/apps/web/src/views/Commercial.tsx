@@ -1,3 +1,4 @@
+import { Select } from '../SearchSelect';
 import { JointTenders } from './JointTenders';
 import { TenderCounterPanel } from './TenderCounter';
 import { TenderOpportunitiesPanel } from './TenderOpportunities';
@@ -766,14 +767,14 @@ function NewQuoteDrawer({
           <label className="label" htmlFor="nq-tender">
             For tender
           </label>
-          <select id="nq-tender" className="select" value={tenderId} onChange={(e) => setTenderId(e.target.value)}>
+          <Select id="nq-tender" className="select" value={tenderId} onChange={(e) => setTenderId(e.target.value)}>
             <option value="">Direct quotation (no tender)</option>
             {tenders.map((t) => (
               <option key={t.tender.id} value={t.tender.id}>
                 {t.tender.ref} · {t.tender.title}
               </option>
             ))}
-          </select>
+          </Select>
         </div>
         <div className="field">
           <label className="label" htmlFor="nq-guards">

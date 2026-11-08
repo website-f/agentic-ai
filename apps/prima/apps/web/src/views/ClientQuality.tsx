@@ -1,3 +1,4 @@
+import { Select } from '../SearchSelect';
 import { useState } from "react";
 import {
   DILIGENCE_CHECK_LABEL,
@@ -131,7 +132,7 @@ export function DiligenceSection({ accountId }: { accountId: string }) {
       {d.can.work && dd && (
         <div style={{ display: "grid", gap: 6, marginTop: 6 }}>
           <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
-            <select
+            <Select
               className="input"
               aria-label="Check"
               value={v("kind")}
@@ -143,7 +144,7 @@ export function DiligenceSection({ accountId }: { accountId: string }) {
                   {DILIGENCE_CHECK_LABEL[k.kind]}
                 </option>
               ))}
-            </select>
+            </Select>
             <select
               className="input"
               aria-label="Result"
@@ -202,7 +203,7 @@ export function DiligenceSection({ accountId }: { accountId: string }) {
               {d.open.map((k) => DILIGENCE_CHECK_LABEL[k]).join("; ")}
             </div>
           )}
-          <select
+          <Select
             className="input"
             aria-label="Decision"
             value={v("result")}
@@ -220,7 +221,7 @@ export function DiligenceSection({ accountId }: { accountId: string }) {
               </option>
             )}
             <option value="declined">{DILIGENCE_RESULT_LABEL.declined}</option>
-          </select>
+          </Select>
           <input
             className="input"
             placeholder="Reason for the decision"

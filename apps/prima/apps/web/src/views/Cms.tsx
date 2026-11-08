@@ -1,3 +1,4 @@
+import { Select } from '../SearchSelect';
 import { useRef, useState } from "react";
 import {
   FootprintsIcon,
@@ -569,7 +570,7 @@ function RosterTab({ data }: { data: Cms }) {
                     )}
                     {can && (
                       <div className="op-act">
-                        <select
+                        <Select
                           className="select"
                           aria-label={`Who sits ${POST[s.shift.post]} ${s.shift.id}`}
                           value={pick[s.shift.id] ?? ""}
@@ -585,7 +586,7 @@ function RosterTab({ data }: { data: Cms }) {
                               {p.name}
                             </option>
                           ))}
-                        </select>
+                        </Select>
                         <button
                           className="btn btn-sm btn-primary"
                           disabled={busy || !pick[s.shift.id]}
@@ -1781,7 +1782,7 @@ function Sites({ data }: { data: Cms }) {
         actions={
           <>
             <ImportButton kind="siteSystem" label="Import CCTV and alarms" />
-            <select
+            <Select
               className="select op-filter"
               aria-label="Company"
               value={company}
@@ -1793,7 +1794,7 @@ function Sites({ data }: { data: Cms }) {
                   {n}
                 </option>
               ))}
-            </select>
+            </Select>
             <div className="seg" role="group" aria-label="Which sites">
               <button aria-pressed={!all} onClick={() => setAll(false)}>
                 Needs attention

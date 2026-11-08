@@ -1,3 +1,4 @@
+import { Select } from '../../SearchSelect';
 import { useMemo, useState } from 'react';
 import { ITEM_CATEGORIES, SALE_PAPER_LABEL, STATE_LABEL, TAG_METHODS, TAG_METHOD_LABEL, labelDisplay, type BaseUom, type ItemCategory, type SalePaperKind, type TagMethod, type TrackingMode } from '@prima/core';
 import { api, type ItemBoard } from '../../api';
@@ -43,22 +44,22 @@ export function Catalogue({ data }: { data: ItemBoard }) {
         <div className="panel" style={{ display: 'grid', gap: 6, marginBottom: 8 }}>
           <input className="input" placeholder="Code, e.g. SHIRT-NAVY-L" value={code} onChange={(e) => setCode(e.target.value)} />
           <input className="input" placeholder="Name" value={name} onChange={(e) => setName(e.target.value)} />
-          <select className="input" aria-label="Category" value={category} onChange={(e) => setCategory(e.target.value as ItemCategory)}>
+          <Select className="input" aria-label="Category" value={category} onChange={(e) => setCategory(e.target.value as ItemCategory)}>
             {ITEM_CATEGORIES.map((c) => (
               <option key={c} value={c}>
                 {CAT_LABEL[c]}
               </option>
             ))}
-          </select>
+          </Select>
           <select className="input" aria-label="Tracking" value={tracking} onChange={(e) => setTracking(e.target.value as TrackingMode)}>
             <option value="SERIALIZED">Each unit has its own label</option>
             <option value="BULK">Counted by quantity</option>
           </select>
-          <select className="input" aria-label="Unit" value={uom} onChange={(e) => setUom(e.target.value as BaseUom)}>
+          <Select className="input" aria-label="Unit" value={uom} onChange={(e) => setUom(e.target.value as BaseUom)}>
             {['PCS', 'PAIR', 'SET', 'BOX', 'BOTTLE', 'LITRE', 'ROLL'].map((u) => (
               <option key={u}>{u}</option>
             ))}
-          </select>
+          </Select>
           <input className="input" placeholder="Size (optional)" value={size} onChange={(e) => setSize(e.target.value)} />
           {tracking === 'BULK' && (
             <label className="row" style={{ gap: 6 }}>
@@ -93,14 +94,14 @@ export function Catalogue({ data }: { data: ItemBoard }) {
                   {s.sqlCodes.map((c) => `${partyName(data, c.partyId)}: ${c.itemCode} (${c.uom})`).join('; ') || <span className="muted">none</span>}
                   {financeParties.length > 0 && (
                     <div className="row" style={{ gap: 4, marginTop: 4 }}>
-                      <select className="input" aria-label="Book" value={map[s.id]?.party ?? ''} onChange={(e) => setMap({ ...map, [s.id]: { party: e.target.value, code: map[s.id]?.code ?? '' } })}>
+                      <Select className="input" aria-label="Book" value={map[s.id]?.party ?? ''} onChange={(e) => setMap({ ...map, [s.id]: { party: e.target.value, code: map[s.id]?.code ?? '' } })}>
                         <option value="">Book…</option>
                         {financeParties.map((p) => (
                           <option key={p} value={p}>
                             {partyName(data, p)}
                           </option>
                         ))}
-                      </select>
+                      </Select>
                       <input className="input" style={{ width: 120 }} placeholder="Item code" value={map[s.id]?.code ?? ''} onChange={(e) => setMap({ ...map, [s.id]: { party: map[s.id]?.party ?? '', code: e.target.value } })} />
                       <button
                         className="btn btn-sm"
@@ -159,13 +160,13 @@ export function TagChoice({ data }: { data: ItemBoard }) {
               )}
               {mgr && (
                 <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
-                  <select className="input" aria-label="Tagging method" value={next} onChange={(e) => setPick({ ...pick, [t.partyId]: e.target.value as TagMethod })}>
+                  <Select className="input" aria-label="Tagging method" value={next} onChange={(e) => setPick({ ...pick, [t.partyId]: e.target.value as TagMethod })}>
                     {TAG_METHODS.map((m) => (
                       <option key={m} value={m}>
                         {TAG_METHOD_LABEL[m]}
                       </option>
                     ))}
-                  </select>
+                  </Select>
                   {next !== t.tagMethod && (
                     <>
                       <input className="input" placeholder="Reason for the change" value={why[t.partyId] ?? ''} onChange={(e) => setWhy({ ...why, [t.partyId]: e.target.value })} />

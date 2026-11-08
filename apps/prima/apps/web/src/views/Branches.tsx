@@ -1,3 +1,4 @@
+import { Select } from '../SearchSelect';
 import { useState } from 'react';
 import { ClockCountdownIcon, HandPalmIcon, ListChecksIcon, PlusIcon, StampIcon } from '@phosphor-icons/react';
 import { BRANCH_APPROVER_LABEL, BRANCH_COST_KINDS, BRANCH_COST_LABEL, TERMINATION_LABEL, TERMINATION_STEPS, isOwnerAdmin, type BranchModel } from '@prima/core';
@@ -350,13 +351,13 @@ function AgreementForm({ branchId, current, onDone }: { branchId: string; curren
       <div className="bz-form">
         <label className="field bz-span">
           <span className="label">Model</span>
-          <select className="select" value={model} onChange={(e) => setModel(e.target.value as BranchModel)}>
+          <Select className="select" value={model} onChange={(e) => setModel(e.target.value as BranchModel)}>
             {(['A', 'B', 'C'] as const).map((m) => (
               <option key={m} value={m}>
                 {MODEL[m]}
               </option>
             ))}
-          </select>
+          </Select>
         </label>
         {model === 'B' ? (
           <label className="field">
@@ -453,13 +454,13 @@ function AddBranch({ companies, onClose }: { companies: BranchBoard['canAdd']; o
         {companies.length > 1 && (
           <label className="field bz-span">
             <span className="label">Company</span>
-            <select className="select" value={f.companyId} onChange={(e) => setF({ ...f, companyId: e.target.value })}>
+            <Select className="select" value={f.companyId} onChange={(e) => setF({ ...f, companyId: e.target.value })}>
               {companies.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.name}
                 </option>
               ))}
-            </select>
+            </Select>
           </label>
         )}
         <label className="field bz-span">
@@ -468,21 +469,21 @@ function AddBranch({ companies, onClose }: { companies: BranchBoard['canAdd']; o
         </label>
         <label className="field">
           <span className="label">State</span>
-          <select className="select" value={f.state} onChange={(e) => setF({ ...f, state: e.target.value })}>
+          <Select className="select" value={f.state} onChange={(e) => setF({ ...f, state: e.target.value })}>
             {STATES.map((x) => (
               <option key={x}>{x}</option>
             ))}
-          </select>
+          </Select>
         </label>
         <label className="field">
           <span className="label">Model</span>
-          <select className="select" value={f.model} onChange={(e) => setF({ ...f, model: e.target.value as BranchModel })}>
+          <Select className="select" value={f.model} onChange={(e) => setF({ ...f, model: e.target.value as BranchModel })}>
             {(['A', 'B', 'C'] as const).map((m) => (
               <option key={m} value={m}>
                 {MODEL[m]}
               </option>
             ))}
-          </select>
+          </Select>
         </label>
       </div>
       <ErrorNotice error={act.error} />
@@ -617,13 +618,13 @@ function SetupPanel({ row: r }: { row: Row }) {
           <div className="bz-form">
             <label className="field bz-span">
               <span className="label">Account type</span>
-              <select className="select" value={acct.kind} onChange={(e) => setAcct({ ...acct, kind: e.target.value })}>
+              <Select className="select" value={acct.kind} onChange={(e) => setAcct({ ...acct, kind: e.target.value })}>
                 {Object.entries(ACCOUNT_KIND).map(([k, t]) => (
                   <option key={k} value={k}>
                     {t}
                   </option>
                 ))}
-              </select>
+              </Select>
             </label>
             <label className="field bz-span">
               <span className="label">Account holder (exact name)</span>
@@ -883,13 +884,13 @@ function PrepareMonth({ row: r, period: initial, onDone }: { row: Row; period: s
       <ol className="bz-br-lines">
         {lines.map((l, i) => (
           <li key={i} className="bz-br-line">
-            <select className="select" aria-label={`Line ${i + 1} kind`} value={l.kind} onChange={(e) => set(i, 'kind', e.target.value)}>
+            <Select className="select" aria-label={`Line ${i + 1} kind`} value={l.kind} onChange={(e) => set(i, 'kind', e.target.value)}>
               {LINE_KINDS.filter((k) => salaried || k !== 'manager_salary').map((k) => (
                 <option key={k} value={k}>
                   {LINE_LABEL[k]}
                 </option>
               ))}
-            </select>
+            </Select>
             <input className="input" aria-label={`Line ${i + 1} reference`} placeholder="SQL doc / payroll ref" value={l.ref} onChange={(e) => set(i, 'ref', e.target.value)} />
             {l.kind === 'billing' && (
               <input className="input" aria-label={`Line ${i + 1} site`} placeholder="Site ID" value={l.siteId} onChange={(e) => set(i, 'siteId', e.target.value)} />
@@ -1430,7 +1431,7 @@ function JvPanel({ row: r }: { row: Row }) {
           <div className="bz-form">
             <label className="field">
               <span className="label">Staff member</span>
-              <select className="select" aria-label="Staff member" value={pf.personId} onChange={(e) => setPf({ ...pf, personId: e.target.value })}>
+              <Select className="select" aria-label="Staff member" value={pf.personId} onChange={(e) => setPf({ ...pf, personId: e.target.value })}>
                 <option value="">Choose staff</option>
                 {d.staff
                   .filter((p) => p.role === 'office' && p.status === 'active')
@@ -1439,7 +1440,7 @@ function JvPanel({ row: r }: { row: Row }) {
                       {p.name}
                     </option>
                   ))}
-              </select>
+              </Select>
             </label>
             <label className="field">
               <span className="label">New basic pay (RM)</span>
@@ -1563,13 +1564,13 @@ function JvPanel({ row: r }: { row: Row }) {
             </label>
             <label className="field">
               <span className="label">Kind</span>
-              <select className="select" aria-label="Kind" value={f.kind} onChange={(e) => setF({ ...f, kind: e.target.value })}>
+              <Select className="select" aria-label="Kind" value={f.kind} onChange={(e) => setF({ ...f, kind: e.target.value })}>
                 {d.kinds.map((k) => (
                   <option key={k} value={k}>
                     {k}
                   </option>
                 ))}
-              </select>
+              </Select>
             </label>
             <label className="field">
               <span className="label">Amount (RM)</span>
@@ -1735,13 +1736,13 @@ function SalariedPanel({ row: r }: { row: Row }) {
             </label>
             <label className="field">
               <span className="label">Kind</span>
-              <select className="select" aria-label="Kind" value={f.kind} onChange={(e) => setF({ ...f, kind: e.target.value })}>
+              <Select className="select" aria-label="Kind" value={f.kind} onChange={(e) => setF({ ...f, kind: e.target.value })}>
                 {d.kinds.map((k) => (
                   <option key={k} value={k}>
                     {k}
                   </option>
                 ))}
-              </select>
+              </Select>
             </label>
             <label className="field">
               <span className="label">{exp ? 'Estimated amount (RM)' : 'Quoted amount (RM)'}</span>
@@ -1791,13 +1792,13 @@ function ApprovalStyle({ row: r, d }: { row: Row; d: BranchJv }) {
       </label>
       <label className="field">
         <span className="label">{label}: approver</span>
-        <select className="select" aria-label={`${label} approver`} value={f[k].approver} onChange={(e) => setF({ ...f, [k]: { ...f[k], approver: e.target.value } })}>
+        <Select className="select" aria-label={`${label} approver`} value={f[k].approver} onChange={(e) => setF({ ...f, [k]: { ...f[k], approver: e.target.value } })}>
           {Object.entries(BRANCH_APPROVER_LABEL).map(([v, l]) => (
             <option key={v} value={v}>
               {l} approves
             </option>
           ))}
-        </select>
+        </Select>
       </label>
       <label className="field">
         <span className="label">{label}: no approval needed up to (RM), 0 for none</span>

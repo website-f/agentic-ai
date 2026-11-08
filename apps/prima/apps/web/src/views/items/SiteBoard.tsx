@@ -1,6 +1,7 @@
 // The site board (P85; paper section 4): what is expected at a site (at the site, or with people whose latest shift is
 // there), who holds it, its condition, when it was last confirmed and what is waiting. An audit scan records what was
 // seen; it never moves anything, changes the owner or bills anyone.
+import { Select } from '../../SearchSelect';
 import { useState } from 'react';
 import { BuildingsIcon, EyeIcon, WarningIcon } from '@phosphor-icons/react';
 import { STATE_LABEL, type ItemState } from '@prima/core';
@@ -16,13 +17,13 @@ export function SiteBoard({ data }: { data: ItemBoard }) {
   return (
     <div className="it-stack">
       <Card title="Site board" sub="Expected items, holders, condition, last confirmed check and what is waiting.">
-        <select className="input it-big" aria-label="Site" value={siteId} onChange={(e) => setSiteId(e.target.value)}>
+        <Select className="input it-big" aria-label="Site" value={siteId} onChange={(e) => setSiteId(e.target.value)}>
           {data.siteChoices.map((s) => (
             <option key={s.id} value={s.id}>
               {s.name}
             </option>
           ))}
-        </select>
+        </Select>
       </Card>
       {siteId && <Board siteId={siteId} />}
     </div>

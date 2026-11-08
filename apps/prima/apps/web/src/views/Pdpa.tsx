@@ -1,3 +1,4 @@
+import { Select } from '../SearchSelect';
 import { useEffect, useState } from 'react';
 import { ChatCircleDotsIcon, ClockCountdownIcon, HandshakeIcon, PlusIcon, ShieldWarningIcon } from '@phosphor-icons/react';
 import type { ProofInput } from '@prima/core';
@@ -522,14 +523,14 @@ function NewCase({ kind, companies, onDone }: { kind: Kind; companies: PdpaBoard
       <div className="hx-form-grid">
         <label className="field">
           <span className="label">Company</span>
-          <select className="select" aria-label="Company" value={f.companyId ?? ''} onChange={(e) => set({ companyId: e.target.value || null })}>
+          <Select className="select" aria-label="Company" value={f.companyId ?? ''} onChange={(e) => set({ companyId: e.target.value || null })}>
             <option value="">PWVSB (group)</option>
             {companies.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.name}
               </option>
             ))}
-          </select>
+          </Select>
         </label>
         <label className="field">
           <span className="label">Title</span>

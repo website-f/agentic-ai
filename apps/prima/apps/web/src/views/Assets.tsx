@@ -1,3 +1,4 @@
+import { Select } from '../SearchSelect';
 import { OpsGuide } from "./OpsGuide";
 import { useEffect, useState } from "react";
 import {
@@ -339,7 +340,7 @@ function Units({ data }: { data: AmBoard }) {
           placeholder="Unit, tenant or town"
           label="Search"
         />
-        <select
+        <Select
           className="select bz-filter"
           aria-label="Type"
           value={type}
@@ -351,8 +352,8 @@ function Units({ data }: { data: AmBoard }) {
               {TYPE[t.type]}
             </option>
           ))}
-        </select>
-        <select
+        </Select>
+        <Select
           className="select bz-filter"
           aria-label="Status"
           value={status}
@@ -364,7 +365,7 @@ function Units({ data }: { data: AmBoard }) {
               {label}
             </option>
           ))}
-        </select>
+        </Select>
       </Toolbar>
       <Card title="Units" actions={<span className="bz-count">{rows.length} units</span>} flush>
         {rows.length === 0 && <Empty title="No unit matches." />}
@@ -609,7 +610,7 @@ function MonthlyRent({ data }: { data: AmBoard }) {
           placeholder="Tenant or unit code"
           label="Find a tenant or unit"
         />
-        <select
+        <Select
           className="select bz-filter"
           aria-label="Month"
           value={period}
@@ -620,7 +621,7 @@ function MonthlyRent({ data }: { data: AmBoard }) {
               {monthLabel(p)}
             </option>
           ))}
-        </select>
+        </Select>
       </Toolbar>
       <Card
         title={period ? monthLabel(period) : "Monthly rent"}
@@ -1196,13 +1197,13 @@ function DisposeDrawer({ asset, onClose }: { asset: AmBoard["assets"]["list"][nu
         </label>
         <label className="field">
           <span className="label">Method</span>
-          <select className="select" value={f.method} onChange={(e) => setF({ ...f, method: e.target.value as typeof f.method })}>
+          <Select className="select" value={f.method} onChange={(e) => setF({ ...f, method: e.target.value as typeof f.method })}>
             {Object.entries(DISPOSAL_METHOD).map(([v, t]) => (
               <option key={v} value={v}>
                 {t}
               </option>
             ))}
-          </select>
+          </Select>
         </label>
         <label className="field">
           <span className="label">Expected proceeds (RM)</span>
@@ -1322,7 +1323,7 @@ function PaymentForm({ u, onDone }: { u: UnitRow; onDone?: () => void }) {
         </label>
         <label className="field">
           <span className="label">How it was paid</span>
-          <select
+          <Select
             className="select"
             value={f.method}
             onChange={(e) =>
@@ -1334,7 +1335,7 @@ function PaymentForm({ u, onDone }: { u: UnitRow; onDone?: () => void }) {
                 {v}
               </option>
             ))}
-          </select>
+          </Select>
         </label>
         <label className="field">
           <span className="label">Date received</span>
@@ -1404,7 +1405,7 @@ function FollowUpForm({
       <div className="bz-am-fields">
         <label className="field">
           <span className="label">What was done</span>
-          <select
+          <Select
             className="select"
             value={f.action}
             onChange={(e) =>
@@ -1416,7 +1417,7 @@ function FollowUpForm({
                 {v}
               </option>
             ))}
-          </select>
+          </Select>
         </label>
         {f.action === "PROMISE" && (
           <label className="field">

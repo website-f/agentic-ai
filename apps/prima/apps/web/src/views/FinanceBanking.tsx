@@ -1,3 +1,4 @@
+import { Select } from '../SearchSelect';
 import { useState } from 'react';
 import { api, type FinControls } from '../api';
 import { Chip, ErrorNotice, dateLabel, useAction } from '../ui';
@@ -59,14 +60,14 @@ export function FixedDeposits({ v }: { v: FinControls }) {
             </Field>
           ))}
           <Field label="Placed from (and paid back into)">
-            <select className="select" value={f.bankId ?? ''} onChange={set('bankId')}>
+            <Select className="select" value={f.bankId ?? ''} onChange={set('bankId')}>
               <option value="">Choose</option>
               {v.statements.map((s) => (
                 <option key={s.bank.id} value={s.bank.id}>
                   {s.bank.bank} {s.bank.accountMasked}
                 </option>
               ))}
-            </select>
+            </Select>
           </Field>
           <Field label="Placed on">
             <input className="input" type="date" value={f.placedOn ?? ''} onChange={set('placedOn')} />

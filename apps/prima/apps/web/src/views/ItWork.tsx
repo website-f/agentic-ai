@@ -1,3 +1,4 @@
+import { Select } from '../SearchSelect';
 import { useMemo, useState } from 'react';
 import { ClockCountdownIcon, HeadsetIcon, KeyIcon, ListChecksIcon, PlusIcon, SealCheckIcon, TrayIcon, UsersThreeIcon, WarningIcon } from '@phosphor-icons/react';
 import type { ProofInput } from '@prima/core';
@@ -168,7 +169,7 @@ export function Jobs({ data }: { data: ItBoard }) {
               </button>
             ))}
           </div>
-          <select className="select iw-bar-select" aria-label="Person" value={who} onChange={(e) => setWho(e.target.value)}>
+          <Select className="select iw-bar-select" aria-label="Person" value={who} onChange={(e) => setWho(e.target.value)}>
             <option value="">Everyone</option>
             {(data.team ?? [])
               .filter((t) => t.itRole !== 'manager')
@@ -177,7 +178,7 @@ export function Jobs({ data }: { data: ItBoard }) {
                   {t.name}
                 </option>
               ))}
-          </select>
+          </Select>
         </div>
         {rows.length ? <JobQueue rows={rows} onOpen={setOpen} /> : <Empty title="Nothing here." />}
         <p className="iw-rule">
@@ -219,24 +220,24 @@ export function GiveJob({ data, onDone, preset }: { data: ItBoard; onDone: () =>
       </label>
       <label className="field">
         <span className="label">Kind</span>
-        <select className="select" aria-label="Kind" value={kind} onChange={(e) => setKind(e.target.value as Job['kind'])}>
+        <Select className="select" aria-label="Kind" value={kind} onChange={(e) => setKind(e.target.value as Job['kind'])}>
           {(Object.keys(JOB_KIND) as Job['kind'][]).map((k) => (
             <option key={k} value={k}>
               {JOB_KIND[k]}
             </option>
           ))}
-        </select>
+        </Select>
       </label>
       <label className="field">
         <span className="label">Give to</span>
-        <select className="select" aria-label="Give to" value={assigneeId} onChange={(e) => setAssigneeId(e.target.value)}>
+        <Select className="select" aria-label="Give to" value={assigneeId} onChange={(e) => setAssigneeId(e.target.value)}>
           <option value="">Give to…</option>
           {doers(data).map((t) => (
             <option key={t.id} value={t.id}>
               {t.name}
             </option>
           ))}
-        </select>
+        </Select>
       </label>
       <label className="field">
         <span className="label">Urgency</span>
@@ -471,13 +472,13 @@ function EditJob({ data, j, onDone }: { data: ItBoard; j: Job; onDone: () => voi
         </label>
         <label className="field">
           <span className="label">Doer</span>
-          <select className="select" aria-label="Doer" value={assigneeId} onChange={(e) => setAssigneeId(e.target.value)}>
+          <Select className="select" aria-label="Doer" value={assigneeId} onChange={(e) => setAssigneeId(e.target.value)}>
             {doers(data).map((t) => (
               <option key={t.id} value={t.id}>
                 {t.name}
               </option>
             ))}
-          </select>
+          </Select>
         </label>
         <label className="field">
           <span className="label">Urgency</span>
@@ -536,14 +537,14 @@ function EditJob({ data, j, onDone }: { data: ItBoard; j: Job; onDone: () => voi
 /** Assign a help request, a joiner or leaver, or a tender's IT part to one person. */
 export function AssignPick({ data, current, onPick, busy }: { data: ItBoard; current: string | null | undefined; onPick: (id: string) => void; busy: boolean }) {
   return (
-    <select className="select iw-assign" aria-label="Give to" value={current ?? ''} disabled={busy} onChange={(e) => e.target.value && onPick(e.target.value)}>
+    <Select className="select iw-assign" aria-label="Give to" value={current ?? ''} disabled={busy} onChange={(e) => e.target.value && onPick(e.target.value)}>
       <option value="">{current ? 'Give to…' : 'Nobody yet: give to…'}</option>
       {doers(data).map((t) => (
         <option key={t.id} value={t.id}>
           {t.name}
         </option>
       ))}
-    </select>
+    </Select>
   );
 }
 
@@ -949,14 +950,14 @@ function AskAccess({ data, accountId, onDone }: { data: ItBoard; accountId: stri
       </label>
       <label className="field">
         <span className="label">Person</span>
-        <select className="select" aria-label="Person" value={userId} onChange={(e) => setUserId(e.target.value)}>
+        <Select className="select" aria-label="Person" value={userId} onChange={(e) => setUserId(e.target.value)}>
           <option value="">Person…</option>
           {(data.people ?? []).map((p) => (
             <option key={p.id} value={p.id}>
               {p.name}
             </option>
           ))}
-        </select>
+        </Select>
       </label>
       {action === 'grant' && (
         <label className="field">

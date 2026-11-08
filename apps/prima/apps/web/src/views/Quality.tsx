@@ -1,3 +1,4 @@
+import { Select } from '../SearchSelect';
 import { useState } from 'react';
 import {
   COMP_KIND_LABEL,
@@ -92,13 +93,13 @@ export function QualityView() {
           <p className="muted">Check that each guard can do the job at their post. Prima reminds you when a check is due.</p>
         </div>
         {companies.length > 1 && (
-          <select className="select" aria-label="Company" value={current} onChange={(e) => setCompanyId(e.target.value)} style={{ maxWidth: 360, marginBottom: 8 }}>
+          <Select className="select" aria-label="Company" value={current} onChange={(e) => setCompanyId(e.target.value)} style={{ maxWidth: 360, marginBottom: 8 }}>
             {companies.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.name}
               </option>
             ))}
-          </select>
+          </Select>
         )}
         <Matrix data={mat.data} />
       </div>
@@ -116,13 +117,13 @@ export function QualityView() {
         </p>
       </div>
       {companies.length > 1 && tab !== 'foundation' && tab !== 'suppliers' && tab !== 'objectives' && tab !== 'documents' && tab !== 'review' && (
-        <select className="select" aria-label="Company" value={current} onChange={(e) => setCompanyId(e.target.value)} style={{ maxWidth: 360, marginBottom: 8 }}>
+        <Select className="select" aria-label="Company" value={current} onChange={(e) => setCompanyId(e.target.value)} style={{ maxWidth: 360, marginBottom: 8 }}>
           {companies.map((c) => (
             <option key={c.id} value={c.id}>
               {c.name}
             </option>
           ))}
-        </select>
+        </Select>
       )}
       {tabs.length > 1 && (
         <div className="tabbar" role="tablist" aria-label="Quality and compliance">
@@ -282,7 +283,7 @@ function RequirementLine({ row, data }: { row: RegRow; data: QmsBoard }) {
           ))}
           {row.canLink && (
             <>
-              <select className="select" aria-label="Kind of evidence" value={kind} onChange={(e) => setKind(e.target.value as QmsEvidenceKind)}>
+              <Select className="select" aria-label="Kind of evidence" value={kind} onChange={(e) => setKind(e.target.value as QmsEvidenceKind)}>
                 {(Object.keys(QMS_EVIDENCE_LABEL) as QmsEvidenceKind[])
                   .filter((x) => x !== 'prima_signal' || r.signal !== 'none')
                   .map((x) => (
@@ -290,7 +291,7 @@ function RequirementLine({ row, data }: { row: RegRow; data: QmsBoard }) {
                       {QMS_EVIDENCE_LABEL[x]}
                     </option>
                   ))}
-              </select>
+              </Select>
               {kind !== 'prima_signal' && (
                 <>
                   <input className="input" aria-label="What it is" placeholder="What it is" value={label} onChange={(e) => setLabel(e.target.value)} />
@@ -330,14 +331,14 @@ function RequirementLine({ row, data }: { row: RegRow; data: QmsBoard }) {
                 </button>
               </div>
               <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
-                <select className="select" aria-label="Who fixes it" value={owner} onChange={(e) => setOwner(e.target.value)}>
+                <Select className="select" aria-label="Who fixes it" value={owner} onChange={(e) => setOwner(e.target.value)}>
                   <option value="">Who fixes the gap</option>
                   {data.owners.map((o) => (
                     <option key={o.id} value={o.id}>
                       {o.name} ({o.title})
                     </option>
                   ))}
-                </select>
+                </Select>
                 <button
                   className="btn btn-sm"
                   disabled={act.busy || note.trim().length < 3 || !owner}
@@ -372,24 +373,24 @@ function RequirementForm({ data }: { data: QmsBoard }) {
     );
   return (
     <div style={col}>
-      <select className="select" aria-label="Standard" value={std} onChange={(e) => setStd(e.target.value)}>
+      <Select className="select" aria-label="Standard" value={std} onChange={(e) => setStd(e.target.value)}>
         {data.standards.map((s) => (
           <option key={s.code} value={s.code}>
             {s.name} ({s.edition})
           </option>
         ))}
-      </select>
+      </Select>
       <input className="input" aria-label="Clause" placeholder="Clause or section reference" value={ref} onChange={(e) => setRef(e.target.value)} />
       <input className="input" aria-label="Summary" placeholder="What is needed, in your own words" value={title} onChange={(e) => setTitle(e.target.value)} />
       <input className="input" aria-label="Owner" placeholder="Owner by job title" value={ownerTitle} onChange={(e) => setOwnerTitle(e.target.value)} />
       <input className="input" aria-label="Where in Prima" placeholder="Where in Prima the evidence comes from" value={workflow} onChange={(e) => setWorkflow(e.target.value)} />
-      <select className="select" aria-label="ACT area" value={area} onChange={(e) => setArea(e.target.value)}>
+      <Select className="select" aria-label="ACT area" value={area} onChange={(e) => setArea(e.target.value)}>
         {data.actAreas.map((a) => (
           <option key={a.id} value={a.id}>
             {a.name}
           </option>
         ))}
-      </select>
+      </Select>
       <div className="row" style={{ gap: 6 }}>
         <button
           className="btn btn-primary btn-sm"
@@ -518,25 +519,25 @@ function PersonLine({ row, data }: { row: MatRow; data: CompMatrix }) {
           ))}
           {row.canAssess && assessable.length > 0 && (
             <>
-              <select className="select" aria-label="Item" value={itemId} onChange={(e) => setItemId(e.target.value)}>
+              <Select className="select" aria-label="Item" value={itemId} onChange={(e) => setItemId(e.target.value)}>
                 <option value="">Choose what you assessed</option>
                 {assessable.map((i) => (
                   <option key={i.id} value={i.id}>
                     {i.label}
                   </option>
                 ))}
-              </select>
+              </Select>
               <select className="select" aria-label="Result" value={result} onChange={(e) => setResult(e.target.value as 'competent' | 'not_yet')}>
                 <option value="competent">Competent</option>
                 <option value="not_yet">Not yet competent</option>
               </select>
-              <select className="select" aria-label="How" value={method} onChange={(e) => setMethod(e.target.value as CompMethod)}>
+              <Select className="select" aria-label="How" value={method} onChange={(e) => setMethod(e.target.value as CompMethod)}>
                 {(Object.keys(COMP_METHOD_LABEL) as CompMethod[]).map((m) => (
                   <option key={m} value={m}>
                     {COMP_METHOD_LABEL[m]}
                   </option>
                 ))}
-              </select>
+              </Select>
               <input className="input" aria-label="What you saw" placeholder="What you saw (needed)" value={note} onChange={(e) => setNote(e.target.value)} />
               <input className="input" aria-label="Course" placeholder="Course just attended, if any (optional)" value={course} onChange={(e) => setCourse(e.target.value)} />
               <button

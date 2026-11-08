@@ -1,3 +1,4 @@
+import { Select } from '../SearchSelect';
 import { useState } from "react";
 import type {
   ClientLostReason,
@@ -745,7 +746,7 @@ function OwnerSection({ c }: { c: CrmClient }) {
       </div>
       {c.can.owner && c.owners.length > 0 && (
         <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
-          <select
+          <Select
             className="select"
             aria-label="Person in charge"
             value={who}
@@ -757,7 +758,7 @@ function OwnerSection({ c }: { c: CrmClient }) {
                 {o.name}
               </option>
             ))}
-          </select>
+          </Select>
           <button
             className="btn btn-sm"
             disabled={!who || act.busy}
@@ -858,7 +859,7 @@ function PeopleSection({ c }: { c: CrmClient }) {
             value={p.position}
             onChange={(e) => setP({ ...p, position: e.target.value })}
           />
-          <select
+          <Select
             className="select"
             aria-label="What they do for us"
             value={p.role}
@@ -873,7 +874,7 @@ function PeopleSection({ c }: { c: CrmClient }) {
                 </option>
               ),
             )}
-          </select>
+          </Select>
           <input
             className="input"
             type="tel"
@@ -998,7 +999,7 @@ function RenewalSection({ c }: { c: CrmClient }) {
           <div style={{ fontWeight: 600 }}>
             {rn?.decision ? "Change the decision" : "Decide the renewal"}
           </div>
-          <select
+          <Select
             className="select"
             aria-label="Decision"
             value={choice}
@@ -1011,7 +1012,7 @@ function RenewalSection({ c }: { c: CrmClient }) {
                 {CLIENT_RENEWAL_DECISION[k]}
               </option>
             ))}
-          </select>
+          </Select>
           {choice === "renew_new_price" && (
             <label>
               Price change %
@@ -1084,7 +1085,7 @@ function RenewalSection({ c }: { c: CrmClient }) {
       {c.can.answer && (rn?.proposal || rn?.decision?.choice === "rebid") && (
         <div className="form">
           <div style={{ fontWeight: 600 }}>Client's answer</div>
-          <select
+          <Select
             className="select"
             aria-label="Answer"
             value={answer}
@@ -1097,7 +1098,7 @@ function RenewalSection({ c }: { c: CrmClient }) {
                 </option>
               ),
             )}
-          </select>
+          </Select>
           {answer === "accepted" && (
             <>
               <label>
@@ -1286,7 +1287,7 @@ function RequestsSection({ c }: { c: CrmClient }) {
       )}
       {adding && (
         <div className="form">
-          <select
+          <Select
             className="select"
             aria-label="Request"
             value={q.kind}
@@ -1301,7 +1302,7 @@ function RequestsSection({ c }: { c: CrmClient }) {
                 </option>
               ),
             )}
-          </select>
+          </Select>
           <input
             className="input"
             placeholder="What the client asked for"
@@ -1383,7 +1384,7 @@ function OffboardSection({ c }: { c: CrmClient }) {
         </button>
       ) : (
         <div className="form">
-          <select
+          <Select
             className="select"
             aria-label="Why the client is leaving"
             value={reason}
@@ -1396,7 +1397,7 @@ function OffboardSection({ c }: { c: CrmClient }) {
                 </option>
               ),
             )}
-          </select>
+          </Select>
           <input
             className="input"
             placeholder="What happened"

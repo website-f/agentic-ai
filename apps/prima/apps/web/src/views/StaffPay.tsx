@@ -1,3 +1,4 @@
+import { Select } from '../SearchSelect';
 import { useEffect, useRef, useState } from "react";
 import {
   CaretRightIcon,
@@ -205,13 +206,13 @@ function PrepareDrawer({
         <div className="pay-prep">
           <label className="field">
             <span className="label">Employer</span>
-            <select className="select" value={companyId} onChange={(e) => setCompanyId(e.target.value)}>
+            <Select className="select" value={companyId} onChange={(e) => setCompanyId(e.target.value)}>
               {data.employers.map((e) => (
                 <option key={e.companyId} value={e.companyId}>
                   {e.companyName} ({e.staff} staff)
                 </option>
               ))}
-            </select>
+            </Select>
             {tried && !companyId && <span className="help" data-tone="crit">Choose the employer.</span>}
           </label>
           <label className="field">
@@ -1081,14 +1082,14 @@ function OneOffEdit({ runId, line, types: oneOff }: { runId: string; line: Staff
       ))}
       {oneOff.length > 0 && (
         <>
-          <select className="input pay-in-lg" aria-label={`One-off allowance for ${line.name}`} value={typeId} onChange={(e) => setTypeId(e.target.value)}>
+          <Select className="input pay-in-lg" aria-label={`One-off allowance for ${line.name}`} value={typeId} onChange={(e) => setTypeId(e.target.value)}>
             <option value="">One-off allowance</option>
             {oneOff.map((t) => (
               <option key={t.id} value={t.id}>
                 {t.name}
               </option>
             ))}
-          </select>
+          </Select>
           <input
             className="input pay-in-sm"
             inputMode="decimal"
@@ -1383,7 +1384,7 @@ function MyZakat() {
         </p>
         <label className="field">
           <span className="label">Zakat body</span>
-          <select
+          <Select
             className="select"
             value={b}
             onChange={(e) => setBody(e.target.value)}
@@ -1392,7 +1393,7 @@ function MyZakat() {
             {data.bodies.map((x) => (
               <option key={x}>{x}</option>
             ))}
-          </select>
+          </Select>
         </label>
         {b && (
           <label className="field">

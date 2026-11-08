@@ -1,3 +1,4 @@
+import { Select } from '../SearchSelect';
 import { openProofItem } from '../save';
 import { useState } from 'react';
 import { TENDER_BID_PART_LABEL, TENDER_PAPER_LABEL, type ProofInput, type TenderBidPart, type TenderDecisionChoice, type TenderPaperKind, type TenderQuery, type TenderRecord } from '@prima/core';
@@ -52,13 +53,13 @@ export function TenderPapers({ row, canUpload }: { row: Row; canUpload: boolean 
       )}
       {open && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 8 }}>
-          <select className="select" aria-label="Kind of paper" value={kind} onChange={(e) => setKind(e.target.value as TenderPaperKind)}>
+          <Select className="select" aria-label="Kind of paper" value={kind} onChange={(e) => setKind(e.target.value as TenderPaperKind)}>
             {KINDS.map((k) => (
               <option key={k} value={k}>
                 {TENDER_PAPER_LABEL[k]}
               </option>
             ))}
-          </select>
+          </Select>
           <ProofPicker site={null} refText="Tender" items={proof} onChange={setProof} documentsOnly required />
           <ErrorNotice error={act.error} />
           <div className="row">
@@ -205,7 +206,7 @@ export function TenderBidFiles({ row, canPrepare, doa }: { row: Row; canPrepare:
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           {list.map((f, i) => (
             <div key={i} className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
-              <select
+              <Select
                 className="select"
                 aria-label="Part of the bid"
                 value={f.part}
@@ -216,7 +217,7 @@ export function TenderBidFiles({ row, canPrepare, doa }: { row: Row; canPrepare:
                     {TENDER_BID_PART_LABEL[p]}
                   </option>
                 ))}
-              </select>
+              </Select>
               <input
                 className="input"
                 style={{ flex: 1, minWidth: 160 }}
@@ -807,13 +808,13 @@ export function TenderDecisionPanel({ row }: { row: Row }) {
       {row.canDecide && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           <div className="row" style={{ flexWrap: 'wrap', gap: 6 }}>
-            <select className="select" aria-label="Decision" value={choice} onChange={(e) => setChoice(e.target.value as TenderDecisionChoice)}>
+            <Select className="select" aria-label="Decision" value={choice} onChange={(e) => setChoice(e.target.value as TenderDecisionChoice)}>
               {(Object.keys(DECISION) as TenderDecisionChoice[]).map((k) => (
                 <option key={k} value={k}>
                   {DECISION[k].label}
                 </option>
               ))}
-            </select>
+            </Select>
             <input
               className="input"
               style={{ flex: 1, minWidth: 160 }}

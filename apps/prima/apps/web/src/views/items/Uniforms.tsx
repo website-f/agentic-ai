@@ -1,3 +1,4 @@
+import { Select } from '../../SearchSelect';
 import { useMemo, useState } from 'react';
 import { ITEM_CATEGORIES, SALE_PAPER_LABEL, STATE_LABEL, TAG_METHODS, TAG_METHOD_LABEL, labelDisplay, type BaseUom, type ItemCategory, type SalePaperKind, type TagMethod, type TrackingMode } from '@prima/core';
 import { api, type ItemBoard } from '../../api';
@@ -105,13 +106,13 @@ export function PastUniforms({ data }: { data: ItemBoard }) {
       </summary>
       <div style={{ display: 'grid', gap: 6, marginTop: 6 }}>
         {u.recordsFor.length > 1 && (
-          <select className="input" aria-label="Company" value={company} onChange={(e) => setCompany(e.target.value)}>
+          <Select className="input" aria-label="Company" value={company} onChange={(e) => setCompany(e.target.value)}>
             {u.recordsFor.map((p) => (
               <option key={p} value={p}>
                 {partyName(data, p)}
               </option>
             ))}
-          </select>
+          </Select>
         )}
         <div className="seg">
           {(['site', 'zone', 'region', 'person'] as const).map((k) => (
@@ -130,14 +131,14 @@ export function PastUniforms({ data }: { data: ItemBoard }) {
         {kind === 'person' ? (
           <input className="input" aria-label="Staff number" placeholder="Staff number" value={id} onChange={(e) => setId(e.target.value)} />
         ) : (
-          <select className="input" aria-label={kind === 'site' ? 'Site' : kind === 'zone' ? 'Zone' : 'Region'} value={id} onChange={(e) => setId(e.target.value)}>
+          <Select className="input" aria-label={kind === 'site' ? 'Site' : kind === 'zone' ? 'Zone' : 'Region'} value={id} onChange={(e) => setId(e.target.value)}>
             <option value="">Choose…</option>
             {options.map(([v, l]) => (
               <option key={v} value={v}>
                 {l}
               </option>
             ))}
-          </select>
+          </Select>
         )}
         <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
           <label className="small">
@@ -145,11 +146,11 @@ export function PastUniforms({ data }: { data: ItemBoard }) {
           </label>
           <label className="small">
             Pieces per guard{' '}
-            <select className="input" aria-label="Pieces per guard" value={pieces} onChange={(e) => setPieces(e.target.value)}>
+            <Select className="input" aria-label="Pieces per guard" value={pieces} onChange={(e) => setPieces(e.target.value)}>
               {[1, 2, 3].map((n) => (
                 <option key={n}>{n}</option>
               ))}
-            </select>
+            </Select>
           </label>
         </div>
         <input

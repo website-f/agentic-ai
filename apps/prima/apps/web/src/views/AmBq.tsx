@@ -1,3 +1,4 @@
+import { Select } from '../SearchSelect';
 import { useEffect, useState } from "react";
 import { bqWorkbookXlsx } from "@prima/core";
 import { api, type AmBqView } from "../api";
@@ -361,13 +362,13 @@ function Editor({ data, workOrderId, reload }: { data: AmBqView; workOrderId: st
                 <span className="small muted" style={{ width: 32 }}>
                   {bil[i]}
                 </span>
-                <select className="input" aria-label={`Line ${i + 1} section`} value={l.section || sections[0]?.code || ""} onChange={(e) => set(i, "section", e.target.value)} style={{ width: 70 }}>
+                <Select className="input" aria-label={`Line ${i + 1} section`} value={l.section || sections[0]?.code || ""} onChange={(e) => set(i, "section", e.target.value)} style={{ width: 70 }}>
                   {sections.map((x) => (
                     <option key={x.code} value={x.code}>
                       {x.code}
                     </option>
                   ))}
-                </select>
+                </Select>
               </>
             )}
             <input className="input" aria-label={`Line ${i + 1} item`} placeholder="Item" value={l.item} onChange={(e) => set(i, "item", e.target.value)} style={{ flex: "2 1 220px" }} />
@@ -530,14 +531,14 @@ function Quotes({ data, workOrderId, reload }: { data: AmBqView; workOrderId: st
       {data.can.reopen && <Reopen workOrderId={workOrderId} reload={reload} />}
       {data.can.askAward && (
         <div className="row" style={{ gap: 6, flexWrap: "wrap", marginTop: 6 }}>
-          <select className="input" aria-label="Quote to award" value={pick} onChange={(e) => setPick(e.target.value)}>
+          <Select className="input" aria-label="Quote to award" value={pick} onChange={(e) => setPick(e.target.value)}>
             <option value="">Choose the quote</option>
             {bq.quotes.map((q) => (
               <option key={q.id} value={q.id}>
                 {q.contractor}
               </option>
             ))}
-          </select>
+          </Select>
           <input className="input" aria-label="Reason" placeholder="Reason, if not the lowest or too few quotes" value={reason} onChange={(e) => setReason(e.target.value)} />
           <button className="btn btn-sm btn-primary" disabled={busy || !pick} onClick={ask}>
             Ask to award
@@ -653,14 +654,14 @@ function Brief({ data, workOrderId, reload }: { data: AmBqView; workOrderId: str
     const set = (x: string) => setAnswers({ ...answers, [f.key]: x });
     if (f.kind === "yesno" || f.kind === "choice")
       return (
-        <select className="input" value={v} onChange={(e) => set(e.target.value)}>
+        <Select className="input" value={v} onChange={(e) => set(e.target.value)}>
           <option value="">Choose</option>
           {(f.kind === "yesno" ? ["yes", "no"] : f.options!).map((o) => (
             <option key={o} value={o}>
               {o === "yes" ? "Yes" : o === "no" ? "No" : o}
             </option>
           ))}
-        </select>
+        </Select>
       );
     if (f.kind === "date") return <input className="input" type="date" value={v} onChange={(e) => set(e.target.value)} />;
     return <input className="input" value={v} onChange={(e) => set(e.target.value)} />;
@@ -684,13 +685,13 @@ function Brief({ data, workOrderId, reload }: { data: AmBqView; workOrderId: str
           </p>
           <label className="small" style={{ display: "grid", gap: 2 }}>
             Kind of job *
-            <select className="input" value={kind} onChange={(e) => setKind(e.target.value as Kind)}>
+            <Select className="input" value={kind} onChange={(e) => setKind(e.target.value as Kind)}>
               {data.templates.map((t) => (
                 <option key={t.kind} value={t.kind}>
                   {t.label}
                 </option>
               ))}
-            </select>
+            </Select>
           </label>
           <div style={{ display: "grid", gap: 8, gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", marginTop: 8 }}>
             {template.brief.map((f) => (
@@ -898,14 +899,14 @@ function Variations({ data, workOrderId, reload }: { data: AmBqView; workOrderId
           <p className="muted small">Pick a BQ line to add or omit (a negative quantity omits), or leave it on new work. A rate other than the awarded rate needs its reason.</p>
           {lines.map((l, i) => (
             <div key={i} className="row" style={{ gap: 6, flexWrap: "wrap", marginTop: 4 }}>
-              <select className="input" aria-label={`VO line ${i + 1}`} value={l.lineId} onChange={(e) => pickLine(i, e.target.value)}>
+              <Select className="input" aria-label={`VO line ${i + 1}`} value={l.lineId} onChange={(e) => pickLine(i, e.target.value)}>
                 <option value="">New work</option>
                 {bq.lines.map((b) => (
                   <option key={b.id} value={b.id}>
                     {b.id}. {b.item} ({b.unit})
                   </option>
                 ))}
-              </select>
+              </Select>
               {!l.lineId && (
                 <>
                   <input className="input" aria-label={`Item ${i + 1}`} placeholder="Item" value={l.item} onChange={(e) => setLine(i, { item: e.target.value })} />

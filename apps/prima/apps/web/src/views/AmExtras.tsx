@@ -1,3 +1,4 @@
+import { Select } from '../SearchSelect';
 import { useState, type ReactNode } from "react";
 import { api, type AmExtrasBoard } from "../api";
 import { Chip, ErrorNotice, Kpi, Loading, dateLabel, useAction, useLoad, type Tone } from "../ui";
@@ -126,13 +127,13 @@ function StepForm({
         {fields.map((f) =>
           f.kind === "select" ? (
             <Captioned key={f.key} label={f.label}>
-              <select className="input" aria-label={f.label} value={String(v[f.key])} onChange={(e) => set(f.key, e.target.value)}>
+              <Select className="input" aria-label={f.label} value={String(v[f.key])} onChange={(e) => set(f.key, e.target.value)}>
                 {Object.entries(f.options ?? {}).map(([k, l]) => (
                   <option key={k} value={k}>
                     {l}
                   </option>
                 ))}
-              </select>
+              </Select>
             </Captioned>
           ) : f.kind === "check" ? (
             <label key={f.key} className="small" style={{ display: "flex", gap: 4, alignItems: "center" }}>

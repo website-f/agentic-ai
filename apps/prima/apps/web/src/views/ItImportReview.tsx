@@ -1,3 +1,4 @@
+import { Select } from '../SearchSelect';
 import { useEffect, useState, useSyncExternalStore } from 'react';
 import type { ImportReviewSession } from './it-import-review-state';
 
@@ -25,10 +26,10 @@ export function ItImportReview({ session, onBack }: { session: ImportReviewSessi
       {row.errors.length > 0 && <p role="alert" className="notice" data-tone="crit">Needs correction: {row.errors.join(', ')}</p>}
       {Object.entries(row.fields).map(([field, item]) => <div key={field} className="ix-proposal-field">
         {['doer', 'itPerson'].includes(field) ? <label className="field">{field} — choose exact staff identity
-          <select className="select" value={s.directory.some(p => p.id === item.value) ? item.value : ''} disabled={locked} onChange={e => session.selectStaff(row.row, field, e.target.value)}>
+          <Select className="select" value={s.directory.some(p => p.id === item.value) ? item.value : ''} disabled={locked} onChange={e => session.selectStaff(row.row, field, e.target.value)}>
             <option value="">Choose a staff member; no name is matched automatically</option>
             {s.directory.map(p => <option key={p.id} value={p.id}>{p.name} — {p.itRole} ({p.id})</option>)}
-          </select>
+          </Select>
           <p className="ix-meta">Current proposal: {item.value || '(none)'}. Directory labels are shown exactly as returned by your authorized app account. Eligibility must be rechecked by the server.</p>
         </label> : <label className="field">{field}<textarea className="input" rows={field === 'detail' ? 3 : 1} value={item.value} disabled={locked} onChange={e => session.edit(row.row, field, e.target.value)} /></label>}
         <p className="ix-meta">{item.edited ? 'Human-edited; not revalidated against the source.' : item.support === 'source-supported' ? 'Server records source-supported text; original source offsets are unavailable here.' : item.evidence.raw === null ? 'Unverified — no supporting source.' : 'Source-supported text; not proof of correctness.'}</p>

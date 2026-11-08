@@ -1,3 +1,4 @@
+import { Select } from '../SearchSelect';
 import { WebTicketReview, LegacyWebsiteActions } from './WebTicketReview';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { api, type WebBoardOk } from '../api';
@@ -212,7 +213,7 @@ function PersonPick({ data, value, onChange, label, it = false }: { data: B; val
   return (
     <label className="field">
       <span>{label}</span>
-      <select className="select" value={value} onChange={(e) => onChange(e.target.value)}>
+      <Select className="select" value={value} onChange={(e) => onChange(e.target.value)}>
         <option value="">Not assigned</option>
         {list.map((p) => (
           <option key={p.id} value={p.id}>
@@ -220,7 +221,7 @@ function PersonPick({ data, value, onChange, label, it = false }: { data: B; val
             {p.title ? ` (${p.title})` : ''}
           </option>
         ))}
-      </select>
+      </Select>
     </label>
   );
 }
@@ -637,14 +638,14 @@ function Sites({ data, go }: { data: B; go: (k: NonNullable<Open>['kind'], id: s
         }
       >
         <div className="ws-toolbar">
-          <select className="select ws-filter" aria-label="Status" value={status} onChange={(e) => setStatus(e.target.value)}>
+          <Select className="select ws-filter" aria-label="Status" value={status} onChange={(e) => setStatus(e.target.value)}>
             <option value="ALL">Every status</option>
             {['live', 'development', 'offline', 'retired'].map((s) => (
               <option key={s} value={s}>
                 {SITE_STATUS[s][1]}
               </option>
             ))}
-          </select>
+          </Select>
         </div>
         <div className="list">
           {rows.map((s) => (
@@ -816,25 +817,25 @@ function SiteForm({ data, site, onDone }: { data: B; site?: B['sites'][number]['
       {!site && (
         <label className="field">
           <span>Company</span>
-          <select className="select" value={f.companyId} onChange={(e) => set('companyId')(e.target.value)}>
+          <Select className="select" value={f.companyId} onChange={(e) => set('companyId')(e.target.value)}>
             {data.companies.map((c) => (
               <option key={c.company.id} value={c.company.id}>
                 {c.company.name}
               </option>
             ))}
-          </select>
+          </Select>
         </label>
       )}
       <Text label="Address (https://…)" value={f.url} onChange={set('url')} />
       <label className="field">
         <span>Status</span>
-        <select className="select" value={f.status} onChange={(e) => set('status')(e.target.value)}>
+        <Select className="select" value={f.status} onChange={(e) => set('status')(e.target.value)}>
           {['live', 'development', 'offline', 'retired'].map((s) => (
             <option key={s} value={s}>
               {SITE_STATUS[s][1]}
             </option>
           ))}
-        </select>
+        </Select>
       </label>
       <Text label="Purpose" value={f.purpose} onChange={set('purpose')} />
       <fieldset className="field">
@@ -864,13 +865,13 @@ function SiteForm({ data, site, onDone }: { data: B; site?: B['sites'][number]['
       </label>
       <label className="field">
         <span>Deployment</span>
-        <select className="select" value={f.deploy} onChange={(e) => set('deploy')(e.target.value)}>
+        <Select className="select" value={f.deploy} onChange={(e) => set('deploy')(e.target.value)}>
           {Object.entries(DEPLOY).map(([k, l]) => (
             <option key={k} value={k}>
               {l}
             </option>
           ))}
-        </select>
+        </Select>
       </label>
       <Text label="Repository (address or reference)" value={f.repoRef} onChange={set('repoRef')} />
       <Text label="Source files (SharePoint, OneDrive or repository)" value={f.sourceRef} onChange={set('sourceRef')} />
@@ -1201,13 +1202,13 @@ function DomainForm({ data, domain, onDone }: { data: B; domain?: B['domains'][n
       <Text label="Registrar" value={f.registrar} onChange={set('registrar')} />
       <label className="field">
         <span>Registration status</span>
-        <select className="select" value={f.status} onChange={(e) => set('status')(e.target.value)}>
+        <Select className="select" value={f.status} onChange={(e) => set('status')(e.target.value)}>
           {['active', 'expired', 'pending', 'transferring', 'unknown'].map((s) => (
             <option key={s} value={s}>
               {s}
             </option>
           ))}
-        </select>
+        </Select>
       </label>
       <label className="field">
         <span>Registered on</span>
@@ -1294,7 +1295,7 @@ function Reviews({ data, go }: { data: B; go: (k: NonNullable<Open>['kind'], id:
   return (
     <Panel title="Quarterly reviews" note={`${data.quarter.key} and anything still open`}>
       <div className="ws-toolbar">
-      <select className="select ws-filter" aria-label="Filter" value={state} onChange={(e) => setState(e.target.value)}>
+      <Select className="select ws-filter" aria-label="Filter" value={state} onChange={(e) => setState(e.target.value)}>
         <option value="ALL">All</option>
         <option value="mine">Waiting on me</option>
         {Object.entries(Q_STATUS)
@@ -1304,7 +1305,7 @@ function Reviews({ data, go }: { data: B; go: (k: NonNullable<Open>['kind'], id:
               {l}
             </option>
           ))}
-      </select>
+      </Select>
       </div>
       <div className="list">
         {rows.map((r) => (
@@ -1741,14 +1742,14 @@ function Checks({ data, go }: { data: B; go: (k: NonNullable<Open>['kind'], id: 
         <Panel title="Assign in a batch" note={`${data.month}: one result kept per website`}>
           <ErrorNotice error={act.error} />
           <div className="ws-actions">
-            <select className="select" value={assignTo} onChange={(e) => setAssignTo(e.target.value)}>
+            <Select className="select" value={assignTo} onChange={(e) => setAssignTo(e.target.value)}>
               <option value="">Each website’s own IT administrator</option>
               {data.itTeam.map((p) => (
                 <option key={p.id} value={p.id}>
                   {p.name}
                 </option>
               ))}
-            </select>
+            </Select>
             <button className="btn btn-sm" disabled={act.busy} onClick={() => call(act, 'openChecks', { month: data.month, assignToId: assignTo }, 'Checks assigned.')}>
               Open and assign {data.month}
             </button>
@@ -1915,28 +1916,28 @@ function IssueForm({ data, onDone }: { data: B; onDone: () => void }) {
       <ErrorNotice error={act.error} />
       <label className="field">
         <span>Company</span>
-        <select className="select" value={companyId} onChange={(e) => (setCompany(e.target.value), setSite(''))}>
+        <Select className="select" value={companyId} onChange={(e) => (setCompany(e.target.value), setSite(''))}>
           {data.companies.map((c) => (
             <option key={c.company.id} value={c.company.id}>
               {c.company.name}
             </option>
           ))}
-        </select>
+        </Select>
       </label>
       <label className="field">
         <span>Website</span>
-        <select className="select" value={siteId} onChange={(e) => setSite(e.target.value)}>
+        <Select className="select" value={siteId} onChange={(e) => setSite(e.target.value)}>
           <option value="">Not about one website</option>
           {sites.map((s) => (
             <option key={s.site.id} value={s.site.id}>
               {s.site.name}
             </option>
           ))}
-        </select>
+        </Select>
       </label>
       <label className="field">
         <span>What kind</span>
-        <select className="select" value={category} onChange={(e) => setCategory(e.target.value)}>
+        <Select className="select" value={category} onChange={(e) => setCategory(e.target.value)}>
           {Object.entries(CATEGORY)
             .filter(([k]) => k !== 'TEST_FAIL')
             .map(([k, l]) => (
@@ -1944,7 +1945,7 @@ function IssueForm({ data, onDone }: { data: B; onDone: () => void }) {
                 {l}
               </option>
             ))}
-        </select>
+        </Select>
       </label>
       <label className="field">
         <span>How serious</span>
@@ -2372,30 +2373,30 @@ function Reports({ data }: { data: B }) {
   return (
     <Panel title="Reports" note="Opens in Excel; print to save as PDF">
       <div className="ws-toolbar">
-        <select className="select" aria-label="Report" value={which} onChange={(e) => setWhich(e.target.value)}>
+        <Select className="select" aria-label="Report" value={which} onChange={(e) => setWhich(e.target.value)}>
           {reports.map((x) => (
             <option key={x.key} value={x.key}>
               {x.title}
             </option>
           ))}
-        </select>
-        <select className="select" aria-label="Company" value={company} onChange={(e) => setCompany(e.target.value)}>
+        </Select>
+        <Select className="select" aria-label="Company" value={company} onChange={(e) => setCompany(e.target.value)}>
           <option value="">Every company</option>
           {data.companies.map((c) => (
             <option key={c.company.id} value={c.company.id}>
               {c.company.name}
             </option>
           ))}
-        </select>
+        </Select>
         {itNames.length > 0 && (
-          <select className="select" aria-label="IT administrator" value={itAdmin} onChange={(e) => setItAdmin(e.target.value)}>
+          <Select className="select" aria-label="IT administrator" value={itAdmin} onChange={(e) => setItAdmin(e.target.value)}>
             <option value="">Every IT administrator</option>
             {itNames.map((n) => (
               <option key={n} value={n}>
                 {n}
               </option>
             ))}
-          </select>
+          </Select>
         )}
         <button className="btn btn-sm" onClick={csv}>
           Export (Excel)
@@ -2583,14 +2584,14 @@ function SpInbox({ data }: { data: B }) {
             {x.detail && <span>{x.detail}</span>}
             <label className="small">
               Company{' '}
-              <select value={company[x.id] ?? ''} onChange={(e) => setCompany((c) => ({ ...c, [x.id]: e.target.value }))}>
+              <Select value={company[x.id] ?? ''} onChange={(e) => setCompany((c) => ({ ...c, [x.id]: e.target.value }))}>
                 <option value="">Match by website address</option>
                 {data.companies.map((c) => (
                   <option key={c.company.id} value={c.company.id}>
                     {c.company.name}
                   </option>
                 ))}
-              </select>
+              </Select>
             </label>
             <Text label="Comment (needed)" value={notes[x.id] ?? ''} onChange={(v) => setNotes((n) => ({ ...n, [x.id]: v }))} />
             <div className="ws-actions">
@@ -2689,25 +2690,25 @@ function SocialForm({ data, account, onDone }: { data: B; account?: B['social'][
         {!account && (
           <label className="small">
             Company{' '}
-            <select className="select" value={f.companyId} onChange={(e) => set('companyId')(e.target.value)}>
+            <Select className="select" value={f.companyId} onChange={(e) => set('companyId')(e.target.value)}>
               <option value="">Choose</option>
               {data.companies.map((c) => (
                 <option key={c.company.id} value={c.company.id}>
                   {c.company.name}
                 </option>
               ))}
-            </select>
+            </Select>
           </label>
         )}
         <label className="small">
           Platform{' '}
-          <select className="select" value={f.platform} onChange={(e) => set('platform')(e.target.value)}>
+          <Select className="select" value={f.platform} onChange={(e) => set('platform')(e.target.value)}>
             {Object.entries(data.platforms).map(([k, l]) => (
               <option key={k} value={k}>
                 {l}
               </option>
             ))}
-          </select>
+          </Select>
         </label>
         <Text label="Page or account name" value={f.name} onChange={set('name')} />
         <Text label="Address (link)" value={f.url} onChange={set('url')} />
@@ -2870,13 +2871,13 @@ function Email({ data }: { data: B; go: (k: NonNullable<Open>['kind'], id: strin
   const sel = (k: string, opts: string[]) => (
     <label className="small">
       {k.toUpperCase()}{' '}
-      <select className="select" value={f[k] ?? 'unknown'} onChange={(e) => set(k)(e.target.value)}>
+      <Select className="select" value={f[k] ?? 'unknown'} onChange={(e) => set(k)(e.target.value)}>
         {opts.map((o) => (
           <option key={o} value={o}>
             {MAIL_LABEL[o] ?? o}
           </option>
         ))}
-      </select>
+      </Select>
     </label>
   );
   return (

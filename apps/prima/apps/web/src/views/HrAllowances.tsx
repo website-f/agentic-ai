@@ -1,3 +1,4 @@
+import { Select } from '../SearchSelect';
 import { useState } from "react";
 import { api } from "../api";
 import { Card, Empty } from "../kit";
@@ -57,13 +58,13 @@ export function AllowancesPanel() {
               </label>
               <label className="field">
                 <span className="label">Paid</span>
-                <select className="select" aria-label="Paid" value={f.frequency} onChange={(e) => setF({ ...f, frequency: e.target.value as Freq })}>
+                <Select className="select" aria-label="Paid" value={f.frequency} onChange={(e) => setF({ ...f, frequency: e.target.value as Freq })}>
                   {(Object.keys(FREQ) as Freq[]).map((k) => (
                     <option key={k} value={k}>
                       {FREQ[k]}
                     </option>
                   ))}
-                </select>
+                </Select>
               </label>
               <label className="field">
                 <span className="label">Usual amount, RM (blank if it varies)</span>
@@ -262,7 +263,7 @@ function StaffAllowanceEdit({ staff, types, onDone }: { staff: NonNullable<Data[
         <div key={i} className="hp-line">
           <label className="field">
             <span className="label">Allowance {i + 1}</span>
-            <select
+            <Select
               className="select"
               aria-label={`Allowance ${i + 1}`}
               value={r.typeId}
@@ -280,7 +281,7 @@ function StaffAllowanceEdit({ staff, types, onDone }: { staff: NonNullable<Data[
                     {t.cap != null ? ` (cap ${rm(t.cap)})` : ""}
                   </option>
                 ))}
-            </select>
+            </Select>
           </label>
           <label className="field">
             <span className="label">Amount, RM</span>

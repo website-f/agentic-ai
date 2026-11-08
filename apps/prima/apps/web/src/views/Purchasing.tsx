@@ -1,3 +1,4 @@
+import { Select } from '../SearchSelect';
 import { useState, type ReactNode } from 'react';
 import {
   ArrowCounterClockwiseIcon,
@@ -481,14 +482,14 @@ function RequestDetail({ r: row, data }: { r: ReqRow; data: PurBoard }) {
             </div>
             <div className="bz-form">
               <F label="Supplier" span>
-                <select className="select" value={quote.supplierId} onChange={(e) => setQuote({ ...quote, supplierId: e.target.value })}>
+                <Select className="select" value={quote.supplierId} onChange={(e) => setQuote({ ...quote, supplierId: e.target.value })}>
                   <option value="">Approved supplier…</option>
                   {ready.map((s) => (
                     <option key={s.supplier.id} value={s.supplier.id}>
                       {s.supplier.name}
                     </option>
                   ))}
-                </select>
+                </Select>
               </F>
               <F label="Quoted amount">
                 <input className="input" placeholder="Quoted amount" inputMode="decimal" value={quote.amount} onChange={(e) => setQuote({ ...quote, amount: e.target.value })} />
@@ -573,13 +574,13 @@ function RequestDetail({ r: row, data }: { r: ReqRow; data: PurBoard }) {
               <h3 className="bz-pu-acth">Choose the quote and send for approval</h3>
               <div className="bz-form">
                 <F label="Chosen quote" span>
-                  <select className="select" value={chosen} onChange={(e) => setChosen(e.target.value)}>
+                  <Select className="select" value={chosen} onChange={(e) => setChosen(e.target.value)}>
                     {r.quotes.map((q) => (
                       <option key={q.supplierId} value={q.supplierId}>
                         {sup(q.supplierId)} {rm(q.amount)}
                       </option>
                     ))}
-                  </select>
+                  </Select>
                 </F>
                 <F label="Reason">
                   <input className="input" placeholder="Reason if not the lowest" value={note} onChange={(e) => setNote(e.target.value)} />
@@ -735,26 +736,26 @@ function NewRequest({ data, onDone }: { data: PurBoard; onDone: () => void }) {
       <div className="bz-form">
         {companies.length > 1 && (
           <F label="Company" span>
-            <select className="select" value={companyId} onChange={(e) => setCompanyId(e.target.value)}>
+            <Select className="select" value={companyId} onChange={(e) => setCompanyId(e.target.value)}>
               {companies.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.name}
                 </option>
               ))}
-            </select>
+            </Select>
           </F>
         )}
         <F label="What is being bought" span>
           <input className="input" placeholder="What is being bought, and why" value={title} onChange={(e) => setTitle(e.target.value)} />
         </F>
         <F label="Category" span>
-          <select className="select" value={category} onChange={(e) => setCategory(e.target.value as PurCategory)}>
+          <Select className="select" value={category} onChange={(e) => setCategory(e.target.value as PurCategory)}>
             {Object.entries(CATEGORY).map(([v, l]) => (
               <option key={v} value={v}>
                 {l}
               </option>
             ))}
-          </select>
+          </Select>
         </F>
       </div>
       <section className="bz-sec">
@@ -771,7 +772,7 @@ function NewRequest({ data, onDone }: { data: PurBoard; onDone: () => void }) {
               <span className="bz-sub">Line {i + 1}</span>
               <div className="bz-form">
                 <F label="Store item">
-                  <select
+                  <Select
                     className="select"
                     value={l.stockItemId}
                     onChange={(e) => {
@@ -786,7 +787,7 @@ function NewRequest({ data, onDone }: { data: PurBoard; onDone: () => void }) {
                         {s.item.size ? ` ${s.item.size}` : ''}
                       </option>
                     ))}
-                  </select>
+                  </Select>
                 </F>
                 <F label="Item">
                   <input className="input" placeholder="Item" value={l.item} onChange={(e) => set({ item: e.target.value })} />
@@ -1036,13 +1037,13 @@ function NewSupplier({ data, onDone }: { data: PurBoard; onDone: () => void }) {
       <div className="bz-form">
         {companies.length > 1 && (
           <F label="Company" span>
-            <select className="select" value={companyId} onChange={(e) => setCompanyId(e.target.value)}>
+            <Select className="select" value={companyId} onChange={(e) => setCompanyId(e.target.value)}>
               {companies.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.name}
                 </option>
               ))}
-            </select>
+            </Select>
           </F>
         )}
         <F label="Supplier name" span>
@@ -1052,13 +1053,13 @@ function NewSupplier({ data, onDone }: { data: PurBoard; onDone: () => void }) {
           <input className="input" placeholder="SSM number" value={f.ssmNo} onChange={(e) => setF({ ...f, ssmNo: e.target.value })} />
         </F>
         <F label="Category">
-          <select className="select" value={f.categories[0]} onChange={(e) => setF({ ...f, categories: [e.target.value as PurCategory] })}>
+          <Select className="select" value={f.categories[0]} onChange={(e) => setF({ ...f, categories: [e.target.value as PurCategory] })}>
             {Object.entries(CATEGORY).map(([v, l]) => (
               <option key={v} value={v}>
                 {l}
               </option>
             ))}
-          </select>
+          </Select>
         </F>
         <F label="Bank">
           <input className="input" placeholder="Bank" value={f.bankName} onChange={(e) => setF({ ...f, bankName: e.target.value })} />
@@ -1476,30 +1477,30 @@ function IssueForm({ data }: { data: PurBoard }) {
         <div className="bz-form">
           {companies.length > 1 && (
             <F label="Company" span>
-              <select className="select" value={companyId} onChange={(e) => setCompanyId(e.target.value)}>
+              <Select className="select" value={companyId} onChange={(e) => setCompanyId(e.target.value)}>
                 {companies.map((c) => (
                   <option key={c.id} value={c.id}>
                     {c.name}
                   </option>
                 ))}
-              </select>
+              </Select>
             </F>
           )}
           <F label="Find a person">
             <input className="input" placeholder="Find a guard or officer by name" value={find} onChange={(e) => setFind(e.target.value)} />
           </F>
           <F label="Person">
-            <select className="select" value={personId} onChange={(e) => setPersonId(e.target.value)}>
+            <Select className="select" value={personId} onChange={(e) => setPersonId(e.target.value)}>
               <option value="">Choose…</option>
               {people.map((p) => (
                 <option key={p.id} value={p.id}>
                   {p.name}
                 </option>
               ))}
-            </select>
+            </Select>
           </F>
           <F label="Item" span>
-            <select className="select" value={itemId} onChange={(e) => setItemId(e.target.value)}>
+            <Select className="select" value={itemId} onChange={(e) => setItemId(e.target.value)}>
               <option value="">Item…</option>
               {stock.map((s) => (
                 <option key={s.item.id} value={s.item.id}>
@@ -1507,7 +1508,7 @@ function IssueForm({ data }: { data: PurBoard }) {
                   {s.item.size ? ` ${s.item.size}` : ''} ({s.item.onHand} in store)
                 </option>
               ))}
-            </select>
+            </Select>
           </F>
           <F label="Quantity">
             <input className="input num" placeholder="Qty" inputMode="numeric" value={qty} onChange={(e) => setQty(e.target.value)} />
@@ -1518,7 +1519,7 @@ function IssueForm({ data }: { data: PurBoard }) {
           {goodwillStore && (
             <>
               <F label="Operations Manager" span>
-                <select className="select" value={omUserId} onChange={(e) => setOmUserId(e.target.value)}>
+                <Select className="select" value={omUserId} onChange={(e) => setOmUserId(e.target.value)}>
                   <option value="">Operations Manager who takes it…</option>
                   {data.govOms.map((u) => (
                     <option key={u.id} value={u.id}>
@@ -1526,18 +1527,18 @@ function IssueForm({ data }: { data: PurBoard }) {
                       {u.title ? ` (${u.title})` : ''}
                     </option>
                   ))}
-                </select>
+                </Select>
               </F>
               {needsPatrol && (
                 <F label="Patrolling officer" span>
-                  <select className="select" value={patrolPersonId} onChange={(e) => setPatrolPersonId(e.target.value)}>
+                  <Select className="select" value={patrolPersonId} onChange={(e) => setPatrolPersonId(e.target.value)}>
                     <option value="">Patrolling officer who hands it to the guard…</option>
                     {patrols.map((p) => (
                       <option key={p.id} value={p.id}>
                         {p.name}
                       </option>
                     ))}
-                  </select>
+                  </Select>
                 </F>
               )}
             </>

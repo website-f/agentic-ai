@@ -1,3 +1,4 @@
+import { Select } from '../SearchSelect';
 import { useState } from 'react';
 import { api, type FinControls, type FinDesk } from '../api';
 import { Chip, ErrorNotice, dateTimeLabel, useAction, type Tone } from '../ui';
@@ -226,7 +227,7 @@ function StatementTests({ l, co, me, reviewer }: { l: L; co: Co; me: string; rev
           <strong className="small">Schedules (FS-12)</strong>
           {sch.map((s, i) => (
             <div className="row" key={i}>
-              <select
+              <Select
                 className="select"
                 aria-label={`Schedule ${i + 1} kind`}
                 value={s.kind}
@@ -237,7 +238,7 @@ function StatementTests({ l, co, me, reviewer }: { l: L; co: Co; me: string; rev
                     {SCHEDULE[k] ?? k}
                   </option>
                 ))}
-              </select>
+              </Select>
               <input
                 className="input"
                 aria-label={`Schedule ${i + 1} ledger balance`}

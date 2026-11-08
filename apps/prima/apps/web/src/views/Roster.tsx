@@ -1,3 +1,4 @@
+import { Select } from '../SearchSelect';
 import { useEffect, useMemo, useState } from 'react';
 import { CalendarBlankIcon, CaretLeftIcon, CaretRightIcon, PencilSimpleLineIcon, PlusIcon, ProhibitIcon, UserCircleDashedIcon } from '@phosphor-icons/react';
 import { addDays, dateOf, isBlocked } from '@prima/core';
@@ -62,13 +63,13 @@ export function RosterView({ siteId: initialSite }: { siteId?: string }) {
         sub="Pick a shift to assign or change a guard. The app checks papers, age, hours and rest before it allows a change."
         actions={
           <>
-            <select id="roster-site" className="select ros-site" aria-label="Site" value={siteId ?? ''} onChange={(e) => setSiteId(e.target.value)}>
+            <Select id="roster-site" className="select ros-site" aria-label="Site" value={siteId ?? ''} onChange={(e) => setSiteId(e.target.value)}>
               {sites.data?.map((s) => (
                 <option key={s.site.id} value={s.site.id}>
                   {s.site.code} · {s.site.name}
                 </option>
               ))}
-            </select>
+            </Select>
             {r?.canEdit && (
               <button className="btn btn-primary" onClick={() => setAdding(true)}>
                 <PlusIcon size={16} weight="bold" aria-hidden="true" />
@@ -301,13 +302,13 @@ function AddShiftsDrawer({ roster: r, from: initialFrom, onClose }: { roster: Ro
       <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
         <label className="field">
           <span className="label">Post</span>
-          <select className="select" value={postId} onChange={(e) => setPostId(e.target.value)}>
+          <Select className="select" value={postId} onChange={(e) => setPostId(e.target.value)}>
             {r.posts.map((p) => (
               <option key={p.id} value={p.id}>
                 {p.name}
               </option>
             ))}
-          </select>
+          </Select>
           {post && (
             <span className="help">
               Pattern: {PATTERN_LABEL[post.shiftStructure] ?? post.shiftStructure}, {post.guardsPerShift} guard{post.guardsPerShift === 1 ? '' : 's'} a shift.

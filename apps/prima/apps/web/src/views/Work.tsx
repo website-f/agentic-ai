@@ -1,3 +1,4 @@
+import { Select } from '../SearchSelect';
 import { useState } from 'react';
 import {
   CalendarBlankIcon,
@@ -976,7 +977,7 @@ function MoveOrAdjust({
         {mode === 'reassign' && (
           <label className="field">
             <span className="label">Move to</span>
-            <select className="input" aria-label="Move to" value={to} onChange={(e) => setTo(e.target.value)}>
+            <Select className="input" aria-label="Move to" value={to} onChange={(e) => setTo(e.target.value)}>
               <option value="">Choose who takes it</option>
               {people.map((p) => (
                 <option key={p.userId} value={p.userId}>
@@ -984,7 +985,7 @@ function MoveOrAdjust({
                   {p.awaySoon ? ` · leave ${p.awaySoon.from}` : ''}
                 </option>
               ))}
-            </select>
+            </Select>
           </label>
         )}
         <label className="field">
@@ -1138,7 +1139,7 @@ function GiveTaskDrawer({ staff, onClose }: { staff: TeamWork['staff']; onClose:
         <Search value={q} onChange={setQ} placeholder="Search name or title" />
         <label className="field">
           <span className="label">Who</span>
-          <select className="select" aria-label="Who" value={userId} onChange={(e) => setUserId(e.target.value)}>
+          <Select className="select" aria-label="Who" value={userId} onChange={(e) => setUserId(e.target.value)}>
             <option value="">Choose…</option>
             {shown.map((s) => (
               <option key={s.id} value={s.id}>
@@ -1146,7 +1147,7 @@ function GiveTaskDrawer({ staff, onClose }: { staff: TeamWork['staff']; onClose:
                 {s.title ? ` · ${s.title}` : ''}
               </option>
             ))}
-          </select>
+          </Select>
           {staff.length === 0 && <span className="help">Nobody on staff has a Prima sign-in yet.</span>}
         </label>
       </div>

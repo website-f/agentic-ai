@@ -1,3 +1,4 @@
+import { Select } from '../SearchSelect';
 import { useCallback, useEffect, useState } from 'react';
 import { RULES, SURVEY_RISKS, SURVEY_RISK_LABEL, SURVEY_SITE_TYPES, SURVEY_SITE_TYPE_LABEL, SURVEY_STATUS_LABEL, SURVEY_UNIT_LABEL, fromMs, guardsPerDay } from '@prima/core';
 import { api, type SiteSurveyBoard, type SiteSurveySetup } from '../api';
@@ -543,14 +544,14 @@ function SurveyEditor({ initial, setup, onClose }: { initial: LocalSurvey; setup
         {setup && setup.companies.length > 1 && (
           <label className="field">
             <span className="label">Company</span>
-            <select className="input" value={f.companyId} onChange={(e) => set({ companyId: e.target.value, leadId: '', siteId: '' })}>
+            <Select className="input" value={f.companyId} onChange={(e) => set({ companyId: e.target.value, leadId: '', siteId: '' })}>
               <option value="">Choose the company</option>
               {setup.companies.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.name}
                 </option>
               ))}
-            </select>
+            </Select>
           </label>
         )}
         {!setup && <div className="notice" data-tone="warn">The company list is not on this phone yet. Open this screen once with a signal.</div>}
@@ -567,27 +568,27 @@ function SurveyEditor({ initial, setup, onClose }: { initial: LocalSurvey; setup
         {f.target === 'lead' && (
           <label className="field">
             <span className="label">Sales lead</span>
-            <select className="input" value={f.leadId} onChange={(e) => set({ leadId: e.target.value })}>
+            <Select className="input" value={f.leadId} onChange={(e) => set({ leadId: e.target.value })}>
               <option value="">Choose the lead</option>
               {company?.leads.map((l) => (
                 <option key={l.id} value={l.id}>
                   {l.ref} · {l.prospect}
                 </option>
               ))}
-            </select>
+            </Select>
           </label>
         )}
         {f.target === 'site' && (
           <label className="field">
             <span className="label">Site</span>
-            <select className="input" value={f.siteId} onChange={(e) => set({ siteId: e.target.value })}>
+            <Select className="input" value={f.siteId} onChange={(e) => set({ siteId: e.target.value })}>
               <option value="">Choose the site</option>
               {company?.sites.map((x) => (
                 <option key={x.id} value={x.id}>
                   {x.code} · {x.name}
                 </option>
               ))}
-            </select>
+            </Select>
           </label>
         )}
         {f.target === 'new' && (
@@ -635,13 +636,13 @@ function SurveyEditor({ initial, setup, onClose }: { initial: LocalSurvey; setup
           <div key={i} className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
             <input className="input" style={{ flex: '2 1 140px' }} aria-label="What you measured" placeholder="What you measured" value={m.label} onChange={(e) => set({ measures: f.measures.map((x, k) => (k === i ? { ...x, label: e.target.value.slice(0, 80) } : x)) })} />
             <input className="input" style={{ flex: '1 1 80px' }} aria-label="Value" inputMode="decimal" value={m.value} onChange={(e) => set({ measures: f.measures.map((x, k) => (k === i ? { ...x, value: e.target.value.replace(/[^0-9.,]/g, '').slice(0, 12) } : x)) })} />
-            <select className="input" style={{ flex: '0 1 90px' }} aria-label="Unit" value={m.unit} onChange={(e) => set({ measures: f.measures.map((x, k) => (k === i ? { ...x, unit: e.target.value as typeof m.unit } : x)) })}>
+            <Select className="input" style={{ flex: '0 1 90px' }} aria-label="Unit" value={m.unit} onChange={(e) => set({ measures: f.measures.map((x, k) => (k === i ? { ...x, unit: e.target.value as typeof m.unit } : x)) })}>
               {Object.entries(SURVEY_UNIT_LABEL).map(([u, l]) => (
                 <option key={u} value={u}>
                   {l}
                 </option>
               ))}
-            </select>
+            </Select>
             <button className="btn btn-ghost" onClick={() => set({ measures: f.measures.filter((_, k) => k !== i) })}>
               Remove
             </button>

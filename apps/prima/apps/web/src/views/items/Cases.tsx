@@ -1,6 +1,7 @@
 // Cases (paper sections 3.5, 4 and 9): every difference stays open until someone closes it with a reason. A loss or
 // disposal is decided by a manager who did not open the case. A shortage is closed as arrived or found only by
 // scanning the item's label, never by typing its ID. No case ever makes a pay deduction.
+import { Select } from '../../SearchSelect';
 import { useState } from 'react';
 import type { ItemBoard } from '../../api';
 import { Card, Empty, Toolbar } from '../../kit';
@@ -55,14 +56,14 @@ function CaseRow({ data, c }: { data: ItemBoard; c: ItemBoard['cases'][number] }
       )}
       {mayClose && (
         <div className="it-form">
-          <select className="input" aria-label="Outcome" value={outcome} onChange={(e) => setOutcome(e.target.value)}>
+          <Select className="input" aria-label="Outcome" value={outcome} onChange={(e) => setOutcome(e.target.value)}>
             <option value="">Close as…</option>
             {(OUTCOMES[c.kind] ?? []).map((o) => (
               <option key={o} value={o}>
                 {o.replace(/_/g, ' ')}
               </option>
             ))}
-          </select>
+          </Select>
           <input className="input" placeholder="Reason and the proof you checked" value={note} onChange={(e) => setNote(e.target.value)} />
           {needsScan ? (
             <Scanner

@@ -3,6 +3,7 @@
  * company managers: each company's offices on a map with their allowed radius, the company's choice for check-ins
  * outside the area, who checks in where (one person or a department at once), and the review of flagged check-ins.
  */
+import { Select } from '../SearchSelect';
 import { lazy, Suspense, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { AirplaneTiltIcon, ArchiveIcon, BuildingsIcon, CrosshairIcon, MagnifyingGlassIcon, MapPinIcon, PlusIcon, TrashIcon, UsersThreeIcon } from '@phosphor-icons/react';
 import { STATE_CAPITALS, type CheckinPlace, type CheckinRuleKind, type CheckinZone } from '@prima/core';
@@ -59,13 +60,13 @@ export function CheckinPlacesView() {
         {data.companies.length > 1 && (
           <label className="field ci-company">
             <span className="label">Company</span>
-            <select className="select" value={company.id} onChange={(e) => setCompanyId(e.target.value)}>
+            <Select className="select" value={company.id} onChange={(e) => setCompanyId(e.target.value)}>
               {data.companies.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.name}
                 </option>
               ))}
-            </select>
+            </Select>
           </label>
         )}
         <div className="field">
@@ -369,14 +370,14 @@ function StaffRules({ company, staff, onChanged }: { company: Company; staff: St
     <Card title="Who checks in where" sub="Everyone checks in at their company's offices unless you set otherwise. Pick people, or a whole department, and set their rule." flush>
       <div className="ss-tools ci-tools">
         <Search value={q} onChange={setQ} placeholder="Search name or title" />
-        <select className="select" value={dept} onChange={(e) => setDept(e.target.value)} aria-label="Department">
+        <Select className="select" value={dept} onChange={(e) => setDept(e.target.value)} aria-label="Department">
           <option value="all">All departments</option>
           {depts.map((d) => (
             <option key={d} value={d}>
               {deptLabel(d || null)}
             </option>
           ))}
-        </select>
+        </Select>
         <label className="ci-check">
           <input
             type="checkbox"
@@ -512,13 +513,13 @@ function RuleEditor({ company, staff, onClose, onSaved }: { company: Company; st
         (active.length ? (
           <label className="field">
             <span className="label">Place</span>
-            <select className="select" value={placeId} onChange={(e) => setPlaceId(e.target.value)}>
+            <Select className="select" value={placeId} onChange={(e) => setPlaceId(e.target.value)}>
               {active.map((p) => (
                 <option key={p.id} value={p.id}>
                   {p.name} (within {fmtM(p.radiusM)})
                 </option>
               ))}
-            </select>
+            </Select>
           </label>
         ) : (
           <p className="notice" data-tone="warn">
@@ -541,7 +542,7 @@ function RuleEditor({ company, staff, onClose, onSaved }: { company: Company; st
             />
           </Suspense>
           <div className="ci-add-zone">
-            <select
+            <Select
               className="select"
               value=""
               aria-label="Add a state capital"
@@ -556,8 +557,8 @@ function RuleEditor({ company, staff, onClose, onSaved }: { company: Company; st
                   {c.city}, {c.state}
                 </option>
               ))}
-            </select>
-            <select
+            </Select>
+            <Select
               className="select"
               value=""
               aria-label="Add a site"
@@ -574,7 +575,7 @@ function RuleEditor({ company, staff, onClose, onSaved }: { company: Company; st
                   {s.name}
                 </option>
               ))}
-            </select>
+            </Select>
             <button type="button" className="btn btn-sm" aria-pressed={adding} onClick={() => setAdding((x) => !x)}>
               <MapPinIcon size={16} aria-hidden="true" /> {adding ? 'Tap the map…' : 'Drop on the map'}
             </button>

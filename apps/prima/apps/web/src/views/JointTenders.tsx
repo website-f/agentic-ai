@@ -1,3 +1,4 @@
+import { Select } from '../SearchSelect';
 import { useState } from 'react';
 import { api, type TenderBoard } from '../api';
 import { useApp } from '../App';
@@ -153,13 +154,13 @@ function CreateJoint({ board, onDone }: { board: TenderBoard; onDone: () => void
     <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 12 }}>
       <label className="field">
         <span className="label">Tender</span>
-        <select className="select" value={source} onChange={(x) => (setSource(x.target.value), setPicked([]))} aria-label="Tender to share">
+        <Select className="select" value={source} onChange={(x) => (setSource(x.target.value), setPicked([]))} aria-label="Tender to share">
           {live.map((r) => (
             <option key={r.tender.id} value={r.tender.id}>
               {r.tender.ref} · {r.tender.title} ({r.companyName})
             </option>
           ))}
-        </select>
+        </Select>
       </label>
       <div className="field">
         <span className="label">Also entering</span>

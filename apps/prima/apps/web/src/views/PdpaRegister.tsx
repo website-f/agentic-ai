@@ -1,3 +1,4 @@
+import { Select } from '../SearchSelect';
 import { useState } from 'react';
 import type { ProofInput } from '@prima/core';
 import { api, type PdpaBoard, type PdpaConsentInput, type PdpaRegisterBoard, type PdpaRegisterInput } from '../api';
@@ -218,14 +219,14 @@ function RegisterForm({ id, init, companies, onDone }: { id: string | null; init
   const ready = f.activity.trim().length >= 3 && f.system.trim() && f.dataKinds.trim() && f.purpose.trim().length >= 3 && f.subjects.length > 0;
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 6, margin: '8px 0' }}>
-      <select className="select" aria-label="Company" disabled={!!id} value={f.companyId ?? ''} onChange={(e) => set({ companyId: e.target.value || null })}>
+      <Select className="select" aria-label="Company" disabled={!!id} value={f.companyId ?? ''} onChange={(e) => set({ companyId: e.target.value || null })}>
         <option value="">PWVSB (group)</option>
         {companies.map((c) => (
           <option key={c.id} value={c.id}>
             {c.name}
           </option>
         ))}
-      </select>
+      </Select>
       <input className="input" aria-label="Activity" placeholder="Activity, e.g. Staff clock-in location" value={f.activity} onChange={(e) => set({ activity: e.target.value })} />
       <input className="input" aria-label="Where it is kept" placeholder="Where it is kept, e.g. Prima Clock, JA, paper file" value={f.system} onChange={(e) => set({ system: e.target.value })} />
       <div className="row" style={{ gap: 8, flexWrap: 'wrap' }} role="group" aria-label="Whose data">
@@ -240,13 +241,13 @@ function RegisterForm({ id, init, companies, onDone }: { id: string | null; init
         <input type="checkbox" checked={f.sensitive} onChange={(e) => set({ sensitive: e.target.checked })} /> Sensitive data (health, face or fingerprint, religion, criminal record)
       </label>
       <textarea className="textarea" aria-label="Purpose" placeholder="Purpose" value={f.purpose} onChange={(e) => set({ purpose: e.target.value })} />
-      <select className="select" aria-label="Legal basis" value={f.basis} onChange={(e) => set({ basis: e.target.value as Basis })}>
+      <Select className="select" aria-label="Legal basis" value={f.basis} onChange={(e) => set({ basis: e.target.value as Basis })}>
         {(Object.keys(BASIS_LABEL) as Basis[]).map((b) => (
           <option key={b} value={b}>
             {BASIS_LABEL[b]}
           </option>
         ))}
-      </select>
+      </Select>
       <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
         <input
           className="input"
@@ -388,7 +389,7 @@ function ConsentForm({ items, onDone }: { items: PdpaRegisterBoard['rows']; onDo
   const ready = f.registerId && f.subjectName.trim().length >= 2 && f.subjectRef.trim() && f.noticeVersion.trim() && f.givenOn && proof.length > 0;
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 10 }}>
-      <select
+      <Select
         className="select"
         aria-label="Register entry"
         value={f.registerId}
@@ -402,17 +403,17 @@ function ConsentForm({ items, onDone }: { items: PdpaRegisterBoard['rows']; onDo
             {r.item.activity}
           </option>
         ))}
-      </select>
+      </Select>
       <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
         <input className="input" aria-label="Name" placeholder="Name" value={f.subjectName} onChange={(e) => set({ subjectName: e.target.value })} />
         <input className="input" aria-label="Staff or guard number" placeholder="Staff or guard number" value={f.subjectRef} onChange={(e) => set({ subjectRef: e.target.value })} />
-        <select className="select" aria-label="Who" value={f.subjectKind} onChange={(e) => set({ subjectKind: e.target.value as Subject })}>
+        <Select className="select" aria-label="Who" value={f.subjectKind} onChange={(e) => set({ subjectKind: e.target.value as Subject })}>
           {(item?.subjects ?? []).map((k) => (
             <option key={k} value={k}>
               {SUBJECT_LABEL[k]}
             </option>
           ))}
-        </select>
+        </Select>
       </div>
       <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
         <input className="input" aria-label="Notice version" placeholder="Notice version, e.g. v1 Oct 2026" value={f.noticeVersion} onChange={(e) => set({ noticeVersion: e.target.value })} />

@@ -1,3 +1,4 @@
+import { Select } from '../SearchSelect';
 import { useState } from 'react';
 import { api, type SalesLeadInput, type SalesLeads } from '../api';
 import { PlusIcon } from '@phosphor-icons/react';
@@ -214,13 +215,13 @@ function LeadLine({ r, data }: { r: Row; data: SalesLeads }) {
           <label className="row small" style={{ gap: 6 }}>
             <input type="checkbox" checked={f.ssmActive} onChange={(e) => setF({ ...f, ssmActive: e.target.checked })} /> SSM shows the company is live
           </label>
-          <select className="input" aria-label="Payment record" value={f.payment} onChange={(e) => setF({ ...f, payment: e.target.value as typeof f.payment })}>
+          <Select className="input" aria-label="Payment record" value={f.payment} onChange={(e) => setF({ ...f, payment: e.target.value as typeof f.payment })}>
             {Object.entries(PAYMENT).map(([v, t]) => (
               <option key={v} value={v}>
                 {t}
               </option>
             ))}
-          </select>
+          </Select>
           <input
             className="input"
             aria-label="Current provider"
@@ -323,13 +324,13 @@ function LeadLine({ r, data }: { r: Row; data: SalesLeads }) {
       {mode === 'quotation' && (
         <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
           {data.quotations.length ? (
-            <select className="input" aria-label="Quotation" value={f.quotationId} onChange={(e) => setF({ ...f, quotationId: e.target.value })}>
+            <Select className="input" aria-label="Quotation" value={f.quotationId} onChange={(e) => setF({ ...f, quotationId: e.target.value })}>
               {data.quotations.map((q) => (
                 <option key={q.id} value={q.id}>
                   {q.ref} {q.client} ({q.status.replace('_', ' ')})
                 </option>
               ))}
-            </select>
+            </Select>
           ) : (
             <span className="muted small">Make the quotation first with New quotation.</span>
           )}
@@ -435,13 +436,13 @@ function NewLead({ companyId, onDone }: { companyId: string; onDone: () => void 
         </label>
         <label className="field">
           <span className="label">Sector</span>
-          <select className="select" value={f.sector} onChange={(e) => setF({ ...f, sector: e.target.value as SalesLeadInput['sector'] })}>
+          <Select className="select" value={f.sector} onChange={(e) => setF({ ...f, sector: e.target.value as SalesLeadInput['sector'] })}>
             {Object.entries(SECTOR).map(([v, t]) => (
               <option key={v} value={v}>
                 {t}
               </option>
             ))}
-          </select>
+          </Select>
         </label>
         <label className="field">
           <span className="label">Where it came from (optional)</span>
@@ -450,14 +451,14 @@ function NewLead({ companyId, onDone }: { companyId: string; onDone: () => void 
         {(branches.data ?? []).length > 0 && (
           <label className="field bz-span">
             <span className="label">Branch that found it</span>
-            <select className="select" value={f.branchId} onChange={(e) => setF({ ...f, branchId: e.target.value })}>
+            <Select className="select" value={f.branchId} onChange={(e) => setF({ ...f, branchId: e.target.value })}>
               <option value="">Head office (no branch)</option>
               {(branches.data ?? []).map((b) => (
                 <option key={b.id} value={b.id}>
                   {b.name}
                 </option>
               ))}
-            </select>
+            </Select>
           </label>
         )}
         <label className="field">

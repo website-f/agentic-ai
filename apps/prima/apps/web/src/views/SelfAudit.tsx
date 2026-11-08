@@ -1,3 +1,4 @@
+import { Select } from '../SearchSelect';
 import { useState } from 'react';
 import type { ProofInput } from '@prima/core';
 import { useApp } from '../App';
@@ -167,13 +168,13 @@ function SelfAuditForm({ b, onDone }: { b: SelfAuditBoard; onDone: () => void })
         {scope === 'site' && (
           <label className="field">
             <span className="label">Site</span>
-            <select className="input" value={siteId} onChange={(e) => setSiteId(e.target.value)}>
+            <Select className="input" value={siteId} onChange={(e) => setSiteId(e.target.value)}>
               {b.sites.map((s) => (
                 <option key={s.id} value={s.id}>
                   {s.code} {s.name}
                 </option>
               ))}
-            </select>
+            </Select>
           </label>
         )}
         {items.map((it) => (

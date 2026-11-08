@@ -1,3 +1,4 @@
+import { Select } from '../SearchSelect';
 import { useMemo, useState } from 'react';
 import { CalendarBlankIcon, ChecksIcon, ClipboardTextIcon, ClockCountdownIcon, EnvelopeSimpleIcon, ListChecksIcon, NotePencilIcon, PlusIcon } from '@phosphor-icons/react';
 import { myt } from '@prima/core';
@@ -898,14 +899,14 @@ function EditActions({ r, people, onDone }: { r: Row; people: StaffPick[]; onDon
           </label>
           <label className="field">
             <span className="label">Who does it</span>
-            <select className="select" aria-label={`Owner of action ${i + 1}`} value={a.ownerId} onChange={(e) => set(i, { ownerId: e.target.value })}>
+            <Select className="select" aria-label={`Owner of action ${i + 1}`} value={a.ownerId} onChange={(e) => set(i, { ownerId: e.target.value })}>
               <option value="">{a.owner || 'Not named'} (not linked)</option>
               {choices.map((p) => (
                 <option key={p.id} value={p.id}>
                   {p.name}
                 </option>
               ))}
-            </select>
+            </Select>
           </label>
           <label className="field">
             <span className="label">By when</span>
@@ -1276,7 +1277,7 @@ function MeetingForm({ doa, people, draft, edit, onClose }: { doa: boolean; peop
         {doa && !m && !section && (
           <label className="field">
             <span className="label">For</span>
-            <select
+            <Select
               className="select"
               value={forCompany ? target : 'group'}
               onChange={(e) => {
@@ -1291,7 +1292,7 @@ function MeetingForm({ doa, people, draft, edit, onClose }: { doa: boolean; peop
                   {c.name}
                 </option>
               ))}
-            </select>
+            </Select>
           </label>
         )}
         <label className="field">
@@ -1300,7 +1301,7 @@ function MeetingForm({ doa, people, draft, edit, onClose }: { doa: boolean; peop
         </label>
         <label className="field">
           <span className="label">Kind</span>
-          <select
+          <Select
             className="select"
             aria-label="Kind of meeting"
             value={kind}
@@ -1315,7 +1316,7 @@ function MeetingForm({ doa, people, draft, edit, onClose }: { doa: boolean; peop
                 {v}
               </option>
             ))}
-          </select>
+          </Select>
         </label>
         <div className="ld-form ld-form-3">
           <label className="field">
@@ -1334,13 +1335,13 @@ function MeetingForm({ doa, people, draft, edit, onClose }: { doa: boolean; peop
         <div className="ld-form">
           <label className="field">
             <span className="label">Repeats</span>
-            <select className="select" aria-label="Repeats" value={repeat} onChange={(e) => setRepeat(e.target.value as keyof typeof REPEAT)}>
+            <Select className="select" aria-label="Repeats" value={repeat} onChange={(e) => setRepeat(e.target.value as keyof typeof REPEAT)}>
               {Object.entries(REPEAT).map(([k, v]) => (
                 <option key={k} value={k}>
                   {v}
                 </option>
               ))}
-            </select>
+            </Select>
           </label>
           {repeat && (
             <label className="field">

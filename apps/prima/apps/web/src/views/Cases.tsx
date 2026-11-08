@@ -1,3 +1,4 @@
+import { Select } from '../SearchSelect';
 import { useMemo, useState } from 'react';
 import { CheckIcon, ClockCountdownIcon, PlusIcon, SirenIcon, UserFocusIcon, WarningIcon } from '@phosphor-icons/react';
 import { jaOwns, type CaseType, type EscalationLevel, type ProofInput, type Severity } from '@prima/core';
@@ -171,15 +172,15 @@ export function Cases({ openCaseId }: { openCaseId?: string }) {
         }
       >
         <Search value={q} onChange={setQ} placeholder="Search title, reference, site or company" label="Search cases" />
-        <select className="select cs-filter" aria-label="Severity" value={sev} onChange={(e) => setSev(e.target.value as Severity | '')}>
+        <Select className="select cs-filter" aria-label="Severity" value={sev} onChange={(e) => setSev(e.target.value as Severity | '')}>
           <option value="">All severities</option>
           {SEVERITIES.map((s) => (
             <option key={s} value={s}>
               {s}: {SLA_TEXT[s]}
             </option>
           ))}
-        </select>
-        <select className="select cs-filter" aria-label="Site" value={site} onChange={(e) => setSite(e.target.value)}>
+        </Select>
+        <Select className="select cs-filter" aria-label="Site" value={site} onChange={(e) => setSite(e.target.value)}>
           <option value="">All sites</option>
           <option value={NO_SITE}>Company-wide (no site)</option>
           {sites.map(([id, name]) => (
@@ -187,7 +188,7 @@ export function Cases({ openCaseId }: { openCaseId?: string }) {
               {name}
             </option>
           ))}
-        </select>
+        </Select>
       </Toolbar>
 
       <section className="k-card cs-board" aria-label="Cases">
@@ -425,7 +426,7 @@ function NewCase({ onClose }: { onClose: () => void }) {
             <label className="label" htmlFor="nc-company">
               Company
             </label>
-            <select
+            <Select
               id="nc-company"
               className="select"
               value={companyId}
@@ -440,27 +441,27 @@ function NewCase({ onClose }: { onClose: () => void }) {
                   {c.name}
                 </option>
               ))}
-            </select>
+            </Select>
           </div>
         )}
         <div className="field">
           <label className="label" htmlFor="nc-site">
             Site
           </label>
-          <select id="nc-site" className="select" value={form.siteId} onChange={(e) => setForm({ ...form, siteId: e.target.value })}>
+          <Select id="nc-site" className="select" value={form.siteId} onChange={(e) => setForm({ ...form, siteId: e.target.value })}>
             <option value="">Company-wide (no site)</option>
             {sites.data?.map((s) => (
               <option key={s.site.id} value={s.site.id}>
                 {s.site.code} · {s.site.name}
               </option>
             ))}
-          </select>
+          </Select>
         </div>
         <div className="field">
           <label className="label" htmlFor="nc-type">
             Type
           </label>
-          <select id="nc-type" className="select" value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value as CaseType })}>
+          <Select id="nc-type" className="select" value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value as CaseType })}>
             {/* Incidents are reported in the JA Group app while it owns them (rule SYS-JA-OWNS). */}
             {Object.entries(TYPE_LABEL)
               .filter(([k]) => k !== 'INCIDENT' || !jaOwns('incidents'))
@@ -469,19 +470,19 @@ function NewCase({ onClose }: { onClose: () => void }) {
                   {v}
                 </option>
               ))}
-          </select>
+          </Select>
         </div>
         <div className="field">
           <label className="label" htmlFor="nc-sev">
             Severity
           </label>
-          <select id="nc-sev" className="select" value={form.severity} onChange={(e) => setForm({ ...form, severity: e.target.value as Severity })}>
+          <Select id="nc-sev" className="select" value={form.severity} onChange={(e) => setForm({ ...form, severity: e.target.value as Severity })}>
             {SEVERITIES.map((s) => (
               <option key={s} value={s}>
                 {s}: {SLA_TEXT[s]}
               </option>
             ))}
-          </select>
+          </Select>
         </div>
         <div className="field">
           <label className="label" htmlFor="nc-title">

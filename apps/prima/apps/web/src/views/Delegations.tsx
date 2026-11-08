@@ -1,3 +1,4 @@
+import { Select } from '../SearchSelect';
 import { useState } from 'react';
 import { api } from '../api';
 import { Card, Empty, Steps, type StepState } from '../kit';
@@ -87,14 +88,14 @@ export function DelegationsPanel() {
                 </label>
                 <label className="field">
                   <span className="label">Holder</span>
-                  <select aria-label="Critical post holder" value={c.holderId} onChange={(e) => setC({ ...c, holderId: e.target.value })}>
+                  <Select aria-label="Critical post holder" value={c.holderId} onChange={(e) => setC({ ...c, holderId: e.target.value })}>
                     <option value="">Holder not in the list</option>
                     {data.people.map((p) => (
                       <option key={p.id} value={p.id}>
                         {p.name}
                       </option>
                     ))}
-                  </select>
+                  </Select>
                 </label>
                 {!c.holderId && (
                   <label className="field">
@@ -118,25 +119,25 @@ export function DelegationsPanel() {
                 </label>
                 <label className="field">
                   <span className="label">Successor</span>
-                  <select aria-label="Successor" value={c.successorId} onChange={(e) => setC({ ...c, successorId: e.target.value })}>
+                  <Select aria-label="Successor" value={c.successorId} onChange={(e) => setC({ ...c, successorId: e.target.value })}>
                     <option value="">No successor yet</option>
                     {data.people.map((p) => (
                       <option key={p.id} value={p.id}>
                         {p.name}
                       </option>
                     ))}
-                  </select>
+                  </Select>
                 </label>
                 {c.successorId && (
                   <label className="field">
                     <span className="label">Readiness</span>
-                    <select aria-label="Successor readiness" value={c.readiness} onChange={(e) => setC({ ...c, readiness: e.target.value as Readiness })}>
+                    <Select aria-label="Successor readiness" value={c.readiness} onChange={(e) => setC({ ...c, readiness: e.target.value as Readiness })}>
                       {(Object.keys(READY) as Readiness[]).map((k) => (
                         <option key={k} value={k}>
                           {READY[k]}
                         </option>
                       ))}
-                    </select>
+                    </Select>
                   </label>
                 )}
               </div>
@@ -231,35 +232,35 @@ export function DelegationsPanel() {
             <div className="gv-form">
               <label className="field">
                 <span className="label">For</span>
-                <select aria-label="For" value={companyId} onChange={(e) => setF({ ...f, companyId: e.target.value, criticalRoleId: '' })}>
+                <Select aria-label="For" value={companyId} onChange={(e) => setF({ ...f, companyId: e.target.value, criticalRoleId: '' })}>
                   {data.canRecordFor.map((x) => (
                     <option key={x.id} value={x.id}>
                       {x.name}
                     </option>
                   ))}
-                </select>
+                </Select>
               </label>
               <label className="field">
                 <span className="label">Kind</span>
-                <select aria-label="Kind of delegation" value={f.kind} onChange={(e) => setF({ ...f, kind: e.target.value as Kind })}>
+                <Select aria-label="Kind of delegation" value={f.kind} onChange={(e) => setF({ ...f, kind: e.target.value as Kind })}>
                   {(Object.keys(KIND) as Kind[]).map((k) => (
                     <option key={k} value={k}>
                       {KIND[k]}
                     </option>
                   ))}
-                </select>
+                </Select>
               </label>
               {critFor.length > 0 && (
                 <label className="field">
                   <span className="label">Critical post covered</span>
-                  <select aria-label="Critical post covered" value={f.criticalRoleId} onChange={(e) => setF({ ...f, criticalRoleId: e.target.value })}>
+                  <Select aria-label="Critical post covered" value={f.criticalRoleId} onChange={(e) => setF({ ...f, criticalRoleId: e.target.value })}>
                     <option value="">Not a listed critical post</option>
                     {critFor.map((r) => (
                       <option key={r.role.id} value={r.role.id}>
                         {r.role.post} ({r.role.holderName})
                       </option>
                     ))}
-                  </select>
+                  </Select>
                 </label>
               )}
               {!f.criticalRoleId && (
@@ -270,7 +271,7 @@ export function DelegationsPanel() {
                   </label>
                   <label className="field">
                     <span className="label">Post holder</span>
-                    <select aria-label="Post holder" value={f.holderId} onChange={(e) => setF({ ...f, holderId: e.target.value })}>
+                    <Select aria-label="Post holder" value={f.holderId} onChange={(e) => setF({ ...f, holderId: e.target.value })}>
                       <option value="">Holder not in the list</option>
                       {data.people.map((p) => (
                         <option key={p.id} value={p.id}>
@@ -278,7 +279,7 @@ export function DelegationsPanel() {
                           {p.title ? `, ${p.title}` : ''}
                         </option>
                       ))}
-                    </select>
+                    </Select>
                   </label>
                   {!f.holderId && (
                     <label className="field">
@@ -295,7 +296,7 @@ export function DelegationsPanel() {
               )}
               <label className="field">
                 <span className="label">Person who acts</span>
-                <select aria-label="Person who acts" value={f.delegateId} onChange={(e) => setF({ ...f, delegateId: e.target.value })}>
+                <Select aria-label="Person who acts" value={f.delegateId} onChange={(e) => setF({ ...f, delegateId: e.target.value })}>
                   <option value="">Who acts</option>
                   {data.people.map((p) => (
                     <option key={p.id} value={p.id}>
@@ -303,7 +304,7 @@ export function DelegationsPanel() {
                       {p.title ? `, ${p.title}` : ''}
                     </option>
                   ))}
-                </select>
+                </Select>
               </label>
               <label className="field">
                 <span className="label">May act on</span>
@@ -469,7 +470,7 @@ export function DelegationsPanel() {
                     </label>
                     {row.canEvidence && (
                       <div className="gv-form">
-                        <select
+                        <Select
                           aria-label={`Competency evidence kind for ${d.post}`}
                           value={e.kind}
                           onChange={(x) => setEv({ ...ev, [d.id]: { ...e, kind: x.target.value as keyof typeof EVIDENCE } })}
@@ -479,7 +480,7 @@ export function DelegationsPanel() {
                               {EVIDENCE[k]}
                             </option>
                           ))}
-                        </select>
+                        </Select>
                         <input
                           aria-label={`Competency reference for ${d.post}`}
                           placeholder="Record or document reference"

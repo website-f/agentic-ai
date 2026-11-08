@@ -1,3 +1,4 @@
+import { Select } from '../SearchSelect';
 import { useState } from 'react';
 import { CheckCircleIcon, HourglassIcon, PlusIcon, TrayIcon, ArrowUUpLeftIcon } from '@phosphor-icons/react';
 import { FinGuide } from './FinGuide';
@@ -400,23 +401,23 @@ function NewRequest({ data, onClose, onDone }: { data: FinRequestList; onClose: 
       <div className="bz-form">
         {data.canCreate.length > 1 && (
           <Field label="Company" span>
-            <select className="select" value={f.companyId} onChange={set('companyId')}>
+            <Select className="select" value={f.companyId} onChange={set('companyId')}>
               {data.canCreate.map((c) => (
                 <option key={c} value={c}>
                   {data.companyNames?.[c] ?? c}
                 </option>
               ))}
-            </select>
+            </Select>
           </Field>
         )}
         <Field label="What it is for" span={f.subject !== 'operations'}>
-          <select className="select" value={f.subject} onChange={set('subject')}>
+          <Select className="select" value={f.subject} onChange={set('subject')}>
             {data.subjects.map((s) => (
               <option key={s.id} value={s.id}>
                 {s.label}
               </option>
             ))}
-          </select>
+          </Select>
         </Field>
         {f.subject === 'operations' && (
           <Field label="Sites">

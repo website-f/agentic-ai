@@ -1,3 +1,4 @@
+import { Select } from '../SearchSelect';
 import { useState } from 'react';
 import { BuildingsIcon, CaretRightIcon, SirenIcon, UserCheckIcon, WarningIcon } from '@phosphor-icons/react';
 import { api } from '../api';
@@ -356,14 +357,14 @@ function PatrolTime({
               <ErrorNotice error={error} />
               <div className="field">
                 <label htmlFor="pt-m">Patrol time</label>
-                <select id="pt-m" className="select" value={minutes} onChange={(e) => setMinutes(e.target.value)}>
+                <Select id="pt-m" className="select" value={minutes} onChange={(e) => setMinutes(e.target.value)}>
                   <option value="default">Group default (every {every(patrol.defaultMin)})</option>
                   {PATROL_CHOICES.map((m) => (
                     <option key={m} value={m}>
                       Every {every(m)}
                     </option>
                   ))}
-                </select>
+                </Select>
               </div>
               {minutes !== 'default' && (
                 <div className="field">

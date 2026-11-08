@@ -1,3 +1,4 @@
+import { Select } from '../SearchSelect';
 import { useState } from "react";
 import { api, type FinControls, type FinDesk } from "../api";
 import { Chip, ErrorNotice, dateLabel, useAction, useLoad } from "../ui";
@@ -85,7 +86,7 @@ function People({
   onChange: (v: string) => void;
 }) {
   return (
-    <select
+    <Select
       className="select"
       value={value}
       onChange={(e) => onChange(e.target.value)}
@@ -96,7 +97,7 @@ function People({
           {p.name} · {p.title}
         </option>
       ))}
-    </select>
+    </Select>
   );
 }
 const banks = (v: FinControls) => v.statements.map((s) => s.bank);
@@ -305,7 +306,7 @@ export function Mandates({ v, co }: { v: FinControls; co: Co }) {
                         onChange={(e) => setP(i, "name", e.target.value)}
                       />
                     )}
-                    <select
+                    <Select
                       className="select"
                       value={p.role}
                       onChange={(e) => setP(i, "role", e.target.value)}
@@ -315,7 +316,7 @@ export function Mandates({ v, co }: { v: FinControls; co: Co }) {
                           {l}
                         </option>
                       ))}
-                    </select>
+                    </Select>
                     <input
                       className="input fin-w-md"
                       placeholder="Own limit RM"
@@ -431,7 +432,7 @@ export function Advances({ v, co }: { v: FinControls; co: Co }) {
       {adding && (
         <div className="fin-grid fin-pad">
           <Field label="Staff member as a payee (verified)">
-            <select
+            <Select
               className="select"
               value={f.payeeId ?? ""}
               onChange={set("payeeId")}
@@ -444,7 +445,7 @@ export function Advances({ v, co }: { v: FinControls; co: Co }) {
                     {p.name} ({p.status})
                   </option>
                 ))}
-            </select>
+            </Select>
           </Field>
           <Field label="Their Prima account (so they can settle it from My work)">
             <People
@@ -479,7 +480,7 @@ export function Advances({ v, co }: { v: FinControls; co: Co }) {
             />
           </Field>
           <Field label="Pay from">
-            <select
+            <Select
               className="select"
               value={f.bankId ?? ""}
               onChange={set("bankId")}
@@ -490,7 +491,7 @@ export function Advances({ v, co }: { v: FinControls; co: Co }) {
                   {b.bank} {b.accountMasked}
                 </option>
               ))}
-            </select>
+            </Select>
           </Field>
           <Field label="SQL Account document number">
             <input
@@ -690,7 +691,7 @@ export function PettyCash({ v, co }: { v: FinControls; co: Co }) {
             />
           </Field>
           <Field label="Custodian as a payee (top-ups are paid to them)">
-            <select
+            <Select
               className="select"
               value={f.payeeId ?? ""}
               onChange={set("payeeId")}
@@ -703,10 +704,10 @@ export function PettyCash({ v, co }: { v: FinControls; co: Co }) {
                     {p.name} ({p.status})
                   </option>
                 ))}
-            </select>
+            </Select>
           </Field>
           <Field label="Top-ups paid from">
-            <select
+            <Select
               className="select"
               value={f.bankId ?? ""}
               onChange={set("bankId")}
@@ -717,7 +718,7 @@ export function PettyCash({ v, co }: { v: FinControls; co: Co }) {
                   {b.bank} {b.accountMasked}
                 </option>
               ))}
-            </select>
+            </Select>
           </Field>
           <Field
             label={`Float (RM, at most ${rm(v.cash.rules.pettyFloatMax)})`}

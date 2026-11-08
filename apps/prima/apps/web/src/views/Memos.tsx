@@ -1,3 +1,4 @@
+import { Select } from '../SearchSelect';
 import { useState } from 'react';
 import { CaretDownIcon, CaretUpIcon, PlusIcon } from '@phosphor-icons/react';
 import { api, type Memos } from '../api';
@@ -153,7 +154,7 @@ function Publish({
     <div className="ss-form">
       <label className="field">
         <span className="label">Send to</span>
-        <select
+        <Select
           className="select"
           aria-label="Memo to"
           value={audience}
@@ -169,7 +170,7 @@ function Publish({
               {a === 'TEAM' ? `My team (${teamSize} people who report to me)` : AUDIENCE_LABEL[a]}
             </option>
           ))}
-        </select>
+        </Select>
       </label>
       <label className="field">
         <span className="label">Title</span>
@@ -186,7 +187,7 @@ function Publish({
       {replaceable.some((r) => r.audience === audience) && (
         <label className="field">
           <span className="label">Replaces an earlier memo (optional)</span>
-          <select className="select" aria-label="Replaces" value={replaces} onChange={(e) => setReplaces(e.target.value)}>
+          <Select className="select" aria-label="Replaces" value={replaces} onChange={(e) => setReplaces(e.target.value)}>
             <option value="">No, this is a new memo</option>
             {replaceable
               .filter((r) => r.audience === audience)
@@ -195,7 +196,7 @@ function Publish({
                   {r.ref}: {r.title}
                 </option>
               ))}
-          </select>
+          </Select>
         </label>
       )}
       {audience !== 'TEAM' && (

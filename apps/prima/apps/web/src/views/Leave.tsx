@@ -1,3 +1,4 @@
+import { Select } from '../SearchSelect';
 import { useState } from 'react';
 import { LEAVE_LABEL, type LeaveKind, type ProofInput } from '@prima/core';
 import { api, type LeaveList } from '../api';
@@ -211,7 +212,7 @@ export function LeaveForm({
     <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
       <label className="field">
         <span className="label">What for</span>
-        <select
+        <Select
           className="select"
           value={kind}
           onChange={(e) => setKind(e.target.value as LeaveKind)}
@@ -222,7 +223,7 @@ export function LeaveForm({
               {LEAVE_LABEL[k]}
             </option>
           ))}
-        </select>
+        </Select>
       </label>
       <div className="grid-2">
         <label className="field">

@@ -1,3 +1,4 @@
+import { Select } from '../SearchSelect';
 import { useEffect, useState } from 'react';
 import { ArrowLeftIcon, CalendarBlankIcon, ScanIcon, SignInIcon, SignOutIcon, SirenIcon, WarningIcon } from '@phosphor-icons/react';
 import { api } from '../api';
@@ -519,13 +520,13 @@ function Flow({
                 <label className="muted small" htmlFor="dev-tag">
                   Test only: which tag the phone touches
                 </label>
-                <select id="dev-tag" className="select" value={tag} onChange={(e) => setTag(e.target.value)}>
+                <Select id="dev-tag" className="select" value={tag} onChange={(e) => setTag(e.target.value)}>
                   {checkpoints.map((c) => (
                     <option key={c.id} value={c.tagCode}>
                       {c.name} ({c.tagCode})
                     </option>
                   ))}
-                </select>
+                </Select>
               </>
             ) : !nfcSupported() ? (
               <div className="notice" data-tone="crit">

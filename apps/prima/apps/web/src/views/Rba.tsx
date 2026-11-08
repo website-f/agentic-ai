@@ -1,3 +1,4 @@
+import { Select } from '../SearchSelect';
 import { useState } from 'react';
 import { api, type EthicsBoard, type RbaBoard, type RbaTraceBoard, type WorkerFilesBoard } from '../api';
 import { Chip, ErrorNotice, Kpi, Loading, useAction, useLoad, type Tone } from '../ui';
@@ -64,13 +65,13 @@ export function RbaView() {
       <div className="page-head">
         <h1>RBA readiness</h1>
         {b.companies.length > 1 && (
-          <select className="select" aria-label="Company" value={cid ?? ''} onChange={(e) => setCompanyId(e.target.value)}>
+          <Select className="select" aria-label="Company" value={cid ?? ''} onChange={(e) => setCompanyId(e.target.value)}>
             {b.companies.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.code} {c.name}
               </option>
             ))}
-          </select>
+          </Select>
         )}
       </div>
       <span className="muted small">

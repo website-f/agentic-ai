@@ -1,3 +1,4 @@
+import { Select } from '../SearchSelect';
 import { useState } from "react";
 import { api } from "../api";
 import { Card, Empty } from "../kit";
@@ -79,29 +80,29 @@ export function StaffMovementPanel({ onlyIfAny = false }: { onlyIfAny?: boolean 
             <div className="hx-form-grid">
               <label className="field">
                 <span className="label">Staff member</span>
-                <select className="select" aria-label="Staff member" value={f.personId} onChange={set("personId")}>
+                <Select className="select" aria-label="Staff member" value={f.personId} onChange={set("personId")}>
                   <option value="">Choose</option>
                   {d.prep.staff.map((s) => (
                     <option key={s.id} value={s.id}>
                       {s.name} · {s.staffNo} · {s.companyName}
                     </option>
                   ))}
-                </select>
+                </Select>
               </label>
               <label className="field">
                 <span className="label">Movement</span>
-                <select className="select" aria-label="Movement" value={f.kind} onChange={set("kind")}>
+                <Select className="select" aria-label="Movement" value={f.kind} onChange={set("kind")}>
                   {(Object.keys(KIND) as Kind[]).map((k) => (
                     <option key={k} value={k}>
                       {KIND[k]}
                     </option>
                   ))}
-                </select>
+                </Select>
               </label>
               {f.kind !== "promotion" && (
                 <label className="field">
                   <span className="label">{f.kind === "transfer" ? "New company" : "Host company"}</span>
-                  <select className="select" aria-label="Other company" value={f.toCompanyId} onChange={set("toCompanyId")}>
+                  <Select className="select" aria-label="Other company" value={f.toCompanyId} onChange={set("toCompanyId")}>
                     <option value="">Choose</option>
                     {d.prep.employers
                       .filter((c) => c.id !== person?.companyId)
@@ -110,7 +111,7 @@ export function StaffMovementPanel({ onlyIfAny = false }: { onlyIfAny?: boolean 
                           {c.name}
                         </option>
                       ))}
-                  </select>
+                  </Select>
                 </label>
               )}
               <label className="field">
@@ -127,14 +128,14 @@ export function StaffMovementPanel({ onlyIfAny = false }: { onlyIfAny?: boolean 
                 <>
                   <label className="field">
                     <span className="label">Branch at the new company</span>
-                    <select className="select" aria-label="New branch" value={f.branchId} onChange={set("branchId")}>
+                    <Select className="select" aria-label="New branch" value={f.branchId} onChange={set("branchId")}>
                       <option value="">Choose</option>
                       {(target?.branches ?? []).map((b) => (
                         <option key={b.id} value={b.id}>
                           {b.name}
                         </option>
                       ))}
-                    </select>
+                    </Select>
                   </label>
                   <label className="field">
                     <span className="label">Staff number at the new company</span>

@@ -1,3 +1,4 @@
+import { Select } from '../SearchSelect';
 import { useState } from 'react';
 import { api, type FinControls, type FinDesk } from '../api';
 import { Chip, ErrorNotice, dateLabel, useAction, type Tone } from '../ui';
@@ -38,25 +39,25 @@ export function Intercompany({ v, co }: { v: FinControls; co: Co }) {
         </div>
       </div>
       <div className="row fin-mb">
-        <select className="select" aria-label="Month" value={f.period} onChange={(e) => setF({ ...f, period: e.target.value })}>
+        <Select className="select" aria-label="Month" value={f.period} onChange={(e) => setF({ ...f, period: e.target.value })}>
           {ic.periods.map((p) => (
             <option key={p}>{p}</option>
           ))}
-        </select>
-        <select className="select" aria-label="Other company" value={f.withId} onChange={(e) => setF({ ...f, withId: e.target.value })}>
+        </Select>
+        <Select className="select" aria-label="Other company" value={f.withId} onChange={(e) => setF({ ...f, withId: e.target.value })}>
           {ic.companies.map((c) => (
             <option key={c.id} value={c.id}>
               {c.name}
             </option>
           ))}
-        </select>
-        <select className="select" aria-label="Kind" value={f.kind} onChange={(e) => setF({ ...f, kind: e.target.value })}>
+        </Select>
+        <Select className="select" aria-label="Kind" value={f.kind} onChange={(e) => setF({ ...f, kind: e.target.value })}>
           {Object.entries(KIND).map(([k, l]) => (
             <option key={k} value={k}>
               {l}
             </option>
           ))}
-        </select>
+        </Select>
         <select className="select" aria-label="Who owes" value={f.side} onChange={(e) => setF({ ...f, side: e.target.value })}>
           <option value="owed">They owe us</option>
           <option value="owe">We owe them</option>

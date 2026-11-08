@@ -1,3 +1,4 @@
+import { Select } from '../SearchSelect';
 import { useState } from "react";
 import { api } from "../api";
 import { Card, Empty } from "../kit";
@@ -63,14 +64,14 @@ export function OfficeOshPanel({ coordinatorOnly = false }: { coordinatorOnly?: 
                 <div className="hx-row-body">
                   {r.canAppoint && staff.length > 0 && (
                     <div className="hp-inline">
-                      <select className="select" aria-label={`OSH coordinator for ${r.companyName}`} value={f(k("coord"))} onChange={(e) => set(k("coord"), e.target.value)}>
+                      <Select className="select" aria-label={`OSH coordinator for ${r.companyName}`} value={f(k("coord"))} onChange={(e) => set(k("coord"), e.target.value)}>
                         <option value="">Choose staff</option>
                         {staff.map((s) => (
                           <option key={s.personId} value={s.personId}>
                             {s.name}
                           </option>
                         ))}
-                      </select>
+                      </Select>
                       <input className="input" placeholder="Training ref (optional)" aria-label={`Training reference for ${r.companyName}`} value={f(k("train"))} onChange={(e) => set(k("train"), e.target.value)} />
                       <button
                         className="btn btn-sm"
@@ -197,13 +198,13 @@ export function OfficeOshPanel({ coordinatorOnly = false }: { coordinatorOnly?: 
                       <div className="hx-form-grid">
                         <label className="field">
                           <span className="label">What happened</span>
-                          <select className="select" aria-label={`What happened at ${r.companyName}`} value={f(k("ik")) || "accident"} onChange={(e) => set(k("ik"), e.target.value)}>
+                          <Select className="select" aria-label={`What happened at ${r.companyName}`} value={f(k("ik")) || "accident"} onChange={(e) => set(k("ik"), e.target.value)}>
                             {(Object.keys(d.labels) as Kind[]).map((x) => (
                               <option key={x} value={x}>
                                 {d.labels[x]}
                               </option>
                             ))}
-                          </select>
+                          </Select>
                         </label>
                         <label className="field">
                           <span className="label">Date</span>
@@ -212,14 +213,14 @@ export function OfficeOshPanel({ coordinatorOnly = false }: { coordinatorOnly?: 
                         {staff.length > 0 && (
                           <label className="field">
                             <span className="label">Staff involved</span>
-                            <select className="select" aria-label={`Staff involved at ${r.companyName}`} value={f(k("who"))} onChange={(e) => set(k("who"), e.target.value)}>
+                            <Select className="select" aria-label={`Staff involved at ${r.companyName}`} value={f(k("who"))} onChange={(e) => set(k("who"), e.target.value)}>
                               <option value="">No one named</option>
                               {staff.map((s) => (
                                 <option key={s.personId} value={s.personId}>
                                   {s.name}
                                 </option>
                               ))}
-                            </select>
+                            </Select>
                           </label>
                         )}
                         <label className="field hx-form-wide">

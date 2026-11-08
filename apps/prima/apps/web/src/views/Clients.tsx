@@ -1,3 +1,4 @@
+import { Select } from '../SearchSelect';
 import { useState } from 'react';
 import { BuildingsIcon, PlusIcon, SmileyIcon, UsersThreeIcon, WarningIcon } from '@phosphor-icons/react';
 import type { ProofInput } from '@prima/core';
@@ -471,13 +472,13 @@ function ClientDetail({ a, act, canBill, onClose }: { a: Account; act: boolean; 
               </label>
               <label className="field">
                 <span className="label">How they said it</span>
-                <select className="select" aria-label="How they said it" value={via} onChange={(e) => setVia(e.target.value as keyof typeof VIA)}>
+                <Select className="select" aria-label="How they said it" value={via} onChange={(e) => setVia(e.target.value as keyof typeof VIA)}>
                   {(Object.keys(VIA) as (keyof typeof VIA)[]).map((k) => (
                     <option key={k} value={k}>
                       {VIA[k]}
                     </option>
                   ))}
-                </select>
+                </Select>
               </label>
             </div>
             <div className="bz-actions">
@@ -664,11 +665,11 @@ function InvoiceForm({ a }: { a: Account }) {
         </label>
         <label className="field">
           <span className="label">Sent</span>
-          <select className="select" aria-label="Sent" value={channel} onChange={(e) => setChannel(e.target.value as typeof channel)}>
+          <Select className="select" aria-label="Sent" value={channel} onChange={(e) => setChannel(e.target.value as typeof channel)}>
             <option value="hand">By hand (client's received copy)</option>
             <option value="email">By email</option>
             {a.invoicePortal && <option value="portal">In {a.invoicePortal}</option>}
-          </select>
+          </Select>
         </label>
         {!existing && (
           <label className="field">
@@ -854,13 +855,13 @@ function ShareLinks({ a }: { a: Account }) {
             </label>
             <label className="field">
               <span className="label">Link open for</span>
-              <select className="select" aria-label="Link open for" value={form.days} onChange={(e) => setForm({ ...form, days: Number(e.target.value) })}>
+              <Select className="select" aria-label="Link open for" value={form.days} onChange={(e) => setForm({ ...form, days: Number(e.target.value) })}>
                 {[1, 3, 7, 14, 30].map((n) => (
                   <option key={n} value={n}>
                     Open {n} day{n > 1 ? 's' : ''}
                   </option>
                 ))}
-              </select>
+              </Select>
             </label>
           </div>
           <div className="bz-actions">
@@ -1067,7 +1068,7 @@ function NewClientForm({ options, onDone }: { options: ClientBoard['canAdd']; on
         {options.length > 1 && (
           <label className="field bz-span">
             <span className="label">Company</span>
-            <select
+            <Select
               className="select"
               aria-label="Company"
               value={companyId}
@@ -1081,7 +1082,7 @@ function NewClientForm({ options, onDone }: { options: ClientBoard['canAdd']; on
                   {o.companyName}
                 </option>
               ))}
-            </select>
+            </Select>
           </label>
         )}
         <label className="field bz-span">

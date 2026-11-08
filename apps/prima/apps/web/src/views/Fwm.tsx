@@ -1,3 +1,4 @@
+import { Select } from '../SearchSelect';
 import { useState, useMemo } from 'react';
 import {
   BellRingingIcon,
@@ -257,22 +258,22 @@ export function FwmView() {
           <Search value={q} onChange={search} placeholder="Name or staff no." label="Search name or staff number" />
           {view === 'papers' && (
             <>
-              <select className="select hx-filter" aria-label="Company" value={company} onChange={(e) => (setCompany(e.target.value), setShown(PAGE))}>
+              <Select className="select hx-filter" aria-label="Company" value={company} onChange={(e) => (setCompany(e.target.value), setShown(PAGE))}>
                 <option value="">All companies</option>
                 {companies.map(([id, name]) => (
                   <option key={id} value={id}>
                     {name}
                   </option>
                 ))}
-              </select>
-              <select className="select hx-filter" aria-label="Paper" value={paper} onChange={(e) => (setPaper(e.target.value as FwPaper | ''), setShown(PAGE))}>
+              </Select>
+              <Select className="select hx-filter" aria-label="Paper" value={paper} onChange={(e) => (setPaper(e.target.value as FwPaper | ''), setShown(PAGE))}>
                 <option value="">All papers</option>
                 {PAPERS.map((p) => (
                   <option key={p} value={p}>
                     {data.items.find((i) => i.paper === p)?.label ?? p}
                   </option>
                 ))}
-              </select>
+              </Select>
               <select className="select hx-filter" aria-label="Show only" value={only} onChange={(e) => (setOnly(e.target.value as typeof only), setShown(PAGE))}>
                 <option value="">Everything</option>
                 <option value="ack">Acknowledgement owed</option>
@@ -873,13 +874,13 @@ function JaOnlyRow({ w, canWork, branches }: { w: Alignment['jaOnly'][number]; c
               <div className="hx-form-grid">
                 <label className="field">
                   <span className="label">Branch</span>
-                  <select className="select" aria-label="Branch" value={branchId} onChange={(e) => setBranchId(e.target.value)}>
+                  <Select className="select" aria-label="Branch" value={branchId} onChange={(e) => setBranchId(e.target.value)}>
                     {branches.map((b) => (
                       <option key={b.id} value={b.id}>
                         {b.name}
                       </option>
                     ))}
-                  </select>
+                  </Select>
                 </label>
                 <label className="field">
                   <span className="label">Hire date</span>
@@ -976,13 +977,13 @@ function TaskForm({ personId, paper, onDone }: { personId: string; paper: FwPape
       <div className="hx-form-grid">
         <label className="field">
           <span className="label">Task</span>
-          <select className="select" aria-label="Task kind" value={kind} onChange={(e) => setKind(e.target.value as FwmTaskKind)}>
+          <Select className="select" aria-label="Task kind" value={kind} onChange={(e) => setKind(e.target.value as FwmTaskKind)}>
             {KINDS.map((k) => (
               <option key={k} value={k}>
                 {FWM_TASK_LABEL[k]}
               </option>
             ))}
-          </select>
+          </Select>
         </label>
         <label className="field">
           <span className="label">Due</span>

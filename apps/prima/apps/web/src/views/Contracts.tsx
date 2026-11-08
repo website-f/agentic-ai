@@ -1,3 +1,4 @@
+import { Select } from '../SearchSelect';
 import { useEffect, useRef, useState } from 'react';
 import { CalendarCheckIcon, HandshakeIcon, LinkBreakIcon, PlusIcon, ReceiptIcon, RocketLaunchIcon } from '@phosphor-icons/react';
 import {
@@ -799,23 +800,23 @@ function AddItemForm({ contractId, round, onDone }: { contractId: string; round:
       <div className="bz-form">
         <label className="field">
           <span className="label">Workstream</span>
-          <select className="select" aria-label="Workstream" value={ws} onChange={(e) => setWs(e.target.value as MobWorkstream)}>
+          <Select className="select" aria-label="Workstream" value={ws} onChange={(e) => setWs(e.target.value as MobWorkstream)}>
             {WS.map((w) => (
               <option key={w} value={w}>
                 {w} {MOB_WORKSTREAM_LABEL[w]}
               </option>
             ))}
-          </select>
+          </Select>
         </label>
         <label className="field">
           <span className="label">Who does it</span>
-          <select className="select" aria-label="Who does it" value={owner} onChange={(e) => setOwner(e.target.value as MobOwner)}>
+          <Select className="select" aria-label="Who does it" value={owner} onChange={(e) => setOwner(e.target.value as MobOwner)}>
             {(Object.keys(MOB_OWNER_LABEL) as MobOwner[]).map((o) => (
               <option key={o} value={o}>
                 {MOB_OWNER_LABEL[o]}
               </option>
             ))}
-          </select>
+          </Select>
         </label>
         <label className="field bz-span">
           <span className="label">What has to be done</span>
@@ -991,13 +992,13 @@ function VariationForm({ row: r, option, onDone }: { row: Row; option: AddOption
       <div className="bz-form">
         <label className="field">
           <span className="label">Billing method</span>
-          <select className="select" aria-label="Billing method" value={method} onChange={(e) => setMethod(e.target.value as BillingMethod)}>
+          <Select className="select" aria-label="Billing method" value={method} onChange={(e) => setMethod(e.target.value as BillingMethod)}>
             {Object.entries(BILLING_METHOD_LABEL).map(([k, l]) => (
               <option key={k} value={k}>
                 {l}
               </option>
             ))}
-          </select>
+          </Select>
         </label>
         {method === 'FIXED' && (
           <label className="field">
@@ -1116,14 +1117,14 @@ function TieClientForm({ row: r, option, onDone }: { row: Row; option: AddOption
     <div className="bz-act">
       <label className="field">
         <span className="label">Client</span>
-        <select className="select" aria-label="Client" value={id} onChange={(e) => setId(e.target.value)}>
+        <Select className="select" aria-label="Client" value={id} onChange={(e) => setId(e.target.value)}>
           <option value="">Choose the client in Clients</option>
           {option.clients.map((c) => (
             <option key={c.id} value={c.id}>
               {c.name}
             </option>
           ))}
-        </select>
+        </Select>
       </label>
       <p className="bz-note">Not on the list? Open the client in Clients first (a won lead opens as a client there).</p>
       <div className="bz-actions">
@@ -1453,7 +1454,7 @@ export function NewContractForm({ options, onDone, clientId: initialClient }: { 
         {options.length > 1 && (
           <label className="field bz-span">
             <span className="label">Company</span>
-            <select
+            <Select
               className="select"
               aria-label="Company"
               value={companyId}
@@ -1469,7 +1470,7 @@ export function NewContractForm({ options, onDone, clientId: initialClient }: { 
                   {o.companyName}
                 </option>
               ))}
-            </select>
+            </Select>
           </label>
         )}
         <label className="field bz-span">
@@ -1486,7 +1487,7 @@ export function NewContractForm({ options, onDone, clientId: initialClient }: { 
         <PaperHelp proof={proof} companyId={co.companyId} clientId={clientId} current={current} onUse={use} />
         <label className="field bz-span">
           <span className="label">Client</span>
-          <select
+          <Select
             className="select"
             aria-label="Client"
             value={clientId}
@@ -1502,7 +1503,7 @@ export function NewContractForm({ options, onDone, clientId: initialClient }: { 
                 {c.name}
               </option>
             ))}
-          </select>
+          </Select>
         </label>
         {!clientId && (
           <label className="field bz-span">
@@ -1544,13 +1545,13 @@ export function NewContractForm({ options, onDone, clientId: initialClient }: { 
         </label>
         <label className="field">
           <span className="label">Billing method</span>
-          <select className="select" aria-label="Billing method" value={method} onChange={(e) => setMethod(e.target.value as BillingMethod)}>
+          <Select className="select" aria-label="Billing method" value={method} onChange={(e) => setMethod(e.target.value as BillingMethod)}>
             {Object.entries(BILLING_METHOD_LABEL).map(([k, l]) => (
               <option key={k} value={k}>
                 {l}
               </option>
             ))}
-          </select>
+          </Select>
         </label>
         {method === 'FIXED' ? (
           <label className="field">

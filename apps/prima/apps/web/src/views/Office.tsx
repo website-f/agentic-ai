@@ -1,3 +1,4 @@
+import { Select } from '../SearchSelect';
 import { useState } from 'react';
 import { ArrowLeftIcon, ArrowRightIcon, BriefcaseIcon, BuildingsIcon, CheckCircleIcon, QuestionIcon, TrayIcon, UsersThreeIcon, WarningIcon } from '@phosphor-icons/react';
 import type { HomeLink, OfficeGuideRole } from '@prima/core';
@@ -261,7 +262,7 @@ function RunByForm({ rows }: { rows: CompanyOffices['rows'] }) {
       <div className="ld-form">
         <label className="field">
           <span className="label">Company</span>
-          <select
+          <Select
             className="select"
             value={companyId}
             onChange={(e) => {
@@ -277,19 +278,19 @@ function RunByForm({ rows }: { rows: CompanyOffices['rows'] }) {
                   {r.company.name}
                 </option>
               ))}
-          </select>
+          </Select>
         </label>
         {target && (
           <label className="field">
             <span className="label">Run by</span>
-            <select className="select" value={runBy} onChange={(e) => setRunBy(e.target.value)}>
+            <Select className="select" value={runBy} onChange={(e) => setRunBy(e.target.value)}>
               <option value="">Its own office</option>
               {parents.map((r) => (
                 <option key={r.company.id} value={r.company.id}>
                   The {r.company.name} office
                 </option>
               ))}
-            </select>
+            </Select>
           </label>
         )}
         {target && (
@@ -611,18 +612,18 @@ function DeskForm({ office, onDone }: { office: CompanyOffice; onDone: () => voi
             </div>
             <label className="field">
               <span className="label">Owner</span>
-              <select className="select" value={rows[d.desk].owner} onChange={(e) => set(d.desk, 'owner', e.target.value)}>
+              <Select className="select" value={rows[d.desk].owner} onChange={(e) => set(d.desk, 'owner', e.target.value)}>
                 <option value="">Not shared out</option>
                 {people.map((p) => (
                   <option key={p.userId} value={p.userId}>
                     {p.name} ({p.job})
                   </option>
                 ))}
-              </select>
+              </Select>
             </label>
             <label className="field">
               <span className="label">Backup</span>
-              <select className="select" value={rows[d.desk].backup} onChange={(e) => set(d.desk, 'backup', e.target.value)}>
+              <Select className="select" value={rows[d.desk].backup} onChange={(e) => set(d.desk, 'backup', e.target.value)}>
                 <option value="">None</option>
                 {people
                   .filter((p) => p.userId !== rows[d.desk].owner)
@@ -631,7 +632,7 @@ function DeskForm({ office, onDone }: { office: CompanyOffice; onDone: () => voi
                       {p.name} ({p.job})
                     </option>
                   ))}
-              </select>
+              </Select>
             </label>
           </li>
         ))}

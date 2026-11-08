@@ -1,3 +1,4 @@
+import { Select } from '../SearchSelect';
 import { Fragment, useState } from "react";
 import { api } from "../api";
 import type { TenderCounter } from "../api/types";
@@ -49,7 +50,7 @@ export function TenderCounterPanel({ companyId }: { companyId?: string }) {
             ? "Tender and quotation counter"
             : "Tender and quotation counter, every company"}
         </h3>
-        <select
+        <Select
           value={h}
           onChange={(e) => setHalf(Number(e.target.value))}
           aria-label="Six-month period"
@@ -59,7 +60,7 @@ export function TenderCounterPanel({ companyId }: { companyId?: string }) {
               {x.label}
             </option>
           ))}
-        </select>
+        </Select>
       </div>
       <p className="muted small" style={{ margin: "0 0 8px" }}>
         Entered = bid lodged with the slip. Won and accepted are counted in the

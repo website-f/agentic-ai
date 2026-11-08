@@ -1,3 +1,4 @@
+import { Select } from '../SearchSelect';
 import { useState } from 'react';
 import type { FinCloseAction, FinPackItem, FinPackKind, FinPackStatus, FinPaymentAction, FinPlanLine, FinSubject } from '@prima/core';
 import { LINE_LABEL } from './FinanceChecks';
@@ -460,7 +461,7 @@ function PaymentDrawer({ c, p, startEdit = false, onClose }: { c: Co; p: Pay; st
                 <Field
                   label={`Second approver in the bank (mandate ${p.mandate.rule === 'any_two' ? 'needs two' : p.mandate.twoAbove != null ? `needs two above ${rm(p.mandate.twoAbove)}` : 'one is enough unless above a personal limit'})`}
                 >
-                  <select className="select" value={coId} onChange={(e) => setCoId(e.target.value)}>
+                  <Select className="select" value={coId} onChange={(e) => setCoId(e.target.value)}>
                     <option value="">None needed</option>
                     {p.mandate.approvers.map((x) => (
                       <option key={x.userId} value={x.userId}>
@@ -468,7 +469,7 @@ function PaymentDrawer({ c, p, startEdit = false, onClose }: { c: Co; p: Pay; st
                         {x.limit != null ? ` (limit ${rm(x.limit)})` : ''}
                       </option>
                     ))}
-                  </select>
+                  </Select>
                 </Field>
               )}
             </>
@@ -569,13 +570,13 @@ function EditReturned({ c, p, onDone, onCancel }: { c: Co; p: Pay; onDone: () =>
         <input className="input" type="date" value={f.dueOn} onChange={set('dueOn')} />
       </Field>
       <Field label="Pay from">
-        <select className="select" value={f.bankId} onChange={set('bankId')}>
+        <Select className="select" value={f.bankId} onChange={set('bankId')}>
           {c.banks.map((b) => (
             <option key={b.id} value={b.id}>
               {b.bank} {b.accountMasked}
             </option>
           ))}
-        </select>
+        </Select>
       </Field>
       <Field label="SQL Account document number">
         <input className="input" value={f.sqlRef} onChange={set('sqlRef')} />
@@ -679,17 +680,17 @@ export function NewPayment({ desk, onClose }: { desk: FinDesk; onClose: () => vo
       <FinGuide id="fin.payment.prepare" />
       <ErrorNotice error={act.error} />
       <Field label="Company">
-        <select className="select" value={f.companyId} onChange={(e) => set('companyId')(e.target.value)}>
+        <Select className="select" value={f.companyId} onChange={(e) => set('companyId')(e.target.value)}>
           {cos.map((c) => (
             <option key={c.companyId} value={c.companyId}>
               {c.companyName} (Team {c.team})
             </option>
           ))}
-        </select>
+        </Select>
       </Field>
       {(co?.requests.length ?? 0) > 0 && (
         <Field label="For an approved payment request (its final approval is this payment's approval)">
-          <select
+          <Select
             className="select"
             value={f.requestId}
             onChange={(e) => {
@@ -707,12 +708,12 @@ export function NewPayment({ desk, onClose }: { desk: FinDesk; onClose: () => vo
                 {r.title} · {rm(r.amount)} · {r.payee}
               </option>
             ))}
-          </select>
+          </Select>
         </Field>
       )}
       {(co?.purchases.length ?? 0) > 0 && !f.requestId && (
         <Field label="For a Procurement purchase (three-way match passed, posted in SQL Account)">
-          <select
+          <Select
             className="select"
             value={f.purchaseId}
             onChange={(e) => {
@@ -740,11 +741,11 @@ export function NewPayment({ desk, onClose }: { desk: FinDesk; onClose: () => vo
                 {r.payeeId ? '' : ` · add the supplier's account ending ${r.accountLast4} as a payee first`}
               </option>
             ))}
-          </select>
+          </Select>
         </Field>
       )}
       <Field label="Pay to (from the company's payee list; only verified payees can be approved)">
-        <select className="select" value={f.payeeId} onChange={(e) => set('payeeId')(e.target.value)}>
+        <Select className="select" value={f.payeeId} onChange={(e) => set('payeeId')(e.target.value)}>
           <option value="">Choose a payee</option>
           {co?.payees
             .filter((x) => x.status !== 'blocked')
@@ -754,22 +755,22 @@ export function NewPayment({ desk, onClose }: { desk: FinDesk; onClose: () => vo
                 {x.status === 'pending' ? ' · NOT VERIFIED' : ''}
               </option>
             ))}
-        </select>
+        </Select>
       </Field>
       <p className="muted small">
         A new payee, or a change of bank account, is added under Checks and verified by a call-back before any payment to it is approved.
       </p>
       <Field label="What it is for (decides who approves)">
-        <select className="select" value={f.subject} onChange={(e) => set('subject')(e.target.value)}>
+        <Select className="select" value={f.subject} onChange={(e) => set('subject')(e.target.value)}>
           {(Object.keys(SUBJECT) as FinSubject[]).map((k) => (
             <option key={k} value={k}>
               {SUBJECT[k]}
             </option>
           ))}
-        </select>
+        </Select>
       </Field>
       <Field label="Budget line it is spent from (the reviewer and approver are warned if it goes over)">
-        <select className="select" value={f.budgetLine} onChange={(e) => set('budgetLine')(e.target.value)}>
+        <Select className="select" value={f.budgetLine} onChange={(e) => set('budgetLine')(e.target.value)}>
           <option value="">Not given</option>
           {(Object.keys(LINE_LABEL) as FinPlanLine[])
             .filter((k) => k !== 'revenue')
@@ -778,7 +779,7 @@ export function NewPayment({ desk, onClose }: { desk: FinDesk; onClose: () => vo
                 {LINE_LABEL[k]}
               </option>
             ))}
-        </select>
+        </Select>
       </Field>
       {desk.teamsReady && (
         <Field label="Approved in (one only, never both)">
@@ -798,14 +799,14 @@ export function NewPayment({ desk, onClose }: { desk: FinDesk; onClose: () => vo
         <input className="input" type="date" value={f.dueOn} onChange={(e) => set('dueOn')(e.target.value)} />
       </Field>
       <Field label="Pay from">
-        <select className="select" value={f.bankId} onChange={(e) => set('bankId')(e.target.value)}>
+        <Select className="select" value={f.bankId} onChange={(e) => set('bankId')(e.target.value)}>
           <option value="">Choose a bank account</option>
           {co?.banks.map((b) => (
             <option key={b.id} value={b.id}>
               {b.bank} {b.accountMasked} ({b.purpose})
             </option>
           ))}
-        </select>
+        </Select>
       </Field>
       <Field label="SQL Account document number (purchase invoice or payment voucher)">
         <input className="input" value={f.sqlRef} onChange={(e) => set('sqlRef')(e.target.value)} />

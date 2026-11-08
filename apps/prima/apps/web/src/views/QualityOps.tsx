@@ -1,3 +1,4 @@
+import { Select } from '../SearchSelect';
 import { useState } from "react";
 import {
   NC_OUTCOME_LABEL,
@@ -125,7 +126,7 @@ function FaultForm({
   });
   return (
     <div style={col}>
-      <select
+      <Select
         className="select"
         aria-label="Site"
         value={f.siteId}
@@ -141,8 +142,8 @@ function FaultForm({
             {s.name}
           </option>
         ))}
-      </select>
-      <select
+      </Select>
+      <Select
         className="select"
         aria-label="Where it came from"
         value={f.source}
@@ -153,7 +154,7 @@ function FaultForm({
             {NC_SOURCE_LABEL[k]}
           </option>
         ))}
-      </select>
+      </Select>
       <input
         className="input"
         aria-label="Reference"
@@ -313,7 +314,7 @@ function FaultLine({ row, data }: { row: FaultRow; data: QmsOpsBoard }) {
       </div>
       {mode === "close" && (
         <div style={col}>
-          <select
+          <Select
             className="select"
             aria-label="How it ended"
             value={outcome}
@@ -324,7 +325,7 @@ function FaultLine({ row, data }: { row: FaultRow; data: QmsOpsBoard }) {
                 {NC_OUTCOME_LABEL[k]}
               </option>
             ))}
-          </select>
+          </Select>
           {outcome === "client_accepted" && (
             <input
               className="input"
@@ -365,7 +366,7 @@ function FaultLine({ row, data }: { row: FaultRow; data: QmsOpsBoard }) {
       )}
       {mode === "root" && (
         <div style={col}>
-          <select
+          <Select
             className="select"
             aria-label="Owner"
             value={owner}
@@ -376,8 +377,8 @@ function FaultLine({ row, data }: { row: FaultRow; data: QmsOpsBoard }) {
                 {o.name}
               </option>
             ))}
-          </select>
-          <select
+          </Select>
+          <Select
             className="select"
             aria-label="Workflow"
             value={area}
@@ -388,7 +389,7 @@ function FaultLine({ row, data }: { row: FaultRow; data: QmsOpsBoard }) {
                 {a.name}
               </option>
             ))}
-          </select>
+          </Select>
           <button
             className="btn btn-primary btn-sm"
             disabled={act.busy || !owner}
@@ -504,7 +505,7 @@ function SupplierLine({ row }: { row: SupplierRow }) {
                 : k === "onTime"
                   ? "On time"
                   : "Paperwork right (invoice, delivery order, certificates)"}
-              <select
+              <Select
                 className="select"
                 value={g[k]}
                 onChange={(e) => setG({ ...g, [k]: Number(e.target.value) })}
@@ -514,10 +515,10 @@ function SupplierLine({ row }: { row: SupplierRow }) {
                     {n}
                   </option>
                 ))}
-              </select>
+              </Select>
             </label>
           ))}
-          <select
+          <Select
             className="select"
             aria-label="Result"
             value={g.result}
@@ -534,7 +535,7 @@ function SupplierLine({ row }: { row: SupplierRow }) {
                 {SUPPLIER_RESULT_LABEL[k]}
               </option>
             ))}
-          </select>
+          </Select>
           <input
             className="input"
             aria-label="What went wrong"

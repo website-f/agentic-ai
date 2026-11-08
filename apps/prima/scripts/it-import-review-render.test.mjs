@@ -2,6 +2,8 @@ import test from 'node:test';import assert from 'node:assert/strict';import fs f
 const require=createRequire(import.meta.url);const React=require('react');const {renderToStaticMarkup}=require('react-dom/server');
 let code=ts.transpileModule(fs.readFileSync(new URL('../apps/web/src/views/ItImportReview.tsx',import.meta.url),'utf8'),{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ES2022,jsx:ts.JsxEmit.ReactJSX}}).outputText;
 code=code.replaceAll('"react/jsx-runtime"',JSON.stringify(pathToFileURL(require.resolve('react/jsx-runtime')).href)).replaceAll("'react'",JSON.stringify(pathToFileURL(require.resolve('react')).href));
+// P90: the searchable pick-list is a separate module; a plain select stands in for it in this offline render.
+code=code.replace("import { Select } from '../SearchSelect';","const Select='select';");
 const {ItImportReview}=await import('data:text/javascript;base64,'+Buffer.from(code).toString('base64'));
 const row={row:1,fields:{title:{value:'<script>bad()</script>',edited:true,evidence:{raw:'<img src=x onerror=bad()>',start:0,end:25}},doer:{value:'staff-a',edited:true,evidence:{raw:null,start:null,end:null}}},errors:[],warnings:[]};
 function render(patch={}){const state={capability:{reason:'Backend review unavailable'},directory:[{id:'staff-a',name:'Synthetic Exact Name',itRole:'executive'},{id:'staff-b',name:'Synthetic Exact Name',itRole:'lead'}],rows:[row],phase:'editing',skipRows:[],extraction:null,snapshot:null,message:null,receipt:null,...patch};return renderToStaticMarkup(React.createElement(ItImportReview,{session:{subscribe:()=>()=>{},getSnapshot:()=>state,ready:()=>false,locked:()=>false,canApprove:()=>false},onBack:()=>{}}));}

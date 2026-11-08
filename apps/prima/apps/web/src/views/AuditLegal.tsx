@@ -1,3 +1,4 @@
+import { Select } from '../SearchSelect';
 import { useState } from 'react';
 import { CalendarDotsIcon, FileXIcon, PlusIcon, ScalesIcon, SignatureIcon } from '@phosphor-icons/react';
 import { api, type CorpAuditLegal, type LegalMatterInput } from '../api';
@@ -245,7 +246,7 @@ function AuditLine({ r }: { r: AuditRow }) {
             <div className="gv-form">
               <label className="field">
                 <span className="label">Opinion</span>
-                <select
+                <Select
                   className="select"
                   aria-label="Opinion"
                   value={sign.opinion}
@@ -256,7 +257,7 @@ function AuditLine({ r }: { r: AuditRow }) {
                       {l}
                     </option>
                   ))}
-                </select>
+                </Select>
               </label>
               <label className="field">
                 <span className="label">Report reference</span>
@@ -506,23 +507,23 @@ function NewMatter({ data, onDone }: { data: CorpAuditLegal; onDone: () => void 
       <div className="gv-form">
         <label className="field">
           <span className="label">Company</span>
-          <select className="select" aria-label="Company" value={companyId} onChange={(e) => setCompanyId(e.target.value)}>
+          <Select className="select" aria-label="Company" value={companyId} onChange={(e) => setCompanyId(e.target.value)}>
             {companies.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.name}
               </option>
             ))}
-          </select>
+          </Select>
         </label>
         <label className="field">
           <span className="label">Kind</span>
-          <select className="select" aria-label="Kind" value={f.kind} onChange={(e) => setF({ ...f, kind: e.target.value as LegalMatterInput['kind'] })}>
+          <Select className="select" aria-label="Kind" value={f.kind} onChange={(e) => setF({ ...f, kind: e.target.value as LegalMatterInput['kind'] })}>
             {Object.entries(KIND).map(([v, l]) => (
               <option key={v} value={v}>
                 {l}
               </option>
             ))}
-          </select>
+          </Select>
         </label>
         <label className="field gv-span">
           <span className="label">Matter</span>
@@ -625,13 +626,13 @@ function NewAudit({ data, onDone }: { data: CorpAuditLegal; onDone: () => void }
     <div className="gv-stack-sm" aria-label="Register an audit">
       <label className="field">
         <span className="label">Company</span>
-        <select className="select" aria-label="Company" value={f.companyId} onChange={(e) => setF({ ...f, companyId: e.target.value })}>
+        <Select className="select" aria-label="Company" value={f.companyId} onChange={(e) => setF({ ...f, companyId: e.target.value })}>
           {companies.map((c) => (
             <option key={c.id} value={c.id}>
               {c.name}
             </option>
           ))}
-        </select>
+        </Select>
       </label>
       <label className="field">
         <span className="label">Financial year end</span>

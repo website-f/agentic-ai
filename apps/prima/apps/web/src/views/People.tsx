@@ -1,3 +1,4 @@
+import { Select } from '../SearchSelect';
 import { useState } from 'react';
 import { CheckCircleIcon, PhoneIcon, ProhibitIcon, UsersThreeIcon, WarningIcon } from '@phosphor-icons/react';
 import { ATTENDANCE_ISSUE_LABEL, GROUP_EMPLOYER_ID, LEAVE_LABEL, isGroupLeader, jaOwns, missingStaffFacts, staffHistoryRole } from '@prima/core';
@@ -776,14 +777,14 @@ export function DisciplineAppealBox({ x, self, onChange }: { x: DisciplineEntry;
       {open && (x.canAppealOwn || canRecord) && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
           <textarea className="input" rows={3} placeholder={x.canAppealOwn ? 'Why you appeal, in your own words and language' : "The guard's grounds, from their letter"} aria-label="Grounds of appeal" value={f.text} onChange={(e) => setF({ ...f, text: e.target.value })} />
-          <select className="select" aria-label="Language of the appeal" value={f.lang} onChange={(e) => setF({ ...f, lang: e.target.value })}>
+          <Select className="select" aria-label="Language of the appeal" value={f.lang} onChange={(e) => setF({ ...f, lang: e.target.value })}>
             <option value="">Language: the guard's mother tongue</option>
             {Object.entries(APPEAL_LANG_LABEL).map(([k, l]) => (
               <option key={k} value={k}>
                 {l}
               </option>
             ))}
-          </select>
+          </Select>
           <button
             className="btn btn-sm btn-primary"
             style={{ alignSelf: 'flex-start' }}
@@ -800,23 +801,23 @@ export function DisciplineAppealBox({ x, self, onChange }: { x: DisciplineEntry;
       {x.canDecideAppeal && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
           <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
-            <select className="select" aria-label="Appeal decision" value={f.result} onChange={(e) => setF({ ...f, result: e.target.value })}>
+            <Select className="select" aria-label="Appeal decision" value={f.result} onChange={(e) => setF({ ...f, result: e.target.value })}>
               <option value="">Decision</option>
               {Object.entries(APPEAL_RESULT_LABEL).map(([k, l]) => (
                 <option key={k} value={k}>
                   {l}
                 </option>
               ))}
-            </select>
+            </Select>
             {f.result === 'varied' && (
-              <select className="select" aria-label="Varied to" value={f.variedTo} onChange={(e) => setF({ ...f, variedTo: e.target.value })}>
+              <Select className="select" aria-label="Varied to" value={f.variedTo} onChange={(e) => setF({ ...f, variedTo: e.target.value })}>
                 <option value="">Lighter step</option>
                 {LIGHTER_STEPS.map((k) => (
                   <option key={k} value={k}>
                     {STEP_LABEL_SHORT[k]}
                   </option>
                 ))}
-              </select>
+              </Select>
             )}
           </div>
           <input className="input" placeholder="Reasons in writing (needed)" aria-label="Reasons for the appeal decision" value={f.text} onChange={(e) => setF({ ...f, text: e.target.value })} />

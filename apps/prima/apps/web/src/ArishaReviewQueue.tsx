@@ -1,3 +1,4 @@
+import { Select } from './SearchSelect';
 import { useEffect, useRef, useState } from 'react';
 import { arishaMayPrepareFinance, arishaPilotAllowed, RECORD_KINDS, type Company, type User } from '@prima/core';
 import { api, type Api } from './api';
@@ -85,8 +86,8 @@ export function ArishaReviewQueue({ user, companies }: { user: User; companies: 
       {arishaMayPrepareFinance(user) && <fieldset disabled={busy} style={{ marginTop: 12, minWidth: 0 }}>
         <legend>Draft finance paper preparation</legend>
         <p className="small">Only an existing audit/tax paper can be proposed as prepared. No payment, bank change, review or sending is performed.</p>
-        <label>Company <select style={{ maxWidth: '100%' }} value={companyId} onChange={(e) => void loadPapers(e.target.value)}><option value="">Choose company</option>{companies.map((c) => <option key={c.id} value={c.id}>{c.code} {c.name}</option>)}</select></label>{' '}
-        <label>Paper <select style={{ maxWidth: '100%' }} value={paperKey} onChange={(e) => setPaperKey(e.target.value)}><option value="">Choose paper</option>{papers.filter((p) => p.status === 'todo').map((p) => <option key={`${p.pack}:${p.id}`} value={`${p.pack}:${p.id}`}>{p.pack}: {p.label} [{p.id}] ({p.status})</option>)}</select></label>{' '}
+        <label>Company <Select style={{ maxWidth: '100%' }} value={companyId} onChange={(e) => void loadPapers(e.target.value)}><option value="">Choose company</option>{companies.map((c) => <option key={c.id} value={c.id}>{c.code} {c.name}</option>)}</Select></label>{' '}
+        <label>Paper <Select style={{ maxWidth: '100%' }} value={paperKey} onChange={(e) => setPaperKey(e.target.value)}><option value="">Choose paper</option>{papers.filter((p) => p.status === 'todo').map((p) => <option key={`${p.pack}:${p.id}`} value={`${p.pack}:${p.id}`}>{p.pack}: {p.label} [{p.id}] ({p.status})</option>)}</Select></label>{' '}
         <button className="btn btn-sm" disabled={!paperKey} onClick={() => void submitPaper()}>Submit preparation draft</button>
       </fieldset>}
       {!busy && !rows.length && <p className="small">No drafts visible to your current authority.</p>}

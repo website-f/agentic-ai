@@ -1,3 +1,4 @@
+import { Select } from '../SearchSelect';
 import { useState, type ReactNode } from 'react';
 import { TENDER_BID_PART_LABEL, type ProofInput, type TenderBidPart } from '@prima/core';
 import { api, type ItBoard } from '../api';
@@ -193,13 +194,13 @@ export function BuyFlow({ row, data }: { row: PurchaseRow; data: ItBoard }) {
             <>
               <label className="field">
                 <span className="label">Choose supplier</span>
-                <select className="select" aria-label="Choose supplier" value={pick} onChange={(e) => setPick(e.target.value)}>
+                <Select className="select" aria-label="Choose supplier" value={pick} onChange={(e) => setPick(e.target.value)}>
                   {quotes.map((q, k) => (
                     <option key={q.supplier} value={k}>
                       {q.supplier} · {rm(q.amount)}
                     </option>
                   ))}
-                </select>
+                </Select>
               </label>
               <label className="field">
                 <span className="label">Why this one</span>
@@ -450,7 +451,7 @@ export function ItTenders({ data }: { data: ItBoard }) {
             Tender executive (paired with the IT Manager): <strong>{data.tenderExec?.name ?? 'not named yet'}</strong>
           </span>
           {manager && (
-            <select
+            <Select
               className="select iw-assign"
               aria-label="Tender executive"
               value={data.tenderExec?.id ?? ''}
@@ -463,7 +464,7 @@ export function ItTenders({ data }: { data: ItBoard }) {
                   {t.name}
                 </option>
               ))}
-            </select>
+            </Select>
           )}
         </div>
         <ErrorNotice error={act.error} />
@@ -570,13 +571,13 @@ function CodeHolderForm({ companies, onDone }: { companies: { id: string; name: 
     <div className="iw-form">
       <label className="field iw-span">
         <span className="label">Company</span>
-        <select className="select" aria-label="Company" value={companyId} onChange={(e) => setCompany(e.target.value)}>
+        <Select className="select" aria-label="Company" value={companyId} onChange={(e) => setCompany(e.target.value)}>
           {companies.map((c) => (
             <option key={c.id} value={c.id}>
               {c.name}
             </option>
           ))}
-        </select>
+        </Select>
       </label>
       <label className="field iw-span">
         <span className="label">IT codes</span>
@@ -652,13 +653,13 @@ function AddTender({ data, onDone }: { data: ItBoard; onDone: () => void }) {
       </label>
       <label className="field">
         <span className="label">Bid in the name of</span>
-        <select className="select" aria-label="Bid in the name of" value={companyId} onChange={(e) => (setCompany(e.target.value), setCodes([]))}>
+        <Select className="select" aria-label="Bid in the name of" value={companyId} onChange={(e) => (setCompany(e.target.value), setCodes([]))}>
           {holders.map((h) => (
             <option key={h.holder.id} value={h.holder.companyId}>
               {h.companyName}
             </option>
           ))}
-        </select>
+        </Select>
       </label>
       {(holder?.holder.codes.length ?? 0) > 0 && (
         <fieldset className="iw-span iw-codes">
@@ -933,13 +934,13 @@ function PartLine(p: {
       </div>
       {naming && (
         <div className="iw-naming">
-          <select className="select" aria-label="Part of the bid" value={part} onChange={(e) => setPart(e.target.value as TenderBidPart)}>
+          <Select className="select" aria-label="Part of the bid" value={part} onChange={(e) => setPart(e.target.value as TenderBidPart)}>
             {(Object.keys(TENDER_BID_PART_LABEL) as TenderBidPart[]).map((x) => (
               <option key={x} value={x}>
                 {TENDER_BID_PART_LABEL[x]}
               </option>
             ))}
-          </select>
+          </Select>
           <input
             className="input"
             aria-label="File name the tender asks for"
@@ -1102,14 +1103,14 @@ export function ItAudit({ data }: { data: ItBoard }) {
         sub="Found in the records: late or returned work, choices that needed a reason, approvals recorded from Teams, and settings to fix. Open the record's proof from its own tab."
         flush
         actions={
-          <select className="select iw-assign" aria-label="Area" value={area} onChange={(e) => setArea(e.target.value)}>
+          <Select className="select iw-assign" aria-label="Area" value={area} onChange={(e) => setArea(e.target.value)}>
             <option value="all">All areas</option>
             {areas.map((x) => (
               <option key={x} value={x}>
                 {x}
               </option>
             ))}
-          </select>
+          </Select>
         }
       >
         {!rows.length && <div className="empty">Nothing found.</div>}

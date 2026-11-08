@@ -1,3 +1,4 @@
+import { Select } from '../SearchSelect';
 import { useState } from 'react';
 import { api, type GovOpsMonitor } from '../api';
 import { useApp } from '../App';
@@ -55,13 +56,13 @@ export function GovOpsMonitorPanel({ sector = 'government' }: { sector?: 'govern
     <section className="panel">
       <div className="panel-head" style={{ flexWrap: 'wrap', gap: 6 }}>
         <h3>{label} sites: profit, pay and leave</h3>
-        <select className="select" aria-label="Month" value={month} onChange={(e) => setMonth(e.target.value)} style={{ width: 'auto' }}>
+        <Select className="select" aria-label="Month" value={month} onChange={(e) => setMonth(e.target.value)} style={{ width: 'auto' }}>
           {months(today).map((m) => (
             <option key={m} value={m}>
               {m}
             </option>
           ))}
-        </select>
+        </Select>
       </div>
       {error ? (
         <ErrorNotice error={error} />

@@ -1,3 +1,4 @@
+import { Select } from '../SearchSelect';
 import { useState } from 'react';
 import { api, type FinControls } from '../api';
 import { Chip, ErrorNotice, dateLabel, useAction } from '../ui';
@@ -95,14 +96,14 @@ export function ClientDeposits({ v }: { v: FinControls }) {
             </select>
           </Field>
           <Field label="Contract (fills the client)">
-            <select className="select" value={f.contractId ?? ''} onChange={set('contractId')}>
+            <Select className="select" value={f.contractId ?? ''} onChange={set('contractId')}>
               <option value="">Not linked: type the client</option>
               {ce.contracts.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.client} · {c.ref}
                 </option>
               ))}
-            </select>
+            </Select>
           </Field>
           {!f.contractId && (
             <Field label="Client">

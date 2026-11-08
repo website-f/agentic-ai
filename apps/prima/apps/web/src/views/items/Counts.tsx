@@ -1,5 +1,6 @@
 // Counts (P85; paper section 10): scope, cut-off, freeze and blind; scanning in continuous mode; close, recount and a
 // manager's review before any case is opened. Not scanned means "not found yet", never lost; nothing is adjusted.
+import { Select } from '../../SearchSelect';
 import { useState } from 'react';
 import { ClipboardTextIcon } from '@phosphor-icons/react';
 import { api, type ItemBoard } from '../../api';
@@ -26,24 +27,24 @@ export function Counts({ data }: { data: ItemBoard }) {
         <div className="it-form">
           <label className="isc-field">
             Company
-            <select className="input" value={partyId} onChange={(e) => setPartyId(e.target.value)}>
+            <Select className="input" value={partyId} onChange={(e) => setPartyId(e.target.value)}>
               {parties.map((p) => (
                 <option key={p.id} value={p.id}>
                   {p.name}
                 </option>
               ))}
-            </select>
+            </Select>
           </label>
           <label className="isc-field">
             Where
-            <select className="input" value={site} onChange={(e) => setSite(e.target.value)}>
+            <Select className="input" value={site} onChange={(e) => setSite(e.target.value)}>
               <option value="">The company's store</option>
               {sites.map((s) => (
                 <option key={s.id} value={s.id}>
                   {s.name}
                 </option>
               ))}
-            </select>
+            </Select>
           </label>
           <label className="isc-field">
             Item types (none chosen: all)

@@ -1,5 +1,6 @@
 // Reports (P85; paper section 10). Built from what you may see only, with other companies' staff not named. Every report
 // says when its data is from and its scope; a CSV download is written to the audit trail.
+import { Select } from '../../SearchSelect';
 import { useState } from 'react';
 import { DownloadSimpleIcon } from '@phosphor-icons/react';
 import { ITEM_REPORT_KINDS, ITEM_REPORT_TITLE, type ItemReportKind } from '@prima/core';
@@ -33,21 +34,21 @@ export function Reports({ data }: { data: ItemBoard }) {
             </button>
           }
         >
-          <select className="input" aria-label="Report" value={kind} onChange={(e) => (setKind(e.target.value as ItemReportKind), setPage(0))}>
+          <Select className="input" aria-label="Report" value={kind} onChange={(e) => (setKind(e.target.value as ItemReportKind), setPage(0))}>
             {ITEM_REPORT_KINDS.map((k) => (
               <option key={k} value={k}>
                 {ITEM_REPORT_TITLE[k]}
               </option>
             ))}
-          </select>
-          <select className="input" aria-label="Company" value={partyId} onChange={(e) => (setPartyId(e.target.value), setPage(0))}>
+          </Select>
+          <Select className="input" aria-label="Company" value={partyId} onChange={(e) => (setPartyId(e.target.value), setPage(0))}>
             <option value="">All companies you may see</option>
             {data.roles.map((x) => (
               <option key={x.partyId} value={x.partyId}>
                 {data.parties.find((p) => p.id === x.partyId)?.name ?? x.partyId}
               </option>
             ))}
-          </select>
+          </Select>
         </Toolbar>
         <ErrorNotice error={error ?? a.error} />
       </div>

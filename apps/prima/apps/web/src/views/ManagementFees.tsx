@@ -1,3 +1,4 @@
+import { Select } from '../SearchSelect';
 import { useState } from 'react';
 import { api, type ManagementFeeBills, type ManagementFees } from '../api';
 import { Chip, ErrorNotice, Kpi, Loading, dateLabel, useAction, useLoad } from '../ui';
@@ -146,20 +147,20 @@ function FeeForm({ r, d, chargedBy, current, onDone }: { r: Row; d: Data; charge
     <div style={{ display: 'grid', gap: 6 }}>
       <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
         {!chargedBy && (
-          <select className="input" aria-label="Billed by" value={by} onChange={(e) => setBy(e.target.value)} style={{ width: 'auto' }}>
+          <Select className="input" aria-label="Billed by" value={by} onChange={(e) => setBy(e.target.value)} style={{ width: 'auto' }}>
             <option value="">Billed by…</option>
             {chargers.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.name}
               </option>
             ))}
-          </select>
+          </Select>
         )}
-        <select className="input" aria-label="Fee type" value={kind} onChange={(e) => setKind(e.target.value as 'percent' | 'fixed' | 'end')} style={{ width: 'auto' }}>
+        <Select className="input" aria-label="Fee type" value={kind} onChange={(e) => setKind(e.target.value as 'percent' | 'fixed' | 'end')} style={{ width: 'auto' }}>
           <option value="percent">% of billing</option>
           <option value="fixed">RM a month</option>
           {chargedBy && <option value="end">End the fee</option>}
-        </select>
+        </Select>
         {kind !== 'end' && (
           <>
             <input
@@ -174,13 +175,13 @@ function FeeForm({ r, d, chargedBy, current, onDone }: { r: Row; d: Data; charge
             <input className="input" aria-label="Agreement reference" placeholder="Agreement reference" value={ref} onChange={(e) => setRef(e.target.value)} />
           </>
         )}
-        <select className="input" aria-label="Applies from" value={from} onChange={(e) => setFrom(e.target.value)} style={{ width: 'auto' }}>
+        <Select className="input" aria-label="Applies from" value={from} onChange={(e) => setFrom(e.target.value)} style={{ width: 'auto' }}>
           {months.map((m) => (
             <option key={m} value={m}>
               From {m}
             </option>
           ))}
-        </select>
+        </Select>
       </div>
       {kind !== 'end' && (
         <label className="small row" style={{ gap: 6 }}>
@@ -234,13 +235,13 @@ export function ManagementFeeBillsPanel() {
     <section className="panel">
       <div className="panel-head" style={{ flexWrap: 'wrap', gap: 6 }}>
         <h3>Management fee bills (draft)</h3>
-        <select className="select" aria-label="Month" value={month} onChange={(e) => setMonth(e.target.value)} style={{ width: 'auto' }}>
+        <Select className="select" aria-label="Month" value={month} onChange={(e) => setMonth(e.target.value)} style={{ width: 'auto' }}>
           {months.map((m) => (
             <option key={m} value={m}>
               {m}
             </option>
           ))}
-        </select>
+        </Select>
       </div>
       {error ? <ErrorNotice error={error} /> : !data ? <Loading what="the fee bills" /> : <Bills d={data} />}
     </section>

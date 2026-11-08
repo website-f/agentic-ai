@@ -1,3 +1,4 @@
+import { Select } from '../../SearchSelect';
 import { useMemo, useState } from 'react';
 import { ITEM_CATEGORIES, SALE_PAPER_LABEL, STATE_LABEL, TAG_METHODS, TAG_METHOD_LABEL, labelDisplay, type BaseUom, type ItemCategory, type SalePaperKind, type TagMethod, type TrackingMode } from '@prima/core';
 import { api, type ItemBoard } from '../../api';
@@ -174,7 +175,7 @@ export function CareSettings({ data }: { data: ItemBoard }) {
       </div>
       {mgr && (
         <div className="row" style={{ gap: 6, flexWrap: 'wrap', marginTop: 8 }}>
-          <select className="input" aria-label="Item type" value={sku} onChange={(e) => setSku(e.target.value)}>
+          <Select className="input" aria-label="Item type" value={sku} onChange={(e) => setSku(e.target.value)}>
             <option value="">Item type…</option>
             {data.skus
               .filter((s) => s.tracking !== 'BULK')
@@ -183,7 +184,7 @@ export function CareSettings({ data }: { data: ItemBoard }) {
                   {s.code}
                 </option>
               ))}
-          </select>
+          </Select>
           <input className="input" style={{ width: 130 }} inputMode="numeric" aria-label="Days between checks" placeholder="Days between checks" value={every} onChange={(e) => setEvery(e.target.value)} />
           <input className="input" style={{ width: 130 }} inputMode="numeric" aria-label="Expected life in months" placeholder="Life in months" value={life} onChange={(e) => setLife(e.target.value)} />
           <input className="input" aria-label="Source" placeholder="Source: maker manual, contract, policy" value={why} onChange={(e) => setWhy(e.target.value)} />

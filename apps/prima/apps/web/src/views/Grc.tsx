@@ -1,3 +1,4 @@
+import { Select } from '../SearchSelect';
 import { useState } from 'react';
 import { FirstAidKitIcon, GiftIcon, MegaphoneIcon, PlusIcon, QuestionIcon, ShieldWarningIcon, StampIcon } from '@phosphor-icons/react';
 import type { GrcStream } from '@prima/core';
@@ -179,7 +180,7 @@ function SpeakUp({ data }: { data: GrcBoard }) {
             <div className="gv-form">
               <label className="field">
                 <span className="label">What is it about</span>
-                <select
+                <Select
                   className="select"
                   aria-label="What is it about"
                   value={f.category}
@@ -190,18 +191,18 @@ function SpeakUp({ data }: { data: GrcBoard }) {
                       {l}
                     </option>
                   ))}
-                </select>
+                </Select>
               </label>
               <label className="field">
                 <span className="label">Which company</span>
-                <select className="select" aria-label="Which company" value={f.companyId ?? ''} onChange={(e) => setF({ ...f, companyId: e.target.value || null })}>
+                <Select className="select" aria-label="Which company" value={f.companyId ?? ''} onChange={(e) => setF({ ...f, companyId: e.target.value || null })}>
                   <option value="">Company (optional)</option>
                   {companies.map((c) => (
                     <option key={c.id} value={c.id}>
                       {c.name}
                     </option>
                   ))}
-                </select>
+                </Select>
               </label>
               <label className="field gv-span">
                 <span className="label">What happened</span>
@@ -511,14 +512,14 @@ function Obligations({ data }: { data: GrcBoard }) {
           </button>
         }
       >
-        <select className="select gv-filter" aria-label="Workstream" value={stream} onChange={(e) => setStream(e.target.value as GrcStream | '')}>
+        <Select className="select gv-filter" aria-label="Workstream" value={stream} onChange={(e) => setStream(e.target.value as GrcStream | '')}>
           <option value="">All workstreams</option>
           {Object.entries(STREAM).map(([v, l]) => (
             <option key={v} value={v}>
               {l}
             </option>
           ))}
-        </select>
+        </Select>
       </Toolbar>
       <Card title="What each company must prove" sub="The company records the proof; internal audit checks it. Only checked, current proof is green." flush>
         {!rows.length && (
@@ -1029,23 +1030,23 @@ function NewObligation({ data, onDone }: { data: GrcBoard; onDone: (saved: boole
     <div className="gv-stack-sm" aria-label="Add an obligation">
       <label className="field">
         <span className="label">Company</span>
-        <select className="select" aria-label="Company" value={f.companyId} onChange={(e) => setF({ ...f, companyId: e.target.value })}>
+        <Select className="select" aria-label="Company" value={f.companyId} onChange={(e) => setF({ ...f, companyId: e.target.value })}>
           {companies.map((c) => (
             <option key={c.id} value={c.id}>
               {c.name}
             </option>
           ))}
-        </select>
+        </Select>
       </label>
       <label className="field">
         <span className="label">Workstream</span>
-        <select className="select" aria-label="Workstream" value={f.stream} onChange={(e) => setF({ ...f, stream: e.target.value as GrcStream })}>
+        <Select className="select" aria-label="Workstream" value={f.stream} onChange={(e) => setF({ ...f, stream: e.target.value as GrcStream })}>
           {Object.entries(STREAM).map(([v, l]) => (
             <option key={v} value={v}>
               {l}
             </option>
           ))}
-        </select>
+        </Select>
       </label>
       <label className="field">
         <span className="label">What must be done</span>

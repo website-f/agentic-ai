@@ -1,3 +1,4 @@
+import { Select } from '../SearchSelect';
 import { useEffect, useState } from 'react';
 import {
   GATE_FLAG_LABEL,
@@ -579,13 +580,13 @@ export function GateInForm({ site, onDone }: { site: Site; onDone: () => void })
             </div>
             <label className="field">
               <span className="label">Document</span>
-              <select className="select" value={idKind} onChange={(e) => setIdKind(e.target.value as VisitorIdKind)}>
+              <Select className="select" value={idKind} onChange={(e) => setIdKind(e.target.value as VisitorIdKind)}>
                 {VISITOR_ID_KINDS.map((k) => (
                   <option key={k} value={k}>
                     {VISITOR_ID_LABEL[k]}
                   </option>
                 ))}
-              </select>
+              </Select>
             </label>
             <label className="field">
               <span className="label">Name as on the card</span>

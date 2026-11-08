@@ -1,3 +1,4 @@
+import { Select } from '../SearchSelect';
 import { useState } from 'react';
 import { api, type FinDashboard, type FinPack } from '../api';
 import { BankIcon, CalendarCheckIcon, ChartLineUpIcon, MapPinIcon, PrinterIcon, ReceiptIcon, WarningOctagonIcon } from '@phosphor-icons/react';
@@ -181,11 +182,11 @@ function PackView({ companyId }: { companyId: string }) {
           </p>
         </div>
         <div className="k-card-actions">
-          <select className="select" aria-label="Month" value={d.period} onChange={(e) => setPeriod(e.target.value)}>
+          <Select className="select" aria-label="Month" value={d.period} onChange={(e) => setPeriod(e.target.value)}>
             {data.periods.map((p) => (
               <option key={p}>{p}</option>
             ))}
-          </select>
+          </Select>
           <button type="button" className="btn btn-sm" onClick={() => window.print()}>
             <PrinterIcon size={14} aria-hidden="true" />
             Print

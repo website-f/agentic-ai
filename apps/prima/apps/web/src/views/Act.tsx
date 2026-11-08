@@ -1,3 +1,4 @@
+import { Select } from '../SearchSelect';
 import { useState } from 'react';
 import {
   BinocularsIcon,
@@ -620,13 +621,13 @@ function FindingLine({ r, data }: { r: FindingRow; data: ActBoard }) {
           <div className="gv-form">
             <label className="field">
               <span className="label">How you followed up</span>
-              <select className="select" aria-label="How you followed up" value={g.method} onChange={(e) => setG({ ...g, method: e.target.value })}>
+              <Select className="select" aria-label="How you followed up" value={g.method} onChange={(e) => setG({ ...g, method: e.target.value })}>
                 {Object.entries(METHOD).map(([k, v]) => (
                   <option key={k} value={k}>
                     {v}
                   </option>
                 ))}
-              </select>
+              </Select>
             </label>
             <label className="field">
               <span className="label">Next follow-up</span>
@@ -710,7 +711,7 @@ function NewFinding({ data, prefill, onDone }: { data: ActBoard; prefill: Prefil
       <div className="gv-form">
         <label className="field">
           <span className="label">Company</span>
-          <select
+          <Select
             className="select"
             aria-label="Company"
             value={f.companyId ?? ''}
@@ -726,17 +727,17 @@ function NewFinding({ data, prefill, onDone }: { data: ActBoard; prefill: Prefil
                 {c.name}
               </option>
             ))}
-          </select>
+          </Select>
         </label>
         <label className="field">
           <span className="label">Workflow</span>
-          <select className="select" aria-label="Workflow" value={f.area} disabled={!!f.signalKey} onChange={(e) => setF({ ...f, area: e.target.value })}>
+          <Select className="select" aria-label="Workflow" value={f.area} disabled={!!f.signalKey} onChange={(e) => setF({ ...f, area: e.target.value })}>
             {data.rule.areas.map((a) => (
               <option key={a.id} value={a.id}>
                 {a.name}
               </option>
             ))}
-          </select>
+          </Select>
         </label>
         <label className="field gv-span">
           <span className="label">What is wrong</span>
@@ -771,13 +772,13 @@ function NewFinding({ data, prefill, onDone }: { data: ActBoard; prefill: Prefil
         </label>
         <label className="field">
           <span className="label">Owner</span>
-          <select className="select" aria-label="Owner" value={f.ownerUserId} onChange={(e) => setF({ ...f, ownerUserId: e.target.value })}>
+          <Select className="select" aria-label="Owner" value={f.ownerUserId} onChange={(e) => setF({ ...f, ownerUserId: e.target.value })}>
             {owners.map((o) => (
               <option key={o.id} value={o.id}>
                 {o.name} ({o.title})
               </option>
             ))}
-          </select>
+          </Select>
         </label>
       </div>
       <ErrorNotice error={act.error} />
@@ -851,24 +852,24 @@ function AuditForm({ data, onDone }: { data: ActBoard; onDone?: () => void }) {
       <div className="gv-form">
         <label className="field">
           <span className="label">Workflow audited</span>
-          <select className="select" aria-label="Workflow audited" value={f.area} onChange={(e) => setF({ ...f, area: e.target.value })}>
+          <Select className="select" aria-label="Workflow audited" value={f.area} onChange={(e) => setF({ ...f, area: e.target.value })}>
             {data.rule.areas.map((a) => (
               <option key={a.id} value={a.id}>
                 {a.name}
               </option>
             ))}
-          </select>
+          </Select>
         </label>
         <label className="field">
           <span className="label">Company audited</span>
-          <select className="select" aria-label="Company audited" value={f.companyId} onChange={(e) => setF({ ...f, companyId: e.target.value })}>
+          <Select className="select" aria-label="Company audited" value={f.companyId} onChange={(e) => setF({ ...f, companyId: e.target.value })}>
             <option value="">PWVSB or group-wide</option>
             {data.companies.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.name}
               </option>
             ))}
-          </select>
+          </Select>
         </label>
         <label className="field">
           <span className="label">Audited on</span>
@@ -1039,13 +1040,13 @@ function NewImprovement({ data, onDone }: { data: ActBoard; onDone: () => void }
         </label>
         <label className="field">
           <span className="label">Owner</span>
-          <select className="select" aria-label="Owner" value={f.ownerUserId} onChange={(e) => setF({ ...f, ownerUserId: e.target.value })}>
+          <Select className="select" aria-label="Owner" value={f.ownerUserId} onChange={(e) => setF({ ...f, ownerUserId: e.target.value })}>
             {data.owners.map((o) => (
               <option key={o.id} value={o.id}>
                 {o.name} ({o.title})
               </option>
             ))}
-          </select>
+          </Select>
         </label>
         <label className="field">
           <span className="label">Target date</span>
@@ -1248,36 +1249,36 @@ function AssignWork({ data, preset, onDone }: { data: ActBoard; preset?: Partial
           <>
             <label className="field">
               <span className="label">Workflow</span>
-              <select className="select" aria-label="Workflow" value={f.area} onChange={(e) => setF({ ...f, area: e.target.value })}>
+              <Select className="select" aria-label="Workflow" value={f.area} onChange={(e) => setF({ ...f, area: e.target.value })}>
                 {data.rule.areas.map((a) => (
                   <option key={a.id} value={a.id}>
                     {a.name}
                   </option>
                 ))}
-              </select>
+              </Select>
             </label>
             <label className="field">
               <span className="label">Company</span>
-              <select className="select" aria-label="Company" value={f.companyId} onChange={(e) => setF({ ...f, companyId: e.target.value })}>
+              <Select className="select" aria-label="Company" value={f.companyId} onChange={(e) => setF({ ...f, companyId: e.target.value })}>
                 <option value="">PWVSB or group-wide</option>
                 {data.companies.map((c) => (
                   <option key={c.id} value={c.id}>
                     {c.name}
                   </option>
                 ))}
-              </select>
+              </Select>
             </label>
           </>
         ) : (
           <label className="field">
             <span className="label">Report</span>
-            <select className="select" aria-label="Report" value={f.reportKey} onChange={(e) => setF({ ...f, reportKey: e.target.value })}>
+            <Select className="select" aria-label="Report" value={f.reportKey} onChange={(e) => setF({ ...f, reportKey: e.target.value })}>
               {reports.map((r) => (
                 <option key={r.key} value={r.key}>
                   {r.sender}: {r.report} ({r.period})
                 </option>
               ))}
-            </select>
+            </Select>
           </label>
         )}
         <label className="field">
@@ -1654,13 +1655,13 @@ function TimingEditor({ p, data, onDone }: { p: PlanRow; data: ActBoard; onDone:
       <div className="gv-form">
         <label className="field">
           <span className="label">Based on the review</span>
-          <select className="select" value={reviewId} onChange={(e) => setReviewId(e.target.value)}>
+          <Select className="select" value={reviewId} onChange={(e) => setReviewId(e.target.value)}>
             {reviews.map((r) => (
               <option key={r.id} value={r.id}>
                 {dateLabel(r.doneOn)} by {r.by} ({r.result})
               </option>
             ))}
-          </select>
+          </Select>
         </label>
         <label className="field">
           <span className="label">Audit every (months)</span>
@@ -2091,13 +2092,13 @@ function InvestigationLine({ v, data }: { v: Inv; data: ActBoard }) {
               <div className="gv-form">
                 <label className="field">
                   <span className="label">Outcome</span>
-                  <select className="select" aria-label="Outcome" value={g.outcome} onChange={(e) => setG({ ...g, outcome: e.target.value as typeof g.outcome })}>
+                  <Select className="select" aria-label="Outcome" value={g.outcome} onChange={(e) => setG({ ...g, outcome: e.target.value as typeof g.outcome })}>
                     {Object.entries(OUTCOME).map(([k, l]) => (
                       <option key={k} value={k}>
                         {l}
                       </option>
                     ))}
-                  </select>
+                  </Select>
                 </label>
                 {g.outcome === 'referred' && (
                   <label className="field">

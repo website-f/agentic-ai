@@ -1,3 +1,4 @@
+import { Select } from '../SearchSelect';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import {
   CameraIcon,
@@ -512,14 +513,14 @@ function EnterFor({ data }: { data: StaffClaims }) {
         <div className="lv-form">
           <label className="field">
             <span className="label">Staff member</span>
-            <select className="select" aria-label="Staff member" value={personId} onChange={(e) => setPersonId(e.target.value)}>
+            <Select className="select" aria-label="Staff member" value={personId} onChange={(e) => setPersonId(e.target.value)}>
               <option value="">Choose the staff member…</option>
               {data.enterFor.map((p) => (
                 <option key={p.id} value={p.id}>
                   {p.name}
                 </option>
               ))}
-            </select>
+            </Select>
           </label>
           <div className="field">
             <span className="label">What to enter</span>
@@ -601,13 +602,13 @@ function NewClaim({ data, onDone, forPersonId, fromWallet }: { data: StaffClaims
       <div className="lv-form">
         <label className="field">
           <span className="label">Kind of claim</span>
-          <select className="select" aria-label="Kind of claim" value={kind} onChange={(e) => setKind(e.target.value as StaffClaimKind)}>
+          <Select className="select" aria-label="Kind of claim" value={kind} onChange={(e) => setKind(e.target.value as StaffClaimKind)}>
             {Object.entries(KIND_LABEL).map(([k, l]) => (
               <option key={k} value={k}>
                 {l}
               </option>
             ))}
-          </select>
+          </Select>
         </label>
         <label className="field">
           <span className="label">{travel ? 'Trip date' : 'Receipt date'}</span>
@@ -635,7 +636,7 @@ function NewClaim({ data, onDone, forPersonId, fromWallet }: { data: StaffClaims
           <>
             <label className="field lv-full">
               <span className="label">Approved trip</span>
-              <select
+              <Select
                 className="select"
                 aria-label="Approved trip"
                 value={trip.tripId ?? ''}
@@ -655,7 +656,7 @@ function NewClaim({ data, onDone, forPersonId, fromWallet }: { data: StaffClaims
                     {dateLabel(t.date)} · {t.destination}
                   </option>
                 ))}
-              </select>
+              </Select>
             </label>
             <label className="field lv-full">
               <span className="label">Where you went and why</span>
@@ -669,13 +670,13 @@ function NewClaim({ data, onDone, forPersonId, fromWallet }: { data: StaffClaims
             </label>
             <label className="field">
               <span className="label">Vehicle</span>
-              <select className="select" aria-label="Vehicle" value={trip.vehicle} onChange={(e) => setTrip({ ...trip, vehicle: e.target.value as ClaimVehicle })}>
+              <Select className="select" aria-label="Vehicle" value={trip.vehicle} onChange={(e) => setTrip({ ...trip, vehicle: e.target.value as ClaimVehicle })}>
                 {Object.entries(VEHICLE_LABEL).map(([k, l]) => (
                   <option key={k} value={k}>
                     {l}
                   </option>
                 ))}
-              </select>
+              </Select>
             </label>
             <label className="field">
               <span className="label">Km, office there and back</span>
@@ -903,13 +904,13 @@ function Rates({ data }: { data: StaffClaims }) {
           <div className="lv-form">
             <label className="field">
               <span className="label">Vehicle</span>
-              <select className="select" aria-label="Vehicle" value={vehicle} onChange={(e) => setVehicle(e.target.value as ClaimVehicle)}>
+              <Select className="select" aria-label="Vehicle" value={vehicle} onChange={(e) => setVehicle(e.target.value as ClaimVehicle)}>
                 {Object.entries(VEHICLE_LABEL).map(([k, l]) => (
                   <option key={k} value={k}>
                     {l}
                   </option>
                 ))}
-              </select>
+              </Select>
             </label>
             <label className="field">
               <span className="label">RM per km</span>
@@ -1226,14 +1227,14 @@ function ReceiptLine({ r, kinds, onClaim }: { r: Receipt; kinds: string[]; onCla
         </label>
         <label className="field">
           <span className="label">What it is for</span>
-          <select className="select" aria-label="What it is for" value={form.kind} onChange={(e) => setForm({ ...form, kind: e.target.value })}>
+          <Select className="select" aria-label="What it is for" value={form.kind} onChange={(e) => setForm({ ...form, kind: e.target.value })}>
             <option value="">What is it for…</option>
             {kinds.map((k) => (
               <option key={k} value={k}>
                 {RECEIPT_LABEL[k] ?? k}
               </option>
             ))}
-          </select>
+          </Select>
         </label>
       </div>
       <ErrorNotice error={act.error} />

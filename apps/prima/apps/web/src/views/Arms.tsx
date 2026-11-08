@@ -1,3 +1,4 @@
+import { Select } from '../SearchSelect';
 import { useState } from 'react';
 import { ClockCountdownIcon, CrosshairIcon, ScanIcon, ShieldCheckIcon, WarningIcon } from '@phosphor-icons/react';
 import { REGIONS, type ArmedJobKind, type ArmedJobStatus, type ArmsOverdueState, type FirearmStatus } from '@prima/core';
@@ -418,13 +419,13 @@ function IssueDrawer({
         <label className="label" htmlFor="ai-f">
           Firearm
         </label>
-        <select id="ai-f" className="select" value={firearmId} onChange={(e) => setFirearmId(e.target.value)}>
+        <Select id="ai-f" className="select" value={firearmId} onChange={(e) => setFirearmId(e.target.value)}>
           {firearms.map((f) => (
             <option key={f.id} value={f.id}>
               {f.tag} · {f.kind}
             </option>
           ))}
-        </select>
+        </Select>
       </div>
       <div className="field">
         <label className="label" htmlFor="ai-r">
@@ -665,13 +666,13 @@ function RaiseRequestDrawer({ data, onClose }: { data: ArmsDetail; onClose: () =
       <ErrorNotice error={act.error} />
       <label className="field">
         <span className="label">What is it for</span>
-        <select className="select" value={kind} onChange={(e) => (setKind(e.target.value as RaiseKind), setPicked([]))}>
+        <Select className="select" value={kind} onChange={(e) => (setKind(e.target.value as RaiseKind), setPicked([]))}>
           {(['ACQUIRE', 'SERVICE', 'DISPOSE', 'LOSS_REPORT'] as const).map((k) => (
             <option key={k} value={k}>
               {REQUEST_KIND[k]}
             </option>
           ))}
-        </select>
+        </Select>
       </label>
       <label className="field">
         <span className="label">Short title</span>
@@ -857,13 +858,13 @@ function PlanJobDrawer({ data, onClose }: { data: ArmsDetail; onClose: () => voi
       <div className="op-form">
         <label className="field">
           <span className="label">Kind of job</span>
-        <select className="select" aria-label="Kind of job" value={kind} onChange={(e) => setKind(e.target.value as ArmedJobKind)}>
+        <Select className="select" aria-label="Kind of job" value={kind} onChange={(e) => setKind(e.target.value as ArmedJobKind)}>
           {Object.entries(JOB_KIND).map(([k, l]) => (
             <option key={k} value={k}>
               {l}
             </option>
           ))}
-        </select>
+        </Select>
         </label>
         <label className="field">
           <span className="label">Client</span>

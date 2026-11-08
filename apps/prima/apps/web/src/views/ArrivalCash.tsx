@@ -1,3 +1,4 @@
+import { Select } from '../SearchSelect';
 import { useState } from 'react';
 import { useApp } from '../App';
 import { api } from '../api';
@@ -8,7 +9,7 @@ type Row=View['rows'][number];
 export function ArrivalCashView() {
   const {me,companyId}=useApp();
   const [company,setCompany]=useState(companyId);
-  return <div className="page arrival-cash"><style>{`.arrival-cash .stack{display:flex;flex-direction:column;gap:12px}.arrival-cash label{display:flex;flex-direction:column;gap:4px}.arrival-cash input:not([type=checkbox]),.arrival-cash select{box-sizing:border-box;max-width:100%;width:100%;min-width:0}.arrival-cash input[type=checkbox]{align-self:flex-start}.arrival-cash .panel{min-width:0;overflow-wrap:anywhere}.arrival-cash button{max-width:100%;white-space:normal}`}</style><h2>Arrival cash advances</h2><label>Company<select className="select" aria-label="Arrival company" value={company} onChange={e=>setCompany(e.target.value)}>{me.companies.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></label><ArrivalCompany key={company} companyId={company}/></div>;
+  return <div className="page arrival-cash"><style>{`.arrival-cash .stack{display:flex;flex-direction:column;gap:12px}.arrival-cash label{display:flex;flex-direction:column;gap:4px}.arrival-cash input:not([type=checkbox]),.arrival-cash select{box-sizing:border-box;max-width:100%;width:100%;min-width:0}.arrival-cash input[type=checkbox]{align-self:flex-start}.arrival-cash .panel{min-width:0;overflow-wrap:anywhere}.arrival-cash button{max-width:100%;white-space:normal}`}</style><h2>Arrival cash advances</h2><label>Company<Select className="select" aria-label="Arrival company" value={company} onChange={e=>setCompany(e.target.value)}>{me.companies.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</Select></label><ArrivalCompany key={company} companyId={company}/></div>;
 }
 function ArrivalCompany({companyId}:{companyId:string}) {
   const {data,error,reload}=useLoad(()=>api.finArrivalCash(companyId),[companyId]);
@@ -25,8 +26,8 @@ function RequestForm({view,row,reload}:{view:View;row?:Row;reload:()=>void}) {
   const field=(key:string,label:string,type='text')=><label>{label}<input className="input" step={type==='number'?'any':undefined} type={type} value={values[key]??''} onChange={e=>set({...values,[key]:e.target.value})} disabled={!!row && ['months','arrivedOn'].includes(key)}/></label>;
   return <form className="panel stack" onSubmit={async e=>{e.preventDefault();if(await act.run(()=>api.finControlAction(view.companyId,'arrivalcash','request',{...values,id:row?.id,amount:Number(values.amount),months:Number(values.months),awaitingPlks:confirmed,withoutWages:confirmed,recentArrivalConfirmed:confirmed}),'Request recorded; Finance can see it. No amount is owed yet.'))reload();}}>
     <h3>{row?'Request another handout':'New arrival request'}</h3>
-    <label>Worker<select className="select" aria-label="Worker" value={values.personId} disabled={!!row} onChange={e=>set({...values,personId:e.target.value})}><option value="">Select worker</option>{view.workers.map(p=><option key={p.id} value={p.id}>{p.staffNo} · {p.name}</option>)}</select></label>
-    <label>Site<select className="select" aria-label="Site" value={values.siteId} disabled={!!row} onChange={e=>set({...values,siteId:e.target.value})}><option value="">Select site</option>{view.sites.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></label>
+    <label>Worker<Select className="select" aria-label="Worker" value={values.personId} disabled={!!row} onChange={e=>set({...values,personId:e.target.value})}><option value="">Select worker</option>{view.workers.map(p=><option key={p.id} value={p.id}>{p.staffNo} · {p.name}</option>)}</Select></label>
+    <label>Site<Select className="select" aria-label="Site" value={values.siteId} disabled={!!row} onChange={e=>set({...values,siteId:e.target.value})}><option value="">Select site</option>{view.sites.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</Select></label>
     {field('arrivedOn','Actual arrival date','date')}{field('months','FWM recovery months','number')}{field('requestId','Unique request reference')}{field('amount','Amount (RM)','number')}{field('purpose','Purpose')}
     <label><input type="checkbox" checked={confirmed} onChange={e=>confirm(e.target.checked)}/> I checked recent arrival, awaiting PLKS and no wages. No fixed 60-day rule is assumed.</label>
     <button className="btn" disabled={!confirmed||act.busy}>Submit request</button><ErrorNotice error={act.error}/>
