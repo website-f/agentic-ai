@@ -72,14 +72,30 @@ function zxingDecoder(): Promise<Decoder> {
   }));
 }
 
-/** The best reader this phone or PC has, or null (type the ID or use a handheld scanner instead). */
-export async function makeDecoder(): Promise<Decoder | null> {
-  const native = await nativeDecoder();
-  if (native) return native;
-  if (__DEMO__) return null;
-  try {
-    return await zxingDecoder();
-  } catch {
-    return null;
-  }
+let best: Promise<Decoder | null> | null = null;
+
+/**
+ * The best reader this phone or PC has, or null (type the ID or use a handheld scanner instead). Prepared once and kept:
+ * opening the camera again does not load anything again. A failed load is tried again next time.
+ */
+export function makeDecoder(): Promise<Decoder | null> {
+  return (best ??= (async () => {
+    const native = await nativeDecoder();
+    if (native) return native;
+    if (__DEMO__) return null;
+    try {
+      return await zxingDecoder();
+    } catch {
+      best = null;
+      return null;
+    }
+  })());
+}
+
+/**
+ * P90: start preparing the reader before the camera is opened (the scan screens call it when they show), so the camera
+ * never waits for the reader's file. Costs nothing where the browser has its own reader.
+ */
+export function prewarmDecoder(): void {
+  void makeDecoder();
 }

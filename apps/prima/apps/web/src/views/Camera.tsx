@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { EVIDENCE_PLACE_LABEL, EVIDENCE_TIME_LABEL, fromMs, type EvidencePhoto } from '@prima/core';
 import { api, type PhotoInput } from '../api';
 import { Chip, ErrorNotice, dateTimeLabel, useAction } from '../ui';
+import { openCamera } from './camera-stream';
 
 export type Fix = { lat: number | null; lng: number | null; accuracyM: number | null };
 type TestPlace = 'site' | 'away' | 'none' | 'gps';
@@ -73,8 +74,8 @@ export function EvidenceCamera({
       setCamErr('This browser cannot open the camera.');
       return;
     }
-    navigator.mediaDevices
-      .getUserMedia({ video: { facingMode: 'environment', width: { ideal: 1280 } }, audio: false })
+    // P90: the shared camera opener (sizes every phone has, with a plain fallback).
+    openCamera('environment')
       .then((m) => {
         if (!live) return m.getTracks().forEach((t) => t.stop());
         s = m;

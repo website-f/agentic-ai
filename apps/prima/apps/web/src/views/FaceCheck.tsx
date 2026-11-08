@@ -4,6 +4,7 @@ import { CameraIcon, CameraRotateIcon, XIcon } from '@phosphor-icons/react';
 import { FACE_DESCRIPTOR_LEN } from '@prima/core';
 import { PermissionHelp } from './PermissionHelp';
 import { CAMERA_PROBLEM_TEXT, cameraProblem, type CameraProblem } from './checkin-permissions';
+import { listCameras, openCamera, stopStream, whenIdle } from './camera-stream';
 import '../styles/camera.css';
 import '../styles/checkin.css';
 
@@ -86,6 +87,8 @@ export function FaceCapture({
   photoOnly?: boolean;
 }) {
   const [open, setOpen] = useState(false);
+  // P90: the face engine loads while the button waits, so the camera screen is ready as soon as it opens.
+  useEffect(() => (__DEMO__ || photoOnly ? undefined : whenIdle(() => void engine().catch(() => undefined), 2500)), [photoOnly]);
   return (
     <div className="cam-launch-wrap">
       <button type="button" className="btn btn-primary cam-launch" disabled={busy} onClick={() => setOpen(true)}>
@@ -166,6 +169,7 @@ function FaceCamera({
   const stream = useRef<MediaStream | null>(null);
   const alive = useRef(true);
   const working = useRef(false);
+  const reviewing = useRef(false);
   const steady = useRef(0);
   const [ready, setReady] = useState(false);
   const [blocked, setBlocked] = useState<string | null>(null);
@@ -177,11 +181,15 @@ function FaceCamera({
   const [cameras, setCameras] = useState<MediaDeviceInfo[]>([]);
   const [deviceId, setDeviceId] = useState<string | null>(null);
   const [status, setStatus] = useState<Status>({ text: 'Opening the camera', tone: 'idle' });
+  // P90: a countdown once the face is in place, a flash when the photo is taken, and the photo shown to keep or retake.
+  const [count, setCount] = useState<number | null>(null);
+  const [flash, setFlash] = useState(0);
+  const [review, setReview] = useState<FaceResult | null>(null);
   const close = useRef(onClose);
   close.current = onClose;
 
   const stop = () => {
-    stream.current?.getTracks().forEach((t) => t.stop());
+    stopStream(stream.current);
     stream.current = null;
   };
 
@@ -200,10 +208,7 @@ function FaceCamera({
     stop();
     setReady(false);
     try {
-      const m = await navigator.mediaDevices.getUserMedia({
-        video: id ? { deviceId: { exact: id }, width: { ideal: 640 } } : { facingMode: 'user', width: { ideal: 640 } },
-        audio: false,
-      });
+      const m = await openCamera('user', id);
       // Closed while the camera was opening: let it go at once.
       if (!alive.current) return m.getTracks().forEach((t) => t.stop());
       stream.current = m;
@@ -218,8 +223,7 @@ function FaceCamera({
       setReady(true);
       setBlocked(null);
       setProblem(null);
-      const all = await navigator.mediaDevices.enumerateDevices().catch(() => [] as MediaDeviceInfo[]);
-      setCameras(all.filter((d) => d.kind === 'videoinput'));
+      setCameras(await listCameras());
     } catch (e) {
       if (__DEMO__) setReady(true);
       else {
@@ -285,7 +289,7 @@ function FaceCamera({
       if (off) return;
       const v = video.current;
       const o = oval.current;
-      if (v && o && v.readyState >= 2 && !working.current) {
+      if (v && o && v.readyState >= 2 && !working.current && !reviewing.current) {
         try {
           const faceapi = await engine();
           const d = await faceapi.detectSingleFace(v, new faceapi.TinyFaceDetectorOptions({ inputSize: 224, scoreThreshold: 0.5 }));
@@ -313,9 +317,12 @@ function FaceCamera({
     working.current = true;
     setBusy(true);
     setStatus({ text: 'Hold still', sub: 'Checking your face', tone: 'idle' });
+    setCount(null);
     try {
-      if (__DEMO__) return onCapture({ photo: snapshot(v), descriptor: testDescriptor(), live: true });
-      if (photoOnly) return onCapture({ photo: snapshot(v), descriptor: [], live: false });
+      if (__DEMO__ || photoOnly) {
+        setFlash((n) => n + 1);
+        return setReview({ photo: snapshot(v), descriptor: __DEMO__ ? testDescriptor() : [], live: __DEMO__ });
+      }
       const faceapi = await engine();
       const opts = new faceapi.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: 0.5 });
       const first = await faceapi.detectSingleFace(v, opts).withFaceLandmarks(true).withFaceDescriptor();
@@ -326,7 +333,8 @@ function FaceCamera({
       const b = second?.landmarks.positions ?? [];
       const moved = b.length === a.length ? a.reduce((n, p, i) => n + Math.hypot(p.x - b[i].x, p.y - b[i].y), 0) / a.length : 0;
       setStatus({ text: 'Face found', sub: 'Photo taken', tone: 'ok' });
-      onCapture({ photo: snapshot(v), descriptor: Array.from(first.descriptor), live: moved > 0.8 && moved < 40 });
+      setFlash((n) => n + 1);
+      setReview({ photo: snapshot(v), descriptor: Array.from(first.descriptor), live: moved > 0.8 && moved < 40 });
     } catch (e) {
       steady.current = 0;
       setStatus({ text: 'Try again', sub: e instanceof Error ? e.message : String(e), tone: 'adjust' });
@@ -344,12 +352,48 @@ function FaceCamera({
     void start(next.deviceId || null);
   };
 
+  // P90: while the photo is shown for review, the face search rests.
+  useEffect(() => {
+    reviewing.current = !!review;
+  }, [review]);
+  // Face in place and steady: count 3, 2, 1 and take the photo (the button still takes it at once).
+  const auto = status === READY && !review && !busy && !blocked;
+  useEffect(() => {
+    if (!auto) return setCount(null);
+    let n = 3;
+    setCount(n);
+    const t = window.setInterval(() => {
+      n -= 1;
+      if (n > 0) return setCount(n);
+      window.clearInterval(t);
+      setCount(null);
+      void take();
+    }, 700);
+    return () => window.clearInterval(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [auto]);
+  const retake = () => {
+    steady.current = 0;
+    setReview(null);
+    setStatus({ text: 'Centre your face', sub: __DEMO__ || photoOnly ? 'Then tap the button' : 'Look at the screen in good light', tone: 'idle' });
+  };
+  const waiting = !blocked && !review && (!ready || (!__DEMO__ && !photoOnly && !engineOk));
+
   return createPortal(
-    <div ref={dialog} className="cam" role="dialog" aria-modal="true" aria-label={title} data-tone={status.tone} tabIndex={-1}>
+    <div ref={dialog} className="cam" role="dialog" aria-modal="true" aria-label={title} data-tone={review ? 'ok' : status.tone} tabIndex={-1}>
       <video ref={video} className="cam-video" data-mirror={mirrored ? 'yes' : undefined} playsInline muted autoPlay />
+      {review && <img className="cam-review" src={review.photo} alt="The photo you took" />}
       <div className="cam-frame" aria-hidden="true">
-        <div ref={oval} className="cam-oval" />
+        <div ref={oval} className="cam-oval">
+          {waiting && <span className="cam-spinner" />}
+          {count !== null && (
+            <span key={count} className="cam-count">
+              {count}
+            </span>
+          )}
+        </div>
       </div>
+      {flash > 0 && <div key={flash} className="cam-flash" aria-hidden="true" />}
 
       <div className="cam-top">
         <button type="button" className="cam-icon" onClick={onClose} aria-label="Close the camera">
@@ -371,16 +415,30 @@ function FaceCamera({
             <p className="cam-status-text">Camera not available</p>
             <p className="cam-status-sub">{blocked}</p>
           </>
+        ) : review ? (
+          <>
+            <p className="cam-status-text">Keep this photo?</p>
+            <p className="cam-status-sub">Use it, or take it again.</p>
+          </>
         ) : (
           <>
-            <p className="cam-status-text">{status.text}</p>
-            {status.sub && <p className="cam-status-sub">{status.sub}</p>}
+            <p className="cam-status-text">{count !== null ? 'Hold still' : status.text}</p>
+            {(count !== null || status.sub) && <p className="cam-status-sub">{count !== null ? 'The photo is taken on its own' : status.sub}</p>}
           </>
         )}
       </div>
 
       <div className="cam-bottom">
-        {blocked ? (
+        {review ? (
+          <div className="cam-review-actions">
+            <button type="button" className="btn" onClick={retake}>
+              Retake
+            </button>
+            <button type="button" className="btn btn-primary" onClick={() => onCapture(review)}>
+              Use photo
+            </button>
+          </div>
+        ) : blocked ? (
           <div className="cam-sheet">
             {problem === 'denied' && (
               <div className="cam-help">
@@ -483,6 +541,7 @@ function ChallengeCamera({
   const [problem, setProblem] = useState<CameraProblem | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [step, setStep] = useState<{ n: number; of: number; kind: Step } | null>(null);
+  const [shots, setShots] = useState(0);
   const close = useRef(onClose);
   close.current = onClose;
 
@@ -496,8 +555,7 @@ function ChallengeCamera({
       setBlocked(CAMERA_PROBLEM_TEXT[p]);
       return;
     }
-    navigator.mediaDevices
-      .getUserMedia({ video: { facingMode: 'user', width: { ideal: 640 } }, audio: false })
+    openCamera('user')
       .then(async (m) => {
         if (!alive.current) return m.getTracks().forEach((t) => t.stop());
         s = m;
@@ -549,6 +607,7 @@ function ChallengeCamera({
         await new Promise((r) => setTimeout(r, STEP_MS));
         // The picture as the camera took it (the preview is mirrored, the picture is not).
         frames.push(snapshot(video.current!));
+        setShots((n) => n + 1);
       }
       setStep(null);
       if (alive.current) onFrames({ token: c.token, frames });
@@ -562,8 +621,9 @@ function ChallengeCamera({
     <div ref={dialog} className="cam" role="dialog" aria-modal="true" aria-label={title} data-tone={step ? 'ok' : err ? 'adjust' : 'idle'} tabIndex={-1}>
       <video ref={video} className="cam-video" data-mirror="yes" playsInline muted autoPlay />
       <div className="cam-frame" aria-hidden="true">
-        <div className="cam-oval" />
+        <div className="cam-oval">{!ready && !blocked && <span className="cam-spinner" />}</div>
       </div>
+      {shots > 0 && <div key={shots} className="cam-flash" aria-hidden="true" />}
 
       <div className="cam-top">
         <button type="button" className="cam-icon" onClick={onClose} aria-label="Close the camera">
@@ -585,6 +645,11 @@ function ChallengeCamera({
             <p className="cam-status-sub">
               {STEP_TEXT[step.kind].en} · {step.n}/{step.of}
             </p>
+            <div className="cam-steps" aria-hidden="true">
+              {Array.from({ length: step.of }, (_, i) => (
+                <span key={i} data-done={i < step.n - 1 ? 'yes' : undefined} />
+              ))}
+            </div>
           </>
         ) : err ? (
           <>
