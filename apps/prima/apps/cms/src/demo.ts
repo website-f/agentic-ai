@@ -52,6 +52,13 @@ export function demoDirectory(now = new Date()): Directory {
       { id: 'sh-1', siteId: 'site-jbk-plaza', postName: 'Main gate', guardId: 'g-1', guardName: 'Sample Guard A', start: at(-30), end: at(690) },
       { id: 'sh-2', siteId: 'site-jbk-plaza', postName: 'Lobby', guardId: 'g-2', guardName: 'Sample Guard B', start: at(-5), end: at(715) },
     ],
+    // CMS desk roster (from Prima): the demo operator is Head Control on the shift ending in 30 minutes.
+    desk: [
+      { id: 'cms-demo-hc-1', post: 'HEAD_CONTROL', start: at(-690), end: at(30), staffName: 'Demo operator' },
+      { id: 'cms-demo-mo-1', post: 'MONITOR_OFFICER', start: at(-690), end: at(30), staffName: 'Sample Monitor Officer A' },
+      { id: 'cms-demo-hc-2', post: 'HEAD_CONTROL', start: at(30), end: at(750), staffName: 'Sample Head Control B' },
+      { id: 'cms-demo-mo-2', post: 'MONITOR_OFFICER', start: at(30), end: at(750), staffName: 'Sample Monitor Officer C' },
+    ],
     patrolRounds: [{ id: 'pr-1', siteId: 'site-jbk-plaza', checkpointId: 'cp-carpark', checkpointName: 'Car park B2', guardId: 'g-2', dueAt: at(-20), lateAfterMin: 10 }],
     group: {
       arms_control: p('Sample Arms Control Manager', 90),

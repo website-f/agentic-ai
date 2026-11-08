@@ -145,8 +145,8 @@ and hourly rate, basic, unpaid short days, overtime, rest day and holiday pay) a
 and a holiday off are one normal day each, inside basic, with no overtime (Fauzan, 6 Nov 2026). The OM, ROM, OGM,
 OD, COO and CEO (and ACT and group leaders) can also pick a guard formula ACT set that is in force this month, counted
 with the CEO's pay law for the month (`GET /salary-calc`, `salaryCalcData`: amounts only, no drafts or place choices).
-On PostgreSQL they read it through the read-only `pay_read` wall (the same wall HR uses in the guard pay module);
-writing still needs the ACT wall. Gross only; no EPF, SOCSO, EIS or PCB. Code: `packages/core/src/salary-calc.ts` (`guardSalaryCalc`),
+On PostgreSQL they read it through the read-only `pay_read` wall; writing still needs the ACT wall.
+Gross only; no EPF, SOCSO, EIS or PCB. Code: `packages/core/src/salary-calc.ts` (`guardSalaryCalc`),
 `apps/web/src/views/SalaryCalc.tsx`.
 
 ## The CEO sets the base and the pay law (Fauzan, 6 Nov 2026)
@@ -162,7 +162,7 @@ writing still needs the ACT wall. Gross only; no EPF, SOCSO, EIS or PCB. Code: `
   version for the same month replaces the earlier one; nothing starts in a past month. Formulas, worked months, labour
   law flags and the salary calculator use the version in force for the month. Defaults are the law as at November 2026.
 - Table `prima.pay_law_versions` (ACT wall: ACT and group leadership read; only the CEO writes, checked by the API).
-  Operations managers' salary calculator uses the defaults, since they cannot read behind the ACT wall.
+  Operations managers read only the current effective published amounts through the separate `pay_read` wall, never ACT drafts or write access.
 - EPF, SOCSO, EIS, LINDUNG and any new contribution type are counted in the pay runs (staff payroll, guard pay run
   PR #120), not here; those rates are to be made CEO-settable there.
 

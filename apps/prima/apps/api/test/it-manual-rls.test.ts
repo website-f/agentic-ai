@@ -159,7 +159,7 @@ describe('manual IT database boundaries',()=>{
  it('central employers (PWVSB, Merdeka, Goodwill, Sasa Team) are offered and accepted for manual records; an unknown company is refused',async()=>{
   const svc=(c:Client)=>{const store=new PgStore(c as unknown as PoolClient);return {store,service:new ItManualService(store,()=> '2026-11-01T00:00:00+08:00')};};
   const board=await as('it-a',async c=>{const {store,service}=svc(c);return service.board((await store.get('users','it-a')) as User);});
-  for(const id of ['pwvsb','merdeka','goodwill','sasateam'])assert.ok(board.companies.some(x=>x.id===id),id);
+  for(const id of ['pwvsb','merdeka','goodwill','sasateam','pgl'])assert.ok(board.companies.some(x=>x.id===id),id);
   for(const [n,companyId] of ['goodwill','sasateam'].entries()){
    const input={requestId:`7777777${n}-7777-4777-8777-777777777777`,name:`Synthetic ${companyId} system`,kind:'other',companyId,unitLabel:'',note:'Synthetic note'};
    const r=await as('it-a',async c=>{const {store,service}=svc(c);return service.create((await store.get('users','it-a')) as User,'system',input);}) as {terminal?:string};

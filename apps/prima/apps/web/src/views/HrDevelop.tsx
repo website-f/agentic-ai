@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { api } from "../api";
+import type { StaffLangId } from "../api/types";
 import { Card, Empty, Person } from "../kit";
 import { Chip, ErrorNotice, Loading, dateLabel, useAction, useLoad } from "../ui";
 import "../styles/hrx.css";
@@ -330,67 +331,312 @@ export function AppraisalsPanel({ mine = false }: { mine?: boolean }) {
 }
 
 const KIND_LABEL = { handbook: "Staff handbook", code_of_conduct: "Code of conduct", it_use: "IT use policy", other: "Other policy" } as const;
+const AUDIENCE_LABEL = { office: "Office staff", guards: "Guards and officers", all: "Everyone" } as const;
+const ROLE_LABEL = { guard: "Guards", supervisor: "Officers", patrol_officer: "Patrol officers", office: "Office staff" } as const;
+const BRIEF_MAX = 80;
+type Lang = StaffLangId;
 
-export function PoliciesPanel({ mine = false }: { mine?: boolean }) {
+/**
+ * Policies staff read and acknowledge. Three ways in: HR's full list (publish, versions, languages, who is missing);
+ * "mine" for a staff member or guard acknowledging on their own sign-in; "briefing" for an officer, OM or company manager
+ * recording the guards who acknowledged at a briefing (guard code of conduct, PIKM/ISO review, Fauzan 5 Nov 2026).
+ * Languages and scope (IWAY finding, Fauzan 6 Nov 2026): English and Malay always, plus each worker's mother tongue;
+ * the language each worker signed is recorded; a policy can be for everyone, a job or a site.
+ */
+export function PoliciesPanel({ mine = false, briefing = false }: { mine?: boolean; briefing?: boolean }) {
   const b = useLoad(() => api.hrPolicies().catch(() => null), []);
   const act = useAction();
   const [open, setOpen] = useState<string | null>(null);
+  const [readLang, setReadLang] = useState<Record<string, Lang>>({});
   const [f, setF] = useState<Record<string, string>>({});
+  const [brief, setBrief] = useState<{ id: string; sel: string[]; ref: string; lang: string } | null>(null);
+  const [tr, setTr] = useState<{ id: string; lang: string; title: string; body: string; translator: string } | null>(null);
+  const [mt, setMt] = useState<{ personId: string; lang: string }>({ personId: "", lang: "" });
   const v = (k: string) => f[k] ?? "";
   const set = (k: string, x: string) => setF((o) => ({ ...o, [k]: x }));
   if (!b.data) return b.loading ? <Loading what="policies" /> : null;
   const d = b.data;
-  if (mine && (d.canPublish || !d.rows.length)) return null;
+  const full = !mine && !briefing;
+  const rows = mine ? d.rows.filter((r) => r.canAck || r.myAck) : briefing ? d.rows.filter((r) => r.briefableCount > 0) : d.rows;
+  if (!full && (d.canPublish || !rows.length)) return null;
+  const langLabel = (l: string) => d.languages.find((x) => x.id === l)?.label ?? l;
+  const siteName = (id: string) => d.sites.find((x) => x.id === id)?.name ?? id;
+  const toggle = (pid: string) =>
+    setBrief((x) => (x ? { ...x, sel: x.sel.includes(pid) ? x.sel.filter((y) => y !== pid) : x.sel.length >= BRIEF_MAX ? x.sel : [...x.sel, pid] } : x));
+  const roles = v("roles") ? v("roles").split(",") : [];
+  const sites = v("sites") ? v("sites").split(",") : [];
   return (
     <Card
       flush
-      title={mine ? "Policies to read" : "Handbook and policies"}
-      sub="Every office staff member reads and acknowledges the latest version. A new version asks again."
+      title={mine ? "Policies to read" : briefing ? "Briefing acknowledgements" : "Handbook and policies"}
+      sub={
+        briefing
+          ? "After you brief your guards, tick who was there and understood it, choose the language you briefed in, and give the briefing sheet or reference."
+          : mine
+            ? "Choose your language, read it, then tap to confirm you understood it."
+            : "Each policy has English and Malay copies, plus the mother tongues of the staff it is for. A material change asks everyone again; a small correction does not."
+      }
     >
-      {d.rows.length === 0 && <Empty title="No policies published yet." />}
-      {d.rows.length > 0 && (
+      {rows.length === 0 && <Empty title="No policies published yet." />}
+      {rows.length > 0 && (
         <ul className="hx-rows">
-          {d.rows.map((r) => (
-            <li key={r.id} className="hx-row">
-              <div className="hx-row-main">
-                <span className="hx-row-title">{r.title}</span>
-                <span className="hx-row-meta">
-                  {KIND_LABEL[r.kind]} · version {r.version}, {dateLabel(r.publishedOn)}
-                  {r.acked != null && ` · ${r.acked} acknowledged, ${r.missing?.length ?? 0} not yet`}
-                </span>
-              </div>
-              <div className="hx-row-side">{r.myAck ? <Chip tone="ok">acknowledged</Chip> : r.canAck ? <Chip tone="warn">to read</Chip> : null}</div>
-              <div className="hx-row-body">
-                <div className="hx-row-actions">
-                  <button className="btn btn-sm" aria-expanded={open === r.id} onClick={() => setOpen(open === r.id ? null : r.id)}>
-                    {open === r.id ? "Hide" : "Read"}
-                  </button>
-                  {r.canAck && (
-                    <button className="btn btn-sm btn-primary" disabled={act.busy || open !== r.id} title={open !== r.id ? "Read it first" : undefined} onClick={() => void act.run(() => api.acknowledgePolicy(r.id), "Acknowledged.").then(() => b.reload())}>
-                      I have read and understood it
-                    </button>
+          {rows.map((r) => {
+            const have = r.copies.map((c) => c.lang);
+            const lang: Lang = readLang[r.id] ?? (r.myLang && have.includes(r.myLang) ? r.myLang : "en");
+            const copy = r.copies.find((c) => c.lang === lang) ?? r.copies[0];
+            const scope = r.scope;
+            return (
+              <li key={r.id} className="hx-row">
+                <div className="hx-row-main">
+                  <span className="hx-row-title">{full ? r.title : copy.title}</span>
+                  <span className="hx-row-meta">
+                    {KIND_LABEL[r.kind]} · version {r.version}, {dateLabel(r.publishedOn)}
+                    {full && r.acked != null && ` · ${r.acked} acknowledged, ${r.missingCount ?? 0} not yet`}
+                    {full && r.acked != null && r.ackedByLang && Object.keys(r.ackedByLang).length > 0
+                      ? ` (${Object.entries(r.ackedByLang)
+                          .map(([l, n]) => `${n} in ${l === "unknown" ? "language not recorded" : langLabel(l)}`)
+                          .join(", ")})`
+                      : ""}
+                    {full && r.acked != null && r.notInMotherTongue ? ` · ${r.notInMotherTongue} signed in a language other than their mother tongue` : ""}
+                    {!mine && r.briefableCount > 0 && ` · ${r.briefableCount} of your guards not yet`}
+                  </span>
+                </div>
+                <div className="hx-row-side">
+                  {!briefing && (r.myAck ? <Chip tone="ok">acknowledged{r.myAckLang ? ` (${langLabel(r.myAckLang)})` : ""}</Chip> : r.canAck ? <Chip tone="warn">to read</Chip> : null)}
+                </div>
+                <div className="hx-row-body">
+                  {full && (
+                    <div className="sx-chips">
+                      <Chip tone="info">{AUDIENCE_LABEL[r.audience]}</Chip>
+                      {scope?.roles?.length ? <Chip tone="info">{scope.roles.map((x) => ROLE_LABEL[x]).join(", ")}</Chip> : null}
+                      {scope?.jobTitles?.length ? <Chip tone="info">Job: {scope.jobTitles.join(", ")}</Chip> : null}
+                      {scope?.siteIds?.length ? <Chip tone="info">Site: {scope.siteIds.map(siteName).join(", ")}</Chip> : null}
+                      <span className="hx-row-meta">Copies:</span>
+                      {r.copies.map((c) => (
+                        <Chip key={c.lang} tone="ok">
+                          {c.label}
+                        </Chip>
+                      ))}
+                      {(r.languageGaps ?? []).map((g) => (
+                        <Chip key={g.lang} tone={g.required ? "crit" : "warn"}>
+                          {g.label} missing{g.people ? `: ${g.people} staff` : ""}
+                        </Chip>
+                      ))}
+                    </div>
                   )}
-                  {d.canPublish && (
-                    <button className="btn btn-sm btn-ghost" onClick={() => setF({ id: r.id, kind: r.kind, title: r.title, body: r.body })}>
-                      New version
+                  <div className="hx-row-actions">
+                    <select className="select" aria-label="Language" value={lang} onChange={(e) => setReadLang({ ...readLang, [r.id]: e.target.value as Lang })}>
+                      {r.copies.map((c) => (
+                        <option key={c.lang} value={c.lang}>
+                          {c.label}
+                        </option>
+                      ))}
+                    </select>
+                    <button className="btn btn-sm" aria-expanded={open === r.id} onClick={() => setOpen(open === r.id ? null : r.id)}>
+                      {open === r.id ? "Hide" : "Read"}
                     </button>
+                    {!briefing && r.canAck && (
+                      <button
+                        className="btn btn-sm btn-primary"
+                        disabled={act.busy || open !== r.id}
+                        title={open !== r.id ? "Read it first" : undefined}
+                        onClick={() => void act.run(() => api.acknowledgePolicy(r.id, lang), "Acknowledged.").then(() => b.reload())}
+                      >
+                        I have read and understood it
+                      </button>
+                    )}
+                    {!mine && r.briefableCount > 0 && (
+                      <button className="btn btn-sm" aria-expanded={brief?.id === r.id} onClick={() => setBrief(brief?.id === r.id ? null : { id: r.id, sel: [], ref: "", lang })}>
+                        {brief?.id === r.id ? "Close briefing" : "Record briefing"}
+                      </button>
+                    )}
+                    {full && d.canPublish && (
+                      <>
+                        <button
+                          className="btn btn-sm btn-ghost"
+                          onClick={() => {
+                            const ms = r.copies.find((c) => c.lang === "ms");
+                            setF({
+                              id: r.id,
+                              kind: r.kind,
+                              title: r.title,
+                              body: r.body,
+                              audience: r.audience,
+                              material: "",
+                              msTitle: ms?.title ?? "",
+                              msBody: ms?.body ?? "",
+                              msBy: ms?.translator ?? "",
+                              roles: (scope?.roles ?? []).join(","),
+                              jobs: (scope?.jobTitles ?? []).join(", "),
+                              sites: (scope?.siteIds ?? []).join(","),
+                            });
+                          }}
+                        >
+                          New version
+                        </button>
+                        <button
+                          className="btn btn-sm btn-ghost"
+                          aria-expanded={tr?.id === r.id}
+                          onClick={() => setTr(tr?.id === r.id ? null : { id: r.id, lang: r.languageGaps?.find((g) => !g.required)?.lang ?? "ne", title: "", body: "", translator: "" })}
+                        >
+                          {tr?.id === r.id ? "Close translation" : "Add translation"}
+                        </button>
+                      </>
+                    )}
+                  </div>
+                  {open === r.id && <div className="hp-doc">{copy.body}</div>}
+                  {full && open === r.id && r.missing && r.missing.length > 0 && (
+                    <p className="hx-row-meta">
+                      Not yet: {r.missing.slice(0, 30).map((m) => `${m.name} (${langLabel(m.lang)})`).join(", ")}
+                      {(r.missingCount ?? 0) > 30 ? " and more" : ""}
+                    </p>
+                  )}
+                  {full && open === r.id && d.canPublish && r.missing && r.missing.length > 0 && (
+                    <div className="hx-form">
+                      <h3 className="hx-form-title">Set a staff member's mother tongue</h3>
+                      <div className="hx-form-grid">
+                        <label className="field">
+                          <span className="label">Staff member</span>
+                          <select className="select" aria-label="Staff member" value={mt.personId} onChange={(e) => setMt({ ...mt, personId: e.target.value })}>
+                            <option value="">Staff member</option>
+                            {r.missing.slice(0, 200).map((m) => (
+                              <option key={m.personId} value={m.personId}>
+                                {m.name} ({langLabel(m.lang)})
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                        <label className="field">
+                          <span className="label">Mother tongue</span>
+                          <select className="select" aria-label="Mother tongue" value={mt.lang} onChange={(e) => setMt({ ...mt, lang: e.target.value })}>
+                            <option value="">Language</option>
+                            {d.languages.map((l) => (
+                              <option key={l.id} value={l.id}>
+                                {l.label}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                      </div>
+                      <div className="hx-form-actions">
+                        <button
+                          className="btn btn-sm"
+                          disabled={act.busy || !mt.personId || !mt.lang}
+                          onClick={() => void act.run(() => api.setMotherTongue(mt.personId, mt.lang as Lang), "Language saved.").then((x) => x && (setMt({ personId: "", lang: "" }), b.reload()))}
+                        >
+                          Save language
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                  {tr?.id === r.id && (
+                    <div className="hx-form">
+                      <h3 className="hx-form-title">Add a translation</h3>
+                      <div className="hx-form-grid">
+                        <label className="field">
+                          <span className="label">Language</span>
+                          <select className="select" aria-label="Translation language" value={tr.lang} onChange={(e) => setTr({ ...tr, lang: e.target.value })}>
+                            {d.languages
+                              .filter((l) => l.id !== "en")
+                              .map((l) => (
+                                <option key={l.id} value={l.id}>
+                                  {l.label}
+                                  {have.includes(l.id) ? " (replace)" : ""}
+                                </option>
+                              ))}
+                          </select>
+                        </label>
+                        <label className="field">
+                          <span className="label">Title</span>
+                          <input className="input" placeholder="Title in this language" aria-label="Translated title" value={tr.title} onChange={(e) => setTr({ ...tr, title: e.target.value })} />
+                        </label>
+                        <label className="field">
+                          <span className="label">Translated by</span>
+                          <input className="input" placeholder="Translated by (person or service)" aria-label="Translated by" value={tr.translator} onChange={(e) => setTr({ ...tr, translator: e.target.value })} />
+                        </label>
+                        <label className="field hx-form-wide">
+                          <span className="label">Text</span>
+                          <textarea className="textarea" rows={5} placeholder="The text in this language" aria-label="Translated text" value={tr.body} onChange={(e) => setTr({ ...tr, body: e.target.value })} />
+                        </label>
+                      </div>
+                      <div className="hx-form-actions">
+                        <button
+                          className="btn btn-sm btn-primary"
+                          disabled={act.busy || tr.title.trim().length < 3 || tr.body.trim().length < 20 || tr.translator.trim().length < 3}
+                          onClick={() =>
+                            void act
+                              .run(() => api.addPolicyCopy(r.id, { lang: tr.lang as Lang, title: tr.title, body: tr.body, translator: tr.translator }), "Translation saved.")
+                              .then((x) => x && (setTr(null), b.reload()))
+                          }
+                        >
+                          Save translation
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                  {brief?.id === r.id && (
+                    <div className="hx-form">
+                      <h3 className="hx-form-title">Record a briefing</h3>
+                      <div className="hx-row-actions">
+                        <button className="btn btn-sm" onClick={() => setBrief({ ...brief, sel: r.briefable.slice(0, BRIEF_MAX).map((x) => x.personId) })}>
+                          Tick all shown (up to {BRIEF_MAX})
+                        </button>
+                        <button className="btn btn-sm" onClick={() => setBrief({ ...brief, sel: [] })}>
+                          Untick all
+                        </button>
+                        <span className="hx-row-meta">{brief.sel.length} ticked</span>
+                      </div>
+                      <div style={{ display: "grid", gap: 2, maxHeight: 240, overflowY: "auto" }}>
+                        {r.briefable.map((x) => (
+                          <label key={x.personId} className="small" style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                            <input type="checkbox" checked={brief.sel.includes(x.personId)} onChange={() => toggle(x.personId)} />
+                            {x.name}{" "}
+                            <span className="muted">
+                              {x.staffNo} · {langLabel(x.lang)}
+                            </span>
+                          </label>
+                        ))}
+                      </div>
+                      <div className="hx-form-grid">
+                        <label className="field">
+                          <span className="label">Briefed in</span>
+                          <select className="select" aria-label="Briefing language" value={brief.lang} onChange={(e) => setBrief({ ...brief, lang: e.target.value })}>
+                            {r.copies.map((c) => (
+                              <option key={c.lang} value={c.lang}>
+                                Briefed in {c.label}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                        <label className="field">
+                          <span className="label">Briefing reference</span>
+                          <input className="input" placeholder="Briefing sheet or reference, e.g. Night briefing 5 Nov, sheet 12" aria-label="Briefing reference" value={brief.ref} onChange={(e) => setBrief({ ...brief, ref: e.target.value })} />
+                        </label>
+                      </div>
+                      <div className="hx-form-actions">
+                        <button
+                          className="btn btn-sm btn-primary"
+                          disabled={act.busy || !brief.sel.length || brief.ref.trim().length < 3}
+                          onClick={() =>
+                            void act
+                              .run(() => api.recordBriefingAcks(r.id, brief.sel, brief.ref, brief.lang as Lang), "Briefing recorded.")
+                              .then((x) => x && (setBrief(null), b.reload()))
+                          }
+                        >
+                          Record {brief.sel.length} acknowledgement{brief.sel.length === 1 ? "" : "s"}
+                        </button>
+                      </div>
+                    </div>
                   )}
                 </div>
-                {open === r.id && <div className="hp-doc">{r.body}</div>}
-                {open === r.id && r.missing && r.missing.length > 0 && (
-                  <p className="hx-row-meta">
-                    Not yet: {r.missing.slice(0, 30).map((m) => m.name).join(", ")}
-                    {r.missing.length > 30 ? " and more" : ""}
-                  </p>
-                )}
-              </div>
-            </li>
-          ))}
+              </li>
+            );
+          })}
         </ul>
       )}
-      {(d.canPublish || act.error) && (
+      {((full && d.canPublish) || act.error) && (
         <div className="hp-section">
-          {d.canPublish && (
+          {full && d.canPublish && (
             <div className="hx-form">
               <h3 className="hx-form-title">{v("id") ? "New version" : "Publish a policy"}</h3>
               <div className="hx-form-grid">
@@ -405,21 +651,110 @@ export function PoliciesPanel({ mine = false }: { mine?: boolean }) {
                   </select>
                 </label>
                 <label className="field">
-                  <span className="label">Title</span>
-                  <input className="input" placeholder="Title" aria-label="Policy title" value={v("title")} onChange={(e) => set("title", e.target.value)} />
+                  <span className="label">Who must read it</span>
+                  <select className="select" aria-label="Who must read it" value={v("audience") || "office"} onChange={(e) => set("audience", e.target.value)}>
+                    {Object.entries(AUDIENCE_LABEL).map(([k, l]) => (
+                      <option key={k} value={k}>
+                        {l}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <div className="field hx-form-wide">
+                  <span className="label">Only for (leave empty for everyone)</span>
+                  <div className="sx-chips">
+                    {Object.entries(ROLE_LABEL).map(([k, l]) => (
+                      <label key={k} className="small" style={{ display: "flex", gap: 4, alignItems: "center" }}>
+                        <input type="checkbox" checked={roles.includes(k)} onChange={(e) => set("roles", (e.target.checked ? [...roles, k] : roles.filter((x) => x !== k)).join(","))} />
+                        {l}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+                <label className="field">
+                  <span className="label">Job titles</span>
+                  <input className="input" placeholder="Separated by commas (e.g. Admin Executive)" aria-label="Job titles" value={v("jobs")} onChange={(e) => set("jobs", e.target.value)} />
+                </label>
+                <label className="field">
+                  <span className="label">Sites</span>
+                  <select
+                    className="select"
+                    aria-label="Add a site"
+                    value=""
+                    onChange={(e) => e.target.value && !sites.includes(e.target.value) && set("sites", [...sites, e.target.value].join(","))}
+                  >
+                    <option value="">Add a site</option>
+                    {d.sites.map((x) => (
+                      <option key={x.id} value={x.id}>
+                        {x.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                {sites.length > 0 && (
+                  <div className="sx-chips hx-form-wide">
+                    {sites.map((id) => (
+                      <button key={id} className="btn btn-sm" title="Remove this site" onClick={() => set("sites", sites.filter((x) => x !== id).join(","))}>
+                        {siteName(id)} ✕
+                      </button>
+                    ))}
+                  </div>
+                )}
+                <label className="field hx-form-wide">
+                  <span className="label">Title in English</span>
+                  <input className="input" placeholder="Title in English" aria-label="Policy title" value={v("title")} onChange={(e) => set("title", e.target.value)} />
                 </label>
                 <label className="field hx-form-wide">
-                  <span className="label">Policy text</span>
-                  <textarea className="textarea" rows={5} placeholder="The text staff read, or where the full document is kept" aria-label="Policy text" value={v("body")} onChange={(e) => set("body", e.target.value)} />
+                  <span className="label">English text</span>
+                  <textarea className="textarea" rows={5} placeholder="The English text staff read, or where the full document is kept" aria-label="Policy text" value={v("body")} onChange={(e) => set("body", e.target.value)} />
+                </label>
+                <label className="field hx-form-wide">
+                  <span className="label">Tajuk dalam Bahasa Melayu</span>
+                  <input className="input" placeholder="Tajuk dalam Bahasa Melayu" aria-label="Malay title" value={v("msTitle")} onChange={(e) => set("msTitle", e.target.value)} />
+                </label>
+                <label className="field hx-form-wide">
+                  <span className="label">Teks dalam Bahasa Melayu</span>
+                  <textarea className="textarea" rows={5} placeholder="Teks dalam Bahasa Melayu (always required)" aria-label="Malay text" value={v("msBody")} onChange={(e) => set("msBody", e.target.value)} />
+                </label>
+                <label className="field">
+                  <span className="label">Malay copy translated by</span>
+                  <input className="input" placeholder="Malay copy translated by" aria-label="Malay copy translated by" value={v("msBy")} onChange={(e) => set("msBy", e.target.value)} />
                 </label>
               </div>
+              <p className="hx-row-meta">Add other mother tongues after publishing, with Add translation.</p>
+              {v("id") && (
+                <label className="small" style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                  <input type="checkbox" checked={v("material") === "yes"} onChange={(e) => set("material", e.target.checked ? "yes" : "")} />
+                  Material change: everyone acknowledges again and other translations are needed again (leave unticked for a typo or wording fix)
+                </label>
+              )}
               <div className="hx-form-actions">
                 <button
                   className="btn btn-sm btn-primary"
-                  disabled={act.busy || v("title").trim().length < 3 || v("body").trim().length < 20}
+                  disabled={act.busy || v("title").trim().length < 3 || v("body").trim().length < 20 || v("msTitle").trim().length < 3 || v("msBody").trim().length < 20 || v("msBy").trim().length < 3}
                   onClick={() =>
                     void act
-                      .run(() => api.publishPolicy({ id: v("id") || null, kind: (v("kind") || "handbook") as keyof typeof KIND_LABEL, title: v("title"), body: v("body") }), v("id") ? "New version published." : "Published.")
+                      .run(
+                        () =>
+                          api.publishPolicy({
+                            id: v("id") || null,
+                            kind: (v("kind") || "handbook") as keyof typeof KIND_LABEL,
+                            title: v("title"),
+                            body: v("body"),
+                            audience: (v("audience") || "office") as keyof typeof AUDIENCE_LABEL,
+                            material: v("id") ? v("material") === "yes" : undefined,
+                            scope: {
+                              roles: roles as (keyof typeof ROLE_LABEL)[],
+                              jobTitles: v("jobs")
+                                .split(",")
+                                .map((x) => x.trim())
+                                .filter(Boolean),
+                              siteIds: sites,
+                            },
+                            copies: [{ lang: "ms", title: v("msTitle"), body: v("msBody"), translator: v("msBy") }],
+                          }),
+                        v("id") ? "New version published." : "Published.",
+                      )
                       .then((r) => r && (setF({}), b.reload()))
                   }
                 >

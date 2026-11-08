@@ -1,12 +1,15 @@
 import { api } from '../api';
-import { saveFile } from '../save';
+import { openProofItem } from '../save';
 import { useState } from 'react';
-import { type EvidenceDoc, type ProofInput } from '@prima/core';
+import { type EvidenceDoc, type ProofInput, parseSharePointProofLink, PROOF_LINK_MIME } from '@prima/core';
 import { Chip, notify, dateTimeLabel } from '../ui';
 import { EvidenceCamera } from './Camera';
 
 const MAX_BYTES = 700_000;
 let testFiles = 0;
+let testLinks = 0;
+/** Only a cleaned https SharePoint link becomes a clickable address. */
+const SAFE_LINK = /^https:\/\/[a-z0-9][a-z0-9-]{0,62}\.sharepoint\.com\//;
 const MAX_ITEMS = 3;
 
 export function readAsDataUrl(f: Blob): Promise<string> {
@@ -51,6 +54,7 @@ export function ProofPicker({
   onChange,
   documentsOnly,
   required,
+  noLinks,
 }: {
   site: { code: string; lat: number; lng: number } | null;
   refText: string;
@@ -58,9 +62,33 @@ export function ProofPicker({
   onChange: (items: ProofInput[]) => void;
   documentsOnly?: boolean;
   required?: boolean;
+  /** The step needs the file itself (for example a tender file that is checked for the company name). */
+  noLinks?: boolean;
 }) {
   const [camera, setCamera] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [pasting, setPasting] = useState(false);
+  const [url, setUrl] = useState('');
+  /**
+   * SharePoint file by link (staff usability rule 6, 4 Nov 2026: files by link, no copies). Checked here for a quick
+   * answer and checked again by the server; nothing is fetched from SharePoint.
+   */
+  const addLink = (raw: string) => {
+    setErr(null);
+    const got = parseSharePointProofLink(raw);
+    if (!got.ok) return setErr(got.reason);
+    if (items.some((it) => it.kind === 'link' && it.url === got.link.url))
+      return setErr('This link is already added.');
+    onChange([...items, { kind: 'link', url: got.link.url }]);
+    setUrl('');
+    setPasting(false);
+  };
+  const label = (it: ProofInput) => {
+    if (it.kind === 'photo') return 'Photo';
+    if (it.kind === 'document') return it.name;
+    const got = parseSharePointProofLink(it.url);
+    return got.ok ? `SharePoint: ${got.link.name}` : 'SharePoint link';
+  };
   const full = items.length >= MAX_ITEMS;
   const addFile = async (f: File | undefined) => {
     setErr(null);
@@ -81,12 +109,13 @@ export function ProofPicker({
     <div className="field" style={{ gap: 8 }}>
       <span className="label">
         Proof{required ? ' (required)' : ''}: {documentsOnly ? 'a document' : site ? 'a photo or a document' : 'a document (no site, so no photo check)'}
+        {!noLinks && <span> or a SharePoint link</span>}
       </span>
       {items.length > 0 && (
         <div className="row" style={{ flexWrap: 'wrap', gap: 6 }}>
           {items.map((it, i) => (
             <Chip key={i} tone="ok">
-              {it.kind === 'photo' ? 'Photo' : it.name}{' '}
+              <span data-no-translate={it.kind === 'photo' ? undefined : true}>{label(it)}</span>{' '}
               <button
                 className="btn btn-ghost btn-sm"
                 aria-label="Remove proof"
@@ -108,7 +137,48 @@ export function ProofPicker({
           onDone={() => setCamera(false)}
         />
       )}
-      {!camera && !full && (
+      {pasting && !full && (
+        <div className="row" style={{ flexWrap: 'wrap', gap: 6 }}>
+          <input
+            className="input"
+            type="url"
+            inputMode="url"
+            autoComplete="off"
+            aria-label="SharePoint link of the file"
+            placeholder="https://…sharepoint.com/sites/…"
+            value={url}
+            onChange={(e) => {
+              setUrl(e.target.value);
+              setErr(null);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                addLink(url);
+              }
+            }}
+            style={{ flex: '1 1 240px', minWidth: 0 }}
+          />
+          <button className="btn btn-sm" type="button" disabled={!url.trim()} onClick={() => addLink(url)}>
+            Add link
+          </button>
+          <button
+            className="btn btn-sm btn-ghost"
+            type="button"
+            onClick={() => {
+              setPasting(false);
+              setUrl('');
+              setErr(null);
+            }}
+          >
+            Cancel
+          </button>
+          <div className="muted small" style={{ flexBasis: '100%' }}>
+            The file stays in SharePoint. Prima keeps only the link; whoever opens it needs access to the file in SharePoint.
+          </div>
+        </div>
+      )}
+      {!camera && !full && !pasting && (
         <div className="row" style={{ flexWrap: 'wrap' }}>
           {site && !documentsOnly && (
             <button className="btn btn-sm" type="button" onClick={() => setCamera(true)}>
@@ -129,6 +199,24 @@ export function ProofPicker({
               }}
             />
           </label>
+          {!noLinks && (
+            <button className="btn btn-sm" type="button" onClick={() => setPasting(true)}>
+              Paste SharePoint link
+            </button>
+          )}
+          {api.mode === 'demo' && !noLinks && (
+            // A made-up SharePoint address so the link step can be tried on the test link; it opens nothing real.
+            <button
+              className="btn btn-sm btn-ghost"
+              type="button"
+              onClick={() => {
+                testLinks += 1;
+                addLink(`https://example.sharepoint.com/sites/TestSite/Shared%20Documents/Test%20link%20proof%20${testLinks}-${Date.now() % 100000}.pdf`);
+              }}
+            >
+              Use a test SharePoint link
+            </button>
+          )}
           {api.mode === 'demo' && (
             // The test link may open where the phone cannot pick a file; a made-up file lets the step be tried.
             <button
@@ -161,15 +249,24 @@ export function DocList({ docs }: { docs: EvidenceDoc[] }) {
     <div className="list">
       {docs.map((d) => (
         <div key={d.id} className="list-item" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 2 }}>
-          <button className="link-button" style={{ fontWeight: 600 }} onClick={() => saveFile(d.name, d.data).then((m) => m && notify(m))}>
-            {d.name}
-          </button>
+          {d.link && SAFE_LINK.test(d.link) ? (
+            <a className="link-button" style={{ fontWeight: 600 }} href={d.link} target="_blank" rel="noopener noreferrer" data-no-translate>
+              {d.name}
+            </a>
+          ) : (
+            <button className="link-button" style={{ fontWeight: 600 }} onClick={() => openProofItem(d.name, d).then((m) => m && notify(m))}>
+              {d.name}
+            </button>
+          )}
           <div className="muted small">
-            {d.mime === 'application/pdf' ? 'PDF' : 'Picture'} · {Math.round(d.bytes / 1000)} KB · {d.uploadedBy}, {dateTimeLabel(d.receivedAt)}
+            {d.mime === PROOF_LINK_MIME ? 'SharePoint link (opens in SharePoint)' : d.mime === 'application/pdf' ? 'PDF' : 'Picture'}
+            {d.mime === PROOF_LINK_MIME ? '' : ` · ${Math.round(d.bytes / 1000)} KB`} · {d.uploadedBy}, {dateTimeLabel(d.receivedAt)}
           </div>
-          <div className="mono muted small" title={d.sha256}>
-            SHA-256 {d.sha256.slice(0, 16)}…
-          </div>
+          {!d.link && (
+            <div className="mono muted small" title={d.sha256}>
+              SHA-256 {d.sha256.slice(0, 16)}…
+            </div>
+          )}
         </div>
       ))}
     </div>

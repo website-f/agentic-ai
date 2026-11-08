@@ -1,4 +1,6 @@
 import { JointTenders } from './JointTenders';
+import { TenderCounterPanel } from './TenderCounter';
+import { TenderOpportunitiesPanel } from './TenderOpportunities';
 import { LeadsPanel } from './Leads';
 import { useState } from 'react';
 import type { Quotation, QuotationStatus, TenderStatus } from '@prima/core';
@@ -218,6 +220,10 @@ export function CommercialView({ openTenderId }: { openTenderId?: string } = {})
       </div>
 
       {(me.user.role === 'company_manager' || me.user.role === 'admin_exec') && <JointTenders />}
+
+      <TenderOpportunitiesPanel companyId={companyId} />
+
+      <TenderCounterPanel companyId={companyId} />
 
       <LeadsPanel companyId={companyId} />
 
@@ -485,7 +491,7 @@ function QuoteDrawer({ q, can, tenderTitle, onClose }: { q: Quotation; can: Comm
       {(can.prepare || can.approve) && ['draft', 'returned', 'awaiting_approval', 'approved', 'sent'].includes(q.status) && (
         <div className="field">
           <label className="label" htmlFor="q-note">
-            Note {q.status === 'awaiting_approval' && can.approve ? '(needed to return it)' : '(optional)'}
+            Note {q.status === 'awaiting_approval' && can.approve ? '(needed to approve or return it; a short one is fine to approve)' : '(optional)'}
           </label>
           <textarea id="q-note" className="textarea" value={note} onChange={(e) => setNote(e.target.value)} />
         </div>
@@ -545,7 +551,7 @@ function QuoteDrawer({ q, can, tenderTitle, onClose }: { q: Quotation; can: Comm
         )}
         {can.approve && q.status === 'awaiting_approval' && (
           <>
-            <button className="btn btn-primary" disabled={act.busy || ownQuote} onClick={() => run('approve')}>
+            <button className="btn btn-primary" disabled={act.busy || ownQuote || !note.trim()} onClick={() => run('approve')}>
               Approve
             </button>
             <button className="btn" disabled={act.busy} onClick={() => run('return')}>

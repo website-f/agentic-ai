@@ -1,44 +1,29 @@
-// Money outside the payment flow, and bank mandates (Fauzan, 2 Nov 2026: yes to suggestions 6, 7, 8, 9 and 14).
-//
-// - Bank mandate register (14): who the bank lets sign and approve for each account, as the board resolution and the
-//   bank's mandate form say. A new version is checked by a second person; it is reviewed every year and whenever someone
-//   on it leaves. Once an account has a checked mandate, whoever records a release from it must be on it, and a second
-//   approver is named when the mandate needs two.
-// - Staff cash advances (6): paid as an ordinary Prima payment (its review and approval stay), settled with receipts
-//   by a settle-by date, checked by someone other than the staff member. Unsettled ones are shown to Finance and HR, and
-//   nobody gets a new advance while an old one is overdue.
-// - Petty cash (7): a fixed float per office kept by one custodian; each voucher has a receipt; the top-up is an
-//   ordinary payment for exactly the vouchers spent; someone other than the custodian counts the cash every month.
-// - Company credit and fuel cards (8): every statement line has a receipt and purpose from the holder, or is marked
-//   personal and paid back; someone other than the holder reviews the statement.
-// Prima never approves or pays anything; every check has a comment, and nobody checks their own entry.
 import { AccessDenied } from "./access";
-import {
-  isLead,
-  isoDate,
-  noSecrets,
-  requireReason,
-  text,
-  type FinActor,
-} from "./finance";
+import { isLead } from "./finance";
+import { isoDate } from "./finance";
+import { noSecrets } from "./finance";
+import { requireReason } from "./finance";
+import { text } from "./finance";
+import type { FinActor } from "./finance";
 import { RULES } from "./rules";
-import { BadRequest, NotFound } from "./service";
-import { addDays, daysBetween } from "./time";
-import type {
-  FinAdvance,
-  FinCard,
-  FinCardLine,
-  FinCardStatement,
-  FinMandate,
-  FinMandatePerson,
-  FinPayment,
-  FinPettyCash,
-  FinSign,
-  FinStatus,
-  Id,
-  IsoDate,
-  User,
-} from "./types";
+import { BadRequest } from "./service";
+import { NotFound } from "./service";
+import { addDays } from "./time";
+import { daysBetween } from "./time";
+import type { FinAdvance } from "./types";
+import type { FinCard } from "./types";
+import type { FinCardLine } from "./types";
+import type { FinCardStatement } from "./types";
+import type { FinMandate } from "./types";
+import type { FinMandatePerson } from "./types";
+import type { FinPayment } from "./types";
+import type { FinPettyCash } from "./types";
+import type { FinSign } from "./types";
+import type { FinStatus } from "./types";
+import type { Id } from "./types";
+import type { IsoDate } from "./types";
+import type { User } from "./types";
+
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
 const norm = (x: string) => x.toUpperCase().replace(/[^A-Z0-9]/g, "");

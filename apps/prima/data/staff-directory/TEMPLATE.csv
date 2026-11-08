@@ -1,0 +1,5 @@
+source_tab,group,org_unit,name,title,email,account_type,entra_status,verified,account_status,issues
+HQ,company,EXAMPLE SECURITY SDN BHD,Sample Manager One,PENGURUS,hq@example-security.test,Outlook HQ,Aktif,Telah Disahkan,Sedang digunakan,
+HQ,company,EXAMPLE SECURITY SDN BHD,Sample Executive Two,EKSEKUTIF PENTADBIRAN,exec2@example.test,Outlook Personal,Aktif,Telah Disahkan,Sedang digunakan,personal_outlook
+UNIT,central_unit,UNIT IT,Sample IT Executive,IT EKSEKUTIF,itsupport@example-group.test,Outlook Hq,Aktif,Telah Disahkan,Sedang digunakan,
+OPERASI,operations_region,OPERASI JOHOR,Sample Ops Officer,PEGAWAI OPERASI,,,,,,no_email

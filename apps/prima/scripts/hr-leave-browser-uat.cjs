@@ -5,6 +5,7 @@
 // Hosted CI passes its pinned Playwright as PLAYWRIGHT_MODULE (.github/workflows/ci.yml, job synthetic-browser); locally
 // the pre-installed one is used. BASE_URL defaults to the local preview on 127.0.0.1:4179.
 const { chromium } = require(process.env.PLAYWRIGHT_MODULE ? require('node:path').dirname(process.env.PLAYWRIGHT_MODULE) : 'playwright');
+const { openPersonaChooser } = require('./browser-persona.cjs');
 const BASE = process.env.BASE_URL || 'http://127.0.0.1:4179';
 const assert = require('node:assert/strict');
 const S = process.argv[2];
@@ -23,9 +24,9 @@ const step = (name, ok, detail = '') => { results.push({ name, ok, detail }); co
     const externalUrls = []; await p.route('**/*', r => { const u = new URL(r.request().url()); if (u.origin === BASE) return r.continue(); externalUrls.push(u.origin + u.pathname); return r.abort(); });
     await p.goto(BASE + '/');
     const as = async (who) => {
-      if (!(await p.locator('.persona').count())) await p.getByRole('button', { name: 'Tukar user' }).first().click();
+      await openPersonaChooser(p, 'Switch person');
       await p.waitForSelector('.persona'); await p.locator('.persona', { hasText: who }).first().click(); await p.waitForTimeout(1800);
-      const ok = p.getByRole('button', { name: 'Saya setuju dan akan rahsiakan' }); if (await ok.count()) { await ok.click(); await p.waitForTimeout(600); }
+      const ok = p.getByRole('button', { name: 'I agree and will keep it confidential' }); if (await ok.count()) { await ok.click(); await p.waitForTimeout(600); }
     };
     const nav = async (name) => {
       const names = name === 'HR monitor' ? ['HR monitor', 'HR'] : [name];
@@ -48,7 +49,8 @@ const step = (name, ok, detail = '') => { results.push({ name, ok, detail }); co
       await it.getByLabel('Decision note').fill(note);
       await it.getByRole('button', { name: approve, exact: true }).click(); await p.waitForTimeout(1200);
     };
-    await p.evaluate(() => localStorage.clear()); await p.reload();
+    // This journey's selectors and expected dates/statuses are English. Do not inherit the default mixed locale.
+    await p.evaluate(() => { localStorage.clear(); localStorage.setItem('prima.lang', 'en'); }); await p.reload();
     // 1. Staff enters a request with the wrong last day.
     await as('IT Executive 1'); await myLeave(); await apply('2026-11-16', '2026-11-18');
     let t = await p.$eval('.page', e => e.innerText);

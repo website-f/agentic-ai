@@ -1,110 +1,192 @@
-// Deterministic mock data shaped like the real group (Fauzan, 24 Oct 2026: build with mock
-// data first, real data later). 38 companies; the three pilots get full detail. All people,
-// clients and sites are fictional. Same seed + same "today" always gives the same data.
+import { GROUP_EMPLOYER_ID } from "./access";
+import { IT_COMPANY_ID } from "./access";
+import { hasOwnStaffRecord } from "./access";
+import { seedItems } from "./item-seed";
+import { itPurchaseRequest } from "./purchase";
+import { appendAudit } from "./audit";
+import { sha256Hex } from "./audit";
+import { DEMO_PIN_KEEPER } from "./pin";
+import { demoPin } from "./pin";
+import { demoPinSalt } from "./pin";
+import { REGIONS } from "./regions";
+import { regionOfState } from "./regions";
+import { BRANCH_CHECKS } from "./work";
+import { dueOf } from "./work";
+import { lineManagerOf } from "./work";
+import { periodOf } from "./work";
+import { playbookFor } from "./work";
+import { RULES } from "./rules";
+import { itTenderTimeline } from "./it-tender";
+import { TENDER_GUIDE_V1 } from "./tender";
+import { itemPart } from "./tender";
+import { sampleTenderReader } from "./tender";
+import { mondayOf } from "./reports";
+import { reportPeriods } from "./reports";
+import { simpleMinutesReader } from "./meetings";
+import { seedWebsites } from "./websites-seed";
+import { websiteSampleUsers } from "./websites-seed";
+import { evaluateClockIn } from "./checks";
+import { evaluateClockOut } from "./checks";
+import { slaDue } from "./checks";
+import { weekdayOf } from "./remote";
+import { CLIENT_ONBOARD_STEPS } from "./clients";
+import { CLIENT_OFFBOARD_STEPS } from "./clients";
+import { addDays } from "./time";
+import { addMinutes } from "./time";
+import { dateOf } from "./time";
+import { daysBetween } from "./time";
+import { fromMs } from "./time";
+import { myt } from "./time";
+import { toMs } from "./time";
+import { weekday } from "./time";
+import { buildStaffPayLine } from "./payroll";
+import { payFormulaLawCheck } from "./pay-formulas";
+import { standardDriverAmounts } from "./pay-formulas";
+import { standardGuardAmounts } from "./pay-formulas";
+import type { PayFormula } from "./pay-formulas";
+import type { PayFormulaUse } from "./pay-formulas";
+import { contractBilling } from "./contracts";
+import { mobilisationFor } from "./contracts";
+import { reviewsFor } from "./contracts";
+import { monthDepn } from "./assets";
+import { netBookValue } from "./assets";
+import { periodBefore } from "./assets";
+import type { WorkTask } from "./types";
+import type { BranchAction } from "./types";
+import type { BranchSettlement } from "./types";
+import type { StaffPayRun } from "./types";
+import type { ItAsset } from "./types";
+import type { ItAssetKind } from "./types";
+import type { CorpChange } from "./types";
+import type { CreditLoan } from "./types";
+import type { CreditDefault } from "./types";
+import type { GovMandate } from "./types";
+import type { LegalMatter } from "./types";
+import type { SalesLead } from "./types";
+import type { ActFinding } from "./types";
+import type { GrcObligation } from "./types";
+import type { PdpaRequest } from "./types";
+import type { PurRequest } from "./types";
+import type { PurSupplier } from "./types";
+import type { StockItem } from "./types";
+import type { ItOnboarding } from "./types";
+import type { ItPurchase } from "./types";
+import type { ItTenderTask } from "./types";
+import type { ItTicket } from "./types";
+import type { ItJob } from "./types";
+import type { ItAccount } from "./types";
+import type { AmAsset } from "./types";
+import type { AmInvoice } from "./types";
+import type { AmProperty } from "./types";
+import type { AmTenancy } from "./types";
+import type { AmUnitStatus } from "./types";
+import type { AmUnitType } from "./types";
+import type { Id } from "./types";
+import type { JaPaper } from "./types";
+import type { JaPayroll } from "./types";
+import type { JaRecord } from "./types";
+import type { CertBody } from "./types";
+import type { ProductCert } from "./types";
+import type { Meeting } from "./types";
+import type { ReportDef } from "./types";
+import type { TenderPaperKind } from "./types";
+import type { StaffClock } from "./types";
+import type { StaffClockFlag } from "./types";
+import type { Attendance } from "./types";
+import type { AuthorityGrant } from "./types";
+import type { Branch } from "./types";
+import type { Case } from "./types";
+import type { Company } from "./types";
+import type { CompanyLicence } from "./types";
+import type { Credential } from "./types";
+import type { CredentialType } from "./types";
+import type { Dataset } from "./types";
+import type { Firearm } from "./types";
+import type { IsoDate } from "./types";
+import type { IsoDateTime } from "./types";
+import type { Person } from "./types";
+import type { PublicHoliday } from "./types";
+import type { FwmTask } from "./types";
+import type { HostelBill } from "./types";
+import type { LeaveKind } from "./types";
+import type { LeaveRequest } from "./types";
+import type { Post } from "./types";
+import type { Quotation } from "./types";
+import type { Severity } from "./types";
+import type { Shift } from "./types";
+import type { ShiftStructure } from "./types";
+import type { Site } from "./types";
+import type { SiteRisk } from "./types";
+import type { Tender } from "./types";
+import type { User } from "./types";
+import type { RemoteDay } from "./types";
+import type { Vault } from "./types";
+import type { ArmedJob } from "./types";
+import type { SupplierItem } from "./types";
+import type { ArmsRequest } from "./types";
+import type { InsuranceKind } from "./types";
+import type { InsurancePolicy } from "./types";
+import type { PhoneCall } from "./types";
+import type { PhoneExtension } from "./types";
+import type { SiteAlarm } from "./types";
+import type { SiteSystem } from "./types";
+import { GOV_OPS_COMPANY_ID } from "./access";
+import { PRIVATE_OPS_COMPANY_ID } from "./access";
+import { seedCleaning } from "./cleaning-seed";
+import { DEMO_PIN_KEY } from "./pin";
+import { idLinker } from "./staff-history";
+import { LOGISTICS_COMPANY_ID } from "./access";
+import { readinessFingerprint } from "./cms-readiness";
+import { seedBoardRegisters } from "./board-registers-seed";
+import { seedQuality } from "./quality-seed";
+import { seedAmExtras } from "./am-extras-seed";
+import { jaHash } from "./ja-switch";
+import { jaRecordId } from "./ja-switch";
+import { jaRowKey } from "./ja-switch";
+import { jaSwitchId } from "./ja-switch";
+import type { JaHistoryRow } from "./ja-switch";
+import type { JaImportBatch } from "./ja-switch";
+import type { JaImportKind } from "./ja-switch";
+import type { JaSwitchRecord } from "./ja-switch";
+import type { FwRecruitFile } from "./types";
 
-import { GOV_OPS_COMPANY_ID, GROUP_EMPLOYER_ID, IT_COMPANY_ID, PRIVATE_OPS_COMPANY_ID, hasOwnStaffRecord } from './access';
-import { seedItems } from './item-seed';
-import { itPurchaseRequest } from './purchase';
-import { appendAudit, sha256Hex } from './audit';
-import { DEMO_PIN_KEEPER, demoPin, demoPinSalt } from './pin';
-import { REGIONS, regionOfState } from './regions';
-import { BRANCH_CHECKS, dueOf, lineManagerOf, periodOf, playbookFor } from './work';
-import { RULES } from './rules';
-import { itTenderTimeline } from './it-tender';
-import { TENDER_GUIDE_V1, itemPart, sampleTenderReader } from './tender';
-import { mondayOf, reportPeriods } from './reports';
-import { simpleMinutesReader } from './meetings';
-import { seedWebsites, websiteSampleUsers } from './websites-seed';
-import { evaluateClockIn, evaluateClockOut, slaDue } from './checks';
-import { weekdayOf } from './remote';
-import { CLIENT_ONBOARD_STEPS, CLIENT_OFFBOARD_STEPS } from './clients';
-import { addDays, addMinutes, dateOf, daysBetween, fromMs, myt, toMs, weekday } from './time';
-import { buildStaffPayLine } from './payroll';
-import { payFormulaLawCheck, standardDriverAmounts, standardGuardAmounts, type PayFormula, type PayFormulaUse } from './pay-formulas';
-import { contractBilling, mobilisationFor, reviewsFor } from './contracts';
-import { monthDepn, netBookValue, periodBefore } from './assets';
-import type {
-  WorkTask,
-  BranchAction,
-  BranchSettlement,
-  StaffPayRun,
-  ItAsset,
-  ItAssetKind,
-  CorpChange,
-  CreditLoan,
-  CreditDefault,
-  GovMandate,
-  LegalMatter,
-  SalesLead,
-  ActFinding,
-  GrcObligation,
-  PdpaRequest,
-  PurRequest,
-  PurSupplier,
-  StockItem,
-  ItOnboarding,
-  ItPurchase,
-  ItTenderTask,
-  ItTicket,
-  ItJob,
-  ItAccount,
-  AmAsset,
-  AmInvoice,
-  AmProperty,
-  AmTenancy,
-  AmUnitStatus,
-  AmUnitType,
-  Id,
-  JaPaper,
-  JaPayroll,
-  JaRecord,
-  CertBody,
-  ProductCert,
-  Meeting,
-  ReportDef,
-  TenderPaperKind,
-  StaffClock,
-  StaffClockFlag,
-  Attendance,
-  AuthorityGrant,
-  Branch,
-  Case,
-  Company,
-  CompanyLicence,
-  Credential,
-  CredentialType,
-  Dataset,
-  Firearm,
-  IsoDate,
-  IsoDateTime,
-  Person,
-  PublicHoliday,
-  FwmTask,
-  FwRecruitFile,
-  HostelBill,
-  LeaveKind,
-  LeaveRequest,
-  Post,
-  Quotation,
-  Severity,
-  Shift,
-  ShiftStructure,
-  Site,
-  SiteRisk,
-  Tender,
-  User,
-  RemoteDay,
-  Vault,
-  ArmedJob,
-  SupplierItem,
-  ArmsRequest,
-  InsuranceKind,
-  InsurancePolicy,
-  PhoneCall,
-  PhoneExtension,
-  SiteAlarm,
-  SiteSystem,
-} from './types';
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 // ---------- PRNG ----------
 
@@ -481,39 +563,6 @@ export const PLACEHOLDER_REPORTS: ReportDef[] = [
 ];
 
 /**
- * Every central department sends a monthly report (Fauzan, 2 Nov 2026), due on the 25th of the next month, on the
- * standard form the ACT Director keeps (rule RPT-MONTHLY). Arms Control and the Chief of Staff already have theirs above.
- */
-export const DEPARTMENT_MONTHLY_REPORTS: ReportDef[] = (
-  [
-    ['operations', 'Operations'],
-    ['hr', 'Human Resources'],
-    ['cms', 'CMS command centre'],
-    ['director_office', 'Director Office'],
-    ['fwm', 'Foreign Worker Management'],
-    ['pdpa', 'PDPA'],
-    ['transport', 'Transport'],
-    ['asset', 'Asset Management'],
-    ['finance', 'Finance'],
-    ['it', 'IT'],
-    ['legal', 'Legal'],
-    ['audit', 'ACT'],
-    ['procurement', 'Procurement and Inventory'],
-  ] as [NonNullable<User['department']>, string][]
-).map(([department, label]) => ({
-  id: `dept-${department}-monthly`,
-  name: `${label} monthly report`,
-  detail: 'Standard monthly department report (proposed form, ACT decides the sections).',
-  from: 'department' as const,
-  department,
-  frequency: 'monthly' as const,
-  dueDay: RULES.monthlyReport.value.dueDay,
-  sections: RULES.monthlyReport.value.sections,
-  checks: RULES.monthlyReport.value.checks[department] ?? [],
-  active: true,
-}));
-
-/**
  * The JKR security tender QT260000000027957 as the Director Office's tender-specific checklist V2.0 (discussion of
  * 11 Oct 2026) sets it out from the ePerolehan papers: the example of what the AI agent should draft.
  */
@@ -719,6 +768,8 @@ export function generateDataset(opts: SeedOptions): Dataset {
     reportDefs: [],
     reportSubmissions: [],
     tenderGroups: [],
+    tenderOpportunities: [],
+    tenderSources: [],
     meetings: [],
     staffClocks: [],
     doorEvents: [],
@@ -731,10 +782,17 @@ export function generateDataset(opts: SeedOptions): Dataset {
     branchChecks: [],
     branchVisits: [],
     remoteDays: [],
+    timeSlips: [],
+    timeSlipSettings: [],
     socsoClaims: [],
     fwRenewals: [],
     fwmTasks: [],
     fwWelfareChecks: [],
+    fwPlacements: [],
+    fwPlacementHosts: [],
+    fwCostRates: [],
+    fwCostCharges: [],
+    fwStatCharges: [],
     // Empty: the table comes with db/modules/fw-recruit-v1.sql, which a reset does not install. The browser demo adds
     // demoFwRecruitFiles() itself.
     fwRecruitFiles: [],
@@ -766,6 +824,9 @@ export function generateDataset(opts: SeedOptions): Dataset {
     staffIds: [],
     staffAccounts: [],
     staffFaces: [],
+    guardPhones: [],
+    guardPhoneSessions: [],
+    guardPings: [],
     publicHolidays: [],
     allowanceTypes: [],
     flexRequests: [],
@@ -773,6 +834,10 @@ export function generateDataset(opts: SeedOptions): Dataset {
     applicants: [],
     staffMovements: [],
     loginHandovers: [],
+    personLinks: [],
+    groupPeople: [],
+    groupPersonNotes: [],
+    hireChecks: [],
     hrFilings: [],
     hrCases: [],
     officeOsh: [],
@@ -782,10 +847,12 @@ export function generateDataset(opts: SeedOptions): Dataset {
     staffOvertime: [],
     hrLegalChecks: [],
     policyAcks: [],
+    hrScreenings: [],
     actFindings: [],
     actAudits: [],
     actImprovements: [],
     amProperties: [],
+    amContractors: [], amLettings: [], amMeters: [], amBookings: [], amHarvests: [], amPmPlans: [],
     vehicleRequests: [],
     staffClaims: [],
     tripApprovals: [],
@@ -794,6 +861,10 @@ export function generateDataset(opts: SeedOptions): Dataset {
     arishaDrafts: [],
     itemSkus: [], physicalItems: [], itemLots: [], itemEvents: [], itemMovements: [], itemCases: [], itemCounts: [], itemSyncJobs: [], itemRequests: [], itemSettings: [], itemDocs: [], uniformRecords: [], itemLabelPrints: [], itemSqlBooks: [], itemSyncBatches: [], itemSqlSnapshots: [], itemCounters: [], itemScanDenials: [],
     itImportReviews: [],
+    offlineLeases: [],
+    offlineOps: [],
+    staffDirectory: [],
+    staffDirectoryBatches: [],
     contracts: [],
     branchSettlements: [],
     branchActions: [],
@@ -823,6 +894,7 @@ export function generateDataset(opts: SeedOptions): Dataset {
     itOperationalReceipts: [],
     itCleanupNominations: [], itCleanupArchives: [], itCleanupReceipts: [], itCleanupPlanBindings: [], orgEvents: [], orgTasks: [], orgNotices: [], orgImports: [], attendanceImports: [], attendanceDays: [], attendanceMatches: [],
     itMetricStreams: [], itMetricReceipts: [], itMetricTargets: [], itMetricCalendars: [],
+    cleaningSites: [], cleaningDays: [], cleaningStock: [], siteKits: [], dutyPlans: [], guardTerms: [],
     itPurchaseFinanceAuthorities: [], itProcurementPackets: [], itProcurementReceipts: [],
     itRentalCorrectionRequests: [], itRentalCorrectionReviews: [], itRentalReplacements: [], itRentalReplacementPayments: [], itRentalCorrectionReceipts: [],
     hrItRequests: [], hrItApprovals: [], hrItDelegations: [], hrItAuthorityMappings: [], hrItReceipts: [],
@@ -857,12 +929,27 @@ export function generateDataset(opts: SeedOptions): Dataset {
     oshAssessments: [],
     pdpaDpos: [],
     pdpaRequests: [],
+    pdpaRegister: [],
+    pdpaConsents: [],
+    pdpaSettings: [],
     bcmSystems: [],
     bcmDrills: [],
     corpAudits: [],
     legalMatters: [],
     corpFilings: [],
     corpChanges: [],
+    regRelatedParties: [],
+    regInterests: [],
+    regCommittees: [],
+    regRisks: [],
+    regSettings: [],
+    qmsRequirements: [],
+    qmsEntries: [],
+    qmsFoundation: [],
+    qmsItems: [],
+    qmsNonconformities: [],
+    compProfiles: [],
+    compAssessments: [],
     phoneExtensions: [],
     phoneCalls: [],
     siteSystems: [],
@@ -874,12 +961,21 @@ export function generateDataset(opts: SeedOptions): Dataset {
     siteNeedsReviews: [],
     siteTasks: [],
     siteTaskLogs: [],
+    clientCodes: [],
+    clientCodeChecks: [],
+    clientInspections: [],
+    selfAudits: [],
+    rbaTraceReviews: [],
+    ethicsDeclarations: [],
+    rbaCommittees: [],
     evidenceVideos: [],
     attendanceFollowUps: [],
     evidencePhotos: [],
     evidenceDocs: [],
     leaveRequests: [],
     siteVisits: [],
+    siteSurveys: [],
+    siteSurveyPhotos: [],
     vaultWatches: [],
     armsSuppliers: [],
     supplierItems: [],
@@ -1101,6 +1197,11 @@ export function generateDataset(opts: SeedOptions): Dataset {
         ds.credentials.push(cred(person, 'PASSPORT', addDays(today, -rng.int(300, 2000)), expiry(180)));
         ds.credentials.push(cred(person, 'FOMEMA', addDays(today, -rng.int(30, 330)), expiry(60)));
         ds.credentials.push(cred(person, 'FW_INSURANCE', addDays(today, -rng.int(30, 330)), expiry(60)));
+        // SPIKPA runs with the insurance year; the KDN letter (year 4 on) with the permit. No extra random draws.
+        const ins = ds.credentials.at(-1)!;
+        ds.credentials.push({ ...ins, id: `cr-${person.id}-spikpa`, type: 'SPIKPA', number: `SPK-${person.staffNo}` });
+        const plks = ds.credentials.find((c) => c.personId === person.id && c.type === 'PLKS_PERMIT')!;
+        if (person.hiredOn <= addDays(today, -3 * 365)) ds.credentials.push({ ...plks, id: `cr-${person.id}-kdn_letter`, type: 'KDN_LETTER', number: `KDN-${person.staffNo}` });
       }
     }
     // Firearm permits for guards at armed sites are assigned after the roster below.
@@ -1785,6 +1886,8 @@ export function generateDataset(opts: SeedOptions): Dataset {
       posts: i < HEADS.length ? ['HEAD_CONTROL', 'MONITOR_OFFICER'] : ['MONITOR_OFFICER'],
       ext: String(900 + i + 1),
       active: true,
+      // Mock: the two sample Head Controls have Prima accounts; the others are names on the roster until linked.
+      userId: i === 0 ? 'u-cms-head' : i === 1 ? 'u-cms-head-b' : null,
     }),
   );
   ds.cmsSettings.push({
@@ -1817,6 +1920,8 @@ export function generateDataset(opts: SeedOptions): Dataset {
         const unfilled = (d === 0 && start === '19:00' && post === 'MONITOR_OFFICER') || (d === 2 && start === '07:00' && post === 'HEAD_CONTROL');
         const name = unfilled ? null : post === 'HEAD_CONTROL' ? HEADS[n % HEADS.length] : MONITORS[n % MONITORS.length];
         const noShow = d === 0 && start === '07:00' && post === 'MONITOR_OFFICER';
+        const ended = toMs(e) <= nowMsArms;
+        const hc = post === 'HEAD_CONTROL';
         ds.cmsShifts.push({
           id: `cms-${date}-${start.replace(':', '')}-12h-${post === 'HEAD_CONTROL' ? 'hc' : 'mo'}-1`,
           date,
@@ -1828,6 +1933,10 @@ export function generateDataset(opts: SeedOptions): Dataset {
           clockIn: name && started && !noShow ? fromMs(toMs(s) - cmrng.int(2, 12) * 60_000) : null,
           handoverAt: post === 'HEAD_CONTROL' && name && started ? fromMs(toMs(s) + cmrng.int(5, 20) * 60_000) : null,
           handoverNote: post === 'HEAD_CONTROL' && name && started ? 'Open items handed over: arms out on post, vault watch check-ins, missed calls' : null,
+          // Finished seats are clocked out (the hours record), and a finished Head Control wrote the handover 30 minutes
+          // before the end. Fixed offsets, so the rest of the sample data does not move.
+          clockOut: name && ended && !noShow ? fromMs(toMs(e) + 6 * 60_000) : null,
+          handoverOut: hc && name && ended ? { by: name, at: fromMs(toMs(e) - 30 * 60_000), note: 'Arms out on post, vault watch check-ins, missed calls (sample)', openItems: [], via: 'prima' } : null,
         });
       }
       n++;
@@ -2686,7 +2795,35 @@ export function generateDataset(opts: SeedOptions): Dataset {
         premiumDueOn,
         premiumPaidOn: premiumPaidOn && premiumPaidOn > today ? today : premiumPaidOn,
         renewal,
+        status: 'active',
+        // Mock payment references, so a paid premium shows the Finance reference it needs in real use.
+        premiumPayment: premiumPaidOn
+          ? { on: premiumPaidOn > today ? today : premiumPaidOn, ref: `PV-MOCK-${irng.int(1000, 9999)}`, by: 'Finance (mock)', at: `${premiumPaidOn > today ? today : premiumPaidOn}T10:00:00+08:00` }
+          : null,
+        renewsId: null,
+        renewedById: null,
+        scheduleRef: null,
+        cancelled: null,
       });
+      // Last year's public liability, renewed: kept on the register as history (real-use register, 5 Nov 2026).
+      if (k.kind === 'PUBLIC_LIABILITY' && p.code === 'SASA') {
+        const cur = ds.insurancePolicies[ds.insurancePolicies.length - 1];
+        const prevId = `${cur.id}-prev`;
+        cur.renewsId = prevId;
+        ds.insurancePolicies.push({
+          ...cur,
+          id: prevId,
+          policyNo: `${cur.policyNo}-P`,
+          startsOn: addDays(cur.startsOn, -365),
+          expiresOn: addDays(cur.startsOn, -1),
+          premiumDueOn: addDays(cur.startsOn, -335),
+          premiumPaidOn: addDays(cur.startsOn, -340),
+          premiumPayment: { on: addDays(cur.startsOn, -340), ref: 'PV-MOCK-PREV', by: 'Finance (mock)', at: `${addDays(cur.startsOn, -340)}T10:00:00+08:00` },
+          renewal: 'renewed',
+          renewsId: null,
+          renewedById: cur.id,
+        });
+      }
     }
   }
   const pol = (companyId: string, kind: InsuranceKind) => `ins-${companyId}-${kind.toLowerCase()}`;
@@ -2941,6 +3078,16 @@ export function generateDataset(opts: SeedOptions): Dataset {
       companyIds: [],
       siteIds: [],
     },
+    // A second Head Control (mock), so a shift handover can be shown between two people.
+    {
+      id: 'u-cms-head-b',
+      name: 'Siti Aishah binti Omar',
+      title: 'CMS Head Control, command centre (every company)',
+      role: 'pwvsb_officer',
+      department: 'cms',
+      companyIds: [],
+      siteIds: [],
+    },
     {
       id: 'u-cos',
       name: 'Aisyah binti Rahman',
@@ -2996,6 +3143,15 @@ export function generateDataset(opts: SeedOptions): Dataset {
       id: 'u-asset-re1',
       name: 'Nadia binti Rahim',
       title: 'Rental Executive, Asset Management',
+      role: 'pwvsb_officer',
+      department: 'asset',
+      companyIds: [],
+      siteIds: [],
+    },
+    {
+      id: 'u-asset-rx1',
+      name: 'Farah binti Ismail',
+      title: 'Resort Executive, Asset Management',
       role: 'pwvsb_officer',
       department: 'asset',
       companyIds: [],
@@ -3574,15 +3730,19 @@ export function generateDataset(opts: SeedOptions): Dataset {
         validTo: grantTo,
       });
     }
-    ds.grants.push({
-      id: `gr-cms-${cid}`,
-      userId: 'u-cms-head',
-      companyId: cid,
-      scope: 'monitor',
-      basis: 'Management agreement with PWVSB (to be verified)',
-      validFrom: grantFrom,
-      validTo: grantTo,
-    });
+    for (const [gid, uid] of [
+      [`gr-cms-${cid}`, 'u-cms-head'],
+      [`gr-cms-b-${cid}`, 'u-cms-head-b'],
+    ])
+      ds.grants.push({
+        id: gid,
+        userId: uid,
+        companyId: cid,
+        scope: 'monitor',
+        basis: 'Management agreement with PWVSB (to be verified)',
+        validFrom: grantFrom,
+        validTo: grantTo,
+      });
     ds.grants.push({
       id: `gr-cos-${cid}`,
       userId: 'u-cos',
@@ -3976,6 +4136,11 @@ export function generateDataset(opts: SeedOptions): Dataset {
     for (const u of ds.users.filter((x) => x.personId && (x.opsTier === 'ogm' || x.department === 'procurement'))) {
       const p = ds.people.find((x) => x.id === u.personId);
       if (p) p.companyId = GOV_OPS_COMPANY_ID;
+    }
+    // The Transport department is employed by Perfect Global Logistics Sdn Bhd (Fauzan, 5 Nov 2026).
+    for (const u of ds.users.filter((x) => x.personId && x.department === 'transport')) {
+      const p = ds.people.find((x) => x.id === u.personId);
+      if (p) p.companyId = LOGISTICS_COMPANY_ID;
     }
     // The Operations Director's private-sector team is employed by Sasa Team Sdn Bhd (Fauzan, 2 Nov 2026).
     for (const u of ds.users.filter((x) => x.personId && (x.opsTier === 'ops_director' || (x.department === 'operations' && x.opsSector === 'private')))) {
@@ -4738,6 +4903,33 @@ export function generateDataset(opts: SeedOptions): Dataset {
         if (p.lindungOptOut) optedOut = true;
       }
     }
+    // The Nepali test guard's own verbal warning (IWAY finding, Fauzan 6 Nov 2026), so the guard can try the appeal on
+    // their own sign-in. Mock: recorded by the Sasa officer two days ago, inside the appeal window.
+    {
+      const npUser = ds.users.find((u) => u.id === 'u-guard-sasa-2');
+      const x = ds.shifts.find((sh) => sh.personId === npUser?.personId && sh.date === addDays(today, -2));
+      if (x)
+        ds.attendanceFollowUps.push({
+          id: `fu-${x.id}-early_leave-${ds.attendanceFollowUps.length + 1}`,
+          companyId: x.companyId,
+          siteId: x.siteId,
+          postId: x.postId,
+          shiftId: x.id,
+          attendanceId: null,
+          personId: x.personId,
+          date: x.date,
+          issue: 'EARLY_LEAVE',
+          kind: 'DISCIPLINE',
+          at: fromMs(toMs(x.start) + 9 * 3_600_000),
+          by: 'Sasa officer (mock)',
+          byId: 'u-sv-sasa',
+          byDesk: 'company',
+          note: 'Left the post 40 minutes before relief arrived (mock).',
+          replacementShiftId: null,
+          replacementPersonId: null,
+          discipline: 'VERBAL_WARNING',
+        });
+    }
     const nowMs = toMs(now);
     const guardUser = ds.users.find((u) => u.id === 'u-guard-sasa-1');
     const sasaGuard = ds.people.find((p) => p.id === guardUser?.personId);
@@ -4803,6 +4995,18 @@ export function generateDataset(opts: SeedOptions): Dataset {
           { at: fromMs(reported), by, what: `Every medical certificate added (${d1} to ${addDays(d1, 4)})`, medical: true },
           { at: fromMs(reported), by, what: `Work restriction: No patrol posts from ${d1}` },
         ],
+        // Mock DOSH assessment: 5 MC days in a row, so JKKP 6 is owed within 7 working days.
+        dosh: {
+          kind: 'OVER_4_DAYS',
+          from: dateOf(fromMs(told)),
+          why: 'MC of 5 days in a row for the ankle (test)',
+          assessedBy: by,
+          assessedAt: fromMs(reported),
+          immediate: null,
+          form: null,
+          clientToldAt: null,
+          history: [{ at: fromMs(reported), by, what: 'DOSH notice assessed: Off work more than 4 calendar days' }],
+        },
         // Mock rehabilitation record: the clinic note keeps the guard off patrol posts until HR clears it.
         rehab: {
           rtwRequestedOn: null,
@@ -4826,6 +5030,49 @@ export function generateDataset(opts: SeedOptions): Dataset {
             },
           ],
           checkIns: [],
+        },
+      });
+    }
+    // Mock LINDUNG 24 Jam case: a road accident on a rest day; the worker applied online and PERKESO asked the company
+    // to confirm employment (5 Nov 2026).
+    const lindungGuard = ds.people.find(
+      (p) => p.companyId === 'co-sasa' && p.nationality === 'MY' && p.role === 'guard' && p.lindungOptOut === false && p.id !== sasaGuard?.id,
+    );
+    if (lindungGuard) {
+      const incident = nowMs - 4 * 86_400_000 - 9 * 3_600_000;
+      const by = 'Nor Azlina binti Hashim';
+      ds.socsoClaims.push({
+        id: `sk-${lindungGuard.id}-seed`,
+        companyId: lindungGuard.companyId,
+        personId: lindungGuard.id,
+        type: 'NON_WORK_ACCIDENT',
+        status: 'DRAFT',
+        incidentAt: fromMs(incident),
+        toldAt: fromMs(incident + 20 * 3_600_000),
+        place: 'Road accident in Klang on a rest day (test)',
+        description: 'Knocked off a motorcycle at a junction on a rest day. Wrist sprain, MC from the government clinic (test).',
+        witnesses: '',
+        caseId: null,
+        openedBy: by,
+        openedAt: fromMs(incident + 21 * 3_600_000),
+        perkesoRef: null,
+        reportedAt: null,
+        docs: [],
+        overrides: [],
+        mcs: [],
+        decision: null,
+        amountPaid: null,
+        returnToWork: null,
+        closedAt: null,
+        history: [
+          { at: fromMs(incident + 21 * 3_600_000), by, what: 'Claim started: Non-work accident (LINDUNG 24 Jam)' },
+          { at: fromMs(nowMs - 3 * 86_400_000), by, what: 'Worker applied: Online, Portal LINDUNG Faedah' },
+        ],
+        lindung: {
+          channel: 'PORTAL',
+          appliedOn: dateOf(fromMs(nowMs - 3 * 86_400_000)),
+          verifyAskedAt: fromMs(nowMs - 26 * 3_600_000),
+          verify: null,
         },
       });
     }
@@ -4857,6 +5104,109 @@ export function generateDataset(opts: SeedOptions): Dataset {
         returnToWork: null,
         closedAt: null,
         history: [{ at: fromMs(incident + 2 * 3_600_000), by, what: 'Claim started: Commuting accident' }],
+      });
+    }
+    // Mock death claim of a foreign worker: dependants in Nepal, embassy told, one funeral payment recorded, the
+    // overseas payment route not yet confirmed with PERKESO (5 Nov 2026). All names are made up.
+    const npDeceased = ds.people.find((p) => p.companyId === 'co-arsh' && p.nationality === 'NP' && p.role === 'guard' && p.id !== arshGuard?.id);
+    if (npDeceased) {
+      const incident = nowMs - 12 * 86_400_000;
+      const by = 'Siti Hajar binti Rosli';
+      const id = `sk-${npDeceased.id}-seed`;
+      const doc = (name: string, at: number) => {
+        const data = 'data:application/pdf;base64,' + btoa(`%PDF-1.1 ${npDeceased.staffNo} ${name} (test)`);
+        const sha256 = sha256Hex(data);
+        const docId = `doc-${sha256.slice(0, 16)}`;
+        ds.evidenceDocs.push({ id: docId, companyId: npDeceased.companyId, caseId: null, followUpId: null, socsoId: id, name, mime: 'application/pdf', bytes: data.length, sha256, data, caption: name, uploadedBy: by, receivedAt: fromMs(at) });
+        return docId;
+      };
+      const t = (days: number) => fromMs(incident + days * 86_400_000);
+      ds.socsoClaims.push({
+        id,
+        companyId: npDeceased.companyId,
+        personId: npDeceased.id,
+        type: 'DEATH',
+        status: 'REPORTED',
+        incidentAt: fromMs(incident),
+        toldAt: fromMs(incident + 2 * 3_600_000),
+        place: 'Guard post, night shift (test)',
+        description: 'Collapsed on duty during the night shift and was declared dead at the hospital (test record).',
+        witnesses: 'Shift partner (test)',
+        caseId: null,
+        openedBy: by,
+        openedAt: fromMs(incident + 3 * 3_600_000),
+        perkesoRef: 'ASSIST-TEST-0099',
+        reportedAt: t(1),
+        docs: [{ item: 'DEATH_CERT', docIds: [doc('Death certificate (test).pdf', incident + 2 * 86_400_000)], by, at: t(2) }],
+        overrides: [],
+        mcs: [],
+        decision: null,
+        amountPaid: null,
+        returnToWork: null,
+        closedAt: null,
+        history: [
+          { at: fromMs(incident + 3 * 3_600_000), by, what: 'Claim started: Death' },
+          { at: fromMs(incident + 5 * 3_600_000), by, what: 'Embassy told' },
+          { at: t(1), by, what: 'Form 34 submitted in ASSIST, reference ASSIST-TEST-0099' },
+        ],
+        dependants: {
+          people: [
+            {
+              id: 'dp-seed-1',
+              name: 'Wife (test)',
+              relation: 'SPOUSE',
+              country: 'Nepal',
+              bornOn: null,
+              relationDocIds: [doc('Marriage certificate (test).pdf', incident + 3 * 86_400_000)],
+              translationDocIds: [],
+              route: null,
+              routeConfirmed: null,
+              addedBy: by,
+              addedAt: t(3),
+            },
+            {
+              id: 'dp-seed-2',
+              name: 'Son (test)',
+              relation: 'CHILD',
+              country: 'Nepal',
+              bornOn: '2016-04-02',
+              relationDocIds: [],
+              translationDocIds: [],
+              route: null,
+              routeConfirmed: null,
+              addedBy: by,
+              addedAt: t(3),
+            },
+          ],
+          payments: [
+            {
+              id: 'dpp-seed-1',
+              dependantId: null,
+              kind: 'REPATRIATION',
+              amount: 4500,
+              paidOn: dateOf(t(8)),
+              perkesoRef: 'PAY-TEST-0001',
+              docIds: [doc('PERKESO payment advice (test).pdf', incident + 8 * 86_400_000)],
+              received: null,
+              by,
+              at: t(8),
+            },
+          ],
+          embassyToldAt: fromMs(incident + 5 * 3_600_000),
+          immigrationToldAt: null,
+          familyToldAt: fromMs(incident + 4 * 3_600_000),
+        },
+        dosh: {
+          kind: 'DEATH',
+          from: dateOf(fromMs(incident)),
+          why: 'Died on duty (test)',
+          assessedBy: by,
+          assessedAt: fromMs(incident + 3 * 3_600_000),
+          immediate: { at: fromMs(incident + 4 * 3_600_000), means: 'Phone', office: 'DOSH state office (test)', ref: 'Duty officer (test)', by },
+          form: null,
+          clientToldAt: fromMs(incident + 3 * 3_600_000),
+          history: [{ at: fromMs(incident + 3 * 3_600_000), by, what: 'DOSH notice assessed: Death' }],
+        },
       });
     }
   }
@@ -5339,6 +5689,114 @@ export function generateDataset(opts: SeedOptions): Dataset {
       summary: null,
     });
     ds.meetings.push(opsMeeting('mt-ops-sasa', 'co-sasa', 5, true), opsMeeting('mt-ops-arsh', 'co-arsh', 28, false));
+    // The COO's monthly meetings with each operations section (rule OPS-MEETING, 5 Nov 2026; mock): CMS held with
+    // minutes and an action for the CMS head, Government operations set with the OGM's answer, the rest not set yet.
+    const cmsHeld = addDays(today, -2);
+    const cmsMinutes = [
+      'Night shift handovers on time all month.',
+      'Two alarm panels at client sites still offline.',
+      `Action: Chase the two offline alarm panels with the site owners (Hafiz, by ${addDays(today, 5)})`,
+    ].join('\n');
+    ds.meetings.push(
+      {
+        id: 'mt-sec-cms',
+        companyId: null,
+        department: 'cms',
+        kind: 'operations',
+        sectionKey: 'cms',
+        title: 'Mesyuarat Operasi Bulanan: CMS command centre',
+        organiser: 'Ahmad Faisal bin Zainal',
+        organiserId: 'u-coo',
+        start: myt(cmsHeld, '10:00'),
+        end: myt(cmsHeld, '11:00'),
+        location: 'CMS command centre',
+        attendees: [],
+        attendeeIds: ['u-cms-head'],
+        rsvp: [{ userId: 'u-cms-head', name: 'Hafiz bin Rahman', answer: 'yes', note: '', at: myt(addDays(cmsHeld, -3), '09:00') }],
+        attendance: [{ userId: 'u-cms-head', name: 'Hafiz bin Rahman', state: 'present' }],
+        changes: [],
+        cancelled: null,
+        agenda: RULES.opsMeeting.value.agenda.join('\n'),
+        status: 'held',
+        minutes: { text: cmsMinutes, by: 'Ahmad Faisal bin Zainal', at: myt(cmsHeld, '15:00'), file: null },
+        summary: {
+          text: 'Night shift handovers on time all month. Two alarm panels at client sites still offline.',
+          actions: [
+            {
+              text: 'Chase the two offline alarm panels with the site owners',
+              owner: 'Hafiz bin Rahman',
+              ownerId: 'u-cms-head',
+              due: addDays(today, 5),
+              done: false,
+            },
+          ],
+          reader: 'Automatic draft from the minutes (test version)',
+          at: myt(cmsHeld, '15:01'),
+          checkedBy: null,
+          checkedAt: null,
+        },
+      },
+      {
+        id: 'mt-sec-gov',
+        companyId: null,
+        department: 'operations',
+        kind: 'operations',
+        sectionKey: 'gov',
+        title: 'Mesyuarat Operasi Bulanan: Government operations',
+        organiser: 'Ahmad Faisal bin Zainal',
+        organiserId: 'u-coo',
+        start: myt(addDays(today, 3), '10:00'),
+        end: myt(addDays(today, 3), '11:30'),
+        location: 'Director Office, boardroom',
+        attendees: [],
+        attendeeIds: ['u-ogm', 'u-pwvsb-doa'],
+        rsvp: [{ userId: 'u-ogm', name: 'Kamarul Ariffin bin Yahya', answer: 'yes', note: '', at: myt(addDays(today, -1), '09:00') }],
+        changes: [],
+        cancelled: null,
+        agenda: RULES.opsMeeting.value.agenda.join('\n'),
+        prep: [...RULES.meetingPrep.value.common, ...RULES.meetingPrep.value.byKind.operations].map((label) => ({ label, done: false, by: null, at: null })),
+        status: 'scheduled',
+        minutes: null,
+        summary: null,
+      },
+    );
+    // Memos (mock): a staff memo from the Chief of Staff past its read-by date, and a field memo from the COO.
+    ds.memos.push(
+      {
+        id: 'memo-seed-cos-1',
+        ref: `MEMO/COS/${today.slice(0, 4)}/001`,
+        audience: 'STAFF',
+        title: 'Waktu pejabat semasa cuti umum (contoh)',
+        body: 'Contoh memo. Pejabat ditutup pada hari cuti umum negeri masing-masing. Kerja segera hubungi ketua jabatan.',
+        publishedBy: 'Aisyah binti Rahman',
+        publishedById: 'u-cos',
+        publishedAt: myt(addDays(today, -6), '09:00'),
+        states: [],
+        readBy: addDays(today, -3),
+        replaces: null,
+        replacedBy: null,
+        withdrawn: null,
+        reminders: [],
+        reads: [{ userId: 'u-pwvsb-doa', name: 'Nurul Huda binti Ismail', at: myt(addDays(today, -5), '10:00') }],
+      },
+      {
+        id: 'memo-seed-coo-1',
+        ref: `MEMO/COO/${today.slice(0, 4)}/001`,
+        audience: 'FIELD',
+        title: 'Pemeriksaan pakaian seragam minggu ini (contoh)',
+        body: 'Contoh memo. Semua pengawal dan pegawai pastikan pakaian seragam dan kad kuasa lengkap semasa bertugas.',
+        publishedBy: 'Ahmad Faisal bin Zainal',
+        publishedById: 'u-coo',
+        publishedAt: myt(addDays(today, -1), '08:00'),
+        states: [],
+        readBy: addDays(today, 2),
+        replaces: null,
+        replacedBy: null,
+        withdrawn: null,
+        reminders: [],
+        reads: [],
+      },
+    );
   }
 
   // ----- Products sold or rented to clients (Fauzan, 26 Oct 2026; mock): one ready, one renewing, two blocked -----
@@ -5457,6 +5915,37 @@ export function generateDataset(opts: SeedOptions): Dataset {
         tracker: { id: 'TRK-0001', lastSeen: ago(4) },
         dashcam: { id: 'CAM-0001', lastSeen: null },
         healthMonitor: true,
+        // Transport usage (5 Nov 2026, mock): a diesel subsidy card and a fuel card, four fill-ups, the last one flagged.
+        fuelType: 'DIESEL',
+        tankLitres: 80,
+        cards: [
+          { id: 'vc-veh-sasa-1-1', kind: 'SUBSIDY', issuer: 'Mock diesel subsidy fleet card', last4: '4401', fuel: 'DIESEL', monthlyLimitRm: null, monthlyQuotaLitres: 300, holder: 'Driver on duty', since: addDays(today, -90), endedOn: null, changes: [{ at: ago(90 * 1440), by: 'Zulkifli bin Yusof', what: `Added from ${addDays(today, -90)}`, reason: 'Mock card for testing' }] },
+          { id: 'vc-veh-sasa-1-2', kind: 'FUEL', issuer: 'Mock fuel card', last4: '7720', fuel: 'DIESEL', monthlyLimitRm: 800, monthlyQuotaLitres: null, holder: 'Transport office', since: addDays(today, -90), endedOn: null, changes: [{ at: ago(90 * 1440), by: 'Zulkifli bin Yusof', what: `Added from ${addDays(today, -90)}`, reason: 'Mock card for testing' }] },
+        ],
+        fuel: [
+          [21, 83_000, 40, 'SUBSIDY_CARD', 'vc-veh-sasa-1-1', []],
+          [15, 83_420, 40.5, 'SUBSIDY_CARD', 'vc-veh-sasa-1-1', []],
+          [9, 83_850, 41, 'FUEL_CARD', 'vc-veh-sasa-1-2', []],
+          [3, 84_150, 62, 'SUBSIDY_CARD', 'vc-veh-sasa-1-1', ['KM_PER_LITRE']],
+        ].map(([d, km, l, paid, card, flags], i) => ({
+          id: `ff-veh-sasa-1-${i + 1}`,
+          at: ago((d as number) * 1440),
+          paidWith: paid as 'SUBSIDY_CARD' | 'FUEL_CARD',
+          cardId: card as string,
+          cardVehicleId: 'veh-sasa-1',
+          fuel: 'DIESEL' as const,
+          litres: l as number,
+          amountRm: Math.round((l as number) * (paid === 'FUEL_CARD' ? 3.35 : 2.15) * 100) / 100,
+          odometerKm: km as number,
+          station: 'Mock station, Shah Alam',
+          driver: 'Mock patrol driver',
+          docId: `doc-fuel-seed-${i + 1}`,
+          recordedBy: 'Zulkifli bin Yusof',
+          recordedById: 'u-transport',
+          recordedAt: ago((d as number) * 1440 - 60),
+          flags: flags as 'KM_PER_LITRE'[],
+          review: null,
+        })),
       },
       {
         ...base,
@@ -5729,6 +6218,127 @@ export function generateDataset(opts: SeedOptions): Dataset {
         // Every company is covered in full, except Inas's worker feed, which has been silent for 30 hours.
         covered: ds.companies.map((c) => c.id).filter((id) => !(dataset === 'worker' && id === 'co-inas')),
       }),
+    );
+  }
+
+  // ----- Switch-over from JA (Fauzan, 5 Nov 2026; mock): Sasa runs incidents and attendance side by side -----
+  // The JA files are made from Prima's own sample records with a few deliberate differences, so the report has
+  // something to explain. A guard records file waits for its second-person approval.
+  {
+    const companyId = 'co-sasa';
+    const from = addDays(today, -6);
+    const to = addDays(today, -1);
+    const at = (h: number) => fromMs(toMs(now) - h * 3_600_000);
+    const people = new Map(ds.people.filter((p) => p.companyId === companyId).map((p) => [p.id, p]));
+    const siteCode = new Map(ds.sites.filter((x) => x.companyId === companyId).map((x) => [x.id, x.code]));
+    const batch = (kind: JaImportKind, rows: JaHistoryRow[], h: number, approved: boolean, extra: Partial<JaImportBatch> = {}): JaImportBatch => ({
+      id: `jaimport-seed-${companyId}-${kind}`,
+      companyId,
+      kind,
+      from,
+      to,
+      fileName: `ja-${kind}-${from}-to-${to}.csv`,
+      fileHash: jaHash({ kind, from, to, rows }),
+      rowsInFile: rows.length + (extra.refused?.length ?? 0),
+      ignoredColumns: ['ic_full', 'phone'],
+      refused: [],
+      counts: { new: rows.length, same: 0, changed: 0 },
+      unknownStaff: [],
+      rows: approved ? [] : rows,
+      staged: { by: 'ACT Assistant to the Lead (mock)', byId: 'u-act-la', at: at(h) },
+      decision: approved ? { decision: 'approved', by: 'ACT Deputy (mock)', byId: 'u-act-dep', at: at(h - 1), note: 'Totals checked against the JA screen.' } : null,
+      written: approved ? rows.length : 0,
+      ...extra,
+    });
+    const keep = (b: JaImportBatch, rows: JaHistoryRow[]) => {
+      ds.jaRecords.push({ id: `ja:import:${b.id}`, companyId, dataset: 'import', externalId: b.id, sourceUpdatedAt: b.staged.at, receivedAt: b.staged.at, jaImport: b });
+      if (b.decision)
+        for (const r of rows)
+          ds.jaRecords.push({
+            id: jaRecordId(companyId, b.kind, jaRowKey(r)),
+            companyId,
+            dataset: `hist_${b.kind}`,
+            externalId: jaRowKey(r),
+            sourceUpdatedAt: b.decision.at,
+            receivedAt: b.decision.at,
+            jaRow: r,
+            importId: b.id,
+          });
+    };
+    // Attendance: one row per guard per day from Prima's clock-ins, then three differences.
+    const att = new Map<string, JaHistoryRow & { kind: 'attendance' }>();
+    for (const a of ds.attendance) {
+      if (a.companyId !== companyId || !a.clockIn || !a.clockOut) continue;
+      const date = dateOf(a.clockIn);
+      const p = people.get(a.personId);
+      if (!p || date < from || date > to) continue;
+      const hours = Math.round(((toMs(a.clockOut) - toMs(a.clockIn)) / 3_600_000) * 100) / 100;
+      const old = att.get(`${p.staffNo}:${date}`);
+      att.set(`${p.staffNo}:${date}`, { kind: 'attendance', staffNo: p.staffNo, date, status: 'present', hours: old?.hours != null ? Math.round((old.hours + hours) * 100) / 100 : hours, siteCode: siteCode.get(a.siteId) ?? null });
+    }
+    const attRows = [...att.values()].sort((a, b) => a.date.localeCompare(b.date) || a.staffNo.localeCompare(b.staffNo));
+    if (attRows.length > 3) {
+      attRows[0] = { ...attRows[0], hours: (attRows[0].hours ?? 0) + 1 };
+      attRows[1] = { ...attRows[1], status: 'leave', hours: null };
+      attRows.splice(2, 1);
+    }
+    const attBatch = batch('attendance', attRows, 30, true);
+    keep(attBatch, attRows);
+    // Incidents: Prima's incident and SOS cases, five minutes apart in JA, one severity different and one only in JA.
+    const cases = ds.cases.filter((c) => c.companyId === companyId && (c.type === 'INCIDENT' || c.type === 'SOS') && dateOf(c.openedAt) >= from && dateOf(c.openedAt) <= to);
+    const incRows: JaHistoryRow[] = cases.map((c, i) => ({
+      kind: 'incidents',
+      externalId: `JA-INC-${4100 + i}`,
+      occurredAt: fromMs(toMs(c.openedAt) + 5 * 60_000),
+      siteCode: c.siteId ? (siteCode.get(c.siteId) ?? null) : null,
+      category: c.type === 'SOS' ? 'SOS' : 'Incident',
+      severity: i === 0 && c.severity !== 'P1' ? 'P1' : c.severity,
+      status: c.status === 'resolved' || c.status === 'closed' ? 'closed' : 'open',
+      summary: c.title,
+    }));
+    const firstSite = [...siteCode.values()][0] ?? null;
+    incRows.push({ kind: 'incidents', externalId: 'JA-INC-4199', occurredAt: myt(addDays(today, -3), '02:40'), siteCode: firstSite, category: 'Trespass', severity: 'P3', status: 'closed', summary: 'Person at the back fence, left when challenged.' });
+    const incBatch = batch('incidents', incRows, 28, true);
+    keep(incBatch, incRows);
+    const runRec = (area: 'attendance' | 'incidents', explanations: JaSwitchRecord['explanations']): JaSwitchRecord => ({
+      companyId,
+      area,
+      state: 'side_by_side',
+      run: { from, to: addDays(from, RULES.jaSwitch.value.sideBySideDays - 1), by: 'Ahmad Faisal bin Zainal', byId: 'u-coo', at: at(24 * 6 + 2), note: 'Sasa pilot, JA stays the real system.' },
+      explanations,
+      check: null,
+      switched: null,
+      history: [{ at: at(24 * 6 + 2), by: 'Ahmad Faisal bin Zainal', byId: 'u-coo', action: 'start', note: 'Sasa pilot, JA stays the real system.' }],
+    });
+    for (const [area, explanations] of [
+      ['incidents', []],
+      [
+        'attendance',
+        attRows.length > 1
+          ? [{ key: `attendance:${attRows[0].kind === 'attendance' ? attRows[0].staffNo : ''}:${attRows[0].kind === 'attendance' ? attRows[0].date : ''}`, kind: 'explained' as const, note: 'Guard stayed one more hour for the handover; JA counted it, Prima did not.', by: 'Ahmad Faisal bin Zainal', byId: 'u-coo', at: at(20) }]
+          : [],
+      ],
+    ] as const) {
+      const rec = runRec(area, [...explanations]);
+      ds.jaRecords.push({ id: jaSwitchId(companyId, area), companyId, dataset: 'switch', externalId: area, sourceUpdatedAt: rec.run!.at, receivedAt: rec.run!.at, jaSwitch: rec });
+    }
+    // A guard records file waiting for the second person.
+    const guards: JaHistoryRow[] = [...people.values()]
+      .filter((p) => p.role === 'guard')
+      .slice(0, 6)
+      .map((p) => ({ kind: 'guards', staffNo: p.staffNo, name: p.name, nationality: p.nationality === 'MY' ? 'Malaysia' : 'Nepal', status: 'active', joinedOn: p.hiredOn, leftOn: null, siteCode: null, rank: 'Guard' }));
+    guards.push({ kind: 'guards', staffNo: 'JA-ONLY-01', name: 'Guard only in JA (mock)', nationality: 'Malaysia', status: 'left', joinedOn: addDays(today, -900), leftOn: addDays(today, -200), siteCode: null, rank: 'Guard' });
+    keep(
+      batch('guards', guards, 3, false, {
+        from: addDays(today, -365),
+        to,
+        fileName: 'ja-guards-export.csv',
+        fileHash: jaHash({ kind: 'guards', from: addDays(today, -365), to, rows: guards }),
+        refused: [{ line: 9, reason: 'name is missing.' }],
+        rowsInFile: guards.length + 1,
+        unknownStaff: ['JA-ONLY-01'],
+      }),
+      guards,
     );
   }
 
@@ -8274,6 +8884,123 @@ export function generateDataset(opts: SeedOptions): Dataset {
     );
   }
 
+  // ----- Personal data register and consents (real-use PDPA, 5 Nov 2026; mock entries for testing only) -----
+  {
+    const nowMs = toMs(now);
+    const ago = (d: number) => fromMs(nowMs - d * 86_400_000);
+    const officer = 'Siti Mariam binti Osman';
+    const item = (n: number, x: Partial<import('./types').PdpaRegisterItem>): import('./types').PdpaRegisterItem => ({
+      id: `pdr-seed-${n}`,
+      companyId: null,
+      activity: 'Activity (mock)',
+      system: 'Prima',
+      subjects: ['staff'],
+      dataKinds: 'Name, staff number',
+      sensitive: false,
+      purpose: 'Purpose (mock)',
+      basis: 'CONTRACT',
+      retentionDays: 2555,
+      disposal: 'Deleted from Prima and backups',
+      sharedWith: '',
+      outsideMalaysia: '',
+      ownerDept: 'HR',
+      noticeGiven: true,
+      dpia: 'not_needed',
+      reviewedOn: addDays(today, -100),
+      reviewedBy: officer,
+      createdBy: officer,
+      createdAt: ago(200),
+      updatedBy: officer,
+      updatedAt: ago(100),
+      retired: null,
+      ...x,
+    });
+    ds.pdpaRegister.push(
+      item(1, {
+        activity: 'Staff clock-in location (mock)',
+        system: 'Prima: Clock',
+        dataKinds: 'Name, staff number, GPS location while clocked in, photo',
+        purpose: 'Record working hours and place of work',
+        basis: 'CONSENT',
+        retentionDays: 90,
+        disposal: 'Location points deleted after 90 days',
+      }),
+      item(2, {
+        activity: 'Staff face sign-in (mock)',
+        system: 'Prima: Face sign-in',
+        dataKinds: 'Face photo and face numbers (biometric)',
+        sensitive: true,
+        purpose: 'Confirm the person clocking in',
+        basis: 'EXPLICIT_CONSENT',
+        retentionDays: 365,
+        disposal: 'Face numbers deleted when the person leaves',
+        dpia: 'needed',
+        reviewedOn: null,
+        reviewedBy: null,
+      }),
+      item(3, {
+        activity: 'Guard payroll (mock)',
+        system: 'JA Group app, SQL Account',
+        subjects: ['guard'],
+        dataKinds: 'Name, IC number, bank account, pay, EPF and SOCSO numbers',
+        purpose: 'Pay wages and statutory contributions',
+        basis: 'LEGAL_DUTY',
+        retentionDays: 2555,
+        sharedWith: 'EPF, PERKESO, LHDN, the bank',
+        ownerDept: 'Finance',
+        reviewedOn: addDays(today, -400),
+      }),
+      item(4, {
+        activity: 'Driver dashcam and health monitor (mock)',
+        system: 'Fleet tracker (not connected)',
+        subjects: ['driver'],
+        dataKinds: 'Video of the driver, heart rate, vehicle location',
+        sensitive: true,
+        purpose: 'Driver safety and incident review',
+        basis: 'EXPLICIT_CONSENT',
+        retentionDays: null,
+        disposal: '',
+        outsideMalaysia: 'Singapore (vendor cloud, mock)',
+        sharedWith: '',
+        ownerDept: 'Transport',
+        dpia: 'needed',
+      }),
+    );
+    ds.pdpaConsents.push(
+      {
+        id: 'pdc-seed-1',
+        registerId: 'pdr-seed-1',
+        companyId: null,
+        subjectName: 'Staff A (mock)',
+        subjectRef: 'PW-0001',
+        subjectKind: 'staff',
+        noticeVersion: 'v1 Oct 2026',
+        givenOn: addDays(today, -60),
+        docId: null,
+        recordedBy: officer,
+        recordedAt: ago(60),
+        withdrawn: null,
+      },
+      {
+        id: 'pdc-seed-2',
+        registerId: 'pdr-seed-1',
+        companyId: null,
+        subjectName: 'Staff B (mock)',
+        subjectRef: 'PW-0002',
+        subjectKind: 'staff',
+        noticeVersion: 'v1 Oct 2026',
+        givenOn: addDays(today, -58),
+        docId: null,
+        recordedBy: officer,
+        recordedAt: ago(58),
+        withdrawn: { on: addDays(today, -12), note: 'Letter: will clock in at the office device instead (mock)', by: officer, at: ago(12) },
+      },
+    );
+    // The seeded open breach gets its register details; the 72-hour clock is still running on it.
+    const b = ds.pdpaCases.find((c) => c.id === 'pdpa-seed-breach-1');
+    if (b?.breach) Object.assign(b.breach, { dataKinds: 'Names and IC numbers', cause: 'Roster posted to the wrong WhatsApp group', remedy: '' });
+  }
+
   // Continuity: the systems and their three copies. Prima is not hosted yet, so every entry is test data.
   {
     const nowMs = toMs(now);
@@ -9021,7 +9748,8 @@ export function generateDataset(opts: SeedOptions): Dataset {
         status: 'active',
         hiredOn: addDays(today, -Math.round(400 + r() * 1500)),
         faceEnrolledOn: null,
-        basicPay: 6500,
+        // A Model B (salaried) Branch Manager's basic pay is the signed salary (mock figure).
+        basicPay: (b.agreements ?? []).at(-1)?.model === 'B' ? ((b.agreements ?? []).at(-1)?.managerSalary ?? 6500) : 6500,
         jobTitle: 'Branch Manager',
       });
       ds.users.push({
@@ -9324,39 +10052,6 @@ export function generateDataset(opts: SeedOptions): Dataset {
     }
   }
 
-  // ----- Company offices (Fauzan, 2 Nov 2026: 1 Company Manager or GM and 2 to 8 executives). Mock names only. -----
-  // Added last so every earlier generator stays stable. The other 35 companies have no office accounts yet (Unknown).
-  const officeExecs: [string, string, string][] = [
-    ['u-ae-sasa', 'Farah Nadia binti Kamal', 'co-sasa'],
-    ['u-ae-sasa-2', 'Aina Sofea binti Rahim', 'co-sasa'],
-    ['u-ae-sasa-3', 'Priya a/p Subramaniam', 'co-sasa'],
-    ['u-ae-arsh-2', 'Wong Jia Hui', 'co-arsh'],
-    ['u-ae-inas', 'Lim Mei Ling', 'co-inas'],
-  ];
-  officeExecs.forEach(([id, name, companyId], k) => {
-    if (ds.users.some((u) => u.id === id)) return;
-    const co = ds.companies.find((c) => c.id === companyId);
-    // Every staff sign-in has its own record (Fauzan, 26 Oct 2026): the company employs its office executives.
-    const personId = `pr-office-${id.slice(2)}`;
-    ds.people.push({
-      id: personId,
-      companyId,
-      branchId: ds.branches.find((b) => b.companyId === companyId)!.id,
-      staffNo: `OFC${String(k + 1).padStart(3, '0')}`,
-      name,
-      nationality: 'MY',
-      idMasked: `9${k}0${k + 1}15-**-***${k}`,
-      dob: `199${k}-0${k + 1}-15`,
-      phone: `012-77${k} 40${k}0`,
-      role: 'office',
-      status: 'active',
-      hiredOn: addDays(today, -(200 + 150 * k)),
-      faceEnrolledOn: null,
-      basicPay: 3200,
-      jobTitle: 'Admin Executive',
-    });
-    ds.users.push({ id, name, title: `Admin Executive, ${co?.name ?? companyId}`, role: 'admin_exec', companyIds: [companyId], siteIds: [], personId });
-  });
   // Pay formulas (Fauzan, 5 Nov 2026): the three standard 12-hour guard formulas and a driver overtime formula, set by
   // the ACT Director for the whole group. Placeholder amounts (minimum wage, no allowances): ACT sets the real ones.
   {
@@ -9518,8 +10213,6 @@ export function generateDataset(opts: SeedOptions): Dataset {
     });
   }
 
-  // One item register (Fauzan, 6 Nov 2026), synthetic only.
-  seedItems(ds, today, now);
   // CMS messages to site devices (Fauzan, 6 Nov 2026). A bodycam linked to the
   // Sasa site device (mock bridge); AI on CCTV saw a person at the fence 4 minutes ago and CMS sent the device an alert;
   // a sensor event at another Sasa site is acknowledged and waiting for CMS to decide.
@@ -9682,12 +10375,264 @@ export function generateDataset(opts: SeedOptions): Dataset {
       });
   }
 
+  // One item register (Fauzan, 6 Nov 2026), synthetic only.
+  seedItems(ds, today, now);
+  // ----- Company offices (Fauzan, 2 Nov 2026: 1 Company Manager or GM and 2 to 8 executives). Mock names only. -----
+  // Added last so every earlier generator stays stable. The other 35 companies have no office accounts yet (Unknown).
+  const officeExecs: [string, string, string][] = [
+    ['u-ae-sasa', 'Farah Nadia binti Kamal', 'co-sasa'],
+    ['u-ae-sasa-2', 'Aina Sofea binti Rahim', 'co-sasa'],
+    ['u-ae-sasa-3', 'Priya a/p Subramaniam', 'co-sasa'],
+    ['u-ae-arsh-2', 'Wong Jia Hui', 'co-arsh'],
+    ['u-ae-inas', 'Lim Mei Ling', 'co-inas'],
+  ];
+  officeExecs.forEach(([id, name, companyId], k) => {
+    if (ds.users.some((u) => u.id === id)) return;
+    const co = ds.companies.find((c) => c.id === companyId);
+    // Every staff sign-in has its own record (Fauzan, 26 Oct 2026): the company employs its office executives.
+    const personId = `pr-office-${id.slice(2)}`;
+    ds.people.push({
+      id: personId,
+      companyId,
+      branchId: ds.branches.find((b) => b.companyId === companyId)!.id,
+      staffNo: `OFC${String(k + 1).padStart(3, '0')}`,
+      name,
+      nationality: 'MY',
+      idMasked: `9${k}0${k + 1}15-**-***${k}`,
+      dob: `199${k}-0${k + 1}-15`,
+      phone: `012-77${k} 40${k}0`,
+      role: 'office',
+      status: 'active',
+      hiredOn: addDays(today, -(200 + 150 * k)),
+      faceEnrolledOn: null,
+      basicPay: 3200,
+      jobTitle: 'Admin Executive',
+    });
+    ds.users.push({ id, name, title: `Admin Executive, ${co?.name ?? companyId}`, role: 'admin_exec', companyIds: [companyId], siteIds: [], personId });
+  });
+  // Cleaning at two government schools (Fauzan, 4 Nov 2026), synthetic only.
+  seedCleaning(ds, today, now);
+  seedGroupHistory(ds, opts.now ?? myt(opts.today, '10:30'));
+
+  seedQuality(ds, today);
+
+  // Client due diligence and assignment instructions (PIKM/ISO review, 5 Nov 2026): one example each for the demo, so the
+  // screens show a finished record next to the clients and sites still to do. Mock wording.
+  {
+    const a = ds.clientAccounts.find((x) => x.companyId === 'co-sasa' && x.stage === 'active' && x.siteIds.length);
+    if (a) {
+      const at = `${addDays(opts.today, -40)}T09:00:00+08:00`;
+      const kinds = ['identity', 'authority', 'purpose', 'credit', 'conflict', 'site_risk', 'pdpa'] as const;
+      a.diligence = {
+        round: 1,
+        openedBy: 'Admin Executive (mock)',
+        openedById: 'u-ae-mock',
+        at,
+        checks: kinds.map((kind) => ({ kind, status: 'clear' as const, ref: `DD-${kind.toUpperCase()} (mock)`, note: '', by: 'Admin Executive (mock)', byId: 'u-ae-mock', at })),
+        decision: { result: 'accepted', note: 'All checks clear (mock).', conditions: '', by: 'Company Manager (mock)', byId: 'u-cm-sasa', at },
+        reviewDueOn: addDays(opts.today, 325),
+        past: [],
+      };
+      const site = ds.sites.find((x) => x.id === a.siteIds[0]);
+      if (site) {
+        site.instructions = {
+          version: 1,
+          general: 'Control the main gate and the loading bay. Patrol the perimeter every hour and scan each tag. Keep the key log and the visitor book (mock).',
+          posts: ds.posts.filter((p) => p.siteId === site.id).map((p) => ({ postId: p.id, postName: p.name, duties: 'Check every vehicle, visitor pass and delivery note at this post. Do not leave the post without relief (mock).' })),
+          emergency: 'Police 999 · Bomba 994 · Hospital 999 · Client duty manager 03-0000 0000 · CMS control room 03-0000 0001 (mock)',
+          reporting: 'Report to the site officer. Any incident goes into the app within 15 minutes, with a photo (mock).',
+          by: 'Operations Manager (mock)',
+          byId: 'u-om-klang',
+          at,
+          clientSigned: { name: 'Encik Pengurus Fasiliti (mock)', role: 'Facility manager', on: addDays(opts.today, -38), ref: 'Site file AI-1 (mock)', by: 'Operations Manager (mock)', at },
+          history: [],
+        };
+      }
+    }
+  }
+
+  // Asset Management extras (Fauzan, 5 Nov 2026): contractors, letting files, meters, resort bookings, harvests, planned jobs.
+  seedAmExtras(ds, today);
   // Test PINs are kept only as hashes, as real ones are (pin.ts); testers work them out from the staff number.
+  seedBoardRegisters(ds, today);
   for (const p of ds.people) if (p.staffNo) p.pinHash = DEMO_PIN_KEEPER.hash(demoPin(p.staffNo), demoPinSalt(p.id));
+  seedCmsReadiness(ds, now);
   return ds;
 }
 
 export type { Company, CompanyLicence, AuthorityGrant };
+
+/**
+ * Every central department sends a monthly report (Fauzan, 2 Nov 2026), due on the 25th of the next month, on the
+ * standard form the ACT Director keeps (rule RPT-MONTHLY). Arms Control and the Chief of Staff already have theirs above.
+ */
+export const DEPARTMENT_MONTHLY_REPORTS: ReportDef[] = (
+  [
+    ['operations', 'Operations'],
+    ['hr', 'Human Resources'],
+    ['cms', 'CMS command centre'],
+    ['director_office', 'Director Office'],
+    ['fwm', 'Foreign Worker Management'],
+    ['pdpa', 'PDPA'],
+    ['transport', 'Transport'],
+    ['asset', 'Asset Management'],
+    ['finance', 'Finance'],
+    ['it', 'IT'],
+    ['legal', 'Legal'],
+    ['audit', 'ACT'],
+    ['procurement', 'Procurement and Inventory'],
+  ] as [NonNullable<User['department']>, string][]
+).map(([department, label]) => ({
+  id: `dept-${department}-monthly`,
+  name: `${label} monthly report`,
+  detail: 'Standard monthly department report (proposed form, ACT decides the sections).',
+  from: 'department' as const,
+  department,
+  frequency: 'monthly' as const,
+  dueDay: RULES.monthlyReport.value.dueDay,
+  sections: RULES.monthlyReport.value.sections,
+  checks: RULES.monthlyReport.value.checks[department] ?? [],
+  active: true,
+}));
+
+/**
+ * Group employment history (Fauzan, 4 Nov 2026), mock only: one Selangor guard at Sasa who worked at Arrow Shield from
+ * 2018 to 2022 under a separate employment record, linked by a made-up IC through the test key (only the key is kept,
+ * as in production; the mock data holds no full numbers). Lets testers open the history as HR, the OM and the company
+ * heads, and try the check before hiring with 900515-14-5051. Nothing here is a real person or number.
+ */
+function seedGroupHistory(ds: Dataset, now: IsoDateTime): void {
+  const selangor = new Set(ds.branches.filter((b) => b.companyId === 'co-sasa' && b.state === 'Selangor').map((b) => b.id));
+  // A guard with no CSG on this record, so the earlier certificate is worth carrying over.
+  const hasCsg = new Set(ds.credentials.filter((c) => c.type === 'CSG_TRAINING').map((c) => c.personId));
+  const pick = (p: Person) => p.companyId === 'co-sasa' && p.role === 'guard' && p.status === 'active' && p.nationality === 'MY' && selangor.has(p.branchId);
+  const g = ds.people.find((p) => pick(p) && !hasCsg.has(p.id)) ?? ds.people.find(pick);
+  const arshBranch = ds.branches.find((b) => b.companyId === 'co-arsh');
+  if (!g || !arshBranch) return;
+  const idFull = '900515-14-5051';
+  const old: Person = {
+    id: 'p-hist-arsh-1',
+    companyId: 'co-arsh',
+    branchId: arshBranch.id,
+    staffNo: 'ARSH-H-0001',
+    name: g.name,
+    nationality: g.nationality,
+    idMasked: g.idMasked,
+    dob: g.dob,
+    phone: g.phone,
+    role: 'guard',
+    status: 'left',
+    hiredOn: '2018-02-01',
+    faceEnrolledOn: null,
+    leaving: { kind: 'terminated', noticeOn: null, lastDayOn: '2022-06-30', reason: 'Absent five days without leave; inquiry held (mock)', by: 'HR (mock)', at: myt('2022-06-30', '17:00') },
+  };
+  ds.people.push(old);
+  ds.credentials.push({ id: 'cred-hist-arsh-1-csg', companyId: 'co-arsh', personId: old.id, type: 'CSG_TRAINING', number: 'CSG-MOCK-1801', issuedOn: '2018-08-20', expiresOn: null });
+  const link = idLinker(DEMO_PIN_KEY);
+  const key = link.key(idFull, 'MY');
+  const gid = 'gp-mock-history-1';
+  for (const p of [old, g]) {
+    ds.personLinks.push({ id: p.id, personId: p.id, companyId: p.companyId, groupPersonId: gid, idKey: key, method: 'id_match', foreign: false, guard: true, linkedAt: now, linkedBy: 'HR (mock)', linkedById: 'u-pwvsb-hr', note: null });
+  }
+  const employments = [old, g].map((p) => ({ personId: p.id, companyId: p.companyId, role: p.role, jobTitle: null, staffNo: p.staffNo, from: p.hiredOn, to: p.leaving?.lastDayOn ?? null, status: p.status, source: 'prima' as const }));
+  ds.groupPeople.push({
+    id: gid,
+    foreign: false,
+    companyIds: ['co-arsh', 'co-sasa'],
+    employments,
+    firstJoinedOn: old.hiredOn,
+    papers: [{ type: 'CSG_TRAINING', doneOn: '2018-08-20', companyId: 'co-arsh' }],
+    rehire: null,
+    mergedInto: null,
+    updatedAt: now,
+  });
+}
+
+
+/**
+ * Mock CMS site readiness (Fauzan, 5 Nov 2026: "Try it with mock data"), so every stage can be tried. Brands are made-up
+ * names marked (mock); the first site of each company stays empty for a fresh walk-through.
+ */
+function seedCmsReadiness(ds: Dataset, now: IsoDateTime): void {
+  const user = (id: string) => ds.users.find((u) => u.id === id)!;
+  const at = (minAgo: number) => fromMs(toMs(now) - minAgo * 60_000);
+  type R = NonNullable<Site['cmsReadiness']>;
+  type Dev = R['devices'][number];
+  const dev = (siteId: string, n: number, by: string, d: Partial<Dev> & Pick<Dev, 'kind' | 'brand'>): Dev => ({
+    id: `crd-${siteId}-${n}-mock`,
+    model: '',
+    count: 1,
+    owner: 'client',
+    clientChoiceRef: 'Client email (mock)',
+    vendorName: 'Synthetic Installer Sdn Bhd (mock)',
+    vendorPhone: '03-0000 0000',
+    linkMethod: '',
+    linkConfirmed: 'unknown',
+    note: '',
+    by: user(by).name,
+    byId: by,
+    at: at(600 + n * 7),
+    ...d,
+  });
+  const ans = (by: string, note = 'Recorded (mock)', ref: string | null = null) => ({
+    value: 'yes' as const,
+    note,
+    ref,
+    by: user(by).name,
+    byId: by,
+    at: at(500),
+  });
+  const allYes = (by: string): R['answers'] => ({
+    survey: ans(by, 'Walked the site with the client (mock)', 'Survey report SR-01 (mock)'),
+    consent: ans(by, '', 'Client letter CL-01 (mock)'),
+    privacyNotice: ans(by, '', 'Photo P-01 of signs (mock)'),
+    internet: ans(by, 'Fibre 100 Mbps, client pays (mock)'),
+    power: ans(by, 'UPS 2 hours (mock)'),
+    timeSync: ans(by, 'Set to NTP (mock)'),
+    adminHolder: ans(by, 'Client building manager holds the login (mock)'),
+  });
+  const plans: { companyId: string; cm: string }[] = [
+    { companyId: 'co-sasa', cm: 'u-cm-sasa' },
+    { companyId: 'co-arsh', cm: 'u-cm-arsh' },
+    { companyId: 'co-inas', cm: 'u-cm-inas' },
+  ];
+  for (const { companyId, cm } of plans) {
+    if (!ds.users.some((u) => u.id === cm)) continue;
+    const sites = ds.sites.filter((s) => s.companyId === companyId).slice(1, 6);
+    if (sites.length < 5) continue;
+    const [a, b, c, d, e] = sites;
+    const cctv = (s: Site, n: number, extra: Partial<Dev> = {}) =>
+      dev(s.id, n, cm, { kind: 'CCTV_RECORDER', brand: 'Brand A (mock)', model: 'NVR-16', linkMethod: 'ONVIF Profile S', linkConfirmed: 'yes', ...extra });
+    // In progress: devices listed, vendor answer and most preparations not known yet.
+    a.cmsReadiness = {
+      devices: [cctv(a, 1, { linkMethod: '', linkConfirmed: 'unknown' }), dev(a.id, 2, cm, { kind: 'ALARM_PANEL', brand: 'Brand B (mock)', clientChoiceRef: '' })],
+      answers: { survey: ans(cm, '', 'Survey report SR-02 (mock)') },
+      check: null,
+      returned: null,
+    };
+    // Needs fixing: the vendor says the client's gate brand cannot share events yet; no backup power.
+    b.cmsReadiness = {
+      devices: [
+        cctv(b, 1),
+        dev(b.id, 2, cm, { kind: 'BARRIER_GATE', brand: 'Brand C (mock)', linkMethod: 'None offered', linkConfirmed: 'no', note: 'Vendor has no open interface; ask for a gateway (mock)' }),
+        dev(b.id, 3, cm, { kind: 'ANPR_CAMERA', brand: 'Brand D (mock)', linkMethod: 'HTTP push', linkConfirmed: 'yes' }),
+      ],
+      answers: { ...allYes(cm), power: { ...ans(cm, 'No UPS for the gate controller yet (mock)'), value: 'no' } },
+      check: null,
+      returned: null,
+    };
+    // Waiting for the Arms Control check.
+    c.cmsReadiness = { devices: [cctv(c, 1), dev(c.id, 2, cm, { kind: 'PANIC_BUTTON', brand: 'Brand B (mock)', count: 3, linkMethod: 'Through the alarm receiver', linkConfirmed: 'yes' })], answers: allYes(cm), check: null, returned: null };
+    // Ready to connect: checked by the Arms Control assistant (who recorded nothing). Not connected.
+    const dReady: R = { devices: [cctv(d, 1, { brand: 'Brand E (mock)', count: 2 })], answers: allYes(cm), check: null, returned: null };
+    dReady.check = { fingerprint: readinessFingerprint(dReady), by: user('u-pwvsb-arms-asst').name, byId: 'u-pwvsb-arms-asst', at: at(120), note: 'Checked survey, client letter and vendor answer (mock)' };
+    d.cmsReadiness = dReady;
+    // Returned by Arms Control with what to fix.
+    const eBack: R = { devices: [cctv(e, 1, { clientChoiceRef: 'Verbal (mock)' })], answers: allYes(cm), check: null, returned: null };
+    eBack.returned = { fingerprint: readinessFingerprint(eBack), by: user('u-pwvsb-arms-asst').name, byId: 'u-pwvsb-arms-asst', at: at(90), note: 'The brand choice must be in writing, not verbal. Get the client email (mock)' };
+    e.cmsReadiness = eBack;
+  }
+}
 
 
 /**
@@ -9743,3 +10688,4 @@ export function demoFwRecruitFiles(today: IsoDate, now: IsoDateTime): FwRecruitF
     },
   ];
 }
+

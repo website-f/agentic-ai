@@ -7,7 +7,7 @@ import { useApp } from "../App";
 /**
  * EPF and PERKESO contribution tables kept row by row in Prima (Fauzan, 2 Nov 2026: "Make sure epf and socso have table
  * for it ... Epf or socso publish their table of calculation"). Payroll takes every EPF, SOCSO and EIS amount from the
- * row the wage falls in. A new published table is loaded by HR or Finance and checked by a second person before use.
+ * reference rows for review. Loading and checking never activates a table for payroll.
  * Also the employer's own EPF, PERKESO, LHDN and HRD Corp numbers for the contribution files.
  */
 
@@ -29,10 +29,10 @@ export function StatTablesView() {
   return (
     <>
       <p className="muted small">
-        EPF amounts come from KWSP&apos;s Third Schedule and SOCSO and EIS amounts from PERKESO&apos;s published
-        tables, row by row. When KWSP or PERKESO publish a new table, HR or Finance loads it here with the month it starts.
-        The Finance Director, the Chief of Staff or the CEO checks it against the published PDF, and payroll uses it from
-        that month. Every version is kept.
+        These published EPF, SOCSO and EIS tables are a review-only reference registry. HR or Finance loads a table,
+        and a second authorised person checks it against the published document. Checking does not activate it for payroll.
+        Payroll continues to use the CEO&apos;s month-effective statutory settings. Table activation needs a separately
+        reviewed authority and calculation change. Every loaded version is kept.
       </p>
       {data.waiting.length > 0 && (
         <section className="panel">
@@ -47,7 +47,7 @@ export function StatTablesView() {
       )}
       <section className="panel">
         <div className="panel-head">
-          <h3>Tables in force for {data.period}</h3>
+          <h3>Reference tables selected for {data.period} (not applied to payroll)</h3>
         </div>
         <div className="list">
           {data.inForce.map((t) => (
@@ -167,7 +167,7 @@ function Waiting({ t, canCheck, onDone }: { t: StatTable; canCheck: boolean; onD
                 className={d === "check" ? "btn btn-primary btn-sm" : "btn btn-ghost btn-sm"}
                 disabled={act.busy}
                 onClick={async () => {
-                  if (await act.run(() => api.checkStatTable({ id: t.id, version: t.version, decision: d, comment }), d === "check" ? "Checked. Payroll uses it from that month." : "Rejected.")) onDone();
+                  if (await act.run(() => api.checkStatTable({ id: t.id, version: t.version, decision: d, comment }), d === "check" ? "Reference checked. Payroll settings are unchanged." : "Rejected.")) onDone();
                 }}
               >
                 {d === "check" ? "Checked, use it" : "Reject"}
@@ -203,7 +203,7 @@ function LoadForm({ onDone }: { onDone: () => void }) {
           </select>
         </label>
         <label className="field">
-          <span>First wage month it applies to (YYYY-MM)</span>
+          <span>Published effective wage month, for reference (YYYY-MM)</span>
           <input className="input" value={f.from} onChange={set("from")} placeholder="2027-01" />
         </label>
         <label className="field">
@@ -222,7 +222,7 @@ function LoadForm({ onDone }: { onDone: () => void }) {
           className="btn btn-primary"
           disabled={act.busy}
           onClick={async () => {
-            const r = await act.run(() => api.loadStatTable(f), "Loaded. A second person checks it before payroll uses it.");
+            const r = await act.run(() => api.loadStatTable(f), "Loaded for review. This does not change payroll calculations.");
             if (r) {
               setChanges((r as { changeCount: number }).changeCount);
               setF({ ...f, rows: "" });

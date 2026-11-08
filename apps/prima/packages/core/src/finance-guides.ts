@@ -1,16 +1,8 @@
-// In-app guide cards for Finance tasks (Arisha main's review, 2 Nov 2026, section A; Fauzan confirmed the
-// director-only legal flags the same day). One card per staff or manager task: what it is for, who does it, the exact
-// screen and button, every field with its format and one made-up example, where the source document is and whom to
-// ask, what Prima already holds (never typed or uploaded twice), the review and return path, and how to recover from
-// an error. Bahasa Melayu first, with matching English.
-//
-// The same versioned, role-scoped cards feed Arisha, so her answers match the screen and never describe another
-// role's work. Every field key is the one the service reads; finance-guides.test.ts runs each entry card's example
-// through the real service. Nothing here names a person, a folder or an integration that does not exist: contacts are
-// roles, and anything not built is marked so.
-import { finActor } from './finance';
-import { finRequestHeadFits } from './finance-requests';
-import type { User } from './types';
+import { finActor } from "./finance";
+import { finRequestHeadFits } from "./finance-requests";
+import type { User } from "./types";
+
+
 
 export const FIN_GUIDES_VERSION = '2026-11-02.1';
 

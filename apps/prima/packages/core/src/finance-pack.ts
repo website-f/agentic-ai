@@ -1,21 +1,19 @@
-// The monthly pack per company and the Finance health numbers (Fauzan, 2 Nov 2026: yes to suggestion 25, "Monthly pack
-// per company, prepared by Prima after the close: profit against budget, cash, invoices over 90 days, loans, collateral
-// held", adding "bring out the key important data in a dashboard"; and suggestion 27, "A few Finance health numbers per
-// company: days to collect, payroll as a % of revenue, profit per site").
-//
-// Prima fills the pack from what Finance already keeps: the budget and SQL Account actuals, the bank statements, the
-// ageing, the invoice problem cases, the regular payments list (loans and hire purchase), intercompany loans, the
-// guarantees and their cash collateral, and the contracts. Nobody types it. Once the month is closed, one reviewer reads
-// the whole pack and signs it off with a comment (lighter check L4: one review per clean pack, not one per item); the
-// figures are then frozen as they were reviewed, for the company's board. The dashboard shows the same numbers for every
-// company the person sees.
-import { AccessDenied } from './access';
-import { requireComment, type FinActor } from './finance';
-import { finCash13 } from './finance-forecast13';
-import { finIcPairs } from './finance-intercompany';
-import { finRegularDues, finRegularExpected } from './finance-regular';
-import { BadRequest } from './service';
-import type { Contract, FinPlanLine, FinSign, FinStatus, Id, IsoDate, StaffPayRun } from './types';
+import { AccessDenied } from "./access";
+import { requireComment } from "./finance";
+import type { FinActor } from "./finance";
+import { finCash13 } from "./finance-forecast13";
+import { finIcPairs } from "./finance-intercompany";
+import { finRegularDues } from "./finance-regular";
+import { finRegularExpected } from "./finance-regular";
+import { BadRequest } from "./service";
+import type { Contract } from "./types";
+import type { FinPlanLine } from "./types";
+import type { FinSign } from "./types";
+import type { FinStatus } from "./types";
+import type { Id } from "./types";
+import type { IsoDate } from "./types";
+import type { StaffPayRun } from "./types";
+
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
 const COST_LINES: FinPlanLine[] = [

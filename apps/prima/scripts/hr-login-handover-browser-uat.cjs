@@ -13,6 +13,7 @@
 // Hosted CI passes its pinned Playwright as PLAYWRIGHT_MODULE (.github/workflows/ci.yml, job synthetic-browser); locally
 // the pre-installed one is used. BASE_URL defaults to the local preview on 127.0.0.1:4179.
 const { chromium } = require(process.env.PLAYWRIGHT_MODULE ? require('node:path').dirname(process.env.PLAYWRIGHT_MODULE) : 'playwright');
+const { openPersonaChooser } = require('./browser-persona.cjs');
 const BASE = process.env.BASE_URL || 'http://127.0.0.1:4179';
 const S = process.argv[2] || '.';
 const results = [];
@@ -32,7 +33,7 @@ const REASON = 'Sulit alasan peribadi sintetik';
     await p.evaluate(() => { localStorage.clear(); localStorage.setItem('prima.lang', 'en'); }); await p.reload(); await p.waitForTimeout(1500);
     const consent = async () => { const ok = p.getByRole('button', { name: 'I agree and will keep it confidential' }); if (await ok.count()) { await ok.click(); await p.waitForTimeout(600); } };
     const asPersona = async (who) => {
-      if (!(await p.locator('.persona').count())) await p.getByRole('button', { name: 'Switch person' }).first().click();
+      await openPersonaChooser(p, 'Switch person');
       await p.waitForSelector('.persona'); await p.locator('.persona', { hasText: who }).first().click(); await p.waitForTimeout(1800); await consent();
     };
     const asId = async (id) => { await p.evaluate((x) => localStorage.setItem('prima-demo-user', x), id); await p.reload(); await p.waitForTimeout(2200); await consent(); };

@@ -1,12 +1,7 @@
-// Staff receipt wallet (Fauzan, 2 Nov 2026): "staff can upload receipts when they get it, upload or phone camera scanner.
-// Then system automatically read it. Staff have the power to push claim now or later. A place to store all receipt for
-// claim."
-//
-// Each receipt is kept as an evidence document marked as the staff member's own (`walletOf`), read by a receipt reader
-// (date, total, shop, what kind of claim it looks like) and confirmed or corrected by the staff member before it is
-// claimed. What the reader saw is kept apart from what the staff member confirmed, so HR sees both. The reader never
-// submits, approves or changes a claim.
-import type { IsoDate, IsoDateTime, StaffClaimKind } from './types';
+import type { IsoDate } from "./types";
+import type { IsoDateTime } from "./types";
+import type { StaffClaimKind } from "./types";
+
 
 /** What kind of spending a receipt looks like (the claim kinds, plus travel parts and anything else). */
 export type ReceiptKind = StaffClaimKind | 'TOLL' | 'PARKING' | 'HOTEL' | 'FUEL' | 'OTHER';

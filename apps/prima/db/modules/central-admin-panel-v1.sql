@@ -1,3 +1,6 @@
+-- Integration release boundary: PROPOSED ONLY. This file is not in the current
+-- five-module release manifest. Earlier pinned-module descriptions below are
+-- historical; installing this module needs separate review and authorization.
 -- Central Admin 5D panel firms (Fauzan, 2 Nov 2026: the audit firm panel is keyed in by staff). A pinned module in
 -- db/release-manifest.json (id central_admin_panel, requires central_admin_walls). Not installed anywhere by this file;
 -- only an authorized owner installs it with the reviewed selected-module command.

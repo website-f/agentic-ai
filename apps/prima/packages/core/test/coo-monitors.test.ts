@@ -75,7 +75,7 @@ describe('COO checks staff tasks in the departments he monitors', () => {
     await expect(svc.workTaskReview(coo, t.id, true, 'Looks right to me from the bank file.')).rejects.toBeInstanceOf(AccessDenied);
     await expect(svc.workTaskReview(coo, t.id, false, 'Forged return from a direct call.')).rejects.toBeInstanceOf(AccessDenied);
     // The line manager still checks it as before.
-    expect((await svc.workTaskReview(await svc.user('u-fin-t1-lead'), t.id, true, '')).status).toBe('accepted');
+    expect((await svc.workTaskReview(await svc.user('u-fin-t1-lead'), t.id, true, 'ok')).status).toBe('accepted');
     expect(await notices(svc, 'u-fin-t1-lead')).toHaveLength(0);
   });
 
@@ -149,7 +149,7 @@ describe('COO checks FWM tasks in place of FWM', () => {
     await svc.doneFwmTask(await svc.user(t.omUserId!), t.id, 'Done', [pdf('uat-fomema.pdf')]);
     await expect(svc.reviewFwmTask(await svc.user('u-fd'), t.id, true, 'Finance check of the FOMEMA slip.')).rejects.toBeInstanceOf(AccessDenied);
     await expect(svc.reviewFwmTask(await svc.user('u-fwm-desp'), t.id, true, 'Despatch says it is fine.')).rejects.toBeInstanceOf(AccessDenied);
-    expect((await svc.reviewFwmTask(fwm, t.id, true, '')).status).toBe('accepted');
+    expect((await svc.reviewFwmTask(fwm, t.id, true, 'ok')).status).toBe('accepted');
   });
 });
 
@@ -177,7 +177,7 @@ describe('COO checks: whoever is in charge is always told', () => {
     await svc.doneFwmTask(await svc.user(t.omUserId!), t.id, 'Endorsed', [pdf('uat-old.pdf')]);
     await expect(svc.reviewFwmTask(await svc.user('u-coo'), t.id, true, 'Checked the endorsement myself.')).rejects.toThrow(/Nobody in FWM is set up to be told/);
     // FWM itself still checks it as before.
-    expect((await svc.reviewFwmTask(fwm, t.id, true, '')).status).toBe('accepted');
+    expect((await svc.reviewFwmTask(fwm, t.id, true, 'ok')).status).toBe('accepted');
   });
 });
 

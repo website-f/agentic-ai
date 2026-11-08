@@ -1,9 +1,25 @@
-import { AccessDenied, GROUP_EMPLOYER_ID, isActHead, isHrDirector } from './access';
-import { FIN_AUTO, finActor, finDefaults, finSettingsOf, isFinCoo, type FinanceDeskService } from './finance';
-import type { Store } from './store';
-import { RULES } from './rules';
-import { toMs } from './time';
-import type { FinSettingsValues, FinStatus, FinStep, Id, IsoDateTime, User } from './types';
+import { AccessDenied } from "./access";
+import { GROUP_EMPLOYER_ID } from "./access";
+import { isActHead } from "./access";
+import { isHrDirector } from "./access";
+import { FIN_AUTO } from "./finance";
+import { finActor } from "./finance";
+import { finDefaults } from "./finance";
+import { finSettingsOf } from "./finance";
+import { isFinCoo } from "./finance";
+import type { FinanceDeskService } from "./finance";
+import type { Store } from "./store";
+import { RULES } from "./rules";
+import { toMs } from "./time";
+import type { FinSettingsValues } from "./types";
+import type { FinStatus } from "./types";
+import type { FinStep } from "./types";
+import type { Id } from "./types";
+import type { IsoDateTime } from "./types";
+import type { User } from "./types";
+import { registerWorkKpiAdapter } from "./work-kpi";
+
+
 
 /**
  * Finance KPIs (Fauzan, 1 Nov 2026): speed and quality, measured from when the work reaches each person (no start/stop
@@ -200,3 +216,72 @@ export class FinanceKpiService {
     };
   }
 }
+
+/**
+ * Finance on the group Work KPIs screen (Fauzan, 5 Nov 2026: "Kpi will be done for all"). The same payments and closes
+ * as the Finance KPI view above, handed to the shared engine in work-kpi.ts so Finance sits beside every other
+ * department. Timed from when the work reached the person (the previous step); approvals are not timed; the preparer's
+ * rework is staff work, review and release are checking, as in the Finance view. Automatic lapses are Prima's, not a
+ * person's, so they are never timed and never count as a return.
+ */
+const FIN_WORK_KPI_STAGE: Partial<Record<FinStep['step'], { workflow: 'payment' | 'close'; stage: string; kind: 'work' | 'check' }>> = {
+  reviewed: { workflow: 'payment', stage: 'review', kind: 'check' },
+  released: { workflow: 'payment', stage: 'release', kind: 'check' },
+  resubmitted: { workflow: 'payment', stage: 'rework', kind: 'work' },
+};
+const FIN_DEFAULT_TARGETS = finDefaults();
+registerWorkKpiAdapter({
+  id: 'finance-payments-closes',
+  depts: ['finance'],
+  tables: ['finStatus'],
+  // The Finance Director's default targets (Settings); proposed here until the CEO approves them into WORK_KPI_TARGETS.
+  targets: {
+    'finance.payment.review': FIN_DEFAULT_TARGETS.kpiReviewMinutes,
+    'finance.payment.release': FIN_DEFAULT_TARGETS.kpiReleaseMinutes,
+    'finance.payment.rework': FIN_DEFAULT_TARGETS.kpiReworkMinutes,
+    'finance.close.review': FIN_DEFAULT_TARGETS.kpiCloseReviewMinutes,
+  },
+  limits: {
+    finance: {
+      unknown: [
+        'Time to prepare a payment or a month-end close: the request arrives outside Prima (SharePoint, email), so it is not measured',
+        'Targets changed later in Finance Settings show in the Finance KPI view; this screen holds the proposed defaults until the CEO approves a version',
+      ],
+      notTimed: ['Approvals of payments and closes (Finance Director, CEO, COO)', 'Automatic lapses of an approval (Prima, not a person)'],
+    },
+  },
+  collect(data, put) {
+    for (const f of data.finStatus ?? []) {
+      for (const p of f.payments ?? []) {
+        p.steps.forEach((st, i) => {
+          const s = FIN_WORK_KPI_STAGE[st.step];
+          if (!s || i === 0 || st.byId === FIN_AUTO.byId) return;
+          put.step({ dept: 'finance', workflow: 'payment', stage: s.stage, kind: s.kind, recordId: p.id, companyId: p.companyId, byId: st.byId, by: st.by, arrivedAt: p.steps[i - 1].at, doneAt: st.at });
+        });
+        const last = p.steps[p.steps.length - 1];
+        if (p.status === 'released' && last) {
+          put.finished({
+            dept: 'finance', workflow: 'payment', recordId: p.id, companyId: p.companyId, preparer: p.steps[0]?.by ?? null, finishedAt: last.at,
+            // A return counts against the preparer's first pass; an automatic lapse is not a return.
+            returns: p.steps.filter((x) => x.step === 'returned' && x.byId !== FIN_AUTO.byId).length,
+            reopens: null, evidenceComplete: p.evidence.length > 0, requesterConfirmed: null,
+          });
+        }
+      }
+      for (const c of f.closes ?? []) {
+        c.steps.forEach((st, i) => {
+          if (i === 0 || st.step !== 'reviewed') return;
+          put.step({ dept: 'finance', workflow: 'close', stage: 'review', kind: 'check', recordId: c.id, companyId: f.companyId, byId: st.byId, by: st.by, arrivedAt: c.steps[i - 1].at, doneAt: st.at });
+        });
+        const ap = [...c.steps].reverse().find((x) => x.step === 'approved');
+        if (c.status === 'approved' && ap) {
+          put.finished({
+            dept: 'finance', workflow: 'close', recordId: c.id, companyId: f.companyId, preparer: c.steps[0]?.by ?? null, finishedAt: ap.at,
+            returns: c.steps.filter((x) => x.step === 'returned').length, reopens: c.steps.filter((x) => x.step === 'reopened').length,
+            evidenceComplete: c.bankRecRefs.length > 0, requesterConfirmed: null,
+          });
+        }
+      }
+    }
+  },
+});

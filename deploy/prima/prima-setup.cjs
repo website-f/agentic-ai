@@ -24,4 +24,45 @@ for (const m of plan.manifest.modules) {
     '--confirm', 'INSTALL_SELECTED_MODULE',
   ]);
 }
-console.log('prima-setup: base and all modules in place');
+// P88: the boss's release candidate changed three things inside modules the office database already has (an installed
+// module is never re-run): payroll Finance may read statutory rates, and the IT cleanup and rental correction scopes
+// know the pgl company. Each is repeat-safe (CREATE OR REPLACE, DROP POLICY IF EXISTS) and runs only where its module
+// is installed, as the schema owner, in one transaction.
+const REFRESH = [
+  {
+    "when": "to_regprocedure('prima.ic_scope(text,text)') IS NOT NULL",
+    "sql": "CREATE OR REPLACE FUNCTION prima.ic_scope(uid text,company text) RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER SET search_path=pg_catalog, prima AS $$\n SELECT coalesce(EXISTS(SELECT 1 FROM prima.users u WHERE u.id=uid AND prima.ic_actor(uid,false) AND u.data->'companyIds' ? company AND (company IN ('pwvsb','merdeka','goodwill','sasateam','pgl') OR EXISTS(SELECT 1 FROM prima.companies c WHERE c.id=company))),false)\n$$;",
+    "what": "IT cleanup scope also covers the pgl company"
+  },
+  {
+    "when": "to_regprocedure('prima.rc_scope(text,text)') IS NOT NULL",
+    "sql": "CREATE OR REPLACE FUNCTION prima.rc_scope(uid text,company text) RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER SET search_path=pg_catalog, prima AS $$\n SELECT coalesce(EXISTS(SELECT 1 FROM prima.users u WHERE u.id=uid AND u.data->'companyIds' ? company AND (company IN ('pwvsb','merdeka','goodwill','sasateam','pgl') OR EXISTS(SELECT 1 FROM prima.companies c WHERE c.id=company))),false)\n$$;",
+    "what": "rental correction scope also covers the pgl company"
+  },
+  {
+    "when": "to_regclass('prima.statutory_versions') IS NOT NULL",
+    "sql": "DROP POLICY IF EXISTS statutory_read ON prima.statutory_versions;\nCREATE POLICY statutory_read ON prima.statutory_versions FOR SELECT USING (prima.has_wall('act') OR prima.has_wall('pay_read') OR prima.has_wall('statutory_read'));",
+    "what": "payroll Finance reads statutory rates (statutory_read wall)"
+  }
+];
+(async () => {
+  const { Client } = require(require.resolve('pg', { paths: [cwd] }));
+  const c = new Client({ connectionString: process.env.DATABASE_URL });
+  await c.connect();
+  try {
+    await c.query('BEGIN');
+    for (const s of REFRESH) {
+      const on = (await c.query(`SELECT (${s.when}) AS ok`)).rows[0].ok;
+      if (!on) continue;
+      await c.query(s.sql);
+      console.log(`prima-setup: refreshed: ${s.what}`);
+    }
+    await c.query('COMMIT');
+  } catch (e) {
+    await c.query('ROLLBACK').catch(() => {});
+    throw e;
+  } finally {
+    await c.end();
+  }
+  console.log('prima-setup: base and all modules in place');
+})().catch((e) => { console.error('prima-setup: module refresh failed:', e.message); process.exit(1); });

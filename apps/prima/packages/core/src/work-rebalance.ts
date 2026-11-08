@@ -1,15 +1,10 @@
-// Manager work rebalancing (Fauzan, 2 Nov 2026): "Each manager can delegate or readjust the work of each staff under
-// him. Arisha need to give advice on what need to change or delegate or readjust based on data. Like timing to do task,
-// work load".
-//
-// This is Arisha's deterministic advice: fixed rules over Prima's own task records, the same answer every time, with
-// the facts behind each line shown. It is not an AI call, sends no staff data to a model and changes nothing by itself.
-// The manager reads it and decides; only the manager's own reassign or readjust action (with a reason) moves work.
-// It is a prompt for the manager, never a finding about the person, a ranking, or an input to pay or access.
+import { RULES } from "./rules";
+import { toMs } from "./time";
+import type { Id } from "./types";
+import type { IsoDate } from "./types";
+import type { IsoDateTime } from "./types";
+import type { WorkTask } from "./types";
 
-import { RULES } from './rules';
-import { toMs } from './time';
-import type { Id, IsoDate, IsoDateTime, WorkTask } from './types';
 
 /**
  * The task's record version (Arisha main review, 2 Nov 2026): a move or readjust names the version the manager saw, and

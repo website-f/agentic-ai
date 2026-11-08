@@ -9,7 +9,22 @@ The CMS Command Centre app is a separate app for the 24/7 command centre. It bri
   - "link with vms, visitor management system and vehicle management system to read [ANPR] for barrier gates";
   - "guard attendance and patrolling also are monitored in cms ... it will tell respective place to what needed".
 
-**Status:** built and tested with sample data only. It is not connected to any real device, vendor, Prima or Azure. It is not deployed.
+**Status:** built and tested with sample data only. It is not connected to any real device, vendor, model server or Prima. It is not deployed.
+
+## Where CMS runs and what Prima gets (Fauzan, 5 Nov 2026)
+
+> "This will be build sepate from prima secure app. As it need it own llm in house. And data from client saved in inhouse server not in azure cloud. Prima secure get details what happen but not the camera feed 24/7. Prima secure get what need to be documented as a company."
+
+| | CMS (this app) | Prima Secure App |
+| --- | --- | --- |
+| Where it runs | The group's own in-house server, not Azure | Azure (as planned for Prima) |
+| Client site data: video, clips, device messages, plate and visitor lists | Kept here only | Never sent |
+| Language model | Its own in-house model (`src/local-model.ts`), private address only | None from CMS |
+| What crosses the link | Signed record of what happened: event kind, time, site, device, summary, whether a clip is held in CMS (`recordForPrima`), closed alarms with real/false and the note, and the 5-minute device status | Keeps it as the company record (site alarms, cases, coverage) |
+
+- **Not sent to Prima:** the clip link, video and the device's raw details. Information-only events (visitor arrivals, allowed plates, clock-ins) also stay in CMS.
+- **Going the other way, from Prima to CMS:** the directory (companies, sites, devices, people to call, shifts, patrol rounds).
+- **Still to settle:** the in-house server itself (hardware, location, backup, power and internet resilience, who looks after it), and the retention periods. Neither has been bought or set up yet.
 
 ## The rule it keeps
 
@@ -30,6 +45,9 @@ CMS watches and tells; the company decides and acts (masterplan V13). The app ha
 | Server | `src/server.ts` | Signed feed routes, operator routes, the TCP receiver for DC-09 and the dashboard. |
 | Saved state | `src/persist.ts` | Saves the whole hub to `CMS_STATE_DIR` before any change is acknowledged and restarts from it: open alarms, the outbox to Prima, watchers and an append-only audit journal; one hub per folder (masterplan §193; details in `docs/CMS_DURABILITY_AND_OPERATOR_SIGN_IN_PLAN.md` section 2A). |
 | Response KPIs | `src/hub.ts` `kpis()` | Time to acknowledge, to someone acting and to close (median and 90%), over target, waiting over target now, false-alarm rate, repeats, devices online/offline/unknown, gaps and the outbox, by severity and by company (masterplan §195). Targets are PROPOSED: acknowledge critical 2 min, high 5, normal 15; act 10, 20, 60. |
+| Monitoring assistant | `src/assistant.ts` | Fauzan, 5 Nov 2026: "AI system track all alert from all system it connected". Reads every open alarm from every connected system, groups alarms that belong together (vault alarm with vault video down; intrusion with a forced door, tamper or blocked plate; a missing guard during a serious alarm; CIT panic with off-route; several devices silent together at one site; the same alarm at 3+ sites at once, which points at a feed or gateway fault), ranks the findings with a written reason for every point, and suggests next steps in BM. It also watches the connected systems themselves (quiet, refusing messages, never heard = unknown, never green). It never acknowledges, actions, closes, escalates, hides or lowers an alarm, never tells anyone in the field and has no device route. Rule-based, no outside service; thresholds in `ASSISTANT_RULES` are PROPOSED. Operators can mark a finding useful or not; that only goes on the audit record. |
+| In-house model | `src/local-model.ts` | Optional shift briefing in BM, written by the CMS's own model on the in-house network from the assistant's findings (the findings stay the record and work without it). Off unless `CMS_LOCAL_MODEL_URL` and `CMS_LOCAL_MODEL_NAME` are set. The address must be private (localhost, 10.x, 172.16-31.x, 192.168.x, `.internal`, `.lan`, `.local`), so a public or cloud address is refused at start. It uses the common "chat completions" call (llama.cpp, vLLM and Ollama all offer it). It is sent only the on-screen findings: never phone numbers, the names of people acting, video, clip links, device details or keys. It has no tools and no routes. If it fails or is slow (`CMS_LOCAL_MODEL_TIMEOUT_MS`, default 20 s), the screen says so and the list carries on. |
+| Shift handover | `src/hub.ts` `giveHandover` / `takeHandover` | Two steps at the desk, by the people Prima rostered (`desk` in the directory): the outgoing Head Control writes it with the open alarms, the incoming one takes it, agreeing or not. The taken handover goes to Prima as the company record (open alarms as id, kind, site and summary only). See `docs/CMS_ROSTER_AND_HANDOVER.md`. |
 | Dashboard | `src/dashboard.ts` | Alarm queue, response KPIs for the last 24 hours, who CMS told, device health (a device never heard from shows as unknown, never green), gaps where nobody is set for a role, and refused feed messages. |
 
 ### Who CMS tells
@@ -81,6 +99,9 @@ How alerts stop and escalate:
 
 **Operators.** Send `Authorization: Bearer <operator key>`. Keys come from `CMS_OPERATOR_KEYS`, a JSON map of key to operator name; each key must be at least 24 characters.
 - `GET /api/state`
+- `GET /api/assistant`: ranked findings, reasons, suggested steps and the connected-systems watch.
+- `GET /api/assistant/briefing`: the in-house model's draft shift briefing (`{state: off | ok | failed}`).
+- `POST /api/assistant/feedback` (`{key, useful, note?}`): recorded on the audit trail only.
 - `GET /api/kpis` (optional `from`, `to` as ISO times; default the last 24 hours)
 - `POST /api/alarms/{id}/acknowledge`, `/actioned` (`{by}`), `/close` (`{outcome, note}`) and `/escalate` (`{reason}`).
 
@@ -91,7 +112,7 @@ How alerts stop and escalate:
 ## Run
 
 ```
-npm test -w @prima/cms                  # 58 tests, sample data, no network
+npm test -w @prima/cms                  # 82 tests, sample data, no network
 npm run build -w @prima/cms
 CMS_DEMO=true PORT=8099 node apps/cms/dist/src/main.js   # sample data; prints a one-time operator key
 CMS_DEMO=true CMS_STATE_DIR=<state-folder> PORT=8099 node apps/cms/dist/src/main.js   # same, saved and restarted from <state-folder>
@@ -108,4 +129,4 @@ Without `CMS_DEMO`, the app refuses to start unless `CMS_OPERATOR_KEYS`, the gat
 - **KPI targets:** the response targets are proposed; Arms Control to confirm.
 - **Sending alerts:** an SMS, push or voice provider. Notifications are listed on the dashboard but not sent anywhere.
 - **Prima's side:** built as a draft in slice 4E (not merged or deployed; no key set anywhere).
-- **Hosting:** no Azure resource exists for this app. Hosting needs approval and a cost estimate first.
+- **Hosting:** decided 5 Nov 2026 that CMS runs on an in-house server, not Azure. No server has been bought or set up yet. The server spec, the model to run on it, backup and the cost need Fauzan's approval first.

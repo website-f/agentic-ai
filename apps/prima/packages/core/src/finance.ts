@@ -1,61 +1,66 @@
-import { registerRollout } from './rollouts';
-// Finance Phase 2 (Fauzan, 31 Oct 2026: Phase 2 is the Finance rollout after the IT pilot).
-//
-// SQL Account stays the system of financial record and the bank portal stays where money moves. Prima holds the
-// workflow around them: payment control with separation of duties, the month-end close with evidence and the Finance
-// Director's approval, and the bank and payment packs next to the existing auditor and tax agent papers.
-//
-// Separation of duties (the Phase 2 gate): nobody reviews, approves or releases what they prepared, nobody approves
-// what they reviewed, and nobody releases a payment they approved. It applies to the CEO and the Finance Director as
-// well, even with full authority. Every approval needs at least a comment (Fauzan, 31 Oct 2026).
-//
-// Nothing here posts to SQL Account, pays anything or contacts a bank. All figures are test data until a read-only
-// SQL Account connector exists.
+import { AccessDenied } from "./access";
+import { GROUP_EMPLOYER_ID } from "./access";
+import { centralEmployerName } from "./access";
+import { isActHead } from "./access";
+import { tenantCompanyIds } from "./access";
+import { periodEnd } from "./payroll";
+import { RULES } from "./rules";
+import type { Store } from "./store";
+import { addDays } from "./time";
+import { daysBetween } from "./time";
+import { dateOf } from "./time";
+import { fromMs } from "./time";
+import { toMs } from "./time";
+import { FIN_PLAN_LINES } from "./types";
+import type { PurRequest } from "./types";
+import type { PurSupplier } from "./types";
+import type { Contract } from "./types";
+import type { FinApprover } from "./types";
+import type { FinSubject } from "./types";
+import type { FinArCase } from "./types";
+import type { FinBankAccount } from "./types";
+import type { FinClose } from "./types";
+import type { FinExternalApproval } from "./types";
+import type { FinPackItem } from "./types";
+import type { FinPackKind } from "./types";
+import type { FinPayeeKind } from "./types";
+import type { FinPayment } from "./types";
+import type { FinBankRec } from "./types";
+import type { FinLedgerLine } from "./types";
+import type { FinSettingsValues } from "./types";
+import type { FinApprovalMethod } from "./types";
+import type { FinPlanLine } from "./types";
+import type { FinRequest } from "./types";
+import type { FinStatement } from "./types";
+import type { FinStatus } from "./types";
+import type { FinStep } from "./types";
+import type { Id } from "./types";
+import type { IsoDate } from "./types";
+import type { IsoDateTime } from "./types";
+import type { User } from "./types";
+import { BadRequest } from "./service";
+import { NotFound } from "./service";
+import { RefusedAfterSave } from "./service";
+import type { HomeItem } from "./service";
+import { finRegularExceptions } from "./finance-regular";
+import { finRegularForPayment } from "./finance-regular";
+import { finRegularLink } from "./finance-regular";
+import { finCashExceptions } from "./finance-cash";
+import { finDuplicateAcross } from "./finance-cash";
+import { finMandateOf } from "./finance-cash";
+import { finMandateRelease } from "./finance-cash";
+import { finPettyFreeTopUp } from "./finance-cash";
+import { finBillingDue } from "./finance-billing";
+import { finMoneyInExceptions } from "./finance-billing";
+import { finStampExceptions } from "./finance-stamp";
+import { finDailyCashExceptions } from "./finance-daily-cash";
+import { finYearEndExceptions } from "./finance-yearend";
+import { finSupplierStatementExceptions } from "./finance-supplier-statements";
+import { finIcExceptions } from "./finance-intercompany";
+import { finIcPairs } from "./finance-intercompany";
+import { FIN_FS_LABELS } from "./finance-ledger";
+import { finFsTests } from "./finance-ledger";
 
-import { AccessDenied, GROUP_EMPLOYER_ID, centralEmployerName, isActHead, tenantCompanyIds } from './access';
-import { periodEnd } from './payroll';
-import { RULES } from './rules';
-import type { Store } from './store';
-import { addDays, daysBetween, dateOf, fromMs, toMs } from './time';
-import { FIN_PLAN_LINES } from './types';
-import type {
-  PurRequest,
-  PurSupplier,
-  Contract,
-  FinApprover,
-  FinSubject,
-  FinArCase,
-  FinBankAccount,
-  FinClose,
-  FinExternalApproval,
-  FinPackItem,
-  FinPackKind,
-  FinPayeeKind,
-  FinPayment,
-  FinBankRec,
-  FinLedgerLine,
-  FinSettingsValues,
-  FinApprovalMethod,
-  FinPlanLine,
-  FinRequest,
-  FinStatement,
-  FinStatus,
-  FinStep,
-  Id,
-  IsoDate,
-  IsoDateTime,
-  User,
-} from './types';
-import { BadRequest, NotFound, RefusedAfterSave, type HomeItem } from './service';
-import { finRegularExceptions, finRegularForPayment, finRegularLink } from './finance-regular';
-import { finCashExceptions, finDuplicateAcross, finMandateOf, finMandateRelease, finPettyFreeTopUp } from './finance-cash';
-import { finBillingDue, finMoneyInExceptions } from './finance-billing';
-import { finStampExceptions } from './finance-stamp';
-import { finDailyCashExceptions } from './finance-daily-cash';
-import { finYearEndExceptions } from './finance-yearend';
-import { finSupplierStatementExceptions } from './finance-supplier-statements';
-import { finIcExceptions, finIcPairs } from './finance-intercompany';
-import { FIN_FS_LABELS, finFsTests } from './finance-ledger';
 
 export const FIN_PAYEE_KINDS: FinPayeeKind[] = ['supplier', 'statutory', 'payroll', 'tax', 'intercompany', 'other'];
 /** Tests that must be exactly RM0.00 before a close is approved (V6). */
@@ -72,8 +77,6 @@ export function inFinanceRollout(user: User): boolean {
   if (user.integration || user.role !== 'pwvsb_officer') return false;
   return user.leadership === 'finance_director' || (user.department === 'finance' && user.financeTeam != null && !!user.financeRole);
 }
-// The shared department switch (packages/core/src/rollouts.ts): FINANCE_ROLLOUT=true or PRIMA_ROLLOUTS=finance.
-registerRollout('finance', 'Finance', inFinanceRollout);
 
 /** What a person may do in Finance. 'viewer' is the Chairman, the Vice Chairman and the ACT head: they look, never act. */
 export interface FinActor {

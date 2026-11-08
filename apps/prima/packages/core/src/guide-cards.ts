@@ -1,20 +1,12 @@
-/**
- * Guide cards (Arisha main review, 2 Nov 2026, section A): one shared, versioned, role-scoped mapping of every staff and
- * manager task. The screen and Arisha read the same cards, so Arisha's answers match the screen. Read-only help: a card
- * never saves, approves, sends or provisions anything, and it shows a task only to people the server already lets do it.
- *
- * Rules every card follows (checked by test):
- * - Bahasa Melayu first, with matching English.
- * - "Entered once, reused" is required: what not to key again, and where it comes from.
- * - Fields come from the real form (RECORD_KINDS); nothing is invented. Anything not built or not verified says so.
- * - Who to ask is a desk from the hand-over map, never a named person or a guessed contact.
- *
- * Department threads add cards with registerGuideCards() from their own module, in the same shape.
- */
-import { IMPORTABLE_KINDS } from './org-import';
-import { ORG_DESK_LABEL, ORG_FLOWS, type OrgDesk } from './org-links';
-import { RECORD_KINDS, type FieldSpec, type RecordKind } from './records';
-import type { User } from './types';
+import { IMPORTABLE_KINDS } from "./org-import";
+import { ORG_DESK_LABEL } from "./org-links";
+import { ORG_FLOWS } from "./org-links";
+import type { OrgDesk } from "./org-links";
+import { RECORD_KINDS } from "./records";
+import type { FieldSpec } from "./records";
+import type { RecordKind } from "./records";
+import type { User } from "./types";
+
 
 /** Bumped whenever a card's meaning changes, so Arisha and the screen can tell they read the same version. */
 export const GUIDE_VERSION = '2026-11-03.2';

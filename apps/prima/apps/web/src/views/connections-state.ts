@@ -1,4 +1,5 @@
-import type { ConnectionsClient, SharePointCheck, SharePointItems, SharePointLibraries, SharePointStatus } from '../api/connections';
+import { type ConnectionsClient, type SharePointCheck, type SharePointItems, type SharePointLibraries, type SharePointStatus } from '../api/connections';
+
 
 type Busy = 'configuration' | 'check' | 'libraries' | 'items';
 export interface ConnectionsState {

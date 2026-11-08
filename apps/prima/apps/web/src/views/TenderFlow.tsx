@@ -1,4 +1,4 @@
-import { saveFile } from '../save';
+import { openProofItem } from '../save';
 import { useState } from 'react';
 import { TENDER_BID_PART_LABEL, TENDER_PAPER_LABEL, type ProofInput, type TenderBidPart, type TenderDecisionChoice, type TenderPaperKind, type TenderQuery, type TenderRecord } from '@prima/core';
 import { api, type Commercial } from '../api';
@@ -28,7 +28,7 @@ export function TenderPapers({ row, canUpload }: { row: Row; canUpload: boolean 
             <div key={p.docId} className="list-item" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 4 }}>
               <div>
                 {p.doc ? (
-                  <button className="link-button" style={{ fontWeight: 600 }} onClick={() => saveFile(p.name, p.doc!.data).then((m) => m && notify(m))}>
+                  <button className="link-button" style={{ fontWeight: 600 }} onClick={() => openProofItem(p.name, p.doc!).then((m) => m && notify(m))}>
                     {p.name}
                   </button>
                 ) : (
@@ -149,7 +149,7 @@ export function TenderBidFiles({ row, canPrepare, doa }: { row: Row; canPrepare:
               </div>
               <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
                 {f.doc && (
-                  <button className="btn btn-sm" onClick={() => saveFile(f.doc!.name, f.doc!.data).then((m) => m && notify(m))}>
+                  <button className="btn btn-sm" onClick={() => openProofItem(f.doc!.name, f.doc!).then((m) => m && notify(m))}>
                     Open
                   </button>
                 )}
@@ -179,7 +179,7 @@ export function TenderBidFiles({ row, canPrepare, doa }: { row: Row; canPrepare:
                   <p className="small">
                     The file must be named <strong data-no-translate>{f.required}</strong>.
                   </p>
-                  <ProofPicker site={null} refText="File" items={file} onChange={(x) => setFile(x.slice(-1))} documentsOnly required />
+                  <ProofPicker site={null} refText="File" items={file} onChange={(x) => setFile(x.slice(-1))} documentsOnly required noLinks />
                   <div>
                     <button
                       className="btn btn-primary btn-sm"
@@ -295,7 +295,7 @@ export function TenderChecklist({ row, canPrepare, doa, reader }: { row: Row; ca
           (t.checklistReview ? <Chip tone="ok">Checked by Director Office</Chip> : <Chip tone="warn">Director Office to check</Chip>)}
       </h3>
       {row.checklist.length === 0 && (
-        <p className="muted">{hasArahan ? 'Not drafted yet.' : 'Upload the arahan petender first; the AI agent drafts the checklist from the papers.'}</p>
+        <p className="muted">{hasArahan ? 'Not drafted yet.' : 'Upload the arahan petender first; the checklist is drafted from the papers.'}</p>
       )}
       {(canPrepare || doa) && working && hasArahan && (
         <div className="row" style={{ marginBottom: 8, flexWrap: 'wrap' }}>
@@ -307,7 +307,7 @@ export function TenderChecklist({ row, canPrepare, doa, reader }: { row: Row; ca
             {row.checklist.length ? 'Draft again from the papers' : 'Draft checklist from the papers'}
           </button>
           <span className="muted small">
-            {reader.readsFiles ? `By ${reader.name}` : 'Test version: a sample draft, the AI agent does not read the files yet.'}
+            {reader.readsFiles ? `By ${reader.name}` : 'Test version: a sample draft; the files are not read yet.'}
           </span>
         </div>
       )}
@@ -323,7 +323,7 @@ export function TenderChecklist({ row, canPrepare, doa, reader }: { row: Row; ca
                 label: c.item.label,
                 detail: c.item.detail,
                 needsDocument: c.item.needsDocument,
-                sub: `${c.item.source === 'ai' ? 'Drafted by AI agent' : 'Added by Director Office'}${c.item.ref ? ` · ${c.item.ref}` : ''}`,
+                sub: `${c.item.source === 'ai' ? 'Drafted from the papers' : 'Added by Director Office'}${c.item.ref ? ` · ${c.item.ref}` : ''}`,
               }}
               done={c.done}
               plan={c.plan}
@@ -428,7 +428,7 @@ export function TenderChecks({ row, canPrepare, missing }: { row: Row; canPrepar
           <input
             className="input"
             aria-label="Check note"
-            placeholder={row.myCheck === 'MANAGER' ? 'Note (required to send back)' : 'Note (optional)'}
+            placeholder={row.myCheck === 'MANAGER' ? 'Comment (needed to sign or send back; a short one is fine to sign)' : 'Note (optional)'}
             value={note}
             onChange={(e) => setNote(e.target.value)}
           />
@@ -436,7 +436,7 @@ export function TenderChecks({ row, canPrepare, missing }: { row: Row; canPrepar
           <div className="row">
             <button
               className="btn btn-primary btn-sm"
-              disabled={act.busy || missing.length > 0}
+              disabled={act.busy || missing.length > 0 || (row.myCheck === 'MANAGER' && !note.trim())}
               onClick={() => act.run(() => api.verifyTender(t.id, true, note), 'Signed.')}
             >
               Sign as {row.myCheck === 'PREPARER' ? 'preparer' : 'company manager'}
@@ -818,7 +818,7 @@ export function TenderDecisionPanel({ row }: { row: Row }) {
               className="input"
               style={{ flex: 1, minWidth: 160 }}
               aria-label="Reason"
-              placeholder={choice === 'TERUSKAN' ? 'Reason or key issue (optional)' : 'Reason (required)'}
+              placeholder={choice === 'TERUSKAN' ? 'Reason or key issue (needed; a short one is fine)' : 'Reason (required)'}
               value={reason}
               onChange={(e) => setReason(e.target.value)}
             />
@@ -827,7 +827,7 @@ export function TenderDecisionPanel({ row }: { row: Row }) {
           <div>
             <button
               className="btn btn-sm"
-              disabled={act.busy || (choice !== 'TERUSKAN' && reason.trim().length < 3)}
+              disabled={act.busy || (choice === 'TERUSKAN' ? !reason.trim() : reason.trim().length < 3)}
               onClick={() => act.run(() => api.decideTender(t.id, choice, reason), 'Decision recorded.')}
             >
               {d ? 'Change decision' : 'Record decision'}

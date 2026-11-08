@@ -48,8 +48,8 @@ describe('Owner as master administrator: ACT', () => {
     const i = await svc.addActImprovement(ceo, { title: 'Weekly roster check', benefit: 'Fewer gaps', findingIds: [], ownerUserId: 'u-cm-arsh', targetOn: '2026-12-31', steps: ['Set the check'] });
     expect(i.ledById).toBe('u-fauzan');
     expect((await svc.actBoard(ceo)).improvements.find((r) => r.improvement.id === i.id)!.canApprove).toBe(false);
-    await expect(svc.actImprovementStep(ceo, i.id, 'approve', {})).rejects.toThrow(/Someone other/);
-    await svc.actImprovementStep(await svc.user('u-coo'), i.id, 'approve', {});
+    await expect(svc.actImprovementStep(ceo, i.id, 'approve', { note: 'ok' })).rejects.toThrow(/Someone other/);
+    await svc.actImprovementStep(await svc.user('u-coo'), i.id, 'approve', { note: 'ok' });
   });
 });
 

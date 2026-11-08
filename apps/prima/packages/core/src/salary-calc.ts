@@ -1,15 +1,8 @@
-/**
- * Guard salary calculator (Fauzan, 6 Nov 2026): "Give an interactive salary calculator for om and above to know how to
- * calculate salary. So they know what to expect."
- *
- * Counts one guard's month from a guard formula and the days entered, showing each step. Same rules as the formula
- * preview and Fauzan's usual guard rules: daily rate = basic / 26, hourly = daily / normal hours (7.5); overtime on a
- * working day 1.5x; rest day worked = extra day(s) + overtime 2x; public holiday worked = 2 extra days + overtime 3x.
- * Paid days not worked (Fauzan, 6 Nov 2026: training, MC, annual leave, a public holiday off) are one normal day each,
- * already inside basic pay, with no overtime. Days short of the full month and not paid are taken off at the daily rate.
- * It counts gross pay only (no EPF, SOCSO, EIS or PCB). Not a payslip.
- */
-import { DEFAULT_PAY_LAW, guardOtHoursPerDay, type PayFormulaAmounts, type PayLawSettings } from './pay-formulas';
+import { DEFAULT_PAY_LAW } from "./pay-formulas";
+import { guardOtHoursPerDay } from "./pay-formulas";
+import type { PayFormulaAmounts } from "./pay-formulas";
+import type { PayLawSettings } from "./pay-formulas";
+
 
 export interface SalaryCalcInput {
   /** Normal working days actually worked (each with the formula's daily overtime). */

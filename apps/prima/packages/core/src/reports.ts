@@ -1,8 +1,7 @@
-// Weekly and monthly reports to the Director Office (Fauzan, 25 Oct 2026): which period a report covers and when it
-// is due.
+import { addDays } from "./time";
+import type { IsoDate } from "./types";
+import type { ReportDef } from "./types";
 
-import { addDays } from './time';
-import type { IsoDate, ReportDef } from './types';
 
 /** Monday of the week the date falls in. */
 export function mondayOf(d: IsoDate): IsoDate {

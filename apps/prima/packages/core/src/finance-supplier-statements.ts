@@ -1,15 +1,17 @@
-// Supplier statement checks (Fauzan, 2 Nov 2026: yes to suggestion 11). Each quarter, for the company's biggest
-// suppliers (by money paid in the last 12 months, worked out by Prima), Finance compares the supplier's own statement
-// with the creditor balance in SQL Account. A difference is explained; a second person reviews it (it is about money
-// owed). Not done within the days allowed after the quarter ends, it keeps the close open.
+import { AccessDenied } from "./access";
+import { noSecrets } from "./finance";
+import { requireReason } from "./finance";
+import { text } from "./finance";
+import type { FinCashCtx } from "./finance-cash";
+import { RULES } from "./rules";
+import { BadRequest } from "./service";
+import { NotFound } from "./service";
+import { addDays } from "./time";
+import type { FinSign } from "./types";
+import type { FinStatus } from "./types";
+import type { Id } from "./types";
+import type { IsoDate } from "./types";
 
-import { AccessDenied } from './access';
-import { noSecrets, requireReason, text } from './finance';
-import type { FinCashCtx } from './finance-cash';
-import { RULES } from './rules';
-import { BadRequest, NotFound } from './service';
-import { addDays } from './time';
-import type { FinSign, FinStatus, Id, IsoDate } from './types';
 
 type Out<T> = { patch: Partial<FinStatus>; action: string; summary: string; result: T };
 const r2 = (n: number) => Math.round(n * 100) / 100;

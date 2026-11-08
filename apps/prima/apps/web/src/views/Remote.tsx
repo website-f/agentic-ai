@@ -494,10 +494,10 @@ function ReviewRow({ r }: { r: RemoteBoard['toReview'][number] }) {
       {d.report!.blockers && <div className="small muted">Blockers: {d.report!.blockers}</div>}
       {r.canDecide ? (
         <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
-          <input className="input" placeholder="Note (needed to query)" aria-label="Review note" value={note} onChange={(e) => setNote(e.target.value)} />
+          <input className="input" placeholder="Comment (needed to accept or query)" aria-label="Review note" value={note} onChange={(e) => setNote(e.target.value)} />
           <button
             className="btn btn-sm btn-primary"
-            disabled={act.busy}
+            disabled={act.busy || !note.trim()}
             onClick={() => act.run(() => api.remoteReview(d.id, 'accepted', note), 'Day accepted.')}
           >
             Accept
@@ -554,12 +554,12 @@ function ApplicationRow({ a }: { a: RemoteBoard['applications'][number] }) {
         <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
           <input
             className="input"
-            placeholder={a.readiness.ready ? 'Written answer (grounds needed to refuse)' : 'Written answer (a reason is needed to approve an exception, or to refuse)'}
+            placeholder={a.readiness.ready ? 'Written answer (a short reason to approve; grounds to refuse)' : 'Written answer (a reason is needed to approve an exception, or to refuse)'}
             aria-label="Answer"
             value={note}
             onChange={(e) => setNote(e.target.value)}
           />
-          <button className="btn btn-sm btn-primary" disabled={act.busy} onClick={() => act.run(() => api.remoteDecide(x.id, true, note), 'Approved.')}>
+          <button className="btn btn-sm btn-primary" disabled={act.busy || !note.trim()} onClick={() => act.run(() => api.remoteDecide(x.id, true, note), 'Approved.')}>
             Approve
           </button>
           <button

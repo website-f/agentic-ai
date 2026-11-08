@@ -1,11 +1,10 @@
-/**
- * The Finance guide cards in the shared guide-card shape (GuideCardSpec, PR #56 `guide-cards.ts`, 4989972), kept as plain
- * data so this PR builds on its own. The type below is a local copy; at the combined merge it is replaced by the import
- * from `./guide-cards` and the list is passed to `registerGuideCards(FINANCE_GUIDE_CARD_SPECS)`. Nothing here adds
- * wording: every text comes from the Finance cards in `finance-guides.ts`, so the two cannot say different things.
- */
-import { FIN_GUIDES, finGuidesFor, type FinGuide, type FinGuideRole, type FinText } from './finance-guides';
-import type { User } from './types';
+import { FIN_GUIDES } from "./finance-guides";
+import { finGuidesFor } from "./finance-guides";
+import type { FinGuide } from "./finance-guides";
+import type { FinGuideRole } from "./finance-guides";
+import type { FinText } from "./finance-guides";
+import type { User } from "./types";
+
 
 // ---- Local copy of the shared shape (PR #56). Replace with `import type { GuideCardSpec } from './guide-cards'` at merge.
 interface GuideText {

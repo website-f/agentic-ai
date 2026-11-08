@@ -7,38 +7,46 @@ import {rentalCorrectionProblems} from './rental-correction-readiness';
 import {cleanupSchemaProblems} from './it-cleanup-readiness';
 import {workflowMetricProblems} from './it-workflow-metrics-readiness';
 import {jobEmailCatalogReadiness} from './connections-mail/pg-job-email-store';
+import {itemRegisterProblems,itemRegisterV2Problems} from './item-register-readiness';
 import {centralAdminDelegationsProblems,centralAdminLegalHoldsProblems,centralAdminPanelProblems,centralAdminWallsProblems} from './central-admin-readiness';
 import {companyOfficeProblems,companyRunLinkProblems} from './company-office-readiness';
 import {orgLinksProblems} from './org-links-readiness';
 import {specialOpsModuleProblems} from './special-ops-readiness';
 import {fwWelfareProblems} from './fw-welfare-readiness';
 import {fwRecruitProblems} from './fw-recruit-readiness';
-import {itemRegisterProblems,itemRegisterV2Problems} from './item-register-readiness';
 import {guardPayProblems,payFormulasProblems} from './pay-modules-readiness';
 
-export const RELEASE_MODULE_IDS = ['procurement','rental_corrections','cleanup','metrics','job_email','central_admin_walls','central_admin_panel','central_admin_delegations','central_admin_legal_holds','company_office','company_run_links','org_links','special_ops','fw_welfare','pay_formulas','guard_pay','fw_recruit','item_register','item_register_v2'] as const;
-export type ReleaseModuleId = typeof RELEASE_MODULE_IDS[number];
+// Agentic Office: upstream activates the first seven; the office database already has the rest installed, so the office
+// release keeps them activated (same order as release-artifact.ts MODULE_SPECS and db/release-manifest.json).
+export const RELEASE_MODULE_IDS = ['procurement','rental_corrections','cleanup','metrics','job_email','item_register','item_register_v2','central_admin_walls','central_admin_panel','central_admin_delegations','central_admin_legal_holds','company_office','company_run_links','org_links','special_ops','fw_welfare','pay_formulas','guard_pay','fw_recruit'] as const;
+// Upstream keeps the Central Admin modules optional (catalog-only); the office activates them above.
+export const OPTIONAL_MODULE_IDS = [] as const;
+export type ReleaseModuleId = typeof RELEASE_MODULE_IDS[number] | typeof OPTIONAL_MODULE_IDS[number];
 type CatalogClient = Pick<PoolClient,'query'>;
 type ReleaseClient = Pick<PoolClient,'query'|'release'>;
 export interface ReleaseCatalogPool { connect():Promise<ReleaseClient> }
 export interface ReleaseCatalogState {
   ready:boolean;
   baseReady:boolean;
-  modules:Record<ReleaseModuleId,{ready:boolean;codes:string[]}>;
+  modules:Record<typeof RELEASE_MODULE_IDS[number],{ready:boolean;codes:string[]}>;
   codes:string[];
 }
 const moduleCode=(id:ReleaseModuleId)=>`RELEASE_${id.toUpperCase()}_NOT_READY`;
 /** Catalog checks only. Caller supplies its transaction/role. No installation, configuration,
  * authority provisioning, or claim about the credential used by a separate running API. */
 export async function moduleCatalogProblems(client:CatalogClient,id:ReleaseModuleId):Promise<string[]> {
-  if(!RELEASE_MODULE_IDS.includes(id))return ['RELEASE_UNKNOWN_MODULE'];
+  if(!([...RELEASE_MODULE_IDS,...OPTIONAL_MODULE_IDS] as readonly string[]).includes(id))return ['RELEASE_UNKNOWN_MODULE'];
   try {
     if(id==='job_email')return (await jobEmailCatalogReadiness(client)).ready?[]:[moduleCode(id)];
+    // The item register does not depend on the IT manual/operations tables.
+    if(id==='item_register')return (await itemRegisterProblems(client)).length?[moduleCode(id)]:[];
+    // P85: the second part (label print log, SQL books, export files, counters) needs the first in place.
+    if(id==='item_register_v2')return (await itemRegisterProblems(client)).length||(await itemRegisterV2Problems(client)).length?[moduleCode(id)]:[];
     // Central Admin modules do not depend on the IT manual/operations tables; the panel needs the walls in place.
     if(id==='central_admin_walls')return (await centralAdminWallsProblems(client)).length?[moduleCode(id)]:[];
     if(id==='central_admin_delegations')return (await centralAdminDelegationsProblems(client)).length?[moduleCode(id)]:[];
     if(id==='central_admin_legal_holds')return (await centralAdminLegalHoldsProblems(client)).length?[moduleCode(id)]:[];
-    // The add-on modules (combined candidate, R14) have their own catalogue checks and no IT table dependency.
+    // The add-on modules (combined candidate, R14, and P85) have their own catalogue checks and no IT table dependency.
     if(id==='company_office')return (await companyOfficeProblems(client)).length?[moduleCode(id)]:[];
     if(id==='company_run_links')return (await companyRunLinkProblems(client)).length?[moduleCode(id)]:[];
     if(id==='org_links')return (await orgLinksProblems(client)).length?[moduleCode(id)]:[];
@@ -47,8 +55,6 @@ export async function moduleCatalogProblems(client:CatalogClient,id:ReleaseModul
     if(id==='pay_formulas')return (await payFormulasProblems(client)).length?[moduleCode(id)]:[];
     if(id==='guard_pay')return (await payFormulasProblems(client)).length||(await guardPayProblems(client)).length?[moduleCode(id)]:[];
     if(id==='fw_recruit')return (await fwRecruitProblems(client)).length?[moduleCode(id)]:[];
-    if(id==='item_register')return (await itemRegisterProblems(client)).length?[moduleCode(id)]:[];
-    if(id==='item_register_v2')return (await itemRegisterProblems(client)).length||(await itemRegisterV2Problems(client)).length?[moduleCode(id)]:[];
     if(id==='central_admin_panel')return (await centralAdminWallsProblems(client)).length||(await centralAdminPanelProblems(client)).length?[moduleCode(id)]:[];
     if((await itManualProblems(client)).length || (await itOperationsProblems(client)).length)return [moduleCode(id)];
     const checks={procurement:procurementProblems,rental_corrections:rentalCorrectionProblems,cleanup:cleanupSchemaProblems,metrics:workflowMetricProblems};

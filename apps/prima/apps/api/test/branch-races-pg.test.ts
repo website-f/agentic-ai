@@ -12,6 +12,9 @@ import { resetDb } from '../src/reset-db';
 const URL = process.env.DATABASE_URL ?? 'postgres://postgres:localdev@localhost:5432/prima_test';
 process.env.DATABASE_URL = URL;
 
+/** The seed's Branch Manager of a branch: they prepare only their own branch's months (Fauzan, 4 Nov 2026). */
+const bmOf = (branchId: string) => `u-bm-${branchId.slice(3)}`;
+
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 /**
@@ -57,6 +60,8 @@ describe('branch ledger cross-action races on PostgreSQL', () => {
   let fin: string;
   let period: string;
   let pick: { branchId: string; siteId: string }[];
+  // Model B (salaried) branches: a month carries the Branch Manager's salary line at the signed amount.
+  const salaried = new Map<string, number>();
   before(async () => {
     await resetDb(URL);
     db = new Db();
@@ -75,6 +80,8 @@ describe('branch ledger cross-action races on PostgreSQL', () => {
       for (const b of branches.filter((x) => x.status !== 'proposed' && x.status !== 'closed')) {
         const site = sites.find((x) => x.branchId === b.id && contracts.some((c) => c.state === 'active' && c.siteIds.includes(x.id)));
         if (site) out.push({ branchId: b.id, siteId: site.id });
+        const a = (b.agreements ?? []).at(-1);
+        if (a?.model === 'B' && a.managerSalary != null) salaried.set(b.id, a.managerSalary);
       }
       return { finId, out };
     });
@@ -87,10 +94,14 @@ describe('branch ledger cross-action races on PostgreSQL', () => {
     await db.onModuleDestroy();
   });
 
-  const lines = (siteId: string, invoice: string, billing: number) => [
-    { kind: 'billing', ref: invoice, siteId, amount: billing },
-    { kind: 'wages', ref: 'PAY-RACE', amount: 10_000 },
-  ];
+  const lines = (siteId: string, invoice: string, billing: number) => {
+    const branchId = pick.find((x) => x.siteId === siteId)?.branchId ?? '';
+    return [
+      { kind: 'billing', ref: invoice, siteId, amount: billing },
+      { kind: 'wages', ref: 'PAY-RACE', amount: 10_000 },
+      ...(salaried.has(branchId) ? [{ kind: 'manager_salary', ref: 'PAY-RACE-BM', amount: salaried.get(branchId)! }] : []),
+    ];
+  };
 
   for (const order of ['preparation first', 'approval first'] as const) {
     it(`preparation and approval of one month never leave an approved month with changed billing (${order})`, async () => {
@@ -98,12 +109,12 @@ describe('branch ledger cross-action races on PostgreSQL', () => {
       const month = order === 'preparation first' ? period : prevOf(period);
       const prep = (billing: number) => (svc: PrimaService, u: User) =>
         svc.prepareBranchSettlement(u, p.branchId, { period: month, payrollRef: 'JA-RACE', lines: lines(p.siteId, `IV-RACE-${order}-${billing}`, billing) });
-      const draft = await db.asUser('u-bm-sasa-1', prep(40_000));
+      const draft = await db.asUser(bmOf(p.branchId), prep(40_000));
       const approve = (svc: PrimaService, u: User) => svc.approveBranchSettlement(u, draft.id, 'Checked the draft');
       const r =
         order === 'preparation first'
-          ? await race((rel) => paused(db, 'u-bm-sasa-1', prep(55_000), rel), () => db.asUser('u-cm-sasa', approve))
-          : await race((rel) => paused(db, 'u-cm-sasa', approve, rel), () => db.asUser('u-bm-sasa-1', prep(55_000)));
+          ? await race((rel) => paused(db, bmOf(p.branchId), prep(55_000), rel), () => db.asUser('u-cm-sasa', approve))
+          : await race((rel) => paused(db, 'u-cm-sasa', approve, rel), () => db.asUser(bmOf(p.branchId), prep(55_000)));
       assert.equal(r.secondFinishedWhileFirstHeld, false, 'the second request waited for the first');
       const cur = await db.asUser('u-cm-sasa', async (_svc, _u, store) => (await store.get('branchSettlements', draft.id))!);
       const billing = cur.lines!.filter((l) => l.kind === 'billing').reduce((t, l) => t + l.amount, 0);
@@ -131,7 +142,7 @@ describe('branch ledger cross-action races on PostgreSQL', () => {
       const invoice = `IV-SHARED-${order}`;
       const prep = (q: { branchId: string; siteId: string }) => (svc: PrimaService, u: User) =>
         svc.prepareBranchSettlement(u, q.branchId, { period: prevOf(prevOf(order === 'A first' ? period : prevOf(period))), payrollRef: 'JA-RACE', lines: lines(q.siteId, invoice, 20_000) });
-      const r = await race((rel) => paused(db, 'u-bm-sasa-1', prep(x), rel), () => db.asUser('u-bm-sasa-1', prep(y)));
+      const r = await race((rel) => paused(db, bmOf(x.branchId), prep(x), rel), () => db.asUser(bmOf(y.branchId), prep(y)));
       assert.equal(r.secondFinishedWhileFirstHeld, false, 'the second branch waited for the first');
       assert.equal(r.ra.status, 'fulfilled');
       assert.equal(r.rb.status, 'rejected');
@@ -160,7 +171,7 @@ describe('branch ledger cross-action races on PostgreSQL', () => {
   it('approving an older draft month checks that month\'s own holds and split (Arisha main, 4 Nov 2026)', async () => {
     const p = pick[0];
     const month = prevOf(prevOf(prevOf(prevOf(period))));
-    const draft = await db.asUser('u-bm-sasa-1', (svc, u) =>
+    const draft = await db.asUser(bmOf(p.branchId), (svc, u) =>
       svc.prepareBranchSettlement(u, p.branchId, { period: month, payrollRef: 'JA-RACE', lines: lines(p.siteId, `IV-OLD-${month}`, 30_000) }),
     );
     // The board shows only the latest month of this branch, not this older draft.
@@ -194,7 +205,7 @@ describe('branch ledger cross-action races on PostgreSQL', () => {
       const admin = new Pool({ connectionString: URL });
       await admin.query(`DELETE FROM prima.branch_settlements WHERE company_id = 'co-sasa' AND data->>'branchId' = $1 AND data->>'status' IN ('approved', 'validated', 'paid')`, [p.branchId]);
       await admin.end();
-      const draft = await db.asUser('u-bm-sasa-1', (svc, u) =>
+      const draft = await db.asUser(bmOf(p.branchId), (svc, u) =>
         svc.prepareBranchSettlement(u, p.branchId, { period: month, payrollRef: 'JA-RACE', lines: lines(p.siteId, `IV-AGR-${order}`, 40_000) }),
       );
       const agreement = (svc: PrimaService, u: User) =>

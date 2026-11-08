@@ -1,25 +1,16 @@
-/**
- * Guide cards for Government Operations (Goodwill Empire), Private Operations (Sasa Team), the management fees and
- * client care (Fauzan, 2 Nov 2026), in the shared guide-card shape of PR #56 (packages/core/src/guide-cards.ts,
- * GuideCardSpec). Read-only help: a card never saves or approves anything.
- *
- * Each `allowed` calls the same rule the server uses (ops-access.ts). Bahasa Melayu first, then English. Who to ask is
- * a hand-over desk, or the record's own keepers by role, never a named person.
- *
- * This file does not import guide-cards.ts so this branch builds on its own; once PR #56 is merged, one line
- * registers them: registerGuideCards(OPS_GUIDE_CARDS).
- */
-import { RULES } from './rules';
-import {
-  canGovOpsMonitor,
-  canIssueGoodwillItems,
-  canPrivateOpsMonitor,
-  canRecordHandover,
-  canSetManagementFee,
-  clientRoleOf,
-  managementFeeBillScope,
-} from './ops-access';
-import type { User } from './types';
+import { RULES } from "./rules";
+import { canGovOpsMonitor } from "./ops-access";
+import { canIssueGoodwillItems } from "./ops-access";
+import { canPrivateOpsMonitor } from "./ops-access";
+import { canRecordHandover } from "./ops-access";
+import { canSetManagementFee } from "./ops-access";
+import { clientRoleOf } from "./ops-access";
+import { managementFeeBillScope } from "./ops-access";
+import type { User } from "./types";
+import { vehicleRentalRole } from "./ops-access";
+import { vehicleUsageRole } from "./ops-access";
+
+
 
 interface Text {
   bm: string;
@@ -184,13 +175,13 @@ export const OPS_GUIDE_CARDS: OpsGuideCard[] = [
     id: 'fin.management_fee.enter',
     status: 'ready',
     dept: 'Finance',
-    title: t('Masukkan yuran pengurusan daripada perjanjian', 'Enter a management fee from the agreement'),
+    title: t('Tetapkan yuran pengurusan daripada perjanjian', 'Set a management fee from the agreement'),
     purpose: t(
-      'Yuran yang dibayar setiap syarikat kepada Goodwill (tapak kerajaan) dan Sasa Team (tapak swasta). Untung rugi tapak kekal Unknown sehingga dimasukkan.',
-      'The fee each company pays Goodwill (government sites) and Sasa Team (private sites). Site profit and loss stays Unknown until it is entered.',
+      'Yuran yang dibilkan oleh mana-mana syarikat kumpulan kepada syarikat lain, termasuk PWVSB, Goodwill (tapak kerajaan) dan Sasa Team (tapak swasta). Beri sebab bagi setiap perubahan; ia terpakai dari bulan yang dipilih. Untung rugi tapak kekal Unknown sehingga yuran Goodwill atau Sasa Team dimasukkan.',
+      'The fee any group company bills another, including PWVSB, Goodwill (government sites) and Sasa Team (private sites). Give a reason for every change; it applies from the month you choose. Site profit and loss stays Unknown until the Goodwill or Sasa Team fee is entered.',
     ),
     who: t('Pengarah Kewangan atau CEO.', 'The Finance Director or the CEO.'),
-    screen: { view: 'finance', name: 'Finance', action: t('Yuran pengurusan: Masukkan atau Ubah pada syarikat itu.', 'Management fees: Enter or Change on that company.') },
+    screen: { view: 'finance', name: 'Finance', action: t('Yuran pengurusan: Tambah yuran, atau Ubah atau tamatkan, pada syarikat itu.', 'Management fees: Add a fee, or Change or end, on that company.') },
     allowed: canSetManagementFee,
     fields: [
       { key: 'kind', label: 'Fee type', required: true, format: t('Peratus bil atau RM sebulan.', '% of billing or RM a month.'), example: '% of billing', choices: ['% of billing', 'RM a month'] },
@@ -203,15 +194,19 @@ export const OPS_GUIDE_CARDS: OpsGuideCard[] = [
         rule: t('Peratus mesti antara 0 dan 100.', 'A percentage must be between 0 and 100.'),
       },
       { key: 'agreementRef', label: 'Agreement reference', required: true, format: t('Rujukan perjanjian pengurusan yang ditandatangani.', 'The signed management agreement reference.'), example: 'SYN-MA-1' },
+      { key: 'chargedBy', label: 'Billed by', required: true, format: t('Mana-mana syarikat kumpulan selain syarikat yang membayar.', 'Any group company other than the paying company.'), example: 'PWVSB' },
+      { key: 'from', label: 'Applies from', required: true, format: t('Bulan; paling awal bulan lepas.', 'A month; last month at the earliest.'), example: '2026-12' },
+      { key: 'inSiteProfit', label: 'Take off site profit and loss', required: false, format: t('Ya atau tidak; asalnya ya untuk Goodwill dan Sasa Team, tidak untuk yang lain.', 'Yes or no; by default yes for Goodwill and Sasa Team, no for others.'), example: 'Yes' },
+      { key: 'reason', label: 'Reason', required: true, format: t('Sebab perubahan, sekurang-kurangnya 3 aksara.', 'Why the fee is set or changed, at least 3 characters.'), example: 'Addendum 1 signed' },
     ],
     sources: [{ what: t('Perjanjian pengurusan yang ditandatangani.', 'The signed management agreement.'), askDesk: null, askName: 'The company secretary or Legal, who keep the signed agreements' }],
     enteredOnce: t('Dimasukkan sekali; untung rugi tapak dan bil yuran bulanan mengira sendiri daripadanya.', 'Entered once; site profit and loss and the monthly fee bills work from it.'),
     actions: ['fin.management_fee'],
     steps: {
-      save: t('Simpan: direkod dalam log audit dengan nilai lama.', 'Save: written to the audit log with the old value.'),
+      save: t('Simpan: direkod dengan sebab dan nilai lama dalam log audit dan senarai perubahan syarikat.', 'Save: kept with the reason and the old value in the audit log and the company\'s list of changes.'),
       review: t('Tiada penyemak.', 'No reviewer.'),
       returned: t('Tiada.', 'None.'),
-      done: t('Berkuat kuasa serta-merta pada untung rugi.', 'Applies to profit and loss straight away.'),
+      done: t('Terpakai dari bulan yang dipilih; bil bulan lebih awal tidak berubah.', 'Applies from the month chosen; bills of earlier months do not change.'),
       recover: t('Tersalah: ubah semula dengan rujukan yang betul; nilai lama kekal dalam log.', 'A mistake: change it again with the right reference; the old value stays in the log.'),
     },
     notVerified: [t('Jumlah yuran sebenar belum dimasukkan.', 'No real fee amounts are entered yet.')],
@@ -221,7 +216,7 @@ export const OPS_GUIDE_CARDS: OpsGuideCard[] = [
     status: 'ready',
     dept: 'Finance',
     title: t('Semak bil yuran pengurusan bulanan', 'Check the monthly management fee bills'),
-    purpose: t('Draf apa yang setiap syarikat berhutang kepada Goodwill dan Sasa Team, untuk dikeluarkan dalam SQL Account. Bukan invois.', 'A draft of what each company owes Goodwill and Sasa Team, to raise in SQL Account. Not an invoice.'),
+    purpose: t('Draf apa yang setiap syarikat berhutang kepada Goodwill, Sasa Team dan mana-mana syarikat kumpulan lain yang membilkan yuran, untuk dikeluarkan dalam SQL Account. Bukan invois.', 'A draft of what each company owes Goodwill, Sasa Team and any other group company that bills it a fee, to raise in SQL Account. Not an invoice.'),
     who: t('Kewangan, COO dan CEO; Ketua Operasi Kerajaan (Goodwill sahaja); Pengarah Operasi (Sasa Team sahaja).', 'Finance, the COO and the CEO; the OGM (Goodwill only); the Operations Director (Sasa Team only).'),
     screen: { view: 'finance', name: 'Finance', action: t('Bil yuran pengurusan (draf): pilih bulan.', 'Management fee bills (draft): choose the month.') },
     allowed: (u) => managementFeeBillScope(u).length > 0,
@@ -237,6 +232,135 @@ export const OPS_GUIDE_CARDS: OpsGuideCard[] = [
       recover: t('Unknown: yuran belum dimasukkan atau bil tapak tidak diketahui.', 'Unknown: the fee is not entered or a site billing is not known.'),
     },
     notVerified: [t('SQL Account belum disambung.', 'SQL Account is not connected.')],
+  },
+  {
+    id: 'fleet.rental.record',
+    status: 'ready',
+    dept: 'Transport',
+    title: t('Rekod kenderaan sewa daripada Perfect Global Logistics', 'Record a vehicle rented from Perfect Global Logistics'),
+    purpose: t(
+      'Kenderaan yang disewa oleh syarikat daripada Perfect Global Logistics, dari tarikh mula hingga hari terakhir. Sewa bulan dibilkan jika masih disewa pada hari terakhir bulan.',
+      'Which vehicles a company rents from Perfect Global Logistics, from the start date to the last day. A month is billed when the vehicle is still rented on its last day.',
+    ),
+    who: t('Jabatan Pengangkutan.', 'The Transport department.'),
+    screen: { view: 'fleet', name: 'Vehicles', action: t('Kenderaan sewa: Rekod kenderaan sewa, atau Tamatkan sewa.', 'Rented vehicles: Record rented vehicle, or End rental.') },
+    allowed: (u) => vehicleRentalRole(u) === 'transport',
+    fields: [
+      { key: 'vehicleId', label: 'Vehicle', required: true, format: t('Kenderaan yang belum disewa.', 'A vehicle not already rented.'), example: 'WXY 1234' },
+      { key: 'ownerId', label: 'Rented from', required: true, format: t('Syarikat kumpulan yang menyewakan.', 'The group company renting it out.'), example: 'Perfect Global Logistics Sdn Bhd' },
+      { key: 'since', label: 'From date', required: true, format: t('Tarikh; paling awal hari pertama bulan lepas.', 'A date; the first day of last month at the earliest.'), example: '2026-11-01' },
+      { key: 'reason', label: 'Reason', required: true, format: t('Sebab, sekurang-kurangnya 3 aksara.', 'Why, at least 3 characters.'), example: 'Moved to the PGL fleet' },
+    ],
+    sources: [{ what: t('Perjanjian sewa kenderaan.', 'The vehicle rental agreement.'), askDesk: null, askName: 'The company secretary or Legal, who keep the signed agreements' }],
+    enteredOnce: t('Dimasukkan sekali; bil sewa bulanan mengira sendiri daripadanya.', 'Entered once; the monthly rent bills work from it.'),
+    actions: ['fleet.rental', 'fleet.rental_end'],
+    steps: {
+      save: t('Simpan: direkod dengan sebab dalam log audit dan senarai perubahan kenderaan.', "Save: kept with the reason in the audit log and the vehicle's list of changes."),
+      review: t('Tiada penyemak.', 'No reviewer.'),
+      returned: t('Tiada.', 'None.'),
+      done: t('Kenderaan muncul dalam bil sewa bulan itu.', "The vehicle shows in that month's rent bills."),
+      recover: t('Tersalah: tamatkan sewa dengan sebab dan rekod semula.', 'A mistake: end the rental with a reason and record it again.'),
+    },
+    notVerified: [t('Tiada kenderaan sebenar direkod lagi.', 'No real vehicles are recorded yet.')],
+  },
+  {
+    id: 'fleet.rental.rent',
+    status: 'ready',
+    dept: 'Finance',
+    title: t('Tetapkan sewa bulanan kenderaan', "Set a rented vehicle's monthly rent"),
+    purpose: t(
+      'Sewa sebulan daripada perjanjian, terpakai dari bulan yang dipilih. Bil kekal Unknown sehingga sewa ditetapkan.',
+      'The monthly rent from the agreement, applying from the month you choose. The bill stays Unknown until it is set.',
+    ),
+    who: t('Pengarah Kewangan atau CEO.', 'The Finance Director or the CEO.'),
+    screen: { view: 'fleet', name: 'Vehicles', action: t('Kenderaan sewa: Tetapkan sewa pada kenderaan itu.', 'Rented vehicles: Set rent on that vehicle.') },
+    allowed: (u) => vehicleRentalRole(u) === 'setter',
+    fields: [
+      { key: 'monthly', label: 'Monthly rent', required: true, format: t('RM lebih daripada 0.', 'RM above 0.'), example: '2200' },
+      { key: 'agreementRef', label: 'Agreement reference', required: true, format: t('Rujukan perjanjian sewa.', 'The rental agreement reference.'), example: 'SYN-PGL-1' },
+      { key: 'from', label: 'Applies from', required: true, format: t('Bulan; paling awal bulan lepas.', 'A month; last month at the earliest.'), example: '2026-12' },
+      { key: 'reason', label: 'Reason', required: true, format: t('Sebab, sekurang-kurangnya 3 aksara.', 'Why, at least 3 characters.'), example: 'Addendum 1 signed' },
+    ],
+    sources: [{ what: t('Perjanjian sewa kenderaan.', 'The vehicle rental agreement.'), askDesk: null, askName: 'The company secretary or Legal, who keep the signed agreements' }],
+    enteredOnce: t('Dimasukkan sekali; bil sewa bulanan mengira sendiri daripadanya.', 'Entered once; the monthly rent bills work from it.'),
+    actions: ['fleet.rent'],
+    steps: {
+      save: t('Simpan: direkod dengan sebab dan nilai lama dalam log audit.', 'Save: kept with the reason and the old value in the audit log.'),
+      review: t('Tiada penyemak.', 'No reviewer.'),
+      returned: t('Tiada.', 'None.'),
+      done: t('Terpakai dari bulan yang dipilih; bil bulan lebih awal tidak berubah.', 'Applies from the month chosen; bills of earlier months do not change.'),
+      recover: t('Tersalah: tetapkan semula dengan rujukan yang betul; nilai lama kekal dalam log.', 'A mistake: set it again with the right reference; the old value stays in the log.'),
+    },
+    notVerified: [t('Tiada sewa sebenar dimasukkan lagi.', 'No real rents are entered yet.')],
+  },
+  {
+    id: 'fleet.usage.fuel',
+    status: 'ready',
+    dept: 'Transport',
+    title: t('Rekod kad minyak, kad subsidi dan isian minyak', 'Record fuel cards, subsidy cards and fill-ups'),
+    purpose: t(
+      'Setiap kenderaan: kad yang disimpan untuknya dan setiap isian minyak dengan resit. Sistem menyemak dan menanda yang luar biasa untuk disemak.',
+      'For each vehicle: the cards kept for it and every fill-up with its receipt. The system checks each one and flags anything unusual for review.',
+    ),
+    who: t('Jabatan Pengangkutan. Pemandu yang membawa kenderaan boleh merekod isian minyaknya sendiri.', 'The Transport department. The driver the vehicle is out with may record their own fill-ups.'),
+    screen: { view: 'fleet', name: 'Vehicles', action: t('Minyak dan penggunaan: Tambah kad, atau Rekod isian minyak.', 'Fuel and usage: Add a card, or Record a fill-up.') },
+    allowed: (u) => vehicleUsageRole(u) === 'transport',
+    fields: [
+      { key: 'last4', label: 'Card last 4 digits', required: true, format: t('4 digit terakhir sahaja; jangan masukkan nombor penuh atau PIN.', 'The last 4 digits only; never the full number or the PIN.'), example: '4401' },
+      {
+        key: 'share',
+        label: 'Same card for another vehicle',
+        required: false,
+        format: t('Hanya dengan persetujuan Ketua Pengangkutan dan sebab.', "Only with the Transport head's consent and a reason."),
+        example: 'Both patrol the same area',
+        rule: t('Had atau kuota kad dikira sekali untuk semua kenderaannya.', "The card's limit or quota is counted once across all its vehicles."),
+      },
+      { key: 'quota', label: 'Monthly limit or quota', required: false, format: t('Daripada dokumen pengeluar kad; kosong = Unknown.', "From the card issuer's papers; empty = Unknown."), example: '300' },
+      { key: 'litres', label: 'Litres and RM', required: true, format: t('Seperti pada resit.', 'As on the receipt.'), example: '40.5 / 87.08' },
+      { key: 'odometer', label: 'Odometer', required: true, format: t('Bacaan km semasa mengisi.', 'The km reading when filling.'), example: '83420' },
+    ],
+    sources: [
+      { what: t('Kad minyak dan surat kad subsidi.', "The fuel card and the subsidy card's letter."), askDesk: null, askName: 'The Transport department, who keep the cards' },
+      { what: t('Resit stesen minyak.', "The station's receipt."), askDesk: null, askName: 'The driver who filled up' },
+    ],
+    enteredOnce: t('Dimasukkan sekali; penggunaan bulanan, had kad dan semakan dikira daripadanya.', 'Entered once; the monthly usage, card limits and checks all work from it.'),
+    actions: ['fleet.card_add', 'fleet.card_end', 'fleet.fuel'],
+    steps: {
+      save: t('Simpan: semakan dijalankan serta-merta dan direkod dalam log audit.', 'Save: the checks run at once and it is kept in the audit log.'),
+      review: t('Isian bertanda disemak oleh orang lain, bukan yang merekodnya.', 'A flagged fill-up is reviewed by someone other than the person who recorded it.'),
+      returned: t('Tiada.', 'None.'),
+      done: t('Isian tanpa tanda tidak perlu disemak.', 'A fill-up with no flag needs no review.'),
+      recover: t('Tersalah: beritahu penyemak; isian tidak dipadam, sebab dicatat semasa semakan.', 'A mistake: tell the reviewer; a fill-up is never deleted, the reason is noted in the review.'),
+    },
+    notVerified: [
+      t('Penjejak belum disambung; jarak penjejak Unknown.', 'Trackers are not connected yet; tracker distance is Unknown.'),
+      t('Penyata kad minyak belum dimuat naik secara automatik.', 'Fuel card statements are not loaded automatically yet.'),
+    ],
+  },
+  {
+    id: 'fleet.usage.review',
+    status: 'ready',
+    dept: 'Transport',
+    title: t('Semak isian minyak bertanda', 'Review a flagged fill-up'),
+    purpose: t('Putuskan: ada penjelasan, tuntut balik daripada pemandu, atau rujuk untuk siasatan. Sentiasa dengan sebab.', 'Decide: explained, recover the money from the driver, or refer it for investigation. Always with a reason.'),
+    who: t('Jabatan Pengangkutan, Ketua Operasi Kerajaan (OGM) atau COO; bukan orang yang merekodnya.', 'The Transport department, the OGM or the COO; never the person who recorded it.'),
+    screen: { view: 'fleet', name: 'Vehicles', action: t('Minyak dan penggunaan: Untuk disemak, Semak.', 'Fuel and usage: To review, Review.') },
+    allowed: (u) => vehicleUsageRole(u) === 'transport' || vehicleUsageRole(u) === 'monitor',
+    fields: [
+      { key: 'outcome', label: 'Outcome', required: true, format: t('Ada penjelasan, tuntut balik, atau kes.', 'Explained, recover, or case.'), example: 'EXPLAINED' },
+      { key: 'reason', label: 'Reason', required: true, format: t('Sebab, sekurang-kurangnya 3 aksara.', 'Why, at least 3 characters.'), example: 'Long trip to Johor' },
+    ],
+    sources: [{ what: t('Resit, log keluar-masuk kenderaan dan pemandu.', "The receipt, the vehicle's out-and-in log and the driver."), askDesk: null, askName: 'The driver who filled up' }],
+    enteredOnce: t('Disimpan pada isian itu; tidak dimasukkan di tempat lain.', 'Kept on the fill-up; not entered anywhere else.'),
+    actions: ['fleet.fuel_review'],
+    steps: {
+      save: t('Simpan: direkod dengan sebab dalam log audit.', 'Save: kept with the reason in the audit log.'),
+      review: t('Tiada penyemak lain.', 'No further reviewer.'),
+      returned: t('Tiada.', 'None.'),
+      done: t('Tuntut balik direkod di sini; sebarang potongan gaji tetap melalui HR.', 'Recovery is recorded here; any pay deduction still goes through HR.'),
+      recover: t('Semakan tidak boleh diubah. Jika dirujuk untuk siasatan, serahkan kepada ACT atau HR; rekod ini tidak memulakan siasatan dengan sendirinya.', 'A review cannot be changed. If referred for investigation, hand it to ACT or HR; this record does not start an investigation by itself.'),
+    },
+    notVerified: [t('Tiada isian minyak sebenar dimasukkan lagi.', 'No real fill-ups are entered yet.')],
   },
   {
     id: 'client.rating',

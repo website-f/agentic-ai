@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useSyncExternalStore } from 'react';
-import type { ConnectionsClient, SharePointStatus } from '../../api/connections';
-import type { Adapter, ProviderPanelProps } from '../contract';
+import { type ConnectionsClient, type SharePointStatus } from '../../api/connections';
+import { type Adapter, type ProviderPanelProps } from '../contract';
 import { ConnectionsSession, sharePointBrowserUrl } from '../../views/connections-state';
+
 
 /** Config is local setup only. Check/list operations are never performed during render or mount. */
 export function sharePointAdapter(client: ConnectionsClient): Adapter {

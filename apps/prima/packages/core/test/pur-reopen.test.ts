@@ -40,8 +40,8 @@ describe('Procurement: correct and resubmit after a rejection', () => {
       await svc.purStep(proc, pr.id, 'quote', { supplierId: `sup-co-sasa-${k}`, amount, ref: `Q${k}b`, proof: [proof()] });
     await svc.purStep(proc, pr.id, 'online', { source: 'Marketplace', ref: 'listing', amount: 1780, proof: [proof()] });
     await svc.purStep(proc, pr.id, 'submit', { supplierId: 'sup-co-sasa-2' });
-    await svc.purStep(coo, pr.id, 'approve');
-    expect((await svc.purStep(ceo, pr.id, 'approve')).status).toBe('approved');
+    await svc.purStep(coo, pr.id, 'approve', { note: 'Corrected quantity checked' });
+    expect((await svc.purStep(ceo, pr.id, 'approve', { note: 'Approved corrected order' })).status).toBe('approved');
   });
 
   it('only Procurement or the raiser reopens, never the rejecter, and only a rejected request', async () => {

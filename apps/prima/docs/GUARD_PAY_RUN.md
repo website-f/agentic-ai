@@ -11,7 +11,7 @@ Status: draft, synthetic data only. Not merged, not migrated, not deployed. The 
 | --- | --- | --- |
 | Prepare / recalculate | HR (PWVSB HR officers) | This month or last month. Public holidays come from the yearly guard lists (below). Can enter a PCB from e-PCB or a one-off item with a reason (flagged for the COO). |
 | Record whose account it is | HR | Own, joint, immediate relative's or close friend's; bank or e-wallet. Someone else's account needs the guard's consent letter, stamped by a Commissioner for Oaths (Pesuruhjaya Sumpah). |
-| Approve a consent letter | The COO; the CEO only through the pilot rule (pilotApproves), Fauzan's review note 7 Nov 2026, item 2 | Reason required; not the HR officer who recorded it. Until approved the account cannot be paid into. |
+| Approve a consent letter | COO only, no CEO stand-in (Fauzan, 6 Nov 2026) | Reason required; not the HR officer who recorded it. Until approved the account cannot be paid into. |
 | List a guard for cash | Director Office staff | Only for a guard with pay and a reason. |
 | Give or refuse cash | COO or CEO | Reason required; not the person who listed it. |
 | Hand out cash | CEO or COO | Once the month is approved, never on a trial month; records the date. |

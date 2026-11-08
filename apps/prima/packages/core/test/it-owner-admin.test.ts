@@ -50,10 +50,10 @@ describe('the owner as master administrator of IT (P78)', () => {
       await svc.itBuyStep(ex, p.id, 'quote', { supplier, amount: 5000 + (k === 'a' ? 0 : 100), proof: [proof(k)] });
     await svc.itBuyStep(ex, p.id, 'online', { source: 'Marketplace A', ref: 'https://market-a.example/laptop', amount: 5000, proof: [proof('online')] });
     expect((await svc.itBuyStep(ex, p.id, 'submit', { index: 0 })).status).toBe('coo');
-    expect((await svc.itBuyStep(coo, p.id, 'decide', { decision: 'approve' })).status).toBe('ceo');
+    expect((await svc.itBuyStep(coo, p.id, 'decide', { decision: 'approve', note: 'Within the IT plan' })).status).toBe('ceo');
     // The CEO asked for it: neither the CEO in Prima nor a Teams screenshot naming the CEO may approve it.
     expect((await svc.itBoard(ceo)).purchases!.find((r) => r.purchase.id === p.id)!.canDecide).toBe(false);
-    await expect(svc.itBuyStep(ceo, p.id, 'decide', { decision: 'approve' })).rejects.toThrow(/COO decides the CEO step/);
+    await expect(svc.itBuyStep(ceo, p.id, 'decide', { decision: 'approve', note: 'ok' })).rejects.toThrow(/COO decides the CEO step/);
     await expect(svc.itBuyStep(ex, p.id, 'teams', { teamsRef: 'Approvals: laptops', proof: [proof('t')] })).rejects.toThrow(/COO decides the CEO step/);
     const row = (await svc.itBoard(coo)).purchases!.find((r) => r.purchase.id === p.id)!;
     expect(row).toMatchObject({ canDecide: true });

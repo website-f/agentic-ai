@@ -14,6 +14,7 @@ import {
 import { RecordButton } from './RecordForm';
 import { ImportButton } from './ImportDrawer';
 import { OpsGuide } from './OpsGuide';
+import { PoliceHelpPanel } from './PoliceHelp';
 import { Card, Empty, Stat, Stats } from '../kit';
 import { Chip, ErrorNotice, Loading, dateLabel, hhmm, useAction, useLoad, type Tone } from '../ui';
 import '../styles/ops.css';
@@ -29,6 +30,7 @@ export type ArmsTab =
   | 'renewals'
   | 'clients'
   | 'police'
+  | 'policehelp'
   | 'tenders'
   | 'suppliers'
   | 'trading'
@@ -45,6 +47,7 @@ export const ARMS_TABS: { id: ArmsTab; label: string }[] = [
   { id: 'requests', label: 'Requests' },
   { id: 'renewals', label: 'Renewals' },
   { id: 'clients', label: 'Client agreements' },
+  { id: 'policehelp', label: 'Police visit help' },
   { id: 'police', label: 'Police and KDN' },
   { id: 'tenders', label: 'Tenders' },
   { id: 'suppliers', label: 'Suppliers' },
@@ -74,6 +77,8 @@ const JOB_STATUS: Record<ArmsControl['jobs'][number]['job']['status'], { label: 
  */
 export function ArmsControlBoard({ tab, onTab }: { tab: ArmsTab; onTab: (t: ArmsTab) => void }) {
   const { data, error } = useLoad(() => api.armsControl(), []);
+  const help = useLoad(() => api.policeHelp(), []);
+  const helpWaiting = help.data?.counts.waiting ?? 0;
   if (error) return <ErrorNotice error={error} />;
   if (!data) return <Loading what="arms control" />;
   const t = data.tiles;
@@ -152,6 +157,7 @@ export function ArmsControlBoard({ tab, onTab }: { tab: ArmsTab; onTab: (t: Arms
             {x.id === 'tenders' && t.armedTenders > 0 && <span className="tab-count">{t.armedTenders}</span>}
             {x.id === 'ready' && t.notReady > 0 && <span className="tab-count">{t.notReady}</span>}
             {x.id === 'requests' && t.requestsForReview > 0 && <span className="tab-count">{t.requestsForReview}</span>}
+            {x.id === 'policehelp' && helpWaiting > 0 && <span className="tab-count">{helpWaiting}</span>}
           </button>
         ))}
       </div>
@@ -170,6 +176,7 @@ export function ArmsControlBoard({ tab, onTab }: { tab: ArmsTab; onTab: (t: Arms
       {tab === 'renewals' && <Renewals data={data} />}
       {tab === 'clients' && <Agreements data={data} />}
       {tab === 'police' && <Police data={data} />}
+      {tab === 'policehelp' && <PoliceHelpPanel />}
       {tab === 'tenders' && <Tenders data={data} />}
       {tab === 'suppliers' && <Suppliers data={data} />}
       {tab === 'trading' && <Trading />}

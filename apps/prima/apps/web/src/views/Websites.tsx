@@ -1,4 +1,4 @@
-import {WebTicketReview,LegacyWebsiteActions} from './WebTicketReview';
+import { WebTicketReview, LegacyWebsiteActions } from './WebTicketReview';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { api, type WebBoardOk } from '../api';
 import { saveFile } from '../save';
@@ -7,6 +7,7 @@ import { loadWebsiteVisit, websiteNoticeIsMonth, type WebsiteVisit } from './web
 import { Chip, Drawer, ErrorNotice, Loading, dataNotice, dateLabel, dateTimeLabel, useAction, useLoad, type Tone } from '../ui';
 import { Card, PageHead, Stat, Stats, Steps, type StepState } from '../kit';
 import { ArrowsClockwiseIcon, BuildingsIcon, CalendarCheckIcon, CheckSquareIcon, GlobeIcon, SealCheckIcon, WarningIcon } from '@phosphor-icons/react';
+
 
 /**
  * Group websites (Fauzan, 27 Oct 2026). One register of every company's domains and websites, run by IT: who owns
@@ -67,6 +68,21 @@ const RESULT: Record<string, [Tone, string]> = { pass: ['ok', 'Pass'], fail: ['c
 const DEPLOY: Record<string, string> = { github: 'GitHub-linked', direct_upload: 'Direct upload', other: 'Other', unknown: 'Unknown' };
 
 const yn = (v: boolean | null | undefined) => (v == null ? 'Unknown' : v ? 'Yes' : 'No');
+
+/** Phase 2: opening the module runs the schedule once per visit; the server runs it at most once an hour. */
+let scheduleTried = false;
+
+async function loadBoard() {
+  const b = await api.websiteBoard();
+  if (!b.allowed || !b.schedule.runs || !b.schedule.auto || scheduleTried) return b;
+  scheduleTried = true;
+  try {
+    const res = (await api.websiteAction('runSchedule', {})) as { ran: boolean; reviews: number; checks: number; sent: number };
+    return res.ran && (res.reviews || res.checks || res.sent) ? api.websiteBoard() : b;
+  } catch {
+    return b;
+  }
+}
 
 export function WebsitesView() {
   const { me } = useApp();

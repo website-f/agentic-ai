@@ -237,8 +237,7 @@ describe('Daily cash pay (Fauzan, 2 Nov 2026)', () => {
     // The COO approves the stamped consent letter; Finance and the Director Office cannot.
     await expect(act(de1, 'approveConsent', { personId: raju, comment: 'ok' })).rejects.toThrow(/only the COO/);
     await expect(act(doa, 'approveConsent', { personId: raju, comment: 'ok' })).rejects.toThrow(/only the COO/);
-    // The CEO may stand in only through the pilot rule (Fauzan's review note 7 Nov 2026, item 2); the FD never approves.
-    await expect(act(fd, 'approveConsent', { personId: raju, comment: 'ok' })).rejects.toThrow(/only the COO/);
+    await expect(act(ceo, 'approveConsent', { personId: raju, comment: 'ok' })).rejects.toThrow(/only the COO/);
     expect((await svc.home(coo)).todo.some((t) => /consent letter\(s\) to approve/.test(t.title))).toBe(true);
     await act(coo, 'approveConsent', { personId: raju, comment: 'Stamp checked against the letter' });
     await act(fd, 'approve', { comment: 'Approved: three by transfer, one in cash' });

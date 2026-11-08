@@ -1,11 +1,15 @@
-/**
- * Who may do what in Government Operations (Goodwill Empire), Private Operations (Sasa Team), the management fees and
- * client care (Fauzan, 2 Nov 2026). PrimaService uses these, and so do the guide cards, so a card is shown only to
- * people the server lets do the task.
- */
-import { GOV_OPS_COMPANY_ID, PRIVATE_OPS_COMPANY_ID, accessClosed, isGroupLeader, isOwnerAdmin, type OpsCompanyId } from './access';
-import { registerRollout } from './rollouts';
-import type { IsoDate, Site, User } from './types';
+import { GOV_OPS_COMPANY_ID } from "./access";
+import { PRIVATE_OPS_COMPANY_ID } from "./access";
+import { accessClosed } from "./access";
+import { isGroupLeader } from "./access";
+import { isOwnerAdmin } from "./access";
+import type { OpsCompanyId } from "./access";
+import { registerRollout } from "./rollouts";
+import type { IsoDate } from "./types";
+import type { Site } from "./types";
+import type { User } from "./types";
+
+
 
 /** An OM or Regional OM tied to one side works only that side's sites; with no side set, both. */
 export function onOpsSide(user: Pick<User, 'opsSector'>, sector: Site['sector'] | null | undefined): boolean {
@@ -49,7 +53,7 @@ export function canPrivateOpsMonitor(u: User, today: IsoDate): boolean {
   return isGroupLeader(u) || isOpsDirector(u) || isPrivateOm(u, today);
 }
 
-/** The Finance Director or the CEO enters management fees from the signed agreements. */
+/** The Finance Director or the CEO sets management fees between any group companies, from the signed agreements, with a reason. */
 export function canSetManagementFee(u: User): boolean {
   return !u.integration && ((u.role === 'pwvsb_officer' && u.leadership === 'finance_director') || u.opsTier === 'ceo');
 }
@@ -109,3 +113,36 @@ export function inPrivateOpsRollout(u: User): boolean {
   return u.opsTier === 'ops_director' || ((u.opsTier === 'om' || u.opsTier === 'regional') && onOpsSide(u, 'private'));
 }
 registerRollout('private_ops', 'Private Operations (Sasa Team)', inPrivateOpsRollout);
+
+/**
+ * Who sees every management fee bill between group companies, not only the operations companies' (5 Nov 2026): the
+ * Finance Director, the CEO and the COO.
+ */
+export function canSeeAllManagementFeeBills(u: User): boolean {
+  return canSetManagementFee(u) || (u.role === 'pwvsb_officer' && u.opsTier === 'coo' && !u.integration);
+}
+
+/**
+ * Vehicles rented from Perfect Global Logistics (Fauzan, 5 Nov 2026): the Transport department records them, the FD or
+ * the CEO sets the rent, the COO and the OGM monitor.
+ */
+export function vehicleRentalRole(u: User): 'transport' | 'setter' | 'monitor' | null {
+  if (u.integration) return null;
+  if (u.role === 'pwvsb_officer' && u.department === 'transport') return 'transport';
+  if (canSetManagementFee(u)) return 'setter';
+  if ((u.role === 'pwvsb_officer' && u.opsTier === 'coo') || isOgm(u)) return 'monitor';
+  return null;
+}
+
+/**
+ * Transport usage (Fauzan, 5 Nov 2026): the Transport department keeps the cards and records fill-ups; the COO and the
+ * OGM monitor and may review a flagged fill-up; the other group leaders see it. (A driver records fill-ups only for the
+ * vehicle out with them, checked against the vehicle in PrimaService.)
+ */
+export function vehicleUsageRole(u: User): 'transport' | 'monitor' | 'view' | null {
+  if (u.integration) return null;
+  if (u.role === 'pwvsb_officer' && u.department === 'transport') return 'transport';
+  if ((u.role === 'pwvsb_officer' && u.opsTier === 'coo') || isOgm(u)) return 'monitor';
+  if (isGroupLeader(u)) return 'view';
+  return null;
+}

@@ -2,13 +2,13 @@ import { useState } from 'react';
 import { BuildingsIcon, CoinsIcon, FileTextIcon, ScalesIcon, ShieldWarningIcon, UmbrellaIcon } from '@phosphor-icons/react';
 import { RecordButton } from './RecordForm';
 import { ImportButton } from './ImportDrawer';
-import { api, type Insurance } from '../api';
+import { api, type Insurance, type InsuranceRenewInput } from '../api';
 import { useApp } from '../App';
 import { Card, Empty, Facts, PageHead, Stat, Stats, Steps, type StepState } from '../kit';
 import { Chip, Drawer, ErrorNotice, ExpiryChip, Loading, dateLabel, dateTimeLabel, useAction, useLoad, type Tone } from '../ui';
 import '../styles/biz.css';
 
-type Tab = 'alerts' | 'policies' | 'premiums' | 'claims' | 'guarantees' | 'companies';
+type Tab = 'alerts' | 'policies' | 'premiums' | 'claims' | 'guarantees' | 'companies' | 'history';
 
 const TABS: { id: Tab; label: string }[] = [
   { id: 'alerts', label: 'To chase' },
@@ -17,7 +17,10 @@ const TABS: { id: Tab; label: string }[] = [
   { id: 'claims', label: 'Claims' },
   { id: 'guarantees', label: 'Guarantees' },
   { id: 'companies', label: 'Companies' },
+  { id: 'history', label: 'History' },
 ];
+
+type PolicyRow = Insurance['policies'][number];
 
 const rm = (v: number) => `RM ${v.toLocaleString('en-MY')}`;
 
@@ -151,6 +154,7 @@ export function InsuranceView() {
       {tab === 'claims' && <Claims data={data} />}
       {tab === 'guarantees' && <Guarantees data={data} />}
       {tab === 'companies' && <Companies data={data} />}
+      {tab === 'history' && <History data={data} />}
     </div>
   );
 }
@@ -195,7 +199,12 @@ function Policies({ data }: { data: Insurance }) {
                   {r.policy.insurer} · <span className="mono">{r.policy.policyNo}</span>
                   {r.policy.broker ? ` · via ${r.policy.broker}` : ''}
                 </span>
+                <span className="bz-row-meta">
+                  {r.policy.scheduleRef ? `Schedule: ${r.policy.scheduleRef}` : 'Policy schedule not on file'}
+                  {r.renewedBy ? ` · renewed as ${r.renewedBy.policyNo} from ${dateLabel(r.renewedBy.startsOn)}` : ''}
+                </span>
                 <span className="bz-row-meta">{r.companyName}</span>
+                {r.canAct && <PolicySteps r={r} />}
               </span>
               <span className="bz-in-fig">
                 <span className="bz-sub">Cover</span>
@@ -216,7 +225,7 @@ function Policies({ data }: { data: Insurance }) {
                     renewal {r.policy.renewal === 'renewed' ? 'done' : r.policy.renewal === 'quotes' ? 'quotes in hand' : 'not started'}
                   </span>
                 )}
-                <RecordButton kind="insurancePolicy" id={r.policy.id} />
+                {!r.renewedBy && <RecordButton kind="insurancePolicy" id={r.policy.id} />}
               </span>
             </li>
           ))}
@@ -248,9 +257,11 @@ function Premiums({ data }: { data: Insurance }) {
                 <span className="bz-row-main">
                   <span className="bz-row-title">{r.label}</span>
                   <span className="bz-row-meta">
-                    {r.policy.premiumPaidOn
-                      ? `Paid ${dateLabel(r.policy.premiumPaidOn)}`
-                      : r.premiumDaysLeft < 0
+                    {r.policy.premiumPayment
+                      ? `Paid ${dateLabel(r.policy.premiumPayment.on)}, ref ${r.policy.premiumPayment.ref}`
+                      : r.policy.premiumPaidOn
+                        ? `Paid ${dateLabel(r.policy.premiumPaidOn)}, no payment reference recorded`
+                        : r.premiumDaysLeft < 0
                         ? `Was due ${dateLabel(r.policy.premiumDueOn)}, ${-r.premiumDaysLeft} days ago`
                         : `Due ${dateLabel(r.policy.premiumDueOn)}, in ${r.premiumDaysLeft} days`}{' '}
                     · {r.policy.insurer}
@@ -259,7 +270,8 @@ function Premiums({ data }: { data: Insurance }) {
                 </span>
                 <span className="bz-row-side">
                   <span className="bz-amt">{rm(r.policy.premium)}</span>
-                  <RecordButton kind="insurancePolicy" id={r.policy.id} label="Record payment" />
+                  {r.paidWithoutRef && <Chip tone="warn">Paid, no reference</Chip>}
+                  {r.canAct && r.premium !== 'paid' && <PremiumForm policyId={r.policy.id} />}
                 </span>
               </li>
             ))}
@@ -650,6 +662,223 @@ function Companies({ data }: { data: Insurance }) {
           );
         })}
       </ul>
+    </Card>
+  );
+}
+
+/** The steps on a policy year: renew (adds next year's record) or cancel (kept as history with the reason). */
+function PolicySteps({ r }: { r: PolicyRow }) {
+  const [open, setOpen] = useState<'renew' | 'cancel' | null>(null);
+  if (r.renewedBy) return null;
+  return (
+    <>
+      {!open && (
+        <span className="bz-actions">
+          {r.cover.status !== 'OK' && (
+            <button className="btn btn-sm" onClick={() => setOpen('renew')}>
+              Renew
+            </button>
+          )}
+          <button className="btn btn-ghost btn-sm" onClick={() => setOpen('cancel')}>
+            Cancel policy
+          </button>
+        </span>
+      )}
+      {open === 'renew' && <RenewForm r={r} onDone={() => setOpen(null)} />}
+      {open === 'cancel' && <CancelForm policyId={r.policy.id} onDone={() => setOpen(null)} />}
+    </>
+  );
+}
+
+const nextDay = (d: string) => {
+  const t = new Date(`${d}T00:00:00Z`);
+  t.setUTCDate(t.getUTCDate() + 1);
+  return t.toISOString().slice(0, 10);
+};
+const plusYear = (d: string) => {
+  const t = new Date(`${d}T00:00:00Z`);
+  t.setUTCFullYear(t.getUTCFullYear() + 1);
+  t.setUTCDate(t.getUTCDate() - 1);
+  return t.toISOString().slice(0, 10);
+};
+
+function RenewForm({ r, onDone }: { r: PolicyRow; onDone: () => void }) {
+  const p = r.policy;
+  const start = nextDay(p.expiresOn);
+  const [f, setF] = useState<InsuranceRenewInput>({
+    insurer: p.insurer,
+    broker: p.broker,
+    policyNo: '',
+    sumInsured: p.sumInsured,
+    premium: p.premium,
+    startsOn: start,
+    expiresOn: plusYear(start),
+    premiumDueOn: start,
+    scheduleRef: null,
+  });
+  const act = useAction();
+  const set = (x: Partial<InsuranceRenewInput>) => setF({ ...f, ...x });
+  return (
+    <div className="bz-act">
+      <p className="bz-sub">Next year's policy is added as a new record. This year's stays on the register as history.</p>
+      <div className="bz-form">
+        <label className="field">
+          <span className="label">Insurer</span>
+          <input className="input" value={f.insurer} onChange={(e) => set({ insurer: e.target.value })} />
+        </label>
+        <label className="field">
+          <span className="label">Broker</span>
+          <input className="input" value={f.broker ?? ''} onChange={(e) => set({ broker: e.target.value || null })} />
+        </label>
+        <label className="field">
+          <span className="label">New policy number</span>
+          <input className="input" value={f.policyNo} onChange={(e) => set({ policyNo: e.target.value })} />
+        </label>
+        <label className="field">
+          <span className="label">Sum insured (RM)</span>
+          <input className="input" type="number" min={1} value={f.sumInsured} onChange={(e) => set({ sumInsured: Number(e.target.value) })} />
+        </label>
+        <label className="field">
+          <span className="label">Premium (RM)</span>
+          <input className="input" type="number" min={0} value={f.premium} onChange={(e) => set({ premium: Number(e.target.value) })} />
+        </label>
+        <label className="field">
+          <span className="label">Starts on</span>
+          <input className="input" type="date" value={f.startsOn} onChange={(e) => set({ startsOn: e.target.value })} />
+        </label>
+        <label className="field">
+          <span className="label">Expires on</span>
+          <input className="input" type="date" value={f.expiresOn} onChange={(e) => set({ expiresOn: e.target.value })} />
+        </label>
+        <label className="field">
+          <span className="label">Premium due on</span>
+          <input className="input" type="date" value={f.premiumDueOn} onChange={(e) => set({ premiumDueOn: e.target.value })} />
+        </label>
+        <label className="field bz-span">
+          <span className="label">Policy schedule kept at</span>
+          <input className="input" placeholder="Document name or link" value={f.scheduleRef ?? ''} onChange={(e) => set({ scheduleRef: e.target.value || null })} />
+        </label>
+      </div>
+      <ErrorNotice error={act.error} />
+      <div className="bz-actions">
+        <button
+          className="btn btn-primary btn-sm"
+          disabled={act.busy || !f.insurer.trim() || !f.policyNo.trim()}
+          onClick={() => act.run(() => api.renewInsurancePolicy(p.id, f), 'Renewed. Next year is on the register.').then((x) => x && onDone())}
+        >
+          Save renewal
+        </button>
+        <button className="btn btn-ghost btn-sm" onClick={onDone}>
+          Back
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function CancelForm({ policyId, onDone }: { policyId: string; onDone: () => void }) {
+  const [on, setOn] = useState('');
+  const [reason, setReason] = useState('');
+  const act = useAction();
+  return (
+    <div className="bz-act">
+      <div className="bz-form">
+        <label className="field">
+          <span className="label">Cancelled from</span>
+          <input className="input" type="date" max={new Date().toLocaleDateString('en-CA')} value={on} onChange={(e) => setOn(e.target.value)} />
+        </label>
+        <label className="field">
+          <span className="label">Reason</span>
+          <input className="input" placeholder="Why it is cancelled" value={reason} onChange={(e) => setReason(e.target.value)} />
+        </label>
+      </div>
+      <ErrorNotice error={act.error} />
+      <div className="bz-actions">
+        <button
+          className="btn btn-sm"
+          disabled={act.busy || !on || reason.trim().length < 5}
+          onClick={() => act.run(() => api.cancelInsurancePolicy(policyId, { on, reason }), 'Policy cancelled and kept as history.').then((x) => x && onDone())}
+        >
+          Confirm cancel
+        </button>
+        <button className="btn btn-ghost btn-sm" onClick={onDone}>
+          Back
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/** Premium paid: the date and Finance's payment reference. A date on its own is not proof of payment. */
+function PremiumForm({ policyId }: { policyId: string }) {
+  const [open, setOpen] = useState(false);
+  const [paidOn, setPaidOn] = useState('');
+  const [ref, setRef] = useState('');
+  const act = useAction();
+  if (!open)
+    return (
+      <button className="btn btn-sm" onClick={() => setOpen(true)}>
+        Record payment
+      </button>
+    );
+  return (
+    <div className="bz-act">
+      <label className="field">
+        <span className="label">Date paid</span>
+        <input className="input" type="date" max={new Date().toLocaleDateString('en-CA')} value={paidOn} onChange={(e) => setPaidOn(e.target.value)} />
+      </label>
+      <label className="field">
+        <span className="label">Payment reference</span>
+        <input className="input" placeholder="Finance payment reference" value={ref} onChange={(e) => setRef(e.target.value)} />
+      </label>
+      <ErrorNotice error={act.error} />
+      <div className="bz-actions">
+        <button
+          className="btn btn-primary btn-sm"
+          disabled={act.busy || !paidOn || ref.trim().length < 3}
+          onClick={() => act.run(() => api.recordInsurancePremium(policyId, { paidOn, ref }), 'Premium recorded as paid.').then((x) => x && setOpen(false))}
+        >
+          Save
+        </button>
+        <button className="btn btn-ghost btn-sm" onClick={() => setOpen(false)}>
+          Back
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/** Policy years that ended by renewal, and cancelled policies: kept on the register, no longer counted as cover. */
+function History({ data }: { data: Insurance }) {
+  return (
+    <Card title="History" sub="Renewed and cancelled policies stay on the register" flush>
+      {data.history.length === 0 ? (
+        <Empty title="No past policies yet." />
+      ) : (
+        <ul className="bz-rows">
+          {data.history.map((r) => (
+            <li key={r.policy.id} className="bz-row">
+              <span className="bz-row-main">
+                <span className="bz-row-title">{r.label}</span>
+                <span className="bz-row-meta">
+                  {r.policy.insurer} · <span className="mono">{r.policy.policyNo}</span> · {dateLabel(r.policy.startsOn)} to {dateLabel(r.policy.expiresOn)} · premium{' '}
+                  {rm(r.policy.premium)}
+                  {r.policy.premiumPayment ? `, paid ref ${r.policy.premiumPayment.ref}` : ''}
+                </span>
+                {r.policy.cancelled && (
+                  <span className="bz-row-meta">
+                    Cancelled from {dateLabel(r.policy.cancelled.on)} by {r.policy.cancelled.by}: {r.policy.cancelled.reason}
+                  </span>
+                )}
+                <span className="bz-row-meta">{r.companyName}</span>
+              </span>
+              <span className="bz-row-side">
+                <Chip tone="neutral">{r.why === 'cancelled' ? 'Cancelled' : 'Renewed'}</Chip>
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
     </Card>
   );
 }

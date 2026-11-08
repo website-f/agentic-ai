@@ -7,6 +7,8 @@ import {
   WrenchIcon,
 } from "@phosphor-icons/react";
 import { api, type AmBoard, type DisposalBody } from "../api";
+import { AmBqDrawer } from "./AmBq";
+import { AmExtrasPanel, type AmExtrasSection } from "./AmExtras";
 import { FixedAssetsPanel, METHOD as DISPOSAL_METHOD } from "./FixedAssets";
 import { RecordButton } from "./RecordForm";
 import { ImportButton } from "./ImportDrawer";
@@ -40,7 +42,8 @@ type Tab =
   | "books"
   | "properties"
   | "check"
-  | "buy";
+  | "buy"
+  | AmExtrasSection;
 const TABS: [Tab, string][] = [
   ["overview", "Overview"],
   ["units", "Units"],
@@ -52,7 +55,14 @@ const TABS: [Tab, string][] = [
   ["properties", "Resorts, orchards, training"],
   ["check", "System check"],
   ["buy", "Purchases"],
+  ["contractors", "Contractors"],
+  ["letting", "Finding tenants"],
+  ["meters", "Meters"],
+  ["resorts", "Resort bookings"],
+  ["orchards", "Harvest"],
+  ["planned", "Planned maintenance"],
 ];
+const EXTRAS: AmExtrasSection[] = ["contractors", "letting", "meters", "resorts", "orchards", "planned"];
 const TYPE: Record<AmBoard["byType"][number]["type"], string> = {
   RESIDENTIAL: "Residential",
   COMMERCIAL: "Commercial",
@@ -172,6 +182,7 @@ export function AssetsView() {
       {tab === "maintenance" && <Maintenance data={data} />}
       {tab === "assets" && <Assets data={data} />}
       {tab === "books" && <FixedAssetsPanel />}
+      {(EXTRAS as Tab[]).includes(tab) && <AmExtrasPanel section={tab as AmExtrasSection} />}
       {tab === "properties" && <Properties data={data} />}
       {tab === "check" && <RentCheck />}
       {tab === "buy" && <Purchases data={data} />}
@@ -951,7 +962,15 @@ function Rent({ data }: { data: AmBoard }) {
   );
 }
 
+const BQ_CHIP: Record<string, [Tone, string]> = {
+  draft: ["neutral", "BQ draft"],
+  submitted: ["warn", "BQ to approve"],
+  approved: ["ok", "BQ approved"],
+  returned: ["crit", "BQ returned"],
+};
+
 function Maintenance({ data }: { data: AmBoard }) {
+  const [bqFor, setBqFor] = useState<string | null>(null);
   const tone = (w: AmBoard["workOrders"][number]): [Tone, string] =>
     w.status === "done"
       ? ["ok", "Done"]
@@ -963,7 +982,7 @@ function Maintenance({ data }: { data: AmBoard }) {
   return (
     <Card
       title="Work orders"
-      sub="Each closes with photos before and after, the cost and the contractor."
+      sub="Each closes with photos before and after, the cost and the contractor. A job sent out to a contractor gets a BQ and quotes first."
       actions={
         <>
           <ImportButton kind="amWorkOrder" />
@@ -991,12 +1010,28 @@ function Maintenance({ data }: { data: AmBoard }) {
               </div>
               <div className="bz-am-side">
                 <Chip tone={tone(w)[0]}>{tone(w)[1]}</Chip>
+                {w.bq && (
+                  <Chip tone={w.bq.award?.final ? "ok" : BQ_CHIP[w.bq.status][0]}>
+                    {w.bq.award?.final
+                      ? "Awarded"
+                      : w.bq.award && !(w.bq.award.director && !w.bq.award.director.approve) && !(w.bq.award.coo && !w.bq.award.coo.approve)
+                        ? "Award to approve"
+                        : BQ_CHIP[w.bq.status][1]}
+                  </Chip>
+                )}
+                {w.bq?.variations?.some((v) => !v.final && !v.withdrawn && ![v.director, v.coo, v.ceo, v.chairman].some((s) => s && !s.approve)) && (
+                  <Chip tone="warn">VO to approve</Chip>
+                )}
+                <button className="btn btn-sm" onClick={() => setBqFor(w.id)}>
+                  BQ
+                </button>
                 <RecordButton kind="amWorkOrder" id={w.id} />
               </div>
             </div>
           </li>
         ))}
       </ul>
+      {bqFor && <AmBqDrawer workOrderId={bqFor} onClose={() => setBqFor(null)} />}
     </Card>
   );
 }
@@ -1731,14 +1766,14 @@ function LetterLine({
               <span className="label">Note</span>
               <input
                 className="input"
-                placeholder="Note (required to stop)"
+                placeholder="Comment (needed to approve or stop)"
                 value={note}
                 onChange={(e) => setNote(e.target.value)}
               />
             </label>
             <button
               className="btn btn-sm btn-primary"
-              disabled={act.busy}
+              disabled={act.busy || !note.trim()}
               onClick={() =>
                 act.run(
                   () => api.amDecideLetter(l.unitId, l.id, true, note),
@@ -1802,14 +1837,14 @@ function ReversalLine({
               <span className="label">Note</span>
               <input
                 className="input"
-                placeholder="Note (required to refuse)"
+                placeholder="Comment (needed to approve or refuse)"
                 value={note}
                 onChange={(e) => setNote(e.target.value)}
               />
             </label>
             <button
               className="btn btn-sm btn-primary"
-              disabled={act.busy}
+              disabled={act.busy || !note.trim()}
               onClick={() =>
                 act.run(
                   () => api.amDecideReversal(p.unitId, p.id, true, note),

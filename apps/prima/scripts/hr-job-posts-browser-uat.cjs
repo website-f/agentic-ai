@@ -40,6 +40,7 @@ const TAG = 'UAT synthetic';
     await p.reload();
     const shot = (name) => p.screenshot({ path: `${S}/${w}-${name}.png`, fullPage: false });
     const as = async (who) => {
+      await p.locator('.persona, .topbar').first().waitFor();
       if (!(await p.locator('.persona').count())) await p.getByRole('button', { name: /Switch person|Tukar user|Tukar pengguna/ }).first().click();
       await p.waitForSelector('.persona');
       await p.locator('.persona', { hasText: who }).first().click();

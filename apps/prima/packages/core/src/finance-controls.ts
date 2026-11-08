@@ -1,114 +1,171 @@
-// Finance Phase 2, part 2 (Fauzan, 31 Oct 2026). The checks Finance runs every month around SQL Account:
-//
-// - Paid to the right person: a payee list with verified bank details (entered by one person, verified by another by
-//   calling back on a number from an independent source); a change of bank details holds every payment to that payee.
-// - Bank statements: each month's statement is loaded and every amount that left the bank is matched to a Prima
-//   payment; money out with no approved payment, and approved payments not seen on the statement, are exceptions.
-// - Monthly ageing: the customer and supplier ageing from SQL Account, agreed to the ledger, every month.
-// - Service tax (SST): each two-month SST-02 return checked against the rate, filed in MySST, and paid to Customs
-//   through an approved Prima payment of exactly the declared amount by the due date.
-// - Financial planning: the year's budget (approved by the Finance Director or the CEO), monthly actuals, a rolling
-//   re-forecast after each close, and explanations where the month is off the budget.
-//
-// SQL Account stays the books; nothing here posts to it, pays anything or files anything with LHDN or Customs.
+import { finBudgetInForce } from "./finance-plan3";
+import { finBudgetRevisionAction } from "./finance-plan3";
+import { finLeadAuthors } from "./finance-plan3";
+import { finPlan3View } from "./finance-plan3";
+import { finSeqNext } from "./finance-plan3";
+import { finThreeStatementAction } from "./finance-plan3";
+import { AccessDenied } from "./access";
+import { GROUP_EMPLOYER_ID } from "./access";
+import { FinanceDeskService } from "./finance";
+import { ageTotal } from "./finance";
+import { finArActive } from "./finance";
+import { finMatchReceipts } from "./finance";
+import { finUnmatchReceipts } from "./finance";
+import { finArStale } from "./finance";
+import { finAutoReconcile } from "./finance";
+import { finBankRecResult } from "./finance";
+import { finBankRecStale } from "./finance";
+import { finAfterPayment } from "./finance";
+import { finDefaults } from "./finance";
+import { FIN_AUTO } from "./finance";
+import { finActor } from "./finance";
+import { finCloseCheck } from "./finance";
+import { isFinCoo } from "./finance";
+import { isLead } from "./finance";
+import { isoDate } from "./finance";
+import { noSecrets } from "./finance";
+import { requireComment } from "./finance";
+import { requireReason } from "./finance";
+import { text } from "./finance";
+import type { FinActor } from "./finance";
+import { RULES } from "./rules";
+import { finPurchasesToPay } from "./finance";
+import { finCreditAction } from "./finance-credit";
+import { finCreditHome } from "./finance-credit";
+import { finCreditView } from "./finance-credit";
+import { finSupplierStatementAction } from "./finance-supplier-statements";
+import { finSupplierStatementHome } from "./finance-supplier-statements";
+import { finSupplierStatementsView } from "./finance-supplier-statements";
+import { finAssetAction } from "./finance-yearend";
+import { finAuditRequestAction } from "./finance-yearend";
+import { finScheduleAction } from "./finance-yearend";
+import { finWhtAction } from "./finance-yearend";
+import { finYearEndHome } from "./finance-yearend";
+import { finYearEndView } from "./finance-yearend";
+import { finBankingHome } from "./finance-banking";
+import { finBankingView } from "./finance-banking";
+import { finChargeAction } from "./finance-banking";
+import { finFdAction } from "./finance-banking";
+import { finMatchFds } from "./finance-banking";
+import { finUnmatchFds } from "./finance-banking";
+import { finContractEndHome } from "./finance-contract-end";
+import { finContractEndView } from "./finance-contract-end";
+import { finDepositAction } from "./finance-contract-end";
+import { finMatchDeposits } from "./finance-contract-end";
+import { finUnmatchDeposits } from "./finance-contract-end";
+import type { Store } from "./store";
+import { addDays } from "./time";
+import { daysBetween } from "./time";
+import { dateOf } from "./time";
+import { toMs } from "./time";
+import { FIN_PLAN_LINES } from "./types";
+import type { Contract } from "./types";
+import type { FinAgeBuckets } from "./types";
+import type { FinAgeing } from "./types";
+import type { FinArCase } from "./types";
+import type { FinArReason } from "./types";
+import type { FinEInvoice } from "./types";
+import type { FinEInvoiceMonth } from "./types";
+import type { FinPayee } from "./types";
+import type { FinPayeeKind } from "./types";
+import type { FinPlan } from "./types";
+import type { FinPlanFigures } from "./types";
+import type { FinPlanLine } from "./types";
+import type { FinSign } from "./types";
+import type { FinSst } from "./types";
+import type { FinCustomsClaim } from "./types";
+import type { FinSstReturn } from "./types";
+import type { FinStatement } from "./types";
+import type { FinStatementLine } from "./types";
+import type { FinBankRec } from "./types";
+import type { FinLedgerLine } from "./types";
+import type { FinSettingsValues } from "./types";
+import type { FinStatus } from "./types";
+import type { Id } from "./types";
+import type { IsoDate } from "./types";
+import type { IsoDateTime } from "./types";
+import type { User } from "./types";
+import { FinMatchRule } from "./types";
+import { BadRequest } from "./service";
+import { NotFound } from "./service";
+import { jaOwns } from "./service";
+import type { HomeItem } from "./service";
+import type { HomeLink } from "./service";
+import type { HomeTile } from "./service";
+import { finTaxCalendar } from "./finance-tax-calendar";
+import { finTaxFile } from "./finance-tax-calendar";
+import { finAdvanceAction } from "./finance-cash";
+import { finAdvanceAdd } from "./finance-cash";
+import { finAdvanceOverdue } from "./finance-cash";
+import { finAdvancePrecheck } from "./finance-cash";
+import { finCardAction } from "./finance-cash";
+import { finCashHome } from "./finance-cash";
+import { finCashMine } from "./finance-cash";
+import { finCashView } from "./finance-cash";
+import { finMandateAction } from "./finance-cash";
+import { finPettyAction } from "./finance-cash";
+import { finPettyTopUpLink } from "./finance-cash";
+import { finPettyTopUpPrecheck } from "./finance-cash";
+import type { FinCashCtx } from "./finance-cash";
+import { FIN_REGULAR_RULE } from "./finance-regular";
+import { finGuaranteeAction } from "./finance-regular";
+import { finHostelPaidOn } from "./finance-regular";
+import { finHostelUnseen } from "./finance-regular";
+import { finMatchRegular } from "./finance-regular";
+import { finRegularAction } from "./finance-regular";
+import { finRegularDues } from "./finance-regular";
+import { finRegularExpected } from "./finance-regular";
+import { finRegularHome } from "./finance-regular";
+import { finRegularState } from "./finance-regular";
+import { finRegularView } from "./finance-regular";
+import { finUnmatchRegular } from "./finance-regular";
+import type { FinRegularCtx } from "./finance-regular";
+import type { FinCheckSection } from "./types";
+import type { HostelBill } from "./types";
+import type { StaffPayLine } from "./types";
+import type { StaffPayRun } from "./types";
+import { finStampAction } from "./finance-stamp";
+import { finStampHome } from "./finance-stamp";
+import { finStampView } from "./finance-stamp";
+import { finIcAction } from "./finance-intercompany";
+import { finIcExceptions } from "./finance-intercompany";
+import { finIcPairs } from "./finance-intercompany";
+import { finIcView } from "./finance-intercompany";
+import { finCoaAction } from "./finance-ledger";
+import { finFiguresAction } from "./finance-ledger";
+import { finLedgerView } from "./finance-ledger";
+import { finSqlApply } from "./finance-ledger";
+import { finSqlBlockers } from "./finance-ledger";
+import { finSqlDiscoveryAction } from "./finance-ledger";
+import type { SqlAccountReader } from "./finance-ledger";
+import { finCash13 } from "./finance-forecast13";
+import { finCash13Action } from "./finance-forecast13";
+import { finDashboardRow } from "./finance-pack";
+import { finPackData } from "./finance-pack";
+import { finPackReview } from "./finance-pack";
+import { finDailyCashAction } from "./finance-daily-cash";
+import { finDailyCashCollectorView } from "./finance-daily-cash";
+import { finDailyCashHome } from "./finance-daily-cash";
+import { finDailyCashView } from "./finance-daily-cash";
+import type { FinDailyCashCtx } from "./finance-daily-cash";
+import { finAllocateAction } from "./finance-billing";
+import { finBillingAction } from "./finance-billing";
+import { finGovtAction } from "./finance-billing";
+import { finMatchGovt } from "./finance-billing";
+import { finMoneyInHome } from "./finance-billing";
+import { finMoneyInView } from "./finance-billing";
+import { finUnmatchGovt } from "./finance-billing";
+import type { EvidenceDoc } from "./types";
+import { finDailyCashDecisions } from "./finance-daily-cash";
+import { finDailyCashReceiptsDue } from "./finance-daily-cash";
+import { sha256Hex } from "./audit";
 
-import { finBudgetInForce, finBudgetRevisionAction, finLeadAuthors, finPlan3View, finSeqNext, finThreeStatementAction } from './finance-plan3';
-import { AccessDenied, GROUP_EMPLOYER_ID } from './access';
-import {
-  FinanceDeskService,
-  ageTotal,
-  finArActive,
-  finMatchReceipts,
-  finUnmatchReceipts,
-  finArStale,
-  finAutoReconcile,
-  finBankRecResult,
-  finBankRecStale,
-  finAfterPayment,
-  finDefaults,
-  FIN_AUTO,
-  finActor,
-  finCloseCheck,
-  isFinCoo,
-  isLead,
-  isoDate,
-  noSecrets,
-  requireComment,
-  requireReason,
-  text,
-  type FinActor,
-} from './finance';
-import { RULES } from './rules';
-import { finPurchasesToPay } from './finance';
-import { finCreditAction, finCreditHome, finCreditView } from './finance-credit';
-import { finSupplierStatementAction, finSupplierStatementHome, finSupplierStatementsView } from './finance-supplier-statements';
-import { finAssetAction, finAuditRequestAction, finScheduleAction, finWhtAction, finYearEndHome, finYearEndView } from './finance-yearend';
-import { finBankingHome, finBankingView, finChargeAction, finFdAction, finMatchFds, finUnmatchFds } from './finance-banking';
-import { finContractEndHome, finContractEndView, finDepositAction, finMatchDeposits, finUnmatchDeposits } from './finance-contract-end';
-import type { Store } from './store';
-import { addDays, daysBetween, dateOf, toMs } from './time';
-import {
-  FIN_PLAN_LINES,
-  type Contract,
-  type FinAgeBuckets,
-  type FinAgeing,
-  type FinArCase,
-  type FinArReason,
-  type FinEInvoice,
-  type FinEInvoiceMonth,
-  type FinPayee,
-  type FinPayeeKind,
-  type FinPlan,
-  type FinPlanFigures,
-  type FinPlanLine,
-  type FinSign,
-  type FinSst,
-  type FinCustomsClaim,
-  type FinSstReturn,
-  type FinStatement,
-  type FinStatementLine,
-  type FinBankRec,
-  type FinLedgerLine,
-  type FinSettingsValues,
-  type FinStatus,
-  type Id,
-  type IsoDate,
-  type IsoDateTime,
-  type User,
-  FinMatchRule,
-} from './types';
-import { BadRequest, NotFound, jaOwns, type HomeItem, type HomeLink, type HomeTile } from './service';
-import { finTaxCalendar, finTaxFile } from './finance-tax-calendar';
-import {
-  finAdvanceAction,
-  finAdvanceAdd,
-  finAdvanceOverdue,
-  finAdvancePrecheck,
-  finCardAction,
-  finCashHome,
-  finCashMine,
-  finCashView,
-  finMandateAction,
-  finPettyAction,
-  finPettyTopUpLink,
-  finPettyTopUpPrecheck,
-  type FinCashCtx,
-} from './finance-cash';
-import { FIN_REGULAR_RULE, finGuaranteeAction, finHostelPaidOn, finHostelUnseen, finMatchRegular, finRegularAction, finRegularDues, finRegularExpected, finRegularHome, finRegularState, finRegularView, finUnmatchRegular, type FinRegularCtx } from './finance-regular';
+
 
 const prevMonth = (period: string) => {
   const [y, m] = period.split('-').map(Number);
   return m === 1 ? `${y - 1}-12` : `${y}-${String(m - 1).padStart(2, '0')}`;
 };
-import type { EvidenceDoc, FinCheckSection, HostelBill, StaffPayLine, StaffPayRun } from './types';
-import { finStampAction, finStampHome, finStampView } from './finance-stamp';
-import { finIcAction, finIcExceptions, finIcPairs, finIcView } from './finance-intercompany';
-import { finCoaAction, finFiguresAction, finLedgerView, finSqlApply, finSqlBlockers, finSqlDiscoveryAction, type SqlAccountReader } from './finance-ledger';
-import { finCash13, finCash13Action } from './finance-forecast13';
-import { finDashboardRow, finPackData, finPackReview } from './finance-pack';
-import { finDailyCashAction, finDailyCashCollectorView, finDailyCashDecisions, finDailyCashHome, finDailyCashReceiptsDue, finDailyCashView, type FinDailyCashCtx } from './finance-daily-cash';
-import { sha256Hex } from './audit';
-import { finAllocateAction, finBillingAction, finGovtAction, finMatchGovt, finMoneyInHome, finMoneyInView, finUnmatchGovt } from './finance-billing';
 
 const KINDS: FinPayeeKind[] = ['supplier', 'statutory', 'payroll', 'tax', 'intercompany', 'other'];
 const round2 = (n: number) => Math.round(n * 100) / 100;
@@ -947,13 +1004,9 @@ export class FinanceControlsService {
   private isDirectorOffice(u: User) {
     return !u.integration && u.role === 'pwvsb_officer' && u.department === 'director_office';
   }
-  /**
-   * The COO approves a stamped consent letter for pay into a third party's account (Fauzan, 6 Nov 2026), as on the guard
-   * pay run. The CEO may stand in only through the existing pilot rule (RULES.pilot on, CEO tier: the service's
-   * pilotApproves), per Fauzan's review note 7 Nov 2026, item 2.
-   */
+  /** Only the COO approves a stamped consent letter (Fauzan, 6 Nov 2026, decision card: "COO only"; no CEO stand-in). */
   private isConsentApprover(u: User) {
-    return isFinCoo(u) || (RULES.pilot.value.on && !u.integration && u.opsTier === 'ceo');
+    return isFinCoo(u);
   }
   private async dailyCtx(user: User, a: FinActor | null): Promise<FinDailyCashCtx> {
     const users = new Map((await this.store.list('users')).map((u) => [u.id, u]));

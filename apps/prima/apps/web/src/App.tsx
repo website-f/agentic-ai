@@ -1,18 +1,19 @@
-import {ItMetrics} from './views/ItMetrics';
+import { ItMetrics } from './views/ItMetrics';
 import { WorkKpiView } from './views/WorkKpi';
-import {CleanupReceiptRecovery} from './views/ItCleanup';
-import {ItProcurement} from './views/ItProcurement';
+import { CleanupReceiptRecovery } from './views/ItCleanup';
+import { ItProcurement } from './views/ItProcurement';
 import { HrItIntake } from './views/HrItIntake';
+import { StaffDirectory } from './views/StaffDirectory';
 import { ItExtractionWorkspace } from './views/ItExtractionWorkspace';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import type { Company, User } from '@prima/core';
-import { RULES, finRequestInMenu, hasOwnStaffRecord, isActHead, isGroupLeader, isOwnerAdmin, jaOwns, seesArmsDetail, workKpiScope } from '@prima/core';
+import { type Company, type User, RULES, hasOwnStaffRecord, isActHead, isGroupLeader, isOwnerAdmin, jaOwns, seesArmsDetail, workKpiScope, finRequestInMenu, canSeeJaSwitch } from '@prima/core';
 import { ApiError, api, type Me } from './api';
 import { ArrowLeftIcon } from '@phosphor-icons/react';
 import { publishPage, rulesFor } from './prima-page';
 import { ViewIcon } from './icons';
 import { SESSION_ENDED } from './api/http';
 import { Chip, Icon, Loading, RefreshContext, ToastHost, hhmm } from './ui';
+import { AlertBell } from './AlertBell';
 import { ArishaReviewQueue } from './ArishaReviewQueue';
 import { ConfidentialityGate } from './Confidential';
 import { Launcher } from './Launcher';
@@ -21,6 +22,8 @@ import { Overview } from './views/Overview';
 import { CompanyView } from './views/Company';
 import { Sites } from './views/Sites';
 import { RosterView } from './views/Roster';
+import { CleaningView } from './views/Cleaning';
+import { DutyView, SiteStockView } from './views/SitePlans';
 import { People } from './views/People';
 import { AttendanceView } from './views/Attendance';
 import { Cases } from './views/Cases';
@@ -29,16 +32,20 @@ import { CommercialView } from './views/Commercial';
 import { HrView } from './views/Hr';
 import { InsuranceView } from './views/Insurance';
 import { CmsView } from './views/Cms';
+import { CmsReadinessView } from './views/CmsReadiness';
 import { OpsView } from './views/Ops';
 import { HomeView } from './views/Home';
 import { ArmsView } from './views/Arms';
 import { AuditView } from './views/Audit';
 import { Device } from './views/Device';
 import { MyDuty } from './views/MyDuty';
+import { GuardPhoneApp } from './views/GuardPhone';
 import { MyClockView, StaffClockBoardView, StaffTracker } from './views/StaffClock';
 import { BranchWorkView, WorkView } from './views/Work';
 import { SocsoView } from './views/Socso';
 import { HostelsView } from './views/Hostels';
+import { FwCostView } from './views/FwCost';
+import { FwStatView } from './views/FwStat';
 import { ClaimsView } from './views/Claims';
 import { MemosView } from './views/Memos';
 import { PdpaView } from './views/Pdpa';
@@ -47,10 +54,9 @@ import { ClientsView } from './views/Clients';
 import { OfficeView } from './views/Office';
 import { RequestsView } from './views/Requests';
 import { JaView } from './views/Ja';
+import { JaSwitchView } from './views/JaSwitch';
 import { AssetsView } from './views/Assets';
 import { StaffPayView } from './views/StaffPay';
-import { CooPaymentsView } from './views/CooPayments';
-import { PaymentRequestsView } from './views/PaymentRequests';
 import { GuardAdvancesView, GuardLoansView, GuardPayView, StatutoryView } from './views/GuardPay';
 import { FinanceView } from './views/Finance';
 import { ContractsView } from './views/Contracts';
@@ -63,8 +69,8 @@ import { PurchasingView } from './views/Purchasing';
 import { ItemsView } from './views/Items';
 import { GovernanceView } from './views/Governance';
 import { GrcView } from './views/Grc';
+import { RegistersView } from './views/Registers';
 import { ActView } from './views/Act';
-import { HandoversView } from './views/Handovers';
 import { PayFormulasView } from './views/PayFormulas';
 import { SiteHoursView } from './views/SiteHours';
 import { SalaryCalcView } from './views/SalaryCalc';
@@ -76,75 +82,50 @@ import { FwmView } from './views/Fwm';
 import { DirectorOfficeView } from './views/DirectorOffice';
 import { ReportsView } from './views/Reports';
 import { MeetingsView } from './views/Meetings';
+import { SelfAuditView } from './views/SelfAudit';
+import { RbaView } from './views/Rba';
+import { SurveysView } from './views/Surveys';
+import { forgetOwner, lastOwner, rememberSetup, syncSurveys } from './survey/offline';
+import { CooPaymentsView } from './views/CooPayments';
+import { PaymentRequestsView } from './views/PaymentRequests';
+import { HandoversView } from './views/Handovers';
+import { QualityView } from './views/Quality';
 
-export type ViewName =
-  | 'home'
-  | 'overview'
-  | 'company'
-  | 'sites'
-  | 'roster'
-  | 'people'
-  | 'attendance'
-  | 'cases'
-  | 'compliance'
-  | 'commercial'
-  | 'ops'
-  | 'hr'
-  | 'insurance'
-  | 'arms'
-  | 'cms'
-  | 'audit'
-  | 'device'
-  | 'mine'
-  | 'clock'
-  | 'staffclock'
-  | 'work'
-  | 'branchwork'
-  | 'socso'
-  | 'fwm'
-  | 'doa'
-  | 'reports'
-  | 'meetings'
-  | 'hostels'
-  | 'claims'
-  | 'memos'
-  | 'pdpa'
-  | 'fleet'
-  | 'clients'
-  | 'office'
-  | 'requests'
-  | 'payreq'
-  | 'ja'
-  | 'assets'
-  | 'staffpay'
-  | 'guardpay'
-  | 'advances'
-  | 'statutory'
-  | 'loans'
-  | 'finance'
-  | 'contracts'
-  | 'branches'
-  | 'it'
-  | 'it-metrics'
-  | 'work-kpi'
-  | 'it-procurement'
-  | 'hr-it-intake'
-  | 'websites'
-  | 'corporate'
-  | 'renewals'
-  | 'credit'
-  | 'purchasing'
-  | 'items'
-  | 'governance'
-  | 'grc'
-  | 'act'
-  | 'handovers'
-  | 'payformulas'
-  | 'sitehours'
-  | 'salarycalc'
-  | 'continuity'
-  | 'connections'
-  | 'it-extraction';
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+export type ViewName = 'home' | 'overview' | 'company' | 'sites' | 'roster' | 'cleaning' | 'duty' | 'sitestock' | 'people' | 'attendance' | 'cases' | 'compliance' | 'commercial' | 'ops' | 'hr' | 'insurance' | 'arms' | 'cms' | 'cmsready' | 'audit' | 'device' | 'mine' | 'clock' | 'staffclock' | 'work' | 'branchwork' | 'socso' | 'fwm' | 'doa' | 'reports' | 'meetings' | 'hostels' | 'fwcost' | 'fwstat' | 'claims' | 'memos' | 'pdpa' | 'fleet' | 'clients' | 'office' | 'requests' | 'payreq' | 'ja' | 'jaswitch' | 'assets' | 'staffpay' | 'guardpay' | 'advances' | 'statutory' | 'loans' | 'finance' | 'contracts' | 'branches' | 'it' | 'it-metrics' | 'work-kpi' | 'it-procurement' | 'hr-it-intake' | 'staff-directory' | 'websites' | 'corporate' | 'renewals' | 'credit' | 'purchasing' | 'items' | 'governance' | 'grc' | 'registers' | 'act' | 'payformulas' | 'sitehours' | 'salarycalc' | 'continuity' | 'connections' | 'it-extraction' | 'surveys' | 'handovers' | 'quality' | 'selfaudit' | 'rba';
 
 export interface Route {
   view: ViewName;
@@ -178,10 +159,10 @@ const inOffice = (api as { office?: boolean }).office === true;
 
 const NAV_GROUPS: { title: string; views: ViewName[] }[] = [
   { title: 'Today', views: ['home', 'overview', 'company', 'office', 'work', 'mine', 'clock', 'staffclock', 'doa', 'reports', 'meetings'] },
-  { title: 'Operations', views: ['sites', 'roster', 'people', 'attendance', 'cases', 'ops', 'device', 'branchwork', 'fleet', 'arms', 'cms', 'sitehours', 'items'] },
-  { title: 'People and HR', views: ['hr', 'claims', 'staffpay', 'guardpay', 'advances', 'loans', 'payformulas', 'salarycalc', 'statutory', 'work-kpi', 'fwm', 'socso', 'hostels', 'requests', 'handovers', 'memos', 'pdpa'] },
-  { title: 'Business and finance', views: ['commercial', 'clients', 'contracts', 'finance', 'credit', 'purchasing', 'payreq', 'branches', 'assets', 'insurance', 'ja'] },
-  { title: 'Compliance and governance', views: ['compliance', 'renewals', 'audit', 'grc', 'act', 'governance', 'corporate', 'continuity'] },
+  { title: 'Operations', views: ['sites', 'roster', 'people', 'attendance', 'cases', 'ops', 'device', 'branchwork', 'duty', 'cleaning', 'sitestock', 'surveys', 'fleet', 'arms', 'cms', 'cmsready', 'sitehours', 'items'] },
+  { title: 'People and HR', views: ['hr', 'claims', 'staffpay', 'guardpay', 'advances', 'loans', 'payformulas', 'salarycalc', 'statutory', 'work-kpi', 'staff-directory', 'fwm', 'fwcost', 'fwstat', 'socso', 'hostels', 'requests', 'handovers', 'memos', 'pdpa'] },
+  { title: 'Business and finance', views: ['commercial', 'clients', 'contracts', 'finance', 'credit', 'purchasing', 'payreq', 'branches', 'assets', 'insurance', 'ja', 'jaswitch'] },
+  { title: 'Compliance and governance', views: ['compliance', 'renewals', 'audit', 'selfaudit', 'rba', 'quality', 'grc', 'act', 'registers', 'governance', 'corporate', 'continuity'] },
   { title: 'IT and systems', views: ['it', 'it-procurement', 'it-metrics', 'hr-it-intake', 'websites', 'connections', 'it-extraction'] },
 ];
 
@@ -208,10 +189,17 @@ const NAV: { view: ViewName; label: string; icon: string; roles: User['role'][];
   { view: 'office', label: 'Company office', icon: 'company', roles: ['director', 'company_manager', 'admin_exec'] },
   { view: 'sites', label: 'Sites', icon: 'sites', roles: ['director', 'pwvsb_officer', 'company_manager', 'admin_exec', 'supervisor'] },
   { view: 'roster', label: 'Roster', icon: 'roster', roles: ['director', 'pwvsb_officer', 'company_manager', 'admin_exec', 'supervisor'] },
+  { view: 'duty', label: 'Guard duty plans', icon: 'roster', roles: ['director', 'pwvsb_officer', 'company_manager', 'admin_exec'] },
+  { view: 'cleaning', label: 'Cleaning plans', icon: 'sites', roles: ['director', 'pwvsb_officer', 'company_manager', 'admin_exec'] },
+  { view: 'sitestock', label: 'Site stock and fittings', icon: 'cart', roles: ['director', 'pwvsb_officer'] },
   { view: 'people', label: 'Guards', icon: 'people', roles: ['director', 'pwvsb_officer', 'company_manager', 'admin_exec', 'supervisor'] },
   { view: 'attendance', label: 'Attendance', icon: 'attendance', roles: ['director', 'pwvsb_officer', 'company_manager', 'admin_exec', 'supervisor'] },
   { view: 'cases', label: 'Cases', icon: 'cases', roles: ['director', 'pwvsb_officer', 'company_manager', 'admin_exec', 'supervisor'] },
   { view: 'compliance', label: 'Licences', icon: 'compliance', roles: ['director', 'pwvsb_officer', 'company_manager', 'admin_exec'] },
+  // Yearly self-audit (Fauzan, 6 Nov 2026): the company does it every year; ACT and group leadership watch.
+  { view: 'selfaudit', label: 'Yearly self-audit', icon: 'compliance', roles: ['director', 'pwvsb_officer', 'company_manager', 'admin_exec'] },
+  // RBA readiness (Fauzan, 8 Nov 2026): every office sign-in signs the yearly ethics declaration here; the rest is by role.
+  { view: 'rba', label: 'RBA readiness', icon: 'compliance', roles: ['director', 'pwvsb_officer', 'company_manager', 'admin_exec'] },
   { view: 'commercial', label: 'Tenders & quotes', icon: 'tender', roles: ['director', 'pwvsb_officer', 'company_manager', 'admin_exec'] },
   { view: 'ops', label: 'Regional ops', icon: 'sites', roles: ['director', 'pwvsb_officer'], depts: ['operations'] },
   { view: 'hr', label: 'HR monitor', icon: 'people', roles: ['director', 'pwvsb_officer'], depts: ['hr'] },
@@ -224,10 +212,21 @@ const NAV: { view: ViewName; label: string; icon: string; roles: User['role'][];
   },
   { view: 'arms', label: 'Arms control', icon: 'arms', roles: ['director', 'pwvsb_officer', 'company_manager', 'supervisor'], depts: ['arms_control'] },
   { view: 'cms', label: 'CMS', icon: 'device', roles: ['director', 'pwvsb_officer'], depts: ['arms_control', 'cms'] },
+  // CMS site readiness (audit decision 4, Fauzan 5 Nov 2026): the company records each site's devices (the client's brands)
+  // and preparations; Arms Control checks; CMS and operations watch. No device is connected from it.
+  {
+    view: 'cmsready',
+    label: 'CMS site readiness',
+    icon: 'sites',
+    roles: ['director', 'pwvsb_officer', 'company_manager', 'admin_exec', 'supervisor'],
+    depts: ['arms_control', 'cms', 'operations'],
+  },
   { view: 'audit', label: 'Audit trail', icon: 'audit', roles: ['director', 'pwvsb_officer', 'company_manager'] },
   { view: 'device', label: 'Site device', icon: 'device', roles: ['site_device'] },
   { view: 'doa', label: 'Director Office', icon: 'tender', roles: ['director', 'pwvsb_officer'] },
   { view: 'reports', label: 'Reports', icon: 'audit', roles: ['director', 'pwvsb_officer', 'company_manager', 'admin_exec'] },
+  // Offline site survey (Fauzan, 4 Nov 2026): sales, managers, site officers and operations; works with no signal.
+  { view: 'surveys', label: 'Site survey', icon: 'sites', roles: ['director', 'pwvsb_officer', 'company_manager', 'admin_exec', 'supervisor'] },
   { view: 'meetings', label: 'Meetings', icon: 'roster', roles: ['director', 'pwvsb_officer', 'company_manager', 'admin_exec'] },
   { view: 'mine', label: 'Duty', icon: 'people', roles: ['guard', 'supervisor', 'director', 'pwvsb_officer', 'company_manager', 'admin_exec'] },
   { view: 'clock', label: 'Clock', icon: 'attendance', roles: ['director', 'pwvsb_officer', 'company_manager', 'admin_exec', 'supervisor'] },
@@ -248,6 +247,24 @@ const NAV: { view: ViewName; label: string; icon: string; roles: User['role'][];
     icon: 'cases',
     roles: ['director', 'pwvsb_officer', 'company_manager', 'admin_exec', 'supervisor'],
     depts: ['hr', 'operations'],
+  },
+  // Recruitment cost (Fauzan, 3 Nov 2026): FWM records placements, Finance runs the month, the FD or CEO sets rates
+  // and approves; each company manager sees its own bills and paybacks.
+  {
+    view: 'fwcost',
+    label: 'Recruitment cost',
+    icon: 'audit',
+    roles: ['director', 'pwvsb_officer', 'company_manager'],
+    depts: ['fwm', 'finance'],
+  },
+  // Nepali EPF and SOCSO recharge (Fauzan, 5 Nov 2026): the permit company pays, the company or branch that used the worker
+  // repays; a Branch Manager sees and repays only their own branch.
+  {
+    view: 'fwstat',
+    label: 'Nepali EPF/SOCSO',
+    icon: 'audit',
+    roles: ['director', 'pwvsb_officer', 'company_manager', 'admin_exec'],
+    depts: ['fwm', 'finance'],
   },
   // Hostel bills and utility excess (Fauzan, 26 Oct 2026): the owning company, FWM, the approvers, HR and leadership.
   {
@@ -283,6 +300,8 @@ const NAV: { view: ViewName; label: string; icon: string; roles: User['role'][];
     roles: ['director', 'pwvsb_officer', 'company_manager', 'admin_exec', 'supervisor'],
     depts: ['operations', 'hr', 'fwm', 'cms'],
   },
+  // Switch-over from JA (Fauzan, 5 Nov 2026): side by side, difference reports, area switch and history import.
+  { view: 'jaswitch', label: 'Switch from JA', icon: 'group', roles: ['director', 'pwvsb_officer', 'company_manager'] },
   // Asset Management (Fauzan, 26 Oct 2026): its team, group leadership and the finance staff who oversee it; no group company.
   { view: 'assets', label: 'Asset Management', icon: 'company', roles: ['director', 'pwvsb_officer'], depts: ['asset', 'finance'] },
   // Staff payroll (Fauzan, 27 Oct 2026; 1 Nov 2026): HR prepares, the Chief of Staff approves, the COO approves, Finance pays;
@@ -300,8 +319,6 @@ const NAV: { view: ViewName; label: string; icon: string; roles: User['role'][];
   { view: 'grc', label: 'Speak up and assurance', icon: 'audit', roles: ['guard', 'supervisor', 'director', 'pwvsb_officer', 'company_manager', 'admin_exec'] },
   // ACT, Audit, Compliance and Transformation (Fauzan, 27 Oct 2026): ACT's workspace; owners see the findings they must fix.
   { view: 'act', label: 'ACT', icon: 'audit', roles: ['director', 'pwvsb_officer', 'company_manager'] },
-  // Hand-overs between departments (Fauzan, 2 Nov 2026: key once, every department gets what it needs).
-  { view: 'handovers', label: 'Hand-overs', icon: 'group', roles: ['director', 'pwvsb_officer', 'company_manager', 'admin_exec'] },
   // Pay formulas (Fauzan, 5 Nov 2026): ACT sets guard salary and driver overtime formulas; group leadership sees.
   { view: 'payformulas', label: 'Pay formulas', icon: 'audit', roles: ['director', 'pwvsb_officer'] },
   // Site man-hours (Fauzan, 6 Nov 2026): allowed hours per site per month; OD/OGM approve extra; HR, ACT and the company office see.
@@ -329,6 +346,8 @@ const NAV: { view: ViewName; label: string; icon: string; roles: User['role'][];
   // Workflow KPIs across departments (Fauzan, 5 Nov 2026): only the KPI keepers; workKpiScope decides who.
   { view: 'work-kpi', label: 'Work KPIs', icon: 'audit', roles: ['director', 'pwvsb_officer', 'company_manager'] },
   { view: 'it-metrics', label: 'Workflow time & quality', icon: 'device', roles: ['director','pwvsb_officer','company_manager','admin_exec','supervisor'] },
+  // Staff directory (Fauzan, 4 Nov 2026): HR, the HR Director, the CEO and IT only; never a sign-in.
+  { view: 'staff-directory', label: 'Staff directory', icon: 'audit', roles: ['director', 'pwvsb_officer'] },
   { view: 'hr-it-intake', label: 'HR / IT coordination', icon: 'device', roles: ['director','pwvsb_officer','company_manager','admin_exec','supervisor'] },
   // Group websites (Fauzan, 27 Oct 2026): IT runs the register and reviews; each company answers for its own websites.
   { view: 'websites', label: 'Websites', icon: 'device', roles: ['director', 'pwvsb_officer', 'company_manager', 'admin_exec'] },
@@ -342,6 +361,9 @@ const NAV: { view: ViewName; label: string; icon: string; roles: User['role'][];
   // Advance and loan scheme (Fauzan, 6 Nov 2026): HR records, the Chief of Staff then the CEO approve, Finance pays out and watches.
   { view: 'loans', label: 'Advances and loans', icon: 'audit', roles: ['director', 'pwvsb_officer'] },
   { view: 'memos', label: 'Memos', icon: 'compliance', roles: ['guard', 'supervisor', 'director', 'pwvsb_officer', 'company_manager', 'admin_exec'] },
+{ view: 'handovers', label: 'Hand-overs', icon: 'group', roles: ['director', 'pwvsb_officer', 'company_manager', 'admin_exec'] },
+{ view: 'registers', label: 'Governance registers', icon: 'compliance', roles: ['director', 'pwvsb_officer', 'company_manager', 'admin_exec'] },
+{ view: 'quality', label: 'Quality and compliance', icon: 'compliance', roles: ['director', 'pwvsb_officer', 'company_manager', 'supervisor'] }
 ];
 
 /** Screens a role sees first (and on the phone tab bar). Admin executives work licences, tenders and quotations. */
@@ -365,7 +387,7 @@ const ROLE_FIRST: Record<string, ViewName[]> = {
   'pwvsb_officer:it': ['it', 'websites', 'clock'],
   'pwvsb_officer:legal': ['credit', 'governance', 'clock'],
   'pwvsb_officer:audit': ['act', 'payformulas', 'grc', 'audit', 'clock'],
-  'pwvsb_officer:procurement': ['purchasing', 'clock'],
+  'pwvsb_officer:procurement': ['purchasing', 'clock', 'sitestock'],
 };
 
 const ROLE_LABEL: Record<User['role'], string> = {
@@ -379,6 +401,9 @@ const ROLE_LABEL: Record<User['role'], string> = {
 };
 
 const VIEW_TOKENS: ViewName[] = [
+  'cleaning',
+  'duty',
+  'sitestock',
   'home',
   'overview',
   'company',
@@ -408,6 +433,8 @@ const VIEW_TOKENS: ViewName[] = [
   'reports',
   'meetings',
   'hostels',
+  'fwcost',
+  'fwstat',
   'claims',
   'memos',
   'pdpa',
@@ -415,6 +442,7 @@ const VIEW_TOKENS: ViewName[] = [
   'clients',
   'requests',
   'ja',
+  'jaswitch',
   'assets',
   'staffpay',
   'guardpay',
@@ -429,6 +457,7 @@ const VIEW_TOKENS: ViewName[] = [
   'work-kpi',
   'it-procurement',
   'hr-it-intake',
+  'staff-directory',
   'websites',
   'corporate',
   'renewals',
@@ -437,21 +466,27 @@ const VIEW_TOKENS: ViewName[] = [
   'items',
   'governance',
   'grc',
+  'registers',
   'act',
-  'handovers',
   'payformulas',
   'sitehours',
   'salarycalc',
   'continuity',
   'connections',
   'it-extraction',
+  'surveys',
+'handovers',
+'cmsready',
+'quality',
+'selfaudit',
+'rba'
 ];
 
 function SignIn({ onSignedIn, notice }: { onSignedIn: (me: Me) => void; notice?: string | null }) {
   const [users, setUsers] = useState<User[] | null>(null);
   const [error, setError] = useState<string | null>(notice ?? null);
   // Office staff sign in with their Microsoft 365 account; the person picker is only for the test link and development.
-  const [ways, setWays] = useState<{ microsoft: boolean; devLogin: boolean; office?: boolean } | null>(api.signInOptions ? null : { microsoft: false, devLogin: true });
+  const [ways, setWays] = useState<{ microsoft: boolean; devLogin: boolean; guardPhone?: boolean; office?: boolean } | null>(api.signInOptions ? null : { microsoft: false, devLogin: true, guardPhone: true });
   useEffect(() => {
     if (!api.signInOptions) return;
     api.signInOptions().then(setWays, (e) => setError(e.message));
@@ -529,6 +564,11 @@ function SignIn({ onSignedIn, notice }: { onSignedIn: (me: Me) => void; notice?:
           </div>
         )}
         {ways && !ways.microsoft && !ways.devLogin && !ways.office && <div className="notice">Sign-in is not set up on this server yet. Contact IT.</div>}
+        {ways?.guardPhone && (
+        <a className="btn btn-ghost btn-sm" style={{ alignSelf: 'flex-start' }} href="#guard-phone">
+          Pengawal atau pegawai? Log masuk di telefon sendiri · Guard or officer? Sign in on your own phone
+        </a>
+        )}
       </div>
     </div>
   );
@@ -573,6 +613,8 @@ function AppBody() {
 
   // Why the sign-in screen is showing, when it is not simply a first visit.
   const [notice, setNotice] = useState<string | null>(null);
+  // No signal when the app opened: the last person signed in here can still fill site surveys (sent later).
+  const [offlineOwner, setOfflineOwner] = useState<{ id: string; name: string } | null>(null);
   const signedIn = useRef(false);
   signedIn.current = !!me;
 
@@ -586,7 +628,12 @@ function AppBody() {
         // 401 is a first visit or an ended session; anything else (account not linked, not in the pilot, server
         // down) is said on the sign-in screen instead of silently showing it again.
         if (!(e instanceof ApiError) || e.status !== 401) setNotice(e instanceof Error ? e.message : String(e));
-        setBooting(false);
+        if (!(e instanceof ApiError))
+          void lastOwner()
+            .then((o) => setOfflineOwner(o))
+            .catch(() => undefined)
+            .finally(() => setBooting(false));
+        else setBooting(false);
       },
     );
   }, []);
@@ -601,7 +648,41 @@ function AppBody() {
     return () => window.removeEventListener(SESSION_ENDED, ended);
   }, []);
 
+  // A guard's own phone has its own enrolment and face-plus-PIN sign-in (third audit item 2), opened by the office link.
+  const [guardMode, setGuardMode] = useState(() => location.hash.startsWith('#guard-phone'));
+  useEffect(() => {
+    const onHash = () => setGuardMode(location.hash.startsWith('#guard-phone'));
+    window.addEventListener('hashchange', onHash);
+    return () => window.removeEventListener('hashchange', onHash);
+  }, []);
+  if (guardMode)
+    return (
+      <ToastHost>
+        <GuardPhoneApp
+          onLeave={() => {
+            history.replaceState(null, '', location.pathname);
+            setGuardMode(false);
+          }}
+        />
+      </ToastHost>
+    );
   if (booting) return <Loading what="Prima Secure App" />;
+  if (offlineOwner && !me)
+    return (
+      <ToastHost>
+        <div className="app" style={{ padding: 16, maxWidth: 760, margin: '0 auto' }}>
+          <div className="notice" data-tone="warn" style={{ marginBottom: 12 }}>
+            No signal, so Prima cannot open fully. {offlineOwner.name}, you can fill in site surveys now; they are sent when you open Prima with a signal.
+            <div style={{ marginTop: 8 }}>
+              <button className="btn" onClick={() => window.location.reload()}>
+                Try again with signal
+              </button>
+            </div>
+          </div>
+          <SurveysView ownerId={offlineOwner.id} offline />
+        </div>
+      </ToastHost>
+    );
   return (
     <ToastHost>
       <RefreshContext.Provider value={{ version, bump }}>
@@ -610,6 +691,7 @@ function AppBody() {
             me={me}
             onSignOut={() => {
               // Signing out clocks staff out (Fauzan, 27 Oct 2026).
+              void forgetOwner().catch(() => undefined);
               api
                 .staffSessionEnd()
                 .catch(() => undefined)
@@ -648,6 +730,26 @@ function Shell({ me, onSignOut, onReset }: { me: Me; onSignOut: () => void; onRe
     api.staffSessionStart().then(bump, () => undefined);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [me.user.id]);
+  // Site surveys made with no signal are sent when the app is open with a signal, whatever screen is showing.
+  useEffect(() => {
+    if (me.user.integration || me.user.role === 'site_device' || me.user.role === 'guard') return;
+    const send = () => void syncSurveys(me.user.id).catch(() => undefined);
+    send();
+    // Keep this person's company, lead and site names on the phone, so the survey screen opens even with no signal
+    // next time, without first visiting it with a signal.
+    if (api.mode !== 'demo')
+      void api
+        .siteSurveySetup()
+        .then((s) => (s.user.id === me.user.id && s.companies.length ? rememberSetup(s) : undefined))
+        .catch(() => undefined);
+    window.addEventListener('online', send);
+    // A weak signal may never fire "online": try again every two minutes while the app is open.
+    const timer = window.setInterval(send, 120_000);
+    return () => {
+      window.removeEventListener('online', send);
+      window.clearInterval(timer);
+    };
+  }, [me.user.id, me.user.integration, me.user.role]);
   const first = (leader ? ROLE_FIRST.leader : ROLE_FIRST[dept ? `${role}:${dept}` : role]) ?? ROLE_FIRST[role] ?? [];
   // Staff clock in daily, so My clock sits right after the first screen (Fauzan, 26 Oct 2026).
   const rank = (v: ViewName) =>
@@ -657,6 +759,7 @@ function Shell({ me, onSignOut, onReset }: { me: Me; onSignOut: () => void; onRe
   const LINE: Partial<Record<NonNullable<User['department']>, ViewName[]>> = {
     operations: [
       'ops',
+      'cmsready',
       'purchasing',
       'clients',
       'contracts',
@@ -666,6 +769,9 @@ function Shell({ me, onSignOut, onReset }: { me: Me; onSignOut: () => void; onRe
       'hostels',
       'sites',
       'roster',
+      'duty',
+      'cleaning',
+      'sitestock',
       'people',
       'attendance',
       'sitehours',
@@ -679,24 +785,25 @@ function Shell({ me, onSignOut, onReset }: { me: Me; onSignOut: () => void; onRe
       'reports',
       'meetings',
       'clock',
+      'surveys', 'quality'
     ],
-    hr: ['hr', 'ja', 'people', 'socso', 'staffclock', 'hostels', 'claims', 'staffpay', 'sitehours', 'guardpay', 'advances', 'loans', 'statutory', 'items', 'reports', 'meetings', 'clock'],
+    hr: ['hr', 'ja', 'people', 'socso', 'staffclock', 'hostels', 'claims', 'staffpay', 'sitehours', 'guardpay', 'advances', 'loans', 'statutory', 'items', 'reports', 'meetings', 'clock', 'quality'],
     // Arms Control sees arms matters only (Fauzan, 25 Oct 2026).
-    arms_control: ['arms', 'cms', 'cases', 'audit', 'reports', 'meetings', 'clock'],
-    cms: ['cms', 'ja', 'arms', 'fleet', 'clock'],
+    arms_control: ['arms', 'cms', 'cases', 'audit', 'reports', 'meetings', 'clock', 'cmsready'],
+    cms: ['cms', 'ja', 'arms', 'fleet', 'clock', 'cmsready'],
     director_office: ['doa', 'commercial', 'guardpay', 'reports', 'meetings', 'clock'],
     chief_of_staff: ['requests', 'claims', 'staffpay', 'insurance', 'reports', 'meetings', 'clock'],
     // FWM: foreign workers, their movements and hostels only, no tenders or other modules (Fauzan, 26 Oct 2026).
-    fwm: ['fwm', 'ja', 'hostels', 'people', 'reports', 'meetings', 'clock'],
+    fwm: ['fwm', 'fwcost', 'fwstat', 'ja', 'hostels', 'people', 'reports', 'meetings', 'clock'],
     pdpa: ['pdpa', 'fleet', 'reports', 'meetings', 'clock'],
     transport: ['fleet', 'reports', 'meetings', 'clock'],
     asset: ['assets', 'reports', 'meetings', 'clock'],
-    finance: ['finance', 'staffpay', 'guardpay', 'advances', 'loans', 'statutory', 'assets', 'credit', 'purchasing', 'items', 'websites', 'reports', 'meetings', 'clock'],
+    finance: ['finance', 'staffpay', 'guardpay', 'advances', 'loans', 'statutory', 'assets', 'credit', 'purchasing', 'items', 'websites', 'reports', 'meetings', 'clock', 'fwcost', 'fwstat'],
     it: ['it', 'items', 'websites', 'connections', 'continuity', 'reports', 'meetings', 'clock'],
-    legal: ['credit', 'governance', 'corporate', 'reports', 'meetings', 'clock'],
-    audit: ['act', 'payformulas', 'statutory', 'sitehours', 'salarycalc', 'grc', 'audit', 'items', 'websites', 'renewals', 'reports', 'meetings', 'clock'],
+    legal: ['credit', 'governance', 'corporate', 'reports', 'meetings', 'clock', 'registers'],
+    audit: ['act', 'payformulas', 'statutory', 'sitehours', 'salarycalc', 'grc', 'audit', 'selfaudit', 'items', 'websites', 'reports', 'meetings', 'clock', 'renewals', 'cleaning', 'registers', 'quality'],
     // Procurement and Inventory: 1 executive and 2 storekeepers under the OGM (Fauzan, 27 Oct 2026).
-    procurement: ['purchasing', 'items', 'reports', 'meetings', 'clock'],
+    procurement: ['purchasing', 'items', 'reports', 'meetings', 'clock', 'sitestock', 'quality'],
   };
   const nav = NAV.filter(
     (n) =>
@@ -707,34 +814,39 @@ function Shell({ me, onSignOut, onReset }: { me: Me; onSignOut: () => void; onRe
         n.view === 'claims' ||
         n.view === 'staffpay' ||
         n.view === 'memos' ||
+        // Anyone can be invited to a meeting or own a meeting action, so every office sign-in reaches Meetings (5 Nov 2026).
+        n.view === 'meetings' ||
         n.view === 'fleet' ||
         n.view === 'it' ||
         n.view === 'it-metrics' ||
-        n.view === 'connections' ||
         n.view === 'work-kpi' ||
         n.view === 'hr-it-intake' ||
+        n.view === 'staff-directory' ||
         n.view === 'it-procurement' ||
         n.view === 'grc' ||
         n.view === 'act' ||
+        n.view === 'rba' ||
         n.view === 'handovers' ||
+        n.view === 'connections' ||
+        n.view === 'jaswitch' ||
+        (n.view === 'payreq' && finRequestInMenu(me.user)) ||
+        (n.view === 'corporate' && !!me.user.corpSecretary) ||
         // The IT Manager sees the IT team's clock, view only (Fauzan, 28 Oct 2026).
         (n.view === 'staffclock' && dept === 'it' && me.user.itRole === 'manager') ||
         n.view === 'work' ||
-        // The company secretary monitors SSM filings, view only (Central Admin 5A, Fauzan 1 Nov 2026).
-        (n.view === 'corporate' && !!me.user.corpSecretary) ||
-        // Payment requests: the department heads and Finance checkers who act on them (UAT, 2 Nov 2026).
-        (n.view === 'payreq' && finRequestInMenu(me.user)) ||
-        // Items (P85, paper section 9): stores, OM and patrol in their area, Finance, HR for uniforms, audit and the owner.
+        // Items (P85, paper section 9): stores, OM and patrol in their area, Finance, HR for uniforms, audit, the COO and the owner.
         (n.view === 'items' && (['om', 'regional', 'ogm', 'ops_director', 'coo'].includes(me.user.opsTier ?? '') || isOwnerAdmin(me.user))) ||
         (n.view === 'branchwork' && (dept === 'audit' || dept === 'cms' || ['om', 'regional', 'ogm', 'ops_director', 'coo'].includes(me.user.opsTier ?? ''))) ||
         (LINE[dept!] ?? ['clock']).includes(n.view)) &&
       // Far branches: the branch manager, the company manager, OM and above, ACT and CMS; not other admin executives.
       (n.view !== 'it-procurement' || (!me.user.integration && (leader || ['it','finance','audit'].includes(dept??'')))) &&
       (n.view !== 'it-metrics' || !me.user.integration) &&
+      (n.view !== 'work-kpi' || !!workKpiScope(me.user, [], me.now.slice(0, 10))) &&
       // Salary calculator: the OM and above, ACT and group leadership (Fauzan, 6 Nov 2026).
       (n.view !== 'salarycalc' || leader || dept === 'audit' || ['om', 'regional', 'ogm', 'ops_director', 'coo', 'ceo'].includes(me.user.opsTier ?? '')) &&
-      (n.view !== 'work-kpi' || !!workKpiScope(me.user, [], me.now.slice(0, 10))) &&
       (n.view !== 'hr-it-intake' || !me.user.integration) &&
+      (n.view !== 'staff-directory' ||
+        (!me.user.integration && (dept === 'hr' || dept === 'it' || ['cos', 'deputy_cos'].includes(me.user.leadership ?? '') || me.user.opsTier === 'ceo'))) &&
       (n.view !== 'it-extraction' || (!me.user.integration && me.user.id === 'u-fauzan' && me.user.opsTier === 'ceo')) &&
       // Every office staff member checks their own Microsoft 365 connections; the server checks role and identity again.
       (n.view !== 'connections' || !me.user.integration) &&
@@ -789,15 +901,20 @@ function Shell({ me, onSignOut, onReset }: { me: Me; onSignOut: () => void; onRe
       (n.view !== 'fwm' || dept !== 'operations' || leader || ['om', 'regional'].includes(me.user.opsTier ?? '')) &&
       (dept !== 'fwm' || me.user.fwmRole !== 'despatch' || n.view === 'fwm' || n.view === 'clock' || n.view === 'hr-it-intake') &&
       // The JA Group app owns foreign worker management (rule SYS-JA-OWNS); Prima's own screen is switched off, not deleted.
+      (n.view !== 'quality' || me.user.procRole !== 'storekeeper') &&
       (n.view !== 'fwm' || !jaOwns('fwm')) &&
       (n.view !== 'hostels' || !jaOwns('hostels')) &&
       // JA data: operations sees it as OM or above; the FWM despatch does not.
       (n.view !== 'ja' || dept !== 'operations' || leader || ['om', 'regional', 'ogm', 'ops_director'].includes(me.user.opsTier ?? '')) &&
       (n.view !== 'ja' || dept !== 'fwm' || me.user.fwmRole !== 'despatch') &&
-      (n.view !== 'ja' || role !== 'supervisor' || !!me.user.opsTier),
+      (n.view !== 'ja' || role !== 'supervisor' || !!me.user.opsTier) &&
+      (n.view !== 'jaswitch' || canSeeJaSwitch(me.user)),
   )
     // Pilot phase: the pilot users run the whole system with their own menus, so every module keeps running (Fauzan, 28 Oct 2026).
     .map((n) => (n.view === 'mine' && role !== 'guard' && role !== 'supervisor' ? { ...n, label: 'My details' } : n))
+    // Officers only assess their guards there: a plain name, no standards (staff-usability rule, 5 Nov 2026).
+    .map((n) => (n.view === 'quality' && role === 'supervisor' ? { ...n, label: 'Guard skills' } : n))
+    .map((n) => (n.view === 'quality' && dept === 'procurement' && !leader ? { ...n, label: 'Supplier ratings' } : n))
     .map((n) => (n.view === 'people' && (dept === 'hr' || leader) ? { ...n, label: 'People' } : n))
     .sort((a, b) => rank(a.view) - rank(b.view));
   const initialView = (): ViewName => {
@@ -866,6 +983,12 @@ function Shell({ me, onSignOut, onReset }: { me: Me; onSignOut: () => void; onRe
         return <Sites openSiteId={route.siteId} />;
       case 'roster':
         return <RosterView siteId={route.siteId} />;
+      case 'cleaning':
+        return <CleaningView />;
+      case 'duty':
+        return <DutyView />;
+      case 'sitestock':
+        return <SiteStockView />;
       case 'people':
         return <People openPersonId={route.personId} />;
       case 'attendance':
@@ -886,6 +1009,8 @@ function Shell({ me, onSignOut, onReset }: { me: Me; onSignOut: () => void; onRe
         return <ArmsView />;
       case 'cms':
         return <CmsView />;
+      case 'cmsready':
+        return <CmsReadinessView />;
       case 'audit':
         return <AuditView />;
       case 'device':
@@ -904,6 +1029,10 @@ function Shell({ me, onSignOut, onReset }: { me: Me; onSignOut: () => void; onRe
         return <SocsoView />;
       case 'hostels':
         return <HostelsView />;
+      case 'fwcost':
+        return <FwCostView />;
+      case 'fwstat':
+        return <FwStatView />;
       case 'claims':
         return <ClaimsView />;
       case 'memos':
@@ -922,6 +1051,8 @@ function Shell({ me, onSignOut, onReset }: { me: Me; onSignOut: () => void; onRe
         return <PaymentRequestsView />;
       case 'ja':
         return <JaView />;
+      case 'jaswitch':
+        return <JaSwitchView />;
       case 'assets':
         return <AssetsView />;
       case 'staffpay':
@@ -946,6 +1077,8 @@ function Shell({ me, onSignOut, onReset }: { me: Me; onSignOut: () => void; onRe
         return <WorkKpiView />;
       case 'it-procurement':
         return <ItProcurement />;
+      case 'staff-directory':
+        return <StaffDirectory />;
       case 'hr-it-intake':
         return <HrItIntake />;
       case 'it':
@@ -964,12 +1097,14 @@ function Shell({ me, onSignOut, onReset }: { me: Me; onSignOut: () => void; onRe
         return <ItemsView />;
       case 'governance':
         return <GovernanceView />;
+      case 'quality':
+        return <QualityView />;
       case 'grc':
         return <GrcView />;
+      case 'registers':
+        return <RegistersView />;
       case 'act':
         return <ActView />;
-      case 'handovers':
-        return <HandoversView />;
       case 'payformulas':
         return <PayFormulasView />;
       case 'sitehours':
@@ -991,10 +1126,21 @@ function Shell({ me, onSignOut, onReset }: { me: Me; onSignOut: () => void; onRe
         return <ReportsView />;
       case 'meetings':
         return <MeetingsView />;
+      case 'selfaudit':
+        return <SelfAuditView />;
+      case 'rba':
+        return <RbaView />;
+      case 'surveys':
+        return <SurveysView ownerId={me.user.id} />;
+      case 'handovers':
+        return <HandoversView />;
     }
   })();
 
   const companyScoped = ![
+    'rba',
+    'handovers', 'quality',
+    'cmsready',
     'home',
     'overview',
     'compliance',
@@ -1018,6 +1164,7 @@ function Shell({ me, onSignOut, onReset }: { me: Me; onSignOut: () => void; onRe
     'clients',
     'requests',
     'ja',
+    'jaswitch',
     'assets',
     'staffpay',
     'guardpay',
@@ -1035,8 +1182,8 @@ function Shell({ me, onSignOut, onReset }: { me: Me; onSignOut: () => void; onRe
     'purchasing',
     'governance',
     'grc',
+    'registers',
     'act',
-    'handovers',
     'payformulas',
     'sitehours',
     'salarycalc',
@@ -1139,6 +1286,18 @@ function Shell({ me, onSignOut, onReset }: { me: Me; onSignOut: () => void; onRe
             )}
             <span className="grow" />
             <span className="muted small hide-sm">{dept === 'it' ? 'Merdeka Network' : ROLE_LABEL[role]}</span>
+            {/* Alerts show here as well as in Teams and email (Fauzan, 5 Nov 2026). */}
+            {!me.user.integration && role !== 'site_device' && role !== 'guard' && (
+              <AlertBell
+                key={me.user.id}
+                userId={me.user.id}
+                canOpen={(v) => nav.some((n) => n.view === v)}
+                onOpen={(v) => {
+                  const n = nav.find((x) => x.view === v);
+                  if (n) go({ view: n.view });
+                }}
+              />
+            )}
             <span className="mono num muted small" title="Malaysia time">
               {hhmm(clock)} MYT
             </span>

@@ -1,3 +1,5 @@
+if (process.env.CI_SYNTHETIC_BROWSER !== 'true') throw Error('Synthetic browser opt-in required');
+const { localOnly } = require('./browser-local-only.cjs');
 // Run: npm run build -w @prima/cms; node scripts/cms-close-dialog-uat.cjs apps/cms <out-dir>. Local only, port 8097, not wired to CI.
 // Browser check of the CMS operator close dialog (synthetic sample directory, in memory, local only).
 const path = require('node:path');
@@ -18,7 +20,7 @@ const assert = require('node:assert/strict');
   ['uat-a', 'uat-b'].forEach((id, i) => { const site = sites[i]; const dev = dir.devices.find((d) => d.siteId === site.id); hub.ingest(makeEvent({ id, kind: 'INTRUSION', companyId: site.companyId, siteId: site.id, deviceId: dev.id, source: 'uat', summary: 'Intrusion ' + id, detail: {} })); });
   const key = 'uat-operator-key-0123456789abcdef';
   const srv = startHttp({ operators: new Map([[key, 'UAT operator']]), gateway: { key: 'g'.repeat(24), secret: 's'.repeat(24) }, prima: { key: 'p'.repeat(24), secret: 'q'.repeat(24) } }, { hub, lists: new GateLists(), routes: new Map() }, 8097);
-  const b = await chromium.launch(); const p = await b.newPage({ viewport: { width: 1280, height: 900 } });
+  const b = await chromium.launch(); const p = await b.newPage({ viewport: { width: 1280, height: 900 } }); await localOnly(p);
   const errs = []; p.on('pageerror', (e) => errs.push(e.message));
   p.on('dialog', (d) => d.accept('UAT'));
   const res = []; const ok = (n) => { res.push(n); console.log('ok ' + res.length + ' ' + n); };

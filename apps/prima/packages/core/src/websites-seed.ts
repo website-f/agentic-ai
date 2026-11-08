@@ -1,12 +1,23 @@
-// SAMPLE DATA ONLY for the group website module: made-up domains, websites and owners for testing. Not company records.
-// The spread is deliberate: live sites, domains with no site, companies with neither, one company with two websites,
-// one website with two domains, one domain shared by two companies, one Head of Company over two companies, renewals
-// due, an expired and an unknown domain, an overdue review, a failed check and a pending DNS change.
+import { GROUP_EMPLOYER_ID } from "./access";
+import { addDays } from "./time";
+import { fromMs } from "./time";
+import { toMs } from "./time";
+import type { Dataset } from "./types";
+import type { Id } from "./types";
+import type { IsoDate } from "./types";
+import type { IsoDateTime } from "./types";
+import type { User } from "./types";
+import { MONTHLY_ITEMS } from "./websites";
+import { REVIEW_TESTS } from "./websites";
+import { REVIEW_TOPICS } from "./websites";
+import { WEB_DEFAULTS } from "./websites";
+import { previousQuarter } from "./websites";
+import { quarterOf } from "./websites";
+import type { WebDomain } from "./websites";
+import type { WebReview } from "./websites";
+import type { WebSite } from "./websites";
+import type { WebTest } from "./websites";
 
-import { GROUP_EMPLOYER_ID } from './access';
-import { addDays, fromMs, toMs } from './time';
-import type { Dataset, Id, IsoDate, IsoDateTime, User } from './types';
-import { MONTHLY_ITEMS, REVIEW_TESTS, REVIEW_TOPICS, WEB_DEFAULTS, previousQuarter, quarterOf, type WebDomain, type WebReview, type WebSite, type WebTest } from './websites';
 
 const IT = ['u-it-ex1', 'u-it-ex2', 'u-it-ex3', 'u-it-ex4', 'u-it-lead'];
 

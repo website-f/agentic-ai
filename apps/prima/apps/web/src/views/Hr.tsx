@@ -4,12 +4,15 @@ import { api } from '../api';
 import { useApp } from '../App';
 import { Chip, ErrorNotice, Loading, useLoad } from '../ui';
 import { Card, PageHead, Stat, Stats } from '../kit';
+import { CmsHoursPanel } from './CmsHours';
 import { LeavePanel } from './Leave';
 import { FlexPanel, HolidaysPanel, HrLeaveSettingsPanel } from './HrLeave';
 import { JoinLeavePanel, VacanciesPanel } from './HrJoinLeave';
 import { StaffMovementPanel } from './HrMovement';
+import { GroupHistoryPanel, HistoryLookupPanel } from './StaffHistory';
 import { AllowancesPanel } from './HrAllowances';
-import { HrCasesPanel } from './HrCases';
+import { DisciplineAppealsPanel, HrCasesPanel } from './HrCases';
+import { ScreeningPanel } from './HrScreening';
 import { OfficeOshPanel } from './HrOsh';
 import { AppraisalsPanel, HrLegalPanel, OvertimePanel, PoliciesPanel, TrainingPanel } from './HrDevelop';
 import { PayChangesPanel } from './PayChanges';
@@ -21,10 +24,10 @@ import '../styles/people.css';
 /** The HR work queues, grouped; each group hides itself (and its jump link) when none of its panels apply to this user. */
 const GROUPS: { id: string; title: string; sub: string }[] = [
   { id: 'hr-g-pay', title: 'Pay and allowances', sub: 'Pay and salary account changes, allowances and staff overtime' },
-  { id: 'hr-g-move', title: 'Joining, leaving and moving', sub: 'Joiners and leavers, vacancies and staff movement' },
-  { id: 'hr-g-cases', title: 'Cases, safety and legal', sub: 'Staff HR files, office safety and legal points for the directors' },
+  { id: 'hr-g-move', title: 'Joining, leaving and moving', sub: 'Joiners and leavers, vacancies, staff movement and staff history' },
+  { id: 'hr-g-cases', title: 'Cases, safety and legal', sub: 'Staff HR files, discipline appeals, screening, office safety and legal points for the directors' },
   { id: 'hr-g-grow', title: 'Appraisals, training and policies', sub: 'Appraisals, training, the handbook and how to do it' },
-  { id: 'hr-g-leave', title: 'Leave and holidays', sub: 'Leave requests, flexible work, extra leave and public holidays' },
+  { id: 'hr-g-leave', title: 'Leave and holidays', sub: 'Leave requests, flexible work, extra leave, public holidays and CMS staff hours' },
   // P81: the monthly attendance reports from the attendance system.
   { id: 'hr-g-att', title: 'Attendance reports', sub: 'Import the monthly attendance PDFs and see each month' },
 ];
@@ -174,9 +177,13 @@ export function HrView() {
         <JoinLeavePanel />
         <VacanciesPanel />
         <StaffMovementPanel />
+        <HistoryLookupPanel />
+        <GroupHistoryPanel />
       </Group>
       <Group {...cases}>
         <HrCasesPanel />
+        <DisciplineAppealsPanel />
+        <ScreeningPanel />
         <OfficeOshPanel />
         <HrLegalPanel />
       </Group>
@@ -191,6 +198,7 @@ export function HrView() {
         <FlexPanel />
         <HrLeaveSettingsPanel />
         <HolidaysPanel />
+        <CmsHoursPanel />
       </Group>
       <Group {...att}>
         <AttendanceReportsSummary

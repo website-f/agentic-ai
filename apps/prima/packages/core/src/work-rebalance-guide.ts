@@ -1,10 +1,7 @@
-// Guide cards for manager rebalancing (Fauzan, 2 Nov 2026), in the shared guide-card shape from PR #56
-// (packages/core/src/guide-cards.ts, GuideCardSpec). The cards are plain data so this branch builds on its own. Once #56
-// is in, whichever PR merges second adds the one line `registerGuideCards(WORK_REBALANCE_GUIDE_CARDS)`.
-// Read-only help: a card never moves work. `allowed` uses the same rule the server uses for each action.
+import { hasOwnStaffRecord } from "./access";
+import { isGroupLeader } from "./access";
+import type { User } from "./types";
 
-import { hasOwnStaffRecord, isGroupLeader } from './access';
-import type { User } from './types';
 
 /**
  * Who may open the rebalance screen and ask for advice (the server's own check in workRebalance). The list only shows

@@ -1,30 +1,20 @@
-// Prima as one organisation: key once, every department that needs it is told (Fauzan, 2 Nov 2026).
-//
-// "Make sure the system build like 1 whole organisation. Key in once and all department get the data needed. Make
-// sure try to automate what can be automated. Make staff life easier."
-//
-// How it works. Every business write in Prima already appends one entry to the audit log (action, entity, record id,
-// company). This layer listens to that log, inside the same database transaction. When an action is a known hand-over
-// between departments (the ORG_FLOWS catalogue below), it writes:
-//   - one org event (what happened, where, by whom; never the audit summary, which can hold pay or personal details),
-//   - one hand-over item per receiving department, addressed to the named people in that department, with a due date
-//     for a to-do, and a link to the record that was keyed (the receiver opens the original; nobody types it again),
-//   - one in-app notice per person.
-// Because it rides the audit log, a department adds a link by adding a catalogue line; the 23,000-line service file is
-// not edited, so department PRs do not collide here.
-//
-// Boundaries (CLAUDE.md):
-//   - A hand-over tells and links. It never approves, pays, provisions or changes the receiving department's records.
-//   - Confidential lines are never routed: speak-up reports, arms detail, harassment and discipline cases, PDPA cases,
-//     face data. They are listed in NEVER_ROUTED and refused even if a flow names them.
-//   - External channels (email, Teams, SMS, push) stay unconfigured until separately verified. Notices are in-app only.
-//   - The layer is off unless PRIMA_ORG_LINKS=true and its tables are installed (db/modules/org-links-v1.sql).
+import type { AuditEntry } from "./types";
+import type { Id } from "./types";
+import type { IsoDate } from "./types";
+import type { IsoDateTime } from "./types";
+import type { TableName } from "./types";
+import type { User } from "./types";
+import type { AuditBody } from "./store";
+import type { Store } from "./store";
+import type { HrItRequest } from "./hr-it-types";
+import { addDays } from "./time";
+import { dateOf } from "./time";
+import { daysBetween } from "./time";
+import { actRole } from "./access";
+import { isCentralEmployer } from "./access";
+import { isGroupLeader } from "./access";
+import { visibleCompanyIds } from "./access";
 
-import type { AuditEntry, Id, IsoDate, IsoDateTime, TableName, User } from './types';
-import type { AuditBody, Store } from './store';
-import type { HrItRequest } from './hr-it-types';
-import { addDays, dateOf, daysBetween } from './time';
-import { actRole, isCentralEmployer, isGroupLeader, visibleCompanyIds } from './access';
 
 // ---------- Who receives ----------
 
@@ -313,7 +303,7 @@ export const ORG_FLOWS: readonly OrgFlow[] = Object.freeze([
       { desk: 'procurement', kind: 'todo', task: 'Resolve the disputed hand-over with the OM and the guard.', dueDays: 3 },
       { desk: 'act', kind: 'info', task: 'An equipment hand-over was disputed.' },
     ],
-    status: 'live',
+    status: 'in_pr',
     note: 'Gov Ops #54.',
   },
   {
@@ -520,7 +510,7 @@ export const ORG_FLOWS: readonly OrgFlow[] = Object.freeze([
       { desk: 'act', kind: 'info', task: 'A receivable was written off.' },
       { desk: 'company_office', kind: 'info', task: 'A client debt of your company was written off.' , officeDesk: 'clients' },
     ],
-    status: 'live',
+    status: 'in_pr',
     note: 'Finance #49.',
   },
   {
@@ -530,7 +520,7 @@ export const ORG_FLOWS: readonly OrgFlow[] = Object.freeze([
     record: 'Payee change',
     actions: ['finance.payee.changed'],
     targets: [{ desk: 'act', kind: 'info', task: 'Payee bank details changed (fraud watch).' }],
-    status: 'live',
+    status: 'in_pr',
     note: 'Finance #49.',
   },
   {
@@ -543,7 +533,7 @@ export const ORG_FLOWS: readonly OrgFlow[] = Object.freeze([
       { desk: 'legal', kind: 'todo', task: 'Review the guarantee call and the contract position.', dueDays: 3 },
       { desk: 'company_office', kind: 'info', task: 'A guarantee of your company was called or claimed.' , officeDesk: 'licences' },
     ],
-    status: 'live',
+    status: 'in_pr',
     note: 'Finance #49.',
   },
   {
@@ -553,7 +543,7 @@ export const ORG_FLOWS: readonly OrgFlow[] = Object.freeze([
     record: 'OSH incident',
     actions: ['hr.osh_incident'],
     targets: [{ desk: 'chief_of_staff', kind: 'todo', task: 'Check whether an insurance claim is needed.', dueDays: 3 }],
-    status: 'live',
+    status: 'in_pr',
     note: 'HR #51.',
   },
   {
@@ -563,7 +553,7 @@ export const ORG_FLOWS: readonly OrgFlow[] = Object.freeze([
     record: 'Licence renewal case (KDN, majlis, vendor panel, ISO, fire)',
     actions: ['renewal.fee'],
     targets: [{ desk: 'finance', kind: 'todo', task: 'Pay the renewal fee so the submission is not held up.', dueDays: 3 }],
-    status: 'live',
+    status: 'in_pr',
     note: 'Central Admin #52 (5C). A lapsed licence already blocks a new contract there (W15).',
   },
   {
@@ -576,7 +566,7 @@ export const ORG_FLOWS: readonly OrgFlow[] = Object.freeze([
       { desk: 'legal', kind: 'info', task: 'A licence was renewed; update tender and contract papers that quote it.' },
       { desk: 'company_office', kind: 'info', task: 'Your licence was renewed; use the new copy in tenders.', officeDesk: 'licences' },
     ],
-    status: 'live',
+    status: 'in_pr',
     note: 'Central Admin #52 (5C).',
   },
   {

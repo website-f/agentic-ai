@@ -32,7 +32,7 @@ CREATE OR REPLACE FUNCTION prima.rc_role(uid text,need text) RETURNS boolean LAN
  ELSE false END),false) FROM prima.users u WHERE u.id=uid
 $$;
 CREATE OR REPLACE FUNCTION prima.rc_scope(uid text,company text) RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER SET search_path=pg_catalog, prima AS $$
- SELECT coalesce(EXISTS(SELECT 1 FROM prima.users u WHERE u.id=uid AND u.data->'companyIds' ? company AND (company IN ('pwvsb','merdeka','goodwill','sasateam') OR EXISTS(SELECT 1 FROM prima.companies c WHERE c.id=company))),false)
+ SELECT coalesce(EXISTS(SELECT 1 FROM prima.users u WHERE u.id=uid AND u.data->'companyIds' ? company AND (company IN ('pwvsb','merdeka','goodwill','sasateam','pgl') OR EXISTS(SELECT 1 FROM prima.companies c WHERE c.id=company))),false)
 $$;
 CREATE OR REPLACE FUNCTION prima.rc_visible(company text) RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER SET search_path=pg_catalog, prima AS $$
  SELECT prima.rc_role(current_setting('app.user_id',true),'read') AND prima.rc_scope(current_setting('app.user_id',true),company)

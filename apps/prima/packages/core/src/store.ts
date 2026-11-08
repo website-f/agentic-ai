@@ -1,35 +1,51 @@
-import {assertMemoryCleanupWrite,memoryCleanupDependencies} from './it-cleanup-guards';
-import type {CleanupKind} from './it-cleanup-types';
-// Storage port. The service talks only to this interface, so the same business code runs
-// against PostgreSQL in the API and against memory in the browser demo.
+import { assertMemoryCleanupWrite } from "./it-cleanup-guards";
+import { memoryCleanupDependencies } from "./it-cleanup-guards";
+import type { CleanupKind } from "./it-cleanup-types";
+import { appendAudit } from "./audit";
+import type { AuditEntry } from "./types";
+import type { Dataset } from "./types";
+import type { Id } from "./types";
+import type { IsoDate } from "./types";
+import type { TableName } from "./types";
+import type { User } from "./types";
+import type { ItTicket } from "./types";
+import type { LegalHoldTable } from "./types";
+import type { GroupPerson } from "./types";
+import type { GroupPersonNotes } from "./types";
+import type { IsoDateTime } from "./types";
+import type { RehireStatus } from "./types";
 
-import { appendAudit } from './audit';
-import type { AuditEntry, Dataset, Id, IsoDate, LegalHoldTable, TableName, User, ItTicket } from './types';
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 export type Row<T extends TableName> = Dataset[T][number];
 export type AuditBody = Omit<AuditEntry, 'hash' | 'prevHash' | 'seq'>;
 
 /** Equality filter on top-level fields; an array value means "field is one of". */
 export type Filter<T extends TableName> = { [K in keyof Row<T>]?: Row<T>[K] | Row<T>[K][] };
-
-/**
- * A date window on one text field holding an ISO date or date-time (review, 3 Nov 2026: screens that showed a day or a
- * month read every shift, attendance row and patrol tap ever recorded, which grows every month). `from` is inclusive,
- * `before` exclusive, both compared as text, so a date bound works on a date-time field. A row without the field is left
- * out when a range is given.
- */
-export interface Range<T extends TableName> {
-  field: keyof Row<T> & string;
-  from?: string;
-  before?: string;
-}
-
-export function inRange(row: unknown, range: { field: string; from?: string; before?: string } | undefined): boolean {
-  if (!range) return true;
-  const v = (row as Record<string, unknown>)[range.field];
-  if (typeof v !== 'string') return false;
-  return (range.from === undefined || v >= range.from) && (range.before === undefined || v < range.before);
-}
 
 export interface Store {
   /** Whether a table is installed: a separately applied database module may not be yet. Absent = always installed. */
@@ -53,17 +69,11 @@ export interface Store {
   itManualProblems?(): Promise<string[]>;
   itOperationsProblems?(): Promise<string[]>;
   procurementProblems?(): Promise<string[]>;
-  /** False until the optional company office module is applied in the database (memory stores always have it). */
-  companyOfficeReady?(): Promise<boolean>;
-  /** False until the optional module for companies run by another office is applied (memory stores always have it). */
-  companyRunLinksReady?(): Promise<boolean>;
   rentalCorrectionProblems?(): Promise<string[]>;
   hrItProblems?(): Promise<string[]>;
   hrItTrustedTenant?(): string | null;
   /** Allocate and insert one ticket atomically; historical references are never renumbered. */
   createItTicket(body: Omit<ItTicket, 'id' | 'ref'>): Promise<ItTicket>;
-  /** False when an optional module's table is not installed yet (PostgreSQL); the in-memory store has every table. */
-  hasTable?(table: TableName): Promise<boolean>;
   list<T extends TableName>(table: T, filter?: Filter<T>, range?: Range<T>): Promise<Row<T>[]>;
   get<T extends TableName>(table: T, id: Id): Promise<Row<T> | undefined>;
   insert<T extends TableName>(table: T, row: Row<T>): Promise<void>;
@@ -79,14 +89,6 @@ export interface Store {
    */
   lock?<T extends TableName>(table: T, id: Id): Promise<void>;
   /**
-   * The Finance team (a number) recorded for a company, read past the company wall by the database's own function
-   * (prima.org_finance_team), so the hand-over layer and its database check always see the same team. Optional: a
-   * store without it falls back to reading finStatus.
-   */
-  orgFinanceTeam?(companyId: Id): Promise<number | null>;
-  /** The company whose office runs this one (hand-over receivers), when the run-links module is installed. */
-  orgRunBy?(companyId: Id): Promise<Id | null>;
-  /**
    * Retention for Arisha IT import reviews (expire after 24h, clear rows 30 days after closing), done and audited by the
    * database in one step; in memory the service tidies and audits itself.
    */
@@ -98,6 +100,39 @@ export interface Store {
    * ended. The database store calls prima.close_access, the only way the API may change accounts and grants.
    */
   closeAccess?(userId: Id, from: IsoDate, closed: NonNullable<User['accessClosed']>): Promise<number>;
+  /**
+   * The Finance team (a number) recorded for a company, read past the company wall by the database's own function
+   * (prima.org_finance_team), so the hand-over layer and its database check always see the same team. Optional: a
+   * store without it falls back to reading finStatus.
+   */
+  orgFinanceTeam?(companyId: Id): Promise<number | null>;
+  /** The company whose office runs this one (hand-over receivers), when the run-links module is installed. */
+  orgRunBy?(companyId: Id): Promise<Id | null>;
+  /** False until the optional company office module is applied in the database (memory stores always have it). */
+  companyOfficeReady?(): Promise<boolean>;
+  /** False until the optional module for companies run by another office is applied (memory stores always have it). */
+  companyRunLinksReady?(): Promise<boolean>;
+  /** What is missing or wrong in the database for the staff directory; empty when ready. */
+  staffDirectoryProblems?(): Promise<string[]>;
+  /**
+   * Look up one person's group history by a keyed IC or passport. On PostgreSQL it runs as prima.group_history_lookup,
+   * which reads across companies but only for the number typed.
+   */
+  groupHistoryLookup?(idKey: string): Promise<GroupHistoryLookupRow>;
+  /** Set the rehire mark on the person a keyed number belongs to (prima.history_set_mark); returns the people marked. */
+  historySetMark?(idKey: string, mark: { status: RehireStatus; setAt: IsoDateTime; setBy: string }, entry: GroupPersonNotes['rehire'][number], actorPersonId: Id | null): Promise<Id[]>;
+  /** The group person a keyed number already belongs to, across every company (prima.history_group_for on PostgreSQL). */
+  historyGroupFor?(idKey: string, notPersonId: Id): Promise<Id | null>;
+  /** Governance registers: false until the reviewed database module is installed. The memory store has them. */
+  registersReady?(): Promise<boolean>;
+  /** What is missing in the database for site surveys (db/modules/site-surveys-v1.sql); empty when installed. */
+  siteSurveyProblems?(): Promise<string[]>;
+  /** Quality and compliance: false until the reviewed database module is installed. The memory store has it. */
+  qualityReady?(): Promise<boolean>;
+  /** Screening case files: false until the reviewed database module is installed. The memory store has them. */
+  screeningReady?(): Promise<boolean>;
+  /** Whether the optional Asset Management extras tables exist (db/modules/am-extras-v1.sql). The memory store always has them. */
+  amExtrasReady?(): Promise<boolean>;
 }
 
 export function matches<T extends TableName>(row: Row<T>, filter?: Filter<T>): boolean {
@@ -257,4 +292,31 @@ function memoryLegalHoldPreserve(data: Dataset, table: TableName, id: Id, before
     byId: null,
     before: structuredClone(before),
   });
+}
+
+/**
+ * A date window on one text field holding an ISO date or date-time (review, 3 Nov 2026: screens that showed a day or a
+ * month read every shift, attendance row and patrol tap ever recorded, which grows every month). `from` is inclusive,
+ * `before` exclusive, both compared as text, so a date bound works on a date-time field. A row without the field is left
+ * out when a range is given.
+ */
+export interface Range<T extends TableName> {
+  field: keyof Row<T> & string;
+  from?: string;
+  before?: string;
+}
+
+export function inRange(row: unknown, range: { field: string; from?: string; before?: string } | undefined): boolean {
+  if (!range) return true;
+  const v = (row as Record<string, unknown>)[range.field];
+  if (typeof v !== 'string') return false;
+  return (range.from === undefined || v >= range.from) && (range.before === undefined || v < range.before);
+}
+
+/** What a history lookup by number reads across every company: the person's summaries and company names only. */
+export interface GroupHistoryLookupRow {
+  groups: GroupPerson[];
+  companyNames: Record<Id, string>;
+  /** The rehire decisions and reasons, only for those who decide "do not hire again". */
+  rehireNotes: GroupPersonNotes['rehire'] | null;
 }

@@ -1,14 +1,13 @@
 import { invalidateDutyContext } from '../duty/context';
-// In-browser demo: the same PrimaService and rules as the server, running on generated
-// mock data. Changes are kept as a short replay log in this browser only, so a reload
-// keeps what you did today; a new day starts from fresh mock data.
-import { AccessDenied, BadRequest, ImportError, MemoryStore, NotFound, OrgLinkError, PrimaService, RuleBlocked, dateOf, fromMs, demoPin, generateDataset, registeredRollouts, withOrgLinks, type User, testReceiptReader, type OrgImportReceipt, demoFwRecruitFiles, makeTestInhouseKey, sampleLabelToken, type ItemAction } from '@prima/core';
-import type { ProofInput, ReportDef, CmsServiceKind, FinCloseAction, FinPackKind, FinPaymentAction, FinRequestAction, ClientLostReason } from '@prima/core';
-import type { ExpenseInput, PdpaCaseInput, PdpaStepName, ProductCertInput, ProductInput, VehicleRequestInput, VehicleWorkInput, ArmsRequestAction, ArmsRequestStepExtra, AmBuyInput, RaiseArmsRequestInput, OfficeDeskInput, WorkAdjustInput, WorkReassignInput, FinControlArea } from './types';
-import { ApiError, type Api, type CmsSettingsPatch, type FollowUpInput, type LeaveInput, type Me, type PhotoInput, type TenderProtocolInput, type DispatchInput, type DetectionInput, type VideoInput, type PostLogInput, type GateInInput, type NeedsReviewInput, type SiteTaskInput, type DoSiteTaskInput } from './types';
+import { AccessDenied, BadRequest, MemoryStore, NotFound, PrimaService, RuleBlocked, dateOf, fromMs, demoPin, generateDataset, makeTestInhouseKey, sampleLabelToken, type ItemAction, type User, type ClientLostReason, type ProofInput, type ReportDef, testReceiptReader, type FinCloseAction, type FinPackKind, type FinPaymentAction, type FinRequestAction, type CmsServiceKind, ImportError, OrgLinkError, registeredRollouts, withOrgLinks, RULES, type FwPaper, QUALITY_OPS_ACTIONS, demoFwRecruitFiles, type OrgImportReceipt } from '@prima/core';
+import { type ExpenseInput, type PdpaCaseInput, type PdpaStepName, type ProductCertInput, type ProductInput, type VehicleRequestInput, type VehicleWorkInput, ApiError, type Api, type CmsSettingsPatch, type FollowUpInput, type LeaveInput, type Me, type PhotoInput, type TenderProtocolInput, type DispatchInput, type DetectionInput, type VideoInput, type PostLogInput, type GateInInput, type NeedsReviewInput, type SiteTaskInput, type DoSiteTaskInput, type ClientCodeInput, type ClientCheckInput, type ClientInspectionInput, type SelfAuditInput, type RbaCommitteeInput, type EthicsInput, type ItEwaste, type FinControlArea, type ArmsRequestAction, type ArmsRequestStepExtra, type AmBuyInput, type RaiseArmsRequestInput, type OfficeDeskInput, type WorkAdjustInput, type WorkReassignInput, type OfficerHoursInput, type CleaningRecordInput, type CleaningSetupInput, type CleaningProofInput, type StockLineInput, type CleaningSlipInput, type ClientWorkAckInput, type GuardTermsInput, type OpportunityInput, type SourceCheckInput, type FwAddFromJaInput, type FwPaperInput, type AmBqActionInput, type PaperReadingResult } from './types';
+import type { DisciplineAppealDecision, PolicyCopyInput, StaffLangId } from './types';
+
+const CLEANING_WRITES = new Set(['saveSetup', 'setMap', 'makePlan', 'publish', 'recordTasks', 'recordDelivery', 'receiveDelivery', 'stockCheck', 'recordClientAck', 'saveSiteKit', 'recordSiteKit', 'approveGift', 'recordTakeBack']);
 
 const LOG_KEY = 'prima-demo-log-v1';
 const USER_KEY = 'prima-demo-user';
+const ALL_STAFF_KEY = 'prima-demo-all-staff';
 
 interface LoggedCall {
   day: string;
@@ -67,424 +66,7 @@ function toApiError(e: unknown): never {
 }
 
 type Mutations =
-  | 'orgClose'
-  | 'orgRead'
-  | 'orgImport'
-  | 'assign'
-  | 'publish'
-  | 'addShifts'
-  | 'lockAttendance'
-  | 'clockIn'
-  | 'clockOut'
-  | 'scan'
-  | 'raiseCase'
-  | 'addCasePhoto'
-  | 'startSiteVisit'
-  | 'addVisitPhoto'
-  | 'closeSiteVisit'
-  | 'updateCase'
-  | 'signOffCase'
-  | 'createQuotation'
-  | 'addTender'
-  | 'quotationAction'
-  | 'correctQuotation'
-  | 'updateTender'
-  | 'setTenderProtocol'
-  | 'doTenderStep'
-  | 'staffClockIn'
-  | 'registerFace'
-  | 'staffFaceCheck'
-  | 'decideFace'
-  | 'removeFace'
-  | 'addPublicHoliday'
-  | 'removePublicHoliday'
-  | 'setLeaveOverride'
-  | 'setWfhAllowed'
-  | 'requestFlex'
-  | 'decideFlex'
-  | 'recordHrFiling'
-  | 'openHrCase'
-  | 'hrCaseStep'
-  | 'appointOshCoordinator'
-  | 'recordOfficeAssessment'
-  | 'reportOshIncident'
-  | 'recordOshReport'
-  | 'recordTraining'
-  | 'recordGuardPaper'
-  | 'openAppraisal'
-  | 'rateAppraisal'
-  | 'commentAppraisal'
-  | 'closeAppraisal'
-  | 'publishPolicy'
-  | 'setStaffOvertime'
-  | 'updateHrLegalCheck'
-  | 'acknowledgePolicy'
-  | 'decideProbation'
-  | 'raiseVacancy'
-  | 'vacancyStep'
-  | 'advertStep'
-  | 'addApplicant'
-  | 'applicantStep'
-  | 'prepareStaffMovement'
-  | 'staffMovementStep'
-  | 'cancelStaffMovement'
-  | 'applyStaffMovement'
-  | 'authoriseMovementLogin'
-  | 'confirmMovementLogin'
-  | 'applyDueStaffMovements'
-  | 'saveAllowanceType'
-  | 'requestAllowanceChange'
-  | 'eaDraft'
-  | 'employeeRegister'
-  | 'staffSessionStart'
-  | 'acceptConfidentiality'
-  | 'setApprovalLimits'
-  | 'staffSessionEnd'
-  | 'startSocsoClaim'
-  | 'addSocsoDoc'
-  | 'overrideSocsoDoc'
-  | 'advanceSocsoClaim'
-  | 'setSocsoRehab'
-  | 'addSocsoAppointment'
-  | 'addSocsoRestriction'
-  | 'clearSocsoRestriction'
-  | 'addSocsoCheckIn'
-  | 'submitFwRenewal'
-  | 'createTenderGroup'
-  | 'uploadHiringDoc'
-  | 'updateHospitalClaim'
-  | 'createFwmTask'
-  | 'doneFwmTask'
-  | 'reviewFwmTask'
-  | 'recordFwCheck'
-  | 'closeFwCheck'
-  | 'openFwRecruitFile'
-  | 'setFwRecruitTravel'
-  | 'recordFwRecruitStep'
-  | 'clearFwRecruitFile'
-  | 'recordFwRecruitArrival'
-  | 'stopFwRecruitFile'
-  | 'addHostelBill'
-  | 'requestHostelPayment'
-  | 'checkHostelBill'
-  | 'approveHostelBill'
-  | 'uploadHostelSlip'
-  | 'decideUtilityCharge'
-  | 'ackUtilityNotice'
-  | 'fileUtilityPaper'
-  | 'submitStaffClaim'
-  | 'addReceipts'
-  | 'receiptAction'
-  | 'headVerifyClaim'
-  | 'prepareStaffPay'
-  | 'setMyZakat'
-  | 'loadStatTable'
-  | 'checkStatTable'
-  | 'setEmployerNos'
-  | 'setFinPack'
-  | 'finCreatePayment'
-  | 'finPaymentStep'
-  | 'finCooStep'
-  | 'finCreateRequest'
-  | 'finRequestStep'
-  | 'finSetSettings'
-  | 'finCloseStep'
-  | 'finAddBankAccount'
-  | 'finStartBooks'
-  | 'finAddPaper'
-  | 'finControlAction'
-  | 'setMobItem'
-  | 'setCmsService'
-  | 'verifyCmsContact'
-  | 'recordCmsTest'
-  | 'acceptCmsService'
-  | 'approveBranchSettlement'
-  | 'addBranch'
-  | 'branchAct'
-  | 'branchSettlementAct'
-  | 'insuranceClaimAct'
-  | 'raiseItTicket'
-  | 'websiteAction'
-  | 'websiteSyncFeed'
-  | 'corpFilingStep'
-  | 'renewalStep'
-  | 'saveCompanyFile'
-  | 'startCompanyFile'
-  | 'addPanelFirm'
-  | 'panelFirmStep'
-  | 'adviserMoneyStep'
-  | 'addDelegation'
-  | 'delegationStep'
-  | 'addCriticalRole'
-  | 'placeLegalHold'
-  | 'releaseLegalHold'
-  | 'criticalRoleStep'
-  | 'creditCheckLenderLicence'
-  | 'ceoInstruct'
-  | 'checkCompanyFile'
-  | 'runCreditCheck'
-  | 'creditDecide'
-  | 'creditEnforcementStep'
-  | 'creditRepayment'
-  | 'creditChargeLodged'
-  | 'creditStamped'
-  | 'creditCorrectCollateral'
-  | 'creditCorrectRecord'
-  | 'creditDispute'
-  | 'addCreditLoan'
-  | 'corpAuditStep'
-  | 'addSalesLead'
-  | 'postDepreciation'
-  | 'raiseActFinding'
-  | 'actFindingStep'
-  | 'recordActAudit'
-  | 'assignActWork'
-  | 'setActReportForm'
-  | 'setActTiming'
-  | 'recordActFieldCheck'
-  | 'openActInvestigation'
-  | 'addActEvidence'
-  | 'actEvidence'
-  | 'actInvestigationStep'
-  | 'addActImprovement'
-  | 'actImprovementStep'
-  | 'amDisposalStep'
-  | 'amLifeReview'
-  | 'amRecordPayment'
-  | 'arishaSubmit'
-  | 'arishaCommit'
-  | 'arishaResubmit'
-  | 'arishaReturn'
-  | 'saveRecord'
-  | 'decidePayChange'
-  | 'savePayFormula'
-  | 'decidePayFormula'
-  | 'withdrawPayFormula'
-  | 'setPayFormulaUse'
-  | 'approveSiteHours'
-  | 'savePayLaw'
-  | 'setPublicHolidays'
-  | 'amReversePayment'
-  | 'amBankCash'
-  | 'amFollowUp'
-  | 'amDecideLetter'
-  | 'salesLeadStep'
-  | 'addLegalMatter'
-  | 'addCorpAudit'
-  | 'addBcmSystem'
-  | 'addGrcObligation'
-  | 'legalMatterStep'
-  | 'bcmRecord'
-  | 'bcmDrill'
-  | 'recordPdpaDpo'
-  | 'addPdpaRequest'
-  | 'pdpaRequestStep'
-  | 'grcEvidence'
-  | 'grcCheck'
-  | 'recordOshAssessment'
-  | 'submitWhistle'
-  | 'whistleStep'
-  | 'declareGift'
-  | 'decideGift'
-  | 'addGovMandate'
-  | 'govMandateStep'
-  | 'raisePurRequest'
-  | 'purStep'
-  | 'addPurSupplier'
-  | 'purSupplierStep'
-  | 'stockIssue'
-  | 'itemAct'
-  | 'confirmMyItem'
-  | 'handoverStep'
-  | 'setManagementFee'
-  | 'stockReturn'
-  | 'raiseCorpChange'
-  | 'addCorpFiling'
-  | 'decideCorpChange'
-  | 'recordCorpBoard'
-  | 'itTicketStep'
-  | 'itAct'
-  | 'setItOnboardingStep'
-  | 'setItTenderItem'
-  | 'setItAsset'
-  | 'itMaintenance'
-  | 'raiseItPurchase'
-  | 'itPurchaseStep'
-  | 'reviewBranchAction'
-  | 'addBranchAgreement'
-  | 'contractStep'
-  | 'contractReview'
-  | 'addContractVariation'
-  | 'addContract'
-  | 'addClientAccount'
-  | 'setStaffPayLine'
-  | 'staffPayStep'
-  | 'staffPayExport'
-  | 'prepareGuardPay'
-  | 'setGuardPayLine'
-  | 'guardPayStep'
-  | 'guardPayExport'
-  | 'guardPayCash'
-  | 'recordPayConsent'
-  | 'approvePayConsent'
-  | 'setStatutory'
-  | 'setGuardAdvances'
-  | 'changeGuardAdvance'
-  | 'approveGuardAdvances'
-  | 'payGuardAdvance'
-  | 'recordGuardLoan'
-  | 'guardLoanStep'
-  | 'cosDecideClaim'
-  | 'hrDecideClaim'
-  | 'cooDecideClaim'
-  | 'financePayClaim'
-  | 'setClaimRate'
-  | 'publishMemo'
-  | 'openPdpaCase'
-  | 'requestVehicle'
-  | 'clientStep'
-  | 'setOfficeDesks'
-  | 'setCompanyRunBy'
-  | 'clientInvoice'
-  | 'setInvoicePortal'
-  | 'createClientShareLink'
-  | 'revokeClientShareLink'
-  | 'saveExpense'
-  | 'prefillOfficeRequest'
-  | 'submitExpense'
-  | 'decideExpense'
-  | 'startOffboarding'
-  | 'setClientOwner'
-  | 'addClientPerson'
-  | 'updateClientPerson'
-  | 'addClientRequest'
-  | 'closeClientRequest'
-  | 'decideClientRenewal'
-  | 'sendClientRenewalOffer'
-  | 'answerClientRenewal'
-  | 'clientContact'
-  | 'clientReport'
-  | 'clientRating'
-  | 'clientComplaint'
-  | 'resolveClientComplaint'
-  | 'clientBilling'
-  | 'saveProduct'
-  | 'saveProductCert'
-  | 'decideVehicleRequest'
-  | 'vehicleOut'
-  | 'vehicleIn'
-  | 'recordVehicleWork'
-  | 'fileMonitoringConsent'
-  | 'setStaffPin'
-  | 'closeAccess'
-  | 'pdpaStep'
-  | 'readMemo'
-  | 'staffClockOut'
-  | 'staffPing'
-  | 'checkIn'
-  | 'saveCheckinPlace'
-  | 'setCheckinPlaceActive'
-  | 'setCheckinPolicy'
-  | 'setCheckinRules'
-  | 'decideCheckin'
-  | 'remoteApply'
-  | 'remotePlan'
-  | 'remoteTask'
-  | 'remoteCheckIn'
-  | 'remoteReport'
-  | 'remoteDecide'
-  | 'remoteEnd'
-  | 'remoteReview'
-  | 'workCheckIn'
-  | 'workTaskAdd'
-  | 'workTaskDone'
-  | 'workTaskLate'
-  | 'workTaskReview'
-  | 'workTaskReassign'
-  | 'workTaskAdjust'
-  | 'seenCooNotice'
-  | 'helpAsk'
-  | 'helpAnswer'
-  | 'oneOnOneRecord'
-  | 'playbookSignOff'
-  | 'plannerSync'
-  | 'branchCheckSubmit'
-  | 'branchVisitRecord'
-  | 'confirmTenderNa'
-  | 'undoTenderStep'
-  | 'planTenderStep'
-  | 'decideTender'
-  | 'setTenderRecord'
-  | 'addTenderQuery'
-  | 'setTenderQuery'
-  | 'addTenderPapers'
-  | 'setTenderBidFiles'
-  | 'uploadTenderBidFile'
-  | 'confirmTenderBidFile'
-  | 'draftTenderChecklist'
-  | 'reviewTenderChecklist'
-  | 'verifyTender'
-  | 'submitTender'
-  | 'submitReport'
-  | 'setReportDefs'
-  | 'scheduleMeeting'
-  | 'addMinutes'
-  | 'checkMeetingSummary'
-  | 'setMeetingAction'
-  | 'addMeetingAction'
-  | 'setMeetingPrep'
-  | 'issueFirearm'
-  | 'returnFirearm'
-  | 'planArmedJob'
-  | 'updateArmedJob'
-  | 'escalateFirearm'
-  | 'countVault'
-  | 'setPatrolInterval'
-  | 'assignCmsShift'
-  | 'updateCmsSettings'
-  | 'planCmsRoster'
-  | 'recordCmsHandover'
-  | 'logCallback'
-  | 'acknowledgeAlarm'
-  | 'sendDispatch'
-  | 'closeDispatch'
-  | 'cancelDispatch'
-  | 'simulateDetection'
-  | 'dispatchSeen'
-  | 'acknowledgeDispatch'
-  | 'addDispatchPhoto'
-  | 'addDispatchVideo'
-  | 'replyDispatch'
-  | 'addPostLog'
-  | 'gateIn'
-  | 'gateOut'
-  | 'saveNeedsReview'
-  | 'setSiteTask'
-  | 'stopSiteTask'
-  | 'setGateLog'
-  | 'doSiteTask'
-  | 'followUpAttendance'
-  | 'requestLeave'
-  | 'decideLeave'
-  | 'closeAlarm'
-  | 'requestTrip'
-  | 'decideTrip'
-  | 'whistleReview'
-  | 'confirmStockLoss'
-  | 'stockCount'
-  | 'amDecideReversal'
-  | 'reviewFalseAlarm'
-  | 'reviewArmsRequest'
-  | 'armsRequestStep'
-  | 'raiseArmsRequest'
-  | 'setArmsTrading'
-  | 'amBuyRequest'
-  | 'amBuyDecide'
-  | 'amBuyReceived'
-  | 'amBuyReprice'
-  | 'amWhatsAppConsent'
-  | 'amWhatsAppSettle'
-  | 'amQueueRentReminders';
+  'orgClose' | 'orgRead' | 'orgImport' | 'assign' | 'publish' | 'lockAttendance' | 'clockIn' | 'clockOut' | 'scan' | 'raiseCase' | 'addCasePhoto' | 'startSiteVisit' | 'addVisitPhoto' | 'closeSiteVisit' | 'siteSurveyReceive' | 'siteSurveyPhoto' | 'siteSurveyReview' | 'updateCase' | 'signOffCase' | 'createQuotation' | 'quotationAction' | 'correctQuotation' | 'updateTender' | 'setTenderProtocol' | 'doTenderStep' | 'staffClockIn' | 'registerFace' | 'staffFaceCheck' | 'decideFace' | 'removeFace' | 'addPublicHoliday' | 'removePublicHoliday' | 'setLeaveOverride' | 'setWfhAllowed' | 'requestFlex' | 'decideFlex' | 'recordHrFiling' | 'openHrCase' | 'hrCaseStep' | 'appointOshCoordinator' | 'recordOfficeAssessment' | 'reportOshIncident' | 'recordOshReport' | 'recordTraining' | 'recordGuardPaper' | 'historyLookup' | 'markByLookup' | 'linkExistingRecords' | 'setRehire' | 'linkHistory' | 'separateHistory' | 'addOldEmployment' | 'carryHistoryPaper' | 'openAppraisal' | 'rateAppraisal' | 'commentAppraisal' | 'closeAppraisal' | 'publishPolicy' | 'setStaffOvertime' | 'updateHrLegalCheck' | 'acknowledgePolicy' | 'recordBriefingAcks' | 'addPolicyCopy' | 'setMotherTongue' | 'lodgeDisciplineAppeal' | 'decideDisciplineAppeal' | 'screeningAct' | 'screeningRepeat' | 'decideProbation' | 'raiseVacancy' | 'vacancyStep' | 'advertStep' | 'addApplicant' | 'applicantStep' | 'prepareStaffMovement' | 'staffMovementStep' | 'cancelStaffMovement' | 'applyStaffMovement' | 'authoriseMovementLogin' | 'confirmMovementLogin' | 'applyDueStaffMovements' | 'saveAllowanceType' | 'requestAllowanceChange' | 'eaDraft' | 'employeeRegister' | 'staffSessionStart' | 'acceptConfidentiality' | 'setApprovalLimits' | 'staffSessionEnd' | 'startSocsoClaim' | 'addSocsoDoc' | 'overrideSocsoDoc' | 'advanceSocsoClaim' | 'setSocsoRehab' | 'addSocsoAppointment' | 'addSocsoRestriction' | 'clearSocsoRestriction' | 'addSocsoCheckIn' | 'recordLindung' | 'verifyLindung' | 'addSocsoDependant' | 'addDependantPaper' | 'confirmDependantRoute' | 'recordDeathNotice' | 'addDependantPayment' | 'confirmDependantReceived' | 'assessDosh' | 'recordDoshImmediate' | 'recordDoshForm' | 'recordDoshClientTold' | 'submitFwRenewal' | 'recordFwPaper' | 'ackFwPaper' | 'addFwWorkerFromJa' | 'createTenderGroup' | 'recordTenderOpportunity' | 'enterTenderOpportunity' | 'addTenderSource' | 'loadTenderSourceStarter' | 'updateTenderSource' | 'recordTenderSourceCheck' | 'uploadHiringDoc' | 'updateHospitalClaim' | 'createFwmTask' | 'doneFwmTask' | 'reviewFwmTask' | 'recordFwCheck' | 'closeFwCheck' | 'openFwRecruitFile' | 'setFwRecruitTravel' | 'recordFwRecruitStep' | 'clearFwRecruitFile' | 'recordFwRecruitArrival' | 'stopFwRecruitFile' | 'addHostelBill' | 'requestHostelPayment' | 'checkHostelBill' | 'approveHostelBill' | 'uploadHostelSlip' | 'decideUtilityCharge' | 'ackUtilityNotice' | 'fileUtilityPaper' | 'submitStaffClaim' | 'addReceipts' | 'receiptAction' | 'headVerifyClaim' | 'prepareStaffPay' | 'setMyZakat' | 'loadStatTable' | 'checkStatTable' | 'setEmployerNos' | 'setFinPack' | 'finCreatePayment' | 'finPaymentStep' | 'finCooStep' | 'finCreateRequest' | 'finRequestStep' | 'finSetSettings' | 'finCloseStep' | 'finControlAction' | 'setMobItem' | 'setCmsService' | 'verifyCmsContact' | 'recordCmsTest' | 'acceptCmsService' | 'approveBranchSettlement' | 'addBranch' | 'branchAct' | 'branchSettlementAct' | 'insuranceClaimAct' | 'raiseItTicket' | 'websiteAction' | 'registerAction' | 'websiteSyncFeed' | 'corpFilingStep' | 'renewalStep' | 'saveCompanyFile' | 'addPanelFirm' | 'panelFirmStep' | 'adviserMoneyStep' | 'addDelegation' | 'delegationStep' | 'addCriticalRole' | 'placeLegalHold' | 'releaseLegalHold' | 'criticalRoleStep' | 'creditCheckLenderLicence' | 'ceoInstruct' | 'checkCompanyFile' | 'runCreditCheck' | 'creditDecide' | 'creditEnforcementStep' | 'creditRepayment' | 'creditChargeLodged' | 'creditStamped' | 'creditCorrectCollateral' | 'creditCorrectRecord' | 'creditDispute' | 'addCreditLoan' | 'corpAuditStep' | 'addSalesLead' | 'postDepreciation' | 'raiseActFinding' | 'actFindingStep' | 'recordActAudit' | 'assignActWork' | 'setActReportForm' | 'setActTiming' | 'recordActFieldCheck' | 'openActInvestigation' | 'addActEvidence' | 'actEvidence' | 'actInvestigationStep' | 'addActImprovement' | 'actImprovementStep' | 'amDisposalStep' | 'amLifeReview' | 'amBqAction' | 'amRecordPayment' | 'arishaSubmit' | 'arishaCommit' | 'arishaResubmit' | 'arishaReturn' | 'saveRecord' | 'decidePayChange' | 'savePayFormula' | 'decidePayFormula' | 'withdrawPayFormula' | 'setPayFormulaUse' | 'approveSiteHours' | 'savePayLaw' | 'setPublicHolidays' | 'amReversePayment' | 'amBankCash' | 'amFollowUp' | 'amDecideLetter' | 'salesLeadStep' | 'addLegalMatter' | 'legalMatterStep' | 'bcmRecord' | 'bcmDrill' | 'recordPdpaDpo' | 'addPdpaRequest' | 'pdpaRequestStep' | 'grcEvidence' | 'grcCheck' | 'recordOshAssessment' | 'submitWhistle' | 'whistleStep' | 'declareGift' | 'decideGift' | 'addGovMandate' | 'govMandateStep' | 'raisePurRequest' | 'purStep' | 'addPurSupplier' | 'purSupplierStep' | 'stockIssue' | 'itemAct' | 'confirmMyItem' | 'handoverStep' | 'setManagementFee' | 'stockReturn' | 'raiseCorpChange' | 'decideCorpChange' | 'recordCorpBoard' | 'itTicketStep' | 'itAct' | 'staffDirectoryAct' | 'setItOnboardingStep' | 'setItTenderItem' | 'setItAsset' | 'itMaintenance' | 'raiseItPurchase' | 'itPurchaseStep' | 'reviewBranchAction' | 'addBranchAgreement' | 'contractStep' | 'contractReview' | 'addContractVariation' | 'addContract' | 'addClientAccount' | 'setStaffPayLine' | 'staffPayStep' | 'staffPayExport' | 'prepareGuardPay' | 'setGuardPayLine' | 'guardPayStep' | 'guardPayExport' | 'guardPayCash' | 'recordPayConsent' | 'approvePayConsent' | 'setStatutory' | 'setGuardAdvances' | 'changeGuardAdvance' | 'approveGuardAdvances' | 'payGuardAdvance' | 'recordGuardLoan' | 'guardLoanStep' | 'cosDecideClaim' | 'hrDecideClaim' | 'cooDecideClaim' | 'financePayClaim' | 'setClaimRate' | 'publishMemo' | 'withdrawMemo' | 'remindMemo' | 'changeMeeting' | 'cancelMeeting' | 'answerMeeting' | 'openPdpaCase' | 'requestVehicle' | 'recordVehicleRental' | 'endVehicleRental' | 'setVehicleRent' | 'moveVehicleUse' | 'setVehicleFuel' | 'addVehicleCard' | 'endVehicleCard' | 'recordFuel' | 'reviewFuel' | 'clientStep' | 'setOfficeDesks' | 'setCompanyRunBy' | 'clientInvoice' | 'clientWorkAck' | 'setInvoicePortal' | 'createClientShareLink' | 'revokeClientShareLink' | 'saveExpense' | 'prefillOfficeRequest' | 'submitExpense' | 'decideExpense' | 'startOffboarding' | 'setClientOwner' | 'addClientPerson' | 'updateClientPerson' | 'addClientRequest' | 'closeClientRequest' | 'decideClientRenewal' | 'sendClientRenewalOffer' | 'answerClientRenewal' | 'clientContact' | 'clientReport' | 'clientRating' | 'clientComplaint' | 'resolveClientComplaint' | 'clientBilling' | 'saveProduct' | 'saveProductCert' | 'decideVehicleRequest' | 'vehicleOut' | 'vehicleIn' | 'recordVehicleWork' | 'fileMonitoringConsent' | 'setStaffPin' | 'closeAccess' | 'pdpaStep' | 'savePdpaRegisterItem' | 'setPdpaSettings' | 'pdpaRegisterStep' | 'recordPdpaConsent' | 'withdrawPdpaConsent' | 'pdpaBreachDetails' | 'recordInsurancePremium' | 'renewInsurancePolicy' | 'cancelInsurancePolicy' | 'readMemo' | 'staffClockOut' | 'staffPing' | 'remoteApply' | 'remotePlan' | 'remoteTask' | 'remoteCheckIn' | 'remoteReport' | 'remoteDecide' | 'remoteEnd' | 'remoteReview' | 'requestTimeSlip' | 'cancelTimeSlip' | 'decideTimeSlip' | 'seenTimeSlip' | 'setTimeSlipApprover' | 'workCheckIn' | 'workTaskAdd' | 'workTaskDone' | 'workTaskLate' | 'workTaskReview' | 'workTaskReassign' | 'workTaskAdjust' | 'seenCooNotice' | 'helpAsk' | 'helpAnswer' | 'oneOnOneRecord' | 'playbookSignOff' | 'plannerSync' | 'branchCheckSubmit' | 'branchVisitRecord' | 'confirmTenderNa' | 'undoTenderStep' | 'planTenderStep' | 'decideTender' | 'setTenderRecord' | 'addTenderQuery' | 'setTenderQuery' | 'addTenderPapers' | 'setTenderBidFiles' | 'uploadTenderBidFile' | 'confirmTenderBidFile' | 'draftTenderChecklist' | 'reviewTenderChecklist' | 'verifyTender' | 'submitTender' | 'submitReport' | 'setReportDefs' | 'scheduleMeeting' | 'addMinutes' | 'checkMeetingSummary' | 'setMeetingAction' | 'setMeetingPrep' | 'issueFirearm' | 'returnFirearm' | 'planArmedJob' | 'updateArmedJob' | 'escalateFirearm' | 'countVault' | 'setPatrolInterval' | 'assignCmsShift' | 'updateCmsSettings' | 'setCmsReadinessAnswer' | 'saveCmsReadinessDevice' | 'removeCmsReadinessDevice' | 'reviewCmsReadiness' | 'planCmsRoster' | 'recordCmsHandover' | 'giveCmsHandover' | 'cmsSeatClockIn' | 'cmsSeatClockOut' | 'releaseCmsSeat' | 'logCallback' | 'acknowledgeAlarm' | 'sendDispatch' | 'closeDispatch' | 'cancelDispatch' | 'simulateDetection' | 'dispatchSeen' | 'acknowledgeDispatch' | 'addDispatchPhoto' | 'addDispatchVideo' | 'replyDispatch' | 'addPostLog' | 'gateIn' | 'gateOut' | 'saveNeedsReview' | 'setSiteTask' | 'stopSiteTask' | 'setGateLog' | 'doSiteTask' | 'followUpAttendance' | 'requestLeave' | 'decideLeave' | 'closeAlarm' | 'requestTrip' | 'decideTrip' | 'whistleReview' | 'confirmStockLoss' | 'stockCount' | 'amDecideReversal' | 'reviewFalseAlarm' | 'reviewArmsRequest' | 'armsRequestStep' | 'raiseArmsRequest' | 'setArmsTrading' | 'amBuyRequest' | 'amBuyDecide' | 'amBuyReceived' | 'amBuyReprice' | 'amWhatsAppConsent' | 'amWhatsAppSettle' | 'amQueueRentReminders' | 'recordFwPlacement' | 'endFwPlacement' | 'setFwCostRate' | 'addFwCostLegalNote' | 'draftFwCostMonth' | 'decideFwCostCharges' | 'bookFwCostCharge' | 'askPoliceHelp' | 'assignPoliceHelp' | 'recordPoliceHelpOutcome' | 'answerPoliceHelp' | 'withdrawPoliceHelp' | 'cleaningOp' | 'dutyOp' | 'addMobItem' | 'certifyContractRound' | 'renewContract' | 'linkContractClient' | 'qualityAction' | 'fwStatAct' | 'clientDiligenceAct' | 'siteInstructionsAct' | 'amExtrasAct' | 'jaSwitchAct' | 'jaImportStage' | 'jaSwitchSettings' | 'jaImportDecide' | 'whistleReply' | 'whistleMessage' | 'saveClientCode' | 'stopClientCode' | 'checkClientRequirement' | 'saveClientInspection' | 'fixInspectionLine' | 'saveSelfAudit' | 'nameRbaCommittee' | 'runRbaTrace' | 'settleRbaTraceRow' | 'signEthicsDeclaration' | 'reviewEthicsInterests' | 'fixSelfAuditLine' | 'setClientReport' | 'addShifts' | 'addTender' | 'finAddBankAccount' | 'finStartBooks' | 'finAddPaper' | 'startCompanyFile' | 'addCorpAudit' | 'addBcmSystem' | 'addGrcObligation' | 'addCorpFiling' | 'checkIn' | 'saveCheckinPlace' | 'setCheckinPlaceActive' | 'setCheckinPolicy' | 'setCheckinRules' | 'decideCheckin' | 'addMeetingAction';
 
 export class DemoApi implements Api {
   async m365Call(): Promise<unknown> { throw new Error('Microsoft integration requires the signed-in server app.'); }
@@ -492,6 +74,9 @@ export class DemoApi implements Api {
   // Demo never fabricates access checks or reads a live provider.
   itExtractionStatus(): ReturnType<Api['itExtractionStatus']> { return Promise.resolve({enabled:false,configured:false,permitted:false,sourceTypes:[],dataClasses:[],previewOnly:true}); }
   itExtractionPreview(): ReturnType<Api['itExtractionPreview']> { return Promise.reject(new Error('AI extraction is disabled in demo mode.')); }
+  // Suggested drafts are off on the test link: it never calls a model or invents a suggestion.
+  draftHelpStatus(): ReturnType<Api['draftHelpStatus']> { return Promise.resolve({ on: false, kinds: [], consentVersion: 'draft-help-v1' }); }
+  draftHelpSuggest(): ReturnType<Api['draftHelpSuggest']> { return Promise.reject(new Error('Suggested drafts are not switched on.')); }
 
   async sharePointRequestPreview(_url: string): Promise<import('./connections').ConnectionRequestPreview> { throw new Error('Connection requests require the signed-in server app.'); }
   async sharePointRequest(_url: string, _requestId: string): Promise<import('./connections').ConnectionRequestReceipt> { throw new Error('Connection requests require the signed-in server app.'); }
@@ -528,6 +113,9 @@ export class DemoApi implements Api {
     let saved: string | null = null;
     try {
       saved = localStorage.getItem(USER_KEY);
+      // Test version only: a browser check may open every made-up staff member (not only IT pilot users), to walk
+      // through flows such as the time slip as company staff and company heads. Never in the API build.
+      if (localStorage.getItem(ALL_STAFF_KEY) === '1') (RULES.pilot.value as { on: boolean }).on = false;
     } catch {
       /* ignore */
     }
@@ -540,17 +128,14 @@ export class DemoApi implements Api {
 
   private boot(): void {
     const now = this.realNow();
-    // Hand-overs between departments are on in the test version (org-links.ts); the server needs PRIMA_ORG_LINKS=true.
     // 40 days of shifts and attendance, so last month's guard pay run has a whole month to count (Fauzan, 5 Nov 2026).
     const ds = generateDataset({ today: dateOf(now), now, daysBack: 40 });
-    // Mock recruitment files: the table is a separate database module, so the shared seed leaves it empty.
     ds.fwRecruitFiles.push(...demoFwRecruitFiles(dateOf(now), now));
     const store = withOrgLinks(new MemoryStore(ds));
     this.store = store;
     this.booted = new PrimaService(store, () => this.clockOverride ?? this.realNow());
-    // The test link reads the receipt's file name as if it were the receipt (the server uses Azure once set up).
-    this.booted.receiptReader = testReceiptReader;
     // Labels made from the request so replaying today's saved actions gives the same labels.
+    this.booted.receiptReader = testReceiptReader;
     this.booted.itemLabelMaker = (seed) => sampleLabelToken(`demo:${seed}`);
     this.log = readLog(dateOf(now));
   }
@@ -618,6 +203,14 @@ export class DemoApi implements Api {
   private apply(u: User, op: Mutations, args: unknown[]): Promise<unknown> {
     const a = args as never[];
     switch (op) {
+      case 'jaSwitchAct':
+        return this.svc.jaSwitchAct(u, a[0], a[1], a[2], a[3]);
+      case 'jaSwitchSettings':
+        return this.svc.jaSwitchSettings(u, a[0]);
+      case 'jaImportStage':
+        return this.svc.jaImportStage(u, a[0]);
+      case 'jaImportDecide':
+        return this.svc.jaImportDecide(u, a[0], a[1]);
       case 'assign':
         return this.svc.assignShift(u, a[0], a[1]);
       case 'publish':
@@ -638,6 +231,12 @@ export class DemoApi implements Api {
         return this.svc.startSiteVisit(u, a[0], a[1]);
       case 'addVisitPhoto':
         return this.svc.addVisitPhoto(u, a[0], a[1]);
+      case 'siteSurveyReceive':
+        return this.svc.siteSurveys.receive(u, a[0]);
+      case 'siteSurveyPhoto':
+        return this.svc.siteSurveys.addPhoto(u, a[0], { n: a[1], image: a[2] });
+      case 'siteSurveyReview':
+        return this.svc.siteSurveys.review(u, a[0], a[1], a[2]);
       case 'closeSiteVisit':
         return this.svc.closeSiteVisit(u, a[0], a[1]);
       case 'raiseCase':
@@ -706,6 +305,22 @@ export class DemoApi implements Api {
         return this.svc.recordTraining(u, a[0]);
       case 'recordGuardPaper':
         return this.svc.recordGuardPaper(u, a[0]);
+      case 'historyLookup':
+        return this.svc.historyLookup(u, a[0]);
+      case 'markByLookup':
+        return this.svc.markByLookup(u, a[0]);
+      case 'linkExistingRecords':
+        return this.svc.linkExistingRecords(u);
+      case 'setRehire':
+        return this.svc.setRehire(u, a[0]);
+      case 'linkHistory':
+        return this.svc.linkHistory(u, a[0]);
+      case 'separateHistory':
+        return this.svc.separateHistory(u, a[0]);
+      case 'addOldEmployment':
+        return this.svc.addOldEmployment(u, a[0]);
+      case 'carryHistoryPaper':
+        return this.svc.carryHistoryPaper(u, a[0]);
       case 'openAppraisal':
         return this.svc.openAppraisal(u, a[0]);
       case 'rateAppraisal':
@@ -721,7 +336,21 @@ export class DemoApi implements Api {
       case 'updateHrLegalCheck':
         return this.svc.updateHrLegalCheck(u, a[0], a[1]);
       case 'acknowledgePolicy':
-        return this.svc.acknowledgePolicy(u, a[0]);
+        return this.svc.acknowledgePolicy(u, a[0], a[1]);
+      case 'recordBriefingAcks':
+        return this.svc.recordBriefingAcks(u, a[0], a[1], a[2], a[3]);
+      case 'addPolicyCopy':
+        return this.svc.addPolicyCopy(u, a[0], a[1]);
+      case 'setMotherTongue':
+        return this.svc.setMotherTongue(u, a[0], a[1]);
+      case 'lodgeDisciplineAppeal':
+        return this.svc.lodgeDisciplineAppeal(u, a[0], a[1]);
+      case 'decideDisciplineAppeal':
+        return this.svc.decideDisciplineAppeal(u, a[0], a[1]);
+      case 'screeningAct':
+        return this.svc.screening.act(u, a[0], a[1]);
+      case 'screeningRepeat':
+        return this.svc.screening.repeat(u, a[0]);
       case 'recordHrFiling':
         return this.svc.recordHrFiling(u, a[0]);
       case 'decideProbation':
@@ -776,18 +405,70 @@ export class DemoApi implements Api {
         return this.svc.clearSocsoRestriction(u, a[0], a[1], a[2]);
       case 'addSocsoCheckIn':
         return this.svc.addSocsoCheckIn(u, a[0], a[1]);
+      case 'recordLindung':
+        return this.svc.recordLindung(u, a[0], a[1]);
+      case 'verifyLindung':
+        return this.svc.verifyLindung(u, a[0], a[1], a[2]);
+      case 'addSocsoDependant':
+        return this.svc.addSocsoDependant(u, a[0], a[1]);
+      case 'addDependantPaper':
+        return this.svc.addDependantPaper(u, a[0], a[1], a[2], a[3]);
+      case 'confirmDependantRoute':
+        return this.svc.confirmDependantRoute(u, a[0], a[1], a[2]);
+      case 'recordDeathNotice':
+        return this.svc.recordDeathNotice(u, a[0], a[1], a[2]);
+      case 'addDependantPayment':
+        return this.svc.addDependantPayment(u, a[0], a[1]);
+      case 'confirmDependantReceived':
+        return this.svc.confirmDependantReceived(u, a[0], a[1], a[2]);
+      case 'assessDosh':
+        return this.svc.assessDosh(u, a[0], a[1], a[2]);
+      case 'recordDoshImmediate':
+        return this.svc.recordDoshImmediate(u, a[0], a[1]);
+      case 'recordDoshForm':
+        return this.svc.recordDoshForm(u, a[0], a[1]);
+      case 'recordDoshClientTold':
+        return this.svc.recordDoshClientTold(u, a[0], a[1]);
       case 'uploadHiringDoc':
         return this.svc.uploadHiringDoc(u, a[0], a[1], a[2]);
       case 'updateHospitalClaim':
         return this.svc.updateHospitalClaim(u, a[0], a[1], a[2]);
       case 'createTenderGroup':
         return this.svc.createTenderGroup(u, a[0], a[1]);
+      case 'recordTenderOpportunity':
+        return this.svc.recordTenderOpportunity(u, a[0]);
+      case 'enterTenderOpportunity':
+        return this.svc.enterTenderOpportunity(u, a[0], a[1], a[2]);
+      case 'addTenderSource':
+        return this.svc.addTenderSource(u, a[0]);
+      case 'loadTenderSourceStarter':
+        return this.svc.loadTenderSourceStarter(u);
+      case 'updateTenderSource':
+        return this.svc.updateTenderSource(u, a[0], a[1]);
+      case 'recordTenderSourceCheck':
+        return this.svc.recordTenderSourceCheck(u, a[0], a[1]);
       case 'submitFwRenewal':
         return this.svc.submitFwRenewal(u, a[0], a[1], a[2], a[3]);
+      case 'recordFwPaper':
+        return this.svc.recordFwPaper(u, a[0], a[1], a[2], a[3]);
+      case 'ackFwPaper':
+        return this.svc.ackFwPaper(u, a[0], a[1]);
+      case 'addFwWorkerFromJa':
+        return this.svc.addFwWorkerFromJa(u, a[0], a[1]);
       case 'createFwmTask':
         return this.svc.createFwmTask(u, a[0], a[1]);
       case 'doneFwmTask':
         return this.svc.doneFwmTask(u, a[0], a[1], a[2]);
+      case 'cleaningOp': {
+        const [name, ...rest] = args as [string, ...unknown[]];
+        if (!CLEANING_WRITES.has(name)) throw new ApiError('Unknown cleaning action.', 400);
+        return (this.svc.cleaning as unknown as Record<string, (u: User, ...x: unknown[]) => Promise<unknown>>)[name](u, ...rest);
+      }
+      case 'dutyOp': {
+        const [name, ...rest] = args as [string, ...unknown[]];
+        if (name !== 'publishPosts' && name !== 'publishRoute' && name !== 'saveTerms') throw new ApiError('Unknown duty action.', 400);
+        return (this.svc.duty as unknown as Record<string, (u: User, ...x: unknown[]) => Promise<unknown>>)[name](u, ...rest);
+      }
       case 'reviewFwmTask':
         return this.svc.reviewFwmTask(u, a[0], a[1], a[2]);
       case 'recordFwCheck':
@@ -890,6 +571,39 @@ export class DemoApi implements Api {
         return this.svc.amDisposalStep(u, a[0], a[1], a[2]);
       case 'amLifeReview':
         return this.svc.amLifeReview(u, a[0], a[1], a[2]);
+      case 'amBqAction': {
+        const id = a[0] as string;
+        const i = a[1] as AmBqActionInput;
+        switch (i.kind) {
+          case 'brief':
+            return this.svc.amBqBrief(u, id, i);
+          case 'draft':
+            return this.svc.amBqDraft(u, id, i.jobKind, i.measurements);
+          case 'save':
+            return this.svc.amBqSave(u, id, i);
+          case 'submit':
+            return this.svc.amBqSubmit(u, id);
+          case 'reopen':
+            return this.svc.amBqReopen(u, id, i.reason);
+          case 'decide':
+            return this.svc.amBqDecide(u, id, i.approve, i.note);
+          case 'quote':
+            return this.svc.amQuoteAdd(u, id, i.quote);
+          case 'award':
+            return this.svc.amAwardAsk(u, id, i.quoteId, i.reason);
+          case 'awardDecide':
+            return this.svc.amAwardDecide(u, id, i.approve, i.note);
+          case 'vo': {
+            const { kind: _k, ...body } = i;
+            return this.svc.amVoAsk(u, id, body);
+          }
+          case 'voWithdraw':
+            return this.svc.amVoWithdraw(u, id, i.voId, i.reason);
+          case 'voDecide':
+            return this.svc.amVoDecide(u, id, i.voId, i.approve, i.note);
+        }
+        throw new Error("Unknown BQ step.");
+      }
       case 'arishaSubmit':
         return this.svc.arishaDrafts.submit(u, a[0], a[1], (a[0] as Parameters<Api['arishaSubmit']>[0])?.type === 'record' ? 'arisha' : 'human');
       case 'arishaCommit':
@@ -962,6 +676,10 @@ export class DemoApi implements Api {
         return this.svc.submitWhistle(u, a[0]);
       case 'whistleStep':
         return this.svc.whistleStep(u, a[0], a[1], a[2]);
+      case 'whistleReply':
+        return this.svc.whistleReply(u, a[0], a[1], a[2]);
+      case 'whistleMessage':
+        return this.svc.whistleMessage(u, a[0], a[1]);
       case 'declareGift':
         return this.svc.declareGift(u, a[0]);
       case 'decideGift':
@@ -1030,6 +748,8 @@ export class DemoApi implements Api {
         return this.svc.decideCorpChange(u, a[0], a[1], a[2], a[3]);
       case 'recordCorpBoard':
         return this.svc.recordCorpBoard(u, a[0], a[1], a[2]);
+      case 'registerAction':
+        return this.svc.registers.act(u, a[0], a[1]);
       case 'websiteAction':
         return this.svc.websites.act(u, a[0], a[1]);
       case 'websiteSyncFeed':
@@ -1038,6 +758,8 @@ export class DemoApi implements Api {
         return this.svc.raiseItTicket(u, a[0]);
       case 'itTicketStep':
         return this.svc.itTicketStep(u, a[0], a[1], a[2]);
+      case 'staffDirectoryAct':
+        return this.svc.staffDirectory.act(u, a[0], a[1]);
       case 'itAct':
         return this.svc.itAct(u, a[0], a[1]);
       case 'setItOnboardingStep':
@@ -1045,7 +767,7 @@ export class DemoApi implements Api {
       case 'setItTenderItem':
         return this.svc.setItTenderItem(u, a[0], a[1], a[2]);
       case 'setItAsset':
-        return this.svc.setItAsset(u, a[0], a[1], a[2], a[3]);
+        return this.svc.setItAsset(u, a[0], a[1], a[2], a[3], a[4] ?? null);
       case 'itMaintenance':
         return this.svc.itMaintenance(u, a[0], a[1], a[2], a[3]);
       case 'raiseItPurchase':
@@ -1065,7 +787,19 @@ export class DemoApi implements Api {
       case 'acceptCmsService':
         return this.svc.acceptCmsService(u, a[0], a[1], a[2], a[3]);
       case 'setMobItem':
-        return this.svc.setMobItem(u, a[0], a[1], a[2], a[3], a[4]);
+        return this.svc.setMobItem(u, a[0], a[1], a[2], a[3], a[4], a[5]);
+      case 'clientDiligenceAct':
+        return this.svc.clientQuality.diligenceAct(u, a[1], { ...(a[2] as Record<string, unknown>), accountId: a[0] });
+      case 'siteInstructionsAct':
+        return this.svc.clientQuality.instructionsAct(u, a[1], { ...(a[2] as Record<string, unknown>), siteId: a[0] });
+      case 'addMobItem':
+        return this.svc.addMobItem(u, a[0], a[1]);
+      case 'certifyContractRound':
+        return this.svc.certifyContractRound(u, a[0], a[1], a[2]);
+      case 'renewContract':
+        return this.svc.renewContract(u, a[0], a[1]);
+      case 'linkContractClient':
+        return this.svc.linkContractClient(u, a[0], a[1]);
       case 'contractStep':
         return this.svc.contractStep(u, a[0], a[1], a[2]);
       case 'contractReview':
@@ -1179,14 +913,12 @@ export class DemoApi implements Api {
         return this.svc.saveProductCert(u, a[0], a[1], a[2]);
       case 'clientInvoice':
         return this.svc.clientInvoice(u, a[0], a[1], a[2], a[3], a[4]);
+      case 'clientWorkAck':
+        return this.svc.clientWorkAck(u, a[0], a[1]);
       case 'setInvoicePortal':
         return this.svc.setInvoicePortal(u, a[0], a[1]);
       case 'prefillOfficeRequest':
         return this.svc.prefillOfficeRequest(u, a[0]);
-      case 'createClientShareLink':
-        return this.svc.createClientShareLink(u, a[0], a[1]);
-      case 'revokeClientShareLink':
-        return this.svc.revokeClientShareLink(u, a[0], a[1], a[2]);
       case 'saveExpense':
         return this.svc.saveExpense(u, a[0], a[1]);
       case 'submitExpense':
@@ -1231,6 +963,24 @@ export class DemoApi implements Api {
         return this.svc.clientBilling(u, a[0], a[1]);
       case 'requestVehicle':
         return this.svc.requestVehicle(u, a[0]);
+      case 'recordVehicleRental':
+        return this.svc.recordVehicleRental(u, a[0], a[1]);
+      case 'endVehicleRental':
+        return this.svc.endVehicleRental(u, a[0], a[1]);
+      case 'setVehicleRent':
+        return this.svc.setVehicleRent(u, a[0], a[1]);
+      case 'moveVehicleUse':
+        return this.svc.moveVehicleUse(u, a[0], a[1]);
+      case 'setVehicleFuel':
+        return this.svc.setVehicleFuel(u, a[0], a[1]);
+      case 'addVehicleCard':
+        return this.svc.addVehicleCard(u, a[0], a[1]);
+      case 'endVehicleCard':
+        return this.svc.endVehicleCard(u, a[0], a[1], a[2]);
+      case 'recordFuel':
+        return this.svc.recordFuel(u, a[0], a[1], a[2]);
+      case 'reviewFuel':
+        return this.svc.reviewFuel(u, a[0], a[1], a[2]);
       case 'decideVehicleRequest':
         return this.svc.decideVehicleRequest(u, a[0], a[1], a[2], a[3]);
       case 'vehicleOut':
@@ -1249,8 +999,36 @@ export class DemoApi implements Api {
         return this.svc.openPdpaCase(u, a[0]);
       case 'pdpaStep':
         return this.svc.pdpaStep(u, a[0], a[1], a[2], a[3]);
+      case 'setPdpaSettings':
+        return this.svc.setPdpaSettings(u, a[0], a[1]);
+      case 'savePdpaRegisterItem':
+        return this.svc.savePdpaRegisterItem(u, a[0], a[1]);
+      case 'pdpaRegisterStep':
+        return this.svc.pdpaRegisterStep(u, a[0], a[1], a[2]);
+      case 'recordPdpaConsent':
+        return this.svc.recordPdpaConsent(u, a[0], a[1]);
+      case 'withdrawPdpaConsent':
+        return this.svc.withdrawPdpaConsent(u, a[0], a[1], a[2]);
+      case 'pdpaBreachDetails':
+        return this.svc.pdpaBreachDetails(u, a[0], a[1]);
+      case 'recordInsurancePremium':
+        return this.svc.recordInsurancePremium(u, a[0], a[1]);
+      case 'renewInsurancePolicy':
+        return this.svc.renewInsurancePolicy(u, a[0], a[1]);
+      case 'cancelInsurancePolicy':
+        return this.svc.cancelInsurancePolicy(u, a[0], a[1]);
       case 'publishMemo':
-        return this.svc.publishMemo(u, a[0], a[1], a[2], a[3]);
+        return this.svc.publishMemo(u, a[0], a[1], a[2], a[3], a[4]);
+      case 'withdrawMemo':
+        return this.svc.withdrawMemo(u, a[0], a[1]);
+      case 'remindMemo':
+        return this.svc.remindMemo(u, a[0]);
+      case 'changeMeeting':
+        return this.svc.changeMeeting(u, a[0], a[1]);
+      case 'cancelMeeting':
+        return this.svc.cancelMeeting(u, a[0], a[1]);
+      case 'answerMeeting':
+        return this.svc.answerMeeting(u, a[0], a[1], a[2]);
       case 'readMemo':
         return this.svc.readMemo(u, a[0]);
       case 'staffClockOut':
@@ -1285,6 +1063,16 @@ export class DemoApi implements Api {
         return this.svc.remoteEnd(u, a[0], a[1]);
       case 'remoteReview':
         return this.svc.remoteReview(u, a[0], a[1], a[2]);
+      case 'requestTimeSlip':
+        return this.svc.requestTimeSlip(u, a[0]);
+      case 'cancelTimeSlip':
+        return this.svc.cancelTimeSlip(u, a[0]);
+      case 'decideTimeSlip':
+        return this.svc.decideTimeSlip(u, a[0], a[1], a[2]);
+      case 'seenTimeSlip':
+        return this.svc.seenTimeSlip(u, a[0]);
+      case 'setTimeSlipApprover':
+        return this.svc.setTimeSlipApprover(u, a[0], a[1]);
       case 'workCheckIn':
         return this.svc.workCheckIn(u, a[0]);
       case 'workTaskAdd':
@@ -1316,7 +1104,7 @@ export class DemoApi implements Api {
       case 'branchVisitRecord':
         return this.svc.branchVisitRecord(u, a[0], a[1]);
       case 'confirmTenderNa':
-        return this.svc.confirmTenderNa(u, a[0], a[1], a[2]);
+        return this.svc.confirmTenderNa(u, a[0], a[1], a[2], a[3]);
       case 'undoTenderStep':
         return this.svc.undoTenderStep(u, a[0], a[1]);
       case 'planTenderStep':
@@ -1352,11 +1140,11 @@ export class DemoApi implements Api {
       case 'scheduleMeeting':
         return this.svc.scheduleMeeting(u, a[0]);
       case 'addMinutes':
-        return this.svc.addMinutes(u, a[0], a[1]);
+        return this.svc.addMinutes(u, a[0], a[1], a[2]);
       case 'checkMeetingSummary':
         return this.svc.checkMeetingSummary(u, a[0], a[1]);
       case 'setMeetingAction':
-        return this.svc.setMeetingAction(u, a[0], a[1], a[2]);
+        return this.svc.setMeetingAction(u, a[0], a[1], a[2], a[3]);
       case 'addMeetingAction':
         return this.svc.addMeetingAction(u, a[0], a[1]);
       case 'setMeetingPrep':
@@ -1377,10 +1165,26 @@ export class DemoApi implements Api {
         return this.svc.assignCmsShift(u, a[0], a[1]);
       case 'updateCmsSettings':
         return this.svc.updateCmsSettings(u, a[0]);
+      case 'setCmsReadinessAnswer':
+        return this.svc.setCmsReadinessAnswer(u, a[0], a[1], a[2]);
+      case 'saveCmsReadinessDevice':
+        return this.svc.saveCmsReadinessDevice(u, a[0], a[1]);
+      case 'removeCmsReadinessDevice':
+        return this.svc.removeCmsReadinessDevice(u, a[0], a[1], a[2]);
+      case 'reviewCmsReadiness':
+        return this.svc.reviewCmsReadiness(u, a[0], a[1]);
       case 'planCmsRoster':
         return this.svc.planCmsRoster(u, a[0]);
       case 'recordCmsHandover':
-        return this.svc.recordCmsHandover(u, a[0], a[1]);
+        return this.svc.recordCmsHandover(u, a[0], a[1], a[2] !== false);
+      case 'giveCmsHandover':
+        return this.svc.giveCmsHandover(u, a[0], a[1]);
+      case 'cmsSeatClockIn':
+        return this.svc.cmsSeatClockIn(u, a[0]);
+      case 'cmsSeatClockOut':
+        return this.svc.cmsSeatClockOut(u, a[0], a[1]);
+      case 'releaseCmsSeat':
+        return this.svc.releaseCmsSeat(u, a[0], a[1]);
       case 'logCallback':
         return this.svc.logCallback(u, a[0], a[1]);
       case 'followUpAttendance':
@@ -1426,6 +1230,32 @@ export class DemoApi implements Api {
         return this.svc.stopSiteTask(u, a[0], a[1]);
       case 'doSiteTask':
         return this.svc.doSiteTask(u, a[0], a[1]);
+      case 'saveClientCode':
+        return this.svc.saveClientCode(u, a[0], a[1]);
+      case 'setClientReport':
+        return this.svc.setClientReport(u, a[0], a[1]);
+      case 'stopClientCode':
+        return this.svc.stopClientCode(u, a[0], a[1]);
+      case 'checkClientRequirement':
+        return this.svc.checkClientRequirement(u, a[0], a[1]);
+      case 'saveClientInspection':
+        return this.svc.saveClientInspection(u, a[0], a[1]);
+      case 'fixInspectionLine':
+        return this.svc.fixInspectionLine(u, a[0], a[1], a[2]);
+      case 'saveSelfAudit':
+        return this.svc.saveSelfAudit(u, a[0], a[1]);
+      case 'nameRbaCommittee':
+        return this.svc.nameRbaCommittee(u, a[0]);
+      case 'runRbaTrace':
+        return this.svc.runRbaTrace(u, a[0], a[1]);
+      case 'settleRbaTraceRow':
+        return this.svc.settleRbaTraceRow(u, a[0], a[1], a[2]);
+      case 'signEthicsDeclaration':
+        return this.svc.signEthicsDeclaration(u, a[0]);
+      case 'reviewEthicsInterests':
+        return this.svc.reviewEthicsInterests(u, a[0], a[1]);
+      case 'fixSelfAuditLine':
+        return this.svc.fixSelfAuditLine(u, a[0], a[1], a[2]);
       case 'requestTrip':
         return this.svc.requestTrip(u, a[0]);
       case 'decideTrip':
@@ -1466,6 +1296,40 @@ export class DemoApi implements Api {
         return this.svc.amQueueRentReminders(u);
       case 'setPatrolInterval':
         return this.svc.setPatrolInterval(u, a[0], a[1]);
+      case 'createClientShareLink':
+        return this.svc.createClientShareLink(u, a[0], a[1]);
+      case 'revokeClientShareLink':
+        return this.svc.revokeClientShareLink(u, a[0], a[1], a[2]);
+      case 'recordFwPlacement':
+        return this.svc.recordFwPlacement(u, a[0], a[1], a[2]);
+      case 'endFwPlacement':
+        return this.svc.endFwPlacement(u, a[0], a[1]);
+      case 'setFwCostRate':
+        return this.svc.setFwCostRate(u, a[0]);
+      case 'addFwCostLegalNote':
+        return this.svc.addFwCostLegalNote(u, a[0]);
+      case 'draftFwCostMonth':
+        return this.svc.draftFwCostMonth(u, a[0]);
+      case 'decideFwCostCharges':
+        return this.svc.decideFwCostCharges(u, a[0]);
+      case 'bookFwCostCharge':
+        return this.svc.bookFwCostCharge(u, a[0], a[1], a[2]);
+      case 'askPoliceHelp':
+        return this.svc.askPoliceHelp(u, a[0]);
+      case 'assignPoliceHelp':
+        return this.svc.assignPoliceHelp(u, a[0], a[1]);
+      case 'recordPoliceHelpOutcome':
+        return this.svc.recordPoliceHelpOutcome(u, a[0], a[1]);
+      case 'answerPoliceHelp':
+        return this.svc.answerPoliceHelp(u, a[0], a[1], a[2]);
+      case 'withdrawPoliceHelp':
+        return this.svc.withdrawPoliceHelp(u, a[0], a[1]);
+      case 'qualityAction':
+        return (QUALITY_OPS_ACTIONS.includes(a[0]) ? this.svc.qualityOps.act(u, a[0], a[1]) : this.svc.quality.act(u, a[0], a[1])) as Promise<unknown>;
+      case 'fwStatAct':
+        return this.svc.fwStatAct(u, a[0], a[1]);
+      case 'amExtrasAct':
+        return this.svc.amExtras.act(u, a[0], a[1], a[2], a[3]);
     }
   }
 
@@ -1554,6 +1418,13 @@ export class DemoApi implements Api {
   staffFaceCheck(input: Parameters<Api['staffFaceCheck']>[0]) {
     return this.write('staffFaceCheck', [input]);
   }
+  // The test version always uses the phone engine; Prima's own engine runs only on the server.
+  faceChallenge(): Promise<never> {
+    return Promise.reject(new Error('The test version has no server face engine.'));
+  }
+  staffFaceCheckFrames(): Promise<never> {
+    return Promise.reject(new Error('The test version has no server face engine.'));
+  }
   faceReviews() {
     return this.read((s, u) => s.faceReviews(u));
   }
@@ -1620,6 +1491,36 @@ export class DemoApi implements Api {
   recordGuardPaper(input: Parameters<Api['recordGuardPaper']>[0]) {
     return this.write('recordGuardPaper', [input]);
   }
+  groupHistoryBoard() {
+    return this.read((s, u) => s.groupHistoryBoard(u));
+  }
+  groupHistory(personId: string) {
+    return this.read((s, u) => s.groupHistory(u, personId));
+  }
+  historyLookup(input: Parameters<Api['historyLookup']>[0]) {
+    return this.write<Awaited<ReturnType<Api['historyLookup']>>>('historyLookup', [input]);
+  }
+  markByLookup(input: Parameters<Api['markByLookup']>[0]) {
+    return this.write<Awaited<ReturnType<Api['markByLookup']>>>('markByLookup', [input]);
+  }
+  linkExistingRecords() {
+    return this.write<Awaited<ReturnType<Api['linkExistingRecords']>>>('linkExistingRecords', []);
+  }
+  setRehire(input: Parameters<Api['setRehire']>[0]) {
+    return this.write('setRehire', [input]);
+  }
+  linkHistory(input: Parameters<Api['linkHistory']>[0]) {
+    return this.write('linkHistory', [input]);
+  }
+  separateHistory(input: Parameters<Api['separateHistory']>[0]) {
+    return this.write('separateHistory', [input]);
+  }
+  addOldEmployment(input: Parameters<Api['addOldEmployment']>[0]) {
+    return this.write('addOldEmployment', [input]);
+  }
+  carryHistoryPaper(input: Parameters<Api['carryHistoryPaper']>[0]) {
+    return this.write('carryHistoryPaper', [input]);
+  }
   trainingRecords(personId?: string) {
     return this.read((s, u) => s.trainingRecords(u, personId));
   }
@@ -1647,8 +1548,35 @@ export class DemoApi implements Api {
   publishPolicy(input: Parameters<Api['publishPolicy']>[0]) {
     return this.write('publishPolicy', [input]);
   }
-  acknowledgePolicy(id: string) {
-    return this.write('acknowledgePolicy', [id]);
+  acknowledgePolicy(id: string, lang?: StaffLangId | null) {
+    return this.write('acknowledgePolicy', [id, lang ?? null]);
+  }
+  recordBriefingAcks(policyId: string, personIds: string[], ref: string, lang?: StaffLangId | null) {
+    return this.write<{ recorded: number }>('recordBriefingAcks', [policyId, personIds, ref, lang ?? null]);
+  }
+  addPolicyCopy(policyId: string, input: PolicyCopyInput) {
+    return this.write('addPolicyCopy', [policyId, input]);
+  }
+  setMotherTongue(personId: string, lang: StaffLangId) {
+    return this.write('setMotherTongue', [personId, lang]);
+  }
+  disciplineAppeals() {
+    return this.read((s, u) => s.disciplineAppeals(u));
+  }
+  lodgeDisciplineAppeal(followUpId: string, input: { grounds: string; lang?: StaffLangId | null }) {
+    return this.write('lodgeDisciplineAppeal', [followUpId, input]);
+  }
+  decideDisciplineAppeal(followUpId: string, input: DisciplineAppealDecision) {
+    return this.write('decideDisciplineAppeal', [followUpId, input]);
+  }
+  screening() {
+    return this.read((s, u) => s.screening.board(u));
+  }
+  screeningAct(action: 'open' | 'check' | 'decide' | 'withdraw', body: Record<string, unknown>) {
+    return this.write('screeningAct', [action, body]);
+  }
+  screeningRepeat(id: string) {
+    return this.write('screeningRepeat', [id]);
   }
   hrLegalChecks() {
     return this.read((s, u) => s.hrLegalChecks(u));
@@ -1829,6 +1757,27 @@ export class DemoApi implements Api {
   remoteReview(dayId: string, verdict: 'accepted' | 'queried', note: string) {
     return this.write('remoteReview', [dayId, verdict, note]);
   }
+  myTimeSlips() {
+    return this.read((s, u) => s.myTimeSlips(u));
+  }
+  requestTimeSlip(input: { date: string; from: string; to: string; reason: string }) {
+    return this.write('requestTimeSlip', [input]);
+  }
+  cancelTimeSlip(id: string) {
+    return this.write('cancelTimeSlip', [id]);
+  }
+  timeSlipBoard() {
+    return this.read((s, u) => s.timeSlipBoard(u));
+  }
+  decideTimeSlip(id: string, approve: boolean, note: string) {
+    return this.write('decideTimeSlip', [id, approve, note]);
+  }
+  seenTimeSlip(id: string) {
+    return this.write('seenTimeSlip', [id]);
+  }
+  setTimeSlipApprover(approver: 'head' | 'hr', note: string) {
+    return this.write('setTimeSlipApprover', [approver, note]);
+  }
   myWork() {
     return this.read((s, u) => s.myWork(u));
   }
@@ -1971,6 +1920,9 @@ export class DemoApi implements Api {
   branchBoard() {
     return this.read((s, u) => s.branchBoard(u));
   }
+  branchJv(branchId: string) {
+    return this.read((s, u) => s.branchJv(u, branchId));
+  }
   creditBoard() {
     return this.read((s, u) => s.creditBoard(u));
   }
@@ -2061,9 +2013,6 @@ export class DemoApi implements Api {
   }
   decidePayChange(id: string, verify: boolean, note: string) {
     return this.write<unknown>('decidePayChange', [id, verify, note]);
-  }
-  salaryCalcData() {
-    return this.read((s, u) => s.salaryCalcData(u));
   }
   payFormulaBoard() {
     return this.read((s, u) => s.payFormulaBoard(u));
@@ -2159,6 +2108,14 @@ export class DemoApi implements Api {
   amLifeReview(id: string, decision: 'keep' | 'rehab', body: { note?: string; cost?: number }) {
     return this.write<unknown>('amLifeReview', [id, decision, body]);
   }
+  amBq(workOrderId: string) {
+    return this.read((s, u) => s.amBq(u, workOrderId));
+  }
+  amBqAction(workOrderId: string, input: AmBqActionInput) {
+    // A draft only reads: it is not kept in the test version's change log.
+    if (input.kind === 'draft') return this.read((s, u) => s.amBqDraft(u, workOrderId, input.jobKind, input.measurements));
+    return this.write<unknown>('amBqAction', [workOrderId, input]);
+  }
   salesLeads(companyId: string) {
     return this.read((s, u) => s.salesLeads(u, companyId));
   }
@@ -2227,6 +2184,12 @@ export class DemoApi implements Api {
   }
   whistleStatus(code: string) {
     return this.read((s) => s.whistleStatus(code));
+  }
+  whistleReply(code: string, text: string, retaliation: boolean) {
+    return this.write<unknown>('whistleReply', [code, text, retaliation]);
+  }
+  whistleMessage(id: string, text: string) {
+    return this.write<unknown>('whistleMessage', [id, text]);
   }
   whistleStep(id: string, action: Parameters<Api['whistleStep']>[1], text: string) {
     return this.write<unknown>('whistleStep', [id, action, text]);
@@ -2493,6 +2456,12 @@ export class DemoApi implements Api {
     const r = await this.write<{ ran: string[]; issues: string[]; notices: number }>('websiteSyncFeed', [feed]);
     return { ...r, delivered: 0 };
   }
+  registerBoard() {
+    return this.read((s, u) => s.registers.board(u));
+  }
+  registerAction(action: string, input: Record<string, unknown>) {
+    return this.write<unknown>('registerAction', [action, input]);
+  }
   websiteAction(action: string, input: Record<string, unknown>) {
     return this.write<unknown>('websiteAction', [action, input]);
   }
@@ -2551,6 +2520,16 @@ export class DemoApi implements Api {
     if(this.userId!==expectedUserId)throw new ApiError('Sign-in changed. Check the original account receipt.',409);
     return result;
   }
+  // Demo only: mock data in this browser. The screen asks for dummy rows here.
+  staffDirectoryStatus() {
+    return Promise.resolve({ enabled: true, ready: true });
+  }
+  staffDirectory() {
+    return this.read((s, u) => s.staffDirectory.board(u));
+  }
+  staffDirectoryAct(action: 'preview' | 'submit' | 'decide' | 'addOne', input: Record<string, unknown>) {
+    return action === 'preview' ? this.read((s, u) => s.staffDirectory.act(u, action, input)) : this.write<unknown>('staffDirectoryAct', [action, input]);
+  }
   itAct(action: string, input: Record<string, unknown>) {
     return this.write<unknown>('itAct', [action, input]);
   }
@@ -2560,8 +2539,8 @@ export class DemoApi implements Api {
   setItTenderItem(id: string, index: number, done: boolean) {
     return this.write<unknown>('setItTenderItem', [id, index, done]);
   }
-  setItAsset(id: string, status: Parameters<Api['setItAsset']>[1], assignedTo: string | null, note: string) {
-    return this.write<unknown>('setItAsset', [id, status, assignedTo, note]);
+  setItAsset(id: string, status: Parameters<Api['setItAsset']>[1], assignedTo: string | null, note: string, ewaste?: ItEwaste | null) {
+    return this.write<unknown>('setItAsset', [id, status, assignedTo, note, ewaste ?? null]);
   }
   itMaintenance(id: string, kind: 'service' | 'repair', note: string, cost: number) {
     return this.write<unknown>('itMaintenance', [id, kind, note, cost]);
@@ -2614,8 +2593,8 @@ export class DemoApi implements Api {
   cmsCommissioning() {
     return this.read((s, u) => s.cmsCommissioning(u));
   }
-  setMobItem(id: string, itemId: string, status: 'open' | 'done' | 'risk_accepted', note: string, acceptedUntil: string | null) {
-    return this.write<unknown>('setMobItem', [id, itemId, status, note, acceptedUntil]);
+  setMobItem(id: string, itemId: string, status: 'open' | 'done' | 'risk_accepted', note: string, acceptedUntil: string | null, proof: ProofInput[] = []) {
+    return this.write<unknown>('setMobItem', [id, itemId, status, note, acceptedUntil, proof]);
   }
   contractStep(id: string, action: Parameters<Api['contractStep']>[1], note: string) {
     return this.write<unknown>('contractStep', [id, action, note]);
@@ -2846,6 +2825,9 @@ export class DemoApi implements Api {
   clientInvoice(accountId: string, period: string, channel: 'hand' | 'email' | 'portal', amount: number | null, proof: ProofInput[]) {
     return this.write<unknown>('clientInvoice', [accountId, period, channel, amount, proof]);
   }
+  clientWorkAck(accountId: string, input: ClientWorkAckInput) {
+    return this.write<unknown>('clientWorkAck', [accountId, input]);
+  }
   setInvoicePortal(accountId: string, portal: string | null) {
     return this.write<unknown>('setInvoicePortal', [accountId, portal]);
   }
@@ -2911,6 +2893,18 @@ export class DemoApi implements Api {
   crmBoard() {
     return this.read((s, u) => s.crmBoard(u));
   }
+  clientDiligence(accountId: string) {
+    return this.read((s, u) => s.clientQuality.diligence(u, accountId));
+  }
+  clientDiligenceAct(accountId: string, action: 'start' | 'check' | 'decide', body: Record<string, unknown>) {
+    return this.write<Awaited<ReturnType<Api['clientDiligenceAct']>>>('clientDiligenceAct', [accountId, action, body]);
+  }
+  siteInstructions(siteId: string) {
+    return this.read((s, u) => s.clientQuality.siteInstructions(u, siteId));
+  }
+  siteInstructionsAct(siteId: string, action: 'save' | 'client_signed', body: Record<string, unknown>) {
+    return this.write<Awaited<ReturnType<Api['siteInstructionsAct']>>>('siteInstructionsAct', [siteId, action, body]);
+  }
   crmClient(accountId: string) {
     return this.read((s, u) => s.crmClient(u, accountId));
   }
@@ -2959,6 +2953,39 @@ export class DemoApi implements Api {
   fleetBoard() {
     return this.read((s, u) => s.fleetBoard(u));
   }
+  vehicleRentals(month?: string) {
+    return this.read((s, u) => s.vehicleRentals(u, month));
+  }
+  recordVehicleRental(vehicleId: string, input: Parameters<Api['recordVehicleRental']>[1]) {
+    return this.write<unknown>('recordVehicleRental', [vehicleId, input]);
+  }
+  endVehicleRental(vehicleId: string, input: Parameters<Api['endVehicleRental']>[1]) {
+    return this.write<unknown>('endVehicleRental', [vehicleId, input]);
+  }
+  moveVehicleUse(vehicleId: string, input: Parameters<Api['moveVehicleUse']>[1]) {
+    return this.write<unknown>('moveVehicleUse', [vehicleId, input]);
+  }
+  setVehicleRent(vehicleId: string, input: Parameters<Api['setVehicleRent']>[1]) {
+    return this.write<unknown>('setVehicleRent', [vehicleId, input]);
+  }
+  vehicleUsage(month?: string) {
+    return this.read((s, u) => s.vehicleUsage(u, month));
+  }
+  setVehicleFuel(vehicleId: string, input: Parameters<Api['setVehicleFuel']>[1]) {
+    return this.write<unknown>('setVehicleFuel', [vehicleId, input]);
+  }
+  addVehicleCard(vehicleId: string, input: Parameters<Api['addVehicleCard']>[1]) {
+    return this.write<unknown>('addVehicleCard', [vehicleId, input]);
+  }
+  endVehicleCard(vehicleId: string, cardId: string, input: { on: string; reason: string }) {
+    return this.write<unknown>('endVehicleCard', [vehicleId, cardId, input]);
+  }
+  recordFuel(vehicleId: string, input: Parameters<Api['recordFuel']>[1], proof: ProofInput[]) {
+    return this.write<unknown>('recordFuel', [vehicleId, input, proof]);
+  }
+  reviewFuel(vehicleId: string, fillId: string, input: Parameters<Api['reviewFuel']>[2]) {
+    return this.write<unknown>('reviewFuel', [vehicleId, fillId, input]);
+  }
   requestVehicle(input: VehicleRequestInput) {
     return this.write<unknown>('requestVehicle', [input]);
   }
@@ -2976,6 +3003,33 @@ export class DemoApi implements Api {
   }
   fileMonitoringConsent(personId: string, proof: ProofInput[]) {
     return this.write<unknown>('fileMonitoringConsent', [personId, proof]);
+  }
+  // Guards' own phones: kept in this page only (not replayed), as the phone's own enrolment is.
+  guardPhoneCode(personId: string) {
+    return this.read((s, u) => s.guardPhone.issueCode(u, personId));
+  }
+  guardPhones(companyId: string) {
+    return this.read((s, u) => s.guardPhone.phones(u, companyId));
+  }
+  revokeGuardPhone(phoneId: string, reason: string) {
+    return this.read((s, u) => s.guardPhone.revoke(u, phoneId, reason));
+  }
+  cmsGuardPhones() {
+    return this.read((s, u) => s.guardPhone.board(u));
+  }
+  /** For the guard phone client in the test version (api/guard-phone.ts). */
+  guardHost(): import('./guard-phone').DemoGuardHost {
+    return {
+      svc: async () => {
+        await this.ready();
+        return this.svc;
+      },
+      user: async (id: string) => {
+        await this.ready();
+        return this.svc.user(id);
+      },
+      toApiError,
+    };
   }
   setStaffPin(personId: string, pin: string) {
     return this.write<unknown>('setStaffPin', [personId, pin]);
@@ -2995,17 +3049,82 @@ export class DemoApi implements Api {
   pdpaDocs(caseId: string) {
     return this.read((s, u) => s.pdpaDocs(u, caseId));
   }
+  pdpaRegisterBoard() {
+    return this.read((s, u) => s.pdpaRegisterBoard(u));
+  }
+  setPdpaSettings(input: { enabled?: boolean; keepYears?: number }, reason: string) {
+    return this.write<unknown>('setPdpaSettings', [input, reason]);
+  }
+  savePdpaRegisterItem(id: string | null, input: Parameters<Api['savePdpaRegisterItem']>[1]) {
+    return this.write<unknown>('savePdpaRegisterItem', [id, input]);
+  }
+  pdpaRegisterStep(id: string, step: 'review' | 'retire', note: string) {
+    return this.write<unknown>('pdpaRegisterStep', [id, step, note]);
+  }
+  recordPdpaConsent(input: Parameters<Api['recordPdpaConsent']>[0], proof: ProofInput[]) {
+    return this.write<unknown>('recordPdpaConsent', [input, proof]);
+  }
+  withdrawPdpaConsent(id: string, on: string, note: string) {
+    return this.write<unknown>('withdrawPdpaConsent', [id, on, note]);
+  }
+  pdpaBreachDetails(caseId: string, input: Parameters<Api['pdpaBreachDetails']>[1]) {
+    return this.write<unknown>('pdpaBreachDetails', [caseId, input]);
+  }
   memos() {
     return this.read((s, u) => s.memos(u));
   }
-  publishMemo(audience: 'STAFF' | 'FIELD', title: string, body: string, states: string[]) {
-    return this.write<unknown>('publishMemo', [audience, title, body, states]);
+  publishMemo(audience: 'STAFF' | 'FIELD' | 'TEAM', title: string, body: string, states: string[], opts: { readBy?: string | null; replaces?: string | null } = {}) {
+    return this.write<unknown>('publishMemo', [audience, title, body, states, opts]);
+  }
+  memoReach(audience: 'STAFF' | 'FIELD' | 'TEAM', states: string[]) {
+    return this.read((s, u) => s.memoReach(u, audience, states));
+  }
+  withdrawMemo(memoId: string, reason: string) {
+    return this.write<unknown>('withdrawMemo', [memoId, reason]);
+  }
+  remindMemo(memoId: string) {
+    return this.write<unknown>('remindMemo', [memoId]);
   }
   readMemo(memoId: string) {
     return this.write<unknown>('readMemo', [memoId]);
   }
   fwmDocs(ref: string) {
     return this.read((s, u) => s.fwmDocs(u, ref));
+  }
+  fwCostBoard() {
+    return this.read((s, u) => s.fwCostBoard(u));
+  }
+  fwStatBoard() {
+    return this.read((s, u) => s.fwStatBoard(u));
+  }
+  fwStatAct(action: Parameters<Api['fwStatAct']>[0], body: Record<string, unknown>) {
+    // A draft only reads; everything else writes and is kept in the demo's own store.
+    return action === 'draft' ? this.read((s, u) => s.fwStatAct(u, action, body)) : this.write<unknown>('fwStatAct', [action, body]);
+  }
+  fwCostDocs(ref: string) {
+    return this.read((s, u) => s.fwCostDocs(u, ref));
+  }
+  recordFwPlacement(personId: string, input: Parameters<Api['recordFwPlacement']>[1], proof: ProofInput[]) {
+    return this.write<unknown>('recordFwPlacement', [personId, input, proof]);
+  }
+  endFwPlacement(id: string, input: { to: string; note: string }) {
+    return this.write<unknown>('endFwPlacement', [id, input]);
+  }
+  addFwCostLegalNote(input: Parameters<Api['addFwCostLegalNote']>[0]) {
+    return this.write<unknown>('addFwCostLegalNote', [input]);
+  }
+
+  setFwCostRate(input: Parameters<Api['setFwCostRate']>[0]) {
+    return this.write<unknown>('setFwCostRate', [input]);
+  }
+  draftFwCostMonth(month: string) {
+    return this.write<unknown>('draftFwCostMonth', [month]);
+  }
+  decideFwCostCharges(input: Parameters<Api['decideFwCostCharges']>[0]) {
+    return this.write<unknown>('decideFwCostCharges', [input]);
+  }
+  bookFwCostCharge(id: string, input: Parameters<Api['bookFwCostCharge']>[1], proof: ProofInput[]) {
+    return this.write<unknown>('bookFwCostCharge', [id, input, proof]);
   }
   personDocs(personId: string) {
     return this.read((s, u) => s.personDocs(u, personId));
@@ -3021,6 +3140,15 @@ export class DemoApi implements Api {
   }
   createFwmTask(personId: string, input: Parameters<Api['createFwmTask']>[1]) {
     return this.write<unknown>('createFwmTask', [personId, input]);
+  }
+  recordFwPaper(personId: string, paper: FwPaper, input: FwPaperInput, proof: ProofInput[]) {
+    return this.write<unknown>('recordFwPaper', [personId, paper, input, proof]);
+  }
+  ackFwPaper(credentialId: string, note: string) {
+    return this.write<unknown>('ackFwPaper', [credentialId, note]);
+  }
+  addFwWorkerFromJa(jaRecordId: string, input: FwAddFromJaInput) {
+    return this.write<unknown>('addFwWorkerFromJa', [jaRecordId, input]);
   }
   doneFwmTask(id: string, note: string, proof: ProofInput[]) {
     return this.write<unknown>('doneFwmTask', [id, note, proof]);
@@ -3061,6 +3189,85 @@ export class DemoApi implements Api {
   advanceSocsoClaim(id: string, to: Parameters<Api['advanceSocsoClaim']>[1], input: Parameters<Api['advanceSocsoClaim']>[2]) {
     return this.write<unknown>('advanceSocsoClaim', [id, to, input]);
   }
+  // Cleaning planner, site fittings, Inventory and duty plans.
+  cleaningBoard(date?: string) {
+    return this.read((s, u) => s.cleaning.board(u, date));
+  }
+  cleaningSite(siteId: string, date?: string) {
+    return this.read((s, u) => s.cleaning.site(u, siteId, date));
+  }
+  cleaningProof(siteId: string, docId: string) {
+    return this.read((s, u) => s.cleaning.proof(u, siteId, docId));
+  }
+  cleaningSaveSetup(siteId: string, setup: CleaningSetupInput, expectedVersion: number | null) {
+    return this.write<unknown>('cleaningOp', ['saveSetup', siteId, setup, expectedVersion]);
+  }
+  cleaningSetMap(siteId: string, input: { name: string; data: string }, expectedVersion: number) {
+    return this.write<unknown>('cleaningOp', ['setMap', siteId, input, expectedVersion]);
+  }
+  cleaningPlan(siteId: string, date: string, absentIds: string[]) {
+    return this.write<unknown>('cleaningOp', ['makePlan', siteId, date, absentIds]);
+  }
+  cleaningPublish(siteId: string, date: string) {
+    return this.write<unknown>('cleaningOp', ['publish', siteId, date]);
+  }
+  cleaningRecord(siteId: string, date: string, input: CleaningRecordInput) {
+    return this.write<unknown>('cleaningOp', ['recordTasks', siteId, date, input]);
+  }
+  cleaningDelivery(siteId: string, input: { date: string; supplies: StockLineInput[]; equipment: StockLineInput[]; note: string }) {
+    return this.write<unknown>('cleaningOp', ['recordDelivery', siteId, input]);
+  }
+  cleaningReceive(siteId: string, entryId: string, input: { supplies: StockLineInput[]; equipment: StockLineInput[]; note: string; proof: CleaningProofInput }) {
+    return this.write<unknown>('cleaningOp', ['receiveDelivery', siteId, entryId, input]);
+  }
+  cleaningStockCheck(siteId: string, input: { date: string; supplies: StockLineInput[]; equipment: StockLineInput[]; note: string; proof: CleaningProofInput }) {
+    return this.write<unknown>('cleaningOp', ['stockCheck', siteId, input]);
+  }
+  cleaningClientSlip(siteId: string, input: CleaningSlipInput) {
+    return this.write<unknown>('cleaningOp', ['recordClientAck', siteId, input]);
+  }
+  cleaningMonthly(siteId: string, month: string) {
+    return this.read((s, u) => s.cleaning.monthly(u, siteId, month));
+  }
+  inventorySites() {
+    return this.read((s, u) => s.cleaning.inventoryBoard(u));
+  }
+  siteKit(siteId: string) {
+    return this.read((s, u) => s.cleaning.siteKit(u, siteId));
+  }
+  saveSiteKit(siteId: string, items: unknown[], expectedVersion: number | null) {
+    return this.write<unknown>('cleaningOp', ['saveSiteKit', siteId, items, expectedVersion]);
+  }
+  recordSiteKit(siteId: string, input: { kind: 'install' | 'check'; date: string; lines: unknown[]; note: string; proof: CleaningProofInput }, expectedVersion: number) {
+    return this.write<unknown>('cleaningOp', ['recordSiteKit', siteId, input, expectedVersion]);
+  }
+  approveSiteGift(siteId: string, input: { ref: string; qty: number; reason: string }) {
+    return this.write<unknown>('cleaningOp', ['approveGift', siteId, input]);
+  }
+  closeOutList(siteId: string) {
+    return this.read((s, u) => s.cleaning.closeOutList(u, siteId));
+  }
+  recordTakeBack(siteId: string, input: { date: string; lines: unknown[]; note: string; proof: CleaningProofInput }) {
+    return this.write<unknown>('cleaningOp', ['recordTakeBack', siteId, input]);
+  }
+  dutyPosts(siteId: string, date: string) {
+    return this.read((s, u) => s.duty.posts(u, siteId, date));
+  }
+  publishDutyPosts(siteId: string, date: string) {
+    return this.write<unknown>('dutyOp', ['publishPosts', siteId, date]);
+  }
+  saveDutyTerms(siteId: string, terms: GuardTermsInput, expectedVersion: number | null) {
+    return this.write<unknown>('dutyOp', ['saveTerms', siteId, terms, expectedVersion]);
+  }
+  dutyOfficers() {
+    return this.read((s, u) => s.duty.officers(u));
+  }
+  dutyRoute(officerId: string, date: string, hours?: OfficerHoursInput | null) {
+    return this.read((s, u) => s.duty.route(u, officerId, date, hours ?? undefined));
+  }
+  publishDutyRoute(officerId: string, date: string, expectPublishedAt: string | null, hours?: OfficerHoursInput | null) {
+    return this.write<unknown>('dutyOp', ['publishRoute', officerId, date, expectPublishedAt, hours ?? null]);
+  }
   roster(siteId: string, from: string, days: number) {
     return this.read((s, u) => s.roster(u, siteId, from, days));
   }
@@ -3084,6 +3291,10 @@ export class DemoApi implements Api {
   }
   commercial(companyId: string) {
     return this.read((s, u) => s.commercial(u, companyId));
+  }
+  myAlerts() {
+    // The test link has no Teams or email: the bell is the only place alerts show here.
+    return this.read(async (s, u) => ({ items: await s.myAlerts(u), email: false, teamsChannel: false }));
   }
   home(companyId?: string) {
     return this.read((s, u) => s.home(u, companyId));
@@ -3123,11 +3334,35 @@ export class DemoApi implements Api {
   insurance() {
     return this.read((s, u) => s.insurance(u));
   }
+  recordInsurancePremium(policyId: string, input: { paidOn: string; ref: string }) {
+    return this.write<unknown>('recordInsurancePremium', [policyId, input]);
+  }
+  renewInsurancePolicy(policyId: string, input: Parameters<Api['renewInsurancePolicy']>[1]) {
+    return this.write<unknown>('renewInsurancePolicy', [policyId, input]);
+  }
+  cancelInsurancePolicy(policyId: string, input: { on: string; reason: string }) {
+    return this.write<unknown>('cancelInsurancePolicy', [policyId, input]);
+  }
   hrMonitor() {
     return this.read((s, u) => s.hrMonitor(u));
   }
   cms() {
     return this.read((s, u) => s.cms(u));
+  }
+  cmsReadiness() {
+    return this.read((s, u) => s.cmsReadiness(u));
+  }
+  setCmsReadinessAnswer(siteId: string, key: string, input: Parameters<Api['setCmsReadinessAnswer']>[2]) {
+    return this.write<Awaited<ReturnType<Api['setCmsReadinessAnswer']>>>('setCmsReadinessAnswer', [siteId, key, input]);
+  }
+  saveCmsReadinessDevice(siteId: string, input: Parameters<Api['saveCmsReadinessDevice']>[1]) {
+    return this.write<Awaited<ReturnType<Api['saveCmsReadinessDevice']>>>('saveCmsReadinessDevice', [siteId, input]);
+  }
+  removeCmsReadinessDevice(siteId: string, deviceId: string, reason: string) {
+    return this.write<Awaited<ReturnType<Api['removeCmsReadinessDevice']>>>('removeCmsReadinessDevice', [siteId, deviceId, reason]);
+  }
+  reviewCmsReadiness(siteId: string, input: Parameters<Api['reviewCmsReadiness']>[1]) {
+    return this.write<Awaited<ReturnType<Api['reviewCmsReadiness']>>>('reviewCmsReadiness', [siteId, input]);
   }
   updateCmsSettings(patch: CmsSettingsPatch) {
     return this.write<unknown>('updateCmsSettings', [patch]);
@@ -3135,8 +3370,20 @@ export class DemoApi implements Api {
   planCmsRoster(days: number) {
     return this.write<unknown>('planCmsRoster', [days]);
   }
-  recordCmsHandover(shiftId: string, note: string) {
-    return this.write<unknown>('recordCmsHandover', [shiftId, note]);
+  recordCmsHandover(shiftId: string, note: string, agree = true) {
+    return this.write<unknown>('recordCmsHandover', [shiftId, note, agree]);
+  }
+  giveCmsHandover(shiftId: string, note: string) {
+    return this.write<unknown>('giveCmsHandover', [shiftId, note]);
+  }
+  cmsSeatClockIn(shiftId: string) {
+    return this.write<unknown>('cmsSeatClockIn', [shiftId]);
+  }
+  cmsSeatClockOut(shiftId: string, note: string) {
+    return this.write<unknown>('cmsSeatClockOut', [shiftId, note]);
+  }
+  releaseCmsSeat(shiftId: string, reason: string) {
+    return this.write<unknown>('releaseCmsSeat', [shiftId, reason]);
   }
   attendanceAlerts(companyId: string) {
     return this.read((s, u) => s.attendanceAlerts(u, companyId));
@@ -3152,6 +3399,24 @@ export class DemoApi implements Api {
   }
   addVisitPhoto(visitId: string, input: PhotoInput) {
     return this.write<unknown>('addVisitPhoto', [visitId, input]);
+  }
+  siteSurveySetup() {
+    return this.read((s, u) => s.siteSurveys.setup(u));
+  }
+  siteSurveyBoard() {
+    return this.read((s, u) => s.siteSurveys.board(u));
+  }
+  siteSurveyDetail(id: string) {
+    return this.read((s, u) => s.siteSurveys.detail(u, id));
+  }
+  siteSurveyReceive(body: Record<string, unknown>) {
+    return this.write<Awaited<ReturnType<Api['siteSurveyReceive']>>>('siteSurveyReceive', [body]);
+  }
+  siteSurveyPhoto(id: string, n: number, image: string) {
+    return this.write<Awaited<ReturnType<Api['siteSurveyPhoto']>>>('siteSurveyPhoto', [id, n, image]);
+  }
+  siteSurveyReview(id: string, outcome: 'accepted' | 'returned', reason: string) {
+    return this.write<unknown>('siteSurveyReview', [id, outcome, reason]);
   }
   closeSiteVisit(visitId: string, findings: string) {
     return this.write<unknown>('closeSiteVisit', [visitId, findings]);
@@ -3218,6 +3483,63 @@ export class DemoApi implements Api {
   }
   doSiteTask(id: string, input: DoSiteTaskInput) {
     return this.write<unknown>('doSiteTask', [id, input]);
+  }
+  clientCodeBoard(siteId: string) {
+    return this.read((s, u) => s.clientCodeBoard(u, siteId));
+  }
+  saveClientCode(siteId: string, input: ClientCodeInput) {
+    return this.write<unknown>('saveClientCode', [siteId, input]);
+  }
+  stopClientCode(id: string, reason: string) {
+    return this.write<unknown>('stopClientCode', [id, reason]);
+  }
+  setClientReport(id: string, input: { send: boolean; how?: string; reason: string }) {
+    return this.write<unknown>('setClientReport', [id, input]);
+  }
+  checkClientRequirement(id: string, input: ClientCheckInput) {
+    return this.write<unknown>('checkClientRequirement', [id, input]);
+  }
+  saveClientInspection(id: string, input: ClientInspectionInput) {
+    return this.write<unknown>('saveClientInspection', [id, input]);
+  }
+  fixInspectionLine(id: string, index: number, input: { note: string; proof?: ProofInput[] }) {
+    return this.write<unknown>('fixInspectionLine', [id, index, input]);
+  }
+  selfAuditBoard(companyId: string) {
+    return this.read((s, u) => s.selfAuditBoard(u, companyId));
+  }
+  saveSelfAudit(companyId: string, input: SelfAuditInput) {
+    return this.write<unknown>('saveSelfAudit', [companyId, input]);
+  }
+  rbaBoard(companyId?: string | null) {
+    return this.read((s, u) => s.rbaBoard(u, companyId ?? null));
+  }
+  nameRbaCommittee(input: RbaCommitteeInput) {
+    return this.write<unknown>('nameRbaCommittee', [input]);
+  }
+  rbaTraceBoard(companyId: string) {
+    return this.read((s, u) => s.rbaTraceBoard(u, companyId));
+  }
+  runRbaTrace(companyId: string, period: string) {
+    return this.write<unknown>('runRbaTrace', [companyId, period]);
+  }
+  settleRbaTraceRow(reviewId: string, personId: string, input: { kind: 'explained' | 'corrected' | 'finding'; note: string }) {
+    return this.write<unknown>('settleRbaTraceRow', [reviewId, personId, input]);
+  }
+  workerFiles(companyId: string) {
+    return this.read((s, u) => s.workerFiles(u, companyId));
+  }
+  ethicsBoard(companyId?: string | null) {
+    return this.read((s, u) => s.ethicsBoard(u, companyId ?? null));
+  }
+  signEthicsDeclaration(input: EthicsInput) {
+    return this.write<unknown>('signEthicsDeclaration', [input]);
+  }
+  reviewEthicsInterests(id: string, input: { action: 'no_conflict' | 'managed'; note: string }) {
+    return this.write<unknown>('reviewEthicsInterests', [id, input]);
+  }
+  fixSelfAuditLine(id: string, key: string, input: { note: string; proof?: ProofInput[] }) {
+    return this.write<unknown>('fixSelfAuditLine', [id, key, input]);
   }
   addPostLog(input: PostLogInput) {
     return this.write<unknown>('addPostLog', [input]);
@@ -3394,14 +3716,23 @@ export class DemoApi implements Api {
   scheduleMeeting(input: Parameters<Api['scheduleMeeting']>[0]) {
     return this.write('scheduleMeeting', [input]);
   }
-  addMinutes(meetingId: string, text: string) {
-    return this.write('addMinutes', [meetingId, text]);
+  addMinutes(meetingId: string, text: string, attendance?: Parameters<Api['addMinutes']>[2]) {
+    return this.write('addMinutes', [meetingId, text, attendance]);
+  }
+  changeMeeting(meetingId: string, input: Parameters<Api['changeMeeting']>[1]) {
+    return this.write('changeMeeting', [meetingId, input]);
+  }
+  cancelMeeting(meetingId: string, reason: string) {
+    return this.write('cancelMeeting', [meetingId, reason]);
+  }
+  answerMeeting(meetingId: string, answer: 'yes' | 'no' | 'maybe', note: string) {
+    return this.write('answerMeeting', [meetingId, answer, note]);
   }
   checkMeetingSummary(meetingId: string, input: Parameters<Api['checkMeetingSummary']>[1]) {
     return this.write('checkMeetingSummary', [meetingId, input]);
   }
-  setMeetingAction(meetingId: string, index: number, done: boolean) {
-    return this.write('setMeetingAction', [meetingId, index, done]);
+  setMeetingAction(meetingId: string, index: number, done: boolean, note = '') {
+    return this.write('setMeetingAction', [meetingId, index, done, note]);
   }
   addMeetingAction(meetingId: string, input: Parameters<Api['addMeetingAction']>[1]) {
     return this.write('addMeetingAction', [meetingId, input]);
@@ -3424,6 +3755,36 @@ export class DemoApi implements Api {
   createTenderGroup(sourceTenderId: string, companyIds: string[]) {
     return this.write<unknown>('createTenderGroup', [sourceTenderId, companyIds]);
   }
+  tenderCounter() {
+    return this.read((s, u) => s.tenderCounter(u));
+  }
+  directorOfficeCounter() {
+    return this.read((s, u) => s.directorOfficeCounter(u));
+  }
+  tenderOpportunities() {
+    return this.read((s, u) => s.tenderOpportunities(u));
+  }
+  recordTenderOpportunity(input: OpportunityInput) {
+    return this.write<unknown>('recordTenderOpportunity', [input]);
+  }
+  enterTenderOpportunity(id: string, companyIds: string[], note: string) {
+    return this.write<unknown>('enterTenderOpportunity', [id, companyIds, note]);
+  }
+  tenderSources() {
+    return this.read((s, u) => s.tenderSources(u));
+  }
+  addTenderSource(input: { buyer: string; urls: string[]; note: string }) {
+    return this.write<unknown>('addTenderSource', [input]);
+  }
+  loadTenderSourceStarter() {
+    return this.write<unknown>('loadTenderSourceStarter', []);
+  }
+  updateTenderSource(id: string, input: { urls?: string[]; note?: string; active?: boolean }) {
+    return this.write<unknown>('updateTenderSource', [id, input]);
+  }
+  recordTenderSourceCheck(id: string, input: SourceCheckInput) {
+    return this.write<unknown>('recordTenderSourceCheck', [id, input]);
+  }
   tenderBoard() {
     return this.read((s, u) => s.tenderBoard(u));
   }
@@ -3436,8 +3797,8 @@ export class DemoApi implements Api {
   doTenderStep(tenderId: string, stepId: string, note: string, proof: ProofInput[], opts?: Parameters<Api['doTenderStep']>[4]) {
     return this.write('doTenderStep', [tenderId, stepId, note, proof, opts ?? {}]);
   }
-  confirmTenderNa(tenderId: string, stepId: string, accept: boolean) {
-    return this.write('confirmTenderNa', [tenderId, stepId, accept]);
+  confirmTenderNa(tenderId: string, stepId: string, accept: boolean, note: string) {
+    return this.write('confirmTenderNa', [tenderId, stepId, accept, note]);
   }
   undoTenderStep(tenderId: string, stepId: string) {
     return this.write('undoTenderStep', [tenderId, stepId]);
@@ -3485,6 +3846,130 @@ export class DemoApi implements Api {
     writeLog([]);
     this.replayed = false;
     this.boot();
+  }
+  policeHelp() {
+    return this.read((s, u) => s.policeHelp(u));
+  }
+  askPoliceHelp(input: Parameters<Api['askPoliceHelp']>[0]) {
+    return this.write<{ ref: string }>('askPoliceHelp', [input]);
+  }
+  assignPoliceHelp(id: string, input: Parameters<Api['assignPoliceHelp']>[1]) {
+    return this.write<unknown>('assignPoliceHelp', [id, input]);
+  }
+  recordPoliceHelpOutcome(id: string, input: Parameters<Api['recordPoliceHelpOutcome']>[1]) {
+    return this.write<unknown>('recordPoliceHelpOutcome', [id, input]);
+  }
+  answerPoliceHelp(id: string, decision: 'confirm' | 'return', note: string) {
+    return this.write<unknown>('answerPoliceHelp', [id, decision, note]);
+  }
+  withdrawPoliceHelp(id: string, note: string) {
+    return this.write<unknown>('withdrawPoliceHelp', [id, note]);
+  }
+  recordLindung(id: string, input: Parameters<Api['recordLindung']>[1]) {
+    return this.write<unknown>('recordLindung', [id, input]);
+  }
+  verifyLindung(id: string, answer: Parameters<Api['verifyLindung']>[1], note: string) {
+    return this.write<unknown>('verifyLindung', [id, answer, note]);
+  }
+  addSocsoDependant(id: string, input: Parameters<Api['addSocsoDependant']>[1]) {
+    return this.write<unknown>('addSocsoDependant', [id, input]);
+  }
+  addDependantPaper(id: string, dependantId: string, kind: 'relation' | 'translation', proof: ProofInput[]) {
+    return this.write<unknown>('addDependantPaper', [id, dependantId, kind, proof]);
+  }
+  confirmDependantRoute(id: string, dependantId: string, input: Parameters<Api['confirmDependantRoute']>[2]) {
+    return this.write<unknown>('confirmDependantRoute', [id, dependantId, input]);
+  }
+  recordDeathNotice(id: string, who: 'family' | 'embassy' | 'immigration', at: string) {
+    return this.write<unknown>('recordDeathNotice', [id, who, at]);
+  }
+  addDependantPayment(id: string, input: Parameters<Api['addDependantPayment']>[1]) {
+    return this.write<unknown>('addDependantPayment', [id, input]);
+  }
+  confirmDependantReceived(id: string, paymentId: string, input: { on: string; proof: ProofInput[] }) {
+    return this.write<unknown>('confirmDependantReceived', [id, paymentId, input]);
+  }
+  assessDosh(id: string, kind: Parameters<Api['assessDosh']>[1], why: string) {
+    return this.write<unknown>('assessDosh', [id, kind, why]);
+  }
+  recordDoshImmediate(id: string, input: Parameters<Api['recordDoshImmediate']>[1]) {
+    return this.write<unknown>('recordDoshImmediate', [id, input]);
+  }
+  recordDoshForm(id: string, input: Parameters<Api['recordDoshForm']>[1]) {
+    return this.write<unknown>('recordDoshForm', [id, input]);
+  }
+  recordDoshClientTold(id: string, at: string) {
+    return this.write<unknown>('recordDoshClientTold', [id, at]);
+  }
+  doshRegister(year: number) {
+    return this.read((svc, u) => svc.doshRegister(u, year));
+  }
+  contractProof(id: string) {
+    return this.read((s, u) => s.contractProof(u, id));
+  }
+  addMobItem(id: string, input: Parameters<Api['addMobItem']>[1]) {
+    return this.write<unknown>('addMobItem', [id, input]);
+  }
+  certifyContractRound(id: string, round: number, note: string) {
+    return this.write<unknown>('certifyContractRound', [id, round, note]);
+  }
+  renewContract(id: string, input: Parameters<Api['renewContract']>[1]) {
+    return this.write<unknown>('renewContract', [id, input]);
+  }
+  linkContractClient(id: string, accountId: string) {
+    return this.write<unknown>('linkContractClient', [id, accountId]);
+  }
+  readContractPaper(input: { companyId: string; clientAccountId: string | null; text: string }) {
+    // A read, not a logged write: the paper's text is never kept in this browser. The demo has no online reader.
+    return this.read<PaperReadingResult>((s, u) => s.readContractPaper(u, input));
+  }
+  cmsHours(month?: string) {
+    return this.read((s, u) => s.cmsHours(u, month));
+  }
+  qualityRegister(opts: { companyId?: string; standard?: 'ISO9001' | 'PIKM' } = {}) {
+    return this.read((s, u) => s.quality.register(u, opts));
+  }
+  qualityMatrix(opts: { companyId?: string } = {}) {
+    return this.read((s, u) => s.quality.matrix(u, opts));
+  }
+  qualityFoundation() {
+    return this.read((s, u) => s.quality.foundation(u));
+  }
+  qualityAction(action: string, input: Record<string, unknown>) {
+    return this.write<unknown>('qualityAction', [action, input]);
+  }
+  salaryCalcData() {
+    return this.read((s, u) => s.salaryCalcData(u));
+  }
+  amExtras() {
+    return this.read((s, u) => s.amExtras.board(u));
+  }
+  amExtrasAct(area: string, action: string, id: string, body: Record<string, unknown>) {
+    return this.write<unknown>('amExtrasAct', [area, action, id, body]);
+  }
+  jaSwitchBoard() {
+    return this.read((s, u) => s.jaSwitchBoard(u));
+  }
+  jaSwitchReport(companyId: string, area: string) {
+    return this.read((s, u) => s.jaSwitchReport(u, companyId, area));
+  }
+  jaSwitchAct(companyId: string, area: string, action: Parameters<Api['jaSwitchAct']>[2], body: Record<string, unknown>) {
+    return this.write<unknown>('jaSwitchAct', [companyId, area, action, body]);
+  }
+  jaSwitchSettings(body: Record<string, unknown>) {
+    return this.write<unknown>('jaSwitchSettings', [body]);
+  }
+  jaImportStage(body: Record<string, unknown>) {
+    return this.write<unknown>('jaImportStage', [body]);
+  }
+  jaImportDecide(id: string, body: Record<string, unknown>) {
+    return this.write<unknown>('jaImportDecide', [id, body]);
+  }
+  jaGuardHistory(companyId: string, staffNo: string) {
+    return this.read((s, u) => s.jaGuardHistory(u, companyId, staffNo));
+  }
+  qualityOps(opts: { companyId?: string } = {}) {
+    return this.read((s, u) => s.qualityOps.board(u, opts));
   }
 }
 

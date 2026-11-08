@@ -1,5 +1,8 @@
-import { isRealDate } from './time';
-import type { InsuranceClaim, InsuranceKind, InsurancePolicy, IsoDate } from './types';
+import type { InsuranceClaim } from "./types";
+import type { InsuranceKind } from "./types";
+import type { InsurancePolicy } from "./types";
+import type { IsoDate } from "./types";
+
 
 // Masterplan row 61 (insurance and warranty response) and 21: an insurance claim moves through steps a person records,
 // each with its reference. Prima never contacts an insurer, accepts an offer for the company or receives money; a claim
@@ -32,3 +35,4 @@ export function coveredOn(policy: Pick<InsurancePolicy, 'startsOn' | 'expiresOn'
 }
 
 /** A date written as YYYY-MM-DD that exists on the calendar. */
+export const isRealDate = (s: string): s is IsoDate => /^\d{4}-\d{2}-\d{2}$/.test(s) && !Number.isNaN(Date.parse(s)) && new Date(s).toISOString().slice(0, 10) === s;

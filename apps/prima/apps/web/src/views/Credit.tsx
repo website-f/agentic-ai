@@ -269,7 +269,7 @@ function CaseLine({ c }: { c: Case }) {
         {canSee && (
           <div className="bz-act">
             <F label="Note">
-              <input className="input" placeholder="Note (required for reconcile, clear, suspend)" value={note} onChange={(e) => setNote(e.target.value)} />
+              <input className="input" placeholder="Note (needed for reconcile, confirm, clear, suspend)" value={note} onChange={(e) => setNote(e.target.value)} />
             </F>
             <div className="bz-actions">
               {c.canAct && c.waiting === 'Checks' && (
@@ -282,7 +282,7 @@ function CaseLine({ c }: { c: Case }) {
                 </button>
               )}
               {c.canAct && c.waiting !== 'Checks' && (
-                <button className="btn btn-sm btn-primary" disabled={act.busy} onClick={() => act.run(() => api.creditDecide(d.id, 'confirm', note), 'Confirmation recorded.')}>
+                <button className="btn btn-sm btn-primary" disabled={act.busy || !note.trim()} onClick={() => act.run(() => api.creditDecide(d.id, 'confirm', note), 'Confirmation recorded.')}>
                   Confirm default as {confirmWho}
                 </button>
               )}

@@ -160,7 +160,7 @@ function SpeakUp({ data }: { data: GrcBoard }) {
   });
   const [receipt, setReceipt] = useState<{ code: string; handledBy: string } | null>(null);
   const [code, setCode] = useState('');
-  const [status, setStatus] = useState<string | null>(null);
+  const [status, setStatus] = useState<Awaited<ReturnType<typeof api.whistleStatus>> | null>(null);
   const check = useAction();
   return (
     <div className="gv-two">
@@ -282,17 +282,13 @@ function SpeakUp({ data }: { data: GrcBoard }) {
                 onClick={() =>
                   check
                     .run(() => api.whistleStatus(code))
-                    .then((r) => r && setStatus(`${r.code}: ${r.status}${r.outcome ? `. Outcome: ${r.outcome}` : ''}`))
+                    .then((r) => r && setStatus(r))
                 }
               >
                 Check
               </button>
             </div>
-            {status && (
-              <p className="notice" data-tone="info">
-                {status}
-              </p>
-            )}
+            {status && <ReporterThread s={status} onChanged={() => api.whistleStatus(status.code).then(setStatus, () => undefined)} />}
             <ErrorNotice error={check.error} />
           </div>
         </Card>
@@ -480,12 +476,17 @@ function GiftLine({ g: row }: { g: GrcBoard['gifts'][number] }) {
       {row.canDecide && (
         <div className="gv-box">
           <div className="gv-box-title">Decide</div>
-          <input className="input" aria-label="Note" placeholder="Note" value={note} onChange={(e) => setNote(e.target.value)} />
+          <input className="input" aria-label="Note" placeholder="Comment (needed to let them keep it)" value={note} onChange={(e) => setNote(e.target.value)} />
           <div className="gv-btns">
             {(['approved', 'return', 'donate', 'refused'] as const)
               .filter((o) => o !== 'approved' || (!g.cash && g.counterpartyKind !== 'PUBLIC_OFFICIAL'))
               .map((o) => (
-                <button key={o} className="btn btn-sm" disabled={act.busy} onClick={() => act.run(() => api.decideGift(g.id, o, note), 'Decision recorded.')}>
+                <button
+                  key={o}
+                  className="btn btn-sm"
+                  disabled={act.busy || (o === 'approved' && !note.trim())}
+                  onClick={() => act.run(() => api.decideGift(g.id, o, note), 'Decision recorded.')}
+                >
                   {{ approved: 'May keep', return: 'Return it', donate: 'Donate it', refused: 'Refuse' }[o]}
                 </button>
               ))}
@@ -602,9 +603,9 @@ function OblLine({ o: row }: { o: Obl }) {
       {row.role === 'auditor' && o.evidence && !o.checked && (
         <div className="gv-box">
           <div className="gv-box-title">Check the proof</div>
-          <input className="input" aria-label="Check note" placeholder="Note (required to reject)" value={note} onChange={(e) => setNote(e.target.value)} />
+          <input className="input" aria-label="Check note" placeholder="Comment (needed to approve or reject)" value={note} onChange={(e) => setNote(e.target.value)} />
           <div className="gv-btns">
-            <button className="btn btn-sm btn-primary" disabled={act.busy} onClick={() => act.run(() => api.grcCheck(o.id, true, note), 'Proof accepted.')}>
+            <button className="btn btn-sm btn-primary" disabled={act.busy || !note.trim()} onClick={() => act.run(() => api.grcCheck(o.id, true, note), 'Proof accepted.')}>
               Accept proof
             </button>
             <button className="btn btn-sm" disabled={act.busy || !note.trim()} onClick={() => act.run(() => api.grcCheck(o.id, false, note), 'Proof rejected.')}>
@@ -817,9 +818,9 @@ function ReviewLine({ t }: { t: GrcBoard['toReview'][number] }) {
         </div>
       </div>
       <div className="gv-box">
-        <input className="input" aria-label="Review note" placeholder="Note (needed to send it back)" value={note} onChange={(e) => setNote(e.target.value)} />
+        <input className="input" aria-label="Review note" placeholder="Comment (needed to agree or send it back)" value={note} onChange={(e) => setNote(e.target.value)} />
         <div className="gv-btns">
-          <button className="btn btn-sm btn-primary" disabled={act.busy} onClick={() => act.run(() => api.whistleReview(r.id, true, note), 'Agreed and closed.')}>
+          <button className="btn btn-sm btn-primary" disabled={act.busy || !note.trim()} onClick={() => act.run(() => api.whistleReview(r.id, true, note), 'Agreed and closed.')}>
             Agree and close
           </button>
           <button
@@ -836,15 +837,80 @@ function ReviewLine({ t }: { t: GrcBoard['toReview'][number] }) {
   );
 }
 
+/**
+ * What the reporter sees with the receipt code: where the report stands, the handler's messages, a way to answer, and
+ * a way to report retaliation, also after closing (RBA reporter follow-up, 8 Nov 2026). Their name is never asked.
+ */
+function ReporterThread({ s, onChanged }: { s: Awaited<ReturnType<typeof api.whistleStatus>>; onChanged: () => void }) {
+  const act = useAction();
+  const [text, setText] = useState('');
+  const closed = s.status === 'closed';
+  return (
+    <div className="gv-stack-sm">
+      <p className="notice" data-tone="info">
+        <strong className="mono">{s.code}</strong>: {s.status}
+        {s.outcome ? `. Outcome: ${s.outcome}` : ''}
+      </p>
+      {s.messages.length > 0 && (
+        <ul className="gv-notes">
+          {s.messages.map((m, i) => (
+            <li key={i}>
+              <span className="gv-notes-when">
+                {dateTimeLabel(m.at)} · {m.from === 'handler' ? 'Handler' : m.retaliation ? 'You (retaliation)' : 'You'}
+              </span>
+              <span>{m.text}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+      {s.canWrite && (
+        <>
+          <textarea
+            className="input"
+            rows={2}
+            aria-label="Your answer"
+            placeholder={closed ? 'Treated badly for reporting? Say what happened and when.' : 'Answer the handler, or add something you remember'}
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+          />
+          <div className="gv-btns">
+            {!closed && (
+              <button
+                className="btn btn-sm"
+                disabled={act.busy || text.trim().length < 10}
+                onClick={() => act.run(() => api.whistleReply(s.code, text, false), 'Sent. Your name is not recorded.').then((r) => r && (setText(''), onChanged()))}
+              >
+                Send answer
+              </button>
+            )}
+            <button
+              className="btn btn-sm"
+              disabled={act.busy || text.trim().length < 10}
+              onClick={() =>
+                act.run(() => api.whistleReply(s.code, text, true), 'Retaliation reported. The handler looks into it now.').then((r) => r && (setText(''), onChanged()))
+              }
+            >
+              Report retaliation
+            </button>
+          </div>
+          <span className="muted small">Nobody may punish you for reporting. You can report retaliation with this code for {s.afterCloseDays} days after the report closes.</span>
+        </>
+      )}
+      <ErrorNotice error={act.error} />
+    </div>
+  );
+}
+
 function ReportLine({ h }: { h: GrcBoard['handled'][number] }) {
   const act = useAction();
   const [text, setText] = useState('');
+  const [msg, setMsg] = useState('');
   const r = h.report;
   const order = ['received', 'acknowledged', 'investigating', 'closing', 'closed'] as const;
   const at = order.indexOf(r.status);
   const st = (i: number): StepState => (at > i || r.status === 'closed' ? 'done' : at === i ? 'now' : 'todo');
   return (
-    <div className="gv-item" data-tone={h.ackLate ? 'crit' : r.status === 'closed' ? undefined : 'warn'}>
+    <div className="gv-item" data-tone={h.ackLate || h.retaliation ? 'crit' : r.status === 'closed' && !h.replyWaiting ? undefined : 'warn'}>
       <div className="gv-item-head">
         <div className="gv-item-main">
           <div className="gv-item-title">
@@ -855,7 +921,9 @@ function ReportLine({ h }: { h: GrcBoard['handled'][number] }) {
           </div>
         </div>
         <div className="gv-item-state">
-          <Chip tone={h.ackLate ? 'crit' : r.status === 'closed' ? 'ok' : 'warn'}>{h.ackLate ? 'Acknowledge now' : r.status}</Chip>
+          <Chip tone={h.ackLate || h.retaliation ? 'crit' : r.status === 'closed' && !h.replyWaiting ? 'ok' : 'warn'}>
+            {h.retaliation ? 'Retaliation reported' : h.ackLate ? 'Acknowledge now' : h.replyWaiting ? 'Reporter wrote' : h.updateDue ? 'Update the reporter' : r.status}
+          </Chip>
         </div>
       </div>
       <Steps
@@ -869,6 +937,32 @@ function ReportLine({ h }: { h: GrcBoard['handled'][number] }) {
       />
       <blockquote className="gv-quote">{r.summary}</blockquote>
       <Notes notes={r.notes} />
+      {(r.messages ?? []).length > 0 && (
+        <ul className="gv-notes">
+          {(r.messages ?? []).map((m, i) => (
+            <li key={i}>
+              <span className="gv-notes-when">
+                {dateTimeLabel(m.at)} · {m.from === 'handler' ? 'You to the reporter' : m.retaliation ? 'Reporter: RETALIATION' : 'Reporter'}
+              </span>
+              <span>{m.text}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+      {(r.status !== 'closed' || h.replyWaiting) && (
+        <div className="gv-inline">
+          <input
+            className="input"
+            aria-label="Message to the reporter"
+            placeholder="Message to the reporter (a question, or where it stands)"
+            value={msg}
+            onChange={(e) => setMsg(e.target.value)}
+          />
+          <button className="btn btn-sm" disabled={act.busy || msg.trim().length < 10} onClick={() => act.run(() => api.whistleMessage(r.id, msg), 'Sent to the reporter.').then((x) => x && setMsg(''))}>
+            Send to reporter
+          </button>
+        </div>
+      )}
       {r.outcome && (
         <div className="gv-lines">
           <div>

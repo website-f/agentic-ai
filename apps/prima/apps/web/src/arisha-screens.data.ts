@@ -357,10 +357,198 @@ export const SCREEN_GUIDES: ScreenGuide[] = [
     "notes": "Past shifts cannot be changed. The \"Assign\" button is grey for a guard who fails the checks. A site needs posts before shifts can be added. Armed sites need guards with a firearm permit."
   },
   {
+    "view": "duty",
+    "title": "Guard duty plans",
+    "what": "Plans the minute-by-minute duties for each guard post from the roster, and each patrolling officer's daily route. Prima makes and publishes the plan; the JA app (or the app in use) runs the work and reports back each month.",
+    "who": "Directors, group leaders, company managers, admin executives and operations staff. The OM, Regional OM or OGM who covers the site can change terms and publish. Everyone else sees the plan marked \"View only\".",
+    "tabs": [
+      {
+        "name": "Posts",
+        "what": "The duty plan for every post at one site on the chosen date, with the client's contract terms."
+      },
+      {
+        "name": "Officer routes",
+        "what": "One patrolling officer's route for the day across the sites they cover."
+      }
+    ],
+    "tasks": [
+      {
+        "task": "How to publish a site's duty plan",
+        "steps": [
+          "Press \"Posts\".",
+          "Pick the date at the top and choose the site.",
+          "Check the plan shown as \"Preview (not published)\".",
+          "Press \"Publish\".",
+          "If the roster changes later you see \"Roster changed since publishing\". Press \"Publish again\"."
+        ]
+      },
+      {
+        "task": "How to enter the client's contract terms",
+        "steps": [
+          "In \"Contract terms\" press \"Enter the contract terms\" (or \"Change terms\").",
+          "Fill in \"Contract reference\", \"Rate per guard-hour (RM)\" and the other boxes.",
+          "Set each shift's times and guards. Use \"Add a shift\" or \"Remove\". For a KPM school you can press \"Use the KPM school contract (2 x 12 h, 4 points, weekly visit, report by 9am)\".",
+          "Press \"Save terms\"."
+        ]
+      },
+      {
+        "task": "How to plan a patrolling officer's route",
+        "steps": [
+          "Press \"Officer routes\" and choose the officer and the date.",
+          "Change \"Starts\", \"Ends (next day if earlier)\" or \"Meal break (min)\" if needed, then press \"Plan with these hours\".",
+          "Press \"Publish\"."
+        ]
+      }
+    ],
+    "terms": [
+      {
+        "term": "Short",
+        "means": "Fewer guards on the roster than the contract needs for that shift."
+      },
+      {
+        "term": "If not filled",
+        "means": "An estimate of what the client may deduct for the gap. The client decides the real amount."
+      }
+    ],
+    "notes": "No \"Publish\" button and a \"View only\" chip means you do not manage that site. \"No patrolling officers on sites you cover.\" means no officer is linked to your sites. Guards rostered at a time that is not a contract shift are not counted as cover. Contract deductions are estimates only."
+  },
+  {
+    "view": "cleaning",
+    "title": "Cleaning plans",
+    "what": "Each cleaning site's daily plan for cleaners and supervisors, made from the client's scope and the size of each area. You also record what the supervisor reports, with time-marked photos.",
+    "who": "Operations, ACT, group leaders, company managers and admin executives. The OM, Regional OM or OGM who covers the site manages it; others see \"View only\". Cleaners and supervisors do not sign in.",
+    "tabs": [
+      {
+        "name": "Day plan",
+        "what": "Today's plan for each worker and the supervisor's report."
+      },
+      {
+        "name": "Scope and crew",
+        "what": "Contract, hours, areas, sizes and crew names."
+      },
+      {
+        "name": "Site map",
+        "what": "The site map with each area placed on it."
+      },
+      {
+        "name": "Supplies and equipment",
+        "what": "Supplies, equipment, deliveries and stock checks."
+      },
+      {
+        "name": "Client slips",
+        "what": "Work that needs the client's signed slip."
+      },
+      {
+        "name": "Monthly report",
+        "what": "Plan against actual for the month."
+      }
+    ],
+    "tasks": [
+      {
+        "task": "How to start cleaning on a new site",
+        "steps": [
+          "In \"Start cleaning on a site\" choose the \"Site\" and fill in the contract details.",
+          "Press \"Start cleaning on this site\".",
+          "Open \"Scope and crew\", enter the real areas and crew names, and press \"Save scope and crew\"."
+        ]
+      },
+      {
+        "task": "How to make and publish today's plan",
+        "steps": [
+          "Press the site in the list and open \"Day plan\".",
+          "Tick anyone absent.",
+          "Press \"Make the plan\" (or \"Make the plan again\").",
+          "Check it, then press \"Publish\"."
+        ]
+      },
+      {
+        "task": "How to record the supervisor's report",
+        "steps": [
+          "Tick the tasks the supervisor reported on.",
+          "Choose \"Done\", \"Checked\", \"Redo\", \"Missed\" or \"Not needed today\".",
+          "For Checked, Redo or Not needed today, add the time-marked photo and type the time printed on it.",
+          "Give the reason if asked, then press the \"Record\" button."
+        ]
+      },
+      {
+        "task": "How to record a delivery or stock check",
+        "steps": [
+          "Open \"Supplies and equipment\".",
+          "Press \"Record a delivery\", \"Record a stock check\" or \"Record receipt\".",
+          "Enter the amounts and press \"Save\"."
+        ]
+      }
+    ],
+    "terms": [
+      {
+        "term": "Time-marked photo",
+        "means": "A photo with the date and time printed on it by the camera app. Ordinary photos are refused."
+      }
+    ],
+    "notes": "Photos must be under 700 KB and sent by email, not WhatsApp (WhatsApp removes the camera time). A photo from another day or used before is refused. \"Cleaning is not set up on this site.\" means no scope yet. Client slips: press \"Upload a client slip\" under \"Client slips\"."
+  },
+  {
+    "view": "sitestock",
+    "title": "Site stock and fittings",
+    "what": "One board of cleaning supplies and equipment, guard uniforms and site fittings at every site you can see. It also plans what fittings each site needs and makes sure everything comes back at contract end.",
+    "who": "Directors, group leaders, operations and Procurement and Inventory staff. Company managers do not see it. The OM who covers the site records; Inventory monitors. Only a director, the COO or the CEO can approve giving an item to the client.",
+    "tabs": [
+      {
+        "name": "All sites",
+        "what": "Every site with stock flags, uniform gaps and fittings short or broken."
+      },
+      {
+        "name": "Fittings for one site",
+        "what": "The fittings plan, records and contract-end take back for one site."
+      }
+    ],
+    "tasks": [
+      {
+        "task": "How to check problems across sites",
+        "steps": [
+          "Press \"All sites\" and look at the number boxes at the top.",
+          "Press \"Fittings\" on a site to open its plan."
+        ]
+      },
+      {
+        "task": "How to plan a site's fittings",
+        "steps": [
+          "Press \"Fittings for one site\" and choose the site.",
+          "Press \"Add an item\", or \"Add KPM guard equipment\" for a KPM guard contract.",
+          "Set what is needed, the owner, and \"Take back\" or \"Hand over (contract says)\" with the \"Contract clause\".",
+          "Press \"Save plan\"."
+        ]
+      },
+      {
+        "task": "How to record an install or the monthly check",
+        "steps": [
+          "Save the plan first.",
+          "Press \"Record install\" or \"Record monthly check\".",
+          "Type how many are in place and how many are broken, add the time-marked photo, and press \"Save\"."
+        ]
+      },
+      {
+        "task": "How to take items back at contract end",
+        "steps": [
+          "In \"Contract end: take everything back\" press \"Record take back at contract end\".",
+          "Type how many came back or were handed over, add the photo of the items collected, and press \"Save\".",
+          "Management can press \"Approve giving\", fill \"How many\" and \"Reason (required)\", then press \"Approve\"."
+        ]
+      }
+    ],
+    "terms": [
+      {
+        "term": "Not recovered",
+        "means": "Items that did not come back at contract end and were not approved to give."
+      }
+    ],
+    "notes": "\"View only\" means you do not manage this site, so the add, save and record buttons are hidden. \"Record install\" and \"Record monthly check\" stay grey until the plan is saved with no unsaved changes. Every item comes back unless the contract hands it over or the COO or CEO approves giving it."
+  },
+  {
     "view": "people",
     "title": "Guards",
-    "what": "The list of guards and office staff, and whether each one is allowed to work. Open a person for papers, training, hours, leave, SOCSO and warnings.",
-    "who": "Directors and group staff, company managers, admin executives and supervisors. HR and group leaders see it as \"People\" and can switch to \"PWVSB central staff\". Pay and \"Benefits\" show only to people allowed to see pay.",
+    "what": "The list of guards and office staff, and whether each one is allowed to work. Open a person for papers, training, hours, leave, SOCSO, warnings and appeals, and their phone sign-in. Some staff can look up a person's history in the group.",
+    "who": "Directors and group staff, company managers, admin executives and supervisors. HR and group leaders see it as \"People\" and can switch to \"PWVSB central staff\". Pay and \"Benefits\" show only to people allowed to see pay. \"Group history\" is for HR only.",
     "tabs": [
       {
         "name": "Work",
@@ -389,6 +577,10 @@ export const SCREEN_GUIDES: ScreenGuide[] = [
       {
         "name": "Benefits",
         "what": "Medical and other benefits."
+      },
+      {
+        "name": "Group history",
+        "what": "Every time this person worked in the group, and the rehire decision."
       }
     ],
     "tasks": [
@@ -428,6 +620,31 @@ export const SCREEN_GUIDES: ScreenGuide[] = [
           "Press \"Close access\", give a reason and date.",
           "Press \"Close access\" again."
         ]
+      },
+      {
+        "task": "How to look up someone's history before hiring",
+        "steps": [
+          "Press \"Look up staff history\".",
+          "Type the \"IC or passport\" and choose \"Nationality\".",
+          "Press \"Look up\". A red notice shows if they are not to be hired again."
+        ]
+      },
+      {
+        "task": "How to enrol a guard's own phone",
+        "steps": [
+          "Open the guard, tab \"Work\", find \"Own phone sign-in (face plus PIN)\".",
+          "Press \"Enrol phone\" (or \"Code for a new phone\").",
+          "Press \"Copy link\" and send it to the guard's own phone only.",
+          "To stop it press \"Retire phone\", give a reason, press \"Retire\"."
+        ]
+      },
+      {
+        "task": "How to handle an appeal against a warning",
+        "steps": [
+          "Open the guard, tab \"Warnings\".",
+          "Press \"Record the guard's appeal\", write the grounds, choose the language, press \"Send appeal\".",
+          "The HR Director or CEO chooses the decision, writes \"Reasons in writing (needed)\" and presses \"Decide appeal\"."
+        ]
       }
     ],
     "terms": [
@@ -444,7 +661,7 @@ export const SCREEN_GUIDES: ScreenGuide[] = [
         "means": "Medical check for foreign workers."
       }
     ],
-    "notes": "Guards and officers come from the JA Group app; office staff are added here. \"Not recorded yet\" means HR has not entered that fact. Add, Import, Set PIN and Close access only show to people allowed."
+    "notes": "Guards and officers come from the JA Group app; office staff are added here. \"Not recorded yet\" means HR has not entered that fact. Add, Import, Set PIN, Close access and the phone card only show to people allowed. A history lookup is recorded with the masked number."
   },
   {
     "view": "attendance",
@@ -522,7 +739,7 @@ export const SCREEN_GUIDES: ScreenGuide[] = [
     "view": "cases",
     "title": "Cases",
     "what": "Incidents, complaints and alerts in one place. Each case has a response clock set by its severity, and only the company closes a case.",
-    "who": "Directors, group officers, company managers, admin executives and supervisors. Group leaders get an \"All companies\" / \"Selected company\" switch. Some people can only look at a case: they see \"You can see this case but not change it.\"",
+    "who": "Directors, group officers, company managers, admin executives and supervisors. Group leaders get an \"All companies\" / \"Selected company\" switch. Company managers and admin executives also see \"Police call or visit help\". Some people can only look at a case: they see \"You can see this case but not change it.\"",
     "tabs": [],
     "tasks": [
       {
@@ -561,10 +778,12 @@ export const SCREEN_GUIDES: ScreenGuide[] = [
         ]
       },
       {
-        "task": "How to close a case",
+        "task": "How to ask Arms Control for help with a police call or visit",
         "steps": [
-          "When the case is resolved, open it.",
-          "Press \"Close case\". If you do not see it, the case is waiting for the Company Manager."
+          "Under \"Police call or visit help\", press \"Ask Arms Control for help · Minta bantuan\".",
+          "Choose what is happening (phoned, coming now, or a set date), what the police want, the station or unit and what they asked, then \"Who Arms Control should call\" and \"Work phone\".",
+          "Press \"Send to Arms Control\" and keep your phone near you.",
+          "After the help, press \"Confirm or send back\", write a comment and press \"Confirm help received\" or \"Send back to Arms Control\"."
         ]
       }
     ],
@@ -586,7 +805,7 @@ export const SCREEN_GUIDES: ScreenGuide[] = [
         "means": "A higher level signs off in place of the person whose turn it is."
       }
     ],
-    "notes": "\"Resolve\" and the verify/confirm buttons stay greyed out until proof is added. \"Take photo\" only shows when the case belongs to a site and you are allowed to add photos. The \"Incident\" type may be missing from the list when incidents are reported in the JA Group app instead. If no buttons show inside a case, you can view it but not change it."
+    "notes": "\"Resolve\" and the verify/confirm buttons stay greyed out until proof is added. Only the company closes a case: \"Close case\" shows once it is resolved; if you do not see it, it waits for the Company Manager. \"Take photo\" only shows when the case belongs to a site. The \"Incident\" type may be missing when incidents are reported in the JA Group app instead. \"What to say and show · Panduan\" opens a short police guide. If no buttons show inside a case, you can view it but not change it."
   },
   {
     "view": "compliance",
@@ -648,9 +867,130 @@ export const SCREEN_GUIDES: ScreenGuide[] = [
     "notes": "If the list says \"Nothing needs action.\", every licence is valid; press \"All\" to see them. If the add and update buttons are missing, your account is not allowed to record licences."
   },
   {
+    "view": "selfaudit",
+    "title": "Yearly self-audit",
+    "what": "Each company checks itself once a year: the company office, each site, or everything at once. Prima reminds you before it is due and keeps what was found and fixed.",
+    "who": "The company manager and the company's admin executives do the self-audit for their company. ACT and directors can see it. It is for the company chosen at the top.",
+    "tabs": [],
+    "tasks": [
+      {
+        "task": "How to do a self-audit",
+        "steps": [
+          "Press \"Do a self-audit\".",
+          "Choose \"Company and all sites\", \"Company office\" or \"One site\".",
+          "For each item press \"OK\", \"Not right\" or \"N/A\". For Not right or N/A, type why.",
+          "Add documents if you have them.",
+          "Press \"Save self-audit\" once every item is answered."
+        ]
+      },
+      {
+        "task": "How to record a fix",
+        "steps": [
+          "Under \"Self-audits done\", open the audit.",
+          "On an item marked \"Not right\" press \"Record fix\".",
+          "Write what was done, add proof, and save."
+        ]
+      },
+      {
+        "task": "How to see a site's client requirements",
+        "steps": [
+          "In \"Where it stands\", press \"Client requirements\" next to the site."
+        ]
+      }
+    ],
+    "terms": [
+      {
+        "term": "Due now / Overdue",
+        "means": "The yearly self-audit for that place is due or late."
+      },
+      {
+        "term": "N/A",
+        "means": "The item does not apply here; you must say why."
+      }
+    ],
+    "notes": "No \"Do a self-audit\" button means you can only view: the company manager or the company's admin executives do it. The save button stays grey until every item is answered. Self-audits and client requirements are a newer database module; where it is not installed yet, no self-audit reminders appear."
+  },
+  {
+    "view": "rba",
+    "title": "RBA readiness",
+    "what": "Records for the RBA Code checklist: monthly targets, red items, site safety checks, the yearly committee, the trace review, worker files and the yearly ethics declaration. It is not a certificate.",
+    "who": "ACT, group leaders, HR, FWM, the Operations Director, company managers, admin executives and OMs up to OGM. What you see depends on your role. Everyone in the office signs the yearly ethics declaration. The Chief of Staff or Deputy names the committee.",
+    "tabs": [
+      {
+        "name": "Dashboard",
+        "what": "The chosen company's monthly targets."
+      },
+      {
+        "name": "Red items",
+        "what": "Gaps graded red on a site's RBA list."
+      },
+      {
+        "name": "Site checks",
+        "what": "The monthly site safety check for each site with an RBA list."
+      },
+      {
+        "name": "Committee",
+        "what": "This year's RBA committee members."
+      },
+      {
+        "name": "Trace review",
+        "what": "ACT's monthly trace of workers' records."
+      },
+      {
+        "name": "Worker files",
+        "what": "Each foreign worker's file folders, and guards with no signed contract."
+      },
+      {
+        "name": "Ethics declaration",
+        "what": "Your own yearly ethics declaration, and the list for reviewers."
+      }
+    ],
+    "tasks": [
+      {
+        "task": "How to sign my ethics declaration",
+        "steps": [
+          "Open \"Ethics declaration\".",
+          "Tick every statement.",
+          "Write any interests that could conflict with your work, or tick \"I have no such interests\".",
+          "Press \"Sign\"."
+        ]
+      },
+      {
+        "task": "How to name the RBA committee (Chief of Staff or Deputy)",
+        "steps": [
+          "Open \"Committee\".",
+          "Press \"Name the committee\" (or \"Change members\").",
+          "Pick the members and press \"Save\"."
+        ]
+      },
+      {
+        "task": "How to run a trace review (ACT)",
+        "steps": [
+          "Open \"Trace review\".",
+          "Choose the month and press \"Run the trace\".",
+          "For each mismatch write what was found and press \"Explained\", \"Corrected\" or \"Finding\"."
+        ]
+      },
+      {
+        "task": "How to review a declared interest (ACT)",
+        "steps": [
+          "In the ethics list, write the review note.",
+          "Press \"No conflict\" or \"Managed\"."
+        ]
+      }
+    ],
+    "terms": [
+      {
+        "term": "UNKNOWN",
+        "means": "Nothing to count yet. It is never shown as green."
+      }
+    ],
+    "notes": "If your role has no RBA access, the page shows only your ethics declaration. Operations sees only site checks, the committee and the ethics declaration. The site inspection itself is done on the site's client requirements page by the OM who covers the site."
+  },
+  {
     "view": "commercial",
     "title": "Tenders & quotes",
-    "what": "The page for the company's bids: government and private tenders, price quotations for clients, and new leads. It also shows whether the company's papers are good enough to bid today.",
+    "what": "The page for the company's bids: tenders, quotations and new leads. It also shows whether the company can bid today, the tenders and quotations the Director Office found, and a count of tenders and quotations.",
     "who": "Directors, group officers, company managers and admin executives. The company admin team prepares tenders and quotations; the Company Manager approves quotations and decides won, lost or no bid. People who cannot prepare only view (\"You can view this tender. The company's admin team and manager update it.\"). The \"Joint tenders\" box shows only for company managers and admin executives, and only when a joint tender exists.",
     "tabs": [],
     "tasks": [
@@ -668,7 +1008,7 @@ export const SCREEN_GUIDES: ScreenGuide[] = [
         "task": "How to work on a tender",
         "steps": [
           "In \"Tender pipeline\", tap the tender card (columns: Open, Preparing, Submitted, Decided).",
-          "Check \"Can this company bid?\" to see if any paper blocks the bid.",
+          "Check \"Can this company bid today?\" to see if any paper blocks the bid.",
           "Work through \"Tender papers\", \"Questions to the buyer\", \"Tender guide\", \"Tender checklist\", \"Bid files\" and \"Signatures and submission\".",
           "Press \"Start preparing\" when the protocol steps are done."
         ]
@@ -686,8 +1026,17 @@ export const SCREEN_GUIDES: ScreenGuide[] = [
         "task": "How the manager approves a quotation",
         "steps": [
           "Under \"Quotations\", tap a quote marked \"Waiting for approval\".",
-          "Press \"Approve\", or write a note and press \"Return for changes\".",
+          "Write a note. A comment is needed to approve (a short one is fine) and to return it.",
+          "Press \"Approve\", or press \"Return for changes\".",
           "After approval the admin team presses \"Mark sent to client\", then \"Client accepted\" or \"Client rejected\"."
+        ]
+      },
+      {
+        "task": "How to enter a tender or quotation the Director Office found",
+        "steps": [
+          "Scroll to \"Tenders and quotations found (peluang)\".",
+          "If the Director Office set your company to enter one, press \"We are entering this\". The Director Office is informed.",
+          "To tell them about one you found, press \"Tell the Director Office\", fill in \"Kind\", \"Government or private\", \"Closes on\", \"Title\" and \"Buyer or client\", then press \"Save\". No approval is needed."
         ]
       },
       {
@@ -711,9 +1060,17 @@ export const SCREEN_GUIDES: ScreenGuide[] = [
       {
         "term": "MOF",
         "means": "Ministry of Finance registration; government tenders also need it."
+      },
+      {
+        "term": "Peluang",
+        "means": "A tender or quotation opportunity that was found and may be entered."
+      },
+      {
+        "term": "Tender and quotation counter",
+        "means": "Counts of tenders entered and won and quotations sent and accepted. Counts only, not a ranking."
       }
     ],
-    "notes": "\"Add tender\" and \"New quotation\" only show for people allowed to add tenders or prepare quotes. \"Start preparing\" stays greyed out until the protocol steps are done; the page lists what is still to do. You cannot approve a quotation you prepared yourself; another person must approve it. Prices are typed in by hand: automatic cost checks (minimum wage, overtime, EPF, SOCSO, EIS) are not on yet. The bid itself is lodged on the buyer's portal by an authorised person; the app only records it."
+    "notes": "\"Add tender\" and \"New quotation\" only show for people allowed to add tenders or prepare quotes. \"Start preparing\" stays greyed out until the protocol steps are done; the page lists what is still to do. You cannot approve a quotation you prepared yourself; another person must approve it. \"Approve\" stays greyed out until a note is written. Prices are typed in by hand: automatic cost checks (minimum wage, overtime, EPF, SOCSO, EIS) are not on yet. The bid itself is lodged on the buyer's portal by an authorised person; the app only records it."
   },
   {
     "view": "ops",
@@ -774,34 +1131,44 @@ export const SCREEN_GUIDES: ScreenGuide[] = [
   {
     "view": "hr",
     "title": "HR monitor",
-    "what": "Workforce papers for every company plus the HR work queues (pay changes, joining and leaving, cases, training, leave, attendance reports). PWVSB HR follows up; each company is the employer and makes the change.",
-    "who": "Directors and group officers in HR. Each work panel hides itself when it does not apply to you, so different people see different panels.",
+    "what": "Workforce papers for every company plus the HR work queues: pay changes, joining and leaving, staff history, cases, discipline appeals, screening, training, leave, CMS staff hours and attendance reports. Each company is the employer and makes the change.",
+    "who": "Directors and group officers in HR. Each work panel hides itself when it does not apply to you.",
     "tabs": [],
     "tasks": [
       {
-        "task": "How to see a company's guards and their papers",
-        "steps": [
-          "In \"Workforce papers by company\", tap the company. The Guards page opens for that company."
-        ]
-      },
-      {
         "task": "How to jump to a work queue",
         "steps": [
-          "Press one of the buttons under the numbers: \"Workforce papers\", \"Pay and allowances\", \"Joining, leaving and moving\", \"Cases, safety and legal\", \"Appraisals, training and policies\", \"Leave and holidays\" or \"Attendance reports\"."
+          "Press a button under the numbers: \"Workforce papers\", \"Pay and allowances\", \"Joining, leaving and moving\", \"Cases, safety and legal\", \"Appraisals, training and policies\", \"Leave and holidays\" or \"Attendance reports\"."
         ]
       },
       {
         "task": "How to verify a pay change",
         "steps": [
-          "Go to \"Pay and allowances\".",
-          "Find it in \"Pay and salary account changes to verify\" and verify or reject it. Once verified it waits for the Vice Chairman's consent."
+          "In \"Pay and allowances\", find it in \"Pay and salary account changes to verify\" and press \"Verify\".",
+          "Write a comment (a comment is needed to verify or reject), then press \"Verify\" or \"Reject\". It then waits for the Vice Chairman's consent."
         ]
       },
       {
-        "task": "How to see attendance reports",
+        "task": "How to check someone's history in the group before hiring",
         "steps": [
-          "Go to \"Attendance reports\".",
-          "Press \"Import attendance report\" to add a monthly PDF, or \"Open attendance reports\" to see the months."
+          "In \"Joining, leaving and moving\", find \"Look up staff history\".",
+          "Type the \"IC or passport\", choose the \"Nationality\" and press \"Look up\". The number is not kept.",
+          "To mark the person, choose \"Your decision\", write the \"Reason\", type the IC or passport again and press \"Save decision\"."
+        ]
+      },
+      {
+        "task": "How to decide a guard's discipline appeal (HR Director or CEO)",
+        "steps": [
+          "In \"Cases, safety and legal\", find \"Guard discipline appeals\".",
+          "Choose the \"Decision\", write the reasons (needed) and press \"Decide appeal\"."
+        ]
+      },
+      {
+        "task": "How to screen a person",
+        "steps": [
+          "In \"Cases, safety and legal\", find \"Screening\" and use \"Open a screening case\", then \"Open case\".",
+          "Record each check with the authority's reference and press \"Save check\".",
+          "The HR Director chooses \"Your decision\", writes the reason and presses \"Record decision\", never on a case they opened."
         ]
       }
     ],
@@ -815,15 +1182,11 @@ export const SCREEN_GUIDES: ScreenGuide[] = [
         "means": "The security guard card or submission from the Home Ministry."
       },
       {
-        "term": "CSG",
-        "means": "The guard training course; \"CSG due (year 1)\" and \"CSG overdue\" count guards who still need it."
-      },
-      {
-        "term": "Foreign worker papers",
-        "means": "PLKS, passport, FOMEMA and insurance for foreign workers."
+        "term": "Group employment history",
+        "means": "One person across the group's companies, linked by IC or passport."
       }
     ],
-    "notes": "A company with no staff data loaded is listed under \"Unknown: staff data not loaded yet\"; it is unknown, not fine. On a phone some columns of the table are hidden. If a work panel is missing, it does not apply to your role."
+    "notes": "A company with no staff data shows under \"Unknown: staff data not loaded yet\"; unknown, not fine. \"CMS staff hours\" is view only; Arms Control sets the CMS roster. If a panel is missing, it does not apply to your role."
   },
   {
     "view": "insurance",
@@ -837,11 +1200,11 @@ export const SCREEN_GUIDES: ScreenGuide[] = [
       },
       {
         "name": "Policies",
-        "what": "Every policy with its insurer, cover amount, dates, yearly premium and renewal state."
+        "what": "Every policy with its insurer, cover, dates, premium and renewal state. Renew or cancel here."
       },
       {
         "name": "Premiums",
-        "what": "Premiums grouped as unpaid and overdue, due soon, not due yet, or paid."
+        "what": "Premiums unpaid and overdue, due soon, not due yet, or paid with Finance's reference."
       },
       {
         "name": "Claims",
@@ -854,6 +1217,10 @@ export const SCREEN_GUIDES: ScreenGuide[] = [
       {
         "name": "Companies",
         "what": "Each company's cover at a glance, including missing or lapsed cover."
+      },
+      {
+        "name": "History",
+        "what": "Renewed and cancelled policies, kept on the register but no longer counted as cover."
       }
     ],
     "tasks": [
@@ -868,9 +1235,17 @@ export const SCREEN_GUIDES: ScreenGuide[] = [
       {
         "task": "How to record a premium payment",
         "steps": [
-          "Open the \"Premiums\" tab.",
-          "Find the policy and press \"Record payment\".",
-          "Fill in the payment details and save."
+          "On the \"Premiums\" tab, find the policy and press \"Record payment\".",
+          "Fill in \"Date paid\" and \"Payment reference\" (from Finance), then press \"Save\". A date alone is not proof of payment."
+        ]
+      },
+      {
+        "task": "How to renew or cancel a policy",
+        "steps": [
+          "On the \"Policies\" tab, find the policy.",
+          "To renew, press \"Renew\", fill in \"New policy number\", check the dates and premium, and press \"Save renewal\". Next year is added as a new record.",
+          "To cancel, press \"Cancel policy\", fill in \"Cancelled from\" and \"Reason\", and press \"Confirm cancel\".",
+          "The old record moves to \"History\"."
         ]
       },
       {
@@ -888,13 +1263,6 @@ export const SCREEN_GUIDES: ScreenGuide[] = [
           "Add each paper with \"Add document\", then press \"Sent for assessment\".",
           "When the insurer offers money, press \"Record offer\". The company manager then presses \"Accept offer for the company\" and Finance presses \"Record money received\"."
         ]
-      },
-      {
-        "task": "How to load many records at once",
-        "steps": [
-          "On \"Policies\", \"Claims\" or \"Guarantees\", press \"Import\".",
-          "Follow the steps in the panel."
-        ]
       }
     ],
     "terms": [
@@ -909,13 +1277,9 @@ export const SCREEN_GUIDES: ScreenGuide[] = [
       {
         "term": "Adjuster",
         "means": "The insurer's person who checks a claim before an offer is made."
-      },
-      {
-        "term": "Unknown",
-        "means": "No insurance records are loaded for that company. It is never shown as covered."
       }
     ],
-    "notes": "The add and edit buttons only appear for people allowed to keep those records. \"Sent for assessment\" stays greyed out while usual documents are still missing. Prima does not contact the insurer, accept offers by itself or receive money; staff record each step with its reference. A claim rejected by the insurer can be appealed once with \"Appeal (once)\". A company showing \"Unknown\" simply has no records loaded yet."
+    "notes": "Add, edit, renew and cancel only show for people allowed to keep those records; \"Renew\" shows when cover needs renewing. \"Paid, no reference\" means a date was recorded without Finance's reference. \"Sent for assessment\" stays greyed out while usual documents are missing. Prima does not contact the insurer, accept offers or receive money; staff record each step. A rejected claim can be appealed once with \"Appeal (once)\". \"Import\" loads many records at once. \"Unknown\" means no records loaded yet."
   },
   {
     "view": "arms",
@@ -958,6 +1322,10 @@ export const SCREEN_GUIDES: ScreenGuide[] = [
       {
         "name": "Client agreements",
         "what": "Client arms agreements."
+      },
+      {
+        "name": "Police visit help",
+        "what": "Companies asking for help with a police call or visit."
       },
       {
         "name": "Police and KDN",
@@ -1020,11 +1388,11 @@ export const SCREEN_GUIDES: ScreenGuide[] = [
         ]
       },
       {
-        "task": "How to raise an arms request",
+        "task": "How to help a company with a police call or visit",
         "steps": [
-          "Under \"Arms requests\", press \"New arms request\".",
-          "Choose \"What is it for\", fill in \"Short title\" and \"Why, and what papers you have\".",
-          "Press \"Send to Arms Control\"."
+          "Open \"Police visit help\" and press \"Assign helper\" on the request.",
+          "Fill in \"Helper\", \"Helper's work phone\" and \"How\" (\"By phone\" or \"Going there\"), press \"Save helper\", then call the company.",
+          "Afterwards press \"Record help given\", write what happened, add proof such as the register page the police signed, and press \"Save\". The company confirms."
         ]
       }
     ],
@@ -1042,7 +1410,7 @@ export const SCREEN_GUIDES: ScreenGuide[] = [
         "means": "A firearm whose whereabouts are not confirmed; never counted as secure."
       }
     ],
-    "notes": "If the RFID reader does not work you can choose by hand, but it is recorded as not scanned. The app stops an issue if the guard's permit, roster, firearm licence or vault approval fails. A count or return that does not match opens a P1 case; the register is never changed to fit. Serial numbers are masked. Arms trading and import are built but switched off until the CEO turns them on. People without handling rights see \"You can view this.\""
+    "notes": "If the RFID reader does not work you can choose by hand, but it is recorded as not scanned. The app stops an issue if the guard's permit, roster, firearm licence or vault approval fails. A count or return that does not match opens a P1 case; the register is never changed to fit. Serial numbers are masked. Arms trading and import stay off until the CEO turns them on. Arms requests start with \"New arms request\". People without handling rights see \"You can view this.\""
   },
   {
     "view": "cms",
@@ -1052,7 +1420,7 @@ export const SCREEN_GUIDES: ScreenGuide[] = [
     "tabs": [
       {
         "name": "Now",
-        "what": "\"To act on\" list, most urgent first, and who is \"On shift now\" with the shift handover."
+        "what": "\"To act on\", who is \"On shift now\", the shift handover, your \"My seat\" card and police help requests (view only)."
       },
       {
         "name": "Emergencies and incidents",
@@ -1060,7 +1428,7 @@ export const SCREEN_GUIDES: ScreenGuide[] = [
       },
       {
         "name": "Site devices",
-        "what": "Send an instruction, alert or urgent alert to a site's shared device and check the guard's photo or video proof."
+        "what": "Send a message to a site's shared device and check the guard's photo or video proof."
       },
       {
         "name": "Sites",
@@ -1068,7 +1436,11 @@ export const SCREEN_GUIDES: ScreenGuide[] = [
       },
       {
         "name": "Phone desk",
-        "what": "Calls forwarded to CMS that nobody answered, calls by company, company extensions and today's calls."
+        "what": "Missed forwarded calls, calls by company, extensions and today's calls."
+      },
+      {
+        "name": "Guard phones",
+        "what": "Guards signed in on their own phones: live, late or offline, and SOS from a phone."
       },
       {
         "name": "Roster",
@@ -1080,11 +1452,11 @@ export const SCREEN_GUIDES: ScreenGuide[] = [
       },
       {
         "name": "What CMS does",
-        "what": "List of CMS duties and whether each works in the app yet."
+        "what": "CMS duties and whether each works in the app yet."
       },
       {
         "name": "Staff",
-        "what": "CMS staff, their posts and console extension."
+        "what": "CMS staff, posts, console extension, linked Prima account and \"Hours this month\"."
       },
       {
         "name": "Commissioning",
@@ -1103,11 +1475,12 @@ export const SCREEN_GUIDES: ScreenGuide[] = [
         ]
       },
       {
-        "task": "How to record the shift handover",
+        "task": "How to start and end your CMS seat",
         "steps": [
-          "Open \"Now\".",
-          "Under \"Shift handover\", write what is still open (arms out, alarms open, calls to return).",
-          "Press \"Record handover\"."
+          "On \"Now\", in \"My seat\", press \"Clock in\".",
+          "Head Control: read \"Take the handover\", write what you checked, and press \"Agree and take over\" or \"Take over, not agreed\" (Arms Control is told).",
+          "In your last hour, Head Control writes what is still open and presses \"Write handover\", then stays until the next Head Control takes it.",
+          "Press \"Clock out\". If leaving early, type why first."
         ]
       },
       {
@@ -1122,19 +1495,17 @@ export const SCREEN_GUIDES: ScreenGuide[] = [
       {
         "task": "How to send a site device to check something",
         "steps": [
-          "Open \"Site devices\".",
-          "Fill in \"Site\", \"Level\", \"Proof the guard sends\", \"Title\" and \"What the guard must do\".",
-          "Press \"Send alert\" (or \"Send urgent\", \"Send instruction\").",
+          "On \"Site devices\", fill in \"Site\", \"Level\", \"Proof the guard sends\", \"Title\" and \"What the guard must do\".",
+          "Press the send button (it is named after the level).",
           "When proof comes back, add a note and press \"Real: open incident\", \"Nothing found\" or \"Done\"."
         ]
       },
       {
         "task": "How to put someone on a CMS seat",
         "steps": [
-          "Open \"Roster\".",
-          "Press \"Plan next week\" if the days are not there yet.",
-          "On an empty seat, choose a name.",
-          "Press \"Set\"."
+          "On \"Roster\", press \"Plan next week\" if the days are missing.",
+          "On a seat, choose a name and press \"Set\".",
+          "To take someone off before they clock in, type why and press \"Take off\"."
         ]
       }
     ],
@@ -1148,19 +1519,71 @@ export const SCREEN_GUIDES: ScreenGuide[] = [
         "means": "The CMS person who watches screens and alarms on a shift."
       },
       {
-        "term": "Acknowledge",
-        "means": "Tell the system you have seen the alarm and are checking it."
-      },
-      {
         "term": "PIC",
         "means": "The person in charge at the company who gets attendance alerts."
-      },
-      {
-        "term": "Commissioning",
-        "means": "Checking a contract's CMS service really works before accepting it."
       }
     ],
-    "notes": "You only see this page if you are CMS, Arms Control, the COO or higher. Action buttons are missing if you are not on the CMS desk; Settings fields are greyed out with \"Only Arms Control can change these.\" Tapping an open incident to go to its case works only for Arms Control. AI and sensor detections say \"Feed not connected yet: test detections only.\" A Commissioning contact cannot verify their own number; another operator must. \"Accept for CMS\" shows only for those allowed to accept."
+    "notes": "Only CMS, Arms Control, the COO or higher see this page. Action buttons show only for the CMS desk; Settings say \"Only Arms Control can change these.\" Head Control reviews every false alarm; \"Agree, false\" needs a note. AI and sensor detections are \"Feed not connected yet: test detections only.\" A Commissioning contact cannot verify their own number; another operator must."
+  },
+  {
+    "view": "cmsready",
+    "title": "CMS site readiness",
+    "what": "A checklist of each site's devices and preparations before it can be linked to the CMS. It only records readiness; nothing here connects a device.",
+    "who": "Directors, group leaders, Arms Control, CMS, operations, company managers, admin executives and supervisors (own sites). The company manager, admin executives, supervisors and Arms Control record. An OM or Regional OM records only when acting for the company in their region. Arms Control checks.",
+    "tabs": [],
+    "tasks": [
+      {
+        "task": "How to find a site",
+        "steps": [
+          "Type in \"Search site, client or company\".",
+          "Or pick a status such as \"Needs fixing\" or \"Waiting for check\".",
+          "Press the site's row to open it."
+        ]
+      },
+      {
+        "task": "How to add a device",
+        "steps": [
+          "Open the site and press \"Add device\".",
+          "Fill in \"Kind\", \"Brand the client chose\", \"Model\", \"How many\", \"Owner\" and \"Where the client chose the brand\".",
+          "Add the \"Installer or vendor\" and \"Vendor phone\" if known.",
+          "Press \"Save\"."
+        ]
+      },
+      {
+        "task": "How to answer a checklist item",
+        "steps": [
+          "Under \"Checklist\" press \"Answer\".",
+          "Choose \"Yes\", \"No\" or \"Not known yet\" and add a note or reference.",
+          "Press \"Save\"."
+        ]
+      },
+      {
+        "task": "How to check a site (Arms Control)",
+        "steps": [
+          "Open the site and go to \"Arms Control check\".",
+          "Write \"Your reason\".",
+          "Press \"Pass\", or \"Return with what to fix\"."
+        ]
+      },
+      {
+        "task": "How to remove a device",
+        "steps": [
+          "Press \"Edit\" on the device.",
+          "Type \"Why remove it\" and press \"Remove device\"."
+        ]
+      }
+    ],
+    "terms": [
+      {
+        "term": "Ready to connect",
+        "means": "The site is prepared and checked. It is not linked yet."
+      },
+      {
+        "term": "Not known yet",
+        "means": "Nobody has answered this; it is never counted as done."
+      }
+    ],
+    "notes": "The device brand is the client's choice. Never type a password, PIN or code here; record only who holds the login. \"Connected\" stays at zero because connections come later. If you recorded part of a site, another Arms Control officer must check it. Without record rights the \"Add device\" and \"Answer\" buttons are hidden."
   },
   {
     "view": "audit",
@@ -1272,7 +1695,7 @@ export const SCREEN_GUIDES: ScreenGuide[] = [
   {
     "view": "doa",
     "title": "Director Office",
-    "what": "The Director Office desk: every company's tenders and where each stands, quotations waiting for approval, this week's digest, CEO instructions and joint tenders.",
+    "what": "The Director Office desk: every company's tenders and where each stands, quotations waiting for approval, this week's digest, CEO instructions, joint tenders, tenders and quotations found, the sites checked for tenders, and counters of tenders, quotations, reports and meetings.",
     "who": "Group leadership and the Director Office team. Tenders themselves are worked on each company's \"Tenders and quotations\" screen. Only the CEO can accept or return CEO instructions. \"Legal flags\" are for directors only.",
     "tabs": [],
     "tasks": [
@@ -1307,6 +1730,30 @@ export const SCREEN_GUIDES: ScreenGuide[] = [
           "Choose the \"Tender\" and tick the companies under \"Also entering\".",
           "Press \"Send to the companies\"."
         ]
+      },
+      {
+        "task": "How to record a tender or quotation that was found",
+        "steps": [
+          "In \"Tenders and quotations found (peluang)\" press \"Record what was found\".",
+          "Choose \"Kind\" and \"Government or private\", fill in \"Closes on\", \"Title\", \"Buyer or client\" and \"Where found\".",
+          "Tick the companies to enter, or set them later with \"Set companies to enter\".",
+          "Press \"Save\"."
+        ]
+      },
+      {
+        "task": "How to record a check of a tender site",
+        "steps": [
+          "In \"Sites to check for tenders\" find the site and press \"Record a check\".",
+          "Choose \"What the check found\", fill in \"Result and gaps\", \"Tenders found\" and \"Follow-up\".",
+          "Press \"Save check\"."
+        ]
+      },
+      {
+        "task": "How to see the counts for a month",
+        "steps": [
+          "In \"Reports and meetings counter\" choose the month.",
+          "In \"Tender and quotation counter, every company\" choose the six months; press a company for detail."
+        ]
       }
     ],
     "terms": [
@@ -1321,9 +1768,13 @@ export const SCREEN_GUIDES: ScreenGuide[] = [
       {
         "term": "Submission slip",
         "means": "The proof that the bid was submitted."
+      },
+      {
+        "term": "Peluang",
+        "means": "A tender or quotation opportunity that was found."
       }
     ],
-    "notes": "A tender can only be sent as a joint tender after its checklist is made and checked. The checklist reader may show \"test version sample draft; the AI agent is not connected yet\". \"Open Tenders and quotations\" only shows if you can open that screen. Press \"Show accepted\" to see finished instructions."
+    "notes": "A tender can only be sent as a joint tender after its checklist is made and checked. \"Checklists: test version sample draft\" under Tenders means the checklists are not read from the files yet. Prima does not visit or log in to the tender sites; staff record what they saw. \"Open Tenders and quotations\" only shows if you can open that screen. Press \"Show accepted\" to see finished instructions."
   },
   {
     "view": "reports",
@@ -1373,18 +1824,99 @@ export const SCREEN_GUIDES: ScreenGuide[] = [
     "notes": "\"Send report\" stays grey until a document is attached. A period already sent cannot be pressed again. \"No report is due from you.\" means nothing is on your list. The starting list is a proposal the Director Office can change."
   },
   {
-    "view": "meetings",
-    "title": "Meetings",
-    "what": "Meetings across the group with agendas, pre-brief checklists, minutes, summaries and action items, plus a calendar of every date that matters in the next 60 days (page title \"Meetings and deadlines\").",
-    "who": "Directors and group staff, company managers and admin executives. \"New meeting\" only shows to people who may schedule. Ticking the pre-brief, adding minutes and marking actions show only to people who run that meeting; the Director Office checks summaries with \"Summary is right\".",
+    "view": "surveys",
+    "title": "Site survey",
+    "what": "Fill in a site survey on your phone at the site, even with no signal. Photos and measurements stay on the phone and are sent by themselves when there is a signal.",
+    "who": "Sales, company managers, admin executives, operations and site officers (supervisors only for their own sites). The Project Director (COO, Operations General Manager, Operations Director) accepts or returns surveys.",
     "tabs": [
       {
-        "name": "Calendar",
-        "what": "Meetings, action items, tender closing dates and reports due in the next 60 days."
+        "name": "On this phone",
+        "what": "Surveys kept on this phone: not finished, waiting for signal or sent."
       },
+      {
+        "name": "Sent surveys",
+        "what": "Surveys the office has received."
+      },
+      {
+        "name": "To decide",
+        "what": "Surveys waiting for your accept or return."
+      }
+    ],
+    "tasks": [
+      {
+        "task": "How to do a new survey",
+        "steps": [
+          "Press \"New site survey\".",
+          "Choose the company and whether it is \"A sales lead\", \"Our existing site\" or \"A new place\".",
+          "Press \"Record location (GPS)\".",
+          "Fill in the details, \"Add a measurement\", the risks, and \"Add a post\" for each guard post.",
+          "Press \"Take a photo\", write the findings, then press \"Finish and send\"."
+        ]
+      },
+      {
+        "task": "How to stop and continue later",
+        "steps": [
+          "Press \"Save and close\".",
+          "Later, open \"On this phone\" and press \"Continue\"."
+        ]
+      },
+      {
+        "task": "How to send when signal comes back",
+        "steps": [
+          "The phone sends by itself.",
+          "To try at once, press \"Send now\".",
+          "If a survey was refused, press \"Fix and send\"."
+        ]
+      },
+      {
+        "task": "How to accept or return a survey (Project Director)",
+        "steps": [
+          "Open \"To decide\" and press the survey.",
+          "Write \"Your reason\".",
+          "Press \"Accept survey\" or \"Return to surveyor\"."
+        ]
+      },
+      {
+        "task": "How to redo a returned survey",
+        "steps": [
+          "Open it under \"Sent surveys\".",
+          "Press \"Redo this survey (answers copied, take new photos)\"."
+        ]
+      }
+    ],
+    "terms": [
+      {
+        "term": "Waiting for signal",
+        "means": "The survey is finished and will be sent when the phone has signal."
+      }
+    ],
+    "notes": "\"You have no company to survey for. Ask your manager.\" means you are not set up for any company. If the browser cannot keep data, keep the app open until the survey is sent. If the office database is not ready, the message is \"Site survey storage is not switched on yet. Your survey stays on the phone and is sent later.\" Deleting a survey from the phone cannot be undone."
+  },
+  {
+    "view": "meetings",
+    "title": "Meetings",
+    "what": "Meetings across the group: invitations and answers, agenda, pre-brief checklist, attendance, minutes, summaries and action items, the regular meetings your job needs, and a calendar of every date that matters in the next 60 days.",
+    "who": "Directors and group staff, company managers and admin executives. \"New meeting\" only shows to people who may schedule. Ticking the pre-brief, adding minutes and adding action items show only to people who run that meeting; an action item's owner can mark it done. The Director Office checks summaries. \"Monthly operations\" shows only to those it is for.",
+    "tabs": [
       {
         "name": "Meetings and minutes",
         "what": "Upcoming and past meetings; press one for its details."
+      },
+      {
+        "name": "Regular meetings",
+        "what": "The meetings your job needs and whether this period's one is set, held or late."
+      },
+      {
+        "name": "My action items",
+        "what": "Open action items given to you, with overdue ones marked."
+      },
+      {
+        "name": "Monthly operations",
+        "what": "The COO's monthly operations meeting with each operations section, and each company's own."
+      },
+      {
+        "name": "Calendar",
+        "what": "Meetings, action items, tender closing dates and reports due in the next 60 days."
       }
     ],
     "tasks": [
@@ -1392,9 +1924,58 @@ export const SCREEN_GUIDES: ScreenGuide[] = [
         "task": "How to set a meeting",
         "steps": [
           "Press \"New meeting\".",
-          "Fill in \"Title\", \"Kind\", \"Date\", \"From\", \"To\", \"Where\", \"Who attends\".",
+          "Fill in \"Title\", \"Kind\", \"Date\", \"From\", \"To\", \"Repeats\" and \"Where\".",
+          "Search and tick staff under \"Invite staff\"; add others in \"Guests without a Prima account\".",
           "Write the agenda, one item per line.",
-          "Press \"Save meeting\"."
+          "Press \"Save meeting\". Invited staff see it on their home screen."
+        ]
+      },
+      {
+        "task": "How to set a regular meeting",
+        "steps": [
+          "Open \"Regular meetings\" (\"Only not done\" hides the ones held).",
+          "Press \"Set it\": title, invitations and agenda are filled in.",
+          "Check the date and time, then press \"Save meeting\"."
+        ]
+      },
+      {
+        "task": "How to answer an invitation",
+        "steps": [
+          "Open the meeting marked \"Answer the invitation\".",
+          "Press \"Attending\", \"Not sure yet\" or \"Not attending\".",
+          "For \"Not attending\" write why you cannot attend and press \"Send\"."
+        ]
+      },
+      {
+        "task": "How to change or cancel a meeting",
+        "steps": [
+          "Open the meeting.",
+          "Press \"Change date, place, agenda or invitees\", make the change, fill in \"Reason for the change\" and press \"Save the change\".",
+          "Or press \"Cancel the meeting\", write why, and press \"Cancel it\"."
+        ]
+      },
+      {
+        "task": "How to add minutes after a meeting",
+        "steps": [
+          "Open the meeting and find \"Add the minutes\".",
+          "Under \"Who was there\" mark each person \"Present\", \"Apology\" or \"Absent\"; add \"Guests present\".",
+          "Paste the text in \"Minutes\" (start action items with \"Action:\").",
+          "Press \"Save minutes\". To fix them later use \"Correct the minutes\"."
+        ]
+      },
+      {
+        "task": "How to mark an action item done",
+        "steps": [
+          "Open the meeting (or press the item in \"My action items\").",
+          "Under \"Action items\" write \"What was done (optional)\" and press \"Done\" (or \"Reopen\").",
+          "For a missing one press \"Add an action item\", fill in what, who and when, press \"Add action item\"."
+        ]
+      },
+      {
+        "task": "How to check a summary (Director Office)",
+        "steps": [
+          "Open a meeting marked \"Summary to check\".",
+          "Press \"Summary is right\", or \"Correct the action items\", fix them and press \"Save and mark checked\"."
         ]
       },
       {
@@ -1403,22 +1984,6 @@ export const SCREEN_GUIDES: ScreenGuide[] = [
           "Open \"Calendar\".",
           "Press \"Add all to Outlook\", or \"Outlook\" on one line.",
           "Open the file that downloads."
-        ]
-      },
-      {
-        "task": "How to add minutes after a meeting",
-        "steps": [
-          "Open the meeting.",
-          "Paste the text in \"Add the minutes\" (start action items with \"Action:\").",
-          "Press \"Save minutes\"."
-        ]
-      },
-      {
-        "task": "How to mark an action item done",
-        "steps": [
-          "Open the meeting.",
-          "Under \"Action items\" press \"Done\" (or \"Reopen\").",
-          "Press \"Add an action item\" for one that is missing."
         ]
       }
     ],
@@ -1432,7 +1997,7 @@ export const SCREEN_GUIDES: ScreenGuide[] = [
         "means": "A job agreed in the meeting, with an owner and a date."
       }
     ],
-    "notes": "Outlook gets a calendar file; direct syncing needs the Microsoft 365 connection that comes later. Minutes can only be added after the meeting. In the test version a simple reader makes the summary, not the AI."
+    "notes": "Outlook gets a calendar file with a reminder the day before; Prima does not send Outlook invitations or emails yet, so invited staff see meetings and reminders in Prima. Minutes can only be added after the meeting. The summary is drafted automatically from the minutes and the Director Office checks it. Cancelling a meeting or saying you cannot attend needs a reason."
   },
   {
     "view": "mine",
@@ -1560,7 +2125,7 @@ export const SCREEN_GUIDES: ScreenGuide[] = [
   {
     "view": "staffclock",
     "title": "Staff clock",
-    "what": "Who of the office staff is clocked in today, where, late arrivals, long breaks, and who left the office while still signed in.",
+    "what": "Who of the office staff is clocked in today, where, late arrivals, long breaks, who left the office while still signed in, and time slips (going out for own matters and working the hours back).",
     "who": "Directors and group leaders, company managers and HR. The IT Manager sees the IT team only, view only. \"Check-in places\" and \"Out of area\" show only to HR, managers and leaders who set check-in places.",
     "tabs": [
       {
@@ -1570,6 +2135,10 @@ export const SCREEN_GUIDES: ScreenGuide[] = [
       {
         "name": "Working from home",
         "what": "Home-working applications and home days to review."
+      },
+      {
+        "name": "Time slips",
+        "what": "Time slips waiting for approval, hours still to work back, and hours taken from leave."
       },
       {
         "name": "Check-in places",
@@ -1615,6 +2184,22 @@ export const SCREEN_GUIDES: ScreenGuide[] = [
           "Check the photo, write a comment.",
           "Press \"Approve\" or \"Refuse\"."
         ]
+      },
+      {
+        "task": "How to approve a time slip",
+        "steps": [
+          "Open \"Time slips\" and find \"Waiting for you to approve\".",
+          "Write a comment (a comment is needed to approve or refuse).",
+          "Press \"Approve\" or \"Refuse\". HR is told of every approval."
+        ]
+      },
+      {
+        "task": "How to see who still owes hours (HR)",
+        "steps": [
+          "Open \"Time slips\".",
+          "Press \"Still to work back\", \"Taken from leave\" or \"New for HR\".",
+          "Press \"Mark seen\" on a slip you have checked."
+        ]
       }
     ],
     "terms": [
@@ -1625,6 +2210,10 @@ export const SCREEN_GUIDES: ScreenGuide[] = [
       {
         "term": "Left the office, still signed in",
         "means": "The office door shows they went out but did not sign out."
+      },
+      {
+        "term": "Time slip",
+        "means": "Permission to go out during office hours for own matters; the hours are worked back after office hours, or taken from annual leave."
       }
     ],
     "notes": "No reading for a while shows as Unknown, never as fine. If there are no office door readings for the day, the door check is Unknown. Nobody approves their own face or reviews their own check-in."
@@ -1683,7 +2272,7 @@ export const SCREEN_GUIDES: ScreenGuide[] = [
         "task": "How to review a team member's task (manager)",
         "steps": [
           "Open \"My team\" and press the person.",
-          "On a waiting task write a note.",
+          "On a waiting task write a comment (a comment is needed to accept or return it).",
           "Press \"Accept\" or \"Return to fix\"."
         ]
       },
@@ -1765,16 +2354,24 @@ export const SCREEN_GUIDES: ScreenGuide[] = [
   {
     "view": "fwm",
     "title": "Foreign workers",
-    "what": "Foreign Worker Management keeps every foreign worker's permit, passport, FOMEMA and insurance renewed, sends OMs dated tasks, and tracks recruitment and welfare.",
-    "who": "FWM staff work it. The Chief of Staff, COO and CEO see papers escalated to them. OMs see only \"Tasks\". Company managers see their company's steps; fees, notes and what workers raise stay with FWM and group leaders.",
+    "what": "Foreign Worker Management keeps every foreign worker's permit, passport, FOMEMA and insurance renewed, sends OMs dated tasks, and tracks recruitment and welfare. The JA Group app's dates show beside Prima's.",
+    "who": "FWM staff work it. Leaders a paper has reached acknowledge it. OMs see only \"Tasks\". Company managers see their company's steps; fees, notes and what workers raise stay with FWM and group leaders.",
     "tabs": [
       {
         "name": "Papers",
-        "what": "Papers on the reminder ladder, with days left."
+        "what": "Papers on the reminder ladder, with days left and who still has to acknowledge."
+      },
+      {
+        "name": "Workers",
+        "what": "FWM finds a worker and records each paper from its copy."
+      },
+      {
+        "name": "Prima and JA",
+        "what": "Where Prima and the JA app disagree on dates, workers or status."
       },
       {
         "name": "Year 10",
-        "what": "Workers reaching their service limit within a year, with go-home and return dates."
+        "what": "Workers reaching their service limit within a year."
       },
       {
         "name": "Tasks",
@@ -1791,38 +2388,37 @@ export const SCREEN_GUIDES: ScreenGuide[] = [
     ],
     "tasks": [
       {
+        "task": "How to acknowledge a paper alert",
+        "steps": [
+          "On \"Papers\", choose \"Acknowledgement owed\" under \"Show only\".",
+          "Press \"Acknowledge\", add a note if you like, press \"Acknowledge\" again."
+        ]
+      },
+      {
+        "task": "How to record a new paper",
+        "steps": [
+          "Press \"New paper received\", fill the number, \"Issued on\" and \"Expires on\", attach the copy, press \"Save\".",
+          "To fix a wrong entry, open \"Workers\", press \"Papers\", then \"Correct a mistake\" and fill \"What was wrong\"."
+        ]
+      },
+      {
         "task": "How to record a renewal",
         "steps": [
-          "On \"Papers\", press \"Renewal submitted\" on the worker.",
-          "Fill \"Submitted on\", \"Where\", \"Note\", press \"Attach document\", then \"Save\"."
+          "Press \"Renewal submitted\", fill \"Submitted on\", \"Where\", \"Note\", attach the document, press \"Save\"."
         ]
       },
       {
-        "task": "How to send a task to an OM",
+        "task": "How to settle a Prima and JA difference",
         "steps": [
-          "Press \"Send task to OM\".",
-          "Choose \"Task\" and \"Due\", fill \"What the OM must do\" and \"Place\", press \"Send\"."
+          "Open \"Prima and JA\". Press \"Use the JA date\" if JA is right, or record the paper from its copy.",
+          "For a worker only in JA, press \"Add to Prima\", fill \"Branch\", \"Hire date\" and \"Date of birth (passport)\", press \"Add\"."
         ]
       },
       {
-        "task": "How to finish a task (OM)",
+        "task": "How to send and finish an OM task",
         "steps": [
-          "On \"Tasks\", press \"Done, send proof\".",
-          "Attach the proof and press \"Send\". FWM then presses \"Accept\" or \"Send back\"."
-        ]
-      },
-      {
-        "task": "How to record a welfare check",
-        "steps": [
-          "Open \"Recruitment and welfare\", then \"Workers\".",
-          "Press \"Arrival fee check\", \"Passport check\" or \"Welfare talk\", fill it, press \"Save\"."
-        ]
-      },
-      {
-        "task": "How to start a recruitment file",
-        "steps": [
-          "On \"Recruitment steps\", press \"New recruitment file\", fill it, press \"Open file\".",
-          "Press \"Record\" on each step, then \"Clear to travel\" and later \"Record arrival\"."
+          "FWM presses \"Send task to OM\", fills \"Task\", \"Due\", \"What the OM must do\" and \"Place\", presses \"Send\".",
+          "The OM presses \"Done, send proof\", attaches proof, presses \"Send\". FWM presses \"Accept\" or \"Send back\"."
         ]
       }
     ],
@@ -1836,20 +2432,16 @@ export const SCREEN_GUIDES: ScreenGuide[] = [
         "means": "The required medical check for foreign workers."
       },
       {
-        "term": "JIM",
-        "means": "Immigration Department."
-      },
-      {
         "term": "Reminder ladder",
         "means": "Reminders at 120, 90, 60, 30 and 15 days before expiry, going up to the Chief of Staff, COO and CEO."
       }
     ],
-    "notes": "A submitted renewal pauses the reminders. \"No expiry on record\" means unknown, not safe. Escalated users can switch \"For me\" and \"All\". The welfare \"Closed\" and \"Agencies\" tabs show only to FWM and group leaders."
+    "notes": "Acknowledge an alert within 1 working day. A submitted renewal pauses the reminders. \"No expiry on record\" means unknown, not safe. When Prima and JA differ, the ladder counts to the earlier date until FWM settles it. FWM also has \"Look up staff history\" at the bottom. The welfare \"Closed\" and \"Agencies\" tabs show only to FWM and group leaders."
   },
   {
     "view": "socso",
     "title": "SOCSO claims",
-    "what": "Start and follow SOCSO (PERKESO) claims for staff hurt at work or in other covered cases, with papers, deadlines and return to work.",
+    "what": "Start and follow SOCSO (PERKESO) claims for staff hurt at work or in other covered cases: papers, deadlines, return to work, LINDUNG, family payments after a death and the DOSH notice.",
     "who": "HR and the OM start claims. HR submits Form 34 in PERKESO ASSIST and moves the claim along. Medical papers are seen by HR only. HR and operations staff follow claims for their companies.",
     "tabs": [
       {
@@ -1858,7 +2450,19 @@ export const SCREEN_GUIDES: ScreenGuide[] = [
       },
       {
         "name": "Rehabilitation",
-        "what": "Inside a claim: return to work, work restrictions, appointments and weekly check-ins."
+        "what": "Return to work, restrictions, appointments and weekly check-ins."
+      },
+      {
+        "name": "LINDUNG",
+        "what": "Accident outside work: the worker's application and PERKESO's employment check."
+      },
+      {
+        "name": "Family and payments",
+        "what": "After a death: dependants, missing papers and PERKESO payments."
+      },
+      {
+        "name": "DOSH",
+        "what": "The separate notice to DOSH for a serious workplace accident."
       }
     ],
     "tasks": [
@@ -1866,35 +2470,38 @@ export const SCREEN_GUIDES: ScreenGuide[] = [
         "task": "How to start a claim",
         "steps": [
           "Press \"Start a claim\" and find the person (or \"Start SOCSO claim\" on their profile).",
-          "Choose \"Kind of case\" (or \"Not sure which kind?\"), fill when it happened, when the company was told, where, what happened and witnesses.",
-          "Press \"Start claim\"."
+          "Choose \"Kind of case\" (or \"Not sure which kind?\"), fill what happened, when and where, press \"Start claim\"."
         ]
       },
       {
         "task": "How to record Form 34",
         "steps": [
-          "Open the claim; under \"Next step\" press \"Form 34 submitted in ASSIST\".",
-          "Type the \"PERKESO reference from ASSIST\", press \"Save\"."
+          "Under \"Next step\" press \"Form 34 submitted in ASSIST\", type the \"PERKESO reference from ASSIST\", press \"Save\"."
         ]
       },
       {
         "task": "How to add papers",
         "steps": [
-          "Under \"Papers\", press \"Add paper\", attach it and press \"Save\".",
-          "If a paper cannot be had, press \"Go ahead without\" and give the reason."
+          "Under \"Papers\", press \"Add paper\", attach it, press \"Save\". If a paper cannot be had, press \"Go ahead without\" with the reason."
         ]
       },
       {
-        "task": "How to move a claim on",
+        "task": "How to handle LINDUNG",
         "steps": [
-          "Under \"Next step\", choose the step, such as \"PERKESO approved\" or \"Paid, close the claim\".",
-          "Fill what it asks, press \"Save\"."
+          "Fill \"How the worker applied\" and \"Date applied\", press \"Save application\".",
+          "When PERKESO emails, press \"PERKESO's email came\", then \"Record the answer given to PERKESO\"."
         ]
       },
       {
-        "task": "How to follow recovery",
+        "task": "How to record family payments",
         "steps": [
-          "Open \"Rehabilitation\": use \"Add restriction\", add appointments, and log calls under \"Weekly check-ins\" with \"Record\"."
+          "Press \"Add dependant\", then \"Record how PERKESO pays\", \"Record a PERKESO payment\" and \"Family confirmed receipt\"."
+        ]
+      },
+      {
+        "task": "How to record the DOSH notice",
+        "steps": [
+          "Choose the level, type the reason, press \"Save the level\". Fill \"Told DOSH at once\", the form and \"Client told\", pressing \"Save\" each time."
         ]
       }
     ],
@@ -1908,15 +2515,140 @@ export const SCREEN_GUIDES: ScreenGuide[] = [
         "means": "The accident notice to PERKESO, made online in ASSIST."
       },
       {
-        "term": "MC",
-        "means": "Medical certificate (sick days)."
+        "term": "LINDUNG 24 Jam",
+        "means": "SOCSO cover for accidents outside work; PERKESO pays the worker directly."
       },
       {
-        "term": "LINDUNG 24 Jam",
-        "means": "SOCSO cover for accidents outside work."
+        "term": "DOSH (JKKP)",
+        "means": "The safety at work department."
       }
     ],
-    "notes": "Form 34 is due 48 hours after the company was told; a reminder shows at 24 hours. Prima does not send anything to PERKESO; HR does it in ASSIST. If you cannot start a claim, tell your OM or HR. A rejected claim can be appealed within 90 days. The roster will not place someone against an open restriction. Read \"How to claim (SOP)\" for what SOCSO pays for."
+    "notes": "Form 34 is due 48 hours after the company was told; a reminder shows at 24 hours. For LINDUNG the worker applies, not the company. Prima sends nothing to PERKESO or DOSH; HR does it and keeps copies. A rejected claim can be appealed within 90 days. The roster will not place someone against an open restriction. Read \"How to claim (SOP)\" for what SOCSO pays for."
+  },
+  {
+    "view": "fwcost",
+    "title": "Recruitment cost",
+    "what": "When a foreign worker works under another company's or a branch's job, the host pays FWM a monthly recruitment cost per worker and FWM pays the owning company back. This page tracks placements, monthly charges and payments.",
+    "who": "FWM staff record placements and see only placements. Finance teams draft months and record invoices and payments. The Finance Director or CEO set rates and approve. Group leaders see everything. A company manager sees their own company's charges.",
+    "tabs": [
+      {
+        "name": "Charges",
+        "what": "Monthly charges with approval, invoice and payment."
+      },
+      {
+        "name": "Placements",
+        "what": "Workers working under another company or branch."
+      },
+      {
+        "name": "Rates",
+        "what": "Charge to host and payback to owner."
+      },
+      {
+        "name": "CEO log",
+        "what": "The CEO's legal note. Only the CEO sees it."
+      }
+    ],
+    "tasks": [
+      {
+        "task": "How to record a placement (FWM)",
+        "steps": [
+          "Open \"Placements\" and press \"Record a placement\".",
+          "Choose the worker, company, branch and \"Who pays the salary\", set \"First day under that job\", and press \"Save\".",
+          "When it ends press \"End the placement\", give the last day and why, and press \"End\"."
+        ]
+      },
+      {
+        "task": "How to draft a month's charges (Finance)",
+        "steps": [
+          "Open \"Charges\".",
+          "Under \"Months to draft\" press the \"Draft\" button for that month."
+        ]
+      },
+      {
+        "task": "How to approve or reject a month (FD or CEO)",
+        "steps": [
+          "Press \"Approve\" for the month, or \"Reject\".",
+          "Write the reason.",
+          "Press \"Approve\" or \"Reject\" again to confirm."
+        ]
+      },
+      {
+        "task": "How to record the invoice and payment (Finance)",
+        "steps": [
+          "Raise the invoice in SQL Account first.",
+          "Press \"Record the invoice\", type its number and date, and press \"Save\".",
+          "After the bank transfer, press \"Record the payment\", add the reference and slip, and press \"Save\"."
+        ]
+      },
+      {
+        "task": "How to set a rate (FD or CEO)",
+        "steps": [
+          "Open \"Rates\" and choose which rate.",
+          "Type the RM per worker per month, the from month and the reason.",
+          "Press \"Save rate\"."
+        ]
+      }
+    ],
+    "terms": [
+      {
+        "term": "Billed, not paid",
+        "means": "An invoice is recorded but no payment yet."
+      }
+    ],
+    "notes": "A month cannot be drafted until both rates are set; the app never guesses a rate. The person who drafted cannot approve; another approver (FD or CEO) decides. Tabs you do not see are not for your role."
+  },
+  {
+    "view": "fwstat",
+    "title": "Nepali EPF/SOCSO",
+    "what": "The company holding a Nepali worker's permit pays EPF and SOCSO. The company or branch that used the worker repays that amount each month, by debit note, for the days it used the worker.",
+    "who": "FWM, Finance teams, group leaders, company managers and admin executives. A Branch Manager sees and repays only their own branch. The owner company's Finance prepares debit notes, cancels them and checks money in.",
+    "tabs": [],
+    "tasks": [
+      {
+        "task": "How to prepare a debit note (owner's Finance)",
+        "steps": [
+          "In \"Months to charge\" press \"Prepare the debit note\".",
+          "For each worker fill \"Wage for the month (RM)\", the EPF and SOCSO amounts paid, and the KWSP and PERKESO receipt numbers.",
+          "Press \"Issue the debit note\"."
+        ]
+      },
+      {
+        "task": "How to record a repayment",
+        "steps": [
+          "Find the debit note under \"Debit notes\".",
+          "Press \"Record the repayment\".",
+          "Repay the full amount in one transfer, then type the bank transfer reference and date.",
+          "Press \"Save\"."
+        ]
+      },
+      {
+        "task": "How to check in the money (owner's Finance)",
+        "steps": [
+          "Press \"Check in the money\" on a repaid note.",
+          "Type the bank statement line or comment.",
+          "Press \"Checked in\"."
+        ]
+      },
+      {
+        "task": "How to cancel a debit note",
+        "steps": [
+          "Press \"Cancel\" on an issued note.",
+          "Write why it is cancelled.",
+          "Press \"Cancel the debit note\"."
+        ]
+      }
+    ],
+    "terms": [
+      {
+        "term": "Debit note",
+        "means": "The bill from the permit company to the company or branch that used the worker."
+      },
+      {
+        "term": "Late",
+        "means": "Not repaid within the set number of days."
+      }
+    ],
+    "notes": "\"Months to charge\" and \"To check in\" show only to the owner company's Finance. The person who recorded the repayment cannot check it in; another person in the owner's Finance does. The salary is paid by the company or branch that uses the worker, not by this page."
   },
   {
     "view": "hostels",
@@ -1952,7 +2684,8 @@ export const SCREEN_GUIDES: ScreenGuide[] = [
         "task": "How to move a bill along",
         "steps": [
           "Press \"Act\" on the bill.",
-          "Press \"Ask for payment approval\", \"Checked, pass on\" or \"Approve\". To return it, type a note and press \"Send back\".",
+          "The company presses \"Ask for payment approval\".",
+          "To check or approve, type a comment (a comment is needed to approve), then press \"Checked, pass on\" or \"Approve\". To return it, type a comment and press \"Send back\".",
           "After paying, attach the slip and press \"Upload the payment slip\"."
         ]
       },
@@ -1988,8 +2721,8 @@ export const SCREEN_GUIDES: ScreenGuide[] = [
         "what": "Your claims, \"My receipts\" and \"Trips to approve before you go\"."
       },
       {
-        "name": "For the Chief of Staff / For the COO / All claims / To verify as company head",
-        "what": "Claims and trips waiting for your decision; the name depends on your role."
+        "name": "All claims",
+        "what": "Claims and trips waiting for your decision. Its name depends on your role: \"For the Chief of Staff\", \"For the COO\", \"All claims\" or \"To verify as company head\"."
       },
       {
         "name": "Enter for staff",
@@ -2026,10 +2759,10 @@ export const SCREEN_GUIDES: ScreenGuide[] = [
         ]
       },
       {
-        "task": "How to decide on a claim",
+        "task": "How to decide on a claim or trip",
         "steps": [
           "Open your decision tab and press \"Waiting for me\".",
-          "Type a note (needed to reject).",
+          "Type a comment. A comment is needed to approve, verify or reject.",
           "Press \"Approve\", \"Checked, to COO\" (HR), \"Verify\" (company head) or \"Reject\". Finance types the \"Payment reference\" and presses \"Record payment\"."
         ]
       },
@@ -2047,33 +2780,45 @@ export const SCREEN_GUIDES: ScreenGuide[] = [
         "means": "The amount paid per km, set monthly by the Chief of Staff for each vehicle."
       }
     ],
-    "notes": "Limits on screen: medical and dental RM1,000 a year, optical RM500 every 2 years. Travel cannot be claimed until that month's mileage rates are published. Claim within the days shown on the form; the same receipt or trip cannot be claimed twice, and \"Claim now\" greys out when too late. No valet parking. Travel with no approved trip, or km more than 10% off the app's km, goes to the Chief of Staff first. \"Nothing to claim here\" means claims are for office and management staff only."
+    "notes": "Limits on screen: medical and dental RM1,000 a year, optical RM500 every 2 years. Travel cannot be claimed until that month's mileage rates are published. Claim within the days shown; the same receipt or trip cannot be claimed twice, and \"Claim now\" greys out when too late. No valet parking. Travel with no approved trip, or km more than 10% off the app's km, goes to the Chief of Staff first. \"Nothing to claim here\" means claims are for office and management staff only."
   },
   {
     "view": "pdpa",
     "title": "PDPA",
-    "what": "Personal data matters: data breaches, client consent for products, social media issues, product checks, people's requests about their own data, and data protection officers.",
-    "who": "The PDPA officer handles every case. The Operations Director and group leadership monitor.",
+    "what": "Personal data matters: breaches with a 72-hour clock, client consent, social media, the register of personal data kept, signed consents, product checks, people's data requests and data protection officers.",
+    "who": "The PDPA officer handles every case. The Operations Director, the Chief of Staff and the CEO monitor. The Chief of Staff switches PDPA on or off.",
     "tabs": [
       {
         "name": "Breaches",
-        "what": "Personal data breaches and their legal notice times."
+        "what": "Breaches, with the Commissioner deadline counting down."
       },
       {
         "name": "Client consent",
-        "what": "Advising clients and getting consent before a product is used."
+        "what": "Getting a client's consent before a product is used."
       },
       {
         "name": "Social media",
         "what": "Social media matters by risk."
       },
       {
+        "name": "Data register",
+        "what": "Every kind of personal data kept, why and for how long."
+      },
+      {
+        "name": "Consents",
+        "what": "Each person's signed consent and withdrawals."
+      },
+      {
+        "name": "Breach register",
+        "what": "Every breach, kept after closing."
+      },
+      {
         "name": "Products",
-        "what": "Products sold or rented to clients, their personal data and certificates."
+        "what": "Products for clients and their certificates."
       },
       {
         "name": "Proposal check",
-        "what": "Tick a proposal's products to check they are ready."
+        "what": "Check a proposal's products are ready."
       },
       {
         "name": "Data requests",
@@ -2082,31 +2827,39 @@ export const SCREEN_GUIDES: ScreenGuide[] = [
       {
         "name": "DPO register",
         "what": "The data protection officer for each company."
+      },
+      {
+        "name": "Settings",
+        "what": "PDPA on or off, and how long the breach register is kept."
       }
     ],
     "tasks": [
       {
         "task": "How to open a case",
         "steps": [
-          "Choose the tab, then press \"Open a case\".",
-          "Choose \"Company\", fill \"Title\" and \"What happened\", plus the extra boxes for that kind.",
-          "Press \"Open case\"."
+          "Choose the tab, press \"Open a case\", choose \"Company\", fill \"Title\" and \"What happened\", press \"Open case\"."
         ]
       },
       {
         "task": "How to record the next step",
         "steps": [
-          "Press \"Act\" on the case.",
-          "Attach proof when the step needs it and add a \"Note\".",
-          "Press the step, such as \"Contained\", \"Commissioner notified\", \"People notified\", \"Client advised\", \"Consent given\" or \"Client refused\".",
+          "Press \"Act\" on the case, attach proof when needed and add a \"Note\".",
+          "Press the step, such as \"Contained\", \"Commissioner notified\", \"People notified\", \"Consent given\" or \"Client refused\".",
+          "For a breach, press \"Record breach register details\", fill \"Data involved\", \"Cause\" and \"Action taken\", press \"Save details\".",
           "Press \"Close\" when done (a note is needed)."
+        ]
+      },
+      {
+        "task": "How to keep the register and consents",
+        "steps": [
+          "In \"Data register\" press \"Add entry\", fill it, press \"Save\"; later \"Mark reviewed\".",
+          "In \"Consents\" press \"Record consent\", attach the signed form, press \"Record consent\"."
         ]
       },
       {
         "task": "How to log a data request",
         "steps": [
-          "Open \"Data requests\" and press \"Log a request\".",
-          "Fill who asked and what, then press \"Log request\"."
+          "Open \"Data requests\", press \"Log a request\", fill it, press \"Log request\"."
         ]
       }
     ],
@@ -2124,12 +2877,12 @@ export const SCREEN_GUIDES: ScreenGuide[] = [
         "means": "Data protection officer."
       }
     ],
-    "notes": "A breach goes to the PDP Commissioner within 72 hours, and to the affected people within 7 days after that when harm is significant. \"Commissioner notified\", \"People notified\" and \"Consent given\" need proof attached first. Without the officer role you see \"Steps\" instead of \"Act\". \"Hide closed\" and \"Show closed\" switch closed cases."
+    "notes": "A breach goes to the PDP Commissioner within 72 hours, and to affected people within 7 days after that when harm is significant. Those steps and \"Consent given\" need proof first. Use the staff or guard number for consents, never the IC. Changing settings needs a \"Reason for the change\". With PDPA off, alerts stop on leaders' screens but duties stay. Without the officer role you see \"Steps\" instead of \"Act\"."
   },
   {
     "view": "clients",
     "title": "Clients",
-    "what": "The list of the company's clients and how each relationship is going: onboarding, visits, reports, satisfaction, complaints, billing and leaving.",
+    "what": "The list of the company's clients and how each relationship is going: onboarding, visits, reports, satisfaction, complaints, billing, the client's signed acknowledgement of each month's work, contracts and leaving.",
     "who": "Directors, group officers, company managers, admin executives and supervisors. Operations Managers, the Operations Director and officers act on clients; the COO and company managers mainly monitor. Billing boxes show only to people allowed to record billing. The \"Group\" tab is for group leadership only.",
     "tabs": [
       {
@@ -2199,6 +2952,15 @@ export const SCREEN_GUIDES: ScreenGuide[] = [
         ]
       },
       {
+        "task": "How to record the client's acknowledgement of a month's work",
+        "steps": [
+          "Open the client and go to \"Money\".",
+          "In the acknowledgement box (due by the 10th), fill in \"Month of work\", \"Date signed\", \"Signed by\" and \"Client's view\".",
+          "Copy the client's words into \"Client's comment\" (or write \"No comment written\"). For complaints, also fill in \"What will be done\".",
+          "Attach the slip or the signed paper (needed) and press \"Record acknowledgement\"."
+        ]
+      },
+      {
         "task": "How to open a won lead as a client",
         "steps": [
           "Go to the \"Pipeline\" tab.",
@@ -2223,9 +2985,13 @@ export const SCREEN_GUIDES: ScreenGuide[] = [
       {
         "term": "Client report links",
         "means": "A read-only web page for the client for one period, with no staff names or amounts owed."
+      },
+      {
+        "term": "Work acknowledgement",
+        "means": "The client's signed slip or paper for a month's work, with their comment, uploaded by the 10th after the month closes."
       }
     ],
-    "notes": "\"New client\" only shows for people allowed to add clients. The update box only shows if you may act on that client; others see \"not done\" on open steps. Billing shows \"unknown (SQL Account not connected)\" when no billing is on record. Report links may say they are switched off on this server. A report link is shown once; make a new one if lost."
+    "notes": "\"New client\" only shows for people allowed to add clients. The update box only shows if you may act on that client; others see \"not done\" on open steps. Billing shows \"unknown (SQL Account not connected)\" when no billing is on record. Report links may say they are switched off on this server. A report link is shown once; make a new one if lost. The acknowledgement box shows only to people allowed to record billing. In a client opened from the lifecycle tabs, tap a contract reference to open it in Contracts; \"Record the signed contract\" starts a new contract for that client."
   },
   {
     "view": "requests",
@@ -2326,12 +3092,12 @@ export const SCREEN_GUIDES: ScreenGuide[] = [
   {
     "view": "fleet",
     "title": "Vehicles",
-    "what": "Company vehicles: renewals, servicing and payments, and each trip logged out and in. Staff request a vehicle here; CMS watches trackers, dashcams and driver health.",
-    "who": "Directors, group officers, company managers and admin executives. The head of Transport and group leaders see \"Reminders\", \"Vehicles\", \"Requests\", \"Monitor\" and \"Trips and driving hours\". CMS sees \"Monitor\" and \"Trips and driving hours\". The PDPA officer sees \"Driver consent\" and \"My requests\". Everyone else sees \"My requests\" only. Only Transport can log vehicles out and in, record work and approve requests.",
+    "what": "Company vehicles: renewals, servicing, payments, trips out and in, fuel and usage, and vehicles rented between companies. Staff request a vehicle here.",
+    "who": "Transport and group leaders see the full set of tabs. \"Rented vehicles\" also shows for the CEO, the COO, the OGM and the Finance Director. CMS sees \"Monitor\" and \"Trips and driving hours\". The PDPA officer sees \"Driver consent\". Everyone else sees \"My requests\". Only Transport logs vehicles out and in and approves requests.",
     "tabs": [
       {
         "name": "Reminders",
-        "what": "Renewals, servicing and payments due, most urgent first."
+        "what": "Renewals, servicing and payments due."
       },
       {
         "name": "Vehicles",
@@ -2339,15 +3105,23 @@ export const SCREEN_GUIDES: ScreenGuide[] = [
       },
       {
         "name": "Requests",
-        "what": "Vehicle requests from staff, waiting ones first."
+        "what": "Vehicle requests from staff."
       },
       {
         "name": "Monitor",
-        "what": "Trackers, dashcams and driver health for each vehicle."
+        "what": "Trackers, dashcams and driver health."
       },
       {
         "name": "Trips and driving hours",
-        "what": "Driver alerts, vehicles on the road and driving hours today."
+        "what": "Driver alerts and driving hours today."
+      },
+      {
+        "name": "Fuel and usage",
+        "what": "Fill-ups, fuel cards and tracker distance per vehicle, and fill-ups to review."
+      },
+      {
+        "name": "Rented vehicles",
+        "what": "Which company uses each rented vehicle, the rent, and the month's draft rent bills."
       },
       {
         "name": "Driver consent",
@@ -2355,25 +3129,22 @@ export const SCREEN_GUIDES: ScreenGuide[] = [
       },
       {
         "name": "My requests",
-        "what": "Ask for a vehicle and see your requests."
+        "what": "Ask for a vehicle and record fill-ups of a vehicle out with you."
       }
     ],
     "tasks": [
       {
         "task": "How to request a vehicle",
         "steps": [
-          "Open \"My requests\".",
-          "Fill in \"What it is for\", \"From\" and \"To\".",
-          "Choose a \"Vehicle\" or leave \"Any vehicle (Transport chooses)\".",
-          "Press \"Send request\"."
+          "Open \"My requests\", fill in \"What it is for\", \"From\" and \"To\".",
+          "Choose a \"Vehicle\" or leave \"Any vehicle (Transport chooses)\", then press \"Send request\"."
         ]
       },
       {
         "task": "How to approve or reject a request (Transport)",
         "steps": [
-          "Open \"Requests\".",
-          "Choose the vehicle, add a note if needed.",
-          "Press \"Approve\", or write a note and reject it (a note is required to reject)."
+          "Open \"Requests\", choose the vehicle and write a comment (a comment is needed to approve).",
+          "Press \"Approve\" or \"Reject\"."
         ]
       },
       {
@@ -2385,32 +3156,33 @@ export const SCREEN_GUIDES: ScreenGuide[] = [
         ]
       },
       {
-        "task": "How to record a renewal, service or payment (Transport)",
+        "task": "How to record a fill-up",
         "steps": [
-          "Open the vehicle.",
-          "Under \"Record a renewal, service or payment\", choose the \"Work\" (Renewal, Service or Instalment paid) and fill in the next due date.",
-          "Attach the receipt and press \"Record with receipt\"."
+          "Driver: in \"My requests\" press \"Record fill-up\". Transport: in \"Fuel and usage\" press \"Record fill-up\" on the vehicle.",
+          "Fill in the receipt details, attach the receipt and press \"Save fill-up\". Without a receipt it is flagged for review."
+        ]
+      },
+      {
+        "task": "How to record a rented vehicle (Transport)",
+        "steps": [
+          "Open \"Rented vehicles\", choose the vehicle, owner and date, write the reason and press \"Record rented vehicle\".",
+          "Use \"Move to another company\" or \"End rental\" later; every change needs a reason. The Finance Director or the CEO uses \"Set rent\"."
         ]
       },
       {
         "task": "How to file a driver's consent (PDPA officer)",
         "steps": [
-          "Open \"Driver consent\".",
-          "Attach the signed consent and press \"File consent\"."
+          "Open \"Driver consent\", attach the signed consent and press \"File consent\"."
         ]
       }
     ],
     "terms": [
       {
-        "term": "PUSPAKOM",
-        "means": "The government vehicle inspection."
-      },
-      {
         "term": "Unknown (device)",
-        "means": "The tracker, dashcam or health device is not connected or silent for over 30 minutes. Never treated as fine."
+        "means": "The device is not connected or silent for over 30 minutes. Never treated as fine."
       }
     ],
-    "notes": "Tracker, dashcam and driver health devices are not connected yet, so they show as unknown. The driving limits shown on \"Trips and driving hours\" are proposed limits. \"Add vehicle\" and \"Import\" only show for Transport and group leaders."
+    "notes": "Tracker, dashcam and driver health devices are not connected yet, so they show as unknown. Driving limits shown are proposed. Vehicle rent bills are a draft for Finance, not an invoice."
   },
   {
     "view": "ja",
@@ -2482,42 +3254,115 @@ export const SCREEN_GUIDES: ScreenGuide[] = [
     "notes": "This is a preview with test data: the JA feed is not live yet, so Prima's own foreign worker, incident, pay and hostel screens stay on until it is. Nothing can be added or edited here. If there are no tabs, you only have one dataset."
   },
   {
+    "view": "jaswitch",
+    "title": "Switch from JA",
+    "what": "Moves one company and one area at a time from the JA app to Prima. Both run side by side, every difference is explained or fixed, ACT checks the report, then the CEO switches. A switch can be undone.",
+    "who": "Directors, group leaders, company managers, ACT, HR, FWM and operations from OM up. Not admin executives or supervisors. The CEO or COO start and stop runs; the ACT Lead checks reports and approves JA files; only the CEO switches.",
+    "tabs": [
+      {
+        "name": "Areas",
+        "what": "Each company's areas and their difference reports."
+      },
+      {
+        "name": "JA files",
+        "what": "JA export files waiting for a second person."
+      },
+      {
+        "name": "Guard history",
+        "what": "A guard's history brought across from JA."
+      },
+      {
+        "name": "Numbers",
+        "what": "Switch-over numbers set by the ACT Director."
+      }
+    ],
+    "tasks": [
+      {
+        "task": "How to start a side-by-side run (CEO or COO)",
+        "steps": [
+          "In \"Areas\" press \"Start side by side\".",
+          "Set the \"First day\" and a note.",
+          "Press \"Start\"."
+        ]
+      },
+      {
+        "task": "How to explain a difference",
+        "steps": [
+          "Press \"Open report\" on the area.",
+          "Press \"Explain\" on a difference.",
+          "Choose \"Explained\" or \"Fixed\", write what happened, and press \"Save\"."
+        ]
+      },
+      {
+        "task": "How to check and switch",
+        "steps": [
+          "ACT Lead: in the report write the \"ACT note\" and press \"Mark report checked\".",
+          "CEO: write the reason and press \"Switch this area to Prima\".",
+          "To undo, the CEO presses \"Switch back to JA\"."
+        ]
+      },
+      {
+        "task": "How to stage a JA file (ACT)",
+        "steps": [
+          "Open \"JA files\".",
+          "In \"Stage a JA export\" choose the company, \"What the file holds\", the first and last day, and the CSV file.",
+          "Press \"Stage file\". The ACT Lead then presses \"Approve\" or \"Reject\"."
+        ]
+      },
+      {
+        "task": "How to look up a guard's JA history",
+        "steps": [
+          "Open \"Guard history\".",
+          "Choose the company and type the \"Staff number\".",
+          "Press \"Look up\"."
+        ]
+      }
+    ],
+    "terms": [
+      {
+        "term": "Side by side",
+        "means": "Prima and JA run the same days so their results can be compared."
+      }
+    ],
+    "notes": "This is test data. JA stays the real system for guards. Switching records the decision; it does not turn screens on or off, and Prima cannot make JA read-only. For guard pay you may see \"The guard pay run's database part is not installed, so guard pay cannot be compared yet.\" Days with no approved JA file are unknown, not matching."
+  },
+  {
     "view": "assets",
     "title": "Asset Management",
-    "what": "The group's rental units, office furniture and fittings, resorts, orchards and training facility: rent collected and owed, repairs, the asset register and purchases.",
-    "who": "Only the Asset Management team, group leadership and the finance staff who oversee it. The rental team records payments and follow-ups. The Asset Director approves letters, notices and payment reversals. Finance confirms payments in the bank and posts journals. The Finance Director or the COO decides disposals.",
+    "what": "The group's rental units, furniture and fittings, resorts, orchards and training facility: rent, repairs, contractors, tenants, meters, bookings, harvests, the asset register and purchases.",
+    "who": "Only the Asset Management team, group leadership and the finance staff who oversee it. The Asset Director approves letters, reversals, contractors, offers and BQs. Finance confirms payments in the bank. The Finance Director or the COO decides disposals.",
     "tabs": [
       {
         "name": "Overview",
-        "what": "Watch list of what needs attention, units by type, and rent billed and collected for 6 months."
+        "what": "What needs attention, and rent billed and collected."
       },
       {
         "name": "Units",
-        "what": "Every rental unit with status, rent and tenant; search and filter."
+        "what": "Every rental unit with status, rent and tenant."
       },
       {
         "name": "Monthly rent",
-        "what": "Each let unit for one month: paid, part paid or not paid, and updates due."
+        "what": "Each let unit for one month: paid or not, and updates due."
       },
       {
         "name": "Rent and arrears",
-        "what": "Arrears by age, record a payment, payments to confirm in the bank, agreements ending, dues and WhatsApp rent reminders."
+        "what": "Arrears, record a payment, letters and reversals to approve, payments to confirm in the bank."
       },
       {
         "name": "Maintenance",
-        "what": "Work orders with due dates, cost and contractor."
+        "what": "Work orders; press \"BQ\" on a job for its bill of quantities, quotes, award and variation orders."
       },
       {
         "name": "Assets",
-        "what": "Register of furniture, fittings and renovations; start a disposal."
+        "what": "Furniture, fittings and renovations; start a disposal."
       },
       {
         "name": "Depreciation and disposal",
-        "what": "Monthly depreciation for SQL Account, written-off items still in use, and disposals."
+        "what": "Monthly depreciation and disposals."
       },
       {
         "name": "Resorts, orchards, training",
-        "what": "Read-only monthly figures and licences for each property."
+        "what": "Read-only monthly figures and licences."
       },
       {
         "name": "System check",
@@ -2526,82 +3371,100 @@ export const SCREEN_GUIDES: ScreenGuide[] = [
       {
         "name": "Purchases",
         "what": "Purchase requests and the \"Ask to buy\" form."
+      },
+      {
+        "name": "Contractors",
+        "what": "The approved contractors list and job ratings."
+      },
+      {
+        "name": "Finding tenants",
+        "what": "Adverts, enquiries, offers and signing for empty units."
+      },
+      {
+        "name": "Meters",
+        "what": "Utility meter readings and bills."
+      },
+      {
+        "name": "Resort bookings",
+        "what": "Bookings, check-in, check-out, payments and room cleaning."
+      },
+      {
+        "name": "Harvest",
+        "what": "Orchard picks and sales."
+      },
+      {
+        "name": "Planned maintenance",
+        "what": "Regular jobs and when they fall due."
       }
     ],
     "tasks": [
       {
         "task": "How to record a rent payment",
         "steps": [
-          "Open \"Rent and arrears\".",
-          "In \"Record a payment\", search the tenant or unit code and tap it.",
-          "Fill \"Amount received\", \"How it was paid\" and \"Date received\" (bank reference if not cash).",
-          "Press \"Record payment\". The app numbers the official receipt; give it to the tenant."
+          "Open \"Rent and arrears\". In \"Record a payment\", search the tenant or unit code and tap it.",
+          "Fill \"Amount received\", \"How it was paid\" and \"Date received\".",
+          "Press \"Record payment\". The app numbers the official receipt."
         ]
       },
       {
         "task": "How to follow up a tenant who has not paid",
         "steps": [
           "Open \"Monthly rent\" and press \"Contact or record payment\" on the unit.",
-          "Use \"Call\", \"WhatsApp\" or \"Email\" to contact them.",
-          "Under \"What happened\", choose \"What was done\" and write what happened.",
-          "Press \"Record follow-up\"."
+          "Use \"Call\", \"WhatsApp\" or \"Email\", choose \"What was done\", write what happened and press \"Record follow-up\"."
         ]
       },
       {
-        "task": "How to confirm cash is banked (Finance)",
+        "task": "How to approve a letter or a reversal (Asset Director)",
         "steps": [
-          "Open \"Rent and arrears\".",
-          "In \"Payments to confirm in the bank\", fill \"Banked on\" and the slip number.",
-          "Press \"Banked\" or \"Seen in the bank\"."
+          "Open \"Rent and arrears\" and find \"Letters waiting for the Asset Director\" or \"Reversals waiting for the Asset Director\".",
+          "Write a comment in \"Note\" (a comment is needed to approve).",
+          "Press \"Approve\" or \"Stop\" for a letter, \"Approve reversal\" for a reversal."
+        ]
+      },
+      {
+        "task": "How to prepare a BQ for a repair",
+        "steps": [
+          "Open \"Maintenance\" and press \"BQ\" on the work order.",
+          "Press \"Draft from template\" or \"Add line\", then \"Save BQ\" and \"Send for approval\".",
+          "Use \"Record a quote\" for each quote, then \"Ask to award\". Later changes go through \"Raise a variation order\"."
         ]
       },
       {
         "task": "How to ask to buy furniture or fittings",
         "steps": [
-          "Open \"Purchases\" (or press \"Ask to buy\").",
-          "Fill \"What to buy\", \"Category\", \"Quantity\", \"Estimated cost (RM)\", \"Location\", \"Owning entity\" and \"Reason\".",
-          "Press \"Ask\". When approved and bought, fill \"Asset tag\", \"Actual cost (RM)\" and \"Bought on\", then press \"Received\"."
+          "Open \"Purchases\", fill \"What to buy\", \"Quantity\", \"Estimated cost (RM)\" and \"Reason\", and press \"Ask\".",
+          "When bought, fill \"Asset tag\", \"Actual cost (RM)\" and \"Bought on\", then press \"Received\"."
         ]
       },
       {
         "task": "How to dispose of an asset",
         "steps": [
-          "Open \"Assets\" and find the item.",
-          "Press \"Dispose…\".",
-          "Fill \"Reason\", \"Method\" and \"Expected proceeds (RM)\".",
-          "Press \"Ask to dispose\". The Finance Director or the COO decides."
+          "Open \"Assets\", find the item and press \"Dispose…\".",
+          "Fill \"Reason\", \"Method\" and \"Expected proceeds (RM)\", then press \"Ask to dispose\"."
         ]
       }
     ],
     "terms": [
       {
-        "term": "Arrears",
-        "means": "Rent that is owed and late."
-      },
-      {
         "term": "Update every 10 days",
-        "means": "Until a unit is paid, the rental team must contact the tenant and record it at least every 10 days."
+        "means": "Until a unit is paid, the team must contact the tenant and record it at least every 10 days."
       },
       {
-        "term": "Reversal",
-        "means": "Undoing a wrongly recorded payment. The Asset Director must approve it."
+        "term": "BQ",
+        "means": "Bill of quantities: the work and prices for a job sent to contractors. The lowest complete quote wins unless a reason is approved."
       },
       {
-        "term": "Work order",
-        "means": "A repair job for a unit or place."
-      },
-      {
-        "term": "Net book value",
-        "means": "What an asset is still worth in the accounts after depreciation."
+        "term": "VO",
+        "means": "Variation order: a change of work or price after the award."
       }
     ],
-    "notes": "This is a test version on made-up data; the Asset Management system will send the real figures. A unit shows paid only when its payment is recorded. Payment, follow-up and dispose buttons show only for the rental team; letters, notices and reversals wait for the Asset Director. \"WhatsApp rent reminders\" are only planned, not sent, until WhatsApp Business is connected. \"System check\" is empty while that system is not connected. Computers and electronics are not on this register."
+    "notes": "This is a test version on made-up data; the Asset Management system will send the real figures. \"WhatsApp rent reminders\" are not sent until WhatsApp Business is connected. Computers and electronics are not on this register."
   },
   {
     "view": "contracts",
     "title": "Contracts",
-    "what": "Signed contracts and the work to get each site ready (mobilisation), then the reviews and monthly billing once the site is live.",
-    "who": "Directors, group officers, company managers, admin executives and Operations staff. The company manager starts mobilising, signs the Ready-to-Operate certificate, goes live, suspends, ends contracts and records variations. Staff can mark mobilisation items and reviews done. \"New contract\" shows only for people allowed to record contracts.",
+    "what": "Signed contracts and letters of award, and the work to get each site ready (mobilisation), including later expansions. Each contract shows its terms, billing, reviews after go-live, papers and proof, and the assignment instructions for its sites.",
+    "who": "Directors, group officers, company managers, admin executives and Operations staff. The company manager records contracts, mobilises, signs Ready-to-Operate, goes live, suspends and ends contracts, and records variations and renewals. Staff can mark mobilisation items and reviews done. \"New contract\" shows only for people allowed to record contracts.",
     "tabs": [
       {
         "name": "Needs attention",
@@ -2624,26 +3487,28 @@ export const SCREEN_GUIDES: ScreenGuide[] = [
       {
         "task": "How to record a new contract",
         "steps": [
-          "Press \"New contract\".",
+          "Press \"New contract\" (or \"Record the signed contract\" from the client in Clients).",
+          "Choose the \"Paper\": \"Signed contract\" or \"Letter of award (contract to follow)\".",
+          "Under \"Copy of the signed paper (PDF best)\", attach the copy. It is needed to save.",
+          "If you like, press \"Read the attached copy\" (or \"Paste the text instead\"). Prima suggests values; check each and press \"Use\".",
           "Choose the \"Client\" (or type the \"Client name\"), tick the sites, and fill in \"Starts\" and \"Ends\".",
-          "Choose the \"Billing method\" and fill in the rate or fixed fee.",
-          "Fill in \"Signed contract or letter of award reference\".",
-          "Press \"Save contract\". Mobilisation opens."
+          "Choose the \"Billing method\", fill in the rate, posts or fee, then the service levels, payment, notice and any bond.",
+          "Fill in the \"Signed contract reference\" (or \"Letter of award reference\") and press \"Save contract\". Mobilisation opens."
         ]
       },
       {
         "task": "How to work through mobilisation",
         "steps": [
-          "Tap the contract to open it.",
-          "Under \"Mobilisation\", press \"Mark done\" on each item when finished.",
-          "The company manager may press \"Accept risk\" on a non-critical item, fill in \"Why\" and \"Until\", then press \"Accept\"."
+          "Tap the contract to open it. Under \"Mobilisation\", pick \"First mobilisation\" or the expansion if there is more than one round.",
+          "Press \"Mark done\" on an item, attach the proof (needed) and press \"Save as done\". Items Prima checks itself show \"Mark done (checked)\".",
+          "The company manager may press \"Accept risk\" on a non-critical item, fill in \"Why\" and \"Until\", then press \"Accept\", or press \"Add an item for this site\"."
         ]
       },
       {
         "task": "How to take a site live (company manager)",
         "steps": [
           "Open the contract and press \"Start mobilising\".",
-          "When the critical items are done, press \"Sign Ready-to-Operate\".",
+          "When the critical items are done, press \"Sign Ready-to-Operate\" (for an expansion, \"Sign Ready-to-Operate for the expansion\").",
           "On or after the start date, press \"Go live\"."
         ]
       },
@@ -2656,18 +3521,18 @@ export const SCREEN_GUIDES: ScreenGuide[] = [
         ]
       },
       {
-        "task": "How to change billing (variation)",
+        "task": "How to change billing or add sites (variation)",
         "steps": [
           "Open the contract and press \"Record a variation\".",
-          "Fill in \"Billing method\", the rate or fee, \"Takes effect from\", \"Signed variation reference\" and \"What changes\".",
-          "Press \"Save variation\"."
+          "Fill in \"Billing method\" and the rate or fee. Tick any \"Sites the variation adds\" or \"More guards or armed posts: mobilise the change before it starts\"; either opens an expansion.",
+          "Fill in \"Takes effect from\", \"Signed variation reference\" and \"What changes\", attach the signed copy, and press \"Save variation\"."
         ]
       }
     ],
     "terms": [
       {
         "term": "Mobilisation",
-        "means": "Getting a new site ready, tracked against 12 workstreams (the 12th is CMS activation)."
+        "means": "Getting a new site ready, tracked against 12 workstreams."
       },
       {
         "term": "Ready-to-Operate",
@@ -2678,17 +3543,17 @@ export const SCREEN_GUIDES: ScreenGuide[] = [
         "means": "A signed change to the contract; billing only changes this way."
       },
       {
-        "term": "CMS",
-        "means": "The central monitoring service that watches site CCTV and alarms."
+        "term": "Expansion",
+        "means": "Extra sites, guards or armed posts added to a contract by a variation; it is mobilised and signed ready on its own."
       }
     ],
-    "notes": "\"Sign Ready-to-Operate\" stays greyed out until every critical item is done and other items due by the start are done or their risk accepted. \"Go live\" waits for the start date. \"Suspend\" and \"End contract\" need a note. The CMS activation item is checked by Prima before it can be marked done. \"Reviews after go-live\" only shows for live or suspended contracts."
+    "notes": "\"Sign Ready-to-Operate\" waits until every critical item is done and other items due by the start are done or their risk accepted. \"Go live\" waits for the start date. \"Suspend\" and \"End contract\" need a note. A new contract, a variation and a renewal each need the signed copy. The paper reader cannot read a scanned paper or photo. For a renewal press \"Record a renewal\"; if the contract shows \"Not tied to a client\", press \"Tie to a client\". Press \"Show\" beside \"Papers and proof\" to see the copies. Under \"Assignment instructions\", press \"Write instructions\" for each site."
   },
   {
     "view": "branches",
     "title": "Branches",
     "what": "Shows each company's branches. A branch works inside its licensed company; the company approves each month's settlement and reviews what the branch did. Prima records payments; it never makes them.",
-    "who": "Directors, PWVSB officers, company managers and admin executives. The company manager approves settlements, reviews branch actions, activates a branch, and handles step-in and closing. Finance verifies accounts, sets the SQL project code, validates months, records payments and branch cash. Branch staff prepare months and record papers.",
+    "who": "Directors, PWVSB officers, company managers and admin executives. The company manager approves settlements, reviews branch actions, activates a branch, and handles step-in and closing. Finance verifies accounts, sets the SQL project code, validates months, records payments and branch cash. For a salaried branch the Finance Director sets the manager's salary and decides the payout; the CEO sets a JV branch's management fee. Branch staff prepare months and record papers.",
     "tabs": [],
     "tasks": [
       {
@@ -2713,7 +3578,8 @@ export const SCREEN_GUIDES: ScreenGuide[] = [
         "steps": [
           "Open the branch.",
           "Under \"Branch actions to review\", read the action.",
-          "Press \"Accept\" (or \"Approve\"), or type a note and press \"Reverse\" (or \"Refuse\")."
+          "Type a comment (needed to accept or reverse).",
+          "Press \"Accept\" (or \"Approve\"), or press \"Reverse\" (or \"Refuse\")."
         ]
       },
       {
@@ -2732,6 +3598,22 @@ export const SCREEN_GUIDES: ScreenGuide[] = [
           "Open the branch.",
           "Under \"Papers and accounts\", use \"Record papers\" and \"Add an account\" until nothing is listed under \"Before activation\".",
           "Type a comment and press \"Activate branch\"."
+        ]
+      },
+      {
+        "task": "How to decide a salaried branch's payout (Finance Director)",
+        "steps": [
+          "Open the branch and find the month marked \"Validated, Finance Director to decide the payout\".",
+          "Type the payout in RM (0 when nothing is paid out); for a payout above 0 also type the bank reference.",
+          "Type a comment and press \"Approve payout\" (or \"Close month (nothing paid out)\")."
+        ]
+      },
+      {
+        "task": "How to ask for a purchase in a salaried branch",
+        "steps": [
+          "Open the branch and go to \"Salaried branch: manager, purchases and expenses\".",
+          "Open \"Ask the company for a purchase or an expense\", fill it in and press \"Send request\".",
+          "The deciders type a comment (needed) and press \"Consent\" or \"Approve\" (or \"Decline\" or \"Refuse\"). After buying, press \"Record invoice\"."
         ]
       }
     ],
@@ -2755,9 +3637,17 @@ export const SCREEN_GUIDES: ScreenGuide[] = [
       {
         "term": "SQL Account",
         "means": "The accounting system. Month lines must quote its document numbers."
+      },
+      {
+        "term": "JV branch",
+        "means": "A Model A or C branch the Branch Manager runs: buys from any supplier and sets branch staff pay; the company and HR see the records."
+      },
+      {
+        "term": "Salaried branch",
+        "means": "A Model B branch the company runs; purchases and expenses follow the approval style the Finance Director sets."
       }
     ],
-    "notes": "\"Propose a new branch\" only shows if you are allowed to add a branch for a company. Approve, activate, step-in and closing buttons show only for the company manager. \"Activate branch\" stays greyed out until all papers and a verified bank account are recorded. \"Branch cash\" shows only when Finance has figures; with nothing recent it shows \"Unknown\". Months marked \"Test figures\" were not prepared from SQL Account lines."
+    "notes": "\"Propose a new branch\" only shows if you are allowed to add a branch for a company. Approve, activate, step-in and closing buttons show only for the company manager. Approving a settlement, activating a branch and reviewing an action each need a comment. \"Activate branch\" stays greyed out until all papers and a verified bank account are recorded. In a JV branch, \"Record a purchase\" logs what the Branch Manager bought; the company may \"Ask\" about it but does not block it. \"Branch cash\" shows only when Finance has figures; with nothing recent it shows \"Unknown\". Months marked \"Test figures\" were not prepared from SQL Account lines."
   },
   {
     "view": "finance",
@@ -2840,6 +3730,14 @@ export const SCREEN_GUIDES: ScreenGuide[] = [
           "Clear the checklist, write a comment and press \"Send for review\".",
           "The deputy or leader presses \"Mark reviewed\"; the Finance Director or the CEO presses \"Approve financials\"."
         ]
+      },
+      {
+        "task": "How to set a management fee between group companies (Finance Director or CEO)",
+        "steps": [
+          "Under \"Management fees between group companies\", find the company and press \"Add a fee\" (or \"Change or end\").",
+          "Choose who bills it, \"% of billing\" or \"RM a month\", the fee, the \"Agreement reference\" and the month it applies from.",
+          "Give a reason and press \"Save\"."
+        ]
       }
     ],
     "terms": [
@@ -2852,7 +3750,7 @@ export const SCREEN_GUIDES: ScreenGuide[] = [
         "means": "The bank statement and the books agree."
       }
     ],
-    "notes": "Test data: SQL Account is not connected yet. A company with no recent SQL figures shows as Unknown. \"New payment\", \"Add bank account\" and \"Add paper\" show only if you can act for a company; only the last 4 digits of a bank account are kept. \"Management fees from the agreements\" is for the Finance Director and the CEO only."
+    "notes": "Test data: SQL Account is not connected yet. A company with no recent SQL figures shows as Unknown. \"New payment\", \"Add bank account\" and \"Add paper\" show only if you can act for a company; only the last 4 digits of a bank account are kept. \"Management fees between group companies\" and \"Management fee bills (draft)\" are for the Finance Director and the CEO only; every fee change is kept with its reason, and the bills are a draft for Finance to raise in SQL Account, not an invoice."
   },
   {
     "view": "credit",
@@ -2892,7 +3790,7 @@ export const SCREEN_GUIDES: ScreenGuide[] = [
         "task": "How to handle a missed instalment",
         "steps": [
           "Open the \"Cases\" tab and the case.",
-          "Write a \"Note\".",
+          "Write a \"Note\". A note is needed to reconcile, confirm, clear or suspend.",
           "Press \"Bank reconciled\", \"Clear, not a default\", or \"Confirm default as ...\" depending on your part."
         ]
       },
@@ -2917,13 +3815,13 @@ export const SCREEN_GUIDES: ScreenGuide[] = [
         "means": "A charge over a company asset lodged with SSM."
       }
     ],
-    "notes": "Test data. A missed instalment opens an investigation, never a default. Prima never changes ownership. Enforcement steps 7 to 9 stay off until counsel approves the agreement template. \"Add financing\" shows only for the credit officer; \"Run the daily check\" for the credit officer and Finance. Use \"Show cleared\" or \"Show settled\" to see finished items."
+    "notes": "Test data. A missed instalment opens an investigation, never a default. Prima never changes ownership. Enforcement steps 7 to 9 stay off until counsel approves the agreement template. \"Add financing\" shows only for the credit officer; \"Run the daily check\" for the credit officer and Finance. Legal and Finance use \"Suspend enforcement\" (a note is needed) and \"Resume\". Use \"Show cleared\" or \"Show settled\" to see finished items."
   },
   {
     "view": "grc",
     "title": "Speak up and assurance",
-    "what": "A safe place to report wrongdoing (you can stay anonymous) and to declare gifts. Some staff also use it to track what each company must prove and site risk assessments.",
-    "who": "Guards, supervisors, admin executives, company managers and PWVSB staff can report and declare gifts. The \"Obligations\" and \"Site safety\" tabs and the numbers at the top show only for people with an assurance role. The \"Reports to handle\" tab shows only for people who handle reports.",
+    "what": "A safe place to report wrongdoing (you can stay anonymous), follow your report with the handler, and declare gifts. Some staff also track what each company must prove and site risk assessments.",
+    "who": "Most staff can report and declare gifts. \"Obligations\", \"Site safety\" and the numbers at the top show only for assurance roles; \"Reports to handle\" only for people who handle reports.",
     "tabs": [
       {
         "name": "Speak up",
@@ -2943,50 +3841,56 @@ export const SCREEN_GUIDES: ScreenGuide[] = [
       },
       {
         "name": "Reports to handle",
-        "what": "Reports you handle, and closures for a second handler to agree."
+        "what": "Reports you handle, messages to reporters, and closures to agree."
       }
     ],
     "tasks": [
       {
         "task": "How to report wrongdoing safely",
         "steps": [
-          "Open the \"Speak up\" tab.",
-          "Choose \"What is it about\".",
-          "Choose \"Which company\" if you want (optional).",
+          "Open \"Speak up\" and choose \"What is it about\" (and \"Which company\" if you want).",
           "In \"What happened\" write what, when, where and who was involved (at least 20 characters).",
-          "If one of the listed people is involved, tick them. Your report will not go to them.",
+          "If a listed person is involved, tick them. Your report will not go to them.",
           "Keep \"Do not record my name\" ticked to stay anonymous.",
           "Press \"Send report\" and write down the receipt code."
         ]
       },
       {
-        "task": "How to check on my report",
+        "task": "How to check my report, answer the handler or report retaliation",
         "steps": [
-          "Under \"Check a report\" type your receipt code.",
-          "Press \"Check\" to see its status and outcome."
+          "Under \"Check a report\" type your receipt code and press \"Check\" to see the status, outcome and the handler's messages.",
+          "Write in the box (at least 10 characters) and press \"Send answer\". Your name is not recorded.",
+          "If you were treated badly for reporting, write what happened and press \"Report retaliation\". This still works for some days after the report closes."
+        ]
+      },
+      {
+        "task": "How to handle a report (handlers)",
+        "steps": [
+          "In \"Reports to handle\" press \"Acknowledge\", then \"Investigate\". Use \"Add note\" for notes.",
+          "To ask the reporter something, write in \"Message to the reporter\" and press \"Send to reporter\".",
+          "Write the outcome and press \"Propose closing\". A second handler presses \"Agree and close\" or \"Send back\"; a comment is needed for both."
         ]
       },
       {
         "task": "How to declare a gift",
         "steps": [
           "Open \"Gifts\" and press \"Declare a gift\".",
-          "Fill in \"Given or received\", \"With whom\", \"Who they are\", \"What it was\", \"Value RM\" and \"Date\".",
-          "Tick \"It was cash or a cash voucher\" if so.",
+          "Fill in \"Given or received\", \"With whom\", \"Who they are\", \"What it was\", \"Value RM\" and \"Date\". Tick \"It was cash or a cash voucher\" if so.",
           "Press \"Declare\"."
         ]
       }
     ],
     "terms": [
       {
-        "term": "Receipt code",
-        "means": "The code you get after sending a report, used to check on it."
+        "term": "Retaliation",
+        "means": "Being treated badly for reporting. Nobody may punish you for reporting."
       },
       {
         "term": "HIRARC",
         "means": "A site's written risk assessment."
       }
     ],
-    "notes": "\"Do not record my name\" is ticked by default. A report never goes to anyone it names, and only the people who handle reports see it. \"Send report\" stays off until \"What happened\" has 20 characters. Gifts above the limit, any gift with a public official, and any cash need a decision by the Chief of Staff or Deputy; cash is never kept. Test data: the gift limit, acknowledgement time and who handles reports are proposals."
+    "notes": "A report never goes to anyone it names. Gifts above the limit, any gift with a public official, and any cash need a decision; cash is never kept. A comment is needed to approve: \"May keep\" for a gift, \"Accept proof\" for an obligation. Test data: the gift limit and acknowledgement time are proposals."
   },
   {
     "view": "act",
@@ -3012,7 +3916,7 @@ export const SCREEN_GUIDES: ScreenGuide[] = [
       },
       {
         "name": "Workflow audits",
-        "what": "The audit cycle for every workflow."
+        "what": "The audit cycle for each workflow."
       },
       {
         "name": "Workflow timing",
@@ -3033,6 +3937,7 @@ export const SCREEN_GUIDES: ScreenGuide[] = [
         "steps": [
           "Open \"My findings\" and find the finding.",
           "Under \"Your plan for the fix\" fill in \"Why it happened\", \"What you will change\" and \"Done by\".",
+          "Also fill in \"Meanwhile\", \"Elsewhere\" and \"How we know it worked\" (optional, except on findings from a quality check).",
           "Press \"Save the plan\"."
         ]
       },
@@ -3059,6 +3964,12 @@ export const SCREEN_GUIDES: ScreenGuide[] = [
           "Write what you checked.",
           "Press \"Fix works, close\" or \"Not fixed\"."
         ]
+      },
+      {
+        "task": "How to approve an improvement (COO or CEO)",
+        "steps": [
+          "In \"Improvements\" open one \"Waiting for approval\", write a comment (a comment is needed to approve) and press \"Approve\"."
+        ]
       }
     ],
     "terms": [
@@ -3071,68 +3982,7 @@ export const SCREEN_GUIDES: ScreenGuide[] = [
         "means": "The person responsible for fixing that finding."
       }
     ],
-    "notes": "Test data; follow-up timing is a proposal. Nothing here is automatic discipline. Overdue findings are shown to the Chief of Staff, then the COO and the CEO. A high finding can only be closed by the ACT Director. If nothing is assigned to you, the page says \"No ACT findings or improvements are assigned to you.\""
-  },
-  {
-    "view": "handovers",
-    "title": "Hand-overs",
-    "what": "Key it once: when one department records something another needs, the right people get a hand-over here with a link to the record.",
-    "who": "Office staff and managers see hand-overs sent to their desk. ACT and group leadership also see late links on the department map.",
-    "tabs": [
-      {
-        "name": "My hand-overs",
-        "what": "What other departments sent you to do or know."
-      },
-      {
-        "name": "Guide",
-        "what": "Step guides for the tasks you are allowed to do."
-      },
-      {
-        "name": "How departments connect",
-        "what": "Every link between departments and who is told."
-      },
-      {
-        "name": "Import existing records",
-        "what": "Load existing records from a CSV spreadsheet."
-      }
-    ],
-    "tasks": [
-      {
-        "task": "How to act on a hand-over",
-        "steps": [
-          "Open \"My hand-overs\".",
-          "Press \"Open this record in\" the screen shown (or \"Open\" the screen) to see it.",
-          "For a to-do, type \"What was done\" and press \"Done\" or \"Not needed\". For information, press \"Noted\"."
-        ]
-      },
-      {
-        "task": "How to see older hand-overs",
-        "steps": [
-          "Tick \"Show closed\".",
-          "Press \"Show more\" at the bottom."
-        ]
-      },
-      {
-        "task": "How to import existing records",
-        "steps": [
-          "Open \"Import existing records\" and choose the \"Kind\" (and \"Company\" if asked).",
-          "Choose the \"CSV file\" or paste it.",
-          "Press \"Check the file\" and fix any \"Rows to fix\".",
-          "Press \"Import\" with the row count."
-        ]
-      }
-    ],
-    "terms": [
-      {
-        "term": "Hand-over",
-        "means": "A note from another department with a link to their record. It never approves, pays or changes their records."
-      },
-      {
-        "term": "CSV",
-        "means": "A spreadsheet saved as plain text with column names in the first row."
-      }
-    ],
-    "notes": "In-app only: email and Teams notices stay off for now. If it says hand-overs are switched off, other departments are not told automatically yet. If a record is on a screen not in your menu, ask the sender. An import is all rows or none, the same file cannot be imported twice, and imported records do not send hand-overs."
+    "notes": "Test data. Nothing here is automatic discipline. Overdue findings go to the Chief of Staff, then the COO and the CEO. Only the ACT Director closes a high finding. If nothing is assigned to you, the page says \"No ACT findings or improvements are assigned to you.\""
   },
   {
     "view": "payformulas",
@@ -3497,7 +4347,7 @@ export const SCREEN_GUIDES: ScreenGuide[] = [
     "view": "purchasing",
     "title": "Procurement",
     "what": "Buying operational and cleaning equipment for the group: quotes, approvals, ordering, receiving, suppliers and the store.",
-    "who": "Staff and managers raise purchases. The Procurement executive gets the quotes; the COO then the CEO approve; a storekeeper receives and issues; Finance matches the invoice. In operations, only the OGM and Operations Director see this page.",
+    "who": "Staff and managers raise purchases. The Procurement executive gets the quotes; the COO then the CEO approve; a storekeeper receives and issues; Finance matches the invoice and checks suppliers. In operations, only the OGM and Operations Director see this page.",
     "tabs": [
       {
         "name": "Purchases",
@@ -3534,9 +4384,16 @@ export const SCREEN_GUIDES: ScreenGuide[] = [
       {
         "task": "How to approve a purchase",
         "steps": [
-          "Open it under \"Waiting for your approval\".",
-          "Check the quotes and online price, write a \"Note\".",
-          "Press \"Approve\" or \"Reject\" (reject needs a note)."
+          "Open it under \"Waiting for your approval\" and check the quotes and online price.",
+          "Write a comment; a comment is needed to approve or reject.",
+          "Press \"Approve\" or \"Reject\"."
+        ]
+      },
+      {
+        "task": "How to check a supplier (Finance)",
+        "steps": [
+          "Open \"Suppliers\", write a comment (needed to verify or review).",
+          "Press \"Bank verified against bank letter\", or \"Yearly review done (Finance)\" once Procurement has recorded \"Conflict declaration received\" and \"Anti-bribery signed\"."
         ]
       },
       {
@@ -3566,7 +4423,7 @@ export const SCREEN_GUIDES: ScreenGuide[] = [
         "means": "The purchase order number."
       }
     ],
-    "notes": "Test data. Every purchase needs the set number of quotes and an online price check. Nobody approves their own request, and an approver never receives the goods. A quote too far above the online price needs a reason. Uniforms and equipment are never charged to the guard. Finished purchases are hidden until \"Show finished\"."
+    "notes": "Test data. Every purchase needs the set number of quotes and an online price check; a quote far above it needs a reason. Nobody approves their own request, and an approver never receives the goods. A reported loss is settled with \"Confirm\" or \"Refuse\" (a note is needed). Uniforms and equipment are never charged to the guard. Finished purchases show with \"Show finished\"."
   },
   {
     "view": "items",
@@ -3876,11 +4733,11 @@ export const SCREEN_GUIDES: ScreenGuide[] = [
       },
       {
         "name": "Systems and access",
-        "what": "Systems and who has access."
+        "what": "Systems, access, and access requests."
       },
       {
         "name": "Assets",
-        "what": "Register of IT devices."
+        "what": "Register of IT devices, including disposal."
       },
       {
         "name": "Device rental",
@@ -3931,8 +4788,7 @@ export const SCREEN_GUIDES: ScreenGuide[] = [
       {
         "task": "How to handle a help request (IT)",
         "steps": [
-          "Open \"Help requests\". Use \"Log a request\" for someone who called or messaged.",
-          "Press \"Take it\", fix it, write what fixed it and press \"Resolve\"."
+          "Open \"Help requests\" (\"Log a request\" for someone who called). Press \"Take it\", fix it, write what fixed it and press \"Resolve\"."
         ]
       },
       {
@@ -3940,7 +4796,14 @@ export const SCREEN_GUIDES: ScreenGuide[] = [
         "steps": [
           "Open \"Purchases\" and press \"Ask to buy\".",
           "Fill in \"Why it is needed\", \"For\", \"Kind\", \"Item and model\", \"Quantity\" and \"Unit price, RM\".",
-          "Press \"Send for approval\"."
+          "Press \"Send for approval\". When the COO or CEO decides, a comment is needed to approve or reject."
+        ]
+      },
+      {
+        "task": "How to dispose of a device (IT)",
+        "steps": [
+          "Open the device in \"Assets\", write a \"Note\" and press \"Ask to dispose\".",
+          "The manager fills in \"E-waste contractor\" and \"Consignment note or certificate\" (both needed; wipe the data first) and presses \"Dispose\"."
         ]
       }
     ],
@@ -3950,7 +4813,7 @@ export const SCREEN_GUIDES: ScreenGuide[] = [
         "means": "How urgent the request is; P1 is most urgent."
       }
     ],
-    "notes": "Press \"Workflow guide\" for step-by-step help on your own tabs. During the pilot, only some people sign in; others reach IT by Teams, email or phone and IT logs it for them. Goods delivery for IT purchases is recorded in \"IT purchase fulfilment\"."
+    "notes": "Press \"Workflow guide\" for step-by-step help. During the pilot, people who do not sign in reach IT by Teams, email or phone and IT logs it. The CEO needs a comment to decide an access request or press \"Confirm the recorded list\". Goods delivery for IT purchases is recorded in \"IT purchase fulfilment\"."
   },
   {
     "view": "it-procurement",
@@ -4094,6 +4957,53 @@ export const SCREEN_GUIDES: ScreenGuide[] = [
       }
     ],
     "notes": "Timing starts only when you open it; earlier time is unknown. \"Which workflows can be timed today\" shows coverage; many are not covered yet. If storage or setup is missing, no timing action is available. Targets are provisional estimates."
+  },
+  {
+    "view": "staff-directory",
+    "title": "Staff directory",
+    "what": "A list of office staff and their Microsoft 365 mailboxes, with flags for problems like a personal Outlook or a shared mailbox. It does not give anyone a sign-in.",
+    "who": "HR, IT (manager, lead, executive), the Chief of Staff, the Deputy Chief of Staff and the CEO. HR, the Chief of Staff or Deputy load and add people. The Chief of Staff, Deputy or CEO approve a batch, never the person who prepared it.",
+    "tabs": [],
+    "tasks": [
+      {
+        "task": "How to find someone",
+        "steps": [
+          "In \"Everyone listed\", type in \"Find a name, company, unit or mailbox\".",
+          "To see only one kind of problem, pick it in the \"Show only\" list."
+        ]
+      },
+      {
+        "task": "How to load the staff list from a file (HR)",
+        "steps": [
+          "In \"Load the staff list\" fill \"Where from: file name and date\".",
+          "Choose the CSV file, or paste the rows with the heading row first.",
+          "Press \"Preview\" and fix any row shown in red.",
+          "Press \"Send\" to send the rows for approval."
+        ]
+      },
+      {
+        "task": "How to approve or return a batch",
+        "steps": [
+          "Under \"Batches\" write \"Your comment (needed)\".",
+          "Press \"Approve and add\" or \"Return to HR\"."
+        ]
+      },
+      {
+        "task": "How to add one missing person",
+        "steps": [
+          "In \"Key in someone missing\" fill the group, company or unit, \"Name\", \"Job title\" and \"Mailbox\".",
+          "Fill \"Where the details come from (needed)\".",
+          "Press \"Add\"."
+        ]
+      }
+    ],
+    "terms": [
+      {
+        "term": "Personal Outlook",
+        "means": "The person uses a personal account and cannot sign in to Prima until IT gives a work account or guest invite."
+      }
+    ],
+    "notes": "If the module is not ready the page says \"The staff directory is not switched on yet.\" or \"The staff directory is switched on but not yet set up in the database.\" IT sets it up after the CEO approves the release. A batch goes in whole or not at all. People already listed are left out. Personal data: do not copy it out of Prima."
   },
   {
     "view": "hr-it-intake",
@@ -4580,5 +5490,213 @@ export const SCREEN_GUIDES: ScreenGuide[] = [
     ],
     "terms": [],
     "notes": "A warning at the top shows how many memos you have not read. A memo can be limited to some states, such as Penang. \"New memo\" shows only for the Chief of Staff and the COO. The title needs at least 3 characters."
+  },
+  {
+    "view": "handovers",
+    "title": "Hand-overs",
+    "what": "Key it once: when one department records something another needs, the right people get a hand-over here with a link to the record.",
+    "who": "Office staff and managers see hand-overs sent to their desk. ACT and group leadership also see late links on the department map.",
+    "tabs": [
+      {
+        "name": "My hand-overs",
+        "what": "What other departments sent you to do or know."
+      },
+      {
+        "name": "Guide",
+        "what": "Step guides for the tasks you are allowed to do."
+      },
+      {
+        "name": "How departments connect",
+        "what": "Every link between departments and who is told."
+      },
+      {
+        "name": "Import existing records",
+        "what": "Load existing records from a CSV spreadsheet."
+      }
+    ],
+    "tasks": [
+      {
+        "task": "How to act on a hand-over",
+        "steps": [
+          "Open \"My hand-overs\".",
+          "Press \"Open this record in\" the screen shown (or \"Open\" the screen) to see it.",
+          "For a to-do, type \"What was done\" and press \"Done\" or \"Not needed\". For information, press \"Noted\"."
+        ]
+      },
+      {
+        "task": "How to see older hand-overs",
+        "steps": [
+          "Tick \"Show closed\".",
+          "Press \"Show more\" at the bottom."
+        ]
+      },
+      {
+        "task": "How to import existing records",
+        "steps": [
+          "Open \"Import existing records\" and choose the \"Kind\" (and \"Company\" if asked).",
+          "Choose the \"CSV file\" or paste it.",
+          "Press \"Check the file\" and fix any \"Rows to fix\".",
+          "Press \"Import\" with the row count."
+        ]
+      }
+    ],
+    "terms": [
+      {
+        "term": "Hand-over",
+        "means": "A note from another department with a link to their record. It never approves, pays or changes their records."
+      },
+      {
+        "term": "CSV",
+        "means": "A spreadsheet saved as plain text with column names in the first row."
+      }
+    ],
+    "notes": "In-app only: email and Teams notices stay off for now. If it says hand-overs are switched off, other departments are not told automatically yet. If a record is on a screen not in your menu, ask the sender. An import is all rows or none, the same file cannot be imported twice, and imported records do not send hand-overs."
+  },
+  {
+    "view": "registers",
+    "title": "Governance registers",
+    "what": "Simple registers a well-run group keeps: related-party deals, directors' interests, board committees and risks. You see only the registers that are yours. Prima records and reminds; it never approves for the board.",
+    "who": "Deals and directors' interests: the Deputy Chief of Staff records, the Chief of Staff reviews, the CEO sees. Committees: company managers and admin executives keep their own company's; the Chief of Staff and Deputy keep PWVSB's; legal and group leaders watch. Risks: ACT only, run by the ACT Director; the CEO sees.",
+    "tabs": [
+      {
+        "name": "Related-party deals",
+        "what": "Deals with directors, shareholders or related companies."
+      },
+      {
+        "name": "Directors' interests",
+        "what": "Each director's signed declaration."
+      },
+      {
+        "name": "Committees",
+        "what": "Board committees, members and meetings."
+      },
+      {
+        "name": "Risks",
+        "what": "The risk register with scores and actions."
+      }
+    ],
+    "tasks": [
+      {
+        "task": "How to record a related-party deal",
+        "steps": [
+          "Open \"Related-party deals\" and press \"Record a deal\".",
+          "Fill the other party, how they are related, the kind of deal, total value, dates and why the price is fair.",
+          "Press \"Save\". The Chief of Staff then presses \"Price is fair\" or \"Ask a question\"."
+        ]
+      },
+      {
+        "task": "How to record a director's declaration",
+        "steps": [
+          "Open \"Directors' interests\" and press \"Record a declaration\".",
+          "Fill the director's name, date and form reference.",
+          "Add each interest (\"Add another interest\") or tick \"Nothing to declare\".",
+          "Press \"Save\"."
+        ]
+      },
+      {
+        "task": "How to record a committee meeting",
+        "steps": [
+          "Open \"Committees\". Press \"Add a committee\" if it is not listed.",
+          "On the committee press \"Record a meeting\".",
+          "Fill the date, members present and minutes reference, then press \"Save\"."
+        ]
+      },
+      {
+        "task": "How to add or review a risk (ACT)",
+        "steps": [
+          "Open \"Risks\" and press \"Add a risk\".",
+          "Fill what could go wrong, the owner, \"Likelihood\", \"Impact\" and what is already in place.",
+          "Press \"Save\". Later use \"Review\", \"Give to the team\" or \"Settle and close\"."
+        ]
+      }
+    ],
+    "terms": [
+      {
+        "term": "Unknown",
+        "means": "No declaration or meeting on file. It is never shown as clear."
+      }
+    ],
+    "notes": "If the module is not installed, the page shows \"Governance registers are not switched on yet. The database part waits for the CEO to approve it.\" Tabs you do not see are not yours. The page shows test data."
+  },
+  {
+    "view": "quality",
+    "title": "Quality and compliance",
+    "what": "One list of what ISO 9001 and the PIKM code ask for, with the Prima records that prove it, plus faults, suppliers, objectives, documents, review and staff skills. A person checks the evidence; Prima never says a company is compliant.",
+    "who": "ACT keeps the requirements list. Company managers link evidence and record faults. HR keeps role profiles. Managers and officers assess staff. Supervisors see it as \"Guard skills\". Procurement (not storekeepers) sees \"Supplier ratings\". The CEO agrees key records.",
+    "tabs": [
+      {
+        "name": "Requirements register",
+        "what": "Each requirement with its evidence."
+      },
+      {
+        "name": "Service faults",
+        "what": "Times the service was not what was agreed."
+      },
+      {
+        "name": "Supplier ratings",
+        "what": "Supplier ratings, at least yearly."
+      },
+      {
+        "name": "Objectives",
+        "what": "Yearly quality targets."
+      },
+      {
+        "name": "Documents",
+        "what": "Procedures and forms in force."
+      },
+      {
+        "name": "Management review",
+        "what": "The review record the CEO agrees."
+      },
+      {
+        "name": "QMS foundation",
+        "what": "Scope, policy and main processes."
+      },
+      {
+        "name": "Competency matrix",
+        "what": "What each role needs and assessments."
+      }
+    ],
+    "tasks": [
+      {
+        "task": "How to link evidence (company manager)",
+        "steps": [
+          "Open \"Requirements register\" and press \"Open\" on a requirement.",
+          "Choose the kind of evidence, fill \"What it is\" and the reference.",
+          "Press \"Link evidence\". ACT then presses \"Evidence is right\" or \"Not accepted\"."
+        ]
+      },
+      {
+        "task": "How to record a service fault",
+        "steps": [
+          "Open \"Service faults\" and press \"Record a fault\".",
+          "Fill what happened, what was done at once and the date found.",
+          "Press \"Record\". Later press \"Close\" and then \"Close the fault\"."
+        ]
+      },
+      {
+        "task": "How to rate a supplier",
+        "steps": [
+          "Press \"Rate\" on the supplier.",
+          "Score quality, time and paperwork from 1 to 5 and pick the result.",
+          "Press \"Save the rating\"."
+        ]
+      },
+      {
+        "task": "How to assess a guard",
+        "steps": [
+          "In the people list press \"Open\".",
+          "Choose what you assessed, \"Competent\" or \"Not yet competent\", and how.",
+          "Write what you saw and press \"Save assessment\"."
+        ]
+      }
+    ],
+    "terms": [
+      {
+        "term": "Stop",
+        "means": "A supplier rating that blocks the supplier; only Finance can unblock it."
+      }
+    ],
+    "notes": "If the module is not installed, the page shows \"Quality and compliance is not switched on yet. The database part waits for the CEO to approve it.\" Storekeepers and admin executives do not see it. Tabs you do not see are not for your role. The page shows test data."
   }
 ];

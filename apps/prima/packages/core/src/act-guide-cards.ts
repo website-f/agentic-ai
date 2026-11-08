@@ -1,10 +1,7 @@
-/**
- * ACT guide cards (Arisha main review, 2 Nov 2026) in the shared guide-card format. Read-only help: a card never
- * saves, checks or closes anything. `allowed` asks the same rules the service enforces (actJobOf, actCanOwnFindings);
- * the service still checks each finding's team, owner and company on every action.
- */
-import { actCanOwnFindings, actJobOf } from './access';
-import type { User } from './types';
+import { actCanOwnFindings } from "./access";
+import { actJobOf } from "./access";
+import type { User } from "./types";
+
 
 // ---- Local copy of the shared guide-card types (PR #56, packages/core/src/guide-cards.ts at 4989972) ----
 // Kept here so this PR builds on its own. At the combined merge: delete this block, import GuideCardSpec, GuideField

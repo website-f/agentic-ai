@@ -1,3 +1,59 @@
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 export * from './types';
 export * from './time';
 export * from './rules';
@@ -5,19 +61,9 @@ export * from './regions';
 export * from './checks';
 export * from './access';
 export * from './rollouts';
-export * from './walls';
-export * from './org-links';
-export * from './org-import';
-// P81: any spreadsheet, auto-aligned to the record's fields; .xlsx read without a library.
-export * from './import-align';
-export * from './xlsx-read';
-// P81: past attendance from the InfoTech monthly PDF reports.
-export * from './attendance-reports';
-export * from './walls';
 export * from './audit';
 export * from './store';
 export * from './service';
-export { demoFwRecruitFiles, generateDataset, mulberry32, type SeedOptions } from './seed';
 export * from './tender';
 export * from './reports';
 export * from './meetings';
@@ -26,7 +72,6 @@ export * from './fw';
 export * from './clients';
 export * from './crm';
 export * from './payroll';
-export * from './statutory-tables';
 export * from './statutory';
 export * from './pay-formulas';
 export * from './site-hours';
@@ -34,15 +79,9 @@ export * from './public-holidays';
 export * from './salary-calc';
 export * from './guard-pay';
 export * from './contracts';
-export * from './growth';
 export * from './branches';
-export * from './branch-ledger';
-export * from './insurance-claims';
-export * from './client-share';
 export * from './assets';
 export * from './records';
-export * from './company-office';
-export * from './office-guide';
 export * from './purchase';
 export * from './websites';
 export * from './websites-connectors';
@@ -56,41 +95,17 @@ export * from './arisha-context';
 export * from './it-import';
 export * from './it-import-review';
 export * from './data-mode';
-export * from './finance';
-export * from './finance-controls';
-export * from './finance-plan3';
-export * from './finance-tax-calendar';
-export * from './finance-kpi';
-export * from './finance-requests';
-export * from './finance-regular';
-export * from './finance-cash';
-export * from './receipts';
-export * from './finance-teams';
 
 export * from './pin';
-export * from './central-admin';
 export * from './hr';
 export * from './hr-leave';
 export * from './hr-joining';
 export * from './hr-osh';
 export * from './hr-payroll-checks';
 export * from './hr-legal';
+export * from './hr-languages';
 export * from './hr-guide-cards';
 export * from './face';
-export * from './finance-billing';
-export * from './finance-contract-end';
-export * from './finance-banking';
-export * from './finance-yearend';
-export * from './finance-credit';
-export * from './finance-supplier-statements';
-export * from './finance-stamp';
-export * from './finance-daily-cash';
-export * from './finance-intercompany';
-export * from './finance-forecast13';
-export * from './finance-pack';
-export * from './finance-guides';
-export * from './finance-guide-cards';
-export * from './finance-ledger';
 
 export * from './it-manual';
 
@@ -120,36 +135,133 @@ export * from './it-workflow-metrics-store';
 export * from './it-workflow-metrics-adapters';
 export * from './it-workflow-quality';
 export * from './it-workflow-metrics-wire';
-export * from './guide-cards';
+export * from './hr-job-adverts';
+export * from './work-kpi';
+export * from './work-kpi-hr';
+export * from './work-kpi-hr-adverts';
+export * from './seal';
+export * from './client-needs';
+export * from './items';
+export * from './item-service';
+export * from './item-seed';
+export * from './work-kpi-client-complaints';
+export * from './work-kpi-crm';
+export * from './offline-sync';
+export * from './statutory-tables';
+export * from './finance';
+export * from './finance-controls';
+export * from './finance-plan3';
+export * from './finance-tax-calendar';
+export * from './finance-kpi';
+export * from './finance-requests';
+export * from './finance-regular';
+export * from './finance-cash';
+export * from './receipts';
+export * from './finance-teams';
+export * from './finance-billing';
+export * from './finance-contract-end';
+export * from './finance-banking';
+export * from './finance-yearend';
+export * from './finance-credit';
+export * from './finance-supplier-statements';
+export * from './finance-stamp';
+export * from './finance-daily-cash';
+export * from './finance-intercompany';
+export * from './finance-forecast13';
+export * from './finance-pack';
+export * from './finance-guides';
+export * from './finance-guide-cards';
+export * from './finance-ledger';
+export * from './central-admin';
+export * from './central-admin-guide';
+export * from './walls';
 
 export * from './special-ops';
 export * from './special-ops-guide';
 export * from './rent-reminders';
 export * from './cms-commissioning';
-export * from './central-admin-guide';
 export * from './act-guide-cards';
+export * from './org-links';
+export * from './org-import';
+export * from './guide-cards';
+export * from './company-office';
+export * from './office-guide';
 export * from './work-rebalance';
 export * from './work-rebalance-guide';
-// P81: staff check-in by place (offices on a map, who checks in where, out-of-area review).
-export * from './checkin';
-export * from './checkin-service';
-// Rehearsal: two guide modules name their own GuideField/GuideCardSpec; the shared guide-cards types win here.
-export type { GuideField, GuideCardSpec } from './guide-cards';
+export * from './branch-ledger';
+export * from './insurance-claims';
+export * from './client-share';
+export * from './growth';
 export * from './read-memo';
-export * from './guide-registry';
-// P81: the group's real companies and staff, loaded into an empty database instead of sample data.
-export * from './real-data';
-export * from './items';
-export * from './item-service';
-export * from './item-seed';
+export * from './fw-cost';
+export * from './police-help';
+export * from './time-slip';
+export * from './staff-directory';
+export * from './cleaning';
+export * from './cleaning-proof';
+export * from './cleaning-service';
+export * from './site-kit';
+export * from './security-plan';
+export * from './staff-history';
+export * from './tender-counter';
+export * from './tender-sources';
+
+export * from './alerts';
+export * from './management-fees';
+export * from './vehicle-rental';
+export * from './vehicle-usage';
+export * from './cms-readiness';
+export * from './am-bq';
+
+export * from './proof-link';
+export * from './board-registers';
+
+export * from './site-surveys';
+export * from './contract-reader';
+export * from './pdf-text';
+export * from './work-kpi-time-slip';
+export * from './work-kpi-central-admin';
+export * from './work-kpi-director-office';
+export * from './work-kpi-special-ops';
+export * from './work-kpi-cms-readiness';
+export * from './work-kpi-ops';
+export * from './work-kpi-cleaning';
+export * from './work-kpi-police-help';
+export * from './work-kpi-act';
+export * from './work-kpi-company-office';
+export * from './work-kpi-branches';
+export * from './work-kpi-fwm';
+export * from './work-kpi-asset';
+export * from './quality';
+export * from './fw-recharge';
+export * from './hr-screening';
+export * from './client-quality';
+export * from './draft-help';
+export * from './am-extras';
+export * from './am-extras-service';
+export * from './am-bq-building';
+export * from './am-bq-xlsx';
+export * from './ja-switch';
+export * from './guard-phone';
+export * from './quality-ops';
+export { demoFwRecruitFiles, generateDataset, mulberry32, type SeedOptions } from './seed';
+
+// Canonical public names where independently developed modules expose equivalent helper/type labels.
+export type { GuideField, GuideCardSpec } from './guide-cards';
+export { isRealDate } from './time';
+export { isHhmm } from './cleaning';
+export * from './client-codes';
+export * from './rba';
 export * from './item-scan';
 export * from './item-finance';
 export * from './item-reports';
-export * from './seal';
-export * from './client-needs';
-export * from './hr-job-adverts';
-export * from './work-kpi';
-export * from './work-kpi-hr';
-export * from './work-kpi-hr-adverts';
-export * from './work-kpi-client-complaints';
-export * from './work-kpi-crm';
+// P81 (office): any spreadsheet, auto-aligned to the record's fields; .xlsx read without a library.
+export * from './import-align';
+export * from './xlsx-read';
+// P81 (office): past attendance from the InfoTech monthly PDF reports.
+export * from './attendance-reports';
+// P81 (office): staff check-in by place (offices on a map, who checks in where, out-of-area review).
+export * from './checkin';
+export * from './checkin-service';
+// P81 (office): the group's real companies and staff, loaded into an empty database instead of sample data.
+export * from './real-data';

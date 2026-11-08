@@ -1,13 +1,12 @@
-// Each licensed company's own office (Fauzan, 2 Nov 2026: "Each company have 1 company manager or gm and 2 to 8
-// executives"). The company runs its own office: the head shares the company's work out to the executives by desk, and
-// every desk has an owner and a backup, so work never waits on one person. The team itself is not keyed again here:
-// it is read from the sign-in accounts HR and IT already keep (role company_manager is the head, admin_exec without a
-// branch is an executive). Only the desk split is new data, and only the company's own head may change it (V12: the
-// company controls company matters; group leaders monitor).
+import type { HomeItem } from "./service";
+import type { HomeView } from "./service";
+import type { CompanyLicence } from "./types";
+import type { Id } from "./types";
+import type { IsoDate } from "./types";
+import type { IsoDateTime } from "./types";
+import type { User } from "./types";
+import { registerRollout } from "./rollouts";
 
-import type { HomeItem, HomeView } from './service';
-import type { CompanyLicence, Id, IsoDate, IsoDateTime, User } from './types';
-import { registerRollout } from './rollouts';
 
 /** The size Fauzan set for every company office (2 Nov 2026). */
 export const OFFICE_TEAM = { heads: 1, minExecs: 2, maxExecs: 8, source: 'Fauzan, 2 Nov 2026: 1 Company Manager or GM and 2 to 8 executives per company' };

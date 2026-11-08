@@ -1,14 +1,7 @@
-import { useState } from "react";
-import { api, type PayChangesData } from "../api";
-import {
-  Chip,
-  ErrorNotice,
-  Loading,
-  dateLabel,
-  dateTimeLabel,
-  useAction,
-  useLoad,
-} from "../ui";
+import { useState } from 'react';
+import { api, type PayChangesData } from '../api';
+import { Chip, ErrorNotice, Loading, dateLabel, dateTimeLabel, useAction, useLoad } from '../ui';
+
 
 const rm = (n: number | null) =>
   n == null ? "none" : `RM${n.toLocaleString("en-MY")}`;

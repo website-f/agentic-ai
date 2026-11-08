@@ -1,16 +1,10 @@
-import { useState } from "react";
-import { LEAVE_LABEL, type LeaveKind, type ProofInput } from "@prima/core";
-import { api, type LeaveList } from "../api";
-import {
-  Chip,
-  ErrorNotice,
-  Loading,
-  dateLabel,
-  dateTimeLabel,
-  useAction,
-  useLoad,
-} from "../ui";
-import { ProofPicker } from "./Proof";
+import { useState } from 'react';
+import { LEAVE_LABEL, type LeaveKind, type ProofInput } from '@prima/core';
+import { api, type LeaveList } from '../api';
+import { Chip, ErrorNotice, Loading, dateLabel, dateTimeLabel, useAction, useLoad } from '../ui';
+import { ProofPicker } from './Proof';
+
+
 
 export const LEAVE_KINDS: LeaveKind[] = [
   "ANNUAL",

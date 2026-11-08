@@ -402,6 +402,34 @@ describe('database company wall', () => {
     );
   });
 
+  it('two Arms Control staff taking the same person off the same CMS seat at once: the seat lock lets only one through', async () => {
+    const board = await db.asUser('u-pwvsb-arms', (svc, user) => svc.cms(user));
+    const seats = board.roster.flatMap((r) => r.seats).filter((s) => s.state === 'later' && s.shift.staffName);
+    const target = seats.at(-1)!;
+    assert.ok(target);
+    const both = await Promise.allSettled([
+      db.asUser('u-pwvsb-arms', (svc, user) => svc.releaseCmsSeat(user, target.shift.id, 'MC (mock) one')),
+      db.asUser('u-pwvsb-arms-asst', (svc, user) => svc.releaseCmsSeat(user, target.shift.id, 'MC (mock) two')),
+    ]);
+    assert.equal(both.filter((r) => r.status === 'fulfilled').length, 1);
+    const after = await db.asUser('u-pwvsb-arms', (svc, user) => svc.cms(user));
+    const seat = after.roster.flatMap((r) => r.seats).find((s) => s.shift.id === target.shift.id)!;
+    assert.equal(seat.shift.released?.length, (target.shift.released?.length ?? 0) + 1);
+  });
+
+  it('takes a person off a CMS seat with the reason, and shows the hours record to Arms Control only, through the app role', async () => {
+    const board = await db.asUser('u-pwvsb-arms', (svc, user) => svc.cms(user));
+    assert.ok(board.hours);
+    const later = board.roster.flatMap((r) => r.seats).find((s) => s.state === 'later' && s.shift.staffName);
+    assert.ok(later);
+    await assert.rejects(db.asUser('u-cms-head', (svc, user) => svc.releaseCmsSeat(user, later.shift.id, 'MC (mock)')), /Not allowed/);
+    const r = await db.asUser('u-pwvsb-arms', (svc, user) => svc.releaseCmsSeat(user, later.shift.id, 'MC (mock)'));
+    assert.equal(r.staffName, null);
+    assert.equal(r.released?.at(-1)?.reason, 'MC (mock)');
+    const desk = await db.asUser('u-cms-head', (svc, user) => svc.cms(user));
+    assert.equal(desk.hours, null);
+  });
+
   it('reads the V14 arms tables and records an Arms Control review through the app role', async () => {
     const board = await db.asUser('u-pwvsb-arms', (svc, user) => svc.armsControl(user));
     assert.ok(board.ammo.length > 0 && board.doors.length > 0 && board.agreements.length > 0 && board.readiness.length > 0);
@@ -552,7 +580,7 @@ describe('database company wall', () => {
       }),
     );
     assert.equal(q.status, 'pending');
-    await assert.rejects(db.asUser('u-cm-sasa', (svc, user) => svc.decideLeave(user, q.id, true, '')));
+    await assert.rejects(db.asUser('u-cm-sasa', (svc, user) => svc.decideLeave(user, q.id, true, 'ok')));
     const own = await asApp('co-inas', 'SELECT count(*)::int AS n FROM prima.leave_requests WHERE company_id = $1', ['co-sasa']);
     assert.equal(own.rows[0].n, 0);
   });
@@ -665,9 +693,45 @@ describe('database company wall', () => {
     assert.ok(!cm.tasks.some((x) => x.task.id === t.id));
     if (t.omUserId) {
       await db.asUser(t.omUserId, (svc, u) => svc.doneFwmTask(u, t.id, 'Done', [proof()]));
-      const done = await db.asUser('u-fwm-mgr', (svc, u) => svc.reviewFwmTask(u, t.id, true, ''));
+      const done = await db.asUser('u-fwm-mgr', (svc, u) => svc.reviewFwmTask(u, t.id, true, 'Permit copy checked'));
       assert.equal(done.status, 'accepted');
     }
+  });
+
+  it('records FWM papers, acknowledgements and JA workers through the restricted login, inside the company wall', async () => {
+    const np = await asApp(
+      'co-sasa',
+      "SELECT id, data->>'staffNo' AS staff FROM prima.people WHERE company_id = 'co-sasa' AND data->>'nationality' = 'NP' AND data->>'role' = 'guard' AND data->>'status' = 'active' LIMIT 1",
+    );
+    const id = np.rows[0].id as string;
+    const today = await db.asUser('u-fwm-ex1', async (svc) => dateOf(svc.now()));
+    const saved = await db.asUser('u-fwm-ex1', (svc, u) =>
+      svc.recordFwPaper(u, id, 'FOMEMA', { mode: 'correct', number: 'RLS-FOMEMA-1', issuedOn: addDays(today, -340), expiresOn: addDays(today, 25), reason: 'RLS test: synthetic date' }, [proof()]),
+    );
+    assert.equal(saved.source, 'prima');
+    const wall = await asApp('co-arsh', 'SELECT count(*)::int AS n FROM prima.credentials WHERE id = $1', [saved.id]);
+    assert.equal(wall.rows[0].n, 0);
+    // Another company's manager does not see it; the FWM despatch cannot record.
+    const cm = await db.asUser('u-cm-arsh', (svc, u) => svc.fwmBoard(u));
+    assert.ok(!cm.items.some((i) => i.credentialId === saved.id));
+    await assert.rejects(db.asUser('u-fwm-desp', (svc, u) => svc.recordFwPaper(u, id, 'FOMEMA', { mode: 'new', number: 'RLS-X', issuedOn: today, expiresOn: addDays(today, 400) }, [proof()])));
+    // At 25 days FWM and the Chief of Staff acknowledge; the COO is not reached yet.
+    await db.asUser('u-cos', (svc, u) => svc.ackFwPaper(u, saved.id, 'RLS ack'));
+    await assert.rejects(db.asUser('u-coo', (svc, u) => svc.ackFwPaper(u, saved.id, '')), /Nothing to acknowledge/);
+    const row = await asApp('co-sasa', "SELECT data->'fwAcks' AS acks FROM prima.credentials WHERE id = $1", [saved.id]);
+    assert.equal(row.rows[0].acks[0].level, 'CHIEF_OF_STAFF');
+    // A worker sent by the JA app is added by FWM, and Prima's recorded paper goes back to the JA app.
+    await db.asUser('u-ja-sync', (svc, u) =>
+      svc.jaIngest(u, 'worker', [{ company: 'SASA', externalId: 'RLS-W-1', updatedAt: new Date().toISOString(), staffNo: 'RLS-NP-1', name: 'RLS Worker', nationality: 'Nepal', status: 'active', papers: [{ paper: 'PLKS', expiresOn: addDays(today, 60) }] }], ['SASA']),
+    );
+    const board = await db.asUser('u-fwm-ex1', (svc, u) => svc.fwmBoard(u));
+    const ja = board.alignment!.jaOnly.find((w) => w.staffNo === 'RLS-NP-1')!;
+    const branch = await asApp('co-sasa', "SELECT id FROM prima.branches WHERE company_id = 'co-sasa' LIMIT 1");
+    const added = await db.asUser('u-fwm-ex1', (svc, u) => svc.addFwWorkerFromJa(u, ja.recordId, { branchId: branch.rows[0].id, hiredOn: '2024-02-01', dob: '1994-03-03' }));
+    assert.equal(added.papers, 1);
+    const back = await db.asUser('u-ja-sync', (svc, u) => svc.jaFwPaperChanges(u, null));
+    assert.ok(back.records.some((r) => r.kind === 'paper' && r.staffNo === np.rows[0].staff && r.paper === 'FOMEMA'));
+    await assert.rejects(db.asUser('u-fwm-ex1', (svc, u) => svc.jaFwPaperChanges(u, null)));
   });
 
   it('lets the COO check FWM and staff tasks through the restricted login, and the people told read their notices', async () => {
@@ -736,7 +800,23 @@ describe('database company wall', () => {
     assert.deepEqual(advice.people.map((p) => p.userId).sort(), ['u-it-ex1', 'u-it-ex2', 'u-it-ex3', 'u-it-ex4']);
   });
 
+  it('allocates distinct task identities for concurrent same-target requests at the same timestamp under RLS', async () => {
+    const fixed = new Date().toISOString();
+    const due = new Date(Date.parse(fixed) + 86_400_000).toISOString();
+    const tasks = await Promise.all(Array.from({ length: 4 }, (_, i) => db.asUser('u-it-lead', (svc, u) => svc.workTaskAdd(u, { userId: 'u-it-ex1', title: `Synthetic fixed-time task ${i}`, doneMeans: 'Evidence recorded and reviewed', dueAt: due, priority: 'normal' }), () => fixed)));
+    assert.equal(new Set(tasks.map(t => t.id)).size, 4);
+    await db.asUser('u-it-ex1', async (_svc, _user, store) => {
+      for (const task of tasks) assert.equal((await store.get('workTasks', task.id))?.userId, 'u-it-ex1');
+    });
+  });
+
   it('caps Arisha AI rebalance asks per manager per day even when they arrive at once (Arisha main review, 2 Nov 2026)', async () => {
+    // An explicit overdue fixture, independent of workloads added by other integrated modules.
+    await db.asUser('u-it-lead', async (svc, u, store) => {
+      const now = Date.parse(svc.now());
+      const task = await svc.workTaskAdd(u, { userId: 'u-it-ex1', title: 'Synthetic overdue AI quota case', doneMeans: 'Evidence recorded', dueAt: new Date(now + 86_400_000).toISOString(), priority: 'normal' });
+      await store.update('workTasks', task.id, { dueAt: new Date(now - 5 * 86_400_000).toISOString() });
+    });
     const r = await db.asUser('u-it-mgr', (svc, u) => svc.workRebalance(u));
     assert.ok(r.advice.length > 0, 'the synthetic team has at least one case');
     const id = r.advice[0].id;

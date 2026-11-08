@@ -496,12 +496,12 @@ describe('HR monitoring and arms control', () => {
     expect(b.renewals.some((r) => r.what === 'Armed-service insurance')).toBe(true);
     // Requests: Arms Control passes its own step to the company, never further.
     const review = b.requests.find((r) => r.request.state === 'arms_review')!;
-    await expect(svc.reviewArmsRequest(await svc.user('u-cm-sasa'), review.request.id, 'pass', '')).rejects.toBeInstanceOf(AccessDenied);
+    await expect(svc.reviewArmsRequest(await svc.user('u-cm-sasa'), review.request.id, 'pass', 'ok')).rejects.toBeInstanceOf(AccessDenied);
     await expect(svc.reviewArmsRequest(arms, review.request.id, 'return', ' ')).rejects.toBeInstanceOf(BadRequest);
     await svc.reviewArmsRequest(arms, review.request.id, 'pass', 'Checked');
     expect(ds.armsRequests.find((r) => r.id === review.request.id)!.state).toBe('company_auth');
     expect(ds.audit.at(-1)!.action).toBe('arms.request_review');
-    await expect(svc.reviewArmsRequest(arms, review.request.id, 'pass', '')).rejects.toBeInstanceOf(BadRequest);
+    await expect(svc.reviewArmsRequest(arms, review.request.id, 'pass', 'ok')).rejects.toBeInstanceOf(BadRequest);
   });
 
   it('tracks the police fundamentals: 14-day loss report, deposit on expiry, permit limit, annual return', async () => {
@@ -689,7 +689,7 @@ describe('HR monitoring and arms control', () => {
     expect(ceo.opsTier).toBe('ceo');
     const h = await svc.home(ceo);
     // Foreign worker papers that reached the CEO step come as one line per paper, not one per worker.
-    expect(h.todo.filter((t) => t.tag === 'Foreign workers').length).toBeLessThanOrEqual(4);
+    expect(h.todo.filter((t) => t.tag === 'Foreign workers').length).toBeLessThanOrEqual(6); // six papers since SPIKPA and the KDN letter joined (5 Nov 2026)
     expect(h.title).toBe('Executive view');
     expect(h.todoTitle).toBe('Do today');
     expect(h.watch).toBeDefined();
@@ -806,15 +806,15 @@ describe('tenders and quotations', () => {
       validDays: 30,
     });
     expect(q.monthlyTotal).toBe(12800);
-    await expect(svc.quotationAction(ae, q.id, 'approve')).rejects.toBeInstanceOf(AccessDenied);
+    await expect(svc.quotationAction(ae, q.id, 'approve', 'ok')).rejects.toBeInstanceOf(AccessDenied);
     await svc.quotationAction(ae, q.id, 'submit');
     await expect(svc.quotationAction(cm, q.id, 'return')).rejects.toThrow(/what needs changing/);
-    const ok = await svc.quotationAction(cm, q.id, 'approve');
+    const ok = await svc.quotationAction(cm, q.id, 'approve', 'ok');
     expect(ok.status).toBe('approved');
     expect(ok.approvedBy).toBe(cm.name);
 
     const own = ds.quotations.find((x) => x.companyId === 'co-arsh' && x.preparedById === 'u-cm-arsh' && x.status === 'awaiting_approval')!;
-    await expect(svc.quotationAction(cm, own.id, 'approve')).rejects.toThrow(/another person/);
+    await expect(svc.quotationAction(cm, own.id, 'approve', 'ok')).rejects.toThrow(/another person/);
     expect(verifyChain(ds.audit)).toBeNull();
   });
 
@@ -878,7 +878,7 @@ describe('tenders and quotations', () => {
     expect(ds.tenders.find((x) => x.id === t.id)!.verifications).toEqual([]);
     await expect(svc.submitTender(cm, t.id, 'Lodged', [proof()])).rejects.toThrow(/both sign/);
     // The person who prepared it signs first; the same person never signs again as the manager.
-    await svc.verifyTender(cm, t.id, true, '');
+    await svc.verifyTender(cm, t.id, true, 'ok');
     await expect(svc.verifyTender(cm, t.id, true, 'again')).rejects.toBeInstanceOf(AccessDenied);
     await svc.verifyTender(gm, t.id, true, 'All verified by the guidelines');
     expect(ds.tenders.find((x) => x.id === t.id)!.verifications!.map((v) => v.level)).toEqual(['PREPARER', 'MANAGER']);
@@ -937,8 +937,8 @@ describe('Tender protocol (Fauzan, 25 Oct 2026)', () => {
     await expect(svc.updateTender(ae, t.id, 'preparing')).rejects.toThrow(/Check eligibility/);
     await svc.doTenderStep(ae, t.id, 'check_eligibility', 'KDN and MOF valid to closing');
     await expect(svc.updateTender(ae, t.id, 'preparing')).rejects.toThrow(/Decision to teruskan/);
-    await expect(svc.decideTender(ae, t.id, 'TERUSKAN', '')).rejects.toBeInstanceOf(AccessDenied);
-    await svc.decideTender(await svc.user('u-cm-arsh'), t.id, 'TERUSKAN', '');
+    await expect(svc.decideTender(ae, t.id, 'TERUSKAN', 'ok')).rejects.toBeInstanceOf(AccessDenied);
+    await svc.decideTender(await svc.user('u-cm-arsh'), t.id, 'TERUSKAN', 'ok');
     expect((await svc.updateTender(ae, t.id, 'preparing')).status).toBe('preparing');
     // Just a tick; a tick made by mistake can be taken back before the bid is signed.
     await svc.doTenderStep(ae, t.id, 'checklist_signed', '');
@@ -1001,7 +1001,7 @@ describe('Meetings, minutes and deadlines (Fauzan, 25 Oct 2026)', () => {
     expect(hr.rows.every((r) => r.meeting.department === 'hr')).toBe(true);
     await expect(svc.addMinutes(await svc.user('u-cm-sasa'), 'mt-arsh-ops', 'x'.repeat(30))).rejects.toBeInstanceOf(AccessDenied);
     const held = await svc.addMinutes(cmA, 'mt-arsh-ops', 'Night patrols improved.\nAction: Fix the gate lock (Site officer, by 2026-10-30)');
-    expect(held.summary!.actions).toEqual([{ text: 'Fix the gate lock', owner: 'Site officer', due: '2026-10-30', done: false }]);
+    expect(held.summary!.actions).toEqual([{ text: 'Fix the gate lock', owner: 'Site officer', ownerId: null, due: '2026-10-30', done: false }]);
     expect(held.summary!.checkedBy).toBeNull();
     await expect(svc.checkMeetingSummary(cmA, 'mt-arsh-ops', {})).rejects.toBeInstanceOf(AccessDenied);
     const checked = await svc.checkMeetingSummary(doa, 'mt-arsh-ops', {});
@@ -1368,8 +1368,8 @@ describe('Guard profile and leave (Fauzan, 25 Oct 2026)', () => {
     expect(q.status).toBe('pending');
     expect(q.days).toBe(2);
     // The company and HR cannot approve a guard's leave; the area OM can.
-    await expect(svc.decideLeave(await svc.user('u-cm-sasa'), q.id, true, '')).rejects.toBeInstanceOf(AccessDenied);
-    await expect(svc.decideLeave(await svc.user('u-pwvsb-hr'), q.id, true, '')).rejects.toBeInstanceOf(AccessDenied);
+    await expect(svc.decideLeave(await svc.user('u-cm-sasa'), q.id, true, 'ok')).rejects.toBeInstanceOf(AccessDenied);
+    await expect(svc.decideLeave(await svc.user('u-pwvsb-hr'), q.id, true, 'ok')).rejects.toBeInstanceOf(AccessDenied);
     const om = ds.users.find((u) => u.opsTier === 'om' && u.areaStates!.includes(ds.branches.find((b) => b.id === g.branchId)!.state))!;
     const list = await svc.leaveRequests(om, { waiting: 'me' });
     expect(list.rows.find((r) => r.request.id === q.id)!.waitingWith!.level).toBe('OM');
@@ -1878,12 +1878,12 @@ describe('Tender guide V1.0 and the JKR checklist (Director Office, 11 Oct 2026)
     const t = ds.tenders.find((x) => x.companyId === 'co-arsh' && x.status === 'open')!;
     await expect(svc.doTenderStep(ae, t.id, 'g02_07', 'Tiada taklimat', [], { status: 'na' })).rejects.toThrow(/reference/);
     await svc.doTenderStep(ae, t.id, 'g02_07', 'Tiada taklimat dalam notis', [], { status: 'na', ref: 'Notis para 4' });
-    await expect(svc.confirmTenderNa(ae, t.id, 'g02_07', true)).rejects.toBeInstanceOf(AccessDenied);
-    await svc.decideTender(cm, t.id, 'TERUSKAN', '');
+    await expect(svc.confirmTenderNa(ae, t.id, 'g02_07', true, 'ok')).rejects.toBeInstanceOf(AccessDenied);
+    await svc.decideTender(cm, t.id, 'TERUSKAN', 'ok');
     for (const s of p.steps.filter((x) => x.before === 'preparing' && x.id !== 'g02_07'))
       await svc.doTenderStep(ae, t.id, s.id, 'Disemak', s.needsDocument ? [proof()] : []);
     await expect(svc.updateTender(ae, t.id, 'preparing')).rejects.toThrow(/T\/B waiting for a supervisor/);
-    await svc.confirmTenderNa(doa, t.id, 'g02_07', true);
+    await svc.confirmTenderNa(doa, t.id, 'g02_07', true, 'ok');
     expect((await svc.updateTender(ae, t.id, 'preparing')).status).toBe('preparing');
     await expect(svc.doTenderStep(ae, t.id, 'g04_09', 'Harga diluluskan', [proof()])).rejects.toThrow(/company manager/);
     await svc.doTenderStep(cm, t.id, 'g04_09', 'Harga versi 1 diluluskan', [proof()]);
@@ -2128,7 +2128,7 @@ describe('Foreign Worker Management (Fauzan, 26 Oct 2026)', () => {
     const back = await svc.reviewFwmTask(fwm, t.id, false, 'Slip is unreadable, scan again');
     expect(back.status).toBe('returned');
     await svc.doneFwmTask(om, t.id, 'Rescanned', [{ ...proof(), name: 'slip2.pdf', data: 'data:application/pdf;base64,' + btoa('%PDF-1.1 slip 2') }]);
-    expect((await svc.reviewFwmTask(fwm, t.id, true, '')).status).toBe('accepted');
+    expect((await svc.reviewFwmTask(fwm, t.id, true, 'ok')).status).toBe('accepted');
     const omBoard = await svc.fwmBoard(om);
     expect(omBoard.items).toEqual([]);
     expect(omBoard.tasks.some((x) => x.task.id === t.id)).toBe(true);
@@ -2201,15 +2201,15 @@ describe('Hostel bills and utility excess (Fauzan, 26 Oct 2026)', () => {
     expect((await svc.home(cm, 'co-sasa')).todo.some((i) => i.tag === 'Hostel bill' && /rent/.test(i.title))).toBe(true);
     await expect(svc.requestHostelPayment(fwm, rent.id, '')).rejects.toBeInstanceOf(AccessDenied);
     await svc.requestHostelPayment(cm, rent.id, 'Monthly rent');
-    await expect(svc.approveHostelBill(od, rent.id, true, '')).rejects.toBeInstanceOf(AccessDenied);
+    await expect(svc.approveHostelBill(od, rent.id, true, 'ok')).rejects.toBeInstanceOf(AccessDenied);
     await expect(svc.checkHostelBill(fwm, rent.id, false, '')).rejects.toThrow(/what is wrong/);
     await svc.checkHostelBill(fwm, rent.id, true, 'Matches the tenancy');
     // Private-sector hostel: the Operations Director approves, not the OGM.
-    await expect(svc.approveHostelBill(ogm, rent.id, true, '')).rejects.toBeInstanceOf(AccessDenied);
-    await expect(svc.approveHostelBill(coo, rent.id, true, '')).rejects.toBeInstanceOf(AccessDenied);
-    await svc.approveHostelBill(od, rent.id, true, '');
+    await expect(svc.approveHostelBill(ogm, rent.id, true, 'ok')).rejects.toBeInstanceOf(AccessDenied);
+    await expect(svc.approveHostelBill(coo, rent.id, true, 'ok')).rejects.toBeInstanceOf(AccessDenied);
+    await svc.approveHostelBill(od, rent.id, true, 'ok');
     await expect(svc.uploadHostelSlip(cm, rent.id, '', [proof()])).rejects.toThrow(/COO approves/);
-    await svc.approveHostelBill(coo, rent.id, true, '');
+    await svc.approveHostelBill(coo, rent.id, true, 'ok');
     await expect(svc.uploadHostelSlip(cm, rent.id, '', [])).rejects.toThrow(/payment slip/);
     const paid = await svc.uploadHostelSlip(cm, rent.id, 'Online transfer', [proof()]);
     expect(paid.status).toBe('paid');
@@ -2294,7 +2294,7 @@ describe('Staff claims (Fauzan, 26 Oct 2026)', () => {
     expect((await svc.staffClaims(cos)).missingRates).toEqual(['CAR', 'MOTORCYCLE', 'COMPANY_CAR']);
     // The trip is approved by the Chief of Staff before it is made (insider abuse audit, 27 Oct 2026).
     const asked = await svc.requestTrip(cm, { date: TODAY, destination: 'Client site, Seremban', purpose: 'Quarterly client review' });
-    await svc.decideTrip(cos, asked.id, true, '');
+    await svc.decideTrip(cos, asked.id, true, 'ok');
     const trip = { destination: 'Client site, Seremban', tripId: asked.id, vehicle: 'CAR' as const, kmClaimed: 130, toll: 12, parking: 5 };
     await expect(svc.submitStaffClaim(cm, { kind: 'TRAVEL', date: TODAY, travel: trip }, [proof()])).rejects.toThrow(/not published/);
     await expect(svc.setClaimRate(hr, TODAY.slice(0, 7), 'CAR', 0.6)).rejects.toBeInstanceOf(AccessDenied);
@@ -2314,19 +2314,19 @@ describe('Staff claims (Fauzan, 26 Oct 2026)', () => {
     const far = await svc.submitStaffClaim(cm, { kind: 'TRAVEL', date: TODAY, travel: { ...trip, destination: 'Port Dickson', tripId: null, kmClaimed: 200 } }, [proof()]);
     expect(far.travel!.cosReasons).toHaveLength(2);
     expect(far.travel!.food).toBe(25);
-    await expect(svc.hrDecideClaim(hr, far.id, true, '')).rejects.toThrow(/Chief of Staff/);
+    await expect(svc.hrDecideClaim(hr, far.id, true, 'ok')).rejects.toThrow(/Chief of Staff/);
     await svc.cosDecideClaim(cos, far.id, true, 'Client visit agreed');
     // HR checks, then the COO approves every claim (Fauzan, 26 Oct 2026).
     const coo = await svc.user('u-coo');
     await expect(svc.cooDecideClaim(coo, far.id, true, '')).rejects.toThrow(/HR checks/);
-    expect((await svc.hrDecideClaim(hr, far.id, true, '')).status).toBe('hr_checked');
+    expect((await svc.hrDecideClaim(hr, far.id, true, 'HR checked travel evidence')).status).toBe('hr_checked');
     // The company head verifies too (Fauzan, 2 Nov 2026).
     await expect(svc.cooDecideClaim(await svc.user('u-coo'), far.id, true, '')).rejects.toThrow(/company head/);
     await svc.headVerifyClaim(await svc.user(far.headIds![0]), far.id, true, 'Client visit confirmed');
     await expect(svc.cooDecideClaim(hr, far.id, true, '')).rejects.toBeInstanceOf(AccessDenied);
     expect((await svc.home(coo)).todo.some((i) => i.tag === 'Claims')).toBe(true);
     expect((await svc.staffClaims(coo)).queue.find((r) => r.claim.id === far.id)!.canCoo).toBe(true);
-    expect((await svc.cooDecideClaim(coo, far.id, true, '')).status).toBe('approved');
+    expect((await svc.cooDecideClaim(coo, far.id, true, 'ok')).status).toBe('approved');
     // Overnight: RM50 a night instead of RM25, hotel capped at RM200 a night.
     const night = await svc.submitStaffClaim(
       cm,
@@ -2360,7 +2360,7 @@ describe('Chief of Staff reminders (Fauzan, 26 Oct 2026)', () => {
     await expect(svc.publishMemo(dcos, 'STAFF', 'Test memo', 'Body text')).rejects.toThrow(/Only the Chief of Staff/);
     await expect(svc.publishMemo(cos, 'FIELD', 'Test memo', 'Body text')).rejects.toThrow(/Only the COO/);
     // P78: the owner (the CEO record) is master administrator and may publish to either audience.
-    expect((await svc.memos(ceo)).audiences).toEqual(['STAFF', 'FIELD']);
+    expect((await svc.memos(ceo)).canPublish).toEqual(expect.arrayContaining(['STAFF', 'FIELD']));
     await expect(svc.publishMemo(hr, 'FIELD', 'Test memo', 'Body text')).rejects.toThrow(/Only the COO/);
     const staffMemo = await svc.publishMemo(cos, 'STAFF', 'Claims cut-off', 'Submit by the 25th.');
     const fieldMemo = await svc.publishMemo(coo, 'FIELD', 'Inspection', 'Uniform check this week.');
@@ -2368,7 +2368,7 @@ describe('Chief of Staff reminders (Fauzan, 26 Oct 2026)', () => {
     const hrView = await svc.memos(hr);
     expect(hrView.memos.some((m) => m.id === staffMemo.id)).toBe(true);
     expect(hrView.memos.some((m) => m.id === fieldMemo.id)).toBe(false);
-    expect(hrView.canPublish).toBeNull();
+    expect(hrView.canPublish).not.toContain('STAFF');
     const gView = await svc.memos(guard);
     expect(gView.memos.some((m) => m.id === fieldMemo.id)).toBe(true);
     expect(gView.memos.some((m) => m.audience === 'STAFF')).toBe(false);
@@ -2415,6 +2415,9 @@ describe('Chief of Staff reminders (Fauzan, 26 Oct 2026)', () => {
     expect(after.clock!.subjectsDue).toBe('2026-11-02');
     await expect(svc.pdpaStep(officer, late.id, 'close', 'Done')).rejects.toThrow(/affected people/);
     await svc.pdpaStep(officer, late.id, 'subjects', 'Letters sent', [proof()]);
+    // The breach register needs the data involved and the cause before closing (PDPA-BREACH-REGISTER, 5 Nov 2026).
+    await expect(svc.pdpaStep(officer, late.id, 'close', 'Phone wiped remotely; access reset.')).rejects.toThrow(/breach register details/);
+    await svc.pdpaBreachDetails(officer, late.id, { dataKinds: 'Guard files: names, IC numbers', cause: 'Admin phone lost', remedy: 'Remote wipe' });
     await svc.pdpaStep(officer, late.id, 'close', 'Phone wiped remotely; access reset.');
     expect((await svc.pdpaDocs(officer, late.id)).length).toBe(2);
     // Client consent: advise first, then the signed consent.
@@ -2470,8 +2473,8 @@ describe('Chief of Staff reminders (Fauzan, 26 Oct 2026)', () => {
     expect(c.board.find((v) => v.id === 'veh-arsh-1')!.tracker).toBe('unknown');
     // The request waits; the CM needs consent filed before driving the monitored patrol car.
     const rq = b.requests.find((r) => r.id === 'vr-seed-1')!;
-    await expect(svc.decideVehicleRequest(cm, rq.id, true, 'veh-sasa-1', '')).rejects.toBeInstanceOf(AccessDenied);
-    await svc.decideVehicleRequest(head, rq.id, true, 'veh-sasa-1', '');
+    await expect(svc.decideVehicleRequest(cm, rq.id, true, 'veh-sasa-1', 'ok')).rejects.toBeInstanceOf(AccessDenied);
+    await svc.decideVehicleRequest(head, rq.id, true, 'veh-sasa-1', 'ok');
     await expect(svc.vehicleOut(head, 'veh-sasa-1', rq.id, 84_250)).rejects.toThrow(/PDPA officer must file/);
     const need = (await svc.fleetBoard(pdpa)).consentNeeded;
     expect(need.map((n) => n.name)).toContain(cm.name);
@@ -2490,9 +2493,9 @@ describe('Chief of Staff reminders (Fauzan, 26 Oct 2026)', () => {
     expect(after.reminders!.map((r) => r.what)).toEqual(['Insurance due']);
     // Staff ask for a vehicle; a clash with an approved booking is refused.
     const mine = await svc.requestVehicle(cm, { purpose: 'Tender submission', from: addMinutes(NOW, 60 * 21), to: addMinutes(NOW, 60 * 22) });
-    await expect(svc.decideVehicleRequest(head, mine.id, true, 'veh-pwvsb-1', '')).resolves.toBeTruthy();
+    await expect(svc.decideVehicleRequest(head, mine.id, true, 'veh-pwvsb-1', 'ok')).resolves.toBeTruthy();
     const other = await svc.requestVehicle(cm, { purpose: 'Bank', from: addMinutes(NOW, 60 * 21.5), to: addMinutes(NOW, 60 * 23) });
-    await expect(svc.decideVehicleRequest(head, other.id, true, 'veh-pwvsb-1', '')).rejects.toThrow(/already booked/);
+    await expect(svc.decideVehicleRequest(head, other.id, true, 'veh-pwvsb-1', 'ok')).rejects.toThrow(/already booked/);
   });
 
   it('keeps products with personal data and MySTI, SIRIM and MCMC certificates, and checks a proposal is ready before it goes out', async () => {
@@ -2610,6 +2613,18 @@ describe('Chief of Staff reminders (Fauzan, 26 Oct 2026)', () => {
     expect((await svc.clientBoard(cm)).accounts.find((a) => a.id === noInv.id)!.issues.find((i) => /invoice/.test(i.what))!.what).toMatch(/in ePerolehan/);
     await svc.clientInvoice(cm, noInv.id, '2026-09', 'portal', null, [proof()]);
     expect((await svc.clientBoard(cm)).accounts.find((a) => a.id === noInv.id)!.issues.some((i) => /invoice/.test(i.what))).toBe(false);
+    // The client's signed acknowledgement of the month's work, with their comment, by the 10th (Fauzan, 4 Nov 2026).
+    const ackDue = (id: string) => svc.clientBoard(cm).then((b) => b.accounts.find((a) => a.id === id)!.issues.filter((i) => /acknowledgement and comment/.test(i.what)));
+    expect((await ackDue(noInv.id)).map((i) => i.what)).toEqual(["2026-09 client's signed acknowledgement and comment on the work not uploaded (due by the 10th)"]);
+    const wa = { period: '2026-09', signedOn: '2026-10-03', signer: 'Synthetic school head', outcome: 'satisfied' as const, comment: 'Good work', action: '', proof: [proof()] };
+    await expect(svc.clientWorkAck(cm, noInv.id, { ...wa, comment: '' })).rejects.toThrow(/comment/);
+    await expect(svc.clientWorkAck(cm, noInv.id, { ...wa, proof: [] })).rejects.toThrow(/signed acknowledgement/);
+    await expect(svc.clientWorkAck(cm, noInv.id, { ...wa, period: '2026-10' })).rejects.toThrow(/finished month/);
+    await expect(svc.clientWorkAck(cm, noInv.id, { ...wa, outcome: 'complaints', comment: 'Grass edges left' })).rejects.toThrow(/done about the complaint/);
+    await svc.clientWorkAck(cm, noInv.id, { ...wa, outcome: 'complaints', comment: 'Grass edges left', action: 'Redo edges by 6 Nov' });
+    expect(await ackDue(noInv.id)).toEqual([]);
+    expect((await svc.clientBoard(cm)).accounts.find((a) => a.id === noInv.id)!.issues.some((i) => /complained about the work: Grass edges left/.test(i.what))).toBe(true);
+    await expect(svc.clientWorkAck(cm, noInv.id, wa)).rejects.toThrow(/already recorded/);
     // Billing can be recorded by the company manager of that company.
     const inas = mine.accounts.find((a) => a.stage === 'active')!;
     await svc.clientBilling(cm, inas.id, { invoicedTo: '2026-09', overdueAmount: 0, overdueDays: 0 });
@@ -2640,10 +2655,10 @@ describe('Chief of Staff reminders (Fauzan, 26 Oct 2026)', () => {
       [proof()],
     );
     await svc.submitExpense(om, claim.id);
-    await expect(svc.decideExpense(cos, claim.id, 'approve', '')).rejects.toBeInstanceOf(AccessDenied);
+    await expect(svc.decideExpense(cos, claim.id, 'approve', 'ok')).rejects.toBeInstanceOf(AccessDenied);
     expect((await svc.home(coo)).todo.some((i) => i.tag === 'Requests')).toBe(true);
     await svc.decideExpense(coo, claim.id, 'return', 'Split the toll by site');
-    await expect(svc.decideExpense(coo, claim.id, 'approve', '')).rejects.toBeInstanceOf(AccessDenied);
+    await expect(svc.decideExpense(coo, claim.id, 'approve', 'ok')).rejects.toBeInstanceOf(AccessDenied);
     await svc.submitExpense(om, claim.id);
     // Every approval carries a reason (Fauzan, 31 Oct 2026).
     await expect(svc.decideExpense(coo, claim.id, 'approve', '  ')).rejects.toThrow(/reason/);
@@ -2661,8 +2676,8 @@ describe('Chief of Staff reminders (Fauzan, 26 Oct 2026)', () => {
       [proof()],
     );
     await svc.submitExpense(cm, off.id);
-    await expect(svc.decideExpense(coo, off.id, 'approve', '')).rejects.toBeInstanceOf(AccessDenied);
-    await expect(svc.decideExpense(dcos, off.id, 'approve', '')).rejects.toBeInstanceOf(AccessDenied);
+    await expect(svc.decideExpense(coo, off.id, 'approve', 'ok')).rejects.toBeInstanceOf(AccessDenied);
+    await expect(svc.decideExpense(dcos, off.id, 'approve', 'ok')).rejects.toBeInstanceOf(AccessDenied);
     expect((await svc.home(cos)).todo.some((i) => i.tag === 'Office request')).toBe(true);
     await expect(svc.decideExpense(cos, off.id, 'approve', '')).rejects.toThrow(/reason/);
     expect((await svc.decideExpense(cos, off.id, 'approve', 'Needed for the office')).status).toBe('cos_approved');
@@ -2780,17 +2795,17 @@ describe('Asset Management (Fauzan, 26 Oct 2026)', () => {
 });
 
 describe('Staff payroll (Fauzan, 27 Oct 2026)', () => {
-  it('works EPF, SOCSO, EIS and a PCB estimate at the October 2026 rates', () => {
+  it('calculates the configured statutory-settings preview without silently applying review-only tables', () => {
     expect(epfShare(3000, 35, 'MY')).toMatchObject({ ee: 330, er: 390 });
     // RM20 bands up to RM5,000: RM3,010 is worked on RM3,020 and rounded up to the ringgit.
     expect(epfShare(3010, 35, 'MY')).toMatchObject({ ee: 333, er: 393 });
     expect(epfShare(6500, 35, 'MY')).toMatchObject({ ee: 715, er: 780 });
     expect(epfShare(3000, 61, 'MY')).toMatchObject({ ee: 0, er: 120 });
     expect(epfShare(3000, 35, 'NP')).toMatchObject({ ee: 60, er: 60 });
-    // From 2 Nov 2026 SOCSO and EIS come from PERKESO's table row (band RM2,900.01-3,000), not a bare percentage.
-    expect(socsoShare(3000, 35)).toMatchObject({ ee: 14.75, er: 51.65, band: 'RM2,900.01-3,000.00' });
-    expect(socsoShare(8000, 35)).toMatchObject({ ee: 29.75, er: 104.15 });
-    expect(eisShare(3000, 35, 'MY')).toEqual({ ee: 5.9, er: 5.9 });
+    // Month-effective CEO settings remain authoritative. This tests configured preview behavior, not statutory-table certification.
+    expect(socsoShare(3000, 35)).toMatchObject({ ee: 15, er: 52.5 });
+    expect(socsoShare(8000, 35)).toMatchObject({ ee: 30, er: 105 });
+    expect(eisShare(3000, 35, 'MY')).toEqual({ ee: 6, er: 6 });
     expect(eisShare(3000, 60, 'MY')).toEqual({ ee: 0, er: 0 });
     // Low pay: the RM400 rebate wipes the tax out, and PCB under RM10 is not deducted.
     expect(pcbEstimate(3000, 330, 21)).toBe(0);
@@ -2960,7 +2975,7 @@ describe('Contracts and site mobilisation (V6 amendment)', () => {
   });
 
   it('will not certify a site ready while a critical item is open, and never risk-accepts a critical item', async () => {
-    const { svc } = fresh();
+    const { svc, store } = fresh();
     const cm = await svc.user('u-cm-arsh');
     const ae = await svc.user('u-ae-arsh');
     const id = 'ct-co-arsh-new1';
@@ -2968,21 +2983,23 @@ describe('Contracts and site mobilisation (V6 amendment)', () => {
     const c = (await svc.contracts(cm)).rows.find((r) => r.contract.id === id)!;
     const crit = c.contract.mobilisation.find((i) => i.critical)!;
     await expect(svc.setMobItem(cm, id, crit.id, 'risk_accepted', 'later', addDays(TODAY, 10))).rejects.toThrow(/critical/);
-    // The admin executive works the items; only the company manager accepts a risk or certifies.
-    for (const i of c.contract.mobilisation.filter((x) => x.critical || x.offset <= 0)) {
-      if (i.critical) await svc.setMobItem(ae, id, i.id, 'done', '');
+    // The admin executive works the items with proof; only the company manager accepts a risk or certifies.
+    await expect(svc.setMobItem(ae, id, c.contract.mobilisation.find((x) => x.critical && !x.auto && x.status === 'open')!.id, 'done', '')).rejects.toThrow(/proof/);
+    for (const i of c.contract.mobilisation.filter((x) => x.critical && x.status !== 'done')) {
+      if (i.auto) await expect(svc.setMobItem(ae, id, i.id, 'done', '')).rejects.toThrow(/Not yet/);
+      else await svc.setMobItem(ae, id, i.id, 'done', '', null, [proof()]);
     }
-    const major = c.contract.mobilisation.find((i) => !i.critical && i.offset <= 0)!;
+    // The system's own checks (roster, guard clearance) cannot pass on a contract with no site: simulate them done.
+    const cur = (await store.get('contracts', id))!;
+    await store.update('contracts', id, { mobilisation: cur.mobilisation.map((i) => (i.auto && i.critical ? { ...i, status: 'done' as const } : i)) });
+    const major = c.contract.mobilisation.find((i) => !i.critical && i.offset <= 0 && i.status === 'open')!;
     await expect(svc.setMobItem(ae, id, major.id, 'risk_accepted', 'x', addDays(TODAY, 5))).rejects.toBeInstanceOf(AccessDenied);
     await expect(svc.setMobItem(cm, id, major.id, 'risk_accepted', 'x', addDays(TODAY, 45))).rejects.toThrow(/no later than/);
-    for (const i of c.contract.mobilisation.filter((x) => !x.critical && x.offset <= 0))
+    for (const i of c.contract.mobilisation.filter((x) => !x.critical && x.offset <= 0 && x.status === 'open'))
       await svc.setMobItem(cm, id, i.id, 'risk_accepted', 'Radios arrive day 2', addDays(TODAY, 10));
     await expect(svc.contractStep(ae, id, 'certify')).rejects.toBeInstanceOf(AccessDenied);
-    const ready = await svc.contractStep(cm, id, 'certify', 'Checked on site');
-    expect(ready.state).toBe('ready');
-    expect(ready.rtoCert!.by).toBe(cm.name);
-    // It goes live only on its start date.
-    await expect(svc.contractStep(cm, id, 'activate')).rejects.toThrow(/starts on/);
+    // The checks are run again at certification: they still fail, so the site is not ready.
+    await expect(svc.contractStep(cm, id, 'certify', 'Checked on site')).rejects.toThrow(/Not ready any more/);
   });
 
   it('runs the day 30 review only with the invoice checked, and changes billing only by a signed variation', async () => {
@@ -2997,7 +3014,8 @@ describe('Contracts and site mobilisation (V6 amendment)', () => {
     const input = { effectiveFrom: addDays(TODAY, 5), billingMethod: 'FIXED' as const, posts: [], fixedFee: 25000, signedRef: '', reason: 'Fixed fee agreed' };
     await expect(svc.addContractVariation(cm, c.id, input)).rejects.toThrow(/signed variation/);
     await expect(svc.addContractVariation(await svc.user('u-ae-arsh'), c.id, { ...input, signedRef: 'V1' })).rejects.toBeInstanceOf(AccessDenied);
-    const v = await svc.addContractVariation(cm, c.id, { ...input, signedRef: 'ARSH/CT/V9' });
+    await expect(svc.addContractVariation(cm, c.id, { ...input, signedRef: 'ARSH/CT/V9' })).rejects.toThrow(/copy of the signed variation/);
+    const v = await svc.addContractVariation(cm, c.id, { ...input, signedRef: 'ARSH/CT/V9', proof: [proof()] });
     expect(v.versions.at(-1)!.billingMethod).toBe('FIXED');
     // Group leadership watches; another company's manager sees nothing.
     expect((await svc.contracts(await svc.user('u-fauzan'))).rows.length).toBeGreaterThan(100);
@@ -3124,8 +3142,8 @@ describe('IT department (Fauzan, 27 Oct 2026)', () => {
       await svc.purStep(proc, pr.id, 'quote', { supplierId: `sup-co-sasa-${k}`, amount, ref: `Q${k}`, proof: [proof()] });
     await svc.purStep(proc, pr.id, 'online', { source: 'Lazada', ref: 'listing', amount: 2950, proof: [proof()] });
     await svc.purStep(proc, pr.id, 'submit', { supplierId: 'sup-co-sasa-2' });
-    await svc.purStep(coo, pr.id, 'approve');
-    await svc.purStep(ceo, pr.id, 'approve');
+    await svc.purStep(coo, pr.id, 'approve', { note: 'ok' });
+    await svc.purStep(ceo, pr.id, 'approve', { note: 'ok' });
     await svc.purStep(proc, pr.id, 'order', { ref: 'PO-IT-1' });
     await svc.purStep(sk, pr.id, 'receive', { qty: [1] });
     const done = await svc.itPurchaseStep(ex, p.id, 'receive');
@@ -3152,8 +3170,10 @@ describe('IT department (Fauzan, 27 Oct 2026)', () => {
     await expect(svc.setItAsset(ex, a.id, 'disposal_pending', null, '')).rejects.toThrow(/why/);
     await svc.setItAsset(ex, a.id, 'disposal_pending', null, 'Screen broken, not worth repair');
     await expect(svc.setItAsset(ex, a.id, 'disposed', null)).rejects.toBeInstanceOf(AccessDenied);
-    const gone = await svc.setItAsset(mgr, a.id, 'disposed', null);
-    expect(gone.disposal).toMatchObject({ reason: 'Screen broken, not worth repair', doneBy: mgr.name });
+    // E-waste (RBA checklist C1): the licensed contractor and its consignment note are needed to dispose.
+    await expect(svc.setItAsset(mgr, a.id, 'disposed', null)).rejects.toThrow(/e-waste contractor/);
+    const gone = await svc.setItAsset(mgr, a.id, 'disposed', null, '', { contractor: 'Synthetic E-Waste Recycler', noteRef: 'CN-TEST-001' });
+    expect(gone.disposal).toMatchObject({ reason: 'Screen broken, not worth repair', doneBy: mgr.name, ewaste: { contractor: 'Synthetic E-Waste Recycler', noteRef: 'CN-TEST-001' } });
     const s = await svc.itMaintenance(
       ex,
       (await svc.itBoard(mgr)).assets!.find((x) => x.asset.kind === 'PRINTER')!.asset.id,
@@ -3290,12 +3310,12 @@ describe('IT pilot: jobs, proof, oversight and system ownership (Fauzan, 28 Oct 
     expect(ds.itAccounts.every((a) => a.ownerId === 'u-fauzan')).toBe(true);
     const r = await svc.askItAccess(lead, { accountId: 'itac-5', action: 'grant', userId: 'u-it-ex1', level: 'operator', reason: 'Backup for website deployments' });
     await expect(svc.askItAccess(lead, { accountId: 'itac-5', action: 'grant', userId: 'u-it-ex1', level: 'operator', reason: 'Again please' })).rejects.toThrow(/already with the CEO/);
-    for (const u of [lead, mgr, coo]) await expect(svc.decideItAccess(u, r.id, true)).rejects.toThrow(/Only the CEO/);
+    for (const u of [lead, mgr, coo]) await expect(svc.decideItAccess(u, r.id, true, 'ok')).rejects.toThrow(/Only the CEO/);
     expect((await svc.home(ceo)).todo.concat((await svc.home(ceo)).watch ?? []).some((t) => t.tag === 'System access')).toBe(true);
-    await svc.decideItAccess(ceo, r.id, true);
+    await svc.decideItAccess(ceo, r.id, true, 'ok');
     expect(ds.itAccounts.find((a) => a.id === 'itac-5')!.access.some((x) => x.userId === 'u-it-ex1')).toBe(true);
-    await expect(svc.reviewItAccount(mgr, 'itac-5')).rejects.toThrow(/CEO/);
-    expect((await svc.reviewItAccount(ceo, 'itac-5')).reviewedOn).toBe(TODAY);
+    await expect(svc.reviewItAccount(mgr, 'itac-5', 'ok')).rejects.toThrow(/CEO/);
+    expect((await svc.reviewItAccount(ceo, 'itac-5', 'ok')).reviewedOn).toBe(TODAY);
     // Website settings belong to the CEO now, not the IT Manager.
     await expect(svc.websites.act(mgr, 'saveSettings', { responseDays: 20 })).rejects.toThrow(/CEO/);
   });
@@ -3383,10 +3403,10 @@ describe('PWVSB credit and collateral (V8, V10)', () => {
     const b = await svc.creditBoard(officer);
     const c = b.cases.find((x) => x.item.companyId === 'co-arsh' && x.item.stage === 'investigating')!;
     expect(c.waiting).toBe('Credit officer');
-    await expect(svc.creditDecide(fd, c.item.id, 'confirm', '')).rejects.toThrow(/Credit officer/);
-    await svc.creditDecide(officer, c.item.id, 'confirm', '');
-    await expect(svc.creditDecide(officer, c.item.id, 'confirm', '')).rejects.toThrow(/Finance Director/);
-    const done = await svc.creditDecide(fd, c.item.id, 'confirm', '');
+    await expect(svc.creditDecide(fd, c.item.id, 'confirm', 'ok')).rejects.toThrow(/Credit officer/);
+    await svc.creditDecide(officer, c.item.id, 'confirm', 'ok');
+    await expect(svc.creditDecide(officer, c.item.id, 'confirm', 'ok')).rejects.toThrow(/Finance Director/);
+    const done = await svc.creditDecide(fd, c.item.id, 'confirm', 'ok');
     expect(done.stage).toBe('confirmed');
     expect(done.enforcement!.steps.filter((s) => s.status === 'off').map((s) => s.no)).toEqual([7, 8, 9]);
     await expect(svc.creditEnforcementStep(officer, done.id, 2, 'x')).rejects.toThrow(/earlier/);
@@ -3405,7 +3425,7 @@ describe('PWVSB credit and collateral (V8, V10)', () => {
     await svc.creditDispute(cm, loan.id, 'raise', 'Paid on 2 Oct, see bank slip');
     const c = (await svc.creditBoard(officer)).cases.find((x) => x.item.loanId === loan.id)!;
     expect(c.ready).toBe(false);
-    await expect(svc.creditDecide(officer, c.item.id, 'confirm', '')).rejects.toThrow(/dispute/);
+    await expect(svc.creditDecide(officer, c.item.id, 'confirm', 'ok')).rejects.toThrow(/dispute/);
     const input = {
       kind: 'LOAN' as const,
       purpose: 'x',
@@ -3456,9 +3476,9 @@ describe('Procurement and Inventory (V5; Fauzan, 27 Oct 2026)', () => {
     await expect(svc.purStep(ex, r.id, 'submit', { supplierId: 'sup-co-arsh-2' })).rejects.toThrow(/above the online price/);
     const sub = await svc.purStep(ex, r.id, 'submit', { supplierId: 'sup-co-arsh-2', onlineReason: 'Online seller has no SST invoice or warranty' });
     expect(sub.tiers).toEqual(['coo', 'ceo']);
-    await expect(svc.purStep(ceo, r.id, 'approve')).rejects.toThrow(/cannot approve/);
-    await svc.purStep(coo, r.id, 'approve');
-    expect((await svc.purStep(ceo, r.id, 'approve')).status).toBe('approved');
+    await expect(svc.purStep(ceo, r.id, 'approve', { note: 'ok' })).rejects.toThrow(/cannot approve/);
+    await svc.purStep(coo, r.id, 'approve', { note: 'ok' });
+    expect((await svc.purStep(ceo, r.id, 'approve', { note: 'ok' })).status).toBe('approved');
     await svc.purStep(ex, r.id, 'order', { ref: 'PO-1' });
     await expect(svc.purStep(ex, r.id, 'receive', { qty: [150] })).rejects.toThrow(/cannot receive/);
     const before = (await svc.purBoard(sk)).stock.find((s) => s.item.id === 'stk-co-arsh-7')!.item.onHand;
@@ -3522,7 +3542,7 @@ describe('Governance and authority (V7, V8, V12)', () => {
       validTo: null,
       powers: [{ area: 'ARMS', scope: 'monitor', limit: null }],
     });
-    await expect(svc.govMandateStep(legal, m.id, 'verify', {})).rejects.toThrow(/not confirmed/);
+    await expect(svc.govMandateStep(legal, m.id, 'verify', { note: 'ok' })).rejects.toThrow(/not confirmed/);
     await expect(svc.govMandateStep(cm, m.id, 'confirm', {})).rejects.toThrow(/resolution/);
     await svc.govMandateStep(cm, m.id, 'confirm', { resolutionRef: 'BR/INAS/2026/07' });
     await expect(svc.govMandateStep(legal, m.id, 'verify', { note: 'x' })).rejects.toThrow(/other than/);
@@ -3565,9 +3585,9 @@ describe('Assurance: obligations, whistleblowing and gifts (V15)', () => {
     expect(done.checked).toBeNull();
     let after = (await svc.grcBoard(cm)).obligations.find((x) => x.item.id === o.item.id)!;
     expect(after.state).not.toBe('ok');
-    await expect(svc.grcCheck(cm, o.item.id, true, '')).rejects.toThrow(/internal audit/);
+    await expect(svc.grcCheck(cm, o.item.id, true, 'ok')).rejects.toThrow(/internal audit/);
     await expect(svc.grcCheck(auditor, o.item.id, false, '')).rejects.toThrow(/what is wrong/);
-    await svc.grcCheck(auditor, o.item.id, true, '');
+    await svc.grcCheck(auditor, o.item.id, true, 'ok');
     after = (await svc.grcBoard(cm)).obligations.find((x) => x.item.id === o.item.id)!;
     expect(['ok', 'due_soon']).toContain(after.state);
   });
@@ -3589,7 +3609,7 @@ describe('Assurance: obligations, whistleblowing and gifts (V15)', () => {
     expect((await svc.grcBoard(await svc.user('u-audit'))).handled.some((h) => h.report.code === res.code)).toBe(false);
     expect((await svc.whistleStatus(res.code)).status).toBe('received');
     const cos = await svc.user('u-cos');
-    await expect(svc.decideGift(cos, 'gift-3', 'approved', '')).rejects.toThrow(/Cash/);
+    await expect(svc.decideGift(cos, 'gift-3', 'approved', 'ok')).rejects.toThrow(/Cash/);
     expect((await svc.decideGift(cos, 'gift-3', 'return', 'Returned with a letter')).decision!.outcome).toBe('return');
   });
 });
@@ -3605,7 +3625,7 @@ describe('PDPA rights: DPO register and data requests', () => {
     expect(b.requests.find((r) => r.request.id === 'dsr-1')!.late).toBe(true);
     await expect(svc.pdpaRequestStep(officer, 'dsr-2', 'done', 'Corrected')).rejects.toThrow(/Verify/);
     await expect(svc.pdpaRequestStep(officer, 'dsr-2', 'refuse', 'Too busy')).rejects.toThrow(/grounds/);
-    await svc.pdpaRequestStep(officer, 'dsr-2', 'verify', '');
+    await svc.pdpaRequestStep(officer, 'dsr-2', 'verify', 'ok');
     expect((await svc.pdpaRequestStep(officer, 'dsr-2', 'done', 'IC corrected in HR and payroll')).status).toBe('done');
     await expect(svc.pdpaRights(await svc.user('u-cm-sasa'))).rejects.toThrow();
   });
@@ -3714,7 +3734,7 @@ describe('Fixed assets: depreciation and disposal (V5)', () => {
     await expect(svc.amDisposalStep(fd, asset.id, 'ask', { reason: 'x', method: 'SCRAP', estProceeds: 0 })).rejects.toThrow();
     await svc.amDisposalStep(team, asset.id, 'ask', { reason: 'Broken', method: 'SCRAP', estProceeds: 0 });
     await expect(svc.amDisposalStep(await svc.user('u-coo'), asset.id, 'approve', {})).rejects.toThrow(/Finance Director/);
-    await svc.amDisposalStep(fd, asset.id, 'approve', {});
+    await svc.amDisposalStep(fd, asset.id, 'approve', { note: 'ok' });
     const done = await svc.amDisposalStep(team, asset.id, 'done', { on: '2026-10-26', proceeds: 0, party: 'Scrap dealer', proofRef: 'SN1' });
     expect(done.status).toBe('disposed');
     const posted = await svc.amDisposalStep(fd, asset.id, 'post', { sqlRef: 'JV-D1' });
@@ -3770,7 +3790,7 @@ describe('Rent paid and unpaid (Fauzan, 27 Oct 2026)', () => {
     // The team only asks; the Asset Director reverses (insider abuse audit, 27 Oct 2026).
     const askedBack = await svc.amReversePayment(re, a.id, twoPay.id, 'Wrong amount');
     expect(askedBack.tenancy!.invoices.reduce((n, i) => n + i.paid, 0)).toBe(two.tenancy!.invoices.reduce((n, i) => n + i.paid, 0));
-    await expect(svc.amDecideReversal(re, a.id, twoPay.id, true, '')).rejects.toBeInstanceOf(AccessDenied);
+    await expect(svc.amDecideReversal(re, a.id, twoPay.id, true, 'ok')).rejects.toBeInstanceOf(AccessDenied);
     const dir = await svc.user('u-asset-dir');
     expect((await svc.amBoard(dir)).reversalsToApprove.some((p) => p.id === twoPay.id)).toBe(true);
     const back = await svc.amDecideReversal(dir, a.id, twoPay.id, true, 'Checked with the tenant');
@@ -3784,8 +3804,8 @@ describe('Rent paid and unpaid (Fauzan, 27 Oct 2026)', () => {
     expect((await svc.amBoard(re)).cashToBank.some((p) => p.receiptNo.endsWith('-0003'))).toBe(false);
     const asked = await svc.amFollowUp(re, a.id, { action: 'LETTER', note: 'First reminder' });
     const f = asked.tenancy!.followUps!.at(-1)!;
-    await expect(svc.amDecideLetter(re, a.id, f.id, true, '')).rejects.toThrow();
-    const ok = await svc.amDecideLetter(await svc.user('u-asset-dir'), a.id, f.id, true, '');
+    await expect(svc.amDecideLetter(re, a.id, f.id, true, 'ok')).rejects.toThrow();
+    const ok = await svc.amDecideLetter(await svc.user('u-asset-dir'), a.id, f.id, true, 'ok');
     expect(ok.tenancy!.followUps!.at(-1)!.approval!.approve).toBe(true);
 
     // Every 10 days until paid: an unpaid unit not updated for 10 days shows as due; an email follow-up clears it.
@@ -4189,8 +4209,8 @@ describe('ACT: Audit, Compliance and Transformation (Fauzan, 27 Oct 2026)', () =
       steps: ['Set dates', 'Train admin'],
     });
     await expect(svc.actImprovementStep(await svc.user('u-cm-arsh'), i.id, 'step', { index: 0 })).rejects.toThrow(/approve/);
-    await expect(svc.actImprovementStep(lead, i.id, 'approve', {})).rejects.toThrow();
-    await svc.actImprovementStep(await svc.user('u-coo'), i.id, 'approve', {});
+    await expect(svc.actImprovementStep(lead, i.id, 'approve', { note: 'ok' })).rejects.toThrow();
+    await svc.actImprovementStep(await svc.user('u-coo'), i.id, 'approve', { note: 'ok' });
     await svc.actImprovementStep(await svc.user('u-cm-arsh'), i.id, 'step', { index: 0 });
     await expect(svc.actImprovementStep(lead, i.id, 'result', { note: 'ok' })).rejects.toThrow(/every step/);
   });
@@ -4373,7 +4393,7 @@ describe('HR and operations retest fixes (Fauzan, 27 Oct 2026)', () => {
     await svc.decidePayChange(cos, bc.id, true, 'Bank letter seen');
     await svc.decidePayChange(await svc.user('u-fd'), bc.id, true, 'Account checked');
     expect(ds.people.find((x) => x.id === p.id)!.bank).toEqual({ bank: 'Maybank', accountMasked: '****5566' });
-    await expect(svc.decidePayChange(hr, pc.id, true, '')).rejects.toThrow(/Someone else/);
+    await expect(svc.decidePayChange(hr, pc.id, true, 'ok')).rejects.toThrow(/Someone else/);
     expect((await svc.payChanges(cos)).rows.find((r) => r.change.id === pc.id)!.mine).toBe(true);
     await svc.decidePayChange(cos, pc.id, true, 'Matches the offer letter');
     // The salary amount then needs the Vice Chairman's consent (Fauzan, 1 Nov 2026).
@@ -4548,10 +4568,10 @@ describe('Working from home (Fauzan, 27 Oct 2026)', () => {
     expect(r.plan!.tasks.map((x) => x.status)).toEqual(['done', 'carried']);
     mine = await svc.myRemote(me);
     expect(mine.today!.status.checkIns.map((c) => c.state)).toEqual(['done', 'missed']);
-    await expect(svc.remoteReview(me, r.id, 'accepted', '')).rejects.toBeInstanceOf(AccessDenied);
+    await expect(svc.remoteReview(me, r.id, 'accepted', 'ok')).rejects.toBeInstanceOf(AccessDenied);
     const hr = await svc.user('u-pwvsb-hr');
     await expect(svc.remoteReview(hr, r.id, 'queried', '')).rejects.toThrow(/asking/);
-    expect((await svc.remoteReview(hr, r.id, 'accepted', '')).review!.verdict).toBe('accepted');
+    expect((await svc.remoteReview(hr, r.id, 'accepted', 'ok')).review!.verdict).toBe('accepted');
     // Not a home day for office staff without an arrangement.
     await expect(svc.remotePlan(await svc.user('u-pwvsb-doa'), ['x'])).rejects.toThrow(/not a home day/);
   });
@@ -4622,8 +4642,8 @@ describe('Insider abuse audit fixes (Fauzan, 27 Oct 2026)', () => {
     const values = (await svc.recordForm(hr, 'officeStaff', cos.personId!, null)).values;
     await svc.saveRecord(hr, 'officeStaff', cos.personId!, null, { ...values, basicPay: Number(values.basicPay) + 2000, payReason: 'Yearly increment' });
     const pc = ds.payChanges.find((c) => c.personId === cos.personId && c.status === 'pending')!;
-    await expect(svc.decidePayChange(cos, pc.id, true, '')).rejects.toThrow(/your own/);
-    await expect(svc.decidePayChange(dcos, pc.id, true, '')).rejects.toBeInstanceOf(AccessDenied);
+    await expect(svc.decidePayChange(cos, pc.id, true, 'ok')).rejects.toThrow(/your own/);
+    await expect(svc.decidePayChange(dcos, pc.id, true, 'ok')).rejects.toBeInstanceOf(AccessDenied);
     const row = (await svc.payChanges(vc)).rows.find((r) => r.change.id === pc.id)!;
     expect(row.waitingOn).toBe('Vice Chairman (consent)');
     expect(row.mine).toBe(true);
@@ -4687,7 +4707,7 @@ describe('Insider abuse audit fixes (Fauzan, 27 Oct 2026)', () => {
     await expect(svc.requestTrip(cm, { date: addDays(TODAY, -1), destination: 'Ipoh', purpose: 'Site visit' })).rejects.toThrow(/before the trip/);
     const trip = await svc.requestTrip(cm, { date: TODAY, destination: 'Ipoh', purpose: 'Site visit' });
     expect((await svc.staffClaims(cos)).tripQueue.some((x) => x.id === trip.id)).toBe(true);
-    await svc.decideTrip(cos, trip.id, true, '');
+    await svc.decideTrip(cos, trip.id, true, 'ok');
     const other = await svc.user('u-cm-sasa');
     await expect(
       svc.submitStaffClaim(other, { kind: 'TRAVEL', date: TODAY, travel: { destination: 'Ipoh', tripId: trip.id, vehicle: 'CAR', kmClaimed: 400 } }),
@@ -4697,10 +4717,10 @@ describe('Insider abuse audit fixes (Fauzan, 27 Oct 2026)', () => {
     expect(ds.tripApprovals.find((x) => x.id === trip.id)!.claimId).toBe(used.id);
     // The Chief of Staff's own trip and claim go to someone else.
     const ownTrip = await svc.requestTrip(cos, { date: TODAY, destination: 'Johor Bahru', purpose: 'Board meeting' });
-    await expect(svc.decideTrip(cos, ownTrip.id, true, '')).rejects.toThrow(/your own/);
-    await svc.decideTrip(await svc.user('u-dcos'), ownTrip.id, true, '');
+    await expect(svc.decideTrip(cos, ownTrip.id, true, 'ok')).rejects.toThrow(/your own/);
+    await svc.decideTrip(await svc.user('u-dcos'), ownTrip.id, true, 'ok');
     const ownClaim = await svc.submitStaffClaim(cos, { kind: 'TRAVEL', date: TODAY, travel: { destination: 'Melaka', vehicle: 'CAR', kmClaimed: 300 } });
-    await expect(svc.cosDecideClaim(cos, ownClaim.id, true, '')).rejects.toThrow(/your own/);
+    await expect(svc.cosDecideClaim(cos, ownClaim.id, true, 'ok')).rejects.toThrow(/your own/);
   });
 
   it('needs the supplier documents, keeps the supplier review with Finance, and catches a supplier paid into a staff account', async () => {
@@ -4718,9 +4738,9 @@ describe('Insider abuse audit fixes (Fauzan, 27 Oct 2026)', () => {
     staff.bankAccountFull = '5566778899';
     const s = await svc.addPurSupplier(ex, 'co-arsh', { name: 'Shell Trading', ssmNo: 'SSM-1', categories: ['OTHER'], bankName: 'Maybank', bankAccount: '5566778899', coiDeclared: true, abcAck: true });
     expect(s.reviewedOn).toBeNull();
-    await expect(svc.purSupplierStep(ex, s.id, 'review', '')).rejects.toBeInstanceOf(AccessDenied);
-    await expect(svc.purSupplierStep(fd, s.id, 'verify_bank', '')).rejects.toThrow(/salary account/);
-    expect((await svc.purSupplierStep(fd, s.id, 'review', '')).reviewedOn).toBe(TODAY);
+    await expect(svc.purSupplierStep(ex, s.id, 'review', 'ok')).rejects.toBeInstanceOf(AccessDenied);
+    await expect(svc.purSupplierStep(fd, s.id, 'verify_bank', 'ok')).rejects.toThrow(/salary account/);
+    expect((await svc.purSupplierStep(fd, s.id, 'review', 'ok')).reviewedOn).toBe(TODAY);
   });
 
   it('never receives more than ordered, sends losses to the company manager, and counts the store with a signed-in witness', async () => {
@@ -4734,8 +4754,8 @@ describe('Insider abuse audit fixes (Fauzan, 27 Oct 2026)', () => {
     for (const k of [1, 2, 3]) await svc.purStep(ex, r.id, 'quote', { supplierId: `sup-co-arsh-${k}`, amount: 900 + k, ref: `Q${k}`, proof: [proof()] });
     await svc.purStep(ex, r.id, 'online', { source: 'Shopee', ref: 'x', amount: 900, proof: [proof()] });
     await svc.purStep(ex, r.id, 'submit', { supplierId: 'sup-co-arsh-1' });
-    await svc.purStep(coo, r.id, 'approve');
-    await svc.purStep(ceo, r.id, 'approve');
+    await svc.purStep(coo, r.id, 'approve', { note: 'ok' });
+    await svc.purStep(ceo, r.id, 'approve', { note: 'ok' });
     await svc.purStep(ex, r.id, 'order', { ref: 'PO-9' });
     await expect(svc.purStep(sk, r.id, 'receive', { qty: [12] })).rejects.toThrow(/only 10 ordered/);
     await svc.purStep(sk, r.id, 'receive', { qty: [10] });
@@ -4744,7 +4764,7 @@ describe('Insider abuse audit fixes (Fauzan, 27 Oct 2026)', () => {
     const i = await svc.stockIssue(sk, 'co-arsh', { itemId: 'stk-co-arsh-7', personId: person.id, qty: 1 });
     await svc.stockReturn(sk, i.id, 'lost', 'Says it was stolen');
     expect((await svc.purBoard(cm)).losses.find((l) => l.issue.id === i.id)!.canConfirm).toBe(true);
-    await expect(svc.confirmStockLoss(sk, i.id, true, '')).rejects.toBeInstanceOf(AccessDenied);
+    await expect(svc.confirmStockLoss(sk, i.id, true, 'ok')).rejects.toBeInstanceOf(AccessDenied);
     await expect(svc.confirmStockLoss(cm, i.id, false, '')).rejects.toThrow(/Say why/);
     await svc.confirmStockLoss(cm, i.id, false, 'Police report needed first');
     expect(ds.stockIssues.find((x) => x.id === i.id)!.returned).toBeNull();
@@ -4764,7 +4784,7 @@ describe('Insider abuse audit fixes (Fauzan, 27 Oct 2026)', () => {
     const tamper = ds.siteAlarms.find((a) => a.kind === 'CAMERA_TAMPER' && a.status === 'new')!;
     await svc.closeAlarm(head, tamper.id, 'false', 'Cleaner moved the camera');
     expect((await svc.cms(head)).ops.falseToReview.some((x) => x.alarm.id === tamper.id)).toBe(true);
-    await expect(svc.reviewFalseAlarm(head, tamper.id, true, '')).rejects.toThrow(/Another person/);
+    await expect(svc.reviewFalseAlarm(head, tamper.id, true, 'ok')).rejects.toThrow(/Another person/);
     const reviewed = await svc.reviewFalseAlarm(arms, tamper.id, false, 'Camera shows a person at the fence before it moved');
     expect(reviewed.verdict).toBe('real');
     expect(ds.cases.find((c) => c.id === reviewed.caseId)!.companyId).toBe(tamper.companyId);
@@ -4779,13 +4799,13 @@ describe('Insider abuse audit fixes (Fauzan, 27 Oct 2026)', () => {
     await svc.whistleStep(handler, r.id, 'close', 'No evidence found');
     expect((await svc.whistleStatus(code)).status).toBe('closing');
     expect((await svc.whistleStatus(code)).outcome).toBeNull();
-    await expect(svc.whistleReview(handler, r.id, true, '')).rejects.toBeInstanceOf(Error);
+    await expect(svc.whistleReview(handler, r.id, true, 'ok')).rejects.toBeInstanceOf(Error);
     const second = await svc.user(RULES.assurance.value.whistleHandlers.find((id) => id !== r.handlerId)!);
     expect((await svc.grcBoard(second)).toReview.some((x) => x.report.id === r.id)).toBe(true);
     await svc.whistleReview(second, r.id, false, 'Check the last 3 invoices against the POs');
     expect(ds.whistleReports.find((x) => x.id === r.id)!.status).toBe('investigating');
     await svc.whistleStep(handler, r.id, 'close', 'Invoices match the POs');
-    await svc.whistleReview(second, r.id, true, '');
+    await svc.whistleReview(second, r.id, true, 'ok');
     expect(await svc.whistleStatus(code)).toMatchObject({ status: 'closed', outcome: 'Invoices match the POs' });
 
     // A company case: whoever resolved it does not close it.
@@ -4877,7 +4897,8 @@ describe('IT pilot: buying, eP tenders in minutes, stand-in and logged requests 
     // The CEO does not jump the COO; IT does not decide in Prima.
     await expect(svc.itBuyStep(ceo, id, 'decide', {})).rejects.toThrow(/Only the COO/);
     await expect(svc.itBuyStep(ex, id, 'decide', {})).rejects.toThrow(/Only the COO/);
-    expect((await svc.itBuyStep(coo, id, 'decide', { decision: 'approve' })).status).toBe('ceo');
+    await expect(svc.itBuyStep(coo, id, 'decide', { decision: 'approve' })).rejects.toThrow(/Write a comment to approve/);
+    expect((await svc.itBuyStep(coo, id, 'decide', { decision: 'approve', note: 'Within the IT plan' })).status).toBe('ceo');
     // The CEO approved in Teams: IT records it, with the Teams reference and a screenshot.
     await expect(svc.itBuyStep(ex, id, 'teams', { teamsRef: 'Approvals: laptops' })).rejects.toThrow(/screenshot/);
     const fin = await svc.itBuyStep(ex, id, 'teams', { teamsRef: 'Approvals: laptops', proof: [proof()] });
@@ -5111,19 +5132,23 @@ describe('staff login retest (27 Oct 2026): work no role could start', () => {
       rate: 11.5,
       fixedFee: null,
       signedRef: 'SASA/CT/NEW-1',
+      proof: [proof()],
     };
+    await expect(svc.addContract(cm, { ...base, proof: [] })).rejects.toThrow(/copy of the signed contract/);
     await expect(svc.addContract(cm, { ...base, endOn: '2026-11-01' })).rejects.toThrow(/end after it starts/);
     await expect(svc.addContract(cm, { ...base, billingMethod: 'M2' })).rejects.toThrow(/contracted hours/);
     await expect(svc.addContract(ae, { ...base, companyId: 'co-arsh' })).rejects.toBeInstanceOf(AccessDenied);
     const c = await svc.addContract(cm, base);
     expect(c.state).toBe('awarded');
     expect(c.mobilisation.length).toBeGreaterThan(10);
-    expect(c.mobilisation.every((i) => i.status === 'open')).toBe(true);
+    // The signed paper is the proof of the first item; the rest are open.
+    expect(c.mobilisation[0].status).toBe('done');
+    expect(c.mobilisation.slice(1).every((i) => i.status === 'open')).toBe(true);
     expect(c.versions[0].posts.every((p) => p.rate === 11.5)).toBe(true);
     await expect(svc.addContract(cm, base)).rejects.toThrow(/already recorded/);
     expect((await svc.contracts(cm)).rows.some((r) => r.contract.id === c.id)).toBe(true);
     await svc.contractStep(cm, c.id, 'mobilise');
-    const fixed = await svc.addContract(cm, { ...base, signedRef: 'SASA/CT/NEW-2', billingMethod: 'FIXED', rate: 0, fixedFee: 25000 });
+    const fixed = await svc.addContract(cm, { ...base, signedRef: 'SASA/CT/NEW-2', billingMethod: 'FIXED', rate: 0, fixedFee: 25000, proof: [proof()] });
     expect(fixed.versions[0].fixedFee).toBe(25000);
   });
 
@@ -5315,13 +5340,13 @@ describe('Remote and branch work plan (Fauzan, 27 Oct 2026)', () => {
     at.now = myt(addDays(TODAY, 3), '15:00');
     const done = await svc.workTaskDone(me, t.id, { note: 'Battery fitted, self-test passed', ref: 'IT-2231' });
     expect(done.onTime).toBe(true);
-    await expect(svc.workTaskReview(me, t.id, true, '')).rejects.toBeInstanceOf(AccessDenied);
+    await expect(svc.workTaskReview(me, t.id, true, 'ok')).rejects.toBeInstanceOf(AccessDenied);
     await expect(svc.workTaskReview(await svc.user('u-it-lead'), t.id, false, 'no')).rejects.toThrow(/fix/);
     const back = await svc.workTaskReview(await svc.user('u-it-lead'), t.id, false, 'No photo of the self-test in the ticket.');
     expect(back.status).toBe('returned');
     expect(back.state).toBe('returned');
     await svc.workTaskDone(me, t.id, { note: 'Photo added to the ticket', ref: 'IT-2231' });
-    expect((await svc.workTaskReview(await svc.user('u-it-lead'), t.id, true, '')).status).toBe('accepted');
+    expect((await svc.workTaskReview(await svc.user('u-it-lead'), t.id, true, 'ok')).status).toBe('accepted');
   });
 
   it('fills the home day plan from the morning check-in, escalates unanswered help after 30 minutes, and records the 1:1', async () => {
@@ -5358,7 +5383,7 @@ describe('Remote and branch work plan (Fauzan, 27 Oct 2026)', () => {
     const waiting = board.applications.find((a) => a.arrangement.userId === 'u-fin-t1-de1')!;
     expect(waiting.readiness.ready).toBe(false);
     expect(waiting.readiness.checks.find((c) => c.key === 'probation')!.ok).toBe(false);
-    await expect(svc.remoteDecide(hr, waiting.arrangement.id, true, '')).rejects.toThrow(/Not ready/);
+    await expect(svc.remoteDecide(hr, waiting.arrangement.id, true, 'ok')).rejects.toThrow(/Not ready/);
     expect((await svc.remoteDecide(hr, waiting.arrangement.id, true, 'Exception: house move, for one month only.')).status).toBe('approved');
     const good = await svc.myWork(await svc.user('u-it-ex1'));
     expect(good.readiness.ready).toBe(true);
@@ -5428,6 +5453,6 @@ describe('Remote and branch work plan (Fauzan, 27 Oct 2026)', () => {
     const after = (await svc.myWork(ex)).waitingReview.find((x) => x.id === t.id)!;
     expect(after.evidence!.ref).toBe(`planner:${taskId}`);
     // The line manager still accepts it in Prima.
-    expect((await svc.workTaskReview(await svc.user('u-it-lead'), t.id, true, '')).status).toBe('accepted');
+    expect((await svc.workTaskReview(await svc.user('u-it-lead'), t.id, true, 'ok')).status).toBe('accepted');
   });
 });

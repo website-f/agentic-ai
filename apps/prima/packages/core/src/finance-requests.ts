@@ -1,28 +1,29 @@
-/**
- * Payment requests by the company head (Fauzan, 1 Nov 2026): "Company head create the approval. They choose which it
- * belongs to. For example, the approval for guard salary in government, the company head create, operation head approve,
- * then finance approve the calculation correct. Then coo approve it. Then finance will process the payment."
- *
- * Each request goes through a fixed chain chosen by what it is for:
- *   1. the company head (a company manager of that company) creates it and says what it is for;
- *   2. the head of that department approves it (Operations: the OGM for government sites, the Operations Director for
- *      private ones; IT Manager; FWM Manager; Procurement & Inventory and Goodwill Empire: the OGM (Fauzan, 2 Nov 2026);
- *      Transport head). Finance has no department step;
- *   3. Finance (the company's team leader or deputy, or the FD) checks the calculation is correct;
- *   4. the final approver approves: the COO or the CEO for the COO's departments, the FD or the CEO for Finance;
- *   5. Finance prepares the payment from the approved request and reviews it. The request's final approval is the
- *      payment's approval: it is never approved twice. Someone else in Finance releases it.
- * Nobody acts twice on one request, the creator never approves it, every step has a comment, and a return sends it back
- * to the creator, after which the whole chain is done again. Prima never approves anything itself.
- */
-import { FIN_SUBJECTS, finApproverFor, isoDate, noSecrets, requireComment, requireReason, text } from './finance';
-import { RULES } from './rules';
-import { BadRequest, NotFound } from './service';
-import type { Store } from './store';
-import { dateOf } from './time';
-import { AccessDenied, centralEmployerName, isOwnerAdmin, tenantCompanyIds } from './access';
-import type { HomeItem } from './service';
-import type { FinRequest, FinRequestStep, FinStatus, FinSubject, Id, IsoDate, IsoDateTime, User } from './types';
+import { FIN_SUBJECTS } from "./finance";
+import { finApproverFor } from "./finance";
+import { isoDate } from "./finance";
+import { noSecrets } from "./finance";
+import { requireComment } from "./finance";
+import { requireReason } from "./finance";
+import { text } from "./finance";
+import { RULES } from "./rules";
+import { BadRequest } from "./service";
+import { NotFound } from "./service";
+import type { Store } from "./store";
+import { dateOf } from "./time";
+import { AccessDenied } from "./access";
+import { centralEmployerName } from "./access";
+import { isOwnerAdmin } from "./access";
+import { tenantCompanyIds } from "./access";
+import type { HomeItem } from "./service";
+import type { FinRequest } from "./types";
+import type { FinRequestStep } from "./types";
+import type { FinStatus } from "./types";
+import type { FinSubject } from "./types";
+import type { Id } from "./types";
+import type { IsoDate } from "./types";
+import type { IsoDateTime } from "./types";
+import type { User } from "./types";
+
 
 export type FinRequestAction = 'head' | 'verify' | 'approve' | 'return' | 'resubmit' | 'cancel';
 

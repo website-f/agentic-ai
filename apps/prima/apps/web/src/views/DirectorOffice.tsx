@@ -9,6 +9,9 @@ import { Chip, ErrorNotice, Loading, dateLabel, useLoad } from '../ui';
 import { Card, Empty, PageHead, Stat, Stats } from '../kit';
 import { rm } from './Commercial';
 import { PriorityChip } from './TenderFlow';
+import { TenderCounterPanel } from './TenderCounter';
+import { DirectorOfficeCounterPanel } from './DirectorOfficeCounter';
+import { TenderOpportunitiesPanel, TenderSourcesPanel } from './TenderOpportunities';
 import '../styles/leadership.css';
 
 type Show = 'mine' | 'live' | 'all';
@@ -72,7 +75,7 @@ export function DirectorOfficeView() {
 
       <Card
         title="Tenders"
-        sub={data.reader.readsFiles ? data.reader.name : 'Checklists: test version sample draft; the AI agent is not connected yet'}
+        sub={data.reader.readsFiles ? data.reader.name : 'Checklists: test version sample draft'}
         actions={
           <div className="seg" role="group" aria-label="Which tenders">
             <button type="button" aria-pressed={view === 'mine'} onClick={() => setShow('mine')}>
@@ -180,6 +183,10 @@ export function DirectorOfficeView() {
 
       <DirectorDesk />
       <MyDailyCash />
+      <TenderOpportunitiesPanel />
+      <TenderCounterPanel />
+      <TenderSourcesPanel />
+      <DirectorOfficeCounterPanel />
       <JointTenders board={data} />
     </div>
   );

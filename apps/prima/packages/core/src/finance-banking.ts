@@ -1,19 +1,20 @@
-// Fixed deposits and bank charges (Fauzan, 2 Nov 2026: yes to suggestions 15 and 16).
-//
-// 15. Each fixed deposit is listed with its bank, amount, rate and maturity, checked by a second person (money), and
-//     Prima warns before it matures so someone decides to renew or uplift it. Prima finds the placement leaving the
-//     current account and the uplift (principal and interest) coming back on the bank statement. "Where the money sits"
-//     is the last statement balance of each account plus the deposits placed.
-// 16. Each month Prima adds up the bank's charges and fees on every statement. The team leader (or the FD/CEO) records
-//     what the bank agreed per account; a month above it needs a reviewer's explanation (refund asked, or why it is right).
+import { AccessDenied } from "./access";
+import { isoDate } from "./finance";
+import { noSecrets } from "./finance";
+import { requireReason } from "./finance";
+import { text } from "./finance";
+import type { FinCashCtx } from "./finance-cash";
+import { RULES } from "./rules";
+import { BadRequest } from "./service";
+import { NotFound } from "./service";
+import { addDays } from "./time";
+import { daysBetween } from "./time";
+import type { FinSign } from "./types";
+import type { FinStatement } from "./types";
+import type { FinStatus } from "./types";
+import type { Id } from "./types";
+import type { IsoDate } from "./types";
 
-import { AccessDenied } from './access';
-import { isoDate, noSecrets, requireReason, text } from './finance';
-import type { FinCashCtx } from './finance-cash';
-import { RULES } from './rules';
-import { BadRequest, NotFound } from './service';
-import { addDays, daysBetween } from './time';
-import type { FinSign, FinStatement, FinStatus, Id, IsoDate } from './types';
 
 export interface FinFixedDeposit {
   id: Id;

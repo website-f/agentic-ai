@@ -75,12 +75,15 @@ export function FaceCapture({
   busy,
   onCapture,
   title,
+  photoOnly = false,
 }: {
   label: string;
   busy?: boolean;
   onCapture: (r: FaceResult) => void;
   /** The heading on the camera screen; the button's label when not given. */
   title?: string;
+  /** Prima's own engine reads the photo on the server (FACE_ENGINE=server): take the photo only, load no phone engine. */
+  photoOnly?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   return (
@@ -93,6 +96,7 @@ export function FaceCapture({
       {open && (
         <FaceCamera
           title={title ?? label}
+          photoOnly={photoOnly}
           onClose={() => setOpen(false)}
           onCapture={(r) => {
             setOpen(false);
@@ -144,7 +148,17 @@ function judge(
   return { text: 'Hold still', sub: 'Checking the light and position', tone: 'idle' };
 }
 
-function FaceCamera({ title, onClose, onCapture }: { title: string; onClose: () => void; onCapture: (r: FaceResult) => void }) {
+function FaceCamera({
+  title,
+  photoOnly,
+  onClose,
+  onCapture,
+}: {
+  title: string;
+  photoOnly: boolean;
+  onClose: () => void;
+  onCapture: (r: FaceResult) => void;
+}) {
   const video = useRef<HTMLVideoElement>(null);
   const oval = useRef<HTMLDivElement>(null);
   const shutter = useRef<HTMLButtonElement>(null);
@@ -157,7 +171,7 @@ function FaceCamera({ title, onClose, onCapture }: { title: string; onClose: () 
   const [blocked, setBlocked] = useState<string | null>(null);
   // P81: why the camera did not open (NotAllowedError, NotFoundError ...), to show the right help.
   const [problem, setProblem] = useState<CameraProblem | null>(null);
-  const [engineOk, setEngineOk] = useState(__DEMO__);
+  const [engineOk, setEngineOk] = useState(__DEMO__ || photoOnly);
   const [busy, setBusy] = useState(false);
   const [mirrored, setMirrored] = useState(true);
   const [cameras, setCameras] = useState<MediaDeviceInfo[]>([]);
@@ -221,7 +235,7 @@ function FaceCamera({ title, onClose, onCapture }: { title: string; onClose: () 
     let live = true;
     alive.current = true;
     void start(null);
-    if (!__DEMO__)
+    if (!__DEMO__ && !photoOnly)
       engine().then(
         () => live && setEngineOk(true),
         () => live && setBlocked('The face check did not load. Check the connection and try again.'),
@@ -257,7 +271,7 @@ function FaceCamera({ title, onClose, onCapture }: { title: string; onClose: () 
   // Live guidance: a light face search a few times a second, paused while the photo is being checked.
   useEffect(() => {
     if (!ready) return;
-    if (__DEMO__) {
+    if (__DEMO__ || photoOnly) {
       setStatus({ text: 'Centre your face', sub: 'Then tap the button', tone: 'idle' });
       return;
     }
@@ -301,6 +315,7 @@ function FaceCamera({ title, onClose, onCapture }: { title: string; onClose: () 
     setStatus({ text: 'Hold still', sub: 'Checking your face', tone: 'idle' });
     try {
       if (__DEMO__) return onCapture({ photo: snapshot(v), descriptor: testDescriptor(), live: true });
+      if (photoOnly) return onCapture({ photo: snapshot(v), descriptor: [], live: false });
       const faceapi = await engine();
       const opts = new faceapi.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: 0.5 });
       const first = await faceapi.detectSingleFace(v, opts).withFaceLandmarks(true).withFaceDescriptor();
@@ -391,6 +406,219 @@ function FaceCamera({ title, onClose, onCapture }: { title: string; onClose: () 
             disabled={busy || !ready || (!__DEMO__ && !engineOk)}
             onClick={() => void take()}
             aria-label={busy ? 'Checking your face' : 'Take the photo'}
+          >
+            <span className="cam-shutter-dot" aria-hidden="true" />
+          </button>
+        )}
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
+type Step = 'centre' | 'left' | 'right';
+const STEP_TEXT: Record<Step, { bm: string; en: string }> = {
+  centre: { bm: 'Pandang terus ke kamera', en: 'Look straight at the camera' },
+  left: { bm: 'Pusing kepala ke KIRI anda', en: 'Turn your head to YOUR LEFT' },
+  right: { bm: 'Pusing kepala ke KANAN anda', en: 'Turn your head to YOUR RIGHT' },
+};
+/** Time to follow each step before the picture is taken. */
+const STEP_MS = 1600;
+
+/**
+ * Face check with Prima's own engine (FACE_ENGINE=server, 5 Nov 2026). The server sends a random set of steps (look,
+ * turn, look, turn); the phone shows each one, takes a picture and sends the pictures only. The server finds the faces,
+ * checks the steps were followed and compares the face. The phone makes no face numbers and no score. The camera is the
+ * same full-screen view as FaceCapture.
+ */
+export function FaceChallengeCapture({
+  label,
+  busy,
+  start,
+  onFrames,
+}: {
+  label: string;
+  busy?: boolean;
+  start: () => Promise<{ token: string; steps: Step[] }>;
+  onFrames: (r: { token: string; frames: string[] }) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="cam-launch-wrap">
+      <button type="button" className="btn btn-primary cam-launch" disabled={busy} onClick={() => setOpen(true)}>
+        <CameraIcon size={18} aria-hidden="true" />
+        {busy ? 'Sending…' : label}
+      </button>
+      {open && (
+        <ChallengeCamera
+          title={label}
+          start={start}
+          onClose={() => setOpen(false)}
+          onFrames={(r) => {
+            setOpen(false);
+            onFrames(r);
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+function ChallengeCamera({
+  title,
+  start,
+  onClose,
+  onFrames,
+}: {
+  title: string;
+  start: () => Promise<{ token: string; steps: Step[] }>;
+  onClose: () => void;
+  onFrames: (r: { token: string; frames: string[] }) => void;
+}) {
+  const video = useRef<HTMLVideoElement>(null);
+  const dialog = useRef<HTMLDivElement>(null);
+  const alive = useRef(true);
+  const [ready, setReady] = useState(false);
+  const [blocked, setBlocked] = useState<string | null>(null);
+  const [problem, setProblem] = useState<CameraProblem | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  const [step, setStep] = useState<{ n: number; of: number; kind: Step } | null>(null);
+  const close = useRef(onClose);
+  close.current = onClose;
+
+  // The front camera, opened once and stopped when the screen closes.
+  useEffect(() => {
+    let s: MediaStream | null = null;
+    alive.current = true;
+    if (!navigator.mediaDevices?.getUserMedia) {
+      const p: CameraProblem = window.isSecureContext === false ? 'insecure' : 'unsupported';
+      setProblem(p);
+      setBlocked(CAMERA_PROBLEM_TEXT[p]);
+      return;
+    }
+    navigator.mediaDevices
+      .getUserMedia({ video: { facingMode: 'user', width: { ideal: 640 } }, audio: false })
+      .then(async (m) => {
+        if (!alive.current) return m.getTracks().forEach((t) => t.stop());
+        s = m;
+        if (video.current) {
+          video.current.srcObject = m;
+          await video.current.play().catch(() => undefined);
+        }
+        setReady(true);
+      })
+      .catch((e) => {
+        const p = cameraProblem(e);
+        setProblem(p);
+        setBlocked(CAMERA_PROBLEM_TEXT[p]);
+      });
+    return () => {
+      alive.current = false;
+      s?.getTracks().forEach((t) => t.stop());
+    };
+  }, []);
+
+  // A full-screen view: no page scroll behind it, and Escape closes it.
+  useEffect(() => {
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    const focusFrom = document.activeElement as HTMLElement | null;
+    dialog.current?.focus();
+    const key = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      e.preventDefault();
+      e.stopPropagation();
+      close.current();
+    };
+    window.addEventListener('keydown', key, true);
+    return () => {
+      document.body.style.overflow = prev;
+      window.removeEventListener('keydown', key, true);
+      focusFrom?.focus?.();
+    };
+  }, []);
+
+  const run = async () => {
+    setErr(null);
+    try {
+      const c = await start();
+      const frames: string[] = [];
+      for (let i = 0; i < c.steps.length; i++) {
+        if (!alive.current) return;
+        setStep({ n: i + 1, of: c.steps.length, kind: c.steps[i] });
+        await new Promise((r) => setTimeout(r, STEP_MS));
+        // The picture as the camera took it (the preview is mirrored, the picture is not).
+        frames.push(snapshot(video.current!));
+      }
+      setStep(null);
+      if (alive.current) onFrames({ token: c.token, frames });
+    } catch (e) {
+      setStep(null);
+      setErr(e instanceof Error ? e.message : String(e));
+    }
+  };
+
+  return createPortal(
+    <div ref={dialog} className="cam" role="dialog" aria-modal="true" aria-label={title} data-tone={step ? 'ok' : err ? 'adjust' : 'idle'} tabIndex={-1}>
+      <video ref={video} className="cam-video" data-mirror="yes" playsInline muted autoPlay />
+      <div className="cam-frame" aria-hidden="true">
+        <div className="cam-oval" />
+      </div>
+
+      <div className="cam-top">
+        <button type="button" className="cam-icon" onClick={onClose} aria-label="Close the camera">
+          <XIcon size={24} weight="bold" />
+        </button>
+        <span className="cam-title">{title}</span>
+        <span className="cam-icon-gap" aria-hidden="true" />
+      </div>
+
+      <div className="cam-status" role="status" aria-live="assertive">
+        {blocked ? (
+          <>
+            <p className="cam-status-text">Camera not available</p>
+            <p className="cam-status-sub">{blocked}</p>
+          </>
+        ) : step ? (
+          <>
+            <p className="cam-status-text">{STEP_TEXT[step.kind].bm}</p>
+            <p className="cam-status-sub">
+              {STEP_TEXT[step.kind].en} · {step.n}/{step.of}
+            </p>
+          </>
+        ) : err ? (
+          <>
+            <p className="cam-status-text">Try again</p>
+            <p className="cam-status-sub">{err}</p>
+          </>
+        ) : (
+          <>
+            <p className="cam-status-text">{ready ? 'Centre your face' : 'Opening the camera'}</p>
+            <p className="cam-status-sub">Tap the button, then follow each step on the screen</p>
+          </>
+        )}
+      </div>
+
+      <div className="cam-bottom">
+        {blocked ? (
+          <div className="cam-sheet">
+            {problem === 'denied' && (
+              <div className="cam-help">
+                <PermissionHelp kind="camera" compact />
+              </div>
+            )}
+            <button type="button" className="btn" onClick={onClose}>
+              Close
+            </button>
+          </div>
+        ) : (
+          <button
+            type="button"
+            className="cam-shutter"
+            data-ready={ready && !step ? 'yes' : undefined}
+            disabled={!ready || !!step}
+            onClick={() => void run()}
+            aria-label={step ? 'Follow the steps' : 'Start the face check'}
           >
             <span className="cam-shutter-dot" aria-hidden="true" />
           </button>

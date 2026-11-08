@@ -432,6 +432,9 @@ textarea {
   min-height: 90px;
   resize: vertical;
 }
+.select {
+  max-width: 100%;
+}
 .field {
   display: flex;
   flex-direction: column;
@@ -442,6 +445,8 @@ textarea {
   gap: 10px;
   align-items: center;
   flex-wrap: wrap;
+  min-width: 0;
+  max-width: 100%;
 }
 .seg {
   display: inline-flex;
@@ -1774,6 +1779,129 @@ dl.facts dd {
   display: flex;
   flex-direction: column;
   gap: 12px;
+}
+
+
+/* Staff usability rule 4 (Fauzan, 4 Nov 2026): large buttons that work on a phone. On touch screens every button,
+   field and tab is at least 44 px tall (Apple and Android guidance), and fields use 16 px text so the phone does not
+   zoom in while typing. */
+@media (pointer: coarse), (max-width: 860px) {
+  .btn,
+  .btn-sm {
+    min-height: 44px;
+    padding: 10px 14px;
+    font-size: 1rem;
+  }
+  .input,
+  .select,
+  input:not([type='checkbox']):not([type='radio']):not([type='file']),
+  select,
+  textarea {
+    min-height: 44px;
+    font-size: 16px;
+  }
+  .tabs button {
+    min-height: 52px;
+  }
+}
+
+/* In-app alert bell (Fauzan, 5 Nov 2026): the same alerts as Teams and email. */
+.alert-bell {
+  position: relative;
+}
+.alert-badge {
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 9px;
+  background: var(--crit);
+  color: #fff;
+  font-size: 0.72rem;
+  font-weight: 700;
+  line-height: 18px;
+  text-align: center;
+}
+.alert-panel {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 6px);
+  z-index: 30;
+  width: min(420px, calc(100vw - 32px));
+  max-height: 70vh;
+  overflow: auto;
+  padding: 12px 14px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+}
+.alert-list {
+  list-style: none;
+  margin: 8px 0;
+  padding: 0;
+}
+.alert-line {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: 0;
+  border-top: 1px solid var(--line);
+  padding: 10px 2px;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.alert-line .chip {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+.alert-line:disabled {
+  cursor: default;
+}
+@media (max-width: 860px) {
+  .alert-panel {
+    position: fixed;
+    left: 16px;
+    right: 16px;
+    top: 64px;
+    width: auto;
+  }
+}
+
+
+/* ---------- Site survey (works on a phone at the site, with gloves on and in the sun) ---------- */
+.btn-lg {
+  min-height: 48px;
+  padding: 10px 16px;
+  font-size: 16px;
+}
+.survey .btn,
+.survey .seg button {
+  min-height: 44px;
+}
+.survey .input,
+.survey .textarea,
+.survey select.input {
+  min-height: 44px;
+  font-size: 16px; /* 16px stops the phone zooming in on every field */
+}
+.survey .btn {
+  white-space: normal;
+}
+.survey dl.kv {
+  display: grid;
+  grid-template-columns: minmax(120px, max-content) 1fr;
+  gap: 4px 12px;
+  margin: 0;
+}
+.survey dl.kv dt {
+  color: var(--muted);
+}
+.survey dl.kv dd {
+  margin: 0;
 }
 
 /* ---------- P68: the Agentic Office polish (phones and small screens) ---------- */

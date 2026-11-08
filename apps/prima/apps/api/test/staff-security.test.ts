@@ -311,7 +311,7 @@ describe('staff data security gates (database)', () => {
     await assert.rejects(db.asUser('u-pwvsb-hr', (svc, u) => svc.rateAppraisal(u, a.id, { rating: 4, strengths: 'Not the appraiser', improve: '', trainingNeeds: '' })));
     await db.asUser('u-it-ex1', (svc, u) => svc.rateAppraisal(u, a.id, { rating: 4, strengths: 'Synthetic strengths', improve: '', trainingNeeds: '' }));
     await db.asUser('u-it-ex3', (svc, u) => svc.commentAppraisal(u, a.id, ''));
-    const p = await db.asUser('u-pwvsb-hr', (svc, u) => svc.publishPolicy(u, { id: null, kind: 'handbook', title: 'Synthetic handbook', body: 'Synthetic handbook text for the test.' }));
+    const p = await db.asUser('u-pwvsb-hr', (svc, u) => svc.publishPolicy(u, { id: null, kind: 'handbook', title: 'Synthetic handbook', body: 'Synthetic handbook text for the test.', copies: [{ lang: "ms" as const, title: "Salinan BM (mock)", body: "Teks dasar dalam Bahasa Melayu untuk ujian (mock).", translator: "HR (mock)" }] }));
     await db.asUser('u-it-ex3', (svc, u) => svc.acknowledgePolicy(u, p.id));
     const seen = await db.asUser('u-pwvsb-hr', (svc, u) => svc.hrPolicies(u));
     assert.ok(!seen.rows.find((r) => r.id === p.id)!.missing!.some((m) => m.personId === staffPerson));

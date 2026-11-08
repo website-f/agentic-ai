@@ -207,7 +207,8 @@ describe('Excel', () => {
   });
 });
 
-describe('import from any sheet', () => {
+// Each row is saved and rolled back on a fresh dataset: over a second each, slower when the whole suite runs at once.
+describe('import from any sheet', { timeout: 30000 }, () => {
   it('clients: Malay headers under a banner, a row skipped, then all chosen rows or none', async () => {
     const { ds, svc, cm, co } = fresh();
     const site = ds.sites.find((s) => s.companyId === co.id)!;
@@ -317,6 +318,9 @@ describe('import from any sheet', () => {
     expect(ct).toMatchObject({ ref: 'SYN-CT-001', clientName: 'Synthetic Client Epsilon', siteIds: [site.id], startOn: '2026-01-01', endOn: '2027-12-31' });
     expect(ct.clientAccountId).toBe(ds.clientAccounts.find((a) => a.name === 'Synthetic Client Epsilon')!.id);
     expect(ct.versions[0].fixedFee).toBe(18000);
+    // The sheet cannot carry the signed copy: it is still asked for on the first mobilisation item.
+    expect(ct.mobilisation[0].status).toBe('open');
+    expect(ct.paper?.docId ?? null).toBeNull();
   });
 
   it('kinds kept on their own reviewed path stay out', async () => {

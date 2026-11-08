@@ -49,7 +49,7 @@ describe('pilot routing: the right person has the button at each step', () => {
     expect((await svc.staffClaims(ceo)).tripQueue.some((x) => x.id === t.id && x.status === 'pending')).toBe(true);
     expect((await svc.staffClaims(hr)).tripQueue).toEqual([]);
     expect((await svc.staffClaims(fd)).tripQueue).toEqual([]);
-    await svc.decideTrip(ceo, t.id, true, '');
+    await svc.decideTrip(ceo, t.id, true, 'ok');
   });
 
   it('mileage rates: someone in the pilot can publish the month’s rates', async () => {
@@ -112,8 +112,8 @@ describe('pilot routing: the right person has the button at each step', () => {
     const rows = async (u: typeof ex1) => (await svc.itBoard(u)).accessRequests ?? [];
     expect((await rows(ceo)).find((x) => x.request.id === r.id)?.canDecide).toBe(true);
     expect((await rows(coo)).find((x) => x.request.id === r.id)?.canDecide ?? false).toBe(false);
-    await expect(svc.decideItAccess(coo, r.id, true)).rejects.toThrow(/Only the CEO/);
-    await svc.decideItAccess(ceo, r.id, true);
+    await expect(svc.decideItAccess(coo, r.id, true, 'ok')).rejects.toThrow(/Only the CEO/);
+    await svc.decideItAccess(ceo, r.id, true, 'ok');
   });
 
   it('device rental: only the Finance Director bills and records payment', async () => {

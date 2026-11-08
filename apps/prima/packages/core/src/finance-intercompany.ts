@@ -1,20 +1,14 @@
-// Intercompany balances agreed on both sides every month (Fauzan, 2 Nov 2026: yes to suggestion 12, "Intercompany:
-// management fees, recharges and loans between companies agreed on both sides every month"; not the transfer pricing
-// file, suggestion 20, "no need for now").
-//
-// Each company's Finance team records, for the month, its balance in SQL Account with each other group company, by kind
-// (management fee, recharge, loan, other): positive when the other company owes it, negative when it owes the other.
-// Both sides together must come to RM0.00. Prima pairs them up: agreed when they do; otherwise it shows who has not
-// recorded, or the difference. A difference is fixed by correcting a side (the usual case: one side has not booked an
-// invoice) or explained by a reviewer who entered neither side (for example cash in transit at the month end). A pair
-// with a balance last month must be recorded again this month. Anything not agreed or explained stops the close of
-// both companies. The entries are kept on PWVSB's Finance row, which every Finance person can read, so each side sees
-// the other's figure; Prima shows each person only the pairs of companies they act on.
-import { AccessDenied } from './access';
-import { noSecrets, requireReason, text } from './finance';
-import { RULES } from './rules';
-import { BadRequest } from './service';
-import type { FinSign, FinStatus, Id, User } from './types';
+import { AccessDenied } from "./access";
+import { noSecrets } from "./finance";
+import { requireReason } from "./finance";
+import { text } from "./finance";
+import { RULES } from "./rules";
+import { BadRequest } from "./service";
+import type { FinSign } from "./types";
+import type { FinStatus } from "./types";
+import type { Id } from "./types";
+import type { User } from "./types";
+
 
 const R = () => RULES.financeIntercompany.value;
 const round2 = (n: number) => Math.round(n * 100) / 100;

@@ -610,10 +610,10 @@ function RequestDetail({ r: row, data }: { r: ReqRow; data: PurBoard }) {
         <section className="bz-act" aria-label="Your decision">
           <h3 className="bz-pu-acth">Your decision</h3>
           <F label="Note">
-            <input className="input" placeholder="Note (required to reject)" value={note} onChange={(e) => setNote(e.target.value)} />
+            <input className="input" placeholder="Comment (needed to approve or reject)" value={note} onChange={(e) => setNote(e.target.value)} />
           </F>
           <div className="bz-actions">
-            <button className="btn btn-primary" disabled={act.busy} onClick={() => act.run(() => api.purStep(r.id, 'approve', { note }), 'Approved.')}>
+            <button className="btn btn-primary" disabled={act.busy || !note.trim()} onClick={() => act.run(() => api.purStep(r.id, 'approve', { note }), 'Approved.')}>
               Approve
             </button>
             <button className="btn" disabled={act.busy || !note.trim()} onClick={() => act.run(() => api.purStep(r.id, 'reject', { note }), 'Rejected.')}>
@@ -902,6 +902,7 @@ function Suppliers({ data }: { data: PurBoard }) {
 }
 
 function SupplierLine({ s: row }: { s: SupRow }) {
+  const [checkNote, setCheckNote] = useState('');
   const act = useAction();
   const [note, setNote] = useState('');
   const s = row.supplier;
@@ -945,9 +946,22 @@ function SupplierLine({ s: row }: { s: SupRow }) {
         <Chip tone={tone}>{label}</Chip>
       </span>
       <div className="bz-pu-sup-acts">
+        {row.role === 'finance' && (!s.bank.verifiedOn || (!s.blocked && row.state !== 'approved')) && (
+          <input
+            className="input"
+            aria-label="Check comment"
+            placeholder="Comment (needed to verify or review; a short one is fine)"
+            value={checkNote}
+            onChange={(e) => setCheckNote(e.target.value)}
+          />
+        )}
         <div className="bz-actions">
           {row.role === 'finance' && !s.bank.verifiedOn && (
-            <button className="btn btn-sm" disabled={act.busy} onClick={() => act.run(() => api.purSupplierStep(s.id, 'verify_bank', ''), 'Bank account verified.')}>
+            <button
+              className="btn btn-sm"
+              disabled={act.busy || !checkNote.trim()}
+              onClick={() => act.run(() => api.purSupplierStep(s.id, 'verify_bank', checkNote), 'Bank account verified.')}
+            >
               Bank verified against bank letter
             </button>
           )}
@@ -968,9 +982,9 @@ function SupplierLine({ s: row }: { s: SupRow }) {
           {row.role === 'finance' && !s.blocked && row.state !== 'approved' && (
             <button
               className="btn btn-sm"
-              disabled={act.busy || !s.coiDeclaredOn || !s.abcAckOn}
+              disabled={act.busy || !s.coiDeclaredOn || !s.abcAckOn || !checkNote.trim()}
               title={!s.coiDeclaredOn || !s.abcAckOn ? 'Procurement records the declarations first' : undefined}
-              onClick={() => act.run(() => api.purSupplierStep(s.id, 'review', ''), 'Yearly review recorded.')}
+              onClick={() => act.run(() => api.purSupplierStep(s.id, 'review', checkNote), 'Yearly review recorded.')}
             >
               Yearly review done (Finance)
             </button>
@@ -1272,7 +1286,7 @@ function LossLine({ l }: { l: PurBoard['losses'][number] }) {
         {l.canConfirm ? (
           <div className="bz-pu-block">
             <input className="input" aria-label="Note" placeholder="Note (needed to refuse)" value={note} onChange={(e) => setNote(e.target.value)} />
-            <button className="btn btn-sm btn-primary" disabled={act.busy} onClick={() => act.run(() => api.confirmStockLoss(l.issue.id, true, note), 'Loss confirmed.')}>
+            <button className="btn btn-sm btn-primary" disabled={act.busy || !note.trim()} onClick={() => act.run(() => api.confirmStockLoss(l.issue.id, true, note), 'Loss confirmed.')}>
               Confirm
             </button>
             <button

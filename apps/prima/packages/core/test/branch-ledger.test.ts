@@ -21,6 +21,9 @@ const NOW = myt(TODAY, '10:30');
 
 function fresh() {
   const ds = generateDataset({ today: TODAY, now: NOW });
+  // A company admin executive who is not a Branch Manager: Branch Managers see only their own branch (Fauzan, 4 Nov 2026).
+  const bm = ds.users.find((u) => u.id === 'u-bm-sasa-1')!;
+  ds.users.push({ ...bm, id: 'u-ae-sasa-syn', name: 'Synthetic Company Executive', branchId: undefined, personId: undefined });
   const store = new MemoryStore(ds);
   return { ds, store, svc: new PrimaService(store, () => NOW) };
 }
@@ -38,12 +41,19 @@ async function readyBranch() {
   const f = fresh();
   const { ds, svc } = f;
   const cm = await svc.user('u-cm-sasa');
-  const ae = await svc.user('u-bm-sasa-1');
+  const ae = await svc.user('u-ae-sasa-syn');
   const contract = ds.contracts.find((c) => c.companyId === 'co-sasa' && c.state === 'active' && ds.sites.some((s) => c.siteIds.includes(s.id) && s.branchId))!;
   const site = ds.sites.find((s) => contract.siteIds.includes(s.id) && s.branchId)!;
   const branch = ds.branches.find((b) => b.id === site.branchId)!;
   const [fin1, fin2] = financeFor(ds, 'co-sasa');
   await svc.setBranchProjectCode(fin1, branch.id, 'BR-SEL-01');
+  // These ledger tests pay out a manager's share, so the branch runs under a synthetic Model A agreement. The salaried
+  // Model B month (no payout, salary line) is tested in branch-salaried.test.ts.
+  const cur = (await f.store.get('branches', branch.id))!;
+  await f.store.update('branches', branch.id, {
+    model: 'A',
+    agreements: (cur.agreements ?? []).map((a) => ({ ...a, model: 'A' as const, companyBillingSharePct: 8, companyNetProfitSharePct: null, managerSalary: null })),
+  });
   return { ...f, cm, ae, fin1, fin2, branch, site };
 }
 
@@ -100,7 +110,7 @@ describe('Branch lifecycle (masterplan 145, 146.1, 157)', () => {
   it('proposes, records papers, verifies the account by another person and activates only when nothing is missing', async () => {
     const { ds, svc } = fresh();
     const cm = await svc.user('u-cm-sasa');
-    const ae = await svc.user('u-bm-sasa-1');
+    const ae = await svc.user('u-ae-sasa-syn');
     const [fin1] = financeFor(ds, 'co-sasa');
     await expect(svc.addBranch(ae, 'co-sasa', { name: 'Kuantan', state: 'Pahang', model: 'C' })).rejects.toBeInstanceOf(AccessDenied);
     await expect(svc.addBranch(cm, 'co-arsh', { name: 'Kuantan', state: 'Pahang', model: 'C' })).rejects.toBeInstanceOf(AccessDenied);
@@ -142,7 +152,7 @@ describe('Branch lifecycle (masterplan 145, 146.1, 157)', () => {
   it('activates a fully papered branch, steps in with a reason and closes in order', async () => {
     const { ds, store, svc } = fresh();
     const cm = await svc.user('u-cm-sasa');
-    const ae = await svc.user('u-bm-sasa-1');
+    const ae = await svc.user('u-ae-sasa-syn');
     const [fin1] = financeFor(ds, 'co-sasa');
     const co = ds.companies.find((c) => c.id === 'co-sasa')!;
     const b = await svc.addBranch(cm, 'co-sasa', { name: 'Kuantan', state: 'Pahang', model: 'A' });
@@ -190,7 +200,8 @@ describe('Branch month ledger (masterplan 163.1, 165.1, 167, 169, 149)', () => {
     const m = await svc.prepareBranchSettlement(ae, branch.id, { period: '2026-09', payrollRef: 'JA-PAY-2026-09', lines: lines(site.id) });
     expect(m.status).toBe('draft');
     expect(m.billing).toBe(100_000);
-    expect(m.costs).toEqual({ wages: 70_000, statutory: 8_000, other: 2_000 });
+    // The branch office staff pay from the approved Prima staff pay run is added by itself (refs sp-...); the preparer's lines are the rest.
+    expect(settlementTotals(m.lines!.filter((l) => !l.ref.startsWith('sp-'))).costs).toEqual({ wages: 70_000, statutory: 8_000, other: 2_000 });
     await expect(svc.approveBranchSettlement(cm, m.id, '')).rejects.toThrow(/comment/);
     const a = await svc.approveBranchSettlement(cm, m.id, 'Checked against the SQL project report');
     expect(a.status).toBe('approved');
@@ -213,7 +224,7 @@ describe('Branch month ledger (masterplan 163.1, 165.1, 167, 169, 149)', () => {
     const fixed = lines(site.id).map((l) => (l.kind === 'wages' ? { ...l, amount: 69_500 } : l));
     const again = await svc.prepareBranchSettlement(ae, branch.id, { period: '2026-09', payrollRef: 'JA-PAY-2026-09', lines: fixed });
     expect(again.status).toBe('draft');
-    expect(again.costs.wages).toBe(69_500);
+    expect(settlementTotals(again.lines!.filter((l) => !l.ref.startsWith('sp-'))).costs.wages).toBe(69_500);
     expect(again.steps!.map((x) => x.what)).toEqual(['prepared', 'returned', 'corrected']);
     await svc.approveBranchSettlement(cm, m.id, 'Corrected wages agree');
     // Finance may also send an approved month back.
@@ -265,7 +276,7 @@ describe('Branch month ledger (masterplan 163.1, 165.1, 167, 169, 149)', () => {
 describe('Branch-originated leads (masterplan 147)', () => {
   it('records the branch and shows the same prospect worked by two branches', async () => {
     const { ds, svc } = fresh();
-    const ae = await svc.user('u-bm-sasa-1');
+    const ae = await svc.user('u-ae-sasa-syn');
     const cm = await svc.user('u-cm-sasa');
     const [b1, b2] = ds.branches.filter((b) => b.companyId === 'co-sasa');
     const base = { sector: 'COMMERCIAL' as const, source: 'branch', guardsEst: 4, estMonthly: null, nextOn: null, nextWhat: '' };
@@ -285,7 +296,7 @@ describe('Branch business case and treasury (masterplan 145, branch treasury)', 
   it('forecasts 13 weeks, needs a different Finance reviewer, and asks how a shortfall is covered', async () => {
     const { ds, svc } = fresh();
     const cm = await svc.user('u-cm-sasa');
-    const ae = await svc.user('u-bm-sasa-1');
+    const ae = await svc.user('u-ae-sasa-syn');
     const [fin1] = financeFor(ds, 'co-sasa');
     const b = await svc.addBranch(cm, 'co-sasa', { name: 'Temerloh', state: 'Pahang', model: 'C' });
     await expect(svc.setBranchBusinessCase(ae, b.id, { ...caseInput(), cash13: caseInput().cash13.slice(0, 12) })).rejects.toThrow(/13 weeks/);
@@ -312,7 +323,7 @@ describe('Branch business case and treasury (masterplan 145, branch treasury)', 
   it('records treasury from the statement, shows Unknown when old, and flags payroll shortfall and float over limit', async () => {
     const { ds, svc } = fresh();
     const cm = await svc.user('u-cm-sasa');
-    const ae = await svc.user('u-bm-sasa-1');
+    const ae = await svc.user('u-ae-sasa-syn');
     const [fin1] = financeFor(ds, 'co-sasa');
     const branch = ds.branches.find((b) => b.companyId === 'co-sasa' && !b.status)!;
     let row = (await svc.branchBoard(cm)).rows.find((r) => r.branch.id === branch.id)!;

@@ -1,7 +1,5 @@
 // Read-only website connectors. Configuration and an explicit authorized switch are both required.
-// Read-only calls with keys kept in Azure Key Vault and passed as environment variables. A missing key means that
-// connector is simply not configured; nothing falls back to a broader account. No key is logged or returned.
-
+// Keys remain server-side; missing configuration never broadens account access.
 import type { CfProject, CfZone, ConnectorKey, ConnectorResult, GhRepo, RegistrarDomain, SpRequest, UpMonitor, WebFeed } from '@prima/core';
 
 const TIMEOUT_MS = 8000;

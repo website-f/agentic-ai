@@ -8,7 +8,7 @@ permissions:
 jobs:
   test:
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 45
     services:
       postgres:
         image: postgres:16
@@ -51,22 +51,31 @@ jobs:
       - run: node --test scripts/procurement-core-contract.test.mjs scripts/metrics-core-contract.test.mjs scripts/cleanup-core-contract.test.mjs
       - name: Test import adapter against this candidate's real core (synthetic data only)
         run: PRIMA_REVIEWED_CORE_MODULE="$GITHUB_WORKSPACE/packages/core/dist/index.js" node --test scripts/it-import-reviewed-core.test.mjs scripts/it-manual-contract-integration.test.mjs scripts/it-operations-core.test.mjs scripts/hr-it-core.test.mjs scripts/it-corrections-core.test.mjs scripts/rental-correction-core.test.mjs
-      - run: npm test -w @prima/core
+      - name: Test all core regressions with bounded worker memory
+        env:
+          NODE_OPTIONS: --max-old-space-size=6144
+        run: npm test -w @prima/core -- --maxWorkers=1
       - run: npm test -w @prima/api
       - run: npm test -w @prima/cms
+      - name: Test offline replay over isolated HTTP and PostgreSQL
+        run: node tests/run-offline-http.cjs
       - name: Test item register on a fresh disposable PostgreSQL database only
         env:
           ITEM_REPAIR_DATABASE_URL: postgres://postgres:ci@localhost:5432/prima_repair_items
         run: |
           node -e "const {Client}=require('pg');(async()=>{const c=new Client({connectionString:process.env.DATABASE_URL});try{await c.connect();await c.query('CREATE DATABASE prima_repair_items')}finally{await c.end()}})().catch(e=>{console.error(e);process.exitCode=1})"
           node apps/api/test/item-register-postgres-repair.cjs
-      - name: Test offline replay over isolated HTTP and PostgreSQL
-        run: node tests/run-offline-http.cjs
+      - name: Test uniform allowance on a fresh disposable PostgreSQL database only
+        env:
+          ITEM_UNIFORM_DATABASE_URL: postgres://postgres:ci@localhost:5432/prima_uniform_items
+        run: |
+          node -e "const {Client}=require('pg');(async()=>{const c=new Client({connectionString:process.env.DATABASE_URL});try{await c.connect();await c.query('CREATE DATABASE prima_uniform_items')}finally{await c.end()}})().catch(e=>{console.error(e);process.exitCode=1})"
+          node apps/api/test/item-uniform-postgres.cjs
       - run: npm run typecheck -w @prima/web
       - run: npm run build:demo -w @prima/web
       - run: node --test scripts/it-purchase-reason.test.cjs
       - run: node --test scripts/release-packaging.test.mjs
-      - run: node --test scripts/arisha-avatar.test.mjs
+      - run: node --test scripts/arisha-avatar.test.mjs scripts/arisha-wording.test.mjs
       # The server-connected website, as Azure gets it (a placeholder API address).
       - run: VITE_API_URL=https://ca-prima-api-staging.example.invalid npm run build -w @prima/web
 
@@ -96,6 +105,7 @@ jobs:
           CI_SYNTHETIC_BROWSER: 'true'
         run: |
           export PLAYWRIGHT_MODULE="$RUNNER_TEMP/prima-browser/node_modules/playwright/index.mjs"
+          node --test scripts/browser-persona.test.cjs
           node tests/offline-browser.cjs
           node scripts/arisha-review-smoke.mjs
           node scripts/it-import-smoke.mjs
@@ -114,8 +124,7 @@ jobs:
           node scripts/cleanup-browser-smoke.mjs
           node scripts/hr-it-browser-smoke.mjs
           node scripts/it-onboarding-browser-smoke.mjs
-          node scripts/central-admin-browser-uat.mjs
-      - name: HR journeys on the synthetic demo build (leave; login handover as an ordinary IT account)
+      - name: HR journeys on the synthetic demo build (leave; login handover as an ordinary IT account; policy languages and appeals)
         shell: bash
         env:
           CI_SYNTHETIC_BROWSER: 'true'
@@ -126,6 +135,24 @@ jobs:
           for i in $(seq 1 30); do curl -sf -o /dev/null http://127.0.0.1:4179/ && break; sleep 1; done
           node scripts/hr-login-handover-browser-uat.cjs "$RUNNER_TEMP/hr-browser" 2>&1 | tee "$RUNNER_TEMP/hr-browser/login-handover.txt"
           node scripts/hr-leave-browser-uat.cjs "$RUNNER_TEMP/hr-browser" 2>&1 | tee "$RUNNER_TEMP/hr-browser/leave.txt"
+          mkdir -p "$RUNNER_TEMP/hr-browser/languages-appeal"
+          node scripts/hr-languages-appeal-browser-uat.cjs "$RUNNER_TEMP/hr-browser/languages-appeal" 2>&1 | tee "$RUNNER_TEMP/hr-browser/languages-appeal/run.txt"
+      - name: Group staff history journeys on the synthetic demo build (HR, HR Director, company head, OM, ROM, COO)
+        shell: bash
+        env:
+          CI_SYNTHETIC_BROWSER: 'true'
+        run: |
+          export PLAYWRIGHT_MODULE="$RUNNER_TEMP/prima-browser/node_modules/playwright/index.mjs"
+          mkdir -p "$RUNNER_TEMP/hr-browser/staff-history"
+          node scripts/staff-history-browser-uat.cjs "$RUNNER_TEMP/hr-browser/staff-history" 2>&1 | tee "$RUNNER_TEMP/hr-browser/staff-history/run.txt"
+      - name: RBA readiness journey on the synthetic demo build (CEO, staff ethics declaration, ACT trace, speak-up by code)
+        shell: bash
+        env:
+          CI_SYNTHETIC_BROWSER: 'true'
+        run: |
+          export PLAYWRIGHT_MODULE="$RUNNER_TEMP/prima-browser/node_modules/playwright/index.mjs"
+          mkdir -p "$RUNNER_TEMP/hr-browser/rba"
+          node scripts/rba-browser-uat.cjs "$RUNNER_TEMP/hr-browser/rba" 2>&1 | tee "$RUNNER_TEMP/hr-browser/rba/run.txt"
       - name: Keep the HR browser results and screenshots (synthetic data only)
         if: always()
         uses: actions/upload-artifact@v4
@@ -134,7 +161,6 @@ jobs:
           path: ${{ runner.temp }}/hr-browser
           retention-days: 14
           if-no-files-found: warn
-          node scripts/finance-plan3-browser-smoke.mjs
 
   packaged_release:
     runs-on: ubuntu-24.04
@@ -208,3 +234,120 @@ jobs:
         env:
           PG_BIN: /usr/lib/postgresql/16/bin
         run: bash ops/existing-admin/tests/run-disposable-pg16.sh "${{ matrix.suite }}"
+
+  combined_base_upgrade:
+    # Fresh synthetic native PG16 cluster only. CEO-gated deployment runners stay unchanged.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci -w @prima/core -w @prima/api
+      - run: npm run build -w @prima/core && npm run build -w @prima/api
+      - name: Rehearse main-to-combined upgrade, rollback and replay without real data
+        env:
+          PG_BIN: /usr/lib/postgresql/16/bin
+        run: bash scripts/run-combined-upgrade-pg.sh
+
+  combined_upgrade_package:
+    # Stage 2 database update package (4b4c... -> combined base). Fresh disposable PostgreSQL service only.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: ci
+          POSTGRES_DB: postgres
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      TEST_POSTGRES_URL: postgres://postgres:ci@localhost:5432/postgres
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci -w @prima/core -w @prima/api
+      - run: npm run build -w @prima/core && npm run build -w @prima/api
+      - run: node --test ops/combined-upgrade/cli.test.cjs
+      - name: Rehearse the stage 2 upgrade command on fresh disposable PostgreSQL only
+        run: node --test ops/combined-upgrade/combined-upgrade.pg.test.cjs
+
+  combined_script_regressions:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build -w @prima/core
+      - name: Every checked-in script regression on the exact combined source
+        env:
+          PRIMA_REVIEWED_CORE_MODULE: ${{ github.workspace }}/packages/core/dist/index.js
+        run: |
+          # PostgreSQL tests run in the dedicated disposable-cluster job above.
+          mapfile -t tests < <(find scripts -maxdepth 1 \( -name "*.test.mjs" -o -name "*.test.cjs" \) ! -name "*.pg.test.cjs" | sort)
+          node --test --test-concurrency=1 "${tests[@]}"
+
+  integrated_department_browser:
+    # All data is synthetic. No tenant/provider credentials or deployment permission.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      max-parallel: 3
+      matrix:
+        journey: [finance, admin, fwm, timeslip, jobposts, specialops, cmsmaster, cmsroster, cmsclose, cmsrestart, mailbi, m365, staffhistory]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build -w @prima/core
+      - run: npm run build:demo -w @prima/web
+      - run: npm run build -w @prima/cms
+      - name: Install pinned synthetic browser tooling
+        run: |
+          npm install --prefix "$RUNNER_TEMP/prima-browser" --no-save --package-lock=false --ignore-scripts playwright@1.56.1
+          node "$RUNNER_TEMP/prima-browser/node_modules/playwright/cli.js" install --with-deps chromium
+      - name: Run the included departmental journey
+        env:
+          CI_SYNTHETIC_BROWSER: 'true'
+          UAT_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          INTEGRATION_BROWSER_OUT: ${{ runner.temp }}/integration-browser
+        run: |
+          export PLAYWRIGHT_MODULE="$RUNNER_TEMP/prima-browser/node_modules/playwright/index.mjs"
+          node scripts/run-integration-browser.cjs "${{ matrix.journey }}"
+      - name: Keep synthetic results for the exact candidate
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: integration-browser-${{ matrix.journey }}-${{ github.event.pull_request.head.sha || github.sha }}
+          path: |
+            ${{ runner.temp }}/integration-browser
+            artifacts/fw-recruitment-cost
+          retention-days: 14
+          if-no-files-found: warn

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { mailboxSetupMarker, requestMailboxSetup } from './setup-request';
-import { validOutlookMessageLink, previewStillCurrent } from './job-emails-client';
-import type { EmailSnapshot, JobEmailClient, JobEmailPreview, JobEmailView } from './job-emails-client';
+import { validOutlookMessageLink, previewStillCurrent, type EmailSnapshot, type JobEmailClient, type JobEmailPreview, type JobEmailView } from './job-emails-client';
+
 
 /**
  * "Outlook emails on this job" panel, for the job screen's owner to mount. Staff keep sending in Outlook; here they

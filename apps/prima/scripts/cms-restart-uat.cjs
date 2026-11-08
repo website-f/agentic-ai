@@ -1,3 +1,5 @@
+if (process.env.CI_SYNTHETIC_BROWSER !== 'true') throw Error('Synthetic browser opt-in required');
+const { localOnly } = require('./browser-local-only.cjs');
 // Run: npm run build -w @prima/cms; node scripts/cms-restart-uat.cjs apps/cms <out-dir>. Local only, port 8098, not wired to CI.
 // Browser check of masterplan §193 and §195 in the CMS app: an operator acknowledges an alarm, the hub is stopped and
 // started again from its saved state folder, and the alarm, the operator's action and the KPIs are still there.
@@ -5,6 +7,7 @@
 const path = require('node:path');
 const os = require('node:os');
 const fs = require('node:fs');
+const net = require('node:net');
 const D = path.resolve(process.argv[2], 'dist/src');
 const OUT = process.argv[3];
 const { Hub } = require(D + '/hub.js');
@@ -21,6 +24,12 @@ const serve = (hub, store) => {
   const lists = new GateLists();
   return startHttp(cfg, { hub, lists, routes: new Map(), persist: () => store.save(hub, { ...lists.exportLists(), routes: [] }) }, 8098);
 };
+const stop = (server) => new Promise((resolve, reject) => {
+  server.close((error) => error ? reject(error) : resolve());
+  // A real process restart drops its HTTP connections. Chromium may hold an
+  // idle preconnection that otherwise keeps graceful close pending forever.
+  server.closeAllConnections();
+});
 (async () => {
   const dirPath = fs.mkdtempSync(path.join(os.tmpdir(), 'cms-uat-state-'));
   const dir = demoDirectory();
@@ -34,7 +43,7 @@ const serve = (hub, store) => {
   const res = []; const ok = (n) => { res.push(n); console.log('ok ' + res.length + ' ' + n); };
   const b = await chromium.launch();
   for (const width of [1280, 390]) {
-    const p = await b.newPage({ viewport: { width, height: 900 } });
+    const p = await b.newPage({ viewport: { width, height: 900 } }); await localOnly(p);
     const errs = []; p.on('pageerror', (e) => errs.push(e.message));
     await p.goto('http://localhost:8098/');
     await p.fill('#token', key); await p.click('#signin button');
@@ -45,7 +54,9 @@ const serve = (hub, store) => {
       assert.ok(fs.readFileSync(path.join(dirPath, 'audit.jsonl'), 'utf8').includes('"acknowledge"'));
       ok('The acknowledgement is in the append-only audit journal before the screen updates');
       // Stop the hub and start it again from the saved folder.
-      await new Promise((r) => srv.close(r));
+      const idle = net.connect(8098, '127.0.0.1');
+      await new Promise((resolve, reject) => { idle.once('connect', resolve); idle.once('error', reject); });
+      try { await stop(srv); } finally { idle.destroy(); }
       store.unlock();
       store = new StateStore(dirPath);
       store.lock();
@@ -71,7 +82,7 @@ const serve = (hub, store) => {
     await p.close();
   }
   await b.close();
-  await new Promise((r) => srv.close(r));
+  await stop(srv);
   store.unlock();
   fs.rmSync(dirPath, { recursive: true, force: true });
   console.log(`${res.length}/5 passed`);

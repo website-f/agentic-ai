@@ -11,10 +11,10 @@ const SKEW_S = 5 * 60;
 /** Keys are fetched again after a day, or sooner when a token names a key we do not hold (at most every 5 minutes). */
 const KEYS_TTL_MS = 24 * 3_600_000;
 const KEYS_RETRY_MS = 5 * 60_000;
-/** During a Microsoft outage, keys already held keep working for up to 3 days after the last good fetch.
- * PROPOSED (4 Nov 2026): chosen by the build, not decided by the owner; change it here once decided. */
-const KEYS_STALE_MS = 3 * 24 * 3_600_000;
-const KEYS_TIMEOUT_MS = Number(process.env.ENTRA_KEYS_TIMEOUT_MS ?? 5_000);
+// Do not extend cached-key acceptance beyond the existing 24-hour lifetime.
+const KEYS_STALE_MS = KEYS_TTL_MS;
+const configuredTimeout = Number(process.env.ENTRA_KEYS_TIMEOUT_MS ?? 5_000);
+const KEYS_TIMEOUT_MS = Number.isFinite(configuredTimeout) && configuredTimeout > 0 ? Math.min(configuredTimeout, 10_000) : 5_000;
 
 export interface EntraConfig {
   /** The directory (tenant) ID of the group's Microsoft 365. Not secret. */

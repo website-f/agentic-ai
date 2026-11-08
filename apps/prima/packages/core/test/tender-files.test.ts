@@ -73,8 +73,8 @@ describe('tender bid files (Fauzan, 28 Oct 2026)', () => {
     t.bidFiles![0].confirmedBy = null;
     await expect(svc.submitTender(cm, t.id, 'Lodged', [pdf('Slip.pdf', 'Slip')])).rejects.toThrow(/bid files are not ready/);
     await svc.verifyTender(cm, t.id, false, 'Check the technical file');
-    await expect(svc.verifyTender(cm, t.id, true, '')).rejects.toThrow(/check "Dokumen Teknikal.pdf"/);
+    await expect(svc.verifyTender(cm, t.id, true, 'ok')).rejects.toThrow(/check "Dokumen Teknikal.pdf"/);
     ds.tenders.find((x) => x.id === t.id)!.bidFiles = [];
-    await expect(svc.verifyTender(cm, t.id, true, '')).rejects.toThrow(/list of file names/);
+    await expect(svc.verifyTender(cm, t.id, true, 'ok')).rejects.toThrow(/list of file names/);
   });
 });

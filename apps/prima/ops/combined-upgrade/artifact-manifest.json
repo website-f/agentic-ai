@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "oldSha": "4b4cf4d3c67d0c5b09ca3c9592c74504a2c7335430dcffeccdd4f48710ed78fe",
+  "newSha": "970b976babec96f85f2a7952fff027a9978eee76f86e19ac07b08cd3947771da",
+  "upgradeSha": "312a3958f801b47ec755cbb06aeb61741819e1eebdd6f25f26770eda19723b82",
+  "runnerSha": "9693eb20a773ebe8903029d0ca663256a8357e83e1ccf0fa0ae4585febb345f9",
+  "files": [
+    {
+      "path": "cli.cjs",
+      "sha256": "cef1114a643ec68eeda0a3fee9bf8da265f186877db09efa9354bff4646a3c21"
+    },
+    {
+      "path": "runner.cjs",
+      "sha256": "9693eb20a773ebe8903029d0ca663256a8357e83e1ccf0fa0ae4585febb345f9"
+    },
+    {
+      "path": "upgrade.sql",
+      "sha256": "312a3958f801b47ec755cbb06aeb61741819e1eebdd6f25f26770eda19723b82"
+    }
+  ]
+}

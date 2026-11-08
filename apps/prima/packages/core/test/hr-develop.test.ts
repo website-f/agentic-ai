@@ -67,13 +67,13 @@ describe('Training, appraisal and policies (slice 3F)', () => {
     const hr = await svc.user('u-pwvsb-hr');
     const staff = await svc.user('u-it-ex3');
     await expect(svc.publishPolicy(staff, { id: null, kind: 'it_use', title: 'IT use', body: 'Use company devices for work only.' })).rejects.toBeInstanceOf(AccessDenied);
-    const p = await svc.publishPolicy(hr, { id: null, kind: 'it_use', title: 'IT use', body: 'Use company devices for work only, and lock the screen.' });
+    const p = await svc.publishPolicy(hr, { id: null, kind: 'it_use', title: 'IT use', body: 'Use company devices for work only, and lock the screen.', copies: [{ lang: "ms" as const, title: "Salinan BM (mock)", body: "Teks dasar dalam Bahasa Melayu untuk ujian (mock).", translator: "HR (mock)" }] });
     expect((await svc.hrPolicies(staff)).rows[0].canAck).toBe(true);
     await svc.acknowledgePolicy(staff, p.id);
     await expect(svc.acknowledgePolicy(staff, p.id)).rejects.toThrow(/Already/);
     const before = (await svc.hrPolicies(hr)).rows[0];
     expect(before.missing!.some((m) => m.personId === staff.personId)).toBe(false);
-    await svc.publishPolicy(hr, { id: p.id, kind: 'it_use', title: 'IT use', body: 'Use company devices for work only, lock the screen, and report loss within 24 hours.' });
+    await svc.publishPolicy(hr, { id: p.id, kind: 'it_use', title: 'IT use', body: 'Use company devices for work only, lock the screen, and report loss within 24 hours.', copies: [{ lang: "ms" as const, title: "Salinan BM (mock)", body: "Teks dasar dalam Bahasa Melayu untuk ujian (mock).", translator: "HR (mock)" }] });
     const again = (await svc.hrPolicies(staff)).rows[0];
     expect(again.version).toBe(2);
     expect(again.canAck).toBe(true);

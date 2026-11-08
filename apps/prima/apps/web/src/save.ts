@@ -43,3 +43,21 @@ export async function saveFile(filename: string, data: Blob | string): Promise<s
   setTimeout(() => URL.revokeObjectURL(a.href), 1000);
   return null;
 }
+
+/**
+ * Opens a proof item: a SharePoint link opens in a new tab, where Microsoft checks whether this person may see the
+ * file (Prima never copies it); a stored file is saved as before. Resolves with a message to show, if any.
+ */
+export async function openProofItem(name: string, item: { data?: string; link?: string | null }): Promise<string | null> {
+  if (item.link) {
+    if (!/^https:\/\/[a-z0-9][a-z0-9-]{0,62}\.sharepoint\.com\//.test(item.link)) return 'This link cannot be opened.';
+    // Open an empty tab first, cut it off from this page, then send it to SharePoint (no opener, no referrer). A null
+    // window means the browser blocked the new tab, which some phones do after a wait for the server.
+    const w = window.open('about:blank', '_blank');
+    if (!w) return 'The browser blocked the new tab. Allow pop-ups for Prima, then press the file name again.';
+    w.opener = null;
+    w.location.replace(item.link);
+    return null;
+  }
+  return saveFile(name, item.data ?? '');
+}

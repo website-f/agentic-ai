@@ -1,12 +1,13 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ChatCircleDotsIcon, ClockCountdownIcon, HandshakeIcon, PlusIcon, ShieldWarningIcon } from '@phosphor-icons/react';
 import type { ProofInput } from '@prima/core';
 import { api, type PdpaBoard, type PdpaCaseInput, type PdpaStepName } from '../api';
-import { Empty, PageHead, Stat, Stats, Steps, type StepState } from '../kit';
+import { Card, Empty, PageHead, Stat, Stats, Steps, type StepState } from '../kit';
 import { Chip, ErrorNotice, Loading, dateLabel, dateTimeLabel, useAction, useLoad, type Tone } from '../ui';
 import { DocList, ProofPicker } from './Proof';
 import { ProductsPanel, ProposalPanel } from './Products';
 import { DpoPanel, RequestsPanel } from './PdpaRights';
+import { BreachRegisterPanel, ConsentsPanel, RegisterPanel } from './PdpaRegister';
 import '../styles/hrx.css';
 
 /**
@@ -17,13 +18,43 @@ import '../styles/hrx.css';
  */
 
 type Case = PdpaBoard['cases'][number];
+type Extra = 'REGISTER' | 'CONSENTS' | 'BREACH_REGISTER' | 'PRODUCTS' | 'PROPOSAL' | 'REQUESTS' | 'DPO' | 'SETTINGS';
+
+const EXTRA_LABEL: Record<Extra, string> = {
+  REGISTER: 'Data register',
+  CONSENTS: 'Consents',
+  BREACH_REGISTER: 'Breach register',
+  PRODUCTS: 'Products',
+  PROPOSAL: 'Proposal check',
+  REQUESTS: 'Data requests',
+  DPO: 'DPO register',
+  SETTINGS: 'Settings',
+};
+
+/** The time now, moving every 30 seconds, so the 72-hour clock counts down on screen without a reload. */
+function useNow(): number {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 30_000);
+    return () => clearInterval(t);
+  }, []);
+  return now;
+}
+
+/** Hours and minutes left (or late) to a deadline, for the breach clock. */
+function countdown(due: string, now: number): { late: boolean; text: string } {
+  const ms = Date.parse(due) - now;
+  const mins = Math.floor(Math.abs(ms) / 60_000);
+  const text = `${Math.floor(mins / 60)} h ${mins % 60} min`;
+  return ms < 0 ? { late: true, text: `${text} late` } : { late: false, text: `${text} left` };
+}
 type Kind = Case['kind'];
 
 const TAB_LABEL: Record<Kind, string> = { BREACH: 'Breaches', CLIENT_CONSENT: 'Client consent', SOCIAL: 'Social media' };
 
 export function PdpaView() {
   const { data, error } = useLoad(() => api.pdpaBoard(), []);
-  const [tab, setTab] = useState<Kind | 'PRODUCTS' | 'PROPOSAL' | 'REQUESTS' | 'DPO'>('BREACH');
+  const [tab, setTab] = useState<Kind | Extra>('BREACH');
   const [adding, setAdding] = useState(false);
   const [shut, setShut] = useState(true);
   if (error)
@@ -42,7 +73,7 @@ export function PdpaView() {
   const inTab = data.cases.filter((c) => c.kind === tab);
   const closedCount = inTab.filter((c) => c.status === 'closed').length;
   const rows = shut ? inTab : inTab.filter((c) => c.status !== 'closed');
-  const caseTab = tab !== 'PRODUCTS' && tab !== 'PROPOSAL' && tab !== 'REQUESTS' && tab !== 'DPO';
+  const caseTab = tab === 'BREACH' || tab === 'CLIENT_CONSENT' || tab === 'SOCIAL';
   const go = (k: Kind) => {
     setTab(k);
     setAdding(false);
@@ -51,8 +82,13 @@ export function PdpaView() {
     <div className="page">
       <PageHead
         title="PDPA"
-        sub="The PDPA officer handles every personal data matter. The Operations Director monitors. A breach goes to the PDP Commissioner within 72 hours, and to the affected people within 7 days after that when the harm is significant."
+        sub="The PDPA officer handles every personal data matter. The Operations Director, the Chief of Staff and the CEO monitor. A breach goes to the PDP Commissioner within 72 hours, and to the affected people within 7 days after that when the harm is significant."
       />
+      {!data.settings.enabled && (
+        <div className="notice" data-tone="warn" role="status">
+          PDPA is switched off by the Chief of Staff: PDPA alerts do not show on the leaders' screens. Records are kept and the legal duties still apply.
+        </div>
+      )}
       {data.counts.late > 0 && (
         <div className="notice" data-tone="crit" role="alert">
           {data.counts.late} breach{data.counts.late === 1 ? '' : 'es'} past the legal notice time.
@@ -96,28 +132,25 @@ export function PdpaView() {
             {TAB_LABEL[k]}
           </button>
         ))}
-        <button role="tab" aria-selected={tab === 'PRODUCTS'} onClick={() => setTab('PRODUCTS')}>
-          Products
-        </button>
-        <button role="tab" aria-selected={tab === 'PROPOSAL'} onClick={() => setTab('PROPOSAL')}>
-          Proposal check
-        </button>
-        <button role="tab" aria-selected={tab === 'REQUESTS'} onClick={() => setTab('REQUESTS')}>
-          Data requests
-        </button>
-        <button role="tab" aria-selected={tab === 'DPO'} onClick={() => setTab('DPO')}>
-          DPO register
-        </button>
+        {(Object.keys(EXTRA_LABEL) as Extra[]).map((k) => (
+          <button key={k} role="tab" aria-selected={tab === k} onClick={() => setTab(k)}>
+            {EXTRA_LABEL[k]}
+          </button>
+        ))}
       </div>
+      {tab === 'REGISTER' && <RegisterPanel />}
+      {tab === 'CONSENTS' && <ConsentsPanel />}
+      {tab === 'BREACH_REGISTER' && <BreachRegisterPanel data={data} />}
       {tab === 'PRODUCTS' && <ProductsPanel />}
       {tab === 'PROPOSAL' && <ProposalPanel />}
       {tab === 'REQUESTS' && <RequestsPanel />}
       {tab === 'DPO' && <DpoPanel />}
+      {tab === 'SETTINGS' && <SettingsPanel s={data.settings} />}
       {caseTab && (
         <section className="k-card">
           <div className="k-card-head">
             <div className="k-card-title">
-              <h2>{TAB_LABEL[tab]}</h2>
+              <h2>{TAB_LABEL[tab as Kind]}</h2>
               <p>
                 {rows.length} case{rows.length === 1 ? '' : 's'}
                 {closedCount > 0 ? (shut ? `, ${closedCount} closed` : ` open, ${closedCount} closed hidden`) : ''}
@@ -139,7 +172,7 @@ export function PdpaView() {
           </div>
           {adding && (
             <div className="pd-new">
-              <NewCase kind={tab} companies={data.companies} onDone={() => setAdding(false)} />
+              <NewCase kind={tab as Kind} companies={data.companies} onDone={() => setAdding(false)} />
             </div>
           )}
           {rows.length === 0 ? (
@@ -157,11 +190,14 @@ export function PdpaView() {
   );
 }
 
-function caseChip(c: Case): [Tone, string] {
+function caseChip(c: Case, now: number): [Tone, string] {
   if (c.status === 'closed') return ['ok', 'Closed'];
   const k = c.clock;
   if (c.kind === 'BREACH' && k) {
-    if (!c.breach!.commissionerAt) return k.commissionerLate ? ['crit', 'Commissioner overdue'] : ['warn', `Commissioner in ${k.hoursLeft} h`];
+    if (!c.breach!.commissionerAt) {
+      const left = countdown(k.commissionerDue, now);
+      return left.late ? ['crit', `Commissioner: ${left.text}`] : ['warn', `Commissioner: ${left.text}`];
+    }
     if (k.subjectsDue && !c.breach!.subjectsAt)
       return k.subjectsLate ? ['crit', 'People notice overdue'] : ['warn', `Tell people by ${dateLabel(k.subjectsDue)}`];
     return ['info', 'Notified, to close'];
@@ -216,7 +252,8 @@ function caseSteps(c: Case): { label: string; state: StepState; note?: string }[
 
 function CaseLine({ c, officer }: { c: Case; officer: boolean }) {
   const [open, setOpen] = useState(false);
-  const [tone, label] = caseChip(c);
+  const now = useNow();
+  const [tone, label] = caseChip(c, now);
   return (
     <li className="hx-row" data-tone={c.status === 'closed' ? undefined : tone === 'crit' ? 'crit' : tone === 'warn' ? 'warn' : undefined}>
       <div className="hx-row-main">
@@ -300,6 +337,13 @@ function CaseDetail({ c, officer }: { c: Case; officer: boolean }) {
           ))}
         </ol>
       </div>
+      {c.breach && (
+        <p className="hx-row-meta">
+          Data involved: {c.breach.dataKinds || 'not recorded'} · Cause: {c.breach.cause || 'not recorded'}
+          {c.breach.remedy ? ` · Action taken: ${c.breach.remedy}` : ''}
+        </p>
+      )}
+      {c.breach && officer && c.status === 'open' && <BreachDetails c={c} />}
       {docs.data && <DocList docs={docs.data} />}
       {officer && c.status === 'open' && (
         <div className="hx-form">
@@ -325,6 +369,145 @@ function CaseDetail({ c, officer }: { c: Case; officer: boolean }) {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+/**
+ * PDPA settings (Fauzan, 5 Nov 2026): the Chief of Staff switches PDPA on or off; the PDPA officer or the Chief of Staff
+ * sets how long the breach register is kept, never under 2 years. Every change needs a reason and is kept in the history.
+ */
+function SettingsPanel({ s }: { s: PdpaBoard['settings'] }) {
+  const [years, setYears] = useState(String(s.keepYears));
+  const [reason, setReason] = useState('');
+  const act = useAction();
+  const yearsNum = Number(years);
+  const yearsOk = Number.isInteger(yearsNum) && yearsNum >= 2 && yearsNum <= 20 && yearsNum !== s.keepYears;
+  const done = () => setReason('');
+  return (
+    <Card title="Settings" actions={<Chip tone={s.enabled ? 'ok' : 'warn'}>{s.enabled ? 'PDPA on' : 'PDPA off'}</Chip>}>
+      {!s.installed && (
+        <div className="notice" data-tone="warn" role="status">
+          The PDPA settings are not installed in the database yet. They are installed when the CEO runs the database update.
+        </div>
+      )}
+      <ul className="hx-rows">
+        <li className="hx-row">
+          <div className="hx-row-main">
+            <span className="hx-row-title">PDPA on or off</span>
+            <span className="hx-row-meta">Only the Chief of Staff switches this. When off, PDPA alerts do not show on the leaders' screens. Records are kept.</span>
+          </div>
+        </li>
+        <li className="hx-row">
+          <div className="hx-row-main">
+            <span className="hx-row-title">{`Breach register kept for ${s.keepYears} years`}</span>
+            <span className="hx-row-meta">Set by the PDPA officer or the Chief of Staff. The law needs at least 2 years.</span>
+          </div>
+        </li>
+      </ul>
+      {s.installed && (s.canSwitch || s.canSetKeep) && (
+        <div className="hx-form">
+          <label className="field">
+            <span className="label">Reason for the change</span>
+            <input className="input" aria-label="Reason for the change" placeholder="Reason for the change" value={reason} onChange={(e) => setReason(e.target.value)} />
+          </label>
+          <ErrorNotice error={act.error} />
+          <div className="hx-form-actions">
+            {s.canSwitch && (
+              <button
+                className="btn btn-sm"
+                disabled={act.busy || reason.trim().length < 3}
+                onClick={() => act.run(() => api.setPdpaSettings({ enabled: !s.enabled }, reason), 'Saved.').then((r) => r && done())}
+              >
+                {s.enabled ? 'Switch PDPA off' : 'Switch PDPA on'}
+              </button>
+            )}
+            {s.canSetKeep && (
+              <>
+                <input
+                  className="input"
+                  style={{ width: 90 }}
+                  type="number"
+                  min={2}
+                  max={20}
+                  aria-label="Years to keep the breach register"
+                  value={years}
+                  onChange={(e) => setYears(e.target.value)}
+                />
+                <button
+                  className="btn btn-sm"
+                  disabled={act.busy || !yearsOk || reason.trim().length < 3}
+                  onClick={() => act.run(() => api.setPdpaSettings({ keepYears: yearsNum }, reason), 'Saved.').then((r) => r && done())}
+                >
+                  Save keep period
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+      {s.history.length > 0 && (
+        <ul className="hx-rows">
+          {[...s.history].reverse().map((h, i) => (
+            <li className="hx-row" key={i}>
+              <div className="hx-row-main">
+                <span className="hx-row-title">{h.what}</span>
+                <span className="hx-row-meta">
+                  {h.by} · {dateTimeLabel(h.at)}
+                </span>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+    </Card>
+  );
+}
+
+/** The breach register details; a breach cannot close without the data involved and the cause. */
+function BreachDetails({ c }: { c: Case }) {
+  const b = c.breach!;
+  const [open, setOpen] = useState(false);
+  const [f, setF] = useState({ dataKinds: b.dataKinds ?? '', cause: b.cause ?? '', remedy: b.remedy ?? '' });
+  const act = useAction();
+  if (!open)
+    return (
+      <div>
+        <button className="btn btn-ghost btn-sm" onClick={() => setOpen(true)}>
+          {b.dataKinds && b.cause ? 'Update breach register details' : 'Record breach register details'}
+        </button>
+      </div>
+    );
+  return (
+    <div className="hx-form">
+      <h3 className="hx-form-title">Breach register details</h3>
+      <div className="hx-form-grid">
+        <label className="field">
+          <span className="label">Data involved</span>
+          <input className="input" aria-label="Data involved" placeholder="Personal data involved, e.g. names and IC numbers" value={f.dataKinds} onChange={(e) => setF({ ...f, dataKinds: e.target.value })} />
+        </label>
+        <label className="field">
+          <span className="label">Cause</span>
+          <input className="input" aria-label="Cause" placeholder="How it happened" value={f.cause} onChange={(e) => setF({ ...f, cause: e.target.value })} />
+        </label>
+        <label className="field hx-form-wide">
+          <span className="label">Action taken</span>
+          <input className="input" aria-label="Action taken" placeholder="What was done so it does not happen again" value={f.remedy} onChange={(e) => setF({ ...f, remedy: e.target.value })} />
+        </label>
+      </div>
+      <ErrorNotice error={act.error} />
+      <div className="hx-form-actions">
+        <button
+          className="btn btn-primary btn-sm"
+          disabled={act.busy || !f.dataKinds.trim() || f.cause.trim().length < 3}
+          onClick={() => act.run(() => api.pdpaBreachDetails(c.id, f), 'Saved.').then((r) => r && setOpen(false))}
+        >
+          Save details
+        </button>
+        <button className="btn btn-ghost btn-sm" onClick={() => setOpen(false)}>
+          Cancel
+        </button>
+      </div>
     </div>
   );
 }
@@ -381,6 +564,14 @@ function NewCase({ kind, companies, onDone }: { kind: Kind; companies: PdpaBoard
             </label>
             <label className="pd-check hx-form-wide">
               <input type="checkbox" checked={!!f.significantHarm} onChange={(e) => set({ significantHarm: e.target.checked })} /> Significant harm likely
+            </label>
+            <label className="field">
+              <span className="label">Data involved</span>
+              <input className="input" aria-label="Data involved" placeholder="Personal data involved" value={f.dataKinds ?? ''} onChange={(e) => set({ dataKinds: e.target.value })} />
+            </label>
+            <label className="field">
+              <span className="label">Cause</span>
+              <input className="input" aria-label="Cause" placeholder="How it happened (if known)" value={f.cause ?? ''} onChange={(e) => set({ cause: e.target.value })} />
             </label>
           </>
         )}

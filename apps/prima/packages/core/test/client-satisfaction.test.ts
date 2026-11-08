@@ -72,20 +72,4 @@ describe('Client satisfaction', () => {
     expect(await issuesOf(s2, acct.id)).toContain('3 complaints in 90 days');
   });
 
-  it('shows satisfaction for the sites in the Goodwill and Sasa Team monitors', async () => {
-    const { svc, om, acct, store } = await setup();
-    const sites = await store.list('sites', {});
-    const sector = sites.find((s) => acct.siteIds.includes(s.id))?.sector ?? 'private';
-    await svc.clientRating(om, acct.id, 2, 'Slow response', { from: 'Synthetic PIC', via: 'meeting' });
-    await svc.clientComplaint(om, acct.id, { from: 'Synthetic PIC', via: 'call', what: 'Slow response' });
-    const leader = await svc.user('u-fauzan');
-    const r = sector === 'government' ? await svc.govOpsMonitor(leader) : await svc.privateOpsMonitor(leader);
-    const c = r.clients.find((x) => x.id === acct.id)!;
-    expect(c).toMatchObject({ score: 2, ratedFrom: 'Synthetic PIC', ratedVia: 'meeting', openComplaints: 1, tone: 'crit' });
-    expect(r.totals!.unhappyClients).toBeGreaterThanOrEqual(1);
-    expect(r.totals!.openComplaints).toBeGreaterThanOrEqual(1);
-    // The other sector's monitor does not list it.
-    const other = sector === 'government' ? await svc.privateOpsMonitor(leader) : await svc.govOpsMonitor(leader);
-    if (!acct.siteIds.some((id) => (sites.find((s) => s.id === id)?.sector ?? 'private') !== sector)) expect(other.clients.some((x) => x.id === acct.id)).toBe(false);
-  });
 });

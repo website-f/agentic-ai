@@ -6,6 +6,7 @@ import { Db } from './db';
 import { EntraTokenError, entraConfig, microsoftKeys, verifyEntraToken, type EntraConfig, type EntraIdentity, type KeySource } from './entra';
 import { leadershipOnboardingPermits } from './arisha-pilot';
 import { isOfficeCall, verifyOffice, type OfficeCall } from './office';
+import { GUARD_TOKEN_PREFIX, guardPhoneConfig, verifyGuardToken } from './guard-phone';
 
 // Office staff sign in with Microsoft Entra ID (entra.ts). The HMAC tokens below are for development and the test
 // build only, and are accepted only while ALLOW_DEV_LOGIN=true. Shared site devices use enrolment plus PIN (plan 6.4).
@@ -45,6 +46,24 @@ export interface AuthedRequest extends Request {
   userId?: string;
   /** Set when the Agentic Office made this call (P66): who it named and whether a person or an AI acted. */
   office?: OfficeCall;
+  /** Set only for a guard's own phone token (guard-phone.ts): the open sign-in session it belongs to. */
+  guardSessionId?: string;
+}
+
+/**
+ * Whether a guard's own phone may be used at all: the same gates as Microsoft sign-in (no system feed, account not
+ * closed, the pilot and leadership-only modes), checked before enrolling, signing in and on every phone request.
+ */
+export async function guardPhoneAdmits(db: Db, userId: string): Promise<User> {
+  const res = await db.pool.query('SELECT data FROM prima.users WHERE id = $1', [userId]);
+  const user = res.rows[0]?.data as User | undefined;
+  if (!user || user.integration || (user.role !== 'guard' && user.role !== 'supervisor') || !user.personId)
+    throw new UnauthorizedException('This phone is not enrolled. Ask the company office for a new code.');
+  if (accessClosed(user, dateOf(fromMs(Date.now())))) throw new ForbiddenException(`This Prima account was closed from ${user.accessClosedFrom}. If you still work here, ask HR.`);
+  // Same pilot gate as every other way in (pilotSignInOnly: the office's PRIMA_SIGNIN_EVERYONE applies here too).
+  if (pilotSignInOnly() && !pilotAdmits(user)) throw new ForbiddenException('Guards are not part of the pilot yet.');
+  if (!leadershipOnboardingPermits(user)) throw new ForbiddenException('Prima is in leadership-only onboarding mode.');
+  return user;
 }
 
 /** Request-local assertion, minted only after Microsoft verification AND Prima identity linking. */
@@ -186,6 +205,7 @@ export class AuthGuard implements CanActivate {
     // Never trust a header/body property or a reused development request as an OBO assertion.
     verifiedEntraAssertions.delete(req);
     delete req.office;
+    req.guardSessionId = undefined;
     // The Agentic Office (office.ts): a signed call naming a staff record. Once the headers are present the call
     // must verify; it never falls through to another way in.
     if (isOfficeCall(req.headers as Record<string, unknown>)) {
@@ -197,6 +217,21 @@ export class AuthGuard implements CanActivate {
       return true;
     }
     const header = req.headers.authorization ?? '';
+    const token = header.startsWith('Bearer ') ? header.slice(7) : '';
+    // A guard's own phone (GUARD_PHONE=on): the signed token, then the session must still be open in the database.
+    if (token.startsWith(GUARD_TOKEN_PREFIX)) {
+      const gp = guardPhoneConfig();
+      const who = gp.on && gp.secret ? verifyGuardToken(gp.secret, token) : null;
+      if (!who) throw new UnauthorizedException('Sign in again on your phone.');
+      const r = await this.db.pool.query('SELECT data FROM prima.guard_phone_sessions WHERE id = $1', [who.sessionId]);
+      const s = r.rows[0]?.data as { userId?: string; endedAt?: string | null; expiresAt?: string } | undefined;
+      if (!s || s.userId !== who.userId || s.endedAt || !s.expiresAt || Date.parse(s.expiresAt) <= Date.now())
+        throw new UnauthorizedException('Sign in again on your phone.');
+      await guardPhoneAdmits(this.db, who.userId);
+      req.userId = who.userId;
+      req.guardSessionId = who.sessionId;
+      return true;
+    }
     const c = await signInCheck(req, header);
     if (c.kind === 'unavailable') throw new ServiceUnavailableException('Microsoft sign-in cannot be checked right now. Try again in a minute.');
     if (c.kind === 'invalid' && c.microsoft) throw new UnauthorizedException('Sign in again with Microsoft.');
@@ -215,6 +250,13 @@ export class AuthGuard implements CanActivate {
     return true;
   }
 }
+
+/** The guard phone session of this request; refused when the request did not come from a signed-in guard phone. */
+export const GuardSession = createParamDecorator((_: unknown, ctx: ExecutionContext): string => {
+  const id = ctx.switchToHttp().getRequest<AuthedRequest>().guardSessionId;
+  if (!id) throw new ForbiddenException('This is for a guard signed in on their own phone.');
+  return id;
+});
 
 export const UserId = createParamDecorator((_: unknown, ctx: ExecutionContext): string => {
   return ctx.switchToHttp().getRequest<AuthedRequest>().userId!;

@@ -18,6 +18,7 @@ import { api, type GuardProfile, type SocsoClaimDetail, type SocsoClaims } from 
 import { Card, Empty, Facts, PageHead, Person, Search, Stat, Stats, Steps, Toolbar, type StepState } from '../kit';
 import { Chip, Drawer, ErrorNotice, Loading, dateLabel, dateTimeLabel, hhmm, useAction, useLoad, type Tone } from '../ui';
 import { DocList, ProofPicker } from './Proof';
+import { DoshPanel, DoshRegisterPanel, FamilyPanel, LindungPanel } from './SocsoMore';
 import { useApp } from '../App';
 import '../styles/hrx.css';
 
@@ -44,6 +45,7 @@ type Form34 = SocsoClaimDetail['form34'];
 type ClaimRow = SocsoClaims['rows'][number];
 
 function Form34Chip({ f }: { f: Form34 }) {
+  if (f.state === 'not_needed') return <Chip tone="neutral">Worker applies (LINDUNG)</Chip>;
   if (f.state === 'done') return <Chip tone="ok">Form 34 sent</Chip>;
   if (f.state === 'overdue') return <Chip tone="crit">Form 34 overdue by {Math.abs(f.hoursLeft)} h</Chip>;
   return <Chip tone={f.state === 'reminder' ? 'warn' : 'info'}>Form 34 due in {f.hoursLeft} h</Chip>;
@@ -74,7 +76,7 @@ function ClaimSteps({ status, form34, perkesoRef }: { status: SocsoStatus; form3
   return (
     <Steps
       steps={[
-        { label: 'Form 34 in ASSIST', state: s[0], note: perkesoRef ? `PERKESO ${perkesoRef}` : `Due ${dateTimeLabel(form34.due)}` },
+        { label: 'Form 34 in ASSIST', state: s[0], note: perkesoRef ? `PERKESO ${perkesoRef}` : form34.state === 'not_needed' ? 'Worker applies (LINDUNG)' : `Due ${dateTimeLabel(form34.due)}` },
         { label: 'Papers to PERKESO', state: s[1] },
         { label: 'PERKESO review', state: s[2] },
         { label: decision, state: s[3] },
@@ -199,6 +201,7 @@ export function SocsoView() {
         </div>
         <SocsoSop />
       </div>
+      <DoshRegisterPanel />
       {open && (
         <Drawer title="SOCSO claim" onClose={() => setOpen(null)}>
           <SocsoClaimBody id={open} />
@@ -549,7 +552,7 @@ export function StartSocsoForm({
 /** One claim: deadlines, the paper checklist, the payroll effect, the next step and the history. */
 export function SocsoClaimBody({ id }: { id: string }) {
   const { data, error } = useLoad(() => api.socsoClaim(id), [id]);
-  const [view, setView] = useState<'claim' | 'rehab'>('claim');
+  const [view, setView] = useState<'claim' | 'rehab' | 'lindung' | 'family' | 'dosh'>('claim');
   if (error) return <ErrorNotice error={error} />;
   if (!data) return <Loading what="claim" />;
   const c = data.claim;
@@ -559,7 +562,7 @@ export function SocsoClaimBody({ id }: { id: string }) {
   const dates: [string, string][] = [
     ['Happened', dateTimeLabel(c.incidentAt)],
     ['Company told', dateTimeLabel(c.toldAt)],
-    ['Form 34 due', dateTimeLabel(data.form34.due)],
+    c.type === 'NON_WORK_ACCIDENT' ? ['Form 34', 'Not needed: the worker applies to PERKESO (LINDUNG tab)'] : ['Form 34 due', dateTimeLabel(data.form34.due)],
   ];
   if (data.later.permanentBy) dates.push(['Permanent disablement claim by', dateLabel(data.later.permanentBy)]);
   if (data.later.appealBy) dates.push(['Appeal by', dateLabel(data.later.appealBy)]);
@@ -593,8 +596,29 @@ export function SocsoClaimBody({ id }: { id: string }) {
           Rehabilitation
           {openRestrictions > 0 && <span className="tab-count">{openRestrictions}</span>}
         </button>
+        {data.lindung && (
+          <button role="tab" aria-selected={view === 'lindung'} onClick={() => setView('lindung')}>
+            LINDUNG
+            {data.lindung.verifyClock?.overdue && <span className="tab-count">!</span>}
+          </button>
+        )}
+        {c.type === 'DEATH' && (
+          <button role="tab" aria-selected={view === 'family'} onClick={() => setView('family')}>
+            Family and payments
+            {data.dependants && data.dependants.gaps.length > 0 && <span className="tab-count">{data.dependants.gaps.length}</span>}
+          </button>
+        )}
+        {data.dosh && (
+          <button role="tab" aria-selected={view === 'dosh'} onClick={() => setView('dosh')}>
+            DOSH
+            {data.dosh.clock?.overdue && <span className="tab-count">!</span>}
+          </button>
+        )}
       </div>
       {view === 'rehab' && <RehabPanel d={data} />}
+      {view === 'lindung' && data.lindung && <LindungPanel d={data} />}
+      {view === 'family' && <FamilyPanel d={data} />}
+      {view === 'dosh' && data.dosh && <DoshPanel d={data} />}
       {view === 'claim' && (
         <>
           <section className="sx-sec">
@@ -616,6 +640,7 @@ export function SocsoClaimBody({ id }: { id: string }) {
               )}
               <span>
                 Started by {c.openedBy}, {dateTimeLabel(c.openedAt)}
+                {c.type === 'NON_WORK_ACCIDENT' ? '. The worker applies to PERKESO; see the LINDUNG tab.' : ''}
               </span>
             </div>
           </section>
@@ -851,7 +876,9 @@ function NextStep({ d }: { d: SocsoClaimDetail }) {
   const [amount, setAmount] = useState('');
   const [back, setBack] = useState('');
   const act = useAction();
-  const moves = NEXT[c.status];
+  const moves = NEXT[c.status].map((m) =>
+    m.to === 'REPORTED' && c.type === 'NON_WORK_ACCIDENT' ? { ...m, label: 'Worker applied for LINDUNG' } : m,
+  );
   if (!moves.length) return null;
   const needsNote = to === 'APPROVED' || to === 'REJECTED' || to === 'APPEAL';
   const needsAmount = to === 'CLOSED' && c.status === 'APPROVED';
@@ -870,7 +897,7 @@ function NextStep({ d }: { d: SocsoClaimDetail }) {
         <div className="hx-form-grid">
           {to === 'REPORTED' && (
             <label className="field">
-              <span className="label">PERKESO reference from ASSIST</span>
+              <span className="label">{c.type === 'NON_WORK_ACCIDENT' ? "PERKESO application number (from the worker's slip)" : 'PERKESO reference from ASSIST'}</span>
               <input className="input" aria-label="PERKESO reference" value={ref} onChange={(e) => setRef(e.target.value)} />
             </label>
           )}

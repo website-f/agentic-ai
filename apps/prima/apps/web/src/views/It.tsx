@@ -367,7 +367,11 @@ function AssetDrawer({ row: r, staff, manager, onClose }: { row: AssetRow; staff
   const [who, setWho] = useState(a.assignedTo ?? '');
   const [note, setNote] = useState('');
   const [cost, setCost] = useState('');
-  const move = (status: Asset['status'], ok: string) => act.run(() => api.setItAsset(a.id, status, status === 'in_use' ? who : null, note), ok);
+  // RBA C2 (8 Nov 2026): a disposal names the licensed e-waste contractor and its consignment note or certificate.
+  const [contractor, setContractor] = useState('');
+  const [noteRef, setNoteRef] = useState('');
+  const move = (status: Asset['status'], ok: string) =>
+    act.run(() => api.setItAsset(a.id, status, status === 'in_use' ? who : null, note, status === 'disposed' ? { contractor: contractor.trim(), noteRef: noteRef.trim() } : null), ok);
   return (
     <Drawer title={`${a.tag} · ${a.model}`} sub={`${KIND[a.kind]} · ${manualRecord(a)?.kind==='asset'?assetProvenance(r):`owned by Merdeka Network, rented to ${r.ownerName}`}`} onClose={onClose}>
       <ErrorNotice error={act.error} />
@@ -389,6 +393,7 @@ function AssetDrawer({ row: r, staff, manager, onClose }: { row: AssetRow; staff
           <div className="notice" data-tone="warn">
             Disposal asked by {a.disposal.askedBy} on {dateTimeLabel(a.disposal.askedAt)}: {a.disposal.reason}
             {a.disposal.doneBy ? `. Disposed by ${a.disposal.doneBy}.` : '. Waiting for the IT Manager.'}
+            {a.disposal.ewaste ? ` E-waste: ${a.disposal.ewaste.contractor}, note ${a.disposal.ewaste.noteRef}.` : ''}
           </div>
         )}
         {staff && a.status !== 'disposed' && (
@@ -403,6 +408,19 @@ function AssetDrawer({ row: r, staff, manager, onClose }: { row: AssetRow; staff
                 <span className="label">Note</span>
                 <input className="input" aria-label="Note" placeholder="Note (needed to ask for disposal)" value={note} onChange={(e) => setNote(e.target.value)} />
               </label>
+              {a.status === 'disposal_pending' && manager && (
+                <>
+                  <label className="field">
+                    <span className="label">E-waste contractor</span>
+                    <input className="input" aria-label="E-waste contractor" placeholder="Licensed e-waste contractor (DOE scheduled waste)" value={contractor} onChange={(e) => setContractor(e.target.value)} />
+                  </label>
+                  <label className="field">
+                    <span className="label">Consignment note or certificate</span>
+                    <input className="input" aria-label="Consignment note or certificate" placeholder="Consignment note or disposal certificate number" value={noteRef} onChange={(e) => setNoteRef(e.target.value)} />
+                  </label>
+                  <span className="muted small">Both are needed to dispose. Wipe the data first.</span>
+                </>
+              )}
             </div>
             <div className="it-actions">
               <button className="btn btn-sm" disabled={act.busy || !who.trim()} onClick={() => move('in_use', 'Assigned.')}>
@@ -420,7 +438,7 @@ function AssetDrawer({ row: r, staff, manager, onClose }: { row: AssetRow; staff
                 </button>
               )}
               {a.status === 'disposal_pending' && manager && (
-                <button className="btn btn-sm btn-danger" disabled={act.busy} onClick={() => move('disposed', 'Disposed. The record is kept.')}>
+                <button className="btn btn-sm btn-danger" disabled={act.busy || contractor.trim().length < 3 || noteRef.trim().length < 3} onClick={() => move('disposed', 'Disposed. The record is kept.')}>
                   Dispose
                 </button>
               )}

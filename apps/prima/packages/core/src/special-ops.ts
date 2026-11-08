@@ -1,10 +1,18 @@
-// Special Operations, Phase 4 (Fauzan, 1-2 Nov 2026): Arms Control, CMS, Transport and Asset Management.
-// Pure rules and helpers for slices 4A-4H. The service (service.ts) records and enforces them; nothing here writes.
+import { can } from "./access";
+import { isGroupRole } from "./access";
+import { seesArmsDetail } from "./access";
+import { registerRollout } from "./rollouts";
+import { registerWall } from "./walls";
+import type { User } from "./types";
+import type { ArmsRequest } from "./types";
+import type { ArmsTradeDetail } from "./types";
+import type { Firearm } from "./types";
+import type { IsoDate } from "./types";
+import type { IsoDateTime } from "./types";
+import type { SiteAlarm } from "./types";
+import { addDays } from "./time";
+import { toMs } from "./time";
 
-import { can, isGroupRole, seesArmsDetail } from './access';
-import { registerRollout } from './rollouts';
-import { registerWall } from './walls';
-import type { User } from './types';
 
 /**
  * Special Operations rollout (slice 4A): the Arms Control, CMS and Transport departments sign in once the CEO starts
@@ -41,11 +49,6 @@ export function holdsCmsWall(user: User): boolean {
 }
 registerWall('arms', holdsArmsWall);
 registerWall('cms', holdsCmsWall);
-
-// ---------- Shared shapes ----------
-
-import type { ArmsRequest, ArmsTradeDetail, Firearm, IsoDate, IsoDateTime, SiteAlarm } from './types';
-import { addDays, toMs } from './time';
 
 /** A firearm still on the company's register: not lost, and not sold, disposed of or transferred out. */
 export function onRegister(f: Pick<Firearm, 'status'>): boolean {

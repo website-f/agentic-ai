@@ -3,7 +3,7 @@ import { TENDER_BID_PART_LABEL, type ProofInput, type TenderBidPart } from '@pri
 import { api, type ItBoard } from '../api';
 import { useApp } from '../App';
 import { ProofPicker } from './Proof';
-import { saveFile } from '../save';
+import { openProofItem } from '../save';
 import { Chip, notify, ErrorNotice, dateLabel, dateTimeLabel, useAction } from '../ui';
 
 /**
@@ -217,10 +217,10 @@ export function BuyFlow({ row, data }: { row: PurchaseRow; data: ItBoard }) {
 
       {(p.status === 'coo' || p.status === 'ceo') && (row.canDecide || row.canBuy) && (
         <div className="iw-decide">
-          <input className="input" aria-label="Note" placeholder="Note (needed to reject)" value={note} onChange={(e) => setNote(e.target.value)} />
+          <input className="input" aria-label="Note" placeholder={row.canDecide ? 'Comment (needed to approve or reject)' : 'Note (needed to reject)'} value={note} onChange={(e) => setNote(e.target.value)} />
           {row.canDecide ? (
             <div className="iw-actions">
-              <button className="btn btn-sm btn-primary" disabled={act.busy} onClick={() => void step('decide', { decision: 'approve', note }, 'Approved.')}>
+              <button className="btn btn-sm btn-primary" disabled={act.busy || !note.trim()} onClick={() => void step('decide', { decision: 'approve', note }, 'Approved.')}>
                 Approve
               </button>
               <button className="btn btn-sm" disabled={act.busy || !note.trim()} onClick={() => void step('decide', { decision: 'reject', note }, 'Rejected.')}>
@@ -874,9 +874,9 @@ function StepLine({ r, tenderId, mine }: { r: ClockRow; tenderId: string; mine: 
 
 /** Fetch one proof file (the board carries none) and hand it to the viewer. */
 async function openProof(act: ReturnType<typeof useAction>, id: string, f: { name: string; sha256: string }) {
-  const got = (await act.run(() => api.itAct('jobProof', { id, sha256: f.sha256 }))) as { data: string } | undefined;
+  const got = (await act.run(() => api.itAct('jobProof', { id, sha256: f.sha256 }))) as { data: string; link?: string } | undefined;
   if (got) {
-    const m = await saveFile(f.name, got.data);
+    const m = await openProofItem(f.name, got);
     if (m) notify(m);
   }
 }
@@ -981,7 +981,7 @@ function PartLine(p: {
               {technical ? ' This is the technical part: no company name anywhere, including letterhead, logo, stamp, header, footer and the file properties.' : ''}
             </p>
           )}
-          <ProofPicker site={null} refText={p.label} items={proof} onChange={(x) => setProof(x.slice(-1))} documentsOnly required />
+          <ProofPicker site={null} refText={p.label} items={proof} onChange={(x) => setProof(x.slice(-1))} documentsOnly required noLinks />
           {technical && (
             <label className="row small iw-check">
               <input type="checkbox" checked={ok} onChange={(e) => setOk(e.target.checked)} />I checked every page: no company name

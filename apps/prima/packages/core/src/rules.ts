@@ -1,8 +1,42 @@
-// Rule register. Every business number used by Wave 1 lives here with its source and
-// label, so the app can show why it blocked or warned (master plan 6.6). In production
-// these move to a versioned table with effective dates and approvers.
+import type { CredentialType } from "./types";
+import type { GovArea } from "./types";
+import type { GrcStream } from "./types";
+import type { InsuranceKind } from "./types";
+import type { LicenceType } from "./types";
+import type { Severity } from "./types";
 
-import type { CredentialType, GovArea, GrcStream, InsuranceKind, LicenceType, Severity } from './types';
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 export type RuleLabel = 'Law' | 'Secondary' | 'Policy' | 'Unverified';
 
@@ -52,48 +86,6 @@ export const RULES = {
     10,
     'Policy',
     'Fauzan, 26 Oct 2026: Sasa keeps a foreign worker to the end of year 10, then the worker goes home for 6 months on a fresh permit application filed in month 3 (the process takes about 3 months; entry is by flight only).',
-  ),
-  fwmPassportCheckDays: rule(
-    'FWM-PASSPORT-CHECK',
-    90,
-    'Policy',
-    'Approved by Fauzan, 3 Nov 2026: FWM checks where each foreign worker\'s passport is at least every 90 days. The worker keeps it; withholding a passport is an offence under the Passports Act 1966 s.12(1)(f).',
-  ),
-  fwmWelfareCheckDays: rule(
-    'FWM-WELFARE-CHECK',
-    90,
-    'Policy',
-    'Approved by Fauzan, 3 Nov 2026: FWM has a private welfare talk with each foreign worker at least every 90 days (ILO forced-labour indicators).',
-  ),
-  fwmPassportConsentDoc: rule(
-    'FWM-PASSPORT-CONSENT',
-    true,
-    'Policy',
-    'Approved by Fauzan, 3 Nov 2026: a document attached to a passport check or follow-up counts as the worker\'s consent to company safekeeping. The app does not read the document, so it cannot tell whether it is a real, voluntary consent signed by the worker; the FWM officer attaching it is responsible for that. Legal flag kept (Passports Act 1966 s.12(1)(f)): reviewed by the directors, not shown to routine staff.',
-  ),
-  fwmRecruitSteps: rule(
-    'FWM-RECRUIT-STEPS',
-    ['AGENCY_LICENCE', 'EMBASSY', 'INTERVIEW', 'AGE', 'CONTRACT'],
-    'Policy',
-    'Fauzan, 6 Nov 2026 (IWAY answer 7, "done in FWM"): FWM records each foreign worker\'s recruitment steps: the agency\'s licence, the embassy\'s confirmation, the interview, the age check from the passport, and the contract signed in English and Malay before travel. A worker is cleared to travel only when all five are on record; zero recruitment fees is confirmed after arrival by the arrival fee check (FWM-ZERO-FEE).',
-  ),
-  fwmRecruitAge: rule(
-    'FWM-RECRUIT-AGE',
-    { min: 18, max: 60 },
-    'Policy',
-    'Fauzan, 6 Nov 2026: a recruited worker is 18 to 60, taken from the date of birth on the passport and counted to the planned travel date (HR-AGE-MAX: no guards over 60).',
-  ),
-  fwmContractLanguages: rule(
-    'FWM-CONTRACT-LANG',
-    ['en', 'ms'],
-    'Policy',
-    'Fauzan, 6 Nov 2026: English and Malay are a must; the worker\'s mother tongue may be added. The contract is signed before the worker travels.',
-  ),
-  fwmZeroFee: rule(
-    'FWM-ZERO-FEE',
-    true,
-    'Policy',
-    'Best practice review BP-1, built on Fauzan\'s go-ahead of 3 Nov 2026: no worker pays to get the job. FWM asks each new worker privately what they paid; any fee found is followed up until the agency pays it back.',
   ),
   fwmPassportMonths: rule(
     'FWM-PASSPORT-12M',
@@ -214,38 +206,6 @@ export const RULES = {
     'Policy',
     'Proposed (D4): results are at standard when at least 80% of tasks over the last 4 weeks were done on time and each role measure met its weekly standard. No tasks means UNKNOWN, never at standard.',
   ),
-  workRebalance: rule(
-    'WORK-REBALANCE',
-    {
-      /** Leave starting within this many days is shown. */
-      lookAheadDays: 5,
-      /** Overloaded: open load at least this many times the team average, and at least overloadMin. */
-      overloadFactor: 1.5,
-      overloadMin: 5,
-      /** Someone with this many overdue tasks is not given more. */
-      overdueBusy: 3,
-      /** Overdue this many hours: advise a decision. */
-      stuckHours: 24,
-      /** Timing: at risk when time left is under riskFactor x the person's usual time, and at most riskMaxHours. */
-      riskFactor: 1,
-      riskMaxHours: 72,
-      /** The usual time is known only after this many finished tasks (fewer is UNKNOWN), from at most sampleMax. */
-      minFinished: 3,
-      sampleMax: 20,
-      lookBackDays: 28,
-      /** A moved task with under this many hours left also gets a new due time, extendHours later. */
-      minHoursLeft: 4,
-      extendHours: 24,
-    },
-    'Policy',
-    'Fauzan, 2 Nov 2026: each manager may delegate or readjust the work of staff under them, and Arisha advises what to change from the data (time to do tasks, workload). Fauzan approved these thresholds on 2 Nov 2026 (he may change them later). The advice is a prompt for the manager, never a finding, ranking or input to pay or access; the manager decides and gives a reason.',
-  ),
-  workRebalanceAi: rule(
-    'WORK-REBALANCE-AI',
-    { perUserPerDay: 10 },
-    'Policy',
-    'Fauzan, 2 Nov 2026: "Use ai when needed. We use it in case basis." A manager may ask Arisha AI about one rebalance case at a time, by pressing a button; it is off until switched on (WORK_REBALANCE_AI_ENABLED) and needs Arisha AI to be on. Proposed cap: 10 asks per manager per day, to keep within the Arisha cost target. People are sent as Person A, B, C; no names, task titles, leave kinds or reasons go to the AI.',
-  ),
   workProbationMonths: rule('WORK-WFH-PROBATION', 3, 'Policy', 'Fauzan, 27 Oct 2026 (D5): working from home only after the 3-month probation, with the playbook signed off and results at standard.'),
   branchVisitCycle: rule(
     'BRANCH-VISITS',
@@ -322,6 +282,7 @@ export const RULES = {
       | 'answerTargetSec'
       | 'callbackWithinMin'
       | 'alarmAckSec'
+      | 'minRestHours'
       | 'headControlPerShift'
       | 'monitorOfficersPerShift',
       { min: number; max: number }
@@ -336,6 +297,7 @@ export const RULES = {
       answerTargetSec: { min: 5, max: 60 },
       callbackWithinMin: { min: 5, max: 120 },
       alarmAckSec: { min: 15, max: 300 },
+      minRestHours: { min: 1, max: 24 },
       headControlPerShift: { min: 1, max: 2 },
       monitorOfficersPerShift: { min: 1, max: 6 },
     },
@@ -394,7 +356,7 @@ export const RULES = {
       hospitalTotal: 60,
     },
     'Law',
-    'Employment Act 1955 s.60E: paid annual leave of 8 days (under 2 years of service), 12 days (2 to 5 years) or 16 days (5 years or more), in proportion to completed months in the first year. s.60F: paid sick leave of 14, 18 or 22 days on a medical certificate, and up to 60 days a year in total with hospitalisation (sick leave counted inside the 60). The guard informs the employer within 48 hours. Emergency leave is taken from annual leave (company policy, proposed).',
+    'Employment Act 1955 s.60E: paid annual leave of 8 days (under 2 years of service), 12 days (2 to 5 years) or 16 days (5 years or more), in proportion to completed months in the first year. s.60F: paid sick leave of 14, 18 or 22 days on a medical certificate, and 60 separate hospitalisation days per calendar year under the current rules (Peninsula/Labuan from 1 January 2023; Sabah/Sarawak from 1 May 2025). Historical transition balances require HR/legal review; ordinary sick leave does not reduce the current hospitalisation allowance. The guard informs the employer within 48 hours. Emergency leave is taken from annual leave (company policy, proposed).',
   ),
   familyLeave: rule(
     'EA-FAMILY-LEAVE',
@@ -452,6 +414,18 @@ export const RULES = {
     { showCauseReplyDays: 7, refuseInquiryWithinDays: 30, suspensionPendingMaxDays: 14, suspensionPayMin: 0.5, outcomeSuspensionMaxDays: 14 },
     'Law',
     "HR Phase 3, slice 3E (Fauzan, 2 Nov 2026: a file on what happens with each staff member; sexual harassment inquiry). Employment Act 1955 s.14: after due inquiry the employer may dismiss, downgrade or suspend without wages for up to 2 weeks; pending the inquiry the employee may be suspended for up to 2 weeks on at least half pay. Natural justice: the charge in writing, a fair time to answer (Prima suggests 7 days), and a panel of people not involved. Part XVA (s.81A-81H): the employer inquires into every sexual harassment complaint; it may refuse only if the matter was inquired before with no finding of harassment, or the complaint is frivolous, vexatious or not in good faith, and then tells the complainant in writing with the reasons within 30 days of receiving it; a notice on sexual harassment is displayed at the workplace at all times. Anti-Sexual Harassment Act 2022: the complainant may also go to the Tribunal. HR records; a dismissal, downgrade or suspension is recorded by the HR Director (CoS or DCoS); the app never decides.",
+  ),
+  disciplineAppeal: rule(
+    'HR-APPEAL',
+    { withinDays: 14 },
+    'Policy',
+    "IKEA IWAY audit finding (Fauzan, 6 Nov 2026): discipline needs an appeal step. A guard or staff member may appeal in writing against a warning, a suspension, a downgrade or a dismissal; within 14 days of the step (Fauzan, 8 Nov 2026: yes). The guard lodges it on their own sign-in, or the company or HR records it from the letter. The HR Director (CoS or DCoS) or the CEO decides, with written reasons, never the person who recorded the step or who is part of the case: upheld, varied to a lighter step, or overturned. An overturned step no longer counts on the discipline ladder. Fauzan, 8 Nov 2026 confirmed the 14 days and that the HR Director or the CEO decides, never someone who made the original decision. Industrial Relations Act 1967 s.20 representations stay open to a dismissed worker whatever the appeal decides.",
+  ),
+  policyLanguages: rule(
+    'HR-POLICY-LANG',
+    { required: ['en', 'ms'], siteRosterDays: 30 },
+    'Policy',
+    "IKEA IWAY audit finding (Fauzan, 6 Nov 2026): HR builds and governs the handbook and code of conduct, for everyone, a specific job or a specific site. Every version has an English and a Malay copy; each worker also gets a copy in their mother tongue (Nepali for Nepali workers unless HR sets otherwise). Prima records the language each worker signed or was briefed in, and shows HR the mother tongues still missing a copy. A material change needs the translations again. A site policy reaches people rostered at that site within 30 days either side of today (Fauzan, 8 Nov 2026: yes). More languages are added when needed (Fauzan, 8 Nov 2026: not yet). Translations are made and checked by people HR names; Prima never machine-translates a policy.",
   ),
   officeOsh: rule(
     'HR-OSH-OFFICE',
@@ -587,64 +561,6 @@ export const RULES = {
     'Policy',
     'Fauzan, 27 Oct 2026: ACT (Audit, Compliance and Transformation) monitors all compliance, audits every workflow, checks all discrepancies, finds solutions and leads the improvement. Confirmed by Fauzan 27 Oct 2026: fix within 14/30/60 days by severity; overdue findings shown to the Chief of Staff, then the COO after 14 days and the CEO after 30; high-risk workflows audited every 6 months, the rest yearly; improvements approved by the COO or CEO. Nothing is automatic discipline. Fauzan, 2 Nov 2026: ACT monitors all, with 1 Director and 2 teams of 1 Auditor and 1 Enforcement officer. Fauzan, 2 Nov 2026: both teams cover every workflow (no split); the ACT Director distributes the work to the two teams (audits, monthly report reviews, findings); ACT also monitors each department’s monthly report. Proposed: the Auditor audits and checks fixes, Enforcement follows up owners and does spot checks, only the Director closes a high finding; the 5-day plan follow-up and the 7-day follow-up cycle await Fauzan.',
   ),
-  actFraud: rule(
-    'ACT-FRAUD',
-    {
-      /** Look-back for every anomaly rule. */
-      lookBackDays: 90,
-      /** Two staff phone clocks this close in time and place, both away from their base, may be one person clocking two. */
-      buddyClock: { minutes: 5, metres: 25 },
-      /** One person reversing this many rent payments inside the look-back. */
-      rentReversals: 2,
-      /** Evidence kept in an investigation file: at most this many files, each at most this size. */
-      evidenceMax: 20,
-      evidenceBytes: 1_500_000,
-    },
-    'Policy',
-    'Fauzan, 3 Nov 2026 ("build all not build"): masterplan item 241, fraud anomalies, investigations and forensic controls. The anomaly rules are fixed checks on records already in Prima, never AI and never an accusation: ACT decides whether to open a finding or an investigation. Investigations are seen only by ACT; evidence is kept with its SHA-256 and every open, add, view and close is logged. Nobody is disciplined automatically. The look-back, the buddy-clock window, the reversal count and the evidence limits are proposals.',
-  ),
-  monthlyReport: rule(
-    'RPT-MONTHLY',
-    {
-      /** Fauzan, 2 Nov 2026: every department's monthly report is due on the 25th of the next month. */
-      dueDay: 25,
-      /**
-       * Proposed standard form for every department's monthly report (Fauzan, 2 Nov 2026: "propose what standard form
-       * whole app ... and ACT department to decide what needed"). The ACT Director changes the sections per department.
-       */
-      sections: [
-        'Summary of the month: three to five key points',
-        'Key figures against target: speed and quality of the work',
-        'Work done, work still open and anything overdue',
-        'Money: spending against budget, payments made and pending',
-        'People: headcount, joiners, leavers, leave and training',
-        'Compliance: licences, permits and legal dates due in the next 90 days; ACT findings open and fixed',
-        'Risks, incidents and complaints',
-        'Improvements done and planned',
-        'Decisions or help needed from management',
-      ],
-      /** Proposed: the figures ACT compares with the records already in Prima, per department. */
-      checks: {
-        operations: ['Guard no-shows and replacements against attendance', 'Incidents and cases against the case register'],
-        hr: ['Headcount, joiners and leavers against staff records', 'Pay changes against verified pay changes'],
-        arms_control: ['Firearm count against the vault register', 'Firearms issued and returned against arms movements'],
-        chief_of_staff: ['Policies and renewals against the insurance register', 'Claims against insurance claims'],
-        cms: ['Alarms and calls against the CMS log'],
-        director_office: ['Tenders sent against the tender register', 'Meetings and minutes against the meeting list'],
-        fwm: ['Permit renewals against foreign worker records'],
-        pdpa: ['Data requests and breaches against the PDPA register'],
-        transport: ['Vehicles, services and road tax against the fleet list'],
-        asset: ['Rent collected and arrears against the rental records'],
-        finance: ['Collections and payments against SQL Account and the bank', 'Statutory payments against the payment list'],
-        it: ['Tickets opened and closed against the IT board', 'Devices and rentals against the asset list'],
-        legal: ['Legal matters and filings against the corporate register'],
-        audit: ['Findings opened and closed against the ACT register'],
-        procurement: ['Purchases and stock against purchase requests and the store'],
-      } as Record<string, string[]>,
-    },
-    'Policy',
-    'Fauzan, 2 Nov 2026: ACT monitors the monthly report of each department; each report is due on the 25th of the next month (25 days after the month ends). The standard form is a proposal; the ACT Director decides what each department must cover. ACT checks each report is on time, complete and true against the records in Prima.',
-  ),
   meetingPrep: rule(
     'MTG-PREP',
     {
@@ -712,12 +628,6 @@ export const RULES = {
     },
     'Law',
     "Fauzan, 27 Oct 2026: guard and officer pay comes from the JA Group app; Prima builds payroll for staff. HR prepares, the Chief of Staff (or the Deputy) approves, then the COO approves (Fauzan, 1 Nov 2026; this replaced the Vice Chairman's monthly consent decided 26 Oct 2026), then Finance pays through the bank's payroll service and posts to SQL Account. The Vice Chairman consents to each salary amount when it is set each year or on review. Every approval carries a comment. Employment Act 1955 s.19: wages within 7 days after the month; s.60I: a monthly-paid employee's daily rate is the monthly pay divided by 26. EPF Third Schedule, SOCSO and EIS tables, HRD levy 1%, PCB from LHDN's e-PCB. Prima drafts files only and never files or pays.",
-  ),
-  staffZakat: rule(
-    'PAY-ZAKAT',
-    { bodies: ['Zakat Kuala Lumpur', 'Zakat Selangor', 'Zakat Kedah', 'Zakat Perlis'], minPercent: 0.5, maxPercent: 25, usualPercent: 2.5 },
-    'Policy',
-    "Fauzan, 2 Nov 2026: staff choose whether zakat is deducted from their salary, which body it goes to and the percentage. Zakat paid by salary deduction reduces the monthly tax deduction (PCB) ringgit for ringgit (Income Tax Act 1967 s.6A(3); Income Tax (Deduction from Remuneration) Rules 1994), never below zero; to be verified against LHDN's current PCB specification before go-live. The companies pay Zakat Kuala Lumpur, Zakat Selangor, Zakat Kedah and Zakat Perlis. The 0.5% to 25% range and 2.5% suggestion are proposals; Employment Act s.24(8) keeps all deductions to half of the wages at most.",
   ),
   it: rule(
     'IT-WATCH',
@@ -858,7 +768,7 @@ export const RULES = {
     'Policy',
     'Fauzan, 6 Nov 2026: guard total hours are watched when salary is done. A site that needs 2 guards per 12-hour shift for a 30-day month needs 4 people and cannot go over 1,440 man-hours (guards per shift x hours covered a day x days in the month, added up for every post). Any total above that is flagged, and the Operations Director (private site) or the OGM (government site) approves the extra hours with a reason before salary, usually for training, annual leave or on-the-job training.',
   ),
-  payPublicHolidays: rule(
+  guardPublicHolidays: rule(
     'PAY-PUBLIC-HOLIDAYS',
     { perYear: 11, dueDay: 10, remindFrom: 1, setters: ['ops_director', 'ogm'] },
     'Law',
@@ -994,6 +904,10 @@ export const RULES = {
       dueSoonDays: 30,
       /** Acknowledge a whistleblowing report within this many days (proposed). */
       whistleAckDays: 7,
+      /** While a report is open the handler tells the reporter where it stands at least this often (RBA; approved by Fauzan 8 Nov 2026, "Policy yes proceed"). */
+      whistleUpdateDays: 30,
+      /** After closing, the reporter may still use the receipt code to report retaliation for this long (approved by Fauzan 8 Nov 2026, "Policy yes proceed"). */
+      whistleAfterCloseDays: 365,
       /** Gifts above this value need a decision (proposed). Cash and anything with a public official always do. */
       giftDecisionAbove: 500,
       oshReviewMonths: 12,
@@ -1065,7 +979,7 @@ export const RULES = {
     'CNT-MOBILISE',
     { majorAcceptMaxDays: 30, reviewDays: [1, 7, 14, 30], startWarnDays: 7, daysPerMonthM1: 30.5 },
     'Policy',
-    'V6 amendment (24 Oct 2026) and the consolidated plan: a signed contract or letter of award opens mobilisation against 12 workstreams (W12 CMS activation, checked by Prima, masterplan §191) due from 10 days before to 30 days after the start. Critical items block go-live and cannot be risk-accepted; others may be risk-accepted by the company manager for up to 30 days (proposed, decision M-1). Go-live needs the Site Ready-to-Operate Certificate, then reviews at day 1, 7, 14 and 30; day 30 checks the first invoice against the contract. Billing Method 1 is hours a day x 30.5 x posts, 2 is the contracted hours, 3 is hours a day x days in the month, or a fixed monthly fee; the method never changes without a signed variation (Fauzan, 23 Oct 2026). The company controls; PWVSB monitors.',
+    'V6 amendment (24 Oct 2026) and the consolidated plan: a signed contract or letter of award opens mobilisation against 12 workstreams (W12 CMS activation, checked by Prima, masterplan §191) due from 10 days before to 30 days after the start. Critical items block go-live and cannot be risk-accepted; others may be risk-accepted by the company manager for up to 30 days (proposed, decision M-1). Go-live needs the Site Ready-to-Operate Certificate, then reviews at day 1, 7, 14 and 30; day 30 checks the first invoice against the contract. Billing Method 1 is hours a day x 30.5 x posts, 2 is the contracted hours, 3 is hours a day x days in the month, or a fixed monthly fee; the method never changes without a signed variation (Fauzan, 23 Oct 2026). Real use (5 Nov 2026): the signed paper is recorded with its copy; every item is done with proof or checked by the system (first-week roster, guard clearance, client contacts); a signed variation that adds a site or guards opens its own mobilisation and Ready-to-Operate; a renewal signed in Clients moves the contract end date. The company controls; PWVSB monitors.',
   ),
   finance: rule(
     'FIN-WATCH',
@@ -1073,233 +987,18 @@ export const RULES = {
     'Policy',
     "Fauzan, 27 Oct 2026: Finance (the Finance Director and 7 teams of a team leader, a deputy and 2 data entry executives) keeps every company's books in SQL Account, which stays; Prima makes sure it is used fully. Proposed checks: figures from SQL Account not older than 48 hours (else Unknown); every bank account reconciled in SQL Account to last month end by the 10th; last month closed by the 15th; what Prima billed and paid is posted; integrity tests FS-01, FS-02 and FS-06 at exactly RM0.00 (V6). Tax: Form C within 7 months of the year end, Form E by 31 March, EA forms to staff by the end of February, CP204 instalments by the 15th of each month (Income Tax Act 1967). Data entry prepares, the team leader or deputy reviews, the team leader or Finance Director sends.",
   ),
-  financePayments: rule(
-    'FIN-PAY',
-    { ceoNoticeFrom: 500_000, approvalExpiryDays: 30, cooSubjects: ['operations', 'it', 'fwm', 'inventory', 'transport', 'goodwill'] as string[], maxAmount: 50_000_000, maxEvidence: 10, reasonMin: 10, bankPackByDay: 10, paymentPackByDay: 15 },
-    'Unverified',
-    "Finance Phase 2 (Fauzan, 31 Oct 2026: Phase 2 is Finance, after the IT pilot). Policy (Fauzan): every approval gives at least a comment; the CEO has full authority alongside the Finance Director; SQL Account stays the books. Phase 2 gate (CEO roadmap, 28 Oct 2026): one user may not both authorise and pay a transaction. In Prima a payment is prepared with its SQL Account document and evidence, reviewed by someone else in the team (deputy or leader), approved by someone who neither prepared nor reviewed it, and released in the bank portal by someone who did not approve it, who records the bank's reference. A month-end close is approved by the Finance Director or the CEO only when SQL Account is closed, every bank account is reconciled with its report attached, FS-01, FS-02 and FS-06 are RM0.00 and every other exception is explained (V6). DECIDED (Fauzan, 1 Nov 2026): approval is by subject matter and only the Finance Director, the CEO and the COO approve anything; Finance payments are approved by the Finance Director or the CEO at any amount (team leaders and deputies review, never approve); payments for the departments the COO directly monitors (Operations, IT, Foreign Worker Management, Procurement & Inventory, Transport, Goodwill Empire; Fauzan 27 and 31 Oct 2026) are approved by the COO or the CEO, not the Finance Director; Finance still prepares, reviews and releases them; the CEO is also reminded of payments of RM500,000 or more. DECIDED (Fauzan, 1 Nov 2026): an approved payment not released within 30 days goes back for a fresh approval; the Finance Director sets this and the other Finance timings and thresholds in Prima. PROPOSED: the bank pack is due by the 10th and the payment pack by the 15th.",
-  ),
-  financeSst: rule(
-    'FIN-SST',
-    { rate: 0.08, threshold: 500_000, periodMonths: 2, toleranceRm: 1, penaltyTiers: [0.1, 0.15, 0.15] as number[], claimMinDocs: 3 },
-    'Secondary',
-    "Service Tax Act 2018 as summarised by PwC's 2025/2026 Malaysian Tax Booklet and KPMG's service tax summary (checked 31 Oct 2026; confirm with the tax agent): security services (guards or protection for safety or security, First Schedule Group G item (k)) are taxable and are NOT covered by the Group G business-to-business exemption; the rate is 8% (6% services such as logistics or rental are separate); registration is due once taxable services over 12 months exceed the threshold (RM500,000 for most services; confirm the figure for item (k)); returns (SST-02) are filed in MySST every 2 months and tax is paid by the last day of the month after the taxable period; late payment adds 10% for the first 30 days, then 15% and 15% more. Tax is normally due when payment is received (or 12 months after the service), unless Customs approved invoice-basis accounting. DECIDED (Fauzan, 1 Nov 2026): the group pays service tax when the customer's payment is received, not on invoice, so bad debt relief should rarely be needed; when bad debt relief or a refund of a wrong payment is needed, a full document pack is submitted to Customs for approval (recovery is usually very hard), so Prima keeps the claim, its documents (at least 3), who prepared and who submitted it, and Customs' answer. DECIDED (Fauzan, 1 Nov 2026): SST is charged to the client at 8% of the bill without SST, so the tax inside a payment received is 8/108 of it; the SST on the invoices and the tax worked out from the money received must agree, and the declared tax must equal it. Prima checks: declared tax = 8/108 of the money received (or, for older returns, taxable value x rate) within RM1 or explained; the invoices' SST agrees with it or is explained; filed with the MySST acknowledgement; paid to the Royal Malaysian Customs Department through an approved Prima payment of exactly the declared amount, to a verified payee, by the due date.",
-  ),
-  financeEInvoice: rule(
-    'FIN-EINV',
-    { exemptBelow: 3_000_000, consolidateByDay: 7, singleTxnMax: 10_000, cancelHours: 72, checkByDay: 10 },
-    'Secondary',
-    "Fauzan, 1 Nov 2026: Malaysia now requires e-Invoicing and it runs from SQL Account. LHDN e-Invoice General Guideline v4.8 and Specific Guideline v4.9 (Aug-Sep 2026), as summarised by Malay Mail (31 Aug 2026) and e-Invoice advisers (checked 1 Nov 2026; confirm with the tax agent): from 1 Sep 2026 taxpayers with annual turnover below RM3 million are exempt (up from RM1 million), the guideline also removes the exemption where a related company has revenue of RM3 million or more (GL 1.6.10). DECIDED (Fauzan, 1 Nov 2026): each group company is its own legal entity and is tested on its OWN turnover; a company starts e-Invoicing when it reaches RM3 million. Phases: above RM100 million from 1 Aug 2024, RM25-100 million from 1 Jan 2025, RM5-25 million from 1 Jul 2025, up to RM5 million from 1 Jan 2026 (relaxation for that phase to 31 Dec 2027); during relaxation monthly consolidated e-Invoices are tolerated and no penalty applies under ITA s.120. Outside relaxation, failing to issue an e-Invoice is an offence under s.120(1)(d) (fine RM200 to RM20,000 per instance, or up to 6 months' jail, or both). Operating rules: sales to buyers who do not ask for an e-Invoice go into a monthly consolidated e-Invoice submitted within 7 days after the month; a single sale above RM10,000 gets its own e-Invoice (not consolidated) from 2026; an e-Invoice is cancelled only within 72 hours of validation, after that a credit or debit note is issued; self-billed e-Invoices are issued for foreign suppliers and agents, payouts to agents and dealers, and other listed cases; a supplier's validated e-Invoice is the proof of expense. SQL Account's MyInvois module submits sales invoices, cash sales, credit and debit notes and self-billed purchase documents, shows Valid, Invalid, Submitting and Cancelled, builds the consolidated e-Invoice, and lists everything in MyInvois Transaction. PROPOSED: the month's e-Invoice check recorded by the 10th; no unvalidated sales document at the close.",
-  ),
-  financeReceivables: rule(
-    'FIN-AR',
-    { followUpDays: 30, caseFromDays: 90, writeOffMinDays: 180, writeOffMinEvidence: 2, sstUnpaidMonths: 12, eInvoiceCancelHours: 72 },
-    'Secondary',
-    "Fauzan, 1 Nov 2026: invoices are issued but the site or the payer has changed so the invoice does not go through, and the ageing shows it only after 3 months; Finance needs a proper way to cancel and redo an invoice, to handle a payer who will not pay or goes bankrupt, to declare bad debt, and to cancel sales when the audit report has already been signed. Rules applied: an invoice is never deleted; a wrong invoice is reversed by a credit note (an e-Invoice validated less than 72 hours ago may be cancelled in MyInvois instead) and a new invoice issued to the right payer. A credit note or write-off for an invoice in a financial year whose audited accounts are signed is dated in the current open month, never back in the audited year; the Finance Director tells the auditor and decides with the auditor whether it is a material prior-period error (MFRS 108 / MPERS section 10). Bad debt: written off only after recovery steps with evidence and approval by the Finance Director or the CEO (not the preparer); income tax deduction for bad debts under ITA 1967 s.34(2), per LHDN's public ruling. Service tax is due when payment is received or, if unpaid, 12 months after the invoice; where tax was paid and the debt is written off after reasonable recovery efforts, the service tax can be reclaimed as bad debt relief from Customs (Service Tax Act 2018; confirm the steps with the tax agent). PROPOSED: an invoice unpaid 90 days or more needs a case; each open case is followed up at least every 30 days; write-off not before 180 days unless the customer is insolvent, with at least 2 pieces of evidence (demand letter, lawyer's letter, liquidation or bankruptcy notice).",
-  ),
-  financeControls: rule(
-    'FIN-CONTROLS',
-    {
-      matchDays: 3,
-      /** A remembered explanation (A6, 2 Nov 2026) covers bank lines up to this amount; larger ones are explained one by one. Proposal. */
-      ruleMaxAmount: 5000,
-      unclearedDays: 5,
-      ageingByDay: 10,
-      monthlyPackByDay: 20,
-      forecastByDay: 20,
-      variancePct: 5,
-      varianceMinRm: 5_000,
-      auditCirculateMonths: 6,
-      ssmLodgeDays: 30,
-    },
-    'Unverified',
-    "Fauzan, 31 Oct 2026: approvals run in Microsoft Teams and SharePoint and every approver comments whatever the decision, so Prima links each payment to its Teams or SharePoint approval; payments must reach the right person; bank statements are reconciled; ageing is done every month so nothing is Unknown; staff prepare what the auditor needs every month so the audit is not late; proper budgeting and forecasting even though actuals never follow the plan to the dot. Paid to the right person: a payee is entered by one person and verified by another by calling back on a number from an independent source (never the number in the request), a bank detail change holds every unreleased payment to that payee until re-verified, and whoever releases a payment confirms the account's last 4 digits and name in the bank portal match. Companies Act 2016: a private company circulates audited financial statements within 6 months of its year end (s.258) and lodges them with SSM within 30 days of circulation (s.259). PROPOSED, to confirm with the Finance Director: statement lines matched to payments within 3 days of release, a released payment not seen on the statement after 5 days is flagged, ageing recorded by the 10th, the monthly audit file by the 20th, a quarterly forecast by the 20th of the month after each quarter (Fauzan, 1 Nov 2026: forecasts are quarterly and yearly), and a month off the budget by more than 10% and RM5,000 explained.",
-  ),
-  financeMoneyIn: rule(
-    'FIN-MONEYIN',
-    {
-      /** An invoice more than this % away from the contract's monthly amount needs a note (fixed fee or Method 2 only). */
-      billDiffPct: 1,
-      /** A government claim is expected to be paid this many days after a complete claim is submitted. */
-      govtPayDays: 14,
-      /** An unpaid government claim is followed up at least this often. */
-      govtFollowUpDays: 14,
-      /** Money in with no invoice is allocated within this many days of the bank date. */
-      unidentifiedDays: 7,
-    },
-    'Unverified',
-    'Fauzan, 2 Nov 2026: yes to the Finance suggestions doc: every contract\'s monthly billing must have its invoice in SQL Account and a missing one is named at the close (1); a government claims tracker with the date submitted, reference, expected payment date and follow-up (2); and money in with no invoice goes to an unidentified list, to be allocated within 7 days (5). The 14-day government payment term (Treasury practice), the 14-day follow-up and the 1% billing difference are PROPOSALS for the Finance Director to confirm.',
-  ),
-  financeWht: rule(
-    'FIN-WHT',
-    {
-      /** Late payment penalty on withholding tax not paid by the due day. */
-      latePenaltyPct: 10,
-      /** Published rates on the gross paid or credited to a non-resident (a treaty may give a lower rate with a certificate of residence). */
-      rates: { services: 10, royalty: 10, interest: 15, contract: 13, other_income: 10 },
-    },
-    'Law',
-    'Income Tax Act 1967 s.107A (contract payments: 10% on account of the contractor + 3% on account of employees = 13%), s.109 (royalty 10%, interest 15%), s.109B (special classes of income: technical services, use of movable property, 10%), s.109F (other gains or profits, 10%). Due to LHDN within one month after paying or crediting; 10% penalty on any amount not paid by then. Fauzan, 2 Nov 2026: no tax agent, use the published rules.',
-  ),
-  financeYearEnd: rule(
-    'FIN-YEAREND',
-    {
-      /** Capital allowance on plant and machinery: initial allowance in the year bought. */
-      initialPct: 20,
-      /** Annual allowance by class. */
-      annualPct: { general: 14, heavy_vehicle: 20, office: 10, computer: 20, motor_car: 20 },
-      /** Small value assets: each RM2,000 or less, 100% in the year bought, up to RM20,000 a year in total (not for SMEs). */
-      smallValueMax: 2000,
-      smallValueCap: 20000,
-      /** Motor car qualifying cost: RM100,000 if new and RM150,000 or less, otherwise RM50,000. */
-      motorCarCapNew: 100000,
-      motorCarCapOther: 50000,
-      /** SME for income tax (Schedule 1 para 2A): paid-up capital and gross business income at most. */
-      smePaidUpMax: 2500000,
-      smeIncomeMax: 50000000,
-      /** An auditor request is due this many days after it is asked, unless the auditor gives a day. */
-      auditRequestDays: 14,
-    },
-    'Unverified',
-    'Income Tax Act 1967 Schedule 3 and Income Tax (Qualifying Plant Annual Allowances) Rules, as published by LHDN; Fauzan, 2 Nov 2026: yes to suggestions 21 to 23. Rates and caps to be checked by the Finance Director against the current LHDN public rulings before use; the 14 days for auditor requests is a PROPOSAL.',
-  ),
-  financeSupplierStatements: rule(
-    'FIN-SUPSTMT',
-    {
-      /** How many of the biggest suppliers (by money paid in the last 12 months) are checked each quarter. */
-      topSuppliers: 10,
-      /** Days after the quarter ends to agree and review them; after that the close stays open. */
-      dueDays: 30,
-    },
-    'Unverified',
-    "Fauzan, 2 Nov 2026: yes to suggestion 11 (quarterly supplier statement check for the biggest suppliers). Top 10 and 30 days are PROPOSALS for the Finance Director.",
-  ),
-  financeCredit: rule(
-    'FIN-CREDIT',
-    {
-      /** An invoice unpaid for longer than this many days makes Prima warn before posts are added for the client. */
-      overdueDays: 90,
-      /** Finance refreshes each limited client's balance from SQL Account at least this often. */
-      balanceStaleDays: 35,
-    },
-    'Unverified',
-    "Fauzan, 2 Nov 2026: yes to suggestion 4 (credit limit per private client; warn Operations before adding posts for a client over its limit or over 90 days). Limits are set by the Finance Director or the CEO with a reason (Fauzan, 2 Nov 2026); Prima warns and Operations may still add the post with a reason that Finance sees. The 35 days is a PROPOSAL for the FD.",
-  ),
-  financeBanking: rule(
-    'FIN-BANKING',
-    {
-      /** Prima asks someone to decide (renew or uplift) this many days before a fixed deposit matures. */
-      maturityAlertDays: 14,
-      /** Words on a statement line that mark a bank charge or fee (money out). */
-      chargeWords: ['CHARGE', 'CHRG', 'FEE', 'COMMISSION', 'COMM ', 'SERVICE TAX', 'SST ON', 'STAMP DUTY', 'PENALTY', 'HANDLING', 'ANNUAL FEE', 'CHQ BOOK', 'INTEREST CHARGED', 'OD INTEREST'],
-    },
-    'Unverified',
-    'Fauzan, 2 Nov 2026: yes to the Finance suggestions doc: fixed deposits and idle cash with maturity alerts and where the money sits (15), and a monthly review of bank charges against what the bank agreed (16). The 14-day alert and the list of charge words are PROPOSALS for the Finance Director; each bank\'s agreed monthly charges are recorded per account by the team leader, the FD or the CEO.',
-  ),
-  financeContractEnd: rule(
-    'FIN-CONTRACT-END',
-    {
-      /** Deposits, retention and guarantee collateral are claimed back within this many days of the contract's end. */
-      claimWithinDays: 30,
-      /** The final invoice is recorded within this many days of the end. */
-      finalInvoiceDays: 14,
-      /** Ended contracts stay on the list this long. */
-      showDays: 365,
-    },
-    'Unverified',
-    "Fauzan, 2 Nov 2026: yes to the Finance suggestions doc: client deposits and retention sums held by clients with a claim-back at contract end (3); when a contract ends, billing stops and the deposit, IG or retention claim starts automatically (24); and automation A11, follow-up tasks open by themselves when a contract is cancelled or ends. The 30-day claim and 14-day final invoice limits are PROPOSALS for the Finance Director to confirm.",
-  ),
-  financeStamp: rule(
-    'FIN-STAMP',
-    {
-      /** Stamp Act 1949 s.47: an agreement signed in Malaysia is stamped within 30 days of signing. */
-      stampDays: 30,
-      /** Prima's working target: the refund application goes in within this many days of the cancellation. */
-      refundTargetDays: 30,
-      /** Stamp Act 1949 s.57 proviso: relief for a stamped instrument that became void or useless is applied for within 12 months of its date. */
-      refundLimitMonths: 12,
-      /** Stamp Act 1949 s.47A(1): late stamping within 3 months of the deadline costs RM50 or 10% of the duty, whichever is higher; later, RM100 or 20%. */
-      latePenalty: { withinMonths: 3, first: { min: 50, pct: 10 }, after: { min: 100, pct: 20 } },
-      refundMinDocs: 3,
-      refundDocs: ['the stamped agreement and its STAMPS certificate', 'the cancellation letter or agreement signed by both parties', 'proof the duty was paid', 'a letter or statutory declaration that the agreement was not carried out and was not used in any court case (s.57)'],
-      /** No answer from LHDN after this many days is followed up. */
-      lhdnAnswerDays: 60,
-      /** An approved refund not seen in the bank after this many days is followed up. */
-      refundMoneyDays: 30,
-    },
-    'Law',
-    'Fauzan, 2 Nov 2026: stamp duty on new contracts and tenancies, stamped within the time limit (suggestion 19): "Ok. Create also procedure to unstamp the contract, if the contract cancelled." Fauzan, 2 Nov 2026: "No need tax agent. All details are online already." From the published Stamp Act 1949: stamp within 30 days of signing in Malaysia (s.47); late penalty RM50 or 10% of the duty within 3 months of the deadline, RM100 or 20% after (s.47A(1), LHDN penalty guideline of 6 Nov 2025); the refund (allowance) for a stamped agreement that is cancelled, void or not carried out is applied for within 12 months of the agreement\'s date, the agreement is given up to be cancelled and must not have been used in court (s.57(f) and proviso), and is paid in money (s.59). Applications and enquiries go to LHDN STAMPS (stamps@hasil.gov.my). The 30-day target to submit, 60 days for LHDN\'s answer and 30 days for the money are Prima working targets.',
-  ),
-  financeDailyCash: rule(
-    'FIN-DAILYCASH',
-    {
-      /** Proposals for the FD: the highest daily rate paid in cash (above it, pay by bank), people on one list, days after the list ends to settle, days for a withdrawal to show on the statement, and how many days a list may start before it is made. */
-      maxDailyRate: 300,
-      maxPeople: 60,
-      settleDays: 3,
-      statementDays: 5,
-      backdateDays: 3,
-      reasonMin: 10,
-    },
-    'Unverified',
-    'Fauzan, 2 Nov 2026: "There is one cash payment. We have daily cash buffer that need to be paid. If not, they dont want to work. So create a system that this type of people can be paid. Cash will be collected by coo or ceo to be paid." and "Only fd can approve this. They need to list it for the week or month. Before than prepare cash." Finance lists the people for the week or month, only the Finance Director approves (never the preparer, not the CEO), Finance then withdraws the cash (never above the approved total, found on the bank statement) and hands it to the COO or CEO, who counts it, pays each listed person for each listed day with the signed pay sheet as proof, and gives back what was not paid; Finance counts and banks it, and any difference is explained and accepted by the FD. The limits are proposals for the FD. Fauzan, 6 Nov 2026 ("Buffer also the same" as the guard pay-out rules): each person is paid to a bank account or e-wallet only, and Finance records each day\'s transfer with its reference (never by the FD who approved); cash only when the Director Office lists the person with the reason and the COO or the CEO gives it with a note (never whoever listed), and only that cash is withdrawn and handed over; a relative\'s or friend\'s account needs the person\'s consent letter stamped by a Commissioner for Oaths (Pesuruhjaya Sumpah) and approved by the COO (the CEO only through the pilot rule: Fauzan\'s review note 7 Nov 2026, item 2). Later the same day: "Director list will send cash person list per site per name and the amount, cash will be given out by ceo or coo. Signed paper of the receive collected and upload as proof. Upload done by director office." The Director Office lists each cash person with the site and the cash amount (at most their approved pay, and the cash withdrawn is at most these amounts); the COO or CEO pays; the Director Office uploads each signed receipt (PDF, JPEG or PNG, kept with its SHA-256), and the list is not settled until every receipt is in. The FD cannot approve a list until every person can be paid. Prima keeps only the last 4 digits of an account. EA s.25 asks for the worker\'s own or joint bank account: e-wallet and third-party accounts are flagged as legal points for the CEO.',
-  ),
-  financeIntercompany: rule(
-    'FIN-IC',
-    {
-      /** Proposal for the FD: a difference above this is corrected in SQL Account, not explained. */
-      explainMax: 5000,
-    },
-    'Unverified',
-    'Fauzan, 2 Nov 2026: yes to suggestion 12, "Intercompany: management fees, recharges and loans between companies agreed on both sides every month" (the transfer pricing file, suggestion 20, "no need for now"). Each company records its month-end balance with each other group company by kind; both sides must come to RM0.00; a difference is corrected or explained by a reviewer who entered neither side; a balance last month must be recorded again; anything not agreed or explained stops both companies\' close. The explain limit is a proposal for the FD.',
-  ),
-  financeForecast13: rule(
-    'FIN-CASH13',
-    {
-      /** The usual staff pay day when no paid run shows it (Employment Act 1955 s.19: wages within 7 days after the wage period). */
-      payDay: 7,
-      /** A reviewer looks the forecast over at least this often. */
-      reviewDays: 7,
-      /** Regular payments due this many days ago and still open are counted in week 1. */
-      regularLookBackDays: 31,
-    },
-    'Unverified',
-    'Fauzan, 2 Nov 2026: yes to suggestion 13, "13-week cash forecast per company: payroll dates, the 15th statutory payments, expected government receipts". Prima fills it from the last statement balances, open payments, the regular payments list (EPF, PERKESO, PCB and HRD on the 15th), the staff payroll at last month\'s net pay on the usual pay day, daily cash lists and government claims; Finance adds what Prima cannot know; a reviewer looks it over weekly; a week below zero shows on FD/CEO home. A forecast only; Prima never moves money.',
-  ),
-  financeCash: rule(
-    'FIN-CASH',
-    {
-      /** A staff advance is settled with receipts within this many days of being paid. */
-      advanceSettleDays: 30,
-      /** The longest settle-by date Finance may give (Fauzan, 2 Nov 2026: "not more than 30 days"). */
-      advanceMaxDays: 30,
-      /** One petty cash voucher at most; bigger spending goes through a normal payment. */
-      pettyVoucherMax: 500,
-      pettyFloatMax: 5000,
-      /** The petty cash count for a month is done by this day of the month after. */
-      pettyCountByDay: 5,
-      /** Card holders explain every line by this day of the month after the statement month. */
-      cardExplainByDay: 10,
-      /** A bank mandate is confirmed against the bank's own list at least this often. */
-      mandateReviewDays: 365,
-      /** Two payments to the same supplier for the same amount within this many days are treated as a possible duplicate. */
-      duplicateDays: 45,
-    },
-    'Unverified',
-    'Fauzan, 2 Nov 2026: yes to the Finance suggestions doc: staff cash advances with a settle-by date, unsettled ones shown to HR and Finance (6); petty cash per office with a float, top-up only with receipts and a monthly count by someone else (7); company credit and fuel cards with each statement matched to receipts and personal use flagged (8); a duplicate supplier invoice check across all companies by supplier, number or amount (9); and a bank mandate register of signatories and portal approvers per account, reviewed when someone leaves (14). The days and ringgit limits are PROPOSALS for the Finance Director to confirm.',
-  ),
   jaGroupApp: rule(
     'SYS-JA-OWNS',
     {
       owns: [] as JaArea[],
-      planned: ['payroll', 'fwm', 'incidents', 'hostels'] as JaArea[],
+      planned: ['payroll', 'incidents', 'hostels'] as JaArea[],
       staleHours: 24,
       payrollByDay: 7,
       papersWarnDays: 30,
       papersCeoDays: 7,
     },
     'Policy',
-    "Fauzan, 26 Oct 2026: guard-to-officer payroll, foreign worker management and incidents are in the JA Group app, which is already built; the JA app sends its data to Prima by API. Fauzan, 27 Oct 2026: Prima's own screens stay on until that API is live; each area moves from planned to owns only when its feed is live, and Prima's version is then switched off (not deleted). Foreign worker hostels also run in the JA app (Fauzan, 27 Oct 2026). A feed silent for over 24 hours shows as unknown. Employment Act 1955 s.19: wages are paid within 7 days after the wage period, so last month's payroll not marked paid by the 7th is flagged. Papers: the JA app runs the renewals; Prima watches anything due within 30 days and puts 7 days or less in front of the CEO.",
+    "Fauzan, 26 Oct 2026: guard-to-officer payroll, foreign worker management and incidents are in the JA Group app, which is already built; the JA app sends its data to Prima by API. Fauzan, 27 Oct 2026: Prima's own screens stay on until that API is live; each area moves from planned to owns only when its feed is live, and Prima's version is then switched off (not deleted). Foreign worker hostels also run in the JA app (Fauzan, 27 Oct 2026). A feed silent for over 24 hours shows as unknown. Employment Act 1955 s.19: wages are paid within 7 days after the wage period, so last month's payroll not marked paid by the 7th is flagged. Papers: the JA app runs the renewals; Prima watches anything due within 30 days and puts 7 days or less in front of the CEO. Fauzan, 5 Nov 2026: the FWM permit board lives in both apps (rule FWM-BOTH-APPS), so FWM is no longer planned to move to JA only.",
   ),
   opsMeetings: rule(
     'OPS-MONTHLY-MEETING',
@@ -1556,6 +1255,18 @@ export const RULES = {
     'Policy',
     'Fauzan, 6 Nov 2026: the OM discusses with the client what the site needs and what can be done, then sets tasks for the patrolling officer, the officer or the guard; the shared device shows the tasks due today. A higher rank may do a lower rank\'s task. A task not done by the end of its day shows as missed to the OM. Limits are proposals.',
   ),
+  clientCodes: rule(
+    'CLIENT-CODE',
+    { selfAuditEveryMonths: 12, selfAuditRemindDays: [60, 30, 7], hoursLookbackDays: 14, inspectionFixDays: 14, maxRequirements: 120, maxFormItems: 40, maxRooms: 30 },
+    'Policy',
+    "Fauzan, 6 Nov 2026, after the IKEA IWAY audit of Sasa: a client's code of conduct checklist is kept on the site's client needs page and done by the OM or ACT, because not every client needs one. Working-hours and break checks, and the site and hostel inspection forms, apply only where the client's code asks for them, with the items the client asks for. Every company does its own self-audit every year, for the company, a site or everything, with reminders. Reminders at 60, 30 and 7 days, a 14-day fix target for inspection items and the 14-day hours look-back are proposals.",
+  ),
+  rba: rule(
+    'RBA-READY',
+    { traceSampleSize: 20, traceToleranceHours: 4, normalHoursPerDay: 8, grievanceOverdueDays: 30, ethicsDueMonth: 1, maxCommittee: 12 },
+    'Policy',
+    "Fauzan, 8 Nov 2026 (\"Yes\" to the RBA build order after the RBA Code of Conduct v8.0 readiness checklist): RBA is a client code beside IWAY, with green, yellow, orange and red grades, and red items go to ACT, the Chief of Staff and the COO the same day. ACT traces a sample of about 20 workers a month, foreign workers first, from roster to clock to overtime to pay to bank, and settles every mismatch. Each foreign worker has one master file in the nine RBA folders. Staff sign a yearly ethics declaration. The discipline appeal step itself is HR-APPEAL (IWAY, PR #131). No fee, deposit, fine or penalty for leaving is taken from pay. Fauzan, 7 Nov 2026: the RBA committee is the Operations Director and a few company heads, chosen by the Chief of Staff every year. Fauzan, 8 Nov 2026 (\"Policy yes proceed\"): the 20-worker sample, 4-hour tolerance, 8-hour normal day and 30-day grievance target are approved.",
+  ),
   siteDispatch: rule(
     'CMS-DISPATCH',
     {
@@ -1596,12 +1307,6 @@ export const RULES = {
     3,
     'Unverified',
     'Fauzan, 25 Oct 2026: three licensed security companies will hold an arms dealer licence and keep trade stock in their own vault to save cost. Trade stock is registered apart from operational firearms and is never issued to a guard. Whether an armoury approved for operational firearms may also hold dealer stock needs PDRM and counsel confirmation (KDN Circular 1/2006 limits a security company to its own firearms).',
-  ),
-  armsLocalOnly: rule(
-    'ARMS-LOCAL-ONLY',
-    true,
-    'Policy',
-    'Fauzan, 2 Nov 2026: "foreign guard cannot use arm." The group\'s rule on top of the Private Agencies (Amendment) Act 2025: only Malaysian guards carry arms. A foreign guard is never issued a firearm, rostered on an armed post or put on an armed job (CIT, CDM, cash vaulting, bodyguard). Bank CIT tenders also ask for Malaysian armed guards (RHB tender notice).',
   ),
   vaultDoorMatchMin: rule(
     'ARMS-DOOR-MATCH',
@@ -1689,30 +1394,6 @@ export const RULES = {
     'Policy',
     'Universal Operating Guidebook: KDN T-120, MOF T-90, insurance T-90, SSM T-60. Central Admin 5C (Fauzan, 2 Nov 2026): every renewal a company holds; each company renews, Central Admin monitors. Proposed leads: majlis 60, vendor panels 90 (MOF renewal opens 3 months before expiry), ISO 120 before each audit, fire certificate 90, other 60.',
   ),
-  renewals: rule(
-    'REG-RENEW',
-    {
-      /** Days overdue before the renewal steps up: Deputy Chief of Staff, then Chief of Staff, then CEO. */
-      escalateDays: [0, 14, 30] as [number, number, number],
-      /** Reminder while the agency has it. */
-      agencyReminderDays: 7,
-      /** Starting paper checklists; the agency's current form decides and the company adds what it asks for. */
-      papers: {
-        KDN_LICENCE: ['Renewal application in the KDN system', 'Current licence', 'SSM company profile', 'Directors and shareholders list', 'Latest audited accounts', 'Guard list with CSG training status', 'Office premises proof', 'Insurance cover'],
-        MOF_REGISTRATION: ['Online renewal in ePerolehan', 'SSM documents', 'Latest audited accounts or bank statements', 'Employee EPF and SOCSO statements', 'Office photos and tenancy agreement', 'Current certificate'],
-        INSURANCE: ['Quotes from insurers', 'Current policy schedule', 'Claims history'],
-        SSM_ANNUAL_RETURN: ['Company secretary prepares the return', 'Directors and shareholders confirmed'],
-        MAJLIS_PREMISE: ['Council renewal form or portal entry', 'Current licence', 'SSM company profile', 'Tenancy agreement or title', 'Latest assessment tax receipt', 'Fire certificate where the council asks'],
-        MAJLIS_SIGNBOARD: ['Council renewal form or portal entry', 'Current licence', 'Signboard photo and size'],
-        VENDOR_PANEL: ["The client's or agency's renewal form", 'SSM company profile', 'Audited accounts', 'KDN, MOF and ISO certificates', 'Insurance', 'Bank confirmation letter'],
-        ISO_CERT: ['Internal audit report', 'Management review minutes', 'Open corrective actions closed', 'Audit booked with the certifying body', 'Nonconformities closed by the deadline'],
-        FIRE_CERT: ['Fire equipment service records', 'Inspection booked', 'Floor plan where asked'],
-        OTHER_COMPLIANCE: ['Renewal form', 'Current certificate'],
-      } as Record<LicenceType, string[]>,
-    },
-    'Policy',
-    'Fauzan, 2 Nov 2026: "License renewal, majlis license renewal. All vendor renewal, iso renewal and compliance"; "Create also workflow on settling it. Whats needed."; "Renewal done by each company. Central admin monitor it." Steps: papers, the company manager signs (never the preparer), fee paid through Finance, submit, agency follow-up, new certificate and expiry, Central Admin confirms. Nothing is lodged or paid by the app. Master plan W15: an expired security licence blocks new contracts for that company. Paper lists are starting checklists (proposed).',
-  ),
   credentialLeadDays: rule<Record<CredentialType, number>>(
     'HR-CRED-LEAD',
     {
@@ -1724,6 +1405,8 @@ export const RULES = {
       PASSPORT: 180,
       FOMEMA: 60,
       FW_INSURANCE: 60,
+      SPIKPA: 60,
+      KDN_LETTER: 90,
       FIREARM_PERMIT: 60,
       RANGE_PRACTICE: 30,
     },
@@ -1751,6 +1434,773 @@ export const RULES = {
     'Policy',
     'Fauzan, 27 Oct 2026, approving the insider abuse audit: salary account changes verified by both the HR Director and Finance; nobody verifies their own pay; claims within 60 days; travel pre-approved by the Chief of Staff before the trip; quotes and online prices backed by documents; IT purchases through Procurement; rent reversals by the Asset Director with system receipt numbers; firearm and store witnesses signed in by PIN; a second person on false alarms, whistleblowing closures and case closures. Amounts and days are proposals for approval.',
   ),
+  staffZakat: rule(
+    'PAY-ZAKAT',
+    { bodies: ['Zakat Kuala Lumpur', 'Zakat Selangor', 'Zakat Kedah', 'Zakat Perlis'], minPercent: 0.5, maxPercent: 25, usualPercent: 2.5 },
+    'Policy',
+    "Fauzan, 2 Nov 2026: staff choose whether zakat is deducted from their salary, which body it goes to and the percentage. Zakat paid by salary deduction reduces the monthly tax deduction (PCB) ringgit for ringgit (Income Tax Act 1967 s.6A(3); Income Tax (Deduction from Remuneration) Rules 1994), never below zero; to be verified against LHDN's current PCB specification before go-live. The companies pay Zakat Kuala Lumpur, Zakat Selangor, Zakat Kedah and Zakat Perlis. The 0.5% to 25% range and 2.5% suggestion are proposals; Employment Act s.24(8) keeps all deductions to half of the wages at most.",
+  ),
+  financePayments: rule(
+    'FIN-PAY',
+    { ceoNoticeFrom: 500_000, approvalExpiryDays: 30, cooSubjects: ['operations', 'it', 'fwm', 'inventory', 'transport', 'goodwill'] as string[], maxAmount: 50_000_000, maxEvidence: 10, reasonMin: 10, bankPackByDay: 10, paymentPackByDay: 15 },
+    'Unverified',
+    "Finance Phase 2 (Fauzan, 31 Oct 2026: Phase 2 is Finance, after the IT pilot). Policy (Fauzan): every approval gives at least a comment; the CEO has full authority alongside the Finance Director; SQL Account stays the books. Phase 2 gate (CEO roadmap, 28 Oct 2026): one user may not both authorise and pay a transaction. In Prima a payment is prepared with its SQL Account document and evidence, reviewed by someone else in the team (deputy or leader), approved by someone who neither prepared nor reviewed it, and released in the bank portal by someone who did not approve it, who records the bank's reference. A month-end close is approved by the Finance Director or the CEO only when SQL Account is closed, every bank account is reconciled with its report attached, FS-01, FS-02 and FS-06 are RM0.00 and every other exception is explained (V6). DECIDED (Fauzan, 1 Nov 2026): approval is by subject matter and only the Finance Director, the CEO and the COO approve anything; Finance payments are approved by the Finance Director or the CEO at any amount (team leaders and deputies review, never approve); payments for the departments the COO directly monitors (Operations, IT, Foreign Worker Management, Procurement & Inventory, Transport, Goodwill Empire; Fauzan 27 and 31 Oct 2026) are approved by the COO or the CEO, not the Finance Director; Finance still prepares, reviews and releases them; the CEO is also reminded of payments of RM500,000 or more. DECIDED (Fauzan, 1 Nov 2026): an approved payment not released within 30 days goes back for a fresh approval; the Finance Director sets this and the other Finance timings and thresholds in Prima. PROPOSED: the bank pack is due by the 10th and the payment pack by the 15th.",
+  ),
+  financeSst: rule(
+    'FIN-SST',
+    { rate: 0.08, threshold: 500_000, periodMonths: 2, toleranceRm: 1, penaltyTiers: [0.1, 0.15, 0.15] as number[], claimMinDocs: 3 },
+    'Secondary',
+    "Service Tax Act 2018 as summarised by PwC's 2025/2026 Malaysian Tax Booklet and KPMG's service tax summary (checked 31 Oct 2026; confirm with the tax agent): security services (guards or protection for safety or security, First Schedule Group G item (k)) are taxable and are NOT covered by the Group G business-to-business exemption; the rate is 8% (6% services such as logistics or rental are separate); registration is due once taxable services over 12 months exceed the threshold (RM500,000 for most services; confirm the figure for item (k)); returns (SST-02) are filed in MySST every 2 months and tax is paid by the last day of the month after the taxable period; late payment adds 10% for the first 30 days, then 15% and 15% more. Tax is normally due when payment is received (or 12 months after the service), unless Customs approved invoice-basis accounting. DECIDED (Fauzan, 1 Nov 2026): the group pays service tax when the customer's payment is received, not on invoice, so bad debt relief should rarely be needed; when bad debt relief or a refund of a wrong payment is needed, a full document pack is submitted to Customs for approval (recovery is usually very hard), so Prima keeps the claim, its documents (at least 3), who prepared and who submitted it, and Customs' answer. DECIDED (Fauzan, 1 Nov 2026): SST is charged to the client at 8% of the bill without SST, so the tax inside a payment received is 8/108 of it; the SST on the invoices and the tax worked out from the money received must agree, and the declared tax must equal it. Prima checks: declared tax = 8/108 of the money received (or, for older returns, taxable value x rate) within RM1 or explained; the invoices' SST agrees with it or is explained; filed with the MySST acknowledgement; paid to the Royal Malaysian Customs Department through an approved Prima payment of exactly the declared amount, to a verified payee, by the due date.",
+  ),
+  financeEInvoice: rule(
+    'FIN-EINV',
+    { exemptBelow: 3_000_000, consolidateByDay: 7, singleTxnMax: 10_000, cancelHours: 72, checkByDay: 10 },
+    'Secondary',
+    "Fauzan, 1 Nov 2026: Malaysia now requires e-Invoicing and it runs from SQL Account. LHDN e-Invoice General Guideline v4.8 and Specific Guideline v4.9 (Aug-Sep 2026), as summarised by Malay Mail (31 Aug 2026) and e-Invoice advisers (checked 1 Nov 2026; confirm with the tax agent): from 1 Sep 2026 taxpayers with annual turnover below RM3 million are exempt (up from RM1 million), the guideline also removes the exemption where a related company has revenue of RM3 million or more (GL 1.6.10). DECIDED (Fauzan, 1 Nov 2026): each group company is its own legal entity and is tested on its OWN turnover; a company starts e-Invoicing when it reaches RM3 million. Phases: above RM100 million from 1 Aug 2024, RM25-100 million from 1 Jan 2025, RM5-25 million from 1 Jul 2025, up to RM5 million from 1 Jan 2026 (relaxation for that phase to 31 Dec 2027); during relaxation monthly consolidated e-Invoices are tolerated and no penalty applies under ITA s.120. Outside relaxation, failing to issue an e-Invoice is an offence under s.120(1)(d) (fine RM200 to RM20,000 per instance, or up to 6 months' jail, or both). Operating rules: sales to buyers who do not ask for an e-Invoice go into a monthly consolidated e-Invoice submitted within 7 days after the month; a single sale above RM10,000 gets its own e-Invoice (not consolidated) from 2026; an e-Invoice is cancelled only within 72 hours of validation, after that a credit or debit note is issued; self-billed e-Invoices are issued for foreign suppliers and agents, payouts to agents and dealers, and other listed cases; a supplier's validated e-Invoice is the proof of expense. SQL Account's MyInvois module submits sales invoices, cash sales, credit and debit notes and self-billed purchase documents, shows Valid, Invalid, Submitting and Cancelled, builds the consolidated e-Invoice, and lists everything in MyInvois Transaction. PROPOSED: the month's e-Invoice check recorded by the 10th; no unvalidated sales document at the close.",
+  ),
+  financeReceivables: rule(
+    'FIN-AR',
+    { followUpDays: 30, caseFromDays: 90, writeOffMinDays: 180, writeOffMinEvidence: 2, sstUnpaidMonths: 12, eInvoiceCancelHours: 72 },
+    'Secondary',
+    "Fauzan, 1 Nov 2026: invoices are issued but the site or the payer has changed so the invoice does not go through, and the ageing shows it only after 3 months; Finance needs a proper way to cancel and redo an invoice, to handle a payer who will not pay or goes bankrupt, to declare bad debt, and to cancel sales when the audit report has already been signed. Rules applied: an invoice is never deleted; a wrong invoice is reversed by a credit note (an e-Invoice validated less than 72 hours ago may be cancelled in MyInvois instead) and a new invoice issued to the right payer. A credit note or write-off for an invoice in a financial year whose audited accounts are signed is dated in the current open month, never back in the audited year; the Finance Director tells the auditor and decides with the auditor whether it is a material prior-period error (MFRS 108 / MPERS section 10). Bad debt: written off only after recovery steps with evidence and approval by the Finance Director or the CEO (not the preparer); income tax deduction for bad debts under ITA 1967 s.34(2), per LHDN's public ruling. Service tax is due when payment is received or, if unpaid, 12 months after the invoice; where tax was paid and the debt is written off after reasonable recovery efforts, the service tax can be reclaimed as bad debt relief from Customs (Service Tax Act 2018; confirm the steps with the tax agent). PROPOSED: an invoice unpaid 90 days or more needs a case; each open case is followed up at least every 30 days; write-off not before 180 days unless the customer is insolvent, with at least 2 pieces of evidence (demand letter, lawyer's letter, liquidation or bankruptcy notice).",
+  ),
+  financeControls: rule(
+    'FIN-CONTROLS',
+    {
+      matchDays: 3,
+      /** A remembered explanation (A6, 2 Nov 2026) covers bank lines up to this amount; larger ones are explained one by one. Proposal. */
+      ruleMaxAmount: 5000,
+      unclearedDays: 5,
+      ageingByDay: 10,
+      monthlyPackByDay: 20,
+      forecastByDay: 20,
+      variancePct: 5,
+      varianceMinRm: 5_000,
+      auditCirculateMonths: 6,
+      ssmLodgeDays: 30,
+    },
+    'Unverified',
+    "Fauzan, 31 Oct 2026: approvals run in Microsoft Teams and SharePoint and every approver comments whatever the decision, so Prima links each payment to its Teams or SharePoint approval; payments must reach the right person; bank statements are reconciled; ageing is done every month so nothing is Unknown; staff prepare what the auditor needs every month so the audit is not late; proper budgeting and forecasting even though actuals never follow the plan to the dot. Paid to the right person: a payee is entered by one person and verified by another by calling back on a number from an independent source (never the number in the request), a bank detail change holds every unreleased payment to that payee until re-verified, and whoever releases a payment confirms the account's last 4 digits and name in the bank portal match. Companies Act 2016: a private company circulates audited financial statements within 6 months of its year end (s.258) and lodges them with SSM within 30 days of circulation (s.259). PROPOSED, to confirm with the Finance Director: statement lines matched to payments within 3 days of release, a released payment not seen on the statement after 5 days is flagged, ageing recorded by the 10th, the monthly audit file by the 20th, a quarterly forecast by the 20th of the month after each quarter (Fauzan, 1 Nov 2026: forecasts are quarterly and yearly), and a month off the budget by more than 10% and RM5,000 explained.",
+  ),
+  financeMoneyIn: rule(
+    'FIN-MONEYIN',
+    {
+      /** An invoice more than this % away from the contract's monthly amount needs a note (fixed fee or Method 2 only). */
+      billDiffPct: 1,
+      /** A government claim is expected to be paid this many days after a complete claim is submitted. */
+      govtPayDays: 14,
+      /** An unpaid government claim is followed up at least this often. */
+      govtFollowUpDays: 14,
+      /** Money in with no invoice is allocated within this many days of the bank date. */
+      unidentifiedDays: 7,
+    },
+    'Unverified',
+    'Fauzan, 2 Nov 2026: yes to the Finance suggestions doc: every contract\'s monthly billing must have its invoice in SQL Account and a missing one is named at the close (1); a government claims tracker with the date submitted, reference, expected payment date and follow-up (2); and money in with no invoice goes to an unidentified list, to be allocated within 7 days (5). The 14-day government payment term (Treasury practice), the 14-day follow-up and the 1% billing difference are PROPOSALS for the Finance Director to confirm.',
+  ),
+  financeWht: rule(
+    'FIN-WHT',
+    {
+      /** Late payment penalty on withholding tax not paid by the due day. */
+      latePenaltyPct: 10,
+      /** Published rates on the gross paid or credited to a non-resident (a treaty may give a lower rate with a certificate of residence). */
+      rates: { services: 10, royalty: 10, interest: 15, contract: 13, other_income: 10 },
+    },
+    'Law',
+    'Income Tax Act 1967 s.107A (contract payments: 10% on account of the contractor + 3% on account of employees = 13%), s.109 (royalty 10%, interest 15%), s.109B (special classes of income: technical services, use of movable property, 10%), s.109F (other gains or profits, 10%). Due to LHDN within one month after paying or crediting; 10% penalty on any amount not paid by then. Fauzan, 2 Nov 2026: no tax agent, use the published rules.',
+  ),
+  financeYearEnd: rule(
+    'FIN-YEAREND',
+    {
+      /** Capital allowance on plant and machinery: initial allowance in the year bought. */
+      initialPct: 20,
+      /** Annual allowance by class. */
+      annualPct: { general: 14, heavy_vehicle: 20, office: 10, computer: 20, motor_car: 20 },
+      /** Small value assets: each RM2,000 or less, 100% in the year bought, up to RM20,000 a year in total (not for SMEs). */
+      smallValueMax: 2000,
+      smallValueCap: 20000,
+      /** Motor car qualifying cost: RM100,000 if new and RM150,000 or less, otherwise RM50,000. */
+      motorCarCapNew: 100000,
+      motorCarCapOther: 50000,
+      /** SME for income tax (Schedule 1 para 2A): paid-up capital and gross business income at most. */
+      smePaidUpMax: 2500000,
+      smeIncomeMax: 50000000,
+      /** An auditor request is due this many days after it is asked, unless the auditor gives a day. */
+      auditRequestDays: 14,
+    },
+    'Unverified',
+    'Income Tax Act 1967 Schedule 3 and Income Tax (Qualifying Plant Annual Allowances) Rules, as published by LHDN; Fauzan, 2 Nov 2026: yes to suggestions 21 to 23. Rates and caps to be checked by the Finance Director against the current LHDN public rulings before use; the 14 days for auditor requests is a PROPOSAL.',
+  ),
+  financeSupplierStatements: rule(
+    'FIN-SUPSTMT',
+    {
+      /** How many of the biggest suppliers (by money paid in the last 12 months) are checked each quarter. */
+      topSuppliers: 10,
+      /** Days after the quarter ends to agree and review them; after that the close stays open. */
+      dueDays: 30,
+    },
+    'Unverified',
+    "Fauzan, 2 Nov 2026: yes to suggestion 11 (quarterly supplier statement check for the biggest suppliers). Top 10 and 30 days are PROPOSALS for the Finance Director.",
+  ),
+  financeCredit: rule(
+    'FIN-CREDIT',
+    {
+      /** An invoice unpaid for longer than this many days makes Prima warn before posts are added for the client. */
+      overdueDays: 90,
+      /** Finance refreshes each limited client's balance from SQL Account at least this often. */
+      balanceStaleDays: 35,
+    },
+    'Unverified',
+    "Fauzan, 2 Nov 2026: yes to suggestion 4 (credit limit per private client; warn Operations before adding posts for a client over its limit or over 90 days). Limits are set by the Finance Director or the CEO with a reason (Fauzan, 2 Nov 2026); Prima warns and Operations may still add the post with a reason that Finance sees. The 35 days is a PROPOSAL for the FD.",
+  ),
+  financeBanking: rule(
+    'FIN-BANKING',
+    {
+      /** Prima asks someone to decide (renew or uplift) this many days before a fixed deposit matures. */
+      maturityAlertDays: 14,
+      /** Words on a statement line that mark a bank charge or fee (money out). */
+      chargeWords: ['CHARGE', 'CHRG', 'FEE', 'COMMISSION', 'COMM ', 'SERVICE TAX', 'SST ON', 'STAMP DUTY', 'PENALTY', 'HANDLING', 'ANNUAL FEE', 'CHQ BOOK', 'INTEREST CHARGED', 'OD INTEREST'],
+    },
+    'Unverified',
+    'Fauzan, 2 Nov 2026: yes to the Finance suggestions doc: fixed deposits and idle cash with maturity alerts and where the money sits (15), and a monthly review of bank charges against what the bank agreed (16). The 14-day alert and the list of charge words are PROPOSALS for the Finance Director; each bank\'s agreed monthly charges are recorded per account by the team leader, the FD or the CEO.',
+  ),
+  financeContractEnd: rule(
+    'FIN-CONTRACT-END',
+    {
+      /** Deposits, retention and guarantee collateral are claimed back within this many days of the contract's end. */
+      claimWithinDays: 30,
+      /** The final invoice is recorded within this many days of the end. */
+      finalInvoiceDays: 14,
+      /** Ended contracts stay on the list this long. */
+      showDays: 365,
+    },
+    'Unverified',
+    "Fauzan, 2 Nov 2026: yes to the Finance suggestions doc: client deposits and retention sums held by clients with a claim-back at contract end (3); when a contract ends, billing stops and the deposit, IG or retention claim starts automatically (24); and automation A11, follow-up tasks open by themselves when a contract is cancelled or ends. The 30-day claim and 14-day final invoice limits are PROPOSALS for the Finance Director to confirm.",
+  ),
+  financeStamp: rule(
+    'FIN-STAMP',
+    {
+      /** Stamp Act 1949 s.47: an agreement signed in Malaysia is stamped within 30 days of signing. */
+      stampDays: 30,
+      /** Prima's working target: the refund application goes in within this many days of the cancellation. */
+      refundTargetDays: 30,
+      /** Stamp Act 1949 s.57 proviso: relief for a stamped instrument that became void or useless is applied for within 12 months of its date. */
+      refundLimitMonths: 12,
+      /** Stamp Act 1949 s.47A(1): late stamping within 3 months of the deadline costs RM50 or 10% of the duty, whichever is higher; later, RM100 or 20%. */
+      latePenalty: { withinMonths: 3, first: { min: 50, pct: 10 }, after: { min: 100, pct: 20 } },
+      refundMinDocs: 3,
+      refundDocs: ['the stamped agreement and its STAMPS certificate', 'the cancellation letter or agreement signed by both parties', 'proof the duty was paid', 'a letter or statutory declaration that the agreement was not carried out and was not used in any court case (s.57)'],
+      /** No answer from LHDN after this many days is followed up. */
+      lhdnAnswerDays: 60,
+      /** An approved refund not seen in the bank after this many days is followed up. */
+      refundMoneyDays: 30,
+    },
+    'Law',
+    'Fauzan, 2 Nov 2026: stamp duty on new contracts and tenancies, stamped within the time limit (suggestion 19): "Ok. Create also procedure to unstamp the contract, if the contract cancelled." Fauzan, 2 Nov 2026: "No need tax agent. All details are online already." From the published Stamp Act 1949: stamp within 30 days of signing in Malaysia (s.47); late penalty RM50 or 10% of the duty within 3 months of the deadline, RM100 or 20% after (s.47A(1), LHDN penalty guideline of 6 Nov 2025); the refund (allowance) for a stamped agreement that is cancelled, void or not carried out is applied for within 12 months of the agreement\'s date, the agreement is given up to be cancelled and must not have been used in court (s.57(f) and proviso), and is paid in money (s.59). Applications and enquiries go to LHDN STAMPS (stamps@hasil.gov.my). The 30-day target to submit, 60 days for LHDN\'s answer and 30 days for the money are Prima working targets.',
+  ),
+  financeDailyCash: rule(
+    'FIN-DAILYCASH',
+    {
+      /** Proposals for the FD: the highest daily rate paid in cash (above it, pay by bank), people on one list, days after the list ends to settle, days for a withdrawal to show on the statement, and how many days a list may start before it is made. */
+      maxDailyRate: 300,
+      maxPeople: 60,
+      settleDays: 3,
+      statementDays: 5,
+      backdateDays: 3,
+      reasonMin: 10,
+    },
+    'Unverified',
+    'Fauzan, 2 Nov 2026: "There is one cash payment. We have daily cash buffer that need to be paid. If not, they dont want to work. So create a system that this type of people can be paid. Cash will be collected by coo or ceo to be paid." and "Only fd can approve this. They need to list it for the week or month. Before than prepare cash." Finance lists the people for the week or month, only the Finance Director approves (never the preparer, not the CEO), Finance then withdraws the cash (never above the approved total, found on the bank statement) and hands it to the COO or CEO, who counts it, pays each listed person for each listed day with the signed pay sheet as proof, and gives back what was not paid; Finance counts and banks it, and any difference is explained and accepted by the FD. The limits are proposals for the FD. Fauzan, 6 Nov 2026 ("Buffer also the same" as the guard pay-out rules): each person is paid to a bank account or e-wallet only, and Finance records each day\'s transfer with its reference (never by the FD who approved); cash only when the Director Office lists the person with the reason and the COO or the CEO gives it with a note (never whoever listed), and only that cash is withdrawn and handed over; a relative\'s or friend\'s account needs the person\'s consent letter stamped by a Commissioner for Oaths (Pesuruhjaya Sumpah) and approved by the COO only (Fauzan, 6 Nov 2026: the CEO does not stand in). Later the same day: "Director list will send cash person list per site per name and the amount, cash will be given out by ceo or coo. Signed paper of the receive collected and upload as proof. Upload done by director office." The Director Office lists each cash person with the site and the cash amount (at most their approved pay, and the cash withdrawn is at most these amounts); the COO or CEO pays; the Director Office uploads each signed receipt (PDF, JPEG or PNG, kept with its SHA-256), and the list is not settled until every receipt is in. The FD cannot approve a list until every person can be paid. Prima keeps only the last 4 digits of an account. EA s.25 asks for the worker\'s own or joint bank account: e-wallet and third-party accounts are flagged as legal points for the CEO.',
+  ),
+  financeIntercompany: rule(
+    'FIN-IC',
+    {
+      /** Proposal for the FD: a difference above this is corrected in SQL Account, not explained. */
+      explainMax: 5000,
+    },
+    'Unverified',
+    'Fauzan, 2 Nov 2026: yes to suggestion 12, "Intercompany: management fees, recharges and loans between companies agreed on both sides every month" (the transfer pricing file, suggestion 20, "no need for now"). Each company records its month-end balance with each other group company by kind; both sides must come to RM0.00; a difference is corrected or explained by a reviewer who entered neither side; a balance last month must be recorded again; anything not agreed or explained stops both companies\' close. The explain limit is a proposal for the FD.',
+  ),
+  financeForecast13: rule(
+    'FIN-CASH13',
+    {
+      /** The usual staff pay day when no paid run shows it (Employment Act 1955 s.19: wages within 7 days after the wage period). */
+      payDay: 7,
+      /** A reviewer looks the forecast over at least this often. */
+      reviewDays: 7,
+      /** Regular payments due this many days ago and still open are counted in week 1. */
+      regularLookBackDays: 31,
+    },
+    'Unverified',
+    'Fauzan, 2 Nov 2026: yes to suggestion 13, "13-week cash forecast per company: payroll dates, the 15th statutory payments, expected government receipts". Prima fills it from the last statement balances, open payments, the regular payments list (EPF, PERKESO, PCB and HRD on the 15th), the staff payroll at last month\'s net pay on the usual pay day, daily cash lists and government claims; Finance adds what Prima cannot know; a reviewer looks it over weekly; a week below zero shows on FD/CEO home. A forecast only; Prima never moves money.',
+  ),
+  financeCash: rule(
+    'FIN-CASH',
+    {
+      /** A staff advance is settled with receipts within this many days of being paid. */
+      advanceSettleDays: 30,
+      /** The longest settle-by date Finance may give (Fauzan, 2 Nov 2026: "not more than 30 days"). */
+      advanceMaxDays: 30,
+      /** One petty cash voucher at most; bigger spending goes through a normal payment. */
+      pettyVoucherMax: 500,
+      pettyFloatMax: 5000,
+      /** The petty cash count for a month is done by this day of the month after. */
+      pettyCountByDay: 5,
+      /** Card holders explain every line by this day of the month after the statement month. */
+      cardExplainByDay: 10,
+      /** A bank mandate is confirmed against the bank's own list at least this often. */
+      mandateReviewDays: 365,
+      /** Two payments to the same supplier for the same amount within this many days are treated as a possible duplicate. */
+      duplicateDays: 45,
+    },
+    'Unverified',
+    'Fauzan, 2 Nov 2026: yes to the Finance suggestions doc: staff cash advances with a settle-by date, unsettled ones shown to HR and Finance (6); petty cash per office with a float, top-up only with receipts and a monthly count by someone else (7); company credit and fuel cards with each statement matched to receipts and personal use flagged (8); a duplicate supplier invoice check across all companies by supplier, number or amount (9); and a bank mandate register of signatories and portal approvers per account, reviewed when someone leaves (14). The days and ringgit limits are PROPOSALS for the Finance Director to confirm.',
+  ),
+  renewals: rule(
+    'REG-RENEW',
+    {
+      /** Days overdue before the renewal steps up: Deputy Chief of Staff, then Chief of Staff, then CEO. */
+      escalateDays: [0, 14, 30] as [number, number, number],
+      /** Reminder while the agency has it. */
+      agencyReminderDays: 7,
+      /** Starting paper checklists; the agency's current form decides and the company adds what it asks for. */
+      papers: {
+        KDN_LICENCE: ['Renewal application in the KDN system', 'Current licence', 'SSM company profile', 'Directors and shareholders list', 'Latest audited accounts', 'Guard list with CSG training status', 'Office premises proof', 'Insurance cover'],
+        MOF_REGISTRATION: ['Online renewal in ePerolehan', 'SSM documents', 'Latest audited accounts or bank statements', 'Employee EPF and SOCSO statements', 'Office photos and tenancy agreement', 'Current certificate'],
+        INSURANCE: ['Quotes from insurers', 'Current policy schedule', 'Claims history'],
+        SSM_ANNUAL_RETURN: ['Company secretary prepares the return', 'Directors and shareholders confirmed'],
+        MAJLIS_PREMISE: ['Council renewal form or portal entry', 'Current licence', 'SSM company profile', 'Tenancy agreement or title', 'Latest assessment tax receipt', 'Fire certificate where the council asks'],
+        MAJLIS_SIGNBOARD: ['Council renewal form or portal entry', 'Current licence', 'Signboard photo and size'],
+        VENDOR_PANEL: ["The client's or agency's renewal form", 'SSM company profile', 'Audited accounts', 'KDN, MOF and ISO certificates', 'Insurance', 'Bank confirmation letter'],
+        ISO_CERT: ['Internal audit report', 'Management review minutes', 'Open corrective actions closed', 'Audit booked with the certifying body', 'Nonconformities closed by the deadline'],
+        FIRE_CERT: ['Fire equipment service records', 'Inspection booked', 'Floor plan where asked'],
+        OTHER_COMPLIANCE: ['Renewal form', 'Current certificate'],
+      } as Record<LicenceType, string[]>,
+    },
+    'Policy',
+    'Fauzan, 2 Nov 2026: "License renewal, majlis license renewal. All vendor renewal, iso renewal and compliance"; "Create also workflow on settling it. Whats needed."; "Renewal done by each company. Central admin monitor it." Steps: papers, the company manager signs (never the preparer), fee paid through Finance, submit, agency follow-up, new certificate and expiry, Central Admin confirms. Nothing is lodged or paid by the app. Master plan W15: an expired security licence blocks new contracts for that company. Paper lists are starting checklists (proposed).',
+  ),
+  armsLocalOnly: rule(
+    'ARMS-LOCAL-ONLY',
+    true,
+    'Policy',
+    'Fauzan, 2 Nov 2026: "foreign guard cannot use arm." The group\'s rule on top of the Private Agencies (Amendment) Act 2025: only Malaysian guards carry arms. A foreign guard is never issued a firearm, rostered on an armed post or put on an armed job (CIT, CDM, cash vaulting, bodyguard). Bank CIT tenders also ask for Malaysian armed guards (RHB tender notice).',
+  ),
+  actFraud: rule(
+    'ACT-FRAUD',
+    {
+      /** Look-back for every anomaly rule. */
+      lookBackDays: 90,
+      /** Two staff phone clocks this close in time and place, both away from their base, may be one person clocking two. */
+      buddyClock: { minutes: 5, metres: 25 },
+      /** One person reversing this many rent payments inside the look-back. */
+      rentReversals: 2,
+      /** Evidence kept in an investigation file: at most this many files, each at most this size. */
+      evidenceMax: 20,
+      evidenceBytes: 1_500_000,
+    },
+    'Policy',
+    'Fauzan, 3 Nov 2026 ("build all not build"): masterplan item 241, fraud anomalies, investigations and forensic controls. The anomaly rules are fixed checks on records already in Prima, never AI and never an accusation: ACT decides whether to open a finding or an investigation. Investigations are seen only by ACT; evidence is kept with its SHA-256 and every open, add, view and close is logged. Nobody is disciplined automatically. The look-back, the buddy-clock window, the reversal count and the evidence limits are proposals.',
+  ),
+  monthlyReport: rule(
+    'RPT-MONTHLY',
+    {
+      /** Fauzan, 2 Nov 2026: every department's monthly report is due on the 25th of the next month. */
+      dueDay: 25,
+      /**
+       * Proposed standard form for every department's monthly report (Fauzan, 2 Nov 2026: "propose what standard form
+       * whole app ... and ACT department to decide what needed"). The ACT Director changes the sections per department.
+       */
+      sections: [
+        'Summary of the month: three to five key points',
+        'Key figures against target: speed and quality of the work',
+        'Work done, work still open and anything overdue',
+        'Money: spending against budget, payments made and pending',
+        'People: headcount, joiners, leavers, leave and training',
+        'Compliance: licences, permits and legal dates due in the next 90 days; ACT findings open and fixed',
+        'Risks, incidents and complaints',
+        'Improvements done and planned',
+        'Decisions or help needed from management',
+      ],
+      /** Proposed: the figures ACT compares with the records already in Prima, per department. */
+      checks: {
+        operations: ['Guard no-shows and replacements against attendance', 'Incidents and cases against the case register'],
+        hr: ['Headcount, joiners and leavers against staff records', 'Pay changes against verified pay changes'],
+        arms_control: ['Firearm count against the vault register', 'Firearms issued and returned against arms movements'],
+        chief_of_staff: ['Policies and renewals against the insurance register', 'Claims against insurance claims'],
+        cms: ['Alarms and calls against the CMS log'],
+        director_office: ['Tenders sent against the tender register', 'Meetings and minutes against the meeting list'],
+        fwm: ['Permit renewals against foreign worker records'],
+        pdpa: ['Data requests and breaches against the PDPA register'],
+        transport: ['Vehicles, services and road tax against the fleet list'],
+        asset: ['Rent collected and arrears against the rental records'],
+        finance: ['Collections and payments against SQL Account and the bank', 'Statutory payments against the payment list'],
+        it: ['Tickets opened and closed against the IT board', 'Devices and rentals against the asset list'],
+        legal: ['Legal matters and filings against the corporate register'],
+        audit: ['Findings opened and closed against the ACT register'],
+        procurement: ['Purchases and stock against purchase requests and the store'],
+      } as Record<string, string[]>,
+    },
+    'Policy',
+    'Fauzan, 2 Nov 2026: ACT monitors the monthly report of each department; each report is due on the 25th of the next month (25 days after the month ends). The standard form is a proposal; the ACT Director decides what each department must cover. ACT checks each report is on time, complete and true against the records in Prima.',
+  ),
+  workRebalance: rule(
+    'WORK-REBALANCE',
+    {
+      /** Leave starting within this many days is shown. */
+      lookAheadDays: 5,
+      /** Overloaded: open load at least this many times the team average, and at least overloadMin. */
+      overloadFactor: 1.5,
+      overloadMin: 5,
+      /** Someone with this many overdue tasks is not given more. */
+      overdueBusy: 3,
+      /** Overdue this many hours: advise a decision. */
+      stuckHours: 24,
+      /** Timing: at risk when time left is under riskFactor x the person's usual time, and at most riskMaxHours. */
+      riskFactor: 1,
+      riskMaxHours: 72,
+      /** The usual time is known only after this many finished tasks (fewer is UNKNOWN), from at most sampleMax. */
+      minFinished: 3,
+      sampleMax: 20,
+      lookBackDays: 28,
+      /** A moved task with under this many hours left also gets a new due time, extendHours later. */
+      minHoursLeft: 4,
+      extendHours: 24,
+    },
+    'Policy',
+    'Fauzan, 2 Nov 2026: each manager may delegate or readjust the work of staff under them, and Arisha advises what to change from the data (time to do tasks, workload). Fauzan approved these thresholds on 2 Nov 2026 (he may change them later). The advice is a prompt for the manager, never a finding, ranking or input to pay or access; the manager decides and gives a reason.',
+  ),
+  workRebalanceAi: rule(
+    'WORK-REBALANCE-AI',
+    { perUserPerDay: 10 },
+    'Policy',
+    'Fauzan, 2 Nov 2026: "Use ai when needed. We use it in case basis." A manager may ask Arisha AI about one rebalance case at a time, by pressing a button; it is off until switched on (WORK_REBALANCE_AI_ENABLED) and needs Arisha AI to be on. Proposed cap: 10 asks per manager per day, to keep within the Arisha cost target. People are sent as Person A, B, C; no names, task titles, leave kinds or reasons go to the AI.',
+  ),
+  fwmPassportCheckDays: rule(
+    'FWM-PASSPORT-CHECK',
+    90,
+    'Policy',
+    'Approved by Fauzan, 3 Nov 2026: FWM checks where each foreign worker\'s passport is at least every 90 days. The worker keeps it; withholding a passport is an offence under the Passports Act 1966 s.12(1)(f).',
+  ),
+  fwmWelfareCheckDays: rule(
+    'FWM-WELFARE-CHECK',
+    90,
+    'Policy',
+    'Approved by Fauzan, 3 Nov 2026: FWM has a private welfare talk with each foreign worker at least every 90 days (ILO forced-labour indicators).',
+  ),
+  fwmPassportConsentDoc: rule(
+    'FWM-PASSPORT-CONSENT',
+    true,
+    'Policy',
+    'Approved by Fauzan, 3 Nov 2026: a document attached to a passport check or follow-up counts as the worker\'s consent to company safekeeping. The app does not read the document, so it cannot tell whether it is a real, voluntary consent signed by the worker; the FWM officer attaching it is responsible for that. Legal flag kept (Passports Act 1966 s.12(1)(f)): reviewed by the directors, not shown to routine staff.',
+  ),
+  fwmZeroFee: rule(
+    'FWM-ZERO-FEE',
+    true,
+    'Policy',
+    'Best practice review BP-1, built on Fauzan\'s go-ahead of 3 Nov 2026: no worker pays to get the job. FWM asks each new worker privately what they paid; any fee found is followed up until the agency pays it back.',
+  ),
+  fwmRecruitmentCost: rule(
+    'FWM-RECRUITMENT-COST',
+    'full_month',
+    'Policy',
+    'Fauzan, 3 Nov 2026: when a foreign worker of one company works under another company\'s job, the employer charges that company a recruitment cost to cover recruitment and renewal costs. Full month per worker: any day in the month counts as the whole month; when a worker works under two hosts in one month, the hosts split it half each (equal shares if more). The host pays FWM; FWM pays the owning company back at its own rate, once per worker per month. The Finance Director or CEO sets both RM rates per worker per month in the app; with no rate set the charge is Unknown and cannot be drafted. The worker keeps wearing the owning company\'s uniform (Fauzan checked with KDN, 3 Nov 2026).',
+  ),
+  policeHelp: rule(
+    'ARMS-POLICE-HELP',
+    { visitNowMin: 15, phoneCallMin: 30, bookedHoursBefore: 24 },
+    'Policy',
+    'Fauzan, 3 Nov 2026: a company that gets a police call or visit (usually an armoury check) asks Arms Control for help, and Arms Control sends someone. Times approved by Fauzan, 3 Nov 2026: a helper is assigned within 15 minutes for a visit happening now, 30 minutes for a phone call, and 24 hours before a booked visit; past that the request shows as late to Arms Control, CMS and the company.',
+  ),
+  timeSlip: rule(
+    'HR-TIME-SLIP',
+    { maxHours: 4, makeUpDays: 30, halfDayHours: 4, aheadDays: 30 },
+    'Policy',
+    'Fauzan, 4 Nov 2026: staff may ask for a time slip to leave the office for a few hours on their own matters, at most 4 hours a slip. The company head (company staff) or the department head (central staff) approves with a comment and HR is told; HR may change who approves. The hours are worked back within 30 days, counted from the staff clock after 5.30 pm. Hours not worked back by then are taken from annual leave in half days (4 hours each), and HR is told; when no annual leave is left the rest is unpaid leave for HR to see.',
+  ),
+  cleaningRates: rule(
+    'CLEAN-RATES',
+    { toilet: '10 cubicles/h', sweep: '400 m²/h', mop: '250 m²/h', vacuum: '250 m²/h', grassCut: '300 m²/h', drain: '60 m/h', briefingMin: 10, moveMin: 5, inspectMin: 5, maxPartMin: 90 },
+    'Policy',
+    'Fauzan, 4 Nov 2026: OMs plan each cleaning site minute by minute from the size of each area. Work rates per person are common industry figures (Fauzan said yes to defaults, 4 Nov 2026); the OM sets a different rate on any area to match the site. Breaks are taken in two turns as the KPM cleaning contract requires.',
+  ),
+  cleaningStock: rule(
+    'CLEAN-STOCK',
+    { overUsePct: 100, underUsePct: 50, reorderDays: 7 },
+    'Policy',
+    'Fauzan, 4 Nov 2026: cleaning equipment and supplies are planned, monitored and managed, with no over-use and no under-giving. Set by Fauzan (4 Nov 2026): use above 100% of the budget is over-use; below 50% means supplies may not reach the areas or were under-given; reorder when stock covers fewer than 7 working days (proposed); a received count below what was sent is a short delivery.',
+  ),
+  cleaningProof: rule(
+    'CLEAN-PROOF',
+    { maxPhotoBytes: 700_000, maxMapBytes: 2_000_000, timeMarkToleranceMin: 10 },
+    'Policy',
+    "Fauzan, 4 Nov 2026: supervisors do not sign in yet; the OM uploads the supervisor's proof, which must be a time-marked photo, not an ordinary photo. The OM enters the time printed on the photo; Prima compares it with the camera's own time when the file has it, refuses a photo from another day and refuses a photo already used as proof.",
+  ),
+  fleetFuel: rule(
+    'FLEET-FUEL',
+    { tankSlackPct: 5, kmPerLitreBandPct: 30, kmPerLitreMinFills: 3, tooSoonHours: 4, enterWithinDays: 31, trackerGapPct: 10 },
+    'Policy',
+    'Fauzan, 5 Nov 2026: the Transport department monitors all transport usage: petrol cards where there is one, the subsidy card, the tracker and everything that happens with each vehicle. Proposed checks: litres over the tank size by more than 5%; km per litre more than 30% away from the same vehicle\'s usual (after 3 fill-ups); two fill-ups within 4 hours; a card used on a vehicle it is not kept for; the wrong fuel on a subsidy card; a card over its monthly limit or quota; no receipt; the odometer out of order. Fill-ups are entered within 31 days. Tracker distance more than 10% away from the odometer is flagged once the tracker is connected.',
+  ),
+  fwmAck: rule(
+    'FWM-ACK',
+    {
+      workingDays: 1,
+      /**
+       * National public holidays that fall on a weekday (weekends are skipped anyway). 2026: Deepavali replacement
+       * and Christmas. 2027: the Cabinet Division schedule (Hari Raya and Deepavali dates subject to change).
+       * Update each year from the official schedule; state-only holidays are not counted.
+       */
+      holidays: [
+        '2026-11-09',
+        '2026-12-25',
+        '2027-03-10',
+        '2027-03-11',
+        '2027-05-17',
+        '2027-05-20',
+        '2027-06-07',
+        '2027-08-31',
+        '2027-09-16',
+        '2027-10-28',
+      ] as string[],
+    },
+    'Policy',
+    'FW design v3, confirmed by Fauzan 26 Oct 2026: at 30 days or less before a foreign-worker paper deadline, everyone alerted (FWM, Chief of Staff, COO, CEO) acknowledges within 1 working day. Fauzan, 5 Nov 2026: Saturday, Sunday and public holidays are not working days. Holidays: national weekday holidays from the Cabinet Division schedule (2027 Islamic and Deepavali dates subject to change; 2027 replacement days and state-only holidays not included yet).',
+  ),
+  fwmBothApps: rule(
+    'FWM-BOTH-APPS',
+    true,
+    'Policy',
+    'Fauzan, 5 Nov 2026 (audit decision 1): the foreign worker permit and renewal board lives in both Prima and the JA Group app. FWM records papers in Prima from the paper itself; the JA app sends its dates; where they differ the board shows both and FWM decides. Prima never overwrites a date silently.',
+  ),
+  amBq: rule(
+    'AM-BQ',
+    {
+      /** Under this estimate one quote is enough (proposed). */
+      directBelow: 5_000,
+      /** Up to this estimate three quotes (RFQ); above it an open tender with at least three bids (proposed). */
+      rfqUpTo: 50_000,
+      quotesForRfq: 3,
+      /** Above this amount the COO approves after the Asset Director, for the BQ and for the award (proposed). */
+      cooAbove: 50_000,
+      /** A quote line dearer than our own past price by more than this % is flagged (proposed). */
+      dearerPct: 20,
+      /** Past awarded prices older than this are not used for drafts (proposed). */
+      historyMonths: 24,
+      /** Open jobs at the same place within this many days are suggested to go out together (proposed). */
+      bundleDays: 30,
+      /** Variation orders: the COO also approves once all VOs together pass this % of the award, or the price passes cooAbove (proposed). */
+      voCooPct: 10,
+      /** All VOs together above this % of the award: advice to check whether the job should have gone out again (proposed). */
+      voWarnPct: 20,
+    },
+    'Policy',
+    'Fauzan, 5 Nov 2026: Asset Management needs a bill of quantities for every job it offers out, with help drafting the BQ and advice on tenders and quotations at the lowest cost. Proposed for approval: the Asset Management team prepares the BQ, the Asset Director approves it and the COO also approves above RM50,000; under RM5,000 one quote, up to RM50,000 three quotes, above that an open tender; rates only from our own past awarded quotes or a price staff entered with its source, never invented; the lowest complete quote wins, any other choice needs a written reason approved the same way. Fauzan, 5 Nov 2026: every price change after the award is a variation order (VO); proposed: the Asset Director approves, and the COO too once all VOs together pass 10% of the award or the price passes RM50,000. Fauzan, 5 Nov 2026: every VO must get the consent of the Chairman and the CEO. Fauzan, 5 Nov 2026: a BQ for a new building or a renovation, laid out like his own sample (summary, lettered sections, workings, notes, contingency, Kadar left for the contractor); proposed: the contingency (5% by default, 0 to 20%) counts towards the estimate and the route but is not part of the contractor\'s price and is spent only through a VO.',
+  ),
+  registers: rule(
+    'GOV-REGISTERS',
+    {
+      /** Each director declares interests once a year (Fauzan, 5 Nov 2026; Companies Act 2016 s.221). */
+      interestEveryMonths: 12,
+      highRiskScore: 15,
+      mediumRiskScore: 8,
+      highRiskReviewMonths: 3,
+      otherRiskReviewMonths: 6,
+      dueSoonDays: 30,
+    },
+    'Policy',
+    "Fauzan, 5 Nov 2026: no public listing (KDN does not allow a listed security company), but follow listing-style governance a little. Related-party deals: the Deputy Chief of Staff records, the Chief of Staff reviews with a reason; a board resolution only above a limit the CEO sets (not set yet). Directors declare interests once a year (Companies Act 2016 s.221); the Deputy Chief of Staff collects the forms by hand and marks each done; only the DCoS, CoS and CEO see deals and declarations. Committees keep minutes. The risk register is in ACT only: the ACT Director scores, settles and directs the team; 5x5 scoring, high at 15 (proposal).",
+  ),
+  siteSurvey: rule(
+    'SURVEY-OFFLINE',
+    { minPhotos: 1, maxPhotos: 12, maxPosts: 20, maxMeasures: 20, keepOnPhoneDays: 30 },
+    'Policy',
+    'Fauzan, 4 Nov 2026 (staff usability rule 5): site survey forms take photos and measurements, work with no signal and send later, with no retyping; the survey goes to the Project Director (the COO, the Operations General Manager or the Operations Director, Fauzan 5 Nov 2026), who accepts or returns it with a reason and never decides their own survey. At least 1 and at most 12 photos (none only with a written reason where photography is not allowed, e.g. a protected place under the Protected Areas and Protected Places Act 1959 or a client rule), 20 posts and 20 extra measurements; how long survey photos are kept is for the PDPA officer to set; a survey not sent stays on the phone and reminds the surveyor after 30 days. Values proposed.',
+  ),
+  pdpaBreachRegister: rule(
+    'PDPA-BREACH-REGISTER',
+    { keepYears: 2 },
+    'Secondary',
+    'PDP Commissioner Data Breach Notification Guideline (2025): a data controller keeps a register of every personal data breach, notified or not, for at least 2 years, with what happened, the data and people affected, and the action taken. Closed breach entries stay on the register and cannot be removed before then. Fauzan, 5 Nov 2026: confirmed; the PDPA officer or the Chief of Staff may set a longer period in PDPA settings, never under 2 years.',
+  ),
+  pdpaRegisterReview: rule(
+    'PDPA-REGISTER-REVIEW',
+    { reviewDays: 365, sensitiveNeedsDpia: true },
+    'Policy',
+    'Fauzan, 5 Nov 2026: approved. The PDPA officer, with the CEO or the Chief of Staff, reviews every entry of the personal data register at least once a year. Sensitive data (health, face or other biometric data) needs explicit consent or another s.40 ground and a data protection impact assessment before use. For approval with the PDPA officer and the Operations Director.',
+  ),
+  lindungVerifyDays: rule(
+    'HR-LINDUNG-VERIFY',
+    2,
+    'Policy',
+    'LINDUNG 24 Jam (5 Nov 2026): PERKESO emails the company to confirm the worker is employed; HR answers within 2 working days so the benefit is not held up. Company target, not law; PERKESO sets no deadline in its FAQ. Proposed, for approval.',
+  ),
+  doshFormWorkingDays: rule(
+    'OSH-DOSH-NOTICE',
+    7,
+    'Law',
+    'OSHA 1994 s.32 and NADOPOD Regulations 2004: death, serious bodily injury and dangerous occurrences are told to the nearest DOSH office at once by the quickest means, then JKKP 6 within 7 working days; injury keeping a worker off more than 4 calendar days, JKKP 6 within 7 working days; occupational poisoning or disease, JKKP 7. Every case goes in the JKKP 8 register, sent to DOSH before 31 January and kept 5 years (DOSH NADOPOD guidelines). Check the current DOSH submission channel.',
+  ),
+  opsMeeting: rule(
+    'OPS-MEETING',
+    {
+      /** Sections of operations the COO meets every month. `tiers` and `department` find the section head(s) to invite. */
+      sections: [
+        { key: 'gov', label: 'Government operations', department: 'operations', tiers: ['ogm'] },
+        { key: 'private', label: 'Private operations', department: 'operations', tiers: ['ops_director'] },
+        { key: 'cms', label: 'CMS command centre', department: 'cms', tiers: [] },
+        { key: 'arms', label: 'Arms Control', department: 'arms_control', tiers: [] },
+        { key: 'transport', label: 'Transport', department: 'transport', tiers: [] },
+      ] as { key: string; label: string; department: string; tiers: string[] }[],
+      /** After this day of the month a section with no meeting set is shown red. */
+      scheduleByDay: 10,
+      /** Minutes are due this many days after the meeting; after that the organiser and the COO are reminded. */
+      minutesWithinDays: 3,
+      agenda: [
+        'Action items from last month',
+        'Attendance, absence and incident figures',
+        'Open cases and client complaints',
+        'Staffing, equipment and vehicles',
+        'Issues the section needs the COO to decide',
+        'Plan for next month',
+        'Any other matters',
+      ],
+    },
+    'Policy',
+    "Fauzan, 26 Oct 2026: \"All operation will be monitor by coo. Its do montly operation meeting with each section in the company who under perview of operation.\" Fauzan, 5 Nov 2026: the five central sections below plus the existing monthly meeting with each company's operations. The 10th-of-month scheduling cut-off, the 3-day minutes window and the standing agenda are proposed for Fauzan to confirm (5 Nov 2026).",
+  ),
+  meetingPlan: rule(
+    'MTG-PLAN',
+    {
+      /**
+       * The regular meetings each kind of staff needs, thought through role by role and confirmed by Fauzan on 5 Nov 2026.
+       * `every` is the period; `dueDay` is how many days into the period it should be set before it shows late (proposed).
+       * The agenda is the standing list; Prima puts what is important now (open actions, open serious cases, licences and
+       * tenders due) in front of it automatically.
+       */
+      series: [
+        {
+          key: 'grp-mgmt',
+          label: 'Group management meeting',
+          every: 'fortnight',
+          dueDay: 3,
+          kind: 'management',
+          who: 'Director Office sets it; CEO, COO, Chief of Staff, Deputy, Finance Director and the Director Office attend',
+          agenda: ['Action items from the last meeting', 'Tenders and quotations closing', 'Collections and overdue clients', 'Escalated cases and risks', 'Decisions needed'],
+        },
+        {
+          key: 'grp-general',
+          label: 'Monthly general meeting',
+          every: 'month',
+          dueDay: 5,
+          kind: 'management',
+          who: 'Director Office sets it; all company managers, all department heads and Finance team leaders attend, with the Director Office, Chairman and Vice Chairman',
+          agenda: ['Action items from the last meeting', 'Each company: operations, clients and collections', 'Each department: work done and help needed', 'Finance: cash, collections and payments', 'Announcements and decisions'],
+        },
+        {
+          key: 'grp-board-review',
+          label: "Chairman's quarterly review",
+          every: 'quarter',
+          dueDay: 30,
+          kind: 'board',
+          who: 'Director Office sets it; Chairman, Vice Chairman, CEO, COO, Finance Director and Chief of Staff attend',
+          agenda: ['Minutes and actions of the last review', 'Group results and cash', 'Operations, licences and compliance', 'Legal matters and risks', 'Plans for next quarter'],
+        },
+        {
+          key: 'dept-toolbox',
+          label: 'Department toolbox meeting',
+          every: 'fortnight',
+          dueDay: 3,
+          kind: 'department',
+          who: 'The head of each central department sets it; the whole department attends',
+          agenda: ['Action items from the last meeting', 'Work due in the next two weeks and who does it', 'Problems and help needed', 'Leave and cover', 'Any other matters'],
+        },
+        {
+          key: 'fin-close',
+          label: 'Finance month-end close meeting',
+          every: 'month',
+          dueDay: 5,
+          kind: 'department',
+          who: 'The Finance Director sets it; team leaders and deputies attend',
+          agenda: ['Bank reconciliations', 'Receivables and collections', 'Payables and payments due', 'Statutory payments (EPF, SOCSO, EIS, PCB, HRD)', 'Close checklist and packs'],
+        },
+        {
+          key: 'co-office',
+          label: 'Company office meeting',
+          every: 'fortnight',
+          dueDay: 3,
+          kind: 'management',
+          who: 'The company manager sets it; the admin executives attend',
+          agenda: ['Action items from the last meeting', 'Tenders, quotations and client requests', 'Licences and papers due', 'Billing and collections', 'Office matters'],
+        },
+        {
+          key: 'co-ops',
+          label: 'Company operations meeting with the COO',
+          every: 'bimonth',
+          dueDay: 15,
+          kind: 'operations',
+          who: 'The company manager sets it; admin executives and the COO attend',
+          agenda: ['Action items from the last meeting', 'Attendance, no-shows and incidents', 'Client complaints and requests', 'Staffing and equipment', 'Plan for the next two months'],
+        },
+        {
+          key: 'co-board',
+          label: 'Company board meeting',
+          every: 'year',
+          dueDay: 180,
+          kind: 'board',
+          who: 'The company manager sets it with the company secretary; directors attend (add them as guests if they have no Prima account)',
+          agenda: ['Confirm the last minutes', 'Management accounts', 'Licence, KDN and compliance matters', 'Contracts and tenders above the board limit', 'Resolutions'],
+        },
+      ] as { key: string; label: string; every: 'fortnight' | 'month' | 'bimonth' | 'quarter' | 'year'; dueDay: number; kind: 'board' | 'management' | 'operations' | 'department'; who: string; agenda: string[] }[],
+    },
+    'Policy',
+    'Fauzan, 5 Nov 2026: "Set for every one meetings and memo also. Be like every staff than think what meeting needed." Fauzan confirmed the list the same day: group management, department toolbox and company office meetings every two weeks; the COO joins each company operations meeting every two months; company board once a year; a monthly general meeting with all company managers, department heads and Finance team leaders; the agenda is set automatically from what is important and lateness is still flagged. The set-by days are proposed. The COO monthly section meetings stay under OPS-MEETING.',
+  ),
+  memoRead: rule(
+    'MEMO-READ',
+    { readWithinDays: 3 },
+    'Policy',
+    'Fauzan, 26 Oct 2026: readers tap "I have read this" and the publisher sees who read it. The 3-day read-by date and the publisher reminder to those who have not read are proposed (5 Nov 2026).',
+  ),
+  quality: rule(
+    'QMS-REGISTER',
+    {
+      /** Standards kept in one register, each with its own edition. PIKM Part 1 text received from Fauzan, 8 Nov 2026 (2022 draft). */
+      standards: [
+        { code: 'ISO9001', edition: '2015', name: 'ISO 9001:2015 Quality management systems', text: 'headings' },
+        { code: 'PIKM', edition: '1:2022 draft', name: 'PIKM-KDN/SIRIM 1 Code of practice for private security companies, Part 1: management', text: 'headings' },
+      ],
+      /** Each requirement with checked evidence is looked at again this often (approved by Fauzan, 8 Nov 2026). */
+      reviewEveryMonths: 12,
+      /** Credentials or refreshers expiring within this many days show as "due soon". */
+      dueSoonDays: 60,
+      /** Default refresher when a skill item has none set (approved by Fauzan, 8 Nov 2026). */
+      defaultRefreshMonths: 12,
+    },
+    'Policy',
+    "Fauzan, 5 Nov 2026: extend the existing Prima modules into one connected quality and compliance system for the SIRIM/PIKM code and ISO 9001:2015, not a separate app. One requirements and evidence register for both standards, each standard and edition kept separate. ACT keeps the list, links existing approved records and checks the evidence; a person who links evidence never checks it. The app never declares a company compliant: missing evidence shows Unknown. Gaps go to an ACT finding (the existing corrective-action steps), not a second CAPA system. Competency matrix per role in HR: credentials are read from the existing records; skills are assessed by a manager or officer, never by the person themselves. Staff never see or fill in clause checklists. Fauzan, 8 Nov 2026 approved as built: 12-month evidence review, 60-day due-soon, refreshers every 12 months for guards and officers and 24 months for office Prima and PDPA training, the four starter role profiles, the screening check lists, repeat screening every 36 months (staff and guards) and 12 months (directors and shareholders), and OM or company manager recording code-of-conduct briefings.",
+  ),
+  fwRecharge: rule(
+    'FW-RECHARGE',
+    {
+      /** The user company or branch repays within this many days of the debit note. Proposal, for approval. */
+      repayDays: 30,
+      /** A paid figure more than this many ringgit from the published rate needs a note from Finance. */
+      checkToleranceRm: 1,
+    },
+    'Policy',
+    'Fauzan, 5 Nov 2026: "Make sure EPF and SOCSO for Nepali are paid by the owner company and repaid back by the company that used it; if the branch manager used it, it needs to pay the amount of EPF and SOCSO to the owner company. Salary can be paid by the company that uses or the branch that uses." The owner company holds the permit, stays the employer and pays KWSP and PERKESO by the 15th of the next month whether or not it has been repaid. The user repays employer and employee shares (the salary payer deducts the employee share from the wage) and LINDUNG 24 Jam, split by the days it used the worker in the month. Split by days worked decided by Fauzan, 5 Nov 2026. The 30 days to repay and the RM1 check are proposals for approval.',
+  ),
+  amExtras: rule(
+    'AM-EXTRAS',
+    {
+      /** A contractor's CIDB registration is flagged this many days before it ends. */
+      cidbWarnDays: 30,
+      /** A contractor averaging below this rating over at least minRatings jobs is flagged for review. */
+      lowRating: 3,
+      minRatings: 2,
+      /** An empty unit is advertised within this many days of becoming vacant. */
+      advertWithinDays: 7,
+      /** An open enquiry gets a next step at least this often. */
+      enquiryFollowUpDays: 3,
+      /** A unit is put up for letting from this many days before its tenancy ends. */
+      letBeforeEndDays: 90,
+      /** Each meter is read at least this often. */
+      meterReadDays: 31,
+      /** A reading using more than this times the usual is flagged (possible leak or fault). */
+      meterSpikeX: 2,
+      /** A resort hold without a deposit lapses after this many days. */
+      holdDays: 3,
+      /** Deposit needed to confirm an outside booking, % of the stay. */
+      depositPct: 30,
+      /** A resort's MOTAC registration is flagged this many days before it ends. */
+      motacWarnDays: 60,
+      /** A harvest sale this % or more below the crop's recent average price is flagged. */
+      priceDropPct: 20,
+      /** Days of sales the recent average price looks back over. */
+      priceLookbackDays: 30,
+      /** Spoiled over this % of a pick is flagged. */
+      spoilPct: 10,
+      /** Kept or given away over this % of a pick is flagged. */
+      keptPct: 5,
+      /** A planned job becomes a work order this many days before it is due. */
+      pmLeadDays: 14,
+    },
+    'Policy',
+    'Fauzan, 26 Oct 2026: Asset Management finds tenants, monitors utilities and runs the resorts and orchards. Fauzan, 5 Nov 2026 (third audit, item 4 "Build"): add the contractors list, finding tenants, utility meters, resort bookings, orchard harvest and planned maintenance. Proposed for approval: the team adds a contractor and the Asset Director approves it for use, suspends or blacklists it with a reason; every finished job is rated; the Asset Director approves every tenancy offer, by someone other than whoever made it, and an offer under the asking rent needs a reason; each meter is read monthly with a photo and a big jump is flagged; the Asset Director sets each resort\'s price list, a price under it needs a reason, an outside booking is confirmed with a 30% deposit and a hold lapses after 3 days; every harvest sale has a weighing slip, and a price drop of 20%, spoilage over 10% or more than 5% kept or given away is flagged; planned jobs turn into work orders 14 days before they are due and only the Asset Director pauses a job the law or a licence requires. Finance confirms every payment in the bank. All figures proposed, for Fauzan to confirm.',
+  ),
+  jaSwitch: rule(
+    'JA-SWITCH',
+    {
+      sideBySideDays: 30,
+      jaReadOnlyDays: 92,
+      hoursTolerance: 0.25,
+      payToleranceRm: 0,
+      incidentMatchMin: 60,
+      startBackDays: 62,
+      startAheadDays: 31,
+      importMaxRows: 2000,
+      reportRows: 500,
+    },
+    'Policy',
+    "Fauzan, 5 Nov 2026 (third audit item 3, plan 'How we switch safely'): Prima and JA run the same month side by side for one company and one area; a difference report lists every mismatch and each is explained or fixed; ACT checks the report (proposed: ACT Lead or Deputy, never someone who explained a difference in it); the CEO switches the area, and a switch can be undone; JA stays read-only for 3 months after. Fauzan, 5 Nov 2026: 'Every formula can set by act director': the ACT Director sets these numbers in the app (a run keeps the values it started with). Starting values: 30 days side by side, pay to the sen, attendance hours may differ by 15 minutes, incidents match by site within 60 minutes, JA read-only 92 days. Recommended order: incidents, attendance and patrol, guard pay, then hostels; foreign worker papers live in both apps and never switch. JA history comes by a one-time import of JA exports, staged by ACT and approved by another person (ACT Lead or Deputy); the import never creates people and refuses full IC numbers.",
+  ),
+  guardPhone: rule<{
+    heartbeatSec: number;
+    offlineAfterMin: number;
+    pingEverySec: number;
+    codeValidHours: number;
+    sessionHours: number;
+    maxFailedTries: number;
+    lockMin: number;
+    dutyMarginMin: number;
+    sosRepeatMin: number;
+    keepPingsDays: number;
+  }>(
+    'OPS-GUARD-PHONE',
+    {
+      heartbeatSec: 60,
+      offlineAfterMin: 5,
+      pingEverySec: 60,
+      codeValidHours: 24,
+      sessionHours: 14,
+      maxFailedTries: 5,
+      lockMin: 30,
+      dutyMarginMin: 30,
+      sosRepeatMin: 10,
+      keepPingsDays: 90,
+    },
+    'Policy',
+    'Third audit item 2, Fauzan 5 Nov 2026: guards sign in on their own phones with face plus PIN, live patrol location, SOS button and a heartbeat to CMS. Heartbeat every 60 s and offline after 5 min follow the JA requirements (2 Nov 2026). Location only on duty (30 min either side of the shift); Fauzan, 5 Nov 2026: no PDPA notice step on the phone. Keeping readings 90 days and the code, session, lock and SOS numbers are PROPOSED.',
+  ),
+  qualityOps: rule(
+    'QMS-OPERATIONS',
+    {
+      /** A service fault at a site that had another within this many days is a repeat and goes to ACT for the root cause (approved by Fauzan, 5 Nov 2026). */
+      repeatDays: 90,
+      /** Each supplier is rated again this often (approved by Fauzan, 5 Nov 2026). */
+      supplierRateEveryDays: 365,
+    },
+    'Policy',
+    "Fauzan, 5 Nov 2026 (\"Build any not build\"): the day-to-day quality pieces on existing records. Service faults are recorded once by the company or Operations, with what was done at once and whether the client was told; serious faults and repeats at the same site go to ACT for the root cause as an ACT finding. Procurement or the company manager rates suppliers on quality, time and paperwork; Stop blocks the supplier and only Finance unblocks. ACT or the Chief of Staff keeps the quality objectives and controlled documents; a document version is approved by a second person, never its writer. Management review: Prima builds the inputs from its own figures and the CEO agrees the record. Guards and officers see none of it. Fauzan, 5 Nov 2026 said yes to the 90-day repeat window, the 12-month supplier re-rating and the 24-month default document review.",
+  ),
+  fwmRecruitSteps: rule(
+    'FWM-RECRUIT-STEPS',
+    ['AGENCY_LICENCE', 'EMBASSY', 'INTERVIEW', 'AGE', 'CONTRACT'],
+    'Policy',
+    'Fauzan, 6 Nov 2026 (IWAY answer 7, "done in FWM"): FWM records each foreign worker\'s recruitment steps: the agency\'s licence, the embassy\'s confirmation, the interview, the age check from the passport, and the contract signed in English and Malay before travel. A worker is cleared to travel only when all five are on record; zero recruitment fees is confirmed after arrival by the arrival fee check (FWM-ZERO-FEE).',
+  ),
+  fwmRecruitAge: rule(
+    'FWM-RECRUIT-AGE',
+    { min: 18, max: 60 },
+    'Policy',
+    'Fauzan, 6 Nov 2026: a recruited worker is 18 to 60, taken from the date of birth on the passport and counted to the planned travel date (HR-AGE-MAX: no guards over 60).',
+  ),
+  fwmContractLanguages: rule(
+    'FWM-CONTRACT-LANG',
+    ['en', 'ms'],
+    'Policy',
+    'Fauzan, 6 Nov 2026: English and Malay are a must; the worker\'s mother tongue may be added. The contract is signed before the worker travels.',
+  )
 } as const;
 
 export const CREDENTIAL_LABEL: Record<CredentialType, string> = {
@@ -1762,6 +2212,8 @@ export const CREDENTIAL_LABEL: Record<CredentialType, string> = {
   PASSPORT: 'Passport',
   FOMEMA: 'FOMEMA medical',
   FW_INSURANCE: 'Foreign worker insurance',
+  SPIKPA: 'SPIKPA hospital insurance',
+  KDN_LETTER: 'KDN approval letter',
   FIREARM_PERMIT: 'Firearm permit',
   RANGE_PRACTICE: 'Range practice',
 };

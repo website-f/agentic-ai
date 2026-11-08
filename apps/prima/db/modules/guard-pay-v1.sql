@@ -86,7 +86,7 @@ GRANT SELECT, INSERT, UPDATE ON prima.guard_loans TO prima_app;
 -- No DELETE: a record is rejected or cancelled with a reason, never removed.
 
 -- Statutory rates and new contribution types the CEO sets by month (Fauzan, 6 Nov 2026). Group-wide, no company column.
--- Read by ACT and leadership (wall act) and by HR preparing pay (wall pay_read); written only through the API, which
+-- Read by ACT/leadership (act), HR preparing pay (pay_read), and payroll Finance (statutory_read only). Written through the API, which
 -- lets only the CEO set a version. A version is replaced, never deleted.
 CREATE TABLE IF NOT EXISTS prima.statutory_versions (
   id   text PRIMARY KEY,
@@ -98,7 +98,7 @@ CREATE TABLE IF NOT EXISTS prima.statutory_versions (
 ALTER TABLE prima.statutory_versions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE prima.statutory_versions FORCE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS statutory_read ON prima.statutory_versions;
-CREATE POLICY statutory_read ON prima.statutory_versions FOR SELECT USING (prima.has_wall('act') OR prima.has_wall('pay_read'));
+CREATE POLICY statutory_read ON prima.statutory_versions FOR SELECT USING (prima.has_wall('act') OR prima.has_wall('pay_read') OR prima.has_wall('statutory_read'));
 DROP POLICY IF EXISTS statutory_write ON prima.statutory_versions;
 CREATE POLICY statutory_write ON prima.statutory_versions FOR INSERT WITH CHECK (prima.has_wall('act'));
 DROP POLICY IF EXISTS statutory_update ON prima.statutory_versions;

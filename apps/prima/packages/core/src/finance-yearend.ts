@@ -1,23 +1,20 @@
-// Withholding tax, prepayments and accruals, fixed assets, and auditor requests (Fauzan, 2 Nov 2026: yes to
-// suggestions 18, 21, 22 and 23; "no need tax agent ... use the published rules").
-//
-// 18. Withholding tax on payments to non-residents (Income Tax Act 1967 s.107A, s.109, s.109B, s.109F): Prima works out
-//     the tax at the published rate from the gross paid, the due day (one month after paying or crediting), and the 10%
-//     late penalty; the remittance to LHDN is recorded with its receipt and checked by a second person.
-// 21. Prepayments and accruals: a yearly cost (insurance, licence, rent paid ahead) or a cost not yet billed is spread
-//     by Prima month by month; staff record the SQL Account journal number each month. A journal is not money, so no
-//     second check (trust-staff rule, 2 Nov 2026); a month not posted keeps the close open.
-// 22. Fixed assets: the list agreed to SQL Account's register (difference RM0.00 or explained), and the capital
-//     allowance list for each year worked out from the published rates (Schedule 3), for the tax computation.
-// 23. Auditor requests: each item the auditor asks for, who prepares it, the due day and when it was sent.
+import { AccessDenied } from "./access";
+import { isLead } from "./finance";
+import { isoDate } from "./finance";
+import { noSecrets } from "./finance";
+import { requireReason } from "./finance";
+import { text } from "./finance";
+import type { FinCashCtx } from "./finance-cash";
+import { RULES } from "./rules";
+import { BadRequest } from "./service";
+import { NotFound } from "./service";
+import { addDays } from "./time";
+import { daysBetween } from "./time";
+import type { FinSign } from "./types";
+import type { FinStatus } from "./types";
+import type { Id } from "./types";
+import type { IsoDate } from "./types";
 
-import { AccessDenied } from './access';
-import { isLead, isoDate, noSecrets, requireReason, text } from './finance';
-import type { FinCashCtx } from './finance-cash';
-import { RULES } from './rules';
-import { BadRequest, NotFound } from './service';
-import { addDays, daysBetween } from './time';
-import type { FinSign, FinStatus, Id, IsoDate } from './types';
 
 type Out<T> = { patch: Partial<FinStatus>; action: string; summary: string; result: T };
 const r2 = (n: number) => Math.round(n * 100) / 100;

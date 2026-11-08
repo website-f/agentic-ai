@@ -2,7 +2,7 @@
   "version": 1,
   "base": {
     "path": "db/migrations/001_init.sql",
-    "sha256": "76161ab46dd145158cd06277b0c80654e5a5150c2a2dae593ee087d54052ccfc"
+    "sha256": "c5d8867df97f9535a3f447bdb6e1823e2cd783ad80ea4969edd71f5dc9fedd81"
   },
   "modules": [
     {
@@ -14,13 +14,13 @@
     {
       "id": "rental_corrections",
       "path": "db/modules/rental-correction-v1.sql",
-      "sha256": "3bc99a1dc3248519218872ca7b5615c76d91d5e8c23645fa4176de51c543ac3f",
+      "sha256": "d5cfeb3e8b7397c2ee5c21bb6273bc036aab98394f606fd52f8dd822c760e509",
       "requires": []
     },
     {
       "id": "cleanup",
       "path": "db/modules/it-cleanup-v1.sql",
-      "sha256": "0c768fcf79e9ec24b65cf7e160840c9fa9bd6d95d7109f949c4dee218ca8f8c0",
+      "sha256": "ec296a0ea1387f0fa04b3ddee41b868f38f93e84ad31bd90c1c29d71abf75804",
       "requires": [
         "procurement",
         "rental_corrections"
@@ -39,15 +39,29 @@
       "requires": []
     },
     {
+      "id": "item_register",
+      "path": "db/modules/item-register-v1.sql",
+      "sha256": "ad1df742e95a6ae122173629cbecf4b74b550c7a873462eae2d963c65259d33a",
+      "requires": []
+    },
+    {
+      "id": "item_register_v2",
+      "path": "db/modules/item-register-v2.sql",
+      "sha256": "8ea3eaba553e68eb46c1316e0926f7ea59a432e490faf099c144a1c4fe98580a",
+      "requires": [
+        "item_register"
+      ]
+    },
+    {
       "id": "central_admin_walls",
       "path": "db/modules/central-admin-walls-v1.sql",
-      "sha256": "180d296df38cf76a9c0c8fb11c52750d2d7e69d703c5df380d691ab0369e2041",
+      "sha256": "a96de4795b7f86d08ee94fce7233be247914d2c6c1d218d5f3d76af4369133ce",
       "requires": []
     },
     {
       "id": "central_admin_panel",
       "path": "db/modules/central-admin-panel-v1.sql",
-      "sha256": "0942afb070a6d7fb472de43cb4eb1cf680ea6f75092da3a238160e3f1c31f2a6",
+      "sha256": "fcf76bb792ae92befe0dab95c541bea8ee0077f9be8d4d32e24efdd51d1d0a48",
       "requires": [
         "central_admin_walls"
       ]
@@ -55,13 +69,13 @@
     {
       "id": "central_admin_delegations",
       "path": "db/modules/central-admin-delegations-v1.sql",
-      "sha256": "1b5b2cd56433765ec05b1a095071dd987db9bdb528dc02a440b05b90878d8b61",
+      "sha256": "c68da695fe6b2c4947fdbdeafa2ffa58279a26bbeb898c123babe7e25708dcda",
       "requires": []
     },
     {
       "id": "central_admin_legal_holds",
       "path": "db/modules/central-admin-legal-holds-v1.sql",
-      "sha256": "77a6e2efccc07ef426919fbf240c15cfdba880f700dbcb936bf0567ad2c49dc2",
+      "sha256": "1c3a996ce4ec7efbe5b438d50a3065838ee270f2cff7f767d6fd6630ca7c9d83",
       "requires": []
     },
     {
@@ -99,13 +113,13 @@
     {
       "id": "pay_formulas",
       "path": "db/modules/pay-formulas-v1.sql",
-      "sha256": "4449424d3584820331563c81cd392ff9dd1983a01532117c398c5a614a6dc3d3",
+      "sha256": "38718470f582cb438a08d42d6131187aa55c0613e3aa58a924836f77cfbfda72",
       "requires": []
     },
     {
       "id": "guard_pay",
       "path": "db/modules/guard-pay-v1.sql",
-      "sha256": "fb0c080b5939fb60459410db347c6cde69d632f24ec72ccb644cac41dd10b0ac",
+      "sha256": "c6ca56b61b076181eba45bd1c1c88d766c9339b981e45c41154b8fee0c32d8a1",
       "requires": [
         "pay_formulas"
       ]
@@ -115,20 +129,6 @@
       "path": "db/modules/fw-recruit-v1.sql",
       "sha256": "99acb852f40b5bf87de45fe1c52e18fc127b3c423ea404f0fc8851ddad0eb87c",
       "requires": []
-    },
-    {
-      "id": "item_register",
-      "path": "db/modules/item-register-v1.sql",
-      "sha256": "ad1df742e95a6ae122173629cbecf4b74b550c7a873462eae2d963c65259d33a",
-      "requires": []
-    },
-    {
-      "id": "item_register_v2",
-      "path": "db/modules/item-register-v2.sql",
-      "sha256": "8ea3eaba553e68eb46c1316e0926f7ea59a432e490faf099c144a1c4fe98580a",
-      "requires": [
-        "item_register"
-      ]
     }
   ]
 }

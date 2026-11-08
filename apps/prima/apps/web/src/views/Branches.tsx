@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { ClockCountdownIcon, HandPalmIcon, ListChecksIcon, PlusIcon, StampIcon } from '@phosphor-icons/react';
-import { BRANCH_COST_KINDS, BRANCH_COST_LABEL, TERMINATION_LABEL, TERMINATION_STEPS, isOwnerAdmin, type BranchModel } from '@prima/core';
-import { api, type BranchBoard } from '../api';
+import { BRANCH_APPROVER_LABEL, BRANCH_COST_KINDS, BRANCH_COST_LABEL, TERMINATION_LABEL, TERMINATION_STEPS, isOwnerAdmin, type BranchModel } from '@prima/core';
+import { api, type BranchBoard, type BranchJv } from '../api';
 import { useApp } from '../App';
 import { Card, Empty, PageHead, Stat, Stats } from '../kit';
 import { Chip, Drawer, ErrorNotice, Loading, dateLabel, dateTimeLabel, useAction, useLoad, type Tone } from '../ui';
@@ -123,6 +123,11 @@ export function BranchesView() {
                           {r.agreement ? `Model ${r.agreement.model} · ${r.agreement.managerName}` : 'No signed agreement'} · {r.sites} sites
                         </span>
                         {r.queue.length > 0 && <span className="bz-row-meta bz-br-todo">{r.queue.length} to review</span>}
+                        {r.purchasesAwaiting ? (
+                          <span className="bz-row-meta bz-br-todo">
+                            {r.purchasesAwaiting} request{r.purchasesAwaiting === 1 ? '' : 's'} (purchases or expenses) to decide
+                          </span>
+                        ) : null}
                       </span>
                       <span className="bz-row-side">
                         {r.split && (
@@ -187,14 +192,31 @@ function BranchDrawer({ row: r, onClose }: { row: Row; onClose: () => void }) {
               <dd>{rm(sp.net)}</dd>
             </div>
             <div className="bz-br-ledger-total">
-              <dt>Company keeps{sp.pct != null ? ` (${sp.pct}%)` : ''}</dt>
+              <dt>{sp.model === 'B' ? 'Company keeps the whole result' : `Company keeps${sp.pct != null ? ` (${sp.pct}%)` : ''}`}</dt>
               <dd>{rm(sp.companyShare)}</dd>
             </div>
-            <div>
-              <dt>{r.agreement?.model === 'B' ? 'Branch Manager (salary through payroll)' : 'Branch Manager'}</dt>
-              <dd>{rm(sp.managerShare)}</dd>
-            </div>
+            {sp.model === 'B' ? (
+              <div>
+                <dt>{r.agreement?.managerKind === 'partner_company' ? 'Partner company fixed amount, by its invoice (in the costs above)' : 'Branch Manager salary, paid through payroll (in the costs above)'}</dt>
+                <dd>{s.managerSalary ? rm(s.managerSalary.paid) : s.lines?.length ? 'Not on this month' : 'Test figures, no salary line'}</dd>
+              </div>
+            ) : (
+              <div>
+                <dt>Branch Manager</dt>
+                <dd>{rm(sp.managerShare)}</dd>
+              </div>
+            )}
           </dl>
+          {r.margin?.low && (
+            <div className="notice" data-tone="warn">
+              {r.margin.period}: profit {r.margin.pct == null ? 'with no billing' : `${r.margin.pct}% of billing`}, under {r.lowMarginPct}%. Flagged to the CEO.
+            </div>
+          )}
+          {s.managerSalary && s.managerSalary.paid !== s.managerSalary.signed && (
+            <div className="notice" data-tone="warn">
+              Salary this month {rm(s.managerSalary.paid)} against the signed {rm(s.managerSalary.signed)}: {s.managerSalary.note}
+            </div>
+          )}
           {sp.shortfall > 0 && (
             <div className="notice" data-tone="warn">
               Shortfall {rm(sp.shortfall)}: costs ran past the manager's part. Wages are paid in full; the company covers it and records it against the manager.
@@ -206,7 +228,11 @@ function BranchDrawer({ row: r, onClose }: { row: Row; onClose: () => void }) {
             </div>
           ))}
           {r.canApprove && <ApproveSettlement id={s.id} />}
-          <p className="bz-note">Wages are never held. A hold stops only the payout of the shares.</p>
+          <p className="bz-note">
+            {sp.model === 'B'
+              ? 'Wages are never held. The manager has no share and the company keeps the result; the Finance Director decides any payout.'
+              : 'Wages are never held. A hold stops only the payout of the shares.'}
+          </p>
         </section>
       )}
       <section className="bz-sec">
@@ -250,6 +276,7 @@ function BranchDrawer({ row: r, onClose }: { row: Row; onClose: () => void }) {
               <strong className="bz-amt">
                 {r.agreement.model === 'A' && (r.agreement.companyBillingSharePct != null ? `${r.agreement.companyBillingSharePct}%` : 'No % signed')}
                 {r.agreement.model === 'C' && (r.agreement.companyNetProfitSharePct != null ? `${r.agreement.companyNetProfitSharePct}%` : 'No % signed')}
+                {r.agreement.model === 'C' && r.agreement.managerSalary != null && ` + salary ${rm(r.agreement.managerSalary)} a month`}
                 {r.agreement.model === 'B' && (r.agreement.managerSalary != null ? `${rm(r.agreement.managerSalary)} a month` : 'No salary signed')}
               </strong>
             </div>
@@ -262,7 +289,11 @@ function BranchDrawer({ row: r, onClose }: { row: Row; onClose: () => void }) {
           <p className="muted small">No signed agreement on record.</p>
         )}
         {agreementForm && <AgreementForm branchId={r.branch.id} current={r.agreement} onDone={() => setAgreementForm(false)} />}
+        {r.canSetFee && <FeeForm row={r} />}
+        {r.canSetSalary && <SalaryForm row={r} />}
       </section>
+      {(r.agreement?.model === 'A' || r.agreement?.model === 'C') && <JvPanel row={r} />}
+      {r.agreement?.model === 'B' && <SalariedPanel row={r} />}
       <SetupPanel row={r} />
       {r.treasury && <TreasuryPanel row={r} />}
       <BusinessCasePanel row={r} />
@@ -290,8 +321,8 @@ function ActionLine({ q, canDecide }: { q: Row['queue'][number]; canDecide: bool
       {canDecide && (
         <>
           <div className="bz-br-inline">
-            <input className="input" aria-label="Note" placeholder="Note (needed to reverse)" value={note} onChange={(e) => setNote(e.target.value)} />
-            <button className="btn btn-sm btn-primary" disabled={act.busy} onClick={() => act.run(() => api.reviewBranchAction(a.id, 'accepted', note), 'Accepted.')}>
+            <input className="input" aria-label="Note" placeholder="Comment (needed to accept or reverse)" value={note} onChange={(e) => setNote(e.target.value)} />
+            <button className="btn btn-sm btn-primary" disabled={act.busy || !note.trim()} onClick={() => act.run(() => api.reviewBranchAction(a.id, 'accepted', note), 'Accepted.')}>
               {a.control === 'C' ? 'Approve' : 'Accept'}
             </button>
             <button className="btn btn-sm" disabled={act.busy || !note.trim()} onClick={() => act.run(() => api.reviewBranchAction(a.id, 'reversed', note), 'Reversed.')}>
@@ -663,6 +694,9 @@ const STATUS_LABEL: Record<string, string> = {
   paid: 'Paid',
 };
 
+/** Model B months: the Finance Director determines and approves the payout after validation (Fauzan, 5 Nov 2026). */
+const SALARIED_STATUS_LABEL: Record<string, string> = { validated: 'Validated, Finance Director to decide the payout' };
+
 const LINE_KINDS = ['billing', 'credit_note', 'true_up', ...BRANCH_COST_KINDS] as const;
 const LINE_LABEL: Record<string, string> = { billing: 'Invoice billed (excl. SST)', credit_note: 'Credit note (negative)', true_up: 'True-up for an earlier month', ...BRANCH_COST_LABEL };
 
@@ -697,6 +731,13 @@ function MonthLine({ row: r, m, onCorrect }: { row: Row; m: Row['months'][number
   const [note, setNote] = useState('');
   const [bankRef, setBankRef] = useState('');
   const manager = r.role === 'manager';
+  const salaried = !!m.noPayout || !!m.payout || r.agreement?.model === 'B';
+  const [amount, setAmount] = useState('0');
+  const label =
+    (salaried && m.status === 'paid' ? (m.payout && m.payout.amount > 0 ? `Payout ${rm(m.payout.amount)} approved by the Finance Director` : 'Closed, nothing paid out') : undefined) ??
+    (salaried ? SALARIED_STATUS_LABEL[m.status] : undefined) ??
+    STATUS_LABEL[m.status] ??
+    m.status;
   return (
     <li className="bz-br-item" data-tone={m.status === 'returned' ? 'crit' : undefined}>
       <div className="bz-br-item-top">
@@ -707,7 +748,7 @@ function MonthLine({ row: r, m, onCorrect }: { row: Row; m: Row['months'][number
             {m.preparedBy ? ` · prepared by ${m.preparedBy}` : ''}
           </span>
         </div>
-        <Chip tone={m.status === 'paid' ? 'ok' : m.status === 'returned' ? 'crit' : 'warn'}>{STATUS_LABEL[m.status] ?? m.status}</Chip>
+        <Chip tone={m.status === 'paid' ? 'ok' : m.status === 'returned' ? 'crit' : 'warn'}>{label}</Chip>
       </div>
       {m.legacy && <div className="bz-sub">Test figures: not prepared from SQL Account lines.</div>}
       {(m.lines ?? []).length > 0 && (
@@ -742,9 +783,12 @@ function MonthLine({ row: r, m, onCorrect }: { row: Row; m: Row['months'][number
           </button>
         </div>
       )}
-      {((m.status === 'draft' && manager) || (m.status === 'approved' && r.finance) || (m.status === 'validated' && r.finance)) && (
+      {((m.status === 'draft' && manager) || (m.status === 'approved' && r.finance) || (m.status === 'validated' && (salaried ? r.canDecidePayout : r.finance))) && (
         <div className="bz-act">
-          {m.status === 'validated' && (
+          {m.status === 'validated' && salaried && (
+            <input className="input" aria-label="Payout amount" placeholder="Payout (RM), 0 when nothing is paid out" inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} />
+          )}
+          {m.status === 'validated' && (!salaried || Number(amount) > 0) && (
             <input className="input" aria-label="Bank reference" placeholder="Bank reference of the payment" value={bankRef} onChange={(e) => setBankRef(e.target.value)} />
           )}
           <input className="input" aria-label="Comment" placeholder="Comment or reason (needed)" value={note} onChange={(e) => setNote(e.target.value)} />
@@ -754,13 +798,22 @@ function MonthLine({ row: r, m, onCorrect }: { row: Row; m: Row['months'][number
                 Agreed to SQL Account
               </button>
             )}
-            {m.status === 'validated' && (
+            {m.status === 'validated' && !salaried && (
               <button
                 className="btn btn-sm btn-primary"
                 disabled={act.busy || note.trim().length < 3 || bankRef.trim().length < 3}
                 onClick={() => act.run(() => api.branchSettlementAct(m.id, 'paid', { bankRef, note }), 'Payment recorded.')}
               >
                 Record payment
+              </button>
+            )}
+            {m.status === 'validated' && salaried && (
+              <button
+                className="btn btn-sm btn-primary"
+                disabled={act.busy || note.trim().length < 3 || amount.trim() === '' || (Number(amount) > 0 && bankRef.trim().length < 3)}
+                onClick={() => act.run(() => api.branchSettlementAct(m.id, 'paid', { note, bankRef, amount: Number(amount) }), 'Payout decided.')}
+              >
+                {Number(amount) > 0 ? 'Approve payout' : 'Close month (nothing paid out)'}
               </button>
             )}
             {(m.status === 'draft' || m.status === 'approved') && (
@@ -783,6 +836,8 @@ function PrepareMonth({ row: r, period: initial, onDone }: { row: Row; period: s
   const existing = r.months.find((m) => m.period === initial);
   const [period, setPeriod] = useState(initial);
   const [payrollRef, setPayrollRef] = useState(existing?.payrollRef ?? '');
+  const salaried = r.agreement?.model === 'B';
+  const [salaryNote, setSalaryNote] = useState(existing?.managerSalary?.note ?? '');
   const [lines, setLines] = useState<LineDraft[]>(
     existing?.lines?.map((l) => ({ kind: l.kind, ref: l.ref, siteId: l.siteId ?? '', amount: String(l.amount), note: l.note })) ?? [
       { kind: 'billing', ref: '', siteId: '', amount: '', note: '' },
@@ -805,12 +860,31 @@ function PrepareMonth({ row: r, period: initial, onDone }: { row: Row; period: s
           <span className="label">Payroll run or JA pay summary reference</span>
           <input className="input" value={payrollRef} onChange={(e) => setPayrollRef(e.target.value)} />
         </label>
+        {salaried && (
+          <label className="field">
+            <span className="label">Why the salary differs</span>
+            <input
+              className="input"
+              aria-label="Why the salary differs"
+              placeholder="If the salary differs from the signed amount, say why"
+              value={salaryNote}
+              onChange={(e) => setSalaryNote(e.target.value)}
+            />
+          </label>
+        )}
       </div>
+      {salaried && (
+        <p className="bz-note">
+          Salaried branch: the month carries the Branch Manager's salary on its own line
+          {r.agreement?.managerSalary != null ? ` (signed: ${rm(r.agreement.managerSalary)} a month)` : ''}. It comes from the approved staff pay run, or add a
+          &quot;Branch Manager salary&quot; line citing the payroll. Approved purchases that were bought are added by themselves.
+        </p>
+      )}
       <ol className="bz-br-lines">
         {lines.map((l, i) => (
           <li key={i} className="bz-br-line">
             <select className="select" aria-label={`Line ${i + 1} kind`} value={l.kind} onChange={(e) => set(i, 'kind', e.target.value)}>
-              {LINE_KINDS.map((k) => (
+              {LINE_KINDS.filter((k) => salaried || k !== 'manager_salary').map((k) => (
                 <option key={k} value={k}>
                   {LINE_LABEL[k]}
                 </option>
@@ -841,6 +915,7 @@ function PrepareMonth({ row: r, period: initial, onDone }: { row: Row; period: s
                   period,
                   payrollRef,
                   lines: lines.map((l) => ({ kind: l.kind, ref: l.ref, siteId: l.siteId || null, amount: Number(l.amount), note: l.note })),
+                  ...(salaried ? { salaryNote } : {}),
                 }),
               existing ? 'Corrected and resubmitted.' : 'Month prepared.',
             );
@@ -1230,5 +1305,557 @@ function TreasuryPanel({ row: r }: { row: Row }) {
       )}
       <ErrorNotice error={act.error} />
     </section>
+  );
+}
+
+/** The Finance Director sets a Model B or C Branch Manager's monthly salary (Fauzan, 5 Nov 2026). */
+function SalaryForm({ row: r }: { row: Row }) {
+  const act = useAction();
+  const [f, setF] = useState({ effectiveFrom: '', amount: '', reason: '' });
+  const now = r.agreement?.managerSalary;
+  return (
+    <details className="bz-br-more">
+      <summary>Set the Branch Manager salary (Finance Director){now != null ? `: now ${rm(now)} a month` : ''}</summary>
+      <div className="bz-form">
+        <label className="field">
+          <span className="label">From month</span>
+          <input className="input" type="month" aria-label="Salary from month" value={f.effectiveFrom.slice(0, 7)} onChange={(e) => setF({ ...f, effectiveFrom: e.target.value ? `${e.target.value}-01` : '' })} />
+        </label>
+        <label className="field">
+          <span className="label">Monthly salary (RM)</span>
+          <input className="input" aria-label="Monthly salary" inputMode="decimal" value={f.amount} onChange={(e) => setF({ ...f, amount: e.target.value })} />
+        </label>
+        <label className="field">
+          <span className="label">Reason</span>
+          <input className="input" aria-label="Salary reason" value={f.reason} onChange={(e) => setF({ ...f, reason: e.target.value })} />
+        </label>
+      </div>
+      <p className="bz-note">
+        {r.agreement?.model === 'C' ? 'Model C: the salary is a branch cost before the profit split. 0 ends it. ' : ''}Starts on the first day of the month, never in a settled
+        month. Update the signed agreement to match.
+      </p>
+      <div className="bz-actions">
+        <button
+          className="btn btn-primary btn-sm"
+          disabled={act.busy || !f.effectiveFrom || f.amount.trim() === '' || f.reason.trim().length < 5}
+          onClick={() => act.run(() => api.branchAct(r.branch.id, 'manager_salary', { effectiveFrom: f.effectiveFrom, amount: Number(f.amount), reason: f.reason }), 'Salary set.')}
+        >
+          Set salary
+        </button>
+      </div>
+      <ErrorNotice error={act.error} />
+    </details>
+  );
+}
+
+/** The CEO sets the company's management fee for a JV branch from a month (Fauzan, 4 Nov 2026). */
+function FeeForm({ row: r }: { row: Row }) {
+  const act = useAction();
+  const [f, setF] = useState({ effectiveFrom: '', pct: '', reason: '' });
+  const of = r.agreement?.model === 'A' ? 'billing' : 'net profit';
+  return (
+    <details className="bz-br-more">
+      <summary>Set the management fee (CEO){r.feePct != null ? `: now ${r.feePct}% of ${of}` : ''}</summary>
+      <div className="bz-form">
+        <label className="field">
+          <span className="label">From month</span>
+          <input className="input" type="month" aria-label="From month" value={f.effectiveFrom.slice(0, 7)} onChange={(e) => setF({ ...f, effectiveFrom: e.target.value ? `${e.target.value}-01` : '' })} />
+        </label>
+        <label className="field">
+          <span className="label">Company fee, % of {of}</span>
+          <input className="input" aria-label="Fee percentage" inputMode="decimal" value={f.pct} onChange={(e) => setF({ ...f, pct: e.target.value })} />
+        </label>
+        <label className="field">
+          <span className="label">Reason</span>
+          <input className="input" aria-label="Reason" value={f.reason} onChange={(e) => setF({ ...f, reason: e.target.value })} />
+        </label>
+      </div>
+      <p className="bz-note">Starts on the first day of the month, never in a settled month. Update the signed agreement with the Branch Manager to match.</p>
+      <div className="bz-actions">
+        <button
+          className="btn btn-primary btn-sm"
+          disabled={act.busy || !f.effectiveFrom || f.pct.trim() === '' || f.reason.trim().length < 5}
+          onClick={() => act.run(() => api.branchAct(r.branch.id, 'fee', { effectiveFrom: f.effectiveFrom, pct: Number(f.pct), reason: f.reason }), 'Management fee set.')}
+        >
+          Set fee
+        </button>
+      </div>
+      <ErrorNotice error={act.error} />
+    </details>
+  );
+}
+
+/**
+ * A JV branch (Model A or C): its staff, their pay from the company's staff payroll, and what the Branch Manager bought
+ * (Fauzan, 4 Nov 2026). The Branch Manager buys from any supplier; the company sees every purchase and may ask about
+ * it but does not block it. Firearms and ammunition go through Arms Control.
+ */
+function JvPanel({ row: r }: { row: Row }) {
+  const { data, error } = useLoad(() => api.branchJv(r.branch.id), [r.branch.id]);
+  const act = useAction();
+  const [f, setF] = useState({ on: '', supplier: '', item: '', kind: 'equipment', amount: '', invoiceRef: '' });
+  const [ask, setAsk] = useState<Record<string, string>>({});
+  const [pf, setPf] = useState({ personId: '', to: '', effectiveOn: '', reason: '' });
+  if (error) return <ErrorNotice error={error} />;
+  if (!data) return <Loading what="branch staff and purchases" />;
+  const d: BranchJv = data;
+  const pay = d.pay[0] ?? null;
+  return (
+    <section className="bz-sec">
+      <div className="bz-sec-head">
+        <h3>JV branch: staff, pay and purchases</h3>
+        {d.openQueries > 0 && <Chip tone="warn">{d.openQueries} question{d.openQueries === 1 ? '' : 's'} open</Chip>}
+      </div>
+      <p className="bz-note">
+        The Branch Manager runs this branch: buys from any supplier, sets branch staff pay and decides their leave. The company and HR see the records and may ask
+        questions. Staff stay employed by the licensed company. Firearms and ammunition go through Arms Control.
+      </p>
+      <h4>Staff ({d.staff.length})</h4>
+      {d.staff.length ? (
+        <ul className="bz-br-log">
+          {d.staff.slice(0, 50).map((p) => (
+            <li key={p.id}>
+              {p.name} <span className="bz-sub">{p.staffNo}</span> · {p.role} · {p.status}
+              {p.basicPay != null ? ` · ${rm(p.basicPay)}` : ''}
+            </li>
+          ))}
+          {d.staff.length > 50 && <li className="bz-sub">and {d.staff.length - 50} more</li>}
+        </ul>
+      ) : (
+        <p className="muted small">No staff are tagged to this branch.</p>
+      )}
+      {d.canSetPay && d.staff.some((p) => p.role === 'office' && p.status === 'active') && (
+        <details className="bz-br-more">
+          <summary>Set a staff member&apos;s basic pay</summary>
+          <div className="bz-form">
+            <label className="field">
+              <span className="label">Staff member</span>
+              <select className="select" aria-label="Staff member" value={pf.personId} onChange={(e) => setPf({ ...pf, personId: e.target.value })}>
+                <option value="">Choose staff</option>
+                {d.staff
+                  .filter((p) => p.role === 'office' && p.status === 'active')
+                  .map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name}
+                    </option>
+                  ))}
+              </select>
+            </label>
+            <label className="field">
+              <span className="label">New basic pay (RM)</span>
+              <input className="input" aria-label="New basic pay" inputMode="decimal" value={pf.to} onChange={(e) => setPf({ ...pf, to: e.target.value })} />
+            </label>
+            <label className="field">
+              <span className="label">Pay starts on</span>
+              <input className="input" type="date" aria-label="Pay starts on" value={pf.effectiveOn} onChange={(e) => setPf({ ...pf, effectiveOn: e.target.value })} />
+            </label>
+            <label className="field">
+              <span className="label">Reason</span>
+              <input className="input" aria-label="Pay reason" value={pf.reason} onChange={(e) => setPf({ ...pf, reason: e.target.value })} />
+            </label>
+          </div>
+          <p className="bz-note">Applies without company approval; the company and HR see it. Guard pay stays in the JA app; your own pay goes through the company.</p>
+          <div className="bz-actions">
+            <button
+              className="btn btn-primary btn-sm"
+              disabled={act.busy || !pf.personId || !pf.to.trim() || !pf.effectiveOn || pf.reason.trim().length < 3}
+              onClick={() => act.run(() => api.branchAct(r.branch.id, 'staff_pay', { ...pf, to: Number(pf.to) }), 'Pay set.')}
+            >
+              Set pay
+            </button>
+          </div>
+        </details>
+      )}
+      <h4>Staff pay</h4>
+      {pay && pay.people ? (
+        <>
+          <dl className="bz-br-ledger">
+            <div className="bz-br-ledger-total">
+              <dt>
+                {pay.period} ({pay.stage}), {pay.people} staff
+              </dt>
+              <dd>
+                {rm(pay.wages)} + employer {rm(pay.statutory)}
+              </dd>
+            </div>
+            {pay.lines.map((l) => (
+              <div key={l.personId}>
+                <dt>{l.name}</dt>
+                <dd>{rm(l.gross)}</dd>
+              </div>
+            ))}
+          </dl>
+          <p className="bz-note">Approved pay is added to the month&apos;s P&amp;L when it is prepared.</p>
+        </>
+      ) : (
+        <p className="muted small">No branch staff in the latest staff pay run.</p>
+      )}
+      <h4>Purchases</h4>
+      {d.purchaseMonths.length > 0 && (
+        <p className="bz-note">
+          {d.purchaseMonths
+            .slice(0, 3)
+            .map((m) => `${m.period}: ${rm(m.total)}`)
+            .join(' · ')}
+        </p>
+      )}
+      {d.purchases.length ? (
+        <ul className="bz-br-list">
+          {d.purchases.slice(0, 30).map((p) => {
+            const open = p.queries.find((q) => !q.answer);
+            return (
+              <li key={p.id} className="bz-br-item" data-tone={open ? 'warn' : undefined}>
+                <div className="bz-br-item-top">
+                  <div className="bz-row-main">
+                    <span className="bz-row-title">
+                      {p.item} <span className="bz-sub">({p.kind})</span>
+                    </span>
+                    <span className="bz-row-meta">
+                      {dateLabel(p.on)} · {p.supplier} · {p.invoiceRef} · {p.by}
+                    </span>
+                  </div>
+                  <strong className="bz-amt">{rm(p.amount)}</strong>
+                </div>
+                {p.queries.length > 0 && (
+                  <ul className="bz-br-log">
+                    {p.queries.map((q, i) => (
+                      <li key={i}>
+                        Asked by {q.by}: {q.text}
+                        {q.answer ? ` · Answer: ${q.answer.text}` : ' · waiting for the Branch Manager'}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                {((d.canQuery && !open) || (d.canAnswer && open)) && (
+                  <div className="bz-br-inline">
+                    <input className="input" aria-label={d.canAnswer ? 'Answer' : 'Question'} placeholder={d.canAnswer ? 'Your answer' : 'Ask about this purchase'} value={ask[p.id] ?? ''} onChange={(e) => setAsk({ ...ask, [p.id]: e.target.value })} />
+                    <button
+                      className="btn btn-sm"
+                      disabled={act.busy || (ask[p.id] ?? '').trim().length < 3}
+                      onClick={() => act.run(() => api.branchAct(r.branch.id, d.canAnswer ? 'purchase_answer' : 'purchase_query', { purchaseId: p.id, text: ask[p.id] }), d.canAnswer ? 'Answer sent.' : 'Question sent.')}
+                    >
+                      {d.canAnswer ? 'Answer' : 'Ask'}
+                    </button>
+                  </div>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      ) : (
+        <p className="muted small">No purchases recorded.</p>
+      )}
+      {d.canBuy && (
+        <details className="bz-br-more">
+          <summary>Record a purchase</summary>
+          <div className="bz-form">
+            <label className="field">
+              <span className="label">Invoice date</span>
+              <input className="input" type="date" aria-label="Invoice date" value={f.on} onChange={(e) => setF({ ...f, on: e.target.value })} />
+            </label>
+            <label className="field">
+              <span className="label">Supplier</span>
+              <input className="input" aria-label="Supplier" value={f.supplier} onChange={(e) => setF({ ...f, supplier: e.target.value })} />
+            </label>
+            <label className="field">
+              <span className="label">What was bought</span>
+              <input className="input" aria-label="Item" value={f.item} onChange={(e) => setF({ ...f, item: e.target.value })} />
+            </label>
+            <label className="field">
+              <span className="label">Kind</span>
+              <select className="select" aria-label="Kind" value={f.kind} onChange={(e) => setF({ ...f, kind: e.target.value })}>
+                {d.kinds.map((k) => (
+                  <option key={k} value={k}>
+                    {k}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="field">
+              <span className="label">Amount (RM)</span>
+              <input className="input" aria-label="Amount" inputMode="decimal" value={f.amount} onChange={(e) => setF({ ...f, amount: e.target.value })} />
+            </label>
+            <label className="field">
+              <span className="label">Supplier invoice number</span>
+              <input className="input" aria-label="Invoice reference" value={f.invoiceRef} onChange={(e) => setF({ ...f, invoiceRef: e.target.value })} />
+            </label>
+          </div>
+          <div className="bz-actions">
+            <button
+              className="btn btn-primary btn-sm"
+              disabled={act.busy || !f.on || !f.supplier.trim() || !f.item.trim() || !f.amount.trim() || !f.invoiceRef.trim()}
+              onClick={() => act.run(() => api.branchAct(r.branch.id, 'purchase', { ...f, amount: Number(f.amount) }), 'Purchase recorded.')}
+            >
+              Record purchase
+            </button>
+          </div>
+        </details>
+      )}
+      <ErrorNotice error={act.error} />
+    </section>
+  );
+}
+
+/**
+ * A Model B branch (salaried Branch Manager, V12): the company runs it. The manager is the company's employee on the
+ * signed salary, and every purchase is approved by the company manager first. Approved purchases count in the month only
+ * once the supplier invoice is recorded. Firearms and ammunition go through Arms Control.
+ */
+function SalariedPanel({ row: r }: { row: Row }) {
+  const { data, error } = useLoad(() => api.branchJv(r.branch.id), [r.branch.id]);
+  const act = useAction();
+  const [f, setF] = useState({ category: 'purchase', supplier: '', item: '', kind: 'equipment', amount: '', quoteRef: '' });
+  const exp = f.category === 'expense';
+  const [note, setNote] = useState<Record<string, string>>({});
+  const [inv, setInv] = useState<Record<string, { on: string; amount: string; invoiceRef: string }>>({});
+  if (error) return <ErrorNotice error={error} />;
+  if (!data) return <Loading what="branch purchases" />;
+  const d: BranchJv = data;
+  const requests = d.purchases.filter((p) => p.approval);
+  const STATE: Record<string, string> = {
+    awaiting: "Waiting for the company manager's consent",
+    consented: 'Consented, waiting for the Finance Director or CEO',
+    approved: 'Approved, to buy',
+    refused: 'Refused',
+    bought: 'Bought',
+  };
+  return (
+    <section className="bz-sec">
+      <div className="bz-sec-head">
+        <h3>Salaried branch: manager, purchases and expenses</h3>
+        {d.awaiting > 0 && <Chip tone="warn">{d.awaiting} to decide</Chip>}
+      </div>
+      <p className="bz-note">
+        The company runs this branch. The Branch Manager is paid a fixed amount
+        {d.managerSalary != null ? ` of ${rm(d.managerSalary)} a month` : ''} (an employee through payroll, a partner company by its invoice), with no share of
+        the result. Purchases and expenses follow the approval style below, which the Finance Director sets. Staff pay and leave follow the company&apos;s usual
+        approvals. Firearms and ammunition go through Arms Control.
+      </p>
+      <h4>Purchase and expense requests</h4>
+      {requests.length ? (
+        <ul className="bz-br-list">
+          {requests.slice(0, 30).map((p) => {
+            const a = p.approval!;
+            const i = inv[p.id] ?? { on: '', amount: String(a.quotedAmount), invoiceRef: '' };
+            return (
+              <li key={p.id} className="bz-br-item" data-tone={d.actionFor[p.id] ? 'warn' : undefined}>
+                <div className="bz-br-item-top">
+                  <div className="bz-row-main">
+                    <span className="bz-row-title">
+                      {p.category === 'expense' ? 'Expense: ' : ''}
+                      {p.item} <span className="bz-sub">({p.kind})</span>
+                    </span>
+                    <span className="bz-row-meta">
+                      {p.supplier} · {p.category === 'expense' ? 'estimate' : 'quotation'} {a.quoteRef} · asked by {a.requestedBy} {dateLabel(a.requestedAt.slice(0, 10))}
+                    </span>
+                    <span className="bz-row-meta">
+                      {a.status === 'consented' && a.rule ? `Waiting for the ${BRANCH_APPROVER_LABEL[a.rule.approver]}` : (STATE[a.status] ?? a.status)}
+                      {a.consentBy ? ` · consent ${a.consentBy}: ${a.consentNote}` : ''}
+                      {a.decidedBy && a.decidedById !== a.consentById ? ` · ${a.decidedBy}: ${a.decisionNote}` : ''}
+                      {a.status === 'bought' ? ` · invoice ${p.invoiceRef} on ${dateLabel(p.on)}` : ''}
+                    </span>
+                  </div>
+                  <strong className="bz-amt">{rm(a.status === 'bought' ? p.amount : a.quotedAmount)}</strong>
+                </div>
+                {d.actionFor[p.id] && (
+                  <div className="bz-br-inline">
+                    <input className="input" aria-label="Decision comment" placeholder="Comment or reason (needed)" value={note[p.id] ?? ''} onChange={(e) => setNote({ ...note, [p.id]: e.target.value })} />
+                    <button
+                      className="btn btn-sm btn-primary"
+                      disabled={act.busy || (note[p.id] ?? '').trim().length < 3}
+                      onClick={() =>
+                        act.run(
+                          () =>
+                            a.status === 'awaiting'
+                              ? api.branchAct(r.branch.id, 'purchase_consent', { purchaseId: p.id, consent: true, note: note[p.id] })
+                              : api.branchAct(r.branch.id, 'purchase_decide', { purchaseId: p.id, approve: true, note: note[p.id] }),
+                          a.status === 'awaiting' ? 'Consent given.' : 'Approved.',
+                        )
+                      }
+                    >
+                      {a.status === 'awaiting' ? 'Consent' : 'Approve'}
+                    </button>
+                    <button
+                      className="btn btn-sm"
+                      disabled={act.busy || (note[p.id] ?? '').trim().length < 3}
+                      onClick={() =>
+                        act.run(
+                          () =>
+                            a.status === 'awaiting'
+                              ? api.branchAct(r.branch.id, 'purchase_consent', { purchaseId: p.id, consent: false, note: note[p.id] })
+                              : api.branchAct(r.branch.id, 'purchase_decide', { purchaseId: p.id, approve: false, note: note[p.id] }),
+                          a.status === 'awaiting' ? 'Declined.' : 'Refused.',
+                        )
+                      }
+                    >
+                      {a.status === 'awaiting' ? 'Decline' : 'Refuse'}
+                    </button>
+                  </div>
+                )}
+                {a.status === 'approved' && d.canRecordBought && (
+                  <div className="bz-br-inline">
+                    <input className="input" type="date" aria-label="Invoice date" value={i.on} onChange={(e) => setInv({ ...inv, [p.id]: { ...i, on: e.target.value } })} />
+                    <input className="input" aria-label="Invoiced amount" inputMode="decimal" placeholder="Invoiced amount (RM)" value={i.amount} onChange={(e) => setInv({ ...inv, [p.id]: { ...i, amount: e.target.value } })} />
+                    <input className="input" aria-label="Invoice number" placeholder={p.category === 'expense' ? 'Invoice or receipt number' : 'Supplier invoice number'} value={i.invoiceRef} onChange={(e) => setInv({ ...inv, [p.id]: { ...i, invoiceRef: e.target.value } })} />
+                    <button
+                      className="btn btn-sm btn-primary"
+                      disabled={act.busy || !i.on || !i.amount.trim() || i.invoiceRef.trim().length < 2}
+                      onClick={() => act.run(() => api.branchAct(r.branch.id, 'purchase_bought', { purchaseId: p.id, on: i.on, amount: Number(i.amount), invoiceRef: i.invoiceRef }), 'Invoice recorded.')}
+                    >
+                      Record invoice
+                    </button>
+                  </div>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      ) : (
+        <p className="muted small">No purchase or expense requests.</p>
+      )}
+      <ApprovalStyle row={r} d={d} />
+      {d.canRequest && (
+        <details className="bz-br-more">
+          <summary>Ask the company for a purchase or an expense</summary>
+          <div className="bz-form">
+            <label className="field">
+              <span className="label">Purchase or expense</span>
+              <select className="select" aria-label="Purchase or expense" value={f.category} onChange={(e) => setF({ ...f, category: e.target.value })}>
+                <option value="purchase">Purchase (goods to buy)</option>
+                <option value="expense">Expense (a service or cost to pay)</option>
+              </select>
+            </label>
+            <label className="field">
+              <span className="label">{exp ? 'Who is to be paid' : 'Supplier'}</span>
+              <input className="input" aria-label="Supplier" value={f.supplier} onChange={(e) => setF({ ...f, supplier: e.target.value })} />
+            </label>
+            <label className="field">
+              <span className="label">{exp ? 'What the expense is for' : 'What is to be bought'}</span>
+              <input className="input" aria-label="Item" value={f.item} onChange={(e) => setF({ ...f, item: e.target.value })} />
+            </label>
+            <label className="field">
+              <span className="label">Kind</span>
+              <select className="select" aria-label="Kind" value={f.kind} onChange={(e) => setF({ ...f, kind: e.target.value })}>
+                {d.kinds.map((k) => (
+                  <option key={k} value={k}>
+                    {k}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="field">
+              <span className="label">{exp ? 'Estimated amount (RM)' : 'Quoted amount (RM)'}</span>
+              <input className="input" aria-label="Quoted amount" inputMode="decimal" value={f.amount} onChange={(e) => setF({ ...f, amount: e.target.value })} />
+            </label>
+            <label className="field">
+              <span className="label">{exp ? 'Quotation or estimate reference' : 'Supplier quotation number'}</span>
+              <input className="input" aria-label="Quotation number" value={f.quoteRef} onChange={(e) => setF({ ...f, quoteRef: e.target.value })} />
+            </label>
+          </div>
+          <div className="bz-actions">
+            <button
+              className="btn btn-primary btn-sm"
+              disabled={act.busy || !f.supplier.trim() || !f.item.trim() || !f.amount.trim() || !f.quoteRef.trim()}
+              onClick={() => act.run(() => api.branchAct(r.branch.id, 'purchase_request', { ...f, amount: Number(f.amount) }), 'Request sent to the company manager.')}
+            >
+              Send request
+            </button>
+          </div>
+        </details>
+      )}
+      <ErrorNotice error={act.error} />
+    </section>
+  );
+}
+
+/** The Model B approval style in force, and the Finance Director's form to change it (Fauzan, 5 Nov 2026). */
+function ApprovalStyle({ row: r, d }: { row: Row; d: BranchJv }) {
+  const act = useAction();
+  const p = d.approvalPolicy;
+  const [f, setF] = useState({
+    purchase: { ...p.purchase, noApprovalUpTo: String(p.purchase.noApprovalUpTo) },
+    expense: { ...p.expense, noApprovalUpTo: String(p.expense.noApprovalUpTo) },
+    payout: p.payout as string,
+    reason: '',
+  });
+  const say = (x: typeof p.purchase) =>
+    `${x.consent === 'company_manager' ? 'company manager consents, then ' : ''}${BRANCH_APPROVER_LABEL[x.approver]} approves${x.noApprovalUpTo > 0 ? `; no approval needed up to ${rm(x.noApprovalUpTo)}` : ''}`;
+  const rule = (k: 'purchase' | 'expense', label: string) => (
+    <>
+      <label className="field">
+        <span className="label">{label}: consent step</span>
+        <select className="select" aria-label={`${label} consent step`} value={f[k].consent} onChange={(e) => setF({ ...f, [k]: { ...f[k], consent: e.target.value } })}>
+          <option value="company_manager">Company manager consents first</option>
+          <option value="none">No consent step</option>
+        </select>
+      </label>
+      <label className="field">
+        <span className="label">{label}: approver</span>
+        <select className="select" aria-label={`${label} approver`} value={f[k].approver} onChange={(e) => setF({ ...f, [k]: { ...f[k], approver: e.target.value } })}>
+          {Object.entries(BRANCH_APPROVER_LABEL).map(([v, l]) => (
+            <option key={v} value={v}>
+              {l} approves
+            </option>
+          ))}
+        </select>
+      </label>
+      <label className="field">
+        <span className="label">{label}: no approval needed up to (RM), 0 for none</span>
+        <input className="input" aria-label={`${label} no-approval limit`} inputMode="decimal" value={f[k].noApprovalUpTo} onChange={(e) => setF({ ...f, [k]: { ...f[k], noApprovalUpTo: e.target.value } })} />
+      </label>
+    </>
+  );
+  return (
+    <>
+      <h4>Approval style</h4>
+      <ul className="bz-br-log">
+        <li>Purchases: {say(p.purchase)}.</li>
+        <li>Expenses: {say(p.expense)}.</li>
+        <li>Payout decided by the {p.payout === 'fd' ? 'Finance Director' : 'Finance Director or CEO'}.</li>
+        <li>{d.approvalPolicySet ? `Set by ${d.approvalPolicySet.by}: ${d.approvalPolicySet.reason}` : 'Default style; the Finance Director can change it.'}</li>
+      </ul>
+      {d.canSetApproval && (
+        <details className="bz-br-more">
+          <summary>Change the approval style (Finance Director)</summary>
+          <div className="bz-form">
+            {rule('purchase', 'Purchases')}
+            {rule('expense', 'Expenses')}
+            <label className="field">
+              <span className="label">Payout decided by</span>
+              <select className="select" aria-label="Payout decided by" value={f.payout} onChange={(e) => setF({ ...f, payout: e.target.value })}>
+                <option value="fd">Finance Director decides the payout</option>
+                <option value="fd_or_ceo">Finance Director or CEO decides the payout</option>
+              </select>
+            </label>
+            <label className="field">
+              <span className="label">Reason</span>
+              <input className="input" aria-label="Approval style reason" value={f.reason} onChange={(e) => setF({ ...f, reason: e.target.value })} />
+            </label>
+          </div>
+          <p className="bz-note">Applies to new requests. Requests already sent keep the style they were sent with. Nobody approves their own request.</p>
+          <div className="bz-actions">
+            <button
+              className="btn btn-primary btn-sm"
+              disabled={act.busy || f.reason.trim().length < 5}
+              onClick={() =>
+                act.run(
+                  () =>
+                    api.branchAct(r.branch.id, 'approval_style', {
+                      purchase: { ...f.purchase, noApprovalUpTo: Number(f.purchase.noApprovalUpTo || 0) },
+                      expense: { ...f.expense, noApprovalUpTo: Number(f.expense.noApprovalUpTo || 0) },
+                      payout: f.payout,
+                      reason: f.reason,
+                    }),
+                  'Approval style set.',
+                )
+              }
+            >
+              Save approval style
+            </button>
+          </div>
+          <ErrorNotice error={act.error} />
+        </details>
+      )}
+    </>
   );
 }

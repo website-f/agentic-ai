@@ -10,6 +10,7 @@ import { SocsoTab } from './Socso';
 import { MyItemsPanel } from './MyItems';
 import '../styles/selfservice.css';
 import { MyGuardPayslips } from './GuardPay';
+import { PoliciesPanel } from './HrDevelop';
 
 const PERSON_ROLE: Record<string, string> = { guard: 'Guard', supervisor: 'Officer', patrol_officer: 'Patrolling officer', office: 'Office staff' };
 
@@ -49,7 +50,7 @@ function DateBlock({ date, now }: { date: string; now?: boolean }) {
  * record, and patrol rounds done or missed. Nothing about any other guard or the company.
  */
 export function MyDuty() {
-  const { data, error } = useLoad(() => api.myDuty(), []);
+  const { data, error, reload } = useLoad(() => api.myDuty(), []);
   // Office and central staff have no roster or patrols here: they open straight on their details.
   const staff = data?.person.role === 'office';
   const [tab, setTab] = useState<Tab>('roster');
@@ -118,6 +119,8 @@ export function MyDuty() {
       )}
 
       <MyItemsPanel />
+      {!staff && <PoliciesPanel mine />}
+      <PoliciesPanel briefing />
 
       {!staff && (
         <Stats>
@@ -266,7 +269,7 @@ export function MyDuty() {
             {meTab === 'hours' && <HoursTab d={d.profile} self />}
             {meTab === 'leave' && <LeaveTab d={d.profile} personId={d.person.id} self />}
             {meTab === 'socso' && <SocsoTab d={d.profile} personId={d.person.id} />}
-            {meTab === 'warnings' && <WarningsTab d={d.profile} self />}
+            {meTab === 'warnings' && <WarningsTab d={d.profile} self onChange={reload} />}
             {meTab === 'benefits' && <BenefitsTab d={d.profile} self />}
           </Card>
         </>

@@ -15,6 +15,20 @@ export const PAGE = `<!doctype html>
 <button id="signout" hidden>Sign out</button></header>
 <p class="rule">CMS watches and tells. The company decides and acts. Gate and panel commands are off.</p>
 <main hidden id="app">
+<section id="assistant" lang="ms"><h2>Pembantu Pemantauan: perkara utama sekarang <span id="fcount"></span></h2>
+<p class="rule">Cadangan sahaja, disusun mengikut keutamaan dengan sebabnya. Operator dan syarikat memutuskan. Pembantu ini tidak mengakui, menutup, menaikkan atau menyembunyikan penggera, dan tidak boleh mengawal sebarang peranti. Ambang masih cadangan.</p>
+<p><button id="briefBtn" type="button">Ringkasan syif (draf)</button></p>
+<div id="brief" hidden><p class="unk">Draf ringkasan daripada senarai di bawah, dibuat di pelayan dalaman CMS. Senarai di bawah ialah rekod; jika berbeza, ikut senarai.</p><p id="briefText" class="brieftext"></p></div>
+<ol id="findings"></ol>
+<h3>Sistem bersambung</h3><table><thead><tr><th>Sistem</th><th>Keadaan</th><th>Peranti (dalam talian / luar / belum didengar)</th><th>Peristiwa 24 jam</th><th>Ditolak 24 jam</th><th>Nota</th></tr></thead><tbody id="systems"></tbody></table></section>
+<section id="handover" lang="ms"><h2>Serah tugas syif (Head Control)</h2>
+<p class="rule">Jadual tugas dari Prima. Head Control yang keluar menulis serah tugas dalam jam terakhir syif; Head Control yang masuk mengambilnya. Rekod dihantar ke Prima (tanpa klip video).</p>
+<p id="hoState"></p>
+<ul id="hoItems"></ul>
+<div id="hoForm" hidden><label>Nota<br><textarea id="hoNote" rows="3" cols="50"></textarea></label><br>
+<button id="hoGive" type="button" hidden>Tulis serah tugas</button>
+<button id="hoAgree" type="button" hidden>Setuju dan ambil alih</button>
+<button id="hoDisagree" type="button" hidden>Ambil alih, tidak setuju</button></div></section>
 <section><h2>Alarm queue <span id="count"></span></h2><table><thead><tr><th>Severity</th><th>What</th><th>Opened</th><th>State</th><th>Actions</th></tr></thead><tbody id="queue"></tbody></table></section>
 <section><h2>Response, last 24 hours <span class="unk">(targets proposed, owner to confirm)</span></h2><table><thead><tr><th>Measure</th><th>All</th><th>Critical</th><th>High</th><th>Normal</th></tr></thead><tbody id="kpis"></tbody></table><p id="kpiDevices"></p><table><thead><tr><th>Company</th><th>Alarms</th><th>Acknowledge median</th><th>Over target</th><th>Waiting over target</th><th>False rate</th><th>Devices unknown</th></tr></thead><tbody id="kpiCompanies"></tbody></table></section>
 <section><h2>Who CMS told</h2><ul id="told"></ul></section>
@@ -43,7 +57,11 @@ h1{font-size:18px;margin:0}h2{font-size:15px;margin:16px 0 8px}
 main,.rule{padding:0 16px}.rule{color:var(--muted)}
 table{width:100%;border-collapse:collapse}td,th{text-align:left;padding:6px;border-bottom:1px solid var(--line);vertical-align:top}
 .critical{color:var(--crit);font-weight:600}.high{color:var(--high);font-weight:600}.on{color:var(--ok)}.off{color:var(--crit)}.unk{color:var(--muted)}
-button{margin:2px}section{overflow-x:auto}`;
+button{margin:2px}section{overflow-x:auto}
+#findings{padding-left:20px}#findings li{margin:0 0 12px;padding:8px;border:1px solid var(--line);border-radius:6px}
+#findings .why,#findings .next{margin:4px 0 0 0;padding-left:18px}#findings .next li,#findings .why li{border:0;margin:0;padding:0}
+.done{opacity:.7}.brieftext{white-space:pre-wrap;border-left:3px solid var(--line);padding-left:10px}h3{font-size:14px;margin:12px 0 6px}
+@media (max-width:600px){button{min-height:44px}}`;
 
 export const SCRIPT = `(() => {
   const $ = (id) => document.getElementById(id);
@@ -133,12 +151,72 @@ export const SCRIPT = `(() => {
     const c = $('kpiCompanies'); c.replaceChildren();
     for (const x of k.byCompany) { const tr = el('tr'); tr.append(el('td', x.companyId), el('td', String(x.figures.alarms)), el('td', m(x.figures.ackMedianMin)), el('td', String(x.figures.ackOverTarget)), el('td', String(x.figures.waitingOverTarget)), el('td', x.figures.falseRatePct === null ? '-' : x.figures.falseRatePct + '%'), el('td', x.devices.unknown + ' of ' + x.devices.total)); c.append(tr); }
   }
-  async function load() { if (!token) return; try { render(await api('/api/state')); renderKpis(await api('/api/kpis')); } catch {} }
+  const SEV = { critical: 'KRITIKAL', high: 'TINGGI', normal: 'BIASA', info: 'MAKLUMAT' };
+  const STATE = { ok: 'Baik', attention: 'Perlu perhatian', quiet: 'Senyap', unknown: 'Tidak diketahui' };
+  async function feedback(key, useful, li) {
+    const note = useful ? '' : (prompt('Kenapa tidak berguna? (pilihan)') || '');
+    try { await api('/api/assistant/feedback', { key, useful, note }); li.querySelector('.fb').textContent = 'Terima kasih, dicatat.'; } catch (e) { alert(e.message); }
+  }
+  function renderAssistant(v) {
+    $('fcount').textContent = '(' + v.findings.length + ')';
+    const ol = $('findings'); ol.replaceChildren();
+    if (!v.findings.length) ol.append(el('li', 'Tiada penggera terbuka.'));
+    for (const f of v.findings) {
+      const li = el('li', undefined, f.allActioned ? 'done' : '');
+      const head = el('div'); head.append(el('strong', SEV[f.severity] + ' ', f.severity), el('strong', f.title), el('span', ' - ' + f.alarmIds.length + ' penggera, sejak ' + t(f.firstOpenedAt), 'unk'));
+      const why = el('ul', undefined, 'why'); for (const r of f.reasons) why.append(el('li', r));
+      const next = el('ol', undefined, 'next'); for (const s of f.suggestions) next.append(el('li', s));
+      const fb = el('div', undefined, 'fb');
+      const yes = el('button', 'Berguna'); yes.addEventListener('click', () => feedback(f.key, true, li));
+      const no = el('button', 'Tidak berguna'); no.addEventListener('click', () => feedback(f.key, false, li));
+      fb.append(yes, no);
+      li.append(head, el('div', 'Kenapa di sini:', 'unk'), why, el('div', 'Cadangan langkah seterusnya:', 'unk'), next, fb);
+      ol.append(li);
+    }
+    const tb = $('systems'); tb.replaceChildren();
+    for (const s of v.systems) {
+      const tr = el('tr'); const d = s.devices;
+      tr.append(el('td', s.label), el('td', STATE[s.state], s.state === 'ok' ? 'on' : s.state === 'quiet' ? 'off' : s.state === 'attention' ? 'high' : 'unk'), el('td', d.total ? d.online + ' / ' + d.offline + ' / ' + d.unknown : '-'), el('td', String(s.events24h)), el('td', String(s.refused24h)), el('td', s.note));
+      tb.append(tr);
+    }
+  }
+  function renderHandover(h) {
+    const st = $('hoState'); const items = $('hoItems'); items.replaceChildren();
+    $('hoGive').hidden = true; $('hoAgree').hidden = true; $('hoDisagree').hidden = true; $('hoForm').hidden = true;
+    if (!h.roster) { st.textContent = 'Jadual tugas CMS belum diterima dari Prima.'; st.className = 'unk'; return; }
+    st.className = '';
+    const w = h.written; const k = h.taken;
+    const parts = [];
+    parts.push(h.ending ? 'Keluar: ' + (h.ending.staffName || 'tiada') + ' (tamat ' + t(h.ending.end) + ')' : 'Tiada syif sedang tamat');
+    parts.push(h.starting ? 'Masuk: ' + (h.starting.staffName || 'tiada') + ' (mula ' + t(h.starting.start) + ')' : 'Tiada syif seterusnya dalam jadual');
+    parts.push(w ? 'Ditulis ' + t(w.outgoing.at) + ': ' + w.outgoing.note : 'Belum ditulis');
+    if (k) parts.push('Diambil ' + t(k.incoming.at) + (k.incoming.agree ? '' : ' (TIDAK SETUJU)') + ': ' + k.incoming.note);
+    st.textContent = parts.join(' · ');
+    if (w) for (const a of w.outgoing.openAlarms) items.append(el('li', a.kind + ': ' + a.summary + ' (' + a.state + ')'));
+    const me = h.operator;
+    const canGive = h.ending && h.ending.staffName === me && !w && Date.now() >= Date.parse(h.ending.end) - 3600000;
+    const canTake = h.starting && h.starting.staffName === me && !k;
+    if (canGive || canTake) { $('hoForm').hidden = false; $('hoGive').hidden = !canGive; $('hoAgree').hidden = !canTake; $('hoDisagree').hidden = !canTake; }
+  }
+  async function handover(path, body) {
+    try { await api(path, Object.assign({ note: $('hoNote').value }, body)); $('hoNote').value = ''; load(); } catch (e) { alert(e.message); }
+  }
+  $('hoGive').addEventListener('click', () => handover('/api/handover/give', {}));
+  $('hoAgree').addEventListener('click', () => handover('/api/handover/take', { agree: true }));
+  $('hoDisagree').addEventListener('click', () => handover('/api/handover/take', { agree: false }));
+  async function load() { if (!token) return; try { render(await api('/api/state')); renderHandover(await api('/api/handover')); renderAssistant(await api('/api/assistant')); renderKpis(await api('/api/kpis')); } catch {} }
   $('signin').addEventListener('submit', async (e) => {
     e.preventDefault(); token = $('token').value; $('token').value = '';
-    try { render(await api('/api/state')); try { sessionStorage.setItem('cmsToken', token); } catch {} $('app').hidden = false; $('signout').hidden = false; $('signin').hidden = true; } catch (err) { alert('Key not accepted'); token = ''; }
+    try { render(await api('/api/state')); try { sessionStorage.setItem('cmsToken', token); } catch {} $('app').hidden = false; $('signout').hidden = false; $('signin').hidden = true; load(); } catch (err) { alert('Key not accepted'); token = ''; }
   });
   $('signout').addEventListener('click', signOut);
+  $('briefBtn').addEventListener('click', async () => {
+    $('brief').hidden = false; $('briefText').textContent = 'Menyediakan...';
+    try {
+      const b = await api('/api/assistant/briefing');
+      $('briefText').textContent = b.state === 'ok' ? b.text : b.state === 'off' ? 'Ringkasan syif belum dihidupkan di pelayan dalaman CMS. Gunakan senarai di bawah.' : 'Ringkasan tidak dapat dibuat: ' + b.reason + ' Gunakan senarai di bawah.';
+    } catch (e) { $('briefText').textContent = e.message; }
+  });
   setInterval(() => { $('clock').textContent = new Date().toLocaleString(); load(); }, 5000);
   if (token) { $('app').hidden = false; $('signout').hidden = false; $('signin').hidden = true; load(); }
 })();`;

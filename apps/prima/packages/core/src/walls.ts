@@ -1,11 +1,6 @@
-// Shared registry of department database walls (connect-departments, 2 Nov 2026).
-//
-// Each request carries the walls the person passes (app.walls); the database lets a row of a walled table through only
-// on a wall the person holds. Before this file every department PR added its wall names to the DataWall list and to
-// dataWalls() in access.ts, so the PRs collided on the same lines. Now a department registers its wall from its own
-// module; dataWalls() appends every registered wall the person holds. The built-in walls in access.ts are unchanged.
+import type { User } from "./types";
 
-import type { User } from './types';
+
 
 export type WallHolds = (user: User) => boolean;
 

@@ -1,26 +1,35 @@
-// Group website management (Fauzan, 27 Oct 2026). One register of every company's domains and websites, run by IT:
-// quarterly content reviews with the company, monthly checks, urgent issues, DNS change control and renewals.
-// Domain registration, Cloudflare hosting, GitHub and Microsoft 365 are separate services. No integration is
-// connected yet, so every publication, check and notice outside Prima is a manual record and is labelled that way.
+import { webActive } from "./web-ticket-policy";
+import { webIt } from "./web-ticket-policy";
+import { webManager } from "./web-ticket-policy";
+import { webTicketPolicy } from "./web-ticket-policy";
+import { socialInactivityDays } from "./web-ticket-policy";
+import { isGroupLeader } from "./access";
+import { RULES } from "./rules";
+import type { Store } from "./store";
+import { addDays } from "./time";
+import { daysBetween } from "./time";
+import { dateOf } from "./time";
+import { fromMs } from "./time";
+import { toMs } from "./time";
+import type { ItTicket } from "./types";
+import type { Company } from "./types";
+import type { Id } from "./types";
+import type { IsoDate } from "./types";
+import type { IsoDateTime } from "./types";
+import type { User } from "./types";
+import { BadRequest } from "./service";
+import { NotFound } from "./service";
+import { CONNECTOR_INFO } from "./websites-connectors";
+import { dnsFingerprint } from "./websites-connectors";
+import { hostOf } from "./websites-connectors";
+import type { ConnectorKey } from "./websites-connectors";
+import type { ConnectorState } from "./websites-connectors";
+import type { DomainObserved } from "./websites-connectors";
+import type { SiteObserved } from "./websites-connectors";
+import type { SpInboxItem } from "./websites-connectors";
+import type { WebFeed } from "./websites-connectors";
 
-import { webActive, webIt, webManager, webTicketPolicy, socialInactivityDays } from './web-ticket-policy';
-import { isGroupLeader } from './access';
-import { RULES } from './rules';
-import type { Store } from './store';
-import { addDays, daysBetween, dateOf, fromMs, toMs } from './time';
-import type { ItTicket, Company, Id, IsoDate, IsoDateTime, User } from './types';
-import { BadRequest, NotFound } from './service';
-import {
-  CONNECTOR_INFO,
-  dnsFingerprint,
-  hostOf,
-  type ConnectorKey,
-  type ConnectorState,
-  type DomainObserved,
-  type SiteObserved,
-  type SpInboxItem,
-  type WebFeed,
-} from './websites-connectors';
+
 
 // ---------- Records ----------
 
@@ -304,8 +313,8 @@ export interface WebNotice {
   link: { kind: 'review' | 'issue' | 'domain' | 'dns' | 'check' | 'site'; id: Id };
   /** Scheduled reminders carry a key so each one goes to each person once. */
   key?: string;
-  /** Shown inside Prima. Email and Teams stay 'not_connected' until Microsoft 365 is connected and authorised. */
-  delivery: { inApp: 'delivered'; email: 'not_connected'; teams: 'not_connected' };
+  /** Shown inside Prima. Email and Teams stay 'not_connected' until the Microsoft 365 connector is switched on. */
+  delivery: { inApp: 'delivered'; email: Delivery; teams: Delivery };
 }
 
 export type Delivery = 'not_connected' | 'queued' | 'sent' | 'failed' | 'not_sent';

@@ -2,18 +2,26 @@
   "status": "PROPOSED, not in db/release-manifest.json. Fauzan approved building the guard pay run on 5 Nov 2026 (third audit, item 1: \"Build\"). Installing it needs his separate approval and goes through the release path and its migration window (run-db-migration.sh, CEO-run). This file does not install anything.",
   "base": {
     "path": "db/migrations/001_init.sql",
-    "sha256": "76161ab46dd145158cd06277b0c80654e5a5150c2a2dae593ee087d54052ccfc"
+    "sha256": "c5d8867df97f9535a3f447bdb6e1823e2cd783ad80ea4969edd71f5dc9fedd81"
   },
-  "after": ["pay_formulas"],
+  "after": [
+    "pay_formulas"
+  ],
   "modules": [
     {
       "id": "guard_pay",
       "version": 1,
       "path": "db/modules/guard-pay-v1.sql",
-      "sha256": "fb0c080b5939fb60459410db347c6cde69d632f24ec72ccb644cac41dd10b0ac",
-      "requires": ["pay_formulas"],
-      "switch": "None separate: the API detects prima.guard_pay_runs and prima.guard_pay_advances (wage advances), prima.guard_loans (advance and loan scheme) and prima.statutory_versions (statutory rates the CEO sets), Fauzan 6 Nov 2026. It also adds a read-only pay_read policy on the pay formulas module's tables so HR can prepare pay. Before the install the Guard pay screen shows no runs and preparing one is refused with a plain message. Paying from Prima is a further switch: rule PAY-GUARD primaPays stays off (trial beside the JA Group app) until Fauzan picks the switch date.",
-      "uses": ["prima.visible_companies() (base)", "role prima_app (base)", "prima.audit (base, written by the API)"],
+      "sha256": "c6ca56b61b076181eba45bd1c1c88d766c9339b981e45c41154b8fee0c32d8a1",
+      "requires": [
+        "pay_formulas"
+      ],
+      "switch": "None separate: the API detects prima.guard_pay_runs and prima.guard_pay_advances (wage advances), prima.guard_loans (advance and loan scheme) and prima.statutory_versions (statutory rates the CEO sets), Fauzan 6 Nov 2026. It also adds a read-only pay_read policy on the pay formulas module's tables so HR can prepare pay. Before the install the Guard pay screen shows no runs and preparing one is refused with a plain message. Paying from Prima is a further switch: rule PAY-GUARD primaPays stays off (trial beside the JA Group app) until Fauzan picks the switch date. Payroll Finance has a statutory_read wall for SELECT on statutory_versions only; it does not grant ACT, pay_read, employee-data access or statutory writes.",
+      "uses": [
+        "prima.visible_companies() (base)",
+        "role prima_app (base)",
+        "prima.audit (base, written by the API)"
+      ],
       "definer": "None.",
       "repeatSafe": true,
       "rollback": "Revoke INSERT, UPDATE on prima.guard_pay_runs, prima.guard_pay_advances and prima.guard_loans from prima_app (the screen goes read-only and preparing fails). Keep the tables: pay runs and advances are pay records and their history is in the audit log."

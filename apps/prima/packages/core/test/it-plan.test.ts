@@ -81,9 +81,9 @@ describe('Pilot phase 1: HR enters for IT staff, Finance pays, Merdeka Network',
     // Not for staff outside the IT team during the pilot.
     const other = ds.users.find((u) => u.department === 'finance' && u.personId)!;
     await expect(svc.submitStaffClaim(hr, { forPersonId: other.personId!, kind: 'MEDICAL', date: TODAY, amount: 80 }, pdf)).rejects.toThrow(/IT team only/);
-    await svc.hrDecideClaim(hr, c.id, true, '');
+    await svc.hrDecideClaim(hr, c.id, true, 'HR checked claim');
     await svc.headVerifyClaim(await svc.user(c.headIds![0]), c.id, true, 'Verified');
-    await svc.cooDecideClaim(await svc.user('u-coo'), c.id, true, '');
+    await svc.cooDecideClaim(await svc.user('u-coo'), c.id, true, 'COO approved claim');
     const fd = await svc.user('u-fd');
     expect((await svc.staffClaims(fd)).queue.find((r) => r.claim.id === c.id)!.canPay).toBe(true);
     await svc.financePayClaim(fd, c.id, 'TRF-0001');

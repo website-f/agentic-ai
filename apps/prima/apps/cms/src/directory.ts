@@ -80,6 +80,20 @@ export interface PatrolRound {
   lateAfterMin: number;
 }
 
+/**
+ * A seat on the CMS desk roster, from Prima (Arms Control rosters it there). The desk uses it only to know who hands
+ * over to whom: the operator signed in must be the person rostered. Names only.
+ */
+export interface DeskSeat {
+  id: string;
+  post: 'HEAD_CONTROL' | 'MONITOR_OFFICER';
+  start: string;
+  end: string;
+  staffName: string | null;
+  /** Clocked in on Prima and not yet out. Older copies leave it out, and then the desk treats the person as on the desk. */
+  onDesk?: boolean;
+}
+
 export interface Directory {
   /** When Prima made this copy. */
   asOf: string;
@@ -90,6 +104,8 @@ export interface Directory {
   patrolRounds: PatrolRound[];
   /** Group people: Arms Control, OGM, Operations Director, COO, CEO, Transport head, IT. */
   group: Partial<Record<Role, Contact>>;
+  /** The CMS desk roster from Prima. Older copies have none: the desk handover then says the roster is missing. */
+  desk?: DeskSeat[];
 }
 
 export function emptyDirectory(): Directory {
@@ -116,6 +132,14 @@ export function directoryProblems(d: unknown): string[] {
     if (Number.isNaN(Date.parse(sh.start)) || Number.isNaN(Date.parse(sh.end)) || Date.parse(sh.end) <= Date.parse(sh.start)) out.push(`shift ${sh.id}: times not valid`);
   }
   for (const p of x.patrolRounds as PatrolRound[]) if (!sites.has(p.siteId)) out.push(`patrol ${p.id}: site ${p.siteId} not listed`);
+  if (x.desk !== undefined) {
+    if (!Array.isArray(x.desk)) out.push('desk not a list');
+    else
+      for (const s of x.desk as DeskSeat[]) {
+        if (s?.post !== 'HEAD_CONTROL' && s?.post !== 'MONITOR_OFFICER') out.push(`desk seat ${s?.id}: post not known`);
+        if (Number.isNaN(Date.parse(s?.start)) || Number.isNaN(Date.parse(s?.end)) || Date.parse(s.end) <= Date.parse(s.start)) out.push(`desk seat ${s?.id}: times not valid`);
+      }
+  }
   const accounts = new Map<string, string>();
   for (const dv of (x.devices as Device[]).filter((v) => v.account)) {
     const seen = accounts.get(dv.account!);

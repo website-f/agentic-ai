@@ -16,7 +16,13 @@ const oid = '99999999-8888-7777-6666-555555555555';
 const now = '2026-10-31T06:00:00.000Z';
 const MSG = 'AAMkAGI2TG93AAA-synthetic_message_id_0001=';
 const link = (id = MSG) => `https://outlook.office.com/mail/inbox/id/${encodeURIComponent(id)}`;
-const env: NodeJS.ProcessEnv = { JOB_EMAIL_ENABLED: 'true', ENTRA_TENANT_ID: tenant, ENTRA_API_CLIENT_ID: client, JOB_EMAIL_OBO_CLIENT_SECRET: 'CLIENT_SECRET_PRIVATE', JOB_EMAIL_PREVIEW_SECRET: 'a1'.repeat(32) };
+const env: NodeJS.ProcessEnv = {
+JOB_EMAIL_ENABLED: 'true',
+ENTRA_TENANT_ID: tenant,
+ENTRA_API_CLIENT_ID: client,
+JOB_EMAIL_OBO_CLIENT_SECRET: 'CLIENT_SECRET_PRIVATE',
+JOB_EMAIL_PREVIEW_SECRET: 'a1'.repeat(32)
+};
 const actor = (id = 'u-it-exec', o = oid): DelegatedActor => ({ user: { id, name: `Synthetic ${id}`, role: 'staff', entraOid: o } as unknown as User, visibleCompanyIds: [], assertion: { userId: id, oid: o, tenantId: tenant, accessToken: `ASSERTION_${id}_PRIVATE` } });
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
 const token = (scope = 'Mail.Read') => json({ token_type: 'Bearer', access_token: 'GRAPH_TOKEN_PRIVATE', scope });

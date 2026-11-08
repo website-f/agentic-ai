@@ -1,16 +1,22 @@
-// Credit limits per private client (Fauzan, 2 Nov 2026: yes to suggestion 4). Finance sets a limit for each private
-// client and keeps the client's balance from SQL Account's customer statement. When Operations adds a post at a
-// private site of a client that is over its limit, or has an invoice unpaid for more than 90 days, Prima warns first;
-// the post can still be added with a reason (Operations decides, Finance sees every one). Nothing is blocked
-// automatically and no client is stopped by Prima.
+import { AccessDenied } from "./access";
+import { isLead } from "./finance";
+import { isoDate } from "./finance";
+import { noSecrets } from "./finance";
+import { requireReason } from "./finance";
+import { text } from "./finance";
+import type { FinCashCtx } from "./finance-cash";
+import { RULES } from "./rules";
+import { BadRequest } from "./service";
+import { NotFound } from "./service";
+import { addDays } from "./time";
+import { daysBetween } from "./time";
+import type { ClientAccount } from "./types";
+import type { FinSign } from "./types";
+import type { FinStatus } from "./types";
+import type { Id } from "./types";
+import type { IsoDate } from "./types";
+import type { IsoDateTime } from "./types";
 
-import { AccessDenied } from './access';
-import { isLead, isoDate, noSecrets, requireReason, text } from './finance';
-import type { FinCashCtx } from './finance-cash';
-import { RULES } from './rules';
-import { BadRequest, NotFound } from './service';
-import { addDays, daysBetween } from './time';
-import type { ClientAccount, FinSign, FinStatus, Id, IsoDate, IsoDateTime } from './types';
 
 type Out<T> = { patch: Partial<FinStatus>; action: string; summary: string; result: T };
 const r2 = (n: number) => Math.round(n * 100) / 100;

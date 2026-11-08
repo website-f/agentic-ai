@@ -508,6 +508,65 @@ CREATE POLICY draft_wall ON prima.arisha_drafts USING (
 );
 GRANT SELECT, INSERT, UPDATE ON prima.arisha_drafts TO prima_app;
 
+-- Offline work on staff-controlled devices (Fauzan, 31 Oct 2026: up to 72 hours; contract agreed with Arisha main,
+-- docs/OFFLINE_SYNC.md). Switched off in the API until device trust, local encryption and retention are reviewed.
+-- A lease is the server-issued 72-hour window for one person and one device label; it is never changed or removed.
+-- An offline operation is kept for good under its person and operation ID, so an ID can never run twice, whatever
+-- happens to a receipt's details later. Neither keeps the content of the work, only its fingerprint.
+CREATE TABLE IF NOT EXISTS prima.offline_leases (
+  id text PRIMARY KEY,
+  data jsonb NOT NULL,
+  CHECK (coalesce(data->>'id' = id AND data ?& ARRAY['id', 'userId', 'deviceLabel', 'issuedAt', 'expiresAt']
+     AND jsonb_typeof(data->'userId') = 'string' AND jsonb_typeof(data->'deviceLabel') = 'string'
+     AND data->>'issuedAt' ~ '^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,6})?(Z|[+-]\d{2}:\d{2})$' AND data->>'expiresAt' ~ '^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,6})?(Z|[+-]\d{2}:\d{2})$'
+     AND (data->>'expiresAt')::timestamptz <= (data->>'issuedAt')::timestamptz + interval '72 hours', false))
+);
+ALTER TABLE prima.offline_leases ENABLE ROW LEVEL SECURITY;
+ALTER TABLE prima.offline_leases FORCE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS lease_own ON prima.offline_leases;
+CREATE POLICY lease_own ON prima.offline_leases
+  USING (data->>'userId' = current_setting('app.user_id', true))
+  WITH CHECK (data->>'userId' = current_setting('app.user_id', true));
+GRANT SELECT, INSERT ON prima.offline_leases TO prima_app;
+
+CREATE TABLE IF NOT EXISTS prima.offline_ops (
+  id text PRIMARY KEY,
+  data jsonb NOT NULL,
+  CHECK (coalesce(data->>'id' = id AND id = (data->>'userId') || ':' || (data->>'opId')
+     AND data ?& ARRAY['id', 'userId', 'opId', 'leaseId', 'kind', 'payloadHash', 'status', 'reason', 'resultId', 'deviceAt', 'receivedAt', 'decidedAt']
+     AND data->>'opId' ~ '^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
+     AND data->>'leaseId' ~ '^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
+     AND data->>'kind' IN ('helpRequest', 'jobNote')
+     AND data->>'payloadHash' ~ '^[0-9a-f]{64}$'
+     AND data->>'status' IN ('applied', 'needs_review', 'rejected', 'discarded')
+     AND jsonb_typeof(data->'reason') IN ('null', 'string')
+     AND data->>'receivedAt' ~ '^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,6})?(Z|[+-]\d{2}:\d{2})$' AND data->>'decidedAt' ~ '^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,6})?(Z|[+-]\d{2}:\d{2})$', false))
+);
+ALTER TABLE prima.offline_ops ENABLE ROW LEVEL SECURITY;
+ALTER TABLE prima.offline_ops FORCE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS op_own ON prima.offline_ops;
+CREATE POLICY op_own ON prima.offline_ops
+  USING (data->>'userId' = current_setting('app.user_id', true))
+  WITH CHECK (data->>'userId' = current_setting('app.user_id', true));
+CREATE OR REPLACE FUNCTION prima.offline_op_guard() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE
+  k text;
+BEGIN
+  -- An operation's identity and what was sent never change; only a held one is decided, once.
+  FOREACH k IN ARRAY ARRAY['id', 'userId', 'opId', 'leaseId', 'kind', 'payloadHash', 'deviceAt', 'receivedAt'] LOOP
+    IF NOT (NEW.data ? k) OR NEW.data->k IS DISTINCT FROM OLD.data->k THEN
+      RAISE EXCEPTION 'An offline operation keeps what was sent' USING ERRCODE = '23514';
+    END IF;
+  END LOOP;
+  IF OLD.data->>'status' IS DISTINCT FROM 'needs_review' OR NEW.data->>'status' NOT IN ('applied', 'rejected', 'discarded') THEN
+    RAISE EXCEPTION 'Only a held offline operation is decided, once' USING ERRCODE = '23514';
+  END IF;
+  RETURN NEW;
+END $$;
+DROP TRIGGER IF EXISTS offline_op_guard ON prima.offline_ops;
+CREATE TRIGGER offline_op_guard BEFORE UPDATE ON prima.offline_ops FOR EACH ROW EXECUTE FUNCTION prima.offline_op_guard();
+GRANT SELECT, INSERT, UPDATE ON prima.offline_ops TO prima_app;
+
 -- Arisha's reviewed handoff into the T9 IT import (Fauzan, 31 Oct 2026). Only the CEO's own account (u-fauzan) keeps
 -- reviews, and only its own; the database checks this, not only the API. The app role has no right to remove a review: a
 -- closed one only clears its reviewed rows after its keeping time, and only through prima.tidy_it_import_reviews, which
@@ -796,7 +855,7 @@ BEGIN
    company := OLD.data->>'ownerId';
    IF company='unlinked' THEN
     IF OLD.data#>'{manual,companyId}' IS DISTINCT FROM 'null'::jsonb THEN RAISE EXCEPTION 'Unlinked stock needs manual provenance' USING ERRCODE='23514'; END IF;
-   ELSIF company IS NULL OR NOT EXISTS(SELECT 1 FROM prima.users u WHERE u.id=current_setting('app.user_id',true) AND u.data->'companyIds' ? company AND (company IN ('pwvsb','merdeka','goodwill','sasateam') OR EXISTS(SELECT 1 FROM prima.companies co WHERE co.id=company))) THEN
+   ELSIF company IS NULL OR NOT EXISTS(SELECT 1 FROM prima.users u WHERE u.id=current_setting('app.user_id',true) AND u.data->'companyIds' ? company AND (company IN ('pwvsb','merdeka','goodwill','sasateam','pgl') OR EXISTS(SELECT 1 FROM prima.companies co WHERE co.id=company))) THEN
     RAISE EXCEPTION 'Correction company is unavailable' USING ERRCODE='23514';
    END IF;
    allowed := ARRAY['serial','model','location','warrantyTo'];
@@ -817,7 +876,7 @@ BEGIN
   ELSE RAISE EXCEPTION 'This record has no correction path' USING ERRCODE='23514';
   END IF;
   IF TG_TABLE_NAME<>'it_assets' THEN
-   IF OLD.data#>'{manual,companyId}' IS DISTINCT FROM 'null'::jsonb AND NOT EXISTS(SELECT 1 FROM prima.users u WHERE u.id=current_setting('app.user_id',true) AND u.data->'companyIds' ? (OLD.data#>>'{manual,companyId}') AND (OLD.data#>>'{manual,companyId}' IN ('pwvsb','merdeka','goodwill','sasateam') OR EXISTS(SELECT 1 FROM prima.companies co WHERE co.id=OLD.data#>>'{manual,companyId}'))) THEN
+   IF OLD.data#>'{manual,companyId}' IS DISTINCT FROM 'null'::jsonb AND NOT EXISTS(SELECT 1 FROM prima.users u WHERE u.id=current_setting('app.user_id',true) AND u.data->'companyIds' ? (OLD.data#>>'{manual,companyId}') AND (OLD.data#>>'{manual,companyId}' IN ('pwvsb','merdeka','goodwill','sasateam','pgl') OR EXISTS(SELECT 1 FROM prima.companies co WHERE co.id=OLD.data#>>'{manual,companyId}'))) THEN
     RAISE EXCEPTION 'Correction company is unavailable' USING ERRCODE='23514'; END IF;
   END IF;
   IF (NEW.data-(allowed||ARRAY['correction'])) IS DISTINCT FROM (OLD.data-(allowed||ARRAY['correction']))
@@ -964,7 +1023,7 @@ BEGIN
       (coalesce(m->'checkedById','null'::jsonb) <> 'null'::jsonb OR coalesce(m->'guidanceById','null'::jsonb) <> 'null'::jsonb) THEN
     RAISE EXCEPTION 'Guidance starts unconfirmed' USING ERRCODE='23514'; END IF;
    IF NOT (m ? 'companyId') OR jsonb_typeof(m->'companyId') NOT IN ('null','string') OR
-      (TG_TABLE_NAME IN ('it_assets','it_onboarding') AND NEW.data->>'ownerId' IS DISTINCT FROM coalesce(m->>'companyId','unlinked')) OR (m->'companyId' <> 'null'::jsonb AND m->>'companyId' NOT IN ('pwvsb','merdeka','goodwill','sasateam') AND NOT EXISTS (SELECT 1 FROM prima.companies c WHERE c.id=m->>'companyId')) THEN
+      (TG_TABLE_NAME IN ('it_assets','it_onboarding') AND NEW.data->>'ownerId' IS DISTINCT FROM coalesce(m->>'companyId','unlinked')) OR (m->'companyId' <> 'null'::jsonb AND m->>'companyId' NOT IN ('pwvsb','merdeka','goodwill','sasateam','pgl') AND NOT EXISTS (SELECT 1 FROM prima.companies c WHERE c.id=m->>'companyId')) THEN
     RAISE EXCEPTION 'Manual company association must be a known company or explicitly pending' USING ERRCODE='23514'; END IF;
   END IF;
  END IF;
@@ -1379,6 +1438,32 @@ CREATE POLICY face_wall ON prima.staff_faces
   WITH CHECK (prima.has_wall('staff_faces') OR (data->>'userId' = current_setting('app.user_id', true) AND data->>'status' = 'pending'));
 GRANT SELECT, INSERT, UPDATE ON prima.staff_faces TO prima_app;
 
+-- Guards' own phones (third audit item 2, Fauzan 5 Nov 2026; packages/core/src/guard-phone.ts): the enrolled phone,
+-- each face-plus-PIN sign-in and the on-duty location readings. Company wall for the office, HR and CMS; a guard or
+-- officer sees and writes only their own rows (app.user_role is set by the API for each request). Only hashes of the
+-- enrolment code and the phone secret are kept.
+CREATE TABLE IF NOT EXISTS prima.guard_phones (id text PRIMARY KEY, company_id text NOT NULL, data jsonb NOT NULL, CHECK (data->>'id' = id), CHECK (data->>'companyId' = company_id));
+CREATE TABLE IF NOT EXISTS prima.guard_phone_sessions (id text PRIMARY KEY, company_id text NOT NULL, data jsonb NOT NULL, CHECK (data->>'id' = id), CHECK (data->>'companyId' = company_id));
+CREATE TABLE IF NOT EXISTS prima.guard_pings (id text PRIMARY KEY, company_id text NOT NULL, data jsonb NOT NULL, CHECK (data->>'id' = id), CHECK (data->>'companyId' = company_id));
+CREATE INDEX IF NOT EXISTS guard_phone_sessions_open ON prima.guard_phone_sessions (company_id) WHERE (data->>'endedAt') IS NULL;
+CREATE INDEX IF NOT EXISTS guard_pings_company ON prima.guard_pings (company_id, id);
+DO $$
+DECLARE
+  t text;
+BEGIN
+  FOREACH t IN ARRAY ARRAY['guard_phones','guard_phone_sessions','guard_pings'] LOOP
+    EXECUTE format('ALTER TABLE prima.%I ENABLE ROW LEVEL SECURITY', t);
+    EXECUTE format('ALTER TABLE prima.%I FORCE ROW LEVEL SECURITY', t);
+    EXECUTE format('DROP POLICY IF EXISTS guard_phone_wall ON prima.%I', t);
+    EXECUTE format($p$CREATE POLICY guard_phone_wall ON prima.%I
+      USING ((company_id = ANY (prima.visible_companies()) AND coalesce(current_setting('app.user_role', true), '') NOT IN ('guard', 'supervisor'))
+             OR data->>'userId' = current_setting('app.user_id', true))
+      WITH CHECK ((company_id = ANY (prima.visible_companies()) AND coalesce(current_setting('app.user_role', true), '') NOT IN ('guard', 'supervisor'))
+             OR data->>'userId' = current_setting('app.user_id', true))$p$, t);
+    EXECUTE format('GRANT SELECT, INSERT, UPDATE ON prima.%I TO prima_app', t);
+  END LOOP;
+END $$;
+
 -- Public holidays (HR Phase 3, slice 3C, Fauzan 2 Nov 2026): group-wide, read by everyone who signs in; HR keeps them.
 CREATE TABLE IF NOT EXISTS prima.public_holidays (id text PRIMARY KEY, data jsonb NOT NULL, CHECK (data->>'id' = id));
 GRANT SELECT, INSERT, UPDATE ON prima.public_holidays TO prima_app;
@@ -1449,6 +1534,179 @@ CREATE POLICY hr_case_wall ON prima.hr_cases
   USING (company_id = ANY (prima.visible_companies()) AND (coalesce(data->>'confidential', 'false') <> 'true' OR prima.has_wall('hr_cases')))
   WITH CHECK (company_id = ANY (prima.visible_companies()) AND prima.has_wall('hr_cases'));
 GRANT SELECT, INSERT, UPDATE ON prima.hr_cases TO prima_app;
+-- Screening case files (PIKM/ISO review, Fauzan 5 Nov 2026): pre-hire and periodic checks for guards, officers, office
+-- staff, directors and shareholders. HR, the HR Director and the CEO ('hr_cases' wall) read and write; ACT ('act'
+-- wall) reads only. Company managers and officers never see them. No delete: a case is withdrawn, never removed.
+CREATE TABLE IF NOT EXISTS prima.hr_screenings (id text PRIMARY KEY, company_id text NOT NULL, data jsonb NOT NULL, CHECK (data->>'id' = id));
+ALTER TABLE prima.hr_screenings ENABLE ROW LEVEL SECURITY;
+ALTER TABLE prima.hr_screenings FORCE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS hr_screening_read ON prima.hr_screenings;
+CREATE POLICY hr_screening_read ON prima.hr_screenings FOR SELECT
+  USING (company_id = ANY (prima.visible_companies()) AND (prima.has_wall('hr_cases') OR prima.has_wall('act')));
+DROP POLICY IF EXISTS hr_screening_insert ON prima.hr_screenings;
+CREATE POLICY hr_screening_insert ON prima.hr_screenings FOR INSERT
+  WITH CHECK (company_id = ANY (prima.visible_companies()) AND prima.has_wall('hr_cases'));
+DROP POLICY IF EXISTS hr_screening_update ON prima.hr_screenings;
+CREATE POLICY hr_screening_update ON prima.hr_screenings FOR UPDATE
+  USING (company_id = ANY (prima.visible_companies()) AND prima.has_wall('hr_cases'))
+  WITH CHECK (company_id = ANY (prima.visible_companies()) AND prima.has_wall('hr_cases'));
+GRANT SELECT, INSERT, UPDATE ON prima.hr_screenings TO prima_app;
+
+-- Group employment history (Fauzan, 4 Nov 2026: "we need a database of all staff history"). Each company's employment
+-- record stays its own (V7: never merge legally separate employment records); these tables only link the records of
+-- one person, by a keyed hash of the IC or passport computed in the API (never the number itself).
+-- person_links: one row per company record. group_people: the person's summary (companies, dates, rehire mark, CSG/TNG),
+-- without pay, reasons or discipline. group_person_notes: HR's rehire reasons and old-file employments (HR wall only).
+-- Walls (packages/core/src/access.ts staffHistoryRole): staff_history = HR, the HR Director and the CEO; fw_history =
+-- FWM management for foreign workers; guard_feed = the JA feed, for guard rows of its companies. Everyone else outside
+-- HR reads one person at a time by typing the number (Fauzan, 4 Nov 2026), only through prima.group_history_lookup
+-- (history_lookup: the Regional OM and above, FWM management, HR) and marks "do not hire again" only through
+-- prima.history_set_mark (history_mark: the COO, OGM and Operations Director). No table policy lets them list anyone.
+CREATE TABLE IF NOT EXISTS prima.person_links (id text PRIMARY KEY, data jsonb NOT NULL, CHECK (data->>'id' = id));
+CREATE TABLE IF NOT EXISTS prima.group_people (id text PRIMARY KEY, data jsonb NOT NULL, CHECK (data->>'id' = id));
+CREATE TABLE IF NOT EXISTS prima.group_person_notes (id text PRIMARY KEY, data jsonb NOT NULL, CHECK (data->>'id' = id));
+CREATE TABLE IF NOT EXISTS prima.hire_checks (id text PRIMARY KEY, data jsonb NOT NULL, CHECK (data->>'id' = id));
+CREATE INDEX IF NOT EXISTS person_links_key ON prima.person_links ((data->>'idKey'));
+CREATE INDEX IF NOT EXISTS person_links_group ON prima.person_links ((data->>'groupPersonId'));
+CREATE INDEX IF NOT EXISTS hire_checks_user ON prima.hire_checks ((data->>'userId'));
+-- The companies a summary covers, as an array the company wall compares.
+CREATE OR REPLACE FUNCTION prima.json_ids(j jsonb) RETURNS text[]
+LANGUAGE sql IMMUTABLE AS $$ SELECT coalesce(ARRAY(SELECT jsonb_array_elements_text(coalesce(j, '[]'::jsonb))), ARRAY[]::text[]) $$;
+ALTER TABLE prima.person_links ENABLE ROW LEVEL SECURITY;
+ALTER TABLE prima.person_links FORCE ROW LEVEL SECURITY;
+ALTER TABLE prima.group_people ENABLE ROW LEVEL SECURITY;
+ALTER TABLE prima.group_people FORCE ROW LEVEL SECURITY;
+ALTER TABLE prima.group_person_notes ENABLE ROW LEVEL SECURITY;
+ALTER TABLE prima.group_person_notes FORCE ROW LEVEL SECURITY;
+ALTER TABLE prima.hire_checks ENABLE ROW LEVEL SECURITY;
+ALTER TABLE prima.hire_checks FORCE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS link_hr ON prima.person_links;
+DROP POLICY IF EXISTS link_fw ON prima.person_links;
+DROP POLICY IF EXISTS link_feed ON prima.person_links;
+DROP POLICY IF EXISTS link_view ON prima.person_links;
+DROP POLICY IF EXISTS link_company ON prima.person_links;
+CREATE POLICY link_hr ON prima.person_links USING (prima.has_wall('staff_history') AND (NOT prima.has_wall('history_local') OR data->>'foreign' = 'false')) WITH CHECK (prima.has_wall('staff_history') AND (NOT prima.has_wall('history_local') OR data->>'foreign' = 'false'));
+CREATE POLICY link_fw ON prima.person_links USING (prima.has_wall('fw_history') AND data->>'foreign' = 'true') WITH CHECK (prima.has_wall('fw_history') AND data->>'foreign' = 'true');
+CREATE POLICY link_feed ON prima.person_links
+  USING (prima.has_wall('guard_feed') AND data->>'guard' = 'true' AND data->>'companyId' = ANY (prima.visible_companies()))
+  WITH CHECK (prima.has_wall('guard_feed') AND data->>'guard' = 'true' AND data->>'companyId' = ANY (prima.visible_companies()));
+DROP POLICY IF EXISTS group_hr ON prima.group_people;
+DROP POLICY IF EXISTS group_fw ON prima.group_people;
+DROP POLICY IF EXISTS group_feed ON prima.group_people;
+DROP POLICY IF EXISTS group_view ON prima.group_people;
+DROP POLICY IF EXISTS group_company ON prima.group_people;
+CREATE POLICY group_hr ON prima.group_people USING (prima.has_wall('staff_history') AND (NOT prima.has_wall('history_local') OR data->>'foreign' = 'false')) WITH CHECK (prima.has_wall('staff_history') AND (NOT prima.has_wall('history_local') OR data->>'foreign' = 'false'));
+CREATE POLICY group_fw ON prima.group_people USING (prima.has_wall('fw_history') AND data->>'foreign' = 'true') WITH CHECK (prima.has_wall('fw_history') AND data->>'foreign' = 'true');
+CREATE POLICY group_feed ON prima.group_people
+  USING (prima.has_wall('guard_feed') AND prima.json_ids(data->'companyIds') && prima.visible_companies())
+  WITH CHECK (prima.has_wall('guard_feed') AND prima.json_ids(data->'companyIds') && prima.visible_companies());
+DROP POLICY IF EXISTS notes_hr ON prima.group_person_notes;
+DROP POLICY IF EXISTS notes_fw ON prima.group_person_notes;
+CREATE POLICY notes_hr ON prima.group_person_notes USING (prima.has_wall('staff_history') AND (NOT prima.has_wall('history_local') OR data->>'foreign' = 'false')) WITH CHECK (prima.has_wall('staff_history') AND (NOT prima.has_wall('history_local') OR data->>'foreign' = 'false'));
+CREATE POLICY notes_fw ON prima.group_person_notes USING (prima.has_wall('fw_history') AND data->>'foreign' = 'true') WITH CHECK (prima.has_wall('fw_history') AND data->>'foreign' = 'true');
+-- History lookups by number: each person writes and reads their own (for the daily limit); HR reads all. Never changed.
+DROP POLICY IF EXISTS hire_check_own ON prima.hire_checks;
+DROP POLICY IF EXISTS hire_check_own_insert ON prima.hire_checks;
+DROP POLICY IF EXISTS hire_check_hr ON prima.hire_checks;
+CREATE POLICY hire_check_own ON prima.hire_checks FOR SELECT USING (data->>'userId' = current_setting('app.user_id', true));
+CREATE POLICY hire_check_own_insert ON prima.hire_checks FOR INSERT WITH CHECK (prima.has_wall('history_lookup') AND data->>'userId' = current_setting('app.user_id', true));
+CREATE POLICY hire_check_hr ON prima.hire_checks FOR SELECT USING (prima.has_wall('staff_history'));
+GRANT SELECT, INSERT, UPDATE ON prima.person_links, prima.group_people, prima.group_person_notes TO prima_app;
+GRANT SELECT, INSERT ON prima.hire_checks TO prima_app;
+GRANT EXECUTE ON FUNCTION prima.json_ids(jsonb) TO prima_app;
+
+-- The person a keyed number already belongs to, across every company, for linking a new record (HR, FWM, the JA
+-- feed). Returns only the group person's id, so the JA feed links a returning guard without reading other companies.
+CREATE OR REPLACE FUNCTION prima.history_group_for(key text, not_person text) RETURNS text
+LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = prima, pg_temp AS $$
+DECLARE
+  g text;
+BEGIN
+  IF NOT (prima.has_wall('staff_history') OR prima.has_wall('fw_history') OR prima.has_wall('guard_feed')) THEN
+    RAISE EXCEPTION 'Not allowed' USING ERRCODE = '42501';
+  END IF;
+  SELECT data->>'groupPersonId' INTO g FROM prima.person_links
+   WHERE data->>'idKey' = key AND id IS DISTINCT FROM not_person
+   ORDER BY data->>'linkedAt', id LIMIT 1;
+  RETURN g;
+END $$;
+REVOKE ALL ON FUNCTION prima.history_group_for(text, text) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION prima.history_group_for(text, text) TO prima_app;
+
+-- One person's history by the number typed ('history_lookup' wall: the Regional OM and above, FWM management, HR).
+-- Reads across companies, but only the person whose keyed number was typed: their summaries (companies, jobs, dates,
+-- the rehire mark, CSG/TNG; never reasons or discipline) and the names of their companies. The rehire reasons only for
+-- HR and those who decide "do not hire again". The API audits each lookup with the masked number and keeps a daily limit.
+CREATE OR REPLACE FUNCTION prima.group_history_lookup(key text) RETURNS jsonb
+LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = prima, pg_temp AS $$
+DECLARE
+  r jsonb;
+BEGIN
+  IF NOT prima.has_wall('history_lookup') THEN
+    RAISE EXCEPTION 'Not allowed' USING ERRCODE = '42501';
+  END IF;
+  WITH g AS (
+    SELECT p.id, p.data FROM prima.group_people p
+     WHERE p.id IN (SELECT data->>'groupPersonId' FROM prima.person_links WHERE data->>'idKey' = key)
+       AND coalesce(p.data->>'mergedInto', '') = ''
+       -- HR officers keep Malaysians, FWM foreign workers (Fauzan, 26 Oct 2026); the population applies before any summary.
+       AND (NOT prima.has_wall('history_local') OR p.data->>'foreign' = 'false')
+       AND (prima.has_wall('staff_history') OR NOT prima.has_wall('fw_history') OR p.data->>'foreign' = 'true')
+  )
+  SELECT jsonb_build_object(
+    'groups', coalesce((SELECT jsonb_agg(g.data ORDER BY g.id) FROM g), '[]'::jsonb),
+    'companyNames', coalesce((SELECT jsonb_object_agg(c.id, c.data->>'name') FROM prima.companies c
+                               WHERE c.id IN (SELECT jsonb_array_elements_text(g.data->'companyIds') FROM g)), '{}'::jsonb),
+    'rehireNotes', CASE WHEN prima.has_wall('history_mark') OR prima.has_wall('staff_history')
+                        THEN coalesce((SELECT jsonb_agg(x) FROM prima.group_person_notes n, jsonb_array_elements(n.data->'rehire') AS x
+                                        WHERE n.id IN (SELECT id FROM g)), '[]'::jsonb)
+                        ELSE NULL END
+  ) INTO r;
+  RETURN r;
+END $$;
+REVOKE ALL ON FUNCTION prima.group_history_lookup(text) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION prima.group_history_lookup(text) TO prima_app;
+
+-- "Do not hire again" set or lifted by the COO, OGM or Operations Director ('history_mark' wall) on the person whose
+-- number they typed, with the decision and its reason appended to HR's notes. Returns the people marked. Refuses a
+-- decision about the caller's own records (actor_person), reading links the caller cannot see.
+CREATE OR REPLACE FUNCTION prima.history_set_mark(key text, mark jsonb, entry jsonb, actor_person text) RETURNS text[]
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = prima, pg_temp AS $$
+DECLARE
+  g record;
+  out text[] := ARRAY[]::text[];
+BEGIN
+  IF NOT prima.has_wall('history_mark') THEN
+    RAISE EXCEPTION 'Not allowed' USING ERRCODE = '42501';
+  END IF;
+  IF coalesce(mark->>'status', '') NOT IN ('eligible', 'check_first', 'do_not_rehire') OR mark->>'status' IS DISTINCT FROM entry->>'status'
+     OR length(coalesce(entry->>'reason', '')) < 10 THEN
+    RAISE EXCEPTION 'A decision with a reason is needed' USING ERRCODE = '22023';
+  END IF;
+  IF actor_person IS NOT NULL AND EXISTS (
+    SELECT 1 FROM prima.person_links l
+     WHERE l.id = actor_person
+       AND l.data->>'groupPersonId' IN (SELECT data->>'groupPersonId' FROM prima.person_links WHERE data->>'idKey' = key)
+  ) THEN
+    RAISE EXCEPTION 'Someone else decides about your own history' USING ERRCODE = '42501';
+  END IF;
+  FOR g IN
+    SELECT p.id, p.data FROM prima.group_people p
+     WHERE p.id IN (SELECT data->>'groupPersonId' FROM prima.person_links WHERE data->>'idKey' = key)
+       AND coalesce(p.data->>'mergedInto', '') = ''
+     ORDER BY p.id FOR UPDATE
+  LOOP
+    UPDATE prima.group_people SET data = data || jsonb_build_object('rehire', mark, 'updatedAt', mark->'setAt') WHERE id = g.id;
+    INSERT INTO prima.group_person_notes (id, data)
+    VALUES (g.id, jsonb_build_object('id', g.id, 'foreign', coalesce(g.data->'foreign', 'false'::jsonb), 'rehire', jsonb_build_array(entry), 'oldRecords', '[]'::jsonb))
+    ON CONFLICT (id) DO UPDATE SET data = prima.group_person_notes.data
+      || jsonb_build_object('rehire', coalesce(prima.group_person_notes.data->'rehire', '[]'::jsonb) || jsonb_build_array(entry));
+    out := out || g.id;
+  END LOOP;
+  RETURN out;
+END $$;
+REVOKE ALL ON FUNCTION prima.history_set_mark(text, jsonb, jsonb, text) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION prima.history_set_mark(text, jsonb, jsonb, text) TO prima_app;
 
 -- Offboarding (pre-publication review R3, Fauzan 31 Oct 2026). The API may read accounts and grants but never change
 -- them, except through this one function: it closes an account from a day and ends its company grants the day before.

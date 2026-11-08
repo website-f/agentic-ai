@@ -36,13 +36,15 @@ describe('P78 owner on the Operations screens', () => {
       rate: 9.5,
       fixedFee: null,
       signedRef: 'LOA/P78/1',
+      proof: [{ kind: 'document' as const, name: 'signed-contract.pdf', data: `data:application/pdf;base64,${Buffer.from('%PDF-1.4 Synthetic signed contract').toString('base64')}` }],
     };
     const c = await svc.addContract(owner, input);
     expect(c.state).toBe('awarded');
     const moved = await svc.contractStep(owner, c.id, 'mobilise');
     expect(moved.state).toBe('mobilising');
-    const item = moved.mobilisation[0];
-    await svc.setMobItem(owner, c.id, item.id, 'done', '');
+    // The signed copy already ticks its own item; the owner records the next open item, with proof.
+    const item = moved.mobilisation.find((i) => i.status === 'open' && !i.auto && i.check !== 'cms_activation')!;
+    expect((await svc.setMobItem(owner, c.id, item.id, 'done', '', null, [{ kind: 'document', name: 'mobilisation-step.pdf', data: `data:application/pdf;base64,${Buffer.from('%PDF-1.4 Mobilisation step').toString('base64')}` }])).mobilisation.find((i) => i.id === item.id)!.status).toBe('done');
     const cmSasa = await svc.user('u-cm-sasa');
     await expect(svc.addContract(cmSasa, { ...input, signedRef: 'LOA/P78/2' })).rejects.toBeInstanceOf(AccessDenied);
     const audit = await svc['store'].list('audit', {});

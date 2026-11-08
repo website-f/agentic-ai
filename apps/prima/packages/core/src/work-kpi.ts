@@ -1,7 +1,28 @@
-import { isActHead, isHrDirector, visibleCompanyIds } from './access';
-import { RULES } from './rules';
-import { toMs } from './time';
-import type { AuthorityGrant, Dataset, Id, IsoDate, IsoDateTime, User } from './types';
+import { isActHead } from "./access";
+import { isHrDirector } from "./access";
+import { visibleCompanyIds } from "./access";
+import { RULES } from "./rules";
+import { toMs } from "./time";
+import type { AuthorityGrant } from "./types";
+import type { Dataset } from "./types";
+import type { Id } from "./types";
+import type { IsoDate } from "./types";
+import type { IsoDateTime } from "./types";
+import type { User } from "./types";
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 /**
  * Workflow KPIs for every department (Fauzan, 1 Nov 2026, restarted 5 Nov 2026: "Start now").
@@ -19,8 +40,8 @@ import type { AuthorityGrant, Dataset, Id, IsoDate, IsoDateTime, User } from './
  * IT (Fauzan, 5 Nov 2026): this arrival-time view is the IT KPI; the staff start/pause board (it-workflow-metrics) is a
  * personal work log only, not a KPI.
  *
- * Finance payments and closes are measured by the Finance KPI view on the Finance branch (finance-kpi.ts); the same
- * rules apply, and this view lists Finance only for the steps of other departments' records that Finance does.
+ * Finance payments and closes are added by the Finance adapter in finance-kpi.ts; the Finance KPI view there keeps
+ * the team-by-team detail and the Finance Director's own Settings targets.
  */
 
 /**
@@ -373,7 +394,7 @@ export const WORK_KPI_LIMITS: Partial<Record<WorkKpiDept, { unknown: string[]; n
   pdpa: { unknown: ['Which steps were the PDPA officer’s and which were others’: steps record the name only'], notTimed: [] },
   client_relations: { unknown: ['No target yet for onboarding steps'], notTimed: [] },
   finance: {
-    unknown: ['Payments and month-end closes are measured in the Finance KPI view (Finance branch, not yet merged)'],
+    unknown: [],
     notTimed: ['Finance Director, CEO and COO approvals'],
   },
 };

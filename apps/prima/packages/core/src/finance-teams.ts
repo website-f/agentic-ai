@@ -1,18 +1,20 @@
-/**
- * Teams approvals read into Prima (Fauzan, 1 Nov 2026: "5. Yes"), track A of docs/TEAMS_APPROVALS_INTEGRATION.md with
- * Revision 2. Off unless TEAMS_APPROVALS_READ=true, and useless until the tenant admin and the FD set up the flow, the
- * lists and the read-only grant; nothing here creates or changes anything in Microsoft 365.
- *
- * Prima trusts a Teams result only when every check passes. A payment the FD or the CEO set to be approved in Teams
- * (approvalMethod 'teams', never both) is then approved by the person who approved in Teams, matched by Entra object ID,
- * with their comment. A trusted Reject blocks approval and release. Prima still holds the approvers, separation of duties,
- * the payment revision and the release; a Teams result never releases or pays anything.
- */
-import { BadRequest, NotFound } from './service';
-import type { Store } from './store';
-import { dateOf, fromMs, toMs } from './time';
-import type { FinPayment, FinStatus, FinTeamsRead, FinTeamsRequestItem, FinTeamsResultItem, FinTeamsVerdict, Id, IsoDateTime, User } from './types';
-import { RULES } from './rules';
+import { BadRequest } from "./service";
+import { NotFound } from "./service";
+import type { Store } from "./store";
+import { dateOf } from "./time";
+import { fromMs } from "./time";
+import { toMs } from "./time";
+import type { FinPayment } from "./types";
+import type { FinStatus } from "./types";
+import type { FinTeamsRead } from "./types";
+import type { FinTeamsRequestItem } from "./types";
+import type { FinTeamsResultItem } from "./types";
+import type { FinTeamsVerdict } from "./types";
+import type { Id } from "./types";
+import type { IsoDateTime } from "./types";
+import type { User } from "./types";
+import { RULES } from "./rules";
+
 
 /** djb2 over a canonical string; enough to bind a result to one payment revision (not a secret). */
 function hash(s: string): string {

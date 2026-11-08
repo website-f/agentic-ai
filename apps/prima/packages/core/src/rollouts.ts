@@ -1,15 +1,7 @@
-// One shared rollout switch for every department (connect-departments work, 2 Nov 2026).
-//
-// While the IT pilot is on (rule PILOT-IT) only pilot users sign in. Each department adds its people when the CEO
-// starts that department's rollout. Before this file, HR (#51), Central Admin (#52) and Special Ops (#53) each wrote
-// their own `pilotAdmits()` with its own environment flag, in the same two files, so the three PRs could not merge
-// together. Now a department registers one admit rule here from its OWN module file, and the API reads one list of
-// started rollouts. Nobody edits auth.ts again to add a department.
-//
-// The list of started rollouts is configuration owned by the CEO (environment), never a request field or a client
-// claim. An unknown key in the list admits nobody. A rollout key with no registered rule admits nobody.
+import type { User } from "./types";
 
-import type { User } from './types';
+
+
 
 export type RolloutAdmit = (user: User) => boolean;
 
@@ -42,8 +34,8 @@ const LEGACY_FLAGS: Record<string, string> = {
   HR_ROLLOUT: 'hr',
   CENTRAL_ADMIN_ROLLOUT: 'central_admin',
   SPECIAL_OPS_ROLLOUT: 'special_ops',
+  GOV_OPS_ROLLOUT: 'gov_ops',
   FINANCE_ROLLOUT: 'finance',
-  // No GOV_OPS_ROLLOUT: Government Ops has not said who joins its rollout, so no flag pretends to start it.
 };
 
 /** The rollouts the CEO has started: PRIMA_ROLLOUTS="hr,central_admin" plus any legacy flag set to exactly "true". */
@@ -67,13 +59,13 @@ export function rolloutAdmits(user: User, on: ReadonlySet<string>): boolean {
   return false;
 }
 
-/** Started rollouts that no department has registered a rule for: they admit nobody, and readiness says so. */
-export function unregisteredRollouts(on: ReadonlySet<string>): string[] {
-  return [...on].filter((key) => !REGISTRY.has(key)).sort();
-}
-
 /** Which started rollouts admit this person (for the sign-in log and the readiness screen). */
 export function rolloutsAdmitting(user: User, on: ReadonlySet<string>): string[] {
   if (user.integration) return [];
   return [...on].filter((key) => REGISTRY.get(key)?.admits(user)).sort();
+}
+
+/** Started rollouts that no department has registered a rule for: they admit nobody, and readiness says so. */
+export function unregisteredRollouts(on: ReadonlySet<string>): string[] {
+  return [...on].filter((key) => !REGISTRY.has(key)).sort();
 }

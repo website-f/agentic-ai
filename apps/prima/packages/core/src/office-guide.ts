@@ -1,17 +1,8 @@
-// In-app guide cards for the company office (Arisha main review, 2 Nov 2026, section A), in the shared guide-card shape
-// of PR #56 (packages/core/src/guide-cards.ts, GuideCardSpec): Bahasa Melayu first, with English; `enteredOnce` filled;
-// whom to ask is a hand-over desk ('company_office') or the record's keepers, never a named person; anything not built
-// or not checked is listed in `notVerified`. Read-only help: a card never saves, approves or grants anything.
-//
-// `allowed` calls the server's own permission rule (access.ts `can`, `isGroupLeader`), so Arisha (GET /api/org/guide)
-// shows a card only to people the server lets do the task. `officeRoles` narrows the office page to the viewer's office
-// role (head, exec or monitor), which the server works out per company. When PR #56 is merged with this branch the
-// cards are registered with one line: registerGuideCards(OFFICE_GUIDE). Until then the office page reads them directly.
-// Every quoted button, field and message is checked against the current screens and service by
-// test/office-guide.test.ts. No new record kinds are added, so SERVER_FIELD_RULES needs no entry.
-import { can, isGroupLeader } from './access';
-import type { Action } from './access';
-import type { User } from './types';
+import { can } from "./access";
+import { isGroupLeader } from "./access";
+import type { Action } from "./access";
+import type { User } from "./types";
+
 
 export const OFFICE_GUIDE_VERSION = 'office-guide-v3 (2026-11-03)';
 

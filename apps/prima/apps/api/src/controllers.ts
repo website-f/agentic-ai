@@ -1,7 +1,7 @@
 import { dutyOfflineContext } from './duty-offline-context';
 import {releaseState} from './release-state';
 import { companyOfficeProblems, companyRunLinkProblems } from './company-office-readiness';
-import { BadRequestException, Body, Controller, ForbiddenException, Get, HttpException, Param, Post, Query, Req, ServiceUnavailableException, UseGuards, Res } from '@nestjs/common';
+import { BadRequestException, Body, Controller, ForbiddenException, Get, HttpException, Param, Post, Query, Req, Res, ServiceUnavailableException, UseGuards } from '@nestjs/common';
 import type {
   AttendanceIssue,
   CorpChangeKind,
@@ -27,16 +27,18 @@ import type {
   ClientRenewalDecision,
   ClientRequestKind,
 } from '@prima/core';
-import { CENTRAL_ALIASES, CENTRAL_EMPLOYER_IDS, CENTRAL_FULL_NAMES, RECORD_KINDS, RULES, accessClosed, arishaFormView, arishaMayConsult, dataModeOf, dateOf, fromMs, arishaKind, arishaToolsFor, type ArishaTurn, type ArishaReviewDraft, isRealDate, CLIENT_VIA, inPilot, rebalanceAiNames, CLIENT_LOST_REASON, CLIENT_PERSON_ROLE, CLIENT_RENEWAL_ANSWER, CLIENT_RENEWAL_DECISION, CLIENT_REQUEST_KIND, ITEM_REPORT_KINDS, type ItemAction, type ScanPurpose, type DispatchLevel, type DispatchProof, type PostLogKind, type SealedBundle, type VisitorIdKind } from '@prima/core';
-import { ArishaBusy, ArishaUnavailable, IdentityToken, askArisha, askArishaOn, type ArishaModel, arishaConfig } from './arisha';
+import { type DispatchLevel, type DispatchProof, type PostLogKind, type SealedBundle, type VisitorIdKind, type ItemAction, CLIENT_LOST_REASON, CLIENT_PERSON_ROLE, CLIENT_RENEWAL_ANSWER, CLIENT_RENEWAL_DECISION, CLIENT_REQUEST_KIND, CLIENT_VIA, isRealDate, rebalanceAiNames, CMS_READINESS_KEYS, type CmsDeviceKind, type CmsReadinessKey, RECORD_KINDS, RULES, arishaFormView, dataModeOf, arishaKind, arishaToolsFor, inPilot, type ArishaTurn, type AmJobKind, type ArishaReviewDraft, QUALITY_OPS_ACTIONS, ITEM_REPORT_KINDS, type ScanPurpose, CENTRAL_ALIASES, CENTRAL_EMPLOYER_IDS, CENTRAL_FULL_NAMES, accessClosed, arishaMayConsult, dateOf, fromMs } from '@prima/core';
+import { ArishaBusy, ArishaUnavailable, IdentityToken, askArisha, askArishaOn, type ArishaModel } from './arisha';
+// P80: Arisha runs on the office's AI inside the Agentic Office (arisha-office.ts); Azure OpenAI stays the fallback.
 import { arishaProvider, officeModel, type ArishaProvider } from './arisha-office';
 import { AuthGuard, DoorFeedGuard, pilotAdmits, FeedGuard, OfficeSystemGuard, PlannerFeedGuard, UserId, devLoginOn, entraSetup, issueToken, pilotSignInOnly, type AuthedRequest, AnalyticsFeedGuard, InhouseFeedGuard } from './auth';
 import { officeSecret } from './office';
-import { arishaPilotAllowed } from './arisha-pilot';
 import { Db, schemaState } from './db';
+import { FaceEngine, faceEngineConfig, issueFaceChallenge, openFaceChallenge } from './face-engine';
 import { shareBase, shareCsp, shareGonePage, shareReportPage, shareSecret, signShare, verifyShare } from './share-links';
 import type { Response } from 'express';
 import { WebConnectors, webConnectorConfig } from './web-connectors';
+import { sharedContractReaderOnline } from './contract-paper-online';
 
 const webConnectors = new WebConnectors();
 
@@ -62,8 +64,33 @@ const DATE = /^\d{4}-\d{2}-\d{2}$/;
 const SOCSO_TYPES = ['WORK_ACCIDENT', 'COMMUTING', 'EMERGENCY', 'OCCUPATIONAL_DISEASE', 'NON_WORK_ACCIDENT', 'INVALIDITY', 'DEATH'] as const;
 const SOCSO_STATUSES = ['REPORTED', 'DOCS_COMPLETE', 'UNDER_REVIEW', 'APPROVED', 'REJECTED', 'APPEAL', 'CLOSED'] as const;
 const SOCSO_RESTRICTIONS = ['NO_DUTY', 'NO_PATROL', 'NO_ARMED', 'NO_NIGHT'] as const;
-const FW_PAPERS = ['PLKS_PERMIT', 'PASSPORT', 'FOMEMA', 'FW_INSURANCE'] as const;
+const LINDUNG_CHANNELS = ['PORTAL', 'COUNTER'] as const;
+const LINDUNG_ANSWERS = ['EMPLOYED', 'NOT_EMPLOYED', 'UNPAID_LEAVE'] as const;
+const DEPENDANT_RELATIONS = ['SPOUSE', 'CHILD', 'PARENT', 'SIBLING', 'GRANDPARENT'] as const;
+const DEPENDANT_ROUTES = ['PERKESO_OVERSEAS_BANK', 'PERKESO_VIA_EMBASSY', 'PERKESO_MALAYSIAN_ACCOUNT'] as const;
+const DEPENDANT_PAYS = ['DEPENDANTS_BENEFIT', 'SURVIVORS_PENSION', 'FUNERAL', 'REPATRIATION', 'LUMP_SUM'] as const;
+const DOSH_KINDS = ['DEATH', 'SERIOUS', 'OVER_4_DAYS', 'DISEASE', 'MINOR'] as const;
+const pick = <T extends string>(list: readonly T[], v: unknown, name: string): T => {
+  const x = list.find((k) => k === v);
+  if (!x) throw new BadRequestException(`unknown ${name}`);
+  return x;
+};
+const FW_PAPERS = ['PLKS_PERMIT', 'PASSPORT', 'FOMEMA', 'FW_INSURANCE', 'SPIKPA', 'KDN_LETTER'] as const;
 const FWM_TASK_KINDS = ['FOMEMA', 'JIM', 'TNG', 'BIOMETRIC', 'OTHER'] as const;
+/** A policy scope HR sets: roles, job titles and sites (Fauzan 6 Nov 2026). The service checks each value. */
+function policyScope(v: unknown): { roles?: never[]; jobTitles?: string[]; siteIds?: string[] } | null {
+  if (v == null) return null;
+  if (typeof v !== 'object' || Array.isArray(v)) throw new BadRequestException('scope must be an object');
+  const o = v as Record<string, unknown>;
+  const list = (x: unknown, name: string, max: number, len: number) => (x == null ? undefined : Array.isArray(x) ? x.slice(0, max).map((y, i) => str(y, `${name}[${i}]`, len)) : (() => { throw new BadRequestException(`${name} must be a list`); })());
+  return { roles: list(o.roles, 'scope.roles', 4, 20) as never[] | undefined, jobTitles: list(o.jobTitles, 'scope.jobTitles', 30, 80), siteIds: list(o.siteIds, 'scope.siteIds', 50, 80) };
+}
+/** One translated copy of a policy. */
+function policyCopy(v: unknown, name: string): { lang: never; title: string; body: string; translator: string } {
+  if (v == null || typeof v !== 'object') throw new BadRequestException(`${name} must be an object`);
+  const o = v as Record<string, unknown>;
+  return { lang: str(o.lang, `${name}.lang`, 4) as never, title: str(o.title, `${name}.title`, 160), body: str(o.body, `${name}.body`, 20000), translator: str(o.translator ?? '', `${name}.translator`, 120) };
+}
 const FW_CHECK_KINDS = ['ARRIVAL_FEE', 'PASSPORT', 'WELFARE'] as const;
 const FW_RECRUIT_STEPS = ['AGENCY_LICENCE', 'EMBASSY', 'INTERVIEW', 'AGE', 'CONTRACT'] as const;
 const FW_CONTRACT_LANGUAGES = ['en', 'ms', 'ne', 'bn', 'my', 'id', 'other'] as const;
@@ -72,6 +99,43 @@ const HIRING_DOC_KINDS = ['AGREEMENT', 'AGREEMENT_STAMPED', 'VETTING_CERT'] as c
 const HOSPITAL_DOC_ITEMS = ['ADMISSION_LETTER', 'GUARANTEE_LETTER', 'MEDICAL_CERT', 'DISCHARGE_SUMMARY', 'ITEMISED_BILL', 'CLAIM_FORM'] as const;
 const HOSPITAL_DOC_STATUSES = ['missing', 'received', 'not_needed'] as const;
 const HOSPITAL_STAGES = ['collecting', 'submitted', 'approved', 'paid', 'rejected'] as const;
+
+const PDPA_SUBJECTS = ['guard', 'staff', 'applicant', 'client', 'visitor', 'driver', 'tenant', 'other'] as const;
+const PDPA_BASES = ['CONSENT', 'EXPLICIT_CONSENT', 'CONTRACT', 'LEGAL_DUTY', 'VITAL_INTEREST', 'JUSTICE'] as const;
+
+/** A personal data register entry from the form; the service checks the content. */
+function registerInput(b: Record<string, unknown>) {
+  const basis = PDPA_BASES.find((x) => x === b.basis);
+  if (!basis) throw new BadRequestException('basis is not known');
+  const dpia = (['not_needed', 'needed', 'done'] as const).find((x) => x === b.dpia);
+  if (!dpia) throw new BadRequestException('dpia is not known');
+  if (!Array.isArray(b.subjects) || b.subjects.length > PDPA_SUBJECTS.length) throw new BadRequestException('subjects must be a list');
+  const subjects = b.subjects.map((x) => {
+    const k = PDPA_SUBJECTS.find((s) => s === x);
+    if (!k) throw new BadRequestException('subjects has an unknown kind');
+    return k;
+  });
+  const opt = (v: unknown, name: string, max: number) => (v == null ? '' : str(v, name, max));
+  const days = b.retentionDays;
+  if (days != null && (typeof days !== 'number' || !Number.isFinite(days))) throw new BadRequestException('retentionDays must be a number');
+  return {
+    companyId: b.companyId == null || b.companyId === '' ? null : str(b.companyId, 'companyId', 60),
+    activity: str(b.activity, 'activity', 120),
+    system: str(b.system, 'system', 120),
+    subjects,
+    dataKinds: str(b.dataKinds, 'dataKinds', 400),
+    sensitive: b.sensitive === true,
+    purpose: str(b.purpose, 'purpose', 400),
+    basis,
+    retentionDays: days == null ? null : (days as number),
+    disposal: opt(b.disposal, 'disposal', 200),
+    sharedWith: opt(b.sharedWith, 'sharedWith', 200),
+    outsideMalaysia: opt(b.outsideMalaysia, 'outsideMalaysia', 80),
+    ownerDept: opt(b.ownerDept, 'ownerDept', 60),
+    noticeGiven: b.noticeGiven === true,
+    dpia,
+  };
+}
 
 /** Where the phone said it was, if it allowed location; anything else is dropped. */
 function placeOf(v: unknown): { lat: number; lng: number; accuracyM: number | null } | null {
@@ -86,6 +150,13 @@ function str(v: unknown, name: string, max = 2000): string {
   return v;
 }
 
+/** A list of user ids (meeting invitations), at most 60. */
+function idList(v: unknown): string[] {
+  if (v == null) return [];
+  if (!Array.isArray(v) || v.length > 60) throw new BadRequestException('attendeeIds must be a list of up to 60');
+  return v.map((x, i) => str(x, `attendeeIds[${i}]`, 120));
+}
+
 /** A stamped photo from the in-app camera, sent with a branch checklist or visit. */
 function proofOf(v: unknown): { image: string; capturedAt?: string; lat?: number | null; lng?: number | null } | null {
   if (v == null) return null;
@@ -98,9 +169,24 @@ function proofOf(v: unknown): { image: string; capturedAt?: string; lat?: number
     lng: typeof p.lng === 'number' ? p.lng : null,
   };
 }
+/** Site measurements for a BQ: a flat object of non-negative numbers. */
+function bqNumbers(v: unknown): Record<string, number> {
+  if (v == null) return {};
+  if (typeof v !== 'object' || Array.isArray(v)) throw new BadRequestException('measurements must be an object');
+  const out: Record<string, number> = {};
+  for (const [k, n] of Object.entries(v as Record<string, unknown>).slice(0, 40)) {
+    if (!/^[a-zA-Z]{1,30}$/.test(k)) throw new BadRequestException('measurements: unknown key');
+    out[k] = Number(n);
+  }
+  return out;
+}
+
 function date(v: unknown, name: string): string {
   if (typeof v !== 'string' || !DATE.test(v) || !isRealDate(v)) throw new BadRequestException(`${name} must be a real date like 2026-10-24`);
   return v;
+}
+function bad(message: string): never {
+  throw new BadRequestException(message);
 }
 function coord(v: unknown): number | null {
   return typeof v === 'number' && Number.isFinite(v) ? v : null;
@@ -111,10 +197,12 @@ function coord(v: unknown): number | null {
  * Before go-live the device sends the capture and the face engine scores it here; a
  * device-supplied score must not be trusted (master plan open item: face engine).
  */
-/** Proof items for a case step (rule CASE-PROOF): in-app camera photos or PDF/JPEG/PNG documents. */
+/** Proof items for a case step (rule CASE-PROOF): in-app camera photos, PDF/JPEG/PNG documents or SharePoint file links. */
 function badStepStage(): never {
   throw new BadRequestException('Each step must be due before preparing or before submitting.');
 }
+
+const FUELS = ['RON95', 'RON97', 'DIESEL', 'LPG', 'OTHER'] as const;
 
 function walletIds(v: unknown): string[] | undefined {
   if (v == null) return undefined;
@@ -135,7 +223,14 @@ function proofList(v: unknown) {
         data: str(b.data, 'proof.data', 1_000_000),
         caption: typeof b.caption === 'string' ? b.caption.slice(0, 200) : '',
       };
-    throw new BadRequestException('proof.kind must be photo or document');
+    if (b.kind === 'link')
+      // A SharePoint file by link: only the text of the link is taken; the service checks and cleans it, and never fetches it.
+      return {
+        kind: 'link' as const,
+        url: str(b.url, 'proof.url', 1800),
+        caption: typeof b.caption === 'string' ? b.caption.slice(0, 200) : '',
+      };
+    throw new BadRequestException('proof.kind must be photo, document or link');
   });
 }
 
@@ -167,6 +262,12 @@ function staffShot(b: Record<string, unknown>) {
   };
 }
 
+/** A photo clock in or out: with FACE_ENGINE=server the phone's descriptor is dropped, so the clock is photo-only. */
+function phoneShot(b: Record<string, unknown>) {
+  const shot = staffShot(b);
+  return faceSetup().cfg.mode === 'server' ? { ...shot, descriptor: null } : shot;
+}
+
 /** A face descriptor from the phone's free engine: 128 numbers (face.ts), or none. */
 function descriptor(v: unknown): number[] | null {
   if (v == null) return null;
@@ -189,6 +290,7 @@ function face(v: unknown): FaceCapture | null {
 }
 
 const CMS_SETTING_KEYS = [
+  'minRestHours',
   'shiftPattern',
   'firstShiftStart',
   'headControlPerShift',
@@ -204,6 +306,14 @@ const CMS_SETTING_KEYS = [
 
 /** Arisha's access to Azure OpenAI, from this server's managed identity. */
 const arishaToken = new IdentityToken();
+
+/** Prima's own face engine, loaded on first use when FACE_ENGINE=server (face-engine.ts). */
+let faceEngine: FaceEngine | null = null;
+export function faceSetup() {
+  const cfg = faceEngineConfig();
+  if (cfg.mode === 'server' && (!faceEngine || faceEngine.modelsDir !== cfg.modelsDir)) faceEngine = new FaceEngine(cfg.modelsDir);
+  return { cfg, engine: cfg.mode === 'server' ? faceEngine! : null };
+}
 /** Rebalance advice may also ask Arisha AI per case (Fauzan, 2 Nov 2026). Off by default; needs Arisha AI on too. */
 const rebalanceAiOn = (env: NodeJS.ProcessEnv = process.env) => env.WORK_REBALANCE_AI_ENABLED?.trim() === 'true' && !!arishaProvider(env);
 
@@ -246,6 +356,12 @@ export class HealthController {
     return { ok: true };
   }
 
+  /** Whether cloud file storage is on. Says nothing about where; production checked it at start-up. */
+  @Get('health/files')
+  files() {
+    return { files: this.db.files ? 'azure-blob' : 'off' };
+  }
+
   /**
    * Which schema version the database holds (a fingerprint of db/migrations, nothing about the data). The deploy
    * workflow compares it with the version it is about to ship and stops when the CEO must run a migration first.
@@ -281,6 +397,8 @@ export class AuthController {
     return {
       microsoft: e ? { tenantId: e.cfg.tenantId, clientId: e.cfg.spaClientId, scope: `${e.cfg.apiAppIdUri}/${e.cfg.scope}` } : null,
       devLogin: devLoginOn(),
+      // Guards' own phones (GUARD_PHONE=on): the sign-in screen then offers the phone sign-in link.
+      guardPhone: process.env.GUARD_PHONE === 'on',
       // P66: the Agentic Office may sign people in (office.ts). A yes/no only; the secret never leaves the server.
       office: !!officeSecret(),
     };
@@ -663,6 +781,40 @@ export class AppController {
     );
   }
 
+  /** FWM records a paper from its copy, corrects a mistake with a reason, or takes the JA app's date (Fauzan, 5 Nov 2026). */
+  @Post('people/:id/fw-papers')
+  fwPaper(@UserId() uid: string, @Param('id') id: string, @Body() b: Record<string, unknown>) {
+    const paper = FW_PAPERS.find((p) => p === b.paper);
+    if (!paper) throw new BadRequestException('unknown paper');
+    const mode = (['new', 'correct', 'ja'] as const).find((m) => m === b.mode);
+    if (!mode) throw new BadRequestException('mode must be new, correct or ja');
+    const input =
+      mode === 'ja'
+        ? { mode }
+        : {
+            mode,
+            number: str(b.number, 'number', 60),
+            issuedOn: date(b.issuedOn, 'issuedOn'),
+            expiresOn: date(b.expiresOn, 'expiresOn'),
+            reason: b.reason == null ? '' : str(b.reason, 'reason', 300),
+          };
+    return this.db.asUser(uid, (svc, u) => svc.recordFwPaper(u, id.slice(0, 120), paper, input, b.proof == null ? [] : proofList(b.proof)));
+  }
+
+  /** Acknowledge a paper at 30 days or less (rule FWM-ACK). */
+  @Post('fw-papers/:id/ack')
+  fwPaperAck(@UserId() uid: string, @Param('id') id: string, @Body() b: { note?: unknown }) {
+    return this.db.asUser(uid, (svc, u) => svc.ackFwPaper(u, id.slice(0, 160), b.note == null ? '' : str(b.note, 'note', 300)));
+  }
+
+  /** FWM adds a worker the JA app sent but Prima does not hold yet. */
+  @Post('fwm/ja-workers/:id/add')
+  fwAddFromJa(@UserId() uid: string, @Param('id') id: string, @Body() b: Record<string, unknown>) {
+    return this.db.asUser(uid, (svc, u) =>
+      svc.addFwWorkerFromJa(u, id.slice(0, 200), { branchId: str(b.branchId, 'branchId', 80), hiredOn: date(b.hiredOn, 'hiredOn'), dob: date(b.dob, 'dob') }),
+    );
+  }
+
   @Post('people/:id/fwm-tasks')
   fwmTask(@UserId() uid: string, @Param('id') id: string, @Body() b: Record<string, unknown>) {
     const kind = FWM_TASK_KINDS.find((k) => k === b.kind);
@@ -675,6 +827,113 @@ export class AppController {
         dueOn: date(b.dueOn, 'dueOn'),
       }),
     );
+  }
+
+  // ----- Recruitment cost: host pays FWM, FWM pays the owner back (Fauzan, 3 Nov 2026) -----
+  @Get('fwm/cost')
+  fwCostBoard(@UserId() uid: string) {
+    return this.db.asUser(uid, (svc, u) => svc.fwCostBoard(u));
+  }
+
+  @Get('fwm/cost/docs/:ref')
+  fwCostDocs(@UserId() uid: string, @Param('ref') ref: string) {
+    return this.db.asUser(uid, (svc, u) => svc.fwCostDocs(u, ref.slice(0, 160)));
+  }
+
+  @Post('people/:id/fw-placements')
+  fwPlacement(@UserId() uid: string, @Param('id') id: string, @Body() b: Record<string, unknown>) {
+    const input = {
+      hostCompanyId: str(b.hostCompanyId, 'hostCompanyId', 80),
+      hostBranchId: b.hostBranchId == null || b.hostBranchId === '' ? null : str(b.hostBranchId, 'hostBranchId', 80),
+      from: date(b.from, 'from'),
+      note: b.note == null ? '' : str(b.note, 'note', 300),
+      salaryPaidBy: b.salaryPaidBy == null || b.salaryPaidBy === '' ? null : b.salaryPaidBy === 'company' ? ('company' as const) : b.salaryPaidBy === 'branch' ? ('branch' as const) : bad('salaryPaidBy must be company or branch'),
+    };
+    return this.db.asUser(uid, (svc, u) => svc.recordFwPlacement(u, id.slice(0, 120), input, b.proof == null ? [] : proofList(b.proof)));
+  }
+
+  @Post('fw-placements/:id/end')
+  fwPlacementEnd(@UserId() uid: string, @Param('id') id: string, @Body() b: Record<string, unknown>) {
+    const input = { to: date(b.to, 'to'), note: str(b.note, 'note', 300) };
+    return this.db.asUser(uid, (svc, u) => svc.endFwPlacement(u, id.slice(0, 160), input));
+  }
+
+  @Post('fwm/cost/legal-notes')
+  fwCostLegalNote(@UserId() uid: string, @Body() b: Record<string, unknown>) {
+    const input = { note: str(b.note, 'note', 2000) };
+    return this.db.asUser(uid, (svc, u) => svc.addFwCostLegalNote(u, input));
+  }
+
+  @Post('fwm/cost/rates')
+  fwCostRate(@UserId() uid: string, @Body() b: Record<string, unknown>) {
+    if (b.kind !== 'charge' && b.kind !== 'payback') throw new BadRequestException('kind must be charge or payback');
+    if (typeof b.monthlyPerWorker !== 'number') throw new BadRequestException('monthlyPerWorker must be a number');
+    if (typeof b.from !== 'string' || !/^\d{4}-(0[1-9]|1[0-2])$/.test(b.from)) throw new BadRequestException('from must be a month like 2026-11');
+    const input = { kind: b.kind as 'charge' | 'payback', monthlyPerWorker: b.monthlyPerWorker, from: b.from, note: str(b.note, 'note', 300) };
+    return this.db.asUser(uid, (svc, u) => svc.setFwCostRate(u, input));
+  }
+
+  @Post('fwm/cost/months/:month/draft')
+  fwCostDraft(@UserId() uid: string, @Param('month') month: string) {
+    if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) throw new BadRequestException('month must be like 2026-11');
+    return this.db.asUser(uid, (svc, u) => svc.draftFwCostMonth(u, month));
+  }
+
+  @Post('fwm/cost/months/:month/decide')
+  fwCostDecide(@UserId() uid: string, @Param('month') month: string, @Body() b: Record<string, unknown>) {
+    if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) throw new BadRequestException('month must be like 2026-11');
+    if (typeof b.approve !== 'boolean') throw new BadRequestException('approve must be true or false');
+    if (b.chargeIds != null && (!Array.isArray(b.chargeIds) || b.chargeIds.length > 500 || b.chargeIds.some((x) => typeof x !== 'string'))) throw new BadRequestException('chargeIds must be a list of ids');
+    const input = { month, approve: b.approve, note: str(b.note, 'note', 300), chargeIds: (b.chargeIds as string[] | undefined) ?? undefined };
+    return this.db.asUser(uid, (svc, u) => svc.decideFwCostCharges(u, input));
+  }
+
+  @Post('fw-cost-charges/:id/book')
+  fwCostBook(@UserId() uid: string, @Param('id') id: string, @Body() b: Record<string, unknown>) {
+    if (b.step !== 'billed' && b.step !== 'paid') throw new BadRequestException('step must be billed or paid');
+    const input = { step: b.step as 'billed' | 'paid', ref: str(b.ref, 'ref', 60), on: date(b.on, 'on') };
+    return this.db.asUser(uid, (svc, u) => svc.bookFwCostCharge(u, id.slice(0, 160), input, b.proof == null ? [] : proofList(b.proof)));
+  }
+
+  // ----- Nepali EPF and SOCSO recharge: the owner pays, the user company or branch repays (Fauzan, 5 Nov 2026) -----
+  @Get('fwm/epf-socso')
+  fwStatBoard(@UserId() uid: string) {
+    return this.db.asUser(uid, (svc, u) => svc.fwStatBoard(u));
+  }
+
+  @Post('fwm/epf-socso/:action')
+  fwStatAct(@UserId() uid: string, @Param('action') action: string, @Body() b: Record<string, unknown>) {
+    if (!['draft', 'issue', 'repaid', 'received', 'cancel'].includes(action)) throw new BadRequestException('Unknown action');
+    const opt = (v: unknown, name: string, max: number) => (v == null || v === '' ? undefined : str(v, name, max));
+    const body: Record<string, unknown> = {
+      ownerCompanyId: opt(b.ownerCompanyId, 'ownerCompanyId', 80),
+      userCompanyId: opt(b.userCompanyId, 'userCompanyId', 80),
+      userBranchId: opt(b.userBranchId, 'userBranchId', 80) ?? null,
+      period: opt(b.period, 'period', 7),
+      pairId: opt(b.pairId, 'pairId', 200),
+      note: opt(b.note, 'note', 300),
+      reason: opt(b.reason, 'reason', 200),
+      bankRef: opt(b.bankRef, 'bankRef', 60),
+      paidOn: b.paidOn == null ? undefined : date(b.paidOn, 'paidOn'),
+      amount: b.amount == null ? undefined : typeof b.amount === 'number' ? b.amount : bad('amount must be a number'),
+    };
+    if (action === 'issue') {
+      if (!Array.isArray(b.lines) || b.lines.length > 500) throw new BadRequestException('lines must be a list');
+      body.lines = b.lines.map((l: unknown) => {
+        const x = (l ?? {}) as Record<string, unknown>;
+        const paid = (x.paid ?? {}) as Record<string, unknown>;
+        const num = (v: unknown, name: string) => (typeof v === 'number' ? v : bad(`${name} must be a number`));
+        return {
+          personId: str(x.personId, 'personId', 120),
+          wage: num(x.wage, 'wage'),
+          paid: { epfEr: num(paid.epfEr, 'epfEr'), epfEe: num(paid.epfEe, 'epfEe'), socsoEr: num(paid.socsoEr, 'socsoEr'), socsoEe: num(paid.socsoEe, 'socsoEe'), lindungEe: num(paid.lindungEe, 'lindungEe') },
+          kwspRef: str(x.kwspRef, 'kwspRef', 60),
+          perkesoRef: str(x.perkesoRef, 'perkesoRef', 60),
+          note: x.note == null ? '' : str(x.note, 'note', 200),
+        };
+      });
+    }
+    return this.db.asUser(uid, (svc, u) => svc.fwStatAct(u, action, body));
   }
 
   // ----- Responsible recruitment and worker welfare (masterplan §240, Fauzan 3 Nov 2026) -----
@@ -1234,6 +1493,16 @@ export class AppController {
     const a = (['acknowledge', 'investigate', 'note', 'close'] as const).find((x) => x === action);
     if (!a) throw new BadRequestException('action must be acknowledge, investigate, note or close');
     return this.db.asUser(uid, (svc, u) => svc.whistleStep(u, id.slice(0, 160), a, str(b.text ?? '', 'text', 1000)));
+  }
+
+  @Post('grc/speak-up/:code/reply')
+  whistleReply(@UserId() uid: string, @Param('code') code: string, @Body() b: { text?: unknown; retaliation?: unknown }) {
+    return this.db.asUser(uid, (svc, u) => svc.whistleReply(u, code.slice(0, 20), str(b.text ?? '', 'text', 2000), b.retaliation === true));
+  }
+
+  @Post('grc/reports/:id/message')
+  whistleMessage(@UserId() uid: string, @Param('id') id: string, @Body() b: { text?: unknown }) {
+    return this.db.asUser(uid, (svc, u) => svc.whistleMessage(u, id.slice(0, 160), str(b.text ?? '', 'text', 1000)));
   }
 
   @Post('grc/reports/:id/review')
@@ -1931,6 +2200,48 @@ export class AppController {
     );
   }
 
+  // ----- Quality and compliance: ISO 9001 + PIKM register and competency matrix (Fauzan, 5 Nov 2026) -----
+  @Get('quality/register')
+  qualityRegister(@UserId() uid: string, @Query('companyId') companyId?: string, @Query('standard') standard?: string) {
+    const std = standard === 'ISO9001' || standard === 'PIKM' ? standard : undefined;
+    return this.db.asUser(uid, (svc, u) => svc.quality.register(u, { companyId: companyId?.slice(0, 80), standard: std }));
+  }
+
+  @Get('quality/foundation')
+  qualityFoundation(@UserId() uid: string) {
+    return this.db.asUser(uid, (svc, u) => svc.quality.foundation(u));
+  }
+
+  @Get('quality/matrix')
+  qualityMatrix(@UserId() uid: string, @Query('companyId') companyId?: string) {
+    return this.db.asUser(uid, (svc, u) => svc.quality.matrix(u, { companyId: companyId?.slice(0, 80) }));
+  }
+
+  @Get('quality/operations')
+  qualityOps(@UserId() uid: string, @Query('companyId') companyId?: string) {
+    return this.db.asUser(uid, (svc, u) => svc.qualityOps.board(u, { companyId: companyId?.slice(0, 80) }));
+  }
+
+  @Post('quality/:action')
+  qualityAction(@UserId() uid: string, @Param('action') action: string, @Body() b: Record<string, unknown>) {
+    if (!/^[a-zA-Z]{2,30}$/.test(action)) throw new BadRequestException('Unknown quality action');
+    if (!b || typeof b !== 'object' || Array.isArray(b)) throw new BadRequestException('Send the details as an object');
+    return this.db.asUser(uid, (svc, u) => (QUALITY_OPS_ACTIONS.includes(action) ? svc.qualityOps.act(u, action, b) : svc.quality.act(u, action, b)) as Promise<unknown>);
+  }
+
+  // ----- Governance registers (Fauzan, 5 Nov 2026) -----
+  @Get('registers')
+  registerBoard(@UserId() uid: string) {
+    return this.db.asUser(uid, (svc, u) => svc.registers.board(u));
+  }
+
+  @Post('registers/:action')
+  registerAction(@UserId() uid: string, @Param('action') action: string, @Body() b: Record<string, unknown>) {
+    if (!/^[a-zA-Z]{2,30}$/.test(action)) throw new BadRequestException('Unknown register action');
+    if (!b || typeof b !== 'object' || Array.isArray(b)) throw new BadRequestException('Send the details as an object');
+    return this.db.asUser(uid, (svc, u) => svc.registers.act(u, action, b));
+  }
+
   // ----- Group website management (Fauzan, 27 Oct 2026) -----
   @Get('websites')
   websiteBoard(@UserId() uid: string) {
@@ -2007,7 +2318,8 @@ export class AppController {
   }
 
   @Post('it/assets/:id')
-  setItAsset(@UserId() uid: string, @Param('id') id: string, @Body() b: { status?: unknown; assignedTo?: unknown; note?: unknown }) {
+  setItAsset(@UserId() uid: string, @Param('id') id: string, @Body() b: { status?: unknown; assignedTo?: unknown; note?: unknown; ewaste?: unknown }) {
+    const ew = b.ewaste && typeof b.ewaste === 'object' ? (b.ewaste as Record<string, unknown>) : null;
     return this.db.asUser(uid, (svc, u) =>
       svc.setItAsset(
         u,
@@ -2015,6 +2327,7 @@ export class AppController {
         str(b.status, 'status', 20) as ItAsset['status'],
         b.assignedTo == null ? null : str(b.assignedTo, 'assignedTo', 80),
         b.note == null ? '' : str(b.note, 'note', 300),
+        ew ? { contractor: typeof ew.contractor === 'string' ? ew.contractor.slice(0, 120) : '', noteRef: typeof ew.noteRef === 'string' ? ew.noteRef.slice(0, 80) : '' } : null,
       ),
     );
   }
@@ -2095,6 +2408,12 @@ export class AppController {
     return this.db.asUser(uid, (svc, u) => svc.branchLeadClaims(u, companyId.slice(0, 40)));
   }
 
+  // JV branch staff, pay and purchases (Fauzan, 4 Nov 2026).
+  @Get('branches/:id/jv')
+  branchJv(@UserId() uid: string, @Param('id') id: string) {
+    return this.db.asUser(uid, (svc, u) => svc.branchJv(u, id.slice(0, 120)));
+  }
+
   @Post('branches/:id/act')
   branchAct(@UserId() uid: string, @Param('id') id: string, @Body() b: Record<string, unknown>) {
     if (!b || typeof b !== 'object' || Array.isArray(b)) throw new BadRequestException('Send the details as an object');
@@ -2153,8 +2472,65 @@ export class AppController {
         st,
         b.note == null ? '' : str(b.note, 'note', 300),
         b.acceptedUntil == null ? null : date(b.acceptedUntil, 'acceptedUntil'),
+        proofList(b.proof),
       ),
     );
+  }
+
+  @Get('contracts/:id/proof')
+  contractProof(@UserId() uid: string, @Param('id') id: string) {
+    return this.db.asUser(uid, (svc, u) => svc.contractProof(u, id.slice(0, 120)));
+  }
+
+  @Post('contracts/:id/items')
+  addMobItem(@UserId() uid: string, @Param('id') id: string, @Body() b: Record<string, unknown>) {
+    const ws = (['W1', 'W2', 'W3', 'W4', 'W5', 'W6', 'W7', 'W8', 'W9', 'W10', 'W11'] as const).find((x) => x === b.workstream);
+    const owner = (['company', 'operations', 'hr', 'finance', 'arms'] as const).find((x) => x === b.owner);
+    if (!ws || !owner) throw new BadRequestException('workstream and owner are required');
+    return this.db.asUser(uid, (svc, u) =>
+      svc.addMobItem(u, id.slice(0, 120), {
+        workstream: ws,
+        owner,
+        label: str(b.label, 'label', 160),
+        dueOn: date(b.dueOn, 'dueOn'),
+        critical: b.critical === true,
+        round: b.round == null ? undefined : Number(b.round),
+      }),
+    );
+  }
+
+  @Post('contracts/:id/rounds/:round/certify')
+  certifyContractRound(@UserId() uid: string, @Param('id') id: string, @Param('round') round: string, @Body() b: { note?: unknown }) {
+    const r = Number(round);
+    if (!Number.isInteger(r) || r < 2 || r > 99) throw new BadRequestException('round must be 2 or more');
+    return this.db.asUser(uid, (svc, u) => svc.certifyContractRound(u, id.slice(0, 120), r, b.note == null ? '' : str(b.note, 'note', 300)));
+  }
+
+  @Post('contracts/:id/renew')
+  renewContract(@UserId() uid: string, @Param('id') id: string, @Body() b: Record<string, unknown>) {
+    return this.db.asUser(uid, (svc, u) =>
+      svc.renewContract(u, id.slice(0, 120), { newEndOn: date(b.newEndOn, 'newEndOn'), signedRef: str(b.signedRef ?? '', 'signedRef', 80), proof: proofList(b.proof) }),
+    );
+  }
+
+  /** Read the text of a signed contract or letter of award to help fill the form. Nothing is saved; the text is not kept. */
+  @Post('contracts/read-paper')
+  readContractPaper(@UserId() uid: string, @Body() b: { companyId?: unknown; clientAccountId?: unknown; text?: unknown }) {
+    if (typeof b.text !== 'string' || b.text.length > 120_000) throw new BadRequestException('text');
+    const text = b.text;
+    const online = sharedContractReaderOnline() ?? undefined;
+    return this.db.asUser(uid, (svc, u) =>
+      svc.readContractPaper(
+        u,
+        { companyId: str(b.companyId, 'companyId', 120), clientAccountId: b.clientAccountId == null || b.clientAccountId === '' ? null : str(b.clientAccountId, 'clientAccountId', 120), text },
+        online,
+      ),
+    );
+  }
+
+  @Post('contracts/:id/client')
+  linkContractClient(@UserId() uid: string, @Param('id') id: string, @Body() b: { accountId?: unknown }) {
+    return this.db.asUser(uid, (svc, u) => svc.linkContractClient(u, id.slice(0, 120), str(b.accountId, 'accountId', 120)));
   }
 
   // ----- CMS commissioning (masterplan §191): signed scope, contact test calls, operator and client acceptance -----
@@ -2243,6 +2619,9 @@ export class AppController {
         fixedFee: b.fixedFee == null ? null : Number(b.fixedFee),
         signedRef: str(b.signedRef ?? '', 'signedRef', 80),
         reason: str(b.reason ?? '', 'reason', 300),
+        proof: proofList(b.proof),
+        addSiteIds: Array.isArray(b.addSiteIds) ? (b.addSiteIds as unknown[]).slice(0, 20).map((x) => String(x).slice(0, 120)) : [],
+        expansion: b.expansion === true,
       }),
     );
   }
@@ -2265,6 +2644,40 @@ export class AppController {
         fixedFee: b.fixedFee == null ? null : Number(b.fixedFee),
         contractedHours: b.contractedHours == null ? null : Number(b.contractedHours),
         signedRef: str(b.signedRef ?? '', 'signedRef', 80),
+        paperKind: b.paperKind === 'loa' ? 'loa' : 'contract',
+        poRef: b.poRef == null || b.poRef === '' ? null : str(b.poRef, 'poRef', 60),
+        posts: Array.isArray(b.posts)
+          ? (b.posts as Record<string, unknown>[]).slice(0, 50).map((p) => ({
+              postId: p?.postId == null || p.postId === '' ? null : String(p.postId).slice(0, 120),
+              label: String(p?.label ?? '').slice(0, 60),
+              guards: Number(p?.guards),
+              hoursPerDay: Number(p?.hoursPerDay),
+              armed: p?.armed === true,
+              rate: Number(p?.rate ?? 0),
+              contractedHours: p?.contractedHours == null ? null : Number(p.contractedHours),
+            }))
+          : null,
+        hoursPerDay: b.hoursPerDay == null ? null : Number(b.hoursPerDay),
+        sla:
+          b.sla && typeof b.sla === 'object'
+            ? {
+                replaceAbsentMinutes: Number((b.sla as Record<string, unknown>).replaceAbsentMinutes ?? 60),
+                incidentReportHours: Number((b.sla as Record<string, unknown>).incidentReportHours ?? 24),
+                monthlyReportByDay: Number((b.sla as Record<string, unknown>).monthlyReportByDay ?? 7),
+              }
+            : null,
+        penalties: b.penalties == null ? null : str(b.penalties, 'penalties', 500),
+        paymentDays: b.paymentDays == null || b.paymentDays === '' ? null : Number(b.paymentDays),
+        noticeDays: b.noticeDays == null || b.noticeDays === '' ? null : Number(b.noticeDays),
+        bond:
+          b.bond && typeof b.bond === 'object'
+            ? {
+                amount: Number((b.bond as Record<string, unknown>).amount),
+                ref: str((b.bond as Record<string, unknown>).ref ?? '', 'bond.ref', 80),
+                expiresOn: date((b.bond as Record<string, unknown>).expiresOn, 'bond.expiresOn'),
+              }
+            : null,
+        proof: proofList(b.proof),
       }),
     );
   }
@@ -2805,6 +3218,19 @@ export class AppController {
     return this.db.asUser(uid, (svc, u) => svc.amBoard(u));
   }
 
+  // ----- Asset Management extras (Fauzan, 5 Nov 2026, rule AM-EXTRAS) -----
+  @Get('assets/extras')
+  amExtrasBoard(@UserId() uid: string) {
+    return this.db.asUser(uid, (svc, u) => svc.amExtras.board(u));
+  }
+
+  /** One route for every step; the service checks who may do it and every field, whatever the screen sends. */
+  @Post('assets/extras/:area/:action')
+  amExtrasAct(@UserId() uid: string, @Param('area') area: string, @Param('action') action: string, @Body() b: Record<string, unknown>, @Query('id') id = '') {
+    if (!b || typeof b !== 'object' || Array.isArray(b)) throw new BadRequestException('body must be an object');
+    return this.db.asUser(uid, (svc, u) => svc.amExtras.act(u, area.slice(0, 20), action.slice(0, 20), String(id).slice(0, 120), b));
+  }
+
   // ----- ACT: Audit, Compliance and Transformation (Fauzan, 27 Oct 2026) -----
   @Get('act')
   actBoard(@UserId() uid: string) {
@@ -2838,6 +3264,9 @@ export class AppController {
         rootCause: opt('rootCause', 500),
         solution: opt('solution', 500),
         targetOn: b.targetOn == null ? undefined : date(b.targetOn, 'targetOn'),
+        containment: opt('containment', 500),
+        similarWhere: opt('similarWhere', 500),
+        effectiveWhen: opt('effectiveWhen', 500),
         proof: opt('proof', 500),
         ok: b.ok === true,
         note: opt('note', 500),
@@ -3278,10 +3707,213 @@ export class AppController {
     );
   }
 
+  // ----- Asset Management BQ, quotes and award (Fauzan, 5 Nov 2026, rule AM-BQ) -----
+  @Get('assets/work-orders/:id/bq')
+  amBq(@UserId() uid: string, @Param('id') id: string) {
+    return this.db.asUser(uid, (svc, u) => svc.amBq(u, id.slice(0, 80)));
+  }
+
+  @Post('assets/work-orders/:id/bq/draft')
+  amBqDraft(@UserId() uid: string, @Param('id') id: string, @Body() b: { jobKind?: unknown; measurements?: unknown }) {
+    return this.db.asUser(uid, (svc, u) => svc.amBqDraft(u, id.slice(0, 80), str(b.jobKind ?? '', 'jobKind', 20) as AmJobKind, bqNumbers(b.measurements)));
+  }
+
+  @Post('assets/work-orders/:id/bq')
+  amBqSave(
+    @UserId() uid: string,
+    @Param('id') id: string,
+    @Body()
+    b: {
+      jobKind?: unknown;
+      measurements?: unknown;
+      lines?: unknown;
+      version?: unknown;
+      title?: unknown;
+      location?: unknown;
+      sections?: unknown;
+      contingencyPct?: unknown;
+      notes?: unknown;
+      drawings?: unknown;
+    },
+  ) {
+    if (!Array.isArray(b.lines) || b.lines.length > 200) throw new BadRequestException('lines: 1 to 200');
+    const lines = b.lines.map((l: Record<string, unknown>) => ({
+      item: str(l?.item ?? '', 'item', 160),
+      unit: str(l?.unit ?? '', 'unit', 12),
+      qty: Number(l?.qty),
+      rate: l?.rate == null || l.rate === '' ? null : Number(l.rate),
+      note: l?.note == null ? '' : str(l.note, 'note', 200),
+      section: l?.section == null ? undefined : str(l.section, 'section', 2),
+      calc: l?.calc == null ? undefined : str(l.calc, 'calc', 160),
+      optional: l?.optional === true,
+    }));
+    // Building BQs: sections, notes and drawings are short lists of short text; the service checks them again.
+    const list = (v: unknown, name: string, max: number) => {
+      if (v == null) return undefined;
+      if (!Array.isArray(v) || v.length > max) throw new BadRequestException(`${name}: at most ${max}`);
+      return v as unknown[];
+    };
+    const sections = list(b.sections, 'sections', 26)?.map((x) => {
+      const o = (x ?? {}) as Record<string, unknown>;
+      return { code: str(o.code ?? '', 'section code', 2), title: str(o.title ?? '', 'section title', 120) };
+    });
+    const notes = list(b.notes, 'notes', 40)?.map((n) => str(n ?? '', 'note', 400));
+    const drawings = list(b.drawings, 'drawings', 30)?.map((x) => {
+      const o = (x ?? {}) as Record<string, unknown>;
+      return { ref: str(o.ref ?? '', 'drawing number', 20), title: str(o.title ?? '', 'drawing title', 160) };
+    });
+    return this.db.asUser(uid, (svc, u) =>
+      svc.amBqSave(u, id.slice(0, 80), {
+        jobKind: str(b.jobKind ?? '', 'jobKind', 20) as AmJobKind,
+        measurements: bqNumbers(b.measurements),
+        lines,
+        version: Number(b.version ?? 0),
+        title: b.title == null ? undefined : str(b.title, 'title', 200),
+        location: b.location == null ? undefined : str(b.location, 'location', 200),
+        sections,
+        contingencyPct: b.contingencyPct == null || b.contingencyPct === '' ? undefined : Number(b.contingencyPct),
+        notes,
+        drawings,
+      }),
+    );
+  }
+
+  @Post('assets/work-orders/:id/bq/brief')
+  amBqBrief(@UserId() uid: string, @Param('id') id: string, @Body() b: { jobKind?: unknown; answers?: unknown; measurements?: unknown; version?: unknown }) {
+    if (b.answers != null && (typeof b.answers !== 'object' || Array.isArray(b.answers))) throw new BadRequestException('answers must be an object');
+    const answers: Record<string, string> = {};
+    for (const [k, v] of Object.entries((b.answers ?? {}) as Record<string, unknown>).slice(0, 60)) {
+      if (!/^[a-zA-Z]{1,30}$/.test(k)) throw new BadRequestException('answers: unknown key');
+      answers[k] = str(v ?? '', k, 500);
+    }
+    return this.db.asUser(uid, (svc, u) =>
+      svc.amBqBrief(u, id.slice(0, 80), { jobKind: str(b.jobKind ?? '', 'jobKind', 20) as AmJobKind, answers, measurements: bqNumbers(b.measurements), version: Number(b.version ?? 0) }),
+    );
+  }
+
+  @Post('assets/work-orders/:id/bq/reopen')
+  amBqReopen(@UserId() uid: string, @Param('id') id: string, @Body() b: { reason?: unknown }) {
+    return this.db.asUser(uid, (svc, u) => svc.amBqReopen(u, id.slice(0, 80), b.reason == null ? '' : str(b.reason, 'reason', 300)));
+  }
+
+  @Post('assets/work-orders/:id/bq/submit')
+  amBqSubmit(@UserId() uid: string, @Param('id') id: string) {
+    return this.db.asUser(uid, (svc, u) => svc.amBqSubmit(u, id.slice(0, 80)));
+  }
+
+  @Post('assets/work-orders/:id/bq/:decision')
+  amBqDecide(@UserId() uid: string, @Param('id') id: string, @Param('decision') decision: string, @Body() b: { note?: unknown }) {
+    if (decision !== 'approve' && decision !== 'return') throw new BadRequestException('approve or return');
+    return this.db.asUser(uid, (svc, u) => svc.amBqDecide(u, id.slice(0, 80), decision === 'approve', b.note == null ? '' : str(b.note, 'note', 300)));
+  }
+
+  @Post('assets/work-orders/:id/quotes')
+  amQuoteAdd(@UserId() uid: string, @Param('id') id: string, @Body() b: Record<string, unknown>) {
+    if (!Array.isArray(b.lines) || b.lines.length > 200) throw new BadRequestException('lines: up to 200');
+    return this.db.asUser(uid, (svc, u) =>
+      svc.amQuoteAdd(u, id.slice(0, 80), {
+        contractor: str(b.contractor ?? '', 'contractor', 120),
+        ref: str(b.ref ?? '', 'ref', 40),
+        receivedOn: date(b.receivedOn, 'receivedOn'),
+        validUntil: b.validUntil == null || b.validUntil === '' ? null : date(b.validUntil, 'validUntil'),
+        lines: (b.lines as Record<string, unknown>[]).map((l) => ({ lineId: str(l?.lineId ?? '', 'lineId', 8), rate: Number(l?.rate) })),
+        statedTotal: Number(b.statedTotal),
+      }),
+    );
+  }
+
+  @Post('assets/work-orders/:id/award')
+  amAwardAsk(@UserId() uid: string, @Param('id') id: string, @Body() b: { quoteId?: unknown; reason?: unknown }) {
+    return this.db.asUser(uid, (svc, u) => svc.amAwardAsk(u, id.slice(0, 80), str(b.quoteId ?? '', 'quoteId', 8), b.reason == null ? '' : str(b.reason, 'reason', 300)));
+  }
+
+  @Post('assets/work-orders/:id/award/:decision')
+  amAwardDecide(@UserId() uid: string, @Param('id') id: string, @Param('decision') decision: string, @Body() b: { note?: unknown }) {
+    if (decision !== 'approve' && decision !== 'reject') throw new BadRequestException('approve or reject');
+    return this.db.asUser(uid, (svc, u) => svc.amAwardDecide(u, id.slice(0, 80), decision === 'approve', b.note == null ? '' : str(b.note, 'note', 300)));
+  }
+
+  // Variation orders: every price change after the award (Fauzan, 5 Nov 2026).
+  @Post('assets/work-orders/:id/variations')
+  amVoAsk(@UserId() uid: string, @Param('id') id: string, @Body() b: Record<string, unknown>) {
+    if (!Array.isArray(b.lines) || b.lines.length > 50) throw new BadRequestException('lines: 1 to 50');
+    return this.db.asUser(uid, (svc, u) =>
+      svc.amVoAsk(u, id.slice(0, 80), {
+        reason: str(b.reason ?? '', 'reason', 300),
+        contractorRef: str(b.contractorRef ?? '', 'contractorRef', 40),
+        lines: (b.lines as Record<string, unknown>[]).map((l) => ({
+          lineId: l?.lineId == null || l.lineId === '' ? null : str(l.lineId, 'lineId', 8),
+          item: l?.item == null ? '' : str(l.item, 'item', 160),
+          unit: l?.unit == null ? '' : str(l.unit, 'unit', 12),
+          qty: Number(l?.qty),
+          rate: Number(l?.rate),
+          note: l?.note == null ? '' : str(l.note, 'note', 200),
+        })),
+      }),
+    );
+  }
+
+  @Post('assets/work-orders/:id/variations/:voId/withdraw')
+  amVoWithdraw(@UserId() uid: string, @Param('id') id: string, @Param('voId') voId: string, @Body() b: { reason?: unknown }) {
+    return this.db.asUser(uid, (svc, u) => svc.amVoWithdraw(u, id.slice(0, 80), voId.slice(0, 8), b.reason == null ? '' : str(b.reason, 'reason', 300)));
+  }
+
+  @Post('assets/work-orders/:id/variations/:voId/:decision')
+  amVoDecide(@UserId() uid: string, @Param('id') id: string, @Param('voId') voId: string, @Param('decision') decision: string, @Body() b: { note?: unknown }) {
+    if (decision !== 'approve' && decision !== 'reject') throw new BadRequestException('approve or reject');
+    return this.db.asUser(uid, (svc, u) => svc.amVoDecide(u, id.slice(0, 80), voId.slice(0, 8), decision === 'approve', b.note == null ? '' : str(b.note, 'note', 300)));
+  }
+
   // ----- JA Group app data, read-only (Fauzan, 26 Oct 2026) -----
   @Get('ja')
   jaBoard(@UserId() uid: string) {
     return this.db.asUser(uid, (svc, u) => svc.jaBoard(u));
+  }
+
+  // ----- Switch-over from JA (Fauzan, 5 Nov 2026): side-by-side runs, difference reports, area switch, history import -----
+  @Get('ja/switch')
+  jaSwitchBoard(@UserId() uid: string) {
+    return this.db.asUser(uid, (svc, u) => svc.jaSwitchBoard(u));
+  }
+
+  @Get('ja/switch/:companyId/:area')
+  jaSwitchReport(@UserId() uid: string, @Param('companyId') companyId: string, @Param('area') area: string) {
+    return this.db.asUser(uid, (svc, u) => svc.jaSwitchReport(u, companyId.slice(0, 80), area.slice(0, 20)));
+  }
+
+  @Post('ja/switch/:companyId/:area/:action')
+  jaSwitchAct(
+    @UserId() uid: string,
+    @Param('companyId') companyId: string,
+    @Param('area') area: string,
+    @Param('action') action: string,
+    @Body() b: Record<string, unknown>,
+  ) {
+    const body = b && typeof b === 'object' && !Array.isArray(b) ? b : {};
+    return this.db.asUser(uid, (svc, u) => svc.jaSwitchAct(u, companyId.slice(0, 80), area.slice(0, 20), action.slice(0, 20), body));
+  }
+
+  @Post('ja/switch-settings')
+  jaSwitchSettings(@UserId() uid: string, @Body() b: Record<string, unknown>) {
+    const body = b && typeof b === 'object' && !Array.isArray(b) ? b : {};
+    return this.db.asUser(uid, (svc, u) => svc.jaSwitchSettings(u, body));
+  }
+
+  @Post('ja/imports')
+  jaImportStage(@UserId() uid: string, @Body() b: Record<string, unknown>) {
+    const body = b && typeof b === 'object' && !Array.isArray(b) ? b : {};
+    return this.db.asUser(uid, (svc, u) => svc.jaImportStage(u, body));
+  }
+
+  @Post('ja/imports/:id/decide')
+  jaImportDecide(@UserId() uid: string, @Param('id') id: string, @Body() b: Record<string, unknown>) {
+    const body = b && typeof b === 'object' && !Array.isArray(b) ? b : {};
+    return this.db.asUser(uid, (svc, u) => svc.jaImportDecide(u, id.slice(0, 160), body));
+  }
+
+  @Get('ja/history/:companyId/:staffNo')
+  jaGuardHistory(@UserId() uid: string, @Param('companyId') companyId: string, @Param('staffNo') staffNo: string) {
+    return this.db.asUser(uid, (svc, u) => svc.jaGuardHistory(u, companyId.slice(0, 80), staffNo.slice(0, 40)));
   }
 
   // ----- Company office (Fauzan, 2 Nov 2026): 1 Company Manager or GM and 2 to 8 executives per company -----
@@ -3356,6 +3988,28 @@ export class AppController {
   @Get('crm')
   crmBoard(@UserId() uid: string) {
     return this.db.asUser(uid, (svc, u) => svc.crmBoard(u));
+  }
+
+  /** Client due diligence on the client file (PIKM/ISO review, 5 Nov 2026). */
+  @Get('crm/clients/:id/diligence')
+  clientDiligence(@UserId() uid: string, @Param('id') id: string) {
+    return this.db.asUser(uid, (svc, u) => svc.clientQuality.diligence(u, id.slice(0, 80)));
+  }
+
+  @Post('crm/clients/:id/diligence/:action')
+  clientDiligenceAct(@UserId() uid: string, @Param('id') id: string, @Param('action') action: string, @Body() b: Record<string, unknown>) {
+    return this.db.asUser(uid, (svc, u) => svc.clientQuality.diligenceAct(u, action.slice(0, 20), { ...(b ?? {}), accountId: id.slice(0, 80) }));
+  }
+
+  /** A site's assignment instructions, signed by the client. */
+  @Get('sites/:id/instructions')
+  siteInstructions(@UserId() uid: string, @Param('id') id: string) {
+    return this.db.asUser(uid, (svc, u) => svc.clientQuality.siteInstructions(u, id.slice(0, 80)));
+  }
+
+  @Post('sites/:id/instructions/:action')
+  siteInstructionsAct(@UserId() uid: string, @Param('id') id: string, @Param('action') action: string, @Body() b: Record<string, unknown>) {
+    return this.db.asUser(uid, (svc, u) => svc.clientQuality.instructionsAct(u, action.slice(0, 20), { ...(b ?? {}), siteId: id.slice(0, 80) }));
   }
 
   @Get('crm/clients/:id')
@@ -3517,6 +4171,23 @@ export class AppController {
     return this.db.asUser(uid, (svc, u) => svc.clientInvoice(u, id.slice(0, 120), str(b.period, 'period', 7), channel, amount, proofList(b.proof)));
   }
 
+  @Post('clients/:id/work-ack')
+  clientWorkAck(@UserId() uid: string, @Param('id') id: string, @Body() b: Record<string, unknown>) {
+    const outcome = b.outcome === 'satisfied' || b.outcome === 'complaints' ? b.outcome : null;
+    if (!outcome) throw new BadRequestException('outcome must be satisfied or complaints');
+    return this.db.asUser(uid, (svc, u) =>
+      svc.clientWorkAck(u, id.slice(0, 120), {
+        period: str(b.period, 'period', 7),
+        signedOn: str(b.signedOn, 'signedOn', 10),
+        signer: str(b.signer, 'signer', 120),
+        outcome,
+        comment: str(b.comment, 'comment', 1000),
+        action: b.action == null ? '' : str(b.action, 'action', 500),
+        proof: proofList(b.proof),
+      }),
+    );
+  }
+
   // ----- Client report links (Fauzan, 3 Nov 2026: "Shared report links first") -----
   @Get('clients/:id/share-links')
   clientShareLinks(@UserId() uid: string, @Param('id') id: string) {
@@ -3668,6 +4339,130 @@ export class AppController {
     return this.db.asUser(uid, (svc, u) => svc.vehicleIn(u, id.slice(0, 60), b.km as number, b.note == null ? '' : str(b.note, 'note', 200)));
   }
 
+  // Vehicles rented from Perfect Global Logistics (Fauzan, 5 Nov 2026): Transport records, the FD or the CEO sets the rent.
+  @Get('fleet/rentals')
+  vehicleRentals(@UserId() uid: string, @Query('month') month?: string) {
+    if (month !== undefined && !/^\d{4}-\d{2}$/.test(month)) throw new BadRequestException('month must be YYYY-MM');
+    return this.db.asUser(uid, (svc, u) => svc.vehicleRentals(u, month));
+  }
+
+  @Post('fleet/vehicles/:id/rental')
+  recordVehicleRental(@UserId() uid: string, @Param('id') id: string, @Body() b: Record<string, unknown>) {
+    return this.db.asUser(uid, (svc, u) =>
+      svc.recordVehicleRental(u, id.slice(0, 60), { ownerId: str(b.ownerId ?? '', 'ownerId', 40), since: date(b.since, 'since'), reason: str(b.reason ?? '', 'reason', 300) }),
+    );
+  }
+
+  @Post('fleet/vehicles/:id/rental/end')
+  endVehicleRental(@UserId() uid: string, @Param('id') id: string, @Body() b: Record<string, unknown>) {
+    return this.db.asUser(uid, (svc, u) => svc.endVehicleRental(u, id.slice(0, 60), { on: date(b.on, 'on'), reason: str(b.reason ?? '', 'reason', 300) }));
+  }
+
+  @Post('fleet/vehicles/:id/move')
+  moveVehicleUse(@UserId() uid: string, @Param('id') id: string, @Body() b: Record<string, unknown>) {
+    return this.db.asUser(uid, (svc, u) =>
+      svc.moveVehicleUse(u, id.slice(0, 60), { companyId: str(b.companyId ?? '', 'companyId', 40), from: date(b.from, 'from'), reason: str(b.reason ?? '', 'reason', 300) }),
+    );
+  }
+
+  @Post('fleet/vehicles/:id/rent')
+  setVehicleRent(@UserId() uid: string, @Param('id') id: string, @Body() b: Record<string, unknown>) {
+    if (typeof b.monthly !== 'number') throw new BadRequestException('monthly must be a number');
+    if (b.from !== undefined && (typeof b.from !== 'string' || !/^\d{4}-\d{2}$/.test(b.from))) throw new BadRequestException('from must be YYYY-MM');
+    return this.db.asUser(uid, (svc, u) =>
+      svc.setVehicleRent(u, id.slice(0, 60), {
+        monthly: b.monthly as number,
+        agreementRef: str(b.agreementRef ?? '', 'agreementRef', 120),
+        reason: str(b.reason ?? '', 'reason', 300),
+        from: b.from as string | undefined,
+      }),
+    );
+  }
+
+  // Transport usage (Fauzan, 5 Nov 2026): cards, fill-ups, reviews and the month's usage.
+  @Get('fleet/usage')
+  vehicleUsage(@UserId() uid: string, @Query('month') month?: string) {
+    if (month !== undefined && !/^\d{4}-\d{2}$/.test(month)) throw new BadRequestException('month must be YYYY-MM');
+    return this.db.asUser(uid, (svc, u) => svc.vehicleUsage(u, month));
+  }
+
+  @Post('fleet/vehicles/:id/fuel-type')
+  setVehicleFuel(@UserId() uid: string, @Param('id') id: string, @Body() b: Record<string, unknown>) {
+    const fuelType = FUELS.find((k) => k === b.fuelType);
+    if (!fuelType) throw new BadRequestException('fuelType is not valid');
+    if (b.tankLitres != null && typeof b.tankLitres !== 'number') throw new BadRequestException('tankLitres must be a number or null');
+    return this.db.asUser(uid, (svc, u) =>
+      svc.setVehicleFuel(u, id.slice(0, 60), { fuelType, tankLitres: (b.tankLitres as number | null) ?? null, reason: str(b.reason ?? '', 'reason', 300) }),
+    );
+  }
+
+  @Post('fleet/vehicles/:id/cards')
+  addVehicleCard(@UserId() uid: string, @Param('id') id: string, @Body() b: Record<string, unknown>) {
+    const kind = (['FUEL', 'SUBSIDY'] as const).find((k) => k === b.kind);
+    if (!kind) throw new BadRequestException('kind must be FUEL or SUBSIDY');
+    const fuel = FUELS.find((k) => k === b.fuel);
+    if (!fuel) throw new BadRequestException('fuel is not valid');
+    for (const k of ['monthlyLimitRm', 'monthlyQuotaLitres'])
+      if (b[k] != null && typeof b[k] !== 'number') throw new BadRequestException(`${k} must be a number or null`);
+    return this.db.asUser(uid, (svc, u) =>
+      svc.addVehicleCard(u, id.slice(0, 60), {
+        kind,
+        issuer: str(b.issuer ?? '', 'issuer', 80),
+        last4: str(b.last4 ?? '', 'last4', 4),
+        fuel,
+        monthlyLimitRm: (b.monthlyLimitRm as number | null) ?? null,
+        monthlyQuotaLitres: (b.monthlyQuotaLitres as number | null) ?? null,
+        holder: str(b.holder ?? '', 'holder', 80),
+        since: date(b.since, 'since'),
+        reason: str(b.reason ?? '', 'reason', 300),
+        shareConsent: b.shareConsent === true,
+        shareReason: b.shareReason == null ? undefined : str(b.shareReason, 'shareReason', 300),
+      }),
+    );
+  }
+
+  @Post('fleet/vehicles/:id/cards/:cardId/end')
+  endVehicleCard(@UserId() uid: string, @Param('id') id: string, @Param('cardId') cardId: string, @Body() b: Record<string, unknown>) {
+    return this.db.asUser(uid, (svc, u) => svc.endVehicleCard(u, id.slice(0, 60), cardId.slice(0, 80), { on: date(b.on, 'on'), reason: str(b.reason ?? '', 'reason', 300) }));
+  }
+
+  @Post('fleet/vehicles/:id/fuel')
+  recordFuel(@UserId() uid: string, @Param('id') id: string, @Body() b: Record<string, unknown>) {
+    const paidWith = (['FUEL_CARD', 'SUBSIDY_CARD', 'CASH', 'OWN_MONEY'] as const).find((k) => k === b.paidWith);
+    if (!paidWith) throw new BadRequestException('paidWith is not valid');
+    const fuel = FUELS.find((k) => k === b.fuel);
+    if (!fuel) throw new BadRequestException('fuel is not valid');
+    for (const k of ['litres', 'amountRm', 'odometerKm']) if (typeof b[k] !== 'number') throw new BadRequestException(`${k} must be a number`);
+    return this.db.asUser(uid, (svc, u) =>
+      svc.recordFuel(
+        u,
+        id.slice(0, 60),
+        {
+          at: str(b.at ?? '', 'at', 40),
+          paidWith,
+          cardId: b.cardId == null ? null : str(b.cardId, 'cardId', 80),
+          fuel,
+          litres: b.litres as number,
+          amountRm: b.amountRm as number,
+          odometerKm: b.odometerKm as number,
+          station: str(b.station ?? '', 'station', 120),
+          driver: b.driver == null ? undefined : str(b.driver, 'driver', 80),
+        },
+        proofList(b.proof),
+      ),
+    );
+  }
+
+  @Post('fleet/vehicles/:id/fuel/:fillId/review')
+  reviewFuel(@UserId() uid: string, @Param('id') id: string, @Param('fillId') fillId: string, @Body() b: Record<string, unknown>) {
+    const outcome = (['EXPLAINED', 'RECOVER', 'CASE'] as const).find((k) => k === b.outcome);
+    if (!outcome) throw new BadRequestException('outcome must be EXPLAINED, RECOVER or CASE');
+    if (b.recoverRm != null && typeof b.recoverRm !== 'number') throw new BadRequestException('recoverRm must be a number');
+    return this.db.asUser(uid, (svc, u) =>
+      svc.reviewFuel(u, id.slice(0, 60), fillId.slice(0, 80), { outcome, reason: str(b.reason ?? '', 'reason', 300), recoverRm: (b.recoverRm as number | null) ?? null }),
+    );
+  }
+
   @Post('fleet/vehicles/:id/work')
   vehicleWork(@UserId() uid: string, @Param('id') id: string, @Body() b: Record<string, unknown>) {
     const kind = (['RENEWAL', 'SERVICE', 'PAYMENT'] as const).find((k) => k === b.kind);
@@ -3777,6 +4572,8 @@ export class AppController {
         platform: opt(b.platform, 'platform', 40),
         link: opt(b.link, 'link', 300),
         risk,
+        dataKinds: opt(b.dataKinds, 'dataKinds', 300),
+        cause: opt(b.cause, 'cause', 500),
       }),
     );
   }
@@ -3786,6 +4583,74 @@ export class AppController {
     const s = (['note', 'contained', 'commissioner', 'subjects', 'advised', 'consent_given', 'consent_refused', 'close'] as const).find((x) => x === step);
     if (!s) throw new BadRequestException('unknown PDPA step');
     return this.db.asUser(uid, (svc, u) => svc.pdpaStep(u, id.slice(0, 120), s, b.note == null ? '' : str(b.note, 'note', 500), proofList(b.proof)));
+  }
+
+  // ----- PDPA personal data register, consents and breach register (real use, 5 Nov 2026) -----
+  @Get('pdpa-register')
+  pdpaRegisterBoard(@UserId() uid: string) {
+    return this.db.asUser(uid, (svc, u) => svc.pdpaRegisterBoard(u));
+  }
+
+  @Post('pdpa-settings')
+  setPdpaSettings(@UserId() uid: string, @Body() b: { enabled?: unknown; keepYears?: unknown; reason?: unknown }) {
+    if (b.enabled !== undefined && typeof b.enabled !== 'boolean') throw new BadRequestException('enabled must be true or false');
+    if (b.keepYears !== undefined && typeof b.keepYears !== 'number') throw new BadRequestException('keepYears must be a number');
+    return this.db.asUser(uid, (svc, u) =>
+      svc.setPdpaSettings(u, { enabled: b.enabled as boolean | undefined, keepYears: b.keepYears as number | undefined }, str(b.reason, 'reason', 300)),
+    );
+  }
+
+  @Post('pdpa-register')
+  addPdpaRegisterItem(@UserId() uid: string, @Body() b: Record<string, unknown>) {
+    return this.db.asUser(uid, (svc, u) => svc.savePdpaRegisterItem(u, null, registerInput(b)));
+  }
+
+  @Post('pdpa-register/:id')
+  editPdpaRegisterItem(@UserId() uid: string, @Param('id') id: string, @Body() b: Record<string, unknown>) {
+    return this.db.asUser(uid, (svc, u) => svc.savePdpaRegisterItem(u, id.slice(0, 80), registerInput(b)));
+  }
+
+  @Post('pdpa-register/:id/:step')
+  pdpaRegisterStep(@UserId() uid: string, @Param('id') id: string, @Param('step') step: string, @Body() b: { note?: unknown }) {
+    const s = (['review', 'retire'] as const).find((x) => x === step);
+    if (!s) throw new BadRequestException('step must be review or retire');
+    return this.db.asUser(uid, (svc, u) => svc.pdpaRegisterStep(u, id.slice(0, 80), s, b.note == null ? '' : str(b.note, 'note', 300)));
+  }
+
+  @Post('pdpa-consents')
+  recordPdpaConsent(@UserId() uid: string, @Body() b: Record<string, unknown>) {
+    const kind = PDPA_SUBJECTS.find((k) => k === b.subjectKind);
+    if (!kind) throw new BadRequestException('subjectKind is not known');
+    return this.db.asUser(uid, (svc, u) =>
+      svc.recordPdpaConsent(
+        u,
+        {
+          registerId: str(b.registerId, 'registerId', 80),
+          subjectName: str(b.subjectName, 'subjectName', 100),
+          subjectRef: str(b.subjectRef, 'subjectRef', 40),
+          subjectKind: kind,
+          noticeVersion: str(b.noticeVersion, 'noticeVersion', 40),
+          givenOn: date(b.givenOn, 'givenOn'),
+        },
+        proofList(b.proof),
+      ),
+    );
+  }
+
+  @Post('pdpa-consents/:id/withdraw')
+  withdrawPdpaConsent(@UserId() uid: string, @Param('id') id: string, @Body() b: Record<string, unknown>) {
+    return this.db.asUser(uid, (svc, u) => svc.withdrawPdpaConsent(u, id.slice(0, 80), date(b.on, 'on'), str(b.note, 'note', 300)));
+  }
+
+  @Post('pdpa-breach/:id/details')
+  pdpaBreachDetails(@UserId() uid: string, @Param('id') id: string, @Body() b: Record<string, unknown>) {
+    return this.db.asUser(uid, (svc, u) =>
+      svc.pdpaBreachDetails(u, id.slice(0, 120), {
+        dataKinds: str(b.dataKinds, 'dataKinds', 300),
+        cause: str(b.cause, 'cause', 500),
+        remedy: b.remedy == null ? '' : str(b.remedy, 'remedy', 500),
+      }),
+    );
   }
 
   @Get('pdpa/:id/docs')
@@ -3800,12 +4665,38 @@ export class AppController {
   }
 
   @Post('memos')
-  publishMemo(@UserId() uid: string, @Body() b: { audience?: unknown; title?: unknown; body?: unknown; states?: unknown }) {
-    const audience = (['STAFF', 'FIELD'] as const).find((a) => a === b.audience);
-    if (!audience) throw new BadRequestException('audience must be STAFF or FIELD');
+  publishMemo(
+    @UserId() uid: string,
+    @Body() b: { audience?: unknown; title?: unknown; body?: unknown; states?: unknown; readBy?: unknown; replaces?: unknown },
+  ) {
+    const audience = (['STAFF', 'FIELD', 'TEAM'] as const).find((a) => a === b.audience);
+    if (!audience) throw new BadRequestException('audience must be STAFF, FIELD or TEAM');
     if (b.states != null && (!Array.isArray(b.states) || b.states.length > 20)) throw new BadRequestException('states must be a list');
     const states = ((b.states as unknown[] | undefined) ?? []).map((s, i) => str(s, `states[${i}]`, 40));
-    return this.db.asUser(uid, (svc, u) => svc.publishMemo(u, audience, str(b.title, 'title', 120), str(b.body, 'body', 5000), states));
+    const opts = {
+      readBy: b.readBy == null ? null : str(b.readBy, 'readBy', 10),
+      replaces: b.replaces == null ? null : str(b.replaces, 'replaces', 120),
+    };
+    return this.db.asUser(uid, (svc, u) => svc.publishMemo(u, audience, str(b.title, 'title', 120), str(b.body, 'body', 5000), states, opts));
+  }
+
+  @Post('memos/reach')
+  memoReach(@UserId() uid: string, @Body() b: { audience?: unknown; states?: unknown }) {
+    const audience = (['STAFF', 'FIELD', 'TEAM'] as const).find((a) => a === b.audience);
+    if (!audience) throw new BadRequestException('audience must be STAFF, FIELD or TEAM');
+    if (b.states != null && (!Array.isArray(b.states) || b.states.length > 20)) throw new BadRequestException('states must be a list');
+    const states = ((b.states as unknown[] | undefined) ?? []).map((s, i) => str(s, `states[${i}]`, 40));
+    return this.db.asUser(uid, (svc, u) => svc.memoReach(u, audience, states));
+  }
+
+  @Post('memos/:id/withdraw')
+  withdrawMemo(@UserId() uid: string, @Param('id') id: string, @Body() b: { reason?: unknown }) {
+    return this.db.asUser(uid, (svc, u) => svc.withdrawMemo(u, id.slice(0, 120), str(b.reason, 'reason', 300)));
+  }
+
+  @Post('memos/:id/remind')
+  remindMemo(@UserId() uid: string, @Param('id') id: string) {
+    return this.db.asUser(uid, (svc, u) => svc.remindMemo(u, id.slice(0, 120)));
   }
 
   @Post('memos/:id/read')
@@ -3888,6 +4779,110 @@ export class AppController {
     );
   }
 
+  // LINDUNG 24 Jam, dependants of a worker who died, and the DOSH notice (5 Nov 2026). The service checks HR access.
+  @Post('socso/:id/lindung')
+  socsoLindung(@UserId() uid: string, @Param('id') id: string, @Body() b: Record<string, unknown>) {
+    return this.db.asUser(uid, (svc, u) =>
+      svc.recordLindung(u, id.slice(0, 80), {
+        channel: b.channel === undefined ? undefined : b.channel === null ? null : pick(LINDUNG_CHANNELS, b.channel, 'channel'),
+        appliedOn: b.appliedOn === undefined ? undefined : b.appliedOn === null || b.appliedOn === '' ? null : date(b.appliedOn, 'appliedOn'),
+        verifyAskedAt: b.verifyAskedAt === undefined ? undefined : b.verifyAskedAt === null || b.verifyAskedAt === '' ? null : str(b.verifyAskedAt, 'verifyAskedAt', 40),
+      }),
+    );
+  }
+
+  @Post('socso/:id/lindung/verify')
+  socsoLindungVerify(@UserId() uid: string, @Param('id') id: string, @Body() b: Record<string, unknown>) {
+    return this.db.asUser(uid, (svc, u) => svc.verifyLindung(u, id.slice(0, 80), pick(LINDUNG_ANSWERS, b.answer, 'answer'), b.note == null ? '' : str(b.note, 'note', 300)));
+  }
+
+  @Post('socso/:id/dependants')
+  socsoDependant(@UserId() uid: string, @Param('id') id: string, @Body() b: Record<string, unknown>) {
+    return this.db.asUser(uid, (svc, u) =>
+      svc.addSocsoDependant(u, id.slice(0, 80), {
+        name: str(b.name, 'name', 120),
+        relation: pick(DEPENDANT_RELATIONS, b.relation, 'relation'),
+        country: str(b.country, 'country', 60),
+        bornOn: b.bornOn == null || b.bornOn === '' ? null : date(b.bornOn, 'bornOn'),
+        relationProof: proofList(b.relationProof),
+        translationProof: proofList(b.translationProof),
+      }),
+    );
+  }
+
+  @Post('socso/:id/dependants/:did/papers')
+  socsoDependantPaper(@UserId() uid: string, @Param('id') id: string, @Param('did') did: string, @Body() b: Record<string, unknown>) {
+    const kind = pick(['relation', 'translation'] as const, b.kind, 'kind');
+    return this.db.asUser(uid, (svc, u) => svc.addDependantPaper(u, id.slice(0, 80), did.slice(0, 80), kind, proofList(b.proof)));
+  }
+
+  @Post('socso/:id/dependants/:did/route')
+  socsoDependantRoute(@UserId() uid: string, @Param('id') id: string, @Param('did') did: string, @Body() b: Record<string, unknown>) {
+    return this.db.asUser(uid, (svc, u) =>
+      svc.confirmDependantRoute(u, id.slice(0, 80), did.slice(0, 80), {
+        route: pick(DEPENDANT_ROUTES, b.route, 'route'),
+        perkesoOfficer: str(b.perkesoOfficer, 'perkesoOfficer', 100),
+        on: date(b.on, 'on'),
+      }),
+    );
+  }
+
+  @Post('socso/:id/death-notices')
+  socsoDeathNotice(@UserId() uid: string, @Param('id') id: string, @Body() b: Record<string, unknown>) {
+    const who = pick(['family', 'embassy', 'immigration'] as const, b.who, 'who');
+    return this.db.asUser(uid, (svc, u) => svc.recordDeathNotice(u, id.slice(0, 80), who, str(b.at, 'at', 40)));
+  }
+
+  @Post('socso/:id/dependant-payments')
+  socsoDependantPayment(@UserId() uid: string, @Param('id') id: string, @Body() b: Record<string, unknown>) {
+    if (typeof b.amount !== 'number' || !Number.isFinite(b.amount)) throw new BadRequestException('amount must be a number');
+    const amount = b.amount;
+    return this.db.asUser(uid, (svc, u) =>
+      svc.addDependantPayment(u, id.slice(0, 80), {
+        dependantId: b.dependantId == null || b.dependantId === '' ? null : str(b.dependantId, 'dependantId', 80),
+        kind: pick(DEPENDANT_PAYS, b.kind, 'kind'),
+        amount,
+        paidOn: date(b.paidOn, 'paidOn'),
+        perkesoRef: str(b.perkesoRef, 'perkesoRef', 60),
+        proof: proofList(b.proof),
+      }),
+    );
+  }
+
+  @Post('socso/:id/dependant-payments/:pid/received')
+  socsoDependantReceived(@UserId() uid: string, @Param('id') id: string, @Param('pid') pid: string, @Body() b: Record<string, unknown>) {
+    return this.db.asUser(uid, (svc, u) => svc.confirmDependantReceived(u, id.slice(0, 80), pid.slice(0, 80), { on: date(b.on, 'on'), proof: proofList(b.proof) }));
+  }
+
+  @Post('socso/:id/dosh')
+  socsoDosh(@UserId() uid: string, @Param('id') id: string, @Body() b: Record<string, unknown>) {
+    return this.db.asUser(uid, (svc, u) => svc.assessDosh(u, id.slice(0, 80), pick(DOSH_KINDS, b.kind, 'kind'), str(b.why, 'why', 500)));
+  }
+
+  @Post('socso/:id/dosh/immediate')
+  socsoDoshImmediate(@UserId() uid: string, @Param('id') id: string, @Body() b: Record<string, unknown>) {
+    return this.db.asUser(uid, (svc, u) =>
+      svc.recordDoshImmediate(u, id.slice(0, 80), { at: str(b.at, 'at', 40), means: str(b.means, 'means', 40), office: str(b.office, 'office', 100), ref: str(b.ref, 'ref', 100) }),
+    );
+  }
+
+  @Post('socso/:id/dosh/form')
+  socsoDoshForm(@UserId() uid: string, @Param('id') id: string, @Body() b: Record<string, unknown>) {
+    return this.db.asUser(uid, (svc, u) => svc.recordDoshForm(u, id.slice(0, 80), { on: date(b.on, 'on'), ref: str(b.ref, 'ref', 60), proof: proofList(b.proof) }));
+  }
+
+  @Post('socso/:id/dosh/client')
+  socsoDoshClient(@UserId() uid: string, @Param('id') id: string, @Body() b: Record<string, unknown>) {
+    return this.db.asUser(uid, (svc, u) => svc.recordDoshClientTold(u, id.slice(0, 80), str(b.at, 'at', 40)));
+  }
+
+  @Get('dosh/register/:year')
+  doshRegister(@UserId() uid: string, @Param('year') year: string) {
+    const y = Number(year);
+    if (!Number.isInteger(y)) throw new BadRequestException('year must be a whole number');
+    return this.db.asUser(uid, (svc, u) => svc.doshRegister(u, y));
+  }
+
   @Get('me/clock')
   myClock(@UserId() uid: string) {
     return this.db.asUser(uid, (svc, u) => svc.myStaffClock(u));
@@ -3914,21 +4909,53 @@ export class AppController {
   }
 
   // Face recognition for clock in (Fauzan, 2 Nov 2026; free engine on the phone).
+  // FACE_ENGINE=server (5 Nov 2026): Prima's own engine on the server makes every descriptor; the phone's are refused.
   @Get('me/face')
-  myFace(@UserId() uid: string) {
-    return this.db.asUser(uid, (svc, u) => svc.myFace(u));
+  async myFace(@UserId() uid: string) {
+    const { cfg } = faceSetup();
+    return { ...(await this.db.asUser(uid, (svc, u) => svc.myFace(u))), engine: cfg.mode };
   }
 
   @Post('me/face')
-  registerFace(@UserId() uid: string, @Body() b: Record<string, unknown>) {
+  async registerFace(@UserId() uid: string, @Body() b: Record<string, unknown>) {
+    const { engine } = faceSetup();
+    const photo = str(b.photo, 'photo', 2_500_000);
+    if (engine) {
+      const found = await engine.analyse(photo);
+      if (!found) throw new BadRequestException('No face was found in the photo. Face the camera in good light and try again.');
+      if (found.faces > 1) throw new BadRequestException('More than one face is in the photo. Register alone.');
+      return this.db.asUser(uid, (svc, u) => svc.registerFace(u, { photo, descriptor: found.descriptor, descriptorBy: 'server' }));
+    }
     const d = descriptor(b.descriptor);
     if (!d) throw new BadRequestException('descriptor is needed');
-    return this.db.asUser(uid, (svc, u) => svc.registerFace(u, { photo: str(b.photo, 'photo', 2_500_000), descriptor: d }));
+    return this.db.asUser(uid, (svc, u) => svc.registerFace(u, { photo, descriptor: d, descriptorBy: 'phone' }));
+  }
+
+  /** The head-movement challenge for the open clock, signed by the server (FACE_ENGINE=server only). */
+  @Post('me/face/challenge')
+  async faceChallenge(@UserId() uid: string) {
+    const { cfg } = faceSetup();
+    if (cfg.mode !== 'server' || !cfg.secret) throw new BadRequestException('The face check uses the phone engine here.');
+    const clockId = await this.db.asUser(uid, (svc, u) => svc.faceCheckClock(u));
+    return issueFaceChallenge(cfg.secret, uid, clockId);
   }
 
   @Post('me/clock/face')
-  staffFaceCheck(@UserId() uid: string, @Body() b: Record<string, unknown>) {
-    return this.db.asUser(uid, (svc, u) => svc.staffFaceCheck(u, staffShot(b)));
+  async staffFaceCheck(@UserId() uid: string, @Body() b: Record<string, unknown>) {
+    const { cfg, engine } = faceSetup();
+    if (!engine || !cfg.secret) return this.db.asUser(uid, (svc, u) => svc.staffFaceCheck(u, staffShot(b)));
+    const challenge = openFaceChallenge(cfg.secret, b.token, uid);
+    if (!challenge) throw new BadRequestException('The face check timed out. Start it again.');
+    if (!Array.isArray(b.frames) || b.frames.length !== challenge.steps.length) throw new BadRequestException('Take one picture for each step.');
+    const frames = b.frames.map((f) => str(f, 'frame', 700_000));
+    // The pictures are read before the database work starts, so a face check never holds a database connection while
+    // the engine runs. Only a face registered with the phone engine is read inside, from its approved photo.
+    const found: Awaited<ReturnType<FaceEngine['analyse']>>[] = [];
+    for (const f of frames) found.push(await engine.analyse(f));
+    const capturedAt = typeof b.capturedAt === 'string' ? b.capturedAt.slice(0, 40) : '';
+    return this.db.asUser(uid, (svc, u) =>
+      svc.staffFaceCheckFrames(u, { clockId: challenge.clockId, steps: challenge.steps, frames, found, capturedAt }, (img) => engine.analyse(img)),
+    );
   }
 
   @Get('hr/faces')
@@ -4249,6 +5276,9 @@ export class AppController {
         proven: (b.proven as boolean | undefined) ?? null,
         outcome: b.outcome == null ? null : (str(b.outcome, 'outcome', 20) as never),
         suspensionDays: (b.suspensionDays as number | undefined) ?? null,
+        lang: b.lang == null ? null : (str(b.lang, 'lang', 4) as never),
+        appealResult: b.appealResult == null ? null : (str(b.appealResult, 'appealResult', 20) as never),
+        variedTo: b.variedTo == null ? null : (str(b.variedTo, 'variedTo', 20) as never),
       }),
     );
   }
@@ -4327,6 +5357,71 @@ export class AppController {
     );
   }
 
+  // Group employment history (Fauzan, 4 Nov 2026): one person across the group's companies, each record kept separate.
+  @Get('hr/history/board')
+  groupHistoryBoard(@UserId() uid: string) {
+    return this.db.asUser(uid, (svc, u) => svc.groupHistoryBoard(u));
+  }
+
+  @Get('hr/history/person/:personId')
+  groupHistory(@UserId() uid: string, @Param('personId') personId: string) {
+    return this.db.asUser(uid, (svc, u) => svc.groupHistory(u, personId.slice(0, 80)));
+  }
+
+  /** By IC or passport in the body (never in the address, so it stays out of logs). */
+  @Post('hr/history/lookup')
+  historyLookup(@UserId() uid: string, @Body() b: Record<string, unknown>) {
+    return this.db.asUser(uid, (svc, u) => svc.historyLookup(u, { idFull: str(b.idFull, 'idFull', 30), nationality: str(b.nationality, 'nationality', 2) as never }));
+  }
+
+  @Post('hr/history/mark')
+  markByLookup(@UserId() uid: string, @Body() b: Record<string, unknown>) {
+    return this.db.asUser(uid, (svc, u) =>
+      svc.markByLookup(u, { idFull: str(b.idFull, 'idFull', 30), nationality: str(b.nationality, 'nationality', 2) as never, status: str(b.status, 'status', 20) as never, reason: str(b.reason, 'reason', 500) }),
+    );
+  }
+
+  @Post('hr/history/link-existing')
+  linkExistingRecords(@UserId() uid: string) {
+    return this.db.asUser(uid, (svc, u) => svc.linkExistingRecords(u));
+  }
+
+  @Post('hr/history/rehire')
+  setRehire(@UserId() uid: string, @Body() b: Record<string, unknown>) {
+    return this.db.asUser(uid, (svc, u) => svc.setRehire(u, { personId: str(b.personId, 'personId', 80), status: str(b.status, 'status', 20) as never, reason: str(b.reason, 'reason', 500) }));
+  }
+
+  @Post('hr/history/link')
+  linkHistory(@UserId() uid: string, @Body() b: Record<string, unknown>) {
+    return this.db.asUser(uid, (svc, u) => svc.linkHistory(u, { personId: str(b.personId, 'personId', 80), toPersonId: str(b.toPersonId, 'toPersonId', 80), reason: str(b.reason, 'reason', 500) }));
+  }
+
+  @Post('hr/history/separate')
+  separateHistory(@UserId() uid: string, @Body() b: Record<string, unknown>) {
+    return this.db.asUser(uid, (svc, u) => svc.separateHistory(u, { personId: str(b.personId, 'personId', 80), reason: str(b.reason, 'reason', 500) }));
+  }
+
+  @Post('hr/history/old-employment')
+  addOldEmployment(@UserId() uid: string, @Body() b: Record<string, unknown>) {
+    return this.db.asUser(uid, (svc, u) =>
+      svc.addOldEmployment(u, {
+        personId: str(b.personId, 'personId', 80),
+        companyId: str(b.companyId, 'companyId', 80),
+        role: str(b.role, 'role', 20) as never,
+        jobTitle: b.jobTitle == null ? null : str(b.jobTitle, 'jobTitle', 80),
+        from: date(b.from, 'from'),
+        to: date(b.to, 'to'),
+        ended: str(b.ended, 'ended', 20) as never,
+        sourceRef: str(b.sourceRef, 'sourceRef', 120),
+      }),
+    );
+  }
+
+  @Post('hr/history/carry-paper')
+  carryHistoryPaper(@UserId() uid: string, @Body() b: Record<string, unknown>) {
+    return this.db.asUser(uid, (svc, u) => svc.carryHistoryPaper(u, { personId: str(b.personId, 'personId', 80), credentialId: str(b.credentialId, 'credentialId', 120) }));
+  }
+
   @Get('hr/training')
   trainingRecords(@UserId() uid: string, @Query('personId') personId?: string) {
     return this.db.asUser(uid, (svc, u) => svc.trainingRecords(u, personId ? str(personId, 'personId', 80) : undefined));
@@ -4392,8 +5487,52 @@ export class AppController {
   @Post('hr/policies')
   publishPolicy(@UserId() uid: string, @Body() b: Record<string, unknown>) {
     return this.db.asUser(uid, (svc, u) =>
-      svc.publishPolicy(u, { id: b.id == null ? null : str(b.id, 'id', 80), kind: str(b.kind, 'kind', 20) as never, title: str(b.title, 'title', 160), body: str(b.body, 'body', 20000) }),
+      svc.publishPolicy(u, {
+        id: b.id == null ? null : str(b.id, 'id', 80),
+        kind: str(b.kind, 'kind', 20) as never,
+        title: str(b.title, 'title', 160),
+        body: str(b.body, 'body', 20000),
+        audience: b.audience == null ? undefined : (str(b.audience, 'audience', 10) as never),
+        material: b.material == null ? undefined : b.material === true,
+        scope: policyScope(b.scope),
+        copies: Array.isArray(b.copies) ? b.copies.slice(0, 12).map((c, i) => policyCopy(c, `copies[${i}]`)) : undefined,
+      }),
     );
+  }
+
+  /** HR adds or replaces one translation of the current version (IWAY finding, Fauzan 6 Nov 2026). */
+  @Post('hr/policies/:id/copies')
+  addPolicyCopy(@UserId() uid: string, @Param('id') id: string, @Body() b: Record<string, unknown>) {
+    return this.db.asUser(uid, (svc, u) => svc.addPolicyCopy(u, id.slice(0, 80), policyCopy(b, 'copy')));
+  }
+
+  /** HR records the language a staff member reads best. */
+  @Post('hr/people/:id/mother-tongue')
+  setMotherTongue(@UserId() uid: string, @Param('id') id: string, @Body() b: Record<string, unknown>) {
+    return this.db.asUser(uid, (svc, u) => svc.setMotherTongue(u, id.slice(0, 80), str(b.lang, 'lang', 4) as never));
+  }
+
+  /** An officer, OM, company manager or HR records the guards who acknowledged a policy at a briefing. */
+  @Post('hr/policies/:id/briefing')
+  recordBriefingAcks(@UserId() uid: string, @Param('id') id: string, @Body() b: Record<string, unknown>) {
+    const ids = Array.isArray(b.personIds) ? b.personIds.slice(0, 80).map((x, i) => str(x, `personIds[${i}]`, 80)) : [];
+    return this.db.asUser(uid, (svc, u) => svc.recordBriefingAcks(u, id.slice(0, 80), ids, b.ref == null ? '' : str(b.ref, 'ref', 300), b.lang == null ? null : (str(b.lang, 'lang', 4) as never)));
+  }
+
+  /** Screening case files: HR works them, the HR Director decides, the CEO and ACT read. */
+  @Get('hr/screening')
+  screeningBoard(@UserId() uid: string) {
+    return this.db.asUser(uid, (svc, u) => svc.screening.board(u));
+  }
+
+  @Post('hr/screening/:id/repeat')
+  screeningRepeat(@UserId() uid: string, @Param('id') id: string) {
+    return this.db.asUser(uid, (svc, u) => svc.screening.repeat(u, id.slice(0, 80)));
+  }
+
+  @Post('hr/screening/:action')
+  screeningAct(@UserId() uid: string, @Param('action') action: string, @Body() b: Record<string, unknown>) {
+    return this.db.asUser(uid, (svc, u) => svc.screening.act(u, action.slice(0, 20), b ?? {}));
   }
 
   @Get('hr/legal')
@@ -4427,18 +5566,18 @@ export class AppController {
   }
 
   @Post('hr/policies/:id/acknowledge')
-  acknowledgePolicy(@UserId() uid: string, @Param('id') id: string) {
-    return this.db.asUser(uid, (svc, u) => svc.acknowledgePolicy(u, id.slice(0, 80)));
+  acknowledgePolicy(@UserId() uid: string, @Param('id') id: string, @Body() b: Record<string, unknown>) {
+    return this.db.asUser(uid, (svc, u) => svc.acknowledgePolicy(u, id.slice(0, 80), b?.lang == null ? null : (str(b.lang, 'lang', 4) as never)));
   }
 
   @Post('me/clock/in')
   staffClockIn(@UserId() uid: string, @Body() b: Record<string, unknown>) {
-    return this.db.asUser(uid, (svc, u) => svc.staffClockIn(u, staffShot(b)));
+    return this.db.asUser(uid, (svc, u) => svc.staffClockIn(u, phoneShot(b)));
   }
 
   @Post('me/clock/out')
   staffClockOut(@UserId() uid: string, @Body() b: Record<string, unknown>) {
-    return this.db.asUser(uid, (svc, u) => svc.staffClockOut(u, staffShot(b)));
+    return this.db.asUser(uid, (svc, u) => svc.staffClockOut(u, phoneShot(b)));
   }
 
   @Post('me/clock/ping')
@@ -4532,6 +5671,46 @@ export class AppController {
     if (b.verdict !== 'accepted' && b.verdict !== 'queried') throw new BadRequestException('verdict must be accepted or queried');
     const verdict = b.verdict;
     return this.db.asUser(uid, (svc, u) => svc.remoteReview(u, id.slice(0, 80), verdict, b.note == null ? '' : str(b.note, 'note', 1000)));
+  }
+
+  // Time slip (Fauzan, 4 Nov 2026, rule HR-TIME-SLIP)
+  @Get('me/time-slips')
+  myTimeSlips(@UserId() uid: string) {
+    return this.db.asUser(uid, (svc, u) => svc.myTimeSlips(u));
+  }
+
+  @Post('me/time-slips')
+  requestTimeSlip(@UserId() uid: string, @Body() b: { date?: unknown; from?: unknown; to?: unknown; reason?: unknown }) {
+    return this.db.asUser(uid, (svc, u) =>
+      svc.requestTimeSlip(u, { date: date(b.date, 'date'), from: str(b.from, 'from', 5), to: str(b.to, 'to', 5), reason: str(b.reason, 'reason', 300) }),
+    );
+  }
+
+  @Post('me/time-slips/:id/cancel')
+  cancelTimeSlip(@UserId() uid: string, @Param('id') id: string) {
+    return this.db.asUser(uid, (svc, u) => svc.cancelTimeSlip(u, id.slice(0, 120)));
+  }
+
+  @Get('time-slips')
+  timeSlipBoard(@UserId() uid: string) {
+    return this.db.asUser(uid, (svc, u) => svc.timeSlipBoard(u));
+  }
+
+  @Post('time-slips/:id/decide')
+  decideTimeSlip(@UserId() uid: string, @Param('id') id: string, @Body() b: { approve?: unknown; note?: unknown }) {
+    return this.db.asUser(uid, (svc, u) => svc.decideTimeSlip(u, id.slice(0, 120), b.approve === true, b.note == null ? '' : str(b.note, 'note', 500)));
+  }
+
+  @Post('time-slips/:id/seen')
+  seenTimeSlip(@UserId() uid: string, @Param('id') id: string) {
+    return this.db.asUser(uid, (svc, u) => svc.seenTimeSlip(u, id.slice(0, 120)));
+  }
+
+  @Post('time-slips/settings')
+  setTimeSlipApprover(@UserId() uid: string, @Body() b: { approver?: unknown; note?: unknown }) {
+    if (b.approver !== 'head' && b.approver !== 'hr') throw new BadRequestException('approver must be head or hr');
+    const approver = b.approver;
+    return this.db.asUser(uid, (svc, u) => svc.setTimeSlipApprover(u, approver, str(b.note, 'note', 300)));
   }
 
   // Remote and branch work plan (Fauzan, 27 Oct 2026).
@@ -4901,9 +6080,67 @@ export class AppController {
     return this.db.asUser(uid, (svc, u) => svc.closeSiteVisit(u, id, findings));
   }
 
+  // ----- Offline site survey form (Fauzan, 4 Nov 2026): made on the phone with no signal, sent later -----
+  @Get('site-surveys/setup')
+  siteSurveySetup(@UserId() uid: string) {
+    return this.db.asUser(uid, (svc, u) => svc.siteSurveys.setup(u));
+  }
+
+  @Get('site-surveys')
+  siteSurveyBoard(@UserId() uid: string) {
+    return this.db.asUser(uid, (svc, u) => svc.siteSurveys.board(u));
+  }
+
+  @Get('site-surveys/:id')
+  siteSurveyDetail(@UserId() uid: string, @Param('id') id: string) {
+    return this.db.asUser(uid, (svc, u) => svc.siteSurveys.detail(u, id.slice(0, 60)));
+  }
+
+  /** The finished survey, without photo files; the service checks every field. Sending it again changes nothing. */
+  @Post('site-surveys')
+  siteSurveyReceive(@UserId() uid: string, @Body() b: Record<string, unknown>) {
+    return this.db.asUser(uid, (svc, u) => svc.siteSurveys.receive(u, b));
+  }
+
+  @Post('site-surveys/:id/photos')
+  siteSurveyPhoto(@UserId() uid: string, @Param('id') id: string, @Body() b: Record<string, unknown>) {
+    return this.db.asUser(uid, (svc, u) => svc.siteSurveys.addPhoto(u, id.slice(0, 60), { n: b.n, image: b.image }));
+  }
+
+  @Post('site-surveys/:id/review')
+  siteSurveyReview(@UserId() uid: string, @Param('id') id: string, @Body() b: Record<string, unknown>) {
+    const outcome = (['accepted', 'returned'] as const).find((x) => x === b.outcome);
+    if (!outcome) throw new BadRequestException('outcome must be accepted or returned');
+    return this.db.asUser(uid, (svc, u) => svc.siteSurveys.review(u, id.slice(0, 60), outcome, str(b.reason ?? '', 'reason', 500)));
+  }
+
   @Get('companies/:id/people/:pid/discipline')
   discipline(@UserId() uid: string, @Param('id') id: string, @Param('pid') pid: string) {
     return this.db.asUser(uid, (svc, u) => svc.disciplineHistory(u, id, pid));
+  }
+
+  /** Guard discipline appeals (IWAY finding, Fauzan 6 Nov 2026): the guard, the company or HR lodges; the HR Director or CEO decides. */
+  @Get('discipline/appeals')
+  disciplineAppeals(@UserId() uid: string) {
+    return this.db.asUser(uid, (svc, u) => svc.disciplineAppeals(u));
+  }
+
+  @Post('discipline/:id/appeal')
+  lodgeDisciplineAppeal(@UserId() uid: string, @Param('id') id: string, @Body() b: Record<string, unknown>) {
+    return this.db.asUser(uid, (svc, u) =>
+      svc.lodgeDisciplineAppeal(u, id.slice(0, 120), { grounds: str(b.grounds ?? '', 'grounds', 2000), lang: b.lang == null ? null : (str(b.lang, 'lang', 4) as never) }),
+    );
+  }
+
+  @Post('discipline/:id/appeal/decide')
+  decideDisciplineAppeal(@UserId() uid: string, @Param('id') id: string, @Body() b: Record<string, unknown>) {
+    return this.db.asUser(uid, (svc, u) =>
+      svc.decideDisciplineAppeal(u, id.slice(0, 120), {
+        result: str(b.result, 'result', 20) as never,
+        variedTo: b.variedTo == null ? null : (str(b.variedTo, 'variedTo', 20) as never),
+        reason: str(b.reason ?? '', 'reason', 2000),
+      }),
+    );
   }
 
   @Post('device/clock-in')
@@ -5079,6 +6316,186 @@ export class AppController {
       until: b.until == null || b.until === '' ? null : str(b.until, 'until', 10),
     };
     return this.db.asUser(uid, (svc, u) => svc.setSiteTask(u, id, input));
+  }
+
+  // ---------- Client requirements and the yearly self-audit (Fauzan, 6 Nov 2026) ----------
+
+  @Get('sites/:id/client-codes')
+  clientCodeBoard(@UserId() uid: string, @Param('id') id: string) {
+    return this.db.asUser(uid, (svc, u) => svc.clientCodeBoard(u, id));
+  }
+
+  @Post('sites/:id/client-codes')
+  saveClientCode(@UserId() uid: string, @Param('id') id: string, @Body() b: Record<string, unknown>) {
+    if (b.template !== 'IWAY' && b.template !== 'RBA' && b.template !== 'CUSTOM') throw new BadRequestException('template must be IWAY, RBA or CUSTOM');
+    const obj = (v: unknown) => (v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : null);
+    const lines = (v: unknown, name: string) => {
+      if (v == null) return undefined;
+      if (!Array.isArray(v) || v.length > 40) throw new BadRequestException(`${name} must be a list of up to 40 items`);
+      return v.map((x) => str(x, name, 240));
+    };
+    const reqs = b.requirements == null ? undefined : Array.isArray(b.requirements) && b.requirements.length <= 120 ? b.requirements : null;
+    if (reqs === null) throw new BadRequestException('requirements must be a list of up to 120 items');
+    const input = {
+      codeId: b.codeId == null || b.codeId === '' ? null : str(b.codeId, 'codeId', 120),
+      template: b.template as 'IWAY' | 'RBA' | 'CUSTOM',
+      name: b.name == null ? undefined : str(b.name, 'name', 80),
+      requirements: reqs?.map((x) => {
+        const o = obj(x) ?? {};
+        return { code: str(o.code ?? '', 'requirement.code', 20), area: typeof o.area === 'string' ? o.area.slice(0, 60) : '', text: str(o.text, 'requirement.text', 400), level: typeof o.level === 'string' ? o.level.slice(0, 10) : 'basic', hint: typeof o.hint === 'string' ? o.hint.slice(0, 160) : '' };
+      }),
+      hours: b.hours === undefined ? undefined : b.hours === null ? null : (() => { const o = obj(b.hours) ?? {}; return { maxWeekHours: Number(o.maxWeekHours), maxDaysInRow: Number(o.maxDaysInRow), breakAfterHours: Number(o.breakAfterHours), breakMinutes: Number(o.breakMinutes) }; })(),
+      breakPlan: b.breakPlan == null ? null : (() => { const o = obj(b.breakPlan) ?? {}; return { count: Number(o.count), minutes: Number(o.minutes) }; })(),
+      rooms: b.rooms === undefined ? undefined : b.rooms === null ? null : (() => { const o = obj(b.rooms) ?? {}; return { m2PerPerson: Number(o.m2PerPerson), minCeilingM: Number(o.minCeilingM), maxPerRoom: Number(o.maxPerRoom) }; })(),
+      siteForm: lines(b.siteForm, 'siteForm'),
+      hostelForm: lines(b.hostelForm, 'hostelForm'),
+      siteInspectEveryDays: b.siteInspectEveryDays === undefined ? undefined : b.siteInspectEveryDays === null ? null : Number(b.siteInspectEveryDays),
+      note: typeof b.note === 'string' ? b.note.slice(0, 300) : '',
+    };
+    return this.db.asUser(uid, (svc, u) => svc.saveClientCode(u, id, input));
+  }
+
+  @Post('client-codes/:id/stop')
+  stopClientCode(@UserId() uid: string, @Param('id') id: string, @Body() b: Record<string, unknown>) {
+    const reason = str(b.reason, 'reason', 300);
+    return this.db.asUser(uid, (svc, u) => svc.stopClientCode(u, id, reason));
+  }
+
+  @Post('client-codes/:id/report')
+  setClientReport(@UserId() uid: string, @Param('id') id: string, @Body() b: Record<string, unknown>) {
+    const reason = str(b.reason, 'reason', 300);
+    const how = b.how === undefined || b.how === null ? '' : str(b.how, 'how', 120);
+    if (typeof b.send !== 'boolean') throw new BadRequestException('send must be true or false');
+    return this.db.asUser(uid, (svc, u) => svc.setClientReport(u, id, { send: b.send as boolean, how, reason }));
+  }
+
+  @Post('client-codes/:id/checks')
+  checkClientRequirement(@UserId() uid: string, @Param('id') id: string, @Body() b: Record<string, unknown>) {
+    if (b.result !== 'met' && b.result !== 'not_met' && b.result !== 'na') throw new BadRequestException('result must be met, not_met or na');
+    if (b.grade != null && b.grade !== 'yellow' && b.grade !== 'orange' && b.grade !== 'red') throw new BadRequestException('grade must be yellow, orange or red');
+    const input = { reqCode: str(b.reqCode, 'reqCode', 20), result: b.result as 'met' | 'not_met' | 'na', note: typeof b.note === 'string' ? b.note.slice(0, 600) : '', proof: proofList(b.proof), grade: (b.grade ?? null) as 'yellow' | 'orange' | 'red' | null };
+    return this.db.asUser(uid, (svc, u) => svc.checkClientRequirement(u, id, input));
+  }
+
+  @Post('client-codes/:id/inspections')
+  saveClientInspection(@UserId() uid: string, @Param('id') id: string, @Body() b: Record<string, unknown>) {
+    if (b.kind !== 'site' && b.kind !== 'hostel') throw new BadRequestException('kind must be site or hostel');
+    if (!Array.isArray(b.lines) || b.lines.length > 40) throw new BadRequestException('lines must be a list of up to 40 items');
+    if (b.rooms != null && (!Array.isArray(b.rooms) || b.rooms.length > 30)) throw new BadRequestException('rooms must be a list of up to 30 rooms');
+    const input = {
+      kind: b.kind as 'site' | 'hostel',
+      place: typeof b.place === 'string' ? b.place.slice(0, 160) : '',
+      date: b.date == null || b.date === '' ? null : date(b.date, 'date'),
+      lines: (b.lines as unknown[]).map((x) => {
+        const o = (x && typeof x === 'object' ? x : {}) as Record<string, unknown>;
+        const r = o.result === 'ok' || o.result === 'not_ok' || o.result === 'na' ? (o.result as 'ok' | 'not_ok' | 'na') : null;
+        if (!r) throw new BadRequestException('each line result must be ok, not_ok or na');
+        return { text: str(o.text, 'line.text', 240), result: r, note: typeof o.note === 'string' ? o.note.slice(0, 400) : '' };
+      }),
+      rooms: ((b.rooms as unknown[] | undefined) ?? []).map((x) => {
+        const o = (x && typeof x === 'object' ? x : {}) as Record<string, unknown>;
+        return { name: typeof o.name === 'string' ? o.name.slice(0, 40) : '', areaM2: Number(o.areaM2), ceilingM: Number(o.ceilingM), residents: Number(o.residents) };
+      }),
+      proof: proofList(b.proof),
+    };
+    return this.db.asUser(uid, (svc, u) => svc.saveClientInspection(u, id, input));
+  }
+
+  @Post('client-inspections/:id/fix')
+  fixInspectionLine(@UserId() uid: string, @Param('id') id: string, @Body() b: Record<string, unknown>) {
+    const index = Number(b.index);
+    if (!Number.isInteger(index) || index < 0 || index > 80) throw new BadRequestException('index must be a line number');
+    const input = { note: str(b.note, 'note', 400), proof: proofList(b.proof) };
+    return this.db.asUser(uid, (svc, u) => svc.fixInspectionLine(u, id, index, input));
+  }
+
+  @Get('companies/:id/self-audits')
+  selfAuditBoard(@UserId() uid: string, @Param('id') id: string) {
+    return this.db.asUser(uid, (svc, u) => svc.selfAuditBoard(u, id));
+  }
+
+  @Post('companies/:id/self-audits')
+  saveSelfAudit(@UserId() uid: string, @Param('id') id: string, @Body() b: Record<string, unknown>) {
+    if (b.scope !== 'company' && b.scope !== 'site' && b.scope !== 'all') throw new BadRequestException('scope must be company, site or all');
+    if (!Array.isArray(b.lines) || b.lines.length > 60) throw new BadRequestException('lines must be a list of up to 60 items');
+    const input = {
+      scope: b.scope as 'company' | 'site' | 'all',
+      siteId: b.siteId == null || b.siteId === '' ? null : str(b.siteId, 'siteId', 120),
+      doneOn: b.doneOn == null || b.doneOn === '' ? null : date(b.doneOn, 'doneOn'),
+      lines: (b.lines as unknown[]).map((x) => {
+        const o = (x && typeof x === 'object' ? x : {}) as Record<string, unknown>;
+        const r = o.result === 'ok' || o.result === 'not_ok' || o.result === 'na' ? (o.result as 'ok' | 'not_ok' | 'na') : null;
+        if (!r) throw new BadRequestException('each line result must be ok, not_ok or na');
+        return { key: str(o.key, 'line.key', 40), result: r, note: typeof o.note === 'string' ? o.note.slice(0, 400) : '' };
+      }),
+      proof: proofList(b.proof),
+    };
+    return this.db.asUser(uid, (svc, u) => svc.saveSelfAudit(u, id, input));
+  }
+
+  @Post('self-audits/:id/fix')
+  fixSelfAuditLine(@UserId() uid: string, @Param('id') id: string, @Body() b: Record<string, unknown>) {
+    const key = str(b.key, 'key', 40);
+    const input = { note: str(b.note, 'note', 400), proof: proofList(b.proof) };
+    return this.db.asUser(uid, (svc, u) => svc.fixSelfAuditLine(u, id, key, input));
+  }
+
+  // ---------- RBA readiness (Fauzan, 8 Nov 2026) ----------
+
+  @Get('rba')
+  rbaBoard(@UserId() uid: string, @Query('companyId') companyId?: string) {
+    return this.db.asUser(uid, (svc, u) => svc.rbaBoard(u, companyId ? String(companyId).slice(0, 120) : null));
+  }
+
+  @Post('rba/committee')
+  nameRbaCommittee(@UserId() uid: string, @Body() b: Record<string, unknown>) {
+    if (!Array.isArray(b.memberUserIds) || b.memberUserIds.length > 12) throw new BadRequestException('memberUserIds must be a list of up to 12 users');
+    const others = Array.isArray(b.others) ? b.others.slice(0, 12).map((x) => ({ name: typeof (x as { name?: unknown })?.name === 'string' ? String((x as { name: string }).name).slice(0, 80) : '' })) : [];
+    const input = { memberUserIds: b.memberUserIds.map((x) => str(x, 'memberUserIds', 120)), others, note: typeof b.note === 'string' ? b.note.slice(0, 300) : '' };
+    return this.db.asUser(uid, (svc, u) => svc.nameRbaCommittee(u, input));
+  }
+
+  @Get('companies/:id/rba-traces')
+  rbaTraceBoard(@UserId() uid: string, @Param('id') id: string) {
+    return this.db.asUser(uid, (svc, u) => svc.rbaTraceBoard(u, id));
+  }
+
+  @Post('companies/:id/rba-traces')
+  runRbaTrace(@UserId() uid: string, @Param('id') id: string, @Body() b: Record<string, unknown>) {
+    const period = str(b.period, 'period', 7);
+    return this.db.asUser(uid, (svc, u) => svc.runRbaTrace(u, id, period));
+  }
+
+  @Post('rba-traces/:id/settle')
+  settleRbaTraceRow(@UserId() uid: string, @Param('id') id: string, @Body() b: Record<string, unknown>) {
+    if (b.kind !== 'explained' && b.kind !== 'corrected' && b.kind !== 'finding') throw new BadRequestException('kind must be explained, corrected or finding');
+    const input = { kind: b.kind as 'explained' | 'corrected' | 'finding', note: str(b.note, 'note', 600) };
+    const personId = str(b.personId, 'personId', 120);
+    return this.db.asUser(uid, (svc, u) => svc.settleRbaTraceRow(u, id, personId, input));
+  }
+
+  @Get('companies/:id/worker-files')
+  workerFiles(@UserId() uid: string, @Param('id') id: string) {
+    return this.db.asUser(uid, (svc, u) => svc.workerFiles(u, id));
+  }
+
+  @Get('ethics')
+  ethicsBoard(@UserId() uid: string, @Query('companyId') companyId?: string) {
+    return this.db.asUser(uid, (svc, u) => svc.ethicsBoard(u, companyId ? String(companyId).slice(0, 120) : null));
+  }
+
+  @Post('ethics')
+  signEthicsDeclaration(@UserId() uid: string, @Body() b: Record<string, unknown>) {
+    if (!Array.isArray(b.statements) || b.statements.length > 20) throw new BadRequestException('statements must be a list');
+    const input = { statements: b.statements.map((x) => str(x, 'statements', 40)), interests: typeof b.interests === 'string' ? b.interests.slice(0, 1000) : '', interestsNone: b.interestsNone === true };
+    return this.db.asUser(uid, (svc, u) => svc.signEthicsDeclaration(u, input));
+  }
+
+  @Post('ethics/:id/review')
+  reviewEthicsInterests(@UserId() uid: string, @Param('id') id: string, @Body() b: Record<string, unknown>) {
+    if (b.action !== 'no_conflict' && b.action !== 'managed') throw new BadRequestException('action must be no_conflict or managed');
+    const input = { action: b.action as 'no_conflict' | 'managed', note: str(b.note, 'note', 600) };
+    return this.db.asUser(uid, (svc, u) => svc.reviewEthicsInterests(u, id, input));
   }
 
   @Post('sites/:id/gate-log')
@@ -5258,6 +6675,11 @@ export class AppController {
     return this.db.asUser(uid, (svc, u) => svc.updateCmsSettings(u, patch));
   }
 
+  @Get('cms/hours')
+  cmsHours(@UserId() uid: string, @Query('month') month?: string) {
+    return this.db.asUser(uid, (svc, u) => svc.cmsHours(u, typeof month === 'string' ? month.slice(0, 7) : undefined));
+  }
+
   @Post('cms/roster/plan')
   planCms(@UserId() uid: string, @Body() b: Record<string, unknown>) {
     const days = b.days === undefined ? 7 : Number(b.days);
@@ -5267,7 +6689,27 @@ export class AppController {
   @Post('cms/shifts/:id/handover')
   cmsHandover(@UserId() uid: string, @Param('id') id: string, @Body() b: Record<string, unknown>) {
     const note = str(b.note, 'note', 1000);
-    return this.db.asUser(uid, (svc, u) => svc.recordCmsHandover(u, id, note));
+    if (b.agree !== undefined && typeof b.agree !== 'boolean') throw new BadRequestException('agree must be true or false');
+    const agree = b.agree !== false;
+    return this.db.asUser(uid, (svc, u) => svc.recordCmsHandover(u, id, note, agree));
+  }
+
+  @Post('cms/shifts/:id/handover-out')
+  cmsHandoverOut(@UserId() uid: string, @Param('id') id: string, @Body() b: Record<string, unknown>) {
+    const note = str(b.note, 'note', 1000);
+    return this.db.asUser(uid, (svc, u) => svc.giveCmsHandover(u, id, note));
+  }
+
+  @Post('cms/shifts/:id/clock-out')
+  cmsClockOut(@UserId() uid: string, @Param('id') id: string, @Body() b: Record<string, unknown>) {
+    const note = b.note === undefined ? '' : str(b.note, 'note', 300);
+    return this.db.asUser(uid, (svc, u) => svc.cmsSeatClockOut(u, id, note));
+  }
+
+  @Post('cms/shifts/:id/release')
+  cmsRelease(@UserId() uid: string, @Param('id') id: string, @Body() b: Record<string, unknown>) {
+    const reason = str(b.reason, 'reason', 300);
+    return this.db.asUser(uid, (svc, u) => svc.releaseCmsSeat(u, id, reason));
   }
 
   @Post('cms/calls/:id/callback')
@@ -5298,8 +6740,60 @@ export class AppController {
 
   @Post('cms/shifts/:id/assign')
   assignCms(@UserId() uid: string, @Param('id') id: string, @Body() b: Record<string, unknown>) {
-    const name = str(b.staffName, 'staffName', 120);
+    // The screen sends the staff record id; a name still works when it is unique.
+    const name = str(b.staffId ?? b.staffName, 'staffId', 120);
     return this.db.asUser(uid, (svc, u) => svc.assignCmsShift(u, id, name));
+  }
+
+  // CMS site readiness (audit decision 4, Fauzan 5 Nov 2026). Readiness only: no route here connects a device.
+  @Get('cms/readiness')
+  cmsReadiness(@UserId() uid: string) {
+    return this.db.asUser(uid, (svc, u) => svc.cmsReadiness(u));
+  }
+
+  @Post('cms/readiness/:siteId/answers/:key')
+  cmsReadinessAnswer(@UserId() uid: string, @Param('siteId') siteId: string, @Param('key') key: string, @Body() b: Record<string, unknown>) {
+    if (!(CMS_READINESS_KEYS as string[]).includes(key)) throw new BadRequestException('unknown readiness item');
+    if (b.value !== 'yes' && b.value !== 'no' && b.value !== 'unknown') throw new BadRequestException('value must be yes, no or unknown');
+    const value = b.value;
+    const note = b.note === undefined ? '' : str(b.note, 'note', 500);
+    const ref = b.ref === undefined || b.ref === null ? null : str(b.ref, 'ref', 200);
+    return this.db.asUser(uid, (svc, u) => svc.setCmsReadinessAnswer(u, siteId, key as CmsReadinessKey, { value, note, ref }));
+  }
+
+  @Post('cms/readiness/:siteId/devices')
+  cmsReadinessDevice(@UserId() uid: string, @Param('siteId') siteId: string, @Body() b: Record<string, unknown>) {
+    const opt = (k: string, max: number) => (b[k] === undefined || b[k] === null ? undefined : str(b[k], k, max));
+    const input = {
+      id: opt('id', 200),
+      kind: opt('kind', 40) as CmsDeviceKind | undefined,
+      brand: opt('brand', 80),
+      model: opt('model', 80),
+      count: b.count === undefined ? undefined : Number(b.count),
+      owner: opt('owner', 10) as 'client' | 'company' | undefined,
+      clientChoiceRef: opt('clientChoiceRef', 200),
+      vendorName: opt('vendorName', 120),
+      vendorPhone: opt('vendorPhone', 40),
+      linkMethod: opt('linkMethod', 120),
+      linkConfirmed: opt('linkConfirmed', 10) as 'yes' | 'no' | 'unknown' | undefined,
+      note: opt('note', 500),
+    };
+    return this.db.asUser(uid, (svc, u) => svc.saveCmsReadinessDevice(u, siteId, input));
+  }
+
+  @Post('cms/readiness/:siteId/devices/:deviceId/remove')
+  cmsReadinessRemoveDevice(@UserId() uid: string, @Param('siteId') siteId: string, @Param('deviceId') deviceId: string, @Body() b: Record<string, unknown>) {
+    const reason = str(b.reason, 'reason', 300);
+    return this.db.asUser(uid, (svc, u) => svc.removeCmsReadinessDevice(u, siteId, deviceId, reason));
+  }
+
+  @Post('cms/readiness/:siteId/review')
+  cmsReadinessReview(@UserId() uid: string, @Param('siteId') siteId: string, @Body() b: Record<string, unknown>) {
+    if (b.decision !== 'pass' && b.decision !== 'return') throw new BadRequestException('decision must be pass or return');
+    const decision = b.decision;
+    const note = str(b.note, 'note', 500);
+    const fingerprint = str(b.fingerprint, 'fingerprint', 100);
+    return this.db.asUser(uid, (svc, u) => svc.reviewCmsReadiness(u, siteId, { decision, note, fingerprint }));
   }
 
   @Post('arms/requests/:id/review')
@@ -5310,7 +6804,70 @@ export class AppController {
     return this.db.asUser(uid, (svc, u) => svc.reviewArmsRequest(u, id, decision, note));
   }
 
-  // Management fees from the signed agreements, entered by the Finance Director or the CEO (Fauzan, 2 Nov 2026).
+  // Police call or visit help (Fauzan, 3 Nov 2026): the company asks, Arms Control assigns and records, the company confirms.
+  @Get('arms/police-help')
+  policeHelp(@UserId() uid: string) {
+    return this.db.asUser(uid, (svc, u) => svc.policeHelp(u));
+  }
+
+  @Post('arms/police-help')
+  askPoliceHelp(@UserId() uid: string, @Body() b: Record<string, unknown>) {
+    const companyId = str(b.companyId, 'companyId', 40);
+    if (!/^[a-z0-9-]{1,40}$/.test(companyId)) throw new BadRequestException('companyId is not valid');
+    if (b.kind !== 'PHONE_CALL' && b.kind !== 'VISIT_NOW' && b.kind !== 'VISIT_BOOKED') throw new BadRequestException('kind is not valid');
+    if (b.reason !== 'ARMOURY_CHECK' && b.reason !== 'DOCUMENT_CHECK' && b.reason !== 'FIREARM_QUERY' && b.reason !== 'OTHER') throw new BadRequestException('reason is not valid');
+    const kind: 'PHONE_CALL' | 'VISIT_NOW' | 'VISIT_BOOKED' = b.kind;
+    const reason: 'ARMOURY_CHECK' | 'DOCUMENT_CHECK' | 'FIREARM_QUERY' | 'OTHER' = b.reason;
+    const input = {
+      companyId,
+      kind,
+      reason,
+      expectedAt: b.expectedAt == null ? null : str(b.expectedAt, 'expectedAt', 40),
+      policeUnit: str(b.policeUnit, 'policeUnit', 160),
+      officer: b.officer == null ? '' : str(b.officer, 'officer', 160),
+      asked: str(b.asked, 'asked', 1000),
+      contactName: str(b.contactName, 'contactName', 120),
+      contactPhone: str(b.contactPhone, 'contactPhone', 24),
+    };
+    return this.db.asUser(uid, (svc, u) => svc.askPoliceHelp(u, input));
+  }
+
+  @Post('arms/police-help/:id/assign')
+  assignPoliceHelp(@UserId() uid: string, @Param('id') id: string, @Body() b: Record<string, unknown>) {
+    if (b.how !== 'PHONE' && b.how !== 'ON_SITE') throw new BadRequestException('how must be PHONE or ON_SITE');
+    const how: 'PHONE' | 'ON_SITE' = b.how;
+    const input = {
+      name: str(b.name, 'name', 120),
+      phone: str(b.phone, 'phone', 24),
+      how,
+      eta: b.eta == null ? null : str(b.eta, 'eta', 40),
+      note: b.note == null ? '' : str(b.note, 'note', 500),
+    };
+    return this.db.asUser(uid, (svc, u) => svc.assignPoliceHelp(u, id, input));
+  }
+
+  @Post('arms/police-help/:id/outcome')
+  policeHelpOutcome(@UserId() uid: string, @Param('id') id: string, @Body() b: Record<string, unknown>) {
+    const input = { note: str(b.note, 'note', 2000), followUp: b.followUp == null ? '' : str(b.followUp, 'followUp', 1000), proof: proofList(b.proof) };
+    return this.db.asUser(uid, (svc, u) => svc.recordPoliceHelpOutcome(u, id, input));
+  }
+
+  @Post('arms/police-help/:id/answer')
+  answerPoliceHelp(@UserId() uid: string, @Param('id') id: string, @Body() b: Record<string, unknown>) {
+    if (b.decision !== 'confirm' && b.decision !== 'return') throw new BadRequestException('decision must be confirm or return');
+    const decision = b.decision;
+    const note = str(b.note, 'note', 1000);
+    return this.db.asUser(uid, (svc, u) => svc.answerPoliceHelp(u, id, decision, note));
+  }
+
+  @Post('arms/police-help/:id/withdraw')
+  withdrawPoliceHelp(@UserId() uid: string, @Param('id') id: string, @Body() b: Record<string, unknown>) {
+    const note = str(b.note, 'note', 1000);
+    return this.db.asUser(uid, (svc, u) => svc.withdrawPoliceHelp(u, id, note));
+  }
+
+  // Management fees between any group companies, from the signed agreements, set by the Finance Director or the CEO
+  // with a reason (Fauzan, 2 Nov 2026; any PWVSB company, 5 Nov 2026).
   @Get('finance/management-fees')
   managementFees(@UserId() uid: string) {
     return this.db.asUser(uid, (svc, u) => svc.managementFees(u));
@@ -5318,17 +6875,27 @@ export class AppController {
 
   @Post('finance/management-fees/:companyId')
   setManagementFee(@UserId() uid: string, @Param('companyId') companyId: string, @Body() b: Record<string, unknown>) {
-    const kind = (['percent', 'fixed'] as const).find((k) => k === b.kind);
-    if (!kind) throw new BadRequestException('kind must be percent or fixed');
-    const opsCompany = (['goodwill', 'sasateam'] as const).find((k) => k === b.opsCompany);
-    if (!opsCompany) throw new BadRequestException('opsCompany must be goodwill or sasateam');
-    if (typeof b.value !== 'number') throw new BadRequestException('value must be a number');
+    const kind = (['percent', 'fixed', 'end'] as const).find((k) => k === b.kind);
+    if (!kind) throw new BadRequestException('kind must be percent, fixed or end');
+    const chargedBy = str(b.chargedBy ?? '', 'chargedBy', 40);
+    if (!chargedBy) throw new BadRequestException('chargedBy is required');
+    if (kind !== 'end' && typeof b.value !== 'number') throw new BadRequestException('value must be a number');
+    if (b.inSiteProfit !== undefined && typeof b.inSiteProfit !== 'boolean') throw new BadRequestException('inSiteProfit must be true or false');
+    if (b.from !== undefined && (typeof b.from !== 'string' || !/^\d{4}-\d{2}$/.test(b.from))) throw new BadRequestException('from must be YYYY-MM');
     return this.db.asUser(uid, (svc, u) =>
-      svc.setManagementFee(u, companyId.slice(0, 40), { opsCompany, kind, value: b.value as number, agreementRef: str(b.agreementRef ?? '', 'agreementRef', 120) }),
+      svc.setManagementFee(u, companyId.slice(0, 40), {
+        chargedBy,
+        kind,
+        value: kind === 'end' ? undefined : (b.value as number),
+        agreementRef: str(b.agreementRef ?? '', 'agreementRef', 120),
+        reason: str(b.reason ?? '', 'reason', 300),
+        from: b.from as string | undefined,
+        inSiteProfit: typeof b.inSiteProfit === 'boolean' ? b.inSiteProfit : undefined,
+      }),
     );
   }
 
-  // The month's management fee bills from Goodwill Empire and Sasa Team to each company (draft, not an invoice).
+  // The month's management fee bills between group companies (draft, not an invoice).
   @Get('finance/management-fee-bills')
   managementFeeBills(@UserId() uid: string, @Query('month') month?: string) {
     if (month !== undefined && !/^\d{4}-\d{2}$/.test(month)) throw new BadRequestException('month must be YYYY-MM');
@@ -5363,6 +6930,38 @@ export class AppController {
   @Get('insurance')
   insurance(@UserId() uid: string) {
     return this.db.asUser(uid, (svc, u) => svc.insurance(u));
+  }
+
+  // ----- Insurance policy register steps (real use, 5 Nov 2026) -----
+  @Post('insurance/policies/:id/premium')
+  recordInsurancePremium(@UserId() uid: string, @Param('id') id: string, @Body() b: Record<string, unknown>) {
+    return this.db.asUser(uid, (svc, u) => svc.recordInsurancePremium(u, id.slice(0, 120), { paidOn: date(b.paidOn, 'paidOn'), ref: str(b.ref, 'ref', 60) }));
+  }
+
+  @Post('insurance/policies/:id/renew')
+  renewInsurancePolicy(@UserId() uid: string, @Param('id') id: string, @Body() b: Record<string, unknown>) {
+    const num = (v: unknown, name: string) => {
+      if (typeof v !== 'number' || !Number.isFinite(v)) throw new BadRequestException(`${name} must be a number`);
+      return v;
+    };
+    return this.db.asUser(uid, (svc, u) =>
+      svc.renewInsurancePolicy(u, id.slice(0, 120), {
+        insurer: str(b.insurer, 'insurer', 100),
+        broker: b.broker == null || b.broker === '' ? null : str(b.broker, 'broker', 100),
+        policyNo: str(b.policyNo, 'policyNo', 60),
+        sumInsured: num(b.sumInsured, 'sumInsured'),
+        premium: num(b.premium, 'premium'),
+        startsOn: date(b.startsOn, 'startsOn'),
+        expiresOn: date(b.expiresOn, 'expiresOn'),
+        premiumDueOn: date(b.premiumDueOn, 'premiumDueOn'),
+        scheduleRef: b.scheduleRef == null || b.scheduleRef === '' ? null : str(b.scheduleRef, 'scheduleRef', 200),
+      }),
+    );
+  }
+
+  @Post('insurance/policies/:id/cancel')
+  cancelInsurancePolicy(@UserId() uid: string, @Param('id') id: string, @Body() b: Record<string, unknown>) {
+    return this.db.asUser(uid, (svc, u) => svc.cancelInsurancePolicy(u, id.slice(0, 120), { on: date(b.on, 'on'), reason: str(b.reason, 'reason', 300) }));
   }
 
   @Post('insurance-claims/:id/act')
@@ -5568,8 +7167,8 @@ export class AppController {
   }
 
   @Post('tenders/:id/steps/:stepId/na')
-  confirmTenderNa(@UserId() uid: string, @Param('id') id: string, @Param('stepId') stepId: string, @Body() b: { accept?: unknown }) {
-    return this.db.asUser(uid, (svc, u) => svc.confirmTenderNa(u, id, stepId.slice(0, 40), b.accept === true));
+  confirmTenderNa(@UserId() uid: string, @Param('id') id: string, @Param('stepId') stepId: string, @Body() b: { accept?: unknown; note?: unknown }) {
+    return this.db.asUser(uid, (svc, u) => svc.confirmTenderNa(u, id, stepId.slice(0, 40), b.accept === true, str(b.note ?? '', 'note', 300)));
   }
 
   @Post('tenders/:id/steps/:stepId/plan')
@@ -5723,15 +7322,55 @@ export class AppController {
         location: b.location == null ? '' : str(b.location, 'location', 120),
         attendees: Array.isArray(b.attendees) ? b.attendees.slice(0, 40).map((a) => str(a, 'attendee', 80)) : [],
         agenda: b.agenda == null ? '' : str(b.agenda, 'agenda', 2000),
+        attendeeIds: idList(b.attendeeIds),
+        sectionKey: b.sectionKey == null ? null : str(b.sectionKey, 'sectionKey', 40),
+        seriesKey: b.seriesKey == null ? null : str(b.seriesKey, 'seriesKey', 80),
         repeat: every,
         times,
       }),
     );
   }
 
+  @Post('meetings/:id/change')
+  changeMeeting(@UserId() uid: string, @Param('id') id: string, @Body() b: Record<string, unknown>) {
+    const opt = (k: string, max: number) => (b[k] == null ? undefined : str(b[k], k, max));
+    return this.db.asUser(uid, (svc, u) =>
+      svc.changeMeeting(u, id.slice(0, 120), {
+        title: opt('title', 120),
+        start: opt('start', 40),
+        end: opt('end', 40),
+        location: opt('location', 120),
+        agenda: opt('agenda', 2000),
+        attendeeIds: b.attendeeIds == null ? undefined : idList(b.attendeeIds),
+        attendees: Array.isArray(b.attendees) ? b.attendees.slice(0, 40).map((a) => str(a, 'attendee', 80)) : undefined,
+        reason: str(b.reason, 'reason', 300),
+      }),
+    );
+  }
+
+  @Post('meetings/:id/cancel')
+  cancelMeeting(@UserId() uid: string, @Param('id') id: string, @Body() b: { reason?: unknown }) {
+    return this.db.asUser(uid, (svc, u) => svc.cancelMeeting(u, id.slice(0, 120), str(b.reason, 'reason', 300)));
+  }
+
+  @Post('meetings/:id/answer')
+  answerMeeting(@UserId() uid: string, @Param('id') id: string, @Body() b: { answer?: unknown; note?: unknown }) {
+    const answer = (['yes', 'no', 'maybe'] as const).find((a) => a === b.answer);
+    if (!answer) throw new BadRequestException('answer must be yes, no or maybe');
+    return this.db.asUser(uid, (svc, u) => svc.answerMeeting(u, id.slice(0, 120), answer, b.note == null ? '' : str(b.note, 'note', 200)));
+  }
+
   @Post('meetings/:id/minutes')
-  addMinutes(@UserId() uid: string, @Param('id') id: string, @Body() b: { text?: unknown }) {
-    return this.db.asUser(uid, (svc, u) => svc.addMinutes(u, id, str(b.text, 'text', 20_000)));
+  addMinutes(@UserId() uid: string, @Param('id') id: string, @Body() b: { text?: unknown; attendance?: unknown }) {
+    if (b.attendance != null && (!Array.isArray(b.attendance) || b.attendance.length > 100)) throw new BadRequestException('attendance must be a list');
+    const attendance = Array.isArray(b.attendance)
+      ? b.attendance.map((a: Record<string, unknown>) => {
+          const state = (['present', 'apology', 'absent'] as const).find((x) => x === a?.state);
+          if (!state) throw new BadRequestException('attendance state must be present, apology or absent');
+          return { userId: a?.userId == null ? null : str(a.userId, 'userId', 120), name: a?.name == null ? '' : str(a.name, 'name', 80), state };
+        })
+      : undefined;
+    return this.db.asUser(uid, (svc, u) => svc.addMinutes(u, id, str(b.text, 'text', 20_000), attendance));
   }
 
   @Post('meetings/:id/summary-check')
@@ -5740,6 +7379,7 @@ export class AppController {
       ? b.actions.slice(0, 40).map((a: Record<string, unknown>) => ({
           text: str(a?.text, 'text', 300),
           owner: a?.owner == null ? '' : str(a.owner, 'owner', 80),
+          ownerId: a?.ownerId == null ? null : str(a.ownerId, 'ownerId', 120),
           due: a?.due == null ? null : str(a.due, 'due', 10),
         }))
       : undefined;
@@ -5759,8 +7399,10 @@ export class AppController {
   }
 
   @Post('meetings/:id/actions/:index')
-  setAction(@UserId() uid: string, @Param('id') id: string, @Param('index') index: string, @Body() b: { done?: unknown }) {
-    return this.db.asUser(uid, (svc, u) => svc.setMeetingAction(u, id, Number.parseInt(index, 10), b.done === true));
+  setAction(@UserId() uid: string, @Param('id') id: string, @Param('index') index: string, @Body() b: { done?: unknown; note?: unknown }) {
+    return this.db.asUser(uid, (svc, u) =>
+      svc.setMeetingAction(u, id, Number.parseInt(index, 10), b.done === true, b.note == null ? '' : str(b.note, 'note', 300)),
+    );
   }
 
   @Post('meetings/:id/prep')
@@ -5791,6 +7433,75 @@ export class AppController {
     return this.db.asUser(uid, (svc, u) => svc.tenderBoard(u));
   }
 
+  @Get('tender-counter')
+  tenderCounter(@UserId() uid: string) {
+    return this.db.asUser(uid, (svc, u) => svc.tenderCounter(u));
+  }
+
+  @Get('director-office-counter')
+  directorOfficeCounter(@UserId() uid: string) {
+    return this.db.asUser(uid, (svc, u) => svc.directorOfficeCounter(u));
+  }
+
+  @Get('tender-opportunities')
+  tenderOpportunities(@UserId() uid: string) {
+    return this.db.asUser(uid, (svc, u) => svc.tenderOpportunities(u));
+  }
+
+  @Post('tender-opportunities')
+  recordTenderOpportunity(@UserId() uid: string, @Body() b: Record<string, unknown>) {
+    const body = b && typeof b === 'object' ? b : {};
+    return this.db.asUser(uid, (svc, u) =>
+      svc.recordTenderOpportunity(u, {
+        kind: body.kind,
+        ref: body.ref,
+        title: body.title,
+        buyer: body.buyer,
+        channel: body.channel,
+        source: body.source,
+        closesOn: body.closesOn,
+        guards: body.guards,
+        note: body.note,
+        companyIds: body.companyIds,
+        companyId: body.companyId,
+      }),
+    );
+  }
+
+  @Post('tender-opportunities/:id/enter')
+  enterTenderOpportunity(@UserId() uid: string, @Param('id') id: string, @Body() b: { companyIds?: unknown; note?: unknown }) {
+    if (!Array.isArray(b?.companyIds) || b.companyIds.length > 40) throw new BadRequestException('Choose the companies.');
+    const ids = b.companyIds.map((x, i) => str(x, `companyIds[${i}]`, 40));
+    return this.db.asUser(uid, (svc, u) => svc.enterTenderOpportunity(u, str(id, 'id', 80), ids, typeof b.note === 'string' ? b.note : ''));
+  }
+
+  @Get('tender-sources')
+  tenderSources(@UserId() uid: string) {
+    return this.db.asUser(uid, (svc, u) => svc.tenderSources(u));
+  }
+
+  @Post('tender-sources')
+  addTenderSource(@UserId() uid: string, @Body() b: { buyer?: unknown; urls?: unknown; note?: unknown }) {
+    return this.db.asUser(uid, (svc, u) => svc.addTenderSource(u, { buyer: b?.buyer, urls: b?.urls, note: b?.note }));
+  }
+
+  @Post('tender-sources/starter')
+  loadTenderSourceStarter(@UserId() uid: string) {
+    return this.db.asUser(uid, (svc, u) => svc.loadTenderSourceStarter(u));
+  }
+
+  @Post('tender-sources/:id')
+  updateTenderSource(@UserId() uid: string, @Param('id') id: string, @Body() b: { urls?: unknown; note?: unknown; active?: unknown }) {
+    return this.db.asUser(uid, (svc, u) => svc.updateTenderSource(u, str(id, 'id', 80), { urls: b?.urls, note: b?.note, active: b?.active }));
+  }
+
+  @Post('tender-sources/:id/check')
+  recordTenderSourceCheck(@UserId() uid: string, @Param('id') id: string, @Body() b: { status?: unknown; result?: unknown; followUp?: unknown; found?: unknown }) {
+    return this.db.asUser(uid, (svc, u) =>
+      svc.recordTenderSourceCheck(u, str(id, 'id', 80), { status: b?.status, result: b?.result, followUp: b?.followUp, found: b?.found }),
+    );
+  }
+
   @Get('compliance')
   compliance(@UserId() uid: string) {
     return this.db.asUser(uid, (svc, u) => svc.compliance(u));
@@ -5803,12 +7514,23 @@ export class AppController {
 }
 
 /** Where the JA Group app sends its data (Fauzan, 26 Oct 2026). It runs as the feed's own system sign-in, so row-level security still applies. */
-const JA_DATASETS = { payroll: 'payroll', 'foreign-workers': 'worker', incidents: 'incident', guards: 'guard', 'pay-summary': 'paySummary' } as const;
+const JA_DATASETS = { payroll: 'payroll', 'foreign-workers': 'worker', incidents: 'incident', 'pay-summary': 'paySummary', guards: 'guard' } as const;
 
 @Controller('api/integrations/ja/v1')
 @UseGuards(FeedGuard)
 export class JaFeedController {
   constructor(private db: Db) {}
+
+  /**
+   * What Prima recorded that the JA app takes back, so the permit board stays the same in both apps (Fauzan, 5 Nov
+   * 2026). Signed POST like the deliveries: { "since": "<last asOf or next>" }.
+   */
+  @Post('foreign-worker-papers/changes')
+  fwPaperChanges(@Body() body: { since?: unknown }) {
+    const since = body?.since == null ? null : typeof body.since === 'string' && !Number.isNaN(Date.parse(body.since)) ? body.since.slice(0, 40) : undefined;
+    if (since === undefined) throw new BadRequestException('since must be a date and time, or left out for everything.');
+    return this.db.asUser(process.env.JA_FEED_USER_ID ?? 'u-ja-sync', (svc, u) => svc.jaFwPaperChanges(u, since));
+  }
 
   @Post(':dataset')
   ingest(@Param('dataset') dataset: string, @Body() body: { records?: unknown; covered?: unknown }) {
@@ -5894,16 +7616,6 @@ export class PlannerFeedController {
   }
 }
 
-/** Successors on a critical post: up to five staff ids, each with how ready they are. */
-function successorsOf(v: unknown): { userId: string; readiness: 'ready_now' | 'ready_later' | 'not_ready' }[] {
-  if (!Array.isArray(v)) return [];
-  return v.slice(0, 5).map((x) => {
-    const r = (x ?? {}) as Record<string, unknown>;
-    const readiness = r.readiness === 'ready_now' || r.readiness === 'ready_later' || r.readiness === 'not_ready' ? r.readiness : null;
-    if (!readiness) throw new BadRequestException('Say how ready each successor is.');
-    return { userId: str(r.userId ?? '', 'userId', 80), readiness };
-  });
-}
 /**
  * The page a client opens from a report link. No Prima sign-in: the signed link names one company, client and link,
  * the database session is limited to that company (Db.asShareLink), and the service re-checks the link is open. The
@@ -5927,4 +7639,15 @@ export class ShareController {
       return res.status(404).send(shareGonePage());
     }
   }
+}
+
+/** Successors on a critical post: up to five staff ids, each with how ready they are. */
+function successorsOf(v: unknown): { userId: string; readiness: 'ready_now' | 'ready_later' | 'not_ready' }[] {
+  if (!Array.isArray(v)) return [];
+  return v.slice(0, 5).map((x) => {
+    const r = (x ?? {}) as Record<string, unknown>;
+    const readiness = r.readiness === 'ready_now' || r.readiness === 'ready_later' || r.readiness === 'not_ready' ? r.readiness : null;
+    if (!readiness) throw new BadRequestException('Say how ready each successor is.');
+    return { userId: str(r.userId ?? '', 'userId', 80), readiness };
+  });
 }

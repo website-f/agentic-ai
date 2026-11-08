@@ -4,6 +4,8 @@ import type { AccountInfo, PublicClientApplication } from '@azure/msal-browser';
 export interface SignInConfig {
   microsoft: { tenantId: string; clientId: string; scope: string } | null;
   devLogin: boolean;
+  /** Guards' own phone sign-in is switched on (GUARD_PHONE=on). */
+  guardPhone?: boolean;
 }
 
 /**

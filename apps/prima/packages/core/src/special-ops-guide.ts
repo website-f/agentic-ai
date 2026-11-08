@@ -1,16 +1,7 @@
-/**
- * Special Ops and Asset Management guide cards (Arisha main review, 2 Nov 2026, section A), in the shared guide-card shape
- * of PR #56 (packages/core/src/guide-cards.ts, GuideCardSpec at 4989972). This branch does not carry PR #56 yet, so the
- * shape is mirrored here structurally; when the two are combined, call registerGuideCards(SPECIAL_OPS_GUIDE_CARDS) from
- * guide-cards and delete the mirrored types below. Arisha then reads them through GET /api/org/guide.
- *
- * Rules kept: Bahasa Melayu first with English; `allowed` calls the same permission rule the server uses for the action;
- * "entered once" filled in; who to ask is a hand-over desk ('asset') or, with no Arms Control desk in the hand-over map,
- * null with the record's keepers named, never a person; anything not built or not walked through is in `notVerified`.
- * Each card names the service method it was checked against. Read-only help: a card never saves, approves or sends.
- */
-import { assetRole, canRunCms } from './access';
-import type { User } from './types';
+import { assetRole } from "./access";
+import { canRunCms } from "./access";
+import type { User } from "./types";
+
 
 interface GuideText {
   bm: string;

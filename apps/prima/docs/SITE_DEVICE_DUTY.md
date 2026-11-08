@@ -1,6 +1,6 @@
 # Site shared device: CMS messages and one-stop guard duty
 
-Requested by Fauzan on 6 Nov 2026. This is a draft built with mock data. It is not merged, not migrated and not deployed.
+Requested by Fauzan on 6 Nov 2026. Built with mock data and merged into main on 7 Nov 2026 (PR #126). It is not migrated and not deployed.
 
 ## 1. CMS messages to the site device
 
@@ -88,4 +88,4 @@ Fauzan, 6 Nov 2026: police need the full data of people coming in and out if som
 
 ## New tables
 
-The new tables are `site_dispatches`, `evidence_videos`, `post_logs`, `site_vehicles` and `gate_entries`, all company-scoped with RLS. They live in `db/migrations/001_init.sql`, and the base migration hash in `db/release-manifest.json` has been updated. This needs a reviewed base transition before any migration.
+The new tables are `site_dispatches`, `evidence_videos`, `post_logs`, `site_vehicles` and `gate_entries`, all company-scoped with RLS. They live in `db/migrations/001_init.sql`, and the base migration hash in `db/release-manifest.json` has been updated. The database update that adds them is prepared in `ops/combined-upgrade` (stage 2, after `ops/base-transition`); it has not been run on any real database.

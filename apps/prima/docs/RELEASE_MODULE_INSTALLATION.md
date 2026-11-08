@@ -1,6 +1,6 @@
 # Complete release artifact and explicit module installation
 
-This local packaging repair covers the exact base schema and five mandatory SQL artifacts: procurement, rental corrections, controlled cleanup, workflow metrics, and selected job-email v2. `db/release-manifest.json` pins all six files. It is not a provider connection, tenant consent, user mandate, licensing, live-data or browser acceptance certificate.
+This local packaging repair covers the exact base schema and six mandatory SQL artifacts: procurement, rental corrections, controlled cleanup, workflow metrics, selected job-email v2 and the item register (added 8 Nov 2026 after the owner chose the release path for it). `db/release-manifest.json` pins all seven files. It is not a provider connection, tenant consent, user mandate, licensing, live-data or browser acceptance certificate.
 
 ## No automatic database changes
 
@@ -20,7 +20,7 @@ prints a file-only plan and immutable release hash without connecting to a datab
 node dist/src/module-install.js --module procurement --release-sha <release-sha256> --module-sha <module-sha256> --confirm INSTALL_SELECTED_MODULE
 ```
 
-Install order: existing exact base → procurement → rental_corrections → cleanup → metrics. Select `job_email` separately for fresh v2 only. Do **not** install mail v1 first; existing v1/partial installations require a separately reviewed data-preserving migration. The base is not installed by this runner.
+Install order: existing exact base → procurement → rental_corrections → cleanup → metrics → item_register (no prerequisites; it only adds `item_*` tables and the `item_parties` function). Select `job_email` separately for fresh v2 only. Do **not** install mail v1 first; existing v1/partial installations require a separately reviewed data-preserving migration. The base is not installed by this runner.
 
 Each selected installation runs under one owner transaction/advisory lock, verifies prerequisites, applies only the fixed hash-pinned module body, and checks its actual catalog before commit. A complete exact existing module is a read-only no-op; partial or drifted state is refused, not overwritten. Any ambiguous failure requires read-only inspection before retry. No generic SQL path or arbitrary module is accepted.
 

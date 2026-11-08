@@ -369,7 +369,7 @@ function TripLine({ t }: { t: Trip }) {
       {t.status === 'pending' && (
         <div className="lv-req-act">
           <div className="lv-decide">
-            <input className="input" aria-label="Note" placeholder="Note (required to reject)" value={note} onChange={(e) => setNote(e.target.value)} />
+            <input className="input" aria-label="Note" placeholder="Comment (needed to approve or reject)" value={note} onChange={(e) => setNote(e.target.value)} />
             <div className="lv-decide-btns">
               <button
                 className="btn btn-sm"
@@ -378,7 +378,7 @@ function TripLine({ t }: { t: Trip }) {
               >
                 Reject
               </button>
-              <button className="btn btn-primary btn-sm" disabled={act.busy} onClick={() => act.run(() => api.decideTrip(t.id, true, note), 'Trip approved.')}>
+              <button className="btn btn-primary btn-sm" disabled={act.busy || !note.trim()} onClick={() => act.run(() => api.decideTrip(t.id, true, note), 'Trip approved.')}>
                 Approve
               </button>
             </div>
@@ -815,7 +815,7 @@ function Decide({ r }: { r: QueueRow }) {
   return (
     <>
       <div className="lv-decide">
-        <input className="input" aria-label="Decision note" placeholder="Note (required to reject)" value={note} onChange={(e) => setNote(e.target.value)} />
+        <input className="input" aria-label="Decision note" placeholder="Comment (needed to approve or reject)" value={note} onChange={(e) => setNote(e.target.value)} />
         <div className="lv-decide-btns">
           <button
             className="btn btn-sm"
@@ -826,7 +826,7 @@ function Decide({ r }: { r: QueueRow }) {
           </button>
           <button
             className="btn btn-primary btn-sm"
-            disabled={act.busy}
+            disabled={act.busy || !note.trim()}
             onClick={() => act.run(() => api.decideStaffClaim(r.claim.id, by, true, note), by === 'hr' ? 'Checked, sent to the COO.' : 'Approved.')}
           >
             {by === 'hr' ? 'Checked, to COO' : 'Approve'}

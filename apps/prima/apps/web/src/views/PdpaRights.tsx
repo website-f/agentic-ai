@@ -55,6 +55,7 @@ export function RequestsPanel() {
 function RequestLine({ r: row, data }: { r: PdpaRights['requests'][number]; data: PdpaRights }) {
   const act = useAction();
   const [note, setNote] = useState('');
+  const [idNote, setIdNote] = useState('');
   const [ground, setGround] = useState(data.rule.refusalGrounds[0]);
   const r = row.request;
   const officer = data.role === 'officer';
@@ -84,9 +85,18 @@ function RequestLine({ r: row, data }: { r: PdpaRights['requests'][number]; data
         <>
           <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
             {!r.idVerified && (
-              <button className="btn btn-sm" disabled={act.busy} onClick={() => act.run(() => api.pdpaRequestStep(r.id, 'verify', ''), 'Identity checked.')}>
-                Identity checked
-              </button>
+              <>
+                <input
+                  className="input"
+                  aria-label="How the identity was checked"
+                  placeholder="How you checked the identity (needed; a short note is fine)"
+                  value={idNote}
+                  onChange={(e) => setIdNote(e.target.value)}
+                />
+                <button className="btn btn-sm" disabled={act.busy || !idNote.trim()} onClick={() => act.run(() => api.pdpaRequestStep(r.id, 'verify', idNote), 'Identity checked.')}>
+                  Identity checked
+                </button>
+              </>
             )}
             <input
               className="input"

@@ -1,8 +1,13 @@
-// CMS commissioning for a client contract (masterplan §191, Fauzan "proceed work", 3 Nov 2026): the signed CMS service
-// scope, contact verification, operator and client acceptance, and coverage measured in contracted minutes.
-// Pure functions only; the service enforces who may do each step.
-import { addDays, dateOf, fromMs, myt, toMs } from './time';
-import type { CmsService, CmsServiceKind, IsoDateTime, SiteSystem } from './types';
+import { addDays } from "./time";
+import { dateOf } from "./time";
+import { fromMs } from "./time";
+import { myt } from "./time";
+import { toMs } from "./time";
+import type { CmsService } from "./types";
+import type { CmsServiceKind } from "./types";
+import type { IsoDateTime } from "./types";
+import type { SiteSystem } from "./types";
+
 
 export const CMS_SERVICE_KINDS: Record<CmsServiceKind, string> = {
   cctv: 'CCTV monitoring',
@@ -196,4 +201,3 @@ export function commissioningGaps(svc: CmsService | null | undefined): string[] 
   if (!svc.clientAcceptance) out.push("no client acceptance recorded");
   return out;
 }
-

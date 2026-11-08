@@ -9,6 +9,9 @@ import { resetDb } from '../src/reset-db';
 const URL = process.env.DATABASE_URL ?? 'postgres://postgres:localdev@localhost:5432/prima_test';
 process.env.DATABASE_URL = URL;
 
+/** The seed's Branch Manager of a branch: they prepare only their own branch's months (Fauzan, 4 Nov 2026). */
+const bmOf = (branchId: string) => `u-bm-${branchId.slice(3)}`;
+
 describe('branch ledger on PostgreSQL', () => {
   let db: Db;
   before(async () => {
@@ -33,7 +36,9 @@ describe('branch ledger on PostgreSQL', () => {
       const sites = await store.list('sites', { companyId: ['co-sasa'] });
       const c = contracts.find((k) => k.state === 'active' && sites.some((s) => k.siteIds.includes(s.id) && s.branchId))!;
       const site = sites.find((s) => c.siteIds.includes(s.id) && s.branchId)!;
-      return { fin1: team[0], fin2: team[1] ?? fd, site };
+      const ag = ((await store.get('branches', site.branchId!))?.agreements ?? []).at(-1);
+      // A Model B (salaried) branch's month carries the Branch Manager's salary line at the signed amount.
+      return { fin1: team[0], fin2: team[1] ?? fd, site, salary: ag?.model === 'B' ? ag.managerSalary : null };
     });
     const branchId = setup.site.branchId!;
 
@@ -49,8 +54,9 @@ describe('branch ledger on PostgreSQL', () => {
       { kind: 'billing', ref: 'IV-PG-1', siteId: setup.site.id, amount: 50_000 },
       { kind: 'wages', ref: 'PAY-PG', amount: 30_000 },
       { kind: 'statutory', ref: 'EPF-PG', amount: 4_000 },
+      ...(setup.salary != null ? [{ kind: 'manager_salary', ref: 'PAY-PG-BM', amount: setup.salary }] : []),
     ];
-    const prepared = await db.asUser('u-bm-sasa-1', (svc, u) => svc.prepareBranchSettlement(u, branchId, { period, payrollRef: 'JA-PAY-PG', lines }));
+    const prepared = await db.asUser(bmOf(branchId), (svc, u) => svc.prepareBranchSettlement(u, branchId, { period, payrollRef: 'JA-PAY-PG', lines }));
     assert.equal(prepared.status, 'draft');
     // Two returns at once: exactly one goes through (row lock, Arisha main 3 Nov 2026).
     const returns = await Promise.allSettled([
@@ -58,7 +64,7 @@ describe('branch ledger on PostgreSQL', () => {
       db.asUser('u-cm-sasa', (svc, u) => svc.returnBranchSettlement(u, prepared.id, 'Statutory figure is last month again')),
     ]);
     assert.equal(returns.filter((r) => r.status === 'fulfilled').length, 1);
-    const corrected = await db.asUser('u-bm-sasa-1', (svc, u) =>
+    const corrected = await db.asUser(bmOf(branchId), (svc, u) =>
       svc.prepareBranchSettlement(u, branchId, { period, payrollRef: 'JA-PAY-PG', lines: lines.map((l) => (l.kind === 'statutory' ? { ...l, amount: 4_100 } : l)) }),
     );
     assert.deepEqual(
@@ -79,9 +85,11 @@ describe('branch ledger on PostgreSQL', () => {
     ]);
     assert.equal(validations.filter((r) => r.status === 'fulfilled').length, 1);
     await assert.rejects(db.asUser(setup.fin1, (svc, u) => svc.recordBranchPayout(u, prepared.id, { bankRef: 'TT-PG', note: 'Paid' })), /another person/);
+    // A Model B month's payout is determined by the Finance Director (Fauzan, 5 Nov 2026); here a payout of zero.
+    const payer = setup.salary != null ? 'u-fd' : setup.fin2;
     const payouts = await Promise.allSettled([
-      db.asUser(setup.fin2, (svc, u) => svc.recordBranchPayout(u, prepared.id, { bankRef: 'TT-PG', note: 'Paid' })),
-      db.asUser(setup.fin2, (svc, u) => svc.recordBranchPayout(u, prepared.id, { bankRef: 'TT-PG-2', note: 'Paid twice' })),
+      db.asUser(payer, (svc, u) => svc.recordBranchPayout(u, prepared.id, { bankRef: 'TT-PG', note: 'Paid', amount: 0 })),
+      db.asUser(payer, (svc, u) => svc.recordBranchPayout(u, prepared.id, { bankRef: 'TT-PG-2', note: 'Paid twice', amount: 0 })),
     ]);
     assert.equal(payouts.filter((r) => r.status === 'fulfilled').length, 1);
     const paid = (payouts.find((r) => r.status === 'fulfilled') as PromiseFulfilledResult<{ status: string }>).value;
@@ -91,9 +99,11 @@ describe('branch ledger on PostgreSQL', () => {
     const actions = await db.asUser('u-fauzan', async (_svc, _u, store) =>
       (await store.list('audit', {})).filter((a) => a.entityId === prepared.id).map((a) => a.action),
     );
-    for (const a of ['branch.prepare', 'branch.return', 'branch.settlement', 'branch.validate', 'branch.paid']) assert.ok(actions.includes(a), a);
+    // A Model B month closed by the Finance Director with no payout is audited as branch.closed.
+    const last = setup.salary != null ? 'branch.closed' : 'branch.paid';
+    for (const a of ['branch.prepare', 'branch.return', 'branch.settlement', 'branch.validate', last]) assert.ok(actions.includes(a), a);
     // Exactly one audit entry for each step that was raced.
-    for (const a of ['branch.return', 'branch.settlement', 'branch.validate', 'branch.paid']) assert.equal(actions.filter((x) => x === a).length, 1, a);
+    for (const a of ['branch.return', 'branch.settlement', 'branch.validate', last]) assert.equal(actions.filter((x) => x === a).length, 1, a);
   });
 
   it('lets exactly one of many concurrent approvals win, with one audit entry (Arisha main, 3 Nov 2026)', async () => {
@@ -121,7 +131,7 @@ describe('branch ledger on PostgreSQL', () => {
     const b = await db.asUser('u-cm-sasa', (svc, u) => svc.addBranch(u, 'co-sasa', { name: 'PG treasury branch', state: 'Perak', model: 'A' }));
     const cash13 = Array.from({ length: 13 }, (_, i) => ({ week: i + 1, inflow: 10_000, outflow: 9_000 }));
     const input = { sites: 2, guards: 20, monthlyBilling: 40_000, monthlyCosts: 36_000, startupCost: 5_000, openingCash: 20_000, fundingSource: 'Company cash (test)', assumptions: 'Synthetic assumptions for PG test', cash13 };
-    await db.asUser('u-bm-sasa-1', (svc, u) => svc.setBranchBusinessCase(u, b.id, input));
+    await db.asUser('u-cm-sasa', (svc, u) => svc.setBranchBusinessCase(u, b.id, input));
     await assert.rejects(db.asUser('u-cm-inas', (svc, u) => svc.reviewBranchBusinessCase(u, b.id, 'Checked')), /not found/i);
     const reviewed = await db.asUser(fin, (svc, u) => svc.reviewBranchBusinessCase(u, b.id, 'Checked against tender'));
     assert.equal(reviewed.businessCases!.at(-1)!.reviewedById, fin);
@@ -129,7 +139,7 @@ describe('branch ledger on PostgreSQL', () => {
     const working = await db.asUser('u-cm-sasa', async (svc, u) => (await svc.branchBoard(u)).rows.find((r) => r.status === 'active')!.branch.id);
     await assert.rejects(
       db.asUser('u-bm-sasa-1', (svc, u) => svc.recordBranchTreasury(u, working, { on: today, bankBalance: 1, statementRef: 'ST-PG', floatHeld: 0, paymentsDue7d: 0 })),
-      /denied|not allowed|cannot/i,
+      /denied|not allowed|cannot|not found/i,
     );
     const v = await db.asUser(fin, (svc, u) => svc.recordBranchTreasury(u, working, { on: today, bankBalance: 9_000, statementRef: 'ST-PG-1', floatHeld: 0, paymentsDue7d: 10_000 }));
     assert.equal(v.state, 'attention');

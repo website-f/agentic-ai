@@ -74,8 +74,10 @@ describe('Site gate record for police: sealed full ID for the in-house server', 
     );
     assert.deepEqual(r.entry.flags, []);
     const raw = await owner.query("SELECT data::text AS t FROM prima.gate_entries WHERE id = $1", [r.entry.id]);
-    assert.ok(!raw.rows[0].t.includes('880202'));
-    const audit = await owner.query("SELECT count(*)::int AS n FROM prima.audit WHERE data::text LIKE '%880202%'");
+    // Look for the whole number, not a 6-digit fragment: random hex (audit hash chain, ciphertext) can contain any
+    // 6 digits by chance, which made this check fail once in CI with nothing leaked.
+    for (const full of ['880202-10-4321', '880202104321']) assert.ok(!raw.rows[0].t.includes(full));
+    const audit = await owner.query("SELECT count(*)::int AS n FROM prima.audit WHERE data::text LIKE '%880202-10-4321%' OR data::text LIKE '%880202104321%'");
     assert.equal(audit.rows[0].n, 0);
     // A resend after a lost signal is the same entry.
     const again = await db.asUser('u-dev-sasa-001', (svc, u) =>

@@ -8,18 +8,26 @@ import { createHash, timingSafeEqual } from 'node:crypto';
 import { problems, verify, type CmsEvent } from './event';
 import { directoryProblems, type Directory } from './directory';
 import { Hub, HubError } from './hub';
+import { assess } from './assistant';
+import { localModelConfig, shiftBriefing, type Briefing, type LocalModelConfig } from './local-model';
 import { GateLists, PROFILES, plateEvent, readFromJson, type Vehicle, type Visitor } from './adaptors/anpr';
 import { fixEvents, type Fix, type Route } from './adaptors/tracker';
 import { handleFrame } from './adaptors/sia-dc09';
 import { CSS, PAGE, SCRIPT } from './dashboard';
 
 export const MAX_BODY = 256 * 1024;
+/** How long one shift briefing from the in-house model is reused before a new one is asked for. */
+export const BRIEFING_REUSE_MS = 60_000;
 
 export interface ServerConfig {
   /** Operator key -> operator name. */
   operators: Map<string, string>;
   gateway: { key: string; secret: string };
   prima: { key: string; secret: string };
+  /** The CMS's own in-house model for the shift briefing (local-model.ts). Absent or null: off. */
+  localModel?: LocalModelConfig | null;
+  /** Sending to the in-house model (tests replace it). */
+  modelFetch?: Parameters<typeof shiftBriefing>[3];
 }
 
 /** Reads the configuration from the environment. Refuses to start without operator keys and feed secrets. */
@@ -38,6 +46,7 @@ export function configFromEnv(env: NodeJS.ProcessEnv = process.env): ServerConfi
     operators,
     gateway: { key: need('CMS_GATEWAY_KEY'), secret: need('CMS_GATEWAY_SECRET') },
     prima: { key: need('PRIMA_TO_CMS_KEY'), secret: need('PRIMA_TO_CMS_SECRET') },
+    localModel: localModelConfig(env),
   };
 }
 
@@ -99,6 +108,8 @@ export interface AppState {
   routes: Map<string, Route>;
   /** Saves the hub (persist.ts). Called before any change is answered 2xx; a failed save answers 503 instead. */
   persist?: () => void;
+  /** The last shift briefing and the one being made (kept with the app state so every request shares it). */
+  briefing?: { pending: Promise<Briefing> | null; last: Briefing | null; at: number };
 }
 
 export function handler(cfg: ServerConfig, state: AppState, clock: () => number = Date.now) {
@@ -153,6 +164,60 @@ export function handler(cfg: ServerConfig, state: AppState, clock: () => number 
         operator(req);
         try {
           return send(res, 200, hub.kpis({ from: url.searchParams.get('from') ?? undefined, to: url.searchParams.get('to') ?? undefined }));
+        } catch (e) {
+          if (e instanceof HubError) throw new HttpError(400, e.message);
+          throw e;
+        }
+      }
+
+      // Shift handover at the desk: who is handing over to whom (roster from Prima), and the two steps.
+      if (req.method === 'GET' && path === '/api/handover') {
+        const who = operator(req);
+        return send(res, 200, { operator: who, ...hub.deskHandover() });
+      }
+      if (req.method === 'POST' && (path === '/api/handover/give' || path === '/api/handover/take')) {
+        const who = operator(req);
+        const body = json((await readBody(req)) || '{}') as Record<string, unknown>;
+        try {
+          if (path === '/api/handover/give') return saved(res, hub.giveHandover(who, String(body.note ?? '')));
+          if (typeof body.agree !== 'boolean') throw new HttpError(400, 'Say whether you agree (true or false).');
+          return saved(res, hub.takeHandover(who, body.agree, String(body.note ?? '')));
+        } catch (e) {
+          if (e instanceof HubError) throw new HttpError(400, e.message);
+          throw e;
+        }
+      }
+
+      if (req.method === 'GET' && path === '/api/assistant') {
+        operator(req);
+        return send(res, 200, assess(hub, clock()));
+      }
+
+      if (req.method === 'GET' && path === '/api/assistant/briefing') {
+        operator(req);
+        // One request to the in-house model at a time, and a briefing is reused for a minute, so several operators
+        // pressing the button do not queue up work on the model server.
+        const t = clock();
+        const briefing = (state.briefing ??= { pending: null, last: null, at: 0 });
+        if (!briefing.pending && (!briefing.last || t - briefing.at > BRIEFING_REUSE_MS))
+          briefing.pending = shiftBriefing(assess(hub, t), cfg.localModel ?? null, t, cfg.modelFetch)
+            .then((b) => {
+              briefing.last = b;
+              briefing.at = t;
+              return b;
+            })
+            .finally(() => {
+              briefing.pending = null;
+            });
+        return send(res, 200, briefing.pending ? await briefing.pending : briefing.last);
+      }
+
+      if (req.method === 'POST' && path === '/api/assistant/feedback') {
+        const who = operator(req);
+        const body = json((await readBody(req)) || '{}') as Record<string, unknown>;
+        if (typeof body.useful !== 'boolean') throw new HttpError(400, 'Say whether the finding was useful (true or false).');
+        try {
+          return saved(res, hub.assistantFeedback(who, String(body.key ?? ''), body.useful, typeof body.note === 'string' ? body.note : ''));
         } catch (e) {
           if (e instanceof HubError) throw new HttpError(400, e.message);
           throw e;

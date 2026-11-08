@@ -54,8 +54,8 @@ describe('P78 business: the owner adds and starts, others approve', () => {
     expect(lead.stage).toBe('new');
     const q = await svc.createQuotation(owner, 'co-sasa', { client: 'Synthetic mall', siteName: 'Main gate', tenderId: null, guards: 4, hoursPerDay: 12, ratePerGuard: 3200, validDays: 30 });
     await svc.quotationAction(owner, q.id, 'submit');
-    await expect(svc.quotationAction(owner, q.id, 'approve')).rejects.toBeInstanceOf(AccessDenied);
-    expect((await svc.quotationAction(await svc.user('u-cm-sasa'), q.id, 'approve')).status).toBe('approved');
+    await expect(svc.quotationAction(owner, q.id, 'approve', 'Rate checked')).rejects.toBeInstanceOf(AccessDenied);
+    expect((await svc.quotationAction(await svc.user('u-cm-sasa'), q.id, 'approve', 'Rate checked')).status).toBe('approved');
   });
 
   it('raises a purchase and adds a supplier; the COO approves an owner-raised purchase in the CEO tier', async () => {
@@ -74,8 +74,8 @@ describe('P78 business: the owner adds and starts, others approve', () => {
     await svc.purStep(proc, pr.id, 'online', { source: 'Marketplace', ref: 'listing', amount: 2950, proof: [proof()] });
     const sent = await svc.purStep(proc, pr.id, 'submit', { supplierId: 'sup-co-sasa-2' });
     expect(sent.tiers).not.toContain('ceo');
-    await expect(svc.purStep(owner, pr.id, 'approve')).rejects.toThrow();
-    expect((await svc.purStep(coo, pr.id, 'approve')).status).toBe('approved');
+    await expect(svc.purStep(owner, pr.id, 'approve', { note: 'ok' })).rejects.toThrow();
+    expect((await svc.purStep(coo, pr.id, 'approve', { note: 'ok' })).status).toBe('approved');
   });
 
   it('asks to buy an asset and records rent like the team; the COO decides, never the asker', async () => {

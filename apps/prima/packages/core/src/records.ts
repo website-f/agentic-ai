@@ -1,6 +1,11 @@
-import { REGIONS } from './regions';
-import type { Dataset, IsoDate } from './types';
-import { isRealDate } from './time';
+import type { Dataset } from "./types";
+import type { IsoDate } from "./types";
+import { isRealDate } from "./time";
+import { REGIONS } from "./regions";
+
+
+
+
 
 /**
  * Add and edit forms for the records each department keeps (Fauzan, 27 Oct 2026: "check all system, where suppose to
@@ -18,7 +23,7 @@ export interface FieldSpec {
   required?: boolean;
   options?: [string, string][];
   /** For 'ref': the records to choose from, limited to the same company where the record has one. */
-  ref?: 'sites' | 'vaults' | 'insurancePolicies' | 'armsSuppliers' | 'amUnits' | 'branches';
+  ref?: 'sites' | 'vaults' | 'insurancePolicies' | 'armsSuppliers' | 'amUnits' | 'branches' | 'cmsAccounts';
   min?: number;
   max?: number;
   help?: string;
@@ -226,13 +231,13 @@ export const RECORD_KINDS: Record<RecordKind, RecordKindSpec> = {
       date('startsOn', 'Starts on', true),
       date('expiresOn', 'Expires on', true),
       date('premiumDueOn', 'Premium due on', true),
-      date('premiumPaidOn', 'Premium paid on'),
       pick('renewal', 'Renewal', [
         ['not_started', 'Not started'],
         ['quotes', 'Getting quotes'],
-        ['renewed', 'Renewed'],
       ]),
+      text('scheduleRef', 'Policy schedule kept at', false, 'Document name or SharePoint link of the policy schedule or certificate.'),
     ],
+    note: 'Paying the premium (with Finance’s payment reference), renewing and cancelling are their own steps on the Insurance screen, so last year’s policy is never overwritten.',
   },
   insuranceClaim: {
     kind: 'insuranceClaim',
@@ -640,7 +645,9 @@ export const RECORD_KINDS: Record<RecordKind, RecordKindSpec> = {
       ]),
       text('ext', 'Desk extension', true),
       yesNo('active', 'Active'),
+      ref('userId', 'Prima account', 'cmsAccounts', false),
     ],
+    note: 'Clock-in, clock-out and the shift handover go by the Prima account linked here, never by the name on the roster. Without an account the person can be rostered but cannot clock in.',
   },
   amUnit: {
     kind: 'amUnit',
@@ -771,7 +778,7 @@ export const RECORD_KINDS: Record<RecordKind, RecordKindSpec> = {
       date('expiresOn', 'Expires on', false, 'Leave empty only if not known: it then shows as a problem.'),
       date('sslExpiresOn', 'SSL certificate expires'),
     ],
-  },
+  }
 };
 
 export type RecordValues = Record<string, string | number | boolean | null>;

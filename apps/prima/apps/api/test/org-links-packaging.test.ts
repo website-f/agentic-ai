@@ -30,13 +30,18 @@ describe('hand-over module packaging proposal (files)', () => {
     assert.equal(sha(read(proposal.base.path)), proposal.base.sha256);
     for (const m of proposal.modules) assert.equal(sha(read(m.path)), m.sha256, `${m.id} bytes differ from the proposal`);
   });
-  it('installs after every manifest module and is pinned in the combined manifest after the modules before it', () => {
-    assert.deepEqual(proposal.after, manifest.modules.slice(0, manifest.modules.findIndex((x) => x.id === proposal.modules[0].id)).map((m) => m.id));
+  it('installs after every manifest module and stays out of the manifest until approved', () => {
+    // Agentic Office: the office release activates this module (its database already has it). It must sit in the
+    // manifest after everything upstream installs first, with the proposal's exact bytes. Upstream keeps it a proposal.
+    const order = manifest.modules.map((m) => m.id);
     for (const m of proposal.modules) {
-      const pinned = (manifest.modules as Array<{ id: string; path?: string; sha256?: string }>).find((x) => x.id === m.id);
-      assert.ok(pinned, `${m.id} is in the combined manifest`);
+      const at = order.indexOf(m.id);
+      const pinned = (manifest.modules as Array<{ id: string; path?: string; sha256?: string }>)[at];
+      if (at < 0) continue; // still a proposal here: nothing to check beyond the after list
       assert.deepEqual({ path: pinned.path, sha256: pinned.sha256 }, { path: m.path, sha256: m.sha256 });
     }
+    for (const id of proposal.after ?? []) assert.ok(order.includes(id), `${id} is installed before this proposal`);
+    for (const m of proposal.modules) { const at = order.indexOf(m.id); if (at >= 0) for (const id of proposal.after ?? []) assert.ok(order.indexOf(id) < at, `${id} before ${m.id}`); }
   });
   it('has no destructive or grant-widening statement; it drops only its own policies and triggers to replace them', () => {
     for (const m of proposal.modules) {

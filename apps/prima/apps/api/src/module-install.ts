@@ -11,20 +11,22 @@ const PREFIX:Record<ReleaseModuleId,{tables:string[];functions:string|null;polic
  rental_corrections:{tables:['it_rental_correction_%','it_rental_replacement%'],functions:'rc_'},
  cleanup:{tables:['it_cleanup_%'],functions:'ic_'},metrics:{tables:['it_metric_%'],functions:'wm_'},
  job_email:{tables:['job_email_%'],functions:'job_email_'},
+ // Exact table names: a LIKE 'item\_%' marker would also match the second part's tables (P85).
+ item_register:{tables:['item_skus','item_units','item_lots','item_events','item_movements','item_cases','item_counts','item_sync_jobs','item_requests','item_settings','item_docs','item_uniform_records'],functions:'item_'},
+ item_register_v2:{tables:['item_label_prints','item_sql_books','item_sync_batches','item_sql_snapshots','item_counters','item_scan_denials'],functions:null},
  central_admin_walls:{tables:[],functions:null,policies:['central_admin_wall']},
  central_admin_panel:{tables:['panel_firms'],functions:null,policies:['panel_firms_wall']},
  central_admin_delegations:{tables:['delegations','critical_roles'],functions:null,policies:['delegations_wall','critical_roles_wall']},
  central_admin_legal_holds:{tables:['legal_holds','legal_hold_versions'],functions:'lh_',policies:['legal_holds_add','legal_holds_change','legal_hold_versions_read']},
+ // Agentic Office: modules the office release keeps activated (already installed on the office database).
  company_office:{tables:['company_desks'],functions:null},
  company_run_links:{tables:['company_run_links'],functions:null},
  org_links:{tables:['org_events','org_tasks','org_notices','org_imports'],functions:'org_'},
+ special_ops:{tables:[],functions:null,policies:['arms_wall']},
  fw_welfare:{tables:['fw_welfare_checks'],functions:null},
  pay_formulas:{tables:['pay_formulas','pay_formula_uses','pay_law_versions','site_hours_approvals','public_holiday_lists'],functions:null},
  guard_pay:{tables:['guard_pay_runs','guard_pay_advances','guard_loans','statutory_versions'],functions:null},
  fw_recruit:{tables:['fw_recruit_files'],functions:null},
- item_register:{tables:['item_skus','item_units','item_lots','item_events','item_movements','item_cases','item_counts','item_sync_jobs','item_requests','item_settings','item_docs','item_uniform_records'],functions:'item_'},
- item_register_v2:{tables:['item_label_prints','item_sql_books','item_sync_batches','item_sql_snapshots','item_counters','item_scan_denials'],functions:null},
- special_ops:{tables:[],functions:null,policies:['arms_wall']},
 };
 type Client=Pick<PoolClient,'query'>;
 const asApp=async<T>(c:Client,fn:()=>Promise<T>)=>{await c.query('SET LOCAL ROLE prima_app');try{return await fn();}finally{await c.query('RESET ROLE');}};

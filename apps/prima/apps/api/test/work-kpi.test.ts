@@ -10,6 +10,8 @@ import { resetDb } from '../src/reset-db';
 
 const URL = process.env.DATABASE_URL ?? 'postgres://postgres:localdev@localhost:5432/prima_test';
 process.env.DATABASE_URL = URL;
+// Tables this branch's adapters read that live in a separately applied db/modules SQL file: missing after a plain reset.
+const MODULE_ONLY = ['tenderOpportunities', 'cleaningDays'];
 
 describe('work KPIs (database)', () => {
   let db: Db;
@@ -25,7 +27,7 @@ describe('work KPIs (database)', () => {
     const r = await db.asUser('u-fauzan', (svc, u) => svc.workKpi(u, '2026-11'));
     assert.equal(r.departments.length, workKpiCoveredDepts().length);
     assert.ok(r.departments.length >= 8);
-    assert.deepEqual(r.notInstalled, []);
+    assert.deepEqual([...r.notInstalled].sort(), [...MODULE_ONLY].sort());
     assert.equal(r.provisional, false);
   });
 
@@ -47,7 +49,33 @@ describe('work KPIs (database)', () => {
       (store as { hasTable?: (t: never) => Promise<boolean> }).hasTable = async (t) => (t === ('cases' as never) ? false : real(t));
       return svc.workKpi(u, '2026-11');
     });
-    assert.deepEqual(r.notInstalled, ['cases']);
+    assert.deepEqual([...r.notInstalled].sort(), [...MODULE_ONLY, 'cases'].sort());
     assert.ok(r.departments.some((d) => d.dept === 'operations'));
+  });
+});
+
+describe('work KPIs once the module is applied (database)', () => {
+  let db: Db;
+  before(async () => {
+    await resetDb(URL);
+    const { Client } = await import('pg');
+    const { readFileSync } = await import('node:fs');
+    const { join } = await import('node:path');
+    const admin = new Client({ connectionString: URL });
+    await admin.connect();
+    try {
+      for (const module of ['tender-opportunities-v1.sql', 'cleaning-ops-v1.sql']) await admin.query(readFileSync(join(__dirname, '../../../../db/modules', module), 'utf8'));
+    } finally {
+      await admin.end();
+    }
+    db = new Db();
+  });
+  after(async () => {
+    await db.onModuleDestroy();
+  });
+
+  it('reads the module tables through the database walls once they exist', async () => {
+    const r = await db.asUser('u-fauzan', (svc, u) => svc.workKpi(u, '2026-11'));
+    assert.deepEqual(r.notInstalled, []);
   });
 });

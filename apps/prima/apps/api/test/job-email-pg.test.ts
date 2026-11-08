@@ -14,13 +14,30 @@ const URL_ = process.env.DATABASE_URL ?? 'postgres://postgres:localdev@localhost
 const tenant = '11111111-2222-3333-4444-555555555555';
 const client = 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee';
 const oid = '99999999-8888-7777-6666-555555555555';
-const env: NodeJS.ProcessEnv = { JOB_EMAIL_ENABLED: 'true', JOB_EMAIL_PREVIEW_SECRET: 'a'.repeat(64), ENTRA_TENANT_ID: tenant, ENTRA_API_CLIENT_ID: client, JOB_EMAIL_OBO_CLIENT_SECRET: 'synthetic' };
+const env: NodeJS.ProcessEnv = {
+JOB_EMAIL_ENABLED: 'true',
+JOB_EMAIL_PREVIEW_SECRET: 'a'.repeat(64),
+ENTRA_TENANT_ID: tenant,
+ENTRA_API_CLIENT_ID: client,
+JOB_EMAIL_OBO_CLIENT_SECRET: 'synthetic'
+};
 const actor = (id: string): DelegatedActor => ({ user: { id, name: id, entraOid: oid } as unknown as User, visibleCompanyIds: [], assertion: { userId: id, oid, tenantId: tenant, accessToken: `A_${id}` } });
 const access: JobEmailAccess = { async canAttach(a) { return ['u-a', 'u-b'].includes(a.user.id); }, async canView() { return true; } };
 const MSG = 'AAMkAGI2TG93AAA-synthetic_message_id_0001=';
 const link = `https://outlook.office.com/mail/inbox/id/${encodeURIComponent(MSG)}`;
-const graphMessage = { id: MSG, internetMessageId: '<pg-1@example.com>', subject: 'Synthetic', from: { emailAddress: { name: 'V', address: 'v@example.com' } }, toRecipients: [], ccRecipients: [],
-  sentDateTime: '2026-10-30T02:00:00Z', receivedDateTime: '2026-10-30T02:00:05Z', body: { contentType: 'text', content: 'Dummy' }, hasAttachments: false, webLink: 'https://outlook.office365.com/owa/?ItemID=AAMkAAAAAAAAAAAAAAAA' };
+const graphMessage = {
+id: MSG,
+internetMessageId: '<pg-1@example.com>',
+subject: 'Synthetic',
+from: { emailAddress: { name: 'V', address: 'v@example.com' } },
+toRecipients: [],
+ccRecipients: [],
+sentDateTime: '2026-10-30T02:00:00Z',
+receivedDateTime: '2026-10-30T02:00:05Z',
+body: { contentType: 'text', content: 'Dummy' },
+hasAttachments: false,
+webLink: 'https://outlook.office365.com/owa/?ItemID=AAMkAAAAAAAAAAAAAAAA'
+};
 const graph = () => (async (url: string | URL | Request) => {
   if (String(url).includes('/oauth2/')) return new Response(JSON.stringify({ token_type: 'Bearer', access_token: 'T', scope: 'Mail.Read' }), { headers: { 'content-type': 'application/json' } });
   if (String(url).startsWith('https://graph.microsoft.com/v1.0/me/messages/')) return new Response(JSON.stringify(graphMessage), { headers: { 'content-type': 'application/json' } });

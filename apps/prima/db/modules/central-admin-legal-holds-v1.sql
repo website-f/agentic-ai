@@ -1,3 +1,6 @@
+-- Integration release boundary: PROPOSED ONLY. This file is not in the current
+-- five-module release manifest. Earlier pinned-module descriptions below are
+-- historical; installing this module needs separate review and authorization.
 -- Central Admin legal hold (masterplan §125, Arisha main 3 Nov 2026: "hold is recorded, files are not frozen"; Fauzan
 -- 3 Nov 2026: "proceed work"). A pinned module in db/release-manifest.json (id central_admin_legal_holds, no module
 -- prerequisites). Not installed anywhere by this file; only an authorized owner installs it with the reviewed

@@ -71,7 +71,7 @@ export const EXTRA_IMPORTS: Record<ExtraImportKind, ImportSpec> = {
     companyScoped: true,
     keptBy: 'Company manager',
     screen: 'Contracts',
-    note: 'Each contract is recorded as the Add contract form records it (awarded, with its mobilisation list). A client of the same name is linked.',
+    note: 'Each contract is recorded as the Add contract form records it (awarded, with its mobilisation list). A client of the same name is linked. Attach each signed copy afterwards on its first mobilisation item.',
     fields: [
       { key: 'clientName', label: 'Client', type: 'text', required: true },
       sitesField,
@@ -217,6 +217,7 @@ export interface ImportSaver {
       contractedHours?: number | null;
       signedRef: string;
     },
+    opts?: { imported?: boolean },
   ): Promise<{ id: Id }>;
   setLeaveOverride(user: User, personId: Id, kind: LeaveOverrideKind, days: number | null, note: string): Promise<unknown>;
 }
@@ -296,7 +297,13 @@ function convert(f: FieldSpec, raw: string, options: [string, string][] | undefi
     case 'ref': {
       const exact = (options ?? []).filter(([k, label]) => k === v || normHeader(label) === normHeader(v));
       // The list shows "code name" (or "policy number cover"): the code or number alone names it too.
-      const hit = exact.length ? exact : (options ?? []).filter(([, label]) => normHeader(label).startsWith(normHeader(v) + ' '));
+      let hit = exact.length ? exact : (options ?? []).filter(([, label]) => normHeader(label).startsWith(normHeader(v) + ' '));
+      // "PL-446289" also prefixes last year's renewed "PL-446289-P" once punctuation is dropped: a code typed exactly
+      // as its first word names that one.
+      if (hit.length > 1) {
+        const word = hit.filter(([, label]) => label.trim().split(/\s+/)[0].toLowerCase() === v.toLowerCase());
+        if (word.length === 1) hit = word;
+      }
       if (hit.length === 1) return { value: hit[0][0] };
       return { value: null, problem: hit.length ? `${f.label}: "${v}" matches more than one; use the code.` : `${f.label}: "${v}" is not on the list.` };
     }
@@ -564,7 +571,7 @@ export class OrgImportService {
         fixedFee: num(v.fixedFee),
         contractedHours: num(v.contractedHours),
         signedRef: String(v.signedRef ?? ''),
-      });
+      }, { imported: true });
       return c.id;
     }
     // leaveEntitlement: the staff member by staff number (or the exact name) within this company.

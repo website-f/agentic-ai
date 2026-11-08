@@ -1,3 +1,5 @@
+if (process.env.CI_SYNTHETIC_BROWSER !== 'true') throw Error('Synthetic browser opt-in required');
+const { localOnly } = require('./browser-local-only.cjs');
 // Run: npm run build:demo -w @prima/web; serve apps/web/dist-demo on :5180 (e.g. python3 -m http.server 5180);
 // then node scripts/cms-masterplan-browser-uat.cjs <out-dir> <width>. Not wired to CI. Masterplan §191 and §195.
 // Browser UAT on the demo build (synthetic data only, all in the browser; no API, no provider).
@@ -15,6 +17,10 @@ const step = async (name, fn) => {
   const b = await chromium.launch();
   const ctx = await b.newContext({ viewport: { width: W, height: 900 } });
   const p = await ctx.newPage();
+  // Keep the linked-CCTV/no-telemetry fixture stable across calendar changes.
+  // Only the synthetic page's Date is fixed; its timers continue running.
+  await p.clock.setFixedTime(new Date('2026-11-07T14:00:00Z'));
+  await localOnly(p);
   p.setDefaultTimeout(8000);
   globalThis.__p = p;
   const errors = [];
@@ -65,7 +71,7 @@ const step = async (name, fn) => {
     await h.scrollIntoViewIfNeeded();
     await p.getByText(/Target: acknowledge within \d+ s \(CMS setting\)/).first().waitFor();
     await p.getByText(/Linked systems: \d+ online, \d+ offline/).first().waitFor();
-    await p.getByRole('columnheader', { name: 'Systems unknown' }).waitFor();
+    await p.locator('th').filter({ hasText: 'Systems unknown' }).waitFor();
     await noSideScroll();
     await shot('cms-kpis');
   });
@@ -79,6 +85,8 @@ const step = async (name, fn) => {
     await item.scrollIntoViewIfNeeded();
     await item.getByText(/Prima checks this before it can be marked done/).waitFor();
     await item.getByRole('button', { name: 'Mark done' }).click();
+    await item.getByRole('button', { name: 'Use a test file', exact: true }).click();
+    await item.getByRole('button', { name: 'Save as done', exact: true }).click();
     await toast(/CMS is not active yet: no site is on this contract yet/);
     await noSideScroll();
     await shot('contract-cms-step');
@@ -87,7 +95,7 @@ const step = async (name, fn) => {
   await step('Commissioning: the company manager records the signed CMS scope on a live contract', async () => {
     await signIn('u-cm-arsh');
     await nav('Contracts');
-    await p.getByText('Wisma George Town 2 (office tower client)').first().click();
+    await p.locator('.list-item').filter({ hasText: 'ARSH/CT/0072' }).first().click();
     const panel = p.locator('section').filter({ has: p.getByRole('heading', { name: 'CMS service' }) }).last();
     await panel.waitFor();
     await panel.scrollIntoViewIfNeeded();

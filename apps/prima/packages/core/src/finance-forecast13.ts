@@ -1,23 +1,26 @@
-// The 13-week cash forecast per company (Fauzan, 2 Nov 2026: yes to suggestion 13, "13-week cash forecast per
-// company: payroll dates, the 15th statutory payments, expected government receipts").
-//
-// Prima fills the forecast from what it already holds, week by week from this Monday:
-//   - the opening balance: each bank's last statement closing, less payments released after it (as in "cash needed");
-//   - money out: payments prepared, reviewed or approved (by their due date; overdue ones in week 1), every regular
-//     payment due (instalments, bills, rent, insurance, EPF, PERKESO, PCB and HRD on the 15th, zakat), the staff payroll
-//     on its usual pay day at last month's net pay, and approved daily cash lists not yet withdrawn;
-//   - money in: government claims not yet paid, on their expected date (overdue ones in week 1).
-// Finance adds what Prima cannot know (client collections, guard payroll from JA, a loan drawdown) as lines with a
-// date and a note. Each week a reviewer looks it over and says so with a comment. A week that ends below zero is shown
-// to the Finance Director and the CEO. A forecast; Prima never moves money.
-import { AccessDenied } from './access';
-import { finCashNeed, isoDate, noSecrets, requireComment, requireReason, text, type FinActor } from './finance';
-import { finDailyCashWithdrawn } from './finance-daily-cash';
-import { finRegularDues, finRegularExpected } from './finance-regular';
-import { RULES } from './rules';
-import { BadRequest, NotFound } from './service';
-import { addDays, daysBetween } from './time';
-import type { FinSign, FinStatus, Id, IsoDate, StaffPayRun, User } from './types';
+import { AccessDenied } from "./access";
+import { finCashNeed } from "./finance";
+import { isoDate } from "./finance";
+import { noSecrets } from "./finance";
+import { requireComment } from "./finance";
+import { requireReason } from "./finance";
+import { text } from "./finance";
+import type { FinActor } from "./finance";
+import { finDailyCashWithdrawn } from "./finance-daily-cash";
+import { finRegularDues } from "./finance-regular";
+import { finRegularExpected } from "./finance-regular";
+import { RULES } from "./rules";
+import { BadRequest } from "./service";
+import { NotFound } from "./service";
+import { addDays } from "./time";
+import { daysBetween } from "./time";
+import type { FinSign } from "./types";
+import type { FinStatus } from "./types";
+import type { Id } from "./types";
+import type { IsoDate } from "./types";
+import type { StaffPayRun } from "./types";
+import type { User } from "./types";
+
 
 const R = () => RULES.financeForecast13.value;
 const round2 = (n: number) => Math.round(n * 100) / 100;

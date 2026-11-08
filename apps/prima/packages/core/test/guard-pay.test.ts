@@ -265,6 +265,9 @@ describe('guard pay run: HR prepares, the COO approves, Finance pays', () => {
     await expect(svc.setGuardPayLine(hr, run.id, pid, { extra: [{ label: 'Uniform set (test)', amount: -20, uniformNo: 4 }] })).rejects.toThrow(/switched off/);
     await expect(svc.setGuardPayLine(hr, run.id, pid, { extra: [{ label: 'Lost radio', amount: -50 }] })).rejects.toThrow(/Equipment is never charged/);
     await expect(svc.setGuardPayLine(hr, run.id, pid, { extra: [{ label: 'Damaged item (test)', amount: -30 }] })).rejects.toThrow(/switched off/);
+    // Free to resign (RBA checklist A6): no fine, deposit, fee or penalty, and nothing for leaving, as a one-off item.
+    for (const label of ['Late fine (test)', 'Resignation penalty', 'Deposit (test)', 'Agency fee', 'Short notice (test)'])
+      await expect(svc.setGuardPayLine(hr, run.id, pid, { extra: [{ label, amount: -30 }] })).rejects.toThrow(/fine, deposit|resigning or leaving/);
     // If management turns on PR #120's path, only a 4th or 5th uniform set is charged, flagged as a legal point for the CEO.
     const policy = RULES.guardPayroll.value as { uniformDeduction: string };
     policy.uniformDeduction = 'fourth_fifth_set';
@@ -376,7 +379,7 @@ describe('second review fixes', () => {
 
   it('takes a one-off deduction from net pay without lowering EPF, SOCSO or tax wages', () => {
     const plain = line(days(26));
-    const ded = line(days(26), { kept: { extra: [{ label: 'Overpayment correction (test)', amount: -50 }], pcb: null } });
+    const ded = line(days(26), { kept: { extra: [{ label: 'Uniform (test)', amount: -50 }], pcb: null } });
     expect(ded.gross).toBe(plain.gross);
     expect(ded.epfWages).toBe(plain.epfWages);
     expect(ded.socsoEe).toBe(plain.socsoEe);
@@ -417,10 +420,8 @@ describe('guard pay: bank or e-wallet only, cash by the COO or CEO, advances (Fa
     const coo = await svc.user('u-coo');
     expect((await svc.payConsentsWaiting(coo)).some((c) => c.personId === p.id && c.canApprove)).toBe(true);
     await expect(svc.approvePayConsent(hr, p.id, 'okay')).rejects.toBeInstanceOf(AccessDenied);
-    // The COO approves; the CEO may stand in only through the pilot rule (Fauzan's review note 7 Nov 2026, item 2).
-    const ceo = await svc.user('u-fauzan');
-    expect((await svc.payConsentsWaiting(ceo)).some((c) => c.personId === p.id && c.canApprove)).toBe(RULES.pilot.value.on);
-    await expect(svc.approvePayConsent(await svc.user('u-cos'), p.id, 'okay')).rejects.toBeInstanceOf(AccessDenied);
+    // COO only: the CEO does not stand in for consent letters, even during the pilot (Fauzan, 6 Nov 2026).
+    await expect(svc.approvePayConsent(await svc.user('u-fauzan'), p.id, 'okay')).rejects.toBeInstanceOf(AccessDenied);
     await expect(svc.approvePayConsent(coo, p.id, '')).rejects.toThrow(/reason/);
     await svc.approvePayConsent(coo, p.id, 'Letter stamped and checked');
     const again = await svc.prepareGuardPay(hr, 'co-arsh', '2026-10');
@@ -632,7 +633,7 @@ describe('cash by exception and the advance and loan scheme (Fauzan, 6 Nov 2026)
     const l = line(days(26), { loans: [{ id: 'gl-1', label: 'Loan repayment: test', due: 5000 }] });
     expect(l.loan).toBe(Math.round(l.gross * 0.5 * 100) / 100);
     expect(l.flags.join(' ')).toMatch(/not taken this month/);
-    const withOther = line(days(26), { kept: { extra: [{ label: 'Overpayment correction (test)', amount: -100 }], pcb: 0 }, loans: [{ id: 'gl-1', label: 'Loan', due: 5000 }] });
+    const withOther = line(days(26), { kept: { extra: [{ label: 'Uniform (uniform no. 4, paid by the guard)', amount: -100 }], pcb: 0 }, loans: [{ id: 'gl-1', label: 'Loan', due: 5000 }] });
     expect(withOther.loan! + withOther.otherDeductions).toBeCloseTo(withOther.gross * 0.5, 1);
   });
 });

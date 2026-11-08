@@ -5,6 +5,7 @@ import { Card, Empty, PageHead, Stat, Stats } from '../kit';
 import { Chip, ErrorNotice, Loading, Sev, dateLabel, dateTimeLabel, useLoad, type Tone } from '../ui';
 import '../styles/biz.css';
 
+
 /**
  * JA Group app data (Fauzan, 26 Oct 2026). Guards and officers stay on the JA Group app, which runs their payroll,
  * foreign worker papers and incidents. It sends that data here by API; Prima shows it read-only, and a company whose

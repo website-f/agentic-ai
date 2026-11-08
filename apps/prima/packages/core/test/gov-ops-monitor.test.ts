@@ -169,23 +169,24 @@ describe('Government Operations monitor', () => {
     for (const id of ['u-om-klang', 'u-ogm', 'u-coo', 'u-chair']) {
       const u = await svc.user(id).catch(() => null);
       if (!u) continue;
-      await expect(svc.setManagementFee(u, site.companyId, { opsCompany: 'goodwill', kind: 'percent', value: 10, agreementRef: 'SYN' })).rejects.toThrow();
+      await expect(svc.setManagementFee(u, site.companyId, { chargedBy: 'goodwill', kind: 'percent', value: 10, agreementRef: 'SYN', reason: 'Synthetic reason' })).rejects.toThrow();
       await expect(svc.managementFees(u)).rejects.toThrow();
     }
-    await expect(svc.setManagementFee(fd, site.companyId, { opsCompany: 'goodwill', kind: 'percent', value: 120, agreementRef: 'SYN' })).rejects.toThrow(/between 0 and 100/);
-    await expect(svc.setManagementFee(fd, site.companyId, { opsCompany: 'goodwill', kind: 'fixed', value: 0, agreementRef: 'SYN' })).rejects.toThrow(/monthly amount/);
-    await expect(svc.setManagementFee(fd, site.companyId, { opsCompany: 'goodwill', kind: 'percent', value: 8, agreementRef: '  ' })).rejects.toThrow(/agreement reference/);
-    await expect(svc.setManagementFee(fd, site.companyId, { opsCompany: 'goodwill', kind: 'other' as 'fixed', value: 8, agreementRef: 'SYN' })).rejects.toThrow(/percentage of billing/);
-    await expect(svc.setManagementFee(fd, 'co-nope', { opsCompany: 'goodwill', kind: 'percent', value: 8, agreementRef: 'SYN' })).rejects.toThrow(/Choose a company/);
-    const f = await svc.setManagementFee(fd, site.companyId, { opsCompany: 'goodwill', kind: 'percent', value: 8, agreementRef: 'SYN-MA-9' });
+    await expect(svc.setManagementFee(fd, site.companyId, { chargedBy: 'goodwill', kind: 'percent', value: 120, agreementRef: 'SYN', reason: 'Synthetic reason' })).rejects.toThrow(/between 0 and 100/);
+    await expect(svc.setManagementFee(fd, site.companyId, { chargedBy: 'goodwill', kind: 'fixed', value: 0, agreementRef: 'SYN', reason: 'Synthetic reason' })).rejects.toThrow(/monthly amount/);
+    await expect(svc.setManagementFee(fd, site.companyId, { chargedBy: 'goodwill', kind: 'percent', value: 8, agreementRef: '  ', reason: 'Synthetic reason' })).rejects.toThrow(/agreement reference/);
+    await expect(svc.setManagementFee(fd, site.companyId, { chargedBy: 'goodwill', kind: 'other' as 'fixed', value: 8, agreementRef: 'SYN', reason: 'Synthetic reason' })).rejects.toThrow(/percentage of billing/);
+    await expect(svc.setManagementFee(fd, 'co-nope', { chargedBy: 'goodwill', kind: 'percent', value: 8, agreementRef: 'SYN', reason: 'Synthetic reason' })).rejects.toThrow(/Choose a company/);
+    const f = await svc.setManagementFee(fd, site.companyId, { chargedBy: 'goodwill', kind: 'percent', value: 8, agreementRef: 'SYN-MA-9', reason: 'Synthetic reason' });
     expect(f.managementFees?.goodwill).toMatchObject({ kind: 'percent', value: 8, agreementRef: 'SYN-MA-9', by: fd.name });
-    await svc.setManagementFee(ceo, site.companyId, { opsCompany: 'goodwill', kind: 'fixed', value: 5000, agreementRef: 'SYN-MA-10' });
+    await svc.setManagementFee(ceo, site.companyId, { chargedBy: 'goodwill', kind: 'fixed', value: 5000, agreementRef: 'SYN-MA-10', reason: 'Synthetic reason' });
     const list = await svc.managementFees(fd);
-    expect(list.find((x) => x.companyId === site.companyId)?.goodwill).toMatchObject({ kind: 'fixed', value: 5000 });
+    expect(list.companies.find((x) => x.companyId === site.companyId)?.fees.find((x) => x.chargedBy === 'goodwill')?.now).toMatchObject({ kind: 'fixed', value: 5000 });
     const audit = (await store.list('audit', {})).filter((a) => a.action === 'fin.management_fee');
+    const payer = (await store.get('companies', site.companyId))!.name;
     expect(audit.map((a) => a.summary)).toEqual([
-      'Management fee to Goodwill Empire Sdn Bhd set to 8% of billing (agreement SYN-MA-9).',
-      'Management fee to Goodwill Empire Sdn Bhd set to RM5000.00 a month (agreement SYN-MA-10), was 8%.',
+      `Management fee Goodwill Empire Sdn Bhd bills ${payer} set to 8% of billing (agreement SYN-MA-9), taken off site profit and loss, from 2026-11, was no fee. Reason: Synthetic reason`,
+      `Management fee Goodwill Empire Sdn Bhd bills ${payer} set to RM5000.00 a month (agreement SYN-MA-10), taken off site profit and loss, from 2026-11, was 8% of billing (taken off site profit). Reason: Synthetic reason`,
     ]);
   });
 

@@ -8,6 +8,8 @@ import { api, type FleetBoard } from '../api';
 import { Card, Empty, Facts, PageHead, Split, Stat, Stats } from '../kit';
 import { Chip, ErrorNotice, Loading, dateLabel, dateTimeLabel, useAction, useLoad, type Tone } from '../ui';
 import { ProofPicker } from './Proof';
+import { VehicleRentalsPanel } from './VehicleRentals';
+import { FuelUsagePanel, MyFuel } from './FuelUsage';
 import '../styles/ops.css';
 
 /**
@@ -39,7 +41,7 @@ const STATUS: Record<Request['status'], [Tone, string]> = {
 const dueText = (days: number) => (days < 0 ? `${-days} days late` : days === 0 ? 'Today' : `${days} days`);
 
 export function FleetView() {
-  const { companyId, company } = useApp();
+  const { companyId, company, me } = useApp();
   const { data, error } = useLoad(() => api.fleetBoard(), []);
   const [tab, setTab] = useState<string | null>(null);
   if (error)
@@ -56,6 +58,13 @@ export function FleetView() {
     );
   const full = data.role === 'transport' || data.role === 'leader';
   const waiting = data.requests.filter((r) => r.status === 'requested').length;
+  // Rented vehicles (5 Nov 2026): Transport records, the FD or the CEO sets rents, the OGM and the COO monitor.
+  const rentals =
+    data.role === 'transport' ||
+    me.user.opsTier === 'ceo' ||
+    me.user.opsTier === 'coo' ||
+    me.user.opsTier === 'ogm' ||
+    (me.user.role === 'pwvsb_officer' && me.user.leadership === 'finance_director');
   const tabs: [string, string, number][] = full
     ? [
         ['due', 'Reminders', data.reminders.length],
@@ -63,7 +72,15 @@ export function FleetView() {
         ['requests', 'Requests', waiting],
         ['monitor', 'Monitor', 0],
         ['hours', 'Trips and driving hours', 0],
+        ['usage', 'Fuel and usage', 0],
+        ...(rentals ? ([['rentals', 'Rented vehicles', 0]] as [string, string, number][]) : []),
       ]
+    : me.user.opsTier === 'ogm'
+      ? [
+          ['mine', 'My requests', 0],
+          ['usage', 'Fuel and usage', 0],
+          ['rentals', 'Rented vehicles', 0],
+        ]
     : data.role === 'cms'
       ? [
           ['monitor', 'Monitor', 0],
@@ -142,6 +159,9 @@ export function FleetView() {
       {view === 'hours' && <TripsAndHours />}
       {view === 'consent' && <Consent data={data} />}
       {view === 'mine' && <Mine data={data} />}
+      {view === 'rentals' && <VehicleRentalsPanel />}
+      {view === 'usage' && <FuelUsagePanel />}
+      {view === 'mine' && <MyFuel />}
     </div>
   );
 }
@@ -211,7 +231,10 @@ function Vehicles({ data, edit }: { data: FleetBoard; edit: boolean }) {
                     <span className="fl-plate">{v.plate}</span> · {v.model}
                   </span>
                   <span className="op-meta">{v.out ? `Out with ${v.out.driver}` : 'In the yard'}</span>
-                  <span className="op-co">{v.companyName}</span>
+                  <span className="op-co">
+                    {v.companyName}
+                    {v.usedByName ? ` (used by ${v.usedByName})` : ''}
+                  </span>
                 </span>
                 {worst ? <Chip tone={worst.tone}>{worst.what}</Chip> : <Chip tone="ok">Up to date</Chip>}
               </button>
@@ -260,7 +283,7 @@ function VehicleDetail({ v, edit, approved }: { v: Row; edit: boolean; approved:
       : []),
   ];
   return (
-    <Card title={`${v.plate} · ${v.model}`} sub={v.companyName} actions={<RecordButton kind="vehicle" id={v.id} label="Edit vehicle" />}>
+    <Card title={`${v.plate} · ${v.model}`} sub={v.usedByName ? `${v.companyName} (used by ${v.usedByName})` : v.companyName} actions={<RecordButton kind="vehicle" id={v.id} label="Edit vehicle" />}>
       <div className="op-chips">
         {v.reminders && v.reminders.length > 0 ? (
           v.reminders.map((r, i) => (
@@ -465,10 +488,10 @@ function RequestLine({ r, edit, vehicles }: { r: Request; edit: boolean; vehicle
               </option>
             ))}
           </select>
-          <input className="input" aria-label="Note" placeholder="Note (required to reject)" value={note} onChange={(e) => setNote(e.target.value)} />
+          <input className="input" aria-label="Note" placeholder="Comment (needed to approve or reject)" value={note} onChange={(e) => setNote(e.target.value)} />
           <button
             className="btn btn-primary btn-sm"
-            disabled={act.busy || !vehicleId}
+            disabled={act.busy || !vehicleId || !note.trim()}
             onClick={() => act.run(() => api.decideVehicleRequest(r.id, true, vehicleId, note), 'Approved.')}
           >
             Approve

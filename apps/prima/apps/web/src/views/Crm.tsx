@@ -27,6 +27,9 @@ import {
   useLoad,
 } from "../ui";
 import { ProofPicker } from "./Proof";
+import { DiligenceSection } from "./ClientQuality";
+import { NewContractForm, OPEN_CONTRACT_KEY } from "./Contracts";
+import { useApp } from "../App";
 
 /**
  * Client CRM (Fauzan, 4 Nov 2026: "Yes build that. We want complete"). The whole client lifecycle in one place: leads
@@ -681,17 +684,7 @@ function ClientFileBody({ c }: { c: CrmClient }) {
                 ? `tender ${a.origin.ref}`
                 : "opened directly"}
         </div>
-        <div>
-          Contracts:{" "}
-          {c.contracts.length
-            ? c.contracts
-                .map(
-                  (k) =>
-                    `${k.ref} (${k.state}, ${dateLabel(k.startOn)} to ${dateLabel(k.endOn)})`,
-                )
-                .join(" · ")
-            : "none tied to this client"}
-        </div>
+        <ContractsLine c={c} />
         <div>
           {c.seesMoney ? "Billing: " : ""}
           {!c.seesMoney
@@ -710,6 +703,7 @@ function ClientFileBody({ c }: { c: CrmClient }) {
           </div>
         )}
       </section>
+      <DiligenceSection accountId={a.id} />
       <OwnerSection c={c} />
       <PeopleSection c={c} />
       <RenewalSection c={c} />
@@ -1452,3 +1446,71 @@ export const CRM_TABS: [CrmTab | "board", string][] = [
   ["lost", "Lost clients"],
   ["group", "Group"],
 ];
+
+// ---------- Contracts of this client (contracts real use, 5 Nov 2026) ----------
+
+const CONTRACT_STATE: Record<CrmClient["contracts"][number]["state"], string> = {
+  awarded: "awarded",
+  mobilising: "mobilising",
+  ready: "ready to start",
+  active: "live",
+  suspended: "suspended",
+  terminated: "ended",
+};
+
+/** The client's contracts, each opening in Contracts; the company manager records a new signed contract from here. */
+function ContractsLine({ c }: { c: CrmClient }) {
+  const { go } = useApp();
+  const [adding, setAdding] = useState(false);
+  const opts = useLoad(
+    () => (adding ? api.contracts() : Promise.resolve(null)),
+    [adding],
+  );
+  const open = (id: string) => {
+    try {
+      sessionStorage.setItem(OPEN_CONTRACT_KEY, id);
+    } catch {
+      /* private window: Contracts opens on its list */
+    }
+    go({ view: "contracts" });
+  };
+  return (
+    <div>
+      Contracts:{" "}
+      {c.contracts.length === 0 && "none tied to this client"}
+      {c.contracts.map((k, i) => (
+        <span key={k.id}>
+          {i > 0 ? " · " : ""}
+          {c.seesContracts ? (
+            <button className="link-button" onClick={() => open(k.id)}>
+              {k.ref}
+            </button>
+          ) : (
+            k.ref
+          )}{" "}
+          ({CONTRACT_STATE[k.state]}, {dateLabel(k.startOn)} to{" "}
+          {dateLabel(k.endOn)}
+          {["awarded", "mobilising"].includes(k.state)
+            ? `, ${k.mobilised.done} of ${k.mobilised.total} mobilisation items done`
+            : ""}
+          {k.openExpansions ? `, ${k.openExpansions} expansion being mobilised` : ""})
+        </span>
+      ))}
+      {c.canRecordContract && (
+        <div style={{ marginTop: 4 }}>
+          <button className="btn btn-sm" onClick={() => setAdding(true)}>
+            Record the signed contract
+          </button>
+        </div>
+      )}
+      {adding && opts.data && (
+        <NewContractForm
+          options={opts.data.canAdd}
+          clientId={c.account.id}
+          onDone={() => setAdding(false)}
+        />
+      )}
+      {adding && opts.error && <ErrorNotice error={opts.error} />}
+    </div>
+  );
+}

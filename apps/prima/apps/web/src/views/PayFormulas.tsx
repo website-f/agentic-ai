@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { api, type PayFormulaBoard, type PayFormulaSaveInput } from '../api';
 import { Chip, ErrorNotice, Loading, dateTimeLabel, useAction, useLoad } from '../ui';
 
+
 /**
  * Pay formulas (Fauzan, 5 Nov 2026): the ACT Director sets the guard salary formula for the whole group, a region, a
  * company or a site, starting with a full month of 12-hour shifts with 2, 2.5 or 3 hours of rest a day, and the driver

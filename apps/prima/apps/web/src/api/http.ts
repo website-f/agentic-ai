@@ -1,54 +1,72 @@
 import { invalidateDutyContext } from '../duty/context';
-import type { ExtractionStatus, ExtractionRequest, ExtractionPreview } from './it-extraction';
-import type { SharePointStatus, SharePointCheck, SharePointLibraries, SharePointItems } from './connections';
-import type { Home, User, ClientLostReason, CmsServiceKind, EvidenceDoc, ProofInput, ReportDef, FinCloseAction, FinPackKind, FinPaymentAction, FinRequestAction, GrowthMargin, GrowthPanel } from '@prima/core';
-import {
-  type FinControlArea,
-  ApiError,
-  type Api,
-  type WorkAdjustInput,
-  type WorkReassignInput,
-  type ClientAccountInput,
-  type CrmBoard,
-  type CrmClient,
-  type CmsSettingsPatch,
-  type ContractInput,
-  type FollowUpInput,
-  type LeaveInput,
-  type OfficeDeskInput,
-  type Me,
-  type PdpaCaseInput,
-  type PdpaStepName,
-  type VehicleRequestInput,
-  type ExpenseInput,
-  type ProductInput,
-  type ProductCertInput,
-  type VehicleWorkInput,
-  type PhotoInput,
-  type ArmsRequestAction,
-  type ArmsRequestStepExtra,
-  type RaiseArmsRequestInput,
-  type SpecialOpsLegalFlags,
-  type ArmsTradingState,
-  type ApprovalLimitsView,
-  type TransportBoard,
-  type AmRentCheck,
-  type AmBuyInput,
-  type AmWhatsAppBoard,
-  type CmsDispatches,
-  type DeviceDispatches,
-  type DispatchInput,
-  type VideoInput,
-  type DutyDevice,
-  type SiteDutyLog,
-  type PostLogInput,
-  type GateInInput,
-  type SiteTaskBoard,
-  type NeedsReviewInput,
-  type SiteTaskInput,
-  type DoSiteTaskInput,
-} from './types';
+import { type ExtractionStatus, type ExtractionRequest, type ExtractionPreview } from './it-extraction';
+import { type SharePointStatus, type SharePointCheck, type SharePointLibraries, type SharePointItems } from './connections';
+import { type Home, type User, type ClientLostReason, type EvidenceDoc, type ProofInput, type ReportDef, type FinCloseAction, type FinPackKind, type FinPaymentAction, type FinRequestAction, type CmsServiceKind, type GrowthMargin, type GrowthPanel, type FwPaper } from '@prima/core';
+import type { DisciplineAppealDecision, DisciplineAppeals, PolicyCopyInput, StaffLangId } from './types';
+import { type FinControlArea, ApiError, type Api, type WorkAdjustInput, type WorkReassignInput, type ClientAccountInput, type CrmBoard, type CrmClient, type CmsSettingsPatch, type ContractInput, type FollowUpInput, type FwAddFromJaInput, type FwPaperInput, type LeaveInput, type OfficeDeskInput, type Me, type PdpaCaseInput, type PdpaStepName, type VehicleRequestInput, type ExpenseInput, type ProductInput, type ProductCertInput, type VehicleWorkInput, type PhotoInput, type CmsDispatches, type DeviceDispatches, type DispatchInput, type VideoInput, type DutyDevice, type SiteDutyLog, type PostLogInput, type GateInInput, type SiteTaskBoard, type NeedsReviewInput, type SiteTaskInput, type DoSiteTaskInput, type ArmsRequestAction, type ArmsRequestStepExtra, type RaiseArmsRequestInput, type SpecialOpsLegalFlags, type ArmsTradingState, type TransportBoard, type AmRentCheck, type AmBuyInput, type AmWhatsAppBoard, type ApprovalLimitsView, type OfficerHoursInput, type CleaningRecordInput, type CleaningSetupInput, type CleaningProofInput, type StockLineInput, type CleaningSlipInput, type ClientWorkAckInput, type GuardTermsInput, type OpportunityInput, type SourceCheckInput, type AmBqActionInput, type PaperReadingResult, type ClientCodeBoard, type ClientCodeInput, type ClientCheckInput, type ClientInspectionInput, type SelfAuditBoard, type SelfAuditInput, type RbaBoard, type RbaTraceBoard, type WorkerFilesBoard, type EthicsBoard, type RbaCommitteeInput, type EthicsInput, type ItEwaste } from './types';
 import { MicrosoftSignIn, type SignInConfig } from './microsoft';
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 const TOKEN_KEY = 'prima-token';
 
@@ -86,7 +104,12 @@ export class HttpApi implements Api {
       const config = (res.ok ? await res.json() : { microsoft: null, devLogin: false }) as SignInConfig;
       return { config, ms: config.microsoft ? await MicrosoftSignIn.start(config.microsoft) : null };
     })();
-    return this.setup;
+    // No signal when the app opened (offline site survey): try again on the next call instead of staying broken.
+    const mine = this.setup;
+    mine.catch(() => {
+      if (this.setup === mine) this.setup = null;
+    });
+    return mine;
   }
 
   private async bearer(): Promise<string | null> {
@@ -111,7 +134,7 @@ export class HttpApi implements Api {
 
   async signInOptions() {
     const { config } = await this.ready();
-    return { microsoft: !!config.microsoft, devLogin: config.devLogin, office: this.office };
+    return { microsoft: !!config.microsoft, devLogin: config.devLogin, guardPhone: !!config.guardPhone, office: this.office };
   }
 
   async signInMicrosoft() {
@@ -175,7 +198,7 @@ export class HttpApi implements Api {
     cancel: (id) => this.call('POST', `/attendance-reports/uploads/${encodeURIComponent(id)}/cancel`, {}),
   };
 
-  private async call<T>(method: 'GET' | 'POST', path: string, body?: unknown, signal?: AbortSignal, microsoftOnly = false): Promise<T> {
+  private async call<T>(method: 'GET' | 'POST' | 'PUT', path: string, body?: unknown, signal?: AbortSignal, microsoftOnly = false): Promise<T> {
     let token: string | null;
     if (microsoftOnly) {
       const { ms } = await this.ready();
@@ -254,6 +277,8 @@ export class HttpApi implements Api {
 
   itExtractionStatus(signal?: AbortSignal) { return this.call<ExtractionStatus>('GET', '/arisha/it-extraction', undefined, signal); }
   itExtractionPreview(input: ExtractionRequest, signal?: AbortSignal) { return this.call<ExtractionPreview>('POST', '/arisha/it-extraction/preview', input, signal); }
+  draftHelpStatus(signal?: AbortSignal) { return this.call<import('./draft-help').DraftHelpStatus>('GET', '/draft-help', undefined, signal); }
+  draftHelpSuggest(kind: import('@prima/core').DraftHelpKind, form: unknown, signal?: AbortSignal) { return this.call<import('./draft-help').DraftHelpSuggestion>('POST', `/draft-help/${encodeURIComponent(kind)}`, { consent: 'draft-help-v1', form }, signal); }
 
   sharePointRequestPreview(url: string, signal?: AbortSignal) { return this.call<import('./connections').ConnectionRequestPreview>('POST', '/connections/sharepoint/requests/preview', {url}, signal); }
   async sharePointRequest(url: string, requestId: string, expectedUserId: string, signal?: AbortSignal): Promise<import('./connections').ConnectionRequestReceipt> {
@@ -352,6 +377,12 @@ export class HttpApi implements Api {
   staffFaceCheck(input: Parameters<Api['staffFaceCheck']>[0]) {
     return this.call('POST', '/me/clock/face', input);
   }
+  faceChallenge() {
+    return this.call<Awaited<ReturnType<Api['faceChallenge']>>>('POST', '/me/face/challenge', {});
+  }
+  staffFaceCheckFrames(input: { token: string; frames: string[]; capturedAt: string }) {
+    return this.call('POST', '/me/clock/face', input);
+  }
   faceReviews() {
     return this.call<Awaited<ReturnType<Api['faceReviews']>>>('GET', '/hr/faces');
   }
@@ -418,6 +449,36 @@ export class HttpApi implements Api {
   recordGuardPaper(input: Parameters<Api['recordGuardPaper']>[0]) {
     return this.call('POST', '/hr/guard-training/papers', input);
   }
+  groupHistoryBoard() {
+    return this.call<Awaited<ReturnType<Api['groupHistoryBoard']>>>('GET', '/hr/history/board');
+  }
+  groupHistory(personId: string) {
+    return this.call<Awaited<ReturnType<Api['groupHistory']>>>('GET', `/hr/history/person/${encodeURIComponent(personId)}`);
+  }
+  historyLookup(input: Parameters<Api['historyLookup']>[0]) {
+    return this.call<Awaited<ReturnType<Api['historyLookup']>>>('POST', '/hr/history/lookup', input);
+  }
+  markByLookup(input: Parameters<Api['markByLookup']>[0]) {
+    return this.call<Awaited<ReturnType<Api['markByLookup']>>>('POST', '/hr/history/mark', input);
+  }
+  linkExistingRecords() {
+    return this.call<Awaited<ReturnType<Api['linkExistingRecords']>>>('POST', '/hr/history/link-existing', {});
+  }
+  setRehire(input: Parameters<Api['setRehire']>[0]) {
+    return this.call('POST', '/hr/history/rehire', input);
+  }
+  linkHistory(input: Parameters<Api['linkHistory']>[0]) {
+    return this.call('POST', '/hr/history/link', input);
+  }
+  separateHistory(input: Parameters<Api['separateHistory']>[0]) {
+    return this.call('POST', '/hr/history/separate', input);
+  }
+  addOldEmployment(input: Parameters<Api['addOldEmployment']>[0]) {
+    return this.call('POST', '/hr/history/old-employment', input);
+  }
+  carryHistoryPaper(input: Parameters<Api['carryHistoryPaper']>[0]) {
+    return this.call('POST', '/hr/history/carry-paper', input);
+  }
   trainingRecords(personId?: string) {
     return this.call<Awaited<ReturnType<Api['trainingRecords']>>>('GET', `/hr/training${personId ? `?personId=${encodeURIComponent(personId)}` : ''}`);
   }
@@ -445,8 +506,35 @@ export class HttpApi implements Api {
   publishPolicy(input: Parameters<Api['publishPolicy']>[0]) {
     return this.call('POST', '/hr/policies', input);
   }
-  acknowledgePolicy(id: string) {
-    return this.call('POST', `/hr/policies/${encodeURIComponent(id)}/acknowledge`, {});
+  acknowledgePolicy(id: string, lang?: StaffLangId | null) {
+    return this.call('POST', `/hr/policies/${encodeURIComponent(id)}/acknowledge`, lang ? { lang } : {});
+  }
+  recordBriefingAcks(policyId: string, personIds: string[], ref: string, lang?: StaffLangId | null) {
+    return this.call<{ recorded: number }>('POST', `/hr/policies/${encodeURIComponent(policyId)}/briefing`, { personIds, ref, ...(lang ? { lang } : {}) });
+  }
+  addPolicyCopy(policyId: string, input: PolicyCopyInput) {
+    return this.call('POST', `/hr/policies/${encodeURIComponent(policyId)}/copies`, input);
+  }
+  setMotherTongue(personId: string, lang: StaffLangId) {
+    return this.call('POST', `/hr/people/${encodeURIComponent(personId)}/mother-tongue`, { lang });
+  }
+  disciplineAppeals() {
+    return this.call<DisciplineAppeals>('GET', '/discipline/appeals');
+  }
+  lodgeDisciplineAppeal(followUpId: string, input: { grounds: string; lang?: StaffLangId | null }) {
+    return this.call('POST', `/discipline/${encodeURIComponent(followUpId)}/appeal`, input);
+  }
+  decideDisciplineAppeal(followUpId: string, input: DisciplineAppealDecision) {
+    return this.call('POST', `/discipline/${encodeURIComponent(followUpId)}/appeal/decide`, input);
+  }
+  screening() {
+    return this.call<Awaited<ReturnType<Api['screening']>>>('GET', '/hr/screening');
+  }
+  screeningAct(action: 'open' | 'check' | 'decide' | 'withdraw', body: Record<string, unknown>) {
+    return this.call('POST', `/hr/screening/${action}`, body);
+  }
+  screeningRepeat(id: string) {
+    return this.call('POST', `/hr/screening/${encodeURIComponent(id)}/repeat`, {});
   }
   hrLegalChecks() {
     return this.call<Awaited<ReturnType<Api['hrLegalChecks']>>>('GET', '/hr/legal');
@@ -623,6 +711,27 @@ export class HttpApi implements Api {
   remoteReview(dayId: string, verdict: 'accepted' | 'queried', note: string) {
     return this.call('POST', `/remote-days/${encodeURIComponent(dayId)}/review`, { verdict, note });
   }
+  myTimeSlips() {
+    return this.call<Awaited<ReturnType<Api['myTimeSlips']>>>('GET', '/me/time-slips');
+  }
+  requestTimeSlip(input: { date: string; from: string; to: string; reason: string }) {
+    return this.call('POST', '/me/time-slips', input);
+  }
+  cancelTimeSlip(id: string) {
+    return this.call('POST', `/me/time-slips/${encodeURIComponent(id)}/cancel`, {});
+  }
+  timeSlipBoard() {
+    return this.call<Awaited<ReturnType<Api['timeSlipBoard']>>>('GET', '/time-slips');
+  }
+  decideTimeSlip(id: string, approve: boolean, note: string) {
+    return this.call('POST', `/time-slips/${encodeURIComponent(id)}/decide`, { approve, note });
+  }
+  seenTimeSlip(id: string) {
+    return this.call('POST', `/time-slips/${encodeURIComponent(id)}/seen`, {});
+  }
+  setTimeSlipApprover(approver: 'head' | 'hr', note: string) {
+    return this.call('POST', '/time-slips/settings', { approver, note });
+  }
   myWork() {
     return this.call<Awaited<ReturnType<Api['myWork']>>>('GET', '/me/work');
   }
@@ -732,6 +841,45 @@ export class HttpApi implements Api {
   clearSocsoRestriction(id: string, restrictionId: string, note: string) {
     return this.call<unknown>('POST', `/socso/${encodeURIComponent(id)}/restrictions/${encodeURIComponent(restrictionId)}/clear`, { note });
   }
+  recordLindung(id: string, input: Parameters<Api['recordLindung']>[1]) {
+    return this.call<unknown>('POST', `/socso/${encodeURIComponent(id)}/lindung`, input);
+  }
+  verifyLindung(id: string, answer: Parameters<Api['verifyLindung']>[1], note: string) {
+    return this.call<unknown>('POST', `/socso/${encodeURIComponent(id)}/lindung/verify`, { answer, note });
+  }
+  addSocsoDependant(id: string, input: Parameters<Api['addSocsoDependant']>[1]) {
+    return this.call<unknown>('POST', `/socso/${encodeURIComponent(id)}/dependants`, input);
+  }
+  addDependantPaper(id: string, dependantId: string, kind: 'relation' | 'translation', proof: ProofInput[]) {
+    return this.call<unknown>('POST', `/socso/${encodeURIComponent(id)}/dependants/${encodeURIComponent(dependantId)}/papers`, { kind, proof });
+  }
+  confirmDependantRoute(id: string, dependantId: string, input: Parameters<Api['confirmDependantRoute']>[2]) {
+    return this.call<unknown>('POST', `/socso/${encodeURIComponent(id)}/dependants/${encodeURIComponent(dependantId)}/route`, input);
+  }
+  recordDeathNotice(id: string, who: 'family' | 'embassy' | 'immigration', at: string) {
+    return this.call<unknown>('POST', `/socso/${encodeURIComponent(id)}/death-notices`, { who, at });
+  }
+  addDependantPayment(id: string, input: Parameters<Api['addDependantPayment']>[1]) {
+    return this.call<unknown>('POST', `/socso/${encodeURIComponent(id)}/dependant-payments`, input);
+  }
+  confirmDependantReceived(id: string, paymentId: string, input: { on: string; proof: ProofInput[] }) {
+    return this.call<unknown>('POST', `/socso/${encodeURIComponent(id)}/dependant-payments/${encodeURIComponent(paymentId)}/received`, input);
+  }
+  assessDosh(id: string, kind: Parameters<Api['assessDosh']>[1], why: string) {
+    return this.call<unknown>('POST', `/socso/${encodeURIComponent(id)}/dosh`, { kind, why });
+  }
+  recordDoshImmediate(id: string, input: Parameters<Api['recordDoshImmediate']>[1]) {
+    return this.call<unknown>('POST', `/socso/${encodeURIComponent(id)}/dosh/immediate`, input);
+  }
+  recordDoshForm(id: string, input: Parameters<Api['recordDoshForm']>[1]) {
+    return this.call<unknown>('POST', `/socso/${encodeURIComponent(id)}/dosh/form`, input);
+  }
+  recordDoshClientTold(id: string, at: string) {
+    return this.call<unknown>('POST', `/socso/${encodeURIComponent(id)}/dosh/client`, { at });
+  }
+  doshRegister(year: number) {
+    return this.call<Awaited<ReturnType<Api['doshRegister']>>>('GET', `/dosh/register/${year}`);
+  }
   addSocsoCheckIn(id: string, note: string) {
     return this.call<unknown>('POST', `/socso/${encodeURIComponent(id)}/checkins`, { note });
   }
@@ -798,6 +946,9 @@ export class HttpApi implements Api {
   clientInvoice(accountId: string, period: string, channel: 'hand' | 'email' | 'portal', amount: number | null, proof: ProofInput[]) {
     return this.call<unknown>('POST', `/clients/${encodeURIComponent(accountId)}/invoice`, { period, channel, amount, proof });
   }
+  clientWorkAck(accountId: string, input: ClientWorkAckInput) {
+    return this.call<unknown>('POST', `/clients/${encodeURIComponent(accountId)}/work-ack`, input);
+  }
   setInvoicePortal(accountId: string, portal: string | null) {
     return this.call<unknown>('POST', `/clients/${encodeURIComponent(accountId)}/portal`, { portal });
   }
@@ -836,6 +987,9 @@ export class HttpApi implements Api {
   }
   branchBoard() {
     return this.call<Awaited<ReturnType<Api['branchBoard']>>>('GET', '/branches');
+  }
+  branchJv(branchId: string) {
+    return this.call<Awaited<ReturnType<Api['branchJv']>>>('GET', `/branches/${encodeURIComponent(branchId)}/jv`);
   }
   creditBoard() {
     return this.call<Awaited<ReturnType<Api['creditBoard']>>>('GET', '/credit');
@@ -926,9 +1080,6 @@ export class HttpApi implements Api {
   }
   decidePayChange(id: string, verify: boolean, note: string) {
     return this.call<unknown>('POST', `/pay-changes/${encodeURIComponent(id)}/${verify ? 'verify' : 'reject'}`, { note });
-  }
-  salaryCalcData() {
-    return this.call<Awaited<ReturnType<Api['salaryCalcData']>>>('GET', '/salary-calc');
   }
   payFormulaBoard() {
     return this.call<Awaited<ReturnType<Api['payFormulaBoard']>>>('GET', '/pay-formulas');
@@ -1042,8 +1193,52 @@ export class HttpApi implements Api {
       { note },
     );
   }
+  amBq(workOrderId: string) {
+    return this.call<Awaited<ReturnType<Api['amBq']>>>('GET', `/assets/work-orders/${encodeURIComponent(workOrderId)}/bq`);
+  }
+  amBqAction(workOrderId: string, input: AmBqActionInput) {
+    const base = `/assets/work-orders/${encodeURIComponent(workOrderId)}`;
+    switch (input.kind) {
+      case 'brief': {
+        const { kind: _k, ...body } = input;
+        return this.call<unknown>('POST', `${base}/bq/brief`, body);
+      }
+      case 'draft':
+        return this.call<unknown>('POST', `${base}/bq/draft`, { jobKind: input.jobKind, measurements: input.measurements });
+      case 'save': {
+        const { kind: _k, ...body } = input;
+        return this.call<unknown>('POST', `${base}/bq`, body);
+      }
+      case 'submit':
+        return this.call<unknown>('POST', `${base}/bq/submit`, {});
+      case 'reopen':
+        return this.call<unknown>('POST', `${base}/bq/reopen`, { reason: input.reason });
+      case 'decide':
+        return this.call<unknown>('POST', `${base}/bq/${input.approve ? 'approve' : 'return'}`, { note: input.note });
+      case 'quote':
+        return this.call<unknown>('POST', `${base}/quotes`, input.quote);
+      case 'award':
+        return this.call<unknown>('POST', `${base}/award`, { quoteId: input.quoteId, reason: input.reason });
+      case 'awardDecide':
+        return this.call<unknown>('POST', `${base}/award/${input.approve ? 'approve' : 'reject'}`, { note: input.note });
+      case 'vo': {
+        const { kind: _k, ...body } = input;
+        return this.call<unknown>('POST', `${base}/variations`, body);
+      }
+      case 'voWithdraw':
+        return this.call<unknown>('POST', `${base}/variations/${encodeURIComponent(input.voId)}/withdraw`, { reason: input.reason });
+      case 'voDecide':
+        return this.call<unknown>('POST', `${base}/variations/${encodeURIComponent(input.voId)}/${input.approve ? 'approve' : 'reject'}`, { note: input.note });
+    }
+  }
   amLifeReview(id: string, decision: 'keep' | 'rehab', body: { note?: string; cost?: number }) {
     return this.call<unknown>('POST', `/assets/${encodeURIComponent(id)}/life/${decision}`, body);
+  }
+  amExtras() {
+    return this.call<Awaited<ReturnType<Api['amExtras']>>>('GET', '/assets/extras');
+  }
+  amExtrasAct(area: string, action: string, id: string, body: Record<string, unknown>) {
+    return this.call<unknown>('POST', `/assets/extras/${encodeURIComponent(area)}/${encodeURIComponent(action)}?id=${encodeURIComponent(id)}`, body);
   }
   salesLeads(companyId: string) {
     return this.call<Awaited<ReturnType<Api['salesLeads']>>>('GET', `/companies/${encodeURIComponent(companyId)}/leads`);
@@ -1113,6 +1308,12 @@ export class HttpApi implements Api {
   }
   whistleStatus(code: string) {
     return this.call<Awaited<ReturnType<Api['whistleStatus']>>>('GET', `/grc/speak-up/${encodeURIComponent(code)}`);
+  }
+  whistleReply(code: string, text: string, retaliation: boolean) {
+    return this.call<unknown>('POST', `/grc/speak-up/${encodeURIComponent(code)}/reply`, { text, retaliation });
+  }
+  whistleMessage(id: string, text: string) {
+    return this.call<unknown>('POST', `/grc/reports/${encodeURIComponent(id)}/message`, { text });
   }
   whistleStep(id: string, action: Parameters<Api['whistleStep']>[1], text: string) {
     return this.call<unknown>('POST', `/grc/reports/${encodeURIComponent(id)}/${action}`, { text });
@@ -1268,9 +1469,6 @@ export class HttpApi implements Api {
   checkCompanyFile(companyId: string, input: Parameters<Api['checkCompanyFile']>[1]) {
     return this.call<unknown>('POST', `/corporate/${encodeURIComponent(companyId)}/file/check`, input);
   }
-  handoverStep(id: string, step: Parameters<Api['handoverStep']>[1], input: Parameters<Api['handoverStep']>[2]) {
-    return this.call<unknown>('POST', `/purchasing/issues/${encodeURIComponent(id)}/handover/${step}`, input);
-  }
   corpBoard() {
     return this.call<Awaited<ReturnType<Api['corpBoard']>>>('GET', '/corporate');
   }
@@ -1295,6 +1493,15 @@ export class HttpApi implements Api {
   recordCorpBoard(id: string, resolutionRef: string, effectiveOn: string) {
     return this.call<unknown>('POST', `/corporate/changes/${encodeURIComponent(id)}/board`, { resolutionRef, effectiveOn });
   }
+  staffDirectoryStatus() {
+    return this.call<{ enabled: boolean; ready: boolean }>('GET', '/staff-directory/status');
+  }
+  staffDirectory() {
+    return this.call<Awaited<ReturnType<Api['staffDirectory']>>>('GET', '/staff-directory');
+  }
+  staffDirectoryAct(action: 'preview' | 'submit' | 'decide' | 'addOne', input: Record<string, unknown>) {
+    return this.call<unknown>('POST', `/staff-directory/${encodeURIComponent(action)}`, input);
+  }
   itBoard() {
     return this.call<Awaited<ReturnType<Api['itBoard']>>>('GET', '/it');
   }
@@ -1306,6 +1513,12 @@ export class HttpApi implements Api {
   }
   websiteSync() {
     return this.call<{ ran: string[]; issues: string[]; notices: number; delivered: number }>('POST', '/websites-sync', {});
+  }
+  registerBoard() {
+    return this.call<Awaited<ReturnType<Api['registerBoard']>>>('GET', '/registers');
+  }
+  registerAction(action: string, input: Record<string, unknown>) {
+    return this.call<unknown>('POST', `/registers/${encodeURIComponent(action)}`, input);
   }
   websiteAction(action: string, input: Record<string, unknown>) {
     return this.call<unknown>('POST', `/websites/${encodeURIComponent(action)}`, input);
@@ -1456,8 +1669,8 @@ export class HttpApi implements Api {
   setItTenderItem(id: string, index: number, done: boolean) {
     return this.call<unknown>('POST', `/it/tenders/${encodeURIComponent(id)}/${index}`, { done });
   }
-  setItAsset(id: string, status: Parameters<Api['setItAsset']>[1], assignedTo: string | null, note: string) {
-    return this.call<unknown>('POST', `/it/assets/${encodeURIComponent(id)}`, { status, assignedTo, note });
+  setItAsset(id: string, status: Parameters<Api['setItAsset']>[1], assignedTo: string | null, note: string, ewaste?: ItEwaste | null) {
+    return this.call<unknown>('POST', `/it/assets/${encodeURIComponent(id)}`, { status, assignedTo, note, ewaste: ewaste ?? null });
   }
   itMaintenance(id: string, kind: 'service' | 'repair', note: string, cost: number) {
     return this.call<unknown>('POST', `/it/assets/${encodeURIComponent(id)}/maintenance`, { kind, note, cost });
@@ -1510,8 +1723,8 @@ export class HttpApi implements Api {
   cmsCommissioning() {
     return this.call<Awaited<ReturnType<Api['cmsCommissioning']>>>('GET', '/cms/commissioning');
   }
-  setMobItem(id: string, itemId: string, status: 'open' | 'done' | 'risk_accepted', note: string, acceptedUntil: string | null) {
-    return this.call<unknown>('POST', `/contracts/${encodeURIComponent(id)}/items/${encodeURIComponent(itemId)}`, { status, note, acceptedUntil });
+  setMobItem(id: string, itemId: string, status: 'open' | 'done' | 'risk_accepted', note: string, acceptedUntil: string | null, proof: ProofInput[] = []) {
+    return this.call<unknown>('POST', `/contracts/${encodeURIComponent(id)}/items/${encodeURIComponent(itemId)}`, { status, note, acceptedUntil, proof });
   }
   contractStep(id: string, action: Parameters<Api['contractStep']>[1], note: string) {
     return this.call<unknown>('POST', `/contracts/${encodeURIComponent(id)}/step/${action}`, { note });
@@ -1737,6 +1950,18 @@ export class HttpApi implements Api {
   crmBoard() {
     return this.call<CrmBoard>('GET', '/crm');
   }
+  clientDiligence(accountId: string) {
+    return this.call<Awaited<ReturnType<Api['clientDiligence']>>>('GET', `/crm/clients/${encodeURIComponent(accountId)}/diligence`);
+  }
+  clientDiligenceAct(accountId: string, action: 'start' | 'check' | 'decide', body: Record<string, unknown>) {
+    return this.call<Awaited<ReturnType<Api['clientDiligenceAct']>>>('POST', `/crm/clients/${encodeURIComponent(accountId)}/diligence/${action}`, body);
+  }
+  siteInstructions(siteId: string) {
+    return this.call<Awaited<ReturnType<Api['siteInstructions']>>>('GET', `/sites/${encodeURIComponent(siteId)}/instructions`);
+  }
+  siteInstructionsAct(siteId: string, action: 'save' | 'client_signed', body: Record<string, unknown>) {
+    return this.call<Awaited<ReturnType<Api['siteInstructionsAct']>>>('POST', `/sites/${encodeURIComponent(siteId)}/instructions/${action}`, body);
+  }
   crmClient(accountId: string) {
     return this.call<CrmClient>('GET', `/crm/clients/${encodeURIComponent(accountId)}`);
   }
@@ -1785,6 +2010,39 @@ export class HttpApi implements Api {
   fleetBoard() {
     return this.call<Awaited<ReturnType<Api['fleetBoard']>>>('GET', '/fleet');
   }
+  vehicleRentals(month?: string) {
+    return this.call<Awaited<ReturnType<Api['vehicleRentals']>>>('GET', `/fleet/rentals${month ? `?month=${encodeURIComponent(month)}` : ''}`);
+  }
+  recordVehicleRental(vehicleId: string, input: Parameters<Api['recordVehicleRental']>[1]) {
+    return this.call<unknown>('POST', `/fleet/vehicles/${encodeURIComponent(vehicleId)}/rental`, input);
+  }
+  endVehicleRental(vehicleId: string, input: Parameters<Api['endVehicleRental']>[1]) {
+    return this.call<unknown>('POST', `/fleet/vehicles/${encodeURIComponent(vehicleId)}/rental/end`, input);
+  }
+  moveVehicleUse(vehicleId: string, input: Parameters<Api['moveVehicleUse']>[1]) {
+    return this.call<unknown>('POST', `/fleet/vehicles/${encodeURIComponent(vehicleId)}/move`, input);
+  }
+  setVehicleRent(vehicleId: string, input: Parameters<Api['setVehicleRent']>[1]) {
+    return this.call<unknown>('POST', `/fleet/vehicles/${encodeURIComponent(vehicleId)}/rent`, input);
+  }
+  vehicleUsage(month?: string) {
+    return this.call<Awaited<ReturnType<Api['vehicleUsage']>>>('GET', `/fleet/usage${month ? `?month=${encodeURIComponent(month)}` : ''}`);
+  }
+  setVehicleFuel(vehicleId: string, input: Parameters<Api['setVehicleFuel']>[1]) {
+    return this.call<unknown>('POST', `/fleet/vehicles/${encodeURIComponent(vehicleId)}/fuel-type`, input);
+  }
+  addVehicleCard(vehicleId: string, input: Parameters<Api['addVehicleCard']>[1]) {
+    return this.call<unknown>('POST', `/fleet/vehicles/${encodeURIComponent(vehicleId)}/cards`, input);
+  }
+  endVehicleCard(vehicleId: string, cardId: string, input: { on: string; reason: string }) {
+    return this.call<unknown>('POST', `/fleet/vehicles/${encodeURIComponent(vehicleId)}/cards/${encodeURIComponent(cardId)}/end`, input);
+  }
+  recordFuel(vehicleId: string, input: Parameters<Api['recordFuel']>[1], proof: ProofInput[]) {
+    return this.call<unknown>('POST', `/fleet/vehicles/${encodeURIComponent(vehicleId)}/fuel`, { ...input, proof });
+  }
+  reviewFuel(vehicleId: string, fillId: string, input: Parameters<Api['reviewFuel']>[2]) {
+    return this.call<unknown>('POST', `/fleet/vehicles/${encodeURIComponent(vehicleId)}/fuel/${encodeURIComponent(fillId)}/review`, input);
+  }
   requestVehicle(input: VehicleRequestInput) {
     return this.call<unknown>('POST', '/fleet/requests', input);
   }
@@ -1802,6 +2060,18 @@ export class HttpApi implements Api {
   }
   fileMonitoringConsent(personId: string, proof: ProofInput[]) {
     return this.call<unknown>('POST', `/people/${encodeURIComponent(personId)}/monitoring-consent`, { proof });
+  }
+  guardPhoneCode(personId: string) {
+    return this.call<Awaited<ReturnType<Api['guardPhoneCode']>>>('POST', `/people/${encodeURIComponent(personId)}/guard-phone/code`, {});
+  }
+  guardPhones(companyId: string) {
+    return this.call<Awaited<ReturnType<Api['guardPhones']>>>('GET', `/companies/${encodeURIComponent(companyId)}/guard-phones`);
+  }
+  revokeGuardPhone(phoneId: string, reason: string) {
+    return this.call<unknown>('POST', `/guard-phones/${encodeURIComponent(phoneId)}/revoke`, { reason });
+  }
+  cmsGuardPhones() {
+    return this.call<Awaited<ReturnType<Api['cmsGuardPhones']>>>('GET', '/cms/guard-phones');
   }
   setStaffPin(personId: string, pin: string) {
     return this.call<unknown>('POST', `/people/${encodeURIComponent(personId)}/pin`, { pin });
@@ -1821,17 +2091,81 @@ export class HttpApi implements Api {
   pdpaDocs(caseId: string) {
     return this.call<EvidenceDoc[]>('GET', `/pdpa/${encodeURIComponent(caseId)}/docs`);
   }
+  pdpaRegisterBoard() {
+    return this.call<Awaited<ReturnType<Api['pdpaRegisterBoard']>>>('GET', '/pdpa-register');
+  }
+  setPdpaSettings(input: { enabled?: boolean; keepYears?: number }, reason: string) {
+    return this.call<unknown>('POST', '/pdpa-settings', { ...input, reason });
+  }
+  savePdpaRegisterItem(id: string | null, input: Parameters<Api['savePdpaRegisterItem']>[1]) {
+    return this.call<unknown>('POST', id ? `/pdpa-register/${encodeURIComponent(id)}` : '/pdpa-register', input);
+  }
+  pdpaRegisterStep(id: string, step: 'review' | 'retire', note: string) {
+    return this.call<unknown>('POST', `/pdpa-register/${encodeURIComponent(id)}/${step}`, { note });
+  }
+  recordPdpaConsent(input: Parameters<Api['recordPdpaConsent']>[0], proof: ProofInput[]) {
+    return this.call<unknown>('POST', '/pdpa-consents', { ...input, proof });
+  }
+  withdrawPdpaConsent(id: string, on: string, note: string) {
+    return this.call<unknown>('POST', `/pdpa-consents/${encodeURIComponent(id)}/withdraw`, { on, note });
+  }
+  pdpaBreachDetails(caseId: string, input: Parameters<Api['pdpaBreachDetails']>[1]) {
+    return this.call<unknown>('POST', `/pdpa-breach/${encodeURIComponent(caseId)}/details`, input);
+  }
   memos() {
     return this.call<Awaited<ReturnType<Api['memos']>>>('GET', '/memos');
   }
-  publishMemo(audience: 'STAFF' | 'FIELD', title: string, body: string, states: string[]) {
-    return this.call<unknown>('POST', '/memos', { audience, title, body, states });
+  publishMemo(audience: 'STAFF' | 'FIELD' | 'TEAM', title: string, body: string, states: string[], opts: { readBy?: string | null; replaces?: string | null } = {}) {
+    return this.call<unknown>('POST', '/memos', { audience, title, body, states, readBy: opts.readBy ?? null, replaces: opts.replaces ?? null });
+  }
+  memoReach(audience: 'STAFF' | 'FIELD' | 'TEAM', states: string[]) {
+    return this.call<{ count: number }>('POST', '/memos/reach', { audience, states });
+  }
+  withdrawMemo(memoId: string, reason: string) {
+    return this.call<unknown>('POST', `/memos/${encodeURIComponent(memoId)}/withdraw`, { reason });
+  }
+  remindMemo(memoId: string) {
+    return this.call<unknown>('POST', `/memos/${encodeURIComponent(memoId)}/remind`, {});
   }
   readMemo(memoId: string) {
     return this.call<unknown>('POST', `/memos/${encodeURIComponent(memoId)}/read`, {});
   }
   fwmDocs(ref: string) {
     return this.call<Awaited<ReturnType<Api['fwmDocs']>>>('GET', `/fwm/docs/${encodeURIComponent(ref)}`);
+  }
+  fwCostBoard() {
+    return this.call<Awaited<ReturnType<Api['fwCostBoard']>>>('GET', '/fwm/cost');
+  }
+  fwStatBoard() {
+    return this.call<Awaited<ReturnType<Api['fwStatBoard']>>>('GET', '/fwm/epf-socso');
+  }
+  fwStatAct(action: Parameters<Api['fwStatAct']>[0], body: Record<string, unknown>) {
+    return this.call<unknown>('POST', `/fwm/epf-socso/${encodeURIComponent(action)}`, body);
+  }
+  fwCostDocs(ref: string) {
+    return this.call<Awaited<ReturnType<Api['fwCostDocs']>>>('GET', `/fwm/cost/docs/${encodeURIComponent(ref)}`);
+  }
+  recordFwPlacement(personId: string, input: Parameters<Api['recordFwPlacement']>[1], proof: ProofInput[]) {
+    return this.call<unknown>('POST', `/people/${encodeURIComponent(personId)}/fw-placements`, { ...input, proof });
+  }
+  endFwPlacement(id: string, input: { to: string; note: string }) {
+    return this.call<unknown>('POST', `/fw-placements/${encodeURIComponent(id)}/end`, input);
+  }
+  setFwCostRate(input: Parameters<Api['setFwCostRate']>[0]) {
+    return this.call<unknown>('POST', '/fwm/cost/rates', input);
+  }
+  addFwCostLegalNote(input: Parameters<Api['addFwCostLegalNote']>[0]) {
+    return this.call<unknown>('POST', '/fwm/cost/legal-notes', input);
+  }
+  draftFwCostMonth(month: string) {
+    return this.call<unknown>('POST', `/fwm/cost/months/${encodeURIComponent(month)}/draft`, {});
+  }
+  decideFwCostCharges(input: Parameters<Api['decideFwCostCharges']>[0]) {
+    const { month, ...body } = input;
+    return this.call<unknown>('POST', `/fwm/cost/months/${encodeURIComponent(month)}/decide`, body);
+  }
+  bookFwCostCharge(id: string, input: Parameters<Api['bookFwCostCharge']>[1], proof: ProofInput[]) {
+    return this.call<unknown>('POST', `/fw-cost-charges/${encodeURIComponent(id)}/book`, { ...input, proof });
   }
   personDocs(personId: string) {
     return this.call<Awaited<ReturnType<Api['personDocs']>>>('GET', `/people/${encodeURIComponent(personId)}/docs`);
@@ -1844,6 +2178,15 @@ export class HttpApi implements Api {
   }
   submitFwRenewal(personId: string, paper: Parameters<Api['submitFwRenewal']>[1], input: Parameters<Api['submitFwRenewal']>[2], proof: ProofInput[]) {
     return this.call<unknown>('POST', `/people/${encodeURIComponent(personId)}/fw-renewals`, { paper, ...input, proof });
+  }
+  recordFwPaper(personId: string, paper: FwPaper, input: FwPaperInput, proof: ProofInput[]) {
+    return this.call<unknown>('POST', `/people/${encodeURIComponent(personId)}/fw-papers`, { paper, ...input, proof });
+  }
+  ackFwPaper(credentialId: string, note: string) {
+    return this.call<unknown>('POST', `/fw-papers/${encodeURIComponent(credentialId)}/ack`, { note });
+  }
+  addFwWorkerFromJa(jaRecordId: string, input: FwAddFromJaInput) {
+    return this.call<unknown>('POST', `/fwm/ja-workers/${encodeURIComponent(jaRecordId)}/add`, input);
   }
   createFwmTask(personId: string, input: Parameters<Api['createFwmTask']>[1]) {
     return this.call<unknown>('POST', `/people/${encodeURIComponent(personId)}/fwm-tasks`, input);
@@ -1886,6 +2229,85 @@ export class HttpApi implements Api {
   }
   advanceSocsoClaim(id: string, to: Parameters<Api['advanceSocsoClaim']>[1], input: Parameters<Api['advanceSocsoClaim']>[2]) {
     return this.call<unknown>('POST', `/socso/${encodeURIComponent(id)}/status`, { to, ...input });
+  }
+  // Cleaning planner, site fittings, Inventory and duty plans.
+  cleaningBoard(date?: string) {
+    return this.call<Awaited<ReturnType<Api['cleaningBoard']>>>('GET', `/cleaning/board${this.q({ date })}`);
+  }
+  cleaningSite(siteId: string, date?: string) {
+    return this.call<Awaited<ReturnType<Api['cleaningSite']>>>('GET', `/cleaning/sites/${siteId}${this.q({ date })}`);
+  }
+  cleaningProof(siteId: string, docId: string) {
+    return this.call<Awaited<ReturnType<Api['cleaningProof']>>>('GET', `/cleaning/sites/${siteId}/proof/${docId}`);
+  }
+  cleaningSaveSetup(siteId: string, setup: CleaningSetupInput, expectedVersion: number | null) {
+    return this.call<unknown>('PUT', `/cleaning/sites/${siteId}/setup`, { setup, expectedVersion });
+  }
+  cleaningSetMap(siteId: string, input: { name: string; data: string }, expectedVersion: number) {
+    return this.call<unknown>('POST', `/cleaning/sites/${siteId}/map`, { ...input, expectedVersion });
+  }
+  cleaningPlan(siteId: string, date: string, absentIds: string[]) {
+    return this.call<unknown>('POST', `/cleaning/sites/${siteId}/days/${date}/plan`, { absentIds });
+  }
+  cleaningPublish(siteId: string, date: string) {
+    return this.call<unknown>('POST', `/cleaning/sites/${siteId}/days/${date}/publish`, {});
+  }
+  cleaningRecord(siteId: string, date: string, input: CleaningRecordInput) {
+    return this.call<unknown>('POST', `/cleaning/sites/${siteId}/days/${date}/record`, input);
+  }
+  cleaningDelivery(siteId: string, input: { date: string; supplies: StockLineInput[]; equipment: StockLineInput[]; note: string }) {
+    return this.call<unknown>('POST', `/cleaning/sites/${siteId}/deliveries`, input);
+  }
+  cleaningReceive(siteId: string, entryId: string, input: { supplies: StockLineInput[]; equipment: StockLineInput[]; note: string; proof: CleaningProofInput }) {
+    return this.call<unknown>('POST', `/cleaning/sites/${siteId}/deliveries/${entryId}/receive`, input);
+  }
+  cleaningStockCheck(siteId: string, input: { date: string; supplies: StockLineInput[]; equipment: StockLineInput[]; note: string; proof: CleaningProofInput }) {
+    return this.call<unknown>('POST', `/cleaning/sites/${siteId}/stock-checks`, input);
+  }
+  cleaningClientSlip(siteId: string, input: CleaningSlipInput) {
+    return this.call<unknown>('POST', `/cleaning/sites/${siteId}/client-slips`, input);
+  }
+  cleaningMonthly(siteId: string, month: string) {
+    return this.call<Awaited<ReturnType<Api['cleaningMonthly']>>>('GET', `/cleaning/sites/${siteId}/monthly${this.q({ month })}`);
+  }
+  inventorySites() {
+    return this.call<Awaited<ReturnType<Api['inventorySites']>>>('GET', '/inventory/sites');
+  }
+  siteKit(siteId: string) {
+    return this.call<Awaited<ReturnType<Api['siteKit']>>>('GET', `/sites/${siteId}/kit`);
+  }
+  saveSiteKit(siteId: string, items: unknown[], expectedVersion: number | null) {
+    return this.call<unknown>('PUT', `/sites/${siteId}/kit`, { items, expectedVersion });
+  }
+  recordSiteKit(siteId: string, input: { kind: 'install' | 'check'; date: string; lines: unknown[]; note: string; proof: CleaningProofInput }, expectedVersion: number) {
+    return this.call<unknown>('POST', `/sites/${siteId}/kit/records`, { ...input, expectedVersion });
+  }
+  approveSiteGift(siteId: string, input: { ref: string; qty: number; reason: string }) {
+    return this.call<unknown>('POST', `/sites/${siteId}/kit/gifts`, input);
+  }
+  closeOutList(siteId: string) {
+    return this.call<Awaited<ReturnType<Api['closeOutList']>>>('GET', `/sites/${siteId}/close-out`);
+  }
+  recordTakeBack(siteId: string, input: { date: string; lines: unknown[]; note: string; proof: CleaningProofInput }) {
+    return this.call<unknown>('POST', `/sites/${siteId}/close-out`, input);
+  }
+  dutyPosts(siteId: string, date: string) {
+    return this.call<Awaited<ReturnType<Api['dutyPosts']>>>('GET', `/duty/sites/${siteId}${this.q({ date })}`);
+  }
+  publishDutyPosts(siteId: string, date: string) {
+    return this.call<unknown>('POST', `/duty/sites/${siteId}/publish`, { date });
+  }
+  saveDutyTerms(siteId: string, terms: GuardTermsInput, expectedVersion: number | null) {
+    return this.call<unknown>('PUT', `/duty/sites/${siteId}/terms`, { terms, expectedVersion });
+  }
+  dutyOfficers() {
+    return this.call<Awaited<ReturnType<Api['dutyOfficers']>>>('GET', '/duty/officers');
+  }
+  dutyRoute(officerId: string, date: string, hours?: OfficerHoursInput | null) {
+    return this.call<Awaited<ReturnType<Api['dutyRoute']>>>('GET', `/duty/officers/${officerId}${this.q({ date, start: hours?.start, end: hours?.end, meal: hours?.mealMin })}`);
+  }
+  publishDutyRoute(officerId: string, date: string, expectPublishedAt: string | null, hours?: OfficerHoursInput | null) {
+    return this.call<unknown>('POST', `/duty/officers/${officerId}/publish`, { date, expectPublishedAt, hours: hours ?? null });
   }
   roster(siteId: string, from: string, days: number) {
     return this.call<Awaited<ReturnType<Api['roster']>>>('GET', `/sites/${siteId}/roster${this.q({ from, days })}`);
@@ -1938,6 +2360,24 @@ export class HttpApi implements Api {
   closeSiteVisit(id: string, findings: string) {
     return this.call<unknown>('POST', `/visits/${id}/close`, { findings });
   }
+  siteSurveySetup() {
+    return this.call<Awaited<ReturnType<Api['siteSurveySetup']>>>('GET', '/site-surveys/setup');
+  }
+  siteSurveyBoard() {
+    return this.call<Awaited<ReturnType<Api['siteSurveyBoard']>>>('GET', '/site-surveys');
+  }
+  siteSurveyDetail(id: string) {
+    return this.call<Awaited<ReturnType<Api['siteSurveyDetail']>>>('GET', `/site-surveys/${encodeURIComponent(id)}`);
+  }
+  siteSurveyReceive(body: Record<string, unknown>) {
+    return this.call<Awaited<ReturnType<Api['siteSurveyReceive']>>>('POST', '/site-surveys', body);
+  }
+  siteSurveyPhoto(id: string, n: number, image: string) {
+    return this.call<Awaited<ReturnType<Api['siteSurveyPhoto']>>>('POST', `/site-surveys/${encodeURIComponent(id)}/photos`, { n, image });
+  }
+  siteSurveyReview(id: string, outcome: 'accepted' | 'returned', reason: string) {
+    return this.call<unknown>('POST', `/site-surveys/${encodeURIComponent(id)}/review`, { outcome, reason });
+  }
   raiseCase(input: Parameters<Api['raiseCase']>[0]) {
     return this.call<Awaited<ReturnType<Api['raiseCase']>>>('POST', '/cases', input);
   }
@@ -1946,6 +2386,9 @@ export class HttpApi implements Api {
   }
   updateCase(id: string, action: Parameters<Api['updateCase']>[1], note = '', proof: ProofInput[] = []) {
     return this.call<Awaited<ReturnType<Api['updateCase']>>>('POST', `/cases/${id}/${action}`, { note, proof });
+  }
+  myAlerts() {
+    return this.call<Awaited<ReturnType<Api['myAlerts']>>>('GET', '/alerts/mine');
   }
   home(companyId?: string) {
     return this.call<Home>('GET', `/home${companyId ? `?companyId=${encodeURIComponent(companyId)}` : ''}`);
@@ -1985,11 +2428,39 @@ export class HttpApi implements Api {
   insurance() {
     return this.call<Awaited<ReturnType<Api['insurance']>>>('GET', '/insurance');
   }
+  recordInsurancePremium(policyId: string, input: { paidOn: string; ref: string }) {
+    return this.call<unknown>('POST', `/insurance/policies/${encodeURIComponent(policyId)}/premium`, input);
+  }
+  renewInsurancePolicy(policyId: string, input: Parameters<Api['renewInsurancePolicy']>[1]) {
+    return this.call<unknown>('POST', `/insurance/policies/${encodeURIComponent(policyId)}/renew`, input);
+  }
+  cancelInsurancePolicy(policyId: string, input: { on: string; reason: string }) {
+    return this.call<unknown>('POST', `/insurance/policies/${encodeURIComponent(policyId)}/cancel`, input);
+  }
   hrMonitor() {
     return this.call<Awaited<ReturnType<Api['hrMonitor']>>>('GET', '/hr');
   }
   cms() {
     return this.call<Awaited<ReturnType<Api['cms']>>>('GET', '/cms');
+  }
+  cmsReadiness() {
+    return this.call<Awaited<ReturnType<Api['cmsReadiness']>>>('GET', '/cms/readiness');
+  }
+  setCmsReadinessAnswer(siteId: string, key: string, input: Parameters<Api['setCmsReadinessAnswer']>[2]) {
+    return this.call<Awaited<ReturnType<Api['setCmsReadinessAnswer']>>>('POST', `/cms/readiness/${encodeURIComponent(siteId)}/answers/${encodeURIComponent(key)}`, input);
+  }
+  saveCmsReadinessDevice(siteId: string, input: Parameters<Api['saveCmsReadinessDevice']>[1]) {
+    return this.call<Awaited<ReturnType<Api['saveCmsReadinessDevice']>>>('POST', `/cms/readiness/${encodeURIComponent(siteId)}/devices`, input);
+  }
+  removeCmsReadinessDevice(siteId: string, deviceId: string, reason: string) {
+    return this.call<Awaited<ReturnType<Api['removeCmsReadinessDevice']>>>(
+      'POST',
+      `/cms/readiness/${encodeURIComponent(siteId)}/devices/${encodeURIComponent(deviceId)}/remove`,
+      { reason },
+    );
+  }
+  reviewCmsReadiness(siteId: string, input: Parameters<Api['reviewCmsReadiness']>[1]) {
+    return this.call<Awaited<ReturnType<Api['reviewCmsReadiness']>>>('POST', `/cms/readiness/${encodeURIComponent(siteId)}/review`, input);
   }
   updateCmsSettings(patch: CmsSettingsPatch) {
     return this.call<unknown>('POST', '/cms/settings', patch);
@@ -1997,8 +2468,20 @@ export class HttpApi implements Api {
   planCmsRoster(days: number) {
     return this.call<unknown>('POST', '/cms/roster/plan', { days });
   }
-  recordCmsHandover(shiftId: string, note: string) {
-    return this.call<unknown>('POST', `/cms/shifts/${shiftId}/handover`, { note });
+  recordCmsHandover(shiftId: string, note: string, agree = true) {
+    return this.call<unknown>('POST', `/cms/shifts/${shiftId}/handover`, { note, agree });
+  }
+  giveCmsHandover(shiftId: string, note: string) {
+    return this.call<unknown>('POST', `/cms/shifts/${shiftId}/handover-out`, { note });
+  }
+  cmsSeatClockIn(shiftId: string) {
+    return this.call<unknown>('POST', `/cms/shifts/${shiftId}/clock-in`, {});
+  }
+  cmsSeatClockOut(shiftId: string, note: string) {
+    return this.call<unknown>('POST', `/cms/shifts/${shiftId}/clock-out`, { note });
+  }
+  releaseCmsSeat(shiftId: string, reason: string) {
+    return this.call<unknown>('POST', `/cms/shifts/${shiftId}/release`, { reason });
   }
   attendanceAlerts(id: string) {
     return this.call<Awaited<ReturnType<Api['attendanceAlerts']>>>('GET', `/companies/${id}/attendance/alerts`);
@@ -2071,6 +2554,63 @@ export class HttpApi implements Api {
   }
   doSiteTask(id: string, input: DoSiteTaskInput) {
     return this.call<unknown>('POST', `/device/tasks/${encodeURIComponent(id)}`, input);
+  }
+  clientCodeBoard(siteId: string) {
+    return this.call<ClientCodeBoard>('GET', `/sites/${encodeURIComponent(siteId)}/client-codes`);
+  }
+  saveClientCode(siteId: string, input: ClientCodeInput) {
+    return this.call<unknown>('POST', `/sites/${encodeURIComponent(siteId)}/client-codes`, input);
+  }
+  setClientReport(id: string, input: { send: boolean; how?: string; reason: string }) {
+    return this.call<unknown>('POST', `/client-codes/${encodeURIComponent(id)}/report`, input);
+  }
+  stopClientCode(id: string, reason: string) {
+    return this.call<unknown>('POST', `/client-codes/${encodeURIComponent(id)}/stop`, { reason });
+  }
+  checkClientRequirement(id: string, input: ClientCheckInput) {
+    return this.call<unknown>('POST', `/client-codes/${encodeURIComponent(id)}/checks`, input);
+  }
+  saveClientInspection(id: string, input: ClientInspectionInput) {
+    return this.call<unknown>('POST', `/client-codes/${encodeURIComponent(id)}/inspections`, input);
+  }
+  fixInspectionLine(id: string, index: number, input: { note: string; proof?: ProofInput[] }) {
+    return this.call<unknown>('POST', `/client-inspections/${encodeURIComponent(id)}/fix`, { index, ...input });
+  }
+  selfAuditBoard(companyId: string) {
+    return this.call<SelfAuditBoard>('GET', `/companies/${encodeURIComponent(companyId)}/self-audits`);
+  }
+  saveSelfAudit(companyId: string, input: SelfAuditInput) {
+    return this.call<unknown>('POST', `/companies/${encodeURIComponent(companyId)}/self-audits`, input);
+  }
+  fixSelfAuditLine(id: string, key: string, input: { note: string; proof?: ProofInput[] }) {
+    return this.call<unknown>('POST', `/self-audits/${encodeURIComponent(id)}/fix`, { key, ...input });
+  }
+  rbaBoard(companyId?: string | null) {
+    return this.call<RbaBoard>('GET', `/rba${companyId ? `?companyId=${encodeURIComponent(companyId)}` : ''}`);
+  }
+  nameRbaCommittee(input: RbaCommitteeInput) {
+    return this.call<unknown>('POST', '/rba/committee', input);
+  }
+  rbaTraceBoard(companyId: string) {
+    return this.call<RbaTraceBoard>('GET', `/companies/${encodeURIComponent(companyId)}/rba-traces`);
+  }
+  runRbaTrace(companyId: string, period: string) {
+    return this.call<unknown>('POST', `/companies/${encodeURIComponent(companyId)}/rba-traces`, { period });
+  }
+  settleRbaTraceRow(reviewId: string, personId: string, input: { kind: 'explained' | 'corrected' | 'finding'; note: string }) {
+    return this.call<unknown>('POST', `/rba-traces/${encodeURIComponent(reviewId)}/settle`, { personId, ...input });
+  }
+  workerFiles(companyId: string) {
+    return this.call<WorkerFilesBoard>('GET', `/companies/${encodeURIComponent(companyId)}/worker-files`);
+  }
+  ethicsBoard(companyId?: string | null) {
+    return this.call<EthicsBoard>('GET', `/ethics${companyId ? `?companyId=${encodeURIComponent(companyId)}` : ''}`);
+  }
+  signEthicsDeclaration(input: EthicsInput) {
+    return this.call<unknown>('POST', '/ethics', input);
+  }
+  reviewEthicsInterests(id: string, input: { action: 'no_conflict' | 'managed'; note: string }) {
+    return this.call<unknown>('POST', `/ethics/${encodeURIComponent(id)}/review`, input);
   }
   siteDutyLog(siteId: string, days = 2) {
     return this.call<SiteDutyLog>('GET', `/sites/${encodeURIComponent(siteId)}/duty-log?days=${days}`);
@@ -2225,14 +2765,23 @@ export class HttpApi implements Api {
   scheduleMeeting(input: Parameters<Api['scheduleMeeting']>[0]) {
     return this.call('POST', '/meetings', input);
   }
-  addMinutes(meetingId: string, text: string) {
-    return this.call('POST', `/meetings/${meetingId}/minutes`, { text });
+  addMinutes(meetingId: string, text: string, attendance?: Parameters<Api['addMinutes']>[2]) {
+    return this.call('POST', `/meetings/${meetingId}/minutes`, { text, attendance });
+  }
+  changeMeeting(meetingId: string, input: Parameters<Api['changeMeeting']>[1]) {
+    return this.call('POST', `/meetings/${encodeURIComponent(meetingId)}/change`, input);
+  }
+  cancelMeeting(meetingId: string, reason: string) {
+    return this.call('POST', `/meetings/${encodeURIComponent(meetingId)}/cancel`, { reason });
+  }
+  answerMeeting(meetingId: string, answer: 'yes' | 'no' | 'maybe', note: string) {
+    return this.call('POST', `/meetings/${encodeURIComponent(meetingId)}/answer`, { answer, note });
   }
   checkMeetingSummary(meetingId: string, input: Parameters<Api['checkMeetingSummary']>[1]) {
     return this.call('POST', `/meetings/${meetingId}/summary-check`, input);
   }
-  setMeetingAction(meetingId: string, index: number, done: boolean) {
-    return this.call('POST', `/meetings/${meetingId}/actions/${index}`, { done });
+  setMeetingAction(meetingId: string, index: number, done: boolean, note = '') {
+    return this.call('POST', `/meetings/${meetingId}/actions/${index}`, { done, note });
   }
   addMeetingAction(meetingId: string, input: Parameters<Api['addMeetingAction']>[1]) {
     return this.call('POST', `/meetings/${encodeURIComponent(meetingId)}/actions`, input);
@@ -2255,6 +2804,36 @@ export class HttpApi implements Api {
   createTenderGroup(sourceTenderId: string, companyIds: string[]) {
     return this.call<unknown>('POST', '/tender-groups', { sourceTenderId, companyIds });
   }
+  tenderCounter() {
+    return this.call<Awaited<ReturnType<Api['tenderCounter']>>>('GET', '/tender-counter');
+  }
+  directorOfficeCounter() {
+    return this.call<Awaited<ReturnType<Api['directorOfficeCounter']>>>('GET', '/director-office-counter');
+  }
+  tenderOpportunities() {
+    return this.call<Awaited<ReturnType<Api['tenderOpportunities']>>>('GET', '/tender-opportunities');
+  }
+  recordTenderOpportunity(input: OpportunityInput) {
+    return this.call<unknown>('POST', '/tender-opportunities', input);
+  }
+  enterTenderOpportunity(id: string, companyIds: string[], note: string) {
+    return this.call<unknown>('POST', `/tender-opportunities/${encodeURIComponent(id)}/enter`, { companyIds, note });
+  }
+  tenderSources() {
+    return this.call<Awaited<ReturnType<Api['tenderSources']>>>('GET', '/tender-sources');
+  }
+  addTenderSource(input: { buyer: string; urls: string[]; note: string }) {
+    return this.call<unknown>('POST', '/tender-sources', input);
+  }
+  loadTenderSourceStarter() {
+    return this.call<unknown>('POST', '/tender-sources/starter', {});
+  }
+  updateTenderSource(id: string, input: { urls?: string[]; note?: string; active?: boolean }) {
+    return this.call<unknown>('POST', `/tender-sources/${encodeURIComponent(id)}`, input);
+  }
+  recordTenderSourceCheck(id: string, input: SourceCheckInput) {
+    return this.call<unknown>('POST', `/tender-sources/${encodeURIComponent(id)}/check`, input);
+  }
   tenderBoard() {
     return this.call<Awaited<ReturnType<Api['tenderBoard']>>>('GET', '/tender-board');
   }
@@ -2270,8 +2849,8 @@ export class HttpApi implements Api {
   undoTenderStep(tenderId: string, stepId: string) {
     return this.call('POST', `/tenders/${tenderId}/steps/${encodeURIComponent(stepId)}/undo`, {});
   }
-  confirmTenderNa(tenderId: string, stepId: string, accept: boolean) {
-    return this.call('POST', `/tenders/${tenderId}/steps/${encodeURIComponent(stepId)}/na`, { accept });
+  confirmTenderNa(tenderId: string, stepId: string, accept: boolean, note: string) {
+    return this.call('POST', `/tenders/${tenderId}/steps/${encodeURIComponent(stepId)}/na`, { accept, note });
   }
   planTenderStep(tenderId: string, stepId: string, pic: string, due: string | null) {
     return this.call('POST', `/tenders/${tenderId}/steps/${encodeURIComponent(stepId)}/plan`, { pic, due });
@@ -2296,6 +2875,90 @@ export class HttpApi implements Api {
   }
   audit() {
     return this.call<Awaited<ReturnType<Api['audit']>>>('GET', '/audit');
+  }
+  handoverStep(id: string, step: Parameters<Api['handoverStep']>[1], input: Parameters<Api['handoverStep']>[2]) {
+    return this.call<unknown>('POST', `/purchasing/issues/${encodeURIComponent(id)}/handover/${step}`, input);
+  }
+  policeHelp() {
+    return this.call<Awaited<ReturnType<Api['policeHelp']>>>('GET', '/arms/police-help');
+  }
+  askPoliceHelp(input: Parameters<Api['askPoliceHelp']>[0]) {
+    return this.call<{ ref: string }>('POST', '/arms/police-help', input);
+  }
+  assignPoliceHelp(id: string, input: Parameters<Api['assignPoliceHelp']>[1]) {
+    return this.call<unknown>('POST', `/arms/police-help/${encodeURIComponent(id)}/assign`, input);
+  }
+  recordPoliceHelpOutcome(id: string, input: Parameters<Api['recordPoliceHelpOutcome']>[1]) {
+    return this.call<unknown>('POST', `/arms/police-help/${encodeURIComponent(id)}/outcome`, input);
+  }
+  answerPoliceHelp(id: string, decision: 'confirm' | 'return', note: string) {
+    return this.call<unknown>('POST', `/arms/police-help/${encodeURIComponent(id)}/answer`, { decision, note });
+  }
+  withdrawPoliceHelp(id: string, note: string) {
+    return this.call<unknown>('POST', `/arms/police-help/${encodeURIComponent(id)}/withdraw`, { note });
+  }
+  contractProof(id: string) {
+    return this.call<Awaited<ReturnType<Api['contractProof']>>>('GET', `/contracts/${encodeURIComponent(id)}/proof`);
+  }
+  addMobItem(id: string, input: Parameters<Api['addMobItem']>[1]) {
+    return this.call<unknown>('POST', `/contracts/${encodeURIComponent(id)}/items`, input);
+  }
+  certifyContractRound(id: string, round: number, note: string) {
+    return this.call<unknown>('POST', `/contracts/${encodeURIComponent(id)}/rounds/${round}/certify`, { note });
+  }
+  renewContract(id: string, input: Parameters<Api['renewContract']>[1]) {
+    return this.call<unknown>('POST', `/contracts/${encodeURIComponent(id)}/renew`, input);
+  }
+  linkContractClient(id: string, accountId: string) {
+    return this.call<unknown>('POST', `/contracts/${encodeURIComponent(id)}/client`, { accountId });
+  }
+  readContractPaper(input: { companyId: string; clientAccountId: string | null; text: string }) {
+    return this.call<PaperReadingResult>('POST', '/contracts/read-paper', input);
+  }
+  cmsHours(month?: string) {
+    return this.call<Awaited<ReturnType<Api['cmsHours']>>>('GET', `/cms/hours${month ? `?month=${encodeURIComponent(month)}` : ''}`);
+  }
+  qualityRegister(opts: { companyId?: string; standard?: 'ISO9001' | 'PIKM' } = {}) {
+    const q = new URLSearchParams();
+    if (opts.companyId) q.set('companyId', opts.companyId);
+    if (opts.standard) q.set('standard', opts.standard);
+    return this.call<Awaited<ReturnType<Api['qualityRegister']>>>('GET', `/quality/register${q.size ? `?${q}` : ''}`);
+  }
+  qualityMatrix(opts: { companyId?: string } = {}) {
+    return this.call<Awaited<ReturnType<Api['qualityMatrix']>>>('GET', `/quality/matrix${opts.companyId ? `?companyId=${encodeURIComponent(opts.companyId)}` : ''}`);
+  }
+  qualityFoundation() {
+    return this.call<Awaited<ReturnType<Api['qualityFoundation']>>>('GET', '/quality/foundation');
+  }
+  qualityAction(action: string, input: Record<string, unknown>) {
+    return this.call<unknown>('POST', `/quality/${encodeURIComponent(action)}`, input);
+  }
+  salaryCalcData() {
+    return this.call<Awaited<ReturnType<Api['salaryCalcData']>>>('GET', '/salary-calc');
+  }
+  jaSwitchBoard() {
+    return this.call<Awaited<ReturnType<Api['jaSwitchBoard']>>>('GET', '/ja/switch');
+  }
+  jaSwitchReport(companyId: string, area: string) {
+    return this.call<Awaited<ReturnType<Api['jaSwitchReport']>>>('GET', `/ja/switch/${encodeURIComponent(companyId)}/${encodeURIComponent(area)}`);
+  }
+  jaSwitchAct(companyId: string, area: string, action: Parameters<Api['jaSwitchAct']>[2], body: Record<string, unknown>) {
+    return this.call<unknown>('POST', `/ja/switch/${encodeURIComponent(companyId)}/${encodeURIComponent(area)}/${action}`, body);
+  }
+  jaSwitchSettings(body: Record<string, unknown>) {
+    return this.call<unknown>('POST', '/ja/switch-settings', body);
+  }
+  jaImportStage(body: Record<string, unknown>) {
+    return this.call<unknown>('POST', '/ja/imports', body);
+  }
+  jaImportDecide(id: string, body: Record<string, unknown>) {
+    return this.call<unknown>('POST', `/ja/imports/${encodeURIComponent(id)}/decide`, body);
+  }
+  jaGuardHistory(companyId: string, staffNo: string) {
+    return this.call<Awaited<ReturnType<Api['jaGuardHistory']>>>('GET', `/ja/history/${encodeURIComponent(companyId)}/${encodeURIComponent(staffNo)}`);
+  }
+  qualityOps(opts: { companyId?: string } = {}) {
+    return this.call<Awaited<ReturnType<Api['qualityOps']>>>('GET', `/quality/operations${opts.companyId ? `?companyId=${encodeURIComponent(opts.companyId)}` : ''}`);
   }
 }
 

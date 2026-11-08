@@ -1,34 +1,31 @@
-// Regular payments and guarantees (Fauzan, 2 Nov 2026): "how about hostel payment, hire purchase payment, bills payment,
-// building loan payment, pcb payment, zakat payment ... we have also insurance payment, insurance guarantee, IG, BG.
-// IG can claim back the cash collateral when the IG is expired or released from client."
-//
-// One list per company of what it pays again and again. Prima works out each due date, has transfers paid as ordinary
-// Prima payments for exactly the due amount, finds direct debits on the loaded bank statement, warns before and after
-// the due date, and keeps the month-end close open while one is unpaid or unseen. Guarantees: Prima watches the expiry,
-// the client's release, the claim for the cash collateral and finds the refund on the bank statement. Hostel bills stay
-// paid by the companies (FWM's flow); Finance sees them and Prima finds each paid one on the company's bank statement.
-// Prima never approves or pays anything.
-import { AccessDenied } from './access';
-import { isLead, isoDate, noSecrets, requireReason, text, type FinActor } from './finance';
-import { BadRequest, NotFound } from './service';
-import { addDays, dateOf, daysBetween } from './time';
-import type {
-  FinGuarantee,
-  FinRegular,
-  FinRegularDue,
-  FinRegularEvery,
-  FinRegularKind,
-  FinSettingsValues,
-  FinSign,
-  FinStatement,
-  FinStatus,
-  FinSubject,
-  HostelBill,
-  Id,
-  IsoDate,
-  IsoDateTime,
-  User,
-} from './types';
+import { AccessDenied } from "./access";
+import { isLead } from "./finance";
+import { isoDate } from "./finance";
+import { noSecrets } from "./finance";
+import { requireReason } from "./finance";
+import { text } from "./finance";
+import type { FinActor } from "./finance";
+import { BadRequest } from "./service";
+import { NotFound } from "./service";
+import { addDays } from "./time";
+import { dateOf } from "./time";
+import { daysBetween } from "./time";
+import type { FinGuarantee } from "./types";
+import type { FinRegular } from "./types";
+import type { FinRegularDue } from "./types";
+import type { FinRegularEvery } from "./types";
+import type { FinRegularKind } from "./types";
+import type { FinSettingsValues } from "./types";
+import type { FinSign } from "./types";
+import type { FinStatement } from "./types";
+import type { FinStatus } from "./types";
+import type { FinSubject } from "./types";
+import type { HostelBill } from "./types";
+import type { Id } from "./types";
+import type { IsoDate } from "./types";
+import type { IsoDateTime } from "./types";
+import type { User } from "./types";
+
 
 export const FIN_REGULAR_KINDS: FinRegularKind[] = ['hire_purchase', 'loan', 'bill', 'rent', 'insurance', 'statutory', 'zakat', 'tax', 'levy', 'other'];
 /** Statutory bodies (paid by the 15th of the next month, except CP204 instalments on the 15th of each month). */

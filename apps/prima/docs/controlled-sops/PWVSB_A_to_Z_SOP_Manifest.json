@@ -1,0 +1,3311 @@
+{
+  "edition": "1.0 draft",
+  "as_of": "2026-10-24",
+  "sop_count": 214,
+  "domains": [
+    {
+      "code": "GOV",
+      "name": "Director Office, strategy and management mandates",
+      "source": "Unified §§01, 10, 11; V7–V9"
+    },
+    {
+      "code": "COR",
+      "name": "Company secretary, board, external audit and legal services",
+      "source": "Unified §02; V9, V15"
+    },
+    {
+      "code": "BRN",
+      "name": "Company administration and three branch commercial structures",
+      "source": "Unified §03; V7, V11, V12.1"
+    },
+    {
+      "code": "CRM",
+      "name": "Sales, tender intelligence and client relationship management",
+      "source": "Unified §04; V3, V4"
+    },
+    {
+      "code": "CNT",
+      "name": "Contract, insurance, mobilization, billing and client exit",
+      "source": "Unified §§04, 07, 14; V3, V15"
+    },
+    {
+      "code": "OPS",
+      "name": "Guard operations, dispatch, patrol and service verification",
+      "source": "Unified §§05, 11; V1–V4, V13"
+    },
+    {
+      "code": "CMS",
+      "name": "Central Monitoring System, video, AI, IoT, access and incident command",
+      "source": "Unified §§11–12; V13"
+    },
+    {
+      "code": "ARM",
+      "name": "Arms Control, armoury, vault CCTV and armed-client operations",
+      "source": "Unified §12; V14"
+    },
+    {
+      "code": "HR",
+      "name": "HR administration, payroll preparation, staff relations and training",
+      "source": "Unified §05; V2, V4, V15"
+    },
+    {
+      "code": "WRK",
+      "name": "Foreign workers, hostels, welfare, safety, transport and fleet",
+      "source": "Unified §§05–06; V2, V15"
+    },
+    {
+      "code": "FIN",
+      "name": "SQL Account, treasury, payroll accounting and financial planning",
+      "source": "Unified §08; V5, V6"
+    },
+    {
+      "code": "PUR",
+      "name": "Procurement, warehouse, uniforms and equipment lifecycle",
+      "source": "Unified §§09, 14; V5"
+    },
+    {
+      "code": "AST",
+      "name": "Property, technology, fleet and fixed-asset maintenance",
+      "source": "Unified §§09–10; V5"
+    },
+    {
+      "code": "REG",
+      "name": "Licences, statutory compliance, tax and corporate obligation calendar",
+      "source": "Unified §§07, 13; V4, V9, V15"
+    },
+    {
+      "code": "CRD",
+      "name": "PWVSB financing, credit licences, collateral and enforcement",
+      "source": "Unified §§01–03, 13; V8, V10"
+    },
+    {
+      "code": "AUD",
+      "name": "Internal audit, anti-fraud, integrity and assurance",
+      "source": "Unified §13; V15"
+    },
+    {
+      "code": "PRV",
+      "name": "Privacy, data security, legal hold and records retention",
+      "source": "Unified §§11–13; V13, V15"
+    },
+    {
+      "code": "TEC",
+      "name": "CTO, super-app engineering, cyber resilience and delivery",
+      "source": "Unified §§14–18; V1, V3, V13, V15"
+    },
+    {
+      "code": "BCM",
+      "name": "Business continuity, executive escalation, crisis and closed-loop assurance",
+      "source": "Unified §§11–18; V15"
+    }
+  ],
+  "sops": [
+    {
+      "source": "Unified §§01, 10, 11; V7–V9",
+      "id": "GOV-01",
+      "title": "Annual group strategic plan",
+      "owner": "CEO / Strategy Office",
+      "trigger": "Financial year planning kickoff",
+      "target": "Draft 45 days before FY",
+      "steps": [
+        "Collect entity-level results and risks",
+        "Set growth, margin, cash and compliance objectives by company and region",
+        "Model scenarios with Finance and COO",
+        "Present trade-offs to Chairman and Vice Chairman",
+        "Approve versioned strategy, owners and quarterly milestones"
+      ]
+    },
+    {
+      "source": "Unified §§01, 10, 11; V7–V9",
+      "id": "GOV-02",
+      "title": "Quarterly director office operating review",
+      "owner": "Director Office Administrator",
+      "trigger": "Quarter-end / forecast refresh",
+      "target": "Within 15 working days",
+      "steps": [
+        "Obtain signed finance and COO scorecards",
+        "Identify top ten exceptions and accountable people",
+        "Circulate agenda and pre-reads",
+        "Minute decisions, dissent and due dates",
+        "Chase closure evidence at next session"
+      ]
+    },
+    {
+      "source": "Unified §§01, 10, 11; V7–V9",
+      "id": "GOV-03",
+      "title": "Board-authority and delegation verification",
+      "owner": "Corporate Administration",
+      "trigger": "New delegation or authority change",
+      "target": "Before action is executed",
+      "steps": [
+        "Retrieve signed management agreement and company board resolution",
+        "Map permitted action, value cap, entity and expiry",
+        "Screen conflicts and regulatory restrictions",
+        "Obtain Legal and CoS independent check",
+        "Publish restricted rights to approval engine"
+      ]
+    },
+    {
+      "source": "Unified §§01, 10, 11; V7–V9",
+      "id": "GOV-04",
+      "title": "Executive instruction case",
+      "owner": "Chief of Staff",
+      "trigger": "Formal Director Office instruction",
+      "target": "Same business day to assign",
+      "steps": [
+        "Record purpose, subject entity and authorized issuer",
+        "Determine responsible central department and company manager",
+        "Require acknowledgment, milestones and supporting records",
+        "Escalate overdue work without altering statutory accountability",
+        "Close only on reviewed deliverable"
+      ]
+    },
+    {
+      "source": "Unified §§01, 10, 11; V7–V9",
+      "id": "GOV-05",
+      "title": "Management agreement renewal",
+      "owner": "Corporate Administration",
+      "trigger": "Agreement due or material service change",
+      "target": "Start 90 days before expiry",
+      "steps": [
+        "Compare service scope and payment/authority schedules",
+        "Obtain legal and affected company director review",
+        "Reconcile changes with mandate register",
+        "Secure properly executed renewal or board authorization",
+        "Update service catalogue and notify Finance / Operations"
+      ]
+    },
+    {
+      "source": "Unified §§01, 10, 11; V7–V9",
+      "id": "GOV-06",
+      "title": "Decision exception or appeal",
+      "owner": "Director Office Administrator",
+      "trigger": "Department disputes instruction or authority",
+      "target": "Acknowledge in 4 hours",
+      "steps": [
+        "Preserve original decision and objections",
+        "Assess urgency and correct decision authority",
+        "Obtain opinion from Legal / Finance / Compliance as needed",
+        "Escalate unresolved cases to CEO or board",
+        "Record final rationale, remedy and notification"
+      ]
+    },
+    {
+      "source": "Unified §§01, 10, 11; V7–V9",
+      "id": "GOV-07",
+      "title": "Group KPI and assurance dashboard",
+      "owner": "Director Office Administrator",
+      "trigger": "Daily/weekly refresh",
+      "target": "Every workday by 08:30 (proposed)",
+      "steps": [
+        "Pull authorized aggregated status by legal entity",
+        "Validate stale feeds and missing records",
+        "Highlight uncovered posts, liquidity and statutory risks",
+        "Allocate action to the named owner",
+        "Publish CEO summary with linked evidence not unsupported totals"
+      ]
+    },
+    {
+      "source": "Unified §§01, 10, 11; V7–V9",
+      "id": "GOV-08",
+      "title": "Director Office hosted meeting",
+      "owner": "Director Office Administrator",
+      "trigger": "Any Director Office meeting",
+      "target": "Minutes draft within 1 workday",
+      "steps": [
+        "Issue agenda and verified attendance",
+        "Capture decisions, conditions, owners and due dates",
+        "Separate pending decisions from approved actions",
+        "Circulate for chair verification",
+        "Track action completion and archive versioned minutes"
+      ]
+    },
+    {
+      "source": "Unified §02; V9, V15",
+      "id": "COR-01",
+      "title": "New legal entity dossier",
+      "owner": "Corporate Administration",
+      "trigger": "Company added or created",
+      "target": "10 working days from verified registration",
+      "steps": [
+        "Verify SSM registration, directors, shareholders and addresses",
+        "Store company constitution, mandates, licences and bank references",
+        "Appoint one company manager and three admin executives where required",
+        "Create company compliance calendar",
+        "Validate read rights and statutory reporting ownership"
+      ]
+    },
+    {
+      "source": "Unified §02; V9, V15",
+      "id": "COR-02",
+      "title": "SSM annual return monitoring",
+      "owner": "Corporate Secretary Liaison",
+      "trigger": "Incorporation anniversary calendar",
+      "target": "Start 60 days prior; statutory deadline separately verified",
+      "steps": [
+        "Confirm anniversary and legal filing rule",
+        "Request particulars from company manager and secretary",
+        "Reconcile directors/shareholders and registered address",
+        "Obtain approved annual return and lodgement proof",
+        "Store SSM acknowledgement and check accepted status"
+      ]
+    },
+    {
+      "source": "Unified §02; V9, V15",
+      "id": "COR-03",
+      "title": "Financial statements circulation and filing",
+      "owner": "Corporate Administration",
+      "trigger": "Financial-year close",
+      "target": "Start 90 days before planned circulation",
+      "steps": [
+        "Confirm actual statutory deadlines for entity",
+        "Track close and external-audit readiness",
+        "Obtain signed financial statements and board approval",
+        "Coordinate circulation and lodgement by secretary",
+        "Verify SSM acceptance and retain final audit file"
+      ]
+    },
+    {
+      "source": "Unified §02; V9, V15",
+      "id": "COR-04",
+      "title": "Directors or shareholders change",
+      "owner": "Company Secretary Liaison",
+      "trigger": "Proposed appointment/resignation/transfer",
+      "target": "Before registry update or action",
+      "steps": [
+        "Obtain proper resolutions and instrument evidence",
+        "Check KDN, KPKT and other regulator approval effects",
+        "Screen beneficial ownership/related party impact",
+        "Instruct company secretary under authorized mandate",
+        "Validate registry filings before declaring change complete"
+      ]
+    },
+    {
+      "source": "Unified §02; V9, V15",
+      "id": "COR-05",
+      "title": "Beneficial-ownership assessment",
+      "owner": "Compliance / Company Secretary",
+      "trigger": "New agreement or ownership/control change",
+      "target": "Same day flag; assessment within 5 workdays",
+      "steps": [
+        "Identify real individuals with relevant control or interests",
+        "Inspect shareholder and contractual control evidence",
+        "Obtain company secretary/legal determination",
+        "Submit applicable statutory updates when required",
+        "Restrict access and preserve reasoning"
+      ]
+    },
+    {
+      "source": "Unified §02; V9, V15",
+      "id": "COR-06",
+      "title": "Board meeting and resolution",
+      "owner": "Corporate Administration",
+      "trigger": "Board decision required",
+      "target": "Papers 5 workdays ahead where feasible",
+      "steps": [
+        "Confirm quorum, conflict declarations and signing power",
+        "Circulate precise paper and draft resolution",
+        "Record votes and terms without presuming assent",
+        "Obtain signed minutes and required company filings",
+        "Update mandate and action registers"
+      ]
+    },
+    {
+      "source": "Unified §02; V9, V15",
+      "id": "COR-07",
+      "title": "Company secretary performance",
+      "owner": "Vice Chief of Staff",
+      "trigger": "Monthly vendor review",
+      "target": "By 10th workday monthly",
+      "steps": [
+        "Reconcile statutory calendar to accepted filings",
+        "Inspect overdue requests and missed reminders",
+        "Check retention of signed originals and registers",
+        "Validate retainer/disbursement invoices",
+        "Correct deficiencies or initiate adviser replacement"
+      ]
+    },
+    {
+      "source": "Unified §02; V9, V15",
+      "id": "COR-08",
+      "title": "External auditor engagement",
+      "owner": "Finance Director / Corporate Administration",
+      "trigger": "Audit appointment or renewal",
+      "target": "60 days before planned start",
+      "steps": [
+        "Assess appointment and independence requirements",
+        "Obtain fee, scope and signed engagement",
+        "Confirm entity ledger close and PBC list",
+        "Coordinate board approvals where applicable",
+        "Open protected audit workspace with deadlines"
+      ]
+    },
+    {
+      "source": "Unified §02; V9, V15",
+      "id": "COR-09",
+      "title": "External audit PBC and findings",
+      "owner": "Audit Liaison / Finance Manager",
+      "trigger": "Auditor information request",
+      "target": "Assign within 1 workday",
+      "steps": [
+        "Log each request with entity and owner",
+        "Provide signed trial balance, bank reconciliations and support",
+        "Track auditor questions and proposed adjustments",
+        "Obtain Finance approval before posting journal",
+        "Close findings only with auditor confirmation or documented disagreement"
+      ]
+    },
+    {
+      "source": "Unified §02; V9, V15",
+      "id": "COR-10",
+      "title": "Legal firm appointment and case management",
+      "owner": "Legal Coordinator",
+      "trigger": "Contract review, claim or lawsuit",
+      "target": "Same-day triage for legal notice",
+      "steps": [
+        "Verify counsel standing, independence and conflicts",
+        "Secure scoped engagement, fee budget and authority",
+        "Track privileged instructions, evidence and deadlines separately",
+        "Obtain authorized settlement or litigation instructions",
+        "Review legal bill and court outcome before closure"
+      ]
+    },
+    {
+      "source": "Unified §02; V9, V15",
+      "id": "COR-11",
+      "title": "Litigation deadline and legal hold",
+      "owner": "Legal Coordinator",
+      "trigger": "Service of process / threatened dispute",
+      "target": "Escalate immediately; counsel same day",
+      "steps": [
+        "Capture received date and originals",
+        "Notify company directors and appointed counsel confidentially",
+        "Freeze relevant footage, email and transaction deletion",
+        "Monitor hearings, directions and response dates",
+        "Record judgment, appeal, settlement and claim ledger consequences"
+      ]
+    },
+    {
+      "source": "Unified §03; V7, V11, V12.1",
+      "id": "BRN-01",
+      "title": "Branch manager onboarding and agreement",
+      "owner": "Company Manager",
+      "trigger": "Proposed new branch partner",
+      "target": "Before branch activation",
+      "steps": [
+        "Check approved KDN branch permissions and partner diligence",
+        "Select Model A, B or C from signed terms",
+        "Define collection, spending, employment and signing mandates",
+        "Configure company/branch/site codes and access",
+        "Verify first-month governance and CMS links"
+      ]
+    },
+    {
+      "source": "Unified §03; V7, V11, V12.1",
+      "id": "BRN-02",
+      "title": "Model A variable billing percentage",
+      "owner": "Branch Finance Analyst",
+      "trigger": "Each monthly billing cycle",
+      "target": "Settlement draft by working day +7",
+      "steps": [
+        "Identify eligible invoicing base and exclusions from agreement",
+        "Apply effective-dated contractual percentage, never hardcoded 6%",
+        "Calculate company allocation and branch expense responsibility",
+        "Reconcile invoices, credits, cash, taxes and disputes in SQL",
+        "Issue checked settlement statement and authorized disbursement"
+      ]
+    },
+    {
+      "source": "Unified §03; V7, V11, V12.1",
+      "id": "BRN-03",
+      "title": "Model B salaried company branch",
+      "owner": "Company Finance / HR",
+      "trigger": "Monthly branch close",
+      "target": "Salary cycle and close calendar",
+      "steps": [
+        "Confirm salary and bonus terms independent of branch collections",
+        "Record all revenue/expenses at correct legal entity",
+        "Reconcile attendance and payroll remittance",
+        "Compute company branch contribution",
+        "Send manager performance review with no unauthorized profit entitlement"
+      ]
+    },
+    {
+      "source": "Unified §03; V7, V11, V12.1",
+      "id": "BRN-04",
+      "title": "Model C configurable net profit share",
+      "owner": "Branch Finance Analyst",
+      "trigger": "Monthly close after adjustments",
+      "target": "Draft by close +10 workdays",
+      "steps": [
+        "Confirm agreement-specific profit definition and period",
+        "Accrue approved wages, relief, taxes, utilities, claims and shared-service costs",
+        "Reconcile receivables, prepayments, fixed costs and reserves",
+        "Allocate contractual 50/60/custom percentages on approved net result",
+        "Obtain maker-checker and manager acknowledgment before settlement"
+      ]
+    },
+    {
+      "source": "Unified §03; V7, V11, V12.1",
+      "id": "BRN-05",
+      "title": "New branch bank account or signing rights",
+      "owner": "Treasury / Company Manager",
+      "trigger": "New account / mandate change",
+      "target": "Before opening or activation",
+      "steps": [
+        "Determine legal bank account holder and KDN agreement implications",
+        "Obtain relevant board resolution and bank KYC",
+        "Limit signatories and set dual approval",
+        "Map account into SQL bank reconciliation",
+        "Inform Audit and revoke obsolete access"
+      ]
+    },
+    {
+      "source": "Unified §03; V7, V11, V12.1",
+      "id": "BRN-06",
+      "title": "Branch-originated tender or lead",
+      "owner": "Branch Manager",
+      "trigger": "Lead found",
+      "target": "Register within 1 working day",
+      "steps": [
+        "Enter client, scope, site and commercial owner",
+        "Screen KDN licence and permitted geographic coverage",
+        "Submit pricing and credit check to central team",
+        "Obtain proper company approval and sign only if delegated",
+        "Track award and integrate mobilization"
+      ]
+    },
+    {
+      "source": "Unified §03; V7, V11, V12.1",
+      "id": "BRN-07",
+      "title": "Branch payroll and statutory assurance",
+      "owner": "HR / Branch Administrator",
+      "trigger": "Monthly payroll cutoff",
+      "target": "Before bank file release",
+      "steps": [
+        "Match guards to legal employer and verified site hours",
+        "Reconcile wages/OT/leave and statutory deductions",
+        "Obtain HR and Finance independent checks",
+        "Release salary from properly authorized legal-entity account",
+        "Investigate rejected transactions or underpayments immediately"
+      ]
+    },
+    {
+      "source": "Unified §03; V7, V11, V12.1",
+      "id": "BRN-08",
+      "title": "Branch capital advance and repayment",
+      "owner": "PWVSB Finance",
+      "trigger": "Approved cash gap or equipment financing",
+      "target": "Credit decision before disbursement",
+      "steps": [
+        "Obtain cash budget, borrower entity and use-of-funds",
+        "Check lending authority, related-party and KPKT applicability",
+        "Execute approved loan/security instruments where required",
+        "Match disbursement and subsequent payments to both ledgers",
+        "Monitor aging, covenant breaches and repayment waterfall"
+      ]
+    },
+    {
+      "source": "Unified §03; V7, V11, V12.1",
+      "id": "BRN-09",
+      "title": "Branch closure, termination and handover",
+      "owner": "COO / Company Manager",
+      "trigger": "Nonrenewal, material breach or closure",
+      "target": "30-day controlled plan unless urgent legal action",
+      "steps": [
+        "Verify notice/step-in rights and KDN implications",
+        "Secure payroll continuity and active clients",
+        "Reconcile cash, branch property, stock and outstanding advances",
+        "Revoke system/bank credentials on authorized date",
+        "Sign final branch statement and preserve disputes"
+      ]
+    },
+    {
+      "source": "Unified §03; V7, V11, V12.1",
+      "id": "BRN-10",
+      "title": "Branch manager monthly scorecard",
+      "owner": "Company Manager",
+      "trigger": "Month-end",
+      "target": "By workday +12",
+      "steps": [
+        "Verify earned revenue, DSO and aged debt",
+        "Check CMS site fulfillment, HR grievances and incident rates",
+        "Assess margins after adjusted costs and unbilled service",
+        "Discuss performance and corrective steps with manager",
+        "Route legal breaches separately from commercial negotiation"
+      ]
+    },
+    {
+      "source": "Unified §04; V3, V4",
+      "id": "CRM-01",
+      "title": "Government tender discovery",
+      "owner": "Director Office Administrator",
+      "trigger": "Weekdays at 08:30",
+      "target": "Register relevant notices same workday",
+      "steps": [
+        "Search approved government eTender portals and tender feeds",
+        "Confirm security service scope and eligibility company",
+        "Log briefing, site visit, bond and submission deadlines",
+        "Assign bid owner in correct company",
+        "Monitor submission status and exceptions until outcome"
+      ]
+    },
+    {
+      "source": "Unified §04; V3, V4",
+      "id": "CRM-02",
+      "title": "Private sector prospecting",
+      "owner": "Branch Manager / SasaTeam",
+      "trigger": "New market opportunity",
+      "target": "Record within 1 day",
+      "steps": [
+        "Enter client contact and site requirements",
+        "Check conflicts, client credit and scope of licence",
+        "Assign site survey and price-development tasks",
+        "Record visits, proposals and follow-ups",
+        "Advance stages only with dated evidence"
+      ]
+    },
+    {
+      "source": "Unified §04; V3, V4",
+      "id": "CRM-03",
+      "title": "Bid/no-bid decision",
+      "owner": "Commercial Lead",
+      "trigger": "Qualified tender opportunity",
+      "target": "Within 2 working days of discovery where possible",
+      "steps": [
+        "Quantify site posts/hours, compliance and mobilisation cost",
+        "Confirm manpower and relief availability with COO",
+        "Assess client credit, guarantees and risk",
+        "Obtain delegated pricing/negative-margin approval",
+        "Record decision, conditions and accountable team"
+      ]
+    },
+    {
+      "source": "Unified §04; V3, V4",
+      "id": "CRM-04",
+      "title": "Site survey and threat/vulnerability assessment",
+      "owner": "Operations Manager / Security Specialist",
+      "trigger": "Tender shortlisted or material contract change",
+      "target": "Before pricing approval",
+      "steps": [
+        "Visit site with client consent and safety brief",
+        "Document posts, access points, assets, risks and technology interfaces",
+        "Define manpower, rest and response requirements",
+        "Obtain risk mitigations and client acceptance",
+        "Version drawings/post orders and cost assumptions"
+      ]
+    },
+    {
+      "source": "Unified §04; V3, V4",
+      "id": "CRM-05",
+      "title": "Pricing proposal and approvals",
+      "owner": "Commercial / Finance",
+      "trigger": "Bid/no-bid approved",
+      "target": "At least 2 days before tender submission",
+      "steps": [
+        "Price contracted hours separately from payroll-ready time",
+        "Include relief, employer costs, accommodation, insurance, devices and taxes",
+        "Stress test margin and collection terms",
+        "Obtain Finance, COO and appropriate company sign-off",
+        "Lock versioned quote and append service assumptions"
+      ]
+    },
+    {
+      "source": "Unified §04; V3, V4",
+      "id": "CRM-06",
+      "title": "Tender briefing and mandatory documents",
+      "owner": "Tender Administrator",
+      "trigger": "Bid has briefing/submission event",
+      "target": "Before official deadline",
+      "steps": [
+        "Book required representatives and credentials",
+        "Attend and document amendments/site conditions",
+        "Gather relevant licence, MOF, audited accounts and certificates",
+        "Conduct independent completeness check",
+        "Lodge and retain submission acknowledgement"
+      ]
+    },
+    {
+      "source": "Unified §04; V3, V4",
+      "id": "CRM-07",
+      "title": "Client credit and reputational assessment",
+      "owner": "Credit Controller / Commercial",
+      "trigger": "New account or payment-term extension",
+      "target": "Within 3 workdays",
+      "steps": [
+        "Verify legal name, beneficial client identifiers and references",
+        "Review payment history, disputes and risk concentration",
+        "Propose exposure, deposits, limits and credit terms",
+        "Obtain Finance authorization and escalation if exception",
+        "Schedule ongoing reassessment and aging actions"
+      ]
+    },
+    {
+      "source": "Unified §04; V3, V4",
+      "id": "CRM-08",
+      "title": "Client satisfaction and service review",
+      "owner": "Key Account Manager",
+      "trigger": "Monthly/quarterly review",
+      "target": "Within 10 days of period end",
+      "steps": [
+        "Review SLA, incidents, complaints and site coverage",
+        "Validate disputed evidence with Operations",
+        "Meet client and record actions and dates",
+        "Escalate material contract changes to controlled variations",
+        "Confirm closure and client acknowledgment"
+      ]
+    },
+    {
+      "source": "Unified §04; V3, V4",
+      "id": "CRM-09",
+      "title": "Client renewal and upsell",
+      "owner": "Commercial / Company GM",
+      "trigger": "120 days before expiry",
+      "target": "Renewal plan by T-90 days",
+      "steps": [
+        "Review margin, insurance and SLA penalties",
+        "Reassess rates, labour/technology changes and risks",
+        "Negotiate signed variation or replacement contract",
+        "Verify company approvals and effective date",
+        "Update Finance/Operations without rewriting historic rates"
+      ]
+    },
+    {
+      "source": "Unified §§04, 07, 14; V3, V15",
+      "id": "CNT-01",
+      "title": "Contract creation and signing",
+      "owner": "Commercial + Legal",
+      "trigger": "Tender won or direct award",
+      "target": "Before legal commencement",
+      "steps": [
+        "Validate award letter, scope, employing/licensed entity",
+        "Map variable 3/5/12/15/custom coverage to service schedules",
+        "Agree 30.5 / fixed monthly / calendar billing basis",
+        "Verify insurance, SLA, termination and indemnity clauses",
+        "Obtain authorized signatures and controlled effective date"
+      ]
+    },
+    {
+      "source": "Unified §§04, 07, 14; V3, V15",
+      "id": "CNT-02",
+      "title": "Insurance certificate and endorsement",
+      "owner": "Insurance Coordinator",
+      "trigger": "New or materially changed site",
+      "target": "Before site becomes active",
+      "steps": [
+        "Read exact contractual coverage requirement and limits",
+        "Confirm named insured, site, risks, exclusions and excess",
+        "Obtain insurer/broker written binding evidence",
+        "Record endorsements, premiums, expiry and claim contacts",
+        "Release readiness gate only after independent check"
+      ]
+    },
+    {
+      "source": "Unified §§04, 07, 14; V3, V15",
+      "id": "CNT-03",
+      "title": "New site mobilisation case",
+      "owner": "Company Manager / Operations",
+      "trigger": "Signed award or permitted mobilisation instruction",
+      "target": "Launch within 1 workday",
+      "steps": [
+        "Create tasks for Finance, HR, Operations, equipment and Compliance",
+        "Verify JTKSM, PERKESO, KDN, Immigration applicability by entity/site",
+        "Complete guard site induction, roster and relief plan",
+        "Commission CCTV/NFC/ANPR and test emergency escalation",
+        "Secure client acceptance and GM go-live sign-off"
+      ]
+    },
+    {
+      "source": "Unified §§04, 07, 14; V3, V15",
+      "id": "CNT-04",
+      "title": "Guard-specific site readiness",
+      "owner": "HR Administrator",
+      "trigger": "Guard proposed for site",
+      "target": "Before first shift",
+      "steps": [
+        "Verify identity, legal employer, permit and training",
+        "Check shift/hours/rest and transport/hostel availability",
+        "Issue site-specific post orders and uniform/equipment",
+        "Obtain guard induction and attendance credential acknowledgment",
+        "Record HR and Ops authorization or block deployment"
+      ]
+    },
+    {
+      "source": "Unified §§04, 07, 14; V3, V15",
+      "id": "CNT-05",
+      "title": "Service commencement and first invoice",
+      "owner": "Billing Controller",
+      "trigger": "Site goes live",
+      "target": "First cycle review at month-end",
+      "steps": [
+        "Confirm actual accepted service start date and contract version",
+        "Match attendance/service evidence to contractual hours",
+        "Apply rate, allowed adjustment, tax and PO references",
+        "Review unbilled earned service, accruals and invoice status",
+        "Send approved invoice and monitor collection"
+      ]
+    },
+    {
+      "source": "Unified §§04, 07, 14; V3, V15",
+      "id": "CNT-06",
+      "title": "Contract variation and site expansion",
+      "owner": "Account Manager",
+      "trigger": "Client requests changed scope / rates / posts",
+      "target": "Authorization before effective date",
+      "steps": [
+        "Issue change request with financial and HR effect",
+        "Reassess insurance, permit, HSE and equipment requirements",
+        "Obtain customer and company signed variation",
+        "Version effective rates, schedules, SLAs and cover",
+        "Reissue relevant post orders and billing instructions"
+      ]
+    },
+    {
+      "source": "Unified §§04, 07, 14; V3, V15",
+      "id": "CNT-07",
+      "title": "Complaint and SLA dispute",
+      "owner": "Key Account Manager",
+      "trigger": "Customer complaint / failed KPI",
+      "target": "Acknowledge same day or contract SLA",
+      "steps": [
+        "Register facts, severity and contractual clock",
+        "Protect CCTV/NFC/incident evidence and investigate",
+        "Agree remedial owner and client communication",
+        "Submit authorized credits/penalties via Finance",
+        "Independently validate closure and trend recurrence"
+      ]
+    },
+    {
+      "source": "Unified §§04, 07, 14; V3, V15",
+      "id": "CNT-08",
+      "title": "Incident insurer notification and claims",
+      "owner": "Claims Coordinator",
+      "trigger": "Damage, loss, liability or legal claim",
+      "target": "Immediately on material incident; insurer term governs",
+      "steps": [
+        "Protect evidence and notify site/insurer under policy terms",
+        "Confirm applicable policy, excess and insured parties",
+        "Manage adjuster requests and legal privilege",
+        "Record reserve, payment, recovery and coverage dispute",
+        "Close only after claim settlement and ledger reconciliation"
+      ]
+    },
+    {
+      "source": "Unified §§04, 07, 14; V3, V15",
+      "id": "CNT-09",
+      "title": "Client renewal governance",
+      "owner": "Company GM",
+      "trigger": "T-120 days before contract expiry",
+      "target": "Action plan by T-90",
+      "steps": [
+        "Review service, margin, finance collections and claims",
+        "Negotiate updated terms and pricing",
+        "Verify licences, insurance and key personnel",
+        "Obtain legal and company signatory acceptance",
+        "Schedule revised coverage and customer communications"
+      ]
+    },
+    {
+      "source": "Unified §§04, 07, 14; V3, V15",
+      "id": "CNT-10",
+      "title": "Client termination and exit",
+      "owner": "Company GM / Legal",
+      "trigger": "Contract ends or terminated",
+      "target": "Plan from notice; final review within 30 days of exit",
+      "steps": [
+        "Validate notice and site security transition obligations",
+        "Redeploy guards and close access credentials",
+        "Recover equipment, keys and evidence assets",
+        "Reconcile final payroll, invoices, deposits, claims and unbilled revenue",
+        "Obtain documented client and Finance closure"
+      ]
+    },
+    {
+      "source": "Unified §§05, 11; V1–V4, V13",
+      "id": "OPS-01",
+      "title": "Annual guard demand and deployment capacity",
+      "owner": "Operations Planning",
+      "trigger": "Awarded posts, renewals, attrition forecast",
+      "target": "Rolling weekly; monthly lock",
+      "steps": [
+        "Forecast required guard hours by contract and site",
+        "Separate client 24/7 coverage from lawful guard working hours",
+        "Model relief, holidays, leave and standby reserves",
+        "Confirm HR recruitment/transfer and permit eligibility",
+        "Publish site manpower risk and cost forecast"
+      ]
+    },
+    {
+      "source": "Unified §§05, 11; V1–V4, V13",
+      "id": "OPS-02",
+      "title": "Daily roster publication",
+      "owner": "Operations Scheduler",
+      "trigger": "Next duty cycle",
+      "target": "Publish at least 24h before shift where feasible",
+      "steps": [
+        "Read effective post order and required coverage windows",
+        "Assign trained legal employees respecting hours/rest",
+        "Allocate relief and contingency coverage",
+        "Check overlaps, leave, foreign permits and travel time",
+        "Freeze published roster with version/audit trail"
+      ]
+    },
+    {
+      "source": "Unified §§05, 11; V1–V4, V13",
+      "id": "OPS-03",
+      "title": "Shift check-in and attendance verification",
+      "owner": "Site Supervisor / Guard",
+      "trigger": "Each scheduled shift",
+      "target": "Exception flagged within 5 min of start (internal target)",
+      "steps": [
+        "Verify named identity, approved device and site",
+        "Compare checked-in guard to expected post/window",
+        "Check missing, duplicate, offline or late evidence",
+        "Notify CMS and Ops for coverage gap",
+        "Confirm relief and reconcile attendance exception at end shift"
+      ]
+    },
+    {
+      "source": "Unified §§05, 11; V1–V4, V13",
+      "id": "OPS-04",
+      "title": "Uncovered post / no-show dispatch",
+      "owner": "CMS Operator / Regional Operations",
+      "trigger": "Late/no check-in or client alert",
+      "target": "P1 acknowledgement <=5 min proposed",
+      "steps": [
+        "Confirm actual unfilled post and client risk",
+        "Contact site and available authorized relief",
+        "Escalate to Operations and client as agreed",
+        "Track deployment and verified physical arrival",
+        "Record service deficit and Finance SLA impact"
+      ]
+    },
+    {
+      "source": "Unified §§05, 11; V1–V4, V13",
+      "id": "OPS-05",
+      "title": "Rest and shift legality",
+      "owner": "HR Timekeeping / Operations",
+      "trigger": "Roster creation / payroll review",
+      "target": "Before roster approval / payroll close",
+      "steps": [
+        "Classify actual worked time versus truly duty-free rest",
+        "Reconcile interruptions, standby and relief",
+        "Apply 45h-week and lawful OT logic with jurisdiction policy",
+        "Review unusual 12h shift templates and client coverage separately",
+        "Correct payroll-ready hours without distorting billed service"
+      ]
+    },
+    {
+      "source": "Unified §§05, 11; V1–V4, V13",
+      "id": "OPS-06",      "title": "Guard substitution or transfer",
+      "owner": "Operations Manager",
+      "trigger": "Absence, client request or emergency",
+      "target": "Before substitute arrives",
+      "steps": [
+        "Verify receiving site/client authorization",
+        "Check legal employer, job eligibility, rest and training",
+        "Arrange transport and necessary equipment",
+        "Update employee effective-dated deployment and CMS roster",
+        "Verify handover and first-check-in"
+      ]
+    },
+    {
+      "source": "Unified §§05, 11; V1–V4, V13",
+      "id": "OPS-07",
+      "title": "Patrolling officer route planning",
+      "owner": "PO Coordinator",
+      "trigger": "Weekly patrol programme",
+      "target": "Publish 1 day before route",
+      "steps": [
+        "Prioritize contract-mandated and high-risk inspections",
+        "Set realistic driving order and visit windows",
+        "Check manager, vehicle and device assignments",
+        "Distribute unresolved previous findings",
+        "Obtain Operations sign-off and route backups"
+      ]
+    },
+    {
+      "source": "Unified §§05, 11; V1–V4, V13",
+      "id": "OPS-08",
+      "title": "Patrolling officer field inspection",
+      "owner": "Patrolling Officer",
+      "trigger": "Scheduled arrival at client site",
+      "target": "Report at departure; serious issue immediate",
+      "steps": [
+        "Verify attendance/identity/uniform and post orders",
+        "Inspect logbook, NFC, CCTV and access incidents",
+        "Discuss wellbeing and client concerns discreetly",
+        "Capture authorized photos, grades and corrective tasks",
+        "Notify CMS/Operations for serious defects and close report"
+      ]
+    },
+    {
+      "source": "Unified §§05, 11; V1–V4, V13",
+      "id": "OPS-09",
+      "title": "NFC guard-tour scheduling and review",
+      "owner": "Site Supervisor / CMS",
+      "trigger": "Each required patrol tour",
+      "target": "Missing tour alert per route window",
+      "steps": [
+        "Configure route/version/checkpoint requirements",
+        "Reconcile actual scan, integrity and offline receipt",
+        "Distinguish emergency/approved break from unperformed patrol",
+        "Open task for missed/tampered checkpoint",
+        "Require supervisory disposition and evidence"
+      ]
+    },
+    {
+      "source": "Unified §§05, 11; V1–V4, V13",
+      "id": "OPS-10",
+      "title": "Serious guard misconduct or service incident",
+      "owner": "Operations / HR / Compliance",
+      "trigger": "Incident report / client allegation",
+      "target": "Immediate safety response; HR case same day",
+      "steps": [
+        "Protect safety and witness accounts without prejudgment",
+        "Preserve site/CMS data and notify legal HR",
+        "Separate factual inquiry from discipline decision",
+        "Approve temporary coverage/replacement lawfully",
+        "Review client, insurance and corrective needs"
+      ]
+    },
+    {
+      "source": "Unified §§05, 11; V1–V4, V13",
+      "id": "OPS-11",
+      "title": "Regional deployment and state office review",
+      "owner": "State Operations Lead",
+      "trigger": "Daily site exceptions / weekly review",
+      "target": "Daily 09:00/weekly close",
+      "steps": [
+        "Review uncovered posts, lateness, PO misses and incidents",
+        "Check permits, accommodation, fleet and staffing gaps",
+        "Resolve local client requests within mandate",
+        "Escalate KDN/financial issues to HQ",
+        "Produce region scorecard and pending actions"
+      ]
+    },
+    {
+      "source": "Unified §§11–12; V13",
+      "id": "CMS-01",
+      "title": "24/7 CMS shift takeover",
+      "owner": "CMS Shift Supervisor",
+      "trigger": "Every shift change",
+      "target": "Complete within shift overlap",
+      "steps": [
+        "Review active incident queue and unacknowledged alerts",
+        "Validate operator logins, communications and backup links",
+        "Hand over uncovered posts and unavailable cameras",
+        "Reassign cases with due escalation clocks",
+        "Sign incoming/outgoing handover record"
+      ]
+    },
+    {
+      "source": "Unified §§11–12; V13",
+      "id": "CMS-02",
+      "title": "Live coverage surveillance",
+      "owner": "CMS Duty Operator",
+      "trigger": "Continuous coverage obligation",
+      "target": "Exceptions near-real-time",
+      "steps": [
+        "Compare contracted posts against actual verified attendance",
+        "Correlate relief, roster and work status",
+        "Investigate failed/late feeds without assuming attendance",
+        "Dispatch according to severity policy",
+        "Confirm physical recovery and site/client notification"
+      ]
+    },
+    {
+      "source": "Unified §§11–12; V13",
+      "id": "CMS-03",
+      "title": "Guard tour missed checkpoint alert",
+      "owner": "CMS Duty Operator",
+      "trigger": "Tour deadline passed",
+      "target": "Acknowledge per site SLA",
+      "steps": [
+        "Check route version and approved exceptions",
+        "Review latest NFC sync/network and guard status",
+        "Contact guard/site supervisor and assess welfare risk",
+        "Escalate missed round or suspected manipulation",
+        "Record root cause and verified subsequent patrol"
+      ]
+    },
+    {
+      "source": "Unified §§11–12; V13",
+      "id": "CMS-04",
+      "title": "PO missing site visit",
+      "owner": "CMS Shift Supervisor",
+      "trigger": "PO route visit window exceeded",
+      "target": "Flag within 15min internal target",
+      "steps": [
+        "Verify officer route and last authorized location event",
+        "Contact officer and Ops manager",
+        "Consider accident/communications issue before blame",
+        "Reassign required inspection or response",
+        "Document findings and close after verified visit"
+      ]
+    },
+    {
+      "source": "Unified §§11–12; V13",
+      "id": "CMS-05",
+      "title": "CCTV live/recording health",
+      "owner": "CMS Video Operator",
+      "trigger": "Camera/NVR/stream/recording alert",
+      "target": "Critical vault faults immediate",
+      "steps": [
+        "Confirm device online, storage, recording and permitted live preview",
+        "Cross-check power/network versus camera tamper signal",
+        "Notify site operator and IT/OEM support",
+        "Initiate compensating monitoring under approved site plan",
+        "Verify restored recording and preserve outage timestamps"
+      ]
+    },
+    {
+      "source": "Unified §§11–12; V13",
+      "id": "CMS-06",
+      "title": "AI analytics alarm and human verification",
+      "owner": "CMS Video Operator",
+      "trigger": "Edge AI event generated",
+      "target": "Site severity response target",
+      "steps": [
+        "Verify source model, confidence and site rule",
+        "Assess video clip under minimum necessary access",
+        "Correlate guard/NFC/access/sensor context",
+        "Dispatch human responder for actionable threat",
+        "Classify false alert only with evidence and tuning feedback"
+      ]
+    },
+    {
+      "source": "Unified §§11–12; V13",
+      "id": "CMS-07",
+      "title": "Barrier/ANPR event exception",
+      "owner": "CMS Access Operator",
+      "trigger": "Unverified opening/plate/forced event",
+      "target": "Immediate review if high risk",
+      "steps": [
+        "Confirm authorised entry policy and device health",
+        "Review ANPR confidence and matching entitlement",
+        "Check OEM interlocks and site fallback SOP",
+        "Escalate unsafe or suspicious movement",
+        "Record commands and overrides with named approval"
+      ]
+    },
+    {
+      "source": "Unified §§11–12; V13",
+      "id": "CMS-08",
+      "title": "Turnstile/access-door alarms",
+      "owner": "CMS Access Operator",
+      "trigger": "Forced entry, held door, denied credential",
+      "target": "Based on risk site SLA",
+      "steps": [
+        "Correlate device ID, access user and local emergency conditions",
+        "Verify legitimate visitor/employee authority",
+        "Contact guard and supervisor without unsafe egress override",
+        "Revoke compromised credential through approved IAM",
+        "Record outcome and verify reset"
+      ]
+    },
+    {
+      "source": "Unified §§11–12; V13",
+      "id": "CMS-09",
+      "title": "Alarm-to-incident and dispatch",
+      "owner": "CMS Incident Controller",
+      "trigger": "Critical sensor / panic / live report",
+      "target": "P1 acknowledge <=5min proposed",
+      "steps": [
+        "Deduplicate and classify evidence from multiple devices",
+        "Start incident clock and assign response owner",
+        "Notify emergency services when SOP thresholds met",
+        "Capture dispatch, arrival, containment and client contact",
+        "Close only with authorized incident commander and evidence"
+      ]
+    },
+    {
+      "source": "Unified §§11–12; V13",
+      "id": "CMS-10",
+      "title": "Emergency CMS continuity",
+      "owner": "CMS Manager / IT",
+      "trigger": "Monitoring centre or WAN failure",
+      "target": "Invoke immediately when objective breached",
+      "steps": [
+        "Declare degraded mode and impacted sites",
+        "Start fallback call tree and local patrol monitoring",
+        "Preserve event queues and edge recording",
+        "Escalate clients and statutory hazards as required",
+        "Validate failback reconciliation before normal status"
+      ]
+    },
+    {
+      "source": "Unified §§11–12; V13",
+      "id": "CMS-11",
+      "title": "Incident postmortem and alarm tuning",
+      "owner": "CMS QA / Security Engineering",
+      "trigger": "Major incident or repeat false positives",
+      "target": "Within 5 workdays of resolution",
+      "steps": [
+        "Freeze incident chronology and underlying evidence",
+        "Compare SLA and operator responses to SOP",
+        "Determine people/process/device root cause",
+        "Approve corrective work and analytics tuning",
+        "Verify regression tests and residual risk acceptance"
+      ]
+    },
+    {
+      "source": "Unified §§11–12; V13",
+      "id": "CMS-12",
+      "title": "Client CMS report and permissions",
+      "owner": "Key Account / CMS Manager",
+      "trigger": "Monthly report or customer access request",
+      "target": "Within 10 workdays after month",
+      "steps": [
+        "Extract only permitted site and service data",
+        "Verify accuracy and redactions",
+        "Reconcile incidents, patrols and video availability",
+        "Obtain Ops/Compliance approval for release",
+        "Record customer acknowledgment and retention obligations"
+      ]
+    },
+    {
+      "source": "Unified §12; V14",
+      "id": "ARM-01",
+      "title": "Firearm legal entity and licence register",
+      "owner": "Arms Control Officer",
+      "trigger": "New firearm/permit/renewal",
+      "target": "Before any armed deployment",
+      "steps": [
+        "Verify lawful owner/licensee, approvals and restricted identifiers",
+        "Verify individual authorized carry/use records and expiry",
+        "Associate only with permitted entity and activity",
+        "Obtain independent original-document check",
+        "Publish eligible status without exposing sensitive vault details"
+      ]
+    },
+    {
+      "source": "Unified §12; V14",
+      "id": "ARM-02",
+      "title": "Armed client contract readiness",
+      "owner": "Arms Control / Company GM",
+      "trigger": "New client requests armed services",
+      "target": "Before client agreement or go-live",
+      "steps": [
+        "Confirm agency/armed-service authority and scope",
+        "Survey site risks and posts with legal/insurance check",
+        "Validate named staffing, firearms availability and storage plans",
+        "Agree client reporting and incident SLA terms",
+        "Obtain appropriate entity and client approvals"
+      ]
+    },
+    {
+      "source": "Unified §12; V14",
+      "id": "ARM-03",
+      "title": "Regulated firearm acquisition request",
+      "owner": "Arms Control / Procurement",
+      "trigger": "Approved need for equipment",
+      "target": "No purchase before legal approvals",
+      "steps": [
+        "Confirm whether acquisition/sale is legally permitted for entity",
+        "Request required regulator approvals and procurement diligence",
+        "Segregate legal documentation from ordinary purchase orders",
+        "Confirm insurance, custody and asset ledger classification",
+        "Record receipt only after authorized physical verification"
+      ]
+    },
+    {
+      "source": "Unified §12; V14",
+      "id": "ARM-04",
+      "title": "Approved vault/armoury establishment",
+      "owner": "Arms Control / Facility Security",
+      "trigger": "New or changed storage facility",
+      "target": "No activation before approval",
+      "steps": [
+        "Verify location-specific lawful approvals and custodian",
+        "Assess licensed physical protection without publishing layout broadly",
+        "Test alarm, CCTV, access and backup communications",
+        "Record inventory baseline with dual-person count",
+        "Commission only with authorized signoff"
+      ]
+    },
+    {
+      "source": "Unified §12; V14",
+      "id": "ARM-05",
+      "title": "Arm issue, handover, movement and return",
+      "owner": "Authorized custodian",
+      "trigger": "Approved armed shift or movement",
+      "target": "Each transaction at physical handover",
+      "steps": [
+        "Verify named permit, client/site and approved purpose",
+        "Confirm issuer/recipient identity and independent check where required",
+        "Record issue and movement with immutable time and asset ID",
+        "Monitor expected return and route exceptions without equating RFID with custody",
+        "Count and sign return; open discrepancy case immediately"
+      ]
+    },
+    {
+      "source": "Unified §12; V14",
+      "id": "ARM-06",
+      "title": "Ammunition accountability",
+      "owner": "Armoury Custodian",
+      "trigger": "Each authorized ammunition transaction",
+      "target": "Verify at every issue/return and scheduled count",
+      "steps": [
+        "Confirm approved opening quantity and lot",
+        "Document named issue and authorized purpose",
+        "Reconcile actual unused/returned quantities",
+        "Escalate any unexplained difference without self-adjustment",
+        "Review authorized adjustments independently and retain original ledger"
+      ]
+    },
+    {
+      "source": "Unified §12; V14",
+      "id": "ARM-07",
+      "title": "Vault CCTV and alarm assurance",
+      "owner": "CMS Video Operator",
+      "trigger": "Continuous monitoring and recording alarm",
+      "target": "Critical failure immediate",
+      "steps": [
+        "Verify vault feed, recording and time synchronization",
+        "Correlate access events with licensed custodian schedules",
+        "Escalate suspicious access, tamper or recording loss",
+        "Preserve original restricted video and access trail",
+        "Require Arms Control signoff before incident closure"
+      ]
+    },
+    {
+      "source": "Unified §12; V14",
+      "id": "ARM-08",
+      "title": "Armed guard pre-duty authorization",
+      "owner": "Armed Operations Supervisor",
+      "trigger": "Every armed shift",
+      "target": "Before any lawful issue/deployment",
+      "steps": [
+        "Verify company and named person permits/competency",
+        "Match contract and approved post",
+        "Verify shift readiness and required documents",
+        "Confirm custodian custody record is complete",
+        "Block digital readiness when any critical authority invalid"
+      ]
+    },
+    {
+      "source": "Unified §12; V14",
+      "id": "ARM-09",
+      "title": "Arms physical count and independent audit",
+      "owner": "Arms Control / Internal Audit",
+      "trigger": "Scheduled count or discrepancy",
+      "target": "Frequency per licensed condition; critical variance immediate",
+      "steps": [
+        "Print signed freeze-time inventory listing",
+        "Perform authorized witnessed physical count",
+        "Reconcile movements and ammunition ledger",
+        "Escalate variance to responsible company/regulators as required",
+        "Obtain independent investigation closure and adjustment approval"
+      ]
+    },
+    {
+      "source": "Unified §12; V14",
+      "id": "ARM-10",
+      "title": "Arm maintenance, repair and return to service",
+      "owner": "Arms Control / Authorized specialist",
+      "trigger": "Inspection or defect found",
+      "target": "Suspend operational readiness immediately",
+      "steps": [
+        "Quarantine out-of-service item under controlled custody",
+        "Verify lawful service provider and approval steps",
+        "Record chain of custody and relevant document references",
+        "Require inspection/permit verification for return",
+        "Release operational availability only after authorized signoff"
+      ]
+    },
+    {
+      "source": "Unified §12; V14",
+      "id": "ARM-11",
+      "title": "Armed incident, loss and regulator notification",
+      "owner": "Arms Control / Company Responsible Officer",
+      "trigger": "Missing arm, use allegation, unauthorized movement",
+      "target": "Immediate command escalation",
+      "steps": [
+        "Secure public/personnel safety and preserve evidence",
+        "Notify appropriate licensed officer, police/regulator based on law",
+        "Reconcile affected inventory and incident timeline",
+        "Coordinate insurer, counsel and formal reports",
+        "Close only after externally required actions and independent audit"
+      ]
+    },
+    {
+      "source": "Unified §12; V14",
+      "id": "ARM-12",
+      "title": "Future arm trading product control",
+      "owner": "Arms Control + Legal",
+      "trigger": "Proposed buying/selling arms business line",
+      "target": "Disabled until approvals verified",
+      "steps": [
+        "Define separately licensed legal entity and permitted activities",
+        "Obtain government and specialist legal confirmation",
+        "Configure restricted trade, customer checks and import/export workflows",
+        "Complete cyber/safety and regulatory UAT",
+        "Enable production only after explicit board/license signoff"
+      ]
+    },
+    {
+      "source": "Unified §05; V2, V4, V15",
+      "id": "HR-01",
+      "title": "Employee master and onboarding",
+      "owner": "HR Administrator",
+      "trigger": "Authorized offer accepted",
+      "target": "Before employee activation",
+      "steps": [
+        "Verify identity, employer company and documentation",
+        "Assess medical/permit requirements without broad exposure",
+        "Create unique employee ID and role/site eligibility",
+        "Set payroll, statutory and bank details via maker-checker",
+        "Provide induction and data/privacy notice"
+      ]
+    },
+    {
+      "source": "Unified §05; V2, V4, V15",
+      "id": "HR-02",
+      "title": "New guard recruitment and screening",
+      "owner": "HR Recruitment / Compliance",
+      "trigger": "Approved manpower requisition",
+      "target": "Weekly pipeline; pre-duty gate",
+      "steps": [
+        "Verify approved headcount and site demand",
+        "Collect lawful recruitment screening and KDN checks",
+        "Assess training/fitness and employment eligibility",
+        "Approve contract and relevant documents",
+        "Release only verified candidate to roster pool"
+      ]
+    },
+    {
+      "source": "Unified §05; V2, V4, V15",
+      "id": "HR-03",
+      "title": "Leave, sick leave and hospitalization",
+      "owner": "HR Administrator",
+      "trigger": "Employee leave request or MC",
+      "target": "Same day receipt; approval before payroll lock",
+      "steps": [
+        "Verify employee entitlements by service/jurisdiction",
+        "Check document authenticity without unnecessary medical disclosure",
+        "Obtain supervisor and HR approval as applicable",
+        "Arrange compliant substitute for affected post",
+        "Update final payroll leave codes and archive evidence"
+      ]
+    },
+    {
+      "source": "Unified §05; V2, V4, V15",
+      "id": "HR-04",
+      "title": "Office staff attendance and training",
+      "owner": "HR Administrator",
+      "trigger": "Daily attendance / annual training plan",
+      "target": "Weekly review; monthly closure",
+      "steps": [
+        "Reconcile presence, leave and flexible rules",
+        "Identify required courses by job role",
+        "Schedule competent provider and signed attendance",
+        "Verify skills assessment and certificates",
+        "Record future renewals and escalation"
+      ]
+    },
+    {
+      "source": "Unified §05; V2, V4, V15",
+      "id": "HR-05",
+      "title": "Guard CSG/TNG/role training",
+      "owner": "Training Coordinator",
+      "trigger": "New hire, quota gap or renewal",
+      "target": "Rolling monthly plan",
+      "steps": [
+        "Identify company-specific current annual rule version",
+        "Build trainee list with official quotas and eligible cohort",
+        "Obtain verified training attendance/completion",
+        "Update eSIMS readiness evidence where authorized",
+        "Report projected shortfall 90 days ahead"
+      ]
+    },
+    {
+      "source": "Unified §05; V2, V4, V15",
+      "id": "HR-06",
+      "title": "Monthly timekeeping and OT review",
+      "owner": "HR Payroll Preparer",
+      "trigger": "Monthly time cut-off",
+      "target": "Close by payroll-approved cutoff",
+      "steps": [
+        "Reconcile roster, check-ins, PO evidence and approved exceptions",
+        "Apply correct work/rest, OT and holiday rates by legal rules",
+        "Verify leave, advances, claims and lawful deductions",
+        "Require Ops, HR, Finance sign-offs",
+        "Lock export snapshot to payroll and preserve prior version"
+      ]
+    },
+    {
+      "source": "Unified §05; V2, V4, V15",
+      "id": "HR-07",
+      "title": "Salary bank file and payment confirmation",
+      "owner": "Payroll / Treasury",
+      "trigger": "Approved payroll batch",
+      "target": "Legal pay date governs",
+      "steps": [
+        "Verify employees, account changes and summary totals",
+        "Independent review against roster and statutory records",
+        "Release via dual bank approval under employing entity",
+        "Reconcile bank rejections, unpaid salaries and returned funds",
+        "Confirm actual payslips and remittances without marking success prematurely"
+      ]
+    },
+    {
+      "source": "Unified §05; V2, V4, V15",
+      "id": "HR-08",
+      "title": "Statutory contributions and payroll taxes",
+      "owner": "HR Payroll / Finance",
+      "trigger": "Each payroll period",
+      "target": "Relevant authority deadline",
+      "steps": [
+        "Reconcile EPF, SOCSO, EIS and PCB applicable populations",
+        "Review exemptions/caps and employee changes",
+        "Approve and remit from correct employer entity",
+        "Reconcile acknowledgements to payroll and SQL",
+        "Escalate unpaid/rejected contributions immediately"
+      ]
+    },
+    {
+      "source": "Unified §05; V2, V4, V15",
+      "id": "HR-09",
+      "title": "Employee grievance, safeguarding and appeal",
+      "owner": "HR Relations Officer",
+      "trigger": "Confidential complaint",
+      "target": "Acknowledge within 1 workday",
+      "steps": [
+        "Protect complainant from retaliation and assess safety",
+        "Assign impartial investigator and preserve evidence",
+        "Offer response opportunity and policy-consistent process",
+        "Obtain independent HR/appropriate Vice Chairman decision",
+        "Record remedy/appeal and limit access"
+      ]
+    },
+    {
+      "source": "Unified §05; V2, V4, V15",
+      "id": "HR-10",
+      "title": "Disciplinary process and termination",
+      "owner": "HR Relations + Legal",
+      "trigger": "Documented misconduct or employment exit",
+      "target": "Case-specific due process",
+      "steps": [
+        "Verify allegations, law, notice and impartiality",
+        "Conduct necessary inquiry with records and representation rights",
+        "Obtain authorized proportionate outcome",
+        "Calculate final pay/benefits and statutory steps",
+        "Disable access/return assets and retain lawful records"
+      ]
+    },
+    {
+      "source": "Unified §05; V2, V4, V15",
+      "id": "HR-11",
+      "title": "Foreign-worker medical allowance",
+      "owner": "HR Administrator",
+      "trigger": "Eligible ordinary medical claim",
+      "target": "Monthly claim cycle",
+      "steps": [
+        "Check eligible employee and RM200 annual limit",
+        "Verify receipts without exposing clinical details",
+        "Maintain running annual ledger and reject duplicate claims",
+        "Approve reimbursement according to policy",
+        "Reconcile amounts with payroll/Finance and reset annually"
+      ]
+    },
+    {
+      "source": "Unified §05; V2, V4, V15",
+      "id": "HR-12",
+      "title": "Headcount, compensation and promotion governance",
+      "owner": "HR Director",
+      "trigger": "Budget cycle / staffing decision",
+      "target": "Prior approval to contract change",
+      "steps": [
+        "Present approved headcount, pay bands and role impacts",
+        "Check company labour and budget implications",
+        "Obtain Vice Chairman final HR approval for delegated matters",
+        "Issue change letter and update access duties",
+        "Track performance and approval trail"
+      ]
+    },
+    {
+      "source": "Unified §§05–06; V2, V15",
+      "id": "WRK-01",
+      "title": "Foreign-worker recruitment and quota",
+      "owner": "Foreign Worker Administrator",
+      "trigger": "Approved Nepal/foreign worker demand",
+      "target": "Stage milestones per authority",
+      "steps": [
+        "Check KDN employer status and approved recruitment demand",
+        "Confirm lawful recruitment fees/agency and documents",
+        "Coordinate Section 60K/attestation/VDR as applicable",
+        "Verify arrival, Immigration, screening and permits",
+        "Activate roster eligibility only after signed legal checks"
+      ]
+    },
+    {
+      "source": "Unified §§05–06; V2, V15",
+      "id": "WRK-02",
+      "title": "PLKS/FOMEMA and immigration renewal",
+      "owner": "Immigration Coordinator",
+      "trigger": "Permit or medical expiry calendar",
+      "target": "Start 120 days before relevant expiry",
+      "steps": [
+        "Verify rule/eligibility and work permit holder",
+        "Schedule required medical and government steps",
+        "Track portal appointment and receipts",
+        "Escalate failures/restrictions and stop unauthorized duty",
+        "Store renewed permit and employer status before release"
+      ]
+    },
+    {
+      "source": "Unified §§05–06; V2, V15",
+      "id": "WRK-03",
+      "title": "Worker deployment and worksite changes",
+      "owner": "HR Immigration Coordinator",
+      "trigger": "Worker transferred or client opens site",
+      "target": "Verify before transfer",
+      "steps": [
+        "Confirm permitted employer and sector/location conditions",
+        "Assess KDN/JTK/PERKESO update applicability",
+        "Validate new accommodation and transport assignment",
+        "Amend employee effective-dated site and contact information",
+        "Obtain check-in and welfare confirmation"
+      ]
+    },
+    {
+      "source": "Unified §§05–06; V2, V15",
+      "id": "WRK-04",
+      "title": "Worker home leave, re-entry and final return",
+      "owner": "HR Foreign Worker Desk",
+      "trigger": "Approved travel or contract end",
+      "target": "Start 30-90 days before travel as needed",
+      "steps": [
+        "Check documents/re-entry visa and work obligations",
+        "Reserve or release hostel bed per approved terms",
+        "Arrange travel and notify payroll/Operations",
+        "Reconcile return or final wages and lawful Check Out process",
+        "Close with signed exit/repatriation proof"
+      ]
+    },
+    {
+      "source": "Unified §§05–06; V2, V15",
+      "id": "WRK-05",
+      "title": "Hostel demand, sourcing and approvals",
+      "owner": "Asset/Accommodation Coordinator",
+      "trigger": "New manpower or CLQ capacity gap",
+      "target": "Plan 60-90 days before occupancy",
+      "steps": [
+        "Confirm number of eligible persons by region",
+        "Inspect property tenure, safety and local law",
+        "Verify JTKSM/Act446/PBT applicability and required certificates",
+        "Approve lease/CLQ cost/deposit via Finance",
+        "Open beds only when legal evidence is verified"
+      ]
+    },
+    {
+      "source": "Unified §§05–06; V2, V15",
+      "id": "WRK-06",
+      "title": "Hostel room and bed allocation",
+      "owner": "Hostel Administrator",
+      "trigger": "Worker arrival or transfer",
+      "target": "Before first overnight stay",
+      "steps": [
+        "Validate available certified capacity and occupancy rules",
+        "Assign unique employee to room/bed effective dates",
+        "Record keys, furniture, condition and tenant info",
+        "Complete required placement notices where applicable",
+        "Monitor check-in/out and protect privacy"
+      ]
+    },
+    {
+      "source": "Unified §§05–06; V2, V15",
+      "id": "WRK-07",
+      "title": "Hostel inspection and defect resolution",
+      "owner": "Hostel Manager",
+      "trigger": "Scheduled inspection or complaint",
+      "target": "Immediate if unsafe; routine per signed plan",
+      "steps": [
+        "Inspect safety, occupancy, sanitation, appliances and utilities",
+        "Photograph defects proportionately without exposing occupants",
+        "Prioritize urgent repairs and accommodation relocation",
+        "Assign vendor and track close-out evidence",
+        "Verify compliance and worker welfare before reopening"
+      ]
+    },
+    {
+      "source": "Unified §§05–06; V2, V15",
+      "id": "WRK-08",
+      "title": "Hostel rent/CLQ invoice reconciliation",
+      "owner": "Accommodation Finance Analyst",
+      "trigger": "Monthly provider invoice",
+      "target": "Before AP due date",
+      "steps": [
+        "Compare contracted minimum/actual bed basis to occupancy",
+        "Check landlord invoices, inclusions and meter readings",
+        "Prevent electricity/water double charge",
+        "Apply internal RM30 electricity/RM20 water budgets as variance only",
+        "Approve matched invoice and investigate disputes"
+      ]
+    },
+    {
+      "source": "Unified §§05–06; V2, V15",
+      "id": "WRK-09",
+      "title": "Fleet allocation and preventive servicing",
+      "owner": "Fleet Controller",
+      "trigger": "Vehicle assignment / mileage interval",
+      "target": "Weekly check; maintenance per OEM",
+      "steps": [
+        "Confirm licensed company ownership/lease and approved use",
+        "Check road tax, insurance, driver eligibility and tracker",
+        "Schedule OEM servicing and defect remediation",
+        "Allocate mileage/fuel to contract/branch",
+        "Capture cost, downtime and replacement plan"
+      ]
+    },
+    {
+      "source": "Unified §§05–06; V2, V15",
+      "id": "WRK-10",
+      "title": "Guard transport route and missed pickup",
+      "owner": "Transport Coordinator",
+      "trigger": "Planned duty shift transport",
+      "target": "Plan previous day; missed pickup immediate",
+      "steps": [
+        "Publish route, assigned vehicle/driver and worker list",
+        "Verify hostel-to-site travel and handover",
+        "Detect late/missed pickups and alert Operations",
+        "Dispatch safe replacement to preserve contract coverage",
+        "Reconcile trip logs, wage impact and cost"
+      ]
+    },
+    {
+      "source": "Unified §§05–06; V2, V15",
+      "id": "WRK-11",
+      "title": "Occupational safety hazard assessment",
+      "owner": "OSH Officer / Site Manager",
+      "trigger": "Site start, incident or material change",
+      "target": "Before work exposure",
+      "steps": [
+        "Identify operational hazards and client co-control responsibilities",
+        "Assess risks and preventive measures with guards",
+        "Issue safe work instructions, PPE and emergency contacts",
+        "Obtain acceptance and training evidence",
+        "Schedule reassessment and monitor unresolved risks"
+      ]
+    },
+    {
+      "source": "Unified §§05–06; V2, V15",
+      "id": "WRK-12",
+      "title": "Workplace injury/near miss/reporting",
+      "owner": "OSH Officer / Operations",
+      "trigger": "Injury, dangerous occurrence or complaint",
+      "target": "Immediate aid; statutory time determined by rule",
+      "steps": [
+        "Provide emergency assistance and prevent repeat harm",
+        "Preserve accurate incident facts and witness evidence",
+        "Determine DOSH reporting applicability and timeframe",
+        "Notify insurer/PERKESO/client where applicable",
+        "Investigate causes and independently verify corrective closure"
+      ]
+    },
+    {
+      "source": "Unified §§05–06; V2, V15",
+      "id": "WRK-13",
+      "title": "Responsible recruitment and worker welfare",
+      "owner": "HR Welfare / Compliance",
+      "trigger": "Monthly monitoring or complaint",
+      "target": "Monthly; urgent abuse immediate",
+      "steps": [
+        "Check recruitment fees, contracts and worker understanding",
+        "Compare payslip, leave and deduction evidence",
+        "Offer confidential channel without retaliation",
+        "Investigate worker welfare/housing/transport claims",
+        "Escalate remediation and management action with tracked closure"
+      ]
+    },
+    {
+      "source": "Unified §08; V5, V6",
+      "id": "FIN-01",
+      "title": "SQL Account company setup and controls",
+      "owner": "Financial Systems Accountant",
+      "trigger": "New legal entity / module roll-out",
+      "target": "Before first posting",
+      "steps": [
+        "Confirm SQL edition, modules, project/branch function and authorised integration",
+        "Build legal entity chart of accounts and bank codes",
+        "Define client/site/branch project mapping and fiscal year",
+        "Test AR, AP, journal and cash flow reports",
+        "Sign opening trial balance with Finance and auditor"
+      ]
+    },
+    {
+      "source": "Unified §08; V5, V6",
+      "id": "FIN-02",
+      "title": "Supplier/customer master data setup",
+      "owner": "AR/AP Master Data Officer",
+      "trigger": "Approved new client or supplier",
+      "target": "Within 2 working days",
+      "steps": [
+        "Validate legal identity, registration, tax and bank references",
+        "Check duplicates, sanctioned/blocked status and terms",
+        "Obtain independent authority for account and payment information",
+        "Set controlled SQL master and project mapping",
+        "Issue reference and audit changed fields"
+      ]
+    },
+    {
+      "source": "Unified §08; V5, V6",
+      "id": "FIN-03",
+      "title": "Supplier bank details change",
+      "owner": "AP Master Data Officer",
+      "trigger": "Vendor requests change",
+      "target": "Payment freeze until verified",
+      "steps": [
+        "Validate request against known vendor contract channel",
+        "Independently call previously verified contact, never number in request alone",
+        "Require supporting bank evidence and second approver",
+        "Record effective date, actor, old/new masked values",
+        "Unfreeze only after verification; test change in next payment sample"
+      ]
+    },
+    {
+      "source": "Unified §08; V5, V6",
+      "id": "FIN-04",
+      "title": "Customer invoice and unbilled revenue",
+      "owner": "AR / Billing Controller",
+      "trigger": "Service delivered and billing cycle closes",
+      "target": "Preliminary D+3, invoice per contract",
+      "steps": [
+        "Reconcile signed contract hours with verified service acceptance",
+        "Identify accrued unbilled service and accepted deductions",
+        "Apply correct tax/e-invoice rules by company",
+        "Post authorized customer invoice/adjustment in SQL",
+        "Review cut-off and unbilled balance with GL"
+      ]
+    },
+    {
+      "source": "Unified §08; V5, V6",
+      "id": "FIN-05",
+      "title": "AR aging, collections and credit escalation",
+      "owner": "Credit Controller",
+      "trigger": "Daily AR refresh and overdue due date",
+      "target": "Daily review; weekly collection action",
+      "steps": [
+        "Extract SQL customer aging by entity/branch/client",
+        "Agree subledger total to GL and unapplied receipts",
+        "Assign call, reminder, dispute or legal path for past due",
+        "Escalate 30/60/90 buckets per credit policy",
+        "Review expected receipts in rolling cash forecast"
+      ]
+    },
+    {
+      "source": "Unified §08; V5, V6",
+      "id": "FIN-06",      "title": "AP aging and weekly payment run",
+      "owner": "AP Team Lead",
+      "trigger": "Supplier approved invoice / weekly run",
+      "target": "Weekly; contract due date controls",
+      "steps": [
+        "Reconcile supplier aging to SQL AP GL and disputes",
+        "Match PO, goods/service receipt and invoice",
+        "Prioritize legal/statutory obligations, ageing and available cash",
+        "Obtain delegated approval and dual banking release",
+        "Record bank confirmation, failed payments and cash forecast impact"
+      ]
+    },
+    {
+      "source": "Unified §08; V5, V6",
+      "id": "FIN-07",
+      "title": "All-account bank reconciliation",
+      "owner": "Treasury / GL Accountant",
+      "trigger": "Statement received / daily bank feed",
+      "target": "Daily matching; monthly signoff by D+5 proposed",
+      "steps": [
+        "Download controlled bank statement or bank feed",
+        "Match each transaction to SQL postings; flag unpresented/uncleared",
+        "Investigate unknown debit, duplicate, unauthorized transfer and unreconciled item",
+        "Obtain independent signoff per account",
+        "Confirm closing balance, aged reconciling items and evidence pack"
+      ]
+    },
+    {
+      "source": "Unified §08; V5, V6",
+      "id": "FIN-08",
+      "title": "Treasury bank mandates and cash placement",
+      "owner": "Treasury Manager",
+      "trigger": "New bank, signatory, deposit or transfer",
+      "target": "Before action and weekly review",
+      "steps": [
+        "Verify company bank rights/board mandate and account purpose",
+        "Assess liquidity, counterparty and exposure",
+        "Set two-person banking rules and approved payee list",
+        "Record deposits, transfers and maturity separately",
+        "Review bank statements and unusual transfers independently"
+      ]
+    },
+    {
+      "source": "Unified §08; V5, V6",
+      "id": "FIN-09",
+      "title": "Monthly general ledger close",
+      "owner": "Finance Controller",
+      "trigger": "Monthly period end",
+      "target": "Proposed D+10 final close",
+      "steps": [
+        "Post controlled accruals, payroll costs, prepaid and depreciation",
+        "Reconcile AR/AP, banks, tax, payroll, intercompany and assets",
+        "Review cut-off, unusual journals and negative balances",
+        "Tie Trial Balance to P&L and Balance Sheet",
+        "Certify final period with outstanding-items list and CFO signoff"
+      ]
+    },
+    {
+      "source": "Unified §08; V5, V6",
+      "id": "FIN-10",
+      "title": "Three-statement financial reconciliation",
+      "owner": "Group Financial Reporting",
+      "trigger": "Monthly accounting close",
+      "target": "Complete by D+10 proposed",
+      "steps": [
+        "Confirm GL debits/credits and account mapping",
+        "Tie P&L profit to equity movements with dividend/adjustment bridge",
+        "Reconcile Balance Sheet assets = liabilities + equity",
+        "Reconcile cash-flow opening/closing to bank/cash equivalents",
+        "Track unexplained variances and forbid Approved status"
+      ]
+    },
+    {
+      "source": "Unified §08; V5, V6",
+      "id": "FIN-11",
+      "title": "Cash-flow forecast and runway",
+      "owner": "FP&A / Treasury",
+      "trigger": "Weekly cash forecast refresh",
+      "target": "Every Monday before 12:00 proposed",
+      "steps": [
+        "Bring SQL bank actuals, AR/AP dates and payroll commitments",
+        "Incorporate branch loans, stock capex, VAT/SST and tax payments",
+        "Model base, downside and severe collection delays",
+        "Obtain Finance Director challenge and funding decisions",
+        "Compare weekly forecast against actual and explain misses"
+      ]
+    },
+    {
+      "source": "Unified §08; V5, V6",
+      "id": "FIN-12",
+      "title": "Annual budget and quarterly reforecast",
+      "owner": "FP&A Director",
+      "trigger": "Budget season / quarter close",
+      "target": "Draft 60 days before FY; each quarter +15 days",
+      "steps": [
+        "Collect company/site headcount and bid pipeline drivers",
+        "Forecast cost per guard, relief, wage changes, CLQ and fleet",
+        "Load approved account budgets into SQL where licensed",
+        "Build three-statement and cash/working-capital views",
+        "Lock approved scenario and monthly variance owners"
+      ]
+    },
+    {
+      "source": "Unified §08; V5, V6",
+      "id": "FIN-13",
+      "title": "Contract and site P&L costing",
+      "owner": "Site Cost Accountant",
+      "trigger": "Month-end site reports",
+      "target": "Draft D+7, signoff D+12",
+      "steps": [
+        "Match service revenue to correct site and month",
+        "Add actual labour/OT/relief/accommodation/transport/insurance",
+        "Allocate shared services using documented drivers",
+        "Challenge negative/misallocated contributions with GM",
+        "Publish SQL-linked source-to-profit bridge"
+      ]
+    },
+    {
+      "source": "Unified §08; V5, V6",
+      "id": "FIN-14",
+      "title": "Company and branch profit settlement",
+      "owner": "Group Finance",
+      "trigger": "Branch model month-end",
+      "target": "After signed close, preferably D+12",
+      "steps": [
+        "Verify branch contractual model A/B/C and effective percent",
+        "Confirm company revenue, tax, costs and cash basis in agreement",
+        "Calculate share, partner entitlement, reserves and financing offsets",
+        "Obtain independent legal/Finance approval",
+        "Issue itemised partner statement and payment evidence"
+      ]
+    },
+    {
+      "source": "Unified §08; V5, V6",
+      "id": "FIN-15",
+      "title": "Intercompany loans, balances and fees",
+      "owner": "Group GL / PWVSB Finance",
+      "trigger": "Management fee, loan or recharge",
+      "target": "Monthly matching before close",
+      "steps": [
+        "Validate actual bilateral contracts and tax treatment",
+        "Record mirror entries in lender/borrower books",
+        "Reconcile principal, interest, service fees and cash receipts",
+        "Resolve unmatched intercompany at month-end",
+        "Prepare legal consolidation vs management reporting separately"
+      ]
+    },
+    {
+      "source": "Unified §08; V5, V6",
+      "id": "FIN-16",
+      "title": "Annual audited financial statements",
+      "owner": "Financial Reporting / Auditor Liaison",
+      "trigger": "Financial year close",
+      "target": "Timetable set 90 days before planned audit",
+      "steps": [
+        "Close year and reconcile all control accounts",
+        "Deliver bank confirmations, major agreements and tax schedules",
+        "Review auditor adjustments and management letters",
+        "Obtain relevant board approvals",
+        "Retain signed/audited reports and statutory filings"
+      ]
+    },
+    {
+      "source": "Unified §08; V5, V6",
+      "id": "FIN-17",
+      "title": "Employee payroll-to-bank-to-GL bridge",
+      "owner": "Payroll Accounting / Treasury",
+      "trigger": "Monthly salary payments processed",
+      "target": "Within 2 workdays after pay run",
+      "steps": [
+        "Reconcile approved payroll gross/net and statutory remittances",
+        "Match bank file total to bank debits and rejection report",
+        "Investigate duplicate, failed or short payments by employee",
+        "Post salary expense/payable settlement to correct SQL entity",
+        "Sign difference-zero schedule or documented exception"
+      ]
+    },
+    {
+      "source": "Unified §08; V5, V6",
+      "id": "FIN-18",
+      "title": "Fixed assets cost and depreciation",
+      "owner": "Fixed Asset Accountant",
+      "trigger": "Asset acquired, transferred or disposed",
+      "target": "Monthly close",
+      "steps": [
+        "Match purchase invoices/GRN to eligible capitalization policy",
+        "Post assets/depreciation in SQL/optional Asset module",
+        "Reconcile physical asset register to GL and accumulated depreciation",
+        "Review impairment, retired assets and ownership",
+        "Document approved journal adjustments"
+      ]
+    },
+    {
+      "source": "Unified §08; V5, V6",
+      "id": "FIN-19",
+      "title": "Tax, SST and e-Invoice control",
+      "owner": "Tax Accountant",
+      "trigger": "Invoice issue, monthly/annual tax due",
+      "target": "Official rules and filing calendar",
+      "steps": [
+        "Assess entity-specific turnover, related-party and exemption rules",
+        "Validate MyInvois/SST or other reporting requirements",
+        "Reconcile taxable revenue and document numbers to SQL",
+        "Obtain tax adviser/Finance confirmation before filing",
+        "Store submission and payment proof plus rejection remediation"
+      ]
+    },
+    {
+      "source": "Unified §08; V5, V6",
+      "id": "FIN-20",
+      "title": "Fraudulent payment and recovery response",
+      "owner": "Treasury / Audit",
+      "trigger": "Suspected duplicate or unauthorized payment",
+      "target": "Immediate containment",
+      "steps": [
+        "Secure payment status and notify bank fraud desk when appropriate",
+        "Freeze implicated payees/access under authority",
+        "Preserve audit, email and reconciliation evidence",
+        "Assign independent investigation and legal recovery options",
+        "Record loss, recovery and corrective access control"
+      ]
+    },
+    {
+      "source": "Unified §§09, 14; V5",
+      "id": "PUR-01",
+      "title": "Purchase request and budget check",
+      "owner": "Requesting Department / Procurement",
+      "trigger": "Approved need identified",
+      "target": "Acknowledge within 1 day",
+      "steps": [
+        "Describe site/company, specification and urgency",
+        "Check existing stock and loan items before buying",
+        "Verify contract budget and conflict of interest",
+        "Route value/classification to approved signatory",
+        "Register approved PR and non-approved request rationale"
+      ]
+    },
+    {
+      "source": "Unified §§09, 14; V5",
+      "id": "PUR-02",
+      "title": "Supplier selection, quotation and due diligence",
+      "owner": "Procurement Officer",
+      "trigger": "Approved requisition",
+      "target": "Target 3 working days for standard RFQ",
+      "steps": [
+        "Screen legal supplier, bank identity and relevant licences",
+        "Obtain competitive bids where policy requires",
+        "Score specifications, lifecycle cost and compliance",
+        "Document tender waivers and conflicts",
+        "Approve selected vendor and terms independently"
+      ]
+    },
+    {
+      "source": "Unified §§09, 14; V5",
+      "id": "PUR-03",
+      "title": "Purchase order issuance",
+      "owner": "Procurement Executive",
+      "trigger": "Approved supplier/PR",
+      "target": "Within 1 day after final approval",
+      "steps": [
+        "Confirm price, quantity, delivery address and legal buyer",
+        "Set cost centre/company/site and tax treatment",
+        "Obtain properly delegated sign-off",
+        "Issue immutable PO number and supplier acknowledgment",
+        "Monitor promised delivery and variations"
+      ]
+    },
+    {
+      "source": "Unified §§09, 14; V5",
+      "id": "PUR-04",
+      "title": "Goods receipt and quality inspection",
+      "owner": "Warehouse Clerk",
+      "trigger": "Goods delivered",
+      "target": "Same day where feasible",
+      "steps": [
+        "Match physical delivery to PO and quantity",
+        "Inspect condition, serial numbers, size and safety",
+        "Photograph shortage/damage without changing PO",
+        "Issue signed GRN and controlled discrepancy case",
+        "Update stock/asset record and inform AP"
+      ]
+    },
+    {
+      "source": "Unified §§09, 14; V5",
+      "id": "PUR-05",
+      "title": "Warehouse cycle count and stock adjustment",
+      "owner": "Warehouse Supervisor",
+      "trigger": "Weekly cycle / month-end count",
+      "target": "Weekly count; monthly audit sample",
+      "steps": [
+        "Freeze counted bins or log cut-off",
+        "Independently physically count, size/SKU and custody",
+        "Reconcile movements/transfers to expected stock",
+        "Investigate shrinkage/defect with maker-checker",
+        "Post approved adjustment and trend stock losses"
+      ]
+    },
+    {
+      "source": "Unified §§09, 14; V5",
+      "id": "PUR-06",
+      "title": "Guard uniform issuance and return",
+      "owner": "Warehouse/Admin",
+      "trigger": "New deployment/replacement/exit",
+      "target": "Before guard first duty",
+      "steps": [
+        "Verify guard identity, size, site and issuance policy",
+        "Pick inspected correct SKU and quantity",
+        "Record issue/return and signed acknowledgment",
+        "Evaluate replacement/wear and loss separately from wage deductions",
+        "Reorder when safe stock falls below approved trigger"
+      ]
+    },
+    {
+      "source": "Unified §§09, 14; V5",
+      "id": "PUR-07",
+      "title": "Equipment issue, custody and transfer",
+      "owner": "Asset Controller",
+      "trigger": "Site installation or staff assignment",
+      "target": "Before physical handover",
+      "steps": [
+        "Check owner company, serial and restrictions",
+        "Test functioning and warranty status",
+        "Obtain receiving person/site acknowledgment",
+        "Update insurance, system location and device integration",
+        "On return confirm condition and recover accessories"
+      ]
+    },
+    {
+      "source": "Unified §§09, 14; V5",
+      "id": "PUR-08",
+      "title": "Central-to-branch inventory transfer",
+      "owner": "Warehouse Manager",
+      "trigger": "Regional replenishment request",
+      "target": "Schedule by operational necessity",
+      "steps": [
+        "Review branch levels and approved demand",
+        "Create source dispatch/transfer record",
+        "Secure proof of physical transport/custody",
+        "Confirm receiving count and report shortage promptly",
+        "Reconcile both stock locations and damaged stock case"
+      ]
+    },
+    {
+      "source": "Unified §§09, 14; V5",
+      "id": "PUR-09",
+      "title": "Inventory reorder and dead-stock control",
+      "owner": "Procurement Planner",
+      "trigger": "Minimum stock alert / monthly review",
+      "target": "Weekly review",
+      "steps": [
+        "Calculate demand by manpower, site and turnover",
+        "Consider supplier lead-time and cash constraints",
+        "Flag obsolete sizes, old electronics and expiring items",
+        "Approve reorder quantities and budget",
+        "Review excess returns/transfers before disposal"
+      ]
+    },
+    {
+      "source": "Unified §§09, 14; V5",
+      "id": "PUR-10",
+      "title": "Invoice match and payment authorization",
+      "owner": "AP + Procurement",
+      "trigger": "Supplier invoice received",
+      "target": "Before payment due",
+      "steps": [
+        "Match supplier master and authorized PO",
+        "Check GRN or verified service completion",
+        "Reconcile price, taxes, delivery and discounts",
+        "Route differences/credit notes to accountable buyer",
+        "Release payment only after independent Finance check"
+      ]
+    },
+    {
+      "source": "Unified §§09, 14; V5",
+      "id": "PUR-11",
+      "title": "Emergency procurement",
+      "owner": "COO / Procurement Director",
+      "trigger": "Unforeseen safety/site critical need",
+      "target": "Immediate controlled exception",
+      "steps": [
+        "Record incident and justification, not retrospective blanket approval",
+        "Obtain available emergency delegated authority",
+        "Choose verified safe supplier and cap expenditure",
+        "Verify physical delivery and independent receipt",
+        "Submit post-event compliance review within 2 workdays"
+      ]
+    },
+    {
+      "source": "Unified §§09, 14; V5",
+      "id": "PUR-12",
+      "title": "Controlled stock loss, damage and disposal",
+      "owner": "Warehouse / Audit / Finance",
+      "trigger": "Missing, damaged or obsolete stock",
+      "target": "Initial incident same day",
+      "steps": [
+        "Segregate and record defective/missing quantity",
+        "Assess police/insurance/legal notification where relevant",
+        "Obtain second-person review and disposal authority",
+        "Use approved recycling/waste chain and custody proof",
+        "Reconcile inventory, financial books and recovery"
+      ]
+    },
+    {
+      "source": "Unified §§09, 14; V5",
+      "id": "PUR-13",
+      "title": "Vendor performance and warranty claims",
+      "owner": "Procurement + Asset Manager",
+      "trigger": "Repeated defects or warranty failure",
+      "target": "Monthly; severe defect immediate",
+      "steps": [
+        "Review supplier delivery/quality scorecard",
+        "Record defects and OEM case references",
+        "Pursue repair, replacement, credit or recovery",
+        "Verify work against acceptance tests",
+        "Update preferred supplier status and dispute/blacklist assessment"
+      ]
+    },
+    {
+      "source": "Unified §§09–10; V5",
+      "id": "AST-01",
+      "title": "Property purchase and investment decision",
+      "owner": "Director of Asset Management",
+      "trigger": "Property acquisition proposal",
+      "target": "Due diligence before deposit",
+      "steps": [
+        "Verify legal owner/tenure/zoning and financing constraints",
+        "Evaluate cash yield, insurance, taxes and valuation",
+        "Commission appropriate legal/technical due diligence",
+        "Obtain correct board/management capital approval",
+        "Record acquisition, lease income and maintenance owner"
+      ]
+    },
+    {
+      "source": "Unified §§09–10; V5",
+      "id": "AST-02",
+      "title": "Property tenancy and rental collections",
+      "owner": "Property Administrator",
+      "trigger": "New tenancy or monthly rent due",
+      "target": "Monthly aging review",
+      "steps": [
+        "Record signed tenancy, deposits, escalation and tenant profile",
+        "Reconcile invoice/rent schedule to bank receipts",
+        "Conduct controlled property inspection/maintenance",
+        "Pursue overdue rent and legal steps lawfully",
+        "Close tenancy with deposit/repair settlement"
+      ]
+    },
+    {
+      "source": "Unified §§09–10; V5",
+      "id": "AST-03",
+      "title": "Property planned maintenance",
+      "owner": "Facility Manager",
+      "trigger": "Scheduled asset condition check",
+      "target": "Monthly condition review",
+      "steps": [
+        "Inventory critical building systems and statutory certificates",
+        "Prioritize repairs by safety and tenant impact",
+        "Source vendor and approve budget/PO",
+        "Supervise work and collect warranties/test results",
+        "Close work order after independent inspection"
+      ]
+    },
+    {
+      "source": "Unified §§09–10; V5",
+      "id": "AST-04",
+      "title": "Vehicles/fuel and mileage claims",
+      "owner": "Fleet Controller / Finance",
+      "trigger": "Monthly driver mileage submission",
+      "target": "Monthly cutoff",
+      "steps": [
+        "Verify fleet ownership, tracker mileage and legitimate trips",
+        "Apply vehicle-specific approved petrol/diesel claim policy",
+        "Distinguish SKDS-eligible and nonsubsidized vehicle reimbursement",
+        "Investigate abnormal liters/km and duplicate receipts",
+        "Approve lawful employee claims and post GL cost"
+      ]
+    },
+    {
+      "source": "Unified §§09–10; V5",
+      "id": "AST-05",
+      "title": "Insurance renewal portfolio",
+      "owner": "Insurance Coordinator / Asset Director",
+      "trigger": "Policy expiry or asset move",
+      "target": "Start 90 days before expiry",
+      "steps": [
+        "Reconcile covered asset register and insured values",
+        "Assess exclusions, tenants, activities and territorial scope",
+        "Obtain broker/insurer written terms and authorized approval",
+        "Confirm bound policy and proof of premium",
+        "Update CMS/client obligations and claims contact"
+      ]
+    },
+    {
+      "source": "Unified §§09–10; V5",
+      "id": "AST-06",
+      "title": "IT and CCTV asset registration",
+      "owner": "IT Asset Manager / CMS Engineering",
+      "trigger": "Device installation, movement or outage",
+      "target": "Before commissioning",
+      "steps": [
+        "Register manufacturer, firmware, service owner and location",
+        "Document authorized VMS/CMS connector identity and network segmentation",
+        "Verify warranty, maintenance and recording health",
+        "Record OEM subscription and recurring cost",
+        "Reassign/retire device safely with credential revocation"
+      ]
+    },
+    {
+      "source": "Unified §§09–10; V5",
+      "id": "AST-07",
+      "title": "Warranty and service-contract renewal",
+      "owner": "Asset/IT Procurement",
+      "trigger": "Coverage due or manufacturer defect",
+      "target": "Start 60 days before expiry",
+      "steps": [
+        "Validate installed base and actual failures",
+        "Compare SLA, spares and vendor support risk",
+        "Negotiate extension/replacement within budget",
+        "Obtain signed service schedule and escalation details",
+        "Verify monitoring dashboard includes expiration dates"
+      ]
+    },
+    {
+      "source": "Unified §§09–10; V5",
+      "id": "AST-08",
+      "title": "Asset transfer, impairment and disposal",
+      "owner": "Asset Controller / Finance",
+      "trigger": "Damage, reassignment, end of life",
+      "target": "Authorization before disposal",
+      "steps": [
+        "Check title, lender security, insurance and accounting residual value",
+        "Assess repair-versus-replace with lifecycle costs",
+        "Obtain lawful disposal/sale approvals and buyer due diligence",
+        "Complete data wipe/e-waste route and custody evidence",
+        "Reconcile asset register and SQL postings"
+      ]
+    },
+    {
+      "source": "Unified §§09–10; V5",
+      "id": "AST-09",
+      "title": "Physical asset annual verification",
+      "owner": "Asset Director / Internal Audit",
+      "trigger": "Annual inventory exercise",
+      "target": "Annual programme",
+      "steps": [
+        "Freeze asset list and assign independent counters",
+        "Inspect selected premises, serials and custodian",
+        "Identify missing/ghost items and title discrepancies",
+        "Approve adjustment/recovery actions under delegated limits",
+        "Issue board-level loss and reconciliation summary"
+      ]
+    },
+    {
+      "source": "Unified §§07, 13; V4, V9, V15",
+      "id": "REG-01",
+      "title": "Unified statutory obligation registration",
+      "owner": "Compliance Administrator",
+      "trigger": "New entity/site/branch/rule or annual refresh",
+      "target": "Update within 5 workdays of source change",
+      "steps": [
+        "Register relevant law, state, entity, event and authority",
+        "Specify actual statutory deadline and evidence type",
+        "Assign preparer/checker/signatory distinct identities",
+        "Verify version/effective date with adviser",
+        "Test alerts at 120/90/60/30/14/7 days as appropriate"
+      ]
+    },
+    {
+      "source": "Unified §§07, 13; V4, V9, V15",
+      "id": "REG-02",
+      "title": "KDN agency annual renewal",
+      "owner": "Security Licence Coordinator",
+      "trigger": "Annual renewal season notice",
+      "target": "Start readiness 120 days before anticipated window",
+      "steps": [
+        "Read actual KDN year-specific notice and quota",
+        "Reconcile company guards, CSG/TNG evidence and eSIMS",
+        "Obtain required board, insurance, audit and compliance documents",
+        "File through official authorized process and retain acknowledgements",
+        "Block/flag prohibited bids or operations if not legally authorized"
+      ]
+    },
+    {
+      "source": "Unified §§07, 13; V4, V9, V15",
+      "id": "REG-03",
+      "title": "KDN branch and geographic operations assessment",
+      "owner": "Licence Coordinator",
+      "trigger": "New branch, regional expansion or relocation",
+      "target": "Before operating branch",
+      "steps": [
+        "Verify company current licence and permitted scope",
+        "Review official KDN branch procedures and manager details",
+        "Prepare authority/lease/staff evidence",
+        "Receive actual formal decision before activation",
+        "Recheck permits and client contracts after changes"
+      ]
+    },
+    {
+      "source": "Unified §§07, 13; V4, V9, V15",
+      "id": "REG-04",
+      "title": "MOF/ePerolehan registration/renewal",
+      "owner": "Tender Credential Officer",
+      "trigger": "New tender need or expiry",
+      "target": "Start 90 days before expiry",
+      "steps": [
+        "Check correct legal company and procurement code (e.g. 220801 where applicable)",
+        "Verify registration category and qualification evidence",
+        "Prepare official renewal application and payment",
+        "Record accepted status and validity dates",
+        "Restrict tender eligibility on expired/missing records"
+      ]
+    },
+    {
+      "source": "Unified §§07, 13; V4, V9, V15",
+      "id": "REG-05",
+      "title": "Company tax estimates and CP204",
+      "owner": "Company Tax Controller",
+      "trigger": "Annual tax estimate calendar",
+      "target": "Official assessment/year rule governs",
+      "steps": [
+        "Validate entity tax classification and management accounts",
+        "Obtain actual tax-agent estimate and sign-off",
+        "Track revisions/installments and payments",
+        "Reconcile estimated and assessed tax in SQL",
+        "Preserve e-filing acknowledgement and exposure"
+      ]
+    },
+    {
+      "source": "Unified §§07, 13; V4, V9, V15",
+      "id": "REG-06",
+      "title": "Employer year-end statutory filings",
+      "owner": "HR / Payroll Tax",
+      "trigger": "Hiring/exit or year-end tax reporting",
+      "target": "Official applicable due date",
+      "steps": [
+        "Determine correct employer and prescribed forms",
+        "Reconcile payroll benefits/PCB to actual employee population",
+        "Obtain reviewer and authorized filing",
+        "Pay/report through accepted official channel",
+        "Resolve rejections/penalties and store proof"
+      ]
+    },
+    {
+      "source": "Unified §§07, 13; V4, V9, V15",
+      "id": "REG-07",
+      "title": "e-Invoice and SST threshold assessment",
+      "owner": "Tax Manager",
+      "trigger": "Entity monthly/annual turnover review",
+      "target": "Monthly review and upon legal update",
+      "steps": [
+        "Read current LHDN implementation/guidance not stale version",
+        "Assess exemption and related company restrictions per entity",
+        "Configure invoice and self-billing rules for SQL/connector",
+        "Reconcile submission status and official validation",
+        "Notify clients and resolve rejected e-invoices"
+      ]
+    },
+    {
+      "source": "Unified §§07, 13; V4, V9, V15",
+      "id": "REG-08",
+      "title": "JTKSM/PERKESO new workplace applicability",
+      "owner": "HR Compliance",
+      "trigger": "New employment location/client site",
+      "target": "Prior to site activation",
+      "steps": [
+        "Identify legal employer, jurisdiction and nature of new workplace",
+        "Research current registration/update conditions",
+        "Record filing decision, law/version and adviser's rationale",
+        "Submit required notices and retain receipts",
+        "Review site update after contract/employee changes"
+      ]
+    },
+    {
+      "source": "Unified §§07, 13; V4, V9, V15",
+      "id": "REG-09",
+      "title": "Regulatory inspection response",
+      "owner": "Company Manager / Compliance",
+      "trigger": "Government inspection / notice",
+      "target": "Same-day case opening",
+      "steps": [
+        "Authenticate inspector request and preserve originals",
+        "Notify entity directors and competent advisor",
+        "Assemble non-privileged accurate records",
+        "Track findings, notices, deadlines and rectification",
+        "Close on regulator acceptance or counsel-documented outcome"
+      ]
+    },
+    {
+      "source": "Unified §§07, 13; V4, V9, V15",
+      "id": "REG-10",
+      "title": "Policy/legal rule change management",
+      "owner": "Group Compliance Researcher",
+      "trigger": "Law, guideline or authority notice revised",
+      "target": "Assess within 5 workdays; urgent immediate",
+      "steps": [
+        "Compare official effective dates and jurisdiction",
+        "Determine affected entities/roles/contracts and data fields",
+        "Seek legal/adviser validation and update rule engine",
+        "Retrain impacted users and adjust SOP dates",
+        "Retest sample transactions and preserve superseded version"
+      ]
+    },
+    {
+      "source": "Unified §§01–03, 13; V8, V10",
+      "id": "CRD-01",
+      "title": "Credit licence scope and eligibility verification",
+      "owner": "Credit Compliance Officer",
+      "trigger": "New product / credit application",
+      "target": "Before offering or disbursing",
+      "steps": [
+        "Verify actual KPKT licence holder, class, period and premises",
+        "Check regulated lending scope, borrower and any exemption",
+        "Obtain licensed legal review of applicable agreement forms",
+        "Check lending cap, charges, advertising and AML/CFT applicability",
+        "Permit workflow only when required licensing confirmed"
+      ]
+    },
+    {
+      "source": "Unified §§01–03, 13; V8, V10",
+      "id": "CRD-02",
+      "title": "Borrower application and cash need",
+      "owner": "Credit Analyst",
+      "trigger": "Company/branch funding request",
+      "target": "Acknowledge 1 workday; decision after diligence",
+      "steps": [
+        "Confirm borrower legal entity, ownership and management agreement",
+        "Obtain cash-flow projection, contracts and existing debt",
+        "Assess creditworthiness, concentration and repayment source",
+        "Identify security documentation and conflicts",
+        "Prepare credit paper with loss scenario and approval recommendation"
+      ]
+    },
+    {
+      "source": "Unified §§01–03, 13; V8, V10",
+      "id": "CRD-03",
+      "title": "Credit decision and loan documentation",
+      "owner": "Credit Committee Secretary",
+      "trigger": "Validated loan paper",
+      "target": "Before loan commitment",
+      "steps": [
+        "Apply documented signatory and lending limits",
+        "Approve rate, term, covenants, collateral and repayment schedule",
+        "Ensure relevant prescribed contracts and stamping/legal checks",
+        "Register signed documents, security interests and conditions",
+        "Release disbursement eligibility only upon independent verification"
+      ]
+    },
+    {
+      "source": "Unified §§01–03, 13; V8, V10",
+      "id": "CRD-04",
+      "title": "Disbursement and SQL borrower/lender accounting",
+      "owner": "Credit Operations / Treasury",
+      "trigger": "Conditions precedent fulfilled",
+      "target": "Before banking release",
+      "steps": [
+        "Confirm board and borrower signed obligations",
+        "Verify payee account independent of applicant message",
+        "Obtain treasury dual release and disbursement receipt",
+        "Post mirror balances to appropriate company SQL databases",
+        "Tie loan principal, fees and schedule to statement"
+      ]
+    },
+    {
+      "source": "Unified §§01–03, 13; V8, V10",
+      "id": "CRD-05",
+      "title": "Loan repayment, aging and covenant monitoring",
+      "owner": "Loan Servicing Officer",
+      "trigger": "Each installment due",
+      "target": "Daily overdue watch; monthly portfolio review",
+      "steps": [
+        "Reconcile bank receipts against schedule without assuming paid",
+        "Apply allocation rules in agreement and current law",
+        "Report arrears, restructuring requests and covenant breach",
+        "Issue permitted reminders and escalate to committee",
+        "Match outstanding loan ledger to GL by lender/borrower"
+      ]
+    },
+    {
+      "source": "Unified §§01–03, 13; V8, V10",
+      "id": "CRD-06",
+      "title": "Collateral rights and agreement register",
+      "owner": "Legal / Corporate Credit",
+      "trigger": "New financing security",
+      "target": "Before disbursement",
+      "steps": [
+        "Record collateral as security, not current share ownership",
+        "Classify legal rights, parties, cure, notices and priority",
+        "Validate board/company secretarial and KDN sensitivity",
+        "Record restrictions on release/enforcement separately",
+        "Review documents and expiry with counsel periodically"
+      ]
+    },
+    {
+      "source": "Unified §§01–03, 13; V8, V10",
+      "id": "CRD-07",
+      "title": "Contractual default and enforcement trigger",
+      "owner": "Credit Operations / Legal",
+      "trigger": "Verified failure against agreed payment condition",
+      "target": "Trigger case immediately after contractual criteria",
+      "steps": [
+        "Validate due amount, cure/grace terms and genuine nonpayment",
+        "Generate enforcement CASE and preserve evidence",
+        "Route notices/approvals to legal and lender authority",
+        "Coordinate lawful remedies, regulator/KDN/SSM permissions as required",
+        "Mark ownership changed only after independently verified legal completion"
+      ]
+    },
+    {
+      "source": "Unified §§01–03, 13; V8, V10",
+      "id": "CRD-08",
+      "title": "Loan restructuring and waiver",
+      "owner": "Credit Committee / Legal",
+      "trigger": "Borrower requests relief",
+      "target": "Before changing schedule",
+      "steps": [
+        "Document reason and collection alternatives",
+        "Model lender exposure and cash impact",
+        "Obtain properly authorized waiver/variation agreement",
+        "Update effective-dated schedule without erasing default history",
+        "Check revised entries and monitor revised terms"
+      ]
+    },
+    {
+      "source": "Unified §§01–03, 13; V8, V10",
+      "id": "CRD-09",
+      "title": "Loan settlement and collateral release",
+      "owner": "Credit Operations / Legal",
+      "trigger": "All amounts satisfied or approved release",
+      "target": "Within contractual release timetable",
+      "steps": [
+        "Obtain reconciled principal/fees/receipt report",
+        "Verify absence of remaining secured obligations",
+        "Prepare authorized release documents",
+        "Complete actual discharge/filing/return as applicable",
+        "Archive proof and release access restrictions"
+      ]
+    },
+    {
+      "source": "Unified §§01–03, 13; V8, V10",
+      "id": "CRD-10",
+      "title": "Credit portfolio stress test and provisioning",
+      "owner": "FP&A / Credit Risk",
+      "trigger": "Quarterly finance review",
+      "target": "Within 15 days after quarter",
+      "steps": [
+        "Age outstanding debt by borrower and agreement",
+        "Model delayed payments/default recovery/legal costs",
+        "Assess expected credit loss/accounting treatment with Finance",
+        "Review concentrations and conflict exposures",
+        "Present provisioning and liquidity scenarios to CEO/board"
+      ]
+    },
+    {
+      "source": "Unified §13; V15",
+      "id": "AUD-01",
+      "title": "Annual risk-based audit programme",
+      "owner": "Audit Manager",
+      "trigger": "FY plan approval",
+      "target": "30 days before FY",
+      "steps": [
+        "Score entities, branches, CMS and Arms Control risk",
+        "Select rotation coverage and high-value controls",
+        "Maintain auditor independence and access permissions",
+        "Seek CEO/board committee endorsement",
+        "Publish sampling schedule and unavoidable conflicts"
+      ]
+    },
+    {
+      "source": "Unified §13; V15",
+      "id": "AUD-02",
+      "title": "Company/branch internal audit",
+      "owner": "Internal Auditor",
+      "trigger": "Assigned audit visit",
+      "target": "Report within 10 workdays after fieldwork",
+      "steps": [
+        "Review licences, management agreements and bank entitlements",
+        "Sample payroll, guards, revenue, expenses and stock",
+        "Verify true independent evidence against claimed process",
+        "Grade findings with owner, due date and root cause",
+        "Present report to appropriate management without self-approving closure"
+      ]
+    },
+    {
+      "source": "Unified §13; V15",
+      "id": "AUD-03",
+      "title": "Fraud anomaly surveillance",
+      "owner": "Audit Data Analyst",
+      "trigger": "Daily rules or whistleblower reports",
+      "target": "High-risk same-day triage",
+      "steps": [
+        "Detect ghost guards, duplicate vendors, changed payees, fake NFC or revenue diversion",
+        "Validate false positives using source records",
+        "Restrict access and preserve original event data",
+        "Assign independent case to audit/legal/HR",
+        "Report substantiated losses and recoveries, avoiding automatic guilt"
+      ]
+    },
+    {
+      "source": "Unified §13; V15",
+      "id": "AUD-04",      "title": "Whistleblowing intake and confidentiality",
+      "owner": "Integrity Officer",
+      "trigger": "Named/anonymous report",
+      "target": "Acknowledge when safe within 2 workdays",
+      "steps": [
+        "Protect reporter identity and assess imminent harm",
+        "Classify financial, corruption, harassment or safety allegation",
+        "Assign investigator outside implicated reporting chain",
+        "Record disposition with restricted evidence",
+        "Monitor retaliation and closure commitments"
+      ]
+    },
+    {
+      "source": "Unified §13; V15",
+      "id": "AUD-05",
+      "title": "Conflict of interest and gifts declaration",
+      "owner": "Compliance / HR",
+      "trigger": "Hiring, tender, vendor selection, annual refresh",
+      "target": "Before affected decision",
+      "steps": [
+        "Request personal interest, relations and gifts details",
+        "Screen procurement, branch and director overlap",
+        "Impose recusal and alternate decision maker as needed",
+        "Obtain signoff and record register",
+        "Audit suspicious non-declarations independently"
+      ]
+    },
+    {
+      "source": "Unified §13; V15",
+      "id": "AUD-06",
+      "title": "Third-party and subcontractor assurance",
+      "owner": "Vendor Risk/Compliance",
+      "trigger": "New subcontract or annual renewal",
+      "target": "Before subcontract begins",
+      "steps": [
+        "Confirm proper licence, legal employer, tax/insurance and worker welfare",
+        "Assess performance, data access and armed restrictions",
+        "Approve written subcontract terms/flow-down obligations",
+        "Audit delivered hours, wages and supervision",
+        "Suspend/terminate on material unremediated breach"
+      ]
+    },
+    {
+      "source": "Unified §13; V15",
+      "id": "AUD-07",
+      "title": "Audit finding and corrective action management",
+      "owner": "Audit Follow-up Officer",
+      "trigger": "Agreed finding issued",
+      "target": "Action owner assigned within 2 days",
+      "steps": [
+        "Document evidence-based root cause and impact",
+        "Negotiate achievable remediation dates by risk",
+        "Require owner implementation proof and retest",
+        "Independent auditor verifies effectiveness",
+        "Escalate repeated overdue or deliberately misreported closure"
+      ]
+    },
+    {
+      "source": "Unified §13; V15",
+      "id": "AUD-08",
+      "title": "Regulatory enforcement / suspected bribery",
+      "owner": "Integrity / Legal",
+      "trigger": "Credible serious allegation",
+      "target": "Immediate confidential escalation",
+      "steps": [
+        "Assess evidence preservation and legal notification duties",
+        "Separate implicated decision makers from evidence or approvals",
+        "Commission independent counsel/investigator if needed",
+        "Document authority, investigation status and due process",
+        "Implement control correction and lawfully report outcome"
+      ]
+    },
+    {
+      "source": "Unified §13; V15",
+      "id": "AUD-09",
+      "title": "Quarterly assurance to Director Office",
+      "owner": "Internal Audit Manager",
+      "trigger": "Quarter-end",
+      "target": "Within 15 working days",
+      "steps": [
+        "Rank material overdue findings and repeat issues",
+        "Reconcile audit results with operational dashboards",
+        "Escalate high-risk systemic control failures and fraud trends",
+        "Record management challenge and disputed views",
+        "Track accepted responses and direct follow-up testing"
+      ]
+    },
+    {
+      "source": "Unified §§11–13; V13, V15",
+      "id": "PRV-01",
+      "title": "Personal data inventory and role assessment",
+      "owner": "DPO / Privacy Manager",
+      "trigger": "New feature/client or annual audit",
+      "target": "Before collection or integration",
+      "steps": [
+        "Map data subject, purpose, lawful basis and company controller/processor",
+        "Classify biometrics, medical, guard GPS, ANPR and CCTV",
+        "Assess retention, access and cross-border transfers",
+        "Obtain DPIA and legal signoff where appropriate",
+        "Register approved privacy notice and deletion schedule"
+      ]
+    },
+    {
+      "source": "Unified §§11–13; V13, V15",
+      "id": "PRV-02",
+      "title": "DPO and registration applicability",
+      "owner": "Privacy Compliance",
+      "trigger": "New company or legal change",
+      "target": "Review per latest JPDP rules",
+      "steps": [
+        "Verify 2026 controller registration circular and data-class criteria",
+        "Evaluate DPO appointment conditions and actual licensed entity",
+        "Record who is accountable and reporting route",
+        "File registration/notification if required",
+        "Review on changes to scale/service types"
+      ]
+    },
+    {
+      "source": "Unified §§11–13; V13, V15",
+      "id": "PRV-03",
+      "title": "Privacy incident and data-breach response",
+      "owner": "Security Incident Lead / DPO",
+      "trigger": "Personal data suspected exposed",
+      "target": "Immediate containment; law-specific reporting clock",
+      "steps": [
+        "Contain access and preserve logs without deleting evidence",
+        "Identify affected legal entities, subjects and data categories",
+        "Obtain counsel/DPO statutory notification assessment",
+        "Notify authority/affected parties if required within actual timelines",
+        "Document root cause, remediation and incident closure"
+      ]
+    },
+    {
+      "source": "Unified §§11–13; V13, V15",
+      "id": "PRV-04",
+      "title": "Data subject access/correction/deletion",
+      "owner": "Privacy Case Officer",
+      "trigger": "Authorized personal data request",
+      "target": "Apply statutory response period",
+      "steps": [
+        "Authenticate requester appropriately",
+        "Locate company/system records without over-disclosure",
+        "Check legal holds and retention/legal exemptions",
+        "Approve safe export, correction or lawful deletion",
+        "Confirm outcome and audit history"
+      ]
+    },
+    {
+      "source": "Unified §§11–13; V13, V15",
+      "id": "PRV-05",
+      "title": "CCTV/ANPR/biometric access request",
+      "owner": "CMS Data Custodian / DPO",
+      "trigger": "Client, law enforcement or staff request",
+      "target": "Triage same day",
+      "steps": [
+        "Verify requester authority, contract and purpose",
+        "Retrieve minimum footage with chain-of-custody controls",
+        "Mask other subjects when necessary and lawful",
+        "Obtain named approval and controlled secure transfer",
+        "Record recipient, expiry, access and deletion/hold"
+      ]
+    },
+    {
+      "source": "Unified §§11–13; V13, V15",
+      "id": "PRV-06",
+      "title": "Retention, legal hold and secure disposal",
+      "owner": "Records Manager",
+      "trigger": "Retention schedule expiry or legal dispute",
+      "target": "Scheduled monthly review",
+      "steps": [
+        "Inventory data across SQL, PostgreSQL, VMS, email and backups",
+        "Identify statutory/accounting/contract holds",
+        "Obtain legal approval for scheduled disposal",
+        "Execute secure deletion by owner system without altering audit evidence",
+        "Certify purge or indefinite hold review date"
+      ]
+    },
+    {
+      "source": "Unified §§11–13; V13, V15",
+      "id": "PRV-07",
+      "title": "Employee joiner/mover/leaver IAM",
+      "owner": "IT IAM / HR",
+      "trigger": "Employment status or job change",
+      "target": "Leaver revoke on effective time",
+      "steps": [
+        "Confirm authorization and scope by company, department and site",
+        "Enforce MFA and least privilege for staff",
+        "Re-approve sensitive Finance/Arms/CMS role changes",
+        "Revoke cloud, bank/OEM and physical credentials on exit",
+        "Verify privileged accounts and periodic access recertification"
+      ]
+    },
+    {
+      "source": "Unified §§14–18; V1, V3, V13, V15",
+      "id": "TEC-01",
+      "title": "Product backlog intake and change control",
+      "owner": "Product Owner / CTO",
+      "trigger": "New requirement, law change or bug",
+      "target": "Triage within 2 workdays",
+      "steps": [
+        "Link requirement to SOP, entity, actor and business acceptance",
+        "Grade security/statutory/financial consequence",
+        "Estimate dependency and technical effort",
+        "Obtain approved release priority and change request",
+        "Version design, tests, training and rollout notes"
+      ]
+    },
+    {
+      "source": "Unified §§14–18; V1, V3, V13, V15",
+      "id": "TEC-02",
+      "title": "Architecture decision record",
+      "owner": "Solution Architect",
+      "trigger": "Material schema, cloud or integration change",
+      "target": "Before build",
+      "steps": [
+        "Describe alternatives and compatibility with modular monolith",
+        "Document data ownership, permissions, scaling and recovery impact",
+        "Review finance and CMS safety implications",
+        "Obtain CTO and security signoff",
+        "Store ADR with date, superseded decisions and rollback"
+      ]
+    },
+    {
+      "source": "Unified §§14–18; V1, V3, V13, V15",
+      "id": "TEC-03",
+      "title": "Canonical multi-company identity and tenancy",
+      "owner": "Platform Engineer",
+      "trigger": "New entity or data-domain implementation",
+      "target": "Before pilot",
+      "steps": [
+        "Define legal entity, branch, contract/site, worker and asset IDs",
+        "Set row/attribute security at API and database",
+        "Restrict group rollups to authorized views",
+        "Test cross-entity ID collision and data leakage",
+        "Obtain independent penetration/UAT proof"
+      ]
+    },
+    {
+      "source": "Unified §§14–18; V1, V3, V13, V15",
+      "id": "TEC-04",
+      "title": "Event bus/API integration and idempotency",
+      "owner": "Integration Lead",
+      "trigger": "SQL/payroll/eSIMS/OEM interface change",
+      "target": "Before live connector",
+      "steps": [
+        "Specify event ID, source, effective time, schema version and entity",
+        "Implement retries, dead-letter and backoff",
+        "Prevent duplicate money/attendance postings with idempotency key",
+        "Surface stale/failed sync and compensating action",
+        "Run signed reconciliation and alert on divergence"
+      ]
+    },
+    {
+      "source": "Unified §§14–18; V1, V3, V13, V15",
+      "id": "TEC-05",
+      "title": "Data migration and cutover reconciliation",
+      "owner": "Data Migration Lead",
+      "trigger": "Legacy-to-new rollout",
+      "target": "Parallel trial before cutover",
+      "steps": [
+        "Map source datasets and owners; detect duplicates",
+        "Classify invalid/missing documentation and historic balances",
+        "Trial-load test company/site/guard/asset/contract links",
+        "Compare row counts, sums and selected source evidence",
+        "Sign migration discrepancies, rollback and operational cutover"
+      ]
+    },
+    {
+      "source": "Unified §§14–18; V1, V3, V13, V15",
+      "id": "TEC-06",
+      "title": "Financial integration release",
+      "owner": "SQL Integration Lead",
+      "trigger": "New posting/report sync",
+      "target": "Before opening live period",
+      "steps": [
+        "Verify actual SQL Account edition/API and licence",
+        "Map no-duplicate document numbers and taxes to correct entity",
+        "Reconcile accepted/rejected invoice, payment and journal statuses",
+        "Test restart/retry and delayed statement exceptions",
+        "Require Finance signoff on zero unexplained balances"
+      ]
+    },
+    {
+      "source": "Unified §§14–18; V1, V3, V13, V15",
+      "id": "TEC-07",
+      "title": "Payroll interface and exception recovery",
+      "owner": "Payroll Systems Engineer",
+      "trigger": "Time export or payfile upgrade",
+      "target": "Parallel two payroll cycles proposed",
+      "steps": [
+        "Verify approved hours, legal employer and pay period",
+        "Validate rejected rows and effective-dated rate rules",
+        "Hash/export approved immutable snapshot",
+        "Reconcile payroll register, bank and GL bridge",
+        "Roll back or hold release on uncontrolled wage discrepancy"
+      ]
+    },
+    {
+      "source": "Unified §§14–18; V1, V3, V13, V15",
+      "id": "TEC-08",
+      "title": "CMS device/vendor connector certification",
+      "owner": "Security Systems Integrator",
+      "trigger": "New CCTV, NFC, ANPR or access OEM",
+      "target": "Before client go-live",
+      "steps": [
+        "Confirm OEM licence/API compatibility and cybersecurity permission",
+        "Test event timestamps, device auth, health, false alerts and offline queue",
+        "Verify video stays VMS/NVR unless approved clip export",
+        "Test safe gate/turnstile interlocks and human override policy",
+        "Obtain client engineering, Ops and IT signoffs"
+      ]
+    },
+    {
+      "source": "Unified §§14–18; V1, V3, V13, V15",
+      "id": "TEC-09",
+      "title": "CMS operational high availability and fallback",
+      "owner": "SRE / CMS IT",
+      "trigger": "24h monitoring production or site loss",
+      "target": "Availability objective set in SLA",
+      "steps": [
+        "Instrument events, queue lag and controller health",
+        "Maintain independent site/local safe operation and redundancy",
+        "Exercise operator failover to alternate control point",
+        "Reconcile delayed alarms without deleting originals",
+        "Approve return to service after incident and user acceptance"
+      ]
+    },
+    {
+      "source": "Unified §§14–18; V1, V3, V13, V15",
+      "id": "TEC-10",
+      "title": "Data access security and secrets",
+      "owner": "Security Engineer",
+      "trigger": "New role, OEM connector or privileged service",
+      "target": "Before credential issue",
+      "steps": [
+        "Implement least privilege, MFA and scoped service principals",
+        "Store secrets/certs with rotation and no source-code credentials",
+        "Set monitoring for unusual export, bank and vault access",
+        "Conduct periodic permission recertification",
+        "Revoke compromised credentials and audit activity"
+      ]
+    },
+    {
+      "source": "Unified §§14–18; V1, V3, V13, V15",
+      "id": "TEC-11",
+      "title": "Application security verification",
+      "owner": "AppSec / QA",
+      "trigger": "Each high-risk release",
+      "target": "Block release until critical tests pass",
+      "steps": [
+        "Run dependency/security scan and review OWASP ASVS relevant controls",
+        "Test authorization across companies/clients",
+        "Review audit logs for financial and armed transactions",
+        "Validate privacy and anti-injection protections",
+        "Record vulnerabilities, fixes and approved residual risks"
+      ]
+    },
+    {
+      "source": "Unified §§14–18; V1, V3, V13, V15",
+      "id": "TEC-12",
+      "title": "Backup restore and disaster recovery exercise",
+      "owner": "SRE / CTO",
+      "trigger": "Scheduled DR test / incident",
+      "target": "Quarterly restore trial proposed",
+      "steps": [
+        "Define RPO/RTO by CMS, HR, finance and legal evidence",
+        "Back up databases, blobs, configs and immutable documents",
+        "Restore isolated environment and compare data integrity",
+        "Practice recovery with users and OEM dependencies",
+        "File recovery measurement, exceptions and improvement owner"
+      ]
+    },
+    {
+      "source": "Unified §§14–18; V1, V3, V13, V15",
+      "id": "TEC-13",
+      "title": "Production change approval and rollback",
+      "owner": "Change Manager / CTO",
+      "trigger": "Planned deploy or emergency patch",
+      "target": "Prior change approval",
+      "steps": [
+        "Prepare tested build, migration and rollback script",
+        "Obtain Product/QA/InfoSec/Finance/Ops signoffs by impact",
+        "Execute canary and monitor errors/transactions",
+        "Restore previous version if acceptance checks fail",
+        "Publish incident/change result and completion evidence"
+      ]
+    },
+    {
+      "source": "Unified §§14–18; V1, V3, V13, V15",
+      "id": "TEC-14",
+      "title": "Observability, support and incident response",
+      "owner": "IT Service Desk / SRE",
+      "trigger": "Alert, fault or staff ticket",
+      "target": "P1 initial response <=15min proposed",
+      "steps": [
+        "Correlate trace/log/metrics without exposing protected data",
+        "Classify severity, scope and legal entity impacts",
+        "Assign incident commander, communications and workaround",
+        "Track cause, recovery and third-party ticket",
+        "Run postincident learning and service-credit decision"
+      ]
+    },
+    {
+      "source": "Unified §§14–18; V1, V3, V13, V15",
+      "id": "TEC-15",
+      "title": "Environment access and release separation",
+      "owner": "DevOps / IT Security",
+      "trigger": "Developer or vendor needs access",
+      "target": "Before grant",
+      "steps": [
+        "Separate production/staging/test data and credentials",
+        "Require ticket, access purpose, expiry and approver",
+        "Use masked/synthetic payroll, CCTV and health records in tests",
+        "Record deployment provenance and access logs",
+        "Revoke expiry and sample for unauthorized access"
+      ]
+    },
+    {
+      "source": "Unified §§14–18; V1, V3, V13, V15",
+      "id": "TEC-16",
+      "title": "Product acceptance/UAT and training",
+      "owner": "Product Owner / Business Lead",
+      "trigger": "Feature ready for release",
+      "target": "Before rollout",
+      "steps": [
+        "Link each feature to numbered SOP and negative test case",
+        "Run operational scenario with real authorized roles in test",
+        "Test offline, duplicate, revoked user and missing evidence cases",
+        "Obtain signed business acceptance and training acknowledgment",
+        "Record defects, deferred risks and postgo-live support"
+      ]
+    },
+    {
+      "source": "Unified §§14–18; V1, V3, V13, V15",
+      "id": "TEC-17",
+      "title": "Service catalogue and support SLAs",
+      "owner": "IT Service Manager",
+      "trigger": "New production module/client integration",
+      "target": "Before go-live",
+      "steps": [
+        "Define who owns operational support versus software/vendor fault",
+        "State uptime, restoration, maintenance window and data-retention terms",
+        "Set P1/P2/P3 escalation and business fallbacks",
+        "Publish contacts, paging and incident runbooks",
+        "Audit actual SLA quarterly and renegotiate capacity"
+      ]
+    },
+    {
+      "source": "Unified §§14–18; V1, V3, V13, V15",
+      "id": "TEC-18",
+      "title": "AI agent and Power Automate governance",
+      "owner": "CTO / AI Product Owner",
+      "trigger": "New bot automates creation or approval",
+      "target": "Prior explicit use-case approval",
+      "steps": [
+        "Limit bot to delegated read/draft actions with approval gates",
+        "Validate data access/retention and prompt injection boundaries",
+        "Require named human acceptance for finance/HR/legal/arms actions",
+        "Log actions and monitor incorrect/duplicate submissions",
+        "Disable agent quickly on safety or regulatory failures"
+      ]
+    },
+    {
+      "source": "Unified §§14–18; V1, V3, V13, V15",
+      "id": "TEC-19",
+      "title": "Vendor development / software supply chain",
+      "owner": "CTO / Procurement",
+      "trigger": "External coder, cloud/OEM supplier engaged",
+      "target": "Before granting access",
+      "steps": [
+        "Verify IP ownership, NDA, security and service contract",
+        "Mandate code review, branch protections and dependency inventory",
+        "Require independent testing and documented deployment rights",
+        "Set escalation and exit/export continuity plan",
+        "Review SLA, vulnerabilities and subcontractor access"
+      ]
+    },
+    {
+      "source": "Unified §§14–18; V1, V3, V13, V15",
+      "id": "TEC-20",
+      "title": "Performance and capacity benchmarking",
+      "owner": "Solution Architect / QA",
+      "trigger": "Monthly scale test / rollout to more entities",
+      "target": "Before production stage expansion",
+      "steps": [
+        "Verify real company/guard/site transaction counts",
+        "Simulate shift-change check-ins, CCTV events and monthly payroll peaks",
+        "Monitor query latency, queue lag and cost",
+        "Identify saturation/failure mode and adjust resources",
+        "Repeat regression and budget approval after optimization"
+      ]
+    },
+    {
+      "source": "Unified §§11–18; V15",
+      "id": "BCM-01",
+      "title": "All-hazards incident command activation",
+      "owner": "COO / Duty Incident Commander",
+      "trigger": "Death, major fire, flood, violence or systemic outage",
+      "target": "Immediate command activation",
+      "steps": [
+        "Stabilize life safety and summon emergency service as appropriate",
+        "Set incident category, unified command and legal entity",
+        "Coordinate CMS, HR, client, insurer and directors",
+        "Track resources, situation and official contacts",
+        "Record recovery criteria and after-action review"
+      ]
+    },
+    {
+      "source": "Unified §§11–18; V15",
+      "id": "BCM-02",
+      "title": "Flood/weather and nationwide deployment continuity",
+      "owner": "Regional COO / CMS",
+      "trigger": "Severe hazard warning or multiple site closures",
+      "target": "Preparedness 24-72h where possible",
+      "steps": [
+        "Map exposed sites, hostels, routes and vulnerable workers",
+        "Review local emergency plans and relief staffing",
+        "Notify clients of risk and alternative security arrangements",
+        "Dispatch safe transport/hostel alternatives if required",
+        "Verify recovery, cost, claims and staff welfare"
+      ]
+    },
+    {
+      "source": "Unified §§11–18; V15",
+      "id": "BCM-03",
+      "title": "Cash liquidity or salary funding crisis",
+      "owner": "Finance Director / Treasury",
+      "trigger": "Forecast breach of salary/critical AP funds",
+      "target": "Escalate same day",
+      "steps": [
+        "Verify 13-week cash impact by legal entity and branch",
+        "Prioritize statutory and worker obligations",
+        "Check contract collections and approved financing options",
+        "Seek board/credit committee decisions through legal agreements",
+        "Monitor daily cash bridge until stable"
+      ]
+    },
+    {
+      "source": "Unified §§11–18; V15",
+      "id": "BCM-04",
+      "title": "Loss of key manager, approver or branch partner",
+      "owner": "Chief of Staff / COO",
+      "trigger": "Sudden absence, termination or incapacity",
+      "target": "Same-day interim delegation",
+      "steps": [
+        "Check lawful current delegated rights and signatories",
+        "Secure sensitive access, banking, CMS and arms custody",
+        "Appoint trained temporary officer with expiry",
+        "Transfer open cases and notify affected companies/clients",
+        "Revalidate appointments, mandated approvals and audit trail"
+      ]
+    },
+    {
+      "source": "Unified §§11–18; V15",
+      "id": "BCM-05",
+      "title": "Critical client service recovery",
+      "owner": "Company GM / CMS / Account Manager",
+      "trigger": "Sustained uncovered service or major SLA breach",
+      "target": "Client contact per SLA, preferably same day",
+      "steps": [
+        "Confirm service deficit and cause",
+        "Deploy qualified emergency relief and safety plan",
+        "Notify client under contract and record commitments",
+        "Quantify service credits, additional cost and insurer exposure",
+        "Validate sustained recovery with patrol/CMS evidence"
+      ]
+    },
+    {
+      "source": "Unified §§11–18; V15",
+      "id": "BCM-06",
+      "title": "Annual policy, SOP and statutory training review",
+      "owner": "Compliance / CoS",
+      "trigger": "Scheduled annual review or law change",
+      "target": "Annual and after major incident",
+      "steps": [
+        "List every SOP owner, last review and legal dependencies",
+        "Incorporate incident lessons and changed contracts",
+        "Seek correct legal/regulator confirmation",
+        "Publish version with required acknowledgements",
+        "Test next case against updated decision logic"
+      ]
+    },
+    {
+      "source": "Unified §§11–18; V15",
+      "id": "BCM-07",
+      "title": "Operational internal control effectiveness",
+      "owner": "Audit/Compliance",
+      "trigger": "Monthly dashboard and quarterly deep dive",
+      "target": "Monthly + quarterly",
+      "steps": [
+        "Compare completed cases to supporting evidence and actual bank/agency records",
+        "Sample late statutory, payroll, CMS and approvals",
+        "Identify false 'closed' statuses and ineffective controls",
+        "Assign remediation owners and independent retest dates",
+        "Report persistent exceptions to CEO/board"
+      ]
+    },
+    {
+      "source": "Unified §§11–18; V15",
+      "id": "BCM-08",
+      "title": "Case backlog and recurring follow-up",
+      "owner": "Chief of Staff / Director Office Administrator",
+      "trigger": "Daily work queue review",
+      "target": "Daily 08:30 proposed",
+      "steps": [
+        "Rank cases by legal due, client harm and value",
+        "Identify unowned, stale and blocked tasks",
+        "Assign one accountable human and verifier",
+        "Escalate overdue P1/P2 through matrix",
+        "Close on proof not tick-box completion"
+      ]
+    }
+  ]
+}

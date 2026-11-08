@@ -1,15 +1,29 @@
-// Foreign Worker Management (Fauzan, 26 Oct 2026): the reminder ladder for foreign-worker papers, the Year 10 plan,
-// and the labels FWM uses. FWM does the renewals; the company stays the employer.
+import { RULES } from "./rules";
+import { addDays } from "./time";
+import { daysBetween } from "./time";
+import type { FwCheckKind } from "./types";
+import type { FwConcern } from "./types";
+import type { FwmTaskKind } from "./types";
+import type { FwPaper } from "./types";
+import type { FwWelfareCheck } from "./types";
+import type { IsoDate } from "./types";
+import type { Id } from "./types";
+import type { IsoDateTime } from "./types";
+import type { JaPaper } from "./types";
+import { ageOn } from "./time";
+import type { FwContractLanguage } from "./types";
+import type { FwRecruitFile } from "./types";
+import type { FwRecruitStep } from "./types";
 
-import { RULES } from './rules';
-import { addDays, ageOn, daysBetween } from './time';
-import type { FwCheckKind, FwConcern, FwContractLanguage, FwmTaskKind, FwPaper, FwRecruitFile, FwRecruitStep, FwWelfareCheck, IsoDate } from './types';
+
 
 export const FW_PAPER_LABEL: Record<FwPaper, string> = {
   PLKS_PERMIT: 'Work permit (PLKS)',
   PASSPORT: 'Passport',
   FOMEMA: 'FOMEMA medical',
   FW_INSURANCE: 'Foreign worker insurance',
+  SPIKPA: 'SPIKPA hospital insurance',
+  KDN_LETTER: 'KDN approval letter',
 };
 
 export const FWM_TASK_LABEL: Record<FwmTaskKind, string> = {
@@ -156,6 +170,90 @@ export function agencyScorecard(checks: FwWelfareCheck[]): AgencyScore[] {
     by.set(key, s);
   }
   return [...by.values()].sort((a, b) => b.feesFound - a.feesFound || b.paid - a.paid || a.agency.localeCompare(b.agency));
+}
+
+// ---------- Real use in both Prima and the JA Group app (Fauzan, 5 Nov 2026) ----------
+// The permit and renewal board lives in BOTH apps. FWM records papers in Prima from the paper itself; the JA app sends
+// its own dates. Where they differ the board says so and never picks one silently.
+
+/** JA paper codes and the paper on Prima's ladder. FWIG is Prima's foreign worker insurance (Fauzan confirmed, 5 Nov 2026). */
+export const JA_TO_FW_PAPER: Partial<Record<JaPaper, FwPaper>> = {
+  PLKS: 'PLKS_PERMIT',
+  PASSPORT: 'PASSPORT',
+  FOMEMA: 'FOMEMA',
+  FWIG: 'FW_INSURANCE',
+  SPIKPA: 'SPIKPA',
+  KDN_LETTER: 'KDN_LETTER',
+};
+
+/** Every paper on the FWM ladder. SPIKPA and the KDN letter joined on 5 Nov 2026 (Fauzan). */
+export const FW_PAPERS: FwPaper[] = ['PLKS_PERMIT', 'PASSPORT', 'FOMEMA', 'FW_INSURANCE', 'SPIKPA', 'KDN_LETTER'];
+
+/** The KDN approval letter is needed from service year 4 (FWCMS); before that a missing one is not a gap. */
+export const FW_KDN_LETTER_FROM_YEAR = 4;
+
+/** Add working days, skipping Saturday, Sunday and the public holidays in rule FWM-ACK. */
+export function addFwWorkingDays(d: IsoDate, n: number): IsoDate {
+  const holidays = new Set(RULES.fwmAck.value.holidays);
+  let cur = d;
+  let left = n;
+  while (left > 0) {
+    cur = addDays(cur, 1);
+    const wd = new Date(`${cur}T00:00:00Z`).getUTCDay();
+    if (wd !== 0 && wd !== 6 && !holidays.has(cur)) left -= 1;
+  }
+  return cur;
+}
+
+export const FW_TO_JA_PAPER: Record<FwPaper, JaPaper> = {
+  PLKS_PERMIT: 'PLKS',
+  PASSPORT: 'PASSPORT',
+  FOMEMA: 'FOMEMA',
+  FW_INSURANCE: 'FWIG',
+  SPIKPA: 'SPIKPA',
+  KDN_LETTER: 'KDN_LETTER',
+};
+
+
+/**
+ * Who must acknowledge, and from how many days before the deadline (rule FWM-ACK): at 30 days or less everyone
+ * alerted acknowledges within 1 working day. FWM and the Chief of Staff from 30 days, the COO from 15, the CEO from 7.
+ */
+export const FW_ACK_FROM: Record<FwLevel, number> = { FWM: 30, CHIEF_OF_STAFF: 30, COO: 15, CEO: 7 };
+
+export interface FwAck {
+  level: FwLevel;
+  /** The expiry this acknowledgement answers; a new expiry needs a new one. */
+  expiresOn: IsoDate;
+  by: string;
+  byId: Id;
+  at: IsoDateTime;
+  note: string;
+}
+
+/**
+ * The acknowledgements still owed for one paper. Each level alerted at 30 days or less owes one, due 1 working day
+ * after the day the paper reached that level's step (rule FWM-ACK). A paused paper (renewal submitted) owes none.
+ */
+export function fwAcksOwed(deadline: IsoDate, expiresOn: IsoDate, stage: FwStage, acks: FwAck[], today: IsoDate) {
+  if (stage.paused || stage.step === null) return [];
+  const days = RULES.fwmAck.value.workingDays;
+  return stage.alerted
+    .filter((level) => stage.step! <= FW_ACK_FROM[level])
+    .filter((level) => !acks.some((a) => a.level === level && a.expiresOn === expiresOn))
+    .map((level) => {
+      const reached = addDays(deadline, -FW_ACK_FROM[level]);
+      const dueOn = addFwWorkingDays(reached, days);
+      return { level, dueOn, late: dueOn < today };
+    });
+}
+
+/** Passport numbers are kept to their last 4 characters in Prima; the full number stays in the restricted vault and the JA app. */
+export function fwPaperNumber(paper: FwPaper, raw: string): string {
+  const v = raw.trim().replace(/\s+/g, ' ');
+  if (paper !== 'PASSPORT') return v;
+  const tail = v.replace(/[^A-Za-z0-9]/g, '').slice(-4);
+  return tail ? `****${tail}` : '';
 }
 
 // ---------- Foreign worker recruitment steps (Fauzan, 6 Nov 2026, IWAY answer 7) ----------

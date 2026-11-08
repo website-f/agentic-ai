@@ -35,6 +35,7 @@ Guards are keyed in once, in JA. Prima files each guard as the single record use
 | `kdnCard` | no | `{ "number", "issuedOn", "expiresOn" }` |
 | `vettingSubmittedOn`, `vettingRef` | no | eSIMS vetting submission |
 | `csg`, `tng` | no | `{ "certificateNo", "doneOn" }` |
+| `leftOn`, `leftHow` | no | Only with `status` `left`, and always together. `leftOn` is the last working day (`YYYY-MM-DD`, not before `hiredOn`); `leftHow` is `resigned`, `terminated`, `contract_end` or `retired`. Feeds the group employment history. |
 
 ## Who sees what in Prima
 - HR: every company. Full numbers behind the HR wall.
@@ -42,6 +43,14 @@ Guards are keyed in once, in JA. Prima files each guard as the single record use
 - Operations: the guards in its states or companies (counts and papers, no pay).
 - FWM: foreign guards' passport numbers only.
 - Group leaders: view.
+
+## Group employment history (4 Nov 2026, draft)
+- Each JA record is one company's employment. A guard who left one group company and joined another, or came back after
+  years, has a record per employment; Prima links them to one person by the IC or passport (`idFull`). The records stay separate.
+- To build the history from JA's past, send the guards who left too (`status` `left` with `leftOn` and `leftHow`), once per
+  company, in the usual batches of up to 1,000.
+- Without `idFull` a record is filed but not linked; HR links it later from the history board.
+- See `docs/STAFF_HISTORY.md`.
 
 ## Open
 - Papers recorded in Prima (for example a CSG certificate HR keys in) flowing back to JA.

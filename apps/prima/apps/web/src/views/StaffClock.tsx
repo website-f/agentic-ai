@@ -17,7 +17,7 @@ import { Card, Empty, PageHead, Person, Search, Stat, Stats } from '../kit';
 import { Chip, Drawer, ErrorNotice, Loading, dateTimeLabel, useAction, useLoad, type Tone } from '../ui';
 import { gps, type Fix } from './Camera';
 import { MyRemoteSection, RemoteBoardView } from './Remote';
-import { FaceCapture } from './FaceCheck';
+import { FaceCapture, FaceChallengeCapture } from './FaceCheck';
 import { FlexPanel } from './HrLeave';
 import { OfficeOshPanel } from './HrOsh';
 import { AppraisalsPanel, PoliciesPanel, TrainingPanel } from './HrDevelop';
@@ -25,6 +25,7 @@ import { HrGuide } from './HrGuide';
 import { useApp } from '../App';
 import { MyCheckinCard, OUTCOME, VERDICT, whereText } from './CheckIn';
 import { CheckinPlacesView, CheckinReviewView } from './CheckinPlaces';
+import { MyTimeSlipSection, TimeSlipBoardView } from './TimeSlip';
 import '../styles/selfservice.css';
 
 const FLAG_LABEL: Record<StaffClockFlag, string> = {
@@ -241,6 +242,7 @@ export function MyClockView() {
         <AppraisalsPanel mine />
         <TrainingPanel mine />
         <HrGuide staffSide />
+        <MyTimeSlipSection />
       </div>
     </div>
   );
@@ -306,7 +308,7 @@ export function StaffClockBoardView() {
   const day = useLoad(() => (places ? api.checkinDay().catch(() => null) : Promise.resolve(null)), [places]);
   const reviews = useLoad(() => (places ? api.checkinReviews().catch(() => null) : Promise.resolve(null)), [places]);
   const [open, setOpen] = useState<string | null>(null);
-  const [tab, setTab] = useState<'clock' | 'home' | 'places' | 'review'>('clock');
+  const [tab, setTab] = useState<'clock' | 'home' | 'slips' | 'places' | 'review'>('clock');
   const [filter, setFilter] = useState<Filter>('all');
   const [q, setQ] = useState('');
   if (error)
@@ -372,6 +374,9 @@ export function StaffClockBoardView() {
         <button role="tab" aria-selected={tab === 'home'} onClick={() => setTab('home')}>
           Working from home
         </button>
+        <button role="tab" aria-selected={tab === 'slips'} onClick={() => setTab('slips')}>
+          Time slips
+        </button>
         {places && (
           <>
             <button role="tab" aria-selected={tab === 'places'} onClick={() => setTab('places')}>
@@ -383,7 +388,9 @@ export function StaffClockBoardView() {
           </>
         )}
       </div>
-      {tab === 'home' ? (
+      {tab === 'slips' ? (
+        <TimeSlipBoardView />
+      ) : tab === 'home' ? (
         <RemoteBoardView />
       ) : tab === 'places' ? (
         <CheckinPlacesView />
@@ -664,26 +671,35 @@ function MyFacePanel({ faceEnrolled, pending }: { faceEnrolled: boolean; pending
         {faceEnrolled && pending && (
           <>
             <p className="small">You are clocked in from your sign-in. Confirm it is you with a quick face check.</p>
-            <FaceCapture
-              label="Check my face"
-              title="Check your face"
-              busy={act.busy}
-              onCapture={(r) =>
-                void act.run(
-                  () =>
-                    api.staffFaceCheck({
-                      image: r.photo,
-                      capturedAt: new Date().toISOString(),
-                      lat: null,
-                      lng: null,
-                      accuracyM: null,
-                      face: { score: 0, live: r.live },
-                      descriptor: r.descriptor,
-                    }),
-                  'Face checked.',
-                )
-              }
-            />
+            {f.engine === 'server' ? (
+              <FaceChallengeCapture
+                label="Check my face"
+                busy={act.busy}
+                start={() => api.faceChallenge()}
+                onFrames={(r) => void act.run(() => api.staffFaceCheckFrames({ ...r, capturedAt: new Date().toISOString() }), 'Face checked.')}
+              />
+            ) : (
+              <FaceCapture
+                label="Check my face"
+                title="Check your face"
+                busy={act.busy}
+                onCapture={(r) =>
+                  void act.run(
+                    () =>
+                      api.staffFaceCheck({
+                        image: r.photo,
+                        capturedAt: new Date().toISOString(),
+                        lat: null,
+                        lng: null,
+                        accuracyM: null,
+                        face: { score: 0, live: r.live },
+                        descriptor: r.descriptor,
+                      }),
+                    'Face checked.',
+                  )
+                }
+              />
+            )}
           </>
         )}
         {faceEnrolled && !pending && <p className="ss-note">Your face is registered. Each sign-in asks for a quick face check.</p>}
@@ -700,6 +716,7 @@ function MyFacePanel({ faceEnrolled, pending }: { faceEnrolled: boolean; pending
               label="Register my face"
               title="Register your face"
               busy={act.busy}
+              photoOnly={f.engine === 'server'}
               onCapture={(r) => void act.run(() => api.registerFace({ photo: r.photo, descriptor: r.descriptor }), 'Sent to HR to approve.').then(() => mine.reload())}
             />
           </>

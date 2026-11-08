@@ -14,7 +14,7 @@ import { ESCALATE_AFTER_MIN, ROUTES } from '../src/routing';
 import { crc16, frame, handleFrame, parseFrame } from '../src/adaptors/sia-dc09';
 import { GateLists, decide, normalisePlate, plateEvent, readFromJson, PROFILES } from '../src/adaptors/anpr';
 import { driverHours, fixEvents } from '../src/adaptors/tracker';
-import { MAX_REFUSALS, flush, newLinkState, primaConfig, pullDirectory, signedRequest } from '../src/prima-link';
+import { MAX_REFUSALS, flush, newLinkState, primaConfig, pullDirectory, recordForPrima, signedRequest } from '../src/prima-link';
 import { handler, MAX_BODY, type ServerConfig } from '../src/server';
 import { createServer } from 'node:http';
 
@@ -389,7 +389,7 @@ describe('link to Prima', () => {
   it('signs the batch so Prima can check it, keeps it on failure and clears it on success', async () => {
     const cfg = { url: 'https://prima.example.invalid/api/integrations/cms/v1/events', directoryUrl: 'https://prima.example.invalid/api/integrations/cms/v1/directory', key: 'k', secret: 's' };
     const q = [intrusion()];
-    const req = signedRequest({ events: q, closedAlarms: [] }, cfg, T0.getTime());
+    const req = signedRequest({ events: q.map(recordForPrima), closedAlarms: [] }, cfg, T0.getTime());
     assert.equal(verify(req.init.headers, req.init.body, 'k', 's', T0.getTime()), true);
     const failed = await flush(q, [], cfg, async () => ({ ok: false, status: 503 }));
     assert.match(failed.error!, /503/);

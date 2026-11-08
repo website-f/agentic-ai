@@ -1,3 +1,247 @@
+# Prima Secure: master readiness and canonical subsection ledger
+
+**Refreshed 7 November 2026 (UTC). Documentation-only update to PR #61.**
+
+This refresh supersedes the readiness claims and counts in the preserved 3 November snapshot below. It does not certify acceptance, authorize deployment, change application code or resolve PR merge conflicts. The filename is retained to preserve the existing ledger identity.
+
+## A. Latest owner direction and responsibilities
+
+Fauzan's 7 November direction after the master-readiness review:
+
+- **Arisha:** refresh this existing PR #61 ledger only.
+- **Fitri:** reconcile/integrate the departmental drafts and prepare the migration/recovery work. This records Fauzan's assignment; it is not evidence that Fitri has received or completed it.
+- **UAT:** to be done later. Deferred timing is not a waiver of acceptance before real operational use.
+- **“Can we release draft all?”:** a question, not release authorization. All drafts can be candidates for one planned release, but their current separate checks do not prove combined compatibility. Preserve gates; do not bulk merge or activate from this ledger.
+- No main merge, deployment, live migration, provider/tenant grants, branch-protection change or communication to Fitri is performed by this documentation refresh.
+
+The group programme starts **18 November**, not 15 November. This is a common training/orientation start, not automatic full cutover. The 18 December basic-data checkpoint remains conditional; learning continues through March 2027. Fitri's 12 November target is not a verified completion claim.
+
+## B. Evidence baseline and limits
+
+Canonical requirement source: **82-page PWVSB Super App Unified Masterplan V1–V15, 24 October 2026**. Its chapter 19 maps 121 subsections in chapters 01–13. This refresh retains every canonical row and the old evidence trail, adds current source/PR disposition, and covers chapters 14–19 separately.
+
+- Current main: `b1325ea3bb36885ed6275fb7892709a19713c9b4`, tested tree `29b19bc6c53edf1efb96a0dfa0db7066141673c6`.
+- [PR 129](https://github.com/fauzan4377/prima-secure-app/pull/129) merged7 Nov 09:21:49 UTC. It combines six reviewed repair branches and ancestry, **not every departmental draft**.
+- 18/18 premerge jobs passed. [Post-merge CI42359424221](https://github.com/fauzan4377/prima-secure-app/actions/runs/42359424221) also succeeded on exact main at 09:33 UTC. These are source/synthetic engineering checks, not actual staff/provider acceptance.
+- Main manifest base: `0b2ffca438ca3067458fde56358a69d3eebe50aa63ba338e455552e6f7f4799c`. Five existing modules only: procurement, rental corrections, cleanup, metrics, job email. Guard-pay, pay-formula and item modules are not newly activated.
+- The 7 Nov public-runtime check found HTTP200/ok, but runtime schema expected/applied old base `4b4cf4d3…`; `ready:true` applied to the five existing modules and `providerVerified:false`. This is evidence of older staging availability, not deployment of this main or acceptance of every module. Recheck runtime before release; no Azure control-plane or real-user inspection is claimed.
+- Main protection was reported disabled by GitHub. Changing protection is a separate authorized settings action, not included here.
+- The detailed 3 Nov row descriptions/test references are historical locating evidence. This refresh verifies current PR disposition and known main changes; it does **not** independently retest every subrequirement. Unverified details remain unverified, not silently complete or absent.
+
+### B1. Current source references
+
+PR states below were freshly read during this refresh. Mergeability can change; recheck before integration. `false` means GitHub reports a conflict/dirty combination, not proof the feature itself is defective. PR 61 head is the pre-refresh snapshot; the documentation commit carrying this file supersedes it without changing application code.
+
+| Ref | Exact reviewed head | State | GitHub mergeable | Integration owner |
+|---|---|---|---|---|
+| [#49](https://github.com/fauzan4377/prima-secure-app/pull/49) | `afbdcd4f25a2716d5ff020b02431fa7b46743c34` | Open draft | false | Fitri; acceptance owners remain department-specific |
+| [#51](https://github.com/fauzan4377/prima-secure-app/pull/51) | `7bb0981c1ea47dd6b0a0e62951f594627eb24920` | Merged | Not applicable | Completed source merge |
+| [#52](https://github.com/fauzan4377/prima-secure-app/pull/52) | `af699865b3ae87e1a155293f3f56563565e52316` | Open draft | false | Fitri; acceptance owners remain department-specific |
+| [#53](https://github.com/fauzan4377/prima-secure-app/pull/53) | `4f1ed5fd37c784f8b4fba9fe42f69211a902fc6d` | Open draft | false | Fitri; acceptance owners remain department-specific |
+| [#54](https://github.com/fauzan4377/prima-secure-app/pull/54) | `a93249e01c664a954fddbcb8d40ebe1d28c05916` | Open draft | false | Fitri; acceptance owners remain department-specific |
+| [#55](https://github.com/fauzan4377/prima-secure-app/pull/55) | `ebf6e4d00850e9b7065c7ae4ad3968e00e84634d` | Open draft | false | Fitri; acceptance owners remain department-specific |
+| [#56](https://github.com/fauzan4377/prima-secure-app/pull/56) | `c76c1afb22d7c92220279db3d762aa018ad47806` | Open draft | false | Fitri; acceptance owners remain department-specific |
+| [#57](https://github.com/fauzan4377/prima-secure-app/pull/57) | `39c2c70ddeb98cfafb9b134e4c7e3919831f773e` | Open draft | false | Fitri; acceptance owners remain department-specific |
+| [#58](https://github.com/fauzan4377/prima-secure-app/pull/58) | `242aefa4ca273d0803f8c3e39464f8275cbed63d` | Open draft | false | Fitri; acceptance owners remain department-specific |
+| [#60](https://github.com/fauzan4377/prima-secure-app/pull/60) | `1bbe4a9d8a865d595ebb2e8e061e5729dbef6e06` | Open draft | false | Fitri; acceptance owners remain department-specific |
+| [#61](https://github.com/fauzan4377/prima-secure-app/pull/61) | `0cce56a134f661f5ac85d6f5753398a6dc9e0c66` | Open draft | false | Fitri; acceptance owners remain department-specific |
+| [#62](https://github.com/fauzan4377/prima-secure-app/pull/62) | `de70175f20e2ad93c3aa6942b3bb8252d0d8939c` | Open draft | false | Fitri; acceptance owners remain department-specific |
+| [#63](https://github.com/fauzan4377/prima-secure-app/pull/63) | `f25bee57b48c5cf0fe1603a51e568556ce144999` | Open draft | true | Fitri; acceptance owners remain department-specific |
+| [#129](https://github.com/fauzan4377/prima-secure-app/pull/129) | `77e9cbb133e57388384ba8e5954cd38fbbee1e2b` | Merged | Not applicable | Completed source merge |
+
+### B2. Readiness vocabulary
+
+Track independently: **source/merge**, **combined tests**, **migration/deployment**, **configuration/provider**, **real UAT**, **business acceptance/live**. A single “Ready” label is insufficient.
+
+- Green: accepted on the intended deployed release, with evidence and owner sign-off.
+- Amber: source/test evidence exists but one or more deployment/configuration/acceptance steps remain.
+- Red: a known blocking gap.
+- Grey: evidence not obtained.
+
+No overall completion percentage is published. Do not reuse the old 104/12/4/1 counts. No subsection is marked operationally accepted by this refresh. This is absence of verified acceptance evidence, not a claim no work occurred elsewhere.
+
+## C. Later decisions overriding stale row text
+
+| Topic | Current interpretation / required treatment |
+|---|---|
+| Stock ownership | Goodwill transfers/sells to the purchasing company (e.g. Sasa Security); track owner, custodian, location and condition separately using one item identity. Do not reuse the old claim that Goodwill permanently owns all equipment. |
+| Uniforms/payroll | Equipment and payroll source proposals differ. Management/legal decision and implementation reconciliation remain required before real use; do not select a deduction policy in this ledger. |
+| Payroll | Guard payroll remains side-by-side trial (`primaPays:false`); statutory bands/effective dates and full-month reconciliation remain open. |
+| Foreign-worker medical | RM200 per eligible worker **per year**, not per month; separate from statutory medical/leave obligations. |
+| Offline | Later instruction requires ongoing work and synchronization after internet returns, with 72-hour access/re-authentication boundary. Offline repair code merged, but enrollment/recovery and physical-device acceptance remain open. The old blanket “offline deferred” sentence is superseded. |
+| Power BI | Still deferred. |
+| Delegation/succession | Ordinary delegation and succession are different. Succession requires relevant leader approval plus Chairman/VC consent with date/time. Reconcile conflicting draft authority rules rather than preserving an older snapshot as policy. |
+| Director Office | Government tenders, CEO reports, and minutes/actions for every Director Office meeting. Private-sector tenders remain COO/SasaTeam. Tracking does not grant approval authority. |
+| Standards | ISO 9001:2015 is the first mapping. Do not reopen the specifically excluded PIKM cross-company shareholder/director ownership point. |
+| Arisha | Present staff IT guidance is deterministic/read-only; full document finding, workflow execution and leave-cover automation are not established by that guide. Board Q&A has a separate acceptance scope. |
+| Language | English for current owner replies; Malay where specifically requested for staff materials. |
+
+## D. Current canonical subsection overlay (121 rows)
+
+Each row retains its canonical ID, requirement and original accountable role. The source reference is refreshed to the exact current-head tableB1; historical implementation/test detail remains in appendixH. **For every row: deployed version = not verified for the intended new release; real UAT = later per owner; acceptance/sign-off = not obtained.** A provider/physical/legal gate still applies even if the row is merged.
+
+Fitri owns technical integration/migration; the listed process owner owns real data and business acceptance. Individual people and acceptance dates must be confirmed, not invented.
+
+| § | Requirement | Process owner | Current source / dependency | Current readiness evidence | Next required proof / blocker |
+|---|---|---|---|---|---|
+| 83 | Group management hierarchy | CEO / Chief of Staff | Main b1325ea3; #52 draft (B1) | Merged/base source plus draft dependencies | Revalidate historical gap: Real people and Entra links for every leader |
+| 84 | Legal-entity autonomy and board responsibility | Deputy CoS (Corporate Admin) | #52 draft | Draft; later decision overrides old wording | Do not reopen excluded PIKM cross-company ownership point; verify actual mandates |
+| 85 | Company identity and licence dossier | Head of Company; DCoS checks vs SSM | #52 draft (B1) | Draft; integration and combined validation pending | Revalidate historical gap: SSM profiles from Permata; PWVSB KPKT licence record missing |
+| 86 | Director Office mandates and controlled instructions | Director Office Administrator / CEO | #52 draft (B1) | Draft; integration and combined validation pending | Revalidate historical gap: Real mandates and signed letters |
+| 87 | Nationwide regional and state permissions | Operations Director / OGM / ROM | Main b1325ea3; #54 draft (B1) | Merged/base source plus draft dependencies | Revalidate historical gap: Real region/state assignments; no branch-creation screen |
+| 95 | Multi-company tenancy and company-aware permissions | IT Lead (platform) | Main b1325ea3; #52 draft (B1), #53 draft (B1), #56 draft (B1), #57 draft (B1) | Merged/base source plus draft dependencies | Revalidate historical gap: PostgreSQL RLS proven on main only; module walls unpackaged |
+| 96 | Management reporting versus statutory consolidation | Finance Director | #49 draft (B1) | Draft; integration and combined validation pending | Revalidate historical gap: Live SQL Account feed (staff paste exports today) |
+| 101 | Authority registry: management agreements and board mandates | Deputy CoS / counsel | #52 draft (B1) | Draft; integration and combined validation pending | Revalidate historical gap: Signed agreements; counsel validation |
+| 102 | Separation of ownership, rights and control | Deputy CoS / counsel | #52 draft (B1) | Draft; integration and combined validation pending | Revalidate historical gap: Counsel validation |
+| 115 | Company master file and statutory register | Deputy CoS | #52 draft (B1) | Draft; integration and combined validation pending | Revalidate historical gap: SSM extracts from Permata |
+| 116 | Company-secretary appointment and performance | Deputy CoS | #52 draft (B1) | Draft; integration and combined validation pending | Revalidate historical gap: Secretary performance measures not defined |
+| 117 | Corporate obligations and statutory calendar | Deputy CoS; each company renews | #52 draft (B1) | Draft; integration and combined validation pending | Revalidate historical gap: Real filing dates |
+| 118 | Filing case with evidence and acknowledgment | Deputy CoS | #52 draft (B1) | Draft; integration and combined validation pending | Revalidate historical gap: SSM acknowledgements (manual upload) |
+| 119 | Board resolutions and signatory authorities | Deputy CoS | #52 draft (B1) | Draft; integration and combined validation pending | Revalidate historical gap: Signed resolutions |
+| 120 | External auditor appointment and fees | Deputy CoS | #52 draft (B1) | Draft; integration and combined validation pending | Revalidate historical gap: Real panel names entered by staff |
+| 121 | External audit lifecycle | Deputy CoS + FD | #52 draft (B1) | Draft; integration and combined validation pending | Revalidate historical gap: Auditor portals; real cycle dates |
+| 122 | Auditor requests and SQL Account evidence | Finance Director | #49 draft (B1) | Draft; integration and combined validation pending | Revalidate historical gap: SQL Account evidence is pasted, not fetched |
+| 123 | Law-firm engagement lifecycle | Deputy CoS | #52 draft (B1) | Draft; integration and combined validation pending | Revalidate historical gap: Engagement letters |
+| 124 | Litigation, claims and deadlines | Deputy CoS | #52 draft (B1) | Draft; integration and combined validation pending | Revalidate historical gap: Court deadlines entered by staff |
+| 125 | Legal confidentiality, holds and conflicts | Deputy CoS | #52 draft (B1) | Draft; integration and combined validation pending | Revalidate historical gap: **Open:** legal hold enforcement on files not built (hold is recorded, files are not frozen) |
+| 126 | Adviser invoices and budgets | Deputy CoS + FD | #52 draft (B1) | Draft; integration and combined validation pending | Revalidate historical gap: Budget per adviser |
+| 145 | Branch formation and management agreements | COO / Operations Director | #61 draft (B1) | Draft; integration and combined validation pending | Revalidate historical gap: Real agreements and KDN refs keyed by staff. Business case + 13-week cash at formation and branch treasury (bank balance, float, payroll due, Unknown when older than 3 days: rule decided by Fauzan 3 Nov 07:42Z) added on #61 after Arisha's 3 Nov 03:32Z note; figures are recorded by Finance, no live bank read |
+| 146 | Branch rights, obligations and approval limits | COO | #61 draft (B1) | Draft; integration and combined validation pending | Revalidate historical gap: Approval limits not set by owner. JV rules (Fauzan 4 Nov 2026) added on #61: JV Branch Manager buys from any supplier with no approval, company asks but never blocks, arms only via Arms Control, CEO sets each branch's management fee %, CEO flagged when a month's profit is under 10% of billing (see docs/BRANCHES_LEDGER.md) |
+| 147 | Branch-originated opportunity to contract | Branch Manager / COO | #61 draft (B1) | Draft; integration and combined validation pending | Process owner to supply real data, normal/failure-path evidence and signed acceptance |
+| 148 | Branch accounts, payments and reconciliation | FD | #61 draft (B1) | Draft; integration and combined validation pending | Revalidate historical gap: Bank statements per branch; SQL ledger read waits for SQL connector (E62) |
+| 149 | Branch payroll and employer obligations | HR / FD | #61 draft (B1) | Draft; integration and combined validation pending | Revalidate historical gap: JA pay feed. JV branch (4 Nov 2026): branch office staff pay from Prima staff payroll goes into the month's P&L; the JV Branch Manager decides branch staff leave and sets branch office staff pay (Fauzan: "Yes they set it them self"), company and HR monitor |
+| 150 | Branch as SQL project/profit centre | FD | #61 draft (B1) | Draft; integration and combined validation pending | Revalidate historical gap: Real SQL Account project codes; no direct SQL read |
+| 162 | Three business models: master classification | COO | Main b1325ea3 | Main source/base; detailed acceptance not evidenced | Revalidate historical gap: Signed % per branch |
+| 163 | Model A: configurable percentage of eligible billing | COO / FD | Main b1325ea3; #61 draft (B1) | Merged/base source plus draft dependencies | Revalidate historical gap: Real billing lines keyed by staff |
+| 164 | Model B: company-operated branch with salary | COO / HR | Main b1325ea3 | Main source/base; detailed acceptance not evidenced | Process owner to supply real data, normal/failure-path evidence and signed acceptance |
+| 165 | Model C: configurable share of agreed net profit | COO / FD | Main b1325ea3; #61 draft (B1) | Merged/base source plus draft dependencies | Revalidate historical gap: Net-profit definition signed |
+| 166 | Company profit versus PWVSB fees and financing | FD | #54 draft (B1) | Draft; integration and combined validation pending | Revalidate historical gap: Fee amounts |
+| 167 | Contract-based monthly distribution waterfall | FD | Main b1325ea3; #61 draft (B1) | Merged/base source plus draft dependencies | Revalidate historical gap: Real contract billing |
+| 169 | Settlement statement, ledger agreement and sign-off | FD / Branch Manager | #61 draft (B1) | Draft; integration and combined validation pending | Revalidate historical gap: Ledger agreement by hand until SQL connector |
+| 170 | No unauthorized branch bank or licence proxy | ACT / FD | #61 draft (B1) | Draft; integration and combined validation pending | Process owner to supply real data, normal/failure-path evidence and signed acceptance |
+| 157 | Branch termination, step-in and asset recovery | COO / counsel | #61 draft (B1) | Draft; integration and combined validation pending | Revalidate historical gap: Counsel template |
+| 20 | Sales CRM and tender qualifications | COO (private) / DOA (government) | Main CRM/KPI repair plus #54 draft | Merged partial; draft dependency | Prove tender/client record through mobilisation and billing |
+| 4 | Contracted coverage and three billing methods | Company Manager / FD | Main b1325ea3; #49 draft (B1) | Merged/base source plus draft dependencies | Revalidate historical gap: Real contracts |
+| 21 | Client contract, insurance and SLAs | Company Manager | Main b1325ea3; #52 draft (B1) | Merged/base source plus draft dependencies | Revalidate historical gap: Real insurance policies |
+| 237 | Statutory-checked client mobilization and first billing | Company Manager / OM | Main b1325ea3 | Main source/base; detailed acceptance not evidenced | Revalidate historical gap: Real sites/posts |
+| 25 | Client satisfaction and account profitability | COO + Company Manager | Main CRM/KPI plus #54 and #61 drafts | Merged partial; client-share draft | Permitted expiring client links; profitability, client feedback/requests and acceptance |
+| 242 | Client termination, transfer and final settlement | COO / FD | #49 draft (B1) | Draft; integration and combined validation pending | Revalidate historical gap: Final settlement with SQL Account |
+| 5 | Service rosters, shifts, breaks and attendance | OM / ROM | Main HR/payroll/site-device code; #54 dependency | Merged partial; real-device acceptance open | Observed shift/rest/relief cycle; offline enrollment and recovery |
+| 22 | Patrolling-officer oversight and NFC guard tour | Patrolling Officer / OM | Main b1325ea3; #54 draft (B1) | Merged/base source plus draft dependencies | Revalidate historical gap: JA patrol feed; signed NFC tags |
+| 38 | Patrolling-officer field SOP | Patrolling Officer | Main b1325ea3 | Main source/base; detailed acceptance not evidenced | Revalidate historical gap: JA owns guard patrol |
+| 6 | HR leave, attendance and benefits | HR | Main via #51 and #129 | HR source merged; deployment and business acceptance not evidenced | Official statutory inputs, leave/payroll reconciliation; RM200 annual foreign-worker medical cap |
+| 7 | Foreign-security-worker recruitment to repatriation | FWM Manager | Main b1325ea3 | Main source/base; detailed acceptance not evidenced | Revalidate historical gap: JTKSM/JIM/KDN portals manual |
+| 36 | Guard licensing, training and deployment readiness | HR (all companies) + company head | Main b1325ea3 | HR source merged; deployment and business acceptance not evidenced | Revalidate historical gap: JA sync back (3G partly) |
+| 37 | Office training and learning evidence | HR | Main b1325ea3 | HR source merged; deployment and business acceptance not evidenced | Revalidate historical gap: HRD Corp claim refs entered by staff |
+| 232 | Employee grievance and disciplinary case | HR / HR Director | Main b1325ea3 | HR source merged; deployment and business acceptance not evidenced | Revalidate historical gap: Real panels |
+| 240 | Responsible recruitment and worker welfare | FWM | #62 draft (B1) | Draft; integration and combined validation pending | Revalidate historical gap: Agent audits keyed by staff; does not close wider FWM lifecycle (7) or hostel/CLQ (8) gaps |
+| 8 | Accommodation and CLQ sourcing to closure | FWM | Main b1325ea3 | Main source/base; detailed acceptance not evidenced | Revalidate historical gap: JA hostel feed |
+| 9 | Hostel electricity/water budgets and invoice controls | FWM / FD | Main b1325ea3; #53 draft (B1) | Merged/base source plus draft dependencies | Revalidate historical gap: Real bills |
+| 57 | Fleet, vehicle utilization and transport | Transport head + CMS | #53 draft (B1) | Draft; integration and combined validation pending | Revalidate historical gap: Tracker vendor feed |
+| 231 | Occupational safety and site hazard response | HR (office) / Ops (site) | Main b1325ea3 | HR source merged; deployment and business acceptance not evidenced | Revalidate historical gap: Site HIRARC per post |
+| 34 | KDN security licence annual readiness | Company admin; Central Admin monitors | #52 draft (B1) | Draft; integration and combined validation pending | Revalidate historical gap: KDN portal manual |
+| 35 | MOF and ePerolehan renewal | Company admin | #52 draft (B1) | Draft; integration and combined validation pending | Revalidate historical gap: ePerolehan manual |
+| 234 | Corporate, employer and employment tax | FD / HR | Main b1325ea3; #49 draft (B1) | Merged/base source plus draft dependencies | Revalidate historical gap: e-PCB check by Finance |
+| 244 | Cross-company statutory and contract calendar | DCoS monitors | #52 draft (B1) | Draft; integration and combined validation pending | Revalidate historical gap: Real dates |
+| 69 | Accounting ledger system-of-record principles | FD | #49 draft (B1) | Draft; integration and combined validation pending | Revalidate historical gap: No live SQL connector (E62) |
+| 70 | Utilize native SQL Account functionality | FD | #49 draft (B1) | Draft; integration and combined validation pending | Revalidate historical gap: SQL usage monitor uses pasted data |
+| 71 | SQL edition, modules, integration and accounting data | FD / IT Lead | #49 draft (B1) | Draft; integration and combined validation pending | Revalidate historical gap: **Open:** interface only, switched off; no live SQL Account reader; edition and API per company not confirmed |
+| 72 | Chart of accounts and cost dimension mapping | FD | #49 draft (B1) | Draft; integration and combined validation pending | Revalidate historical gap: Real chart and project codes; FD to decide if a missing mapping blocks close |
+| 73 | Mandatory bank reconciliation | FD + teams | #49 draft (B1) | Draft; integration and combined validation pending | Revalidate historical gap: Bank feeds; staff paste SQL ledger |
+| 74 | Customer aging and collections | FD | #49 draft (B1) | Draft; integration and combined validation pending | Revalidate historical gap: SQL ageing pasted |
+| 75 | Supplier aging and payment obligations | FD | #49 draft (B1) | Draft; integration and combined validation pending | Revalidate historical gap: SQL AP pasted |
+| 76 | Profit and loss, balance sheet and cash-flow agreement | FD | #49 draft (B1) | Draft; integration and combined validation pending | Revalidate historical gap: Real SQL report figures |
+| 77 | Financial close and independent review | FD / CEO | #49 draft (B1) | Draft; integration and combined validation pending | Revalidate historical gap: SQL close status manual |
+| 78 | Budgets, scenario plans and 13-week cash forecast | FD | #49 draft (B1) | Draft; integration and combined validation pending | Revalidate historical gap: **Open:** three-statement (P&L, balance sheet, cash-flow) forecasts and approved budget revision workflow not confirmed built; 13-week cash forecast is built. Real budget inputs |
+| 79 | Accounting links to inventories and fixed assets | FD / Asset | Main item outbox plus #49 draft | Interface only; no item SQL sending adapter | Entity/book/SKU mapping and acknowledged idempotent reconciliation |
+| 80 | Group Finance dashboards and operating scorecards | FD / CEO | #49 draft (B1) | Draft; integration and combined validation pending | Revalidate historical gap: Power BI deferred |
+| 49 | Purchase request to verified payment | Procurement exec / COO+CEO | Main b1325ea3 | Main source/base; detailed acceptance not evidenced | Revalidate historical gap: Supplier bank verification by FD (G8) |
+| 53 | Procurement policy and sourcing methods | Procurement | Main b1325ea3 | Main source/base; detailed acceptance not evidenced | Process owner to supply real data, normal/failure-path evidence and signed acceptance |
+| 54 | Central and regional warehouse, uniform inventory | Inventory / Goodwill store | Main item code via #129; #54 draft | Merged partial; item module not activated | Goodwill seller-to-buyer transfer, opening count, SQL adapter, uniform policy |
+| 55 | Returnable equipment and fixed-asset register | Asset / IT | Main item/IT assets via #129; #53 draft | Merged partial; non-IT expansion draft | Physical custody, serial/bulk mapping, maintenance and ownership reconciliation |
+| 56 | Technology rollout, site asset custody | IT / OM | Main b1325ea3 | Main source/base; detailed acceptance not evidenced | Revalidate historical gap: Real devices |
+| 58 | Company property, rentals and hostel assets | Asset Mgmt dept / IT | Main b1325ea3; #53 draft (B1) | Merged/base source plus draft dependencies | Revalidate historical gap: Asset Mgmt developer API |
+| 59 | Planned maintenance, repairs and work orders | IT / Asset | Main b1325ea3 | Main source/base; detailed acceptance not evidenced | Revalidate historical gap: Non-IT work orders |
+| 60 | Stock transfers, loss, theft and disposal | Inventory Manager | Main item transfer/loss source via #129; #54 draft | Merged partial; item module not activated | Witnessed transfers/returns/loss/disposal; physical and accounting reconciliation |
+| 61 | Insurance and warranty response | Asset / FD | Main base screen plus claim steps in #61 | Draft claim workflow; warranty gap | Real claim lifecycle and insurer/bank reconciliation; warranty scope |
+| 239 | Supplier and subcontractor assurance | Procurement / FD | Main b1325ea3 | Main source/base; detailed acceptance not evidenced | Revalidate historical gap: Real supplier documents |
+| 103 | KPKT licensing: verification gate | DCoS / counsel | #52 draft (B1) | Draft; integration and combined validation pending | Revalidate historical gap: Real PWVSB KPKT licence not keyed |
+| 104 | Financing case, drawdown and repayment | FD / DCoS | #52 draft (B1) | Draft; integration and combined validation pending | Revalidate historical gap: Real loans |
+| 105 | Loan accounting and borrower-lender reconciliation | FD | #52 draft (B1) | Draft; integration and combined validation pending | Revalidate historical gap: SQL loan ledger |
+| 134 | Collateral is security, not present ownership | DCoS / counsel | #52 draft (B1) | Draft; integration and combined validation pending | Revalidate historical gap: Counsel |
+| 135 | Default automatically triggers a process, not a transfer | DCoS | #52 draft (B1) | Draft; integration and combined validation pending | Revalidate historical gap: Counsel |
+| 136 | Notices, legal reviews and lawful enforcement | DCoS / counsel | #52 draft (B1) | Draft; integration and combined validation pending | Revalidate historical gap: Counsel |
+| 138 | Default and cure determination with ledger evidence | FD / DCoS | #52 draft (B1) | Draft; integration and combined validation pending | Revalidate historical gap: Ledger evidence |
+| 182 | Federated multi-company monitoring scope | Arms Control Manager (CMS under Arms Control) | #53 draft (B1) | Draft; integration and combined validation pending | Revalidate historical gap: Real site directory push |
+| 183 | 24-hour duty operator and shift handover | Head Control | Main b1325ea3 | Main source/base; detailed acceptance not evidenced | Revalidate historical gap: Real roster |
+| 184 | Live guard coverage and attendance | CMS / OM | #53 draft (B1) | Draft; integration and combined validation pending | Revalidate historical gap: JA attendance feed |
+| 185 | Supervisor patrols and NFC guard tours | CMS | #53 draft (B1) | Draft; integration and combined validation pending | Revalidate historical gap: JA patrol feed |
+| 186 | CCTV, recording health and AI analytics | CMS | #53 draft (B1) | Draft; integration and combined validation pending | Revalidate historical gap: CCTV vendor list not supplied |
+| 187 | ANPR, barrier gates, turnstiles and access control | CMS | #53 draft (B1) | Draft; integration and combined validation pending | Revalidate historical gap: ANPR/VMS vendor feeds |
+| 188 | Panic, sensor and infrastructure alarms | CMS | #53 draft (B1) | Draft; integration and combined validation pending | Revalidate historical gap: Panel keys; alarm vendors |
+| 189 | Event correlation, dispatch and incident handling | CMS operator | #53 draft (B1) | Draft; integration and combined validation pending | Revalidate historical gap: SMS/voice provider |
+| 190 | CMS dashboard and response queue | CMS | #53 draft (B1) | Draft; integration and combined validation pending | Revalidate historical gap: Hosting not approved |
+| 191 | CMS activation during client onboarding | CMS / Company Manager | #53 draft (B1) | Draft; integration and combined validation pending | Process owner to supply real data, normal/failure-path evidence and signed acceptance |
+| 192 | Device integration contracts and event schema | IT Lead | #53 draft (B1) | Draft; integration and combined validation pending | Revalidate historical gap: Brand profiles |
+| 193 | CMS cybersecurity, evidence and resilience | IT Lead | #53 draft and main site-device code | Partial; provider/recovery gaps | Durable CMS storage/operator identity, real vendor feeds and recovery drills |
+| 195 | CMS coverage and response performance indicators | Arms Control Manager | #53 draft (B1) | Draft; integration and combined validation pending | Revalidate historical gap: Live events |
+| 201 | Applicable KDN/PDRM authority and scope checks | Arms Control Manager | #53 draft (B1) | Draft; integration and combined validation pending | Revalidate historical gap: Real licences |
+| 203 | Controlled arms, ammunition and custodian records | Arms Control | #53 draft (B1) | Draft; integration and combined validation pending | Revalidate historical gap: Real serials (Arms Control only) |
+| 204 | Approved armoury/vault and physical verification | Arms Control | #53 draft (B1) | Draft; integration and combined validation pending | Revalidate historical gap: RFID tags at pilot vault |
+| 205 | Authorization-to-disposal firearm lifecycle | Arms Control | #53 draft (B1) | Draft; integration and combined validation pending | Revalidate historical gap: Police notices manual |
+| 206 | Armed guard and shift readiness | Arms Control / OM | #53 draft (B1) | Draft; integration and combined validation pending | Process owner to supply real data, normal/failure-path evidence and signed acceptance |
+| 207 | Custody and movement authorization trail | Arms Control | #53 draft (B1) | Draft; integration and combined validation pending | Process owner to supply real data, normal/failure-path evidence and signed acceptance |
+| 208 | Ammunition accountability and discrepancies | Arms Control | #53 draft (B1) | Draft; integration and combined validation pending | Revalidate historical gap: Real counts |
+| 210 | Armed-service supervision and SOP assurance | Arms Control | #53 draft (B1) | Draft; integration and combined validation pending | Process owner to supply real data, normal/failure-path evidence and signed acceptance |
+| 211 | Serious incident and statutory-notification assessment | Arms Control | #53 draft (B1) | Draft; integration and combined validation pending | Process owner to supply real data, normal/failure-path evidence and signed acceptance |
+| 212 | Armed-client onboarding and coverage | Arms Control / COO | #53 draft (B1) | Draft; integration and combined validation pending | Process owner to supply real data, normal/failure-path evidence and signed acceptance |
+| 221 | Arms Control departmental ownership vs CMS monitoring | Arms Control / CMS | #53 draft (B1) | Draft; integration and combined validation pending | Process owner to supply real data, normal/failure-path evidence and signed acceptance |
+| 222 | Vault CCTV, recording continuity and alert escalation | Arms Control | #53 draft (B1) | Draft; integration and combined validation pending | Revalidate historical gap: Vault CCTV feed |
+| 224 | Armed-client insurance, service pricing and contracts | Arms Control / CoS | #53 draft (B1) | Draft; integration and combined validation pending | Revalidate historical gap: Real policies |
+| 225 | Future firearms buying/selling: disabled until authorized | CEO switch | #53 draft (B1) | Draft; integration and combined validation pending | Revalidate historical gap: Counsel/PDRM on trade stock |
+| 233 | Anti-corruption, gifts, tender integrity and whistleblowing | ACT | Main b1325ea3; #55 draft (B1) | Merged/base source plus draft dependencies | Process owner to supply real data, normal/failure-path evidence and signed acceptance |
+| 235 | National incident command and continuity | IT + group leadership | Main b1325ea3; #56 draft (B1) | Merged/base source plus draft dependencies | Revalidate historical gap: No real backups yet |
+| 236 | Personal data, cybersecurity and breach notification | PDPA officer | Main b1325ea3 | Main source/base; detailed acceptance not evidenced | Revalidate historical gap: DPIA; pen test |
+| 238 | Risk-based independent internal audits | ACT Director | #55 draft (B1) | Draft; integration and combined validation pending | Process owner to supply real data, normal/failure-path evidence and signed acceptance |
+| 241 | Fraud anomalies, investigations and forensic controls | ACT | #55 draft (B1) | Draft; integration and combined validation pending | Revalidate historical gap: Face provider for fix 13 |
+| 243 | Emergency delegation and succession | CEO / CoS | #52 draft | Draft; authority conflict must be reconciled | Separate ordinary delegation from succession: leader approval plus Chairman/VC consent and timestamp |
+
+## E. Cross-cutting chapters 14–19
+
+| Chapter | Current source position | Required evidence / next action | Owner |
+|---|---|---|---|
+|14 Shared journeys, IDs, workflow contracts | Main shell; #56/#57 drafts; role/handover acceptance not established | Trace one record across departments without re-entry or scope expansion; identity and source-of-record mapping | Fitri + CoS + department owners |
+|15 Architecture, security and integrations | Main company walls and repair tests; partial providers; deployed schema older | Versioned migration/recovery package, real tenant/provider checks, offline enrollment/recovery, retention and capacity tests | Fitri + IT checker; relevant data owners |
+|16 Balanced scorecards | IT and reviewed HR/CRM KPI source on main; Finance/CMS/Growth draft extensions | Approved formulas/targets, real baseline, completeness/freshness and “unknown” handling | FD/COO/CoS + department owners |
+|17 Release gates | PR 129 checks passed, not full operational gate | Scope freeze, combined candidate, production-like rehearsal, UAT later, formal go/no-go | Fitri prepares; leadership/process owners accept |
+|18 Decisions and prerequisites | Documented open questions remain | Resolve uniform/statutory/retention/vendor/mapping decisions with named accountable person and evidence | CEO + relevant owner/counsel |
+|19 Traceability |121-row historical source retained and current overlay added | Continue updating this ledger on exact release; link evidence and signed acceptance per row, not aggregate optimism | Arisha ledger review; Fitri technical evidence; business owners sign-off |
+
+## F. Masterplan release gates and all-draft question
+
+The canonical plan(pp 77–78) requires legal-entity/mandate evidence, cross-company negative tests, one observed live shift cycle, a full parallel payroll/billing/bank reconciliation cycle, signed settled A/B/C branch examples, SQL bank/AR/AP/GL/financial-statement agreement, actual camera-loss alert and vault/CMS/arms incident drill, official filing acknowledgements, misuse/duplicate/late-evidence/AI-error/outage tests, and a multi-owner go/no-go with rollback/contingency.
+
+**No full operational release is certified.** All drafts may be planned as a combined release candidate only after Fitri reconciles dependencies/conflicts, preserves existing work and tests the exact combination. Marking a draft ready for review, merging source, deploying to staging and releasing for live operations are four different actions. This refresh performs none of them. UAT later means the real-use gate remains pending, not waived.
+
+## G. Action/evidence register
+
+| Item | Next action | Owner per latest direction | Current status | Completion evidence required |
+|---|---|---|---|---|
+|Ledger refresh | Update same file, preserve121 IDs/history; verify documentation-only diff | Arisha | This refresh; publication verified separately | Remote blob/commit and unchanged application files |
+|Draft integration | Select included/excluded scope; reconcile #49/#52–58/#60–63 and other relevant feature dependencies with main | Fitri | Assigned by Fauzan; not communicated/completed by this refresh | Exact candidate SHA, reviewed diff, combined CI and dependency record |
+|Migration/recovery | Package actual0b2ffca4 base transition; rehearse representative restore/migration/rollback | Fitri | Pending | Immutable package/version, logs, reconciliation, rollback/restore evidence |
+|Provider readiness | SQL entity/book/SKU mapping and adapter; trusted Teams source/consumer; selected Microsoft permissions | Fitri with Finance/IT owners | Not accepted | Real permitted identities/resources, deny/revoke/retry/replay tests, reconciliation |
+|Policy | Uniform treatment, statutory inputs, data retention/key/disclosure procedures | CEO + HR/Finance/Compliance/counsel | Open | Dated decision, implemented controls and tests |
+|Real UAT | Five common and three high-risk tasks per department; actual identities/devices | Department owners with IT | Later per Fauzan | Pass/fail, time/errors, downstream output, exceptions and sign-off |
+|Release decision | Formal go/no-go after applicable gates | Fauzan + relevant leadership/process owners | Not authorized by ledger refresh | Explicit release scope/version/conditions and approval |
+
+## H. Preserved historical snapshot — NOT current readiness
+
+The following original3Nov content is retained verbatim for audit/history. Its counts, PR states, deployment assertions and owner decisions are superseded where sectionsA–G differ. Do not use this appendix as the current readiness summary.
+
+<details>
+<summary>Original 3 November ledger and all historical evidence</summary>
+
 # Prima Secure: masterplan subsection ledger
 
 Prepared 3 Nov 2026 (MYT) for the combined review (brought forward from Thursday 5 Nov at Fauzan's request). Revised 3 Nov 03:35Z after Arisha main's review of `946dc01`. It answers Arisha main's 2 Nov 16:16Z request for a subsection-level ledger. It is an evidence map. It is not an acceptance certificate, a deployment claim or a statement that the masterplan is "all built".
@@ -156,10 +400,10 @@ State legend: every row is **Not accepted**. The reason is given (sample data on
 | § | Requirement | Latest amendment | Owner | Where and commit | Test evidence | Deployment proof | Missing data / integration | State |
 |---|---|---|---|---|---|---|---|---|
 | 145 | **Branch formation and management agreements**. Draft PR: #61 `7c0ce2f`: company manager proposes a branch; activation gate (agreement, KDN/premises/insurance refs, SQL project code, legal employer, verified company bank) | V11/V12: branch never a separate employer | COO / Operations Director | #61 `7c0ce2f` | `branch-ledger.test.ts`, `branch-ledger-pg.test.ts` | None: not merged | Real agreements and KDN refs keyed by staff. Business case + 13-week cash at formation and branch treasury (bank balance, float, payroll due, Unknown when older than 3 days: rule decided by Fauzan 3 Nov 07:42Z) added on #61 after Arisha's 3 Nov 03:32Z note; figures are recorded by Finance, no live bank read | Not accepted: draft, review open |
-| 146 | **Branch rights, obligations and approval limits**. Draft PR: #61 `7c0ce2f`: step-in/step-out with reasons; manager approval with comment, no self-approval (main had the action review on sample data) | V12.1 all % flexible | COO | #61 `7c0ce2f` | `branch-ledger.test.ts`, `branch-ledger-pg.test.ts` | None: not merged | Approval limits not set by owner | Not accepted: draft, review open |
+| 146 | **Branch rights, obligations and approval limits**. Draft PR: #61 `7c0ce2f`: step-in/step-out with reasons; manager approval with comment, no self-approval (main had the action review on sample data) | V12.1 all % flexible | COO | #61 `7c0ce2f` | `branch-ledger.test.ts`, `branch-ledger-pg.test.ts`, `branch-jv.test.ts`, `branch-jv-pg.test.ts` | None: not merged | Approval limits not set by owner. JV rules (Fauzan 4 Nov 2026) added on #61: JV Branch Manager buys from any supplier with no approval, company asks but never blocks, arms only via Arms Control, CEO sets each branch's management fee %, CEO flagged when a month's profit is under 10% of billing (see docs/BRANCHES_LEDGER.md) | Not accepted: draft, review open |
 | 147 | **Branch-originated opportunity to contract**. Draft PR: #61 `7c0ce2f`: lead names the branch that found it; manager sees prospects worked by two branches; contracting stays with the company | none | Branch Manager / COO | #61 `7c0ce2f` | `branch-ledger.test.ts`, `branch-ledger-pg.test.ts` | None: not merged | none | Not accepted: draft, review open |
 | 148 | **Branch accounts, payments and reconciliation**. Draft PR: #61 `7c0ce2f`: company branch bank (company's exact name), SQL project ledger, partner entity (SSM no.); adder never verifies; Finance validates and a second Finance person records payout | Controls only where money moves (2 Nov) | FD | #61 `7c0ce2f` | `branch-ledger.test.ts`, `branch-ledger-pg.test.ts` | None: not merged | Bank statements per branch; SQL ledger read waits for SQL connector (E62) | Not accepted: draft, review open |
-| 149 | **Branch payroll and employer obligations**. Draft PR: #61 `7c0ce2f`: every month carries the payroll run or JA pay summary reference; company stays employer (guard pay itself stays in JA) | Guard pay stays in JA (27 Oct) | HR / FD | #61 `7c0ce2f` | `branch-ledger.test.ts`, `branch-ledger-pg.test.ts` | None: not merged | JA pay feed | Not accepted: draft, review open |
+| 149 | **Branch payroll and employer obligations**. Draft PR: #61 `7c0ce2f`: every month carries the payroll run or JA pay summary reference; company stays employer (guard pay itself stays in JA) | Guard pay stays in JA (27 Oct) | HR / FD | #61 `7c0ce2f` | `branch-ledger.test.ts`, `branch-ledger-pg.test.ts`, `branch-jv.test.ts`, `branch-jv-pg.test.ts` | None: not merged | JA pay feed. JV branch (4 Nov 2026): branch office staff pay from Prima staff payroll goes into the month's P&L; the JV Branch Manager decides branch staff leave and sets branch office staff pay (Fauzan: "Yes they set it them self"), company and HR monitor | Not accepted: draft, review open |
 | 150 | **Branch as SQL project/profit centre**. Draft PR: #61 `7c0ce2f`: Finance sets a unique SQL project code per branch; no month without it | SQL Account system of record | FD | #61 `7c0ce2f` | `branch-ledger.test.ts`, `branch-ledger-pg.test.ts` | None: not merged | Real SQL Account project codes; no direct SQL read | Not accepted: draft, review open |
 | 162 | **Three business models: master classification**. Sample-data screen on main: Branch model A/B/C field on sample data | V12/V12.1 three models, all % flexible | COO | main `6ea8f97` | `core.test.ts` | Staging deploy run 41382096652 (9c03cbf) + SPA 41399587980 (0ead549); no runtime UAT | Signed % per branch | Not accepted: sample data only |
 | 163 | **Model A: configurable percentage of eligible billing**. Split on main (sample data); Draft PR: #61 `7c0ce2f` adds billing from cited invoice lines of signed work, credit notes, true-ups, one invoice per branch month | V12.1 | COO / FD | main `6ea8f97` + #61 `7c0ce2f` | `core.test.ts`, `branch-ledger.test.ts`, `branch-ledger-pg.test.ts` | Split only: staging per main; #61 None: not merged | Real billing lines keyed by staff | Not accepted: draft, review open |
@@ -312,3 +556,6 @@ State legend: every row is **Not accepted**. The reason is given (sample data on
 - 3 Nov 2026 ~00:35Z: row 240 updated for draft PR #62 `ce58033` (FWM thread) and row 241 for draft PR #55 `81e58f8` (ACT thread). PR #61 headless browser check on the demo build: Branches opens for company manager, branch manager and CEO at 1280/390 px with no page errors or sideways scroll; company manager proposed a branch, saw the activation gaps and saved papers. Not phone UAT by staff.
 - 3 Nov 2026 ~00:35Z: rows 71, 72, 76 updated for draft PR #49 `0ceb488` (Finance thread). Stale 13-week rows in docs/FINANCE_PHASE2.md fixed at 2b69001.
 - 3 Nov 2026 ~00:36Z: rows 191, 193 (partial), 195 updated for draft PR #53 `e1a8b2a` (Special Ops thread).
+
+
+</details>

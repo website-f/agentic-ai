@@ -2,7 +2,7 @@
 // Chairman's consent; staff payroll needs the Chief of Staff then the COO; a salary amount needs the HR Director then
 // the Vice Chairman's consent; every HR approval needs a comment. Mock data only, never staging.
 import { describe, expect, it } from 'vitest';
-import { AccessDenied, BadRequest, GROUP_EMPLOYER_ID, MemoryStore, PrimaService, generateDataset, inHrRollout, isHrAdmin, myt } from '../src';
+import { AccessDenied, BadRequest, GROUP_EMPLOYER_ID, MemoryStore, PrimaService, generateDataset, inHrRollout, isHrAdmin, isJvBranch, myt } from '../src';
 
 const TODAY = '2026-10-26';
 const NOW = myt(TODAY, '10:30');
@@ -106,10 +106,15 @@ describe('Staff leave: HR decides, the Vice Chairman consents (Fauzan, 1 Nov 202
 
   it('leaves guard and officer leave unchanged: the OM decides in one step', async () => {
     const { svc, ds } = fresh();
+    // Explicit ordinary-branch fixture: the default seed now demonstrates JV routing.
     const q = ds.leaveRequests.find((r) => r.status === 'pending' && ds.people.find((p) => p.id === r.personId)!.role === 'guard' && r.kind === 'ANNUAL')!;
     const p = ds.people.find((x) => x.id === q.personId)!;
+    const branch = ds.branches.find((b) => b.id === p.branchId)!;
+    branch.model = 'B'; branch.agreements = [];
+    expect(isJvBranch(branch, TODAY)).toBe(false);
+    q.requestedAt = NOW;
     const om = ds.users.find((u) => u.opsTier === 'om' && u.areaStates!.includes(ds.branches.find((b) => b.id === p.branchId)!.state))!;
-    expect((await svc.decideLeave(om, q.id, true, '')).status).toBe('approved');
+    expect((await svc.decideLeave(om, q.id, true, 'Ordinary branch cover checked')).status).toBe('approved');
   });
 });
 

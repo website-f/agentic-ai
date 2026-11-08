@@ -41,8 +41,7 @@ BEGIN
       REVOKE ALL ON prima.%1$I FROM prima_app;
       GRANT SELECT, INSERT, UPDATE ON prima.%1$I TO prima_app;
     $f$, t);
-    -- Read-only door through the pay_read wall: HR preparing pay, and the OM and above using the salary calculator
-    -- (Fauzan, 6 Nov 2026). Writing still needs the act wall. The guard pay module creates the same policy.
+    -- Read-only salary-calculator/HR access. The ACT write wall is unchanged.
     EXECUTE format('DROP POLICY IF EXISTS pay_read ON prima.%1$I; CREATE POLICY pay_read ON prima.%1$I FOR SELECT USING (prima.has_wall(''pay_read''));', t);
   END LOOP;
 END $$;

@@ -4,7 +4,7 @@
 // and the watchers (masterplan §193; the file store is in persist.ts).
 import { newLinkState, type PrimaLinkState } from './prima-link';
 import { makeEvent, problems, severityOf, stableId, type CmsEvent, type EventKind } from './event';
-import { DirectoryIndex, type Directory, type Role } from './directory';
+import { DirectoryIndex, type DeskSeat, type Directory, type Role } from './directory';
 import { ROUTES, manualLadder, recipients, stepAt, type Recipient } from './routing';
 
 export type AlarmState = 'open' | 'acknowledged' | 'actioned' | 'closed';
@@ -66,6 +66,21 @@ export interface AuditEntry {
 }
 
 /** Everything the hub needs to carry on after a restart (masterplan §193). Plain JSON. */
+/**
+ * A shift handover at the CMS desk, in two steps: the outgoing Head Control writes it (with the alarms still open), the
+ * incoming Head Control takes it, agreeing or not. The taken handover goes to Prima as the company record of who
+ * handed the desk to whom; open alarms go as id, kind, site and summary only (no clip links or device details).
+ */
+export interface Handover {
+  id: string;
+  /** The outgoing Head Control seat on Prima's roster. Null when taken with nobody on the seat before. */
+  fromShiftId: string | null;
+  /** The incoming Head Control seat. Set when the handover is taken. */
+  shiftId: string | null;
+  outgoing: { operator: string; at: string; note: string; openAlarms: { id: string; kind: string; siteId: string; summary: string; state: AlarmState }[] } | null;
+  incoming: { operator: string; at: string; agree: boolean; note: string } | null;
+}
+
 export interface HubSnapshot {
   version: 1;
   savedAt: string;
@@ -85,6 +100,9 @@ export interface HubSnapshot {
   scans: [string, string][];
   raised: string[];
   sentKeys: string[];
+  /** Added with the desk handover; older saved states have none. */
+  handovers?: Handover[];
+  handoversToPrima?: string[];
 }
 
 /** PROPOSED response targets in minutes (owner to confirm, masterplan §195). */
@@ -153,6 +171,10 @@ export class Hub {
   readonly toPrima: CmsEvent[] = [];
   /** Closed alarms waiting to be sent to Prima. */
   readonly closedToPrima: Alarm[] = [];
+  /** Desk handovers, newest last (written and taken). */
+  readonly handovers: Handover[] = [];
+  /** Taken handovers waiting to be sent to Prima. */
+  readonly handoversToPrima: Handover[] = [];
   readonly refused: { at: string; source: string; reason: string }[] = [];
   /** Sending to Prima: one send at a time, retry counts, and items Prima kept refusing (never silently dropped). */
   readonly primaLink: PrimaLinkState = newLinkState();
@@ -162,6 +184,10 @@ export class Hub {
   private readonly scans = new Map<string, string>(); // patrolRoundId -> time
   private readonly raised = new Set<string>(); // keys of watcher events already raised
   private readonly sentKeys = new Set<string>();
+  /** When each outside system last sent something real (not an event the hub made itself). Kept in memory only: after a
+   * restart every system shows "not heard since restart" until it sends again, never green. */
+  private readonly heard = new Map<string, number>();
+  private internal = false;
   private readonly startedAt: number;
   private auditSeq = 0;
 
@@ -229,6 +255,7 @@ export class Hub {
       this.refuse(e?.source ?? 'unknown', bad.join('; '));
       return { stored: false, refused: bad };
     }
+    if (!this.internal && e.source !== 'hub') this.markHeard(e.source);
     if (this.events.has(e.id)) return { stored: false, duplicate: true };
     this.events.set(e.id, e);
     if (this.dir.devices.has(e.deviceId)) this.lastSeen.set(e.deviceId, Math.max(this.lastSeen.get(e.deviceId) ?? 0, this.now().getTime()));
@@ -276,9 +303,49 @@ export class Hub {
 
   // ---- Guard attendance and patrols (JA app feed). CMS watches; the company acts. ----
 
+  /** An outside system was heard from now (feed message, heartbeat, panel frame). */
+  markHeard(system: string): void {
+    // The name comes from a signed feed, but is still bounded so a bad adaptor cannot grow this without end.
+    if (system.length > 40 || (!this.heard.has(system) && this.heard.size >= 100)) return;
+    this.heard.set(system, this.now().getTime());
+  }
+
+  /** When each outside system was last heard from since this CMS started (ms). */
+  lastHeard(): ReadonlyMap<string, number> {
+    return this.heard;
+  }
+
+  /** Events made by the hub's own watchers: they never count as a feed being heard. */
+  private ingestInternal(e: CmsEvent): void {
+    this.internal = true;
+    try {
+      this.ingest(e);
+    } finally {
+      this.internal = false;
+    }
+  }
+
+  /** Every stored event, oldest first not guaranteed. Read-only use (the monitoring assistant). */
+  allEvents(): Iterable<CmsEvent> {
+    return this.events.values();
+  }
+
+  /**
+   * An operator's view on a monitoring-assistant finding (useful or not, with an optional note). It is only put on record,
+   * for tuning the rules; it never changes an alarm.
+   */
+  assistantFeedback(operator: string, findingKey: string, useful: boolean, note: string): AuditEntry {
+    if (!/^[a-z_]+:[0-9a-f,]{8,}$/.test(findingKey)) throw new HubError('Finding not known.');
+    if (note.length > 500) throw new HubError('Note too long (500 characters at most).');
+    const e: AuditEntry = { at: this.now().toISOString(), operator, action: `assistant:${useful ? 'useful' : 'not-useful'}`, note: `${findingKey}${note.trim() ? ` ${note.trim()}` : ''}` };
+    this.record(e);
+    return e;
+  }
+
   clockIn(shiftId: string, at: string): boolean {
     const sh = this.dir.d.shifts.find((s) => s.id === shiftId);
     if (!sh || Number.isNaN(Date.parse(at))) return false;
+    this.markHeard('ja-feed');
     if (!this.clockIns.has(shiftId)) this.clockIns.set(shiftId, at);
     const site = this.dir.sites.get(sh.siteId)!;
     this.ingest(
@@ -307,6 +374,7 @@ export class Hub {
   checkpoint(roundId: string, at: string): boolean {
     const r = this.dir.d.patrolRounds.find((x) => x.id === roundId);
     if (!r || Number.isNaN(Date.parse(at))) return false;
+    this.markHeard('ja-feed');
     if (!this.scans.has(roundId)) this.scans.set(roundId, at);
     return true;
   }
@@ -322,7 +390,7 @@ export class Hub {
       if (!this.offline.has(dev.id) && t - seen > dev.silentAfterMin * 60_000) {
         this.offline.add(dev.id);
         const site = this.dir.sites.get(dev.siteId)!;
-        this.ingest(
+        this.ingestInternal(
           makeEvent({
             id: stableId('offline', dev.id, String(seen)),
             kind: 'DEVICE_OFFLINE',
@@ -344,7 +412,7 @@ export class Hub {
       const grace = (site.clockInGraceMin ?? 15) * 60_000; // PROPOSED default 15 minutes
       if (t > Date.parse(sh.start) + grace && t < Date.parse(sh.end) && !this.clockIns.has(sh.id) && !this.raised.has(`noshow:${sh.id}`)) {
         this.raised.add(`noshow:${sh.id}`);
-        this.ingest(
+        this.ingestInternal(
           makeEvent({
             id: stableId('noshow', sh.id),
             kind: 'GUARD_NO_SHOW',
@@ -365,7 +433,7 @@ export class Hub {
       if (!site) continue;
       if (t > Date.parse(r.dueAt) + r.lateAfterMin * 60_000 && !this.scans.has(r.id) && !this.raised.has(`patrol:${r.id}`)) {
         this.raised.add(`patrol:${r.id}`);
-        this.ingest(
+        this.ingestInternal(
           makeEvent({
             id: stableId('patrol', r.id),
             kind: 'PATROL_MISSED',
@@ -530,6 +598,83 @@ export class Hub {
     return [...this.events.values()].sort((a, b) => Date.parse(b.receivedAt) - Date.parse(a.receivedAt)).slice(0, limit);
   }
 
+  // ---- Shift handover at the CMS desk. Prima holds the roster; the desk only checks who is who. ----
+
+  private deskSeats(): DeskSeat[] {
+    return (this.dir.d.desk ?? []).filter((s) => s.post === 'HEAD_CONTROL');
+  }
+
+  /** The handover state for the dashboard: the seat ending and the one starting around now, and what is written. */
+  deskHandover(): { roster: boolean; ending: DeskSeat | null; starting: DeskSeat | null; written: Handover | null; taken: Handover | null } {
+    const t = this.now().getTime();
+    const seats = this.deskSeats();
+    const ending = seats.find((s) => Date.parse(s.start) <= t && t < Date.parse(s.end) + 4 * 3_600_000 && !this.handovers.some((h) => h.fromShiftId === s.id && h.incoming)) ?? null;
+    const starting = ending ? (seats.find((s) => s.start === ending.end) ?? null) : (seats.find((s) => Date.parse(s.start) - 30 * 60_000 <= t && t < Date.parse(s.end)) ?? null);
+    return {
+      roster: !!this.dir.d.desk,
+      ending,
+      starting,
+      written: ending ? (this.handovers.find((h) => h.fromShiftId === ending.id) ?? null) : null,
+      taken: starting ? (this.handovers.find((h) => h.shiftId === starting.id && h.incoming) ?? null) : null,
+    };
+  }
+
+  /**
+   * Step 1: the outgoing Head Control writes the handover in the last hour of their shift (or up to 4 hours after it
+   * ends, while still at the desk). The operator signed in must be the person Prima rostered on that seat.
+   */
+  giveHandover(operator: string, note: string): Handover {
+    const t = this.now().getTime();
+    if (!this.dir.d.desk) throw new HubError('Jadual tugas CMS belum diterima dari Prima.');
+    const seat = this.deskSeats().find((s) => s.staffName === operator && t >= Date.parse(s.end) - 60 * 60_000 && t < Date.parse(s.end) + 4 * 3_600_000);
+    if (!seat) throw new HubError('Anda bukan Head Control bagi syif yang sedang tamat.');
+    if (this.handovers.some((h) => h.fromShiftId === seat.id)) throw new HubError('Serah tugas untuk syif ini sudah ditulis.');
+    const text = note.trim().slice(0, 1000);
+    if (text.length < 5) throw new HubError('Tulis apa yang masih terbuka, atau "tiada".');
+    const openAlarms = [...this.alarms.values()]
+      .filter((a) => a.state !== 'closed')
+      .sort((a, b) => Date.parse(a.openedAt) - Date.parse(b.openedAt))
+      .slice(0, 50)
+      .map((a) => ({ id: a.id, kind: a.kind, siteId: a.siteId, summary: a.summary.slice(0, 160), state: a.state }));
+    const h: Handover = { id: stableId('handover', seat.id), fromShiftId: seat.id, shiftId: null, outgoing: { operator, at: new Date(t).toISOString(), note: text, openAlarms }, incoming: null };
+    this.handovers.push(h);
+    if (this.handovers.length > 200) this.handovers.splice(0, this.handovers.length - 200);
+    this.record({ at: h.outgoing!.at, operator, action: 'handover:written', note: `${openAlarms.length} penggera terbuka. ${text}` });
+    return h;
+  }
+
+  /**
+   * Step 2: the incoming Head Control takes it, from 30 minutes before their shift. When the outgoing Head Control is
+   * rostered, they must have written it first; nobody takes a handover from themselves. Not agreeing is allowed with
+   * the reason (Prima tells Arms Control). The taken handover is queued for Prima.
+   */
+  takeHandover(operator: string, agree: boolean, note: string): Handover {
+    const t = this.now().getTime();
+    if (!this.dir.d.desk) throw new HubError('Jadual tugas CMS belum diterima dari Prima.');
+    const seats = this.deskSeats();
+    const seat = seats.find((s) => s.staffName === operator && Date.parse(s.start) - 30 * 60_000 <= t && t < Date.parse(s.end));
+    if (!seat) throw new HubError('Anda bukan Head Control bagi syif yang bermula sekarang.');
+    if (this.handovers.some((h) => h.shiftId === seat.id && h.incoming)) throw new HubError('Serah tugas untuk syif ini sudah diambil.');
+    const text = note.trim().slice(0, 1000);
+    if (text.length < 5) throw new HubError(agree ? 'Tulis apa yang anda semak dan apa yang masih terbuka.' : 'Nyatakan bahagian yang anda tidak setuju.');
+    const prev = seats.find((s) => s.end === seat.start && s.staffName) ?? null;
+    if (prev?.staffName === operator) throw new HubError('Anda tidak boleh mengambil serah tugas daripada diri sendiri.');
+    let h = prev ? this.handovers.find((x) => x.fromShiftId === prev.id) : undefined;
+    // The outgoing Head Control writes it first when they are on the desk; a no-show or someone Arms Control clocked out
+    // leaves the incoming one to take over without it.
+    if (prev && !h && prev.onDesk !== false) throw new HubError(`${prev.staffName} belum menulis serah tugas. Minta beliau menulisnya dahulu.`);
+    const at = new Date(t).toISOString();
+    if (!h) {
+      h = { id: stableId('handover', 'none', seat.id), fromShiftId: null, shiftId: null, outgoing: null, incoming: null };
+      this.handovers.push(h);
+    }
+    h.shiftId = seat.id;
+    h.incoming = { operator, at, agree, note: text };
+    this.handoversToPrima.push(h);
+    this.record({ at, operator, action: `handover:${agree ? 'taken' : 'taken-not-agreed'}`, note: text });
+    return h;
+  }
+
   // ---- Saving and restarting (masterplan §193). ----
 
   /** Drops finished records past the keep period. Open alarms, their events and anything still to send stay. */
@@ -576,6 +721,8 @@ export class Hub {
       scans: [...this.scans],
       raised: [...this.raised],
       sentKeys: [...this.sentKeys],
+      handovers: this.handovers,
+      handoversToPrima: this.handoversToPrima.map((h) => h.id),
     };
   }
 
@@ -616,6 +763,11 @@ export class Hub {
     for (const [k, v] of snap.scans) hub.scans.set(k, v);
     for (const k of snap.raised) hub.raised.add(k);
     for (const k of snap.sentKeys) hub.sentKeys.add(k);
+    hub.handovers.push(...(snap.handovers ?? []));
+    for (const id of snap.handoversToPrima ?? []) {
+      const h = hub.handovers.find((x) => x.id === id);
+      if (h) hub.handoversToPrima.push(h);
+    }
     hub.audit.push(...journal.slice(-KEEP.audit));
     hub.auditSeq = journal.reduce((m, e) => Math.max(m, e.seq ?? 0), 0);
     const at = new Date(t).toISOString();

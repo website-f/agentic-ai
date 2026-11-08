@@ -68,15 +68,16 @@ describe('Central Admin module packaging proposal (files)', () => {
       assert.equal(sha(read(m.path)), m.sha256, `${m.id} bytes differ from the proposal`);
     }
   });
-  it('declares its dependencies in install order, and the release manifest carries the same entries after the IT modules', () => {
+  it('declares its dependencies in install order, without adding optional modules to the release manifest', () => {
     const ids = proposal.modules.map((m) => m.id);
     assert.deepEqual(ids, ['central_admin_walls', 'central_admin_panel', 'central_admin_delegations', 'central_admin_legal_holds']);
     assert.equal(new Set(ids).size, ids.length);
-    const pinned = ids.map((id) => manifest.modules.find((m) => m.id === id)!);
-    assert.deepEqual(
-      pinned.map(({ id, path, sha256, requires }) => ({ id, path, sha256, requires })),
-      proposal.modules.map(({ id, path, sha256, requires }) => ({ id, path, sha256, requires })),
-    );
+    // Agentic Office: the office release activates these four (its database has them), in this order and with the
+    // proposal's exact bytes; upstream keeps them optional.
+    const order = manifest.modules.map((m) => m.id);
+    const pinned = proposal.modules.map((m) => (manifest.modules as Array<{ id: string; path?: string; sha256?: string }>).find((x) => x.id === m.id));
+    proposal.modules.forEach((m, i) => assert.deepEqual({ path: pinned[i]?.path, sha256: pinned[i]?.sha256 }, { path: m.path, sha256: m.sha256 }, m.id));
+    assert.deepEqual(ids.map((id) => order.indexOf(id)), [...ids.map((id) => order.indexOf(id))].sort((a, b) => a - b));
     proposal.modules.forEach((m, i) => m.requires.forEach((r) => assert.ok(ids.indexOf(r) > -1 && ids.indexOf(r) < i, `${m.id} needs ${r} first`)));
   });
   it('keeps both modules free of destructive or grant-widening statements', () => {

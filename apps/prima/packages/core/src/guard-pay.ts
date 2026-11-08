@@ -1,7 +1,6 @@
 import { ORP_DIVISOR, guardOtHoursPerDay, type PayFormula } from './pay-formulas';
 import { eisShare, epfShare, hrdLevy, lindungShare, otherShares, payAccountCheck, pcbEstimate, periodEnd, socsoShare } from './payroll';
 import { DEFAULT_STATUTORY, type StatutorySettings } from './statutory';
-import type { StatTable } from './statutory-tables';
 import { holidayPayLost } from './public-holidays';
 import { ageOn } from './time';
 import type { Attendance, Id, IsoDate, IsoDateTime, LeaveRequest, Nationality, PayAccount, Person, PersonRole, Shift, UtilityCharge } from './types';
@@ -301,8 +300,6 @@ export interface GuardPayInput {
   divisor?: number;
   /** The CEO's statutory settings for the month (EPF, SOCSO, EIS, LINDUNG, HRD and any new contribution). */
   statutory?: StatutorySettings;
-  /** EPF and PERKESO tables loaded and checked in Prima (statutory-tables.ts); the built-in tables otherwise. */
-  tables?: StatTable[];
 }
 
 /**
@@ -495,7 +492,7 @@ export function buildGuardPayLine(i: GuardPayInput): GuardPayLine {
   const advances = (i.advances ?? []).filter((x) => x.paid);
   for (const x of advances) add(`Advance paid ${x.payOn}`, 'advance', null, null, null, -x.amount);
 
-  // A one-off minus item (an overpayment taken back, an advance) is taken from the net pay after the statutory shares; it never lowers the
+  // A one-off minus item (uniform, advance) is taken from the net pay after the statutory shares; it never lowers the
   // wages EPF, SOCSO or tax are counted on.
   const isDeduction = (x: GuardPayItem) => (x.kind === 'extra' || x.kind === 'advance' || x.kind === 'loan') && x.amount < 0;
   const gross = r2(items.filter((x) => !isDeduction(x)).reduce((n, x) => n + x.amount, 0));
@@ -506,9 +503,9 @@ export function buildGuardPayLine(i: GuardPayInput): GuardPayLine {
   const noEpf = new Set<GuardPayItem['kind']>(f?.amounts.epfOnRestHolidayPay === false ? ['ot', 'rest_day', 'holiday'] : ['ot']);
   const ot = r2(items.filter((x) => noEpf.has(x.kind) && !isDeduction(x)).reduce((n, x) => n + x.amount, 0));
   const epfWages = r2(gross - ot);
-  const epf = epfShare(epfWages, age, p.nationality, i.period, i.tables, st);
-  const socso = socsoShare(gross, age, i.period, i.tables, st);
-  const eis = eisShare(gross, age, p.nationality, i.period, i.tables, st);
+  const epf = epfShare(epfWages, age, p.nationality, st);
+  const socso = socsoShare(gross, age, st);
+  const eis = eisShare(gross, age, p.nationality, st);
   const lindung = lindungShare(gross, i.period, p.nationality, p.lindungOptOut === true, st);
   const otPay = r2(items.filter((x) => x.kind === 'ot').reduce((n, x) => n + x.amount, 0));
   const others = otherShares(st, gross, otPay, age, p.nationality);

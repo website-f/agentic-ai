@@ -261,7 +261,7 @@ describe('returned quotation correction', () => {
     await expect(svc.correctQuotation(ae, q.id, { ...bad, reason: 'again' })).rejects.toThrow(/Nothing changed/);
     // Then resubmitted and approved by another person; an approved quotation can no longer be corrected here.
     await svc.quotationAction(ae, q.id, 'submit');
-    await svc.quotationAction(cm, q.id, 'approve');
+    await svc.quotationAction(cm, q.id, 'approve', 'Checked corrected quotation and approved');
     await expect(svc.correctQuotation(ae, q.id, { ...bad, guards: 7, reason: 'late change' })).rejects.toThrow(/Only a draft or returned/);
   });
 });

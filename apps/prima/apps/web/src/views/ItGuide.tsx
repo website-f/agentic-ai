@@ -5,15 +5,15 @@ import{nextJobSteps,sourceTabs,workflows,type GuideTab}from'../it-guide/catalog'
 export function ItGuide({allowedTabs,onOpen}:{allowedTabs:string[];onOpen:(tab:GuideTab)=>void}){
  const{me}=useApp();const owner=me.user.id;const[expanded,setExpanded]=useState<string|null>(null);
  const{data,error,reload}=useLoad(()=>api.itGuidanceBoard(owner),[owner]);
- if(error)return <section className="panel" aria-label="Arisha AI Assistant workflow guide"><ErrorNotice error={error}/><button className="btn" onClick={reload}>Reload my authorized guidance</button></section>;
+ if(error)return <section className="panel" aria-label="IT work guide"><ErrorNotice error={error}/><button className="btn" onClick={reload}>Reload my authorized guidance</button></section>;
  if(!data||data.userId!==owner)return <Loading what="your authorized workflow guide"/>;
  const tabs=sourceTabs(data.board,allowedTabs),next=tabs.includes('jobs')?nextJobSteps(data.board):[];
  const counts=data.board.kpis?[data.board.kpis.jobsOpen,data.board.kpis.jobsWaitingCheck,data.board.kpis.jobsLate]:null;
  const verifiedCounts=counts?.every(n=>Number.isSafeInteger(n)&&n>=0)?counts:null;
  const open=(tab:GuideTab)=>{if(tabs.includes(tab))onOpen(tab);};
- return <section className="panel" aria-label="Arisha AI Assistant workflow guide">
-  <h3>Arisha AI Assistant — step-by-step IT work guide</h3>
-  <p className="notice" data-tone="info">Deterministic guidance from your authorized work snapshot, not a generated AI answer. I can explain the next step; you enter the real data and use the existing authorized action. This guide does not save, approve, provision, send messages or execute payments.</p>
+ return <section className="panel" aria-label="IT work guide">
+  <h3>Step-by-step IT work guide</h3>
+  <p className="notice" data-tone="info">Fixed guidance from your own work list. It explains the next step; you enter the real data and use the normal button. This guide does not save, approve, provision, send messages or execute payments. Questions about this guide: ask the Project Director.</p>
   <p className="small">Snapshot read at {data.observedAt}. Refresh before decisions; live permissions and record state are checked by the actual workflow. No job revision token is supplied by this summary.</p><button className="btn" onClick={reload}>Refresh my work guidance</button>
   {verifiedCounts&&<p className="small">Authorized board summary: {verifiedCounts[0]} open jobs · {verifiedCounts[1]} waiting for checks · {verifiedCounts[2]} late. These are scoped snapshot counts, not proof of completion.</p>}
   <h4>Your permitted next job actions</h4>{!next.length&&<p>No next job action is available in this snapshot. That is not proof that all IT work is complete; check the authorized registers below.</p>}

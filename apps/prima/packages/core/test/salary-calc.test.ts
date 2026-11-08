@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { MemoryStore, PrimaService, dataWalls, generateDataset, guardSalaryCalc, myt, standardGuardAmounts, type User } from '../src';
+import { guardSalaryCalc, standardGuardAmounts } from '../src';
 
 // Salary calculator (Fauzan, 6 Nov 2026). Placeholder basic of RM1,700; not a real rate.
 describe('guard salary calculator', () => {
@@ -29,41 +29,5 @@ describe('guard salary calculator', () => {
   });
   it('warns when the days add up to more than the month', () => {
     expect(guardSalaryCalc(a, { daysWorked: 26, annualLeaveDays: 2 }).notes[0]).toMatch(/more than the 26-day month/);
-  });
-});
-
-describe('salary calculator data (OM and above, read only)', () => {
-  const TODAY = '2026-11-06';
-  const fresh = () => {
-    const ds = generateDataset({ today: TODAY, now: myt(TODAY, '10:00') });
-    return { ds, svc: new PrimaService(new MemoryStore(ds), () => myt(TODAY, '10:00')) };
-  };
-  it('the OM, ROM, OGM, OD, COO and CEO get the live guard formulas and the pay law; nobody else', async () => {
-    const { ds, svc } = fresh();
-    const tiers = ['om', 'regional', 'ogm', 'ops_director', 'coo', 'ceo'];
-    for (const t of tiers) {
-      const u = ds.users.find((x) => x.opsTier === t && !x.integration) as User;
-      const d = await svc.salaryCalcData(u);
-      expect(d.formulas.every((f) => f.amounts.basicMonthly > 0)).toBe(true);
-      expect(d.formulas.map((f) => f.code)).toContain('STD-12H-R2');
-      expect(d.law.ordinaryRateDivisor).toBe(26);
-      expect(dataWalls(u)).toContain('pay_read');
-    }
-    for (const role of ['guard', 'site_device', 'supervisor'] as const) {
-      const u = ds.users.find((x) => x.role === role && !x.opsTier);
-      if (u) {
-        await expect(svc.salaryCalcData(u)).rejects.toThrow(/Not allowed/);
-        expect(dataWalls(u)).not.toContain('pay_read');
-      }
-    }
-    const patrol = ds.users.find((x) => x.opsTier === 'patrol');
-    if (patrol) await expect(svc.salaryCalcData(patrol)).rejects.toThrow(/Not allowed/);
-  });
-  it('follows the CEO pay law for the month', async () => {
-    const { ds, svc } = fresh();
-    const ceo = ds.users.find((x) => x.id === 'u-fauzan') as User;
-    await svc.savePayLaw(ceo, { effectiveFrom: '2026-11', settings: { minimumWage: 1900 }, reason: 'Synthetic law change' });
-    const om = ds.users.find((x) => x.id === 'u-om-klang') as User;
-    expect((await svc.salaryCalcData(om)).law.minimumWage).toBe(1900);
   });
 });

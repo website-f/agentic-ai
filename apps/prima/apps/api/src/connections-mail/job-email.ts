@@ -1,3 +1,4 @@
+
 import { createHash, createHmac, timingSafeEqual, randomUUID } from 'node:crypto';
 import { BadRequestException, ConflictException, ForbiddenException, NotFoundException, ServiceUnavailableException } from '@nestjs/common';
 import { boundedJson, delegatedApp, linkedIdentity, LOCAL_ID, onBehalfOf, record, TIMEOUT_MS, type DelegatedActor, type DelegatedApp } from './delegated';
@@ -113,6 +114,7 @@ export function snapshotFrom(m: Record<string, unknown>): EmailSnapshot | null {
     internetMessageId: clean(m.internetMessageId),
   };
 }
+const hashOf = (jobId: string, userId: string, s: EmailSnapshot) => createHash('sha256').update(JSON.stringify([jobId, userId, s])).digest('hex');
 const snapshotHash = (s: EmailSnapshot) => createHash('sha256').update(JSON.stringify(s)).digest('hex');
 export const PREVIEW_TTL_MS = 10 * 60 * 1000;
 interface PreviewClaim { v: 2; userId: string; jobId: string; tenantId: string; oid: string; inputId: string; canonicalMessageId: string; hash: string; issuedAt: number; expiresAt: number }

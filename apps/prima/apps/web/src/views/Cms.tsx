@@ -28,6 +28,8 @@ import { RecordButton } from "./RecordForm";
 import { ImportButton } from "./ImportDrawer";
 import "../styles/ops.css";
 import { CmsDevicesTab } from "./SiteDispatch";
+import { PoliceHelpPanel } from "./PoliceHelp";
+import { GuardPhonesBoard } from "./GuardPhoneOffice";
 
 type Tab =
   | "now"
@@ -36,6 +38,7 @@ type Tab =
   | "sites"
   | "roster"
   | "phones"
+  | "guardphones"
   | "settings"
   | "duties"
   | "staff"
@@ -47,6 +50,7 @@ const TABS: { id: Tab; label: string }[] = [
   { id: "devices", label: "Site devices" },
   { id: "sites", label: "Sites" },
   { id: "phones", label: "Phone desk" },
+  { id: "guardphones", label: "Guard phones" },
   { id: "roster", label: "Roster" },
   { id: "settings", label: "Settings" },
   { id: "duties", label: "What CMS does" },
@@ -203,6 +207,8 @@ export function CmsView() {
         ))}
       </div>
       {tab === "now" && <Now data={data} />}
+      {/* CMS monitors police help requests (Fauzan, 3 Nov 2026: Arms Control coordinates, company authorises, CMS monitors). */}
+      {tab === "now" && <PoliceHelpPanel />}
       {tab === "emergencies" && <Emergencies data={data} />}
       {tab === "devices" && <CmsDevicesTab />}
       {tab === "sites" && (
@@ -213,6 +219,7 @@ export function CmsView() {
       )}
       {tab === "roster" && <RosterTab data={data} />}
       {tab === "phones" && <Phones data={data} />}
+      {tab === "guardphones" && <GuardPhonesBoard />}
       {tab === "settings" && <Settings data={data} />}
       {tab === "duties" && <Duties data={data} />}
       {tab === "staff" && <Staff data={data} />}
@@ -223,9 +230,11 @@ export function CmsView() {
 
 function Now({ data }: { data: Cms }) {
   const c = data.current;
-  const { run, busy, error } = useAction();
-  const [note, setNote] = useState("");
+  // In the last hour of a shift, the handover to the next shift is shown too.
+  const next = data.roster.find((r) => !r.live && !r.done && Date.parse(r.start) - Date.parse(data.now) <= 60 * 60_000) ?? null;
   return (
+    <>
+    <MyDesk data={data} />
     <div className="cm-now">
       <Card
         title="To act on"
@@ -275,56 +284,189 @@ function Now({ data }: { data: Cms }) {
           ))}
           {c?.handover && (
             <li className="op-item">
-              <div className="op-line">
-                <div className="op-main">
-                  <span className="op-title">Shift handover</span>
-                  <span className="op-meta">
-                    {c.handover.at
-                      ? `Taken ${hhmm(c.handover.at)}: ${c.handover.note}`
-                      : "Not taken yet. Head Control writes what is still open."}
-                  </span>
-                </div>
-                <Chip tone={c.handover.at ? "ok" : "warn"}>
-                  {c.handover.at ? "Taken" : "Open"}
-                </Chip>
-              </div>
-              {!c.handover.at && data.canDesk && (
-                <>
-                  <ErrorNotice error={error} />
-                  <textarea
-                    className="textarea"
-                    aria-label="Handover note"
-                    placeholder="Arms still out, alarms open, calls to return…"
-                    value={note}
-                    onChange={(e) => setNote(e.target.value)}
-                  />
-                  <div className="op-form-actions">
-                    <button
-                      className="btn btn-primary btn-sm"
-                      disabled={busy}
-                      onClick={() =>
-                        run(
-                          () =>
-                            api.recordCmsHandover(c.handover!.shiftId, note),
-                          "Handover recorded",
-                        )
-                      }
-                    >
-                      Record handover
-                    </button>
-                  </div>
-                </>
-              )}
+              <HandoverView h={c.handover} />
+            </li>
+          )}
+          {next?.handover && (
+            <li className="op-item">
+              <HandoverView h={next.handover} title={`Handover to the ${hhmm(next.start)} shift`} />
             </li>
           )}
         </ul>
       </Card>
     </div>
+    </>
+  );
+}
+
+type Handover = NonNullable<Cms["roster"][number]["handover"]>;
+
+/** The two steps of a shift handover, as everyone on the board sees them. */
+function HandoverView({ h, title = "Shift handover" }: { h: Handover; title?: string }) {
+  const out = h.outgoing?.written ?? null;
+  const tone: Tone = h.disputed ? "crit" : h.at ? "ok" : "warn";
+  return (
+    <div className="op-stack">
+      <div className="op-line">
+        <span className="op-title">{title}</span>
+        <Chip tone={tone}>{h.disputed ? "Not agreed" : h.at ? "Taken" : "Open"}</Chip>
+      </div>
+      <span className="op-meta">
+        <span className="muted">1. Handed over by: </span>
+        {out
+          ? `${out.by} at ${hhmm(out.at)}${out.via === "cms_app" ? " (CMS desk)" : ""}: ${out.note}`
+          : h.outgoing
+            ? `${h.outgoing.name} has not written it yet`
+            : "No Head Control on the shift before"}
+      </span>
+      {out && out.openItems.length > 0 && (
+        <ul className="op-meta" style={{ margin: "0 0 0 18px", padding: 0 }}>
+          {out.openItems.slice(0, 12).map((i) => (
+            <li key={i.kind + i.ref}>{i.label}</li>
+          ))}
+          {out.openItems.length > 12 && <li>and {out.openItems.length - 12} more</li>}
+        </ul>
+      )}
+      {out && out.openItems.length === 0 && <span className="op-meta">Nothing open on the board when it was written.</span>}
+      <span className="op-meta">
+        <span className="muted">2. Taken by: </span>
+        {h.at
+          ? `${h.takenBy} at ${hhmm(h.at)}${h.via === "cms_app" ? " (CMS desk)" : ""}: ${h.note}`
+          : `${h.takenBy ?? "Head Control"} has not taken it yet`}
+      </span>
+    </div>
+  );
+}
+
+/**
+ * The signed-in CMS officer's own seats: clock in, write the handover at the end of the shift (Head Control), take
+ * the handover at the start of the next one, and clock out. Each action is checked again on the server.
+ */
+function MyDesk({ data }: { data: Cms }) {
+  const { run, busy, error } = useAction();
+  const [text, setText] = useState<Record<string, string>>({});
+  const nowMs = Date.parse(data.now);
+  const mine = data.roster
+    .flatMap((r) => r.seats.filter((s) => s.mine).map((s) => ({ r, s })))
+    .filter(({ r }) => Date.parse(r.start) - nowMs < 60 * 60_000 || r.live);
+  if (!data.canDesk || mine.length === 0) return null;
+  const val = (k: string) => text[k] ?? "";
+  const set = (k: string, v: string) => setText({ ...text, [k]: v });
+  return (
+    <Card title="My seat" sub="Head Control stays on the desk until the next Head Control takes the handover." flush>
+      <div className="op-pad">
+        <ErrorNotice error={error} />
+      </div>
+      <ul className="op-list">
+        {mine.map(({ r, s }) => {
+          const sh = s.shift;
+          const hc = sh.post === "HEAD_CONTROL";
+          const endMs = Date.parse(r.end);
+          const startMs = Date.parse(r.start);
+          const canIn = !sh.clockIn && nowMs >= startMs - 30 * 60_000 && nowMs < endMs;
+          const onDesk = !!sh.clockIn && !sh.clockOut;
+          const writeOut = hc && onDesk && !r.handoverOut && nowMs >= endMs - 60 * 60_000;
+          const take = hc && !!sh.clockIn && r.handover && !r.handover.at;
+          const early = nowMs < endMs - data.restRules.earlyGraceMin * 60_000;
+          const k = sh.id;
+          return (
+            <li key={k} className="op-item">
+              <div className="op-line">
+                <div className="op-main">
+                  <span className="op-title">
+                    {POST[sh.post]} · {dateLabel(r.date)} {hhmm(r.start)}–{hhmm(r.end)}
+                  </span>
+                  <span className="op-meta">
+                    {sh.clockIn ? `In ${hhmm(sh.clockIn)}` : "Not clocked in"}
+                    {sh.clockOut ? ` · out ${hhmm(sh.clockOut)}` : ""}
+                  </span>
+                </div>
+                <Chip tone={SEAT[s.state].tone}>{SEAT[s.state].label}</Chip>
+              </div>
+              {canIn && (
+                <div className="op-form-actions">
+                  <button className="btn btn-primary btn-sm" disabled={busy} onClick={() => run(() => api.cmsSeatClockIn(sh.id), "Clocked in")}>
+                    Clock in
+                  </button>
+                </div>
+              )}
+              {take && (
+                <div className="op-box">
+                  <span className="op-section-title">Take the handover</span>
+                  <HandoverView h={r.handover!} />
+                  <textarea
+                    className="textarea"
+                    aria-label="Handover taken, note"
+                    placeholder="What you checked and what is still open, or the part you do not agree with"
+                    value={val(k + ":in")}
+                    onChange={(e) => set(k + ":in", e.target.value)}
+                  />
+                  <div className="op-form-actions">
+                    <button
+                      className="btn btn-primary btn-sm"
+                      disabled={busy}
+                      onClick={() => run(() => api.recordCmsHandover(sh.id, val(k + ":in"), true), "Handover taken")}
+                    >
+                      Agree and take over
+                    </button>
+                    <button
+                      className="btn btn-sm"
+                      disabled={busy}
+                      onClick={() => run(() => api.recordCmsHandover(sh.id, val(k + ":in"), false), "Handover taken as not agreed. Arms Control is told.")}
+                    >
+                      Take over, not agreed
+                    </button>
+                  </div>
+                </div>
+              )}
+              {writeOut && (
+                <div className="op-box">
+                  <span className="op-section-title">Write the handover for the next Head Control</span>
+                  <span className="op-meta">Open alarms, false alarms to review and calls to return are added from the board.</span>
+                  <textarea
+                    className="textarea"
+                    aria-label="Handover for the next shift"
+                    placeholder="Arms still out, alarms open, calls to return, anything to watch"
+                    value={val(k + ":out")}
+                    onChange={(e) => set(k + ":out", e.target.value)}
+                  />
+                  <div className="op-form-actions">
+                    <button className="btn btn-primary btn-sm" disabled={busy} onClick={() => run(() => api.giveCmsHandover(sh.id, val(k + ":out")), "Handover written")}>
+                      Write handover
+                    </button>
+                  </div>
+                </div>
+              )}
+              {hc && r.handoverOut && (
+                <span className="op-meta">Handover written at {hhmm(r.handoverOut.at)}. Wait for the next Head Control to take it, then clock out.</span>
+              )}
+              {onDesk && (
+                <div className="op-act">
+                  {early && (
+                    <input
+                      className="input"
+                      aria-label="Why you are leaving early"
+                      placeholder="Leaving before the shift ends: why"
+                      value={val(k + ":outnote")}
+                      onChange={(e) => set(k + ":outnote", e.target.value)}
+                    />
+                  )}
+                  <button className="btn btn-sm" disabled={busy} onClick={() => run(() => api.cmsSeatClockOut(sh.id, val(k + ":outnote")), "Clocked out")}>
+                    Clock out
+                  </button>
+                </div>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+    </Card>
   );
 }
 
 function RosterTab({ data }: { data: Cms }) {
   const [pick, setPick] = useState<Record<string, string>>({});
+  const [why, setWhy] = useState<Record<string, string>>({});
   const { run, busy, error } = useAction();
   const active = data.staff.filter((s) => s.active);
   return (
@@ -359,7 +501,10 @@ function RosterTab({ data }: { data: Cms }) {
           {data.settings.headControlPerShift} Head Control and{" "}
           {data.settings.monitorOfficersPerShift} Monitor Officer
           {data.settings.monitorOfficersPerShift === 1 ? "" : "s"}. Nobody works
-          more than 12 hours in a row.
+          more than {data.restRules.maxHours} hours in a row, everyone has at least{" "}
+          {data.restRules.minRestHours} hours' rest between stretches (Arms Control setting) and a
+          rest day after {data.restRules.maxDaysInRow} days in a row, and nobody is
+          put on a seat during approved leave.
         </p>
       </div>
       <ul className="op-list op-top-line">
@@ -391,7 +536,37 @@ function RosterTab({ data }: { data: Cms }) {
                       {s.state === "no_show" ? (
                         <span className="op-crit"> · not clocked in</span>
                       ) : null}
+                      {s.shift.released?.length ? (
+                        <span className="muted">
+                          {" "}
+                          · taken off: {s.shift.released[s.shift.released.length - 1].name} (
+                          {s.shift.released[s.shift.released.length - 1].reason})
+                        </span>
+                      ) : null}
                     </span>
+                    {data.canManage && s.shift.staffName && !s.shift.clockIn && !r.done && (
+                      <div className="op-act">
+                        <input
+                          className="input"
+                          aria-label={`Why take ${s.shift.staffName} off ${s.shift.id}`}
+                          placeholder="Sick, leave, emergency…"
+                          value={why[s.shift.id] ?? ""}
+                          onChange={(e) => setWhy({ ...why, [s.shift.id]: e.target.value })}
+                        />
+                        <button
+                          className="btn btn-sm"
+                          disabled={busy || (why[s.shift.id] ?? "").trim().length < 3}
+                          onClick={() =>
+                            run(
+                              () => api.releaseCmsSeat(s.shift.id, why[s.shift.id] ?? ""),
+                              "Taken off the seat. Put someone else on it.",
+                            )
+                          }
+                        >
+                          Take off
+                        </button>
+                      </div>
+                    )}
                     {can && (
                       <div className="op-act">
                         <select
@@ -406,7 +581,7 @@ function RosterTab({ data }: { data: Cms }) {
                             {s.shift.staffName ? "Replace…" : "Choose…"}
                           </option>
                           {who.map((p) => (
-                            <option key={p.id} value={p.name}>
+                            <option key={p.id} value={p.id}>
                               {p.name}
                             </option>
                           ))}
@@ -418,7 +593,7 @@ function RosterTab({ data }: { data: Cms }) {
                             run(
                               () =>
                                 api.assignCmsShift(s.shift.id, pick[s.shift.id]),
-                              `${pick[s.shift.id]} is on the seat`,
+                              `${who.find((p) => p.id === pick[s.shift.id])?.name ?? "Staff member"} is on the seat`,
                             )
                           }
                         >
@@ -653,13 +828,19 @@ type NumKey =
   | "forwardAfterSec"
   | "answerTargetSec"
   | "callbackWithinMin"
-  | "alarmAckSec";
+  | "alarmAckSec"
+  | "minRestHours";
 
 const NUM_FIELDS: { key: NumKey; label: string; help: string }[] = [
   {
     key: "headControlPerShift",
     label: "Head Control per shift",
     help: "At least 1",
+  },
+  {
+    key: "minRestHours",
+    label: "Rest between shifts, hours",
+    help: "Least rest between one stretch of work and the next. HR can view it.",
   },
   {
     key: "monitorOfficersPerShift",
@@ -859,6 +1040,9 @@ function Staff({ data }: { data: Cms }) {
                 </span>
               </div>
               <div className="op-chips">
+                <Chip tone={p.linked ? "ok" : "warn"}>
+                  {p.linked ? "Prima account linked" : "No Prima account: cannot clock in"}
+                </Chip>
                 <Chip tone={p.active ? "ok" : "neutral"}>
                   {p.active ? "Active" : "Inactive"}
                 </Chip>
@@ -868,6 +1052,46 @@ function Staff({ data }: { data: Cms }) {
           </li>
         ))}
       </ul>
+      {data.hours && (
+        <>
+          <div className="op-pad">
+            <span className="op-section-title">Hours this month</span>
+            <p className="op-note">From clock-in to clock-out. This is the hours record for HR, not a payslip.</p>
+          </div>
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Seats</th>
+                  <th>Worked</th>
+                  <th>Hours</th>
+                  <th>Late in</th>
+                  <th>Left early</th>
+                  <th>No clock-out</th>
+                  <th>Missed</th>
+                  <th>Taken off</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.hours.map((h) => (
+                  <tr key={h.staffId}>
+                    <td>{h.name}</td>
+                    <td>{h.seats}</td>
+                    <td>{h.worked}</td>
+                    <td>{h.hours}</td>
+                    <td>{h.late}</td>
+                    <td>{h.early}</td>
+                    <td>{h.noClockOut}</td>
+                    <td>{h.missed}</td>
+                    <td>{h.takenOff}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
     </Card>
   );
 }
@@ -1100,7 +1324,7 @@ function Emergencies({ data }: { data: Cms }) {
                     <input
                       className="input"
                       aria-label={`Review note ${f.alarm.id}`}
-                      placeholder="What you checked (needed if it was real)"
+                      placeholder="What you checked (always needed; a short note is fine)"
                       value={notes[f.alarm.id] ?? ""}
                       onChange={(e) =>
                         setNotes({ ...notes, [f.alarm.id]: e.target.value })
@@ -1108,7 +1332,7 @@ function Emergencies({ data }: { data: Cms }) {
                     />
                     <button
                       className="btn btn-sm"
-                      disabled={busy}
+                      disabled={busy || !(notes[f.alarm.id] ?? "").trim()}
                       onClick={() =>
                         run(
                           () =>

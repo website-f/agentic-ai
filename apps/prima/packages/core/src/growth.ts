@@ -1,21 +1,13 @@
-// Growth panel for group leadership (Fauzan, 3 Nov 2026, whole-organisation review gap G3, "Recommended set").
-//
-// The leaders' home showed risk well but not whether the group is growing. This rolls up figures each department
-// already keeps, per company and for the group:
-//   - monthly contract value this month and its change from last month (Contracts);
-//   - contracts ending in the next 90 days, as revenue at risk (Contracts);
-//   - sales pipeline: open leads and their estimated monthly value (Clients, sales leads);
-//   - under-billing: last month's invoices below what the contract bills, and invoices missing (Contracts + client
-//     accounts);
-//   - unfilled shifts in the next 7 days (Roster);
-//   - collection days from the latest month-end debtor ageing Finance recorded from SQL Account.
-// Site margin comes from the Operations monitors' site profit and loss and is loaded separately (it is heavier).
-//
-// A company with nothing recorded shows Unknown (null), never zero: Unknown is never shown as fine. Nothing here
-// approves, pays or changes a record; it only reads. Never a ranking of people.
-import { contractBilling } from './contracts';
-import { addDays } from './time';
-import type { Company, Contract, ClientAccount, FinAgeing, Id, IsoDate, SalesLead } from './types';
+import { contractBilling } from "./contracts";
+import { addDays } from "./time";
+import type { Company } from "./types";
+import type { Contract } from "./types";
+import type { ClientAccount } from "./types";
+import type { FinAgeing } from "./types";
+import type { Id } from "./types";
+import type { IsoDate } from "./types";
+import type { SalesLead } from "./types";
+
 
 export interface GrowthCompany {
   companyId: Id;

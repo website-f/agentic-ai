@@ -29,7 +29,7 @@ CREATE FUNCTION prima.ic_actor(uid text,lead boolean) RETURNS boolean LANGUAGE s
  AND coalesce(u.data->'integration','null'::jsonb) IN ('null'::jsonb,'false'::jsonb) AND (coalesce(u.data->>'accessClosedFrom','')='' OR u.data->>'accessClosedFrom'>to_char(now() AT TIME ZONE 'Asia/Kuala_Lumpur','YYYY-MM-DD'))),false) FROM prima.users u WHERE u.id=uid
 $$;
 CREATE FUNCTION prima.ic_scope(uid text,company text) RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER SET search_path=pg_catalog, prima AS $$
- SELECT coalesce(EXISTS(SELECT 1 FROM prima.users u WHERE u.id=uid AND prima.ic_actor(uid,false) AND u.data->'companyIds' ? company AND (company IN ('pwvsb','merdeka','goodwill','sasateam') OR EXISTS(SELECT 1 FROM prima.companies c WHERE c.id=company))),false)
+ SELECT coalesce(EXISTS(SELECT 1 FROM prima.users u WHERE u.id=uid AND prima.ic_actor(uid,false) AND u.data->'companyIds' ? company AND (company IN ('pwvsb','merdeka','goodwill','sasateam','pgl') OR EXISTS(SELECT 1 FROM prima.companies c WHERE c.id=company))),false)
 $$;
 CREATE FUNCTION prima.ic_root(kind text,rid text) RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog, prima AS $$
 DECLARE d jsonb;

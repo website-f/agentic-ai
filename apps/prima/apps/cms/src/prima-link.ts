@@ -5,7 +5,7 @@
 // Prima's side of this key is CMS_FEED_API_KEY / CMS_FEED_SIGNING_SECRET; here it is CMS_TO_PRIMA_KEY / _SECRET.
 import { directoryProblems, type Directory } from './directory';
 import { sign, type CmsEvent } from './event';
-import type { Alarm } from './hub';
+import type { Alarm, Handover } from './hub';
 
 export interface PrimaLinkConfig {
   url: string;
@@ -26,8 +26,34 @@ export function primaConfig(env: NodeJS.ProcessEnv = process.env): PrimaLinkConf
   return { url, directoryUrl, key, secret };
 }
 
+/**
+ * What Prima keeps of an event: the company record of what happened (Fauzan, 5 Nov 2026: "Prima secure get details what
+ * happen but not the camera feed 24/7. Prima secure get what need to be documented as a company"). Video, clip links and
+ * the device's raw details stay on the CMS in-house server; Prima is told only whether a clip is held there.
+ */
+export type PrimaEventRecord = Pick<CmsEvent, 'id' | 'kind' | 'severity' | 'companyId' | 'siteId' | 'deviceId' | 'source' | 'occurredAt' | 'receivedAt' | 'summary'> & {
+  /** True when the CMS server holds a video clip for this event (ask the CMS desk for it; never sent to Prima). */
+  clipHeldInCms: boolean;
+};
+
+export function recordForPrima(e: CmsEvent): PrimaEventRecord {
+  return {
+    id: e.id,
+    kind: e.kind,
+    severity: e.severity,
+    companyId: e.companyId,
+    siteId: e.siteId,
+    deviceId: e.deviceId,
+    source: e.source,
+    occurredAt: e.occurredAt,
+    receivedAt: e.receivedAt,
+    summary: e.summary,
+    clipHeldInCms: Boolean(e.clipUrl),
+  };
+}
+
 export interface PrimaBatch {
-  events: CmsEvent[];
+  events: PrimaEventRecord[];
   /** Closed alarms: a real one opens the company's own case in Prima; a false one is kept for the false-alarm rate. */
   closedAlarms: Pick<Alarm, 'id' | 'kind' | 'companyId' | 'siteId' | 'summary' | 'openedAt' | 'outcome' | 'closingNote' | 'closedBy' | 'closedAt' | 'eventIds'>[];
   /**
@@ -35,6 +61,8 @@ export interface PrimaBatch {
    * Prima has evidence a device was up; when the snapshots stop, Prima counts the time as Unknown, not covered.
    */
   status?: DeviceStatus;
+  /** Shift handovers taken at the CMS desk (who handed the desk to whom). Open alarms as id, kind, site and summary only. */
+  handovers?: Handover[];
 }
 
 export interface DeviceStatus {
@@ -56,7 +84,7 @@ export interface PrimaLinkState {
   /** Tries per item (event id or alarm id) that Prima refused. */
   attempts: Map<string, number>;
   /** Items Prima refused MAX_REFUSALS times: kept and shown to the operator, never silently dropped. */
-  parked: { at: string; kind: 'event' | 'closed alarm'; id: string; reason: string; attempts: number }[];
+  parked: { at: string; kind: 'event' | 'closed alarm' | 'handover'; id: string; reason: string; attempts: number }[];
 }
 
 export const MAX_REFUSALS = 5;
@@ -80,16 +108,18 @@ export async function flush(
   state: PrimaLinkState = newLinkState(),
   now: () => Date = () => new Date(),
   status?: () => DeviceStatus,
+  handoverQueue: Handover[] = [],
 ): Promise<{ sent: number; refused: number; parked: number; busy?: boolean; error?: string }> {
   if (state.inFlight) return { sent: 0, refused: 0, parked: 0, busy: true };
-  if (!queue.length && !closed.length && !status) return { sent: 0, refused: 0, parked: 0 };
+  if (!queue.length && !closed.length && !handoverQueue.length && !status) return { sent: 0, refused: 0, parked: 0 };
   state.inFlight = true;
   try {
     const events = queue.slice(0, 200);
     const alarms = closed.slice(0, 200);
+    const hos = handoverQueue.slice(0, 50);
     const req = signedRequest(
       {
-        events,
+        events: events.map(recordForPrima),
         closedAlarms: alarms.map((a) => ({
           id: a.id,
           kind: a.kind,
@@ -104,6 +134,17 @@ export async function flush(
           eventIds: a.eventIds,
         })),
         ...(status ? { status: status() } : {}),
+        ...(hos.length
+          ? {
+              handovers: hos.map((h) => ({
+                id: h.id,
+                fromShiftId: h.fromShiftId,
+                shiftId: h.shiftId,
+                outgoing: h.outgoing && { ...h.outgoing, openAlarms: h.outgoing.openAlarms.map((a) => ({ id: a.id, kind: a.kind, siteId: a.siteId, summary: a.summary, state: a.state })) },
+                incoming: h.incoming,
+              })),
+            }
+          : {}),
       },
       cfg,
     );
@@ -117,14 +158,22 @@ export async function flush(
     // A 2xx is an acknowledgement only when Prima says how many of each list it read and names every refusal so it
     // can be matched to an item sent. Anything else (no body, wrong counts, a refusal that matches nothing) keeps the
     // whole batch for the next try: a malformed answer never clears the queue (Arisha main review, round 2).
-    const body = (res.json ? await res.json().catch(() => null) : null) as { received?: { events?: unknown; closedAlarms?: unknown }; refused?: unknown } | null;
+    const body = (res.json ? await res.json().catch(() => null) : null) as { received?: { events?: unknown; closedAlarms?: unknown; handovers?: unknown }; refused?: unknown } | null;
     const malformed = (why: string) => ({ sent: 0, refused: 0, parked: 0, error: `Prima's answer was not a valid acknowledgement (${why}); kept for the next try` });
     if (!body || typeof body !== 'object' || !body.received || body.received.events !== events.length || body.received.closedAlarms !== alarms.length) return malformed('counts missing or different');
+    if (hos.length && body.received.handovers !== hos.length) return malformed('handover count missing or different');
     if (body.refused !== undefined && !Array.isArray(body.refused)) return malformed('refusals not a list');
     const refusedEvents = new Map<CmsEvent, string>();
     const refusedAlarms = new Map<Alarm, string>();
+    const refusedHandovers = new Map<Handover, string>();
     for (const r of (body.refused ?? []) as Refusal[]) {
       const reason = String(r?.reason ?? 'refused').slice(0, 200);
+      if (r?.list === 'handovers') {
+        const byId = typeof r.id === 'string' ? hos.find((x) => x.id === r.id) : undefined;
+        if (!byId) return malformed('a refusal matches no item sent');
+        refusedHandovers.set(byId, reason);
+        continue;
+      }
       if (r?.list !== 'events' && r?.list !== 'closedAlarms') return malformed('a refusal names no list');
       const inAlarms = r.list === 'closedAlarms';
       const list: (CmsEvent | Alarm)[] = inAlarms ? alarms : events;
@@ -137,7 +186,7 @@ export async function flush(
       else refusedEvents.set(hit as CmsEvent, reason);
     }
     let parked = 0;
-    const settle = <T extends { id: string }>(sent: T[], refused: Map<T, string>, kind: 'event' | 'closed alarm', target: T[]) => {
+    const settle = <T extends { id: string }>(sent: T[], refused: Map<T, string>, kind: 'event' | 'closed alarm' | 'handover', target: T[]) => {
       const drop = new Set<T>();
       for (const x of sent) {
         const reason = refused.get(x);
@@ -161,7 +210,9 @@ export async function flush(
     };
     settle(events, refusedEvents, 'event', queue);
     settle(alarms, refusedAlarms, 'closed alarm', closed);
-    return { sent: events.length + alarms.length - refusedEvents.size - refusedAlarms.size, refused: refusedEvents.size + refusedAlarms.size, parked };
+    settle(hos, refusedHandovers, 'handover', handoverQueue);
+    const refusedN = refusedEvents.size + refusedAlarms.size + refusedHandovers.size;
+    return { sent: events.length + alarms.length + hos.length - refusedN, refused: refusedN, parked };
   } finally {
     state.inFlight = false;
   }

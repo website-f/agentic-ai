@@ -6,6 +6,7 @@ import { randomBytes } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { directoryProblems, emptyDirectory, type Directory } from './directory';
 import { demoDirectory } from './demo';
+import { localModelConfig } from './local-model';
 import { Hub } from './hub';
 import { GateLists } from './adaptors/anpr';
 import type { Route } from './adaptors/tracker';
@@ -19,7 +20,7 @@ function load(): { dir: Directory; cfg: ServerConfig; demo: boolean } {
     const k = () => randomBytes(18).toString('base64url');
     const op = k();
     console.log(`CMS demo mode. Sample data only. Operator key for this run: ${op}`);
-    return { dir: demoDirectory(), demo, cfg: { operators: new Map([[op, 'Demo operator']]), gateway: { key: k(), secret: k() }, prima: { key: k(), secret: k() } } };
+    return { dir: demoDirectory(), demo, cfg: { operators: new Map([[op, 'Demo operator']]), gateway: { key: k(), secret: k() }, prima: { key: k(), secret: k() }, localModel: localModelConfig() } };
   }
   const cfg = configFromEnv();
   let dir = emptyDirectory();
@@ -75,7 +76,7 @@ for (const sig of ['SIGINT', 'SIGTERM'] as const)
 const prima = primaConfig();
 if (prima) {
   setInterval(() => {
-    void flush(hub.toPrima, hub.closedToPrima, prima, fetch, hub.primaLink).then((r) => {
+    void flush(hub.toPrima, hub.closedToPrima, prima, fetch, hub.primaLink, undefined, undefined, hub.handoversToPrima).then((r) => {
       saveQuietly();
       if (r.error) console.error(`Prima link: ${r.error} (kept for the next try)`);
       if (r.refused) console.error(`Prima link: ${r.refused} item(s) refused by Prima (kept for the next try)`);
@@ -83,7 +84,7 @@ if (prima) {
   }, 30_000);
   // Device status every STATUS_EVERY_MIN minutes, so Prima can tell covered time from Unknown time.
   setInterval(() => {
-    void flush(hub.toPrima, hub.closedToPrima, prima, fetch, hub.primaLink, undefined, () => hub.statusForPrima()).then((r) => {
+    void flush(hub.toPrima, hub.closedToPrima, prima, fetch, hub.primaLink, undefined, () => hub.statusForPrima(), hub.handoversToPrima).then((r) => {
       saveQuietly();
       if (r.error) console.error(`Prima link (status): ${r.error}`);
     });

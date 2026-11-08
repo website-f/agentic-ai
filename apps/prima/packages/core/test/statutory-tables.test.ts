@@ -56,7 +56,7 @@ describe('EPF and PERKESO tables kept in Prima', () => {
     expect(() => parseStatRows('30\t0.40\t0.10\n20\t0.70\t0.20')).toThrow(/do not follow/);
   });
 
-  it('uses a newly loaded table only after a second person checks it, and keeps every version', async () => {
+  it('keeps checked reference tables without silently replacing month-effective payroll authority', async () => {
     const { svc, ds } = fresh();
     const [hr, fd, cos, fin, staff] = await Promise.all(['u-pwvsb-hr', 'u-fd', 'u-cos', 'u-fin-t1-lead', 'u-fin-t1-de1'].map((id) => svc.user(id)));
     // A pretend new PERKESO table: every row RM1 more for the employer.
@@ -67,20 +67,23 @@ describe('EPF and PERKESO tables kept in Prima', () => {
     const loaded = await svc.loadStatTable(hr, { id: 'SOCSO-1', from: P, source: 'PERKESO contribution table notice (mock)', doc: 'Jadual caruman (mock).pdf', rows });
     expect(loaded.table).toMatchObject({ version: 'v2', status: 'loaded' });
     expect(loaded.changeCount).toBe(table('SOCSO-1').rows.length);
-    // Not used yet: payroll still takes the built-in row.
+    // Loading and checking never activate reference rows for payroll.
     let run = await svc.prepareStaffPay(hr, GROUP_EMPLOYER_ID, P);
     const l0 = run.lines.find((l) => l.gross > 1000 && l.age < 60)!;
-    expect(l0.statBands?.socso).toMatch(/^SOCSO-1 built-in/);
+    expect(l0.statBands).toBeUndefined();
+    expect(l0.statutoryInputs).toBeTruthy();
     // Nobody checks their own load; Finance staff and HR do not check; the Finance Director, CoS or CEO does.
     await expect(svc.checkStatTable(staff, { id: 'SOCSO-1', version: 'v2', decision: 'check', comment: 'Looks right' })).rejects.toBeInstanceOf(AccessDenied);
     await expect(svc.checkStatTable(cos, { id: 'SOCSO-1', version: 'v2', decision: 'check', comment: '' })).rejects.toThrow(/what you checked/i);
     await svc.checkStatTable(fd, { id: 'SOCSO-1', version: 'v2', decision: 'check', comment: 'Every row against the PERKESO PDF (mock)' });
     run = await svc.prepareStaffPay(hr, GROUP_EMPLOYER_ID, P);
     const l1 = run.lines.find((l) => l.personId === l0.personId)!;
-    expect(l1.socsoEr).toBeCloseTo(l0.socsoEr + 1, 2);
-    expect(l1.statBands?.socso).toMatch(/^SOCSO-1 v2/);
-    expect(run.tables).toContainEqual({ id: 'SOCSO-1', version: 'v2', status: 'checked' });
+    expect(l1.socsoEr).toBe(l0.socsoEr);
+    expect(l1.statutoryInputs).toBe(l0.statutoryInputs);
+    expect(l1.statBands).toBeUndefined();
+    expect(run.tables).toBeUndefined();
     const v = await svc.statTables(fin);
+    expect(v).toMatchObject({ calculationSource: 'month_effective_statutory_settings', tableApplication: 'review_only' });
     expect(v.inForce.find((t) => t.id === 'SOCSO-1')).toMatchObject({ version: 'v2', status: 'checked' });
     expect(v.history.map((t) => t.version)).toEqual(['v2']);
     // The loader cannot check their own: the Finance Director loads, the CoS checks.
@@ -92,7 +95,7 @@ describe('EPF and PERKESO tables kept in Prima', () => {
 
   it('keeps staff and employer numbers on the contribution files and flags what is missing', async () => {
     const { svc, ds } = fresh();
-    const [hr, cos, vc, fin] = await Promise.all(['u-pwvsb-hr', 'u-cos', 'u-vchair', 'u-fin-t1-lead'].map((id) => svc.user(id)));
+    const [hr, cos, vc, fin] = await Promise.all(['u-pwvsb-hr', 'u-cos', 'u-coo', 'u-fin-t1-lead'].map((id) => svc.user(id)));
     const someone = ds.people.find((p) => p.companyId === GROUP_EMPLOYER_ID && p.role === 'office' && p.status === 'active')!;
     expect(someone.epfNo && someone.socsoNo && someone.taxNo).toBeTruthy();
     someone.epfNo = undefined;
@@ -101,18 +104,18 @@ describe('EPF and PERKESO tables kept in Prima', () => {
     const run = await svc.prepareStaffPay(hr, GROUP_EMPLOYER_ID, P);
     expect(run.lines.find((l) => l.personId === someone.id)!.flags).toContain('No EPF (KWSP) number on record');
     await svc.staffPayStep(hr, run.id, 'submit');
-    await svc.staffPayStep(cos, run.id, 'approve', { note: 'Checked (synthetic)' });
-    await svc.staffPayStep(await svc.user('u-coo'), run.id, 'coo_approve', { note: 'Approved (synthetic)' });
+    await svc.staffPayStep(cos, run.id, 'approve', { note: 'CoS checked payroll (mock)' });
+    await svc.staffPayStep(vc, run.id, 'coo_approve', { note: 'COO approved payroll (mock)' });
     const epf = (await svc.staffPayExport(fin, run.id, 'epf')).body.split('\n');
     expect(epf[0]).toBe('Employer EPF number,EPF 12345678');
-    expect(epf[1]).toBe('Staff no,Name,IC / passport,EPF number,Wages,Employee,Employer,Table row');
-    expect(epf.find((l) => l.startsWith(someone.staffNo))).toContain('NOT RECORDED');
+    expect(epf[1]).toBe('Staff no,Name,IC / passport,EPF member no,Wages,Employee,Employer');
+    expect(epf.find((l) => l.startsWith(someone.staffNo))).toContain('MISSING: ask HR');
     expect((await svc.staffPayExport(fin, run.id, 'socso')).body.split('\n')[0]).toBe('Employer PERKESO code,E1234567890X');
   });
 
   it('fills the EPF, PERKESO, PCB and HRD payments from the approved payroll (A1)', async () => {
     const { svc, ds } = fresh();
-    const [hr, cos, vc, de1, dep] = await Promise.all(['u-pwvsb-hr', 'u-cos', 'u-vchair', 'u-fin-t1-de1', 'u-fin-t1-dep'].map((id) => svc.user(id)));
+    const [hr, cos, vc, de1, dep] = await Promise.all(['u-pwvsb-hr', 'u-cos', 'u-coo', 'u-fin-t1-de1', 'u-fin-t1-dep'].map((id) => svc.user(id)));
     const run = await svc.prepareStaffPay(hr, GROUP_EMPLOYER_ID, P);
     const F = ds.finStatus.find((f) => f.companyId === GROUP_EMPLOYER_ID)!;
     const add = async (body: string) => {
@@ -128,8 +131,8 @@ describe('EPF and PERKESO tables kept in Prima', () => {
     // Not approved yet: nothing to fill from.
     await expect(svc.financeControls.regularAction(de1, GROUP_EMPLOYER_ID, 'bill', { regularId: epfId, period: '2026-11' })).rejects.toThrow(/not approved yet/);
     await svc.staffPayStep(hr, run.id, 'submit');
-    await svc.staffPayStep(cos, run.id, 'approve', { note: 'Checked (synthetic)' });
-    await svc.staffPayStep(await svc.user('u-coo'), run.id, 'coo_approve', { note: 'Approved (synthetic)' });
+    await svc.staffPayStep(cos, run.id, 'approve', { note: 'CoS checked payroll (mock)' });
+    await svc.staffPayStep(vc, run.id, 'coo_approve', { note: 'COO approved payroll (mock)' });
     const epf = Math.round(run.lines.reduce((n, l) => n + l.epfEe + l.epfEr, 0) * 100) / 100;
     const perkeso = Math.round(run.lines.reduce((n, l) => n + l.socsoEe + l.socsoEr + l.eisEe + l.eisEr + l.lindungEe, 0) * 100) / 100;
     // Prima fills the amount and the document; a different amount is refused.

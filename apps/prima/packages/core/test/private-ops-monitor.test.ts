@@ -86,38 +86,39 @@ describe('Private Operations (Sasa Team)', () => {
   it('uses the Sasa Team fee for private sites and the Goodwill fee for government sites', async () => {
     const { svc, site } = await setup();
     const fd = await svc.user('u-fd');
-    await svc.setManagementFee(fd, site.companyId, { opsCompany: 'goodwill', kind: 'percent', value: 5, agreementRef: 'SYN-G' });
+    await svc.setManagementFee(fd, site.companyId, { chargedBy: 'goodwill', kind: 'percent', value: 5, agreementRef: 'SYN-G', reason: 'Synthetic agreement', from: '2026-10' });
     let row = (await svc.privateOpsMonitor(fd, '2026-10')).sites.find((x) => x.siteId === site.id)!;
     expect(row.managementFee).toBeNull();
-    await svc.setManagementFee(fd, site.companyId, { opsCompany: 'sasateam', kind: 'percent', value: 12, agreementRef: 'SYN-S' });
+    await svc.setManagementFee(fd, site.companyId, { chargedBy: 'sasateam', kind: 'percent', value: 12, agreementRef: 'SYN-S', reason: 'Synthetic agreement', from: '2026-10' });
     row = (await svc.privateOpsMonitor(fd, '2026-10')).sites.find((x) => x.siteId === site.id)!;
     expect(row.managementFee).toBe(6000);
-    const fees = (await svc.managementFees(fd)).find((x) => x.companyId === site.companyId)!;
-    expect(fees.goodwill?.value).toBe(5);
-    expect(fees.sasateam?.value).toBe(12);
-    await expect(svc.setManagementFee(fd, site.companyId, { opsCompany: 'merdeka' as 'goodwill', kind: 'percent', value: 1, agreementRef: 'X' })).rejects.toThrow(
-      /Goodwill Empire \(government sites\) or Sasa Team/,
-    );
+    const fees = (await svc.managementFees(fd)).companies.find((x) => x.companyId === site.companyId)!;
+    expect(fees.fees.find((f) => f.chargedBy === 'goodwill')?.now?.value).toBe(5);
+    expect(fees.fees.find((f) => f.chargedBy === 'sasateam')?.now?.value).toBe(12);
+    // A fee from any other group company (here Merdeka Network) does not touch the site profit and loss.
+    await svc.setManagementFee(fd, site.companyId, { chargedBy: 'merdeka', kind: 'percent', value: 1, agreementRef: 'X', reason: 'IT services agreement', from: '2026-10' });
+    row = (await svc.privateOpsMonitor(fd, '2026-10')).sites.find((x) => x.siteId === site.id)!;
+    expect(row.managementFee).toBe(6000);
   });
 
   it('drafts each company\'s management fee bill, Unknown until the fee and billing are known', async () => {
     const { svc, site } = await setup();
     const fd = await svc.user('u-fd');
     let bills = await svc.managementFeeBills(fd, '2026-10');
-    let mine = bills.bills.find((b) => b.opsCompanyId === 'sasateam' && b.companyId === site.companyId)!;
+    let mine = bills.bills.find((b) => b.chargedById === 'sasateam' && b.companyId === site.companyId)!;
     expect(mine.amount).toBeNull();
     expect(mine.unknownSites).toContain(site.name);
-    expect(bills.totals.map((t) => t.opsCompanyId)).toEqual(['goodwill', 'sasateam']);
-    await svc.setManagementFee(fd, site.companyId, { opsCompany: 'sasateam', kind: 'fixed', value: 4500, agreementRef: 'SYN-S' });
+    expect(bills.totals.map((t) => t.chargedById)).toEqual(['goodwill', 'sasateam']);
+    await svc.setManagementFee(fd, site.companyId, { chargedBy: 'sasateam', kind: 'fixed', value: 4500, agreementRef: 'SYN-S', reason: 'Synthetic agreement', from: '2026-10' });
     bills = await svc.managementFeeBills(fd, '2026-10');
-    mine = bills.bills.find((b) => b.opsCompanyId === 'sasateam' && b.companyId === site.companyId)!;
-    expect(mine).toMatchObject({ amount: 4500, billing: 50_000, sites: 1, unknownSites: [], opsCompanyName: 'Sasa Team Sdn Bhd' });
+    mine = bills.bills.find((b) => b.chargedById === 'sasateam' && b.companyId === site.companyId)!;
+    expect(mine).toMatchObject({ amount: 4500, billing: 50_000, sites: 1, unknownSites: [], chargedByName: 'Sasa Team Sdn Bhd' });
     expect(bills.notes.join(' ')).toMatch(/not an invoice/);
     // Each operations head sees only their own company's bills; an OM sees none.
     const ogm = await svc.managementFeeBills(await svc.user('u-ogm'), '2026-10');
-    expect(ogm.bills.every((b) => b.opsCompanyId === 'goodwill')).toBe(true);
+    expect(ogm.bills.every((b) => b.chargedById === 'goodwill')).toBe(true);
     const dir = await svc.managementFeeBills(await svc.user('u-opsdir'), '2026-10');
-    expect(dir.bills.every((b) => b.opsCompanyId === 'sasateam')).toBe(true);
+    expect(dir.bills.every((b) => b.chargedById === 'sasateam')).toBe(true);
     await svc.managementFeeBills(await svc.user('u-coo'), '2026-10');
     await expect(svc.managementFeeBills(await svc.user('u-om-klang'))).rejects.toThrow();
   });

@@ -1,9 +1,23 @@
-import { RULES } from './rules';
-import { minimumWageFor, minimumWageShort } from './hr-payroll-checks';
-import { statShare, statTableFor, type StatTable, type StatTableId } from './statutory-tables';
-import { DEFAULT_STATUTORY, otherShare, type StatutorySettings } from './statutory';
-import { ageOn } from './time';
-import type { AllowanceType, LeaveRequest, Nationality, PayAccount, Person, StaffClaim, StaffPayLine } from './types';
+import { staffZakatPreview, staffZakatInputKey } from './staff-zakat-guards';
+import { RULES } from "./rules";
+import { minimumWageFor } from "./hr-payroll-checks";
+import { minimumWageShort } from "./hr-payroll-checks";
+import { DEFAULT_STATUTORY } from "./statutory";
+import { otherShare } from "./statutory";
+import type { StatutorySettings } from "./statutory";
+import { ageOn } from "./time";
+import type { AllowanceType } from "./types";
+import type { LeaveRequest } from "./types";
+import type { Nationality } from "./types";
+import type { PayAccount } from "./types";
+import type { Person } from "./types";
+import type { StaffClaim } from "./types";
+import type { StaffPayLine } from "./types";
+import { statShare } from "./statutory-tables";
+import { statTableFor } from "./statutory-tables";
+import type { StatTable } from "./statutory-tables";
+import type { StatTableId } from "./statutory-tables";
+
 
 /**
  * Staff payroll sums (Fauzan, 27 Oct 2026: guards are paid from the JA Group app; Prima builds payroll for staff).
@@ -16,69 +30,27 @@ const r2 = (n: number) => Math.round(n * 100) / 100;
 const r05 = (n: number) => Math.round(n * 20) / 20;
 
 /**
- * Whether the CEO's statutory settings for the month (statutory.ts, Fauzan 6 Nov 2026) change this contribution from the
- * law as at November 2026. Unchanged, the contribution is read from the tables kept in Prima (statutory-tables.ts), row by
- * row as published; changed (a new law the tables do not carry yet), it is counted at the CEO's rates.
+ * EPF (KWSP Act 1991, Third Schedule). Wages up to RM5,000 go in RM20 bands, above that in RM100 bands; the share is
+ * worked on the top of the band and rounded up to the next ringgit. Employer 13% up to RM5,000 and 12% above;
+ * employee 11%. From age 60 the employee pays nothing and the employer 4%. Foreign workers 2% each.
  */
-function ceoChanged(st: StatutorySettings | undefined, k: 'epf' | 'socso' | 'eis'): st is StatutorySettings {
-  if (!st) return false;
-  const a = st[k] as unknown as Record<string, unknown> | undefined;
-  const b = DEFAULT_STATUTORY[k] as unknown as Record<string, unknown>;
-  if (!a) return false;
-  return Object.keys(b).some((key) => a[key] !== b[key]);
+export function epfShare(wage: number, age: number, nationality: Nationality, st: StatutorySettings = DEFAULT_STATUTORY): { ee: number; er: number } {
+  const e = st.epf;
+  if (wage <= 0) return { ee: 0, er: 0 };
+  const up = (n: number) => (e.bands ? Math.ceil(Math.max(0, n - 1e-9)) : r2(n));
+  if (nationality !== 'MY') return { ee: up(wage * e.foreignEeRate), er: up(wage * e.foreignErRate) };
+  const band = wage <= e.erLimit ? 20 : 100;
+  const top = !e.bands || wage > 20000 ? wage : Math.ceil(wage / band) * band;
+  if (age >= e.olderAge) return { ee: up(top * e.olderEeRate), er: up(top * e.olderErRate) };
+  return { ee: up(top * e.eeRate), er: up(top * (wage <= e.erLimit ? e.erRateLow : e.erRateHigh)) };
 }
 
-/**
- * EPF (KWSP Act 1991, Third Schedule), from the table kept in Prima (statutory-tables.ts): Part A for Malaysians under
- * 60 (employer 13% up to RM5,000 and 12% above, employee 11%), Part E from age 60 (employer 4%), foreign workers 2% each. When the CEO's settings
- * for the month change EPF, it is counted at the CEO's rates instead.
- */
-export function epfShare(
-  wage: number,
-  age: number,
-  nationality: Nationality,
-  period = '9999-12',
-  stored: StatTable[] = [],
-  st?: StatutorySettings,
-): { ee: number; er: number; band: string; table: string } {
-  if (ceoChanged(st, 'epf')) {
-    const e = st.epf;
-    const out = (ee: number, er: number) => ({ ee, er, band: 'CEO rates', table: 'CEO statutory settings' });
-    if (wage <= 0) return out(0, 0);
-    const up = (n: number) => (e.bands ? Math.ceil(Math.max(0, n - 1e-9)) : r2(n));
-    if (nationality !== 'MY') return out(up(wage * e.foreignEeRate), up(wage * e.foreignErRate));
-    const band = wage <= e.erLimit ? 20 : 100;
-    const top = !e.bands || wage > 20000 ? wage : Math.ceil(wage / band) * band;
-    if (age >= e.olderAge) return out(up(top * e.olderEeRate), up(top * e.olderErRate));
-    return out(up(top * e.eeRate), up(top * (wage <= e.erLimit ? e.erRateLow : e.erRateHigh)));
-  }
-  const id: StatTableId = nationality !== 'MY' ? 'EPF-F' : age >= 60 ? 'EPF-E' : 'EPF-A';
-  const t = statTableFor(id, period, stored);
-  const s = statShare(t, wage);
-  return { ee: s.ee, er: s.er, band: s.band, table: `${t.id} ${t.version}` };
-}
-
-/**
- * SOCSO (PERKESO Act 4), from the table kept in Prima: First Category under 60; from 60 the Second Category (employer
- * only). When the CEO's settings for the month change SOCSO, it is counted at the CEO's rates and wage cap instead.
- */
-export function socsoShare(
-  wage: number,
-  age: number,
-  period = '9999-12',
-  stored: StatTable[] = [],
-  st?: StatutorySettings,
-): { ee: number; er: number; band: string; table: string } {
-  if (ceoChanged(st, 'socso')) {
-    const s = st.socso;
-    const w = Math.min(Math.max(wage, 0), s.wageCap);
-    const out = (ee: number, er: number) => ({ ee, er, band: 'CEO rates', table: 'CEO statutory settings' });
-    if (age >= s.olderAge) return out(0, r05(w * s.olderErRate));
-    return out(r05(w * s.eeRate), r05(w * s.erRate));
-  }
-  const t = statTableFor(age >= 60 ? 'SOCSO-2' : 'SOCSO-1', period, stored);
-  const s = statShare(t, wage);
-  return { ee: s.ee, er: s.er, band: s.band, table: `${t.id} ${t.version}` };
+/** SOCSO (PERKESO): employer 1.75%, employee 0.5% on wages up to RM6,000; from 60 the employer pays 1.25% only. */
+export function socsoShare(wage: number, age: number, st: StatutorySettings = DEFAULT_STATUTORY): { ee: number; er: number } {
+  const s = st.socso;
+  const w = Math.min(Math.max(wage, 0), s.wageCap);
+  if (age >= s.olderAge) return { ee: 0, er: r05(w * s.olderErRate) };
+  return { ee: r05(w * s.eeRate), er: r05(w * s.erRate) };
 }
 
 /**
@@ -100,17 +72,12 @@ export function lindungShare(
   return { ee: r05(Math.min(Math.max(wage, 0), cap) * rate), rate, status: 'deducted' };
 }
 
-/** EIS (SIP, Act 800), from the table kept in Prima: Malaysians aged 18 to 59; at the CEO's rates when the CEO changed EIS. */
-export function eisShare(wage: number, age: number, nationality: Nationality, period = '9999-12', stored: StatTable[] = [], st?: StatutorySettings): { ee: number; er: number } {
-  if (ceoChanged(st, 'eis')) {
-    const e = st.eis;
-    if ((e.malaysiansOnly && nationality !== 'MY') || age < e.minAge || age >= e.maxAge) return { ee: 0, er: 0 };
-    const w = Math.min(Math.max(wage, 0), e.wageCap);
-    return { ee: r05(w * e.eeRate), er: r05(w * e.erRate) };
-  }
-  if (nationality !== 'MY' || age < 18 || age >= 60) return { ee: 0, er: 0 };
-  const s = statShare(statTableFor('EIS', period, stored), wage);
-  return { ee: s.ee, er: s.er };
+/** EIS (SIP): 0.2% each on wages up to RM6,000, Malaysians aged 18 to 59. */
+export function eisShare(wage: number, age: number, nationality: Nationality, st: StatutorySettings = DEFAULT_STATUTORY): { ee: number; er: number } {
+  const e = st.eis;
+  if ((e.malaysiansOnly && nationality !== 'MY') || age < e.minAge || age >= e.maxAge) return { ee: 0, er: 0 };
+  const w = Math.min(Math.max(wage, 0), e.wageCap);
+  return { ee: r05(w * e.eeRate), er: r05(w * e.erRate) };
 }
 
 /** HRD Corp levy: 1% of basic pay and fixed allowances, Malaysian employees, paid by the employer. */
@@ -181,13 +148,14 @@ export interface StaffPayInput {
   /** The wage month (YYYY-MM), for rates that change by date. */
   period: string;
   lindungOptedOut: boolean;
+  /** The statutory settings in force for the month (CEO, by month); the law as at Nov 2026 when not given. */
+  statutory?: StatutorySettings;
   /** Zakat the staff member chose, as a percentage of gross pay (0 = none). */
   zakatPercent?: number;
   /** EPF and PERKESO tables loaded and checked in Prima; the built-in tables otherwise. */
   tables?: StatTable[];
-  /** The statutory settings in force for the month (CEO, by month); the law as at Nov 2026 when not given. */
-  statutory?: StatutorySettings;
 }
+
 
 export function staffPaySums(i: StaffPayInput) {
   const st = i.statutory ?? DEFAULT_STATUTORY;
@@ -201,16 +169,13 @@ export function staffPaySums(i: StaffPayInput) {
   const epfWage = r2(gross - outside('epf'));
   const socsoWage = r2(gross - outside('socso'));
   const taxable = r2(gross - outside('pcb'));
-  const epf = epfShare(epfWage, i.age, i.nationality, i.period, i.tables, i.statutory);
-  const socso = socsoShare(socsoWage, i.age, i.period, i.tables, i.statutory);
-  const eis = eisShare(socsoWage, i.age, i.nationality, i.period, i.tables, i.statutory);
+  const epf = epfShare(epfWage, i.age, i.nationality, st);
+  const socso = socsoShare(socsoWage, i.age, st);
+  const eis = eisShare(socsoWage, i.age, i.nationality, st);
   const lindung = lindungShare(socsoWage, i.period, i.nationality, i.lindungOptedOut, st);
-  // New contribution types the CEO added for the month (statutory.ts), on gross pay.
   const others = otherShares(st, gross, 0, i.age, i.nationality);
   const othersEe = r2(others.reduce((n, o) => n + o.ee, 0));
   const pcbBeforeZakat = i.pcbEntered ?? pcbEstimate(taxable, epf.ee, socso.ee + eis.ee);
-  // Zakat by salary deduction (Fauzan, 2 Nov 2026): the staff member's own percentage of gross pay. Zakat paid through
-  // the employer reduces the monthly tax deduction ringgit for ringgit (ITA s.6A(3)), never below zero.
   const zakat = r2(Math.max(0, gross) * Math.max(0, i.zakatPercent ?? 0) / 100);
   const pcb = r2(Math.max(0, pcbBeforeZakat - zakat));
   const deductions = r2(epf.ee + socso.ee + lindung.ee + eis.ee + pcb + zakat + othersEe);
@@ -223,8 +188,6 @@ export function staffPaySums(i: StaffPayInput) {
     taxable,
     epfEe: epf.ee,
     epfEr: epf.er,
-    /** The table rows used, so the payslip can be checked against the published schedule. */
-    statBands: { epf: `${epf.table}: ${epf.band}`, socso: `${socso.table}: ${socso.band}` },
     socsoEe: socso.ee,
     socsoEr: socso.er,
     lindungEe: lindung.ee,
@@ -266,8 +229,22 @@ export function staffPayInputsKey(p: Person, period: string, types: AllowanceTyp
     const t = a.typeId ? types?.find((x) => x.id === a.typeId) : undefined;
     return [a.typeId ?? '', a.label, a.amount, t ? [t.epf, t.socso, t.pcb, t.hrd].map(Number).join('') : ''];
   });
-  return JSON.stringify([p.basicPay ?? 0, allowances, from, to, unpaidDays, p.nationality, p.dob ?? '', p.lindungOptOut ?? null]);
+  return JSON.stringify([p.basicPay ?? 0, allowances, from, to, unpaidDays, p.nationality, p.dob ?? '', p.lindungOptOut ?? null, staffZakatInputKey(p)]);
 }
+
+/** Effective contribution inputs, excluding version IDs, reasons and law-reference wording.
+ * Stable object-key and contribution-code order prevents metadata/reordering-only changes from invalidating pay. */
+export function staffPayStatutoryKey(settings: StatutorySettings = DEFAULT_STATUTORY): string {
+  const { lawRef: _lawRef, ...inputs } = settings;
+  const stable = (value: unknown): unknown => {
+    if (Array.isArray(value)) return value.map(stable);
+    if (value && typeof value === 'object')
+      return Object.fromEntries(Object.entries(value).sort(([a], [b]) => a.localeCompare(b)).map(([k, v]) => [k, stable(v)]));
+    return value;
+  };
+  return JSON.stringify(stable({ ...inputs, others: [...inputs.others].sort((a, b) => a.code.localeCompare(b.code)) }));
+}
+
 
 /** One staff member's line for the month, from their record, approved unpaid leave and approved claims not paid yet. */
 export function buildStaffPayLine(args: {
@@ -285,12 +262,11 @@ export function buildStaffPayLine(args: {
   allowanceFlagAbove?: number;
   /** HR's allowance list, for each allowance's EPF, SOCSO, PCB and HRD ticks. */
   types?: AllowanceType[];
-  /** EPF and PERKESO tables loaded and checked in Prima. */
-  tables?: StatTable[];
   /** The CEO's statutory settings for the month. */
   statutory?: StatutorySettings;
 }): StaffPayLine {
   const { person: p, period } = args;
+  const zakatChoice = staffZakatPreview(p, period);
   const end = periodEnd(period);
   const age = ageOn(p.dob, end);
   const extra = args.kept?.extra ?? [];
@@ -331,12 +307,14 @@ export function buildStaffPayLine(args: {
     pcbEntered: args.kept?.pcb ?? null,
     period,
     lindungOptedOut: p.lindungOptOut === true,
-    zakatPercent: p.zakat?.percent ?? 0,
-    tables: args.tables,
     statutory: args.statutory,
+    zakatPercent: zakatChoice.percent,
   });
   const flags: string[] = [];
-  // Wages go to a bank account or an e-wallet; someone else's account needs the COO-approved consent (Fauzan, 6 Nov 2026).
+  // Presence warnings only: full member/tax identifiers stay out of broadly visible payroll lines.
+  if (!p.epfNo) flags.push('No EPF (KWSP) number on record');
+  if (!p.socsoNo) flags.push('No SOCSO (PERKESO) number on record');
+  if (!p.taxNo) flags.push('No income tax number on record');
   const account = payAccountCheck(p.bank);
   if (account.problem) flags.push(`${account.problem}: cannot go in the bank file`);
   flags.push(...account.flags);
@@ -367,12 +345,7 @@ export function buildStaffPayLine(args: {
   if (!partMonth && minimumWageShort(basic, period) > 0) flags.push(`Basic pay RM${basic.toFixed(2)} is below the minimum wage of RM${minimumWageFor(period).toFixed(2)}`);
   if (p.nationality === 'MY' && p.lindungOptOut == null && sums.lindungStatus === 'deducted')
     flags.push('LINDUNG 24 Jam deducted: opt-out choice not recorded');
-  // Employment Act s.24(8): deductions are at most half of the wages.
-  if (sums.gross > 0 && sums.deductions > sums.gross / 2) flags.push(`Deductions RM${sums.deductions.toFixed(2)} are more than half of gross pay: check the zakat choice`);
-  // The numbers KWSP, PERKESO and LHDN need on the contribution files.
-  if (!p.epfNo && sums.epfEe + sums.epfEr > 0) flags.push('No EPF (KWSP) number on record');
-  if (!p.socsoNo && sums.socsoEr > 0) flags.push('No SOCSO (PERKESO) number on record');
-  if (!p.taxNo && sums.pcb > 0) flags.push('No income tax (LHDN) number on record');
+  if (sums.gross > 0 && sums.deductions > sums.gross / 2) flags.push(`Deductions RM${sums.deductions.toFixed(2)} exceed half of gross pay: review the applicable deduction limits and zakat choice`);
   if (unpaidDays) flags.push(`${unpaidDays} day${unpaidDays === 1 ? '' : 's'} unpaid leave deducted`);
   return {
     personId: p.id,
@@ -390,11 +363,9 @@ export function buildStaffPayLine(args: {
     partMonth,
     partPay,
     inputs,
+    statutoryInputs: staffPayStatutoryKey(args.statutory),
     ...sums,
-    zakatBody: sums.zakat > 0 ? (p.zakat?.body ?? null) : null,
-    epfNo: p.epfNo ?? null,
-    socsoNo: p.socsoNo ?? null,
-    taxNo: p.taxNo ?? null,
+    zakatBody: sums.zakat > 0 ? zakatChoice.body : null,
   };
 }
 

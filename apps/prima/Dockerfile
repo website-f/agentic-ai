@@ -23,11 +23,14 @@ RUN npm ci --omit=dev -w @prima/core -w @prima/api && npm cache clean --force
 COPY --from=build /app/packages/core/dist packages/core/dist
 COPY --from=build /app/apps/api/dist apps/api/dist
 COPY db/migrations db/migrations
+# Face models for Prima's own face engine (FACE_ENGINE=server); the same files the website serves at /face-models.
+COPY apps/web/public/face-models apps/web/public/face-models
 COPY db/modules db/modules
 COPY db/release-manifest.json db/release-manifest.json
 COPY apps/api/src/connections-mail/job-email-v2.sql apps/api/src/connections-mail/job-email-v2.sql
 COPY ops/base-transition ops/base-transition
 COPY ops/existing-admin ops/existing-admin
+COPY ops/combined-upgrade ops/combined-upgrade
 USER node
 EXPOSE 3000
 WORKDIR /app/apps/api

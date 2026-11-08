@@ -381,8 +381,9 @@ export class CmsFeedController {
   constructor(private db: Db) {}
 
   @Post('events')
-  events(@Body() body: { events?: unknown; closedAlarms?: unknown }) {
-    if (!Array.isArray(body?.events) && !Array.isArray(body?.closedAlarms)) throw new BadRequestException('Send { "events": [...], "closedAlarms": [...] }.');
+  events(@Body() body: { events?: unknown; closedAlarms?: unknown; handovers?: unknown }) {
+    if (!Array.isArray(body?.events) && !Array.isArray(body?.closedAlarms) && !Array.isArray(body?.handovers))
+      throw new BadRequestException('Send { "events": [...], "closedAlarms": [...], "handovers": [...] }.');
     return this.db.asUser(process.env.CMS_FEED_USER_ID ?? 'u-cms-link', (svc, u) => svc.cmsIngest(u, body));
   }
 

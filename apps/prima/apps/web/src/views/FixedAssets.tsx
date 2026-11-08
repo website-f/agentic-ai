@@ -358,11 +358,11 @@ function DisposalLine({ d, data }: { d: Disposal; data: FixedAssets }) {
           <input
             className="input"
             aria-label="Note"
-            placeholder="Note (needed to reject)"
+            placeholder="Comment (needed to approve or reject)"
             value={f.note}
             onChange={(e) => setF({ ...f, note: e.target.value })}
           />
-          <button className="btn btn-sm btn-primary" disabled={act.busy} onClick={() => run('approve', { note: f.note }, 'Approved.')}>
+          <button className="btn btn-sm btn-primary" disabled={act.busy || !f.note.trim()} onClick={() => run('approve', { note: f.note }, 'Approved.')}>
             Approve
           </button>
           <button className="btn btn-sm" disabled={act.busy} onClick={() => run('reject', { note: f.note }, 'Rejected.')}>

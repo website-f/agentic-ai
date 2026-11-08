@@ -2,7 +2,7 @@
   "status": "PROPOSED, not installed, not in db/release-manifest.json. Arisha main review 2 Nov 2026 asked for a packaging proposal; no install, migration, grant or deploy is authorized by this file. Fauzan approves any install directly.",
   "base": {
     "path": "db/migrations/001_init.sql",
-    "sha256": "76161ab46dd145158cd06277b0c80654e5a5150c2a2dae593ee087d54052ccfc"
+    "sha256": "c5d8867df97f9535a3f447bdb6e1823e2cd783ad80ea4969edd71f5dc9fedd81"
   },
   "after": [
     "procurement",
@@ -10,13 +10,8 @@
     "cleanup",
     "metrics",
     "job_email",
-    "central_admin_walls",
-    "central_admin_panel",
-    "central_admin_delegations",
-    "central_admin_legal_holds",
-    "company_office",
-    "company_run_links",
-    "org_links"
+    "item_register",
+    "item_register_v2"
   ],
   "modules": [
     {

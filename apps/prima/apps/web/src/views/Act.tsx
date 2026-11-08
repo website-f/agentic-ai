@@ -388,11 +388,12 @@ function Findings({ data, prefill, clearPrefill }: { data: ActBoard; prefill: Pr
 function FindingLine({ r, data }: { r: FindingRow; data: ActBoard }) {
   const act = useAction();
   const f = r.finding;
-  const [g, setG] = useState({ rootCause: '', solution: '', targetOn: '', proof: '', note: '', method: 'call', followNote: '', nextOn: '' });
+  const [g, setG] = useState({ rootCause: '', solution: '', targetOn: '', containment: '', similarWhere: '', effectiveWhen: '', proof: '', note: '', method: 'call', followNote: '', nextOn: '' });
   const follows = f.followUps ?? [];
   // Auditors and Enforcement act only on their own team's findings; the Director on any (server enforces the same).
   const onTeam = data.job === 'director' || (!!r.team && r.team === data.myTeam);
   const highForDirector = f.severity === 'high' && !data.canCloseHigh;
+  const full = f.origin === 'quality';
   const label = f.status === 'closed' ? 'Closed' : r.overdueDays ? `${r.overdueDays} days overdue` : STATUS[f.status];
   const last = f.checks[f.checks.length - 1];
   const live = f.status === 'open' || f.status === 'planned';
@@ -461,6 +462,24 @@ function FindingLine({ r, data }: { r: FindingRow; data: ActBoard }) {
             Cause: {f.plan.rootCause} · Fix: {f.plan.solution} · by {dateLabel(f.plan.targetOn)}
           </div>
         )}
+        {f.plan?.containment && (
+          <div>
+            <span className="gv-k">Meanwhile</span>
+            {f.plan.containment}
+          </div>
+        )}
+        {f.plan?.similarWhere && (
+          <div>
+            <span className="gv-k">Elsewhere</span>
+            {f.plan.similarWhere}
+          </div>
+        )}
+        {f.plan?.effectiveWhen && (
+          <div>
+            <span className="gv-k">Worked when</span>
+            {f.plan.effectiveWhen}
+          </div>
+        )}
         {f.fix && (
           <div>
             <span className="gv-k">Fix</span>
@@ -497,6 +516,36 @@ function FindingLine({ r, data }: { r: FindingRow; data: ActBoard }) {
                   <span className="label">What you will change</span>
                   <input className="input" aria-label="Fix" placeholder="What you will change" value={g.solution} onChange={(e) => setG({ ...g, solution: e.target.value })} />
                 </label>
+                <label className="field gv-span">
+                  <span className="label">Meanwhile{full ? '' : ' (optional)'}</span>
+                  <input
+                    className="input"
+                    aria-label="Meanwhile"
+                    placeholder="What was done meanwhile to stop it getting worse"
+                    value={g.containment}
+                    onChange={(e) => setG({ ...g, containment: e.target.value })}
+                  />
+                </label>
+                <label className="field gv-span">
+                  <span className="label">Elsewhere{full ? '' : ' (optional)'}</span>
+                  <input
+                    className="input"
+                    aria-label="Elsewhere"
+                    placeholder="Could it happen elsewhere? Where did you check"
+                    value={g.similarWhere}
+                    onChange={(e) => setG({ ...g, similarWhere: e.target.value })}
+                  />
+                </label>
+                <label className="field gv-span">
+                  <span className="label">How we know it worked{full ? '' : ' (optional)'}</span>
+                  <input
+                    className="input"
+                    aria-label="How we know it worked"
+                    placeholder="How we will know the fix worked"
+                    value={g.effectiveWhen}
+                    onChange={(e) => setG({ ...g, effectiveWhen: e.target.value })}
+                  />
+                </label>
                 <label className="field">
                   <span className="label">Done by</span>
                   <input className="input" type="date" value={g.targetOn} onChange={(e) => setG({ ...g, targetOn: e.target.value })} />
@@ -507,7 +556,18 @@ function FindingLine({ r, data }: { r: FindingRow; data: ActBoard }) {
                   className="btn btn-sm btn-primary"
                   disabled={act.busy}
                   onClick={() =>
-                    act.run(() => api.actFindingStep(f.id, 'plan', { rootCause: g.rootCause, solution: g.solution, targetOn: g.targetOn }), 'Plan saved.')
+                    act.run(
+                      () =>
+                        api.actFindingStep(f.id, 'plan', {
+                          rootCause: g.rootCause,
+                          solution: g.solution,
+                          targetOn: g.targetOn,
+                          containment: g.containment,
+                          similarWhere: g.similarWhere,
+                          effectiveWhen: g.effectiveWhen,
+                        }),
+                      'Plan saved.',
+                    )
                   }
                 >
                   Save the plan
@@ -897,7 +957,7 @@ function ImprovementLine({ r, data }: { r: ActBoard['improvements'][number]; dat
           </div>
           <div className="gv-item-meta">
             Benefit: {i.benefit} · owner {i.ownerName} · led by {i.ledBy} · target {dateLabel(i.targetOn)}
-            {i.approved ? ` · approved by ${i.approved.by}` : ''}
+            {i.approved ? ` · approved by ${i.approved.by}${i.approved.note ? `: ${i.approved.note}` : ''}` : ''}
           </div>
         </div>
         <div className="gv-item-state">
@@ -929,11 +989,18 @@ function ImprovementLine({ r, data }: { r: ActBoard['improvements'][number]; dat
           </div>
         </div>
       )}
-      {r.canApprove && (
-        <div className="gv-btns">
-          <button className="btn btn-sm btn-primary" disabled={act.busy} onClick={() => act.run(() => api.actImprovementStep(i.id, 'approve', {}), 'Approved.')}>
-            Approve
-          </button>
+      {!i.approved && r.canApprove && (
+        <div className="gv-box">
+          <div className="gv-inline">
+            <input className="input" aria-label="Approval comment" placeholder="Comment (needed to approve; a short one is fine)" value={note} onChange={(e) => setNote(e.target.value)} />
+            <button
+              className="btn btn-sm btn-primary"
+              disabled={act.busy || !note.trim()}
+              onClick={() => act.run(() => api.actImprovementStep(i.id, 'approve', { note }), 'Approved.')}
+            >
+              Approve
+            </button>
+          </div>
         </div>
       )}
       {data.role === 'act' && !i.result && r.done === i.steps.length && (

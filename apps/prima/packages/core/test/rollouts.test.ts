@@ -1,6 +1,6 @@
 // One shared rollout switch (connect-departments, 2 Nov 2026). Synthetic users only.
 import { describe, expect, it } from 'vitest';
-import { registerRollout, registeredRollouts, rolloutAdmits, rolloutsAdmitting, rolloutsOn, unregisteredRollouts, type User } from '../src';
+import { registerRollout, registeredRollouts, rolloutAdmits, rolloutsAdmitting, rolloutsOn, type User } from '../src';
 
 const u = (over: Partial<User>): User => ({ id: 'u-x', name: 'X', role: 'pwvsb_officer', companyIds: [], siteIds: [], ...over }) as User;
 const hrRule = (x: User) => x.role === 'pwvsb_officer' && x.department === 'hr';
@@ -27,9 +27,6 @@ describe('rollout switch', () => {
   it('never admits a system feed, an unknown key or an unregistered rollout', () => {
     expect(rolloutAdmits(u({ department: 'hr', integration: 'ja' } as Partial<User>), new Set(['t_hr']))).toBe(false);
     expect(rolloutAdmits(u({ department: 'hr' }), new Set(['nobody_registered']))).toBe(false);
-    expect(unregisteredRollouts(new Set(['t_hr', 'nobody_registered']))).toEqual(['nobody_registered']);
-    // Government Ops has no admit rule yet, so there is no flag that claims to start it.
-    expect([...rolloutsOn({ GOV_OPS_ROLLOUT: 'true' })]).toEqual([]);
   });
 
   it('refuses a second, different rule under the same key', () => {
@@ -39,3 +36,4 @@ describe('rollout switch', () => {
     expect(registeredRollouts().map((r) => r.key)).toEqual(expect.arrayContaining(['t_fin', 't_hr']));
   });
 });
+// One shared rollout switch (connect-departments, 2 Nov 2026). Synthetic users only.

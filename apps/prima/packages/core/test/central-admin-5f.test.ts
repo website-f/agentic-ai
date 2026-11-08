@@ -68,7 +68,10 @@ describe('Chief of Staff office automations (5F)', () => {
   });
 
   it('reminds a reader who has not opened a memo after 3 days, until they read it', async () => {
-    const { svc, clock } = fresh();
+    const { svc, clock, ds } = fresh();
+    // Isolate the two-day-old memo: the combined meeting module also seeds an unrelated six-day-old memo.
+    const memo = ds.memos.find((m) => m.id === 'memo-seed-staff-1')!;
+    ds.memos.splice(0, ds.memos.length, memo);
     const cm = await svc.user('u-cm-sasa');
     // The seeded staff memo is 2 days old: no reminder yet.
     expect(JSON.stringify(await svc.home(cm, 'co-sasa'))).not.toMatch(/not read yet/);
@@ -77,4 +80,28 @@ describe('Chief of Staff office automations (5F)', () => {
     await svc.readMemo(cm, 'memo-seed-staff-1');
     expect(JSON.stringify(await svc.home(cm, 'co-sasa'))).not.toMatch(/not read yet/);
   });
+
+  it.each(['withdrawn', 'replaced'] as const)('does not revive a %s memo in the three-day home reminder', async (action) => {
+    const { svc, clock, ds } = fresh();
+    const old = ds.memos.find((m) => m.id === 'memo-seed-staff-1')!;
+    ds.memos.splice(0, ds.memos.length, old);
+    const reader = await svc.user('u-cm-sasa');
+    const publisher = await svc.user('u-cos');
+    clock.now = myt('2026-11-03', '11:00');
+    expect(JSON.stringify(await svc.home(reader, 'co-sasa'))).toMatch(/memo not read yet/);
+    if (action === 'withdrawn') {
+      await svc.withdrawMemo(publisher, old.id, 'Office guidance withdrawn for review');
+    } else {
+      const replacement = await svc.publishMemo(publisher, 'STAFF', 'Corrected office guidance', 'This replaces the earlier guidance.', [], { replaces: old.id });
+      await svc.readMemo(reader, replacement.id);
+    }
+    // The old memo remains unread in history, but is no longer an active instruction to chase.
+    expect(old.reads.some((r) => r.userId === reader.id)).toBe(false);
+    clock.now = myt('2026-11-10', '11:00');
+    const board = await svc.memos(reader);
+    expect(board.memos.find((m) => m.id === old.id)?.status).toBe(action);
+    expect(board.unread).toBe(0);
+    expect(JSON.stringify(await svc.home(reader, 'co-sasa'))).not.toMatch(/not read yet/);
+  });
+
 });

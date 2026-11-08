@@ -880,7 +880,7 @@ function ReviewTaskRow({ t, cooCheck }: { t: Task; cooCheck: PersonWork['cooChec
         <div className="ss-sub-form">
           <input
             className="input"
-            placeholder={cooCheck === 'reason' || cooCheck === 'own' ? 'Reason (needed to accept or return it)' : 'Note (needed to return it)'}
+            placeholder={cooCheck === 'reason' || cooCheck === 'own' ? 'Reason (needed to accept or return it)' : 'Comment (needed to accept or return it)'}
             aria-label="Review note"
             value={note}
             onChange={(e) => setNote(e.target.value)}
@@ -888,7 +888,7 @@ function ReviewTaskRow({ t, cooCheck }: { t: Task; cooCheck: PersonWork['cooChec
           <div className="ss-actions">
             <button
               className="btn btn-sm btn-primary"
-              disabled={act.busy || ((cooCheck === 'reason' || cooCheck === 'own') && !note.trim())}
+              disabled={act.busy || !note.trim()}
               onClick={() => act.run(() => api.workTaskReview(t.id, true, note), 'Accepted.')}
             >
               Accept

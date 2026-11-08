@@ -1,8 +1,10 @@
-// WhatsApp rent reminders (Fauzan, 2 Nov 2026: "Create a connector to what app so it can communicate directly. Renter all
-// have what app but not everyone use or monitor emails"). Prima plans which reminder each tenant is due; the API sends it
-// through the WhatsApp Business Platform once an authorized owner connects it. Pure functions only: no sending here.
-import type { AmTenancy, AmUnit, IsoDate, IsoDateTime } from './types';
-import { addDays, daysBetween } from './time';
+import type { AmTenancy } from "./types";
+import type { AmUnit } from "./types";
+import type { IsoDate } from "./types";
+import type { IsoDateTime } from "./types";
+import { addDays } from "./time";
+import { daysBetween } from "./time";
+
 
 /**
  * Timings: due day confirmed by Fauzan (2 Nov 2026); the reminder days are PROPOSED, to confirm with the Asset Director: rent for a month is due on the 1st (Fauzan, 2 Nov 2026); a reminder 3 days before,

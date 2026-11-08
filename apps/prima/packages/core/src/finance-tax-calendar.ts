@@ -1,15 +1,15 @@
-// Tax and statutory calendar per company (suggestion 17 and automation A10, Fauzan 2 Nov 2026: "Our closing account is
-// on end of december every year"; "Yes proceed"). Prima builds every deadline of the year from the company's financial
-// year end, shows each on the owner's list before it is due, and ticks what it can see is done: SST returns filed,
-// statutory and zakat payments paid from the regular payments list, the consolidated e-Invoice submitted. The rest are
-// marked filed by Finance with the acknowledgement reference (one person; it is a record of a filing already made in the
-// authority's portal). Prima files nothing. Dates follow the law as at November 2026 and are to be confirmed by the tax
-// agent before go-live.
-import { AccessDenied } from './access';
-import { BadRequest, NotFound } from './service';
-import { finRegularDues, finRegularState } from './finance-regular';
-import { addDays, daysBetween } from './time';
-import type { FinSettingsValues, FinSign, FinStatus, IsoDate } from './types';
+import { AccessDenied } from "./access";
+import { BadRequest } from "./service";
+import { NotFound } from "./service";
+import { finRegularDues } from "./finance-regular";
+import { finRegularState } from "./finance-regular";
+import { addDays } from "./time";
+import { daysBetween } from "./time";
+import type { FinSettingsValues } from "./types";
+import type { FinSign } from "./types";
+import type { FinStatus } from "./types";
+import type { IsoDate } from "./types";
+
 
 export interface FinTaxItem {
   key: string;

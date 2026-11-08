@@ -1,6 +1,8 @@
 import { useRef, useState } from 'react';
 import { api, type ItBoard, type ItPlan } from '../api';
 import { LANG_RULE, Rich, sampleProblem, useSample } from '../Arisha';
+import { arishaPilotAllowed } from '@prima/core';
+import { useApp } from '../App';
 import { useLang } from '../i18n';
 import { Chip, ErrorNotice, Loading, dateLabel, useLoad } from '../ui';
 import { Card, Empty, Stat, Stats } from '../kit';
@@ -130,7 +132,7 @@ export function ItPlanView({ board }: { board: ItBoard }) {
         </div>
       </Card>
 
-      {data.canPlan && <PlanHelper data={data} />}
+      {data.canPlan && <PlanHelperGate data={data} />}
 
       <Card
         title="Regular work"
@@ -198,6 +200,15 @@ export function ItPlanView({ board }: { board: ItBoard }) {
   );
 }
 
+/**
+ * Staff screens never show an AI tool (Fauzan's staff usability rule 4, 4 Nov 2026). Only the four leadership Arisha
+ * users see the planning suggestion; the IT Manager plans with the board alone.
+ */
+function PlanHelperGate({ data }: { data: ItPlan }) {
+  const { me } = useApp();
+  return arishaPilotAllowed(me.user) ? <PlanHelper data={data} /> : null;
+}
+
 /** Arisha suggests who could do what and when. The IT Manager decides and gives each job with "Plan it". */
 function PlanHelper({ data }: { data: ItPlan }) {
   const sample = useSample();
@@ -254,7 +265,7 @@ ${open.map((d, i) => `${i + 1}. ${d.title} | due ${d.dueOn}${d.overdue ? ' OVERD
         )
       }
     >
-      {!sample && <p className="it-none">Plan suggestions are not connected here. In the test link they run on Claude.</p>}
+      {!sample && <p className="it-none">Plan suggestions are not switched on here.</p>}
       {text !== null && (
         <div className="it-plan-text" data-no-translate>
           {text ? <Rich text={text} /> : <span className="muted">Thinking…</span>}

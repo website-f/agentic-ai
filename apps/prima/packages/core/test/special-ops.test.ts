@@ -50,9 +50,14 @@ describe('arms and CMS walls', () => {
     for (const id of ['u-pwvsb-arms', 'u-cms-head', 'u-coo', 'u-fauzan', 'u-audit', 'u-cm-sasa', 'u-sv-sasa']) expect(holdsArmsWall(u(id))).toBe(true);
     // Finance Director, Chief of Staff, HR, IT, PDPA, Transport and admin executives never read arms rows.
     for (const id of ['u-fd', 'u-cos', 'u-pwvsb-hr', 'u-it-ex1', 'u-pdpa', 'u-transport', 'u-ae-arsh']) expect(holdsArmsWall(u(id))).toBe(false);
-    // System feeds hold no wall, except the Asset Management system feed (Special Ops 4G), which updates the units it reports.
-    for (const f of ds.users.filter((x) => x.integration && !['am', 'whatsapp', 'ja'].includes(String(x.integration)))) expect(dataWalls(f)).toEqual([]);
+    // Asset feeds hold only asset walls; JA holds only its narrow guard-feed wall. No integration holds arms or staff identity walls.
+    for (const f of ds.users.filter((x) => x.integration && x.integration !== 'am' && x.integration !== 'whatsapp' && x.integration !== 'ja')) expect(dataWalls(f)).toEqual([]);
     for (const k of ['am', 'whatsapp']) expect(dataWalls(ds.users.find((x) => x.integration === k)!)).toEqual(['asset_read', 'asset_write']);
+    expect(dataWalls(ds.users.find((x) => x.integration === 'ja')!)).toEqual(['guard_feed']);
+    for (const f of ds.users.filter((x) => x.integration)) {
+      expect(holdsArmsWall(f)).toBe(false);
+      for (const wall of ['staff_ids', 'staff_accounts', 'arms']) expect(dataWalls(f)).not.toContain(wall);
+    }
   });
 
   it('gives the CMS wall to CMS, Arms Control and group arms viewers, never to a company user', () => {

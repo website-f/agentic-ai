@@ -2,6 +2,7 @@ import { useState } from "react";
 import { isOwnerAdmin } from "@prima/core";
 import { api } from "../api";
 import { useApp } from "../App";
+import { DisciplineAppealBox } from "./People";
 import { Card, Empty } from "../kit";
 import { Chip, ErrorNotice, Loading, dateLabel, dateTimeLabel, useAction, useLoad } from "../ui";
 import "../styles/hrx.css";
@@ -29,8 +30,21 @@ const STEP_LABEL = {
   inquiry_held: "Inquiry held",
   refuse_inquiry: "Inquiry refused (written reasons)",
   outcome: "Outcome",
+  appeal: "Appeal lodged",
+  appeal_decided: "Appeal decided",
   closed: "Closed",
 } as const;
+const APPEAL_RESULT = { upheld: "Upheld", varied: "Varied to a lighter decision", overturned: "Overturned" } as const;
+const VARIED_TO = {
+  no_action: "No action",
+  verbal_warning: "Verbal warning",
+  written_warning: "Written warning",
+  final_warning: "Final warning",
+  suspension: "Suspension without wages",
+  downgrade: "Downgrade",
+} as const;
+/** Languages an appeal letter may be in; HR picks the one the staff member wrote in. */
+const APPEAL_LANGS = { ms: "Bahasa Melayu", en: "English", ne: "Nepali", bn: "Bengali", my: "Burmese", hi: "Hindi", ur: "Urdu", id: "Bahasa Indonesia", ta: "Tamil", zh: "Chinese" } as const;
 type StepKind = keyof typeof STEP_LABEL;
 type Outcome = "no_action" | "warning" | "suspension" | "downgrade" | "dismissal";
 
@@ -208,6 +222,10 @@ export function HrCasesPanel() {
                             {s.panel ? ` (panel: ${s.panel.join(", ")}, hearing ${s.hearingOn ? dateLabel(s.hearingOn) : ""})` : ""}
                             {s.proven != null ? ` (${s.proven ? "proven" : "not proven"})` : ""}
                             {s.outcome ? ` (${s.outcome.replace("_", " ")}${s.suspensionDays ? `, ${s.suspensionDays} days` : ""})` : ""}
+                            {s.appealResult
+                              ? ` (${APPEAL_RESULT[s.appealResult]}${s.variedTo ? `: ${VARIED_TO[s.variedTo as keyof typeof VARIED_TO] ?? s.variedTo}` : ""})`
+                              : ""}
+                            {s.kind === "appeal" && s.lang ? ` (letter in ${APPEAL_LANGS[s.lang as keyof typeof APPEAL_LANGS] ?? s.lang})` : ""}
                           </span>
                         </div>
                       </li>
@@ -221,7 +239,13 @@ export function HrCasesPanel() {
                           <span className="label">Step</span>
                           <select className="select" value={st.kind} onChange={(e) => setSt({ ...st, kind: e.target.value as StepKind })} aria-label="Step">
                             {(Object.keys(STEP_LABEL) as StepKind[])
-                              .filter((k) => (k === "outcome" ? c.canDecideOutcome : c.canAct) && (k !== "refuse_inquiry" || c.kind === "sexual_harassment"))
+                              .filter(
+                                (k) =>
+                                  k !== "appeal" &&
+                                  k !== "appeal_decided" &&
+                                  (k === "outcome" ? c.canDecideOutcome : c.canAct) &&
+                                  (k !== "refuse_inquiry" || c.kind === "sexual_harassment"),
+                              )
                               .map((k) => (
                                 <option key={k} value={k}>
                                   {STEP_LABEL[k]}
@@ -323,6 +347,7 @@ export function HrCasesPanel() {
                       </div>
                     </div>
                   )}
+                  <AppealBox c={c} onDone={() => list.reload()} />
                 </div>
               )}
             </li>
@@ -333,6 +358,175 @@ export function HrCasesPanel() {
         <div className="hp-section">
           <ErrorNotice error={act.error} />
         </div>
+      )}
+    </Card>
+  );
+}
+
+type CaseRow = Awaited<ReturnType<typeof api.hrCases>>["rows"][number];
+
+/**
+ * The appeal on a case (IWAY finding, Fauzan 6 Nov 2026): HR records the staff member's written appeal within the
+ * window; the HR Director or the CEO who did not make the decision decides it with reasons.
+ */
+function AppealBox({ c, onDone }: { c: CaseRow; onDone: () => void }) {
+  const act = useAction();
+  const [a, setA] = useState({ note: "", lang: "ms", result: "", variedTo: "" });
+  const ap = c.appeal;
+  if (!ap.against) return null;
+  return (
+    <div className="hx-form">
+      <h3 className="hx-form-title">Appeal</h3>
+      <p className="hx-row-text">
+        Against {STEP_LABEL[ap.against.kind as StepKind] ?? ap.against.kind}
+        {ap.against.outcome ? ` (${ap.against.outcome.replace("_", " ")})` : ""} by {ap.against.by}.{" "}
+        {ap.decided ? (
+          <Chip tone="ok">{APPEAL_RESULT[ap.decided.result ?? "upheld"]}</Chip>
+        ) : ap.pending ? (
+          <Chip tone="warn">waiting for a decision</Chip>
+        ) : (
+          <span className="muted">The staff member may appeal in writing by {ap.dueBy ? dateLabel(ap.dueBy) : ""}.</span>
+        )}
+      </p>
+      {ap.canLodge && (
+        <>
+          <div className="hx-form-grid">
+            <label className="field hx-form-wide">
+              <span className="label">Grounds of appeal</span>
+              <input
+                className="input"
+                placeholder="From the staff member's letter"
+                aria-label="Grounds of appeal"
+                value={a.note}
+                onChange={(e) => setA({ ...a, note: e.target.value })}
+              />
+            </label>
+            <label className="field">
+              <span className="label">Language of the letter</span>
+              <select className="select" aria-label="Language of the letter" value={a.lang} onChange={(e) => setA({ ...a, lang: e.target.value })}>
+                {Object.entries(APPEAL_LANGS).map(([k, l]) => (
+                  <option key={k} value={k}>
+                    {l}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+          <div className="hx-form-actions">
+            <button
+              className="btn btn-sm btn-primary"
+              disabled={act.busy || a.note.trim().length < 10}
+              onClick={async () => {
+                const r = await act.run(() => api.hrCaseStep(c.id, { kind: "appeal", note: a.note, lang: a.lang as keyof typeof APPEAL_LANGS }), "Appeal recorded.");
+                if (r) onDone();
+              }}
+            >
+              Record appeal
+            </button>
+          </div>
+        </>
+      )}
+      {ap.canDecide && (
+        <>
+          <p className="hx-row-text muted">Grounds: {ap.lodged?.note}</p>
+          <div className="hx-form-grid">
+            <label className="field">
+              <span className="label">Decision</span>
+              <select className="select" aria-label="Appeal decision" value={a.result} onChange={(e) => setA({ ...a, result: e.target.value })}>
+                <option value="">Decision</option>
+                {Object.entries(APPEAL_RESULT).map(([k, l]) => (
+                  <option key={k} value={k}>
+                    {l}
+                  </option>
+                ))}
+              </select>
+            </label>
+            {a.result === "varied" && (
+              <label className="field">
+                <span className="label">Varied to</span>
+                <select className="select" aria-label="Varied to" value={a.variedTo} onChange={(e) => setA({ ...a, variedTo: e.target.value })}>
+                  <option value="">Lighter decision</option>
+                  {Object.entries(VARIED_TO).map(([k, l]) => (
+                    <option key={k} value={k}>
+                      {l}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
+            <label className="field hx-form-wide">
+              <span className="label">Reasons in writing</span>
+              <input
+                className="input"
+                placeholder="Reasons in writing (needed)"
+                aria-label="Reasons for the appeal decision"
+                value={a.note}
+                onChange={(e) => setA({ ...a, note: e.target.value })}
+              />
+            </label>
+          </div>
+          <div className="hx-form-actions">
+            <button
+              className="btn btn-sm btn-primary"
+              disabled={act.busy || !a.result || a.note.trim().length < 20 || (a.result === "varied" && !a.variedTo)}
+              onClick={async () => {
+                const r = await act.run(
+                  () =>
+                    api.hrCaseStep(c.id, {
+                      kind: "appeal_decided",
+                      note: a.note,
+                      appealResult: a.result as keyof typeof APPEAL_RESULT,
+                      variedTo: a.result === "varied" ? (a.variedTo as keyof typeof VARIED_TO) : null,
+                    }),
+                  "Appeal decided.",
+                );
+                if (r) onDone();
+              }}
+            >
+              Decide appeal
+            </button>
+          </div>
+        </>
+      )}
+      <ErrorNotice error={act.error} />
+    </div>
+  );
+}
+
+/**
+ * Guard discipline appeals for the HR Director, the CEO and HR (IWAY finding, Fauzan 6 Nov 2026): waiting first. The
+ * HR Director or the CEO who did not record the step decides; HR sees them to follow up.
+ */
+export function DisciplineAppealsPanel() {
+  const b = useLoad(() => api.disciplineAppeals().catch(() => null), []);
+  if (!b.data) return b.loading ? <Loading what="appeals" /> : null;
+  const rows = b.data.rows;
+  return (
+    <Card
+      flush
+      title="Guard discipline appeals"
+      sub={`A guard may appeal a warning, suspension, downgrade or dismissal within ${b.data.rule.value.withinDays} days. The HR Director or the CEO who did not record the step decides, with reasons.`}
+    >
+      {rows.length === 0 ? (
+        <Empty title="No appeals." />
+      ) : (
+        <ul className="hx-rows">
+          {rows.map((r) => (
+            <li key={r.id} className="hx-row">
+              <div className="hx-row-main">
+                <span className="hx-row-title">
+                  {r.personName} ({r.staffNo}) · {r.label} · {dateLabel(r.date)}
+                </span>
+                <span className="hx-row-meta">
+                  {r.by}: {r.note}
+                </span>
+              </div>
+              <div className="hx-row-body">
+                <DisciplineAppealBox x={r} self={false} onChange={() => b.reload()} />
+              </div>
+            </li>
+          ))}
+        </ul>
       )}
     </Card>
   );

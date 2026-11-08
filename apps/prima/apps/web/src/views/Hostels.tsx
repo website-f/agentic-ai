@@ -251,7 +251,7 @@ function BillItem({ b }: { b: BillRow }) {
                   <input
                     className="input"
                     aria-label="Note"
-                    placeholder={b.can.check || b.can.approve ? 'Note (required to send back)' : 'Note (optional)'}
+                    placeholder={b.can.check || b.can.approve ? 'Comment (needed to check, approve or send back)' : 'Note (optional)'}
                     value={note}
                     onChange={(e) => setNote(e.target.value)}
                   />
@@ -271,7 +271,7 @@ function BillItem({ b }: { b: BillRow }) {
                     <>
                       <button
                         className="btn btn-primary btn-sm"
-                        disabled={act.busy}
+                        disabled={act.busy || !note.trim()}
                         onClick={() =>
                           act.run(
                             () => api.hostelBillStep(bill.id, b.can.check ? 'check' : 'approve', true, note),

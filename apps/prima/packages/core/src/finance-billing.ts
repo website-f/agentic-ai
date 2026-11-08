@@ -1,24 +1,27 @@
-// Money in (Fauzan, 2 Nov 2026: yes to Finance suggestions 1, 2 and 5).
-//
-// - Billing to invoice (1): every contract that ran in a month has its invoice in SQL Account, recorded here with the
-//   SQL Account invoice number; or a reason there is none (suspended, billed under another contract), which someone else
-//   checks. A contract with neither is named at the month-end close.
-// - Government claims (2): each claim to a government client with the date submitted, its reference, the date payment
-//   is expected and every follow-up until the money is on the bank statement. Prima finds the payment on the statement;
-//   a claim past its expected date with no recent follow-up is named on Finance home and at the close.
-// - Unidentified money in (5): money in on the bank statement that Prima could not match to an invoice receipt, a
-//   government claim or a refund goes to an "unidentified" list, to be allocated within 7 days; someone other than the
-//   allocator checks each allocation (misallocated receipts are how one customer's money hides another's shortfall).
-// Prima never approves, pays or posts anything; every check has a comment, and nobody checks their own entry.
-import { AccessDenied } from './access';
-import { isoDate, noSecrets, requireComment, requireReason, text } from './finance';
-import type { FinCashCtx } from './finance-cash';
-import { finContractEndOn } from './finance-contract-end';
-import { periodEnd } from './payroll';
-import { RULES } from './rules';
-import { BadRequest, NotFound } from './service';
-import { addDays, daysBetween } from './time';
-import type { ClientAccount, Contract, FinSign, FinStatement, FinStatementLine, FinStatus, Id, IsoDate, IsoDateTime } from './types';
+import { AccessDenied } from "./access";
+import { isoDate } from "./finance";
+import { noSecrets } from "./finance";
+import { requireComment } from "./finance";
+import { requireReason } from "./finance";
+import { text } from "./finance";
+import type { FinCashCtx } from "./finance-cash";
+import { finContractEndOn } from "./finance-contract-end";
+import { periodEnd } from "./payroll";
+import { RULES } from "./rules";
+import { BadRequest } from "./service";
+import { NotFound } from "./service";
+import { addDays } from "./time";
+import { daysBetween } from "./time";
+import type { ClientAccount } from "./types";
+import type { Contract } from "./types";
+import type { FinSign } from "./types";
+import type { FinStatement } from "./types";
+import type { FinStatementLine } from "./types";
+import type { FinStatus } from "./types";
+import type { Id } from "./types";
+import type { IsoDate } from "./types";
+import type { IsoDateTime } from "./types";
+
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
 const norm = (x: string) => x.toUpperCase().replace(/[^A-Z0-9]/g, '');

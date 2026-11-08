@@ -1,3 +1,6 @@
+-- Integration release boundary: PROPOSED ONLY. This file is not in the current
+-- five-module release manifest. Earlier pinned-module descriptions below are
+-- historical; installing this module needs separate review and authorization.
 -- Central Admin walls, Phase 5A part 2 (Fauzan, 1 Nov 2026). A pinned module in db/release-manifest.json (id
 -- central_admin_walls), installed only by an authorized owner with the reviewed selected-module command
 -- (apps/api/src/module-install.ts). It stays out of the base schema so the reviewed IT pilot base is unchanged. Not

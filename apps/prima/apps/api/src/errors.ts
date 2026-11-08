@@ -1,5 +1,5 @@
 import { ArgumentsHost, Catch, ExceptionFilter, HttpException, Logger } from '@nestjs/common';
-import { AccessDenied, BadRequest, NotFound, ReviewConflict, RuleBlocked } from '@prima/core';
+import { AccessDenied, BadRequest, NotFound, ReviewConflict, RuleBlocked, SurveyStorageMissing } from '@prima/core';
 import type { Response } from 'express';
 import { UnknownUser } from './db';
 import { randomUUID } from 'node:crypto';
@@ -51,6 +51,8 @@ export class DomainErrors implements ExceptionFilter {
       res.status(409).json(details && typeof details === 'object' ? { message: err.message, details } : { message: err.message });
     } else if (err instanceof BadRequest) {
       res.status(400).json({ message: err.message });
+    } else if (err instanceof SurveyStorageMissing) {
+      res.status(503).json({ message: err.message });
     } else if (err instanceof UnknownUser) {
       res.status(401).json({ message: 'Sign in again.' });
     } else if (isPoolBusy(err)) {

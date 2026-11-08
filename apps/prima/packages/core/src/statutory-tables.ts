@@ -1,17 +1,5 @@
-// EPF (KWSP) and PERKESO contribution tables, kept row by row in Prima (Fauzan, 2 Nov 2026: "Make sure epf and socso
-// have table for it. Make sure the system have the information stored ... Epf or socso publish their table of
-// calculation").
-//
-// KWSP publishes the Third Schedule of the EPF Act 1991 (Jadual Ketiga). PERKESO publishes the contribution table of the
-// Employees' Social Security Act 1969 (Act 4, Third Schedule) and the Employment Insurance System Act 2017 (Act 800,
-// Second Schedule). Payroll takes every EPF, SOCSO and EIS amount from the row the wage falls in, never from a bare
-// percentage, so the payslip shows exactly what the published table says.
-//
-// Prima carries built-in copies so payroll works on day one. Each built-in table says how it was made and which
-// published rows it was checked against. When KWSP or PERKESO publish a new table, HR or Finance loads it row by row
-// with the month it starts and the document it came from; a second person (the Finance Director, the Chief of Staff or
-// the CEO) checks it against the published PDF; only then does payroll use it, from that month. Every version is kept.
-import type { IsoDateTime } from './types';
+import type { IsoDateTime } from "./types";
+
 
 export type StatTableId = 'EPF-A' | 'EPF-E' | 'EPF-F' | 'SOCSO-1' | 'SOCSO-2' | 'EIS';
 

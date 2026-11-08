@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { CLIENT_NEEDS, NEED_TOPICS, SITE_TASK_FOR_LABEL, type NeedConcern, type NeedTopic, type SiteTaskFor } from '@prima/core';
 import { api, type SiteTaskBoard } from '../api';
 import { Chip, ErrorNotice, Loading, useAction, useLoad, type Tone } from '../ui';
+import { ClientCodesPanel } from './ClientCodes';
 
 /**
  * The OM's page for one site (Fauzan, 6 Nov 2026): what to discuss with the client to learn what the site needs and
@@ -69,6 +70,7 @@ export function SiteTasksView({ siteId }: { siteId: string }) {
           <div className="empty">Use "Discuss needs with the client" at the first meeting.</div>
         )}
       </section>
+      <ClientCodesPanel siteId={siteId} />
       <section className="panel">
         <div className="panel-head">
           <h3>Site tasks</h3>

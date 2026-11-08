@@ -158,7 +158,7 @@ describe('extracted forward guard behavior with inert command fixtures', () => {
   const expected = createHash('sha256').update(sql).digest('hex');
   const releaseRoot = fileURLToPath(new URL('../', import.meta.url));
   const release = verifyReleaseArtifact(releaseRoot).sha256;
-  const report = JSON.stringify({version:1,expected:release,ready:true,catalog:{ready:true,baseReady:true,codes:[],modules:Object.fromEntries(['procurement','rental_corrections','cleanup','metrics','job_email','central_admin_walls','central_admin_panel','central_admin_delegations','central_admin_legal_holds','company_office','company_run_links','org_links','special_ops','fw_welfare'].map(id=>[id,{ready:true,codes:[]}]))}});
+  const report = JSON.stringify({version:1,expected:release,ready:true,catalog:{ready:true,baseReady:true,codes:[],modules:Object.fromEntries(['procurement','rental_corrections','cleanup','metrics','job_email','item_register','item_register_v2'].map(id=>[id,{ready:true,codes:[]}]))}});
   const image = `testregistry.azurecr.io/prima-api@sha256:${'c'.repeat(64)}`;
   const forward = step(job('deploy'), 'Require matching applied schema immediately before changing the API image');
   const script = forward.split('        run: |\n')[1].split('\n').map(line => line.slice(10)).join('\n');

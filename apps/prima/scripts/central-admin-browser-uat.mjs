@@ -428,7 +428,7 @@ try {
 
     await step('Admin executive', `${viewport.name}: guide card in Bahasa Melayu first, English alongside`, async () => {
       await as('u-bm-sasa-1', 'ms');
-      await open('Renewals');
+      await open('Pembaharuan kontrak');
       await page.getByText('Panduan langkah demi langkah').waitFor();
       await page.getByText('Panduan langkah demi langkah').click();
       await page.getByText(/Pembaharuan lesen dan pendaftaran/).waitFor();

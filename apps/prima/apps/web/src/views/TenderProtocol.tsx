@@ -262,6 +262,7 @@ export function StepRow({
   const [open, setOpen] = useState<null | 'plan'>(null);
   const [pic, setPic] = useState(plan?.pic ?? '');
   const [due, setDue] = useState(plan?.due ?? '');
+  const [naNote, setNaNote] = useState('');
   const act = useAction();
   const na = done?.status === 'na';
   const naWaiting = na && !done?.naConfirmedBy;
@@ -308,7 +309,7 @@ export function StepRow({
             {done.ref ? <span className="muted"> · ref {done.ref}</span> : null}{' '}
             <span className="muted">
               · {done.by}, {dateTimeLabel(done.at)}
-              {done.naConfirmedBy ? ` · confirmed by ${done.naConfirmedBy}` : ''}
+              {done.naConfirmedBy ? ` · confirmed by ${done.naConfirmedBy}${done.naConfirmNote ? `: ${done.naConfirmNote}` : ''}` : ''}
             </span>
           </div>
           <DocList docs={docs} />
@@ -316,19 +317,26 @@ export function StepRow({
       )}
       {naWaiting && canConfirm && (
         <>
+          <input
+            className="input"
+            aria-label="T/B comment"
+            placeholder="Comment (needed to confirm; a short one is fine)"
+            value={naNote}
+            onChange={(e) => setNaNote(e.target.value)}
+          />
           <ErrorNotice error={act.error} />
           <div className="row">
             <button
               className="btn btn-primary btn-sm"
-              disabled={act.busy}
-              onClick={() => act.run(() => api.confirmTenderNa(t, item.id, true), 'T/B confirmed.')}
+              disabled={act.busy || !naNote.trim()}
+              onClick={() => act.run(() => api.confirmTenderNa(t, item.id, true, naNote), 'T/B confirmed.')}
             >
               Confirm T/B
             </button>
             <button
               className="btn btn-sm"
               disabled={act.busy}
-              onClick={() => act.run(() => api.confirmTenderNa(t, item.id, false), 'T/B refused; the item is open again.')}
+              onClick={() => act.run(() => api.confirmTenderNa(t, item.id, false, naNote), 'T/B refused; the item is open again.')}
             >
               Refuse
             </button>

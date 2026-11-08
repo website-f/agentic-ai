@@ -1,23 +1,21 @@
-/**
- * Budget revisions and three-statement forecasts (masterplan section 08, items 76 and 78; Fauzan, 3 Nov 2026: "proceed work").
- *
- * Budget revisions: the approved budget itself is never changed. A revision is a new version that applies from an open month
- * onward; months before it keep the budget in force. Fauzan, 3 Nov 2026 ("Either is enough for both"): one approval, by the
- * Finance Director or the CEO, with a comment, by someone who did not draft or send it, puts a revision in force.
- *
- * Three-statement forecasts: a forecast profit and loss, balance sheet and cash-flow statement, linked so the cash flow is worked
- * out from the profit and the balance sheet movements and the closing cash ties to the balance sheet. Each forecast has a
- * scenario (base, downside, upside), written assumptions and a version. A person prepares it; the FD or the CEO (not the
- * preparer or sender) approves it with a comment once the opening balance sheet balances and, where reviewed SQL Account
- * figures exist for the opening month, agrees to them. Prima never approves anything by itself.
- *
- * JSONB on the existing `prima.fin_status` row (`plans[].revisions`, `plans[].threeStatements`); no migration.
- */
-import { AccessDenied } from './access';
-import type { FinActor } from './finance';
-import { isLead, noSecrets, requireComment, requireReason, text } from './finance';
-import { BadRequest, NotFound, ReviewConflict } from './service';
-import { FIN_PLAN_LINES, type FinPlan, type FinPlanFigures, type FinPlanLine, type FinSign, type FinStatus, type Id } from './types';
+import { AccessDenied } from "./access";
+import type { FinActor } from "./finance";
+import { isLead } from "./finance";
+import { noSecrets } from "./finance";
+import { requireComment } from "./finance";
+import { requireReason } from "./finance";
+import { text } from "./finance";
+import { BadRequest } from "./service";
+import { NotFound } from "./service";
+import { ReviewConflict } from "./service";
+import { FIN_PLAN_LINES } from "./types";
+import type { FinPlan } from "./types";
+import type { FinPlanFigures } from "./types";
+import type { FinPlanLine } from "./types";
+import type { FinSign } from "./types";
+import type { FinStatus } from "./types";
+import type { Id } from "./types";
+
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
 const off = (n: number) => Math.abs(n) >= 0.005;

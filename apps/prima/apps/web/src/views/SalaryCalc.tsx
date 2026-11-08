@@ -15,6 +15,7 @@ const STANDARD: Choice[] = [2, 2.5, 3].map((r) => ({ id: `std-${r}`, name: `Stan
 export function SalaryCalcView() {
   const [choices, setChoices] = useState<Choice[]>(STANDARD);
   const [law, setLaw] = useState<PayLawSettings>(DEFAULT_PAY_LAW);
+  const [settingsState, setSettingsState] = useState<'loading' | 'current' | 'unavailable'>('loading');
   const [choiceId, setChoiceId] = useState(STANDARD[0].id);
   const [basic, setBasic] = useState<string>(String(STANDARD[0].amounts.basicMonthly));
   const [v, setV] = useState({ daysWorked: '26', trainingDays: '0', annualLeaveDays: '0', mcDays: '0', holidaysOff: '0', restDaysWorked: '0', publicHolidaysWorked: '0' });
@@ -26,10 +27,11 @@ export function SalaryCalcView() {
       (d) => {
         if (!live) return;
         setLaw(d.law);
+        setSettingsState('current');
         const mine = d.formulas.map((f) => ({ id: f.id, name: `${f.code}: ${f.name}`, amounts: f.amounts }));
         if (mine.length) setChoices([...STANDARD, ...mine]);
       },
-      () => undefined,
+      () => { if (live) setSettingsState('unavailable'); },
     );
     return () => {
       live = false;
@@ -68,6 +70,13 @@ export function SalaryCalcView() {
         </p>
       </div>
 
+      {settingsState !== 'current' && (
+        <div role="status" className="notice warn">
+          {settingsState === 'loading'
+            ? 'Checking current pay settings. Figures below are estimates using default settings, not verified current settings.'
+            : 'Current pay settings are unavailable. Figures below are estimates using default settings, not the approved current pay law or site formula. Do not use this estimate to approve or pay wages.'}
+        </div>
+      )}
       <section className="panel">
         <div className="panel-head">
           <h2>Formula</h2>

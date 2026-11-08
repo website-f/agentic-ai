@@ -2,8 +2,10 @@
 // run unless the target is a local database.
 import { CENTRAL_EMPLOYER_IDS, generateDataset, dateOf, type Dataset, type DataWall, type TableName } from '@prima/core';
 import { Client } from 'pg';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { nowMyt } from './db';
-import { companyOfficeModuleSql, companyRunLinksModuleSql, guardPayModuleSql, migrationSql, payFormulasModuleSql } from './schema';
+import { guardPayModuleSql, migrationSql, payFormulasModuleSql, companyOfficeModuleSql, companyRunLinksModuleSql } from './schema';
 
 const COMPANY_TABLES: TableName[] = [
   'branches',
@@ -82,70 +84,80 @@ const COMPANY_TABLES: TableName[] = [
   'siteVisits',
   'companyDesks',
   'grants',
+  'fwPlacements',
+  'fwPlacementHosts',
+  'fwCostRates',
+  'fwCostCharges',
+  'fwStatCharges',
 ];
 const TABLE_NAME: Partial<Record<TableName, string>> = {
-  armsMovements: 'arms_movements',
-  armedJobs: 'armed_jobs',
-  dealerLicences: 'dealer_licences',
-  vaultWatches: 'vault_watches',
-  vaultEvents: 'vault_events',
-  ammoStocks: 'ammo_stocks',
-  armsAgreements: 'arms_agreements',
-  armsRequests: 'arms_requests',
-  insurancePolicies: 'insurance_policies',
-  insuranceClaims: 'insurance_claims',
-  insuranceGuarantees: 'insurance_guarantees',
-  phoneExtensions: 'phone_extensions',
-  phoneCalls: 'phone_calls',
-  siteSystems: 'site_systems',
-  siteAlarms: 'site_alarms',
-  siteDispatches: 'site_dispatches',
-  postLogs: 'post_logs',
-  siteVehicles: 'site_vehicles',
-  gateEntries: 'gate_entries',
-  siteNeedsReviews: 'site_needs_reviews',
-  siteTasks: 'site_tasks',
-  siteTaskLogs: 'site_task_logs',
-  evidenceVideos: 'evidence_videos',
-  attendanceFollowUps: 'attendance_followups',
-  evidencePhotos: 'evidence_photos',
-  evidenceDocs: 'evidence_docs',
-  leaveRequests: 'leave_requests',
-  payChanges: 'pay_changes',
-  socsoClaims: 'socso_claims',
-  fwRenewals: 'fw_renewals',
-  fwmTasks: 'fwm_tasks',
-  fwWelfareChecks: 'fw_welfare_checks',
-  fwRecruitFiles: 'fw_recruit_files',
-  hostelStays: 'hostel_stays',
-  hostelBills: 'hostel_bills',
-  utilityCharges: 'utility_charges',
-  staffClaims: 'staff_claims',
-  tripApprovals: 'trip_approvals',
-  staffPayRuns: 'staff_pay_runs',
-  finStatus: 'fin_status',
-  arishaDrafts: 'arisha_drafts',
-  contracts: 'contracts',
-  branchSettlements: 'branch_settlements',
-  branchActions: 'branch_actions',
-  corpProfiles: 'corp_profiles',
-  creditLoans: 'credit_loans',
-  creditDefaults: 'credit_defaults',
-  purSuppliers: 'pur_suppliers',
-  purRequests: 'pur_requests',
-  stockItems: 'stock_items',
-  stockIssues: 'stock_issues',
-  govMandates: 'gov_mandates',
-  grcObligations: 'grc_obligations',
-  oshAssessments: 'osh_assessments',
-  corpAudits: 'corp_audits',
-  salesLeads: 'sales_leads',
-  legalMatters: 'legal_matters',
-  corpFilings: 'corp_filings',
-  corpChanges: 'corp_changes',
-  siteVisits: 'site_visits',
-  jaRecords: 'ja_records',
-  companyDesks: 'company_desks',
+armsMovements: 'arms_movements',
+armedJobs: 'armed_jobs',
+dealerLicences: 'dealer_licences',
+vaultWatches: 'vault_watches',
+vaultEvents: 'vault_events',
+ammoStocks: 'ammo_stocks',
+armsAgreements: 'arms_agreements',
+armsRequests: 'arms_requests',
+insurancePolicies: 'insurance_policies',
+insuranceClaims: 'insurance_claims',
+insuranceGuarantees: 'insurance_guarantees',
+phoneExtensions: 'phone_extensions',
+phoneCalls: 'phone_calls',
+siteSystems: 'site_systems',
+siteAlarms: 'site_alarms',
+siteDispatches: 'site_dispatches',
+postLogs: 'post_logs',
+siteVehicles: 'site_vehicles',
+gateEntries: 'gate_entries',
+siteNeedsReviews: 'site_needs_reviews',
+siteTasks: 'site_tasks',
+siteTaskLogs: 'site_task_logs',
+evidenceVideos: 'evidence_videos',
+attendanceFollowUps: 'attendance_followups',
+evidencePhotos: 'evidence_photos',
+evidenceDocs: 'evidence_docs',
+leaveRequests: 'leave_requests',
+payChanges: 'pay_changes',
+socsoClaims: 'socso_claims',
+fwRenewals: 'fw_renewals',
+fwmTasks: 'fwm_tasks',
+hostelStays: 'hostel_stays',
+hostelBills: 'hostel_bills',
+utilityCharges: 'utility_charges',
+staffClaims: 'staff_claims',
+tripApprovals: 'trip_approvals',
+staffPayRuns: 'staff_pay_runs',
+finStatus: 'fin_status',
+arishaDrafts: 'arisha_drafts',
+contracts: 'contracts',
+branchSettlements: 'branch_settlements',
+branchActions: 'branch_actions',
+corpProfiles: 'corp_profiles',
+creditLoans: 'credit_loans',
+creditDefaults: 'credit_defaults',
+purSuppliers: 'pur_suppliers',
+purRequests: 'pur_requests',
+stockItems: 'stock_items',
+stockIssues: 'stock_issues',
+govMandates: 'gov_mandates',
+grcObligations: 'grc_obligations',
+oshAssessments: 'osh_assessments',
+corpAudits: 'corp_audits',
+salesLeads: 'sales_leads',
+legalMatters: 'legal_matters',
+corpFilings: 'corp_filings',
+corpChanges: 'corp_changes',
+siteVisits: 'site_visits',
+jaRecords: 'ja_records',
+companyDesks: 'company_desks',
+fwWelfareChecks: 'fw_welfare_checks',
+fwPlacements: 'fw_placements',
+fwPlacementHosts: 'fw_placement_hosts',
+fwCostRates: 'fw_cost_rates',
+fwCostCharges: 'fw_cost_charges',
+fwStatCharges: 'fw_stat_charges',
+fwRecruitFiles: 'fw_recruit_files'
 };
 
 export async function resetDb(url: string, now = nowMyt()): Promise<Dataset> {
@@ -159,12 +171,11 @@ export async function resetDb(url: string, now = nowMyt()): Promise<Dataset> {
   try {
     await client.query('DROP SCHEMA IF EXISTS prima CASCADE');
     await client.query(migrationSql());
-    // Development and tests only: the optional company office module, so local databases match the code under review.
-    await client.query(companyOfficeModuleSql());
-    await client.query(companyRunLinksModuleSql());
     // Development and tests only: the optional pay formulas module, so local databases match the code under review.
     await client.query(payFormulasModuleSql());
     await client.query(guardPayModuleSql());
+    await client.query(companyOfficeModuleSql());
+    await client.query(companyRunLinksModuleSql());
     const ds = generateDataset({ today: dateOf(now), now });
     await insertDataset(client, ds);
     return ds;
@@ -227,6 +238,12 @@ async function fill(client: Pick<Client, 'query'>, ds: Dataset): Promise<void> {
   await bulk('pdpa_cases', ds.pdpaCases, (r) => [r.id, r], 'id,data');
   await bulk('pdpa_dpos', ds.pdpaDpos, (r) => [r.id, r], 'id,data');
   await bulk('pdpa_requests', ds.pdpaRequests, (r) => [r.id, r], 'id,data');
+  // Proposed module (db/modules/pdpa-register-v1.sql): only filled when a development database has it installed.
+  if ((await client.query("SELECT to_regclass('prima.pdpa_register') IS NOT NULL AS ok")).rows[0]?.ok) {
+    await bulk('pdpa_register', ds.pdpaRegister, (r) => [r.id, r], 'id,data');
+    await bulk('pdpa_consents', ds.pdpaConsents, (r) => [r.id, r], 'id,data');
+    await bulk('pdpa_settings', ds.pdpaSettings, (r) => [r.id, r], 'id,data');
+  }
   await bulk('bcm_systems', ds.bcmSystems, (r) => [r.id, r], 'id,data');
   await bulk('bcm_drills', ds.bcmDrills, (r) => [r.id, r], 'id,data');
   await bulk('am_depn_postings', ds.amDepnPostings, (r) => [r.id, r], 'id,data');
@@ -244,8 +261,13 @@ async function fill(client: Pick<Client, 'query'>, ds: Dataset): Promise<void> {
   await bulk('checkin_settings', ds.checkinSettings ?? [], (r) => [r.id, r.companyId, r], 'id,company_id,data');
   await bulk('checkin_events', ds.checkinEvents ?? [], (r) => [r.id, r.companyId, r], 'id,company_id,data');
   await bulk('login_handovers', ds.loginHandovers, (r) => [r.id, r], 'id,data');
+  await bulk('person_links', ds.personLinks, (r) => [r.id, r], 'id,data');
+  await bulk('group_people', ds.groupPeople, (r) => [r.id, r], 'id,data');
+  await bulk('group_person_notes', ds.groupPersonNotes, (r) => [r.id, r], 'id,data');
+  await bulk('hire_checks', ds.hireChecks, (r) => [r.id, r], 'id,data');
   await bulk('hr_filings', ds.hrFilings, (r) => [r.id, r.companyId, r], 'id,company_id,data');
   await bulk('hr_cases', ds.hrCases, (r) => [r.id, r.companyId, r], 'id,company_id,data');
+  await bulk('hr_screenings', ds.hrScreenings, (r) => [r.id, r.companyId, r], 'id,company_id,data');
   await bulk('applicants', ds.applicants, (r) => [r.id, r.companyId, r], 'id,company_id,data');
   await bulk('office_osh', ds.officeOsh, (r) => [r.id, r.companyId, r], 'id,company_id,data');
   await bulk('staff_training', ds.staffTraining, (r) => [r.id, r.companyId, r], 'id,company_id,data');
@@ -304,8 +326,13 @@ async function fill(client: Pick<Client, 'query'>, ds: Dataset): Promise<void> {
   await bulk('meetings', ds.meetings, (r) => [r.id, r.companyId, r], 'id,company_id,data');
   await bulk('staff_clocks', ds.staffClocks, (r) => [r.id, r.companyId, r], 'id,company_id,data');
   await bulk('location_pings', ds.locationPings, (r) => [r.id, r.companyId, r], 'id,company_id,data');
+  await bulk('guard_phones', ds.guardPhones, (r) => [r.id, r.companyId, r], 'id,company_id,data');
+  await bulk('guard_phone_sessions', ds.guardPhoneSessions, (r) => [r.id, r.companyId, r], 'id,company_id,data');
+  await bulk('guard_pings', ds.guardPings, (r) => [r.id, r.companyId, r], 'id,company_id,data');
   await bulk('remote_arrangements', ds.remoteArrangements, (r) => [r.id, r.companyId, r], 'id,company_id,data');
   await bulk('remote_days', ds.remoteDays, (r) => [r.id, r.companyId, r], 'id,company_id,data');
+  await bulk('time_slips', ds.timeSlips, (r) => [r.id, r.companyId, r], 'id,company_id,data');
+  await bulk('time_slip_settings', ds.timeSlipSettings, (r) => [r.id, r.companyId, r], 'id,company_id,data');
   await bulk('work_tasks', ds.workTasks, (r) => [r.id, r.companyId, r], 'id,company_id,data');
   await bulk('work_check_ins', ds.workCheckIns, (r) => [r.id, r.companyId, r], 'id,company_id,data');
   await bulk('help_requests', ds.helpRequests, (r) => [r.id, r.companyId, r], 'id,company_id,data');
@@ -319,6 +346,16 @@ async function fill(client: Pick<Client, 'query'>, ds: Dataset): Promise<void> {
     await bulk(TABLE_NAME[t] ?? t, ds[t] as unknown[], (r) => [r.id, r.companyId, r], 'id,company_id,data');
   }
   await bulk('audit', ds.audit, (r) => [r.seq, r.companyId, r], 'seq,company_id,data');
+}
+
+if (require.main === module) {
+  const url = process.env.DATABASE_URL ?? 'postgres://postgres@localhost:5432/prima';
+  resetDb(url)
+    .then((ds) => console.log(`Database reset: ${ds.companies.length} companies, ${ds.people.length} people, ${ds.shifts.length} shifts.`))
+    .catch((e) => {
+      console.error(e.message);
+      process.exit(1);
+    });
 }
 
 if (require.main === module) {

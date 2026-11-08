@@ -1,5 +1,6 @@
-import type { Store } from './store';
-import type { TableName } from './types';
+import type { Store } from "./store";
+import type { TableName } from "./types";
+
 
 /**
  * A read-through memo for one read-only screen (whole-organisation review G2, 3 Nov 2026). A leader's home asked the

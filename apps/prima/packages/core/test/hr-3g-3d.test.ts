@@ -198,10 +198,10 @@ describe('Slice 3D: minimum wage, overtime, statutory files', () => {
     const line = (await store.get('staffPayRuns', run))!.lines[0];
     const full = (await store.get('staffIds', line.personId))?.idFull;
     const epfHr = await svc.staffPayExport(hr, run, 'epf');
-    expect(epfHr.body.split('\n')[1]).toBe('Staff no,Name,IC / passport,EPF number,Wages,Employee,Employer,Table row');
+    expect(epfHr.body.split('\n')[1]).toBe('Staff no,Name,IC / passport,EPF member no,Wages,Employee,Employer');
     if (full) expect(epfHr.body).toContain(full);
     const fin = await svc.staffPayExport(await svc.user('u-fin-t1-lead'), run, 'socso');
-    expect(fin.body.split('\n')[1]).toContain('IC / passport,SOCSO number');
+    expect(fin.body.split('\n')[1]).toContain('IC / passport,SOCSO no');
     if (full) expect(fin.body).not.toContain(full);
   });
 });

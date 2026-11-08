@@ -1,3 +1,5 @@
+if (process.env.CI_SYNTHETIC_BROWSER !== 'true') throw Error('Synthetic browser opt-in required');
+const { localOnly } = require('./browser-local-only.cjs');
 // Run: npm run build:demo -w @prima/web; serve apps/web/dist-demo on :5180 (e.g. python3 -m http.server 5180);
 // then node scripts/special-ops-browser-uat.cjs <out-dir> <width>. Not wired to CI.
 // Browser UAT on the demo build (synthetic data only, all in the browser; no API, no provider).
@@ -15,6 +17,7 @@ const step = async (name, fn) => {
   const b = await chromium.launch();
   const ctx = await b.newContext({ viewport: { width: W, height: 900 } });
   const p = await ctx.newPage();
+  await localOnly(p);
   p.setDefaultTimeout(8000);
   globalThis.__p = p;
   const errors = [];
@@ -44,6 +47,7 @@ const step = async (name, fn) => {
   };
   // Is a menu entry offered at all (desktop sidebar, or the phone bar plus its More sheet)?
   const offered = async (label) => {
+    await dismiss();
     if (W >= 800) return (await p.locator('nav:visible button').filter({ hasText: new RegExp('^' + label + '$') }).count()) > 0;
     const bar = await p.locator('nav:visible button').filter({ hasText: new RegExp('^(' + label + '|' + (SHORT[label] || label) + ')$') }).count();
     if (bar) return true;
@@ -218,5 +222,5 @@ const step = async (name, fn) => {
   await step('No page errors', async () => { assert.deepEqual(errors, []); });
   require('node:fs').writeFileSync(`${OUT}/results-${W}.json`, JSON.stringify({ width: W, results, errors }, null, 2));
   await b.close();
-  process.exit(results.every((r) => r.ok) ? 0 : 1);
+  process.exit(results.every((r) => r.ok) && !errors.length ? 0 : 1);
 })();

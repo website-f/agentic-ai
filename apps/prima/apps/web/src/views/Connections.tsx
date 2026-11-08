@@ -3,13 +3,15 @@ import { jobEmailClient } from '../connections/mail/job-emails-client';
 import { useEffect, useMemo, useSyncExternalStore } from 'react';
 import { api } from '../api';
 import { Chip } from '../ui';
-import type { Adapter, ServiceId } from '../connections/contract';
+import { type Adapter, type ServiceId } from '../connections/contract';
 import { createRegistry, serviceIds } from '../connections/registry';
 import { ConnectionCardSession } from '../connections/session';
 import { SharePointRequest } from '../connections/sharepoint/request';
 import { sharePointAdapter } from '../connections/sharepoint/adapter';
 import { m365Client } from '../connections/m365/client';
 import { M365ConnectionsPanel } from '../connections/m365/panel';
+
+
 
 const titles = { mail: 'Mail', sharepoint: 'SharePoint', powerbi: 'Power BI' };
 export function ConnectionCard({ serviceId, userId, adapter }: { serviceId: ServiceId; userId: string; adapter?: Adapter }) {

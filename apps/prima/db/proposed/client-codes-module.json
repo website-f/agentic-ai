@@ -1,0 +1,35 @@
+{
+  "status": "PROPOSED, not installed, not in db/release-manifest.json. No install, migration or deploy is authorized by this file. Fauzan said yes to installing it on 8 Nov 2026 04:48Z (\"Proceed\"), at the same time as the combined merge and through the reviewed release path; the release owner packages it and the CEO runs it.",
+  "base": {
+    "path": "db/migrations/001_init.sql",
+    "sha256": "c5d8867df97f9535a3f447bdb6e1823e2cd783ad80ea4969edd71f5dc9fedd81"
+  },
+  "after": [
+    "procurement",
+    "rental_corrections",
+    "cleanup",
+    "metrics",
+    "job_email",
+    "item_register",
+    "item_register_v2"
+  ],
+  "modules": [
+    {
+      "id": "client_codes",
+      "version": 1,
+      "path": "db/modules/client-codes-v1.sql",
+      "sha256": "b12347c19e7ea6ec5e69f45ddcde62224e208696c67c9c92a6d31847ca28bd3e",
+      "requires": [],
+      "approval": "Fauzan 8 Nov 2026 04:48Z: \"Proceed\" (asked: install the new tables at the same time as the combined merge). Installed only through the release path after the combined review; this file authorizes no install by itself.",
+      "switch": "None separate: the API detects prima.client_codes, prima.client_code_checks, prima.client_inspections and prima.self_audits. Before the install the client requirements and self-audit screens answer 'not installed in this database yet' and the company home shows no self-audit reminder; after the install they work.",
+      "uses": [
+        "prima.visible_companies() (base)",
+        "role prima_app (base)",
+        "prima.audit (base, written by the API)"
+      ],
+      "definer": "None.",
+      "repeatSafe": true,
+      "rollback": "Revoke INSERT, UPDATE on the four tables from prima_app (the screens go read-only and saving fails with a plain message). Keep the tables: client checks, inspections and self-audits are company records and their history is in the audit log."
+    }
+  ]
+}

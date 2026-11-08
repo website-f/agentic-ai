@@ -1,23 +1,18 @@
-// The ledger side of Finance (Fauzan, 3 Nov 2026: "Yes build all not build"; masterplan section 08, items 71, 72, 76).
-//
-// 76. Statement agreement: the twelve close tests FS-01 to FS-12. Finance records the month's figures from the SQL Account
-//     reports (or the connector fills them, item 71) and Prima works out each difference itself; someone else reviews.
-//     FS-01, FS-02 and FS-06 must be RM0.00 for the close; the others are close exceptions until they agree or are
-//     explained. The historical cash-flow statement (FS-04/FS-05) is not the 13-week cash forecast (finance-forecast13.ts).
-// 72. Chart of accounts and cost dimension mapping: each company's own SQL Account codes mapped to one group reporting
-//     list, every bank account to its ledger code, and sites/contracts to SQL project codes. Proposed by Finance,
-//     approved by the Finance Director or the CEO (never the proposer), versioned by the first month it applies.
-// 71. SQL Account connector: a read-only interface only. Nothing here calls SQL Account. It stays off until the edition,
-//     modules and API are confirmed for the company (discovery, checked by the FD or CEO), the mapping is approved, and
-//     a reader is installed and switched on by a separate, authorised change. A read is refused when any account is
-//     unmapped, never used twice, and still needs a person's review before the close counts it.
+import { AccessDenied } from "./access";
+import type { FinActor } from "./finance";
+import { isLead } from "./finance";
+import { noSecrets } from "./finance";
+import { requireComment } from "./finance";
+import { requireReason } from "./finance";
+import { text } from "./finance";
+import type { FinCashCtx } from "./finance-cash";
+import { BadRequest } from "./service";
+import { NotFound } from "./service";
+import type { FinSign } from "./types";
+import type { FinStatus } from "./types";
+import type { Id } from "./types";
+import type { IsoDateTime } from "./types";
 
-import { AccessDenied } from './access';
-import type { FinActor } from './finance';
-import { isLead, noSecrets, requireComment, requireReason, text } from './finance';
-import type { FinCashCtx } from './finance-cash';
-import { BadRequest, NotFound } from './service';
-import type { FinSign, FinStatus, Id, IsoDateTime } from './types';
 
 type Out<T> = { patch: Partial<FinStatus>; action: string; summary: string; result: T };
 const r2 = (n: number) => Math.round(n * 100) / 100;

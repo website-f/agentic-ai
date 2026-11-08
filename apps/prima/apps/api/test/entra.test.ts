@@ -320,7 +320,7 @@ describe('Microsoft sign-in settings', () => {
     }) as typeof fetch;
     const src = microsoftKeys(TENANT, fetcher, () => t);
     assert.ok(await src('k1'));
-    // A day later the cache has expired and Microsoft is down: starter and waiters all keep using the held key.
+    // A day later the cache has expired and Microsoft is down: starter and waiters all fail closed.
     t += 25 * 3_600_000;
     down = true;
     gate = new Promise<void>((r) => (release = r));
@@ -328,13 +328,13 @@ describe('Microsoft sign-in settings', () => {
     release();
     const got = await all;
     assert.equal(calls, 2);
-    assert.ok(got.slice(0, 3).every((r) => r.status === 'fulfilled' && r.value), 'every k1 request works, starter included');
+    assert.ok(got.slice(0, 3).every((r) => r.status === 'rejected'), 'every expired k1 request fails closed, starter included');
     assert.equal(got[3].status, 'rejected', 'a key we do not hold is unavailable, not unknown');
     // And in the retry gap after that failure, the same.
     t += 60_000;
-    assert.ok(await src('k1'));
+    await assert.rejects(src('k1'));
     await assert.rejects(src('nope'));
-    // Held keys stop being used 3 days after the last good fetch: then a known key is unavailable too, not trusted forever.
+    // Held keys remain refused beyond 24 hours without a successful refresh; no unapproved 72-hour fallback.
     t = NOW + 3 * 24 * 3_600_000 + 60_000;
     await assert.rejects(src('k1'));
     // Recovery: one good fetch and everything answers normally.

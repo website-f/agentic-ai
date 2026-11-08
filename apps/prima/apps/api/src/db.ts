@@ -1,27 +1,9 @@
 import { Injectable, OnModuleDestroy } from '@nestjs/common';
-import {
-  AccessClosed,
-  DEMO_PIN_KEY,
-  PrimaService,
-  accessClosed,
-  dataWalls,
-  dateOf,
-  fromMs,
-  isGroupRole,
-  orgLinksEnabled,
-  withOrgLinks,
-  pinKeeper,
-  tenantCompanyIds,
-  withRunCompanies,
-  RefusedAfterSave,
-  type AuthorityGrant,
-  type PinKeeper,
-  type User,
-  type Store,
-} from '@prima/core';
+import { AccessClosed, DEMO_PIN_KEY, PrimaService, accessClosed, dataWalls, dateOf, fromMs, isGroupRole, pinKeeper, tenantCompanyIds, RefusedAfterSave, type AuthorityGrant, type PinKeeper, type User, type Store, orgLinksEnabled, withOrgLinks, withRunCompanies, idLinker, type IdLinker } from '@prima/core';
 import { Pool } from 'pg';
 import { PgStore, TABLE } from './pg-store';
 import { withReadSnapshots } from './read-cache';
+import { FileStore, fileBackendFromEnv } from './file-store';
 import { migrationSha } from './schema';
 
 export function nowMyt(): string {
@@ -33,10 +15,36 @@ export function nowMyt(): string {
  * short or test key switches PIN checks off (refused with a clear message) instead of weakening them. Local runs and
  * tests use the test key, which the mock data was hashed with.
  */
+/**
+ * The key for the group employment history links (staff-history.ts): the same Key Vault secret as the PINs, under its
+ * own label. In production the test key is refused, so linking is off (and says so) until IT sets PIN_PEPPER.
+ */
+export function apiIdLinker(env: NodeJS.ProcessEnv = process.env): IdLinker {
+  const key = env.PIN_PEPPER;
+  if (env.NODE_ENV === 'production') return idLinker(key && key !== DEMO_PIN_KEY ? key : null);
+  return idLinker(key || DEMO_PIN_KEY);
+}
+
 export function apiPinKeeper(env: NodeJS.ProcessEnv = process.env): PinKeeper {
   const key = env.PIN_PEPPER;
   if (env.NODE_ENV === 'production') return pinKeeper(key && key !== DEMO_PIN_KEY ? key : null);
   return pinKeeper(key || DEMO_PIN_KEY);
+}
+
+/**
+ * The group's SharePoint host names that proof links must point at (proof-link.ts), from SHAREPOINT_PROOF_HOSTS as a
+ * comma-separated list such as `<tenant>.sharepoint.com`. Unset accepts any company SharePoint host; a malformed entry
+ * is dropped, never widened. Recording a link never contacts Microsoft.
+ */
+export function apiProofLinkHosts(env: NodeJS.ProcessEnv = process.env): string[] {
+  const raw = (env.SHAREPOINT_PROOF_HOSTS ?? '').trim();
+  if (!raw) return [];
+  const hosts = raw
+    .split(',')
+    .map((h) => h.trim().toLowerCase())
+    .filter((h) => /^[a-z0-9][a-z0-9-]{0,62}\.sharepoint\.com$/.test(h) && !h.endsWith('-my.sharepoint.com'));
+  // Set but with no usable host: refuse every link rather than fall back to any host.
+  return hosts.length ? hosts : ['no-approved-host.invalid'];
 }
 
 /**
@@ -62,6 +70,13 @@ export function apiInhouseKey(env: NodeJS.ProcessEnv = process.env): PrimaServic
 export class Db implements OnModuleDestroy {
   readonly pool = makePool();
   readonly pins = apiPinKeeper();
+  readonly proofLinkHosts = apiProofLinkHosts();
+  /** Cloud file storage for app-captured photos and proof; null while FILE_STORE is off (the default). */
+  readonly files: FileStore | null = (() => {
+    const backend = fileBackendFromEnv();
+    return backend ? new FileStore(backend) : null;
+  })();
+  readonly idLinks = apiIdLinker();
   /** PRIMA_ORG_LINKS=true, read once at start (org-links.ts); off by default. */
   readonly orgLinks = orgLinksEnabled(process.env);
   readonly inhouseKey = apiInhouseKey();
@@ -89,32 +104,31 @@ export class Db implements OnModuleDestroy {
       const g = await client.query('SELECT data FROM prima.grants WHERE data->>$1 = $2', ['userId', userId]);
       const grants = g.rows.map((r) => r.data as AuthorityGrant);
       await client.query('SET LOCAL ROLE prima_app');
-      // A company office also works for the companies its office runs (Fauzan, 3 Nov 2026), as the CEO set them. The
-      // links are read as the app role, before the company wall is set, so the wall and the permission rules agree.
-      // Before the optional module is applied there are none, and every office works only for its own company.
-      const linkStore = new PgStore(client);
-      const user = withRunCompanies(stored, await linkStore.list('companyRunLinks'));
+      const pgStore = new PgStore(client);
+      const user = withRunCompanies(stored, await pgStore.list('companyRunLinks'));
       const companies = tenantCompanyIds(user, grants, dateOf(clock()));
       await client.query(`SELECT set_config('app.company_ids', $1, true)`, [companies.join(',')]);
       await client.query(`SELECT set_config('app.user_id', $1, true)`, [user.id]);
+      await client.query(`SELECT set_config('app.user_role', $1, true)`, [user.role]);
       await client.query(`SELECT set_config('app.group_user', $1, true)`, [isGroupRole(user) ? 'on' : 'off']);
       await client.query(`SELECT set_config('app.walls', $1, true)`, [dataWalls(user).join(',')]);
       // Hand-overs between departments ride the audit log in this same transaction, when switched on.
       // P83: per-request read snapshots (read-cache.ts): one query per table instead of one per company.
-      const reads = process.env.PRIMA_READ_SNAPSHOTS === 'false' ? new PgStore(client) : withReadSnapshots(new PgStore(client), client, (t) => TABLE[t]);
-      const store = this.orgLinks ? withOrgLinks(reads) : reads;
+      const reads = process.env.PRIMA_READ_SNAPSHOTS === 'false' ? pgStore : withReadSnapshots(pgStore, client, (t) => TABLE[t]);
+      const fileStore = this.files ? this.files.wrap(reads) : reads;
+      const store = this.orgLinks ? withOrgLinks(fileStore) : fileStore;
       const svc = new PrimaService(store, clock);
       svc.pins = this.pins;
+      svc.inhouseKey = this.inhouseKey;
+      svc.idLinks = this.idLinks;
+      svc.proofLinkHosts = this.proofLinkHosts;
       svc.teamsApprovals = process.env.TEAMS_APPROVALS_READ === 'true';
       svc.teamsServiceOid = process.env.TEAMS_FLOW_SERVICE_OID ?? '';
-      svc.inhouseKey = this.inhouseKey;
       const out = await fn(svc, user, store);
       await client.query('COMMIT');
       return out;
     } catch (e) {
-      // A refusal that must keep what it saved (a lapsed approval returned and logged) commits; all else rolls back.
-      if (e instanceof RefusedAfterSave) await client.query('COMMIT').catch(() => client.query('ROLLBACK').catch(() => undefined));
-      else await client.query('ROLLBACK').catch(() => undefined);
+      await client.query(e instanceof RefusedAfterSave ? 'COMMIT' : 'ROLLBACK').catch(async () => { await client.query('ROLLBACK').catch(() => undefined); });
       throw e;
     } finally {
       client.release();

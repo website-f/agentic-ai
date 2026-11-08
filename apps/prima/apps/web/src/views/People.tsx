@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { CheckCircleIcon, PhoneIcon, ProhibitIcon, UsersThreeIcon, WarningIcon } from '@phosphor-icons/react';
-import { ATTENDANCE_ISSUE_LABEL, GROUP_EMPLOYER_ID, LEAVE_LABEL, isGroupLeader, jaOwns, missingStaffFacts } from '@prima/core';
+import { ATTENDANCE_ISSUE_LABEL, GROUP_EMPLOYER_ID, LEAVE_LABEL, isGroupLeader, jaOwns, missingStaffFacts, staffHistoryRole } from '@prima/core';
 import { api, type GuardProfile, type PersonDetail } from '../api';
 import { useApp } from '../App';
 import { Chip, Drawer, ErrorNotice, ExpiryChip, Findings, Kpi, Loading, dateLabel, dayLabel, hhmm, useAction, useLoad } from '../ui';
@@ -13,6 +13,8 @@ import { RecordButton } from './RecordForm';
 import { ImportButton } from './ImportDrawer';
 import { GuardTrainingPanel } from './HrDevelop';
 import { FaceCapture } from './FaceCheck';
+import { GroupHistoryTab, HistoryLookupPanel } from './StaffHistory';
+import { GuardPhoneCard } from './GuardPhoneOffice';
 import '../styles/people.css';
 
 export function People({ openPersonId }: { openPersonId?: string }) {
@@ -24,6 +26,8 @@ export function People({ openPersonId }: { openPersonId?: string }) {
   const [q, setQ] = useState('');
   const [filter, setFilter] = useState<'all' | 'blocked' | 'np'>('all');
   const [open, setOpen] = useState<string | undefined>(openPersonId);
+  const [hireCheck, setHireCheck] = useState(false);
+  const historyRole = staffHistoryRole(me.user);
   const { data, error } = useLoad(() => api.people(companyId, q), [companyId, q]);
 
   if (error)
@@ -52,6 +56,11 @@ export function People({ openPersonId }: { openPersonId?: string }) {
           <>
             <ImportButton kind="officeStaff" companyId={companyId} />
             <RecordButton kind="officeStaff" companyId={companyId} label="Add office staff" primary />
+            {historyRole && (
+              <button className="btn" aria-pressed={hireCheck} onClick={() => setHireCheck(!hireCheck)}>
+                Look up staff history
+              </button>
+            )}
           </>
         }
       />
@@ -64,6 +73,8 @@ export function People({ openPersonId }: { openPersonId?: string }) {
           <Stat label="Not allowed" value={blockedCount} icon={<ProhibitIcon />} tone={blockedCount ? 'crit' : 'ok'} onClick={() => setFilter('blocked')} />
         </Stats>
       )}
+
+      {hireCheck && <HistoryLookupPanel />}
 
       <Card flush>
         <div className="pp-toolbar">
@@ -136,7 +147,7 @@ export function People({ openPersonId }: { openPersonId?: string }) {
   );
 }
 
-type Tab = 'work' | 'training' | 'hours' | 'leave' | 'socso' | 'warnings' | 'benefits';
+type Tab = 'work' | 'training' | 'hours' | 'leave' | 'socso' | 'warnings' | 'benefits' | 'history';
 
 const STATUS_LABEL: Record<string, [string, 'ok' | 'warn' | 'neutral']> = {
   active: ['Active', 'ok'],
@@ -154,7 +165,10 @@ function PersonDrawer({ personId, onClose }: { personId: string; onClose: () => 
   const basic = useLoad(() => (prof.error ? api.person(personId) : Promise.resolve(null)), [personId, !!prof.error]);
   const data = prof.data ?? basic.data;
   const [tab, setTab] = useState<Tab>('work');
+  const { me } = useApp();
   const p = data?.person;
+  // Group employment history (Fauzan, 4 Nov 2026): on the profile for HR only; everyone else looks up by number.
+  const history: [Tab, string][] = staffHistoryRole(me.user) === 'hr' ? [['history', 'Group history']] : [];
   const tabs: [Tab, string][] = prof.data
     ? [
         ['work', 'Work'],
@@ -164,8 +178,11 @@ function PersonDrawer({ personId, onClose }: { personId: string; onClose: () => 
         ['socso', 'SOCSO'],
         ['warnings', 'Warnings'],
         ...(prof.data.access.pay ? ([['benefits', 'Benefits']] as [Tab, string][]) : []),
+        ...history,
       ]
-    : [];
+    : history.length
+      ? [['work', 'Work'], ...history]
+      : [];
   const blocked = data ? data.findings.some((f) => f.level === 'block') : false;
   const status = p ? STATUS_LABEL[p.status] : undefined;
   return (
@@ -225,8 +242,9 @@ function PersonDrawer({ personId, onClose }: { personId: string; onClose: () => 
           {prof.data && tab === 'hours' && <HoursTab d={prof.data} />}
           {prof.data && tab === 'leave' && <LeaveTab d={prof.data} personId={personId} />}
           {prof.data && tab === 'socso' && <SocsoTab d={prof.data} personId={personId} />}
-          {prof.data && tab === 'warnings' && <WarningsTab d={prof.data} />}
+          {prof.data && tab === 'warnings' && <WarningsTab d={prof.data} onChange={prof.reload} />}
           {prof.data && tab === 'benefits' && <BenefitsTab d={prof.data} />}
+          {tab === 'history' && <GroupHistoryTab personId={personId} />}
         </>
       )}
     </Drawer>
@@ -377,6 +395,7 @@ function AccessSection({ data }: { data: PersonDetail }) {
             </button>
           </div>
         )}
+        {data.canSetPin && p.status === 'active' && p.role !== 'office' && <GuardPhoneCard personId={p.id} companyId={p.companyId} />}
         {data.accounts.map((a) => (
           <div key={a.userId} className="list-item pp-stack">
             <div className="pp-line">
@@ -640,7 +659,7 @@ export function LeaveTab({ d, personId, self }: { d: GuardProfile; personId: str
   );
 }
 
-export function WarningsTab({ d, self }: { d: GuardProfile; self?: boolean }) {
+export function WarningsTab({ d, self, onChange }: { d: GuardProfile; self?: boolean; onChange?: () => void }) {
   const w = d.warnings;
   return (
     <div className="pp-tab">
@@ -657,6 +676,7 @@ export function WarningsTab({ d, self }: { d: GuardProfile; self?: boolean }) {
                 {x.by}: {x.note}
                 {x.proof ? ` · ${x.proof} document(s)` : ''}
               </div>
+              <DisciplineAppealBox x={x} self={!!self} onChange={onChange} />
             </div>
           ))}
         </div>
@@ -702,6 +722,126 @@ export function BenefitsTab({ d, self }: { d: GuardProfile; self?: boolean }) {
       </Sec>
       <MedicalHistory d={d} />
       <ClaimsPolicy d={d} self={self} />
+    </div>
+  );
+}
+
+type DisciplineEntry = Pick<GuardProfile['warnings']['discipline'][number], 'id' | 'appealable' | 'appealDueBy' | 'appeal' | 'canAppealOwn' | 'canDecideAppeal'>;
+const APPEAL_RESULT_LABEL = { upheld: 'Upheld', varied: 'Varied to a lighter step', overturned: 'Overturned' } as const;
+const APPEAL_LANG_LABEL = { ms: 'Bahasa Melayu', en: 'English', ne: 'नेपाली (Nepali)', bn: 'বাংলা (Bengali)', my: 'မြန်မာ (Burmese)', hi: 'हिन्दी (Hindi)', ur: 'اردو (Urdu)', id: 'Bahasa Indonesia', ta: 'தமிழ் (Tamil)', zh: '中文 (Chinese)' } as const;
+const LIGHTER_STEPS = ['VERBAL_WARNING', 'WRITTEN_WARNING', 'FINAL_WARNING', 'SUSPENSION', 'DOWNGRADE'] as const;
+const STEP_LABEL_SHORT: Record<string, string> = { VERBAL_WARNING: 'Verbal warning', WRITTEN_WARNING: 'Written warning', FINAL_WARNING: 'Final warning', SUSPENSION: 'Suspension', DOWNGRADE: 'Downgrade', DISMISSAL: 'Dismissal' };
+
+/**
+ * A guard's appeal against a disciplinary step (IWAY finding, Fauzan 6 Nov 2026): the guard appeals on their own
+ * sign-in, or the company or HR records it from the guard's letter, within the window; the HR Director or the CEO who
+ * did not record the step decides with reasons.
+ */
+export function DisciplineAppealBox({ x, self, onChange }: { x: DisciplineEntry; self: boolean; onChange?: () => void }) {
+  const act = useAction();
+  const [f, setF] = useState({ text: '', lang: '', result: '', variedTo: '' });
+  const [open, setOpen] = useState(false);
+  if (!x.appealable) return null;
+  const a = x.appeal;
+  const today = new Date(Date.now() + 8 * 3_600_000).toISOString().slice(0, 10);
+  const canRecord = !self && !a && !!x.appealDueBy && today <= x.appealDueBy;
+  const done = () => {
+    setOpen(false);
+    setF({ text: '', lang: '', result: '', variedTo: '' });
+    onChange?.();
+  };
+  return (
+    <div className="small" style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 4 }}>
+      {a ? (
+        <div>
+          Appeal {dateLabel(a.lodgedOn)} ({a.via === 'own' ? 'by the guard' : a.via === 'company' ? 'recorded by the company' : 'recorded by HR'}, {APPEAL_LANG_LABEL[a.lang]}): {a.grounds}{' '}
+          {a.decision ? (
+            <Chip tone={a.decision.result === 'upheld' ? 'neutral' : 'ok'}>
+              {APPEAL_RESULT_LABEL[a.decision.result]}
+              {a.decision.variedTo ? `: ${STEP_LABEL_SHORT[a.decision.variedTo]}` : ''}
+            </Chip>
+          ) : (
+            <Chip tone="warn">waiting for HR Director</Chip>
+          )}
+          {a.decision && <div className="muted">{a.decision.by}: {a.decision.reason}</div>}
+        </div>
+      ) : x.appealDueBy && today <= x.appealDueBy ? (
+        <div className="muted">{self ? `You may appeal by ${dateLabel(x.appealDueBy)}.` : `The guard may appeal by ${dateLabel(x.appealDueBy)}.`}</div>
+      ) : null}
+      {(x.canAppealOwn || canRecord) && !open && (
+        <button className="btn btn-sm" style={{ alignSelf: 'flex-start' }} onClick={() => setOpen(true)}>
+          {x.canAppealOwn ? 'Appeal' : "Record the guard's appeal"}
+        </button>
+      )}
+      {open && (x.canAppealOwn || canRecord) && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+          <textarea className="input" rows={3} placeholder={x.canAppealOwn ? 'Why you appeal, in your own words and language' : "The guard's grounds, from their letter"} aria-label="Grounds of appeal" value={f.text} onChange={(e) => setF({ ...f, text: e.target.value })} />
+          <select className="select" aria-label="Language of the appeal" value={f.lang} onChange={(e) => setF({ ...f, lang: e.target.value })}>
+            <option value="">Language: the guard's mother tongue</option>
+            {Object.entries(APPEAL_LANG_LABEL).map(([k, l]) => (
+              <option key={k} value={k}>
+                {l}
+              </option>
+            ))}
+          </select>
+          <button
+            className="btn btn-sm btn-primary"
+            style={{ alignSelf: 'flex-start' }}
+            disabled={act.busy || f.text.trim().length < 10}
+            onClick={async () => {
+              const r = await act.run(() => api.lodgeDisciplineAppeal(x.id, { grounds: f.text, lang: (f.lang || null) as keyof typeof APPEAL_LANG_LABEL | null }), 'Appeal sent to HR.');
+              if (r) done();
+            }}
+          >
+            Send appeal
+          </button>
+        </div>
+      )}
+      {x.canDecideAppeal && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+          <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
+            <select className="select" aria-label="Appeal decision" value={f.result} onChange={(e) => setF({ ...f, result: e.target.value })}>
+              <option value="">Decision</option>
+              {Object.entries(APPEAL_RESULT_LABEL).map(([k, l]) => (
+                <option key={k} value={k}>
+                  {l}
+                </option>
+              ))}
+            </select>
+            {f.result === 'varied' && (
+              <select className="select" aria-label="Varied to" value={f.variedTo} onChange={(e) => setF({ ...f, variedTo: e.target.value })}>
+                <option value="">Lighter step</option>
+                {LIGHTER_STEPS.map((k) => (
+                  <option key={k} value={k}>
+                    {STEP_LABEL_SHORT[k]}
+                  </option>
+                ))}
+              </select>
+            )}
+          </div>
+          <input className="input" placeholder="Reasons in writing (needed)" aria-label="Reasons for the appeal decision" value={f.text} onChange={(e) => setF({ ...f, text: e.target.value })} />
+          <button
+            className="btn btn-sm btn-primary"
+            style={{ alignSelf: 'flex-start' }}
+            disabled={act.busy || !f.result || f.text.trim().length < 20 || (f.result === 'varied' && !f.variedTo)}
+            onClick={async () => {
+              const r = await act.run(
+                () =>
+                  api.decideDisciplineAppeal(x.id, {
+                    result: f.result as keyof typeof APPEAL_RESULT_LABEL,
+                    variedTo: f.result === 'varied' ? (f.variedTo as (typeof LIGHTER_STEPS)[number]) : null,
+                    reason: f.text,
+                  }),
+                'Appeal decided.',
+              );
+              if (r) done();
+            }}
+          >
+            Decide appeal
+          </button>
+        </div>
+      )}
+      <ErrorNotice error={act.error} />
     </div>
   );
 }

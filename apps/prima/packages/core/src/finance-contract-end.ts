@@ -1,19 +1,22 @@
-// Contract end and money held by clients (Fauzan, 2 Nov 2026: yes to suggestions 3 and 24 and automation A11).
-//
-// 3. Client deposits and retention sums held by clients are listed per contract, checked by a second person (money owed
-//    to the company), claimed back once the contract ends, and found on the bank statement by Prima when paid back.
-// 24 and A11. When a contract ends or is terminated, billing stops at that day and the follow-ups open by themselves:
-//    the final invoice, each deposit or retention to claim back, each IG/BG to release and its collateral, and, for an
-//    agreement cancelled before it started, the stamp duty refund. People do and check each one; Prima only lists them
-//    and finds the money on the bank statement.
+import { AccessDenied } from "./access";
+import { isLead } from "./finance";
+import { isoDate } from "./finance";
+import { noSecrets } from "./finance";
+import { requireReason } from "./finance";
+import { text } from "./finance";
+import type { FinCashCtx } from "./finance-cash";
+import { RULES } from "./rules";
+import { BadRequest } from "./service";
+import { NotFound } from "./service";
+import { addDays } from "./time";
+import { daysBetween } from "./time";
+import type { Contract } from "./types";
+import type { FinSign } from "./types";
+import type { FinStatement } from "./types";
+import type { FinStatus } from "./types";
+import type { Id } from "./types";
+import type { IsoDate } from "./types";
 
-import { AccessDenied } from './access';
-import { isLead, isoDate, noSecrets, requireReason, text } from './finance';
-import type { FinCashCtx } from './finance-cash';
-import { RULES } from './rules';
-import { BadRequest, NotFound } from './service';
-import { addDays, daysBetween } from './time';
-import type { Contract, FinSign, FinStatement, FinStatus, Id, IsoDate } from './types';
 
 export interface FinClientDeposit {
   id: Id;

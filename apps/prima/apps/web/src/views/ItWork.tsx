@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { ClockCountdownIcon, HeadsetIcon, KeyIcon, ListChecksIcon, PlusIcon, SealCheckIcon, TrayIcon, UsersThreeIcon, WarningIcon } from '@phosphor-icons/react';
 import type { ProofInput } from '@prima/core';
 import { api, type ItBoard } from '../api';
-import { saveFile } from '../save';
+import { openProofItem } from '../save';
 import { Chip, notify, Drawer, ErrorNotice, dateLabel, dateTimeLabel, useAction } from '../ui';
 import { Avatar, Card, Empty, Facts, Person, Stat, Stats } from '../kit';
 import { ProofPicker } from './Proof';
@@ -303,9 +303,9 @@ export function JobDrawer({ data, r, onClose }: { data: ItBoard; r: JobRow; onCl
       }
     });
   const download = async (sha256: string, name: string) => {
-    const f = (await act.run(() => api.itAct('jobProof', { id: j.id, sha256 }))) as { data: string } | undefined;
+    const f = (await act.run(() => api.itAct('jobProof', { id: j.id, sha256 }))) as { data: string; link?: string } | undefined;
     if (f) {
-      const m = await saveFile(name, f.data);
+      const m = await openProofItem(name, f);
       if (m) notify(m);
     }
   };
@@ -342,7 +342,9 @@ export function JobDrawer({ data, r, onClose }: { data: ItBoard; r: JobRow; onCl
                   {p.name}
                 </button>
                 <span className="muted small">
-                  {p.by}, {dateTimeLabel(p.at)} · SHA-256 {p.sha256.slice(0, 12)}…
+                  {p.mime === 'text/uri-list' ? 'SharePoint link · ' : ''}
+                  {p.by}, {dateTimeLabel(p.at)}
+                  {p.mime === 'text/uri-list' ? '' : ` · SHA-256 ${p.sha256.slice(0, 12)}…`}
                 </span>
               </li>
             ))}
@@ -803,7 +805,8 @@ export function Systems({ data }: { data: ItBoard }) {
   const act = useAction();
   const staff = data.role === 'manager' || data.role === 'team';
   const [ask, setAsk] = useState<string | null>(null);
-  const [note, setNote] = useState('');
+  const [notes, setNotes] = useState<Record<string, string>>({});
+  const [reviewNote, setReviewNote] = useState<Record<string, string>>({});
   const requests = data.accessRequests ?? [];
   const accounts = data.accounts ?? [];
   const waiting = requests.filter((r) => r.request.status === 'waiting').length;
@@ -840,15 +843,15 @@ export function Systems({ data }: { data: ItBoard }) {
               </div>
               {r.canDecide && (
                 <div className="iw-row-extra iw-decide">
-                  <input className="input" aria-label="Note" placeholder="Note (needed to reject)" value={note} onChange={(e) => setNote(e.target.value)} />
+                  <input className="input" aria-label="Note" placeholder="Comment (needed to approve or reject)" value={notes[r.request.id] ?? ''} onChange={(e) => setNotes({ ...notes, [r.request.id]: e.target.value })} />
                   <div className="iw-actions">
-                    <button className="btn btn-sm btn-primary" disabled={act.busy} onClick={() => void act.run(() => api.itAct('decideAccess', { id: r.request.id, approve: true, note }), 'Approval recorded. Apply and verify external access separately.')}>
+                    <button className="btn btn-sm btn-primary" disabled={act.busy || !(notes[r.request.id] ?? '').trim()} onClick={() => void act.run(() => api.itAct('decideAccess', { id: r.request.id, approve: true, note: notes[r.request.id] ?? '' }), 'Approval recorded. Apply and verify external access separately.')}>
                       Approve
                     </button>
                     <button
                       className="btn btn-sm"
-                      disabled={act.busy || !note.trim()}
-                      onClick={() => void act.run(() => api.itAct('decideAccess', { id: r.request.id, approve: false, note }), 'Rejected.')}
+                      disabled={act.busy || !(notes[r.request.id] ?? '').trim()}
+                      onClick={() => void act.run(() => api.itAct('decideAccess', { id: r.request.id, approve: false, note: notes[r.request.id] ?? '' }), 'Rejected.')}
                     >
                       Reject
                     </button>
@@ -896,7 +899,16 @@ export function Systems({ data }: { data: ItBoard }) {
               {(data.ceo || staff) && (
                 <div className="iw-sys-actions">
                   {data.ceo && (
-                    <button className="btn btn-sm" disabled={act.busy} onClick={() => void act.run(() => api.itAct('reviewAccount', { id: a.account.id }), 'Recorded access list reviewed; external permissions still require verification.')}>
+                    <input
+                      className="input"
+                      aria-label={`Review comment for ${a.account.name}`}
+                      placeholder="Comment to confirm"
+                      value={reviewNote[a.account.id] ?? ''}
+                      onChange={(e) => setReviewNote({ ...reviewNote, [a.account.id]: e.target.value })}
+                    />
+                  )}
+                  {data.ceo && (
+                    <button className="btn btn-sm" disabled={act.busy || !(reviewNote[a.account.id] ?? '').trim()} onClick={() => void act.run(() => api.itAct('reviewAccount', { id: a.account.id, note: reviewNote[a.account.id] ?? '' }), 'Recorded access list reviewed; external permissions still require verification.')}>
                       Confirm the recorded list
                     </button>
                   )}

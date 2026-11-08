@@ -1,0 +1,5 @@
+# Real staff data (names, personal emails) must never be committed. PDPA.
+*
+!.gitignore
+!TEMPLATE.csv
+!README.md

@@ -169,6 +169,7 @@ function MineRow({ m }: { m: Reports['mine'][number] }) {
                       companyId: m.companyId,
                       note,
                       proof,
+                      sections: covered,
                     }),
                   'Report sent to the Director Office.',
                 );

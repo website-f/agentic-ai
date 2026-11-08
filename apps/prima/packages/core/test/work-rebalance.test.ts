@@ -218,7 +218,7 @@ describe('Managers delegate and readjust work (service)', () => {
     // The line manager of the new person still reviews it; the new person cannot review their own work.
     await svc.workTaskDone(await svc.user('u-it-ex2'), t.id, { note: 'Test page printed', ref: 'TCK-1' });
     await expect(svc.workTaskReview(await svc.user('u-it-ex2'), t.id, true, 'ok')).rejects.toBeInstanceOf(AccessDenied);
-    expect((await svc.workTaskReview(lead, t.id, true, '')).status).toBe('accepted');
+    expect((await svc.workTaskReview(lead, t.id, true, 'Test evidence reviewed')).status).toBe('accepted');
   });
 
   it('refuses staff moving a colleague’s work, moves outside the manager’s line, finished work and overdue work without a new time', async () => {
@@ -267,6 +267,9 @@ describe('Managers delegate and readjust work (service)', () => {
   it('asking Arisha AI is per case, by a manager with that case, capped per day and audited without the brief', async () => {
     const { svc, ds } = fresh();
     const lead = await svc.user('u-it-lead');
+    // Explicit overdue case: merged seed data no longer promises an overloaded IT executive.
+    const t = await svc.workTaskAdd(lead, { userId: 'u-it-ex1', title: 'Synthetic overdue rebalance case', doneMeans: 'Evidence recorded', dueAt: myt(addDays(TODAY, 1), '17:00'), priority: 'normal' });
+    t.dueAt = myt(addDays(TODAY, -5), '17:00');
     const r = await svc.workRebalance(lead);
     expect(r.ai).toBe(false); // the API switches it on; the core never calls an AI
     expect(r.advice.length).toBeGreaterThan(0);

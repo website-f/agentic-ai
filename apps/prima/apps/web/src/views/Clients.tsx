@@ -565,7 +565,33 @@ function ClientDetail({ a, act, canBill, onClose }: { a: Account; act: boolean; 
         ) : (
           <p className="bz-note">None on record.</p>
         )}
+        <div className="bz-sec-head">
+          <span className="label">Client's signed acknowledgement and comment on the work</span>
+        </div>
+        {(a.workAcks ?? []).length ? (
+          <ul className="bz-cl-log">
+            {[...(a.workAcks ?? [])]
+              .sort((x, y) => y.period.localeCompare(x.period))
+              .slice(0, 6)
+              .map((w) => (
+                <li key={w.period}>
+                  <span className="bz-cl-log-top">
+                    <Chip tone={w.outcome === 'satisfied' ? 'ok' : 'warn'}>{w.outcome === 'satisfied' ? 'Satisfied' : 'Complaints'}</Chip>
+                    <span className="bz-sub">
+                      {w.period}, signed by {w.signer} on {dateLabel(w.signedOn)} (uploaded by {w.by})
+                    </span>
+                  </span>
+                  <span>
+                    “{w.comment}”{w.action ? ` · Action: ${w.action}` : ''}
+                  </span>
+                </li>
+              ))}
+          </ul>
+        ) : (
+          <p className="bz-note">None on record.</p>
+        )}
         {canBill && <InvoiceForm a={a} />}
+        {canBill && <WorkAckForm a={a} />}
         {canBill && (
           <div className="bz-act">
             <span className="label">Billing</span>
@@ -682,6 +708,82 @@ function InvoiceForm({ a }: { a: Account }) {
         </label>
         <button className="btn btn-ghost btn-sm" disabled={act.busy} onClick={() => act.run(() => api.setInvoicePortal(a.id, portal || null), 'Saved.')}>
           Save system
+        </button>
+      </div>
+      <ErrorNotice error={act.error} />
+    </div>
+  );
+}
+
+/**
+ * The client's signed acknowledgement of a month's work (Fauzan, 4 Nov 2026): for all operations the OM uploads the
+ * acknowledgement slip or signed paper by the 10th after the month closes and puts down the client's comment on the work.
+ */
+function WorkAckForm({ a }: { a: Account }) {
+  const prev = new Date(Date.now() + 8 * 3_600_000);
+  prev.setUTCDate(0);
+  const [period, setPeriod] = useState(prev.toISOString().slice(0, 7));
+  const [signedOn, setSignedOn] = useState(new Date(Date.now() + 8 * 3_600_000).toISOString().slice(0, 10));
+  const [signer, setSigner] = useState('');
+  const [outcome, setOutcome] = useState<'satisfied' | 'complaints'>('satisfied');
+  const [comment, setComment] = useState('');
+  const [action, setAction] = useState('');
+  const [proof, setProof] = useState<ProofInput[]>([]);
+  const act = useAction();
+  const done = (a.workAcks ?? []).some((w) => w.period === period);
+  const ready = proof.length > 0 && signer.trim().length >= 2 && comment.trim().length >= 2 && (outcome === 'satisfied' || action.trim().length >= 3) && !done;
+  return (
+    <div className="bz-act">
+      <span className="label">Client's acknowledgement of the month's work (due by the 10th)</span>
+      <p className="bz-note">Upload the slip or the signed paper, and copy what the client wrote about the work. If the slip has no comment, write "No comment written".</p>
+      <div className="bz-cl-bill">
+        <label className="field">
+          <span className="label">Month of work</span>
+          <input className="input" type="month" aria-label="Month of work" value={period} onChange={(e) => setPeriod(e.target.value)} />
+        </label>
+        <label className="field">
+          <span className="label">Date signed</span>
+          <input className="input" type="date" aria-label="Date signed" value={signedOn} onChange={(e) => setSignedOn(e.target.value)} />
+        </label>
+        <label className="field">
+          <span className="label">Signed by</span>
+          <input className="input" aria-label="Signed by" placeholder="Signed by (name and post)" value={signer} onChange={(e) => setSigner(e.target.value)} />
+        </label>
+        <label className="field">
+          <span className="label">Client's view</span>
+          <select className="select" aria-label="Client's view" value={outcome} onChange={(e) => setOutcome(e.target.value as typeof outcome)}>
+            <option value="satisfied">Satisfied</option>
+            <option value="complaints">Complaints about the work</option>
+          </select>
+        </label>
+      </div>
+      <label className="field">
+        <span className="label">Client's comment</span>
+        <textarea className="input" aria-label="Client's comment" placeholder="Client's comment on the work, as written" rows={2} value={comment} onChange={(e) => setComment(e.target.value)} />
+      </label>
+      {outcome === 'complaints' && (
+        <label className="field">
+          <span className="label">What will be done</span>
+          <input className="input" aria-label="What will be done" placeholder="What will be done about it (e.g. redo by a date)" value={action} onChange={(e) => setAction(e.target.value)} />
+        </label>
+      )}
+      <ProofPicker site={null} refText="Acknowledgement" items={proof} onChange={setProof} documentsOnly required />
+      {done && <p className="bz-note">{period} is already recorded.</p>}
+      <div className="bz-actions">
+        <button
+          className="btn btn-primary btn-sm"
+          disabled={act.busy || !ready}
+          onClick={() =>
+            act.run(() => api.clientWorkAck(a.id, { period, signedOn, signer, outcome, comment, action, proof }), 'Acknowledgement recorded.').then((r) => {
+              if (r) {
+                setProof([]);
+                setComment('');
+                setAction('');
+              }
+            })
+          }
+        >
+          Record acknowledgement
         </button>
       </div>
       <ErrorNotice error={act.error} />

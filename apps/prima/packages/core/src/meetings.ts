@@ -1,7 +1,5 @@
-// Meeting minutes summaries (Fauzan, 25 Oct 2026): an AI agent summarises the minutes and lists the action items;
-// the Director Office Administrator checks the summary.
+import type { IsoDate } from "./types";
 
-import type { IsoDate } from './types';
 
 export interface MinutesSummary {
   text: string;
@@ -20,7 +18,8 @@ export interface MinutesReader {
  * action item, with "(Owner, by YYYY-MM-DD)" at the end.
  */
 export const simpleMinutesReader: MinutesReader = {
-  name: 'Simple reader (test version, not the AI agent)',
+  name: 'Simple reader (test version)'
+,
   usesAi: false,
   summarise(minutes) {
     const lines = minutes
@@ -36,5 +35,5 @@ export const simpleMinutesReader: MinutesReader = {
       });
     const points = lines.filter((l) => !/^action\s*:/i.test(l)).slice(0, 3);
     return { text: points.join(' '), actions };
-  },
+  }
 };

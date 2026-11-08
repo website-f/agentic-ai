@@ -1,3 +1,6 @@
+-- Integration release boundary: PROPOSED ONLY. This file is not in the current
+-- five-module release manifest. Earlier pinned-module descriptions below are
+-- historical; installing this module needs separate review and authorization.
 -- Central Admin emergency delegation and succession register (masterplan §243, Fauzan 3 Nov 2026: "build all not
 -- build"). A pinned module in db/release-manifest.json (id central_admin_delegations, no module prerequisites).
 -- Not installed anywhere by this file; only an authorized owner installs it with the reviewed selected-module command.

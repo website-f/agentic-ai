@@ -674,6 +674,7 @@ function LineEdit({ runId, line, onChanged }: { runId: string; line: GuardPayLin
   const [pcb, setPcb] = useState(line.pcbSource === "entered" ? String(line.pcb) : "");
   const [label, setLabel] = useState("");
   const [amount, setAmount] = useState("");
+  const [uniformNo, setUniformNo] = useState("");
   const extra = line.items.filter((x) => x.kind === "extra").map((x) => ({ label: x.label, amount: x.amount }));
   const save = async (patch: Parameters<typeof api.setGuardPayLine>[2], msg: string) => {
     if (await act.run(() => api.setGuardPayLine(runId, line.personId, patch), msg)) onChanged();
@@ -717,10 +718,15 @@ function LineEdit({ runId, line, onChanged }: { runId: string; line: GuardPayLin
           value={amount}
           onChange={(e) => setAmount(e.target.value)}
         />
+        <select className="input" style={{ maxWidth: 190 }} aria-label="Uniform" value={uniformNo} onChange={(e) => setUniformNo(e.target.value)}>
+          <option value="">Not a uniform</option>
+          <option value="4">4th uniform (guard pays)</option>
+          <option value="5">5th uniform (guard pays)</option>
+        </select>
         <button
           className="btn btn-sm"
           disabled={act.busy || !label.trim() || !amount.trim()}
-          onClick={() => save({ extra: [...extra, { label: label.trim(), amount: Number(amount) }] }, "Item added. The COO sees it flagged.")}
+          onClick={() => save({ extra: [...extra, { label: label.trim(), amount: Number(amount), uniformNo: uniformNo ? Number(uniformNo) : undefined }] }, "Item added. The COO sees it flagged.")}
         >
           Add
         </button>

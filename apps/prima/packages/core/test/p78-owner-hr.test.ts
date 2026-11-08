@@ -93,9 +93,11 @@ describe('P78: the owner in People and HR', () => {
     await expect(svc.pdpaRequestStep(owner, req.id, 'verify', 'Identity seen')).rejects.toBeInstanceOf(AccessDenied);
 
     const memos = await svc.memos(owner);
-    expect(memos.audiences).toEqual(['STAFF', 'FIELD']);
+    expect(memos.canPublish).toEqual(expect.arrayContaining(['STAFF', 'FIELD']));
     await svc.publishMemo(owner, 'FIELD', 'Test memo (P78)', 'Read this, please.');
-    expect((await svc.memos(await svc.user('u-coo'))).audiences).toEqual(['FIELD']);
+    const cooMay = (await svc.memos(await svc.user('u-coo'))).canPublish;
+    expect(cooMay).toContain('FIELD');
+    expect(cooMay).not.toContain('STAFF');
 
     expect((await svc.fwmBoard(owner)).canWork).toBe(true);
     expect((await svc.fwmWelfare(owner)).canRecord).toBe(true);

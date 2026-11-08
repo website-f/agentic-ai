@@ -117,6 +117,7 @@ describe('Master plan W15: an expired security licence goes to the directors, ne
       rate: 11.5,
       fixedFee: null,
       signedRef: 'SASA/CT/NEW-W15',
+      proof: [{ kind: 'document' as const, name: 'signed-contract.pdf', data: `data:application/pdf;base64,${Buffer.from('%PDF-1.4 Synthetic signed contract').toString('base64')}` }],
     };
     await store.update('licences', KDN, { expiresOn: '2026-10-31' });
     const c = await svc.addContract(cm, input);

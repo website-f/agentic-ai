@@ -1,21 +1,21 @@
-// Stamp duty (Fauzan, 2 Nov 2026: suggestion 19 "Ok. Create also procedure to unstamp the contract, if the contract
-// cancelled").
-//
-// Every agreement a company signs that needs stamping (client contracts, tenancies, loans and hire purchase, others) is
-// listed with the date it was signed and the last day to stamp it (30 days after signing, Stamp Act 1949 s.47). Finance
-// records the stamp certificate from LHDN's STAMPS system with the duty and any late penalty; someone else checks it
-// against the certificate. If the agreement is cancelled, the refund procedure ("unstamp") starts: the reason and date of
-// cancellation, the document pack (3 or more), the application submitted by someone other than the preparer, LHDN's
-// answer, and the refund seen on the bank statement. The law's limits (s.47, s.47A, s.57) come from the published Act
-// (Fauzan 2 Nov 2026: no tax agent needed); the other deadlines are Prima's working targets. Earlier note: the tax agent
-// confirms the form, the documents and any time limit before go-live. Prima files nothing with LHDN.
-import { AccessDenied } from './access';
-import { isoDate, noSecrets, requireComment, requireReason, text } from './finance';
-import type { FinCashCtx } from './finance-cash';
-import { RULES } from './rules';
-import { BadRequest, NotFound } from './service';
-import { addDays, daysBetween } from './time';
-import type { Contract, FinSign, FinStatus, Id, IsoDate } from './types';
+import { AccessDenied } from "./access";
+import { isoDate } from "./finance";
+import { noSecrets } from "./finance";
+import { requireComment } from "./finance";
+import { requireReason } from "./finance";
+import { text } from "./finance";
+import type { FinCashCtx } from "./finance-cash";
+import { RULES } from "./rules";
+import { BadRequest } from "./service";
+import { NotFound } from "./service";
+import { addDays } from "./time";
+import { daysBetween } from "./time";
+import type { Contract } from "./types";
+import type { FinSign } from "./types";
+import type { FinStatus } from "./types";
+import type { Id } from "./types";
+import type { IsoDate } from "./types";
+
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
 const R = () => RULES.financeStamp.value;

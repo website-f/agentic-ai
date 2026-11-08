@@ -197,7 +197,7 @@ describe('who sets pay formulas', () => {
   it('lets only the preparer withdraw a draft', async () => {
     const { svc } = fresh();
     const la = await svc.user('u-act-aud1');
-    const da = await svc.user('u-act-enf1');
+    const da = await svc.user('u-act-aud2');
     const d = await svc.savePayFormula(la, { ...guardInput(), kind: 'driver_ot', amounts: standardDriverAmounts(), name: 'UAT driver' });
     await expect(svc.withdrawPayFormula(da, d.id)).rejects.toThrow(/prepared it/);
     expect((await svc.withdrawPayFormula(la, d.id)).status).toBe('withdrawn');

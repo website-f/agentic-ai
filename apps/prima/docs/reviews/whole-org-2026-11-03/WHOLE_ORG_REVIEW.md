@@ -428,7 +428,7 @@ API suite: 853 of 853 on local PostgreSQL.
 2. A known key had expired. The request that started the refresh failed, while the requests waiting on it succeeded.
 
 The key cache now gives one rule, whether a request started the fetch, waited on it, or arrived in the retry gap after it:
-- **A key Prima holds is used**, even while a refresh fails. The limit is 3 days after the last good fetch (`KEYS_STALE_MS`). **3 days is PROPOSED**: the build chose it, and Fauzan has not decided it. After that it is "unavailable", so an old key is not trusted for ever.
+- **A key Prima holds is used**, even while a refresh fails. The limit is 3 days after the last good fetch (`KEYS_STALE_MS`). **3 days (72 hours) is DECIDED (Fauzan, 4 Nov 03:07Z).** He chose it over Microsoft's 24-hour guidance, knowing that during an outage a withdrawn key stays usable for up to 3 days. After that it is "unavailable", so an old key is not trusted for ever.
 - **A key Prima does not hold** is "unknown" (401, sign in again) only if the last fetch succeeded. If the last fetch failed, it is "unavailable" (503, try again in a minute).
 
 Tests in `apps/api/test/entra.test.ts`:

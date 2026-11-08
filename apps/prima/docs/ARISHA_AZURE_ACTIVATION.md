@@ -2,10 +2,25 @@
 
 ## State of play
 - PR #22 and PR #23 merged on `main`; actual Azure image/revision and `ARISHA_ENABLED` must be checked before any deployment or assumption that AI works.
-- PR #26 is the proposed company-master form. Do **not** merge/deploy without CI/review.
+- PRs #22–26 are merged. PR #26 adds CEO company-master verification and database security changes; merging does **not** apply its migration or deploy the API/website.
 - Three Microsoft Entra object IDs are verified but their **Prima DB links are unverified**. A user email is not an account association in Prima.
 - Last Azure Cloud Shell output showed no OpenAI/AIServices resource and `ARISHA_ENABLED=false`.
 - The current expected user-assigned API managed identity is `id-prima-staging-app` with client ID `fb3881d0-7c7b-4114-b539-f9606dcdb315`, principal ID `8cd9479b-9fd4-47d0-91a5-9d90fbd27ef9`.
+
+## Evidence refresh — 30 October 2026 (Malaysia time)
+- Inspected main commit `997ac0db24c43e9820401f19bc4049151f1eec10`; [main CI passed](https://github.com/fauzan4377/prima-secure-app/actions/runs/40984467088).
+- PRs [#22](https://github.com/fauzan4377/prima-secure-app/pull/22), [#23](https://github.com/fauzan4377/prima-secure-app/pull/23), [#24](https://github.com/fauzan4377/prima-secure-app/pull/24), [#25](https://github.com/fauzan4377/prima-secure-app/pull/25) and [#26](https://github.com/fauzan4377/prima-secure-app/pull/26) are merged.
+- [Check staging run 40984052732](https://github.com/fauzan4377/prima-secure-app/actions/runs/40984052732) succeeded **only for the price job**; the Azure `check` job was skipped. This is not live Azure readiness evidence.
+- The latest deployment run returned by the repository Actions history remains [40896632618](https://github.com/fauzan4377/prima-secure-app/actions/runs/40896632618), targeting `5d7f1b5dcd459cea84e66e879af5c4ba5dcb73ca`. Its historical final browser-check failure and successful publication are described in `CLAUDE.md`; later [website verification](https://github.com/fauzan4377/prima-secure-app/actions/runs/40900395750) passed. Neither verifies PRs #22–26 are deployed.
+- No authenticated Azure inspection or database query was performed in this refresh. Azure CLI was unavailable in the inspection workspace. Resource existence, live settings, current schema and account links remain unverified; the previous Cloud Shell snapshot below is historical.
+
+### Next safe action and approval gates
+1. In an authenticated, authorized Azure environment, collect read-only evidence using the preflight below. If using GitHub's manual **Check staging**, verify the Azure `check` job actually ran; it does not itself execute the Arisha-specific script.
+2. Record configured API image separately from the ready revision's image and environment. The preflight's `Image` field and configuration presence come from the app template, which may describe a failed/pending revision. They are not proof of the ready revision's settings or the revision receiving traffic.
+3. Read `GET /api/health/schema` and compare the reported applied hash with `sha256sum db/migrations/001_init.sql` at the approved release commit. An unavailable/404 endpoint is inconclusive. Inspect the schema changes and recovery plan before seeking approval to run `infra/run-db-migration.sh`; this document does not authorize running it.
+4. Keep approvals distinct: database migration; API/website deployment; identity linking/role changes; paid AI resource/model and budget; AI configuration/activation. Routine deployment does not migrate the database or enable AI.
+5. After approved changes, test mock-only CEO draft/save behavior, three directors' chat-only permissions, a denied fifth user, company boundaries and the off-switch. Capture the exact release/image/revision, test results and remaining failures before claiming activation.
+6. Bulk Excel/CSV/PDF import and real-data security gates remain separate development work. Open roadmap PR #9 is planning/review work, not an activation prerequisite.
 
 ## 1. Read-only preflight
 From an authenticated Azure Cloud Shell, run:
@@ -48,7 +63,7 @@ On Container Apps, setting environment variables creates a revision; record the 
 
 ## 5. Controlled UAT and off-switch
 1. Use mock-only prompts: every one of the four named users gets chat; a fifth user is rejected on the **server**.
-2. CEO can prepare a company draft (PR #26 after approved deployment); no save before pressing Save; company ID/code unchanged, duplicate SSM blocked, audit entry written.
+2. CEO can prepare a company draft (merged PR #26, after approved migration/deployment); no save before pressing Save; company ID/code unchanged, duplicate SSM blocked, audit entry written.
 3. Finance/COO/ACT cannot get `record_form` or `prepare_record` tools, cannot write company master using AI and cannot see another department's data.
 4. Validate logs for no secret values, review AI screen-context minimization and verify the separate monthly budget alert.
 5. Off-switch: update `ARISHA_ENABLED=false` and verify `GET /api/arisha` reports disabled; this requires an API revision deployment by authorized Azure staff.

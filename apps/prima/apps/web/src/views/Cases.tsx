@@ -8,6 +8,7 @@ import { Chip, Drawer, ErrorNotice, Loading, Sev, dateLabel, dateTimeLabel, hhmm
 import { EvidenceCamera, PhotoCard } from './Camera';
 import { VideoCard } from './SiteDispatch';
 import { DocList, ProofPicker } from './Proof';
+import { PoliceHelpPanel } from './PoliceHelp';
 import '../styles/cases.css';
 
 const LEVEL_SHORT: Record<EscalationLevel, string> = {
@@ -52,7 +53,7 @@ function age(t: string): string {
 const NO_SITE = '__none';
 
 export function Cases({ openCaseId }: { openCaseId?: string }) {
-  const { isGroup, companyId } = useApp();
+  const { isGroup, companyId, me } = useApp();
   const [status, setStatus] = useState<'active' | 'all'>('active');
   const [waiting, setWaiting] = useState(false);
   const [scope, setScope] = useState<'company' | 'all'>(isGroup ? 'all' : 'company');
@@ -105,6 +106,8 @@ export function Cases({ openCaseId }: { openCaseId?: string }) {
         }
       />
       <ErrorNotice error={error} />
+      {/* Police call or visit help (Fauzan, 3 Nov 2026): the company manager and admin executives ask Arms Control here. */}
+      {(me.user.role === 'company_manager' || me.user.role === 'admin_exec') && <PoliceHelpPanel />}
       {all && (
         <Stats>
           <Stat
@@ -496,7 +499,7 @@ function NewCase({ onClose }: { onClose: () => void }) {
           <ProofPicker
             site={site}
             refText={form.title || 'New case'}
-            items={proof.filter((p) => site || p.kind === 'document')}
+            items={proof.filter((p) => site || p.kind !== 'photo')}
             onChange={setProof}
             required={form.type !== 'SOS'}
           />
@@ -506,7 +509,7 @@ function NewCase({ onClose }: { onClose: () => void }) {
       <div className="cs-form-foot">
         <button
           className="btn btn-primary"
-          disabled={act.busy || !form.title.trim() || (form.type !== 'SOS' && !proof.some((p) => site || p.kind === 'document'))}
+          disabled={act.busy || !form.title.trim() || (form.type !== 'SOS' && !proof.some((p) => site || p.kind !== 'photo'))}
           onClick={async () => {
             const r = await act.run(
               () =>
@@ -517,7 +520,7 @@ function NewCase({ onClose }: { onClose: () => void }) {
                   severity: form.severity,
                   title: form.title,
                   description: form.description,
-                  proof: proof.filter((p) => site || p.kind === 'document'),
+                  proof: proof.filter((p) => site || p.kind !== 'photo'),
                 }),
               (c) => `Case ${c.ref} raised.`,
             );

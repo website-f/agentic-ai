@@ -7,6 +7,11 @@ export const MODULE_SPECS=[
  {id:'cleanup',path:'db/modules/it-cleanup-v1.sql',requires:['procurement','rental_corrections']},
  {id:'metrics',path:'db/modules/it-workflow-metrics-v1.sql',requires:[]},
  {id:'job_email',path:'apps/api/src/connections-mail/job-email-v2.sql',requires:[]},
+ // One item register (Fauzan, 6 Nov 2026; owner chose the release path for staging, 8 Nov 2026).
+ {id:'item_register',path:'db/modules/item-register-v1.sql',requires:[]},
+ {id:'item_register_v2',path:'db/modules/item-register-v2.sql',requires:['item_register']},
+ // Agentic Office: the office database already has these modules installed (P85 and the combined candidate), so the
+ // office release keeps them activated after upstream's seven, in the order of upstream's db/proposed `after` lists.
  {id:'central_admin_walls',path:'db/modules/central-admin-walls-v1.sql',requires:[]},
  {id:'central_admin_panel',path:'db/modules/central-admin-panel-v1.sql',requires:['central_admin_walls']},
  {id:'central_admin_delegations',path:'db/modules/central-admin-delegations-v1.sql',requires:[]},
@@ -16,15 +21,14 @@ export const MODULE_SPECS=[
  {id:'org_links',path:'db/modules/org-links-v1.sql',requires:[]},
  {id:'special_ops',path:'db/modules/special-ops-v1.sql',requires:[]},
  {id:'fw_welfare',path:'db/modules/fw-welfare-v1.sql',requires:[]},
- // P85: the boss's pay formulas, guard pay, foreign worker recruitment and item register modules.
  {id:'pay_formulas',path:'db/modules/pay-formulas-v1.sql',requires:[]},
  {id:'guard_pay',path:'db/modules/guard-pay-v1.sql',requires:['pay_formulas']},
  {id:'fw_recruit',path:'db/modules/fw-recruit-v1.sql',requires:[]},
- {id:'item_register',path:'db/modules/item-register-v1.sql',requires:[]},
- // P85: QR labels, print log, SQL books and the export-only outbox files, after the first part.
- {id:'item_register_v2',path:'db/modules/item-register-v2.sql',requires:['item_register']},
 ] as const;
-export type ReleaseModuleId=typeof MODULE_SPECS[number]['id'];
+// Catalog-only optional modules. Never included in release activation implicitly. Upstream lists the four Central Admin
+// modules here; the office activates them above, so none are optional in the office release.
+export const OPTIONAL_MODULE_SPECS:readonly {readonly id:never;readonly path:string;readonly requires:readonly string[]}[]=[];
+export type ReleaseModuleId=typeof MODULE_SPECS[number]['id'] | typeof OPTIONAL_MODULE_SPECS[number]['id'];
 export type ReleaseArtifact={version:1;base:{path:string;sha256:string};modules:Array<{id:ReleaseModuleId;path:string;sha256:string;requires:readonly string[]}>};
 export const releaseRoot=()=>resolve(__dirname,'../../../..');
 export const sha256=(b:string|Buffer)=>createHash('sha256').update(b).digest('hex');

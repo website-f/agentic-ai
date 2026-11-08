@@ -7,12 +7,12 @@ const TODAY = '2026-10-31';
 const NOW = myt(TODAY, '10:00');
 const P = TODAY.slice(0, 7);
 
-async function setup(consent = true) {
+async function setup(finalApproval = true) {
   const ds = generateDataset({ today: TODAY, now: NOW });
   const svc = new PrimaService(new MemoryStore(ds), () => NOW);
   ds.staffPayRuns = ds.staffPayRuns.filter((r) => r.id !== `sp-${GROUP_EMPLOYER_ID}-${P}`);
   for (const p of ds.people.filter((x) => x.companyId === GROUP_EMPLOYER_ID && !x.bank)) p.bank = { bank: 'Maybank', accountMasked: '****0001' };
-  const u = Object.fromEntries(await Promise.all(['u-pwvsb-hr', 'u-cos', 'u-vchair', 'u-fin-t1-de1', 'u-fin-t1-de2', 'u-fin-t1-dep', 'u-fd'].map(async (id) => [id, await svc.user(id)])));
+  const u = Object.fromEntries(await Promise.all(['u-pwvsb-hr', 'u-cos', 'u-coo', 'u-fin-t1-de1', 'u-fin-t1-de2', 'u-fin-t1-dep', 'u-fd'].map(async (id) => [id, await svc.user(id)])));
   const F = ds.finStatus.find((f) => f.companyId === GROUP_EMPLOYER_ID)!;
   const add = async (body: string, extra: Record<string, unknown> = {}) => {
     const r = (await svc.financeControls.regularAction(u['u-fin-t1-de1'], GROUP_EMPLOYER_ID, 'add', {
@@ -23,8 +23,8 @@ async function setup(consent = true) {
   };
   const run = await svc.prepareStaffPay(u['u-pwvsb-hr'], GROUP_EMPLOYER_ID, P);
   await svc.staffPayStep(u['u-pwvsb-hr'], run.id, 'submit');
-  await svc.staffPayStep(u['u-cos'], run.id, 'approve', { note: 'Checked (synthetic)' });
-  if (consent) await svc.staffPayStep(await svc.user('u-coo'), run.id, 'coo_approve', { note: 'Approved (synthetic)' });
+  await svc.staffPayStep(u['u-cos'], run.id, 'approve', { note: 'CoS checked payroll (mock)' });
+  if (finalApproval) await svc.staffPayStep(u['u-coo'], run.id, 'coo_approve', { note: 'COO approved payroll (mock)' });
   return { ds, svc, u, F, add, run };
 }
 

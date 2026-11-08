@@ -1,5 +1,18 @@
-import type { Branch, BranchAccount, BranchBusinessCase, BranchSettlement, BranchSettlementLine, BranchTreasuryDay, Company, IsoDate } from './types';
-import { agreementOn } from './branches';
+import type { Branch } from "./types";
+import type { BranchAccount } from "./types";
+import type { BranchPurchase } from "./types";
+import type { StaffPayRun } from "./types";
+import type { BranchBusinessCase } from "./types";
+import type { BranchSettlement } from "./types";
+import type { BranchSettlementLine } from "./types";
+import type { BranchTreasuryDay } from "./types";
+import type { Company } from "./types";
+import type { IsoDate } from "./types";
+import { agreementOn } from "./branches";
+import type { BranchApprovalPolicy } from "./types";
+import type { BranchApprovalRule } from "./types";
+
+
 
 // Masterplan chapter 03 (V11, V12, V12.1): a branch is inside its licensed company. These helpers keep the parts of
 // the chapter that are pure rules: what a branch needs before it is activated, what a month's settlement is made of,
@@ -10,6 +23,7 @@ const r2 = (n: number) => Math.round(n * 100) / 100;
 /** Cost kinds a branch month may carry. Model C's net profit is billing less every one of them. */
 export const BRANCH_COST_KINDS = [
   'wages',
+  'manager_salary',
   'statutory',
   'transport',
   'hostel',
@@ -26,6 +40,7 @@ export type BranchCostKind = (typeof BRANCH_COST_KINDS)[number];
 
 export const BRANCH_COST_LABEL: Record<BranchCostKind, string> = {
   wages: 'Guard and staff wages',
+  manager_salary: 'Branch Manager salary (Model B, or Model C when set)',
   statutory: 'EPF, SOCSO, EIS, PCB and levies',
   transport: 'Transport',
   hostel: 'Hostel and lodging',
@@ -57,9 +72,10 @@ export function settlementTotals(lines: BranchSettlementLine[]) {
     if (l.kind === 'billing' || l.kind === 'credit_note' || l.kind === 'true_up') billing += l.amount;
     else byKind[l.kind] += l.amount;
   }
-  const wages = r2(byKind.wages);
+  // A Model B manager's salary is a wage: it sits in the wages bucket, with its own line kind so it can be checked.
+  const wages = r2(byKind.wages + byKind.manager_salary);
   const statutory = r2(byKind.statutory);
-  const other = r2(BRANCH_COST_KINDS.filter((k) => k !== 'wages' && k !== 'statutory').reduce((n, k) => n + byKind[k], 0));
+  const other = r2(BRANCH_COST_KINDS.filter((k) => k !== 'wages' && k !== 'manager_salary' && k !== 'statutory').reduce((n, k) => n + byKind[k], 0));
   return { billing: r2(billing), costs: { wages, statutory, other }, byKind: Object.fromEntries(Object.entries(byKind).map(([k, v]) => [k, r2(v)])) };
 }
 
@@ -201,4 +217,155 @@ export function treasuryView(days: BranchTreasuryDay[], floatLimit: number | nul
   }
   const state: 'unknown' | 'attention' | 'ok' = !latest || ageDays! > TREASURY_STALE_DAYS ? 'unknown' : flags.length ? 'attention' : 'ok';
   return { state, latest, ageDays, flags, recent: sorted.slice(-7).reverse() };
+}
+
+// ---------- JV branch purchases and staff (Fauzan, 4 Nov 2026) ----------
+
+/** Models where the Branch Manager shares the result (JV): A (share of billing) and C (share of net profit). */
+export const JV_MODELS = ['A', 'C'] as const;
+
+/** Whether a branch is a JV branch on a date: its agreement in force is Model A or C. */
+export function isJvBranch(b: Pick<Branch, 'agreements' | 'model'>, on: IsoDate): boolean {
+  const a = agreementOn(b.agreements, on);
+  return (JV_MODELS as readonly string[]).includes(a?.model ?? b.model);
+}
+
+/** Cost kinds a branch purchase may be: what is bought, never wages, levies, fees, provisions or write-offs. */
+export const BRANCH_PURCHASE_KINDS = ['equipment', 'transport', 'hostel', 'insurance', 'subcontract', 'other'] as const;
+export type BranchPurchaseKind = (typeof BRANCH_PURCHASE_KINDS)[number];
+
+/** Firearms and ammunition are licensed under the Arms Act 1960: they go through Arms Control, never a branch purchase. */
+const ARMS = /\b(fire ?arms?|guns?|pistols?|revolvers?|shotguns?|rifles?|ammo|ammunition|cartridges?|bullets?|peluru|senjata( api)?|senapang|pistol)\b/i;
+export function isArmsItem(text: string): boolean {
+  return ARMS.test(text);
+}
+
+/** A month's purchases as settlement lines, citing each supplier invoice. */
+export function purchaseLines(purchases: BranchPurchase[] | undefined, period: string): BranchSettlementLine[] {
+  return (purchases ?? [])
+    .filter((p) => purchaseCounts(p) && p.on.slice(0, 7) === period)
+    .map((p) => ({ kind: p.kind, ref: p.invoiceRef, siteId: null, amount: p.amount, note: `${p.category === 'expense' ? 'Expense, ' : ''}${p.supplier}: ${p.item}`.slice(0, 200) }));
+}
+
+/** Pay for one branch's staff from the company's staff pay run: wages (gross) and the employer's statutory share. */
+export function branchStaffPay(run: StaffPayRun | null, personIds: Set<string>) {
+  if (!run) return null;
+  const lines = run.lines.filter((l) => personIds.has(l.personId));
+  const wages = r2(lines.reduce((t, l) => t + l.gross, 0));
+  const statutory = r2(lines.reduce((t, l) => t + l.epfEr + l.socsoEr + l.eisEr + l.hrd, 0));
+  return { runId: run.id, period: run.period, stage: run.stage, people: lines.length, wages, statutory, lines };
+}
+
+/** Settlement lines for a branch's staff pay, when the company's staff pay run for the month is approved or paid. */
+export function staffPayLines(pay: ReturnType<typeof branchStaffPay>): BranchSettlementLine[] {
+  if (!pay || !pay.people) return [];
+  const out: BranchSettlementLine[] = [];
+  if (pay.wages > 0) out.push({ kind: 'wages', ref: pay.runId, siteId: null, amount: pay.wages, note: `Branch staff pay, ${pay.people} staff (Prima staff payroll)` });
+  if (pay.statutory > 0) out.push({ kind: 'statutory', ref: `${pay.runId}-ER`, siteId: null, amount: pay.statutory, note: 'Employer EPF, SOCSO, EIS and HRD for branch staff' });
+  return out;
+}
+
+/** Add lines the month must carry that the preparer has not already listed (same kind and reference). */
+export function withAutoLines(lines: BranchSettlementLine[], auto: BranchSettlementLine[]): BranchSettlementLine[] {
+  const key = (l: BranchSettlementLine) => `${l.kind}|${l.ref.trim().toUpperCase()}`;
+  const have = new Set(lines.map(key));
+  return [...lines, ...auto.filter((l) => !have.has(key(l)))];
+}
+
+// ---------- Low profit flag (Fauzan, 4 Nov 2026: "Flag to ceo if pnl is less than 10% from billing") ----------
+
+/** A branch month whose profit (billing less all branch costs, before the company's share) is under this % of billing. */
+export const BRANCH_LOW_MARGIN_PCT = 10;
+
+/** The month's profit as a % of billing. A month with costs and no billing is low; a month with neither is not. */
+export function branchMargin(s: Pick<BranchSettlement, 'billing' | 'costs'>) {
+  const costs = r2(s.costs.wages + s.costs.statutory + s.costs.other);
+  const net = r2(s.billing - costs);
+  const raw = s.billing > 0 ? (net / s.billing) * 100 : null;
+  const pct = raw == null ? null : Math.round(raw * 10) / 10;
+  // Compared before rounding, so 9.96% is still under 10%.
+  const low = raw == null ? costs > 0 : raw < BRANCH_LOW_MARGIN_PCT;
+  return { billing: s.billing, costs, net, pct, low };
+}
+
+/** Months counted for the flag: settled ones, and drafts prepared from lines. Older test rows with no lines are not. */
+export function marginCounts(s: Pick<BranchSettlement, 'status' | 'lines'>): boolean {
+  return isSettled(s) || ((s.status === 'draft' || s.status === 'returned') && !!s.lines?.length);
+}
+
+/** The management fee % a CEO setting may change: Model A (of billing) and Model C (of net profit) only. */
+export function feePctOf(a: { model: string; companyBillingSharePct: number | null; companyNetProfitSharePct: number | null } | null): number | null {
+  if (!a) return null;
+  return a.model === 'A' ? a.companyBillingSharePct : a.model === 'C' ? a.companyNetProfitSharePct : null;
+}
+
+/**
+ * Whether a purchase counts in the branch P&L: a JV purchase always (no approval step); a Model B purchase only once
+ * the company approved it and the supplier invoice is recorded. A request, an approved-not-bought or a refused one never.
+ */
+export function purchaseCounts(p: Pick<BranchPurchase, 'approval'>): boolean {
+  return !p.approval || p.approval.status === 'bought';
+}
+
+// ---------- Model B: salaried Branch Manager (V12: company-run, salary only, every matter company-approved first) ----
+
+/** Whether a branch is Model B (salaried Branch Manager) on a date: its agreement in force says so. */
+export function isSalariedBranch(b: Pick<Branch, 'agreements' | 'model'>, on: IsoDate): boolean {
+  const a = agreementOn(b.agreements, on);
+  return (a?.model ?? b.model) === 'B';
+}
+
+/**
+ * Model B month: the salary the month carries against the signed monthly salary. A month without the salary line is
+ * incomplete. A difference is allowed (part month, unpaid leave, an increment waiting for a new agreement version) only
+ * with a note from the preparer; it never changes the signed salary.
+ */
+export function managerSalaryCheck(signed: number | null, lines: BranchSettlementLine[]) {
+  const paid = r2(lines.filter((l) => l.kind === 'manager_salary').reduce((t, l) => t + l.amount, 0));
+  const has = lines.some((l) => l.kind === 'manager_salary');
+  return { signed, paid, has, differs: signed != null && has && Math.abs(paid - signed) >= 0.005, diff: signed == null ? null : r2(paid - signed) };
+}
+
+/**
+ * Split a branch's staff pay into the Model B manager's own salary and everyone else's pay, so the manager's salary is
+ * cited on its own line and never counted twice.
+ */
+export function managerPayLines(pay: ReturnType<typeof branchStaffPay>, managerPersonId: string | null): BranchSettlementLine[] {
+  if (!pay || !managerPersonId) return [];
+  const l = pay.lines.find((x) => x.personId === managerPersonId);
+  if (!l || !(l.gross > 0)) return [];
+  const out: BranchSettlementLine[] = [{ kind: 'manager_salary', ref: `${pay.runId}-BM`, siteId: null, amount: r2(l.gross), note: 'Branch Manager salary (Prima staff payroll)' }];
+  const er = r2(l.epfEr + l.socsoEr + l.eisEr + l.hrd);
+  if (er > 0) out.push({ kind: 'statutory', ref: `${pay.runId}-BM-ER`, siteId: null, amount: er, note: 'Employer EPF, SOCSO, EIS and HRD for the Branch Manager' });
+  return out;
+}
+
+// ---------- Model B approval style, set by the Finance Director (Fauzan, 5 Nov 2026) ----------
+
+/** The default style: the company manager consents, then the Finance Director or the CEO approves; the FD decides payouts. */
+export const DEFAULT_BRANCH_APPROVAL: Pick<BranchApprovalPolicy, 'purchase' | 'expense' | 'payout'> = {
+  purchase: { consent: 'company_manager', approver: 'fd_or_ceo', noApprovalUpTo: 0 },
+  expense: { consent: 'company_manager', approver: 'fd_or_ceo', noApprovalUpTo: 0 },
+  payout: 'fd',
+};
+
+export const BRANCH_APPROVER_LABEL: Record<BranchApprovalRule['approver'], string> = {
+  fd_or_ceo: 'Finance Director or CEO',
+  fd: 'Finance Director',
+  ceo: 'CEO',
+  company_manager: 'Company manager',
+};
+
+/** The style in force for a branch: its own setting, or the default. */
+export function approvalPolicyOf(b: Pick<Branch, 'approvalPolicy'>): Pick<BranchApprovalPolicy, 'purchase' | 'expense' | 'payout'> {
+  return b.approvalPolicy ?? DEFAULT_BRANCH_APPROVAL;
+}
+
+/** Problems with a rule, or null. The same person can never both consent and approve, so a company manager approver needs no consent step. */
+export function approvalRuleProblem(r: BranchApprovalRule, what: string): string | null {
+  if (!['company_manager', 'none'].includes(r?.consent)) return `${what}: choose the consent step (company manager or none).`;
+  if (!['fd_or_ceo', 'fd', 'ceo', 'company_manager'].includes(r?.approver)) return `${what}: choose who approves.`;
+  if (r.consent === 'company_manager' && r.approver === 'company_manager') return `${what}: the company manager approves, so choose no separate consent step.`;
+  if (!isMoney(r.noApprovalUpTo) || r.noApprovalUpTo < 0) return `${what}: give the no-approval limit in ringgit (0 when every request needs approval).`;
+  return null;
 }
