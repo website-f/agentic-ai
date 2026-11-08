@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { api } from '../api';
 import { ErrorNotice, useAction, useLoad } from '../ui';
 import { readAsDataUrl } from './Proof';
@@ -11,11 +11,13 @@ function download(name: string, content: string, type = 'text/csv') {
   const a = document.createElement('a'); a.href = url; a.download = name; a.click(); URL.revokeObjectURL(url);
 }
 const csv = (v: string) => '"' + (/^(?:\s*[=+@-]|[\t\r\n])/.test(v) ? "'" + v : v).replaceAll('"', '""') + '"';
-export function ExceptionalGuardCash({ companyId }: { companyId: string }) {
+/** P90: people the server refuses (e.g. the CEO on Director Office) see nothing here, not a red error; `picker` shows only when allowed. */
+export function ExceptionalGuardCash({ companyId, picker }: { companyId: string; picker?: ReactNode }) {
   const { data, error, reload } = useLoad(() => api.finExceptionalCash(companyId), [companyId]);
   const act = useAction();
   const [checked, setChecked] = useState(false);
-  if (error) return <ErrorNotice error={error} />;
+  if (error && /^Not allowed:/.test(error)) return null;
+  if (error) return <>{picker}<ErrorNotice error={error} /></>;
   if (!data) return <p>Loading approved guard cash handovers…</p>;
   const submit = async (file?: File) => {
     if (!file) return;
@@ -28,6 +30,7 @@ export function ExceptionalGuardCash({ companyId }: { companyId: string }) {
   };
   return <section className="panel" aria-label="Exceptional guard cash">
     <h3>Exceptional guard cash</h3>
+    {picker}
     <p>Operations Managers request support manually. CEO approves each named guard, amount and payment occasion manually. Director Office prepares the approved list in the separate controlled Excel workbook and hands it to Finance.</p>
     <p className="notice">{data.accountingGate} Approval is not a payout. Actual hours and ordinary wages remain unchanged.</p>
     {data.canSubmit && <div className="stack">

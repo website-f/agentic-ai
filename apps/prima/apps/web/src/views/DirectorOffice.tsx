@@ -185,8 +185,7 @@ export function DirectorOfficeView() {
       </Card>
 
       <DirectorDesk />
-      <label>Cash handover company<Select className="select" value={cashCompany} onChange={e => setCashCompany(e.target.value)}>{me.companies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</Select></label>
-      <ExceptionalGuardCash key={cashCompany} companyId={cashCompany} />
+      <ExceptionalGuardCash key={cashCompany} companyId={cashCompany} picker={<label>Cash handover company<Select className="select" value={cashCompany} onChange={e => setCashCompany(e.target.value)}>{me.companies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</Select></label>} />
       <MyDailyCash />
       <TenderOpportunitiesPanel />
       <TenderCounterPanel />
