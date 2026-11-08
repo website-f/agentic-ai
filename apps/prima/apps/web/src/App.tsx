@@ -1306,7 +1306,8 @@ function Shell({ me, onSignOut, onReset }: { me: Me; onSignOut: () => void; onRe
               {api.mode === 'demo' ? 'Switch person' : 'Sign out'}
             </button>
           </header>
-          {view}
+          {/* P90: every screen sits in one page frame (padding, width, rhythm), even one that draws no .page of its own. */}
+          <div className="view-host">{view}</div>
         </div>
         <nav className="tabs" aria-label="Main">
           {tabNav.map((n) => (

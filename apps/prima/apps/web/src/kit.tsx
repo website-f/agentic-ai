@@ -44,7 +44,7 @@ export function Stat({ label, value, note, tone, icon, onClick }: {
         <span className="k-stat-label">{label}</span>
       </span>
       {/* P80: a word in place of a number (Unknown, Not set) is set smaller so it never breaks inside the word. */}
-      <span className="k-stat-value" data-text={isWord(value) || undefined}>{value === 'UNKNOWN' ? 'Unknown' : value}</span>
+      <span className="k-stat-value" data-text={isWord(value) || undefined} data-long={((typeof value === 'string' || typeof value === 'number') && String(value).length > 9) || undefined}>{value === 'UNKNOWN' ? 'Unknown' : value}</span>
       {note && <span className="k-stat-note">{note}</span>}
     </>
   );

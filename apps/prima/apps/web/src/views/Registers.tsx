@@ -285,7 +285,7 @@ function BoardLimit({ d }: { d: Deals }) {
   const [note, setNote] = useState("");
   return (
     <div style={col}>
-      <button className="btn btn-sm" onClick={() => setOpen(!open)}>
+      <button className="btn btn-sm" style={{ alignSelf: "flex-start" }} onClick={() => setOpen(!open)}>
         Set the board limit
       </button>
       {open && (

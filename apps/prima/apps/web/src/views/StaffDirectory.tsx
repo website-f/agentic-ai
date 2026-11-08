@@ -7,6 +7,7 @@ import {
 } from "@prima/core";
 import { api } from "../api";
 import { Chip, ErrorNotice, Kpi, Loading, useAction, useLoad } from "../ui";
+import { Empty, PageHead } from "../kit";
 
 /**
  * Staff directory (Fauzan, 4 Nov 2026): HR loads the office staff list once (preview, send, and the HR Director or the
@@ -21,21 +22,34 @@ const groupLabel = (g: string) => GROUPS.find(([k]) => k === g)?.[1] ?? g;
 
 export function StaffDirectory() {
   const status = useLoad(() => api.staffDirectoryStatus(), []);
-  if (status.loading && !status.data) return <Loading what="staff directory" />;
-  if (status.error) return <ErrorNotice error={status.error} />;
-  if (!status.data?.enabled || !status.data.ready)
-    return (
+  // P90: the screen sits in the page frame with the kit's page head, like every other screen.
+  let body;
+  if (status.loading && !status.data) body = <Loading what="staff directory" />;
+  else if (status.error) body = <ErrorNotice error={status.error} />;
+  else if (!status.data?.enabled || !status.data.ready)
+    body = (
       <section className="panel">
-        <h3>Staff directory</h3>
-        <p className="muted">
-          {status.data?.enabled
-            ? "The staff directory is switched on but not yet set up in the database."
-            : "The staff directory is not switched on yet."}{" "}
+        <Empty
+          title={
+            status.data?.enabled
+              ? "The staff directory is switched on but not yet set up in the database."
+              : "The staff directory is not switched on yet."
+          }
+        >
           IT sets it up after the CEO approves the release.
-        </p>
+        </Empty>
       </section>
     );
-  return <Directory />;
+  else body = <Directory />;
+  return (
+    <div className="page">
+      <PageHead
+        title="Staff directory"
+        sub="Office staff and their Microsoft 365 mailboxes. This list does not give anyone a sign-in: accounts are still linked one by one by IT through HR/IT coordination. Personal data: do not copy it out of Prima."
+      />
+      {body}
+    </div>
+  );
 }
 
 function Directory() {
@@ -59,42 +73,29 @@ function Directory() {
   const waiting = b.batches.filter((x) => x.status === "waiting");
   return (
     <>
-      <section className="panel">
-        <div className="panel-head">
-          <h3>Staff directory</h3>
-        </div>
-        <div className="panel-body">
-          <p className="muted small">
-            Office staff and their Microsoft 365 mailboxes. This list does not
-            give anyone a sign-in: accounts are still linked one by one by IT
-            through HR/IT coordination. Personal data: do not copy it out of
-            Prima.
-          </p>
-        </div>
-        <div className="kpis">
-          <Kpi label="People listed" value={b.entries.length} />
-          <Kpi
-            label="Personal Outlook"
-            value={b.issueCounts.personal_outlook ?? 0}
-            tone={b.issueCounts.personal_outlook ? "warn" : "ok"}
-          />
-          <Kpi
-            label="Shared mailbox"
-            value={b.issueCounts.email_used_more_than_once ?? 0}
-            tone={b.issueCounts.email_used_more_than_once ? "warn" : "ok"}
-          />
-          <Kpi
-            label="No job title"
-            value={b.issueCounts.no_title ?? 0}
-            tone={b.issueCounts.no_title ? "warn" : "ok"}
-          />
-          <Kpi
-            label="Batches waiting"
-            value={waiting.length}
-            tone={waiting.length ? "info" : "neutral"}
-          />
-        </div>
-      </section>
+      <div className="kpis">
+        <Kpi label="People listed" value={b.entries.length} />
+        <Kpi
+          label="Personal Outlook"
+          value={b.issueCounts.personal_outlook ?? 0}
+          tone={b.issueCounts.personal_outlook ? "warn" : "ok"}
+        />
+        <Kpi
+          label="Shared mailbox"
+          value={b.issueCounts.email_used_more_than_once ?? 0}
+          tone={b.issueCounts.email_used_more_than_once ? "warn" : "ok"}
+        />
+        <Kpi
+          label="No job title"
+          value={b.issueCounts.no_title ?? 0}
+          tone={b.issueCounts.no_title ? "warn" : "ok"}
+        />
+        <Kpi
+          label="Batches waiting"
+          value={waiting.length}
+          tone={waiting.length ? "info" : "neutral"}
+        />
+      </div>
       {b.batches.length > 0 && <Batches batches={b.batches} />}
       {b.can.prepare && <Import />}
       {b.can.addOne && <AddOne />}
@@ -109,6 +110,7 @@ function Directory() {
           >
             <input
               className="input"
+              style={{ flex: "1 1 260px" }}
               aria-label="Find"
               placeholder="Find a name, company, unit or mailbox"
               value={find}
@@ -136,9 +138,7 @@ function Directory() {
             </Select>
           </div>
           {shown.length === 0 ? (
-            <p className="muted">
-              Nobody listed{issue || find ? " for this filter" : " yet"}.
-            </p>
+            <Empty title={`Nobody listed${issue || find ? " for this filter" : " yet"}.`} />
           ) : (
             <div className="list">
               {shown.map((e) => (

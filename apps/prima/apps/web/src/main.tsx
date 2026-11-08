@@ -2,6 +2,8 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { App } from './App';
 import './styles.css';
+// P90: the page-by-page spacing pass; loaded last so its shared rules settle the older ones.
+import './styles/ux.css';
 
 declare const __DEMO__: boolean;
 
