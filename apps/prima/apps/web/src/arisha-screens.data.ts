@@ -18,6 +18,14 @@ export const SCREEN_GUIDES: ScreenGuide[] = [
         ]
       },
       {
+        "task": "How to find a screen",
+        "steps": [
+          "Scroll to \"All your screens\". Each card is one area, such as \"Operations\" or \"People and HR\", with its screens and one line on what each is for.",
+          "Press a screen to open it. \"Recently opened\" above the cards shows the screens you used last.",
+          "Or type in \"Find a screen\" (or in \"Search the menu\" at the top of the menu; press / on a computer). Words like \"gaji\", \"cuti\" or \"pekerja asing\" work too."
+        ]
+      },
+      {
         "task": "How to see all items in one area",
         "steps": [
           "Scroll to the \"Monitor\" list (or the to-do list).",
@@ -4916,7 +4924,7 @@ export const SCREEN_GUIDES: ScreenGuide[] = [
     "view": "it-metrics",
     "title": "Workflow time & quality",
     "what": "Lets staff time their own work on a workflow stage (working, waiting, ready for handoff) so the team can see how long work takes. It is not attendance, screen watching or a ranking.",
-    "who": "Directors, PWVSB officers, company managers, admin executives and supervisors. You see only the stages in your own scope. Only the IT Manager can review timing targets.",
+    "who": "Directors, PWVSB officers, company managers and admin executives (not site or patrol officers). You see only the stages in your own scope. Only the IT Manager can review timing targets.",
     "tabs": [],
     "tasks": [
       {

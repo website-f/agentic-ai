@@ -1,0 +1,495 @@
+/* P90: the menu's search box, its sections that open and close, and the search results (NavMenu.tsx). Colours come
+   only from the theme variables, so dark mode follows. */
+
+.navm {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+
+/* ---------- Search box ---------- */
+.navm-search {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+.navm-rail .navm-search {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  padding-block: 2px 4px;
+  background: var(--surface);
+}
+.navm-sheet .navm-search {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  padding: 6px 4px 8px;
+  background: var(--surface);
+}
+.navm-search-icon {
+  position: absolute;
+  left: 11px;
+  color: var(--muted);
+  pointer-events: none;
+}
+.navm-sheet .navm-search-icon {
+  left: 15px;
+}
+.navm-search .input {
+  width: 100%;
+  padding-left: 34px;
+  padding-right: 34px;
+  min-height: 38px;
+  font-size: 0.88rem;
+  background: var(--surface-2);
+  border-color: transparent;
+}
+.navm-sheet .navm-search .input {
+  min-height: 44px;
+  font-size: 1rem;
+}
+.navm-search .input:focus {
+  background: var(--surface);
+}
+.navm-kbd,
+.navm-clear {
+  position: absolute;
+  right: 8px;
+  display: grid;
+  place-items: center;
+  min-width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  color: var(--muted);
+}
+.navm-sheet .navm-clear {
+  right: 12px;
+}
+.navm-kbd {
+  padding: 0 6px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  font: 600 0.72rem/1 var(--font-mono);
+  pointer-events: none;
+}
+.navm-search .input:focus ~ .navm-kbd {
+  display: none;
+}
+.navm-clear {
+  border: 0;
+  background: none;
+  cursor: pointer;
+  padding: 0;
+}
+.navm-clear:hover {
+  background: var(--surface-2);
+  color: var(--ink);
+}
+/* The side menu styles every button inside it; these are not menu rows. */
+.nav .navm-clear {
+  width: 26px;
+  min-height: 26px;
+  height: 26px;
+  padding: 0;
+  justify-content: center;
+}
+
+/* ---------- Sections that open and close ---------- */
+.navm-section {
+  gap: 1px;
+}
+.nav .navm-head,
+.navm-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 30px;
+  padding: 4px 10px;
+  border: 0;
+  background: none;
+  border-radius: var(--r-sm, 6px);
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 0.7rem;
+  font-weight: 650;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  text-align: left;
+}
+.nav .navm-head:hover,
+.navm-head:hover {
+  background: var(--surface-2);
+  color: var(--ink);
+}
+.navm-sheet .navm-head {
+  min-height: 40px;
+  padding: 8px 12px;
+  font-size: 0.74rem;
+}
+.navm-head-title {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.navm-count {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  letter-spacing: 0;
+  min-width: 20px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  text-align: center;
+}
+.nav .navm-head svg.navm-caret,
+.navm-caret {
+  width: 12px;
+  height: 12px;
+  flex: none;
+  transition: transform 0.15s;
+}
+.navm-section[data-open='false'] .navm-caret {
+  transform: rotate(-90deg);
+}
+.navm-body {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding-top: 2px;
+}
+.navm-group {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.navm-group + .navm-group {
+  margin-top: 6px;
+}
+.navm-group-title {
+  padding: 2px 10px 2px 38px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--muted);
+  opacity: 0.85;
+}
+.navm-sheet .navm-group-title {
+  padding: 6px 12px 2px 44px;
+}
+
+/* ---------- Search results ---------- */
+.navm-results {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.nav .navm-hit,
+.navm-hit {
+  align-items: flex-start;
+}
+.navm-hit svg {
+  margin-top: 2px;
+}
+.navm-hit[data-active='true'] {
+  background: var(--surface-2);
+  color: var(--ink);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+.navm-hit-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  gap: 1px;
+}
+.navm-label mark {
+  background: color-mix(in srgb, var(--warn) 26%, transparent);
+  color: inherit;
+  border-radius: 3px;
+  padding: 0 1px;
+}
+.navm-hit-where {
+  font-size: 0.72rem;
+  font-weight: 450;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.navm-empty {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 10px 12px;
+  font-size: 0.86rem;
+  border: 1px dashed var(--line);
+  border-radius: var(--r);
+}
+.navm-empty p {
+  margin: 0;
+}
+
+/* The More sheet's own search sits above its sections; the sheet scrolls under it. */
+.sheet .navm {
+  gap: 6px;
+}
+.sheet .navm-section .sheet-item {
+  padding-block: 12px;
+}
+
+/* ---------- Home: "All your screens" (views/AllScreens.tsx) ---------- */
+.home-screens {
+  gap: 14px;
+}
+.home-screens-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 16px;
+}
+.home-screens-search {
+  flex: 0 1 360px;
+  min-width: min(100%, 240px);
+}
+.home-screens-search .input {
+  background: var(--surface);
+  border-color: var(--line);
+  min-height: 40px;
+}
+.home-cat-count {
+  display: inline-grid;
+  place-items: center;
+  min-width: 24px;
+  height: 22px;
+  padding: 0 7px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--muted);
+  font-size: 0.76rem;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+
+.home-recent {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.home-recent-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-right: 4px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--muted);
+}
+.home-recent-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 34px;
+  padding: 5px 12px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  color: inherit;
+  font: inherit;
+  font-size: 0.85rem;
+  font-weight: 550;
+  cursor: pointer;
+  transition: border-color 0.12s, background-color 0.12s;
+}
+.home-recent-chip svg {
+  width: 15px;
+  height: 15px;
+  color: var(--accent);
+  flex: none;
+}
+.home-recent-chip:hover {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
+  background: var(--accent-soft);
+}
+
+/* One card per category, in reading order (left to right, then down); long cards fold, so rows stay even. */
+.home-cats {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr));
+  align-items: start;
+  gap: 16px;
+}
+.home-cat {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md, 12px);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+.home-cat-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px 10px;
+}
+.home-cat-head h3 {
+  flex: 1;
+  min-width: 0;
+  font-size: 1rem;
+  font-weight: 650;
+  letter-spacing: -0.005em;
+}
+.home-cat-icon {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  background: var(--surface-2);
+  color: var(--ink);
+}
+.home-cat[data-cat='today'] .home-cat-icon {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.home-cat[data-cat='ops'] .home-cat-icon {
+  background: var(--ok-soft);
+  color: var(--ok);
+}
+.home-cat[data-cat='people'] .home-cat-icon {
+  background: var(--unknown-soft);
+  color: var(--unknown);
+}
+.home-cat[data-cat='biz'] .home-cat-icon {
+  background: var(--warn-soft);
+  color: var(--warn);
+}
+.home-cat-group {
+  padding: 0 8px;
+}
+.home-cat-group + .home-cat-group {
+  margin-top: 4px;
+}
+.home-cat-group h4 {
+  margin: 6px 8px 2px;
+  font-size: 0.7rem;
+  font-weight: 650;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.home-cat > .home-cat-group:last-of-type {
+  padding-bottom: 8px;
+}
+.home-tiles {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.home-tile {
+  appearance: none;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+  width: 100%;
+  min-height: 48px;
+  padding: 9px 8px;
+  border: 0;
+  border-radius: var(--r);
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 0.12s;
+}
+.home-tile:hover {
+  background: var(--surface-2);
+}
+.home-tile:focus-visible {
+  outline-offset: -2px;
+}
+.home-tile-icon {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--muted);
+  transition: color 0.12s, border-color 0.12s;
+}
+.home-tile-icon svg {
+  width: 18px;
+  height: 18px;
+}
+.home-tile:hover .home-tile-icon {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--line));
+}
+.home-tile-text {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+}
+.home-tile-label,
+.home-tile .navm-label {
+  font-weight: 600;
+  font-size: 0.9rem;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+.home-tile-blurb {
+  font-size: 0.8rem;
+  line-height: 1.4;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+.home-tile-where {
+  font-size: 0.74rem;
+  color: var(--muted);
+  opacity: 0.85;
+}
+.home-cat .home-group-more {
+  margin-top: auto;
+}
+/* Search results: the same tiles in a responsive grid of cards. */
+.home-tiles-results {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr));
+  gap: 10px;
+}
+.home-tiles-results .home-tile {
+  height: 100%;
+  padding: 12px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+.home-tiles-results .home-tile:hover {
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--line));
+  background: var(--surface);
+}
+.home-screens-empty {
+  background: var(--surface);
+  padding: 16px;
+}
+
+@media (max-width: 860px) {
+  .home-screens-search {
+    flex: 1 1 100%;
+  }
+  .home-tile {
+    min-height: 52px;
+  }
+}

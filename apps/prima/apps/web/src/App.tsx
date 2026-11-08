@@ -91,6 +91,8 @@ import { CooPaymentsView } from './views/CooPayments';
 import { PaymentRequestsView } from './views/PaymentRequests';
 import { HandoversView } from './views/Handovers';
 import { QualityView } from './views/Quality';
+import { NavMenu } from './NavMenu';
+import { rememberView } from './nav-catalog';
 
 
 
@@ -145,6 +147,8 @@ interface AppCtx {
   isGroup: boolean;
   /** Whether this person has the screen in their menu. A link to a screen they do not have is not shown. */
   canOpen?: (view: ViewName) => boolean;
+  /** P90: this person's menu (screen, label, icon), for the home screen's "All your screens". */
+  menu?: { view: ViewName; label: string; icon: string }[];
 }
 
 export const Ctx = createContext<AppCtx>(null as unknown as AppCtx);
@@ -158,28 +162,7 @@ export const useApp = () => useContext(Ctx);
 /** P71: opened inside the Agentic Office (its sign-in, its menu link back). */
 const inOffice = (api as { office?: boolean }).office === true;
 
-const NAV_GROUPS: { title: string; views: ViewName[] }[] = [
-  { title: 'Today', views: ['home', 'overview', 'company', 'office', 'work', 'mine', 'clock', 'staffclock', 'doa', 'reports', 'meetings'] },
-  { title: 'Operations', views: ['sites', 'roster', 'people', 'attendance', 'cases', 'ops', 'device', 'branchwork', 'duty', 'cleaning', 'sitestock', 'surveys', 'fleet', 'arms', 'cms', 'cmsready', 'sitehours', 'items'] },
-  { title: 'People and HR', views: ['hr', 'claims', 'staffpay', 'guardpay', 'advances', 'arrivalcash', 'loans', 'payformulas', 'salarycalc', 'statutory', 'work-kpi', 'staff-directory', 'fwm', 'fwcost', 'fwstat', 'socso', 'hostels', 'requests', 'handovers', 'memos', 'pdpa'] },
-  { title: 'Business and finance', views: ['commercial', 'clients', 'contracts', 'finance', 'credit', 'purchasing', 'payreq', 'branches', 'assets', 'insurance', 'ja', 'jaswitch'] },
-  { title: 'Compliance and governance', views: ['compliance', 'renewals', 'audit', 'selfaudit', 'rba', 'quality', 'grc', 'act', 'registers', 'governance', 'corporate', 'continuity'] },
-  { title: 'IT and systems', views: ['it', 'it-procurement', 'it-metrics', 'hr-it-intake', 'websites', 'connections', 'it-extraction'] },
-];
-
-function navSections<T extends { view: ViewName }>(items: T[]): { title: string | null; items: T[] }[] {
-  if (items.length <= 8) return [{ title: null, items }];
-  const seen = new Set<ViewName>();
-  const out: { title: string | null; items: T[] }[] = [];
-  for (const g of NAV_GROUPS) {
-    const mine = items.filter((n) => g.views.includes(n.view));
-    mine.forEach((n) => seen.add(n.view));
-    if (mine.length) out.push({ title: g.title, items: mine });
-  }
-  const rest = items.filter((n) => !seen.has(n.view));
-  if (rest.length) out.push({ title: 'More', items: rest });
-  return out;
-}
+// P90: the sections, their small groups and the search words live in nav-catalog.ts; NavMenu.tsx draws the menu.
 
 const NAV: { view: ViewName; label: string; icon: string; roles: User['role'][]; depts?: NonNullable<User['department']>[] }[] = [
   { view: 'home', label: 'Home', icon: 'company', roles: ['director', 'company_manager', 'admin_exec', 'supervisor'] },
@@ -346,7 +329,8 @@ const NAV: { view: ViewName; label: string; icon: string; roles: User['role'][];
   { view: 'it-procurement', label: 'IT purchase fulfilment', icon: 'device', roles: ['director','pwvsb_officer'] },
   // Workflow KPIs across departments (Fauzan, 5 Nov 2026): only the KPI keepers; workKpiScope decides who.
   { view: 'work-kpi', label: 'Work KPIs', icon: 'audit', roles: ['director', 'pwvsb_officer', 'company_manager'] },
-  { view: 'it-metrics', label: 'Workflow time & quality', icon: 'device', roles: ['director','pwvsb_officer','company_manager','admin_exec','supervisor'] },
+  // P90: not for site and patrol officers: it times IT jobs and IT requests, and their menu has no IT screen to raise one.
+  { view: 'it-metrics', label: 'Workflow time & quality', icon: 'device', roles: ['director','pwvsb_officer','company_manager','admin_exec'] },
   // Staff directory (Fauzan, 4 Nov 2026): HR, the HR Director, the CEO and IT only; never a sign-in.
   { view: 'staff-directory', label: 'Staff directory', icon: 'audit', roles: ['director', 'pwvsb_officer'] },
   { view: 'hr-it-intake', label: 'HR / IT coordination', icon: 'device', roles: ['director','pwvsb_officer','company_manager','admin_exec','supervisor'] },
@@ -938,6 +922,16 @@ function Shell({ me, onSignOut, onReset }: { me: Me; onSignOut: () => void; onRe
     });
   }, [route.view, me.user.id, me.user.role, me.user.title, nav]);
   const [moreOpen, setMoreOpen] = useState(false);
+  // P90: the menu search shortcut on a phone opens More with its search box ready.
+  const [moreSearch, setMoreSearch] = useState(false);
+  const openMoreSearch = useCallback(() => {
+    setMoreSearch(true);
+    setMoreOpen(true);
+  }, []);
+  // P90: the screens opened lately, for "Recently opened" on the home screen (this browser only).
+  useEffect(() => {
+    rememberView(me.user.id, route.view);
+  }, [me.user.id, route.view]);
   // Phones show four tabs; the rest and Switch person live under More.
   const tabNav = nav.length > 5 ? nav.slice(0, 4) : nav;
   const moreNav = nav.length > 5 ? nav.slice(4) : [];
@@ -974,7 +968,10 @@ function Shell({ me, onSignOut, onReset }: { me: Me; onSignOut: () => void; onRe
 
   const navKey = nav.map((n) => n.view).join(',');
   const canOpen = useCallback((v: ViewName) => navKey.split(',').includes(v), [navKey]);
-  const ctx = useMemo<AppCtx>(() => ({ me, companyId, company, setCompanyId, go, isGroup, canOpen }), [me, companyId, company, go, isGroup, canOpen]);
+  const menuKey = nav.map((n) => `${n.view}:${n.label}`).join(',');
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const menu = useMemo(() => nav.map((n) => ({ view: n.view, label: n.label, icon: n.icon })), [menuKey]);
+  const ctx = useMemo<AppCtx>(() => ({ me, companyId, company, setCompanyId, go, isGroup, canOpen, menu }), [me, companyId, company, go, isGroup, canOpen, menu]);
 
   const view = (() => {
     switch (route.view) {
@@ -1227,17 +1224,7 @@ function Shell({ me, onSignOut, onReset }: { me: Me; onSignOut: () => void; onRe
             </a>
           )}
           <nav className="nav" aria-label="Main">
-            {navSections(nav).map((sec) => (
-              <div className="nav-section" key={sec.title ?? 'all'}>
-                {sec.title && <div className="nav-heading">{sec.title}</div>}
-                {sec.items.map((n) => (
-                  <button key={n.view} aria-current={route.view === n.view ? 'page' : undefined} onClick={() => go({ view: n.view })}>
-                    <ViewIcon view={n.view} fallback={n.icon} />
-                    {n.label}
-                  </button>
-                ))}
-              </div>
-            ))}
+            <NavMenu variant="rail" items={menu} current={route.view} userId={me.user.id} onOpen={(v) => go({ view: v })} onHotkeyHidden={openMoreSearch} />
           </nav>
           <div className="rail-foot">
             <div>
@@ -1326,7 +1313,7 @@ function Shell({ me, onSignOut, onReset }: { me: Me; onSignOut: () => void; onRe
           ))}
           {/* Always shown: More also holds Switch person and the language. */}
           {(
-            <button aria-current={moreNav.some((n) => n.view === route.view) ? 'page' : undefined} aria-expanded={moreOpen} onClick={() => setMoreOpen(true)}>
+            <button aria-current={moreNav.some((n) => n.view === route.view) ? 'page' : undefined} aria-expanded={moreOpen} onClick={() => (setMoreSearch(false), setMoreOpen(true))}>
               <Icon name="more" />
               More
             </button>
@@ -1334,27 +1321,27 @@ function Shell({ me, onSignOut, onReset }: { me: Me; onSignOut: () => void; onRe
         </nav>
         {moreOpen && (
           <>
-            <div className="scrim" onClick={() => setMoreOpen(false)} />
+            <div
+              className="scrim"
+              onClick={() => {
+                setMoreOpen(false);
+                setMoreSearch(false);
+              }}
+            />
             <div className="sheet" role="dialog" aria-label="More">
-              {navSections(moreNav).map((sec) => (
-                <div className="sheet-section" key={sec.title ?? 'all'}>
-                  {sec.title && <div className="nav-heading">{sec.title}</div>}
-                  {sec.items.map((n) => (
-                    <button
-                      key={n.view}
-                      className="sheet-item"
-                      aria-current={route.view === n.view ? 'page' : undefined}
-                      onClick={() => {
-                        setMoreOpen(false);
-                        go({ view: n.view });
-                      }}
-                    >
-                      <ViewIcon view={n.view} fallback={n.icon} />
-                      {n.label}
-                    </button>
-                  ))}
-                </div>
-              ))}
+              <NavMenu
+                variant="sheet"
+                items={moreNav.map((n) => ({ view: n.view, label: n.label, icon: n.icon }))}
+                searchItems={menu}
+                current={route.view}
+                userId={me.user.id}
+                focusSearch={moreSearch}
+                onOpen={(v) => {
+                  setMoreOpen(false);
+                  setMoreSearch(false);
+                  go({ view: v });
+                }}
+              />
               <button
                 className="sheet-item"
                 onClick={() => {
