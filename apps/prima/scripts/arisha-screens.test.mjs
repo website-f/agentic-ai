@@ -33,6 +33,6 @@ test('each guide says what the screen is for, who uses it, and at least one how-
 });
 
 test('the brief carries the open screen guide and the plain-words instruction', () => {
-  assert.ok(arisha.includes('${screenGuideText(view, menu, lang)}'));
+  assert.ok(arisha.includes('${screenGuideText(view, menu, lang, guideRoom)}'));
   assert.ok(arisha.includes('Many people asking are not used to computers.'));
 });
