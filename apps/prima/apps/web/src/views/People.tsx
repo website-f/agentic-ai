@@ -1,5 +1,5 @@
 import { Select } from '../SearchSelect';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { CheckCircleIcon, PhoneIcon, ProhibitIcon, UsersThreeIcon, WarningIcon } from '@phosphor-icons/react';
 import { ATTENDANCE_ISSUE_LABEL, GROUP_EMPLOYER_ID, LEAVE_LABEL, isGroupLeader, jaOwns, missingStaffFacts, staffHistoryRole } from '@prima/core';
 import { api, type GuardProfile, type PersonDetail } from '../api';
@@ -29,7 +29,13 @@ export function People({ openPersonId }: { openPersonId?: string }) {
   const [open, setOpen] = useState<string | undefined>(openPersonId);
   const [hireCheck, setHireCheck] = useState(false);
   const historyRole = staffHistoryRole(me.user);
-  const { data, error } = useLoad(() => api.people(companyId, q), [companyId, q]);
+  // P90: the list is asked for once typing pauses, not on every key (each ask reads the company's guards).
+  const [query, setQuery] = useState(q);
+  useEffect(() => {
+    const t = setTimeout(() => setQuery(q), 300);
+    return () => clearTimeout(t);
+  }, [q]);
+  const { data, error } = useLoad(() => api.people(companyId, query), [companyId, query]);
 
   if (error)
     return (

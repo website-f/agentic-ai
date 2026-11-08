@@ -581,7 +581,7 @@ export class AppController {
 
   /** Arisha's chat (P80: everyone may consult her); preparation is independently scoped and never saves records. */
   @Post('arisha')
-  async arisha(@UserId() uid: string, @Body() b: { brief?: unknown; history?: unknown }, @Req() req: AuthedRequest) {
+  async arisha(@UserId() uid: string, @Body() b: { brief?: unknown; history?: unknown; quick?: unknown }, @Req() req: AuthedRequest) {
     // Integration logins never reach the AI service; the tools below are scoped per person.
     const user = await this.db.asUser(uid, async (_svc, u) => u);
     if (!arishaMayConsult(user)) throw new ForbiddenException('Arisha is not available to integration logins.');
@@ -613,6 +613,9 @@ export class AppController {
       throw new BadRequestException('Unknown tool.');
     };
     try {
+      // P90: a quick question (how to use a screen, matched to the screen guide by the web app) is asked without
+      // tools, in one turn: it can only narrow what Arisha may do, never widen it.
+      if (b.quick === true) return await askArishaFor(provider, user.id, req, { history, brief, tools: null, toolSpecs: [], quick: true });
       return await askArishaFor(provider, user.id, req, { history, brief, tools, toolSpecs });
     } catch (e) {
       if (e instanceof ForbiddenException) throw e;

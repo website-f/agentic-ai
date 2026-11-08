@@ -48,7 +48,7 @@ async def prima_model(request: Request) -> JSONResponse:
         prima_user = model.verify(headers, request.method, url, body)
         if prima_user is None or not await model.once(headers["x-prima-signature"]):
             raise Refused(401, "Not allowed.")
-        messages, tools, max_tokens = model.parse_body(body)
+        messages, tools, max_tokens, quick = model.parse_turn(body)
         async with SessionLocal() as db:
             who = await model.person_of(db, prima_user)
             ws, m = who.workspace, who.membership
@@ -64,13 +64,14 @@ async def prima_model(request: Request) -> JSONResponse:
                         r = await gateway.chat_first(
                             db,
                             ws.id,
-                            model.GROUPS,
+                            model.QUICK_GROUPS if quick else model.GROUPS,
                             messages,
                             task=model.TASK,
                             max_tokens=max_tokens,
                             temperature=0.2,
                             tools=tools,
                             branch_id=m.branch_id,
+                            reasoning_effort=model.REASONING_EFFORT,
                         )
             except TimeoutError as e:
                 raise Refused(

@@ -91,7 +91,8 @@ export function AttendanceView() {
         />
       )}
       {tab === 'leave' && <LeavePanel companyId={companyId} />}
-      {tab === 'record' && (a ? <Record a={a} onOpen={setOpen} /> : <Loading what="absence records" />)}
+      {/* P90: after a failed load the error above stays alone, not beside a spinner that never stops. */}
+      {tab === 'record' && (a ? <Record a={a} onOpen={setOpen} /> : alerts.error ? null : <Loading what="absence records" />)}
 
       {open && a && (
         <FollowUpDrawer

@@ -10,6 +10,8 @@ import { officePayload, officeSecret, officeSign } from './office';
 // runs that one turn as the linked person and records it. Her rules, tools, tool authorisation and budgets stay here.
 
 export const OFFICE_MODEL_VIA = 'prima:arisha';
+/** P90: the longest answer a quick turn asks for (about 12 short lines in Malay fit well inside it). */
+export const QUICK_MAX_TOKENS = 1200;
 
 export interface OfficeModelConfig {
   url: string;
@@ -55,10 +57,11 @@ async function officeMessage(res: Response, signal: AbortSignal): Promise<string
 
 /** One signed model turn on the office's AI, for this Prima staff record. */
 export function officeModel(cfg: OfficeModelConfig, userId: string, http: Fetch = fetch, now: () => number = Date.now): ArishaModel {
-  return async ({ messages, tools, maxTokens }, signal) => {
+  return async ({ messages, tools, maxTokens, quick }, signal) => {
     const url = new URL(cfg.url);
     const path = url.pathname + url.search;
-    const body = JSON.stringify({ messages, ...(tools ? { tools } : {}), max_tokens: maxTokens });
+    // P90: a quick turn (a screen question, no tools) asks the office for its fast models and a shorter answer.
+    const body = JSON.stringify({ messages, ...(tools ? { tools } : {}), max_tokens: quick ? Math.min(maxTokens, QUICK_MAX_TOKENS) : maxTokens, ...(quick ? { speed: 'quick' } : {}) });
     const ts = new Date(now()).toISOString();
     const signature = officeSign(cfg.secret, officePayload(ts, 'POST', path, { user: userId, via: OFFICE_MODEL_VIA }, body));
     const res = await http(cfg.url, {

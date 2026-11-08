@@ -1162,8 +1162,8 @@ export class HttpApi implements Api {
   arishaStatus() {
     return this.call<{ enabled: boolean }>('GET', '/arisha');
   }
-  arisha(input: Parameters<Api['arisha']>[0]) {
-    return this.call<Awaited<ReturnType<Api['arisha']>>>('POST', '/arisha', input);
+  arisha(input: Parameters<Api['arisha']>[0], signal?: AbortSignal) {
+    return this.call<Awaited<ReturnType<Api['arisha']>>>('POST', '/arisha', input, signal);
   }
   recordForm(kind: Parameters<Api['recordForm']>[0], id: string | null, companyId: string | null) {
     const q = new URLSearchParams();
