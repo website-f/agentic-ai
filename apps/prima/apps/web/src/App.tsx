@@ -1301,7 +1301,7 @@ function Shell({ me, onSignOut, onReset }: { me: Me; onSignOut: () => void; onRe
               {hhmm(clock)} MYT
             </span>
             {/* P86: the draft review queue sits in the top bar as a pop-over, not a strip of its own above it. */}
-            {!me.user.integration && <ArishaReviewQueue key={me.user.id} user={me.user} companies={me.companies} />}
+            {!me.user.integration && <ArishaReviewQueue key={`review-${me.user.id}`} user={me.user} companies={me.companies} />}
             <button className="btn btn-sm hide-sm" onClick={onSignOut}>
               {api.mode === 'demo' ? 'Switch person' : 'Sign out'}
             </button>
