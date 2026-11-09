@@ -1774,6 +1774,23 @@ MS: dict[str, str] = {
         "menjimatkan token sekarang."
     ),
     "{n} skill proposals wait for a decision.": "{n} cadangan kemahiran menunggu keputusan.",
+    # P92: lessons people teach the agents
+    "That lesson is not here.": "Pengajaran itu tiada di sini.",
+    "Only managers can change what the whole office remembers. Ask your manager.": (
+        "Hanya pengurus boleh mengubah apa yang diingati seluruh pejabat. Minta pengurus anda."
+    ),
+    "This lesson is not in use.": "Pengajaran ini tidak digunakan.",
+    "Only the person who taught this lesson, or an owner or admin, can undo it.": (
+        "Hanya orang yang mengajar pengajaran ini, atau pemilik atau pentadbir, boleh "
+        "membatalkannya."
+    ),
+    "Write the lesson as one short sentence, with no passwords, codes or other secrets.": (
+        "Tulis pengajaran sebagai satu ayat pendek, tanpa kata laluan, kod atau rahsia lain."
+    ),
+    "{n} lessons had to be taught more than once. See them on the Learning page under Lessons.": (
+        "{n} pengajaran terpaksa diajar lebih daripada sekali. Lihat di halaman Pembelajaran, "
+        "bahagian Pengajaran."
+    ),
     "What the AI team learned: week of {date}": "Apa yang dipelajari pasukan AI: minggu {date}",
     "Per agent": "Setiap ejen",
     "Agent": "Ejen",

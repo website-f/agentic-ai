@@ -114,6 +114,8 @@ async def test_index_in_prompt_body_on_demand(client: httpx.AsyncClient, llm, te
         "weekly-status-report",
         "research-brief",
         "clean-spreadsheet",
+        # P92 the ePerolehan tender procedure (skills/eperolehan.py)
+        "eperolehan-tender",
     }
     async with SessionLocal() as db:
         a = await db.get(Agent, agent["id"])

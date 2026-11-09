@@ -165,6 +165,7 @@ async def _names(db: AsyncSession, actors: set[str]) -> dict[str, str]:
     agents = {a.removeprefix("agent:") for a in actors if a.startswith("agent:")}
     out = {a: "Agentic Office" for a in actors if a == "system"}
     fixed = {"system:autopilot": "Learning autopilot", "curator": "Nightly curator"}  # P17
+    fixed["lessons"] = "Lessons people taught"  # P92: the nightly fold of lessons into skills
     out |= {a: fixed[a] for a in actors if a in fixed}
     if users:
         for uid, name in (
@@ -248,6 +249,20 @@ async def _fact(db: AsyncSession, principal: Principal, fact_id: str) -> BrainFa
     ):  # P29: outside the caller's scope is "not here"
         raise api_error(status.HTTP_404_NOT_FOUND, "fact_not_found", "That fact is not here.")
     return f
+
+
+async def _staff_writes_own(db: AsyncSession, principal: Principal, agent_id: str | None) -> None:
+    """P92: staff read what their company remembers, but change only what their own AI keeps
+    for itself: a shared fact is recalled by every agent of the office."""
+    if principal.scope.kind != "own":
+        return
+    a = await db.get(Agent, agent_id) if agent_id else None
+    if a is None or a.owner_user_id != principal.user.id:
+        raise api_error(
+            status.HTTP_403_FORBIDDEN,
+            "shared_memory",
+            "Only managers can change what the whole office remembers. Ask your manager.",
+        )
 
 
 async def _check_scope(
@@ -832,6 +847,7 @@ async def add_fact(
     db: AsyncSession = Depends(get_db),
 ) -> FactOut:
     await _check_scope(db, principal, body.branch_id, body.agent_id)
+    await _staff_writes_own(db, principal, body.agent_id)
     text = brain_facts.clean(body.text)
     if not text:
         raise api_error(
@@ -863,6 +879,7 @@ async def edit_fact(
 ) -> FactOut:
     """Facts are never rewritten in place: the correction replaces the old one."""
     old = await _fact(db, principal, fact_id)
+    await _staff_writes_own(db, principal, old.agent_id)
     if old.valid_to is not None:
         raise api_error(
             status.HTTP_409_CONFLICT, "fact_ended", "Restore this fact before editing it."
@@ -901,6 +918,7 @@ async def forget_fact(
     db: AsyncSession = Depends(get_db),
 ) -> FactOut:
     f = await _fact(db, principal, fact_id)
+    await _staff_writes_own(db, principal, f.agent_id)
     if f.valid_to is None:
         brain_facts.end(f, "forgotten")
         await db.commit()
@@ -914,6 +932,7 @@ async def restore_fact(
     db: AsyncSession = Depends(get_db),
 ) -> FactOut:
     f = await _fact(db, principal, fact_id)
+    await _staff_writes_own(db, principal, f.agent_id)
     f.valid_to, f.end_reason, f.superseded_by = None, None, None
     await db.commit()
     return (await _facts_out(db, [f]))[0]

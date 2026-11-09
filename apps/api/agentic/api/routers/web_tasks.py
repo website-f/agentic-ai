@@ -350,6 +350,10 @@ async def web_task(
     )
     db.add(t)
     await db.flush()
+    if body.mode == "tender":  # P92: follows the eperolehan-tender skill, pitfalls included
+        from ...skills import eperolehan
+
+        t.brief += await eperolehan.attach(db, agent, t)
     await audit.record(
         db,
         principal.workspace_id,

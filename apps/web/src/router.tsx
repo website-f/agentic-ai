@@ -460,10 +460,10 @@ const skillsRoute = createRoute({
 const learningRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/learning",
-  // P45: tab=week (the default: per agent) | overview; week=2026-W43.
-  validateSearch: (s: Record<string, unknown>): { days?: number; tab?: "week" | "overview"; week?: string } => ({
+  // P45: tab=week (the default: per agent) | overview; week=2026-W43. P92: tab=lessons.
+  validateSearch: (s: Record<string, unknown>): { days?: number; tab?: "week" | "overview" | "lessons"; week?: string } => ({
     days: [7, 30, 90].find((d) => d === Number(s.days)),
-    tab: s.tab === "overview" || s.tab === "week" ? s.tab : undefined,
+    tab: s.tab === "overview" || s.tab === "week" || s.tab === "lessons" ? s.tab : undefined,
     week: typeof s.week === "string" && /^\d{4}-W\d{2}$/i.test(s.week) ? s.week.toUpperCase() : undefined,
   }),
   component: page.learning,

@@ -12,6 +12,7 @@ import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "re
 import { toast } from "sonner";
 
 import { AgentAvatar } from "@/components/agent-avatar";
+import { LessonNote } from "@/components/lesson-note";
 import { Markdown } from "@/components/markdown";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm";
@@ -25,6 +26,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { VoiceInput } from "@/components/voice-input";
 import { t as tr, useT } from "@/i18n";
 import { api, ApiError, errorMessage } from "@/lib/api";
+import type { NotedLesson } from "@/lib/lessons";
 import { meQuery } from "@/lib/queries";
 import { staffOnly } from "@/lib/twin";
 import { useIsPhone } from "@/lib/use-media";
@@ -40,7 +42,7 @@ export interface ChatMessage {
   id: number | string;
   role: "user" | "assistant";
   content: string;
-  meta?: { provider?: string; model?: string; tools?: string[]; budget?: boolean; recalled?: Recalled[] } | null;
+  meta?: { provider?: string; model?: string; tools?: string[]; budget?: boolean; recalled?: Recalled[]; lesson?: NotedLesson } | null;
   created_at?: string;
 }
 
@@ -626,6 +628,8 @@ function Reply({ m, agent, canTask, onTask, onCopy }: {
         {/* A task it handed out: shown in place, its status following the work. */}
         {taskId ? <TaskCard taskId={taskId} className="mt-2.5" /> : null}
         {m.meta?.recalled?.length ? <Remembered items={m.meta.recalled} /> : null}
+        {/* P92: the person corrected it: kept as a lesson now, with Undo. */}
+        {m.meta?.lesson ? <LessonNote lesson={m.meta.lesson} /> : null}
         <div className="mt-1.5 flex flex-wrap items-center gap-x-1 gap-y-1 text-[12px] text-muted">
           <button type="button" onClick={() => onCopy(m.content)} className="inline-flex h-8 items-center gap-1 rounded-sm px-1.5 hover:bg-surface-2 hover:text-fg">
             <CopyIcon size={13} /> {t("Copy")}

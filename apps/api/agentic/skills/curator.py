@@ -111,6 +111,10 @@ async def run(db: AsyncSession, ws: Workspace) -> list[dict[str, Any]]:
         if near is None or near[1] <= OVERLAP:
             continue
         b, sim = near
+        if a.branch_id != b.branch_id or sorted(a.agent_ids or []) != sorted(b.agent_ids or []):
+            # P92: never merge one company's (or one agent's) skill into another's: the merged
+            # text would reach agents that were never meant to see the other one.
+            continue
         pair = frozenset((a.id, b.id))
         if pair in done_pairs or (a.id, "merge") in pending or (b.id, "merge") in pending:
             continue
@@ -187,6 +191,16 @@ async def run(db: AsyncSession, ws: Workspace) -> list[dict[str, Any]]:
         if p is not None:
             repaired += 1
             changes.append({"kind": "skill", "action": "repair", "name": s.name, "uses": n})
+
+    # P92: the day's lessons from people go into their topic's skill (Pitfalls), as a tested
+    # proposal the autopilot or a person decides on.
+    try:
+        from ..brain import lessons  # late: the brain imports this module
+
+        changes += await lessons.fold_into_skills(db, ws)
+    except Exception:  # noqa: BLE001 - folding is a bonus; never stop the dream
+        log.warning("lesson fold failed for %s", ws.id, exc_info=True)
+        await db.rollback()
 
     # P18: one skill a night gets the optimizer (reflective rewrite, tested old vs new).
     try:

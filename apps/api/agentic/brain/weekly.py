@@ -93,6 +93,7 @@ async def gather(
             "fact_examples": [],
             "lessons": 0,
             "lesson_examples": [],
+            "repeated": 0,  # P92: lessons people had to teach more than once
             "skills_proposed": 0,
             "skills_approved": 0,
             "skill_uses": 0,
@@ -129,6 +130,7 @@ async def gather(
             .where(
                 BrainFact.workspace_id == ws.id,
                 BrainFact.agent_id.in_(ids),
+                BrainFact.source_kind != "lesson",  # counted below, by the agent taught
                 BrainFact.created_at >= start,
                 BrainFact.created_at < end,
                 BrainFact.valid_to.is_(None),
@@ -136,14 +138,37 @@ async def gather(
             .order_by(BrainFact.confidence.desc(), BrainFact.created_at.desc())
         )
     ).all()
-    for aid, kind, text in facts:
+    # P92: lessons people taught are kept with the agent taught (meta.agent_id), shared or
+    # not; they count as lessons, never as facts.
+    taught = (
+        await db.execute(
+            select(BrainFact.meta, BrainFact.text)
+            .where(
+                BrainFact.workspace_id == ws.id,
+                BrainFact.source_kind == "lesson",
+                BrainFact.meta["agent_id"].astext.in_(ids),
+                BrainFact.created_at >= start,
+                BrainFact.created_at < end,
+                BrainFact.valid_to.is_(None),
+            )
+            .order_by(BrainFact.created_at.desc())
+        )
+    ).all()
+    for aid, kind, text in [  # what people taught leads the examples
+        *((str((m or {}).get("agent_id")), "lesson", t) for m, t in taught),
+        *facts,
+    ]:
         if aid is None or aid not in rows:
             continue
         r = rows[aid]
-        key = "lessons" if kind == "person" else "facts"
+        key = "facts" if kind not in ("person", "lesson") else "lessons"
         r[key] += 1
         if len(r[f"{key[:-1]}_examples"]) < EXAMPLES:
             r[f"{key[:-1]}_examples"].append(str(text)[:200])
+    for m, _ in taught:
+        aid = str((m or {}).get("agent_id"))
+        if aid in rows and int((m or {}).get("taught") or 1) >= 2:
+            rows[aid]["repeated"] += 1
 
     for aid, status, n in (
         await db.execute(
@@ -262,7 +287,7 @@ def _wrap(
         ),
     )
     keys = ("done", "facts", "lessons", "skills_proposed", "skills_approved", "routines_learned",
-            "routine_runs", "tokens_saved")  # fmt: skip
+            "routine_runs", "tokens_saved", "repeated")  # fmt: skip
     return {
         "week": week_label(monday),
         "start": monday.isoformat(),
@@ -292,6 +317,15 @@ def _body(data: dict[str, Any], lang: str) -> str:
         ),
         "",
     ]
+    if t.get("repeated"):  # P92: the same correction given twice is a mistake that repeats
+        lines[-1:-1] = [
+            tr(
+                "{n} lessons had to be taught more than once. See them on the Learning page "
+                "under Lessons.",
+                lang,
+                n=t["repeated"],
+            )
+        ]
     for a in data["agents"]:
         if not (a["done"] or a["facts"] or a["lessons"] or a["skills_proposed"]
                 or a["routines_learned"] or a["routine_runs"]):  # fmt: skip
