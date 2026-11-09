@@ -4821,6 +4821,12 @@
  },
  {
   "method": "POST",
+  "path": "api/me/clock/pings",
+  "name": "staffPings",
+  "body": "{ readings?: unknown }"
+ },
+ {
+  "method": "POST",
   "path": "api/me/clock/session-end",
   "name": "staffSessionEnd"
  },
