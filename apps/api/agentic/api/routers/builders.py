@@ -26,7 +26,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...agents import dispatch
 from ...core.db import get_db
-from ...core.security import PERMISSIONS
+from ...core.security import role_permissions
 from ...documents import service
 from ...engine import gateway
 from ...i18n import current_lang
@@ -91,7 +91,7 @@ def job_out(job: dict[str, Any]) -> JobOut:
 
 
 def _can_build(principal: Principal, what: str) -> None:
-    perms = PERMISSIONS.get(principal.role, frozenset())
+    perms = role_permissions(principal.role)
     ok = (
         "org.manage" in perms
         if what == "sop"

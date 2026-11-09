@@ -15,7 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 
 from ...core.db import get_db
-from ...core.security import PERMISSIONS
+from ...core.security import role_permissions
 from ...i18n import Msg
 from ...models import Branch, Department, Objective, Task, User, Workspace
 from ...services import audit, events
@@ -99,7 +99,7 @@ class ObjectiveDetailOut(BaseModel):
 
 
 def _perms(p: Principal) -> frozenset[str]:
-    return PERMISSIONS.get(p.role, frozenset())
+    return role_permissions(p.role)
 
 
 async def _visible(db: AsyncSession, p: Principal) -> list[Objective]:

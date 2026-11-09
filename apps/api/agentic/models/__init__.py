@@ -2582,6 +2582,9 @@ class PrimaLink(Timestamps, Base):
     prima_name: Mapped[str] = mapped_column(String(200), default="")
     how: Mapped[str] = mapped_column(String(10))
     linked_by: Mapped[str] = mapped_column(String(80))
+    # P92: their email or Microsoft link was corrected: their own Prima account (how="auto")
+    # is brought up to date (relinked) the next time they open Prima (prima/client.link_for).
+    relink_needed: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
 
 
 # P57: export and erase a workspace (agentic/erasure/models.py).

@@ -30,7 +30,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ...agents import dispatch, hire, launch, roles, twin, work_hours
 from ...brain.store import Author
 from ...core.db import get_db
-from ...core.security import PERMISSIONS
+from ...core.security import role_permissions
 from ...i18n import Msg, current_lang, lookup, tr
 from ...i18n.labels import agent_status_label, role_label
 from ...models import (
@@ -60,7 +60,7 @@ OPEN = ("triage", "ready", "running", "blocked", "review")
 
 
 def _is_staff(principal: Principal) -> bool:
-    perms = PERMISSIONS.get(principal.role, frozenset())
+    perms = role_permissions(principal.role)
     return "agents.own" in perms and "agents.manage" not in perms
 
 

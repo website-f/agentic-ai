@@ -491,3 +491,10 @@ app.include_router(feedback_router.router)
 from .routers import bulk_delete as bulk_delete_router  # noqa: E402
 
 app.include_router(bulk_delete_router.router)
+
+# P92: Settings > Roles and access (owner only), and the owner's own sign-in email.
+from .routers import account as account_router  # noqa: E402
+from .routers import role_access as role_access_router  # noqa: E402
+
+app.include_router(role_access_router.router)
+app.include_router(account_router.router)

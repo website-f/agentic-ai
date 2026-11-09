@@ -19,7 +19,8 @@ POLICIES: tuple[Policy, ...] = ("off", "admins", "everyone")
 SETTING = "require_2fa"
 # "Owners and admins": the roles that run the whole workspace (members, settings, every
 # login and file). Office roles (branch manager, HOD) are covered by "everyone".
-ADMIN_ROLES = frozenset({"owner", "admin"})
+# P92: management and HR manage members (and passwords) like an admin, so the rule asks them too.
+ADMIN_ROLES = frozenset({"owner", "admin", "management", "hr"})
 
 ISSUER = "Agentic Office"
 RECOVERY_COUNT = 10

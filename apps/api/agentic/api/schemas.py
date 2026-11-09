@@ -15,6 +15,8 @@ Role = Literal[
     "operator",
     "approver",
     "viewer",
+    "management",
+    "hr",
 ]
 HEX_COLOR = r"^#[0-9a-fA-F]{6}$"
 
@@ -84,6 +86,7 @@ class MeOut(BaseModel):
     role: Role
     permissions: list[str]
     scope: ScopeOut | None = None
+    assignable_roles: list[str] = []  # P92: the roles this person may give others
 
 
 class MemberOut(BaseModel):
@@ -158,9 +161,12 @@ class MemberCreateOut(BaseModel):
 
 
 class MemberUpdateIn(BaseModel):
-    role: Role
+    # P92: any of role (with its place), name and email; leave out what does not change.
+    role: Role | None = None
     branch_id: str | None = None
     department_id: str | None = None
+    name: str | None = Field(default=None, min_length=1, max_length=120)
+    email: EmailStr | None = None
 
 
 class TempPasswordOut(BaseModel):

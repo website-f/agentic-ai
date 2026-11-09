@@ -23,6 +23,7 @@ from ...agents import dispatch, verify
 from ...brain.store import Author
 from ...core.db import get_db
 from ...core.redact import redact
+from ...core.security import can
 from ...models import (
     Agent,
     AgentMessage,
@@ -302,7 +303,7 @@ async def overview(
         "mode": autopilot.mode(ws),
         "self_check": verify.enabled(ws),
         "modes": [{"key": k, "label": v} for k, v in MODE_LABELS.items()],
-        "can_configure": principal.role in ("owner", "admin"),
+        "can_configure": can(principal.role, "brain.manage"),
         "proposals": {
             "created": len(proposals),
             "by_status": by_status,

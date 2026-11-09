@@ -59,6 +59,8 @@ TRACK_OF_ROLE: dict[str, Track] = {
     "staff": "staff",
     "approver": "approver",
     "viewer": "approver",
+    "management": "management",
+    "hr": "management",
 }
 
 

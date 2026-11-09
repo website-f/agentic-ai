@@ -90,6 +90,24 @@ ROLE_WORDS: dict[str, str] = {
     "view only": "viewer",
     "lihat sahaja": "viewer",
     "baca sahaja": "viewer",
+    # P92: management and HR. "Manager" / "pengurus" alone stay a branch manager.
+    "management": "management",
+    "top management": "management",
+    "senior management": "management",
+    "pengurusan atasan": "management",
+    "pengurusan kanan": "management",
+    "hr": "hr",
+    "hrd": "hr",
+    "human resource": "hr",
+    "human resources": "hr",
+    "hr manager": "hr",
+    "hr executive": "hr",
+    "hr officer": "hr",
+    "hr admin": "hr",
+    "pengurus hr": "hr",
+    "pegawai hr": "hr",
+    "eksekutif hr": "hr",
+    "sumber manusia": "hr",
 }
 
 # Malay department words -> the English names workspaces often use, to match either way.
@@ -690,10 +708,7 @@ async def _check_rows(
 
 def _assignable(principal: Principal) -> list[str]:
     """The roles this person may give (as members._check_can_touch decides)."""
-    if can(principal.role, "members.manage"):
-        return [r for r in ROLES if r != "owner" or can(principal.role, "members.assign_owner")]
-    allowed = members.TEAM_ROLES.get(principal.role, set())
-    return [r for r in ROLES if r in allowed]
+    return members.assignable_roles(principal)
 
 
 def _in_scope(principal: Principal, org: Org) -> Org:

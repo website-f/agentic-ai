@@ -18,7 +18,7 @@ from ...agents.templates import BY_ID, TEMPLATES
 from ...agents.tools import FOLLOWS, TOOLS, mode_of
 from ...assistants import access as assistant_access
 from ...core.db import SessionLocal, get_db
-from ...core.security import PERMISSIONS
+from ...core.security import role_permissions
 from ...core.valkey import valkey
 from ...engine import gateway
 from ...i18n import Msg
@@ -143,7 +143,7 @@ async def clean_hours(db: AsyncSession, ws_id: str, raw: dict | None) -> dict | 
 
 
 def can_manage(principal: Principal, a: Agent) -> bool:
-    return principal.scope.manages_agent(a, PERMISSIONS.get(principal.role, frozenset()))
+    return principal.scope.manages_agent(a, role_permissions(principal.role))
 
 
 async def get_agent(db: AsyncSession, who: Principal | str, agent_id: str) -> Agent:
@@ -176,7 +176,7 @@ def manage_perm():
     """Agents are added and changed by people with agents.manage, or agents.own (their own)."""
 
     async def checker(principal: Principal = Depends(require("read"))) -> Principal:
-        perms = PERMISSIONS.get(principal.role, frozenset())
+        perms = role_permissions(principal.role)
         if "agents.manage" not in perms and "agents.own" not in perms:
             raise api_error(
                 status.HTTP_403_FORBIDDEN,
@@ -334,7 +334,7 @@ async def create_agent(
     principal: Principal = Depends(manage_perm()),
     db: AsyncSession = Depends(get_db),
 ) -> AgentOut:
-    perms = PERMISSIONS.get(principal.role, frozenset())
+    perms = role_permissions(principal.role)
     personal = body.personal or "agents.manage" not in perms
     # P18: without agents.manage, a person's one agent is their AI twin, sitting with them.
     as_twin = "agents.manage" not in perms
@@ -529,12 +529,12 @@ async def update_agent(
 ) -> AgentOut:
     a = await managed_agent(db, principal, agent_id)
     changes = body.model_dump(exclude_unset=True)
-    if "agents.manage" not in PERMISSIONS.get(principal.role, frozenset()):
+    if "agents.manage" not in role_permissions(principal.role):
         for k in ("role_kind", "heartbeat", "reports_to"):
             changes.pop(k, None)
     if a.is_twin:
         await _guard_twin(db, principal, a, changes)
-        if "agents.manage" not in PERMISSIONS.get(principal.role, frozenset()):
+        if "agents.manage" not in role_permissions(principal.role):
             _guard_own_twin(a, changes)
     if changes.get("status") == "active" and await assistant_access.dormant(db, a):
         raise _dormant_error(a)

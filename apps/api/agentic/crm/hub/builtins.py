@@ -369,7 +369,7 @@ SOURCES: dict[str, Source] = {
             [
                 ("name", "Name", "text", {}),
                 ("email", "Email", "email", {}),
-                ("role", "Role", "select", _choices("owner", "admin", "branch_manager", "hod", "supervisor", "operator", "staff", "approver", "viewer")),
+                ("role", "Role", "select", _choices("owner", "admin", "branch_manager", "hod", "supervisor", "operator", "staff", "approver", "viewer", "management", "hr")),
                 ("company", "Company", "text", {}),
                 ("last_login", "Last signed in", "datetime", {}),
             ],
