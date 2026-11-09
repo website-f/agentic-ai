@@ -4,6 +4,8 @@ import type { ProofInput } from '@prima/core';
 import { api, type PdpaBoard, type PdpaConsentInput, type PdpaRegisterBoard, type PdpaRegisterInput } from '../api';
 import { Chip, ErrorNotice, Kpi, Loading, dateLabel, dateTimeLabel, useAction, useLoad, type Tone } from '../ui';
 import { ProofPicker } from './Proof';
+import { PlusIcon } from '@phosphor-icons/react';
+import { ImportButton } from './ImportDrawer';
 
 /**
  * Real-use PDPA registers (5 Nov 2026). The PDPA officer keeps the personal data register (what personal data the group
@@ -93,9 +95,13 @@ export function RegisterPanel() {
       <div className="panel-head">
         <h3>Personal data register</h3>
         {officer && !adding && (
-          <button className="btn btn-sm" onClick={() => setAdding(true)}>
-            Add entry
-          </button>
+          <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
+            <button className="btn btn-sm btn-primary" onClick={() => setAdding(true)}>
+              <PlusIcon size={14} weight="bold" aria-hidden="true" />
+              Add register entry
+            </button>
+            <ImportButton kind="pdpaRegisterItem" />
+          </div>
         )}
       </div>
       <p className="muted small">
@@ -304,7 +310,8 @@ export function ConsentsPanel() {
       <div className="panel-head">
         <h3>Consent register</h3>
         {officer && !adding && consentItems.length > 0 && (
-          <button className="btn btn-sm" onClick={() => setAdding(true)}>
+          <button className="btn btn-sm btn-primary" onClick={() => setAdding(true)}>
+            <PlusIcon size={14} weight="bold" aria-hidden="true" />
             Record consent
           </button>
         )}

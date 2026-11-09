@@ -3,6 +3,8 @@ import type { CertBody, ProofInput } from '@prima/core';
 import { api, type ProductBoard, type ProductCertInput, type ProductInput, type ProposalCheck } from '../api';
 import { Chip, ErrorNotice, Loading, dateLabel, useAction, useLoad, type Tone } from '../ui';
 import { ProofPicker } from './Proof';
+import { PlusIcon } from '@phosphor-icons/react';
+import { ImportButton } from './ImportDrawer';
 
 /**
  * Products sold or rented to clients (Fauzan, 26 Oct 2026). The PDPA officer keeps each product's personal data
@@ -41,9 +43,13 @@ export function ProductsPanel() {
         <div className="panel-head">
           <h3>Products sold or rented to clients</h3>
           {officer && !adding && (
-            <button className="btn btn-sm" onClick={() => setAdding(true)}>
-              Add product
-            </button>
+            <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
+              <button className="btn btn-sm btn-primary" onClick={() => setAdding(true)}>
+                <PlusIcon size={14} weight="bold" aria-hidden="true" />
+                Add product
+              </button>
+              <ImportButton kind="pdpaProduct" />
+            </div>
           )}
         </div>
         {adding && <ProductForm onDone={() => setAdding(false)} />}

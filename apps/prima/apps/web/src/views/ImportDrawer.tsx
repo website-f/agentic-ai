@@ -3,6 +3,7 @@ import { useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { CheckCircleIcon, DownloadSimpleIcon, FileArrowUpIcon, MagnifyingGlassIcon, SparkleIcon, UploadSimpleIcon } from '@phosphor-icons/react';
 import {
   COMPANY_FIELD,
+  EXTRA_IMPORTS,
   IMPORTABLE_KINDS,
   RECORD_KINDS,
   cleanGrid,
@@ -45,6 +46,9 @@ import '../styles/import.css';
  */
 
 const isRecordKind = (k: ImportKind): k is RecordKind => Object.prototype.hasOwnProperty.call(RECORD_KINDS, k);
+/** P91: the header words a kind's spec gives a field (Malay and old-system names), for the in-browser matcher. */
+const specWords = (kind: ImportKind, key: string): string[] | undefined =>
+  isRecordKind(kind) ? undefined : (EXTRA_IMPORTS[kind as keyof typeof EXTRA_IMPORTS]?.fields.find((f) => f.key === key) as { words?: string[] } | undefined)?.words;
 const MAX_FILE = 8_000_000;
 const MAX_CSV = 1_000_000;
 const SEVERAL = '*';
@@ -246,6 +250,8 @@ function ImportDrawer({
               type: c.type as AlignField['type'],
               required: c.required,
               options: c.choices?.map((l): [string, string] => [l, l]),
+              // P91: the spec's own column words (English and Malay) reach the matcher here too.
+              words: specWords(tpl.kind, c.key),
             })),
             ...(tpl.companyScoped ? [{ key: COMPANY_FIELD, label: 'Company', type: 'text' as const }] : []),
           ]

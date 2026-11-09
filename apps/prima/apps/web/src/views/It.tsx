@@ -244,7 +244,7 @@ export function ItView() {
           </>
         )}
         {current === 'systems' && <>{manualItVisible(me.user)&&<ItManualPanel mode="systems"/>}<Systems data={data} /></>}
-        {current === 'assets' && <>{manualItVisible(me.user)&&<ItManualPanel mode="assets"/>}{manualItVisible(me.user)&&<div className="imp-inline"><ImportButton kind="itAsset" label="Import IT equipment from file" /></div>}<Assets data={data} staff={staff} /></>}
+        {current === 'assets' && <>{manualItVisible(me.user)&&<ItManualPanel mode="assets" extra={<ImportButton kind="itAsset" label="Import IT equipment from file" />}/>}<Assets data={data} staff={staff} /></>}
         {current === 'purchases' && <Purchases data={data} staff={staff} />}
         {current === 'maintenance' && <><Maintenance data={data} staff={staff} /><ItOperations mode="inspection"/></>}
         {current === 'websites' && <WebsitesView />}

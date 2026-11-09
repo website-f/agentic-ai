@@ -5,7 +5,7 @@ import { Chip, ErrorNotice, ExpiryChip, Loading, Sev, dateLabel, hhmm, useLoad }
 import { Card, Empty, PageHead, Person, Stat, Stats } from '../kit';
 import { VacanciesPanel } from './HrJoinLeave';
 import { StaffMovementPanel } from './HrMovement';
-import { RecordButton } from './RecordForm';
+import { RecordButton, useRecordKinds } from './RecordForm';
 import { ImportButton } from './ImportDrawer';
 import '../styles/leadership.css';
 
@@ -39,6 +39,7 @@ export function CompanyView() {
         <PageHead
           title={data.company.name}
           sub="No detailed data for this company yet. Only licence dates are held. Operational figures show Unknown until the company is connected."
+          actions={<LicenceAdd companyId={data.company.id} />}
         />
         <Licences licences={row.licences} companyId={data.company.id} onAll={() => go({ view: 'compliance' })} />
         {headHr}
@@ -49,7 +50,7 @@ export function CompanyView() {
   const open = cases.filter((c) => c.status !== 'resolved');
   return (
     <div className="page ld">
-      <PageHead title={data.company.name} sub={<>Head of company: {data.company.headOfCompany || 'not recorded yet'}</>}>
+      <PageHead title={data.company.name} sub={<>Head of company: {data.company.headOfCompany || 'not recorded yet'}</>} actions={<LicenceAdd companyId={data.company.id} />}>
         {branches.length > 0 && (
           <div className="ld-branches" aria-label="Branches">
             <span className="label">Branches</span>
@@ -222,6 +223,17 @@ export function CompanyView() {
       <Licences licences={row.licences} companyId={data.company.id} onAll={() => go({ view: 'compliance' })} />
       {headHr}
     </div>
+  );
+}
+
+/** P91: the company's licences are the records kept from this screen; Add and Import sit at the top for those who keep them. */
+function LicenceAdd({ companyId }: { companyId: string }) {
+  if (!useRecordKinds().has('licence')) return null;
+  return (
+    <>
+      <RecordButton kind="licence" companyId={companyId} label="Add licence" primary />
+      <ImportButton kind="licence" companyId={companyId} />
+    </>
   );
 }
 

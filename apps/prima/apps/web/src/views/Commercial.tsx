@@ -3,6 +3,7 @@ import { JointTenders } from './JointTenders';
 import { TenderCounterPanel } from './TenderCounter';
 import { TenderOpportunitiesPanel } from './TenderOpportunities';
 import { LeadsPanel } from './Leads';
+import { ImportButton } from './ImportDrawer';
 import { useState } from 'react';
 import type { Quotation, QuotationStatus, TenderStatus } from '@prima/core';
 import { api, type Commercial, type QuotationAction } from '../api';
@@ -98,6 +99,7 @@ export function CommercialView({ openTenderId }: { openTenderId?: string } = {})
                   Add tender
                 </button>
               )}
+              {data.can.addTender && <ImportButton kind="tender" companyId={companyId} label="Import tenders" />}
               {data.can.prepare && (
                 <button className={data.can.addTender ? 'btn' : 'btn btn-primary'} onClick={() => setNewQuote({ tenderId: null, client: '' })}>
                   <PlusIcon size={16} weight="bold" aria-hidden="true" />

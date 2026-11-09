@@ -30,9 +30,10 @@ import { RECORD_KINDS, type FieldSpec, type RecordKind, type RecordValues } from
 import type { Store } from './store';
 import type { BillingMethod, Dataset, Id, IsoDate, IsoDateTime, LeaveOverrideKind, PurCategory, User } from './types';
 import { orgLinksOn, withoutHandOvers } from './org-links';
+import { P91_BIZ_IMPORTS, P91_BIZ_KINDS, isBizImportKind, saveBizRow, type BizImportSaver, type P91BizImportKind } from './org-import-biz';
 
 /** P81: records that are not plain record forms but have their own add path, imported row by row through it. */
-export type ExtraImportKind = 'client' | 'contract' | 'leaveEntitlement' | P90ImportKind;
+export type ExtraImportKind = 'client' | 'contract' | 'leaveEntitlement' | P90ImportKind | P91BizImportKind;
 /**
  * P90 ("Import from any file", Fitri 9 Nov 2026): more screens that keep records staff bring from old spreadsheets.
  * Each row goes through the screen's own add (addFwWorker, addPurSupplier, addPublicHoliday, addBranch, the IT manual
@@ -242,6 +243,8 @@ export const EXTRA_IMPORTS: Record<ExtraImportKind, ImportSpec> = {
       { key: 'warrantyTo', label: 'Warranty until', type: 'date' },
     ],
   },
+  // P91: the business screens' master records (org-import-biz.ts).
+  ...P91_BIZ_IMPORTS,
 };
 
 /** Record kinds that may be imported in bulk. */
@@ -277,6 +280,8 @@ export const IMPORTABLE_KINDS: readonly ImportKind[] = Object.freeze([
   'publicHoliday',
   'branch',
   'itAsset',
+  // P91: see docs/P91_ADD_IMPORT_BIZ.md.
+  ...P91_BIZ_KINDS,
 ] as ImportKind[]);
 
 export const IMPORT_MAX_ROWS = 500;
@@ -336,7 +341,7 @@ type RecordFormLike = {
 };
 
 /** The narrow part of PrimaService the import uses. */
-export interface ImportSaver {
+export interface ImportSaver extends BizImportSaver {
   recordForm(user: User, kind: RecordKind, id: Id | null, companyId: Id | null): Promise<RecordFormLike>;
   saveRecord(user: User, kind: RecordKind, id: Id | null, companyId: Id | null, raw: RecordValues): Promise<unknown>;
   addClientAccount(user: User, input: { companyId: Id; name: string; siteIds: Id[]; contractEndsOn: IsoDate | null }): Promise<{ id: Id }>;
@@ -717,6 +722,7 @@ export class OrgImportService {
       return null;
     }
     const v = raw as Record<string, unknown>;
+    if (isBizImportKind(kind)) return saveBizRow(this.saver, (t, f) => this.store.list(t as never, f as never) as Promise<unknown[]>, user, kind, cid, v);
     const companyId = cid as Id;
     const num = (x: unknown) => (x === null || x === undefined || x === '' ? null : Number(x));
     if (kind === 'client') {

@@ -85,6 +85,8 @@ export function InsuranceView() {
             <AddFor kind="insurancePolicy" label="Add policy" primary />
             <AddFor kind="insuranceClaim" label="Record claim" />
             <AddFor kind="insuranceGuarantee" label="Add guarantee" />
+            {/* P91: Import for the open tab's records (policies on the other tabs). */}
+            <ImportFor kind={tab === 'claims' ? 'insuranceClaim' : tab === 'guarantees' ? 'insuranceGuarantee' : 'insurancePolicy'} />
           </>
         }
       />
