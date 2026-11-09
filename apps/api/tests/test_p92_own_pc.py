@@ -12,6 +12,7 @@
 """
 
 import asyncio
+from datetime import timedelta
 
 import httpx
 from sqlalchemy import select
@@ -20,12 +21,11 @@ from agentic.agents.tools import TOOLS, ToolContext
 from agentic.core.db import SessionLocal
 from agentic.core.valkey import valkey
 from agentic.devices import bridge, tunnel
-from agentic.devices.core import online_key
 from agentic.models import Agent, Device, Task, Workspace
 
 from .conftest import csrf
 from .test_agents import llm, new_agent, office, temporal  # noqa: F401
-from .test_devices import FakePC, ids_of, link, personal_agent
+from .test_devices import FakePC, fake_offline, fake_online, ids_of, link, personal_agent
 from .test_office_roles import as_role, member
 
 EP = "eperolehan.gov.my"
@@ -131,6 +131,12 @@ async def test_status_walks_every_state_and_asks_the_persons_own_pc(client, llm,
         assert got["device"]["id"] == dev["device_id"] and "is ready" in got["next"]
     finally:
         await pc.stop()
+    # P94: gone a moment ago: reconnecting (work may start, it waits); long gone: offline.
+    assert await until(lambda: _state_is(client, "reconnecting"))
+    async with SessionLocal() as db:
+        d = await db.get(Device, dev["device_id"])
+        d.last_seen_at = d.last_seen_at - timedelta(minutes=10)
+        await db.commit()
     assert await until(lambda: _state_is(client, "offline"))
 
 
@@ -155,7 +161,7 @@ async def _pcs(o: dict) -> tuple[str, str, str, str, str]:
         await db.commit()
         ids = mine.id, hers.id
     for d in ids:
-        await valkey().set(online_key(d), "1", ex=60)
+        fake_online(d)
     return ws_id, owner_id, aina_id, *ids
 
 
@@ -201,7 +207,7 @@ async def test_a_persons_eperolehan_work_uses_their_own_pc_whatever_was_chosen(
     assert (await tunnel.route(ws_id, "news.example.com", twin.id)).kind == "proxy"
 
     # Aina's PC is off: refused by name with where to go, never another PC or way.
-    await valkey().delete(online_key(hers_id))
+    fake_offline(hers_id)
     await tunnel.remember_person(shared_id, aina_id)
     r3 = await tunnel.route(ws_id, "www.eperolehan.gov.my", shared_id)
     assert r3.kind == "refuse" and r3.own and "Aina PC" in r3.why and "offline" in r3.why
@@ -303,7 +309,7 @@ async def test_a_web_task_on_eperolehan_waits_for_the_persons_pc(
         db.add(d)
         await db.commit()
         dev_id = d.id
-    await valkey().set(online_key(dev_id), "1", ex=60)
+    fake_online(dev_id)
     r = await client.post(f"/api/agents/{rafi['id']}/web-task", json=body, headers=csrf(client))
     assert r.status_code == 201, r.text
     assert "tender" in r.json()["labels"]

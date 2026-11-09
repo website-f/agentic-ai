@@ -91,6 +91,9 @@ class Settings(BaseSettings):
     # P31: the PC agent desktop app builds (shown on the link dialog only when both are set).
     pc_app_windows_url: str = ""
     pc_app_mac_url: str = ""
+    # P94: a call to a computer that was connected moments ago (the server restarted, its
+    # Wi-Fi blinked) waits this many seconds for it to come back before saying it is offline.
+    device_reconnect_wait: float = 45.0
     # Google OAuth app for Gmail (P16). Can also be set in the dashboard (Channels > Google).
     google_client_id: str = ""
     google_client_secret: str = ""

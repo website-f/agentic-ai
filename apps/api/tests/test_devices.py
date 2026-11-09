@@ -287,6 +287,23 @@ class FakePC:
 # ---------------------------------------------------------------- helpers
 
 
+class _Live:
+    """P94: a socket in the hub without a real PC behind it (online is the hub's socket)."""
+
+    closed = False
+
+    async def send(self, msg: dict) -> None:
+        return None
+
+
+def fake_online(device_id: str) -> None:
+    hub.REGISTRY[device_id] = _Live()  # type: ignore[assignment]
+
+
+def fake_offline(device_id: str) -> None:
+    hub.REGISTRY.pop(device_id, None)
+
+
 async def ids_of(email: str) -> tuple[str, str]:
     async with SessionLocal() as db:
         u = await db.scalar(select(User).where(User.email == email))
@@ -597,7 +614,9 @@ async def test_calls_uploads_and_the_pc_tools(client, llm, temporal, monkeypatch
         await pc.stop()
     await asyncio.sleep(0.05)
     out = await run_tool(twin.id, "pc_find_files", {"query": "report"})
-    assert out == "Error: Your PC 'Work laptop' is offline; turn it on or open the app."
+    # P94: waited for it first, then what the person does about it and where to look.
+    assert out.startswith("Error: Your PC 'Work laptop' is not connected to the office")
+    assert "open Agentic Office PC" in out and "/computers" in out
 
 
 async def test_upload_and_download_endpoints_are_device_bound(client, llm, temporal):

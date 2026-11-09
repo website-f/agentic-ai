@@ -1263,6 +1263,19 @@ async def internal_ask(device_id: str, body: InternalAskIn, request: Request) ->
     return {"ok": True, "data": {"asked": asked}}
 
 
+class InternalWaitIn(BaseModel):
+    timeout: float = Field(default=0, ge=0, le=120)
+
+
+@router.post("/internal/devices/{device_id}/wait")
+async def internal_wait(device_id: str, body: InternalWaitIn, request: Request) -> dict[str, Any]:
+    """P94: whether the PC is connected here, waiting up to `timeout` seconds for one that is
+    reconnecting (the worker asks before it starts ePerolehan work on it)."""
+    _internal(request)
+    online = await hub.wait_for(device_id, body.timeout) is not None  # the sockets are here
+    return {"ok": True, "data": {"online": online}}
+
+
 @router.post("/internal/devices/{device_id}/browser")
 async def internal_browser(device_id: str, body: BrowserIn, request: Request) -> dict[str, Any]:
     """Start the PC's browser and its CDP relay; the browser service connects to ws_url."""

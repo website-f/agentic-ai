@@ -31,6 +31,13 @@ MAX_FOLDERS = 20
 MAX_FOLDER_CHARS = 400
 ONLINE_TTL = 90  # seconds; the PC pings every 25 s and every message refreshes it
 LAST_SEEN_EVERY = 60  # last_seen_at is written at most this often
+# P94: a computer seen this recently but not connected now is most likely reconnecting (the
+# server restarted, its Wi-Fi blinked): pages say "Reconnecting", calls wait for it.
+RECONNECTING_FOR = 120  # seconds: shown as reconnecting
+RECONNECT_WINDOW = 180  # seconds: a call waits for it (settings.device_reconnect_wait)
+# P94: the newest PC app (apps/pc-agent/agent.cjs VERSION; a test keeps them equal). An older
+# one is told an update is available (welcome, My computers); nothing is replaced silently.
+AGENT_VERSION = "0.5.2"
 MAX_MESSAGE = 256 * 1024  # a socket message (file bytes never travel in the socket)
 MAX_UPLOAD = 25 * 1024 * 1024
 FILE_TTL = 300  # uploads and downloads wait this long for the other side
@@ -269,7 +276,21 @@ def internal_ok(given: str | None) -> bool:
     return bool(given) and hmac.compare_digest(internal_token(), given or "")
 
 
-# ---------------------------------------------------------------- online state (Valkey)
+# ---------------------------------------------------------------- online state
+
+
+# P94: the truth about a connection is the socket in the API process (`hub`). The Valkey flag
+# is how other processes (the worker) see it; it carries the boot of the API process that set
+# it, and the API clears every flag when it starts, so a flag left by a process that is gone
+# (a restart) never shows a computer as online while no socket is there.
+BOOT = secrets.token_hex(8)
+BOOT_KEY = "devices:boot"
+_local_online: Any = None  # set by bridge.serve_here(): device id -> a live socket here?
+
+
+def use_local_online(check: Any) -> None:
+    global _local_online
+    _local_online = check
 
 
 def online_key(device_id: str) -> str:
@@ -278,7 +299,9 @@ def online_key(device_id: str) -> str:
 
 async def set_online(device_id: str, conn_id: str, base: str) -> None:
     await valkey().set(
-        online_key(device_id), json.dumps({"conn": conn_id, "base": base}), ex=ONLINE_TTL
+        online_key(device_id),
+        json.dumps({"conn": conn_id, "base": base, "boot": BOOT}),
+        ex=ONLINE_TTL,
     )
 
 
@@ -292,22 +315,79 @@ async def clear_online(device_id: str, conn_id: str) -> None:
     raw = await r.get(online_key(device_id))
     try:
         mine = raw is not None and json.loads(raw).get("conn") == conn_id
-    except ValueError:
+    except (ValueError, AttributeError):
         mine = True
     if mine:
         await r.delete(online_key(device_id))
 
 
+async def at_startup() -> int:
+    """P94: the API process starts with no sockets: record its boot and drop every online flag
+    an earlier process left (they would say "online" for up to ONLINE_TTL with nobody there).
+    Returns how many were dropped."""
+    r = valkey()
+    await r.set(BOOT_KEY, BOOT)
+    stale = [k async for k in r.scan_iter(match=online_key("*"), count=500)]
+    if stale:
+        await r.delete(*stale)
+    return len(stale)
+
+
+def _flag_ok(raw: Any, boot: str | None) -> bool:
+    """A Valkey flag counts when the running API process set it (its boot), or when no boot
+    is on record (an API from before P94)."""
+    if not raw:
+        return False
+    if not boot:
+        return True
+    try:
+        data = json.loads(raw)
+    except ValueError:
+        return False
+    return isinstance(data, dict) and data.get("boot") == boot
+
+
 async def online_ids(ids: Iterable[str]) -> set[str]:
+    """The computers connected now. In the API process: a live socket here, nothing else. In
+    other processes: the flag the running API process set."""
     ids = list(ids)
     if not ids:
         return set()
+    if _local_online is not None:
+        return {i for i in ids if _local_online(i)}
     try:
-        vals = await valkey().mget([online_key(i) for i in ids])
+        r = valkey()
+        boot = await r.get(BOOT_KEY)
+        vals = await r.mget([online_key(i) for i in ids])
     except Exception:  # noqa: BLE001 - shown as offline rather than failing the page
         log.warning("device online state unavailable", exc_info=True)
         return set()
-    return {i for i, v in zip(ids, vals, strict=True) if v}
+    return {i for i, v in zip(ids, vals, strict=True) if _flag_ok(v, boot)}
+
+
+def seen_within(d: Device, seconds: float) -> bool:
+    """Connected (or seen) in the last `seconds`."""
+    seen = d.last_seen_at
+    if seen is None:
+        return False
+    if seen.tzinfo is None:
+        seen = seen.replace(tzinfo=UTC)
+    return now() - seen <= timedelta(seconds=seconds)
+
+
+def reconnecting(d: Device, online: bool) -> bool:
+    """P94: not connected now but seen moments ago: most likely on its way back."""
+    return not online and d.revoked_at is None and seen_within(d, RECONNECTING_FOR)
+
+
+def may_come_back(d: Device) -> bool:
+    """P94: worth waiting for (a call, an ePerolehan start): seen in the last few minutes."""
+    return d.revoked_at is None and not d.paused and seen_within(d, RECONNECT_WINDOW)
+
+
+def update_available(version: str | None) -> bool:
+    """P94: the PC runs an older app than this server offers."""
+    return bool(version) and version_tuple(version) < version_tuple(AGENT_VERSION)
 
 
 # ---------------------------------------------------------------- activity and events
@@ -446,6 +526,7 @@ def device_out(d: Device, online: bool) -> dict[str, Any]:
         "version": d.version,
         "hostname": d.hostname,
         "online": online,
+        "reconnecting": reconnecting(d, online),  # P94: seen moments ago, coming back
         "last_seen_at": d.last_seen_at,
         "folders": list(d.folders or []),
         "paused": d.paused,
@@ -455,6 +536,9 @@ def device_out(d: Device, online: bool) -> dict[str, Any]:
         "remote_allowed": d.remote_allowed,
         "remote": remote_level(d),
         "tunnel_hosts": list(d.tunnel_hosts or []),  # P58: sites its person lets through
+        # P94: a newer PC app is available (the page offers it; nothing updates silently).
+        "latest_version": AGENT_VERSION,
+        "update_available": update_available(d.version),
     }
 
 

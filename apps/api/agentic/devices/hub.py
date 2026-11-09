@@ -85,11 +85,48 @@ class Connection:
 
 
 REGISTRY: dict[str, Connection] = {}
+# P94: calls waiting for a computer that is reconnecting; set (and dropped) when it connects.
+_ARRIVED: dict[str, asyncio.Event] = {}
 
 
 def connection(device_id: str) -> Connection | None:
     c = REGISTRY.get(device_id)
     return None if c is None or c.closed else c
+
+
+def is_connected(device_id: str) -> bool:
+    return connection(device_id) is not None
+
+
+async def wait_for(device_id: str, timeout: float) -> Connection | None:
+    """P94: the live connection, waiting up to `timeout` seconds for the computer to connect
+    (it was connected moments ago: the server restarted, its Wi-Fi blinked). No polling: the
+    hub wakes every waiter when it says welcome."""
+    c = connection(device_id)
+    if c is not None or timeout <= 0:
+        return c
+    # One event per computer, shared by its waiters (kept after a timeout: others may wait).
+    ev = _ARRIVED.setdefault(device_id, asyncio.Event())
+    with contextlib.suppress(TimeoutError):
+        await asyncio.wait_for(ev.wait(), timeout)
+    return connection(device_id)
+
+
+def _arrived(device_id: str) -> None:
+    ev = _ARRIVED.pop(device_id, None)
+    if ev is not None:
+        ev.set()
+
+
+async def at_startup() -> None:
+    """P94: on API start, the online flags of the process before are dropped (core)."""
+    try:
+        n = await core.at_startup()
+    except Exception:  # noqa: BLE001 - the server starts anyway; the flags expire in 90 s
+        log.warning("could not clear the computers' online flags", exc_info=True)
+        return
+    if n:
+        log.info("dropped %d online flags from before the restart", n)
 
 
 async def push_settings(device: Device) -> None:
@@ -193,12 +230,15 @@ async def serve(ws: WebSocket) -> None:
         await db.refresh(d)
         base = core.public_base(ws.headers, ws.url.scheme)
         conn = Connection(ws, d, base)
-        welcome = {
+        welcome: dict[str, Any] = {
             "type": "welcome",
             "device_id": d.id,
             "name": d.name,
             "settings": {"folders": list(d.folders or []), "paused": d.paused},
+            "latest": core.AGENT_VERSION,  # P94
         }
+        if core.update_available(d.version):  # P94: the app shows Update available
+            welcome["update"] = update_offer(base, d.os)
         ask, own = await _pending_ask(db, d)
         db.expunge(d)
     old = REGISTRY.get(d.id)
@@ -212,6 +252,7 @@ async def serve(ws: WebSocket) -> None:
                 {"type": "tunnel_ask", "hosts": ask, "by": "", **({"own": True} if own else {})}
             )
         await core.set_online(d.id, conn.id, base)
+        _arrived(d.id)  # P94: calls that waited for this computer go ahead
         await core.publish(d, "device.status", online=True)
         await _loop(conn)
     except (WebSocketDisconnect, RuntimeError):
@@ -227,6 +268,20 @@ async def serve(ws: WebSocket) -> None:
                 await core.clear_online(d.id, conn.id)
             await _seen(d.id)
             await core.publish(d, "device.status", online=False)
+
+
+def update_offer(base: str, os_: str | None) -> dict[str, Any]:
+    """P94: what an older app is told: the newest version and where to get it. Windows: the
+    program itself (running it keeps the link and replaces the old one); elsewhere My
+    computers, where the install line is."""
+    from . import install
+
+    url = (
+        f"{base}/api/install/update/exe"
+        if os_ == "windows" and install.exe_path() is not None
+        else f"{base}/computers"
+    )
+    return {"version": core.AGENT_VERSION, "url": url}
 
 
 async def _loop(conn: Connection) -> None:

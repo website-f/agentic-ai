@@ -291,7 +291,8 @@ async def web_task(
             raise api_error(
                 status.HTTP_409_CONFLICT, "device_paused", "{name} is paused.", name=device.name
             )
-        if not await devices.online_ids([device.id]):
+        # P94: one connected moments ago is on its way back; the call waits for it.
+        if not await devices.online_ids([device.id]) and not devices.reconnecting(device, False):
             raise api_error(
                 status.HTTP_409_CONFLICT,
                 "device_offline",
@@ -312,7 +313,8 @@ async def web_task(
         pc = await tunnel.pc_status(
             db, principal.workspace_id, person, host, by=principal.user.name
         )
-        if pc["needed"] and pc["state"] != "ready":
+        # P94: "reconnecting" starts too: the work waits for the computer to come back.
+        if pc["needed"] and pc["state"] not in ("ready", "reconnecting"):
             raise api_error(
                 status.HTTP_409_CONFLICT,
                 "pc_not_ready",

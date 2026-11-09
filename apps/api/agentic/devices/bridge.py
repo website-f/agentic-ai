@@ -14,6 +14,7 @@ from typing import Any
 
 import httpx
 
+from ..core.config import settings
 from ..core.db import SessionLocal
 from ..core.valkey import valkey, valkey_bytes
 from ..models import Device
@@ -26,8 +27,23 @@ _transport: httpx.AsyncBaseTransport | None = None  # tests: reach the API in-pr
 
 
 def serve_here(on: bool = True) -> None:
+    """This process holds the PC sockets: P94 its hub is also the truth about who is online."""
     global SERVE_HERE
     SERVE_HERE = on
+    core.use_local_online(hub.is_connected if on else None)
+
+
+def reconnect_wait() -> float:
+    """P94: how long a call waits for a computer that was connected moments ago."""
+    return max(0.0, float(settings.device_reconnect_wait))
+
+
+# P94: what an agent is told when the computer stays away: what the person does about it.
+OFFLINE = (
+    "This computer is not connected to the office right now. On that computer, open Agentic "
+    "Office PC and check it is on and connected to the internet (My computers shows when it is "
+    "back), then try again."
+)
 
 
 def use_transport(transport: httpx.AsyncBaseTransport | None) -> None:
@@ -109,7 +125,24 @@ async def call(
         "agent_id": agent_id,
         "task_id": task_id,
     }
-    return await _remote(f"/internal/devices/{device_id}/call", body, timeout + 15)
+    return await _remote(
+        f"/internal/devices/{device_id}/call", body, timeout + 15 + reconnect_wait()
+    )
+
+
+async def wait_online(device_id: str, timeout: float | None = None) -> bool:
+    """P94: whether the computer is connected, waiting up to `timeout` seconds (default
+    reconnect_wait) for one that is reconnecting. From any process."""
+    timeout = reconnect_wait() if timeout is None else max(0.0, min(float(timeout), 120.0))
+    if SERVE_HERE:
+        return await hub.wait_for(device_id, timeout) is not None
+    try:
+        data = await _remote(
+            f"/internal/devices/{device_id}/wait", {"timeout": timeout}, timeout + 15
+        )
+    except DeviceError:
+        return False
+    return bool(data.get("online"))
 
 
 async def ask_sites(device_id: str, hosts: list[str], by: str = "", own: bool = False) -> bool:
@@ -193,6 +226,7 @@ async def call_here(
     async with SessionLocal() as db:
         d = await db.get(Device, device_id)
         revoked, paused = (d is None or d.revoked_at is not None), bool(d and d.paused)
+        back = d is not None and core.may_come_back(d)
     if d is None:
         raise DeviceError("not_found", "There is no such computer.")
     if revoked:
@@ -200,8 +234,12 @@ async def call_here(
     if paused:
         raise await failed("paused", "This computer is paused.")
     conn = hub.connection(device_id)
+    if conn is None and back:
+        # P94: connected moments ago (the server restarted, its Wi-Fi blinked): it is most
+        # likely on its way back, so wait for it rather than failing at once.
+        conn = await hub.wait_for(device_id, reconnect_wait())
     if conn is None:
-        raise await failed("offline", "This computer is offline.")
+        raise await failed("offline", OFFLINE)
     if method in core.UPLOADS:
         params["upload_url"] = f"{conn.base}/api/devices/uploads/{call_id}"
     elif method == "files.save" and "download_url" not in params:
@@ -389,7 +427,9 @@ async def open_browser(
     its person let them through with `agentic-pc tunnel on`)."""
     if not SERVE_HERE:
         body = {"start_url": start_url, "agent_id": agent_id, "task_id": task_id, "sites": sites}
-        data = await _remote(f"/internal/devices/{device_id}/browser", body, timeout + 30)
+        data = await _remote(
+            f"/internal/devices/{device_id}/browser", body, timeout + 30 + reconnect_wait()
+        )
         return str(data.get("channel") or ""), str(data.get("ws_url") or "")
     ch = relay.create(device_id)
     params: dict[str, Any] = {"channel": ch.id}

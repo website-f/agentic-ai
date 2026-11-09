@@ -1343,6 +1343,13 @@ async def _run_task_step(task_id: str) -> StepResult:
         ctx = ToolContext(db=db, agent=agent, workspace=ws, task=task)
         history = await _history(db, task_id=task.id)
         if not history:
+            # P94: ePerolehan work that reached the agent another way (a routine's run, a
+            # schedule) gets the browser tools now, or stops with the plain reason.
+            from . import browser_grant
+
+            refused = await browser_grant.for_task(db, task, agent)
+            if refused is not None:
+                return StepResult("failed", browser_grant.as_text(refused))
             content = f"Task: {task.title}\n\n{task.brief}".strip()
             content += await objectives.why_line(db, task)  # P21: why this work matters
             content += await _language_line(db, task)  # P22: report in the asker's language
@@ -2249,6 +2256,11 @@ async def _chat_turn(db: AsyncSession, agent: Agent, session: ChatSession, text:
     # P92: a correction or "remember this" is kept as a lesson now, so this very answer and
     # every later one use it; the person sees "Noted for next time" under the answer.
     noted = await _chat_lesson(db, agent, session, asked, text)
+    # P94: ePerolehan asked in chat: the browser tools are given when this person may, else
+    # the agent tells them plainly who can allow it.
+    from . import browser_grant
+
+    no_browser = await browser_grant.for_chat(db, agent, session.user_id, text)
     # Recalled memory rides on this turn only: it is not stored, and earlier turns stay
     # byte-identical, so the cached prompt prefix keeps hitting.
     recalled: list[dict[str, Any]] = []
@@ -2262,7 +2274,7 @@ async def _chat_turn(db: AsyncSession, agent: Agent, session: ChatSession, text:
         used=recalled,
     )
     taught = await brain_lessons.block_for_chat(db, agent, query)
-    block = "\n\n".join(b for b in (block, taught) if b)
+    block = "\n\n".join(b for b in (block, taught, no_browser) if b)
     # P22: the person's language rides on this turn too (never the system prompt). The
     # request's language (X-Lang, or a bot's use_lang), else the person's saved one.
     lang = explicit_lang() or await prefs.language(db, session.user_id)

@@ -50,6 +50,16 @@ async def launch(
         )
     if t.status in RUNNING and not restartable(t):
         raise LaunchError(409, "already_running", "This task is already running.")
+    # P94: ePerolehan work gets the browser tools by itself (when the person may give them),
+    # whichever way it came; otherwise it does not start, and the person is told why.
+    from . import browser_grant
+
+    refused = await browser_grant.for_task(db, t, agent, actor)
+    if refused is not None:
+        t.blocked_reason = str(refused)[:300]
+        await db.commit()
+        await runtime.task_event(db, t, "browser", actor, str(refused)[:300])
+        raise LaunchError(409, "no_browser", refused)
     now = now or datetime.now(UTC)
     if actor not in CONTINUES:
         later = work_hours.deferred_until(

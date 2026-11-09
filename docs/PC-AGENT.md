@@ -76,7 +76,9 @@ PC  → {"type":"hello","token":"…","version":"0.1.0","os":"windows|mac","arch
        "hostname":"…","folders":["C:\\Users\\a\\Documents",…],"paused":false,
        "browsers":["chrome","edge"]}
 SRV → {"type":"welcome","device_id":"dv_…","name":"Aina's laptop",
-       "settings":{"folders":[…],"paused":false}}
+       "settings":{"folders":[…],"paused":false},"latest":"0.5.2",
+       "update":{"version":"0.5.2","url":"https://…/api/install/update/exe"}}   (P94: update only
+       when this app is older; the app shows "Update available", nothing is replaced silently)
 SRV → {"type":"error","code":"bad_token|revoked|paused_by_server","message":"…"}  then close
 ```
 
@@ -224,12 +226,24 @@ port, relay or app.
 restarting during an update, Wi-Fi changing) could wait forever while the agent looked
 running. Now:
 
-- every connection attempt is given up after 20 s and retried (2 s, doubling to 60 s, with
-  jitter); every retry is logged with a plain reason;
+- every connection attempt is given up after 20 s and retried; every retry is logged with a
+  plain reason. P94 (0.5.2): after a drop (server restart 1012, going away 1001, line dropped
+  1006, refused or hanging attempts) it retries at 1 s, 2 s, 3 s, then every 10 s for the
+  first 5 minutes, then 2 s doubling to 60 s; a refusal by the server (1008, 4401, 4403,
+  4409) goes straight to the longer backoff; every wait is spread ±25 % so many computers do
+  not knock at once;
 - after the computer sleeps (the clock jumps more than 30 s between 5-second ticks) it
   reconnects at once;
 - `status.json` (next to `config.json`) says `online | connecting | offline | not_linked`,
   since when, the last reason and the next try.
+
+**Online means connected (P94).** The web, the agents and the ePerolehan checks treat a
+computer as online only while the API process has its socket (`devices/hub.py`); the Valkey
+flag other processes read carries the API's boot id and every flag is dropped when the API
+starts. A computer seen in the last 2 minutes but not connected shows "Reconnecting"; a call
+to one seen in the last 3 minutes waits up to `AGENTIC_DEVICE_RECONNECT_WAIT` seconds (45)
+for it to come back (`/internal/devices/{id}/wait` from the worker), then fails with what the
+person should do.
 
 **Status page.** The running agent serves a page on `http://127.0.0.1:47615` (the next five
 ports if taken): connected or not and why, *Reconnect now*, *Pause / Let the AI use it again*,

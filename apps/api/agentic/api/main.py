@@ -88,8 +88,11 @@ PUBLIC_HOOK_PATHS = {"/api/integrations/microsoft/notify"}
 async def lifespan(_: FastAPI):
     # Load the embedding model in the background so the first search is not slow.
     warm = asyncio.create_task(embed.warm())
-    from ..devices import tunnel  # P58: the egress proxy's way through a company computer
+    from ..devices import hub, tunnel  # P58: the egress proxy's way through a company computer
 
+    # P94: this process holds the PC sockets and has none yet: online flags left by the
+    # process before (a restart) are dropped, so no computer shows online until it is back.
+    await hub.at_startup()
     await tunnel.start()
     # P65: the Prima Secure SOPs and workflows into every workspace's Library (unchanged
     # sections are skipped; the worker's liveness round repeats it for new workspaces).

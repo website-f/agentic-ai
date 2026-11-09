@@ -15,7 +15,15 @@ from agentic.models import Device
 
 from .conftest import csrf
 from .test_agents import llm, office, temporal  # noqa: F401
-from .test_devices import FakePC, FakeWS, ids_of, link, personal_agent
+from .test_devices import (
+    FakePC,
+    FakeWS,
+    fake_offline,
+    fake_online,
+    ids_of,
+    link,
+    personal_agent,
+)
 
 
 class SitePC(FakePC):
@@ -404,8 +412,6 @@ async def test_p72_each_persons_work_goes_through_their_own_pc(client, llm, temp
     """P72: ePerolehan work runs on the PC of the person it is for: a personal AI's owner, or
     whoever gave a shared agent its task. Never another person's PC; the office's own work
     (no person) alone uses the company's chosen one."""
-    from agentic.core.valkey import valkey
-    from agentic.devices.core import online_key
     from agentic.models import Agent
 
     from .test_office_roles import member
@@ -423,7 +429,7 @@ async def test_p72_each_persons_work_goes_through_their_own_pc(client, llm, temp
         await db.commit()
         mine_id, hers_id = mine.id, hers.id
     for d in (mine_id, hers_id):
-        await valkey().set(online_key(d), "1", ex=60)
+        fake_online(d)
 
     twin = await personal_agent(o, owner_id, ws_id, is_twin=True)
     async with SessionLocal() as db:
@@ -441,7 +447,7 @@ async def test_p72_each_persons_work_goes_through_their_own_pc(client, llm, temp
     r = await tunnel.route(ws_id, "www.eperolehan.gov.my", shared_id)
     assert (r.kind, r.device_id) == ("computer", hers_id)
     # Aina's PC off: refused by name, never the owner's PC instead.
-    await valkey().delete(online_key(hers_id))
+    fake_offline(hers_id)
     r = await tunnel.route(ws_id, "www.eperolehan.gov.my", shared_id)
     assert r.kind == "refuse" and "Aina PC" in r.why and "offline" in r.why
     # A person with no PC: told to link their own.

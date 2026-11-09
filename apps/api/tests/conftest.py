@@ -27,6 +27,8 @@ os.environ["AGENTIC_EMBED_BACKEND"] = "hash"
 os.environ["AGENTIC_PUSH_HOSTS_ALLOWED"] = "push.fake"
 os.environ["AGENTIC_TELEGRAM_API_BASE"] = "https://tg.fake"
 os.environ["AGENTIC_RECALL_MIN_SIMILARITY"] = "0.3"
+# P94: a call waits this long for a computer seen moments ago (45 s live; tests set their own).
+os.environ["AGENTIC_DEVICE_RECONNECT_WAIT"] = "0.3"
 VAULT_DIR = Path(tempfile.mkdtemp(prefix="agentic-vault-"))
 os.environ["AGENTIC_VAULT_DIR"] = str(VAULT_DIR)
 

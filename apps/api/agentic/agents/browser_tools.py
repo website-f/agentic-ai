@@ -291,8 +291,21 @@ async def _open_on_pc(ctx: Any, device_id: str, sites: list[str] | None = None) 
             device_id, agent_id=ctx.agent.id, task_id=ctx.task.id, sites=sites
         )
     except DeviceError as e:
+        if e.code == "offline":
+            # P94: the call already waited for it to reconnect. Say what the person does.
+            from ..devices import tunnel
+            from ..models import Device
+
+            d = await ctx.db.get(Device, device_id)
+            name = d.name if d is not None else "the person's computer"
+            raise BrowsersBusy(
+                f"The browser on {name} could not open: that computer is not connected to the "
+                "office right now (it was waited for). Tell the person in plain words: on that "
+                "computer, open Agentic Office PC and check it is on and connected to the "
+                f"internet; My computers ({tunnel.my_computers_url()}) shows when it is back. "
+                "Then try again. Do not switch to another browser."
+            ) from None
         why = {
-            "offline": "it is offline (turned off, asleep, or the agent is not running)",
             "paused": "the person paused it",
             "revoked": "it was unlinked",
             "no_browser": "it has no Chrome or Edge",

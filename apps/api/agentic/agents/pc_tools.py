@@ -82,9 +82,19 @@ async def _pick(ctx: ToolContext, args: dict[str, Any]) -> Device | str:
     return devices[0]  # offline: the call says so
 
 
+def _computers() -> str:
+    from ..devices.tunnel import my_computers_url
+
+    return my_computers_url()
+
+
 def _say(e: DeviceError, d: Device) -> str:
     plain = {
-        "offline": f"Your PC '{d.name}' is offline; turn it on or open the app.",
+        # P94: what the person does about it, and where they see it come back.
+        "offline": f"Your PC '{d.name}' is not connected to the office right now (it was "
+        "waited for). Tell the person: on that computer, open Agentic Office PC and check it is "
+        f"on and connected to the internet; My computers ({_computers()}) shows when it is "
+        "back. Then try again.",
         "paused": f"Your PC '{d.name}' is paused. Resume it on the My computers page or in the "
         "app on the PC.",
         "revoked": f"Your PC '{d.name}' was unlinked. Link it again on the My computers page.",

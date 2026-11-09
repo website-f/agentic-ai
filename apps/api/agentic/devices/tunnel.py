@@ -162,9 +162,21 @@ async def computer_down(db: Any, workspace_id: str, device_id: str, sites: list[
             f"{d.name} has not allowed it yet (on that computer, press Allow on the Agentic "
             "Office page)"
         )
-    if d.id not in await core.online_ids([d.id]):
+    if d.id not in await core.online_ids([d.id]) and not await _came_back(d):
         return f"{d.name} is offline"
     return ""
+
+
+async def _came_back(d: Device) -> bool:
+    """P94: a computer connected moments ago is waited for (bridge.wait_online), not called
+    offline: after a server restart or a Wi-Fi blink it is back within seconds."""
+    if not core.may_come_back(d):
+        return False
+    try:
+        return await bridge.wait_online(d.id)
+    except Exception:  # noqa: BLE001 - then it is offline, as before
+        log.info("could not wait for %s to reconnect", d.id)
+        return False
 
 
 # P72: whose work it is, for the gateway (which sees only the browser's agent). browser_tools sets
@@ -287,7 +299,15 @@ async def ask_own(device: Device, sites: list[str], by: str = "", force: bool = 
         return False
 
 
-STATES = ("ready", "offline", "not_allowed", "not_linked", "needs_update", "paused")
+STATES = (
+    "ready",
+    "reconnecting",  # P94: seen moments ago, coming back: work may start (calls wait for it)
+    "offline",
+    "not_allowed",
+    "not_linked",
+    "needs_update",
+    "paused",
+)
 
 
 @dataclass
@@ -301,12 +321,19 @@ class PcState:
 
 
 async def person_state(
-    db: Any, workspace_id: str, person: str, sites: list[str], ask: bool = True, by: str = ""
+    db: Any,
+    workspace_id: str,
+    person: str,
+    sites: list[str],
+    ask: bool = True,
+    by: str = "",
+    wait: bool = False,
 ) -> PcState:
     """P92: the person's OWN linked computers for `sites`: ready (online, not paused, allowed
     every site; most recently seen first), else what is in the way. An online PC that has not
     allowed them gets the Allow request by itself (`ask`); an offline one is asked when it
-    connects."""
+    connects. P94: one seen moments ago is "reconnecting"; with `wait` (work about to start
+    on it) it is waited for instead."""
     ASK_VERSION, _version = core.ASK_VERSION, core.version_tuple
 
     rows = list(await core.live_devices(db, workspace_id, person))
@@ -316,6 +343,14 @@ async def person_state(
 
     def allows(d: Device) -> bool:
         return all(core.host_in(x, d.tunnel_hosts or []) for x in sites)
+
+    back = [d for d in rows if d.id not in online and allows(d) and core.may_come_back(d)]
+    if back and not any(d.id in online and not d.paused and allows(d) for d in rows):
+        if wait:
+            if await _came_back(back[0]):
+                online = await core.online_ids([d.id for d in rows])
+        elif core.reconnecting(back[0], False):
+            return PcState("reconnecting", back[0])
 
     ready = [d for d in rows if d.id in online and not d.paused and allows(d)]
     if ready:
@@ -345,6 +380,12 @@ def why_for(st: PcState, who: str) -> str:
     name = d.name if d is not None else ""
     if st.state == "ready":
         return ""
+    if st.state == "reconnecting":
+        return (
+            f"{name} ({who}'s computer) is reconnecting to the office: it was connected a "
+            f"moment ago. If it is not back in a minute, they open Agentic Office PC on it and "
+            f"check it is on and online (My computers: {link})"
+        )
     if st.state == "not_linked":
         return (
             f"{who} has no computer linked yet. ePerolehan work runs on their own computer: "
@@ -382,7 +423,12 @@ async def person_computer(
     who = (u.name if u else "") or "the person"
     ws = await db.get(Workspace, workspace_id)
     st = await person_state(
-        db, workspace_id, person, ask_sites(sites, mode_of(ws)), by=(u.name if u else "")
+        db,
+        workspace_id,
+        person,
+        ask_sites(sites, mode_of(ws)),
+        by=(u.name if u else ""),
+        wait=True,  # P94: work is about to start on it: wait for one that is reconnecting
     )
     if st.state == "ready" and st.device is not None:
         return st.device.id, ""
@@ -406,6 +452,11 @@ async def pc_status(
     name = d.name if d is not None else ""
     nxt = {
         "ready": tr("Your computer {name} is ready.", name=name),
+        "reconnecting": tr(
+            "{name} is reconnecting. It was connected a moment ago and usually is back in a "
+            "few seconds. You can start: the work waits for it.",
+            name=name,
+        ),
         "offline": tr("Turn on {name} and open Agentic Office PC on it.", name=name),
         "not_allowed": tr(
             "On {name}, press Allow on the Agentic Office page. We sent the request to it.",

@@ -295,6 +295,9 @@ async def test_a_newer_lesson_on_the_same_point_replaces_the_older(client, llm, 
     await send_back(client, task["id"], "Name the summary QT plus 5 digits then COMPANY SUMMARY.")
     [old] = await all_lessons()
 
+    # P94: the rerun follows the eperolehan-tender skill (in its brief since it was started):
+    # a brief that long is self-checked before it is handed in again.
+    llm.say('{"ok": true, "issues": []}')
     llm.say(lesson("Same point: put the short company name in capitals.", same_as=old.id))
     await send_back(client, task["id"], "Again: the summary file name, like I said before.")
     [same] = await all_lessons()
@@ -633,6 +636,9 @@ async def test_daily_digest_and_weekly_report(client, llm, temporal):
     llm.say(lesson("Download every tender document before filling anything."))
     await send_back(client, task["id"], "Download all the tender documents first.")
     [f] = await all_lessons()
+    # P94: the rerun follows the eperolehan-tender skill (in its brief since it was started):
+    # a brief that long is self-checked before it is handed in again.
+    llm.say('{"ok": true, "issues": []}')
     llm.say(lesson("Download every tender document first.", same_as=f.id))
     await send_back(client, task["id"], "Again, download the documents first.")
 

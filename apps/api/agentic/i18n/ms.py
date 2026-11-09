@@ -1379,6 +1379,15 @@ MS: dict[str, str] = {
     "{name} is paused. Turn it back on in My computers.": (
         "{name} dijeda. Hidupkan semula di Komputer saya."
     ),
+    # P94: a computer coming back after a restart, and ePerolehan work getting the browser
+    "{name} is reconnecting. It was connected a moment ago and usually is back in a few seconds. You can start: the work waits for it.": (  # noqa: E501
+        "{name} sedang bersambung semula. Ia bersambung sebentar tadi dan biasanya kembali "
+        "dalam beberapa saat. Anda boleh mula: kerja akan menunggunya."
+    ),
+    "{agent} can't use the browser yet; ask whoever manages {agent} to allow it, or pick another agent.": (  # noqa: E501
+        "{agent} belum boleh guna pelayar; minta orang yang mengurus {agent} membenarkannya, "
+        "atau pilih ejen lain."
+    ),
     "Link your computer first. It takes about 2 minutes: open My computers and press Link a computer.": (  # noqa: E501
         "Pautkan komputer anda dahulu. Ia mengambil kira-kira 2 minit: buka Komputer saya dan "
         "tekan Pautkan komputer."
