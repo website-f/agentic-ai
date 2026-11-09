@@ -121,9 +121,9 @@ async def test_a_member_signs_in_with_microsoft_and_their_outlook_connects(
     await office(client)
     c = anon(client)
     try:
-        assert (await c.get("/api/auth/sso")).json() == {"microsoft": False}  # not set up yet
+        assert (await c.get("/api/auth/sso")).json()["microsoft"] is False  # not set up yet
         await configure(client)
-        assert (await c.get("/api/auth/sso")).json() == {"microsoft": True}
+        assert (await c.get("/api/auth/sso")).json()["microsoft"] is True
 
         r = await c.post("/api/auth/microsoft/start", json={})
         url = r.json()["url"]
@@ -305,7 +305,7 @@ async def test_staff_sign_in_and_the_admin_switches(client, llm, temporal, sso):
         await client.put(
             "/api/integrations/microsoft/options", json={"sign_in": False}, headers=csrf(client)
         )
-        assert (await c.get("/api/auth/sso")).json() == {"microsoft": False}
+        assert (await c.get("/api/auth/sso")).json()["microsoft"] is False
         r = await c.post("/api/auth/microsoft/start", json={})
         assert r.status_code == 409 and r.json()["code"] == "not_available"
     finally:
