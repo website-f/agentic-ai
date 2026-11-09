@@ -46,6 +46,8 @@ export function DirectorOfficeCounterPanel() {
   const { data, error } = useLoad(() => api.directorOfficeCounter(), []);
   const [m, setM] = useState<number | null>(null);
   const [open, setOpen] = useState<string | null>(null);
+  // P91: the counter is for people who see every meeting; others who open Director Office see no red "Not allowed" box.
+  if (error && /^Not allowed:/.test(String((error as unknown as { message?: string })?.message ?? error))) return null;
   if (error) return <ErrorNotice error={error} />;
   if (!data) return <Loading what="report and meeting counter" />;
   const i = m ?? data.months.length - 1;

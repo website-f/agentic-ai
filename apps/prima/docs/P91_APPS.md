@@ -17,7 +17,7 @@ home sidebar is only the everyday things."
 - **Phone**: bottom tabs Home, Apps (a sheet with the app grid and search), Search, the person's own Clock or Work, More.
   Inside an app a bar under the top bar has Back, the app's name, and its screens in a strip that scrolls sideways. The
   phone's Back button leaves the app (going in or out of an app is a history step; moving inside one is not).
-- A short menu (under 12 screens, or one app only: guards, site officers, a site device) keeps the one plain list it had.
+- A short menu (under 16 screens, or one app only: guards, site and patrol officers, a site device) keeps the one plain list it had.
 
 ## The apps (nav-catalog.ts `NAV_SECTIONS`)
 

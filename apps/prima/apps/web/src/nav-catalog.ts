@@ -388,7 +388,7 @@ export function spaceOf(view: ViewName): SpaceId {
 }
 
 /** A menu this short stays one plain list (a guard, a site device): apps would only add a click. */
-export const APPS_FROM = 12;
+export const APPS_FROM = 16;
 
 /** Whether this person's menu is split into a Home space and apps: a long menu that spans at least two apps. */
 export function usesApps<T extends { view: ViewName }>(items: T[]): boolean {
