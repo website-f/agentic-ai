@@ -412,11 +412,67 @@ test("P92: an ask for the person's own ePerolehan work is marked own, and the pa
   assert.equal(askFrom({ hosts: ["eperolehan.gov.my"], own: true }, { tunnel: { on: true, hosts: ["eperolehan.gov.my"] } }), null);
   assert.match(a.PAGE, /Your ePerolehan work runs on this computer/);
   assert.match(a.PAGE, /a&&a\.own/);
-  assert.equal(a.VERSION, "0.5.1");
+  assert.ok(a.VERSION >= "0.5.1");
 });
 
 test("P62: the status page's script parses", () => {
   const script = a.PAGE.split("<script>")[1].split("</script>")[0];
   assert.doesNotThrow(() => new Function(script));
   assert.match(a.PAGE, /data-act="\/tunnel" data-on="1">Allow</);
+});
+
+// ---------------------------------------------------------------- P94: back within seconds
+
+test("after a server restart or a dropped line it retries at 1, 2, 3 s, then every 10 s", () => {
+  const mid = () => 0.5; // no jitter
+  for (const why of ["1012 restart", "1001", "1006", "no answer from the office server in 20 s", "could not start a connection: ECONNREFUSED"]) {
+    assert.deepEqual([1, 2, 3, 4, 5, 9].map((n) => a.retryDelay(n, 30_000, why, mid)), [1000, 2000, 3000, 10_000, 10_000, 10_000], why);
+  }
+  // After 5 minutes down: the longer backoff, up to a minute.
+  assert.equal(a.retryDelay(1, a.FAST_FOR + 1, "1006", mid), 2000);
+  assert.equal(a.retryDelay(30, a.FAST_FOR + 1, "1006", mid), 60_000);
+  // Refused by the server (unlinked, replaced): never hammered.
+  assert.deepEqual([1, 2, 3, 4, 6].map((n) => a.retryDelay(n, 0, "4401", mid)), [2000, 4000, 8000, 16_000, 60_000]);
+  assert.equal(a.quickRetry("4409 replaced"), false);
+  assert.equal(a.quickRetry("1012"), true);
+});
+
+test("every wait is spread so many computers do not reconnect at the same moment", () => {
+  assert.equal(a.retryDelay(1, 0, "1012", () => 0), 750);
+  assert.equal(a.retryDelay(1, 0, "1012", () => 1), 1250);
+  assert.equal(a.retryDelay(4, 0, "1012", () => 0), 7500);
+  assert.equal(a.retryDelay(4, 0, "1012", () => 0.999), 12_495);
+});
+
+test("with fake timers: a 30 s server restart is over within a few seconds of it coming back", (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout", "Date"] });
+  const up = 30_000; // the server is back after 30 s
+  const tries = [];
+  let n = 0;
+  let back = null;
+  const attempt = () => {
+    const now = Date.now();
+    tries.push(now);
+    if (now >= up) { back = now; return; }
+    n += 1;
+    setTimeout(attempt, a.retryDelay(n, now, "1012", () => 0.5));
+  };
+  attempt();
+  for (let i = 0; i < 200 && back === null; i++) t.mock.timers.tick(250);
+  assert.ok(back !== null && back - up <= 10_000, `back at ${back}`);
+  assert.deepEqual(tries.slice(0, 4), [0, 1000, 3000, 6000]);
+  t.mock.timers.reset();
+});
+
+test("a newer app from the same office is offered; anything else is ignored", () => {
+  const server = "https://office.example";
+  const url = "https://office.example/api/install/update/exe";
+  assert.deepEqual(a.updateFrom({ update: { version: "9.0.0", url } }, server), { version: "9.0.0", url });
+  assert.equal(a.updateFrom({ update: { version: a.VERSION, url } }, server), null); // not newer
+  assert.equal(a.updateFrom({ update: { version: "0.1.0", url } }, server), null);
+  assert.equal(a.updateFrom({ update: { version: "9.0.0", url: "https://evil.example/x.exe" } }, server), null);
+  assert.equal(a.updateFrom({ update: { version: "9.0.0; rm", url } }, server), null);
+  assert.equal(a.updateFrom({}, server), null);
+  assert.equal(a.VERSION, "0.5.2");
+  assert.ok(a.PAGE.includes('id="update"') && a.PAGE.includes("Download the update"));
 });

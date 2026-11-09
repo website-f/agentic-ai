@@ -13,6 +13,8 @@
  * P52: it always finds its way back (a connection attempt that hangs is cut after 20 s, waking
  * from sleep reconnects at once, every retry is logged), writes how it is doing to status.json,
  * and serves a small status page on this computer only (http://127.0.0.1:47615, with a key).
+ * P94: after the office server restarts or the line drops it comes back within seconds (1, 2,
+ * 3 s, then every 10 s for 5 minutes, with jitter), and it says when a newer app is out.
  * On Windows it is also built as AgenticOfficePC.exe (Node single executable): double-click to
  * install, link and start with Windows; no console window, no script host.
  */
@@ -27,7 +29,7 @@ const net = require("node:net");
 const crypto = require("node:crypto");
 const { spawn, spawnSync } = require("node:child_process");
 
-const VERSION = "0.5.1";
+const VERSION = "0.5.2";
 // P52: running as AgenticOfficePC.exe (a Node single executable application).
 const SEA = (() => { try { return require("node:sea").isSea(); } catch { return false; } })();
 const IS_WIN = process.platform === "win32";
@@ -58,6 +60,49 @@ const PING_EVERY = 25_000;
 const SILENCE = 70_000; // the server pongs every ping; this long without a word = reconnect
 const CONNECT_TIMEOUT = Number(process.env.AGENTIC_PC_CONNECT_TIMEOUT) || 20_000; // P52: a hanging attempt is cut and retried
 const SLEPT = 30_000; // P52: the clock jumped this much between ticks: the computer slept
+
+// P94: how soon to try again. After a drop (the server restarted: 1012, going away: 1001, the
+// line dropped: 1006, a refused or hanging attempt) it comes back fast: 1 s, 2 s, 3 s, then
+// every 10 s for the first 5 minutes; after that, and when the server refused this computer,
+// the longer backoff (2 s doubling to 60 s). Every wait is spread +-25 % so 200 computers do
+// not all knock at the same moment when the server comes back.
+const FAST_STEPS = [1000, 2000, 3000];
+const FAST_CAP = 10_000;
+const FAST_FOR = 5 * 60_000;
+const SLOW_FIRST = 2000;
+const SLOW_CAP = 60_000;
+const REFUSED = new Set([1008, 4401, 4403, 4409]);
+
+/** Whether the connection ended in a way worth retrying fast (not a refusal). */
+function quickRetry(why) {
+  const code = Number(String(why).split(" ")[0]);
+  return !(Number.isFinite(code) && REFUSED.has(code));
+}
+
+/** Milliseconds to wait before attempt number `tries + 1` (`tries` failed in a row, from 1),
+ * `downFor` ms since the last good connection ended (or the agent started). */
+function retryDelay(tries, downFor, why, random = Math.random) {
+  const n = Math.max(1, tries);
+  const base = quickRetry(why) && downFor < FAST_FOR
+    ? (FAST_STEPS[n - 1] ?? FAST_CAP)
+    : Math.min(SLOW_FIRST * 2 ** (n - 1), SLOW_CAP);
+  return Math.round(base * (0.75 + random() * 0.5));
+}
+
+/** P94: what the server said about a newer app, if it is one and points at this office. */
+function updateFrom(msg, server) {
+  const u = msg && typeof msg.update === "object" && msg.update ? msg.update : null;
+  if (!u || typeof u.version !== "string" || typeof u.url !== "string") return null;
+  if (!/^\d+\.\d+\.\d+$/.test(u.version) || !newer(u.version, VERSION)) return null;
+  if (!sameServer(u.url, server)) return null;
+  return { version: u.version, url: u.url };
+}
+
+function newer(a, b) {
+  const pa = a.split(".").map(Number), pb = b.split(".").map(Number);
+  for (let i = 0; i < 3; i++) if ((pa[i] || 0) !== (pb[i] || 0)) return (pa[i] || 0) > (pb[i] || 0);
+  return false;
+}
 const MAX_MESSAGE = 256 * 1024;
 const MAX_UPLOAD = 25 * 1024 * 1024;
 const SEARCH_MAX_ENTRIES = 50_000;
@@ -1084,7 +1129,7 @@ function setStatus(patch) {
 /** Why a connection ended, in words a person understands. */
 function plainWhy(why) {
   const code = Number(String(why).split(" ")[0]);
-  if (code === 1012) return "the office server restarted (an update); it reconnects by itself";
+  if (code === 1012) return "the office server restarted (an update); it reconnects by itself in a few seconds";
   if (code === 1006) return "the connection dropped (no internet, Wi-Fi changed, or the server is unreachable)";
   if (code === 1000 || code === 1001) return "the connection was closed";
   if (code === 1008 || code === 4401 || code === 4403) return "the office server refused this computer";
@@ -1098,10 +1143,12 @@ async function run() {
     process.exit(1);
   }
   if (!takeLock()) { console.error("The agent is already running."); process.exit(0); }
-  let delay = 2000;
+  let tries = 0; // P94: failed attempts in a row
+  let downSince = Date.now(); // P94: when the last good connection ended (or the start)
   let stopping = false; // the agent is shutting down
   let unlinked = false; // this session ended because the computer was unlinked
   let current = null;
+  let connectedOnce = false; // this attempt got the welcome
   let kickSleep = null;
   statusNow = { state: "starting", since: new Date().toISOString() };
   log(`agent ${VERSION} starting${cfg.server ? ` for ${cfg.server}` : ""}${SEA ? " (exe)" : ""}`);
@@ -1109,7 +1156,8 @@ async function run() {
   // Reconnect now: from the status page, or after the computer woke up.
   const reconnect = (why) => {
     log(why);
-    delay = 2000;
+    tries = 0;
+    downSince = Date.now();
     try { if (current && current.readyState !== WebSocket.CLOSED) current.close(); } catch { /* closing */ }
     kickSleep?.();
   };
@@ -1210,12 +1258,15 @@ async function run() {
       try { m = JSON.parse(ev.data); } catch { return; }
       if (!m || typeof m !== "object") return;
       if (m.type === "welcome") {
-        delay = 2000;
+        tries = 0;
+        connectedOnce = true;
         const s = m.settings || {};
         cfg = { ...cfg, device_id: m.device_id, name: m.name, folders: Array.isArray(s.folders) && s.folders.length ? s.folders : cfg.folders, paused: !!s.paused };
         writeConfig({ ...readConfig(), device_id: cfg.device_id, name: cfg.name, folders: cfg.folders, paused: cfg.paused });
         lastState = stateOf(cfg);
-        setStatus({ state: "online", last_error: null, next_try: null });
+        const update = updateFrom(m, cfg.server); // P94: a newer app: shown, never forced
+        setStatus({ state: "online", last_error: null, next_try: null, update });
+        if (update) log(`a newer app is available: ${update.version} (${update.url})`);
         log(`linked as "${m.name}"; folders: ${(cfg.folders || []).join(", ")}${cfg.paused ? " (paused)" : ""}`);
       } else if (m.type === "settings") {
         cfg = { ...cfg, folders: Array.isArray(m.folders) ? m.folders : cfg.folders, paused: !!m.paused };
@@ -1283,11 +1334,13 @@ async function run() {
     unlinked = false;
     lastState = stateOf(cfg);
     setStatus({ state: statusNow.state === "online" ? "online" : "connecting", server: cfg.server });
+    connectedOnce = false;
     const why = await connect(wsBaseOf(cfg.server));
     if (stopping) break;
     if (unlinked) continue;
-    const wait = delay + Math.floor(Math.random() * 1000);
-    delay = Math.min(delay * 2, 60_000);
+    if (connectedOnce) downSince = Date.now(); // it was online: the fast retries start now
+    tries += 1;
+    const wait = retryDelay(tries, Date.now() - downSince, why);
     setStatus({ state: "offline", last_error: plainWhy(why), next_try: new Date(Date.now() + wait).toISOString() });
     log(`offline: ${plainWhy(why)}; trying again in ${Math.round(wait / 1000)} s`);
     await new Promise((r) => { kickSleep = r; setTimeout(r, wait); });
@@ -1313,7 +1366,7 @@ h1{font-size:20px;margin:0}h2{font-size:15px;margin:0 0 8px}.muted{color:var(--m
 .state{display:flex;align-items:center;gap:12px;font-size:18px;font-weight:600}
 .dot{width:14px;height:14px;border-radius:50%;flex:none}.ok{background:var(--ok)}.warn{background:var(--warn)}.bad{background:var(--bad)}
 button,input{font:inherit}button{min-height:44px;padding:0 16px;border-radius:10px;border:1px solid var(--line);background:var(--card);color:var(--fg);cursor:pointer}
-button.primary{background:var(--accent);border-color:var(--accent);color:#fff}.row{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+button.primary,a.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}a.btn{display:inline-flex;align-items:center;min-height:44px;padding:0 16px;border-radius:10px;border:1px solid var(--line);text-decoration:none;font-weight:600}.row{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
 input{width:100%;min-height:44px;padding:0 12px;border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--fg);margin-top:4px}
 label{display:block;margin-top:10px;font-size:13px;font-weight:600}ol{margin:0;padding-left:20px}li{margin:6px 0}
 .err{color:var(--bad);font-size:13px;margin-top:8px}code{font-size:13px}
@@ -1322,6 +1375,7 @@ label{display:block;margin-top:10px;font-size:13px;font-weight:600}ol{margin:0;p
 </style></head><body><main>
 <div><h1>Agentic Office on this computer</h1><p class="muted">Lets your own AI use the folders you chose on this computer. Only you see this page.</p></div>
 <div class="card" id="status"><div class="state"><span class="dot warn"></span>Checking…</div></div>
+<div class="card" id="update" hidden></div>
 <div class="card" id="sites" hidden></div>
 <div class="card" id="help" hidden></div>
 <div class="card" id="link" hidden><h2>Link this computer</h2>
@@ -1342,7 +1396,7 @@ link.hidden=s.linked;help.hidden=true;
 if(!s.linked){st.innerHTML='<div class="state"><span class="dot warn"></span>Not linked yet</div>'+(s.last_error?'<p class="err">'+esc(s.last_error)+'</p>':'');if(s.server&&!document.getElementById("server").value)document.getElementById("server").value=s.server;}
 else if(s.state==="online"){st.innerHTML='<div class="state"><span class="dot ok"></span>Online</div><p class="muted">Linked as <b>'+esc(s.name)+'</b> to '+esc(s.server)+' · since '+ago(s.since)+'</p><p class="muted">'+(s.paused?"<b>Paused:</b> the AI cannot use this computer.":"The AI can use: "+esc((s.folders||[]).join(", ")||"no folders"))+'</p><p class="muted">Sites through this computer: '+(s.tunnel&&s.tunnel.on?"<b>on</b> — "+esc((s.tunnel.hosts||[]).join(", "))+" ("+(s.tunnel.open||0)+" open now)":"off")+'</p><div class="row">'+(s.paused?'<button class="primary" onclick="act(\\'/resume\\')">Let the AI use it again</button>':'<button onclick="act(\\'/pause\\')">Pause the AI</button>')+'</div>';}
 else{st.innerHTML='<div class="state"><span class="dot bad"></span>'+(s.state==="connecting"?"Connecting…":"Offline")+'</div><p class="muted">'+esc(s.last_error||"")+(s.next_try?' · next try '+new Date(s.next_try).toLocaleTimeString():"")+'</p><div class="row"><button class="primary" onclick="act(\\'/reconnect\\')">Reconnect now</button></div>';
-help.hidden=false;help.innerHTML='<h2>If it stays offline</h2><ol><li>Check this computer is on the internet: open any website.</li><li>Press <b>Reconnect now</b>. It also retries by itself every minute.</li><li>If you use a VPN or office firewall, make sure <code>'+esc(s.server)+'</code> is allowed.</li><li>Restart the computer. It starts by itself when you sign in.</li><li>Still offline? On the web, open <b>My computers</b>: if this computer is not listed, link it again with a new code.</li></ol>';}
+help.hidden=false;help.innerHTML='<h2>If it stays offline</h2><ol><li>Check this computer is on the internet: open any website.</li><li>Press <b>Reconnect now</b>. It also retries by itself (within seconds after a short drop, then every minute).</li><li>If you use a VPN or office firewall, make sure <code>'+esc(s.server)+'</code> is allowed.</li><li>Restart the computer. It starts by itself when you sign in.</li><li>Still offline? On the web, open <b>My computers</b>: if this computer is not listed, link it again with a new code.</li></ol>';}
 const sites=document.getElementById("sites");sites.hidden=!s.linked;
 if(s.linked){const t=s.tunnel||{},a=s.ask,list=(t.hosts&&t.hosts.length?t.hosts:["eperolehan.gov.my"]).join(", ");let h='<h2>Websites through this computer</h2>';
 if(a&&a.own){h+='<div class="ask"><p><b>Your ePerolehan work runs on this computer.</b> Press <b>Allow</b> so your AI can open <b>'+esc(a.hosts.join(", "))+'</b> here, from your own internet line.</p><p class="muted">Kerja ePerolehan anda berjalan pada komputer ini. Tekan <b>Allow</b> (Benarkan) sekali sahaja.</p><p class="muted">Only these sites. The AI opens them in a browser window here, so you can watch what it does. You can turn it off on this page at any time.</p><div class="row"><button class="primary" data-act="/tunnel" data-on="1">Allow</button><button data-act="/ask/dismiss">Not now</button></div></div>';}
@@ -1350,6 +1404,7 @@ else if(a){h+='<div class="ask"><p><b>'+esc(a.by||"Your office")+'</b> asks to o
 else if(t.on){h+='<p><span class="pill on">On</span> '+esc(list)+' · '+(t.open||0)+' open now</p><p class="muted">Your office AI opens these sites through this computer. Nothing else passes through it.</p><div class="row"><button data-act="/tunnel" data-on="0">Turn off</button></div>';}
 else{h+='<p><span class="pill">Off</span></p><p class="muted">When your office chooses this computer for a site such as ePerolehan, it asks you here first.</p><div class="row"><button data-act="/tunnel" data-on="1">Turn on for '+esc(list)+'</button></div>';}
 sites.innerHTML=h;}
+const up=document.getElementById("update");up.hidden=!(s.update&&s.update.url);if(s.update&&s.update.url)up.innerHTML='<h2>Update available</h2><p class="muted">Agentic Office PC '+esc(s.update.version)+' is ready (this computer has '+esc(s.version)+'). It reconnects faster after the office server restarts. Download it and run it: it replaces this one and stays linked.</p><div class="row"><a class="btn primary" href="'+esc(s.update.url)+'" target="_blank" rel="noopener">Download the update</a></div>';
 document.getElementById("foot").textContent="Agent "+s.version+(s.at?"":"");}
 document.addEventListener("click",e=>{const b=e.target.closest("[data-act]");if(b)act(b.dataset.act,b.dataset.on!==undefined?{on:b.dataset.on==="1"}:{})});
 document.getElementById("doLink").onclick=async()=>{const e=document.getElementById("linkErr");e.textContent="";try{await api("/link",{server:document.getElementById("server").value.trim(),code:document.getElementById("code").value.trim()});load()}catch(x){e.textContent=x.message}};
@@ -1851,7 +1906,7 @@ module.exports = {
   denied, allowedPath, inside, safeName, sameServer, searchFiles, listFolder, matcher, NO_SAVE_EXTS, AgentError, VERSION,
   needRemote, parseCombo, sendKeysText, sendKeysCombo, xdoCombo, macCombo, toPixel, health, runHelper,
   linkWith, validHost, tunnelOf, hostAllowed, parseTunnelArgs, pipeTunnel, openTunnel, detailOf, hello, tunnels, companyBrowserAllowed,
-  askFrom, allowTunnel, shouldOpenAsk, PAGE,
+  askFrom, allowTunnel, shouldOpenAsk, PAGE, retryDelay, quickRetry, updateFrom, FAST_FOR,
 };
 
 if (require.main === module || SEA) {
