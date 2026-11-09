@@ -116,6 +116,41 @@ const INVALIDATE: Record<string, readonly (readonly string[])[]> = {
   "money.updated": [moneyKeys.all, partyKeys.all],
 };
 
+/** P96: invalidations are batched: each key once, 250 ms after the last event, but never later
+ * than `maxWaitMs` after the first one waiting. A plain debounce never fired while 50 agents
+ * kept events coming faster than every 250 ms, so pages stopped refreshing under load. */
+export function invalidationBatcher(
+  run: (key: readonly unknown[]) => void,
+  quietMs = 250,
+  maxWaitMs = 1000,
+): { add: (key: readonly string[]) => void; cancel: () => void } {
+  const pending = new Set<string>();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let firstAt = 0;
+  const flush = () => {
+    timer = undefined;
+    firstAt = 0;
+    const keys = [...pending];
+    pending.clear();
+    for (const k of keys) run(JSON.parse(k) as unknown[]);
+  };
+  return {
+    add(key) {
+      pending.add(JSON.stringify(key));
+      const now = Date.now();
+      if (!firstAt) firstAt = now;
+      clearTimeout(timer);
+      timer = setTimeout(flush, Math.max(0, Math.min(quietMs, firstAt + maxWaitMs - now)));
+    },
+    cancel() {
+      clearTimeout(timer);
+      timer = undefined;
+      firstAt = 0;
+      pending.clear();
+    },
+  };
+}
+
 export function useLiveEvents() {
   const qc = useQueryClient();
   const navigate = useNavigate();
@@ -127,17 +162,8 @@ export function useLiveEvents() {
     let openedAt = 0;
     let stopped = false;
     let retry: ReturnType<typeof setTimeout> | undefined;
-    const pending = new Set<string>();
-    let flush: ReturnType<typeof setTimeout> | undefined;
-
-    const queue = (key: readonly string[]) => {
-      pending.add(JSON.stringify(key));
-      clearTimeout(flush);
-      flush = setTimeout(() => {
-        for (const k of pending) qc.invalidateQueries({ queryKey: JSON.parse(k) });
-        pending.clear();
-      }, 250);
-    };
+    const batch = invalidationBatcher((key) => qc.invalidateQueries({ queryKey: key }));
+    const queue = batch.add;
 
     const handle = (ev: LiveEvent) => {
       if (!isNewEvent(ev, lastSeq)) return; // replayed after a reconnect: already handled
@@ -211,7 +237,7 @@ export function useLiveEvents() {
       stopped = true;
       document.removeEventListener("visibilitychange", onVisible);
       clearTimeout(retry);
-      clearTimeout(flush);
+      batch.cancel();
       es?.close();
       useLive.getState().set({ connected: false });
     };

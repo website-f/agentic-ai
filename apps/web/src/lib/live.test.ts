@@ -1,6 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
-import { isNewEvent, resetLive, streamUrl, useLive } from "./live";
+import { invalidationBatcher, isNewEvent, resetLive, streamUrl, useLive } from "./live";
 
 describe("live event dedupe", () => {
   it("drops events at or below the last seq seen", () => {
@@ -36,5 +36,45 @@ describe("live event dedupe", () => {
     resetLive();
     expect(useLive.getState().agentStatus).toEqual({});
     expect(useLive.getState().connected).toBe(false);
+  });
+});
+
+describe("live invalidation batching (P96)", () => {
+  it("refreshes each key once after a quiet moment", () => {
+    vi.useFakeTimers();
+    const ran: string[] = [];
+    const b = invalidationBatcher((k) => ran.push(JSON.stringify(k)));
+    b.add(["tasks"]);
+    b.add(["tasks"]);
+    b.add(["status"]);
+    vi.advanceTimersByTime(249);
+    expect(ran).toEqual([]);
+    vi.advanceTimersByTime(1);
+    expect(ran).toEqual(['["tasks"]', '["status"]']);
+    vi.useRealTimers();
+  });
+
+  it("still refreshes within a second while events never stop (50 busy agents)", () => {
+    vi.useFakeTimers();
+    const ran: string[] = [];
+    const b = invalidationBatcher((k) => ran.push(JSON.stringify(k)));
+    for (let ms = 0; ms < 3000; ms += 100) {
+      b.add(["tasks"]);
+      vi.advanceTimersByTime(100);
+    }
+    expect(ran.length).toBeGreaterThanOrEqual(2); // a plain debounce: 0 until the events stop
+    b.cancel();
+    vi.useRealTimers();
+  });
+
+  it("cancel drops what was waiting", () => {
+    vi.useFakeTimers();
+    const ran: string[] = [];
+    const b = invalidationBatcher((k) => ran.push(JSON.stringify(k)));
+    b.add(["tasks"]);
+    b.cancel();
+    vi.advanceTimersByTime(2000);
+    expect(ran).toEqual([]);
+    vi.useRealTimers();
   });
 });
