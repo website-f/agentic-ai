@@ -52,3 +52,20 @@
   gap: 8px;
   align-items: center;
 }
+/* P93: where the Add button would be, for someone who may not add: who adds instead. */
+.p93-noadd {
+  margin: 0;
+  max-width: 340px;
+  padding: 8px 12px;
+  border: 1px dashed var(--line, #d8dde3);
+  border-radius: 8px;
+  color: var(--muted, #5b6672);
+  font-size: 0.86rem;
+  line-height: 1.35;
+}
+@media (max-width: 480px) {
+  .p93-noadd {
+    max-width: none;
+    width: 100%;
+  }
+}

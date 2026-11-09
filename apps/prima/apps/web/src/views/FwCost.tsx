@@ -4,6 +4,7 @@ import type { ProofInput } from '@prima/core';
 import { api, type FwCostBoard } from '../api';
 import { Chip, ErrorNotice, Kpi, Loading, dateLabel, useAction, useLoad } from '../ui';
 import { DocList, ProofPicker } from './Proof';
+import { NoAddNote } from './FwmAdd';
 
 /**
  * Recruitment cost (Fauzan, 3 Nov 2026). A foreign worker owned by one company sometimes works under another company's
@@ -46,6 +47,7 @@ const STATUS_LABEL: Record<Charge['status'], string> = {
 export function FwCostView() {
   const { data, error } = useLoad(() => api.fwCostBoard(), []);
   const [tab, setTab] = useState<'charges' | 'placements' | 'rates' | 'ceo'>('charges');
+  const [startAdding, setStartAdding] = useState(0);
   if (error) return <ErrorNotice error={error} />;
   if (!data) return <Loading what="recruitment cost" />;
   const running = data.placements.filter((p) => p.running).length;
@@ -59,6 +61,16 @@ export function FwCostView() {
             When a foreign worker works under another company's or a branch's job, the host pays FWM a monthly recruitment cost per worker, and FWM pays the
             owning company back. Any day in a month counts as the full month; two hosts in one month pay half each. The Finance Director or CEO sets both rates.
           </p>
+        </div>
+        {/* P93: the add at the top for FWM; for everyone else, who adds instead of a silent gap. */}
+        <div className="k-head-actions">
+          {data.can.place ? (
+            <button className="btn btn-primary btn-sm" onClick={() => (setTab('placements'), setStartAdding((n) => n + 1))}>
+              Record a placement
+            </button>
+          ) : (
+            <NoAddNote>Placements are recorded by the FWM team. Charges are drafted by Finance and approved by the Finance Director or CEO.</NoAddNote>
+          )}
         </div>
       </div>
       <div className="kpis">
@@ -94,7 +106,7 @@ export function FwCostView() {
           </div>
         </div>
         {tab === 'charges' && data.scope !== 'placements' && <Charges data={data} />}
-        {(tab === 'placements' || (data.scope === 'placements' && tab === 'charges')) && <Placements data={data} />}
+        {(tab === 'placements' || (data.scope === 'placements' && tab === 'charges')) && <Placements key={startAdding} data={data} startAdding={startAdding > 0} />}
         {tab === 'rates' && data.rates && <Rates data={data} />}
         {tab === 'ceo' && data.legal && <CeoLog legal={data.legal} />}
       </section>
@@ -318,8 +330,8 @@ function BookForm({ c, step, onDone }: { c: Charge; step: 'billed' | 'paid'; onD
 
 // ---------- Placements ----------
 
-function Placements({ data }: { data: FwCostBoard }) {
-  const [adding, setAdding] = useState(false);
+function Placements({ data, startAdding = false }: { data: FwCostBoard; startAdding?: boolean }) {
+  const [adding, setAdding] = useState(startAdding && data.can.place);
   const [q, setQ] = useState('');
   const needle = q.trim().toLowerCase();
   const shown = data.placements.filter(
@@ -335,6 +347,12 @@ function Placements({ data }: { data: FwCostBoard }) {
           </button>
         )}
       </div>
+      {data.can.place && (
+        <p className="muted small" style={{ padding: '0 12px', margin: 0 }}>
+          Placements from before Prima: record each one here, oldest first, with its real start date. They are not imported from a file because each month of a
+          placement becomes a charge.
+        </p>
+      )}
       {adding && <PlacementForm data={data} onDone={() => setAdding(false)} />}
       {shown.length === 0 && <div className="empty">{data.placements.length ? 'No placement matches.' : 'No worker is under another company’s job.'}</div>}
       {shown.map((p) => (

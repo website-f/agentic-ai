@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { demoPin } from '@prima/core';
 import { ApiError, guardPhone } from '../api';
-import type { GuardPhoneMe, GuardPhoneStatus } from '../api/guard-phone';
+import type { GuardDuty, GuardPhoneMe, GuardPhoneStatus } from '../api/guard-phone';
 import { Chip, hhmm } from '../ui';
 import { gps } from './Camera';
 import { FaceCapture, FaceChallengeCapture } from './FaceCheck';
@@ -357,9 +357,70 @@ function Duty({ onSignedOut }: { onSignedOut: () => void }) {
           {err}
         </div>
       )}
+      <MyDuty />
       <button className="btn btn-sm" style={{ alignSelf: 'flex-start' }} onClick={() => guardPhone.signOut().then(onSignedOut)}>
         Log keluar · Sign out
       </button>
+    </div>
+  );
+}
+
+/**
+ * P93 (Fitri, 9 Nov 2026: foreign workers "might get their own login just for guard kind of things"): the guard's own
+ * duty on the phone, view only: reminders (papers running out, the next shift), the next shifts and the last clock-ins.
+ * Clocking in itself stays on the site device. Short lines in Malay and English, for guards whose first language is
+ * neither.
+ */
+const H2 = { fontSize: '1rem', margin: '6px 0 0' } as const;
+const UL = { margin: 0, paddingLeft: 18, display: 'grid', gap: 4, fontSize: '0.9rem' } as const;
+
+function MyDuty() {
+  const [duty, setDuty] = useState<GuardDuty | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  useEffect(() => {
+    guardPhone.duty().then(setDuty, (e) => setErr(errText(e)));
+  }, []);
+  if (err) return <div className="muted small">{err}</div>;
+  if (!duty) return null;
+  const day = (d: string) => new Date(`${d}T00:00:00+08:00`).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
+  return (
+    <div className="list" style={{ gap: 8 }}>
+      {duty.reminders.length > 0 && (
+        <>
+          <h2 style={H2}>Peringatan · Reminders</h2>
+          {duty.reminders.map((r, i) => (
+            <div key={i} className="notice small" data-tone={r.tone === 'info' ? undefined : r.tone}>
+              {r.text}
+            </div>
+          ))}
+        </>
+      )}
+      <h2 style={H2}>Syif saya · My shifts</h2>
+      {duty.roster.length === 0 ? (
+        <p className="muted small">Tiada syif dalam 14 hari · No shift in the next 14 days.</p>
+      ) : (
+        <ul style={UL}>
+          {duty.roster.slice(0, 7).map((r) => (
+            <li key={r.id}>
+              <b>{day(r.date)}</b> {hhmm(r.start)} to {hhmm(r.end)} · {r.siteName}
+            </li>
+          ))}
+        </ul>
+      )}
+      <h2 style={H2}>Rekod masuk kerja · My clock-ins</h2>
+      {duty.clockRecord.length === 0 ? (
+        <p className="muted small">Tiada rekod · Nothing yet.</p>
+      ) : (
+        <ul style={UL}>
+          {duty.clockRecord.slice(0, 5).map((c) => (
+            <li key={c.shiftId}>
+              <b>{day(c.date)}</b> {c.siteName} · {c.clockIn ? `in ${hhmm(c.clockIn)}${c.clockOut ? `, out ${hhmm(c.clockOut)}` : ''}` : 'tiada · none'}
+              {c.status === 'late' ? ' · lewat · late' : c.status === 'no_show' ? ' · tidak hadir · not attended' : ''}
+            </li>
+          ))}
+        </ul>
+      )}
+      <p className="muted small">Masuk dan keluar kerja di peranti tapak · Clock in and out on the site device.</p>
     </div>
   );
 }

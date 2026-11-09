@@ -43,7 +43,7 @@ export type ExtraImportKind = 'client' | 'contract' | 'leaveEntitlement' | P90Im
  * Each row goes through the screen's own add (addFwWorker, addPurSupplier, addPublicHoliday, addBranch, the IT manual
  * asset record), with that add's own permission check: the import never lets anyone write what they could not add by hand.
  */
-export type P90ImportKind = 'fwWorker' | 'purSupplier' | 'publicHoliday' | 'branch' | 'itAsset';
+export type P90ImportKind = 'fwWorker' | 'purSupplier' | 'publicHoliday' | 'branch' | 'itAsset' | 'fwPaper';
 
 /** Supplier categories, as the Procurement screen names them. */
 export const PUR_CATEGORY_WORDS: [string, string][] = [
@@ -169,6 +169,23 @@ export const EXTRA_IMPORTS: Record<ExtraImportKind, ImportSpec> = {
       { key: 'fomemaExpiresOn', label: 'FOMEMA medical expires on', type: 'date' },
       { key: 'insuranceExpiresOn', label: 'Foreign worker insurance expires on', type: 'date' },
       { key: 'spikpaExpiresOn', label: 'SPIKPA expires on', type: 'date' },
+    ],
+  },
+  // P93: a paper of a worker already in Prima, from the old system (opening record, copy not yet attached).
+  fwPaper: {
+    kind: 'fwPaper',
+    label: 'Foreign worker paper date',
+    table: 'credentials',
+    companyScoped: true,
+    keptBy: 'FWM',
+    screen: 'Foreign workers',
+    note: 'One row per paper of a worker already in Prima. It is added only where Prima has no date for that paper yet, and shows as "Typed in, copy not seen". The next paper is recorded from its copy, as always.',
+    fields: [
+      { key: 'staffNo', label: 'Staff number', type: 'text', required: true, words: ['worker no', 'worker id', 'no pekerja', 'id pekerja', 'fw no'] },
+      { key: 'paper', label: 'Paper', type: 'text', required: true, help: 'Work permit (PLKS), passport, FOMEMA, insurance, SPIKPA or KDN letter.', words: ['document', 'dokumen', 'jenis dokumen', 'type', 'jenis'] },
+      { key: 'number', label: 'Paper number', type: 'text', restricted: true, help: 'For a passport only the last 4 characters are kept.', words: ['no dokumen', 'document no', 'no.'] },
+      { key: 'issuedOn', label: 'Issued on', type: 'date', words: ['tarikh dikeluarkan', 'issue date', 'tarikh keluar'] },
+      { key: 'expiresOn', label: 'Expires on', type: 'date', required: true, words: ['tarikh tamat', 'expiry', 'expiry date', 'tamat'] },
     ],
   },
   purSupplier: {
@@ -340,6 +357,8 @@ export const IMPORTABLE_KINDS: readonly ImportKind[] = Object.freeze([
   'publicHoliday',
   'branch',
   'itAsset',
+  // P93: foreign workers' papers from the old system.
+  'fwPaper',
   // P91: the Items screen (item types, units with labels, bulk stock).
   ...ITEM_IMPORT_KINDS,
   // P91: see docs/P91_ADD_IMPORT_BIZ.md.
@@ -429,6 +448,8 @@ export interface ImportSaver extends BizImportSaver, P91ImportSaver {
   setLeaveOverride(user: User, personId: Id, kind: LeaveOverrideKind, days: number | null, note: string): Promise<unknown>;
   /** P90 kinds: the screen's own add, permission check included. */
   addFwWorker(user: User, input: FwWorkerInput): Promise<{ person: { id: Id } }>;
+  /** P93: one paper of a worker already in Prima, from the old system. */
+  importFwPaper(user: User, input: { companyId: Id; staffNo: string; paper: string; number?: string | null; issuedOn?: IsoDate | null; expiresOn: IsoDate }): Promise<{ id: Id }>;
   addPurSupplier(
     user: User,
     companyId: Id,
@@ -861,6 +882,18 @@ export class OrgImportService {
         spikpaExpiresOn: d(v.spikpaExpiresOn),
       });
       return r.person.id;
+    }
+    if (kind === 'fwPaper') {
+      const d = (x: unknown) => (x === null || x === undefined || x === '' ? null : String(x));
+      const c = await this.saver.importFwPaper(user, {
+        companyId,
+        staffNo: String(v.staffNo ?? ''),
+        paper: String(v.paper ?? ''),
+        number: d(v.number),
+        issuedOn: d(v.issuedOn),
+        expiresOn: String(v.expiresOn ?? ''),
+      });
+      return c.id;
     }
     if (kind === 'purSupplier') {
       const cats = String(v.categories ?? '')

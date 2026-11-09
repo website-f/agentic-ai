@@ -976,7 +976,7 @@ export function QuickAddButton({
   );
 }
 
-function QuickAddDrawer({
+export function QuickAddDrawer({
   kind,
   title,
   options,

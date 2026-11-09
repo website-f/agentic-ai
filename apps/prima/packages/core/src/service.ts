@@ -916,6 +916,7 @@ import { FW_PAPERS } from "./fw";
 import { JA_TO_FW_PAPER } from "./fw";
 import { fwAcksOwed } from "./fw";
 import { fwPaperNumber } from "./fw";
+import { fwPaperFromWords } from "./fw";
 import type { FwAck } from "./fw";
 import { AM_BQ_TEMPLATES } from "./am-bq";
 import { AM_JOB_KINDS } from "./am-bq";
@@ -11170,7 +11171,7 @@ export class PrimaService {
     const byPerson = new Map<Id, Credential[]>();
     for (const c of creds) byPerson.set(c.personId, [...(byPerson.get(c.personId) ?? []), c]);
     const items: FwBoardItem[] = [];
-    const workers: FwWorkerRow[] = [];
+    const workers: Omit<FwWorkerRow, 'phone'>[] = [];
     if (seeBoard) {
       for (const p of foreign) {
         const ja = jaByKey.get(jaKey(p.companyId, p.staffNo)) ?? null;
@@ -11246,6 +11247,26 @@ export class PrimaService {
         }
       : null;
     const users = await this.store.list('users', {});
+    // P93: the worker list (and the branches to add one to) go to the people who may add a worker: FWM staff and the
+    // owner. Paper numbers stay with the FWM team; each row says whether the worker's own guard phone is set up.
+    const maker = this.fwmMaker(user);
+    const phones = maker && workers.length ? await this.store.list('guardPhones', { companyId: ids }) : [];
+    const nowMs = toMs(this.now());
+    const personById = new Map(foreign.map((p) => [p.id, p]));
+    const phoneOf = (p: Person): FwWorkerRow['phone'] => {
+      const login = users.some((u) => u.personId === p.id && (u.role === 'guard' || u.role === 'supervisor') && !u.integration && !(u.accessClosedFrom && u.accessClosedFrom <= today));
+      const mine = phones.filter((x) => x.personId === p.id);
+      const active = mine.find((x) => x.status === 'active') ?? null;
+      const issued = mine.some((x) => x.status === 'issued' && !!x.codeExpiresAt && toMs(x.codeExpiresAt) > nowMs);
+      return { login, pin: !!p.pinHash, state: active ? 'active' : issued ? 'issued' : 'none', enrolledAt: active?.enrolledAt ?? null, canEnrol: this.mayManageGuardPhone(user, p) };
+    };
+    const workerRows: FwWorkerRow[] = maker
+      ? workers.map((w) => ({
+          ...w,
+          papers: role === 'staff' ? w.papers : w.papers.map((x) => ({ ...x, number: null })),
+          phone: phoneOf(personById.get(w.id)!),
+        }))
+      : [];
     const visibleTasks = tasks.filter((t) => role !== 'om' || t.omUserId === user.id || t.omUserId === null);
     const taskRows = visibleTasks
       .map((t) => {
@@ -11290,10 +11311,12 @@ export class PrimaService {
       },
       year10,
       tasks: taskRows,
-      workers: role === 'staff' ? workers : [],
+      workers: workerRows,
+      /** P93: recording a paper from its copy (or taking the JA date) stays with the FWM team. */
+      canRecordPaper: role === 'staff',
       alignment,
-      /** Branches FWM may put a worker in when adding them from the JA app. */
-      branches: role === 'staff' ? branches.map((b) => ({ id: b.id, companyId: b.companyId, name: b.name })) : [],
+      /** Branches FWM (or the owner) may put a worker in when adding one. */
+      branches: maker ? branches.filter((b) => b.status !== 'closed').map((b) => ({ id: b.id, companyId: b.companyId, name: b.name })) : [],
       rules: { ladder: RULES.fwmLadder, cap: RULES.fwmYearCap, passport: RULES.fwmPassportMonths, ack: RULES.fwmAck, both: RULES.fwmBothApps },
     };
   }
@@ -49209,7 +49232,8 @@ export class PrimaService {
    * worker's file. The full passport number stays in the JA app and the restricted vault.
    */
   async addFwWorkerFromJa(user: User, jaRecordId: Id, input: { branchId: Id; hiredOn: IsoDate; dob: IsoDate }) {
-    if (this.fwmRoleOf(user) !== 'staff') throw new AccessDenied('hr.pay', '(adding foreign workers)');
+    // P93: FWM staff and the owner (P78: the owner does the maker step everywhere); nobody else.
+    if (!this.fwmMaker(user)) throw new AccessDenied('hr.pay', '(adding foreign workers)');
     const r = await this.store.get('jaRecords', jaRecordId);
     if (!r || r.dataset !== 'worker' || !r.worker) throw new NotFound('JA worker record');
     if (!visibleCompanyIds(user, await this.grants(), this.today()).includes(r.companyId)) throw new AccessDenied('view', r.companyId);
@@ -49290,7 +49314,8 @@ export class PrimaService {
    * number, the board links the two as it does for any worker.
    */
   async addFwWorker(user: User, input: FwWorkerInput) {
-    if (this.fwmRoleOf(user) !== 'staff') throw new AccessDenied('hr.pay', '(adding foreign workers)');
+    // P93: FWM staff and the owner (P78: the owner does the maker step everywhere); nobody else.
+    if (!this.fwmMaker(user)) throw new AccessDenied('hr.pay', '(adding foreign workers)');
     const companyId = String(input?.companyId ?? '');
     if (!visibleCompanyIds(user, await this.grants(), this.today()).includes(companyId)) throw new AccessDenied('view', companyId || '(company)');
     const nat = String(input.nationality ?? '').trim();
@@ -49385,6 +49410,71 @@ export class PrimaService {
         summary: `Foreign worker ${staffNo} added by FWM with ${creds.length} paper date${creds.length === 1 ? '' : 's'} (typed, copy not seen)`,
       });
       return { person, papers: creds.length };
+    });
+  }
+
+  /**
+   * P93 (Fitri, 9 Nov 2026: "where do I add the old records"): one paper of a foreign worker already in Prima, from the
+   * old system, as its opening record. Same people as adding a worker (FWM staff, or the owner). It never replaces
+   * anything: a paper Prima already holds (from its copy, typed, or the JA app) is refused, so FWM records a newer one
+   * from its copy on the screen. The date is kept as "Typed in, copy not seen" (source typed, no copy), exactly as a
+   * worker added from an old list, so the copy rule is unchanged: the next paper is recorded only with its copy
+   * attached, a renewal only with its receipt, and a correction that moves the expiry later only with the copy.
+   */
+  async importFwPaper(user: User, input: { companyId: Id; staffNo: string; paper: string; number?: string | null; issuedOn?: IsoDate | null; expiresOn: IsoDate }) {
+    if (!this.fwmMaker(user)) throw new AccessDenied('hr.pay', '(foreign worker papers)');
+    const companyId = String(input?.companyId ?? '');
+    if (!visibleCompanyIds(user, await this.grants(), this.today()).includes(companyId)) throw new AccessDenied('view', companyId || '(company)');
+    const paper = fwPaperFromWords(String(input.paper ?? ''));
+    if (!paper) throw new BadRequest(`"${String(input.paper ?? '').slice(0, 40)}" is not a paper Prima keeps: work permit (PLKS), passport, FOMEMA, insurance, SPIKPA or KDN letter.`);
+    const label = FW_PAPER_LABEL[paper];
+    const staffNo = String(input.staffNo ?? '').trim().slice(0, 40);
+    if (staffNo.length < 2) throw new BadRequest('Give the worker’s staff number.');
+    const today = this.today();
+    const isDate = (d: unknown): d is IsoDate => typeof d === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d) && !Number.isNaN(Date.parse(`${d}T00:00:00Z`)) && new Date(`${d}T00:00:00Z`).toISOString().slice(0, 10) === d;
+    if (!isDate(input.expiresOn)) throw new BadRequest(`Give the ${label.toLowerCase()} expiry date.`);
+    if (input.expiresOn > addDays(today, 365 * 20)) throw new BadRequest(`The ${label.toLowerCase()} expiry is more than 20 years away. Check the date.`);
+    const issued = input.issuedOn === null || input.issuedOn === undefined || input.issuedOn === '' ? null : input.issuedOn;
+    if (issued !== null && !isDate(issued)) throw new BadRequest(`The ${label.toLowerCase()} issue date is not a real date.`);
+    if (issued && issued > today) throw new BadRequest(`The ${label.toLowerCase()} issue date is in the future.`);
+    if (issued && input.expiresOn <= issued) throw new BadRequest(`The ${label.toLowerCase()} expiry must be after its issue date.`);
+    const people = (await this.store.list('people', { companyId: [companyId] })).filter((p) => p.staffNo.trim().toUpperCase() === staffNo.toUpperCase());
+    if (!people.length) throw new BadRequest(`No worker with staff number ${staffNo} in this company. Add the worker first.`);
+    const person = people[0];
+    if (!isForeign(person)) throw new BadRequest(`${staffNo} is not a foreign worker; their papers are kept on the guard’s record.`);
+    if (person.status === 'left') throw new BadRequest(`${staffNo} has left; old papers are not added.`);
+    await this.store.lock?.('people', person.id);
+    const current = latestCredentials((await this.store.list('credentials', { personId: person.id })).filter((c) => c.companyId === companyId)).get(paper) ?? null;
+    if (current)
+      throw new BadRequest(`Prima already has the ${label.toLowerCase()} for ${staffNo} (expires ${current.expiresOn ?? 'not set'}). Record a newer one from its copy on the Foreign workers screen.`);
+    const at = this.now();
+    const c: Credential = {
+      id: `cr-fw-${person.id}-${paper.toLowerCase()}-${toMs(at)}-${Math.random().toString(36).slice(2, 8)}`,
+      companyId,
+      personId: person.id,
+      type: paper,
+      number: fwPaperNumber(paper, String(input.number ?? '')).slice(0, 60),
+      // No issue date in the old system: the day it was recorded stands in, as for a JA date.
+      issuedOn: issued ?? today,
+      expiresOn: input.expiresOn,
+      source: 'typed',
+      docIds: [],
+      recordedBy: user.name,
+      recordedById: user.id,
+      recordedAt: at,
+    };
+    return this.store.transaction(async (tx) => {
+      await tx.insert('credentials', c);
+      await tx.audit({
+        at,
+        actor: user.name,
+        companyId,
+        action: 'fwm.paper.opening',
+        entity: 'person',
+        entityId: person.id,
+        summary: `${label} for ${staffNo} from the old system, expires ${c.expiresOn} (opening record, copy not yet attached)`,
+      });
+      return c;
     });
   }
 
@@ -54486,6 +54576,11 @@ export interface FwWorkerRow {
     jaExpiresOn: IsoDate | null;
     datesDiffer: boolean;
   }[];
+  /**
+   * P93: the worker's own phone sign-in (they are guard records, so it is the guard phone): whether a guard sign-in
+   * exists, whether a PIN is set, the phone's state, and whether this viewer may enrol it. Never a code or a secret.
+   */
+  phone: { login: boolean; pin: boolean; state: 'active' | 'issued' | 'none'; enrolledAt: IsoDateTime | null; canEnrol: boolean };
 }
 
 /** Each company's JA foreign-worker feed: none, stale (silent past the limit) or ok. A stale feed is unknown, not fine. */
