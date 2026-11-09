@@ -7,6 +7,8 @@
  *   - My feedback: what you sent, where it stands and the developer's answers.
  * Knows nothing of the page around it: the office (host.tsx, on every route) and the stand-alone
  * widget (feedback-widget/, inside Prima) say which page this is and what its rules panel shows.
+ * P93: on a phone the button is a narrow tab on the right edge (it covers less of the page) that
+ * stays above the office's tab bar, and the drops move up or down to stay on the screen.
  */
 import {
   CameraIcon,
@@ -25,6 +27,7 @@ import { toast } from "sonner";
 import { msg, useLang, useT } from "@/i18n";
 import { errorMessage } from "@/lib/api";
 import { feedbackConfigQuery, feedbackKeys, sendFeedback, type FeedbackCategory, type FeedbackIn, type HouseRule } from "@/lib/feedback";
+import { useIsPhone } from "@/lib/use-media";
 import { cn } from "@/lib/utils";
 
 import { Annotator, composeNote, composeShot, type Mark, type Shot } from "./annotator";
@@ -60,11 +63,26 @@ const ITEMS: { view: View; icon: Icon; label: string; hint: string }[] = [
 
 // The drops fan out to the left of the button on an arc (radius 116 px), evenly spaced.
 const DROPS = [-93, -31, 31, 93].map((dy) => ({ x: -Math.sqrt(116 * 116 - dy * dy), y: dy }));
-const dropAt = (i: number) => DROPS[i] ?? { x: 0, y: 0 };
+const dropAt = (i: number, shift = 0) => {
+  const d = DROPS[i] ?? { x: 0, y: 0 };
+  return { x: d.x, y: d.y + shift };
+};
+/** P93: the drops move up (or down) together when the button sits near the bottom (or top) of the
+ * screen, so none of them is cut off by the edge. */
+export function dropShift(centerY: number, height: number): number {
+  const reach = 93 + 22 + 8; // the farthest drop's middle, half a drop, and a margin
+  if (centerY + reach > height) return height - reach - centerY;
+  if (centerY - reach < 0) return reach - centerY;
+  return 0;
+}
 // The goo needs a real box to draw in: this much room around the button.
-const GOO = { left: 220, top: 150, width: 240, height: 300 };
+const GOO = { left: 220, top: 200, width: 240, height: 400 }; // room for the drops moved up or down too
 
 const POS_KEY = "agentic.feedback.y";
+/** How far down the button may go: on a phone it stays above the office's tab bar at the bottom. */
+export function lowestY(phone: boolean, height: number): number {
+  return phone ? Math.min(0.88, 1 - 104 / Math.max(1, height)) : 0.88;
+}
 function readY(): number {
   try {
     const v = Number(localStorage.getItem(POS_KEY));
@@ -131,6 +149,11 @@ export function Feedback({
   const button = useRef<HTMLButtonElement>(null);
   const drag = useRef<{ startY: number; startV: number; moved: boolean } | null>(null);
   const page = pageOf();
+  // P93: on a phone the button is a tab on the right edge, so it covers as little of the page as it can.
+  const phone = useIsPhone();
+  const shownY = Math.min(y, lowestY(phone, typeof window === "undefined" ? 800 : window.innerHeight));
+  // On a phone the drops also stay clear of the office's tab bar at the bottom (64 px).
+  const shift = typeof window === "undefined" ? 0 : dropShift(shownY * window.innerHeight, window.innerHeight - (phone ? 64 : 0));
 
   // Press: the drops come out or fold back. Coming out, the widget re-reads the page's language.
   const toggle = () => {
@@ -142,8 +165,8 @@ export function Feedback({
     // P80: hosted, the panels grow out of the host's launcher in the bottom right corner.
     if (hosted) return { x: window.innerWidth - 44, y: window.innerHeight - 44 };
     const r = button.current?.getBoundingClientRect();
-    return r ? { x: r.left + r.width / 2, y: r.top + r.height / 2 } : { x: window.innerWidth - 36, y: window.innerHeight * y };
-  }, [y, hosted]);
+    return r ? { x: r.left + r.width / 2, y: r.top + r.height / 2 } : { x: window.innerWidth - 36, y: window.innerHeight * shownY };
+  }, [shownY, hosted]);
 
   // Escape folds the drops back.
   useEffect(() => {
@@ -299,7 +322,7 @@ export function Feedback({
   const onDown = (e: RPointerEvent<HTMLButtonElement>) => {
     if (e.button !== 0) return;
     e.stopPropagation();
-    drag.current = { startY: e.clientY, startV: y, moved: false };
+    drag.current = { startY: e.clientY, startV: shownY, moved: false };
     e.currentTarget.setPointerCapture(e.pointerId);
   };
   const onMove = (e: RPointerEvent<HTMLButtonElement>) => {
@@ -309,7 +332,7 @@ export function Feedback({
     if (!d.moved && Math.abs(dy) < 6) return;
     d.moved = true;
     setOpen(false);
-    setY(Math.max(0.12, Math.min(0.88, d.startV + dy / window.innerHeight)));
+    setY(Math.max(0.12, Math.min(lowestY(phone, window.innerHeight), d.startV + dy / window.innerHeight)));
   };
   const onUp = () => {
     const d = drag.current;
@@ -405,22 +428,23 @@ export function Feedback({
       <div
         data-feedback-ignore=""
         className={cn(
-          "fixed right-3 z-[70] size-0 transition-[opacity,scale] duration-200 md:right-4",
+          "fixed z-[70] size-0 transition-[opacity,scale] duration-200",
+          phone ? "right-[env(safe-area-inset-right)]" : "right-3 md:right-4",
           !showButton ? "pointer-events-none opacity-0" : quiet ? "scale-[0.72] opacity-45 hover:scale-100 hover:opacity-100 focus-within:scale-100 focus-within:opacity-100" : "opacity-100",
         )}
-        style={{ top: `${y * 100}%`, pointerEvents: showButton ? "auto" : "none" }}
+        style={{ top: `${shownY * 100}%`, pointerEvents: showButton ? "auto" : "none" }}
         onPointerDown={(e) => e.stopPropagation()}
       >
         {/* Liquid layer: plain colour shapes only, blurred together by the goo filter. */}
         <div aria-hidden className="pointer-events-none absolute" style={{ left: -GOO.left, top: -GOO.top, width: GOO.width, height: GOO.height, filter: "url(#feedback-goo)" }}>
           <div className="absolute size-0" style={{ left: GOO.left, top: GOO.top }}>
           <motion.span
-            className="absolute -top-7 -left-14 block size-14 rounded-full bg-accent"
+            className={cn("absolute block bg-accent", phone ? "-top-[26px] -left-11 h-[52px] w-11 rounded-l-full" : "-top-7 -left-14 size-14 rounded-full")}
             animate={{ scale: open ? 1.06 : 1 }}
             transition={{ type: "spring", stiffness: 400, damping: 18 }}
           />
           {ITEMS.map((it, i) => {
-            const p = dropAt(i);
+            const p = dropAt(i, shift);
             return (
               <motion.span
                 key={it.view}
@@ -436,7 +460,7 @@ export function Feedback({
 
         {/* Content layer: the icons and labels, crisp above the goo. */}
         {ITEMS.map((it, i) => {
-          const p = dropAt(i);
+          const p = dropAt(i, shift);
           return (
             <motion.div
               key={it.view}
@@ -486,13 +510,16 @@ export function Feedback({
           aria-expanded={open}
           aria-label={open ? t("Close feedback") : t("Feedback")}
           title={open ? t("Close feedback") : t("Feedback: tell us about this page (drag to move)")}
-          className="group absolute -top-7 -left-14 grid size-14 touch-none place-items-center rounded-full text-accent-fg shadow-[0_10px_30px_-8px_color-mix(in_oklab,var(--accent)_70%,transparent)] outline-none select-none focus-visible:ring-2 focus-visible:ring-fg/60 focus-visible:ring-offset-2"
+          className={cn(
+            "group absolute grid touch-none place-items-center text-accent-fg shadow-[0_10px_30px_-8px_color-mix(in_oklab,var(--accent)_70%,transparent)] outline-none select-none focus-visible:ring-2 focus-visible:ring-fg/60 focus-visible:ring-offset-2",
+            phone ? "-top-[26px] -left-11 h-[52px] w-11 rounded-l-full pl-1" : "-top-7 -left-14 size-14 rounded-full",
+          )}
         >
           <motion.span animate={{ rotate: open ? 90 : 0 }} transition={{ type: "spring", stiffness: 380, damping: 20 }} className="grid place-items-center">
-            {open ? <XIcon size={22} weight="bold" /> : <MegaphoneSimpleIcon size={23} weight="fill" className="transition-transform group-hover:-rotate-12" />}
+            {open ? <XIcon size={phone ? 20 : 22} weight="bold" /> : <MegaphoneSimpleIcon size={phone ? 21 : 23} weight="fill" className="transition-transform group-hover:-rotate-12" />}
           </motion.span>
           {/* A gentle ripple so people notice it the first time. */}
-          {!open ? <span aria-hidden className="pointer-events-none absolute inset-0 animate-ping rounded-full bg-accent/30 [animation-duration:2.6s] [animation-iteration-count:3]" /> : null}
+          {!open ? <span aria-hidden className={cn("pointer-events-none absolute inset-0 animate-ping bg-accent/30 [animation-duration:2.6s] [animation-iteration-count:3]", phone ? "rounded-l-full" : "rounded-full")} /> : null}
         </button>
       </div>
       </>

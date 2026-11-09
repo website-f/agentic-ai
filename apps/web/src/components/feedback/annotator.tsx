@@ -1,10 +1,14 @@
 /** P73: the screenshot, full screen, to draw on: circle (the default, a tap drops one), box,
  * arrow and free pen, in four colours, each mark numbered so a note can say what it means.
  * Then a kind (not working, hard to use, not needed, idea...) and a note, and send. The marks
- * are burnt into the picture the developer sees. */
+ * are burnt into the picture the developer sees.
+ * P93: on a phone it is one sheet that scrolls (picture, then the note), and a finger draws only
+ * while marking: "Done, write a note" lets the picture scroll like the rest and goes to the note,
+ * "Mark the picture" draws again. Send stays in a footer above the on-screen keyboard. */
 import {
   ArrowCounterClockwiseIcon,
   ArrowUpRightIcon,
+  CheckIcon,
   CircleIcon,
   MonitorIcon,
   PaperPlaneTiltIcon,
@@ -19,7 +23,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState, type Pointer
 import { Button } from "@/components/ui/button";
 import { msg, useT } from "@/i18n";
 import { CATEGORIES, type FeedbackCategory } from "@/lib/feedback";
-import { useIsPhone } from "@/lib/use-media";
+import { useIsPhone, useMedia } from "@/lib/use-media";
 import { cn } from "@/lib/utils";
 
 export type Tool = "circle" | "box" | "arrow" | "pen";
@@ -181,6 +185,17 @@ export function composeNote(note: string, marks: Mark[]): string {
   return [note.trim(), lines.join("\n")].filter(Boolean).join("\n\n");
 }
 
+/** P93: how big the picture is on a phone: the width it has, and at most the given height (never
+ * under 200 px), keeping its shape. The height is the screen less the bars around the picture and
+ * a strip of the note under it, so it is plain that the note is further down. */
+export function phonePictureFit(shot: { width: number; height: number }, room: { width: number; height: number }): { w: number; h: number } {
+  const s = Math.min(Math.max(1, room.width) / shot.width, Math.max(200, room.height) / shot.height);
+  return { w: Math.max(1, Math.floor(shot.width * s)), h: Math.max(1, Math.floor(shot.height * s)) };
+}
+
+// Below the picture on a phone this much of the note shows before any scrolling.
+const NOTE_PEEK = 76;
+
 export function Annotator({
   shot,
   pageLabel,
@@ -199,34 +214,54 @@ export function Annotator({
 }) {
   const t = useT();
   const phone = useIsPhone();
+  const finger = useMedia("(pointer: coarse)"); // a touch screen: one colour button, so the tools fit
   const [tool, setTool] = useState<Tool>("circle");
   const [color, setColor] = useState(COLORS[0]!);
   const [marks, setMarks] = useState<Mark[]>([]);
   const [draft, setDraft] = useState<Mark | null>(null);
   const [category, setCategory] = useState<FeedbackCategory | null>(null);
   const [note, setNote] = useState("");
-  // On a phone the note folds away at first, so the picture has room to be drawn on.
-  const [panel, setPanel] = useState(!phone);
+  // P93: on a phone a finger on the picture draws only while marking; otherwise it scrolls (and
+  // pinches) like the rest of the sheet, down to the note and Send. A mouse or a pen always draws.
+  const [marking, setMarking] = useState(true);
   const area = useRef<HTMLDivElement>(null);
+  const scroller = useRef<HTMLDivElement>(null);
+  const noteBox = useRef<HTMLElement>(null);
+  const noteField = useRef<HTMLTextAreaElement>(null);
+  const footer = useRef<HTMLElement>(null);
   const svg = useRef<SVGSVGElement>(null);
+  const fingers = useRef(new Set<number>());
   const nextId = useRef(1);
   const [fit, setFit] = useState({ w: 0, h: 0 });
   const sw = strokeOf(shot.width);
 
-  // The picture fills the space it has, keeping its shape.
+  // The picture fills the space it has, keeping its shape. On a phone: the width, and the height
+  // of the window less the bars and a strip of the note (the window's height, which the on-screen
+  // keyboard leaves alone, so the picture does not jump while typing).
   useLayoutEffect(() => {
     const el = area.current;
     if (!el) return;
     const measure = () => {
       const r = el.getBoundingClientRect();
-      const s = Math.min(r.width / shot.width, r.height / shot.height);
+      if (phone) {
+        const below = footer.current?.offsetHeight ?? 68;
+        const pad = 12 * 2; // px-3 on both sides
+        setFit(phonePictureFit(shot, { width: r.width - pad, height: window.innerHeight - el.offsetTop - below - NOTE_PEEK }));
+        return;
+      }
+      // Inside the area's padding (px-6, pb-6).
+      const s = Math.min(Math.max(1, r.width - 48) / shot.width, Math.max(1, r.height - 24) / shot.height);
       setFit({ w: Math.max(1, Math.floor(shot.width * s)), h: Math.max(1, Math.floor(shot.height * s)) });
     };
     measure();
     const ro = new ResizeObserver(measure);
     ro.observe(el);
-    return () => ro.disconnect();
-  }, [shot.width, shot.height]);
+    window.addEventListener("orientationchange", measure);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener("orientationchange", measure);
+    };
+  }, [shot, phone]);
 
   const undo = useCallback(() => setMarks((m) => m.slice(0, -1)), []);
   useEffect(() => {
@@ -248,19 +283,30 @@ export function Annotator({
     return [Math.max(0, Math.min(shot.width, x)), Math.max(0, Math.min(shot.height, y))];
   };
 
+  // A finger draws only while marking (phone); a second finger is a pinch, not a mark.
+  const draws = (e: RPointerEvent) => !(phone && e.pointerType === "touch" && !marking);
   const down = (e: RPointerEvent<SVGSVGElement>) => {
-    if (e.button !== 0) return;
+    if (e.button !== 0 || !draws(e)) return;
+    if (e.pointerType === "touch") {
+      fingers.current.add(e.pointerId);
+      if (fingers.current.size > 1) {
+        setDraft(null);
+        return;
+      }
+    }
     e.preventDefault();
-    e.currentTarget.setPointerCapture(e.pointerId);
+    e.currentTarget.setPointerCapture?.(e.pointerId);
     const p = at(e);
     setDraft({ id: nextId.current++, tool, color, pts: [p, p], note: "" });
   };
   const move = (e: RPointerEvent<SVGSVGElement>) => {
-    if (!draft) return;
+    if (!draft || fingers.current.size > 1) return;
     const p = at(e);
     setDraft((d) => (d ? { ...d, pts: d.tool === "pen" ? [...d.pts, p] : [d.pts[0]!, p] } : d));
   };
-  const up = () => {
+  const lift = (e: RPointerEvent<SVGSVGElement>) => fingers.current.delete(e.pointerId);
+  const up = (e: RPointerEvent<SVGSVGElement>) => {
+    lift(e);
     if (!draft) return;
     const b = bounds(draft);
     const small = Math.hypot(b.x2 - b.x1, b.y2 - b.y1) < (shot.width / Math.max(1, fit.w)) * 8;
@@ -280,41 +326,66 @@ export function Annotator({
   const send = () => onSend({ category: category ?? "other", note, marks });
   const canSend = !sending;
 
+  // Phone: "Done" goes down to the note and starts it; "Mark" goes back up to the picture.
+  const doneMarking = () => {
+    setMarking(false);
+    setDraft(null);
+    noteField.current?.focus({ preventScroll: true });
+    noteBox.current?.scrollIntoView?.({ block: "start", behavior: "smooth" });
+  };
+  const markAgain = () => {
+    setMarking(true);
+    scroller.current?.scrollTo?.({ top: 0, behavior: "smooth" });
+  };
+  const pick = (k: Tool) => {
+    setTool(k);
+    setMarking(true);
+  };
+  const nextColor = () => setColor((c) => COLORS[(COLORS.indexOf(c) + 1) % COLORS.length]!);
+
+  const toolButton = "grid size-8 place-items-center rounded-full transition-colors sm:size-9 pointer-coarse:size-11";
   const tools = (
     <div className="mx-auto flex w-max items-center gap-0.5 rounded-full border border-white/15 bg-neutral-900/85 p-1 text-white shadow-2xl backdrop-blur sm:gap-1">
       {TOOLS.map(({ tool: k, icon: I, label }) => (
         <button
           key={k}
           type="button"
-          onClick={() => setTool(k)}
+          onClick={() => pick(k)}
           aria-pressed={tool === k}
           title={t(label)}
           aria-label={t(label)}
-          className={cn("grid size-8 place-items-center rounded-full transition-colors sm:size-9", tool === k ? "bg-white text-neutral-900" : "hover:bg-white/15")}
+          className={cn(toolButton, tool === k ? "bg-white text-neutral-900" : "hover:bg-white/15")}
         >
           <I size={18} weight={tool === k ? "bold" : "regular"} />
         </button>
       ))}
-      <span aria-hidden className="mx-0.5 h-5 w-px bg-white/20 sm:mx-1" />
-      {COLORS.map((c) => (
-        <button
-          key={c}
-          type="button"
-          onClick={() => setColor(c)}
-          aria-pressed={color === c}
-          aria-label={t("Colour")}
-          className={cn("grid size-7 place-items-center rounded-full transition-transform sm:size-8", color === c ? "scale-110" : "opacity-80 hover:opacity-100")}
-        >
-          <span className={cn("size-5 rounded-full ring-2", color === c ? "ring-white" : "ring-transparent")} style={{ background: c }} />
+      {phone || finger ? (
+        // One colour button for fingers (it goes round the four colours), so every button stays 44 px.
+        <button type="button" onClick={nextColor} aria-label={t("Colour: tap for the next one")} title={t("Colour: tap for the next one")} className={cn(toolButton, "hover:bg-white/15")}>
+          <span className="size-6 rounded-full ring-2 ring-white" style={{ background: color }} />
         </button>
-      ))}
+      ) : (
+        <>
+          <span aria-hidden className="mx-0.5 h-5 w-px bg-white/20 sm:mx-1" />
+          {COLORS.map((c) => (
+            <button
+              key={c}
+              type="button"
+              onClick={() => setColor(c)}
+              aria-pressed={color === c}
+              aria-label={t("Colour")}
+              className={cn("grid size-7 place-items-center rounded-full transition-transform sm:size-8 pointer-coarse:size-11", color === c ? "scale-110" : "opacity-80 hover:opacity-100")}
+            >
+              <span className={cn("size-5 rounded-full ring-2", color === c ? "ring-white" : "ring-transparent")} style={{ background: c }} />
+            </button>
+          ))}
+        </>
+      )}
       <span aria-hidden className="mx-0.5 h-5 w-px bg-white/20 sm:mx-1" />
-      <button type="button" onClick={undo} disabled={!marks.length} title={t("Undo")} aria-label={t("Undo")}
-        className="grid size-8 place-items-center rounded-full hover:bg-white/15 disabled:opacity-35 sm:size-9">
+      <button type="button" onClick={undo} disabled={!marks.length} title={t("Undo")} aria-label={t("Undo")} className={cn(toolButton, "hover:bg-white/15 disabled:opacity-35")}>
         <ArrowCounterClockwiseIcon size={18} />
       </button>
-      <button type="button" onClick={() => setMarks([])} disabled={!marks.length} title={t("Clear all marks")} aria-label={t("Clear all marks")}
-        className="grid size-8 place-items-center rounded-full hover:bg-white/15 disabled:opacity-35 sm:size-9">
+      <button type="button" onClick={() => setMarks([])} disabled={!marks.length} title={t("Clear all marks")} aria-label={t("Clear all marks")} className={cn(toolButton, "hover:bg-white/15 disabled:opacity-35")}>
         <TrashIcon size={18} />
       </button>
     </div>
@@ -325,9 +396,10 @@ export function Annotator({
       <label className="grid gap-2">
         <span className="text-[12.5px] font-medium text-muted">{t("Your note")}</span>
         <textarea
+          ref={noteField}
           value={note}
           onChange={(e) => setNote(e.target.value)}
-          rows={phone ? 2 : 5}
+          rows={phone ? 3 : 5}
           maxLength={3000}
           placeholder={t("For example: this button is not needed, or this page is hard to find your way around.")}
           className="w-full resize-y rounded-[var(--radius-sm)] border border-border bg-surface px-3 py-2 text-[13.5px] outline-none focus:border-accent"
@@ -339,7 +411,7 @@ export function Annotator({
           {CATEGORIES.map((c) => (
             <button key={c.value} type="button" onClick={() => setCategory((v) => (v === c.value ? null : c.value))} aria-pressed={category === c.value} title={t(c.hint)}
               className={cn(
-                "h-8 rounded-full border px-3 text-[12.5px] font-medium transition-colors pointer-coarse:h-9",
+                "h-8 rounded-full border px-3 text-[12.5px] font-medium transition-colors pointer-coarse:h-11 pointer-coarse:px-3.5",
                 category === c.value ? "border-accent bg-accent text-accent-fg" : "border-border bg-surface hover:border-accent/50 hover:bg-accent-soft",
               )}>
               {t(c.label)}
@@ -359,10 +431,10 @@ export function Annotator({
                   onChange={(e) => setMarks((all) => all.map((x) => (x.id === m.id ? { ...x, note: e.target.value } : x)))}
                   placeholder={t("What about this one? (optional)")}
                   maxLength={300}
-                  className="h-8 min-w-0 flex-1 rounded-sm border border-border bg-surface px-2.5 text-[13px] outline-none focus:border-accent pointer-coarse:h-10"
+                  className="h-8 min-w-0 flex-1 rounded-sm border border-border bg-surface px-2.5 text-[13px] outline-none focus:border-accent pointer-coarse:h-11"
                 />
                 <button type="button" onClick={() => setMarks((all) => all.filter((x) => x.id !== m.id))} aria-label={t("Remove this mark")} title={t("Remove this mark")}
-                  className="grid size-8 shrink-0 place-items-center rounded-sm text-muted hover:bg-surface-2 hover:text-danger">
+                  className="grid size-8 shrink-0 place-items-center rounded-sm text-muted hover:bg-surface-2 hover:text-danger pointer-coarse:size-11">
                   <XIcon size={14} />
                 </button>
               </li>
@@ -377,71 +449,116 @@ export function Annotator({
     </div>
   );
 
+  const markCount = marks.length === 1 ? t("1 mark on the screen") : marks.length ? t("{n} marks on the screen", { n: marks.length }) : t("Your screenshot is ready");
+  const fingerDraws = !phone || marking;
+  const picture = (
+    <motion.div
+      initial={{ scale: 0.92, opacity: 0 }}
+      animate={{ scale: 1, opacity: 1 }}
+      transition={{ type: "spring", stiffness: 260, damping: 24, delay: 0.08 }}
+      className={cn(
+        "relative shrink-0 overflow-hidden rounded-[var(--radius-sm)] shadow-[0_30px_80px_-20px_rgb(0_0_0/0.7)]",
+        phone && marking ? "ring-2 ring-accent" : "ring-1 ring-white/15",
+      )}
+      style={{ width: fit.w, height: fit.h }}
+    >
+      <img src={shot.url} alt={t("Screenshot of {page}", { page: pageLabel })} draggable={false} className="pointer-events-none absolute inset-0 size-full select-none" />
+      <svg
+        ref={svg}
+        data-feedback-canvas=""
+        data-marking={fingerDraws ? "on" : "off"}
+        viewBox={`0 0 ${shot.width} ${shot.height}`}
+        preserveAspectRatio="none"
+        className={cn("absolute inset-0 size-full", fingerDraws ? "cursor-crosshair touch-none" : "touch-auto")}
+        onPointerDown={down}
+        onPointerMove={move}
+        onPointerUp={up}
+        onPointerCancel={(e) => {
+          lift(e);
+          setDraft(null);
+        }}
+      >
+        {marks.map((m, i) => <MarkSvg key={m.id} m={m} n={i + 1} sw={sw} />)}
+        {draft ? <MarkSvg m={draft} n={marks.length + 1} sw={sw} /> : null}
+      </svg>
+    </motion.div>
+  );
+
+  if (phone) {
+    // P93 phone: one sheet that scrolls (header, tools, picture, then the note), with the Mark /
+    // Done switch and Send in a footer that stays in sight, above the on-screen keyboard too.
+    return (
+      <div className="absolute inset-0 flex flex-col bg-neutral-950/92 backdrop-blur-sm" data-layout="phone">
+        <div ref={scroller} data-feedback-scroll="" className="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain">
+          <div className="sticky top-0 z-10 flex shrink-0 items-center justify-between gap-2 bg-neutral-950/85 pt-[calc(env(safe-area-inset-top)+0.5rem)] pr-[max(0.75rem,env(safe-area-inset-right))] pb-1.5 pl-[max(0.75rem,env(safe-area-inset-left))] backdrop-blur">
+            <div className="min-w-0 text-white">
+              <p className="truncate text-[14px] font-semibold">{t("Mark up this screen")}</p>
+              <p className="truncate text-[12px] text-white/60">{pageLabel}</p>
+            </div>
+            <button type="button" onClick={onCancel} aria-label={t("Close")} title={t("Close")} className="grid size-11 shrink-0 place-items-center rounded-full bg-white/10 text-white hover:bg-white/20">
+              <XIcon size={20} />
+            </button>
+          </div>
+          <div className="flex shrink-0 overflow-x-auto px-3 pt-1 [scrollbar-width:none]">{tools}</div>
+          <p className="shrink-0 px-4 py-2 text-center text-[12.5px] text-white/75" aria-live="polite">
+            {marking ? t("Marking: tap or drag on the picture.") : t("Scrolling. To draw again, tap Mark the picture.")}
+          </p>
+          <div ref={area} className="flex shrink-0 justify-center px-3 pb-4">{picture}</div>
+          <section
+            ref={noteBox}
+            aria-label={t("Tell us what you see")}
+            className="flex-1 scroll-mt-16 rounded-t-[var(--radius-lg)] border-t border-border bg-surface px-4 pt-4 pb-6"
+            onFocus={() => setMarking(false)}
+          >
+            <p className="text-[14.5px] font-semibold">{t("Tell us what you see")}</p>
+            <p className="mb-3 text-[12px] text-muted">{markCount}</p>
+            {form}
+          </section>
+        </div>
+        <footer ref={footer} className="flex shrink-0 items-center gap-2 border-t border-border bg-surface px-3 pt-2.5 pb-[calc(env(safe-area-inset-bottom)+0.625rem)]">
+          {/* One button that changes, so it keeps the keyboard's focus. */}
+          <Button variant="outline" size="lg" className="min-w-0 flex-1 px-3" onClick={marking ? doneMarking : markAgain}>
+            {marking ? <CheckIcon size={17} weight="bold" /> : <PencilSimpleIcon size={17} weight="bold" />}
+            <span className="truncate">{marking ? t("Done, write a note") : t("Mark the picture")}</span>
+          </Button>
+          <Button size="lg" className="px-4" onClick={send} disabled={!canSend} loading={sending}>
+            <PaperPlaneTiltIcon size={17} weight="bold" /> {t("Send")}
+          </Button>
+        </footer>
+      </div>
+    );
+  }
+
   return (
-    <div className="absolute inset-0 flex flex-col bg-neutral-950/88 backdrop-blur-sm md:flex-row">
+    <div className="absolute inset-0 flex flex-row bg-neutral-950/88 backdrop-blur-sm" data-layout="wide">
       <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
-        <div className="flex shrink-0 items-center justify-between gap-2 px-3 pt-[calc(env(safe-area-inset-top)+0.75rem)] pb-2 md:px-5">
+        <div className="flex shrink-0 items-center justify-between gap-2 px-5 pt-[calc(env(safe-area-inset-top)+0.75rem)] pb-2">
           <div className="min-w-0 text-white">
             <p className="truncate text-[13.5px] font-semibold">{t("Mark up this screen")}</p>
             <p className="truncate text-[12px] text-white/60">{pageLabel}</p>
           </div>
-          <button type="button" onClick={onCancel} aria-label={t("Close")} title={t("Close")}
-            className="grid size-9 shrink-0 place-items-center rounded-full bg-white/10 text-white hover:bg-white/20 md:hidden">
-            <XIcon size={18} />
-          </button>
         </div>
         <div className="flex shrink-0 overflow-x-auto px-3 pb-3 [scrollbar-width:none]">{tools}</div>
-        <div ref={area} className="relative flex min-h-0 flex-1 items-center justify-center px-3 pb-3 md:px-6 md:pb-6">
-          <motion.div
-            initial={{ scale: 0.92, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            transition={{ type: "spring", stiffness: 260, damping: 24, delay: 0.08 }}
-            className="relative overflow-hidden rounded-[var(--radius-sm)] shadow-[0_30px_80px_-20px_rgb(0_0_0/0.7)] ring-1 ring-white/15"
-            style={{ width: fit.w, height: fit.h }}
-          >
-            <img src={shot.url} alt={t("Screenshot of {page}", { page: pageLabel })} draggable={false} className="absolute inset-0 size-full select-none" />
-            <svg
-              ref={svg}
-              viewBox={`0 0 ${shot.width} ${shot.height}`}
-              preserveAspectRatio="none"
-              className="absolute inset-0 size-full cursor-crosshair touch-none"
-              onPointerDown={down}
-              onPointerMove={move}
-              onPointerUp={up}
-              onPointerCancel={() => setDraft(null)}
-            >
-              {marks.map((m, i) => <MarkSvg key={m.id} m={m} n={i + 1} sw={sw} />)}
-              {draft ? <MarkSvg m={draft} n={marks.length + 1} sw={sw} /> : null}
-            </svg>
-          </motion.div>
-        </div>
+        <div ref={area} className="relative flex min-h-0 flex-1 items-center justify-center px-6 pb-6">{picture}</div>
       </div>
 
       <motion.aside
-        initial={phone ? { y: 40, opacity: 0 } : { x: 40, opacity: 0 }}
-        animate={{ x: 0, y: 0, opacity: 1 }}
+        initial={{ x: 40, opacity: 0 }}
+        animate={{ x: 0, opacity: 1 }}
         transition={{ type: "spring", stiffness: 300, damping: 30, delay: 0.12 }}
-        className={cn(
-          "flex shrink-0 flex-col border-border bg-surface",
-          phone ? "max-h-[52dvh] rounded-t-[var(--radius-lg)] border-t pb-[env(safe-area-inset-bottom)]" : "w-[24rem] border-l",
-        )}
+        className="flex w-[24rem] max-w-[50vw] shrink-0 flex-col border-l border-border bg-surface"
       >
         <div className="flex items-center justify-between gap-3 border-b border-border px-5 py-3.5">
-          <button type="button" className="min-w-0 text-left" onClick={() => phone && setPanel((v) => !v)} aria-expanded={panel}>
+          <div className="min-w-0">
             <p className="text-[14.5px] font-semibold">{t("Tell us what you see")}</p>
-            <p className="text-[12px] text-muted">
-              {marks.length === 1 ? t("1 mark on the screen") : marks.length ? t("{n} marks on the screen", { n: marks.length }) : t("Your screenshot is ready")}
-              {phone && !panel ? ` · ${t("tap here to add a note")}` : ""}
-            </p>
+            <p className="text-[12px] text-muted">{markCount}</p>
+          </div>
+          <button type="button" onClick={onCancel} aria-label={t("Close")} title={t("Close")} className="grid size-8 place-items-center rounded-sm text-muted hover:bg-surface-2 hover:text-fg pointer-coarse:size-11">
+            <XIcon size={16} />
           </button>
-          {phone ? null : (
-            <button type="button" onClick={onCancel} aria-label={t("Close")} title={t("Close")} className="grid size-8 place-items-center rounded-sm text-muted hover:bg-surface-2 hover:text-fg">
-              <XIcon size={16} />
-            </button>
-          )}
         </div>
-        {panel || !phone ? <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">{form}</div> : null}
-        <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border px-5 py-3">
+        <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">{form}</div>
+        <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border px-5 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
           {onRetakeScreen ? (
             <button type="button" onClick={onRetakeScreen} className="inline-flex items-center gap-1.5 text-[12.5px] text-muted hover:text-fg" title={t("Something missing in the picture? Let the browser take it instead.")}>
               <MonitorIcon size={14} /> {t("Exact screen capture")}

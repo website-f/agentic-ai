@@ -198,7 +198,7 @@ export function GuideTour({ tour, moving, onBack, onClose, onGo }: { tour: Tour;
             </p>
           </div>
           <button type="button" onClick={onClose} aria-label={t("Close")} title={t("Close")}
-            className="grid size-9 shrink-0 place-items-center rounded-full bg-white/10 text-white hover:bg-white/20 md:hidden">
+            className="grid size-11 shrink-0 place-items-center rounded-full bg-white/10 text-white hover:bg-white/20 md:hidden">
             <XIcon size={18} />
           </button>
         </div>

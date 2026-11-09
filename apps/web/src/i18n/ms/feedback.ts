@@ -36,11 +36,16 @@ export const FEEDBACK: Record<string, string> = {
   "Tell us what you see": "Beritahu apa yang anda nampak",
   "{n} marks on the screen": "{n} tanda di skrin",
   "1 mark on the screen": "1 tanda di skrin",
-  "tap here to add a note": "ketik di sini untuk tambah nota",
   "Your screenshot is ready": "Tangkapan skrin anda sudah sedia",
   "Something missing in the picture? Let the browser take it instead.": "Ada yang tiada dalam gambar? Biar pelayar yang tangkap.",
   "Exact screen capture": "Tangkapan skrin tepat",
   "Send feedback": "Hantar maklum balas",
+  // P93: the phone layout (one sheet that scrolls; a finger draws only while marking)
+  "Colour: tap for the next one": "Warna: ketik untuk warna seterusnya",
+  "Marking: tap or drag on the picture.": "Sedang menanda: ketik atau seret pada gambar.",
+  "Scrolling. To draw again, tap Mark the picture.": "Sedang menatal. Untuk melukis semula, ketik Tanda gambar.",
+  "Done, write a note": "Siap, tulis nota",
+  "Mark the picture": "Tanda gambar",
 
   // ---------------------------------------------------------------- kinds and where it stands
   "Something is broken or does nothing.": "Ada yang rosak atau tidak buat apa-apa.",

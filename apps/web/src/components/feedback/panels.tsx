@@ -29,7 +29,9 @@ import { CATEGORIES, categoryOf, myFeedbackQuery, screenshotUrl, statusOf, type 
 import { useIsPhone } from "@/lib/use-media";
 import { cn, timeAgo } from "@/lib/utils";
 
-/** A panel docked on the right (a tall sheet on phones) over a dimmed page. */
+/** A panel docked on the right (a tall sheet on phones) over a dimmed page. P93: on a phone the
+ * sheet is a share of the layer, which follows what can be seen: with the on-screen keyboard up it
+ * takes all of the room above it, its middle scrolls and the footer (Send) stays in sight. */
 export function Panel({ title, sub, icon: I, onClose, children, footer }: { title: string; sub?: string; icon: Icon; onClose: () => void; children: ReactNode; footer?: ReactNode }) {
   const t = useT();
   const phone = useIsPhone();
@@ -41,7 +43,7 @@ export function Panel({ title, sub, icon: I, onClose, children, footer }: { titl
         transition={{ type: "spring", stiffness: 260, damping: 28 }}
         className={cn(
           "flex flex-col bg-surface shadow-[var(--shadow-pop)]",
-          phone ? "mt-auto h-[88dvh] w-full rounded-t-[var(--radius-lg)] border-t border-border pb-[env(safe-area-inset-bottom)]" : "h-full w-[min(100vw,27rem)] border-l border-border",
+          phone ? "mt-auto h-[88%] max-h-full w-full rounded-t-[var(--radius-lg)] border-t border-border pb-[env(safe-area-inset-bottom)] in-data-[visible=part]:h-full in-data-[visible=part]:pb-0" : "h-full w-[min(100vw,27rem)] border-l border-border",
         )}
       >
         <header className="flex items-start gap-3 border-b border-border px-5 pt-4 pb-3.5">
@@ -52,7 +54,7 @@ export function Panel({ title, sub, icon: I, onClose, children, footer }: { titl
             <h2 className="text-[15px] font-semibold">{title}</h2>
             {sub ? <p className="mt-0.5 text-[12.5px] text-muted">{sub}</p> : null}
           </div>
-          <button type="button" onClick={onClose} aria-label={t("Close")} title={t("Close")} className="grid size-8 shrink-0 place-items-center rounded-sm text-muted hover:bg-surface-2 hover:text-fg">
+          <button type="button" onClick={onClose} aria-label={t("Close")} title={t("Close")} className="-my-1 grid size-8 shrink-0 place-items-center rounded-sm text-muted hover:bg-surface-2 hover:text-fg pointer-coarse:size-11">
             <XIcon size={16} />
           </button>
         </header>
@@ -94,7 +96,7 @@ export function GeneralForm({
           <button type="button" onClick={onScreenshot} className="inline-flex items-center gap-1.5 text-[12.5px] text-muted hover:text-fg">
             <CameraIcon size={14} /> {t("Add a screenshot instead")}
           </button>
-          <Button onClick={() => onSend({ category: category ?? "other", note, aboutPage })} disabled={!ok} loading={sending}>
+          <Button className="ml-auto" onClick={() => onSend({ category: category ?? "other", note, aboutPage })} disabled={!ok} loading={sending}>
             <PaperPlaneTiltIcon size={16} weight="bold" /> {t("Send feedback")}
           </Button>
         </>
