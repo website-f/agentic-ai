@@ -19,7 +19,7 @@ import { officeKeys, reportQuery, type Report, type ReportTable } from "@/lib/of
 import { useDebounced, usePagedList } from "@/lib/paged";
 import { cn, timeAgo } from "@/lib/utils";
 
-function DataTable({ reportId, table, n }: { reportId: string; table: ReportTable; n: number }) {
+export function DataTable({ reportId, table, n }: { reportId: string; table: ReportTable; n: number }) {
   const t = useT();
   const [sort, setSort] = useState<{ col: number; desc: boolean } | null>(null);
   const [q, setQ] = useState("");
@@ -54,7 +54,25 @@ function DataTable({ reportId, table, n }: { reportId: string; table: ReportTabl
           <a href={`/api/reports/${reportId}/table/${n}.csv`} download><DownloadSimpleIcon size={14} /> CSV</a>
         </Button>
       </div>
-      <div className="max-h-[32rem] overflow-auto">
+      {/* P92: on a phone each row is a card (no sideways scrolling); the table from md up */}
+      <ul data-testid="report-cards" className="max-h-[32rem] divide-y divide-border overflow-y-auto md:hidden">
+        {rows.map((r, ri) => (
+          <li key={ri} className="px-3 py-2.5">
+            <dl className="grid grid-cols-[minmax(0,2fr)_minmax(0,3fr)] gap-x-3 gap-y-1 text-[14px]">
+              {table.columns.map((c, ci) => (
+                <div key={ci} className="contents">
+                  <dt className="text-[13px] break-words text-muted">{c}</dt>
+                  <dd className={cn("min-w-0 break-words", numeric[ci] && "font-mono tabular")}>
+                    {typeof r[ci] === "number" ? Number(r[ci]).toLocaleString(locale()) : String(r[ci] ?? "")}
+                  </dd>
+                </div>
+              ))}
+            </dl>
+          </li>
+        ))}
+        {!rows.length ? <li className="px-3 py-4 text-center text-[14px] text-muted">{t("No rows match.")}</li> : null}
+      </ul>
+      <div className="max-h-[32rem] overflow-auto max-md:hidden">
         <table className="w-full text-[12.5px]">
           <thead className="sticky top-0 z-10 bg-surface text-left text-muted shadow-[0_1px_0_var(--color-border)]">
             <tr>

@@ -55,6 +55,7 @@ import {
   TargetIcon,
   type Icon,
 } from "@phosphor-icons/react";
+import { ClockUserIcon } from "@phosphor-icons/react"; // P92: the staff phone's Clock in tab
 
 import { msg } from "@/i18n";
 
@@ -340,6 +341,27 @@ export function sidebarItems(items: NavItem[], perms: string[]): NavItem[] {
 export const HELP_SECTION = "Help";
 
 export const TAB_BAR: AppPath[] = ["/workspace", "/tasks", "/approvals", "/chat"];
+
+/** P92: staff (no office.view) keep to their own day on a phone: their desk, clocking in at
+ * Prima, their tasks and chat. Approvals and the rest are under More. */
+export const STAFF_TAB_BAR: AppPath[] = ["/workspace", "/prima", "/tasks", "/chat"];
+
+/** The phone bottom bar for these permissions. */
+export function tabBarFor(perms: string[]): AppPath[] {
+  return perms.includes("office.view") ? TAB_BAR : STAFF_TAB_BAR;
+}
+
+/** P92: a tab that opens its page somewhere particular: the Prima tab opens on Prima's clock
+ * screen (Prima reads the #clock in its address). */
+export const TAB_TARGET: Partial<Record<AppPath, { label: string; hash: string; icon: Icon }>> = {
+  "/prima": { label: msg("Clock in"), hash: "clock", icon: ClockUserIcon },
+};
+
+/** The More sheet's entries: everything not already a tab, but Prima stays (its tab opens only
+ * the clock). */
+export function moreItems(items: NavItem[], tabs: AppPath[]): NavItem[] {
+  return items.filter((i) => !tabs.includes(i.to) || !!TAB_TARGET[i.to]);
+}
 
 /** The navigation entry a path belongs to (its own page, a tab of it, or a page under it). */
 export function navItemFor(pathname: string): NavItem | undefined {

@@ -75,6 +75,8 @@ export interface Group {
   members: GroupMember[];
   /** chat groups can run an agent; embed / transcribe / image are for one job each. */
   kind?: "chat" | "embed" | "transcribe" | "image";
+  /** P92: how many models it has; `members` is empty for people who do not run the AI engine. */
+  size?: number;
 }
 
 export interface StepEvent {

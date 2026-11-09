@@ -37,7 +37,8 @@ import { useSignOut } from "@/lib/use-sign-out";
 import { ROLE_INFO } from "@/lib/types";
 import { cn, initials } from "@/lib/utils";
 import { agentsQuery } from "@/lib/work";
-import { ALL_NAV, HELP_SECTION, hubOf, NAV, sidebarItems, TAB_BAR, type NavItem, type NavSection } from "@/nav";
+import { ALL_NAV, HELP_SECTION, hubOf, NAV, sidebarItems, type NavItem, type NavSection } from "@/nav";
+import { moreItems, TAB_TARGET, tabBarFor } from "@/nav"; // P92: the staff phone bar
 
 import { CommandPalette } from "./command-palette";
 import { openTaskComposer } from "./task-composer/store";
@@ -650,12 +651,14 @@ function Header() {
 
 function TabLink({ item, active, badge = 0 }: { item: NavItem; active: boolean; badge?: number }) {
   const t = useT();
-  const IconCmp = item.icon;
+  const target = TAB_TARGET[item.to]; // P92: the Prima tab opens on its clock screen
+  const IconCmp = target?.icon ?? item.icon;
   return (
     <Link
       to={item.to}
+      hash={target?.hash}
       className={cn(
-        "flex flex-1 flex-col items-center gap-0.5 py-2 text-[11px] font-medium",
+        "flex min-h-12 flex-1 flex-col items-center gap-0.5 py-2 text-[11px] font-medium",
         active ? "text-accent" : "text-muted",
       )}
     >
@@ -663,7 +666,7 @@ function TabLink({ item, active, badge = 0 }: { item: NavItem; active: boolean; 
         <IconCmp size={22} weight={active ? "fill" : "regular"} />
         <Badge count={badge} className="absolute -top-1.5 -right-2.5" />
       </span>
-      <span className="max-w-full truncate px-0.5">{t(item.short ?? item.label)}</span>
+      <span className="max-w-full truncate px-0.5">{t(target?.label ?? item.short ?? item.label)}</span>
     </Link>
   );
 }
@@ -676,12 +679,16 @@ function MobileTabBar() {
   const helpItems = useHelpItems();
   const askHelp = useHelpAsk((s) => s.ask);
   const [more, setMore] = useState(false);
-  const tabs = TAB_BAR.map((to) => ALL_NAV.find((n) => n.to === to)).filter(Boolean) as NavItem[];
+  const { data: me } = useSuspenseQuery(meQuery);
+  const bar = tabBarFor(me.permissions);
+  const tabs = bar.map((to) => ALL_NAV.find((n) => n.to === to)).filter(Boolean) as NavItem[];
   const moreActive = !tabs.some((tab) => isActive(pathname, tab.to));
   const moreSections = sections
     .filter((s) => s.title !== HELP_SECTION)
-    .map((s) => ({ ...s, items: s.items.filter((i) => !TAB_BAR.includes(i.to)) }))
+    .map((s) => ({ ...s, items: moreItems(s.items, bar) }))
     .filter((s) => s.items.length);
+  // P92: when Approvals is under More (staff), More carries its count.
+  const moreBadge = bar.includes("/approvals") ? 0 : approvals;
 
   return (
     <>
@@ -696,11 +703,14 @@ function MobileTabBar() {
         <button
           onClick={() => setMore(true)}
           className={cn(
-            "flex flex-1 flex-col items-center gap-0.5 py-2 text-[11px] font-medium",
+            "flex min-h-12 flex-1 flex-col items-center gap-0.5 py-2 text-[11px] font-medium",
             moreActive ? "text-accent" : "text-muted",
           )}
         >
-          <DotsThreeIcon size={22} weight="bold" />
+          <span className="relative">
+            <DotsThreeIcon size={22} weight="bold" />
+            <Badge count={moreBadge} className="absolute -top-1.5 -right-2.5" />
+          </span>
           {t("More")}
         </button>
       </nav>
@@ -765,7 +775,10 @@ function MobileTabBar() {
                           active ? "border-accent/40 bg-accent-soft text-accent" : "border-border text-fg",
                         )}
                       >
-                        <IconCmp size={22} weight={active ? "fill" : "regular"} />
+                        <span className="relative">
+                          <IconCmp size={22} weight={active ? "fill" : "regular"} />
+                          <Badge count={item.to === "/approvals" ? moreBadge : 0} className="absolute -top-1.5 -right-2.5" />
+                        </span>
                         <span className="leading-tight">{t(item.label)}</span>
                       </Link>
                     );

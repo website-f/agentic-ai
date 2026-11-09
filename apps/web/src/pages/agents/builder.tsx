@@ -274,7 +274,7 @@ export function AgentBuilderPage() {
             <div className="grid gap-1.5">
               <span className="text-[13px] font-medium">{t("Model group")}</span>
               <Select value={d.model_group} onValueChange={(v) => set({ model_group: v })} label={t("Model group")}
-                options={groups.map((g) => ({ value: g.name, label: g.label, hint: g.members.length ? t("{n} models", { n: g.members.length }) : t("No models yet, add some in AI Engine") }))} />
+                options={groups.map((g) => ({ value: g.name, label: g.label, hint: (g.size ?? g.members.length) ? t("{n} models", { n: g.size ?? g.members.length }) : t("No models yet, add some in AI Engine") }))} />
             </div>
             <ToolMatrix tools={d.tools} onChange={(tools) => set({ tools })} autonomy={d.autonomy} onAutonomy={(autonomy) => set({ autonomy })} />
           </section>

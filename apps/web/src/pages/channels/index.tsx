@@ -600,7 +600,8 @@ function OfficeNumber({ ch, st, loading, fetchError, canManage, onStart, startin
         <div className="min-w-0">
           <p className="font-medium">{t(problem.title)}</p>
           {detail ? <p className="break-words text-muted">{detail}</p> : null}
-          <p className="text-muted">{provider === "meta" ? t("Check the token and phone number ID in your Meta app, then check again.") : t(problem.hint)}</p>
+          {/* P92: people who do not run the channels get a plain word, not the gateway's fix */}
+          <p className="text-muted">{!canManage ? t("Ask an owner or admin to fix it, then try again.") : provider === "meta" ? t("Check the token and phone number ID in your Meta app, then check again.") : t(problem.hint)}</p>
         </div>
       </div>
       <div className="flex flex-wrap gap-2">
@@ -837,7 +838,7 @@ function WhatsAppCard({ ch, canManage }: { ch: ChannelOut; canManage: boolean })
             {ch.enabled ? <Pill tone={pill.tone} live={pill.live}>{t(pill.label)}</Pill> : <Pill>{t("Off")}</Pill>}
           </span>
         }
-        description={<span className="flex flex-wrap items-center gap-x-2.5 sm:gap-x-1.5"><Meta items={[number ? <span key="n" className="tabular">{number}</span> : null, provider === "meta" ? "Meta Cloud API" : t("WAHA, self-hosted")]} /></span>}
+        description={<span className="flex flex-wrap items-center gap-x-2.5 sm:gap-x-1.5"><Meta items={[number ? <span key="n" className="tabular">{number}</span> : null, !canManage ? null : provider === "meta" ? "Meta Cloud API" : t("WAHA, self-hosted")]} /></span>}
         actions={canManage ? <SwitchField checked={ch.enabled} onCheckedChange={(v) => toggle.mutate(v)} label={t("Running")} /> : null}
       />
       <CardBody className="grid grid-cols-[minmax(0,1fr)] gap-5 lg:grid-cols-2">
