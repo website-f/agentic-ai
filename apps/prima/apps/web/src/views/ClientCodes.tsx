@@ -3,6 +3,7 @@ import { roomProblems, type ProofInput } from '@prima/core';
 import { api, type ClientCodeBoard } from '../api';
 import { Chip, ErrorNotice, Loading, useAction, useLoad, type Tone } from '../ui';
 import { ProofPicker } from './Proof';
+import { printHtml } from '../native';
 
 /**
  * Client requirements on the site's client needs page (Fauzan, 6 Nov 2026, after the IKEA IWAY audit): a client's code
@@ -596,20 +597,16 @@ function ClientReportChoice({ c, canDecide, site }: { c: Code; canDecide: boolea
   const [reason, setReason] = useState('');
   const act = useAction();
   const printReport = () => {
-    const w = window.open('', '_blank');
-    if (!w) return;
     const esc = (t: string) => t.replace(/[&<>"]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[ch] as string);
     const notMet = c.rows.filter((x) => x.check?.result === 'not_met');
     const insp = c.inspections.slice(0, 3);
-    w.document.write(`<!doctype html><meta charset="utf-8"><title>${esc(c.code.name)} report</title><body style="font-family:sans-serif;max-width:760px;margin:24px auto;line-height:1.45">
+    void printHtml(`${c.code.name} report`, `<!doctype html><meta charset="utf-8"><title>${esc(c.code.name)} report</title><body style="font-family:sans-serif;max-width:760px;margin:24px auto;line-height:1.45">
 <h2>${esc(c.code.name)}: ${esc(site.code)} ${esc(site.name)}</h2>
 <p>Prepared ${new Date().toISOString().slice(0, 10)} from Prima. Last check ${esc(c.lastCheck ? c.lastCheck.slice(0, 10) : 'none yet')}.</p>
 <p><b>${c.counted.met}</b> met, <b>${c.counted.notMet}</b> not met, <b>${c.counted.na}</b> not applicable, <b>${c.counted.unknown}</b> not checked yet.</p>
 ${notMet.length ? `<h3>Being fixed</h3><ul>${notMet.map((x) => `<li>${esc(x.code)} ${esc(x.text)}: ${esc(x.check?.note ?? '')}</li>`).join('')}</ul>` : ''}
 ${insp.length ? `<h3>Latest inspections</h3><ul>${insp.map((i) => `<li>${esc(i.kind === 'hostel' ? 'Hostel' : 'Site')} ${esc(i.date)}: ${i.open ? `${i.open} to fix` : 'nothing open'}</li>`).join('')}</ul>` : ''}
 </body>`);
-    w.document.close();
-    w.print();
   };
   return (
     <div className="small" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>

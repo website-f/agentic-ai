@@ -3,6 +3,7 @@ import { ITEM_CATEGORIES, SALE_PAPER_LABEL, STATE_LABEL, TAG_METHODS, TAG_METHOD
 import { api, type ItemBoard } from '../../api';
 import { Chip, Drawer, ErrorNotice, Kpi, Loading, dateLabel, dateTimeLabel, useAction, useLoad } from '../../ui';
 import { act, any, CAT_LABEL, partyName, readFile, rolesOf, skuName, STATE_TONE } from './shared';
+import { openBlob } from '../../native';
 
 // Sale papers: invoice, payment slip and the signed letter of acknowledgement (Fauzan, 6 Nov 2026).
 // Moved unchanged from views/Items.tsx in the P85 split; laid out by the item register styles (styles/items.css).
@@ -35,9 +36,8 @@ export function SalePapers({ data, m }: { data: ItemBoard; m: ItemBoard['movemen
     // Open the stored file as a local copy; nothing is sent anywhere.
     const bin = atob(d.data.slice(d.data.indexOf(',') + 1));
     const bytes = Uint8Array.from(bin, (c) => c.charCodeAt(0));
-    const url = URL.createObjectURL(new Blob([bytes], { type: d.mime }));
-    window.open(url, '_blank', 'noopener');
-    setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    // P96: inside the app (no second window there) the file is saved instead.
+    await openBlob(d.name || 'paper', new Blob([bytes], { type: d.mime }));
   };
   const save = async () => {
     if (!open) return;

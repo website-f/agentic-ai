@@ -13,6 +13,7 @@ import { type Company, type User, RULES, hasOwnStaffRecord, isActHead, isGroupLe
 import { ApiError, api, type Me } from './api';
 import { ArrowLeftIcon, HouseIcon, MagnifyingGlassIcon, SquaresFourIcon } from '@phosphor-icons/react';
 import { publishPage, rulesFor } from './prima-page';
+import { backClosedSheet, useBackClose } from './back-close';
 import { ViewIcon } from './icons';
 import { SESSION_ENDED } from './api/http';
 import { Chip, Icon, Loading, RefreshContext, ToastHost, hhmm } from './ui';
@@ -1013,7 +1014,9 @@ function Shell({ me, onSignOut, onReset }: { me: Me; onSignOut: () => void; onRe
   // The phone's or browser's Back after going into an app: the screen in the address comes back.
   useEffect(() => {
     if (!apps) return;
-    const onPop = () => {
+    const onPop = (e: PopStateEvent) => {
+      // P96: that Back closed a sheet or drawer; the screen stays as it is.
+      if (backClosedSheet(e)) return;
       const h = location.hash.slice(1);
       if (h.startsWith('@') && spaceLayout(nav, h.slice(1) as SpaceId)) setRoute({ view: 'home', space: h.slice(1) as SpaceId });
       else if (VIEW_TOKENS.includes(h as ViewName) && nav.some((x) => x.view === h)) setRoute({ view: h as ViewName });
@@ -1039,6 +1042,12 @@ function Shell({ me, onSignOut, onReset }: { me: Me; onSignOut: () => void; onRe
   // P91: the side menu shows the open app's screens only (or, on the home screen, the everyday screens).
   const railItems = useMemo(() => (apps ? (spaceLayout(menu, space ?? 'home')?.groups.flatMap((g) => g.items) ?? []) : menu), [apps, menu, space]);
   const [appsOpen, setAppsOpen] = useState(false);
+  // P96: the phone's Back closes the More and Apps sheets.
+  useBackClose(moreOpen, () => {
+    setMoreOpen(false);
+    setMoreSearch(false);
+  });
+  useBackClose(appsOpen, () => setAppsOpen(false));
   const personal = apps ? (nav.find((n) => n.view === 'clock') ?? nav.find((n) => n.view === 'work') ?? nav.find((n) => n.view === 'mine')) : undefined;
 
   const view = (() => {

@@ -4,8 +4,13 @@ import { App } from './App';
 import './styles.css';
 // P90: the page-by-page spacing pass; loaded last so its shared rules settle the older ones.
 import './styles/ux.css';
+// P96: phone first and ready for the Android and iOS app wrapper; loaded after the spacing pass.
+import './styles/mobile.css';
+import { startMobile } from './mobile';
 
 declare const __DEMO__: boolean;
+
+startMobile();
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

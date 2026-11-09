@@ -38,6 +38,7 @@ import {
 } from 'react';
 import { createPortal } from 'react-dom';
 import { tr, useLang, type Lang } from './i18n';
+import { useBackClose } from './back-close';
 import './styles/kit-controls.css';
 
 export type SelectOption = { value: string; label: string; group?: string; disabled?: boolean; hidden?: boolean };
@@ -296,6 +297,8 @@ function Combo(props: ComboProps) {
     setQuery('');
     if (refocus) triggerRef.current?.focus({ preventScroll: true });
   }, []);
+  // P96: on a phone the list is a bottom sheet; the phone's Back closes it.
+  useBackClose(open && sheet, () => close(false));
 
   const choose = useCallback(
     (o: SelectOption | undefined, refocus = true) => {

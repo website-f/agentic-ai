@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useBackClose } from './back-close';
 import type { AlertItem } from '@prima/core';
 import { api } from './api';
 import type { MyAlerts } from './api/types';
@@ -32,6 +33,8 @@ function saveSeen(userId: string, keys: string[]) {
 export function AlertBell({ userId, canOpen, onOpen }: { userId: string; canOpen: (view: string) => boolean; onOpen: (view: string) => void }) {
   const [data, setData] = useState<MyAlerts | null>(null);
   const [open, setOpen] = useState(false);
+  // P96: the phone's Back closes the alerts panel.
+  useBackClose(open, () => setOpen(false));
   const [seen, setSeen] = useState<Set<string>>(() => readSeen(userId));
   const box = useRef<HTMLDivElement>(null);
   const load = useCallback(() => {

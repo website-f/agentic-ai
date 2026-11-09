@@ -10,6 +10,7 @@ import { Card, PageHead, Stat, Stats, Steps, type StepState } from '../kit';
 import { ImportButton } from './ImportDrawer';
 import { RecordButton } from './RecordForm';
 import { ArrowsClockwiseIcon, BuildingsIcon, CalendarCheckIcon, CheckSquareIcon, GlobeIcon, SealCheckIcon, WarningIcon } from '@phosphor-icons/react';
+import { printPage } from '../native';
 
 
 /**
@@ -2409,7 +2410,7 @@ function Reports({ data }: { data: B }) {
         <button className="btn btn-sm" onClick={csv}>
           Export (Excel)
         </button>
-        <button className="btn btn-sm" onClick={() => window.print()}>
+        <button className="btn btn-sm" onClick={() => void printPage('Websites')}>
           Print or PDF
         </button>
       </div>

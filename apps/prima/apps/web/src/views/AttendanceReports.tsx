@@ -487,6 +487,7 @@ function LineChart({ trend, metric, current }: { trend: AttendanceOverviewView['
                 height={H}
                 fill="transparent"
                 onMouseEnter={() => setHover(i)}
+                onClick={() => setHover(i)}
                 onFocus={() => setHover(i)}
                 tabIndex={-1}
               />
@@ -531,7 +532,7 @@ function OtBars({ trend, current }: { trend: AttendanceOverviewView['trend']; cu
             const cx = PAD.l + slot * i + slot / 2;
             let acc = 0;
             return (
-              <g key={t.month} onMouseEnter={() => setHover(i)}>
+              <g key={t.month} onMouseEnter={() => setHover(i)} onClick={() => setHover(i)}>
                 {t.ot.map((h, r) => {
                   const top = y(acc + h);
                   const hgt = y(acc) - top;

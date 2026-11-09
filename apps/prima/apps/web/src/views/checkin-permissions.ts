@@ -12,6 +12,9 @@ export interface Platform {
   browser: 'chrome' | 'edge' | 'safari' | 'samsung' | 'firefox' | 'other';
   /** Opened inside another app (WhatsApp, Facebook, Teams ...): these often cannot use the camera or location. */
   inApp: boolean;
+  /** P96: Prima's own Android or iPhone app (the wrapper adds "PrimaApp/" to the browser name): the phone asks for the
+   * camera and location for the Prima app itself, and its settings are under the Prima app. */
+  ownApp?: boolean;
 }
 
 export function detectPlatform(ua: string, maxTouchPoints = 0): Platform {
@@ -30,8 +33,9 @@ export function detectPlatform(ua: string, maxTouchPoints = 0): Platform {
           : /Safari\//i.test(u)
             ? 'safari'
             : 'other';
-  const inApp = /FBAN|FBAV|Instagram|WhatsApp|Line\/|MicroMessenger|; wv\)|Teams\//i.test(u);
-  return { os, browser, inApp };
+  const ownApp = /\bPrimaApp\//.test(u);
+  const inApp = !ownApp && /FBAN|FBAV|Instagram|WhatsApp|Line\/|MicroMessenger|; wv\)|Teams\//i.test(u);
+  return { os, browser, inApp, ownApp };
 }
 
 /** What the browser says about a permission now, without asking. Never throws. */
@@ -224,8 +228,42 @@ const LOCATION: HelpGuide[] = [
   },
 ];
 
+/** P96: Prima's own app on a phone: its camera and location are switched on for the Prima app in the phone settings. */
+const OWN_APP: Record<PermKind, HelpGuide[]> = {
+  camera: [
+    {
+      id: 'app-android',
+      title: 'Prima app on Android',
+      steps: ['When the phone asks, choose Allow (or While using the app).', 'Blocked earlier? Phone Settings > Apps > Prima > Permissions > Camera > Allow.', 'Come back to Prima and tap Try again.'],
+    },
+    {
+      id: 'app-ios',
+      title: 'Prima app on iPhone or iPad',
+      steps: ['When the iPhone asks, choose Allow.', 'Blocked earlier? iPhone Settings > Apps > Prima, turn Camera on.', 'Come back to Prima and tap Try again.'],
+    },
+  ],
+  location: [
+    {
+      id: 'app-android',
+      title: 'Prima app on Android',
+      steps: [
+        'Make sure the phone Location is on: swipe down from the top and tap Location.',
+        'When the phone asks, choose While using the app, with Precise location on.',
+        'Blocked earlier? Phone Settings > Apps > Prima > Permissions > Location > Allow only while using the app, precise location on.',
+        'Come back to Prima and tap Try again.',
+      ],
+    },
+    {
+      id: 'app-ios',
+      title: 'Prima app on iPhone or iPad',
+      steps: ['iPhone Settings > Privacy & Security > Location Services: on.', 'In the same list, Prima: While Using the App, with Precise Location on.', 'Come back to Prima and tap Try again.'],
+    },
+  ],
+};
+
 /** The guide id for this device and browser. */
 export function guideId(p: Platform): string {
+  if (p.ownApp) return p.os === 'ios' ? 'app-ios' : 'app-android';
   if (p.os === 'ios') return p.browser === 'chrome' ? 'ios-chrome' : p.browser === 'edge' ? 'ios-edge' : 'ios-safari';
   if (p.os === 'android') return p.browser === 'edge' ? 'android-edge' : p.browser === 'samsung' ? 'android-samsung' : 'android-chrome';
   if (p.os === 'mac' && p.browser === 'safari') return 'mac-safari';
@@ -234,7 +272,7 @@ export function guideId(p: Platform): string {
 
 /** Every guide for the kind, this device's first. */
 export function permissionHelp(kind: PermKind, p: Platform): { mine: HelpGuide; others: HelpGuide[]; inAppNote: string | null } {
-  const all = kind === 'camera' ? CAMERA : LOCATION;
+  const all = [...(p.ownApp ? OWN_APP[kind] : []), ...(kind === 'camera' ? CAMERA : LOCATION)];
   const id = guideId(p);
   const mine = all.find((g) => g.id === id) ?? all[0];
   return {

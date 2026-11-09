@@ -13,6 +13,7 @@ import { makeDecoder, prewarmDecoder } from './decoder';
 import { hasTorch, keepFocus, listCameras, openCamera, stopStream, whenIdle } from '../camera-stream';
 import { CAMERA_PROBLEM_TEXT, cameraProblem, type CameraProblem } from '../checkin-permissions';
 import { PermissionHelp } from '../PermissionHelp';
+import { useBackClose } from '../../back-close';
 import { REPEAT_MS, classifyKeys, cleanScan } from './keys';
 import '../../styles/camera.css';
 import '../../styles/items.css';
@@ -284,6 +285,7 @@ export function Scanner({
 /** A typed ID: the reason and the physical proof the server checks (paper section 10). */
 function ManualDialog({ info, onCancel, onSubmit }: { info: { code: string; hasSerial: boolean; message: string }; onCancel: () => void; onSubmit: (m: NonNullable<ScanEntry['manual']>) => void }) {
   const [why, setWhy] = useState(REASONS[0]);
+  useBackClose(true, onCancel);
   const [more, setMore] = useState('');
   const [serial, setSerial] = useState('');
   const [tick, setTick] = useState(false);
@@ -353,6 +355,8 @@ export function CameraScan({ title, last, error, onRead, onClose, onForeign }: {
   foreign.current = onForeign;
   const close = useRef(onClose);
   close.current = onClose;
+  // P96: the phone's Back closes the camera.
+  useBackClose(true, () => close.current());
   const chosen = useRef<string | null>(null);
 
   useEffect(() => {

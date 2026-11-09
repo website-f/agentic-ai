@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { CameraIcon, CameraRotateIcon, XIcon } from '@phosphor-icons/react';
 import { FACE_DESCRIPTOR_LEN } from '@prima/core';
 import { PermissionHelp } from './PermissionHelp';
+import { useBackClose } from '../back-close';
 import { CAMERA_PROBLEM_TEXT, cameraProblem, type CameraProblem } from './checkin-permissions';
 import { listCameras, openCamera, stopStream, whenIdle } from './camera-stream';
 import '../styles/camera.css';
@@ -187,6 +188,8 @@ function FaceCamera({
   const [review, setReview] = useState<FaceResult | null>(null);
   const close = useRef(onClose);
   close.current = onClose;
+  // P96: the phone's Back closes the camera.
+  useBackClose(true, () => close.current());
 
   const stop = () => {
     stopStream(stream.current);
@@ -544,6 +547,7 @@ function ChallengeCamera({
   const [shots, setShots] = useState(0);
   const close = useRef(onClose);
   close.current = onClose;
+  useBackClose(true, () => close.current());
 
   // The front camera, opened once and stopped when the screen closes.
   useEffect(() => {
