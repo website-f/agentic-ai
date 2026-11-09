@@ -409,6 +409,8 @@ async def test_the_test_email_and_microsofts_errors_in_plain_words(client, graph
     ]
     for status, headers, body, words in cases:
         graph.answers.append((status, headers, body))
+        if status == 403:  # refused again with a fresh token (P96: one retry on 403)
+            graph.answers.append((status, headers, body))
         r = await client.post("/api/settings/system-mail/test", json={}, headers=csrf(client))
         assert r.status_code == 502 and words in r.json()["message"], (status, r.text)
         await valkey().delete(
@@ -416,7 +418,7 @@ async def test_the_test_email_and_microsofts_errors_in_plain_words(client, graph
         )
 
     # In Malay too.
-    graph.answers.append((403, {}, {}))
+    graph.answers += [(403, {}, {}), (403, {}, {})]
     r = await client.post(
         "/api/settings/system-mail/test", json={}, headers={**csrf(client), "x-lang": "ms"}
     )
@@ -561,7 +563,7 @@ async def test_bulk_send_stops_when_microsoft_refuses(client, graph):
     await sender_on(client)
     for n in range(3):
         await add(client, f"p{n}@example.com")
-    graph.answers.append((403, {}, {"error": {"code": "ErrorAccessDenied"}}))
+    graph.answers += [(403, {}, {"error": {"code": "ErrorAccessDenied"}})] * 2
     await client.post("/api/members/signin-emails/bulk", json={}, headers=csrf(client))
     await signin_mail.drain()
     job = (await client.get("/api/members/signin-emails", headers={"x-lang": "en"})).json()["job"]
@@ -579,3 +581,17 @@ async def test_an_interrupted_bulk_send_says_so(client, graph):
     await valkey().set(f"signin_bulk:{ws}", json.dumps({"state": "running", "total": 9, "sent": 3}))
     job = (await client.get("/api/members/signin-emails")).json()["job"]
     assert job["state"] == "stopped" and "server restarted" in job["error"]
+
+
+async def test_a_permission_granted_after_the_token_was_taken_works_at_once(client, graph):
+    """P96, live: Mail.Send (Application) was added after the office had taken its app token;
+    the cached token lacked the role and Graph said 403 for up to an hour. Now a 403 is
+    tried once more with a fresh token."""
+    await setup_owner(client)
+    await sender_on(client)
+    graph.answers.append((403, {}, {"error": {"code": "ErrorAccessDenied"}}))
+    before = graph.tokens
+    r = await client.post("/api/settings/system-mail/test", json={}, headers=csrf(client))
+    assert r.status_code == 200, r.text
+    assert graph.tokens == before + 2  # the first token, then a fresh one after the 403
+    assert graph.to("owner@example.com")

@@ -191,8 +191,10 @@ async def send(
                 Msg("Could not reach Microsoft to send the email. Try again in a few minutes."),
                 "unavailable",
             ) from e
-        if r.status_code == 401 and attempt == 0:
-            continue  # a stale cached token: once more with a new one
+        if r.status_code in (401, 403) and attempt == 0:
+            # A stale cached token: once more with a new one. 403 too: a token taken before the
+            # admin granted Mail.Send (Application) lacks the role for up to an hour (P96).
+            continue
         if r.status_code < 300:
             return
         err = _mapped(r, sender, to)
