@@ -119,6 +119,17 @@ import { validFaceDescriptor } from "./face";
 // P81 (office): staff check-in by place, real-data pay gaps, and InfoTech attendance reports.
 import { CheckinService } from "./checkin-service";
 import { checkinState } from "./checkin-service";
+// P93: clock and movement (idempotent clock-in, midnight, distance, out of station).
+import { clockCarriesOver } from "./checkin-service";
+import { analyseMovement } from "./movement";
+import type { MovementSummary } from "./movement";
+import type { RawReading } from "./movement";
+import { mayTestCheckin } from "./owner-test-checkin";
+import { checkinCompanyOf } from "./checkin";
+import { checkinTargets } from "./checkin";
+import { isOutstation } from "./checkin";
+import type { CheckinEvent } from "./checkin";
+import type { CheckinTarget } from "./checkin";
 import type { CheckinAddress } from "./checkin-service";
 import type { CheckinFix } from "./checkin-service";
 import type { CheckinInput } from "./checkin-service";
@@ -11635,12 +11646,22 @@ export class PrimaService {
   }
 
   private async openStaffClock(user: User): Promise<StaffClock | null> {
-    return (await this.store.list('staffClocks', { userId: user.id })).find((c) => !c.out) ?? null;
+    // P93: the newest open one, should an older one ever have been left open beside it.
+    return (await this.store.list('staffClocks', { userId: user.id })).filter((c) => !c.out).sort((a, b) => b.in.receivedAt.localeCompare(a.in.receivedAt))[0] ?? null;
+  }
+
+  /** P93: one clock step at a time per person (sign-in clock, check-in, a second tab or phone), so two never both open a clock. */
+  private async lockStaffClock(user: User): Promise<void> {
+    await this.store.lock?.('staffClocks', `user:${user.id}`);
   }
 
   async staffClockIn(user: User, input: Parameters<PrimaService['staffShot']>[1]) {
     if (!this.staffClockAllowed(user)) throw new BadRequest('Guards clock in on the site device.');
-    if (await this.openStaffClock(user)) throw new BadRequest('You are already clocked in. Clock out first.');
+    await this.lockStaffClock(user);
+    // P93: clocking in when already clocked in returns the open clock (a second tap, another tab, a retry), never an
+    // error asking the person to clock out and in again.
+    const already = await this.openStaffClock(user);
+    if (already && (dateOf(already.in.receivedAt) === this.today() || clockCarriesOver(already, this.now()))) return already;
     const { shot, flags } = this.staffShot(user, { ...input, face: await this.serverFace(user, input) }, await this.staffFaceEnrolled(user));
     await this.refuseReusedClockPhoto(shot);
     const companyId = this.staffCompany(user);
@@ -11742,9 +11763,13 @@ export class PrimaService {
 
   async staffSessionStart(user: User, opts?: { checkIn?: boolean }) {
     if (!this.staffClockAllowed(user)) return null;
+    // P93: opening Prima (the automatic clock-in) and a check-in at the same moment go one after the other, so the
+    // second finds the first's clock instead of opening a second one.
+    await this.lockStaffClock(user);
     const at = this.now();
     const open = await this.openStaffClock(user);
-    if (open && dateOf(open.in.receivedAt) === this.today()) return open;
+    // P93: a clock still active from before midnight (night work) is kept, not closed as "did not sign out".
+    if (open && (dateOf(open.in.receivedAt) === this.today() || clockCarriesOver(open, at))) return open;
     // P81: a check-out ends the working day. Opening Prima again that day does not start a new clock; a new check-in does.
     if (!opts?.checkIn && !open) {
       const d = this.today();
@@ -11818,6 +11843,9 @@ export class PrimaService {
    * left running), the clock is flagged for HR (Fauzan, 27 Oct 2026); the sign-out time stays the record until HR confirms.
    */
   async staffSessionEnd(user: User, place?: Pick<StaffClockShot, 'lat' | 'lng' | 'accuracyM' | 'distanceM'>) {
+    // P93: signing out also ends the owner's TEST check-in at its last reading, so its route and distance stop there.
+    if (!place && mayTestCheckin(user)) await this.ownerTestCheckins.endAtSignOut(user);
+    await this.lockStaffClock(user);
     const open = await this.openStaffClock(user);
     if (!open) return null;
     const at = this.now();
@@ -11840,6 +11868,60 @@ export class PrimaService {
       });
       return updated;
     });
+  }
+
+  /**
+   * P93: readings the phone kept while it had no signal, sent together when it is back online. Each is taken only when
+   * the phone's time falls inside one of the person's own clock sessions (still open, or ended in the last day): nothing
+   * is followed outside working hours. The same reading sent twice is kept once.
+   */
+  async staffPings(user: User, list: { lat: number; lng: number; accuracyM: number | null; capturedAt: IsoDateTime }[]) {
+    if (!this.staffClockAllowed(user)) throw new BadRequest('Guards clock in on the site device.');
+    const readings = (Array.isArray(list) ? list : []).slice(0, 200);
+    const at = this.now();
+    const since = toMs(at) - 24 * 3_600_000;
+    const clocks = (await this.store.list('staffClocks', { userId: user.id })).filter((c) => !c.out || toMs(c.out.receivedAt) >= since);
+    if (!clocks.length) return { accepted: 0, skipped: readings.length };
+    const home = await this.homeArrangement(user.id, this.today());
+    if (home) return { accepted: 0, skipped: readings.length };
+    const have = new Set((await this.store.list('locationPings', { clockId: clocks.map((c) => c.id) })).map((p) => p.id));
+    const rows: LocationPing[] = [];
+    for (const r of readings) {
+      if (!r || typeof r.lat !== 'number' || typeof r.lng !== 'number' || Math.abs(r.lat) > 90 || Math.abs(r.lng) > 180 || !Number.isFinite(r.lat) || !Number.isFinite(r.lng)) continue;
+      if (typeof r.capturedAt !== 'string' || !/^\d{4}-\d{2}-\d{2}T/.test(r.capturedAt) || Number.isNaN(Date.parse(r.capturedAt))) continue;
+      const t = toMs(r.capturedAt);
+      // Never a time ahead of the server's (a phone clock set forward), never before the clock-in or after the clock-out.
+      if (t > toMs(at) + RULES.staffPhoneTimeMin.value * 60_000) continue;
+      const c = clocks.find((x) => t >= toMs(x.in.receivedAt) - 60_000 && t <= (x.out ? toMs(x.out.receivedAt) : toMs(at) + 60_000));
+      if (!c) continue;
+      const id = `lp-${user.id}-${t}`;
+      if (have.has(id)) continue;
+      have.add(id);
+      rows.push({
+        id,
+        clockId: c.id,
+        userId: user.id,
+        companyId: c.companyId,
+        capturedAt: r.capturedAt,
+        receivedAt: at,
+        lat: r.lat,
+        lng: r.lng,
+        accuracyM: typeof r.accuracyM === 'number' && Number.isFinite(r.accuracyM) ? Math.round(r.accuracyM) : null,
+        distanceM: user.base ? Math.round(distanceM(r.lat, r.lng, user.base.lat, user.base.lng)) : null,
+      });
+    }
+    if (!rows.length) return { accepted: 0, skipped: readings.length };
+    await this.store.transaction(async (tx) => {
+      for (const row of rows) await tx.insert('locationPings', row);
+      for (const c of clocks) {
+        const mine = rows.filter((x) => x.clockId === c.id);
+        if (!mine.length) continue;
+        const latest = mine.map((x) => x.capturedAt).sort().at(-1)!;
+        const lastPingAt = !c.out && (!c.lastPingAt || toMs(c.lastPingAt) < toMs(at)) ? at : c.lastPingAt;
+        await tx.update('staffClocks', c.id, { lastPingAt: c.out ? (c.lastPingAt && c.lastPingAt > latest ? c.lastPingAt : latest) : lastPingAt, pings: c.pings + mine.length });
+      }
+    });
+    return { accepted: rows.length, skipped: readings.length - rows.length };
   }
 
   /** A location reading from the phone. Accepted only while clocked in: nothing is followed outside working hours. */
@@ -11872,12 +11954,16 @@ export class PrimaService {
       });
     }
     if (open.lastPingAt && toMs(at) - toMs(open.lastPingAt) < 60_000) return { accepted: false as const, clock: open };
+    const capturedAt = input.capturedAt && /^\d{4}-\d{2}-\d{2}T/.test(input.capturedAt) && !Number.isNaN(Date.parse(input.capturedAt)) ? input.capturedAt : at;
+    // P93: named by the phone's time, so the same reading sent again (a retry on a weak signal) is kept once.
+    const id = `lp-${user.id}-${toMs(capturedAt)}`;
+    if (await this.store.get('locationPings', id)) return { accepted: false as const, clock: open, duplicate: true as const };
     const ping: LocationPing = {
-      id: `lp-${user.id}-${toMs(at)}`,
+      id,
       clockId: open.id,
       userId: user.id,
       companyId: open.companyId,
-      capturedAt: input.capturedAt && /^\d{4}-\d{2}-\d{2}T/.test(input.capturedAt) ? input.capturedAt : at,
+      capturedAt,
       receivedAt: at,
       lat: input.lat,
       lng: input.lng,
@@ -11910,6 +11996,98 @@ export class PrimaService {
     return 'tracked';
   }
 
+  /**
+   * P93: the places each person is held to, for their movement: their check-in place, field areas and company offices
+   * (or the older personal base), and whether the day is an outstation day. Read once for many people.
+   */
+  private async assignedPlaces(users: User[], date: IsoDate): Promise<Map<Id, { targets: CheckinTarget[]; outstation: boolean }>> {
+    const out = new Map<Id, { targets: CheckinTarget[]; outstation: boolean }>();
+    if (!users.length) return out;
+    const personIds = users.map((u) => u.personId).filter((x): x is Id => !!x);
+    const [people, places, rules] = await Promise.all([
+      personIds.length ? this.store.list('people', { id: personIds }) : Promise.resolve([] as Person[]),
+      this.store.list('checkinPlaces', {}),
+      this.store.list('checkinRules', { userId: users.map((u) => u.id) }),
+    ]);
+    const personOf = new Map(people.map((p) => [p.id, p]));
+    for (const u of users) {
+      const companyId = checkinCompanyOf(u, u.personId ? personOf.get(u.personId)?.companyId : null);
+      const rule = rules.find((r) => r.userId === u.id) ?? null;
+      out.set(u.id, { targets: checkinTargets(rule, places.filter((p) => p.companyId === companyId), u.base).targets, outstation: isOutstation(rule, date) });
+    }
+    return out;
+  }
+
+  /**
+   * P93: one clock session's movement (movement.ts): every location it holds (the clock-in, each check-in and check-out
+   * of the session, the readings between), cleaned, measured and checked against the place the person is held to. The
+   * place saved with the session's check-in is used, so a later change of place does not rewrite the history.
+   */
+  private clockMovement(
+    c: StaffClock,
+    pings: LocationPing[],
+    events: CheckinEvent[],
+    assigned: { targets: CheckinTarget[]; outstation: boolean } | undefined,
+    home: boolean,
+  ): MovementSummary {
+    const raw: RawReading[] = [];
+    const shot = (x: StaffClockShot | null, source: 'in' | 'out', id: string) => {
+      if (x && x.lat !== null && x.lng !== null) raw.push({ id, source, capturedAt: x.capturedAt, receivedAt: x.receivedAt, lat: x.lat, lng: x.lng, accuracyM: x.accuracyM });
+    };
+    shot(c.in, 'in', `${c.id}:in`);
+    const mine = events.filter((e) => e.clockId === c.id && e.outcome !== 'blocked');
+    for (const e of mine) raw.push({ id: e.id, source: e.kind, capturedAt: e.capturedAt, receivedAt: e.at, lat: e.lat, lng: e.lng, accuracyM: e.accuracyM });
+    for (const p of pings) raw.push({ id: p.id, source: 'ping', capturedAt: p.capturedAt, receivedAt: p.receivedAt, lat: p.lat, lng: p.lng, accuracyM: p.accuracyM });
+    if (!(c.out?.source === 'checkin' && mine.some((e) => e.kind === 'out'))) shot(c.out, 'out', `${c.id}:out`);
+    const firstIn = mine.find((e) => e.kind === 'in');
+    const r = RULES.staffMovement.value;
+    return analyseMovement({
+      raw,
+      from: c.in.receivedAt,
+      to: c.out?.receivedAt ?? null,
+      now: this.now(),
+      targets: firstIn ? firstIn.targets : (assigned?.targets ?? []),
+      outstation: firstIn ? firstIn.outstation || (assigned?.outstation ?? false) : (assigned?.outstation ?? false),
+      home,
+      rules: { outOfStationMin: r.outOfStationMin, maxAccuracyM: r.maxAccuracyM, maxSpeedKmh: r.maxSpeedKmh, farClockInM: r.farClockInM, gapMin: RULES.staffTrackGapMin.value },
+    });
+  }
+
+  /** P93: the movement of several clocks, reading their location readings and check-ins in one go each. */
+  private async clocksMovement(clocks: StaffClock[], users: Map<Id, User>, home: (c: StaffClock) => boolean): Promise<Map<Id, MovementSummary>> {
+    const out = new Map<Id, MovementSummary>();
+    if (!clocks.length) return out;
+    const ids = clocks.map((c) => c.id);
+    const from = clocks.map((c) => dateOf(c.in.receivedAt)).sort()[0];
+    const [pings, events] = await Promise.all([
+      this.store.list('locationPings', { clockId: ids }),
+      this.store.list('checkinEvents', { userId: [...new Set(clocks.map((c) => c.userId))] }, { field: 'at', from, before: addDays(this.today(), 1) }),
+    ]);
+    const people = [...new Set(clocks.map((c) => c.userId))].map((id) => users.get(id)).filter((u): u is User => !!u);
+    const byDate = new Map<IsoDate, Map<Id, { targets: CheckinTarget[]; outstation: boolean }>>();
+    for (const c of clocks) {
+      const d = dateOf(c.in.receivedAt);
+      if (!byDate.has(d)) byDate.set(d, await this.assignedPlaces(people, d));
+      out.set(
+        c.id,
+        this.clockMovement(
+          c,
+          pings.filter((p) => p.clockId === c.id),
+          events,
+          byDate.get(d)!.get(c.userId),
+          home(c),
+        ),
+      );
+    }
+    return out;
+  }
+
+  /** P93: the short form shown on a list row: distance, time outside and the review items. */
+  private movementBrief(m: MovementSummary | undefined) {
+    if (!m) return null;
+    return { measure: m.measure, distanceM: m.distanceM, insideMin: m.insideMin, outsideMin: m.outsideMin, unknownMin: m.unknownMin, flags: m.flags, used: m.readings.used };
+  }
+
   /** The staff member's own clock: whether they are in, today's and recent records, and how often the phone reports. */
   async myStaffClock(user: User) {
     const allowed = this.staffClockAllowed(user);
@@ -11918,13 +12096,21 @@ export class PrimaService {
     const pings = open ? (await this.store.list('locationPings', { clockId: open.id })).sort((a, b) => a.receivedAt.localeCompare(b.receivedAt)) : [];
     const since = addDays(this.today(), -7);
     const home = allowed ? await this.homeArrangement(user.id, this.today()) : null;
+    const recent = clocks.filter((c) => dateOf(c.in.receivedAt) >= since).slice(0, 14);
+    // P93: each record's distance and time outside the person's place, worked out the same way as the manager's view.
+    const homeDays = new Set<IsoDate>();
+    for (const d of new Set(recent.map((c) => dateOf(c.in.receivedAt)))) if (await this.homeArrangement(user.id, d)) homeDays.add(d);
+    const moves = allowed ? await this.clocksMovement(recent, new Map([[user.id, user]]), (c) => homeDays.has(dateOf(c.in.receivedAt))) : new Map<Id, MovementSummary>();
+    const latestToday = recent.find((c) => dateOf(c.in.receivedAt) === this.today()) ?? null;
     return {
       allowed,
       open,
       home: !!home,
       state: open ? this.staffLocationState(user, open, pings.at(-1) ?? null, !!home) : ('off' as const),
       pings,
-      recent: clocks.filter((c) => dateOf(c.in.receivedAt) >= since).slice(0, 14),
+      recent: recent.map((c) => ({ ...c, movement: this.movementBrief(moves.get(c.id)) })),
+      /** P93: today's session in full (route, time inside and outside, review items), for the person's own screen. */
+      today: latestToday ? { clockId: latestToday.id, movement: moves.get(latestToday.id) ?? null } : null,
       base: user.base ?? null,
       faceEnrolled: await this.staffFaceEnrolled(user),
       pingEveryMin: RULES.staffPingMin.value,
@@ -11958,15 +12144,18 @@ export class PrimaService {
         left: last?.direction === 'out',
       };
     };
+    // P93: every clock of the day read once: location readings, check-ins, and each session's movement.
+    const userMap = new Map(staff.map((u) => [u.id, u]));
+    const moves = await this.clocksMovement(clocks, userMap, (c) => homeUsers.has(c.userId));
+    const dayPings = clocks.length ? await this.store.list('locationPings', { clockId: clocks.filter((c) => !c.out).map((c) => c.id) }) : [];
     const rows = await Promise.all(
       staff.map(async (u) => {
         const mine = clocks.filter((c) => c.userId === u.id).sort((a, b) => b.in.receivedAt.localeCompare(a.in.receivedAt));
         const c = mine[0] ?? null;
-        const last =
-          c && !c.out
-            ? ((await this.store.list('locationPings', { clockId: c.id })).sort((a, b) => a.receivedAt.localeCompare(b.receivedAt)).at(-1) ?? null)
-            : null;
+        const last = c && !c.out ? (dayPings.filter((p) => p.clockId === c.id).sort((a, b) => a.receivedAt.localeCompare(b.receivedAt)).at(-1) ?? null) : null;
         const cid = this.staffCompany(u);
+        const m = c ? moves.get(c.id) : undefined;
+        const loc = c ? this.staffLocationState(u, c, last, homeUsers.has(u.id)) : ('off' as const);
         return {
           userId: u.id,
           name: u.name,
@@ -11978,8 +12167,14 @@ export class PrimaService {
           status: !c ? ('not_in' as const) : c.out ? ('out' as const) : ('in' as const),
           hours: this.staffDayHours(day, mine, this.now()),
           home: homeUsers.has(u.id),
-          location: c ? this.staffLocationState(u, c, last, homeUsers.has(u.id)) : ('off' as const),
+          // P93: followed, but the last reading is outside the place they are held to: away.
+          location: loc === 'tracked' && m?.measure === 'measured' && m.periods.at(-1)?.state === 'outside' ? ('away' as const) : loc,
           last: last ? { at: last.receivedAt, lat: last.lat, lng: last.lng, distanceM: last.distanceM } : null,
+          movement: this.movementBrief(m),
+          // Every review item of the day's sessions, newest session first.
+          review: mine.flatMap((x) => (moves.get(x.id)?.flags ?? []).map((f) => ({ ...f, clockId: x.id }))),
+          /** P93: whether time outside can be measured for this person: no place assigned is said, not guessed. */
+          place: m ? m.measure : null,
         };
       }),
     );
@@ -11997,6 +12192,11 @@ export class PrimaService {
       longBreak: rows.filter((r) => r.hours?.longBreak).length,
       viewOnly: scope === 'it',
       doorFeed: doors.length > 0,
+      /** P93: the movement items for the manager to look at, from every session of the day. */
+      reviews: rows
+        .flatMap((r) => r.review.map((f) => ({ userId: r.userId, name: r.name, title: r.title, company: r.company, ...f })))
+        .sort((a, b) => b.at.localeCompare(a.at)),
+      movementRules: { ...RULES.staffMovement.value, gapMin: RULES.staffTrackGapMin.value },
     };
   }
 
@@ -12058,7 +12258,9 @@ export class PrimaService {
       if (m > RULES.staffTrackGapMin.value) gaps.push({ from: times[i - 1], to: times[i], minutes: m });
     }
     const home = await this.homeArrangement(c.userId, dateOf(c.in.receivedAt));
-    return { clock: c, pings, base: who?.base ?? null, gaps, state: this.staffLocationState(who, c, pings.at(-1) ?? null, !!home) };
+    // P93: the route, distance, time inside and outside the person's place, and the review items.
+    const moves = who ? await this.clocksMovement([c], new Map([[who.id, who]]), () => !!home) : new Map<Id, MovementSummary>();
+    return { clock: c, pings, base: who?.base ?? null, gaps, state: this.staffLocationState(who, c, pings.at(-1) ?? null, !!home), movement: moves.get(c.id) ?? null };
   }
 
   // ---------- Check-in places (P81, 6 Nov 2026; checkin.ts and checkin-service.ts) ----------

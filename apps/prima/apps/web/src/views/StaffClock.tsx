@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import {
   ClockIcon,
   CoffeeIcon,
@@ -10,6 +10,7 @@ import {
   TimerIcon,
   UserCheckIcon,
   UserMinusIcon,
+  WarningCircleIcon,
 } from '@phosphor-icons/react';
 import { checkinScope, fromMs, isOwnerAdmin, type CheckinEvent, type StaffClockFlag } from '@prima/core';
 import { api, type MyStaffClock, type StaffClockBoard } from '../api';
@@ -27,6 +28,9 @@ import { MyCheckinCard, OUTCOME, VERDICT, whereText } from './CheckIn';
 import { CheckinPlacesView, CheckinReviewView } from './CheckinPlaces';
 import { MyTimeSlipSection, TimeSlipBoardView } from './TimeSlip';
 import { OwnerTestCheckinView } from './OwnerTestCheckin';
+import { MOVE_FLAG, MovementChips, MovementView, flagText } from './Movement';
+// P93: the tracker moved to its own file (adaptive, offline queue, back-on-screen reading); App.tsx imports it from here.
+export { StaffTracker } from './StaffTracker';
 import '../styles/selfservice.css';
 
 const FLAG_LABEL: Record<StaffClockFlag, string> = {
@@ -79,6 +83,7 @@ const MY_CLOCK_SUB = (every: number) =>
 export function MyClockView() {
   const { data, error, reload } = useLoad(() => api.myStaffClock(), []);
   const [where, setWhere] = useState<TestPlace>(api.mode === 'demo' ? 'base' : 'gps');
+  const [record, setRecord] = useState<string | null>(null);
   const act = useAction();
   const { me } = useApp();
   // P90: the owner has no staff clock; they test check-in and check-out here instead (never attendance or pay).
@@ -204,14 +209,28 @@ export function MyClockView() {
       {/* P81: check in and out by place, with the location checked by the server. */}
       <MyCheckinCard />
 
+      {/* P93: today's movement, worked out the same way the manager sees it. */}
+      {data.today?.movement && (
+        <Card title="My movement today" sub="From your location readings while clocked in, and only then. You, your manager and HR see it.">
+          <MovementView m={data.today.movement} mapLabel="Your route today" fitKey={`${data.today.clockId}:${data.today.movement.readings.used}`} />
+          <div className="ss-actions">
+            <button type="button" className="btn btn-sm" onClick={() => setRecord(data.today!.clockId)}>
+              Open the full record
+            </button>
+          </div>
+        </Card>
+      )}
+
       <div className="ss-cols">
         <Card title="Last 7 days" flush>
           <ul className="ss-rows">
             {data.recent.length === 0 && <li className="empty">No clock records yet.</li>}
             {data.recent.map((c) => {
               const flags = c.flags.filter((f) => f !== 'PHOTO_ONLY');
+              const review = (c.movement?.flags.length ?? 0) > 0;
               return (
-                <li key={c.id} className="ss-row" data-tone={flags.length > 0 ? 'warn' : undefined}>
+                <li key={c.id}>
+                  <button type="button" className="ss-row" data-tone={flags.length > 0 || review ? 'warn' : undefined} onClick={() => setRecord(c.id)}>
                   <span className="ss-row-main">
                     <span className="ss-row-title">{dateTimeLabel(c.in.receivedAt).replace(/,? \d\d:\d\d$/, '')}</span>
                     <span className="ss-times-line ss-meta">
@@ -228,8 +247,10 @@ export function MyClockView() {
                         {c.pings} readings
                       </span>
                     </span>
+                    <MovementChips m={c.movement} />
                   </span>
                   {flags.length > 0 ? <Chip tone="warn">{flags.map((f) => FLAG_LABEL[f]).join(', ')}</Chip> : <Chip tone="ok">OK</Chip>}
+                  </button>
                 </li>
               );
             })}
@@ -248,55 +269,9 @@ export function MyClockView() {
         <HrGuide staffSide />
         <MyTimeSlipSection />
       </div>
+      {record && <ClockDetail id={record} onClose={() => setRecord(null)} />}
     </div>
   );
-}
-
-/**
- * Sends a location reading while the staff member is clocked in, on the installed app. A web app only reads the
- * location while it is open; following a closed phone needs the native app wrapper (production).
- */
-export function StaffTracker() {
-  useEffect(() => {
-    if (api.mode === 'demo' || !navigator.geolocation) return;
-    let watch: number | null = null;
-    let last = 0;
-    let everyMs = 10 * 60_000;
-    let stopped = false;
-    const start = async () => {
-      const mine = await api.myStaffClock().catch(() => null);
-      if (stopped || !mine?.open) return;
-      everyMs = mine.pingEveryMin * 60_000;
-      watch = navigator.geolocation.watchPosition(
-        (p) => {
-          if (Date.now() - last < everyMs) return;
-          last = Date.now();
-          void api
-            .staffPing({ lat: p.coords.latitude, lng: p.coords.longitude, accuracyM: Math.round(p.coords.accuracy), capturedAt: fromMs(p.timestamp) })
-            .then((r) => {
-              // A home day takes one reading at the start and no more (rule HR-WFH-PLACE).
-              if ((r as { remote?: boolean }).remote && watch !== null) {
-                navigator.geolocation.clearWatch(watch);
-                stopped = true;
-              }
-            })
-            .catch(() => undefined);
-        },
-        () => undefined,
-        { enableHighAccuracy: true, maximumAge: 60_000 },
-      );
-    };
-    void start();
-    const t = setInterval(() => {
-      if (watch === null) void start();
-    }, 5 * 60_000);
-    return () => {
-      stopped = true;
-      clearInterval(t);
-      if (watch !== null) navigator.geolocation.clearWatch(watch);
-    };
-  }, []);
-  return null;
 }
 
 type Row = StaffClockBoard['rows'][number];
@@ -336,6 +311,7 @@ export function StaffClockBoardView() {
     r.location === 'unknown' ||
     r.location === 'away' ||
     (r.status === 'in' && r.door.left) ||
+    r.review.length > 0 ||
     (r.clock?.flags ?? []).some((f) => f !== 'PHOTO_ONLY');
   const needle = q.trim().toLowerCase();
   const rows = data.rows
@@ -349,6 +325,7 @@ export function StaffClockBoardView() {
   const away = data.rows.filter((r) => r.location === 'away').length;
   const notIn = data.rows.filter((r) => r.status === 'not_in').length;
   const problems = data.rows.filter(problem).length;
+  const outOfStation = data.reviews.filter((x) => x.kind === 'out_of_station').length;
   const pick = (f: Filter) => () => {
     setTab('clock');
     setFilter(f);
@@ -406,6 +383,7 @@ export function StaffClockBoardView() {
             <Stat label="Clocked in now" value={inNow} tone="info" icon={<UserCheckIcon size={16} />} onClick={pick('in')} />
             <Stat label="Location unknown" value={unknown} tone={unknown ? 'unknown' : 'ok'} icon={<QuestionIcon size={16} />} onClick={pick('problem')} />
             <Stat label="Away from base" value={away} tone={away ? 'warn' : 'ok'} icon={<MapPinIcon size={16} />} onClick={pick('problem')} />
+            <Stat label="Out of station" value={outOfStation} tone={outOfStation ? 'warn' : 'ok'} icon={<WarningCircleIcon size={16} />} onClick={pick('problem')} />
             <Stat label="Not clocked in today" value={notIn} icon={<UserMinusIcon size={16} />} onClick={pick('not_in')} />
             <Stat label="Late in" value={data.late} tone={data.late ? 'warn' : 'ok'} icon={<TimerIcon size={16} />} onClick={pick('problem')} />
             <Stat label="Break over 1 hour" value={data.longBreak} tone={data.longBreak ? 'warn' : 'ok'} icon={<CoffeeIcon size={16} />} onClick={pick('problem')} />
@@ -421,6 +399,29 @@ export function StaffClockBoardView() {
             <p className="notice" data-tone="unknown">
               No office door readings for this day: the door check is unknown, not passed.
             </p>
+          )}
+          {data.reviews.length > 0 && (
+            <Card
+              title={`Movement to look at (${data.reviews.length})`}
+              sub={`Outside their place for more than ${data.movementRules.outOfStationMin} minutes, a location jump, a fake-looking location, a clock-in far from the place, or location that stopped. Open one for the route and timeline.`}
+              flush
+            >
+              <ul className="ss-rows">
+                {data.reviews.map((f, i) => (
+                  <li key={`${f.clockId}-${f.kind}-${f.at}-${i}`}>
+                    <button type="button" className="ss-row mv-review" data-tone={MOVE_FLAG[f.kind].tone === 'crit' ? 'crit' : 'warn'} onClick={() => setOpen(f.clockId)}>
+                      <Person name={f.name} sub={f.title.includes(f.company.split(' ')[0]) ? f.title : `${f.title} · ${f.company}`} />
+                      <span className="ss-board-times">
+                        <span className="mv-flag-text">{flagText(f)}</span>
+                      </span>
+                      <span className="ss-row-side">
+                        <Chip tone={MOVE_FLAG[f.kind].tone}>{MOVE_FLAG[f.kind].label}</Chip>
+                      </span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </Card>
           )}
           <Card title="Team today" sub="Clocked in first, then clocked out, then not in. Open a person for their clock record." flush>
             <div className="ss-tools">
@@ -507,6 +508,7 @@ function BoardRow({ r, problem, onOpen, checkins = [] }: { r: Row; problem: bool
             {r.last.distanceM !== null ? `, ${fmtDistance(r.last.distanceM)} from base` : ''}
           </span>
         )}
+        {r.status !== 'not_in' && <MovementChips m={r.movement} />}
         {checkins.length > 0 && (
           <span className="ci-board-line">
             {checkins.map((e) => (
@@ -606,7 +608,8 @@ function ClockDetail({ id, onClose }: { id: string; onClose: () => void }) {
                         <span>
                           {time(s.receivedAt)} server time{s.lat !== null ? ` · ${s.lat.toFixed(5)}, ${s.lng!.toFixed(5)}` : ' · no location'}
                         </span>
-                        {s.distanceM !== null && <span className="muted">{fmtDistance(s.distanceM)} from base</span>}
+                        {/* P93: a check-out's distance is from the check-in place, not from the old personal base. */}
+                        {s.distanceM !== null && <span className="muted">{s.source === 'checkin' ? `${fmtDistance(s.distanceM)} from the check-in place` : `${fmtDistance(s.distanceM)} from base`}</span>}
                         <span className="mono muted">SHA-256 {s.sha256.slice(0, 12)}…</span>
                       </>
                     )}
@@ -615,6 +618,12 @@ function ClockDetail({ id, onClose }: { id: string; onClose: () => void }) {
               })}
             </div>
           </section>
+          {data.movement && (
+            <section className="ss-sec">
+              <h3 className="ss-sec-title">Movement</h3>
+              <MovementView m={data.movement} fitKey={`${data.clock.id}:${data.movement.readings.used}`} />
+            </section>
+          )}
           <section className="ss-sec">
             <h3 className="ss-sec-title">Location while clocked in</h3>
             <p className="ss-note">{data.base ? `Base: ${data.base.name}, within ${data.base.radiusM} m.` : 'No fixed base; the route is recorded, not checked.'}</p>

@@ -1927,7 +1927,8 @@ describe('Staff clock (Fauzan, 26 Oct 2026)', () => {
     const rec = await svc.staffClockIn(ae, { image: img, capturedAt: NOW, lat: 3.0568, lng: 101.5851, accuracyM: 8, face: null });
     expect(rec.flags).toEqual(['PHOTO_ONLY']);
     expect(rec.in.distanceM).toBeLessThan(200);
-    await expect(svc.staffClockIn(ae, { image: img, capturedAt: NOW, lat: null, lng: null, accuracyM: null, face: null })).rejects.toThrow(/already/);
+    // P93: clocking in again returns the open clock instead of an error.
+    expect((await svc.staffClockIn(ae, { image: img, capturedAt: NOW, lat: null, lng: null, accuracyM: null, face: null })).id).toBe(rec.id);
     const mine = await svc.myStaffClock(ae);
     expect(mine.open!.id).toBe(rec.id);
     expect(mine.state).toBe('tracked');

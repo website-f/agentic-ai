@@ -3,19 +3,17 @@
  * staff clock, so this is a separate TEST: its own record (never a clock, attendance, KPI, report or pay record), its own
  * route on the map, and a list of past tests. The server allows it for the owner only (owner-test-checkin.ts).
  */
-import { lazy, Suspense, useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { CrosshairIcon, FlaskIcon, MapPinIcon, PathIcon, SignInIcon, SignOutIcon, TimerIcon } from '@phosphor-icons/react';
-import { fromMs, haversineM, type OwnerTestCheckin, type OwnerTestPoint } from '@prima/core';
+import { fromMs, type OwnerTestPoint } from '@prima/core';
 import { api, type MyTestCheckins, type TestCheckinFix } from '../api';
 import { Card, Empty, PageHead, Stat, Stats } from '../kit';
 import { Chip, Drawer, ErrorNotice, Loading, dateTimeLabel, useAction, useLoad } from '../ui';
 import { LOCATION_PROBLEM_TEXT, locationProblem, type LocationProblem } from './checkin-permissions';
 import { PermissionHelp } from './PermissionHelp';
-import { MapFallback, fmtM } from './CheckIn';
-import type { MapLine, MapPoint } from './GeoMap';
+import { fmtM } from './CheckIn';
+import { MovementView } from './Movement';
 import '../styles/checkin.css';
-
-const GeoMap = lazy(() => import('./GeoMap'));
 
 const time = (t: string) => t.slice(11, 16);
 const dur = (min: number) => (min >= 60 ? `${Math.floor(min / 60)} h ${String(min % 60).padStart(2, '0')} min` : `${min} min`);
@@ -59,18 +57,6 @@ function simulated(last: Pick<OwnerTestPoint, 'lat' | 'lng'> | null): TestChecki
   const a = Math.random() * Math.PI * 2;
   const step = last ? 0.0006 + Math.random() * 0.0008 : 0;
   return { lat: base.lat + Math.sin(a) * step, lng: base.lng + Math.cos(a) * step, accuracyM: 6 + Math.round(Math.random() * 10), capturedAt: fromMs(Date.now()) };
-}
-
-function routeOf(s: Pick<OwnerTestCheckin, 'trail' | 'in' | 'out'>, live?: boolean): { lines: MapLine[]; points: MapPoint[] } {
-  const path = s.trail.length ? s.trail : [s.in];
-  const end = s.out ?? path.at(-1)!;
-  return {
-    lines: [{ path, tone: 'primary', label: 'Route' }],
-    points: [
-      { lat: s.in.lat, lng: s.in.lng, tone: 'ok', label: `Check-in ${time(s.in.at)}` },
-      ...(path.length > 1 || s.out ? [{ lat: end.lat, lng: end.lng, accuracyM: live ? end.accuracyM : null, tone: (s.out ? 'crit' : 'info') as MapPoint['tone'], label: s.out ? `Check-out ${time(s.out.at)}` : `Now ${time(end.at)}` }] : []),
-    ],
-  };
 }
 
 /** Sends a reading every so often while the test is open and this screen is showing. */
@@ -149,7 +135,6 @@ export function OwnerTestCheckinView() {
     }, success);
 
   const nowIso = data.now;
-  const opened = open ? routeOf(open, true) : null;
   const opened_min = open ? minutesOf(open.startedAt, fromMs(Date.now())) : 0;
   const busyText = finding ? 'Finding your location…' : 'Saving…';
 
@@ -220,11 +205,10 @@ export function OwnerTestCheckinView() {
         </div>
       </section>
 
-      {open && opened && (
+      {/* P93: the same movement reading as a staff clock: distance without GPS wobble, time inside and outside the office. */}
+      {open && (
         <Card title="Your route so far" sub={`From ${time(open.startedAt)} · ${fmtM(open.distanceM)}`}>
-          <Suspense fallback={<MapFallback height={300} />}>
-            <GeoMap label="Your route since the test check-in" height={300} lines={opened.lines} points={opened.points} fitKey={`${open.id}:${open.trail.length}`} />
-          </Suspense>
+          <MovementView m={open.movement} mapLabel="Your route since the test check-in" fitKey={`${open.id}:${open.trail.length}`} />
         </Card>
       )}
 
@@ -259,7 +243,9 @@ export function OwnerTestCheckinView() {
                         </span>
                       </span>
                     </span>
-                    <Chip tone={s.endedAt ? (s.autoEnded ? 'warn' : 'neutral') : 'ok'}>{s.endedAt ? (s.autoEnded ? 'Closed by Prima' : 'Test') : 'Running'}</Chip>
+                    <Chip tone={s.endedAt ? (s.autoEnded ? 'warn' : 'neutral') : 'ok'}>
+                      {s.endedAt ? (s.autoEnded ? 'Closed by Prima' : s.endedBy === 'sign_out' ? 'Ended at sign-out' : 'Test') : 'Running'}
+                    </Chip>
                   </button>
                 </li>
               );
@@ -276,34 +262,27 @@ export function OwnerTestCheckinView() {
 /** One test: the route on the map and every reading from check-in to check-out. */
 function TestSession({ s, now, onClose }: { s: MyTestCheckins['sessions'][number] | null; now: string; onClose: () => void }) {
   if (!s) return null;
-  const r = routeOf(s);
   const mins = minutesOf(s.startedAt, s.endedAt ?? now);
-  let along = 0;
-  const rows = s.trail.map((p, i) => {
-    if (i > 0) along += haversineM(s.trail[i - 1], p);
-    return { p, along, first: i === 0, last: !!s.out && i === s.trail.length - 1 };
-  });
+  const rows = s.trail.map((p, i) => ({ p, first: i === 0, last: !!s.out && i === s.trail.length - 1 }));
   return (
     <Drawer title="Test check-in" sub={`${dateTimeLabel(s.startedAt)} · Test only, never attendance or pay`} onClose={onClose}>
       <Stats>
         <Stat label="Check-in" value={time(s.startedAt)} icon={<SignInIcon size={16} />} />
         <Stat label="Check-out" value={s.endedAt ? time(s.endedAt) : 'Still in'} icon={<SignOutIcon size={16} />} />
         <Stat label="Time" value={dur(mins)} icon={<TimerIcon size={16} />} />
-        <Stat label="Moved" value={fmtM(s.distanceM)} note={`${s.trail.length} readings`} icon={<PathIcon size={16} />} />
       </Stats>
-      <Suspense fallback={<MapFallback height={300} />}>
-        <GeoMap label="The route from check-in to check-out" height={300} lines={r.lines} points={r.points} fitKey={s.id} />
-      </Suspense>
+      <MovementView m={s.movement} mapLabel="The route from check-in to check-out" fitKey={s.id} />
       {s.autoEnded && <p className="notice small" data-tone="warn">This test was left open, so Prima closed it at its last reading when the next test started.</p>}
+      {s.endedBy === 'sign_out' && <p className="notice small" data-tone="info">You signed out of Prima during this test, so it ended at its last reading.</p>}
       <ol className="ci-timeline otc-timeline" aria-label="Movements">
-        {rows.map(({ p, along: m, first, last }, i) => (
+        {rows.map(({ p, first, last }, i) => (
           <li key={`${p.at}-${i}`} data-outcome={first || last ? 'accepted' : undefined}>
             <span className="ci-tl-time">{p.at.slice(11, 19)}</span>
             <span className="ci-tl-main">
               <span className="ci-tl-title">{first ? 'Check-in (test)' : last ? 'Check-out (test)' : <>Reading {i}</>}</span>
               <span className="ci-tl-sub">
                 {p.lat.toFixed(5)}, {p.lng.toFixed(5)}
-                {p.accuracyM != null ? ` · ±${p.accuracyM} m` : ''} · {fmtM(m)} along the route
+                {p.accuracyM != null ? ` · ±${p.accuracyM} m` : ''}
               </span>
             </span>
           </li>

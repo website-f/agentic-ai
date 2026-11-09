@@ -25,6 +25,7 @@ import { FaceCapture, type FaceResult } from './FaceCheck';
 import { PermissionHelp } from './PermissionHelp';
 import { LOCATION_PROBLEM_TEXT, locationProblem, queryPermission, type LocationProblem, type PermState } from './checkin-permissions';
 import type { MapCircle, MapPoint } from './GeoMap';
+import { clockChanged } from './StaffTracker';
 import '../styles/checkin.css';
 
 const GeoMap = lazy(() => import('./GeoMap'));
@@ -173,6 +174,11 @@ type TestPlace = 'at' | 'away' | 'rough' | 'device';
 /** Readings better than this are taken at once; otherwise the best in a few seconds. */
 const GOOD_M = 25;
 const WAIT_MS = 12_000;
+/**
+ * P93: when the best after WAIT_MS is still too rough, keep looking (the phone's GPS often needs half a minute indoors)
+ * and show how close it is, instead of failing; only after this long is the person asked to move and try again.
+ */
+const LONG_WAIT_MS = 45_000;
 
 function CheckinFlow({ me, onClose, onDone }: { me: MyCheckin; onClose: () => void; onDone: () => void }) {
   const m = me.mine!;
@@ -185,7 +191,7 @@ function CheckinFlow({ me, onClose, onDone }: { me: MyCheckin; onClose: () => vo
   const [skipFace, setSkipFace] = useState(false);
   const [reason, setReason] = useState('');
   const [test, setTest] = useState<TestPlace>('at');
-  const [result, setResult] = useState<{ at: string; text: string } | null>(null);
+  const [result, setResult] = useState<{ at: string; text: string; already: boolean } | null>(null);
   const stopWatch = useRef<() => void>(() => undefined);
   const act = useAction();
 
@@ -236,8 +242,14 @@ function CheckinFlow({ me, onClose, onDone }: { me: MyCheckin; onClose: () => vo
     setLoc({ phase: 'asking', accuracy: null });
     let best: GeolocationPosition | null = null;
     let done = false;
-    const finish = () => {
+    let longTimer = 0;
+    const finish = (final = false) => {
       if (done) return;
+      // Nothing usable yet: keep waiting a while longer, showing the accuracy so far.
+      if (!final && (!best || best.coords.accuracy > me.maxAccuracyM)) {
+        longTimer = window.setTimeout(() => finish(true), LONG_WAIT_MS - WAIT_MS);
+        return;
+      }
       done = true;
       stopWatch.current();
       if (!best) return setLoc({ phase: 'problem', problem: 'timeout' });
@@ -252,21 +264,26 @@ function CheckinFlow({ me, onClose, onDone }: { me: MyCheckin; onClose: () => vo
         setPerm('granted');
         if (!best || p.coords.accuracy < best.coords.accuracy) best = p;
         setLoc({ phase: 'asking', accuracy: Math.round(best.coords.accuracy) });
-        if (best.coords.accuracy <= GOOD_M) finish();
+        if (best.coords.accuracy <= GOOD_M) finish(true);
+        // Already waited the first few seconds and this one is usable: take it.
+        else if (longTimer && best.coords.accuracy <= me.maxAccuracyM) finish(true);
       },
       (err) => {
+        const problem = locationProblem(err);
+        // P93: a slow phone that already gave a reading: use the best one so far instead of failing.
+        if (problem !== 'denied' && best) return finish(true);
         done = true;
         stopWatch.current();
-        const problem = locationProblem(err);
         if (problem === 'denied') setPerm('denied');
         setLoc({ phase: 'problem', problem });
       },
-      { enableHighAccuracy: true, maximumAge: 0, timeout: 20_000 },
+      { enableHighAccuracy: true, maximumAge: 0, timeout: LONG_WAIT_MS },
     );
-    const timer = window.setTimeout(finish, WAIT_MS);
+    const timer = window.setTimeout(() => finish(), WAIT_MS);
     stopWatch.current = () => {
       navigator.geolocation.clearWatch(id);
       window.clearTimeout(timer);
+      window.clearTimeout(longTimer);
     };
   };
 
@@ -291,8 +308,10 @@ function CheckinFlow({ me, onClose, onDone }: { me: MyCheckin; onClose: () => vo
         reason: preview?.reasonNeeded || preview?.outcome === 'blocked' ? reason.trim() || null : null,
         face: face && !skipFace ? { image: face.photo, descriptor: face.descriptor, live: face.live } : null,
       });
-      setResult({ at: r.event.at, text: whereText(r.event) });
+      // P93: already checked in (or out) from another tab or phone, or a retry after a lost answer: shown as done.
+      setResult({ at: r.event.at, text: whereText(r.event), already: !!r.already });
       setStep('done');
+      clockChanged();
       return r;
     });
 
@@ -366,7 +385,13 @@ function CheckinFlow({ me, onClose, onDone }: { me: MyCheckin; onClose: () => vo
             <div className="ci-ask" data-busy="">
               <span className="ci-radar" aria-hidden="true" />
               <p className="ci-ask-title">Finding your location…</p>
-              <p className="ci-ask-sub">{loc.accuracy == null ? 'Hold the phone still for a few seconds.' : `Accurate to about ${loc.accuracy} m so far.`}</p>
+              <p className="ci-ask-sub">
+                {loc.accuracy == null
+                  ? 'Hold the phone still for a few seconds.'
+                  : loc.accuracy > me.maxAccuracyM
+                    ? `Accurate to about ${loc.accuracy} m so far; waiting for ${me.maxAccuracyM} m or better. Stay near a window or step outside.`
+                    : `Accurate to about ${loc.accuracy} m so far.`}
+              </p>
             </div>
           )}
 
@@ -503,7 +528,7 @@ function CheckinFlow({ me, onClose, onDone }: { me: MyCheckin; onClose: () => vo
             <CheckCircleIcon size={56} weight="fill" />
           </span>
           <p className="ci-ask-title">{kind === 'in' ? `Checked in at ${time(result.at)}` : `Checked out at ${time(result.at)}`}</p>
-          <p className="ci-ask-sub">You are {result.text}.</p>
+          <p className="ci-ask-sub">{result.already ? (kind === 'in' ? 'You were already checked in. Nothing more to do.' : 'You were already checked out. Nothing more to do.') : `You are ${result.text}.`}</p>
           <button type="button" className="btn btn-primary" onClick={onDone}>
             Done
           </button>

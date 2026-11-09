@@ -810,3 +810,66 @@
   color: var(--ink);
   margin-bottom: 2px;
 }
+
+/* P93: a clock session's movement (Movement.tsx): figures, review items, route map and timeline. */
+.mv {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+.mv .k-stats {
+  margin: 0;
+}
+.mv-flags {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+.mv-flags li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px 10px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: var(--warn-soft);
+}
+.mv-flags li[data-tone='crit'] {
+  background: var(--crit-soft);
+}
+.mv-flags li[data-tone='unknown'] {
+  background: var(--unknown-soft);
+}
+.mv-flag-text {
+  min-width: 0;
+  flex: 1 1 220px;
+  font-size: 0.88rem;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+.mv-timeline {
+  margin-top: 0;
+  max-height: 320px;
+  overflow: auto;
+}
+.mv-timeline .ci-tl-time {
+  white-space: nowrap;
+}
+.mv-chips {
+  margin-top: 4px;
+}
+button.mv-review {
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  width: 100%;
+}
+.ss-rows > li > button.ss-row {
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  width: 100%;
+}

@@ -797,6 +797,12 @@ async list<T extends TableName>(table: T, filter?: Filter<T>, range?: Range<T>):
     if (PgStore.CLEANING_OPS.has(table) && !(await this.cleaningOpsReady())) throw new BadRequest('Cleaning and duty plans are not installed in this database yet.');
     if (PgStore.AM_EXTRAS.has(table) && !(await this.amExtrasReady())) throw new BadRequest(PgStore.AM_EXTRAS_MISSING);
     if (table === 'audit') return;
+    // P93: one person's clock steps (opening Prima, check-in, check-out, sign-out, a second tab or phone) one at a time,
+    // even before their first clock row exists, so two of them never both open a clock or both check in.
+    if ((table === 'staffClocks' || table === 'ownerTestCheckins') && id.startsWith('user:')) {
+      await this.client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [`${table}:${id}`]);
+      return;
+    }
     // Two sends of the same new offline operation at once: the second waits, then finds the first's receipt.
     // Also serializes one person's help-request duplicate check (id `help:<userId>`) across different operation IDs.
     if (table === 'offlineOps') await this.client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [`offline-op:${id}`]);

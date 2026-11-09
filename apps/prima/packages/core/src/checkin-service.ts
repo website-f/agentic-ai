@@ -99,6 +99,41 @@ export function checkinState(events: CheckinEvent[]): 'none' | 'in' | 'out' {
   return last ? last.kind : 'none';
 }
 
+/** P93: a clock opened on an earlier day still runs past midnight when it began within this many hours... */
+export const CLOCK_CARRY_MAX_H = 16;
+/** ...and was active (opened, or a location reading) within this many hours: night work, not a forgotten sign-out. */
+export const CLOCK_CARRY_ACTIVE_H = 4;
+
+/**
+ * P93 (Fitri: "sometimes an error asking me to go out and clock in again"): whether an open clock from an earlier day
+ * is still the working session. Someone working past midnight keeps their clock and can still check out; a clock left
+ * open from yesterday morning is closed by Prima instead (staffSessionStart), as before.
+ */
+export function clockCarriesOver(c: Pick<StaffClock, 'in' | 'lastPingAt'>, now: IsoDateTime): boolean {
+  const n = toMs(now);
+  const started = toMs(c.in.receivedAt);
+  const active = Math.max(started, c.lastPingAt ? toMs(c.lastPingAt) : 0);
+  return n - started <= CLOCK_CARRY_MAX_H * 3_600_000 && n - active <= CLOCK_CARRY_ACTIVE_H * 3_600_000;
+}
+
+/** The open clock that is today's working session (today's, or carried past midnight), else null. */
+export function currentClock<C extends Pick<StaffClock, 'id' | 'in' | 'lastPingAt'>>(open: C | null | undefined, now: IsoDateTime): C | null {
+  if (!open) return null;
+  return dateOf(open.in.receivedAt) === dateOf(now) || clockCarriesOver(open, now) ? open : null;
+}
+
+/**
+ * P93: where the person stands now, across midnight. Today's last check-in or check-out decides; a check-in from an
+ * earlier day still counts only while its clock is the current one (night work), so nobody is told to check out of
+ * yesterday before they can start today, nor that they never checked in when they did so before midnight.
+ */
+export function checkinStateNow(events: CheckinEvent[], now: IsoDateTime, currentClockId: Id | null): 'none' | 'in' | 'out' {
+  const last = events.filter((e) => e.outcome !== 'blocked').sort((a, b) => a.at.localeCompare(b.at)).at(-1);
+  if (!last) return 'none';
+  if (dateOf(last.at) === dateOf(now)) return last.kind;
+  return last.kind === 'in' && !!currentClockId && last.clockId === currentClockId ? 'in' : 'none';
+}
+
 export class CheckinService {
   constructor(
     private store: Store,
@@ -131,6 +166,20 @@ export class CheckinService {
     return (await this.store.list('checkinEvents', { userId }, { field: 'at', from: d, before: addDays(d, 1) })).sort((a, b) => a.at.localeCompare(b.at));
   }
 
+  /** Yesterday's and today's check-ins (a check-in before midnight can still be open), oldest first. */
+  private async recentEvents(userId: Id): Promise<CheckinEvent[]> {
+    const d = this.today();
+    return (await this.store.list('checkinEvents', { userId }, { field: 'at', from: addDays(d, -1), before: addDays(d, 1) })).sort((a, b) => a.at.localeCompare(b.at));
+  }
+
+  /** Where the person stands now (P93: across midnight), with the open clock that is their current session. */
+  private async stateNow(user: User) {
+    const [events, open] = await Promise.all([this.recentEvents(user.id), this.deps.openClock(user)]);
+    const current = currentClock(open, this.clock());
+    const state = checkinStateNow(events, this.clock(), current?.id ?? null);
+    return { events, open, current, state, last: events.filter((e) => e.outcome !== 'blocked').at(-1) ?? null };
+  }
+
   private async companyName(id: Id): Promise<string> {
     return (await this.store.get('companies', id))?.name ?? centralStaffName(id);
   }
@@ -142,15 +191,17 @@ export class CheckinService {
     if (!allowed) return { allowed, notice, maxAccuracyM: CHECKIN_MAX_ACCURACY_M, reasonMin: CHECKIN_REASON_MIN, state: 'none' as const, today: [] as CheckinEvent[], mine: null };
     const ctx = await this.context(user);
     const today = this.today();
-    const events = await this.todayEvents(user.id);
-    const open = await this.deps.openClock(user);
+    const now = await this.stateNow(user);
+    const open = now.open;
+    // Today's list, plus a check-in from before midnight that is still open (night work).
+    const events = now.events.filter((e) => dateOf(e.at) === today || (now.state === 'in' && e.id === now.last?.id));
     const t = checkinTargets(ctx.rule, ctx.places, user.base);
     return {
       allowed,
       notice,
       maxAccuracyM: CHECKIN_MAX_ACCURACY_M,
       reasonMin: CHECKIN_REASON_MIN,
-      state: checkinState(events),
+      state: now.state,
       today: events,
       mine: {
         companyId: ctx.companyId,
@@ -173,7 +224,7 @@ export class CheckinService {
     this.need(user);
     if (!validLatLng(fix.lat, fix.lng)) throw new BadRequest('No location from the phone. Allow location and try again.');
     const ctx = await this.context(user);
-    const kind = checkinState(await this.todayEvents(user.id)) === 'in' ? ('out' as const) : ('in' as const);
+    const kind = (await this.stateNow(user)).state === 'in' ? ('out' as const) : ('in' as const);
     const ev = evaluateCheckin({ lat: fix.lat, lng: fix.lng, date: this.today(), rule: ctx.rule, places: ctx.places, base: user.base });
     const d = checkinDecision(ev.verdict, ctx.policy, kind);
     const problem = accuracyProblem(fix.accuracyM);
@@ -186,14 +237,28 @@ export class CheckinService {
    */
   async record(user: User, kind: 'in' | 'out', input: CheckinInput, address: CheckinAddress) {
     this.need(user);
+    // P93: one clock step at a time per person (the sign-in clock, a second tab, a second phone, a retry), so two of
+    // them never both open a clock or both check in.
+    await this.store.lock?.('staffClocks', `user:${user.id}`);
+    const now = await this.stateNow(user);
+    const { state } = now;
+    // P93 (Fitri: "an error asking me to go out and clock in again"): a check-in when already checked in, or a
+    // check-out when already checked out, is the same step again (a second tap, another tab or phone, or a retry after
+    // the answer was lost on a weak signal). It returns the step already made instead of an error telling the person to
+    // check out and check in again.
+    if (kind === 'in' && state === 'in' && now.last) {
+      let clock = now.current;
+      if (input.face && clock?.flags.includes('FACE_PENDING'))
+        clock = await this.deps.faceCheck(user, { image: input.face.image, capturedAt: this.clock(), descriptor: input.face.descriptor, live: input.face.live === true });
+      return { event: now.last, blocked: false as const, clock, already: true as const };
+    }
+    if (kind === 'out' && state === 'out' && now.last) return { event: now.last, blocked: false as const, clock: null, already: true as const };
+    if (kind === 'out' && state !== 'in') throw new BadRequest('You have not checked in today, so there is nothing to check out. Press Check in when you start work.');
     if (!validLatLng(input.lat, input.lng)) throw new BadRequest('No location from the phone. Allow location and try again.');
     const problem = accuracyProblem(input.accuracyM);
     if (problem) throw new BadRequest(problem);
     const ctx = await this.context(user);
-    const events = await this.todayEvents(user.id);
-    const state = checkinState(events);
-    if (kind === 'in' && state === 'in') throw new BadRequest(`You checked in at ${hhmm(events.filter((e) => e.outcome !== 'blocked').at(-1)!.at)}. Check out first.`);
-    if (kind === 'out' && state !== 'in') throw new BadRequest('You have not checked in today. Check in first.');
+    const events = now.events.filter((e) => dateOf(e.at) === this.today());
     const at = this.clock();
     const ev = evaluateCheckin({ lat: input.lat, lng: input.lng, date: this.today(), rule: ctx.rule, places: ctx.places, base: user.base });
     const d = checkinDecision(ev.verdict, ctx.policy, kind);
@@ -238,9 +303,9 @@ export class CheckinService {
         await tx.insert('checkinEvents', base);
         await tx.audit({ at, actor: user.name, companyId: ctx.companyId, action: 'checkin.blocked', entity: 'checkin_event', entityId: base.id, summary: `${user.name} tried to check in outside the allowed area${where}; refused by the company's rule` });
       });
-      return { event: base, blocked: true as const, clock: null };
+      return { event: base, blocked: true as const, clock: null, already: false as const };
     }
-    let clock = kind === 'in' ? await this.deps.ensureClock(user) : await this.deps.openClock(user);
+    let clock = kind === 'in' ? await this.deps.ensureClock(user) : now.open;
     let face: FaceCapture | null = null;
     if (kind === 'in' && input.face && clock?.flags.includes('FACE_PENDING')) {
       clock = await this.deps.faceCheck(user, { image: input.face.image, capturedAt, descriptor: input.face.descriptor, live: input.face.live === true });
@@ -265,7 +330,7 @@ export class CheckinService {
       const m = ev.matched ?? ev.nearest;
       clock = await this.deps.closeClock(user, { lat: input.lat, lng: input.lng, accuracyM: event.accuracyM, distanceM: m ? m.distanceM : null });
     }
-    return { event, blocked: false as const, clock };
+    return { event, blocked: false as const, clock, already: false as const };
   }
 
   /** The address the API found after the check-in was saved (a slow lookup). Only the person's own, only once. */

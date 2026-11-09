@@ -8,7 +8,9 @@
 // may start one, and each person only ever reads or changes their own sessions (the service here, and row-level
 // security in db/modules/owner-test-checkin-v1.sql). Nothing anyone else holds is touched.
 import { isOwnerAdmin } from './access';
-import { haversineM, validLatLng } from './checkin';
+import { checkinCompanyOf, checkinTargets, haversineM, validLatLng, type CheckinTarget } from './checkin';
+import { MOVEMENT_DEFAULTS, analyseMovement, type MovementSummary, type RawReading } from './movement';
+import { RULES } from './rules';
 import { BadRequest } from './service';
 import type { Store } from './store';
 import { toMs } from './time';
@@ -18,8 +20,10 @@ import type { Id, IsoDateTime, User } from './types';
 export const OWNER_TEST_MAX_POINTS = 2000;
 /** Readings closer together than this are not kept. */
 export const OWNER_TEST_MIN_GAP_S = 10;
-/** A reading rougher than this is not added to the route (it would draw a false zig-zag). */
-export const OWNER_TEST_MAX_ACCURACY_M = 150;
+/** A reading rougher than this is not added to the route (it would draw a false zig-zag). P93: the staff clock's rule. */
+export const OWNER_TEST_MAX_ACCURACY_M = MOVEMENT_DEFAULTS.maxAccuracyM;
+/** P93: a check-out sent again within this many minutes (the answer was lost) returns the check-out already made. */
+export const OWNER_TEST_RETRY_MIN = 10;
 /** A session left open longer than this is closed at its last reading when the next one starts. */
 export const OWNER_TEST_STALE_H = 18;
 /** Sessions listed on the screen. */
@@ -56,6 +60,8 @@ export interface OwnerTestCheckin {
   endedAt: IsoDateTime | null;
   /** Closed by Prima because it was left open (at its last reading), not by a check-out. */
   autoEnded: boolean;
+  /** P93: how it ended: a check-out, signing out of Prima (at its last reading), or Prima closing one left open. */
+  endedBy?: 'check_out' | 'sign_out' | 'prima';
   note: string;
 }
 
@@ -65,6 +71,9 @@ export interface OwnerTestFix {
   accuracyM: number | null;
   capturedAt?: IsoDateTime | null;
 }
+
+/** P93: a test session as the screen gets it: the distance worked out again, and its movement. */
+export type OwnerTestView = OwnerTestCheckin & { savedDistanceM: number; movement: MovementSummary };
 
 const NOT_OWNER = 'Test check-in is only for the owner. Staff check in on My clock.';
 
@@ -80,7 +89,10 @@ function pointOf(fix: OwnerTestFix, at: IsoDateTime): OwnerTestPoint {
   return { at, capturedAt: cap, lat: Math.round(fix.lat * 1e6) / 1e6, lng: Math.round(fix.lng * 1e6) / 1e6, accuracyM: acc };
 }
 
-/** Metres along a route. */
+/**
+ * Metres along a route, every step added. P93: kept for reference only; the distance shown is the staff clock's
+ * (movement.ts), which leaves out rough readings, jumps and GPS jitter.
+ */
 export function routeLengthM(points: Pick<OwnerTestPoint, 'lat' | 'lng'>[]): number {
   let m = 0;
   for (let i = 1; i < points.length; i++) m += haversineM(points[i - 1], points[i]);
@@ -101,6 +113,19 @@ export function testMinutes(s: Pick<OwnerTestCheckin, 'startedAt' | 'endedAt'>, 
   return Math.max(0, Math.round((toMs(s.endedAt ?? now) - toMs(s.startedAt)) / 60_000));
 }
 
+/** P93: a test session's readings, as the staff clock reads its own (check-in first, check-out last). */
+export function testReadings(s: Pick<OwnerTestCheckin, 'id' | 'trail' | 'out'>): RawReading[] {
+  return s.trail.map((p, i) => ({
+    id: `${s.id}:${i}`,
+    source: i === 0 ? 'in' : s.out && i === s.trail.length - 1 && p.at === s.out.at ? 'out' : 'ping',
+    capturedAt: p.capturedAt,
+    receivedAt: p.at,
+    lat: p.lat,
+    lng: p.lng,
+    accuracyM: p.accuracyM,
+  }));
+}
+
 export class OwnerTestCheckinService {
   constructor(
     private store: Store,
@@ -116,31 +141,86 @@ export class OwnerTestCheckinService {
     return (await this.store.list('ownerTestCheckins', { userId: user.id })).sort((a, b) => b.startedAt.localeCompare(a.startedAt));
   }
 
+  /** P93: the places the owner's tests are measured against: their company's check-in places, else their base. */
+  private async targets(user: User): Promise<CheckinTarget[]> {
+    const companyId = checkinCompanyOf(user, null);
+    const places = await this.store.list('checkinPlaces', { companyId });
+    return checkinTargets(null, places, user.base).targets;
+  }
+
+  /** P93: the same movement reading as a staff clock: distance without jitter, time inside and outside, review items. */
+  private movement(s: OwnerTestCheckin, targets: CheckinTarget[]): MovementSummary {
+    const r = RULES.staffMovement.value;
+    return analyseMovement({
+      raw: testReadings(s),
+      from: s.startedAt,
+      to: s.endedAt,
+      now: this.now(),
+      targets,
+      rules: { outOfStationMin: r.outOfStationMin, maxAccuracyM: r.maxAccuracyM, maxSpeedKmh: r.maxSpeedKmh, farClockInM: r.farClockInM, gapMin: RULES.staffTrackGapMin.value },
+    });
+  }
+
+  /** P93: signing out of Prima ends an open test at its last reading, as signing out ends a staff clock. */
+  async endAtSignOut(user: User): Promise<OwnerTestCheckin | null> {
+    if (!mayTestCheckin(user)) return null;
+    await this.store.lock?.('ownerTestCheckins', `user:${user.id}`);
+    const open = (await this.sessions(user)).find((s) => !s.endedAt);
+    if (!open) return null;
+    const last = open.trail.at(-1) ?? open.in;
+    const at = this.now();
+    return this.store.transaction(async (tx) => {
+      const updated = await tx.update('ownerTestCheckins', open.id, { endedAt: last.at, out: last, endedBy: 'sign_out', distanceM: this.movement({ ...open, endedAt: last.at, out: last }, []).distanceM });
+      await tx.audit({
+        at,
+        actor: user.name,
+        companyId: null,
+        action: 'owner_test.sign_out',
+        entity: 'owner_test_checkin',
+        entityId: open.id,
+        summary: `${user.name} signed out of Prima with a TEST check-in open; it ended at its last reading (owner test only; not attendance, not pay)`,
+      });
+      return updated;
+    });
+  }
+
   /** The owner's test sessions (newest first) and the open one. Anyone else is told it is not for them; nothing is read. */
   async mine(user: User) {
     if (!mayTestCheckin(user))
-      return { allowed: false as const, open: null, sessions: [] as OwnerTestCheckin[], pingEveryS: OWNER_TEST_PING_S, maxPoints: OWNER_TEST_MAX_POINTS, now: this.now() };
+      return { allowed: false as const, open: null as OwnerTestView | null, sessions: [] as OwnerTestView[], pingEveryS: OWNER_TEST_PING_S, maxPoints: OWNER_TEST_MAX_POINTS, now: this.now() };
     const all = await this.sessions(user);
     const open = all.find((s) => !s.endedAt) ?? null;
+    const targets = await this.targets(user);
+    // P93: the distance shown is worked out again from the readings each time (so a test saved before this fix shows the
+    // right figure too), with the time inside and outside the owner's office and the review items a manager would see.
+    const view = (s: OwnerTestCheckin): OwnerTestView => {
+      const movement = this.movement(s, targets);
+      return { ...s, distanceM: movement.distanceM, savedDistanceM: s.distanceM, trail: thinRoute(s.trail, OWNER_TEST_LIST_POINTS), movement };
+    };
     return {
       allowed: true as const,
-      open: open ? { ...open, trail: thinRoute(open.trail, OWNER_TEST_LIST_POINTS) } : null,
-      sessions: all.slice(0, OWNER_TEST_LIST).map((s) => ({ ...s, trail: thinRoute(s.trail, OWNER_TEST_LIST_POINTS) })),
+      open: open ? view(open) : null,
+      sessions: all.slice(0, OWNER_TEST_LIST).map(view),
       pingEveryS: OWNER_TEST_PING_S,
       maxPoints: OWNER_TEST_MAX_POINTS,
       now: this.now(),
     };
   }
 
-  /** Test check-in. One open session at a time; one left open from long ago is closed at its last reading first. */
+  /**
+   * Test check-in. One open session at a time; one left open from long ago is closed at its last reading first.
+   * P93: pressing it again while a test is open (a second tap, another tab, a retry) returns the open test instead of
+   * an error asking to check out first.
+   */
   async start(user: User, fix: OwnerTestFix): Promise<OwnerTestCheckin> {
     this.assertOwner(user);
+    await this.store.lock?.('ownerTestCheckins', `user:${user.id}`);
     const at = this.now();
     const point = pointOf(fix, at);
     const open = (await this.sessions(user)).find((s) => !s.endedAt) ?? null;
     if (open) {
       const last = open.trail.at(-1) ?? open.in;
-      if (toMs(at) - toMs(last.at) < OWNER_TEST_STALE_H * 3_600_000) throw new BadRequest('A test check-in is already open. Check out of it first.');
+      if (toMs(at) - toMs(last.at) < OWNER_TEST_STALE_H * 3_600_000) return open;
     }
     const row: OwnerTestCheckin = {
       id: `otc-${user.id}-${toMs(at)}`,
@@ -159,7 +239,7 @@ export class OwnerTestCheckinService {
     return this.store.transaction(async (tx) => {
       if (open) {
         const last = open.trail.at(-1) ?? open.in;
-        await tx.update('ownerTestCheckins', open.id, { endedAt: last.at, out: last, autoEnded: true });
+        await tx.update('ownerTestCheckins', open.id, { endedAt: last.at, out: last, autoEnded: true, endedBy: 'prima' });
       }
       await tx.insert('ownerTestCheckins', row);
       await tx.audit({
@@ -187,24 +267,35 @@ export class OwnerTestCheckinService {
     if (open.trail.length >= OWNER_TEST_MAX_POINTS) return skip('This test has the most readings one test keeps. Check out and start another.');
     if (toMs(at) - toMs(last.at) < OWNER_TEST_MIN_GAP_S * 1000) return skip('A reading was kept a moment ago.');
     if (point.accuracyM !== null && point.accuracyM > OWNER_TEST_MAX_ACCURACY_M) return skip(`The reading is only accurate to ${point.accuracyM} m, so it is not drawn on the route.`);
-    const distanceM = open.distanceM + Math.round(haversineM(last, point));
+    const next = { ...open, trail: [...open.trail, point] };
+    // P93: the staff clock's distance (jitter, rough readings and jumps left out), not every step added up.
+    const distanceM = this.movement(next, []).distanceM;
     await this.store.transaction(async (tx) => {
-      await tx.update('ownerTestCheckins', open.id, { trail: [...open.trail, point], distanceM });
+      await tx.update('ownerTestCheckins', open.id, { trail: next.trail, distanceM });
     });
-    return { accepted: true, reason: null, points: open.trail.length + 1, distanceM };
+    return { accepted: true, reason: null, points: next.trail.length, distanceM };
   }
 
-  /** Test check-out: the last reading closes the route. */
+  /**
+   * Test check-out: the last reading closes the route. P93: a check-out sent again just after one (the answer was lost)
+   * returns that check-out; the distance leaves out a rough last reading instead of drawing a jump to it.
+   */
   async end(user: User, fix: OwnerTestFix): Promise<OwnerTestCheckin> {
     this.assertOwner(user);
+    await this.store.lock?.('ownerTestCheckins', `user:${user.id}`);
     const at = this.now();
     const point = pointOf(fix, at);
-    const open = (await this.sessions(user)).find((s) => !s.endedAt);
-    if (!open) throw new BadRequest('No test check-in is open.');
+    const all = await this.sessions(user);
+    const open = all.find((s) => !s.endedAt);
+    if (!open) {
+      const recent = all.find((s) => s.endedAt && s.endedBy !== 'prima' && toMs(at) - toMs(s.endedAt) <= OWNER_TEST_RETRY_MIN * 60_000);
+      if (recent) return recent;
+      throw new BadRequest('No test check-in is running. Press Check in (test) to start one.');
+    }
     const trail = open.trail.length >= OWNER_TEST_MAX_POINTS ? [...open.trail.slice(0, -1), point] : [...open.trail, point];
-    const distanceM = routeLengthM(trail);
+    const distanceM = this.movement({ ...open, trail, out: point, endedAt: at }, []).distanceM;
     return this.store.transaction(async (tx) => {
-      const updated = await tx.update('ownerTestCheckins', open.id, { out: point, endedAt: at, trail, distanceM });
+      const updated = await tx.update('ownerTestCheckins', open.id, { out: point, endedAt: at, trail, distanceM, endedBy: 'check_out' });
       await tx.audit({
         at,
         actor: user.name,
