@@ -19,6 +19,8 @@ MS: dict[str, str] = {
     ),
     "Set a new password before continuing.": "Tetapkan kata laluan baharu sebelum teruskan.",
     "Your role ({role}) cannot do this.": "Peranan anda ({role}) tidak boleh buat ini.",
+    # P96: data tables (api/table.py)
+    "This list cannot be sorted by {column}.": "Senarai ini tidak boleh disusun ikut {column}.",
     # ------------------------------------------------------------ P81 start fresh for go-live
     "That workspace was not found.": "Ruang kerja itu tidak dijumpai.",
     "One of the companies picked is not in this office.": (

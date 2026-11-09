@@ -21,6 +21,33 @@ export interface PersonAllowance extends Allowance {
   role: string;
   /** The person's own setting: null = the default for their role, 0 = no limit. */
   own: number | null;
+  /** P96: where they sit, today's cost and how much of the limit is used. */
+  branch_id?: string | null;
+  branch_name?: string | null;
+  department_name?: string | null;
+  cost_usd?: number;
+  /** Percent of the limit used; null = no limit. */
+  pct?: number | null;
+  status?: AllowanceStatus;
+}
+
+export type AllowanceStatus = "ok" | "near" | "over" | "unlimited";
+
+/** Everyone in scope, whatever the search (the stat tiles). */
+export interface AllowanceSummary {
+  people: number;
+  over: number;
+  near: number;
+  used: number;
+  cost_usd: number;
+}
+
+/** GET /api/allowances: with ?page= one page of people; total is the matching count. */
+export interface AllowancesBody {
+  policy: AllowancePolicy;
+  people: PersonAllowance[];
+  total?: number;
+  summary?: AllowanceSummary;
 }
 
 export interface AllowancePolicy {
@@ -60,7 +87,7 @@ export const myAllowanceQuery = queryOptions({
 
 export const allowancesQuery = queryOptions({
   queryKey: allowanceKeys.all,
-  queryFn: () => api<{ policy: AllowancePolicy; people: PersonAllowance[] }>("/api/allowances"),
+  queryFn: () => api<AllowancesBody>("/api/allowances"),
   refetchInterval: 60_000,
 });
 

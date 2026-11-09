@@ -42,6 +42,7 @@ from ..agent_schemas import (
     TaskUpdateIn,
 )
 from ..deps import Principal, api_error, ensure_work_scope, require
+from ..table import TableParams, like, sql_page
 from .files import FileOut, file_out
 
 router = APIRouter(prefix="/api", tags=["tasks"])
@@ -1122,12 +1123,16 @@ async def list_approvals(
     status_: str | None = Query(default=None, alias="status", max_length=80),
     limit: int = Query(default=200, ge=1, le=paging.MAX_LIMIT),
     cursor: str | None = Query(default=None, max_length=400),
+    table: TableParams = Depends(),
     principal: Principal = Depends(require("read")),
     db: AsyncSession = Depends(get_db),
 ) -> list[ApprovalOut]:
     """Newest first. History pages with `limit` + `cursor` (X-Next-Cursor); `status` narrows
-    history to some outcomes (comma list, e.g. approved,denied)."""
-    q = select(Approval).where(Approval.workspace_id == principal.workspace_id)
+    history to some outcomes (comma list, e.g. approved,denied). P96 (the history table):
+    `page` + `size` for numbered pages, `q` finds words in what was asked, the answer, the
+    agent or the task, `sort` is "created" or "decided" ("-" newest first, the default)."""
+    ws = principal.workspace_id
+    q = select(Approval).where(Approval.workspace_id == ws)
     cond = principal.scope.approval_where()
     if cond is not None:
         q = q.where(cond)
@@ -1138,14 +1143,38 @@ async def list_approvals(
     )
     if status_ and state == "history":
         q = q.where(Approval.status.in_(status_.split(",")))
-    rows = await paging.paginate(
-        db,
-        q,
-        ((Approval.created_at, True), (Approval.id, True)),
-        limit=limit,
-        cursor=cursor,
-        response=response,
-    )
+    for w in table.words:
+        pat = like(w)
+        q = q.where(
+            or_(
+                Approval.tool_name.ilike(pat, escape="\\"),
+                Approval.reason.ilike(pat, escape="\\"),
+                Approval.answer.ilike(pat, escape="\\"),
+                Approval.agent_id.in_(
+                    select(Agent.id).where(
+                        Agent.workspace_id == ws, Agent.name.ilike(pat, escape="\\")
+                    )
+                ),
+                Approval.task_id.in_(
+                    select(Task.id).where(
+                        Task.workspace_id == ws, Task.title.ilike(pat, escape="\\")
+                    )
+                ),
+            )
+        )
+    if table.paged:
+        key, desc = table.sort_by(("created", "decided"), default="-created")
+        col = Approval.decided_at if key == "decided" else Approval.created_at
+        rows = await sql_page(db, q, ((col, desc), (Approval.id, desc)), table, response)
+    else:
+        rows = await paging.paginate(
+            db,
+            q,
+            ((Approval.created_at, True), (Approval.id, True)),
+            limit=limit,
+            cursor=cursor,
+            response=response,
+        )
     names = await _names(db, {a.decided_by for a in rows if a.decided_by})
     return [await approval_out(db, a, names) for a in rows]
 

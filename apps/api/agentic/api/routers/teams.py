@@ -32,6 +32,7 @@ from ...services import audit, events
 from ...teams import budget, meetings, schedules
 from .. import paging
 from ..deps import Principal, api_error, ensure_work_scope, require
+from ..table import TableParams, like, sql_page
 
 router = APIRouter(prefix="/api", tags=["teams"])
 
@@ -586,14 +587,20 @@ def _run_out(r: JobRun, names: dict[str, str], titles: dict[str, str]) -> dict[s
 
 @router.get("/runs")
 async def list_runs(
+    response: Response,
     job: str | None = None,
     schedule_id: str | None = None,
     status_: str | None = Query(default=None, alias="status"),
     limit: int = Query(default=100, ge=1, le=500),
+    table: TableParams = Depends(),
     principal: Principal = Depends(require("read")),
     db: AsyncSession = Depends(get_db),
 ) -> list[dict[str, Any]]:
-    q = select(JobRun).where(JobRun.workspace_id == principal.workspace_id)
+    """The newest runs (`limit`). P96 (the runs table): `page` + `size` for numbered pages
+    with X-Total-Count, `q` finds words in the schedule's name, the task's title or the
+    error, `sort` "started" ("-started", newest first, is the default)."""
+    ws = principal.workspace_id
+    q = select(JobRun).where(JobRun.workspace_id == ws)
     if job:
         q = q.where(JobRun.job == job)
     if schedule_id:
@@ -607,7 +614,29 @@ async def list_runs(
                 select(Schedule.id).where(Schedule.agent_id.in_(visible or {""}))
             )
         )
-    rows = (await db.scalars(q.order_by(JobRun.id.desc()).limit(limit))).all()
+    for w in table.words:
+        pat = like(w)
+        q = q.where(
+            or_(
+                JobRun.error.ilike(pat, escape="\\"),
+                JobRun.job.ilike(pat, escape="\\"),
+                JobRun.schedule_id.in_(
+                    select(Schedule.id).where(
+                        Schedule.workspace_id == ws, Schedule.name.ilike(pat, escape="\\")
+                    )
+                ),
+                JobRun.task_id.in_(
+                    select(Task.id).where(
+                        Task.workspace_id == ws, Task.title.ilike(pat, escape="\\")
+                    )
+                ),
+            )
+        )
+    if table.paged:
+        _, desc = table.sort_by(("started",), default="-started")
+        rows = await sql_page(db, q, ((JobRun.id, desc),), table, response)
+    else:
+        rows = (await db.scalars(q.order_by(JobRun.id.desc()).limit(limit))).all()
     sids = {r.schedule_id for r in rows if r.schedule_id}
     tids = {r.task_id for r in rows if r.task_id}
     names = dict(

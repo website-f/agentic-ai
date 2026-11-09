@@ -12,6 +12,7 @@ import { EmptyState, IconTile, Page, PageHeader } from "@/components/page";
 import { Button } from "@/components/ui/button";
 import { ListCard, Meta } from "@/components/ui/card";
 import { ConfirmDialog } from "@/components/ui/confirm";
+import { DataTable, filterOf, useServerTable, useTableState, type Column } from "@/components/ui/data-table";
 import { ResponsiveDialog } from "@/components/ui/dialog";
 import { Field, FormError, TextareaField } from "@/components/ui/field";
 import { Pill } from "@/components/ui/pill";
@@ -28,10 +29,10 @@ import {
   describeCron,
   incidentsQuery,
   RUN_TONE,
-  runsQuery,
   schedulesQuery,
   systemJobsQuery,
   teamKeys,
+  type JobRun,
   type RunStatus,
   type Schedule,
 } from "@/lib/teams";
@@ -196,69 +197,69 @@ function took(r: { started_at: string; finished_at: string | null }): string {
   return sec < 90 ? `${sec}s` : `${Math.round(sec / 60)}m`;
 }
 
+/** P96: every run ever logged, as a data table: the server finds words (schedule, task,
+ * error), filters the job and status, and sends one numbered page. The address keeps them. */
 function RunsTab() {
   const t = useT();
-  const [job, setJob] = useState("all");
-  const { data, isLoading, error } = useQuery(runsQuery(job === "all" ? undefined : job));
+  const control = useTableState({ size: 25 }, { prefix: "r_", filters: ["job", "status"] });
+  const [job, setJob] = filterOf(control, "job");
+  const [status, setStatus] = filterOf(control, "status");
+  // The API reads job and status without the prefix.
+  const runs = useServerTable<JobRun>(["runs"], "/api/runs", { ...control.state, f: {} }, { job: job || undefined, status: status || undefined });
+  const columns: Column<JobRun>[] = [
+    {
+      id: "job", header: t("Job"), card: "title",
+      cell: (r) => (
+        <span className="grid min-w-0">
+          <span className="font-medium break-words">{r.job === "heartbeat" ? t("Heartbeat") : r.schedule_name ?? t("Schedule")}</span>
+          {r.attempt > 1 ? <span className="text-[12px] text-muted">{t("attempt {n}", { n: r.attempt })}</span> : null}
+        </span>
+      ),
+    },
+    { id: "status", header: t("Status"), cell: (r) => <Pill tone={RUN_TONE[r.status]} live={r.status === "running"}>{t(RUN_WORD[r.status])}</Pill> },
+    { id: "started", header: t("Started"), sortable: true, kind: "date", cell: (r) => <span className="whitespace-nowrap text-muted">{timeAgo(r.started_at)}</span> },
+    { id: "took", header: t("Took"), hideBelow: "lg", cell: (r) => <span className="text-muted tabular">{took(r)}</span> },
+    {
+      id: "result", header: t("Result"), card: "full",
+      cell: (r) => {
+        const d = r.detail as { started?: number; pinged?: number } | null;
+        return (
+          <span className="grid min-w-0 gap-0.5">
+            {r.task_id ? <Link to="/tasks" search={{ task: r.task_id }} className="break-words text-accent hover:underline">{r.task_title ?? t("Open task")}</Link> : null}
+            {r.job === "heartbeat" && d ? <span className="text-muted">{t("{started} started, {pinged} asked for work", { started: d.started ?? 0, pinged: d.pinged ?? 0 })}</span> : null}
+            {r.error ? <span className="text-[12.5px] break-words text-danger">{r.error}</span> : null}
+          </span>
+        );
+      },
+    },
+  ];
   return (
-    <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-4">
-      <Segmented label={t("Which jobs")} value={job} onChange={setJob} className="w-fit"
-        options={[{ value: "all", label: t("All jobs") }, { value: "schedule", label: t("Schedules") }, { value: "heartbeat", label: t("Heartbeats") }]} />
-      {isLoading ? <RowsSkeleton rows={5} h="h-12" /> : error || !data ? <p role="alert" className="text-danger">{errorMessage(error)}</p> : !data.length ? (
-        <EmptyState icon={HeartbeatIcon} title={t("No runs yet")} body={t("Every scheduled run and heartbeat is logged here: claimed, running, then completed or failed.")} />
-      ) : (
-        <>
-          {/* Phones: one card per run. */}
-          <ListCard data-guide="schedules.list" className="md:hidden">
-            {data.map((r) => {
-              const d = r.detail as { started?: number; pinged?: number } | null;
-              return (
-                <li key={r.id} className="grid min-w-0 gap-1.5 px-4 py-3">
-                  <div className="flex items-start justify-between gap-3">
-                    <span className="min-w-0 text-[13.5px] font-medium break-words">{r.job === "heartbeat" ? t("Heartbeat") : r.schedule_name ?? t("Schedule")}</span>
-                    <Pill tone={RUN_TONE[r.status]} live={r.status === "running"}>{t(RUN_WORD[r.status])}</Pill>
-                  </div>
-                  <span className="flex flex-wrap items-center gap-x-1.5 text-[12px] text-muted tabular">
-                    <Meta items={[timeAgo(r.started_at), t("took {time}", { time: took(r) }), r.attempt > 1 ? t("attempt {n}", { n: r.attempt }) : null]} />
-                  </span>
-                  {r.task_id ? <Link to="/tasks" search={{ task: r.task_id }} className="min-h-6 text-[13px] break-words text-accent hover:underline">{r.task_title ?? t("Open task")}</Link> : null}
-                  {r.job === "heartbeat" && d ? <span className="text-[12.5px] text-muted">{t("{started} started, {pinged} asked for work", { started: d.started ?? 0, pinged: d.pinged ?? 0 })}</span> : null}
-                  {r.error ? <span className="text-[12.5px] break-words text-danger">{r.error}</span> : null}
-                </li>
-              );
-            })}
-          </ListCard>
-          {/* Larger screens: the ledger as a table. */}
-          <div data-guide="schedules.list" className="overflow-x-auto rounded-[var(--radius-md)] border border-border bg-surface max-md:hidden">
-            <table className="w-full min-w-[640px] text-left text-[13px]">
-              <thead className="border-b border-border bg-surface-2/50 text-[12px] text-muted">
-                <tr><th className="px-4 py-2.5 font-medium">{t("Job")}</th><th className="px-4 py-2.5 font-medium">{t("Status")}</th><th className="px-4 py-2.5 font-medium">{t("Started")}</th><th className="px-4 py-2.5 font-medium">{t("Took")}</th><th className="px-4 py-2.5 font-medium">{t("Result")}</th></tr>
-              </thead>
-              <tbody className="divide-y divide-border">
-                {data.map((r) => {
-                  const d = r.detail as { started?: number; pinged?: number } | null;
-                  return (
-                    <tr key={r.id} className="align-top transition-colors hover:bg-surface-2/40">
-                      <td className="px-4 py-2.5">
-                        <span className="block font-medium">{r.job === "heartbeat" ? t("Heartbeat") : r.schedule_name ?? t("Schedule")}</span>
-                        {r.attempt > 1 ? <span className="text-[12px] text-muted">{t("attempt {n}", { n: r.attempt })}</span> : null}
-                      </td>
-                      <td className="px-4 py-2.5"><Pill tone={RUN_TONE[r.status]} live={r.status === "running"}>{t(RUN_WORD[r.status])}</Pill></td>
-                      <td className="px-4 py-2.5 whitespace-nowrap text-muted">{timeAgo(r.started_at)}</td>
-                      <td className="px-4 py-2.5 text-muted tabular">{took(r)}</td>
-                      <td className="max-w-[320px] px-4 py-2.5">
-                        {r.task_id ? <Link to="/tasks" search={{ task: r.task_id }} className="text-accent hover:underline">{r.task_title ?? t("Open task")}</Link> : null}
-                        {r.job === "heartbeat" && d ? <span className="text-muted">{t("{started} started, {pinged} asked for work", { started: d.started ?? 0, pinged: d.pinged ?? 0 })}</span> : null}
-                        {r.error ? <span className="block text-[12.5px] break-words text-danger">{r.error}</span> : null}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        </>
-      )}
+    <div data-guide="schedules.list" className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-4">
+      <DataTable
+        label={t("Runs")}
+        mode="server"
+        columns={columns}
+        rows={runs.rows}
+        total={runs.total}
+        rowId={(r) => String(r.id)}
+        control={control}
+        loading={runs.loading}
+        fetching={runs.fetching}
+        error={runs.error}
+        onRetry={runs.refetch}
+        searchPlaceholder={t("Search by schedule, task or error")}
+        filters={
+          <>
+            <div className="col-span-2 max-w-full min-w-0 overflow-x-auto">
+              <Segmented label={t("Which jobs")} value={job || "all"} onChange={(v) => setJob(v === "all" ? "" : v)} className="w-fit"
+                options={[{ value: "all", label: t("All jobs") }, { value: "schedule", label: t("Schedules") }, { value: "heartbeat", label: t("Heartbeats") }]} />
+            </div>
+            <Select className="w-full sm:w-40" label={t("Status")} value={status || "all"} onValueChange={(v) => setStatus(v === "all" ? "" : v)}
+              options={[{ value: "all", label: t("All statuses") }, ...(Object.keys(RUN_WORD) as JobRun["status"][]).map((s) => ({ value: s, label: t(RUN_WORD[s]) }))]} />
+          </>
+        }
+        empty={<EmptyState icon={HeartbeatIcon} title={t("No runs yet")} body={t("Every scheduled run and heartbeat is logged here: claimed, running, then completed or failed.")} />}
+      />
     </div>
   );
 }
