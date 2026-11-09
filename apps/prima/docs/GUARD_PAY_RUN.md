@@ -5,6 +5,8 @@ patrolling officers, with payslips and a bank file, reading the ACT pay formulas
 
 Status: draft, synthetic data only. Not merged, not migrated, not deployed. The JA Group app still pays guards.
 
+Switch date (Fauzan, 8 Nov 2026): Prima takes over guard pay on 1 August 2027 (rule PAY-GUARD `switchDate: '2027-08-01'`; `primaPays` stays off until then). Until then the JA Group app keeps paying guards and Prima pay runs are side-by-side trials only. The pay formulas and guard pay modules are optional and installed later as their own step, never with a release (`docs/RELEASE_MODULE_INSTALLATION.md`).
+
 ## Who does what
 
 | Step | Who | Notes |

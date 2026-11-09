@@ -49,3 +49,20 @@ it('existing v1/partial mail marker refuses fresh v2 install without replacing e
  await owner.query('CREATE TABLE prima.job_email_attachments(id text primary key,data jsonb not null)');await owner.query("INSERT INTO prima.job_email_attachments VALUES('preserved','{}')");
  await assert.rejects(installSelectedModule(owner,input('job_email')));assert.equal((await owner.query('SELECT id FROM prima.job_email_attachments')).rows[0].id,'preserved');
 });
+// P96 guard pay (Fauzan, 8 Nov 2026): the pay formulas and guard pay modules are optional, installed later as their own step.
+it('optional pay modules: guard pay needs pay formulas, install once, again is a no-op, drift refused, no DELETE or TRUNCATE',async()=>{
+ const {OPTIONAL_MODULE_SPECS}=await import('../src/release-artifact');const {OPTIONAL_CONFIRM}=await import('../src/module-install');
+ const opt=(id:ReleaseModuleId)=>({id,releaseSha256:artifact.sha256,moduleSha256:OPTIONAL_MODULE_SPECS.find(m=>m.id===id)!.sha256,confirm:OPTIONAL_CONFIRM});
+ await owner.query('DROP SCHEMA prima CASCADE');await owner.query(readFileSync(resolve(releaseRoot(),artifact.manifest.base.path),'utf8'));await owner.query('INSERT INTO prima.schema_info VALUES(1,$1,now())',[artifact.manifest.base.sha256]);
+ await assert.rejects(installSelectedModule(owner,opt('guard_pay')));
+ assert.equal((await owner.query("SELECT to_regclass('prima.guard_pay_runs') AS t")).rows[0].t,null);
+ await assert.rejects(installSelectedModule(owner,{...opt('pay_formulas'),confirm:'INSTALL_SELECTED_MODULE'}));
+ assert.equal((await installSelectedModule(owner,opt('pay_formulas'))).status,'installed');
+ assert.equal((await installSelectedModule(owner,opt('pay_formulas'))).status,'already_installed');
+ assert.equal((await installSelectedModule(owner,opt('guard_pay'))).status,'installed');
+ assert.equal((await installSelectedModule(owner,opt('guard_pay'))).status,'already_installed');
+ await owner.query('ALTER TABLE prima.guard_loans NO FORCE ROW LEVEL SECURITY');
+ try{await assert.rejects(installSelectedModule(owner,opt('guard_pay')));assert.equal((await owner.query("SELECT relforcerowsecurity FROM pg_class WHERE oid='prima.guard_loans'::regclass")).rows[0].relforcerowsecurity,false);}finally{await owner.query('ALTER TABLE prima.guard_loans FORCE ROW LEVEL SECURITY');}
+ assert.equal((await installSelectedModule(owner,opt('guard_pay'))).status,'already_installed');
+ const c=await pool.connect();try{for(const t of ['pay_formulas','site_hours_approvals','guard_pay_runs','guard_pay_advances','guard_loans','statutory_versions'])for(const sql of [`DELETE FROM prima.${t}`,`TRUNCATE prima.${t}`]){await c.query('BEGIN');try{await c.query('SET LOCAL ROLE prima_app');await assert.rejects(c.query(sql),/permission denied/,sql);}finally{await c.query('ROLLBACK');}}}finally{c.release();}
+});

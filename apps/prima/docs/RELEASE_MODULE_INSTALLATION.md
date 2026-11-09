@@ -22,6 +22,21 @@ node dist/src/module-install.js --module procurement --release-sha <release-sha2
 
 Install order: existing exact base → procurement → rental_corrections → cleanup → metrics → item_register (no prerequisites; it only adds `item_*` tables and the `item_parties` function). Select `job_email` separately for fresh v2 only. Do **not** install mail v1 first; existing v1/partial installations require a separately reviewed data-preserving migration. The base is not installed by this runner.
 
+## Optional modules: pay formulas and guard pay (off until Fauzan says)
+
+Fauzan decided on 8 Nov 2026 that the guard pay database is installed **later, as its own step**. Prima takes over guard pay on **1 August 2027** (rule PAY-GUARD `switchDate`); until then the JA Group app keeps paying guards and Prima pay runs are side-by-side trials only (`primaPays` stays off). The cash and advance policy in the code is unchanged.
+
+- `pay_formulas` (`db/modules/pay-formulas-v1.sql`, sha256 `38718470f582cb438a08d42d6131187aa55c0613e3aa58a924836f77cfbfda72`, no prerequisites) and `guard_pay` (`db/modules/guard-pay-v1.sql`, sha256 `c6ca56b61b076181eba45bd1c1c88d766c9339b981e45c41154b8fee0c32d8a1`, requires `pay_formulas`) are listed in `OPTIONAL_MODULE_SPECS` (`apps/api/src/release-artifact.ts`) and `OPTIONAL_MODULE_IDS` (`apps/api/src/release-catalog.ts`). Their bytes are pinned there; they are **not** in `db/release-manifest.json`, so release readiness, API startup and the office `prima-setup` service (which installs every manifest module) never need or install them. `prima-setup` also refuses to start if a release ever lists them.
+- Their catalogue checks stay (`pay-formulas-readiness.ts`, `guard-pay-readiness.ts`): every table exists, row security is on and forced, every policy name the module file creates is present, `prima_app` has exactly the rights the file grants and never DELETE or TRUNCATE. `guard_pay` also reports a problem while `pay_formulas` is not ready.
+- The plan (`node dist/src/module-install.js`) prints them under `optional`, apart from the release modules. Install only when Fauzan says, after all the mandatory modules, in this order, each with the optional confirmation:
+
+```
+node dist/src/module-install.js --module pay_formulas --release-sha <release-sha256> --module-sha 38718470f582cb438a08d42d6131187aa55c0613e3aa58a924836f77cfbfda72 --confirm INSTALL_OPTIONAL_MODULE
+node dist/src/module-install.js --module guard_pay --release-sha <release-sha256> --module-sha c6ca56b61b076181eba45bd1c1c88d766c9339b981e45c41154b8fee0c32d8a1 --confirm INSTALL_OPTIONAL_MODULE
+```
+
+`INSTALL_SELECTED_MODULE` is refused for them, `guard_pay` is refused until `pay_formulas` is catalogue-verified, a second run is a no-op and a drifted install is refused. Never edit the two .sql files: their hashes are pinned. Before the install the Guard pay, advances, loans, pay formulas and statutory rates screens show nothing and refuse to save, with a plain message.
+
 Each selected installation runs under one owner transaction/advisory lock, verifies prerequisites, applies only the fixed hash-pinned module body, and checks its actual catalog before commit. A complete exact existing module is a read-only no-op; partial or drifted state is refused, not overwritten. Any ambiguous failure requires read-only inspection before retry. No generic SQL path or arbitrary module is accepted.
 
 With the actual API connection, `node dist/src/release-check.js` verifies the complete release. Catalog-only installer success is not proof that the API login works. Required authority mappings, selected sites/mailbox configuration, and live-provider tests remain separate gates.

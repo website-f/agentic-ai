@@ -31165,7 +31165,7 @@ export class PrimaService {
       on,
       period,
       prev,
-      rule: { payByDay: RULES.guardPayroll.value.payByDay, primaPays: RULES.guardPayroll.value.primaPays },
+      rule: { payByDay: RULES.guardPayroll.value.payByDay, primaPays: RULES.guardPayroll.value.primaPays, switchDate: RULES.guardPayroll.value.switchDate },
       employers: status,
       runs: rows,
     };

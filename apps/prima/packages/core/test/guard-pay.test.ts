@@ -217,6 +217,27 @@ describe('guard pay run: HR prepares, the COO approves, Finance pays', () => {
     expect(Math.abs(dr - cr)).toBeLessThan(0.05);
   });
 
+  it('switches on 1 August 2027 (Fauzan, 8 Nov 2026): until then primaPays stays off and a run cannot be marked paid', async () => {
+    expect(RULES.guardPayroll.value.switchDate).toBe('2027-08-01');
+    expect(RULES.guardPayroll.value.primaPays).toBe(false);
+    expect(RULES.guardPayroll.source).toMatch(/1 August 2027/);
+    const { svc, ds } = fresh();
+    const hr = await svc.user('u-pwvsb-hr');
+    const coo = await svc.user('u-coo');
+    const fin = await svc.user('u-fin-t1-lead');
+    for (const p of ds.people) if (!p.bank) p.bank = { bank: 'Test Bank', accountMasked: '****9999' };
+    const board = await svc.guardPayroll(hr);
+    expect(board.rule.switchDate).toBe('2027-08-01');
+    // A month before the switch date: prepared, submitted and approved as a trial, never paid.
+    const run = await svc.prepareGuardPay(hr, 'co-sasa', '2026-10', []);
+    expect(`${run.period}-01` < RULES.guardPayroll.value.switchDate).toBe(true);
+    expect(run.trial).toBe(true);
+    await svc.guardPayStep(hr, run.id, 'submit');
+    await svc.guardPayStep(coo, run.id, 'approve', { note: 'Checked against the JA figures' });
+    await expect(svc.guardPayStep(fin, run.id, 'pay', { bankRef: 'M2U-GUARD-1', pcbChecked: true, paidOn: '2026-11-05' })).rejects.toThrow(/JA Group app still pays/);
+    expect((await svc.guardPayRun(fin, run.id)).run.stage).toBe('approved');
+  });
+
   it('once Prima pays guards, Finance marks paid and the guard sees the payslip', async () => {
     RULES.guardPayroll.value.primaPays = true;
     const { svc, ds } = fresh();

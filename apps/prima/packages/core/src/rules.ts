@@ -729,6 +729,8 @@ export const RULES = {
       payByDay: 7,
       /** Off while the JA Group app still pays guards: runs are side-by-side trials, never marked paid. Fauzan picks the switch date. */
       primaPays: false,
+      /** Fauzan, 8 Nov 2026: Prima takes over guard pay on this date. */
+      switchDate: '2027-08-01',
       /**
        * Uniform deductions from guard pay: 'awaiting_decision' (no uniform or item deduction) until management and legal
        * decide (Fauzan, 8 Nov 2026: "Do not decide the unresolved uniform-deduction policy in code"). Fitri's paper
@@ -754,7 +756,7 @@ export const RULES = {
       },
     },
     'Policy',
-    "Fauzan, 5 Nov 2026 (third audit, item 1: Build): Prima runs its own monthly guard pay from attendance under the ACT pay formulas (PAY-FORMULA), with payslips and a bank file. Fauzan, 26 Oct 2026: the COO approves all guard and officer salaries. HR prepares each company's month, the COO approves with a reason, Finance pays through the bank; Prima only drafts the files. Fauzan, 5 Nov 2026 00:55Z: the JA Group app keeps running until he picks a switch date, so until then a run is a side-by-side trial compared with JA's figures and cannot be marked paid. Employment Act 1955 s.19: wages paid within 7 days after the wage period. KWSP: overtime is not wages for EPF. Public holidays are entered by HR from the gazette for each month; none are assumed.",
+    "Fauzan, 5 Nov 2026 (third audit, item 1: Build): Prima runs its own monthly guard pay from attendance under the ACT pay formulas (PAY-FORMULA), with payslips and a bank file. Fauzan, 26 Oct 2026: the COO approves all guard and officer salaries. HR prepares each company's month, the COO approves with a reason, Finance pays through the bank; Prima only drafts the files. Fauzan, 5 Nov 2026 00:55Z: the JA Group app keeps running until he picks a switch date, so until then a run is a side-by-side trial compared with JA's figures and cannot be marked paid. Fauzan, 8 Nov 2026: Prima takes over guard pay on 1 August 2027 (switchDate); until then the JA Group app keeps paying guards and Prima pay runs are side-by-side trials only, and the guard pay database is installed later as its own step. primaPays stays off until the switch is made on that date. Employment Act 1955 s.19: wages paid within 7 days after the wage period. KWSP: overtime is not wages for EPF. Public holidays are entered by HR from the gazette for each month; none are assumed.",
   ),
   payLaw: rule(
     'PAY-LAW-CEO',

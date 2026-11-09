@@ -1517,6 +1517,9 @@ const ROWS: Row[] = [
   ["Submit to the COO", "Hantar kepada COO", "Submit kepada COO"],
   ["Return to HR", "Pulangkan kepada HR", "Return kepada HR"],
   ["Mark paid", "Tanda sudah dibayar", "Mark paid"],
+  // P96: the switch date (Fauzan, 8 Nov 2026)
+  ["Prima takes over guard pay on 1 Aug 2027. Until then runs are trials; JA Group app still pays.", "Prima mengambil alih gaji pengawal pada 1 Ogos 2027. Sehingga itu, setiap pengiraan gaji hanya percubaan; aplikasi JA Group masih membayar gaji.", "Prima ambil alih gaji guard pada 1 Ogos 2027. Sebelum itu, setiap pay run hanya trial; app JA Group masih bayar gaji."],
+  ["Each month here is worked out to compare with JA, cannot be marked paid, and its bank file says not to upload it.", "Setiap bulan di sini dikira untuk dibandingkan dengan JA, tidak boleh ditanda sudah dibayar, dan fail banknya menyatakan jangan dimuat naik.", "Setiap bulan di sini dikira untuk compare dengan JA, tak boleh mark paid, dan fail bank dia tulis jangan upload."],
   ["Add holiday", "Tambah cuti umum", "Tambah cuti umum"],
   // Pay-out rules and advances (Fauzan, 6 Nov 2026)
   ["Wage advances", "Pendahuluan gaji", "Advance gaji"],
