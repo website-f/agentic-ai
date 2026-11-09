@@ -129,4 +129,13 @@ export const AI_USE: Record<string, string> = {
   "No routines yet": "Belum ada rutin",
   "They appear after agents finish work that used tools and could be repeated, such as a monthly report or a regular check. Give the same kind of task twice and accept the results.":
     "Ia muncul selepas ejen siapkan kerja yang guna alat dan boleh diulang, seperti laporan bulanan atau semakan berkala. Beri tugasan yang sama dua kali dan terima hasilnya.",
+  // P96: learned work on the AI use page
+  "On": "Hidup",
+  "Jobs it knows": "Kerja yang dikuasai",
+  "Jobs done from memory": "Kerja dibuat dari ingatan",
+  "Answers reused": "Jawapan diguna semula",
+  "Learned work and tokens saved": "Kerja yang dipelajari dan token dijimatkan",
+  "Jobs an agent has learned run from its memory without the AI engine. {n} tokens saved so far.": "Kerja yang telah dipelajari ejen dijalankan dari ingatannya tanpa enjin AI. {n} token dijimatkan setakat ini.",
+  "Search by agent name": "Cari mengikut nama ejen",
+  "No agent has learned a job yet. After the same job is done well twice, it runs from memory.": "Belum ada ejen yang mempelajari kerja. Selepas kerja yang sama dibuat dengan baik dua kali, ia dijalankan dari ingatan.",
 };

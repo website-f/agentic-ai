@@ -44,6 +44,7 @@ beforeEach(() => {
     if (url.pathname === "/api/branches") return json([{ id: "br_1", name: "Maju Sdn Bhd", departments: [] }]);
     if (url.pathname === "/api/work-scope") return json({ enabled: true, roles: ["staff"], about: "" });
     if (url.pathname === "/api/work-scope/refusals") return json([]);
+    if (url.pathname === "/api/procedures/summary") return json([{ agent_id: "ag_1", agent_name: "Rina", replay: true, office_on: true, can_manage: true, procedures: 3, active: 2, replays: 14, tokens_saved: 500000, answers_reused: 9, answer_tokens_saved: 8000 }]);
     if (url.pathname === "/api/allowances") {
       gets.push(url);
       const q = url.searchParams.get("q") ?? "";
@@ -88,12 +89,20 @@ describe("AI use and limits", { timeout: 30_000 }, () => {
     expect(heads).toEqual(expect.arrayContaining(["Name", "Role", "Where", "Used today", "Limit", "Used %", "Status"]));
   });
 
+  it("shows what each agent learned and the tokens it saved (P96)", async () => {
+    show();
+    const table = await screen.findByRole("table", { name: "Learned work and tokens saved" }, { timeout: 8000 });
+    expect(within(table).getByText("Rina")).toBeInTheDocument();
+    expect(within(table).getByText("14")).toBeInTheDocument();
+    expect(screen.getByText(/508k tokens saved so far/)).toBeInTheDocument();
+  });
+
   it("finds a staff member by name on the server, and sorts by use", async () => {
     const router = show();
     await screen.findByText("Showing 1 to 25 of 240", undefined, { timeout: 8000 });
     fireEvent.change(screen.getByRole("searchbox", { name: "Search by name or email" }), { target: { value: "person 007" } });
     await waitFor(() => expect(gets.at(-1)!.searchParams.get("q")).toBe("person 007"), { timeout: 3000 });
-    await waitFor(() => expect(screen.getAllByRole("row")).toHaveLength(2));
+    await waitFor(() => expect(within(screen.getByRole("table", { name: "Each person's AI use today" })).getAllByRole("row")).toHaveLength(2));
     expect(router.state.location.search).toMatchObject({ q: "person 007" });
     fireEvent.click(within(screen.getByRole("columnheader", { name: /Used today/ })).getByRole("button"));
     await waitFor(() => expect(gets.at(-1)!.searchParams.get("sort")).toBe("-used"));

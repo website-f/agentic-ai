@@ -1,8 +1,9 @@
-import { CoinsIcon, GaugeIcon, PencilSimpleIcon, ProhibitIcon, ShieldCheckIcon, UsersIcon } from "@phosphor-icons/react";
+import { BrainIcon, CoinsIcon, GaugeIcon, PencilSimpleIcon, ProhibitIcon, ShieldCheckIcon, UsersIcon } from "@phosphor-icons/react";
 import { useMutation, useQuery, useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { toast } from "sonner";
 
+import { procedureSummaryQuery, useReplaySwitch, type AgentSavings } from "@/components/learned-procedures";
 import { EmptyState, IconTile, Page, PageHeader } from "@/components/page";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
@@ -394,6 +395,45 @@ function ScopeCard({ scope, canSet }: { scope: WorkScope; canSet: boolean }) {
   );
 }
 
+/** P96: one agent's "reuse what it learned" switch, for the row of the learned-work table. */
+function ReplayCell({ row }: { row: AgentSavings }) {
+  const t = useT();
+  const set = useReplaySwitch(row.agent_id);
+  if (!row.can_manage) return <Pill tone={row.replay ? "ok" : "neutral"}>{row.replay ? t("On") : t("Off")}</Pill>;
+  return <SwitchField checked={row.replay} disabled={set.isPending || !row.office_on} onCheckedChange={(v) => set.mutate(v)} label={t("Reuse what it learned")} />;
+}
+
+/** P96: what each agent learned to do from memory, and the tokens that saved (api/routers/procedures.py). */
+function LearnedSavings() {
+  const t = useT();
+  const summary = useQuery(procedureSummaryQuery);
+  const { isLoading, error, refetch } = summary;
+  const data = Array.isArray(summary.data) ? summary.data : [];
+  const control = useLocalTableState({ size: 10, sort: "saved", dir: "desc" });
+  const saved = (r: AgentSavings) => r.tokens_saved + r.answer_tokens_saved;
+  const total = data.reduce((n, r) => n + saved(r), 0);
+  const columns: Column<AgentSavings>[] = [
+    { id: "agent", header: t("Agent"), sortValue: (r) => r.agent_name, card: "title", cell: (r) => <span className="font-medium">{r.agent_name}</span> },
+    { id: "active", header: t("Jobs it knows"), kind: "number", align: "right", sortValue: (r) => r.active, cell: (r) => <span className="tabular">{r.active}</span> },
+    { id: "replays", header: t("Jobs done from memory"), kind: "number", align: "right", sortValue: (r) => r.replays, cell: (r) => <span className="tabular">{r.replays}</span> },
+    { id: "answers", header: t("Answers reused"), kind: "number", align: "right", hideBelow: "lg", sortValue: (r) => r.answers_reused, cell: (r) => <span className="tabular">{r.answers_reused}</span> },
+    { id: "saved", header: t("Tokens saved"), kind: "number", align: "right", sortValue: saved, cell: (r) => <span className="tabular font-medium">{tokens(saved(r))}</span> },
+    { id: "replay", header: t("Reuse what it learned"), card: "full", cell: (r) => <ReplayCell row={r} /> },
+  ];
+  return (
+    <Card>
+      <CardHeader title={t("Learned work and tokens saved")} icon={<IconTile icon={BrainIcon} size="sm" tone="ok" />}
+        description={t("Jobs an agent has learned run from its memory without the AI engine. {n} tokens saved so far.", { n: tokens(total) })} />
+      <CardBody>
+        <DataTable label={t("Learned work and tokens saved")} columns={columns} rows={data} rowId={(r) => r.agent_id}
+          control={control} loading={isLoading} error={error} onRetry={() => void refetch()}
+          searchText={(r) => r.agent_name} searchPlaceholder={t("Search by agent name")}
+          empty={<p className="py-3 text-[13px] text-muted">{t("No agent has learned a job yet. After the same job is done well twice, it runs from memory.")}</p>} />
+      </CardBody>
+    </Card>
+  );
+}
+
 /** The latest refused requests (the API keeps the newest 30): searchable by name or words. */
 function Refusals() {
   const t = useT();
@@ -438,7 +478,7 @@ export function AiUsePage() {
         description={t("Keep AI use fair and on the job: a daily allowance for each person, a check that staff use their AI for work, and who used what today.")} />
       {/* The stat tiles, the policy and the people table share one call (PeopleTable). */}
       <PeopleTable canSet={canSet} canOwnerRows={canOwnerRows} meId={me.user.id} />
-      {/* P96 slot for the learn engineer: "learned procedures / tokens saved" goes here. */}
+      <LearnedSavings />
       {scope.data ? <ScopeCard key={JSON.stringify(scope.data)} scope={scope.data} canSet={canSet} /> : <Skeleton className="h-40" />}
       <Refusals />
     </Page>
