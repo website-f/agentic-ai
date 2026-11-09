@@ -1583,6 +1583,7 @@ const ROWS: Row[] = [
   ['Good morning', 'Selamat pagi', null],
   ['Good afternoon', 'Selamat petang', null],
   ['Good evening', 'Selamat malam', null],
+  ['Only IT, the Finance team chosen to handle IT purchases, the COO, the CEO, the Finance Director and audit open IT purchases. If your team should handle them, ask the Finance Director.', 'Hanya IT, pasukan Kewangan yang dipilih untuk pembelian IT, COO, CEO, Pengarah Kewangan dan audit membuka pembelian IT. Jika pasukan anda patut menguruskannya, tanya Pengarah Kewangan.', null],
   // P90: one line per screen on the home screen
   ['What needs you today and the key numbers.', 'Perkara yang perlu anda uruskan hari ini dan angka utama.', 'Apa yang perlu anda buat hari ini dan angka utama.'],
   ['Every company in the group at a glance.', 'Semua syarikat dalam kumpulan sepintas lalu.', null],

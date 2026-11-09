@@ -11,6 +11,8 @@ const{data,error,reload}=useLoad(async()=>decodeProcurementBoard(await api.itPro
 const session=useMemo(()=>createProcurementSession(owner,(a,i)=>api.itProcurementAct(owner,a,i),()=>render()),[owner,epoch]);
 useEffect(()=>{session.start();return()=>session.dispose()},[session]);
 const state=session.snapshot(),close=()=>{setChoice(null);setEpoch(x=>x+1);reload()};
+// P91: the screen is for IT, the Finance team chosen for IT purchases, the COO, the CEO, the Finance Director and audit; anyone else in the menu sees why in plain words, not a red "Not allowed".
+if(error&&/^Not allowed:/.test(String((error as unknown as {message?:string})?.message??error)))return <section className="page"><header className="k-head"><div className="k-head-text"><h1>IT purchase fulfilment</h1></div></header><p className="notice" data-tone="info">Only IT, the Finance team chosen to handle IT purchases, the COO, the CEO, the Finance Director and audit open IT purchases. If your team should handle them, ask the Finance Director.</p></section>;
 if(error)return <section className="page"><header className="k-head"><div className="k-head-text"><h1>IT purchase fulfilment</h1></div></header><ErrorNotice error={error}/><div className="ix-actions"><button className="btn" onClick={reload}>Retry authorized procurement records</button></div></section>;
 if(!data||data.userId!==owner)return <Loading what="authorized procurement records"/>;
 const selected=choice?data.rows.find(r=>r.purchaseId===choice.id):null;
