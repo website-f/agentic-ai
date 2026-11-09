@@ -17,6 +17,7 @@ from fastapi import APIRouter, Depends, Query, Response, status
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import defer
 
 from ...agents import dispatch
 from ...brain.store import Author
@@ -81,6 +82,9 @@ class SkillDetail(SkillOut):
     eval_cases: list[dict[str, Any]]
     last_eval: dict[str, Any] | None
     proposals: list[dict[str, Any]]
+    # P96: this person may publish it (edit straight away, retire, revert, choose who uses
+    # it): the page shows those buttons only then (may_publish is the rule).
+    can_publish: bool = False
 
 
 class SkillIn(BaseModel):
@@ -121,6 +125,7 @@ class ProposalOut(BaseModel):
     decided_at: datetime | None
     decision_note: str | None
     created_at: datetime
+    can_publish: bool = False  # P96: this person may approve or reject it
 
 
 class ApproveIn(BaseModel):
@@ -280,7 +285,9 @@ async def _skills_out(db: AsyncSession, rows: list[Skill]) -> list[SkillOut]:
     return out
 
 
-async def _proposal_out(db: AsyncSession, sp: SkillProposal) -> ProposalOut:
+async def _proposal_out(
+    db: AsyncSession, sp: SkillProposal, p: Principal | None = None
+) -> ProposalOut:
     skill = await db.get(Skill, sp.skill_id) if sp.skill_id else None
     other = await db.get(Skill, sp.other_skill_id) if sp.other_skill_id else None
     names = await _names(db, {x for x in (sp.proposed_by, sp.decided_by or "") if x})
@@ -329,10 +336,11 @@ async def _proposal_out(db: AsyncSession, sp: SkillProposal) -> ProposalOut:
         decided_at=sp.decided_at,
         decision_note=sp.decision_note,
         created_at=sp.created_at,
+        can_publish=p is not None and await may_publish(db, p, skill),
     )
 
 
-async def _detail(db: AsyncSession, s: Skill) -> SkillDetail:
+async def _detail(db: AsyncSession, s: Skill, p: Principal | None = None) -> SkillDetail:
     await db.refresh(s)  # updated_at is set by the database on save
     base = (await _skills_out(db, [s]))[0]
     versions = list(
@@ -425,9 +433,10 @@ async def _detail(db: AsyncSession, s: Skill) -> SkillDetail:
         ],
         last_eval=s.last_eval,
         proposals=[
-            {"id": p.id, "kind": p.kind, "status": p.status, "created_at": p.created_at}
-            for p in props
+            {"id": x.id, "kind": x.kind, "status": x.status, "created_at": x.created_at}
+            for x in props
         ],
+        can_publish=p is not None and await may_publish(db, p, s),
     )
 
 
@@ -441,7 +450,12 @@ async def list_skills(
     db: AsyncSession = Depends(get_db),
 ) -> list[SkillOut]:
     await store.ensure_builtin(db, await _ws(db, principal))
-    q = select(Skill).where(Skill.workspace_id == principal.workspace_id)
+    # P96: the list shows no bodies (up to 12,000 characters each) or vectors: not loaded.
+    q = (
+        select(Skill)
+        .where(Skill.workspace_id == principal.workspace_id)
+        .options(defer(Skill.body), defer(Skill.embedding))
+    )
     if state != "all":
         q = q.where(Skill.status == state)
     return await _skills_out(db, list((await db.scalars(q.order_by(Skill.name))).all()))
@@ -453,7 +467,7 @@ async def get_skill(
     principal: Principal = Depends(require("office.view")),
     db: AsyncSession = Depends(get_db),
 ) -> SkillDetail:
-    return await _detail(db, await _skill(db, principal, skill_id))
+    return await _detail(db, await _skill(db, principal, skill_id), principal)
 
 
 @router.post("/skills", status_code=status.HTTP_201_CREATED)
@@ -478,10 +492,10 @@ async def create_skill(
         target = await db.get(Skill, sp.skill_id) if sp.skill_id else None
         if await may_publish(db, principal, target):
             s = await store.approve(db, ws, sp, _author(principal))
-            return {"skill": (await _detail(db, s)).model_dump(), "proposal": None}
+            return {"skill": (await _detail(db, s, principal)).model_dump(), "proposal": None}
     except (store.SkillError, fmt.SkillFormatError) as e:
         raise _bad(e) from e
-    return {"skill": None, "proposal": (await _proposal_out(db, sp)).model_dump()}
+    return {"skill": None, "proposal": (await _proposal_out(db, sp, principal)).model_dump()}
 
 
 class ImportIn(BaseModel):
@@ -518,7 +532,7 @@ async def import_skill(
         )
     except (store.SkillError, fmt.SkillFormatError, SourceError) as e:
         raise _bad(e) from e
-    return {"skill": None, "proposal": (await _proposal_out(db, sp)).model_dump()}
+    return {"skill": None, "proposal": (await _proposal_out(db, sp, principal)).model_dump()}
 
 
 @router.patch("/skills/{skill_id}")
@@ -582,11 +596,11 @@ async def update_skill(
             if publish:
                 await store.approve(db, ws, sp, _author(principal))
             else:
-                proposal = (await _proposal_out(db, sp)).model_dump()
+                proposal = (await _proposal_out(db, sp, principal)).model_dump()
     except (store.SkillError, fmt.SkillFormatError) as e:
         raise _bad(e) from e
     await db.refresh(s)
-    return {"skill": (await _detail(db, s)).model_dump(), "proposal": proposal}
+    return {"skill": (await _detail(db, s, principal)).model_dump(), "proposal": proposal}
 
 
 # ---------------------------------------------------------------- test cases and evals
@@ -830,7 +844,7 @@ async def get_proposal(
     principal: Principal = Depends(require("office.view")),
     db: AsyncSession = Depends(get_db),
 ) -> ProposalOut:
-    return await _proposal_out(db, await _proposal(db, principal, proposal_id))
+    return await _proposal_out(db, await _proposal(db, principal, proposal_id), principal)
 
 
 @router.post("/skill-proposals/{proposal_id}/approve")
@@ -853,7 +867,7 @@ async def approve_proposal(
         )
     except (store.SkillError, fmt.SkillFormatError) as e:
         raise _bad(e) from e
-    return await _detail(db, s)
+    return await _detail(db, s, principal)
 
 
 @router.post("/skill-proposals/{proposal_id}/reject")
@@ -869,7 +883,7 @@ async def reject_proposal(
         await store.reject(db, await _ws(db, principal), sp, _author(principal), body.reason)
     except store.SkillError as e:
         raise api_error(status.HTTP_409_CONFLICT, "already_decided", str(e)) from e
-    return await _proposal_out(db, sp)
+    return await _proposal_out(db, sp, principal)
 
 
 @router.post("/skill-proposals/{proposal_id}/evaluate", status_code=status.HTTP_202_ACCEPTED)
