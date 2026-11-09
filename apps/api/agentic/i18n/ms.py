@@ -188,6 +188,8 @@ MS: dict[str, str] = {
     "Operator": "Operator",
     "Approver": "Pelulus",
     "Viewer": "Pemerhati",
+    "Management": "Pengurusan",
+    "HR": "Sumber manusia (HR)",
     # "{name} is {status}." reads "{name} {status}." in Malay.
     "active|agent status": "aktif",
     "paused|agent status": "sedang dijeda",
@@ -1985,6 +1987,43 @@ MS: dict[str, str] = {
     "Show 25, 50 or 100 a page.": "Tunjukkan 25, 50 atau 100 setiap halaman.",
     "Owners open Prima as its top record. They need no link of their own.": (
         "Pemilik membuka Prima sebagai rekod teratasnya. Mereka tidak perlu dipautkan."
+    ),
+    # ------------------------------------------------------------ P92 roles and access, names and emails
+    "You cannot give or change a role that has more access than your own.": (
+        "Anda tidak boleh memberi atau menukar peranan yang mempunyai akses lebih daripada anda."
+    ),
+    "Nothing to change.": "Tiada apa untuk ditukar.",
+    "Your role ({role}) cannot change names or emails.": (
+        "Peranan anda ({role}) tidak boleh menukar nama atau emel."
+    ),
+    "Change your own name or email in Settings.": "Tukar nama atau emel anda sendiri di Tetapan.",
+    "Type a name.": "Taip nama.",
+    "This person is also in another workspace, so their name and email are not changed from here.": (  # noqa: E501
+        "Orang ini juga berada dalam ruang kerja lain, jadi nama dan emel mereka tidak ditukar "
+        "dari sini."
+    ),
+    "{email} already belongs to another account.": "{email} sudah digunakan oleh akaun lain.",
+    "Only an owner can change what each role may do.": (
+        "Hanya pemilik boleh menukar apa yang boleh dibuat oleh setiap peranan."
+    ),
+    "The owner role always has everything. It cannot be changed.": (
+        "Peranan pemilik sentiasa ada semuanya. Ia tidak boleh ditukar."
+    ),
+    "Only an owner can ever do that ({permission}).": (
+        "Hanya pemilik boleh membuat perkara itu ({permission})."
+    ),
+    "Everyone in the workspace can sign in and read. That cannot be taken away.": (
+        "Semua orang dalam ruang kerja boleh log masuk dan membaca. Itu tidak boleh ditarik balik."
+    ),
+    "There is no permission called {permission}.": "Tiada kebenaran bernama {permission}.",
+    "A permission cannot be both given and taken away.": (
+        "Satu kebenaran tidak boleh diberi dan ditarik balik serentak."
+    ),
+    "Ask an owner or admin to correct your email on the Members page.": (
+        "Minta pemilik atau admin membetulkan emel anda di halaman Ahli."
+    ),
+    "Type your current password (or sign in with Microsoft again first).": (
+        "Taip kata laluan semasa anda (atau log masuk dengan Microsoft sekali lagi dahulu)."
     ),
 }
 

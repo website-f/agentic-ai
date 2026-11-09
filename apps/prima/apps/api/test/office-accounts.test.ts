@@ -61,6 +61,13 @@ describe('office accounts: what an office account can be', () => {
     assert.throws(() => checkAccountInput({ ...GOOD, name: 'a\u0000b' }), /name/);
     assert.throws(() => checkAccountInput([GOOD]), /JSON object/);
   });
+
+  it('P92: takes relink (the office corrected their details) only as true or false', () => {
+    assert.equal(checkAccountInput({ ...GOOD, relink: true }).relink, true);
+    assert.equal(checkAccountInput({ ...GOOD, relink: false }).relink, undefined);
+    assert.equal(checkAccountInput(GOOD).relink, undefined);
+    for (const bad of ['yes', 1, null, {}]) assert.throws(() => checkAccountInput({ ...GOOD, relink: bad }), /relink must be true or false/, String(bad));
+  });
 });
 
 describe('office accounts: the service', () => {

@@ -27,7 +27,7 @@ export const OWNER_STEPS: SetupStep[] = [
   {
     key: "ai", title: msg("Connect an AI"), signals: ["provider"], to: "/ai-engine", action: msg("Add an AI key"),
     why: msg("Your agents think with an AI model. Paste one key (OpenAI, Google, Groq or OpenRouter); free and local models work too."),
-    perm: ["engine.manage", "org.read"],
+    perm: ["engine.manage", "engine.view"],
   },
   {
     key: "company", title: msg("Add your company"), signals: ["company"], to: "/organization", search: { new: 1 }, action: msg("Add the company"),

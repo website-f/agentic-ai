@@ -211,6 +211,7 @@ async def create_account(
     role: str,
     company_ids: list[str],
     email: str = "",
+    relink: bool = False,
 ) -> str:
     """Make (or bring up to date) this person's own Prima account; its Prima id. A system call
     to Prima's accounts service, signed like every other ("/accounts"). P81: with their sign-in
@@ -225,6 +226,8 @@ async def create_account(
     }
     if email and "@" in email and len(email) <= 254:
         payload["email"] = email.strip().lower()
+    if relink:  # P92: find their staff record again from the corrected details
+        payload["relink"] = True
     body = json.dumps(payload, separators=(",", ":")).encode()
     ans = await _send("POST", "/accounts", "", "system", body, "", base=settings.prima_accounts_url)
     data = ans.json() if ans.status in (200, 400) else None
@@ -309,6 +312,68 @@ async def _own_account(db: AsyncSession, m: Membership, name: str, email: str = 
     return link
 
 
+async def _relink(db: AsyncSession, m: Membership, link: PrimaLink) -> PrimaLink:
+    """P92: their email or Microsoft link was corrected (services/identity). Their own Prima
+    account keeps its id (and so their Prima history) and is relinked: Prima lets go of the
+    staff record the old details found and of any Microsoft account on it, and finds their
+    record again from the new email and name (office-accounts.ts, relink)."""
+    from . import people  # late: people builds on this module
+
+    me = next((p for p in await people.people(db, m.workspace_id) if p.user_id == m.user_id), None)
+    if me is None:
+        raise _not_linked()
+    if not link.prima_user_id.startswith(OFFICE_ACCOUNT_PREFIX):
+        link.relink_needed = False  # not theirs to remake: kept as the owner set it
+        await db.commit()
+        return link
+    company = await _account_company(db, m)
+    role = prima_role(m.role)
+    rid = await create_account(
+        office_user_id=m.user_id,
+        name=me.name,
+        title=str(role_label(m.role)),
+        role=role,
+        company_ids=[company],
+        email=me.email,
+        relink=True,
+    )
+    before = link.prima_user_id
+    link.prima_user_id = rid
+    link.prima_name = me.name[:200]
+    link.relink_needed = False
+    await audit.record(
+        db,
+        m.workspace_id,
+        "system:prima",
+        "prima.relink",
+        target=m.user_id,
+        before={"prima_user_id": before},
+        after={"prima_user_id": rid, "role": role, "company": company},
+        note=f"Own Prima account {rid} relinked from their corrected details",
+    )
+    await db.commit()
+    return link
+
+
+async def _account_company(db: AsyncSession, m: Membership) -> str:
+    """The Prima company of a person's branch (as _own_account finds it), or PrimaError."""
+    only = (
+        await db.scalars(select(Branch.id).where(Branch.workspace_id == m.workspace_id).limit(2))
+    ).all()
+    branch_id = m.branch_id or (only[0] if len(only) == 1 else None)
+    company = company_map(await db.get(Workspace, m.workspace_id)).get(branch_id or "")
+    if not company:
+        raise PrimaError(
+            403,
+            Msg(
+                "Prima does not know which company you work in yet. Ask the office owner to give "
+                "you a branch."
+            ),
+            code="company_needed",
+        )
+    return company
+
+
 async def link_for(db: AsyncSession, workspace_id: str, user_id: str) -> PrimaLink:
     """This person's Prima record. Made here, the first time they open Prima, when the match is
     sure (people.suggestions): the record IT gave their verified Microsoft account, else the
@@ -343,6 +408,8 @@ async def link_for(db: AsyncSession, workspace_id: str, user_id: str) -> PrimaLi
             code="microsoft_needed",
         )
     link = await db.get(PrimaLink, (workspace_id, user_id))
+    if link is not None and link.relink_needed and m is not None:
+        return await _relink(db, m, link)
     if link is not None:
         return link
     records = matchable(await staff())

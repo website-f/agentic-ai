@@ -27,7 +27,7 @@ router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 
 async def _me(db: AsyncSession, user: User, workspace_id: str, role: str) -> MeOut:
-    from ...core.security import PERMISSIONS
+    from ...core.security import effective
     from ...models import Branch, Department, Membership
     from ..schemas import ScopeOut
     from ..scope import Scope
@@ -58,8 +58,20 @@ async def _me(db: AsyncSession, user: User, workspace_id: str, role: str) -> MeO
         ),
         workspace=WorkspaceOut(id=ws.id, name=ws.name, slug=ws.slug, timezone=ws.timezone),
         role=role,  # type: ignore[arg-type]
-        permissions=sorted(PERMISSIONS[role] | await _extra_permissions(db, ws.id, user.id, role)),
+        permissions=sorted(
+            effective(role, ws.settings) | await _extra_permissions(db, ws.id, user.id, role)
+        ),
+        assignable_roles=_assignable(role, ws.settings),
     )
+
+
+def _assignable(role: str, ws_settings: dict | None) -> list[str]:
+    """P92: the roles this person may give, so the Members page offers only those."""
+    from ...core.security import use_settings
+    from .members import assignable_for
+
+    use_settings(ws_settings)  # this workspace's role access (as every signed-in request)
+    return assignable_for(role)
 
 
 async def _extra_permissions(
@@ -71,7 +83,9 @@ async def _extra_permissions(
 
     if role == "owner":
         user = await db.get(User, user_id)
-        return {"crm.access"} | ({DEVELOPER_PERMISSION} if is_developer(user, role) else set())
+        # P92: only an owner edits what each role may do (Settings > Roles and access).
+        extra = {"crm.access", "roles.manage"}
+        return extra | ({DEVELOPER_PERMISSION} if is_developer(user, role) else set())
     shared = await db.scalar(
         select(CrmAccess.id)
         .where(CrmAccess.workspace_id == workspace_id, CrmAccess.user_id == user_id)

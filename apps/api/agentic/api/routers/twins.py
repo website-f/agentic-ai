@@ -21,7 +21,7 @@ from ...brain.facts import _SECRET
 from ...brain.store import Author
 from ...core import threats
 from ...core.db import get_db
-from ...core.security import PERMISSIONS
+from ...core.security import role_permissions
 from ...i18n.labels import role_label
 from ...models import Agent, AuditLog, Workspace
 from ...services import audit, events
@@ -89,7 +89,7 @@ def own_perm():
     """Only people whose role has their own agents (agents.own) have a twin."""
 
     async def checker(principal: Principal = Depends(require("read"))) -> Principal:
-        if "agents.own" not in PERMISSIONS.get(principal.role, frozenset()):
+        if "agents.own" not in role_permissions(principal.role):
             raise api_error(
                 status.HTTP_403_FORBIDDEN,
                 "no_twin_role",
@@ -211,7 +211,7 @@ def _author(principal: Principal) -> Author:
 async def _state(db: AsyncSession, principal: Principal) -> dict[str, Any]:
     """Everything the My twin page and the wizard need, in one answer."""
     ws_id, user = principal.workspace_id, principal.user
-    eligible = "agents.own" in PERMISSIONS.get(principal.role, frozenset())
+    eligible = "agents.own" in role_permissions(principal.role)
     mine = await twin.twin_of(db, ws_id, user.id)
     home = await twin.home_of(db, ws_id, user)
     old = await twin.adoptable(db, ws_id, user.id) if eligible and mine is None else []

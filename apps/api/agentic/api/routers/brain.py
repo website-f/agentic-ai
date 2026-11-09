@@ -22,7 +22,7 @@ from ...brain.scope import for_agent, for_people, for_person, sees_fact
 from ...brain.search import Hit, search_facts, search_history, search_pages
 from ...core.config import settings
 from ...core.db import get_db
-from ...core.security import PERMISSIONS
+from ...core.security import role_permissions
 from ...models import (
     Agent,
     BrainDream,
@@ -327,7 +327,7 @@ async def _check_page_write(
     if not await _readable_page(db, principal, path, branch_id):
         raise _not_found()
     is_agent, a = await _page_agent(db, principal.workspace_id, path)
-    perms = PERMISSIONS.get(principal.role, frozenset())
+    perms = role_permissions(principal.role)
     if not is_agent:
         # P36: shared pages feed every agent's recall; people who manage agents or the brain
         # change them, staff only read them (their own AI's memory is theirs to change).

@@ -36,6 +36,7 @@ const page = {
   assistants: lazyRouteComponent(() => import("@/pages/assistants"), "AssistantsPage"),
   organization: lazyRouteComponent(() => import("@/pages/organization"), "OrganizationPage"),
   settings: lazyRouteComponent(() => import("@/pages/settings"), "SettingsPage"),
+  rolesAccess: lazyRouteComponent(() => import("@/pages/roles-access"), "RolesAccessPage"),
   members: lazyRouteComponent(() => import("@/pages/members"), "MembersPage"),
   aiUse: lazyRouteComponent(() => import("@/pages/ai-use"), "AiUsePage"),
   storage: lazyRouteComponent(() => import("@/pages/storage"), "StoragePage"),
@@ -295,6 +296,15 @@ const membersRoute = createRoute({
 
 // P36: each person's daily AI allowance and what staff may use their AI for.
 const aiUseRoute = createRoute({ getParentRoute: () => appRoute, path: "/settings/ai-use", component: page.aiUse });
+// P92: what each role may do (owner only; the server refuses everyone else too).
+const rolesAccessRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/settings/roles",
+  beforeLoad: ({ context }) => {
+    if (!context.me.permissions.includes("roles.manage")) throw redirect({ to: "/settings" });
+  },
+  component: page.rolesAccess,
+});
 // P40: where company files are kept, and storage that feeds the Library.
 const storageRoute = createRoute({ getParentRoute: () => appRoute, path: "/settings/storage", component: page.storage });
 // P46: small routine money steps that go through without a person.
@@ -554,7 +564,7 @@ const mcpServersRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/mcp-servers",
   beforeLoad: ({ context }) => {
-    if (!context.me.permissions.includes("engine.manage")) throw redirect({ to: "/" });
+    if (!context.me.permissions.includes("mcp.manage")) throw redirect({ to: "/" });
   },
   component: page.mcpServers,
 });
@@ -886,6 +896,7 @@ const routeTree = rootRoute.addChildren([
     settingsRoute,
     membersRoute,
     aiUseRoute,
+    rolesAccessRoute,
     storageRoute,
     approvalLimitsRoute,
     timetableRoute,

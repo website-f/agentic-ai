@@ -155,7 +155,7 @@ def _model_out(m: AIModel) -> ModelOut:
 
 @router.get("/settings")
 async def get_ai_settings(
-    principal: Principal = Depends(require("org.read")), db: AsyncSession = Depends(get_db)
+    principal: Principal = Depends(require("engine.view")), db: AsyncSession = Depends(get_db)
 ) -> AISettingsOut:
     ws = await _workspace(db, principal.workspace_id)
     return AISettingsOut(
@@ -190,13 +190,13 @@ async def update_ai_settings(
 
 
 @router.get("/presets")
-async def presets(_: Principal = Depends(require("org.read"))) -> list[PresetOut]:
+async def presets(_: Principal = Depends(require("engine.view"))) -> list[PresetOut]:
     return [PresetOut(**p.public(), primary=p.id in PRIMARY) for p in PRESETS]
 
 
 @router.get("/providers")
 async def list_providers(
-    principal: Principal = Depends(require("org.read")), db: AsyncSession = Depends(get_db)
+    principal: Principal = Depends(require("engine.view")), db: AsyncSession = Depends(get_db)
 ) -> list[ProviderOut]:
     rows = (
         await db.scalars(
@@ -494,7 +494,7 @@ async def refresh_models(
 async def list_models(
     provider_id: str | None = None,
     capability: str | None = None,
-    principal: Principal = Depends(require("org.read")),
+    principal: Principal = Depends(require("engine.view")),
     db: AsyncSession = Depends(get_db),
 ) -> list[ModelOut]:
     q = select(AIModel).where(AIModel.workspace_id == principal.workspace_id)
@@ -657,7 +657,7 @@ async def playground(
 @router.get("/usage")
 async def usage(
     days: int = Query(default=7, ge=1, le=90),
-    principal: Principal = Depends(require("org.read")),
+    principal: Principal = Depends(require("engine.view")),
     db: AsyncSession = Depends(get_db),
 ) -> dict:
     since = datetime.now(UTC) - timedelta(days=days)
@@ -746,7 +746,7 @@ async def usage(
 @router.get("/cache-health")
 async def cache_health_report(
     days: int = Query(default=7, ge=1, le=90),
-    principal: Principal = Depends(require("org.read")),
+    principal: Principal = Depends(require("engine.view")),
     db: AsyncSession = Depends(get_db),
 ) -> dict:
     """Prompt-cache drift per agent and job kind (P21): how often the system message + tool
@@ -871,7 +871,7 @@ async def _privacy_out(db: AsyncSession, workspace_id: str) -> PrivacyOut:
 
 
 async def get_privacy(
-    principal: Principal = Depends(require("org.read")), db: AsyncSession = Depends(get_db)
+    principal: Principal = Depends(require("engine.view")), db: AsyncSession = Depends(get_db)
 ) -> PrivacyOut:
     """Masking on/off, what is masked, and each company's data level with the providers that
     did its work in the last 30 days."""

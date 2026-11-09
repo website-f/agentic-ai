@@ -29,7 +29,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..assistants.access import may_assist
 from ..models import Agent, Membership, MicrosoftAccount, SharedMailbox
 
-MAILBOX_ADMINS = frozenset({"owner", "admin"})
+# P92: management and HR see the whole workspace like an admin.
+MAILBOX_ADMINS = frozenset({"owner", "admin", "management", "hr"})
 
 
 async def has_twin(db: AsyncSession, workspace_id: str, user_id: str) -> bool:
@@ -242,7 +243,7 @@ async def has_mailbox(agent: Agent | None) -> bool:
 
 # ---------------------------------------------------------------- who approves
 
-MAILBOX_MANAGERS = frozenset({"owner", "admin", "branch_manager"})
+MAILBOX_MANAGERS = frozenset({"owner", "admin", "branch_manager", "management", "hr"})
 
 
 async def may_approve_shared(

@@ -47,7 +47,7 @@ const OWNER: Lesson[] = [
     ],
     show: { to: "/ai-engine", search: { tab: "providers" }, label: "Buka Enjin AI" },
     signals: ["model_group"],
-    perm: ["org.read"],
+    perm: ["engine.view"],
     icon: CpuIcon,
     tone: "info",
     art: "connect",

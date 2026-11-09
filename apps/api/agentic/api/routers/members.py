@@ -5,7 +5,14 @@ from sqlalchemy.orm import aliased
 
 from ...assistants import access as assistant_access
 from ...core.db import get_db
-from ...core.security import SCOPED_ROLES, can, hash_password, temp_password
+from ...core.security import (
+    ROLES,
+    SCOPED_ROLES,
+    can,
+    hash_password,
+    role_permissions,
+    temp_password,
+)
 from ...i18n import Msg, current_lang, render
 from ...i18n.labels import role_label
 from ...models import (
@@ -17,7 +24,7 @@ from ...models import (
     PushSubscription,
     User,
 )
-from ...services import audit
+from ...services import audit, identity
 from ..deps import Principal, api_error, current_principal, require
 from ..schemas import (
     MemberCreateIn,
@@ -90,6 +97,14 @@ def _check_can_touch(actor: Principal, target_role: str, new_role: str | None = 
         raise api_error(
             status.HTTP_403_FORBIDDEN, "owner_only", "Only an owner can change owner access."
         )
+    if can(actor.role, "members.manage") and not all(
+        within_own(actor, r) for r in (target_role, new_role) if r is not None
+    ):
+        raise api_error(
+            status.HTTP_403_FORBIDDEN,
+            "more_access",
+            "You cannot give or change a role that has more access than your own.",
+        )
     if not can(actor.role, "members.manage"):
         allowed = TEAM_ROLES.get(actor.role, set())
         if target_role not in allowed or (new_role is not None and new_role not in allowed):
@@ -102,6 +117,41 @@ def _check_can_touch(actor: Principal, target_role: str, new_role: str | None = 
                     **{r: role_label(r) for r in allowed},
                 ),
             )
+
+
+# P92: what a role may hold that gives no power over anyone else (their own AI and logins).
+_PERSONAL = frozenset({"agents.own", "vault.own"})
+
+
+def within_own(actor: Principal, role: str) -> bool:
+    """P92: nobody but an owner gives a role (or changes someone in a role) with more access
+    than their own, so management cannot make an admin to reach the AI engine. Managing all
+    members includes managing a team (team.manage)."""
+    if actor.role == "owner":
+        return True
+    mine = set(role_permissions(actor.role))
+    if "members.manage" in mine:
+        mine.add("team.manage")
+    return role_permissions(role) - _PERSONAL <= mine
+
+
+def assignable_roles(actor: Principal) -> list[str]:
+    return assignable_for(actor.role)
+
+
+def assignable_for(role: str) -> list[str]:
+    """The roles someone in `role` may give (as _check_can_touch decides), in the app's
+    order. Follows this request's role access (core/security.use_settings)."""
+    if can(role, "members.manage"):
+        mine = set(role_permissions(role)) | {"team.manage"}
+        return [
+            r
+            for r in ROLES
+            if (r == "owner" and can(role, "members.assign_owner"))
+            or (r != "owner" and (role == "owner" or role_permissions(r) - _PERSONAL <= mine))
+        ]
+    allowed = TEAM_ROLES.get(role, set())
+    return [r for r in ROLES if r in allowed]
 
 
 def people_manager():
@@ -478,8 +528,139 @@ async def update_member(
     principal: Principal = Depends(people_manager()),
     db: AsyncSession = Depends(get_db),
 ) -> MemberOut:
-    m = await change_access(db, principal, user_id, body.role, body.branch_id, body.department_id)
+    if body.role is None and body.name is None and body.email is None:
+        raise api_error(
+            status.HTTP_422_UNPROCESSABLE_CONTENT, "nothing_to_change", "Nothing to change."
+        )
+    if body.role is not None:
+        await change_access(db, principal, user_id, body.role, body.branch_id, body.department_id)
+    # P92: a name or email typed wrong (in the form or an import) is corrected here. Last:
+    # every check runs before anything is saved.
+    if body.name is not None or body.email is not None:
+        await change_identity(db, principal, user_id, body.name, body.email)
     await db.commit()
+    m = await _membership(db, principal.workspace_id, user_id)
+    await db.refresh(m)
+    return _out(m, await _names(db, principal.workspace_id))
+
+
+async def email_taken(db: AsyncSession, email: str, user_id: str) -> bool:
+    return (
+        await db.scalar(select(User.id).where(User.email == email, User.id != user_id).limit(1))
+    ) is not None
+
+
+async def change_identity(
+    db: AsyncSession,
+    principal: Principal,
+    user_id: str,
+    name: str | None,
+    email: str | None,
+) -> Membership:
+    """P92: correct someone's name or sign-in email (members.manage; only an owner corrects
+    an owner). A new email lets go of the Microsoft account the old one was linked to and
+    signs them out everywhere (services/identity); the caller commits."""
+    if not can(principal.role, "members.manage"):
+        raise api_error(
+            status.HTTP_403_FORBIDDEN,
+            "forbidden",
+            "Your role ({role}) cannot change names or emails.",
+            role=role_label(principal.role),
+        )
+    if user_id == principal.user.id:
+        raise api_error(
+            status.HTTP_400_BAD_REQUEST,
+            "self_change",
+            "Change your own name or email in Settings.",
+        )
+    m = await _membership(db, principal.workspace_id, user_id)
+    if not _member_in_scope(principal, m):
+        raise api_error(status.HTTP_404_NOT_FOUND, "member_not_found", "That member is not here.")
+    _check_can_touch(principal, m.role)
+    user = m.user
+    new_name = " ".join(name.split()) if name is not None else user.name
+    new_email = email.strip().lower() if email is not None else user.email
+    if not new_name:
+        raise api_error(status.HTTP_422_UNPROCESSABLE_CONTENT, "name_required", "Type a name.")
+    if new_name == user.name and new_email == user.email:
+        return m
+    elsewhere = await db.scalar(
+        select(func.count())
+        .select_from(Membership)
+        .where(Membership.user_id == user_id, Membership.workspace_id != principal.workspace_id)
+    )
+    if elsewhere:
+        raise api_error(
+            status.HTTP_409_CONFLICT,
+            "other_workspace",
+            "This person is also in another workspace, so their name and email are not changed "
+            "from here.",
+        )
+    if new_email != user.email and await email_taken(db, new_email, user_id):
+        raise api_error(
+            status.HTTP_409_CONFLICT,
+            "email_taken",
+            "{email} already belongs to another account.",
+            email=new_email,
+        )
+    before = {"name": user.name, "email": user.email}
+    after: dict[str, object] = {"name": new_name, "email": new_email}
+    email_changed = new_email != user.email
+    user.name, user.email = new_name, new_email
+    await audit.record(
+        db,
+        principal.workspace_id,
+        principal.actor,
+        "member.identity_changed",
+        target=user_id,
+        before=before,
+        after=after,
+    )
+    if email_changed:
+        await _let_go(db, principal, user_id, "member.microsoft_reset", "their email changed")
+    else:
+        await identity.prima_follows(db, principal.workspace_id, user_id, name_only=True)
+    await db.flush()
+    return m
+
+
+async def _let_go(db: AsyncSession, principal: Principal, user_id: str, action: str, why: str):
+    """The Microsoft link and sessions after a correction, audited (services/identity)."""
+    await db.flush()
+    done = await identity.let_go_of_microsoft(db, principal.workspace_id, user_id)  # commits
+    sessions = await identity.sign_out_everywhere(db, user_id)
+    await audit.record(
+        db,
+        principal.workspace_id,
+        principal.actor,
+        action,
+        target=user_id,
+        after={**done, "sessions_ended": sessions},
+        note=f"Microsoft link reset: {why}; they sign in again",
+    )
+
+
+@router.post("/{user_id}/reset-microsoft")
+async def reset_microsoft(
+    user_id: str,
+    principal: Principal = Depends(require("members.manage")),
+    db: AsyncSession = Depends(get_db),
+) -> MemberOut:
+    """P92: let go of the Microsoft account a person is linked to (the wrong one signed in as
+    them), without changing their email: their next Microsoft sign-in links again."""
+    if user_id == principal.user.id:
+        raise api_error(
+            status.HTTP_400_BAD_REQUEST,
+            "self_change",
+            "Change your own name or email in Settings.",
+        )
+    m = await _membership(db, principal.workspace_id, user_id)
+    if not _member_in_scope(principal, m):
+        raise api_error(status.HTTP_404_NOT_FOUND, "member_not_found", "That member is not here.")
+    _check_can_touch(principal, m.role)
+    await _let_go(db, principal, user_id, "member.microsoft_reset", "reset by hand")
+    await db.commit()
+    m = await _membership(db, principal.workspace_id, user_id)
     await db.refresh(m)
     return _out(m, await _names(db, principal.workspace_id))
 

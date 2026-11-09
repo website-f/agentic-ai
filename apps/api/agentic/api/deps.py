@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core.config import settings
 from ..core.db import get_db
-from ..core.security import PERMISSIONS, can, new_token, token_hash
+from ..core.security import can, new_token, role_permissions, token_hash, use_settings
 from ..engine import acting
 from ..i18n import Msg, explicit_lang, lookup, normalize, set_lang
 from ..i18n.labels import role_label
@@ -45,7 +45,7 @@ class Principal:
 
     @property
     def permissions(self) -> list[str]:
-        return sorted(PERMISSIONS.get(self.role, frozenset()))
+        return sorted(role_permissions(self.role))
 
 
 def api_error(status_code: int, code: str, message: str, **vars: Any) -> HTTPException:
@@ -194,6 +194,8 @@ async def _load_principal(request: Request, db: AsyncSession) -> Principal:
         )
     user, m, ws_settings = row
     _remember_lang(request, user)
+    # P92: the owner's role access for this workspace, for every check this request makes.
+    use_settings(ws_settings)
     # P36: model calls this request makes are this person's (their daily AI allowance).
     acting.set_person(user.id)
     return Principal(

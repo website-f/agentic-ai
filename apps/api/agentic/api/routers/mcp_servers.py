@@ -73,7 +73,7 @@ async def _check_url(url: str) -> None:
 
 @router.get("")
 async def list_servers(
-    principal: Principal = Depends(require("org.read")), db: AsyncSession = Depends(get_db)
+    principal: Principal = Depends(require("mcp.manage")), db: AsyncSession = Depends(get_db)
 ) -> list[McpOut]:
     rows = (
         await db.scalars(
@@ -106,7 +106,7 @@ async def _discover(s: McpServer) -> None:
 @router.post("", status_code=status.HTTP_201_CREATED)
 async def add_server(
     body: McpIn,
-    principal: Principal = Depends(require("engine.manage")),
+    principal: Principal = Depends(require("mcp.manage")),
     db: AsyncSession = Depends(get_db),
 ) -> McpOut:
     await _check_url(body.url)
@@ -170,7 +170,7 @@ class McpUpdateIn(BaseModel):
 async def update_server(
     sid: str,
     body: McpUpdateIn,
-    principal: Principal = Depends(require("engine.manage")),
+    principal: Principal = Depends(require("mcp.manage")),
     db: AsyncSession = Depends(get_db),
 ) -> McpOut:
     s = await _get(db, principal.workspace_id, sid)
@@ -204,7 +204,7 @@ async def update_server(
 @router.post("/{sid}/refresh")
 async def refresh_server(
     sid: str,
-    principal: Principal = Depends(require("engine.manage")),
+    principal: Principal = Depends(require("mcp.manage")),
     db: AsyncSession = Depends(get_db),
 ) -> McpOut:
     s = await _get(db, principal.workspace_id, sid)
@@ -221,7 +221,7 @@ async def refresh_server(
 @router.delete("/{sid}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_server(
     sid: str,
-    principal: Principal = Depends(require("engine.manage")),
+    principal: Principal = Depends(require("mcp.manage")),
     db: AsyncSession = Depends(get_db),
 ) -> Response:
     s = await _get(db, principal.workspace_id, sid)

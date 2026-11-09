@@ -5,6 +5,9 @@
 //    staff record IT, HR or the clean slate made;
 //  - its role is one of OFFICE_ROLES only, its companies must exist, its department is one of OFFICE_DEPARTMENTS;
 //  - it never sets leadership, opsTier, integration, entraOid or any other field; a closed account stays closed.
+// P92: `relink: true` (the office corrected the person's email or Microsoft link) lets go of the staff record the old
+// details found and of any Microsoft account (entraOid) on the account, then finds their record again from the new
+// email and name. The account keeps its id, so its Prima history stays the person's. It only ever removes a link.
 // Each change goes on Prima's audit chain ('OFFICE_ACCOUNT'), in the same transaction, like entra-link.ts.
 //
 // P81: with the real staff loaded, most people who open Prima already have an office staff record (a person) but no
@@ -50,7 +53,7 @@ export const OFFICE_DEPARTMENTS: readonly NonNullable<User['department']>[] = ['
 
 const OFFICE_USER_ID = /^[a-z0-9][a-z0-9_-]{2,63}$/;
 const COMPANY_ID = /^[A-Za-z0-9_-]{1,60}$/;
-const FIELDS = new Set(['officeUserId', 'name', 'title', 'role', 'companyIds', 'department', 'email']);
+const FIELDS = new Set(['officeUserId', 'name', 'title', 'role', 'companyIds', 'department', 'email', 'relink']);
 const EMAIL = /^[^\s@]{1,64}@[a-z0-9.-]{1,190}\.[a-z]{2,24}$/;
 // eslint-disable-next-line no-control-regex
 const CONTROL = /[\u0000-\u001f\u007f]/;
@@ -64,6 +67,8 @@ export interface OfficeAccountInput {
   department?: User['department'];
   /** P81: the person's office sign-in email, only to find their staff record (never stored on the account). */
   email?: string;
+  /** P92: their details were corrected in the office: let go of the old staff record and Microsoft link, find again. */
+  relink?: boolean;
 }
 
 export interface OfficeAccountResult {
@@ -74,6 +79,8 @@ export interface OfficeAccountResult {
   /** P81: the staff record the account is linked to, if any. */
   personId?: string;
   created: boolean;
+  /** P92: the account was relinked (see `relink`). */
+  relinked?: boolean;
   /** A closed account is left exactly as it is (offboarding): the office shows Prima's own refusal. */
   closed: boolean;
 }
@@ -119,6 +126,7 @@ export function checkAccountInput(raw: unknown): OfficeAccountInput {
     email = text(o.email, 'The email', 3, 254).toLowerCase();
     if (!EMAIL.test(email)) throw new AccountRefused('The email is not an email address.');
   }
+  if (o.relink !== undefined && typeof o.relink !== 'boolean') throw new AccountRefused('relink must be true or false.');
   // P81: a central employer's staff are central staff. An admin_exec there would read every central staff record.
   const role = companyIds.some(isCentralEmployer) ? 'pwvsb_officer' : (o.role as UserRole);
   return {
@@ -129,6 +137,7 @@ export function checkAccountInput(raw: unknown): OfficeAccountInput {
     companyIds,
     ...(o.department ? { department: o.department as User['department'] } : {}),
     ...(email ? { email } : {}),
+    ...(o.relink === true ? { relink: true } : {}),
   };
 }
 
@@ -152,12 +161,20 @@ export async function upsertOfficeAccount(client: PoolClient, raw: unknown, by: 
     if (unknown.length) throw new AccountRefused(`No Prima company ${unknown.join(', ')}.`);
 
     const u = await client.query('SELECT data FROM prima.users WHERE id = $1 FOR UPDATE', [id]);
-    const old = (u.rows[0]?.data as User | undefined) ?? null;
-    if (old?.integration) throw new AccountRefused('A system feed is never an office account.');
-    if (old?.accessClosedFrom) {
+    const found0 = (u.rows[0]?.data as User | undefined) ?? null;
+    if (found0?.integration) throw new AccountRefused('A system feed is never an office account.');
+    if (found0?.accessClosedFrom) {
       await client.query('COMMIT');
-      return { id, name: old.name, role: old.role, companyIds: old.companyIds, created: false, closed: true };
+      return { id, name: found0.name, role: found0.role, companyIds: found0.companyIds, created: false, closed: true };
     }
+    // P92: relink: the old staff record and Microsoft account are let go of before anything is found again.
+    const relinked = !!(input.relink && found0);
+    const dropped = relinked && found0 ? { personId: found0.personId ?? null, entraOid: found0.entraOid ?? null } : null;
+    const old: User | null = (() => {
+      if (!relinked || !found0) return found0;
+      const { personId: _p, entraOid: _e, ...rest } = found0;
+      return rest as User;
+    })();
     // P81: the person's own staff record: the one already linked, else found now (findOwnRecord). Its company decides
     // the role (see the top of this file), every time, so a second call changes nothing.
     const linkedBefore = old?.personId ? await recordCompany(client, old.personId, input) : null;
@@ -193,13 +210,16 @@ export async function upsertOfficeAccount(client: PoolClient, raw: unknown, by: 
     const what = `${user.role} for ${user.companyIds.join(', ')}${input.department ? `, ${input.department}` : ''}`;
     const link = found ? `; linked to staff record ${found.personId} (same ${found.by})` : '';
     const why = access.role !== input.role ? ` (the office asked ${input.role}; ${access.why})` : '';
+    const was = dropped
+      ? `; relinked after the office corrected their details (let go of ${dropped.personId ? `staff record ${dropped.personId}` : 'no staff record'}${dropped.entraOid ? ' and a Microsoft account' : ''})`
+      : '';
     const changed = old && (old.role !== user.role || old.companyIds.join(',') !== user.companyIds.join(','));
     const summary = old
-      ? `Office account ${input.name} updated: ${what}${changed ? ` (was ${old.role} for ${old.companyIds.join(', ')})` : ''}${why}${link}`
+      ? `Office account ${input.name} updated: ${what}${changed ? ` (was ${old.role} for ${old.companyIds.join(', ')})` : ''}${why}${link}${was}`
       : `Office account ${input.name} created: ${what}${why}${link}`;
     await new PgStore(client).audit({ at: fromMs(now), actor: by.trim(), companyId: user.companyIds[0] ?? null, action: 'OFFICE_ACCOUNT', entity: 'user', entityId: id, summary });
     await client.query('COMMIT');
-    return { id, name: user.name, role: user.role, companyIds: user.companyIds, ...(user.personId ? { personId: user.personId } : {}), created: !old, closed: false };
+    return { id, name: user.name, role: user.role, companyIds: user.companyIds, ...(user.personId ? { personId: user.personId } : {}), created: !old, closed: false, ...(relinked ? { relinked: true } : {}) };
   } catch (e) {
     await client.query('ROLLBACK').catch(() => undefined);
     throw e;

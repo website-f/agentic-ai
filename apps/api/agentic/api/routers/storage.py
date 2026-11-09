@@ -1,5 +1,5 @@
 """P40: where company files are kept (documents/storage.py, documents/sources.py). Owner and
-admin only (org.manage): this holds bucket keys and file server passwords.
+admin only (storage.manage, P92): this holds bucket keys and file server passwords.
 
 - GET    /api/storage                  the storage targets (secrets never returned)
 - POST   /api/storage                  add one (tested before it is saved)
@@ -143,7 +143,7 @@ async def _only_primary(db: AsyncSession, t: StorageTarget) -> None:
 
 @router.get("")
 async def list_targets(
-    principal: Principal = Depends(require("org.manage")), db: AsyncSession = Depends(get_db)
+    principal: Principal = Depends(require("storage.manage")), db: AsyncSession = Depends(get_db)
 ) -> list[TargetOut]:
     rows = (
         await db.scalars(
@@ -158,7 +158,7 @@ async def list_targets(
 @router.post("", status_code=status.HTTP_201_CREATED)
 async def add_target(
     body: TargetIn,
-    principal: Principal = Depends(require("org.manage")),
+    principal: Principal = Depends(require("storage.manage")),
     db: AsyncSession = Depends(get_db),
 ) -> TargetOut:
     t = StorageTarget(
@@ -195,7 +195,7 @@ async def add_target(
 async def update_target(
     target_id: str,
     body: TargetPatch,
-    principal: Principal = Depends(require("org.manage")),
+    principal: Principal = Depends(require("storage.manage")),
     db: AsyncSession = Depends(get_db),
 ) -> TargetOut:
     t = await _get(db, principal, target_id)
@@ -248,7 +248,7 @@ async def update_target(
 @router.post("/{target_id}/check")
 async def check_target(
     target_id: str,
-    principal: Principal = Depends(require("org.manage")),
+    principal: Principal = Depends(require("storage.manage")),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, bool]:
     await _test(await _get(db, principal, target_id))
@@ -258,7 +258,7 @@ async def check_target(
 @router.post("/{target_id}/sync")
 async def sync_target(
     target_id: str,
-    principal: Principal = Depends(require("org.manage")),
+    principal: Principal = Depends(require("storage.manage")),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, int]:
     t = await _get(db, principal, target_id)
@@ -276,7 +276,7 @@ async def sync_target(
 @router.delete("/{target_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_target(
     target_id: str,
-    principal: Principal = Depends(require("org.manage")),
+    principal: Principal = Depends(require("storage.manage")),
     db: AsyncSession = Depends(get_db),
 ) -> Response:
     t = await _get(db, principal, target_id)
