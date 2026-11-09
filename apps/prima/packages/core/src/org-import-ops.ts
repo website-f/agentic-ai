@@ -17,7 +17,10 @@
 // that names nothing in Prima, or more than one, is refused with plain words. The same record already in Prima is
 // refused too, so a second file with overlapping rows does not double them.
 
+import { isOwnerAdmin } from './access';
 import { CMS_DEVICE_KINDS } from './cms-readiness';
+import { hrKeeps } from './hr';
+import { vehicleUsageRole } from './ops-access';
 import { normHeader } from './import-align';
 import { CREDENTIAL_LABEL } from './rules';
 import { SITE_KIT_CATEGORY_LABEL, SITE_KIT_OWNER_LABEL, type SiteKitCategory, type SiteKitOwner } from './site-kit';
@@ -128,7 +131,7 @@ export const P91_IMPORTS: Record<P91ImportKind, ImportSpec> = {
         type: 'select',
         required: true,
         options: GUARD_PAPERS.map((t): [string, string] => [t, CREDENTIAL_LABEL[t]]),
-        words: ['paper', 'document', 'dokumen', 'jenis', 'type', 'kind', 'certificate type', 'jenis sijil'],
+        words: ['paper', 'document', 'dokumen', 'jenis', 'type', 'kind', 'certificate type', 'jenis sijil', 'jenis dokumen', 'document type', 'jenis kad'],
       },
       { key: 'number', label: 'Card or certificate number', type: 'text', required: true, words: ['card no', 'no kad', 'certificate no', 'no sijil', 'reference', 'rujukan', 'esims', 'number'] },
       { key: 'issuedOn', label: 'Issued or done on', type: 'date', required: true, words: ['issued', 'issue date', 'tarikh dikeluarkan', 'tarikh keluar', 'date issued', 'done on', 'tarikh lulus'] },
@@ -162,7 +165,7 @@ export const P91_IMPORTS: Record<P91ImportKind, ImportSpec> = {
       { key: 'monthlyLimitRm', label: 'Monthly limit (RM)', type: 'number', min: 0, words: ['limit', 'had', 'had bulanan', 'monthly limit', 'credit limit'] },
       { key: 'monthlyQuotaLitres', label: 'Monthly quota (litres)', type: 'number', min: 0, words: ['quota', 'kuota', 'litres', 'liter'] },
       { key: 'holder', label: 'Kept by', type: 'text', required: true, words: ['holder', 'pemegang', 'driver', 'pemandu', 'kept by', 'disimpan oleh', 'user'] },
-      { key: 'since', label: 'With this vehicle since', type: 'date', required: true, words: ['since', 'sejak', 'start date', 'tarikh mula', 'issued', 'date'] },
+      { key: 'since', label: 'With this vehicle since', type: 'date', required: true, words: ['since', 'sejak', 'start date', 'tarikh mula', 'issued', 'date', 'mula guna', 'tarikh mula guna', 'tarikh terima'] },
       { key: 'reason', label: 'Reason', type: 'text', help: 'Empty: "Existing card, loaded from the old list".', words: ['reason', 'sebab', 'remark', 'catatan', 'note'] },
     ],
   },
@@ -438,4 +441,26 @@ export function cardKind(raw: string): string {
   if (/subsid|subsidi|budi/.test(n)) return 'SUBSIDY';
   if (/fuel|fleet|minyak|petrol|kad/.test(n)) return 'FUEL';
   return raw;
+}
+
+/**
+ * Whether the screen shows the Import button for a P91 kind to this person: the same people the server lets add the
+ * record by hand. Only a hint for the screen; the server checks every row again (site-level rights, a guard's company).
+ */
+export function p91MayImport(user: User, kind: P91ImportKind): boolean {
+  if (user.integration) return false;
+  const ops = user.role === 'pwvsb_officer' && user.department === 'operations';
+  const guardKeeper = user.role === 'company_manager' || (ops && ['om', 'regional', 'ops_director', 'ogm', 'coo'].includes(user.opsTier ?? ''));
+  switch (kind) {
+    case 'staffTraining':
+      return hrKeeps(user) || isOwnerAdmin(user) || guardKeeper;
+    case 'guardPaper':
+      return hrKeeps(user) || guardKeeper;
+    case 'fuelCard':
+      return vehicleUsageRole(user) === 'transport';
+    case 'cmsDevice':
+      return ['company_manager', 'admin_exec', 'supervisor'].includes(user.role) || (user.role === 'pwvsb_officer' && user.department === 'arms_control') || (ops && (user.opsTier === 'om' || user.opsTier === 'regional')) || user.opsTier === 'ceo';
+    case 'siteKitItem':
+      return ops && ['om', 'regional', 'ogm'].includes(user.opsTier ?? '');
+  }
 }
