@@ -3,10 +3,12 @@
 // Code 128 of the same ID), owner and holder kept apart, every handover confirmed by the person who gets it. Firearms
 // stay in the Arms Control records. SQL Account is not connected: Finance works from export files only. Nothing is
 // ever deducted from pay.
-import { useState } from 'react';
+// P91 (Fitri, 9 Nov 2026: "where do I add the items?"): Add (new item type, register items) and Import from file sit at
+// the top of the screen for the people who may add, and open here whichever tab is showing.
+import { useEffect, useRef, useState } from 'react';
 import { ArrowsLeftRightIcon, ClockCountdownIcon, PackageIcon, ScalesIcon, SirenIcon, TagIcon } from '@phosphor-icons/react';
 import { api, type ItemBoard } from '../../api';
-import { PageHead, Stat, Stats } from '../../kit';
+import { Card, PageHead, Stat, Stats } from '../../kit';
 import { ErrorNotice, Loading, useLoad } from '../../ui';
 import { Care } from './Care';
 import { Cases } from './Cases';
@@ -21,6 +23,9 @@ import { SiteBoard } from './SiteBoard';
 import { Stock } from './Stock';
 import { Uniforms } from './Uniforms';
 import { any } from './shared';
+import { ItemsAddBar, type ItemAddIntent } from './AddMenu';
+import { SkuForm } from './Catalogue';
+import { RegisterPrint } from './Stock';
 import '../../styles/items.css';
 
 type Tab = 'find' | 'stock' | 'moves' | 'site' | 'counts' | 'cases' | 'care' | 'uniforms' | 'catalogue' | 'reports' | 'finance' | 'mine';
@@ -28,6 +33,12 @@ type Tab = 'find' | 'stock' | 'moves' | 'site' | 'counts' | 'cases' | 'care' | '
 export function ItemsView() {
   const { data, error } = useLoad(() => api.itemBoard(), []);
   const [tab, setTab] = useState<Tab | null>(null);
+  const [adding, setAdding] = useState<{ what: ItemAddIntent; oldTag?: string; n: number } | null>(null);
+  const addBox = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (adding) addBox.current?.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
+  }, [adding]);
+  const add = (what: ItemAddIntent, oldTag?: string) => setAdding((cur) => ({ what, oldTag, n: (cur?.n ?? 0) + 1 }));
   if (error)
     return (
       <div className="page">
@@ -68,7 +79,27 @@ export function ItemsView() {
       <PageHead
         title="Items and equipment"
         sub="One label for life per item, printed as a QR code and a barcode of the same ID. Owner and holder are kept apart; the person who gets an item confirms it themselves. Nothing is ever charged to them automatically."
+        actions={<ItemsAddBar data={data} onAdd={(what) => add(what)} />}
       />
+      {adding && (
+        <div ref={addBox} className="it-adding">
+          {adding.what === 'type' ? (
+            <Card
+              title="New item type"
+              sub="The item type says what it is, its size and unit. Many units share one type. How a type is tracked is set once."
+              actions={
+                <button className="btn" type="button" onClick={() => setAdding(null)}>
+                  Cancel
+                </button>
+              }
+            >
+              <SkuForm key={adding.n} onDone={() => setAdding(null)} />
+            </Card>
+          ) : (
+            <RegisterPrint key={adding.n} data={data} legacyRef={adding.oldTag} onClose={() => setAdding(null)} />
+          )}
+        </div>
+      )}
       <p className="notice" data-tone="info">
         {data.armsNote} {data.sqlConnection.note}
       </p>
@@ -89,15 +120,15 @@ export function ItemsView() {
           </button>
         ))}
       </div>
-      <Body tab={current} data={data} />
+      <Body tab={current} data={data} onRegister={(oldTag) => add('register', oldTag)} />
     </div>
   );
 }
 
-function Body({ tab, data }: { tab: Tab; data: ItemBoard }) {
+function Body({ tab, data, onRegister }: { tab: Tab; data: ItemBoard; onRegister: (oldTag: string) => void }) {
   switch (tab) {
     case 'find':
-      return <Find data={data} />;
+      return <Find data={data} onRegister={any(data, 'store', 'manager', 'it') ? onRegister : undefined} />;
     case 'stock':
       return <Stock data={data} />;
     case 'moves':

@@ -247,6 +247,16 @@ export interface PhysicalItem {
   registeredAt: IsoDateTime;
   /** Opening balance counted without a witnessed receipt (migration): never treated as received by a person. */
   legacyUnverified: boolean;
+  /**
+   * P91 (moving from the old system, Fitri 9 Nov 2026): the unit's tag or ID in the old system, kept as a reference only.
+   * It is never a Prima label: scanning it does not find or move the item; the Prima label printed at registration does.
+   */
+  legacyRef?: string | null;
+  /**
+   * P91: what the old record said about the unit, as typed there: where it was, its condition, who held it. A reference
+   * for the store when labelling; Prima's own condition is set at the check, and a holder only by a confirmed handover.
+   */
+  legacyFrom?: { where: string | null; condition: string | null; holder: string | null } | null;
   replacesId: Id | null;
   replacedById: Id | null;
   /** The IT asset register record, for IT devices. The IT register remains the IT record. */

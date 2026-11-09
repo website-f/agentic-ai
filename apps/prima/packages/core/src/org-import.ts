@@ -30,9 +30,12 @@ import { RECORD_KINDS, type FieldSpec, type RecordKind, type RecordValues } from
 import type { Store } from './store';
 import type { BillingMethod, Dataset, Id, IsoDate, IsoDateTime, LeaveOverrideKind, PurCategory, User } from './types';
 import { orgLinksOn, withoutHandOvers } from './org-links';
+// P91: the item register's own kinds (item types, units, bulk stock), saved through the Items screen's own actions.
+import { CENTRAL_PARTIES } from './items';
+import { ITEM_CATEGORY_WORDS, ITEM_IMPORT_KINDS, ITEM_TRACKING_WORDS, ITEM_UOM_WORDS, type ItemImportKind, type ItemStockRow, type ItemTypeRow, type ItemUnitRow } from './item-import';
 
 /** P81: records that are not plain record forms but have their own add path, imported row by row through it. */
-export type ExtraImportKind = 'client' | 'contract' | 'leaveEntitlement' | P90ImportKind;
+export type ExtraImportKind = 'client' | 'contract' | 'leaveEntitlement' | P90ImportKind | ItemImportKind;
 /**
  * P90 ("Import from any file", Fitri 9 Nov 2026): more screens that keep records staff bring from old spreadsheets.
  * Each row goes through the screen's own add (addFwWorker, addPurSupplier, addPublicHoliday, addBranch, the IT manual
@@ -242,6 +245,60 @@ export const EXTRA_IMPORTS: Record<ExtraImportKind, ImportSpec> = {
       { key: 'warrantyTo', label: 'Warranty until', type: 'date' },
     ],
   },
+  // P91 (Fitri, 9 Nov 2026): the Items screen loads the old system's lists. Each row through the screen's own action.
+  itemType: {
+    kind: 'itemType',
+    label: 'Item type',
+    table: 'itemSkus',
+    companyScoped: false,
+    keptBy: 'Store staff and managers (IT for IT devices)',
+    screen: 'Items and equipment, Item types',
+    note: 'Each item type is added as "New item type" adds one. With no code in the file, the code is made from the name and size (SHIRT-NAVY-L). How a type is tracked is set once. Firearms and ammunition are refused: they stay in Arms Control.',
+    fields: [
+      { key: 'name', label: 'Item name', type: 'text', required: true, words: ['item name', 'nama barang', 'nama item', 'item', 'barang', 'perkara', 'description', 'keterangan', 'keterangan barang', 'item description', 'butiran'] },
+      { key: 'sku', label: 'Item code', type: 'text', help: 'Short code, e.g. SHIRT-NAVY-L. Empty: made from the name and size.', words: ['item code', 'kod barang', 'kod item', 'code', 'kod', 'sku', 'part no', 'stock code', 'kod stok'] },
+      { key: 'category', label: 'Category', type: 'select', required: true, options: ITEM_CATEGORY_WORDS, words: ['category', 'kategori', 'jenis', 'jenis barang', 'type', 'item type', 'kumpulan', 'group'] },
+      { key: 'tracking', label: 'Tracked', type: 'select', required: true, options: ITEM_TRACKING_WORDS, help: 'Each unit has its own label (radios, phones, torchlights), or counted by quantity (cleaning stock, small parts).', words: ['tracking', 'tracked', 'tracked by', 'jejak', 'kaedah', 'serial or quantity', 'serialised', 'serialized', 'bulk'] },
+      { key: 'unit', label: 'Unit', type: 'select', options: ITEM_UOM_WORDS, help: 'PCS, PAIR, SET, BOX, BOTTLE, LITRE or ROLL. Empty: PCS.', words: ['unit', 'uom', 'unit of measure', 'unit ukuran', 'ukuran', 'per'] },
+      { key: 'size', label: 'Size', type: 'text', words: ['size', 'saiz', 'ukuran saiz', 'variant', 'varian'] },
+      { key: 'colour', label: 'Colour', type: 'text', words: ['colour', 'color', 'warna'] },
+      { key: 'consumable', label: 'Used up (not expected back)', type: 'bool', help: 'For stock counted by quantity only.', words: ['consumable', 'used up', 'guna habis', 'habis guna', 'pakai buang'] },
+      { key: 'supplierBarcodes', label: 'Supplier barcodes', type: 'text', help: 'The product barcode on the supplier box; several separated by commas. It names the type, never one unit.', words: ['barcode', 'supplier barcode', 'kod bar', 'ean', 'upc', 'product barcode'] },
+    ],
+  },
+  itemUnit: {
+    kind: 'itemUnit',
+    label: 'Item units (each with its own label)',
+    table: 'physicalItems',
+    companyScoped: true,
+    keptBy: 'Store staff and managers of the owner company (IT for IT devices)',
+    screen: 'Items and equipment, Stock and labels',
+    note: 'Each unit is registered as "Register items" registers one: a new Prima ID, owned by the company and held in its store, on the list of labels to print and scan back, then checked. The old tag, where it was, its condition and who held it are kept as a reference only. A holder is never set from a file: after the check the store hands the item over and the person confirms it themselves.',
+    fields: [
+      { key: 'sku', label: 'Item type', type: 'text', required: true, help: 'The item code or name as in the catalogue.', words: ['item type', 'jenis barang', 'jenis item', 'item', 'barang', 'nama barang', 'item name', 'item code', 'kod barang', 'kod item', 'sku', 'description', 'keterangan', 'perkara'] },
+      { key: 'serial', label: 'Maker serial number', type: 'text', words: ['serial', 'serial no', 'serial number', 'no siri', 'no. siri', 'nombor siri', 's n', 'sn', 'imei', 'no imei', 'maker serial'] },
+      { key: 'tag', label: 'Old tag or ID', type: 'text', help: 'The tag, barcode or asset number in the old system. Kept as a reference; the new Prima label replaces it.', words: ['old tag', 'asset tag', 'tag no', 'no aset', 'no. aset', 'asset no', 'asset id', 'kod aset', 'old id', 'id lama', 'no inventori', 'inventory no', 'barcode', 'kod bar', 'tag', 'no tag', 'label lama', 'old label'] },
+      { key: 'count', label: 'How many units', type: 'number', min: 1, max: 50, help: 'Empty: one. Only for a row with no serial and no old tag.', words: ['qty', 'quantity', 'kuantiti', 'bilangan', 'bil unit', 'jumlah unit', 'units'] },
+      { key: 'location', label: 'Where it is now (old record)', type: 'text', words: ['location', 'lokasi', 'tempat', 'site', 'tapak', 'store', 'stor', 'gudang', 'premis', 'where', 'di mana'] },
+      { key: 'condition', label: 'Condition (old record)', type: 'text', words: ['condition', 'keadaan', 'kondisi', 'status barang'] },
+      { key: 'keeper', label: 'Held by (old record)', type: 'text', help: 'Kept as a note for the store. The holder is set only by a handover the person confirms.', words: ['held by', 'holder', 'pemegang', 'issued to', 'diberi kepada', 'dikeluarkan kepada', 'assigned to', 'pengguna', 'user', 'nama pengguna', 'kept by', 'penjaga'] },
+    ],
+  },
+  itemStock: {
+    kind: 'itemStock',
+    label: 'Item stock by quantity',
+    table: 'itemLots',
+    companyScoped: true,
+    keptBy: 'Store staff and managers of the owner company',
+    screen: 'Items and equipment, Stock and labels',
+    note: 'Each row is an opening balance added as "Add stock" adds it: into the owner company store, for item types counted by quantity. Where the old list says the stock was is kept in the note.',
+    fields: [
+      { key: 'sku', label: 'Item type', type: 'text', required: true, help: 'The item code or name as in the catalogue.', words: ['item type', 'jenis barang', 'jenis item', 'item', 'barang', 'nama barang', 'item name', 'item code', 'kod barang', 'kod item', 'sku', 'description', 'keterangan', 'perkara'] },
+      { key: 'onHand', label: 'Quantity', type: 'number', required: true, min: 1, max: 100000, words: ['qty', 'quantity', 'kuantiti', 'bilangan', 'baki', 'baki stok', 'stock', 'stok', 'on hand', 'balance', 'jumlah'] },
+      { key: 'location', label: 'Where it is now (old record)', type: 'text', words: ['location', 'lokasi', 'tempat', 'site', 'tapak', 'store', 'stor', 'gudang', 'premis'] },
+      { key: 'note', label: 'Where the figure comes from', type: 'text', help: 'For example the old stock card. Empty: "Opening balance from the old system".', words: ['note', 'catatan', 'remarks', 'source', 'sumber', 'rujukan'] },
+    ],
+  },
 };
 
 /** Record kinds that may be imported in bulk. */
@@ -277,6 +334,8 @@ export const IMPORTABLE_KINDS: readonly ImportKind[] = Object.freeze([
   'publicHoliday',
   'branch',
   'itAsset',
+  // P91: the Items screen (item types, units with labels, bulk stock).
+  ...ITEM_IMPORT_KINDS,
 ] as ImportKind[]);
 
 export const IMPORT_MAX_ROWS = 500;
@@ -372,6 +431,11 @@ export interface ImportSaver {
     companyId: Id,
     input: { tag: string; serial: string; kind: string; model: string; location: string; unitLabel: string; boughtOn: IsoDate | null; warrantyTo: IsoDate | null },
   ): Promise<{ id: Id }>;
+  /** P91 kinds: the Items screen's own actions (sku.add, item.register, lot.add), permission checks included. */
+  itemImportAllowed?(user: User, kind: ItemImportKind, partyId: Id | null): Promise<boolean>;
+  importItemType?(user: User, row: ItemTypeRow): Promise<{ id: Id }>;
+  importItemUnit?(user: User, row: ItemUnitRow): Promise<{ ids: Id[] }>;
+  importItemStock?(user: User, row: ItemStockRow): Promise<{ id: Id }>;
 }
 
 /** P90: a foreign worker added by FWM by hand or from an old list (no JA record needed). */
@@ -540,6 +604,8 @@ export class OrgImportService {
         type: f.type,
         choices: f.type === 'select' ? (f.options ?? []).map(([, l]) => l) : undefined,
         help: f.help ?? null,
+        // P91: the record's own header words go to the browser's matcher too ("No. Aset", "Jenis Barang").
+        ...(f.words?.length ? { words: f.words } : {}),
       })),
       csvHeader: spec.fields.map((f) => f.key).join(','),
     };
@@ -548,6 +614,8 @@ export class OrgImportService {
   /** The companies a Company column may name: those the person keeps this record for. */
   private async companyChoices(user: User, kind: ImportKind): Promise<Company[]> {
     const all = (await this.store.list('companies', {})) as unknown as Company[];
+    // P91: items may also belong to the central parties (PWVSB central, Merdeka Network IT, Goodwill), which are not companies.
+    if ((ITEM_IMPORT_KINDS as readonly ImportKind[]).includes(kind)) return [...all.map((c) => ({ id: c.id, name: c.name, code: c.code })), ...CENTRAL_PARTIES.map((p) => ({ id: p.id, name: p.name }))];
     if (!isRecordKind(kind)) return all.map((c) => ({ id: c.id, name: c.name, code: c.code }));
     let form: RecordFormLike;
     try {
@@ -570,6 +638,9 @@ export class OrgImportService {
       return { companyId: form.companyId, options: form.options };
     }
     if (spec.companyScoped && !cid) throw new ImportError('Choose the company the records belong to, or add a Company column.', 400);
+    // P91: the people the Items screen lets add this record, for this company (each row is checked again when saved).
+    if ((ITEM_IMPORT_KINDS as readonly ImportKind[]).includes(kind) && !(await this.saver.itemImportAllowed?.(user, kind as ItemImportKind, cid)))
+      throw new ImportError(kind === 'itemType' ? 'Only store staff and managers (IT for IT devices) add item types.' : 'Only store staff of that company (or IT for IT devices) add its items.', 403);
     return { companyId: cid, options: {} };
   }
 
@@ -711,7 +782,7 @@ export class OrgImportService {
   }
 
   /** One row through the record's own save. Returns the new record's id where the save gives it. */
-  private async saveRow(user: User, kind: ImportKind, cid: Id | null, raw: RecordValues): Promise<Id | null> {
+  private async saveRow(user: User, kind: ImportKind, cid: Id | null, raw: RecordValues): Promise<Id | Id[] | null> {
     if (isRecordKind(kind)) {
       await this.saver.saveRecord(user, kind, null, cid, raw);
       return null;
@@ -824,6 +895,30 @@ export class OrgImportService {
       });
       return a.id;
     }
+    if (kind === 'itemType' || kind === 'itemUnit' || kind === 'itemStock') {
+      const t = (x: unknown) => (x === null || x === undefined ? '' : String(x));
+      if (!this.saver.importItemType || !this.saver.importItemUnit || !this.saver.importItemStock) throw new ImportError('Items are not imported here.', 400);
+      if (kind === 'itemType') {
+        const r = await this.saver.importItemType(user, {
+          code: t(v.sku),
+          name: t(v.name),
+          category: t(v.category),
+          tracking: t(v.tracking),
+          uom: t(v.unit),
+          size: t(v.size),
+          colour: t(v.colour),
+          consumable: v.consumable === true,
+          supplierBarcodes: t(v.supplierBarcodes),
+        });
+        return r.id;
+      }
+      if (kind === 'itemUnit') {
+        const r = await this.saver.importItemUnit(user, { partyId: companyId, sku: t(v.sku), serial: t(v.serial), tag: t(v.tag), count: num(v.count), location: t(v.location), condition: t(v.condition), keeper: t(v.keeper) });
+        return r.ids;
+      }
+      const r = await this.saver.importItemStock(user, { partyId: companyId, sku: t(v.sku), qty: num(v.onHand), location: t(v.location), note: t(v.note) });
+      return r.id;
+    }
     // leaveEntitlement: the staff member by staff number (or the exact name) within this company.
     const who = String(v.staffNo ?? '').trim();
     const people = ((await this.store.list('people', { companyId: [companyId] })) as unknown as { id: Id; staffNo: string; name: string; role: string }[]).filter(
@@ -924,7 +1019,8 @@ export class OrgImportService {
         for (const r of chosen) {
           try {
             const id = await this.saveRow(user, kind, r.companyId, r.raw);
-            if (id) returned.push(id);
+            if (Array.isArray(id)) returned.push(...id);
+            else if (id) returned.push(id);
           } catch (e) {
             if (sameTimeClash(e)) throw new ImportError(SAME_TIME, 409);
             throw new ImportError(`Row ${r.row}: ${messageOf(e)} Nothing was imported.`, 400);

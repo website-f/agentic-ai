@@ -3,17 +3,23 @@ import { useMemo, useState } from 'react';
 import { ITEM_CATEGORIES, SALE_PAPER_LABEL, STATE_LABEL, TAG_METHODS, TAG_METHOD_LABEL, labelDisplay, type BaseUom, type ItemCategory, type SalePaperKind, type TagMethod, type TrackingMode } from '@prima/core';
 import { api, type ItemBoard } from '../../api';
 import { Chip, Drawer, ErrorNotice, Kpi, Loading, dateLabel, dateTimeLabel, useAction, useLoad } from '../../ui';
-import { act, any, CAT_LABEL, partyName, readFile, rolesOf, skuName, STATE_TONE } from './shared';
+import { act, CAT_LABEL, partyName, readFile, rolesOf, skuName, STATE_TONE } from './shared';
 import { CareSettings } from './Care';
+import { PlusIcon } from '@phosphor-icons/react';
+import { Card } from '../../kit';
+import { ItemImport, mayAddTypes } from './AddMenu';
 
 // Item types (SKU catalogue) and each company's tagging choice.
 // Moved unchanged from views/Items.tsx in the P85 split; laid out by the item register styles (styles/items.css).
 
 // ---------- Catalogue ----------
 
-export function Catalogue({ data }: { data: ItemBoard }) {
+/**
+ * P91: a new item type, the same form wherever it opens (the Add menu at the top of the Items screen, or the top of the
+ * Item types tab). The server's sku.add checks who may add and refuses firearms.
+ */
+export function SkuForm({ onDone }: { onDone: () => void }) {
   const a = useAction();
-  const [form, setForm] = useState(false);
   const [code, setCode] = useState('');
   const [name, setName] = useState('');
   const [category, setCategory] = useState<ItemCategory>('uniform');
@@ -21,27 +27,8 @@ export function Catalogue({ data }: { data: ItemBoard }) {
   const [uom, setUom] = useState<BaseUom>('PCS');
   const [size, setSize] = useState('');
   const [consumable, setConsumable] = useState(false);
-  const [map, setMap] = useState<Record<string, { party: string; code: string }>>({});
-  const financeParties = data.roles.filter((r) => r.roles.includes('finance')).map((r) => r.partyId);
   return (
-    <>
-    <TagChoice data={data} />
-    <CareSettings data={data} />
-    <section className="panel">
-      <div className="panel-head">
-        <h3>Item types (catalogue)</h3>
-        {any(data, 'store', 'manager', 'it') && (
-          <button className="btn btn-sm" onClick={() => setForm(!form)}>
-            New item type
-          </button>
-        )}
-      </div>
-      <p className="muted">
-        The item type says what it is, its size and unit. Many units share one type, but each unit tracked one by one has its own label. How a type is
-        tracked is set once.
-      </p>
-      {form && (
-        <div className="panel" style={{ display: 'grid', gap: 6, marginBottom: 8 }}>
+        <div className="it-form">
           <input className="input" placeholder="Code, e.g. SHIRT-NAVY-L" value={code} onChange={(e) => setCode(e.target.value)} />
           <input className="input" placeholder="Name" value={name} onChange={(e) => setName(e.target.value)} />
           <Select className="input" aria-label="Category" value={category} onChange={(e) => setCategory(e.target.value as ItemCategory)}>
@@ -66,11 +53,45 @@ export function Catalogue({ data }: { data: ItemBoard }) {
               <input type="checkbox" checked={consumable} onChange={(e) => setConsumable(e.target.checked)} /> Used up (not expected back)
             </label>
           )}
-          <button className="btn" disabled={a.busy} onClick={() => a.run(() => act({ kind: 'sku.add', code, name, category, tracking, uom, size, consumable }), 'Item type added.').then((r) => r && setForm(false))}>
+          <button className="btn btn-primary it-big" disabled={a.busy} onClick={() => a.run(() => act({ kind: 'sku.add', code, name, category, tracking, uom, size, consumable }), 'Item type added.').then((r) => r && onDone())}>
             Save
           </button>
+          <ErrorNotice error={a.error} />
         </div>
-      )}
+  );
+}
+
+export function Catalogue({ data }: { data: ItemBoard }) {
+  const a = useAction();
+  const [form, setForm] = useState(false);
+  const [map, setMap] = useState<Record<string, { party: string; code: string }>>({});
+  const financeParties = data.roles.filter((r) => r.roles.includes('finance')).map((r) => r.partyId);
+  const mayAdd = mayAddTypes(data);
+  return (
+    <>
+    {mayAdd && (
+      <div className="it-tabbar-add">
+        <button className="btn btn-primary" type="button" aria-expanded={form} onClick={() => setForm(!form)}>
+          <PlusIcon size={16} weight="bold" aria-hidden="true" /> New item type
+        </button>
+        <ItemImport data={data} kinds={['itemType']} label="Import item types from file" />
+      </div>
+    )}
+    {form && (
+      <Card title="New item type" sub="The item type says what it is, its size and unit. How a type is tracked is set once." actions={<button className="btn" type="button" onClick={() => setForm(false)}>Cancel</button>}>
+        <SkuForm onDone={() => setForm(false)} />
+      </Card>
+    )}
+    <TagChoice data={data} />
+    <CareSettings data={data} />
+    <section className="panel">
+      <div className="panel-head">
+        <h3>Item types (catalogue)</h3>
+      </div>
+      <p className="muted">
+        The item type says what it is, its size and unit. Many units share one type, but each unit tracked one by one has its own label. How a type is
+        tracked is set once.
+      </p>
       <ErrorNotice error={a.error} />
       <div className="table-wrap">
         <table>

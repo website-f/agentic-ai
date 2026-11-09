@@ -483,3 +483,131 @@
     white-space: nowrap;
   }
 }
+
+/* P91: Add and Import at the top of the Items screen and of its Item types and Stock tabs. On a wide screen a menu opens
+   under its button; on a phone it is a sheet from the bottom, with big rows for a thumb. */
+.it-addbar,
+.it-tabbar-add {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+.it-tabbar-add {
+  justify-content: flex-start;
+}
+.it-menu {
+  position: relative;
+  display: inline-flex;
+}
+.it-menu-scrim {
+  display: none;
+}
+.it-menu-list {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 40;
+  width: min(360px, calc(100vw - 32px));
+  display: grid;
+  gap: 2px;
+  padding: 6px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md, 12px);
+  box-shadow: var(--shadow);
+}
+.it-tabbar-add .it-menu-list {
+  right: auto;
+  left: 0;
+}
+.it-menu-title {
+  display: none;
+}
+.it-menu-item {
+  display: grid;
+  gap: 2px;
+  text-align: left;
+  padding: 10px 12px;
+  border: 0;
+  border-radius: var(--r-sm, 8px);
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  cursor: pointer;
+}
+.it-menu-item:hover,
+.it-menu-item:focus-visible {
+  background: var(--surface-2);
+  outline: none;
+}
+.it-menu-item:focus-visible {
+  box-shadow: inset 0 0 0 2px var(--accent, currentColor);
+}
+.isc-unknown {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md, 12px);
+  background: var(--surface-2);
+}
+.isc-unknown > span {
+  flex: 1 1 260px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+@media (max-width: 719px) {
+  .it-addbar,
+  .it-tabbar-add {
+    width: 100%;
+  }
+  .it-addbar > *,
+  .it-tabbar-add > * {
+    flex: 1 1 0;
+    min-width: 0;
+  }
+  .it-addbar .btn,
+  .it-tabbar-add .btn {
+    width: 100%;
+    min-height: 44px;
+    justify-content: center;
+  }
+  .it-menu-scrim {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 70;
+    background: color-mix(in srgb, #0d1210 45%, transparent);
+  }
+  .it-menu-list,
+  .it-tabbar-add .it-menu-list {
+    position: fixed;
+    top: auto;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 71;
+    width: auto;
+    max-height: 80vh;
+    overflow-y: auto;
+    padding: 10px 12px max(16px, env(safe-area-inset-bottom, 0px));
+    border-radius: var(--r-lg, 16px) var(--r-lg, 16px) 0 0;
+  }
+  .it-menu-title {
+    display: block;
+    font-weight: 600;
+    padding: 6px 12px 8px;
+  }
+  .it-menu-item {
+    min-height: 56px;
+    padding: 12px;
+  }
+  .isc-unknown .btn {
+    width: 100%;
+    justify-content: center;
+  }
+}

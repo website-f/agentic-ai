@@ -60,6 +60,9 @@ function feedback(ok: boolean) {
 
 const REASONS = ['Label damaged', 'Label unreadable', 'Label missing', 'Printer or scanner fault'];
 
+/** P91: looks like an old tag or barcode (printable, no spaces at the ends, up to 60 characters), never a link. */
+const oldCode = (v: string) => v.length >= 3 && v.length <= 60 && /^[\x21-\x7e][\x20-\x7e]*[\x21-\x7e]$/.test(v) && !/^[a-z][a-z0-9+.-]*:/i.test(v);
+
 /**
  * The scanner. `onResult` gets every checked scan with its verdict; the screen decides what to do with it. With
  * `continuous`, the camera stays open for the next scan (pick lists, receipts, counts).
@@ -73,6 +76,7 @@ export function Scanner({
   allowManual = true,
   busy = false,
   autoFocus = false,
+  onUnknownCode,
 }: {
   purpose: ScanPurpose;
   contextId?: string | null;
@@ -82,6 +86,11 @@ export function Scanner({
   allowManual?: boolean;
   busy?: boolean;
   autoFocus?: boolean;
+  /**
+   * P91: a code that is not a Prima label (an old system's barcode or asset tag). When given, the scanner offers to
+   * register the item with that code kept as its old tag, and the camera reports such codes instead of skipping them.
+   */
+  onUnknownCode?: (code: string) => void;
 }) {
   const [raw, setRaw] = useState('');
   const [camera, setCamera] = useState(false);
@@ -89,6 +98,7 @@ export function Scanner({
   const [error, setError] = useState<string | null>(null);
   const [manual, setManual] = useState<{ code: string; hasSerial: boolean; message: string } | null>(null);
   const [checking, setChecking] = useState(false);
+  const [unknown, setUnknown] = useState<string | null>(null);
   const keyTimes = useRef<number[]>([]);
   const recent = useRef(new Map<string, number>());
   const input = useRef<HTMLInputElement>(null);
@@ -100,8 +110,11 @@ export function Scanner({
   async function check(code: string, source: ScanSource, man: ScanEntry['manual'] = null) {
     const v = cleanScan(code);
     const p = parseScan(v);
+    setUnknown(null);
     if (!p.ok) {
       setError(LABEL_REFUSAL[p.reason]);
+      // P91: an old system's code (not a link, not a mistyped Prima ID) may be registered on the spot.
+      if (onUnknownCode && p.reason === 'unknown_format' && oldCode(v)) setUnknown(v);
       feedback(false);
       return;
     }
@@ -220,6 +233,16 @@ export function Scanner({
         </div>
       )}
       <ErrorNotice error={error} />
+      {unknown && onUnknownCode && (
+        <div className="isc-unknown">
+          <span>
+            <span className="mono">{unknown}</span> is not a Prima label. If it is an item from the old system, register it now: it gets a new Prima label, and this code is kept as its old tag.
+          </span>
+          <button className="btn btn-primary" type="button" onClick={() => onUnknownCode(unknown)}>
+            Register this item
+          </button>
+        </div>
+      )}
       {manual && (
         <ManualDialog
           info={manual}
@@ -240,6 +263,14 @@ export function Scanner({
             if (!continuous) setCamera(false);
             void check(code, 'camera');
           }}
+          onForeign={
+            onUnknownCode
+              ? (code) => {
+                  setCamera(false);
+                  void check(code, 'camera');
+                }
+              : undefined
+          }
           onClose={() => {
             setCamera(false);
             setTimeout(() => input.current?.focus(), 50);
@@ -304,7 +335,7 @@ function ManualDialog({ info, onCancel, onSubmit }: { info: { code: string; hasS
  * a flash and buzz on each read; the result in a large card; and help when the camera is blocked. The stream stays open
  * while this screen is open (continuous scanning) and every track is stopped as soon as it closes.
  */
-export function CameraScan({ title, last, error, onRead, onClose }: { title: string; last: ItemScanVerdict | null; error: string | null; onRead: (code: string) => void; onClose: () => void }) {
+export function CameraScan({ title, last, error, onRead, onClose, onForeign }: { title: string; last: ItemScanVerdict | null; error: string | null; onRead: (code: string) => void; onClose: () => void; onForeign?: (code: string) => void }) {
   const video = useRef<HTMLVideoElement>(null);
   const dialog = useRef<HTMLDivElement>(null);
   const stream = useRef<MediaStream | null>(null);
@@ -318,6 +349,8 @@ export function CameraScan({ title, last, error, onRead, onClose }: { title: str
   const [flash, setFlash] = useState(false);
   const cb = useRef(onRead);
   cb.current = onRead;
+  const foreign = useRef(onForeign);
+  foreign.current = onForeign;
   const close = useRef(onClose);
   close.current = onClose;
   const chosen = useRef<string | null>(null);
@@ -366,6 +399,14 @@ export function CameraScan({ title, last, error, onRead, onClose }: { title: str
           if (code) {
             setHit((n) => n + 1);
             cb.current(code);
+          } else if (foreign.current) {
+            // P91: an old system's barcode, offered for registering (only where the screen asks for it).
+            const old = found.map(cleanScan).find((v) => { const p = parseScan(v); return !p.ok && p.reason === 'unknown_format' && oldCode(v); });
+            if (old) {
+              setHit((n) => n + 1);
+              foreign.current(old);
+              return;
+            }
           }
         }
         await new Promise((r) => setTimeout(r, decoder.kind === 'native' ? 100 : 150));

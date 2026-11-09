@@ -173,7 +173,7 @@ const errOf = (e: unknown): Err => ({ message: e instanceof ApiError || e instan
 /** What each column is matched to, and how sure: from the matcher, then the person's own choices. */
 type ColState = { field: string; level: SmartLevel | null; how: SmartColumn['how']; why: string };
 
-function ImportDrawer({
+export function ImportDrawer({
   kind,
   companyId: given,
   choices: offered,
@@ -246,6 +246,7 @@ function ImportDrawer({
               type: c.type as AlignField['type'],
               required: c.required,
               options: c.choices?.map((l): [string, string] => [l, l]),
+              words: 'words' in c ? c.words : undefined,
             })),
             ...(tpl.companyScoped ? [{ key: COMPANY_FIELD, label: 'Company', type: 'text' as const }] : []),
           ]

@@ -8,7 +8,7 @@ records staff would bring from old spreadsheets, whether the screen has an **Add
 path (whose permission check the import reuses: an import row is saved through the same call as Add, so nobody can import
 what they could not add by hand).
 
-Legend: **P90** = added in this change. "Workflow" = the screen holds work in progress (approvals, cases, tasks, pay runs),
+Legend: **P90** = added in P90; **P91** = added in P91 (Items, 9 Nov 2026). "Workflow" = the screen holds work in progress (approvals, cases, tasks, pay runs),
 not master records; those are not bulk-loaded, because each item needs its own approval or evidence.
 
 ## Screens that keep master records
@@ -38,13 +38,17 @@ not master records; those are not bulk-loaded, because each item needs its own a
 | CMS | Phone extensions, CMS staff, CCTV and alarm panels | yes | yes (3 kinds) | `saveRecord`, Arms Control |
 | Arms control | Arms suppliers, price list | yes | yes | `saveRecord`, Arms Control |
 | Arms control | Vaults, firearms, dealer licences, armed agreements | yes | no (by design) | Kept on their own reviewed path (P81 decision) |
+| Items and equipment (`items`) | Item types (catalogue) | **P91** "Add" menu at the top of the screen: "New item type"; and "New item type" at the top of the Item types tab | **P91** `itemType` | `sku.add` (`importItemType`): store staff or managers of any company, IT for IT devices; code made from name and size when the file has none; firearms refused (Arms Control) |
+| Items and equipment (`items`) | Serialised units from the old asset list | **P91** "Add" menu: "Register items" (opens the register, labels printed and scanned back) and at the top of the Stock and labels tab; the scanner offers "Register this item" for an old barcode it does not know, keeping that code as the old tag | **P91** `itemUnit` | `item.register` (`importItemUnit`): store staff, managers or IT of the owner company (Company column or chosen company; central parties too). Each unit gets a new Prima ID, no label yet, on "Labels to print or scan back", an opening balance not yet verified; old tag kept (`legacyRef`, refused twice per company), old location, condition and holder kept as a reference (`legacyFrom`); IT devices whose serial or tag is in the IT register are linked |
+| Items and equipment (`items`) | Bulk stock (opening balances) | **P91** "Register items" with an item type counted by quantity ("Add stock") | **P91** `itemStock` | `lot.add` (`importItemStock`): store staff or managers of the owner company; into the owner's store, the old location kept in the note |
+| Items and equipment (`items`) | Current holders from the old system | n/a (by design) | no (by design) | A holder is set only by a handover that the person confirms themselves, after the printed label is scanned back and the item checked (P85 rules). The old holder is kept on the unit as "Held by (old record)" so the store hands it over through the normal handover. |
+| Items and equipment (`items`) | Past uniform issues | yes (Uniforms tab, by guard or in bulk for a site, zone or region) | no | `uniform.past` already records counts in bulk with a source; not changed |
 | Hand-overs | Every importable kind | n/a | yes, all kinds | The generic import screen |
 
 ## Add exists, no import yet (lower value or needs its own review)
 
 | Screen | Records | Create path | Why not in P90 |
 |---|---|---|---|
-| Items and equipment (`items`) | Item types, serialised units, lots, past uniform issues | `item-service.ts` `skuAdd`, `register`, `lotAdd` | The Items register (P85) is being changed in parallel (camera scanner, labels); units need printed labels scanned back, so a bulk path needs its own design. Next candidate. |
 | HR monitor (`hr`) | Staff training records | `recordTraining` | Next candidate (HR or scoped manager) |
 | Guards (`people`) | Guard papers (KDN card, CSG, TNG) | `recordGuardPaper` | Next candidate; guards themselves come from JA |
 | Foreign workers | Paper renewals for existing workers | `recordFwPaper` | A renewed paper needs its copy attached (rule); typed dates are only accepted when a worker is first added |
