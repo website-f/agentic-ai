@@ -582,6 +582,7 @@ MS: dict[str, str] = {
     "That department is not here.": "Jabatan itu tiada di sini.",
     # ------------------------------------------------------------ tasks and approvals
     "That task is not here.": "Tugasan itu tiada di sini.",
+    "It is not paused now.": "Ia tidak berehat sekarang.",
     "This task does not wait for that one.": "Tugasan ini tidak menunggu tugasan itu.",
     "Pick an agent from {where}.": "Pilih ejen dari {where}.",
     "Pick files you can see.": "Pilih fail yang anda boleh lihat.",

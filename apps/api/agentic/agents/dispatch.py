@@ -66,6 +66,12 @@ async def cancel_task(workflow_id: str) -> None:
     await client.get_workflow_handle(workflow_id).signal(AgentTaskWorkflow.cancel)
 
 
+async def wake_task(workflow_id: str) -> None:
+    """P95: end a site rest now (the agent carries on with its next step)."""
+    client = await temporal_client()
+    await client.get_workflow_handle(workflow_id).signal(AgentTaskWorkflow.wake)
+
+
 async def terminate_task(workflow_id: str, reason: str) -> bool:
     """P38: stop a run now, even in the middle of a long step (cancel only takes effect
     between steps). False when the run was already gone."""

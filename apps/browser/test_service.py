@@ -347,3 +347,26 @@ def test_budget_caps_each_hour(monkeypatch):
         assert service.budget_check(key, t + i * 10)[0] == 0
     rest, why = service.budget_check(key, t + 60)
     assert "this hour" in why and rest > 3000
+
+def test_budget_on_the_persons_own_pc_keeps_no_office_hours_or_breaks(monkeypatch):
+    """P95: at 05:17 the window on the person's PC sat blank until 07:30."""
+    service._budgets.clear()
+    monkeypatch.setattr(service, "BUDGET_HOURS", "07:30-22:00")
+    monkeypatch.setattr(service, "BUDGET_SITTING_MIN", 25)
+    key = ("ws", "eperolehan.gov.my")
+    assert service.budget_check(key, _at(5, 17), own_desk=True) == (0.0, "")
+    assert service.budget_check(key, _at(23, 0))[0] > 0  # the office's own browsers still rest
+    t = _at(10, 0)
+    for i in range(40):  # one action a minute for 40 minutes: no break on the own PC
+        assert service.budget_check(key, t + i * 60, own_desk=True) == (0.0, "")
+
+
+def test_budget_on_the_own_pc_still_caps_each_hour(monkeypatch):
+    service._budgets.clear()
+    monkeypatch.setattr(service, "BUDGET_PER_HOUR", 5)
+    key = ("ws", "eperolehan.gov.my")
+    t = _at(5, 0)
+    for i in range(5):
+        assert service.budget_check(key, t + i * 10, own_desk=True)[0] == 0
+    rest, why = service.budget_check(key, t + 60, own_desk=True)
+    assert "this hour" in why and rest > 3000

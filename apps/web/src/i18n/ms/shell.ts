@@ -297,6 +297,8 @@ export const SHELL: Record<string, string> = {
   "The agent's browser: {title}": "Pelayar ejen: {title}",
   "The agent's browser: a web page": "Pelayar ejen: halaman web",
   "The browser is starting…": "Pelayar sedang dibuka…",
+  "Carry on now": "Teruskan sekarang",
+  "{name} carries on now.": "{name} meneruskan kerja sekarang.",
   "The browser was closed.": "Pelayar sudah ditutup.",
   "{name} is thinking…": "{name} sedang berfikir…",
   "{name} is at their desk": "{name} ada di mejanya",

@@ -37,6 +37,7 @@ class AgentTaskWorkflow:
     def __init__(self) -> None:
         self.decided: set[str] = set()
         self.cancelled = False
+        self.woken = False  # P95: a person said "carry on now" during a site rest
 
     @workflow.signal
     def approval_decided(self, approval_id: str) -> None:
@@ -45,6 +46,10 @@ class AgentTaskWorkflow:
     @workflow.signal
     def cancel(self) -> None:
         self.cancelled = True
+
+    @workflow.signal
+    def wake(self) -> None:
+        self.woken = True
 
     @workflow.query
     def waiting_on(self) -> list[str]:
@@ -102,10 +107,12 @@ class AgentTaskWorkflow:
                 state, r = "failed", {"state": "failed", "message": why}
             if state == "rest" and workflow.patched("site-rest-v1"):
                 # P59: the site budget asked for a rest (a person's break, office hours): sleep,
-                # then the agent carries on. A cancel still stops it at once.
+                # then the agent carries on. A cancel still stops it at once, and P95's "carry
+                # on now" (the wake signal) ends the rest early.
+                self.woken = False
                 with contextlib.suppress(TimeoutError):
                     await workflow.wait_condition(
-                        lambda: self.cancelled,
+                        lambda: self.cancelled or self.woken,
                         timeout=timedelta(seconds=max(60, int(r.get("timeout_seconds") or 60))),
                     )
                 if self.cancelled:

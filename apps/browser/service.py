@@ -176,6 +176,10 @@ PACE_MIN = float(os.environ.get("BROWSER_PACE_MIN", "2.5"))  # seconds between s
 PACE_JITTER = float(os.environ.get("BROWSER_PACE_JITTER", "1.5"))  # extra 0..this, random
 PACE_WINDOW = 60.0
 PACE_MAX = int(os.environ.get("BROWSER_PACE_MAX_PER_MIN", "20"))  # server actions per minute
+# P95: on the person's own computer they watch every step; a quicker, still human pace.
+PC_PACE_MIN = float(os.environ.get("BROWSER_PC_PACE_MIN", "1.0"))
+PC_PACE_JITTER = float(os.environ.get("BROWSER_PC_PACE_JITTER", "0.8"))
+PC_PACE_MAX = int(os.environ.get("BROWSER_PC_PACE_MAX_PER_MIN", "30"))
 # Actions that make the site's server work (a click, a form post, a navigation). Observing
 # the already-loaded page (snapshot, find, look, read, wait, scroll) is not one of these.
 SERVER_ACTIONS = frozenset(
@@ -210,6 +214,10 @@ BUDGET_PER_HOUR = int(os.environ.get("BROWSER_BUDGET_PER_HOUR", "90"))
 BUDGET_PER_DAY = int(os.environ.get("BROWSER_BUDGET_PER_DAY", "500"))
 BUDGET_HOURS = os.environ.get("BROWSER_BUDGET_HOURS", "07:30-22:00")  # local time
 BUDGET_TZ = os.environ.get("BROWSER_BUDGET_TZ", "Asia/Kuala_Lumpur")
+# P95: on the person's own computer (P31) the person is at the desk, watching their own
+# browser on their own internet line: no office hours and no sittings with breaks (the
+# window sat blank until 07:30 on 10 Nov). The hour and day caps still count, against the
+# same company budget, so a runaway agent still stops.
 
 
 class _Budget:
@@ -247,23 +255,26 @@ def _hours() -> tuple[int, int]:
         return 0, 24 * 60
 
 
-def budget_check(key: tuple[str, str], now: float | None = None) -> tuple[float, str]:
+def budget_check(
+    key: tuple[str, str], now: float | None = None, *, own_desk: bool = False
+) -> tuple[float, str]:
     """(seconds to rest, why) before one more server action on the site; (0, "") = go, and
-    the action is counted."""
+    the action is counted. `own_desk`: the person's own computer (no hours, no breaks)."""
     now = time.time() if now is None else now
     b = _budgets.setdefault(key, _Budget())
-    start, end = _hours()
-    mins, local = _local_minutes(now)
-    if not start <= mins < end:
-        wait_min = (start - mins) % (24 * 60)
-        return wait_min * 60.0 - local.second, "outside office hours on the site"
-    if now < b.rest_until:
-        return b.rest_until - now, "a short break, as a person takes"
+    if not own_desk:
+        start, end = _hours()
+        mins, local = _local_minutes(now)
+        if not start <= mins < end:
+            wait_min = (start - mins) % (24 * 60)
+            return wait_min * 60.0 - local.second, "outside office hours on the site"
+        if now < b.rest_until:
+            return b.rest_until - now, "a short break, as a person takes"
     b.times = [t for t in b.times if now - t < 86400]
     last = b.times[-1] if b.times else 0.0
     if not b.sitting_from or now - last > BUDGET_IDLE_MIN * 60:
         b.sitting_from = now  # a new sitting after a natural pause
-    elif now - b.sitting_from >= BUDGET_SITTING_MIN * 60:
+    elif not own_desk and now - b.sitting_from >= BUDGET_SITTING_MIN * 60:
         rest = random.uniform(BUDGET_BREAK_MIN, BUDGET_BREAK_MAX) * 60
         b.rest_until, b.sitting_from = now + rest, 0.0
         return rest, "a short break after a long sitting, as a person takes"
@@ -636,9 +647,13 @@ async def _pace(s: "Session", action: str) -> None:
     if action not in SERVER_ACTIONS:
         return
     now = time.time()
-    wait = (s.last_server + PACE_MIN + random.uniform(0, PACE_JITTER)) - now
+    pc = s.remote is not None
+    gap = (PC_PACE_MIN + random.uniform(0, PC_PACE_JITTER)) if pc else (
+        PACE_MIN + random.uniform(0, PACE_JITTER)
+    )
+    wait = (s.last_server + gap) - now
     s.act_times = [t for t in s.act_times if now - t < PACE_WINDOW]
-    if len(s.act_times) >= PACE_MAX:  # over the per-minute cap: wait for the window to roll
+    if len(s.act_times) >= (PC_PACE_MAX if pc else PACE_MAX):  # over the per-minute cap
         wait = max(wait, PACE_WINDOW - (now - s.act_times[0]) + 0.1)
     if wait > 0:
         await asyncio.sleep(min(wait, PACE_WINDOW))
@@ -1632,7 +1647,10 @@ async def _run_action(s: Session, sid: str, body: Act) -> dict[str, Any]:
             here = s.page.url if s.page is not None else None
         site = budget_site(body.url if body.action == "goto" else None) or budget_site(here)
         if site:
-            rest, why = budget_check((s.workspace_id or s.owner.get("agent_id", ""), site))
+            rest, why = budget_check(
+                (s.workspace_id or s.owner.get("agent_id", ""), site),
+                own_desk=s.remote is not None,
+            )
             if rest > 0:
                 return {"error": f"SITE_REST: {why}", "retry_after": int(rest) + 1, "site": site}
     await _pace(s, body.action)

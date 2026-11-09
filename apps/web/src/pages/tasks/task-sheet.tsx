@@ -280,6 +280,34 @@ function ShareControl({ task }: { task: Task }) {
   );
 }
 
+/** P95: the agent rests on a site (office hours, a break); the person may end the rest. */
+function RestBanner({ task, events, canWrite }: { task: TaskX; events: TaskEvent[]; canWrite: boolean }) {
+  const t = useT();
+  const qc = useQueryClient();
+  const last = [...events].reverse().find((e) => ["rest", "status", "wake"].includes(e.kind));
+  const wake = useMutation({
+    mutationFn: () => api<Task>(`/api/tasks/${task.id}/wake`, "POST"),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: workKeys.task(task.id) });
+      qc.invalidateQueries({ queryKey: workKeys.tasks });
+      toast.success(t("{name} carries on now.", { name: task.assignee_name ?? t("The agent") }));
+    },
+    onError: (e) => toast.error(errorMessage(e)),
+  });
+  if (task.status !== "running" || last?.kind !== "rest") return null;
+  return (
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-[var(--radius-md)] border border-info/30 bg-info/8 px-3.5 py-3 text-[13px] text-info">
+      <MoonStarsIcon size={17} weight="duotone" className="shrink-0" />
+      <span className="min-w-0 flex-1 basis-48">{last.text}</span>
+      {canWrite ? (
+        <Button size="sm" loading={wake.isPending} onClick={() => wake.mutate()}>
+          <PlayIcon size={14} /> {t("Carry on now")}
+        </Button>
+      ) : null}
+    </div>
+  );
+}
+
 export function TaskSheet({ taskId, onClose }: { taskId: string; onClose: () => void }) {
   const t = useT();
   const { data: me } = useSuspenseQuery(meQuery);
@@ -340,6 +368,7 @@ export function TaskSheet({ taskId, onClose }: { taskId: string; onClose: () => 
               {pending.map((a) => <ApprovalCard key={a.id} approval={a} canDecide={me.permissions.includes("approvals.decide")} showTask={false} />)}
             </SheetSection>
           ) : null}
+          <RestBanner task={task} events={data.events} canWrite={canWrite} />
           {task.error ? (
             <p role="alert" className="flex items-start gap-2.5 rounded-[var(--radius-md)] border border-danger/30 bg-danger/8 px-3.5 py-3 text-[13px] break-words text-danger">
               <WarningCircleIcon size={17} weight="duotone" className="mt-px shrink-0" /> <span className="min-w-0">{task.error}</span>

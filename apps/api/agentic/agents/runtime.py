@@ -849,7 +849,7 @@ async def _resolve_calls(
             back = (_now() + timedelta(seconds=secs)).astimezone(ZoneInfo(ctx.workspace.timezone))
             why = rest.group(2).strip()
             result = (
-                f"Paused on the site: {why}. Resumed at {back:%H:%M}. Carry on where you were "
+                f"Paused on the site: {why}. Back at {back:%H:%M}. Carry on where you were "
                 "(look at the page again first)."
             )
         if _stuck(name, result) and await _help_hint_once(db, task, agent):

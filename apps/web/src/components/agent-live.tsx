@@ -151,6 +151,10 @@ export function Screen({ session, events, live = true }: { session: string; even
   const box = useRef<HTMLDivElement>(null);
   const last = [...events].reverse().find((e) => e.type === "agent.activity" && e.data.kind === "browser");
   const d = (last?.data ?? {}) as Act;
+  // P95: resting on the site (office hours, a break) since the last browser step: say so,
+  // never "starting" for hours.
+  const latest = [...events].reverse().find((e) => (e.type === "agent.activity" && e.data.kind === "browser") || (e.type === "task.event" && e.data.kind === "rest"));
+  const resting = live && latest?.type === "task.event" ? String(latest.data.text ?? "") : "";
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     if (!live) return;
@@ -182,7 +186,9 @@ export function Screen({ session, events, live = true }: { session: string; even
           className={cn("absolute inset-0 size-full object-contain object-top", failed && "invisible")}
           onError={() => setFailed(true)} onLoad={() => setFailed(false)} />
         {failed ? (
-          <p className="absolute inset-0 grid place-items-center text-[13px] text-muted">{live ? t("The browser is starting…") : t("The browser was closed.")}</p>
+          <p className="absolute inset-0 grid place-items-center px-6 text-center text-[13px] text-muted">{resting || (live ? t("The browser is starting…") : t("The browser was closed."))}</p>
+        ) : resting ? (
+          <p className="absolute inset-x-0 bottom-0 bg-surface/90 px-3 py-2 text-center text-[12.5px] text-muted backdrop-blur-sm">{resting}</p>
         ) : null}
         {d.point && fresh ? (
           <span aria-hidden className="pointer-events-none absolute size-6 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-accent bg-accent/25 motion-safe:animate-ping"

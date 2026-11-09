@@ -1000,6 +1000,31 @@ async def cancel_task(
     return await task_out(db, t)
 
 
+@router.post("/tasks/{task_id}/wake")
+async def wake_task(
+    task_id: str,
+    principal: Principal = Depends(require("work.write")),
+    db: AsyncSession = Depends(get_db),
+) -> TaskOut:
+    """P95: "Carry on now" while the agent rests on a site (office hours, a break): the rest
+    ends and the agent goes on. Only a running task that is resting; anything else is 409."""
+    t = await _task(db, principal, task_id)
+    last = (
+        await db.execute(
+            select(TaskEvent.kind)
+            .where(TaskEvent.task_id == t.id, TaskEvent.kind.in_(("rest", "status")))
+            .order_by(TaskEvent.ts.desc(), TaskEvent.id.desc())
+            .limit(1)
+        )
+    ).scalar_one_or_none()
+    if t.status != "running" or not t.workflow_id or last != "rest":
+        raise api_error(status.HTTP_409_CONFLICT, "not_resting", "It is not paused now.")
+    await dispatch.wake_task(t.workflow_id)
+    await runtime.task_event(db, t, "wake", principal.actor, "asked it to carry on now")
+    await db.refresh(t)
+    return await task_out(db, t)
+
+
 @router.post("/tasks/{task_id}/accept")
 async def accept_task(
     task_id: str,
