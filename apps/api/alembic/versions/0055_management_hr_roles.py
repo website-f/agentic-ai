@@ -5,7 +5,7 @@ was corrected gets their Prima account brought up to date the next time they ope
 Role access the owner changes lives in workspaces.settings["role_permissions"] (no column).
 
 Revision ID: 0055
-Revises: 0053
+Revises: 0054
 Create Date: 2026-11-09 12:00:00
 """
 
@@ -16,7 +16,7 @@ from alembic import op
 
 # Merging after another 0054: change only down_revision below (to "0054").
 revision: str = "0055"
-down_revision: str | None = "0053"
+down_revision: str | None = "0054"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

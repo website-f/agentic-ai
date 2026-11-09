@@ -4,7 +4,7 @@ don't, field, example, the agent it was taught to, how it was taught, how often)
 new JSON column, `brain_facts.meta`. Existing facts get an empty object.
 
 Revision ID: 0056
-Revises: 0053
+Revises: 0055
 Create Date: 2026-11-09 18:00:00
 """
 
@@ -15,7 +15,7 @@ from alembic import op
 from sqlalchemy.dialects import postgresql
 
 revision: str = "0056"
-down_revision: str | None = "0053"
+down_revision: str | None = "0055"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
