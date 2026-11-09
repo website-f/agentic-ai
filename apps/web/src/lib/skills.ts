@@ -70,6 +70,8 @@ export interface SkillDetail extends Skill {
   eval_cases: { id: string; title: string; input: string; checks: Checks }[];
   last_eval: EvalSuite | null;
   proposals: { id: string; kind: ProposalKind; status: string; created_at: string }[];
+  /** P96: this person may publish it (edit straight away, retire, restore, choose who uses it). */
+  can_publish?: boolean;
 }
 
 export type ProposalKind = "new" | "patch" | "merge" | "retire";
@@ -114,6 +116,8 @@ export interface ProposalDetail {
   decided_at: string | null;
   decision_note: string | null;
   created_at: string;
+  /** P96: this person may approve or reject it (the detail only). */
+  can_publish?: boolean;
 }
 
 export const skillKeys = {

@@ -398,7 +398,7 @@ export function AgentDetailPage() {
             </div>
           </div>
           <div className="flex flex-wrap gap-2 max-sm:grid max-sm:grid-cols-2">
-            {!viewOnly ? (
+            {canWrite ? (
               <Button asChild>
                 <Link {...chatRoute(agent.id, { from: `/agents/${agentId}` })}>
                   <ChatsCircleIcon size={15} weight="fill" /> {t("Chat")}

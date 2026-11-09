@@ -412,7 +412,8 @@ export function LearningPage() {
   const { data: me } = useSuspenseQuery(meQuery);
   const canWrite = me.permissions.includes("work.write");
   const canDecide = me.permissions.includes("approvals.decide");
-  const canExport = me.role === "owner" || me.role === "admin";
+  // P96: whoever the server lets download it (brain.manage: owner, admin, management, HR).
+  const canExport = me.permissions.includes("brain.manage");
   const search = useSearch({ strict: false }) as { days?: number; tab?: "week" | "overview" | "lessons"; week?: string };
   const navigate = useNavigate();
   const days: LearningRange = LEARNING_RANGES.find((r) => r === search.days) ?? 30;

@@ -54,7 +54,8 @@ export function ChatPage() {
       <Page>
         <PageHeader title={t("Chat")} />
         <EmptyState icon={ChatsCircleIcon} title={t("No agents to talk to yet")} body={t("Create an agent, then chat with it here or from its profile.")}
-          action={<Button asChild>{staffOnly(me.permissions) ? <Link to="/twin">{t("Meet your AI twin")}</Link> : <Link to="/agents/new">{t("New agent")}</Link>}</Button>} />
+          action={staffOnly(me.permissions) ? <Button asChild><Link to="/twin">{t("Meet your AI twin")}</Link></Button>
+            : me.permissions.includes("agents.manage") ? <Button asChild><Link to="/agents/new">{t("New agent")}</Link></Button> : undefined} />
       </Page>
     );
   }

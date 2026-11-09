@@ -187,7 +187,7 @@ export function AgentsPage() {
               />
             ) : null}
           </div>
-          {view === "org" ? <OrgChart agents={inBranch.filter((a) => a.status !== "retired")} manage={canManage} /> : (
+          {view === "org" ? <OrgChart agents={inBranch.filter((a) => a.status !== "retired")} manage={me.permissions.includes("agents.manage")} /> : (
             <div className="grid grid-cols-[minmax(0,1fr)] gap-10">
               {companies.map(({ company, sections: depts }) => {
                 const H = isAll ? "h3" : "h2";
