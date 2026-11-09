@@ -386,13 +386,28 @@ async def capture(
     if len(said) < MIN_CHARS or not taught_by.startswith("user:"):
         return None  # only people teach lessons; a reviewer agent's notes are not one
     try:
-        return await _capture(
+        noted = await _capture(
             db, agent, said, via, taught_by, task, session_id, context, topic, guess
         )
     except Exception:  # noqa: BLE001 - a lesson is a bonus; the correction itself stands
         log.warning("could not keep a lesson for %s", agent.id, exc_info=True)
         await db.rollback()
         return None
+    if noted is not None and task is not None:
+        await _retire_routines(db, task.id, noted.fact.text)
+    return noted
+
+
+async def _retire_routines(db: AsyncSession, task_id: str, lesson: str) -> None:
+    """P96: work a learned routine did (or did the routine's way) was corrected: the routine
+    stops repeating it (skills/routines.py corrected)."""
+    from ..skills import routines  # late: skills reach the runtime
+
+    try:
+        await routines.corrected(db, task_id, lesson)
+    except Exception:  # noqa: BLE001 - the lesson is kept either way
+        log.warning("could not pause the routines of %s", task_id, exc_info=True)
+        await db.rollback()
 
 
 async def _capture(

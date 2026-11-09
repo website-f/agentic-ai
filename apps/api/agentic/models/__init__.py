@@ -912,6 +912,11 @@ class Routine(Timestamps, Base):
     last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     confirmed_by: Mapped[str | None] = mapped_column(String(80))
     note: Mapped[str | None] = mapped_column(String(300))
+    # P96: only the agent that learned it replays it (a person's own AI, or browser work),
+    # and only for this person; when people last accepted the job done this way.
+    agent_only: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    person_id: Mapped[str | None] = mapped_column(String(40))
+    checked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 # ---------------------------------------------------------------- P6 channels

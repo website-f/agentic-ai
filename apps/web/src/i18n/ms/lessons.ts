@@ -76,4 +76,19 @@ export const LESSONS: Record<string, string> = {
     "Pengajaran daripada pembetulan. Ia menggunakannya setiap kali membuat kerja seperti itu.",
   'Nothing yet. When you correct {name} (send work back, answer its question, or say "no, ..." in chat), the lesson shows here.':
     'Belum ada. Apabila anda membetulkan {name} (hantar kerja balik, jawab soalannya, atau kata "tak, ..." dalam sembang), pengajarannya dipaparkan di sini.',
+  // ---------------------------------------------------------------- P96: what an agent does from memory
+  "What {name} does from memory": "Apa yang {name} buat daripada ingatan",
+  "Jobs it has done well before run again step by step without the AI, and the same first question gets the same answer. Anything new or different still goes to the AI, and sending or uploading always waits for a person.":
+    "Kerja yang pernah dibuatnya dengan baik dijalankan semula langkah demi langkah tanpa AI, dan soalan pertama yang sama mendapat jawapan yang sama. Apa-apa yang baharu atau berbeza tetap ke AI, dan menghantar atau memuat naik sentiasa menunggu seseorang.",
+  "{jobs} jobs done from memory, {answers} answers reused: {n} tokens saved":
+    "{jobs} kerja dibuat daripada ingatan, {answers} jawapan diguna semula: {n} token dijimatkan",
+  "Reuse what it learned": "Guna semula apa yang dipelajarinya",
+  "Off: it always works with the AI. It keeps learning.": "Mati: ia sentiasa bekerja dengan AI. Ia tetap belajar.",
+  "Switched off for the whole office in Skills > Routines.": "Dimatikan untuk seluruh pejabat di Kemahiran > Rutin.",
+  "in the browser": "dalam pelayar",
+  "its own, for one person": "miliknya sendiri, untuk seorang",
+  "shared with its company": "dikongsi dengan syarikatnya",
+  "learned by a colleague": "dipelajari oleh rakan sekerja",
+  "Nothing yet. When {name} does the same kind of job twice the same way and people accept it, the steps show here.":
+    "Belum ada. Apabila {name} membuat kerja yang sama dua kali dengan cara yang sama dan orang menerimanya, langkahnya dipaparkan di sini.",
 };
