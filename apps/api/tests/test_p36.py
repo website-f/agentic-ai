@@ -475,16 +475,16 @@ async def test_a_job_done_twice_the_same_way_is_then_done_without_the_model(
         r.baseline_tokens = 1000
         await db.commit()
 
-    # 3. The third time it follows the routine: one cheap call to read the amounts, the
-    # tool runs as it is, one cheap call to write the answer. No agent model call.
+    # 3. The third time it follows the routine: the amounts are read off the brief (it reads
+    # like the first one with other amounts: P96, no model), the tool runs as it is, one cheap
+    # call writes the answer. No agent model call.
     c = await new_task(client, agent, "Invoices total", f"{BRIEF}: 700 and 45")
-    llm.say(json.dumps({"values": {"first": "700", "second": "45"}}))
     llm.say("The total is RM 745.")
     sent = len(llm.requests)
     step = await runtime.run_task_step(c["id"])
     assert step.state == "done" and step.message == "The total is RM 745."
-    assert len(llm.requests) == sent + 2
-    assert [q["model"] for q in llm.requests[sent:]] == ["m-fast", "m-fast"]
+    assert len(llm.requests) == sent + 1
+    assert [q["model"] for q in llm.requests[sent:]] == ["m-fast"]
     assert all(not q.get("tools") for q in llm.requests[sent:])
     msgs = [m for m in await _messages(c["id"]) if m.role == "tool"]
     assert [m.content for m in msgs] == ["745"]
@@ -507,7 +507,7 @@ async def test_a_job_done_twice_the_same_way_is_then_done_without_the_model(
     assert ok.status_code == 200, ok.text
     summary = (await client.get("/api/routines/summary")).json()
     assert summary["active"] == 1 and summary["successes"] == 1
-    assert summary["tokens_saved"] == 1000 - 240  # two cheap calls instead of the whole run
+    assert summary["tokens_saved"] == 1000 - 120  # one cheap call instead of the whole run
 
 
 async def test_a_routine_without_slots_and_a_template_needs_no_model_at_all(
@@ -590,8 +590,10 @@ def test_a_routine_must_give_back_the_calls_the_agent_made():
     ]
     why = routines.check(text, two, "x", [{"name": "a", "example": "1250"}], steps2, compose)
     assert why and "earlier step" in why
-    # Work with a person or another agent in it is never a routine.
-    assert routines.forbidden("ask_human") and routines.forbidden("browser_click")
+    # Work with a person or another agent in it is never a routine, nor the person's own
+    # computer. P96: browser steps may be (found again by name: test_p96_procedures.py).
+    assert routines.forbidden("ask_human") and routines.forbidden("pc_read_file")
+    assert not routines.forbidden("browser_click")
 
 
 async def _messages(task_id: str) -> list[AgentMessage]:

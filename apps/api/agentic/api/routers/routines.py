@@ -176,7 +176,9 @@ async def settings(
 ) -> SettingsIn:
     ws = await db.get(Workspace, principal.workspace_id)
     assert ws is not None
-    ws.settings = {**(ws.settings or {}), "routines": {"enabled": body.enabled}}
+    # P96: keep the per-agent switches (routines.agents_off) when the office switch changes.
+    cfg = dict((ws.settings or {}).get("routines") or {})
+    ws.settings = {**(ws.settings or {}), "routines": {**cfg, "enabled": body.enabled}}
     flag_modified(ws, "settings")
     await audit.record(
         db, ws.id, principal.actor, "routines.settings", target=ws.id, after=body.model_dump()

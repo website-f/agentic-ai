@@ -23,6 +23,22 @@ Using (at the start of a task, `step` in the runtime):
 - Any step that fails hands the task to the agent, with everything done so far.
 - The finished work goes through the same self-check, goal and review as any other.
 A routine whose results are sent back or fail twice in a row pauses itself.
+
+P96 (the agent's own brain):
+- Whose routine: one learned by a person's own AI (twin), or with browser steps (they ran on
+  one person's computer and sites), is that agent's own (`agent_only`) and replays only for
+  the same person (`person_id`). A person's own AI never uses another agent's routine; a
+  private assistant neither learns nor replays. Office routines stay per company.
+- Browser steps replay through the same tools and policy: an element is found again on the
+  page by its role and name (a browser_find step, never a stale ref), each step must land on
+  the page it landed on before, and anything else hands the task to the agent. Sending a
+  form or uploading still waits for a person every time (policy.ALWAYS_ASK).
+- Reading the values: when the task reads like the one it was learned from with only the
+  values changed, they are read off the text with no model at all.
+- A person's correction (P92 lesson) on work a routine did, or did the routine's way, pauses
+  it; a lesson on this kind of work taught after people last accepted it makes the agent do
+  the job itself (with the lesson) until the routine is confirmed again.
+- Off per agent (workspace setting routines.agents_off) or for the whole office.
 """
 
 import hashlib
@@ -33,6 +49,7 @@ import secrets
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
+from urllib.parse import urlsplit
 
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -60,6 +77,7 @@ CONFIRMATIONS = 2  # accepted tasks before a learned routine goes live on its ow
 PAUSE_AFTER = 2  # results sent back or failed in a row
 STEPS_PER_CALL = 6  # tool calls per activity call (each may take up to 45 s)
 MAX_STEPS = 12
+BROWSER_MAX_STEPS = 30  # browser work takes more, smaller steps
 MAX_RESULT_CHARS = 4000  # per step, in the write-up prompt
 # Drafting a routine costs one smart-model call; work that never repeats would waste it, so
 # each workspace drafts at most this many a day (confirming an existing one is free).
@@ -87,7 +105,27 @@ FORBIDDEN = frozenset(
         "tool_describe",
     }
 )
-FORBIDDEN_PREFIXES = ("browser_", "pc_")
+# P96: browser steps may be part of a routine (found again by name, see `locate`); the
+# person's computer (pc_*) is not.
+FORBIDDEN_PREFIXES = ("pc_",)
+BROWSER = "browser_"
+# Browser arguments that name an element on the page (a ref like e12).
+REF_KEYS = (
+    "ref",
+    "element",
+    "scope",
+    "then_ref",
+    "username_element",
+    "password_element",
+    "submit_element",
+)
+EL = "$el"  # {"$el": {"role": ..., "name": ...}}: an element found again by role and name
+# One element as the browser's view shows it: - button "Cari" [e12]
+_ELEMENT = re.compile(
+    r'-\s+(?P<role>[a-z]+)\s+"(?P<name>(?:[^"\\]|\\.)*)"[^\n]*?\[(?P<ref>(?:f\d+)?e\d+)\]'
+)
+_PAGE_URL = re.compile(r"https?://[^\s|)\]>\"']+")
+_PAGE_LINE = re.compile(r"^Page: [^\n]*$", re.MULTILINE)  # browser_tools.view's first line
 # The agent's own bookkeeping: left out of the routine (it does not change the result).
 SKIPPED = frozenset(
     {"use_skill", "report_progress", "expand_result", "memory", "remember", "recall"}
@@ -159,6 +197,205 @@ def _same(a: Any, b: Any) -> bool:
     )
 
 
+# ---------------------------------------------------------------- P96: browser steps
+
+
+def is_browser(tool: str) -> bool:
+    return tool.startswith(BROWSER)
+
+
+def _ref(value: Any) -> str | None:
+    from ..agents.browser_tools import ref_arg  # late: browser_tools reaches the runtime
+
+    return ref_arg(value)
+
+
+def _unquote(name: str) -> str:
+    return name.replace('\\"', '"').replace("\\\\", "\\")
+
+
+def elements(text: str) -> list[tuple[str, str, str]]:
+    """(role, name, ref) of every named element a browser view or find result shows."""
+    return [
+        (m.group("role"), _unquote(m.group("name")), m.group("ref"))
+        for m in _ELEMENT.finditer(text or "")
+    ]
+
+
+def element_of(ref: str, results: list[str]) -> tuple[str, str] | None:
+    """The role and name the page showed for `ref`, from the newest result that shows it."""
+    for text in reversed(results):
+        found = [(role, name) for role, name, r in elements(text) if r == ref and name.strip()]
+        if found:
+            return found[-1]
+    return None
+
+
+def page_of(result: str | None) -> str | None:
+    """host/path of the page a browser result is on (no query; no ;jsessionid)."""
+    text = result or ""
+    line = _PAGE_LINE.search(text)
+    where = line.group(0).rsplit(" | ", 1)[-1] if line else text.strip().split("\n", 1)[0]
+    m = _PAGE_URL.search(where)
+    if m is None:
+        return None
+    u = urlsplit(m.group(0))
+    path = re.sub(r";[^/]*", "", u.path or "/").rstrip("/") or "/"
+    return f"{(u.hostname or '').lower()}{path}"
+
+
+def _slotted(text: str, values: dict[str, str]) -> str:
+    """Put {{slot}} where a slot's value (3+ characters) appears in a learned name or page."""
+    for name, v in sorted(values.items(), key=lambda kv: -len(kv[1])):
+        if len(v) >= 3 and v in text:
+            text = text.replace(v, "{{" + name + "}}")
+    return text
+
+
+def _same_role(a: str, b: str) -> bool:
+    boxes = {"textbox", "searchbox"}
+    return a == b or (a in boxes and b in boxes)
+
+
+def _same_name(a: str, b: str) -> bool:
+    return " ".join(a.split()).casefold() == " ".join(b.split()).casefold()
+
+
+def _locate_args(
+    args: Any, call_args: Any, earlier: list[str], values: dict[str, str], key: str = ""
+) -> tuple[Any, str | None]:
+    """The step's arguments with every element ref turned into {"$el": role and name}."""
+    if isinstance(args, dict) and isinstance(call_args, dict):
+        out: dict[str, Any] = {}
+        for k, v in args.items():
+            got, why = _locate_args(v, call_args.get(k), earlier, values, k)
+            if why:
+                return None, why
+            out[k] = got
+        return out, None
+    if isinstance(args, list) and isinstance(call_args, list) and len(args) == len(call_args):
+        items = []
+        for v, c in zip(args, call_args, strict=True):
+            got, why = _locate_args(v, c, earlier, values, key)
+            if why:
+                return None, why
+            items.append(got)
+        return items, None
+    if key in REF_KEYS and call_args not in (None, ""):
+        ref = _ref(call_args)
+        el = element_of(ref, earlier) if ref else None
+        if el is None:
+            return None, f"element {call_args!r} cannot be found again by its name"
+        return {EL: {"role": el[0], "name": _slotted(el[1], values)}}, None
+    return args, None
+
+
+def locate(
+    steps: list[dict[str, Any]], calls: list["Call"], slots: list[dict[str, Any]]
+) -> tuple[list[dict[str, Any]] | None, str | None]:
+    """Browser steps made repeatable: elements by role and name, and the page each step
+    landed on (`expect`). (steps, None), or (None, why not)."""
+    values = {str(s["name"]): str(s.get("example") or "") for s in slots}
+    out: list[dict[str, Any]] = []
+    for i, (step, call) in enumerate(zip(steps, calls, strict=True)):
+        if not is_browser(call.tool):
+            out.append(step)
+            continue
+        earlier = [c.result for c in calls[:i] if is_browser(c.tool)]
+        args, why = _locate_args(step.get("args") or {}, call.args, earlier, values)
+        if why:
+            return None, f"step {i + 1}: {why}"
+        new: dict[str, Any] = {"tool": step["tool"], "args": args}
+        if page := page_of(call.result):
+            new["expect"] = _slotted(page, values)
+        out.append(new)
+    return out, None
+
+
+def _els(value: Any) -> list[dict[str, str]]:
+    if isinstance(value, dict):
+        if EL in value:
+            return [value[EL]]
+        return [e for v in value.values() for e in _els(v)]
+    if isinstance(value, list):
+        return [e for v in value for e in _els(v)]
+    return []
+
+
+def _put_refs(value: Any, refs: list[str]) -> Any:
+    """Each {"$el"} in order replaced by the ref found for it now."""
+    if isinstance(value, dict):
+        if EL in value:
+            return refs.pop(0)
+        return {k: _put_refs(v, refs) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_put_refs(v, refs) for v in value]
+    return value
+
+
+def found_ref(result: str, role: str, name: str) -> str | None:
+    """The one element a browser_find result shows with exactly this role and name."""
+    hits = {r for ro, n, r in elements(result) if _same_role(ro, role) and _same_name(n, name)}
+    return hits.pop() if len(hits) == 1 else None
+
+
+# ---------------------------------------------------------------- P96: values without a model
+
+
+_NUMBER = re.compile(r"[\d.,/-]+")
+
+
+def _shape_ok(example: str, value: str) -> bool:
+    """A value read off the text looks like the example did (a number stays a number, a
+    word does not swallow a sentence)."""
+    if _NUMBER.fullmatch(example) and not _NUMBER.fullmatch(value):
+        return False
+    words, ex_words = len(value.split()), len(example.split())
+    return words <= max(3, 2 * ex_words) and len(value) <= 3 * len(example) + 20
+
+
+def by_pattern(example: str, slots: list[dict[str, Any]], text: str) -> dict[str, str] | None:
+    """Slot values read straight off `text` when it reads like `example` with only the slot
+    values changed. None when it does not (then the cheap model reads them)."""
+    ex = " ".join((example or "").split())
+    got = " ".join((text or "").split())
+    if not ex or not got:
+        return None
+    if not slots:
+        return {}
+    low = ex.casefold()
+    spans: list[tuple[int, int, str, str]] = []
+    for s in slots:
+        v = " ".join(str(s.get("example") or "").split())
+        name = str(s.get("name") or "")
+        if not v or not SLOT.fullmatch("{{" + name + "}}"):
+            return None
+        i = low.find(v.casefold())
+        if i < 0 or low.find(v.casefold(), i + 1) >= 0:
+            return None  # not there, or there twice: which one changed is a guess
+        spans.append((i, i + len(v), name, v))
+    spans.sort()
+    if any(a[1] > b[0] for a, b in zip(spans, spans[1:], strict=False)):
+        return None
+    pattern, pos = "", 0
+    for a, b, name, _ in spans:
+        if a == pos and pos > 0:
+            return None  # two values side by side: where one ends is a guess
+        pattern += re.escape(ex[pos:a]) + f"(?P<{name}>.+?)"
+        pos = b
+    pattern += re.escape(ex[pos:])
+    m = re.fullmatch(pattern, got, re.IGNORECASE | re.DOTALL)
+    if m is None:
+        return None
+    out: dict[str, str] = {}
+    for _, _, name, v in spans:
+        val = m.group(name).strip()
+        if not val or not _shape_ok(v, val):
+            return None
+        out[name] = val
+    return out
+
+
 # ---------------------------------------------------------------- trajectories
 
 
@@ -196,7 +433,8 @@ def trajectory(msgs: list[AgentMessage]) -> list[Call] | None:
             if result is None or failed(result):
                 return None
             calls.append(Call(name, args, result))
-    if not calls or len(calls) > MAX_STEPS:
+    limit = BROWSER_MAX_STEPS if any(is_browser(c.tool) for c in calls) else MAX_STEPS
+    if not calls or len(calls) > limit:
         return None
     return calls
 
@@ -279,22 +517,41 @@ def confirms(r: Routine, text: str, calls: list[Call]) -> bool:
     if [s.get("tool") for s in r.steps] != [c.tool for c in calls]:
         return False
     plain = _norm(text)
-    for step, call in zip(r.steps, calls, strict=True):
+    for i, (step, call) in enumerate(zip(r.steps, calls, strict=True)):
         tpl = step.get("args") or {}
         if ANSWER in names_in(tpl):
             continue
-        if set(tpl) != set(call.args):
+        earlier = [c.result for c in calls[:i] if is_browser(c.tool)]
+        if not isinstance(tpl, dict) or set(tpl) != set(call.args):
             return False
-        for k, v in tpl.items():
-            got = call.args.get(k)
-            if isinstance(v, str) and names_in(v):
-                # The same template, filled with values that are all in this task.
-                found = captures(v, got) if isinstance(got, str) else None
-                if found is None or any(_norm(x) not in plain for x in found.values()):
-                    return False
-            elif not _same(v, got):
-                return False
+        if not _fits(tpl, call.args, earlier, plain):
+            return False
     return True
+
+
+def _fits(tpl: Any, got: Any, earlier: list[str], plain: str) -> bool:
+    """One argument of a routine step against the call a run made (P96: nested values and
+    elements found by name)."""
+    if isinstance(tpl, dict) and EL in tpl:
+        ref = _ref(got)
+        el = element_of(ref, earlier) if ref else None
+        want = tpl[EL]
+        if el is None or not _same_role(el[0], str(want.get("role") or "")):
+            return False
+        return _fits(str(want.get("name") or ""), el[1], earlier, plain)
+    if isinstance(tpl, str) and names_in(tpl):
+        # The same template, filled with values that are all in this task.
+        found = captures(tpl, got) if isinstance(got, str) else None
+        return found is not None and all(_norm(x) in plain for x in found.values())
+    if isinstance(tpl, dict) and isinstance(got, dict):
+        return set(tpl) == set(got) and all(
+            _fits(v, got[k], earlier, plain) for k, v in tpl.items()
+        )
+    if isinstance(tpl, list) and isinstance(got, list):
+        return len(tpl) == len(got) and all(
+            _fits(v, g, earlier, plain) for v, g in zip(tpl, got, strict=True)
+        )
+    return _same(tpl, got)
 
 
 # ---------------------------------------------------------------- learning
@@ -318,11 +575,38 @@ async def _task_tokens(db: AsyncSession, task_id: str, *, prefix: str = "agent.t
     return int(total or 0)
 
 
+def personal(agent: Agent) -> bool:
+    """A person's own AI (twin, private assistant, or any agent a person owns)."""
+    return bool(agent.owner_user_id or agent.private or agent.is_twin)
+
+
 def _visible(q: Any, agent: Agent) -> Any:
-    return q.where(
+    """P96: an agent's own routines, and the office's (its company's) unless it is a
+    person's own AI: that one uses only what it learned itself."""
+    own = [Routine.agent_id == agent.id]
+    if agent.clone_of:
+        own.append(Routine.agent_id == agent.clone_of)  # a helper copy shares its original's
+    q = q.where(
         Routine.workspace_id == agent.workspace_id,
         or_(Routine.branch_id.is_(None), Routine.branch_id == agent.branch_id),
     )
+    return (
+        q.where(or_(*own)) if personal(agent) else q.where(or_(Routine.agent_only.is_(False), *own))
+    )
+
+
+def for_person(r: Routine, agent: Agent, person: str | None) -> bool:
+    """An agent-only routine is for the person it was learned for (a person's own AI: its
+    person). Never across people."""
+    if not r.agent_only:
+        return True
+    return r.person_id == (agent.owner_user_id or person)
+
+
+def replay_on(ws: Workspace | None, agent: Agent) -> bool:
+    """Replay switched on for the office and for this agent (P96: per agent)."""
+    cfg = ((ws.settings if ws else None) or {}).get("routines") or {}
+    return cfg.get("enabled") is not False and agent.id not in (cfg.get("agents_off") or [])
 
 
 async def _nearest(
@@ -363,6 +647,9 @@ Rules:
   covers, its sections and format, its length), in one to three sentences.
 - Not replayable when the work depended on judgement that will differ next time in a way the
   steps cannot capture.
+- Browser steps: keep element refs (e12) exactly as they are (the office finds the element
+  again by its name). Not replayable when which element to pick depended on what the page
+  happened to show that day (a new row, the latest item).
 """
 
 
@@ -397,7 +684,7 @@ async def _draft(
             prompt,
             task="skill.routine",
             json_mode=True,
-            max_tokens=2500,
+            max_tokens=2500 if len(calls) <= MAX_STEPS else 5000,
             temperature=0,
             accept=ok,
             agent_id=task.assignee_agent_id,
@@ -460,7 +747,15 @@ async def learn(db: AsyncSession, task_id: str) -> Routine | None:
     vector = await embed.embed_one(text)
     if vector is None:
         return None
+    from ..teams.allowance import person_of_task  # late: teams reach the runtime
+
+    person = await person_of_task(db, task)
+    # P96: browser work ran on one person's computer and sites, and a person's own AI works
+    # with that person's things: such a routine is the agent's own, for that person only.
+    own = personal(agent) or any(is_browser(c.tool) for c in calls)
     for r, _ in await _nearest(db, agent, vector, ("candidate", "active"), CONFIRM):
+        if not for_person(r, agent, person):
+            continue
         if confirms(r, text, calls):
             if task.id not in (r.source_task_ids or []):
                 r.source_task_ids = [*(r.source_task_ids or []), task.id][-10:]
@@ -481,6 +776,9 @@ async def learn(db: AsyncSession, task_id: str) -> Routine | None:
     raw_answer = d.get("answer")
     answer: dict[str, Any] = raw_answer if isinstance(raw_answer, dict) else {}
     why = check(text, calls, task.result or "", slots, steps, answer)
+    if why is None:
+        located, why = locate(steps, calls, slots)
+        steps = located or steps
     if why:
         log.info("routine from %s rejected: %s", task.id, why)
         return None
@@ -500,13 +798,23 @@ async def learn(db: AsyncSession, task_id: str) -> Routine | None:
             }
             for s in slots
         ],
-        steps=[{"tool": s["tool"], "args": s["args"]} for s in steps],
+        steps=[
+            {
+                "tool": s["tool"],
+                "args": s["args"],
+                **({"expect": s["expect"]} if s.get("expect") else {}),
+            }
+            for s in steps
+        ],
         answer={"mode": answer["mode"], "text": str(answer.get("text") or "")[:2000]},
-        tools=sorted({s["tool"] for s in steps}),
+        tools=sorted({s["tool"] for s in steps} | ({"browser_find"} if _els(steps) else set())),
         status="candidate",
         source_task_ids=[task.id],
         agent_id=agent.id,
         baseline_tokens=await _task_tokens(db, task.id) or None,
+        agent_only=own,
+        person_id=(agent.owner_user_id or person) if own else None,
+        checked_at=_now(),
     )
     db.add(r)
     await db.commit()
@@ -583,10 +891,64 @@ async def settle(db: AsyncSession, task_id: str, outcome: str) -> None:
             flag_modified(c, "source_task_ids")
             if not c.source_task_ids:
                 c.status, c.note = "retired", "Its work was not accepted."
+    if outcome == "accepted":
+        # P96: people accepted the job done this way just now: the routine is up to date
+        # with every lesson taught before this run.
+        seen = (
+            await db.scalars(
+                select(Routine).where(
+                    Routine.status.in_(("candidate", "active")),
+                    Routine.source_task_ids.contains([task_id]),
+                )
+            )
+        ).all()
+        for c in seen:
+            c.checked_at = _now()
     await db.commit()
     for c in taught:
         if outcome == "accepted":
             await promote(db, c)
+
+
+async def corrected(db: AsyncSession, task_id: str, lesson: str) -> list[str]:
+    """P96: a person corrected work a routine did, or work done the routine's way (a P92
+    lesson): it stops repeating that way. A live routine pauses with the lesson as its note
+    (a manager can resume it, or the agent's next accepted run teaches it again); a
+    candidate learned from that task is retired. Returns the routine ids it touched."""
+    ran = (
+        await db.scalars(
+            select(TaskEvent.data).where(
+                TaskEvent.task_id == task_id, TaskEvent.kind == "routine_run"
+            )
+        )
+    ).all()
+    ids = {str(d.get("routine_id")) for d in ran if d and d.get("routine_id")}
+    rows = list(
+        (
+            await db.scalars(
+                select(Routine).where(
+                    Routine.status.in_(("candidate", "active")),
+                    or_(Routine.id.in_(ids), Routine.source_task_ids.contains([task_id])),
+                )
+            )
+        ).all()
+    )
+    note = f"A person corrected its work: {' '.join(lesson.split())}"[:300]
+    for r in rows:
+        if r.status == "candidate" and r.id not in ids:
+            r.source_task_ids = [i for i in r.source_task_ids or [] if i != task_id]
+            flag_modified(r, "source_task_ids")
+            if not r.source_task_ids:
+                r.status = "retired"
+        else:
+            r.status = "paused"
+        r.note = note
+    await db.commit()
+    for r in rows:
+        await events.publish(
+            r.workspace_id, "routine.updated", {"routine_id": r.id, "status": r.status}
+        )
+    return [r.id for r in rows]
 
 
 # ---------------------------------------------------------------- using
@@ -646,6 +1008,10 @@ async def _fill(db: AsyncSession, ws: Workspace, task: Task, r: Routine) -> dict
     if not names:
         return {}
     text = task_text(task)
+    # P96: the same wording with new values (a schedule's run, a template brief): no model.
+    known = by_pattern(r.example, r.slots or [], text)
+    if known is not None and _slot_values(json.dumps({"values": known}), names, text):
+        return known
     spec = "\n".join(
         f"- {s['name']}: {s.get('description') or ''} (e.g. {s.get('example')})" for s in r.slots
     )
@@ -673,21 +1039,52 @@ async def _fill(db: AsyncSession, ws: Workspace, task: Task, r: Routine) -> dict
     return _slot_values(reply.content, names, text)
 
 
+async def stale(db: AsyncSession, agent: Agent, task: Task, r: Routine) -> bool:
+    """P96: a person taught a lesson on this kind of work (not a general one) after people
+    last accepted the routine's way: the agent does the job itself, with the lesson, until
+    a run done the routine's way is accepted again."""
+    from ..brain import lessons  # late: the brain reaches the runtime
+
+    topics = [t for t in await lessons.task_topics(db, task, agent) if t != lessons.GENERAL]
+    if not topics:
+        return False
+    since = r.checked_at or r.created_at
+    for f in await lessons.best(db, agent, topics):
+        taught = (f.meta or {}).get("last_taught_at")
+        try:
+            when = datetime.fromisoformat(taught) if taught else f.created_at
+        except ValueError:
+            when = f.created_at
+        if when is not None and since is not None and when > since:
+            log.info("routine %s skipped for %s: lesson %s is newer", r.id, task.id, f.id)
+            return True
+    return False
+
+
 async def match(db: AsyncSession, agent: Agent, ws: Workspace, task: Task) -> Plan | None:
     """The live routine this task should follow, with its slots filled, or None."""
-    if task.output_schema or task.source == "review" or task.goal or task.device_id:
+    if task.output_schema or task.source == "review" or task.goal:
         return None
-    if (ws.settings or {}).get("routines", {}).get("enabled") is False:
-        return None
+    if agent.private or not replay_on(ws, agent):
+        return None  # a private assistant never replays; a person may switch it off (P96)
     vector = await embed.embed_one(task_text(task))
     if vector is None:
         return None
     near = await _nearest(db, agent, vector, ("active",), MATCH)
     if not near:
         return None
+    from ..teams.allowance import person_of_task  # late: teams reach the runtime
+
+    person = await person_of_task(db, task)
     have = await _offered(db, agent, task)
     for r, sim in near:
+        if not for_person(r, agent, person):
+            continue  # never across people
+        if task.device_id and not r.agent_only:
+            continue  # work on a person's own computer follows only what was learned there
         if not set(r.tools or []) <= have:
+            continue
+        if await stale(db, agent, task, r):
             continue
         slots = await _fill(db, ws, task, r)
         if slots is None:
@@ -720,7 +1117,8 @@ def _results(history: list[AgentMessage]) -> list[tuple[str, dict[str, Any], str
     by_id = {m.tool_call_id: m for m in history if m.role == "tool"}
     out = []
     for m in history:
-        if m.role == "assistant" and (m.meta or {}).get("routine") and m.tool_calls:
+        meta = m.meta or {}
+        if m.role == "assistant" and meta.get("routine") and m.tool_calls and "locate" not in meta:
             for c in m.tool_calls:
                 fn = c.get("function") or {}
                 res = by_id.get(c.get("id"))
@@ -825,6 +1223,24 @@ async def _abort(db: AsyncSession, agent: Agent, task: Task, r: Routine | None, 
     )
 
 
+def _went_wrong(spec: dict[str, Any], raw: str, slots: dict[str, str]) -> str | None:
+    """Why a step's result is not what the routine expects (it hands over), else None."""
+    if failed(raw):
+        return "did not work"
+    if not is_browser(str(spec.get("tool") or "")):
+        return None
+    from ..agents.runtime import _browser_tool_error  # late: the runtime imports this module
+
+    if _browser_tool_error(raw):
+        return "did not work in the browser"
+    want = spec.get("expect")
+    if want:
+        want, got = render(str(want), slots), page_of(raw)
+        if got != want:
+            return f"landed on {got or 'another page'}, not {want}"
+    return None
+
+
 async def step(
     db: AsyncSession, ctx: Any, task: Task, agent: Agent, ws: Workspace, history: list[AgentMessage]
 ) -> Any:
@@ -868,14 +1284,16 @@ async def step(
         await _abort(db, agent, task, None, "it was deleted")
         return None
     slots: dict[str, str] = dict(plan.get("slots") or {})
-    # The result of the last step that ran: a failure hands over.
-    done_calls = _results(history)
-    if done_calls and failed(done_calls[-1][3]):
-        await _abort(
-            db, agent, task, r, f"step {len(done_calls)} ({done_calls[-1][0]}) did not work"
-        )
-        return None
     steps = list(r.steps or [])
+    # The result of the last step that ran (also one a person just approved): anything
+    # other than what it gave before hands over.
+    done_calls = _results(history)
+    if done_calls and 0 < nxt <= len(steps):
+        why = _went_wrong(steps[nxt - 1], done_calls[-1][3], slots)
+        if why:
+            await _abort(db, agent, task, r, f"step {nxt} ({done_calls[-1][0]}) {why}")
+            return None
+    stored = any(m.role == "assistant" and (m.meta or {}).get("routine") for m in history)
     answer = await _answer_of(db, task)
     ran = 0
     while nxt < len(steps):
@@ -889,9 +1307,58 @@ async def step(
                 await _abort(db, agent, task, r, "the write-up could not be made")
                 return None
         args = render(spec.get("args") or {}, {**slots, **({ANSWER: answer} if answer else {})})
+        # P96: elements are found on the page as it is now, by role and name.
+        refs: list[str] = []
+        for el in _els(args):
+            role, name = str(el.get("role") or ""), str(el.get("name") or "")
+            lmeta: dict[str, Any] = {"routine": r.id, "locate": nxt}
+            if not stored:
+                lmeta["plan"], stored = plan, True
+            cid = _call_id(nxt)
+            find = {"role": role, "label": name}
+            runtime._add(
+                db,
+                agent,
+                "assistant",
+                task_id=task.id,
+                tool_calls=[
+                    {
+                        "id": cid,
+                        "type": "function",
+                        "function": {"name": "browser_find", "arguments": json.dumps(find)},
+                    }
+                ],
+                meta=lmeta,
+            )
+            await db.commit()
+            waiting = await runtime._resolve_calls(
+                db, ctx, task, await runtime._history(db, task_id=task.id)
+            )
+            if waiting is not None:
+                return waiting
+            res = await db.scalar(
+                select(AgentMessage.content).where(
+                    AgentMessage.task_id == task.id,
+                    AgentMessage.role == "tool",
+                    AgentMessage.tool_call_id == cid,
+                )
+            )
+            ref = found_ref(res or "", role, name)
+            if ref is None:
+                await _abort(
+                    db,
+                    agent,
+                    task,
+                    r,
+                    f"the page did not show the {role} {name!r} it showed before",
+                )
+                return None
+            refs.append(ref)
+        if refs:
+            args = _put_refs(args, refs)
         meta: dict[str, Any] = {"routine": r.id, "step": nxt}
-        if nxt == 0:
-            meta["plan"] = plan
+        if not stored:
+            meta["plan"], stored = plan, True
         runtime._add(
             db,
             agent,
@@ -916,8 +1383,9 @@ async def step(
             return waiting  # an approval: the run comes back here once it is decided
         history = await runtime._history(db, task_id=task.id)
         last = _results(history)
-        if last and failed(last[-1][3]):
-            await _abort(db, agent, task, r, f"step {nxt + 1} ({spec['tool']}) did not work")
+        why = _went_wrong(spec, last[-1][3], slots) if last else None
+        if why:
+            await _abort(db, agent, task, r, f"step {nxt + 1} ({spec['tool']}) {why}")
             return None
         nxt += 1
         ran += 1

@@ -18,6 +18,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..assistants.names import ASSISTANT_ONLY
+from ..brain import answers
 from ..brain import core as core_memory
 from ..brain import lessons as brain_lessons
 from ..brain.recall import recall_block
@@ -2329,6 +2330,47 @@ async def _chat_turn(db: AsyncSession, agent: Agent, session: ChatSession, text:
         )
         if last:
             messages.append({"role": "user", "content": FINAL_ROUND})
+        tools = (
+            None
+            if last
+            else offered_tools(
+                agent,
+                mcp=await _has_mcp(db, ws.id),
+                pc=await pc_ready(db, agent) and mine,
+                mail=await mail_ready(db, agent) and mine,
+                teams=await teams_ready(db, agent) and mine,
+                finance=await money_ready(db, agent),
+            )
+        )
+        # P96: the same first question, same person, same sources: the answer it gave before.
+        reuse = (
+            answers.key(ws.id, agent.id, session.user_id, agent.model_group, messages, tools)
+            if round_no == 0
+            and session.user_id
+            and answers.may_reuse(
+                text, len(history) == 1, noted is not None, routines.replay_on(ws, agent)
+            )
+            else None
+        )
+        if reuse and (hit := await answers.lookup(reuse)) is not None:
+            saved = int(hit.get("tokens") or 0)
+            answer = _add(
+                db,
+                agent,
+                "assistant",
+                session_id=session.id,
+                content=hit["content"],
+                meta={
+                    "provider": "reuse",
+                    "model": str(hit.get("model") or ""),
+                    "tools": [],
+                    "reused": {"saved": saved},
+                    **({"recalled": recalled[:RECALLED_SHOWN]} if recalled else {}),
+                },
+            )
+            await db.commit()
+            await answers.count(ws.id, agent.id, saved)
+            return ChatReply(hit["content"], "reuse", str(hit.get("model") or ""), [], answer.id)
         await agent_thinking(agent, True)
         try:
             reply = await gateway.chat(
@@ -2337,16 +2379,7 @@ async def _chat_turn(db: AsyncSession, agent: Agent, session: ChatSession, text:
                 agent.model_group,
                 messages,
                 task="agent.chat",
-                tools=None
-                if last
-                else offered_tools(
-                    agent,
-                    mcp=await _has_mcp(db, ws.id),
-                    pc=await pc_ready(db, agent) and mine,
-                    mail=await mail_ready(db, agent) and mine,
-                    teams=await teams_ready(db, agent) and mine,
-                    finance=await money_ready(db, agent),
-                ),
+                tools=tools,
                 max_tokens=1600 if last else 1200,
                 agent_id=agent.id,
                 branch_id=agent.branch_id,
@@ -2359,6 +2392,10 @@ async def _chat_turn(db: AsyncSession, agent: Agent, session: ChatSession, text:
         finally:
             await agent_thinking(agent, False)
         if not reply.tool_calls and (reply.content or "").strip():
+            if reuse and not reply.truncated and BACKUP_NOTE not in reply.content:
+                await answers.keep(
+                    reuse, reply.content, reply.model, reply.usage.prompt + reply.usage.completion
+                )
             if reply.truncated:  # P29: say so instead of passing a cut-off reply as whole
                 reply.content = f"{reply.content}\n\n{CUT_NOTE}"
             answer = _add(

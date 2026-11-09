@@ -1672,6 +1672,11 @@ MS: dict[str, str] = {
     "That routine is not here.": "Rutin itu tiada di sini.",
     "This routine is {status} already.": "Rutin ini sudah {status}.",
     "Only managers can change routines.": "Hanya pengurus boleh menukar rutin.",
+    # P96: what an agent learned to do without the AI engine
+    "Only someone who manages this agent can do that.": (
+        "Hanya orang yang mengurus ejen ini boleh berbuat begitu."
+    ),
+    "Only managers can forget an office routine.": "Hanya pengurus boleh melupakan rutin pejabat.",
     "This login was saved with another key and cannot be read here. Enter both the username and the password to replace it.": (
         "Log masuk ini disimpan dengan kunci lain dan tidak boleh dibaca di sini. Masukkan nama "
         "pengguna dan kata laluan untuk menggantikannya."

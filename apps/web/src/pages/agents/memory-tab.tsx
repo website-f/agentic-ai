@@ -3,6 +3,7 @@ import { Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { toast } from "sonner";
 
+import { LearnedProcedures } from "@/components/learned-procedures";
 import { Button } from "@/components/ui/button";
 import { FormError } from "@/components/ui/field";
 import { Pill } from "@/components/ui/pill";
@@ -112,6 +113,8 @@ export function MemoryTab({ agent, canWrite }: { agent: Agent; canWrite: boolean
       </section>
       {/* P92: lessons people taught it when they corrected it. */}
       <AgentLessons agentId={agent.id} name={agent.name} />
+      {/* P96: jobs it does from memory (no AI), reused answers, the tokens saved, the switch. */}
+      <LearnedProcedures agentId={agent.id} name={agent.name} />
     </div>
   );
 }

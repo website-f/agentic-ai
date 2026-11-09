@@ -423,6 +423,11 @@ from .routers import routines as routines_router  # noqa: E402
 
 app.include_router(routines_router.router)
 
+# P96: what each agent learned to do without the AI engine (procedures, reused answers).
+from .routers import procedures as procedures_router  # noqa: E402
+
+app.include_router(procedures_router.router)
+
 # P38: a person's way out of any stuck or failed task (stop now, finish by hand, retry on
 # another AI or agent).
 from .routers import task_rescue as task_rescue_router  # noqa: E402

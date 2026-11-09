@@ -109,6 +109,35 @@ Ranked by payoff vs effort. Figures are from provider docs and published benchma
 
 Semantic (fuzzy) response caching is **not** used for multi-turn agents: production hit rates are low and wrong-answer risk is real.
 
+### 6b. The agent's own brain (P96)
+
+What an agent learned is its own: repeated or learned work no longer needs the AI engine.
+
+- **Learned procedures** (`skills/routines.py`). Routines now include browser steps: an element
+  is stored by role and name (never the ref), found again with `browser_find` on the page as it
+  is now (exactly one match, or the agent takes over), and every step must land on the page it
+  landed on before (host and path; `expect`). Steps run through `runtime._resolve_calls`, so
+  policy, approvals, `ALWAYS_ASK` (submit, upload), budgets and site pacing apply unchanged.
+  When a brief reads like the one a routine was learned from with only the values changed, the
+  values are read off the text with no model; a template answer then needs no model at all.
+- **Whose:** a routine learned by a person's own AI, or with browser steps, is `agent_only`
+  (migration 0057) and replays only for that agent and `person_id`. A person's own AI uses only
+  its own routines; a private assistant neither learns nor replays. Office routines stay per
+  company (branch).
+- **Corrections:** a P92 lesson on a task a routine ran (or did the routine's way) pauses it
+  with the lesson as its note (`routines.corrected`); a lesson on the task's topic taught after
+  `checked_at` makes the agent do the job itself until people accept the routine's way again.
+- **Answer reuse** (`brain/answers.py`): the first question of a chat, answered without tools,
+  is kept for a day under a key of everything the model read (system prompt with frozen memory,
+  recall, lessons, language note, tool list) plus the agent and the person. The same question
+  in a new chat by the same person, with nothing changed, is answered from it. Never questions
+  about now, never across people.
+- **Switch:** per agent (`Workspace.settings.routines.agents_off`, owner of their own AI or a
+  manager) and office-wide (`routines.enabled`). API `/api/procedures/*`; agent page Memory tab.
+- **Measured** (fake model billing chars/4, `tests/test_p96_procedures.py`): a tool job learned
+  once costs one small write-up call on repeat (under a tenth of the first run); a learned
+  browser job and a template answer cost no model call at all; a repeated chat question costs 0.
+
 ## 6a. Context window for long runs (P12, from Hermes Agent)
 
 `agents/context.py`. Tasks and chats used to resend their whole history on every model call.
