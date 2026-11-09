@@ -12,6 +12,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...core.db import SessionLocal, get_db
+from ...core.security import can
 from ...core.ssrf import BlockedURL, guard_url
 from ...core.workspace_settings import HARD_MAX_TASK_MODEL_CALLS, max_task_model_calls
 from ...engine import cache_health, client, gateway, media, privacy, store, tester
@@ -543,13 +544,17 @@ async def list_groups(
     principal: Principal = Depends(require("read")), db: AsyncSession = Depends(get_db)
 ) -> list[GroupOut]:
     rows = await store.ensure_default_groups(db, principal.workspace_id)
+    # P92: the pickers (an agent's model, voice notes) need the names and whether a group has
+    # models; which providers and models are in it is for who may open the AI engine.
+    full = can(principal.role, "org.read") or can(principal.role, "engine.manage")
     return [
         GroupOut(
             name=g.name,
             label=g.label,
             description=g.description,
-            members=[GroupMember(**m) for m in g.members],
+            members=[GroupMember(**m) for m in g.members] if full else [],
             kind=_group_kind(g.name),
+            size=len(g.members or []),
         )
         for g in rows
     ]  # type: ignore[arg-type]
@@ -607,6 +612,7 @@ async def update_group(
         description=g.description,
         members=[GroupMember(**m) for m in g.members],
         kind=_group_kind(g.name),
+        size=len(g.members or []),
     )
 
 

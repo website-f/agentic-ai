@@ -56,6 +56,7 @@ import { GOLIVE } from "./golive";
 import { SIGNIN_EMAIL } from "./signin-email";
 import { ROLES_ACCESS } from "./roles-access";
 import { LESSONS } from "./lessons";
+import { STAFF_PHONE } from "./staff-phone";
 
 export const MS: Record<string, string> = {
   // P73: first, so an existing translation of the same English always wins.
@@ -112,4 +113,5 @@ export const MS: Record<string, string> = {
   ...SIGNIN_EMAIL,
   ...ROLES_ACCESS,
   ...LESSONS,
+  ...STAFF_PHONE,
 };

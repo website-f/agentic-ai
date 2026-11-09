@@ -315,6 +315,8 @@ async def _channel_out(db: AsyncSession, ch: Channel, principal: Principal) -> d
     ).all()
     manage = can(principal.role, "channels.manage")
     st = ch.state or {}
+    if not manage:
+        return _channel_member_view(ch, st, links, binds, principal)
     return {
         "id": ch.id,
         "kind": ch.kind,
@@ -340,6 +342,45 @@ async def _channel_out(db: AsyncSession, ch: Channel, principal: Principal) -> d
         "bindings": [
             {"id": b.id, "match": b.match, "agent_id": b.agent_id, "agent_name": an}
             for b, an in binds
+        ],
+        "created_at": ch.created_at,
+    }
+
+
+def _channel_member_view(
+    ch: Channel, st: dict[str, Any], links: Any, binds: Any, principal: Principal
+) -> dict[str, Any]:
+    """P92: a channel as someone who does not run the channels sees it: enough to link their
+    own phone (the bot's name, the office WhatsApp number once it works), their own links and
+    who answers private chats. Not the gateway, its errors, a number that is not working, other
+    people's links or the chats an agent was pinned to."""
+    working = ch.enabled and st.get("status") in (None, "WORKING")
+    return {
+        "id": ch.id,
+        "kind": ch.kind,
+        "name": ch.name,
+        "enabled": ch.enabled,
+        "bot_username": st.get("username"),
+        "provider": None,
+        "number": st.get("number") if working else None,
+        "status": st.get("status"),
+        "last_error": None,
+        "links": [
+            {
+                "id": link.id,
+                "user_id": link.user_id,
+                "user_name": uname,
+                "display": link.display,
+                "created_at": link.created_at,
+            }
+            for link, uname in links
+            if link.user_id == principal.user.id
+        ],
+        "linked": any(link.user_id == principal.user.id for link, _ in links),
+        "bindings": [
+            {"id": b.id, "match": b.match, "agent_id": b.agent_id, "agent_name": an}
+            for b, an in binds
+            if b.match in ("dm", "group")
         ],
         "created_at": ch.created_at,
     }

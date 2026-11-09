@@ -23,6 +23,7 @@ import { Select } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useT } from "@/i18n";
 import { api, errorMessage } from "@/lib/api";
+import { primaScreen } from "@/lib/prima-screen";
 import { meQuery } from "@/lib/queries";
 
 const APP = "/prima/";
@@ -63,14 +64,14 @@ function PrimaFrame() {
   // office"), not framed inside this one: one menu at a time, on every screen size. Owners
   // stop here once a day only if they come to link people (?people=1 shows that instead).
   useEffect(() => {
-    window.location.assign(APP);
+    window.location.assign(APP + primaScreen(window.location.hash));
   }, []);
   return (
     <Page>
       <PageHeader title={t("Prima")} icon={ShieldCheckIcon}
         description={t("Opening Prima…")} />
       <div className="flex flex-wrap gap-2">
-        <Button asChild size="lg"><a href={APP}><ArrowSquareOutIcon size={18} /> {t("Open Prima Secure")}</a></Button>
+        <Button asChild size="lg"><a href={APP + primaScreen(window.location.hash)}><ArrowSquareOutIcon size={18} /> {t("Open Prima Secure")}</a></Button>
         {owner ? (
           <Button asChild size="lg" variant="secondary"><Link to="/prima" search={{ people: 1 }}><UsersThreeIcon size={16} /> {t("People in Prima")}</Link></Button>
         ) : null}
@@ -114,7 +115,7 @@ function PrimaSetup({ status: s, loading }: { status?: PrimaStatus; loading: boo
 
       <Section title={t("How you get in")}>
         <p className="text-[13px]">{t("Prima opens with your office sign-in once your Microsoft work account is connected to the office. The first time, the office finds your Prima staff record by that account or your exact name; if it cannot be sure, the office owner picks it on this page.")}</p>
-        <p className="mt-2 text-[13px] text-muted">{t("Owners open Prima straight away as its CEO, with no link and no Microsoft step. Prima's records show the CEO; the office's activity log shows which owner recorded what.")}</p>
+        {owner ? <p className="mt-2 text-[13px] text-muted">{t("Owners open Prima straight away as its CEO, with no link and no Microsoft step. Prima's records show the CEO; the office's activity log shows which owner recorded what.")}</p> : null}
         <a href={PREVIEW} className="mt-3 grid gap-1.5 rounded-[var(--radius-md)] border border-border bg-surface p-4 hover:border-accent/40">
           <span className="flex items-center gap-2 text-[14.5px] font-semibold"><EyeIcon size={18} className="text-accent" /> {t("Preview with sample data")}</span>
           <span className="text-[12.5px] text-muted">{t("The same app on made-up data, in your browser only. No sign-in, nothing saved to the company.")}</span>
@@ -280,23 +281,29 @@ function CompaniesSection() {
 }
 
 /** P70: one sign-in with Microsoft connects the account; it comes back here and Prima opens. */
-function ConnectMicrosoft({ email }: { email: string }) {
+export function ConnectMicrosoft({ email }: { email: string }) {
   const t = useT();
   const connect = useMutation({
-    mutationFn: () => api<{ url: string }>("/api/auth/microsoft/start", "POST", { email, next: "/prima" }),
+    mutationFn: () => api<{ url: string }>("/api/auth/microsoft/start", "POST", { email, next: `/prima${primaScreen(window.location.hash)}` }),
     onSuccess: (r) => {
       window.location.href = r.url;
     },
   });
   return (
-    <section className="grid gap-4 rounded-[var(--radius-lg)] border border-accent/30 bg-accent-soft/50 p-5 sm:grid-cols-[auto_1fr_auto] sm:items-center">
+    <section data-testid="prima-connect" className="grid gap-4 rounded-[var(--radius-lg)] border border-accent/30 bg-accent-soft/50 p-4 sm:grid-cols-[auto_1fr_auto] sm:items-center sm:p-5">
       <span className="grid size-11 place-items-center rounded-[var(--radius-md)] bg-accent text-accent-fg"><MicrosoftOutlookLogoIcon size={22} weight="fill" /></span>
       <div className="grid gap-1">
-        <h2 className="text-[15.5px] font-semibold">{t("Connect your Microsoft account to open Prima")}</h2>
-        <p className="text-[13px] text-muted">{t("Prima and the office are one system and know you by your Microsoft work account. Sign in with Microsoft once; you come straight back to Prima.")}</p>
+        <h2 className="text-[16px] font-semibold">{t("Connect your Microsoft account to open Prima")}</h2>
+        <p className="text-[14px] text-muted sm:text-[13px]">{t("Prima and the office are one system and know you by your Microsoft work account. Sign in with Microsoft once; you come straight back to Prima.")}</p>
+        {/* P92: on a phone, the steps in plain words: most people do this once, from the Clock in tab */}
+        <ol className="mt-1 grid list-decimal gap-0.5 pl-5 text-[14px] sm:text-[13px]">
+          <li>{t("Press Connect Microsoft.")}</li>
+          <li>{t("Sign in with your work email and password (the one for Outlook).")}</li>
+          <li>{t("You come back here and Prima opens.")}</li>
+        </ol>
         {connect.error ? <p className="text-[13px] text-danger">{errorMessage(connect.error)}</p> : null}
       </div>
-      <Button size="lg" disabled={connect.isPending} onClick={() => connect.mutate()}>
+      <Button size="lg" className="min-h-11 w-full sm:w-auto" disabled={connect.isPending} onClick={() => connect.mutate()}>
         <LinkIcon size={16} /> {t("Connect Microsoft")}
       </Button>
     </section>

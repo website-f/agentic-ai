@@ -17,6 +17,7 @@ from sqlalchemy.orm import aliased
 from ...core.db import get_db
 from ...core.security import role_permissions
 from ...i18n import Msg
+from ...i18n.labels import role_label
 from ...models import Branch, Department, Objective, Task, User, Workspace
 from ...services import audit, events
 from ...teams import objectives as obj
@@ -279,6 +280,21 @@ async def _publish(p: Principal, ob: Objective, kind: str) -> None:
     )
 
 
+def _page_open(p: Principal) -> bool:
+    return "office.view" in _perms(p)
+
+
+def _page_check(p: Principal) -> None:
+    """P92: one objective's page (its cost by day, its tasks) only for who may open it."""
+    if not _page_open(p):
+        raise api_error(
+            status.HTTP_403_FORBIDDEN,
+            "forbidden",
+            "Your role ({role}) cannot do this.",
+            role=role_label(p.role),
+        )
+
+
 # ---------------------------------------------------------------- endpoints
 
 
@@ -298,7 +314,23 @@ async def list_objectives(
         rows = [o for o in rows if o.status in wanted]
     if branch_id:
         rows = [o for o in rows if o.branch_id in (None, branch_id)]
-    return await _outs(db, principal, rows)
+    outs = await _outs(db, principal, rows)
+    if not _page_open(principal):
+        # P92: staff link work to an objective (the task form's picker); the objectives page,
+        # with what each one cost and its budget, is for who may open the office.
+        outs = [
+            o.model_copy(
+                update={
+                    "budget_usd": None,
+                    "usd": 0.0,
+                    "tokens": 0,
+                    "rollup_usd": 0.0,
+                    "budget_state": "none",
+                }
+            )
+            for o in outs
+        ]
+    return outs
 
 
 @router.post("", status_code=status.HTTP_201_CREATED)
@@ -353,6 +385,7 @@ async def objective_detail(
 ) -> ObjectiveDetailOut:
     """One objective, the one above it, the ones nested under it (that the person sees), and
     its daily spend (with nested objectives) over the last `days` days."""
+    _page_check(principal)
     ob = await _get(db, principal, objective_id)
     visible = await _visible(db, principal)
     every = list(
@@ -392,6 +425,7 @@ async def objective_tasks(
     to it and the parts of their requests, within what the person may see."""
     from .tasks import tasks_out  # late: tasks imports teams.objectives, not this router
 
+    _page_check(principal)
     ob = await _get(db, principal, objective_id)
     root = aliased(Task)
     q = (

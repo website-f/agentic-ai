@@ -72,7 +72,7 @@ export function VoiceInput({
   const timer = useRef<number | null>(null);
   const { data: groups } = useQuery(groupsQuery);
   const transcribeGroup = groups?.find((g) => g.name === "transcribe");
-  const notSetUp = !!groups && (!transcribeGroup || transcribeGroup.members.length === 0);
+  const notSetUp = !!groups && (!transcribeGroup || (transcribeGroup.size ?? transcribeGroup.members.length) === 0);
 
   const release = () => {
     if (timer.current !== null) window.clearInterval(timer.current);
