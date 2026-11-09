@@ -47,14 +47,15 @@ describe('owner test check-in (P90)', () => {
     expect(rough.accepted).toBe(false);
     later(20);
     expect((await svc.ownerTestCheckins.ping(owner, step(2))).accepted).toBe(true);
-    // A second check-in while one is open is refused.
-    await expect(svc.ownerTestCheckins.start(owner, KL)).rejects.toBeInstanceOf(BadRequest);
+    // P93: a second check-in while one is open returns the open one (no error asking to check out first).
+    expect((await svc.ownerTestCheckins.start(owner, KL)).id).toBe(s.id);
     later(600);
     const done = await svc.ownerTestCheckins.end(owner, step(3));
     expect(done.endedAt).toBeTruthy();
     expect(done.trail).toHaveLength(4);
     expect(done.out?.lat).toBeCloseTo(step(3).lat, 5);
-    expect(done.distanceM).toBe(routeLengthM(done.trail));
+    // P93: the staff clock's distance: on a straight walk it is the route length.
+    expect(Math.abs(done.distanceM - routeLengthM(done.trail))).toBeLessThanOrEqual(1);
     expect(done.distanceM).toBeGreaterThan(250);
     const mine = await svc.ownerTestCheckins.mine(owner);
     expect(mine.allowed).toBe(true);
@@ -62,7 +63,10 @@ describe('owner test check-in (P90)', () => {
     expect(mine.sessions.map((x) => x.id)).toEqual([s.id]);
     // Nothing more after the check-out.
     await expect(svc.ownerTestCheckins.ping(owner, step(4))).rejects.toBeInstanceOf(BadRequest);
-    await expect(svc.ownerTestCheckins.end(owner, step(4))).rejects.toBeInstanceOf(BadRequest);
+    // P93: the same check-out sent again just after (the answer was lost) returns it; long after, it is refused.
+    expect((await svc.ownerTestCheckins.end(owner, step(4))).id).toBe(s.id);
+    later(15 * 60);
+    await expect(svc.ownerTestCheckins.end(owner, step(4))).rejects.toThrow(/No test check-in is running/);
   });
 
   it('never touches the clock, check-ins, location readings or attendance, and the staff board does not show it', async () => {

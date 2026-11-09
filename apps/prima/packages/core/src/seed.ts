@@ -4785,7 +4785,8 @@ export function generateDataset(opts: SeedOptions): Dataset {
       ...extra,
     });
     // gapFrom: minutes before now when the phone stopped reporting.
-    const clockIn = (userId: string, startMin: number, opts: { away?: number; gapFrom?: number; out?: number } = {}) => {
+    // P93: trip: out of the office from one minute of the day to another, this many metres away (only once it is over).
+    const clockIn = (userId: string, startMin: number, opts: { away?: number; gapFrom?: number; out?: number; trip?: { from: number; to: number; m: number } } = {}) => {
       const u = ds.users.find((x) => x.id === userId);
       if (!u) return;
       const start = toMs(myt(today, '00:00')) + startMin * 60_000;
@@ -4800,6 +4801,9 @@ export function generateDataset(opts: SeedOptions): Dataset {
       let n = 0;
       for (let t = start + 10 * 60_000; t <= end; t += 10 * 60_000) {
         if (opts.gapFrom !== undefined && t >= nowMs - opts.gapFrom * 60_000) break;
+        const dayMin = (t - toMs(myt(today, '00:00'))) / 60_000;
+        const tripOn = !!opts.trip && toMs(myt(today, '00:00')) + opts.trip.to * 60_000 <= nowMs && dayMin >= opts.trip.from && dayMin < opts.trip.to;
+        const tripLat = tripOn ? opts.trip!.m / 111_000 : 0;
         ds.locationPings.push({
           id: `lp-${u.id}-${t}`,
           clockId: id,
@@ -4807,10 +4811,10 @@ export function generateDataset(opts: SeedOptions): Dataset {
           companyId,
           capturedAt: fromMs(t - 3_000),
           receivedAt: fromMs(t),
-          lat: b.lat + off + 0.0002 * Math.sin(n),
+          lat: b.lat + off + tripLat + 0.0002 * Math.sin(n),
           lng: b.lng + 0.0002 * Math.cos(n),
           accuracyM: 15,
-          distanceM: u.base ? 20 + (opts.away ?? 0) : null,
+          distanceM: u.base ? 20 + (opts.away ?? 0) + (tripOn ? opts.trip!.m : 0) : null,
         });
         last = t;
         n++;
@@ -4830,7 +4834,8 @@ export function generateDataset(opts: SeedOptions): Dataset {
       });
     };
     clockIn('u-cm-sasa', 8 * 60 + 31);
-    clockIn('u-pwvsb-doa', 8 * 60 + 45);
+    // P93: went 2.4 km out of the office from 10.00 to 10.50 am: an out-of-station item for the manager (mock).
+    clockIn('u-pwvsb-doa', 8 * 60 + 45, { trip: { from: 10 * 60, to: 10 * 60 + 50, m: 2_400 } });
     clockIn('u-pwvsb-hr', 8 * 60 + 52);
     // Phone stopped reporting 45 minutes ago: shows as Unknown, not as fine.
     clockIn('u-cm-arsh', 8 * 60 + 40, { gapFrom: 45 });

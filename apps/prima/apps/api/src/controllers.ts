@@ -5645,6 +5645,20 @@ export class AppController {
     );
   }
 
+  // P93: readings the phone kept while it had no signal, sent together (each placed inside the person's own clock session).
+  @Post('me/clock/pings')
+  staffPings(@UserId() uid: string, @Body() b: { readings?: unknown }) {
+    if (!Array.isArray(b.readings) || b.readings.length > 200) throw new BadRequestException('readings must be a list of up to 200');
+    const list = b.readings.map((x, i) => {
+      const r = (x ?? {}) as Record<string, unknown>;
+      const lat = coord(r.lat);
+      const lng = coord(r.lng);
+      if (lat === null || lng === null) throw new BadRequestException(`readings[${i}]: lat and lng are required`);
+      return { lat, lng, accuracyM: coord(r.accuracyM), capturedAt: str(r.capturedAt, `readings[${i}].capturedAt`, 40) };
+    });
+    return this.db.asUser(uid, (svc, u) => svc.staffPings(u, list));
+  }
+
   @Get('staff-clock')
   staffClockBoard(@UserId() uid: string, @Query('date') d?: string) {
     return this.db.asUser(uid, (svc, u) => svc.staffClockBoard(u, d ? date(d, 'date') : undefined));

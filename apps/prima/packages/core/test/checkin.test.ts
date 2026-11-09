@@ -214,7 +214,9 @@ describe('Check-in and check-out', () => {
     expect(r.event).toMatchObject({ kind: 'in', verdict: 'in_area', outcome: 'accepted', accuracyM: 12, address: found.text, addressStatus: 'found', at: NOW, review: null });
     expect(r.event.matched).toMatchObject({ label: 'Head office', distanceM: 40 });
     expect(r.clock && !r.clock.out).toBe(true);
-    await expect(svc.checkIn(staff, 'in', at(HQ))).rejects.toThrow(/Check out first/);
+    // P93: a second check-in (another tab, a retry) returns the first one instead of asking to check out first.
+    const again = await svc.checkIn(staff, 'in', at(HQ));
+    expect(again).toMatchObject({ already: true, event: { id: r.event.id } });
     expect((await svc.myCheckin(staff)).state).toBe('in');
     later(480);
     const out = await svc.checkIn(staff, 'out', at(north(HQ, 20)));
@@ -222,7 +224,8 @@ describe('Check-in and check-out', () => {
     expect(out.clock?.out).toMatchObject({ source: 'checkin', distanceM: 20, accuracyM: 12 });
     // Checked out for the day: opening Prima again does not start a new clock; a new check-in does.
     expect(await svc.staffSessionStart(staff)).toBeNull();
-    await expect(svc.checkIn(staff, 'out', at(HQ))).rejects.toThrow(/Check in first/);
+    // P93: a second check-out returns the one already made.
+    expect(await svc.checkIn(staff, 'out', at(HQ))).toMatchObject({ already: true, event: { id: out.event.id } });
     later(5);
     expect((await svc.checkIn(staff, 'in', at(HQ))).clock?.out).toBeNull();
   });
