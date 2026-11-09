@@ -71,11 +71,10 @@ export function GuardPayView() {
         </p>
       </div>
       {!data.rule.primaPays && (
-        <div className="notice" data-tone="info">
-          Trial: the JA Group app still pays guards. Each month here is
-          worked out to compare with JA, cannot be marked paid, and its bank
-          file says not to upload it. Prima pays only from the switch date the
-          CEO picks.
+        // Fauzan, 8 Nov 2026: the switch date (rule PAY-GUARD switchDate). Until then the JA Group app pays guards.
+        <div className="notice" data-tone="info" data-testid="guard-pay-switch">
+          <strong>Prima takes over guard pay on 1 Aug 2027. Until then runs are trials; JA Group app still pays.</strong>
+          <div>Each month here is worked out to compare with JA, cannot be marked paid, and its bank file says not to upload it.</div>
         </div>
       )}
       {!data.on && (

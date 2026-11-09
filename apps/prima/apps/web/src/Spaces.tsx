@@ -1,4 +1,5 @@
 import { useEffect, useId, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from 'react';
+import { useBackClose } from './back-close';
 import {
   ArrowLeftIcon,
   ArrowRightIcon,
@@ -480,6 +481,7 @@ export function AppSwitcher({ menu, current, onSpace, label }: { menu: MenuItem[
     }
     setOpen((o) => !o);
   };
+  useBackClose(open, () => setOpen(false));
   useEffect(() => {
     if (!open) return;
     const away = (e: MouseEvent) => {

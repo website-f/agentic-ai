@@ -4,6 +4,7 @@ import { api, type FinDashboard, type FinPack } from '../api';
 import { BankIcon, CalendarCheckIcon, ChartLineUpIcon, MapPinIcon, PrinterIcon, ReceiptIcon, WarningOctagonIcon } from '@phosphor-icons/react';
 import { Chip, ErrorNotice, Loading, dateLabel, useAction, useLoad } from '../ui';
 import { Card, Stat, Stats } from '../kit';
+import { printPage } from '../native';
 
 /**
  * The Finance dashboard and each company's monthly pack (Fauzan, 2 Nov 2026: "bring out the key important data in a
@@ -187,7 +188,7 @@ function PackView({ companyId }: { companyId: string }) {
               <option key={p}>{p}</option>
             ))}
           </Select>
-          <button type="button" className="btn btn-sm" onClick={() => window.print()}>
+          <button type="button" className="btn btn-sm" onClick={() => void printPage('Finance board')}>
             <PrinterIcon size={14} aria-hidden="true" />
             Print
           </button>

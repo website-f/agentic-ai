@@ -13,9 +13,13 @@ const cwd = process.env.PRIMA_API_DIR || '/app/apps/api';
 const run = (args) => execFileSync('node', args, { cwd, stdio: 'inherit', env: process.env });
 
 run(['dist/src/db-setup.js']);
+// P96: the pay formulas and guard pay modules are OPTIONAL (Fauzan, 8 Nov 2026): installed later as their own step, never
+// here. They are not in the release manifest and need a different confirmation; this list is a second lock.
+const NEVER_HERE = new Set(['pay_formulas', 'guard_pay']);
 function installModules() {
   const plan = JSON.parse(execFileSync('node', ['dist/src/module-install.js'], { cwd, env: process.env }).toString());
   for (const m of plan.manifest.modules) {
+    if (NEVER_HERE.has(m.id)) throw new Error(`the release lists the optional module ${m.id}; it is installed only as its own step`);
     console.log(`prima-setup: module ${m.id}`);
     run([
       'dist/src/module-install.js',

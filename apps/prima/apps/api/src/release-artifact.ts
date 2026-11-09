@@ -21,13 +21,20 @@ export const MODULE_SPECS=[
  {id:'org_links',path:'db/modules/org-links-v1.sql',requires:[]},
  {id:'special_ops',path:'db/modules/special-ops-v1.sql',requires:[]},
  {id:'fw_welfare',path:'db/modules/fw-welfare-v1.sql',requires:[]},
- {id:'pay_formulas',path:'db/modules/pay-formulas-v1.sql',requires:[]},
- {id:'guard_pay',path:'db/modules/guard-pay-v1.sql',requires:['pay_formulas']},
  {id:'fw_recruit',path:'db/modules/fw-recruit-v1.sql',requires:[]},
 ] as const;
-// Catalog-only optional modules. Never included in release activation implicitly. Upstream lists the four Central Admin
-// modules here; the office activates them above, so none are optional in the office release.
-export const OPTIONAL_MODULE_SPECS:readonly {readonly id:never;readonly path:string;readonly requires:readonly string[]}[]=[];
+// Optional modules. Never included in release activation implicitly and never in db/release-manifest.json, so the office's
+// prima-setup (which installs every manifest module) never installs them. Upstream lists the four Central Admin modules
+// here; the office activates those above. Guard pay (Fauzan, 8 Nov 2026): the pay formulas and guard pay database is
+// installed LATER, as its own step; Prima takes over guard pay on 1 August 2027 and until then the JA Group app pays and
+// Prima pay runs are side-by-side trials only. An operator installs them one at a time, pay_formulas then guard_pay, with
+// the explicit optional confirmation (docs/RELEASE_MODULE_INSTALLATION.md). The bytes are pinned here, not in the manifest.
+export const OPTIONAL_MODULE_SPECS=[
+ {id:'pay_formulas',path:'db/modules/pay-formulas-v1.sql',sha256:'38718470f582cb438a08d42d6131187aa55c0613e3aa58a924836f77cfbfda72',requires:[]},
+ {id:'guard_pay',path:'db/modules/guard-pay-v1.sql',sha256:'c6ca56b61b076181eba45bd1c1c88d766c9339b981e45c41154b8fee0c32d8a1',requires:['pay_formulas']},
+] as const satisfies readonly {readonly id:string;readonly path:string;readonly sha256:string;readonly requires:readonly string[]}[];
+export type OptionalModuleId=typeof OPTIONAL_MODULE_SPECS[number]['id'];
+export const isOptionalModule=(id:string):id is OptionalModuleId=>OPTIONAL_MODULE_SPECS.some(m=>m.id===id);
 export type ReleaseModuleId=typeof MODULE_SPECS[number]['id'] | typeof OPTIONAL_MODULE_SPECS[number]['id'];
 export type ReleaseArtifact={version:1;base:{path:string;sha256:string};modules:Array<{id:ReleaseModuleId;path:string;sha256:string;requires:readonly string[]}>};
 export const releaseRoot=()=>resolve(__dirname,'../../../..');
@@ -43,3 +50,5 @@ export function releaseArtifact(root=releaseRoot()):{manifest:ReleaseArtifact;sh
  return {manifest:m,sha256:sha256(bytes)};
 }
 export function selectedModuleSql(id:ReleaseModuleId,root=releaseRoot()){const a=releaseArtifact(root),m=a.manifest.modules.find(x=>x.id===id);if(!m)throw Error('Unknown release module.');return {artifact:a,module:m,sql:readFileSync(resolve(root,m.path),'utf8')};}
+/** An optional module's pinned bytes, bound to the exact verified release. Only the explicit operator command uses this. */
+export function optionalModuleSql(id:ReleaseModuleId,root=releaseRoot()){const a=releaseArtifact(root),s=OPTIONAL_MODULE_SPECS.find(x=>x.id===id);if(!s||a.manifest.modules.some(x=>x.id===id))throw Error('Unknown optional module.');const p=resolve(root,s.path);if(!lstatSync(p).isFile()||lstatSync(p).isSymbolicLink())throw Error('Optional module SQL unavailable.');const bytes=readFileSync(p);if(sha256(bytes)!==s.sha256)throw Error('Packaged optional SQL does not match its pinned hash.');return {artifact:a,module:{id:s.id as ReleaseModuleId,path:s.path,sha256:s.sha256,requires:s.requires as readonly string[]},sql:bytes.toString('utf8')};}

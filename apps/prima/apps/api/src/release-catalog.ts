@@ -14,13 +14,16 @@ import {orgLinksProblems} from './org-links-readiness';
 import {specialOpsModuleProblems} from './special-ops-readiness';
 import {fwWelfareProblems} from './fw-welfare-readiness';
 import {fwRecruitProblems} from './fw-recruit-readiness';
-import {guardPayProblems,payFormulasProblems} from './pay-modules-readiness';
+import {payFormulasProblems} from './pay-formulas-readiness';
+import {guardPayProblems} from './guard-pay-readiness';
 
 // Agentic Office: upstream activates the first seven; the office database already has the rest installed, so the office
 // release keeps them activated (same order as release-artifact.ts MODULE_SPECS and db/release-manifest.json).
-export const RELEASE_MODULE_IDS = ['procurement','rental_corrections','cleanup','metrics','job_email','item_register','item_register_v2','central_admin_walls','central_admin_panel','central_admin_delegations','central_admin_legal_holds','company_office','company_run_links','org_links','special_ops','fw_welfare','pay_formulas','guard_pay','fw_recruit'] as const;
-// Upstream keeps the Central Admin modules optional (catalog-only); the office activates them above.
-export const OPTIONAL_MODULE_IDS = [] as const;
+export const RELEASE_MODULE_IDS = ['procurement','rental_corrections','cleanup','metrics','job_email','item_register','item_register_v2','central_admin_walls','central_admin_panel','central_admin_delegations','central_admin_legal_holds','company_office','company_run_links','org_links','special_ops','fw_welfare','fw_recruit'] as const;
+// Upstream keeps the Central Admin modules optional (catalog-only); the office activates them above. Guard pay (Fauzan,
+// 8 Nov 2026): the pay formulas and guard pay modules are optional, installed later as their own step and never with a
+// release (Prima takes over guard pay on 1 August 2027). Their catalogue checks stay, so an operator can verify them.
+export const OPTIONAL_MODULE_IDS = ['pay_formulas','guard_pay'] as const;
 export type ReleaseModuleId = typeof RELEASE_MODULE_IDS[number] | typeof OPTIONAL_MODULE_IDS[number];
 type CatalogClient = Pick<PoolClient,'query'>;
 type ReleaseClient = Pick<PoolClient,'query'|'release'>;
@@ -53,7 +56,8 @@ export async function moduleCatalogProblems(client:CatalogClient,id:ReleaseModul
     if(id==='special_ops')return (await specialOpsModuleProblems(client)).length?[moduleCode(id)]:[];
     if(id==='fw_welfare')return (await fwWelfareProblems(client)).length?[moduleCode(id)]:[];
     if(id==='pay_formulas')return (await payFormulasProblems(client)).length?[moduleCode(id)]:[];
-    if(id==='guard_pay')return (await payFormulasProblems(client)).length||(await guardPayProblems(client)).length?[moduleCode(id)]:[];
+    // guardPayProblems also reports the pay formulas module when that is not ready.
+    if(id==='guard_pay')return (await guardPayProblems(client)).length?[moduleCode(id)]:[];
     if(id==='fw_recruit')return (await fwRecruitProblems(client)).length?[moduleCode(id)]:[];
     if(id==='central_admin_panel')return (await centralAdminWallsProblems(client)).length||(await centralAdminPanelProblems(client)).length?[moduleCode(id)]:[];
     if((await itManualProblems(client)).length || (await itOperationsProblems(client)).length)return [moduleCode(id)];

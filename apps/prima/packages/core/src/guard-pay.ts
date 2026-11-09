@@ -12,7 +12,7 @@ import type { Attendance, Id, IsoDate, IsoDateTime, LeaveRequest, Nationality, P
  * the bank. Prima drafts the bank file and the statutory lists; it never pays or files anything itself.
  *
  * While the JA Group app still pays guards, a run is a side-by-side trial: Finance cannot mark it paid and the bank file
- * says it must not be uploaded (rule PAY-GUARD, primaPays off until Fauzan picks the switch date).
+ * says it must not be uploaded (rule PAY-GUARD, primaPays off; Fauzan, 8 Nov 2026: Prima takes over on switchDate 2027-08-01).
  */
 
 // Pre-repair unpaid snapshots must be recalculated before approval or payment.

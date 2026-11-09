@@ -8,6 +8,7 @@ import { LABEL_TEMPLATES, type LabelTemplateId } from '@prima/core';
 import { PrinterIcon } from '@phosphor-icons/react';
 import { TEMPLATES, barcodeSvg, layout, pageCss, perPage, qrSvg } from './labels';
 import '../../styles/items.css';
+import { inAppShell, printPage } from '../../native';
 
 export interface PrintLabel {
   printId: string;
@@ -75,7 +76,9 @@ export function LabelSheet({ labels, template: initial, symbols, onPrinted }: { 
     setPrinting(true);
     // Let the print layer render, print, then remove it.
     setTimeout(() => {
-      window.print();
+      // P96: inside the app (no printing there) the sheet is saved as a file to print from a computer.
+      if (inAppShell()) void printPage('Labels');
+      else window.print();
       setPrinting(false);
       onPrinted?.();
     }, 60);

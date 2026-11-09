@@ -1,6 +1,6 @@
 /** Explicit operator command only. Never imported by startup, never resets/reseeds/changes credentials. */
 import {Pool,type PoolClient} from 'pg';
-import {selectedModuleSql,releaseArtifact,type ReleaseModuleId} from './release-artifact';
+import {selectedModuleSql,optionalModuleSql,isOptionalModule,releaseArtifact,OPTIONAL_MODULE_SPECS,type ReleaseModuleId} from './release-artifact';
 import {moduleCatalogProblems} from './release-catalog';
 import {itManualProblems} from './it-manual-readiness';
 import {itOperationsProblems} from './it-operations-readiness';
@@ -24,6 +24,7 @@ const PREFIX:Record<ReleaseModuleId,{tables:string[];functions:string|null;polic
  org_links:{tables:['org_events','org_tasks','org_notices','org_imports'],functions:'org_'},
  special_ops:{tables:[],functions:null,policies:['arms_wall']},
  fw_welfare:{tables:['fw_welfare_checks'],functions:null},
+ // Optional (Fauzan, 8 Nov 2026): installed later as their own step, never with a release; guard_pay needs pay_formulas.
  pay_formulas:{tables:['pay_formulas','pay_formula_uses','pay_law_versions','site_hours_approvals','public_holiday_lists'],functions:null},
  guard_pay:{tables:['guard_pay_runs','guard_pay_advances','guard_loans','statutory_versions'],functions:null},
  fw_recruit:{tables:['fw_recruit_files'],functions:null},
@@ -32,8 +33,11 @@ type Client=Pick<PoolClient,'query'>;
 const asApp=async<T>(c:Client,fn:()=>Promise<T>)=>{await c.query('SET LOCAL ROLE prima_app');try{return await fn();}finally{await c.query('RESET ROLE');}};
 /** The pinned scripts have one outer transaction. Keep all DDL and postchecks in our single transaction. */
 export function moduleBody(sql:string){const m=/^\s*(?:--[^\n]*\n\s*)*BEGIN;([\s\S]*)\bCOMMIT;\s*$/.exec(sql);if(!m)throw Error('Reviewed transactional module required.');return m[1];}
+/** Release modules need INSTALL_SELECTED_MODULE; an optional module needs INSTALL_OPTIONAL_MODULE, so a loop over the
+ * release plan (the office's prima-setup) can never install one. */
+export const OPTIONAL_CONFIRM='INSTALL_OPTIONAL_MODULE';
 export async function installSelectedModule(c:Client,input:{id:ReleaseModuleId;releaseSha256:string;moduleSha256:string;confirm:string},root?:string){
- const s=selectedModuleSql(input.id,root);if(input.confirm!=='INSTALL_SELECTED_MODULE'||input.releaseSha256!==s.artifact.sha256||input.moduleSha256!==s.module.sha256)throw Error('Exact selected module and release confirmation required.');
+ const optional=isOptionalModule(input.id);const s=optional?optionalModuleSql(input.id,root):selectedModuleSql(input.id,root);if(input.confirm!==(optional?OPTIONAL_CONFIRM:'INSTALL_SELECTED_MODULE')||input.releaseSha256!==s.artifact.sha256||input.moduleSha256!==s.module.sha256)throw Error('Exact selected module and release confirmation required.');
  let begun=false;
  try{
   await c.query('BEGIN');begun=true;await c.query("SET LOCAL lock_timeout='5s'");await c.query("SET LOCAL statement_timeout='60s'");await c.query("SELECT pg_advisory_xact_lock(hashtext('prima-reviewed-module-install'))");
@@ -49,6 +53,6 @@ export async function installSelectedModule(c:Client,input:{id:ReleaseModuleId;r
   await c.query('COMMIT');begun=false;return {module:input.id,status:'installed',catalogVerified:true,releaseSha256:s.artifact.sha256};
  }catch{if(begun)await c.query('ROLLBACK').catch(()=>undefined);throw Error('Selected module installation outcome is unconfirmed; inspect exact catalog before any retry.');}
 }
-async function main(){const a=releaseArtifact();if(process.argv.length===2){console.log(JSON.stringify({mode:'plan_only',releaseSha256:a.sha256,manifest:a.manifest}));return;}
+async function main(){const a=releaseArtifact();if(process.argv.length===2){console.log(JSON.stringify({mode:'plan_only',releaseSha256:a.sha256,manifest:a.manifest,optional:{install:'Never with a release. One at a time, only when the owner says so, in the order listed, with --confirm '+OPTIONAL_CONFIRM+'.',modules:OPTIONAL_MODULE_SPECS}}));return;}
  const args=process.argv.slice(2);if(args.length!==8||args[0]!=='--module'||args[2]!=='--release-sha'||args[4]!=='--module-sha'||args[6]!=='--confirm')throw Error('Use explicit module, release-sha, module-sha and confirmation.');if(!process.env.DATABASE_URL)throw Error('Existing operator database connection is required.');const pool=new Pool({connectionString:process.env.DATABASE_URL,max:1,connectionTimeoutMillis:10000});const c=await pool.connect();try{console.log(JSON.stringify(await installSelectedModule(c,{id:args[1] as ReleaseModuleId,releaseSha256:args[3],moduleSha256:args[5],confirm:args[7]})));}catch(error){c.release(error as Error);await pool.end();throw error;}c.release();await pool.end();}
 if(require.main===module)main().catch(()=>{console.error('Module operation refused or incomplete. No automatic retry; use read-only release verification.');process.exitCode=1;});

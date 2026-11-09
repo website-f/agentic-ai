@@ -65,6 +65,21 @@ test('knows the phone and browser, and their own steps come first', () => {
   assert.match(wa.inAppNote, /Open it in Chrome, Edge or Safari/);
 });
 
+// P96: Prima's own Android and iPhone app (a WebView whose browser name carries "PrimaApp/") is not "another app".
+test('in the Prima app itself, the steps are for the Prima app, never "open it in Chrome"', () => {
+  const android = P.detectPlatform(UA.androidWhatsApp.replace(' WhatsApp/2.24', ' PrimaApp/1.0'));
+  assert.equal(android.inApp, false);
+  assert.equal(android.ownApp, true);
+  const cam = P.permissionHelp('camera', android);
+  assert.equal(cam.inAppNote, null);
+  assert.equal(cam.mine.id, 'app-android');
+  assert.match(cam.mine.steps.join(' '), /Apps > Prima > Permissions > Camera/);
+  const ios = P.detectPlatform(UA.iphoneSafari + ' PrimaApp/1.0');
+  assert.equal(P.permissionHelp('location', ios).mine.id, 'app-ios');
+  assert.ok(P.permissionHelp('location', ios).others.some((g) => g.id === 'ios-safari'));
+  assert.equal(P.detectPlatform(UA.androidWhatsApp).ownApp, false);
+});
+
 test('reads camera and location errors the way browsers report them', () => {
   assert.equal(P.cameraProblem({ name: 'NotAllowedError' }), 'denied');
   assert.equal(P.cameraProblem({ name: 'NotFoundError' }), 'missing');

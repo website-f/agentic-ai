@@ -11,6 +11,7 @@ import { Client } from 'pg';
 import { Db } from '../src/db';
 import { resetDb } from '../src/reset-db';
 import { guardPayModuleSql } from '../src/schema';
+import { OPTIONAL_MODULE_SPECS } from '../src/release-artifact';
 
 const URL = process.env.DATABASE_URL ?? 'postgres://postgres:localdev@localhost:5432/prima_test';
 process.env.DATABASE_URL = URL;
@@ -43,12 +44,14 @@ const proposal = JSON.parse(readFileSync(resolve(ROOT, 'db/proposed/guard-pay-mo
 const manifest = JSON.parse(readFileSync(resolve(ROOT, 'db/release-manifest.json'), 'utf8')) as { base: { sha256: string }; modules: { id: string }[] };
 
 describe('guard pay module (files)', () => {
-  // P85 (Agentic Office): the module ships in the release manifest, pinned to the same bytes as its proposal.
-  it('pins the module bytes on the release base and ships them in the release manifest', () => {
+  // P96 (Fauzan, 8 Nov 2026): an optional module, installed later as its own step and never with a release; its bytes are
+  // pinned in OPTIONAL_MODULE_SPECS, the same as its proposal, and it is not in the release manifest.
+  it('pins the module bytes on the release base as an optional module, never in the release manifest', () => {
     assert.equal(proposal.base.sha256, manifest.base.sha256);
     const m = proposal.modules[0];
     assert.equal(createHash('sha256').update(readFileSync(resolve(ROOT, m.path))).digest('hex'), m.sha256);
-    assert.equal((manifest.modules.find((x) => x.id === m.id) as { sha256?: string } | undefined)?.sha256, m.sha256, 'in the release manifest with the same bytes');
+    assert.equal(manifest.modules.find((x) => x.id === m.id), undefined, 'not in the release manifest');
+    assert.equal(OPTIONAL_MODULE_SPECS.find((x) => x.id === m.id)?.sha256, m.sha256, 'optional, with the same bytes');
     assert.equal(readFileSync(resolve(ROOT, m.path), 'utf8'), guardPayModuleSql());
   });
 });

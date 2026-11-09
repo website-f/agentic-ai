@@ -4,6 +4,7 @@ import { api } from './api';
 import { XIcon } from '@phosphor-icons/react';
 import { ArishaAvatar } from './ArishaAvatar';
 import { useLang, type Lang } from './i18n';
+import { useBackClose } from './back-close';
 import { screenGuideText } from './arisha-screens';
 import { fallbackAnswer, guideFocus, guideOnly, localAnswer, normalise, taskReply, warmGuideIndex, type LocalChip, type QuickKey } from './arisha-local';
 import './styles/arisha-local.css';
@@ -361,6 +362,8 @@ export function Arisha({ user, view, menu, open, onClose, serverOn, sample }: {
 }) {
   const { lang } = useLang();
   const titleId = useId();
+  // P96: the phone's Back closes Arisha's panel.
+  useBackClose(open, onClose);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
   const [turns, setTurns] = useState<ShownTurn[]>([]);
   const [draft, setDraft] = useState('');

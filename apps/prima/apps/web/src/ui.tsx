@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import type { DataMode, ExpiryStatus, Finding, Severity } from '@prima/core';
 import { activateDrawer } from './drawer-focus';
+import { useBackClose } from './back-close';
 import { ApiError, api } from './api';
 
 // ---------- Data loading ----------
@@ -257,6 +258,8 @@ export function Drawer({ title, sub, onClose, children }: { title: ReactNode; su
   const dialog = useRef<HTMLElement>(null);
   const close = useRef(onClose); close.current = onClose;
   useEffect(() => dialog.current ? activateDrawer(dialog.current, () => close.current()) : undefined, []);
+  // P96: the phone's Back (Android's back button, the iPhone's swipe back) closes the drawer.
+  useBackClose(true, () => close.current());
   return (
     <>
       <div className="scrim" onClick={onClose} />

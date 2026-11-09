@@ -5332,7 +5332,7 @@ export const SCREEN_GUIDES: ScreenGuide[] = [
         "means": "Pesuruhjaya Sumpah, who stamps a consent letter."
       }
     ],
-    "notes": "While the JA Group app still pays guards, every month is a trial: it cannot be marked paid and its bank file says not to upload it. If the guard pay run is not switched on, nothing can be prepared. Uniform and item deductions are switched off until management and legal decide: Prima refuses a minus one-off item for uniforms or lost or damaged items, equipment is never charged, and advances or loans come back only from approved records on \"Advances and loans\". Every one-off item is flagged for the COO. \"Submit to the COO\" is greyed out until the month ends."
+    "notes": "Prima takes over guard pay on 1 Aug 2027 (Fauzan, 8 Nov 2026). Until then the JA Group app still pays guards, every month is a trial: it cannot be marked paid and its bank file says not to upload it. If the guard pay run is not switched on, nothing can be prepared. Uniform and item deductions are switched off until management and legal decide: Prima refuses a minus one-off item for uniforms or lost or damaged items, equipment is never charged, and advances or loans come back only from approved records on \"Advances and loans\". Every one-off item is flagged for the COO. \"Submit to the COO\" is greyed out until the month ends."
   },
   {
     "view": "advances",
