@@ -110,6 +110,20 @@ async def send_back(db: AsyncSession, t: Task, agent: Agent, feedback: str, acto
     )
     await db.commit()
     await runtime.task_event(db, t, "feedback", actor, feedback[:500])
+    if actor.startswith("user:"):  # P92: a person's correction is a lesson, kept now
+        from ..brain import lessons
+
+        noted = await lessons.capture(
+            db,
+            agent,
+            feedback,
+            via="send_back",
+            taught_by=actor,
+            task=t,
+            context=f"The work it handed in: {(t.result or '')[:800]}",
+        )
+        if noted is not None:
+            await runtime.task_event(db, t, "lesson", actor, noted.fact.text, noted.event())
     await launch(db, t, actor)
 
 

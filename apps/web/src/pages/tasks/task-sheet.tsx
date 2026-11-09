@@ -31,6 +31,7 @@ import {
   FileTextIcon,
   EyeIcon,
   PaperclipIcon,
+  LightbulbIcon,
 } from "@phosphor-icons/react";
 import { useMutation, useQuery, useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
@@ -38,6 +39,7 @@ import { useState, type ReactNode } from "react";
 import { toast } from "sonner";
 
 import { AgentAvatar } from "@/components/agent-avatar";
+import { LessonNote } from "@/components/lesson-note";
 import { ApprovalCard } from "@/components/approval-card";
 import { Markdown } from "@/components/markdown";
 import { TaskDocuments } from "@/components/provenance";
@@ -68,6 +70,7 @@ const EVENT_ICON: Record<string, typeof FlagIcon> = {
   correction: ArrowCounterClockwiseIcon, budget: CoinsIcon,
   review: ShieldCheckIcon, silent: MoonStarsIcon, reconcile: ArrowsClockwiseIcon, blockers: HourglassMediumIcon,
   files: PaperclipIcon,
+  lesson: LightbulbIcon,
 };
 
 /** A titled block inside the sheet: small icon, heading, optional trailing note. */
@@ -136,18 +139,22 @@ function Timeline({ events }: { events: TaskEvent[] }) {
         return (
           <li key={e.id} className="relative flex min-w-0 gap-3 pb-3.5">
             {i < events.length - 1 ? <span aria-hidden className="absolute top-7 bottom-0.5 left-[13px] w-px bg-border" /> : null}
-            <span className={cn("relative grid size-7 shrink-0 place-items-center rounded-full bg-surface-2 text-muted ring-4 ring-surface", e.kind === "tool_blocked" && "bg-danger/12 text-danger", (e.kind === "progress" || e.kind === "decision") && "bg-accent-soft text-accent", (e.kind === "memory" || e.kind === "skill") && "bg-info/12 text-info", (e.kind === "feedback" || e.kind === "silent") && "bg-warn/12 text-warn", e.kind === "review" && "bg-info/12 text-info")}>
+            <span className={cn("relative grid size-7 shrink-0 place-items-center rounded-full bg-surface-2 text-muted ring-4 ring-surface", e.kind === "tool_blocked" && "bg-danger/12 text-danger", (e.kind === "progress" || e.kind === "decision") && "bg-accent-soft text-accent", (e.kind === "memory" || e.kind === "skill" || e.kind === "lesson") && "bg-info/12 text-info", (e.kind === "feedback" || e.kind === "silent") && "bg-warn/12 text-warn", e.kind === "review" && "bg-info/12 text-info")}>
               <Icon size={13} weight="bold" />
             </span>
             <div className="min-w-0 flex-1 pt-1">
               <p className="text-[13px] break-words">
                 <span className="font-medium">{e.actor_name ?? (e.actor === "system" ? t("System") : e.actor)}</span>{" "}
                 <span className="text-muted">
-                  {e.kind === "progress" ? <>{t("posted an update:")} <span className="text-fg">{e.text}</span></> : e.kind === "feedback" ? <>{t("sent it back:")} <span className="text-fg">{e.text}</span></> : e.kind === "decision" ? <>{t("summed up the meeting:")} <span className="whitespace-pre-line text-fg">{e.text}</span></> : e.text}
+                  {e.kind === "progress" ? <>{t("posted an update:")} <span className="text-fg">{e.text}</span></> : e.kind === "feedback" ? <>{t("sent it back:")} <span className="text-fg">{e.text}</span></> : e.kind === "decision" ? <>{t("summed up the meeting:")} <span className="whitespace-pre-line text-fg">{e.text}</span></> : e.kind === "lesson" && typeof e.data?.lesson_id === "string" ? t("taught it a lesson") : e.text}
                 </span>
               </p>
               {e.kind === "decision" && typeof e.data?.meeting_id === "string" ? (
                 <Link to="/meetings" search={{ m: e.data.meeting_id }} className="mt-1 inline-block text-[12.5px] text-accent hover:underline">{t("Read the meeting")}</Link>
+              ) : null}
+              {/* P92: a correction kept as a lesson, with Undo. */}
+              {e.kind === "lesson" && typeof e.data?.lesson_id === "string" ? (
+                <LessonNote lesson={{ lesson_id: e.data.lesson_id, text: e.text, action: e.data.action === "confirmed" ? "confirmed" : undefined }} />
               ) : null}
               {e.kind === "tool" && typeof e.data?.result_preview === "string" ? (
                 <p className="mt-1 line-clamp-2 rounded-[6px] bg-surface-2/60 px-2 py-1 font-mono text-[11.5px] break-all text-muted">{e.data.result_preview}</p>

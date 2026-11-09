@@ -62,6 +62,7 @@ import { ProposalSheet } from "@/pages/skills/proposal-sheet";
 import { SkillSheet } from "@/pages/skills/skill-sheet";
 
 import { LearnSourceDialog } from "./learn-source-dialog";
+import { LessonsView } from "./lessons";
 import { WeekView } from "./week";
 
 const KPI_GRID = "sm:grid-cols-3 lg:grid-cols-3 2xl:grid-cols-6";
@@ -412,11 +413,11 @@ export function LearningPage() {
   const canWrite = me.permissions.includes("work.write");
   const canDecide = me.permissions.includes("approvals.decide");
   const canExport = me.role === "owner" || me.role === "admin";
-  const search = useSearch({ strict: false }) as { days?: number; tab?: "week" | "overview"; week?: string };
+  const search = useSearch({ strict: false }) as { days?: number; tab?: "week" | "overview" | "lessons"; week?: string };
   const navigate = useNavigate();
   const days: LearningRange = LEARNING_RANGES.find((r) => r === search.days) ?? 30;
   // P45: the week per agent first: what each one learned and what waits for a manager.
-  const tab = search.tab === "overview" ? "overview" : "week";
+  const tab = search.tab === "overview" || search.tab === "lessons" ? search.tab : "week";
   const canManageRoutines = ["brain.manage", "agents.manage", "team.manage"].some((p) => me.permissions.includes(p));
   const { data: o, isLoading, error } = useQuery({ ...learningOverviewQuery(days), enabled: tab === "overview" });
   const [teaching, setTeaching] = useState(0);
@@ -445,14 +446,15 @@ export function LearningPage() {
         }
       />
 
-      <PageTabs<"week" | "overview"> label={t("What to show")} value={tab}
+      <PageTabs<"week" | "overview" | "lessons"> label={t("What to show")} value={tab}
         onChange={(v) => navigate({ to: "/learning", search: { tab: v === "week" ? undefined : v }, replace: true })}
         tabs={[
           { value: "week", label: t("Week by agent"), icon: GraduationCapIcon },
           { value: "overview", label: t("Overview and autopilot"), icon: ChartLineIcon },
+          { value: "lessons", label: t("Lessons"), icon: LightbulbIcon },
         ]} />
 
-      {tab === "week" ? (
+      {tab === "lessons" ? <LessonsView /> : tab === "week" ? (
         <WeekView week={search.week} canManage={canManageRoutines}
           onWeek={(w) => navigate({ to: "/learning", search: { week: w }, replace: true })} />
       ) : (

@@ -32,6 +32,7 @@ from .routers import (
     files,
     impact,
     learning,
+    lessons,
     library,
     mcp_servers,
     media,
@@ -318,6 +319,7 @@ for r in (
     whatsapp.router,
     assistants.router,
     learning.router,
+    lessons.router,  # P92: lessons people taught the agents
     events_stream.router,
     media.router,
     twins.router,

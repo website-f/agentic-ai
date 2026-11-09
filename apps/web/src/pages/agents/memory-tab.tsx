@@ -12,6 +12,7 @@ import { api, errorMessage } from "@/lib/api";
 import { agentFactsQuery, brainKeys, coreMemoryQuery, factScope, type CoreMemory } from "@/lib/brain";
 import { cn, timeAgo } from "@/lib/utils";
 import type { Agent } from "@/lib/work";
+import { AgentLessons } from "@/pages/learning/lessons";
 
 const TARGETS = [
   { key: "user", title: msg("Who it works for"), hint: msg("People, roles and preferences. Example: Fitri wants the summary line first.") },
@@ -109,6 +110,8 @@ export function MemoryTab({ agent, canWrite }: { agent: Agent; canWrite: boolean
           </p>
         )}
       </section>
+      {/* P92: lessons people taught it when they corrected it. */}
+      <AgentLessons agentId={agent.id} name={agent.name} />
     </div>
   );
 }

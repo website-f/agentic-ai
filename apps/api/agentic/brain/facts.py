@@ -328,6 +328,11 @@ async def learn(
         old = known.get(str(old_id)) if old_id else None
         if old is not None and agent.private and old.agent_id != (agent.clone_of or agent.id):
             old = None  # a private chat never ends or confirms facts the team shares
+        if old is not None and old.source_kind == "lesson" and action in ("skip", "replace"):
+            # P92: what a person taught stands; an agent's own reading of the transcript
+            # never ends it or counts as using it. The same point is simply not stored twice.
+            out.reinforced.append(old.text)
+            continue
         if action == "skip" and old is not None:
             old.hits += 1
             old.confidence = min(1.0, old.confidence + 0.05)

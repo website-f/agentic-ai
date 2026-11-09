@@ -31,6 +31,7 @@ from ..models import (
     Workspace,
 )
 from ..services import audit, events
+from . import eperolehan
 from . import format as fmt
 from .office_pack import OFFICE_SKILLS
 from .scan import blocked, scan
@@ -286,6 +287,8 @@ for a vehicle, machine, property or working capital and asks which is cheaper.
 # Tests for the built-in skills: run from the Skills page like any skill's eval cases.
 # P55: everyday office work (letters, filing, compiling, claims, HR, replies...).
 BUILTIN += OFFICE_SKILLS
+# P92: the ePerolehan tender procedure, which tender tasks follow and lessons improve.
+BUILTIN += [(eperolehan.NAME, eperolehan.DESCRIPTION, eperolehan.BODY)]
 
 BUILTIN_CASES: dict[str, list[dict[str, Any]]] = {
     "cash-flow-forecast": [
@@ -353,6 +356,8 @@ BUILTIN_CASES: dict[str, list[dict[str, Any]]] = {
         },
     ],
 }
+
+BUILTIN_CASES[eperolehan.NAME] = eperolehan.CASES  # P92: so a fold of lessons can be tested
 
 # The starters every workspace had before P19, so older workspaces gain only the new ones.
 _FIRST_BUILTIN = ("compare-quotes", "meeting-notes")
@@ -817,6 +822,20 @@ async def approve(
     if blocked(p.scan):
         raise SkillError("The safety scan found problems. Edit the skill to fix them first.")
     skill = await db.get(Skill, p.skill_id) if p.skill_id else None
+    if (
+        skill is not None
+        and p.kind in ("patch", "merge")
+        and p.base_version is not None
+        and skill.version != p.base_version
+        and body is None
+    ):
+        # P92: a draft written against an older version would silently undo whatever went
+        # live since (two drafts of one skill, approved one after the other). A person who
+        # edits the draft while approving has seen it; anyone else asks for a fresh draft.
+        raise SkillError(
+            f"{skill.name} changed since this was drafted (it was version {p.base_version}, "
+            f"now {skill.version}). Edit it before approving, or let a new draft be made."
+        )
     who = approver.name
     if p.kind == "new":
         if await find(db, ws.id, p.name):

@@ -136,7 +136,9 @@ async def _consolidate(
         fa, fb = facts.get(a), facts.get(b)
         if fa is None or fb is None or fa.valid_to or fb.valid_to:
             continue
-        old, new = sorted((fa, fb), key=lambda f: (f.valid_from, f.id))
+        # P92: a lesson a person taught is kept over a fact an agent extracted, whatever the
+        # dates; between two of the same kind the newer one stands.
+        old, new = sorted((fa, fb), key=lambda f: (f.source_kind == "lesson", f.valid_from, f.id))
         exact = old.text.strip().rstrip(".").lower() == new.text.strip().rstrip(".").lower()
         if exact or (sim >= MERGE_SIMILARITY and same_numbers(old.text, new.text)):
             apply("merge", old, new, sim)
@@ -235,6 +237,9 @@ def diary(
                     "flag": f"- {name} was accepted only {pct}% of the last {c.get('uses')} "
                     "times; worth a look",
                     "vault_edit": f"- {name} was edited in the vault; the edit waits for review",
+                    "lessons": f"- {c.get('lessons')} lesson(s) people taught went into {name}'s "
+                    "Pitfalls"
+                    + (" (live after its tests)" if c.get("live") else " (waiting for review)"),
                 }.get(action, f"- {name}")
             )
     if stats.get("judge_skipped"):

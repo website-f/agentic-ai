@@ -723,6 +723,8 @@ class BrainFact(Base):
     )  # replaced|merged|contradicted|forgotten
     superseded_by: Mapped[str | None] = mapped_column(String(40))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    # P92: a lesson's structure (topic, when, do, dont, field, example, agent_id, via, taught).
+    meta: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict, server_default="{}")
 
 
 class BrainDream(Base):

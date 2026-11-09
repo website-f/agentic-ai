@@ -19,6 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..assistants.names import ASSISTANT_ONLY
 from ..brain import core as core_memory
+from ..brain import lessons as brain_lessons
 from ..brain.recall import recall_block
 from ..core.config import settings
 from ..core.db import SessionLocal
@@ -1214,6 +1215,51 @@ async def _attached_files_note(db: AsyncSession, task: Task, tz: str) -> str:
     return f"\n\nFiles attached to this task (read them with read_file):\n{lines}"
 
 
+REFRESH_NOTE = "(Memory for this run, not from the person.)"
+
+
+async def _refresh_memory(
+    db: AsyncSession, task: Task, agent: Agent, ws: Workspace, history: list[AgentMessage]
+) -> bool:
+    """P92: a new run of a task with a conversation already (sent back with feedback,
+    retried, resumed) looks in memory again, so what was learned since the first run (the
+    lesson from this very send-back included) reaches the agent. It rides on the person's
+    newest message, or as a note of its own. Once per run. True when the history changed."""
+    if not history:
+        return False
+    users = [m for m in history if m.role == "user"]
+    if not users or any((m.meta or {}).get("recall_run") == task.run_count for m in users):
+        return False
+    last = history[-1]
+    said = (last.content or "") if last.role == "user" else ""
+    query = f"{task.title}\n{said[:1500] or (task.brief or '')[:1500]}"
+    block, n_facts, n_pages = await recall_block(db, agent, query, ws.timezone)
+    taught, n_lessons = await brain_lessons.block_for_task(db, agent, task)
+    block = "\n\n".join(b for b in (block, taught) if b)
+    mark = {"recall_run": task.run_count}
+    if last.role == "user" and not (last.meta or {}).get("recall_run"):
+        if block:
+            last.content = f"{last.content}\n\n{block}"
+        last.meta = {**(last.meta or {}), **mark}
+    elif block and not (last.role == "assistant" and last.tool_calls):
+        _add(db, agent, "user", task_id=task.id, content=f"{REFRESH_NOTE}\n\n{block}", meta=mark)
+    else:  # nothing to add, or calls wait for their results: just note the run looked
+        users[-1].meta = {**(users[-1].meta or {}), **mark}
+    await db.commit()
+    if block:
+        await task_event(
+            db,
+            task,
+            "memory",
+            f"agent:{agent.id}",
+            f"looked in memory again for run {task.run_count}: "
+            f"{_count(n_facts, 'fact')}, {_count(n_pages, 'page')} and "
+            f"{_count(n_lessons, 'lesson')}",
+            {"facts": n_facts, "pages": n_pages, "lessons": n_lessons, "run": task.run_count},
+        )
+    return bool(block)
+
+
 async def _language_line(db: AsyncSession, task: Task) -> str:
     """P22: a task a person created is reported in their language. One line on the first
     message only (never the system prompt, so the cached prefix stays the same)."""
@@ -1307,12 +1353,17 @@ async def _run_task_step(task_id: str) -> StepResult:
             block, n_facts, n_pages = await recall_block(
                 db, agent, f"{task.title}\n{task.brief}", ws.timezone
             )
+            # P92: the lessons people taught on this kind of work, every time (not only the
+            # ones that happen to match the words of this brief).
+            taught, n_lessons = await brain_lessons.block_for_task(db, agent, task)
+            block = "\n\n".join(b for b in (block, taught) if b)
             _add(
                 db,
                 agent,
                 "user",
                 task_id=task.id,
                 content=f"{content}\n\n{block}" if block else content,
+                meta={"recall_run": task.run_count},
             )
             await db.commit()
             if block:
@@ -1321,9 +1372,12 @@ async def _run_task_step(task_id: str) -> StepResult:
                     task,
                     "memory",
                     f"agent:{agent.id}",
-                    f"recalled {_count(n_facts, 'fact')} and {_count(n_pages, 'page')}",
-                    {"facts": n_facts, "pages": n_pages},
+                    f"recalled {_count(n_facts, 'fact')} and {_count(n_pages, 'page')}"
+                    + (f" and {_count(n_lessons, 'lesson')}" if n_lessons else ""),
+                    {"facts": n_facts, "pages": n_pages, "lessons": n_lessons},
                 )
+            history = await _history(db, task_id=task.id)
+        elif await _refresh_memory(db, task, agent, ws, history):
             history = await _history(db, task_id=task.id)
 
         await agent_status(agent, "working", task)
@@ -1850,6 +1904,22 @@ async def _apply_decision(db: AsyncSession, a: Approval) -> None:
             await _learn_denial(db, agent, task, a, who)
     elif a.status == "answered":
         result = f"Answer from {who}: {a.answer}"
+        # P92: an answer that corrects the agent or gives a rule is a lesson, kept now.
+        args = a.args or {}
+        options = args.get("options") if isinstance(args.get("options"), list) else []
+        if a.decided_by and brain_lessons.worth_a_lesson(a.answer or "", "", options):
+            noted = await brain_lessons.capture(
+                db,
+                agent,
+                a.answer or "",
+                via="ask_human",
+                taught_by=a.decided_by,
+                task=task,
+                context=f"The agent asked: {str(args.get('question') or a.reason or '')[:600]}",
+                guess=False,
+            )
+            if noted is not None:
+                await _lesson_event(db, task, a.decided_by, noted)
     else:  # expired
         result = (
             "No one answered within 24 hours. Continue without it, or finish and "
@@ -1876,13 +1946,34 @@ async def _apply_decision(db: AsyncSession, a: Approval) -> None:
     await agent_status(agent, "working", task)
 
 
+async def _lesson_event(db: AsyncSession, task: Task, actor: str, noted: Any) -> None:
+    """P92: "Noted for next time: ..." on the task's timeline (the page offers Undo)."""
+    await task_event(db, task, "lesson", actor, noted.fact.text, noted.event())
+
+
 async def _learn_denial(db: AsyncSession, agent: Agent, task: Task, a: Approval, who: str) -> None:
-    """A denial with a reason is a lesson: keep it as a private fact for this agent (P17)."""
+    """A denial with a reason is a lesson (P92: one structured lesson, kept now); when no
+    model can write one or it holds nothing for next time, a private fact as before (P17)."""
     from ..brain import facts as brain_facts  # late: the brain imports agent modules
     from ..brain.scope import for_agent
 
     tool = TOOLS.get(a.tool_name)
     label = tool.label if tool else a.tool_name
+    if a.decided_by:
+        noted = await brain_lessons.capture(
+            db,
+            agent,
+            a.answer or "",
+            via="denial",
+            taught_by=a.decided_by,
+            task=task,
+            context=f'The agent asked to use "{label}" with {_brief(a.args, 400)}; it was '
+            "turned down.",
+            guess=False,
+        )
+        if noted is not None:
+            await _lesson_event(db, task, a.decided_by, noted)
+            return
     text = brain_facts.clean(
         f'{who} denied "{label}" on the task "{task.title[:80]}": {(a.answer or "").strip()}'
     )
@@ -2066,6 +2157,48 @@ async def _recall_query(db: AsyncSession, session_id: str, asked_id: int, text: 
     return f"{(before or '')[-400:]}\n{text}".strip()
 
 
+async def _chat_lesson(
+    db: AsyncSession, agent: Agent, session: ChatSession, asked: AgentMessage, text: str
+) -> Any:
+    """P92: the person corrected the agent ("no, ...", "salah, ...", "jangan ...") or asked it
+    to remember something: one lesson, kept now. The same signal reflect.chat_trigger uses."""
+    from ..skills import reflect  # late: skills reach the runtime
+
+    if not session.user_id:
+        return None
+    remember = bool(brain_lessons.REMEMBER.search(text) or reflect.REMEMBER.search(text))
+    if not remember:
+        if len(text.strip()) < 12 or not reflect.CORRECTION.search(text):
+            return None
+        turns = await db.scalar(
+            select(func.count())
+            .select_from(AgentMessage)
+            .where(AgentMessage.session_id == session.id, AgentMessage.role == "user")
+        )
+        if int(turns or 0) < 2:
+            return None  # a first message is a request, not a correction
+    before = await db.scalar(
+        select(AgentMessage.content)
+        .where(
+            AgentMessage.session_id == session.id,
+            AgentMessage.role == "assistant",
+            AgentMessage.id < asked.id,
+            AgentMessage.content.is_not(None),
+        )
+        .order_by(AgentMessage.id.desc())
+        .limit(1)
+    )
+    return await brain_lessons.capture(
+        db,
+        agent,
+        text,
+        via="remember" if remember else "chat",
+        taught_by=f"user:{session.user_id}",
+        session_id=session.id,
+        context=f"The agent had said: {(before or '')[:600]}" if before else "",
+    )
+
+
 async def chat_turn(db: AsyncSession, agent: Agent, session: ChatSession, text: str) -> ChatReply:
     """Direct conversation. Runs in the request (no Temporal): only tools the policy allows
     outright are executed; anything needing approval is declined with a pointer to tasks.
@@ -2113,17 +2246,23 @@ async def _chat_turn(db: AsyncSession, agent: Agent, session: ChatSession, text:
         )
         await db.commit()
         return ChatReply(note, "", "", [], answer.id)
+    # P92: a correction or "remember this" is kept as a lesson now, so this very answer and
+    # every later one use it; the person sees "Noted for next time" under the answer.
+    noted = await _chat_lesson(db, agent, session, asked, text)
     # Recalled memory rides on this turn only: it is not stored, and earlier turns stay
     # byte-identical, so the cached prompt prefix keeps hitting.
     recalled: list[dict[str, Any]] = []
+    query = await _recall_query(db, session.id, asked.id, text)
     block, _, _ = await recall_block(
         db,
         agent,
-        await _recall_query(db, session.id, asked.id, text),
+        query,
         ws.timezone,
         exclude_session_id=session.id,
         used=recalled,
     )
+    taught = await brain_lessons.block_for_chat(db, agent, query)
+    block = "\n\n".join(b for b in (block, taught) if b)
     # P22: the person's language rides on this turn too (never the system prompt). The
     # request's language (X-Lang, or a bot's use_lang), else the person's saved one.
     lang = explicit_lang() or await prefs.language(db, session.user_id)
@@ -2222,6 +2361,7 @@ async def _chat_turn(db: AsyncSession, agent: Agent, session: ChatSession, text:
                     "tools": used,
                     # What it remembered for this answer, shown under it (and correctable).
                     **({"recalled": recalled[:RECALLED_SHOWN]} if recalled else {}),
+                    **({"lesson": noted.event()} if noted is not None else {}),
                 },
             )
             await db.commit()
