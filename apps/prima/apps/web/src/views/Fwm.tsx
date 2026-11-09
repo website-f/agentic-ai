@@ -21,7 +21,8 @@ import { CooNoticesPanel } from './CooNotices';
 import { DocList, ProofPicker } from './Proof';
 import { FwmWelfarePanel } from './FwmWelfare';
 import { FwmRecruitmentPanel } from './FwmRecruitment';
-import { FwAddButtons } from './FwmAdd';
+import { FwAddMenu, NoAddNote } from './FwmAdd';
+import { GuardPhoneCard } from './GuardPhoneOffice';
 import '../styles/hrx.css';
 
 /**
@@ -127,7 +128,13 @@ export function FwmView() {
     <div className="page">
       <PageHead
         title="Foreign workers"
-        actions={data.role === 'staff' ? <FwAddButtons branches={data.branches} /> : undefined}
+        actions={
+          data.canWork ? (
+            <FwAddMenu branches={data.branches} onPapers={() => setTab('workers')} />
+          ) : (
+            <NoAddNote>Foreign workers are added by the FWM team. Ask them, or ask the owner to give you FWM access.</NoAddNote>
+          )
+        }
         sub={
           data.role === 'om'
             ? 'Tasks from Foreign Worker Management: get the guard there, then send the proof.'
@@ -310,7 +317,7 @@ export function FwmView() {
             ) : (
               <ul className="hx-rows">
                 {items.slice(0, shown).map((i) => (
-                  <PaperRow key={`${i.person.id ?? i.person.staffNo}-${i.person.companyId}-${i.paper}`} i={i} canWork={data.canWork} onAlign={() => setTab('align')} />
+                  <PaperRow key={`${i.person.id ?? i.person.staffNo}-${i.person.companyId}-${i.paper}`} i={i} canWork={data.canWork} canRecord={data.canRecordPaper} onAlign={() => setTab('align')} />
                 ))}
               </ul>
             )}
@@ -321,7 +328,7 @@ export function FwmView() {
         </div>
       )}
 
-      {view === 'workers' && data.canWork && <WorkersView workers={data.workers} />}
+      {view === 'workers' && data.canWork && <WorkersView workers={data.workers} canRecord={data.canRecordPaper} />}
 
       {view === 'align' && align && <AlignView a={align} canWork={data.canWork} branches={data.branches} note={data.rules.both.source} />}
 
@@ -393,7 +400,7 @@ export function FwmView() {
   );
 }
 
-function PaperRow({ i, canWork, onAlign }: { i: Item; canWork: boolean; onAlign: () => void }) {
+function PaperRow({ i, canWork, canRecord, onAlign }: { i: Item; canWork: boolean; canRecord: boolean; onAlign: () => void }) {
   const [mode, setMode] = useState<'renew' | 'task' | 'new' | 'ack' | null>(null);
   const act = useAction();
   const personId = i.person.id;
@@ -481,15 +488,17 @@ function PaperRow({ i, canWork, onAlign }: { i: Item; canWork: boolean; onAlign:
             )}
             {canWork && personId && (
               <>
-                <button className="btn btn-sm" onClick={() => setMode('new')}>
-                  New paper received
-                </button>
+                {canRecord && (
+                  <button className="btn btn-sm" onClick={() => setMode('new')}>
+                    New paper received
+                  </button>
+                )}
                 {i.primaExpiresOn && !i.renewal && !i.jaSubmitted && (
                   <button className="btn btn-sm" onClick={() => setMode('renew')}>
                     Renewal submitted
                   </button>
                 )}
-                {i.ja?.expiresOn && i.ja.expiresOn !== i.primaExpiresOn && (
+                {canRecord && i.ja?.expiresOn && i.ja.expiresOn !== i.primaExpiresOn && (
                   <button
                     className="btn btn-sm"
                     disabled={act.busy}
@@ -621,7 +630,7 @@ function PaperForm({
   );
 }
 
-function WorkersView({ workers }: { workers: Worker[] }) {
+function WorkersView({ workers, canRecord }: { workers: Worker[]; canRecord: boolean }) {
   const [q, setQ] = useState('');
   const [open, setOpen] = useState<string | null>(null);
   const text = q.trim().toLowerCase();
@@ -631,7 +640,12 @@ function WorkersView({ workers }: { workers: Worker[] }) {
       <Toolbar>
         <Search value={q} onChange={setQ} placeholder="Type a name or staff number" label="Find a worker" />
       </Toolbar>
-      <Card title="Record a worker’s papers" actions={<span className="hx-count">{workers.length} in Prima</span>} flush>
+      <Card
+        title={canRecord ? 'Record a worker’s papers' : 'Workers in Prima'}
+        sub="Old paper dates from another system: Import from file, at the top. Each shows as Typed in until the paper is recorded from its copy."
+        actions={<span className="hx-count">{workers.length} in Prima</span>}
+        flush
+      >
         {text.length < 2 ? (
           <Empty title={`${workers.length} foreign workers in Prima.`}>Type at least 2 letters to find one.</Empty>
         ) : found.length === 0 ? (
@@ -649,6 +663,7 @@ function WorkersView({ workers }: { workers: Worker[] }) {
                 </div>
                 <div className="hx-row-side">
                   {w.jaStatus && w.jaStatus !== 'active' && <Chip tone="warn">JA: {JA_STATUS[w.jaStatus] ?? w.jaStatus}</Chip>}
+                  <PhoneChip p={w.phone} />
                   <button className="btn btn-sm" aria-expanded={open === w.id} onClick={() => setOpen(open === w.id ? null : w.id)}>
                     {open === w.id ? 'Close' : 'Papers'}
                   </button>
@@ -657,9 +672,10 @@ function WorkersView({ workers }: { workers: Worker[] }) {
                   <div className="hx-row-body">
                     <ul className="hx-rows">
                       {w.papers.map((p) => (
-                        <WorkerPaper key={p.paper} personId={w.id} p={p} />
+                        <WorkerPaper key={p.paper} personId={w.id} p={p} canRecord={canRecord} />
                       ))}
                     </ul>
+                    <WorkerPhone w={w} />
                   </div>
                 )}
               </li>
@@ -671,7 +687,50 @@ function WorkersView({ workers }: { workers: Worker[] }) {
   );
 }
 
-function WorkerPaper({ personId, p }: { personId: string; p: Worker['papers'][number] }) {
+/**
+ * P93: foreign workers are guard records, so their own sign-in is the guard phone (face plus PIN, own data only). The
+ * chip says how far it is set up; the people who set PINs (the company office or HR) enrol it here or on the Guards screen.
+ */
+function phoneText(p: Worker['phone']): { label: string; tone: Tone; title: string } {
+  if (p.state === 'active') return { label: 'Phone sign-in ready', tone: 'ok', title: 'The worker signs in on their own phone with face plus PIN.' };
+  if (p.state === 'issued') return { label: 'Phone code sent', tone: 'info', title: 'A one-time enrolment code is waiting to be used on the worker’s phone.' };
+  if (!p.login) return { label: 'No guard sign-in yet', tone: 'unknown', title: 'IT creates the guard sign-in first; then a PIN is set and the phone enrolled.' };
+  if (!p.pin) return { label: 'No PIN yet', tone: 'unknown', title: 'HR or the company office sets the PIN, then enrols the phone.' };
+  return { label: 'Phone not enrolled', tone: 'neutral', title: 'HR or the company office enrols the phone with a one-time code.' };
+}
+
+function PhoneChip({ p }: { p: Worker['phone'] }) {
+  const t = phoneText(p);
+  return (
+    <Chip tone={t.tone} title={t.title}>
+      {t.label}
+    </Chip>
+  );
+}
+
+function WorkerPhone({ w }: { w: Worker }) {
+  const t = phoneText(w.phone);
+  return (
+    <div className="hx-form fw-phone">
+      <h3 className="hx-form-title">Own phone sign-in</h3>
+      <p className="muted small">
+        The worker sees their own shifts, clock-ins, papers running out and SOS on their own phone, with face plus PIN. Clocking in stays on the site
+        device.
+      </p>
+      {w.phone.canEnrol && w.phone.login ? (
+        <GuardPhoneCard personId={w.id} companyId={w.companyId} />
+      ) : (
+        <p className="muted small">
+          {w.phone.login
+            ? 'HR or the company office sets the PIN and enrols the phone, here or on the Guards screen.'
+            : 'Ask IT to create the worker’s guard sign-in; then HR or the company office sets the PIN and enrols the phone.'}
+        </p>
+      )}
+    </div>
+  );
+}
+
+function WorkerPaper({ personId, p, canRecord }: { personId: string; p: Worker['papers'][number]; canRecord: boolean }) {
   const [mode, setMode] = useState<'new' | 'correct' | null>(null);
   const act = useAction();
   return (
@@ -679,7 +738,9 @@ function WorkerPaper({ personId, p }: { personId: string; p: Worker['papers'][nu
       <div className="hx-row-main">
         <span className="hx-row-title">{p.label}</span>
         <span className="hx-row-meta">
-          {p.expiresOn ? `${p.number || 'no number'} · issued ${p.issuedOn ? dateLabel(p.issuedOn) : '?'} · expires ${dateLabel(p.expiresOn)}` : 'Not on record in Prima'}
+          {p.expiresOn
+            ? `${canRecord ? `${p.number || 'no number'} · ` : ''}issued ${p.issuedOn ? dateLabel(p.issuedOn) : '?'} · expires ${dateLabel(p.expiresOn)}`
+            : 'Not on record in Prima'}
           {p.jaExpiresOn ? ` · JA app: ${dateLabel(p.jaExpiresOn)}` : ''}
         </span>
       </div>
@@ -693,7 +754,7 @@ function WorkerPaper({ personId, p }: { personId: string; p: Worker['papers'][nu
         {!p.expiresOn && <Chip tone="unknown">Unknown</Chip>}
       </div>
       <div className="hx-row-body">
-        {!mode && (
+        {!mode && canRecord && (
           <div className="hx-row-actions">
             <button className="btn btn-sm" onClick={() => setMode('new')}>
               {p.expiresOn ? 'New paper received' : 'Record from the paper'}

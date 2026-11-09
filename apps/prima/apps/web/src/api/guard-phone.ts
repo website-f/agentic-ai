@@ -12,6 +12,8 @@ export type GuardPhoneStatus = R<'status'> & { engine: 'phone' | 'server' };
 export type GuardPhoneMe = R<'me'>;
 export type GuardHeartbeat = R<'heartbeat'>;
 export type GuardSos = R<'sos'>;
+/** P93: the guard's own duty (roster, clock record, papers running out), the same view-only answer as /api/me/duty. */
+export type GuardDuty = Awaited<ReturnType<PrimaService['myDuty']>>;
 export type GuardChallenge = { engine: 'phone' } | { engine: 'server'; token: string; steps: ('centre' | 'left' | 'right')[]; expiresAt: string };
 export type GuardSignInInput = { pin: string; descriptor?: number[]; live?: boolean; photo?: string; token?: string; frames?: string[] };
 export type GuardFix = { lat: number | null; lng: number | null; accuracyM: number | null };
@@ -28,6 +30,8 @@ export interface GuardPhoneClient {
   challenge(): Promise<GuardChallenge>;
   signIn(input: GuardSignInInput): Promise<void>;
   me(): Promise<GuardPhoneMe>;
+  /** P93: own roster, clock-in record and reminders (papers running out), view only. */
+  duty(): Promise<GuardDuty>;
   heartbeat(fix: GuardFix, battery: number | null): Promise<GuardHeartbeat>;
   sos(fix: GuardFix): Promise<GuardSos>;
   signOut(): Promise<void>;
@@ -133,6 +137,16 @@ export class HttpGuardPhone extends StoredDevice implements GuardPhoneClient {
   me() {
     return this.call<GuardPhoneMe>('/me', undefined, true);
   }
+  async duty() {
+    // The guard's own view, signed in with the phone's token (the same route the guard's own sign-in uses).
+    const res = await fetch(`${this.base}/api/me/duty`, { headers: this.token ? { authorization: `Bearer ${this.token}` } : {} });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      if (res.status === 401) this.setToken(null);
+      throw new ApiError(data.message ?? `Request failed (${res.status})`, res.status, []);
+    }
+    return data as GuardDuty;
+  }
   heartbeat(fix: GuardFix, battery: number | null) {
     return this.call<GuardHeartbeat>('/me/heartbeat', { ...fix, capturedAt: new Date().toISOString(), battery }, true);
   }
@@ -214,6 +228,16 @@ export class DemoGuardPhone extends StoredDevice implements GuardPhoneClient {
   }
   me() {
     return this.run(this.need().userId, (g, u) => g.me(u, this.session()));
+  }
+  async duty() {
+    const d = this.need();
+    this.session();
+    try {
+      const svc = await this.host.svc();
+      return await svc.myDuty(await this.host.user(d.userId));
+    } catch (e) {
+      return this.host.toApiError(e);
+    }
   }
   heartbeat(fix: GuardFix, battery: number | null) {
     return this.run(this.need().userId, (g, u) => g.heartbeat(u, this.session(), { ...fix, battery }));

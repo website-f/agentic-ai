@@ -249,6 +249,24 @@ export function fwAcksOwed(deadline: IsoDate, expiresOn: IsoDate, stage: FwStage
 }
 
 /** Passport numbers are kept to their last 4 characters in Prima; the full number stays in the restricted vault and the JA app. */
+/**
+ * P93: the paper a cell of an old list names, in English or Malay ("PLKS", "Permit Kerja", "Pasport", "Insurans"); null
+ * when it is none of the papers Prima keeps. SPIKPA and the KDN letter are checked before plain insurance and permit.
+ */
+export function fwPaperFromWords(raw: string): FwPaper | null {
+  const v = String(raw ?? '').trim();
+  if ((FW_PAPERS as string[]).includes(v.toUpperCase())) return v.toUpperCase() as FwPaper;
+  const t = v.toLowerCase();
+  if (!t) return null;
+  if (/spikpa|hospital/.test(t)) return 'SPIKPA';
+  if (/kdn|approval letter|surat kelulusan/.test(t)) return 'KDN_LETTER';
+  if (/fomema|medical|perubatan/.test(t)) return 'FOMEMA';
+  if (/pass?port/.test(t)) return 'PASSPORT';
+  if (/plks|permit|pas lawatan|work pass/.test(t)) return 'PLKS_PERMIT';
+  if (/insuran|fwcs|fwhs/.test(t)) return 'FW_INSURANCE';
+  return null;
+}
+
 export function fwPaperNumber(paper: FwPaper, raw: string): string {
   const v = raw.trim().replace(/\s+/g, ' ');
   if (paper !== 'PASSPORT') return v;

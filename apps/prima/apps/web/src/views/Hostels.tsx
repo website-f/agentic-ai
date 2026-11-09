@@ -7,6 +7,7 @@ import { Card, Empty, PageHead, Search, Stat, Stats, Steps, Toolbar, type StepSt
 import { Chip, ErrorNotice, Loading, dateLabel, dateTimeLabel, useAction, useLoad, type Tone } from '../ui';
 import { ProofPicker } from './Proof';
 import { RecordButton } from './RecordForm';
+import { NoAddNote } from './FwmAdd';
 import { ImportButton } from './ImportDrawer';
 import '../styles/hrx.css';
 
@@ -62,6 +63,8 @@ export function HostelsView() {
           <>
             <ImportButton kind="hostel" />
             <RecordButton kind="hostel" label="Add hostel" primary />
+            {/* P93: where the Add button would be, say who adds hostels instead of leaving a silent gap. */}
+            {!data.canAddBill && <NoAddNote>Hostels and their bills are added by the company office or FWM.</NoAddNote>}
           </>
         }
       />
@@ -99,7 +102,11 @@ export function HostelsView() {
           )}
           {data.hostels.length === 0 && (
             <Card>
-              <Empty title="No hostel on record.">Add the hostel first (Add hostel, above); its rent and utility bills are then entered on it.</Empty>
+              <Empty title="No hostel on record.">
+                {data.canAddBill
+                  ? 'Add the hostel first (Add hostel, above); its rent and utility bills are then entered on it.'
+                  : 'The company office or FWM adds the hostel first; its rent and utility bills are then entered on it.'}
+              </Empty>
             </Card>
           )}
           {data.hostels.length > 0 && hostels.length === 0 && (

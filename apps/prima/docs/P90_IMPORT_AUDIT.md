@@ -16,6 +16,7 @@ not master records; those are not bulk-loaded, because each item needs its own a
 | Screen (menu) | Records | Add | Import | Create path and permission |
 |---|---|---|---|---|
 | Foreign workers (`fwm`) | Foreign workers with passport, PLKS, FOMEMA, insurance, SPIKPA dates | **P90** "Add foreign worker" | **P90** `fwWorker` | **P90** `addFwWorker`: FWM staff only (`fwmRoleOf === 'staff'`, the same check as adding from the JA app); Nepali, age 18-60, own branch, staff number once |
+| Foreign workers (`fwm`) | Paper dates of workers already in Prima, from the old system | **P93** Add menu "Paper dates from the old system" (opens Workers) | **P93** `fwPaper` | **P93** `importFwPaper`: FWM staff or the owner (P78). Only where Prima holds no date for that paper; saved "Typed in, copy not seen"; the next paper still needs its copy (see docs/P93_FOREIGN_WORKERS.md). P93 also lets the owner add workers (`fwmMaker`) |
 | Sites (`sites`) | Sites, posts, checkpoints | yes | yes (`site`, `post`, `checkpoint`) | `saveRecord`, company desk (site also the OGM) |
 | Guards (`people`) | Office staff | yes (`officeStaff`) | yes | `saveRecord`, HR |
 | Guards (`people`) | Guards and officers | no (by design) | no (by design) | Guards come from the JA Group app feed (`records.ts`: "Guards and officers come from the JA Group app and are not added here"). Not changed: a second source of guard records needs the CEO's decision. History from JA is loaded through "Switch from JA". |
@@ -51,7 +52,7 @@ not master records; those are not bulk-loaded, because each item needs its own a
 |---|---|---|---|
 | HR monitor (`hr`) | Staff training records | `recordTraining` | Next candidate (HR or scoped manager) |
 | Guards (`people`) | Guard papers (KDN card, CSG, TNG) | `recordGuardPaper` | Next candidate; guards themselves come from JA |
-| Foreign workers | Paper renewals for existing workers | `recordFwPaper` | A renewed paper needs its copy attached (rule); typed dates are only accepted when a worker is first added |
+| Foreign workers | Paper renewals for existing workers | `recordFwPaper` | A renewed paper needs its copy attached (rule); typed dates are only accepted when a worker is first added, or (P93) as an opening record where Prima holds none |
 | Staff directory | Office staff directory | own CSV batch with CoS approval | Already has its own reviewed batch path |
 | Switch from JA | JA history | own staged import with ACT approval | Already has its own reviewed path |
 | Recruitment cost (`fwcost`) | Worker placements | `recordFwPlacement` | Money rule (charges follow); left to the form |

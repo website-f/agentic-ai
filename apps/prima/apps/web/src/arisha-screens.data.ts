@@ -2363,7 +2363,7 @@ export const SCREEN_GUIDES: ScreenGuide[] = [
     "view": "fwm",
     "title": "Foreign workers",
     "what": "Foreign Worker Management keeps every foreign worker's permit, passport, FOMEMA and insurance renewed, sends OMs dated tasks, and tracks recruitment and welfare. The JA Group app's dates show beside Prima's.",
-    "who": "FWM staff work it. Leaders a paper has reached acknowledge it. OMs see only \"Tasks\". Company managers see their company's steps; fees, notes and what workers raise stay with FWM and group leaders.",
+    "who": "FWM staff work it. FWM staff and the owner add workers and old paper dates. Leaders a paper has reached acknowledge it. OMs see only \"Tasks\". Company managers see their company's steps; fees, notes and what workers raise stay with FWM and group leaders.",
     "tabs": [
       {
         "name": "Papers",
@@ -2371,7 +2371,7 @@ export const SCREEN_GUIDES: ScreenGuide[] = [
       },
       {
         "name": "Workers",
-        "what": "FWM finds a worker and records each paper from its copy."
+        "what": "FWM finds a worker and records each paper from its copy. Each worker shows whether their own phone sign-in is set up."
       },
       {
         "name": "Prima and JA",
@@ -2395,6 +2395,20 @@ export const SCREEN_GUIDES: ScreenGuide[] = [
       }
     ],
     "tasks": [
+      {
+        "task": "How to add a foreign worker",
+        "steps": [
+          "Press \"Add\" at the top, choose \"Foreign worker\", fill the form, press \"Save\".",
+          "For the old list, press \"Import from file\" at the top and choose \"Foreign worker\"."
+        ]
+      },
+      {
+        "task": "How to load old paper dates",
+        "steps": [
+          "Press \"Import from file\" at the top and choose \"Paper dates from the old system\": one row per paper, with the staff number, the paper and its expiry.",
+          "A date is added only where Prima has none, and shows \"Typed in\" until the paper is recorded from its copy."
+        ]
+      },
       {
         "task": "How to acknowledge a paper alert",
         "steps": [
@@ -2444,7 +2458,7 @@ export const SCREEN_GUIDES: ScreenGuide[] = [
         "means": "Reminders at 120, 90, 60, 30 and 15 days before expiry, going up to the Chief of Staff, COO and CEO."
       }
     ],
-    "notes": "Acknowledge an alert within 1 working day. A submitted renewal pauses the reminders. \"No expiry on record\" means unknown, not safe. When Prima and JA differ, the ladder counts to the earlier date until FWM settles it. FWM also has \"Look up staff history\" at the bottom. The welfare \"Closed\" and \"Agencies\" tabs show only to FWM and group leaders."
+    "notes": "Acknowledge an alert within 1 working day. A submitted renewal pauses the reminders. \"No expiry on record\" means unknown, not safe. When Prima and JA differ, the ladder counts to the earlier date until FWM settles it. FWM also has \"Look up staff history\" at the bottom. Foreign workers are guards in Prima: HR or the company office enrols their own phone (\"Enrol phone\"); clocking in stays on the site device. If you cannot add, the screen says who does. The welfare \"Closed\" and \"Agencies\" tabs show only to FWM and group leaders."
   },
   {
     "view": "socso",
