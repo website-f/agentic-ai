@@ -248,7 +248,7 @@ export function AnnotatedShot({
         <button
           type="button"
           onClick={() => setOpen(true)}
-          className="absolute right-2 bottom-2 z-20 inline-flex h-9 items-center gap-1.5 rounded-full border border-border bg-surface/90 px-3 text-[12.5px] font-medium text-fg shadow-[var(--shadow-soft)] backdrop-blur transition-opacity md:opacity-0 md:group-hover:opacity-100 md:focus-visible:opacity-100"
+          className="absolute right-2 bottom-2 z-20 inline-flex h-9 items-center gap-1.5 rounded-full border border-border bg-surface/90 px-3 text-[12.5px] font-medium text-fg shadow-[var(--shadow-soft)] backdrop-blur transition-opacity md:opacity-0 md:group-hover:opacity-100 md:focus-visible:opacity-100 pointer-coarse:opacity-100"
         >
           <MagnifyingGlassPlusIcon size={15} /> {t("Enlarge")}
         </button>

@@ -24,6 +24,7 @@ import { Select } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { locale, msg, t as tr, useT } from "@/i18n";
 import { api, errorMessage } from "@/lib/api";
+import { openUrl, startDownload } from "@/lib/native";
 import {
   docKeys, documentQuery, exportUrl, fileUrl, kitQuery, STATUS_LABEL, versionsQuery,
   type Check, type DocDetail, type DocStatus, type FieldValue, type LineItem, type TemplateField,
@@ -346,10 +347,10 @@ export function DocumentEditor({ id }: { id: string }) {
     <Menu>
       <MenuTrigger asChild><Button size="sm" variant="outline"><DownloadSimpleIcon size={14} /> {t("Export")}</Button></MenuTrigger>
       <MenuContent>
-        <MenuItem icon={<FilePdfIcon />} onSelect={() => window.open(exportUrl(id, "pdf", true), "_blank", "noopener")}>{t("Open PDF")}</MenuItem>
-        <MenuItem icon={<DownloadSimpleIcon />} onSelect={() => { window.location.href = exportUrl(id, "pdf"); }}>{t("Download PDF")}</MenuItem>
-        <MenuItem icon={<DownloadSimpleIcon />} onSelect={() => { window.location.href = exportUrl(id, "docx"); }}>{t("Download Word")}</MenuItem>
-        <MenuItem icon={<DownloadSimpleIcon />} onSelect={() => { window.location.href = exportUrl(id, "xlsx"); }}>{t("Download Excel")}</MenuItem>
+        <MenuItem icon={<FilePdfIcon />} onSelect={() => openUrl(exportUrl(id, "pdf", true))}>{t("Open PDF")}</MenuItem>
+        <MenuItem icon={<DownloadSimpleIcon />} onSelect={() => startDownload(exportUrl(id, "pdf"))}>{t("Download PDF")}</MenuItem>
+        <MenuItem icon={<DownloadSimpleIcon />} onSelect={() => startDownload(exportUrl(id, "docx"))}>{t("Download Word")}</MenuItem>
+        <MenuItem icon={<DownloadSimpleIcon />} onSelect={() => startDownload(exportUrl(id, "xlsx"))}>{t("Download Excel")}</MenuItem>
         <MenuSeparator />
         <MenuItem icon={<TrashIcon />} danger onSelect={() => setRemoving(true)}>{t("Delete document")}</MenuItem>
       </MenuContent>

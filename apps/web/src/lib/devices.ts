@@ -6,6 +6,7 @@ import { queryOptions } from "@tanstack/react-query";
 import { t } from "@/i18n";
 
 import { ApiError, api, langHeader } from "./api";
+import { saveFile } from "./native";
 
 export type DeviceOs = "windows" | "mac" | "linux";
 
@@ -209,14 +210,8 @@ export async function downloadFromDevice(id: string, path: string): Promise<void
   }
   if (!res.ok) throw await failure(res);
   const m = /filename\*=UTF-8''([^;]+)/.exec(res.headers.get("content-disposition") ?? "");
-  const url = URL.createObjectURL(await res.blob());
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = m ? decodeURIComponent(m[1]!) : (path.split(/[\\/]/).pop() || "file");
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  // P96: the browser's download, or the share sheet in the phone app.
+  await saveFile(await res.blob(), m ? decodeURIComponent(m[1]!) : (path.split(/[\\/]/).pop() || "file"));
 }
 
 /** 1.2 GB, 640 MB, 12 KB. */

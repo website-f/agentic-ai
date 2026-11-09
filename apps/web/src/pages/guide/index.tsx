@@ -37,6 +37,7 @@ import type { GuideManifest } from "@/guide/manifest";
 import { PAGE_ICONS, Rich, stateLabel } from "@/guide/rich";
 import type { GuidePage as GuidePageInfo } from "@/guide/targets";
 import { locale, useT } from "@/i18n";
+import { useBackClose } from "@/lib/back-close";
 import { useIsPhone } from "@/lib/use-media";
 import { cn } from "@/lib/utils";
 
@@ -97,6 +98,7 @@ function PageIndex({ current, query, onPick }: { current?: string; query: string
 function IndexSheet({ current, query, onQuery }: { current?: GuidePageInfo; query: string; onQuery: (q: string) => void }) {
   const t = useT();
   const [open, setOpen] = useState(false);
+  useBackClose(open, () => setOpen(false)); // P96: the phone's Back closes the index
   const IconCmp = current ? (PAGE_ICONS[current.id] ?? BookBookmarkIcon) : BookOpenTextIcon;
   return (
     <Drawer.Root open={open} onOpenChange={setOpen}>

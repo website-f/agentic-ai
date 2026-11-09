@@ -11,6 +11,7 @@ import { queryOptions } from "@tanstack/react-query";
 import { msg } from "@/i18n";
 
 import { api, ApiError, langHeader } from "./api";
+import { saveFile } from "./native";
 
 export type FieldType =
   | "text" | "long_text" | "number" | "money" | "percent" | "date" | "datetime" | "checkbox"
@@ -209,14 +210,7 @@ export const importCsv = (key: string, csv: string) => api<{ added: number; skip
 export async function exportCsv(key: string): Promise<void> {
   const res = await fetch(`/api/crm/objects/${enc(key)}/export.csv`, { credentials: "same-origin", headers: langHeader() });
   if (!res.ok) throw new ApiError(res.status, "export_failed", msg("Could not export."));
-  const url = URL.createObjectURL(await res.blob());
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = `${key}.csv`;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  await saveFile(await res.blob(), `${key}.csv`); // P96: the share sheet in the phone app
 }
 
 // ------------------------------------------------------------------------------- labels and helpers

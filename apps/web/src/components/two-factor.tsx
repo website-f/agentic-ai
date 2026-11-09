@@ -23,6 +23,7 @@ import { Pill } from "@/components/ui/pill";
 import { Skeleton } from "@/components/ui/skeleton";
 import { locale, msg, useT } from "@/i18n";
 import { api, errorMessage } from "@/lib/api";
+import { saveFile } from "@/lib/native";
 import { keys, meQuery } from "@/lib/queries";
 import {
   codesFile,
@@ -118,14 +119,8 @@ async function copyText(text: string, done: string, blocked: string) {
 /** The ten one-time codes, shown once, with Copy and Download. */
 export function RecoveryCodes({ codes, email, onDone }: { codes: string[]; email: string; onDone: () => void }) {
   const t = useT();
-  const download = () => {
-    const url = URL.createObjectURL(codesFile(codes, email, t("Agentic Office recovery codes")));
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "agentic-recovery-codes.txt";
-    a.click();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
-  };
+  // P96: the browser's download, or the share sheet in the phone app.
+  const download = () => void saveFile(codesFile(codes, email, t("Agentic Office recovery codes")), "agentic-recovery-codes.txt");
   return (
     <div className="grid gap-4">
       <div className="flex items-start gap-2.5 rounded-sm border border-warn/30 bg-warn/8 px-3 py-2.5 text-[13px]">

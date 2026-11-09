@@ -1,6 +1,7 @@
 /** Adding members from an Excel or CSV sheet (api/routers/member_import.py). */
 import { msg, t } from "@/i18n";
 import { ApiError, langHeader, readCookie } from "@/lib/api";
+import { saveFile } from "@/lib/native";
 import type { Role } from "@/lib/types";
 
 export const SHEET_ACCEPT = ".xlsx,.xls,.csv,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel";
@@ -101,16 +102,8 @@ export async function previewSheet(file: File): Promise<ImportPreview> {
   return (await res.json()) as ImportPreview;
 }
 
-function save(blob: Blob, name: string) {
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = name;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
-}
+// P96: the browser's download, or the share sheet in the phone app.
+const save = (blob: Blob, name: string) => saveFile(blob, name);
 
 /** The template in the app's language (a plain link would not send it). */
 export async function downloadTemplate(): Promise<void> {

@@ -134,7 +134,7 @@ function PaletteItem({ item, onAdd }: { item: LibItem; onAdd: () => void }) {
         <span className="block truncate text-[13px] font-medium">{t(item.label)}</span>
         <span className="block truncate text-[11.5px] text-muted">{t(item.desc)}</span>
       </span>
-      <PlusIcon size={14} className="text-muted opacity-0 transition-opacity group-hover:opacity-100" />
+      <PlusIcon size={14} className="text-muted opacity-0 transition-opacity group-hover:opacity-100 pointer-coarse:opacity-100" />
     </button>
   );
 }

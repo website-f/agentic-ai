@@ -21,6 +21,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Stat, StatGrid } from "@/components/ui/stat";
 import { t as tr, useLang, useT } from "@/i18n";
 import { api, errorMessage } from "@/lib/api";
+import { openUrl } from "@/lib/native";
 import { useCompanies } from "@/lib/company";
 import {
   docKeys, documentsQuery, fileUrl, itemsIn, packQuery, packsQuery, STATUS_LABEL, templatesQuery,
@@ -310,7 +311,7 @@ function PackDetail({ id }: { id: string }) {
     onSuccess: (r) => {
       put(r.pack);
       qc.invalidateQueries({ queryKey: docKeys.files });
-      toast.success(tr("Compiled: {n} pages.", { n: r.pages }), { action: { label: useLang.getState().lang === "ms" ? tr("Open (verb)") : "Open", onClick: () => window.open(fileUrl(r.file_id, true), "_blank", "noopener") } });
+      toast.success(tr("Compiled: {n} pages.", { n: r.pages }), { action: { label: useLang.getState().lang === "ms" ? tr("Open (verb)") : "Open", onClick: () => openUrl(fileUrl(r.file_id, true)) } });
       if (r.skipped.length) toast.warning(tr("Left out: {list}", { list: r.skipped.join("; ") }));
     },
     onError: (e) => toast.error(errorMessage(e)),

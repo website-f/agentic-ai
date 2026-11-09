@@ -18,6 +18,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { SwitchField } from "@/components/ui/switch";
 import { msg, useT } from "@/i18n";
 import { api, errorMessage } from "@/lib/api";
+import { saveFile } from "@/lib/native";
 import { cn, timeAgo } from "@/lib/utils";
 
 interface Approval { location: string; data: string; note: string; by: string; at: string }
@@ -69,11 +70,7 @@ export function ApprovedServicesPage() {
     const rows = [["Service", "Kind", "Detail", "Location", "Data it may receive", "Note", "Approved by", "Approved at"]];
     for (const s of approved) rows.push([s.name, s.kind, s.detail, s.approval!.location, s.approval!.data, s.approval!.note, s.approval!.by, s.approval!.at]);
     const csv = rows.map((r) => r.map((c) => `"${String(c ?? "").replace(/"/g, '""')}"`).join(",")).join("\n");
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
-    a.download = "approved-services.csv";
-    a.click();
-    URL.revokeObjectURL(a.href);
+    void saveFile(new Blob([csv], { type: "text/csv" }), "approved-services.csv"); // P96: phone app too
   };
 
   return (

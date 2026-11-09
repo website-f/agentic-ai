@@ -1,11 +1,13 @@
 import { cva, type VariantProps } from "class-variance-authority";
 import { Slot } from "radix-ui";
-import type { ButtonHTMLAttributes } from "react";
+import { Children, type ButtonHTMLAttributes, type ReactNode } from "react";
 
 import { cn } from "@/lib/utils";
 
 const button = cva(
-  "inline-flex shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-sm font-medium " +
+  // P96: never wider than its row (a long label ends in "..." instead of running off a phone
+  // screen), and `hit` gives small buttons a finger-sized (44 px) touch area on touch screens.
+  "hit inline-flex max-w-full shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-sm font-medium " +
     "transition-[background-color,color,box-shadow,transform] duration-150 select-none " +
     "active:scale-[0.98] disabled:pointer-events-none disabled:opacity-50 [&_svg]:shrink-0",
   {
@@ -28,6 +30,28 @@ const button = cva(
     defaultVariants: { variant: "primary", size: "md" },
   },
 );
+
+/** Text runs inside a button become one span that can shrink and end in "..." (an icon stays
+ * whole). Whitespace-only runs stay as they are: flex ignores them. */
+export function buttonLabel(children: ReactNode): ReactNode {
+  const parts = Children.toArray(children);
+  if (!parts.some((c) => typeof c === "string" || typeof c === "number")) return children;
+  const out: ReactNode[] = [];
+  let run = "";
+  const flush = () => {
+    if (run.trim()) out.push(<span key={`t${out.length}`} className="min-w-0 truncate">{run.trim()}</span>);
+    run = "";
+  };
+  for (const c of parts) {
+    if (typeof c === "string" || typeof c === "number") run += String(c);
+    else {
+      flush();
+      out.push(c);
+    }
+  }
+  flush();
+  return out;
+}
 
 export interface ButtonProps
   extends ButtonHTMLAttributes<HTMLButtonElement>,
@@ -63,7 +87,7 @@ export function Button({
           className="size-3.5 animate-spin rounded-full border-2 border-current border-r-transparent"
         />
       ) : null}
-      {children}
+      {buttonLabel(children)}
     </button>
   );
 }

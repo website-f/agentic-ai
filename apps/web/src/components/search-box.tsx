@@ -22,6 +22,7 @@ import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode 
 import { useT } from "@/i18n";
 import { useCompanies } from "@/lib/company";
 import { clearRecent, markParts, safeHref, searchKeys, suggestQuery, useDebounced, type HitType, type Suggestion } from "@/lib/search";
+import { useBackClose } from "@/lib/back-close";
 import { usePalette } from "@/lib/stores";
 import { useIsPhone } from "@/lib/use-media";
 import { cn } from "@/lib/utils";
@@ -335,6 +336,7 @@ function PhoneSearch() {
   const t = useT();
   const setPalette = usePalette((s) => s.setOpen);
   const [open, setOpen] = useState(false);
+  useBackClose(open, () => setOpen(false)); // P96: the phone's Back closes search
   const listId = useId();
   return (
     <Dialog.Root open={open} onOpenChange={setOpen}>
