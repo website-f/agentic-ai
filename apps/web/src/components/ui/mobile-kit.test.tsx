@@ -38,7 +38,7 @@ describe("Button on a phone", () => {
     const btn = screen.getByRole("button", { name: /Always allow for Pembantu/ });
     expect(btn.className).toContain("max-w-full");
     expect(btn.className).toContain("hit");
-    const label = btn.querySelector("span.truncate");
+    const label = btn.querySelector("span.text-ellipsis");
     expect(label?.textContent).toBe("Always allow for Pembantu Perolehan Kerajaan dan Tender Elektronik");
     expect(label?.className).toContain("min-w-0");
     expect(screen.getByTestId("icon").parentElement).toBe(btn);
@@ -53,8 +53,15 @@ describe("Button on a phone", () => {
 
   it("keeps numbers and words in one run", () => {
     render(<Button>Approve {3} now</Button>);
-    expect(screen.getByRole("button").querySelectorAll("span.truncate")).toHaveLength(1);
+    expect(screen.getByRole("button").querySelectorAll("span.text-ellipsis")).toHaveLength(1);
     expect(screen.getByRole("button").textContent).toBe("Approve 3 now");
+  });
+
+  it("a button made to wrap keeps wrapping (the label inherits white-space)", () => {
+    render(<Button className="h-auto whitespace-normal">A long choice that should wrap onto two lines</Button>);
+    const label = screen.getByRole("button").querySelector("span");
+    expect(label?.className).not.toMatch(/whitespace-nowrap|truncate/);
+    expect(screen.getByRole("button").className).toContain("whitespace-normal");
   });
 });
 

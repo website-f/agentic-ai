@@ -32,14 +32,15 @@ const button = cva(
 );
 
 /** Text runs inside a button become one span that can shrink and end in "..." (an icon stays
- * whole). Whitespace-only runs stay as they are: flex ignores them. */
+ * whole). The span inherits the button's white-space, so a button made to wrap still wraps.
+ * Whitespace-only runs stay as they are: flex ignores them. */
 export function buttonLabel(children: ReactNode): ReactNode {
   const parts = Children.toArray(children);
   if (!parts.some((c) => typeof c === "string" || typeof c === "number")) return children;
   const out: ReactNode[] = [];
   let run = "";
   const flush = () => {
-    if (run.trim()) out.push(<span key={`t${out.length}`} className="min-w-0 truncate">{run.trim()}</span>);
+    if (run.trim()) out.push(<span key={`t${out.length}`} className="min-w-0 overflow-hidden text-ellipsis">{run.trim()}</span>);
     run = "";
   };
   for (const c of parts) {
