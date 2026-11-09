@@ -2,7 +2,9 @@
 work-scope guard (teams/allowance.py, agents/scope_guard.py).
 
 - GET  /api/me/allowance              my allowance today (everyone)
-- GET  /api/allowances                the policy and everyone's use today (people managers)
+- GET  /api/allowances                the policy and everyone's use today (people managers);
+                                      P96: ?q=&role=&branch=&status=&page=&size=&sort= for the
+                                      data table (api/table.py), X-Total-Count = matching people
 - PUT  /api/allowances/policy         the default allowance and who it applies to (owner, admin)
 - PUT  /api/allowances/{user_id}      one person's own allowance (people managers, in scope)
 - GET  /api/work-scope                what staff may use their AI for (people managers)
@@ -10,22 +12,27 @@ work-scope guard (teams/allowance.py, agents/scope_guard.py).
 - GET  /api/work-scope/refusals       recent requests the guard refused (people managers)
 """
 
-from typing import Any
+from datetime import datetime, timedelta
+from typing import Any, Literal
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, Query, Response, status
 from pydantic import BaseModel, Field
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm.attributes import flag_modified
 
 from ...agents import scope_guard
 from ...core.db import get_db
 from ...core.security import ROLES, can
-from ...models import AuditLog, Membership, Workspace
+from ...core.valkey import valkey
+from ...models import AuditLog, LLMCall, Membership, Workspace
 from ...services import audit
 from ...teams import allowance
+from ...teams.budget import periods
 from ..deps import Principal, api_error, current_principal, require
-from .members import _member_in_scope, people_manager
+from ..paging import TOTAL
+from ..table import TableParams, matches, page_of
+from .members import _member_in_scope, _names, people_manager
 
 router = APIRouter(prefix="/api", tags=["allowances"])
 
@@ -47,6 +54,13 @@ class PersonAllowance(AllowanceOut):
     role: str
     # The person's own setting: None = the default for their role, 0 = no limit.
     own: int | None
+    # P96: where they sit, what today cost, and how much of the limit is used.
+    branch_id: str | None = None
+    branch_name: str | None = None
+    department_name: str | None = None
+    cost_usd: float = 0.0
+    pct: int | None = None  # None = no limit
+    status: str = "ok"  # ok | near (80% or more) | over | unlimited
 
 
 class PolicyIn(BaseModel):
@@ -56,9 +70,21 @@ class PolicyIn(BaseModel):
     office_daily_tokens: int | None = Field(default=None, ge=0, le=allowance.MAX_DAILY_TOKENS * 10)
 
 
+class AllowanceSummary(BaseModel):
+    people: int = 0
+    over: int = 0
+    near: int = 0
+    used: int = 0
+    cost_usd: float = 0.0
+
+
 class AllowancesOut(BaseModel):
     policy: PolicyIn
+    # With ?page=: one page of the matching people; else every person in scope.
     people: list[PersonAllowance]
+    total: int = 0
+    # Everyone in scope, whatever the search (the stat tiles).
+    summary: AllowanceSummary = Field(default_factory=AllowanceSummary)
 
 
 class OwnIn(BaseModel):
@@ -103,34 +129,169 @@ async def my_allowance(
     return AllowanceOut(**st.dict())
 
 
+NEAR = 0.8  # "near the limit" from 80% used
+SORTS = ("name", "email", "role", "place", "used", "cost", "limit", "pct")
+Status = Literal["ok", "near", "over", "unlimited", "limited"]
+
+
+def _status(used: int, limit: int | None) -> tuple[int | None, str]:
+    """(percent of the limit used, ok | near | over | unlimited)."""
+    if limit is None:
+        return None, "unlimited"
+    pct = 100 if not limit else min(999, round(used * 100 / limit))
+    if used >= limit:
+        return pct, "over"
+    return pct, "near" if used >= limit * NEAR else "ok"
+
+
+def _person(
+    m: Membership,
+    names: dict[str, str],
+    used: int,
+    cost: float,
+    base: int | None,
+    extra: int,
+    day: str,
+    resets: str,
+) -> PersonAllowance:
+    """allowance.state() for one person, from numbers worked out for everyone at once."""
+    limit = None if base is None else base + extra
+    pct, state = _status(used, limit)
+    return PersonAllowance(
+        used=used,
+        limit=limit,
+        remaining=None if limit is None else max(0, limit - used),
+        extra=extra if base is not None else 0,
+        over=limit is not None and used >= limit,
+        day=day,
+        resets_at=resets,
+        user_id=m.user_id,
+        name=m.user.name,
+        email=m.user.email,
+        role=m.role,
+        own=m.ai_daily_tokens,
+        branch_id=m.branch_id,
+        branch_name=names.get(m.branch_id or ""),
+        department_name=names.get(m.department_id or ""),
+        cost_usd=round(cost, 4),
+        pct=pct,
+        status=state,
+    )
+
+
+async def _costs_today(db: AsyncSession, ws: Workspace, day_start: datetime) -> dict[str, float]:
+    """Today's model cost per person (USD), counted the way the allowance counts tokens."""
+    q = (
+        select(LLMCall.user_id, func.coalesce(func.sum(LLMCall.cost_usd), 0))
+        .where(
+            LLMCall.workspace_id == ws.id,
+            LLMCall.user_id.is_not(None),
+            LLMCall.ts >= day_start,
+        )
+        .group_by(LLMCall.user_id)
+    )
+    for prefix in allowance.NOT_CHARGED:
+        q = q.where(~LLMCall.task.startswith(prefix))
+    return {str(u): float(c or 0) for u, c in (await db.execute(q)).all()}
+
+
+async def _grants(ws_id: str, user_ids: list[str], day: str) -> dict[str, int]:
+    """What managers gave each person today, in one Valkey round trip."""
+    if not user_ids:
+        return {}
+    try:
+        raw = await valkey().mget([allowance._grant_key(ws_id, u, day) for u in user_ids])
+    except Exception:  # noqa: BLE001 - no Valkey: no extra today
+        return {}
+    return {u: int(v or 0) for u, v in zip(user_ids, raw, strict=True)}
+
+
+def _place(p: PersonAllowance) -> str:
+    return f"{p.branch_name or ''} {p.department_name or ''}".strip().lower()
+
+
+SORT_KEYS: dict[str, Any] = {
+    "name": lambda p: p.name.lower(),
+    "email": lambda p: p.email.lower(),
+    "role": lambda p: p.role,
+    "place": _place,
+    "used": lambda p: p.used,
+    "cost": lambda p: p.cost_usd,
+    "limit": lambda p: p.limit,
+    "pct": lambda p: p.pct,
+}
+
+
 @router.get("/allowances")
 async def list_allowances(
-    principal: Principal = Depends(people_manager()), db: AsyncSession = Depends(get_db)
+    response: Response,
+    params: TableParams = Depends(),
+    role: str | None = Query(default=None, max_length=16),
+    branch: str | None = Query(default=None, max_length=40),
+    status_: Status | None = Query(default=None, alias="status"),
+    principal: Principal = Depends(people_manager()),
+    db: AsyncSession = Depends(get_db),
 ) -> AllowancesOut:
+    """Everyone the caller manages, with today's use. P96: worked out for all of them in a few
+    queries (it was three per person), then searched, filtered, sorted and paged for the data
+    table. `branch` is a branch id or "none"; `status` is ok, near, over, unlimited or limited."""
     ws = await _ws(db, principal)
     daily, roles = allowance.policy(ws)
+    p = periods(ws.timezone)
+    resets = (p.day_start + timedelta(days=1)).isoformat()
     used = await allowance.used_by_person(db, ws)
-    rows = (await db.scalars(select(Membership).where(Membership.workspace_id == ws.id))).all()
-    people = []
-    for m in rows:
-        if not _member_in_scope(principal, m):
-            continue
-        st = await allowance.state(db, ws, m.user_id)
-        people.append(
-            PersonAllowance(
-                **{**st.dict(), "used": used.get(m.user_id, 0)},
-                user_id=m.user_id,
-                name=m.user.name,
-                email=m.user.email,
-                role=m.role,
-                own=m.ai_daily_tokens,
-            )
+    costs = await _costs_today(db, ws, p.day_start)
+    names = await _names(db, ws.id)
+    rows = [
+        m
+        for m in (
+            await db.scalars(select(Membership).where(Membership.workspace_id == ws.id))
+        ).all()
+        if _member_in_scope(principal, m)
+    ]
+    limits = {m.user_id: allowance.limit_of(ws, m) for m in rows}
+    grants = await _grants(ws.id, [u for u, b in limits.items() if b is not None], p.day)
+    everyone = [
+        _person(
+            m,
+            names,
+            used.get(m.user_id, 0),
+            costs.get(m.user_id, 0.0),
+            limits[m.user_id],
+            grants.get(m.user_id, 0),
+            p.day,
+            resets,
         )
-    people.sort(key=lambda p: (-(p.used or 0), p.name.lower()))
+        for m in rows
+    ]
+    summary = AllowanceSummary(
+        people=len(everyone),
+        over=sum(1 for x in everyone if x.status == "over"),
+        near=sum(1 for x in everyone if x.status == "near"),
+        used=sum(x.used for x in everyone),
+        cost_usd=round(sum(x.cost_usd for x in everyone), 4),
+    )
+    people = everyone
+    if params.words:
+        people = [x for x in people if matches(params.words, x.name, x.email)]
+    if role:
+        people = [x for x in people if x.role == role]
+    if branch:
+        people = [x for x in people if (x.branch_id or "none") == branch]
+    if status_ == "limited":
+        people = [x for x in people if x.limit is not None]
+    elif status_:
+        people = [x for x in people if x.status == status_]
+    # The usual order (and the tie-break of any other): most used first, then by name.
+    people.sort(key=lambda x: (-(x.used or 0), x.name.lower()))
+    key, desc = params.sort_by(SORTS)
+    people = page_of(people, params, response, SORT_KEYS.get(key), desc)
     office = allowance.office_limit(ws) or 0
     return AllowancesOut(
         policy=PolicyIn(daily_tokens=daily, roles=list(roles), office_daily_tokens=office),
         people=people,
+        total=int(response.headers[TOTAL]),
+        summary=summary,
     )
 
 
@@ -189,6 +350,8 @@ async def set_own(
     )
     await db.commit()
     st = await allowance.state(db, ws, user_id)
+    pct, state = _status(st.used, st.limit)
+    names = await _names(db, ws.id)
     return PersonAllowance(
         **st.dict(),
         user_id=user_id,
@@ -196,6 +359,11 @@ async def set_own(
         email=m.user.email,
         role=m.role,
         own=m.ai_daily_tokens,
+        branch_id=m.branch_id,
+        branch_name=names.get(m.branch_id or ""),
+        department_name=names.get(m.department_id or ""),
+        pct=pct,
+        status=state,
     )
 
 

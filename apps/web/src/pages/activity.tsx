@@ -12,18 +12,16 @@ import {
   WarningOctagonIcon,
   type Icon,
 } from "@phosphor-icons/react";
-import { useInfiniteQuery, useMutation } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
+import { useMutation } from "@tanstack/react-query";
 
-import { LoadMore } from "@/components/load-more";
 import { EmptyState, IconTile, Page, PageHeader, type Tone } from "@/components/page";
 import { Button } from "@/components/ui/button";
+import { DataTable, filterOf, useServerTable, useTableState, type Column } from "@/components/ui/data-table";
 import { Segmented } from "@/components/ui/segmented";
-import { Skeleton } from "@/components/ui/skeleton";
 import { locale, msg, t as tr, translate, useLang, useT, type Lang } from "@/i18n";
 import { api, errorMessage } from "@/lib/api";
-import { auditQuery } from "@/lib/queries";
-import { ROLE_INFO, type AuditItem, type Role } from "@/lib/types";
+import { keys } from "@/lib/queries";
+import { ROLE_INFO, type AuditItem, type AuditPage, type Role } from "@/lib/types";
 
 /** Plain-language sentence for each audit action. */
 function describe(item: AuditItem): string {
@@ -118,36 +116,54 @@ function dayLabel(iso: string, lang: Lang): string {
   return d.toLocaleDateString(locale(lang), { weekday: "long", day: "numeric", month: "long" });
 }
 
+function whenText(iso: string, lang: Lang): string {
+  return `${dayLabel(iso, lang)}, ${new Date(iso).toLocaleTimeString(locale(lang), { hour: "2-digit", minute: "2-digit" })}`;
+}
+
 export function ActivityPage() {
   const t = useT();
   const lang = useLang((s) => s.lang);
   const verify = useMutation({ mutationFn: () => api<{ ok: boolean; checked: number; broken_at: number | null }>("/api/audit/verify") });
-  const [kind, setKind] = useState<Kind | "all">("all");
-  // The kind filter runs on the server: every page is that kind, and the counts are true counts.
-  const { data, isLoading, error, fetchNextPage, hasNextPage, isFetchingNextPage } = useInfiniteQuery(auditQuery(kind === "all" ? undefined : kind));
-
-  const all = useMemo(() => {
-    const seen = new Set<number>();
-    return (data?.pages.flatMap((p) => p.items) ?? []).filter((i) => !seen.has(i.id) && seen.add(i.id));
-  }, [data]);
-  const first = data?.pages[0];
-  const counts = first?.kinds ?? {};
+  // P96: a data table. The server finds words (action, note, who), filters the kind, sorts by
+  // time and sends one numbered page; the address keeps the search, kind, page and order.
+  const control = useTableState({ size: 50 }, { filters: ["kind"] });
+  const [kindParam, setKind] = filterOf(control, "kind");
+  const kind = (kindParam && kindParam in KINDS ? kindParam : "all") as Kind | "all";
+  const table = useServerTable<AuditItem, AuditPage>(keys.audit, "/api/audit", control.state, {}, { pick: (b) => b.items });
+  const counts = table.body?.kinds ?? {};
   const everything = Object.values(counts).reduce((a, b) => a + b, 0);
-
-  const groups = useMemo(() => {
-    const out: { day: string; items: AuditItem[] }[] = [];
-    for (const item of all) {
-      const day = dayLabel(item.ts, lang);
-      const last = out[out.length - 1];
-      if (last && last.day === day) last.items.push(item);
-      else out.push({ day, items: [item] });
-    }
-    return out;
-  }, [all, lang]);
 
   const options = [
     { value: "all" as const, label: t("All"), count: everything || undefined },
     ...(Object.keys(KINDS) as Kind[]).filter((k) => counts[k] || k === kind).map((k) => ({ value: k, label: t(KINDS[k].label), count: counts[k] ?? 0 })),
+  ];
+
+  const columns: Column<AuditItem>[] = [
+    {
+      id: "ts", header: t("When"), sortable: true, kind: "date", className: "whitespace-nowrap",
+      cell: (item) => (
+        <time className="text-[12.5px] text-muted tabular" dateTime={item.ts} title={new Date(item.ts).toLocaleString(locale())}>
+          {whenText(item.ts, lang)}
+        </time>
+      ),
+    },
+    { id: "who", header: t("Who"), card: "title", cell: (item) => <span className="font-medium break-words">{item.actor_name ?? item.actor}</span> },
+    {
+      id: "what", header: t("What happened"), card: "full",
+      cell: (item) => {
+        const look = iconFor(item.action);
+        return (
+          <span className="flex min-w-0 items-start gap-2.5">
+            <IconTile icon={look.icon} tone={look.tone} size="sm" className="mt-0.5 shrink-0" />
+            <span className="grid min-w-0 gap-0.5">
+              <span className="text-[13.5px] break-words">{describe(item)}</span>
+              {item.note ? <span className="text-[12px] break-words text-muted">{item.note}</span> : null}
+            </span>
+          </span>
+        );
+      },
+    },
+    { id: "kind", header: t("Kind"), hideBelow: "lg", cell: (item) => <span className="text-muted">{t(KINDS[kindOf(item.action)].label)}</span> },
   ];
 
   return (
@@ -182,54 +198,33 @@ export function ActivityPage() {
       ) : null}
       {verify.error ? <p role="alert" className="text-[13px] text-danger">{errorMessage(verify.error)}</p> : null}
 
-      {isLoading ? (
-        <div className="grid gap-2">{Array.from({ length: 6 }, (_, i) => <Skeleton key={i} className="h-14 rounded-[var(--radius-md)]" />)}</div>
-      ) : error ? (
-        <div role="alert" className="rounded-[var(--radius-md)] border border-danger/30 bg-danger/8 p-4 text-[13.5px] text-danger">
-          {t("Could not load activity. {error}", { error: errorMessage(error) })}
-        </div>
-      ) : all.length === 0 && kind === "all" ? (
-        <EmptyState icon={ClockCounterClockwiseIcon} title={t("Nothing recorded yet")} body={t("Changes to members, branches and departments will show up here.")} />
-      ) : (
-        <div className="grid grid-cols-[minmax(0,1fr)] gap-6">
-          <Segmented guide="activity.filter" label={t("Filter activity")} value={kind} onChange={setKind} options={options} className="w-fit" />
-          {groups.length === 0 ? (
-            <p className="rounded-[var(--radius-md)] border border-dashed border-border px-4 py-8 text-center text-[13px] text-muted">
-              {kind !== "all" ? t("No {kind} recorded yet.", { kind: t(KINDS[kind].label).toLowerCase() }) : t("No entries recorded yet.")}
-            </p>
-          ) : null}
-          {groups.map((g, gi) => (
-            <section key={g.day} data-guide={gi === 0 ? "activity.list" : undefined} className="grid gap-2">
-              <h2 className="flex items-center gap-2 text-[12.5px] font-medium text-muted">
-                {g.day}
-                <span className="rounded-full bg-surface-2 px-1.5 text-[11px] tabular">{g.items.length}</span>
-              </h2>
-              <ol className="grid grid-cols-[minmax(0,1fr)] divide-y divide-border overflow-hidden rounded-[var(--radius-md)] border border-border bg-surface">
-                {g.items.map((item) => {
-                  const look = iconFor(item.action);
-                  return (
-                    <li key={item.id} className="flex items-start gap-3 px-4 py-2.5 sm:px-5">
-                      <IconTile icon={look.icon} tone={look.tone} size="sm" className="mt-0.5" />
-                      <div className="min-w-0 flex-1">
-                        <p className="text-[13.5px] break-words">
-                          <span className="font-medium">{item.actor_name ?? item.actor}</span>{" "}
-                          <span className="text-muted">{describe(item)}</span>
-                        </p>
-                        {item.note ? <p className="text-[12px] break-words text-muted">{item.note}</p> : null}
-                      </div>
-                      <time className="mt-0.5 shrink-0 font-mono text-[12px] whitespace-nowrap text-muted tabular" dateTime={item.ts} title={new Date(item.ts).toLocaleString(locale())}>
-                        {new Date(item.ts).toLocaleTimeString(locale(), { hour: "2-digit", minute: "2-digit" })}
-                      </time>
-                    </li>
-                  );
-                })}
-              </ol>
-            </section>
-          ))}
-          <LoadMore noun="entries" shown={all.length} total={first?.total} hasMore={!!hasNextPage} loading={isFetchingNextPage}
-            onLoad={() => { if (hasNextPage && !isFetchingNextPage) void fetchNextPage(); }} />
-        </div>
-      )}
+      <div data-guide="activity.list" className="grid grid-cols-[minmax(0,1fr)]">
+        <DataTable
+          label={t("Activity")}
+          mode="server"
+          columns={columns}
+          rows={table.rows}
+          total={table.total}
+          rowId={(item) => String(item.id)}
+          control={control}
+          loading={table.loading}
+          fetching={table.fetching}
+          error={table.error}
+          onRetry={table.refetch}
+          searchPlaceholder={t("Search by person, action or note")}
+          pageSizes={[25, 50, 100]}
+          filters={
+            <div className="col-span-2 max-w-full min-w-0 overflow-x-auto">
+              <Segmented guide="activity.filter" label={t("Filter activity")} value={kind} onChange={(k) => setKind(k === "all" ? "" : k)} options={options} className="w-fit" />
+            </div>
+          }
+          empty={
+            kind === "all"
+              ? <EmptyState icon={ClockCounterClockwiseIcon} title={t("Nothing recorded yet")} body={t("Changes to members, branches and departments will show up here.")} />
+              : <p className="rounded-[var(--radius-md)] border border-dashed border-border px-4 py-8 text-center text-[13px] text-muted">{t("No {kind} recorded yet.", { kind: t(KINDS[kind].label).toLowerCase() })}</p>
+          }
+        />
+      </div>
     </Page>
   );
 }

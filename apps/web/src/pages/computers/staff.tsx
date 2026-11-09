@@ -11,13 +11,12 @@ import { Link } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 
-import { EmptyState, IconTile, Page, PageHeader, Section } from "@/components/page";
+import { EmptyState, IconTile, Page, PageHeader } from "@/components/page";
 import { Button } from "@/components/ui/button";
+import { DataTable, filterOf, useTableState, type Column } from "@/components/ui/data-table";
 import { ResponsiveDialog } from "@/components/ui/dialog";
 import { Pill } from "@/components/ui/pill";
 import { Select } from "@/components/ui/select";
-import { SearchInput } from "@/components/ui/search-input";
-import { Skeleton } from "@/components/ui/skeleton";
 import { SwitchField } from "@/components/ui/switch";
 import { locale, useT } from "@/i18n";
 import { errorMessage } from "@/lib/api";
@@ -25,30 +24,82 @@ import {
   backupSettingsQuery, orgComputersQuery, setBackup, type StaffComputer,
 } from "@/lib/devices";
 import { meQuery } from "@/lib/queries";
-import { useDebounced } from "@/lib/paged";
 import { cn, timeAgo } from "@/lib/utils";
 
 
 const OS_ICON: Record<string, Icon> = { mac: AppleLogoIcon, linux: LinuxLogoIcon, windows: WindowsLogoIcon };
+const ALL = "all";
+const osName = (c: StaffComputer) => `${c.os === "mac" ? "macOS" : c.os === "linux" ? "Linux" : "Windows"}${c.os_version ? ` ${c.os_version}` : ""}`;
 
 export function StaffComputersPage() {
   const t = useT();
   const { data: me } = useSuspenseQuery(meQuery);
-  const [q, setQ] = useState("");
-  const needle = useDebounced(q.trim());
-  const roster = useQuery(orgComputersQuery(needle));
+  // P96: one list of every computer (a company has a few hundred at most), searched, sorted and
+  // paged in the browser by the shared data table; the address keeps where you were.
+  const roster = useQuery(orgComputersQuery(""));
+  const control = useTableState({ size: 25, sort: "company" }, { filters: ["company", "state"] });
+  const [company, setCompany] = filterOf(control, "company");
+  const [state, setState] = filterOf(control, "state");
   const [backupOpen, setBackupOpen] = useState(false);
+  const canView = me.permissions.includes("agents.own") || me.permissions.includes("assistants.use") || me.permissions.includes("members.manage") || me.permissions.includes("team.manage");
 
   const list = useMemo(() => roster.data?.computers ?? [], [roster.data]);
-  const byCompany = useMemo(() => {
-    const groups = new Map<string, StaffComputer[]>();
-    for (const c of list) {
-      const key = c.company || t("No company");
-      groups.set(key, [...(groups.get(key) ?? []), c]);
-    }
-    return [...groups.entries()].sort((a, b) => a[0].localeCompare(b[0]));
-  }, [list, t]);
+  const companies = useMemo(() => [...new Set(list.map((c) => c.company || ""))].sort((a, b) => a.localeCompare(b)), [list]);
+  const rows = useMemo(() => list.filter((c) =>
+    (!company || (c.company || "") === (company === "none" ? "" : company))
+    && (!state || (state === "paused" ? c.paused : state === "online" ? c.online && !c.paused : !c.online))), [list, company, state]);
   const online = list.filter((c) => c.online).length;
+  const status = (c: StaffComputer) => (c.paused ? t("Paused") : c.online ? t("Online") : t("Offline"));
+
+  const columns: Column<StaffComputer>[] = [
+    {
+      id: "name", header: t("Computer"), sortValue: (c) => c.name.toLowerCase(), card: "title",
+      cell: (c) => {
+        const OsIcon = OS_ICON[c.os] ?? DesktopTowerIcon;
+        return (
+          <span className="flex min-w-0 items-center gap-3">
+            <span className="relative shrink-0">
+              <IconTile icon={OsIcon} tone="neutral" size="sm" />
+              <span aria-hidden className={cn("absolute -right-0.5 -bottom-0.5 size-2.5 rounded-full ring-2 ring-surface", c.paused ? "bg-warn" : c.online ? "bg-ok" : "bg-border")} />
+            </span>
+            <span className="grid min-w-0">
+              <span className="text-[13.5px] font-semibold break-words">{c.name}</span>
+              {c.hostname ? <span className="text-[12px] break-all text-muted">{c.hostname}</span> : null}
+            </span>
+          </span>
+        );
+      },
+    },
+    {
+      id: "state", header: t("Status"), sortValue: (c) => (c.paused ? 1 : c.online ? 0 : 2),
+      cell: (c) => <Pill tone={c.paused ? "warn" : c.online ? "ok" : "neutral"} live={c.online && !c.paused}>{status(c)}</Pill>,
+    },
+    {
+      id: "person", header: t("Linked by"), sortValue: (c) => c.person.name.toLowerCase(),
+      cell: (c) => (
+        <span className="grid min-w-0">
+          <span className="break-words">{c.person.name}</span>
+          <span className="text-[12px] break-all text-muted">{c.person.email}</span>
+        </span>
+      ),
+    },
+    { id: "company", header: t("Company"), sortValue: (c) => c.company || null, cell: (c) => c.company || <span className="text-muted">{t("No company")}</span> },
+    { id: "os", header: t("System"), sortValue: osName, hideBelow: "xl", cell: osName },
+    {
+      id: "seen", header: t("Last seen"), kind: "date", hideBelow: "lg",
+      sortValue: (c) => (c.online ? "9999" : c.last_seen_at ?? null),
+      cell: (c) => (c.online ? <span className="text-ok">{t("Now")}</span> : c.last_seen_at ? <span className="text-muted">{timeAgo(c.last_seen_at)}</span> : <span className="text-muted">-</span>),
+    },
+    {
+      id: "folders", header: t("Folders"), sortValue: (c) => c.folders.length, kind: "number", hideBelow: "xl",
+      cell: (c) => (
+        <span className="text-[12.5px] text-muted">
+          {c.folders.length ? t("Shares {n} folders", { n: c.folders.length }) : t("No folders shared")}
+          {c.remote && c.remote !== "off" ? ` · ${c.remote === "control" ? t("Remote control on") : t("Remote view on")}` : ""}
+        </span>
+      ),
+    },
+  ];
 
   return (
     <Page wide>
@@ -63,75 +114,49 @@ export function StaffComputersPage() {
         ) : undefined}
       />
 
-      <div className="flex flex-wrap items-center gap-3">
-        <SearchInput value={q} onChange={setQ} placeholder={t("Search by person, company or computer")} className="sm:max-w-sm" />
-        {!roster.isLoading ? (
-          <span className="text-[12.5px] text-muted">{t("{n} computers · {online} online", { n: list.length.toLocaleString(locale()), online })}</span>
-        ) : null}
-      </div>
+      {!roster.isLoading && list.length ? (
+        <p className="text-[12.5px] text-muted">{t("{n} computers · {online} online", { n: list.length.toLocaleString(locale()), online })}</p>
+      ) : null}
 
-      {roster.isLoading ? (
-        <div className="grid gap-2">{[0, 1, 2].map((i) => <Skeleton key={i} className="h-24 rounded-[var(--radius-md)]" />)}</div>
-      ) : roster.error ? (
-        <p role="alert" className="text-danger">{errorMessage(roster.error)}</p>
-      ) : !list.length ? (
-        <EmptyState icon={DesktopTowerIcon} title={needle ? t("Nothing matches") : t("No computers linked yet")}
-          body={needle ? t("Try another name.") : t("Staff link a company computer from My computers. Once linked, it shows here.")}
-          action={needle ? undefined : <Button asChild variant="outline"><Link to="/computers" search={{ link: 1 }}><DesktopTowerIcon size={16} /> {t("Link my own computer")}</Link></Button>} />
+      {!roster.isLoading && !roster.error && !list.length ? (
+        <EmptyState icon={DesktopTowerIcon} title={t("No computers linked yet")}
+          body={t("Staff link a company computer from My computers. Once linked, it shows here.")}
+          action={<Button asChild variant="outline"><Link to="/computers" search={{ link: 1 }}><DesktopTowerIcon size={16} /> {t("Link my own computer")}</Link></Button>} />
       ) : (
-        byCompany.map(([company, rows]) => (
-          <Section key={company} title={company} description={t("{n} computers", { n: rows.length })}>
-            <ul className="grid grid-cols-[minmax(0,1fr)] gap-2 lg:grid-cols-2">
-              {rows.map((c) => <ComputerRow key={c.id} c={c} canView={me.permissions.includes("agents.own") || me.permissions.includes("assistants.use") || me.permissions.includes("members.manage") || me.permissions.includes("team.manage")} />)}
-            </ul>
-          </Section>
-        ))
+        <DataTable
+          label={t("Staff computers")}
+          columns={columns}
+          rows={rows}
+          rowId={(c) => c.id}
+          rowLabel={(c) => c.name}
+          control={control}
+          loading={roster.isLoading}
+          error={roster.error}
+          onRetry={() => void roster.refetch()}
+          searchText={(c) => `${c.name} ${c.hostname ?? ""} ${c.person.name} ${c.person.email} ${c.company}`}
+          searchPlaceholder={t("Search by person, company or computer")}
+          filters={
+            <>
+              {companies.length > 1 ? (
+                <Select className="w-full sm:w-48" label={t("Company")} value={company || ALL} onValueChange={(v) => setCompany(v === ALL ? "" : v)}
+                  options={[{ value: ALL, label: t("All companies") }, ...companies.map((c) => (c ? { value: c, label: c } : { value: "none", label: t("No company") }))]} />
+              ) : null}
+              <Select className="w-full sm:w-40" label={t("Status")} value={state || ALL} onValueChange={(v) => setState(v === ALL ? "" : v)}
+                options={[{ value: ALL, label: t("All statuses") }, { value: "online", label: t("Online") }, { value: "offline", label: t("Offline") }, { value: "paused", label: t("Paused") }]} />
+            </>
+          }
+          actions={canView ? (c) => (
+            <Button size="sm" variant="outline" asChild>
+              <Link to="/computers/$deviceId/remote" params={{ deviceId: c.id }} search={{ staff: "1" } as never} aria-label={t("Open {name}", { name: c.name })}>
+                <MonitorPlayIcon size={15} /> {t("Open")}
+              </Link>
+            </Button>
+          ) : undefined}
+        />
       )}
 
       {backupOpen ? <BackupDialog onClose={() => setBackupOpen(false)} /> : null}
     </Page>
-  );
-}
-
-function ComputerRow({ c, canView }: { c: StaffComputer; canView: boolean }) {
-  const t = useT();
-  const OsIcon = OS_ICON[c.os] ?? DesktopTowerIcon;
-  return (
-    <li className="grid gap-3 rounded-[var(--radius-md)] border border-border bg-surface p-3.5">
-      <div className="flex min-w-0 items-start gap-3">
-        <span className="relative shrink-0">
-          <IconTile icon={OsIcon} tone="neutral" />
-          <span aria-hidden className={cn("absolute -right-0.5 -bottom-0.5 size-3 rounded-full ring-2 ring-surface", c.paused ? "bg-warn" : c.online ? "bg-ok" : "bg-border")} />
-        </span>
-        <div className="grid min-w-0 flex-1 gap-0.5">
-          <span className="flex min-w-0 flex-wrap items-center gap-2">
-            <span className="truncate text-[14.5px] font-semibold">{c.name}</span>
-            <Pill tone={c.paused ? "warn" : c.online ? "ok" : "neutral"} live={c.online && !c.paused}>
-              {c.paused ? t("Paused") : c.online ? t("Online") : t("Offline")}
-            </Pill>
-          </span>
-          <span className="truncate text-[13px] text-muted">{c.person.name} · {c.person.email}</span>
-          <span className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[12px] text-muted">
-            <span>{c.os === "mac" ? "macOS" : c.os === "linux" ? "Linux" : "Windows"}{c.os_version ? ` ${c.os_version}` : ""}</span>
-            {c.hostname ? <span>· {c.hostname}</span> : null}
-            {!c.online && c.last_seen_at ? <span>· {t("last seen {when}", { when: timeAgo(c.last_seen_at) })}</span> : null}
-          </span>
-        </div>
-      </div>
-      <div className="flex min-w-0 flex-wrap items-center justify-between gap-2 border-t border-border/70 pt-2.5">
-        <span className="min-w-0 truncate text-[12px] text-muted">
-          {c.folders.length ? t("Shares {n} folders", { n: c.folders.length }) : t("No folders shared")}
-          {c.remote && c.remote !== "off" ? ` · ${c.remote === "control" ? t("Remote control on") : t("Remote view on")}` : ""}
-        </span>
-        {canView ? (
-          <Button size="sm" variant="outline" asChild>
-            <Link to="/computers/$deviceId/remote" params={{ deviceId: c.id }} search={{ staff: "1" } as never}>
-              <MonitorPlayIcon size={15} /> {t("Open")}
-            </Link>
-          </Button>
-        ) : null}
-      </div>
-    </li>
   );
 }
 

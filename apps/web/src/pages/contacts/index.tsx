@@ -2,29 +2,26 @@
  * what each owes or is owed. New contacts by hand or from a spreadsheet; likely duplicates are
  * flagged so they can be tidied. */
 import { AddressBookIcon, BuildingOfficeIcon, CaretRightIcon, CopyIcon, PlusIcon, UploadSimpleIcon, UserIcon, WarningIcon } from "@phosphor-icons/react";
-import { useInfiniteQuery, useMutation, useQuery, useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
 import { Link, useNavigate, useSearch } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
-import { LoadMore } from "@/components/load-more";
 import { EmptyState, Page, PageHeader } from "@/components/page";
 import { Button } from "@/components/ui/button";
-import { Toolbar } from "@/components/ui/card";
+import { DataTable, filterOf, useServerTable, useTableState, type Column } from "@/components/ui/data-table";
 import { Input } from "@/components/ui/field";
 import { Pill } from "@/components/ui/pill";
-import { SearchInput } from "@/components/ui/search-input";
 import { Segmented } from "@/components/ui/segmented";
-import { Skeleton } from "@/components/ui/skeleton";
 import { useT } from "@/i18n";
 import { errorMessage } from "@/lib/api";
 import { useCompanies } from "@/lib/company";
-import { archiveParty, duplicatesQuery, partiesQuery, partyKeys, type Party, type PartyRole } from "@/lib/crm";
+import { archiveParty, asList, duplicatesQuery, normalizeParty, partyKeys, type ListResult, type Party, type PartyRole } from "@/lib/crm";
 import { useDebounced } from "@/lib/paged";
 import { meQuery } from "@/lib/queries";
 import { cn } from "@/lib/utils";
 
-import { CompanySelect, LoadError, RolePills, useCompanyFilter, useFormat } from "./bits";
+import { CompanySelect, RolePills, useCompanyFilter, useFormat } from "./bits";
 import { ImportDialog } from "./import";
 import { PartyDialog } from "./party-form";
 
@@ -40,15 +37,29 @@ export function ContactsPage() {
   const finance = me.permissions.includes("finance.view");
   const { isAll, canAll } = useCompanies();
   const company = useCompanyFilter();
+  const { money } = useFormat();
 
-  const [q, setQ] = useState(search.q ?? "");
-  const [role, setRole] = useState<RoleFilter>(search.role ?? "all");
-  const [tag, setTag] = useState("");
-  const [status, setStatus] = useState<StatusFilter>("active");
+  // P96: a data table. The search (q) and role stay in the address as before; tag, active or
+  // archived, page, size and order join them. The server searches, filters, sorts and pages.
+  const control = useTableState({ size: 25 }, { filters: ["role", "tag", "status"] });
+  const [roleParam, setRoleParam] = filterOf(control, "role");
+  const [tagParam, setTagParam] = filterOf(control, "tag");
+  const [statusParam, setStatusParam] = filterOf(control, "status");
+  const role = (roleParam || "all") as RoleFilter;
+  const status = (statusParam || "active") as StatusFilter;
+  const [tag, setTag] = useState(tagParam);
+  const [seenTag, setSeenTag] = useState(tagParam);
+  if (seenTag !== tagParam) {
+    setSeenTag(tagParam);
+    setTag(tagParam);
+  }
+  const tagNeedle = useDebounced(tag.trim());
+  useEffect(() => {
+    if (tagNeedle !== tagParam) setTagParam(tagNeedle);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tagNeedle]);
   const [creatingOn, setCreatingOn] = useState(false);
   const [importingOn, setImportingOn] = useState(false);
-  const needle = useDebounced(q.trim());
-  const tagNeedle = useDebounced(tag.trim());
 
   // Links like /contacts?new=1 (or ?import=1) open the form; closing it drops the flag.
   const creating = creatingOn || (!!search.new && canWrite);
@@ -62,15 +73,71 @@ export function ContactsPage() {
     if (!o && search.import) void navigate({ search: (s) => ({ ...s, import: undefined }), replace: true });
   };
 
-  const params = useMemo(
-    () => ({ q: needle, role: role === "all" ? undefined : role, branch_id: company.branchId, tag: tagNeedle, status }),
-    [needle, role, company.branchId, tagNeedle, status],
-  );
-  const list = useInfiniteQuery(partiesQuery(params));
-  const items = useMemo(() => list.data?.pages.flatMap((p) => p.items) ?? [], [list.data]);
-  const total = list.data?.pages[0]?.total ?? null;
-  const filtered = !!(needle || role !== "all" || tagNeedle || status !== "active" || company.branchId);
+  const list = useServerTable<Party, ListResult<Party> | Party[]>(partyKeys.all, "/api/parties", control.state,
+    { branch_id: company.branchId, status }, { pick: (b) => asList(b).items.map(normalizeParty) });
+  const filtered = !!(control.state.q || role !== "all" || tagParam || status !== "active" || company.branchId);
   const showCompany = canAll && isAll && !company.branchId;
+
+  const columns: Column<Party>[] = [
+    {
+      id: "name", header: t("Name"), sortable: true, card: "title",
+      cell: (p) => (
+        <span className="flex min-w-0 items-start gap-2.5">
+          <span aria-hidden className="mt-0.5 grid size-8 shrink-0 place-items-center rounded-full bg-surface-2 text-muted">
+            {p.kind === "person" ? <UserIcon size={16} /> : <BuildingOfficeIcon size={16} />}
+          </span>
+          <span className="grid min-w-0 gap-1">
+            <span className="flex min-w-0 flex-wrap items-center gap-1.5">
+              <span className="min-w-0 text-[14px] font-medium break-words">{p.name}</span>
+              {p.status === "archived" ? <Pill>{t("Archived")}</Pill> : null}
+            </span>
+            <span className="flex min-w-0 flex-wrap items-center gap-1">
+              <RolePills roles={p.roles} />
+              {showCompany && p.branch_name ? <span className="truncate text-[11.5px] text-muted">{p.branch_name}</span> : null}
+              {p.tags.slice(0, 2).map((tg) => <span key={tg} className="max-w-32 truncate rounded-full border border-border px-1.5 text-[11px] text-muted">{tg}</span>)}
+            </span>
+          </span>
+        </span>
+      ),
+    },
+    {
+      id: "contact", header: t("Primary contact"),
+      cell: (p) => (p.primary_contact ? (
+        <span className="grid min-w-0 text-[12.5px]">
+          <span className="font-medium break-words text-fg/90">{p.primary_contact.name}</span>
+          {p.primary_contact.title ? <span className="break-words text-muted">{p.primary_contact.title}</span> : null}
+        </span>
+      ) : <span className="text-muted">—</span>),
+    },
+    {
+      id: "reach", header: t("Phone and email"), hideBelow: "lg",
+      cell: (p) => {
+        const c = p.primary_contact;
+        return (
+          <span className="grid min-w-0 text-[12.5px] text-muted">
+            {p.phone || c?.phone ? <span className="break-all">{p.phone || c?.phone}</span> : null}
+            {p.email || c?.email ? <span className="break-all">{p.email || c?.email}</span> : null}
+            {!(p.phone || c?.phone || p.email || c?.email) ? "—" : null}
+          </span>
+        );
+      },
+    },
+    ...(finance ? [{
+      id: "balance", header: t("Open balance"), align: "right" as const,
+      cell: (p: Party) => {
+        const b = p.balances;
+        if (!b) return <span className="text-[12.5px] text-muted">—</span>;
+        return (
+          <span className="grid justify-items-end gap-1 max-md:justify-items-start">
+            {b.receivable_open ? <span className="text-[13px] font-medium whitespace-nowrap tabular" title={t("They owe you")}>{money(b.receivable_open, p.currency)}</span> : null}
+            {b.payable_open ? <span className="text-[12.5px] whitespace-nowrap text-muted tabular" title={t("You owe them")}>{t("You owe {amount}", { amount: money(b.payable_open, p.currency) })}</span> : null}
+            {!b.receivable_open && !b.payable_open ? <span className="text-[12.5px] text-muted">{t("Nothing open")}</span> : null}
+            {b.overdue ? <Pill tone="danger">{t("{amount} overdue", { amount: money(b.overdue, p.currency) })}</Pill> : null}
+          </span>
+        );
+      },
+    }] : []),
+  ];
 
   return (
     <Page>
@@ -87,31 +154,40 @@ export function ContactsPage() {
 
       <Duplicates canWrite={canWrite} />
 
-      <Toolbar>
-        <SearchInput value={q} onChange={setQ} placeholder={t("Search name, email, phone, TIN or SSM")} />
-        <CompanySelect value={company.value} onChange={company.set} />
-        <Input value={tag} onChange={(e) => setTag(e.target.value)} placeholder={t("Tag")} aria-label={t("Filter by tag")} className="sm:w-36" />
-      </Toolbar>
-      <div className="flex flex-wrap items-center gap-2">
-        <Segmented<RoleFilter> size="sm" label={t("Which contacts")} value={role} onChange={setRole}
-          options={[
-            { value: "all", label: t("All") },
-            { value: "customer", label: t("Customers") },
-            { value: "supplier", label: t("Suppliers") },
-            { value: "partner", label: t("Partners") },
-            { value: "lead", label: t("Leads") },
-          ]} />
-        <Segmented<StatusFilter> size="sm" label={t("Active or archived")} value={status} onChange={setStatus}
-          options={[{ value: "active", label: t("Active") }, { value: "archived", label: t("Archived") }]} />
-        {total !== null ? <span className="ml-auto text-[12.5px] text-muted tabular">{total === 1 ? t("1 contact") : t("{n} contacts", { n: total })}</span> : null}
-      </div>
-
-      {list.isLoading ? (
-        <div className="grid gap-2">{[0, 1, 2, 3, 4].map((i) => <Skeleton key={i} className="h-16 rounded-[var(--radius-md)]" />)}</div>
-      ) : list.error ? (
-        <LoadError error={list.error} />
-      ) : !items.length ? (
-        filtered ? (
+      <DataTable
+        label={t("Contacts")}
+        mode="server"
+        columns={columns}
+        rows={list.rows}
+        total={list.total}
+        rowId={(p) => p.id}
+        rowLabel={(p) => p.name}
+        control={control}
+        loading={list.loading}
+        fetching={list.fetching}
+        error={list.error}
+        onRetry={list.refetch}
+        onOpen={(p) => void navigate({ to: "/contacts/$partyId", params: { partyId: p.id } })}
+        searchPlaceholder={t("Search name, email, phone, TIN or SSM")}
+        filters={
+          <>
+            <CompanySelect value={company.value} onChange={company.set} className="w-full" />
+            <Input value={tag} onChange={(e) => setTag(e.target.value)} placeholder={t("Tag")} aria-label={t("Filter by tag")} className="w-full sm:w-36" />
+            <div className="col-span-2 max-w-full min-w-0 overflow-x-auto">
+              <Segmented<RoleFilter> size="sm" label={t("Which contacts")} value={role} onChange={(v) => setRoleParam(v === "all" ? "" : v)}
+                options={[
+                  { value: "all", label: t("All") },
+                  { value: "customer", label: t("Customers") },
+                  { value: "supplier", label: t("Suppliers") },
+                  { value: "partner", label: t("Partners") },
+                  { value: "lead", label: t("Leads") },
+                ]} />
+            </div>
+            <Segmented<StatusFilter> size="sm" className="col-span-2 w-fit" label={t("Active or archived")} value={status} onChange={(v) => setStatusParam(v === "active" ? "" : v)}
+              options={[{ value: "active", label: t("Active") }, { value: "archived", label: t("Archived") }]} />
+          </>
+        }
+        empty={filtered ? (
           <p className="rounded-[var(--radius-md)] border border-dashed border-border px-4 py-8 text-center text-[13px] text-muted">{t("No contact matches these filters.")}</p>
         ) : (
           <EmptyState icon={AddressBookIcon} title={t("No contacts yet")}
@@ -122,90 +198,13 @@ export function ContactsPage() {
                 <Button variant="outline" onClick={() => setImporting(true)}><UploadSimpleIcon size={16} /> {t("Import from Excel/CSV")}</Button>
               </div>
             ) : undefined} />
-        )
-      ) : (
-        <div className="grid grid-cols-[minmax(0,1fr)] overflow-hidden rounded-[var(--radius-md)] border border-border bg-surface">
-          <div aria-hidden className={cn("hidden gap-3 border-b border-border bg-surface-2/50 px-4 py-2 text-[12px] font-medium text-muted lg:grid", finance ? "lg:grid-cols-[minmax(0,2.2fr)_minmax(0,1.5fr)_minmax(0,1.6fr)_minmax(0,1.2fr)_1rem]" : "lg:grid-cols-[minmax(0,2.2fr)_minmax(0,1.5fr)_minmax(0,1.6fr)_1rem]")}>
-            <span>{t("Name")}</span>
-            <span>{t("Primary contact")}</span>
-            <span>{t("Phone and email")}</span>
-            {finance ? <span className="text-right">{t("Open balance")}</span> : null}
-            <span />
-          </div>
-          <ul className="grid grid-cols-[minmax(0,1fr)] divide-y divide-border">
-            {items.map((p) => <PartyRow key={p.id} p={p} finance={finance} showCompany={showCompany} />)}
-          </ul>
-          <LoadMore className="px-4 pb-3" noun={t("contacts")} shown={items.length} total={total} hasMore={!!list.hasNextPage} loading={list.isFetchingNextPage}
-            onLoad={() => { if (list.hasNextPage && !list.isFetchingNextPage) void list.fetchNextPage(); }} />
-        </div>
-      )}
+        )}
+      />
 
       {creating ? <PartyDialog open={creating} onOpenChange={setCreating} defaultRoles={role === "all" ? ["customer"] : [role]}
         onSaved={(p) => p.id && void navigate({ to: "/contacts/$partyId", params: { partyId: p.id } })} /> : null}
       <ImportDialog open={importing} onOpenChange={setImporting} />
     </Page>
-  );
-}
-
-function PartyRow({ p, finance, showCompany }: { p: Party; finance: boolean; showCompany: boolean }) {
-  const t = useT();
-  const { money } = useFormat();
-  const c = p.primary_contact;
-  const b = p.balances;
-  const open = b ? (b.receivable_open || 0) + (b.payable_open || 0) : 0;
-  return (
-    <li>
-      <Link to="/contacts/$partyId" params={{ partyId: p.id }}
-        className={cn("grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1.5 px-4 py-3 transition-colors hover:bg-surface-2/60 focus-visible:bg-surface-2/60 focus-visible:outline-none",
-          finance ? "lg:grid-cols-[minmax(0,2.2fr)_minmax(0,1.5fr)_minmax(0,1.6fr)_minmax(0,1.2fr)_1rem]" : "lg:grid-cols-[minmax(0,2.2fr)_minmax(0,1.5fr)_minmax(0,1.6fr)_1rem]")}>
-        <span className="flex min-w-0 items-start gap-2.5">
-          <span aria-hidden className="mt-0.5 grid size-8 shrink-0 place-items-center rounded-full bg-surface-2 text-muted">
-            {p.kind === "person" ? <UserIcon size={16} /> : <BuildingOfficeIcon size={16} />}
-          </span>
-          <span className="grid min-w-0 gap-1">
-            <span className="flex min-w-0 flex-wrap items-center gap-1.5">
-              <span className="min-w-0 truncate text-[14px] font-medium">{p.name}</span>
-              {p.status === "archived" ? <Pill>{t("Archived")}</Pill> : null}
-            </span>
-            <span className="flex min-w-0 flex-wrap items-center gap-1">
-              <RolePills roles={p.roles} />
-              {showCompany && p.branch_name ? <span className="truncate text-[11.5px] text-muted">{p.branch_name}</span> : null}
-              {p.tags.slice(0, 2).map((tg) => <span key={tg} className="max-w-32 truncate rounded-full border border-border px-1.5 text-[11px] text-muted">{tg}</span>)}
-            </span>
-          </span>
-        </span>
-        {/* Phones: the balance and overdue badge sit on the right of the name. */}
-        <span className="flex flex-col items-end gap-1 lg:hidden">
-          {finance && open ? <span className="text-[13px] font-medium whitespace-nowrap tabular">{money(open, p.currency)}</span> : null}
-          {finance && b?.overdue ? <Pill tone="danger">{t("Overdue")}</Pill> : null}
-        </span>
-        <span className="col-span-2 min-w-0 text-[12.5px] max-lg:pl-[2.625rem] lg:col-span-1">
-          {c ? (
-            <>
-              <span className="block truncate font-medium text-fg/90">{c.name}</span>
-              {c.title ? <span className="block truncate text-muted">{c.title}</span> : null}
-            </>
-          ) : <span className="text-muted max-lg:hidden">—</span>}
-        </span>
-        <span className="col-span-2 grid min-w-0 text-[12.5px] text-muted max-lg:pl-[2.625rem] lg:col-span-1">
-          {p.phone || c?.phone ? <span className="truncate">{p.phone || c?.phone}</span> : null}
-          {p.email || c?.email ? <span className="truncate">{p.email || c?.email}</span> : null}
-        </span>
-        {finance ? (
-          <span className="hidden flex-col items-end gap-1 lg:flex">
-            {b ? (
-              <>
-                {b.receivable_open ? <span className="text-[13px] font-medium whitespace-nowrap tabular" title={t("They owe you")}>{money(b.receivable_open, p.currency)}</span> : null}
-                {b.payable_open ? <span className="text-[12.5px] whitespace-nowrap text-muted tabular" title={t("You owe them")}>{t("You owe {amount}", { amount: money(b.payable_open, p.currency) })}</span> : null}
-                {!b.receivable_open && !b.payable_open ? <span className="text-[12.5px] text-muted">{t("Nothing open")}</span> : null}
-                {b.overdue ? <Pill tone="danger">{t("{amount} overdue", { amount: money(b.overdue, p.currency) })}</Pill> : null}
-              </>
-            ) : <span className="text-[12.5px] text-muted">—</span>}
-          </span>
-        ) : null}
-        <CaretRightIcon size={14} className="hidden text-muted lg:block" />
-      </Link>
-    </li>
   );
 }
 

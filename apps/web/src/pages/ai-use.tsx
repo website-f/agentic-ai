@@ -1,50 +1,69 @@
-import { CoinsIcon, ProhibitIcon, ShieldCheckIcon, UsersIcon } from "@phosphor-icons/react";
+import { CoinsIcon, GaugeIcon, PencilSimpleIcon, ProhibitIcon, ShieldCheckIcon, UsersIcon } from "@phosphor-icons/react";
 import { useMutation, useQuery, useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { toast } from "sonner";
 
 import { EmptyState, IconTile, Page, PageHeader } from "@/components/page";
 import { Button } from "@/components/ui/button";
-import { Card, CardBody, CardHeader, ListCard } from "@/components/ui/card";
+import { Card, CardBody, CardHeader } from "@/components/ui/card";
+import { DataTable, filterOf, useLocalTableState, useServerTable, useTableState, type Column } from "@/components/ui/data-table";
 import { FormError, Input } from "@/components/ui/field";
 import { Pill } from "@/components/ui/pill";
 import { Select } from "@/components/ui/select";
+import { SideSheet } from "@/components/ui/side-sheet";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Stat, StatGrid } from "@/components/ui/stat";
 import { SwitchField } from "@/components/ui/switch";
 import { msg, useT } from "@/i18n";
 import {
   allowanceKeys,
-  allowancesQuery,
   refusalsQuery,
   tokens,
   workScopeQuery,
   type AllowancePolicy,
+  type AllowancesBody,
+  type AllowanceStatus,
   type PersonAllowance,
+  type Refusal,
   type WorkScope,
 } from "@/lib/allowance";
 import { api, errorMessage } from "@/lib/api";
-import { meQuery } from "@/lib/queries";
+import { branchesQuery, meQuery } from "@/lib/queries";
 import { ROLE_INFO, type Role } from "@/lib/types";
 import { cn, initials, timeAgo } from "@/lib/utils";
 
 // Roles a policy can cover (the owner never: they set their own if they want one).
 const LIMITABLE: Role[] = ["staff", "supervisor", "hod", "branch_manager", "operator", "approver", "viewer", "admin", "management", "hr"];
+const ALL_ROLES: Role[] = ["owner", ...LIMITABLE];
 const WHERE: Record<string, string> = { chat: msg("Chat"), task: msg("Task") };
 const PRESETS = [20_000, 50_000, 100_000, 250_000];
+const STATUS: Record<AllowanceStatus, { label: string; tone: "ok" | "warn" | "danger" | "neutral" }> = {
+  ok: { label: msg("Within limit"), tone: "ok" },
+  near: { label: msg("Near the limit"), tone: "warn" },
+  over: { label: msg("At the limit"), tone: "danger" },
+  unlimited: { label: msg("No limit"), tone: "neutral" },
+};
+const ALL = "all";
 
-function Bar({ used, limit }: { used: number; limit: number | null }) {
+/** How much of the limit is used: a bar and a percent, or "No limit". */
+function Meter({ p }: { p: PersonAllowance }) {
   const t = useT();
-  if (limit === null) return <span className="text-[12.5px] text-muted tabular">{t("{used} today, no limit", { used: tokens(used) })}</span>;
-  const ratio = limit ? Math.min(1, used / limit) : 1;
+  if (p.limit === null) return <span className="text-[12.5px] text-muted">{t("No limit")}</span>;
+  const ratio = p.limit ? Math.min(1, p.used / p.limit) : 1;
+  const pct = p.pct ?? Math.round(ratio * 100);
   return (
-    <div className="grid min-w-0 gap-1">
-      <div className="h-1.5 overflow-hidden rounded-full bg-surface-2" role="meter" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(ratio * 100)} aria-label={t("AI allowance used")}>
+    <div className="flex min-w-28 items-center gap-2">
+      <div className="h-1.5 min-w-16 flex-1 overflow-hidden rounded-full bg-surface-2" role="meter" aria-valuemin={0} aria-valuemax={100}
+        aria-valuenow={Math.min(100, pct)} aria-label={t("AI allowance used")}>
         <div className={cn("h-full rounded-full", ratio >= 1 ? "bg-danger" : ratio >= 0.8 ? "bg-warn" : "bg-accent")} style={{ width: `${ratio * 100}%` }} />
       </div>
-      <span className="text-[12px] text-muted tabular">{t("{used} of {limit} tokens", { used: tokens(used), limit: tokens(limit) })}</span>
+      <span className="w-10 text-right text-[12px] text-muted tabular">{pct}%</span>
     </div>
   );
+}
+
+function usd(n: number | undefined): string {
+  return `US$${(n ?? 0).toFixed((n ?? 0) < 1 ? 3 : 2)}`;
 }
 
 function RolesPicker({ value, onChange }: { value: string[]; onChange: (v: string[]) => void }) {
@@ -118,52 +137,223 @@ const OWN_DEFAULT = "default";
 const OWN_NONE = "none";
 const OWN_CUSTOM = "custom";
 
-function PersonRow({ p, meId, canOwnerRows }: { p: PersonAllowance; meId: string; canOwnerRows: boolean }) {
+/** Can this manager change this person's allowance? (The server checks the same.) */
+function lockedFor(p: PersonAllowance, meId: string, canOwnerRows: boolean): string | null {
+  if (p.user_id === meId && !canOwnerRows) return msg("You cannot change your own AI allowance. Ask an owner or admin.");
+  if (p.role === "owner" && !canOwnerRows) return msg("Only an owner can change owner access.");
+  return null;
+}
+
+/** One person's allowance, opened from their row: what they used, and their own limit. */
+function LimitSheet({ p, policy, meId, canOwnerRows, onClose }: {
+  p: PersonAllowance;
+  policy: AllowancePolicy | undefined;
+  meId: string;
+  canOwnerRows: boolean;
+  onClose: () => void;
+}) {
   const t = useT();
   const qc = useQueryClient();
-  const mode = p.own === null ? OWN_DEFAULT : p.own === 0 ? OWN_NONE : OWN_CUSTOM;
-  const [choice, setChoice] = useState(mode);
+  const [choice, setChoice] = useState(p.own === null ? OWN_DEFAULT : p.own === 0 ? OWN_NONE : OWN_CUSTOM);
   const [value, setValue] = useState(String(p.own && p.own > 0 ? p.own : 50_000));
+  const locked = lockedFor(p, meId, canOwnerRows);
   const save = useMutation({
     mutationFn: (daily: number | null) => api<PersonAllowance>(`/api/allowances/${p.user_id}`, "PUT", { daily_tokens: daily }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: allowanceKeys.all });
       toast.success(t("{name}'s allowance is saved.", { name: p.name }));
+      onClose();
     },
-    onError: (e) => toast.error(errorMessage(e)),
   });
-  const locked = (p.user_id === meId && !canOwnerRows) || (p.role === "owner" && !canOwnerRows);
-  const apply = (next: string, amount = value) => {
-    setChoice(next);
-    if (next === OWN_DEFAULT) save.mutate(null);
-    else if (next === OWN_NONE) save.mutate(0);
-    else if (Number(amount) > 0) save.mutate(Number(amount));
-  };
+  const amount = Number(value);
+  const bad = choice === OWN_CUSTOM && !(amount >= 1000);
+  const roleDefault = policy && policy.daily_tokens && policy.roles.includes(p.role)
+    ? t("{n} tokens a day", { n: tokens(policy.daily_tokens) }) : t("No limit");
+  const place = [p.branch_name, p.department_name].filter(Boolean).join(" · ");
+  const choices = [
+    { value: OWN_DEFAULT, label: t("Default for their role"), hint: roleDefault },
+    { value: OWN_CUSTOM, label: t("Their own amount"), hint: t("Tokens per day, from 1,000") },
+    { value: OWN_NONE, label: t("No limit"), hint: t("Their AI is never stopped for use") },
+  ];
   return (
-    <li className="grid min-w-0 gap-3 px-4 py-3 sm:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_minmax(0,1.3fr)] sm:items-center sm:px-5">
-      <div className="flex min-w-0 items-center gap-3">
-        <span className="grid size-8 shrink-0 place-items-center rounded-full bg-surface-2 text-[12px] font-semibold">{initials(p.name)}</span>
-        <div className="min-w-0">
-          <p className="truncate text-[13.5px] font-medium">{p.name}</p>
-          <p className="truncate text-[12px] text-muted">{t(ROLE_INFO[p.role as Role]?.label ?? p.role)}{p.extra ? ` · ${t("+{n} given today", { n: tokens(p.extra) })}` : ""}</p>
+    <SideSheet open onOpenChange={(o) => { if (!o) onClose(); }} size="sm"
+      title={t("AI allowance for {name}", { name: p.name })} description={p.email}>
+      <form className="grid gap-5" onSubmit={(e) => {
+        e.preventDefault();
+        if (locked || bad) return;
+        save.mutate(choice === OWN_DEFAULT ? null : choice === OWN_NONE ? 0 : amount);
+      }}>
+        <dl className="grid grid-cols-[minmax(0,auto)_minmax(0,1fr)] gap-x-4 gap-y-1.5 text-[13px]">
+          <dt className="text-muted">{t("Role")}</dt><dd>{t(ROLE_INFO[p.role as Role]?.label ?? p.role)}</dd>
+          <dt className="text-muted">{t("Where")}</dt><dd className="break-words">{place || t("Whole workspace")}</dd>
+          <dt className="text-muted">{t("Used today")}</dt><dd className="tabular">{tokens(p.used)}{p.cost_usd ? ` · ${usd(p.cost_usd)}` : ""}</dd>
+          <dt className="text-muted">{t("Limit today")}</dt>
+          <dd className="tabular">{p.limit === null ? t("No limit") : tokens(p.limit)}{p.extra ? ` (${t("+{n} given today", { n: tokens(p.extra) })})` : ""}</dd>
+          <dt className="text-muted">{t("Status")}</dt><dd><Pill tone={STATUS[p.status ?? "ok"].tone}>{t(STATUS[p.status ?? "ok"].label)}</Pill></dd>
+        </dl>
+        {p.limit !== null ? <Meter p={p} /> : null}
+        {locked ? <p role="note" className="rounded-sm bg-surface-2 px-3 py-2 text-[13px] text-muted">{t(locked)}</p> : null}
+        <fieldset className="grid gap-2" disabled={!!locked || save.isPending}>
+          <legend className="mb-1 text-[13px] font-medium">{t("Their daily allowance")}</legend>
+          {choices.map((c) => (
+            <label key={c.value} className={cn("flex cursor-pointer items-start gap-3 rounded-sm border px-3 py-2.5",
+              choice === c.value ? "border-accent bg-accent-soft/50" : "border-border hover:bg-surface-2")}>
+              <input type="radio" name="own" value={c.value} checked={choice === c.value} onChange={() => setChoice(c.value)}
+                className="mt-0.5 size-4 accent-[var(--accent)]" />
+              <span className="grid min-w-0 gap-0.5">
+                <span className="text-[13.5px] font-medium">{c.label}</span>
+                <span className="text-[12px] text-muted">{c.hint}</span>
+              </span>
+            </label>
+          ))}
+          {choice === OWN_CUSTOM ? (
+            <div className="grid gap-2 pt-1">
+              <Input type="number" min={1000} step={1000} value={value} onChange={(e) => setValue(e.target.value)} className="w-full tabular sm:w-44"
+                aria-label={t("Tokens per day for {name}", { name: p.name })} aria-invalid={bad || undefined} />
+              <div className="flex flex-wrap gap-1.5">
+                {PRESETS.map((n) => (
+                  <Button key={n} type="button" size="sm" variant={amount === n ? "secondary" : "ghost"} onClick={() => setValue(String(n))}>{tokens(n)}</Button>
+                ))}
+              </div>
+              {bad ? <p className="text-[12px] text-danger">{t("Give at least 1,000 tokens a day, or pick No limit.")}</p> : null}
+            </div>
+          ) : null}
+        </fieldset>
+        <FormError message={save.error ? errorMessage(save.error) : null} />
+        <div className="flex flex-wrap gap-2">
+          <Button type="submit" loading={save.isPending} disabled={!!locked || bad}>{t("Save allowance")}</Button>
+          <Button type="button" variant="outline" onClick={onClose}>{t("Cancel")}</Button>
         </div>
-      </div>
-      <Bar used={p.used} limit={p.limit} />
-      <div className="flex min-w-0 flex-wrap items-center gap-2">
-        <Select size="sm" value={choice} disabled={locked || save.isPending} onValueChange={(v) => apply(v)} label={t("Allowance for {name}", { name: p.name })}
-          options={[
-            { value: OWN_DEFAULT, label: t("Default for their role") },
-            { value: OWN_CUSTOM, label: t("Their own amount") },
-            { value: OWN_NONE, label: t("No limit") },
-          ]} />
-        {choice === OWN_CUSTOM ? (
-          <form className="flex items-center gap-1.5" onSubmit={(e) => { e.preventDefault(); apply(OWN_CUSTOM); }}>
-            <Input type="number" min={1000} step={1000} value={value} disabled={locked} onChange={(e) => setValue(e.target.value)} className="h-8 w-28 tabular" aria-label={t("Tokens per day for {name}", { name: p.name })} />
-            <Button type="submit" size="sm" variant="outline" disabled={locked} loading={save.isPending}>{t("Set")}</Button>
-          </form>
-        ) : null}
-      </div>
-    </li>
+      </form>
+    </SideSheet>
+  );
+}
+
+function PersonName({ p, isMe }: { p: PersonAllowance; isMe: boolean }) {
+  const t = useT();
+  return (
+    <span className="flex min-w-0 items-center gap-3">
+      <span aria-hidden className="grid size-8 shrink-0 place-items-center rounded-full bg-surface-2 text-[12px] font-semibold">{initials(p.name)}</span>
+      <span className="grid min-w-0">
+        <span className="flex flex-wrap items-center gap-x-2 text-[13.5px] font-medium">
+          <span className="min-w-0 break-words">{p.name}</span>
+          {isMe ? <Pill tone="accent">{t("You")}</Pill> : null}
+        </span>
+        <span className="text-[12px] break-all text-muted">{p.email}</span>
+      </span>
+    </span>
+  );
+}
+
+/** Everyone the manager looks after, today: search by name or email, filter, sort, page, and
+ * open a row to change that person's allowance. The API does the work (api/routers/allowances.py). */
+function PeopleTable({ canSet, canOwnerRows, meId }: { canSet: boolean; canOwnerRows: boolean; meId: string }) {
+  const t = useT();
+  const control = useTableState({ size: 25 }, { filters: ["role", "branch", "status"] });
+  const table = useServerTable<PersonAllowance, AllowancesBody>(allowanceKeys.all, "/api/allowances", control.state, {}, {
+    pick: (b) => b.people,
+    refetchInterval: 60_000,
+  });
+  const { data: branches = [] } = useQuery(branchesQuery);
+  const [role, setRole] = filterOf(control, "role");
+  const [branch, setBranch] = filterOf(control, "branch");
+  const [status, setStatus] = filterOf(control, "status");
+  const [open, setOpen] = useState<PersonAllowance | null>(null);
+  const body = table.body;
+  const summary = body?.summary;
+
+  const columns: Column<PersonAllowance>[] = [
+    { id: "name", header: t("Name"), sortable: true, card: "title", cell: (p) => <PersonName p={p} isMe={p.user_id === meId} /> },
+    { id: "role", header: t("Role"), sortable: true, cell: (p) => t(ROLE_INFO[p.role as Role]?.label ?? p.role) },
+    {
+      id: "place", header: t("Where"), sortable: true, hideBelow: "lg",
+      cell: (p) => [p.branch_name, p.department_name].filter(Boolean).join(" · ") || <span className="text-muted">{t("Whole workspace")}</span>,
+    },
+    {
+      id: "used", header: t("Used today"), sortable: true, kind: "number", align: "right",
+      cell: (p) => (
+        <span className="grid justify-items-end whitespace-nowrap tabular max-md:justify-items-start">
+          <span>{tokens(p.used)}</span>
+          {p.cost_usd ? <span className="text-[11.5px] text-muted">{usd(p.cost_usd)}</span> : null}
+        </span>
+      ),
+    },
+    {
+      id: "limit", header: t("Limit"), sortable: true, kind: "number", align: "right",
+      cell: (p) => (
+        <span className="grid justify-items-end whitespace-nowrap tabular max-md:justify-items-start">
+          <span>{p.limit === null ? t("No limit") : tokens(p.limit)}</span>
+          <span className="text-[11.5px] text-muted">
+            {p.own === null ? t("Role default") : t("Their own")}{p.extra ? ` · ${t("+{n} given today", { n: tokens(p.extra) })}` : ""}
+          </span>
+        </span>
+      ),
+    },
+    { id: "pct", header: t("Used %"), sortable: true, kind: "number", cell: (p) => <Meter p={p} /> },
+    { id: "status", header: t("Status"), cell: (p) => <Pill tone={STATUS[p.status ?? "ok"].tone}>{t(STATUS[p.status ?? "ok"].label)}</Pill> },
+  ];
+
+  return (
+    <>
+      {!summary ? (
+        <StatGrid>{[0, 1, 2, 3].map((i) => <Skeleton key={i} className="h-[6.5rem] rounded-[var(--radius-md)]" />)}</StatGrid>
+      ) : <StatGrid>
+        <Stat label={t("Used today")} value={tokens(summary.used)} icon={CoinsIcon} tone="accent"
+          hint={summary.cost_usd ? t("Tokens, by everyone you manage · {cost}", { cost: usd(summary.cost_usd) }) : t("Tokens, by everyone you manage")} />
+        <Stat label={t("People at their limit")} value={summary.over} icon={ProhibitIcon} tone={summary.over ? "warn" : "ok"}
+          hint={summary.over ? t("Their AI waits for a manager") : t("Nobody")}
+          onClick={() => setStatus(status === "over" ? "" : "over")} active={status === "over"} />
+        <Stat label={t("Near their limit")} value={summary.near} icon={GaugeIcon} tone={summary.near ? "warn" : "neutral"}
+          hint={t("80% or more used today")} onClick={() => setStatus(status === "near" ? "" : "near")} active={status === "near"} />
+        <Stat label={t("People")} value={summary.people} icon={UsersIcon} tone="info"
+          onClick={() => control.set({ q: "", f: { role: "", branch: "", status: "" } })} active={!role && !branch && !status && !control.state.q} />
+      </StatGrid>}
+      <Card>
+        <CardHeader title={t("Each person today")} icon={<IconTile icon={UsersIcon} size="sm" tone="info" />}
+          description={t("Find someone by name or email, then open their row to give them their own amount or no limit. Changes count straight away.")} />
+        <CardBody>
+          <DataTable
+            label={t("Each person's AI use today")}
+            mode="server"
+            columns={columns}
+            rows={table.rows}
+            total={table.total}
+            rowId={(p) => p.user_id}
+            rowLabel={(p) => p.name}
+            control={control}
+            loading={table.loading}
+            fetching={table.fetching}
+            error={table.error}
+            onRetry={table.refetch}
+            searchPlaceholder={t("Search by name or email")}
+            onOpen={setOpen}
+            actions={(p) => (
+              <Button size="sm" variant="ghost" onClick={() => setOpen(p)} aria-label={t("Change the allowance for {name}", { name: p.name })}>
+                <PencilSimpleIcon size={15} /> <span className="max-sm:sr-only">{t("Change")}</span>
+              </Button>
+            )}
+            filters={
+              <>
+                <Select className="w-full sm:w-40" label={t("Role")} value={role || ALL} onValueChange={(v) => setRole(v === ALL ? "" : v)}
+                  options={[{ value: ALL, label: t("All roles") }, ...ALL_ROLES.map((r) => ({ value: r, label: t(ROLE_INFO[r].label) }))]} />
+                {branches.length > 1 ? (
+                  <Select className="w-full sm:w-44" label={t("Company")} value={branch || ALL} onValueChange={(v) => setBranch(v === ALL ? "" : v)}
+                    options={[{ value: ALL, label: t("All companies") }, { value: "none", label: t("No company") }, ...branches.map((b) => ({ value: b.id, label: b.name }))]} />
+                ) : null}
+                <Select className="w-full sm:w-40" label={t("Status")} value={status || ALL} onValueChange={(v) => setStatus(v === ALL ? "" : v)}
+                  options={[{ value: ALL, label: t("All statuses") }, ...(Object.keys(STATUS) as AllowanceStatus[]).map((s) => ({ value: s, label: t(STATUS[s].label) }))]} />
+              </>
+            }
+            empty={<EmptyState icon={UsersIcon} title={t("Nobody yet")} body={t("Add people in Members and roles.")} />}
+          />
+        </CardBody>
+      </Card>
+      {/* The default for everyone sits under the people: the table is what managers use most. */}
+      {body ? <PolicyCard key={JSON.stringify(body.policy)} policy={body.policy} canSet={canSet} /> : null}
+      {open ? (
+        <LimitSheet key={`${open.user_id}:${open.own}`} p={open} policy={body?.policy} meId={meId} canOwnerRows={canOwnerRows} onClose={() => setOpen(null)} />
+      ) : null}
+    </>
   );
 }
 
@@ -204,29 +394,34 @@ function ScopeCard({ scope, canSet }: { scope: WorkScope; canSet: boolean }) {
   );
 }
 
+/** The latest refused requests (the API keeps the newest 30): searchable by name or words. */
 function Refusals() {
   const t = useT();
-  const { data, isLoading } = useQuery(refusalsQuery);
+  const { data = [], isLoading, error, refetch } = useQuery(refusalsQuery);
+  const control = useLocalTableState({ size: 10 });
+  const columns: Column<Refusal>[] = [
+    { id: "name", header: t("Who"), sortValue: (r) => r.name, card: "title", cell: (r) => <span className="font-medium">{r.name}</span> },
+    { id: "where", header: t("Where"), sortValue: (r) => r.where, cell: (r) => <Pill tone="neutral">{t(WHERE[r.where] ?? r.where)}</Pill> },
+    {
+      id: "text", header: t("What they asked"), card: "full",
+      cell: (r) => (
+        <span className="grid gap-0.5">
+          <span className="text-[13px] break-words">{r.text}</span>
+          {r.why ? <span className="text-[12px] text-muted">{t("Why: {why}", { why: r.why })}</span> : null}
+        </span>
+      ),
+    },
+    { id: "at", header: t("When"), sortValue: (r) => r.at, kind: "date", cell: (r) => <span className="whitespace-nowrap text-muted">{timeAgo(r.at)}</span> },
+  ];
   return (
     <Card>
       <CardHeader title={t("Refused requests")} icon={<IconTile icon={ProhibitIcon} size="sm" tone="danger" />} description={t("The latest requests the check turned away, newest first.")} />
-      {isLoading ? <Skeleton className="m-4 h-16" /> : !data?.length ? (
-        <p className="px-4 py-5 text-[13px] text-muted sm:px-5">{t("Nothing refused. Requests have all been about work.")}</p>
-      ) : (
-        <ListCard className="rounded-none border-0">
-          {data.map((r, i) => (
-            <li key={i} className="grid min-w-0 gap-1 px-4 py-3 sm:px-5">
-              <div className="flex flex-wrap items-center gap-2 text-[12.5px] text-muted">
-                <span className="font-medium text-fg">{r.name}</span>
-                <Pill tone="neutral">{t(WHERE[r.where] ?? r.where)}</Pill>
-                <span>{timeAgo(r.at)}</span>
-              </div>
-              <p className="text-[13px] break-words">{r.text}</p>
-              {r.why ? <p className="text-[12px] text-muted">{t("Why: {why}", { why: r.why })}</p> : null}
-            </li>
-          ))}
-        </ListCard>
-      )}
+      <CardBody>
+        <DataTable label={t("Refused requests")} columns={columns} rows={data} rowId={(r) => `${r.at}:${r.user_id ?? ""}:${r.text.slice(0, 20)}`}
+          control={control} loading={isLoading} error={error} onRetry={() => void refetch()}
+          searchText={(r) => `${r.name} ${r.text} ${r.why}`} searchPlaceholder={t("Search by name or words")}
+          empty={<p className="py-3 text-[13px] text-muted">{t("Nothing refused. Requests have all been about work.")}</p>} />
+      </CardBody>
     </Card>
   );
 }
@@ -236,38 +431,14 @@ export function AiUsePage() {
   const { data: me } = useSuspenseQuery(meQuery);
   const canSet = me.permissions.includes("members.manage");
   const canOwnerRows = me.permissions.includes("members.assign_owner");
-  const all = useQuery(allowancesQuery);
   const scope = useQuery(workScopeQuery);
-  const people = all.data?.people ?? [];
-  const over = people.filter((p) => p.over).length;
-  const used = people.reduce((n, p) => n + p.used, 0);
   return (
-    <Page className="max-w-5xl">
+    <Page className="max-w-6xl">
       <PageHeader title={t("AI use and limits")}
         description={t("Keep AI use fair and on the job: a daily allowance for each person, a check that staff use their AI for work, and who used what today.")} />
-      <StatGrid>
-        <Stat label={t("Used today")} value={tokens(used)} icon={CoinsIcon} tone="accent" hint={t("Tokens, by everyone you manage")} />
-        <Stat label={t("People at their limit")} value={over} icon={ProhibitIcon} tone={over ? "warn" : "ok"} hint={over ? t("Their AI waits for a manager") : t("Nobody")} />
-        <Stat label={t("People")} value={people.length} icon={UsersIcon} tone="info" />
-      </StatGrid>
-      {all.isLoading ? <Skeleton className="h-48" /> : all.error ? (
-        <p role="alert" className="text-danger">{errorMessage(all.error)}</p>
-      ) : all.data ? (
-        <>
-          <PolicyCard key={JSON.stringify(all.data.policy)} policy={all.data.policy} canSet={canSet} />
-          <Card>
-            <CardHeader title={t("Each person today")} icon={<IconTile icon={UsersIcon} size="sm" tone="info" />}
-              description={t("Give someone their own amount, or no limit. Changes count straight away.")} />
-            {people.length ? (
-              <ListCard className="rounded-none border-0">
-                {people.map((p) => <PersonRow key={`${p.user_id}:${p.own}`} p={p} meId={me.user.id} canOwnerRows={canOwnerRows} />)}
-              </ListCard>
-            ) : (
-              <EmptyState icon={UsersIcon} title={t("Nobody yet")} body={t("Add people in Members and roles.")} />
-            )}
-          </Card>
-        </>
-      ) : null}
+      {/* The stat tiles, the policy and the people table share one call (PeopleTable). */}
+      <PeopleTable canSet={canSet} canOwnerRows={canOwnerRows} meId={me.user.id} />
+      {/* P96 slot for the learn engineer: "learned procedures / tokens saved" goes here. */}
       {scope.data ? <ScopeCard key={JSON.stringify(scope.data)} scope={scope.data} canSet={canSet} /> : <Skeleton className="h-40" />}
       <Refusals />
     </Page>

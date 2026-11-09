@@ -15,7 +15,7 @@ from datetime import date
 from decimal import Decimal
 from typing import Any, Literal
 
-from fastapi import APIRouter, Depends, Query, Request, status
+from fastapi import APIRouter, Depends, Query, Request, Response, status
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -38,6 +38,7 @@ from ...models import (
 )
 from ...services import audit
 from ..deps import Principal, api_error, require
+from ..paging import TOTAL
 
 router = APIRouter(prefix="/api", tags=["crm"])
 
@@ -382,6 +383,7 @@ def _changed(principal: Principal) -> None:
 
 @router.get("/parties")
 async def list_parties(
+    response: Response,
     q: str | None = Query(default=None, max_length=200),
     role: Role | None = None,
     branch_id: str | None = Query(default=None, max_length=40),
@@ -390,12 +392,16 @@ async def list_parties(
     kind: Literal["company", "person"] | None = None,
     limit: int = Query(default=50, ge=1, le=MAX_LIMIT),
     offset: int = Query(default=0, ge=0),
+    page: int | None = Query(default=None, ge=1, le=100_000),
+    size: int = Query(default=25, ge=1, le=MAX_LIMIT),
+    sort: Literal["name", "-name", "updated", "-updated", "created", "-created"] | None = None,
     principal: Principal = Depends(require("read")),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """Customers and suppliers this person sees, with the primary contact and (for finance
     people) what is open: receivable_open, payable_open, overdue. `branch_id=shared` lists
-    the ones shared by every company."""
+    the ones shared by every company. P96 (the contacts table): `page` + `size` instead of
+    offset + limit, and `sort` by name, updated or created ("-" for descending)."""
     base = select(Party).where(
         Party.workspace_id == principal.workspace_id, access.party_where(principal)
     )
@@ -430,11 +436,18 @@ async def list_parties(
             )
         )
     total = int(await db.scalar(select(func.count()).select_from(base.subquery())) or 0)
-    rows = (
-        await db.scalars(
-            base.order_by(func.lower(Party.name), Party.id).offset(offset).limit(limit)
-        )
-    ).all()
+    response.headers[TOTAL] = str(total)
+    if page is not None:
+        offset, limit = (page - 1) * size, size
+    key = (sort or "name").lstrip("-")
+    desc = bool(sort and sort.startswith("-"))
+    col: Any = {
+        "name": func.lower(Party.name),
+        "updated": Party.updated_at,
+        "created": Party.created_at,
+    }[key]
+    order = [col.desc() if desc else col.asc(), Party.id.desc() if desc else Party.id]
+    rows = (await db.scalars(base.order_by(*order).offset(offset).limit(limit))).all()
     ids = [p.id for p in rows]
     primaries = await _primaries(db, ids)
     names = await _branch_names(db, principal.workspace_id)
