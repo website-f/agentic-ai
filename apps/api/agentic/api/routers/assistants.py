@@ -244,7 +244,14 @@ async def assistants_home(
         "google": await _google(db, principal),
         "whatsapp": {
             "channel_id": wa.id if wa else None,
-            "number": (wa.state or {}).get("number") if wa else None,
+            # P92: the number once it works (to message it); a broken one only for who runs it.
+            "number": (wa.state or {}).get("number")
+            if wa
+            and (
+                can(principal.role, "channels.manage")
+                or (wa.enabled and (wa.state or {}).get("status") in (None, "WORKING"))
+            )
+            else None,
             # The office number: connected (WORKING) or not, apart from this person's own link.
             "status": (wa.state or {}).get("status") if wa else None,
             "provider": (wa.state or {}).get("provider") if wa else None,

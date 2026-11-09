@@ -227,6 +227,13 @@ async def whatsapp_status(
         }
         await db.commit()
     out = {**st, "id": ch.id, "name": ch.name, "enabled": ch.enabled}
+    if not manage:
+        # P92: the office number to link to once it works; the gateway and its errors are for
+        # whoever runs the channels.
+        out.pop("error", None)
+        out["provider"] = None
+        if out.get("status") != "WORKING":
+            out["number"] = None
     if manage:
         out["webhook_url"] = waha_hook(ch.id) if cfg.provider == "waha" else meta_hook(ch.id)
         if cfg.provider == "meta":

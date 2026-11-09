@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ... import __version__
 from ...core.config import settings
 from ...core.db import get_db
+from ...core.security import can
 from ...core.temporal import temporal_client
 from ...core.valkey import valkey
 from ...models import (
@@ -118,6 +119,10 @@ async def _documents_review(db: AsyncSession, principal: Principal) -> int:
     return await review_waiting(db, principal)
 
 
+def _cond(c) -> tuple:
+    return () if c is None else (c,)
+
+
 @router.get("/api/system/status")
 async def system_status(
     principal: Principal = Depends(require("read")), db: AsyncSession = Depends(get_db)
@@ -131,8 +136,20 @@ async def system_status(
         ),
     ]
     ws = principal.workspace_id
+    # P92: the office beyond one's own work (members, companies, AI providers, skills, every
+    # agent and task) is for people who may open the office (office.view). Everyone else, staff
+    # above all, gets their own numbers: their agents, their work, the decisions waiting for
+    # them (the app badge), and no infrastructure detail.
+    office = can(principal.role, "office.view")
+    sc = principal.scope
+    task_cond = sc.task_where()
+    approval_cond = sc.approval_where()
+    if not office:
+        components = [c.model_copy(update={"detail": ""}) for c in components]
 
     async def count(model) -> int:
+        if not office:
+            return 0
         return (
             await db.scalar(select(func.count()).select_from(model).where(model.workspace_id == ws))
             or 0
@@ -146,38 +163,47 @@ async def system_status(
         "agents": await db.scalar(
             select(func.count())
             .select_from(Agent)
-            .where(Agent.workspace_id == ws, Agent.status != "retired")
+            .where(Agent.workspace_id == ws, Agent.status != "retired", sc.agent_where())
         )
         or 0,
         "tasks_running": await db.scalar(
             select(func.count())
             .select_from(Task)
             .where(Task.workspace_id == ws, Task.status.in_(("running", "blocked")))
+            .where(*_cond(task_cond))
         )
         or 0,
         "tasks_review": await db.scalar(
             select(func.count())
             .select_from(Task)
             .where(Task.workspace_id == ws, Task.status == "review")
+            .where(*_cond(task_cond))
         )
         or 0,
         "approvals_pending": await db.scalar(
             select(func.count())
             .select_from(Approval)
             .where(Approval.workspace_id == ws, Approval.status == "pending")
+            .where(*_cond(approval_cond))
         )
         or 0,
-        "skill_proposals_pending": await db.scalar(
-            select(func.count())
-            .select_from(SkillProposal)
-            .where(SkillProposal.workspace_id == ws, SkillProposal.status == "pending")
+        "skill_proposals_pending": (
+            await db.scalar(
+                select(func.count())
+                .select_from(SkillProposal)
+                .where(SkillProposal.workspace_id == ws, SkillProposal.status == "pending")
+            )
+            or 0
         )
-        or 0,
+        if office
+        else 0,
         # P25: documents agents made that wait for this person (scoped like Documents).
         "documents_review": await _documents_review(db, principal),
         # P36 setup steps: models agents can chat with, the company's documents in the
         # library, and the first work given.
-        "chat_models": len(
+        "chat_models": 0
+        if not office
+        else len(
             await db.scalar(
                 select(ModelGroup.members).where(
                     ModelGroup.workspace_id == ws, ModelGroup.name == "smart"
@@ -185,7 +211,9 @@ async def system_status(
             )
             or []
         ),
-        "library": (
+        "library": 0
+        if not office
+        else (
             await db.scalar(
                 select(func.count())
                 .select_from(DocFile)
@@ -201,7 +229,13 @@ async def system_status(
             )
             or 0
         ),
-        "tasks": await count(Task),
+        "tasks": await db.scalar(
+            select(func.count())
+            .select_from(Task)
+            .where(Task.workspace_id == ws)
+            .where(*_cond(task_cond))
+        )
+        or 0,
     }
     return SystemStatusOut(
         ok=all(c.ok for c in components), version=__version__, components=components, counts=counts

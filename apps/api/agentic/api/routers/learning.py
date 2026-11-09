@@ -117,7 +117,7 @@ async def learning_week(
 @router.get("/learning/overview")
 async def overview(
     days: int = Query(30, ge=1, le=180),
-    principal: Principal = Depends(require("read")),
+    principal: Principal = Depends(require("office.view")),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     ws = await db.get(Workspace, principal.workspace_id)

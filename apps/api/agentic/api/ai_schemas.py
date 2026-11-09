@@ -203,6 +203,9 @@ class GroupOut(BaseModel):
     members: list[GroupMember]
     # chat | embed | transcribe | image: pickers for an agent's model offer chat groups only.
     kind: str = "chat"
+    # P92: how many models the group has. People who do not run the AI engine get this and the
+    # group's name, not which providers and models are in it (members is empty for them).
+    size: int = 0
 
 
 class GroupUpdateIn(BaseModel):

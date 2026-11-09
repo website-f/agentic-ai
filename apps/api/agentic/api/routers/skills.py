@@ -437,7 +437,7 @@ async def _detail(db: AsyncSession, s: Skill) -> SkillDetail:
 @router.get("/skills")
 async def list_skills(
     state: Literal["active", "retired", "all"] = "active",
-    principal: Principal = Depends(require("read")),
+    principal: Principal = Depends(require("office.view")),
     db: AsyncSession = Depends(get_db),
 ) -> list[SkillOut]:
     await store.ensure_builtin(db, await _ws(db, principal))
@@ -450,7 +450,7 @@ async def list_skills(
 @router.get("/skills/{skill_id}")
 async def get_skill(
     skill_id: str,
-    principal: Principal = Depends(require("read")),
+    principal: Principal = Depends(require("office.view")),
     db: AsyncSession = Depends(get_db),
 ) -> SkillDetail:
     return await _detail(db, await _skill(db, principal, skill_id))
@@ -804,7 +804,7 @@ async def list_proposals(
     state: Literal["pending", "decided", "all"] = "pending",
     limit: int = Query(default=100, ge=1, le=paging.MAX_LIMIT),
     cursor: str | None = Query(default=None, max_length=400),
-    principal: Principal = Depends(require("read")),
+    principal: Principal = Depends(require("office.view")),
     db: AsyncSession = Depends(get_db),
 ) -> list[ProposalListOut]:
     """Newest first. Pages with `limit` + `cursor` (X-Next-Cursor, X-Total-Count)."""
@@ -827,7 +827,7 @@ async def list_proposals(
 @router.get("/skill-proposals/{proposal_id}")
 async def get_proposal(
     proposal_id: str,
-    principal: Principal = Depends(require("read")),
+    principal: Principal = Depends(require("office.view")),
     db: AsyncSession = Depends(get_db),
 ) -> ProposalOut:
     return await _proposal_out(db, await _proposal(db, principal, proposal_id))

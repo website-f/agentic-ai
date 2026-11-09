@@ -8,10 +8,11 @@ status to "active" (audited as sop.approved).
 import logging
 
 from fastapi import APIRouter, Depends, Response, status
-from sqlalchemy import select
+from sqlalchemy import ColumnElement, and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...core.db import get_db
+from ...core.security import can
 from ...intake.builders import file_names
 from ...knowledge import indexer
 from ...models import SOP, Agent, Branch, Department
@@ -79,17 +80,27 @@ async def _get(db: AsyncSession, ws: str, sop_id: str) -> SOP:
     return s
 
 
+def _own_sops(p: Principal) -> ColumnElement[bool]:
+    """P92: the SOPs someone outside the office view (staff) reads in the Library: the ones in
+    force for every company, the Library's, and their own company's and department's. Not
+    drafts the AI wrote, nor other companies' procedures."""
+    sc = p.scope
+    parts: list[ColumnElement[bool]] = [SOP.scope.in_(("workspace", "library"))]
+    if sc.branch_id:
+        parts.append(and_(SOP.scope == "branch", SOP.scope_id == sc.branch_id))
+    if sc.department_id:
+        parts.append(and_(SOP.scope == "department", SOP.scope_id == sc.department_id))
+    return and_(SOP.status == "active", or_(*parts))
+
+
 @router.get("")
 async def list_sops(
     principal: Principal = Depends(require("read")), db: AsyncSession = Depends(get_db)
 ) -> list[SOPOut]:
-    rows = (
-        await db.scalars(
-            select(SOP)
-            .where(SOP.workspace_id == principal.workspace_id)
-            .order_by(SOP.scope, SOP.title)
-        )
-    ).all()
+    q = select(SOP).where(SOP.workspace_id == principal.workspace_id)
+    if not can(principal.role, "office.view"):
+        q = q.where(_own_sops(principal))
+    rows = (await db.scalars(q.order_by(SOP.scope, SOP.title))).all()
     names = await file_names(
         db, principal.workspace_id, [i for s in rows for i in (s.source_file_ids or [])]
     )

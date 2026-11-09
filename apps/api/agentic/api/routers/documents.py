@@ -94,7 +94,7 @@ async def _branch(db: AsyncSession, principal: Principal, branch_id: str) -> Bra
     if (
         b is None
         or b.workspace_id != principal.workspace_id
-        or (sc.kind == "branch" and sc.branch_id != b.id)
+        or (not sc.everything and sc.branch_id != b.id)  # P92: scoped roles, their own company
     ):
         raise api_error(status.HTTP_404_NOT_FOUND, "branch_not_found", "That company is not here.")
     return b
@@ -105,8 +105,8 @@ async def list_kits(
     principal: Principal = Depends(require("read")), db: AsyncSession = Depends(get_db)
 ) -> list[KitOut]:
     q = select(Branch).where(Branch.workspace_id == principal.workspace_id).order_by(Branch.name)
-    if principal.scope.kind == "branch" and principal.scope.branch_id:
-        q = q.where(Branch.id == principal.scope.branch_id)
+    if not principal.scope.everything:  # P92: a branch manager, HOD, supervisor or staff
+        q = q.where(Branch.id == principal.scope.branch_id)  # their own company's kit only
     out = []
     for b in (await db.scalars(q)).all():
         out.append(_kit_out(b, await db.get(CompanyKit, b.id), principal))
