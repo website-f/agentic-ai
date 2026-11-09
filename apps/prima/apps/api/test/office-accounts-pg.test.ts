@@ -261,6 +261,41 @@ describe('office accounts in the database', () => {
       assert.match((await audits('u-off-us_p81later'))[1].summary, /updated: admin_exec for co-arsh \(was pwvsb_officer for co-arsh\).*linked to staff record pr-p81-later/);
     });
 
+    it('P92: relink after the office corrected the email: the wrong record and Microsoft link go, the id stays', async () => {
+      await add(person('pr-p92-wrong', 'pwvsb', 'Synthetic Wrong Record', { email: 'wrong.p92@example.test' }));
+      await add(person('pr-p92-right', 'pwvsb', 'Synthetic Right Record', { email: 'right.p92@example.test' }));
+      const base = { officeUserId: 'us_p92fix', name: 'Synthetic Fixed', title: 'HR', role: 'pwvsb_officer', companyIds: ['pwvsb'] };
+      const first = await upsert({ ...base, email: 'wrong.p92@example.test' });
+      assert.equal(first.personId, 'pr-p92-wrong', 'the typo found someone else');
+      const c = await pool.connect();
+      try {
+        await linkEntra(c, 'u-off-us_p92fix', '0a0a0a0a-0000-4000-8000-0000000000f2', 'IT Manager');
+      } finally {
+        c.release();
+      }
+      // Without relink, a linked account keeps its record (P81): the stale link the office must clear.
+      const plain = await upsert({ ...base, email: 'right.p92@example.test' });
+      assert.equal(plain.personId, 'pr-p92-wrong');
+      const fixed = await upsert({ ...base, email: 'right.p92@example.test', relink: true });
+      assert.equal(fixed.id, 'u-off-us_p92fix', 'the same account, so its Prima history stays');
+      assert.equal(fixed.personId, 'pr-p92-right');
+      assert.equal(fixed.relinked, true);
+      const u = await user('u-off-us_p92fix');
+      assert.equal(u?.personId, 'pr-p92-right');
+      assert.equal(u?.entraOid, undefined, 'the old Microsoft account is let go of');
+      const a = await audits('u-off-us_p92fix');
+      assert.match(a[a.length - 1].summary, /linked to staff record pr-p92-right \(same email\); relinked after the office corrected their details \(let go of staff record pr-p92-wrong and a Microsoft account\)/);
+      // The wrong record is free again for its own person.
+      const theirs = await upsert({ officeUserId: 'us_p92wrong', name: 'Synthetic Wrong Record', title: '', role: 'pwvsb_officer', companyIds: ['pwvsb'], email: 'wrong.p92@example.test' });
+      assert.equal(theirs.personId, 'pr-p92-wrong');
+      // Nothing matches the corrected details: no record at all, never the old one.
+      const none = await upsert({ ...base, officeUserId: 'us_p92wrong', email: 'nobody.p92@example.test', relink: true });
+      assert.equal(none.personId, undefined);
+      assert.equal((await user('u-off-us_p92wrong'))?.personId, undefined);
+      const chain = (await pool.query('SELECT data FROM prima.audit ORDER BY seq')).rows.map((r) => r.data as AuditEntry);
+      assert.equal(verifyChain(chain), null);
+    });
+
     it('the company office staff member has their own details, clock, leave and claims', async () => {
       const got = await upsert({ officeUserId: 'us_p81hq', name: 'Sasa HQ', title: 'Staff', role: 'pwvsb_officer', companyIds: ['co-sasa'], email: 'sasa.hq.staff@example.test' });
       assert.deepEqual([got.personId, got.role, got.companyIds], ['pr-p81-hq', 'admin_exec', ['co-sasa']]);
