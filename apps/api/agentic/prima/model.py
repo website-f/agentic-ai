@@ -40,8 +40,9 @@ SIG = re.compile(r"^[0-9a-f]{64}$")
 
 TASK = "prima.arisha"  # llm_calls.task: Arisha's turns in the AI usage pages
 GROUPS = ("smart", "fast")  # the workspace's chat models: smart first, fast when it has none
-# P90 (Fitri, 9 Nov 2026: Arisha answers too slowly): a quick turn is a question about using a Prima screen,
-# sent with no tools and the screen guide already in the brief, so the fast models answer it first.
+# P90 (Fitri, 9 Nov 2026: Arisha answers too slowly): a quick turn is a question about using a Prima
+# screen, sent with no tools and the screen guide already in the brief, so the fast models answer it
+# first.
 QUICK_GROUPS = ("fast", "smart")
 # P90: thinking models that take the setting think briefly: Arisha explains from a written guide.
 REASONING_EFFORT = "low"
