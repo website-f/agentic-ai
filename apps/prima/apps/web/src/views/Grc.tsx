@@ -6,6 +6,7 @@ import { api, type GiftInput, type GrcBoard, type WhistleInput } from '../api';
 import { useApp } from '../App';
 import { Card, Empty, PageHead, Stat, Stats, Steps, Toolbar, type StepState } from '../kit';
 import { Chip, Drawer, ErrorNotice, Loading, dateLabel, dateTimeLabel, useAction, useLoad } from '../ui';
+import { ImportButton } from './ImportDrawer';
 import '../styles/gov.css';
 
 /**
@@ -79,9 +80,16 @@ export function GrcView() {
         sub="Report wrongdoing safely, declare gifts, and see what each company must prove. A report never goes to anyone it names, and you can stay anonymous."
         actions={
           data.obligationCompanies.length > 0 ? (
-            <button className="btn btn-primary" onClick={() => setAdding(true)}>
-              <PlusIcon size={16} /> Add obligation
-            </button>
+            <>
+              <button className="btn btn-primary" onClick={() => setAdding(true)}>
+                <PlusIcon size={16} /> Add obligation
+              </button>
+              <ImportButton
+                kind="grcObligation"
+                label="Import obligations"
+                choices={data.obligationCompanies.map((id): [string, string] => [id, data.companies.find((c) => c.id === id)?.name ?? id])}
+              />
+            </>
           ) : undefined
         }
       >

@@ -4,6 +4,7 @@ import { CalendarDotsIcon, FileXIcon, PlusIcon, ScalesIcon, SignatureIcon } from
 import { api, type CorpAuditLegal, type LegalMatterInput } from '../api';
 import { Card, Empty, Stat, Stats, Steps, type StepState } from '../kit';
 import { Chip, Drawer, ErrorNotice, dateLabel, dateTimeLabel, useAction } from '../ui';
+import { ImportButton } from './ImportDrawer';
 import '../styles/gov.css';
 
 /**
@@ -35,6 +36,8 @@ const KIND: Record<LegalMatterInput['kind'], string> = {
 const rm = (n: number) => `RM ${n.toLocaleString('en-MY')}`;
 const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const toneOf = (t: string) => (t === 'crit' ? 'crit' : t === 'warn' ? 'warn' : undefined);
+/** P91: the companies an import may name, as the page's own Add offers them. */
+const companyChoices = (data: CorpAuditLegal, ids: string[]): [string, string][] => ids.map((id) => [id, data.companies.find((c) => c.id === id)?.name ?? id]);
 
 export function AuditLegalKpis({ data }: { data: CorpAuditLegal }) {
   const k = data.kpis;
@@ -72,6 +75,7 @@ export function AuditPanel({ data }: { data: CorpAuditLegal }) {
               <PlusIcon size={16} /> Register an audit
             </button>
           )}
+          {canAdd && <ImportButton kind="corpAudit" choices={companyChoices(data, data.auditCompanies)} />}
         </>
       }
     >
@@ -304,6 +308,7 @@ export function LegalPanel({ data }: { data: CorpAuditLegal }) {
               <PlusIcon size={16} /> Open a matter
             </button>
           )}
+          {canOpen && <ImportButton kind="legalMatter" choices={companyChoices(data, data.matterCompanies)} />}
         </>
       }
     >

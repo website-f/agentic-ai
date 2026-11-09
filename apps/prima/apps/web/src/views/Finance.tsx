@@ -19,6 +19,7 @@ import { ChecksTab } from './FinanceChecks';
 import { FinanceSettingsTab } from './FinanceSettings';
 import { FinanceKpiTab } from './FinanceKpi';
 import { FinanceDashboardTab } from './FinanceDashboard';
+import { ImportButton } from './ImportDrawer';
 import { Chip, Drawer, ErrorNotice, Loading, dateLabel, dateTimeLabel, useAction, useLoad, type Tone } from '../ui';
 import { Card, Empty, PageHead, Stat, Stats } from '../kit';
 import '../styles/finance.css';
@@ -124,6 +125,9 @@ export function FinanceView() {
                   <PlusIcon size={16} aria-hidden="true" />
                   Add bank account
                 </button>
+              )}
+              {bankCos.length > 0 && (
+                <ImportButton kind="finBankAccount" label="Import bank accounts" choices={bankCos.map((c): [string, string] => [c.companyId, c.companyName])} />
               )}
               {payCos.length > 0 && (
                 <button className="btn btn-primary" onClick={() => setAdding('payment')}>

@@ -11,6 +11,7 @@ import { LegalHoldsPanel } from './LegalHolds';
 import { Card, Empty, PageHead, Stat, Stats, Steps, Toolbar, type StepState } from '../kit';
 import { Chip, Drawer, ErrorNotice, Loading, dateLabel, dateTimeLabel, useAction, useLoad } from '../ui';
 import { CentralAdminGuide } from './CentralAdminGuide';
+import { ImportButton } from './ImportDrawer';
 import '../styles/gov.css';
 
 /**
@@ -97,6 +98,7 @@ export function CorporateView() {
                   <PlusIcon size={16} /> Add filing
                 </button>
               )}
+              {data.canFile.length > 0 && <ImportButton kind="corpFiling" label="Import filings" choices={data.canFile.map((c): [string, string] => [c.id, c.name])} />}
             </>
           ) : undefined
         }

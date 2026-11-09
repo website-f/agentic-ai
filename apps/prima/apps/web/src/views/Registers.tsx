@@ -14,6 +14,7 @@ import {
   type RptStatus,
 } from "@prima/core";
 import { api, type RegBoard } from "../api";
+import { ImportButton } from "./ImportDrawer";
 import {
   Chip,
   ErrorNotice,
@@ -242,7 +243,7 @@ function DealsPanel({ d }: { d: Deals }) {
         <h3>Related-party deals</h3>
         <div className="row" style={{ gap: 6 }}>
           {d.canRecord && (
-            <button className="btn btn-sm" onClick={() => setForm(!form)}>
+            <button className="btn btn-sm btn-primary" onClick={() => setForm(!form)}>
               Record a deal
             </button>
           )}
@@ -693,7 +694,7 @@ function InterestsPanel({ d, rule }: { d: Interests; rule: RegBoard["rule"] }) {
         <h3>Directors' interests</h3>
         {d.canRecord && (
           <button
-            className="btn btn-sm"
+            className="btn btn-sm btn-primary"
             onClick={() => setForm(form === null ? "" : null)}
           >
             Record a declaration
@@ -953,7 +954,7 @@ function CommitteesPanel({ d }: { d: Committees }) {
       <div className="panel-head">
         <h3>Board committees</h3>
         {d.companies.length > 0 && (
-          <button className="btn btn-sm" onClick={() => setForm(!form)}>
+          <button className="btn btn-sm btn-primary" onClick={() => setForm(!form)}>
             Add a committee
           </button>
         )}
@@ -1225,9 +1226,12 @@ function RisksPanel({ d, rule }: { d: Risks; rule: RegBoard["rule"] }) {
         <h3>Risk register</h3>
         <div className="row" style={{ gap: 6 }}>
           {d.canAdd && (
-            <button className="btn btn-sm" onClick={() => setForm(!form)}>
+            <button className="btn btn-sm btn-primary" onClick={() => setForm(!form)}>
               Add a risk
             </button>
+          )}
+          {d.canAdd && (
+            <ImportButton kind="regRisk" choices={d.companies.map((c): [string, string] => [c.id, c.name])} />
           )}
           <button className="btn btn-sm" onClick={() => setAll(!all)}>
             {all ? "Hide closed" : "Show closed"}

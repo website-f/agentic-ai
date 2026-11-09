@@ -3,6 +3,7 @@ import { ArrowsClockwiseIcon, ClipboardTextIcon, HardDrivesIcon, PlusIcon, Quest
 import { api, type BcmBoard } from '../api';
 import { Card, Empty, PageHead, Stat, Stats } from '../kit';
 import { Chip, Drawer, ErrorNotice, Loading, dateLabel, dateTimeLabel, useAction, useLoad } from '../ui';
+import { ImportButton } from './ImportDrawer';
 import '../styles/gov.css';
 
 /** Today in Malaysia, so a date field starts filled in. */
@@ -44,9 +45,12 @@ export function ContinuityView() {
         sub={`Every system keeps copies in Malaysia: the cloud, our own server and an emergency server. A copy counts only when it was backed up within its target and restored in a test in the last ${data.rule.restoreTestMonths} months. No record means unknown.`}
         actions={
           it ? (
-            <button className="btn btn-primary" onClick={() => setAdding(true)}>
-              <PlusIcon size={16} /> Add system
-            </button>
+            <>
+              <button className="btn btn-primary" onClick={() => setAdding(true)}>
+                <PlusIcon size={16} /> Add system
+              </button>
+              <ImportButton kind="bcmSystem" />
+            </>
           ) : undefined
         }
       >

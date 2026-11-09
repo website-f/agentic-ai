@@ -2,7 +2,7 @@ import { Select as KSelect } from '../SearchSelect';
 import {ItCleanup} from './ItCleanup';
 import {ItCorrections} from './ItCorrections';
 import {correctionVisible} from '../it-corrections/client';
-import { useEffect, useMemo, useReducer, useState } from 'react';
+import { useEffect, useMemo, useReducer, useState, type ReactNode } from 'react';
 import { PlusIcon } from '@phosphor-icons/react';
 import { api } from '../api';
 import { useApp } from '../App';
@@ -28,7 +28,7 @@ export function decodeManualBoard(value:unknown,userId:string):Board {
   return b;
 }
 const createAction:Record<ManualKind,string>={intake:'createIntake',system:'createSystem',guidance:'createGuidance',asset:'createAsset'};
-export function ItManualPanel({mode}:{mode:'intake'|'systems'|'assets'}) {
+export function ItManualPanel({mode,extra}:{mode:'intake'|'systems'|'assets';/** P91: shown next to the Add button (e.g. Import). */extra?:ReactNode}) {
   const {me}=useApp();const userId=me.user.id;
   const [opened,setOpened]=useState<ManualKind|null>(null);
   const [review,setReview]=useState<string|null>(null);
@@ -40,7 +40,7 @@ export function ItManualPanel({mode}:{mode:'intake'|'systems'|'assets'}) {
     {data.configuration==='setup_required'&&<p className="notice" data-tone="warn">Setup required: the protected manual IT record store is not ready. No saving or checking is enabled. IT must complete the reviewed database setup before these records can be used.</p>}
     <h3>{mode==='intake'?'Record a joining or leaving request':mode==='assets'?'Register an existing device':'Register existing systems and SharePoint guidance'}</h3>
     <p className="muted small">Manual records only. This does not create or revoke accounts, grant permissions, create a SharePoint site, or prove a connection is working. Never enter passwords, tokens or recovery codes.</p>
-    {(mode==='assets'?data.canCreateAsset:data.canCreate)&&!opened&&!review&&<div className="row it-actions">{(mode==='intake'?['intake']:mode==='assets'?['asset']:['system','guidance'] as ManualKind[]).map(kind=><button className="btn btn-primary" key={kind} onClick={()=>setOpened(kind as ManualKind)}><PlusIcon size={16} weight="bold" aria-hidden="true"/> {kind==='intake'?'Add joining / leaving request':kind==='system'?'Register existing system':kind==='asset'?'Register existing device':'Record SharePoint guidance'}</button>)}</div>}
+    {(mode==='assets'?data.canCreateAsset:data.canCreate)&&!opened&&!review&&<div className="row it-actions">{(mode==='intake'?['intake']:mode==='assets'?['asset']:['system','guidance'] as ManualKind[]).map(kind=><button className="btn btn-primary" key={kind} onClick={()=>setOpened(kind as ManualKind)}><PlusIcon size={16} weight="bold" aria-hidden="true"/> {kind==='intake'?'Add joining / leaving request':kind==='system'?'Register existing system':kind==='asset'?'Register existing device':'Record SharePoint guidance'}</button>)}{extra}</div>}
     {!(mode==='assets'?data.canCreateAsset:data.canCreate)&&<p className="muted">Read-only here. Authorized IT staff record these details; system access still follows CEO approval.</p>}
     {opened&&data.configuration==='ready'&&(opened==='asset'?data.canCreateAsset:data.canCreate)&&<ManualEditor key={`${userId}:${opened}`} kind={opened} board={data} onClose={()=>{setOpened(null);reload();}}/>}
     {mode==='systems'&&data.accounts.filter(a=>(a.manual as {kind?:unknown}|undefined)?.kind==='guidance').map(a=>{

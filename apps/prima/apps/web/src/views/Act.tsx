@@ -122,13 +122,15 @@ export function ActView() {
             : 'ACT found these in your area. Give the cause and the fix, do it, then mark it fixed with the proof. ACT checks it before it closes.'
         }
         actions={
-          act && data.actRole ? (
-            <Chip tone="info">
-              You are the ACT {ROLE[data.actRole]}
-              {data.myTeam ? `, Team ${data.myTeam}` : ''}.
-            </Chip>
-          ) : data.canRaise || data.canRecordAudit ? (
+          // P91: ACT staff also see Raise a finding and Record an audit at the top, next to their role.
+          (act && data.actRole) || data.canRaise || data.canRecordAudit ? (
             <>
+              {act && data.actRole && (
+                <Chip tone="info">
+                  You are the ACT {ROLE[data.actRole]}
+                  {data.myTeam ? `, Team ${data.myTeam}` : ''}.
+                </Chip>
+              )}
               {data.canRecordAudit && (
                 <button className="btn" onClick={() => setDrawer('audit')}>
                   <PlusIcon size={16} /> Record an audit

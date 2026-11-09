@@ -15,7 +15,7 @@ import type { ProofInput, PurCategory } from '@prima/core';
 import { api, type PurBoard, type PurRequestInput } from '../api';
 import { ProofPicker } from './Proof';
 import { DeliveryProofPanel } from './DeliveryProof';
-import { RecordButton } from './RecordForm';
+import { RecordButton, useRecordKinds } from './RecordForm';
 import { ImportButton } from './ImportDrawer';
 import { WitnessField, emptyWitness } from './Witness';
 import { Card, Empty, Facts, PageHead, Search, Stat, Stats, Steps, Toolbar, type StepState } from '../kit';
@@ -1158,8 +1158,16 @@ function GoodwillBilling({ data }: { data: PurBoard }) {
 
 function Store({ data }: { data: PurBoard }) {
   const company = isStore(data.roles);
+  // P91: Add and Import at the top of the Store tab, not under the follow-up lists.
+  const mayAdd = useRecordKinds().has('stockItem');
   return (
     <>
+      {mayAdd && (
+        <div className="imp-inline">
+          <RecordButton kind="stockItem" label="Add store item" primary />
+          <ImportButton kind="stockItem" />
+        </div>
+      )}
       {data.losses.length > 0 && (
         <Card title="Lost or damaged, waiting for confirmation" sub="The company manager confirms or refuses each loss." flush>
           <ul className="bz-rows">
@@ -1182,7 +1190,7 @@ function Store({ data }: { data: PurBoard }) {
           </ul>
         </Card>
       )}
-      <Card title="Stock" sub={`${data.stock.length} item${data.stock.length === 1 ? '' : 's'} in the store`} actions={<><ImportButton kind="stockItem" /><RecordButton kind="stockItem" label="Add store item" /></>} flush>
+      <Card title="Stock" sub={`${data.stock.length} item${data.stock.length === 1 ? '' : 's'} in the store`} flush>
         <div className="table-wrap bz-pu-stock">
           <table className="table">
             <thead>
