@@ -46,3 +46,19 @@ test('search words cover the everyday words staff use', () => {
   assert.ok(find('cuti').length && find('leave').length, 'leave/cuti');
   for (const w of ['fw', 'pekerja', 'asing']) assert.ok(find(w).includes('fwm'), `${w} finds foreign workers`);
 });
+
+// P91 (Fitri, 9 Nov 2026): Prima as apps. The home space holds the everyday screens; every other space is an app card with
+// a one-line description, both with a Malay row; the shell's labels have rows too.
+test('the menu is a home space and apps, each with a short line and a Malay row', () => {
+  const spaces = [...secBlock.matchAll(/id: '([^']+)',\s*title: '([^']+)',\s*blurb: '([^']+)',(\s*home: true,)?/g)].map((m) => ({ id: m[1], title: m[2], blurb: m[3], home: !!m[4] }));
+  assert.equal(spaces.filter((s) => s.home).length, 1, 'one home space');
+  assert.equal(spaces[0].id, 'home', 'home first');
+  assert.ok(spaces.length >= 10, `${spaces.length} apps`);
+  for (const s of spaces) {
+    assert.ok(s.blurb.length > 10 && s.blurb.length <= 60, `${s.id} line is short`);
+    assert.ok(rows.has(s.title) && rows.has(s.blurb), `rows for ${s.id}`);
+  }
+  const homeBlock = secBlock.slice(secBlock.indexOf("id: 'home'"), secBlock.indexOf("id: 'ops'"));
+  for (const v of ['home', 'mine', 'clock', 'work']) assert.ok(homeBlock.includes(`'${v}'`), `${v} is an everyday screen`);
+  for (const t of ['Apps', 'All apps', 'Switch app', 'Search apps and screens', 'Waiting for you', 'Good morning', 'Good afternoon', 'Good evening']) assert.ok(rows.has(t), `row for "${t}"`);
+});

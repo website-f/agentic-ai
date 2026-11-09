@@ -11,7 +11,7 @@ import { ItExtractionWorkspace } from './views/ItExtractionWorkspace';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { type Company, type User, RULES, hasOwnStaffRecord, isActHead, isGroupLeader, isOwnerAdmin, jaOwns, seesArmsDetail, workKpiScope, finRequestInMenu, canSeeJaSwitch } from '@prima/core';
 import { ApiError, api, type Me } from './api';
-import { ArrowLeftIcon } from '@phosphor-icons/react';
+import { ArrowLeftIcon, HouseIcon, MagnifyingGlassIcon, SquaresFourIcon } from '@phosphor-icons/react';
 import { publishPage, rulesFor } from './prima-page';
 import { ViewIcon } from './icons';
 import { SESSION_ENDED } from './api/http';
@@ -94,7 +94,9 @@ import { PaymentRequestsView } from './views/PaymentRequests';
 import { HandoversView } from './views/Handovers';
 import { QualityView } from './views/Quality';
 import { NavMenu } from './NavMenu';
-import { rememberView } from './nav-catalog';
+import { AppGrid, AppSwitcher, SpacePhoneBar, SpaceRailHead, SpotSearch } from './Spaces';
+import { LaunchpadView, SpaceRoute } from './views/SpaceRoute';
+import { appsOf, rememberView, spaceLayout, spaceOf, usesApps, type SpaceId } from './nav-catalog';
 
 
 
@@ -138,6 +140,8 @@ export interface Route {
   personId?: string;
   caseId?: string;
   tenderId?: string;
+  /** P91: on the home screen, the app whose own home page is open (`#@hr`). */
+  space?: SpaceId;
 }
 
 interface AppCtx {
@@ -151,6 +155,9 @@ interface AppCtx {
   canOpen?: (view: ViewName) => boolean;
   /** P90: this person's menu (screen, label, icon), for the home screen's "All your screens". */
   menu?: { view: ViewName; label: string; icon: string }[];
+  /** P91: whether this person's menu is split into apps, and opening one (null = the home screen). */
+  apps?: boolean;
+  openSpace?: (id: SpaceId | null) => void;
 }
 
 export const Ctx = createContext<AppCtx>(null as unknown as AppCtx);
@@ -915,7 +922,19 @@ function Shell({ me, onSignOut, onReset }: { me: Me; onSignOut: () => void; onRe
     const h = location.hash.slice(1) as ViewName;
     return VIEW_TOKENS.includes(h) && nav.some((x) => x.view === h) ? h : nav[0].view;
   };
-  const [route, setRoute] = useState<Route>({ view: initialView() });
+  // P91: Prima as apps for a long menu; `#@hr` opens an app's own home page.
+  const apps = usesApps(nav);
+  const initialRoute = (): Route => {
+    const h = location.hash.slice(1);
+    if (apps && h.startsWith('@')) {
+      const id = h.slice(1) as SpaceId;
+      if (id !== 'home' && spaceLayout(nav, id)) return { view: 'home', space: id };
+    }
+    // With apps, Prima opens on the home screen (the app cards), unless the address names a screen of this person.
+    if (apps && !(VIEW_TOKENS.includes(h as ViewName) && nav.some((x) => x.view === h))) return { view: 'home' };
+    return { view: initialView() };
+  };
+  const [route, setRoute] = useState<Route>(initialRoute);
   // P75: the office's feedback button explains the screen open now (prima-page.ts).
   useEffect(() => {
     const item = nav.find((n) => n.view === route.view);
@@ -961,27 +980,72 @@ function Shell({ me, onSignOut, onReset }: { me: Me; onSignOut: () => void; onRe
     return () => clearInterval(t);
   }, []);
 
-  const go = useCallback((r: Route) => {
-    setRoute(r);
-    try {
-      history.replaceState(null, '', `#${r.view}`);
-    } catch {
-      /* ignore */
-    }
-    window.scrollTo(0, 0);
-  }, []);
+  // P91: the app the open screen sits in (null = the home screen and the everyday screens).
+  const spaceOfRoute = useCallback(
+    (r: Route): SpaceId | null => {
+      if (!apps) return null;
+      if (r.view === 'home') return r.space ?? null;
+      const s = spaceOf(r.view);
+      return s === 'home' ? null : s;
+    },
+    [apps],
+  );
+  const space = spaceOfRoute(route);
+  const spaceNow = useRef(space);
+  spaceNow.current = space;
+  const go = useCallback(
+    (r: Route) => {
+      // Going into an app or back out of one is a step the phone's Back button undoes; moving inside an app is not.
+      const step = apps && spaceOfRoute(r) !== spaceNow.current;
+      setRoute(r);
+      try {
+        const hash = r.view === 'home' && r.space ? `#@${r.space}` : `#${r.view}`;
+        if (step) history.pushState(null, '', hash);
+        else history.replaceState(null, '', hash);
+      } catch {
+        /* ignore */
+      }
+      window.scrollTo(0, 0);
+    },
+    [apps, spaceOfRoute],
+  );
+  const openSpace = useCallback((id: SpaceId | null) => go(id && id !== 'home' ? { view: 'home', space: id } : { view: 'home' }), [go]);
+  // The phone's or browser's Back after going into an app: the screen in the address comes back.
+  useEffect(() => {
+    if (!apps) return;
+    const onPop = () => {
+      const h = location.hash.slice(1);
+      if (h.startsWith('@') && spaceLayout(nav, h.slice(1) as SpaceId)) setRoute({ view: 'home', space: h.slice(1) as SpaceId });
+      else if (VIEW_TOKENS.includes(h as ViewName) && nav.some((x) => x.view === h)) setRoute({ view: h as ViewName });
+      else if (!h || h === 'home') setRoute({ view: 'home' });
+      window.scrollTo(0, 0);
+    };
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [apps]);
 
   const navKey = nav.map((n) => n.view).join(',');
   const canOpen = useCallback((v: ViewName) => navKey.split(',').includes(v), [navKey]);
   const menuKey = nav.map((n) => `${n.view}:${n.label}`).join(',');
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  const menu = useMemo(() => nav.map((n) => ({ view: n.view, label: n.label, icon: n.icon })), [menuKey]);
-  const ctx = useMemo<AppCtx>(() => ({ me, companyId, company, setCompanyId, go, isGroup, canOpen, menu }), [me, companyId, company, go, isGroup, canOpen, menu]);
+  const menu = useMemo(() => {
+    const m = nav.map((n) => ({ view: n.view, label: n.label, icon: n.icon }));
+    // P91: with apps everyone has a home screen to come back to. Without Home in their menu it is the app cards only
+    // (no dashboard numbers), so nobody sees more than before.
+    return apps && !m.some((n) => n.view === 'home') ? [{ view: 'home' as ViewName, label: 'Home', icon: 'company' }, ...m] : m;
+  }, [menuKey, apps]);
+  const ctx = useMemo<AppCtx>(() => ({ me, companyId, company, setCompanyId, go, isGroup, canOpen, menu, apps, openSpace }), [me, companyId, company, go, isGroup, canOpen, menu, apps, openSpace]);
+  // P91: the side menu shows the open app's screens only (or, on the home screen, the everyday screens).
+  const railItems = useMemo(() => (apps ? (spaceLayout(menu, space ?? 'home')?.groups.flatMap((g) => g.items) ?? []) : menu), [apps, menu, space]);
+  const [appsOpen, setAppsOpen] = useState(false);
+  const personal = apps ? (nav.find((n) => n.view === 'clock') ?? nav.find((n) => n.view === 'work') ?? nav.find((n) => n.view === 'mine')) : undefined;
 
   const view = (() => {
     switch (route.view) {
       case 'home':
-        return <HomeView />;
+        if (route.space) return <SpaceRoute key={route.space} id={route.space} />;
+        return nav.some((n) => n.view === 'home') ? <HomeView /> : <LaunchpadView />;
       case 'overview':
         return <Overview />;
       case 'company':
@@ -1228,8 +1292,20 @@ function Shell({ me, onSignOut, onReset }: { me: Me; onSignOut: () => void; onRe
               Back to the office
             </a>
           )}
+          {apps && space && <SpaceRailHead id={space} menu={menu} onHome={() => openSpace(null)} onSpace={openSpace} />}
           <nav className="nav" aria-label="Main">
-            <NavMenu variant="rail" items={menu} current={route.view} userId={me.user.id} onOpen={(v) => go({ view: v })} onHotkeyHidden={openMoreSearch} />
+            <NavMenu
+              key={apps ? `space-${space ?? 'home'}` : 'menu'}
+              variant="rail"
+              items={railItems}
+              searchItems={menu}
+              layout={apps ? 'groups' : 'sections'}
+              after={apps && !space ? <AppSwitcher menu={menu} onSpace={openSpace} label /> : undefined}
+              current={route.view}
+              userId={me.user.id}
+              onOpen={(v) => go({ view: v })}
+              onHotkeyHidden={openMoreSearch}
+            />
           </nav>
           <div className="rail-foot">
             <div>
@@ -1308,10 +1384,34 @@ function Shell({ me, onSignOut, onReset }: { me: Me; onSignOut: () => void; onRe
             </button>
           </header>
           {/* P90: every screen sits in one page frame (padding, width, rhythm), even one that draws no .page of its own. */}
+          {apps && space && <SpacePhoneBar id={space} menu={menu} current={route.view === 'home' ? null : route.view} onHome={() => openSpace(null)} onSpace={openSpace} onView={(v) => go({ view: v })} />}
           <div className="view-host">{view}</div>
         </div>
         <nav className="tabs" aria-label="Main">
-          {tabNav.map((n) => (
+          {/* P91: with apps, the phone's tabs are Home, Apps, Search, the person's own clock or work, and More. */}
+          {apps && (
+            <>
+              <button aria-current={route.view === 'home' && !route.space ? 'page' : undefined} onClick={() => openSpace(null)}>
+                <HouseIcon size={22} aria-hidden="true" />
+                Home
+              </button>
+              <button aria-current={space ? 'page' : undefined} aria-expanded={appsOpen} onClick={() => setAppsOpen(true)}>
+                <SquaresFourIcon size={22} aria-hidden="true" />
+                Apps
+              </button>
+              <button aria-expanded={moreOpen && moreSearch} onClick={openMoreSearch}>
+                <MagnifyingGlassIcon size={22} aria-hidden="true" />
+                Search
+              </button>
+              {personal && (
+                <button aria-current={route.view === personal.view ? 'page' : undefined} onClick={() => go({ view: personal.view })}>
+                  <ViewIcon view={personal.view} fallback={personal.icon} />
+                  {personal.label.split(' ')[0]}
+                </button>
+              )}
+            </>
+          )}
+          {!apps && tabNav.map((n) => (
             <button key={n.view} aria-current={route.view === n.view ? 'page' : undefined} onClick={() => go({ view: n.view })}>
               <ViewIcon view={n.view} fallback={n.icon} />
               {n.label.split(' ')[0]}
@@ -1319,7 +1419,7 @@ function Shell({ me, onSignOut, onReset }: { me: Me; onSignOut: () => void; onRe
           ))}
           {/* Always shown: More also holds Switch person and the language. */}
           {(
-            <button aria-current={moreNav.some((n) => n.view === route.view) ? 'page' : undefined} aria-expanded={moreOpen} onClick={() => (setMoreSearch(false), setMoreOpen(true))}>
+            <button aria-current={!apps && moreNav.some((n) => n.view === route.view) ? 'page' : undefined} aria-expanded={moreOpen && !moreSearch} onClick={() => (setMoreSearch(false), setMoreOpen(true))}>
               <Icon name="more" />
               More
             </button>
@@ -1337,7 +1437,8 @@ function Shell({ me, onSignOut, onReset }: { me: Me; onSignOut: () => void; onRe
             <div className="sheet" role="dialog" aria-label="More">
               <NavMenu
                 variant="sheet"
-                items={moreNav.map((n) => ({ view: n.view, label: n.label, icon: n.icon }))}
+                layout={apps ? 'groups' : 'sections'}
+                items={apps ? (spaceLayout(menu, 'home')?.groups.flatMap((g) => g.items) ?? []) : moreNav.map((n) => ({ view: n.view, label: n.label, icon: n.icon }))}
                 searchItems={menu}
                 current={route.view}
                 userId={me.user.id}
@@ -1373,6 +1474,36 @@ function Shell({ me, onSignOut, onReset }: { me: Me; onSignOut: () => void; onRe
                   Reset test data
                 </button>
               )}
+            </div>
+          </>
+        )}
+        {appsOpen && (
+          <>
+            <div className="scrim" onClick={() => setAppsOpen(false)} />
+            <div className="sheet sp-sheet" role="dialog" aria-label="Apps">
+              <div className="sp-sheet-head">
+                <strong>Apps</strong>
+              </div>
+              <SpotSearch
+                menu={menu}
+                onView={(v) => {
+                  setAppsOpen(false);
+                  go({ view: v });
+                }}
+                onSpace={(id) => {
+                  setAppsOpen(false);
+                  openSpace(id);
+                }}
+              />
+              <AppGrid
+                apps={appsOf(menu)}
+                compact
+                current={space}
+                onOpen={(id) => {
+                  setAppsOpen(false);
+                  openSpace(id);
+                }}
+              />
             </div>
           </>
         )}

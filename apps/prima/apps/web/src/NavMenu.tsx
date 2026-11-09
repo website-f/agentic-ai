@@ -1,4 +1,4 @@
-import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react';
+import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from 'react';
 import { CaretDownIcon, MagnifyingGlassIcon, XIcon } from '@phosphor-icons/react';
 import type { ViewName } from './App';
 import { ViewIcon } from './icons';
@@ -59,6 +59,8 @@ export function NavMenu({
   variant,
   focusSearch,
   onHotkeyHidden,
+  layout = 'sections',
+  after,
 }: {
   items: MenuItem[];
   /** What the search looks through (the More sheet shows only the rest of the menu but searches all of it). */
@@ -71,6 +73,10 @@ export function NavMenu({
   focusSearch?: boolean;
   /** The shortcut was pressed while this menu is hidden (the side menu on a phone). */
   onHotkeyHidden?: () => void;
+  /** P91: 'groups' = one app's (or the Home space's) screens, its small groups always open, no section heads. */
+  layout?: 'sections' | 'groups';
+  /** P91: shown under the screens when no search is typed (the Apps button on the home menu). */
+  after?: ReactNode;
 }) {
   const { lang } = useLang();
   const [query, setQuery] = useState('');
@@ -83,7 +89,7 @@ export function NavMenu({
   const here = whereIs(current)?.section.id;
 
   const [open, setOpen] = useState<Record<string, boolean>>(() => sectionState(userId));
-  const isOpen = (id: string) => open[id] ?? (items.length <= ALL_OPEN || id === 'today' || id === here || id === 'more');
+  const isOpen = (id: string) => open[id] ?? (items.length <= ALL_OPEN || id === 'home' || id === here || id === 'more');
   const toggle = (id: string) => {
     const was = isOpen(id);
     // From the latest state, so quick clicks on several sections all count.
@@ -248,6 +254,18 @@ export function NavMenu({
             })
           )}
         </div>
+      ) : layout === 'groups' ? (
+        <>
+          {sections.map((sec) =>
+            sec.groups.map((g) => (
+              <div className="nav-section navm-group navm-flat" key={`${sec.id}-${g.title || 'all'}`}>
+                {(sec.groups.length > 1 || sections.length > 1) && g.title && <div className="navm-group-title">{g.title}</div>}
+                {g.items.map(button)}
+              </div>
+            )),
+          )}
+          {after}
+        </>
       ) : items.length <= SHORT ? (
         <div className="nav-section">{items.map(button)}</div>
       ) : (

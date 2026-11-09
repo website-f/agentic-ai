@@ -9,6 +9,8 @@ import { ErrorNotice, Loading, useLoad } from '../ui';
 export function CmsHoursPanel() {
   const [month, setMonth] = useState('');
   const { data, error } = useLoad(() => api.cmsHours(month || undefined), [month]);
+  // P91: the panel is for Arms Control and HR; anyone else who opens HR monitor (the COO) sees no red "Not allowed" box.
+  if (error && /^Not allowed:/.test(String((error as unknown as { message?: string })?.message ?? error))) return null;
   return (
     <section className="panel">
       <div className="panel-head">

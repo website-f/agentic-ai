@@ -10,7 +10,15 @@ import type { ViewName } from './App';
  * Titles and one-line descriptions are written in English and shown through the translation table (i18n.ts rows
  * "P90: menu sections" and "P90: screen descriptions").
  */
-export type NavSectionId = 'today' | 'ops' | 'people' | 'biz' | 'gov' | 'it';
+/**
+ * P91 (Fitri, 9 Nov 2026: "Prima full revamp ... the sidebar is still too overwhelming ... when they go to Prima they are
+ * shown a simple, mobile-friendly home with many category cards (like Grab) ... each category is like a microservice: when
+ * they click HR the sidebar changes to HR only ... like going to a different realm, with a back button"): the menu is a
+ * Home space (the everyday screens: dashboards and the person's own work) and eleven apps. The home screen shows the apps
+ * as cards; opening one turns the side menu into that app's screens only, with a way back. Every screen still sits in
+ * exactly one group of one space.
+ */
+export type NavSectionId = 'home' | 'ops' | 'security' | 'equip' | 'hr' | 'pay' | 'fw' | 'sales' | 'finance' | 'gov' | 'board' | 'it';
 
 export interface NavGroup {
   title: string;
@@ -19,63 +27,112 @@ export interface NavGroup {
 export interface NavSection {
   id: NavSectionId;
   title: string;
+  /** One plain line for the app's card on the home screen. */
+  blurb: string;
+  /** The Home space: shown in the side menu on the home screen, never as an app card. */
+  home?: true;
   groups: NavGroup[];
 }
 
 export const NAV_SECTIONS: NavSection[] = [
   {
-    id: 'today',
-    title: 'Today',
+    id: 'home',
+    title: 'Home',
+    blurb: 'Your day, your dashboards and your own work.',
+    home: true,
     groups: [
-      { title: 'Dashboards', views: ['home', 'overview', 'company', 'office', 'doa', 'reports'] },
+      { title: 'Dashboards', views: ['home', 'overview', 'company', 'reports'] },
       { title: 'My work', views: ['mine', 'clock', 'work', 'meetings', 'memos'] },
     ],
   },
   {
     id: 'ops',
     title: 'Operations',
+    blurb: 'Sites, guards, rosters and attendance.',
     groups: [
       { title: 'Sites and areas', views: ['ops', 'sites', 'branchwork', 'surveys', 'sitehours'] },
       { title: 'Guards and duty', views: ['people', 'roster', 'duty', 'attendance', 'cleaning'] },
-      { title: 'Incidents and security', views: ['cases', 'arms', 'cms', 'cmsready', 'device'] },
-      { title: 'Equipment and vehicles', views: ['items', 'sitestock', 'fleet'] },
     ],
   },
   {
-    id: 'people',
-    title: 'People and HR',
+    id: 'security',
+    title: 'Security',
+    blurb: 'Incidents, firearms, CCTV and alarms.',
+    groups: [{ title: 'Incidents and security', views: ['cases', 'arms', 'cms', 'cmsready', 'device'] }],
+  },
+  {
+    id: 'equip',
+    title: 'Equipment',
+    blurb: 'Items, uniforms, site stock, vehicles and assets.',
+    groups: [{ title: 'Equipment and vehicles', views: ['items', 'sitestock', 'fleet', 'assets'] }],
+  },
+  {
+    id: 'hr',
+    title: 'HR',
+    blurb: 'Staff, leave, claims and hand-overs.',
     groups: [
       { title: 'Staff', views: ['hr', 'staff-directory', 'staffclock', 'work-kpi', 'handovers'] },
-      { title: 'Pay', views: ['staffpay', 'guardpay', 'payformulas', 'salarycalc', 'statutory', 'advances', 'loans', 'arrivalcash'] },
       { title: 'Claims and welfare', views: ['claims', 'socso'] },
-      { title: 'Foreign workers', views: ['fwm', 'fwcost', 'fwstat', 'hostels'] },
     ],
   },
   {
-    id: 'biz',
-    title: 'Business and finance',
+    id: 'pay',
+    title: 'Payroll',
+    blurb: 'Pay runs, pay rules, advances and loans.',
     groups: [
-      { title: 'Clients and sales', views: ['commercial', 'clients', 'contracts'] },
-      { title: 'Payments and buying', views: ['finance', 'payreq', 'requests', 'purchasing', 'credit'] },
-      { title: 'Companies and assets', views: ['branches', 'assets', 'insurance'] },
-      { title: 'JA Group app', views: ['ja', 'jaswitch'] },
+      { title: 'Pay runs', views: ['staffpay', 'guardpay'] },
+      { title: 'Rules and rates', views: ['payformulas', 'salarycalc', 'statutory'] },
+      { title: 'Advances and loans', views: ['advances', 'loans'] },
+    ],
+  },
+  {
+    id: 'fw',
+    title: 'Foreign workers',
+    blurb: 'Permits, passports, hostels and costs.',
+    groups: [{ title: 'Foreign workers', views: ['fwm', 'fwcost', 'fwstat', 'hostels', 'arrivalcash'] }],
+  },
+  {
+    id: 'sales',
+    title: 'Clients and sales',
+    blurb: 'Tenders, quotations, clients and contracts.',
+    groups: [{ title: 'Clients and sales', views: ['commercial', 'clients', 'contracts'] }],
+  },
+  {
+    id: 'finance',
+    title: 'Finance',
+    blurb: 'Accounts, payments, buying and insurance.',
+    groups: [
+      { title: 'Money', views: ['finance', 'payreq', 'credit'] },
+      { title: 'Buying', views: ['purchasing', 'requests'] },
+      { title: 'Companies', views: ['branches', 'insurance'] },
     ],
   },
   {
     id: 'gov',
-    title: 'Compliance and governance',
+    title: 'Compliance',
+    blurb: 'Licences, renewals, audits and quality.',
     groups: [
       { title: 'Licences and readiness', views: ['compliance', 'renewals', 'rba', 'selfaudit'] },
       { title: 'Audit and quality', views: ['act', 'audit', 'quality', 'grc'] },
+    ],
+  },
+  {
+    id: 'board',
+    title: 'Management',
+    blurb: 'Director office, mandates, registers and PDPA.',
+    groups: [
+      { title: 'Offices', views: ['office', 'doa'] },
       { title: 'Company governance', views: ['governance', 'registers', 'corporate', 'pdpa'] },
     ],
   },
   {
     id: 'it',
     title: 'IT and systems',
+    blurb: 'IT help, equipment, websites and the JA app.',
     groups: [
       { title: 'IT help', views: ['it', 'hr-it-intake', 'it-procurement'] },
       { title: 'Systems and data', views: ['connections', 'websites', 'continuity', 'it-metrics', 'it-extraction'] },
+      { title: 'JA Group app', views: ['ja', 'jaswitch'] },
     ],
   },
 ];
@@ -294,20 +351,57 @@ export function saveSectionState(userId: string, state: Record<string, boolean>)
   }
 }
 
-/** The menu laid out in sections and groups, keeping only the screens this person has. */
-export function layoutNav<T extends { view: ViewName }>(items: T[]): { id: string; title: string; groups: { title: string; items: T[] }[]; count: number }[] {
+export interface NavLayout<T> {
+  id: string;
+  title: string;
+  blurb: string;
+  home: boolean;
+  groups: { title: string; items: T[] }[];
+  count: number;
+}
+
+/** The menu laid out in spaces and groups, keeping only the screens this person has. */
+export function layoutNav<T extends { view: ViewName }>(items: T[]): NavLayout<T>[] {
   const byView = new Map(items.map((i) => [i.view, i]));
   const placed = new Set<ViewName>();
-  const out: { id: string; title: string; groups: { title: string; items: T[] }[]; count: number }[] = [];
+  const out: NavLayout<T>[] = [];
   for (const s of NAV_SECTIONS) {
     const groups = s.groups
       .map((g) => ({ title: g.title, items: g.views.map((v) => byView.get(v)).filter((x): x is T => !!x) }))
       .filter((g) => g.items.length);
     groups.forEach((g) => g.items.forEach((i) => placed.add(i.view)));
     const count = groups.reduce((n, g) => n + g.items.length, 0);
-    if (count) out.push({ id: s.id, title: s.title, groups, count });
+    if (count) out.push({ id: s.id, title: s.title, blurb: s.blurb, home: !!s.home, groups, count });
   }
   const rest = items.filter((i) => !placed.has(i.view));
-  if (rest.length) out.push({ id: 'more', title: 'More', groups: [{ title: '', items: rest }], count: rest.length });
+  if (rest.length) out.push({ id: 'more', title: 'More', blurb: 'Other screens.', home: false, groups: [{ title: '', items: rest }], count: rest.length });
   return out;
+}
+
+/* ---------- P91: Home and apps ---------- */
+
+export type SpaceId = NavSectionId | 'more';
+
+/** The space a screen sits in: 'home' for the everyday screens, an app id otherwise, 'more' if not placed. */
+export function spaceOf(view: ViewName): SpaceId {
+  return WHERE.get(view)?.section.id ?? 'more';
+}
+
+/** A menu this short stays one plain list (a guard, a site device): apps would only add a click. */
+export const APPS_FROM = 12;
+
+/** Whether this person's menu is split into a Home space and apps: a long menu that spans at least two apps. */
+export function usesApps<T extends { view: ViewName }>(items: T[]): boolean {
+  if (items.length < APPS_FROM) return false;
+  return layoutNav(items).filter((s) => !s.home).length >= 2;
+}
+
+/** The apps this person has, in the catalogue's order, each with its screens in groups. */
+export function appsOf<T extends { view: ViewName }>(items: T[]): NavLayout<T>[] {
+  return layoutNav(items).filter((s) => !s.home);
+}
+
+/** The screens of one space, laid out in groups ([] when the person has none there). */
+export function spaceLayout<T extends { view: ViewName }>(items: T[], id: SpaceId): NavLayout<T> | undefined {
+  return layoutNav(items).find((s) => s.id === id);
 }
