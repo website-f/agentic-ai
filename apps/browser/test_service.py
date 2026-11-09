@@ -12,6 +12,7 @@ times" bug fix (type focuses itself; a click on a field focuses once and then no
 adds no extra click), the submit-approval gate, and multi-step scrolling.
 """
 
+import asyncio
 import os
 import random
 import sys
@@ -370,3 +371,80 @@ def test_budget_on_the_own_pc_still_caps_each_hour(monkeypatch):
         assert service.budget_check(key, t + i * 10, own_desk=True)[0] == 0
     rest, why = service.budget_check(key, t + 60, own_desk=True)
     assert "this hour" in why and rest > 3000
+
+
+# ---------------------------------------------------------------- P96 fifty people at once
+
+
+def _session(remote: bool, agent: str = "a1", ws: str = "ws1"):
+    m = service.Machine(agent, remote=remote, workspace_id=ws)
+    s = service.Session("bs_" + agent, {"task_id": "t-" + agent, "agent_id": agent}, m, None)
+    s.workspace_id = ws
+    if remote:
+        s.remote = object()  # a Chrome/Edge on the person's own computer
+    return s
+
+
+def test_own_pc_budget_is_each_persons_own(monkeypatch):
+    """P96: 50 people of one company on their own computers used to share ONE hourly cap of
+    90 actions, so after a few minutes everyone rested for up to an hour."""
+    service._budgets.clear()
+    monkeypatch.setattr(service, "BUDGET_PER_HOUR", 3)
+    site = "eperolehan.gov.my"
+    t = _at(10, 0)
+    for agent in ("aina", "badrul", "chong"):  # three people, three actions each: all go
+        s = _session(True, agent)
+        for i in range(3):
+            assert service.budget_check(service.budget_key(s, site), t + i, own_desk=True)[0] == 0
+    s = _session(True, "aina")
+    assert service.budget_check(service.budget_key(s, site), t + 9, own_desk=True)[0] > 0
+    # The office's own browsers (one server address) still share the company's budget.
+    a, b = _session(False, "x"), _session(False, "y")
+    assert service.budget_key(a, site) == service.budget_key(b, site) == ("ws1", site)
+    assert service.budget_key(_session(True, "x"), site) != service.budget_key(a, site)
+
+
+async def test_clicks_on_a_persons_own_pc_never_wait_for_the_pool_gate():
+    """P96: every click of every person's PC queued behind one lock (~2 s each over the
+    relay): at 10 people a click waited ~17 s. Only our Camoufox pool needs the gate."""
+    s = _session(True)
+    page = FakePage()
+    service._attach_page(s, _Closable(page), opened=False)
+    remote_page = s.pages[0]
+    loc = FakeLocator()
+    gate = service._click_gate()
+    await gate.acquire()  # another machine is mid-click
+    try:
+        await asyncio.wait_for(service._click(remote_page, loc), 1)
+        assert loc.clicks == 1
+        pool_page = FakePage()
+        with pytest.raises(TimeoutError):  # a pool page still takes its turn
+            await asyncio.wait_for(service._click(pool_page, FakeLocator()), 0.05)
+    finally:
+        gate.release()
+
+
+async def test_a_closed_tab_forgets_its_cursor():
+    s = _session(True)
+    tab = _Closable(FakePage())
+    service._attach_page(s, tab, opened=False)
+    service._mouse_pos[id(tab)] = (1.0, 2.0)
+    tab.fire("close")
+    assert id(tab) not in service._mouse_pos
+
+
+class _Closable:
+    """A FakePage that also takes event handlers (download, close)."""
+
+    def __init__(self, page) -> None:
+        self._page = page
+        self.handlers: dict = {}
+
+    def __getattr__(self, name):
+        return getattr(self._page, name)
+
+    def on(self, event, fn):
+        self.handlers[event] = fn
+
+    def fire(self, event):
+        self.handlers[event](self)
