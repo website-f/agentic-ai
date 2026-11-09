@@ -268,7 +268,7 @@ export function SignInEmailsBar({ isOwner }: { isOwner: boolean }) {
           </p>
         </div>
         {isOwner ? (
-          <Button size="sm" variant="outline" asChild><a href="/settings#sign-in-emails">{t("Set up sign-in emails")}</a></Button>
+          <Button size="sm" variant="outline" asChild className="max-sm:w-full"><a href="/settings#sign-in-emails">{t("Set up sign-in emails")}</a></Button>
         ) : null}
       </div>
     );
@@ -282,7 +282,7 @@ export function SignInEmailsBar({ isOwner }: { isOwner: boolean }) {
           {n === 0 ? t("Everyone here has signed in at least once.") : n === 1 ? t("1 person has not signed in yet.") : t("{n} people have not signed in yet.", { n })}
         </p>
         {n > 0 ? (
-          <Button size="sm" variant="secondary" disabled={running} onClick={() => setConfirm(true)} className="max-sm:w-full">
+          <Button size="sm" variant="secondary" disabled={running} onClick={() => setConfirm(true)} className="h-auto min-h-8 py-1.5 text-left whitespace-normal max-sm:w-full">
             <EnvelopeSimpleIcon size={15} /> {t("Email sign-in passwords to everyone who has not signed in yet")}
           </Button>
         ) : null}
