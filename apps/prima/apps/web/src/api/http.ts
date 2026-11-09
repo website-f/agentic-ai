@@ -637,6 +637,9 @@ export class HttpApi implements Api {
   staffPing(input: Parameters<Api['staffPing']>[0]) {
     return this.call('POST', '/me/clock/ping', input);
   }
+  staffPings(readings: Parameters<Api['staffPings']>[0]) {
+    return this.call<{ accepted: number; skipped: number }>('POST', '/me/clock/pings', { readings });
+  }
   // P81: staff check-in by place (apps/api/src/checkin.controller.ts).
   // P90: the owner's test check-in (owner only; the server refuses anyone else).
   myTestCheckins() {

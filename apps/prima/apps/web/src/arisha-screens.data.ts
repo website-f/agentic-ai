@@ -2098,6 +2098,13 @@ export const SCREEN_GUIDES: ScreenGuide[] = [
         ]
       },
       {
+        "task": "How to see where I went today",
+        "steps": [
+          "Look at \"My movement today\": how far you moved, time inside and outside your place, and the route on the map.",
+          "Press a day in \"Last 7 days\" to see that day."
+        ]
+      },
+      {
         "task": "How to register my face",
         "steps": [
           "In \"Face recognition\" press \"Register my face\".",
@@ -2126,6 +2133,10 @@ export const SCREEN_GUIDES: ScreenGuide[] = [
       {
         "term": "Out of area",
         "means": "You checked in outside your allowed place."
+      },
+      {
+        "term": "Out of station",
+        "means": "Outside your place for more than 15 minutes while clocked in; your manager sees it."
       }
     ],
     "notes": "Location is recorded only while you are clocked in. If the browser blocked location, follow the help shown and press \"Try again\". If your company is set to refuse check-ins outside the area, you can only \"Record this attempt for my manager\". \"Working from home\" only shows once you are eligible. The owner has no staff clock: the owner sees \"Check in (test)\" and \"Check out (test)\" with the route on a map and \"My test check-ins\"; a test is never attendance or pay."
@@ -2165,6 +2176,13 @@ export const SCREEN_GUIDES: ScreenGuide[] = [
           "Press \"Needs a look\".",
           "Or search in \"Search name, title or company\".",
           "Press a person to see their clock record."
+        ]
+      },
+      {
+        "task": "How to see who went out of station",
+        "steps": [
+          "Open \"Clock today\" and look at \"Movement to look at\" (or press \"Out of station\").",
+          "Press a line to see the route, the timeline and how long they were outside."
         ]
       },
       {
