@@ -31,7 +31,7 @@ describe("NavProgress (P96: slow networks)", () => {
     await screen.findByText("Home");
     expect(screen.queryByRole("progressbar")).toBeNull();
 
-    act(() => void router.navigate({ to: "/slow" }));
+    act(() => router.history.push("/slow"));
     await wait(50);
     expect(screen.queryByRole("progressbar")).toBeNull(); // a quick load shows nothing
     await wait(300);
