@@ -64,6 +64,11 @@ class User(Timestamps, Base):
     # P73: the system's developer: with an owner's role, also the Feedbacks page (what people
     # send from the floating feedback button). Set only by `python -m agentic.admin`.
     is_developer: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    # P92: an emailed sign-in password (services/signin_mail.py): only its argon2id hash, its
+    # expiry and when it was sent. Never the real password; signing in with it clears all three.
+    signin_code_hash: Mapped[str | None] = mapped_column(Text)
+    signin_code_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    signin_code_sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class Membership(Timestamps, Base):

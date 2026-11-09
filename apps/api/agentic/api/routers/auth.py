@@ -9,7 +9,7 @@ from ...core.config import settings
 from ...core.db import get_db
 from ...core.security import hash_password, needs_rehash, verify_password
 from ...models import AuthSession, Membership, PushSubscription, User, Workspace
-from ...services import audit, loginguard, two_factor
+from ...services import audit, loginguard, signin_mail, two_factor
 from ...services.text import slugify
 from ..deps import (
     DEVELOPER_PERMISSION,
@@ -173,8 +173,16 @@ async def login(
         )
 
     user = await db.scalar(select(User).where(User.email == email))
-    if not verify_password(user.password_hash if user else None, body.password) or not user:
+    password_ok = verify_password(user.password_hash if user else None, body.password)
+    # P92: or the temporary password emailed to them (never their real one). Every failure
+    # makes this second check (against a dummy hash when there is no code): flat timing.
+    code_hash = None if password_ok else signin_mail.live_code_hash(user)
+    code_ok = not password_ok and verify_password(code_hash, body.password)
+    if not (password_ok or code_ok) or not user:
         await loginguard.register_failure(email, ip)
+        # P92: someone who never signed in gets a temporary password by email. Decided and
+        # sent in the background for every failure, so the answer is the same for all.
+        signin_mail.spawn(signin_mail.after_failed_login(email, ip))
         raise api_error(
             status.HTTP_401_UNAUTHORIZED, "bad_credentials", "Email or password is incorrect."
         )
@@ -189,7 +197,14 @@ async def login(
             status.HTTP_403_FORBIDDEN, "no_workspace", "This account is not in any workspace yet."
         )
 
-    if needs_rehash(user.password_hash):
+    note = ""
+    if code_ok and code_hash:
+        # P92: the emailed password works once; a new password of their own comes next.
+        signin_mail.clear_code(user)
+        user.must_change_password = True
+        await signin_mail.remember_used(user.id, code_hash)
+        note = ", emailed password"
+    elif needs_rehash(user.password_hash):
         user.password_hash = hash_password(body.password)
     await loginguard.clear(email)
     if two_factor.enabled(user):
@@ -198,7 +213,7 @@ async def login(
         return TwoFactorChallengeOut(
             challenge=await two_factor.new_challenge(user.id, membership.workspace_id)
         )
-    return await _signed_in(db, request, response, user, membership)
+    return await _signed_in(db, request, response, user, membership, note)
 
 
 @router.post("/login/2fa")
@@ -296,7 +311,11 @@ async def sso_options(db: AsyncSession = Depends(get_db)) -> dict[str, bool]:
     """Which other ways to sign in the sign-in page offers."""
     from ...microsoft import signin
 
-    return {"microsoft": bool(await signin.offices(db))}
+    # P92: and "Email me a sign-in password" when some workspace sends sign-in emails.
+    return {
+        "microsoft": bool(await signin.offices(db)),
+        "email_signin": await signin_mail.any_sender(db) is not None,
+    }
 
 
 @router.post("/microsoft/start")
@@ -368,7 +387,11 @@ async def change_password(
 ) -> MeOut:
     user = await db.get(User, principal.user.id)
     assert user is not None
-    if not verify_password(user.password_hash, body.current_password):
+    # P92: after signing in with an emailed password, that password counts as the current one.
+    if not verify_password(user.password_hash, body.current_password) and not (
+        user.must_change_password
+        and await signin_mail.used_code_matches(user.id, body.current_password)
+    ):
         raise api_error(
             status.HTTP_400_BAD_REQUEST, "bad_current_password", "Current password is incorrect."
         )
@@ -378,6 +401,8 @@ async def change_password(
         )
     user.password_hash = hash_password(body.new_password)
     user.must_change_password = False
+    signin_mail.clear_code(user)
+    await signin_mail.forget_used(user.id)
     # Sign out every other device; keep this one.
     await db.execute(
         delete(AuthSession).where(

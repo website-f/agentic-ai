@@ -491,3 +491,8 @@ app.include_router(feedback_router.router)
 from .routers import bulk_delete as bulk_delete_router  # noqa: E402
 
 app.include_router(bulk_delete_router.router)
+
+# P92: emailed sign-in passwords (first sign-in, forgotten password) and the system sender.
+from .routers import signin_mail as signin_mail_router  # noqa: E402
+
+app.include_router(signin_mail_router.router)

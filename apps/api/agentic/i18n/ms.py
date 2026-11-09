@@ -1987,3 +1987,8 @@ MS: dict[str, str] = {
         "Pemilik membuka Prima sebagai rekod teratasnya. Mereka tidak perlu dipautkan."
     ),
 }
+
+# P92: emailed sign-in passwords and the system sender, kept in their own file.
+from .ms_signin import MS_SIGNIN  # noqa: E402
+
+MS.update({k: v for k, v in MS_SIGNIN.items() if k not in MS})
