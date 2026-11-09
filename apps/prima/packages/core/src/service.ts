@@ -826,6 +826,7 @@ import type { TimeSlipApprover } from "./types";
 import type { TimeSlipSetting } from "./types";
 import { StaffDirectoryService } from "./staff-directory";
 import { CleaningService } from "./cleaning-service";
+import type { SiteKitCategory, SiteKitOwner } from "./site-kit";
 import { SecurityPlanService } from "./security-plan";
 import { staffHistoryRole } from "./access";
 import { canMarkDoNotRehire } from "./access";
@@ -29420,7 +29421,7 @@ export class PrimaService {
   }
 
   /** HR or the guard's company head records a KDN card, an eSIMS vetting submission, CSG or TNG. Never Arms or FWM papers. */
-  async recordGuardPaper(user: User, input: { personId: Id; type: CredentialType; number: string; issuedOn: IsoDate; expiresOn: IsoDate | null }) {
+  async recordGuardPaper(user: User, input: { personId: Id; type: CredentialType; number: string; issuedOn: IsoDate; expiresOn: IsoDate | null }, opts?: { imported?: boolean }) {
     if (!GUARD_PAPER_TYPES.includes(input.type)) throw new BadRequest('Firearm papers stay with Arms Control and foreign worker papers with FWM.');
     const p = await this.store.get('people', input.personId);
     if (!p || p.role === 'office') throw new BadRequest('Choose a guard or officer.');
@@ -29436,7 +29437,8 @@ export class PrimaService {
     if (input.type === 'CSG_TRAINING' || input.type === 'KDN_VETTING') expiresOn = null;
     if (expiresOn && (!iso.test(expiresOn) || expiresOn <= input.issuedOn)) throw new BadRequest('The expiry date must be after the issue date.');
     const at = this.now();
-    const row: Credential = { id: `cred-${p.id}-${input.type}-${toMs(at)}`, companyId: p.companyId, personId: p.id, type: input.type, number, issuedOn: input.issuedOn, expiresOn, recordedBy: user.name, recordedById: user.id, recordedAt: at };
+    // P91: rows of one imported file are saved within the same millisecond, so each gets its own suffix.
+    const row: Credential = { id: `cred-${p.id}-${input.type}-${toMs(at)}${opts?.imported ? `-${globalThis.crypto.randomUUID().slice(0, 8)}` : ''}`, companyId: p.companyId, personId: p.id, type: input.type, number, issuedOn: input.issuedOn, expiresOn, recordedBy: user.name, recordedById: user.id, recordedAt: at };
     await this.store.transaction(async (tx) => {
       await tx.insert('credentials', row);
       await tx.audit({ at, actor: user.name, companyId: p.companyId, action: 'hr.guard_paper', entity: 'credential', entityId: row.id, summary: `${CREDENTIAL_LABEL[input.type]} for ${p.name} (${p.staffNo}): ${number}, ${input.issuedOn}${expiresOn ? ` to ${expiresOn}` : ''}` });
@@ -29494,7 +29496,11 @@ export class PrimaService {
   }
 
   /** HR records a course a staff member attended. */
-  async recordTraining(user: User, input: { personId: Id; course: string; provider: string; from: IsoDate; to: IsoDate; hours: number; cost: number | null; hrdRef: string | null; certificateRef: string | null }) {
+  async recordTraining(
+    user: User,
+    input: { personId: Id; course: string; provider: string; from: IsoDate; to: IsoDate; hours: number; cost: number | null; hrdRef: string | null; certificateRef: string | null },
+    opts?: { imported?: boolean },
+  ) {
     const p = await this.store.get('people', input.personId);
     if (!p) throw new BadRequest('Choose a staff member or guard.');
     // Office staff: HR. Guards and officers: HR or their company head (Fauzan, 2 Nov 2026).
@@ -29514,7 +29520,8 @@ export class PrimaService {
     if (input.cost != null && (!Number.isFinite(Number(input.cost)) || Number(input.cost) < 0)) throw new BadRequest('Give the cost in RM, or leave it empty.');
     const at = this.now();
     const row: StaffTraining = {
-      id: `trn-${p.id}-${toMs(at)}`,
+      // P91: rows of one imported file are saved within the same millisecond, so each gets its own suffix.
+      id: `trn-${p.id}-${toMs(at)}${opts?.imported ? `-${globalThis.crypto.randomUUID().slice(0, 8)}` : ''}`,
       companyId: p.companyId,
       personId: p.id,
       name: p.name,
@@ -49361,6 +49368,23 @@ export class PrimaService {
       });
       return { person, papers: creds.length };
     });
+  }
+
+  /**
+   * P91: one line of a site's fittings plan from an old list, through the OM's own plan save (saveSiteKit: its
+   * permission, checks, version and audit). The line is added to the plan already there; nothing else changes.
+   */
+  async importSiteKitItem(
+    user: User,
+    siteId: Id,
+    item: { name: string; category: SiteKitCategory; required: number; owner: SiteKitOwner; note: string; atEnd: 'take_back' | 'hand_over'; handOverRef: string },
+  ) {
+    const cur = await this.store.get('siteKits', `kit-${siteId}`);
+    const items = cur?.items ?? [];
+    if (items.some((i) => i.name.trim().toLowerCase() === String(item.name ?? '').trim().toLowerCase())) throw new BadRequest(`"${String(item.name).slice(0, 60)}" is already on this site's fittings plan.`);
+    const id = `kit-${globalThis.crypto.randomUUID().slice(0, 12)}`;
+    const row = await this.cleaning.saveSiteKit(user, siteId, [...items, { ...item, id }], cur?.version ?? null);
+    return { id: row.id };
   }
 
   /**
