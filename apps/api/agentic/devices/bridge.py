@@ -20,7 +20,7 @@ from ..models import Device
 from . import core, hub, relay
 from .core import DeviceError
 
-# Set by api/routers/devices.py on import: this process holds the PC sockets.
+# Set by api/main.py when the API app starts (P94): this process holds the PC sockets.
 SERVE_HERE = False
 _transport: httpx.AsyncBaseTransport | None = None  # tests: reach the API in-process
 

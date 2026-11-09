@@ -44,8 +44,9 @@ from ..deps import Principal, api_error, client_ip, current_principal
 
 router = APIRouter(tags=["devices"])
 
-# This process holds the PC sockets: calls made here go straight to them.
-bridge.serve_here()
+# P94: the API app (api/main.py) marks itself as the process holding the PC sockets. Not here:
+# importing this module from the worker (P92 tunnel.py did) made the worker think it held
+# them, so every PC call from an agent failed as "offline".
 
 UPLOAD_PREFIX = "/api/devices/uploads/"
 KINDS = frozenset(
@@ -991,14 +992,9 @@ async def test_proxies(
 # ---------------------------------------------------------------- P62 how the AI browses
 
 
-ASK_VERSION = (0, 5, 0)  # the agent that shows Allow / Not now on its own page
-
-
-def _version(v: str | None) -> tuple[int, ...]:
-    try:
-        return tuple(int(x) for x in (v or "0").split("-")[0].split(".")[:3])
-    except ValueError:
-        return (0,)
+# P94: kept in devices/core.py so the worker can use them without importing this router.
+ASK_VERSION = core.ASK_VERSION
+_version = core.version_tuple
 
 
 class WebIn(BaseModel):

@@ -504,3 +504,9 @@ from .routers import role_access as role_access_router  # noqa: E402
 
 app.include_router(role_access_router.router)
 app.include_router(account_router.router)
+
+# P94: only the API process holds the PC sockets (devices/hub.py); the worker reaches them
+# through /internal/devices/*. Set here, not when a module is imported.
+from ..devices import bridge as _devices_bridge  # noqa: E402
+
+_devices_bridge.serve_here()

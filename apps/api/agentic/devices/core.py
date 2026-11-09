@@ -238,6 +238,17 @@ def public_base(headers: Mapping[str, str], scheme: str) -> str:
     return f"{proto}://{host}"
 
 
+ASK_VERSION = (0, 5, 0)  # the PC agent that shows Allow / Not now on its own page
+
+
+def version_tuple(v: str | None) -> tuple[int, ...]:
+    """Version text such as 0.5.1 as (0, 5, 1); anything unreadable is (0,)."""
+    try:
+        return tuple(int(x) for x in (v or "0").split("-")[0].split(".")[:3])
+    except ValueError:
+        return (0,)
+
+
 def internal_url() -> str:
     """How the worker (and the browser service) reach the API inside the stack."""
     import os

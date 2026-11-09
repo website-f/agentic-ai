@@ -150,7 +150,7 @@ async def computer_down(db: Any, workspace_id: str, device_id: str, sites: list[
     if d.paused:
         return f"{d.name} is paused"
     if not all(core.host_in(s, d.tunnel_hosts or []) for s in sites):
-        from ..api.routers.devices import ASK_VERSION, _version
+        ASK_VERSION, _version = core.ASK_VERSION, core.version_tuple
 
         if _version(d.version) < ASK_VERSION:
             # P84: an older app has no Allow button: say what to do, not "press Allow".
@@ -307,7 +307,7 @@ async def person_state(
     every site; most recently seen first), else what is in the way. An online PC that has not
     allowed them gets the Allow request by itself (`ask`); an offline one is asked when it
     connects."""
-    from ..api.routers.devices import ASK_VERSION, _version
+    ASK_VERSION, _version = core.ASK_VERSION, core.version_tuple
 
     rows = list(await core.live_devices(db, workspace_id, person))
     if not rows:
