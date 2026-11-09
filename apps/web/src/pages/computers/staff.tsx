@@ -76,7 +76,8 @@ export function StaffComputersPage() {
         <p role="alert" className="text-danger">{errorMessage(roster.error)}</p>
       ) : !list.length ? (
         <EmptyState icon={DesktopTowerIcon} title={needle ? t("Nothing matches") : t("No computers linked yet")}
-          body={needle ? t("Try another name.") : t("Staff link a company computer from My computers. Once linked, it shows here.")} />
+          body={needle ? t("Try another name.") : t("Staff link a company computer from My computers. Once linked, it shows here.")}
+          action={needle ? undefined : <Button asChild variant="outline"><Link to="/computers" search={{ link: 1 }}><DesktopTowerIcon size={16} /> {t("Link my own computer")}</Link></Button>} />
       ) : (
         byCompany.map(([company, rows]) => (
           <Section key={company} title={company} description={t("{n} computers", { n: rows.length })}>

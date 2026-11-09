@@ -299,6 +299,27 @@ async def web_task(
                 name=device.name,
             )
 
+    # P92: ePerolehan work runs on its person's own PC (the agent's owner for a personal AI,
+    # else the person giving it). It does not start until that PC is ready: the reason and
+    # the next step in plain words instead of a task that fails later.
+    from urllib.parse import urlsplit
+
+    from ...devices import tunnel
+
+    host = (urlsplit(url).hostname or "").lower()
+    if tunnel.pc_only(host):
+        person = agent.owner_user_id or principal.user.id
+        pc = await tunnel.pc_status(
+            db, principal.workspace_id, person, host, by=principal.user.name
+        )
+        if pc["needed"] and pc["state"] != "ready":
+            raise api_error(
+                status.HTTP_409_CONFLICT,
+                "pc_not_ready",
+                "ePerolehan work runs on your own computer, and it is not ready: {next}",
+                next=pc["next"],
+            )
+
     lowest = (
         await db.scalar(
             select(func.min(Task.position)).where(Task.workspace_id == principal.workspace_id)

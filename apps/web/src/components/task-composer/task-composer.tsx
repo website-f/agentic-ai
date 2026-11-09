@@ -15,6 +15,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { toast } from "sonner";
 
 import { FilePicker } from "@/components/file-drop";
+import { MyPcStatusCard } from "@/components/my-pc-status";
 import { ObjectivePicker } from "@/components/objective-bits";
 import { Button } from "@/components/ui/button";
 import { Field, FormError, Input, TextareaField } from "@/components/ui/field";
@@ -25,6 +26,7 @@ import { SwitchField } from "@/components/ui/switch";
 import { VoiceInput } from "@/components/voice-input";
 import { msg, useT } from "@/i18n";
 import { api, ApiError, errorMessage } from "@/lib/api";
+import { EPEROLEHAN_SITE, myPcStatusQuery, pcReady, pcSiteOf } from "@/lib/my-pc";
 import { keys, meQuery } from "@/lib/queries";
 import { teamKeys, type Schedule } from "@/lib/teams";
 import { cn } from "@/lib/utils";
@@ -157,7 +159,14 @@ export function TaskComposer({ prefill, onClose }: { prefill: ComposerPrefill; o
   // P31: browse on the person's own computer (only their own AI, only a computer that is on).
   const [where, setWhere] = useState(ON_SERVER);
   const myDevices = useMyDevicesFor(kind === "browse" ? agent : null, me.user.id);
-  const deviceId = myDevices.find((d) => d.id === where && canBrowseOn(d))?.id ?? null;
+  // P92: ePerolehan always runs on the person's own linked computer (the server picks it), so
+  // there is no "where" to choose: a card says whether that computer is ready, before starting.
+  // Other work that mentions ePerolehan shows the card too (it may open the portal), without
+  // holding the task back: the agent is told the same reason if the portal is needed.
+  const pcSite = kind === "browse" ? pcSiteOf(url) : /e-?perolehan/i.test(text) ? EPEROLEHAN_SITE : null;
+  const pc = useQuery(myPcStatusQuery(pcSite ?? "", !!pcSite));
+  const pcBlocked = kind === "browse" && !!pcSite && !pcReady(pc.data);
+  const deviceId = pcSite ? null : myDevices.find((d) => d.id === where && canBrowseOn(d))?.id ?? null;
 
   const logins = useQuery({
     queryKey: ["agent-logins", agentId],
@@ -188,7 +197,7 @@ export function TaskComposer({ prefill, onClose }: { prefill: ComposerPrefill; o
     if (needsAgent && !hasAgent) return false;
     if (repeatOn) return !!shownTitle && !sched.problem;
     if (kind === "research") return text.trim().length >= 3 && !!shownTitle;
-    if (kind === "browse") return url.trim().length > 3 && text.trim().length > 2;
+    if (kind === "browse") return url.trim().length > 3 && text.trim().length > 2 && !pcBlocked;
     if (kind === "workflow") return !!flowId && !!shownTitle;
     return !!shownTitle;
   })();
@@ -333,6 +342,7 @@ export function TaskComposer({ prefill, onClose }: { prefill: ComposerPrefill; o
                   </div>
                 </div>
                 {fields.instructions ? <p role="alert" className="text-[12.5px] text-danger">{fields.instructions}</p> : null}
+                {pcSite && kind !== "browse" ? <MyPcStatusCard site={pcSite} /> : null}
                 <div className="grid min-w-0 gap-1">
                   <label htmlFor="composer-title" className="text-[12px] text-muted">{t("Title")}{titleEdited ? null : <span> · {t("from the first line; change it if you like")}</span>}</label>
                   <Input id="composer-title" maxLength={200} value={titleEdited ? title : titleFrom(text)} placeholder={t("A short name for the task")}
@@ -374,7 +384,8 @@ export function TaskComposer({ prefill, onClose }: { prefill: ComposerPrefill; o
                 {kind === "browse" ? (
                   <div className="grid min-w-0 gap-3 rounded-[var(--radius-md)] border border-border bg-surface-2/30 p-3">
                     <Field label={t("Link")} value={url} onChange={(e) => setUrl(e.target.value)} placeholder={t("https://… or portal.example.com/page")} error={fields.url} inputMode="url" />
-                    {myDevices.length ? <BrowseWhere devices={myDevices} value={deviceId ?? ON_SERVER} onChange={setWhere} /> : null}
+                    {pcSite ? <MyPcStatusCard site={pcSite} />
+                      : myDevices.length ? <BrowseWhere devices={myDevices} value={deviceId ?? ON_SERVER} onChange={setWhere} /> : null}
                     <RadioGroup.Root value={mode} onValueChange={(v) => pickMode(v as "read" | "interact" | "tender")} aria-label={t("What it may do")} className="grid gap-2 sm:grid-cols-3">
                       <ModeChoice value="read" icon={MagnifyingGlassIcon} title={t("Find information")} body={t("Reads the page (and the pages it links to). Fills in nothing.")} />
                       <ModeChoice value="interact" icon={CursorClickIcon} title={t("Interact and fill in")} body={t("Clicks, types and fills forms. Sending a form waits for your approval.")} />
@@ -527,6 +538,9 @@ export function TaskComposer({ prefill, onClose }: { prefill: ComposerPrefill; o
 
           <div className="flex min-w-0 shrink-0 flex-col gap-2 border-t border-border px-4 py-3 sm:px-6">
             <FormError message={submit.error && !Object.keys(fields).length ? errorMessage(submit.error) : null} />
+            {pcBlocked && pc.data ? (
+              <p role="status" className="text-[12.5px] text-warn">{t("It starts once your computer is ready: {next}", { next: pc.data.next })}</p>
+            ) : null}
             <div className="flex min-w-0 items-center gap-2">
               <span className="mr-auto hidden text-[11.5px] text-muted sm:inline">{IS_MAC ? t("⌘ Enter to send") : t("Ctrl+Enter to send")}</span>
               <Button variant="outline" onClick={onClose} className="max-sm:flex-1">{t("Cancel")}</Button>

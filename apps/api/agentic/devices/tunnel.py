@@ -30,6 +30,12 @@ listed sites (proxies may also take every site). Whatever is chosen is used or t
 refused with the reason (503): it never quietly leaves from this server's address instead, the
 way the old fallbacks and an unapproved proxy list did. A site refusing or blocking a request
 never moves it elsewhere either.
+
+P92: ePerolehan (PC_ONLY) work for a person always goes through that person's OWN linked PC,
+whatever Web connections says; it is refused with the plain next step (link it, turn it on,
+press Allow) when that PC is not ready, and an online PC that has not allowed it is sent the
+Allow request by itself. Only the office's own work (no person) follows the workspace choice.
+`pc_status` answers GET /api/devices/my-pc-status for the cards shown before work starts.
 """
 
 import asyncio
@@ -192,49 +198,247 @@ async def person_of_agent(db: Any, agent_id: str) -> str | None:
     return str(v) if v else None
 
 
+# P92: ePerolehan work for a person ALWAYS runs on that person's own linked PC, whatever the
+# workspace chose on Web connections: never another person's computer, the company's chosen
+# one or this server's address. Only the office's own work (no person) follows the choice.
+PC_ONLY = list(DEFAULT_HOSTS)
+ASK_EVERY = 60  # seconds: the Allow request goes to the same PC at most this often by itself
+ASK_AGAIN = 5  # "Send the request again": at most this often
+WANT_TTL = 86400  # the person wants these sites on their PC: asked when it next connects
+
+
+def pc_only(host: str) -> bool:
+    return core.host_in(host, PC_ONLY)
+
+
+def my_computers_url() -> str:
+    """Where a person links and checks their own computer (told to the person by the agent)."""
+    base = (settings.public_url or "").rstrip("/")
+    return f"{base}/computers" if base else "/computers"
+
+
+def _want_key(user_id: str) -> str:
+    return f"devices:want:{user_id}"
+
+
+async def want_sites(user_id: str) -> list[str]:
+    """The sites a person is waiting to use on their own PC (asked when it connects)."""
+    from ..core.valkey import valkey
+
+    try:
+        raw = await valkey().get(_want_key(user_id))
+        return core.tunnel_hosts(json.loads(raw)) if raw else []
+    except Exception:  # noqa: BLE001 - no cache: nothing remembered
+        return []
+
+
+async def remember_want(user_id: str, sites: list[str]) -> None:
+    from ..core.valkey import valkey
+
+    keep = core.tunnel_hosts([*await want_sites(user_id), *sites])
+    with contextlib.suppress(Exception):
+        await valkey().set(_want_key(user_id), json.dumps(keep), ex=WANT_TTL)
+
+
+async def forget_want(user_id: str) -> None:
+    from ..core.valkey import valkey
+
+    with contextlib.suppress(Exception):
+        await valkey().delete(_want_key(user_id))
+
+
+def ask_sites(sites: list[str], m: Mode | None = None) -> list[str]:
+    """The site names to ask a PC to allow: the listed site each host belongs to
+    (www.eperolehan.gov.my -> eperolehan.gov.my), so one Allow covers the whole site."""
+    listed = PC_ONLY + [s for s in (m.sites if m else []) if s != "*"]
+    out: list[str] = []
+    for s in sites:
+        name = next((p for p in listed if core.host_in(s, [p])), s)
+        if name not in out:
+            out.append(name)
+    return core.tunnel_hosts(out)
+
+
+async def ask_own(device: Device, sites: list[str], by: str = "", force: bool = False) -> bool:
+    """P92: send the Allow request for `sites` to the person's own PC (its page opens there
+    with Allow / Not now; nothing passes until they press Allow). At most once a minute by
+    itself, every few seconds when the person presses "Send the request again". True when the
+    PC got it now."""
+    from ..core.valkey import valkey
+
+    sites = core.tunnel_hosts(sites)
+    if not sites:
+        return False
+    await remember_want(device.user_id, sites)
+    try:
+        if force:
+            ok = await valkey().set(f"devices:ask-again:{device.id}", "1", ex=ASK_AGAIN, nx=True)
+            await valkey().set(f"devices:ask:{device.id}", "1", ex=ASK_EVERY)
+        else:
+            ok = await valkey().set(f"devices:ask:{device.id}", "1", ex=ASK_EVERY, nx=True)
+    except Exception:  # noqa: BLE001 - no cache: no limit
+        ok = True
+    if not ok:
+        return False
+    try:
+        return await bridge.ask_sites(device.id, sites, by, own=True)
+    except Exception:  # noqa: BLE001 - asked again when it next connects (want_sites)
+        log.info("could not send the Allow request to %s", device.id)
+        return False
+
+
+STATES = ("ready", "offline", "not_allowed", "not_linked", "needs_update", "paused")
+
+
+@dataclass
+class PcState:
+    """Where a person's own PC stands for some sites: `state` (STATES), the computer it is
+    about (the ready one, else the one to act on), and its last-seen time."""
+
+    state: str
+    device: Device | None = None
+    asked: bool = False
+
+
+async def person_state(
+    db: Any, workspace_id: str, person: str, sites: list[str], ask: bool = True, by: str = ""
+) -> PcState:
+    """P92: the person's OWN linked computers for `sites`: ready (online, not paused, allowed
+    every site; most recently seen first), else what is in the way. An online PC that has not
+    allowed them gets the Allow request by itself (`ask`); an offline one is asked when it
+    connects."""
+    from ..api.routers.devices import ASK_VERSION, _version
+
+    rows = list(await core.live_devices(db, workspace_id, person))
+    if not rows:
+        return PcState("not_linked")
+    online = await core.online_ids([d.id for d in rows])
+
+    def allows(d: Device) -> bool:
+        return all(core.host_in(x, d.tunnel_hosts or []) for x in sites)
+
+    ready = [d for d in rows if d.id in online and not d.paused and allows(d)]
+    if ready:
+        return PcState("ready", ready[0])
+    live = [d for d in rows if d.id in online and not d.paused]
+    if live:
+        d = live[0]
+        if _version(d.version) < ASK_VERSION:
+            return PcState("needs_update", d)
+        asked = await ask_own(d, sites, by) if ask else False
+        return PcState("not_allowed", d, asked)
+    paused = [d for d in rows if d.id in online]
+    if paused:
+        return PcState("paused", paused[0])
+    # Offline: when it connects, the hub asks it for these sites if it has not allowed them.
+    if ask and not any(allows(d) for d in rows):
+        await remember_want(person, sites)
+    d = next((d for d in rows if allows(d) and not d.paused), rows[0])
+    return PcState("offline", d)
+
+
+def why_for(st: PcState, who: str) -> str:
+    """The plain reason a person's ePerolehan work cannot start on their PC ("" when ready),
+    for the agent to pass on, with where to go."""
+    link = my_computers_url()
+    d = st.device
+    name = d.name if d is not None else ""
+    if st.state == "ready":
+        return ""
+    if st.state == "not_linked":
+        return (
+            f"{who} has no computer linked yet. ePerolehan work runs on their own computer: "
+            f"they open My computers ({link}), press Link a computer (about 2 minutes), then "
+            "press Allow on that computer"
+        )
+    if st.state == "paused":
+        return f"{name} ({who}'s computer) is paused: they turn it back on in My computers ({link})"
+    if st.state == "needs_update":
+        return (
+            f"{name} ({who}'s computer) has not allowed it yet: it has an older Agentic Office "
+            f"PC app (on that computer they open My computers ({link}), download the app again "
+            "and run it, then press Allow)"
+        )
+    if st.state == "not_allowed":
+        return (
+            f"{name} ({who}'s computer) has not allowed it yet: the request was sent to it, "
+            f"they press Allow on the Agentic Office page on that computer (My computers: {link})"
+        )
+    return (
+        f"{name} ({who}'s computer) is offline: they turn it on and open Agentic Office PC "
+        f"(My computers: {link})"
+    )
+
+
 async def person_computer(
     db: Any, workspace_id: str, person: str, sites: list[str]
 ) -> tuple[str, str]:
     """P72: (device id, "") of the person's OWN linked computer that has allowed every one of
-    `sites` and is online now (most recently seen first), or ("", why)."""
+    `sites` and is online now (most recently seen first), or ("", why). P92: an online PC that
+    has not allowed them is sent the Allow request by itself."""
     from ..models import User
 
-    rows = (
-        await db.scalars(
-            select(Device)
-            .where(
-                Device.workspace_id == workspace_id,
-                Device.user_id == person,
-                Device.revoked_at.is_(None),
-            )
-            .order_by(Device.last_seen_at.desc().nullslast())
-        )
-    ).all()
     u = await db.get(User, person)
     who = (u.name if u else "") or "the person"
-    if not rows:
-        return "", (
-            f"{who} has no linked PC. ePerolehan work runs on their own PC: link it on Staff "
-            "computers (download Agentic Office PC), then press Allow on it"
-        )
-    ready = [
-        d
-        for d in rows
-        if not d.paused and all(core.host_in(x, d.tunnel_hosts or []) for x in sites)
-    ]
-    if not ready:
-        d = rows[0]
-        return "", (
-            f"{d.name} ({who}'s PC) is paused"
-            if d.paused
-            else f"{d.name} ({who}'s PC) has not allowed it yet: on that PC, press Allow on the "
-            "Agentic Office page"
-        )
-    online = await core.online_ids([d.id for d in ready])
-    d = next((d for d in ready if d.id in online), None)
-    if d is None:
-        return "", f"{ready[0].name} ({who}'s PC) is offline: turn it on and open Agentic Office PC"
-    return d.id, ""
+    ws = await db.get(Workspace, workspace_id)
+    st = await person_state(
+        db, workspace_id, person, ask_sites(sites, mode_of(ws)), by=(u.name if u else "")
+    )
+    if st.state == "ready" and st.device is not None:
+        return st.device.id, ""
+    return "", why_for(st, who)
+
+
+async def pc_status(
+    db: Any, workspace_id: str, person: str, site: str, by: str = ""
+) -> dict[str, Any]:
+    """P92 GET /api/devices/my-pc-status: whether work on `site` for this person can start on
+    their own PC now, and the next step in plain words."""
+    from ..i18n import tr
+
+    host = (core.tunnel_hosts([site]) or [DEFAULT_HOSTS[0]])[0]
+    m = mode_of(await db.get(Workspace, workspace_id))
+    needed = pc_only(host) or (m.mode == "pc" and m.covers(host))
+    if not needed:
+        return {"state": "ready", "needed": False, "site": host, "device": None, "next": ""}
+    st = await person_state(db, workspace_id, person, ask_sites([host], m), by=by)
+    d = st.device
+    name = d.name if d is not None else ""
+    nxt = {
+        "ready": tr("Your computer {name} is ready.", name=name),
+        "offline": tr("Turn on {name} and open Agentic Office PC on it.", name=name),
+        "not_allowed": tr(
+            "On {name}, press Allow on the Agentic Office page. We sent the request to it.",
+            name=name,
+        ),
+        "needs_update": tr(
+            "{name} has an older Agentic Office PC. On that computer, open My computers, "
+            "download the app again and run it. Then press Allow.",
+            name=name,
+        ),
+        "paused": tr("{name} is paused. Turn it back on in My computers.", name=name),
+        "not_linked": tr(
+            "Link your computer first. It takes about 2 minutes: open My computers and press "
+            "Link a computer."
+        ),
+    }[st.state]
+    return {
+        "state": st.state,
+        "needed": True,
+        "site": host,
+        "device": (
+            {
+                "id": d.id,
+                "name": d.name,
+                "last_seen_at": d.last_seen_at,
+                "version": d.version,
+            }
+            if d is not None
+            else None
+        ),
+        "asked": st.asked,
+        "next": nxt,
+    }
 
 
 async def any_computer(db: Any, workspace_id: str, host: str) -> str:
@@ -279,6 +483,7 @@ class Route:
     device_id: str | None = None
     proxies: list[proxies_mod.Proxy] | None = None
     site: str = ""
+    own: bool = False  # P92: the person's own PC (refused: the person acts on My computers)
 
 
 async def route(workspace_id: str, host: str, agent_id: str = "") -> Route:
@@ -301,23 +506,32 @@ async def _route(
 ) -> Route:
     """route() for a given choice `m` (P84: the Check button tries the choice on the screen,
     saved or not; `device_id` is that choice's computer)."""
+    # P92: a person's ePerolehan work goes through their own PC whatever was chosen.
+    own_site = pc_only(host)
+    wants_pc = own_site or (m.mode == "pc" and m.covers(host))
+    person = await person_of_agent(db, agent_id) if wants_pc else None
+    if own_site and person:
+        site = next((h for h in PC_ONLY if core.host_in(host, [h])), host)
+        device_id, why = await person_computer(db, workspace_id, person, [host])
+        if why:
+            return Route("refuse", why, own=True)
+        return Route("computer", device_id=device_id, site=site, own=True)
     if not m.covers(host):
         return Route("server", "not routed")
     site = next((h for h in m.sites if h != "*" and core.host_in(host, [h])), host)
     if m.mode == "pc":
-        person = await person_of_agent(db, agent_id)
         if person:
             device_id, why = await person_computer(db, workspace_id, person, [host])
             if why:
-                return Route("refuse", why)
-            return Route("computer", device_id=device_id, site=site)
+                return Route("refuse", why, own=True)
+            return Route("computer", device_id=device_id, site=site, own=True)
         device_id = device_id or setting(ws).device_id or await any_computer(db, workspace_id, host)
         why = await computer_down(db, workspace_id, device_id, [host])
         if why == "no computer is chosen":
             why = (
                 "ePerolehan is opened through a company computer, and none is linked or "
-                "has allowed it yet. Link your PC on Staff computers (download Agentic "
-                "Office PC), then press Allow on that PC"
+                "has allowed it yet. Link a PC on My computers (download Agentic Office PC), "
+                f"then press Allow on that PC ({my_computers_url()})"
             )
         if why:
             return Route("refuse", why)
@@ -335,13 +549,19 @@ async def _route(
 async def unavailable(workspace_id: str, host: str, agent_id: str = "") -> str:
     """Why `host` cannot be opened now the chosen way ("" when it can): told to the agent
     before its browser tries, instead of a bare connection error."""
+    return (await refusal(workspace_id, host, agent_id))[0]
+
+
+async def refusal(workspace_id: str, host: str, agent_id: str = "") -> tuple[str, bool]:
+    """unavailable() and whether it is about the person's own PC (P92: then the person acts
+    on My computers, not the owner on Web connections)."""
     if not workspace_id or not host:
-        return ""
+        return "", False
     try:
         r = await route(workspace_id, host, agent_id)
     except Exception:  # noqa: BLE001 - the gateway decides again for real
-        return ""
-    return r.why if r.kind == "refuse" else ""
+        return "", False
+    return (r.why, r.own) if r.kind == "refuse" else ("", False)
 
 
 async def decide(workspace_id: str, host: str) -> tuple[int, str, str | None]:
@@ -770,6 +990,12 @@ async def screen_for(
         return "", ""
     ws = await db.get(Workspace, workspace_id)
     st, m = setting(ws), mode_of(ws)
+    if person and all(pc_only(s) for s in sites):
+        # P92: a person's ePerolehan task: on their own PC whatever was chosen; refused with
+        # why when it is not ready (shown there unless the owner turned the screen off: then
+        # only its line carries the site, still refused when it is not ready).
+        dev, why = await person_computer(db, workspace_id, person, sites)
+        return (dev, "") if (dev and st.show) else ("", why)
     if not (m.mode == "pc" and st.show and all(m.covers(s) for s in sites)):
         return "", ""
     if person:

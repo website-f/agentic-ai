@@ -1356,6 +1356,33 @@ MS: dict[str, str] = {
     "Your manager retired {name}. Ask them before making a new AI twin.": "Pengurus anda telah menamatkan {name}. Tanya mereka dahulu sebelum mencipta kembar AI baharu.",
     # P31 the PC agent: a person's own computers (api/routers/devices.py, devices/, pc_tools)
     "Linking a computer is for your own AI. Make your AI twin first (My AI), then link this computer.": "Memautkan komputer adalah untuk AI anda sendiri. Cipta kembar AI anda dahulu (AI saya), kemudian pautkan komputer ini.",
+    # P92 ePerolehan on the person's own PC (devices/tunnel.py pc_status, web_tasks.py)
+    "Your role does not give work to the AI, so it has no computer to link. Ask the owner if you need one.": (
+        "Peranan anda tidak memberi kerja kepada AI, jadi tiada komputer untuk dipautkan. "
+        "Tanya pemilik jika anda memerlukannya."
+    ),
+    "ePerolehan work runs on your own computer, and it is not ready: {next}": (
+        "Kerja ePerolehan berjalan pada komputer anda sendiri, dan ia belum sedia: {next}"
+    ),
+    "Your computer {name} is ready.": "Komputer anda {name} sudah sedia.",
+    "Turn on {name} and open Agentic Office PC on it.": (
+        "Hidupkan {name} dan buka Agentic Office PC padanya."
+    ),
+    "On {name}, press Allow on the Agentic Office page. We sent the request to it.": (
+        "Pada {name}, tekan Benarkan di halaman Agentic Office. Kami telah menghantar "
+        "permintaan kepadanya."
+    ),
+    "{name} has an older Agentic Office PC. On that computer, open My computers, download the app again and run it. Then press Allow.": (  # noqa: E501
+        "{name} menggunakan Agentic Office PC versi lama. Pada komputer itu, buka Komputer "
+        "saya, muat turun aplikasi sekali lagi dan jalankannya. Kemudian tekan Benarkan."
+    ),
+    "{name} is paused. Turn it back on in My computers.": (
+        "{name} dijeda. Hidupkan semula di Komputer saya."
+    ),
+    "Link your computer first. It takes about 2 minutes: open My computers and press Link a computer.": (  # noqa: E501
+        "Pautkan komputer anda dahulu. Ia mengambil kira-kira 2 minit: buka Komputer saya dan "
+        "tekan Pautkan komputer."
+    ),
     "You have {n} link codes open. Use one, or wait 10 minutes.": "Anda ada {n} kod pautan yang masih terbuka. Gunakan satu, atau tunggu 10 minit.",
     "That link code is not here.": "Kod pautan itu tiada di sini.",
     "Too many link attempts from this network. Wait 10 minutes and try again.": "Terlalu banyak cubaan memautkan dari rangkaian ini. Tunggu 10 minit dan cuba lagi.",

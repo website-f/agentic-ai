@@ -50,15 +50,17 @@ export function ComputersPage() {
         description={t("Let your own AI find files on your computer and browse on your screen. Only your AI can use it, only in the folders you choose.")}
         actions={list.length ? linkButton : null} />
 
+      {/* P92: no wall: anyone links their own computer for their ePerolehan work. A personal AI
+          only adds finding files on it. */}
       {noAi ? (
         <div className="flex min-w-0 flex-wrap items-start gap-3 rounded-[var(--radius-md)] border border-info/30 bg-info/8 px-4 py-3 text-[13.5px]">
           <InfoIcon size={18} weight="duotone" className="mt-0.5 shrink-0 text-info" />
           <p className="min-w-0 flex-1">
-            {aiHome === "/my-worker"
-              ? t("You have no personal AI yet. Only your own AI twin can use your computer: set it up first.")
-              : t("You have no personal assistant yet. Only your own private assistant can use your computer: make one first.")}
+            {t("Link your computer so your ePerolehan work runs on it, from your own internet line. With your own AI, it can also find files in the folders you choose.")}
           </p>
-          <Button asChild size="sm" variant="outline"><Link to={aiHome}>{aiHome === "/my-worker" ? t("Open My AI") : t("Open My assistants")}</Link></Button>
+          {me.permissions.includes("agents.own") || me.permissions.includes("assistants.use") ? (
+            <Button asChild size="sm" variant="outline"><Link to={aiHome}>{aiHome === "/my-worker" ? t("Open My AI") : t("Open My assistants")}</Link></Button>
+          ) : null}
         </div>
       ) : null}
 

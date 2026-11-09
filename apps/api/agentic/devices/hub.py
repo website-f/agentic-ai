@@ -103,29 +103,37 @@ async def push_settings(device: Device) -> None:
         )
 
 
-async def ask_tunnel(device_id: str, hosts: list[str], by: str = "") -> bool:
+async def ask_tunnel(device_id: str, hosts: list[str], by: str = "", own: bool = False) -> bool:
     """P62: ask the person at the computer to let these sites through it. The agent (0.5.0+)
     opens its own page there with Allow / Not now; nothing passes until they press Allow.
-    False when the computer is not connected here."""
+    False when the computer is not connected here. P92 `own`: it is for the person's own work
+    (their ePerolehan tasks), not the office's choice (agents before 0.5.1 ignore it)."""
     c = connection(device_id)
     if c is None:
         return False
+    msg: dict[str, Any] = {"type": "tunnel_ask", "hosts": hosts, "by": by[:80]}
+    if own:
+        msg["own"] = True
     try:
-        await c.send({"type": "tunnel_ask", "hosts": hosts, "by": by[:80]})
+        await c.send(msg)
     except Exception:  # noqa: BLE001 - it asks again when it next connects
         return False
     return True
 
 
-async def _pending_ask(db: Any, d: Device) -> list[str]:
-    """The sites the workspace wants through this computer that its person has not allowed."""
+async def _pending_ask(db: Any, d: Device) -> tuple[list[str], bool]:
+    """The sites the workspace wants through this computer that its person has not allowed;
+    P92: else the sites its own person is waiting to use on it (own=True)."""
     from . import tunnel
 
     ws = await db.get(Workspace, d.workspace_id)
     m = tunnel.mode_of(ws)
-    if m.mode != "pc" or tunnel.setting(ws).device_id != d.id:
-        return []
-    return [] if all(core.host_in(s, d.tunnel_hosts or []) for s in m.sites) else m.sites
+    if m.mode == "pc" and tunnel.setting(ws).device_id == d.id:
+        if not all(core.host_in(s, d.tunnel_hosts or []) for s in m.sites):
+            return m.sites, False
+    want = await tunnel.want_sites(d.user_id)
+    missing = [s for s in want if not core.host_in(s, d.tunnel_hosts or [])]
+    return missing, True
 
 
 async def disconnect(device_id: str, code: str, message: str) -> None:
@@ -191,7 +199,7 @@ async def serve(ws: WebSocket) -> None:
             "name": d.name,
             "settings": {"folders": list(d.folders or []), "paused": d.paused},
         }
-        ask = await _pending_ask(db, d)
+        ask, own = await _pending_ask(db, d)
         db.expunge(d)
     old = REGISTRY.get(d.id)
     REGISTRY[d.id] = conn
@@ -199,8 +207,10 @@ async def serve(ws: WebSocket) -> None:
         await old.close(4409, ("replaced", "Another connection for this computer took over."))
     try:
         await conn.send(welcome)
-        if ask:  # P62: still waiting for its person's OK
-            await conn.send({"type": "tunnel_ask", "hosts": ask, "by": ""})
+        if ask:  # P62: still waiting for its person's OK (P92: or its person's own work)
+            await conn.send(
+                {"type": "tunnel_ask", "hosts": ask, "by": "", **({"own": True} if own else {})}
+            )
         await core.set_online(d.id, conn.id, base)
         await core.publish(d, "device.status", online=True)
         await _loop(conn)
@@ -281,10 +291,11 @@ async def _state(conn: Connection, m: dict[str, Any]) -> None:
             d.remote_pc = m["remote"]
             await core.log_activity(db, d, "remote", {"by": "pc", "level": d.remote_pc})
         tunnel = m.get("tunnel")  # P58: the PC's person changed which sites pass through it
+        allowed: list[str] | None = None
         if isinstance(tunnel, dict):
             hosts = core.tunnel_hosts(tunnel.get("hosts")) if tunnel.get("on") is True else []
             if hosts != (d.tunnel_hosts or []):
-                d.tunnel_hosts = hosts
+                d.tunnel_hosts = allowed = hosts
                 await core.log_activity(db, d, "tunnel", {"by": "pc", "hosts": hosts})
         if isinstance(m.get("paused"), bool) and m["paused"] != d.paused:
             d.paused = m["paused"]
@@ -292,4 +303,10 @@ async def _state(conn: Connection, m: dict[str, Any]) -> None:
         await db.commit()
         await db.refresh(d)
         db.expunge(d)
+    if allowed:  # P92: its person allowed what they were waiting for: nothing more to ask
+        from . import tunnel as tunnel_mod
+
+        want = await tunnel_mod.want_sites(d.user_id)
+        if want and all(core.host_in(s, allowed) for s in want):
+            await tunnel_mod.forget_want(d.user_id)
     await core.publish(d, "device.updated")

@@ -32,6 +32,7 @@ import { JOBS } from "./jobs";
 import { NEEDS_MEMORY } from "./needs-memory";
 import { APPROVED_SERVICES } from "./approved-services";
 import { PC_TUNNEL } from "./pc-tunnel";
+import { MY_PC } from "./my-pc";
 import { PRIMA } from "./prima";
 import { SIGN_IN } from "./signin";
 import { WEB_CONNECTIONS } from "./web-connections";
@@ -97,6 +98,7 @@ export const MS: Record<string, string> = {
   ...NEEDS_MEMORY,
   ...APPROVED_SERVICES,
   ...PC_TUNNEL,
+  ...MY_PC,
   ...WEB_CONNECTIONS,
   ...SIGN_IN,
   ...PRIMA,

@@ -699,7 +699,8 @@ const computersRoute = createRoute({
   path: "/computers",
   validateSearch: (s: Record<string, unknown>): { link?: number; device?: string } => ({ link: num(s.link), device: str(s.device) }),
   beforeLoad: ({ context }) => {
-    if (!["agents.own", "assistants.use"].some((p) => context.me.permissions.includes(p))) throw redirect({ to: "/workspace" });
+    // P92: and anyone who gives work (their ePerolehan work runs on their own computer).
+    if (!["agents.own", "assistants.use", "work.write"].some((p) => context.me.permissions.includes(p))) throw redirect({ to: "/workspace" });
   },
   component: page.computers,
 });

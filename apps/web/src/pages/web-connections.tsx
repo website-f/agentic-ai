@@ -189,12 +189,17 @@ export function WebConnectionsPage() {
           <div className="grid gap-5">
             <div role="radiogroup" aria-label={t("How the AI browses")} className="grid gap-2.5 lg:grid-cols-3">
               <Choice on={mode === "pc"} icon={DesktopTowerIcon} title={t("Browse through a computer")} onPick={() => setMode("pc")}
-                body={t("The default. Through your own linked PC, so ePerolehan sees your office's home or office internet line, not a server. Link your PC on Staff computers, then press Allow on it.")} />
+                body={t("The default. Through your own linked PC, so ePerolehan sees your office's home or office internet line, not a server. Link your PC on My computers, then press Allow on it.")} />
               <Choice on={mode === "server"} icon={CloudIcon} title={t("Browse from here")} onPick={() => setMode("server")}
                 body={t("From the office server. Government portals such as ePerolehan may refuse its address.")} />
               <Choice on={mode === "proxy"} icon={PlugsIcon} title={t("Use your proxies")} onPick={() => setMode("proxy")}
                 body={t("Through your proxy provider, such as Webshare.")} />
             </div>
+            {/* P92: whatever is chosen here, a person's own ePerolehan work uses their own PC. */}
+            <p className="flex min-w-0 flex-wrap items-center gap-x-1.5 text-[12.5px] text-muted">
+              <span>{t("Whatever you choose here, ePerolehan work for a person always runs on that person's own linked computer. This choice is for the office's own work.")}</span>
+              <Link to="/computers" className="font-medium text-accent hover:underline">{t("My computers")}</Link>
+            </p>
 
             {mode === "pc" ? (
               <div className="grid gap-4">
