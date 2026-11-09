@@ -40,7 +40,9 @@ class FakeGraph:
             assert form["grant_type"] == "client_credentials"
             assert form["scope"] == "https://graph.microsoft.com/.default"
             self.tokens += 1
-            return httpx.Response(200, json={"access_token": f"app-{self.tokens}", "expires_in": 3600})
+            return httpx.Response(
+                200, json={"access_token": f"app-{self.tokens}", "expires_in": 3600}
+            )
         assert r.url.host == "graph.microsoft.com", r.url
         assert r.url.path.endswith("/sendMail"), r.url.path
         if self.answers:
@@ -208,7 +210,10 @@ async def test_first_failed_sign_in_emails_a_code_that_works_once(client, graph)
     # Audited, never with the code.
     rows = await audit_rows()
     sent = [a for a in rows if a.action == "auth.signin_email_sent"]
-    assert len(sent) == 1 and sent[0].after == {"to": "new.person@example.com", "via": "first_sign_in"}
+    assert len(sent) == 1 and sent[0].after == {
+        "to": "new.person@example.com",
+        "via": "first_sign_in",
+    }
     dump = json.dumps([[a.action, a.before, a.after, a.note] for a in rows], default=str)
     assert code not in dump
 
@@ -220,7 +225,9 @@ async def test_a_code_expires(client, graph):
     c = anon(client)
     await login(c, "late.one@example.com", "nope-nope-nope")
     code = graph.code_for("late.one@example.com")
-    await set_user("late.one@example.com", signin_code_expires_at=datetime.now(UTC) - timedelta(seconds=1))
+    await set_user(
+        "late.one@example.com", signin_code_expires_at=datetime.now(UTC) - timedelta(seconds=1)
+    )
     assert (await login(c, "late.one@example.com", code)).status_code == 401
 
 
@@ -240,9 +247,9 @@ async def test_only_never_signed_in_active_members_get_one(client, graph):
         assert r.status_code == 202
     await signin_mail.drain()
     # The member who signed in before asked for one (forgot password): only they get it.
-    assert [s["body"]["message"]["toRecipients"][0]["emailAddress"]["address"] for s in graph.sent] == [
-        "regular@example.com"
-    ]
+    assert [
+        s["body"]["message"]["toRecipients"][0]["emailAddress"]["address"] for s in graph.sent
+    ] == ["regular@example.com"]
 
 
 async def test_switches_and_no_sender_mean_no_email(client, graph):
@@ -339,9 +346,13 @@ async def test_settings_are_the_owners_and_checked(client, graph):
         m.role = "admin"
         await db.commit()
     assert (await admin.get("/api/settings/system-mail")).status_code == 403
-    r = await admin.put("/api/settings/system-mail", json={"enabled": True, "address": SENDER}, headers=csrf(admin))
+    r = await admin.put(
+        "/api/settings/system-mail", json={"enabled": True, "address": SENDER}, headers=csrf(admin)
+    )
     assert r.status_code == 403
-    assert (await admin.post("/api/settings/system-mail/test", json={}, headers=csrf(admin))).status_code == 403
+    assert (
+        await admin.post("/api/settings/system-mail/test", json={}, headers=csrf(admin))
+    ).status_code == 403
 
     r = await client.get("/api/settings/system-mail")
     assert r.status_code == 200
@@ -385,7 +396,12 @@ async def test_the_test_email_and_microsofts_errors_in_plain_words(client, graph
     assert not BOX.search(msg["body"]["content"])  # no password in a test
 
     cases = [
-        (403, {}, {"error": {"code": "ErrorAccessDenied", "message": "Access is denied."}}, "Mail.Send application permission"),
+        (
+            403,
+            {},
+            {"error": {"code": "ErrorAccessDenied", "message": "Access is denied."}},
+            "Mail.Send application permission",
+        ),
         (429, {"retry-after": "30"}, {"error": {"code": "TooManyRequests"}}, "limiting how fast"),
         (503, {}, {"error": {"code": "ServiceUnavailable"}}, "having trouble"),
         (500, {}, {}, "having trouble"),
@@ -395,11 +411,15 @@ async def test_the_test_email_and_microsofts_errors_in_plain_words(client, graph
         graph.answers.append((status, headers, body))
         r = await client.post("/api/settings/system-mail/test", json={}, headers=csrf(client))
         assert r.status_code == 502 and words in r.json()["message"], (status, r.text)
-        await valkey().delete(f"signin_mail:test:{(await client.get('/api/auth/me')).json()['workspace']['id']}")
+        await valkey().delete(
+            f"signin_mail:test:{(await client.get('/api/auth/me')).json()['workspace']['id']}"
+        )
 
     # In Malay too.
     graph.answers.append((403, {}, {}))
-    r = await client.post("/api/settings/system-mail/test", json={}, headers={**csrf(client), "x-lang": "ms"})
+    r = await client.post(
+        "/api/settings/system-mail/test", json={}, headers={**csrf(client), "x-lang": "ms"}
+    )
     assert "Mail.Send" in r.json()["message"] and "kebenaran" in r.json()["message"]
 
 
@@ -410,7 +430,14 @@ async def test_send_maps_token_and_app_problems():
         await db.commit()
         with pytest.raises(sendmail.SendError) as e:
             await sendmail.send(
-                db, ws.id, sender=SENDER, from_name="No Reply", to="a@example.com", to_name="A", subject="s", html="h"
+                db,
+                ws.id,
+                sender=SENDER,
+                from_name="No Reply",
+                to="a@example.com",
+                to_name="A",
+                subject="s",
+                html="h",
             )
         assert e.value.kind == "not_configured"
 
@@ -423,7 +450,10 @@ async def test_a_stale_token_is_renewed_once_then_explained(client, graph):
     assert r.status_code == 502 and "client secret" in r.json()["message"]
     assert graph.tokens == 2
     # The sender address's domain is the tenant when the app has none of its own.
-    assert sendmail.tenant_for(type("C", (), {"app_tenant": lambda self: None})(), SENDER) == "example.com"
+    assert (
+        sendmail.tenant_for(type("C", (), {"app_tenant": lambda self: None})(), SENDER)
+        == "example.com"
+    )
 
 
 # ---------------------------------------------------------------- the Members page
@@ -457,26 +487,39 @@ async def test_members_page_one_person_and_permissions(client, graph):
 
     # Only people who manage members.
     assert (await viewer.get("/api/members/signin-emails")).status_code == 403
-    assert (await viewer.post(f"/api/members/{uid}/email-signin", json={}, headers=csrf(viewer))).status_code == 403
-    assert (await viewer.post("/api/members/signin-emails/bulk", json={}, headers=csrf(viewer))).status_code == 403
+    assert (
+        await viewer.post(f"/api/members/{uid}/email-signin", json={}, headers=csrf(viewer))
+    ).status_code == 403
+    assert (
+        await viewer.post("/api/members/signin-emails/bulk", json={}, headers=csrf(viewer))
+    ).status_code == 403
 
     await set_user("new.guard@example.com", is_active=False)
     await valkey().flushdb()
     r = await client.post(f"/api/members/{uid}/email-signin", json={}, headers=csrf(client))
     assert r.status_code == 409 and r.json()["code"] == "account_disabled"
-    assert (await client.post("/api/members/us_nobody/email-signin", json={}, headers=csrf(client))).status_code == 404
+    assert (
+        await client.post("/api/members/us_nobody/email-signin", json={}, headers=csrf(client))
+    ).status_code == 404
 
 
 async def test_bulk_send_counts_waits_and_throttling(client, graph):
     await setup_owner(client)
     await sender_on(client)
-    for email in ("a.one@example.com", "b.two@example.com", "c.off@example.com", "d.noemail@example.com"):
+    for email in (
+        "a.one@example.com",
+        "b.two@example.com",
+        "c.off@example.com",
+        "d.noemail@example.com",
+    ):
         await add(client, email)
     await signed_in_member(client, client, "e.known@example.com")
     await set_user("c.off@example.com", is_active=False)
     await set_user("d.noemail@example.com", email="d.noemail@localhost")
     info = (await client.get("/api/members/signin-emails")).json()
-    assert info["sender_ready"] is True and info["never_signed_in"] == 3  # the switched-off one aside
+    assert (
+        info["sender_ready"] is True and info["never_signed_in"] == 3
+    )  # the switched-off one aside
 
     graph.answers.append((429, {"retry-after": "7"}, {"error": {"code": "TooManyRequests"}}))
     r = await client.post("/api/members/signin-emails/bulk", json={}, headers=csrf(client))
@@ -488,14 +531,21 @@ async def test_bulk_send_counts_waits_and_throttling(client, graph):
 
     job = (await client.get("/api/members/signin-emails")).json()["job"]
     assert job["state"] == "done"
-    assert (job["sent"], job["failed"], job["skipped_disabled"], job["skipped_no_email"]) == (2, 0, 1, 1)
+    assert (job["sent"], job["failed"], job["skipped_disabled"], job["skipped_no_email"]) == (
+        2,
+        0,
+        1,
+        1,
+    )
     assert job["skipped"] == 2
     # The first was throttled once (waited Retry-After), the next one waited the 2-second gap.
     assert graph.waits == [7.0, signin_mail.BULK_GAP_SECONDS]
     assert len(graph.to("a.one@example.com")) == 1 and len(graph.to("b.two@example.com")) == 1
     assert graph.to("e.known@example.com") == []
     codes = [graph.code_for("a.one@example.com"), graph.code_for("b.two@example.com")]
-    dump = json.dumps([[a.action, a.before, a.after, a.note] for a in await audit_rows()], default=str)
+    dump = json.dumps(
+        [[a.action, a.before, a.after, a.note] for a in await audit_rows()], default=str
+    )
     assert not any(c in dump for c in codes)
     assert "auth.signin_emails_bulk" in dump
 

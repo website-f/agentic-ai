@@ -5,6 +5,7 @@ import { RadioGroup } from "radix-ui";
 
 import { DataPrivacySection } from "@/components/data-privacy";
 import { InstallApp } from "@/components/install-app";
+import { SignInEmailsSection } from "@/components/sign-in-emails";
 import { LanguageSwitch } from "@/components/language-switch";
 import { SpeechStylePicker } from "@/components/speech-style";
 import { TwoFactorSettings } from "@/components/two-factor";
@@ -131,6 +132,8 @@ export function SettingsPage() {
           })}
         </RadioGroup.Root>
       </Section>
+
+      {me.role === "owner" ? <SignInEmailsSection /> : null}
 
       {me.role === "owner" ? <DataPrivacySection /> : null}
     </Page>

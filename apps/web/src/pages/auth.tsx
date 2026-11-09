@@ -5,6 +5,7 @@ import { useEffect, useRef, useState, type FormEvent, type ReactNode, type RefOb
 import { toast } from "sonner";
 
 import { LanguageSwitch } from "@/components/language-switch";
+import { EmailSignInForm } from "@/components/sign-in-emails";
 import { Wordmark } from "@/components/logo";
 import { IconTile } from "@/components/page";
 import { CodeInput, RecoveryInput, TwoFactorSetup } from "@/components/two-factor";
@@ -14,6 +15,7 @@ import { msg, useT } from "@/i18n";
 import { api, ApiError } from "@/lib/api";
 import { keys, meQuery } from "@/lib/queries";
 import { safeNext } from "@/lib/search";
+import { ssoKey, type SsoOptions } from "@/lib/signin-emails";
 import { lastLoginPath, rememberLoginPath, staffQuery, type LoginPath } from "@/lib/staff";
 import { staffOnly } from "@/lib/twin";
 import { isChallenge, type TwoFactorChallenge } from "@/lib/two-factor";
@@ -192,9 +194,18 @@ export function LoginPage() {
     else if (me.user.two_factor_setup_required) navigate({ to: "/two-step-setup" });
     else navigate({ to: await landing(qc, me, path, search.next) });
   };
-  const { busy, error, fields, submit } = useAuthSubmit("/api/auth/login", signedIn, (c) => setChallenge({ token: c.challenge, email }));
+  const { busy, error, errorCode, fields, submit } = useAuthSubmit("/api/auth/login", signedIn, (c) => setChallenge({ token: c.challenge, email }));
   const finishing = useSsoDone(search.sso === "done", signedIn);
   const loginForm = useRef<HTMLFormElement>(null);
+  // P92: "Email me a sign-in password" (first sign-in or a forgotten password), when offered.
+  const sso = useQuery({ queryKey: ssoKey, queryFn: () => api<SsoOptions>("/api/auth/sso"), staleTime: 60_000 });
+  const emailOn = !!sso.data?.email_signin;
+  const [emailing, setEmailing] = useState(false);
+  const startEmailing = () => {
+    const typed = loginForm.current?.elements.namedItem("email") as HTMLInputElement | null | undefined;
+    setEmail(typed?.value.trim() ?? email);
+    setEmailing(true);
+  };
   if (challenge) {
     return <CodeStep challenge={challenge.token} email={challenge.email} onDone={signedIn} onBack={() => setChallenge(null)} />;
   }
@@ -202,6 +213,13 @@ export function LoginPage() {
     return (
       <AuthLayout title={t("Signing you in")} subtitle={t("Microsoft confirmed it is you. Opening the office…")}>
         <div className="grid place-items-center py-6"><span className="size-6 animate-spin rounded-full border-2 border-accent border-t-transparent" /></div>
+      </AuthLayout>
+    );
+  }
+  if (emailing) {
+    return (
+      <AuthLayout title={t("Email me a sign-in password")} subtitle={t("For your first sign-in, or if you forgot your password. We email you a temporary password.")}>
+        <EmailSignInForm initialEmail={email} onBack={() => setEmailing(false)} />
       </AuthLayout>
     );
   }
@@ -246,10 +264,24 @@ export function LoginPage() {
         <Field label={t("Email")} name="email" type="email" required autoComplete="username" inputMode="email" error={fields.email} />
         <Field label={t("Password")} name="password" type="password" required autoComplete="current-password" error={fields.password} />
         <FormError message={error} />
+        {emailOn && errorCode === "bad_credentials" ? (
+          <p role="status" className="rounded-sm border border-accent/25 bg-accent-soft/50 px-3 py-2 text-[13px]">
+            {t("First time here? If your account is new, we have emailed a temporary password to you. Check your inbox (and Junk).")}
+          </p>
+        ) : null}
         <Button type="submit" size="lg" loading={busy} className={cn("mt-1", staff && "h-12 text-[16px]")}>
           {!busy ? <SignInIcon size={17} weight="bold" /> : null} {staff ? t("Sign in") : t("Sign in to the office")}
         </Button>
-        <p className="text-center text-[12.5px] text-muted">{t("Forgot your password? Ask an admin or your manager to reset it.")}</p>
+        {emailOn ? (
+          <div className="grid justify-items-center gap-0.5 text-center">
+            <span className="text-[12.5px] text-muted">{t("First time here, or forgot your password?")}</span>
+            <button type="button" onClick={startEmailing} className="min-h-10 px-2 text-[13.5px] font-medium text-accent hover:underline">
+              {t("Email me a sign-in password")}
+            </button>
+          </div>
+        ) : (
+          <p className="text-center text-[12.5px] text-muted">{t("Forgot your password? Ask an admin or your manager to reset it.")}</p>
+        )}
       </form>
     </AuthLayout>
   );

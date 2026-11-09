@@ -1,5 +1,5 @@
 import {
-  CaretDownIcon, CaretLeftIcon, CaretRightIcon, CaretUpIcon, CopyIcon, CrownSimpleIcon, DotsThreeIcon, FileXlsIcon, KeyIcon, MicrosoftOutlookLogoIcon,
+  CaretDownIcon, CaretLeftIcon, CaretRightIcon, CaretUpIcon, CopyIcon, CrownSimpleIcon, DotsThreeIcon, EnvelopeSimpleIcon, FileXlsIcon, KeyIcon, MicrosoftOutlookLogoIcon,
   PencilSimpleIcon, ShieldSlashIcon, TrashIcon, UserPlusIcon, UsersIcon, XIcon,
 } from "@phosphor-icons/react";
 import { keepPreviousData, useMutation, useQuery, useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
@@ -8,6 +8,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 
 import { EmptyState, Page, PageHeader, Section } from "@/components/page";
+import { SignInEmailsBar, useEmailMember } from "@/components/sign-in-emails";
 import { ResetTwoFactorDialog, TwoFactorPill, useMemberTwoFactor } from "@/components/two-factor";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm";
@@ -331,6 +332,8 @@ function MemberActions({ member, me }: { member: Member; me: Me }) {
     onSuccess: (r) => { refresh(); setReset(r.temp_password); },
     onError: (e) => toast.error(errorMessage(e)),
   });
+  // P92: a temporary password by email (owners and admins; the server checks).
+  const emailPw = useEmailMember(member.user_id, member.name);
   if (!editable) return <span aria-hidden className="block size-10" />;
   return (
     <>
@@ -343,6 +346,9 @@ function MemberActions({ member, me }: { member: Member; me: Me }) {
         <MenuContent>
           <MenuItem icon={<PencilSimpleIcon />} onSelect={() => setEditing(true)}>{t("Change role or place")}</MenuItem>
           <MenuItem icon={<KeyIcon />} onSelect={() => resetPw.mutate()}>{t("Reset password")}</MenuItem>
+          {me.permissions.includes("members.manage") ? (
+            <MenuItem icon={<EnvelopeSimpleIcon />} onSelect={() => emailPw.mutate()}>{t("Email a sign-in password")}</MenuItem>
+          ) : null}
           {me.role === "owner" && hasTwoFactor ? (
             <MenuItem icon={<ShieldSlashIcon />} onSelect={() => setResetting2fa(true)}>{t("Reset two-step sign-in")}</MenuItem>
           ) : null}
@@ -612,6 +618,7 @@ export function MembersPage() {
           </>
         ) : null}
       />
+      {me.permissions.includes("members.manage") ? <SignInEmailsBar isOwner={me.role === "owner"} /> : null}
       {isLoading ? (
         <div className="grid gap-4">
           <StatGrid>{[0, 1, 2, 3].map((i) => <Skeleton key={i} className="h-[6.5rem] rounded-[var(--radius-md)]" />)}</StatGrid>
