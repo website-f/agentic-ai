@@ -33,6 +33,7 @@ import { SearchInput } from "@/components/ui/search-input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { locale, msg, t as tr, useT } from "@/i18n";
 import { errorMessage } from "@/lib/api";
+import { openUrl } from "@/lib/native";
 import { docKeys, fileSize, fileUrl } from "@/lib/documents";
 import {
   EMPTY_SELECTION, FILE_TYPES, fileItemKey, fileType, folderItemKey, folderNameProblem, labelsQuery, selectionReducer, sortItems,
@@ -586,7 +587,7 @@ export function CompanyExplorer({ branch, folder, openId, initialOrigin, root, o
       const canSee = !one.file.quarantined || canManage;
       if (canSee) {
         const pk = previewKind(one.file);
-        acts.push({ id: "tab", label: t("Open in new tab"), icon: <ArrowSquareOutIcon />, run: () => window.open(pk === "pdf" || pk === "office" ? previewUrl(one.file.id) : fileUrl(one.file.id, true), "_blank", "noopener") });
+        acts.push({ id: "tab", label: t("Open in new tab"), icon: <ArrowSquareOutIcon />, run: () => openUrl(pk === "pdf" || pk === "office" ? previewUrl(one.file.id) : fileUrl(one.file.id, true)) });
       }
     }
     if (canEdit && one) acts.push({ id: "rename", label: t("Rename"), icon: <PencilSimpleIcon />, run: () => setRenaming(one.key), keys: "F2", sep: true });

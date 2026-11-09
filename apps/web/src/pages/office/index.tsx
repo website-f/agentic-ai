@@ -267,7 +267,7 @@ export function OfficePage() {
 
   return (
     // Fills the screen below the header (and above the phone tab bar).
-    <div className="flex h-[calc(100dvh-3.5rem-4.5rem-env(safe-area-inset-bottom))] min-h-80 flex-col md:h-[calc(100dvh-3.5rem)]">
+    <div className="flex h-[calc(100dvh-3.5rem-env(safe-area-inset-top)-4.5rem-env(safe-area-inset-bottom))] min-h-80 flex-col md:h-[calc(100dvh-3.5rem-env(safe-area-inset-top))]">
       <div className="flex items-center gap-2 border-b border-border bg-surface/60 px-3 py-2 sm:px-6 sm:py-2.5">
         <h1 className="mr-2 text-[17px] font-semibold max-sm:sr-only">{t("Office")}</h1>
         <nav data-guide="office.branch" aria-label={t("Companies")} className="flex min-w-0 gap-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">

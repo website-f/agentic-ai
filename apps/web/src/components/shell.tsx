@@ -27,6 +27,7 @@ import { create } from "zustand";
 
 import { ALL_COMPANIES, useCompanies } from "@/lib/company";
 import { SetupCard } from "@/pages/start";
+import { useBackClose } from "@/lib/back-close";
 import { useLiveEvents } from "@/lib/live";
 import { meQuery, systemStatusQuery } from "@/lib/queries";
 import { useBranch, usePalette, useTheme, type ThemePref } from "@/lib/stores";
@@ -48,6 +49,7 @@ import { LogoMark, Wordmark } from "./logo";
 import { HelpAskSheet, useHelpAsk } from "./help-ask";
 import { InstallApp } from "./install-app";
 import { NeedsBell } from "./needs-bell";
+import { NavProgress } from "./nav-progress";
 import { OfflineBanner } from "./offline-banner";
 import { Button } from "./ui/button";
 import {
@@ -512,7 +514,8 @@ function ThemeMenu() {
   return (
     <Menu>
       <MenuTrigger asChild>
-        <Button variant="ghost" size="icon-sm" aria-label={t("Theme")}>
+        {/* P96: on phones the theme is in the account menu, so the header has room. */}
+        <Button variant="ghost" size="icon-sm" className="max-sm:hidden" aria-label={t("Theme")}>
           <IconCmp size={18} />
         </Button>
       </MenuTrigger>
@@ -531,6 +534,7 @@ function ThemeMenu() {
 export function UserMenu() {
   const { data: me } = useSuspenseQuery(meQuery);
   const t = useT();
+  const { pref, setPref } = useTheme();
   useProfileLanguage();
   const signOut = useSignOut();
   const navigate = useNavigate();
@@ -558,6 +562,16 @@ export function UserMenu() {
           <LanguageSwitch />
         </div>
         <MenuSeparator />
+        {/* P96: phones have no theme button in the header; the choice lives here. */}
+        <div className="sm:hidden">
+          <MenuLabel>{t("Theme")}</MenuLabel>
+          <MenuRadioGroup value={pref} onValueChange={(v) => setPref(v as ThemePref)}>
+            <MenuRadioItem value="light">{t("Light")}</MenuRadioItem>
+            <MenuRadioItem value="dark">{t("Dark")}</MenuRadioItem>
+            <MenuRadioItem value="system">{t("Match system")}</MenuRadioItem>
+          </MenuRadioGroup>
+          <MenuSeparator />
+        </div>
         <MenuItem icon={<KeyIcon />} onSelect={() => navigate({ to: "/change-password" })}>
           {t("Change password")}
         </MenuItem>
@@ -603,8 +617,9 @@ function Header() {
   const canWrite = me.permissions.includes("work.write");
   return (
     <header
-      className="sticky top-0 z-30 flex h-14 items-center gap-2 border-b border-border bg-bg/85 px-3 backdrop-blur-md sm:px-4"
-      style={{ paddingTop: "env(safe-area-inset-top)" }}
+      // P96: the header grows by the status bar / notch (a wrapped app draws under it) instead
+      // of the notch eating its 3.5rem; the sides keep clear of a landscape notch.
+      className="sticky top-0 z-30 flex h-[calc(3.5rem+env(safe-area-inset-top))] items-center gap-2 border-b border-border bg-bg/85 pt-[env(safe-area-inset-top)] pr-[max(0.75rem,env(safe-area-inset-right))] pl-[max(0.75rem,env(safe-area-inset-left))] backdrop-blur-md sm:pr-[max(1rem,env(safe-area-inset-right))] sm:pl-[max(1rem,env(safe-area-inset-left))] md:px-4"
     >
       <Link to="/" className="-m-1.5 p-1.5 md:hidden" aria-label={t("Home")}>
         <LogoMark className="size-7" />
@@ -679,6 +694,7 @@ function MobileTabBar() {
   const helpItems = useHelpItems();
   const askHelp = useHelpAsk((s) => s.ask);
   const [more, setMore] = useState(false);
+  useBackClose(more, () => setMore(false)); // P96: the phone's Back closes the page list
   const { data: me } = useSuspenseQuery(meQuery);
   const bar = tabBarFor(me.permissions);
   const tabs = bar.map((to) => ALL_NAV.find((n) => n.to === to)).filter(Boolean) as NavItem[];
@@ -694,14 +710,15 @@ function MobileTabBar() {
     <>
       <nav
         aria-label={t("Main")}
-        className="fixed inset-x-0 bottom-0 z-30 flex border-t border-border bg-surface/95 backdrop-blur-md md:hidden"
-        style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
+        className="fixed inset-x-0 bottom-0 z-30 flex border-t border-border bg-surface/95 pr-[env(safe-area-inset-right)] pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] backdrop-blur-md md:hidden"
       >
         {tabs.map((tab) => (
           <TabLink key={tab.to} item={tab} active={isActive(pathname, tab.to)} badge={tab.to === "/approvals" ? approvals : 0} />
         ))}
         <button
+          type="button"
           onClick={() => setMore(true)}
+          aria-expanded={more}
           className={cn(
             "flex min-h-12 flex-1 flex-col items-center gap-0.5 py-2 text-[11px] font-medium",
             moreActive ? "text-accent" : "text-muted",
@@ -830,7 +847,7 @@ export function AppShell() {
   }, [setOpen]);
 
   return (
-    <div className="flex min-h-dvh">
+    <div className="flex min-h-dvh md:pr-[env(safe-area-inset-right)] md:pl-[env(safe-area-inset-left)]">
       <Sidebar />
       <div className="flex min-w-0 flex-1 flex-col">
         <Header />
@@ -843,6 +860,7 @@ export function AppShell() {
       <TaskComposerHost />
       <HelpAskSheet />
       <OfflineBanner />
+      <NavProgress />
       <InstallApp />
     </div>
   );

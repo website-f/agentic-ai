@@ -7,6 +7,7 @@ import { createRoot } from "react-dom/client";
 import { Toaster } from "sonner";
 
 import { ApiError } from "@/lib/api";
+import { installNativeLinks, markNativeApp } from "@/lib/native";
 import { useTheme } from "@/lib/stores";
 import { applyUpdate } from "@/lib/unsaved";
 import { makeRouter } from "@/router";
@@ -40,6 +41,11 @@ const queryClient: QueryClient = new QueryClient({
 });
 
 const router = makeRouter(queryClient);
+
+// P96: inside the phone app wrapper (Capacitor) only: no page bounce, and new-window links and
+// downloads go through its plugins. Nothing changes in a browser.
+markNativeApp();
+installNativeLinks();
 
 function ThemedToaster() {
   const pref = useTheme((s) => s.pref);

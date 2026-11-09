@@ -11,6 +11,7 @@ import { Dialog, Popover } from "radix-ui";
 import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 
 import { locale, useT } from "@/i18n";
+import { useBackClose } from "@/lib/back-close";
 import { useIsPhone } from "@/lib/use-media";
 import { cn } from "@/lib/utils";
 
@@ -59,6 +60,7 @@ export function PickerPanel({
 }) {
   const t = useT();
   const phone = useIsPhone();
+  useBackClose(open, () => onOpenChange(false)); // P96: Back closes the calendar first
   const focusFirst = (e: Event) => {
     const el = initialFocus ? (e.currentTarget as HTMLElement | null)?.querySelector<HTMLElement>(initialFocus) : null;
     if (el) {

@@ -32,7 +32,7 @@ const POINTS: { icon: Icon; title: string; body: string }[] = [
 function AuthLayout({ title, subtitle, children }: { title: string; subtitle: ReactNode; children: ReactNode }) {
   const t = useT();
   return (
-    <div className="grid min-h-dvh bg-bg lg:grid-cols-[minmax(0,1fr)_minmax(0,36rem)]">
+    <div className="grid min-h-dvh bg-bg pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] lg:grid-cols-[minmax(0,1fr)_minmax(0,36rem)]">
       <aside className="relative hidden overflow-hidden border-r border-border bg-surface lg:flex lg:flex-col lg:justify-between lg:p-12">
         <div
           aria-hidden

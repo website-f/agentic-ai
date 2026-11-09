@@ -71,6 +71,10 @@
   from { opacity: 0.6; transform: translateX(24px); }
   to { opacity: 1; transform: none; }
 }
+@keyframes nav-progress {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(300%); }
+}
 @keyframes menu-in {
   from { opacity: 0; transform: translateY(-4px) scale(0.98); }
   to { opacity: 1; transform: none; }
@@ -182,4 +186,37 @@ html {
     position: absolute;
     inset: -10px -6px;
   }
+}
+
+/* ---------------------------------------------------------------- P96: app-ready on phones
+   In a layer, so a control's own utilities (absolute, fixed) still win over `relative`. */
+@layer components {
+  @media (pointer: coarse) {
+    /* A finger needs about 44 px. Small controls (the kit's `hit`, and bare icon buttons sized
+       5 to 9) get an invisible touch area that size without changing how they look. Controls
+       that draw their own ::after (tab underlines) keep it. */
+    :is(.hit, :is(button, a[href], [role="button"], [role="tab"], summary):is([class~="size-5"], [class~="size-6"], [class~="size-7"], [class~="size-8"], [class~="size-9"], [class~="h-6"], [class~="h-7"], [class~="h-8"], [class~="h-9"])):not([class*="after:"], [role="switch"]) {
+      position: relative;
+    }
+    :is(.hit, :is(button, a[href], [role="button"], [role="tab"], summary):is([class~="size-5"], [class~="size-6"], [class~="size-7"], [class~="size-8"], [class~="size-9"], [class~="h-6"], [class~="h-7"], [class~="h-8"], [class~="h-9"])):not([class*="after:"], [role="switch"])::after {
+      content: "";
+      position: absolute;
+      inset: min(0px, calc((100% - 44px) / 2));
+    }
+  }
+}
+@media (pointer: coarse) {
+  /* Menu, list-box and palette rows: a finger-high row each. */
+  [role="menuitem"],
+  [role="menuitemradio"],
+  [role="menuitemcheckbox"],
+  [role="option"] {
+    min-height: 44px;
+  }
+}
+/* Wrapped as a phone app (Capacitor sets html.native-app, see lib/native.ts): no rubber-band
+   bounce or pull-to-refresh on the page itself, like the installed web app. */
+html.native-app,
+html.native-app body {
+  overscroll-behavior-y: none;
 }

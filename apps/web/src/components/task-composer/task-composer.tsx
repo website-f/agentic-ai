@@ -26,6 +26,7 @@ import { SwitchField } from "@/components/ui/switch";
 import { VoiceInput } from "@/components/voice-input";
 import { msg, useT } from "@/i18n";
 import { api, ApiError, errorMessage } from "@/lib/api";
+import { useBackClose } from "@/lib/back-close";
 import { EPEROLEHAN_SITE, myPcStatusQuery, pcReady, pcSiteOf } from "@/lib/my-pc";
 import { keys, meQuery } from "@/lib/queries";
 import { teamKeys, type Schedule } from "@/lib/teams";
@@ -87,6 +88,7 @@ function ModeChoice({ value, title, body, icon: Icon }: { value: string; title: 
 
 export function TaskComposer({ prefill, onClose }: { prefill: ComposerPrefill; onClose: () => void }) {
   const t = useT();
+  useBackClose(true, onClose); // P96: the phone's Back closes the composer
   const qc = useQueryClient();
   const navigate = useNavigate();
   const { data: me } = useSuspenseQuery(meQuery);

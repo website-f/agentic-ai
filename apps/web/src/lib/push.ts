@@ -2,6 +2,7 @@
 import { t } from "@/i18n";
 
 import { api } from "./api";
+import { isNativeApp } from "./native";
 
 export type PushState = "unsupported" | "needs-install" | "denied" | "off" | "on";
 
@@ -14,8 +15,9 @@ function b64ToBytes(b64: string): Uint8Array<ArrayBuffer> {
 }
 
 export const isIOS = () => /iPad|iPhone|iPod/.test(navigator.userAgent);
+// P96: the phone app wrapper counts as installed (no "Add to Home Screen" card inside it).
 export const isStandalone = () =>
-  window.matchMedia("(display-mode: standalone)").matches || (navigator as Navigator & { standalone?: boolean }).standalone === true;
+  isNativeApp() || window.matchMedia("(display-mode: standalone)").matches || (navigator as Navigator & { standalone?: boolean }).standalone === true;
 
 function supported(): boolean {
   return "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
@@ -27,6 +29,8 @@ async function registration(): Promise<ServiceWorkerRegistration | null> {
 }
 
 export async function pushState(): Promise<PushState> {
+  // P96: a WebView has no Web Push; the phone app gets native push (docs/P96_MOBILE_APP_READY.md).
+  if (isNativeApp()) return "unsupported";
   // iPhone only allows notifications for apps added to the Home Screen (iOS 16.4+).
   if (isIOS() && !isStandalone()) return "needs-install";
   if (!supported()) return "unsupported";

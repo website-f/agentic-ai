@@ -4,10 +4,14 @@ import type { ReactNode } from "react";
 import { Drawer } from "vaul";
 
 import { useT } from "@/i18n";
+import { useBackClose } from "@/lib/back-close";
 import { useIsPhone } from "@/lib/use-media";
 import { cn } from "@/lib/utils";
 
 import { fitWidth, SHEET_BODY } from "./fit-width";
+
+/** A finger-sized close button for phone sheets (44 px), quiet like the desktop one. */
+export const PHONE_CLOSE = "-mt-1 grid size-11 shrink-0 place-items-center rounded-full text-muted active:bg-surface-2";
 
 interface ResponsiveDialogProps {
   open: boolean;
@@ -31,6 +35,8 @@ export function ResponsiveDialog({
 }: ResponsiveDialogProps) {
   const t = useT();
   const phone = useIsPhone();
+  // P96: the phone's Back closes the dialog instead of leaving the page.
+  useBackClose(open, () => onOpenChange(false));
 
   if (phone) {
     return (
@@ -43,13 +49,18 @@ export function ResponsiveDialog({
             style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
           >
             <div aria-hidden className="mx-auto mt-2.5 h-1.5 w-10 shrink-0 rounded-full bg-border" />
-            <div className="min-w-0 shrink-0 px-5 pt-3 pb-2 break-words">
-              <Drawer.Title className="text-base font-semibold">{title}</Drawer.Title>
-              {description ? (
-                <Drawer.Description className="mt-1 text-[13px] text-muted">
-                  {description}
-                </Drawer.Description>
-              ) : null}
+            <div className="flex min-w-0 shrink-0 items-start gap-2 pt-3 pr-2 pb-2 pl-5">
+              <div className="min-w-0 flex-1 break-words">
+                <Drawer.Title className="text-base font-semibold">{title}</Drawer.Title>
+                {description ? (
+                  <Drawer.Description className="mt-1 text-[13px] text-muted">
+                    {description}
+                  </Drawer.Description>
+                ) : null}
+              </div>
+              <Drawer.Close className={PHONE_CLOSE} aria-label={t("Close")}>
+                <XIcon size={18} />
+              </Drawer.Close>
             </div>
             <div data-sheet-body className={cn(SHEET_BODY, "px-5 pb-4")}>{children}</div>
             {footer ? (
@@ -87,7 +98,7 @@ export function ResponsiveDialog({
               ) : null}
             </div>
             <Dialog.Close
-              className="shrink-0 rounded-sm p-1.5 text-muted hover:bg-surface-2 hover:text-fg"
+              className="shrink-0 rounded-sm p-1.5 text-muted hover:bg-surface-2 hover:text-fg pointer-coarse:p-2.5"
               aria-label={t("Close")}
             >
               <XIcon size={18} />
