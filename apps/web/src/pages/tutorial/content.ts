@@ -80,7 +80,7 @@ const OWNER: Lesson[] = [
     ],
     show: { to: "/ai-engine", search: { tab: "providers" }, label: "Open AI Engine" },
     signals: ["model_group"],
-    perm: ["org.read"],
+    perm: ["engine.view"],
     icon: CpuIcon,
     tone: "info",
     art: "connect",

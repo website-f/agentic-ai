@@ -113,6 +113,7 @@ export type AppPath =
   | "/settings/ai-use"
   | "/settings/storage"
   | "/settings/approval-limits"
+  | "/settings/roles"
   | "/timetable"
   | "/tutorial"
   | "/guide"
@@ -250,16 +251,17 @@ export const NAV: NavSection[] = [
       { to: "/staff-computers", label: msg("Staff computers"), icon: DesktopTowerIcon, perm: ["members.manage", "team.manage"], blurb: msg("Every company computer your staff linked: who has which, online or not, the folders it shares. Open one to see its screen and fetch files, and turn on a company backup of those folders.") },
       { to: "/settings", label: msg("Settings"), icon: GearSixIcon, blurb: msg("Members and roles, appearance and your account.") },
       { to: "/settings/members", label: msg("Members and roles"), icon: UsersIcon, perm: ["members.manage", "team.manage"], hidden: true, blurb: msg("Add teammates and decide what each one can do.") },
+      { to: "/settings/roles", label: msg("Roles and access"), icon: UsersIcon, perm: "roles.manage", hidden: true, blurb: msg("What each role may do, area by area. Only the owner changes it.") },
       { to: "/settings/ai-use", label: msg("AI use and limits"), icon: CoinsIcon, perm: ["members.manage", "team.manage"], blurb: msg("Each person's daily AI allowance, what staff may use their AI for, and what was refused.") },
       { to: "/settings/approval-limits", label: msg("Approval limits"), icon: ScalesIcon, perm: "org.manage", blurb: msg("Let small, routine money steps go through without waiting for you: bills under an amount from known suppliers, small invoice drafts.") },
       { to: "/web-connections", label: msg("Web connections"), icon: GlobeIcon, perm: "org.manage", blurb: msg("How the AI's browsers reach websites: this server, a company computer, or your own proxies.") },
       { to: "/approved-services", label: msg("Approved services"), icon: ShieldCheckIcon, perm: "org.manage", blurb: msg("Which outside services may receive company information (AI providers, storage, messaging, the web). Turn on to use only approved ones.") },
       { to: "/channels", label: msg("Channels"), icon: PlugsConnectedIcon, blurb: msg("Phone notifications, Telegram, API tokens, and which agent answers where.") },
-      { to: "/ai-engine", label: msg("AI Engine"), icon: CpuIcon, perm: "org.read", blurb: msg("Add provider keys, test the connection, choose models and see what every agent spends.") },
-      { to: "/settings/storage", label: msg("File storage"), icon: HardDrivesIcon, perm: "org.manage", blurb: msg("Where company files are kept: the database, this server's disk, a Backblaze B2 or S3 bucket, or your own file server, and what feeds the Library.") },
+      { to: "/ai-engine", label: msg("AI Engine"), icon: CpuIcon, perm: "engine.view", blurb: msg("Add provider keys, test the connection, choose models and see what every agent spends.") },
+      { to: "/settings/storage", label: msg("File storage"), icon: HardDrivesIcon, perm: "storage.manage", blurb: msg("Where company files are kept: the database, this server's disk, a Backblaze B2 or S3 bucket, or your own file server, and what feeds the Library.") },
       { to: "/logins", label: msg("Logins"), icon: LockKeyIcon, perm: ["vault.manage", "vault.own"], blurb: msg("Website logins agents may use without ever seeing them, each locked to its own sites.") },
       { to: "/schedules", advanced: true, label: msg("Schedules"), icon: CalendarCheckIcon, perm: "office.view", blurb: msg("Recurring work and every run's result, with retries and grouped incidents.") },
-      { to: "/mcp-servers", advanced: true, label: msg("MCP tools"), icon: PuzzlePieceIcon, perm: "engine.manage", blurb: msg("Connect tools from other systems (MCP): a tracker, a CRM, or your own server. Agents ask before every call.") },
+      { to: "/mcp-servers", advanced: true, label: msg("MCP tools"), icon: PuzzlePieceIcon, perm: "mcp.manage", blurb: msg("Connect tools from other systems (MCP): a tracker, a CRM, or your own server. Agents ask before every call.") },
       { to: "/activity", advanced: true, label: msg("Activity"), icon: ClockCounterClockwiseIcon, perm: "audit.read", blurb: msg("Every change made by people and agents, in a tamper-evident log.") },
     ],
   },

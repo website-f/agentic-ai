@@ -52,6 +52,7 @@ import { EXPLORER } from "./explorer";
 import { FEEDBACK } from "./feedback";
 import { SHAREPOINT } from "./sharepoint";
 import { GOLIVE } from "./golive";
+import { ROLES_ACCESS } from "./roles-access";
 
 export const MS: Record<string, string> = {
   // P73: first, so an existing translation of the same English always wins.
@@ -104,4 +105,5 @@ export const MS: Record<string, string> = {
   ...EXPLORER,
   ...SHAREPOINT,
   ...GOLIVE,
+  ...ROLES_ACCESS,
 };

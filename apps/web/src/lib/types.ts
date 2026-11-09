@@ -9,7 +9,9 @@ export type Role =
   | "staff"
   | "operator"
   | "approver"
-  | "viewer";
+  | "viewer"
+  | "management"
+  | "hr";
 
 /** Office roles see a slice of the workspace (P9). */
 export const SCOPED_ROLES: Role[] = ["branch_manager", "hod", "supervisor", "staff"];
@@ -31,6 +33,8 @@ export interface Me {
   role: Role;
   permissions: string[];
   scope?: Scope | null;
+  /** P92: the roles this person may give others (the server's own rule). */
+  assignable_roles?: Role[];
 }
 
 export const hasAny = (me: Me, ...perms: string[]) => perms.some((p) => me.permissions.includes(p));
@@ -119,4 +123,6 @@ export const ROLE_INFO: Record<Role, { label: string; blurb: string }> = {
   operator: { label: msg("Operator"), blurb: msg("Creates and assigns work across the workspace, instructs agents.") },
   approver: { label: msg("Approver"), blurb: msg("Decides approvals across the workspace and reviews what agents learn.") },
   viewer: { label: msg("Viewer"), blurb: msg("Read only, the whole workspace.") },
+  management: { label: msg("Management"), blurb: msg("Runs the whole workspace like an admin, without the AI engine, file storage and MCP tools. The owner can change this.") },
+  hr: { label: msg("HR"), blurb: msg("People, members and the whole workspace like an admin, without the AI engine, file storage and MCP tools. The owner can change this.") },
 };

@@ -3,6 +3,7 @@ import { useSuspenseQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { RadioGroup } from "radix-ui";
 
+import { AccountEmailRow } from "@/components/account-email";
 import { DataPrivacySection } from "@/components/data-privacy";
 import { InstallApp } from "@/components/install-app";
 import { LanguageSwitch } from "@/components/language-switch";
@@ -93,7 +94,11 @@ export function SettingsPage() {
               <LinkRow to="/settings/ai-use" icon={CoinsIcon} tone="accent" title={t("AI use and limits")} body={t("Each person's daily AI allowance, what staff may use their AI for, and what was refused.")} />
             </>
           ) : null}
+          {me.permissions.includes("roles.manage") ? (
+            <LinkRow to="/settings/roles" icon={UsersIcon} tone="accent" title={t("Roles and access")} body={t("What each role may do, area by area. Only the owner changes it.")} />
+          ) : null}
           <LinkRow to="/change-password" icon={KeyIcon} tone="warn" title={t("Change password")} body={t("Signs out your other devices.")} />
+          {me.role === "owner" ? <AccountEmailRow email={me.user.email} /> : null}
         </div>
       </Section>
 

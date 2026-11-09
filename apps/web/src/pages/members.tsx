@@ -1,5 +1,5 @@
 import {
-  CaretDownIcon, CaretLeftIcon, CaretRightIcon, CaretUpIcon, CopyIcon, CrownSimpleIcon, DotsThreeIcon, FileXlsIcon, KeyIcon, MicrosoftOutlookLogoIcon,
+  CaretDownIcon, CaretLeftIcon, CaretRightIcon, CaretUpIcon, CopyIcon, CrownSimpleIcon, DotsThreeIcon, FileXlsIcon, IdentificationCardIcon, KeyIcon, MicrosoftOutlookLogoIcon,
   PencilSimpleIcon, ShieldSlashIcon, TrashIcon, UserPlusIcon, UsersIcon, XIcon,
 } from "@phosphor-icons/react";
 import { keepPreviousData, useMutation, useQuery, useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
@@ -30,9 +30,11 @@ import { branchesQuery, keys, meQuery } from "@/lib/queries";
 import { hasAny, ROLE_INFO, SCOPED_ROLES, type Branch, type Me, type Member, type Role } from "@/lib/types";
 import { cn, initials, timeAgo } from "@/lib/utils";
 
+import { MemberIdentityDialog, ResetMicrosoftDialog } from "@/components/member-identity";
+
 import { ImportMembersDialog } from "./members-import";
 
-const ROLES: Role[] = ["owner", "admin", "branch_manager", "hod", "supervisor", "staff", "operator", "approver", "viewer"];
+const ROLES: Role[] = ["owner", "admin", "branch_manager", "hod", "supervisor", "staff", "operator", "approver", "viewer", "management", "hr"];
 // What a branch manager or HOD may hand out (mirrors api/routers/members.py TEAM_ROLES).
 const TEAM_ROLES: Partial<Record<Role, Role[]>> = { branch_manager: ["hod", "supervisor", "staff"], hod: ["supervisor", "staff"] };
 const NONE = "none";
@@ -44,9 +46,13 @@ const WHOLE_WORKSPACE: Partial<Record<Role, string>> = {
   operator: msg("Operators see the whole workspace."),
   approver: msg("Approvers see the whole workspace."),
   viewer: msg("Viewers see the whole workspace."),
+  management: msg("Management see the whole workspace."),
+  hr: msg("HR see the whole workspace."),
 };
 
 function assignable(me: Me): Role[] {
+  // P92: the server says which (nobody gives a role with more access than their own).
+  if (me.assignable_roles) return ROLES.filter((r) => me.assignable_roles?.includes(r));
   if (me.permissions.includes("members.manage")) {
     return ROLES.filter((r) => r !== "owner" || me.permissions.includes("members.assign_owner"));
   }
@@ -322,6 +328,10 @@ function MemberActions({ member, me }: { member: Member; me: Me }) {
   // P57: owners and admins see who has two-step sign-in on; owners reset it (a lost phone).
   const hasTwoFactor = useMemberTwoFactor(member.user_id, me.permissions.includes("members.manage"));
   const [resetting2fa, setResetting2fa] = useState(false);
+  // P92: correcting a name or email, and a wrong Microsoft link (members.manage only).
+  const [identity, setIdentity] = useState(false);
+  const [resettingMs, setResettingMs] = useState(false);
+  const fixesPeople = me.permissions.includes("members.manage");
   const refresh = () => {
     qc.invalidateQueries({ queryKey: keys.members });
     qc.invalidateQueries({ queryKey: keys.status });
@@ -342,6 +352,8 @@ function MemberActions({ member, me }: { member: Member; me: Me }) {
         </MenuTrigger>
         <MenuContent>
           <MenuItem icon={<PencilSimpleIcon />} onSelect={() => setEditing(true)}>{t("Change role or place")}</MenuItem>
+          {fixesPeople ? <MenuItem icon={<IdentificationCardIcon />} onSelect={() => setIdentity(true)}>{t("Change name or email")}</MenuItem> : null}
+          {fixesPeople && member.microsoft ? <MenuItem icon={<MicrosoftOutlookLogoIcon />} onSelect={() => setResettingMs(true)}>{t("Reset Microsoft link")}</MenuItem> : null}
           <MenuItem icon={<KeyIcon />} onSelect={() => resetPw.mutate()}>{t("Reset password")}</MenuItem>
           {me.role === "owner" && hasTwoFactor ? (
             <MenuItem icon={<ShieldSlashIcon />} onSelect={() => setResetting2fa(true)}>{t("Reset two-step sign-in")}</MenuItem>
@@ -369,6 +381,8 @@ function MemberActions({ member, me }: { member: Member; me: Me }) {
         }}
       />
       <ResetTwoFactorDialog member={member} open={resetting2fa} onOpenChange={setResetting2fa} />
+      {identity ? <MemberIdentityDialog member={member} open={identity} onOpenChange={setIdentity} /> : null}
+      <ResetMicrosoftDialog member={member} open={resettingMs} onOpenChange={setResettingMs} />
       <ResponsiveDialog open={!!reset} onOpenChange={() => setReset(null)} title={t("Password reset")} footer={<Button onClick={() => setReset(null)}>{t("Done")}</Button>}>
         {reset ? <TempPassword email={member.email} password={reset} /> : null}
       </ResponsiveDialog>

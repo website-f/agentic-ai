@@ -7,8 +7,11 @@ const STAFF = ["read", "work.write", "approvals.decide", "agents.own", "vault.ow
 const OWNER = [
   "read", "office.view", "org.read", "members.manage", "org.manage", "audit.read", "work.write", "approvals.decide",
   "agents.manage", "engine.manage", "brain.manage", "channels.manage", "vault.manage", "assistants.use",
-  "finance.view", "finance.manage", "members.assign_owner",
+  "finance.view", "finance.manage", "members.assign_owner", "engine.view", "storage.manage", "mcp.manage", "roles.manage", "crm.access",
 ];
+// P92: management and HR: an admin's access without the AI engine, file storage and MCP tools.
+const MANAGEMENT = OWNER.filter((p) => !["members.assign_owner", "engine.manage", "engine.view", "storage.manage", "mcp.manage", "roles.manage", "crm.access"].includes(p));
+const VIEWER = ["read", "office.view", "org.read", "engine.view"];
 
 describe("P36: one guard for pages and the sidebar", () => {
   it("keeps staff to their own desk, their AI and their work", () => {
@@ -34,5 +37,31 @@ describe("P36: one guard for pages and the sidebar", () => {
     expect(navItemFor("/settings")?.to).toBe("/settings");
     expect(navItemFor("/sops")?.to).toBe("/sops");
     expect(navItemFor("/")?.to).toBe("/");
+  });
+});
+
+describe("P92: AI engine, file storage and MCP tools are their own switches", () => {
+  it("keeps management and HR out of the AI engine, file storage and MCP tools, and lets them everywhere else an admin goes", () => {
+    for (const path of ["/ai-engine", "/settings/storage", "/mcp-servers", "/settings/roles"]) {
+      expect(pathAllowed(path, MANAGEMENT), path).toBe(false);
+    }
+    for (const path of ["/", "/agents/ag_1", "/brain", "/settings/members", "/settings/ai-use", "/money", "/activity", "/organization", "/channels", "/approvals"]) {
+      expect(pathAllowed(path, MANAGEMENT), path).toBe(true);
+    }
+  });
+
+  it("leaves those pages to who had them: the owner everywhere, a viewer sees the AI engine only", () => {
+    for (const path of ["/ai-engine", "/settings/storage", "/mcp-servers", "/settings/roles"]) {
+      expect(pathAllowed(path, OWNER), path).toBe(true);
+    }
+    expect(pathAllowed("/ai-engine", VIEWER)).toBe(true);
+    expect(pathAllowed("/settings/storage", VIEWER)).toBe(false);
+    expect(pathAllowed("/mcp-servers", VIEWER)).toBe(false);
+  });
+
+  it("follows what the owner gave a role (the permissions /me sends)", () => {
+    expect(pathAllowed("/ai-engine", [...MANAGEMENT, "engine.view"])).toBe(true);
+    expect(pathAllowed("/activity", MANAGEMENT.filter((p) => p !== "audit.read"))).toBe(false);
+    expect(navItemFor("/settings/roles")?.to).toBe("/settings/roles");
   });
 });

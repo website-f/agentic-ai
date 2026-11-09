@@ -361,7 +361,7 @@ function TurnOffDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (o
 
 const POLICIES: { value: TwoFactorPolicy; label: string; hint: string }[] = [
   { value: "off", label: msg("Off"), hint: msg("Each person decides for themselves.") },
-  { value: "admins", label: msg("Owners and admins"), hint: msg("Recommended. Everyone who can change the whole workspace.") },
+  { value: "admins", label: msg("Owners and admins"), hint: msg("Recommended. Everyone who can change the whole workspace: owners, admins, management and HR.") },
   { value: "everyone", label: msg("Everyone"), hint: msg("Every member, before they can use the app.") },
 ];
 
