@@ -222,7 +222,8 @@ async def _session(ctx: Any) -> str:
         if why:
             raise BrowsersBusy(
                 f"This site is used from the person's own computer, and {why}. Tell the "
-                "person; do not switch to another browser."
+                f"person in plain words, with the link to My computers "
+                f"({tunnel.my_computers_url()}); do not switch to another browser."
             )
         sites = allowed if device_id else None
     if device_id:
@@ -808,8 +809,20 @@ async def browser_open(ctx: Any, args: dict[str, Any]) -> str:
     # P62: the company's chosen way to this site (a computer, its proxies) is unavailable:
     # say why, rather than a bare connection error, and never another way round.
     from ..devices import tunnel
+    from ..teams import allowance
 
-    why = await tunnel.unavailable(ctx.agent.workspace_id, host_of(url), ctx.agent.id)
+    # P92: whose work this is, known before the first page (the session sets it again).
+    if tunnel.pc_only(host_of(url)):
+        person = ctx.agent.owner_user_id or await allowance.person_of_task(ctx.db, ctx.task)
+        await tunnel.remember_person(ctx.agent.id, person)
+    why, own = await tunnel.refusal(ctx.agent.workspace_id, host_of(url), ctx.agent.id)
+    if why and own:
+        return (
+            f"Error: {host_of(url)} cannot be opened right now: {why}. This site is only "
+            "opened from the person's own computer. Tell the person this in plain words, with "
+            f"the link to My computers ({tunnel.my_computers_url()}), and wait for them; do "
+            "not try another way or another computer."
+        )
     if why:
         return (
             f"Error: {host_of(url)} cannot be opened right now: {why}. The company chose how "

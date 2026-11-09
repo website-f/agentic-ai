@@ -445,23 +445,22 @@ async def test_link_install_claim_hello_and_status(client, llm, temporal, monkey
 
 
 async def test_link_code_needs_a_personal_ai_and_caps_open_codes(client, llm, temporal):
+    """P92: anyone who gives work links their own computer (no AI twin first); a role that
+    gives no work (viewer) has nothing to link it for, unless it has an AI of its own."""
     o = await office(client)
-    staff = await as_role(
-        client, "aina@example.com", "staff", branch_id=o["branch"]["id"],
-        department_id=o["depts"]["Finance"],
-    )  # fmt: skip
+    viewer = await as_role(client, "aina@example.com", "viewer")
     try:
-        r = await staff.post(
-            "/api/devices/link-code", json={}, headers={**csrf(staff), "x-lang": "ms"}
+        r = await viewer.post(
+            "/api/devices/link-code", json={}, headers={**csrf(viewer), "x-lang": "ms"}
         )
         assert r.status_code == 403 and r.json()["code"] == "no_personal_ai"
-        assert r.json()["message"].startswith("Memautkan komputer")
+        assert r.json()["message"].startswith("Peranan anda")
         uid, ws_id = await ids_of("aina@example.com")
         await personal_agent(o, uid, ws_id, is_twin=True)
-        r = await staff.post("/api/devices/link-code", json={}, headers=csrf(staff))
+        r = await viewer.post("/api/devices/link-code", json={}, headers=csrf(viewer))
         assert r.status_code == 201, r.text
     finally:
-        await staff.aclose()
+        await viewer.aclose()
     for _ in range(4):
         assert (
             await client.post("/api/devices/link-code", json={}, headers=csrf(client))

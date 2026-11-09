@@ -112,6 +112,20 @@ async def call(
     return await _remote(f"/internal/devices/{device_id}/call", body, timeout + 15)
 
 
+async def ask_sites(device_id: str, hosts: list[str], by: str = "", own: bool = False) -> bool:
+    """P92: ask the person at the PC to allow these sites (Allow / Not now on its page), from
+    any process. False when the PC is not connected."""
+    if SERVE_HERE:
+        return await hub.ask_tunnel(device_id, hosts, by, own=own)
+    try:
+        data = await _remote(
+            f"/internal/devices/{device_id}/ask", {"hosts": hosts, "by": by, "own": own}, 15
+        )
+    except DeviceError:
+        return False
+    return bool(data.get("asked"))
+
+
 async def _remote(path: str, body: dict[str, Any], timeout: float) -> dict[str, Any]:
     try:
         async with httpx.AsyncClient(transport=_transport, timeout=timeout) as c:

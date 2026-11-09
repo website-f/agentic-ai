@@ -168,7 +168,7 @@ export const NAV: NavSection[] = [
       // Private assistants are for people who manage others (assistants.use); staff have their twin.
       { to: "/assistants", label: msg("My assistants"), icon: SparkleIcon, perm: "assistants.use", blurb: msg("Your own private AI assistants: the whole company at a glance, your Gmail with drafts you approve, and chasing people on WhatsApp.") },
       // P31: the person's own computers, for their own AI (twin or private assistant) only.
-      { to: "/computers", label: msg("My computers"), icon: DesktopTowerIcon, perm: ["agents.own", "assistants.use"], blurb: msg("Let your own AI find files on your computer and browse on your screen. Only your AI can use it, only in the folders you choose.") },
+      { to: "/computers", label: msg("My computers"), icon: DesktopTowerIcon, perm: ["agents.own", "assistants.use", "work.write"], blurb: msg("Let your own AI find files on your computer and browse on your screen. Only your AI can use it, only in the folders you choose.") },
     ],
   },
   {

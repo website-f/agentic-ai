@@ -57,8 +57,12 @@ KINDS = frozenset(
 
 
 async def _may_link(db: AsyncSession, principal: Principal) -> bool:
-    """Whoever may have a personal AI: their AI twin, or personal assistants by role."""
-    if may_assist(principal.role):
+    """Whoever may have a personal AI: their AI twin, or personal assistants by role. P92:
+    and anyone who gives work (work.write): their ePerolehan tasks run on their own PC, so the
+    computer belongs to the person directly, with no AI of their own needed first. Only a
+    personal AI ever gets the folder and screen tools (devices.core.personal), so linking
+    without one gives no AI any new reach into the computer's files."""
+    if may_assist(principal.role) or can(principal.role, "work.write"):
         return True
     twin = await db.scalar(
         select(Agent.id).where(
@@ -81,8 +85,8 @@ async def link_code(
         raise api_error(
             status.HTTP_403_FORBIDDEN,
             "no_personal_ai",
-            "Linking a computer is for your own AI. Make your AI twin first (My AI), then "
-            "link this computer.",
+            "Your role does not give work to the AI, so it has no computer to link. Ask the "
+            "owner if you need one.",
         )
     now = core.now()
     open_codes = await db.scalar(
@@ -148,6 +152,53 @@ async def link_code(
             else None
         ),
     }
+
+
+class AskIn(BaseModel):
+    site: str = Field(default="", max_length=120)
+
+
+@router.get("/api/devices/my-pc-status")
+async def my_pc_status(
+    site: str = Query(default="", max_length=120),
+    principal: Principal = Depends(current_principal),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """P92: before ePerolehan work starts: is the person's OWN computer ready for `site`
+    (ready | offline | not_allowed | not_linked | needs_update | paused), which one, when it
+    was last seen, and the next step in plain words. An online PC that has not allowed the
+    site is sent the Allow request by itself (at most once a minute)."""
+    from ...devices import tunnel
+
+    return await tunnel.pc_status(
+        db, principal.workspace_id, principal.user.id, site, by=principal.user.name
+    )
+
+
+@router.post("/api/devices/my-pc-status/ask")
+async def ask_my_pc(
+    body: AskIn,
+    principal: Principal = Depends(current_principal),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """P92 "Send the request again": the Allow request to the person's own online PC now."""
+    from ...devices import tunnel
+
+    site = (core.tunnel_hosts([body.site]) or tunnel.PC_ONLY)[0]
+    ws = await db.get(Workspace, principal.workspace_id)
+    m = tunnel.mode_of(ws)
+    if not (tunnel.pc_only(site) or (m.mode == "pc" and m.covers(site))):
+        return {"asked": False, "online": False}  # only sites that go through a computer
+    sites = tunnel.ask_sites([site], m)
+    rows = await core.live_devices(db, principal.workspace_id, principal.user.id)
+    online = await core.online_ids(d.id for d in rows)
+    live = [d for d in rows if d.id in online and not d.paused]
+    if not live:
+        await tunnel.remember_want(principal.user.id, sites)  # asked when it connects
+        return {"asked": False, "online": False}
+    d = live[0]
+    asked = await tunnel.ask_own(d, sites, principal.user.name, force=True)
+    return {"asked": asked, "online": True, "device": {"id": d.id, "name": d.name}}
 
 
 @router.get("/api/devices/link-code/{code}/status")
@@ -1199,6 +1250,21 @@ async def internal_call(device_id: str, body: CallIn, request: Request) -> dict[
     except DeviceError as e:
         return {"ok": False, "error": {"code": e.code, "message": e.message}}
     return {"ok": True, "data": data}
+
+
+class InternalAskIn(BaseModel):
+    hosts: list[str] = Field(default_factory=list, max_length=10)
+    by: str = Field(default="", max_length=80)
+    own: bool = False
+
+
+@router.post("/internal/devices/{device_id}/ask")
+async def internal_ask(device_id: str, body: InternalAskIn, request: Request) -> dict[str, Any]:
+    """P92: the worker asks a person's PC to allow sites (its socket is in this process)."""
+    _internal(request)
+    hosts = core.tunnel_hosts(body.hosts)
+    asked = bool(hosts) and await hub.ask_tunnel(device_id, hosts, body.by, own=body.own)
+    return {"ok": True, "data": {"asked": asked}}
 
 
 @router.post("/internal/devices/{device_id}/browser")

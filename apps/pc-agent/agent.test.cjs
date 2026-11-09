@@ -403,6 +403,18 @@ test("P62: the office's ask, Allow on the page, and the page popping up at most 
   assert.equal(shouldOpenAsk(one, 1_000_000 + 11 * 60_000), true);
 });
 
+test("P92: an ask for the person's own ePerolehan work is marked own, and the page says so", () => {
+  const { askFrom } = a;
+  assert.equal(askFrom({ hosts: ["eperolehan.gov.my"], by: "Aina", own: true }, {}).own, true);
+  assert.equal(askFrom({ hosts: ["eperolehan.gov.my"], by: "Fitri" }, {}).own, false);
+  assert.equal(askFrom({ hosts: ["eperolehan.gov.my"], own: "yes" }, {}).own, false); // only true
+  // Already allowed: nothing to ask, own or not.
+  assert.equal(askFrom({ hosts: ["eperolehan.gov.my"], own: true }, { tunnel: { on: true, hosts: ["eperolehan.gov.my"] } }), null);
+  assert.match(a.PAGE, /Your ePerolehan work runs on this computer/);
+  assert.match(a.PAGE, /a&&a\.own/);
+  assert.equal(a.VERSION, "0.5.1");
+});
+
 test("P62: the status page's script parses", () => {
   const script = a.PAGE.split("<script>")[1].split("</script>")[0];
   assert.doesNotThrow(() => new Function(script));

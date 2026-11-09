@@ -27,7 +27,7 @@ const net = require("node:net");
 const crypto = require("node:crypto");
 const { spawn, spawnSync } = require("node:child_process");
 
-const VERSION = "0.5.0";
+const VERSION = "0.5.1";
 // P52: running as AgenticOfficePC.exe (a Node single executable application).
 const SEA = (() => { try { return require("node:sea").isSea(); } catch { return false; } })();
 const IS_WIN = process.platform === "win32";
@@ -501,15 +501,16 @@ let tunnelAsk = null; // { hosts, by, at } waiting for an answer here
 const ASK_OPEN_EVERY = 10 * 60_000; // the page pops up at most this often for the same ask
 const askOpened = new Map(); // hosts key -> when the page was last opened for it
 
-/** A `tunnel_ask` from the office server -> { hosts, by, at }, or null when it is not one or
- * this computer already lets all those sites through. */
+/** A `tunnel_ask` from the office server -> { hosts, by, own, at }, or null when it is not one
+ * or this computer already lets all those sites through. P92 `own`: it is for this computer's
+ * own person's work (their ePerolehan tasks), not a site the office chose for it. */
 function askFrom(msg, cfg) {
   if (!msg || !Array.isArray(msg.hosts)) return null;
   const hosts = [...new Set(msg.hosts.map((h) => String(h).trim().toLowerCase()).filter(validHost))].slice(0, TUNNEL_MAX_HOSTS);
   if (!hosts.length) return null;
   const t = tunnelOf(cfg);
   if (t.on && hosts.every((h) => hostAllowed(h, t.hosts))) return null;
-  return { hosts, by: typeof msg.by === "string" ? msg.by.slice(0, 80) : "", at: new Date().toISOString() };
+  return { hosts, by: typeof msg.by === "string" ? msg.by.slice(0, 80) : "", own: msg.own === true, at: new Date().toISOString() };
 }
 
 /** Pressing Allow: these sites join the ones already let through (at most 10). */
@@ -1223,11 +1224,12 @@ async function run() {
         if (cfg.paused) { closeBrowserSession("paused from the web"); closeTunnels("paused from the web"); }
         log("settings from the web:", { folders: cfg.folders, paused: cfg.paused });
       } else if (m.type === "tunnel_ask") {
-        // P62: the office chose this computer for some sites: ask the person here.
+        // P62: the office chose this computer for some sites: ask the person here. P92: or
+        // the person's own ePerolehan work needs it (own): the same Allow, plainer words.
         const ask = askFrom(m, readConfig());
         if (ask) {
           tunnelAsk = ask;
-          log(`the office asks to let through: ${ask.hosts.join(", ")}`);
+          log(`${ask.own ? "your own work asks" : "the office asks"} to let through: ${ask.hosts.join(", ")}`);
           if (control && shouldOpenAsk(ask) && !process.env.AGENTIC_PC_NO_BROWSER) openUrl(`http://127.0.0.1:${control.port}/?k=${control.key}`);
         }
       } else if (m.type === "error") {
@@ -1343,7 +1345,8 @@ else{st.innerHTML='<div class="state"><span class="dot bad"></span>'+(s.state===
 help.hidden=false;help.innerHTML='<h2>If it stays offline</h2><ol><li>Check this computer is on the internet: open any website.</li><li>Press <b>Reconnect now</b>. It also retries by itself every minute.</li><li>If you use a VPN or office firewall, make sure <code>'+esc(s.server)+'</code> is allowed.</li><li>Restart the computer. It starts by itself when you sign in.</li><li>Still offline? On the web, open <b>My computers</b>: if this computer is not listed, link it again with a new code.</li></ol>';}
 const sites=document.getElementById("sites");sites.hidden=!s.linked;
 if(s.linked){const t=s.tunnel||{},a=s.ask,list=(t.hosts&&t.hosts.length?t.hosts:["eperolehan.gov.my"]).join(", ");let h='<h2>Websites through this computer</h2>';
-if(a){h+='<div class="ask"><p><b>'+esc(a.by||"Your office")+'</b> asks to open <b>'+esc(a.hosts.join(", "))+'</b> through this computer, so the site sees your office internet line instead of the server.</p><p class="muted">Only these sites. The AI may open them in a browser window here, so you can watch what it does. You can turn it off on this page at any time.</p><div class="row"><button class="primary" data-act="/tunnel" data-on="1">Allow</button><button data-act="/ask/dismiss">Not now</button></div></div>';}
+if(a&&a.own){h+='<div class="ask"><p><b>Your ePerolehan work runs on this computer.</b> Press <b>Allow</b> so your AI can open <b>'+esc(a.hosts.join(", "))+'</b> here, from your own internet line.</p><p class="muted">Kerja ePerolehan anda berjalan pada komputer ini. Tekan <b>Allow</b> (Benarkan) sekali sahaja.</p><p class="muted">Only these sites. The AI opens them in a browser window here, so you can watch what it does. You can turn it off on this page at any time.</p><div class="row"><button class="primary" data-act="/tunnel" data-on="1">Allow</button><button data-act="/ask/dismiss">Not now</button></div></div>';}
+else if(a){h+='<div class="ask"><p><b>'+esc(a.by||"Your office")+'</b> asks to open <b>'+esc(a.hosts.join(", "))+'</b> through this computer, so the site sees your office internet line instead of the server.</p><p class="muted">Only these sites. The AI may open them in a browser window here, so you can watch what it does. You can turn it off on this page at any time.</p><div class="row"><button class="primary" data-act="/tunnel" data-on="1">Allow</button><button data-act="/ask/dismiss">Not now</button></div></div>';}
 else if(t.on){h+='<p><span class="pill on">On</span> '+esc(list)+' · '+(t.open||0)+' open now</p><p class="muted">Your office AI opens these sites through this computer. Nothing else passes through it.</p><div class="row"><button data-act="/tunnel" data-on="0">Turn off</button></div>';}
 else{h+='<p><span class="pill">Off</span></p><p class="muted">When your office chooses this computer for a site such as ePerolehan, it asks you here first.</p><div class="row"><button data-act="/tunnel" data-on="1">Turn on for '+esc(list)+'</button></div>';}
 sites.innerHTML=h;}

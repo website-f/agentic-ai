@@ -59,6 +59,26 @@ export function WindowsSmartScreen({ step }: { step: 1 | 2 }) {
   );
 }
 
+/** P92: the Agentic Office page on the computer asking for ePerolehan, with Allow ringed. The
+ * page's own words stay as the computer shows them (English); the caption translates. */
+export function AllowButtonPicture() {
+  const t = useT();
+  return (
+    <Frame label={t("On your computer: press Allow")} className="w-full max-w-sm text-left">
+      <div className="grid gap-2 bg-[#f6f7f9] p-3.5 text-[#111827]">
+        <span className="text-[12px] font-semibold">Websites through this computer</span>
+        <div className="grid gap-2 rounded-[6px] border border-[#f0c36d] bg-[#fff8e6] p-2.5">
+          <p className="text-[11px] leading-snug"><b>Your ePerolehan work runs on this computer.</b> Press <b>Allow</b> so your AI can open <b>eperolehan.gov.my</b> here.</p>
+          <div className="flex gap-2">
+            <Press><span className="rounded-[4px] bg-[#2563eb] px-3 py-1 text-[11px] font-semibold text-white">Allow</span></Press>
+            <span className="rounded-[4px] border border-[#d1d5db] bg-white px-3 py-1 text-[11px]">Not now</span>
+          </div>
+        </div>
+      </div>
+    </Frame>
+  );
+}
+
 /** macOS: the "Not Opened" alert, then System Settings → Privacy & Security → Open Anyway. */
 export function MacGatekeeper({ step }: { step: 1 | 2 }) {
   const t = useT();
