@@ -2,7 +2,7 @@
 // laundry and swaps, the label's print history and the movements and cases it was part of. A scan only finds the
 // record; what you may do still depends on your role. Other companies' staff are never named.
 import { Select } from '../../SearchSelect';
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { MagnifyingGlassIcon, PrinterIcon } from '@phosphor-icons/react';
 import { STATE_LABEL, labelDisplay, type ItemAction } from '@prima/core';
 import { api, type ItemBoard, type ItemPassport } from '../../api';
@@ -11,15 +11,16 @@ import { Card, Empty, Facts } from '../../kit';
 import { Chip, Drawer, ErrorNotice, Loading, dateLabel, dateTimeLabel, useAction, useLoad } from '../../ui';
 import { PrintRun, type PrintResult } from './PrintRun';
 import { Scanner } from './Scanner';
+import { oldRecordLine } from './Stock';
 import { STATE_TONE, TYPE_LABEL, act, partyName, rolesOf, skuName } from './shared';
 
-export function Find({ data }: { data: ItemBoard }) {
+export function Find({ data, onRegister }: { data: ItemBoard; onRegister?: (oldTag: string) => void }) {
   const [open, setOpen] = useState<{ code?: string; id?: string } | null>(null);
   const recent = data.items.slice(-8).reverse();
   return (
     <div className="it-stack">
       <Card title="Find an item" sub="Scan the QR code, the barcode or the RFID tag, or type the ID printed under the code. Every company's labels scan here; a scan only finds the record.">
-        <Scanner purpose="view" title="Find an item" autoFocus onResult={({ verdict, entry }) => verdict.outcome !== 'not_found' && verdict.itemId && setOpen({ code: entry.code })} />
+        <Scanner purpose="view" title="Find an item" autoFocus onResult={({ verdict, entry }) => verdict.outcome !== 'not_found' && verdict.itemId && setOpen({ code: entry.code })} onUnknownCode={onRegister} />
       </Card>
       <Card title="Recent items" flush>
         {!recent.length ? (
@@ -85,6 +86,8 @@ function PassportBody({ data, p, onChanged }: { data: ItemBoard; p: ItemPassport
           ...(p.followedBy.length ? ([['Followed by', `${p.followedBy.join(' and ')} (whole history; only the owner and holder act on it)`]] as [string, string][]) : []),
           ...(i.dueBack ? ([['Due back to owner', dateLabel(i.dueBack.on)]] as [string, string][]) : []),
           ...(i.legacyUnverified ? ([['Opening balance', 'Counted from the old list, not yet verified']] as [string, string][]) : []),
+          ...(i.legacyRef ? ([['Old tag or ID', <span className="mono">{i.legacyRef}</span>]] as [string, ReactNode][]) : []),
+          ...(i.legacyFrom ? ([['Old record', oldRecordLine({ ...i, legacyRef: null })]] as [string, string][]) : []),
           ...(i.writeOff ? ([['Write-off', 'For Finance to decide. Never a pay deduction.']] as [string, string][]) : []),
         ]}
       />

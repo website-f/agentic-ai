@@ -8,6 +8,7 @@ import type { ItemBoard } from '../../api';
 import { Card, Empty, Toolbar } from '../../kit';
 import { Chip, ErrorNotice, useAction } from '../../ui';
 import { PrintRun, type PrintResult } from './PrintRun';
+import { ItemImport } from './AddMenu';
 import { CAT_LABEL, STATE_TONE, act, any, handles, partyName, rolesOf, skuName } from './shared';
 
 export function Stock({ data }: { data: ItemBoard }) {
@@ -18,18 +19,19 @@ export function Stock({ data }: { data: ItemBoard }) {
   const mayRegister = any(data, 'store', 'manager', 'it');
   return (
     <div className="it-stack">
+      {mayRegister && !reg && (
+        <div className="it-tabbar-add">
+          <button className="btn btn-primary" type="button" onClick={() => setReg(true)}>
+            <PlusIcon size={16} weight="bold" aria-hidden="true" /> Register items
+          </button>
+          <ItemImport data={data} kinds={['itemUnit', 'itemStock']} />
+        </div>
+      )}
       {mayRegister && (reg ? <RegisterPrint data={data} onClose={() => setReg(false)} /> : null)}
       {mayRegister && !reg && <LabelsToPrint data={data} />}
       <Card
         title="Stock by owner, holder and condition"
         sub="A set counts once, by its parts. Owner and holder are kept apart: a company can hold items another owns."
-        actions={
-          mayRegister && !reg ? (
-            <button className="btn btn-primary" type="button" onClick={() => setReg(true)}>
-              <PlusIcon size={16} aria-hidden="true" /> Register items
-            </button>
-          ) : undefined
-        }
         flush
       >
         <div className="it-pad">
@@ -94,6 +96,7 @@ function LabelsToPrint({ data }: { data: ItemBoard }) {
             <span className="it-row-main">
               <strong>{skuName(data, i.skuId)}</strong>
               <span className="mono muted">{labelDisplay(i.token)}</span>
+              {(i.legacyRef || i.legacyFrom) && <span className="muted small">{oldRecordLine(i)}</span>}
             </span>
             <Chip tone="warn">{(i.labelGen ?? 1) === 0 ? 'No label yet' : 'Not scanned back'}</Chip>
           </li>
@@ -120,8 +123,18 @@ function LabelsToPrint({ data }: { data: ItemBoard }) {
   );
 }
 
-/** Register units, print their labels and scan them back, in one place (paper 3.1). Bulk stock is added by quantity. */
-function RegisterPrint({ data, onClose }: { data: ItemBoard; onClose: () => void }) {
+/** P91: what the old system said about a unit registered from it, as one line for the store labelling it. */
+export function oldRecordLine(i: PhysicalItem) {
+  const f = i.legacyFrom;
+  return [i.legacyRef ? `Old tag ${i.legacyRef}` : '', f?.where ? `was at ${f.where}` : '', f?.holder ? `held by ${f.holder} (old record)` : '', f?.condition ? `condition ${f.condition}` : ''].filter(Boolean).join(' · ');
+}
+
+/**
+ * Register units, print their labels and scan them back, in one place (paper 3.1). Bulk stock is added by quantity.
+ * P91: opened from the Add menu at the top of the Items screen too, and from the scanner with an old code it does not
+ * know (that code is kept as the unit's old tag).
+ */
+export function RegisterPrint({ data, onClose, legacyRef: scanned = '' }: { data: ItemBoard; onClose: () => void; legacyRef?: string }) {
   const a = useAction();
   const roles = rolesOf(data);
   const parties = data.parties.filter((p) => (roles.get(p.id) ?? []).some((r) => r === 'store' || r === 'manager' || r === 'it'));
@@ -129,8 +142,9 @@ function RegisterPrint({ data, onClose }: { data: ItemBoard; onClose: () => void
   const [skuId, setSkuId] = useState('');
   const [count, setCount] = useState('1');
   const [serials, setSerials] = useState('');
-  const [legacy, setLegacy] = useState(false);
+  const [legacy, setLegacy] = useState(!!scanned);
   const [note, setNote] = useState('');
+  const [oldTag, setOldTag] = useState(scanned);
   const [run, setRun] = useState<PrintResult | null>(null);
   const sku = data.skus.find((s) => s.id === skuId);
   if (run) return <PrintRun run={run} onDone={onClose} />;
@@ -138,7 +152,7 @@ function RegisterPrint({ data, onClose }: { data: ItemBoard; onClose: () => void
     a.run(
       async () => {
         if (sku!.tracking === 'BULK') return act({ kind: 'lot.add', skuId, partyId, qty: Number(count), note });
-        const out = (await act({ kind: 'item.register', skuId, partyId, count: Number(count), serials: serials.trim() ? serials.split(',').map((x) => x.trim()) : undefined, legacyUnverified: legacy, note })) as { result: PhysicalItem[] };
+        const out = (await act({ kind: 'item.register', skuId, partyId, count: Number(count), serials: serials.trim() ? serials.split(',').map((x) => x.trim()) : undefined, legacyUnverified: legacy, note, ...(oldTag.trim() ? { legacyRef: oldTag.trim() } : {}) })) as { result: PhysicalItem[] };
         const printed = (await act({ kind: 'label.print', itemIds: out.result.map((i) => i.id) })) as { result: PrintResult };
         setRun(printed.result);
         return printed;
@@ -187,6 +201,12 @@ function RegisterPrint({ data, onClose }: { data: ItemBoard; onClose: () => void
           <label className="isc-field">
             Maker serials (optional, one per unit, comma separated)
             <input className="input mono" value={serials} onChange={(e) => setSerials(e.target.value)} />
+          </label>
+        )}
+        {sku?.tracking !== 'BULK' && (
+          <label className="isc-field">
+            Old tag or ID from the old system (optional, one unit)
+            <input className="input mono" value={oldTag} onChange={(e) => setOldTag(e.target.value)} />
           </label>
         )}
         <label className="isc-field">

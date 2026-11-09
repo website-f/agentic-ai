@@ -100,7 +100,7 @@ export type ItemAction =
   | { kind: 'sku.add'; code: string; name: string; category: ItemCategory; tracking: TrackingMode; uom: BaseUom; size?: string; colour?: string; consumable?: boolean; components?: { skuId: Id; qty: number }[]; supplierBarcodes?: string[] }
   | { kind: 'sku.map'; skuId: Id; partyId: Id; itemCode: string; uom: BaseUom; factor?: number }
   | { kind: 'sku.mapApprove'; skuId: Id; partyId: Id }
-  | { kind: 'item.register'; skuId: Id; partyId: Id; count: number; serials?: string[]; itAssetId?: Id; legacyUnverified?: boolean; note?: string }
+  | { kind: 'item.register'; skuId: Id; partyId: Id; count: number; serials?: string[]; itAssetId?: Id; legacyUnverified?: boolean; note?: string; legacyRef?: string; legacyFrom?: { where?: string; condition?: string; holder?: string } }
   | { kind: 'item.inspect'; label: string; condition: Exclude<ItemCondition, 'unknown'>; note: string; expectedVersion?: number }
   | { kind: 'item.reprint'; label: string; reason: string; identity?: { serialSeen?: string; skuSizeConfirmed?: boolean }; template?: LabelTemplateId }
   | { kind: 'label.print'; itemIds: Id[]; template?: LabelTemplateId; symbols?: LabelSymbol[]; reason?: string; identity?: { serialSeen?: string; skuSizeConfirmed?: boolean } }
@@ -303,6 +303,17 @@ export class ItemService {
     return out;
   }
 
+  /**
+   * P91: whether the user may add this kind of record by hand: item types (as sku.add), units (as item.register) or bulk
+   * stock (as lot.add) for one company. The screen shows Add and Import only then; each saved row is checked again.
+   */
+  async mayAdd(user: User, what: 'type' | 'unit' | 'stock', partyId: Id | null): Promise<boolean> {
+    const roles = await this.rolesFor(user);
+    const has = (p: Id, ...rs: ItemRole[]) => (roles.get(p) ?? []).some((r) => rs.includes(r));
+    if (what === 'type') return [...roles.keys()].some((p) => has(p, 'store', 'manager')) || has('merdeka', 'it', 'manager');
+    return !!partyId && has(partyId, 'store', 'manager', 'it');
+  }
+
   private has(ctx: Ctx, partyId: Id, ...roles: ItemRole[]) {
     return (ctx.roles.get(partyId) ?? []).some((r) => roles.includes(r));
   }
@@ -451,7 +462,10 @@ export class ItemService {
   }
 
   private maskItem(ctx: Ctx, i: PhysicalItem): PhysicalItem {
-    return { ...i, custody: this.mask(ctx, i.custody), pendingAck: i.pendingAck && !ctx.roles.has(i.custody.partyId) ? { ...i.pendingAck, personId: '(hidden)' } : i.pendingAck };
+    const out = { ...i, custody: this.mask(ctx, i.custody), pendingAck: i.pendingAck && !ctx.roles.has(i.custody.partyId) ? { ...i.pendingAck, personId: '(hidden)' } : i.pendingAck };
+    // P91: the old record's holder is a name from the owner's own list: shown only to the owner company's people.
+    if (out.legacyFrom?.holder && !ctx.roles.has(i.ownerPartyId)) out.legacyFrom = { ...out.legacyFrom, holder: '(hidden)' };
+    return out;
   }
 
   async board(user: User) {
@@ -1257,6 +1271,16 @@ export class ItemService {
         if (!serials.length && asset.serial) serials.push(asset.serial);
       }
     } else if (a.itAssetId) throw new BadRequest('Only IT devices link to the IT register.');
+    // P91: the old system's tag or ID, kept as a reference for one unit; the same old tag is not registered twice in a company.
+    const legacyRef = clip(a.legacyRef, 60) || null;
+    if (legacyRef) {
+      if (count !== 1) throw new BadRequest('An old tag or ID names one unit: register that unit on its own.');
+      if (!/^[!-~][ -~]*$/.test(legacyRef)) throw new BadRequest('Write the old tag or ID as it is printed (letters, numbers and signs).');
+      const same = (await tx.list('physicalItems', { legacyRef } as never)).find((x) => x.ownerPartyId === a.partyId && x.state !== 'disposed');
+      if (same) throw new BadRequest(`Old tag ${legacyRef} is already registered as ${labelDisplay(same.token)}.`);
+    }
+    const lf = a.legacyFrom && typeof a.legacyFrom === 'object' && !Array.isArray(a.legacyFrom) ? a.legacyFrom : null;
+    const legacyFrom = lf ? { where: clip(lf.where, 120) || null, condition: clip(lf.condition, 60) || null, holder: clip(lf.holder, 120) || null } : null;
     const out: PhysicalItem[] = [];
     for (let k = 0; k < count; k++) {
       let token = this.newToken(`${ctx.requestId}:${k}:0`);
@@ -1283,6 +1307,8 @@ export class ItemService {
         registeredBy: ctx.user.name,
         registeredAt: ctx.at,
         legacyUnverified: !!a.legacyUnverified,
+        ...(legacyRef ? { legacyRef } : {}),
+        ...(legacyFrom && (legacyFrom.where || legacyFrom.condition || legacyFrom.holder) ? { legacyFrom } : {}),
         replacesId: null,
         replacedById: null,
         itAssetId,
