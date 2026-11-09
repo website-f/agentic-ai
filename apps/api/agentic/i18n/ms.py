@@ -1389,6 +1389,16 @@ MS: dict[str, str] = {
         "{agent} belum boleh guna pelayar; minta orang yang mengurus {agent} membenarkannya, "
         "atau pilih ejen lain."
     ),
+    # P96: work gets the office skill it needs, or the person is told who can give it
+    "{agent} doesn't have the office's skill {skill} for this yet. Ask {who} to give it, or pick another agent.": (  # noqa: E501
+        "{agent} belum ada kemahiran pejabat {skill} untuk kerja ini. Minta {who} memberikannya, "
+        "atau pilih ejen lain."
+    ),
+    "{agent} was given the office's skill {skill} for this work.": (
+        "{agent} diberi kemahiran pejabat {skill} untuk kerja ini."
+    ),
+    "an owner or admin": "pemilik atau admin",
+    "{a} or {b}": "{a} atau {b}",
     "Link your computer first. It takes about 2 minutes: open My computers and press Link a computer.": (  # noqa: E501
         "Pautkan komputer anda dahulu. Ia mengambil kira-kira 2 minit: buka Komputer saya dan "
         "tekan Pautkan komputer."
