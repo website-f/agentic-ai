@@ -11,6 +11,7 @@ import asyncio
 import contextlib
 import hashlib
 import json
+import random
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import Any
@@ -18,6 +19,7 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ..core.db import release_idle
 from ..models import AIModel, AIProvider, ModelGroup
 from ..obs import langfuse
 from . import client, compliance, media, privacy, store
@@ -34,9 +36,14 @@ BACKGROUND_TASKS = ("brain.", "skill.", "workflow.", "goal.", "overview.", "coll
 class GatewayUnavailable(Exception):
     """No member of the group could answer. `attempts` says why, member by member."""
 
-    def __init__(self, message: str, attempts: list[dict[str, Any]]):
+    def __init__(
+        self, message: str, attempts: list[dict[str, Any]], retry_in: int | None = None
+    ) -> None:
         super().__init__(message)
         self.attempts = attempts
+        # P96: some member is only resting (a rate limit, a cooldown): usable again in about
+        # this many seconds, so the work can wait instead of failing.
+        self.retry_in = retry_in
 
 
 @dataclass
@@ -240,6 +247,7 @@ async def _chat(
         budget = max(max_tokens, client.reasoning_floor(json_mode)) if thinker else max_tokens
         # P33: a cloud member sees placeholders, never the real values.
         sent, masker = guard.masked(p, messages)
+        await release_idle(db)  # P96: inside a task step, no connection held while it thinks
         r = await client.chat(
             p.base_url,
             key,
@@ -362,7 +370,9 @@ async def _chat(
     # for them instead of failing the work, up to MAX_WAIT in total. Members that failed for
     # good (a 400, a bad reply) used to stop this wait; now they are just not asked again.
     if waits and _waited + min(waits) <= MAX_WAIT:
-        pause = min(waits) + 0.5
+        # P96: a little random spread, so 50 steps cooled by the same rate limit do not all
+        # ask again in the same instant (and hit the limit again together).
+        pause = min(waits) + 0.5 + random.uniform(0, 2.0)  # noqa: S311 - not security
         await asyncio.sleep(pause)
         return await _chat(
             db,
@@ -383,7 +393,11 @@ async def _chat(
             _skip=_skip | failed,
             _guard=guard,
         )
-    raise GatewayUnavailable(f"No model in the {g.label} group could answer.", attempts)
+    raise GatewayUnavailable(
+        f"No model in the {g.label} group could answer.",
+        attempts,
+        retry_in=int(min(waits)) + 1 if waits else None,
+    )
 
 
 def _bad_reply(r: client.ChatResult) -> str:

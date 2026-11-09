@@ -18,6 +18,7 @@ from urllib.parse import parse_qs, quote_plus, unquote, urlparse
 import httpx
 
 from ..core.config import settings
+from ..core.http import tls
 from ..core.valkey import valkey
 
 log = logging.getLogger("agentic.browse_reader")
@@ -46,6 +47,7 @@ def _client() -> httpx.AsyncClient:
         headers={"x-browser-token": settings.browser_token},
         timeout=READ_TIMEOUT,
         transport=_transport,
+        verify=tls(),  # P96: shared, not loaded per call
     )
 
 

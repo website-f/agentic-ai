@@ -172,6 +172,15 @@ class Settings(BaseSettings):
     def is_dev(self) -> bool:
         return self.env == "dev"
 
+    @property
+    def worker_slots(self) -> int:
+        """P96: task steps one worker runs at once: as set, but never more than its database
+        pool can serve at two connections per step (a pool too small for the steps made them
+        fail with "QueuePool limit reached" under load)."""
+        return max(
+            1, min(self.worker_max_activities, (self.db_pool_size + self.db_max_overflow) // 2)
+        )
+
 
 def check(s: Settings) -> None:
     """Outside dev, refuse to start on settings that would be unsafe in front of people."""

@@ -1,4 +1,6 @@
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Iterator
+from contextlib import contextmanager
+from contextvars import ContextVar
 from datetime import datetime
 
 from sqlalchemy import DateTime, func
@@ -32,3 +34,31 @@ class Timestamps:
 async def get_db() -> AsyncIterator[AsyncSession]:
     async with SessionLocal() as session:
         yield session
+
+
+# P96: a task step waits seconds at a time for the model and for browser actions. Its session
+# kept its connection for all of it (a transaction stays open after the first read), so 50
+# running steps held 50-100 connections doing nothing. Inside a step those waits now hand the
+# connection back first; the next query takes one again.
+_release_ok: ContextVar[bool] = ContextVar("db_release_while_waiting", default=False)
+
+
+@contextmanager
+def release_while_waiting() -> Iterator[None]:
+    """Mark the code below (a task step) as safe to release idle connections in."""
+    token = _release_ok.set(True)
+    try:
+        yield
+    finally:
+        _release_ok.reset(token)
+
+
+async def release_idle(db: AsyncSession) -> None:
+    """Before a long wait: end the session's read-only transaction so its connection goes back
+    to the pool. Only inside release_while_waiting, and never with unsaved changes (those are
+    the caller's to commit). Loaded objects stay usable (expire_on_commit=False)."""
+    if not _release_ok.get() or not db.in_transaction():
+        return
+    if db.new or db.dirty or db.deleted:
+        return
+    await db.commit()

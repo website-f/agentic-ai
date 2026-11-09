@@ -265,13 +265,22 @@ async def main() -> None:
     client = await _connect()
     await ensure_schedules(client)
     asyncio.create_task(embed.warm())  # noqa: RUF006 - fire and forget; logs its own failure
+    if settings.worker_slots < settings.worker_max_activities:
+        log.warning(
+            "running %d steps at once, not %d: the database pool (%d + %d) serves no more",
+            settings.worker_slots,
+            settings.worker_max_activities,
+            settings.db_pool_size,
+            settings.db_max_overflow,
+        )
     worker = Worker(
         client,
         task_queue=settings.temporal_task_queue,
         workflows=WORKFLOWS,
         activities=ACTIVITIES,
-        # Bounded so the database pool (2 connections per busy step) never runs dry.
-        max_concurrent_activities=settings.worker_max_activities,
+        # Bounded so the database pool (2 connections per busy step) never runs dry. P96:
+        # several worker replicas may poll the same queue (docker-compose.vps.yml).
+        max_concurrent_activities=settings.worker_slots,
     )
     stop = asyncio.Event()
     loop = asyncio.get_running_loop()

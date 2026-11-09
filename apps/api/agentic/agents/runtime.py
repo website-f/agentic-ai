@@ -1452,6 +1452,13 @@ async def _run_task_step(task_id: str) -> StepResult:
                     branch_id=task.branch_id or agent.branch_id,
                 )
             except gateway.GatewayUnavailable as e:
+                if e.retry_in and await _ai_rests(db, task) < AI_RESTS:
+                    # P96: every model is only resting (a provider's rate limit, which 50
+                    # people at once can hit): the task rests and tries again, not fails.
+                    secs = max(60, min(int(e.retry_in), 600))
+                    note = f"Paused: the AI service is busy. Trying again in {secs // 60} min."
+                    await task_event(db, task, "rest", "system", note, {"why": AI_BUSY})
+                    return StepResult("rest", note, timeout_seconds=secs)
                 why = "; ".join(
                     f"{a['member']}: {a.get('failed') or a.get('skipped')}" for a in e.attempts
                 )
@@ -1583,6 +1590,25 @@ async def _run_task_step(task_id: str) -> StepResult:
             return StepResult("done", answer)
         await db.commit()
         return StepResult("continue")
+
+
+AI_BUSY = "ai_busy"
+AI_RESTS = 5  # P96: rests for a busy AI service per task before it fails as before
+
+
+async def _ai_rests(db: AsyncSession, task: Task) -> int:
+    return int(
+        await db.scalar(
+            select(func.count())
+            .select_from(TaskEvent)
+            .where(
+                TaskEvent.task_id == task.id,
+                TaskEvent.kind == "rest",
+                TaskEvent.data["why"].astext == AI_BUSY,
+            )
+        )
+        or 0
+    )
 
 
 async def start_run(task_id: str) -> None:

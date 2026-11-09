@@ -11,6 +11,8 @@ import asyncio
 import contextlib
 import logging
 import os
+import secrets
+import socket
 
 from sqlalchemy import select
 
@@ -23,7 +25,15 @@ log = logging.getLogger("agentic.channels.poller")
 
 LOCK_TTL = 75
 RESCAN = 15
-ME = f"{os.getpid()}-{id(object())}"
+
+
+def _owner_name() -> str:
+    """P96: who holds a bot's lock. Two worker replicas in containers are both pid 1, so the
+    host name and a random part keep their names apart (a shared name let both poll)."""
+    return f"{socket.gethostname()}-{os.getpid()}-{secrets.token_hex(6)}"
+
+
+ME = _owner_name()
 
 
 async def _lock(channel_id: str) -> bool:

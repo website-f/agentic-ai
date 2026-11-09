@@ -16,6 +16,7 @@ import httpx
 
 from ..core.config import settings
 from ..core.db import SessionLocal
+from ..core.http import tls
 from ..core.valkey import valkey, valkey_bytes
 from ..models import Device
 from . import core, hub, relay
@@ -161,7 +162,7 @@ async def ask_sites(device_id: str, hosts: list[str], by: str = "", own: bool = 
 
 async def _remote(path: str, body: dict[str, Any], timeout: float) -> dict[str, Any]:
     try:
-        async with httpx.AsyncClient(transport=_transport, timeout=timeout) as c:
+        async with httpx.AsyncClient(transport=_transport, timeout=timeout, verify=tls()) as c:
             r = await c.post(
                 f"{core.internal_url()}{path}",
                 json=body,
