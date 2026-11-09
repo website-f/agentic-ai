@@ -491,7 +491,7 @@ async def list_pages(
     q: str = Query(default="", max_length=120),
     limit: int | None = Query(default=None, ge=1, le=paging.MAX_LIMIT),
     cursor: str | None = Query(default=None, max_length=400),
-    principal: Principal = Depends(require("office.view")),
+    principal: Principal = Depends(require("read")),
     db: AsyncSession = Depends(get_db),
 ) -> list[PageSummary]:
     """Every page in path order (the vault tree needs the whole set). `limit` + `cursor` page
@@ -570,7 +570,7 @@ async def _page_out(db: AsyncSession, ws: Workspace, p: BrainPage, principal: Pr
 @router.get("/brain/page")
 async def get_page(
     path: str = Query(min_length=1, max_length=400),
-    principal: Principal = Depends(require("office.view")),
+    principal: Principal = Depends(require("read")),
     db: AsyncSession = Depends(get_db),
 ) -> PageOut:
     ws = await _ws(db, principal)
@@ -763,7 +763,7 @@ async def graph(
 async def search(
     q: str = Query(min_length=1, max_length=300),
     history: bool = False,
-    principal: Principal = Depends(require("office.view")),
+    principal: Principal = Depends(require("read")),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     t0 = time.perf_counter()
@@ -800,7 +800,7 @@ async def list_facts(
     limit: int = Query(default=100, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
     cursor: str | None = Query(default=None, max_length=400),
-    principal: Principal = Depends(require("office.view")),
+    principal: Principal = Depends(require("read")),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """Newest first. `{total, items, next_cursor}`: pass `next_cursor` (also sent as

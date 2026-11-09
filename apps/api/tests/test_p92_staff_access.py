@@ -264,6 +264,9 @@ STAFF_OK = {
     "/api/approvals", "/api/assistants", "/api/auth/2fa", "/api/auth/2fa/policy", "/api/auth/me",
     "/api/auth/setup-status", "/api/auth/sso", "/api/blueprints", "/api/branches",
     "/api/brain/dreams",  # the nightly tidy-up, only their own agents' share (test_staff_policy)
+    # scoped to their own AI (test_p29_security)
+    "/api/brain/facts", "/api/brain/page", "/api/brain/pages", "/api/brain/search",
+    "/api/devices/my-pc-status", "/api/lessons", "/api/learning/digest",  # their own PC and AI
     "/api/branches/starter-teams", "/api/broadcasts", "/api/budgets", "/api/calendar-drafts",
     "/api/channels", "/api/channels/{channel_id}/whatsapp", "/api/chat/recent",
     "/api/company-kits", "/api/deals", "/api/deals/summary",
@@ -286,7 +289,7 @@ STAFF_OK = {
 
 # Office-wide pages staff never open: refused outright (not just empty).
 STAFF_REFUSED = {
-    "/api/brain/overview", "/api/brain/pages", "/api/brain/graph", "/api/brain/facts",
+    "/api/brain/overview", "/api/brain/graph",
     "/api/skills", "/api/skill-proposals", "/api/learning/overview",
     "/api/learning/week", "/api/objectives/{objective_id}", "/api/objectives/{objective_id}/tasks",
     "/api/ai/providers", "/api/ai/usage", "/api/audit", "/api/overview", "/api/impact",
@@ -424,6 +427,8 @@ STAFF_WRITE_OK = {
     ("POST", "/api/parties/import"),  # a preview of a sheet sent, saves nothing
     ("POST", "/api/library/delete"),  # nothing named, nothing removed (each item is checked)
     ("POST", "/api/tasks/retry-failed"),  # only failed work of their own (scope.task_where)
+    ("POST", "/api/devices/link-code"),  # linking their own computer (P92 own PC)
+    ("POST", "/api/devices/my-pc-status/ask"),  # asks their own computer to allow ePerolehan
 }
 
 
