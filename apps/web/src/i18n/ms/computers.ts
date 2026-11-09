@@ -217,4 +217,16 @@ export const COMPUTERS: Record<string, string> = {
     "Anda akan dapat menonton skrin komputer ini dari mana-mana pelayar yang anda log masuk. Komputer menunjukkan satu notis semasa anda menonton. Masukkan kata laluan anda untuk mengesahkan.",
   "Turn it on": "Hidupkannya",
   "Your password": "Kata laluan anda",
+  // P94: reconnecting after a restart, and a newer app
+  "Reconnecting…": "Bersambung semula…",
+  "It was connected a moment ago and is coming back by itself, usually within seconds. Work given to it waits for it.":
+    "Ia bersambung sebentar tadi dan akan kembali dengan sendirinya, biasanya dalam beberapa saat. Kerja yang diberi kepadanya akan menunggunya.",
+  "Update available": "Kemas kini tersedia",
+  "Agentic Office PC {version} is ready (this computer has {current}). It reconnects within seconds after the office server restarts.":
+    "Agentic Office PC {version} sudah sedia (komputer ini ada {current}). Ia bersambung semula dalam beberapa saat selepas pelayan pejabat dimulakan semula.",
+  "On that computer, download it and run it: it replaces the old one and stays linked.":
+    "Pada komputer itu, muat turun dan jalankannya: ia menggantikan yang lama dan kekal dipautkan.",
+  "On that computer, press Link a computer above and run the install line again.":
+    "Pada komputer itu, tekan Pautkan komputer di atas dan jalankan baris pemasangan sekali lagi.",
+  "Download the update": "Muat turun kemas kini",
 };

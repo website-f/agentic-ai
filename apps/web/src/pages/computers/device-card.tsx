@@ -155,7 +155,9 @@ export function DeviceCard({ device, focus, onFocused }: { device: Device; focus
 
   const state = device.paused
     ? { tone: "warn" as const, label: t("Paused") }
-    : device.online ? { tone: "ok" as const, label: t("Online") } : { tone: "neutral" as const, label: t("Offline") };
+    : device.online ? { tone: "ok" as const, label: t("Online") }
+      : device.reconnecting ? { tone: "warn" as const, label: t("Reconnecting…") }
+        : { tone: "neutral" as const, label: t("Offline") };
 
   return (
     <div ref={card} id={`device-${device.id}`} data-guide="computers.device" className="min-w-0 scroll-mt-20">
@@ -165,7 +167,7 @@ export function DeviceCard({ device, focus, onFocused }: { device: Device; focus
           <span className="relative">
             <IconTile icon={OsIcon} tone="neutral" />
             <span aria-hidden className={cn("absolute -right-0.5 -bottom-0.5 size-3 rounded-full ring-2 ring-surface",
-              device.paused ? "bg-warn" : device.online ? "bg-ok" : "bg-border")} />
+              device.paused || device.reconnecting ? "bg-warn" : device.online ? "bg-ok" : "bg-border")} />
           </span>
           <div className="grid min-w-0 flex-1 gap-1">
             {renaming ? (
@@ -200,7 +202,13 @@ export function DeviceCard({ device, focus, onFocused }: { device: Device; focus
         </div>
 
         <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-5 p-4 sm:p-5">
-          {!device.online ? <OfflineHelp device={device} /> : null}
+          {device.update_available ? <UpdateNotice device={device} /> : null}
+          {!device.online && device.reconnecting ? (
+            <p role="status" className="rounded-[var(--radius-md)] border border-warn/30 bg-warn/5 p-3 text-[12.5px]">
+              {t("It was connected a moment ago and is coming back by itself, usually within seconds. Work given to it waits for it.")}
+            </p>
+          ) : null}
+          {!device.online && !device.reconnecting ? <OfflineHelp device={device} /> : null}
           {/* ---- pause + browsers */}
           <div className="grid min-w-0 gap-4 md:grid-cols-2">
             <SwitchField checked={device.paused} onCheckedChange={(paused) => save.mutate({ paused })} disabled={save.isPending}
@@ -358,6 +366,33 @@ function OfflineHelp({ device }: { device: Device }) {
         {steps.map((s, i) => <li key={i}>{s}</li>)}
       </ol>
       {device.os !== "windows" ? <code className="justify-self-start rounded-sm bg-surface-2 px-2 py-1 font-mono text-[12px]">agentic-pc doctor</code> : null}
+    </section>
+  );
+}
+
+/** P94: a newer Agentic Office PC is out: one click gets it on Windows (running it replaces
+ * the old one and keeps the link); elsewhere the install line from Link a computer. Nothing
+ * updates by itself. */
+export function UpdateNotice({ device }: { device: Device }) {
+  const t = useT();
+  const version = device.latest_version ?? "";
+  return (
+    <section className="flex min-w-0 flex-wrap items-center gap-3 rounded-[var(--radius-md)] border border-accent/30 bg-accent-soft/40 p-3.5"
+      aria-label={t("Update available")}>
+      <div className="grid min-w-0 flex-1 gap-0.5">
+        <h3 className="text-[13.5px] font-semibold">{t("Update available")}</h3>
+        <p className="text-[12.5px] text-muted">
+          {t("Agentic Office PC {version} is ready (this computer has {current}). It reconnects within seconds after the office server restarts.", { version, current: device.version || "?" })}{" "}
+          {device.os === "windows"
+            ? t("On that computer, download it and run it: it replaces the old one and stays linked.")
+            : t("On that computer, press Link a computer above and run the install line again.")}
+        </p>
+      </div>
+      {device.os === "windows" ? (
+        <Button asChild size="sm">
+          <a href="/api/install/update/exe" download><DownloadSimpleIcon size={15} /> {t("Download the update")}</a>
+        </Button>
+      ) : null}
     </section>
   );
 }

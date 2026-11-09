@@ -87,6 +87,12 @@ export function PcCard({ s, className, checking, onCheck, onLink }: {
       title = t("Your computer {name} is ready", { name });
       body = t("ePerolehan opens on {name}, from your own internet line. Keep it on until the work is done.", { name });
       break;
+    case "reconnecting":
+      icon = <ArrowClockwiseIcon size={26} weight="bold" />;
+      title = t("{name} is reconnecting", { name });
+      body = t("It was connected a moment ago and usually is back within seconds. You can start: the work waits for it.");
+      actions = checkAgain;
+      break;
     case "offline":
       icon = <PowerIcon size={26} weight="bold" />;
       title = t("Turn on your computer and open Agentic Office PC");

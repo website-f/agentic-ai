@@ -80,4 +80,8 @@ export const MY_PC: Record<string, string> = {
   "Whatever you choose here, ePerolehan work for a person always runs on that person's own linked computer. This choice is for the office's own work.":
     "Apa pun pilihan anda di sini, kerja ePerolehan untuk seseorang sentiasa berjalan pada komputer orang itu sendiri yang dipautkan. Pilihan ini untuk kerja pejabat sendiri.",
   "Link my own computer": "Pautkan komputer saya sendiri",
+  // P94: a computer coming back by itself after the office server restarted
+  "{name} is reconnecting": "{name} sedang bersambung semula",
+  "It was connected a moment ago and usually is back within seconds. You can start: the work waits for it.":
+    "Ia bersambung sebentar tadi dan biasanya kembali dalam beberapa saat. Anda boleh mula: kerja akan menunggunya.",
 };

@@ -5,7 +5,8 @@ import { queryOptions } from "@tanstack/react-query";
 
 import { api } from "./api";
 
-export type PcState = "ready" | "offline" | "not_allowed" | "not_linked" | "needs_update" | "paused";
+/** P94 "reconnecting": seen moments ago and coming back by itself; work may start (it waits). */
+export type PcState = "ready" | "reconnecting" | "offline" | "not_allowed" | "not_linked" | "needs_update" | "paused";
 
 export interface MyPcStatus {
   state: PcState;
@@ -56,7 +57,7 @@ export function pcSiteOf(url: string | null | undefined): string | null {
 
 /** Whether work may start: nothing needed, or the computer is ready. */
 export function pcReady(s: MyPcStatus | null | undefined): boolean {
-  return !!s && (!s.needed || s.state === "ready");
+  return !!s && (!s.needed || s.state === "ready" || s.state === "reconnecting");
 }
 
 /** Green when ready, red when there is no computer yet, amber for everything in between. */

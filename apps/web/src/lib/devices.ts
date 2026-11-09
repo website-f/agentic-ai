@@ -25,6 +25,12 @@ export interface Device {
   version: string | null;
   /** Connected right now (the socket is open). */
   online: boolean;
+  /** P94: not connected now but seen moments ago (the office server restarted, its Wi-Fi
+   * blinked): it is coming back by itself, and work given to it waits for it. */
+  reconnecting?: boolean;
+  /** P94: the newest Agentic Office PC this server offers, and whether this one is older. */
+  latest_version?: string | null;
+  update_available?: boolean;
   last_seen_at: string | null;
   paused: boolean;
   /** The folders the AI may look in (the server's settings are the truth). */

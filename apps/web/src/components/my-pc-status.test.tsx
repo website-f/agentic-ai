@@ -97,6 +97,14 @@ describe("the status card", () => {
     expect(onCheck).toHaveBeenCalled();
   });
 
+  it("P94 amber reconnecting: coming back by itself, work may start", () => {
+    expect(pcReady({ ...base, state: "reconnecting" })).toBe(true);
+    expect(pcTone("reconnecting")).toBe("warn");
+    wrap(<PcCard s={{ ...base, state: "reconnecting" }} onCheck={() => {}} onLink={() => {}} />);
+    expect(screen.getByRole("heading")).toHaveTextContent("Aina Laptop is reconnecting");
+    expect(screen.getByText(/the work waits for it/)).toBeInTheDocument();
+  });
+
   it("amber not allowed: press Allow, and the request can be sent again", async () => {
     wrap(<PcCard s={{ ...base, state: "not_allowed" }} onCheck={() => {}} onLink={() => {}} />);
     expect(screen.getByRole("heading")).toHaveTextContent("Press Allow on your computer");
