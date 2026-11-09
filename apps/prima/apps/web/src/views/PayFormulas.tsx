@@ -77,7 +77,7 @@ export function PayFormulasView() {
 
       {act && data.ready && !editing && (
         <div className="row" style={{ gap: 6, flexWrap: 'wrap', marginBottom: 12 }}>
-          <button className="btn btn-sm" onClick={() => setEditing({ from: null, kind: 'guard_shift' })}>
+          <button className="btn btn-sm btn-primary" onClick={() => setEditing({ from: null, kind: 'guard_shift' })}>
             New guard salary formula
           </button>
           <button className="btn btn-sm" onClick={() => setEditing({ from: null, kind: 'driver_ot' })}>

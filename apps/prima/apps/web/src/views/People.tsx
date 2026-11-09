@@ -1,7 +1,7 @@
 import { Select } from '../SearchSelect';
 import { useEffect, useState } from 'react';
 import { CheckCircleIcon, PhoneIcon, ProhibitIcon, UsersThreeIcon, WarningIcon } from '@phosphor-icons/react';
-import { ATTENDANCE_ISSUE_LABEL, GROUP_EMPLOYER_ID, LEAVE_LABEL, isGroupLeader, jaOwns, missingStaffFacts, staffHistoryRole } from '@prima/core';
+import { ATTENDANCE_ISSUE_LABEL, GROUP_EMPLOYER_ID, LEAVE_LABEL, isGroupLeader, jaOwns, missingStaffFacts, p91MayImport, staffHistoryRole } from '@prima/core';
 import { api, type GuardProfile, type PersonDetail } from '../api';
 import { useApp } from '../App';
 import { Chip, Drawer, ErrorNotice, ExpiryChip, Findings, Kpi, Loading, dateLabel, dayLabel, hhmm, useAction, useLoad } from '../ui';
@@ -13,6 +13,7 @@ import { SHIFT_STATE } from './shared';
 import { RecordButton } from './RecordForm';
 import { ImportButton } from './ImportDrawer';
 import { GuardTrainingPanel } from './HrDevelop';
+import { jumpTo } from './AddImportMenu';
 import { FaceCapture } from './FaceCheck';
 import { GroupHistoryTab, HistoryLookupPanel } from './StaffHistory';
 import { GuardPhoneCard } from './GuardPhoneOffice';
@@ -29,6 +30,7 @@ export function People({ openPersonId }: { openPersonId?: string }) {
   const [open, setOpen] = useState<string | undefined>(openPersonId);
   const [hireCheck, setHireCheck] = useState(false);
   const historyRole = staffHistoryRole(me.user);
+  const papers = p91MayImport(me.user, 'guardPaper');
   // P90: the list is asked for once typing pauses, not on every key (each ask reads the company's guards).
   const [query, setQuery] = useState(q);
   useEffect(() => {
@@ -61,7 +63,7 @@ export function People({ openPersonId }: { openPersonId?: string }) {
         }
         actions={
           <>
-            <ImportButton kind="officeStaff" companyId={companyId} />
+            <ImportButton kind="officeStaff" companyId={companyId} label="Import office staff" />
             <RecordButton kind="officeStaff" companyId={companyId} label="Add office staff" primary />
             {historyRole && (
               <button className="btn" aria-pressed={hireCheck} onClick={() => setHireCheck(!hireCheck)}>
@@ -70,7 +72,17 @@ export function People({ openPersonId }: { openPersonId?: string }) {
             )}
           </>
         }
-      />
+      >
+        {/* P91: guards come from the JA app; their KDN card, CSG and TNG papers are recorded or loaded here. */}
+        {papers && (
+          <div className="p91-actions">
+            <button className="btn" onClick={() => jumpTo('pp-guard-papers')}>
+              Record guard papers
+            </button>
+            <ImportButton kind="guardPaper" label="Import guard papers" />
+          </div>
+        )}
+      </PageHead>
 
       {data && (
         <Stats>
@@ -148,7 +160,9 @@ export function People({ openPersonId }: { openPersonId?: string }) {
         )}
       </Card>
 
-      <GuardTrainingPanel />
+      <div id="pp-guard-papers">
+        <GuardTrainingPanel />
+      </div>
       {open && <PersonDrawer personId={open} onClose={() => setOpen(undefined)} />}
     </div>
   );

@@ -9,6 +9,7 @@ import {
   cleanGrid,
   extractPdfTable,
   headerSignature,
+  importSpec,
   normHeader,
   normaliseTable,
   parseCsv,
@@ -46,9 +47,14 @@ import '../styles/import.css';
  */
 
 const isRecordKind = (k: ImportKind): k is RecordKind => Object.prototype.hasOwnProperty.call(RECORD_KINDS, k);
-/** P91: the header words a kind's spec gives a field (Malay and old-system names), for the in-browser matcher. */
-const specWords = (kind: ImportKind, key: string): string[] | undefined =>
-  isRecordKind(kind) ? undefined : (EXTRA_IMPORTS[kind as keyof typeof EXTRA_IMPORTS]?.fields.find((f) => f.key === key) as { words?: string[] } | undefined)?.words;
+/** P91: a field's header words from the kind's spec in core (the same table the server checks with). */
+function specWords(kind: ImportKind, key: string): string[] | undefined {
+  try {
+    return (importSpec(kind).fields.find((f) => f.key === key) as { words?: string[] } | undefined)?.words;
+  } catch {
+    return undefined;
+  }
+}
 const MAX_FILE = 8_000_000;
 const MAX_CSV = 1_000_000;
 const SEVERAL = '*';

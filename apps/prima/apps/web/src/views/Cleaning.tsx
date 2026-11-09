@@ -25,6 +25,8 @@ import {
 } from '@prima/core';
 import { api, type CleaningProofInput, type CleaningSetupInput, type CleaningSiteView, type StockLineInput } from '../api';
 import { useApp } from '../App';
+import { PlusIcon } from '@phosphor-icons/react';
+import { jumpTo } from './AddImportMenu';
 import { Chip, Drawer, ErrorNotice, Kpi, Loading, dateLabel, useAction, useLoad, type Tone } from '../ui';
 
 const MAX_PHOTO = 700_000;
@@ -130,6 +132,12 @@ export function CleaningView() {
           <p>Each site's daily roster and minute-by-minute plan for cleaners and supervisors, from the client's scope and the size of each area.</p>
         </div>
         <div className="row">
+          {/* P91: setting up a new cleaning site is at the top, not only under the list. */}
+          {b && b.startable.length > 0 && (
+            <button className="btn btn-primary" onClick={() => jumpTo('cl-start')}>
+              <PlusIcon size={16} weight="bold" aria-hidden="true" /> Set up cleaning at a site
+            </button>
+          )}
           <input className="input" type="date" aria-label="Date" value={date} onChange={(e) => e.target.value && setDate(e.target.value)} style={{ maxWidth: 170 }} />
         </div>
       </div>
@@ -179,7 +187,11 @@ export function CleaningView() {
               ))}
             </div>
           </section>
-          {b.startable.length > 0 && <StartCleaning sites={b.startable} today={today} onStarted={setSiteId} />}
+          {b.startable.length > 0 && (
+            <div id="cl-start">
+              <StartCleaning sites={b.startable} today={today} onStarted={setSiteId} />
+            </div>
+          )}
         </>
       )}
     </div>

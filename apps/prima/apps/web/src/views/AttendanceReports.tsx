@@ -1359,6 +1359,24 @@ function PreviewSummary({ p }: { p: AttendancePreview }) {
 }
 
 /** Used by the HR screen: the import button and a short summary, with a way into the Attendance screen. */
+/**
+ * P91 (Fitri, 9 Nov 2026): the timesheet import at the top of the Attendance screen, for those who may import (the
+ * same check as the Monthly reports tab). Opens the same import as that tab.
+ */
+export function ImportTimesheetButton({ onDone }: { onDone?: () => void }) {
+  const { data } = useLoad(() => (client ? client.overview({}) : Promise.resolve(null)), []);
+  const [importing, setImporting] = useState(false);
+  if (!data?.canImport) return null;
+  return (
+    <>
+      <button type="button" className="btn btn-primary" onClick={() => setImporting(true)}>
+        <UploadSimpleIcon size={16} /> Import timesheet
+      </button>
+      {importing && <ImportDrawer onClose={() => (setImporting(false), onDone?.())} />}
+    </>
+  );
+}
+
 export function AttendanceReportsSummary({ onOpen }: { onOpen: () => void }) {
   const { data, error } = useLoad(() => (client ? client.overview({}) : Promise.resolve(null)), []);
   const [importing, setImporting] = useState(false);

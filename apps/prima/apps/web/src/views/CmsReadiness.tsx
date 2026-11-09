@@ -5,6 +5,8 @@ import { useState } from 'react';
 import { api } from '../api';
 import type { CmsDeviceInput, CmsReadinessBoard } from '../api/types';
 import { Chip, Drawer, ErrorNotice, Kpi, Loading, dateTimeLabel, useAction, useLoad, type Tone } from '../ui';
+import { PlusIcon } from '@phosphor-icons/react';
+import { ImportButton } from './ImportDrawer';
 
 type Row = CmsReadinessBoard['sites'][number];
 type Status = Row['view']['status'];
@@ -28,6 +30,9 @@ export function CmsReadinessView() {
   const [q, setQ] = useState('');
   const [status, setStatus] = useState<Status | 'all'>('all');
   const [open, setOpen] = useState<string | null>(null);
+  // P91: Add device at the top asks which site, then opens that site's device form.
+  const [picking, setPicking] = useState(false);
+  const [newFor, setNewFor] = useState<string | null>(null);
   if (error)
     return (
       <div className="page">
@@ -56,6 +61,14 @@ export function CmsReadinessView() {
           <p>{data.notice}</p>
         </div>
         <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
+          {data.sites.some((r) => r.canRecord) && (
+            <>
+              <button className="btn btn-primary" aria-expanded={picking} onClick={() => setPicking(!picking)}>
+                <PlusIcon size={16} weight="bold" aria-hidden="true" /> Add device
+              </button>
+              <ImportButton kind="cmsDevice" label="Import devices" />
+            </>
+          )}
           <input className="input" placeholder="Search site, client or company" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search" />
           <select className="select" value={status} onChange={(e) => setStatus(e.target.value as Status | 'all')} aria-label="Status">
             <option value="all">All statuses</option>
@@ -67,6 +80,33 @@ export function CmsReadinessView() {
           </select>
         </div>
       </div>
+      {picking && (
+        <section className="panel">
+          <label className="field" style={{ maxWidth: 420 }}>
+            <span className="label">Which site is the device at?</span>
+            <Select
+              className="select"
+              aria-label="Site for the new device"
+              value=""
+              onChange={(e) => {
+                if (!e.target.value) return;
+                setNewFor(e.target.value);
+                setOpen(e.target.value);
+                setPicking(false);
+              }}
+            >
+              <option value="">Choose the site</option>
+              {data.sites
+                .filter((r) => r.canRecord)
+                .map((r) => (
+                  <option key={r.site.id} value={r.site.id}>
+                    {r.site.code} · {r.site.name}
+                  </option>
+                ))}
+            </Select>
+          </label>
+        </section>
+      )}
       <div className="kpis">
         <Kpi label="Sites" value={t.sites} />
         <Kpi label="Needs fixing" value={t.needsFix} tone={t.needsFix ? 'crit' : undefined} />
@@ -111,7 +151,7 @@ export function CmsReadinessView() {
           {rows.length === 0 && <div className="empty">{data.sites.length ? 'No site matches.' : 'No sites you can see.'}</div>}
         </div>
       </section>
-      {row && <SiteReadiness row={row} kinds={data.deviceKinds} items={data.items} onClose={() => setOpen(null)} />}
+      {row && <SiteReadiness key={row.site.id} row={row} kinds={data.deviceKinds} items={data.items} startNew={newFor === row.site.id && row.canRecord} onClose={() => (setOpen(null), setNewFor(null))} />}
     </div>
   );
 }
@@ -120,14 +160,16 @@ function SiteReadiness({
   row,
   kinds,
   items,
+  startNew = false,
   onClose,
 }: {
   row: Row;
   kinds: Kinds;
   items: CmsReadinessBoard['items'];
+  startNew?: boolean;
   onClose: () => void;
 }) {
-  const [editDevice, setEditDevice] = useState<string | 'new' | null>(null);
+  const [editDevice, setEditDevice] = useState<string | 'new' | null>(startNew ? 'new' : null);
   const [editItem, setEditItem] = useState<string | null>(null);
   const v = row.view;
   return (

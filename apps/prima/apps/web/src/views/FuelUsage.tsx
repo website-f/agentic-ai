@@ -4,6 +4,7 @@ import type { ProofInput } from '@prima/core';
 import { api, type VehicleUsage } from '../api';
 import { Chip, ErrorNotice, Kpi, Loading, dateLabel, dateTimeLabel, useAction, useLoad, type Tone } from '../ui';
 import { ProofPicker } from './Proof';
+import { ImportButton } from './ImportDrawer';
 
 /** Today in Malaysia, whatever the device's clock zone (the app keeps Malaysian dates). */
 const mytNow = () => new Date(Date.now() + 8 * 3_600_000).toISOString();
@@ -67,6 +68,7 @@ export function FuelUsagePanel() {
               </option>
             ))}
           </Select>
+          {transport && <ImportButton kind="fuelCard" label="Import fuel cards" />}
         </div>
         {data.total && (
           <div className="kpis">
