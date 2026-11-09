@@ -17,7 +17,7 @@ import { Card, PageHead, Person, Search, Stat, Stats, Toolbar } from '../kit';
 import { Chip, ErrorNotice, Loading, dateLabel, dateTimeLabel, dayLabel, hhmm, useAction, useLoad } from '../ui';
 import { AlertState, FollowUpDrawer, ISSUE_TONE, isAbsence } from './FollowUp';
 import { LeavePanel } from './Leave';
-import { AttendanceReports } from './AttendanceReports';
+import { AttendanceReports, ImportTimesheetButton } from './AttendanceReports';
 
 /** P81: sessionStorage key another screen sets to open Attendance on its monthly reports. */
 export const ATT_TAB_KEY = 'prima-attendance-tab';
@@ -64,6 +64,7 @@ export function AttendanceView() {
             checking it. Nothing here pays, deducts or disciplines anyone automatically. Clock-ins come only from the site device with a face check; they are not typed in here. Shifts are added on the Roster.
           </>
         }
+        actions={<ImportTimesheetButton onDone={() => setTab('reports')} />}
       />
 
       <div className="tabbar" role="tablist" aria-label="Attendance sections">

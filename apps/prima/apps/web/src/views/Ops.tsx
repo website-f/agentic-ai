@@ -7,6 +7,8 @@ import { LeavePanel } from './Leave';
 import { GovOpsMonitorPanel } from './GovOps';
 import { ManagementFeeBillsPanel } from './ManagementFees';
 import { Card, Empty, PageHead, Stat, Stats } from '../kit';
+import { RecordButton } from './RecordForm';
+import { ImportButton } from './ImportDrawer';
 import { Chip, ErrorNotice, Loading, dayLabel, hhmm, money, useLoad } from '../ui';
 import '../styles/ops.css';
 import { VacanciesPanel } from './HrJoinLeave';
@@ -73,15 +75,20 @@ export function OpsView() {
           </>
         }
         actions={
-          data.regions.length > 1 && (
-            <Select className="select op-filter" aria-label="Region" value={data.region.id} onChange={(e) => setRegion(e.target.value)}>
-              {data.regions.map((r) => (
-                <option key={r.id} value={r.id}>
-                  {r.name}
-                </option>
-              ))}
-            </Select>
-          )
+          <>
+            {data.regions.length > 1 && (
+              <Select className="select op-filter" aria-label="Region" value={data.region.id} onChange={(e) => setRegion(e.target.value)}>
+                {data.regions.map((r) => (
+                  <option key={r.id} value={r.id}>
+                    {r.name}
+                  </option>
+                ))}
+              </Select>
+            )}
+            {/* P91: sites are added here too, for those who may add them (the form and the server check it). */}
+            <ImportButton kind="site" label="Import sites" />
+            <RecordButton kind="site" label="Add site" primary />
+          </>
         }
       />
 

@@ -1782,6 +1782,8 @@ function Sites({ data }: { data: Cms }) {
         actions={
           <>
             <ImportButton kind="siteSystem" label="Import CCTV and alarms" />
+            {/* P91: Add is also at the top of the list, not only on each site's line. */}
+            <RecordButton kind="siteSystem" label="Add CCTV or alarm" primary />
             <Select
               className="select op-filter"
               aria-label="Company"

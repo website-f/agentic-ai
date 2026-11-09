@@ -4,7 +4,7 @@ import { CalendarCheckIcon, CarIcon, ClipboardTextIcon, QuestionIcon } from '@ph
 import { useApp } from '../App';
 import { RecordButton } from './RecordForm';
 import { ImportButton } from './ImportDrawer';
-import type { ProofInput, VehicleRenewal } from '@prima/core';
+import { p91MayImport, type ProofInput, type VehicleRenewal } from '@prima/core';
 import { api, type FleetBoard } from '../api';
 import { Card, Empty, Facts, PageHead, Split, Stat, Stats } from '../kit';
 import { Chip, ErrorNotice, Loading, dateLabel, dateTimeLabel, useAction, useLoad, type Tone } from '../ui';
@@ -106,6 +106,8 @@ export function FleetView() {
             <>
               <ImportButton kind="vehicle" companyId={companyId} />
               <RecordButton kind="vehicle" companyId={companyId} label={company ? `Add vehicle (${company.code})` : 'Add vehicle'} primary />
+              {/* P91: fuel and subsidy cards load from the old list by plate (Transport only). */}
+              {p91MayImport(me.user, 'fuelCard') && <ImportButton kind="fuelCard" label="Import fuel cards" />}
             </>
           )
         }

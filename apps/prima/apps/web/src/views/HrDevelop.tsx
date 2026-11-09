@@ -5,6 +5,8 @@ import type { StaffLangId } from "../api/types";
 import { Card, Empty, Person } from "../kit";
 import { Chip, ErrorNotice, Loading, dateLabel, useAction, useLoad } from "../ui";
 import "../styles/hrx.css";
+import { ImportButton } from "./ImportDrawer";
+import { jumpTo } from "./AddImportMenu";
 
 /**
  * HR Phase 3, slice 3F (Fauzan, 2 Nov 2026): training records, the yearly appraisal and the handbook, code of conduct
@@ -27,7 +29,18 @@ export function TrainingPanel({ mine = false }: { mine?: boolean }) {
       flush
       title={mine ? "My training" : "Training"}
       sub="Courses attended, with the HRD Corp claim reference when the levy pays."
-      actions={d.rows.length > 0 ? <span className="hx-count">{d.rows.length > 50 ? `50 of ${d.rows.length}` : d.rows.length} record{d.rows.length === 1 ? "" : "s"}</span> : undefined}
+      actions={
+        <>
+          {d.rows.length > 0 && <span className="hx-count">{d.rows.length > 50 ? `50 of ${d.rows.length}` : d.rows.length} record{d.rows.length === 1 ? "" : "s"}</span>}
+          {/* P91: Add and Import at the top of the list, not only under it. */}
+          {d.canRecord && !mine && (
+            <button className="btn btn-primary btn-sm" onClick={() => jumpTo("hr-training-form")}>
+              Record training
+            </button>
+          )}
+          {d.canRecord && !mine && <ImportButton kind="staffTraining" label="Import training records" />}
+        </>
+      }
     >
       {d.rows.length === 0 && <Empty title="No training recorded." />}
       {d.rows.length > 0 && (
@@ -67,7 +80,7 @@ export function TrainingPanel({ mine = false }: { mine?: boolean }) {
         </ul>
       )}
       {d.canRecord && (
-        <div className="hp-section">
+        <div className="hp-section" id="hr-training-form">
           <div className="hx-form">
             <h3 className="hx-form-title">Record training</h3>
             <div className="hx-form-grid">
@@ -1035,9 +1048,14 @@ export function GuardTrainingPanel() {
       title="Guard training and legal papers"
       sub="KDN guard card, eSIMS vetting, CSG (within the first year) and TNG. HR and the company head record them; KDN counts untrained guards at licence renewal."
       actions={
-        <label className="hp-check hp-switch">
-          <input type="checkbox" checked={only} onChange={(e) => setOnly(e.target.checked)} /> Only guards needing action
-        </label>
+        <>
+          {/* P91: papers for guards already in Prima load from the old list (guards themselves come from the JA app). */}
+          {d.summary.some((s) => s.canManage) && <ImportButton kind="guardPaper" label="Import guard papers" />}
+          {d.summary.some((s) => s.canManage) && <ImportButton kind="staffTraining" label="Import training records" />}
+          <label className="hp-check hp-switch">
+            <input type="checkbox" checked={only} onChange={(e) => setOnly(e.target.checked)} /> Only guards needing action
+          </label>
+        </>
       }
     >
       {d.summary.length > 0 && (

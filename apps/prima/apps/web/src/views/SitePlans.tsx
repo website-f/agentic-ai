@@ -8,6 +8,9 @@ import { api, type CleaningProofInput, type GuardTermsInput, type OfficerHoursIn
 import { useApp } from '../App';
 import { Chip, Drawer, ErrorNotice, Kpi, Loading, dateLabel, hhmm, useAction, useLoad } from '../ui';
 import { ReturnSpec, TimeMarkedPhoto } from './Cleaning';
+import { p91MayImport } from '@prima/core';
+import { PlusIcon } from '@phosphor-icons/react';
+import { ImportButton } from './ImportDrawer';
 
 // ---------- Site stock and fittings ----------
 
@@ -24,13 +27,24 @@ export function SiteStockView() {
           <h1>Site stock and fittings</h1>
           <p>Cleaning supplies and equipment, guard uniforms and site fittings at every site you can see. Inventory monitors; the OM who covers the site records.</p>
         </div>
-        <div className="seg">
-          <button aria-pressed={mode === 'board'} onClick={() => setMode('board')}>
-            All sites
-          </button>
-          <button aria-pressed={mode === 'fittings'} onClick={() => setMode('fittings')}>
-            Fittings for one site
-          </button>
+        <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
+          {/* P91: the OM adds a site's fittings, or loads them from the old list, from the top of the screen. */}
+          {p91MayImport(me.user, 'siteKitItem') && (
+            <>
+              <button className="btn btn-primary" onClick={() => setMode('fittings')}>
+                <PlusIcon size={16} weight="bold" aria-hidden="true" /> Add fittings
+              </button>
+              <ImportButton kind="siteKitItem" label="Import fittings" />
+            </>
+          )}
+          <div className="seg">
+            <button aria-pressed={mode === 'board'} onClick={() => setMode('board')}>
+              All sites
+            </button>
+            <button aria-pressed={mode === 'fittings'} onClick={() => setMode('fittings')}>
+              Fittings for one site
+            </button>
+          </div>
         </div>
       </div>
       {mode === 'board' && (
@@ -177,6 +191,11 @@ function Fittings({ siteId, today }: { siteId: string; today: string }) {
   const manage = d.access === 'manage';
   const dirty = JSON.stringify(items) !== JSON.stringify(d.kit?.items ?? []);
   const set = (i: number, p: Partial<SiteKitItem>) => setItems(items.map((x, j) => (j === i ? { ...x, ...p } : x)));
+  const addItem = () => {
+    let n = items.length + 1;
+    while (items.some((x) => x.id === `item-${n}`)) n++;
+    setItems([...items, { id: `item-${n}`, name: 'New item', category: 'furniture', required: 1, owner: 'company', note: '', atEnd: 'take_back', handOverRef: '' }]);
+  };
   const mgmt = me.user.role === 'director' || (me.user.role === 'pwvsb_officer' && (me.user.opsTier === 'coo' || me.user.opsTier === 'ceo'));
   return (
     <>
@@ -184,6 +203,11 @@ function Fittings({ siteId, today }: { siteId: string; today: string }) {
         <div className="panel-head">
           <h2>Fittings plan: {d.site.name}</h2>
           <div className="row">
+            {manage && (
+              <button className="btn btn-primary btn-sm" onClick={addItem}>
+                <PlusIcon size={14} weight="bold" aria-hidden="true" /> Add an item
+              </button>
+            )}
             <Chip tone={manage ? 'info' : 'neutral'}>{manage ? 'You manage this site' : 'View only'}</Chip>
             {d.status?.checkDue && <Chip tone="warn">Monthly check due</Chip>}
             {d.status?.lastRecord && <Chip tone="neutral">Last record {dateLabel(d.status.lastRecord)}</Chip>}
@@ -255,14 +279,7 @@ function Fittings({ siteId, today }: { siteId: string; today: string }) {
         {!items.length && <div className="empty">No fittings planned for this site.</div>}
         {manage && (
           <div className="panel-body row">
-            <button
-              className="btn btn-sm"
-              onClick={() => {
-                let n = items.length + 1;
-                while (items.some((x) => x.id === `item-${n}`)) n++;
-                setItems([...items, { id: `item-${n}`, name: 'New item', category: 'furniture', required: 1, owner: 'company', note: '', atEnd: 'take_back', handOverRef: '' }]);
-              }}
-            >
+            <button className="btn btn-sm" onClick={addItem}>
               Add an item
             </button>
             <button

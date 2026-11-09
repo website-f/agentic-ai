@@ -19,6 +19,8 @@ import { PayChangesPanel } from './PayChanges';
 import { HrGuide } from './HrGuide';
 import { AttendanceReportsSummary } from './AttendanceReports';
 import { ATT_TAB_KEY } from './Attendance';
+import { hrKeeps, isOwnerAdmin, p91MayImport } from '@prima/core';
+import { AddImportMenu, jumpTo } from './AddImportMenu';
 import '../styles/people.css';
 
 /** The HR work queues, grouped; each group hides itself (and its jump link) when none of its panels apply to this user. */
@@ -83,6 +85,7 @@ export function HrView() {
       <PageHead
         title="HR monitor"
         sub="Workforce papers for every company. PWVSB HR follows up; each company is the employer and makes the change. Companies with no data loaded yet show Unknown, never as fine."
+        actions={<HrAddMenu />}
       />
       <Stats>
         <Stat label="Staff (companies with data)" value={sum('staff')} icon={<UsersThreeIcon />} tone="info" />
@@ -196,8 +199,12 @@ export function HrView() {
       <Group {...leave}>
         <LeavePanel />
         <FlexPanel />
-        <HrLeaveSettingsPanel />
-        <HolidaysPanel />
+        <div id="hr-leave-settings">
+          <HrLeaveSettingsPanel />
+        </div>
+        <div id="hr-holidays">
+          <HolidaysPanel />
+        </div>
         <CmsHoursPanel />
       </Group>
       <Group {...att}>
@@ -213,5 +220,26 @@ export function HrView() {
         />
       </Group>
     </div>
+  );
+}
+
+/**
+ * P91 (Fitri, 9 Nov 2026): what HR adds on this page, and what loads from old lists, at the top of the page instead of
+ * deep in each group. Each entry shows only to those the server lets add it.
+ */
+function HrAddMenu() {
+  const { me, go } = useApp();
+  const u = me.user;
+  const maker = hrKeeps(u) || isOwnerAdmin(u);
+  return (
+    <AddImportMenu
+      entries={[
+        { key: 'training', label: 'Training record', onAdd: maker ? () => jumpTo('hr-training-form') : undefined, importKind: p91MayImport(u, 'staffTraining') ? 'staffTraining' : undefined },
+        { key: 'papers', label: 'Guard papers (KDN, CSG, TNG)', onAdd: p91MayImport(u, 'guardPaper') ? () => go({ view: 'people' }) : undefined, importKind: p91MayImport(u, 'guardPaper') ? 'guardPaper' : undefined },
+        { key: 'holiday', label: 'Public holidays', onAdd: maker ? () => jumpTo('hr-holidays') : undefined, importKind: maker ? 'publicHoliday' : undefined },
+        { key: 'leave', label: 'Leave days above the Act', onAdd: maker ? () => jumpTo('hr-leave-settings') : undefined, importKind: maker ? 'leaveEntitlement' : undefined },
+        { key: 'staff', label: 'Office staff', onAdd: maker ? () => go({ view: 'people' }) : undefined },
+      ]}
+    />
   );
 }

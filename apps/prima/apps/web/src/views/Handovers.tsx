@@ -45,6 +45,12 @@ const IMPORT_KINDS: [ImportKind, string][] = [
   ['client', 'Clients'],
   ['contract', 'Client contracts'],
   ['leaveEntitlement', 'Leave days above the Act'],
+  // P91: Operations, Security, Equipment and HR records (each page has its own Import too).
+  ['staffTraining', 'Training records'],
+  ['guardPaper', 'Guard papers (KDN, CSG, TNG)'],
+  ['fuelCard', 'Fuel cards'],
+  ['cmsDevice', 'Site devices for CMS'],
+  ['siteKitItem', 'Site fittings'],
 ];
 
 const STATUS = { live: 'Ready', in_pr: 'Waits for its department PR', direct: 'Already linked; notice added', waits: 'Waits for an outside system' } as const;

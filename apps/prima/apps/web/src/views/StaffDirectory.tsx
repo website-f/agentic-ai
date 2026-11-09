@@ -8,6 +8,8 @@ import {
 import { api } from "../api";
 import { Chip, ErrorNotice, Kpi, Loading, useAction, useLoad } from "../ui";
 import { Empty, PageHead } from "../kit";
+import { PlusIcon, UploadSimpleIcon } from "@phosphor-icons/react";
+import { jumpTo } from "./AddImportMenu";
 
 /**
  * Staff directory (Fauzan, 4 Nov 2026): HR loads the office staff list once (preview, send, and the HR Director or the
@@ -73,6 +75,21 @@ function Directory() {
   const waiting = b.batches.filter((x) => x.status === "waiting");
   return (
     <>
+      {/* P91: the two ways to add, at the top: the whole list from a file (approved as a batch) or one person. */}
+      {(b.can.prepare || b.can.addOne) && (
+        <div className="p91-actions" style={{ marginBottom: 12 }}>
+          {b.can.addOne && (
+            <button className="btn btn-primary" onClick={() => jumpTo("sd-add-one")}>
+              <PlusIcon size={16} weight="bold" aria-hidden="true" /> Add one person
+            </button>
+          )}
+          {b.can.prepare && (
+            <button className="btn" onClick={() => jumpTo("sd-import")}>
+              <UploadSimpleIcon size={16} weight="bold" aria-hidden="true" /> Load the staff list (CSV)
+            </button>
+          )}
+        </div>
+      )}
       <div className="kpis">
         <Kpi label="People listed" value={b.entries.length} />
         <Kpi
@@ -97,8 +114,16 @@ function Directory() {
         />
       </div>
       {b.batches.length > 0 && <Batches batches={b.batches} />}
-      {b.can.prepare && <Import />}
-      {b.can.addOne && <AddOne />}
+      {b.can.prepare && (
+        <div id="sd-import">
+          <Import />
+        </div>
+      )}
+      {b.can.addOne && (
+        <div id="sd-add-one">
+          <AddOne />
+        </div>
+      )}
       <section className="panel">
         <div className="panel-head">
           <h3>Everyone listed</h3>

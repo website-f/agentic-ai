@@ -8,6 +8,7 @@ import {
   cleanGrid,
   extractPdfTable,
   headerSignature,
+  importSpec,
   normHeader,
   normaliseTable,
   parseCsv,
@@ -45,6 +46,14 @@ import '../styles/import.css';
  */
 
 const isRecordKind = (k: ImportKind): k is RecordKind => Object.prototype.hasOwnProperty.call(RECORD_KINDS, k);
+/** P91: a field's header words from the kind's spec in core (the same table the server checks with). */
+function specWords(kind: ImportKind, key: string): string[] | undefined {
+  try {
+    return (importSpec(kind).fields.find((f) => f.key === key) as { words?: string[] } | undefined)?.words;
+  } catch {
+    return undefined;
+  }
+}
 const MAX_FILE = 8_000_000;
 const MAX_CSV = 1_000_000;
 const SEVERAL = '*';
@@ -173,7 +182,7 @@ const errOf = (e: unknown): Err => ({ message: e instanceof ApiError || e instan
 /** What each column is matched to, and how sure: from the matcher, then the person's own choices. */
 type ColState = { field: string; level: SmartLevel | null; how: SmartColumn['how']; why: string };
 
-function ImportDrawer({
+export function ImportDrawer({
   kind,
   companyId: given,
   choices: offered,
@@ -246,6 +255,8 @@ function ImportDrawer({
               type: c.type as AlignField['type'],
               required: c.required,
               options: c.choices?.map((l): [string, string] => [l, l]),
+              // P91: the record's own header words (English and Malay) from its spec, which the template does not carry.
+              words: specWords(kind, c.key),
             })),
             ...(tpl.companyScoped ? [{ key: COMPANY_FIELD, label: 'Company', type: 'text' as const }] : []),
           ]
