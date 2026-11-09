@@ -63,7 +63,18 @@ services:
       - "${AGENTIC_MEDIA_DIR:-media}:/data/media"
 
   worker:
-    environment: *prod-env
+    # P96 (50 people running ePerolehan at once): two worker processes, 32 steps each. The
+    # worker holds no PC sockets (only the api does), Telegram polling and schedules are
+    # already safe with several workers, so replicas just add capacity and a spare when one
+    # restarts. Per replica: 1 CPU, 1.5 GB, a pool of 32 + 32 (2 x 64 + api 20 + Temporal ~40
+    # stays under Postgres max_connections 200). docker-compose.small.yml sets 1.
+    deploy:
+      replicas: ${AGENTIC_WORKER_REPLICAS:-2}
+    environment:
+      <<: *prod-env
+      AGENTIC_WORKER_MAX_ACTIVITIES: ${AGENTIC_WORKER_MAX_ACTIVITIES:-32}
+      AGENTIC_DB_POOL_SIZE: ${AGENTIC_WORKER_DB_POOL:-32}
+      AGENTIC_DB_MAX_OVERFLOW: ${AGENTIC_WORKER_DB_OVERFLOW:-32}
     volumes:
       - "${AGENTIC_VAULT_DIR:-vault}:/data/vault"
       - "${AGENTIC_MEDIA_DIR:-media}:/data/media"

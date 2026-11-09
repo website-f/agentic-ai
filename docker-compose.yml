@@ -118,7 +118,7 @@ services:
       -c maintenance_work_mem=128MB
       -c random_page_cost=1.1
       -c wal_compression=on
-      -c max_connections=150
+      -c max_connections=${PG_MAX_CONNECTIONS:-200}
     environment:
       POSTGRES_USER: agentic
       POSTGRES_PASSWORD: ${AGENTIC_DB_PASSWORD:-agentic_dev}
@@ -212,7 +212,11 @@ services:
     # Forwarded headers are trusted only from private (Docker network) addresses: in practice
     # the web container, whose nginx overwrites X-Forwarded-For / X-Real-IP with the real
     # client address (deploy/nginx/web.conf). Nothing public reaches the api directly.
-    command: ["sh", "-c", "alembic upgrade head && python -m agentic.seed && exec uvicorn agentic.api.main:app --host 0.0.0.0 --port 8501 --proxy-headers --forwarded-allow-ips '${AGENTIC_FORWARDED_ALLOW_IPS:-127.0.0.1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16}'"]
+    # P96 --ws-per-message-deflate false: this one process relays every PC's browser (CDP:
+    # page trees, screenshots). Playwright asks for compressed frames, so each frame was zlib
+    # compressed here for the browser service on the same host, on the api's single core.
+    # The PC app never compresses what it sends, so nothing is lost on the internet side.
+    command: ["sh", "-c", "alembic upgrade head && python -m agentic.seed && exec uvicorn agentic.api.main:app --host 0.0.0.0 --port 8501 --proxy-headers --ws-per-message-deflate false --forwarded-allow-ips '${AGENTIC_FORWARDED_ALLOW_IPS:-127.0.0.1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16}'"]
     environment: *app-env
     depends_on:
       postgres: { condition: service_healthy }
@@ -249,9 +253,14 @@ services:
     command: ["python", "-m", "agentic.workflows.worker"]
     environment:
       <<: *app-env
+      # P96: steps at once in ONE worker process, and its database pool. A step gives its
+      # connection back while it waits for the model or a browser, so few are in use at once,
+      # but the pool still allows two per running step (the worker caps its steps at
+      # (pool + overflow) / 2 if these disagree). Postgres max_connections (200) must cover
+      # every replica's pool + overflow, the api's 20 and Temporal's ~40.
       AGENTIC_WORKER_MAX_ACTIVITIES: ${AGENTIC_WORKER_MAX_ACTIVITIES:-16}
-      AGENTIC_DB_POOL_SIZE: ${AGENTIC_WORKER_DB_POOL:-24}
-      AGENTIC_DB_MAX_OVERFLOW: "16"
+      AGENTIC_DB_POOL_SIZE: ${AGENTIC_WORKER_DB_POOL:-16}
+      AGENTIC_DB_MAX_OVERFLOW: ${AGENTIC_WORKER_DB_OVERFLOW:-16}
     volumes:
       - "${AGENTIC_VAULT_DIR:-vault}:/data/vault"
       - "${AGENTIC_MEDIA_DIR:-media}:/data/media"
