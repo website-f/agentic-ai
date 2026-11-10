@@ -15,6 +15,7 @@ import asyncio
 from datetime import timedelta
 
 import httpx
+import pytest
 from sqlalchemy import select
 
 from agentic.agents.tools import TOOLS, ToolContext
@@ -27,6 +28,23 @@ from .conftest import csrf
 from .test_agents import llm, new_agent, office, temporal  # noqa: F401
 from .test_devices import FakePC, fake_offline, fake_online, ids_of, link, personal_agent
 from .test_office_roles import as_role, member
+
+
+@pytest.fixture(autouse=True)
+def _portal_dns(monkeypatch):
+    """P96: the portal's address is looked up for the web-task form; a real DNS lookup failed
+    once under load in the full suite, so these tests answer it themselves."""
+    from agentic.core import ssrf
+
+    real = ssrf._resolve
+
+    async def resolve(host: str, port: int) -> list[str]:
+        if host == "eperolehan.gov.my" or host.endswith(".eperolehan.gov.my"):
+            return ["175.136.1.10"]
+        return await real(host, port)
+
+    monkeypatch.setattr(ssrf, "_resolve", resolve)
+
 
 EP = "eperolehan.gov.my"
 

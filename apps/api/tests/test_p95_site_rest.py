@@ -90,7 +90,10 @@ async def _resting_task(client, llm, monkeypatch):  # noqa: F811
         return "Error: SITE_REST 7800: outside office hours on the site"
 
     monkeypatch.setattr(runtime, "run_tool_once", resting)
-    llm.call("browser_open", url="https://www.eperolehan.gov.my/")
+    # Queued a few times: in the full suite a stray background call from an earlier test once
+    # took the only scripted answer. The step rests at the first one; the rest go unused.
+    for _ in range(3):
+        llm.call("browser_open", url="https://www.eperolehan.gov.my/")
     r = await runtime.run_task_step(t["id"])
     assert r.state == "rest"
     async with SessionLocal() as db:  # as the live run is (the test doorway starts nothing)

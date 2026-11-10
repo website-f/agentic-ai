@@ -17,6 +17,7 @@ from datetime import timedelta
 from pathlib import Path
 
 import httpx
+import pytest
 from sqlalchemy import select
 
 from agentic.agents import browser_grant, runtime
@@ -32,6 +33,23 @@ from .conftest import csrf
 from .test_agents import llm, new_agent, office, temporal  # noqa: F401
 from .test_devices import FakePC, fake_offline, fake_online, ids_of, link
 from .test_office_roles import as_role
+
+
+@pytest.fixture(autouse=True)
+def _portal_dns(monkeypatch):
+    """P96: the portal's address is looked up for the web-task form; a real DNS lookup failed
+    once under load in the full suite, so these tests answer it themselves."""
+    from agentic.core import ssrf
+
+    real = ssrf._resolve
+
+    async def resolve(host: str, port: int) -> list[str]:
+        if host == "eperolehan.gov.my" or host.endswith(".eperolehan.gov.my"):
+            return ["175.136.1.10"]
+        return await real(host, port)
+
+    monkeypatch.setattr(ssrf, "_resolve", resolve)
+
 
 EP_BRIEF = "Open https://www.eperolehan.gov.my and check quotation QT260123 for Maju Sdn Bhd."
 

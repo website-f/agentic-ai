@@ -267,6 +267,7 @@ STAFF_OK = {
     # scoped to their own AI (test_p29_security)
     "/api/brain/facts", "/api/brain/page", "/api/brain/pages", "/api/brain/search",
     "/api/devices/my-pc-status", "/api/lessons", "/api/learning/digest",  # their own PC and AI
+    "/api/procedures/summary",  # P96: learned work of the agents they see (their own AI)
     "/api/branches/starter-teams", "/api/broadcasts", "/api/budgets", "/api/calendar-drafts",
     "/api/channels", "/api/channels/{channel_id}/whatsapp", "/api/chat/recent",
     "/api/company-kits", "/api/deals", "/api/deals/summary",
