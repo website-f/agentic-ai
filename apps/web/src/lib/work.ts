@@ -141,6 +141,11 @@ export interface Task {
   objective_id?: string | null;
   objective_title?: string | null;
   root_task_id?: string | null;
+  /** P97: a task for a person (a member) instead of an agent, their name, who gave it, when it is due. */
+  assignee_user_id?: string | null;
+  assignee_user_name?: string | null;
+  created_by_name?: string | null;
+  due_at?: string | null;
 }
 
 /** POST /api/tasks/retry-failed */

@@ -497,6 +497,11 @@ from .routers import feedback as feedback_router  # noqa: E402
 
 app.include_router(feedback_router.router)
 
+# P97: tasks given to people, the people I may give work to, comments, a step to my AI.
+from .routers import team_work as team_work_router  # noqa: E402
+
+app.include_router(team_work_router.router)
+
 # P81: delete many files and SOPs at once (Library, Browse, SOPs).
 from .routers import bulk_delete as bulk_delete_router  # noqa: E402
 

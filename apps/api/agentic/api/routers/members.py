@@ -25,6 +25,7 @@ from ...models import (
     User,
 )
 from ...services import audit, identity
+from ...teams import people
 from ..deps import Principal, api_error, current_principal, require
 from ..schemas import (
     MemberCreateIn,
@@ -35,6 +36,7 @@ from ..schemas import (
     MembersBulkResult,
     MembersPageOut,
     MembersSummary,
+    MemberTeamIn,
     MemberUpdateIn,
     TempPasswordOut,
 )
@@ -50,10 +52,16 @@ def _out(
     m: Membership,
     names: dict[str, str] | None = None,
     agents: dict[str, int] | None = None,
+    org: "Org | None" = None,
 ) -> MemberOut:
     u = m.user
     names = names or {}
+    org = org or Org()
     return MemberOut(
+        reports_to_user_id=m.reports_to_user_id,
+        reports_to_name=org.people.get(m.reports_to_user_id or ""),
+        heads_department=bool(m.heads_department),
+        manages=org.manages.get(u.id, 0),
         branch_id=m.branch_id,
         branch_name=names.get(m.branch_id or ""),
         department_id=m.department_id,
@@ -69,6 +77,38 @@ def _out(
         joined_at=m.created_at,
         microsoft=bool(m.ms_oid),
     )
+
+
+class Org:
+    """P97: managers' names and how many report to each, for member rows (two queries)."""
+
+    def __init__(
+        self, people_: dict[str, str] | None = None, manages: dict[str, int] | None = None
+    ):
+        self.people = people_ or {}
+        self.manages = manages or {}
+
+    @classmethod
+    async def load(cls, db: AsyncSession, ws: str, rows: list[Membership]) -> "Org":
+        bosses = {m.reports_to_user_id for m in rows if m.reports_to_user_id}
+        ids = [m.user_id for m in rows]
+        manages = (
+            dict(
+                (
+                    await db.execute(
+                        select(Membership.reports_to_user_id, func.count())
+                        .where(
+                            Membership.workspace_id == ws,
+                            Membership.reports_to_user_id.in_(ids),
+                        )
+                        .group_by(Membership.reports_to_user_id)
+                    )
+                ).all()
+            )
+            if ids
+            else {}
+        )
+        return cls(await people.names(db, bosses), manages)
 
 
 async def _membership(db: AsyncSession, workspace_id: str, user_id: str) -> Membership:
@@ -341,6 +381,7 @@ async def list_members(
     company: str = Query(default="", max_length=40),
     department: str = Query(default="", max_length=40),
     role: str = Query(default="", max_length=20),
+    manager: str = Query(default="", max_length=40),
     status_: str = Query(default="", alias="status", max_length=20),
     sort: str = Query(default="name", max_length=20),
     dir: str = Query(default="asc", max_length=4),
@@ -362,7 +403,9 @@ async def list_members(
         ).all()
         agents = {uid: n for uid, n in (await db.execute(_agent_counts(principal))).all() if uid}
         names = await _names(db, ws)
-        return [_out(m, names, agents) for m in rows if _member_in_scope(principal, m)]
+        seen = [m for m in rows if _member_in_scope(principal, m)]
+        org = await Org.load(db, ws, seen)
+        return [_out(m, names, agents, org) for m in seen]
 
     if page_size not in PAGE_SIZES:
         raise api_error(
@@ -386,6 +429,10 @@ async def list_members(
         where.append(Membership.department_id == department)
     if role:
         where.append(Membership.role == role)
+    if manager == "none":
+        where.append(Membership.reports_to_user_id.is_(None))
+    elif manager:
+        where.append(Membership.reports_to_user_id == manager)
     if status_ in STATUSES:
         where.append(_status_where(status_))
     branch = aliased(Branch)
@@ -424,8 +471,9 @@ async def list_members(
         else {}
     )
     names = await _names(db, ws)
+    org = await Org.load(db, ws, list(rows))
     return MembersPageOut(
-        items=[_out(m, names, agents) for m in rows],
+        items=[_out(m, names, agents, org) for m in rows],
         total=total,
         page=page,
         page_size=page_size,
@@ -528,20 +576,192 @@ async def update_member(
     principal: Principal = Depends(people_manager()),
     db: AsyncSession = Depends(get_db),
 ) -> MemberOut:
-    if body.role is None and body.name is None and body.email is None:
+    org_change = body.heads_department is not None or "reports_to_user_id" in body.model_fields_set
+    if body.role is None and body.name is None and body.email is None and not org_change:
         raise api_error(
             status.HTTP_422_UNPROCESSABLE_CONTENT, "nothing_to_change", "Nothing to change."
         )
     if body.role is not None:
         await change_access(db, principal, user_id, body.role, body.branch_id, body.department_id)
+    if "reports_to_user_id" in body.model_fields_set:
+        await set_manager(db, principal, user_id, body.reports_to_user_id)
+    if body.heads_department is not None:
+        await set_head(db, principal, user_id, body.heads_department)
     # P92: a name or email typed wrong (in the form or an import) is corrected here. Last:
     # every check runs before anything is saved.
     if body.name is not None or body.email is not None:
         await change_identity(db, principal, user_id, body.name, body.email)
     await db.commit()
+    return await _one_out(db, principal, user_id)
+
+
+async def _one_out(db: AsyncSession, principal: Principal, user_id: str) -> MemberOut:
     m = await _membership(db, principal.workspace_id, user_id)
     await db.refresh(m)
-    return _out(m, await _names(db, principal.workspace_id))
+    org = await Org.load(db, principal.workspace_id, [m])
+    return _out(m, await _names(db, principal.workspace_id), None, org)
+
+
+# ---------------------------------------------------------------- P97 who reports to whom
+
+
+def _org_editor(principal: Principal) -> None:
+    """Who reports to whom and who heads a department: whoever manages all members
+    (members.manage: owner, admin, management, HR by default)."""
+    if not can(principal.role, "members.manage"):
+        raise api_error(
+            status.HTTP_403_FORBIDDEN,
+            "forbidden",
+            "Only owners, admins, management and HR set who reports to whom.",
+        )
+
+
+async def set_manager(
+    db: AsyncSession, principal: Principal, user_id: str, manager_id: str | None
+) -> Membership:
+    """One person reports to `manager_id` (None: to no one), with every rule; the caller
+    commits. The manager is a member in a role that manages people; no loops."""
+    _org_editor(principal)
+    m = await _membership(db, principal.workspace_id, user_id)
+    if not _member_in_scope(principal, m):
+        raise api_error(status.HTTP_404_NOT_FOUND, "member_not_found", "That member is not here.")
+    _check_can_touch(principal, m.role)
+    if manager_id == m.reports_to_user_id:
+        return m
+    if manager_id is not None:
+        if manager_id == user_id:
+            raise api_error(
+                status.HTTP_400_BAD_REQUEST, "self_manager", "Nobody reports to themselves."
+            )
+        boss = await db.get(Membership, (principal.workspace_id, manager_id))
+        if boss is None or not boss.user.is_active:
+            raise api_error(
+                status.HTTP_400_BAD_REQUEST, "bad_manager", "Pick a manager who is a member here."
+            )
+        if boss.role not in people.MANAGER_ROLES:
+            raise api_error(
+                status.HTTP_400_BAD_REQUEST,
+                "not_a_manager",
+                "{name} is {role}, a role that does not manage people. Make them a head of "
+                "department, supervisor or manager first.",
+                name=boss.user.name,
+                role=role_label(boss.role),
+            )
+        up, seen = boss, set()
+        while up is not None and up.reports_to_user_id and up.user_id not in seen:
+            seen.add(up.user_id)
+            if up.reports_to_user_id == user_id:
+                raise api_error(
+                    status.HTTP_409_CONFLICT,
+                    "manager_loop",
+                    "{boss} already reports to {name}, so {name} cannot report to {boss}.",
+                    boss=boss.user.name,
+                    name=m.user.name,
+                )
+            up = await db.get(Membership, (principal.workspace_id, up.reports_to_user_id))
+    before = m.reports_to_user_id
+    m.reports_to_user_id = manager_id
+    await audit.record(
+        db,
+        principal.workspace_id,
+        principal.actor,
+        "member.manager_changed",
+        target=user_id,
+        before={"reports_to": before},
+        after={"reports_to": manager_id},
+    )
+    await db.flush()
+    return m
+
+
+async def set_head(db: AsyncSession, principal: Principal, user_id: str, on: bool) -> Membership:
+    """P97: this person heads the department they sit in (a department may have several)."""
+    _org_editor(principal)
+    m = await _membership(db, principal.workspace_id, user_id)
+    if not _member_in_scope(principal, m):
+        raise api_error(status.HTTP_404_NOT_FOUND, "member_not_found", "That member is not here.")
+    _check_can_touch(principal, m.role)
+    if on and not m.department_id:
+        raise api_error(
+            status.HTTP_400_BAD_REQUEST,
+            "no_department",
+            "Put them in a department first: they head the department they sit in.",
+        )
+    if bool(m.heads_department) != on:
+        m.heads_department = on
+        await audit.record(
+            db,
+            principal.workspace_id,
+            principal.actor,
+            "member.head_changed",
+            target=user_id,
+            after={"heads_department": on, "department_id": m.department_id},
+        )
+        await db.flush()
+    return m
+
+
+@router.get("/{user_id}/team")
+async def member_team(
+    user_id: str,
+    principal: Principal = Depends(require("read")),
+    db: AsyncSession = Depends(get_db),
+) -> list[MemberOut]:
+    """P97: the people who report to this member (anyone who may see the member)."""
+    m = await _membership(db, principal.workspace_id, user_id)
+    if not _member_in_scope(principal, m):
+        raise api_error(status.HTTP_404_NOT_FOUND, "member_not_found", "That member is not here.")
+    rows = list(
+        (
+            await db.scalars(
+                select(Membership)
+                .join(User, User.id == Membership.user_id)
+                .where(
+                    Membership.workspace_id == principal.workspace_id,
+                    Membership.reports_to_user_id == user_id,
+                )
+                .order_by(func.lower(User.name))
+            )
+        ).all()
+    )
+    names = await _names(db, principal.workspace_id)
+    org = await Org.load(db, principal.workspace_id, rows)
+    return [_out(r, names, None, org) for r in rows]
+
+
+@router.put("/{user_id}/team")
+async def set_member_team(
+    user_id: str,
+    body: MemberTeamIn,
+    principal: Principal = Depends(current_principal),
+    db: AsyncSession = Depends(get_db),
+) -> MembersBulkOut:
+    """P97: exactly these people report to this member ("Manages"): the ones listed are
+    placed under them, the ones who reported to them and are not listed report to no one.
+    Each change follows set_manager's rules; anyone the rules stop is skipped and says why."""
+    _org_editor(principal)
+    boss = await _membership(db, principal.workspace_id, user_id)
+    if not _member_in_scope(principal, boss):
+        raise api_error(status.HTTP_404_NOT_FOUND, "member_not_found", "That member is not here.")
+    want = list(dict.fromkeys(body.user_ids))
+    now = set(await people.direct_reports(db, principal.workspace_id, user_id))
+    results: list[MembersBulkResult] = []
+    for uid, target in [*((u, user_id) for u in want), *((u, None) for u in now - set(want))]:
+        try:
+            async with db.begin_nested():
+                await set_manager(db, principal, uid, target)
+        except HTTPException as e:
+            detail = e.detail if isinstance(e.detail, dict) else {"message": str(e.detail)}
+            results.append(
+                MembersBulkResult(
+                    user_id=uid, ok=False, message=render(detail.get("message", ""), current_lang())
+                )
+            )
+            continue
+        results.append(MembersBulkResult(user_id=uid, ok=True))
+    await db.commit()
+    done = sum(1 for r in results if r.ok)
+    return MembersBulkOut(results=results, done=done, skipped=len(results) - done)
 
 
 async def email_taken(db: AsyncSession, email: str, user_id: str) -> bool:
@@ -691,6 +911,17 @@ async def change_access(
             status.HTTP_400_BAD_REQUEST, "last_owner", "A workspace needs at least one owner."
         )
     before = {"role": m.role, "branch_id": m.branch_id, "department_id": m.department_id}
+    if department_id != m.department_id:
+        m.heads_department = False  # P97: they headed the department they left
+    if role not in people.MANAGER_ROLES and m.role in people.MANAGER_ROLES:
+        # P97: a role that manages no one: the people who reported to them report to no one.
+        for r in await db.scalars(
+            select(Membership).where(
+                Membership.workspace_id == m.workspace_id,
+                Membership.reports_to_user_id == user_id,
+            )
+        ):
+            r.reports_to_user_id = None
     m.role, m.branch_id, m.department_id = role, branch_id, department_id
     await audit.record(
         db,
@@ -722,6 +953,13 @@ async def remove_one(db: AsyncSession, principal: Principal, user_id: str) -> No
             status.HTTP_400_BAD_REQUEST, "last_owner", "A workspace needs at least one owner."
         )
     email = m.user.email
+    for r in await db.scalars(  # P97: their people report to no one now
+        select(Membership).where(
+            Membership.workspace_id == principal.workspace_id,
+            Membership.reports_to_user_id == user_id,
+        )
+    ):
+        r.reports_to_user_id = None
     await db.delete(m)
     await db.execute(
         delete(AuthSession).where(
@@ -761,12 +999,16 @@ async def bulk(
     (never half done: one person's refusal never undoes the others)."""
     if body.action == "access" and body.role is None:
         raise api_error(status.HTTP_422_UNPROCESSABLE_CONTENT, "role_required", "Pick a role.")
+    if body.action == "manager":
+        _org_editor(principal)
     results: list[MembersBulkResult] = []
     for user_id in dict.fromkeys(body.user_ids):  # each person once
         try:
             async with db.begin_nested():
                 if body.action == "remove":
                     await remove_one(db, principal, user_id)
+                elif body.action == "manager":  # P97: they all report to this manager
+                    await set_manager(db, principal, user_id, body.manager_id)
                 else:
                     assert body.role is not None
                     await change_access(

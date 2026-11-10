@@ -95,8 +95,14 @@ class Membership(Timestamps, Base):
     # by Microsoft. Prima links its staff by this ID (agentic/prima).
     ms_tenant_id: Mapped[str | None] = mapped_column(String(80))
     ms_oid: Mapped[str | None] = mapped_column(String(80))
+    # P97: the manager this person reports to here (an HOD, supervisor or manager "manages"
+    # the people who report to them: teams/people.py), and whether they head their department.
+    reports_to_user_id: Mapped[str | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL")
+    )
+    heads_department: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
 
-    user: Mapped[User] = relationship(lazy="joined")
+    user: Mapped[User] = relationship(lazy="joined", foreign_keys=[user_id])
 
 
 class AuthSession(Base):
@@ -427,6 +433,7 @@ class Task(Timestamps, Base):
         ),
         Index("ix_tasks_ws_status", "workspace_id", "status"),
         Index("ix_tasks_assignee_status", "assignee_agent_id", "status"),  # P96
+        Index("ix_tasks_assignee_user_status", "assignee_user_id", "status"),  # P97
     )
 
     id: Mapped[str] = mapped_column(String(40), primary_key=True, default=lambda: new_id("tk"))
@@ -490,6 +497,12 @@ class Task(Timestamps, Base):
     # P38: the model group this task runs on instead of its agent's (a person chose another
     # AI on retry). Null = the agent's group.
     model_group: Mapped[str | None] = mapped_column(String(40))
+    # P97: a task for a person (a member) instead of an agent; never both. A person's task
+    # never starts an agent run; its board moves follow teams/people.py PERSON_MOVES.
+    assignee_user_id: Mapped[str | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL")
+    )
+    due_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class AgentMessage(Base):

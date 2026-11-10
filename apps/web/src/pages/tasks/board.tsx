@@ -22,7 +22,7 @@ import {
 } from "@dnd-kit/core";
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy, type SortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { ArrowClockwiseIcon, ArrowLeftIcon, ArrowRightIcon, CaretRightIcon, EyeIcon, KanbanIcon, PlusIcon, PushPinIcon, SealCheckIcon, WarningIcon, XIcon } from "@phosphor-icons/react";
+import { ArrowClockwiseIcon, ArrowLeftIcon, ArrowRightIcon, CalendarBlankIcon, CaretRightIcon, EyeIcon, KanbanIcon, ListBulletsIcon, PlusIcon, PushPinIcon, SealCheckIcon, WarningIcon, XIcon } from "@phosphor-icons/react";
 import { useMutation, useQuery, useQueryClient, useSuspenseQuery, type QueryKey } from "@tanstack/react-query";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import { motion, useReducedMotion } from "motion/react";
@@ -30,12 +30,13 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { toast } from "sonner";
 
-import { AgentAvatar } from "@/components/agent-avatar";
+import { AssigneeFace, assigneeName } from "@/components/person-avatar";
 import { openTaskComposer } from "@/components/task-composer/store";
 import { LoadMore } from "@/components/load-more";
 import { ObjectiveChip } from "@/components/objective-bits";
 import { EmptyState, Page, PageHeader } from "@/components/page";
 import { Button } from "@/components/ui/button";
+import { ResponsiveDialog } from "@/components/ui/dialog";
 import { Toolbar } from "@/components/ui/card";
 import { ConfirmDialog } from "@/components/ui/confirm";
 import { Pill } from "@/components/ui/pill";
@@ -46,6 +47,7 @@ import { msg, useT } from "@/i18n";
 import { api, errorMessage } from "@/lib/api";
 import { ALL_COMPANIES, useCompanies } from "@/lib/company";
 import { pinsQuery } from "@/lib/desk";
+import { canMoveTask, isPersonTask, MANAGER_ROLES, movesFor, teamPeopleQuery } from "@/lib/people";
 import { editPaged, useDebounced, usePagedList, type PagedList } from "@/lib/paged";
 import { keys, meQuery } from "@/lib/queries";
 import type { Branch } from "@/lib/types";
@@ -55,16 +57,22 @@ import { cn, shortAge, timeAgo } from "@/lib/utils";
 import { PRIORITY_INFO, STATUS_INFO, VISIBILITY, workKeys, type RetryFailedResult, type Task, type TaskStatus } from "@/lib/work";
 
 import { ReviewRoundPill, waitingPath, WaitingChip, type TaskX } from "./accountable";
+import { PeopleStrip } from "./people-strip";
+import { QuickAdd } from "./quick-add";
 import { TaskSheet } from "./task-sheet";
+import { DueChip, DueView, ListView } from "./team-views";
 
-const COLUMNS: { status: TaskStatus; hint: string; empty: string }[] = [
-  { status: "triage", hint: msg("Not started"), empty: msg("New tasks without an agent land here.") },
-  { status: "ready", hint: msg("Queued to run"), empty: msg("Nothing queued.") },
-  { status: "running", hint: msg("Agents working"), empty: msg("No agent is working right now.") },
+// P97: one board for people and AI. Columns keep their states; "Running" reads "In progress"
+// here, since people work on cards too.
+const COLUMNS: { status: TaskStatus; label?: string; hint: string; empty: string }[] = [
+  { status: "triage", label: msg("New"), hint: msg("Not started"), empty: msg("New tasks wait here until someone takes them.") },
+  { status: "ready", label: msg("To do"), hint: msg("Taken or queued"), empty: msg("Nothing queued.") },
+  { status: "running", label: msg("In progress"), hint: msg("Being worked on"), empty: msg("Nobody is working on anything right now.") },
   { status: "blocked", hint: msg("A decision or a task"), empty: msg("Nothing is waiting on you.") },
   { status: "review", hint: msg("Check and accept"), empty: msg("Nothing to review.") },
   { status: "done", hint: msg("Accepted"), empty: msg("Accepted work shows here.") },
 ];
+const columnLabel = (s: TaskStatus) => COLUMNS.find((c) => c.status === s)?.label ?? STATUS_INFO[s].label;
 
 /** The status colour as a small dot beside the column name (the label carries the meaning). */
 const DOT: Record<(typeof STATUS_INFO)[TaskStatus]["tone"], string> = {
@@ -76,16 +84,9 @@ const DOT: Record<(typeof STATUS_INFO)[TaskStatus]["tone"], string> = {
   danger: "bg-danger",
 };
 
-/** Same rules as the API (routers/tasks.py MANUAL_MOVES). Running and blocked are agent-driven. */
-const MOVES: Partial<Record<TaskStatus, TaskStatus[]>> = {
-  triage: ["ready", "cancelled"],
-  ready: ["triage", "cancelled"],
-  review: ["done", "cancelled"],
-  failed: ["triage", "cancelled"],
-  done: ["triage"],
-  cancelled: ["triage"],
-};
-const canMove = (from: TaskStatus | null | undefined, to: TaskStatus) => !!from && (MOVES[from] ?? []).includes(to);
+/** Same rules as the API: an agent's task (routers/tasks.py MANUAL_MOVES; running and blocked
+ * are agent-driven) or a person's (teams/people.py PERSON_MOVES), see lib/people.ts. */
+const canMove = canMoveTask;
 
 /** A short buzz where the phone supports it (Android; iOS Safari ignores it). */
 const buzz = (ms = 10) => {
@@ -172,8 +173,9 @@ function CardContent({ task, company }: { task: Task; company?: Branch }) {
       ) : task.status === "failed" && task.error ? (
         <p className="line-clamp-2 rounded-[6px] bg-danger/8 px-2 py-1 text-[12px] break-words text-danger">{task.error}</p>
       ) : null}
-      {task.labels?.length || urgent || task.pending_approvals || company || (task as TaskX).review_round || task.objective_title || shared ? (
+      {task.labels?.length || urgent || task.pending_approvals || company || (task as TaskX).review_round || task.objective_title || shared || task.due_at ? (
         <span className="flex min-w-0 flex-wrap gap-1">
+          <DueChip task={task} />
           {company ? <CompanyTag company={company} /> : null}
           {shared ? <Pill tone="info" title={t(shared.hint)}><EyeIcon size={11} weight="bold" /> {t(shared.label)}</Pill> : null}
           {task.objective_title ? <ObjectiveChip title={task.objective_title} /> : null}
@@ -184,10 +186,11 @@ function CardContent({ task, company }: { task: Task; company?: Branch }) {
         </span>
       ) : null}
       <div className="flex min-w-0 items-center gap-2 border-t border-border/70 pt-2">
-        {task.assignee_name ? (
+        {assigneeName(task) ? (
           <span className="flex min-w-0 items-center gap-1.5 text-[12px] text-muted">
-            <AgentAvatar name={task.assignee_name} color={task.assignee_color ?? "#888"} size="xs" working={task.status === "running"} />
-            <span className="truncate">{task.assignee_name}</span>
+            <AssigneeFace task={task} />
+            <span className="truncate">{assigneeName(task)}</span>
+            {isPersonTask(task) && task.status === "triage" ? <span className="shrink-0 rounded-full bg-info/12 px-1.5 text-[10.5px] font-medium text-info">{t("Not taken yet")}</span> : null}
           </span>
         ) : <span className="truncate text-[12px] text-muted italic">{t("Unassigned")}</span>}
         <time dateTime={task.updated_at} title={t("Updated {ago}", { ago: timeAgo(task.updated_at).toLowerCase() })} className="ml-auto shrink-0 text-[11px] whitespace-nowrap text-muted tabular">{shortAge(task.updated_at)}</time>
@@ -264,9 +267,32 @@ function LiftedCard({ task, company, reduce }: { task: Task; company?: Branch; r
  * loads 50 cards at a time as you scroll it while the short working columns stay complete. */
 const BOARD_KEY: QueryKey = [...workKeys.tasks, "board"];
 type BoardStatus = "triage" | "ready" | "running" | "blocked" | "review" | "done";
-type Who = "all" | "mine" | "pinned";
-const useColumn = (status: string, q: string, branch: string | undefined, who: Who, enabled = true) =>
-  usePagedList<Task>(BOARD_KEY, "/api/tasks", { status, q, branch_id: branch, who: who === "all" ? undefined : who }, { enabled });
+type Who = "all" | "mine" | "team" | "assigned" | "pinned";
+type View = "board" | "list" | "due";
+const WHO: Who[] = ["all", "mine", "team", "assigned", "pinned"];
+const useColumn = (status: string, q: string, branch: string | undefined, who: Who, assignee: string, enabled = true) =>
+  usePagedList<Task>(BOARD_KEY, "/api/tasks", { status, q, branch_id: branch, who: who === "all" ? undefined : who, assignee: assignee || undefined }, { enabled });
+
+/** A setting remembered on this device (private mode: until reload). */
+function useStored<T extends string>(key: string, allowed: readonly T[], fallback: T): [T, (v: T) => void] {
+  const [v, setV] = useState<T>(() => {
+    try {
+      const s = localStorage.getItem(key) as T | null;
+      return s && allowed.includes(s) ? s : fallback;
+    } catch {
+      return fallback;
+    }
+  });
+  const set = (next: T) => {
+    setV(next);
+    try {
+      localStorage.setItem(key, next);
+    } catch {
+      // private mode
+    }
+  };
+  return [v, set];
+}
 
 interface ColumnProps {
   status: TaskStatus;
@@ -275,7 +301,7 @@ interface ColumnProps {
   list: PagedList<Task>;
   onOpen: (id: string) => void;
   canWrite: boolean;
-  dragFrom: TaskStatus | null;
+  dragFrom: Task | null;
   hovered: boolean;
   drop: number | null;
   sortable: boolean;
@@ -289,7 +315,7 @@ function Column({ status, hint, empty, list, onOpen, canWrite, dragFrom, hovered
   const scroller = useRef<HTMLDivElement>(null);
   const tasks = list.items;
   const allowed = canMove(dragFrom, status);
-  const home = dragFrom === status;
+  const home = dragFrom?.status === status;
   const info = STATUS_INFO[status];
   const lineAt = (i: number): "before" | "after" | undefined =>
     drop === null ? undefined : drop === i ? "before" : drop === tasks.length && i === tasks.length - 1 ? "after" : undefined;
@@ -297,7 +323,7 @@ function Column({ status, hint, empty, list, onOpen, canWrite, dragFrom, hovered
     <section
       ref={setNodeRef}
       data-col={status}
-      aria-label={t(info.label)}
+      aria-label={t(columnLabel(status))}
       className={cn(
         // Fills the screen below the toolbar; the cards scroll inside the column, header stays.
         "flex h-[var(--fill-h,24rem)] w-[84vw] max-w-[20rem] shrink-0 snap-start flex-col overflow-hidden rounded-[var(--radius-md)] border border-border/60 bg-surface-2/50 transition-[border-color,background-color,opacity,box-shadow] duration-150",
@@ -313,7 +339,7 @@ function Column({ status, hint, empty, list, onOpen, canWrite, dragFrom, hovered
         <div className="min-w-0">
           <h2 className="flex items-center gap-2 text-[13px] font-semibold">
             <span aria-hidden className={cn("size-2 shrink-0 rounded-full", DOT[info.tone])} />
-            <span className="truncate">{t(info.label)}</span>
+            <span className="truncate">{t(columnLabel(status))}</span>
           </h2>
           <p className="mt-0.5 truncate pl-4 text-[11.5px] text-muted">{dragFrom && !allowed && !home ? t("Can't move here") : t(hint)}</p>
         </div>
@@ -322,7 +348,7 @@ function Column({ status, hint, empty, list, onOpen, canWrite, dragFrom, hovered
       <div ref={scroller} data-scroll className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)] content-start gap-2 overflow-y-auto overscroll-contain p-2 [scrollbar-width:thin]">
         <SortableContext id={status} items={tasks.map((t) => t.id)} strategy={sortable ? verticalListSortingStrategy : noSort}>
           {tasks.map((t, i) => (
-            <TaskCard key={t.id} task={t} onOpen={() => onOpen(t.id)} draggable={canWrite && !!MOVES[t.status]} guide={guideFirst && i === 0 ? "tasks.card" : undefined}
+            <TaskCard key={t.id} task={t} onOpen={() => onOpen(t.id)} draggable={canWrite && movesFor(t).length > 0} guide={guideFirst && i === 0 ? "tasks.card" : undefined}
               company={companyOf(t)} line={lineAt(i)} />
           ))}
         </SortableContext>
@@ -340,7 +366,7 @@ function Column({ status, hint, empty, list, onOpen, canWrite, dragFrom, hovered
 
 /** One tab of the phone column switcher. While a card is held it is also a drop target: drop
  * on it to move the card to the top of that column; hover a moment and the board slides there. */
-function ColumnTab({ status, count, on, onPick, dragFrom, hovered }: { status: TaskStatus; count: number; on: boolean; onPick: () => void; dragFrom: TaskStatus | null; hovered: boolean }) {
+function ColumnTab({ status, count, on, onPick, dragFrom, hovered }: { status: TaskStatus; count: number; on: boolean; onPick: () => void; dragFrom: Task | null; hovered: boolean }) {
   const t = useT();
   const { setNodeRef } = useDroppable({ id: tabId(status), data: { type: "tab", status } satisfies DragData, disabled: !dragFrom });
   const allowed = canMove(dragFrom, status);
@@ -356,14 +382,14 @@ function ColumnTab({ status, count, on, onPick, dragFrom, hovered }: { status: T
         on ? "text-fg" : "text-muted hover:text-fg",
         dragFrom && allowed && "text-accent ring-1 ring-accent/50 ring-inset",
         hovered && allowed && "bg-accent text-accent-fg ring-0",
-        dragFrom && !allowed && dragFrom !== status && "opacity-45",
+        dragFrom && !allowed && dragFrom.status !== status && "opacity-45",
       )}
     >
       {on && !(hovered && allowed) ? (
         <motion.span layoutId="board-tab" transition={{ type: "spring", stiffness: 500, damping: 38 }}
           className="absolute inset-0 rounded-[calc(var(--radius-sm)-2px)] bg-surface shadow-[0_1px_2px_hsl(var(--shadow)/0.12)] ring-1 ring-border" />
       ) : null}
-      <span className="relative">{t(STATUS_INFO[status].label)}</span>
+      <span className="relative">{t(columnLabel(status))}</span>
       <span className={cn("relative rounded-full px-1.5 text-[11px] tabular", hovered && allowed ? "bg-accent-fg/20 text-accent-fg" : on ? "bg-accent-soft text-accent" : "bg-surface-2 text-muted")}>{count}</span>
     </button>
   );
@@ -430,31 +456,24 @@ export function TasksPage() {
   const navigate = useNavigate();
   const reduce = !!useReducedMotion();
   const phone = useIsPhone();
-  const search = useSearch({ strict: false }) as { task?: string; new?: number; agent?: string; brief?: string; objective?: string };
+  const search = useSearch({ strict: false }) as { task?: string; new?: number; agent?: string; brief?: string; objective?: string; who?: string };
   const [active, setActive] = useState<Task | null>(null);
   const [target, setTarget] = useState<Target | null>(null);
   const [overStatus, setOverStatus] = useState<TaskStatus | null>(null);
   const [q, setQ] = useState("");
-  // Whose cards: everything you may see, the work you gave or your own AI does, or the cards
-  // you pinned to your workspace. Remembered on this device.
-  const [who, setWhoState] = useState<Who>(() => {
-    try {
-      const v = localStorage.getItem("agentic.tasks.who");
-      return v === "mine" || v === "pinned" ? v : "all";
-    } catch {
-      return "all";
-    }
-  });
-  const setWho = (v: Who) => {
-    setWhoState(v);
-    try {
-      localStorage.setItem("agentic.tasks.who", v);
-    } catch {
-      // private mode: lasts until reload
-    }
-  };
+  // Whose cards: everything you may see, the work you gave or your own AI does, your team's
+  // (P97: your people and their AI), the tasks given to you, or the cards you pinned to your
+  // workspace. Remembered on this device, as is the view (board, list, due dates).
+  const [storedWho, setWho] = useStored<Who>("agentic.tasks.who", WHO, "all");
+  const who: Who = search.who && WHO.includes(search.who as Who) ? (search.who as Who) : storedWho;
+  const [view, setView] = useStored<View>("agentic.tasks.view", ["board", "list", "due"], "board");
+  // P97: one person or agent ("user:<id>" / "agent:<id>"), or people / agents only.
+  const [assignee, setAssignee] = useState("");
+  const { data: teamPeople = [] } = useQuery(teamPeopleQuery);
+  const leads = MANAGER_ROLES.includes(me.role) || teamPeople.some((p) => p.reports_to_me);
   const [picked, setPicked] = useState<TaskStatus | null>(null);
   const [retrying, setRetrying] = useState(false);
+  const [adding, setAdding] = useState(false); // P97: phones add a task from a sheet
   const board = useRef<HTMLDivElement>(null);
   const tabs = useRef<HTMLDivElement>(null);
   const jumpedAt = useRef(0);
@@ -462,7 +481,7 @@ export function TasksPage() {
   // True from the moment a card is lifted until just after it lands: that click is not an "open".
   const holdClicks = useRef(false);
   const holdTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-  const dragFrom = active?.status ?? null;
+  const dragFrom = active;
   const sensors = useSensors(
     // Mouse: a small nudge starts the drag, so a click still opens the card.
     useSensor(MouseSensor, { activationConstraint: { distance: 5 } }),
@@ -486,18 +505,19 @@ export function TasksPage() {
   // Search runs on the server (title, brief, agent, label), so every page of every column is
   // filtered and the counts are the true counts.
   const needle = useDebounced(q.trim());
-  const triage = useColumn("triage", needle, branchFilter, who, companiesReady);
-  const ready = useColumn("ready", needle, branchFilter, who, companiesReady);
-  const running = useColumn("running", needle, branchFilter, who, companiesReady);
-  const blocked = useColumn("blocked", needle, branchFilter, who, companiesReady);
-  const review = useColumn("review", needle, branchFilter, who, companiesReady);
-  const done = useColumn("done", needle, branchFilter, who, companiesReady);
+  const onBoard = companiesReady && view === "board";
+  const triage = useColumn("triage", needle, branchFilter, who, assignee, onBoard);
+  const ready = useColumn("ready", needle, branchFilter, who, assignee, onBoard);
+  const running = useColumn("running", needle, branchFilter, who, assignee, onBoard);
+  const blocked = useColumn("blocked", needle, branchFilter, who, assignee, onBoard);
+  const review = useColumn("review", needle, branchFilter, who, assignee, onBoard);
+  const done = useColumn("done", needle, branchFilter, who, assignee, onBoard);
   const cols: Record<BoardStatus, PagedList<Task>> = { triage, ready, running, blocked, review, done };
-  const closedList = useColumn("failed,cancelled", needle, branchFilter, who, companiesReady);
-  const failedList = useColumn("failed", needle, branchFilter, who, companiesReady && canWrite);
+  const closedList = useColumn("failed,cancelled", needle, branchFilter, who, assignee, onBoard);
+  const failedList = useColumn("failed", needle, branchFilter, who, assignee, onBoard && canWrite);
   const counts = new Map<TaskStatus, number>(Object.entries(cols).map(([s, l]) => [s as TaskStatus, l.total ?? l.items.length]));
   const lists = [...Object.values(cols), closedList];
-  const isLoading = companiesLoading || lists.some((l) => l.isLoading);
+  const isLoading = companiesLoading || (view === "board" && lists.some((l) => l.isLoading));
   const error = lists.find((l) => l.error)?.error ?? null;
   const anyTasks = lists.some((l) => (l.total ?? l.items.length) > 0);
   const failed = failedList.items;
@@ -507,7 +527,8 @@ export function TasksPage() {
   // The API sends board positions: cards can be re-ordered and dropped into a chosen slot.
   const sortable = Object.values(cols).some((l) => l.items.some((t) => typeof t.position === "number"));
 
-  const showBoard = !isLoading && !error && (anyTasks || !!needle || who !== "all");
+  const filtering = !!needle || who !== "all" || !!assignee;
+  const showBoard = view === "board" && !isLoading && !error && (anyTasks || filtering);
   useFillHeight(board, { min: phone ? 272 : 384, gap: phone ? 12 : 20, enabled: showBoard });
 
   /** Relaunch every failed task shown (the API takes up to 50 per call and says what it skipped). */
@@ -711,8 +732,8 @@ export function TasksPage() {
       move.mutate(m);
       return;
     }
-    if (!canMove(from.status, to)) {
-      toast(t("A {from} task cannot go to {to}.", { from: t(STATUS_INFO[from.status].label).toLowerCase(), to: t(STATUS_INFO[to].label).toLowerCase() }));
+    if (!canMove(task, to)) {
+      toast(t("A {from} task cannot go to {to}.", { from: t(columnLabel(from.status)).toLowerCase(), to: t(columnLabel(to)).toLowerCase() }));
       return;
     }
     const list = cols[to as BoardStatus]?.items ?? [];
@@ -727,13 +748,13 @@ export function TasksPage() {
     place(m);
     buzz(8);
     move.mutate(m);
-    if (d.type === "tab") toast.success(t("Moved to {column}.", { column: t(STATUS_INFO[to].label) }), { duration: 1800 });
+    if (d.type === "tab") toast.success(t("Moved to {column}.", { column: t(columnLabel(to)) }), { duration: 1800 });
   };
 
   const labelOf = (id: string | number | undefined) => {
     const s = id === undefined ? "" : String(id);
     const status = s.startsWith("col:") || s.startsWith("tab:") ? (s.slice(4) as TaskStatus) : null;
-    if (status) return t("the {column} column", { column: t(STATUS_INFO[status].label) });
+    if (status) return t("the {column} column", { column: t(columnLabel(status)) });
     const hit = lists.flatMap((l) => l.items).find((x) => x.id === s);
     return hit ? `"${hit.title}"` : t("the board");
   };
@@ -753,28 +774,36 @@ export function TasksPage() {
   // A click that ends a drag (or a long press that lifted a card) never opens the task.
   const openTask = (id: string) => {
     if (active || holdClicks.current) return;
-    navigate({ to: "/tasks", search: { task: id } });
+    navigate({ to: "/tasks", search: { task: id, ...(search.who ? { who: search.who } : {}) } });
   };
   const company = active ? companyOf(active) : undefined;
 
   let overlay: ReactNode = null;
   if (active) overlay = <LiftedCard task={active} company={company} reduce={reduce} />;
 
+  const filters = { q: needle, who, assignee, branch: branchFilter };
+  const newTask = () => (phone ? setAdding(true) : openTaskComposer());
   return (
     <Page wide>
       <PageHeader
-        title={t("Tasks")}
-        description={phone ? undefined : t("Everything your agents are working on. Drag a card to move it (press and hold on a phone); agents move running work themselves.")}
+        title={who === "team" ? t("Team board") : t("Tasks")}
+        description={phone ? undefined : who === "team"
+          ? t("Your people and their AI on one board. Give work to a person or an agent, drag cards as work moves, and see what is due.")
+          : t("Work for people and AI agents. Drag a card to move it (press and hold on a phone); agents move running work themselves.")}
         // Phones: a round "+" beside the search instead of a full-width button, so the board gets the screen.
-        actions={canWrite && !(phone && showBoard) ? <Button data-guide="tasks.new" onClick={() => openTaskComposer()}><PlusIcon size={16} weight="bold" /> {t("New task")}</Button> : null}
+        actions={canWrite && !(phone && (showBoard || view !== "board")) ? <Button data-guide="tasks.new" onClick={() => openTaskComposer()}><PlusIcon size={16} weight="bold" /> {t("New task")}</Button> : null}
       />
       {isLoading ? (
         <BoardSkeleton />
       ) : error ? (
         <p role="alert" className="text-danger">{errorMessage(error)}</p>
-      ) : !anyTasks && !needle && who === "all" ? (
-        <EmptyState icon={KanbanIcon} title={branchFilter && selected ? t("No tasks at {name} yet", { name: selected.name }) : t("No tasks yet")} body={t("Give an agent something to do. It follows its SOPs, asks you before risky steps, and puts the result here for review.")}
-          action={canWrite ? <Button onClick={() => openTaskComposer()}><PlusIcon size={16} weight="bold" /> {t("Create first task")}</Button> : undefined} />
+      ) : view === "board" && !anyTasks && !filtering ? (
+        <div className="grid gap-4">
+          <ViewSwitch view={view} onChange={setView} />
+          {canWrite ? <QuickAdd /> : null}
+          <EmptyState icon={KanbanIcon} title={branchFilter && selected ? t("No tasks at {name} yet", { name: selected.name }) : t("No tasks yet")} body={t("Give a person or an agent something to do. People get it in their workspace; agents follow their SOPs, ask before risky steps and put the result here for review.")}
+            action={canWrite ? <Button onClick={() => openTaskComposer()}><PlusIcon size={16} weight="bold" /> {t("Create first task")}</Button> : undefined} />
+        </div>
       ) : (
         <DndContext
           sensors={sensors}
@@ -789,21 +818,24 @@ export function TasksPage() {
           onDragCancel={reset}
           onDragEnd={onDragEnd}
         >
-          <Toolbar className="xl:max-w-2xl">
+          <Toolbar className="2xl:max-w-none">
             <div className="flex min-w-0 flex-1 basis-56 items-center gap-2">
-              <SearchInput guide="tasks.search" value={q} onChange={setQ} placeholder={t("Search cards by title, agent or label")} />
+              <SearchInput guide="tasks.search" value={q} onChange={setQ} placeholder={t("Search tasks, people or agents")} />
               {canWrite && phone ? (
-                <Button data-guide="tasks.new" size="icon" className="size-11 shrink-0 rounded-full" aria-label={t("New task")} onClick={() => openTaskComposer()}>
+                <Button data-guide="tasks.new" size="icon" className="size-11 shrink-0 rounded-full" aria-label={t("New task")} onClick={newTask}>
                   <PlusIcon size={18} weight="bold" />
                 </Button>
               ) : null}
             </div>
-            <Segmented size="sm" guide="tasks.who" label={t("Whose cards")} value={who} onChange={setWho}
+            <Segmented size="sm" guide="tasks.who" label={t("Whose cards")} value={who} onChange={(v) => { setWho(v); if (search.who) navigate({ to: "/tasks", search: {}, replace: true }); }}
               options={[
                 { value: "all", label: t("All") },
+                ...(leads ? [{ value: "team" as Who, label: t("My team") }] : []),
+                { value: "assigned", label: t("For me") },
                 { value: "mine", label: t("Mine") },
                 { value: "pinned", label: t("Pinned") },
               ]} />
+            <ViewSwitch view={view} onChange={setView} />
             {branchFilter && selected ? (
               <button type="button" onClick={() => select(ALL_COMPANIES)} title={t("Show every company's tasks")}
                 className="inline-flex h-10 max-w-full min-w-0 shrink-0 items-center gap-2 rounded-sm border border-border bg-surface px-3 text-[12.5px] text-muted hover:border-accent/40 hover:text-fg pointer-coarse:h-11">
@@ -813,16 +845,21 @@ export function TasksPage() {
               </button>
             ) : null}
             {/* Column switcher for the sideways board (and a drop target while dragging). */}
-            <div ref={tabs} className="min-w-0">
-              <div role="tablist" aria-label={t("Board columns")}
-                className="flex max-w-full shrink-0 gap-0.5 overflow-x-auto rounded-[var(--radius-sm)] border border-border bg-surface-2/60 p-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-                {COLUMNS.map((c) => (
-                  <ColumnTab key={c.status} status={c.status} count={counts.get(c.status) ?? 0} on={c.status === col} onPick={() => jump(c.status)}
-                    dragFrom={dragFrom} hovered={hoverTab === c.status} />
-                ))}
+            {view === "board" ? (
+              <div ref={tabs} className="min-w-0">
+                <div role="tablist" aria-label={t("Board columns")}
+                  className="flex max-w-full shrink-0 gap-0.5 overflow-x-auto rounded-[var(--radius-sm)] border border-border bg-surface-2/60 p-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                  {COLUMNS.map((c) => (
+                    <ColumnTab key={c.status} status={c.status} count={counts.get(c.status) ?? 0} on={c.status === col} onPick={() => jump(c.status)}
+                      dragFrom={dragFrom} hovered={hoverTab === c.status} />
+                  ))}
+                </div>
               </div>
-            </div>
+            ) : null}
           </Toolbar>
+          <PeopleStrip value={assignee} onChange={setAssignee} teamOnly={who === "team"} />
+          {canWrite && !phone ? <QuickAdd defaultAssignee={assignee.startsWith("user:") || assignee.startsWith("agent:") ? (assignee as `user:${string}`) : ""} key={assignee} /> : null}
+          {view === "list" ? <ListView f={filters} onOpen={openTask} /> : view === "due" ? <DueView f={filters} meId={me.user.id} onOpen={openTask} /> : (<>
           <div className="relative -mx-4 sm:-mx-6 lg:-mx-8">
           {edges.right ? (
             <p className="pointer-events-none absolute -top-6 right-4 hidden items-center gap-1 text-[12px] text-muted sm:right-6 md:flex lg:right-8">
@@ -840,9 +877,9 @@ export function TasksPage() {
             )}
           >
             {COLUMNS.map((c) => {
-              const drop = target && target.status === c.status && target.status !== dragFrom && canMove(dragFrom, c.status) && target.index >= 0 ? target.index : null;
+              const drop = target && target.status === c.status && target.status !== dragFrom?.status && canMove(dragFrom, c.status) && target.index >= 0 ? target.index : null;
               return (
-                <Column key={c.status} status={c.status} hint={c.hint} empty={needle || who !== "all" ? msg("No match in this column.") : c.empty} list={cols[c.status as BoardStatus]} onOpen={openTask}
+                <Column key={c.status} status={c.status} hint={c.hint} empty={filtering ? msg("No match in this column.") : c.empty} list={cols[c.status as BoardStatus]} onOpen={openTask}
                   canWrite={canWrite} dragFrom={dragFrom} hovered={overStatus === c.status} drop={drop} sortable={sortable} companyOf={companyOf} guideFirst={c.status === firstBusy} />
               );
             })}
@@ -886,9 +923,39 @@ export function TasksPage() {
           <ConfirmDialog open={retrying} onOpenChange={setRetrying} title={failedTotal === 1 ? t("Retry 1 failed task?") : t("Retry {n} failed tasks?", { n: failedTotal })} confirmLabel={t("Retry all")}
             body={<>{t("Each one starts a fresh run with its agent, continuing the same conversation.")}{failedTotal > 50 ? ` ${t("Up to 50 start now; retry again for the rest.")}` : ""}{needle ? ` ${t("Only the tasks matching your filter are retried.")}` : ""}</>}
             onConfirm={retryFailed} />
+          </>)}
         </DndContext>
       )}
-      {search.task ? <TaskSheet taskId={search.task} onClose={() => navigate({ to: "/tasks", search: {} })} /> : null}
+      {phone && canWrite ? (
+        <ResponsiveDialog open={adding} onOpenChange={setAdding} title={t("New task")}
+          footer={<Button variant="outline" onClick={() => { setAdding(false); openTaskComposer(); }}>{t("More options")}</Button>}>
+          <QuickAdd autoFocus className="border-0 p-0 shadow-none focus-within:ring-0" onAdded={() => setAdding(false)}
+            defaultAssignee={assignee.startsWith("user:") || assignee.startsWith("agent:") ? (assignee as `user:${string}`) : ""} />
+        </ResponsiveDialog>
+      ) : null}
+      {search.task ? <TaskSheet taskId={search.task} onClose={() => navigate({ to: "/tasks", search: who !== storedWho ? { who } : {} })} /> : null}
     </Page>
+  );
+}
+
+/** Board, list or due dates: the same cards three ways. */
+function ViewSwitch({ view, onChange }: { view: View; onChange: (v: View) => void }) {
+  const t = useT();
+  const opts: { value: View; label: string; icon: typeof KanbanIcon }[] = [
+    { value: "board", label: t("Board"), icon: KanbanIcon },
+    { value: "list", label: t("List"), icon: ListBulletsIcon },
+    { value: "due", label: t("Due"), icon: CalendarBlankIcon },
+  ];
+  return (
+    <div role="radiogroup" aria-label={t("View")} className="inline-flex shrink-0 gap-0.5 rounded-[var(--radius-sm)] border border-border bg-surface-2/60 p-0.5">
+      {opts.map((o) => (
+        <button key={o.value} type="button" role="radio" aria-checked={view === o.value} onClick={() => onChange(o.value)}
+          className={cn("inline-flex h-8 items-center gap-1.5 rounded-[calc(var(--radius-sm)-2px)] px-2.5 text-[12.5px] font-medium transition-colors pointer-coarse:h-10",
+            view === o.value ? "bg-surface text-fg shadow-[0_1px_2px_hsl(var(--shadow)/0.12)] ring-1 ring-border" : "text-muted hover:text-fg")}>
+          <o.icon size={14} weight={view === o.value ? "bold" : "regular"} />
+          <span className="max-sm:sr-only">{o.label}</span>
+        </button>
+      ))}
+    </div>
   );
 }

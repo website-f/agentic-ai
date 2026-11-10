@@ -204,7 +204,11 @@ async def tick(now: datetime | None = None) -> dict[str, int]:
         rows = (
             await db.scalars(
                 select(Task)
-                .where(Task.status == "running", Task.updated_at < now - GRACE)
+                .where(
+                    Task.status == "running",
+                    Task.updated_at < now - GRACE,
+                    Task.assignee_user_id.is_(None),  # P97: a person's work has no run
+                )
                 .order_by(Task.updated_at)
                 .limit(500)
             )

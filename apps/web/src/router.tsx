@@ -378,8 +378,9 @@ const agentDetailRoute = createRoute({
 const tasksRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/tasks",
-  validateSearch: (s: Record<string, unknown>): { task?: string; new?: number; agent?: string; brief?: string; objective?: string } => ({
-    task: str(s.task), new: num(s.new), agent: str(s.agent), brief: str(s.brief), objective: str(s.objective),
+  // P97 `who`: open on a slice of the board (assigned = for me, team = my team).
+  validateSearch: (s: Record<string, unknown>): { task?: string; new?: number; agent?: string; brief?: string; objective?: string; who?: string } => ({
+    task: str(s.task), new: num(s.new), agent: str(s.agent), brief: str(s.brief), objective: str(s.objective), who: str(s.who),
   }),
   component: page.tasks,
 });
