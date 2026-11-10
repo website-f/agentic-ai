@@ -622,3 +622,43 @@ def test_azure_foundry_gets_its_key_header_and_others_do_not():
         "deepseek",
         "mistral",
     } <= set(presets.BY_ID)
+
+
+def test_any_azure_address_is_used_as_its_openai_v1_endpoint():
+    """P96, live: Foundry shows a project address (.../api/projects/<name>); pasted in, the
+    model list answered 404 and the page said the model did not exist."""
+    from agentic.engine import client
+
+    v1 = "https://acme-resource.services.ai.azure.com/openai/v1"
+    for typed in (
+        "https://acme-resource.services.ai.azure.com/api/projects/sales",
+        "https://acme-resource.services.ai.azure.com",
+        "https://acme-resource.services.ai.azure.com/openai/v1/",
+        v1,
+    ):
+        assert client._url(typed, "/models") == v1 + "/models", typed  # noqa: SLF001
+    assert client._url("https://acme.openai.azure.com/openai/v1", "/chat/completions") == (  # noqa: SLF001
+        "https://acme.openai.azure.com/openai/v1/chat/completions"
+    )
+    assert client.azure_base("https://api.groq.com/openai/v1") == "https://api.groq.com/openai/v1"
+    assert client.azure_base("https://evil.azure.com.example.org/x") == (
+        "https://evil.azure.com.example.org/x"
+    )
+
+
+async def test_a_404_on_the_key_step_says_check_the_address():
+    from agentic.engine import tester
+
+    engine_client.use_transport(httpx.MockTransport(lambda r: httpx.Response(404, json={})))
+    try:
+        events = [
+            e
+            async for e in tester.run(
+                tester.Target("ws", "https://example.com/wrong", "k", None, "X", "paid")
+            )
+        ]
+    finally:
+        engine_client.use_transport(None)
+    key = next(e for e in events if e.get("step") == "key" and e["status"] == "failed")
+    assert key["error_class"] == "bad_address" and "Check the base URL" in key["detail"]
+    assert "model ID" not in key["detail"]

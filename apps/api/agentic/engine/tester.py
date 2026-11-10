@@ -11,7 +11,7 @@ check means the work it does will run, not that some other model answers.
 
 import json
 from collections.abc import AsyncIterator
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from typing import Any
 
@@ -138,6 +138,15 @@ async def run(target: Target, db: AsyncSession | None = None) -> AsyncIterator[d
     if not res.ok:
         f = res.failure
         assert f is not None
+        if f.error_class == "model_not_found":  # a 404 here is the address, not a model (P96)
+            f = replace(
+                f,
+                error_class="bad_address",
+                message=(
+                    "Nothing answers at this address. Check the base URL: it usually ends in "
+                    "/v1 (Azure AI Foundry: https://<resource>.services.ai.azure.com/openai/v1)."
+                ),
+            )
         yield _event(
             "key",
             label,

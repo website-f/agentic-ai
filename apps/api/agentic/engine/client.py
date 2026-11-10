@@ -103,10 +103,24 @@ def host_of(url: str) -> str:
 
 
 def _url(base_url: str, path: str) -> str:
-    return path if path.startswith("http") else f"{base_url.rstrip('/')}/{path.lstrip('/')}"
+    if path.startswith("http"):
+        return path
+    return f"{azure_base(base_url).rstrip('/')}/{path.lstrip('/')}"
 
 
 AZURE_HOSTS = (".openai.azure.com", ".services.ai.azure.com", ".cognitiveservices.azure.com")
+
+
+def azure_base(base_url: str) -> str:
+    """P96: Azure AI Foundry answers its OpenAI-compatible calls only at
+    https://<resource>.../openai/v1. Foundry also shows a project address
+    (.../api/projects/<name>) and the bare resource address; both answered 404, which the
+    page reported as "model ID does not exist". Any Azure address is used as /openai/v1."""
+    u = urlparse(base_url.strip())
+    host = (u.hostname or "").lower()
+    if not host.endswith(AZURE_HOSTS) or u.path.rstrip("/").endswith("/openai/v1"):
+        return base_url
+    return f"https://{host}/openai/v1"
 
 
 def _headers(key: str, host: str = "") -> dict[str, str]:
