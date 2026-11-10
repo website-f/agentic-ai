@@ -1836,8 +1836,10 @@ async def _do_steps(s: Session, sid: str, body: Act) -> dict[str, Any]:
         item: dict[str, Any] = {"step": i, "do": _step_label(sub)}
         if err:
             item["error"] = str(err)
-        elif res.get("note"):
-            item["note"] = str(res["note"])
+        else:
+            item["url"] = s.page.url  # where the step left the agent (the playbook learns it)
+            if res.get("note"):
+                item["note"] = str(res["note"])
         done.append(item)
         point = res.get("point") or point
         if err:

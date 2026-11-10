@@ -49,6 +49,7 @@ _URL = re.compile(r"https?://[^\s<>\"')\]]+")
 _ABOUT_EP = re.compile(r"eperolehan\.gov\.my|\be-?perolehan\b|\bQT\d{5,}\b", re.I)
 _PAGE_LINE = re.compile(r"^Page: [^\n]*?\| (\S+)\s*$", re.M)
 _DONE = re.compile(r"^Did (\d+) of (\d+) steps", re.M)
+_MOVED = re.compile(r"^(\d+)\. .*: done.*\(now on (\S+)\)\s*$", re.M)
 _ELEMENT = re.compile(
     r'-\s+(?P<role>[a-z]+)\s+"(?P<name>(?:[^"\\]|\\.)*)"[^\n]*?\[(?P<ref>(?:f\d+)?e\d+)\]'
 )
@@ -290,6 +291,13 @@ def _steps_of(name: str, args: dict[str, Any], result: str, earlier: list[str]) 
             return _what(str(a.get("role") or ""), str(a.get("name") or ""))
         return None
 
+    def then(text: str, url: str | None) -> str:
+        """The step, and the page it led to (a later run may open that page directly)."""
+        return f"{text} (then on {_generic_url(url)})" if url else text
+
+    before = _page_url(earlier[-1]) if earlier else None
+    after = _page_url(result)
+    moved = after if after and before and after.split("?")[0] != before.split("?")[0] else None
     out: list[str] = []
     if name == "browser_open":
         url = _page_url(result) or str(args.get("url") or "")
@@ -302,15 +310,16 @@ def _steps_of(name: str, args: dict[str, Any], result: str, earlier: list[str]) 
         if t:
             verb = name.removeprefix("browser_")
             extra = " (the value from the task)" if verb in ("type", "select") else ""
-            out.append(f"{verb} {t}{extra}")
+            out.append(then(f"{verb} {t}{extra}", moved))
     elif name == "browser_submit":
         t = target(args)
         if t:
-            out.append(f"click {t}: a send, browser_submit (a person approves)")
+            out.append(then(f"click {t}: a send, browser_submit (a person approves)", moved))
     elif name == "browser_steps":
         m = _DONE.search(result or "")
         done = int(m.group(1)) if m else 0
-        for st in (args.get("steps") or [])[:done]:
+        landed = {int(n): u for n, u in _MOVED.findall(result or "")}
+        for i, st in enumerate((args.get("steps") or [])[:done], start=1):
             if not isinstance(st, dict):
                 continue
             do = str(st.get("do") or "")
@@ -321,7 +330,7 @@ def _steps_of(name: str, args: dict[str, Any], result: str, earlier: list[str]) 
             if t and do in ("click", "type", "select", "check"):
                 extra = " (the value from the task)" if do in ("type", "select") else ""
                 expect = f"; expect {st['expect']!r}" if st.get("expect") else ""
-                out.append(f"{do} {t}{extra}{expect}")
+                out.append(then(f"{do} {t}{extra}{expect}", landed.get(i)))
             elif do == "wait" and st.get("text"):
                 out.append(f"wait for {str(st['text'])[:60]!r}")
     return out

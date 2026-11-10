@@ -1290,14 +1290,19 @@ async def browser_login(ctx: Any, args: dict[str, Any]) -> str:
     )
 
 
-def _step_lines(steps: list[dict[str, Any]]) -> str:
+def _step_lines(steps: list[dict[str, Any]], start: str = "") -> str:
+    """One line per step; a step that changed the page says where it is now."""
     out = []
+    here = start
     for d in steps:
         if d.get("error"):
             out.append(f"{d.get('step')}. {d.get('do')}: STOPPED: {d['error']}")
-        else:
-            note = f" ({d['note']})" if d.get("note") else ""
-            out.append(f"{d.get('step')}. {d.get('do')}: done{note}")
+            continue
+        note = f" ({d['note']})" if d.get("note") else ""
+        url = str(d.get("url") or "")
+        moved = f" (now on {url})" if url and url != here else ""
+        here = url or here
+        out.append(f"{d.get('step')}. {d.get('do')}: done{note}{moved}")
     return "\n".join(out)
 
 
@@ -1363,6 +1368,9 @@ async def browser_steps(ctx: Any, args: dict[str, Any]) -> str:
             note = f"Already signed in with the saved login {name!r}: no need to sign in.\n"
         elif outcome == "expired":
             note = f"The saved sign-in for {name!r} had expired; sign in with browser_login.\n"
+    sid = await _task_sid(ctx.task.id)
+    raw = await valkey().get(f"browser:url:{sid}") if sid else None
+    start = _s(raw) if raw else ""
     obs = await _act(ctx, "steps", steps=clean, label=f"{len(clean)} steps")
     if obs.get("error") and not obs.get("url"):
         return note + f"Error: {obs['error']}"
@@ -1371,7 +1379,7 @@ async def browser_steps(ctx: Any, args: dict[str, Any]) -> str:
     if done < len(clean):
         head += "; stopped at the first problem (nothing after it was done)"
     head += "."
-    report = _step_lines(list(obs.get("steps") or []))
+    report = _step_lines(list(obs.get("steps") or []), start)
     return note + head + "\n" + fence(report) + "\n" + await _out({**obs, "error": None})
 
 
@@ -1538,16 +1546,19 @@ def stale_views(history: list[Any], keep_over: int = 400) -> set[int]:
 FOCUS_KEEP = frozenset(
     {"ask_human", "report_progress", "write_page", "read_page", "expand_result", "use_skill"}
 )
-FOCUS_LINE = 90
+FOCUS_LINE = 70
 
 
 def _bare(schema: Any) -> dict[str, Any]:
-    """A tool's parameters in brief: each top-level name with its type (and choices), and
-    which are required. Nested shapes and descriptions come with the full list."""
+    """A tool's parameters in brief: only the required ones, each with its type (and
+    choices). The optional ones, nested shapes and descriptions come with the full list."""
     if not isinstance(schema, dict):
         return {"type": "object"}
     props: dict[str, Any] = {}
+    need = set(schema.get("required") or [])
     for k, v in (schema.get("properties") or {}).items():
+        if k not in need:
+            continue
         v = v if isinstance(v, dict) else {}
         props[k] = {x: v[x] for x in ("type", "enum") if x in v} or {"type": "string"}
     out: dict[str, Any] = {"type": "object", "properties": props}

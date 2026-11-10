@@ -286,7 +286,10 @@ RUN = [
                 {"do": "click", "role": "link", "name": "never done"},
             ]
         },
-        "Did 2 of 3 steps; stopped at the first problem.\n" + DOCS,
+        "Did 2 of 3 steps; stopped at the first problem.\n<<<\n"
+        '1. click link "Lihat QT260104": done (now on https://portal.fake/ep/notis/QT260104)\n'
+        '2. click button "Semak": done\n3. click link "never done": STOPPED: not there\n>>>\n'
+        + DOCS,
     ),
     ("browser_submit", {"role": "link", "name": "Klik sini", "why": "open"}, DOCS),
 ]
@@ -307,7 +310,9 @@ async def test_a_finished_run_teaches_the_playbook_its_path(client):
     assert "1. open https://portal.fake/ep/papan-notis\n" in learned  # no query, no value
     assert '2. type textbox "No. Sebut Harga / Tender" (the value from the task)' in learned
     assert '3. click button "Cari"' in learned
-    assert 'click link "Lihat <ref>"' in learned  # a record number in a name is <ref>
+    # A record number in a name is <ref>; the page a step led to is kept, its id as {id}.
+    assert 'click link "Lihat <ref>" (then on https://portal.fake/ep/notis/{id})' in learned
+    assert "Semak\"; expect 'Layak'\n" in learned  # no page change: nothing added
     assert "never done" not in learned  # a step after the stop is not part of the path
     assert 'click link "Klik sini": a send, browser_submit' in learned
     assert "QT260104" not in learned  # no reference anywhere: names, job or address
