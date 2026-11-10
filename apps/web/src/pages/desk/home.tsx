@@ -728,7 +728,8 @@ function PinTile({ pin: p, off, arranging, menu }: { pin: Pin; off: boolean; arr
         type="button"
         disabled={off || arranging}
         onClick={() => open(p)}
-        title={off ? t("Not available: removed, or you can no longer open it")         className={cn("flex min-w-0 flex-1 items-center gap-3 rounded-[var(--radius-md)] py-2.5 text-left focus-visible:outline-none", arranging ? "pl-1" : "pl-3", off && "cursor-not-allowed opacity-55")}
+        title={off ? t("Not available: removed, or you can no longer open it") : title}
+        className={cn("flex min-w-0 flex-1 items-center gap-3 rounded-[var(--radius-md)] py-2.5 text-left focus-visible:outline-none", arranging ? "pl-1" : "pl-3", off && "cursor-not-allowed opacity-55")}
       >
         <IconTile icon={IconCmp} tone={off ? "neutral" : PIN_TONE[p.kind]} size="sm" />
         <span className="grid min-w-0 gap-0.5">

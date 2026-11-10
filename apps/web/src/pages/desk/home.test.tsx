@@ -151,13 +151,15 @@ describe("DeskHome", { timeout: 30_000 }, () => {
     const pinned = await screen.findByRole("region", { name: "Pinned" });
     expect(within(pinned).getByRole("heading", { name: "Every month" })).toBeInTheDocument();
     expect(within(pinned).getByRole("heading", { name: "Tenders" })).toBeInTheDocument(); // an empty folder still shows
-    const gone = within(pinned).getByRole("button", { name: /Old task/ });
+    // The pin's own button (its menu button is "<name>: more").
+    const tile = (name: RegExp) => within(pinned).getAllByRole("button", { name }).find((b) => !b.hasAttribute("aria-label"))!;
+    const gone = tile(/Old task/);
     expect(gone).toBeDisabled();
     expect(gone).toHaveTextContent("Not available");
-    expect(within(pinned).getByRole("button", { name: /Members/ })).toBeDisabled();
+    expect(tile(/Members/)).toBeDisabled();
     const open = vi.fn();
     vi.stubGlobal("open", open);
-    fireEvent.click(within(pinned).getByRole("button", { name: /ePerolehan/ }));
+    fireEvent.click(tile(/ePerolehan/));
     expect(open).toHaveBeenCalledWith("https://www.eperolehan.gov.my/", "_blank", "noopener,noreferrer");
   });
 
