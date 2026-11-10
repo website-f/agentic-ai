@@ -268,6 +268,8 @@ STAFF_OK = {
     "/api/brain/facts", "/api/brain/page", "/api/brain/pages", "/api/brain/search",
     "/api/devices/my-pc-status", "/api/lessons", "/api/learning/digest",  # their own PC and AI
     "/api/procedures/summary",  # P96: learned work of the agents they see (their own AI)
+    # P97: the tasks given to them, and the people they may give a task to (themselves)
+    "/api/me/assigned-tasks", "/api/team/people",
     "/api/branches/starter-teams", "/api/broadcasts", "/api/budgets", "/api/calendar-drafts",
     "/api/channels", "/api/channels/{channel_id}/whatsapp", "/api/chat/recent",
     "/api/company-kits", "/api/deals", "/api/deals/summary",
