@@ -62,7 +62,7 @@ export const TEAM: Record<string, string> = {
   "now reports to {name}": "kini melapor kepada {name}",
   "Who {name} manages": "Siapa yang diurus oleh {name}",
   "Tick the people who report to {name}. They can give them tasks and follow their work. Someone who reports to another manager moves to {name}.":
-    "Tanda orang yang melapor kepada {name}. {name} boleh memberi mereka tugasan dan memantau kerja mereka. Sesiapa yang melapor kepada pengurus lain akan berpindah kepada {name}.",
+    "Tanda orang yang melapor kepada {name}. Mereka boleh diberi tugasan dan kerja mereka dipantau. Sesiapa yang melapor kepada pengurus lain akan berpindah kepada {name}.",
   "People {name} manages": "Orang yang diurus oleh {name}",
   "Everyone in {department}": "Semua orang dalam {department}",
   "Nobody reports to {name} yet.": "Belum ada sesiapa melapor kepada {name}.",
