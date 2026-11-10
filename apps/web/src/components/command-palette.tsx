@@ -1,20 +1,23 @@
 import {
-  ArrowElbowDownLeftIcon, ArrowsDownUpIcon, FileMagnifyingGlassIcon, FileTextIcon, KanbanIcon, MagnifyingGlassIcon, MonitorIcon, MoonIcon, PlusIcon, SignOutIcon, SunIcon,
-  TextAlignLeftIcon, UserPlusIcon,
+  AddressBookIcon, ArrowElbowDownLeftIcon, ArrowsDownUpIcon, ClipboardTextIcon, FileMagnifyingGlassIcon, FileTextIcon, KanbanIcon, MagnifyingGlassIcon, MonitorIcon, MoonIcon, PlusIcon,
+  PushPinIcon, SignOutIcon, SparkleIcon, SunIcon, TextAlignLeftIcon, UserFocusIcon, UserIcon, UserPlusIcon, type Icon,
 } from "@phosphor-icons/react";
-import { useQuery } from "@tanstack/react-query";
-import { useNavigate } from "@tanstack/react-router";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useNavigate, useRouterState } from "@tanstack/react-router";
+import { toast } from "sonner";
 import { Command } from "cmdk";
 import { Dialog } from "radix-ui";
 import { useState, type ReactNode } from "react";
 
+import { errorMessage } from "@/lib/api";
 import { useCompanies } from "@/lib/company";
+import { askDesk, deskKeys, findQuery, pinItem, type Found } from "@/lib/desk";
 import { meQuery } from "@/lib/queries";
 import { suggestQuery, useDebounced } from "@/lib/search";
 
 import { useT } from "@/i18n";
 import { usePalette, useTheme } from "@/lib/stores";
-import { NAV } from "@/nav";
+import { NAV, navItemFor } from "@/nav";
 
 import { useSignOut } from "@/lib/use-sign-out";
 
@@ -60,6 +63,39 @@ export function CommandPalette() {
   const { data: me } = useQuery(meQuery);
   const { data: sug } = useQuery(suggestQuery(typed, co.isAll ? undefined : co.selected?.id, open && typed.length >= 2));
   const titles = typed.length >= 2 ? (sug?.suggestions ?? []).filter((s) => s.kind === "title" || s.kind === "heading").slice(0, 4) : [];
+  // P97: tasks, agents, people, contacts and reports by name (only what this person may open).
+  const { data: found } = useQuery(findQuery(typed, open));
+  const qc = useQueryClient();
+  const where = useRouterState({ select: (s) => s.location });
+  const here = `${where.pathname}${where.searchStr ?? ""}${where.hash ? `#${where.hash}` : ""}`;
+  const pinHere = useMutation({
+    mutationFn: () => {
+      const item = navItemFor(where.pathname);
+      return pinItem("route", here, item ? t(item.label) : document.title || where.pathname);
+    },
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: deskKeys.all });
+      toast.success(t("Pinned to your workspace."));
+    },
+    onError: (e) => toast.error(errorMessage(e)),
+  });
+  const ask = useMutation({
+    mutationFn: (text: string) => askDesk({ text, make: "answer" }),
+    onSuccess: (r) => {
+      void qc.invalidateQueries({ queryKey: deskKeys.all });
+      toast.success(t("{name} is on it. The answer appears under My work.", { name: r.agent.name }), {
+        action: { label: t("Follow it"), onClick: () => void navigate({ to: "/tasks", search: { task: r.task_id } as never }) },
+      });
+    },
+    onError: (e) => toast.error(errorMessage(e)),
+  });
+  const FOUND: { key: keyof Found; heading: string; icon: Icon }[] = [
+    { key: "tasks", heading: t("Tasks"), icon: KanbanIcon },
+    { key: "people", heading: t("People"), icon: UserIcon },
+    { key: "agents", heading: t("Agents"), icon: UserFocusIcon },
+    { key: "contacts", heading: t("Contacts"), icon: AddressBookIcon },
+    { key: "reports", heading: t("Reports"), icon: ClipboardTextIcon },
+  ];
 
   const run = (fn: () => void) => {
     setOpen(false);
@@ -81,7 +117,7 @@ export function CommandPalette() {
                 value={q}
                 onValueChange={setQ}
                 autoFocus
-                placeholder={t("Jump to a page or run an action…")}
+                placeholder={t("Search pages, people, tasks, documents, agents…")}
                 className="h-13 w-full min-w-0 bg-transparent text-[14.5px] outline-none placeholder:text-muted"
               />
               <span className="max-sm:hidden"><Key>Esc</Key></span>
@@ -105,6 +141,18 @@ export function CommandPalette() {
                   ))}
                 </Command.Group>
               ) : null}
+              {typed.length >= 2 && found
+                ? FOUND.filter((g) => found[g.key]?.length).map((g) => (
+                    <Command.Group key={g.key} heading={g.heading} className={GROUP}>
+                      {found[g.key].map((f) => (
+                        <Item key={`${f.kind}:${f.id}`} value={`find ${f.kind} ${f.id} ${f.title}`} keywords={[q]} icon={<g.icon />} hint={f.sub || undefined}
+                          onSelect={() => run(() => navigate({ href: f.url }))}>
+                          {f.title}
+                        </Item>
+                      ))}
+                    </Command.Group>
+                  ))
+                : null}
               {NAV.map((section) => (
                 <Command.Group key={section.title} heading={t(section.title)} className={GROUP}>
                   {/* Only pages the person may open (the sidebar's rule; hidden tabs stay findable). */}
@@ -119,6 +167,16 @@ export function CommandPalette() {
                 </Command.Group>
               ))}
               <Command.Group heading={t("Actions")} className={GROUP}>
+                {q.trim().length >= 3 && me?.permissions.includes("work.write") ? (
+                  <Item value={`ask-my-ai ${q}`} keywords={[q]} icon={<SparkleIcon />} onSelect={() => { const text = q.trim(); run(() => ask.mutate(text)); }}>
+                    {t("Ask my AI: “{q}”", { q: q.trim() })}
+                  </Item>
+                ) : null}
+                {where.pathname !== "/workspace" ? (
+                  <Item icon={<PushPinIcon />} keywords={["pin", "semat", "desk", "workspace"]} onSelect={() => run(() => pinHere.mutate())}>
+                    {t("Pin this page to my desk")}
+                  </Item>
+                ) : null}
                 {me?.permissions.includes("work.write") ? (
                   <Item icon={<KanbanIcon />} keywords={["task", "tugasan", "research", "browse", "schedule"]} onSelect={() => run(() => openTaskComposer())}>
                     {t("New task")}

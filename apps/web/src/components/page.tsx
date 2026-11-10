@@ -5,6 +5,7 @@ import type { ReactNode } from "react";
 import { guidePageFor } from "@/guide/lookup";
 import { HubTabs } from "./hub-tabs";
 import { PageTips, ShowTipsButton } from "@/components/page-tips";
+import { PinPageButton } from "@/components/pin-button";
 import { useT } from "@/i18n";
 import { cn } from "@/lib/utils";
 import { hubOf, NAV, navItemFor } from "@/nav";
@@ -100,6 +101,9 @@ export function PageHeader({
               {title}
             </h1>
             {entry ? <ShowTipsButton path={entry.to} /> : null}
+            {/* P97: pin this page to the person's desk */}
+            <PinPageButton title={typeof title === "string" ? title : entry ? t(navItemFor(entry.to)?.label ?? "") : ""}
+              className="mt-0.5 size-7 rounded-full border border-border bg-surface pointer-coarse:size-9 sm:mt-1" />
             {guide ? (
               <Link
                 to="/guide/$page"

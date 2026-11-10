@@ -1,6 +1,8 @@
-/** P26: keep anything on My workspace (pin) or take it off, from wherever it is shown. */
+/** P26: keep anything on My workspace (pin) or take it off, from wherever it is shown. P97: any
+ * kind of thing, and the page itself (PinPageButton, in every page header). */
 import { PushPinIcon } from "@phosphor-icons/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useRouterState } from "@tanstack/react-router";
 import { toast } from "sonner";
 
 import { useT } from "@/i18n";
@@ -60,4 +62,12 @@ export function PinButton({
       {withLabel ? <span>{pin ? t("On my workspace") : t("Pin to my workspace")}</span> : null}
     </Button>
   );
+}
+
+/** P97: pin the page open now (its address with its tab or filter) to the desk. */
+export function PinPageButton({ title, className }: { title: string; className?: string }) {
+  const where = useRouterState({ select: (s) => s.location });
+  const ref = `${where.pathname}${where.searchStr ?? ""}${where.hash ? `#${where.hash}` : ""}`;
+  if (where.pathname === "/workspace") return null;
+  return <PinButton kind="route" refId={ref} title={title} className={className} />;
 }

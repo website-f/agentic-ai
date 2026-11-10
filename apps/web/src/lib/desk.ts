@@ -9,18 +9,36 @@ import { MAX_UPLOAD_MB, type DocFile } from "./documents";
 import type { ReviewStatus } from "./provenance";
 import type { WorkHours } from "./staff";
 
-export type PinKind = "sop" | "workflow" | "file" | "document" | "template" | "page" | "task" | "agent" | "search";
+/** P97: also any screen of the app or Prima (`route`, its address in this site), a web link,
+ * a report and a contact. */
+export type PinKind =
+  | "sop" | "workflow" | "file" | "document" | "template" | "page" | "task" | "agent" | "search"
+  | "route" | "link" | "report" | "contact";
 
 export interface Pin {
   id: string;
   kind: PinKind;
   ref: string;
+  /** What the desk shows: the person's own name for it, else its name. */
   title: string;
+  /** Its own name (or, when unavailable, the name it had when it was pinned). */
+  name?: string;
+  label?: string | null;
+  folder?: string | null;
   sub: string;
   status: string | null;
   mime: string | null;
   url: string;
+  /** Deleted, or no longer this person's to open: shown as unavailable, never what it is now. */
   missing: boolean;
+}
+
+/** P97: the blocks of the desk's overview, in the person's order, and their folders. */
+export type DeskSectionId = "today" | "pinned" | "recent" | "ai" | "howto" | "goto";
+export const DESK_SECTIONS: DeskSectionId[] = ["today", "pinned", "recent", "ai", "howto", "goto"];
+export interface DeskLayout {
+  sections: { id: DeskSectionId; hidden: boolean }[];
+  folders: string[];
 }
 
 export interface DeskAgent {
@@ -123,6 +141,9 @@ export interface Desk {
     documents: { id: string; title: string; url: string }[];
   };
   recent_searches: string[];
+  /** P97 (older servers leave it out: the defaults apply). */
+  layout?: DeskLayout;
+  may_assist?: boolean;
   files: DeskFile[];
   file_counts: { total: number; agent: number; uploaded: number };
   documents: DeskDocument[];
@@ -144,6 +165,8 @@ export const deskKeys = {
   desk: ["desk", "home"] as const,
   pins: ["desk", "pins"] as const,
   targets: ["desk", "targets"] as const,
+  find: (q: string) => ["desk", "find", q] as const,
+  meetings: ["desk", "meetings"] as const,
 };
 
 export const deskQuery = queryOptions({
@@ -164,9 +187,73 @@ export const askTargetsQuery = queryOptions({
   staleTime: 60_000,
 });
 
-export const pinItem = (kind: PinKind, ref: string, title = "") => api<Pin>("/api/desk/items", "POST", { kind, ref, title });
+export const pinItem = (kind: PinKind, ref: string, title = "", folder?: string | null) =>
+  api<Pin>("/api/desk/items", "POST", { kind, ref, title, ...(folder ? { folder } : {}) });
 export const unpinItem = (id: string) => api<void>(`/api/desk/items/${id}`, "DELETE");
-export const reorderPins = (ids: string[]) => api<void>("/api/desk/items/order", "PUT", { ids });
+export const reorderPins = (ids: string[], folders?: Record<string, string | null>) =>
+  api<void>("/api/desk/items/order", "PUT", folders ? { ids, folders } : { ids });
+/** P97: the person's own name for a pin ("" clears it), or the folder it sits in (null: none). */
+export const changePin = (id: string, body: { label?: string | null; folder?: string | null }) =>
+  api<Pin>(`/api/desk/items/${id}`, "PATCH", body);
+export const saveLayout = (body: { sections?: DeskLayout["sections"]; folders?: string[] }) =>
+  api<DeskLayout>("/api/desk/layout", "PUT", body);
+/** Rename a folder, or remove it with `to: null` (its pins stay, outside any folder). */
+export const renameFolder = (name: string, to: string | null) =>
+  api<DeskLayout>("/api/desk/folders/rename", "POST", { name, to });
+
+/** The layout to show: the saved one, or every section in the first order. */
+export function layoutOf(desk: Pick<Desk, "layout"> | undefined): DeskLayout {
+  const saved = desk?.layout?.sections ?? [];
+  const sections = saved.filter((s) => DESK_SECTIONS.includes(s.id));
+  for (const id of DESK_SECTIONS) if (!sections.some((s) => s.id === id)) sections.push({ id, hidden: false });
+  return { sections, folders: desk?.layout?.folders ?? [] };
+}
+
+export interface FoundItem {
+  kind: "task" | "agent" | "person" | "contact" | "report";
+  id: string;
+  title: string;
+  sub: string;
+  url: string;
+}
+export type Found = Record<"tasks" | "agents" | "people" | "contacts" | "reports", FoundItem[]>;
+
+/** P97: tasks, agents, people, contacts and reports by name, only what the person may open. */
+export const findQuery = (q: string, enabled = true) =>
+  queryOptions({
+    queryKey: deskKeys.find(q),
+    queryFn: () => api<Found>(`/api/desk/find?${new URLSearchParams({ q })}`),
+    enabled: enabled && q.length >= 2,
+    staleTime: 15_000,
+  });
+
+export interface Meeting {
+  id: string;
+  title: string;
+  start: string;
+  end: string;
+  all_day: boolean;
+  location: string;
+  meet: string;
+  link: string;
+}
+
+/** Today's meetings from the person's own Google Calendar (people with assistants). */
+export const meetingsQuery = (enabled: boolean) =>
+  queryOptions({
+    queryKey: deskKeys.meetings,
+    queryFn: () => api<{ connected: boolean; events: Meeting[]; problem?: boolean }>("/api/desk/meetings"),
+    enabled,
+    staleTime: 120_000,
+  });
+
+/** Where a pin opens, and how: Prima is its own app (a full page load), a web link opens in a
+ * new tab, the rest are pages of this app. */
+export function pinTarget(p: Pick<Pin, "kind" | "url">): { href: string; how: "app" | "page" | "tab" } {
+  if (p.kind === "link") return { href: p.url, how: "tab" };
+  if (p.url.startsWith("/prima/")) return { href: p.url, how: "page" };
+  return { href: p.url, how: "app" };
+}
 export const followWorkflow = (workflowId: string, agentId: string, follow: boolean) =>
   api<{ workflow_id: string; agent_ids: string[] }>(`/api/desk/workflows/${workflowId}/follow`, "POST", { agent_id: agentId, follow });
 export const askDesk = (body: { text: string; agent_id?: string | null; make: "answer" | "document"; file_ids?: string[] }) =>

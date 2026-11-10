@@ -18,18 +18,18 @@ export type Audience = "staff" | "manager";
 export const PAGE_TIPS: Record<string, Partial<Record<Audience, Tip>>> = {
   "/workspace": {
     staff: {
-      what: msg("Your desk: the work you gave, what your AI is doing, and what waits for you."),
+      what: msg("Your own desk: what needs you today, what you pinned, and the way to anywhere."),
       steps: [
         msg("Type what you need in Give your AI a task, in your own words."),
-        msg("Answer anything under Waiting for you: your AI asks before important steps."),
-        msg("Accept or send back finished work in My work."),
+        msg("Start with Needs you under Today: your AI asks before important steps."),
+        msg("Pin anything you use often, and press Customize to show only what you need."),
       ],
     },
     manager: {
       what: msg("Your own desk: work you gave, your files, and what waits for you personally."),
       steps: [
-        msg("Give a task to any agent you look after from the box at the top."),
-        msg("Clear Waiting for you first: approvals, documents to review, finished work to accept."),
+        msg("Search or jump anywhere from the bar at the top, or press Ctrl K."),
+        msg("Clear Needs you first: approvals, documents to review, finished work to accept."),
         msg("For the whole office, open the Command center."),
       ],
     },
