@@ -11,12 +11,15 @@ To add a key: list it in KEYS and, if its shape matters, give it a validator in 
 
 import json
 from collections.abc import Callable
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..models import User
+
+if TYPE_CHECKING:
+    from ..i18n.notes import Voice
 
 KEYS: tuple[str, ...] = ("tutorial", "onboarding", "locale", "needs")  # P56 needs: bell read mark
 MAX_KEY_BYTES = 8_000  # one key's object, as JSON
@@ -106,6 +109,23 @@ def speech_of(user: User | None) -> str | None:
 
 async def speech(db: AsyncSession, user_id: str | None) -> str | None:
     return speech_of(await db.get(User, user_id)) if user_id else None
+
+
+async def voice(
+    db: AsyncSession,
+    user_id: str | None,
+    text: str,
+    *,
+    lang: str | None = None,
+    pick: str | None = None,
+) -> "Voice":
+    """P97: how every agent speaks to this person this turn: their language and dialect
+    setting (one place: locale.language + locale.speech), unless `pick` (a conversation's
+    own choice) says otherwise. `lang` overrides the saved language (the request's X-Lang)."""
+    from ..i18n import notes
+
+    user = await db.get(User, user_id) if user_id else None
+    return notes.voice_for(lang or lang_of(user), speech_of(user), text, pick)
 
 
 VALIDATORS: dict[str, Callable[[dict[str, Any]], dict[str, Any]]] = {

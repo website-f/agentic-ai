@@ -30,7 +30,7 @@ from ..crm.access import MONEY_TOOLS, explicit_money, money_ready
 from ..devices.core import PC_TOOLS, pc_ready
 from ..devices.core import personal as pc_personal
 from ..engine import acting, gateway
-from ..i18n import dialects, explicit_lang
+from ..i18n import explicit_lang
 from ..i18n import notes as lang_notes
 from ..microsoft.access import MAIL_TOOLS, TEAMS_TOOLS, mail_ready, teams_ready
 from ..models import (
@@ -1264,19 +1264,25 @@ async def _refresh_memory(
 async def _language_line(db: AsyncSession, task: Task) -> str:
     """P22: a task a person created is reported in their language. One line on the first
     message only (never the system prompt, so the cached prefix stays the same)."""
-    if not (task.created_by or "").startswith("user:"):
+    # P97: work an agent handed on for a person (a delegated part) is still for that person.
+    owner, up = task.created_by or "", task
+    for _ in range(4):
+        if owner.startswith("user:") or up.parent_task_id is None:
+            break
+        up = await db.get(Task, up.parent_task_id)
+        if up is None:
+            break
+        owner = up.created_by or ""
+    if not owner.startswith("user:"):
         return ""
-    who = task.created_by.removeprefix("user:")
+    who = owner.removeprefix("user:")
     lang = await prefs.language(db, who)
     line = lang_notes.task_line(lang)
     # P37: the final answer to the person in their style (reports stay standard Malay), when
     # the brief is in Malay.
     text = f"{task.title}\n{task.brief}"
-    style = dialects.style_for(await prefs.speech(db, who), lang, text)
-    if style:
-        line += "\n\nWhen you answer the person directly: " + dialects.voice_note(style, text)
-        if g := dialects.gloss(style, text):
-            line += "\n" + g
+    if note := lang_notes.answer_note(await prefs.voice(db, who, text), text):
+        line += "\n\n" + note
     return line
 
 
@@ -2236,15 +2242,20 @@ async def _chat_lesson(
     )
 
 
-async def chat_turn(db: AsyncSession, agent: Agent, session: ChatSession, text: str) -> ChatReply:
+async def chat_turn(
+    db: AsyncSession, agent: Agent, session: ChatSession, text: str, pick: str | None = None
+) -> ChatReply:
     """Direct conversation. Runs in the request (no Temporal): only tools the policy allows
     outright are executed; anything needing approval is declined with a pointer to tasks.
-    P36: billed to the person talking, within their daily AI allowance."""
+    P36: billed to the person talking, within their daily AI allowance. P97: `pick` is the
+    conversation's own reply language (en, ms or a dialect), else the person's setting."""
     with acting.person(session.user_id):
-        return await _chat_turn(db, agent, session, text)
+        return await _chat_turn(db, agent, session, text, pick)
 
 
-async def _chat_turn(db: AsyncSession, agent: Agent, session: ChatSession, text: str) -> ChatReply:
+async def _chat_turn(
+    db: AsyncSession, agent: Agent, session: ChatSession, text: str, pick: str | None = None
+) -> ChatReply:
     ws = await db.get(Workspace, agent.workspace_id)
     assert ws is not None
     # Frozen for the conversation, like a task run, so the cached prompt prefix keeps hitting.
@@ -2311,16 +2322,12 @@ async def _chat_turn(db: AsyncSession, agent: Agent, session: ChatSession, text:
     block = "\n\n".join(b for b in (block, taught, no_browser) if b)
     # P22: the person's language rides on this turn too (never the system prompt). The
     # request's language (X-Lang, or a bot's use_lang), else the person's saved one.
-    lang = explicit_lang() or await prefs.language(db, session.user_id)
-    note = lang_notes.chat_note(lang)
-    # P37: the person's dialect or casual style, and what their dialect words mean, when
-    # they write in Malay; otherwise plain speech, so a dialect never outlives the setting.
-    style = dialects.style_for(await prefs.speech(db, session.user_id), lang, text)
-    if style:
-        extra = [dialects.voice_note(style, text), dialects.gloss(style, text)]
-        note = "\n".join([note, *[x for x in extra if x]])
-    else:
-        note = f"{note}\n{dialects.plain_note(lang)}"
+    # P37/P97: the person's dialect or casual style, and what their dialect words mean, when
+    # they write in Malay (mixed with English counts); otherwise plain speech, so a dialect
+    # never outlives the setting. The same for every agent they talk to; a conversation may
+    # pick another language or dialect for itself.
+    voice = await prefs.voice(db, session.user_id, text, lang=explicit_lang(), pick=pick)
+    note = lang_notes.turn_note(voice, text)
     block = f"{block}\n\n{note}" if block else note
     ctx = ToolContext(
         db=db, agent=agent, workspace=ws, task=None, person=session.user_id, session_id=session.id
@@ -2377,7 +2384,9 @@ async def _chat_turn(db: AsyncSession, agent: Agent, session: ChatSession, text:
         )
         # P96: the same first question, same person, same sources: the answer it gave before.
         reuse = (
-            answers.key(ws.id, agent.id, session.user_id, agent.model_group, messages, tools)
+            answers.key(
+                ws.id, agent.id, session.user_id, agent.model_group, messages, tools, voice.key
+            )
             if round_no == 0
             and session.user_id
             and answers.may_reuse(

@@ -40,6 +40,9 @@ export function savedLang(): Lang {
   try {
     const v = localStorage.getItem('prima.lang');
     if (v === 'en' || v === 'ms' || v === 'mix') return v;
+    // P97: opened from the Agentic Office (same site): the office's language until Prima's own is picked.
+    const office = localStorage.getItem('agentic.lang');
+    if (office === 'en' || office === 'ms') return office;
   } catch {
     /* private window: use the default */
   }
@@ -49,6 +52,19 @@ export function savedLang(): Lang {
 export function saveLang(l: Lang) {
   try {
     localStorage.setItem('prima.lang', l);
+    // P97: inside the Agentic Office (not the demo) the office and its agents follow, BM + English counting as
+    // Malay there: the office language on this device and the person's profile, which every agent reads.
+    const csrf = /(?:^|;\s*)agentic_csrf=([^;]+)/.exec(document.cookie)?.[1];
+    if (csrf && !location.pathname.startsWith('/prima/demo')) {
+      const office = l === 'en' ? 'en' : 'ms';
+      localStorage.setItem('agentic.lang', office);
+      void fetch('/api/me/prefs', {
+        method: 'PUT',
+        credentials: 'same-origin',
+        headers: { 'content-type': 'application/json', 'x-csrf-token': decodeURIComponent(csrf) },
+        body: JSON.stringify({ locale: { language: office } }),
+      }).catch(() => undefined);
+    }
   } catch {
     /* private window: the choice lasts for this visit */
   }

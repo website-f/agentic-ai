@@ -131,6 +131,25 @@ async def _notify(ctx: ToolContext, args: dict[str, Any]) -> str:
                 return f"Error: you can only notify {target.name}, the person you work for."
     if target is None:
         return "Error: that person no longer exists."
+    # P97: a notice reads the way its reader chose (Settings > Language); one plainly in the
+    # other language goes back to the agent to write again, before anything is sent.
+    from ..i18n import dialects
+    from ..i18n import notes as lang_notes
+    from ..services import prefs
+
+    reads, style = prefs.saved_lang(target), prefs.speech_of(target)
+    wrong = bool(reads) and dialects.clearly_not(message, reads)
+    if not wrong and reads == "ms" and style and style != "pasar":
+        # In Malay but none of their dialect's words: asked to rewrite once (10 minutes), so a
+        # message the word list cannot tell apart is never bounced twice.
+        if not dialects.gloss(style, message) and dialects.writes_malay(message, "ms"):
+            once = f"notify:style:{a.id}:{target.id}"
+            wrong = bool(await valkey().set(once, "1", ex=600, nx=True))
+    if wrong:
+        return (
+            f"Not sent yet: {target.name} reads {lang_notes.reader_note(reads or 'en', style)}"
+            ". Write the message that way and call notify_person again."
+        )
     count = await valkey().incr(f"notify:{a.id}")
     if count == 1:
         await valkey().expire(f"notify:{a.id}", 3600)
@@ -463,7 +482,7 @@ ASSISTANT_TOOLS: list[Tool] = [
     Tool(
         "notify_person",
         "Notify a person",
-        "Send a short message to a person's phone (WhatsApp, Telegram and the app, whichever they linked). A team agent may only notify the person it works for (person: 'me').",
+        "Send a short message to a person's phone (WhatsApp, Telegram and the app, whichever they linked). A team agent may only notify the person it works for (person: 'me'). Write it in the language and dialect that person chose; if it does not fit, you are told before anything is sent.",
         _p(
             {
                 "person": {

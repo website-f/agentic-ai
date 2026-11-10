@@ -1353,6 +1353,8 @@ MS: dict[str, str] = {
     # P30 personal assistants only for people who manage others; staff have one AI (their twin)
     "Personal assistants are for people who manage others. Your role ({role}) has one personal AI: your AI twin, in My AI.": "Pembantu peribadi adalah untuk orang yang mengurus orang lain. Peranan anda ({role}) ada satu AI peribadi: kembar AI anda, dalam AI saya.",
     "{name} is paused: personal assistants are for people who manage others. Nothing was deleted; use your AI twin in My AI instead.": "{name} dijeda: pembantu peribadi adalah untuk orang yang mengurus orang lain. Tiada apa dipadam; guna kembar AI anda dalam AI saya.",
+    # P97 a chat's own reply language
+    "That reply language is not one the agents speak.": "Ejen tidak bercakap dalam bahasa balasan itu.",
     "{name} is paused: personal assistants are for people who manage others.": "{name} dijeda: pembantu peribadi adalah untuk orang yang mengurus orang lain.",
     "This personal assistant is paused: personal assistants are for people who manage others.": "Pembantu peribadi ini dijeda: pembantu peribadi adalah untuk orang yang mengurus orang lain.",
     "Staff put only their own AI twin on a schedule.": "Kakitangan hanya boleh menjadualkan kembar AI mereka sendiri.",

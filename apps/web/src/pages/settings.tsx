@@ -8,7 +8,7 @@ import { DataPrivacySection } from "@/components/data-privacy";
 import { InstallApp } from "@/components/install-app";
 import { SignInEmailsSection } from "@/components/sign-in-emails";
 import { LanguageSwitch } from "@/components/language-switch";
-import { SpeechStylePicker } from "@/components/speech-style";
+import { SpeechStylePicker, VoiceSummary } from "@/components/speech-style";
 import { TwoFactorSettings } from "@/components/two-factor";
 import { IconTile, Page, PageHeader, Section, type Tone } from "@/components/page";
 import { Card, CardHeader } from "@/components/ui/card";
@@ -107,12 +107,20 @@ export function SettingsPage() {
         <TwoFactorSettings />
       </Section>
 
-      <Section title={t("Language")} description={t("English or Bahasa Melayu. Saved to your profile, so it follows you to other devices.")}>
-        <LanguageSwitch size="md" />
-      </Section>
-
-      <Section title={t("How your AI speaks to you")} description={t("When you write in Malay, your AI can answer in casual Malay or your own state's dialect. When you write in English, it answers in English. Documents, letters and reports it writes stay in standard Malay.")}>
-        <SpeechStylePicker />
+      {/* P97: one place for the app language and how every agent speaks to you. */}
+      <Section title={t("Language")} description={t("Saved to your profile, so it follows you to other devices and applies to every agent: your AI, team agents and assistants such as Chief of Staff.")}>
+        <div data-guide="settings.language" className="grid gap-4">
+          <div className="grid gap-1.5">
+            <span className="text-[13px] font-medium">{t("App language")}</span>
+            <LanguageSwitch size="md" />
+          </div>
+          <div className="grid gap-1.5">
+            <span className="text-[13px] font-medium">{t("How agents speak to you")}</span>
+            <SpeechStylePicker />
+            <span className="text-[12.5px] text-muted">{t("Pick casual Malay or your state's dialect. Documents, letters and reports stay in standard Malay. For one chat only, use the language button under the message box.")}</span>
+          </div>
+          <VoiceSummary />
+        </div>
       </Section>
 
       <Section title={t("Appearance")} description={t("Saved on this device.")}>

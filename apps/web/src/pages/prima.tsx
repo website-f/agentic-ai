@@ -21,9 +21,9 @@ import { Button } from "@/components/ui/button";
 import { Pill } from "@/components/ui/pill";
 import { Select } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useT } from "@/i18n";
+import { useLang, useT } from "@/i18n";
 import { api, errorMessage } from "@/lib/api";
-import { primaScreen } from "@/lib/prima-screen";
+import { handPrimaLanguage, primaScreen } from "@/lib/prima-screen";
 import { meQuery } from "@/lib/queries";
 
 const APP = "/prima/";
@@ -64,6 +64,7 @@ function PrimaFrame() {
   // office"), not framed inside this one: one menu at a time, on every screen size. Owners
   // stop here once a day only if they come to link people (?people=1 shows that instead).
   useEffect(() => {
+    handPrimaLanguage(useLang.getState().lang);
     window.location.assign(APP + primaScreen(window.location.hash));
   }, []);
   return (
@@ -71,7 +72,7 @@ function PrimaFrame() {
       <PageHeader title={t("Prima")} icon={ShieldCheckIcon}
         description={t("Opening Prima…")} />
       <div className="flex flex-wrap gap-2">
-        <Button asChild size="lg"><a href={APP + primaScreen(window.location.hash)}><ArrowSquareOutIcon size={18} /> {t("Open Prima Secure")}</a></Button>
+        <Button asChild size="lg"><a href={APP + primaScreen(window.location.hash)} onClick={() => handPrimaLanguage(useLang.getState().lang)}><ArrowSquareOutIcon size={18} /> {t("Open Prima Secure")}</a></Button>
         {owner ? (
           <Button asChild size="lg" variant="secondary"><Link to="/prima" search={{ people: 1 }}><UsersThreeIcon size={16} /> {t("People in Prima")}</Link></Button>
         ) : null}

@@ -83,7 +83,7 @@ export const LESSONS: Record<string, string> = {
   "{jobs} jobs done from memory, {answers} answers reused: {n} tokens saved":
     "{jobs} kerja dibuat daripada ingatan, {answers} jawapan diguna semula: {n} token dijimatkan",
   "Reuse what it learned": "Guna semula apa yang dipelajarinya",
-  "Off: it always works with the AI. It keeps learning.": "Mati: ia sentiasa bekerja dengan AI. Ia tetap belajar.",
+  "Off: it always works with the AI. It keeps learning.": "Dimatikan: ia sentiasa bekerja dengan AI, dan tetap belajar.",
   "Switched off for the whole office in Skills > Routines.": "Dimatikan untuk seluruh pejabat di Kemahiran > Rutin.",
   "in the browser": "dalam pelayar",
   "its own, for one person": "miliknya sendiri, untuk seorang",

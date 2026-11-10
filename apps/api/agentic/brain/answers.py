@@ -48,8 +48,14 @@ def key(
     group: str,
     messages: list[dict[str, Any]],
     tools: list[dict[str, Any]] | None,
+    voice: str = "",
 ) -> str:
-    raw = json.dumps([agent_id, user_id, group, messages, tools], sort_keys=True, default=str)
+    """P97: `voice` is the language and dialect the answer is in (i18n.notes.Voice.key), so a
+    standard Malay answer is never given for a Kelantan Malay (or English) request, even if
+    the notes riding on the question were ever to read the same."""
+    raw = json.dumps(
+        [agent_id, user_id, group, voice, messages, tools], sort_keys=True, default=str
+    )
     return f"answers:{workspace_id}:{hashlib.sha256(raw.encode()).hexdigest()}"
 
 
