@@ -17,6 +17,7 @@ import {
   SealCheckIcon,
   ShieldCheckIcon,
   SparkleIcon,
+  TrayArrowDownIcon,
   WarningCircleIcon,
   type Icon,
 } from "@phosphor-icons/react";
@@ -31,7 +32,7 @@ import { api } from "@/lib/api";
 import { cn, timeAgo } from "@/lib/utils";
 
 export interface NeedItem {
-  key: "approvals" | "blocked" | "reviews" | "documents" | "failed" | "drafts" | "bills" | "skills" | "routines" | "services";
+  key: "approvals" | "assigned" | "blocked" | "reviews" | "documents" | "failed" | "drafts" | "bills" | "skills" | "routines" | "services";
   count: number;
   to: string;
   search: Record<string, string>;
@@ -57,6 +58,8 @@ export const needsQuery = queryOptions({
 
 const LOOK: Record<NeedItem["key"], { icon: Icon; label: string; one: string; tone: string }> = {
   approvals: { icon: SealCheckIcon, label: msg("{n} approvals and questions from your AI"), one: msg("Approval or question"), tone: "text-warn" },
+  // P97: tasks a person gave me, not taken yet or overdue.
+  assigned: { icon: TrayArrowDownIcon, label: msg("{n} tasks given to you need you"), one: msg("Task given to you"), tone: "text-info" },
   blocked: { icon: HandIcon, label: msg("{n} tasks wait for your decision"), one: msg("Waits for your decision"), tone: "text-warn" },
   reviews: { icon: KanbanIcon, label: msg("{n} finished tasks for you to accept"), one: msg("Finished, to accept"), tone: "text-info" },
   documents: { icon: FileTextIcon, label: msg("{n} documents made by AI to review"), one: msg("Document to review"), tone: "text-info" },

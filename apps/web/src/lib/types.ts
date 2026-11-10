@@ -55,6 +55,11 @@ export interface Member {
   joined_at: string;
   /** P82: signed in with their Microsoft work account here. */
   microsoft?: boolean;
+  /** P97: who they report to, whether they head their department, how many report to them. */
+  reports_to_user_id?: string | null;
+  reports_to_name?: string | null;
+  heads_department?: boolean;
+  manages?: number;
 }
 
 export interface Department {

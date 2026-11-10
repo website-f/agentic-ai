@@ -1,6 +1,6 @@
 import {
   CaretDownIcon, CaretLeftIcon, CaretRightIcon, CaretUpIcon, CopyIcon, CrownSimpleIcon, DotsThreeIcon, EnvelopeSimpleIcon, FileXlsIcon, IdentificationCardIcon, KeyIcon, MicrosoftOutlookLogoIcon,
-  PencilSimpleIcon, ShieldSlashIcon, TrashIcon, UserPlusIcon, UsersIcon, XIcon,
+  PencilSimpleIcon, ShieldSlashIcon, TrashIcon, TreeStructureIcon, UserPlusIcon, UsersIcon, UsersThreeIcon, XIcon,
 } from "@phosphor-icons/react";
 import { keepPreviousData, useMutation, useQuery, useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
 import { useNavigate, useSearch } from "@tanstack/react-router";
@@ -27,13 +27,15 @@ import {
   type MemberSort, type MembersFilters, type MembersPage, type MemberStatus, type PageSize,
 } from "@/lib/members";
 import { useDebounced } from "@/lib/paged";
-import { branchesQuery, keys, meQuery } from "@/lib/queries";
+import { MANAGER_ROLES } from "@/lib/people";
+import { branchesQuery, keys, meQuery, membersQuery } from "@/lib/queries";
 import { hasAny, ROLE_INFO, SCOPED_ROLES, type Branch, type Me, type Member, type Role } from "@/lib/types";
 import { cn, initials, timeAgo } from "@/lib/utils";
 
 import { MemberIdentityDialog, ResetMicrosoftDialog } from "@/components/member-identity";
 
 import { ImportMembersDialog } from "./members-import";
+import { addsDepartments, BulkManagerDialog, departmentOptions, editsOrg, NEW_DEPT, NewDepartment, OrgFields, OrgLine, TeamDialog } from "./members-org";
 
 const ROLES: Role[] = ["owner", "admin", "branch_manager", "hod", "supervisor", "staff", "operator", "approver", "viewer", "management", "hr"];
 // What a branch manager or HOD may hand out (mirrors api/routers/members.py TEAM_ROLES).
@@ -61,19 +63,23 @@ function assignable(me: Me): Role[] {
 }
 
 function roleOptions(roles: Role[]) {
-  return roles.map((r) => ({ value: r, label: tr(ROLE_INFO[r].label), hint: tr(ROLE_INFO[r].blurb) }));
+  // P97: the head of department role says "HOD" too, the word people use.
+  return roles.map((r) => ({ value: r, label: r === "hod" ? tr("Head of department (HOD)") : tr(ROLE_INFO[r].label), hint: tr(ROLE_INFO[r].blurb) }));
 }
 
 /** Where a scoped member sits: branch managers and staff pick a branch, HODs and supervisors a department. */
-function Placement({ role, branches, branchId, departmentId, onChange, lockBranch }: {
+function Placement({ role, branches, branchId, departmentId, onChange, lockBranch, canAddDept }: {
   role: Role;
   branches: Branch[];
   branchId: string;
   departmentId: string;
   onChange: (b: string, d: string) => void;
   lockBranch?: string | null;
+  /** P97: "+ New department" in the list (org.manage, as on the Organization page). */
+  canAddDept?: boolean;
 }) {
   const t = useT();
+  const [adding, setAdding] = useState(false);
   if (!SCOPED_ROLES.includes(role)) {
     const line = WHOLE_WORKSPACE[role];
     return <p className="text-[12.5px] text-muted">{line ? t(line) : t("{role} sees the whole workspace.", { role: t(ROLE_INFO[role].label) })}</p>;
@@ -81,10 +87,7 @@ function Placement({ role, branches, branchId, departmentId, onChange, lockBranc
   const list = lockBranch ? branches.filter((b) => b.id === lockBranch) : branches;
   const branch = list.find((b) => b.id === branchId) ?? list[0];
   const needsDept = role === "hod" || role === "supervisor";
-  const deptOptions = [
-    ...(needsDept ? [] : [{ value: NONE, label: t("Any department") }]),
-    ...(branch?.departments ?? []).map((d) => ({ value: d.id, label: d.name })),
-  ];
+  const deptOptions = departmentOptions(branch?.departments ?? [], !!canAddDept && !!branch, needsDept ? null : { value: NONE, label: t("Any department") });
   return (
     <div className="grid grid-cols-[minmax(0,1fr)] gap-3 sm:grid-cols-2">
       <div className="grid gap-1.5">
@@ -95,10 +98,16 @@ function Placement({ role, branches, branchId, departmentId, onChange, lockBranc
       {role === "branch_manager" ? null : (
         <div className="grid gap-1.5">
           <span className="text-[13px] font-medium">{needsDept ? t("Department") : t("Department (optional)")}</span>
-          <Select value={departmentId || (needsDept ? "" : NONE)} onValueChange={(v) => onChange(branch?.id ?? "", v)} label={t("Department")}
+          <Select value={adding ? NEW_DEPT : departmentId || (needsDept ? "" : NONE)} label={t("Department")}
+            onValueChange={(v) => (v === NEW_DEPT ? setAdding(true) : (setAdding(false), onChange(branch?.id ?? "", v)))}
             placeholder={t("Pick a department")} options={deptOptions} />
         </div>
       )}
+      {adding && branch && role !== "branch_manager" ? (
+        <div className="sm:col-span-2">
+          <NewDepartment branchId={branch.id} onCancel={() => setAdding(false)} onMade={(d) => { setAdding(false); onChange(branch.id, d.id); }} />
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -194,7 +203,7 @@ function AddMemberDialog({ open, onOpenChange, me }: { open: boolean; onOpenChan
           <Select value={role} onValueChange={(v) => setRole(v as Role)} options={roleOptions(roles)} label={t("Role")} />
           <p className="text-[12.5px] text-muted">{t(ROLE_INFO[role].blurb)}</p>
         </div>
-        <Placement role={role} branches={branches} branchId={branchId} departmentId={departmentId} lockBranch={lockBranch}
+        <Placement role={role} branches={branches} branchId={branchId} departmentId={departmentId} lockBranch={lockBranch} canAddDept={addsDepartments(me)}
           onChange={(b, d) => { setBranchId(b); setDepartmentId(d); }} />
         <FormError message={add.error && !Object.keys(fields).length ? errorMessage(add.error) : null} />
       </div>
@@ -219,11 +228,22 @@ function AccessDialog({ members, me, open, onOpenChange, onDone }: {
   const [role, setRole] = useState<Role>(one?.role ?? (roles.includes("staff") ? "staff" : roles[0] ?? "viewer"));
   const [branchId, setBranchId] = useState(one?.branch_id ?? lockBranch ?? "");
   const [departmentId, setDepartmentId] = useState(one?.department_id ?? "");
+  // P97: who they report to and whether they head their department (members.manage).
+  const org = !!one && editsOrg(me);
+  const { data: everyone = [] } = useQuery({ ...membersQuery, enabled: org });
+  const [reportsTo, setReportsTo] = useState(one?.reports_to_user_id ?? "");
+  const [heads, setHeads] = useState(!!one?.heads_department);
   const save = useMutation({
     mutationFn: async () => {
       const place = placementBody(role, branchId || branches[0]?.id || "", departmentId);
       if (one) {
-        await api(`/api/members/${one.user_id}`, "PATCH", { role, ...place });
+        const orgBody = org
+          ? {
+              ...(reportsTo !== (one.reports_to_user_id ?? "") ? { reports_to_user_id: reportsTo || null } : {}),
+              ...(heads !== !!one.heads_department || (heads && place.department_id !== one.department_id) ? { heads_department: heads && !!place.department_id } : {}),
+            }
+          : {};
+        await api(`/api/members/${one.user_id}`, "PATCH", { role, ...place, ...orgBody });
         return { done: 1, skipped: 0, first: null as string | null };
       }
       const r = await api<BulkOut>("/api/members/bulk", "POST", { user_ids: members.map((m) => m.user_id), action: "access", role, ...place });
@@ -249,8 +269,12 @@ function AccessDialog({ members, me, open, onOpenChange, onDone }: {
           <Select value={role} onValueChange={(v) => setRole(v as Role)} options={roleOptions(options)} label={t("Role")} />
           <p className="text-[12.5px] text-muted">{t(ROLE_INFO[role].blurb)}</p>
         </div>
-        <Placement role={role} branches={branches} branchId={branchId} departmentId={departmentId} lockBranch={lockBranch}
+        <Placement role={role} branches={branches} branchId={branchId} departmentId={departmentId} lockBranch={lockBranch} canAddDept={addsDepartments(me)}
           onChange={(b, d) => { setBranchId(b); setDepartmentId(d); }} />
+        {org && one ? (
+          <OrgFields member={one} members={everyone} reportsTo={reportsTo} onReportsTo={setReportsTo} heads={heads} onHeads={setHeads}
+            hasDepartment={!!placementBody(role, branchId || branches[0]?.id || "", departmentId).department_id} />
+        ) : null}
         <FormError message={save.error ? errorMessage(save.error) : null} />
       </div>
     </ResponsiveDialog>
@@ -332,6 +356,9 @@ function MemberActions({ member, me }: { member: Member; me: Me }) {
   // P92: correcting a name or email, and a wrong Microsoft link (members.manage only).
   const [identity, setIdentity] = useState(false);
   const [resettingMs, setResettingMs] = useState(false);
+  // P97: who this member manages (owners, admins, management, HR).
+  const [team, setTeam] = useState(false);
+  const managesPeople = editsOrg(me) && MANAGER_ROLES.includes(member.role);
   const fixesPeople = me.permissions.includes("members.manage");
   const refresh = () => {
     qc.invalidateQueries({ queryKey: keys.members });
@@ -355,6 +382,7 @@ function MemberActions({ member, me }: { member: Member; me: Me }) {
         </MenuTrigger>
         <MenuContent>
           <MenuItem icon={<PencilSimpleIcon />} onSelect={() => setEditing(true)}>{t("Change role or place")}</MenuItem>
+          {managesPeople ? <MenuItem icon={<UsersThreeIcon />} onSelect={() => setTeam(true)}>{t("Who they manage")}</MenuItem> : null}
           {fixesPeople ? <MenuItem icon={<IdentificationCardIcon />} onSelect={() => setIdentity(true)}>{t("Change name or email")}</MenuItem> : null}
           {fixesPeople && member.microsoft ? <MenuItem icon={<MicrosoftOutlookLogoIcon />} onSelect={() => setResettingMs(true)}>{t("Reset Microsoft link")}</MenuItem> : null}
           <MenuItem icon={<KeyIcon />} onSelect={() => resetPw.mutate()}>{t("Reset password")}</MenuItem>
@@ -369,6 +397,7 @@ function MemberActions({ member, me }: { member: Member; me: Me }) {
         </MenuContent>
       </Menu>
       {editing ? <AccessDialog members={[member]} me={me} open={editing} onOpenChange={setEditing} /> : null}
+      {team ? <TeamDialog member={member} me={me} open={team} onOpenChange={setTeam} /> : null}
       <ConfirmDialog
         open={removing}
         onOpenChange={setRemoving}
@@ -399,6 +428,7 @@ function MemberActions({ member, me }: { member: Member; me: Me }) {
 function NameCell({ member, me, seesTwoFactor }: { member: Member; me: Me; seesTwoFactor: boolean }) {
   const t = useT();
   const isMe = member.user_id === me.user.id;
+  const [team, setTeam] = useState(false);
   return (
     <div className="flex min-w-0 items-center gap-3">
       <Avatar member={member} isMe={isMe} />
@@ -412,7 +442,9 @@ function NameCell({ member, me, seesTwoFactor }: { member: Member; me: Me; seesT
         {member.agents ? (
           <p className="text-[12px] text-muted">{member.agents === 1 ? t("1 personal agent") : t("{n} personal agents", { n: member.agents })}</p>
         ) : null}
+        <OrgLine member={member} onTeam={() => setTeam(true)} />
       </div>
+      {team ? <TeamDialog member={member} me={me} open={team} onOpenChange={setTeam} /> : null}
     </div>
   );
 }
@@ -569,6 +601,7 @@ export function MembersPage() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkAccess, setBulkAccess] = useState(false);
   const [bulkRemove, setBulkRemove] = useState(false);
+  const [bulkManager, setBulkManager] = useState(false);
   const search = useSearch({ strict: false }) as { add?: number };
   const navigate = useNavigate();
   const [adding, setAdding] = useState(false);
@@ -696,6 +729,11 @@ export function MembersPage() {
                 <Button size="sm" variant="secondary" disabled={!ticked.length} onClick={() => setBulkAccess(true)}>
                   <PencilSimpleIcon size={14} /> {t("Change role or place")}
                 </Button>
+                {editsOrg(me) ? (
+                  <Button size="sm" variant="secondary" onClick={() => setBulkManager(true)}>
+                    <TreeStructureIcon size={14} /> {t("Reports to")}
+                  </Button>
+                ) : null}
                 <Button size="sm" variant="outline" onClick={() => setBulkRemove(true)}>
                   <TrashIcon size={14} /> {t("Remove")}
                 </Button>
@@ -746,6 +784,9 @@ export function MembersPage() {
       ) : null}
       {bulkAccess ? (
         <AccessDialog members={ticked} me={me} open={bulkAccess} onOpenChange={setBulkAccess} onDone={() => setSelected(new Set())} />
+      ) : null}
+      {bulkManager ? (
+        <BulkManagerDialog userIds={[...selected]} open={bulkManager} onOpenChange={setBulkManager} onDone={() => setSelected(new Set())} />
       ) : null}
       <ConfirmDialog
         open={bulkRemove}

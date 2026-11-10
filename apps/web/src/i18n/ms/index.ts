@@ -58,8 +58,11 @@ import { ROLES_ACCESS } from "./roles-access";
 import { LESSONS } from "./lessons";
 import { STAFF_PHONE } from "./staff-phone";
 import { TABLES } from "./tables";
+import { TEAM } from "./team";
 
 export const MS: Record<string, string> = {
+  // P97: first, so an existing translation of the same English wins over these.
+  ...TEAM,
   // P73: first, so an existing translation of the same English always wins.
   // P96: before the rest too, so an existing translation of the same English wins.
   ...TABLES,

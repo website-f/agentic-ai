@@ -39,6 +39,7 @@ import { useState, type ReactNode } from "react";
 import { toast } from "sonner";
 
 import { AgentAvatar } from "@/components/agent-avatar";
+import { AssigneeFace, assigneeName } from "@/components/person-avatar";
 import { LessonNote } from "@/components/lesson-note";
 import { ApprovalCard } from "@/components/approval-card";
 import { Markdown } from "@/components/markdown";
@@ -54,10 +55,12 @@ import { SideSheet } from "@/components/ui/side-sheet";
 import { Skeleton } from "@/components/ui/skeleton";
 import { msg, useT } from "@/i18n";
 import { api, ApiError, errorMessage } from "@/lib/api";
+import { isPersonTask, PERSON_STATUS } from "@/lib/people";
 import { keys, meQuery } from "@/lib/queries";
 import { cn, timeAgo } from "@/lib/utils";
 import { canShareTasks, PRIORITY_INFO, STATUS_INFO, taskQuery, VISIBILITY, workKeys, type Task, type TaskEvent, type Visibility } from "@/lib/work";
 
+import { PersonTaskPanel } from "./person-task";
 import { TaskFiles } from "./task-files";
 import { RescueActions } from "./rescue";
 import { TaskFlowMenu } from "./task-flow";
@@ -71,6 +74,7 @@ const EVENT_ICON: Record<string, typeof FlagIcon> = {
   review: ShieldCheckIcon, silent: MoonStarsIcon, reconcile: ArrowsClockwiseIcon, blockers: HourglassMediumIcon,
   files: PaperclipIcon,
   lesson: LightbulbIcon,
+  comment: ChatTextIcon,
 };
 
 /** A titled block inside the sheet: small icon, heading, optional trailing note. */
@@ -139,14 +143,14 @@ function Timeline({ events }: { events: TaskEvent[] }) {
         return (
           <li key={e.id} className="relative flex min-w-0 gap-3 pb-3.5">
             {i < events.length - 1 ? <span aria-hidden className="absolute top-7 bottom-0.5 left-[13px] w-px bg-border" /> : null}
-            <span className={cn("relative grid size-7 shrink-0 place-items-center rounded-full bg-surface-2 text-muted ring-4 ring-surface", e.kind === "tool_blocked" && "bg-danger/12 text-danger", (e.kind === "progress" || e.kind === "decision") && "bg-accent-soft text-accent", (e.kind === "memory" || e.kind === "skill" || e.kind === "lesson") && "bg-info/12 text-info", (e.kind === "feedback" || e.kind === "silent") && "bg-warn/12 text-warn", e.kind === "review" && "bg-info/12 text-info")}>
+            <span className={cn("relative grid size-7 shrink-0 place-items-center rounded-full bg-surface-2 text-muted ring-4 ring-surface", e.kind === "tool_blocked" && "bg-danger/12 text-danger", (e.kind === "progress" || e.kind === "decision" || e.kind === "comment") && "bg-accent-soft text-accent", (e.kind === "memory" || e.kind === "skill" || e.kind === "lesson") && "bg-info/12 text-info", (e.kind === "feedback" || e.kind === "silent") && "bg-warn/12 text-warn", e.kind === "review" && "bg-info/12 text-info")}>
               <Icon size={13} weight="bold" />
             </span>
             <div className="min-w-0 flex-1 pt-1">
               <p className="text-[13px] break-words">
                 <span className="font-medium">{e.actor_name ?? (e.actor === "system" ? t("System") : e.actor)}</span>{" "}
                 <span className="text-muted">
-                  {e.kind === "progress" ? <>{t("posted an update:")} <span className="text-fg">{e.text}</span></> : e.kind === "feedback" ? <>{t("sent it back:")} <span className="text-fg">{e.text}</span></> : e.kind === "decision" ? <>{t("summed up the meeting:")} <span className="whitespace-pre-line text-fg">{e.text}</span></> : e.kind === "lesson" && typeof e.data?.lesson_id === "string" ? t("taught it a lesson") : e.text}
+                  {e.kind === "progress" ? <>{t("posted an update:")} <span className="text-fg">{e.text}</span></> : e.kind === "comment" ? <>{t("commented:")} <span className="whitespace-pre-line text-fg">{e.text}</span></> : e.kind === "feedback" ? <>{t("sent it back:")} <span className="text-fg">{e.text}</span></> : e.kind === "decision" ? <>{t("summed up the meeting:")} <span className="whitespace-pre-line text-fg">{e.text}</span></> : e.kind === "lesson" && typeof e.data?.lesson_id === "string" ? t("taught it a lesson") : e.text}
                 </span>
               </p>
               {e.kind === "decision" && typeof e.data?.meeting_id === "string" ? (
@@ -209,6 +213,7 @@ function Actions({ task, canWrite, onDeleted }: { task: Task; canWrite: boolean;
   });
   if (!canWrite) return null;
   const s = task.status;
+  const person = isPersonTask(task); // P97: its own buttons are in PersonTaskPanel
   if (revising) {
     return (
       <form className="grid w-full gap-2" onSubmit={(e) => { e.preventDefault(); if (feedback.trim()) act.mutate({ path: "revise", body: { feedback } }); }}>
@@ -223,8 +228,8 @@ function Actions({ task, canWrite, onDeleted }: { task: Task; canWrite: boolean;
   }
   return (
     <>
-      {s === "review" ? <Button size="sm" loading={act.isPending} onClick={() => act.mutate({ path: "accept" })}><CheckIcon size={14} weight="bold" /> {t("Accept")}</Button> : null}
-      {s === "review" || s === "done" || s === "failed" ? <Button size="sm" variant="outline" onClick={() => setRevising(true)}><ArrowCounterClockwiseIcon size={14} /> {t("Send back")}</Button> : null}
+      {s === "review" && !person ? <Button size="sm" loading={act.isPending} onClick={() => act.mutate({ path: "accept" })}><CheckIcon size={14} weight="bold" /> {t("Accept")}</Button> : null}
+      {(s === "review" || s === "done" || s === "failed") && !person ? <Button size="sm" variant="outline" onClick={() => setRevising(true)}><ArrowCounterClockwiseIcon size={14} /> {t("Send back")}</Button> : null}
       {s === "blocked" && (task as TaskX).restartable && task.assignee_agent_id ? (
         <Button size="sm" loading={act.isPending} onClick={() => act.mutate({ path: "start" })}>
           <PlayIcon size={14} weight="fill" /> {(task as TaskX).waiting_for?.length && !(task as TaskX).blocked_owner ? t("Start now anyway") : t("Retry")}
@@ -243,8 +248,8 @@ function Actions({ task, canWrite, onDeleted }: { task: Task; canWrite: boolean;
       {s === "running" || s === "blocked" || s === "ready" || s === "triage" ? (
         <Button size="sm" variant="ghost" disabled={act.isPending} onClick={() => act.mutate({ path: "cancel" })}><HandIcon size={14} /> {t("Cancel")}</Button>
       ) : null}
-      <RescueActions task={task} />
-      <TaskFlowMenu task={task as TaskX} />
+      {person ? null : <RescueActions task={task} />}
+      {person ? null : <TaskFlowMenu task={task as TaskX} />}
       {s === "done" || s === "failed" || s === "cancelled" ? (
         <Button size="sm" variant="ghost" className="text-muted hover:text-danger" disabled={act.isPending} onClick={() => setDeleting(true)}><TrashIcon size={14} /> {t("Delete")}</Button>
       ) : null}
@@ -329,12 +334,12 @@ export function TaskSheet({ taskId, onClose }: { taskId: string; onClose: () => 
       title={task ? <span className="line-clamp-3 break-words">{task.title}</span> : t("Task")}
       description={task ? (
         <span className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
-          <Pill tone={STATUS_INFO[task.status].tone} live={task.status === "running"}>{statusLabel(task)}</Pill>
+          <Pill tone={STATUS_INFO[task.status].tone} live={task.status === "running" && !isPersonTask(task)}>{isPersonTask(task) ? t(PERSON_STATUS[task.status] ?? STATUS_INFO[task.status].label) : statusLabel(task)}</Pill>
           <QuietBadge minutes={task.quiet_minutes} />
           <ReviewRoundPill task={task} />
           {task.priority !== "normal" ? <Pill tone={PRIORITY_INFO[task.priority].tone}>{t(PRIORITY_INFO[task.priority].label)}</Pill> : null}
-          {task.assignee_name ? (
-            <span className="inline-flex min-w-0 items-center gap-1.5 text-fg"><AgentAvatar name={task.assignee_name} color={task.assignee_color ?? "#888"} size="xs" /> <span className="truncate">{task.assignee_name}</span></span>
+          {assigneeName(task) ? (
+            <span className="inline-flex min-w-0 items-center gap-1.5 text-fg"><AssigneeFace task={task} /> <span className="truncate">{assigneeName(task)}</span></span>
           ) : <span>{t("Unassigned")}</span>}
           {task.run_count > 1 ? <span className="tabular">{t("Run {n}", { n: task.run_count })}</span> : null}
           {task.labels?.map((l) => <Pill key={l}>{l}</Pill>)}
@@ -368,6 +373,7 @@ export function TaskSheet({ taskId, onClose }: { taskId: string; onClose: () => 
               {pending.map((a) => <ApprovalCard key={a.id} approval={a} canDecide={me.permissions.includes("approvals.decide")} showTask={false} />)}
             </SheetSection>
           ) : null}
+          {isPersonTask(task) && !data.read_only ? <PersonTaskPanel task={task} meId={me.user.id} canWrite={canWrite} /> : null}
           <RestBanner task={task} events={data.events} canWrite={canWrite} />
           {task.error ? (
             <p role="alert" className="flex items-start gap-2.5 rounded-[var(--radius-md)] border border-danger/30 bg-danger/8 px-3.5 py-3 text-[13px] break-words text-danger">
@@ -384,7 +390,7 @@ export function TaskSheet({ taskId, onClose }: { taskId: string; onClose: () => 
               </span>
             </div>
           ) : null}
-          {task.status === "running" ? (
+          {task.status === "running" && !isPersonTask(task) ? (
             <p className="flex items-center gap-2.5 rounded-[var(--radius-md)] border border-accent/25 bg-accent-soft/50 px-3.5 py-3 text-[13px] text-accent">
               <CircleNotchIcon size={16} className="shrink-0 motion-safe:animate-spin" /> {task.quiet_minutes
                 ? t("{name} has been quiet for {n} min. It is still running; nothing was stopped.", { name: task.assignee_name ?? "", n: task.quiet_minutes })
@@ -397,7 +403,7 @@ export function TaskSheet({ taskId, onClose }: { taskId: string; onClose: () => 
               <span className="min-w-0">{partBefore}<span className="font-medium break-words text-fg">{data.parent.title}</span>{partAfter}{data.parent.assignee_name ? ` (${data.parent.assignee_name})` : ""}</span>
             </Link>
           ) : null}
-          <Facts task={task} />
+          {isPersonTask(task) ? null : <Facts task={task} />}
           <TaskObjectivePanel taskId={task.id} branchId={task.branch_id} objective={data.objective} request={data.request} canWrite={canWrite} />
           {acc.blockers?.length || acc.blocking?.length || (canWrite && canWait(task)) ? (
             <SheetSection icon={HourglassMediumIcon} title={t("Waits for")} note={acc.blockers?.length ? t("{done} of {total} done", { done: acc.blockers.filter((b) => b.status === "done").length, total: acc.blockers.length }) : undefined}>
