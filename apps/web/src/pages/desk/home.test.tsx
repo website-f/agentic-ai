@@ -146,6 +146,26 @@ describe("DeskHome", { timeout: 30_000 }, () => {
     expect(within(plate).getByText("Working")).toBeInTheDocument();
   });
 
+  it("shows tasks given to the person first under Today, and nothing when there are none (P97)", async () => {
+    const base = vi.mocked(fetch).getMockImplementation()!;
+    vi.mocked(fetch).mockImplementation(async (input, init) => {
+      const url = new URL(String(input), "http://office.test");
+      if (url.pathname === "/api/me/assigned-tasks") {
+        return json({
+          items: [{ id: "tk_p1", title: "Check the site roster", status: "ready", created_by_name: "Hana HOD", labels: [], priority: "normal" }],
+          done: [],
+          counts: { open: 1, new: 1, overdue: 0, due_today: 0 },
+        });
+      }
+      return base(input, init);
+    });
+    show();
+    const today = await screen.findByRole("region", { name: "Today" });
+    expect(await within(today).findByText("Check the site roster")).toBeInTheDocument();
+    expect(within(today).getByText("Assigned to me")).toBeInTheDocument();
+    expect(within(today).getByText("From Hana HOD")).toBeInTheDocument();
+  });
+
   it("keeps pins in folders, and never opens one the person can no longer see", async () => {
     show();
     const pinned = await screen.findByRole("region", { name: "Pinned" });

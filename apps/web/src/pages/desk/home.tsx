@@ -1077,6 +1077,6 @@ export function greeting(hour: number): string {
 /** P97: work a manager or colleague gave this person, shown only when there is some. */
 function AssignedToMe() {
   const { data } = useQuery(assignedTasksQuery);
-  if (!data?.items.length) return null;
+  if (!Array.isArray(data?.items) || !data.items.length) return null;
   return <MyAssignedTasks className="mb-4" />;
 }
