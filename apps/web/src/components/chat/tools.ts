@@ -90,6 +90,7 @@ export const TOOL_LOOK: Record<string, ToolLook> = {
   browser_click: { label: msg("Used a website"), icon: CursorClickIcon },
   browser_type: { label: msg("Used a website"), icon: CursorClickIcon },
   browser_fill: { label: msg("Filled in a form"), icon: CursorClickIcon },
+  browser_steps: { label: msg("Used a website"), icon: CursorClickIcon },
   browser_select: { label: msg("Used a website"), icon: CursorClickIcon },
   browser_submit: { label: msg("Submitted a form"), icon: CursorClickIcon },
   browser_upload: { label: msg("Uploaded a file"), icon: CursorClickIcon },

@@ -795,6 +795,7 @@ MS: dict[str, str] = {
     "Click in the browser": "Klik dalam pelayar",
     "Type in the browser": "Taip dalam pelayar",
     "Fill a form": "Isi borang",
+    "Do several steps in the browser": "Buat beberapa langkah dalam pelayar",
     "Choose an option": "Pilih satu pilihan",
     "Tick a box": "Tandakan kotak",
     "Scroll the page": "Tatal halaman",

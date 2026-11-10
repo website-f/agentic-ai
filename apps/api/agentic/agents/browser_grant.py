@@ -38,6 +38,7 @@ BROWSER = (
     "browser_find",
     "browser_wait",
     "browser_close",
+    "browser_steps",
     "browser_type",
     "browser_fill",
     "browser_select",

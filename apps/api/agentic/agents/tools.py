@@ -1070,6 +1070,9 @@ _REF = {
     "type": "string",
     "description": "The element's ref from the page view, e.g. e12 (f1e3 = inside a frame)",
 }
+# P97: or the element by its role and name, found on the page now (one match only).
+_ROLE = {"type": "string", "description": "Instead of ref: link, button, textbox, combobox..."}
+_NAME = {"type": "string", "description": "Instead of ref: the element's name as shown"}
 for _name, _label, _desc, _params, _req, _risk, _mode in (
     (
         "browser_open",
@@ -1123,6 +1126,8 @@ for _name, _label, _desc, _params, _req, _risk, _mode in (
             "text": {"type": "string"},
             "url": {"type": "string"},
             "ref": _REF,
+            "role": _ROLE,
+            "name": _NAME,
             "gone": {"type": "boolean"},
             "timeout": {"type": "number", "description": "Seconds, at most 30"},
         },
@@ -1133,20 +1138,21 @@ for _name, _label, _desc, _params, _req, _risk, _mode in (
     (
         "browser_click",
         "Click in the browser",
-        "Click a link or button by its ref. To enter text in a field, call browser_type "
-        "directly (it focuses the field for you) - do not click the field first.",
-        {"ref": _REF},
-        ["ref"],
+        "Click a link or button once: by its ref, or by role and name (e.g. role=link, "
+        "name=Papan Kenyataan) without looking it up first. To enter text call browser_type "
+        "(it focuses the field). A click that changed nothing yet: wait, do not click again.",
+        {"ref": _REF, "role": _ROLE, "name": _NAME},
+        [],
         "low",
         "deny",
     ),
     (
         "browser_type",
         "Type in the browser",
-        "Type text into a field (replaces what is there). This focuses the field itself, so "
-        "call it directly - you never need to click the field first.",
-        {"ref": _REF, "text": {"type": "string"}},
-        ["ref", "text"],
+        "Type text into a field (replaces what is there), by ref or role and name. It focuses "
+        "the field itself: never click the field first.",
+        {"ref": _REF, "role": _ROLE, "name": _NAME, "text": {"type": "string"}},
+        ["text"],
         "low",
         "deny",
     ),
@@ -1175,20 +1181,67 @@ for _name, _label, _desc, _params, _req, _risk, _mode in (
         "deny",
     ),
     (
+        "browser_steps",
+        "Do several steps in the browser",
+        "Do a short series of actions in one call, in order, each checked, stopping at the "
+        "first surprise (then you see where it stopped and the page). Use it whenever you "
+        "know the next actions, e.g. from the site playbook: open a page, fill fields, click "
+        "Cari, open a row. Each step: do = open (url) | click | type (text) | select (option) "
+        "| check (on) | wait (text) | scroll | back, the element by role and name as shown "
+        "(or ref), and optional expect: text that must show after it (or url:<part>). "
+        "Sending a form, uploading and signing in are never steps.",
+        {
+            "steps": {
+                "type": "array",
+                "maxItems": 15,
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "do": {
+                            "type": "string",
+                            "enum": [
+                                "open",
+                                "click",
+                                "type",
+                                "select",
+                                "check",
+                                "wait",
+                                "scroll",
+                                "back",
+                            ],
+                        },
+                        "role": {"type": "string"},
+                        "name": {"type": "string"},
+                        "ref": {"type": "string"},
+                        "url": {"type": "string"},
+                        "text": {"type": "string"},
+                        "option": {"type": "string"},
+                        "on": {"type": "boolean"},
+                        "expect": {"type": "string"},
+                    },
+                    "required": ["do"],
+                },
+            }
+        },
+        ["steps"],
+        "low",
+        "deny",
+    ),
+    (
         "browser_select",
         "Choose an option",
-        "Choose an option in a drop-down by its visible text.",
-        {"ref": _REF, "option": {"type": "string"}},
-        ["ref", "option"],
+        "Choose an option in a drop-down (by ref, or role and name) by its visible text.",
+        {"ref": _REF, "role": _ROLE, "name": _NAME, "option": {"type": "string"}},
+        ["option"],
         "low",
         "deny",
     ),
     (
         "browser_check",
         "Tick a box",
-        "Tick (on=true) or untick a checkbox or radio button.",
-        {"ref": _REF, "on": {"type": "boolean"}},
-        ["ref"],
+        "Tick (on=true) or untick a checkbox or radio button (by ref, or role and name).",
+        {"ref": _REF, "role": _ROLE, "name": _NAME, "on": {"type": "boolean"}},
+        [],
         "low",
         "deny",
     ),
@@ -1233,10 +1286,10 @@ for _name, _label, _desc, _params, _req, _risk, _mode in (
     (
         "browser_submit",
         "Send a form",
-        "Press a button that sends a form (a person approves first). Fill and check every field "
-        "before you call this. Say what the form does in why.",
-        {"ref": _REF, "why": {"type": "string"}},
-        ["ref", "why"],
+        "Press a button that sends a form (a person approves first), by ref or role and "
+        "name. Fill and check every field before you call this. Say what it does in why.",
+        {"ref": _REF, "role": _ROLE, "name": _NAME, "why": {"type": "string"}},
+        ["why"],
         "high",
         "deny",
     ),
@@ -1294,6 +1347,9 @@ FOLLOWS = {
     "browser_find": "browser_open",
     "browser_wait": "browser_open",
     "browser_save_page": "browser_open",
+    # P97: a batch of clicks and typing follows the agent's click setting (and each step is
+    # checked against its own tool's setting when it runs).
+    "browser_steps": "browser_click",
     # research_gather reads pages too: an agent set to ask (or deny) before web_fetch gets the
     # same answer here instead of a side door.
     "research_gather": "web_fetch",

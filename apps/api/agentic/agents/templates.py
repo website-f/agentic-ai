@@ -29,6 +29,7 @@ _WEB = {
     "browser_click": "allow",
     "browser_type": "allow",
     "browser_fill": "allow",
+    "browser_steps": "allow",
     "browser_select": "allow",
     "browser_check": "allow",
     "browser_scroll": "allow",
