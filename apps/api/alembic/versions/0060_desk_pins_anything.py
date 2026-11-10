@@ -6,7 +6,7 @@ saved searches. Each pin may carry the person's own name for it (`label`) and si
 their folders (`folder`); a screen's address can be longer than an id, so `ref` grows to 600.
 
 Revision ID: 0060
-Revises: 0058
+Revises: 0059
 Create Date: 2026-11-11 12:00:00
 """
 
@@ -16,7 +16,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision: str = "0060"
-down_revision: str | None = "0058"
+down_revision: str | None = "0059"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

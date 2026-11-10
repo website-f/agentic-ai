@@ -10,6 +10,8 @@
  *   they can no longer open shows as unavailable and opens nothing.
  * - Recent, My AI, How do I…?, Go to.
  * Each person shows, hides and orders these blocks (kept on the server, same on phone and PC). */
+import { MyAssignedTasks } from "@/components/my-assigned-tasks";
+import { assignedTasksQuery } from "@/lib/people";
 import {
   AddressBookIcon,
   AppWindowIcon,
@@ -378,14 +380,14 @@ function Today({ desk, onTab }: { desk: Desk; onTab: (tab: DeskTab) => void }) {
       to: <Link to="/forms" search={{ tab: "todo", form: f.id }} className="hit">{go(t("Fill in"), t("Fill in"))}</Link>,
     })),
   ];
-  // P97 slot: team's MyAssignedTasks. The team engineer's GET /api/me/assigned-tasks and its
-  // component (tasks people assign to this person) go here; until then this shows the work
-  // on this person's plate that the desk already knows: what they gave and their AI does.
+  // P97: tasks people gave this person (team's MyAssignedTasks) sit first under Today when there
+  // are any; "On my plate" keeps the work they gave and what their AI does.
   const mine = desk.work.filter((x) => workGroup(x.status) !== "done").slice(0, 5);
   const total = needs.length;
   return (
     <section data-guide="desk.waiting" aria-label={t("Today")}>
       <SectionHead id="today" count={total || undefined} />
+      <AssignedToMe />
       <div className="grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)]">
         <Card className="min-w-0 overflow-hidden">
           <CardHeader title={t("Needs you")} description={total ? t("Answer these first.") : undefined}
@@ -1072,3 +1074,9 @@ export function greeting(hour: number): string {
   return hour < 12 ? msg("Good morning, {name}") : hour < 18 ? msg("Good afternoon, {name}") : msg("Good evening, {name}");
 }
 
+/** P97: work a manager or colleague gave this person, shown only when there is some. */
+function AssignedToMe() {
+  const { data } = useQuery(assignedTasksQuery);
+  if (!data?.items.length) return null;
+  return <MyAssignedTasks className="mb-4" />;
+}
