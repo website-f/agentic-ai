@@ -4144,32 +4144,45 @@ export const SCREEN_GUIDES: ScreenGuide[] = [
   {
     "view": "salarycalc",
     "title": "Salary calculator",
-    "what": "A calculator that shows, step by step, how a guard's month is counted so you know what to expect. Nothing is saved.",
+    "what": "A calculator that shows, step by step, how a guard's month is counted and what the guard takes home, so you know what to expect. Nothing is saved.",
     "who": "The OM and above, ACT and group leadership.",
     "tabs": [],
     "tasks": [
       {
         "task": "How to work out a guard's month",
         "steps": [
-          "Choose the \"Formula\".",
-          "Type the \"Basic pay a month (RM)\".",
-          "Fill \"Working days worked\", \"Training days\", \"Annual leave days\", \"MC days\", \"Public holidays off\", \"Rest days worked\" and \"Public holidays worked\".",
-          "Read the total under \"Salary\"."
+          "In step 1 \"Formula and month\", choose the \"Formula\" and type the \"Basic pay a month\".",
+          "In step 2 \"Days in the month\", fill \"Working days worked\" and any rest days, public holidays, training, leave or MC days. Type the number or tap the minus and plus buttons.",
+          "Read \"Earnings\", \"Deductions\" and \"Employer pays on top\" below. The \"Net pay\" and \"Employer cost\" stay in view: on the right on a computer, in the bar at the bottom on a phone."
         ]
       },
       {
-        "task": "How to read the result",
+        "task": "How to change who the deduction estimate is for",
         "steps": [
-          "Each line under \"Salary\" shows how it was worked out.",
-          "Below are paid days, overtime hours and hours on duty.",
-          "Yellow notes point out anything to watch."
+          "In step 4 \"Deductions\", open \"Who the estimate is for\".",
+          "Choose Malaysian or Nepali, under 60 or 60 or over, and tick the LINDUNG opt-out if the guard has the form on file."
+        ]
+      },
+      {
+        "task": "How to print the estimate",
+        "steps": [
+          "Tap \"Print estimate\". It prints a payslip-style page in the screen's language. Inside the phone app it is saved as a file instead.",
+          "\"Start again\" puts every field back to the standard month."
         ]
       }
     ],
     "terms": [
       {
         "term": "Gross pay",
-        "means": "Pay before EPF, SOCSO, EIS and PCB are taken off."
+        "means": "Pay before EPF, SOCSO, EIS, LINDUNG and PCB are taken off."
+      },
+      {
+        "term": "Net pay",
+        "means": "Gross pay less the deductions: what the guard takes home."
+      },
+      {
+        "term": "Employer cost",
+        "means": "Gross pay plus what the employer pays on top (EPF, SOCSO, EIS and the HRD levy)."
       },
       {
         "term": "MC days",
@@ -4180,7 +4193,7 @@ export const SCREEN_GUIDES: ScreenGuide[] = [
         "means": "Working on the weekly day off; paid extra."
       }
     ],
-    "notes": "Gross pay only: EPF, SOCSO, EIS and PCB are not taken off. It is not a payslip; the real pay run uses the formula ACT set for the guard's site. The basic pay is a placeholder until ACT sets the real amount. The formula list has the standard 12-hour shift choices, plus any guard formula ACT has in force this month."
+    "notes": "An estimate, not a payslip. Gross pay follows the formula exactly; the real pay run uses the formula ACT set for the guard's site. Deductions use the standard statutory rates and a single person's PCB; the pay run uses the CEO's statutory settings for the month and LHDN's e-PCB. A red line under a field says what to fix. The basic pay is a placeholder until ACT sets the real amount."
   },
   {
     "view": "governance",

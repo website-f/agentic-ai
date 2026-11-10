@@ -1,0 +1,674 @@
+/* =====================================================================================================================
+   P97: the salary calculator laid out as a payslip is read (Fitri, 11 Nov 2026: "fields are not organized and look
+   chaotic"). Steps on the left, the totals beside them on a computer and in a bar at the bottom on a phone. Colours,
+   radii and controls come from styles.css tokens only; works in light and dark.
+   ===================================================================================================================== */
+
+.sc-page {
+  --sc-gap: 20px;
+}
+.sc-head .k-head-actions {
+  flex-wrap: wrap;
+}
+.sc-status {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+/* ---------- Two columns on a computer: the steps, and the summary that stays in view ---------- */
+.sc-layout {
+  display: grid;
+  gap: var(--sc-gap);
+  align-items: start;
+  min-width: 0;
+}
+.sc-main {
+  display: grid;
+  gap: var(--sc-gap);
+  min-width: 0;
+}
+@media (min-width: 1100px) {
+  .sc-layout {
+    grid-template-columns: minmax(0, 1fr) 320px;
+  }
+  .sc-summary {
+    position: sticky;
+    top: 76px;
+  }
+}
+
+/* ---------- A step: number, title, one line of help, then its fields ---------- */
+.sc-step {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md, 12px);
+  box-shadow: var(--shadow);
+  min-width: 0;
+  scroll-margin-top: 76px;
+}
+.sc-step-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 16px 20px 0;
+}
+.sc-step-no {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 650;
+  font-size: 0.85rem;
+  font-variant-numeric: tabular-nums;
+}
+.sc-step-title {
+  min-width: 0;
+  flex: 1;
+}
+.sc-step-title h2 {
+  font-size: 1rem;
+  font-weight: 650;
+  line-height: 28px;
+  letter-spacing: -0.01em;
+}
+.sc-step-title p {
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 0.84rem;
+  max-width: 70ch;
+  text-wrap: pretty;
+}
+.sc-step-body {
+  padding: 16px 20px 20px;
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+}
+
+/* ---------- Fields: label above, control, hint or problem under it ---------- */
+.sc-grid {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+}
+.sc-grid-2 {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr));
+}
+.sc-grid-3 {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 190px), 1fr));
+}
+.sc-grid-4 {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
+}
+.sc-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+.sc-label {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--ink);
+}
+.sc-req {
+  font-size: 0.7rem;
+  font-weight: 550;
+  color: var(--muted);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 0 5px;
+  line-height: 1.5;
+}
+.sc-hint,
+.sc-error {
+  font-size: 0.78rem;
+  line-height: 1.35;
+  color: var(--muted);
+  text-wrap: pretty;
+}
+.sc-error {
+  color: var(--crit);
+  font-weight: 550;
+}
+
+/* An input with its unit inside the same box: "RM [ 1,700.00 ]" and "[ − ] [ 26 ] days [ + ]". */
+.sc-money,
+.sc-stepper {
+  display: flex;
+  align-items: stretch;
+  min-height: var(--ctl-h, 40px);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm, 8px);
+  background: var(--surface);
+  overflow: hidden;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.sc-money:focus-within,
+.sc-stepper:focus-within {
+  border-color: var(--accent);
+  box-shadow: var(--ring);
+}
+.sc-money[data-invalid],
+.sc-stepper[data-invalid] {
+  border-color: var(--crit);
+}
+.sc-money[data-invalid]:focus-within,
+.sc-stepper[data-invalid]:focus-within {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--crit) 22%, transparent);
+}
+.sc-page input.sc-input {
+  flex: 1;
+  min-width: 0;
+  width: 100%;
+  min-height: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  outline: none;
+  padding: 8px 10px;
+  font-size: 1rem;
+  font-weight: 550;
+}
+.sc-num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.sc-unit {
+  display: flex;
+  align-items: center;
+  padding: 0 0 0 12px;
+  color: var(--muted);
+  font-size: 0.85rem;
+  font-weight: 550;
+  user-select: none;
+}
+.sc-unit-after {
+  padding: 0 10px 0 0;
+}
+.sc-stepper .sc-input {
+  padding-right: 6px;
+}
+.sc-stepper-btn {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 40px;
+  border: 0;
+  background: color-mix(in srgb, var(--ink) 4%, var(--surface));
+  color: var(--ink);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.sc-stepper-btn:first-child {
+  border-right: 1px solid var(--line);
+}
+.sc-stepper-btn:last-child {
+  border-left: 1px solid var(--line);
+}
+.sc-stepper-btn:hover:not(:disabled) {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.sc-stepper-btn:active:not(:disabled) {
+  transform: scale(0.96);
+}
+.sc-stepper-btn:disabled {
+  color: var(--muted);
+  opacity: 0.45;
+  cursor: default;
+}
+.sc-stepper-btn svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+}
+
+/* Groups of days. */
+.sc-group {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+}
+.sc-group-title {
+  display: block;
+  margin-bottom: 10px;
+  font-size: 0.74rem;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.sc-group + .sc-group {
+  border-top: 1px solid var(--line);
+  padding-top: 16px;
+}
+
+/* ---------- Worked out, not typed: tinted, no box, never looks like a field ---------- */
+.sc-derived {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 150px), 1fr));
+  gap: 1px;
+  margin: 0;
+  border-radius: var(--r-sm, 8px);
+  overflow: hidden;
+  background: var(--line);
+}
+.sc-derived > div {
+  background: color-mix(in srgb, var(--accent-soft) 45%, var(--bg));
+  padding: 10px 12px;
+  min-width: 0;
+}
+.sc-derived dt {
+  font-size: 0.74rem;
+  color: var(--muted);
+  font-weight: 550;
+}
+.sc-derived dd {
+  margin: 2px 0 0;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+.sc-derived dd.sc-derived-how {
+  margin: 0;
+  font-size: 0.74rem;
+  font-weight: 450;
+  color: var(--muted);
+}
+
+/* Paid days against the full month. */
+.sc-tally {
+  display: grid;
+  gap: 10px;
+}
+.sc-meter {
+  height: 6px;
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--ink) 8%, var(--surface));
+  overflow: hidden;
+}
+.sc-meter > span {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  border-radius: inherit;
+  transition: width 0.25s ease-out;
+}
+.sc-tally-facts {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0;
+}
+.sc-tally-facts dt {
+  font-size: 0.74rem;
+  color: var(--muted);
+}
+.sc-tally-facts dd {
+  margin: 0;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+.sc-tally-facts [data-tone='warn'] dd {
+  color: var(--warn);
+}
+@media (max-width: 480px) {
+  .sc-tally-facts {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* ---------- Money lines, as a payslip lists them ---------- */
+.sc-lines {
+  display: grid;
+  min-width: 0;
+}
+.sc-line {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 4px 16px;
+  align-items: baseline;
+  padding: 9px 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--line) 70%, transparent);
+}
+.sc-line-text {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+}
+.sc-line-label {
+  font-weight: 550;
+}
+.sc-line-how {
+  font-size: 0.78rem;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+.sc-line-note {
+  font-size: 0.8rem;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.sc-amt {
+  text-align: right;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  font-weight: 550;
+}
+.sc-line-total {
+  border-bottom: 0;
+  border-top: 2px solid var(--ink);
+  margin-top: -1px;
+  padding-top: 10px;
+}
+.sc-line-total .sc-line-label,
+.sc-line-total .sc-amt {
+  font-weight: 700;
+}
+.sc-net {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: var(--r-sm, 8px);
+  background: var(--accent-soft);
+  color: var(--ink);
+  font-weight: 650;
+}
+.sc-net strong {
+  font-size: 1.25rem;
+  font-weight: 750;
+  color: var(--accent);
+}
+.sc-net-quiet {
+  background: color-mix(in srgb, var(--ink) 5%, var(--surface));
+}
+.sc-net-quiet strong {
+  color: var(--ink);
+}
+
+/* Who the deduction estimate is for: folded, with the current choice shown. */
+.sc-about {
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm, 8px);
+  background: color-mix(in srgb, var(--ink) 2%, var(--surface));
+}
+.sc-about > summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px 12px;
+  padding: 10px 14px;
+  cursor: pointer;
+  list-style: none;
+}
+.sc-about > summary::-webkit-details-marker {
+  display: none;
+}
+.sc-about > summary::after {
+  content: '';
+  width: 16px;
+  height: 16px;
+  background: var(--chev) center / 16px no-repeat;
+  transition: transform 0.2s;
+}
+.sc-about[open] > summary::after {
+  transform: rotate(180deg);
+}
+.sc-about-label {
+  font-weight: 600;
+  font-size: 0.85rem;
+}
+.sc-about-value {
+  flex: 1;
+  text-align: right;
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+.sc-about-body {
+  display: grid;
+  gap: 14px;
+  padding: 4px 14px 14px;
+}
+.sc-seg {
+  display: flex;
+  flex-wrap: wrap;
+  width: fit-content;
+  max-width: 100%;
+}
+.sc-seg button {
+  min-height: var(--ctl-h, 40px);
+  padding: 6px 14px;
+}
+.sc-check {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 0.875rem;
+  cursor: pointer;
+}
+
+/* ---------- The summary ---------- */
+.sc-sum-card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md, 12px);
+  box-shadow: var(--shadow);
+  padding: 18px 20px 16px;
+  display: grid;
+  gap: 12px;
+}
+.sc-sum-title {
+  font-size: 0.74rem;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.sc-sum-formula {
+  margin-top: -6px;
+  font-size: 0.84rem;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+.sc-sum-net {
+  display: grid;
+  gap: 2px;
+  padding: 14px 16px;
+  border-radius: var(--r-sm, 8px);
+  background: var(--accent-soft);
+}
+.sc-sum-net span {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--accent);
+}
+.sc-sum-net strong {
+  font-family: var(--font-display);
+  font-size: 1.9rem;
+  line-height: 1.15;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+.sc-sum-rows {
+  display: grid;
+  margin: 0;
+}
+.sc-sum-rows > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 7px 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--line) 70%, transparent);
+}
+.sc-sum-rows dt {
+  color: var(--muted);
+  font-size: 0.875rem;
+}
+.sc-sum-rows dd {
+  margin: 0;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.sc-sum-rows dd[data-minus] {
+  color: var(--crit);
+}
+.sc-sum-rows > .sc-sum-sep {
+  border-bottom: 0;
+}
+.sc-sum-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+.sc-sum-facts b {
+  color: var(--ink);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.sc-sum-print {
+  width: 100%;
+}
+.sc-sum-foot {
+  font-size: 0.76rem;
+  color: var(--muted);
+}
+
+/* ---------- Phones and narrow screens: the totals ride along at the bottom ---------- */
+.sc-bar {
+  display: none;
+}
+@media (max-width: 1099px) {
+  .sc-bar {
+    position: sticky;
+    bottom: calc(var(--sc-bar-lift, 0px) + env(safe-area-inset-bottom, 0px));
+    z-index: 4;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas: 'main go' 'sub go';
+    align-items: center;
+    gap: 2px 12px;
+    margin-top: calc(-1 * var(--sc-gap) + 4px);
+    padding: 8px 10px 8px 14px;
+    border: 1px solid var(--line);
+    border-radius: var(--r-md, 12px);
+    background: color-mix(in srgb, var(--surface) 94%, transparent);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    box-shadow: 0 -6px 24px -12px color-mix(in srgb, var(--ink) 30%, transparent);
+  }
+  .sc-bar-main {
+    grid-area: main;
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    min-width: 0;
+  }
+  .sc-bar-label {
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--accent);
+  }
+  .sc-bar-net {
+    font-size: 1.2rem;
+    font-weight: 750;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+  .sc-bar-sub {
+    grid-area: sub;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0 10px;
+    font-size: 0.74rem;
+    color: var(--muted);
+    min-width: 0;
+  }
+  .sc-bar-sub b {
+    color: var(--ink);
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+  .sc-bar-go {
+    grid-area: go;
+    width: 44px;
+    min-width: 44px;
+    padding: 0;
+  }
+  .sc-bar-go svg {
+    width: 18px;
+    height: 18px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.8;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+}
+/* The bottom tab bar on phones (56 px, fixed): the summary bar sits just above it, and drops down while the keyboard is
+   up (mobile.css hides the tabs then). */
+@media (max-width: 860px) {
+  .sc-page {
+    --sc-gap: 16px;
+    --sc-bar-lift: 64px;
+  }
+  :root[data-typing] .sc-page {
+    --sc-bar-lift: 8px;
+  }
+  .sc-step-head {
+    padding: 14px 16px 0;
+  }
+  .sc-step-body {
+    padding: 14px 16px 16px;
+  }
+  .sc-stepper-btn {
+    width: 44px;
+  }
+  .sc-page input.sc-input {
+    font-size: 1rem; /* 16 px: phones do not zoom into the field */
+  }
+}
+@media (max-width: 860px), (pointer: coarse) {
+  .sc-money,
+  .sc-stepper {
+    min-height: 44px;
+  }
+}
+
+@media print {
+  .sc-bar,
+  .sc-head .k-head-actions,
+  .sc-sum-print {
+    display: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sc-meter > span,
+  .sc-about > summary::after {
+    transition: none;
+  }
+}
