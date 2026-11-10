@@ -608,7 +608,10 @@ export interface Api extends ConnectionsClient, ExtractionClient, DraftHelpClien
   staffClockOut(input: StaffShotInput): Promise<unknown>;
   staffPing(input: { lat: number; lng: number; accuracyM: number | null; capturedAt?: string }): Promise<unknown>;
   /** P93: readings kept on the phone while it had no signal, sent together. */
-  staffPings(readings: { lat: number; lng: number; accuracyM: number | null; capturedAt: string }[]): Promise<{ accepted: number; skipped: number }>;
+  staffPings(
+    readings: { lat: number; lng: number; accuracyM: number | null; capturedAt: string }[],
+    notes?: import('./checkin').TrackerNoteInput[],
+  ): Promise<{ accepted: number; skipped: number; notes?: number }>;
   staffClockBoard(date?: string): Promise<StaffClockBoard>;
   staffClockDetail(id: string): Promise<StaffClockDetail>;
   /** Working from home (Fauzan, 27 Oct 2026). */
