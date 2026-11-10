@@ -182,7 +182,9 @@ const LONG_WAIT_MS = 45_000;
 
 function CheckinFlow({ me, onClose, onDone }: { me: MyCheckin; onClose: () => void; onDone: () => void }) {
   const m = me.mine!;
-  const kind = me.state === 'in' ? ('out' as const) : ('in' as const);
+  // P97: fixed when the drawer opens. The screen reloads after the check-out is saved (state then 'out'); reading the
+  // kind again then turned the finished check-out into "Checked in at ..." and hid its route.
+  const [kind] = useState(() => (me.state === 'in' ? ('out' as const) : ('in' as const)));
   // P97 (rule HR-STAFF-SNAP, on by default): a face photo at every check-in and check-out. Before P97 the camera came
   // only with a face HR had approved and a sign-in clock still waiting for its face check, so most staff never saw it.
   const snapOn = me.snap?.on ?? false;
