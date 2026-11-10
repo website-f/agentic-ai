@@ -13,6 +13,7 @@ import { LOCATION_PROBLEM_TEXT, locationProblem, type LocationProblem } from './
 import { PermissionHelp } from './PermissionHelp';
 import { fmtM } from './CheckIn';
 import { MovementView } from './Movement';
+import { ClockPhotoCard, ClockPhotoStep, type ClockPhoto } from './ClockPhoto';
 import '../styles/checkin.css';
 
 const time = (t: string) => t.slice(11, 16);
@@ -87,6 +88,8 @@ export function OwnerTestCheckinView() {
   const [problem, setProblem] = useState<LocationProblem | null>(null);
   const [finding, setFinding] = useState(false);
   const [openId, setOpenId] = useState<string | null>(null);
+  // P97: the face photo first (the same camera as a staff check-in), then the location.
+  const [photoFor, setPhotoFor] = useState<'in' | 'out' | null>(null);
   const [, tick] = useState(0);
   const open = data?.open ?? null;
   useTestTracker(!!open, data?.pingEveryS ?? 15, reload);
@@ -112,7 +115,7 @@ export function OwnerTestCheckinView() {
       </div>
     );
 
-  const step = (kind: 'in' | 'ping' | 'out', success?: string) =>
+  const step = (kind: 'in' | 'ping' | 'out', success?: string, photo?: ClockPhoto | null) =>
     act.run(async () => {
       setProblem(null);
       let fix: TestCheckinFix;
@@ -129,8 +132,10 @@ export function OwnerTestCheckinView() {
           setFinding(false);
         }
       }
-      const r = await api.testCheckin(kind, fix);
+      const r = (await api.testCheckin(kind, photo ? { ...fix, face: photo.face, noCamera: photo.noCamera } : fix)) as { id?: string } | null;
       reload();
+      // P97: at the test check-out, the route from check-in to check-out opens at once.
+      if (kind === 'out' && r?.id) setOpenId(r.id);
       return r;
     }, success);
 
@@ -187,7 +192,7 @@ export function OwnerTestCheckinView() {
           <div className="row">
             {open ? (
               <>
-                <button type="button" className="btn btn-primary ci-go" disabled={act.busy} onClick={() => void step('out', 'Test check-out saved.')}>
+                <button type="button" className="btn btn-primary ci-go" disabled={act.busy} onClick={() => setPhotoFor('out')}>
                   <SignOutIcon size={18} aria-hidden="true" /> {act.busy ? busyText : 'Check out (test)'}
                 </button>
                 <button type="button" className="btn" disabled={act.busy} onClick={() => void step('ping')}>
@@ -195,7 +200,7 @@ export function OwnerTestCheckinView() {
                 </button>
               </>
             ) : (
-              <button type="button" className="btn btn-primary ci-go" disabled={act.busy} onClick={() => void step('in', 'Test check-in saved.')}>
+              <button type="button" className="btn btn-primary ci-go" disabled={act.busy} onClick={() => setPhotoFor('in')}>
                 <SignInIcon size={18} aria-hidden="true" /> {act.busy ? busyText : 'Check in (test)'}
               </button>
             )}
@@ -255,6 +260,21 @@ export function OwnerTestCheckinView() {
       </Card>
 
       {openId && <TestSession s={data.sessions.find((x) => x.id === openId) ?? null} now={nowIso} onClose={() => setOpenId(null)} />}
+      {photoFor && (
+        <Drawer title={photoFor === 'in' ? 'Check in (test)' : 'Check out (test)'} sub="Test only: not attendance, not pay" onClose={() => setPhotoFor(null)}>
+          <ClockPhotoStep
+            kind={photoFor}
+            reasonMin={10}
+            value={null}
+            test
+            onDone={(ph) => {
+              const k = photoFor;
+              setPhotoFor(null);
+              void step(k, k === 'in' ? 'Test check-in saved.' : 'Test check-out saved.', ph);
+            }}
+          />
+        </Drawer>
+      )}
     </div>
   );
 }
@@ -271,6 +291,27 @@ function TestSession({ s, now, onClose }: { s: MyTestCheckins['sessions'][number
         <Stat label="Check-out" value={s.endedAt ? time(s.endedAt) : 'Still in'} icon={<SignOutIcon size={16} />} />
         <Stat label="Time" value={dur(mins)} icon={<TimerIcon size={16} />} />
       </Stats>
+      {s.snaps && (s.snaps.in || s.snaps.out) && (
+        <div className="cph-pair">
+          {(['in', 'out'] as const).map((k) => {
+            const sn = s.snaps?.[k];
+            if (!sn) return null;
+            const label = k === 'in' ? 'Check-in photo (test)' : 'Check-out photo (test)';
+            return sn.image === 'kept' ? (
+              <div key={k} className="cph-card">
+                <span className="label">{label}</span>
+                <span className="small muted">Photo kept with this test.</span>
+              </div>
+            ) : (
+              <ClockPhotoCard
+                key={k}
+                label={label}
+                snap={{ image: sn.image, mode: sn.image ? 'photo' : 'none', faceFound: sn.faceFound, live: sn.live, face: null, reason: sn.reason, review: null, at: sn.at }}
+              />
+            );
+          })}
+        </div>
+      )}
       <MovementView m={s.movement} mapLabel="The route from check-in to check-out" fitKey={s.id} />
       {s.autoEnded && <p className="notice small" data-tone="warn">This test was left open, so Prima closed it at its last reading when the next test started.</p>}
       {s.endedBy === 'sign_out' && <p className="notice small" data-tone="info">You signed out of Prima during this test, so it ended at its last reading.</p>}

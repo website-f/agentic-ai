@@ -7,7 +7,6 @@ import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import {
   AirplaneTiltIcon,
   ArrowClockwiseIcon,
-  CameraIcon,
   CheckCircleIcon,
   CrosshairIcon,
   MapPinIcon,
@@ -20,9 +19,10 @@ import {
 import { fromMs, type CheckinEvent } from '@prima/core';
 import { api, type CheckinPreview, type MyCheckin } from '../api';
 import { Card, Steps, type StepState } from '../kit';
-import { Chip, Drawer, ErrorNotice, useAction, useLoad, type Tone } from '../ui';
-import { FaceCapture, type FaceResult } from './FaceCheck';
+import { Chip, Drawer, ErrorNotice, Loading, useAction, useLoad, type Tone } from '../ui';
 import { PermissionHelp } from './PermissionHelp';
+import { ClockPhotoStep, type ClockPhoto } from './ClockPhoto';
+import { MovementView } from './Movement';
 import { LOCATION_PROBLEM_TEXT, locationProblem, queryPermission, type LocationProblem, type PermState } from './checkin-permissions';
 import type { MapCircle, MapPoint } from './GeoMap';
 import { clockChanged } from './StaffTracker';
@@ -182,16 +182,20 @@ const LONG_WAIT_MS = 45_000;
 
 function CheckinFlow({ me, onClose, onDone }: { me: MyCheckin; onClose: () => void; onDone: () => void }) {
   const m = me.mine!;
-  const kind = me.state === 'in' ? ('out' as const) : ('in' as const);
-  const needFace = kind === 'in' && m.faceEnrolled && m.facePending;
+  // P97: fixed when the drawer opens. The screen reloads after the check-out is saved (state then 'out'); reading the
+  // kind again then turned the finished check-out into "Checked in at ..." and hid its route.
+  const [kind] = useState(() => (me.state === 'in' ? ('out' as const) : ('in' as const)));
+  // P97 (rule HR-STAFF-SNAP, on by default): a face photo at every check-in and check-out. Before P97 the camera came
+  // only with a face HR had approved and a sign-in clock still waiting for its face check, so most staff never saw it.
+  const snapOn = me.snap?.on ?? false;
+  const needFace = snapOn || (kind === 'in' && m.faceEnrolled && m.facePending);
   const [step, setStep] = useState<'location' | 'face' | 'confirm' | 'done'>('location');
   const [perm, setPerm] = useState<PermState>('unknown');
   const [loc, setLoc] = useState<Loc>({ phase: 'idle' });
-  const [face, setFace] = useState<FaceResult | null>(null);
-  const [skipFace, setSkipFace] = useState(false);
+  const [photo, setPhoto] = useState<ClockPhoto | null>(null);
   const [reason, setReason] = useState('');
   const [test, setTest] = useState<TestPlace>('at');
-  const [result, setResult] = useState<{ at: string; text: string; already: boolean } | null>(null);
+  const [result, setResult] = useState<{ at: string; text: string; already: boolean; clockId: string | null } | null>(null);
   const stopWatch = useRef<() => void>(() => undefined);
   const act = useAction();
 
@@ -306,10 +310,11 @@ function CheckinFlow({ me, onClose, onDone }: { me: MyCheckin; onClose: () => vo
         accuracyM: fix.accuracyM,
         capturedAt: fromMs(Date.now()),
         reason: preview?.reasonNeeded || preview?.outcome === 'blocked' ? reason.trim() || null : null,
-        face: face && !skipFace ? { image: face.photo, descriptor: face.descriptor, live: face.live } : null,
+        face: photo?.face ?? null,
+        noCamera: photo?.noCamera ?? null,
       });
       // P93: already checked in (or out) from another tab or phone, or a retry after a lost answer: shown as done.
-      setResult({ at: r.event.at, text: whereText(r.event), already: !!r.already });
+      setResult({ at: r.event.at, text: whereText(r.event), already: !!r.already, clockId: r.clock?.id ?? r.event.clockId ?? null });
       setStep('done');
       clockChanged();
       return r;
@@ -478,7 +483,15 @@ function CheckinFlow({ me, onClose, onDone }: { me: MyCheckin; onClose: () => vo
         </section>
       )}
 
-      {step === 'face' && <FaceStep onFace={(f) => (setFace(f), setSkipFace(false), setStep('confirm'))} onSkip={() => (setSkipFace(true), setStep('confirm'))} />}
+      {step === 'face' && (
+        <ClockPhotoStep
+          kind={kind}
+          reasonMin={me.snap?.reasonMin ?? 10}
+          value={photo}
+          onDone={(p) => (setPhoto(p), setStep('confirm'))}
+          onBack={() => setStep('location')}
+        />
+      )}
 
       {step === 'confirm' && preview && fix && (
         <section className="ci-step">
@@ -497,8 +510,8 @@ function CheckinFlow({ me, onClose, onDone }: { me: MyCheckin; onClose: () => vo
             </div>
             {needFace && (
               <div>
-                <dt>Face check</dt>
-                <dd>{face && !skipFace ? 'Photo taken, matched on the server' : 'Not done: HR will see it is missing'}</dd>
+                <dt>Face photo</dt>
+                <dd>{photo?.face ? (photo.face.descriptor.length ? 'Photo taken, face found' : 'Photo taken') : photo?.noCamera ? `No camera: ${photo.noCamera.reason}` : 'Not taken: your manager or HR will see it is missing'}</dd>
               </div>
             )}
             {preview.reasonNeeded && (
@@ -515,7 +528,7 @@ function CheckinFlow({ me, onClose, onDone }: { me: MyCheckin; onClose: () => vo
               {kind === 'in' ? <SignInIcon size={18} aria-hidden="true" /> : <SignOutIcon size={18} aria-hidden="true" />}
               {act.busy ? 'Saving…' : kind === 'in' ? 'Check in now' : 'Check out now'}
             </button>
-            <button type="button" className="btn btn-ghost" disabled={act.busy} onClick={() => setStep('location')}>
+            <button type="button" className="btn btn-ghost" disabled={act.busy} onClick={() => setStep(needFace ? 'face' : 'location')}>
               Back
             </button>
           </div>
@@ -529,6 +542,8 @@ function CheckinFlow({ me, onClose, onDone }: { me: MyCheckin; onClose: () => vo
           </span>
           <p className="ci-ask-title">{kind === 'in' ? `Checked in at ${time(result.at)}` : `Checked out at ${time(result.at)}`}</p>
           <p className="ci-ask-sub">{result.already ? (kind === 'in' ? 'You were already checked in. Nothing more to do.' : 'You were already checked out. Nothing more to do.') : `You are ${result.text}.`}</p>
+          {/* P97: at check-out, the shift's route from check-in to check-out, its distance and time on and off the place. */}
+          {kind === 'out' && result.clockId && <ShiftSummary clockId={result.clockId} />}
           <button type="button" className="btn btn-primary" onClick={onDone}>
             Done
           </button>
@@ -575,35 +590,16 @@ function Verdict({ preview, kind }: { preview: CheckinPreview; kind: 'in' | 'out
   );
 }
 
-/** The face check with the check-in: enable the camera (with help if it is blocked), then the full-screen camera. */
-function FaceStep({ onFace, onSkip }: { onFace: (f: FaceResult) => void; onSkip: () => void }) {
-  const [perm, setPerm] = useState<PermState>('unknown');
-  useEffect(() => {
-    void queryPermission('camera').then(setPerm);
-  }, []);
+/** P97: the shift just checked out: its route on the map with the distance and time on and off the place. */
+function ShiftSummary({ clockId }: { clockId: string }) {
+  const { data, error } = useLoad(() => api.staffClockDetail(clockId), [clockId]);
+  if (error) return <ErrorNotice error={error} />;
+  if (!data) return <Loading what="your route" />;
+  if (!data.movement) return null;
   return (
-    <section className="ci-step">
-      <div className="ci-ask">
-        <span className="ci-ask-icon" aria-hidden="true">
-          <CameraIcon size={28} />
-        </span>
-        <p className="ci-ask-title">Enable camera</p>
-        <p className="ci-ask-sub">A quick face check confirms it is you. The photo is kept with your clock for HR to spot-check.</p>
-        {perm === 'denied' ? (
-          <div className="ci-blocked">
-            <p className="notice" data-tone="warn">
-              The camera is blocked for Prima. Allow it with these steps, then open the camera.
-            </p>
-            <PermissionHelp kind="camera" />
-          </div>
-        ) : (
-          perm !== 'granted' && <p className="ss-note">Your browser will ask to use the camera. Choose Allow.</p>
-        )}
-        <FaceCapture label="Open the camera" title="Check your face" onCapture={onFace} />
-        <button type="button" className="btn btn-ghost btn-sm" onClick={onSkip}>
-          Camera not working? Continue without the face check
-        </button>
-      </div>
-    </section>
+    <div className="ci-summary">
+      <p className="ci-tl-title">Your shift, from check-in to check-out</p>
+      <MovementView m={data.movement} mapLabel="Your route from check-in to check-out" fitKey={`${clockId}:summary`} />
+    </div>
   );
 }

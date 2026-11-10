@@ -6,11 +6,11 @@
  */
 import { lazy, Suspense } from 'react';
 import { MapPinIcon, PathIcon, QuestionIcon, SignOutIcon } from '@phosphor-icons/react';
-import type { MovementFlag, MovementFlagKind, MovementSummary, StationState } from '@prima/core';
+import type { GapCause, MovementFlag, MovementFlagKind, MovementSummary, RouteSegment, StationState } from '@prima/core';
 import { Stat, Stats } from '../kit';
 import { Chip, type Tone } from '../ui';
 import { MapFallback, fmtM } from './CheckIn';
-import type { MapCircle, MapPoint } from './GeoMap';
+import type { MapCircle, MapLine, MapPoint } from './GeoMap';
 import '../styles/checkin.css';
 
 const GeoMap = lazy(() => import('./GeoMap'));
@@ -33,6 +33,11 @@ const STATE: Record<StationState, { label: string; tone: Tone }> = {
   unknown: { label: 'Unknown', tone: 'unknown' },
 };
 
+/** P97: one gap in plain words. */
+export function gapText(g: { from: string; to: string | null; minutes: number }): string {
+  return `No position from ${time(g.from)} to ${g.to ? time(g.to) : 'now'} (${durText(g.minutes)})`;
+}
+
 /** One review item in plain words (one sentence, so the Malay screen reads it whole). */
 export function flagText(f: MovementFlag): string {
   switch (f.kind) {
@@ -50,6 +55,23 @@ export function flagText(f: MovementFlag): string {
       return `No location from ${time(f.at)} to ${f.to ? time(f.to) : 'now'} (${durText(f.minutes ?? 0)}) while clocked in.`;
   }
 }
+
+/** P97: what the phone said about a gap, in plain words. Never a guess at where the person was. */
+export const GAP_CAUSE: Record<GapCause, string> = {
+  closed: 'Prima was closed or in the background',
+  denied: 'Location was turned off for Prima',
+  offline: 'No signal',
+  no_fix: 'The phone could not find its position',
+  unknown: 'The phone sent nothing (asleep, switched off, or Prima closed)',
+};
+
+/** P97: how each kind of route piece is drawn: inside the place, outside it (highlighted), not measured, a gap (dashed). */
+const SEGMENT_LINE: Record<RouteSegment['kind'], Pick<MapLine, 'tone' | 'dash' | 'weight' | 'label'>> = {
+  inside: { tone: 'ok', weight: 4, label: 'Inside the place' },
+  outside: { tone: 'warn', weight: 6, label: 'Outside the place' },
+  free: { tone: 'primary', weight: 4, label: 'Route' },
+  gap: { tone: 'muted', weight: 3, dash: true, label: 'No position: straight line only' },
+};
 
 const MEASURE: Partial<Record<MovementSummary['measure'], string>> = {
   no_place: 'No place is set for this person, so time outside cannot be measured. HR or the manager sets it on Check-in places.',
@@ -88,10 +110,20 @@ export function MovementView({ m, mapLabel = 'The route while clocked in', fitKe
     ...(end && route.length > 1 ? [{ lat: end.lat, lng: end.lng, accuracyM: end.accuracyM, tone: (end.source === 'out' ? 'crit' : 'info') as MapPoint['tone'], label: `${end.source === 'out' ? 'End' : 'Last'} ${time(end.t)}` }] : []),
   ];
   const ignored = m.readings.total - m.readings.used;
+  // P97: the route in pieces (inside, outside highlighted, gaps dashed); an older answer without pieces draws one line.
+  const segments = m.segments ?? [];
+  const lines: MapLine[] = segments.length
+    ? segments.map((sg) => ({ path: sg.path, ...SEGMENT_LINE[sg.kind] }))
+    : route.length > 1
+      ? [{ path: route, tone: 'primary', label: 'Route' }]
+      : [];
+  const kinds = new Set(segments.map((sg) => sg.kind));
+  const gaps = m.gaps ?? [];
+  const gapM = m.gapDistanceM ?? 0;
   return (
     <div className="mv">
       <Stats>
-        <Stat label="Moved" value={fmtM(m.distanceM)} note={`${m.readings.used} readings used`} icon={<PathIcon size={16} />} />
+        <Stat label="Moved" value={fmtM(m.distanceM)} note={gapM > 0 ? `${fmtM(gapM)} of it across gaps` : `${m.readings.used} readings used`} icon={<PathIcon size={16} />} />
         {m.measure === 'measured' && <Stat label="Inside the place" value={durText(m.insideMin)} tone="ok" icon={<MapPinIcon size={16} />} />}
         {m.measure === 'measured' && <Stat label="Outside the place" value={durText(m.outsideMin)} tone={m.outsideMin ? 'warn' : 'ok'} icon={<SignOutIcon size={16} />} />}
         <Stat label="No location" value={durText(m.unknownMin)} tone={m.unknownMin > m.rules.gapMin ? 'unknown' : 'ok'} icon={<QuestionIcon size={16} />} />
@@ -112,9 +144,30 @@ export function MovementView({ m, mapLabel = 'The route while clocked in', fitKe
         </ul>
       )}
       {route.length > 0 && (
-        <Suspense fallback={<MapFallback height={280} />}>
-          <GeoMap label={mapLabel} height={280} circles={circles} lines={route.length > 1 ? [{ path: route, tone: 'primary', label: 'Route' }] : []} points={points} fitKey={fitKey} />
+        <Suspense fallback={<MapFallback height={300} />}>
+          <GeoMap label={mapLabel} height={300} circles={circles} lines={lines} points={points} fitKey={fitKey} />
         </Suspense>
+      )}
+      {route.length > 1 && (
+        <ul className="mv-legend" aria-label="Map key">
+          <li data-k="start">Start</li>
+          <li data-k="end">{end?.source === 'out' ? 'End' : 'Last'}</li>
+          {kinds.has('inside') && <li data-k="inside">Inside the place</li>}
+          {kinds.has('outside') && <li data-k="outside">Outside the place</li>}
+          {kinds.has('free') && <li data-k="free">Route</li>}
+          {kinds.has('gap') && <li data-k="gap">No position (dashed)</li>}
+          {circles.length > 0 && <li data-k="place">The place</li>}
+        </ul>
+      )}
+      {gaps.length > 0 && (
+        <ul className="mv-gaps" aria-label="Times with no position">
+          {gaps.map((g) => (
+            <li key={g.from}>
+              <span className="mv-gap-time">{gapText(g)}</span>
+              <span className="mv-gap-why">{GAP_CAUSE[g.cause]}</span>
+            </li>
+          ))}
+        </ul>
       )}
       {m.periods.length > 0 && (
         <ol className="ci-timeline mv-timeline" aria-label="Timeline">
@@ -136,6 +189,9 @@ export function MovementView({ m, mapLabel = 'The route while clocked in', fitKe
         {ignored > 0 ? `${ignored} of ${m.readings.total} readings were left out (too rough, sent twice, or an impossible jump). ` : ''}
         {`Readings rougher than ${m.rules.maxAccuracyM} m are not used. Small GPS wobble is not counted as moving. Outside for more than ${m.rules.outOfStationMin} minutes is shown to the manager.`}
       </p>
+      {gaps.length > 0 && (
+        <p className="ss-note">A dashed line only joins the last position before a gap to the first after it: where the person went in between is not known, and no position is made up.</p>
+      )}
     </div>
   );
 }

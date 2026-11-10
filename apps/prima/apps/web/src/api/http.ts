@@ -637,8 +637,14 @@ export class HttpApi implements Api {
   staffPing(input: Parameters<Api['staffPing']>[0]) {
     return this.call('POST', '/me/clock/ping', input);
   }
-  staffPings(readings: Parameters<Api['staffPings']>[0]) {
-    return this.call<{ accepted: number; skipped: number }>('POST', '/me/clock/pings', { readings });
+  staffPings(readings: Parameters<Api['staffPings']>[0], notes?: Parameters<Api['staffPings']>[1]) {
+    return this.call<{ accepted: number; skipped: number; notes?: number }>('POST', '/me/clock/pings', notes?.length ? { readings, notes } : { readings });
+  }
+  clockPhotoReviews() {
+    return this.call<Awaited<ReturnType<Api['clockPhotoReviews']>>>('GET', '/staff-clock-photos');
+  }
+  decideClockPhoto(id: string, decision: 'cleared' | 'upheld', note: string) {
+    return this.call('POST', `/staff-clock-photos/${encodeURIComponent(id)}`, { decision, note });
   }
   // P81: staff check-in by place (apps/api/src/checkin.controller.ts).
   // P90: the owner's test check-in (owner only; the server refuses anyone else).

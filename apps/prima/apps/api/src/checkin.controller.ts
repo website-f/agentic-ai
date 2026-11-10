@@ -7,6 +7,16 @@ import { AccessDenied, RefusedAfterSave, checkinScope, type CheckinAddress, type
 import { AuthGuard, UserId } from './auth';
 import { Db } from './db';
 import { GeocodeBusy, GeocodeOff, geocoderFromEnv, type Geocoder } from './geocode';
+import { faceEngineConfig } from './face-engine';
+
+/** P97: where the face engine runs (the server's own setting, never the phone's word). */
+function faceEngineMode(): 'phone' | 'server' {
+  try {
+    return faceEngineConfig().mode;
+  } catch {
+    return 'server';
+  }
+}
 
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -35,17 +45,30 @@ function fixOf(b: Record<string, unknown>) {
   return { lat, lng, accuracyM, capturedAt: typeof b.capturedAt === 'string' ? b.capturedAt.slice(0, 40) : null };
 }
 
+/**
+ * The face photo sent with a check-in or check-out. P97: the descriptor may be empty (a photo taken without the phone's
+ * face engine: Prima's own engine on the server, or the engine did not load); then the face is not matched.
+ */
+function faceInput(v: unknown): CheckinInput['face'] {
+  if (v == null) return null;
+  const f = v as Record<string, unknown>;
+  const image = str(f.image, 'face.image', 2_500_000);
+  if (!/^data:image\/jpeg;base64,/.test(image)) throw new BadRequestException('Take the photo with the app camera.');
+  const d = f.descriptor == null ? [] : f.descriptor;
+  if (!Array.isArray(d) || (d.length !== 0 && d.length !== 128) || !d.every((x) => typeof x === 'number' && Number.isFinite(x)))
+    throw new BadRequestException('face.descriptor must be 128 numbers, or empty');
+  return { image, descriptor: d as number[], live: f.live === true };
+}
+
+/** P97: no camera, with the person's reason. */
+function noCameraInput(v: unknown): CheckinInput['noCamera'] {
+  if (v == null) return null;
+  const o = v as Record<string, unknown>;
+  return { reason: str(o.reason, 'noCamera.reason', 500) };
+}
+
 function checkinInput(b: Record<string, unknown>): CheckinInput {
-  let face: CheckinInput['face'] = null;
-  if (b.face != null) {
-    const f = b.face as Record<string, unknown>;
-    const image = str(f.image, 'face.image', 2_500_000);
-    if (!/^data:image\/jpeg;base64,/.test(image)) throw new BadRequestException('Take the photo with the app camera.');
-    const d = f.descriptor;
-    if (!Array.isArray(d) || d.length !== 128 || !d.every((x) => typeof x === 'number' && Number.isFinite(x))) throw new BadRequestException('face.descriptor must be 128 numbers');
-    face = { image, descriptor: d as number[], live: f.live === true };
-  }
-  return { ...fixOf(b), reason: opt(b.reason, 'reason', 500), face };
+  return { ...fixOf(b), reason: opt(b.reason, 'reason', 500), face: faceInput(b.face), noCamera: noCameraInput(b.noCamera), faceEngine: faceEngineMode() };
 }
 
 function ruleInput(v: unknown): CheckinRuleInput {
@@ -159,7 +182,9 @@ export class CheckinController {
   @Post('me/test-checkin/in')
   testIn(@UserId() uid: string, @Body() b: Record<string, unknown>) {
     const fix = fixOf(b);
-    return this.db.asUser(uid, (svc, u) => svc.ownerTestCheckins.start(u, fix));
+    // P97: the test's face photo, as a staff check-in's.
+    const photo = { face: faceInput(b.face), noCamera: noCameraInput(b.noCamera) };
+    return this.db.asUser(uid, (svc, u) => svc.ownerTestCheckins.start(u, fix, photo));
   }
 
   @Post('me/test-checkin/ping')
@@ -171,7 +196,22 @@ export class CheckinController {
   @Post('me/test-checkin/out')
   testOut(@UserId() uid: string, @Body() b: Record<string, unknown>) {
     const fix = fixOf(b);
-    return this.db.asUser(uid, (svc, u) => svc.ownerTestCheckins.end(u, fix));
+    const photo = { face: faceInput(b.face), noCamera: noCameraInput(b.noCamera) };
+    return this.db.asUser(uid, (svc, u) => svc.ownerTestCheckins.end(u, fix, photo));
+  }
+
+  // P97: the check-in and check-out face photos for the person's manager or HR to look at (the staff clock's scope; the
+  // table's row-level security agrees), and their decision with a comment. Never the person's own.
+  @Get('staff-clock-photos')
+  photoReviews(@UserId() uid: string) {
+    return this.db.asUser(uid, (svc, u) => svc.clockSnapReviews(u));
+  }
+
+  @Post('staff-clock-photos/:id')
+  decidePhoto(@UserId() uid: string, @Param('id') sid: string, @Body() b: Record<string, unknown>) {
+    const decision = b.decision === 'cleared' || b.decision === 'upheld' ? b.decision : null;
+    if (!decision) throw new BadRequestException('decision must be cleared or upheld');
+    return this.db.asUser(uid, (svc, u) => svc.decideClockSnap(u, id(sid), decision, b.note == null ? '' : str(b.note, 'note', 500)));
   }
 
   @Get('checkin/setup')

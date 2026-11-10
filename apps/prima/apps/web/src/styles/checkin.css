@@ -873,3 +873,175 @@ button.mv-review {
   color: inherit;
   width: 100%;
 }
+
+/* P97: the route map's key and the times with no position. */
+.mv-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: 0.8125rem;
+  color: var(--muted);
+}
+.mv-legend li {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.mv-legend li::before {
+  content: '';
+  display: inline-block;
+  width: 22px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--primary);
+}
+.mv-legend li[data-k='start']::before,
+.mv-legend li[data-k='end']::before {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 2px solid #fff;
+  box-shadow: 0 0 0 1px var(--line);
+  background: var(--ok);
+}
+.mv-legend li[data-k='end']::before {
+  background: var(--crit);
+}
+.mv-legend li[data-k='inside']::before {
+  background: var(--ok);
+}
+.mv-legend li[data-k='outside']::before {
+  height: 6px;
+  background: var(--warn);
+}
+.mv-legend li[data-k='gap']::before {
+  height: 0;
+  border-top: 3px dashed var(--muted);
+  background: none;
+}
+.mv-legend li[data-k='place']::before {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid var(--primary);
+  background: color-mix(in srgb, var(--primary) 15%, transparent);
+}
+.mv-gaps {
+  display: grid;
+  gap: 6px;
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.mv-gaps li {
+  display: grid;
+  gap: 2px;
+  padding: 8px 10px;
+  border-radius: var(--r-sm, 8px);
+  border-left: 3px dashed var(--unknown);
+  background: var(--surface-2);
+  font-size: 0.875rem;
+}
+.mv-gap-time {
+  font-weight: 600;
+}
+.mv-gap-why {
+  color: var(--muted);
+}
+
+/* P97: the face photo at check-in and check-out. */
+.cph-done {
+  display: grid;
+  grid-template-columns: minmax(0, 132px) minmax(0, 1fr);
+  gap: 14px;
+  align-items: start;
+}
+.cph-photo {
+  width: 100%;
+  aspect-ratio: 3 / 4;
+  object-fit: cover;
+  border-radius: var(--r-md, 12px);
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+}
+.cph-photo-sm {
+  max-width: 120px;
+}
+.cph-facts {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+.cph-facts .ci-ask-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--ok);
+}
+.cph-card {
+  display: grid;
+  gap: 6px;
+  justify-items: start;
+  min-width: 0;
+}
+.cph-nophoto {
+  display: grid;
+  place-items: center;
+  width: 120px;
+  aspect-ratio: 3 / 4;
+  border-radius: var(--r-md, 12px);
+  border: 1px dashed var(--line);
+  color: var(--muted);
+  background: var(--surface-2);
+}
+.cph-pair {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+.cph-review {
+  display: grid;
+  grid-template-columns: minmax(0, 96px) minmax(0, 1fr);
+  gap: 12px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--line);
+}
+.cph-review:last-child {
+  border-bottom: 0;
+}
+.cph-review .cph-photo,
+.cph-review .cph-nophoto {
+  width: 96px;
+  max-width: 96px;
+}
+@media (max-width: 380px) {
+  .cph-done {
+    grid-template-columns: minmax(0, 104px) minmax(0, 1fr);
+  }
+}
+/* P97: the clock-out summary and the following status on My clock. */
+.ci-summary {
+  display: grid;
+  gap: 12px;
+  text-align: left;
+  width: 100%;
+}
+.trk {
+  display: grid;
+  gap: 8px;
+}
+.trk-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+}
+.trk-toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+}

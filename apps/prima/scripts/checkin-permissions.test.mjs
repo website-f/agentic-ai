@@ -111,7 +111,9 @@ test('the check-in screens keep the rules the server enforces', () => {
   assert.match(flow, /api\.checkinPreview\(fix\)/);
   assert.doesNotMatch(flow, /verdict:\s*['"]in_area['"]/);
   assert.match(flow, /<PermissionHelp kind="location" \/>/);
-  assert.match(flow, /<PermissionHelp kind="camera" \/>/);
+  // P97: the camera step is the face photo step (ClockPhoto.tsx), used at check-in and check-out.
+  assert.match(flow, /<ClockPhotoStep/);
+  assert.match(read('views/ClockPhoto.tsx'), /<PermissionHelp kind="camera" \/>/);
   const face = read('views/FaceCheck.tsx');
   assert.match(face, /cameraProblem\(e\)/);
   assert.match(face, /problem === 'denied'/);

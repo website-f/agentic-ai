@@ -54,6 +54,8 @@ const MODULE_TABLES: Partial<Record<TableName, string>> = {
   pdpaSettings: 'The PDPA settings are not installed in the database yet (module pdpa-register-v1, run by the CEO).',
   // P90: the owner's test check-in (db/modules/owner-test-checkin-v1.sql, applied by the office prima-setup).
   ownerTestCheckins: 'The owner test check-in is not set up in this database yet (module owner-test-checkin-v1).',
+  // P97: the staff check-in and check-out face photos (db/modules/clock-snaps-v1.sql, applied by the office prima-setup).
+  clockSnaps: 'Check-in face photos are not set up in this database yet (module clock-snaps-v1).',
 };
 
 // Exported for the per-request read snapshots (read-cache.ts, P83).
@@ -248,6 +250,7 @@ checkinRules: 'prima.checkin_rules',
 checkinSettings: 'prima.checkin_settings',
 checkinEvents: 'prima.checkin_events',
 ownerTestCheckins: 'prima.owner_test_checkins',
+clockSnaps: 'prima.clock_snaps',
 loginHandovers: 'prima.login_handovers',
 hrFilings: 'prima.hr_filings',
 hrCases: 'prima.hr_cases',
@@ -420,6 +423,7 @@ const HAS_COMPANY_COLUMN = new Set<TableName>([
 'meetings',
 'staffClocks',
 'locationPings',
+'clockSnaps',
 'remoteArrangements',
 'remoteDays',
 'flexRequests',

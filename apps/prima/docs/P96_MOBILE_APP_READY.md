@@ -114,3 +114,51 @@ a Mac with Xcode for iOS, Android Studio for Android, and the store accounts.
 
 Gates that stay: the store listings, the privacy policy page, the app signing keys and who holds them, and the
 decision to publish are for Fitri and the CEO.
+
+## P97: following the location in the background (the Prima app only)
+
+Fitri, 11 Nov 2026: "The location must be logged even if they close the thing." A web page (Chrome, Safari, Prima
+installed from the browser) cannot read the location once Prima is closed or the phone is asleep: no browser allows it,
+on Android or iPhone. Prima in a browser therefore follows while it is open (also in a background tab while the browser
+lets it), can keep the screen on while clocked in (the person's choice on My clock), queues positions without signal,
+and records what the phone said (sent to the background, location refused, no position, no signal) so that every gap
+shows its likely cause. It never fills a gap with made-up positions.
+
+The wrapped app can follow with Prima in the background. Prima already uses the plugin when it is there
+(`apps/web/src/native-geo.ts`, used by `views/StaffTracker.tsx`): only while the person is clocked in, started after a
+check-in and stopped at check-out. Without the plugin the app behaves like the browser. Steps for the wrapper:
+
+1. In `prima-mobile/`: `npm i @capacitor-community/background-geolocation@^1.2` (the 1.x line works with Capacitor 6 and
+   7), then `npx cap sync`. Nothing else in Prima changes: the plugin is reached as
+   `window.Capacitor.Plugins.BackgroundGeolocation` on the live site the app loads (`server.url`).
+2. Android `android/app/src/main/AndroidManifest.xml` (inside `<manifest>`):
+
+   ```xml
+   <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+   <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+   <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+   <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
+   <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+   ```
+
+   The plugin follows through a foreground service with a notification ("Prima: clocked in. Prima is following your
+   location while you are clocked in. It stops when you check out."), so "Allow only while using the app" is enough and
+   `ACCESS_BACKGROUND_LOCATION` is not needed. In `android/app/src/main/res/values/strings.xml` add
+   `<string name="capacitor_background_geolocation_notification_channel_name">Prima location while clocked in</string>`
+   and, for the notification's icon, `<string name="capacitor_background_geolocation_notification_icon">drawable/ic_stat_prima</string>`
+   (a white-on-transparent icon in `res/drawable`).
+3. iOS `ios/App/App/Info.plist`: `NSLocationWhenInUseUsageDescription` ("Prima checks you are at your site when you
+   clock in and follows your location while you are clocked in."), `NSLocationAlwaysAndWhenInUseUsageDescription` (the
+   same words), and `UIBackgroundModes` with `location`. In Xcode, Signing & Capabilities > Background Modes > Location
+   updates. iOS shows the blue location indicator while Prima follows.
+4. Phones that stop apps to save battery (many Android makes): staff set Prima's battery use to "Unrestricted"
+   (Settings > Apps > Prima > Battery). Without it the phone may still stop the app after some minutes: the gap then
+   shows on the record as "The phone sent nothing".
+5. Store review: Google Play asks for the location permission declaration and a short video showing the notice before
+   the permission prompt (Prima's check-in notice says location is followed while clocked in); Apple asks why background
+   location is needed. The words, the privacy policy and the PDPA notice to staff are for Fitri, the PDPA officer and
+   the company lawyer.
+6. Test on a real phone: check in (face photo, location), lock the phone and walk for 10 minutes, open Prima: My clock
+   shows "Following, also in the background", the route has no gap for the walk, and check-out shows the whole route
+   with its distance. Then turn location off for Prima during a walk: the record shows a dashed gap "Location was turned
+   off for Prima".

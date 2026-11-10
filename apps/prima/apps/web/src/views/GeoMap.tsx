@@ -30,6 +30,9 @@ export interface MapLine {
   path: { lat: number; lng: number }[];
   tone?: MapTone;
   label?: string;
+  /** P97: dashed (a gap: no position came between the two ends) and the line's width. */
+  dash?: boolean;
+  weight?: number;
 }
 
 export interface GeoMapProps {
@@ -121,7 +124,7 @@ export default function GeoMap({ lines = [], circles = [], points = [], pin, onP
       if (l.path.length < 2) continue;
       const route = L.polyline(
         l.path.map((p) => [p.lat, p.lng] as L.LatLngTuple),
-        { color: color(l.tone), weight: 4, opacity: 0.85, lineJoin: 'round', lineCap: 'round', interactive: !!l.label },
+        { color: color(l.tone), weight: l.weight ?? 4, opacity: l.dash ? 0.75 : 0.85, dashArray: l.dash ? '6 8' : undefined, lineJoin: 'round', lineCap: 'round', interactive: !!l.label },
       );
       if (l.label) route.bindTooltip(l.label, { sticky: true });
       route.addTo(g);

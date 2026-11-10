@@ -12,7 +12,18 @@ export type CheckinReviews = R<'checkinReviews'>;
 export type CheckinSites = R<'checkinSites'>;
 /** P90: the owner's test check-ins (never attendance or pay). */
 export type MyTestCheckins = Awaited<ReturnType<PrimaService['ownerTestCheckins']['mine']>>;
-export type TestCheckinFix = { lat: number; lng: number; accuracyM: number | null; capturedAt?: string | null };
+export type TestCheckinFix = {
+  lat: number;
+  lng: number;
+  accuracyM: number | null;
+  capturedAt?: string | null;
+  /** P97: the test's face photo, or no camera with the reason (check-in and check-out only). */
+  face?: { image: string; descriptor: number[]; live: boolean } | null;
+  noCamera?: { reason: string } | null;
+};
+/** P97: the check-in and check-out face photos for a manager or HR to look at. */
+export type ClockPhotoReviews = R<'clockSnapReviews'>;
+export type TrackerNoteInput = { at: string; kind: import('@prima/core').TrackerNoteKind };
 export type { CheckinAddress, CheckinInput, CheckinPlaceInput, CheckinPolicy, CheckinRuleInput };
 
 /** One result of the address search (the API asks OpenStreetMap; the browser never does). */
@@ -44,4 +55,7 @@ export interface CheckinClient {
   /** P90: the owner's TEST check-in, readings on the way, and check-out. Owner only; never attendance or pay. */
   myTestCheckins(): Promise<MyTestCheckins>;
   testCheckin(step: 'in' | 'ping' | 'out', fix: TestCheckinFix): Promise<unknown>;
+  /** P97: the face photos to look at, and the decision (fine or follow up) with a comment. */
+  clockPhotoReviews(): Promise<ClockPhotoReviews>;
+  decideClockPhoto(id: string, decision: 'cleared' | 'upheld', note: string): Promise<unknown>;
 }

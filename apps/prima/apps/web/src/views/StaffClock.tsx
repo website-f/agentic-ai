@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import {
+  BroadcastIcon,
   ClockIcon,
   CoffeeIcon,
   DoorOpenIcon,
@@ -29,6 +30,9 @@ import { CheckinPlacesView, CheckinReviewView } from './CheckinPlaces';
 import { MyTimeSlipSection, TimeSlipBoardView } from './TimeSlip';
 import { OwnerTestCheckinView } from './OwnerTestCheckin';
 import { MOVE_FLAG, MovementChips, MovementView, flagText } from './Movement';
+import { ClockPhotoCard } from './ClockPhoto';
+import { awakeWanted, setAwakeWanted, useTrackerStatus } from './StaffTracker';
+import { inAppShell } from '../native';
 // P93: the tracker moved to its own file (adaptive, offline queue, back-on-screen reading); App.tsx imports it from here.
 export { StaffTracker } from './StaffTracker';
 import '../styles/selfservice.css';
@@ -209,6 +213,9 @@ export function MyClockView() {
       {/* P81: check in and out by place, with the location checked by the server. */}
       <MyCheckinCard />
 
+      {/* P97: how the location is followed on this phone, said honestly (a web page cannot follow a closed app). */}
+      {open && !data.home && <TrackingCard lastPingAt={open.lastPingAt} />}
+
       {/* P93: today's movement, worked out the same way the manager sees it. */}
       {data.today?.movement && (
         <Card title="My movement today" sub="From your location readings while clocked in, and only then. You, your manager and HR see it.">
@@ -348,6 +355,7 @@ export function StaffClockBoardView() {
         {data.viewOnly && <p className="notice">You see your IT team's clock, view only.</p>}
       </PageHead>
       <FaceReviewsPanel />
+      <ClockPhotoReviews onOpen={setOpen} />
       <div className="tabbar" role="tablist" aria-label="Staff clock sections">
         <button role="tab" aria-selected={tab === 'clock'} onClick={() => setTab('clock')}>
           Clock today
@@ -618,6 +626,17 @@ function ClockDetail({ id, onClose }: { id: string; onClose: () => void }) {
               })}
             </div>
           </section>
+          {/* P97: the face photos of this record's check-ins and check-outs. */}
+          {data.snaps && data.snaps.length > 0 && (
+            <section className="ss-sec">
+              <h3 className="ss-sec-title">Face photos</h3>
+              <div className="cph-pair">
+                {data.snaps.map((sn) => (
+                  <ClockPhotoCard key={sn.id} label={sn.kind === 'in' ? 'Check-in photo' : 'Check-out photo'} snap={sn} />
+                ))}
+              </div>
+            </section>
+          )}
           {data.movement && (
             <section className="ss-sec">
               <h3 className="ss-sec-title">Movement</h3>
@@ -791,6 +810,149 @@ function FaceReviewsPanel() {
                       onClick={() => void act.run(() => api.decideFace(r.personId, false, note[r.personId] ?? ''), 'Face refused.').then(() => list.reload())}
                     >
                       Refuse
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          </li>
+        ))}
+      </ul>
+      {act.error && (
+        <div className="ss-pad">
+          <ErrorNotice error={act.error} />
+        </div>
+      )}
+    </Card>
+  );
+}
+
+/**
+ * P97: following the location while clocked in, said honestly. In the Prima app with background following the phone
+ * keeps sending; in a browser only while Prima is open (also in a background tab while the browser allows it), with an
+ * option to keep the screen on. Times without a position show as gaps with their likely cause, never filled in.
+ */
+function TrackingCard({ lastPingAt }: { lastPingAt: string | null }) {
+  const st = useTrackerStatus();
+  const [awake, setAwake] = useState(awakeWanted());
+  const app = inAppShell();
+  const last = st.lastFixAt ? fromMs(st.lastFixAt) : lastPingAt;
+  const mode =
+    api.mode === 'demo'
+      ? { label: 'Test version: no location followed', tone: 'neutral' as Tone }
+      : st.problem === 'denied'
+        ? { label: 'Location is off for Prima', tone: 'crit' as Tone }
+        : st.mode === 'native'
+          ? { label: 'Following, also in the background', tone: 'ok' as Tone }
+          : st.mode === 'web'
+            ? { label: 'Following while Prima is open', tone: 'info' as Tone }
+            : { label: 'Starting', tone: 'neutral' as Tone };
+  return (
+    <Card title="Location while clocked in" actions={<Chip tone={mode.tone}>{mode.label}</Chip>}>
+      <div className="trk">
+        <div className="trk-line ss-meta">
+          <span>
+            <BroadcastIcon size={14} aria-hidden="true" /> {last ? `Last position sent ${time(last)}` : 'No position sent yet'}
+          </span>
+          {st.queued > 0 && <Chip tone="warn">{`${st.queued} waiting for signal`}</Chip>}
+        </div>
+        {st.problem === 'denied' && (
+          <p className="notice small" data-tone="warn">
+            Location is blocked for Prima, so nothing is recorded and your manager sees a gap. Allow location for Prima in the phone settings.
+          </p>
+        )}
+        {st.mode === 'native' ? (
+          <p className="ss-note">The Prima app keeps sending your position with Prima in the background or the screen off, until you check out. The phone shows a notice while it does.</p>
+        ) : (
+          <p className="ss-note">
+            {app
+              ? 'This Prima app follows your location only while Prima is open. Keep it open while you move.'
+              : 'A web page can follow your location only while Prima is open (also in another tab, while the browser allows it). Once Prima is closed or the phone sleeps, nothing is recorded: that time shows as a gap with its likely cause, never as a made-up route. The Prima app for Android and iPhone can follow in the background.'}
+          </p>
+        )}
+        {st.mode === 'web' && st.wake !== 'unsupported' && (
+          <label className="trk-toggle">
+            <input
+              type="checkbox"
+              checked={awake}
+              onChange={(e) => {
+                setAwake(e.target.checked);
+                setAwakeWanted(e.target.checked);
+              }}
+            />
+            <span>Keep the screen on while clocked in (uses more battery)</span>
+            {st.wake === 'on' && <Chip tone="ok">On</Chip>}
+          </label>
+        )}
+      </div>
+    </Card>
+  );
+}
+
+/** P97: the check-in and check-out face photos for the manager or HR to look at: fine, or follow up, with a comment. */
+function ClockPhotoReviews({ onOpen }: { onOpen: (clockId: string) => void }) {
+  const list = useLoad(() => api.clockPhotoReviews().catch(() => null), []);
+  const [note, setNote] = useState<Record<string, string>>({});
+  const act = useAction();
+  const d = list.data;
+  if (!d || d.open.length === 0) return null;
+  const WHY: Record<string, string> = {
+    no_camera: 'No camera',
+    no_photo: 'No photo',
+    not_matched: 'Face not matched',
+    not_live: 'Face did not move',
+    no_face: 'No face found',
+  };
+  return (
+    <Card title={`Face photos to look at (${d.open.length})`} sub="Check-ins and check-outs without a photo, with a face that did not match or did not move. Nobody decides their own." flush>
+      <ul className="ss-rows">
+        {d.open.map((sn) => (
+          <li key={sn.id} className="cph-review">
+            {sn.image ? <img className="cph-photo" src={sn.image} alt={`${sn.kind === 'in' ? 'Check-in' : 'Check-out'} photo of ${sn.userName}`} /> : <span className="cph-nophoto" aria-hidden="true" />}
+            <div className="ss-form">
+              <div className="ss-row-main">
+                <span className="ss-row-title">{sn.userName}</span>
+                <span className="ss-meta">
+                  {sn.kind === 'in' ? 'Check-in' : 'Check-out'} {dateTimeLabel(sn.at)}
+                </span>
+              </div>
+              <div className="ss-chips">
+                {(sn.review?.why ?? []).map((w) => (
+                  <Chip key={w} tone={w === 'not_matched' ? 'crit' : 'warn'}>
+                    {WHY[w] ?? w}
+                  </Chip>
+                ))}
+                {sn.face && <Chip tone={sn.face.matched ? 'ok' : 'crit'}>{`Match ${Math.round(sn.face.score * 100)}%`}</Chip>}
+              </div>
+              {sn.reason && <p className="small">“{sn.reason}”</p>}
+              {sn.clockId && (
+                <button type="button" className="btn btn-ghost btn-sm" onClick={() => onOpen(sn.clockId!)}>
+                  Open the clock record
+                </button>
+              )}
+              {d.canDecide && (
+                <>
+                  <input
+                    className="input"
+                    placeholder="Comment (needed)"
+                    aria-label={`Comment for ${sn.userName}`}
+                    value={note[sn.id] ?? ''}
+                    onChange={(e) => setNote((x) => ({ ...x, [sn.id]: e.target.value }))}
+                  />
+                  <div className="ss-actions">
+                    <button
+                      className="btn btn-primary btn-sm"
+                      disabled={act.busy || !(note[sn.id] ?? '').trim()}
+                      onClick={() => void act.run(() => api.decideClockPhoto(sn.id, 'cleared', note[sn.id] ?? ''), 'Marked fine.').then(() => list.reload())}
+                    >
+                      Fine
+                    </button>
+                    <button
+                      className="btn btn-sm"
+                      disabled={act.busy || !(note[sn.id] ?? '').trim()}
+                      onClick={() => void act.run(() => api.decideClockPhoto(sn.id, 'upheld', note[sn.id] ?? ''), 'Marked for follow-up.').then(() => list.reload())}
+                    >
+                      Follow up
                     </button>
                   </div>
                 </>

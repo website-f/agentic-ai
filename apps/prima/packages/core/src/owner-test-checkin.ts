@@ -10,6 +10,8 @@
 import { isOwnerAdmin } from './access';
 import { checkinCompanyOf, checkinTargets, haversineM, validLatLng, type CheckinTarget } from './checkin';
 import { MOVEMENT_DEFAULTS, analyseMovement, type MovementSummary, type RawReading } from './movement';
+import { SNAP_REASON_MIN, snapImageProblem } from './clock-snap';
+import { validFaceDescriptor } from './face';
 import { RULES } from './rules';
 import { BadRequest } from './service';
 import type { Store } from './store';
@@ -63,7 +65,30 @@ export interface OwnerTestCheckin {
   /** P93: how it ended: a check-out, signing out of Prima (at its last reading), or Prima closing one left open. */
   endedBy?: 'check_out' | 'sign_out' | 'prima';
   note: string;
+  /** P97: the face photo at the test check-in and check-out (the same camera as the staff check-in), on the owner's own row. */
+  snaps?: { in?: OwnerTestSnap; out?: OwnerTestSnap };
 }
+
+/** P97: the test's face photo: the same face check as a staff check-in, never matched (the owner registers no face). */
+export interface OwnerTestSnap {
+  at: IsoDateTime;
+  /** The compressed photo; '' with no camera. */
+  image: string;
+  /** The phone's face engine found a face, and saw it move. */
+  faceFound: boolean;
+  live: boolean;
+  /** With no camera: what was written. */
+  reason: string | null;
+}
+
+/** What the screen sends with a test check-in or check-out. */
+export interface OwnerTestSnapInput {
+  face?: { image: string; descriptor: number[]; live: boolean } | null;
+  noCamera?: { reason: string } | null;
+}
+
+/** P97: the test sessions sent with their photos (the newest); older ones say a photo is kept without sending it. */
+export const OWNER_TEST_LIST_PHOTOS = 5;
 
 export interface OwnerTestFix {
   lat: number;
@@ -80,6 +105,19 @@ const NOT_OWNER = 'Test check-in is only for the owner. Staff check in on My clo
 /** Who may use the test check-in: the owner only. Everyone else's screens and records are unchanged. */
 export function mayTestCheckin(user: User): boolean {
   return isOwnerAdmin(user);
+}
+
+/** P97: the test's photo, checked as a staff check-in photo is; null when nothing was sent. */
+function snapOf(input: OwnerTestSnapInput | null | undefined, at: IsoDateTime): OwnerTestSnap | null {
+  if (!input || (!input.face && !input.noCamera)) return null;
+  if (input.face) {
+    const p = snapImageProblem(input.face.image);
+    if (p) throw new BadRequest(p);
+    return { at, image: input.face.image, faceFound: validFaceDescriptor(input.face.descriptor), live: input.face.live === true, reason: null };
+  }
+  const reason = typeof input.noCamera?.reason === 'string' ? input.noCamera.reason.replace(/[\u0000-\u001f\u007f]/g, ' ').trim().slice(0, 500) : '';
+  if (reason.length < SNAP_REASON_MIN) throw new BadRequest(`Write why the camera cannot be used (at least ${SNAP_REASON_MIN} characters).`);
+  return { at, image: '', faceFound: false, live: false, reason };
 }
 
 function pointOf(fix: OwnerTestFix, at: IsoDateTime): OwnerTestPoint {
@@ -193,14 +231,16 @@ export class OwnerTestCheckinService {
     const targets = await this.targets(user);
     // P93: the distance shown is worked out again from the readings each time (so a test saved before this fix shows the
     // right figure too), with the time inside and outside the owner's office and the review items a manager would see.
-    const view = (s: OwnerTestCheckin): OwnerTestView => {
+    const view = (s: OwnerTestCheckin, photos = true): OwnerTestView => {
       const movement = this.movement(s, targets);
-      return { ...s, distanceM: movement.distanceM, savedDistanceM: s.distanceM, trail: thinRoute(s.trail, OWNER_TEST_LIST_POINTS), movement };
+      // P97: older tests' photos stay on their row; the list does not carry them (the screen says a photo is kept).
+      const snaps = s.snaps && !photos ? Object.fromEntries(Object.entries(s.snaps).map(([k, v]) => [k, { ...v, image: v.image ? 'kept' : '' }])) : s.snaps;
+      return { ...s, snaps, distanceM: movement.distanceM, savedDistanceM: s.distanceM, trail: thinRoute(s.trail, OWNER_TEST_LIST_POINTS), movement };
     };
     return {
       allowed: true as const,
       open: open ? view(open) : null,
-      sessions: all.slice(0, OWNER_TEST_LIST).map(view),
+      sessions: all.slice(0, OWNER_TEST_LIST).map((s, i) => view(s, i < OWNER_TEST_LIST_PHOTOS)),
       pingEveryS: OWNER_TEST_PING_S,
       maxPoints: OWNER_TEST_MAX_POINTS,
       now: this.now(),
@@ -212,11 +252,12 @@ export class OwnerTestCheckinService {
    * P93: pressing it again while a test is open (a second tap, another tab, a retry) returns the open test instead of
    * an error asking to check out first.
    */
-  async start(user: User, fix: OwnerTestFix): Promise<OwnerTestCheckin> {
+  async start(user: User, fix: OwnerTestFix, photo?: OwnerTestSnapInput | null): Promise<OwnerTestCheckin> {
     this.assertOwner(user);
     await this.store.lock?.('ownerTestCheckins', `user:${user.id}`);
     const at = this.now();
     const point = pointOf(fix, at);
+    const snap = snapOf(photo, at);
     const open = (await this.sessions(user)).find((s) => !s.endedAt) ?? null;
     if (open) {
       const last = open.trail.at(-1) ?? open.in;
@@ -235,6 +276,7 @@ export class OwnerTestCheckinService {
       endedAt: null,
       autoEnded: false,
       note: 'Test only: not attendance, not a clock record, never in pay or reports.',
+      ...(snap ? { snaps: { in: snap } } : {}),
     };
     return this.store.transaction(async (tx) => {
       if (open) {
@@ -280,11 +322,12 @@ export class OwnerTestCheckinService {
    * Test check-out: the last reading closes the route. P93: a check-out sent again just after one (the answer was lost)
    * returns that check-out; the distance leaves out a rough last reading instead of drawing a jump to it.
    */
-  async end(user: User, fix: OwnerTestFix): Promise<OwnerTestCheckin> {
+  async end(user: User, fix: OwnerTestFix, photo?: OwnerTestSnapInput | null): Promise<OwnerTestCheckin> {
     this.assertOwner(user);
     await this.store.lock?.('ownerTestCheckins', `user:${user.id}`);
     const at = this.now();
     const point = pointOf(fix, at);
+    const snap = snapOf(photo, at);
     const all = await this.sessions(user);
     const open = all.find((s) => !s.endedAt);
     if (!open) {
@@ -295,7 +338,7 @@ export class OwnerTestCheckinService {
     const trail = open.trail.length >= OWNER_TEST_MAX_POINTS ? [...open.trail.slice(0, -1), point] : [...open.trail, point];
     const distanceM = this.movement({ ...open, trail, out: point, endedAt: at }, []).distanceM;
     return this.store.transaction(async (tx) => {
-      const updated = await tx.update('ownerTestCheckins', open.id, { out: point, endedAt: at, trail, distanceM, endedBy: 'check_out' });
+      const updated = await tx.update('ownerTestCheckins', open.id, { out: point, endedAt: at, trail, distanceM, endedBy: 'check_out', ...(snap ? { snaps: { ...open.snaps, out: snap } } : {}) });
       await tx.audit({
         at,
         actor: user.name,
