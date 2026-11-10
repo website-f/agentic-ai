@@ -370,9 +370,10 @@ async def _chat(
     # for them instead of failing the work, up to MAX_WAIT in total. Members that failed for
     # good (a 400, a bad reply) used to stop this wait; now they are just not asked again.
     if waits and _waited + min(waits) <= MAX_WAIT:
-        # P96: a little random spread, so 50 steps cooled by the same rate limit do not all
-        # ask again in the same instant (and hit the limit again together).
-        pause = min(waits) + 0.5 + random.uniform(0, 2.0)  # noqa: S311 - not security
+        # P96: a little random spread (a tenth of the wait, 2 s at most), so 50 steps cooled
+        # by the same rate limit do not all ask again in the same instant.
+        spread = random.uniform(0, min(2.0, min(waits) / 10))  # noqa: S311 - not security
+        pause = min(waits) + 0.5 + spread
         await asyncio.sleep(pause)
         return await _chat(
             db,
