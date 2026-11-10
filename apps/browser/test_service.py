@@ -139,7 +139,7 @@ def fast_human(monkeypatch):
     monkeypatch.setattr(service, "THINK_MS_MIN", 0)
     monkeypatch.setattr(service, "THINK_MS_MAX", 0)
     monkeypatch.setattr(service, "TYPO_RATE", 0.0)
-    monkeypatch.setattr(service, "_type_delay", lambda ch="": 0.0)
+    monkeypatch.setattr(service, "_type_delay", lambda ch="", pc=False: 0.0)
 
     async def _nosleep(*_a, **_k):
         return None
@@ -448,3 +448,188 @@ class _Closable:
 
     def fire(self, event):
         self.handlers[event](self)
+
+
+# ---------------------------------------------------------------- P97: a skilled hand
+
+
+def _remote_page():
+    s = _session(True, "pc")
+    service._attach_page(s, _Closable(FakePage()), opened=False)
+    return s, s.pages[0]
+
+
+async def test_on_the_persons_pc_the_cursor_takes_a_short_curved_path():
+    """P97: each cursor point is a round trip over the relay (12-22 cost ~1 s a click): a
+    few points on the person's own computer, still curved, still ending on the target."""
+    _, page = _remote_page()
+    for _ in range(20):
+        page.mouse.moves.clear()
+        await service._human_mouse(page, 300.0, 200.0)
+        assert 4 <= len(page.mouse.moves) <= 6  # 3-5 points and the correction
+        assert page.mouse.moves[-1] == (300.0, 200.0)
+    local = FakePage()
+    await service._human_mouse(local, 300.0, 200.0)
+    assert len(local.mouse.moves) >= 13  # the office's own browsers keep the long path
+
+
+async def test_on_the_persons_pc_a_click_does_not_hover_twice():
+    _, page = _remote_page()
+    loc = FakeLocator()
+    await service._click(page, loc)
+    assert "hover" not in loc.ops and loc.clicks == 1  # the hand is already there
+    loc2 = FakeLocator()
+    await service._click(FakePage(), loc2)
+    assert "hover" in loc2.ops
+
+
+async def test_filling_a_form_on_the_pc_is_paced_by_the_typing_not_by_extra_waits(monkeypatch):
+    waits: list[float] = []
+
+    async def sleep(d, *_a, **_k):
+        waits.append(d)
+
+    monkeypatch.setattr(service.asyncio, "sleep", sleep)
+    s = _session(True)
+    s.last_server = service.time.time()  # an action a moment ago
+    await service._pace(s, "type")
+    assert waits == []  # a field right after: no extra wait
+    await service._pace(s, "click")
+    assert waits and waits[0] >= service.PC_PACE_MIN * 0.9  # a click still keeps the gap
+    waits.clear()
+    s2 = _session(False)
+    s2.last_server = service.time.time()
+    await service._pace(s2, "type")
+    assert waits  # the office's own browsers are unchanged
+
+
+def test_a_batch_step_is_an_ordinary_action_and_never_a_send():
+    a = service._step_act({"do": "open", "url": "https://x.example/a"})
+    assert a.action == "goto" and a.url == "https://x.example/a"
+    a = service._step_act({"do": "type", "role": "textbox", "name": "No. Rujukan", "text": "QT1"})
+    assert (a.action, a.role, a.name, a.text) == ("type", "textbox", "No. Rujukan", "QT1")
+    a = service._step_act({"do": "check", "name": "Setuju", "on": False})
+    assert a.action == "check" and a.text == "false"
+    a = service._step_act({"do": "click", "name": "Cari", "expect": "1 rekod"})
+    assert a.expect == "1 rekod" and not a.allow_submit
+    for bad in ({"do": "submit"}, {"do": "upload"}, {"do": "login_submit"}, {"do": ""}):
+        with pytest.raises(ValueError):
+            service._step_act(bad)
+    with pytest.raises(ValueError):
+        service._step_act({"do": "press", "key": "Enter"})
+
+
+def _nodes(*items):
+    return {"nodes": [dict(ref=r, role=ro, name=n, tag="a") for r, ro, n in items]}
+
+
+async def test_an_element_is_found_by_role_and_name_one_match_only(monkeypatch):
+    monkeypatch.setattr(service, "NAME_WAIT", 0)
+    snap = _nodes(
+        ("e3", "link", "Papan Kenyataan"),
+        ("e4", "link", "Papan Kenyataan Lama"),
+        ("e7", "button", "Cari"),
+        ("e8", "link", "Lihat QT260104"),
+        ("e9", "link", "Lihat QT260105"),
+    )
+
+    async def nodes(_page, **_k):
+        return snap
+
+    monkeypatch.setattr(service, "_snapshot_nodes", nodes)
+    page = FakePage()
+    assert await service._by_name(page, "link", "Papan Kenyataan") == ("e3", "")  # exact first
+    assert await service._by_name(page, "", "cari") == ("e7", "")
+    ref, why = await service._by_name(page, "link", "Lihat")
+    assert ref is None and "2 elements match" in why and "e8" in why  # never guessed
+    ref, why = await service._by_name(page, "button", "Simpan")
+    assert ref is None and "Nothing on the page" in why
+
+
+async def test_a_page_still_loading_is_looked_at_again(monkeypatch):
+    monkeypatch.setattr(service, "NAME_WAIT", 5)
+    calls = {"n": 0}
+
+    async def nodes(_page, **_k):
+        calls["n"] += 1
+        return _nodes(("e5", "button", "Semak")) if calls["n"] >= 3 else _nodes()
+
+    monkeypatch.setattr(service, "_snapshot_nodes", nodes)
+    assert await service._by_name(FakePage(), "button", "Semak") == ("e5", "")
+    assert calls["n"] == 3
+
+
+async def test_a_batch_stops_at_the_first_surprise(monkeypatch):
+    done: list[str] = []
+
+    async def run(s, sid, body, observe=True):
+        assert observe is False
+        done.append(body.name or body.action)
+        if body.name == "Simpan":
+            return {"error": "SUBMIT_NEEDS_APPROVAL: this control sends the form."}
+        return {"ok": True, "url": "https://x.example/", "point": None}
+
+    async def observe(s, point=None, **_k):
+        return {"url": "https://x.example/", "rev": 2, "mode": "delta", "delta": ""}
+
+    async def nothing(_s):
+        return None
+
+    monkeypatch.setattr(service, "_run_action", run)
+    monkeypatch.setattr(service, "_observe", observe)
+    monkeypatch.setattr(service, "_guard_frames", nothing)
+    s = _session(True)
+    s.page = FakePage()
+    body = service.Act(
+        action="steps",
+        steps=[
+            {"do": "type", "name": "Catatan", "text": "x"},
+            {"do": "click", "name": "Simpan"},
+            {"do": "click", "name": "Seterusnya"},
+        ],
+    )
+    obs = await service._do_steps(s, "bs_pc", body)
+    assert done == ["Catatan", "Simpan"]  # nothing after the stop
+    assert obs["steps_done"] == 1
+    assert "SUBMIT_NEEDS_APPROVAL" in obs["steps"][1]["error"]
+
+
+async def test_a_batch_rests_when_the_site_budget_says_so(monkeypatch):
+    async def run(s, sid, body, observe=True):
+        if body.name == "B":
+            return {"error": "SITE_REST: enough for this hour", "retry_after": 600}
+        return {"ok": True, "url": "https://x.example/"}
+
+    async def observe(s, point=None, **_k):
+        return {"url": "https://x.example/", "rev": 1, "mode": "same"}
+
+    async def nothing(_s):
+        return None
+
+    monkeypatch.setattr(service, "_run_action", run)
+    monkeypatch.setattr(service, "_observe", observe)
+    monkeypatch.setattr(service, "_guard_frames", nothing)
+    s = _session(True)
+    s.page = FakePage()
+    body = service.Act(action="steps", steps=[{"do": "click", "name": "A"}, {"do": "click", "name": "B"}])
+    obs = await service._do_steps(s, "bs_pc", body)
+    assert obs["retry_after"] == 600 and obs["steps_done"] == 1 and "SITE_REST" in obs["error"]
+
+
+async def test_a_second_click_waits_for_the_page_instead_of_clicking_again(monkeypatch):
+    """P97: one deliberate click per intent. The first click showed nothing yet; the page
+    changes while the agent thinks; the second click is not made."""
+    s = _session(True)
+    s.page = FakePage("https://x.example/carian")
+    s.last_click = {"ref": "e7", "url": s.page.url, "rev": 4, "changed": False}
+
+    async def observe(s, point=None, **_k):
+        return {"url": s.page.url, "rev": 5, "mode": "delta", "delta": "+ row"}
+
+    monkeypatch.setattr(service, "_observe", observe)
+    held = await service._held_click(s, "e7", service.Act(action="click", ref="e7"))
+    assert held is not None and "Not clicked again" in held["note"]
+    # Unchanged meanwhile: the click goes ahead (None); another element is never held.
+    s.last_click = {"ref": "e7", "url": s.page.url, "rev": 5, "changed": False}
+    assert await service._held_click(s, "e7", service.Act(action="click", ref="e7")) is None
+    assert await service._held_click(s, "e9", service.Act(action="click", ref="e9")) is None
