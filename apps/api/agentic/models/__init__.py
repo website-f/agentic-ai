@@ -1854,13 +1854,15 @@ class CredentialState(Base):
 class DeskItem(Base):
     """P26: something a person keeps on their workspace (their desk): a pinned SOP, workflow,
     file, document, template, wiki page, task, agent or saved search. `ref` is the item's id,
-    or the words of a saved search."""
+    or the words of a saved search. P97: also any screen of the app or of Prima (`route`, its
+    address inside the site), a web link (`link`), a report and a contact; a pin may carry the
+    person's own name for it (`label`) and sit in one of their folders (`folder`)."""
 
     __tablename__ = "desk_items"
     __table_args__ = (
         CheckConstraint(
             "kind IN ('sop', 'workflow', 'file', 'document', 'template', 'page', 'task', "
-            "'agent', 'search')",
+            "'agent', 'search', 'route', 'link', 'report', 'contact')",
             name="ck_desk_items_kind",
         ),
         UniqueConstraint("user_id", "kind", "ref", name="uq_desk_items_user_ref"),
@@ -1871,8 +1873,10 @@ class DeskItem(Base):
     workspace_id: Mapped[str] = mapped_column(ForeignKey("workspaces.id", ondelete="CASCADE"))
     user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
     kind: Mapped[str] = mapped_column(String(16))
-    ref: Mapped[str] = mapped_column(String(300))
+    ref: Mapped[str] = mapped_column(String(600))
     title: Mapped[str] = mapped_column(String(200), default="")
+    label: Mapped[str | None] = mapped_column(String(120))
+    folder: Mapped[str | None] = mapped_column(String(60))
     position: Mapped[float] = mapped_column(Float, default=0.0)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
 

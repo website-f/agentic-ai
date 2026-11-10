@@ -14,17 +14,27 @@ their workspace.
 - GET    /api/desk                 the whole desk in one call
 - GET    /api/desk/items           what is pinned (for pin buttons elsewhere)
 - POST   /api/desk/items           pin something (sop, workflow, file, document, template,
-                                   page, task, agent, search)
+                                   page, task, agent, search; P97: route, link, report,
+                                   contact)
+- PATCH  /api/desk/items/{id}      P97: rename a pin (its own name) or move it to a folder
 - DELETE /api/desk/items/{id}      unpin
-- PUT    /api/desk/items/order     reorder the pins
+- PUT    /api/desk/items/order     reorder the pins (P97: and move them between folders)
+- PUT    /api/desk/layout          P97: which desk sections show, in what order, and folders
+- POST   /api/desk/folders/rename  P97: rename a folder, or remove it (its pins stay)
+- GET    /api/desk/find            P97: find tasks, agents, people, contacts and reports
+- GET    /api/desk/meetings        P97: today's meetings from the person's own calendar
 - POST   /api/desk/ask             give a question or a job to one of their AI workers
 - POST   /api/desk/files           upload a file into their workspace
 - POST   /api/desk/workflows/{id}/follow  have one of their agents follow a workflow
 """
 
-from datetime import UTC, datetime, timedelta
+import contextlib
+import json
+import re
+from datetime import UTC, datetime, time, timedelta
 from typing import Any, Literal
-from urllib.parse import quote
+from urllib.parse import quote, urlsplit
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, Query, Request, status
 from pydantic import BaseModel, Field
@@ -34,6 +44,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ...agents import launch
 from ...assistants.access import may_assist
 from ...core.db import get_db
+from ...core.valkey import valkey
+from ...crm import access as crm_access
 from ...documents import provenance, service
 from ...i18n import lookup, tr
 from ...models import (
@@ -45,19 +57,59 @@ from ...models import (
     DocFile,
     DocTemplate,
     Document,
+    GoogleAccount,
+    Membership,
+    Party,
+    Report,
     Task,
+    User,
     Workflow,
+    Workspace,
 )
 from ...search import vocab
 from ...search.viewer import for_person
 from ...services import audit, events
 from ..deps import Principal, api_error, ensure_work_scope, require
 from .files import check_branch, file_out, start_reading, visible_files
+from .reports import _scoped as report_scoped
 
 router = APIRouter(prefix="/api/desk", tags=["desk"])
 
-KINDS = ("sop", "workflow", "file", "document", "template", "page", "task", "agent", "search")
+KINDS = (
+    "sop",
+    "workflow",
+    "file",
+    "document",
+    "template",
+    "page",
+    "task",
+    "agent",
+    "search",
+    "route",
+    "link",
+    "report",
+    "contact",
+)
+PinKind = Literal[
+    "sop",
+    "workflow",
+    "file",
+    "document",
+    "template",
+    "page",
+    "task",
+    "agent",
+    "search",
+    "route",
+    "link",
+    "report",
+    "contact",
+]
 MAX_PINS = 60
+MAX_FOLDERS = 20
+# P97: the blocks of the desk's overview, in their first order. A person may hide or reorder
+# them (users.prefs["desk"]); a block added later shows up at the end for everyone.
+SECTIONS = ("today", "pinned", "recent", "ai", "howto", "goto")
 OPEN = ("triage", "ready", "running", "blocked", "review")
 URLS = {
     "file": "/files?f={id}",
@@ -69,12 +121,57 @@ URLS = {
     "task": "/tasks?task={id}",
     "agent": "/chat?agent={id}",
     "search": "/search?q={id}",
+    "report": "/reports?r={id}",
+    "contact": "/contacts/{id}",
 }
 
 
 def url_of(kind: str, ref: str) -> str:
-    """Where a pinned item opens (a wiki page's link needs its path: _resolve gives it)."""
+    """Where a pinned item opens (a wiki page's link needs its path: _resolve gives it). A
+    screen (route) or a web link opens at its own address."""
+    if kind in ("route", "link"):
+        return ref
     return URLS[kind].format(id=quote(ref, safe=""))
+
+
+_UNSAFE = re.compile(r"[\x00-\x20\x7f\\]")
+
+
+def clean_ref(kind: str, ref: str) -> str | None:
+    """The pin's ref as kept, or None when it may not be pinned. A screen is an address inside
+    this site (/tasks?task=..., /prima/#clock): never another site, never the API. A web link
+    is a plain http(s) address without a user name or password in it."""
+    if kind == "search":
+        return " ".join(ref.split()) or None
+    ref = ref.strip()
+    if kind == "route":
+        if (
+            not ref.startswith("/")
+            or ref.startswith(("//", "/api/", "/api?"))
+            or ref == "/api"
+            or _UNSAFE.search(ref)
+        ):
+            return None
+        return ref
+    if kind == "link":
+        if _UNSAFE.search(ref):
+            return None
+        try:
+            u = urlsplit(ref)
+        except ValueError:
+            return None
+        if u.scheme not in ("http", "https") or not u.hostname or u.username or u.password:
+            return None
+        return ref
+    return ref or None
+
+
+def clean_name(text: str | None, limit: int) -> str | None:
+    """A person's own name for a pin or a folder: one line, trimmed; empty means none."""
+    if text is None:
+        return None
+    out = " ".join("".join(ch for ch in text if ch.isprintable()).split())[:limit]
+    return out or None
 
 
 def _now() -> datetime:
@@ -206,18 +303,46 @@ async def _resolve(
         for a in rows.all():
             if principal.scope.sees_agent(a):
                 info[("agent", a.id)] = {"title": a.name, "sub": a.role, "status": a.status}
+    if ids := by.get("report"):
+        q = report_scoped(select(Report).where(Report.workspace_id == ws), principal)
+        for r in (await db.scalars(q.where(Report.id.in_(ids)))).all():
+            info[("report", r.id)] = {"title": r.title, "sub": r.summary[:120], "status": None}
+    if ids := by.get("contact"):
+        rows = await db.scalars(
+            select(Party).where(
+                Party.workspace_id == ws, Party.id.in_(ids), crm_access.party_where(principal)
+            )
+        )
+        for c in rows.all():
+            info[("contact", c.id)] = {
+                "title": c.name,
+                "sub": c.industry or c.kind,
+                "status": c.status,
+            }
     out: list[dict[str, Any]] = []
     for it in items:
         if it.kind == "search":
             found: dict[str, Any] | None = {"title": it.ref, "sub": "", "status": None}
+        elif it.kind == "route":
+            # A screen of the app or of Prima: whether this person may open it is decided
+            # when it opens (the app's own page rules, Prima's sign-in), like any address.
+            found = {"title": it.title or it.ref, "sub": it.ref, "status": None}
+        elif it.kind == "link":
+            found = {"title": it.title or it.ref, "sub": urlsplit(it.ref).hostname, "status": None}
         else:
             found = info.get((it.kind, it.ref))
+        # Something deleted, or no longer this person's to see: only what they named or saw
+        # when they pinned it, never what it says now.
+        name = (found or {}).get("title") or it.title
         out.append(
             {
                 "id": it.id,
                 "kind": it.kind,
                 "ref": it.ref,
-                "title": (found or {}).get("title") or it.title,
+                "title": it.label or name,
+                "name": name,
+                "label": it.label,
+                "folder": it.folder,
                 "sub": (found or {}).get("sub") or "",
                 "status": (found or {}).get("status"),
                 "mime": (found or {}).get("mime"),
@@ -243,11 +368,32 @@ async def pins(
 
 
 class PinIn(BaseModel):
-    kind: Literal[
-        "sop", "workflow", "file", "document", "template", "page", "task", "agent", "search"
-    ]
-    ref: str = Field(min_length=1, max_length=300)
+    kind: PinKind
+    ref: str = Field(min_length=1, max_length=600)
     title: str = Field(default="", max_length=200)
+    folder: str | None = Field(default=None, max_length=60)
+
+
+async def _my_pins(db: AsyncSession, principal: Principal) -> list[DeskItem]:
+    return list(
+        (
+            await db.scalars(
+                select(DeskItem)
+                .where(
+                    DeskItem.workspace_id == principal.workspace_id,
+                    DeskItem.user_id == principal.user.id,
+                )
+                .order_by(DeskItem.position, DeskItem.created_at)
+            )
+        ).all()
+    )
+
+
+async def _my_pin(db: AsyncSession, principal: Principal, item_id: str) -> DeskItem:
+    it = await db.get(DeskItem, item_id)
+    if it is None or it.user_id != principal.user.id or it.workspace_id != principal.workspace_id:
+        raise api_error(status.HTTP_404_NOT_FOUND, "not_found", "That is not on your workspace.")
+    return it
 
 
 @router.post("/items", status_code=status.HTTP_201_CREATED)
@@ -256,10 +402,20 @@ async def pin(
     principal: Principal = Depends(require("read")),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
-    ref = " ".join(body.ref.split()) if body.kind == "search" else body.ref.strip()
+    ref = clean_ref(body.kind, body.ref)
+    if ref is None:
+        raise api_error(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            "bad_pin",
+            "That address cannot be pinned. Pin a page of this app, or a web link "
+            "starting with https://.",
+        )
     existing = await db.scalar(
         select(DeskItem).where(
-            DeskItem.user_id == principal.user.id, DeskItem.kind == body.kind, DeskItem.ref == ref
+            DeskItem.workspace_id == principal.workspace_id,
+            DeskItem.user_id == principal.user.id,
+            DeskItem.kind == body.kind,
+            DeskItem.ref == ref,
         )
     )
     if existing is None:
@@ -278,7 +434,8 @@ async def pin(
                 "Your workspace holds up to {n} pinned items. Unpin one first.",
                 n=MAX_PINS,
             )
-        probe = DeskItem(kind=body.kind, ref=ref, title=body.title, id="probe")
+        given = clean_name(body.title, 200) or ""
+        probe = DeskItem(kind=body.kind, ref=ref, title=given, id="probe")
         resolved = (await _resolve(db, principal, [probe]))[0]
         if resolved["missing"]:
             raise api_error(
@@ -290,12 +447,15 @@ async def pin(
                 DeskItem.user_id == principal.user.id,
             )
         )
+        # The name it has now (what the person sees): a screen or a link keeps the one given.
+        name = given if body.kind in ("route", "link") else resolved["name"]
         existing = DeskItem(
             workspace_id=principal.workspace_id,
             user_id=principal.user.id,
             kind=body.kind,
             ref=ref,
-            title=(body.title or resolved["title"] or ref)[:200],
+            title=(name or ref)[:200],
+            folder=clean_name(body.folder, 60),
             position=float(last or 0) + 1,
             created_at=_now(),
         )
@@ -304,21 +464,45 @@ async def pin(
     return (await _resolve(db, principal, [existing]))[0]
 
 
+class PinChange(BaseModel):
+    """Only the fields sent change: a label or folder sent as null or "" is cleared."""
+
+    label: str | None = Field(default=None, max_length=120)
+    folder: str | None = Field(default=None, max_length=60)
+
+
+@router.patch("/items/{item_id}")
+async def change_pin(
+    item_id: str,
+    body: PinChange,
+    principal: Principal = Depends(require("read")),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """Rename a pin (the person's own name for it) or move it into a folder."""
+    it = await _my_pin(db, principal, item_id)
+    if "label" in body.model_fields_set:
+        it.label = clean_name(body.label, 120)
+    if "folder" in body.model_fields_set:
+        it.folder = clean_name(body.folder, 60)
+    await db.commit()
+    return (await _resolve(db, principal, [it]))[0]
+
+
 @router.delete("/items/{item_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def unpin(
     item_id: str,
     principal: Principal = Depends(require("read")),
     db: AsyncSession = Depends(get_db),
 ) -> None:
-    it = await db.get(DeskItem, item_id)
-    if it is None or it.user_id != principal.user.id:
-        raise api_error(status.HTTP_404_NOT_FOUND, "not_found", "That is not on your workspace.")
+    it = await _my_pin(db, principal, item_id)
     await db.delete(it)
     await db.commit()
 
 
 class OrderIn(BaseModel):
     ids: list[str] = Field(max_length=MAX_PINS)
+    # P97: where each pin now sits ({id: folder name, or null for no folder}), after a drag.
+    folders: dict[str, str | None] | None = Field(default=None, max_length=MAX_PINS)
 
 
 @router.put("/items/order", status_code=status.HTTP_204_NO_CONTENT)
@@ -327,16 +511,129 @@ async def reorder(
     principal: Principal = Depends(require("read")),
     db: AsyncSession = Depends(get_db),
 ) -> None:
-    rows = {
-        it.id: it
-        for it in (
-            await db.scalars(select(DeskItem).where(DeskItem.user_id == principal.user.id))
-        ).all()
-    }
+    rows = {it.id: it for it in await _my_pins(db, principal)}
     for i, iid in enumerate(body.ids):
         if iid in rows:
             rows[iid].position = float(i)
+    for iid, folder in (body.folders or {}).items():
+        if iid in rows:
+            rows[iid].folder = clean_name(folder, 60)
     await db.commit()
+
+
+# ---------------------------------------------------------------- the desk's layout
+
+
+def layout_of(user: User | None, pins: list[DeskItem] | None = None) -> dict[str, Any]:
+    """The person's desk layout (users.prefs["desk"]): every section once, in their order
+    (sections added since go last, shown), and their folders in order (with any folder a pin
+    names that the list lacks)."""
+    saved = ((user.prefs if user else None) or {}).get("desk") or {}
+    sections: list[dict[str, Any]] = []
+    for s in saved.get("sections") or []:
+        if isinstance(s, dict) and s.get("id") in SECTIONS:
+            if s["id"] not in [x["id"] for x in sections]:
+                sections.append({"id": s["id"], "hidden": bool(s.get("hidden"))})
+    sections += [
+        {"id": s, "hidden": False} for s in SECTIONS if s not in [x["id"] for x in sections]
+    ]
+    folders = [f for f in saved.get("folders") or [] if isinstance(f, str) and f]
+    for it in pins or []:
+        if it.folder and it.folder not in folders:
+            folders.append(it.folder)
+    return {"sections": sections, "folders": folders[:MAX_FOLDERS]}
+
+
+class SectionIn(BaseModel):
+    id: Literal["today", "pinned", "recent", "ai", "howto", "goto"]
+    hidden: bool = False
+
+
+class LayoutIn(BaseModel):
+    sections: list[SectionIn] | None = Field(default=None, max_length=len(SECTIONS))
+    folders: list[str] | None = Field(default=None, max_length=MAX_FOLDERS)
+
+
+async def _locked_user(db: AsyncSession, principal: Principal) -> User:
+    return (
+        await db.execute(
+            select(User)
+            .where(User.id == principal.user.id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+    ).scalar_one()
+
+
+def _save_layout(user: User, layout: dict[str, Any]) -> None:
+    keep = {"sections": layout["sections"], "folders": layout["folders"]}
+    if len(json.dumps(keep, separators=(",", ":"))) > 8_000:
+        raise api_error(
+            status.HTTP_422_UNPROCESSABLE_CONTENT, "bad_layout", "That is too much to keep."
+        )
+    user.prefs = {**(user.prefs or {}), "desk": keep}  # a new dict: the JSONB column is dirty
+
+
+@router.put("/layout")
+async def put_layout(
+    body: LayoutIn,
+    principal: Principal = Depends(require("read")),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """Which desk sections show and in what order, and the order of the person's folders.
+    Kept per person on the server, so the desk looks the same on their phone and PC."""
+    user = await _locked_user(db, principal)
+    now = layout_of(user)
+    if body.sections is not None:
+        seen: list[str] = []
+        for s in body.sections:
+            if s.id in seen:
+                raise api_error(
+                    status.HTTP_422_UNPROCESSABLE_CONTENT, "bad_layout", "Each section once."
+                )
+            seen.append(s.id)
+        now["sections"] = [{"id": s.id, "hidden": s.hidden} for s in body.sections]
+    if body.folders is not None:
+        names: list[str] = []
+        for f in body.folders:
+            name = clean_name(f, 60)
+            if name and name not in names:
+                names.append(name)
+        now["folders"] = names
+    _save_layout(user, now)
+    await db.commit()
+    return layout_of(user, await _my_pins(db, principal))
+
+
+class FolderRenameIn(BaseModel):
+    name: str = Field(min_length=1, max_length=60)
+    # The new name; null or "" removes the folder (its pins stay, outside any folder).
+    to: str | None = Field(default=None, max_length=60)
+
+
+@router.post("/folders/rename")
+async def rename_folder(
+    body: FolderRenameIn,
+    principal: Principal = Depends(require("read")),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    old = clean_name(body.name, 60)
+    new = clean_name(body.to, 60)
+    pins = await _my_pins(db, principal)
+    for it in pins:
+        if it.folder == old:
+            it.folder = new
+    user = await _locked_user(db, principal)
+    lay = layout_of(user)
+    folders: list[str] = []
+    for f in lay["folders"]:
+        name = new if f == old else f
+        if name and name not in folders:
+            folders.append(name)
+    lay["folders"] = folders
+    _save_layout(user, lay)
+    await db.commit()
+    return layout_of(user, pins)
 
 
 # ---------------------------------------------------------------- the desk
@@ -734,16 +1031,7 @@ async def desk(
             .where(Task.assignee_agent_id == a.id, Task.status.in_(OPEN))
         )
         cards.append(_agent_card(a, current, int(n or 0)))
-    pins = (
-        await db.scalars(
-            select(DeskItem)
-            .where(
-                DeskItem.workspace_id == principal.workspace_id,
-                DeskItem.user_id == principal.user.id,
-            )
-            .order_by(DeskItem.position, DeskItem.created_at)
-        )
-    ).all()
+    pins = await _my_pins(db, principal)
     from ...models import Branch, Department
 
     branch = await db.get(Branch, principal.branch_id) if principal.branch_id else None
@@ -768,7 +1056,10 @@ async def desk(
             }
             for a in await assignable(db, principal)
         ],
-        "pins": await _resolve(db, principal, list(pins)),
+        "pins": await _resolve(db, principal, pins),
+        "layout": layout_of(await db.get(User, principal.user.id), pins),
+        # P97: whether today's meetings can come from their own calendar (assistants' Google).
+        "may_assist": may_assist(principal.role),
         "procedures": await _procedures(db, principal, agent_ids),
         "work": await _work(db, principal, agent_ids),
         "waiting": await _waiting(db, principal, agent_ids),
@@ -777,6 +1068,192 @@ async def desk(
         ],
         **await _files(db, principal),
     }
+
+
+# ---------------------------------------------------------------- find anything (P97)
+
+FIND_EACH = 5
+
+
+def _like(q: str) -> str:
+    words = q.lower().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+    return f"%{words}%"
+
+
+@router.get("/find")
+async def find(
+    q: str = Query(min_length=2, max_length=120),
+    principal: Principal = Depends(require("read")),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, list[dict[str, Any]]]:
+    """Tasks, agents, people, contacts and reports whose name matches, for the desk's search
+    bar and the command palette (pages and documents come from the app and /api/search).
+    Each list is only what this person may open, by the same rules as the pages that show
+    them; people only for those who look after members."""
+    ws = principal.workspace_id
+    like = _like(" ".join(q.split()))
+    out: dict[str, list[dict[str, Any]]] = {
+        "tasks": [],
+        "agents": [],
+        "people": [],
+        "contacts": [],
+        "reports": [],
+    }
+    tq = select(Task).where(Task.workspace_id == ws, func.lower(Task.title).like(like, escape="\\"))
+    cond = principal.scope.task_where()
+    if cond is not None and (shared := principal.scope.shared_task_where()) is not None:
+        cond = or_(cond, shared)
+    if cond is not None:
+        tq = tq.where(cond)
+    for t in (await db.scalars(tq.order_by(Task.updated_at.desc()).limit(FIND_EACH))).all():
+        out["tasks"].append(
+            {
+                "kind": "task",
+                "id": t.id,
+                "title": t.title,
+                "sub": t.status,
+                "url": url_of("task", t.id),
+            }
+        )
+    aq = select(Agent).where(
+        Agent.workspace_id == ws,
+        Agent.status != "retired",
+        Agent.clone_of.is_(None),
+        func.lower(Agent.name).like(like, escape="\\"),
+        principal.scope.agent_where(),
+    )
+    for a in (await db.scalars(aq.order_by(Agent.name).limit(FIND_EACH * 2))).all():
+        if principal.scope.sees_agent(a) and len(out["agents"]) < FIND_EACH:
+            out["agents"].append(
+                {
+                    "kind": "agent",
+                    "id": a.id,
+                    "title": a.name,
+                    "sub": a.role,
+                    "url": url_of("agent", a.id),
+                }
+            )
+    if {"members.manage", "team.manage"} & set(principal.permissions):
+        from .members import _scope_where
+
+        pq = (
+            select(User, Membership)
+            .join(Membership, Membership.user_id == User.id)
+            .where(
+                Membership.workspace_id == ws,
+                _scope_where(principal),
+                or_(
+                    func.lower(User.name).like(like, escape="\\"),
+                    func.lower(User.email).like(like, escape="\\"),
+                ),
+            )
+            .order_by(func.lower(User.name))
+            .limit(FIND_EACH)
+        )
+        for u, m in (await db.execute(pq)).all():
+            out["people"].append(
+                {
+                    "kind": "person",
+                    "id": u.id,
+                    "title": u.name,
+                    "sub": m.role,
+                    "url": "/settings/members",
+                }
+            )
+    cq = select(Party).where(
+        Party.workspace_id == ws,
+        Party.status == "active",
+        crm_access.party_where(principal),
+        func.lower(Party.name).like(like, escape="\\"),
+    )
+    for c in (await db.scalars(cq.order_by(func.lower(Party.name)).limit(FIND_EACH))).all():
+        out["contacts"].append(
+            {
+                "kind": "contact",
+                "id": c.id,
+                "title": c.name,
+                "sub": c.industry or c.kind,
+                "url": url_of("contact", c.id),
+            }
+        )
+    rq = report_scoped(
+        select(Report).where(
+            Report.workspace_id == ws, func.lower(Report.title).like(like, escape="\\")
+        ),
+        principal,
+    )
+    for r in (await db.scalars(rq.order_by(Report.created_at.desc()).limit(FIND_EACH))).all():
+        out["reports"].append(
+            {
+                "kind": "report",
+                "id": r.id,
+                "title": r.title,
+                "sub": r.summary[:120],
+                "url": url_of("report", r.id),
+            }
+        )
+    return out
+
+
+# ---------------------------------------------------------------- today's meetings (P97)
+
+MEETINGS_TTL = 300  # seconds: the desk refreshes often; Google is asked at most every 5 min
+
+
+@router.get("/meetings")
+async def meetings(
+    principal: Principal = Depends(require("read")), db: AsyncSession = Depends(get_db)
+) -> dict[str, Any]:
+    """Today's meetings from the person's own Google Calendar, when they connected it for
+    their assistants (roles with assistants only). Read only; nothing is written anywhere."""
+    from ...assistants import calendar
+
+    none: dict[str, Any] = {"connected": False, "events": []}
+    if not may_assist(principal.role):
+        return none
+    acct = await db.scalar(
+        select(GoogleAccount).where(
+            GoogleAccount.workspace_id == principal.workspace_id,
+            GoogleAccount.user_id == principal.user.id,
+        )
+    )
+    if acct is None or not calendar.has_calendar(acct):
+        return none
+    key = f"desk:meetings:{principal.workspace_id}:{principal.user.id}"
+    try:
+        cached = await valkey().get(key)
+    except Exception:  # noqa: BLE001 - the cache is optional
+        cached = None
+    if cached:
+        return dict(json.loads(cached))
+    workspace = await db.get(Workspace, principal.workspace_id)
+    tz = workspace.timezone if workspace else "Asia/Kuala_Lumpur"
+    zone = ZoneInfo(tz)
+    start = datetime.combine(datetime.now(zone).date(), time(0), zone)
+    try:
+        evs = await calendar.events(db, acct, start, start + timedelta(days=1), tz)
+    except calendar.CalendarError:
+        return {"connected": True, "events": [], "problem": True}
+    out = {
+        "connected": True,
+        "events": [
+            {
+                "id": e.id,
+                "title": e.title,
+                "start": e.start.isoformat(),
+                "end": e.end.isoformat(),
+                "all_day": e.all_day,
+                "location": e.location[:200],
+                "meet": e.meet,
+                "link": e.link,
+            }
+            for e in evs
+            if e.my_response != "declined"
+        ][:12],
+    }
+    with contextlib.suppress(Exception):  # the cache is optional
+        await valkey().set(key, json.dumps(out), ex=MEETINGS_TTL)
+    return out
 
 
 # ---------------------------------------------------------------- ask my AI
