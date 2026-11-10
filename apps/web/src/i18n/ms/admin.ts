@@ -21,6 +21,8 @@ export const ADMIN: Record<string, string> = {
   Paid: "Berbayar",
   Local: "Setempat",
   "Free tier": "Pakej percuma",
+  "Added · add another": "Sudah ditambah · tambah lagi",
+  "{n} added · add another": "{n} sudah ditambah · tambah lagi",
   "{ok} of {n} recent checks passed": "{ok} daripada {n} semakan terkini lulus",
   "No checks yet": "Belum ada semakan",
   "No checks": "Tiada semakan",

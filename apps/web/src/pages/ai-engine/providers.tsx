@@ -345,7 +345,7 @@ function ProviderCard({ provider, color, canManage }: { provider: Provider; colo
   );
 }
 
-function PresetTile({ preset, onConnect }: { preset: Preset; onConnect: () => void }) {
+function PresetTile({ preset, added, onConnect }: { preset: Preset; added: number; onConnect: () => void }) {
   const t = useT();
   return (
     <button
@@ -362,6 +362,7 @@ function PresetTile({ preset, onConnect }: { preset: Preset; onConnect: () => vo
           <Pill tone={preset.tier === "paid" ? "info" : "accent"} className="px-2 py-0 text-[11px]">
             {preset.tier === "free" ? t("Free tier") : t(TIER_LABEL[preset.tier])}
           </Pill>
+          {added ? <Pill tone="ok" className="px-2 py-0 text-[11px]">{added === 1 ? t("Added · add another") : t("{n} added · add another", { n: added })}</Pill> : null}
         </span>
         <span className="mt-0.5 line-clamp-2 block text-[12.5px] text-muted">{preset.notes}</span>
       </span>
@@ -379,10 +380,12 @@ export function ProvidersTab({ canManage }: { canManage: boolean }) {
   const [opens, setOpens] = useState(0);
   const colors = useMemo(() => providerColors(providers ?? []), [providers]);
 
-  const used = new Set((providers ?? []).map((p) => p.preset).filter(Boolean));
-  const available = presets.filter((p) => !used.has(p.id));
-  const primary = available.filter((p) => p.primary);
-  const optional = available.filter((p) => !p.primary);
+  // P96: a kind already connected stays offered (a second Azure AI Foundry resource, another
+  // account with its own address and key), listed after the ones not connected yet.
+  const addedOf = (id: string) => (providers ?? []).filter((p) => p.preset === id).length;
+  const available = [...presets.filter((p) => !addedOf(p.id)), ...presets.filter((p) => addedOf(p.id))];
+  const primary = available.filter((p) => p.primary && !addedOf(p.id));
+  const optional = available.filter((p) => !primary.includes(p));
   // A fresh key per open remounts the dialog, so every connect starts with empty fields.
   const open = (preset: Preset | null) => {
     setOpens((n) => n + 1);
@@ -447,7 +450,7 @@ export function ProvidersTab({ canManage }: { canManage: boolean }) {
           }
         >
           <div className="grid grid-cols-[minmax(0,1fr)] gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {[...primary, ...optional].map((p) => <PresetTile key={p.id} preset={p} onConnect={() => open(p)} />)}
+            {[...primary, ...optional].map((p) => <PresetTile key={p.id} preset={p} added={addedOf(p.id)} onConnect={() => open(p)} />)}
           </div>
         </Section>
       ) : null}

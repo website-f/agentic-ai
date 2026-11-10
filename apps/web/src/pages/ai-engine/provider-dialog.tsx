@@ -1,5 +1,5 @@
 import { ArrowSquareOutIcon, EyeIcon, EyeSlashIcon } from "@phosphor-icons/react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { toast } from "sonner";
 
@@ -11,7 +11,7 @@ import { msg, useT } from "@/i18n";
 import { api, ApiError, errorMessage } from "@/lib/api";
 import { keys } from "@/lib/queries";
 
-import { aiKeys, type Preset, type Provider, type Tier } from "./data";
+import { aiKeys, providersQuery, type Preset, type Provider, type Tier } from "./data";
 import { TestControls, TestSteps, useConnectionTest } from "./test-runner";
 
 const TIERS = [
@@ -27,12 +27,21 @@ interface Props {
   provider?: Provider; // editing an existing one
 }
 
+/** P96: a second provider of the same kind (another Azure AI Foundry resource, another
+ * account) gets a free name: "Azure AI Foundry 2", then 3... Names must be unique. */
+export function freeName(base: string, taken: readonly string[]): string {
+  const used = new Set(taken.map((n) => n.trim().toLowerCase()));
+  if (!base || !used.has(base.toLowerCase())) return base;
+  for (let n = 2; ; n++) if (!used.has(`${base} ${n}`.toLowerCase())) return `${base} ${n}`;
+}
+
 /** Connect or edit a provider. Remounted with a fresh key per open by the caller. */
 export function ProviderDialog({ open, onOpenChange, preset, provider }: Props) {
   const t = useT();
   const qc = useQueryClient();
   const editing = !!provider;
-  const [name, setName] = useState(provider?.name ?? preset?.name ?? "");
+  const { data: existing = [] } = useQuery(providersQuery);
+  const [name, setName] = useState(provider?.name ?? freeName(preset?.name ?? "", existing.map((p) => p.name)));
   const [baseUrl, setBaseUrl] = useState(provider?.base_url ?? preset?.base_url ?? "https://");
   const [apiKey, setApiKey] = useState("");
   const [showKey, setShowKey] = useState(false);

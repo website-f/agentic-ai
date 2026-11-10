@@ -662,3 +662,43 @@ async def test_a_404_on_the_key_step_says_check_the_address():
     key = next(e for e in events if e.get("step") == "key" and e["status"] == "failed")
     assert key["error_class"] == "bad_address" and "Check the base URL" in key["detail"]
     assert "model ID" not in key["detail"]
+
+
+async def test_two_providers_of_the_same_kind_with_their_own_address_and_key(
+    client: httpx.AsyncClient,
+):
+    """P96: a second Azure AI Foundry (another resource, its own key) is its own provider;
+    only the name must differ."""
+    await setup_owner(client)
+    made = []
+    for name, host in (("Azure AI Foundry", "good.fake/a"), ("Azure AI Foundry 2", "good.fake/b")):
+        r = await client.post(
+            "/api/ai/providers",
+            json={
+                "name": name,
+                "preset": "azure-foundry",
+                "base_url": f"https://{host}/openai/v1",
+                "api_key": GOOD_KEY,
+                "tier": "paid",
+            },
+            headers=csrf(client),
+        )
+        assert r.status_code == 201, r.text
+        made.append(r.json())
+    assert {p["base_url"] for p in made} == {
+        "https://good.fake/a/openai/v1",
+        "https://good.fake/b/openai/v1",
+    }
+    same = await client.post(
+        "/api/ai/providers",
+        json={"name": "Azure AI Foundry", "preset": "azure-foundry",
+              "base_url": "https://good.fake/c/openai/v1", "api_key": GOOD_KEY, "tier": "paid"},
+        headers=csrf(client),
+    )  # fmt: skip
+    assert same.status_code == 409 and same.json()["code"] == "provider_exists"
+    renamed = await client.patch(
+        f"/api/ai/providers/{made[1]['id']}",
+        json={"name": "Azure AI Foundry"},
+        headers=csrf(client),
+    )
+    assert renamed.status_code == 409 and renamed.json()["code"] == "provider_exists"

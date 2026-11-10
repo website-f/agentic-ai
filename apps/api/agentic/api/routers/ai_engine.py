@@ -216,6 +216,21 @@ async def create_provider(
     db: AsyncSession = Depends(get_db),
 ) -> ProviderOut:
     await _guard(body.base_url)
+    # P96: checked before the insert. The flush below hit the unique name first, so a second
+    # "Azure AI Foundry" answered 500 instead of saying the name is taken.
+    taken = await db.scalar(
+        select(AIProvider.id).where(
+            AIProvider.workspace_id == principal.workspace_id,
+            AIProvider.name == body.name.strip(),
+        )
+    )
+    if taken:
+        raise api_error(
+            status.HTTP_409_CONFLICT,
+            "provider_exists",
+            "A provider called {name} already exists.",
+            name=body.name.strip(),
+        )
     preset = BY_ID.get(body.preset or "")
     # P33: trust and zero data retention start as the preset (or its address) says.
     known = preset_of(body.preset, body.base_url)
@@ -302,7 +317,21 @@ async def update_provider(
         store.set_provider_key(p, new_key)
         p.health = "unknown"
         await store.clear_cooldown(p.id)
-    if body.name is not None:
+    if body.name is not None and body.name.strip() != p.name:
+        taken = await db.scalar(
+            select(AIProvider.id).where(
+                AIProvider.workspace_id == p.workspace_id,
+                AIProvider.name == body.name.strip(),
+                AIProvider.id != p.id,
+            )
+        )
+        if taken:  # P96: a plain 409, not a 500 at commit
+            raise api_error(
+                status.HTTP_409_CONFLICT,
+                "provider_exists",
+                "A provider called {name} already exists.",
+                name=body.name.strip(),
+            )
         p.name = body.name.strip()
     if body.tier is not None:
         p.tier = body.tier
