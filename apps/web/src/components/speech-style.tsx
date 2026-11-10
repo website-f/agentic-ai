@@ -1,11 +1,15 @@
-/** P37: how my AI speaks to me: as I write, casual Malay (bahasa pasar) or a state's dialect. */
+/** P37: how agents speak to me: as I write, casual Malay (bahasa pasar) or a state's dialect.
+ * P97: one setting for every agent (my AI, team agents, assistants such as Chief of Staff),
+ * shown beside the app language with one plain sentence of what happens. */
+import { ChatCircleTextIcon } from "@phosphor-icons/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
 import { Select } from "@/components/ui/select";
-import { msg, useT } from "@/i18n";
+import { msg, useLang, useT } from "@/i18n";
 import { errorMessage } from "@/lib/api";
 import { prefsQuery, savePrefs, tutorialKeys, type SpeechStyle } from "@/lib/tutorial";
+import { STYLE_NAMES, voiceSummary } from "@/lib/voice";
 
 const STYLES: { value: SpeechStyle; label: string; hint: string }[] = [
   { value: "standard", label: msg("As I write (standard)"), hint: msg("English, or standard Malay, following you") },
@@ -22,6 +26,23 @@ const STYLES: { value: SpeechStyle; label: string; hint: string }[] = [
   { value: "sarawak", label: msg("Sarawak"), hint: msg("Kamek, kitak, sik, polah, nangga") },
 ];
 
+/** What agents will answer in, in one sentence, from the saved setting. */
+export function VoiceSummary() {
+  const t = useT();
+  const lang = useLang((s) => s.lang);
+  const { data, isPending } = useQuery(prefsQuery);
+  const speech = data?.locale?.speech ?? "standard";
+  const name = speech !== "standard" ? t(STYLE_NAMES[speech]) : "";
+  if (isPending) return null;
+  return (
+    <p data-testid="voice-summary" aria-live="polite"
+      className="flex items-start gap-2 rounded-[var(--radius-md)] border border-accent/20 bg-accent-soft/60 px-3 py-2.5 text-[13px] text-fg">
+      <ChatCircleTextIcon size={17} className="mt-px shrink-0 text-accent" aria-hidden />
+      <span>{t(voiceSummary(lang, speech), { name })}</span>
+    </p>
+  );
+}
+
 export function SpeechStylePicker() {
   const t = useT();
   const qc = useQueryClient();
@@ -31,7 +52,7 @@ export function SpeechStylePicker() {
     mutationFn: (speech: SpeechStyle) => savePrefs({ locale: { speech } }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: tutorialKeys.prefs });
-      toast.success(t("Saved. Your AI speaks this way from your next message."));
+      toast.success(t("Saved. Agents speak this way from your next message."));
     },
     onError: (e) => toast.error(errorMessage(e)),
   });
@@ -40,7 +61,7 @@ export function SpeechStylePicker() {
       value={value}
       disabled={save.isPending}
       onValueChange={(v) => save.mutate(v as SpeechStyle)}
-      label={t("How your AI speaks to you")}
+      label={t("How agents speak to you")}
       className="w-full sm:w-96"
       options={STYLES.map((s) => ({ value: s.value, label: t(s.label), hint: t(s.hint) }))}
     />

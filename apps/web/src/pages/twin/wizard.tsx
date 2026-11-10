@@ -11,7 +11,7 @@ import {
   TranslateIcon,
 } from "@phosphor-icons/react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useNavigate } from "@tanstack/react-router";
+import { Link, useNavigate } from "@tanstack/react-router";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -83,7 +83,7 @@ export function TwinPreviewCard({ a, state, className, compact }: { a: TwinAnswe
             </div>
             <div className="flex flex-wrap gap-x-3 gap-y-1 border-t border-border pt-2.5 text-[12px] text-muted">
               <span className="inline-flex items-center gap-1"><ClockIcon size={13} /> {a.hours}</span>
-              <span className="inline-flex items-center gap-1"><TranslateIcon size={13} /> {a.languages.join(", ") || "English"}</span>
+              <span className="inline-flex items-center gap-1"><TranslateIcon size={13} /> {a.languages.map((l) => t(l === "English" ? "English|name" : l)).join(", ") || t("English|name")}</span>
             </div>
           </>
         )}
@@ -279,11 +279,14 @@ export function TwinWizard({ state, open, onOpenChange }: { state: TwinState; op
                             <button key={l} type="button" aria-pressed={on} onClick={() => toggle("languages", l)}
                               className={cn("inline-flex h-9 items-center gap-1.5 rounded-full border px-3.5 text-[13px] transition-colors",
                                 on ? "border-accent/50 bg-accent-soft text-accent" : "border-border hover:border-accent/30")}>
-                              {on ? <CheckIcon size={13} weight="bold" /> : null}{l}
+                              {on ? <CheckIcon size={13} weight="bold" /> : null}{t(l === "English" ? "English|name" : l)}
                             </button>
                           );
                         })}
                       </div>
+                      {/* P97: how every agent speaks to you is one setting, not this list. */}
+                      <p className="text-[12.5px] text-muted">{t("The languages your twin may use with others. How every agent, your twin too, speaks to you (language and dialect) is set once in")}{" "}
+                        <Link to="/settings" className="font-medium text-accent hover:underline">{t("Settings > Language")}</Link>.</p>
                     </fieldset>
                     <fieldset className="grid gap-2">
                       <legend className="mb-2 text-[13px] font-medium">{t("Its colour")}</legend>

@@ -33,7 +33,10 @@ import { useIsPhone } from "@/lib/use-media";
 import { cn } from "@/lib/utils";
 import { workKeys, type Agent } from "@/lib/work";
 
+import { readPick, savePick, type Pick } from "@/lib/voice";
+
 import { clearAsk, peekAsk, taskIdIn } from "./links";
+import { ReplyLanguage } from "./reply-language";
 import { type Recalled, Remembered } from "./remembered";
 import { channelOf, SessionList, useSessions } from "./sessions";
 import { TASK_TOOLS, toolLook } from "./tools";
@@ -138,6 +141,13 @@ export function ChatView({
     enabled: !!current,
   });
   const messages = [...(current ? thread.data ?? [] : []), ...local];
+  // P97: this conversation's own reply language (empty = my setting), kept on this device.
+  const [picks, setPicks] = useState<Record<string, Pick>>({});
+  const replyIn: Pick = current ? (picks[current] ?? readPick(current)) : (picks[""] ?? "");
+  const choosePick = (p: Pick) => {
+    savePick(current, p);
+    setPicks((m) => ({ ...m, [current ?? ""]: p }));
+  };
   const title = sessions.items.find((s) => s.id === current)?.title;
 
   useEffect(() => {
@@ -152,12 +162,17 @@ export function ChatView({
   const [openedAt] = useState(() => Date.now());
   const recentAsk = !!lastMsg && lastMsg.role === "user" && !!lastMsg.created_at && openedAt - Date.parse(lastMsg.created_at) < 5 * 60_000;
   const send = useMutation({
-    mutationFn: (text: string) => api<ChatReply>(`/api/agents/${agent.id}/chat`, "POST", { message: text, session_id: current }),
+    mutationFn: (text: string) => api<ChatReply>(`/api/agents/${agent.id}/chat`, "POST", { message: text, session_id: current, ...(replyIn ? { reply_in: replyIn } : {}) }),
     onMutate: (text) => {
       setAsked(text);
       setLocal((l) => [...l, { id: `u${Date.now()}`, role: "user", content: text }]);
     },
     onSuccess: async (r) => {
+      if (!current && picks[""]) {
+        // A new conversation keeps the language picked before its first message.
+        savePick(r.session_id, picks[""]);
+        setPicks((m) => ({ ...m, [r.session_id]: m[""] ?? "", "": "" }));
+      }
       setSessionId(r.session_id);
       setPicked(true);
       await qc.invalidateQueries({ queryKey: workKeys.messages(r.session_id) });
@@ -567,7 +582,10 @@ export function ChatView({
               <PaperPlaneRightIcon size={18} weight="fill" />
             </Button>
           </form>
-          <p id={`chat-${agent.id}-hint`} className="-mt-1 pb-2 text-center text-[11px] text-muted max-sm:sr-only">{t("Enter to send, Shift+Enter for a new line")}</p>
+          <div className="mx-auto -mt-1.5 flex max-w-[808px] items-center justify-center gap-3 px-3 pb-1.5 sm:px-6">
+            <ReplyLanguage pick={replyIn} onPick={choosePick} disabled={locked} />
+            <p id={`chat-${agent.id}-hint`} className="text-[11px] text-muted max-sm:sr-only">{t("Enter to send, Shift+Enter for a new line")}</p>
+          </div>
         </div>
       </main>
 

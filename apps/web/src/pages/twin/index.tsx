@@ -159,7 +159,7 @@ function Profile({ state, twin }: { state: TwinState; twin: Agent }) {
             <p className="flex items-center gap-1 text-[11.5px] font-medium tracking-[0.05em] text-muted uppercase"><ShieldCheckIcon size={12} weight="bold" /> {t("Asks you first")}</p>
             <p className="text-[12.5px] break-words">{asks.join(" · ")}</p>
           </div>
-          <p className="flex items-center gap-1.5 text-[12.5px] text-muted"><ClockIcon size={14} className="shrink-0" /> {a.hours} · {a.languages.join(", ")}</p>
+          <p className="flex items-center gap-1.5 text-[12.5px] text-muted"><ClockIcon size={14} className="shrink-0" /> {a.hours} · {a.languages.map((l) => t(l === "English" ? "English|name" : l)).join(", ")}</p>
         </div>
       </div>
     </Card>
