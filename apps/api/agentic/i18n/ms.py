@@ -2102,3 +2102,8 @@ MS: dict[str, str] = {
 from .ms_signin import MS_SIGNIN  # noqa: E402
 
 MS.update({k: v for k, v in MS_SIGNIN.items() if k not in MS})
+
+# P97: heads of department, who reports to whom, tasks for people.
+from .ms_team import MS_TEAM  # noqa: E402
+
+MS.update({k: v for k, v in MS_TEAM.items() if k not in MS})

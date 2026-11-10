@@ -2,10 +2,11 @@
 
 import contextlib
 from datetime import UTC, datetime, timedelta
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from pydantic import BaseModel, Field
-from sqlalchemy import String, cast, delete, func, or_, select
+from sqlalchemy import String, and_, cast, delete, false, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...agents import decisions, dispatch, launch, runtime
@@ -29,7 +30,7 @@ from ...models import (
 )
 from ...services import audit, events
 from ...skills import store as skills_store
-from ...teams import blockers, objectives, reconcile, review
+from ...teams import blockers, objectives, people, reconcile, review
 from .. import paging
 from ..agent_schemas import (
     ApprovalOut,
@@ -152,10 +153,27 @@ async def task_out(
         objective_id=t.objective_id,
         root_task_id=t.root_task_id or t.id,
         visibility=t.visibility or "private",
+        assignee_user_id=t.assignee_user_id,
+        due_at=t.due_at,
     )
     if fill:
         await fill_accountable(db, [t], [out])
+        await fill_people(db, [t], [out])
     return out
+
+
+async def fill_people(db: AsyncSession, rows: list[Task], outs: list[TaskOut]) -> None:
+    """P97: the person each task is for and who gave it, by name (one query)."""
+    ids = {t.assignee_user_id for t in rows if t.assignee_user_id}
+    ids |= {g for t in rows if (g := people.giver_id(t))}
+    known = await people.names(db, ids)
+    for t, out in zip(rows, outs, strict=True):
+        out.assignee_user_name = known.get(t.assignee_user_id or "")
+        out.created_by_name = known.get(people.giver_id(t) or "")
+
+
+def people_error(e: people.PeopleError) -> HTTPException:
+    return api_error(e.status, e.code, e.message)
 
 
 async def fill_accountable(db: AsyncSession, rows: list[Task], outs: list[TaskOut]) -> None:
@@ -266,6 +284,16 @@ async def _assignee(db: AsyncSession, principal: Principal, agent_id: str | None
     return a
 
 
+async def _person(db: AsyncSession, principal: Principal, user_id: str | None):
+    """P97: the member a task may be given to (teams/people.py may_assign), or None."""
+    if not user_id:
+        return None
+    try:
+        return await people.may_assign(db, people.actor_of(principal), user_id)
+    except people.PeopleError as e:
+        raise people_error(e) from e
+
+
 def clean_labels(labels: list[str]) -> list[str]:
     out: list[str] = []
     for raw in labels:
@@ -330,7 +358,9 @@ async def list_tasks(
     cursor: str | None = Query(default=None, max_length=400),
     q_: str = Query(default="", alias="q", max_length=120),
     full: bool = False,
-    who: str | None = Query(default=None, pattern="^(mine|pinned)$"),
+    who: str | None = Query(default=None, pattern="^(mine|pinned|assigned|team)$"),
+    assignee: str | None = Query(default=None, max_length=60),
+    has_due: bool = False,
     principal: Principal = Depends(require("read")),
     db: AsyncSession = Depends(get_db),
 ) -> list[TaskOut]:
@@ -339,7 +369,10 @@ async def list_tasks(
     text. More rows than `limit`: `X-Next-Cursor` holds the token for the next page (pass it
     as `cursor`); `X-Next-Before` keeps the older id form (pass it as `before`). P26 `who`:
     mine (tasks the person gave or their own AI workers do, with their sub-tasks) or pinned
-    (the cards pinned to their workspace)."""
+    (the cards pinned to their workspace). P97: `who` assigned (tasks given to the person
+    themselves) or team (their people's tasks and their people's and department's agents'
+    tasks); `assignee` one person (user:<id>) or agent (agent:<id>), or people / agents /
+    none; `has_due` only tasks with a due date, soonest first."""
     q = select(Task).where(Task.workspace_id == principal.workspace_id)
     cond = principal.scope.task_where()
     if cond is not None:
@@ -366,6 +399,10 @@ async def list_tasks(
                 Task.root_task_id.in_(given),
             )
         )
+    elif who == "assigned":
+        q = q.where(Task.assignee_user_id == principal.user.id)
+    elif who == "team":
+        q = q.where(await _team_where(db, principal))
     elif who == "pinned":
         from ...models import DeskItem
 
@@ -373,17 +410,23 @@ async def list_tasks(
             DeskItem.user_id == principal.user.id, DeskItem.kind == "task"
         )
         q = q.where(Task.id.in_(pinned))
+    if assignee:
+        q = q.where(_assignee_where(assignee))
+    if has_due:
+        q = q.where(Task.due_at.is_not(None))
     if q_.strip():
         like = f"%{q_.strip()}%"
         named = select(Agent.id).where(
             Agent.workspace_id == principal.workspace_id, Agent.name.ilike(like)
         )
+        person = select(User.id).where(User.name.ilike(like))
         q = q.where(
             or_(
                 Task.title.ilike(like),
                 Task.brief.ilike(like),
                 cast(Task.labels, String).ilike(like),
                 Task.assignee_agent_id.in_(named),
+                Task.assignee_user_id.in_(person),
             )
         )
     if before and not cursor:
@@ -393,10 +436,60 @@ async def list_tasks(
                 status.HTTP_400_BAD_REQUEST, "bad_cursor", "That page cursor is not valid."
             )
         cursor = paging.cursor_for(cur, TASK_ORDER)
-    rows = await paging.paginate(db, q, TASK_ORDER, limit=limit, cursor=cursor, response=response)
+    order = DUE_ORDER if has_due else TASK_ORDER
+    rows = await paging.paginate(db, q, order, limit=limit, cursor=cursor, response=response)
     if paging.NEXT in response.headers:
         response.headers["X-Next-Before"] = rows[-1].id
     return await tasks_out(db, rows, trim=not full)
+
+
+DUE_ORDER: paging.Order = ((Task.due_at, False), (Task.id, False))
+
+
+def _assignee_where(value: str) -> Any:
+    """P97 board filter: user:<id>, agent:<id>, people, agents or none."""
+    if value == "people":
+        return Task.assignee_user_id.is_not(None)
+    if value == "agents":
+        return Task.assignee_agent_id.is_not(None)
+    if value == "none":
+        return and_(Task.assignee_user_id.is_(None), Task.assignee_agent_id.is_(None))
+    kind, _, ref = value.partition(":")
+    if kind == "user" and ref:
+        return Task.assignee_user_id == ref
+    if kind == "agent" and ref:
+        return Task.assignee_agent_id == ref
+    raise api_error(status.HTTP_400_BAD_REQUEST, "bad_assignee", "That filter is not known.")
+
+
+async def team_ids(db: AsyncSession, principal: Principal) -> list[str]:
+    """The person and their direct reports (P97)."""
+    if principal.team or principal.scope.kind != "all":
+        return [principal.user.id, *sorted(principal.team)]
+    return [
+        principal.user.id,
+        *await people.direct_reports(db, principal.workspace_id, principal.user.id),
+    ]
+
+
+async def _team_where(db: AsyncSession, principal: Principal) -> Any:
+    """P97 the team board: tasks of the person and their people, their people's own AI, and
+    (an HOD or supervisor) their department's agents. The scope still applies on top."""
+    ids = await team_ids(db, principal)
+    agents = select(Agent.id).where(
+        Agent.workspace_id == principal.workspace_id,
+        or_(
+            Agent.owner_user_id.in_(ids),
+            Agent.department_id == principal.department_id
+            if principal.scope.kind == "department" and principal.department_id
+            else false(),
+        ),
+    )
+    return or_(
+        Task.assignee_user_id.in_(ids),
+        Task.assignee_agent_id.in_(agents),
+        and_(Task.created_by == principal.actor, Task.parent_task_id.is_(None)),
+    )
 
 
 async def tasks_out(db: AsyncSession, rows: list[Task], trim: bool = False) -> list[TaskOut]:
@@ -423,6 +516,7 @@ async def tasks_out(db: AsyncSession, rows: list[Task], trim: bool = False) -> l
     )
     out = [await task_out(db, t, agents, pending, trim, fill=False) for t in rows]
     await fill_accountable(db, rows, out)
+    await fill_people(db, rows, out)
     # P21: the objective chip on board cards (one query for the whole page).
     names = await objectives.titles(db, {t.objective_id for t in rows if t.objective_id})
     for o in out:
@@ -455,8 +549,16 @@ async def create_task(
     db: AsyncSession = Depends(get_db),
 ) -> TaskOut:
     _check_share(principal, body.visibility)
+    if body.assignee_agent_id and body.assignee_user_id:
+        raise api_error(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            "two_assignees",
+            "Give it to a person or an agent, not both.",
+        )
     agent = await _assignee(db, principal, body.assignee_agent_id)
-    await ensure_work_scope(db, principal, f"{body.title}\n{body.brief}")
+    person = await _person(db, principal, body.assignee_user_id)
+    if person is None:  # P36 checks work given to an AI; a person's task uses no AI
+        await ensure_work_scope(db, principal, f"{body.title}\n{body.brief}")
     brief, labels = body.brief, list(body.labels)
     if body.workflow_id:
         brief = await _with_workflow(db, principal, body.workflow_id, brief)
@@ -476,15 +578,23 @@ async def create_task(
         brief=brief,
         priority=body.priority,
         assignee_agent_id=agent.id if agent else None,
-        branch_id=agent.branch_id if agent else principal.branch_id,
+        assignee_user_id=person.user_id if person else None,
+        branch_id=agent.branch_id
+        if agent
+        else (person.branch_id or principal.branch_id)
+        if person
+        else principal.branch_id,
         requires_review=body.requires_review,
         goal=(body.goal or "").strip() or None,
         labels=clean_labels(labels),
         created_by=principal.actor,
-        status="ready" if agent else "triage",
+        # P97: a task someone gives a person waits for them to take it (triage); one a person
+        # gives themselves is on their list straight away (ready).
+        status="ready" if agent or (person and person.user_id == principal.user.id) else "triage",
         position=float(lowest) - 1,
         objective_id=objective_id,
         visibility=body.visibility,
+        due_at=body.due_at,
     )
     db.add(t)
     await db.flush()
@@ -500,15 +610,19 @@ async def create_task(
         principal.actor,
         "task.created",
         target=t.id,
-        after={"title": t.title, "assignee": t.assignee_agent_id},
+        after={"title": t.title, "assignee": t.assignee_agent_id or t.assignee_user_id},
     )
     await db.commit()
     await runtime.task_event(db, t, "created", principal.actor, "created the task")
     await events.publish(
         principal.workspace_id,
         "task.created",
-        {"task_id": t.id, "agent_id": t.assignee_agent_id},
+        people.event_data(t, principal.actor)
+        if person
+        else {"task_id": t.id, "agent_id": t.assignee_agent_id},
     )
+    if person:
+        await people.told_assigned(db, t, people.actor_of(principal), principal.user.name)
     if body.blocked_by:
         await blockers.refresh(db, t, principal.actor, start=bool(body.start and agent))
     elif body.start and agent:
@@ -692,14 +806,34 @@ async def update_task(
         t.visibility = changes["visibility"]
     if changes.get("labels") is not None:
         t.labels = clean_labels(changes["labels"])
-    if "assignee_agent_id" in changes:
-        if t.status in RUNNING and not launch.restartable(t):  # P21: parked work may move
-            raise api_error(
+    was_person, before_person = people.is_person_task(t), t.assignee_user_id
+    switching = (changes.get("assignee_agent_id") and was_person) or (
+        changes.get("assignee_user_id") and t.assignee_agent_id
+    )
+    if switching and t.status not in ("triage", "ready"):  # P97: person <-> agent
+        raise api_error(
+            status.HTTP_409_CONFLICT,
+            "move_back_first",
+            "Move it back to To do before giving it to someone else.",
+        )
+    if "assignee_agent_id" in changes and not (was_person and changes["assignee_agent_id"] is None):
+        if t.status in RUNNING and not launch.restartable(t) and not was_person:
+            raise api_error(  # P21: parked work may move
                 status.HTTP_409_CONFLICT, "running", "Cancel the run before reassigning."
             )
         agent = await _assignee(db, principal, changes["assignee_agent_id"])
         t.assignee_agent_id = agent.id if agent else None
         t.branch_id = agent.branch_id if agent else t.branch_id
+        if agent:
+            t.assignee_user_id = None
+    if "assignee_user_id" in changes and changes["assignee_user_id"] != t.assignee_user_id:
+        person = await _person(db, principal, changes["assignee_user_id"])
+        t.assignee_user_id = person.user_id if person else None
+        if person:
+            t.assignee_agent_id = None
+            t.branch_id = person.branch_id or t.branch_id
+    if "due_at" in changes:
+        t.due_at = changes["due_at"]
     for k in ("title", "brief", "priority", "position"):
         if k in changes and changes[k] is not None:
             setattr(t, k, changes[k])
@@ -708,6 +842,24 @@ async def update_task(
         t.objective_id = await _objective(db, principal, changes["objective_id"], t.branch_id)
         await objectives.relink_tree(db, t, old, t.objective_id)  # its parts follow it
     new_status = changes.get("status")
+    before = t.status
+    if new_status and new_status != t.status and people.is_person_task(t):
+        try:  # P97: a person's task moves by its own rules and never starts a run
+            new_status = people.land(t, new_status, people.actor_of(principal))
+        except people.PeopleError as e:
+            raise people_error(e) from e
+        await runtime.set_task_status(
+            db,
+            t,
+            new_status,
+            actor=principal.actor,
+            note=people.MOVE_NOTES.get(new_status, f"moved it to {new_status}"),
+            finished_at=datetime.now(UTC) if new_status in ("done", "cancelled") else None,
+            started_at=t.started_at or (datetime.now(UTC) if new_status == "running" else None),
+        )
+        if new_status in FINISHED:
+            await blockers.on_finished(db, t)
+        new_status = None  # handled
     if new_status and new_status != t.status:
         if new_status not in MANUAL_MOVES.get(t.status, set()):
             raise api_error(
@@ -733,11 +885,23 @@ async def update_task(
             await blockers.on_finished(db, t)
     await db.commit()
     await db.refresh(t)
-    await events.publish(
-        principal.workspace_id,
-        "task.updated",
-        {"task_id": t.id, "status": t.status, "agent_id": t.assignee_agent_id},
-    )
+    if people.is_person_task(t) or was_person:
+        await events.publish(
+            principal.workspace_id,
+            "task.updated",
+            people.event_data(t, principal.actor, was=before_person),
+        )
+        who = people.actor_of(principal)
+        if t.assignee_user_id and t.assignee_user_id != before_person:
+            await people.told_assigned(db, t, who, principal.user.name)
+        elif t.status != before:
+            await people.told_moved(db, t, who, principal.user.name, before)
+    else:
+        await events.publish(
+            principal.workspace_id,
+            "task.updated",
+            {"task_id": t.id, "status": t.status, "agent_id": t.assignee_agent_id},
+        )
     return await task_out(db, t)
 
 
@@ -1037,6 +1201,11 @@ async def accept_task(
         raise api_error(
             status.HTTP_409_CONFLICT, "not_in_review", "Only work in review can be accepted."
         )
+    if people.is_person_task(t):  # P97: the person who did it does not accept their own work
+        try:
+            people.land(t, "done", people.actor_of(principal))
+        except people.PeopleError as e:
+            raise people_error(e) from e
     await runtime.set_task_status(
         db,
         t,

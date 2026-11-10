@@ -187,6 +187,9 @@ class TaskIn(BaseModel):
     review_policy: dict[str, Any] | None = None
     # P26: who else may look at it (managers and owners only; default private).
     visibility: Literal["private", "department", "company", "everyone"] = "private"
+    # P97: a task for a person (a member) instead of an agent (never both), and its due time.
+    assignee_user_id: str | None = Field(default=None, max_length=40)
+    due_at: datetime | None = None
 
 
 class TaskUpdateIn(BaseModel):
@@ -194,12 +197,18 @@ class TaskUpdateIn(BaseModel):
     brief: str | None = Field(default=None, max_length=20_000)
     priority: Literal["low", "normal", "high", "urgent"] | None = None
     assignee_agent_id: str | None = None
-    status: Literal["triage", "ready", "done", "cancelled"] | None = None
+    # P97: running, blocked and review are moves only a person's task makes by hand.
+    status: (
+        Literal["triage", "ready", "running", "blocked", "review", "done", "cancelled"] | None
+    ) = None
     position: float | None = None
     labels: list[str] | None = Field(default=None, max_length=8)
     objective_id: str | None = Field(default=None, max_length=40)  # P21: null unlinks
     # P26: who else may look at it (managers and owners only).
     visibility: Literal["private", "department", "company", "everyone"] | None = None
+    # P97: give it to a person (null takes it back) and when it is due (null clears it).
+    assignee_user_id: str | None = Field(default=None, max_length=40)
+    due_at: datetime | None = None
 
 
 class TaskOut(BaseModel):
@@ -253,6 +262,11 @@ class TaskOut(BaseModel):
     quiet_minutes: int | None = None
     # P26: who else may look at it.
     visibility: str = "private"
+    # P97: the person it is for (instead of an agent), their name, who gave it, when it is due.
+    assignee_user_id: str | None = None
+    assignee_user_name: str | None = None
+    created_by_name: str | None = None
+    due_at: datetime | None = None
 
 
 class TaskEventOut(BaseModel):

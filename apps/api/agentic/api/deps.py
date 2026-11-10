@@ -34,6 +34,8 @@ class Principal:
     department_id: str | None = None
     # P57: the workspace requires two-step sign-in of this person and it is not set up yet.
     two_factor_due: bool = False
+    # P97: the people who report to a scoped manager (their tasks are in the scope).
+    team: frozenset[str] = frozenset()
 
     @property
     def actor(self) -> str:
@@ -41,7 +43,7 @@ class Principal:
 
     @property
     def scope(self) -> Scope:
-        return Scope.of(self.role, self.user.id, self.branch_id, self.department_id)
+        return Scope.of(self.role, self.user.id, self.branch_id, self.department_id, self.team)
 
     @property
     def permissions(self) -> list[str]:
@@ -198,6 +200,18 @@ async def _load_principal(request: Request, db: AsyncSession) -> Principal:
     use_settings(ws_settings)
     # P36: model calls this request makes are this person's (their daily AI allowance).
     acting.set_person(user.id)
+    team: frozenset[str] = frozenset()
+    if m.role in SCOPED_MANAGERS:  # P97: workspace roles see everything already
+        team = frozenset(
+            (
+                await db.scalars(
+                    select(Membership.user_id).where(
+                        Membership.workspace_id == session.workspace_id,
+                        Membership.reports_to_user_id == user.id,
+                    )
+                )
+            ).all()
+        )
     return Principal(
         user=user,
         workspace_id=session.workspace_id,
@@ -206,7 +220,12 @@ async def _load_principal(request: Request, db: AsyncSession) -> Principal:
         branch_id=m.branch_id,
         department_id=m.department_id,
         two_factor_due=two_factor.due(user, m.role, ws_settings),
+        team=team,
     )
+
+
+# P97: the scoped roles that may have people reporting to them (teams/people.py).
+SCOPED_MANAGERS = frozenset({"branch_manager", "hod", "supervisor"})
 
 
 def _require_two_factor(principal: Principal) -> None:

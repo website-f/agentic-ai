@@ -20,6 +20,13 @@ Shared tasks (P26): a manager or owner may let more people *look at* a task they
 (`visibility`: department, company, everyone). That widens only the task board and the task
 itself, read only (`shared_task_where` / `shares_task`); it never lets anyone change the
 task, see its agent's transcript or approvals, or reach its files.
+
+People's tasks (P97): a task may be for a person (`assignee_user_id`) instead of an agent.
+Besides what each scope saw before, a person sees the tasks given to them, and a manager
+(branch manager, HOD, supervisor) the tasks of the people who report to them (`team`: their
+direct reports, loaded with the session). A branch manager also sees their branch's people's
+tasks (the task carries the person's branch). Nothing else widens: no one sees a person's
+task because of their department alone, and staff see only their own.
 """
 
 from dataclasses import dataclass
@@ -38,18 +45,25 @@ class Scope:
     user_id: str
     branch_id: str | None = None
     department_id: str | None = None
+    # P97: the people who report to this person (their direct reports in this workspace).
+    team: frozenset[str] = frozenset()
 
     @classmethod
     def of(
-        cls, role: str, user_id: str, branch_id: str | None, department_id: str | None
+        cls,
+        role: str,
+        user_id: str,
+        branch_id: str | None,
+        department_id: str | None,
+        team: frozenset[str] = frozenset(),
     ) -> "Scope":
         if role not in SCOPED_ROLES:
-            return cls("all", user_id)
+            return cls("all", user_id, team=team)
         if role == "branch_manager":
-            return cls("branch", user_id, branch_id, department_id)
+            return cls("branch", user_id, branch_id, department_id, team)
         if role in ("hod", "supervisor"):
-            return cls("department", user_id, branch_id, department_id)
-        return cls("own", user_id, branch_id, department_id)
+            return cls("department", user_id, branch_id, department_id, team)
+        return cls("own", user_id, branch_id, department_id)  # staff manage no one
 
     @property
     def everything(self) -> bool:
@@ -159,13 +173,19 @@ class Scope:
         parts: list[ColumnElement[bool]] = [
             Task.assignee_agent_id.in_(self._visible_agent_ids()),
             Task.created_by == self.actor,
+            Task.assignee_user_id.in_([self.user_id, *sorted(self.team)]),  # P97
         ]
         if self.kind == "branch" and self.branch_id:
             parts.append(Task.branch_id == self.branch_id)  # unassigned work in the branch
         return or_(*parts)
 
+    def sees_person_task(self, t: Task) -> bool:
+        """P97: a task given to this person or to someone who reports to them."""
+        uid = getattr(t, "assignee_user_id", None)
+        return bool(uid) and (uid == self.user_id or uid in self.team)
+
     def sees_task(self, t: Task, agent: Agent | None) -> bool:
-        if t.created_by == self.actor:
+        if t.created_by == self.actor or self.sees_person_task(t):
             return True
         if agent is not None and agent.private and agent.owner_user_id != self.user_id:
             return False
@@ -232,6 +252,19 @@ class Scope:
         if type_ in BRANCH_EVENTS:  # P24: a company's uploads reach the people of it
             return self.everything or (
                 self.branch_id is not None and data.get("branch_id") == self.branch_id
+            )
+        person = data.get("assignee_user_id")  # P97: a person's task: them and their managers
+        if person and not (data.get("agent_id") or data.get("assignee_agent_id")):
+            return (
+                self.everything
+                or person == self.user_id
+                or person in self.team
+                or data.get("by") == self.actor
+                or (
+                    self.kind == "branch"
+                    and bool(self.branch_id)
+                    and data.get("branch_id") == self.branch_id
+                )
             )
         aid = data.get("agent_id") or data.get("assignee_agent_id")
         if aid:

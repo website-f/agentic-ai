@@ -104,6 +104,11 @@ class MemberOut(BaseModel):
     department_name: str | None = None
     agents: int = 0  # personal agents
     microsoft: bool = False  # P82: signed in with their Microsoft work account here
+    # P97: who they report to, whether they head their department, how many report to them.
+    reports_to_user_id: str | None = None
+    reports_to_name: str | None = None
+    heads_department: bool = False
+    manages: int = 0
 
 
 class MembersSummary(BaseModel):
@@ -129,10 +134,12 @@ class MembersPageOut(BaseModel):
 
 class MembersBulkIn(BaseModel):
     user_ids: list[str] = Field(min_length=1, max_length=100)
-    action: Literal["remove", "access"]
+    # P97 "manager": everyone ticked reports to manager_id (null: to no one).
+    action: Literal["remove", "access", "manager"]
     role: Role | None = None
     branch_id: str | None = None
     department_id: str | None = None
+    manager_id: str | None = Field(default=None, max_length=40)
 
 
 class MembersBulkResult(BaseModel):
@@ -167,6 +174,15 @@ class MemberUpdateIn(BaseModel):
     department_id: str | None = None
     name: str | None = Field(default=None, min_length=1, max_length=120)
     email: EmailStr | None = None
+    # P97: heads their department; reports to this manager (send null to clear).
+    heads_department: bool | None = None
+    reports_to_user_id: str | None = Field(default=None, max_length=40)
+
+
+class MemberTeamIn(BaseModel):
+    """P97: the people who report to a manager (the whole list; others are let go)."""
+
+    user_ids: list[str] = Field(default_factory=list, max_length=500)
 
 
 class TempPasswordOut(BaseModel):

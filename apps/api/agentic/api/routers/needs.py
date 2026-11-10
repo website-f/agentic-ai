@@ -2,6 +2,7 @@
 and the phone's More menu). Only what they may act on, each with where to do it:
 
 - approvals and questions from AI (theirs, or the ones they decide);
+- tasks a person gave them that they have not taken yet, and their overdue ones (P97);
 - work waiting for a decision they own (a blocked task), and work done that waits for them to
   accept, and documents an AI made for them to review;
 - their own failed tasks of the last week (retry, another AI, or finish it themselves);
@@ -19,7 +20,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from fastapi import APIRouter, Depends
-from sqlalchemy import func, or_, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...core.db import get_db
@@ -116,6 +117,22 @@ async def needs(
         (Task.id, Task.title, Task.updated_at),
         "/tasks",
         {"status": "blocked"},
+        lambda i: {"task": i},
+    )
+    # P97: tasks a person gave me that I have not taken yet, and my overdue ones.
+    await add(
+        "assigned",
+        select(Task.id).where(
+            Task.workspace_id == ws,
+            Task.assignee_user_id == principal.user.id,
+            or_(
+                Task.status == "triage",
+                and_(Task.status.in_(("ready", "running", "blocked")), Task.due_at < now()),
+            ),
+        ),
+        (Task.id, Task.title, Task.updated_at),
+        "/tasks",
+        {"who": "assigned"},
         lambda i: {"task": i},
     )
     agent_ids = [a.id for a in await my_agents(db, principal)]

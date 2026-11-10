@@ -211,6 +211,8 @@ async def task_event(
         {
             "task_id": task.id,
             "agent_id": task.assignee_agent_id,
+            "assignee_user_id": task.assignee_user_id,  # P97: a person's task
+            "branch_id": task.branch_id,
             "kind": kind,
             "actor": actor,
             "text": text,
@@ -279,7 +281,13 @@ async def set_task_status(
     await events.publish(
         task.workspace_id,
         "task.updated",
-        {"task_id": task.id, "status": status, "assignee_agent_id": task.assignee_agent_id},
+        {
+            "task_id": task.id,
+            "status": status,
+            "assignee_agent_id": task.assignee_agent_id,
+            "assignee_user_id": task.assignee_user_id,  # P97: a person's task
+            "branch_id": task.branch_id,
+        },
     )
 
 
