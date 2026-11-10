@@ -10,6 +10,7 @@ from urllib.parse import urlparse
 
 import httpx
 
+from ..core.http import tls
 from ..core.ssrf import pinned
 from .errors import Failure, classify_exception, classify_response, rate_limits
 
@@ -91,7 +92,10 @@ def use_transport(transport: httpx.AsyncBaseTransport | None) -> None:
 
 
 def _client(timeout: float) -> httpx.AsyncClient:
-    return httpx.AsyncClient(transport=_transport, timeout=timeout, follow_redirects=False)
+    # P96: one shared TLS context (core/http.py), not one read from disk per call.
+    return httpx.AsyncClient(
+        transport=_transport, timeout=timeout, follow_redirects=False, verify=tls()
+    )
 
 
 def host_of(url: str) -> str:

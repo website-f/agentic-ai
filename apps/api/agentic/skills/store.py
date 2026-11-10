@@ -372,6 +372,17 @@ async def ensure_builtin(db: AsyncSession, ws: Workspace) -> None:
     seeded = settings.get(seeded_key)
     if isinstance(seeded, list) and all_names <= set(seeded):
         return  # the usual case: one dict lookup, no query
+    # P96: many first steps at once (50 people pressing Start, or the first steps after a
+    # deploy that adds a starter) raced here: one seeded, the others failed their step on
+    # uq_skills_ws_name, and each wrote the workspace settings back whole over changes made
+    # meanwhile. Lock the workspace row and read its settings again: one at a time, each
+    # seeing what the one before it wrote (the lock goes at the commit below).
+    await db.refresh(ws, ["settings"], with_for_update=True)
+    settings = dict(ws.settings or {})
+    seeded = settings.get(seeded_key)
+    if isinstance(seeded, list) and all_names <= set(seeded):
+        await db.commit()  # the one before us did it
+        return
     if not isinstance(seeded, list):
         have = await db.scalar(
             select(func.count()).select_from(Skill).where(Skill.workspace_id == ws.id)

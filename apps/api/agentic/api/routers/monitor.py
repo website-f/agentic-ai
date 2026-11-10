@@ -201,6 +201,9 @@ async def frame(
         or not principal.scope.sees_agent(owner)
     ):
         raise api_error(status.HTTP_404_NOT_FOUND, "no_browser", "That browser is not open.")
+    from ...agents.browser_tools import watched
+
+    await watched(session)  # P96: someone is looking: the live follow-up frames are worth it
     data = await valkey_bytes().get(f"browser:frame:{session}")
     if not data:
         raise api_error(status.HTTP_404_NOT_FOUND, "no_frame", "Nothing on screen yet.")

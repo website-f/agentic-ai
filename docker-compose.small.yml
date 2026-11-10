@@ -47,6 +47,8 @@ services:
     mem_limit: 900m
 
   worker:
+    deploy:
+      replicas: 1  # P96: the VPS overlay runs two; a 2 vCPU box has room for one
     environment:
       AGENTIC_BROWSER_URL: ${AGENTIC_BROWSER_URL:-}
       AGENTIC_WORKER_MAX_ACTIVITIES: "4"

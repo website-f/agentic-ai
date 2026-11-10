@@ -30,7 +30,9 @@ from typing import Any
 import httpx
 
 from ..core.config import settings
+from ..core.db import release_idle
 from ..core.fence import fence
+from ..core.http import tls
 from ..core.ssrf import BlockedURL, guard_url
 from ..core.valkey import valkey, valkey_bytes
 
@@ -56,6 +58,13 @@ BUSY_RETRIES = 6
 BUSY_WAIT = 5  # seconds; under the 45 s tool timeout in all
 # P59: a site-budget rest up to this long is waited out inside the call; longer rests the task.
 SHORT_REST = 30
+# P96: after an action, a few more frames so a page that keeps loading looks live, but only
+# while someone has that screen open (the Monitor's frame request marks it for WATCH_TTL s)
+# and only until the next action: they were about two thirds of the bytes through the PC
+# relay (load harness, 10 people), mostly for screens nobody was looking at.
+FOLLOW_FRAMES = 4
+FOLLOW_GAP = 0.9
+WATCH_TTL = 10
 
 transport: httpx.AsyncBaseTransport | None = None  # tests swap in a fake browser
 _UNSET: Any = object()
@@ -81,6 +90,7 @@ def _client(timeout: float = 60) -> httpx.AsyncClient:
         headers={"x-browser-token": settings.browser_token},
         timeout=timeout,
         transport=transport,
+        verify=tls(),  # P96: shared, not loaded per action
     )
 
 
@@ -227,6 +237,7 @@ async def _session(ctx: Any) -> str:
             )
         sites = allowed if device_id else None
     if device_id:
+        await release_idle(ctx.db)  # P96: the PC may take a while (it may be reconnecting)
         channel, body["cdp_url"] = await _open_on_pc(ctx, device_id, sites)
     try:
         async with _client() as c:
@@ -337,12 +348,27 @@ async def store_frame(sid: str, b64: str) -> int:
     return int(await valkey().incr(f"browser:frame_seq:{sid}"))
 
 
-async def _follow(sid: str) -> None:
-    """A few more frames after an action, so pages that keep loading look live."""
+async def watched(sid: str) -> None:
+    """P96: someone has this browser's screen open (the Monitor asks for its frame)."""
+    await valkey().set(f"browser:watch:{sid}", "1", ex=WATCH_TTL)
+
+
+async def _follow(sid: str, act: int) -> None:
+    """A few more frames after action number `act`, so pages that keep loading look live:
+    only while someone watches, and never once the next action has started."""
+
+    async def current() -> bool:
+        raw = await valkey().get(f"browser:act:{sid}")
+        return bool(await valkey().exists(f"browser:watch:{sid}")) and int(_s(raw or 0)) == act
+
     try:
+        if not await current():
+            return
         async with _client(timeout=15) as c:
-            for _ in range(4):
-                await asyncio.sleep(0.9)
+            for _ in range(FOLLOW_FRAMES):
+                await asyncio.sleep(FOLLOW_GAP)
+                if not await current():
+                    return
                 r = await c.get(f"/sessions/{sid}/frame")
                 if r.status_code != 200:
                     return
@@ -484,6 +510,9 @@ async def _act(
     payload = {"action": action, **body}
     if since is not None:
         payload["since"] = since
+    act = int(await valkey().incr(f"browser:act:{sid}"))  # P96: ends the last one's _follow
+    await valkey().expire(f"browser:act:{sid}", SESSION_TTL)
+    await release_idle(ctx.db)  # P96: no database connection held while the page works
     try:
         async with _client() as c:
             r = await c.post(f"/sessions/{sid}/act", json=payload)
@@ -541,7 +570,7 @@ async def _act(
     )
     if obs.get("url") and action not in ("find",):
         await _after_page(ctx, sid, obs)
-    asyncio.create_task(_follow(sid))  # noqa: RUF006 - fire and forget
+    asyncio.create_task(_follow(sid, act))  # noqa: RUF006 - fire and forget
     return obs
 
 
@@ -1362,7 +1391,7 @@ async def close_for_task(task_id: str) -> None:
         meta = {}
     if meta.get("channel") and meta.get("device_id"):  # P31: the window on the person's PC
         await _close_on_pc(meta["device_id"], meta["channel"], meta.get("agent_id", ""), task_id)
-    for k in ("logins", "verify", "rev"):
+    for k in ("logins", "verify", "rev", "act", "watch"):
         await valkey().delete(f"browser:{k}:{sid}")
 
 

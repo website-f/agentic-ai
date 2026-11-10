@@ -67,6 +67,7 @@ import secrets
 import socket
 import time
 import contextlib
+import weakref
 from contextlib import asynccontextmanager
 from typing import Any
 from urllib.parse import urlparse
@@ -168,6 +169,23 @@ def _click_gate() -> asyncio.Lock:
     return _CLICK_GATE
 
 
+# P96: tabs in a Chrome/Edge on a person's own computer (P31). Each is its own browser on its
+# own machine, so its clicks never wait for the gate above: with 10 people at once a click
+# waited ~17 s behind the others' (each ~2 s over the relay); with 50, ~100 s.
+_REMOTE_PAGES: "weakref.WeakSet[Any]" = weakref.WeakSet()
+
+
+def _gate(page: Any) -> Any:
+    """The click gate for this page: the global one for our Camoufox pool, none for a
+    person's own browser."""
+    try:
+        if page in _REMOTE_PAGES:
+            return contextlib.nullcontext()
+    except TypeError:  # not weak-referenceable: treat it as one of ours
+        pass
+    return _click_gate()
+
+
 # Gentle pacing: keep to a human speed on the site so a portal does not see a burst of
 # machine-speed requests from one session (every click on a server-form portal like
 # ePerolehan is a POST). A minimum gap between server-touching actions, plus a cap per
@@ -230,6 +248,17 @@ class _Budget:
 
 
 _budgets: dict[tuple[str, str], _Budget] = {}
+
+
+def budget_key(s: "Session", site: str) -> tuple[str, str]:
+    """Whose budget an action counts against. The office's browsers leave from one server
+    address: one budget per company. P96: on a person's own computer (their own line, their
+    own ePerolehan account) it is that person's: 50 people of one company used to share one
+    cap of 90 actions an hour, so within minutes everyone rested for up to an hour."""
+    who = s.workspace_id or s.owner.get("agent_id", "")
+    if s.remote is not None:
+        return (f"{who}/{s.owner.get('agent_id', '')}", site)
+    return (who, site)
 
 
 def budget_site(url: str | None) -> str | None:
@@ -689,6 +718,9 @@ def _attach_page(sess: Session, page: Any, *, opened: bool) -> None:
     downloads, and keep the session's current tab right when a tab the site opened closes."""
     sess.machine.page_owner[page] = sess
     sess.pages.append(page)
+    if sess.remote is not None:  # P96: a tab on the person's own computer: no pool gate
+        with contextlib.suppress(TypeError):
+            _REMOTE_PAGES.add(page)
     if opened and sess.page is not None:
         sess.opened.append(page)
 
@@ -699,6 +731,7 @@ def _attach_page(sess: Session, page: Any, *, opened: bool) -> None:
 
     def on_close(p: Any) -> None:
         sess.machine.page_owner.pop(p, None)
+        _mouse_pos.pop(id(p), None)  # P96: the cursor of a closed tab is forgotten
         if p in sess.pages:
             sess.pages.remove(p)
         if p in sess.opened:
@@ -1086,7 +1119,7 @@ async def _click(page: Any, loc: Any, *, hover: bool = True) -> None:
             box = await loc.bounding_box()
         except Exception:  # noqa: BLE001
             box = None
-    async with _click_gate():
+    async with _gate(page):
         if HUMAN_CLICK and box:
             await _human_mouse(page, box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)
             if hover:
@@ -1109,7 +1142,7 @@ async def _hand_to(page: Any, loc: Any) -> None:
     except Exception:  # noqa: BLE001
         return
     if box:
-        async with _click_gate():
+        async with _gate(page):
             await _human_mouse(page, box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)
         await asyncio.sleep(random.uniform(CLICK_DWELL_MS * 0.5, CLICK_DWELL_MS * 1.5) / 1000)
 
@@ -1647,10 +1680,7 @@ async def _run_action(s: Session, sid: str, body: Act) -> dict[str, Any]:
             here = s.page.url if s.page is not None else None
         site = budget_site(body.url if body.action == "goto" else None) or budget_site(here)
         if site:
-            rest, why = budget_check(
-                (s.workspace_id or s.owner.get("agent_id", ""), site),
-                own_desk=s.remote is not None,
-            )
+            rest, why = budget_check(budget_key(s, site), own_desk=s.remote is not None)
             if rest > 0:
                 return {"error": f"SITE_REST: {why}", "retry_after": int(rest) + 1, "site": site}
     await _pace(s, body.action)

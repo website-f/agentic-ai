@@ -8,7 +8,7 @@ from sqlalchemy import select
 from temporalio import activity
 
 from ..agents import runtime
-from ..core.db import SessionLocal
+from ..core.db import SessionLocal, release_while_waiting
 from ..engine import gateway
 from ..models import Agent, Broadcast, BroadcastReceipt
 from ..services import events
@@ -23,7 +23,10 @@ async def task_start(task_id: str) -> None:
 
 @activity.defn
 async def task_step(task_id: str) -> dict[str, Any]:
-    return (await runtime.run_task_step(task_id)).dict()
+    # P96: the step gives its database connection back while it waits for the model or a
+    # browser action (core.db.release_idle), so many running steps share a small pool.
+    with release_while_waiting():
+        return (await runtime.run_task_step(task_id)).dict()
 
 
 @activity.defn
