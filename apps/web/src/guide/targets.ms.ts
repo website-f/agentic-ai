@@ -28,9 +28,9 @@ export const GUIDE_PAGES_MS: GuidePage[] = [
     id: "workspace", route: "/workspace", title: "Meja kerja saya", group: "Home",
     states: [],
     targets: [
-      t("desk.tabs", "Tab meja kerja"), t("desk.ask", "Tanya atau cari"), t("desk.stats", "Hari anda dalam angka"), t("desk.pinned", "Disemat"),
+      t("desk.tabs", "Tab meja kerja"), t("desk.ask", "Cari atau pergi ke mana-mana"), t("desk.stats", "Kerja di tangan saya"), t("desk.pinned", "Disemat"),
       t("desk.work", "Kerja saya"), t("desk.files", "Fail meja kerja saya"), t("desk.agents", "Pekerja AI saya"),
-      t("desk.waiting", "Menunggu anda"), t("desk.procedures", "Prosedur saya"),
+      t("desk.waiting", "Hari ini"), t("desk.procedures", "Prosedur saya"),
     ],
   },
   {

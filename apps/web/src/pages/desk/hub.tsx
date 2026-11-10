@@ -5,7 +5,6 @@
 import {
   ArrowRightIcon,
   BookOpenTextIcon,
-  CompassIcon,
   FileTextIcon,
   FlowArrowIcon,
   LifebuoyIcon,
@@ -96,38 +95,37 @@ export function DeskShortcuts({ desk, onTab }: { desk: Desk; onTab: (tab: DeskTa
     page("/computers", "neutral", t("Your own PC, from anywhere")),
   ];
   const items = all.filter((x): x is Shortcut => !!x);
+  // P97: compact rows (the desk's "Go to" section has its own heading); the hint is the
+  // second line on wider screens and the tooltip everywhere.
   return (
-    <section aria-label={t("Go to")} data-guide="desk.shortcuts" className="grid gap-2">
-      <h2 className="flex items-center gap-2 text-[13px] font-semibold text-muted"><CompassIcon size={15} /> {t("Go to")}</h2>
-      <ul className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-6">
+    <nav aria-label={t("Go to")} data-guide="desk.shortcuts">
+      <ul className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
         {items.map((s) => {
           const body = (
             <>
-              <span className="flex items-start justify-between gap-2">
-                <IconTile icon={s.icon} tone={s.tone} size="sm" />
-                {typeof s.count === "number" && s.count > 0 ? (
-                  <span className={cn("rounded-full px-2 py-0.5 text-[11.5px] font-semibold tabular", s.attention ? "bg-warn text-white" : "bg-surface-2 text-muted")}>{s.count}</span>
-                ) : null}
+              <IconTile icon={s.icon} tone={s.tone} size="sm" />
+              <span className="grid min-w-0 flex-1 gap-0.5">
+                <span className="truncate text-[13.5px] font-medium">{s.label}</span>
+                <span className="hidden truncate text-[12px] text-muted sm:block">{s.hint}</span>
               </span>
-              <span className="grid min-w-0 gap-0.5">
-                <span className="truncate text-[14px] font-semibold">{s.label}</span>
-                <span className="line-clamp-2 text-[12px] leading-snug text-muted">{s.hint}</span>
-              </span>
+              {typeof s.count === "number" && s.count > 0 ? (
+                <span className={cn("shrink-0 rounded-full px-2 py-0.5 text-[11.5px] font-semibold tabular", s.attention ? "bg-warn text-white" : "bg-surface-2 text-muted")}>{s.count}</span>
+              ) : null}
             </>
           );
-          const cls = "grid h-full min-h-[6.5rem] content-between gap-2 rounded-[var(--radius-md)] border border-border bg-surface p-3 text-left transition-colors hover:border-accent/50 hover:bg-accent-soft/20 focus-visible:border-accent focus-visible:outline-none";
+          const cls = "flex h-full min-h-14 min-w-0 items-center gap-2.5 rounded-[var(--radius-md)] border border-border bg-surface px-3 py-2.5 text-left transition-colors hover:border-accent/50 hover:bg-accent-soft/20 focus-visible:border-accent focus-visible:outline-none";
           return (
             <li key={s.to ?? s.tab}>
               {s.tab ? (
-                <button type="button" className={cn(cls, "w-full")} onClick={() => onTab(s.tab!)}>{body}</button>
+                <button type="button" title={s.hint} className={cn(cls, "w-full")} onClick={() => onTab(s.tab!)}>{body}</button>
               ) : (
-                <Link to={s.to!} className={cls}>{body}</Link>
+                <Link to={s.to!} title={s.hint} className={cls}>{body}</Link>
               )}
             </li>
           );
         })}
       </ul>
-    </section>
+    </nav>
   );
 }
 
@@ -137,7 +135,7 @@ const EXAMPLES = [msg("submit a tender"), msg("claim a receipt"), msg("apply for
 
 /** "How do I…?": the company's own SOPs and workflows for a job, matched as you type, and
  * the person's AI to walk them through it (or the app's help, for how to use the app). */
-export function HowDoI({ desk, compact = false }: { desk: Desk; compact?: boolean }) {
+export function HowDoI({ desk, compact = false, headless = false }: { desk: Desk; compact?: boolean; headless?: boolean }) {
   const t = useT();
   const navigate = useNavigate();
   const help = useHelpAsk();
@@ -163,11 +161,13 @@ export function HowDoI({ desk, compact = false }: { desk: Desk; compact?: boolea
   return (
     <Card data-guide="desk.howto" className="overflow-hidden">
       <div className="grid gap-3 p-4 sm:p-5">
-        <div className="flex flex-wrap items-center gap-2">
-          <IconTile icon={LifebuoyIcon} size="sm" tone="info" />
-          <h2 className="text-[15px] font-semibold">{t("How do I…?")}</h2>
-          {!compact ? <span className="text-[12.5px] text-muted">{t("Find how a job is done here, step by step.")}</span> : null}
-        </div>
+        {headless ? null : (
+          <div className="flex flex-wrap items-center gap-2">
+            <IconTile icon={LifebuoyIcon} size="sm" tone="info" />
+            <h2 className="text-[15px] font-semibold">{t("How do I…?")}</h2>
+            {!compact ? <span className="text-[12.5px] text-muted">{t("Find how a job is done here, step by step.")}</span> : null}
+          </div>
+        )}
         <form className="flex flex-col gap-2 sm:flex-row" onSubmit={(e) => { e.preventDefault(); if (q.trim().length >= 3 && desk.can_ask) walk(); }}>
           <label className="relative min-w-0 flex-1">
             <span className="sr-only">{t("How do I…?")}</span>

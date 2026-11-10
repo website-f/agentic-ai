@@ -95,32 +95,33 @@ export const PAGE_DOCS: Record<string, PageDoc> = {
   },
 
   workspace: {
-    purpose: "Your own desk, for everyone from staff to owners. Instead of going through Files, SOPs, Workflows, Tasks and Documents one by one, ask or search here, keep what you use often pinned, and find everything your work produced in one place. The other pages are still there to browse.",
+    purpose: "Your own desk, for everyone from staff to owners: what needs you today, everything you pinned, and one bar to reach any page, person, task, document or agent. Show, hide and order its parts the way you like. The other pages are still there to browse.",
     can: [
-      "Ask or search anything inside the company's documents, SOPs and records, with suggestions as you type.",
+      "Search or jump anywhere from the bar at the top, or with Ctrl K: pages, people, tasks, documents, agents, contacts and reports.",
       "Hand a question to your AI worker: it searches the documents, answers with the file and page it used and, if you ask, prepares a document.",
-      "Pin SOPs, workflows, files, documents and searches, and open them in one click.",
+      "Pin anything: pages of the office and Prima, tasks, files, documents, agents, reports, contacts and web links. Rename pins, keep them in folders and drag them into order.",
       "Run a workflow again straight from **My procedures** or a pin.",
       "Follow **My work**: what you asked for, what your AI workers are doing, and the documents and files they made.",
       "Keep your own files in **My workspace files**, next to everything your AI made for you.",
       "Answer what waits for you: your AI's questions and approvals, and its work to review.",
+      "Press **Customize** to show, hide and reorder the parts of your desk, the same on your phone and PC.",
     ],
     spots: {
-      "desk.tabs": "Five tabs: **Overview**, **My work**, **My files**, **Workflows & SOPs** and **AI workers**.",
-      "desk.ask": "Type a word, amount or reference number. **Search** shows matches here; **Ask** gives it to your AI worker.",
-      "desk.stats": "What waits for you, what is in progress, what finished this week and how much is in your workspace.",
-      "desk.pinned": "Your shortcuts. Workflows have **Run**, files have **Download**.",
+      "desk.tabs": "Five tabs: **My desk**, **My work**, **My files**, **Workflows & SOPs** and **AI workers**.",
+      "desk.ask": "One bar to anywhere: pages, people, tasks, documents and agents. Under it: **New task**, **Ask my AI**, **Upload a file** and **Pin a page or link**.",
+      "desk.stats": "**On my plate**: the work you gave and what your AI is doing now.",
+      "desk.pinned": "Your pins, in your own folders. **Arrange** lets you drag them into order; each pin's menu renames, moves or unpins it.",
       "desk.work": "Everything you asked for or your AI does, with the documents and files it made.",
       "desk.files": "Files you uploaded here and everything your work produced. Filter by **Made by AI** or **Uploaded**.",
       "desk.agents": "Your AI worker and assistants: what each is doing, and quick ways to give them work.",
-      "desk.waiting": "Questions, approvals and results that need you.",
+      "desk.waiting": "**Today**: questions, approvals, reviews and forms that need you, and today's meetings.",
       "desk.procedures": "The SOPs and workflows for your job: your department's first, then your company's.",
     },
     howto: [
       {
         title: "Find something in the company's documents",
         steps: [
-          s("Type in **Ask or search**, for example a word, an amount like RM700 or a tender number. Suggestions appear as you type.", "desk.ask"),
+          s("Press **Ask my AI**, then type a word, an amount like RM700 or a tender number. Suggestions appear as you type.", "desk.ask"),
           s("Click **Search**. The best matches appear under the box, with the page of the PDF where they were found."),
           s("Click **Open** to read it, or the pin to keep it on your workspace. Pin the whole search to run it again later."),
         ],
@@ -128,7 +129,7 @@ export const PAGE_DOCS: Record<string, PageDoc> = {
       {
         title: "Ask your AI worker to find it and hand it over",
         steps: [
-          s("Type your question in **Ask or search**, for example: how much advance can a guard with 8 working days get?", "desk.ask"),
+          s("Press **Ask my AI** and type your question, for example: how much advance can a guard with 8 working days get?", "desk.ask"),
           s("Choose **Find and answer**, or **Answer and prepare a document** when you need a letter, quotation or report."),
           s("Click **Ask** followed by your AI worker's name. It searches the documents and SOPs, and asks colleagues when it needs to."),
           s("The answer appears under **My work**, with every source cited. A document it prepared is in **My workspace files** and waits for your review.", "desk.work"),
@@ -137,8 +138,8 @@ export const PAGE_DOCS: Record<string, PageDoc> = {
       {
         title: "Keep your shortcuts and run a workflow again",
         steps: [
-          s("Press the pin next to any SOP, workflow, file, document or search result, here or on its own page."),
-          s("It appears under **Pinned**. Click it to open it.", "desk.pinned"),
+          s("Press the pin next to anything: a task, file, document, agent, report, contact or search result. For the page you are on, press the pin by its title."),
+          s("It appears under **Pinned**. Click it to open it; its menu renames it or moves it into a folder.", "desk.pinned"),
           s("For a workflow, click **Run**, fill in the job and start it. You can also run one from **My procedures**.", "desk.procedures"),
         ],
       },
@@ -1667,7 +1668,7 @@ export const PAGE_DOCS: Record<string, PageDoc> = {
         title: "1b. Show the staff member's own workspace",
         steps: [
           s("After hiring, the staff member lands on **My workspace**: their desk, with their AI worker, their procedures and their work."),
-          s("Type a question in **Ask or search**, for example the advance rules, and click **Search**: the matching pages appear at once."),
+          s("Press **Ask my AI**, type a question, for example the advance rules, and click **Search**: the matching pages appear at once."),
           s("Then click **Ask** with the AI worker's name and choose **Answer and prepare a document**. The answer and the document land under **My work** and **My workspace files**."),
           s("Pin the SOPs and workflows they use every day, and run a workflow again from **Pinned**."),
         ],

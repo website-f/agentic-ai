@@ -56,32 +56,33 @@ export const PAGE_DOCS_MS: Record<string, PageDoc> = {
   },
 
   workspace: {
-    purpose: "Meja anda sendiri, untuk semua orang daripada kakitangan hingga pemilik. Daripada membuka Fail, SOP, Aliran kerja, Tugasan dan Dokumen satu demi satu, tanya atau cari di sini, semat apa yang kerap anda guna, dan dapatkan semua hasil kerja anda di satu tempat. Halaman lain masih ada untuk dilayari.",
+    purpose: "Meja anda sendiri, untuk semua orang daripada kakitangan hingga pemilik: apa yang perlukan anda hari ini, semua yang anda semat, dan satu bar untuk ke mana-mana halaman, orang, tugasan, dokumen atau ejen. Tunjuk, sorok dan susun bahagiannya mengikut cara anda. Halaman lain masih ada untuk dilayari.",
     can: [
-      "Tanya atau cari apa sahaja dalam dokumen, SOP dan rekod syarikat, dengan cadangan semasa menaip.",
+      "Cari atau pergi ke mana-mana dari bar di atas, atau dengan Ctrl K: halaman, orang, tugasan, dokumen, ejen, hubungan dan laporan.",
       "Serahkan soalan kepada pekerja AI anda: ia mencari dalam dokumen, menjawab dengan fail dan halaman yang digunakan dan, jika diminta, menyediakan dokumen.",
-      "Semat SOP, aliran kerja, fail, dokumen dan carian, dan buka dengan satu klik.",
+      "Semat apa sahaja: halaman pejabat dan Prima, tugasan, fail, dokumen, ejen, laporan, hubungan dan pautan web. Tukar nama semat, simpan dalam folder dan seret mengikut susunan.",
       "Jalankan aliran kerja semula terus dari **Prosedur saya** atau pin.",
       "Ikuti **Kerja saya**: apa yang anda minta, apa yang pekerja AI anda sedang buat, dan dokumen serta fail yang dihasilkan.",
       "Simpan fail anda sendiri dalam **Fail meja kerja saya**, bersama semua yang dibuat oleh AI untuk anda.",
       "Jawab apa yang menunggu anda: soalan dan permintaan kelulusan AI anda, serta hasil kerja untuk disemak.",
+      "Tekan **Ubah suai** untuk menunjuk, menyorok dan menyusun bahagian meja anda, sama di telefon dan PC.",
     ],
     spots: {
-      "desk.tabs": "Lima tab: **Ringkasan**, **Kerja saya**, **Fail saya**, **Aliran kerja & SOP** dan **Pekerja AI**.",
-      "desk.ask": "Taip perkataan, amaun atau nombor rujukan. **Cari** menunjukkan padanan di sini; **Minta** menyerahkannya kepada pekerja AI anda.",
-      "desk.stats": "Apa yang menunggu anda, apa yang sedang berjalan, apa yang siap minggu ini dan berapa banyak dalam meja kerja anda.",
-      "desk.pinned": "Pintasan anda. Aliran kerja ada **Jalankan**, fail ada **Muat turun**.",
+      "desk.tabs": "Lima tab: **Meja saya**, **Kerja saya**, **Fail saya**, **Aliran kerja & SOP** dan **Pekerja AI**.",
+      "desk.ask": "Satu bar ke mana-mana: halaman, orang, tugasan, dokumen dan ejen. Di bawahnya: **Tugasan baharu**, **Minta AI saya**, **Muat naik fail** dan **Semat halaman atau pautan**.",
+      "desk.stats": "**Kerja di tangan saya**: kerja yang anda beri dan apa yang AI anda sedang buat.",
+      "desk.pinned": "Semat anda, dalam folder anda sendiri. **Susun** membolehkan anda menyeretnya mengikut susunan; menu setiap semat menukar nama, memindah atau menyahsematnya.",
       "desk.work": "Semua yang anda minta atau dibuat oleh AI anda, bersama dokumen dan fail yang dihasilkan.",
       "desk.files": "Fail yang anda muat naik di sini dan semua hasil kerja anda. Tapis mengikut **Dibuat oleh AI** atau **Dimuat naik**.",
       "desk.agents": "Pekerja AI dan pembantu anda: apa yang sedang dibuat, dan cara cepat memberi mereka kerja.",
-      "desk.waiting": "Soalan, kelulusan dan hasil yang memerlukan anda.",
+      "desk.waiting": "**Hari ini**: soalan, kelulusan, semakan dan borang yang perlukan anda, serta mesyuarat hari ini.",
       "desk.procedures": "SOP dan aliran kerja untuk kerja anda: jabatan anda dahulu, kemudian syarikat anda.",
     },
     howto: [
       {
         title: "Cari sesuatu dalam dokumen syarikat",
         steps: [
-          s("Taip dalam **Tanya atau cari**, contohnya perkataan, amaun seperti RM700 atau nombor tender. Cadangan muncul semasa anda menaip.", "desk.ask"),
+          s("Tekan **Minta AI saya**, kemudian taip perkataan, amaun seperti RM700 atau nombor tender. Cadangan muncul semasa anda menaip.", "desk.ask"),
           s("Klik **Cari**. Padanan terbaik muncul di bawah kotak, bersama halaman PDF tempat ia dijumpai."),
           s("Klik **Buka** untuk membacanya, atau pin untuk menyimpannya di meja kerja anda. Semat seluruh carian untuk menjalankannya semula kemudian."),
         ],
@@ -89,7 +90,7 @@ export const PAGE_DOCS_MS: Record<string, PageDoc> = {
       {
         title: "Minta pekerja AI anda carikan dan serahkan",
         steps: [
-          s("Taip soalan anda dalam **Tanya atau cari**, contohnya: berapa advance yang boleh diterima pengawal dengan 8 hari bekerja?", "desk.ask"),
+          s("Tekan **Minta AI saya** dan taip soalan anda, contohnya: berapa advance yang boleh diterima pengawal dengan 8 hari bekerja?", "desk.ask"),
           s("Pilih **Cari dan jawab**, atau **Jawab dan sediakan dokumen** jika anda perlukan surat, sebut harga atau laporan."),
           s("Klik **Minta** diikuti nama pekerja AI anda. Ia mencari dalam dokumen dan SOP, dan bertanya rakan sekerja jika perlu."),
           s("Jawapannya muncul di bawah **Kerja saya**, dengan setiap sumber disebut. Dokumen yang disediakan ada dalam **Fail meja kerja saya** dan menunggu semakan anda.", "desk.work"),
@@ -98,8 +99,8 @@ export const PAGE_DOCS_MS: Record<string, PageDoc> = {
       {
         title: "Simpan pintasan dan jalankan aliran kerja semula",
         steps: [
-          s("Tekan pin di sebelah mana-mana SOP, aliran kerja, fail, dokumen atau hasil carian, di sini atau di halamannya sendiri."),
-          s("Ia muncul di bawah **Disemat**. Klik untuk membukanya.", "desk.pinned"),
+          s("Tekan pin di sebelah apa sahaja: tugasan, fail, dokumen, ejen, laporan, hubungan atau hasil carian. Untuk halaman yang sedang dibuka, tekan pin di sebelah tajuknya."),
+          s("Ia muncul di bawah **Disemat**. Klik untuk membukanya; menunya menukar nama atau memindahkannya ke folder.", "desk.pinned"),
           s("Bagi aliran kerja, klik **Jalankan**, isi butiran kerja dan mulakan. Anda juga boleh menjalankannya dari **Prosedur saya**.", "desk.procedures"),
         ],
       },
@@ -1628,7 +1629,7 @@ export const PAGE_DOCS_MS: Record<string, PageDoc> = {
         title: "1b. Tunjukkan meja kerja kakitangan itu sendiri",
         steps: [
           s("Selepas mengambil pekerja AI, kakitangan itu masuk ke **Meja kerja saya**: meja mereka, dengan pekerja AI, prosedur dan kerja mereka."),
-          s("Taip soalan dalam **Tanya atau cari**, contohnya peraturan advance, dan klik **Cari**: halaman yang sepadan muncul serta-merta."),
+          s("Tekan **Minta AI saya**, taip soalan, contohnya peraturan advance, dan klik **Cari**: halaman yang sepadan muncul serta-merta."),
           s("Kemudian klik **Minta** bersama nama pekerja AI dan pilih **Jawab dan sediakan dokumen**. Jawapan dan dokumen itu masuk ke **Kerja saya** dan **Fail meja kerja saya**."),
           s("Semat SOP dan aliran kerja yang mereka guna setiap hari, dan jalankan aliran kerja semula dari **Disemat**."),
         ],

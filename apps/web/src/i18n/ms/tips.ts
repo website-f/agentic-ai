@@ -7,19 +7,20 @@ export const TIPS: Record<string, string> = {
   "Show what to do here": "Tunjuk apa perlu dibuat di sini",
 
   // desk
-  "Your desk: the work you gave, what your AI is doing, and what waits for you.":
-    "Meja anda: kerja yang anda beri, apa yang AI anda sedang buat, dan apa yang menunggu anda.",
+  "Your own desk: what needs you today, what you pinned, and the way to anywhere.":
+    "Meja anda sendiri: apa yang perlukan anda hari ini, apa yang anda semat, dan jalan ke mana-mana.",
   "Type what you need in Give your AI a task, in your own words.":
     "Taip apa yang anda perlukan di ruang Beri tugasan kepada AI anda, dalam ayat anda sendiri.",
-  "Answer anything under Waiting for you: your AI asks before important steps.":
-    "Jawab apa sahaja di bawah Menunggu anda: AI anda bertanya dahulu sebelum langkah penting.",
-  "Accept or send back finished work in My work.": "Terima atau hantar semula kerja yang siap dalam Kerja saya.",
+  "Start with Needs you under Today: your AI asks before important steps.":
+    "Mulakan dengan Perlukan anda di bawah Hari ini: AI anda bertanya dahulu sebelum langkah penting.",
+  "Pin anything you use often, and press Customize to show only what you need.":
+    "Semat apa sahaja yang kerap anda guna, dan tekan Ubah suai untuk menunjukkan hanya apa yang anda perlukan.",
   "Your own desk: work you gave, your files, and what waits for you personally.":
     "Meja anda sendiri: kerja yang anda beri, fail anda, dan apa yang menunggu anda sendiri.",
-  "Give a task to any agent you look after from the box at the top.":
-    "Beri tugasan kepada mana-mana ejen jagaan anda melalui kotak di atas.",
-  "Clear Waiting for you first: approvals, documents to review, finished work to accept.":
-    "Selesaikan Menunggu anda dahulu: kelulusan, dokumen untuk disemak, kerja siap untuk diterima.",
+  "Search or jump anywhere from the bar at the top, or press Ctrl K.":
+    "Cari atau pergi ke mana-mana dari bar di atas, atau tekan Ctrl K.",
+  "Clear Needs you first: approvals, documents to review, finished work to accept.":
+    "Selesaikan Perlukan anda dahulu: kelulusan, dokumen untuk disemak, kerja siap untuk diterima.",
   "For the whole office, open the Command center.": "Untuk seluruh pejabat, buka Pusat arahan.",
 
   // command center

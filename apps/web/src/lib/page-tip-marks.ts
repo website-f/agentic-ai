@@ -15,10 +15,10 @@ import type { Tip } from "./page-tips";
 
 export const STEP_MARKS: Record<string, string[]> = {
   "Type what you need in Give your AI a task, in your own words.": ["What do you need?", "Give my AI a task"],
-  "Answer anything under Waiting for you: your AI asks before important steps.": ["Waiting for you"],
-  "Accept or send back finished work in My work.": ["My work"],
-  "Give a task to any agent you look after from the box at the top.": ["Ask or search", "Who should do it", "What do you need?"],
-  "Clear Waiting for you first: approvals, documents to review, finished work to accept.": ["Waiting for you"],
+  "Start with Needs you under Today: your AI asks before important steps.": ["Needs you"],
+  "Pin anything you use often, and press Customize to show only what you need.": ["Pinned", "Customize"],
+  "Search or jump anywhere from the bar at the top, or press Ctrl K.": ["Search or jump to anything: pages, people, tasks, documents, agents"],
+  "Clear Needs you first: approvals, documents to review, finished work to accept.": ["Needs you"],
   "For the whole office, open the Command center.": ["Command center"],
   "Start with Waiting on you and To review: those are blocked until you act.": ["Waiting on you", "To review"],
   "Agents asking means an agent is stuck or needs more budget.": ["Agents asking"],
