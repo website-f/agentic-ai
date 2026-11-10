@@ -22,6 +22,7 @@ from ...core.security import role_permissions
 from ...core.valkey import valkey
 from ...engine import gateway
 from ...i18n import Msg
+from ...i18n import notes as lang_notes
 from ...i18n.labels import agent_status_label, role_label
 from ...models import SOP, Agent, AgentMessage, Branch, ChatSession, Department, Task, User
 from ...services import audit, events
@@ -739,6 +740,13 @@ async def chat(
             name=a.name,
             status=agent_status_label(a.status),
         )
+    pick = body.reply_in or None
+    if pick and not lang_notes.valid_pick(pick):
+        raise api_error(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            "unknown_reply_language",
+            "That reply language is not one the agents speak.",
+        )
     if body.session_id:
         s = await db.get(ChatSession, body.session_id)
         if s is None or s.user_id != principal.user.id or s.agent_id != a.id:
@@ -757,7 +765,7 @@ async def chat(
     # P64: the turn runs on its own (its own database session), so a page reload, a dropped
     # connection or a proxy timeout never cancels it half way: the answer is saved anyway and
     # the page picks it up from the conversation (GET .../progress, then .../messages).
-    work = asyncio.create_task(_turn(a.id, s.id, body.message))
+    work = asyncio.create_task(_turn(a.id, s.id, body.message, pick))
     _TURNS.add(work)
     work.add_done_callback(_TURNS.discard)
     try:
@@ -781,7 +789,9 @@ def _busy_key(session_id: str) -> str:
     return f"chat:busy:{session_id}"
 
 
-async def _turn(agent_id: str, session_id: str, message: str) -> runtime.ChatReply:
+async def _turn(
+    agent_id: str, session_id: str, message: str, pick: str | None = None
+) -> runtime.ChatReply:
     with contextlib.suppress(Exception):
         await valkey().set(_busy_key(session_id), "1", ex=BUSY_FOR)
     try:
@@ -789,7 +799,7 @@ async def _turn(agent_id: str, session_id: str, message: str) -> runtime.ChatRep
             a = await db.get(Agent, agent_id)
             s = await db.get(ChatSession, session_id)
             assert a is not None and s is not None
-            reply = await runtime.chat_turn(db, a, s, message)
+            reply = await runtime.chat_turn(db, a, s, message, pick)
             s.title = s.title or message[:80]
             # Every turn moves the conversation up the list (nothing else on the row
             # changes, so the updated_at onupdate would not fire by itself).

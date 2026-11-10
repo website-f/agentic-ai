@@ -156,6 +156,32 @@ async def _names(db: AsyncSession, ids: list[str]) -> dict[str, Agent]:
     return {a.id: a for a in rows}
 
 
+async def _person_note(db: AsyncSession, m: Meeting, rows: list[MeetingTurn]) -> str:
+    """P97: the person in this meeting (the last one who spoke, else who called it) reads it
+    in the language they chose, and is addressed in their dialect. Empty when they never
+    chose a language or dialect (the meeting then follows the topic's language)."""
+    from ..i18n import notes as lang_notes
+    from ..models import User
+    from ..services import prefs
+
+    said = [t for t in rows if t.kind == "human" and (t.speaker or "").startswith("user:")]
+    who = said[-1].speaker if said else (m.started_by or "")
+    if not who.startswith("user:"):
+        return ""
+    user = await db.get(User, who.removeprefix("user:"))
+    lang, style = prefs.saved_lang(user), prefs.speech_of(user)
+    if user is None or not (lang or style):
+        return ""
+    text = said[-1].content if said else m.topic
+    v = lang_notes.voice_for(lang, style, text or "")
+    tongue = "Bahasa Melayu" if v.lang == "ms" else "English"
+    out = f"\n\n({user.name}, a person, follows this meeting: write your turn in {tongue}."
+    if v.style:
+        out += f" When you address {user.name} directly, speak as below.)\n"
+        return out + lang_notes.turn_note(v, text or "")
+    return out + ")"
+
+
 async def take_turn(meeting_id: str, rnd: int, agent_id: str) -> dict[str, Any]:
     """One agent speaks once. Returns {"stop": bool, "passed": bool}."""
     async with SessionLocal() as db:
@@ -190,7 +216,8 @@ async def take_turn(meeting_id: str, rnd: int, agent_id: str) -> dict[str, Any]:
             {"role": "system", "content": system},
             {
                 "role": "user",
-                "content": f"Topic: {m.topic}\n\nSo far:\n{fence(transcript(rows))}\n\nYour turn.",
+                "content": f"Topic: {m.topic}\n\nSo far:\n{fence(transcript(rows))}\n\nYour turn."
+                + await _person_note(db, m, rows),
             },
         ]
         used = 0

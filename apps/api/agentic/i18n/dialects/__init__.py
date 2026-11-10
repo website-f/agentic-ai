@@ -230,10 +230,15 @@ def voice_note(code: str | None, text: str = "") -> str:
     ex = _examples_for(s.code, text)
     if ex:
         lines.append("How it sounds: " + " ".join(f"«{x['d']}» (= {x['s']})" for x in ex))
+    # P97: never "follow the style they write in": most people type standard Malay (or mix in
+    # English words) and still want their dialect back; that is why they chose it.
     lines.append(
-        "Keep names, numbers, amounts, dates and technical terms exact. If the person writes "
-        "in another language or style, follow theirs. Documents, letters, reports and "
-        "anything sent outside the company stay in standard Malay.)"
+        f"This person chose {s.label} in their settings, so use it even when they write "
+        "standard Malay or mix in English words, and even if earlier replies here were in "
+        "standard Malay; it wins over any general rule to answer in the language or style you "
+        "are spoken to in. Your own name, role and manner stay yours. Keep names, numbers, "
+        "amounts, dates and technical terms exact. Documents, letters, reports and anything "
+        "sent outside the company stay in standard Malay.)"
     )
     return "\n".join(lines)
 
@@ -269,7 +274,16 @@ _MS_WORDS = frozenset(
     "lagi juga pun je jak saja sahaja la lah kan ke kah bah ka tolong terima kasih buat bikin "
     "polah tengok tingu nangga cari hantar beri bagi minta semak sila hari esok semalam minggu "
     "bulan tahun jam pukul baru lama banyak sikit sedikit semua orang kerja syarikat pelanggan "
-    "harga duit bayar ambo demo mung hang depa teman kome den ekau kamek kitak sia ko".split()
+    "harga duit bayar ambo demo mung hang depa teman kome den ekau kamek kitak sia ko "
+    # P97: everyday work words, and the dialect words of the guides above, so a message in
+    # dialect or mixed with English still reads as Malay.
+    "laporan mesyuarat invois jualan senarai pembekal tugas tugasan pejabat jabatan cawangan "
+    "pekerja staf gaji cuti tarikh masa nanti kalau jika sebab kerana pasal betul faham tahu "
+    "tau dapat siap dulu lepas sebelum selepas macamana camana cepat lambat sekejap jap "
+    "jom dorg dgn utk yg tk xde xleh blh nk sy kawe dio kito nok dop takdok sokmo "
+    "pitih guano mano sapo jah kecek tubik bakpe guane kekgi royak kelih pulok sokmo dok "
+    "habaq satgi toksah cheq mike deme sio eden apo dogheh mangkali aok polah kinek juak "
+    "kenak sine dolok kelak durang inda ndapapa kasi pigi bilang kunuk".split()
 )
 _EN_WORDS = frozenset(
     "i me my we our you your he she it they them this that these those the a an and or but "
@@ -310,9 +324,26 @@ def writes_malay(text: str, lang: str | None) -> bool:
     words = WORD.findall((text or "").lower())
     ms = sum(1 for w in words if w in _MS_WORDS)
     en = sum(1 for w in words if w in _EN_WORDS)
+    if lang == "ms":
+        # P97: someone who chose Malay mixes English in all the time ("tolong summarize the
+        # report for me"); only a message clearly in English is English.
+        return not (en >= 3 and en > 4 * ms)
     if ms != en:
         return ms > en
-    return lang == "ms"
+    return False
+
+
+def clearly_not(text: str, lang: str | None) -> bool:
+    """P97: a message plainly written in the other language than `lang` (en or ms): four or
+    more words of the other one and none of `lang`. Unclear or mixed text is never flagged."""
+    words = WORD.findall((text or "").lower())
+    ms = sum(1 for w in words if w in _MS_WORDS)
+    en = sum(1 for w in words if w in _EN_WORDS)
+    if lang == "ms":
+        return en >= 4 and ms == 0
+    if lang == "en":
+        return ms >= 4 and en == 0
+    return False
 
 
 def style_for(code: str | None, lang: str | None, text: str) -> str | None:

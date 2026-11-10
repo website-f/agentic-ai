@@ -158,6 +158,9 @@ class SOPOut(BaseModel):
 class ChatIn(BaseModel):
     message: str = Field(min_length=1, max_length=8000)
     session_id: str | None = None
+    # P97: this conversation's own reply language: en, ms (standard Malay) or a dialect code
+    # (i18n.dialects); empty = the person's setting (Settings > Language).
+    reply_in: str | None = Field(default=None, max_length=24, pattern=r"^[a-z_]*$")
 
 
 class ChatOut(BaseModel):
