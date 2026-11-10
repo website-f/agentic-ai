@@ -88,6 +88,13 @@ seeing no visible change after the click, click it again — robotic. Fixed by:
 | `BROWSER_HUMAN_CLICK` | true | Bézier cursor path + hover + dwell before a click |
 | `BROWSER_HUMAN_CLICK_DWELL_MS` | 120 | dwell before clicking (ms) |
 | `BROWSER_HUMAN_SCROLL` | true | multi-step scrolling |
+| `BROWSER_PC_TYPE_MS_MIN` / `_MAX` | 35 / 90 | P97: per-char delay on the person's own PC |
+| `BROWSER_PC_THINK_MS_MIN` / `_MAX` | 120 / 350 | P97: beat before a field on the person's own PC |
+| `BROWSER_NAME_WAIT` | 5 | P97: seconds an element named by role+name is looked for on a loading page |
+
+P97: on the person's own PC (P31) the cursor path is 3-5 points (each point is a CDP round trip
+over the relay), the click does not hover twice, and filling a field adds no pacing wait of its
+own (the per-minute cap still counts). See `docs/P97_EPEROLEHAN_SPEED.md`.
 
 Tests set `BROWSER_HUMAN_TYPING=0` (and friends) for speed/determinism.
 

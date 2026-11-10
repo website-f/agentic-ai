@@ -40,6 +40,7 @@ READ = (
     "browser_find",
     "browser_wait",
     "browser_close",
+    "browser_steps",  # P97: a batch; each step still needs its own tool's setting
 )
 INTERACT = READ + (
     "browser_type",
@@ -161,6 +162,14 @@ def brief_for(body: WebTaskIn) -> str:
             "/ needs a person, then what still needs a person (prices, certificates, "
             "declarations, final submission and signing).",
         ]
+        lines += [
+            "",
+            "ON THE PORTAL work like a clerk who knows it: follow the site playbook below (the "
+            "way to each screen and the names of its fields and buttons); open a screen "
+            "directly when its address is known; send the actions you already know as one "
+            "browser_steps call by role and name; click each thing once (a click that showed "
+            "no change yet: browser_wait, not a second click).",
+        ]
         if body.values.strip():
             lines += [
                 "",
@@ -171,8 +180,9 @@ def brief_for(body: WebTaskIn) -> str:
         lines += [
             "",
             "You may click, type and fill in forms on this site to do it. Fill all the fields "
-            "in one browser_fill. Sending a form waits for my approval (browser_submit): "
-            "before you send, check every field against what I asked.",
+            "in one browser_fill (or, with the clicks you already know, one browser_steps). "
+            "Sending a form waits for my approval (browser_submit): before you send, check "
+            "every field against what I asked.",
         ]
         if body.values.strip():
             lines += [

@@ -76,6 +76,7 @@ from fastapi import FastAPI, Header, HTTPException
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
 from snapshot import (
+    INTERACTIVE,
     MARKS_JS,
     SNAPSHOT_JS,
     Delta,
@@ -156,6 +157,20 @@ HUMAN_SCROLL = _env_bool("BROWSER_HUMAN_SCROLL", "true")  # several small wheel 
 # A person's beat between one field and the next (reading the label, moving the hand), in ms.
 THINK_MS_MIN = max(0, int(os.environ.get("BROWSER_HUMAN_THINK_MS_MIN", "250")))
 THINK_MS_MAX = max(THINK_MS_MIN, int(os.environ.get("BROWSER_HUMAN_THINK_MS_MAX", "800")))
+# P97: on the person's own computer (P31) every cursor point is a CDP round trip through the
+# office's relay (12-22 points cost ~1 s a click on 11 Nov). There a hand moves in a short,
+# still curved path of a few points, types briskly, and takes a shorter beat between fields;
+# the person watches their own screen, so the work should look like a skilled clerk's.
+PC_MOUSE_POINTS = (3, 5)
+PC_TYPE_MS_MIN = max(0, int(os.environ.get("BROWSER_PC_TYPE_MS_MIN", "35")))
+PC_TYPE_MS_MAX = max(PC_TYPE_MS_MIN, int(os.environ.get("BROWSER_PC_TYPE_MS_MAX", "90")))
+PC_THINK_MS_MIN = max(0, int(os.environ.get("BROWSER_PC_THINK_MS_MIN", "120")))
+PC_THINK_MS_MAX = max(PC_THINK_MS_MIN, int(os.environ.get("BROWSER_PC_THINK_MS_MAX", "350")))
+# P97: an element named by role and name (no ref) on a page that is still loading: look again
+# for this long, the way a person waits for the page to show, instead of failing at once.
+NAME_WAIT = float(os.environ.get("BROWSER_NAME_WAIT", "5"))
+STEPS_MAX = 15  # actions in one batch (browser_steps)
+EXPECT_WAIT = 8.0  # seconds a step's `expect` may take to show
 # Serializes the actual click/cursor move of every machine so no two deadlock Camoufox's
 # humanized cursor. Created lazily on the running loop.
 _CLICK_GATE: asyncio.Lock | None = None
@@ -213,6 +228,11 @@ SERVER_ACTIONS = frozenset(
         "upload",
         "back",
     }
+)
+FIELD_ACTIONS = frozenset({"type", "select", "check"})  # P97: filling a form in
+# P97: what one browser_steps batch may do (never a submit, an upload, Enter or a saved login).
+STEP_ACTIONS = frozenset(
+    {"goto", "click", "type", "select", "check", "wait", "scroll", "back", "press"}
 )
 # P59 the site budget: a portal such as ePerolehan is used the way one person at a desk uses
 # it, across every agent of a company (they share its address): sittings of so many minutes
@@ -667,6 +687,9 @@ class Session:
         # P31: a Chrome/Edge on the person's own computer, reached over the API's CDP relay
         # (connect_over_cdp). Closing the session only disconnects; the PC closes its window.
         self.remote: Any = None
+        # P97: the last click (its ref, the page it was on, the view after it, whether it
+        # changed anything), so a second click on the same thing waits for the page instead.
+        self.last_click: dict[str, Any] | None = None
 
 
 async def _pace(s: "Session", action: str) -> None:
@@ -680,6 +703,10 @@ async def _pace(s: "Session", action: str) -> None:
     gap = (PC_PACE_MIN + random.uniform(0, PC_PACE_JITTER)) if pc else (
         PACE_MIN + random.uniform(0, PACE_JITTER)
     )
+    if pc and action in FIELD_ACTIONS:
+        # P97: filling in a form on the person's own computer is paced by the typing and the
+        # beat before each field, as a person's is; only the per-minute cap still counts.
+        gap = 0.0
     wait = (s.last_server + gap) - now
     s.act_times = [t for t in s.act_times if now - t < PACE_WINDOW]
     if len(s.act_times) >= (PC_PACE_MAX if pc else PACE_MAX):  # over the per-minute cap
@@ -1035,6 +1062,13 @@ class Act(BaseModel):
     # then_ref is the button that sends them, pressed under the same approval.
     files: list[dict[str, str]] | None = Field(default=None, max_length=5)
     then_ref: str | None = Field(default=None, max_length=24)
+    # P97: click/type/select/check/wait may name the element by role and name instead of a
+    # ref (found on the page now, one match required). `steps`: a batch of such actions,
+    # done in order, stopping at the first surprise; `expect`: text (or "url:<part>") that
+    # must show after this action; `again`: click once more on purpose.
+    steps: list[dict[str, Any]] | None = Field(default=None, max_length=STEPS_MAX)
+    expect: str | None = Field(default=None, max_length=300)
+    again: bool = False
 
 
 class HoldIn(BaseModel):
@@ -1067,8 +1101,17 @@ async def _marked_frame(page: Any) -> str:
 # ---------------------------------------------------------------- the human-interaction layer
 
 
-def _type_delay(ch: str = "") -> float:
-    d = random.uniform(TYPE_MS_MIN, TYPE_MS_MAX) / 1000.0
+def _remote(page: Any) -> bool:
+    """P97: is this a tab in the person's own Chrome/Edge (reached over the relay)?"""
+    try:
+        return page in _REMOTE_PAGES
+    except TypeError:
+        return False
+
+
+def _type_delay(ch: str = "", pc: bool = False) -> float:
+    lo, hi = (PC_TYPE_MS_MIN, PC_TYPE_MS_MAX) if pc else (TYPE_MS_MIN, TYPE_MS_MAX)
+    d = random.uniform(lo, hi) / 1000.0
     if ch in " \t\n":  # a beat after a word
         d += random.uniform(0.04, 0.12)
     elif ch in ".,;:!?":  # a longer beat after punctuation
@@ -1093,12 +1136,14 @@ async def _human_mouse(page: Any, x: float, y: float) -> None:
     c1 = (sx + (x - sx) * 0.3 + jitter(), sy + (y - sy) * 0.3 + jitter())
     c2 = (sx + (x - sx) * 0.7 + jitter(), sy + (y - sy) * 0.7 + jitter())
     over = (x + random.uniform(-6, 6), y + random.uniform(-6, 6))  # slight overshoot
-    steps = random.randint(12, 22)
+    pc = _remote(page)
+    # P97: a few points on the person's own computer (each is a round trip over the relay).
+    steps = random.randint(*PC_MOUSE_POINTS) if pc else random.randint(12, 22)
     try:
         for i in range(1, steps + 1):
             bx, by = _bezier((sx, sy), c1, c2, over, i / steps)
             await page.mouse.move(bx, by)
-            await asyncio.sleep(random.uniform(0.006, 0.02))
+            await asyncio.sleep(random.uniform(0.004, 0.012) if pc else random.uniform(0.006, 0.02))
         await page.mouse.move(x, y)  # correct onto the target
     except Exception:  # noqa: BLE001 - cursor movement is a nicety; the click still runs
         pass
@@ -1119,15 +1164,18 @@ async def _click(page: Any, loc: Any, *, hover: bool = True) -> None:
             box = await loc.bounding_box()
         except Exception:  # noqa: BLE001
             box = None
+    pc = _remote(page)
     async with _gate(page):
         if HUMAN_CLICK and box:
             await _human_mouse(page, box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)
             if hover:
-                try:
-                    await loc.hover(timeout=3000)
-                except Exception:  # noqa: BLE001
-                    pass
-                dwell = random.uniform(CLICK_DWELL_MS * 0.5, CLICK_DWELL_MS * 1.5)
+                if not pc:  # P97: on the person's computer the hand is already there
+                    try:
+                        await loc.hover(timeout=3000)
+                    except Exception:  # noqa: BLE001
+                        pass
+                lo, hi = (0.3, 0.8) if pc else (0.5, 1.5)
+                dwell = random.uniform(CLICK_DWELL_MS * lo, CLICK_DWELL_MS * hi)
                 await asyncio.sleep(dwell / 1000)
         await loc.click(timeout=10_000)
 
@@ -1156,10 +1204,12 @@ async def _press(page: Any, loc: Any) -> None:
         pass
 
 
-async def _think() -> None:
-    """The short beat a person takes before the next field (P58)."""
-    if THINK_MS_MAX:
-        await asyncio.sleep(random.uniform(THINK_MS_MIN, THINK_MS_MAX) / 1000)
+async def _think(page: Any = None) -> None:
+    """The short beat a person takes before the next field (P58); shorter on the person's own
+    computer, where they watch a skilled hand (P97)."""
+    lo, hi = (PC_THINK_MS_MIN, PC_THINK_MS_MAX) if _remote(page) else (THINK_MS_MIN, THINK_MS_MAX)
+    if hi:
+        await asyncio.sleep(random.uniform(lo, hi) / 1000)
 
 
 async def _into_field(loc: Any) -> None:
@@ -1178,11 +1228,14 @@ async def _into_field(loc: Any) -> None:
 async def _human_type(loc: Any, text: str) -> None:
     """Type key by key with a jittered cadence and the odd backspace-correct. Clicks into
     the field itself, so no pre-click is needed; the final text is always exactly `text`."""
-    try:
-        await loc.scroll_into_view_if_needed(timeout=3000)
-    except Exception:  # noqa: BLE001
-        pass
-    await _think()
+    page = getattr(loc, "page", None)
+    pc = _remote(page)
+    if not (pc and HUMAN_CLICK):  # P97: the click into the field scrolls it into view itself
+        try:
+            await loc.scroll_into_view_if_needed(timeout=3000)
+        except Exception:  # noqa: BLE001
+            pass
+    await _think(page)
     if HUMAN_CLICK:
         await _into_field(loc)
     else:
@@ -1191,11 +1244,11 @@ async def _human_type(loc: Any, text: str) -> None:
     for ch in text:
         if TYPO_RATE and ch not in " \t\n" and random.random() < TYPO_RATE:
             await loc.press_sequentially(random.choice("asdfghjkleriou"), delay=0)
-            await asyncio.sleep(_type_delay())
+            await asyncio.sleep(_type_delay(pc=pc))
             await loc.press("Backspace")
-            await asyncio.sleep(_type_delay())
+            await asyncio.sleep(_type_delay(pc=pc))
         await loc.press_sequentially(ch, delay=0)
-        await asyncio.sleep(_type_delay(ch))
+        await asyncio.sleep(_type_delay(ch, pc))
 
 
 async def _type_field(loc: Any, text: str) -> None:
@@ -1473,9 +1526,11 @@ async def _open_on_pc(body: Open) -> dict[str, Any]:
         ctx = browser.contexts[0] if browser.contexts else await browser.new_context()
         machine.context = ctx
         restore = _clean_state(body.storage_state)
+        restored = False
         if restore and restore.get("cookies"):
             try:
                 await ctx.add_cookies(restore["cookies"])
+                restored = True
             except Exception:  # noqa: BLE001 - a damaged saved session: start clean
                 log.warning("saved session for %s could not be loaded on the PC", sid)
         sess.context = ctx
@@ -1497,7 +1552,9 @@ async def _open_on_pc(body: Open) -> dict[str, Any]:
     state["sessions"][sid] = sess
     # The person closed the window, the PC slept, or the relay ended: the next action reopens.
     browser.on("disconnected", lambda *_: asyncio.ensure_future(_close(sid)))
-    return {"id": sid, "restored": False, "reused": False, "on_pc": True}
+    # P97: say when a saved sign-in was laid in, so the worker checks it once and the agent
+    # does not sign in again (it always said False, so every PC task signed in afresh).
+    return {"id": sid, "restored": restored, "reused": False, "on_pc": True}
 
 
 def _cookie_for(domain: str, hosts: list[str]) -> bool:
@@ -1617,6 +1674,10 @@ async def _do_wait(s: Session, body: Act) -> str | None:
             await page.wait_for_url(lambda u: needle in u, timeout=ms)
         else:
             ref = _target(body)
+            if not ref and (body.role or body.name):
+                ref, why = await _by_name(page, body.role, body.name, wait=body.timeout)
+                if not ref:
+                    return None if body.state == "hidden" and "Nothing" in why else why
             if not ref:
                 return "Say what to wait for: text, url or ref."
             loc = await _locate(page, ref)
@@ -1628,6 +1689,197 @@ async def _do_wait(s: Session, body: Act) -> str | None:
             what = body.text or body.url or body.ref or body.element
             return f"Waited {ms // 1000} s: {what!s} did not show up."
         raise
+    return None
+
+
+def _same_words(a: str, b: str) -> bool:
+    return " ".join(a.split()).casefold() == " ".join(b.split()).casefold()
+
+
+async def _by_name(
+    page: Any, role: str, name: str, *, wait: float | None = None
+) -> tuple[str | None, str]:
+    """P97: the ref of the one element with this role and name on the page now: an exact
+    name first, else the one whose name holds these words. A page still loading is looked at
+    again for a few seconds (a person waits for it to show); two or more matches are never
+    guessed: the answer lists them. (ref, "") or (None, why)."""
+    role, name = (role or "").strip().lower(), (name or "").strip()
+    deadline = time.time() + max(0.0, NAME_WAIT if wait is None else min(wait, WAIT_MAX))
+    while True:
+        raw = await _snapshot_nodes(page, full=True)
+        hits = [n for n in find_nodes(raw.get("nodes") or [], role, name) if n.get("ref")]
+        exact = [n for n in hits if _same_words(str(n.get("name") or ""), name)]
+        pool = exact or hits
+        acts = [n for n in pool if str(n.get("role") or "") in INTERACTIVE]
+        pool = acts or pool
+        if len(pool) == 1:
+            return str(pool[0]["ref"]), ""
+        if len(pool) > 1:
+            shown = "\n".join(f"{node_line(n)} [{n['ref']}]" for n in pool[:8])
+            return None, (
+                f"{len(pool)} elements match {role or 'element'} {name!r}; not guessed. Give "
+                f"the ref of the one you mean (untrusted labels):\n{shown}"
+            )
+        if time.time() >= deadline:
+            what = f"{role} {name!r}" if role else repr(name)
+            return None, (
+                f"Nothing on the page is {what} (looked for {NAME_WAIT:.0f} s). Check the page "
+                "view below for its real name."
+            )
+        with contextlib.suppress(Exception):
+            await page.wait_for_load_state("domcontentloaded", timeout=2000)
+        await asyncio.sleep(0.3)
+
+
+async def _target_ref(s: Session, body: Act) -> tuple[str | None, str]:
+    """The element an action is for: its ref, or (P97) its role and name found now."""
+    ref = _target(body)
+    if ref or not (body.role or body.name):
+        return ref, "" if ref else _gone(ref)
+    return await _by_name(s.page, body.role, body.name)
+
+
+async def _expect(page: Any, want: str) -> str | None:
+    """P97: a step's expected outcome: text on the page, or url:<part> in the address."""
+    want = (want or "").strip()
+    if not want:
+        return None
+    ms = int(EXPECT_WAIT * 1000)
+    try:
+        if want.lower().startswith("url:"):
+            part = want[4:].strip()
+            await page.wait_for_url(lambda u: part in u, timeout=ms)
+        else:
+            await page.wait_for_function(WAIT_TEXT_JS, arg=want.lower(), timeout=ms, polling=250)
+    except Exception as e:  # noqa: BLE001
+        if "Timeout" in e.__class__.__name__:
+            return f"Expected {want!r} after this step, but it did not show in {EXPECT_WAIT:.0f} s."
+        raise
+    return None
+
+
+def _step_act(raw: dict[str, Any]) -> Act:
+    """One browser_steps item ({"do": "click", "role": ..., "name": ...}) as an action."""
+    if not isinstance(raw, dict):
+        raise ValueError('each step is an object like {"do": "click", "name": "Cari"}')
+    do = str(raw.get("do") or raw.get("action") or "").strip().lower()
+    do = {"open": "goto", "fill": "type", "tick": "check"}.get(do, do)
+    if do not in STEP_ACTIONS:
+        allowed = ", ".join(sorted(STEP_ACTIONS))
+        raise ValueError(f"{do or '(none)'} cannot be a step (allowed: {allowed})")
+    text = raw.get("text", raw.get("value", raw.get("option")))
+    if do == "check":
+        on = raw.get("on", text if text is not None else True)
+        text = "false" if str(on).lower() in ("false", "off", "0", "no") else "true"
+    if do == "press" and str(raw.get("key") or "") == "Enter":
+        raise ValueError("Enter may send a form: not in a batch (use browser_submit)")
+    body: dict[str, Any] = {
+        "action": do,
+        "url": raw.get("url"),
+        "ref": raw.get("ref"),
+        "role": str(raw.get("role") or "")[:40],
+        "name": str(raw.get("name") or raw.get("label") or "")[:200],
+        "text": None if text is None else str(text)[:5000],
+        "key": raw.get("key"),
+        "expect": raw.get("expect"),
+        "again": bool(raw.get("again")),
+    }
+    if do == "scroll":
+        body["dy"] = -700 if str(raw.get("direction") or "down") == "up" else 700
+    if do == "wait":
+        body["timeout"] = float(raw.get("timeout") or 10)
+        body["state"] = "hidden" if raw.get("gone") else "visible"
+    return Act(**{k: v for k, v in body.items() if v is not None})
+
+
+def _step_label(a: Act) -> str:
+    if a.action == "goto":
+        return f"open {a.url}"
+    what = f"{a.role} {a.name!r}".strip() if a.name or a.role else (a.ref or "")
+    if a.action == "type":
+        return f"type into {what}"
+    if a.action == "wait":
+        return f"wait for {a.text or a.url or what}"
+    return f"{a.action} {what}".strip()
+
+
+async def _do_steps(s: Session, sid: str, body: Act) -> dict[str, Any]:
+    """P97: a short batch of ordinary actions in order (each paced, budgeted and guarded the
+    same as on its own), with one look at the page at the end instead of one per action.
+    It stops at the first surprise: an error, an element that is not there or is not the
+    only match, a send that needs a person, a page off the allowed sites, or an `expect`
+    that did not show. The answer says which steps were done."""
+    done: list[dict[str, Any]] = []
+    point = None
+    stop: dict[str, Any] = {}
+    for i, raw in enumerate((body.steps or [])[:STEPS_MAX], start=1):
+        try:
+            sub = _step_act(raw)
+        except (ValueError, TypeError) as e:
+            kind = str(raw.get("do") or "?") if isinstance(raw, dict) else "?"
+            done.append({"step": i, "do": kind, "error": str(e)})
+            break
+        res = await _run_action(s, sid, sub, observe=False)
+        err = res.get("error")
+        if res.get("retry_after"):
+            stop = {"retry_after": res["retry_after"], "site": res.get("site")}
+        if not err:
+            await _guard_frames(s)
+            if s.blocked and s.allowed:
+                err = blocked_text(s.blocked, s.allowed)
+                s.blocked = None
+            elif s.unsafe:
+                err = f"The page sent the browser to {s.unsafe}, a non-public address; it was blocked."
+                s.unsafe = None
+        if not err and sub.expect:
+            err = await _expect(s.page, sub.expect)
+        item: dict[str, Any] = {"step": i, "do": _step_label(sub)}
+        if err:
+            item["error"] = str(err)
+        else:
+            item["url"] = s.page.url  # where the step left the agent (the playbook learns it)
+            if res.get("note"):
+                item["note"] = str(res["note"])
+        done.append(item)
+        point = res.get("point") or point
+        if err:
+            break
+    obs = await _observe(s, point, since=body.since)
+    obs["steps"] = done
+    obs["steps_done"] = sum(1 for d in done if "error" not in d)
+    obs.update(stop)
+    if stop.get("retry_after"):
+        obs["error"] = next((d["error"] for d in done if "error" in d), "SITE_REST")
+    if s.new_downloads:
+        obs["downloads"] = [
+            {"id": d, "name": s.downloads[d]["name"], "size": len(s.downloads[d]["data"])}
+            for d in s.new_downloads
+            if d in s.downloads
+        ]
+        s.new_downloads = []
+    return obs
+
+
+async def _held_click(s: Session, ref: str, body: Act) -> dict[str, Any] | None:
+    """P97: one deliberate click per intent. The same element clicked again on the same page
+    when the first click showed no change: first let the page settle (a slow portal is
+    often still working) and look again. If it changed meanwhile, the second click is not
+    made and the agent sees the change; otherwise the click goes ahead (again=true clicks
+    twice on purpose)."""
+    last = s.last_click
+    page = s.page
+    if not last or last.get("ref") != ref or last.get("url") != page.url or last.get("changed"):
+        return None
+    with contextlib.suppress(Exception):
+        await page.wait_for_load_state("networkidle", timeout=3000)
+    obs = await _observe(s, since=body.since)
+    if last.get("rev") is not None and obs.get("rev") != last.get("rev"):
+        s.last_click = {**last, "changed": True}
+        obs["note"] = (
+            f"Not clicked again: the page changed after your earlier click on {ref} (it was "
+            "still working). See what changed below."
+        )
+        return obs
     return None
 
 
@@ -1672,7 +1924,11 @@ async def act(
             s.machine.touch()
 
 
-async def _run_action(s: Session, sid: str, body: Act) -> dict[str, Any]:
+async def _run_action(
+    s: Session, sid: str, body: Act, *, observe: bool = True
+) -> dict[str, Any]:
+    """One action. `observe=False` (P97, inside a batch): no look at the page afterwards;
+    a light {"ok", "url", "point", "note"} instead (errors are answered as always)."""
     if body.action in SERVER_ACTIONS:
         # P59: the site budget (which site: where it is going, else where it is).
         here = None
@@ -1737,6 +1993,8 @@ async def _run_action(s: Session, sid: str, body: Act) -> dict[str, Any]:
             return {"url": page.url, "title": await page.title(), "links": links[:300]}
         elif body.action == "find":
             return await _do_find(s, body)
+        elif body.action == "steps":
+            return await _do_steps(s, sid, body)
         elif body.action == "wait":
             note = await _do_wait(s, body)
         elif body.action == "login_submit":
@@ -1763,12 +2021,17 @@ async def _run_action(s: Session, sid: str, body: Act) -> dict[str, Any]:
             except Exception:  # noqa: BLE001
                 pass
         elif body.action in ("click", "type", "select", "check"):
-            ref = _target(body)
+            ref, why = await _target_ref(s, body)
             loc = await _locate(page, ref) if ref else None
             if loc is None:
                 obs = await _observe(s, since=body.since)
-                obs["error"] = _gone(ref)
+                obs["error"] = why if not ref and why else _gone(ref)
                 return obs
+            if body.action == "click" and not body.again:
+                held = await _held_click(s, ref, body)
+                if held is not None:
+                    return held
+            rev_before, url_before = s.history.rev, page.url
             box = await loc.bounding_box()
             if box:
                 point = {"x": box["x"] + box["width"] / 2, "y": box["y"] + box["height"] / 2}
@@ -1800,7 +2063,7 @@ async def _run_action(s: Session, sid: str, body: Act) -> dict[str, Any]:
                         }
                     await loc.press("Enter")
             elif body.action == "select":
-                await _think()
+                await _think(page)
                 await _hand_to(page, loc)  # the hand goes to the list before choosing
                 try:
                     await loc.select_option(label=body.text or "", timeout=5000)
@@ -1808,7 +2071,7 @@ async def _run_action(s: Session, sid: str, body: Act) -> dict[str, Any]:
                     await loc.select_option(value=body.text or "", timeout=5000)
             else:
                 want = bool(body.text not in ("false", "off", "0"))
-                await _think()
+                await _think(page)
                 if HUMAN_CLICK and await loc.is_checked() != want:
                     await _click(page, loc)  # a real click on the box, like a person
                     if await loc.is_checked() != want:  # a styled box that ignores clicks
@@ -1873,7 +2136,20 @@ async def _run_action(s: Session, sid: str, body: Act) -> dict[str, Any]:
     if body.action in ("click", "upload", "press", "goto", "login_submit", "type"):
         settled = await _settle(s)
         note = " ".join(x for x in (note, settled) if x) or None
+    if not observe:
+        if body.action == "wait" and note:
+            return {"error": note}
+        if body.action == "click":
+            s.last_click = None  # a batch's click: the batch checks its outcome itself
+        return {"ok": True, "url": s.page.url, "point": point, "note": note}
     obs = await _observe(s, point, read=body.action == "read", since=body.since, marks=body.marks)
+    if body.action == "click":
+        s.last_click = {
+            "ref": ref,
+            "url": url_before,
+            "rev": obs.get("rev"),
+            "changed": obs.get("rev") != rev_before or obs.get("url") != url_before,
+        }
     if note:
         obs["error" if body.action == "wait" else "note"] = note
     if s.new_downloads:

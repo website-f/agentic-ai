@@ -5,7 +5,7 @@ import logging
 from sqlalchemy import select
 from temporalio import activity
 
-from ..agents import runtime
+from ..agents import runtime, site_playbook
 from ..core.db import SessionLocal
 from ..models import Skill, SkillEvalCase, SkillProposal, Task, Workspace
 from ..services import events
@@ -23,6 +23,12 @@ async def skill_reflect(task_id: str) -> str | None:
             await routines.learn(db, task_id)
         except Exception:  # noqa: BLE001 - a routine is extra; skills are learned regardless
             activity.logger.warning("routine learning failed for %s", task_id, exc_info=True)
+    # P97: and the way it went on each web site, for the site's playbook.
+    async with SessionLocal() as db:
+        try:
+            await site_playbook.learn(db, task_id)
+        except Exception:  # noqa: BLE001 - a playbook is extra
+            activity.logger.warning("playbook learning failed for %s", task_id, exc_info=True)
     async with SessionLocal() as db:
         p = await reflect.reflect_on_task(db, task_id)
         if p is None:

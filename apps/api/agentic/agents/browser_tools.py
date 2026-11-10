@@ -44,6 +44,22 @@ TEXT_IN_VIEW = 700  # page text under an old (numbered) view
 SNAP_TEXT = 500  # page text under a full snapshot (the tree already names most things)
 READ_CHARS = 6000
 DIGEST_OVER = 3000  # longer page reads are condensed by the cheap model first
+# P97: actions in one browser_steps batch, and which tool each one is (the agent's own setting
+# for that tool decides whether it may be batched: only "allow", never "ask" or "deny").
+STEPS_MAX = 15
+STEP_TOOLS = {
+    "open": "browser_open",
+    "goto": "browser_open",
+    "click": "browser_click",
+    "type": "browser_type",
+    "fill": "browser_type",
+    "select": "browser_select",
+    "check": "browser_check",
+    "tick": "browser_check",
+    "wait": "browser_wait",
+    "scroll": "browser_scroll",
+    "back": "browser_back",
+}
 # The most each tool hands the model, in characters (about 4 per token).
 MAX_OUTPUT = {
     "browser_snapshot": 12_000,
@@ -124,7 +140,8 @@ def ref_arg(value: Any) -> str | None:
 
 
 def _target(args: dict[str, Any], *keys: str) -> dict[str, Any]:
-    """The element an action is for, as the service wants it (element=N stays N)."""
+    """The element an action is for, as the service wants it (element=N stays N). P97: or
+    its role and name (`role`, `name`), found on the page by the service, one match only."""
     for k in keys or ("ref", "element"):
         v = args.get(k)
         if v in (None, ""):
@@ -136,10 +153,17 @@ def _target(args: dict[str, Any], *keys: str) -> dict[str, Any]:
         ref = ref_arg(v)
         if ref:
             return {"ref": ref}
+    if keys in ((), ("ref",)):
+        role = str(args.get("role") or "").strip()[:40]
+        name = str(args.get("name") or args.get("label") or "").strip()[:200]
+        if name or role:
+            return {"role": role, "name": name}
     return {}
 
 
 def _label(target: dict[str, Any]) -> str:
+    if target.get("name") or target.get("role"):
+        return f"{target.get('role') or 'element'} {target.get('name', '')!r}".strip()
     return f"element {target.get('ref') or target.get('element') or '?'}"
 
 
@@ -530,6 +554,8 @@ async def _act(
                 if not wait or wait > SHORT_REST:
                     break
                 await asyncio.sleep(wait)
+                if action == "steps":  # P97: only the steps not done yet
+                    payload["steps"] = payload["steps"][int(obs.get("steps_done") or 0) :]
                 r = await c.post(f"/sessions/{sid}/act", json=payload)
                 r.raise_for_status()
                 obs = r.json()
@@ -838,10 +864,10 @@ async def _restore_check(ctx: Any, url: str) -> tuple[str, dict[str, Any] | None
 # ---------------------------------------------------------------- the tools
 
 
-async def browser_open(ctx: Any, args: dict[str, Any]) -> str:
+async def _may_open(ctx: Any, url: str) -> str | None:
+    """Why this page may not be opened now (an error for the agent), or None."""
     from .vault import host_of
 
-    url = str(args.get("url", ""))
     try:
         await guard_url(url)
     except BlockedURL as e:
@@ -871,6 +897,16 @@ async def browser_open(ctx: Any, args: dict[str, Any]) -> str:
             "this site is reached (Settings > Web connections). Tell the person; do not try "
             "another way."
         )
+    return None
+
+
+async def browser_open(ctx: Any, args: dict[str, Any]) -> str:
+    from .vault import host_of
+
+    url = str(args.get("url", ""))
+    refused = await _may_open(ctx, url)
+    if refused:
+        return refused
     note = ""
     try:
         outcome, checked, name = await _restore_check(ctx, url)
@@ -1254,6 +1290,99 @@ async def browser_login(ctx: Any, args: dict[str, Any]) -> str:
     )
 
 
+def _step_lines(steps: list[dict[str, Any]], start: str = "") -> str:
+    """One line per step; a step that changed the page says where it is now."""
+    out = []
+    here = start
+    for d in steps:
+        if d.get("error"):
+            out.append(f"{d.get('step')}. {d.get('do')}: STOPPED: {d['error']}")
+            continue
+        note = f" ({d['note']})" if d.get("note") else ""
+        url = str(d.get("url") or "")
+        moved = f" (now on {url})" if url and url != here else ""
+        here = url or here
+        out.append(f"{d.get('step')}. {d.get('do')}: done{note}{moved}")
+    return "\n".join(out)
+
+
+async def browser_steps(ctx: Any, args: dict[str, Any]) -> str:
+    """P97: several actions in one call, done in order with a check after each, stopping at
+    the first surprise. Elements by role and name (from the page view or the site playbook)
+    or by ref. Only what the agent may do without asking: a send, an upload or a saved
+    login is never part of a batch."""
+    from .tools import GLOBAL_DENY, modes_for
+
+    steps = args.get("steps")
+    if not isinstance(steps, list) or not steps:
+        return (
+            'Error: give steps: a list like [{"do": "click", "role": "link", "name": '
+            '"Papan Kenyataan"}, {"do": "type", "role": "textbox", "name": "No. Rujukan", '
+            '"text": "QT1"}].'
+        )
+    if len(steps) > STEPS_MAX:
+        return f"Error: at most {STEPS_MAX} steps in one call; split the work."
+    if ctx.task is None:
+        return "Error: the browser only works inside a task."
+    modes = modes_for(ctx.agent)
+    clean: list[dict[str, Any]] = []
+    for i, st in enumerate(steps, start=1):
+        if not isinstance(st, dict):
+            return f"Error: step {i} must be an object with do (open, click, type, ...)."
+        do = str(st.get("do") or st.get("action") or "").strip().lower()
+        tool = STEP_TOOLS.get(do)
+        if tool is None:
+            allowed = "open, click, type, select, check, wait, scroll, back"
+            return (
+                f"Error: step {i}: {do or '(no do)'!r} cannot be a step ({allowed}). Sending "
+                "a form is browser_submit, an upload browser_upload, a sign-in browser_login."
+            )
+        mode = "deny" if tool in GLOBAL_DENY else modes.get(tool, "deny")
+        if mode != "allow":
+            return (
+                f"Error: step {i}: you may not {do} without asking ({tool} is {mode!r} for "
+                f"you). Call {tool} on its own."
+            )
+        item = {k: v for k, v in st.items() if k != "action"}
+        item["do"] = do
+        if do in ("open", "goto"):
+            url = str(st.get("url") or "")
+            refused = await _may_open(ctx, url)
+            if refused:
+                return f"Error: step {i}: {refused.removeprefix('Error: ')}"
+        if item.get("ref") not in (None, ""):
+            ref = ref_arg(item["ref"])
+            if not ref:
+                return f"Error: step {i}: ref must be a ref from the page view, e.g. e12."
+            item["ref"] = ref
+        clean.append(item)
+    note = ""
+    first = clean[0]
+    if first["do"] in ("open", "goto"):
+        # A saved sign-in for this site is checked once, as browser_open does.
+        try:
+            outcome, _, name = await _restore_check(ctx, str(first.get("url") or ""))
+        except BrowsersBusy as e:
+            return "Error: " + (e.message or "All browsers are in use right now; try again soon.")
+        if outcome == "ok":
+            note = f"Already signed in with the saved login {name!r}: no need to sign in.\n"
+        elif outcome == "expired":
+            note = f"The saved sign-in for {name!r} had expired; sign in with browser_login.\n"
+    sid = await _task_sid(ctx.task.id)
+    raw = await valkey().get(f"browser:url:{sid}") if sid else None
+    start = _s(raw) if raw else ""
+    obs = await _act(ctx, "steps", steps=clean, label=f"{len(clean)} steps")
+    if obs.get("error") and not obs.get("url"):
+        return note + f"Error: {obs['error']}"
+    done = int(obs.get("steps_done") or 0)
+    head = f"Did {done} of {len(clean)} steps"
+    if done < len(clean):
+        head += "; stopped at the first problem (nothing after it was done)"
+    head += "."
+    report = _step_lines(list(obs.get("steps") or []), start)
+    return note + head + "\n" + fence(report) + "\n" + await _out({**obs, "error": None})
+
+
 async def browser_submit(ctx: Any, args: dict[str, Any]) -> str:
     t = _target(args)
     return await _out(
@@ -1366,6 +1495,110 @@ async def browser_save_page(ctx: Any, args: dict[str, Any]) -> str:
 async def browser_close(ctx: Any, _: dict[str, Any]) -> str:
     await close_for_task(ctx.task.id if ctx.task else "")
     return "Closed the browser."
+
+
+# P97: the tools whose answer is a page view (a later whole view makes older ones stale).
+VIEW_TOOLS = frozenset(
+    {
+        "browser_open",
+        "browser_click",
+        "browser_type",
+        "browser_fill",
+        "browser_select",
+        "browser_check",
+        "browser_scroll",
+        "browser_back",
+        "browser_wait",
+        "browser_steps",
+        "browser_login",
+        "browser_submit",
+        "browser_snapshot",
+    }
+)
+_WHOLE_VIEW = re.compile(r"^Elements \(view \d+", re.M)
+
+
+def stale_views(history: list[Any], keep_over: int = 400) -> set[int]:
+    """P97: the ids of page views the model no longer needs in full: every browser view
+    older than the newest whole view of a page (its refs and text are superseded; deltas
+    after it build on it). They are sent as one-line stubs that point at expand_result.
+    Page reads (browser_read), finds and short results are never touched."""
+    newest = 0
+    for m in history:
+        if m.role == "tool" and m.name in VIEW_TOOLS and _WHOLE_VIEW.search(m.content or ""):
+            newest = m.id
+    if not newest:
+        return set()
+    return {
+        m.id
+        for m in history
+        if m.role == "tool"
+        and m.name in VIEW_TOOLS
+        and m.id < newest
+        and len(m.content or "") > keep_over
+    }
+
+
+# P97: while the agent is hands on in the browser (its last turn used only browser tools),
+# the other tools it has are sent short: name, one line, parameter names and types. They are
+# still there to call; their full descriptions come back once it leaves the browser. Tool
+# descriptions were about two thirds of every browser step's prompt (11k of 17k tokens).
+FOCUS_KEEP = frozenset(
+    {"ask_human", "report_progress", "write_page", "read_page", "expand_result", "use_skill"}
+)
+FOCUS_LINE = 70
+
+
+def _bare(schema: Any) -> dict[str, Any]:
+    """A tool's parameters in brief: only the required ones, each with its type (and
+    choices). The optional ones, nested shapes and descriptions come with the full list."""
+    if not isinstance(schema, dict):
+        return {"type": "object"}
+    props: dict[str, Any] = {}
+    need = set(schema.get("required") or [])
+    for k, v in (schema.get("properties") or {}).items():
+        if k not in need:
+            continue
+        v = v if isinstance(v, dict) else {}
+        props[k] = {x: v[x] for x in ("type", "enum") if x in v} or {"type": "string"}
+    out: dict[str, Any] = {"type": "object", "properties": props}
+    if schema.get("required"):
+        out["required"] = list(schema["required"])
+    return out
+
+
+def focus(schemas: list[dict[str, Any]], history: list[Any]) -> list[dict[str, Any]]:
+    """The tool list for this step: every tool, the non-browser ones short while the agent
+    is in the middle of browser work."""
+    last = next((m for m in reversed(history) if m.role == "assistant"), None)
+    names = (
+        [str((c.get("function") or {}).get("name") or "") for c in (last.tool_calls or [])]
+        if last
+        else []
+    )
+    if not names or not all(n.startswith("browser_") for n in names):
+        return schemas
+    out: list[dict[str, Any]] = []
+    for s in schemas:
+        fn = s.get("function") or {}
+        name = str(fn.get("name") or "")
+        if name.startswith("browser_") or name in FOCUS_KEEP:
+            out.append(s)
+            continue
+        line = str(fn.get("description") or "").split(". ", 1)[0].strip()
+        if len(line) > FOCUS_LINE:
+            line = line[: FOCUS_LINE - 1].rstrip() + "…"
+        out.append(
+            {
+                "type": "function",
+                "function": {
+                    "name": name,
+                    "description": line,
+                    "parameters": _bare(fn.get("parameters") or {"type": "object"}),
+                },
+            }
+        )
+    return out
 
 
 async def close_for_task(task_id: str) -> None:

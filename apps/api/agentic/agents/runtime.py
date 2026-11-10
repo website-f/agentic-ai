@@ -1350,6 +1350,12 @@ async def run_task_step(task_id: str) -> StepResult:
         return await _run_task_step(task_id)
 
 
+def browser_focus(schemas: list[dict[str, Any]], history: list[Any]) -> list[dict[str, Any]]:
+    from .browser_tools import focus  # late: browser_tools imports this module
+
+    return focus(schemas, history)
+
+
 async def _run_task_step(task_id: str) -> StepResult:
     async with SessionLocal() as db:
         task, agent, ws = await _load(db, task_id)
@@ -1373,6 +1379,9 @@ async def _run_task_step(task_id: str) -> StepResult:
             content += await _language_line(db, task)  # P22: report in the asker's language
             content += await _attached_files_note(db, task, ws.timezone)
             content += await skills_store.hint_for(db, agent, f"{task.title}\n{task.brief}")
+            from . import site_playbook  # P97: where to click on the task's sites
+
+            content += await site_playbook.block_for_task(db, agent, task)  # P97
             if task.output_schema:
                 content += "\n\n" + delegation.schema_note(task.output_schema)
             block, n_facts, n_pages = await recall_block(
@@ -1455,14 +1464,18 @@ async def _run_task_step(task_id: str) -> StepResult:
                     group,
                     messages,
                     task="agent.task",
-                    tools=offered_tools(
-                        agent,
-                        task,
-                        mcp=await _has_mcp(db, ws.id),
-                        pc=await pc_ready(db, agent) and await owner_asks(db, agent, task),
-                        mail=await mail_ready(db, agent) and await owner_asks(db, agent, task),
-                        teams=await teams_ready(db, agent) and await owner_asks(db, agent, task),
-                        finance=await money_ready(db, agent),
+                    tools=browser_focus(  # P97: short non-browser tools mid-browsing
+                        offered_tools(
+                            agent,
+                            task,
+                            mcp=await _has_mcp(db, ws.id),
+                            pc=await pc_ready(db, agent) and await owner_asks(db, agent, task),
+                            mail=await mail_ready(db, agent) and await owner_asks(db, agent, task),
+                            teams=await teams_ready(db, agent)
+                            and await owner_asks(db, agent, task),
+                            finance=await money_ready(db, agent),
+                        ),
+                        history,
                     ),
                     max_tokens=TASK_REPLY_TOKENS,
                     agent_id=agent.id,

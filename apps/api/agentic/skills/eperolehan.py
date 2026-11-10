@@ -7,6 +7,12 @@ patch THIS skill, and its success is measured), and the brief carries the skill'
 Pitfalls, where the lessons people teach are folded every night (brain/lessons.py) through
 the normal proposal -> tests -> autopilot path. The stages themselves stay in the brief
 (web_tasks.brief_for) and in this skill's Steps.
+
+P97: how to work the portal quickly. The way around the portal (start pages, menu paths, the
+names of fields and buttons per job, pitfalls) is the site playbook wiki/sites/
+eperolehan.gov.my.md (agents/site_playbook.py: seeded from the public supplier manuals, put in
+every ePerolehan task's first message, and taught the path of every finished run). The agent
+sends the actions it knows as one browser_steps call by role and name, and clicks once.
 """
 
 import re
@@ -57,6 +63,17 @@ similar government procurement portal), usually from Browse for me in tender mod
    PDF "QT<last 5 digits> - <COMPANY SHORT NAME> SUMMARY" with rename_file.
 10. ask_human to approve the final submission, naming the summary file, and finish with
     publish_report (a table of stages: done before, done now, skipped, needs a person).
+
+## Working the portal
+- Follow the site playbook in the task (wiki/sites/eperolehan.gov.my.md): open the screen
+  you need directly when its address is known, and send the clicks and fields you already
+  know as one browser_steps call by role and name, each with what should show after it.
+- One click per intent: a click that showed no change yet means wait (browser_wait), not a
+  second click. Never look up a button with browser_find when the playbook names it.
+- The link "Klik sini untuk sediakan / kemaskini cadangan tawaran" counts as a send: ask
+  once with browser_submit.
+- When the portal differs from the playbook, follow the portal and correct the playbook
+  (write_page, mode append).
 
 ## Output format
 The summary file first, then one row per stage, then what still needs a person (prices,

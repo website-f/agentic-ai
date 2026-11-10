@@ -336,3 +336,9 @@ async def profile_save(req: Request):
         f"<h1>Profile saved</h1><p>Reference UPD-{len(SUBMISSIONS):04d}. We received:</p>"
         f"<table>{rows}</table><p><a href=/profile>Edit again</a></p>",
     )
+
+
+# P97: a practice ePerolehan (supplier side) under /ep, for browser agent speed checks.
+from practice_ep import router as _ep_router  # noqa: E402
+
+app.include_router(_ep_router)

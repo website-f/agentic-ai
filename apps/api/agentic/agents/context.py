@@ -362,6 +362,12 @@ def render(
             break
         newest.add(m.id)
 
+    # P97: browser page views older than the newest whole view of a page are stale (a
+    # browser task resent every old page on every click).
+    from .browser_tools import stale_views  # late: browser_tools reaches the runtime
+
+    stale = stale_views(body)
+
     out: list[dict[str, Any]] = []
     for m in head:
         d = to_openai(m)
@@ -381,7 +387,7 @@ def render(
             )
             if h and latest.get(h) not in (None, m.id):
                 d["content"] = f"[Same {m.name or 'tool'} output as a later call; see that result.]"
-            elif m.id <= window.cut and len(d["content"] or "") > STUB_OVER:
+            elif (m.id <= window.cut or m.id in stale) and len(d["content"] or "") > STUB_OVER:
                 d["content"] = stub(m)
         if extra and m.id in extra:
             d["content"] = f"{d.get('content') or ''}\n\n{extra[m.id]}"

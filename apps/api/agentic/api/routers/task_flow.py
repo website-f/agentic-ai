@@ -43,7 +43,14 @@ MAX_STEPS = 60
 # Arguments never shown to the analyst: they can hold passwords, codes or personal data.
 SECRET_ARG = re.compile(r"pass|secret|token|pin\b|otp|key|credential|cookie|login|value", re.I)
 # Tools whose arguments are what was typed into a site: only the tool name is kept.
-TYPED = {"browser_type", "browser_fill", "browser_login", "browser_select", "browser_check"}
+TYPED = {
+    "browser_type",
+    "browser_fill",
+    "browser_steps",  # P97: a batch carries what it types
+    "browser_login",
+    "browser_select",
+    "browser_check",
+}
 # Timeline entries that say how the work went (not tool chatter, which the messages carry).
 TELLING = ("progress", "feedback", "delegated", "decision", "tool_blocked", "review")
 
