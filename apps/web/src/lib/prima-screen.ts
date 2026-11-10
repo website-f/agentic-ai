@@ -3,3 +3,14 @@
 export function primaScreen(hash: string): string {
   return /^#@?[a-z][a-z0-9-]{0,39}$/.test(hash) ? hash : "";
 }
+
+/** P97: Prima opens in the office's language (Prima's own "BM + English" counts as Malay, so it
+ * stays when the office is in Malay). Prima's switch hands its choice back to the office. */
+export function handPrimaLanguage(lang: "en" | "ms"): void {
+  try {
+    if (lang === "ms" && localStorage.getItem("prima.lang") === "mix") return;
+    localStorage.setItem("prima.lang", lang);
+  } catch {
+    /* storage blocked: Prima uses its own default */
+  }
+}
