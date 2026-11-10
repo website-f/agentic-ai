@@ -104,3 +104,31 @@ Review items are worked out from the stored readings each time they are shown. T
 2. **PDPA notice to staff.** Location is still recorded only while clocked in, but it is now read more often while moving, kept on the phone while offline, and used to show managers time outside the place and suspicious patterns. The written notice staff get before this goes live (the check-in notice in `checkin.ts` CHECKIN_NOTICE and the PDPA register) should say so; the wording is for the PDPA officer and the company lawyer. Keeping location readings 90 days (HR-STAFF-KEEP) is still unverified.
 3. **Recording the manager's decision** on each movement item (reason accepted / follow up, with a comment, as for out-of-area check-ins) needs one small Prima office module (a decisions table with forced row-level security). Not built: say if wanted.
 4. **Following a closed phone** needs the native app wrapper; the web app follows only while Prima is open.
+
+## P97 (Fitri, 11 Nov 2026): face photo, following through the shift, the route at check-out
+
+"In Prima clock-in I can clock in, but where is the face scan/snap? The location must be logged even if they close the
+thing and still detect their location range. When clocked out, map the route from clock-in until clock-out and their
+distance within the shift."
+
+- **Why there was no face scan.** The check-in asked for a face only when the person had a face HR had approved AND the
+  sign-in clock still waited for its face check; most staff have no approved face yet, check-out never asked, and the
+  owner's TEST check-in (what the owner sees on My clock) had no camera at all. Not hidden by a rule: not built for them.
+- **Face photo at every check-in and check-out** (rule HR-STAFF-SNAP, on by default): the same camera and face check as
+  the sign-in face check (`FaceCheck.tsx`: the phone finds the face and checks it moved; with an approved face the server
+  matches it, rule OPS-FACE-MATCH). The photo is made smaller on the phone (about 480 px) and kept in its own table
+  (`db/modules/clock-snaps-v1.sql`, forced row-level security: the person, their manager and HR only, never colleagues;
+  the picture is dropped after HR-STAFF-KEEP, 90 days). No camera: the person writes why. No photo, no face, a face that
+  did not move or did not match: the check-in is still recorded (as for guards) and the photo waits on the Staff clock
+  board ("Face photos to look at") for the manager or HR to mark fine or follow up, with a comment, never their own. The
+  owner's TEST check-in takes the same photo, kept on the test's own row.
+- **Following through the shift.** In a browser: watchPosition while Prima is open (also in a background tab while the
+  browser allows it), the screen kept on if the person chooses, positions queued without signal, and notes of what the
+  phone said (to the background, location refused, no position, no signal) sent with them. A web page cannot read the
+  location once it is closed or the phone sleeps; those times are gaps with their likely cause, never made-up positions.
+  The Prima app with the background-geolocation plugin follows in the background (`native-geo.ts`; steps in
+  `P96_MOBILE_APP_READY.md`). Still only while clocked in.
+- **The route.** At check-out (and on every clock record for the person, their manager and HR) the route is drawn in
+  pieces: inside the place (green), outside it (orange, thicker), dashed where no position came (the line only joins the
+  two readings), start and end markers and the place's circle, with the distance (and how much of it is the straight
+  lines across gaps), time inside and outside the place, and each gap with its cause.
