@@ -5646,17 +5646,24 @@ export class AppController {
   }
 
   // P93: readings the phone kept while it had no signal, sent together (each placed inside the person's own clock session).
+  // P97: with the phone's notes about its following (background, permission off, no signal), which explain gaps.
   @Post('me/clock/pings')
-  staffPings(@UserId() uid: string, @Body() b: { readings?: unknown }) {
-    if (!Array.isArray(b.readings) || b.readings.length > 200) throw new BadRequestException('readings must be a list of up to 200');
-    const list = b.readings.map((x, i) => {
+  staffPings(@UserId() uid: string, @Body() b: { readings?: unknown; notes?: unknown }) {
+    const readings = b.readings == null && Array.isArray(b.notes) ? [] : b.readings;
+    if (!Array.isArray(readings) || readings.length > 200) throw new BadRequestException('readings must be a list of up to 200');
+    if (b.notes != null && (!Array.isArray(b.notes) || b.notes.length > 50)) throw new BadRequestException('notes must be a list of up to 50');
+    const notes = ((b.notes as unknown[] | undefined) ?? []).map((x, i) => {
+      const n = (x ?? {}) as Record<string, unknown>;
+      return { at: str(n.at, `notes[${i}].at`, 40), kind: str(n.kind, `notes[${i}].kind`, 20) as never };
+    });
+    const list = readings.map((x, i) => {
       const r = (x ?? {}) as Record<string, unknown>;
       const lat = coord(r.lat);
       const lng = coord(r.lng);
       if (lat === null || lng === null) throw new BadRequestException(`readings[${i}]: lat and lng are required`);
       return { lat, lng, accuracyM: coord(r.accuracyM), capturedAt: str(r.capturedAt, `readings[${i}].capturedAt`, 40) };
     });
-    return this.db.asUser(uid, (svc, u) => svc.staffPings(u, list));
+    return this.db.asUser(uid, (svc, u) => svc.staffPings(u, list, notes));
   }
 
   @Get('staff-clock')

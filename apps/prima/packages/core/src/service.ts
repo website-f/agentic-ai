@@ -122,6 +122,8 @@ import { checkinState } from "./checkin-service";
 // P93: clock and movement (idempotent clock-in, midnight, distance, out of station).
 import { clockCarriesOver } from "./checkin-service";
 import { analyseMovement } from "./movement";
+import { TRACKER_NOTE_KINDS, TRACKER_NOTES_MAX, type TrackerNote } from "./movement";
+import { ClockSnapService } from "./clock-snap-service";
 import type { MovementSummary } from "./movement";
 import type { RawReading } from "./movement";
 import { mayTestCheckin } from "./owner-test-checkin";
@@ -11875,15 +11877,20 @@ export class PrimaService {
    * the phone's time falls inside one of the person's own clock sessions (still open, or ended in the last day): nothing
    * is followed outside working hours. The same reading sent twice is kept once.
    */
-  async staffPings(user: User, list: { lat: number; lng: number; accuracyM: number | null; capturedAt: IsoDateTime }[]) {
+  async staffPings(user: User, list: { lat: number; lng: number; accuracyM: number | null; capturedAt: IsoDateTime }[], notes: TrackerNote[] = []) {
     if (!this.staffClockAllowed(user)) throw new BadRequest('Guards clock in on the site device.');
     const readings = (Array.isArray(list) ? list : []).slice(0, 200);
     const at = this.now();
     const since = toMs(at) - 24 * 3_600_000;
     const clocks = (await this.store.list('staffClocks', { userId: user.id })).filter((c) => !c.out || toMs(c.out.receivedAt) >= since);
-    if (!clocks.length) return { accepted: 0, skipped: readings.length };
+    // The answer carries the notes count only when notes were sent (older phones get the same answer as before).
+    const withNotes = <T extends object>(r: T, n: number) => (Array.isArray(notes) && notes.length ? { ...r, notes: n } : r);
+    if (!clocks.length) return withNotes({ accepted: 0, skipped: readings.length }, 0);
+    // P97: the phone's notes about its following (background, permission off, no signal), each kept on the clock session
+    // its time falls in, only while clocked in. They explain gaps; they are never positions.
+    const noted = await this.staffTrackNotes(clocks, notes, at);
     const home = await this.homeArrangement(user.id, this.today());
-    if (home) return { accepted: 0, skipped: readings.length };
+    if (home) return withNotes({ accepted: 0, skipped: readings.length }, noted);
     const have = new Set((await this.store.list('locationPings', { clockId: clocks.map((c) => c.id) })).map((p) => p.id));
     const rows: LocationPing[] = [];
     for (const r of readings) {
@@ -11910,7 +11917,7 @@ export class PrimaService {
         distanceM: user.base ? Math.round(distanceM(r.lat, r.lng, user.base.lat, user.base.lng)) : null,
       });
     }
-    if (!rows.length) return { accepted: 0, skipped: readings.length };
+    if (!rows.length) return withNotes({ accepted: 0, skipped: readings.length }, noted);
     await this.store.transaction(async (tx) => {
       for (const row of rows) await tx.insert('locationPings', row);
       for (const c of clocks) {
@@ -11921,7 +11928,43 @@ export class PrimaService {
         await tx.update('staffClocks', c.id, { lastPingAt: c.out ? (c.lastPingAt && c.lastPingAt > latest ? c.lastPingAt : latest) : lastPingAt, pings: c.pings + mine.length });
       }
     });
-    return { accepted: rows.length, skipped: readings.length - rows.length };
+    return withNotes({ accepted: rows.length, skipped: readings.length - rows.length }, noted);
+  }
+
+  /** P97: keep the phone's following notes on the clock sessions their times fall in (newest TRACKER_NOTES_MAX each). */
+  private async staffTrackNotes(clocks: StaffClock[], notes: unknown, at: IsoDateTime): Promise<number> {
+    const list = (Array.isArray(notes) ? notes : []).slice(0, 50) as Partial<TrackerNote>[];
+    const ahead = toMs(at) + RULES.staffPhoneTimeMin.value * 60_000;
+    const add = new Map<Id, TrackerNote[]>();
+    for (const n of list) {
+      if (!n || typeof n.at !== 'string' || !/^\d{4}-\d{2}-\d{2}T/.test(n.at) || Number.isNaN(Date.parse(n.at)) || !TRACKER_NOTE_KINDS.includes(n.kind as TrackerNote['kind'])) continue;
+      const t = toMs(n.at);
+      if (t > ahead) continue;
+      const c = clocks.find((x) => t >= toMs(x.in.receivedAt) - 60_000 && t <= (x.out ? toMs(x.out.receivedAt) : toMs(at) + 60_000));
+      if (!c) continue;
+      add.set(c.id, [...(add.get(c.id) ?? []), { at: n.at, kind: n.kind as TrackerNote['kind'] }]);
+    }
+    if (!add.size) return 0;
+    let n = 0;
+    await this.store.transaction(async (tx) => {
+      for (const c of clocks) {
+        const mine = add.get(c.id);
+        if (!mine) continue;
+        const seen = new Set((c.trackNotes ?? []).map((x) => `${x.at}|${x.kind}`));
+        const fresh: TrackerNote[] = [];
+        for (const x of mine) {
+          const k = `${x.at}|${x.kind}`;
+          if (seen.has(k)) continue;
+          seen.add(k);
+          fresh.push(x);
+        }
+        if (!fresh.length) continue;
+        n += fresh.length;
+        const all = [...(c.trackNotes ?? []), ...fresh].sort((a, b) => a.at.localeCompare(b.at)).slice(-TRACKER_NOTES_MAX);
+        await tx.update('staffClocks', c.id, { trackNotes: all });
+      }
+    });
+    return n;
   }
 
   /** A location reading from the phone. Accepted only while clocked in: nothing is followed outside working hours. */
@@ -12050,6 +12093,8 @@ export class PrimaService {
       outstation: firstIn ? firstIn.outstation || (assigned?.outstation ?? false) : (assigned?.outstation ?? false),
       home,
       rules: { outOfStationMin: r.outOfStationMin, maxAccuracyM: r.maxAccuracyM, maxSpeedKmh: r.maxSpeedKmh, farClockInM: r.farClockInM, gapMin: RULES.staffTrackGapMin.value },
+      // P97: what the phone said about its following, so each gap shows its likely cause.
+      notes: c.trackNotes ?? [],
     });
   }
 
@@ -12260,7 +12305,9 @@ export class PrimaService {
     const home = await this.homeArrangement(c.userId, dateOf(c.in.receivedAt));
     // P93: the route, distance, time inside and outside the person's place, and the review items.
     const moves = who ? await this.clocksMovement([c], new Map([[who.id, who]]), () => !!home) : new Map<Id, MovementSummary>();
-    return { clock: c, pings, base: who?.base ?? null, gaps, state: this.staffLocationState(who, c, pings.at(-1) ?? null, !!home), movement: moves.get(c.id) ?? null };
+    // P97: the face photos of the record's check-ins and check-outs (the person and those who see their clock only).
+    const snaps = await this.clockSnaps().forClock(c.id);
+    return { clock: c, pings, base: who?.base ?? null, gaps, state: this.staffLocationState(who, c, pings.at(-1) ?? null, !!home), movement: moves.get(c.id) ?? null, snaps };
   }
 
   // ---------- Check-in places (P81, 6 Nov 2026; checkin.ts and checkin-service.ts) ----------
@@ -12276,8 +12323,28 @@ export class PrimaService {
     });
   }
 
-  myCheckin(user: User) {
-    return this.checkins().mine(user);
+  async myCheckin(user: User) {
+    // P97: whether the check-in and check-out ask for a face photo (rule HR-STAFF-SNAP).
+    return { ...(await this.checkins().mine(user)), snap: this.clockSnaps().rule() };
+  }
+
+  /** P97: the face photo at check-in and check-out (clock-snap-service.ts), with the staff clock's own scope. */
+  clockSnaps(): ClockSnapService {
+    return new ClockSnapService(this.store, () => this.now(), {
+      enrolled: (u) => this.staffFaceEnrolled(u),
+      score: async (u, descriptor) => (await this.serverFace(u, { face: { score: 0, live: true }, descriptor }))?.score ?? null,
+      scope: (u) => this.staffClockScope(u),
+      itTeamViewer: (u) => this.seesItTeamClock(u),
+    });
+  }
+
+  /** P97: the face photos for the manager or HR to look at. */
+  clockSnapReviews(user: User) {
+    return this.clockSnaps().reviews(user);
+  }
+
+  decideClockSnap(user: User, id: Id, decision: 'cleared' | 'upheld', note: string) {
+    return this.clockSnaps().decide(user, id, decision, note);
   }
 
   checkinPreview(user: User, fix: CheckinFix, address: CheckinAddress = { status: 'off', text: null }) {
@@ -12286,14 +12353,18 @@ export class PrimaService {
 
   /** Check in (or out): the server decides in or out of the area. A refused attempt is kept, then the refusal raised. */
   async checkIn(user: User, kind: 'in' | 'out', input: CheckinInput, address: CheckinAddress = { status: 'off', text: null }) {
+    // P97: the face photo is checked first, so a broken photo never leaves a check-in saved without it.
+    const snaps = this.clockSnaps();
+    snaps.check(input);
     const r = await this.checkins().record(user, kind, input, address);
+    if (!r.blocked && !r.already) return { ...r, photo: await snaps.save(user, r.event, r.clock, input) };
     if (r.blocked) {
       const n = r.event.nearest;
       throw new RefusedAfterSave(
         `Check-in refused: you are ${n ? `${n.outsideByM.toLocaleString('en-MY')} m outside ${n.label}` : 'outside your allowed area'}, and your company does not allow check-ins outside it. Your manager can see this attempt.`,
       );
     }
-    return r;
+    return { ...r, photo: { kept: false, snap: null } as Awaited<ReturnType<ClockSnapService['save']>> };
   }
 
   checkinSetAddress(user: User, id: Id, address: CheckinAddress) {

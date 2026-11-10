@@ -30,6 +30,7 @@ import {
   type CheckinRuleKind,
   type CheckinZone,
 } from './checkin';
+import { validFaceDescriptor } from './face';
 import { BadRequest, NotFound, requireApprovalReason } from './service';
 import type { Store } from './store';
 import { addDays, dateOf, isRealDate, toMs } from './time';
@@ -46,8 +47,15 @@ export interface CheckinFix {
 export interface CheckinInput extends CheckinFix {
   /** Required when the check-in is outside the allowed area and the company allows it with a reason. */
   reason?: string | null;
-  /** The face check, when the clock still waits for it: the photo and the descriptor the phone's engine made. */
+  /**
+   * The face photo with the descriptor the phone's engine made (empty when taken without the phone engine). P97: sent at
+   * every check-in and check-out (rule HR-STAFF-SNAP); at a check-in it also does the sign-in clock's face check.
+   */
   face?: { image: string; descriptor: number[]; live: boolean } | null;
+  /** P97: no camera (blocked, broken, none): what the person wrote, for their manager or HR to look at. */
+  noCamera?: { reason: string } | null;
+  /** P97: set by the API from its own setting, never by the phone: where the face engine runs. */
+  faceEngine?: 'phone' | 'server';
 }
 
 /** The street address the API looked up for the point (never sent by the phone). */
@@ -248,7 +256,7 @@ export class CheckinService {
     // check out and check in again.
     if (kind === 'in' && state === 'in' && now.last) {
       let clock = now.current;
-      if (input.face && clock?.flags.includes('FACE_PENDING'))
+      if (input.face && validFaceDescriptor(input.face.descriptor) && clock?.flags.includes('FACE_PENDING'))
         clock = await this.deps.faceCheck(user, { image: input.face.image, capturedAt: this.clock(), descriptor: input.face.descriptor, live: input.face.live === true });
       return { event: now.last, blocked: false as const, clock, already: true as const };
     }
@@ -307,7 +315,7 @@ export class CheckinService {
     }
     let clock = kind === 'in' ? await this.deps.ensureClock(user) : now.open;
     let face: FaceCapture | null = null;
-    if (kind === 'in' && input.face && clock?.flags.includes('FACE_PENDING')) {
+    if (kind === 'in' && input.face && validFaceDescriptor(input.face.descriptor) && clock?.flags.includes('FACE_PENDING')) {
       clock = await this.deps.faceCheck(user, { image: input.face.image, capturedAt, descriptor: input.face.descriptor, live: input.face.live === true });
       face = clock.faceCheck?.face ?? null;
     }

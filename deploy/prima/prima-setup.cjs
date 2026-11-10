@@ -56,7 +56,8 @@ const REFRESH = [
 // every start as the schema owner, each file in its own transaction (the file holds BEGIN and COMMIT). A second run changes
 // nothing. They add new tables only; no existing table, row or policy is changed.
 //   owner-test-checkin-v1.sql: the owner's TEST check-in and check-out with the route between (never attendance or pay).
-const OFFICE_MODULES = ['owner-test-checkin-v1.sql'];
+//   clock-snaps-v1.sql (P97): the staff check-in and check-out face photos, seen only by the person, their manager and HR.
+const OFFICE_MODULES = ['owner-test-checkin-v1.sql', 'clock-snaps-v1.sql'];
 (async () => {
   const { Client } = require(require.resolve('pg', { paths: [cwd] }));
   const c = new Client({ connectionString: process.env.DATABASE_URL });

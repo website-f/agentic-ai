@@ -4823,7 +4823,7 @@
   "method": "POST",
   "path": "api/me/clock/pings",
   "name": "staffPings",
-  "body": "{ readings?: unknown }"
+  "body": "{ readings?: unknown; notes?: unknown }"
  },
  {
   "method": "POST",
@@ -6366,6 +6366,20 @@
   "query": [
    "date"
   ]
+ },
+ {
+  "method": "GET",
+  "path": "api/staff-clock-photos",
+  "name": "photoReviews"
+ },
+ {
+  "method": "POST",
+  "path": "api/staff-clock-photos/:id",
+  "name": "decidePhoto",
+  "params": [
+   "id"
+  ],
+  "body": "Record<string, unknown>"
  },
  {
   "method": "GET",

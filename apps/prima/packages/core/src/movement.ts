@@ -301,9 +301,126 @@ export interface MovementFlag {
 /** Why time inside or outside is not measured for this session. */
 export type MovementMeasure = 'measured' | 'no_place' | 'outstation' | 'home' | 'no_location';
 
+/**
+ * P97 (Fitri, 11 Nov 2026: "the location must be logged even if they close the thing"): what the phone said about its own
+ * following, so a gap can be explained honestly instead of guessed. 'hidden': Prima went to the background or was closed;
+ * 'visible': back on the screen; 'denied': location permission off; 'no_fix': the phone gave no position; 'offline' and
+ * 'online': the signal; 'native': the Prima app's background following started; 'stopped': following stopped.
+ */
+export type TrackerNoteKind = 'hidden' | 'visible' | 'denied' | 'no_fix' | 'offline' | 'online' | 'native' | 'stopped';
+export const TRACKER_NOTE_KINDS: TrackerNoteKind[] = ['hidden', 'visible', 'denied', 'no_fix', 'offline', 'online', 'native', 'stopped'];
+export interface TrackerNote {
+  at: IsoDateTime;
+  kind: TrackerNoteKind;
+}
+/** The most notes one clock session keeps (the newest). */
+export const TRACKER_NOTES_MAX = 80;
+
+/** Why no position came for a while, from the phone's own notes; 'unknown' when it said nothing (asleep, off, closed). */
+export type GapCause = 'closed' | 'denied' | 'offline' | 'no_fix' | 'unknown';
+
+export interface MovementGap {
+  from: IsoDateTime;
+  /** null: still no position now. */
+  to: IsoDateTime | null;
+  minutes: number;
+  cause: GapCause;
+}
+
+/** A piece of the route for the map: inside the place, outside it, not measured, or a gap (no position in between). */
+export interface RouteSegment {
+  kind: 'inside' | 'outside' | 'free' | 'gap';
+  path: { lat: number; lng: number; t: IsoDateTime }[];
+}
+
+/** The most points the map segments carry together (each segment keeps its two ends). */
+export const MOVEMENT_SEGMENT_POINTS = 600;
+
+const CAUSE_RANK: Record<GapCause, number> = { denied: 4, closed: 3, offline: 2, no_fix: 1, unknown: 0 };
+const NOTE_CAUSE: Partial<Record<TrackerNoteKind, GapCause>> = { denied: 'denied', hidden: 'closed', stopped: 'closed', offline: 'offline', no_fix: 'no_fix' };
+
+/**
+ * The cause of a gap: the strongest note the phone sent from the last reading before the gap (up to `leadMin` before it
+ * starts) to its end. A note that following resumed ('visible', 'online', 'native') after a cause clears that cause.
+ */
+export function gapCause(notes: TrackerNote[], from: IsoDateTime, to: IsoDateTime, leadMin: number): GapCause {
+  const a = toMs(from) - (leadMin + 1) * 60_000;
+  const b = toMs(to);
+  let best: GapCause = 'unknown';
+  const inside = notes.filter((n) => validTime(n.at) && toMs(n.at) >= a && toMs(n.at) <= b).sort((x, y) => x.at.localeCompare(y.at));
+  for (const n of inside) {
+    const c = NOTE_CAUSE[n.kind];
+    if (c && CAUSE_RANK[c] > CAUSE_RANK[best]) best = c;
+  }
+  // The latest note before the gap's own start decides when it is a "resumed" note and nothing stronger came later.
+  const lastBefore = inside.filter((n) => toMs(n.at) <= toMs(from)).at(-1);
+  if (lastBefore && !NOTE_CAUSE[lastBefore.kind] && !inside.some((n) => toMs(n.at) > toMs(from) && NOTE_CAUSE[n.kind])) return 'unknown';
+  return best;
+}
+
+/**
+ * Every time no position came for longer than `gapMin` while clocked in: from the clock-in (or a reading) to the next
+ * reading (or the clock-out, or now: then `to` is null). The real silence, from the last position to the next one.
+ */
+export function silences(points: TrackPoint[], opts: { from: IsoDateTime; to: IsoDateTime | null; now: IsoDateTime; gapMin: number }): Omit<MovementGap, 'cause'>[] {
+  const out: Omit<MovementGap, 'cause'>[] = [];
+  const end = opts.to ?? opts.now;
+  const times = [opts.from, ...points.map((p) => p.t).filter((t) => toMs(t) > toMs(opts.from) && toMs(t) <= toMs(end)), end];
+  for (let i = 1; i < times.length; i++) {
+    const minutes = Math.round((toMs(times[i]) - toMs(times[i - 1])) / 60_000);
+    if (minutes <= opts.gapMin) continue;
+    const last = i === times.length - 1;
+    out.push({ from: times[i - 1], to: last && !opts.to ? null : times[i], minutes });
+  }
+  return out;
+}
+
+/**
+ * The route cut into pieces for the map. Two readings further apart in time than `gapMin` are joined by a GAP piece
+ * (drawn dashed: no position came in between, the straight line only joins the two readings and is never a path). A
+ * step that ends or starts outside every place is OUTSIDE (drawn highlighted); otherwise INSIDE. Without a place to
+ * measure against, steps are FREE. Also the metres the gaps' straight lines add to the distance.
+ */
+export function routeSegments(
+  points: TrackPoint[],
+  targets: Pick<CheckinTarget, 'label' | 'lat' | 'lng' | 'radiusM'>[],
+  opts: { gapMin: number; measured: boolean; minStepM?: number },
+): { segments: RouteSegment[]; gapDistanceM: number } {
+  const segments: RouteSegment[] = [];
+  let gapDistanceM = 0;
+  const gapMs = opts.gapMin * 60_000;
+  const inside = points.map((p) => (opts.measured ? placeOf(p, targets).inside : true));
+  for (let i = 1; i < points.length; i++) {
+    const a = points[i - 1];
+    const b = points[i];
+    const gap = toMs(b.t) - toMs(a.t) > gapMs;
+    const kind: RouteSegment['kind'] = gap ? 'gap' : !opts.measured ? 'free' : inside[i - 1] && inside[i] ? 'inside' : 'outside';
+    if (gap) {
+      const d = haversineM(a, b);
+      if (d >= Math.max(opts.minStepM ?? MOVEMENT_DEFAULTS.minStepM, (a.accuracyM ?? 0) + (b.accuracyM ?? 0))) gapDistanceM += d;
+    }
+    const last = segments.at(-1);
+    const pa = { lat: a.lat, lng: a.lng, t: a.t };
+    const pb = { lat: b.lat, lng: b.lng, t: b.t };
+    if (last && last.kind === kind && kind !== 'gap') last.path.push(pb);
+    else segments.push({ kind, path: [pa, pb] });
+  }
+  // Thin long pieces so the screen gets at most MOVEMENT_SEGMENT_POINTS points, each piece keeping its two ends.
+  const total = segments.reduce((n, s) => n + s.path.length, 0);
+  if (total > MOVEMENT_SEGMENT_POINTS)
+    for (const s of segments) s.path = thin(s.path, Math.max(2, Math.floor((s.path.length / total) * MOVEMENT_SEGMENT_POINTS)));
+  return { segments, gapDistanceM: Math.round(gapDistanceM) };
+}
+
 export interface MovementSummary {
   measure: MovementMeasure;
   distanceM: number;
+  /** P97: of distanceM, the metres of straight lines across gaps (no position came in between: the real way is unknown). */
+  gapDistanceM: number;
+  /** P97: the route in pieces for the map: inside, outside (highlighted), not measured, and gaps (dashed). */
+  segments: RouteSegment[];
+  /** P97: each time no position came while clocked in, with what the phone said about why. */
+  gaps: MovementGap[];
   /** The cleaned route, thinned for the screen. */
   route: { t: IsoDateTime; lat: number; lng: number; accuracyM: number | null; source: RawReading['source'] }[];
   readings: { total: number; used: number; dropped: Record<DropReason, number> };
@@ -353,6 +470,8 @@ export function analyseMovement(input: {
   outstation?: boolean;
   home?: boolean;
   rules?: Partial<MovementRules>;
+  /** P97: what the phone said about its following (background, permission off, no signal), to explain gaps. */
+  notes?: TrackerNote[];
 }): MovementSummary {
   const r = { ...MOVEMENT_DEFAULTS, ...input.rules };
   const end = input.to ?? input.now;
@@ -392,8 +511,15 @@ export function analyseMovement(input: {
       });
   }
   flags.sort((a, b) => a.at.localeCompare(b.at));
+  // P97: the map's pieces and every gap with its likely cause. A gap is never filled with invented positions.
+  const notes = (input.notes ?? []).filter((n) => n && validTime(n.at) && TRACKER_NOTE_KINDS.includes(n.kind));
+  const pieces = measure === 'home' ? { segments: [], gapDistanceM: 0 } : routeSegments(pts, targets, { gapMin: r.gapMin, measured: measure === 'measured', minStepM: r.minStepM });
+  const gaps = measure === 'home' ? [] : silences(pts, { from: input.from, to: input.to, now: input.now, gapMin: r.gapMin }).map((g) => ({ ...g, cause: gapCause(notes, g.from, g.to ?? input.now, 0) }));
   return {
     measure,
+    gapDistanceM: pieces.gapDistanceM,
+    segments: pieces.segments,
+    gaps,
     distanceM: measure === 'home' ? 0 : routeDistanceM(pts, r.minStepM),
     route: measure === 'home' ? [] : thin(pts, MOVEMENT_ROUTE_POINTS).map((p) => ({ t: p.t, lat: p.lat, lng: p.lng, accuracyM: p.accuracyM, source: p.source })),
     readings: { total: input.raw.length, used: pts.length, dropped: clean.dropped },

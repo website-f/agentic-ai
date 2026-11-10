@@ -1409,6 +1409,8 @@ export interface StaffClock {
   mode?: 'login' | 'photo';
   /** The face check after a sign-in clock in (Fauzan, 2 Nov 2026), with the photo kept for HR to spot-check. */
   faceCheck?: StaffClockShot | null;
+  /** P97: what the phone said about following the location (background, permission off, no signal), newest kept. */
+  trackNotes?: import('./movement').TrackerNote[];
 }
 
 /** One location reading while a staff member is clocked in. None is accepted outside working hours. */
@@ -3376,6 +3378,8 @@ export interface Dataset {
   checkinEvents: import('./checkin').CheckinEvent[];
   /** P90: the owner's TEST check-ins (owner-test-checkin.ts): never a clock, attendance or pay record. */
   ownerTestCheckins: import('./owner-test-checkin').OwnerTestCheckin[];
+  /** P97: the face photo at each staff check-in and check-out (clock-snap.ts; db/modules/clock-snaps-v1.sql). */
+  clockSnaps: import('./clock-snap').ClockSnap[];
   fwWelfareChecks: FwWelfareCheck[];
   fwPlacements: FwPlacement[];
   fwPlacementHosts: FwPlacementHostView[];

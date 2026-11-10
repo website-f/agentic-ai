@@ -117,6 +117,12 @@ export const RULES = {
     'Policy',
     'Fitri, 9 Nov 2026 (P93): movements while clocked in are recorded well enough to see when staff go out of their place, to prevent violations and fraud. Proposed: outside the assigned place (check-in place, company office, field area or base) for more than 15 minutes is an out-of-station period for the manager to review; readings rougher than 100 m are not used for distance or place; faster than 200 km/h between two readings is a jump; a clock-in more than 1 km outside the place is a review item. While moving (100 m or more) the phone sends a reading about every 2 minutes; when still, at the HR-STAFF-PING interval.',
   ),
+  staffClockSnap: rule(
+    'HR-STAFF-SNAP',
+    { on: true },
+    'Policy',
+    'Fitri, 11 Nov 2026 (P97): "where is the face scan/snap?" Each staff check-in and check-out takes a face photo on the phone with the same face check as the sign-in face check (the phone finds the face and checks it moved; with a face HR approved, the server matches it). Without a camera the person writes why; their manager or HR looks at it. A missing or unmatched face never refuses the check-in (as for guards); it is reviewed. The photo is seen only by the person, their manager and HR, and kept as long as location readings (HR-STAFF-KEEP). On by default; off, the check-in asks for no photo. Face is biometric data under the PDPA: the written notice to staff must say so before this goes live.',
+  ),
   armsRfid: rule(
     'ARMS-RFID',
     { scanRequired: false },
