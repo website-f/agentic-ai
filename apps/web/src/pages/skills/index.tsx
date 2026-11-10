@@ -189,7 +189,9 @@ export function SkillsPage() {
   const { data: me } = useSuspenseQuery(meQuery);
   const canWrite = me.permissions.includes("work.write");
   const canManage = me.permissions.includes("agents.manage");
-  const canDecide = me.permissions.includes("approvals.decide");
+  // P96: a new skill reaches every agent, so only someone who manages the whole workspace's
+  // agents publishes it straight away; anyone else sends it for review (skills.may_publish).
+  const canPublishNew = canManage && (!me.scope || me.scope.kind === "all");
   const search = useSearch({ strict: false }) as SkillsSearch;
   const navigate = useNavigate();
   const tab: SkillTab = search.tab && SKILL_TABS.includes(search.tab) ? search.tab : "library";
@@ -290,11 +292,11 @@ export function SkillsPage() {
         )}
       </div>
 
-      {search.skill ? <SkillSheet key={search.skill} id={search.skill} canDecide={canDecide} canWrite={canWrite} onClose={() => go({ skill: undefined })} /> : null}
-      {search.proposal ? <ProposalSheet key={search.proposal} id={search.proposal} canDecide={canDecide} canWrite={canWrite} onClose={() => go({ proposal: undefined })} /> : null}
+      {search.skill ? <SkillSheet key={search.skill} id={search.skill} canWrite={canWrite} onClose={() => go({ skill: undefined })} /> : null}
+      {search.proposal ? <ProposalSheet key={search.proposal} id={search.proposal} canWrite={canWrite} onClose={() => go({ proposal: undefined })} /> : null}
       {teaching ? <LearnSourceDialog key={teaching} open onOpenChange={(o) => !o && setTeaching(0)} /> : null}
       {importing ? <ImportSkillDialog onClose={() => setImporting(false)} onDone={() => { setImporting(false); go({ tab: "proposals" }); }} /> : null}
-      {creating ? <NewSkill key={creating} open canDecide={canDecide} onOpenChange={(o) => !o && setCreating(0)} /> : null}
+      {creating ? <NewSkill key={creating} open canDecide={canPublishNew} onOpenChange={(o) => !o && setCreating(0)} /> : null}
     </Page>
   );
 }

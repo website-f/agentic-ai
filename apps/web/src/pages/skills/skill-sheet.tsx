@@ -22,6 +22,7 @@ import { Stat, StatGrid } from "@/components/ui/stat";
 import { msg, t as tr, useLang, useT } from "@/i18n";
 import { api, errorMessage } from "@/lib/api";
 import { learningKeys, revertSkill } from "@/lib/learning";
+import { meQuery } from "@/lib/queries";
 import { compact, pct, skillKeys, skillQuery, TRUST_LABEL, type SkillDetail } from "@/lib/skills";
 import { cn, timeAgo } from "@/lib/utils";
 import { agentsQuery } from "@/lib/work";
@@ -92,6 +93,9 @@ function Audience({ s, canDecide }: { s: SkillDetail; canDecide: boolean }) {
   const t = useT();
   const qc = useQueryClient();
   const { data: agents = [] } = useQuery(agentsQuery);
+  const { data: me } = useQuery(meQuery);
+  // P96: letting every agent use it is for someone over the whole workspace (may_publish).
+  const whole = !me?.scope || me.scope.kind === "all";
   const [mode, setMode] = useState(s.agent_ids.length ? "some" : "all");
   const [ids, setIds] = useState<string[]>(s.agent_ids);
   const save = useMutation({
@@ -109,7 +113,7 @@ function Audience({ s, canDecide }: { s: SkillDetail; canDecide: boolean }) {
   return (
     <div className="grid gap-2">
       <RadioGroup.Root value={mode} onValueChange={(v) => { setMode(v); if (v === "all") save.mutate([]); }} className="flex flex-wrap gap-2" aria-label={t("Who can use it")}>
-        {[["all", t("Every agent")], ["some", t("Chosen agents")]].map(([v, l]) => (
+        {[...(whole ? [["all", t("Every agent")]] : []), ["some", t("Chosen agents")]].map(([v, l]) => (
           <RadioGroup.Item key={v} value={v!} className="min-h-9 rounded-sm border border-border px-3 py-1.5 text-[13px] transition-colors hover:bg-surface-2/60 data-[state=checked]:border-accent data-[state=checked]:bg-accent-soft/50 data-[state=checked]:font-medium">{l}</RadioGroup.Item>
         ))}
       </RadioGroup.Root>
@@ -203,12 +207,16 @@ function Cases({ s, canWrite }: { s: SkillDetail; canWrite: boolean }) {
   );
 }
 
-export function SkillSheet({ id, canDecide, canWrite, onClose }: { id: string; canDecide: boolean; canWrite: boolean; onClose: () => void }) {
+/** `canDecide` is no longer read: the server's `can_publish` on the skill decides (P96). */
+export function SkillSheet({ id, canWrite, onClose }: { id: string; canDecide?: boolean; canWrite: boolean; onClose: () => void }) {
   const t = useT();
   // "Open" and "Saved" have other meanings elsewhere (Buka, Disimpan); here they need their own Malay words.
   const lang = useLang((st) => st.lang);
   const qc = useQueryClient();
   const { data: s, isLoading, error } = useQuery(skillQuery(id));
+  // P96: the server says whether this person may publish this skill (a manager only for the
+  // agents they manage), so no button here ends in "not allowed".
+  const canDecide = !!s?.can_publish;
   const [editing, setEditing] = useState(false);
   const [openVersion, setOpenVersion] = useState<number | null>(null);
   const [restoring, setRestoring] = useState<number | null>(null);

@@ -60,6 +60,11 @@ async def launch(
         await db.commit()
         await runtime.task_event(db, t, "browser", actor, str(refused)[:300])
         raise LaunchError(409, "no_browser", refused)
+    # P96: and the office skill the work needs (with its tools), or a note saying who can
+    # give it. Never stops the work.
+    from . import skill_grant
+
+    await skill_grant.for_task(db, t, agent, actor)
     now = now or datetime.now(UTC)
     if actor not in CONTINUES:
         later = work_hours.deferred_until(

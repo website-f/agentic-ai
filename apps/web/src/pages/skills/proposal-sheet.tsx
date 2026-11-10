@@ -55,7 +55,8 @@ function Scan({ p }: { p: ProposalDetail }) {
   );
 }
 
-export function ProposalSheet({ id, canDecide, canWrite, onClose }: { id: string; canDecide: boolean; canWrite: boolean; onClose: () => void }) {
+/** `canDecide` is no longer read: the server's `can_publish` on the proposal decides (P96). */
+export function ProposalSheet({ id, canWrite, onClose }: { id: string; canDecide?: boolean; canWrite: boolean; onClose: () => void }) {
   const t = useT();
   const qc = useQueryClient();
   const { data: p, isLoading, error } = useQuery(proposalQuery(id));
@@ -105,7 +106,7 @@ export function ProposalSheet({ id, canDecide, canWrite, onClose }: { id: string
           <span>{t("from {name}, {when}", { name: p.proposed_by_name, when: timeAgo(p.created_at).toLowerCase() })}</span>
         </span>
       ) : null}
-      actions={p && pending && canDecide ? (
+      actions={p && pending && p.can_publish ? (
         editing ? (
           <>
             <Button size="sm" loading={approve.isPending} onClick={() => approve.mutate()}><CheckIcon size={14} weight="bold" /> {t("Save and approve")}</Button>

@@ -426,6 +426,7 @@ class Task(Timestamps, Base):
             name="ck_tasks_status",
         ),
         Index("ix_tasks_ws_status", "workspace_id", "status"),
+        Index("ix_tasks_assignee_status", "assignee_agent_id", "status"),  # P96
     )
 
     id: Mapped[str] = mapped_column(String(40), primary_key=True, default=lambda: new_id("tk"))

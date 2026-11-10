@@ -1351,6 +1351,9 @@ async def _run_task_step(task_id: str) -> StepResult:
             refused = await browser_grant.for_task(db, task, agent)
             if refused is not None:
                 return StepResult("failed", browser_grant.as_text(refused))
+            from . import skill_grant  # P96: and the office skill it needs, by itself
+
+            await skill_grant.for_task(db, task, agent)
             content = f"Task: {task.title}\n\n{task.brief}".strip()
             content += await objectives.why_line(db, task)  # P21: why this work matters
             content += await _language_line(db, task)  # P22: report in the asker's language
@@ -2262,6 +2265,10 @@ async def _chat_turn(db: AsyncSession, agent: Agent, session: ChatSession, text:
     from . import browser_grant
 
     no_browser = await browser_grant.for_chat(db, agent, session.user_id, text)
+    if not no_browser:  # P96: the office skill this asks for, given when this person may
+        from . import skill_grant
+
+        no_browser = await skill_grant.for_chat(db, agent, session.user_id, text)
     # Recalled memory rides on this turn only: it is not stored, and earlier turns stay
     # byte-identical, so the cached prompt prefix keeps hitting.
     recalled: list[dict[str, Any]] = []

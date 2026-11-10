@@ -71,6 +71,31 @@ async def _work(db: AsyncSession, ids: list[str]) -> tuple[dict[str, Task], dict
     return current, counts
 
 
+async def _prefetch(db: AsyncSession, rows: list[Agent]) -> list[Any]:
+    """P96: the branches, departments, owners and (for private assistants) the owners'
+    memberships of many agents, one query each. The caller holds the result: the session's
+    identity map is weak, so without a reference every agent_out's db.get loaded them again
+    (three queries per agent: 245 for a 90-agent office page)."""
+    from ...models import Membership
+
+    held: list[Any] = []
+    bids = {a.branch_id for a in rows}
+    dids = {a.department_id for a in rows if a.department_id}
+    uids = {a.owner_user_id for a in rows if a.owner_user_id}
+    pas = {a.owner_user_id for a in rows if a.private and a.owner_user_id}
+    for model, ids in ((Branch, bids), (Department, dids), (User, uids)):
+        if ids:
+            held += (await db.scalars(select(model).where(model.id.in_(ids)))).all()
+    if pas:
+        ws = rows[0].workspace_id
+        held += (
+            await db.scalars(
+                select(Membership).where(Membership.workspace_id == ws, Membership.user_id.in_(pas))
+            )
+        ).all()
+    return held
+
+
 async def agent_out(
     db: AsyncSession,
     a: Agent,
@@ -325,6 +350,7 @@ async def list_agents(
         q = q.where(Agent.status != "retired")
     rows = (await db.scalars(q.order_by(Agent.created_at))).all()
     work = await _work(db, [a.id for a in rows])
+    held = await _prefetch(db, list(rows))  # noqa: F841 - kept alive for agent_out's gets
     return [await agent_out(db, a, work, principal) for a in rows]
 
 
