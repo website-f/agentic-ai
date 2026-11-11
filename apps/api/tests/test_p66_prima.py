@@ -7,6 +7,7 @@ owner links them in one click; nobody runs a script."""
 import hashlib
 import hmac
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -21,7 +22,7 @@ from agentic.core.config import settings
 from agentic.core.db import SessionLocal
 from agentic.models import Agent, Membership, PrimaLink, Task, User, Workspace
 from agentic.prima import client as prima
-from agentic.prima import routes
+from agentic.prima import modules, routes
 from agentic.prima.client import PrimaError, StaffRecord
 from agentic.prima.people import Person, name_key, suggestions
 
@@ -167,6 +168,37 @@ def test_the_catalog_is_prima_s_api():
         for _, p in paths
     )
     assert routes.find("apply leave")[0]["path"].startswith("api/leave")
+
+
+PRIMA_WEB = Path(__file__).resolve().parents[2] / "prima" / "apps" / "web" / "src"
+
+
+@pytest.mark.skipif(not PRIMA_WEB.is_dir(), reason="apps/prima not in this checkout")
+def test_the_screen_catalog_is_prima_s_menu():
+    """P99: the Prima screens a member may be given, and the calls each makes, are built from
+    Prima's web source; every API route is placed with a screen or refused on purpose."""
+    built = modules.build(PRIMA_WEB)
+    kept = json.loads(
+        (Path(modules.__file__).with_name("modules.json")).read_text(encoding="utf-8")
+    )
+    assert built == kept, (
+        "Run: python -m agentic.prima.modules ../prima/apps/web/src > agentic/prima/modules.json"
+    )
+    # Every screen of Prima's menu (App.tsx NAV) can be chosen, in exactly one app.
+    nav = set(re.findall(r"view: '([\w-]+)',", (PRIMA_WEB / "App.tsx").read_text("utf-8")))
+    assert nav <= set(modules.ids()) and len(modules.ids()) == len(set(modules.ids()))
+    # Each screen makes calls (Connections inside the office is the office's own page).
+    assert not [v for v, calls in kept["calls"].items() if not calls and v != "connections"]
+    # Every route Prima serves belongs to a screen, or is refused to anyone with chosen
+    # screens: only the guard's own phone app (its own sign-in, never through the office).
+    loose = [
+        f"{r['method']} {r['path']}"
+        for r in routes.catalog()
+        if not modules.screens_for(str(r["method"]), str(r["path"]))
+    ]
+    assert all(p.split(" ")[1].startswith("api/guard-phone/") for p in loose), loose
+    assert modules.screens_for("GET", "api/items") == {"items"}
+    assert "staffpay" in modules.screens_for("GET", "api/staff-pay")
 
 
 def test_only_prima_s_own_addresses():

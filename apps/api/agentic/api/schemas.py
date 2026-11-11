@@ -19,6 +19,10 @@ Role = Literal[
     "hr",
 ]
 HEX_COLOR = r"^#[0-9a-fA-F]{6}$"
+# P99: the office and Prima, or Prima only (core/access.py).
+Access = Literal["agentic", "prima_only"]
+# P99: Prima screen ids (prima/modules.py); null = all their Prima role allows.
+PrimaModules = list[str] | None
 
 
 class _Password(BaseModel):
@@ -96,6 +100,9 @@ class MeOut(BaseModel):
     permissions: list[str]
     scope: ScopeOut | None = None
     assignable_roles: list[str] = []  # P92: the roles this person may give others
+    # P99: Prima only (the office's pages are closed to them) and their chosen Prima screens.
+    access: Access = "agentic"
+    prima_modules: PrimaModules = None
 
 
 class MemberOut(BaseModel):
@@ -120,6 +127,9 @@ class MemberOut(BaseModel):
     reports_to_name: str | None = None
     heads_department: bool = False
     manages: int = 0
+    # P99: what they reach: the office and Prima, or Prima only; and their Prima screens.
+    access: Access = "agentic"
+    prima_modules: PrimaModules = None
 
 
 class MembersSummary(BaseModel):
@@ -146,13 +156,17 @@ class MembersPageOut(BaseModel):
 class MembersBulkIn(BaseModel):
     user_ids: list[str] = Field(min_length=1, max_length=100)
     # P97 "manager": everyone ticked reports to manager_id (null: to no one).
-    action: Literal["remove", "access", "manager"]
+    # P99 "prima": everyone ticked gets this access and/or these Prima screens.
+    action: Literal["remove", "access", "manager", "prima"]
     role: Role | None = None
     branch_id: str | None = None
     department_id: str | None = None
     # P98: every branch they work in (branch_id, or the department's branch, is the home).
     branch_ids: list[str] | None = Field(default=None, max_length=100)
     manager_id: str | None = Field(default=None, max_length=40)
+    # P99 (action "prima"): leave out what does not change; prima_modules null = all.
+    access: Access | None = None
+    prima_modules: PrimaModules = Field(default=None, max_length=200)
 
 
 class MembersBulkResult(BaseModel):
@@ -174,6 +188,9 @@ class MemberCreateIn(BaseModel):
     branch_id: str | None = None
     department_id: str | None = None
     branch_ids: list[str] | None = Field(default=None, max_length=100)  # P98
+    # P99: the office and Prima (default), or Prima only; their Prima screens (null = all).
+    access: Access = "agentic"
+    prima_modules: PrimaModules = Field(default=None, max_length=200)
 
 
 class MemberCreateOut(BaseModel):
@@ -192,12 +209,23 @@ class MemberUpdateIn(BaseModel):
     # P97: heads their department; reports to this manager (send null to clear).
     heads_department: bool | None = None
     reports_to_user_id: str | None = Field(default=None, max_length=40)
+    # P99: what they reach, and their Prima screens (send null for all their role allows).
+    access: Access | None = None
+    prima_modules: PrimaModules = Field(default=None, max_length=200)
 
 
 class MemberTeamIn(BaseModel):
     """P97: the people who report to a manager (the whole list; others are let go)."""
 
     user_ids: list[str] = Field(default_factory=list, max_length=500)
+
+
+class PrimaAccessIn(BaseModel):
+    """P99: what one member reaches. Leave out what does not change; prima_modules null is
+    all their Prima role allows."""
+
+    access: Access | None = None
+    prima_modules: PrimaModules = Field(default=None, max_length=200)
 
 
 class TempPasswordOut(BaseModel):

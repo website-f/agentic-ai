@@ -69,7 +69,9 @@ async def _link_for(db: AsyncSession, ch: Channel, from_id: str) -> ChannelLink 
 async def _role(db: AsyncSession, ch: Channel, user_id: str) -> str | None:
     return await db.scalar(
         select(Membership.role).where(
-            Membership.workspace_id == ch.workspace_id, Membership.user_id == user_id
+            Membership.workspace_id == ch.workspace_id,
+            Membership.user_id == user_id,
+            Membership.access != "prima_only",  # P99: Prima-only people are not in the office
         )
     )
 

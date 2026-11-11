@@ -9,6 +9,7 @@ from fastapi import Depends, HTTPException, Request, Response, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ..core.access import is_prima_only, prima_only_allows
 from ..core.config import settings
 from ..core.db import get_db
 from ..core.security import can, new_token, role_permissions, token_hash, use_settings
@@ -38,6 +39,10 @@ class Principal:
     team: frozenset[str] = frozenset()
     # P98: every branch they work in (home first); a scoped role's scope covers all of them.
     branch_ids: tuple[str, ...] = ()
+    # P99: "agentic" or "prima_only" (core/access.py), and the Prima screens chosen for them
+    # (None: all their Prima role allows; prima/modules.py).
+    access: str = "agentic"
+    prima_modules: tuple[str, ...] | None = None
 
     @property
     def actor(self) -> str:
@@ -200,6 +205,14 @@ async def _load_principal(request: Request, db: AsyncSession) -> Principal:
         )
     user, m, ws_settings = row
     _remember_lang(request, user)
+    prima_only = is_prima_only(m.access, m.role)
+    if prima_only and not prima_only_allows(request.method, request.url.path):
+        # P99: Prima only: the office's API answers only what Prima needs (core/access.py).
+        raise api_error(
+            status.HTTP_403_FORBIDDEN,
+            "prima_only",
+            "Your access is to Prima only. Open Prima to continue.",
+        )
     # P92: the owner's role access for this workspace, for every check this request makes.
     use_settings(ws_settings)
     # P36: model calls this request makes are this person's (their daily AI allowance).
@@ -226,6 +239,8 @@ async def _load_principal(request: Request, db: AsyncSession) -> Principal:
         two_factor_due=two_factor.due(user, m.role, ws_settings),
         team=team,
         branch_ids=tuple(m.branch_ids),
+        access="prima_only" if prima_only else "agentic",
+        prima_modules=tuple(m.prima_modules) if m.prima_modules is not None else None,
     )
 
 

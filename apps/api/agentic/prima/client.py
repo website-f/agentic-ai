@@ -34,10 +34,11 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core.config import settings
-from ..i18n import Msg
+from ..i18n import Msg, current_lang
 from ..i18n.labels import role_label
 from ..models import Branch, Membership, PrimaLink, Workspace
 from ..services import audit
+from . import modules
 
 transport: httpx.AsyncBaseTransport | None = None
 TIMEOUT = httpx.Timeout(30.0, connect=5.0)
@@ -507,6 +508,45 @@ async def _let_go(db: AsyncSession, workspace_id: str, user_id: str) -> None:
     await db.commit()
 
 
+async def check_chosen(
+    db: AsyncSession, workspace_id: str, user_id: str, method: str, url: str
+) -> None:
+    """P99: refuse a call outside the Prima screens chosen for this person (modules.py), for
+    their screens and their AI alike. Nothing chosen (None) is all their Prima role allows;
+    owners always have all of Prima. Prima's own role checks come after, either way."""
+    m = await db.get(Membership, (workspace_id, user_id))
+    if m is None or m.prima_modules is None or opens_as_top(m):
+        return
+    path = url.split("?", 1)[0]
+    if modules.allows(method, path, m.prima_modules):
+        return
+    lang = current_lang()
+    names = modules.titles()
+    shown = [
+        names[v].get(lang) or names[v]["en"]
+        for v in modules.ids()
+        if v in modules.screens_for(method, path)
+    ]
+    if shown:
+        raise PrimaError(
+            403,
+            Msg(
+                "{screens} is not in your Prima access. Ask the person who manages members in "
+                "the office to add it.",
+                screens=", ".join(shown[:3]),
+            ),
+            code="module_not_chosen",
+        )
+    raise PrimaError(
+        403,
+        Msg(
+            "This part of Prima is not in your Prima access. Ask the person who manages members "
+            "in the office to add it."
+        ),
+        code="module_not_chosen",
+    )
+
+
 def via_agent(name: str) -> str:
     """'agent:<name>' in plain ASCII (a header), at most 80 characters of name."""
     plain = re.sub(r"[^A-Za-z0-9 _.\-]", "", name).strip() or "AI"
@@ -575,6 +615,7 @@ async def call(
     if len(body) > MAX_BODY:
         raise PrimaError(413, Msg("That is too large for Prima (3 MB at most)."))
     url = clean_path(path, query)
+    await check_chosen(db, workspace_id, user_id, method, url)
     link = await link_for(db, workspace_id, user_id)
     ans = await _send(method, url, link.prima_user_id, via, body, client_ip)
     if link.linked_by == TOP_LINK and method == "POST":

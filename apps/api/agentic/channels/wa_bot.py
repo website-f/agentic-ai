@@ -199,7 +199,9 @@ async def _handle(db: AsyncSession, ch: Channel, msg: Inbound) -> None:
         return  # strangers get silence
     role = await db.scalar(
         select(Membership.role).where(
-            Membership.workspace_id == ch.workspace_id, Membership.user_id == link.user_id
+            Membership.workspace_id == ch.workspace_id,
+            Membership.user_id == link.user_id,
+            Membership.access != "prima_only",  # P99: Prima-only people are not in the office
         )
     )
     if role is None:

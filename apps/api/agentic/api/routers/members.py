@@ -4,6 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 
 from ...assistants import access as assistant_access
+from ...core.access import ACCESS, AGENTIC, is_prima_only
 from ...core.db import get_db
 from ...core.security import (
     ROLES,
@@ -21,13 +22,17 @@ from ...models import (
     Branch,
     Department,
     Membership,
+    PrimaLink,
     PushSubscription,
     User,
 )
+from ...prima import client as prima_client
+from ...prima import modules
+from ...prima.client import PrimaError
 from ...services import audit, identity
 from ...teams import people
 from ...teams.branches import member_in_branches, ordered, set_branches
-from ..deps import Principal, api_error, current_principal, require
+from ..deps import Principal, api_error, current_principal, is_developer, require
 from ..schemas import (
     BranchRef,
     MemberCreateIn,
@@ -40,6 +45,7 @@ from ..schemas import (
     MembersSummary,
     MemberTeamIn,
     MemberUpdateIn,
+    PrimaAccessIn,
     TempPasswordOut,
 )
 
@@ -79,6 +85,8 @@ def _out(
         last_login_at=u.last_login_at,
         joined_at=m.created_at,
         microsoft=bool(m.ms_oid),
+        access="prima_only" if is_prima_only(m.access, m.role) else "agentic",
+        prima_modules=None if m.role == "owner" else m.prima_modules,
     )
 
 
@@ -506,6 +514,8 @@ async def add_one(
     department_id: str | None,
     via: str | None = None,
     branch_ids: list[str] | None = None,
+    access: str = AGENTIC,
+    prima_modules: list[str] | None = None,
 ) -> tuple[Membership, str | None]:
     """Add one person: the role and place rules, a new account with a one-time password
     (None when they already have an account), and the audit row. One path for the form and
@@ -513,6 +523,10 @@ async def add_one(
     _check_can_touch(principal, role, role)
     branch_id, department_id, every = await _placement(
         db, principal, role, branch_id, department_id, branch_ids
+    )
+    # P99: Prima only, or some Prima screens, from the start (the same rules as a change).
+    access, prima_modules = check_prima_access(
+        principal, role, access, prima_modules, AGENTIC, None
     )
     email = email.lower()
     user = await db.scalar(select(User).where(User.email == email))
@@ -542,6 +556,8 @@ async def add_one(
         role=role,
         branch_id=branch_id,
         department_id=department_id,
+        access=access,
+        prima_modules=prima_modules,
     )
     set_branches(m, branch_id, every)
     db.add(m)
@@ -553,6 +569,10 @@ async def add_one(
     }
     if len(every) > 1:
         after["branch_ids"] = every
+    if access != AGENTIC:
+        after["access"] = access
+    if prima_modules is not None:
+        after["prima_modules"] = prima_modules
     if via:
         after["via"] = via
     if reactivated:
@@ -582,6 +602,8 @@ async def add_member(
         branch_id=body.branch_id,
         department_id=body.department_id,
         branch_ids=body.branch_ids,
+        access=body.access,
+        prima_modules=body.prima_modules,
     )
     await db.commit()
     await db.refresh(m)
@@ -598,7 +620,9 @@ async def update_member(
     db: AsyncSession = Depends(get_db),
 ) -> MemberOut:
     org_change = body.heads_department is not None or "reports_to_user_id" in body.model_fields_set
-    if body.role is None and body.name is None and body.email is None and not org_change:
+    prima_change = body.access is not None or "prima_modules" in body.model_fields_set
+    unchanged = body.role is None and body.name is None and body.email is None
+    if unchanged and not org_change and not prima_change:
         raise api_error(
             status.HTTP_422_UNPROCESSABLE_CONTENT, "nothing_to_change", "Nothing to change."
         )
@@ -610,6 +634,15 @@ async def update_member(
         await set_manager(db, principal, user_id, body.reports_to_user_id)
     if body.heads_department is not None:
         await set_head(db, principal, user_id, body.heads_department)
+    if prima_change:  # P99: after the role, so an owner's access is checked against it
+        await set_prima_access(
+            db,
+            principal,
+            user_id,
+            body.access,
+            body.prima_modules,
+            "prima_modules" in body.model_fields_set,
+        )
     # P92: a name or email typed wrong (in the form or an import) is corrected here. Last:
     # every check runs before anything is saved.
     if body.name is not None or body.email is not None:
@@ -960,6 +993,10 @@ async def change_access(
             r.reports_to_user_id = None
     m.role, m.department_id = role, department_id
     set_branches(m, branch_id, every)
+    if role == "owner" and (m.access != AGENTIC or m.prima_modules is not None):
+        # P99: owners always have the office and all of Prima.
+        before["access"], before["prima_modules"] = m.access, m.prima_modules
+        m.access, m.prima_modules = AGENTIC, None
     await audit.record(
         db,
         principal.workspace_id,
@@ -1043,6 +1080,12 @@ async def bulk(
         raise api_error(status.HTTP_422_UNPROCESSABLE_CONTENT, "role_required", "Pick a role.")
     if body.action == "manager":
         _org_editor(principal)
+    if body.action == "prima":
+        _prima_access_editor(principal)
+        if body.access is None and "prima_modules" not in body.model_fields_set:
+            raise api_error(
+                status.HTTP_422_UNPROCESSABLE_CONTENT, "nothing_to_change", "Nothing to change."
+            )
     results: list[MembersBulkResult] = []
     for user_id in dict.fromkeys(body.user_ids):  # each person once
         try:
@@ -1051,6 +1094,15 @@ async def bulk(
                     await remove_one(db, principal, user_id)
                 elif body.action == "manager":  # P97: they all report to this manager
                     await set_manager(db, principal, user_id, body.manager_id)
+                elif body.action == "prima":  # P99: what they reach
+                    await set_prima_access(
+                        db,
+                        principal,
+                        user_id,
+                        body.access,
+                        body.prima_modules,
+                        "prima_modules" in body.model_fields_set,
+                    )
                 else:
                     assert body.role is not None
                     await change_access(
@@ -1125,3 +1177,259 @@ async def reset_password(
     # Shown once: never cached, never logged or audited.
     response.headers["Cache-Control"] = "no-store"
     return TempPasswordOut(temp_password=password)
+
+
+# ---------------------------------------------------------------- P99 what each person reaches
+#
+# Access: the office and Prima ("agentic", everyone by default), or Prima only. Prima screens:
+# all their Prima role allows (None), or a chosen list (prima/modules.py), on top of Prima's own
+# role checks: a choice only narrows. Set by whoever manages all members (members.manage:
+# owner, admin, management and HR by default), for people in their scope, never themselves,
+# never an owner, and never beyond what they have themselves. Every change is audited.
+
+
+def _prima_access_editor(principal: Principal) -> None:
+    if not can(principal.role, "members.manage"):
+        raise api_error(
+            status.HTTP_403_FORBIDDEN,
+            "forbidden",
+            "Only owners, admins, management and HR set what someone reaches.",
+        )
+
+
+def check_prima_access(
+    principal: Principal,
+    role: str,
+    access: str | None,
+    chosen: list[str] | None,
+    old_access: str,
+    old_chosen: list[str] | None,
+    set_chosen: bool = True,
+) -> tuple[str, list[str] | None]:
+    """The access and Prima screens this person may be given (cleaned), or the refusal.
+    `access` None keeps `old_access`; `set_chosen` False keeps `old_chosen`."""
+    if access is not None and access not in ACCESS:
+        raise api_error(status.HTTP_422_UNPROCESSABLE_CONTENT, "bad_access", "Pick an access.")
+    if set_chosen and chosen is not None:
+        known = set(modules.ids())
+        if any(c not in known for c in chosen):
+            raise api_error(
+                status.HTTP_422_UNPROCESSABLE_CONTENT,
+                "bad_module",
+                "Pick Prima screens from the list.",
+            )
+    new_access = old_access if access is None else access
+    new_chosen = modules.clean(chosen) if set_chosen else old_chosen
+    if new_access == old_access and new_chosen == old_chosen:
+        return new_access, new_chosen
+    _prima_access_editor(principal)
+    if role == "owner" and (new_access != AGENTIC or new_chosen is not None):
+        raise api_error(
+            status.HTTP_400_BAD_REQUEST,
+            "owner_access",
+            "Owners always have the office and all of Prima.",
+        )
+    # Nobody gives more than they have: someone with chosen screens gives only those (or what
+    # the other person already had); all of Prima only from someone who has all of it.
+    mine = None if principal.role == "owner" else principal.prima_modules
+    if mine is not None and new_chosen != old_chosen:
+        had = set(modules.ids()) if old_chosen is None else set(old_chosen)
+        if new_chosen is None or not set(new_chosen) <= set(mine) | had:
+            raise api_error(
+                status.HTTP_403_FORBIDDEN,
+                "more_access",
+                "You can give only the Prima screens you have yourself.",
+            )
+    return new_access, new_chosen
+
+
+async def set_prima_access(
+    db: AsyncSession,
+    principal: Principal,
+    user_id: str,
+    access: str | None,
+    chosen: list[str] | None,
+    set_chosen: bool,
+) -> Membership:
+    """One person's access and Prima screens, with every rule; the caller commits."""
+    _prima_access_editor(principal)
+    if user_id == principal.user.id:
+        raise api_error(
+            status.HTTP_400_BAD_REQUEST,
+            "self_change",
+            "You cannot change your own access. Ask another owner or admin.",
+        )
+    m = await _membership(db, principal.workspace_id, user_id)
+    if not _member_in_scope(principal, m):
+        raise api_error(status.HTTP_404_NOT_FOUND, "member_not_found", "That member is not here.")
+    _check_can_touch(principal, m.role)
+    if m.role == "owner" or is_developer(m.user, m.role):
+        raise api_error(
+            status.HTTP_400_BAD_REQUEST,
+            "owner_access",
+            "Owners always have the office and all of Prima.",
+        )
+    before = {"access": m.access, "prima_modules": m.prima_modules}
+    new_access, new_chosen = check_prima_access(
+        principal, m.role, access, chosen, m.access, m.prima_modules, set_chosen
+    )
+    if new_access == m.access and new_chosen == m.prima_modules:
+        return m
+    m.access, m.prima_modules = new_access, new_chosen
+    await audit.record(
+        db,
+        principal.workspace_id,
+        principal.actor,
+        "member.prima_access",
+        target=user_id,
+        before=before,
+        after={"access": new_access, "prima_modules": new_chosen},
+    )
+    await db.flush()
+    return m
+
+
+@router.put("/{user_id}/prima-access")
+async def put_prima_access(
+    user_id: str,
+    body: PrimaAccessIn,
+    principal: Principal = Depends(require("members.manage")),
+    db: AsyncSession = Depends(get_db),
+) -> MemberOut:
+    """P99: what one member reaches (the office and Prima, or Prima only) and their screens."""
+    if body.access is None and "prima_modules" not in body.model_fields_set:
+        raise api_error(
+            status.HTTP_422_UNPROCESSABLE_CONTENT, "nothing_to_change", "Nothing to change."
+        )
+    await set_prima_access(
+        db,
+        principal,
+        user_id,
+        body.access,
+        body.prima_modules,
+        "prima_modules" in body.model_fields_set,
+    )
+    await db.commit()
+    return await _one_out(db, principal, user_id)
+
+
+def _words(w: dict[str, str]) -> str:
+    return w.get(current_lang()) or w["en"]
+
+
+@router.get("/prima-modules")
+async def prima_modules(
+    principal: Principal = Depends(require("members.manage")),
+) -> dict[str, object]:
+    """P99: Prima's screens to choose from, in its own apps and groups and the reader's
+    language; the ones everyone keeps; and the ones the reader may give (null: all)."""
+    always = set(modules.ALWAYS)
+    return {
+        "enabled": prima_client.enabled(principal.workspace_id),
+        "always": list(modules.ALWAYS),
+        "mine": None if principal.role == "owner" else principal.prima_modules,
+        "apps": [
+            {
+                "id": a["id"],
+                "title": _words(a["title"]),
+                "blurb": _words(a["blurb"]),
+                "groups": [
+                    {
+                        "title": _words(g["title"]),
+                        "modules": [
+                            {
+                                "id": x["id"],
+                                "title": _words(x["title"]),
+                                "blurb": _words(x["blurb"]),
+                                "always": x["id"] in always,
+                            }
+                            for x in g["modules"]
+                        ],
+                    }
+                    for g in a["groups"]
+                ],
+            }
+            for a in modules.catalog()["apps"]  # type: ignore[union-attr]
+        ],
+    }
+
+
+# Prima's roles (apps/prima/packages/core User role), named as its own menu names them.
+PRIMA_ROLE_LABELS = {
+    "director": Msg("Group leadership"),
+    "pwvsb_officer": Msg("PWVSB staff"),
+    "company_manager": Msg("Company Manager"),
+    "admin_exec": Msg("Admin Executive"),
+    "supervisor": Msg("Supervisor"),
+    "guard": Msg("Guard"),
+    "site_device": Msg("Site device"),
+}
+
+
+def _prima_role(role: str) -> str:
+    label = PRIMA_ROLE_LABELS.get(role)
+    return label.render() if label is not None else role
+
+
+@router.get("/{user_id}/prima")
+async def member_prima(
+    user_id: str,
+    principal: Principal = Depends(require("members.manage")),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, object]:
+    """P99: the Prima role this member has and where it is set, for the Access section."""
+    m = await _membership(db, principal.workspace_id, user_id)
+    if not _member_in_scope(principal, m):
+        raise api_error(status.HTTP_404_NOT_FOUND, "member_not_found", "That member is not here.")
+    out: dict[str, object] = {
+        "enabled": prima_client.enabled(principal.workspace_id),
+        "role": None,
+        "role_label": None,
+        "where": "",
+        "record": None,
+    }
+    if not out["enabled"]:
+        out["where"] = render(Msg("Prima is not set up on this server."))
+        return out
+    office_role = render(role_label(m.role))
+    if prima_client.opens_as_top(m):
+        out["role"], out["role_label"] = "director", _prima_role("director")
+        out["where"] = render(Msg("Owners open Prima as its top record (the CEO)."))
+        return out
+    link = await db.get(PrimaLink, (principal.workspace_id, user_id))
+    auto = prima_client.prima_role(m.role)
+    if link is None:
+        out["role"], out["role_label"] = auto, _prima_role(auto)
+        out["where"] = render(
+            Msg(
+                "Not opened Prima yet. Prima uses their staff record if it has one; else they "
+                "get {prima_role} from their office role ({role}).",
+                prima_role=_prima_role(auto),
+                role=office_role,
+            )
+        )
+        return out
+    out["record"] = link.prima_name
+    if link.how == "auto":
+        out["role"], out["role_label"] = auto, _prima_role(auto)
+        out["where"] = render(
+            Msg(
+                "Their own Prima account, given from their office role ({role}) when they first "
+                "opened Prima.",
+                role=office_role,
+            )
+        )
+        return out
+    try:
+        record = next((r for r in await prima_client.staff() if r.id == link.prima_user_id), None)
+    except PrimaError:
+        record = None
+    if record is not None:
+        out["role"], out["role_label"] = record.role, _prima_role(record.role)
+    out["where"] = render(
+        Msg(
+            "Their Prima staff record ({name}). Its role is set in Prima, on that record.",
+            name=link.prima_name,
+        )
+    )
+    return out

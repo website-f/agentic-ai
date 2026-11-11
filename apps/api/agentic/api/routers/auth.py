@@ -5,6 +5,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import delete, func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ...core.access import is_prima_only
 from ...core.config import settings
 from ...core.db import get_db
 from ...core.security import hash_password, needs_rehash, verify_password
@@ -74,6 +75,9 @@ async def _me(db: AsyncSession, user: User, workspace_id: str, role: str) -> MeO
             effective(role, ws.settings) | await _extra_permissions(db, ws.id, user.id, role)
         ),
         assignable_roles=_assignable(role, ws.settings),
+        # P99: Prima only (the app opens Prima for them) and their chosen Prima screens.
+        access="prima_only" if m and is_prima_only(m.access, role) else "agentic",
+        prima_modules=m.prima_modules if m and role != "owner" else None,
     )
 
 

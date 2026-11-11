@@ -8,6 +8,7 @@ Prima's answer, refusals included, comes back as it is, so Prima decides what an
 with no Prima record of their own gets their own account in that company.
 """
 
+import json
 from difflib import SequenceMatcher
 
 from fastapi import APIRouter, Depends, Request
@@ -20,7 +21,7 @@ from sqlalchemy.orm.attributes import flag_modified
 from ...core.db import get_db
 from ...i18n import Msg, render, tr
 from ...models import Branch, Membership, Workspace
-from ...prima import client, people
+from ...prima import client, modules, people
 from ...prima.client import PrimaError
 from ...services import audit
 from ..deps import Principal, client_ip, current_principal, require
@@ -334,7 +335,29 @@ async def _forward(request: Request, path: str, principal: Principal, db: AsyncS
     headers = {"cache-control": "no-store"}
     if ans.disposition:
         headers["content-disposition"] = ans.disposition
-    return Response(ans.body, status_code=ans.status, media_type=ans.content_type, headers=headers)
+    body_out = ans.body
+    if request.method == "GET" and path.strip("/") == "api/me" and ans.status == 200:
+        body_out = _with_office(ans, principal)
+    return Response(body_out, status_code=ans.status, media_type=ans.content_type, headers=headers)
+
+
+def _with_office(ans: client.Answer, principal: Principal) -> bytes:
+    """P99: Prima's "who am I" with what the office gives this person, so Prima's web hides
+    the screens not chosen and the way back to the office of someone with Prima only. The
+    office refuses those calls anyway (client.check_chosen, core/access.py)."""
+    try:
+        data = ans.json()
+    except ValueError:
+        return ans.body
+    if not isinstance(data, dict):
+        return ans.body
+    chosen = None if principal.role == "owner" else principal.prima_modules
+    data["office"] = {
+        "primaOnly": principal.access == "prima_only",
+        "modules": list(chosen) if chosen is not None else None,
+        "always": list(modules.ALWAYS),
+    }
+    return json.dumps(data, separators=(",", ":"), ensure_ascii=False).encode()
 
 
 @router.get("/{path:path}")

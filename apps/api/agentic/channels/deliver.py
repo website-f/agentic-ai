@@ -69,7 +69,11 @@ async def deciders(
         await db.execute(
             select(User, Membership)
             .join(Membership, Membership.user_id == User.id)
-            .where(Membership.workspace_id == workspace_id, User.is_active.is_(True))
+            .where(
+                Membership.workspace_id == workspace_id,
+                User.is_active.is_(True),
+                Membership.access != "prima_only",  # P99: not in the office
+            )
         )
     ).all()
     return [
@@ -353,7 +357,11 @@ async def notify_people(
         await db.execute(
             select(User, Membership.role)
             .join(Membership, Membership.user_id == User.id)
-            .where(Membership.workspace_id == workspace_id, User.is_active.is_(True))
+            .where(
+                Membership.workspace_id == workspace_id,
+                User.is_active.is_(True),
+                Membership.access != "prima_only",  # P99: not in the office
+            )
         )
     ).all()
     for user, role in rows:

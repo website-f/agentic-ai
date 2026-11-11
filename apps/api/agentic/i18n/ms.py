@@ -2118,3 +2118,8 @@ MS.update({k: v for k, v in MS_TEAM.items() if k not in MS})
 from .ms_branches import MS_BRANCHES  # noqa: E402
 
 MS.update({k: v for k, v in MS_BRANCHES.items() if k not in MS})
+
+# P99: the office and Prima, or Prima only; and the Prima screens chosen for a member.
+from .ms_access import MS_ACCESS  # noqa: E402
+
+MS.update({k: v for k, v in MS_ACCESS.items() if k not in MS})

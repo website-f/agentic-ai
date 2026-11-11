@@ -452,6 +452,61 @@ async def test_staff_writes_refused_beyond_their_own(client, llm, temporal):  # 
     await staff.aclose()
 
 
+# P99: a Prima-only person (core/access.py). The office answers signing in, their own password,
+# two-step sign-in and language, Prima, and the feedback button; pages with no sign-in answer
+# anyone. Everything else is refused before any route runs ("prima_only").
+PRIMA_ONLY_OK = {
+    "/api/auth/me", "/api/auth/2fa", "/api/me/prefs", "/api/prima/status",
+    "/api/feedback/config", "/api/feedback/mine",
+    # no sign-in needed
+    "/api/auth/setup-status", "/api/auth/sso",
+}  # fmt: skip
+PRIMA_ONLY_WRITE_OK = {
+    ("PUT", "/api/me/prefs"), ("POST", "/api/auth/2fa/setup"), ("POST", "/api/auth/logout"),
+    ("POST", "/api/integrations/microsoft/notify"),  # Microsoft's webhook (its own secret)
+}  # fmt: skip
+
+
+async def _prima_only(client, s: dict, email: str) -> httpx.AsyncClient:
+    c = await as_role(client, email, "staff", **s["where"])
+    async with SessionLocal() as db:
+        uid = await db.scalar(select(User.id).where(User.email == email))
+    r = await client.put(
+        f"/api/members/{uid}/prima-access", json={"access": "prima_only"}, headers=csrf(client)
+    )
+    assert r.status_code == 200, r.text
+    return c
+
+
+async def test_prima_only_reach_only_prima(client, llm, temporal):  # noqa: F811
+    s = await seed(client)
+    email = "prima.only.p99@example.com"
+    c = await _prima_only(client, s, email)
+    await give_own_agent(client, s, email)  # an agent they had before: out of reach now
+    res = await walk(c, s)
+    dump("prima_only", res)
+    assert not crashes(res), crashes(res)
+    assert not leaks(res, CANARIES), leaks(res, CANARIES)
+    answered = {p for p, (st, _) in res.items() if st < 300}
+    assert answered <= PRIMA_ONLY_OK, (
+        f"new GETs answer Prima-only: {sorted(answered - PRIMA_ONLY_OK)}"
+    )
+    closed = {p for p, (st, body) in res.items() if st == 403 and '"prima_only"' in body}
+    for path in ("/api/tasks", "/api/desk", "/api/agents", "/api/chat/recent", "/api/members",
+                 "/api/me/twin", "/api/files", "/api/approvals", "/api/prima/people"):  # fmt: skip
+        assert path in closed, path
+
+    got: dict[tuple[str, str], int] = {}
+    writes = [r for r in api_routes(get=False) if r != ("POST", "/api/auth/logout")]
+    for method, path in [*writes, ("POST", "/api/auth/logout")]:
+        r = await c.request(method, fill(path, s), json={}, headers=csrf(c))
+        got[(method, path)] = r.status_code
+    assert not sorted(k for k, v in got.items() if v >= 500)
+    extra = sorted(k for k, v in got.items() if v < 300 and k not in PRIMA_ONLY_WRITE_OK)
+    assert not extra, " | ".join(f"{m} {p}" for m, p in extra)
+    await c.aclose()
+
+
 SECRETS = [
     "good-key-123", "owner-secret-pw", "ErrCanaryZ", "60199990000", "WahaKeyCanary", "waha.fake"
 ]  # fmt: skip

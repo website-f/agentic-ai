@@ -74,7 +74,10 @@ class User(Timestamps, Base):
 
 class Membership(Timestamps, Base):
     __tablename__ = "memberships"
-    __table_args__ = (CheckConstraint(_ROLE_CHECK, name="ck_memberships_role"),)
+    __table_args__ = (
+        CheckConstraint(_ROLE_CHECK, name="ck_memberships_role"),
+        CheckConstraint("access IN ('agentic', 'prima_only')", name="ck_memberships_access"),
+    )
 
     workspace_id: Mapped[str] = mapped_column(
         ForeignKey("workspaces.id", ondelete="CASCADE"), primary_key=True
@@ -102,6 +105,11 @@ class Membership(Timestamps, Base):
         ForeignKey("users.id", ondelete="SET NULL")
     )
     heads_department: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    # P99: "agentic" (the office and Prima) or "prima_only" (Prima only: the office's API refuses
+    # everything else, api/deps.py); and the Prima screens they may open (None: all their Prima
+    # role allows; agentic/prima/modules.py). Set on the Members page (members.set_prima_access).
+    access: Mapped[str] = mapped_column(String(16), default="agentic", server_default="agentic")
+    prima_modules: Mapped[list[str] | None] = mapped_column(JSONB)
 
     user: Mapped[User] = relationship(lazy="joined", foreign_keys=[user_id])
     # P98: every branch this member works in (the home branch_id included; loaded with the

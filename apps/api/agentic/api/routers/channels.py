@@ -227,7 +227,9 @@ async def act(body: ActIn, db: AsyncSession = Depends(get_db)) -> dict[str, str]
         raise api_error(status.HTTP_404_NOT_FOUND, "approval_not_found", "That approval is gone.")
     role = await db.scalar(
         select(Membership.role).where(
-            Membership.workspace_id == a.workspace_id, Membership.user_id == t.user_id
+            Membership.workspace_id == a.workspace_id,
+            Membership.user_id == t.user_id,
+            Membership.access != "prima_only",  # P99: Prima-only people are not in the office
         )
     )
     user = await db.get(User, t.user_id)

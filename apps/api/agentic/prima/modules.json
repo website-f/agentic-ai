@@ -1,0 +1,3015 @@
+{
+ "always": [
+  "home",
+  "mine",
+  "clock",
+  "work",
+  "meetings",
+  "memos"
+ ],
+ "common": [
+  "GET arisha",
+  "GET arisha/draft-form",
+  "GET arisha/drafts",
+  "GET arisha/finance-papers",
+  "GET auth/users",
+  "GET draft-help",
+  "GET me",
+  "GET me/confidentiality",
+  "GET org/guide",
+  "GET org/import-ai",
+  "GET org/import/:/template",
+  "GET org/inbox",
+  "GET org/map",
+  "POST arisha",
+  "POST arisha/drafts",
+  "POST arisha/drafts/:/commit",
+  "POST arisha/drafts/:/resubmit",
+  "POST arisha/drafts/:/return",
+  "POST arisha/finance-options",
+  "POST arisha/prepare",
+  "POST arisha/prepare-finance",
+  "POST arisha/summary",
+  "POST auth/dev-login",
+  "POST draft-help/:",
+  "POST me/clock/session-start",
+  "POST me/confidentiality",
+  "POST org/import/:/ai-columns",
+  "POST org/import/:/commit",
+  "POST org/import/:/preview",
+  "POST org/inbox/:/close",
+  "POST org/inbox/:/read",
+  "POST records/:"
+ ],
+ "first_parts": {
+  "connections": [
+   "connections"
+  ],
+  "firearms": [
+   "arms"
+  ],
+  "ammo": [
+   "arms"
+  ],
+  "vault-watches": [
+   "arms"
+  ],
+  "websites-powerbi": [
+   "websites"
+  ],
+  "offline": [
+   "surveys"
+  ]
+ },
+ "apps": [
+  {
+   "id": "home",
+   "title": {
+    "en": "Home",
+    "ms": "Utama"
+   },
+   "blurb": {
+    "en": "Your day, your dashboards and your own work.",
+    "ms": "Hari anda, papan pemuka anda dan kerja anda sendiri."
+   },
+   "groups": [
+    {
+     "title": {
+      "en": "Dashboards",
+      "ms": "Papan pemuka"
+     },
+     "modules": [
+      {
+       "id": "home",
+       "title": {
+        "en": "Home",
+        "ms": "Utama"
+       },
+       "blurb": {
+        "en": "What needs you today and the key numbers.",
+        "ms": "Perkara yang perlu anda uruskan hari ini dan angka utama."
+       }
+      },
+      {
+       "id": "overview",
+       "title": {
+        "en": "Group",
+        "ms": "Kumpulan"
+       },
+       "blurb": {
+        "en": "Every company in the group at a glance.",
+        "ms": "Semua syarikat dalam kumpulan sepintas lalu."
+       }
+      },
+      {
+       "id": "company",
+       "title": {
+        "en": "Company today",
+        "ms": "Syarikat hari ini"
+       },
+       "blurb": {
+        "en": "Your company's day: sites, guards and open matters.",
+        "ms": "Hari syarikat anda: tapak, pengawal dan perkara terbuka."
+       }
+      },
+      {
+       "id": "reports",
+       "title": {
+        "en": "Reports",
+        "ms": "Laporan"
+       },
+       "blurb": {
+        "en": "Monthly and summary reports to read or print.",
+        "ms": "Laporan bulanan dan ringkasan untuk dibaca atau dicetak."
+       }
+      }
+     ]
+    },
+    {
+     "title": {
+      "en": "My work",
+      "ms": "Kerja saya"
+     },
+     "modules": [
+      {
+       "id": "mine",
+       "title": {
+        "en": "My details",
+        "ms": "Butiran saya"
+       },
+       "blurb": {
+        "en": "Your own details, duty, leave and payslips.",
+        "ms": "Butiran, tugas, cuti dan slip gaji anda sendiri."
+       }
+      },
+      {
+       "id": "clock",
+       "title": {
+        "en": "Clock",
+        "ms": "Jam kerja"
+       },
+       "blurb": {
+        "en": "Clock in and out for your working day.",
+        "ms": "Daftar masuk dan keluar untuk hari kerja anda."
+       }
+      },
+      {
+       "id": "work",
+       "title": {
+        "en": "Work",
+        "ms": "Kerja"
+       },
+       "blurb": {
+        "en": "Your tasks and what \"done\" means for each.",
+        "ms": "Tugasan anda dan maksud \"selesai\" bagi setiap satu."
+       }
+      },
+      {
+       "id": "meetings",
+       "title": {
+        "en": "Meetings",
+        "ms": "Mesyuarat"
+       },
+       "blurb": {
+        "en": "Meetings, minutes and the actions you own.",
+        "ms": "Mesyuarat, minit dan tindakan yang anda pegang."
+       }
+      },
+      {
+       "id": "memos",
+       "title": {
+        "en": "Memos",
+        "ms": "Memo"
+       },
+       "blurb": {
+        "en": "Memos and notices sent to you.",
+        "ms": "Memo dan notis yang dihantar kepada anda."
+       }
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "ops",
+   "title": {
+    "en": "Operations",
+    "ms": "Operasi"
+   },
+   "blurb": {
+    "en": "Sites, guards, rosters and attendance.",
+    "ms": "Tapak, pengawal, jadual tugas dan kehadiran."
+   },
+   "groups": [
+    {
+     "title": {
+      "en": "Sites and areas",
+      "ms": "Tapak dan kawasan"
+     },
+     "modules": [
+      {
+       "id": "ops",
+       "title": {
+        "en": "Regional ops",
+        "ms": "Operasi wilayah"
+       },
+       "blurb": {
+        "en": "Operations across regions and areas.",
+        "ms": "Operasi di semua wilayah dan kawasan."
+       }
+      },
+      {
+       "id": "sites",
+       "title": {
+        "en": "Sites",
+        "ms": "Tapak"
+       },
+       "blurb": {
+        "en": "Every site with its posts, guards and client.",
+        "ms": "Setiap tapak dengan pos, pengawal dan pelanggannya."
+       }
+      },
+      {
+       "id": "branchwork",
+       "title": {
+        "en": "Far branches",
+        "ms": "Cawangan jauh"
+       },
+       "blurb": {
+        "en": "Checklists for branches far from the office.",
+        "ms": "Senarai semak untuk cawangan yang jauh dari pejabat."
+       }
+      },
+      {
+       "id": "surveys",
+       "title": {
+        "en": "Site survey",
+        "ms": "Tinjauan tapak"
+       },
+       "blurb": {
+        "en": "Survey a new site, even with no signal.",
+        "ms": "Tinjau tapak baharu, walaupun tiada isyarat."
+       }
+      },
+      {
+       "id": "sitehours",
+       "title": {
+        "en": "Site man-hours",
+        "ms": "Jam tenaga kerja tapak"
+       },
+       "blurb": {
+        "en": "Allowed guard hours per site each month.",
+        "ms": "Jam pengawal yang dibenarkan bagi setiap tapak setiap bulan."
+       }
+      }
+     ]
+    },
+    {
+     "title": {
+      "en": "Guards and duty",
+      "ms": "Pengawal dan tugas"
+     },
+     "modules": [
+      {
+       "id": "people",
+       "title": {
+        "en": "Guards",
+        "ms": "Pengawal"
+       },
+       "blurb": {
+        "en": "Guards and officers: details, papers and history.",
+        "ms": "Pengawal dan pegawai: butiran, dokumen dan sejarah."
+       }
+      },
+      {
+       "id": "roster",
+       "title": {
+        "en": "Roster",
+        "ms": "Jadual tugas"
+       },
+       "blurb": {
+        "en": "Who works which shift at which site.",
+        "ms": "Siapa bertugas syif mana di tapak mana."
+       }
+      },
+      {
+       "id": "duty",
+       "title": {
+        "en": "Guard duty plans",
+        "ms": "Pelan tugas pengawal"
+       },
+       "blurb": {
+        "en": "Duty plans for each guard post.",
+        "ms": "Pelan tugas untuk setiap pos pengawal."
+       }
+      },
+      {
+       "id": "attendance",
+       "title": {
+        "en": "Attendance",
+        "ms": "Kehadiran"
+       },
+       "blurb": {
+        "en": "Who came, who was late and who was absent.",
+        "ms": "Siapa hadir, siapa lewat dan siapa tidak hadir."
+       }
+      },
+      {
+       "id": "cleaning",
+       "title": {
+        "en": "Cleaning plans",
+        "ms": "Pelan pembersihan"
+       },
+       "blurb": {
+        "en": "Cleaning plans and checks for each site.",
+        "ms": "Pelan dan semakan pembersihan untuk setiap tapak."
+       }
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "security",
+   "title": {
+    "en": "Security",
+    "ms": "Keselamatan"
+   },
+   "blurb": {
+    "en": "Incidents, firearms, CCTV and alarms.",
+    "ms": "Insiden, senjata api, CCTV dan penggera."
+   },
+   "groups": [
+    {
+     "title": {
+      "en": "Incidents and security",
+      "ms": "Insiden dan keselamatan"
+     },
+     "modules": [
+      {
+       "id": "cases",
+       "title": {
+        "en": "Cases",
+        "ms": "Kes"
+       },
+       "blurb": {
+        "en": "Incidents and complaints, from report to close.",
+        "ms": "Insiden dan aduan, dari laporan hingga ditutup."
+       }
+      },
+      {
+       "id": "arms",
+       "title": {
+        "en": "Arms control",
+        "ms": "Kawalan senjata"
+       },
+       "blurb": {
+        "en": "Firearms, ammunition and their holders.",
+        "ms": "Senjata api, peluru dan pemegangnya."
+       }
+      },
+      {
+       "id": "cms",
+       "title": {
+        "en": "CMS",
+        "ms": "CMS"
+       },
+       "blurb": {
+        "en": "CCTV and alarm monitoring.",
+        "ms": "Pemantauan CCTV dan penggera."
+       }
+      },
+      {
+       "id": "cmsready",
+       "title": {
+        "en": "CMS site readiness",
+        "ms": "Kesediaan tapak CMS"
+       },
+       "blurb": {
+        "en": "Each site's devices and readiness for CMS.",
+        "ms": "Peranti setiap tapak dan kesediaannya untuk CMS."
+       }
+      },
+      {
+       "id": "device",
+       "title": {
+        "en": "Site device",
+        "ms": "Peranti tapak"
+       },
+       "blurb": {
+        "en": "The site's shared device for face clock-in.",
+        "ms": "Peranti kongsi tapak untuk daftar masuk dengan muka."
+       }
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "equip",
+   "title": {
+    "en": "Equipment",
+    "ms": "Peralatan"
+   },
+   "blurb": {
+    "en": "Items, uniforms, site stock, vehicles and assets.",
+    "ms": "Barang, pakaian seragam, stok tapak, kenderaan dan aset."
+   },
+   "groups": [
+    {
+     "title": {
+      "en": "Equipment and vehicles",
+      "ms": "Peralatan dan kenderaan"
+     },
+     "modules": [
+      {
+       "id": "items",
+       "title": {
+        "en": "Items and equipment",
+        "ms": "Barang dan peralatan"
+       },
+       "blurb": {
+        "en": "Equipment and uniforms: issue, return, scan and count.",
+        "ms": "Peralatan dan pakaian seragam: keluarkan, pulangkan, imbas dan kira."
+       }
+      },
+      {
+       "id": "sitestock",
+       "title": {
+        "en": "Site stock and fittings",
+        "ms": "Stok dan kelengkapan tapak"
+       },
+       "blurb": {
+        "en": "Stock and fittings kept at each site.",
+        "ms": "Stok dan kelengkapan yang disimpan di setiap tapak."
+       }
+      },
+      {
+       "id": "fleet",
+       "title": {
+        "en": "Vehicles",
+        "ms": "Kenderaan"
+       },
+       "blurb": {
+        "en": "Company vehicles, bookings and drivers.",
+        "ms": "Kenderaan syarikat, tempahan dan pemandu."
+       }
+      },
+      {
+       "id": "assets",
+       "title": {
+        "en": "Asset Management",
+        "ms": "Pengurusan Aset"
+       },
+       "blurb": {
+        "en": "Company assets and their upkeep.",
+        "ms": "Aset syarikat dan penyelenggaraannya."
+       }
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "hr",
+   "title": {
+    "en": "HR",
+    "ms": "Sumber manusia"
+   },
+   "blurb": {
+    "en": "Staff, leave, claims and hand-overs.",
+    "ms": "Kakitangan, cuti, tuntutan dan serahan tugas."
+   },
+   "groups": [
+    {
+     "title": {
+      "en": "Staff",
+      "ms": "Staf"
+     },
+     "modules": [
+      {
+       "id": "hr",
+       "title": {
+        "en": "HR monitor",
+        "ms": "Pemantauan HR"
+       },
+       "blurb": {
+        "en": "HR across the group: staff, leave and cases.",
+        "ms": "HR seluruh kumpulan: kakitangan, cuti dan kes."
+       }
+      },
+      {
+       "id": "staff-directory",
+       "title": {
+        "en": "Staff directory",
+        "ms": "Direktori staf"
+       },
+       "blurb": {
+        "en": "Office staff names, posts and contacts.",
+        "ms": "Nama, jawatan dan hubungan staf pejabat."
+       }
+      },
+      {
+       "id": "staffclock",
+       "title": {
+        "en": "Staff clock",
+        "ms": "Jam kerja staf"
+       },
+       "blurb": {
+        "en": "Office staff clock-in times.",
+        "ms": "Waktu daftar masuk staf pejabat."
+       }
+      },
+      {
+       "id": "work-kpi",
+       "title": {
+        "en": "Work KPIs",
+        "ms": "Work KPIs"
+       },
+       "blurb": {
+        "en": "How fast and how well work moves between teams.",
+        "ms": "Seberapa cepat dan baik kerja bergerak antara pasukan."
+       }
+      },
+      {
+       "id": "handovers",
+       "title": {
+        "en": "Hand-overs",
+        "ms": "Serah tugas"
+       },
+       "blurb": {
+        "en": "Hand over your work before leave or a move.",
+        "ms": "Serahkan kerja anda sebelum bercuti atau bertukar."
+       }
+      }
+     ]
+    },
+    {
+     "title": {
+      "en": "Claims and welfare",
+      "ms": "Tuntutan dan kebajikan"
+     },
+     "modules": [
+      {
+       "id": "claims",
+       "title": {
+        "en": "Claims",
+        "ms": "Tuntutan"
+       },
+       "blurb": {
+        "en": "Claim back work expenses and travel.",
+        "ms": "Tuntut semula perbelanjaan kerja dan perjalanan."
+       }
+      },
+      {
+       "id": "socso",
+       "title": {
+        "en": "SOCSO claims",
+        "ms": "Tuntutan PERKESO"
+       },
+       "blurb": {
+        "en": "SOCSO claims for injured guards and staff.",
+        "ms": "Tuntutan PERKESO untuk pengawal dan staf yang cedera."
+       }
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "pay",
+   "title": {
+    "en": "Payroll",
+    "ms": "Gaji"
+   },
+   "blurb": {
+    "en": "Pay runs, pay rules, advances and loans.",
+    "ms": "Proses gaji, peraturan gaji, pendahuluan dan pinjaman."
+   },
+   "groups": [
+    {
+     "title": {
+      "en": "Pay runs",
+      "ms": "Proses gaji"
+     },
+     "modules": [
+      {
+       "id": "staffpay",
+       "title": {
+        "en": "Staff payroll",
+        "ms": "Gaji staf"
+       },
+       "blurb": {
+        "en": "Office staff payroll and payslips.",
+        "ms": "Gaji dan slip gaji staf pejabat."
+       }
+      },
+      {
+       "id": "guardpay",
+       "title": {
+        "en": "Guard pay",
+        "ms": "Gaji pengawal"
+       },
+       "blurb": {
+        "en": "The guards' monthly pay run.",
+        "ms": "Proses gaji bulanan pengawal."
+       }
+      }
+     ]
+    },
+    {
+     "title": {
+      "en": "Rules and rates",
+      "ms": "Peraturan dan kadar"
+     },
+     "modules": [
+      {
+       "id": "payformulas",
+       "title": {
+        "en": "Pay formulas",
+        "ms": "Formula gaji"
+       },
+       "blurb": {
+        "en": "How guard salary and overtime are counted.",
+        "ms": "Cara gaji dan kerja lebih masa pengawal dikira."
+       }
+      },
+      {
+       "id": "salarycalc",
+       "title": {
+        "en": "Salary calculator",
+        "ms": "Kalkulator gaji"
+       },
+       "blurb": {
+        "en": "See how a guard's month of pay is counted.",
+        "ms": "Lihat cara gaji sebulan seorang pengawal dikira."
+       }
+      },
+      {
+       "id": "statutory",
+       "title": {
+        "en": "Statutory rates",
+        "ms": "Kadar caruman berkanun"
+       },
+       "blurb": {
+        "en": "EPF, SOCSO, EIS and tax rates by month.",
+        "ms": "Kadar KWSP, PERKESO, SIP dan cukai mengikut bulan."
+       }
+      }
+     ]
+    },
+    {
+     "title": {
+      "en": "Advances and loans",
+      "ms": "Pendahuluan dan pinjaman"
+     },
+     "modules": [
+      {
+       "id": "advances",
+       "title": {
+        "en": "Wage advances",
+        "ms": "Pendahuluan gaji"
+       },
+       "blurb": {
+        "en": "Wage advances asked for, approved and paid.",
+        "ms": "Pendahuluan gaji yang dipohon, diluluskan dan dibayar."
+       }
+      },
+      {
+       "id": "loans",
+       "title": {
+        "en": "Advances and loans",
+        "ms": "Pendahuluan dan pinjaman"
+       },
+       "blurb": {
+        "en": "Staff advances and loans, and repayments.",
+        "ms": "Pendahuluan dan pinjaman staf, serta bayaran balik."
+       }
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "fw",
+   "title": {
+    "en": "Foreign workers",
+    "ms": "Pekerja asing"
+   },
+   "blurb": {
+    "en": "Permits, passports, hostels and costs.",
+    "ms": "Permit, pasport, asrama dan kos."
+   },
+   "groups": [
+    {
+     "title": {
+      "en": "Foreign workers",
+      "ms": "Pekerja asing"
+     },
+     "modules": [
+      {
+       "id": "fwm",
+       "title": {
+        "en": "Foreign workers",
+        "ms": "Pekerja asing"
+       },
+       "blurb": {
+        "en": "Foreign workers: permits, passports and moves.",
+        "ms": "Pekerja asing: permit, pasport dan pergerakan."
+       }
+      },
+      {
+       "id": "fwcost",
+       "title": {
+        "en": "Recruitment cost",
+        "ms": "Kos pengambilan"
+       },
+       "blurb": {
+        "en": "What hiring foreign workers costs each company.",
+        "ms": "Kos mengambil pekerja asing bagi setiap syarikat."
+       }
+      },
+      {
+       "id": "fwstat",
+       "title": {
+        "en": "Nepali EPF/SOCSO",
+        "ms": "KWSP/PERKESO Nepal"
+       },
+       "blurb": {
+        "en": "EPF and SOCSO for Nepali workers, and repayments.",
+        "ms": "KWSP dan PERKESO pekerja Nepal, serta bayaran balik."
+       }
+      },
+      {
+       "id": "hostels",
+       "title": {
+        "en": "Hostels",
+        "ms": "Asrama"
+       },
+       "blurb": {
+        "en": "Hostels, rooms and utility bills.",
+        "ms": "Asrama, bilik dan bil utiliti."
+       }
+      },
+      {
+       "id": "arrivalcash",
+       "title": {
+        "en": "Arrival cash",
+        "ms": "Wang tunai ketibaan"
+       },
+       "blurb": {
+        "en": "Cash given to new foreign workers on arrival.",
+        "ms": "Wang tunai yang diberi kepada pekerja asing baharu semasa tiba."
+       }
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "sales",
+   "title": {
+    "en": "Clients and sales",
+    "ms": "Pelanggan dan jualan"
+   },
+   "blurb": {
+    "en": "Tenders, quotations, clients and contracts.",
+    "ms": "Tender, sebut harga, pelanggan dan kontrak."
+   },
+   "groups": [
+    {
+     "title": {
+      "en": "Clients and sales",
+      "ms": "Pelanggan dan jualan"
+     },
+     "modules": [
+      {
+       "id": "commercial",
+       "title": {
+        "en": "Tenders & quotes",
+        "ms": "Tender & sebut harga"
+       },
+       "blurb": {
+        "en": "Tenders and quotations from first look to award.",
+        "ms": "Tender dan sebut harga dari semakan awal hingga dianugerahkan."
+       }
+      },
+      {
+       "id": "clients",
+       "title": {
+        "en": "Clients",
+        "ms": "Pelanggan"
+       },
+       "blurb": {
+        "en": "Clients and their contact people.",
+        "ms": "Pelanggan dan orang hubungan mereka."
+       }
+      },
+      {
+       "id": "contracts",
+       "title": {
+        "en": "Contracts",
+        "ms": "Kontrak"
+       },
+       "blurb": {
+        "en": "Contracts and getting new sites started.",
+        "ms": "Kontrak dan permulaan tapak baharu."
+       }
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "finance",
+   "title": {
+    "en": "Finance",
+    "ms": "Kewangan"
+   },
+   "blurb": {
+    "en": "Accounts, payments, buying and insurance.",
+    "ms": "Akaun, bayaran, pembelian dan insurans."
+   },
+   "groups": [
+    {
+     "title": {
+      "en": "Money",
+      "ms": "Wang"
+     },
+     "modules": [
+      {
+       "id": "finance",
+       "title": {
+        "en": "Finance",
+        "ms": "Kewangan"
+       },
+       "blurb": {
+        "en": "Accounts, payments and cash for each company.",
+        "ms": "Akaun, bayaran dan tunai bagi setiap syarikat."
+       }
+      },
+      {
+       "id": "payreq",
+       "title": {
+        "en": "Payment requests",
+        "ms": "Permohonan bayaran"
+       },
+       "blurb": {
+        "en": "Ask for a payment and follow its approvals.",
+        "ms": "Mohon bayaran dan ikuti kelulusannya."
+       }
+      },
+      {
+       "id": "credit",
+       "title": {
+        "en": "PWVSB credit",
+        "ms": "Kredit PWVSB"
+       },
+       "blurb": {
+        "en": "Credit given by PWVSB to group companies.",
+        "ms": "Kredit yang diberi oleh PWVSB kepada syarikat kumpulan."
+       }
+      }
+     ]
+    },
+    {
+     "title": {
+      "en": "Buying",
+      "ms": "Pembelian"
+     },
+     "modules": [
+      {
+       "id": "purchasing",
+       "title": {
+        "en": "Procurement",
+        "ms": "Perolehan"
+       },
+       "blurb": {
+        "en": "Buying, suppliers and the uniform store.",
+        "ms": "Pembelian, pembekal dan stor pakaian seragam."
+       }
+      },
+      {
+       "id": "requests",
+       "title": {
+        "en": "Requests",
+        "ms": "Permohonan"
+       },
+       "blurb": {
+        "en": "Operation claims and office needs.",
+        "ms": "Tuntutan operasi dan keperluan pejabat."
+       }
+      }
+     ]
+    },
+    {
+     "title": {
+      "en": "Companies",
+      "ms": "Syarikat"
+     },
+     "modules": [
+      {
+       "id": "branches",
+       "title": {
+        "en": "Branches",
+        "ms": "Cawangan"
+       },
+       "blurb": {
+        "en": "Branches, their settlements and actions.",
+        "ms": "Cawangan, penyelesaian dan tindakannya."
+       }
+      },
+      {
+       "id": "insurance",
+       "title": {
+        "en": "Insurance",
+        "ms": "Insurans"
+       },
+       "blurb": {
+        "en": "Insurance policies and claims.",
+        "ms": "Polisi dan tuntutan insurans."
+       }
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "gov",
+   "title": {
+    "en": "Compliance",
+    "ms": "Pematuhan"
+   },
+   "blurb": {
+    "en": "Licences, renewals, audits and quality.",
+    "ms": "Lesen, pembaharuan, audit dan kualiti."
+   },
+   "groups": [
+    {
+     "title": {
+      "en": "Licences and readiness",
+      "ms": "Lesen dan kesediaan"
+     },
+     "modules": [
+      {
+       "id": "compliance",
+       "title": {
+        "en": "Licences",
+        "ms": "Lesen"
+       },
+       "blurb": {
+        "en": "Licences and permits, and when they expire.",
+        "ms": "Lesen dan permit, serta tarikh tamat tempohnya."
+       }
+      },
+      {
+       "id": "renewals",
+       "title": {
+        "en": "Renewals",
+        "ms": "Pembaharuan kontrak"
+       },
+       "blurb": {
+        "en": "Renewals coming due for each company.",
+        "ms": "Pembaharuan yang akan tiba bagi setiap syarikat."
+       }
+      },
+      {
+       "id": "rba",
+       "title": {
+        "en": "RBA readiness",
+        "ms": "Kesediaan RBA"
+       },
+       "blurb": {
+        "en": "RBA ethics declarations and readiness.",
+        "ms": "Akuan etika dan kesediaan RBA."
+       }
+      },
+      {
+       "id": "selfaudit",
+       "title": {
+        "en": "Yearly self-audit",
+        "ms": "Audit kendiri tahunan"
+       },
+       "blurb": {
+        "en": "The company's yearly self-audit.",
+        "ms": "Audit kendiri tahunan syarikat."
+       }
+      }
+     ]
+    },
+    {
+     "title": {
+      "en": "Audit and quality",
+      "ms": "Audit dan kualiti"
+     },
+     "modules": [
+      {
+       "id": "act",
+       "title": {
+        "en": "ACT",
+        "ms": "ACT"
+       },
+       "blurb": {
+        "en": "Audit findings to fix, and how they are fixed.",
+        "ms": "Penemuan audit yang perlu dibetulkan, dan cara ia dibetulkan."
+       }
+      },
+      {
+       "id": "audit",
+       "title": {
+        "en": "Audit trail",
+        "ms": "Jejak audit"
+       },
+       "blurb": {
+        "en": "Who changed what, and when.",
+        "ms": "Siapa mengubah apa, dan bila."
+       }
+      },
+      {
+       "id": "quality",
+       "title": {
+        "en": "Quality and compliance",
+        "ms": "Kualiti dan pematuhan"
+       },
+       "blurb": {
+        "en": "Quality checks, guard skills and supplier ratings.",
+        "ms": "Semakan kualiti, kemahiran pengawal dan penarafan pembekal."
+       }
+      },
+      {
+       "id": "grc",
+       "title": {
+        "en": "Speak up and assurance",
+        "ms": "Lapor isu dan jaminan"
+       },
+       "blurb": {
+        "en": "Speak up about a concern, or declare a gift.",
+        "ms": "Suarakan kebimbangan, atau isytiharkan hadiah."
+       }
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "board",
+   "title": {
+    "en": "Management",
+    "ms": "Pengurusan"
+   },
+   "blurb": {
+    "en": "Director office, mandates, registers and PDPA.",
+    "ms": "Pejabat pengarah, mandat, daftar dan PDPA."
+   },
+   "groups": [
+    {
+     "title": {
+      "en": "Offices",
+      "ms": "Pejabat"
+     },
+     "modules": [
+      {
+       "id": "office",
+       "title": {
+        "en": "Company office",
+        "ms": "Pejabat syarikat"
+       },
+       "blurb": {
+        "en": "Share company office work out to the executives.",
+        "ms": "Agihkan kerja pejabat syarikat kepada eksekutif."
+       }
+      },
+      {
+       "id": "doa",
+       "title": {
+        "en": "Director Office",
+        "ms": "Pejabat Pengarah"
+       },
+       "blurb": {
+        "en": "The Director Office's letters, approvals and follow-ups.",
+        "ms": "Surat, kelulusan dan susulan Pejabat Pengarah."
+       }
+      }
+     ]
+    },
+    {
+     "title": {
+      "en": "Company governance",
+      "ms": "Tadbir urus syarikat"
+     },
+     "modules": [
+      {
+       "id": "governance",
+       "title": {
+        "en": "Mandates",
+        "ms": "Mandat"
+       },
+       "blurb": {
+        "en": "Mandates: who may decide what.",
+        "ms": "Mandat: siapa boleh memutuskan apa."
+       }
+      },
+      {
+       "id": "registers",
+       "title": {
+        "en": "Governance registers",
+        "ms": "Daftar tadbir urus"
+       },
+       "blurb": {
+        "en": "Governance registers kept by law.",
+        "ms": "Daftar tadbir urus yang disimpan mengikut undang-undang."
+       }
+      },
+      {
+       "id": "corporate",
+       "title": {
+        "en": "Company secretary",
+        "ms": "Setiausaha syarikat"
+       },
+       "blurb": {
+        "en": "Company secretary filings and the board.",
+        "ms": "Pemfailan setiausaha syarikat dan lembaga pengarah."
+       }
+      },
+      {
+       "id": "pdpa",
+       "title": {
+        "en": "PDPA",
+        "ms": "PDPA"
+       },
+       "blurb": {
+        "en": "Personal data protection: consent and requests.",
+        "ms": "Perlindungan data peribadi: persetujuan dan permintaan."
+       }
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "it",
+   "title": {
+    "en": "IT and systems",
+    "ms": "IT dan sistem"
+   },
+   "blurb": {
+    "en": "IT help, equipment, websites and the JA app.",
+    "ms": "Bantuan IT, peralatan, laman web dan aplikasi JA."
+   },
+   "groups": [
+    {
+     "title": {
+      "en": "IT help",
+      "ms": "Bantuan IT"
+     },
+     "modules": [
+      {
+       "id": "it",
+       "title": {
+        "en": "IT",
+        "ms": "IT"
+       },
+       "blurb": {
+        "en": "Ask IT for help, and IT equipment.",
+        "ms": "Minta bantuan IT, dan peralatan IT."
+       }
+      },
+      {
+       "id": "hr-it-intake",
+       "title": {
+        "en": "HR / IT coordination",
+        "ms": "Penyelarasan HR / IT"
+       },
+       "blurb": {
+        "en": "Accounts for staff joining, moving or leaving.",
+        "ms": "Akaun untuk staf yang menyertai, bertukar atau berhenti."
+       }
+      },
+      {
+       "id": "it-procurement",
+       "title": {
+        "en": "IT purchase fulfilment",
+        "ms": "Pemenuhan pembelian IT"
+       },
+       "blurb": {
+        "en": "Buying IT equipment through to delivery.",
+        "ms": "Pembelian peralatan IT hingga penghantaran."
+       }
+      }
+     ]
+    },
+    {
+     "title": {
+      "en": "Systems and data",
+      "ms": "Sistem dan data"
+     },
+     "modules": [
+      {
+       "id": "connections",
+       "title": {
+        "en": "Connections",
+        "ms": "Sambungan"
+       },
+       "blurb": {
+        "en": "Check your Outlook, Teams and SharePoint access.",
+        "ms": "Semak akses Outlook, Teams dan SharePoint anda."
+       }
+      },
+      {
+       "id": "websites",
+       "title": {
+        "en": "Websites",
+        "ms": "Laman web"
+       },
+       "blurb": {
+        "en": "The group's websites and who looks after them.",
+        "ms": "Laman web kumpulan dan siapa yang menjaganya."
+       }
+      },
+      {
+       "id": "continuity",
+       "title": {
+        "en": "Continuity",
+        "ms": "Kesinambungan"
+       },
+       "blurb": {
+        "en": "Backups and restore tests for every system.",
+        "ms": "Sandaran dan ujian pemulihan untuk setiap sistem."
+       }
+      },
+      {
+       "id": "it-metrics",
+       "title": {
+        "en": "Workflow time & quality",
+        "ms": "Masa & kualiti aliran kerja"
+       },
+       "blurb": {
+        "en": "How long work takes and how well it is done.",
+        "ms": "Berapa lama kerja mengambil masa dan sebaik mana ia dibuat."
+       }
+      },
+      {
+       "id": "it-extraction",
+       "title": {
+        "en": "AI data preview",
+        "ms": "Pratonton data AI"
+       },
+       "blurb": {
+        "en": "Preview of data read by AI from files.",
+        "ms": "Pratonton data yang dibaca oleh AI daripada fail."
+       }
+      }
+     ]
+    },
+    {
+     "title": {
+      "en": "JA Group app",
+      "ms": "Aplikasi JA Group"
+     },
+     "modules": [
+      {
+       "id": "ja",
+       "title": {
+        "en": "JA app data",
+        "ms": "Data aplikasi JA"
+       },
+       "blurb": {
+        "en": "Data read from the JA Group app.",
+        "ms": "Data yang dibaca daripada aplikasi JA Group."
+       }
+      },
+      {
+       "id": "jaswitch",
+       "title": {
+        "en": "Switch from JA",
+        "ms": "Beralih daripada JA"
+       },
+       "blurb": {
+        "en": "Moving work over from the JA Group app.",
+        "ms": "Memindahkan kerja daripada aplikasi JA Group."
+       }
+      }
+     ]
+    }
+   ]
+  }
+ ],
+ "calls": {
+  "act": [
+   "GET act",
+   "GET act/investigations/:/evidence/:",
+   "POST act/audits",
+   "POST act/field-checks",
+   "POST act/findings",
+   "POST act/findings/:/:",
+   "POST act/improvements",
+   "POST act/improvements/:/:",
+   "POST act/investigations",
+   "POST act/investigations/:/:",
+   "POST act/investigations/:/evidence",
+   "POST act/report-form",
+   "POST act/timing",
+   "POST act/work"
+  ],
+  "advances": [
+   "GET guard-pay",
+   "GET guard-pay/:",
+   "GET guard-pay/advances",
+   "GET guard-pay/consents",
+   "GET guard-pay/loans",
+   "GET guard-pay/mine",
+   "GET statutory",
+   "POST guard-pay",
+   "POST guard-pay/:/:",
+   "POST guard-pay/:/cash/:/:",
+   "POST guard-pay/:/files/:",
+   "POST guard-pay/:/lines/:",
+   "POST guard-pay/advances",
+   "POST guard-pay/advances/:",
+   "POST guard-pay/advances/approve",
+   "POST guard-pay/consent/:",
+   "POST guard-pay/consent/:/approve",
+   "POST guard-pay/loans",
+   "POST guard-pay/loans/:/:",
+   "POST statutory"
+  ],
+  "arms": [
+   "GET arms",
+   "GET arms/control",
+   "GET arms/legal-flags",
+   "GET arms/police-help",
+   "GET arms/trading",
+   "GET companies/:/arms",
+   "GET records/:/form",
+   "GET records/kinds",
+   "POST arms/issue",
+   "POST arms/jobs",
+   "POST arms/jobs/:/update",
+   "POST arms/movements/:/escalate",
+   "POST arms/movements/:/return",
+   "POST arms/police-help",
+   "POST arms/police-help/:/answer",
+   "POST arms/police-help/:/assign",
+   "POST arms/police-help/:/outcome",
+   "POST arms/police-help/:/withdraw",
+   "POST arms/requests",
+   "POST arms/requests/:/step",
+   "POST arms/trading",
+   "POST vaults/:/count"
+  ],
+  "arrivalcash": [
+   "GET finance/arrivalcash/:",
+   "GET finance/arrivalcash/:/evidence/:",
+   "POST finance/:/controls/:/:"
+  ],
+  "assets": [
+   "GET am/rent-check",
+   "GET am/whatsapp",
+   "GET assets",
+   "GET assets/extras",
+   "GET assets/fixed",
+   "GET assets/work-orders/:/bq",
+   "GET records/:/form",
+   "GET records/kinds",
+   "POST am/purchases",
+   "POST am/purchases/:/decide",
+   "POST am/purchases/:/received",
+   "POST am/purchases/:/reprice",
+   "POST am/whatsapp/run",
+   "POST am/whatsapp/units/:/consent",
+   "POST am/whatsapp/units/:/reminders/:/settle",
+   "POST asset-units/:/follow-ups",
+   "POST asset-units/:/follow-ups/:/:",
+   "POST asset-units/:/payments",
+   "POST asset-units/:/payments/:/bank",
+   "POST asset-units/:/payments/:/reversal",
+   "POST asset-units/:/payments/:/reverse",
+   "POST assets/:/disposal/:",
+   "POST assets/:/life/:",
+   "POST assets/depreciation",
+   "POST assets/extras/:/:"
+  ],
+  "attendance": [
+   "GET attendance-reports",
+   "GET attendance-reports/person",
+   "GET attendance-reports/staff",
+   "GET attendance-reports/unmatched",
+   "GET attendance-reports/uploads/:",
+   "GET companies/:/attendance",
+   "GET companies/:/attendance/alerts",
+   "GET companies/:/people/:/discipline",
+   "GET leave",
+   "GET shifts/:/candidates",
+   "POST attendance-reports/match",
+   "POST attendance-reports/uploads",
+   "POST attendance-reports/uploads/:/cancel",
+   "POST attendance-reports/uploads/:/chunk",
+   "POST attendance-reports/uploads/:/finish",
+   "POST attendance-reports/uploads/:/preview",
+   "POST attendance-reports/uploads/:/save",
+   "POST attendance/follow-up",
+   "POST companies/:/attendance/lock",
+   "POST leave",
+   "POST leave/:/decide"
+  ],
+  "audit": [
+   "GET audit"
+  ],
+  "branches": [
+   "GET branches",
+   "GET branches/:/jv",
+   "GET records/:/form",
+   "GET records/kinds",
+   "POST branch-actions/:/review",
+   "POST branch-settlements/:/act",
+   "POST branch-settlements/:/approve",
+   "POST branches/:/act",
+   "POST branches/:/agreements",
+   "POST companies/:/branches"
+  ],
+  "branchwork": [
+   "GET branch-work",
+   "GET finance/cash/advances-overdue",
+   "GET finance/cash/mine",
+   "GET me/remote",
+   "GET me/work",
+   "GET remote",
+   "GET work/people/:",
+   "GET work/rebalance",
+   "GET work/summary",
+   "GET work/team",
+   "POST branch-work/:/check",
+   "POST branch-work/:/visit",
+   "POST coo-notices/:/:/seen",
+   "POST finance/:/controls/:/:",
+   "POST me/remote/apply",
+   "POST me/remote/check-in",
+   "POST me/remote/plan",
+   "POST me/remote/report",
+   "POST me/remote/tasks/:",
+   "POST me/work/check-in",
+   "POST me/work/help",
+   "POST remote-days/:/review",
+   "POST remote/:/decide",
+   "POST remote/:/end",
+   "POST work/help/:/answer",
+   "POST work/one-on-ones",
+   "POST work/people/:/playbook-signoff",
+   "POST work/planner/sync",
+   "POST work/tasks",
+   "POST work/tasks/:/adjust",
+   "POST work/tasks/:/done",
+   "POST work/tasks/:/more-time",
+   "POST work/tasks/:/reassign",
+   "POST work/tasks/:/review"
+  ],
+  "cases": [
+   "GET arms/police-help",
+   "GET cases",
+   "GET cases/:",
+   "GET cms/dispatches",
+   "GET companies/:/sites",
+   "GET device/dispatches",
+   "GET device/duty",
+   "GET sites/:/duty-log",
+   "POST arms/police-help",
+   "POST arms/police-help/:/answer",
+   "POST arms/police-help/:/assign",
+   "POST arms/police-help/:/outcome",
+   "POST arms/police-help/:/withdraw",
+   "POST cases",
+   "POST cases/:/:",
+   "POST cases/:/photos",
+   "POST cases/:/signoff",
+   "POST cms/dispatches",
+   "POST cms/dispatches/:/cancel",
+   "POST cms/dispatches/:/close",
+   "POST device/dispatches/:/ack",
+   "POST device/dispatches/:/photos",
+   "POST device/dispatches/:/reply",
+   "POST device/dispatches/:/seen",
+   "POST device/dispatches/:/videos",
+   "POST device/gate/:/out",
+   "POST device/gate/in",
+   "POST device/post-log",
+   "POST device/tasks/:"
+  ],
+  "claims": [
+   "GET claims",
+   "GET claims/receipts",
+   "POST claim-rates",
+   "POST claims",
+   "POST claims/:/decide",
+   "POST claims/:/head",
+   "POST claims/receipts",
+   "POST claims/receipts/:/:",
+   "POST claims/trips",
+   "POST claims/trips/:/decide"
+  ],
+  "cleaning": [
+   "GET cleaning/board",
+   "GET cleaning/sites/:",
+   "GET cleaning/sites/:/monthly",
+   "GET cleaning/sites/:/proof/:",
+   "GET records/:/form",
+   "GET records/kinds",
+   "POST cleaning/sites/:/client-slips",
+   "POST cleaning/sites/:/days/:/plan",
+   "POST cleaning/sites/:/days/:/publish",
+   "POST cleaning/sites/:/days/:/record",
+   "POST cleaning/sites/:/deliveries",
+   "POST cleaning/sites/:/deliveries/:/receive",
+   "POST cleaning/sites/:/map",
+   "POST cleaning/sites/:/stock-checks",
+   "PUT cleaning/sites/:/setup"
+  ],
+  "clients": [
+   "GET clients",
+   "GET clients/:/share-links",
+   "GET clients/:/share-links/:/preview",
+   "GET contracts",
+   "GET contracts/:/proof",
+   "GET crm",
+   "GET crm/clients/:",
+   "GET crm/clients/:/diligence",
+   "GET records/:/form",
+   "GET records/kinds",
+   "GET sites/:/instructions",
+   "POST clients",
+   "POST clients/:/billing",
+   "POST clients/:/complaints",
+   "POST clients/:/complaints/:/resolve",
+   "POST clients/:/contact",
+   "POST clients/:/invoice",
+   "POST clients/:/offboard",
+   "POST clients/:/portal",
+   "POST clients/:/rating",
+   "POST clients/:/report",
+   "POST clients/:/share-links",
+   "POST clients/:/share-links/:/revoke",
+   "POST clients/:/step",
+   "POST clients/:/work-ack",
+   "POST contracts",
+   "POST contracts/:/client",
+   "POST contracts/:/cms-service",
+   "POST contracts/:/cms-service/accept/:",
+   "POST contracts/:/items",
+   "POST contracts/:/items/:",
+   "POST contracts/:/renew",
+   "POST contracts/:/reviews/:",
+   "POST contracts/:/rounds/:/certify",
+   "POST contracts/:/step/:",
+   "POST contracts/:/variations",
+   "POST contracts/read-paper",
+   "POST crm/clients/:/diligence/:",
+   "POST crm/clients/:/owner",
+   "POST crm/clients/:/people",
+   "POST crm/clients/:/people/:",
+   "POST crm/clients/:/renewal/answer",
+   "POST crm/clients/:/renewal/decide",
+   "POST crm/clients/:/renewal/offer",
+   "POST crm/clients/:/requests",
+   "POST crm/clients/:/requests/:",
+   "POST sites/:/instructions/:"
+  ],
+  "clock": [
+   "GET checkin/day",
+   "GET checkin/reviews",
+   "GET checkin/setup",
+   "GET checkin/sites",
+   "GET flex",
+   "GET geo/reverse",
+   "GET geo/search",
+   "GET hr/appraisals",
+   "GET hr/faces",
+   "GET hr/guard-training",
+   "GET hr/holidays",
+   "GET hr/leave-settings",
+   "GET hr/legal",
+   "GET hr/osh",
+   "GET hr/overtime",
+   "GET hr/policies",
+   "GET hr/training",
+   "GET me/checkin",
+   "GET me/clock",
+   "GET me/face",
+   "GET me/remote",
+   "GET me/test-checkin",
+   "GET me/time-slips",
+   "GET records/:/form",
+   "GET records/kinds",
+   "GET remote",
+   "GET staff-clock",
+   "GET staff-clock-photos",
+   "GET staff-clock/:",
+   "GET time-slips",
+   "POST checkin/places",
+   "POST checkin/places/:/active",
+   "POST checkin/policy",
+   "POST checkin/reviews/:",
+   "POST checkin/rules",
+   "POST flex",
+   "POST flex/:/decide",
+   "POST hr/appraisals",
+   "POST hr/appraisals/:/close",
+   "POST hr/appraisals/:/comment",
+   "POST hr/appraisals/:/rate",
+   "POST hr/faces/:/decide",
+   "POST hr/guard-training/papers",
+   "POST hr/holidays",
+   "POST hr/holidays/:/remove",
+   "POST hr/legal/:",
+   "POST hr/osh/assessments",
+   "POST hr/osh/coordinator",
+   "POST hr/osh/incidents",
+   "POST hr/osh/incidents/:/report",
+   "POST hr/overtime",
+   "POST hr/overtime/preview",
+   "POST hr/people/:/leave-days",
+   "POST hr/people/:/mother-tongue",
+   "POST hr/people/:/wfh",
+   "POST hr/policies",
+   "POST hr/policies/:/acknowledge",
+   "POST hr/policies/:/briefing",
+   "POST hr/policies/:/copies",
+   "POST hr/training",
+   "POST me/checkin/:",
+   "POST me/checkin/preview",
+   "POST me/clock/face",
+   "POST me/clock/ping",
+   "POST me/clock/pings",
+   "POST me/face",
+   "POST me/face/challenge",
+   "POST me/remote/apply",
+   "POST me/remote/check-in",
+   "POST me/remote/plan",
+   "POST me/remote/report",
+   "POST me/remote/tasks/:",
+   "POST me/test-checkin/:",
+   "POST me/time-slips",
+   "POST me/time-slips/:/cancel",
+   "POST remote-days/:/review",
+   "POST remote/:/decide",
+   "POST remote/:/end",
+   "POST staff-clock-photos/:",
+   "POST time-slips/:/decide",
+   "POST time-slips/:/seen",
+   "POST time-slips/settings"
+  ],
+  "cms": [
+   "GET arms/police-help",
+   "GET cms",
+   "GET cms/commissioning",
+   "GET cms/dispatches",
+   "GET cms/guard-phones",
+   "GET companies/:/guard-phones",
+   "GET companies/:/people/:/discipline",
+   "GET device/dispatches",
+   "GET device/duty",
+   "GET records/:/form",
+   "GET records/kinds",
+   "GET shifts/:/candidates",
+   "GET sites/:/duty-log",
+   "POST arms/police-help",
+   "POST arms/police-help/:/answer",
+   "POST arms/police-help/:/assign",
+   "POST arms/police-help/:/outcome",
+   "POST arms/police-help/:/withdraw",
+   "POST attendance/follow-up",
+   "POST cms/alarms/:/ack",
+   "POST cms/alarms/:/close",
+   "POST cms/alarms/:/review",
+   "POST cms/calls/:/callback",
+   "POST cms/dispatches",
+   "POST cms/dispatches/:/cancel",
+   "POST cms/dispatches/:/close",
+   "POST cms/roster/plan",
+   "POST cms/settings",
+   "POST cms/shifts/:/assign",
+   "POST cms/shifts/:/clock-in",
+   "POST cms/shifts/:/clock-out",
+   "POST cms/shifts/:/handover",
+   "POST cms/shifts/:/handover-out",
+   "POST cms/shifts/:/release",
+   "POST contracts/:/cms-service/accept/:",
+   "POST contracts/:/cms-service/contacts/:/verify",
+   "POST contracts/:/cms-service/tests",
+   "POST device/dispatches/:/ack",
+   "POST device/dispatches/:/photos",
+   "POST device/dispatches/:/reply",
+   "POST device/dispatches/:/seen",
+   "POST device/dispatches/:/videos",
+   "POST device/gate/:/out",
+   "POST device/gate/in",
+   "POST device/post-log",
+   "POST device/tasks/:",
+   "POST guard-phones/:/revoke",
+   "POST people/:/guard-phone/code"
+  ],
+  "cmsready": [
+   "GET cms/readiness",
+   "GET records/:/form",
+   "GET records/kinds",
+   "POST cms/readiness/:/answers/:",
+   "POST cms/readiness/:/devices",
+   "POST cms/readiness/:/devices/:/remove",
+   "POST cms/readiness/:/review"
+  ],
+  "commercial": [
+   "GET companies/:/commercial",
+   "GET companies/:/leads",
+   "GET records/:/form",
+   "GET records/kinds",
+   "GET tender-counter",
+   "GET tender-groups",
+   "GET tender-opportunities",
+   "GET tender-sources",
+   "POST companies/:/leads",
+   "POST companies/:/quotations",
+   "POST companies/:/tenders",
+   "POST leads/:/:",
+   "POST quotations/:/:",
+   "POST quotations/:/correct",
+   "POST tender-groups",
+   "POST tender-opportunities",
+   "POST tender-opportunities/:/enter",
+   "POST tender-protocol",
+   "POST tender-sources",
+   "POST tender-sources/:",
+   "POST tender-sources/:/check",
+   "POST tender-sources/starter",
+   "POST tenders/:/checklist/draft",
+   "POST tenders/:/checklist/review",
+   "POST tenders/:/decision",
+   "POST tenders/:/files",
+   "POST tenders/:/files/:",
+   "POST tenders/:/files/:/check",
+   "POST tenders/:/papers",
+   "POST tenders/:/queries",
+   "POST tenders/:/queries/:",
+   "POST tenders/:/record",
+   "POST tenders/:/status",
+   "POST tenders/:/steps/:",
+   "POST tenders/:/steps/:/na",
+   "POST tenders/:/steps/:/plan",
+   "POST tenders/:/steps/:/undo",
+   "POST tenders/:/submit",
+   "POST tenders/:/verify"
+  ],
+  "company": [
+   "GET companies/:/dashboard",
+   "GET hr/ea",
+   "GET hr/join-leave",
+   "GET hr/movements",
+   "GET hr/people/:/leaving-guide",
+   "GET hr/register",
+   "GET records/:/form",
+   "GET records/kinds",
+   "GET vacancies",
+   "GET vacancies/:/applicants",
+   "POST applicants/:/:",
+   "POST hr/filings",
+   "POST hr/movements",
+   "POST hr/movements/:/cancel",
+   "POST hr/movements/:/login/authorise",
+   "POST hr/movements/:/step",
+   "POST hr/movements/apply-due",
+   "POST hr/people/:/probation",
+   "POST vacancies",
+   "POST vacancies/:/:",
+   "POST vacancies/:/advert/:",
+   "POST vacancies/:/applicants"
+  ],
+  "compliance": [
+   "GET compliance",
+   "GET records/:/form",
+   "GET records/kinds"
+  ],
+  "connections": [],
+  "continuity": [
+   "GET continuity",
+   "GET records/:/form",
+   "GET records/kinds",
+   "POST continuity/playbooks/:/drills",
+   "POST continuity/systems",
+   "POST continuity/systems/:/copies/:/:"
+  ],
+  "contracts": [
+   "GET contracts",
+   "GET contracts/:/proof",
+   "GET crm/clients/:/diligence",
+   "GET records/:/form",
+   "GET records/kinds",
+   "GET sites/:/instructions",
+   "POST contracts",
+   "POST contracts/:/client",
+   "POST contracts/:/cms-service",
+   "POST contracts/:/cms-service/accept/:",
+   "POST contracts/:/items",
+   "POST contracts/:/items/:",
+   "POST contracts/:/renew",
+   "POST contracts/:/reviews/:",
+   "POST contracts/:/rounds/:/certify",
+   "POST contracts/:/step/:",
+   "POST contracts/:/variations",
+   "POST contracts/read-paper",
+   "POST crm/clients/:/diligence/:",
+   "POST sites/:/instructions/:"
+  ],
+  "corporate": [
+   "GET corporate",
+   "GET corporate/audit-legal",
+   "GET corporate/files",
+   "GET corporate/panel",
+   "GET delegations",
+   "GET legal-holds",
+   "GET records/:/form",
+   "GET records/kinds",
+   "POST corporate/:/audits",
+   "POST corporate/:/changes",
+   "POST corporate/:/file",
+   "POST corporate/:/file/start",
+   "POST corporate/:/filings",
+   "POST corporate/:/legal-matters",
+   "POST corporate/audits/:/:",
+   "POST corporate/changes/:/board",
+   "POST corporate/changes/:/decide",
+   "POST corporate/filings/:/:",
+   "POST corporate/legal-matters/:/:",
+   "POST corporate/panel/:/:",
+   "POST corporate/panel/:/money/:",
+   "POST critical-roles/item/:/:",
+   "POST delegations/item/:/:",
+   "POST legal-holds/:",
+   "POST legal-holds/item/:/release"
+  ],
+  "credit": [
+   "GET credit",
+   "POST credit/:/loans",
+   "POST credit/cases/:/:",
+   "POST credit/cases/:/steps/:",
+   "POST credit/check",
+   "POST credit/loans/:/charge",
+   "POST credit/loans/:/collateral",
+   "POST credit/loans/:/correct",
+   "POST credit/loans/:/dispute/:",
+   "POST credit/loans/:/licence",
+   "POST credit/loans/:/repayments",
+   "POST credit/loans/:/stamped"
+  ],
+  "device": [
+   "GET cms/dispatches",
+   "GET device/dispatches",
+   "GET device/duty",
+   "GET leave",
+   "GET sites/:",
+   "GET sites/:/duty-log",
+   "POST cases",
+   "POST cases/:/photos",
+   "POST cms/dispatches",
+   "POST cms/dispatches/:/cancel",
+   "POST cms/dispatches/:/close",
+   "POST device/clock-in",
+   "POST device/clock-out",
+   "POST device/dispatches/:/ack",
+   "POST device/dispatches/:/photos",
+   "POST device/dispatches/:/reply",
+   "POST device/dispatches/:/seen",
+   "POST device/dispatches/:/videos",
+   "POST device/gate/:/out",
+   "POST device/gate/in",
+   "POST device/post-log",
+   "POST device/scan",
+   "POST device/tasks/:",
+   "POST items/act",
+   "POST items/device/pending",
+   "POST leave",
+   "POST leave/:/decide"
+  ],
+  "doa": [
+   "GET ceo/instructions",
+   "GET companies/:/commercial",
+   "GET companies/:/leads",
+   "GET director-office-counter",
+   "GET director/digest",
+   "GET director/legal-flags",
+   "GET finance/dailycash/mine",
+   "GET finance/exceptionalcash/:",
+   "GET finance/exceptionalcash/:/evidence/:",
+   "GET records/:/form",
+   "GET records/kinds",
+   "GET tender-board",
+   "GET tender-counter",
+   "GET tender-groups",
+   "GET tender-opportunities",
+   "GET tender-sources",
+   "POST companies/:/leads",
+   "POST companies/:/quotations",
+   "POST companies/:/tenders",
+   "POST finance/:/controls/:/:",
+   "POST leads/:/:",
+   "POST quotations/:/:",
+   "POST quotations/:/correct",
+   "POST tender-groups",
+   "POST tender-opportunities",
+   "POST tender-opportunities/:/enter",
+   "POST tender-protocol",
+   "POST tender-sources",
+   "POST tender-sources/:",
+   "POST tender-sources/:/check",
+   "POST tender-sources/starter",
+   "POST tenders/:/checklist/draft",
+   "POST tenders/:/checklist/review",
+   "POST tenders/:/decision",
+   "POST tenders/:/files",
+   "POST tenders/:/files/:",
+   "POST tenders/:/files/:/check",
+   "POST tenders/:/papers",
+   "POST tenders/:/queries",
+   "POST tenders/:/queries/:",
+   "POST tenders/:/record",
+   "POST tenders/:/status",
+   "POST tenders/:/steps/:",
+   "POST tenders/:/steps/:/na",
+   "POST tenders/:/steps/:/plan",
+   "POST tenders/:/steps/:/undo",
+   "POST tenders/:/submit",
+   "POST tenders/:/verify",
+   "POST work/tasks/:/review"
+  ],
+  "duty": [
+   "GET cleaning/board",
+   "GET cleaning/sites/:",
+   "GET cleaning/sites/:/monthly",
+   "GET cleaning/sites/:/proof/:",
+   "GET companies/:/sites",
+   "GET duty/officers",
+   "GET duty/officers/:",
+   "GET duty/sites/:",
+   "GET inventory/sites",
+   "GET records/:/form",
+   "GET records/kinds",
+   "GET sites/:/close-out",
+   "GET sites/:/kit",
+   "POST cleaning/sites/:/client-slips",
+   "POST cleaning/sites/:/days/:/plan",
+   "POST cleaning/sites/:/days/:/publish",
+   "POST cleaning/sites/:/days/:/record",
+   "POST cleaning/sites/:/deliveries",
+   "POST cleaning/sites/:/deliveries/:/receive",
+   "POST cleaning/sites/:/map",
+   "POST cleaning/sites/:/stock-checks",
+   "POST duty/officers/:/publish",
+   "POST duty/sites/:/publish",
+   "POST sites/:/close-out",
+   "POST sites/:/kit/gifts",
+   "POST sites/:/kit/records",
+   "PUT cleaning/sites/:/setup",
+   "PUT duty/sites/:/terms",
+   "PUT sites/:/kit"
+  ],
+  "finance": [
+   "GET finance",
+   "GET finance/:/controls",
+   "GET finance/:/pack",
+   "GET finance/cash/advances-overdue",
+   "GET finance/cash/mine",
+   "GET finance/checks-todo",
+   "GET finance/coo",
+   "GET finance/dailycash/mine",
+   "GET finance/dashboard",
+   "GET finance/desk",
+   "GET finance/exceptionalcash/:",
+   "GET finance/exceptionalcash/:/evidence/:",
+   "GET finance/kpi",
+   "GET finance/management-fee-bills",
+   "GET finance/management-fees",
+   "GET finance/settings",
+   "GET finance/today",
+   "GET records/:/form",
+   "GET records/kinds",
+   "POST finance/:/:/:",
+   "POST finance/:/banks",
+   "POST finance/:/books",
+   "POST finance/:/close/:",
+   "POST finance/:/controls/:/:",
+   "POST finance/:/papers/:",
+   "POST finance/:/payments",
+   "POST finance/:/payments/:/:",
+   "POST finance/coo/:/:/:",
+   "POST finance/management-fees/:",
+   "POST finance/settings"
+  ],
+  "fleet": [
+   "GET fleet",
+   "GET fleet/rentals",
+   "GET fleet/usage",
+   "GET records/:/form",
+   "GET records/kinds",
+   "GET transport/board",
+   "POST fleet/requests",
+   "POST fleet/requests/:/decide",
+   "POST fleet/vehicles/:/cards",
+   "POST fleet/vehicles/:/cards/:/end",
+   "POST fleet/vehicles/:/fuel",
+   "POST fleet/vehicles/:/fuel-type",
+   "POST fleet/vehicles/:/fuel/:/review",
+   "POST fleet/vehicles/:/in",
+   "POST fleet/vehicles/:/move",
+   "POST fleet/vehicles/:/out",
+   "POST fleet/vehicles/:/rent",
+   "POST fleet/vehicles/:/rental",
+   "POST fleet/vehicles/:/rental/end",
+   "POST fleet/vehicles/:/work",
+   "POST people/:/monitoring-consent"
+  ],
+  "fwcost": [
+   "GET fwm/cost",
+   "GET fwm/cost/docs/:",
+   "GET records/:/form",
+   "GET records/kinds",
+   "POST fw-cost-charges/:/book",
+   "POST fw-placements/:/end",
+   "POST fwm/cost/legal-notes",
+   "POST fwm/cost/months/:/decide",
+   "POST fwm/cost/months/:/draft",
+   "POST fwm/cost/rates",
+   "POST fwm/workers",
+   "POST people/:/fw-placements"
+  ],
+  "fwm": [
+   "GET cms/guard-phones",
+   "GET companies/:/guard-phones",
+   "GET fwm",
+   "GET fwm/docs/:",
+   "GET fwm/recruitment",
+   "GET fwm/welfare",
+   "GET hr/history/board",
+   "GET hr/history/person/:",
+   "GET records/:/form",
+   "GET records/kinds",
+   "POST coo-notices/:/:/seen",
+   "POST fw-checks/:/close",
+   "POST fw-papers/:/ack",
+   "POST fwm-tasks/:/done",
+   "POST fwm-tasks/:/review",
+   "POST fwm/ja-workers/:/add",
+   "POST fwm/recruitment",
+   "POST fwm/recruitment/:/arrived",
+   "POST fwm/recruitment/:/clear",
+   "POST fwm/recruitment/:/steps/:",
+   "POST fwm/recruitment/:/stop",
+   "POST fwm/recruitment/:/travel",
+   "POST fwm/workers",
+   "POST guard-phones/:/revoke",
+   "POST hr/history/carry-paper",
+   "POST hr/history/link",
+   "POST hr/history/link-existing",
+   "POST hr/history/lookup",
+   "POST hr/history/mark",
+   "POST hr/history/old-employment",
+   "POST hr/history/rehire",
+   "POST hr/history/separate",
+   "POST people/:/fw-checks",
+   "POST people/:/fw-papers",
+   "POST people/:/fw-renewals",
+   "POST people/:/fwm-tasks",
+   "POST people/:/guard-phone/code"
+  ],
+  "fwstat": [
+   "GET fwm/epf-socso",
+   "POST fwm/epf-socso/:"
+  ],
+  "governance": [
+   "GET governance",
+   "POST governance/:/mandates",
+   "POST governance/mandates/:/:"
+  ],
+  "grc": [
+   "GET grc",
+   "GET grc/speak-up/:",
+   "GET records/:/form",
+   "GET records/kinds",
+   "POST grc/companies/:/obligations",
+   "POST grc/gifts",
+   "POST grc/gifts/:/decide",
+   "POST grc/obligations/:/check",
+   "POST grc/obligations/:/evidence",
+   "POST grc/reports/:/:",
+   "POST grc/reports/:/message",
+   "POST grc/reports/:/review",
+   "POST grc/sites/:/osh",
+   "POST grc/speak-up",
+   "POST grc/speak-up/:/reply"
+  ],
+  "guardpay": [
+   "GET guard-pay",
+   "GET guard-pay/:",
+   "GET guard-pay/advances",
+   "GET guard-pay/consents",
+   "GET guard-pay/loans",
+   "GET guard-pay/mine",
+   "GET statutory",
+   "POST guard-pay",
+   "POST guard-pay/:/:",
+   "POST guard-pay/:/cash/:/:",
+   "POST guard-pay/:/files/:",
+   "POST guard-pay/:/lines/:",
+   "POST guard-pay/advances",
+   "POST guard-pay/advances/:",
+   "POST guard-pay/advances/approve",
+   "POST guard-pay/consent/:",
+   "POST guard-pay/consent/:/approve",
+   "POST guard-pay/loans",
+   "POST guard-pay/loans/:/:",
+   "POST statutory"
+  ],
+  "handovers": [
+   "GET records/:/form",
+   "GET records/kinds"
+  ],
+  "home": [
+   "GET approval-limits",
+   "GET growth",
+   "GET growth/margin",
+   "GET home",
+   "POST approval-limits"
+  ],
+  "hostels": [
+   "GET hostels",
+   "GET records/:/form",
+   "GET records/kinds",
+   "POST fwm/workers",
+   "POST hostel-bills",
+   "POST hostel-bills/:/:",
+   "POST people/:/utility-paper",
+   "POST utility-charges/:/ack",
+   "POST utility-charges/:/decide"
+  ],
+  "hr": [
+   "GET attendance-reports",
+   "GET attendance-reports/person",
+   "GET attendance-reports/staff",
+   "GET attendance-reports/unmatched",
+   "GET attendance-reports/uploads/:",
+   "GET cms/guard-phones",
+   "GET cms/hours",
+   "GET companies/:/attendance",
+   "GET companies/:/attendance/alerts",
+   "GET companies/:/guard-phones",
+   "GET companies/:/people",
+   "GET companies/:/people/:/discipline",
+   "GET discipline/appeals",
+   "GET dosh/register/:",
+   "GET flex",
+   "GET hr",
+   "GET hr/allowances",
+   "GET hr/appraisals",
+   "GET hr/cases",
+   "GET hr/ea",
+   "GET hr/guard-training",
+   "GET hr/history/board",
+   "GET hr/history/person/:",
+   "GET hr/holidays",
+   "GET hr/join-leave",
+   "GET hr/leave-settings",
+   "GET hr/legal",
+   "GET hr/movements",
+   "GET hr/osh",
+   "GET hr/overtime",
+   "GET hr/people/:/leaving-guide",
+   "GET hr/policies",
+   "GET hr/register",
+   "GET hr/screening",
+   "GET hr/training",
+   "GET leave",
+   "GET pay-changes",
+   "GET people/:",
+   "GET people/:/docs",
+   "GET people/:/profile",
+   "GET records/:/form",
+   "GET records/kinds",
+   "GET shifts/:/candidates",
+   "GET socso",
+   "GET socso/:",
+   "GET vacancies",
+   "GET vacancies/:/applicants",
+   "POST accounts/:/close",
+   "POST applicants/:/:",
+   "POST attendance-reports/match",
+   "POST attendance-reports/uploads",
+   "POST attendance-reports/uploads/:/cancel",
+   "POST attendance-reports/uploads/:/chunk",
+   "POST attendance-reports/uploads/:/finish",
+   "POST attendance-reports/uploads/:/preview",
+   "POST attendance-reports/uploads/:/save",
+   "POST attendance/follow-up",
+   "POST companies/:/attendance/lock",
+   "POST discipline/:/appeal",
+   "POST discipline/:/appeal/decide",
+   "POST flex",
+   "POST flex/:/decide",
+   "POST guard-phones/:/revoke",
+   "POST hr/allowances/staff/:",
+   "POST hr/allowances/types",
+   "POST hr/appraisals",
+   "POST hr/appraisals/:/close",
+   "POST hr/appraisals/:/comment",
+   "POST hr/appraisals/:/rate",
+   "POST hr/cases",
+   "POST hr/cases/:/steps",
+   "POST hr/filings",
+   "POST hr/guard-training/papers",
+   "POST hr/history/carry-paper",
+   "POST hr/history/link",
+   "POST hr/history/link-existing",
+   "POST hr/history/lookup",
+   "POST hr/history/mark",
+   "POST hr/history/old-employment",
+   "POST hr/history/rehire",
+   "POST hr/history/separate",
+   "POST hr/holidays",
+   "POST hr/holidays/:/remove",
+   "POST hr/legal/:",
+   "POST hr/movements",
+   "POST hr/movements/:/cancel",
+   "POST hr/movements/:/login/authorise",
+   "POST hr/movements/:/step",
+   "POST hr/movements/apply-due",
+   "POST hr/osh/assessments",
+   "POST hr/osh/coordinator",
+   "POST hr/osh/incidents",
+   "POST hr/osh/incidents/:/report",
+   "POST hr/overtime",
+   "POST hr/overtime/preview",
+   "POST hr/people/:/leave-days",
+   "POST hr/people/:/mother-tongue",
+   "POST hr/people/:/probation",
+   "POST hr/people/:/wfh",
+   "POST hr/policies",
+   "POST hr/policies/:/acknowledge",
+   "POST hr/policies/:/briefing",
+   "POST hr/policies/:/copies",
+   "POST hr/screening/:",
+   "POST hr/screening/:/repeat",
+   "POST hr/training",
+   "POST leave",
+   "POST leave/:/decide",
+   "POST leave/:/hospital-claim",
+   "POST me/face",
+   "POST pay-changes/:/:",
+   "POST people/:/guard-phone/code",
+   "POST people/:/hiring-docs",
+   "POST people/:/pin",
+   "POST people/:/socso",
+   "POST socso/:/appointments",
+   "POST socso/:/checkins",
+   "POST socso/:/death-notices",
+   "POST socso/:/dependant-payments",
+   "POST socso/:/dependant-payments/:/received",
+   "POST socso/:/dependants",
+   "POST socso/:/dependants/:/papers",
+   "POST socso/:/dependants/:/route",
+   "POST socso/:/documents",
+   "POST socso/:/dosh",
+   "POST socso/:/dosh/client",
+   "POST socso/:/dosh/form",
+   "POST socso/:/dosh/immediate",
+   "POST socso/:/lindung",
+   "POST socso/:/lindung/verify",
+   "POST socso/:/override",
+   "POST socso/:/rehab",
+   "POST socso/:/restrictions",
+   "POST socso/:/restrictions/:/clear",
+   "POST socso/:/status",
+   "POST vacancies",
+   "POST vacancies/:/:",
+   "POST vacancies/:/advert/:",
+   "POST vacancies/:/applicants"
+  ],
+  "hr-it-intake": [
+   "POST it/act/:"
+  ],
+  "insurance": [
+   "GET insurance",
+   "GET records/:/form",
+   "GET records/kinds",
+   "POST insurance-claims/:/act",
+   "POST insurance/policies/:/cancel",
+   "POST insurance/policies/:/premium",
+   "POST insurance/policies/:/renew"
+  ],
+  "it": [
+   "GET it",
+   "GET it/plan",
+   "GET login-handovers",
+   "GET records/:/form",
+   "GET records/kinds",
+   "GET websites",
+   "POST hr/movements/:/login/confirm",
+   "POST it/act/:",
+   "POST it/assets/:",
+   "POST it/assets/:/maintenance",
+   "POST it/onboarding/:/:",
+   "POST it/purchases",
+   "POST it/purchases/:/:",
+   "POST it/tickets",
+   "POST it/tickets/:/:",
+   "POST websites-sync",
+   "POST websites/:"
+  ],
+  "it-extraction": [
+   "GET it"
+  ],
+  "it-metrics": [
+   "POST it/act/:"
+  ],
+  "it-procurement": [
+   "GET records/:/form",
+   "GET records/kinds",
+   "POST it/act/:"
+  ],
+  "items": [
+   "GET items",
+   "GET items/counts/:",
+   "GET items/finance",
+   "GET items/finance/batches/:/files/:",
+   "GET items/paper/:",
+   "GET items/passport/:",
+   "GET items/reports/:",
+   "GET items/site/:",
+   "GET records/:/form",
+   "GET records/kinds",
+   "POST items/act",
+   "POST items/import/read",
+   "POST items/resolve",
+   "POST items/scan-check"
+  ],
+  "ja": [
+   "GET ja"
+  ],
+  "jaswitch": [
+   "GET ja/history/:/:",
+   "GET ja/switch",
+   "GET ja/switch/:/:",
+   "POST ja/imports",
+   "POST ja/imports/:/decide",
+   "POST ja/switch-settings",
+   "POST ja/switch/:/:/:"
+  ],
+  "loans": [
+   "GET guard-pay",
+   "GET guard-pay/:",
+   "GET guard-pay/advances",
+   "GET guard-pay/consents",
+   "GET guard-pay/loans",
+   "GET guard-pay/mine",
+   "GET statutory",
+   "POST guard-pay",
+   "POST guard-pay/:/:",
+   "POST guard-pay/:/cash/:/:",
+   "POST guard-pay/:/files/:",
+   "POST guard-pay/:/lines/:",
+   "POST guard-pay/advances",
+   "POST guard-pay/advances/:",
+   "POST guard-pay/advances/approve",
+   "POST guard-pay/consent/:",
+   "POST guard-pay/consent/:/approve",
+   "POST guard-pay/loans",
+   "POST guard-pay/loans/:/:",
+   "POST statutory"
+  ],
+  "meetings": [
+   "GET meetings",
+   "POST meetings",
+   "POST meetings/:/actions",
+   "POST meetings/:/actions/:",
+   "POST meetings/:/answer",
+   "POST meetings/:/cancel",
+   "POST meetings/:/change",
+   "POST meetings/:/minutes",
+   "POST meetings/:/prep",
+   "POST meetings/:/summary-check"
+  ],
+  "memos": [
+   "GET memos",
+   "POST memos",
+   "POST memos/:/read",
+   "POST memos/:/remind",
+   "POST memos/:/withdraw",
+   "POST memos/reach"
+  ],
+  "mine": [
+   "GET cms/guard-phones",
+   "GET companies/:/guard-phones",
+   "GET companies/:/people",
+   "GET dosh/register/:",
+   "GET guard-pay",
+   "GET guard-pay/:",
+   "GET guard-pay/advances",
+   "GET guard-pay/consents",
+   "GET guard-pay/loans",
+   "GET guard-pay/mine",
+   "GET hr/appraisals",
+   "GET hr/guard-training",
+   "GET hr/history/board",
+   "GET hr/history/person/:",
+   "GET hr/legal",
+   "GET hr/overtime",
+   "GET hr/policies",
+   "GET hr/training",
+   "GET leave",
+   "GET me/duty",
+   "GET me/items",
+   "GET people/:",
+   "GET people/:/docs",
+   "GET people/:/profile",
+   "GET records/:/form",
+   "GET records/kinds",
+   "GET socso",
+   "GET socso/:",
+   "GET statutory",
+   "POST accounts/:/close",
+   "POST discipline/:/appeal",
+   "POST discipline/:/appeal/decide",
+   "POST guard-pay",
+   "POST guard-pay/:/:",
+   "POST guard-pay/:/cash/:/:",
+   "POST guard-pay/:/files/:",
+   "POST guard-pay/:/lines/:",
+   "POST guard-pay/advances",
+   "POST guard-pay/advances/:",
+   "POST guard-pay/advances/approve",
+   "POST guard-pay/consent/:",
+   "POST guard-pay/consent/:/approve",
+   "POST guard-pay/loans",
+   "POST guard-pay/loans/:/:",
+   "POST guard-phones/:/revoke",
+   "POST hr/appraisals",
+   "POST hr/appraisals/:/close",
+   "POST hr/appraisals/:/comment",
+   "POST hr/appraisals/:/rate",
+   "POST hr/guard-training/papers",
+   "POST hr/history/carry-paper",
+   "POST hr/history/link",
+   "POST hr/history/link-existing",
+   "POST hr/history/lookup",
+   "POST hr/history/mark",
+   "POST hr/history/old-employment",
+   "POST hr/history/rehire",
+   "POST hr/history/separate",
+   "POST hr/legal/:",
+   "POST hr/overtime",
+   "POST hr/overtime/preview",
+   "POST hr/people/:/mother-tongue",
+   "POST hr/policies",
+   "POST hr/policies/:/acknowledge",
+   "POST hr/policies/:/briefing",
+   "POST hr/policies/:/copies",
+   "POST hr/training",
+   "POST leave",
+   "POST leave/:/decide",
+   "POST leave/:/hospital-claim",
+   "POST me/face",
+   "POST me/items/:/:",
+   "POST people/:/guard-phone/code",
+   "POST people/:/hiring-docs",
+   "POST people/:/pin",
+   "POST people/:/socso",
+   "POST purchasing/issues/:/handover/:",
+   "POST socso/:/appointments",
+   "POST socso/:/checkins",
+   "POST socso/:/death-notices",
+   "POST socso/:/dependant-payments",
+   "POST socso/:/dependant-payments/:/received",
+   "POST socso/:/dependants",
+   "POST socso/:/dependants/:/papers",
+   "POST socso/:/dependants/:/route",
+   "POST socso/:/documents",
+   "POST socso/:/dosh",
+   "POST socso/:/dosh/client",
+   "POST socso/:/dosh/form",
+   "POST socso/:/dosh/immediate",
+   "POST socso/:/lindung",
+   "POST socso/:/lindung/verify",
+   "POST socso/:/override",
+   "POST socso/:/rehab",
+   "POST socso/:/restrictions",
+   "POST socso/:/restrictions/:/clear",
+   "POST socso/:/status",
+   "POST statutory"
+  ],
+  "office": [
+   "GET companies/:/office",
+   "GET offices",
+   "POST companies/:/office/desks",
+   "POST companies/:/office/run-by"
+  ],
+  "ops": [
+   "GET finance/management-fee-bills",
+   "GET finance/management-fees",
+   "GET hr/ea",
+   "GET hr/join-leave",
+   "GET hr/people/:/leaving-guide",
+   "GET hr/register",
+   "GET leave",
+   "GET ops/government",
+   "GET ops/private",
+   "GET ops/region",
+   "GET records/:/form",
+   "GET records/kinds",
+   "GET vacancies",
+   "GET vacancies/:/applicants",
+   "POST applicants/:/:",
+   "POST finance/management-fees/:",
+   "POST hr/filings",
+   "POST hr/people/:/probation",
+   "POST leave",
+   "POST leave/:/decide",
+   "POST vacancies",
+   "POST vacancies/:/:",
+   "POST vacancies/:/advert/:",
+   "POST vacancies/:/applicants"
+  ],
+  "overview": [
+   "GET group/overview",
+   "GET records/:/form",
+   "GET records/kinds"
+  ],
+  "payformulas": [
+   "GET pay-formulas",
+   "GET pay-formulas/at",
+   "POST pay-formula-uses",
+   "POST pay-formulas",
+   "POST pay-formulas/:/decide",
+   "POST pay-formulas/:/withdraw",
+   "POST pay-law"
+  ],
+  "payreq": [
+   "GET finance/requests",
+   "POST finance/requests/:",
+   "POST finance/requests/:/:/:"
+  ],
+  "pdpa": [
+   "GET pdpa",
+   "GET pdpa-register",
+   "GET pdpa/:/docs",
+   "GET pdpa/rights",
+   "GET products",
+   "GET records/:/form",
+   "GET records/kinds",
+   "POST pdpa",
+   "POST pdpa-breach/:/details",
+   "POST pdpa-consents",
+   "POST pdpa-consents/:/withdraw",
+   "POST pdpa-register/:/:",
+   "POST pdpa-settings",
+   "POST pdpa/:/:",
+   "POST pdpa/dpos/:",
+   "POST pdpa/requests",
+   "POST pdpa/requests/:/:",
+   "POST products",
+   "POST products/:/certs",
+   "POST proposal-check"
+  ],
+  "people": [
+   "GET cms/guard-phones",
+   "GET companies/:/guard-phones",
+   "GET companies/:/people",
+   "GET dosh/register/:",
+   "GET hr/appraisals",
+   "GET hr/guard-training",
+   "GET hr/history/board",
+   "GET hr/history/person/:",
+   "GET hr/legal",
+   "GET hr/overtime",
+   "GET hr/policies",
+   "GET hr/training",
+   "GET leave",
+   "GET people/:",
+   "GET people/:/docs",
+   "GET people/:/profile",
+   "GET records/:/form",
+   "GET records/kinds",
+   "GET socso",
+   "GET socso/:",
+   "POST accounts/:/close",
+   "POST discipline/:/appeal",
+   "POST discipline/:/appeal/decide",
+   "POST guard-phones/:/revoke",
+   "POST hr/appraisals",
+   "POST hr/appraisals/:/close",
+   "POST hr/appraisals/:/comment",
+   "POST hr/appraisals/:/rate",
+   "POST hr/guard-training/papers",
+   "POST hr/history/carry-paper",
+   "POST hr/history/link",
+   "POST hr/history/link-existing",
+   "POST hr/history/lookup",
+   "POST hr/history/mark",
+   "POST hr/history/old-employment",
+   "POST hr/history/rehire",
+   "POST hr/history/separate",
+   "POST hr/legal/:",
+   "POST hr/overtime",
+   "POST hr/overtime/preview",
+   "POST hr/people/:/mother-tongue",
+   "POST hr/policies",
+   "POST hr/policies/:/acknowledge",
+   "POST hr/policies/:/briefing",
+   "POST hr/policies/:/copies",
+   "POST hr/training",
+   "POST leave",
+   "POST leave/:/decide",
+   "POST leave/:/hospital-claim",
+   "POST me/face",
+   "POST people/:/guard-phone/code",
+   "POST people/:/hiring-docs",
+   "POST people/:/pin",
+   "POST people/:/socso",
+   "POST socso/:/appointments",
+   "POST socso/:/checkins",
+   "POST socso/:/death-notices",
+   "POST socso/:/dependant-payments",
+   "POST socso/:/dependant-payments/:/received",
+   "POST socso/:/dependants",
+   "POST socso/:/dependants/:/papers",
+   "POST socso/:/dependants/:/route",
+   "POST socso/:/documents",
+   "POST socso/:/dosh",
+   "POST socso/:/dosh/client",
+   "POST socso/:/dosh/form",
+   "POST socso/:/dosh/immediate",
+   "POST socso/:/lindung",
+   "POST socso/:/lindung/verify",
+   "POST socso/:/override",
+   "POST socso/:/rehab",
+   "POST socso/:/restrictions",
+   "POST socso/:/restrictions/:/clear",
+   "POST socso/:/status"
+  ],
+  "purchasing": [
+   "GET purchasing",
+   "GET purchasing/issues/:/proof",
+   "GET records/:/form",
+   "GET records/kinds",
+   "POST purchasing/:/issues",
+   "POST purchasing/:/requests",
+   "POST purchasing/:/suppliers",
+   "POST purchasing/issues/:/confirm-loss",
+   "POST purchasing/issues/:/return",
+   "POST purchasing/requests/:/:",
+   "POST purchasing/stock/:/count",
+   "POST purchasing/suppliers/:/:"
+  ],
+  "quality": [
+   "GET quality/foundation",
+   "GET quality/matrix",
+   "GET quality/operations",
+   "GET quality/register",
+   "POST quality/:"
+  ],
+  "rba": [
+   "GET companies/:/rba-traces",
+   "GET companies/:/worker-files",
+   "GET ethics",
+   "GET rba",
+   "POST companies/:/rba-traces",
+   "POST ethics",
+   "POST ethics/:/review",
+   "POST rba-traces/:/settle",
+   "POST rba/committee"
+  ],
+  "registers": [
+   "GET records/:/form",
+   "GET records/kinds",
+   "GET registers",
+   "POST registers/:"
+  ],
+  "renewals": [
+   "GET compliance",
+   "GET records/:/form",
+   "GET records/kinds",
+   "GET renewals",
+   "POST renewals/:/:"
+  ],
+  "reports": [
+   "GET reports",
+   "POST reports",
+   "POST reports/list"
+  ],
+  "requests": [
+   "GET requests",
+   "GET requests/:/docs",
+   "POST expenses/prefill",
+   "POST requests",
+   "POST requests/:/decide",
+   "POST requests/:/submit"
+  ],
+  "roster": [
+   "GET companies/:/sites",
+   "GET records/:/form",
+   "GET records/kinds",
+   "GET shifts/:/candidates",
+   "GET sites/:/roster",
+   "POST shifts/:/assign",
+   "POST sites/:/roster/publish",
+   "POST sites/:/roster/shifts"
+  ],
+  "salarycalc": [
+   "GET salary-calc"
+  ],
+  "selfaudit": [
+   "GET companies/:/self-audits",
+   "GET sites/:/client-codes",
+   "POST client-codes/:/checks",
+   "POST client-codes/:/inspections",
+   "POST client-codes/:/report",
+   "POST client-codes/:/stop",
+   "POST client-inspections/:/fix",
+   "POST companies/:/self-audits",
+   "POST self-audits/:/fix",
+   "POST sites/:/client-codes"
+  ],
+  "sitehours": [
+   "GET public-holidays",
+   "GET site-hours",
+   "POST public-holidays",
+   "POST site-hours/approve"
+  ],
+  "sites": [
+   "GET companies/:/sites",
+   "GET device/duty",
+   "GET records/:/form",
+   "GET records/kinds",
+   "GET sites/:",
+   "GET sites/:/client-codes",
+   "GET sites/:/duty-log",
+   "GET sites/:/tasks",
+   "GET sites/:/visits",
+   "POST client-codes/:/checks",
+   "POST client-codes/:/inspections",
+   "POST client-codes/:/report",
+   "POST client-codes/:/stop",
+   "POST client-inspections/:/fix",
+   "POST device/gate/:/out",
+   "POST device/gate/in",
+   "POST device/post-log",
+   "POST device/tasks/:",
+   "POST site-tasks/:/stop",
+   "POST sites/:/client-codes",
+   "POST sites/:/gate-log",
+   "POST sites/:/needs-reviews",
+   "POST sites/:/patrol-interval",
+   "POST sites/:/tasks",
+   "POST sites/:/visits",
+   "POST visits/:/close",
+   "POST visits/:/photos"
+  ],
+  "sitestock": [
+   "GET cleaning/board",
+   "GET cleaning/sites/:",
+   "GET cleaning/sites/:/monthly",
+   "GET cleaning/sites/:/proof/:",
+   "GET companies/:/sites",
+   "GET duty/officers",
+   "GET duty/officers/:",
+   "GET duty/sites/:",
+   "GET inventory/sites",
+   "GET records/:/form",
+   "GET records/kinds",
+   "GET sites/:/close-out",
+   "GET sites/:/kit",
+   "POST cleaning/sites/:/client-slips",
+   "POST cleaning/sites/:/days/:/plan",
+   "POST cleaning/sites/:/days/:/publish",
+   "POST cleaning/sites/:/days/:/record",
+   "POST cleaning/sites/:/deliveries",
+   "POST cleaning/sites/:/deliveries/:/receive",
+   "POST cleaning/sites/:/map",
+   "POST cleaning/sites/:/stock-checks",
+   "POST duty/officers/:/publish",
+   "POST duty/sites/:/publish",
+   "POST sites/:/close-out",
+   "POST sites/:/kit/gifts",
+   "POST sites/:/kit/records",
+   "PUT cleaning/sites/:/setup",
+   "PUT duty/sites/:/terms",
+   "PUT sites/:/kit"
+  ],
+  "socso": [
+   "GET companies/:/people",
+   "GET dosh/register/:",
+   "GET socso",
+   "GET socso/:",
+   "POST people/:/socso",
+   "POST socso/:/appointments",
+   "POST socso/:/checkins",
+   "POST socso/:/death-notices",
+   "POST socso/:/dependant-payments",
+   "POST socso/:/dependant-payments/:/received",
+   "POST socso/:/dependants",
+   "POST socso/:/dependants/:/papers",
+   "POST socso/:/dependants/:/route",
+   "POST socso/:/documents",
+   "POST socso/:/dosh",
+   "POST socso/:/dosh/client",
+   "POST socso/:/dosh/form",
+   "POST socso/:/dosh/immediate",
+   "POST socso/:/lindung",
+   "POST socso/:/lindung/verify",
+   "POST socso/:/override",
+   "POST socso/:/rehab",
+   "POST socso/:/restrictions",
+   "POST socso/:/restrictions/:/clear",
+   "POST socso/:/status"
+  ],
+  "staff-directory": [
+   "GET records/:/form",
+   "GET records/kinds",
+   "GET staff-directory",
+   "GET staff-directory/status",
+   "POST staff-directory/:"
+  ],
+  "staffclock": [
+   "GET checkin/day",
+   "GET checkin/reviews",
+   "GET checkin/setup",
+   "GET checkin/sites",
+   "GET flex",
+   "GET geo/reverse",
+   "GET geo/search",
+   "GET hr/appraisals",
+   "GET hr/faces",
+   "GET hr/guard-training",
+   "GET hr/holidays",
+   "GET hr/leave-settings",
+   "GET hr/legal",
+   "GET hr/osh",
+   "GET hr/overtime",
+   "GET hr/policies",
+   "GET hr/training",
+   "GET me/checkin",
+   "GET me/clock",
+   "GET me/face",
+   "GET me/remote",
+   "GET me/test-checkin",
+   "GET me/time-slips",
+   "GET records/:/form",
+   "GET records/kinds",
+   "GET remote",
+   "GET staff-clock",
+   "GET staff-clock-photos",
+   "GET staff-clock/:",
+   "GET time-slips",
+   "POST checkin/places",
+   "POST checkin/places/:/active",
+   "POST checkin/policy",
+   "POST checkin/reviews/:",
+   "POST checkin/rules",
+   "POST flex",
+   "POST flex/:/decide",
+   "POST hr/appraisals",
+   "POST hr/appraisals/:/close",
+   "POST hr/appraisals/:/comment",
+   "POST hr/appraisals/:/rate",
+   "POST hr/faces/:/decide",
+   "POST hr/guard-training/papers",
+   "POST hr/holidays",
+   "POST hr/holidays/:/remove",
+   "POST hr/legal/:",
+   "POST hr/osh/assessments",
+   "POST hr/osh/coordinator",
+   "POST hr/osh/incidents",
+   "POST hr/osh/incidents/:/report",
+   "POST hr/overtime",
+   "POST hr/overtime/preview",
+   "POST hr/people/:/leave-days",
+   "POST hr/people/:/mother-tongue",
+   "POST hr/people/:/wfh",
+   "POST hr/policies",
+   "POST hr/policies/:/acknowledge",
+   "POST hr/policies/:/briefing",
+   "POST hr/policies/:/copies",
+   "POST hr/training",
+   "POST me/checkin/:",
+   "POST me/checkin/preview",
+   "POST me/clock/face",
+   "POST me/clock/ping",
+   "POST me/clock/pings",
+   "POST me/face",
+   "POST me/face/challenge",
+   "POST me/remote/apply",
+   "POST me/remote/check-in",
+   "POST me/remote/plan",
+   "POST me/remote/report",
+   "POST me/remote/tasks/:",
+   "POST me/test-checkin/:",
+   "POST me/time-slips",
+   "POST me/time-slips/:/cancel",
+   "POST remote-days/:/review",
+   "POST remote/:/decide",
+   "POST remote/:/end",
+   "POST staff-clock-photos/:",
+   "POST time-slips/:/decide",
+   "POST time-slips/:/seen",
+   "POST time-slips/settings"
+  ],
+  "staffpay": [
+   "GET finance/cash/advances-overdue",
+   "GET finance/cash/mine",
+   "GET hr/allowances",
+   "GET pay-changes",
+   "GET staff-pay",
+   "GET staff-pay/:",
+   "GET staff-pay/my-zakat",
+   "GET staff-pay/stat-tables",
+   "POST finance/:/controls/:/:",
+   "POST pay-changes/:/:",
+   "POST staff-pay",
+   "POST staff-pay/:/:",
+   "POST staff-pay/:/files/:",
+   "POST staff-pay/:/lines/:",
+   "POST staff-pay/employer-nos/:",
+   "POST staff-pay/my-zakat",
+   "POST staff-pay/stat-tables",
+   "POST staff-pay/stat-tables/check"
+  ],
+  "statutory": [
+   "GET guard-pay",
+   "GET guard-pay/:",
+   "GET guard-pay/advances",
+   "GET guard-pay/consents",
+   "GET guard-pay/loans",
+   "GET guard-pay/mine",
+   "GET statutory",
+   "POST guard-pay",
+   "POST guard-pay/:/:",
+   "POST guard-pay/:/cash/:/:",
+   "POST guard-pay/:/files/:",
+   "POST guard-pay/:/lines/:",
+   "POST guard-pay/advances",
+   "POST guard-pay/advances/:",
+   "POST guard-pay/advances/approve",
+   "POST guard-pay/consent/:",
+   "POST guard-pay/consent/:/approve",
+   "POST guard-pay/loans",
+   "POST guard-pay/loans/:/:",
+   "POST statutory"
+  ],
+  "surveys": [
+   "GET site-surveys",
+   "GET site-surveys/:",
+   "GET site-surveys/setup",
+   "POST site-surveys",
+   "POST site-surveys/:/photos",
+   "POST site-surveys/:/review"
+  ],
+  "websites": [
+   "GET records/:/form",
+   "GET records/kinds",
+   "GET websites",
+   "POST websites-sync",
+   "POST websites/:"
+  ],
+  "work": [
+   "GET branch-work",
+   "GET finance/cash/advances-overdue",
+   "GET finance/cash/mine",
+   "GET me/remote",
+   "GET me/work",
+   "GET remote",
+   "GET work/people/:",
+   "GET work/rebalance",
+   "GET work/summary",
+   "GET work/team",
+   "POST branch-work/:/check",
+   "POST branch-work/:/visit",
+   "POST coo-notices/:/:/seen",
+   "POST finance/:/controls/:/:",
+   "POST me/remote/apply",
+   "POST me/remote/check-in",
+   "POST me/remote/plan",
+   "POST me/remote/report",
+   "POST me/remote/tasks/:",
+   "POST me/work/check-in",
+   "POST me/work/help",
+   "POST remote-days/:/review",
+   "POST remote/:/decide",
+   "POST remote/:/end",
+   "POST work/help/:/answer",
+   "POST work/one-on-ones",
+   "POST work/people/:/playbook-signoff",
+   "POST work/planner/sync",
+   "POST work/tasks",
+   "POST work/tasks/:/adjust",
+   "POST work/tasks/:/done",
+   "POST work/tasks/:/more-time",
+   "POST work/tasks/:/reassign",
+   "POST work/tasks/:/review"
+  ],
+  "work-kpi": [
+   "GET kpi/work"
+  ]
+ }
+}
