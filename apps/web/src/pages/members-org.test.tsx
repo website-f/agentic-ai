@@ -1,13 +1,13 @@
 /** P97: the member editor's organisation parts: a department made from the dropdown, and who a
  * head of department manages (searchable ticks, "Everyone in Finance", one save). */
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import type { ReactNode } from "react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { useState, type ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { Me, Member } from "@/lib/types";
 
-import { NewDepartment, OrgLine, TeamDialog } from "./members-org";
+import { ManagesField, NewDepartment, OrgLine, saveManages, TeamDialog } from "./members-org";
 
 const m = (id: string, name: string, extra: Partial<Member> = {}): Member => ({
   user_id: id, email: `${id}@example.com`, name, role: "staff", is_active: true, must_change_password: false, last_login_at: null,
@@ -23,6 +23,8 @@ const json = (b: unknown) => new Response(JSON.stringify(b), { status: 200, head
 
 beforeEach(() => {
   sent = [];
+  vi.stubGlobal("ResizeObserver", class { observe() {} unobserve() {} disconnect() {} });
+  Element.prototype.scrollIntoView = () => {};
   vi.stubGlobal("matchMedia", (q: string) => ({ matches: false, media: q, addEventListener() {}, removeEventListener() {} }));
   vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = new URL(String(input), "http://office.test");
@@ -84,5 +86,38 @@ describe("A new department from the member editor", { timeout: 30_000 }, () => {
     fireEvent.click(screen.getByRole("button", { name: "Add department" }));
     await waitFor(() => expect(made).toHaveBeenCalledWith(expect.objectContaining({ id: "dp_new", name: "Procurement" })));
     expect(sent[0]).toEqual({ path: "/api/branches/br_1/departments", method: "POST", body: { name: "Procurement" } });
+  });
+});
+
+describe("P98: staff they manage, in the member editor", { timeout: 30_000 }, () => {
+  function Field() {
+    const [v, setV] = useState<string[] | null>(null);
+    return (
+      <>
+        <ManagesField member={HANA} members={ALL} value={v} onChange={setV} />
+        <output data-testid="picked">{v === null ? "untouched" : v.join(",")}</output>
+      </>
+    );
+  }
+
+  it("starts from who reports to them now, finds people by search and adds a whole department", async () => {
+    wrap(<Field />);
+    const group = await screen.findByRole("group", { name: "Staff they manage" });
+    await waitFor(() => expect(within(group).getByText("Sara")).toBeInTheDocument());
+    expect(screen.getByTestId("picked")).toHaveTextContent("untouched");
+    fireEvent.click(within(group).getByRole("button", { name: "Staff they manage: 1 picked. Change" }));
+    fireEvent.change(await screen.findByRole("combobox"), { target: { value: "omar@" } });
+    fireEvent.click(screen.getByRole("option", { name: /Omar/ }));
+    expect(screen.getByTestId("picked")).toHaveTextContent("u_sara,u_omar");
+    fireEvent.click(screen.getByRole("button", { name: "Done" }));
+    fireEvent.click(screen.getByRole("button", { name: "+ Everyone in Finance" }));
+    expect(screen.getByTestId("picked")).toHaveTextContent("u_sara,u_omar,u_tom");
+    fireEvent.click(screen.getByRole("button", { name: "Remove Sara" }));
+    expect(screen.getByTestId("picked")).toHaveTextContent("u_omar,u_tom");
+  });
+
+  it("saves the whole list in one call", async () => {
+    await saveManages("u_hana", ["u_tom", "u_omar"]);
+    expect(sent).toEqual([{ path: "/api/members/u_hana/team", method: "PUT", body: { user_ids: ["u_tom", "u_omar"] } }]);
   });
 });

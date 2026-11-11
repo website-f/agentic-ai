@@ -23,6 +23,8 @@ export interface Scope {
   branch_name: string | null;
   department_id: string | null;
   department_name: string | null;
+  /** P98: every branch the scope covers (home first). */
+  branches?: { id: string; name: string }[];
 }
 
 export interface Me {
@@ -49,6 +51,8 @@ export interface Member {
   last_login_at: string | null;
   branch_id?: string | null;
   branch_name?: string | null;
+  /** P98: every branch they work in, home (branch_id) first. */
+  branches?: { id: string; name: string }[];
   department_id?: string | null;
   department_name?: string | null;
   agents?: number;
@@ -121,7 +125,7 @@ export interface SystemStatus {
 export const ROLE_INFO: Record<Role, { label: string; blurb: string }> = {
   owner: { label: msg("Owner"), blurb: msg("Everything, including owner access and workspace-level budgets.") },
   admin: { label: msg("Admin"), blurb: msg("Members, organization, AI keys and policies.") },
-  branch_manager: { label: msg("Branch manager"), blurb: msg("Runs one branch: its agents, work, approvals, logins and people.") },
+  branch_manager: { label: msg("Branch manager"), blurb: msg("Runs their branches (one or more): agents, work, approvals, logins and people.") },
   hod: { label: msg("Head of department"), blurb: msg("Runs one department: its agents, work, approvals and people.") },
   supervisor: { label: msg("Supervisor"), blurb: msg("Gives the department's agents work and decides what they ask. Does not change agents.") },
   staff: { label: msg("Staff"), blurb: msg("Has personal agents: creates them, gives them work, answers them.") },

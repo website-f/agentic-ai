@@ -14,7 +14,7 @@ import { Button } from "@/components/ui/button";
 import { ResponsiveDialog } from "@/components/ui/dialog";
 import { Field, FormError } from "@/components/ui/field";
 import { Pill } from "@/components/ui/pill";
-import { Select } from "@/components/ui/select";
+import { MultiSelect, SearchSelect } from "@/components/ui/search-select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { t as tr, useT } from "@/i18n";
 import { api, errorMessage } from "@/lib/api";
@@ -81,8 +81,8 @@ export function OrgFields({ member, members, reportsTo, onReportsTo, heads, onHe
       <legend className="px-1 text-[13px] font-medium">{t("Team")}</legend>
       <div className="grid gap-1.5">
         <span className="text-[13px] font-medium">{t("Reports to")}</span>
-        <Select value={reportsTo || NO_ONE} onValueChange={(v) => onReportsTo(v === NO_ONE ? "" : v)} label={t("Reports to")}
-          options={[{ value: NO_ONE, label: t("No one") }, ...managerOptions(members, member.user_id)]} />
+        <SearchSelect value={reportsTo || NO_ONE} onValueChange={(v) => onReportsTo(v === NO_ONE ? "" : v)} label={t("Reports to")}
+          searchPlaceholder={t("Search people")} options={[{ value: NO_ONE, label: t("No one") }, ...managerOptions(members, member.user_id)]} />
         <p className="text-[12.5px] text-muted">{t("Their manager can give them tasks and follows their work.")}</p>
       </div>
       <label className="flex min-h-11 cursor-pointer items-start gap-3">
@@ -94,6 +94,58 @@ export function OrgFields({ member, members, reportsTo, onReportsTo, heads, onHe
         </span>
       </label>
     </fieldset>
+  );
+}
+
+type TeamSave = { done: number; skipped: number; results: { ok: boolean; message: string | null }[] };
+
+/** P98: exactly these people report to this manager (the rest who did report to no one). */
+export const saveManages = (userId: string, ids: string[]) => api<TeamSave>(`/api/members/${userId}/team`, "PUT", { user_ids: ids });
+
+/** P98: "Staff they manage" in the member editor: search and tick many at once (or take some
+ * away); saving sets those people's "reports to". `value` null: not changed yet (shows the
+ * people who report to them now). */
+export function ManagesField({ member, members, value, onChange }: {
+  member: Member;
+  members: Member[];
+  value: string[] | null;
+  onChange: (ids: string[]) => void;
+}) {
+  const t = useT();
+  const team = useQuery({ queryKey: [...keys.members, "team", member.user_id], queryFn: () => api<Member[]>(`/api/members/${member.user_id}/team`) });
+  const now = (team.data ?? []).map((m) => m.user_id);
+  const none = t("No department");
+  const options = members
+    .filter((m) => m.user_id !== member.user_id && m.is_active)
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .map((m) => ({
+      value: m.user_id,
+      label: m.name,
+      keywords: [m.email],
+      group: m.department_name ?? none,
+      hint: [tr(ROLE_INFO[m.role].label), m.department_name, m.reports_to_user_id && m.reports_to_user_id !== member.user_id && m.reports_to_name ? t("now reports to {name}", { name: m.reports_to_name }) : null].filter(Boolean).join(" · "),
+    }))
+    // Grouped by department (A to Z), people with none last; by name inside each.
+    .sort((a, b) => Number(a.group === none) - Number(b.group === none) || a.group.localeCompare(b.group));
+  const sameDept = member.department_id ? members.filter((m) => m.department_id === member.department_id && m.user_id !== member.user_id && m.is_active).map((m) => m.user_id) : [];
+  const current = value ?? now;
+  return (
+    <div className="grid gap-1.5">
+      <span className="text-[13px] font-medium">{t("Staff they manage")}</span>
+      {team.isLoading ? <Skeleton className="h-10" /> : (
+        <MultiSelect value={current} onValueChange={onChange} label={t("Staff they manage")} placeholder={t("Pick the people who report to them")}
+          searchPlaceholder={t("Search by name, email or department")} options={options} />
+      )}
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+        <p className="min-w-0 flex-1 text-[12.5px] text-muted">{t("They can give these people tasks and follow their work. Someone who reports to another manager moves to them.")}</p>
+        {member.department_name && sameDept.some((id) => !current.includes(id)) ? (
+          <button type="button" className="text-[12.5px] font-medium text-accent hover:underline"
+            onClick={() => onChange([...current, ...sameDept.filter((id) => !current.includes(id))])}>
+            {t("+ Everyone in {department}", { department: member.department_name })}
+          </button>
+        ) : null}
+      </div>
+    </div>
   );
 }
 
@@ -202,7 +254,7 @@ export function BulkManagerDialog({ userIds, open, onOpenChange, onDone }: { use
       footer={<><Button variant="outline" onClick={() => onOpenChange(false)}>{t("Cancel")}</Button><Button loading={save.isPending} onClick={() => save.mutate()}>{t("Save")}</Button></>}>
       <div className="grid gap-3">
         {all.isLoading ? <Skeleton className="h-10" /> : (
-          <Select value={manager} onValueChange={setManager} label={t("Reports to")}
+          <SearchSelect value={manager} onValueChange={setManager} label={t("Reports to")} searchPlaceholder={t("Search people")}
             options={[{ value: NO_ONE, label: t("No one") }, ...managerOptions(all.data ?? []).filter((o) => !userIds.includes(o.value))]} />
         )}
         <FormError message={save.error ? errorMessage(save.error) : null} />

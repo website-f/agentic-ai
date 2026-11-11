@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { ResponsiveDialog } from "@/components/ui/dialog";
 import { FormError } from "@/components/ui/field";
 import { Pill } from "@/components/ui/pill";
-import { Select } from "@/components/ui/select";
+import { SearchSelect } from "@/components/ui/search-select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { SwitchField } from "@/components/ui/switch";
 import { t as tr, useT } from "@/i18n";
@@ -85,8 +85,9 @@ export function StarterTeamFields({
     <div className="grid grid-cols-[minmax(0,1fr)] gap-4">
       <div className="grid gap-1.5">
         <span className="text-[13px] font-medium">{t("Industry")}</span>
-        <Select
+        <SearchSelect
           label={t("Industry")}
+          searchPlaceholder={t("Search industries")}
           value={industry}
           onValueChange={onIndustry}
           className="w-full"
