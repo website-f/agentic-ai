@@ -144,6 +144,7 @@ export * from './client-needs';
 export * from './items';
 export * from './item-service';
 export * from './item-import';
+export * from './item-report';
 export * from './item-seed';
 export * from './work-kpi-client-complaints';
 export * from './work-kpi-crm';

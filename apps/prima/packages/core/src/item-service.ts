@@ -2,7 +2,7 @@
 // Every write is checked here, whatever the screen shows: who the user is, which legal entity they act for, the item's
 // state and version, and the request id (a double tap or retry never repeats a change). A scan only finds a record.
 
-import { AccessDenied, activeGrants, isActHead, isGroupLeader } from './access';
+import { AccessDenied, activeGrants, isActHead, isGroupLeader, isOwnerAdmin } from './access';
 import { sha256Hex } from './audit';
 import { BadRequest, NotFound, RefusedAfterSave, ReviewConflict } from './service';
 import { MISS_WINDOW_MS, MOVING_PURPOSES, SCAN_PURPOSES, genVerdict, manualProblem, readEntry, scanHash, tooManyManual, type ScanPurpose, type ScanVerdict } from './item-scan';
@@ -75,6 +75,8 @@ import {
   type ItemMovement,
   type ItemParty,
   type ItemSku,
+  type ItemSkuLegacy,
+  type ItemSkuUnit,
   type ItemSyncJob,
   type LineResult,
   type MovementType,
@@ -84,6 +86,19 @@ import {
 
 /** What a user may do for one legal entity. */
 export type ItemRole = 'store' | 'manager' | 'ops' | 'finance' | 'it' | 'view' | 'hr';
+
+/**
+ * P98: what an old system's item list and stock reports add to an item type (its old code, stock group, units with
+ * rate, cost and price, the last supplier cost, and its old stock figure as a reference). Checked in skuCatalogue.
+ */
+export type SkuCatalogue = {
+  sourceCode?: string | null;
+  group?: string | null;
+  uomLabel?: string | null;
+  units?: ItemSkuUnit[];
+  lastCost?: { cost: string; uom: string | null; supplier: string | null } | null;
+  legacy?: Omit<ItemSkuLegacy, 'at' | 'by'> | null;
+};
 
 /** A scan, or the older bare label (treated as chosen from a list on screen). */
 type Scanned = { label?: string; scan?: ScanEntry };
@@ -97,7 +112,8 @@ export class ItemDenied extends AccessDenied {
 }
 
 export type ItemAction =
-  | { kind: 'sku.add'; code: string; name: string; category: ItemCategory; tracking: TrackingMode; uom: BaseUom; size?: string; colour?: string; consumable?: boolean; components?: { skuId: Id; qty: number }[]; supplierBarcodes?: string[] }
+  | ({ kind: 'sku.add'; code: string; name: string; category: ItemCategory; tracking: TrackingMode; uom: BaseUom; size?: string; colour?: string; consumable?: boolean; components?: { skuId: Id; qty: number }[]; supplierBarcodes?: string[] } & SkuCatalogue)
+  | ({ kind: 'sku.update'; skuId: Id; expectedVersion?: number; name?: string; size?: string; colour?: string } & SkuCatalogue)
   | { kind: 'sku.map'; skuId: Id; partyId: Id; itemCode: string; uom: BaseUom; factor?: number }
   | { kind: 'sku.mapApprove'; skuId: Id; partyId: Id }
   | { kind: 'item.register'; skuId: Id; partyId: Id; count: number; serials?: string[]; itAssetId?: Id; legacyUnverified?: boolean; note?: string; legacyRef?: string; legacyFrom?: { where?: string; condition?: string; holder?: string } }
@@ -310,8 +326,31 @@ export class ItemService {
   async mayAdd(user: User, what: 'type' | 'unit' | 'stock', partyId: Id | null): Promise<boolean> {
     const roles = await this.rolesFor(user);
     const has = (p: Id, ...rs: ItemRole[]) => (roles.get(p) ?? []).some((r) => rs.includes(r));
+    // P98: the owner (the CEO record, isOwnerAdmin) may take these maker steps for any company (P78), never a check.
+    if (isOwnerAdmin(user)) return what === 'type' || (!!partyId && (await this.parties()).some((p) => p.id === partyId));
     if (what === 'type') return [...roles.keys()].some((p) => has(p, 'store', 'manager')) || has('merdeka', 'it', 'manager');
     return !!partyId && has(partyId, 'store', 'manager', 'it');
+  }
+
+  /**
+   * P98: may this user add item types, and for which companies may they register units or add stock (the Items
+   * screen shows Add and Import from these; every action checks again).
+   */
+  private addRights(ctx: Ctx): { types: boolean; parties: Id[] } {
+    const owner = isOwnerAdmin(ctx.user);
+    const types = owner || [...ctx.roles.keys()].some((p) => this.has(ctx, p, 'store', 'manager')) || this.has(ctx, 'merdeka', 'it', 'manager');
+    const parties = ctx.parties.filter((p) => owner || this.has(ctx, p.id, 'store', 'manager', 'it')).map((p) => p.id);
+    return { types, parties };
+  }
+
+  /**
+   * P98 (Fitri, 11 Nov 2026: the owner could not find Add): the maker steps of adding items (register units, print and
+   * scan back their first labels, add stock) for the store, or for the owner in any company (P78 OWNER_MAKER_ACTIONS:
+   * the owner may enter what a department enters). IT devices still belong to Merdeka Network only.
+   */
+  private mayMake(ctx: Ctx, partyId: Id, sku?: ItemSku | null) {
+    if (this.canHandle(ctx, partyId, sku ?? undefined)) return true;
+    return isOwnerAdmin(ctx.user) && ctx.parties.some((p) => p.id === partyId) && (sku?.category !== 'it_device' || partyId === 'merdeka');
   }
 
   private has(ctx: Ctx, partyId: Id, ...roles: ItemRole[]) {
@@ -520,16 +559,22 @@ export class ItemService {
     const careItems = items.filter((i) => this.visibleTo(ctx, i.partyIds) && (ctx.roles.has(i.ownerPartyId) || ctx.roles.has(i.custody.partyId) || this.follows(ctx, i)));
     const careIds = new Set(careItems.map((i) => i.id));
     const settings = new Map((await this.store.list('itemSettings')).map((x) => [x.partyId, x]));
+    // P98: the old system's cost and price are for stores, managers, Finance, IT and leaders; Operations sees the item only.
+    const seesMoney = isOwnerAdmin(user) || [...ctx.roles.values()].some((rs) => rs.some((r) => r === 'store' || r === 'manager' || r === 'finance' || r === 'view' || r === 'it'));
+    const vSkus = seesMoney ? skus : skus.map((s) => (s.units?.length || s.lastCost ? { ...s, units: (s.units ?? []).map((u) => ({ ...u, cost: null, price: null })), lastCost: null } : s));
     return {
       today,
       roles: [...ctx.roles.entries()].map(([partyId, roles]) => ({ partyId, roles })),
+      /** P98: whether this user may add item types, and the companies they may register units or add stock for. */
+      addRights: this.addRights(ctx),
+      seesMoney,
       /** How each of the user's companies tags its items. Scanning accepts all three whatever the choice. */
       tagMethods: [...ctx.roles.keys()].map((partyId) => {
         const x = settings.get(partyId);
         return { partyId, tagMethod: (x?.tagMethod ?? 'barcode') as TagMethod, label: TAG_METHOD_LABEL[x?.tagMethod ?? 'barcode'], by: x?.by ?? null, at: x?.at ?? null, reason: x?.reason ?? null };
       }),
       parties: ctx.parties.filter((p) => ctx.roles.has(p.id) || vMoves.some((m) => m.fromPartyId === p.id || m.toPartyId === p.id)),
-      skus,
+      skus: vSkus,
       items: vItems,
       lots: vLots,
       movements: vMoves.sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
@@ -892,7 +937,7 @@ export class ItemService {
     // A plain copy with list fields forced to lists, so a malformed request is refused, never half-applied.
     action = JSON.parse(raw) as ItemAction;
     const rec = action as unknown as Record<string, unknown>;
-    for (const k of ['lines', 'lotLines', 'labels', 'serials', 'components', 'supplierBarcodes', 'reads', 'scans', 'unexpected', 'itemIds', 'expected', 'jobIds', 'counterparties', 'skuIds', 'symbols'])
+    for (const k of ['lines', 'lotLines', 'labels', 'serials', 'components', 'supplierBarcodes', 'reads', 'scans', 'unexpected', 'itemIds', 'expected', 'jobIds', 'counterparties', 'skuIds', 'symbols', 'units'])
       if (k in rec && rec[k] != null && !Array.isArray(rec[k])) throw new BadRequest(`${k} must be a list.`);
     for (const k of ['scans', 'unexpected', 'reads', 'itemIds']) if (Array.isArray(rec[k]) && (rec[k] as unknown[]).length > SCAN_BATCH_MAX) throw new BadRequest(`Send at most ${SCAN_BATCH_MAX} at a time.`);
     for (const k of ['lines', 'lotLines', 'components', 'scans', 'unexpected', 'expected', 'counterparties'])
@@ -1049,6 +1094,8 @@ export class ItemService {
     switch (a.kind) {
       case 'sku.add':
         return this.skuAdd(tx, ctx, a);
+      case 'sku.update':
+        return this.skuUpdate(tx, ctx, a);
       case 'sku.map':
         return this.skuMap(tx, ctx, a);
       case 'item.register':
@@ -1181,8 +1228,7 @@ export class ItemService {
   // ----- Catalogue -----
 
   private async skuAdd(tx: Store, ctx: Ctx, a: Extract<ItemAction, { kind: 'sku.add' }>) {
-    const anyHandler = [...ctx.roles.entries()].some(([p]) => this.has(ctx, p, 'store', 'manager')) || (a.category === 'it_device' && this.has(ctx, 'merdeka', 'it', 'manager'));
-    if (!anyHandler) throw new ItemDenied('Only store staff, managers (and IT for IT devices) add item types.');
+    if (!this.mayEditTypes(ctx, a.category)) throw new ItemDenied('Only store staff, managers (and IT for IT devices) add item types.');
     const code = clip(a.code, 40).toUpperCase();
     const name = clip(a.name, 120);
     if (!/^[A-Z0-9][A-Z0-9-]{1,39}$/.test(code)) throw new BadRequest('Give a short code, letters, numbers and dashes (e.g. SHIRT-NAVY-L).');
@@ -1192,6 +1238,7 @@ export class ItemService {
     if (!['SERIALIZED', 'BULK', 'KIT'].includes(a.tracking)) throw new BadRequest('Choose how it is tracked: each unit, by quantity, or as a set.');
     if (!BASE_UOMS.includes(a.uom)) throw new BadRequest('Choose the unit.');
     if ((await tx.list('itemSkus', { code })).length) throw new BadRequest('That code is already in the catalogue.');
+    const extra = await this.skuCatalogue(tx, ctx, a, null);
     const consumable = a.tracking === 'BULK' && !!a.consumable;
     let components: ItemSku['components'] = [];
     if (a.tracking === 'KIT') {
@@ -1221,10 +1268,119 @@ export class ItemService {
       createdAt: ctx.at,
       version: 1,
       partyIds: ['*'],
+      ...extra,
     };
     await tx.insert('itemSkus', row);
     await tx.audit({ at: ctx.at, actor: ctx.user.name, companyId: null, action: 'item.sku.add', entity: 'item_sku', entityId: id, summary: `Item type ${code} (${name}) added, tracked ${a.tracking}.` });
     return row;
+  }
+
+  /** Who adds and changes item types: store staff or managers of any company, IT for IT devices, or the owner (P98). */
+  private mayEditTypes(ctx: Ctx, category: ItemCategory) {
+    return isOwnerAdmin(ctx.user) || [...ctx.roles.entries()].some(([p]) => this.has(ctx, p, 'store', 'manager')) || (category === 'it_device' && this.has(ctx, 'merdeka', 'it', 'manager'));
+  }
+
+  /**
+   * P98: the old system's catalogue fields, checked: its code as printed (one type per old code), stock group, unit
+   * name, units with rate, cost and price, the last supplier cost, and the old stock figure. Only what is given changes.
+   */
+  private async skuCatalogue(tx: Store, ctx: Ctx, a: SkuCatalogue, self: ItemSku | null): Promise<Partial<ItemSku>> {
+    const out: Partial<ItemSku> = {};
+    const text = (v: unknown, n: number) => clip(v, n).replace(/[\u0000-\u001f\u007f]/g, '') || null;
+    const money = (v: unknown, what: string) => {
+      if (v == null || v === '') return null;
+      const n = Number(v);
+      if (!Number.isFinite(n) || n < 0 || n > 10_000_000) throw new BadRequest(`${what}: give an amount in ringgit (0 or more).`);
+      return n.toFixed(2);
+    };
+    if (a.sourceCode !== undefined) {
+      const sc = text(a.sourceCode, 60)?.replace(/\s+/g, ' ').toUpperCase() ?? null;
+      if (sc) {
+        const same = (await tx.list('itemSkus', { sourceCode: sc } as never)).find((s) => s.id !== self?.id);
+        if (same) throw new BadRequest(`Old code ${sc} is already item type ${same.code}.`);
+      }
+      out.sourceCode = sc;
+    }
+    if (a.group !== undefined) out.group = text(a.group, 60);
+    if (a.uomLabel !== undefined) out.uomLabel = text(a.uomLabel, 20)?.toUpperCase() ?? null;
+    if (a.units !== undefined) {
+      if (!Array.isArray(a.units) || a.units.length > 6) throw new BadRequest('Give at most 6 units.');
+      out.units = a.units.map((u) => {
+        const uom = text(u?.uom, 20)?.toUpperCase();
+        if (!uom) throw new BadRequest('Each unit needs its name (UOM).');
+        const rate = u.rate == null ? null : Number(u.rate);
+        if (rate !== null && (!Number.isFinite(rate) || rate <= 0 || rate > 100000)) throw new BadRequest(`Unit ${uom}: the rate is the number of base units in it.`);
+        return { uom, rate, cost: money(u.cost, `Unit ${uom} cost`), price: money(u.price, `Unit ${uom} price`) };
+      });
+    }
+    if (a.lastCost !== undefined)
+      out.lastCost = a.lastCost ? { cost: money(a.lastCost.cost, 'Last cost') ?? '0.00', uom: text(a.lastCost.uom, 20)?.toUpperCase() ?? null, supplier: text(a.lastCost.supplier, 80) } : null;
+    if (a.legacy !== undefined) {
+      const l = a.legacy;
+      if (!l) out.legacy = null;
+      else {
+        const n = (v: unknown) => (v == null || v === '' ? null : Number.isFinite(Number(v)) && Math.abs(Number(v)) <= 1e9 ? Number(v) : NaN);
+        const d = (v: unknown) => (v == null || v === '' ? null : /^\d{4}-\d{2}-\d{2}$/.test(String(v)) ? String(v) : 'bad');
+        const c = l.card;
+        const card = c
+          ? {
+              from: d(c.from),
+              to: d(c.to),
+              opening: n(c.opening),
+              in: n(c.in) ?? 0,
+              out: n(c.out) ?? 0,
+              balance: n(c.balance),
+              lines: n(c.lines) ?? 0,
+              docs: Object.fromEntries(Object.entries(c.docs ?? {}).filter(([k, v]) => /^[A-Za-z]{1,5}$/.test(k) && Number.isInteger(v) && v >= 0).slice(0, 8)),
+            }
+          : null;
+        const qty = n(l.qty);
+        const nums = [qty, card?.opening, card?.in, card?.out, card?.balance, card?.lines];
+        if (nums.some((x) => typeof x === 'number' && Number.isNaN(x)) || d(l.qtyAsOf) === 'bad' || card?.from === 'bad' || card?.to === 'bad') throw new BadRequest('The old stock figures are not numbers and dates.');
+        out.legacy = {
+          qty,
+          qtyAsOf: d(l.qtyAsOf),
+          stocked: l.stocked && typeof l.stocked === 'object' ? { partyId: clip(l.stocked.partyId, 80), qty: Math.max(0, Math.round(Number(l.stocked.qty) || 0)) } : null,
+          card: card as ItemSkuLegacy['card'],
+          location: text(l.location, 60),
+          batch: text(l.batch, 40),
+          note: text(l.note, 200),
+          at: ctx.at,
+          by: ctx.user.name,
+        };
+      }
+    }
+    return out;
+  }
+
+  /** P98: change an item type's name and the old system's catalogue fields. How it is tracked and its code never change. */
+  private async skuUpdate(tx: Store, ctx: Ctx, a: Extract<ItemAction, { kind: 'sku.update' }>) {
+    await tx.lock?.('itemSkus', String(a.skuId ?? ''));
+    const sku = this.skuCheck(await tx.get('itemSkus', String(a.skuId ?? '')));
+    if (!this.mayEditTypes(ctx, sku.category)) throw new ItemDenied('Only store staff, managers (and IT for IT devices) change item types.');
+    if (a.expectedVersion != null && a.expectedVersion !== sku.version) throw new ReviewConflict('Someone changed this item type a moment ago. Reload it and check again.');
+    // A type first added without its old code takes it on the first import that names it; an old code never changes.
+    const given: SkuCatalogue = { ...a };
+    if (sku.sourceCode) delete given.sourceCode;
+    const patch: Partial<ItemSku> = await this.skuCatalogue(tx, ctx, given, sku);
+    if (a.name !== undefined) {
+      const name = clip(a.name, 120);
+      if (name.length < 3) throw new BadRequest('Give the item name.');
+      if (isControlledItem(`${sku.code} ${name}`)) throw new BadRequest('Firearms, ammunition and controlled items are not registered here. They stay in the Arms Control vault records.');
+      patch.name = name;
+    }
+    if (a.size !== undefined) patch.size = clip(a.size, 20) || null;
+    if (a.colour !== undefined) patch.colour = clip(a.colour, 30) || null;
+    // The old stock figure's date and author change with every import: compare what it says, not when it was read.
+    const same = (k: string) => {
+      const strip = (v: unknown) => (k === 'legacy' && v && typeof v === 'object' ? { ...(v as Record<string, unknown>), at: null, by: null } : (v ?? null));
+      return JSON.stringify(strip((sku as unknown as Record<string, unknown>)[k])) === JSON.stringify(strip((patch as Record<string, unknown>)[k]));
+    };
+    const changed = Object.keys(patch).filter((k) => !same(k));
+    if (!changed.length) return sku;
+    const out = await tx.update('itemSkus', sku.id, { ...patch, version: sku.version + 1 });
+    await tx.audit({ at: ctx.at, actor: ctx.user.name, companyId: null, action: 'item.sku.update', entity: 'item_sku', entityId: sku.id, summary: `Item type ${sku.code} changed: ${changed.join(', ')}.` });
+    return out;
   }
 
   private async skuMap(tx: Store, ctx: Ctx, a: Extract<ItemAction, { kind: 'sku.map' }>) {
@@ -1252,7 +1408,7 @@ export class ItemService {
     const sku = this.skuCheck(await tx.get('itemSkus', a.skuId));
     if (sku.tracking === 'BULK') throw new BadRequest('That item type is counted by quantity: add stock instead.');
     if (sku.tracking === 'KIT') throw new BadRequest('A set is made from units already registered: assemble the set.');
-    if (!this.canHandle(ctx, a.partyId, sku)) throw new ItemDenied('Only store staff of that company (or IT for IT devices) register items.');
+    if (!this.mayMake(ctx, a.partyId, sku)) throw new ItemDenied('Only store staff of that company (or IT for IT devices) register items.');
     const count = Math.round(Number(a.count));
     if (!(count >= 1 && count <= 50)) throw new BadRequest('Register 1 to 50 units at a time.');
     const serials = (a.serials ?? []).map((s) => clip(s, 60));
@@ -1374,7 +1530,7 @@ export class ItemService {
       const found = await tx.get('physicalItems', id);
       if (!found || !(await this.seesItem(ctx, found))) throw new NotFound('Item');
       const sku = await tx.get('itemSkus', found.skuId);
-      if (!this.canHandle(ctx, found.custody.partyId, sku)) throw new ItemDenied('Only the store holding the item prints its label.');
+      if (!this.canHandle(ctx, found.custody.partyId, sku) && !(this.mayMake(ctx, found.custody.partyId, sku) && found.state === 'quarantine')) throw new ItemDenied('Only the store holding the item prints its label.');
       if (found.state === 'disposed') throw new BadRequest('A disposed item keeps its ID retired; no new label.');
       const item = await this.lockItem(tx, found);
       const cfg = this.cfg(ctx, item.custody.partyId);
@@ -1443,7 +1599,7 @@ export class ItemService {
     if ((p.gen ?? 1) !== pr.gen) throw new BadRequest('This is not the copy just printed: it is from another print of the same ID.');
     if (labelGenOf(item) !== pr.gen) throw new BadRequest('A newer label was printed since: scan that one.');
     const sku = await tx.get('itemSkus', item.skuId);
-    if (!this.canHandle(ctx, item.custody.partyId, sku)) throw new ItemDenied('Only the store holding the item checks its label.');
+    if (!this.canHandle(ctx, item.custody.partyId, sku) && !(this.mayMake(ctx, item.custody.partyId, sku) && item.state === 'quarantine')) throw new ItemDenied('Only the store holding the item checks its label.');
     if (pr.verified) return pr;
     item = await this.lockItem(tx, item);
     const verified = { at: ctx.at, byId: ctx.user.id, source: r.entry.source };
@@ -1497,7 +1653,7 @@ export class ItemService {
   private async lotAdd(tx: Store, ctx: Ctx, a: Extract<ItemAction, { kind: 'lot.add' }>) {
     const sku = this.skuCheck(await tx.get('itemSkus', a.skuId));
     if (sku.tracking !== 'BULK') throw new BadRequest('Only item types counted by quantity are added as stock. Register units one by one.');
-    if (!this.canHandle(ctx, a.partyId, sku)) throw new ItemDenied('Only store staff add stock.');
+    if (!this.mayMake(ctx, a.partyId, sku)) throw new ItemDenied('Only store staff add stock.');
     const qty = Number(a.qty);
     if (!Number.isInteger(qty) || qty < 1 || qty > 100000) throw new BadRequest('Give a whole quantity.');
     const note = clip(a.note, 200);

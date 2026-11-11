@@ -32,7 +32,7 @@ import type { BillingMethod, Dataset, Id, IsoDate, IsoDateTime, LeaveOverrideKin
 import { orgLinksOn, withoutHandOvers } from './org-links';
 // P91: the item register's own kinds (item types, units, bulk stock), saved through the Items screen's own actions.
 import { CENTRAL_PARTIES } from './items';
-import { ITEM_CATEGORY_WORDS, ITEM_IMPORT_KINDS, ITEM_TRACKING_WORDS, ITEM_UOM_WORDS, type ItemImportKind, type ItemStockRow, type ItemTypeRow, type ItemUnitRow } from './item-import';
+import { ITEM_CATEGORY_WORDS, ITEM_IMPORT_KINDS, ITEM_TRACKING_WORDS, ITEM_UOM_WORDS, type ItemImportKind, type ItemListOutcome, type ItemListRow, type ItemStockRow, type ItemTypeRow, type ItemUnitRow } from './item-import';
 import { P91_BIZ_IMPORTS, P91_BIZ_KINDS, isBizImportKind, saveBizRow, type BizImportSaver, type P91BizImportKind } from './org-import-biz';
 import { OpsImportRows, P91_IMPORTS, P91_IMPORT_KINDS, isP91Kind, type P91ImportKind, type P91ImportSaver } from './org-import-ops';
 
@@ -318,6 +318,39 @@ export const EXTRA_IMPORTS: Record<ExtraImportKind, ImportSpec> = {
       { key: 'note', label: 'Where the figure comes from', type: 'text', help: 'For example the old stock card. Empty: "Opening balance from the old system".', words: ['note', 'catatan', 'remarks', 'source', 'sumber', 'rujukan'] },
     ],
   },
+  // P98 (Fitri, 11 Nov 2026): an old system's item list or stock reports, read on the Items screen (item-report.ts) and
+  // sent here one item a row: matched by its old code, a new item type or the same one brought up to date, and the
+  // quantity as the chosen company's opening stock when it has none yet.
+  itemList: {
+    kind: 'itemList',
+    label: 'Item list or stock report',
+    table: 'itemSkus',
+    companyScoped: true,
+    keptBy: 'Store staff and managers of the company holding the stock, or the owner',
+    screen: 'Items and equipment, Import',
+    note: 'Each item is matched by its old code: a new item type is added as "New item type" adds one, or the type already loaded is brought up to date. The quantity becomes the company\'s opening stock only when it has none of that item yet; a figure below zero or not whole is kept as a reference to count.',
+    fields: [
+      { key: 'code', label: 'Old item code', type: 'text', words: ['item code', 'kod item', 'kod barang', 'code', 'kod', 'sku'] },
+      { key: 'name', label: 'Description', type: 'text', required: true, words: ['description', 'keterangan', 'item name', 'nama barang', 'name'] },
+      { key: 'group', label: 'Stock group', type: 'text', words: ['stock group', 'kumpulan', 'group'] },
+      { key: 'category', label: 'Category', type: 'select', required: true, options: ITEM_CATEGORY_WORDS, words: ['category', 'kategori'] },
+      { key: 'tracking', label: 'Tracked', type: 'select', options: ITEM_TRACKING_WORDS, words: ['tracking', 'tracked'] },
+      { key: 'unit', label: 'Unit', type: 'text', words: ['uom', 'unit'] },
+      { key: 'units', label: 'Units with rate, cost and price', type: 'text', words: ['units'] },
+      { key: 'lastCost', label: 'Last supplier cost', type: 'text', words: ['last cost'] },
+      { key: 'lastCostUom', label: 'Last cost unit', type: 'text', words: ['last cost uom'] },
+      { key: 'supplier', label: 'Last supplier', type: 'text', words: ['supplier', 'pembekal'] },
+      { key: 'qty', label: 'Quantity in stock', type: 'text', words: ['qty', 'quantity', 'balance', 'baki'] },
+      { key: 'qtyAsOf', label: 'Quantity as at', type: 'text', words: ['as at', 'qty as of'] },
+      { key: 'location', label: 'Location', type: 'text', words: ['location', 'lokasi'] },
+      { key: 'batch', label: 'Batch', type: 'text', words: ['batch'] },
+      { key: 'size', label: 'Size', type: 'text', words: ['size', 'saiz'] },
+      { key: 'colour', label: 'Colour', type: 'text', words: ['colour', 'warna'] },
+      { key: 'barcode', label: 'Supplier barcode', type: 'text', words: ['barcode'] },
+      { key: 'history', label: 'Stock card summary', type: 'text', words: ['history', 'stock card'] },
+      { key: 'note', label: 'Note', type: 'text', words: ['note', 'catatan'] },
+    ],
+  },
   // P91: the business screens' master records (org-import-biz.ts).
   ...P91_BIZ_IMPORTS,
   // P91: Operations, Security, Equipment and HR records (org-import-ops.ts).
@@ -393,6 +426,8 @@ export interface OrgImportReceipt {
   skippedRows?: number[];
   /** P81: the companies the rows went to, when a Company column sent them to more than one. */
   companyIds?: Id[];
+  /** P98: what each item of an item list did (returned with the import, not kept in the receipt). */
+  outcomes?: ItemListOutcome[];
 }
 
 export interface ImportRowResult {
@@ -405,6 +440,8 @@ export interface ImportRowResult {
   values: Record<string, string>;
   /** P81: the company the row goes to (from a Company column), and whether the name was a close guess. */
   company: { id: Id; name: string; guess: boolean } | null;
+  /** P98: for an item list, what the row would do: a new item type or a change, and its opening stock. */
+  outcome?: ItemListOutcome;
 }
 
 export interface ImportOptions {
@@ -467,6 +504,8 @@ export interface ImportSaver extends BizImportSaver, P91ImportSaver {
   importItemType?(user: User, row: ItemTypeRow): Promise<{ id: Id }>;
   importItemUnit?(user: User, row: ItemUnitRow): Promise<{ ids: Id[] }>;
   importItemStock?(user: User, row: ItemStockRow): Promise<{ id: Id }>;
+  /** P98: one item of an old item list or stock report (sku.add or sku.update, then lot.add). */
+  importItemList?(user: User, row: ItemListRow): Promise<ItemListOutcome>;
 }
 
 /** P90: a foreign worker added by FWM by hand or from an old list (no JA record needed). */
@@ -614,6 +653,8 @@ type Form = { companyId: Id | null; options: Record<string, [string, string][]> 
 
 export class OrgImportService {
   private opsRows: OpsImportRows | null = null;
+  /** P98: what the last item list row did (read by the preview and the commit right after the row is saved). */
+  private lastOutcome: ItemListOutcome | null = null;
   constructor(
     private store: Store,
     private saver: ImportSaver,
@@ -941,6 +982,35 @@ export class OrgImportService {
       });
       return a.id;
     }
+    if (kind === 'itemList') {
+      if (!this.saver.importItemList) throw new ImportError('Items are not imported here.', 400);
+      const t = (x: unknown) => (x === null || x === undefined ? '' : String(x));
+      const q = t(v.qty).trim();
+      const r = await this.saver.importItemList(user, {
+        partyId: companyId ?? null,
+        code: t(v.code),
+        name: t(v.name),
+        group: t(v.group),
+        category: t(v.category),
+        tracking: t(v.tracking),
+        unit: t(v.unit),
+        units: t(v.units),
+        lastCost: t(v.lastCost),
+        lastCostUom: t(v.lastCostUom),
+        supplier: t(v.supplier),
+        qty: q === '' ? null : Number(q.replace(/,/g, '')),
+        qtyAsOf: t(v.qtyAsOf),
+        location: t(v.location),
+        batch: t(v.batch),
+        size: t(v.size),
+        colour: t(v.colour),
+        barcode: t(v.barcode),
+        history: t(v.history),
+        note: t(v.note),
+      });
+      this.lastOutcome = r;
+      return r.id;
+    }
     if (kind === 'itemType' || kind === 'itemUnit' || kind === 'itemStock') {
       const t = (x: unknown) => (x === null || x === undefined ? '' : String(x));
       if (!this.saver.importItemType || !this.saver.importItemUnit || !this.saver.importItemStock) throw new ImportError('Items are not imported here.', 400);
@@ -993,13 +1063,16 @@ export class OrgImportService {
         const out: ImportRowResult[] = [];
         for (const r of p.rows) {
           const problems = [...r.problems];
+          this.lastOutcome = null;
           if (!r.skipped && !problems.length && !p.missing.length) {
             try {
               await this.store.transaction(() => this.saveRow(user, kind, r.companyId, r.raw));
             } catch (e) {
               problems.push(messageOf(e));
+              this.lastOutcome = null;
             }
           }
+          const outcome = this.lastOutcome;
           out.push({
             row: r.row,
             ok: !r.skipped && !problems.length && !p.missing.length,
@@ -1007,6 +1080,7 @@ export class OrgImportService {
             problems: r.skipped ? [] : problems,
             values: this.shown(p.spec, r.raw),
             company: r.company,
+            ...(outcome ? { outcome } : {}),
           });
         }
         return out;
@@ -1061,10 +1135,13 @@ export class OrgImportService {
       if (receipts.some((x) => x.fingerprint === p.fingerprint)) throw new ImportError('This file was already imported.', 409);
       const before = new Set((await tx.list(p.spec.table as never, {})).map((r) => (r as { id: Id }).id));
       const returned: Id[] = [];
+      const outcomes: ItemListOutcome[] = [];
       await withoutHandOvers(tx, async () => {
         for (const r of chosen) {
           try {
+            this.lastOutcome = null;
             const id = await this.saveRow(user, kind, r.companyId, r.raw);
+            if (this.lastOutcome) outcomes.push(this.lastOutcome);
             if (Array.isArray(id)) returned.push(...id);
             else if (id) returned.push(id);
           } catch (e) {
@@ -1103,7 +1180,7 @@ export class OrgImportService {
         entityId: receipt.id,
         summary: `${chosen.length} ${p.spec.label.toLowerCase()} record${chosen.length === 1 ? '' : 's'} imported from a file${skippedRows.length ? `, ${skippedRows.length} row${skippedRows.length === 1 ? '' : 's'} skipped` : ''}${companyIds.length > 1 ? `, into ${companyIds.length} companies` : ''} (fingerprint ${p.fingerprint.slice(0, 12)}).`,
       });
-      return receipt;
+      return outcomes.length ? { ...receipt, outcomes } : receipt;
     });
   }
 }

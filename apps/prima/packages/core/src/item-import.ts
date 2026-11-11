@@ -9,6 +9,7 @@
 // and the person who gets it confirms it themselves. Firearms stay in Arms Control (sku.add refuses them).
 
 import { matchOption, normHeader } from './import-align';
+import { decodeCard, decodeUnits, primaCodeOf } from './item-report';
 import { BASE_UOMS, ITEM_CATEGORIES, type BaseUom, type ItemCategory, type ItemSku, type PhysicalItem, type TrackingMode, type ItemLot } from './items';
 import type { ItemService } from './item-service';
 import { BadRequest } from './service';
@@ -16,8 +17,8 @@ import type { Store } from './store';
 import type { Id, User } from './types';
 
 /** The kinds the Items screen imports. */
-export type ItemImportKind = 'itemType' | 'itemUnit' | 'itemStock';
-export const ITEM_IMPORT_KINDS: readonly ItemImportKind[] = ['itemType', 'itemUnit', 'itemStock'];
+export type ItemImportKind = 'itemType' | 'itemUnit' | 'itemStock' | 'itemList';
+export const ITEM_IMPORT_KINDS: readonly ItemImportKind[] = ['itemType', 'itemUnit', 'itemStock', 'itemList'];
 
 /** Categories as the Items screen names them. */
 export const ITEM_CATEGORY_WORDS: [ItemCategory, string][] = [
@@ -74,10 +75,10 @@ const TRACKING_SYNONYMS: Record<'SERIALIZED' | 'BULK', string[]> = {
   BULK: ['bulk', 'quantity', 'qty', 'by quantity', 'kuantiti', 'pukal', 'consumable', 'stock', 'stok', 'count', 'counted'],
 };
 const UOM_SYNONYMS: Record<BaseUom, string[]> = {
-  PCS: ['pcs', 'pc', 'piece', 'pieces', 'unit', 'units', 'nos', 'no', 'ea', 'each', 'biji', 'helai', 'keping', 'buah', 'batang', 'unit unit'],
-  PAIR: ['pair', 'pairs', 'pr', 'prs', 'pasang'],
+  PCS: ['pcs', 'pc', 'piece', 'pieces', 'piecse', 'unit', 'units', 'nos', 'no', 'ea', 'each', 'biji', 'helai', 'keping', 'buah', 'batang', 'unit unit'],
+  PAIR: ['pair', 'pairs', 'pr', 'prs', 'pasang', 'psg'],
   SET: ['set', 'sets', 'kit', 'kits'],
-  BOX: ['box', 'boxes', 'bx', 'kotak', 'carton', 'ctn', 'pack', 'pek', 'paket'],
+  BOX: ['box', 'boxes', 'bx', 'kotak', 'carton', 'ctn', 'pack', 'pek', 'paket', 'pkt'],
   BOTTLE: ['bottle', 'bottles', 'btl', 'botol'],
   LITRE: ['litre', 'litres', 'liter', 'l', 'ltr', 'lit'],
   ROLL: ['roll', 'rolls', 'gulung', 'rol'],
@@ -260,4 +261,156 @@ export async function importItemStock(items: ItemService, store: Store, user: Us
   const note = `Opening balance from the old system${where ? ` (was at ${where.slice(0, 60)})` : ''}${said ? `: ${said}` : ''}`.slice(0, 200);
   const out = (await items.act(user, rid(), { kind: 'lot.add', skuId: sku.id, partyId: r.partyId, qty, note })) as { result: ItemLot };
   return { id: out.result.id };
+}
+
+// ---------- P98: any item list or stock report (kind itemList) ----------
+
+/**
+ * One item of an old system's item list or stock report, as the Items screen's import sends it after reading the files
+ * (item-report.ts). The server reads every cell again here.
+ */
+export interface ItemListRow {
+  partyId: Id | null;
+  code: string;
+  name: string;
+  group: string;
+  category: string;
+  tracking: string;
+  unit: string;
+  units: string;
+  lastCost: string;
+  lastCostUom: string;
+  supplier: string;
+  qty: number | null;
+  qtyAsOf: string;
+  location: string;
+  batch: string;
+  size: string;
+  colour: string;
+  barcode: string;
+  history: string;
+  note: string;
+}
+
+/** What one item of the list did: a new item type, a change, or nothing new; and its opening stock. */
+export interface ItemListOutcome {
+  id: Id;
+  code: string;
+  action: 'create' | 'update' | 'same';
+  stock: 'added' | 'kept' | 'none';
+  notes: string[];
+}
+
+/**
+ * One item of an old list into the catalogue, matched by its old code: a new item type through sku.add (its Prima code
+ * made from the old code, its label QR and barcode from that), or the same type brought up to date through sku.update.
+ * The quantity becomes the opening stock of the chosen company through lot.add only when that company has no stock of
+ * it yet; a figure below zero or not whole is kept as a reference and the item is left to count.
+ */
+export async function importItemList(items: ItemService, store: Store, user: User, r: ItemListRow): Promise<ItemListOutcome> {
+  const tidy = (v: unknown, n: number) =>
+    String(v ?? '')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .slice(0, n);
+  const source = tidy(r.code, 60).toUpperCase();
+  const name = tidy(r.name, 120) || source;
+  if (!name) fail('Each item needs its code or its description.');
+  const category = itemCategoryOf(r.category) ?? fail(`Category "${tidy(r.category, 40)}" is not one of: ${ITEM_CATEGORY_WORDS.map(([, l]) => l).join(', ')}.`);
+  const tracking = String(r.tracking ?? '').trim() ? (itemTrackingOf(r.tracking) ?? fail('Tracked: write "each unit" (own label) or "by quantity".')) : 'BULK';
+  const label = tidy(r.unit, 20).toUpperCase();
+  const uom: BaseUom = (label && itemUomOf(label)) || 'PCS';
+  const units = decodeUnits(r.units) ?? fail('The units (UOM, rate, cost, price) could not be read.');
+  const card = decodeCard(r.history);
+  if (card === 'bad') fail('The stock card summary could not be read.');
+  const cost = String(r.lastCost ?? '').trim();
+  const lastCost = cost ? { cost, uom: tidy(r.lastCostUom, 20) || null, supplier: tidy(r.supplier, 80) || null } : undefined;
+  const qty = r.qty == null || String(r.qty) === '' ? null : Number(r.qty);
+  if (qty !== null && !Number.isFinite(qty)) fail('The quantity is not a number.');
+  const asOf = tidy(r.qtyAsOf, 10);
+  if (asOf && !/^\d{4}-\d{2}-\d{2}$/.test(asOf)) fail('The date of the quantity is not a date.');
+  const prima = primaCodeOf(source, name);
+  // Looked up by the old code, then by the Prima code (a type added by hand before the import), never by listing all.
+  const bySource = source ? await store.list('itemSkus', { sourceCode: source } as never) : [];
+  let sku = bySource[0] ?? (await store.list('itemSkus', { code: prima })).find((s) => !s.sourceCode) ?? null;
+  const notes: string[] = [];
+  // The opening stock: a whole number above zero, into a company with no stock of this type yet.
+  const partyId = r.partyId;
+  let stockQty: number | null = null;
+  const stockTracking = sku?.tracking ?? tracking;
+  if (qty !== null && partyId) {
+    if (stockTracking !== 'BULK') notes.push(`Each unit has its own label: register the ${qty} units on Stock and labels; no stock is added.`);
+    else if (qty < 0) notes.push(`The old system shows ${qty} (below zero): no stock added. Count it.`);
+    else if (!Number.isInteger(qty)) notes.push(`The old system shows ${qty} (not a whole number): no stock added. Count it.`);
+    else if (qty > 100000) notes.push(`The old system shows ${qty}: more than 100000 at once is not added. Add it by hand.`);
+    else if (qty > 0) {
+      const lots = sku ? await store.list('itemLots', { skuId: sku.id, ownerPartyId: partyId }) : [];
+      if (lots.length) notes.push(`Prima already has stock of this item for the company (${lots.reduce((a, l) => a + l.qty, 0)}): not changed. Count it to correct.`);
+      else stockQty = qty;
+    }
+  }
+  const legacy = {
+    qty,
+    qtyAsOf: asOf || null,
+    stocked: stockQty !== null && partyId ? { partyId, qty: stockQty } : null,
+    card: card === 'bad' ? null : card,
+    location: tidy(r.location, 60) || null,
+    batch: tidy(r.batch, 40) || null,
+    note: tidy(r.note, 200) || null,
+  };
+  const extras = {
+    ...(String(r.group ?? '').trim() ? { group: tidy(r.group, 60) } : {}),
+    ...(units.length ? { units } : {}),
+    ...(label && label !== uom ? { uomLabel: label } : {}),
+    ...(lastCost ? { lastCost } : {}),
+    legacy,
+  };
+  let action: ItemListOutcome['action'];
+  if (!sku) {
+    // A new type: its code from the old code; another old code that makes the same Prima code gets -2, -3.
+    let code = prima;
+    if (!/^[A-Z0-9][A-Z0-9-]{1,39}$/.test(code)) fail(`The code "${source || name}" gives no usable Prima code: give the item a code of letters and digits.`);
+    for (let k = 2; (await store.list('itemSkus', { code })).length; k++) {
+      if (k > 50) fail(`Too many items make the code ${prima}: give this item a code of its own.`);
+      code = `${prima.slice(0, 40 - String(k).length - 1).replace(/-+$/, '')}-${k}`;
+    }
+    if (code !== prima) notes.push(`Prima code ${code}: ${prima} is another item.`);
+    const barcode = tidy(r.barcode, 40);
+    const out = (await items.act(user, rid(), {
+      kind: 'sku.add',
+      code,
+      name: name.length < 3 ? `${name} (${code})`.slice(0, 120) : name,
+      category,
+      tracking,
+      uom,
+      size: tidy(r.size, 20) || undefined,
+      colour: tidy(r.colour, 30) || undefined,
+      consumable: false,
+      supplierBarcodes: barcode ? [barcode] : [],
+      ...(source ? { sourceCode: source } : {}),
+      ...extras,
+    })) as { result: ItemSku };
+    sku = out.result;
+    action = 'create';
+  } else {
+    const found: ItemSku = sku;
+    const better = name.length >= found.name.length && name !== found.name && name.length >= 3;
+    const out = (await items.act(user, rid(), {
+      kind: 'sku.update',
+      skuId: found.id,
+      ...(better ? { name } : {}),
+      ...(source && !found.sourceCode ? { sourceCode: source } : {}),
+      ...extras,
+    })) as { result: ItemSku };
+    action = out.result.version === found.version ? 'same' : 'update';
+    if (found.category !== category) notes.push(`Kept as ${ITEM_CATEGORY_WORDS.find(([k]) => k === found.category)?.[1] ?? found.category}: the category of an item type is changed by hand.`);
+    if (found.tracking !== tracking) notes.push('Kept as it is tracked now: how an item type is tracked is set once.');
+    sku = out.result;
+  }
+  let stock: ItemListOutcome['stock'] = 'none';
+  if (stockQty !== null && partyId) {
+    await items.act(user, rid(), { kind: 'lot.add', skuId: sku.id, partyId, qty: stockQty, note: `Opening balance from the old system${asOf ? ` as at ${asOf}` : ''}${legacy.location ? ` (${legacy.location})` : ''}` });
+    stock = 'added';
+  } else if (notes.some((n) => n.startsWith('Prima already has stock'))) stock = 'kept';
+  return { id: sku.id, code: sku.code, action, stock, notes };
 }

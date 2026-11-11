@@ -225,7 +225,7 @@ import { simpleMinutesReader } from "./meetings";
 import type { MinutesReader } from "./meetings";
 import { WebsiteService } from "./websites";
 import { ItemService } from "./item-service";
-import { importItemStock, importItemType, importItemUnit, type ItemImportKind, type ItemStockRow, type ItemTypeRow, type ItemUnitRow } from './item-import';
+import { importItemList, importItemStock, importItemType, importItemUnit, type ItemImportKind, type ItemListRow, type ItemStockRow, type ItemTypeRow, type ItemUnitRow } from './item-import';
 import { SOCSO_RESTRICTION_LABEL } from "./socso";
 import { SOCSO_STATUS_LABEL } from "./socso";
 import { SOCSO_TYPE_LABEL } from "./socso";
@@ -35688,7 +35688,13 @@ export class PrimaService {
 
   /** P91: who may import item types, units or stock for a company: the same people the Items screen lets add them. */
   itemImportAllowed(user: User, kind: ItemImportKind, partyId: Id | null): Promise<boolean> {
+    // P98: an item list adds item types and the company's opening stock: both rights are needed.
+    if (kind === 'itemList') return this.items.mayAdd(user, 'type', null).then(async (t) => t && (await this.items.mayAdd(user, 'stock', partyId)));
     return this.items.mayAdd(user, kind === 'itemType' ? 'type' : kind === 'itemUnit' ? 'unit' : 'stock', partyId);
+  }
+  /** P98: one item of an old item list or stock report (matched by its old code; opening stock when there is none). */
+  importItemList(user: User, row: ItemListRow) {
+    return importItemList(this.items, this.store, user, row);
   }
   /** P91: one item type from an old list, through sku.add. */
   importItemType(user: User, row: ItemTypeRow) {
