@@ -3911,7 +3911,6 @@ const ROWS: Row[] = [
   ['Why it changes', 'Kenapa ia berubah', null],
   ['A change from this month is already saved. Saving replaces it; it stays in the history as replaced.', 'Perubahan mulai bulan ini sudah disimpan. Menyimpan akan menggantikannya; ia kekal dalam sejarah sebagai diganti.', 'Perubahan mulai bulan ini dah di-save. Save akan ganti; ia kekal dalam history sebagai replaced.'],
   ['Now', 'Sekarang', null],
-  ['New', 'Baharu', 'Baru'],
   ['Was', 'Sebelum', null],
   ['No rate changes: this records the law reference and the reason from that month.', 'Tiada perubahan kadar: ini merekod rujukan undang-undang dan sebab mulai bulan itu.', 'Tiada perubahan rate: ini rekod rujukan undang-undang dan sebab mulai bulan itu.'],
   ['Back to edit', 'Kembali untuk sunting', 'Balik untuk edit'],
