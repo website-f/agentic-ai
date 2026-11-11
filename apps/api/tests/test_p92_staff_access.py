@@ -268,6 +268,7 @@ STAFF_OK = {
     "/api/brain/facts", "/api/brain/page", "/api/brain/pages", "/api/brain/search",
     "/api/devices/my-pc-status", "/api/lessons", "/api/learning/digest",  # their own PC and AI
     "/api/procedures/summary",  # P96: learned work of the agents they see (their own AI)
+    "/api/desk/meetings",  # P97: today's meetings from their own calendar
     # P97: the tasks given to them, and the people they may give a task to (themselves)
     "/api/me/assigned-tasks", "/api/team/people",
     "/api/branches/starter-teams", "/api/broadcasts", "/api/budgets", "/api/calendar-drafts",
@@ -432,6 +433,7 @@ STAFF_WRITE_OK = {
     ("POST", "/api/tasks/retry-failed"),  # only failed work of their own (scope.task_where)
     ("POST", "/api/devices/link-code"),  # linking their own computer (P92 own PC)
     ("POST", "/api/devices/my-pc-status/ask"),  # asks their own computer to allow ePerolehan
+    ("PUT", "/api/desk/layout"),  # P97: their own desk's sections and order
 }
 
 

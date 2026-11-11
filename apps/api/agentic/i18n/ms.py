@@ -584,6 +584,9 @@ MS: dict[str, str] = {
     "That department is not here.": "Jabatan itu tiada di sini.",
     # ------------------------------------------------------------ tasks and approvals
     "That task is not here.": "Tugasan itu tiada di sini.",
+    "That address cannot be pinned. Pin a page of this app, or a web link starting with https://.": "Alamat itu tidak boleh disemat. Semat halaman dalam aplikasi ini, atau pautan web yang bermula dengan https://.",
+    "That is too much to keep.": "Itu terlalu banyak untuk disimpan.",
+    "Each section once.": "Setiap bahagian sekali sahaja.",
     "It is not paused now.": "Ia tidak berehat sekarang.",
     "This task does not wait for that one.": "Tugasan ini tidak menunggu tugasan itu.",
     "Pick an agent from {where}.": "Pilih ejen dari {where}.",
