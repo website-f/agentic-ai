@@ -450,6 +450,11 @@ export interface Me {
   now: string;
   /** What the server's records are (PRIMA_DATA_MODE); an older server sends none, which reads as test data. */
   dataMode?: DataMode;
+  /**
+   * P99: inside the Agentic Office, what the office gives this person: Prima only (no office pages), and the Prima screens
+   * chosen for them (null: all their Prima role allows) plus the ones everyone keeps. Absent outside the office.
+   */
+  office?: { primaOnly: boolean; modules: string[] | null; always: string[] };
 }
 
 export interface RaiseCaseInput {

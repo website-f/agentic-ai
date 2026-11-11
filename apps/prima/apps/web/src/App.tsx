@@ -98,6 +98,7 @@ import { NavMenu } from './NavMenu';
 import { AppGrid, AppSwitcher, SpacePhoneBar, SpaceRailHead, SpotSearch } from './Spaces';
 import { LaunchpadView, SpaceRoute } from './views/SpaceRoute';
 import { appsOf, rememberView, spaceLayout, spaceOf, usesApps, type SpaceId } from './nav-catalog';
+import { officeNarrowed, primaOnly } from './office-access';
 
 
 
@@ -805,7 +806,7 @@ function Shell({ me, onSignOut, onReset }: { me: Me; onSignOut: () => void; onRe
     // Procurement and Inventory: 1 executive and 2 storekeepers under the OGM (Fauzan, 27 Oct 2026).
     procurement: ['purchasing', 'items', 'reports', 'meetings', 'clock', 'sitestock', 'quality'],
   };
-  const nav = NAV.filter(
+  const roleNav = NAV.filter(
     (n) =>
       (leader ? n.roles.includes('director') : n.roles.includes(role)) &&
       (role !== 'pwvsb_officer' ||
@@ -919,6 +920,9 @@ function Shell({ me, onSignOut, onReset }: { me: Me; onSignOut: () => void; onRe
     .map((n) => (n.view === 'quality' && dept === 'procurement' && !leader ? { ...n, label: 'Supplier ratings' } : n))
     .map((n) => (n.view === 'people' && (dept === 'hr' || leader) ? { ...n, label: 'People' } : n))
     .sort((a, b) => rank(a.view) - rank(b.view));
+  // P99: the office narrows Prima to the screens it gives this person (office-access.ts); Home if nothing is left.
+  const narrowed = officeNarrowed(roleNav, me.office);
+  const nav = narrowed.length ? narrowed : [{ view: 'home' as ViewName, label: 'Home', icon: 'company', roles: [] as User['role'][] }];
   const initialView = (): ViewName => {
     const h = location.hash.slice(1) as ViewName;
     return VIEW_TOKENS.includes(h) && nav.some((x) => x.view === h) ? h : nav[0].view;
@@ -1294,8 +1298,8 @@ function Shell({ me, onSignOut, onReset }: { me: Me; onSignOut: () => void; onRe
               <div className="brand-sub">{inOffice ? 'Agentic Office' : 'PWVSB Security Group'}</div>
             </div>
           </div>
-          {inOffice && (
-            // P71: Prima is a module of the Agentic Office; one step back to the rest of it.
+          {inOffice && !primaOnly(me) && (
+            // P71: Prima is a module of the Agentic Office; one step back to the rest of it. P99: not for Prima only.
             <a className="rail-back" href="/" target="_top">
               <ArrowLeftIcon size={16} aria-hidden="true" />
               Back to the office

@@ -82,6 +82,8 @@ export const SESSION_ENDED = 'prima:session-ended';
 export class HttpApi implements Api {
   readonly mode = 'server' as const;
   private token: string | null = null;
+  /** P99: the office gave this person Prima only (its /me says so): signing out signs out of the office. */
+  private primaOnly = false;
   private setup: Promise<{ config: SignInConfig; ms: MicrosoftSignIn | null }> | null = null;
 
   /**
@@ -148,6 +150,17 @@ export class HttpApi implements Api {
     invalidateDutyContext();
     // In the office, signing out of Prima is signing out of the office: back to it.
     if (this.office) {
+      if (this.primaOnly) {
+        // P99: Prima only: the office has nothing else to go back to, so signing out signs out of the office.
+        await fetch('/api/auth/logout', {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: { 'content-type': 'application/json', 'x-csrf-token': officeCsrf() },
+          body: '{}',
+        }).catch(() => undefined);
+        window.top?.location.assign('/login');
+        return;
+      }
       window.top?.location.assign('/');
       return;
     }
@@ -329,7 +342,10 @@ export class HttpApi implements Api {
     return this.me();
   }
   me() {
-    return this.call<Me>('GET', '/me');
+    return this.call<Me>('GET', '/me').then((m) => {
+      this.primaOnly = m.office?.primaOnly === true;
+      return m;
+    });
   }
   overview() {
     return this.call<Awaited<ReturnType<Api['overview']>>>('GET', '/group/overview');
