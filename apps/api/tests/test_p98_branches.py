@@ -116,6 +116,23 @@ async def test_a_branch_manager_of_two_branches_sees_both_and_never_a_third(clie
         await bm.aclose()
 
 
+async def test_a_manager_never_drops_a_branch_outside_their_own(client, llm, temporal):
+    o = await three_branches(client)
+    a, b, c = o["branch"]["id"], o["b2"]["id"], o["b3"]["id"]
+    bm = await as_role(client, "bm3@example.com", "branch_manager", branch_ids=[a, b])
+    both = (await member(client, "both@example.com", "staff", branch_ids=[b, c]))["member"]
+    try:
+        r = await bm.patch(
+            f"/api/members/{both['user_id']}",
+            json={"role": "staff", "branch_ids": [a]},
+            headers=csrf(bm),
+        )
+        assert r.status_code == 200, r.text
+        assert branch_ids(r.json()) == [a, c]  # B taken away, C (not theirs) kept
+    finally:
+        await bm.aclose()
+
+
 async def test_scope_reads_every_branch_of_the_membership():
     sc = Scope.of("branch_manager", "u1", "br_a", None, branch_ids=["br_a", "br_b"])
     assert sc.in_branch("br_b") and not sc.in_branch("br_c") and not sc.in_branch(None)

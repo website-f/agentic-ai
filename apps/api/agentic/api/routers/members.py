@@ -932,6 +932,11 @@ async def change_access(
     branch_id, department_id, every = await _placement(
         db, principal, role, branch_id, department_id, branch_ids
     )
+    sc = principal.scope
+    if every and not sc.everything:
+        # P98: a scoped manager neither sees nor changes the person's other branches (outside
+        # their own): those stay as they are.
+        every += [b for b in m.branch_ids if not sc.in_branch(b) and b not in every]
     if m.role == "owner" and role != "owner" and await _owner_count(db, m.workspace_id) <= 1:
         raise api_error(
             status.HTTP_400_BAD_REQUEST, "last_owner", "A workspace needs at least one owner."
