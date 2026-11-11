@@ -125,8 +125,8 @@ function Placement({ role, branches, branchIds, departmentId, onChange, allowed,
   return (
     <div className="grid grid-cols-[minmax(0,1fr)] gap-3">
       <div className="grid gap-1.5">
-        <span className="text-[13px] font-medium">{t("Branches")}</span>
-        <MultiSelect value={picked} onValueChange={setBranches} label={t("Branches")} placeholder={t("Pick one or more branches")}
+        <span className="text-[13px] font-medium">{t("Branches|office")}</span>
+        <MultiSelect value={picked} onValueChange={setBranches} label={t("Branches|office")} placeholder={t("Pick one or more branches")}
           searchPlaceholder={t("Search branches")}
           locked={dept && picked.includes(dept.branch_id) ? { [dept.branch_id]: t("Their department's branch") } : undefined}
           options={list.map((b) => ({ value: b.id, label: b.name, hint: b.id === picked[0] ? t("Home branch") : undefined }))} />

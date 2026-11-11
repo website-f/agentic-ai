@@ -12,6 +12,7 @@ export const ROLES_P98: Record<string, string> = {
   "Pick all": "Pilih semua",
 
   // Members: several branches, who they manage
+  "Branches|office": "Cawangan",
   "Pick one or more branches": "Pilih satu atau lebih cawangan",
   "Search branches": "Cari cawangan",
   "Their department's branch": "Cawangan jabatan mereka",
