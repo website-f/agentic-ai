@@ -47,7 +47,9 @@ def _scoped(q: Any, principal: Principal) -> Any:
     sc = principal.scope
     own = Report.owner_user_id == principal.user.id
     boxes = select(SharedMailbox.id).where(
-        shared_where(principal.workspace_id, principal.user.id, principal.role, principal.branch_id)
+        shared_where(
+            principal.workspace_id, principal.user.id, principal.role, principal.branch_ids
+        )
     )
     mailbox = and_(Report.owner_user_id.is_(None), Report.mailbox_id.in_(boxes))
     plain = and_(Report.owner_user_id.is_(None), Report.mailbox_id.is_(None))
@@ -56,8 +58,8 @@ def _scoped(q: Any, principal: Principal) -> Any:
         return q.where(or_(own, mailbox, plain))
     visible = select(Agent.id).where(Agent.workspace_id == principal.workspace_id, cond)
     parts: list[Any] = [Report.agent_id.in_(visible)]
-    if sc.kind == "branch" and sc.branch_id:
-        parts.append(Report.branch_id == sc.branch_id)
+    if sc.kind == "branch" and sc.branch_ids:
+        parts.append(sc.branch_col(Report.branch_id))
     return q.where(or_(own, mailbox, and_(plain, or_(*parts))))
 
 

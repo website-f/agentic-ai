@@ -40,6 +40,7 @@ from ...models import (
     Workspace,
 )
 from ...services import audit
+from ...teams.branches import member_in_branches
 from ..deps import Principal, api_error, client_ip, current_principal
 
 router = APIRouter(tags=["devices"])
@@ -677,7 +678,7 @@ def _can_see_device(principal: Principal, m: Membership | None) -> bool:
     if m is None:  # the id-only pre-check: a scoped manager may still reach some device
         return True
     if sc.kind == "branch":
-        return m.branch_id == sc.branch_id
+        return any(sc.in_branch(b) for b in m.branch_ids)
     if sc.kind == "department":
         return m.department_id == sc.department_id
     return False
@@ -710,7 +711,7 @@ async def org_computers(
         .where(Device.workspace_id == principal.workspace_id, Device.revoked_at.is_(None))
     )
     if not sc.everything:
-        query = query.where(Membership.branch_id == sc.branch_id)
+        query = query.where(member_in_branches(sc.branch_ids))
         if sc.kind == "department":
             query = query.where(Membership.department_id == sc.department_id)
     rows = (await db.execute(query.order_by(User.name, Device.created_at.desc()))).all()

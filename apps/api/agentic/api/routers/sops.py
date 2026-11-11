@@ -86,8 +86,8 @@ def _own_sops(p: Principal) -> ColumnElement[bool]:
     drafts the AI wrote, nor other companies' procedures."""
     sc = p.scope
     parts: list[ColumnElement[bool]] = [SOP.scope.in_(("workspace", "library"))]
-    if sc.branch_id:
-        parts.append(and_(SOP.scope == "branch", SOP.scope_id == sc.branch_id))
+    if sc.branch_ids:
+        parts.append(and_(SOP.scope == "branch", sc.branch_col(SOP.scope_id)))
     if sc.department_id:
         parts.append(and_(SOP.scope == "department", SOP.scope_id == sc.department_id))
     return and_(SOP.status == "active", or_(*parts))

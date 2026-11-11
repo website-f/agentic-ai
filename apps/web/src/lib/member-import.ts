@@ -23,12 +23,15 @@ export interface ImportRow {
   role: Role;
   branch_id: string | null;
   department_id: string | null;
+  /** P98: every company they work in (branch_id, their home, first). */
+  branch_ids?: string[];
   phone: string;
   notes: string;
 }
 
 export interface PreviewRow extends ImportRow {
   branch_name: string | null;
+  branch_names?: string[];
   department_name: string | null;
   role_text: string;
   company_text: string;
@@ -63,6 +66,7 @@ export interface ImportResult {
   user_id: string | null;
   role: Role;
   branch_name: string | null;
+  branch_names?: string[];
   department_name: string | null;
 }
 
@@ -130,7 +134,7 @@ export function downloadSignIns(results: ImportResult[], roleLabel: (r: Role) =>
   const head = [t("Name"), t("Email"), t("Temporary password"), t("Role"), t("Company"), t("Department"), t("Sign in at")];
   const lines = results
     .filter((r) => r.status === "added")
-    .map((r) => [r.name, r.email, r.temp_password ?? t("Their own password"), roleLabel(r.role), r.branch_name ?? "", r.department_name ?? "", `${location.origin}/`]);
+    .map((r) => [r.name, r.email, r.temp_password ?? t("Their own password"), roleLabel(r.role), (r.branch_names?.length ? r.branch_names.join("; ") : r.branch_name) ?? "", r.department_name ?? "", `${location.origin}/`]);
   const csv = [head, ...lines].map((row) => row.map(csvCell).join(",")).join("\r\n");
   save(new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8" }), `${t("sign-in-details")}.csv`);
 }
@@ -144,8 +148,10 @@ export function mergeChecks(row: PreviewRow, checked: PreviewRow, keep: ImportNo
   return {
     ...row,
     branch_id: checked.branch_id,
+    branch_ids: checked.branch_ids ?? [],
     department_id: checked.department_id,
     branch_name: checked.branch_name,
+    branch_names: checked.branch_names ?? [],
     department_name: checked.department_name,
     existing_account: checked.existing_account,
     notes_found: notes,
@@ -154,5 +160,5 @@ export function mergeChecks(row: PreviewRow, checked: PreviewRow, keep: ImportNo
 }
 
 export function toImportRow(r: PreviewRow): ImportRow {
-  return { row: r.row, name: r.name, email: r.email, role: r.role, branch_id: r.branch_id, department_id: r.department_id, phone: r.phone, notes: r.notes };
+  return { row: r.row, name: r.name, email: r.email, role: r.role, branch_id: r.branch_id, branch_ids: r.branch_ids ?? [], department_id: r.department_id, phone: r.phone, notes: r.notes };
 }

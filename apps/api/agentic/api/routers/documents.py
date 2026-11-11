@@ -65,7 +65,7 @@ def _kit_editable(principal: Principal, branch_id: str) -> bool:
     if can(principal.role, "org.manage"):
         return True
     sc = principal.scope
-    return principal.role == "branch_manager" and sc.branch_id == branch_id
+    return principal.role == "branch_manager" and sc.in_branch(branch_id)
 
 
 def _kit_out(b: Branch, kit: CompanyKit | None, principal: Principal) -> KitOut:
@@ -94,7 +94,7 @@ async def _branch(db: AsyncSession, principal: Principal, branch_id: str) -> Bra
     if (
         b is None
         or b.workspace_id != principal.workspace_id
-        or (not sc.everything and sc.branch_id != b.id)  # P92: scoped roles, their own company
+        or (not sc.everything and not sc.in_branch(b.id))  # P92/P98: their own companies
     ):
         raise api_error(status.HTTP_404_NOT_FOUND, "branch_not_found", "That company is not here.")
     return b
@@ -106,7 +106,7 @@ async def list_kits(
 ) -> list[KitOut]:
     q = select(Branch).where(Branch.workspace_id == principal.workspace_id).order_by(Branch.name)
     if not principal.scope.everything:  # P92: a branch manager, HOD, supervisor or staff
-        q = q.where(Branch.id == principal.scope.branch_id)  # their own company's kit only
+        q = q.where(principal.scope.branch_col(Branch.id))  # their own companies' kits only
     out = []
     for b in (await db.scalars(q)).all():
         out.append(_kit_out(b, await db.get(CompanyKit, b.id), principal))
@@ -296,8 +296,8 @@ async def list_templates(
     await service.ensure_starters(db, principal.workspace_id)
     q = select(DocTemplate).where(DocTemplate.workspace_id == principal.workspace_id)
     sc = principal.scope
-    if sc.kind == "branch" and sc.branch_id:
-        q = q.where(or_(DocTemplate.branch_id.is_(None), DocTemplate.branch_id == sc.branch_id))
+    if sc.kind == "branch" and sc.branch_ids:
+        q = q.where(or_(DocTemplate.branch_id.is_(None), sc.branch_col(DocTemplate.branch_id)))
     rows = (await db.scalars(q.order_by(DocTemplate.builtin.desc(), DocTemplate.name))).all()
     return [await _tpl_out(db, t) for t in rows]
 

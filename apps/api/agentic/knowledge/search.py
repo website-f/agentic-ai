@@ -46,9 +46,16 @@ class Reader:
     branch_id: str | None = None
     department_id: str | None = None
     all_departments: bool = False  # a branch manager: every department of the branch
+    # P98: the other branches a person works in (their home is branch_id).
+    more_branches: tuple[str, ...] = ()
     # P36: a staff member, or a staff member's AI twin: never restricted documents (only
     # restricted passages carry a department, see knowledge.indexer.index_file).
     personal: bool = False
+
+    @property
+    def branch_ids(self) -> list[str]:
+        """P98: home branch and the others they work in."""
+        return sorted({b for b in (self.branch_id, *self.more_branches) if b})
 
 
 def for_agent(agent: Agent) -> Reader:
@@ -65,12 +72,18 @@ def for_person(principal: Any) -> Reader:
     if sc.everything:
         return Reader(principal.workspace_id, everything=True)
     if sc.kind == "branch":
-        return Reader(principal.workspace_id, branch_id=sc.branch_id, all_departments=True)
+        return Reader(
+            principal.workspace_id,
+            branch_id=sc.branch_id,
+            all_departments=True,
+            more_branches=tuple(sorted(sc.branch_ids - {sc.branch_id})),
+        )
     return Reader(
         principal.workspace_id,
         branch_id=sc.branch_id,
         department_id=sc.department_id,
         personal=sc.kind == "own",
+        more_branches=tuple(sorted(sc.branch_ids - {sc.branch_id})),
     )
 
 
@@ -79,7 +92,8 @@ def scope_where(r: Reader) -> Any:
     if r.everything:
         return and_(*conds)
     branch = KnowledgeChunk.branch_id
-    conds.append(or_(branch.is_(None), branch == r.branch_id) if r.branch_id else branch.is_(None))
+    mine = sorted({b for b in (r.branch_id, *r.more_branches) if b})
+    conds.append(or_(branch.is_(None), branch.in_(mine)) if mine else branch.is_(None))
     if not r.all_departments:
         dept = KnowledgeChunk.department_id
         conds.append(
@@ -94,7 +108,7 @@ def sees(r: Reader, branch_id: str | None, department_id: str | None) -> bool:
     """scope_where for one source, in Python (lists, single reads)."""
     if r.everything:
         return True
-    if branch_id is not None and branch_id != r.branch_id:
+    if branch_id is not None and branch_id != r.branch_id and branch_id not in r.more_branches:
         return False
     return (
         r.all_departments

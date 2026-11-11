@@ -27,8 +27,17 @@ Besides what each scope saw before, a person sees the tasks given to them, and a
 direct reports, loaded with the session). A branch manager also sees their branch's people's
 tasks (the task carries the person's branch). Nothing else widens: no one sees a person's
 task because of their department alone, and staff see only their own.
+
+Several branches (P98): a member may work in more than one branch (membership_branches,
+teams/branches.py). `branch_ids` is all of them (home first); every branch rule here and in
+the routers reads "one of their branches" instead of "their branch": a branch manager of two
+branches sees and manages both, never a third; staff watch the offices of each of their
+branches; a branch's shared tasks, uploads and records reach the people of every branch they
+are in. `branch_id` stays the home branch: where something new they make is filed when they
+do not pick a branch. Department scope does not widen (a department is in one branch).
 """
 
+from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import Any
 
@@ -47,6 +56,12 @@ class Scope:
     department_id: str | None = None
     # P97: the people who report to this person (their direct reports in this workspace).
     team: frozenset[str] = frozenset()
+    # P98: every branch they work in (the home branch_id included).
+    branch_ids: frozenset[str] = frozenset()
+
+    def __post_init__(self) -> None:
+        if self.branch_id and self.branch_id not in self.branch_ids:  # the home always counts
+            object.__setattr__(self, "branch_ids", self.branch_ids | {self.branch_id})
 
     @classmethod
     def of(
@@ -56,14 +71,29 @@ class Scope:
         branch_id: str | None,
         department_id: str | None,
         team: frozenset[str] = frozenset(),
+        branch_ids: Iterable[str] = (),
     ) -> "Scope":
         if role not in SCOPED_ROLES:
             return cls("all", user_id, team=team)
+        every = frozenset(b for b in (branch_id, *branch_ids) if b)
         if role == "branch_manager":
-            return cls("branch", user_id, branch_id, department_id, team)
+            return cls("branch", user_id, branch_id, department_id, team, every)
         if role in ("hod", "supervisor"):
-            return cls("department", user_id, branch_id, department_id, team)
-        return cls("own", user_id, branch_id, department_id)  # staff manage no one
+            return cls("department", user_id, branch_id, department_id, team, every)
+        return cls("own", user_id, branch_id, department_id, branch_ids=every)  # manage no one
+
+    @classmethod
+    def of_member(cls, m: Any, team: frozenset[str] = frozenset()) -> "Scope":
+        """The scope of a loaded Membership (its branches come with it)."""
+        return cls.of(m.role, m.user_id, m.branch_id, m.department_id, team, m.branch_ids)
+
+    def in_branch(self, branch_id: str | None) -> bool:
+        """P98: one of their branches (home or another)."""
+        return bool(branch_id) and branch_id in self.branch_ids
+
+    def branch_col(self, col: Any) -> ColumnElement[bool]:
+        """P98: SQL: this column is one of their branches (never true without a branch)."""
+        return col.in_(sorted(self.branch_ids)) if self.branch_ids else false()
 
     @property
     def everything(self) -> bool:
@@ -76,6 +106,8 @@ class Scope:
     @property
     def label(self) -> str:
         """For sentences ("Pick an agent from {where}."): English, translated with them."""
+        if self.kind == "branch" and len(self.branch_ids) > 1:
+            return Msg("your branches")  # P98
         return Msg(
             {
                 "all": "the whole workspace",
@@ -97,7 +129,7 @@ class Scope:
         if self.everything:
             return self._open()
         if self.kind == "branch":
-            base = or_(Agent.branch_id == self.branch_id, mine) if self.branch_id else mine
+            base = or_(self.branch_col(Agent.branch_id), mine) if self.branch_ids else mine
         elif self.kind == "department":
             base = (
                 or_(Agent.department_id == self.department_id, mine) if self.department_id else mine
@@ -113,7 +145,7 @@ class Scope:
             return self.agent_where()
         mine = Agent.owner_user_id == self.user_id
         # Staff without a company (theirs was deleted) watch no office, never every one.
-        office = Agent.branch_id == self.branch_id if self.branch_id else false()
+        office = self.branch_col(Agent.branch_id)
         return and_(or_(mine, office), self._open())
 
     def observes_agent(self, a: Agent | None) -> bool:
@@ -121,7 +153,7 @@ class Scope:
             return False
         if self.sees_agent(a):
             return True
-        return self.kind == "own" and bool(self.branch_id) and a.branch_id == self.branch_id
+        return self.kind == "own" and self.in_branch(a.branch_id)
 
     def sees_agent(self, a: Agent | None) -> bool:
         if a is None:
@@ -131,7 +163,7 @@ class Scope:
         if self.everything or a.owner_user_id == self.user_id:
             return True
         if self.kind == "branch":
-            return bool(self.branch_id) and a.branch_id == self.branch_id
+            return self.in_branch(a.branch_id)
         if self.kind == "department":
             return bool(self.department_id) and a.department_id == self.department_id
         return False
@@ -147,7 +179,7 @@ class Scope:
         if self.everything:
             return True
         if self.kind == "branch":
-            return branch_id == self.branch_id
+            return self.in_branch(branch_id)
         if self.kind == "department":
             return department_id is not None and department_id == self.department_id
         return True  # personal agents may sit anywhere; they stay the owner's
@@ -175,8 +207,8 @@ class Scope:
             Task.created_by == self.actor,
             Task.assignee_user_id.in_([self.user_id, *sorted(self.team)]),  # P97
         ]
-        if self.kind == "branch" and self.branch_id:
-            parts.append(Task.branch_id == self.branch_id)  # unassigned work in the branch
+        if self.kind == "branch" and self.branch_ids:
+            parts.append(self.branch_col(Task.branch_id))  # unassigned work in their branches
         return or_(*parts)
 
     def sees_person_task(self, t: Task) -> bool:
@@ -193,15 +225,15 @@ class Scope:
             return True
         if agent is not None and self.sees_agent(agent):
             return True
-        return self.kind == "branch" and bool(self.branch_id) and t.branch_id == self.branch_id
+        return self.kind == "branch" and self.in_branch(t.branch_id)
 
     def shared_task_where(self) -> ColumnElement[bool] | None:
         """Tasks shared with this person to look at (beyond what `task_where` gives)."""
         if self.everything:
             return None
         parts: list[ColumnElement[bool]] = [Task.visibility == "everyone"]
-        if self.branch_id:
-            parts.append(and_(Task.visibility == "company", Task.branch_id == self.branch_id))
+        if self.branch_ids:
+            parts.append(and_(Task.visibility == "company", self.branch_col(Task.branch_id)))
         if self.department_id:
             dept = select(Agent.id).where(Agent.department_id == self.department_id)
             parts.append(and_(Task.visibility == "department", Task.assignee_agent_id.in_(dept)))
@@ -215,7 +247,7 @@ class Scope:
         if v == "everyone":
             return True
         if v == "company":
-            return bool(self.branch_id) and t.branch_id == self.branch_id
+            return self.in_branch(t.branch_id)
         if v == "department":
             return (
                 bool(self.department_id)
@@ -250,9 +282,7 @@ class Scope:
         if type_ in KNOWLEDGE_EVENTS:
             return True
         if type_ in BRANCH_EVENTS:  # P24: a company's uploads reach the people of it
-            return self.everything or (
-                self.branch_id is not None and data.get("branch_id") == self.branch_id
-            )
+            return self.everything or self.in_branch(data.get("branch_id"))
         person = data.get("assignee_user_id")  # P97: a person's task: them and their managers
         if person and not (data.get("agent_id") or data.get("assignee_agent_id")):
             return (
@@ -260,11 +290,7 @@ class Scope:
                 or person == self.user_id
                 or person in self.team
                 or data.get("by") == self.actor
-                or (
-                    self.kind == "branch"
-                    and bool(self.branch_id)
-                    and data.get("branch_id") == self.branch_id
-                )
+                or (self.kind == "branch" and self.in_branch(data.get("branch_id")))
             )
         aid = data.get("agent_id") or data.get("assignee_agent_id")
         if aid:
@@ -314,7 +340,7 @@ async def member_scope(db: Any, workspace_id: str, user_id: str) -> Scope | None
     m = await db.get(Membership, (workspace_id, user_id))
     if m is None:
         return None
-    return Scope.of(m.role, user_id, m.branch_id, m.department_id)
+    return Scope.of_member(m)
 
 
 async def member_sees_agent(db: Any, workspace_id: str, user_id: str, agent_id: str) -> bool:

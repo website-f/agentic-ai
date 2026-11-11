@@ -71,6 +71,13 @@ class WorkspaceOut(BaseModel):
     timezone: str
 
 
+class BranchRef(BaseModel):
+    """P98: a branch by id and name."""
+
+    id: str
+    name: str
+
+
 class ScopeOut(BaseModel):
     kind: Literal["all", "branch", "department", "own"]
     label: str
@@ -78,6 +85,8 @@ class ScopeOut(BaseModel):
     branch_name: str | None = None
     department_id: str | None = None
     department_name: str | None = None
+    # P98: every branch their scope covers (home first), with names.
+    branches: list[BranchRef] = []
 
 
 class MeOut(BaseModel):
@@ -98,8 +107,10 @@ class MemberOut(BaseModel):
     must_change_password: bool
     last_login_at: datetime | None
     joined_at: datetime
-    branch_id: str | None = None
+    branch_id: str | None = None  # the home (primary) branch
     branch_name: str | None = None
+    # P98: every branch they work in, home first (branch_id is branches[0]).
+    branches: list[BranchRef] = []
     department_id: str | None = None
     department_name: str | None = None
     agents: int = 0  # personal agents
@@ -139,6 +150,8 @@ class MembersBulkIn(BaseModel):
     role: Role | None = None
     branch_id: str | None = None
     department_id: str | None = None
+    # P98: every branch they work in (branch_id, or the department's branch, is the home).
+    branch_ids: list[str] | None = Field(default=None, max_length=100)
     manager_id: str | None = Field(default=None, max_length=40)
 
 
@@ -160,6 +173,7 @@ class MemberCreateIn(BaseModel):
     role: Role
     branch_id: str | None = None
     department_id: str | None = None
+    branch_ids: list[str] | None = Field(default=None, max_length=100)  # P98
 
 
 class MemberCreateOut(BaseModel):
@@ -172,6 +186,7 @@ class MemberUpdateIn(BaseModel):
     role: Role | None = None
     branch_id: str | None = None
     department_id: str | None = None
+    branch_ids: list[str] | None = Field(default=None, max_length=100)  # P98: all branches
     name: str | None = Field(default=None, min_length=1, max_length=120)
     email: EmailStr | None = None
     # P97: heads their department; reports to this manager (send null to clear).

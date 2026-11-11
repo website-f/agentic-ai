@@ -72,8 +72,8 @@ def _sees(principal: Principal) -> ColumnElement[bool] | None:
     if sc.everything:
         return None
     mine = IntakeBatch.created_by == principal.actor
-    if sc.kind == "branch" and sc.branch_id:
-        return or_(mine, IntakeBatch.branch_id == sc.branch_id)
+    if sc.kind == "branch" and sc.branch_ids:
+        return or_(mine, sc.branch_col(IntakeBatch.branch_id))
     return mine
 
 
@@ -117,7 +117,7 @@ async def upload(
     elif branch_id is None and not sc.everything:
         branch_id = sc.branch_id  # an office role files under its own company
     await check_branch(db, principal, branch_id)
-    if not sc.everything and branch_id != sc.branch_id:
+    if not sc.everything and not sc.in_branch(branch_id):
         raise api_error(
             status.HTTP_403_FORBIDDEN, "out_of_scope", "You can add documents to your company only."
         )

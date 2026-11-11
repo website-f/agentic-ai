@@ -1,5 +1,6 @@
 import {
   AddressBookIcon,
+  UserGearIcon,
   GlobeIcon,
   ShieldCheckIcon,
   ChartPieSliceIcon,
@@ -252,7 +253,7 @@ export const NAV: NavSection[] = [
       { to: "/staff-computers", label: msg("Staff computers"), icon: DesktopTowerIcon, perm: ["members.manage", "team.manage"], blurb: msg("Every company computer your staff linked: who has which, online or not, the folders it shares. Open one to see its screen and fetch files, and turn on a company backup of those folders.") },
       { to: "/settings", label: msg("Settings"), icon: GearSixIcon, blurb: msg("Members and roles, appearance and your account.") },
       { to: "/settings/members", label: msg("Members and roles"), icon: UsersIcon, perm: ["members.manage", "team.manage"], hidden: true, blurb: msg("Add teammates and decide what each one can do.") },
-      { to: "/settings/roles", label: msg("Roles and access"), icon: UsersIcon, perm: "roles.manage", hidden: true, blurb: msg("What each role may do, area by area. Only the owner changes it.") },
+      { to: "/settings/roles", label: msg("Roles and access"), icon: UserGearIcon, perm: "roles.manage", hidden: true, blurb: msg("What each role may do, area by area. Only the owner changes it.") },
       { to: "/settings/ai-use", label: msg("AI use and limits"), icon: CoinsIcon, perm: ["members.manage", "team.manage"], blurb: msg("Each person's daily AI allowance, what staff may use their AI for, and what was refused.") },
       { to: "/settings/approval-limits", label: msg("Approval limits"), icon: ScalesIcon, perm: "org.manage", blurb: msg("Let small, routine money steps go through without waiting for you: bills under an amount from known suppliers, small invoice drafts.") },
       { to: "/web-connections", label: msg("Web connections"), icon: GlobeIcon, perm: "org.manage", blurb: msg("How the AI's browsers reach websites: this server, a company computer, or your own proxies.") },
@@ -308,7 +309,7 @@ export const HUBS: Hub[] = [
   { label: msg("Customers"), tabs: ["/contacts", "/deals"] },
   { label: msg("Agents"), tabs: ["/agents", "/timetable", "/monitor", "/meetings", "/broadcasts"] },
   { label: msg("Knowledge & skills"), tabs: ["/learning", "/skills", "/brain", "/blueprints"] },
-  { label: msg("Organization & people"), tabs: ["/organization", "/settings/members", "/staff-computers", "/settings/ai-use", "/settings/approval-limits", "/approved-services", "/web-connections"] },
+  { label: msg("Organization & people"), tabs: ["/organization", "/settings/members", "/settings/roles", "/staff-computers", "/settings/ai-use", "/settings/approval-limits", "/approved-services", "/web-connections"] },
   { label: msg("Settings"), tabs: ["/settings", "/channels", "/ai-engine", "/settings/storage", "/logins", "/schedules", "/mcp-servers", "/activity"] },
   { label: msg("Learn"), tabs: ["/tutorial", "/guide", "/present"] },
 ];

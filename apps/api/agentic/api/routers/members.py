@@ -26,8 +26,10 @@ from ...models import (
 )
 from ...services import audit, identity
 from ...teams import people
+from ...teams.branches import member_in_branches, ordered, set_branches
 from ..deps import Principal, api_error, current_principal, require
 from ..schemas import (
+    BranchRef,
     MemberCreateIn,
     MemberCreateOut,
     MemberOut,
@@ -64,6 +66,7 @@ def _out(
         manages=org.manages.get(u.id, 0),
         branch_id=m.branch_id,
         branch_name=names.get(m.branch_id or ""),
+        branches=[BranchRef(id=b, name=names.get(b, "")) for b in m.branch_ids],
         department_id=m.department_id,
         department_name=names.get(m.department_id or ""),
         agents=(agents or {}).get(u.id, 0),
@@ -214,10 +217,15 @@ async def _placement(
     role: str,
     branch_id: str | None,
     department_id: str | None,
-) -> tuple[str | None, str | None]:
-    """Check (and complete) where a scoped member sits. Workspace roles sit nowhere."""
+    branch_ids: list[str] | None = None,
+) -> tuple[str | None, str | None, list[str]]:
+    """Check (and complete) where a scoped member sits: (home branch, department, every
+    branch they work in, home first). Workspace roles sit nowhere. P98: `branch_ids` are all
+    their branches; the home is the department's branch, else `branch_id`, else the first."""
     if role not in SCOPED_ROLES:
-        return None, None
+        return None, None, []
+    if not branch_id and branch_ids:
+        branch_id = next((b for b in branch_ids if b), None)
     if department_id:
         d = await db.get(Department, department_id)
         if d is None or d.workspace_id != principal.workspace_id:
@@ -225,8 +233,13 @@ async def _placement(
                 status.HTTP_400_BAD_REQUEST, "bad_department", "Pick a department from here."
             )
         branch_id = d.branch_id
-    if branch_id:
-        b = await db.get(Branch, branch_id)
+    every = ordered(branch_id, branch_ids or [])
+    if len(every) > 100:
+        raise api_error(
+            status.HTTP_422_UNPROCESSABLE_CONTENT, "too_many_branches", "Pick up to 100 branches."
+        )
+    for bid in every:
+        b = await db.get(Branch, bid)
         if b is None or b.workspace_id != principal.workspace_id:
             raise api_error(status.HTTP_400_BAD_REQUEST, "bad_branch", "Pick a branch from here.")
     if role == "branch_manager" and not branch_id:
@@ -248,8 +261,9 @@ async def _placement(
             "Staff need a branch (their own agents are placed there).",
         )
     sc = principal.scope
+    # P98: a scoped manager places people only in their own branches (each of them).
     if not sc.everything and (
-        (sc.kind == "branch" and branch_id != sc.branch_id)
+        not all(sc.in_branch(b) for b in every)
         or (sc.kind == "department" and department_id != sc.department_id)
     ):
         raise api_error(
@@ -258,15 +272,15 @@ async def _placement(
             "You can only add people to {where}.",
             where=sc.label,
         )
-    return branch_id, department_id
+    return branch_id, department_id, every
 
 
 def _member_in_scope(principal: Principal, m: Membership) -> bool:
     sc = principal.scope
     if sc.everything or m.user_id == principal.user.id:
         return True
-    if sc.kind == "branch":
-        return m.branch_id == sc.branch_id
+    if sc.kind == "branch":  # P98: they work in one of the manager's branches
+        return any(sc.in_branch(b) for b in m.branch_ids)
     if sc.kind == "department":
         return m.department_id == sc.department_id
     return False
@@ -299,7 +313,7 @@ def _scope_where(principal: Principal) -> ColumnElement[bool]:
         return true()
     me = Membership.user_id == principal.user.id
     if sc.kind == "branch":
-        return or_(me, Membership.branch_id == sc.branch_id)
+        return or_(me, member_in_branches(sc.branch_ids))
     if sc.kind == "department":
         return or_(me, Membership.department_id == sc.department_id)
     return me
@@ -423,8 +437,8 @@ async def list_members(
         )
     if company == "none":
         where.append(Membership.branch_id.is_(None))
-    elif company:
-        where.append(Membership.branch_id == company)
+    elif company:  # P98: anyone who works there (home or not)
+        where.append(member_in_branches([company]))
     if department:
         where.append(Membership.department_id == department)
     if role:
@@ -491,12 +505,15 @@ async def add_one(
     branch_id: str | None,
     department_id: str | None,
     via: str | None = None,
+    branch_ids: list[str] | None = None,
 ) -> tuple[Membership, str | None]:
     """Add one person: the role and place rules, a new account with a one-time password
     (None when they already have an account), and the audit row. One path for the form and
     the Excel import (`via="import"`); the caller commits."""
     _check_can_touch(principal, role, role)
-    branch_id, department_id = await _placement(db, principal, role, branch_id, department_id)
+    branch_id, department_id, every = await _placement(
+        db, principal, role, branch_id, department_id, branch_ids
+    )
     email = email.lower()
     user = await db.scalar(select(User).where(User.email == email))
     password: str | None = None
@@ -526,6 +543,7 @@ async def add_one(
         branch_id=branch_id,
         department_id=department_id,
     )
+    set_branches(m, branch_id, every)
     db.add(m)
     after: dict[str, object] = {
         "email": email,
@@ -533,6 +551,8 @@ async def add_one(
         "branch_id": branch_id,
         "department_id": department_id,
     }
+    if len(every) > 1:
+        after["branch_ids"] = every
     if via:
         after["via"] = via
     if reactivated:
@@ -561,6 +581,7 @@ async def add_member(
         role=body.role,
         branch_id=body.branch_id,
         department_id=body.department_id,
+        branch_ids=body.branch_ids,
     )
     await db.commit()
     await db.refresh(m)
@@ -582,7 +603,9 @@ async def update_member(
             status.HTTP_422_UNPROCESSABLE_CONTENT, "nothing_to_change", "Nothing to change."
         )
     if body.role is not None:
-        await change_access(db, principal, user_id, body.role, body.branch_id, body.department_id)
+        await change_access(
+            db, principal, user_id, body.role, body.branch_id, body.department_id, body.branch_ids
+        )
     if "reports_to_user_id" in body.model_fields_set:
         await set_manager(db, principal, user_id, body.reports_to_user_id)
     if body.heads_department is not None:
@@ -892,9 +915,10 @@ async def change_access(
     role: str,
     branch_id: str | None,
     department_id: str | None,
+    branch_ids: list[str] | None = None,
 ) -> Membership:
     """One person's role and place, with every rule (one path for the row and the bulk
-    change, P82); the caller commits."""
+    change, P82); the caller commits. P98: `branch_ids` is every branch they work in."""
     if user_id == principal.user.id:
         raise api_error(
             status.HTTP_400_BAD_REQUEST,
@@ -905,12 +929,24 @@ async def change_access(
     if not _member_in_scope(principal, m):
         raise api_error(status.HTTP_404_NOT_FOUND, "member_not_found", "That member is not here.")
     _check_can_touch(principal, m.role, role)
-    branch_id, department_id = await _placement(db, principal, role, branch_id, department_id)
+    branch_id, department_id, every = await _placement(
+        db, principal, role, branch_id, department_id, branch_ids
+    )
+    sc = principal.scope
+    if every and not sc.everything:
+        # P98: a scoped manager neither sees nor changes the person's other branches (outside
+        # their own): those stay as they are.
+        every += [b for b in m.branch_ids if not sc.in_branch(b) and b not in every]
     if m.role == "owner" and role != "owner" and await _owner_count(db, m.workspace_id) <= 1:
         raise api_error(
             status.HTTP_400_BAD_REQUEST, "last_owner", "A workspace needs at least one owner."
         )
-    before = {"role": m.role, "branch_id": m.branch_id, "department_id": m.department_id}
+    before: dict[str, object] = {
+        "role": m.role,
+        "branch_id": m.branch_id,
+        "department_id": m.department_id,
+        "branch_ids": m.branch_ids,
+    }
     if department_id != m.department_id:
         m.heads_department = False  # P97: they headed the department they left
     if role not in people.MANAGER_ROLES and m.role in people.MANAGER_ROLES:
@@ -922,7 +958,8 @@ async def change_access(
             )
         ):
             r.reports_to_user_id = None
-    m.role, m.branch_id, m.department_id = role, branch_id, department_id
+    m.role, m.department_id = role, department_id
+    set_branches(m, branch_id, every)
     await audit.record(
         db,
         principal.workspace_id,
@@ -930,7 +967,12 @@ async def change_access(
         "member.role_changed",
         target=user_id,
         before=before,
-        after={"role": role, "branch_id": branch_id, "department_id": department_id},
+        after={
+            "role": role,
+            "branch_id": branch_id,
+            "department_id": department_id,
+            "branch_ids": every,
+        },
     )
     if before["role"] != role:  # P30: assistants follow the role (kept, never deleted)
         await assistant_access.follow_role(
@@ -1012,7 +1054,13 @@ async def bulk(
                 else:
                     assert body.role is not None
                     await change_access(
-                        db, principal, user_id, body.role, body.branch_id, body.department_id
+                        db,
+                        principal,
+                        user_id,
+                        body.role,
+                        body.branch_id,
+                        body.department_id,
+                        body.branch_ids,
                     )
         except HTTPException as e:
             detail = e.detail if isinstance(e.detail, dict) else {"message": str(e.detail)}

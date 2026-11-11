@@ -147,7 +147,7 @@ def can_edit(principal: Principal, rec: MeetingRecording) -> bool:
     if sc.everything or rec.created_by == principal.actor:
         return True
     if sc.kind == "branch":
-        return rec.branch_id is not None and rec.branch_id == sc.branch_id
+        return sc.in_branch(rec.branch_id)
     if sc.kind == "department":
         return rec.department_id is not None and rec.department_id == sc.department_id
     return False
@@ -207,7 +207,7 @@ async def check_scope(
         ok = department_id == sc.department_id
         where = "department"
     else:
-        ok = branch_id is not None and branch_id == sc.branch_id
+        ok = sc.in_branch(branch_id)
         ok = ok and (sc.kind == "branch" or department_id is None)
         where = "company"
     if not ok:

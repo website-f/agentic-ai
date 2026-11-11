@@ -29,15 +29,26 @@ router = APIRouter(prefix="/api/auth", tags=["auth"])
 async def _me(db: AsyncSession, user: User, workspace_id: str, role: str) -> MeOut:
     from ...core.security import effective
     from ...models import Branch, Department, Membership
-    from ..schemas import ScopeOut
+    from ..schemas import BranchRef, ScopeOut
     from ..scope import Scope
 
     ws = await db.get(Workspace, workspace_id)
     assert ws is not None
     m = await db.get(Membership, (workspace_id, user.id))
-    sc = Scope.of(role, user.id, m.branch_id if m else None, m.department_id if m else None)
+    sc = (
+        Scope.of(role, user.id, m.branch_id, m.department_id, branch_ids=m.branch_ids)
+        if m
+        else Scope.of(role, user.id, None, None)
+    )
     b = await db.get(Branch, sc.branch_id) if sc.branch_id else None
     d = await db.get(Department, sc.department_id) if sc.department_id else None
+    # P98: every branch the scope covers, home first, with names.
+    ids = [i for i in (m.branch_ids if m else []) if i in sc.branch_ids]
+    found = (
+        {x.id: x.name for x in (await db.scalars(select(Branch).where(Branch.id.in_(ids)))).all()}
+        if ids
+        else {}
+    )
     return MeOut(
         scope=ScopeOut(
             kind=sc.kind,  # type: ignore[arg-type]
@@ -46,6 +57,7 @@ async def _me(db: AsyncSession, user: User, workspace_id: str, role: str) -> MeO
             branch_name=b.name if b else None,
             department_id=sc.department_id,
             department_name=d.name if d else None,
+            branches=[BranchRef(id=i, name=found[i]) for i in ids if i in found],
         ),
         user=UserOut(
             id=user.id,

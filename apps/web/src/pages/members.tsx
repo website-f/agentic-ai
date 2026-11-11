@@ -1,7 +1,8 @@
 import {
   CaretDownIcon, CaretLeftIcon, CaretRightIcon, CaretUpIcon, CopyIcon, CrownSimpleIcon, DotsThreeIcon, EnvelopeSimpleIcon, FileXlsIcon, IdentificationCardIcon, KeyIcon, MicrosoftOutlookLogoIcon,
-  PencilSimpleIcon, ShieldSlashIcon, TrashIcon, TreeStructureIcon, UserPlusIcon, UsersIcon, UsersThreeIcon, XIcon,
+  PencilSimpleIcon, ShieldSlashIcon, TrashIcon, TreeStructureIcon, UserGearIcon, UserPlusIcon, UsersIcon, UsersThreeIcon, XIcon,
 } from "@phosphor-icons/react";
+import { Link } from "@tanstack/react-router";
 import { keepPreviousData, useMutation, useQuery, useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import { useState } from "react";
@@ -17,6 +18,7 @@ import { Field, FormError } from "@/components/ui/field";
 import { Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger } from "@/components/ui/menu";
 import { Pill } from "@/components/ui/pill";
 import { SearchInput } from "@/components/ui/search-input";
+import { MultiSelect, SearchSelect } from "@/components/ui/search-select";
 import { Select } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Stat, StatGrid } from "@/components/ui/stat";
@@ -35,7 +37,7 @@ import { cn, initials, timeAgo } from "@/lib/utils";
 import { MemberIdentityDialog, ResetMicrosoftDialog } from "@/components/member-identity";
 
 import { ImportMembersDialog } from "./members-import";
-import { addsDepartments, BulkManagerDialog, departmentOptions, editsOrg, NEW_DEPT, NewDepartment, OrgFields, OrgLine, TeamDialog } from "./members-org";
+import { addsDepartments, BulkManagerDialog, editsOrg, ManagesField, NewDepartment, OrgFields, OrgLine, saveManages, TeamDialog } from "./members-org";
 
 const ROLES: Role[] = ["owner", "admin", "branch_manager", "hod", "supervisor", "staff", "operator", "approver", "viewer", "management", "hr"];
 // What a branch manager or HOD may hand out (mirrors api/routers/members.py TEAM_ROLES).
@@ -67,55 +69,95 @@ function roleOptions(roles: Role[]) {
   return roles.map((r) => ({ value: r, label: r === "hod" ? tr("Head of department (HOD)") : tr(ROLE_INFO[r].label), hint: tr(ROLE_INFO[r].blurb) }));
 }
 
-/** Where a scoped member sits: branch managers and staff pick a branch, HODs and supervisors a department. */
-function Placement({ role, branches, branchId, departmentId, onChange, lockBranch, canAddDept }: {
+/** P98: the branches a scoped manager may place people in (null: any). */
+export function allowedBranches(me: Me): string[] | null {
+  if (!me.scope || me.scope.kind === "all") return null;
+  const ids = me.scope.branches?.map((b) => b.id) ?? [];
+  return ids.length ? ids : me.scope.branch_id ? [me.scope.branch_id] : [];
+}
+
+/** A member's branches, home first (older answers carry only branch_id). */
+export const branchIdsOf = (m: Member) => (m.branches?.length ? m.branches.map((b) => b.id) : m.branch_id ? [m.branch_id] : []);
+/** Their branches' names, home first. */
+export const branchNamesOf = (m: Member) => (m.branches?.length ? m.branches.map((b) => b.name) : m.branch_name ? [m.branch_name] : []);
+
+/** Where a scoped member works (P98): one or more branches, the first their home, and for most
+ * roles a department (from the picked branches). Workspace roles sit nowhere. */
+function Placement({ role, branches, branchIds, departmentId, onChange, allowed, canAddDept }: {
   role: Role;
   branches: Branch[];
-  branchId: string;
+  /** Home first. */
+  branchIds: string[];
   departmentId: string;
-  onChange: (b: string, d: string) => void;
-  lockBranch?: string | null;
+  onChange: (branchIds: string[], departmentId: string) => void;
+  /** A scoped manager: only their own branches. */
+  allowed?: string[] | null;
   /** P97: "+ New department" in the list (org.manage, as on the Organization page). */
   canAddDept?: boolean;
 }) {
   const t = useT();
-  const [adding, setAdding] = useState(false);
+  const [adding, setAdding] = useState<string | null>(null);
   if (!SCOPED_ROLES.includes(role)) {
     const line = WHOLE_WORKSPACE[role];
     return <p className="text-[12.5px] text-muted">{line ? t(line) : t("{role} sees the whole workspace.", { role: t(ROLE_INFO[role].label) })}</p>;
   }
-  const list = lockBranch ? branches.filter((b) => b.id === lockBranch) : branches;
-  const branch = list.find((b) => b.id === branchId) ?? list[0];
+  const list = allowed ? branches.filter((b) => allowed.includes(b.id)) : branches;
+  const picked = branchIds.filter((id) => list.some((b) => b.id === id));
+  const pool = picked.length ? list.filter((b) => picked.includes(b.id)) : list.slice(0, 1);
   const needsDept = role === "hod" || role === "supervisor";
-  const deptOptions = departmentOptions(branch?.departments ?? [], !!canAddDept && !!branch, needsDept ? null : { value: NONE, label: t("Any department") });
+  const dept = list.flatMap((b) => b.departments).find((d) => d.id === departmentId);
+  // The department's branch is their home: it leads the list and stays while the department does.
+  const setBranches = (ids: string[]) => {
+    const keep = dept && !ids.includes(dept.branch_id) ? [dept.branch_id, ...ids] : ids;
+    onChange(keep, dept && keep.includes(dept.branch_id) ? departmentId : "");
+  };
+  const setDept = (id: string) => {
+    const d = list.flatMap((b) => b.departments).find((x) => x.id === id);
+    if (!d) return onChange(picked, id === NONE ? "" : id);
+    onChange([d.branch_id, ...picked.filter((b) => b !== d.branch_id)], d.id);
+  };
+  const deptOptions = [
+    ...(needsDept ? [] : [{ value: NONE, label: t("Any department") }]),
+    ...pool.flatMap((b) => b.departments.map((d) => ({ value: d.id, label: d.name, group: pool.length > 1 ? b.name : undefined }))),
+  ];
+  const home = list.find((b) => b.id === picked[0]);
+  const addTo = pool[0];
   return (
-    <div className="grid grid-cols-[minmax(0,1fr)] gap-3 sm:grid-cols-2">
+    <div className="grid grid-cols-[minmax(0,1fr)] gap-3">
       <div className="grid gap-1.5">
-        <span className="text-[13px] font-medium">{t("Branch")}</span>
-        <Select value={branch?.id ?? ""} onValueChange={(v) => onChange(v, NONE)} label={t("Branch")} placeholder={t("Pick a branch")}
-          options={list.map((b) => ({ value: b.id, label: b.name }))} />
+        <span className="text-[13px] font-medium">{t("Branches|office")}</span>
+        <MultiSelect value={picked} onValueChange={setBranches} label={t("Branches|office")} placeholder={t("Pick one or more branches")}
+          searchPlaceholder={t("Search branches")}
+          locked={dept && picked.includes(dept.branch_id) ? { [dept.branch_id]: t("Their department's branch") } : undefined}
+          options={list.map((b) => ({ value: b.id, label: b.name, hint: b.id === picked[0] ? t("Home branch") : undefined }))} />
+        <p className="text-[12.5px] text-muted">
+          {home ? t("Home branch: {name}. Their own agents sit there; they work in every branch picked.", { name: home.name }) : t("They work in every branch picked. The first is their home branch.")}
+        </p>
       </div>
       {role === "branch_manager" ? null : (
         <div className="grid gap-1.5">
           <span className="text-[13px] font-medium">{needsDept ? t("Department") : t("Department (optional)")}</span>
-          <Select value={adding ? NEW_DEPT : departmentId || (needsDept ? "" : NONE)} label={t("Department")}
-            onValueChange={(v) => (v === NEW_DEPT ? setAdding(true) : (setAdding(false), onChange(branch?.id ?? "", v)))}
-            placeholder={t("Pick a department")} options={deptOptions} />
+          <SearchSelect value={departmentId || (needsDept ? "" : NONE)} label={t("Department")} onValueChange={setDept}
+            placeholder={t("Pick a department")} searchPlaceholder={t("Search departments")} options={deptOptions}
+            action={canAddDept && addTo ? { label: t("+ New department in {branch}", { branch: addTo.name }), onSelect: () => setAdding(addTo.id) } : undefined} />
         </div>
       )}
-      {adding && branch && role !== "branch_manager" ? (
-        <div className="sm:col-span-2">
-          <NewDepartment branchId={branch.id} onCancel={() => setAdding(false)} onMade={(d) => { setAdding(false); onChange(branch.id, d.id); }} />
-        </div>
+      {adding && role !== "branch_manager" ? (
+        <NewDepartment branchId={adding} onCancel={() => setAdding(null)}
+          onMade={(d) => { setAdding(null); onChange([d.branch_id, ...picked.filter((b) => b !== d.branch_id)], d.id); }} />
       ) : null}
     </div>
   );
 }
 
-function placementBody(role: Role, branchId: string, departmentId: string) {
-  if (!SCOPED_ROLES.includes(role)) return { branch_id: null, department_id: null };
-  return { branch_id: branchId || null, department_id: departmentId && departmentId !== NONE && role !== "branch_manager" ? departmentId : null };
+function placementBody(role: Role, branchIds: string[], departmentId: string) {
+  if (!SCOPED_ROLES.includes(role)) return { branch_id: null, branch_ids: [], department_id: null };
+  const ids = branchIds.filter(Boolean);
+  return { branch_id: ids[0] ?? null, branch_ids: ids, department_id: departmentId && departmentId !== NONE && role !== "branch_manager" ? departmentId : null };
 }
+
+/** Their branches, or the first one there is when none was picked. */
+const orFirst = (ids: string[], list: Branch[]) => (ids.length ? ids : list[0] ? [list[0].id] : []);
 
 function TempPassword({ email, password }: { email: string; password: string }) {
   const t = useT();
@@ -153,16 +195,17 @@ function AddMemberDialog({ open, onOpenChange, me }: { open: boolean; onOpenChan
   const qc = useQueryClient();
   const { data: branches = [] } = useQuery(branchesQuery);
   const roles = assignable(me);
-  const lockBranch = me.scope && me.scope.kind !== "all" ? me.scope.branch_id : null;
+  const allowed = allowedBranches(me);
+  const list = allowed ? branches.filter((b) => allowed.includes(b.id)) : branches;
   const [email, setEmail] = useState("");
   const [name, setName] = useState("");
   const [role, setRole] = useState<Role>(roles.includes("staff") ? "staff" : roles[0] ?? "viewer");
-  const [branchId, setBranchId] = useState(lockBranch ?? "");
+  const [branchIds, setBranchIds] = useState<string[]>(allowed?.length ? [me.scope?.branch_id ?? allowed[0]!] : []);
   const [departmentId, setDepartmentId] = useState(me.scope?.kind === "department" ? me.scope.department_id ?? "" : "");
   const [result, setResult] = useState<{ email: string; password: string | null } | null>(null);
 
   const add = useMutation({
-    mutationFn: () => api<{ temp_password: string | null }>("/api/members", "POST", { email, name, role, ...placementBody(role, branchId || branches[0]?.id || "", departmentId) }),
+    mutationFn: () => api<{ temp_password: string | null }>("/api/members", "POST", { email, name, role, ...placementBody(role, orFirst(branchIds, list), departmentId) }),
     onSuccess: (r) => {
       qc.invalidateQueries({ queryKey: keys.members });
       qc.invalidateQueries({ queryKey: keys.status });
@@ -200,11 +243,11 @@ function AddMemberDialog({ open, onOpenChange, me }: { open: boolean; onOpenChan
         <Field label={t("Email")} type="email" value={email} onChange={(e) => setEmail(e.target.value)} error={fields.email} />
         <div className="grid gap-1.5">
           <span className="text-[13px] font-medium">{t("Role")}</span>
-          <Select value={role} onValueChange={(v) => setRole(v as Role)} options={roleOptions(roles)} label={t("Role")} />
+          <SearchSelect value={role} onValueChange={(v) => setRole(v as Role)} options={roleOptions(roles)} label={t("Role")} searchPlaceholder={t("Search roles")} />
           <p className="text-[12.5px] text-muted">{t(ROLE_INFO[role].blurb)}</p>
         </div>
-        <Placement role={role} branches={branches} branchId={branchId} departmentId={departmentId} lockBranch={lockBranch} canAddDept={addsDepartments(me)}
-          onChange={(b, d) => { setBranchId(b); setDepartmentId(d); }} />
+        <Placement role={role} branches={branches} branchIds={orFirst(branchIds, list)} departmentId={departmentId} allowed={allowed} canAddDept={addsDepartments(me)}
+          onChange={(b, d) => { setBranchIds(b); setDepartmentId(d); }} />
         <FormError message={add.error && !Object.keys(fields).length ? errorMessage(add.error) : null} />
       </div>
     </ResponsiveDialog>
@@ -223,19 +266,22 @@ function AccessDialog({ members, me, open, onOpenChange, onDone }: {
   const qc = useQueryClient();
   const { data: branches = [] } = useQuery(branchesQuery);
   const roles = assignable(me);
-  const lockBranch = me.scope && me.scope.kind !== "all" ? me.scope.branch_id : null;
+  const allowed = allowedBranches(me);
+  const list = allowed ? branches.filter((b) => allowed.includes(b.id)) : branches;
   const one = members.length === 1 ? members[0] : null;
   const [role, setRole] = useState<Role>(one?.role ?? (roles.includes("staff") ? "staff" : roles[0] ?? "viewer"));
-  const [branchId, setBranchId] = useState(one?.branch_id ?? lockBranch ?? "");
+  const [branchIds, setBranchIds] = useState<string[]>(one ? branchIdsOf(one) : allowed?.length ? [me.scope?.branch_id ?? allowed[0]!] : []);
   const [departmentId, setDepartmentId] = useState(one?.department_id ?? "");
   // P97: who they report to and whether they head their department (members.manage).
   const org = !!one && editsOrg(me);
   const { data: everyone = [] } = useQuery({ ...membersQuery, enabled: org });
   const [reportsTo, setReportsTo] = useState(one?.reports_to_user_id ?? "");
   const [heads, setHeads] = useState(!!one?.heads_department);
+  // P98: the people they manage, many at once (sets those people's "reports to").
+  const [manages, setManages] = useState<string[] | null>(null);
   const save = useMutation({
     mutationFn: async () => {
-      const place = placementBody(role, branchId || branches[0]?.id || "", departmentId);
+      const place = placementBody(role, orFirst(branchIds, list), departmentId);
       if (one) {
         const orgBody = org
           ? {
@@ -244,6 +290,10 @@ function AccessDialog({ members, me, open, onOpenChange, onDone }: {
             }
           : {};
         await api(`/api/members/${one.user_id}`, "PATCH", { role, ...place, ...orgBody });
+        if (org && manages && MANAGER_ROLES.includes(role)) {
+          const r = await saveManages(one.user_id, manages);
+          return { done: 1, skipped: r.skipped, first: r.results.find((x) => !x.ok)?.message ?? null };
+        }
         return { done: 1, skipped: 0, first: null as string | null };
       }
       const r = await api<BulkOut>("/api/members/bulk", "POST", { user_ids: members.map((m) => m.user_id), action: "access", role, ...place });
@@ -251,8 +301,10 @@ function AccessDialog({ members, me, open, onOpenChange, onDone }: {
     },
     onSuccess: (r) => {
       qc.invalidateQueries({ queryKey: keys.members });
-      if (one) toast.success(t("{name} is now {role}.", { name: one.name, role: t(ROLE_INFO[role].label).toLowerCase() }));
-      else bulkToast(r.done, r.skipped, r.first);
+      if (one) {
+        toast.success(t("{name} is now {role}.", { name: one.name, role: t(ROLE_INFO[role].label).toLowerCase() }));
+        if (r.skipped) bulkToast(0, r.skipped, r.first);
+      } else bulkToast(r.done, r.skipped, r.first);
       onDone?.();
       onOpenChange(false);
     },
@@ -266,14 +318,17 @@ function AccessDialog({ members, me, open, onOpenChange, onDone }: {
       <div className="grid gap-4">
         <div className="grid gap-1.5">
           <span className="text-[13px] font-medium">{t("Role")}</span>
-          <Select value={role} onValueChange={(v) => setRole(v as Role)} options={roleOptions(options)} label={t("Role")} />
+          <SearchSelect value={role} onValueChange={(v) => setRole(v as Role)} options={roleOptions(options)} label={t("Role")} searchPlaceholder={t("Search roles")} />
           <p className="text-[12.5px] text-muted">{t(ROLE_INFO[role].blurb)}</p>
         </div>
-        <Placement role={role} branches={branches} branchId={branchId} departmentId={departmentId} lockBranch={lockBranch} canAddDept={addsDepartments(me)}
-          onChange={(b, d) => { setBranchId(b); setDepartmentId(d); }} />
+        <Placement role={role} branches={branches} branchIds={orFirst(branchIds, list)} departmentId={departmentId} allowed={allowed} canAddDept={addsDepartments(me)}
+          onChange={(b, d) => { setBranchIds(b); setDepartmentId(d); }} />
         {org && one ? (
           <OrgFields member={one} members={everyone} reportsTo={reportsTo} onReportsTo={setReportsTo} heads={heads} onHeads={setHeads}
-            hasDepartment={!!placementBody(role, branchId || branches[0]?.id || "", departmentId).department_id} />
+            hasDepartment={!!placementBody(role, orFirst(branchIds, list), departmentId).department_id} />
+        ) : null}
+        {org && one && MANAGER_ROLES.includes(role) ? (
+          <ManagesField member={one} members={everyone} value={manages} onChange={setManages} />
         ) : null}
         <FormError message={save.error ? errorMessage(save.error) : null} />
       </div>
@@ -301,6 +356,23 @@ function StatusPill({ member }: { member: Member }) {
   const t = useT();
   const s = STATUS_INFO[memberStatus(member)];
   return <Pill tone={s.tone}>{t(s.label)}</Pill>;
+}
+
+/** P98: their home branch, then the others (a few, then "+N more"). */
+function Branches({ member }: { member: Member }) {
+  const t = useT();
+  const names = branchNamesOf(member);
+  if (!names.length) return <span className="text-muted">-</span>;
+  return (
+    <span className="grid gap-0.5">
+      <span>{names[0]}</span>
+      {names.length > 1 ? (
+        <span className="text-[12px] text-muted" title={names.slice(1).join(", ")}>
+          {names.length > 3 ? t("also {names} +{n} more", { names: names.slice(1, 3).join(", "), n: names.length - 3 }) : t("also {names}", { names: names.slice(1).join(", ") })}
+        </span>
+      ) : null}
+    </span>
+  );
 }
 
 function RolePill({ role }: { role: Role }) {
@@ -511,7 +583,7 @@ function MembersTable({ rows, me, f, onSort, selected, onTick, onTickPage, canBu
               ) : null}
               <td className="max-w-[20rem] px-3 py-2.5"><NameCell member={m} me={me} seesTwoFactor={seesTwoFactor} /></td>
               <td className="px-3 py-2.5"><RolePill role={m.role} /></td>
-              <td className="px-3 py-2.5 break-words">{m.branch_name ?? <span className="text-muted">-</span>}</td>
+              <td className="px-3 py-2.5 break-words"><Branches member={m} /></td>
               <td className="px-3 py-2.5 break-words">{m.department_name ?? <span className="text-muted">-</span>}</td>
               <td className="px-3 py-2.5"><SignIn member={m} /></td>
               <td className="px-3 py-2.5"><StatusPill member={m} /></td>
@@ -537,7 +609,7 @@ function MemberCards({ rows, me, selected, onTick, canBulk }: {
   return (
     <ul className="grid gap-2 md:hidden">
       {rows.map((m) => {
-        const place = [m.department_name, m.branch_name].filter(Boolean).join(", ");
+        const place = [m.department_name, ...branchNamesOf(m)].filter(Boolean).join(", ");
         return (
           <li key={m.user_id} className={cn("grid gap-2 rounded-[var(--radius-md)] border border-border bg-surface p-3", selected.has(m.user_id) && "border-accent/40 bg-accent-soft/40")}>
             <div className="flex items-start gap-2">
@@ -587,6 +659,8 @@ export function MembersPage() {
   const qc = useQueryClient();
   const { data: me } = useSuspenseQuery(meQuery);
   const canAdd = hasAny(me, "members.manage", "team.manage") && assignable(me).length > 0;
+  // P98: the owner changes what each role may do (Settings > Roles and access).
+  const editsRoles = me.permissions.includes("roles.manage");
   const { data: branches = [] } = useQuery(branchesQuery);
   const [f, setF] = useState<MembersFilters>(FIRST_PAGE);
   const [typed, setTyped] = useState("");
@@ -654,14 +728,19 @@ export function MembersPage() {
       <PageHeader
         title={t("Members")}
         description={scoped ? t("People in {place}, and what their role lets them do.", { place: me.scope?.label ?? "" }) : t("People who can sign in to this workspace, where they sit, and what their role lets them do.")}
-        actions={canAdd ? (
+        actions={canAdd || editsRoles ? (
           <>
-            <Button variant="outline" onClick={() => setImporting(true)}>
+            {editsRoles ? (
+              <Button asChild variant="outline">
+                <Link to="/settings/roles"><UserGearIcon size={16} /> {t("Roles and access")}</Link>
+              </Button>
+            ) : null}
+            {canAdd ? <Button variant="outline" onClick={() => setImporting(true)}>
               <FileXlsIcon size={16} /> {t("Import from Excel")}
-            </Button>
-            <Button data-guide="settings.add" onClick={openAdd}>
+            </Button> : null}
+            {canAdd ? <Button data-guide="settings.add" onClick={openAdd}>
               <UserPlusIcon size={16} weight="bold" /> {t("Add member")}
-            </Button>
+            </Button> : null}
           </>
         ) : null}
       />
@@ -694,9 +773,9 @@ export function MembersPage() {
             </div>
             <div className="grid grid-cols-[minmax(0,1fr)] gap-2 sm:grid-cols-2 lg:grid-cols-[minmax(0,2fr)_repeat(3,minmax(0,1fr))]">
               <SearchInput value={typed} onChange={setTyped} placeholder={t("Search by name or email")} className="sm:col-span-2 lg:col-span-1" />
-              <Select label={t("Company")} value={filters.company || "all"} onValueChange={(v) => change({ company: v === "all" ? "" : v })}
+              <SearchSelect label={t("Company")} value={filters.company || "all"} onValueChange={(v) => change({ company: v === "all" ? "" : v })} searchPlaceholder={t("Search companies")}
                 options={[{ value: "all", label: t("All companies") }, { value: "none", label: t("No company") }, ...branches.map((b) => ({ value: b.id, label: b.name }))]} />
-              <Select label={t("Role")} value={filters.role || "all"} onValueChange={(v) => change({ role: v === "all" ? "" : (v as Role) })}
+              <SearchSelect label={t("Role")} value={filters.role || "all"} onValueChange={(v) => change({ role: v === "all" ? "" : (v as Role) })} searchPlaceholder={t("Search roles")}
                 options={[{ value: "all", label: t("All roles") }, ...ROLES.map((r) => ({ value: r, label: t(ROLE_INFO[r].label) }))]} />
               <Select label={t("Status")} value={filters.status || "all"} onValueChange={(v) => change({ status: v === "all" ? "" : (v as MemberStatus) })}
                 options={[{ value: "all", label: t("All statuses") }, ...(Object.keys(STATUS_INFO) as MemberStatus[]).map((s) => ({ value: s, label: t(STATUS_INFO[s].label) }))]} />
@@ -761,7 +840,12 @@ export function MembersPage() {
         </>
       ) : null}
 
-      <Section title={t("Roles")} description={t("What each role lets a person do. Scoped roles only see their own part of the workspace.")}>
+      <Section title={t("Roles")} description={t("What each role lets a person do. Scoped roles only see their own part of the workspace.")}
+        actions={editsRoles ? (
+          <Button asChild size="sm" variant="outline">
+            <Link to="/settings/roles"><UserGearIcon size={15} /> {t("Change what each role can do")}</Link>
+          </Button>
+        ) : null}>
         <div className="grid grid-cols-[minmax(0,1fr)] gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {ROLES.map((r) => {
             const count = summary?.roles[r] ?? 0;
@@ -769,7 +853,7 @@ export function MembersPage() {
               <div key={r} className="grid content-start gap-1 rounded-[var(--radius-md)] border border-border bg-surface px-4 py-3">
                 <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[13.5px] font-medium">
                   <span className="min-w-0 flex-1">{t(ROLE_INFO[r].label)}</span>
-                  {SCOPED_ROLES.includes(r) ? <Pill tone="info">{r === "staff" ? t("Own agents") : r === "branch_manager" ? t("One branch") : t("One department")}</Pill> : null}
+                  {SCOPED_ROLES.includes(r) ? <Pill tone="info">{r === "staff" ? t("Own agents") : r === "branch_manager" ? t("Their branches") : t("One department")}</Pill> : null}
                 </p>
                 <p className="text-[12.5px] text-muted">{t(ROLE_INFO[r].blurb)}</p>
                 <p className="text-[12px] text-muted tabular">{count ? (count === 1 ? t("1 member") : t("{n} members", { n: count })) : t("Nobody yet")}</p>
@@ -780,7 +864,7 @@ export function MembersPage() {
       </Section>
       <AddMemberDialog key={addKey} open={addOpen} onOpenChange={setAddOpen} me={me} />
       {importing ? (
-        <ImportMembersDialog open onOpenChange={setImporting} roles={assignable(me)} lockBranch={scoped ? me.scope?.branch_id ?? null : null} />
+        <ImportMembersDialog open onOpenChange={setImporting} roles={assignable(me)} lockBranch={allowedBranches(me)} />
       ) : null}
       {bulkAccess ? (
         <AccessDialog members={ticked} me={me} open={bulkAccess} onOpenChange={setBulkAccess} onDone={() => setSelected(new Set())} />

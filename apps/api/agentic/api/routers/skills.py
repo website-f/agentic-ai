@@ -164,7 +164,7 @@ async def may_publish(
         return False
     if p.scope.everything:
         return True
-    if skill is not None and skill.branch_id and skill.branch_id != p.branch_id:
+    if skill is not None and skill.branch_id and not p.scope.in_branch(skill.branch_id):
         return False
     after = list(agent_ids if agent_ids is not None else (skill.agent_ids if skill else []))
     # Both who it reaches now and who it will reach must be agents this manager manages:

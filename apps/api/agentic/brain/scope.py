@@ -65,7 +65,10 @@ async def for_person(db: AsyncSession, workspace_id: str, scope: Any) -> Viewer:
     ids = frozenset(a.id for a in agents if scope.sees_agent(a))
     if scope.everything:
         return Viewer(workspace_id, None, None, ids)
-    return Viewer(workspace_id, None, await _branches(db, workspace_id, scope.branch_id), ids)
+    shared: frozenset[str] = frozenset()
+    for b in sorted(scope.branch_ids or ({scope.branch_id} - {None})):  # P98: each branch
+        shared |= await _branches(db, workspace_id, b)
+    return Viewer(workspace_id, None, shared, ids)
 
 
 def sees_fact(v: Viewer, fact: Any) -> bool:

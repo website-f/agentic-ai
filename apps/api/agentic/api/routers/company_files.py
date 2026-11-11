@@ -334,7 +334,7 @@ async def _save_folders(db: AsyncSession, workspace_id: str, entries: list[dict[
 
 def _company_ok(principal: Principal, branch_id: str | None) -> bool:
     sc = principal.scope
-    return sc.everything or branch_id is None or branch_id == sc.branch_id
+    return sc.everything or branch_id is None or sc.in_branch(branch_id)
 
 
 def _saved_seen(

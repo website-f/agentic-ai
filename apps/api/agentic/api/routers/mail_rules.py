@@ -122,7 +122,7 @@ async def _box(db: AsyncSession, principal: Principal, box: str) -> Box:
             workspace_id=principal.workspace_id,
             user_id=principal.user.id,
             role=principal.role,
-            branch_id=principal.branch_id,
+            branch_id=principal.branch_ids,
         )
     ):
         raise api_error(status.HTTP_404_NOT_FOUND, "mailbox_not_found", "That mailbox is not here.")

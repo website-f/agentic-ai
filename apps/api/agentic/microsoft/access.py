@@ -23,11 +23,14 @@ Use `viewer_ids` for live events about a mailbox (`mail.*` events carry them; se
 api/scope.py), and `shared_where` to filter lists in SQL.
 """
 
+from collections.abc import Iterable
+
 from sqlalchemy import ColumnElement, and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..assistants.access import may_assist
 from ..models import Agent, Membership, MicrosoftAccount, SharedMailbox
+from ..teams.branches import member_in_branches
 
 # P92: management and HR see the whole workspace like an admin.
 MAILBOX_ADMINS = frozenset({"owner", "admin", "management", "hr"})
@@ -56,6 +59,15 @@ def sees_personal(acct: MicrosoftAccount | None, workspace_id: str, user_id: str
     return acct is not None and acct.workspace_id == workspace_id and acct.user_id == user_id
 
 
+def _mine(branch_id: str | Iterable[str] | None) -> set[str]:
+    """P98: a person's branch, or all of their branches (a member may work in several)."""
+    if not branch_id:
+        return set()
+    if isinstance(branch_id, str):
+        return {branch_id}
+    return {b for b in branch_id if b}
+
+
 async def sees_shared(
     db: AsyncSession,
     mailbox: SharedMailbox | None,
@@ -63,13 +75,13 @@ async def sees_shared(
     workspace_id: str,
     user_id: str,
     role: str,
-    branch_id: str | None,
+    branch_id: str | Iterable[str] | None,
 ) -> bool:
     if mailbox is None or mailbox.workspace_id != workspace_id:
         return False
     if role in MAILBOX_ADMINS:
         return True
-    if role == "branch_manager" and branch_id and branch_id == mailbox.branch_id:
+    if role == "branch_manager" and mailbox.branch_id in _mine(branch_id):
         return True
     if mailbox.agent_id:
         owner = await db.scalar(select(Agent.owner_user_id).where(Agent.id == mailbox.agent_id))
@@ -78,7 +90,7 @@ async def sees_shared(
 
 
 def shared_where(
-    workspace_id: str, user_id: str, role: str, branch_id: str | None
+    workspace_id: str, user_id: str, role: str, branch_id: str | Iterable[str] | None
 ) -> ColumnElement[bool]:
     """SQL condition on SharedMailbox: the shared mailboxes this person sees."""
     in_ws = SharedMailbox.workspace_id == workspace_id
@@ -88,8 +100,8 @@ def shared_where(
         Agent.workspace_id == workspace_id, Agent.owner_user_id == user_id
     )
     parts: list[ColumnElement[bool]] = [SharedMailbox.agent_id.in_(owned_agents)]
-    if role == "branch_manager" and branch_id:
-        parts.append(SharedMailbox.branch_id == branch_id)
+    if role == "branch_manager" and _mine(branch_id):
+        parts.append(SharedMailbox.branch_id.in_(sorted(_mine(branch_id))))
     return and_(in_ws, or_(*parts))
 
 
@@ -103,7 +115,7 @@ async def viewer_ids(db: AsyncSession, box: MicrosoftAccount | SharedMailbox) ->
                 Membership.workspace_id == box.workspace_id,
                 or_(
                     Membership.role.in_(MAILBOX_ADMINS),
-                    (Membership.role == "branch_manager") & (Membership.branch_id == box.branch_id),
+                    (Membership.role == "branch_manager") & member_in_branches([box.branch_id]),
                 ),
             )
         )
@@ -253,7 +265,7 @@ async def may_approve_shared(
     workspace_id: str,
     user_id: str,
     role: str,
-    branch_id: str | None,
+    branch_id: str | Iterable[str] | None,
 ) -> bool:
     """A shared mailbox's drafts and calendar changes: approved by someone who sees the
     mailbox AND manages (owner, admin, or a branch manager of its company)."""
@@ -265,7 +277,7 @@ async def may_approve_shared(
 
 
 def approvable_where(
-    workspace_id: str, user_id: str, role: str, branch_id: str | None
+    workspace_id: str, user_id: str, role: str, branch_id: str | Iterable[str] | None
 ) -> ColumnElement[bool] | None:
     """SQL condition on SharedMailbox: the mailboxes whose drafts this person approves.
     None: none at all."""
@@ -285,7 +297,7 @@ async def approver_ids(db: AsyncSession, box: MicrosoftAccount | SharedMailbox) 
                 Membership.workspace_id == box.workspace_id,
                 or_(
                     Membership.role.in_(MAILBOX_ADMINS),
-                    (Membership.role == "branch_manager") & (Membership.branch_id == box.branch_id),
+                    (Membership.role == "branch_manager") & member_in_branches([box.branch_id]),
                 ),
             )
         )

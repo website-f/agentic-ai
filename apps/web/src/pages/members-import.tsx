@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { ResponsiveDialog } from "@/components/ui/dialog";
 import { FormError } from "@/components/ui/field";
 import { Pill } from "@/components/ui/pill";
-import { Select } from "@/components/ui/select";
+import { MultiSelect, SearchSelect } from "@/components/ui/search-select";
 import { t as tr, useT } from "@/i18n";
 import { api, errorMessage } from "@/lib/api";
 import {
@@ -40,13 +40,16 @@ function Row({ row, editable, roles, branches, lockBranch, onFix }: {
   editable: boolean;
   roles: Role[];
   branches: Branch[];
-  lockBranch: string | null;
+  /** P98: a scoped manager's own branches (they add people only there). */
+  lockBranch: string[] | null;
   onFix: (field: "role" | "company" | "department", patch: Partial<PreviewRow>) => void;
 }) {
   const t = useT();
   const scoped = SCOPED_ROLES.includes(row.role);
-  const list = lockBranch ? branches.filter((b) => b.id === lockBranch) : branches;
+  const list = lockBranch ? branches.filter((b) => lockBranch.includes(b.id)) : branches;
   const branch = list.find((b) => b.id === row.branch_id);
+  const picked = row.branch_ids?.length ? row.branch_ids : row.branch_id ? [row.branch_id] : [];
+  const pool = list.filter((b) => picked.includes(b.id));
   const needsDept = row.role === "hod" || row.role === "supervisor";
   return (
     <tr className="align-top">
@@ -58,7 +61,7 @@ function Row({ row, editable, roles, branches, lockBranch, onFix }: {
       </td>
       <td className="px-3 py-2.5">
         {editable ? (
-          <Select size="sm" value={roles.includes(row.role) ? row.role : ""} placeholder={roleLabel(row.role)} label={t("Role for {name}", { name: row.name || row.email })}
+          <SearchSelect size="sm" value={roles.includes(row.role) ? row.role : ""} placeholder={roleLabel(row.role)} label={t("Role for {name}", { name: row.name || row.email })}
             className="w-40" options={roles.map((r) => ({ value: r, label: roleLabel(r) }))}
             onValueChange={(v) => onFix("role", { role: v as Role, ...(SCOPED_ROLES.includes(v as Role) ? {} : { branch_id: null, department_id: null }) })} />
         ) : <span className="text-[13px]">{roleLabel(row.role)}</span>}
@@ -69,18 +72,18 @@ function Row({ row, editable, roles, branches, lockBranch, onFix }: {
       <td className="px-3 py-2.5">
         {!scoped ? <span className="text-[12.5px] text-muted">{t("Whole workspace")}</span> : editable ? (
           <div className="grid gap-1.5">
-            <Select size="sm" value={branch?.id ?? ""} placeholder={t("Pick a company")} label={t("Company for {name}", { name: row.name || row.email })} className="w-44"
+            <MultiSelect size="sm" value={picked} placeholder={t("Pick a company")} label={t("Company for {name}", { name: row.name || row.email })} className="w-52"
               options={list.map((b) => ({ value: b.id, label: b.name }))}
-              onValueChange={(v) => onFix("company", { branch_id: v, department_id: null })} />
+              onValueChange={(v) => onFix("company", { branch_id: v[0] ?? null, branch_ids: v, department_id: null })} />
             {row.role === "branch_manager" ? null : (
-              <Select size="sm" value={row.department_id ?? (needsDept ? "" : NONE)} placeholder={t("Pick a department")} disabled={!branch}
-                label={t("Department for {name}", { name: row.name || row.email })} className="w-44"
-                options={[...(needsDept ? [] : [{ value: NONE, label: t("Any department") }]), ...(branch?.departments ?? []).map((d) => ({ value: d.id, label: d.name }))]}
+              <SearchSelect size="sm" value={row.department_id ?? (needsDept ? "" : NONE)} placeholder={t("Pick a department")} disabled={!branch}
+                label={t("Department for {name}", { name: row.name || row.email })} className="w-52"
+                options={[...(needsDept ? [] : [{ value: NONE, label: t("Any department") }]), ...pool.flatMap((b) => b.departments.map((d) => ({ value: d.id, label: d.name, group: pool.length > 1 ? b.name : undefined })))]}
                 onValueChange={(v) => onFix("department", { department_id: v === NONE ? null : v })} />
             )}
           </div>
         ) : (
-          <span className="text-[13px] break-words">{[row.branch_name, row.department_name].filter(Boolean).join(" · ") || "—"}</span>
+          <span className="text-[13px] break-words">{[row.branch_names?.length ? row.branch_names.join(", ") : row.branch_name, row.department_name].filter(Boolean).join(" · ") || "—"}</span>
         )}
         {row.company_text || row.department_text ? (
           <span className="mt-0.5 block text-[11.5px] break-words text-muted">{t("Sheet: {text}", { text: [row.company_text, row.department_text].filter(Boolean).join(" · ") })}</span>
@@ -131,7 +134,7 @@ function Results({ results }: { results: ImportResult[] }) {
           <li key={r.email} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 px-3.5 py-2.5">
             <span className="min-w-0">
               <span className="block text-[13px] font-medium break-words">{r.name}</span>
-              <span className="block text-[12px] break-all text-muted">{r.email} · {roleLabel(r.role)}{r.branch_name ? ` · ${r.branch_name}` : ""}</span>
+              <span className="block text-[12px] break-all text-muted">{r.email} · {roleLabel(r.role)}{r.branch_names?.length ? ` · ${r.branch_names.join(", ")}` : r.branch_name ? ` · ${r.branch_name}` : ""}</span>
             </span>
             {r.temp_password ? (
               <span className="flex items-center gap-1.5">
@@ -201,7 +204,7 @@ export function ImportMembersDialog({ open, onOpenChange, roles, lockBranch }: {
   onOpenChange: (o: boolean) => void;
   /** The roles this person may give (members.tsx assignable). */
   roles: Role[];
-  lockBranch: string | null;
+  lockBranch: string[] | null;
 }) {
   const t = useT();
   const qc = useQueryClient();

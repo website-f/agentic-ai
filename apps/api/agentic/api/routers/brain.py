@@ -302,7 +302,7 @@ async def _page_agent(db: AsyncSession, ws_id: str, path: str) -> tuple[bool, Ag
 
 
 def _branch_ok(principal: Principal, branch_id: str | None) -> bool:
-    return principal.scope.everything or branch_id is None or branch_id == principal.branch_id
+    return principal.scope.everything or branch_id is None or principal.scope.in_branch(branch_id)
 
 
 async def _page_branch(db: AsyncSession, ws_id: str, path: str) -> str | None:
@@ -373,8 +373,8 @@ async def _page_where(db: AsyncSession, principal: Principal) -> ColumnElement[b
     conds: list[ColumnElement[bool]] = []
     if not sc.everything:
         conds.append(
-            or_(BrainPage.branch_id.is_(None), BrainPage.branch_id == principal.branch_id)
-            if principal.branch_id
+            or_(BrainPage.branch_id.is_(None), sc.branch_col(BrainPage.branch_id))
+            if sc.branch_ids
             else BrainPage.branch_id.is_(None)
         )
         conds.append(not_(BrainPage.path.startswith(DREAMS, autoescape=True)))
@@ -772,7 +772,7 @@ async def search(
     v = await for_person(db, principal.workspace_id, principal.scope)
     pv = v
     if not principal.scope.everything:
-        own = frozenset({principal.branch_id}) if principal.branch_id else frozenset()
+        own = principal.scope.branch_ids
         pv = dataclasses.replace(v, branch_ids=own)
     qvec = await embed.embed_one(q)
     facts = [h for _, h in await search_facts(db, v, q, qvec, limit=10)]

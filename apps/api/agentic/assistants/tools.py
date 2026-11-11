@@ -114,7 +114,7 @@ async def _notify(ctx: ToolContext, args: dict[str, Any]) -> str:
                 or not (
                     sc.everything
                     or target.id == a.owner_user_id
-                    or (sc.kind == "branch" and them.branch_id == sc.branch_id)
+                    or (sc.kind == "branch" and any(sc.in_branch(b) for b in them.branch_ids))
                     or (sc.kind == "department" and them.department_id == sc.department_id)
                 )
             ):

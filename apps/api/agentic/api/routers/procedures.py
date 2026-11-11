@@ -311,7 +311,7 @@ async def forget(
     if r is None or r.workspace_id != principal.workspace_id:
         raise api_error(status.HTTP_404_NOT_FOUND, "routine_not_found", "That routine is not here.")
     sc = principal.scope
-    if not sc.everything and sc.branch_id and r.branch_id not in (None, sc.branch_id):
+    if not sc.everything and sc.branch_ids and r.branch_id and not sc.in_branch(r.branch_id):
         raise api_error(status.HTTP_404_NOT_FOUND, "routine_not_found", "That routine is not here.")
     if r.agent_id != agent.id and r.id not in await _used_by(db, agent):
         raise api_error(status.HTTP_404_NOT_FOUND, "routine_not_found", "That routine is not here.")

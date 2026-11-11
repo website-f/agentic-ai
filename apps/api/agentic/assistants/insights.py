@@ -93,7 +93,7 @@ async def _people(db: AsyncSession, ws: str, scope: Scope) -> list[tuple[User, M
     for u, m in rows:
         if scope.everything or u.id == scope.user_id:
             out.append((u, m))
-        elif scope.kind == "branch" and m.branch_id == scope.branch_id:
+        elif scope.kind == "branch" and any(scope.in_branch(b) for b in m.branch_ids):
             out.append((u, m))
         elif scope.kind == "department" and m.department_id == scope.department_id:
             out.append((u, m))

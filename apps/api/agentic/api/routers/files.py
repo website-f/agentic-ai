@@ -220,8 +220,8 @@ def place_refused(principal: Principal, branch_id: str | None, department_id: st
     if sc.everything:
         return None
     if sc.kind == "branch":
-        return None if branch_id is not None and branch_id == sc.branch_id else "company"
-    if branch_id is None or branch_id != sc.branch_id:
+        return None if sc.in_branch(branch_id) else "company"
+    if not sc.in_branch(branch_id):
         return "company"
     if department_id != sc.department_id:
         return "department"

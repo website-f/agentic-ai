@@ -72,8 +72,8 @@ class Viewer:
         r = self.reader
         parts: list[ColumnElement[bool]] = [SOP.scope.in_(("workspace", "library"))]
         if r.branch_id:
-            parts.append(and_(SOP.scope == "branch", SOP.scope_id == r.branch_id))
-            depts = select(Department.id).where(Department.branch_id == r.branch_id)
+            parts.append(and_(SOP.scope == "branch", SOP.scope_id.in_(r.branch_ids)))
+            depts = select(Department.id).where(Department.branch_id.in_(r.branch_ids))
             if not r.all_departments:
                 depts = depts.where(
                     Department.id == r.department_id if r.department_id else false()
@@ -98,7 +98,7 @@ class Viewer:
         b = self.reader.branch_id
         return and_(
             ws,
-            or_(DocTemplate.branch_id.is_(None), DocTemplate.branch_id == b)
+            or_(DocTemplate.branch_id.is_(None), DocTemplate.branch_id.in_(self.reader.branch_ids))
             if b
             else (DocTemplate.branch_id.is_(None)),
         )
@@ -112,7 +112,7 @@ class Viewer:
         b = self.reader.branch_id
         return and_(
             ws,
-            or_(BrainPage.branch_id.is_(None), BrainPage.branch_id == b)
+            or_(BrainPage.branch_id.is_(None), BrainPage.branch_id.in_(self.reader.branch_ids))
             if b
             else (BrainPage.branch_id.is_(None)),
         )
@@ -126,7 +126,7 @@ def library_scope(r: library.Reader) -> ColumnElement[bool]:
     if r.everything:
         return true()
     branch = (
-        or_(DocFile.branch_id.is_(None), DocFile.branch_id == r.branch_id)
+        or_(DocFile.branch_id.is_(None), DocFile.branch_id.in_(r.branch_ids))
         if r.branch_id
         else DocFile.branch_id.is_(None)
     )
@@ -148,7 +148,8 @@ def for_person(principal: Any) -> Viewer:
         f"{principal.workspace_id}:all"
         if sc.everything
         else f"{principal.workspace_id}:u:{principal.user.id}:{principal.role}"
-        f":{principal.branch_id or '-'}:{principal.department_id or '-'}"
+        f":{','.join(principal.scope.branch_ids) if principal.scope.branch_ids else '-'}"
+        f":{principal.department_id or '-'}"
     )
     return Viewer(
         principal.workspace_id,

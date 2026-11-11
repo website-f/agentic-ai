@@ -171,12 +171,15 @@ class ImportRow(BaseModel):
     role: str = Field(default="staff", max_length=40)
     branch_id: str | None = Field(default=None, max_length=40)
     department_id: str | None = Field(default=None, max_length=40)
+    # P98: every company they work in (branch_id, their home, first). Empty: just branch_id.
+    branch_ids: list[str] = Field(default_factory=list, max_length=100)
     phone: str = Field(default="", max_length=60)
     notes: str = Field(default="", max_length=500)
 
 
 class RowOut(ImportRow):
     branch_name: str | None = None
+    branch_names: list[str] = Field(default_factory=list)  # P98: every company, home first
     department_name: str | None = None
     # What the sheet said, for rows the person fixes by hand.
     role_text: str = ""
@@ -237,6 +240,7 @@ class ResultOut(BaseModel):
     user_id: str | None = None
     role: str
     branch_name: str | None = None
+    branch_names: list[str] = Field(default_factory=list)  # P98
     department_name: str | None = None
 
 
@@ -471,6 +475,26 @@ def best_match(text: str, options: dict[str, str], key) -> tuple[str, bool] | No
     return None
 
 
+# P98: a cell naming several companies ("Alpha; Beta", "Alpha, Beta", one per line).
+_MANY = re.compile(r"\s*(?:;|\||\n)\s*")
+
+
+def company_parts(text: str, options: dict[str, str]) -> list[str]:
+    """The company names a cell holds: the whole cell when it names one company exactly
+    (a name may hold a comma: "Alpha Sdn. Bhd., Johor"), else its parts split on ; | or a
+    new line, else on commas."""
+    text = text.strip()
+    if not text:
+        return []
+    whole = best_match(text, options, _company_key)
+    if whole is not None and whole[1]:
+        return [text]
+    parts = [p for p in _MANY.split(text) if p.strip()]
+    if len(parts) < 2:
+        parts = [p.strip() for p in text.split(",") if p.strip()]
+    return parts if len(parts) >= 2 else [text]
+
+
 def match_role(text: str) -> tuple[str, bool] | None:
     """(role key, exact) for what a sheet calls a role."""
     norm = _norm(text)
@@ -543,25 +567,22 @@ def _match_row(principal: Principal, org: Org, row: RowOut) -> list[Note]:
     sc = principal.scope
     branches = {b.id: b.name for b in org.branches.values()}
     if row.company_text:
-        found = best_match(row.company_text, branches, _company_key)
-        if found is None:
-            note(
-                "company",
-                "error",
-                tr('No company called "{text}". Pick one.', text=row.company_text),
-            )
-        else:
-            row.branch_id = found[0]
+        found_ids: list[str] = []
+        for part in company_parts(row.company_text, branches):  # P98: one or several
+            found = best_match(part, branches, _company_key)
+            if found is None:
+                note("company", "error", tr('No company called "{text}". Pick one.', text=part))
+                continue
+            if found[0] not in found_ids:
+                found_ids.append(found[0])
             if not found[1]:
                 note(
                     "company",
                     "warn",
-                    tr(
-                        'Matched "{text}" to {name}.',
-                        text=row.company_text,
-                        name=branches[found[0]],
-                    ),
+                    tr('Matched "{text}" to {name}.', text=part, name=branches[found[0]]),
                 )
+        if found_ids:
+            row.branch_id, row.branch_ids = found_ids[0], found_ids
     elif not sc.everything:
         row.branch_id = sc.branch_id
     elif len(branches) == 1:
@@ -573,7 +594,7 @@ def _match_row(principal: Principal, org: Org, row: RowOut) -> list[Note]:
         pool = {
             d.id: d.name
             for d in org.departments.values()
-            if row.branch_id is None or d.branch_id == row.branch_id
+            if row.branch_id is None or d.branch_id in (row.branch_ids or [row.branch_id])
         }
         found = best_match(row.department_text, pool, _dept_key)
         if found is None:
@@ -608,7 +629,7 @@ def _match_row(principal: Principal, org: Org, row: RowOut) -> list[Note]:
             )
         else:
             d = org.departments[found[0]]
-            row.department_id, row.branch_id = d.id, d.branch_id
+            row.department_id, row.branch_id = d.id, d.branch_id  # the home: its company
             if not found[1]:
                 note(
                     "department",
@@ -690,15 +711,17 @@ async def _check_rows(
                 note("role", _error_text(e))
             if r.row not in skip_place:
                 try:
-                    b, d = await members._placement(
-                        db, principal, r.role, r.branch_id, r.department_id
+                    b, d, every = await members._placement(
+                        db, principal, r.role, r.branch_id, r.department_id, r.branch_ids
                     )
-                    r.branch_id, r.department_id = b, d
+                    r.branch_id, r.department_id, r.branch_ids = b, d, every
                 except HTTPException as e:
                     note("place", _error_text(e))
         if r.role not in SCOPED_ROLES:
             r.branch_id = r.department_id = None
+            r.branch_ids = []
         r.branch_name = org.branches[r.branch_id].name if r.branch_id in org.branches else None
+        r.branch_names = [org.branches[b].name for b in r.branch_ids if b in org.branches]
         r.department_name = (
             org.departments[r.department_id].name if r.department_id in org.departments else None
         )
@@ -716,11 +739,11 @@ def _in_scope(principal: Principal, org: Org) -> Org:
     sc = principal.scope
     if sc.everything:
         return org
-    branches = [b for b in org.branches.values() if b.id == sc.branch_id]
+    branches = [b for b in org.branches.values() if sc.in_branch(b.id)]
     depts = [
         d
         for d in org.departments.values()
-        if d.branch_id == sc.branch_id and (sc.kind != "department" or d.id == sc.department_id)
+        if sc.in_branch(d.branch_id) and (sc.kind != "department" or d.id == sc.department_id)
     ]
     return Org(branches, depts)
 
@@ -770,7 +793,7 @@ async def template(
         branch.name if branch else "",
         dept.name if dept else "",
         "012-345 6789",
-        tr("Example row: replace it with your people."),
+        tr("Example row: replace it with your people. Several companies: separate them with ;"),
     ]
     for i, v in enumerate(example, 1):
         ws.cell(2, i, v).font = Font(italic=True, color="808080")
@@ -913,7 +936,10 @@ async def read_sheet(db: AsyncSession, principal: Principal, data: bytes, name: 
             x.level == "error" and x.field == "company" and x.source == "match"
             for x in r.notes_found
         ):
-            missing.setdefault(_norm(r.company_text), r.company_text.strip())
+            known = {b.id: b.name for b in org.branches.values()}
+            for part in company_parts(r.company_text, known):  # P98: each company named
+                if best_match(part, known, _company_key) is None:
+                    missing.setdefault(_norm(part), part.strip())
     return PreviewOut(
         file_name=name,
         sheet=sheet,
@@ -1038,6 +1064,7 @@ async def import_rows(db: AsyncSession, principal: Principal, rows: list[RowOut]
             status="skipped",
             role=r.role,
             branch_name=r.branch_name,
+            branch_names=r.branch_names,
             department_name=r.department_name,
         )
         results.append(res)
@@ -1055,6 +1082,7 @@ async def import_rows(db: AsyncSession, principal: Principal, rows: list[RowOut]
                     branch_id=r.branch_id,
                     department_id=r.department_id,
                     via="import",
+                    branch_ids=r.branch_ids,
                 )
         except HTTPException as e:
             res.message = _error_text(e)
