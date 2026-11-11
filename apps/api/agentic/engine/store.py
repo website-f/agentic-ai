@@ -313,6 +313,8 @@ async def upsert_models(
     }
     seen, added = set(), 0
     for m in models:
+        if m["id"] in seen:  # P97: Azure AI Foundry lists some models twice; one row each
+            continue
         seen.add(m["id"])
         row = existing.get(m["id"])
         if row is None:

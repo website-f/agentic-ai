@@ -702,3 +702,21 @@ async def test_two_providers_of_the_same_kind_with_their_own_address_and_key(
         headers=csrf(client),
     )
     assert renamed.status_code == 409 and renamed.json()["code"] == "provider_exists"
+
+
+async def test_a_model_listed_twice_is_saved_once(client: httpx.AsyncClient):
+    """P97, live: an Azure AI Foundry listing names some models twice; saving it hit the
+    unique (provider, model) row and every health check of that provider failed."""
+    from agentic.core.db import SessionLocal
+    from agentic.engine import store
+    from agentic.models import AIModel, AIProvider
+
+    await setup_owner(client)
+    made = await add_provider(client, "Azure", "good.fake")
+    async with SessionLocal() as db:
+        p = await db.get(AIProvider, made["id"])
+        listing = [{"id": "DeepSeek-V4.1-Flash"}, {"id": "gpt-4o"}, {"id": "DeepSeek-V4.1-Flash"}]
+        await store.upsert_models(db, p, listing)
+        await db.commit()
+        ids = (await db.scalars(select(AIModel.model_id).where(AIModel.provider_id == p.id))).all()
+    assert sorted(ids).count("DeepSeek-V4.1-Flash") == 1 and "gpt-4o" in ids
