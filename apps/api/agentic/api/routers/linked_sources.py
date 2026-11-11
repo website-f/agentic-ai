@@ -64,7 +64,7 @@ def _manager(principal: Principal) -> bool:
 def may_connect(principal: Principal) -> bool:
     sc = principal.scope
     return _manager(principal) or (
-        sc.kind == "branch" and bool(sc.branch_id) and can(principal.role, "agents.manage")
+        sc.kind == "branch" and bool(sc.branch_ids) and can(principal.role, "agents.manage")
     )
 
 
@@ -73,12 +73,7 @@ def may_manage(principal: Principal, branch_id: str | None) -> bool:
     if _manager(principal):
         return True
     sc = principal.scope
-    return (
-        sc.kind == "branch"
-        and can(principal.role, "agents.manage")
-        and branch_id is not None
-        and branch_id == sc.branch_id
-    )
+    return sc.kind == "branch" and can(principal.role, "agents.manage") and sc.in_branch(branch_id)
 
 
 def _forbid() -> Exception:

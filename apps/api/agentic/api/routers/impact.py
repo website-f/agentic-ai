@@ -83,7 +83,7 @@ async def build(db: AsyncSession, principal: Principal, days: int) -> dict[str, 
     )
     if not sc.everything:
         seen = {a.branch_id for a in all_agents} | {t.branch_id for t in tasks}
-        branches = [b for b in branches if b.id in seen or b.id == sc.branch_id]
+        branches = [b for b in branches if b.id in seen or sc.in_branch(b.id)]
     branch_ids = {b.id for b in branches}
     depts = list(
         (

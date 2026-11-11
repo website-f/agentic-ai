@@ -49,7 +49,7 @@ async def office_snapshot(
     if (
         branch is None
         or branch.workspace_id != principal.workspace_id
-        or (not sc.everything and branch.id != sc.branch_id)
+        or (not sc.everything and not sc.in_branch(branch.id))
     ):
         raise api_error(status.HTTP_404_NOT_FOUND, "branch_not_found", "That company is not here.")
     depts = list(

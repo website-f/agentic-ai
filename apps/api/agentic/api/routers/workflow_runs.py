@@ -162,8 +162,8 @@ def _scoped(q: Any, principal: Principal) -> Any:
     if sc.everything:
         return q
     parts = [WorkflowRun.created_by == principal.actor]
-    if sc.kind == "branch" and sc.branch_id:
-        parts.append(WorkflowRun.branch_id == sc.branch_id)
+    if sc.kind == "branch" and sc.branch_ids:
+        parts.append(sc.branch_col(WorkflowRun.branch_id))
     return q.where(or_(*parts))
 
 

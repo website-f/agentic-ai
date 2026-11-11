@@ -112,8 +112,8 @@ def visible_where(scope: Any) -> ColumnElement[bool] | None:
     if scope.everything:
         return None
     parts: list[ColumnElement[bool]] = [Objective.branch_id.is_(None)]
-    if scope.branch_id:
-        mine = Objective.branch_id == scope.branch_id
+    if scope.branch_ids:
+        mine = scope.branch_col(Objective.branch_id)  # P98: each of their companies
         if scope.kind == "department":
             mine = and_(
                 mine,
@@ -134,8 +134,8 @@ def sees(scope: Any, ob: Objective) -> bool:
     if scope.kind == "department":
         if ob.department_id is not None:
             return ob.department_id == scope.department_id
-        return bool(scope.branch_id) and ob.branch_id == scope.branch_id
-    return bool(scope.branch_id) and ob.branch_id == scope.branch_id
+        return scope.in_branch(ob.branch_id)
+    return scope.in_branch(ob.branch_id)
 
 
 def may_edit(
@@ -148,7 +148,7 @@ def may_edit(
     if "team.manage" not in perms:
         return False
     if scope.kind == "branch":
-        return ob_branch is not None and ob_branch == scope.branch_id
+        return scope.in_branch(ob_branch)
     if scope.kind == "department":
         return ob_dept is not None and ob_dept == scope.department_id
     return False

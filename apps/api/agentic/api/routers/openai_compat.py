@@ -90,7 +90,7 @@ async def creator_scope(db: AsyncSession, t: ApiToken) -> Scope:
             "authentication_error",
             "invalid_token",
         )
-    return Scope.of(m.role, user.id, m.branch_id, m.department_id)
+    return Scope.of_member(m)
 
 
 def _reachable(sc: Scope) -> ColumnElement[bool]:

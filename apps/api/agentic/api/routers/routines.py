@@ -76,8 +76,8 @@ def _manager(principal: Principal) -> None:
 def _scoped(q: Any, principal: Principal) -> Any:
     q = q.where(Routine.workspace_id == principal.workspace_id)
     sc = principal.scope
-    if not sc.everything and sc.branch_id:
-        q = q.where(or_(Routine.branch_id.is_(None), Routine.branch_id == sc.branch_id))
+    if not sc.everything and sc.branch_ids:
+        q = q.where(or_(Routine.branch_id.is_(None), sc.branch_col(Routine.branch_id)))
     return q
 
 

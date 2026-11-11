@@ -2113,3 +2113,8 @@ MS.update({k: v for k, v in MS_SIGNIN.items() if k not in MS})
 from .ms_team import MS_TEAM  # noqa: E402
 
 MS.update({k: v for k, v in MS_TEAM.items() if k not in MS})
+
+# P98: a member in several branches at once.
+from .ms_branches import MS_BRANCHES  # noqa: E402
+
+MS.update({k: v for k, v in MS_BRANCHES.items() if k not in MS})

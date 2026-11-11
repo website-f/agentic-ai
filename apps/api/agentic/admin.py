@@ -51,6 +51,7 @@ from .models import (
     Workspace,
 )
 from .services import audit
+from .teams.branches import set_branches
 
 ACTOR = "system:admin-cli"
 
@@ -133,7 +134,7 @@ async def make_developer(email: str, name: str | None, workspace: str | None) ->
             db.add(Membership(workspace_id=ws.id, user_id=user.id, role="owner"))
         else:
             m.role = "owner"
-            m.branch_id = None
+            set_branches(m, None, [])  # P98: owners sit in no branch
             m.department_id = None
         await db.execute(delete(AuthSession).where(AuthSession.user_id == user.id))
         await audit.record(

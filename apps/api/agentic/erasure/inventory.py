@@ -245,7 +245,14 @@ CATEGORIES: dict[str, tuple[str, ...]] = {
     ),
     "Mail and calendar": ("mail_items", "email_drafts", "calendar_proposals", "mail_rules"),
     "Meeting recordings": ("meeting_recordings",),
-    "People and access": ("memberships", "users", "auth_sessions", "api_tokens", "crm_access"),
+    "People and access": (
+        "memberships",
+        "membership_branches",  # P98
+        "users",
+        "auth_sessions",
+        "api_tokens",
+        "crm_access",
+    ),
 }
 
 

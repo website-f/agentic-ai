@@ -115,7 +115,7 @@ async def chat_approver(db: AsyncSession, agent: Agent, user_id: str | None) -> 
     m = await db.get(Membership, (agent.workspace_id, user_id))
     if m is None or not can(m.role, "approvals.decide"):
         return None
-    scope = Scope.of(m.role, user_id, m.branch_id, m.department_id)
+    scope = Scope.of_member(m)
     return user_id if scope.sees_agent(agent) else None
 
 

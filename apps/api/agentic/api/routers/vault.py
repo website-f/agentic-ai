@@ -80,7 +80,7 @@ def _manages(principal: Principal, c: Credential) -> bool:
     if not can(principal.role, "vault.manage"):
         return False
     sc = principal.scope
-    return sc.everything or (c.branch_id is not None and c.branch_id == sc.branch_id)
+    return sc.everything or sc.in_branch(c.branch_id)
 
 
 def _sees(principal: Principal, c: Credential) -> bool:
@@ -89,7 +89,7 @@ def _sees(principal: Principal, c: Credential) -> bool:
         return _manages(principal, c)
     sc = principal.scope
     return can(principal.role, "vault.manage") and (
-        sc.everything or c.branch_id is None or c.branch_id == sc.branch_id
+        sc.everything or c.branch_id is None or sc.in_branch(c.branch_id)
     )
 
 

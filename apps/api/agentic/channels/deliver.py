@@ -77,9 +77,7 @@ async def deciders(
         for u, m in rows
         if can(m.role, "approvals.decide")
         and (not budget or any(can(m.role, p) for p in GRANTERS))
-        and (
-            agent is None or Scope.of(m.role, u.id, m.branch_id, m.department_id).sees_agent(agent)
-        )
+        and (agent is None or Scope.of_member(m).sees_agent(agent))
     ]
 
 

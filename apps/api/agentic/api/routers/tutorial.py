@@ -105,7 +105,7 @@ async def progress(
             Workflow.workspace_id == ws,
             or_(
                 Workflow.branch_id.is_(None),
-                true() if sc.everything else Workflow.branch_id == sc.branch_id,
+                true() if sc.everything else sc.branch_col(Workflow.branch_id),
             ),
         ),
         "autopilot": exists().where(

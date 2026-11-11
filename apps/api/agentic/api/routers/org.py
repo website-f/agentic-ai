@@ -1,7 +1,7 @@
 """Branches (one per company) and their departments."""
 
 from fastapi import APIRouter, Depends, Response, status
-from sqlalchemy import false, func, select
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -111,7 +111,7 @@ async def list_branches(
     if not sc.everything:
         # Office roles see their own company only: not the other companies' names or
         # settings (the switcher showed only theirs, but the list held every one).
-        q = q.where(Branch.id == sc.branch_id) if sc.branch_id else q.where(false())
+        q = q.where(sc.branch_col(Branch.id))  # P98: each of their companies
     rows = (await db.scalars(q.order_by(Branch.created_at))).all()
     return [_branch_out(b) for b in rows]
 

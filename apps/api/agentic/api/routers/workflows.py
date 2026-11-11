@@ -90,7 +90,7 @@ def _may_change(principal: Principal, branch_id: str | None, created_by: str | N
     workspace-wide one, branch_id None, is shared); someone without agents.manage (staff)
     changes only the workflows they made themselves."""
     sc = principal.scope
-    if not sc.everything and branch_id and branch_id != sc.branch_id:
+    if not sc.everything and branch_id and not sc.in_branch(branch_id):
         raise api_error(
             status.HTTP_404_NOT_FOUND, "workflow_not_found", "That workflow is not here."
         )

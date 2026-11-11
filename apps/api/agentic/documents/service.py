@@ -94,8 +94,8 @@ def scoped(q: Any, model: Any, principal: Any) -> Any:
         tcond = sc.task_where()
         tasks = select(Task.id).where(Task.workspace_id == principal.workspace_id)
         parts.append(model.task_id.in_(tasks.where(tcond) if tcond is not None else tasks))
-    if sc.kind == "branch" and sc.branch_id:
-        parts.append(model.branch_id == sc.branch_id)
+    if sc.kind == "branch" and sc.branch_ids:
+        parts.append(sc.branch_col(model.branch_id))
     return q.where(or_(*parts))
 
 
@@ -104,7 +104,7 @@ def branch_ok(principal: Any, branch_id: str | None) -> bool:
     sc = principal.scope
     if sc.everything or branch_id is None:
         return True
-    return sc.kind != "branch" or branch_id == sc.branch_id
+    return sc.kind != "branch" or sc.in_branch(branch_id)
 
 
 def visible_files(query: Any, principal: Any) -> Any:

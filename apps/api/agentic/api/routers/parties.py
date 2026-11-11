@@ -778,7 +778,7 @@ async def _links(
     task_ids = {r.task_id for r in rows if r.task_id}
     if task_ids:
         for t in (await db.scalars(select(Task).where(Task.id.in_(task_ids)))).all():
-            if sc.everything or (sc.branch_id and t.branch_id == sc.branch_id):
+            if sc.everything or sc.in_branch(t.branch_id):
                 titles[("task", t.id)] = t.title
     deal_ids = {r.deal_id for r in rows if r.deal_id}
     if deal_ids:
@@ -791,7 +791,7 @@ async def _links(
     doc_ids = {r.document_id for r in rows if r.document_id}
     if doc_ids:
         for d in (await db.scalars(select(Document).where(Document.id.in_(doc_ids)))).all():
-            if sc.everything or d.branch_id in (None, sc.branch_id):
+            if sc.everything or d.branch_id is None or sc.in_branch(d.branch_id):
                 titles[("document", d.id)] = d.title
     money_ids = {r.money_doc_id for r in rows if r.money_doc_id}
     if money_ids and access.has_finance(principal):

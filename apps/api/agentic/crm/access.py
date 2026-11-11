@@ -54,12 +54,12 @@ def party_where(principal: Any, model: Any = Party) -> ColumnElement[bool]:
     sc = principal.scope
     if sc.everything:
         return true()
-    return company_where(model, sc.branch_id)
+    return or_(model.branch_id.is_(None), sc.branch_col(model.branch_id))  # P98: each company
 
 
 def sees_branch(principal: Any, branch_id: str | None) -> bool:
     sc = principal.scope
-    return sc.everything or branch_id is None or branch_id == sc.branch_id
+    return sc.everything or branch_id is None or sc.in_branch(branch_id)
 
 
 def sees_party(principal: Any, p: Party | Deal | None) -> bool:
@@ -94,14 +94,14 @@ def finance_where(principal: Any, model: Any = MoneyDoc) -> ColumnElement[bool]:
     sc = principal.scope
     if sc.everything:
         return true()
-    return model.branch_id == sc.branch_id if sc.branch_id else false()
+    return sc.branch_col(model.branch_id)
 
 
 def finance_sees(principal: Any, branch_id: str | None) -> bool:
     if not has_finance(principal) or not branch_id:
         return False
     sc = principal.scope
-    return sc.everything or branch_id == sc.branch_id
+    return sc.everything or sc.in_branch(branch_id)
 
 
 # ---------------------------------------------------------------- agents

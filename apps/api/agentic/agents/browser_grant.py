@@ -112,7 +112,7 @@ async def may_manage(db: AsyncSession, agent: Agent, user_id: str | None) -> boo
         return False
     ws = await db.get(Workspace, agent.workspace_id)
     perms = effective(m.role, ws.settings if ws is not None else None)
-    scope = Scope.of(m.role, user_id, m.branch_id, m.department_id)
+    scope = Scope.of_member(m)
     return scope.manages_agent(agent, perms)
 
 

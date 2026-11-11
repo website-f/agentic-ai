@@ -14,6 +14,7 @@ from sqlalchemy import (
     DateTime,
     Float,
     ForeignKey,
+    ForeignKeyConstraint,
     Index,
     Integer,
     LargeBinary,
@@ -103,6 +104,39 @@ class Membership(Timestamps, Base):
     heads_department: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
 
     user: Mapped[User] = relationship(lazy="joined", foreign_keys=[user_id])
+    # P98: every branch this member works in (the home branch_id included; loaded with the
+    # membership). Change them with teams/branches.set_branches, never row by row.
+    branch_rows: Mapped[list["MembershipBranch"]] = relationship(
+        lazy="selectin", cascade="all, delete-orphan", passive_deletes=True
+    )
+
+    @property
+    def branch_ids(self) -> list[str]:
+        """P98: home branch first, then the others (by id): everything their scope covers."""
+        rows = sorted(r.branch_id for r in self.branch_rows if r.branch_id != self.branch_id)
+        return ([self.branch_id] if self.branch_id else []) + rows
+
+
+class MembershipBranch(Base):
+    """P98: one branch a member works in (migration 0061). The home branch is
+    memberships.branch_id and has a row here too."""
+
+    __tablename__ = "membership_branches"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["workspace_id", "user_id"],
+            ["memberships.workspace_id", "memberships.user_id"],
+            ondelete="CASCADE",
+            name="fk_membership_branches_membership",
+        ),
+        Index("ix_membership_branches_branch", "workspace_id", "branch_id"),
+    )
+
+    workspace_id: Mapped[str] = mapped_column(String(40), primary_key=True)
+    user_id: Mapped[str] = mapped_column(String(40), primary_key=True)
+    branch_id: Mapped[str] = mapped_column(
+        ForeignKey("branches.id", ondelete="CASCADE"), primary_key=True
+    )
 
 
 class AuthSession(Base):

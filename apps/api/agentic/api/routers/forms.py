@@ -49,6 +49,7 @@ from ...models import (
     Workspace,
 )
 from ...services import audit, events
+from ...teams.branches import member_in_branches
 from ..deps import Principal, api_error, require
 from .files import check_branch, visible_files
 
@@ -68,7 +69,7 @@ def manages(principal: Principal, branch_id: str | None) -> bool:
     if not any(p in principal.permissions for p in MANAGERS):
         return False
     sc = principal.scope
-    return sc.everything or (branch_id is not None and branch_id == sc.branch_id)
+    return sc.everything or sc.in_branch(branch_id)
 
 
 def _for_me(principal: Principal) -> Any:
@@ -79,7 +80,7 @@ def _for_me(principal: Principal) -> Any:
     sc = principal.scope
     if sc.everything:
         return q
-    branch = or_(Form.branch_id.is_(None), Form.branch_id == principal.branch_id)
+    branch = or_(Form.branch_id.is_(None), sc.branch_col(Form.branch_id))
     if any(p in principal.permissions for p in MANAGERS) and sc.kind == "branch":
         return q & branch
     dept = or_(Form.department_id.is_(None), Form.department_id == principal.department_id)
@@ -136,7 +137,7 @@ async def _expected(db: AsyncSession, f: Form) -> list[tuple[Membership, User]]:
         .where(Membership.workspace_id == f.workspace_id, Membership.role.not_in(WORKSPACE_ROLES))
     )
     q = q.where(
-        Membership.branch_id == f.branch_id if f.branch_id else Membership.branch_id.is_not(None)
+        member_in_branches([f.branch_id]) if f.branch_id else Membership.branch_id.is_not(None)
     )
     if f.department_id:
         q = q.where(Membership.department_id == f.department_id)
@@ -147,7 +148,7 @@ def expects(principal: Principal, f: Form) -> bool:
     """Whether this person is one of those who hand the form in (same rule as _expected)."""
     if principal.role in WORKSPACE_ROLES or principal.branch_id is None:
         return False
-    if f.branch_id and principal.branch_id != f.branch_id:
+    if f.branch_id and f.branch_id not in principal.branch_ids:
         return False
     return not f.department_id or principal.department_id == f.department_id
 

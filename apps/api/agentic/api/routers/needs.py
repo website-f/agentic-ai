@@ -172,7 +172,7 @@ async def needs(
         lambda i: {"task": i},
     )
 
-    boxes = mail_access.approvable_where(ws, principal.user.id, role, principal.branch_id)
+    boxes = mail_access.approvable_where(ws, principal.user.id, role, principal.branch_ids)
     draft_cond = [EmailDraft.user_id == principal.user.id]
     if boxes is not None:
         draft_cond.append(EmailDraft.shared_mailbox_id.in_(select(SharedMailbox.id).where(boxes)))

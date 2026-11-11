@@ -531,7 +531,7 @@ async def list_drafts(
     mailboxes they approve. Pages with `limit` + `cursor` (X-Next-Cursor, X-Total-Count)."""
     mine = EmailDraft.user_id == principal.user.id
     shared = ms_access.approvable_where(
-        principal.workspace_id, principal.user.id, principal.role, principal.branch_id
+        principal.workspace_id, principal.user.id, principal.role, principal.branch_ids
     )
     who = (
         or_(mine, EmailDraft.shared_mailbox_id.in_(select(SharedMailbox.id).where(shared)))

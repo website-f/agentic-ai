@@ -222,13 +222,13 @@ async def _check_scope(
     if sc.everything:
         return branch_id, department_id
     if sc.kind == "branch":
-        ok = branch_id is not None and branch_id == sc.branch_id
+        ok = sc.in_branch(branch_id)
         where = Msg("your company")
     elif sc.department_id:
-        ok = branch_id == sc.branch_id and department_id == sc.department_id
+        ok = sc.in_branch(branch_id) and department_id == sc.department_id
         where = Msg("your department")
     else:
-        ok = branch_id is not None and branch_id == sc.branch_id and department_id is None
+        ok = sc.in_branch(branch_id) and department_id is None
         where = Msg("your company")
     if not ok:
         raise api_error(

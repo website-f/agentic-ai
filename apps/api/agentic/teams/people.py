@@ -30,6 +30,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..core.security import can
 from ..i18n import Msg
 from ..models import Membership, Task, User
+from .branches import member_in_branches
 
 log = logging.getLogger(__name__)
 
@@ -75,6 +76,8 @@ class Actor:
     user_id: str
     role: str
     branch_id: str | None
+    # P98: every branch they work in (a branch manager gives tasks to the people of each).
+    branch_ids: tuple[str, ...] = ()
 
     @property
     def actor(self) -> str:
@@ -82,7 +85,13 @@ class Actor:
 
 
 def actor_of(principal: Any) -> Actor:
-    return Actor(principal.workspace_id, principal.user.id, principal.role, principal.branch_id)
+    return Actor(
+        principal.workspace_id,
+        principal.user.id,
+        principal.role,
+        principal.branch_id,
+        tuple(getattr(principal, "branch_ids", ()) or ()),
+    )
 
 
 def is_person_task(t: Task) -> bool:
@@ -125,7 +134,7 @@ def assignable_where(a: Actor, team: list[str]) -> Any:
     if team:
         parts.append(Membership.user_id.in_(team))
     if a.role == "branch_manager" and a.branch_id:
-        parts.append(Membership.branch_id == a.branch_id)
+        parts.append(member_in_branches(a.branch_ids or (a.branch_id,)))
     return or_(*parts)
 
 
@@ -139,7 +148,7 @@ async def may_assign(db: AsyncSession, a: Actor, user_id: str) -> Membership:
         return m
     if m.reports_to_user_id == a.user_id and a.role in MANAGER_ROLES:
         return m
-    if a.role == "branch_manager" and a.branch_id and m.branch_id == a.branch_id:
+    if a.role == "branch_manager" and set(m.branch_ids) & set(a.branch_ids or (a.branch_id,)):
         return m
     raise PeopleError(
         403,

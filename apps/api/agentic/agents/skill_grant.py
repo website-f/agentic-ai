@@ -208,7 +208,7 @@ async def _member(db: AsyncSession, agent: Agent, user_id: str):  # noqa: ANN202
         return None
     ws = await db.get(Workspace, agent.workspace_id)
     perms = effective(m.role, ws.settings if ws is not None else None)
-    return Scope.of(m.role, user_id, m.branch_id, m.department_id), perms
+    return Scope.of_member(m), perms
 
 
 async def may_reach(db: AsyncSession, scope, perms: frozenset[str], skill: Skill, agent: Agent):  # noqa: ANN001, ANN201
@@ -218,7 +218,7 @@ async def may_reach(db: AsyncSession, scope, perms: frozenset[str], skill: Skill
         return False
     if scope.everything:
         return True
-    if skill.branch_id and skill.branch_id != scope.branch_id:
+    if skill.branch_id and not scope.in_branch(skill.branch_id):
         return False
     ids = [*(skill.agent_ids or []), agent.id]
     rows = (
@@ -250,7 +250,7 @@ async def who_can(
         if m.user_id == but or len(names) >= 3:
             continue
         perms = effective(m.role, ws.settings if ws is not None else None)
-        scope = Scope.of(m.role, m.user_id, m.branch_id, m.department_id)
+        scope = Scope.of_member(m)
         if not scope.manages_agent(agent, perms):
             continue
         if tools and agent.is_twin and "agents.manage" not in perms:

@@ -14,6 +14,7 @@ discard and confirm is audited.
 
 import html
 import json
+from collections.abc import Iterable
 from datetime import UTC, datetime
 from typing import Any, TypeGuard
 
@@ -65,7 +66,7 @@ async def may_approve(
     workspace_id: str,
     user_id: str,
     role: str,
-    branch_id: str | None,
+    branch_id: str | Iterable[str] | None,
 ) -> bool:
     if box is None or box.workspace_id != workspace_id:
         return False
@@ -371,7 +372,7 @@ async def shared_proposals(
     workspace_id: str,
     user_id: str,
     role: str,
-    branch_id: str | None,
+    branch_id: str | Iterable[str] | None,
     pending_only: bool,
 ) -> list[dict[str, Any]]:
     """Proposals on shared mailboxes this person approves (personal ones carry user_id and

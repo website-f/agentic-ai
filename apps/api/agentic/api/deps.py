@@ -36,6 +36,8 @@ class Principal:
     two_factor_due: bool = False
     # P97: the people who report to a scoped manager (their tasks are in the scope).
     team: frozenset[str] = frozenset()
+    # P98: every branch they work in (home first); a scoped role's scope covers all of them.
+    branch_ids: tuple[str, ...] = ()
 
     @property
     def actor(self) -> str:
@@ -43,7 +45,9 @@ class Principal:
 
     @property
     def scope(self) -> Scope:
-        return Scope.of(self.role, self.user.id, self.branch_id, self.department_id, self.team)
+        return Scope.of(
+            self.role, self.user.id, self.branch_id, self.department_id, self.team, self.branch_ids
+        )
 
     @property
     def permissions(self) -> list[str]:
@@ -221,6 +225,7 @@ async def _load_principal(request: Request, db: AsyncSession) -> Principal:
         department_id=m.department_id,
         two_factor_due=two_factor.due(user, m.role, ws_settings),
         team=team,
+        branch_ids=tuple(m.branch_ids),
     )
 
 
