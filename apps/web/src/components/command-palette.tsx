@@ -1,6 +1,6 @@
 import {
   AddressBookIcon, ArrowElbowDownLeftIcon, ArrowsDownUpIcon, ClipboardTextIcon, FileMagnifyingGlassIcon, FileTextIcon, KanbanIcon, MagnifyingGlassIcon, MonitorIcon, MoonIcon, PlusIcon,
-  PushPinIcon, SignOutIcon, SparkleIcon, SunIcon, TextAlignLeftIcon, UserFocusIcon, UserIcon, UserPlusIcon, type Icon,
+  PushPinIcon, SignOutIcon, SparkleIcon, SunIcon, TextAlignLeftIcon, UserFocusIcon, UserGearIcon, UserIcon, UserPlusIcon, type Icon,
 } from "@phosphor-icons/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useRouterState } from "@tanstack/react-router";
@@ -186,6 +186,13 @@ export function CommandPalette() {
                 {me?.permissions.includes("org.manage") ? (
                   <Item icon={<PlusIcon />} onSelect={() => run(() => navigate({ to: "/organization", search: { new: 1 } }))}>
                     {t("New company")}
+                  </Item>
+                ) : null}
+                {/* P98: where the owner sets what each role may do, found by any of these words. */}
+                {me?.permissions.includes("roles.manage") ? (
+                  <Item icon={<UserGearIcon />} keywords={["roles", "permissions", "access", "rights", "peranan", "akses", "kebenaran", "hak"]}
+                    onSelect={() => run(() => navigate({ to: "/settings/roles" }))}>
+                    {t("Change what each role can do")}
                   </Item>
                 ) : null}
                 {me?.permissions.includes("members.manage") || me?.permissions.includes("team.manage") ? (

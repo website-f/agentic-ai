@@ -1,4 +1,4 @@
-import { ArrowRightIcon, BuildingOfficeIcon, CheckCircleIcon, CoinsIcon, KeyIcon, MonitorIcon, MoonIcon, SunIcon, UsersIcon } from "@phosphor-icons/react";
+import { ArrowRightIcon, BuildingOfficeIcon, CheckCircleIcon, CoinsIcon, KeyIcon, MonitorIcon, MoonIcon, SunIcon, UserGearIcon, UsersIcon } from "@phosphor-icons/react";
 import { useSuspenseQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { RadioGroup } from "radix-ui";
@@ -96,7 +96,7 @@ export function SettingsPage() {
             </>
           ) : null}
           {me.permissions.includes("roles.manage") ? (
-            <LinkRow to="/settings/roles" icon={UsersIcon} tone="accent" title={t("Roles and access")} body={t("What each role may do, area by area. Only the owner changes it.")} />
+            <LinkRow to="/settings/roles" icon={UserGearIcon} tone="accent" title={t("Roles and access")} body={t("Set what each role can open and change, permission by permission. Only owners.")} />
           ) : null}
           <LinkRow to="/change-password" icon={KeyIcon} tone="warn" title={t("Change password")} body={t("Signs out your other devices.")} />
           {me.role === "owner" ? <AccountEmailRow email={me.user.email} /> : null}
