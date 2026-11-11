@@ -770,6 +770,8 @@ export interface Api extends ConnectionsClient, ExtractionClient, DraftHelpClien
   itemScanCheck(purpose: import('@prima/core').ScanPurpose, contextId: string | null, entry: import('@prima/core').ScanEntry): Promise<ItemScanVerdict>;
   /** P85: find an item by a scanned code (sent in the body, never in the URL). */
   itemResolve(code: string): Promise<ItemPassport>;
+  /** P98: an item list or stock report PDF (base64) read into rows and columns on the server, for the person to check. */
+  itemImportRead(data: string): Promise<import('@prima/core').ReportTable>;
   itemPassport(itemId: string): Promise<ItemPassport>;
   itemLabels(batchId: string): Promise<ItemLabelBatch>;
   itemSiteBoard(siteId: string): Promise<ItemSiteBoard>;

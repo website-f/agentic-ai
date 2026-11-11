@@ -5,9 +5,10 @@ import { api, type ItemBoard } from '../../api';
 import { Chip, Drawer, ErrorNotice, Kpi, Loading, dateLabel, dateTimeLabel, useAction, useLoad } from '../../ui';
 import { act, CAT_LABEL, partyName, readFile, rolesOf, skuName, STATE_TONE } from './shared';
 import { CareSettings } from './Care';
-import { PlusIcon } from '@phosphor-icons/react';
-import { Card } from '../../kit';
-import { ItemImport, mayAddTypes } from './AddMenu';
+import { PlusIcon, PrinterIcon, UploadSimpleIcon } from '@phosphor-icons/react';
+import { Card, Empty, Search, Toolbar } from '../../kit';
+import { mayAddTypes } from './AddMenu';
+import { TypeCard, TypeLabelPrint } from './TypeLabels';
 
 // Item types (SKU catalogue) and each company's tagging choice.
 // Moved unchanged from views/Items.tsx in the P85 split; laid out by the item register styles (styles/items.css).
@@ -61,86 +62,221 @@ export function SkuForm({ onDone }: { onDone: () => void }) {
   );
 }
 
-export function Catalogue({ data }: { data: ItemBoard }) {
+/**
+ * P98: the item types as a list that reads on a phone and on a PC: search, filters by category, stock group and how it
+ * is tracked, the stock of each, ticks to print many QR labels at once, and each type's card (its QR code, units,
+ * prices and stock) one tap away. Add and Import sit at the top and in the empty list.
+ */
+export function Catalogue({ data, onAdd, onImport }: { data: ItemBoard; onAdd?: () => void; onImport?: () => void }) {
   const a = useAction();
   const [form, setForm] = useState(false);
+  const [q, setQ] = useState('');
+  const [cat, setCat] = useState('');
+  const [group, setGroup] = useState('');
+  const [track, setTrack] = useState('');
+  const [sel, setSel] = useState<Set<string>>(new Set());
+  const [open, setOpen] = useState<string | null>(null);
+  const [print, setPrint] = useState<string[] | null>(null);
+  const [shown, setShown] = useState(80);
   const [map, setMap] = useState<Record<string, { party: string; code: string }>>({});
   const financeParties = data.roles.filter((r) => r.roles.includes('finance')).map((r) => r.partyId);
   const mayAdd = mayAddTypes(data);
+  const stockOf = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const b of data.balance) m.set(b.skuId, (m.get(b.skuId) ?? 0) + b.qty);
+    return m;
+  }, [data.balance]);
+  const groups = useMemo(() => [...new Set(data.skus.map((s) => s.group).filter((g): g is string => !!g))].sort(), [data.skus]);
+  const list = data.skus
+    .filter((s) => {
+      if (cat && s.category !== cat) return false;
+      if (group && s.group !== group) return false;
+      if (track && s.tracking !== track) return false;
+      if (!q) return true;
+      const t = q.toUpperCase();
+      return s.code.includes(t) || s.name.toUpperCase().includes(t) || (s.sourceCode ?? '').includes(t) || (s.group ?? '').toUpperCase().includes(t) || s.supplierBarcodes.some((b) => b.toUpperCase() === t);
+    })
+    .sort((x, y) => x.name.localeCompare(y.name));
+  const allShown = list.length > 0 && list.every((s) => sel.has(s.id));
+  const tick = (id: string, on: boolean) =>
+    setSel((cur) => {
+      const n = new Set(cur);
+      if (on) n.add(id);
+      else n.delete(id);
+      return n;
+    });
   return (
-    <>
-    {mayAdd && (
-      <div className="it-tabbar-add">
-        <button className="btn btn-primary" type="button" aria-expanded={form} onClick={() => setForm(!form)}>
-          <PlusIcon size={16} weight="bold" aria-hidden="true" /> New item type
-        </button>
-        <ItemImport data={data} kinds={['itemType']} label="Import item types from file" />
-      </div>
-    )}
-    {form && (
-      <Card title="New item type" sub="The item type says what it is, its size and unit. How a type is tracked is set once." actions={<button className="btn" type="button" onClick={() => setForm(false)}>Cancel</button>}>
-        <SkuForm onDone={() => setForm(false)} />
-      </Card>
-    )}
-    <TagChoice data={data} />
-    <CareSettings data={data} />
-    <section className="panel">
-      <div className="panel-head">
-        <h3>Item types (catalogue)</h3>
-      </div>
-      <p className="muted">
-        The item type says what it is, its size and unit. Many units share one type, but each unit tracked one by one has its own label. How a type is
-        tracked is set once.
-      </p>
-      <ErrorNotice error={a.error} />
-      <div className="table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th>Code</th>
-              <th>Name</th>
-              <th>Kind</th>
-              <th>Tracked</th>
-              <th>SQL item codes</th>
-            </tr>
-          </thead>
-          <tbody>
-            {data.skus.map((s) => (
-              <tr key={s.id}>
-                <td>{s.code}</td>
-                <td>{s.name}</td>
-                <td>{CAT_LABEL[s.category]}</td>
-                <td>{s.tracking === 'BULK' ? (s.consumable ? 'Quantity, used up' : 'Quantity') : s.tracking === 'KIT' ? 'Set' : 'Each unit'}</td>
-                <td>
-                  {s.sqlCodes.map((c) => `${partyName(data, c.partyId)}: ${c.itemCode} (${c.uom})`).join('; ') || <span className="muted">none</span>}
-                  {financeParties.length > 0 && (
-                    <div className="row" style={{ gap: 4, marginTop: 4 }}>
-                      <Select className="input" aria-label="Book" value={map[s.id]?.party ?? ''} onChange={(e) => setMap({ ...map, [s.id]: { party: e.target.value, code: map[s.id]?.code ?? '' } })}>
-                        <option value="">Book…</option>
-                        {financeParties.map((p) => (
-                          <option key={p} value={p}>
-                            {partyName(data, p)}
-                          </option>
-                        ))}
-                      </Select>
-                      <input className="input" style={{ width: 120 }} placeholder="Item code" value={map[s.id]?.code ?? ''} onChange={(e) => setMap({ ...map, [s.id]: { party: map[s.id]?.party ?? '', code: e.target.value } })} />
-                      <button
-                        className="btn btn-sm"
-                        disabled={a.busy || !map[s.id]?.party}
-                        onClick={() => a.run(() => act({ kind: 'sku.map', skuId: s.id, partyId: map[s.id].party, itemCode: map[s.id].code, uom: s.uom }), 'Code recorded (not connected).')}
-                      >
-                        Map
-                      </button>
-                    </div>
+    <div className="it-stack">
+      {mayAdd && (
+        <div className="it-tabbar-add">
+          <button className="btn btn-primary" type="button" aria-expanded={form} onClick={() => (onAdd ? onAdd() : setForm(!form))}>
+            <PlusIcon size={16} weight="bold" aria-hidden="true" /> New item type
+          </button>
+          {onImport && (
+            <button className="btn" type="button" onClick={onImport}>
+              <UploadSimpleIcon size={16} weight="bold" aria-hidden="true" /> Import item list (Excel, CSV, PDF)
+            </button>
+          )}
+        </div>
+      )}
+      {form && (
+        <Card title="New item type" sub="The item type says what it is, its size and unit. How a type is tracked is set once." actions={<button className="btn" type="button" onClick={() => setForm(false)}>Cancel</button>}>
+          <SkuForm onDone={() => setForm(false)} />
+        </Card>
+      )}
+      <Card
+        title={
+          <>
+            Item types <span className="muted">({data.skus.length})</span>
+          </>
+        }
+        sub="What each item is, its unit and how it is tracked. Each type has its own QR code from its code: tick several to print their labels at once."
+        flush
+      >
+        <div className="it-pad">
+          <Toolbar>
+            <Search value={q} onChange={(v) => (setQ(v), setShown(80))} placeholder="Search name, code or barcode" />
+            <Select className="input" aria-label="Category" value={cat} onChange={(e) => setCat(e.target.value)}>
+              <option value="">All categories</option>
+              {ITEM_CATEGORIES.map((c) => (
+                <option key={c} value={c}>
+                  {CAT_LABEL[c]}
+                </option>
+              ))}
+            </Select>
+            {groups.length > 0 && (
+              <Select className="input" aria-label="Stock group" value={group} onChange={(e) => setGroup(e.target.value)} searchable>
+                <option value="">All stock groups</option>
+                {groups.map((g) => (
+                  <option key={g} value={g}>
+                    {g}
+                  </option>
+                ))}
+              </Select>
+            )}
+            <Select className="input" aria-label="Tracked" value={track} onChange={(e) => setTrack(e.target.value)}>
+              <option value="">Any tracking</option>
+              <option value="BULK">By quantity</option>
+              <option value="SERIALIZED">Each unit has its own label</option>
+              <option value="KIT">Sets</option>
+            </Select>
+          </Toolbar>
+        </div>
+        {list.length > 0 && (
+          <div className="it-bulk" data-on={sel.size > 0 || undefined}>
+            <label className="it-check">
+              <input type="checkbox" checked={allShown} onChange={(e) => setSel(e.target.checked ? new Set([...sel, ...list.map((s) => s.id)]) : new Set([...sel].filter((id) => !list.some((s) => s.id === id))))} />
+              <span>{sel.size ? <><span>{sel.size}</span> ticked</> : 'Tick all shown'}</span>
+            </label>
+            {sel.size > 0 && (
+              <>
+                <button className="btn btn-primary" type="button" onClick={() => setPrint([...sel])}>
+                  <PrinterIcon size={16} aria-hidden="true" /> Print QR labels
+                </button>
+                <button className="btn btn-ghost" type="button" onClick={() => setSel(new Set())}>
+                  Clear
+                </button>
+              </>
+            )}
+          </div>
+        )}
+        {!data.skus.length ? (
+          <Empty
+            title="No item types yet."
+            action={
+              mayAdd ? (
+                <div className="row" style={{ gap: 8, flexWrap: 'wrap', justifyContent: 'center' }}>
+                  {onImport && (
+                    <button className="btn btn-primary" type="button" onClick={onImport}>
+                      <UploadSimpleIcon size={16} aria-hidden="true" /> Import your item list
+                    </button>
                   )}
-                </td>
-              </tr>
+                  <button className="btn" type="button" onClick={() => (onAdd ? onAdd() : setForm(true))}>
+                    <PlusIcon size={16} aria-hidden="true" /> Add one by hand
+                  </button>
+                </div>
+              ) : undefined
+            }
+          >
+            {mayAdd ? 'Load the list you already have (Excel, CSV or the PDF report from the old system), or add the first item type by hand.' : 'Store staff and managers add item types.'}
+          </Empty>
+        ) : !list.length ? (
+          <Empty title="Nothing matches.">Change the search or the filters.</Empty>
+        ) : (
+          <ul className="it-rows it-cat">
+            {list.slice(0, shown).map((s) => (
+              <li key={s.id} className="it-cat-row" data-ticked={sel.has(s.id) || undefined}>
+                <label className="it-check" aria-label={`Tick ${s.name}`}>
+                  <input type="checkbox" checked={sel.has(s.id)} onChange={(e) => tick(s.id, e.target.checked)} />
+                </label>
+                <button type="button" className="it-cat-main" onClick={() => setOpen(s.id)}>
+                  <strong>{s.name}</strong>
+                  <span className="mono small muted">{s.code}</span>
+                  <span className="small muted">
+                    {CAT_LABEL[s.category]}
+                    {s.group ? ` · ${s.group}` : ''}
+                  </span>
+                </button>
+                <span className="it-cat-side">
+                  <Chip tone="neutral">{s.tracking === 'BULK' ? (s.consumable ? 'Quantity, used up' : 'Quantity') : s.tracking === 'KIT' ? 'Set' : 'Each unit'}</Chip>
+                  <span className="it-qty" title="In stock">
+                    {stockOf.get(s.id) ?? 0}
+                  </span>
+                  <span className="muted small">{s.uomLabel ?? s.uom}</span>
+                </span>
+              </li>
             ))}
-          </tbody>
-        </table>
-      </div>
-    </section>
-    </>
+          </ul>
+        )}
+        {list.length > shown && (
+          <div className="it-pad">
+            <button className="btn" type="button" onClick={() => setShown(shown + 200)}>
+              Show more (<span>{list.length - shown}</span> more)
+            </button>
+          </div>
+        )}
+      </Card>
+      {financeParties.length > 0 && data.skus.length > 0 && (
+        <details className="panel">
+          <summary>
+            <strong>SQL Account item codes</strong> <span className="muted small">(Finance)</span>
+          </summary>
+          <ErrorNotice error={a.error} />
+          <ul className="it-rows">
+            {data.skus.map((s) => (
+              <li key={s.id} className="it-row" style={{ flexWrap: 'wrap' }}>
+                <span className="it-row-main">
+                  <strong>{s.name}</strong>
+                  <span className="small muted">{s.sqlCodes.map((c) => `${partyName(data, c.partyId)}: ${c.itemCode} (${c.uom})`).join('; ') || 'No SQL code yet'}</span>
+                </span>
+                <span className="row" style={{ gap: 4, flexWrap: 'wrap' }}>
+                  <Select className="input" aria-label="Book" value={map[s.id]?.party ?? ''} onChange={(e) => setMap({ ...map, [s.id]: { party: e.target.value, code: map[s.id]?.code ?? '' } })}>
+                    <option value="">Book…</option>
+                    {financeParties.map((p) => (
+                      <option key={p} value={p}>
+                        {partyName(data, p)}
+                      </option>
+                    ))}
+                  </Select>
+                  <input className="input" style={{ width: 120 }} placeholder="Item code" value={map[s.id]?.code ?? ''} onChange={(e) => setMap({ ...map, [s.id]: { party: map[s.id]?.party ?? '', code: e.target.value } })} />
+                  <button
+                    className="btn btn-sm"
+                    disabled={a.busy || !map[s.id]?.party}
+                    onClick={() => a.run(() => act({ kind: 'sku.map', skuId: s.id, partyId: map[s.id].party, itemCode: map[s.id].code, uom: s.uom }), 'Code recorded (not connected).')}
+                  >
+                    Map
+                  </button>
+                </span>
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
+      <TagChoice data={data} />
+      <CareSettings data={data} />
+      {open && <TypeCard data={data} skuId={open} onClose={() => setOpen(null)} onPrint={(ids) => (setOpen(null), setPrint(ids))} />}
+      {print && <TypeLabelPrint data={data} skuIds={print} onClose={() => setPrint(null)} />}
+    </div>
   );
 }
 

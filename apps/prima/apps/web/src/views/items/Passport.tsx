@@ -14,13 +14,21 @@ import { Scanner } from './Scanner';
 import { oldRecordLine } from './Stock';
 import { STATE_TONE, TYPE_LABEL, act, partyName, rolesOf, skuName } from './shared';
 
-export function Find({ data, onRegister }: { data: ItemBoard; onRegister?: (oldTag: string) => void }) {
+export function Find({ data, onRegister, onType }: { data: ItemBoard; onRegister?: (oldTag: string) => void; onType?: (skuId: string) => void }) {
   const [open, setOpen] = useState<{ code?: string; id?: string } | null>(null);
+  // P98: an item type's QR label (PT-code), or its code, old code or supplier barcode typed or scanned, opens the type.
+  const typeCode = (raw: string) => {
+    const v = raw.trim().toUpperCase();
+    const hit = data.skus.find((s) => s.code === v || (s.sourceCode ?? '').toUpperCase() === v || s.supplierBarcodes.some((b) => b.toUpperCase() === v));
+    if (!hit || !onType) return false;
+    onType(hit.id);
+    return true;
+  };
   const recent = data.items.slice(-8).reverse();
   return (
     <div className="it-stack">
-      <Card title="Find an item" sub="Scan the QR code, the barcode or the RFID tag, or type the ID printed under the code. Every company's labels scan here; a scan only finds the record.">
-        <Scanner purpose="view" title="Find an item" autoFocus onResult={({ verdict, entry }) => verdict.outcome !== 'not_found' && verdict.itemId && setOpen({ code: entry.code })} onUnknownCode={onRegister} />
+      <Card title="Find an item" sub="Scan the QR code, the barcode or the RFID tag, or type the ID printed under the code. An item type's shelf label opens the item type. Every company's labels scan here; a scan only finds the record.">
+        <Scanner purpose="view" title="Find an item" autoFocus onResult={({ verdict, entry }) => verdict.outcome !== 'not_found' && verdict.itemId && setOpen({ code: entry.code })} onUnknownCode={onRegister} onTypeCode={onType ? typeCode : undefined} />
       </Card>
       <Card title="Recent items" flush>
         {!recent.length ? (

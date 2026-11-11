@@ -6,7 +6,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { CameraIcon, CameraRotateIcon, CheckCircleIcon, KeyboardIcon, LightningIcon, WarningCircleIcon, XIcon } from '@phosphor-icons/react';
-import { LABEL_REFUSAL, SCAN_OUTCOME_LABEL, parseScan, type ScanEntry, type ScanPurpose, type ScanSource } from '@prima/core';
+import { LABEL_REFUSAL, SCAN_OUTCOME_LABEL, parseScan, typeLabelCode, type ScanEntry, type ScanPurpose, type ScanSource } from '@prima/core';
 import { api, type ItemScanVerdict } from '../../api';
 import { Chip, ErrorNotice } from '../../ui';
 import { makeDecoder, prewarmDecoder } from './decoder';
@@ -78,6 +78,7 @@ export function Scanner({
   busy = false,
   autoFocus = false,
   onUnknownCode,
+  onTypeCode,
 }: {
   purpose: ScanPurpose;
   contextId?: string | null;
@@ -92,6 +93,11 @@ export function Scanner({
    * register the item with that code kept as its old tag, and the camera reports such codes instead of skipping them.
    */
   onUnknownCode?: (code: string) => void;
+  /**
+   * P98: an item type's own QR code or barcode (PT- and its code), or a code that names an item type (its code, old
+   * code or supplier barcode). Return true when it opened the item type: the scan stops there, nothing is sent.
+   */
+  onTypeCode?: (code: string) => boolean;
 }) {
   const [raw, setRaw] = useState('');
   const [camera, setCamera] = useState(false);
@@ -112,6 +118,12 @@ export function Scanner({
     const v = cleanScan(code);
     const p = parseScan(v);
     setUnknown(null);
+    if (onTypeCode && !p.ok && (typeLabelCode(v) ? onTypeCode(typeLabelCode(v)!) : p.reason === 'unknown_format' && onTypeCode(v))) {
+      setError(null);
+      setRaw('');
+      feedback(true);
+      return;
+    }
     if (!p.ok) {
       setError(LABEL_REFUSAL[p.reason]);
       // P91: an old system's code (not a link, not a mistyped Prima ID) may be registered on the spot.
@@ -265,7 +277,7 @@ export function Scanner({
             void check(code, 'camera');
           }}
           onForeign={
-            onUnknownCode
+            onUnknownCode || onTypeCode
               ? (code) => {
                   setCamera(false);
                   void check(code, 'camera');
