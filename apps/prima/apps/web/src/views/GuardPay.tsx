@@ -1407,212 +1407,11 @@ function ConsentLetters() {
   );
 }
 
-type Stat = Awaited<ReturnType<typeof api.statutoryBoard>>["inForce"];
-type StatOther = Stat["others"][number];
-const pct = (n: number | null | undefined) => (n == null ? "" : String(Math.round(n * 100000) / 1000));
-const fromPct = (v: string) => (v.trim() === "" ? NaN : Number(v) / 100);
-
 /**
- * Statutory rates (Fauzan, 6 Nov 2026): "Ceo can set ... how salary is set and how the base is set base by the new law
- * that came. Even with socso or epf or add new way." The CEO sets EPF, SOCSO, EIS, LINDUNG and HRD from a month and can
- * add a new contribution; HR, Finance and ACT see what is in force. The day divisor is on the Pay formulas screen.
+ * Statutory rates (Fauzan, 6 Nov 2026): the CEO sets EPF, SOCSO, EIS, LINDUNG and HRD from a month. P98 moved the screen
+ * to its own file, laid out like the salary calculator (StatutoryRates.tsx, statutory-model.ts, styles/statutory.css).
  */
-export function StatutoryView() {
-  const [tick, setTick] = useState(0);
-  const { data, error } = useLoad(() => api.statutoryBoard(), [tick]);
-  if (error) return <ErrorNotice error={error} />;
-  if (!data) return <Loading what="statutory rates" />;
-  return (
-    <div className="page">
-      <div className="page-head">
-        <h1>Statutory rates</h1>
-        <p className="muted">
-          EPF, SOCSO, EIS, LINDUNG 24 Jam and HRD rates used by guard pay and staff payroll, and any new contribution the law brings. The CEO
-          changes them from a month with a reason and the law reference. The day divisor and other pay law settings are on the Pay formulas
-          screen.
-        </p>
-      </div>
-      {!data.on && (
-        <div className="notice" data-tone="warn">
-          Not switched on in this database yet: pay uses the law as at November 2026 until the guard pay module is installed with approval.
-        </div>
-      )}
-      <StatPanel title={`In force for ${monthLabel(data.month)}`} s={data.inForce} />
-      {data.canSet && <StatForm start={data.inForce} month={data.month} onDone={() => setTick((n) => n + 1)} />}
-      <section className="panel">
-        <div className="panel-head">
-          <h3>Changes</h3>
-        </div>
-        <div className="list">
-          {data.versions.map((v) => (
-            <div key={v.id} className="list-item" style={{ flexDirection: "column", alignItems: "stretch", gap: 2 }}>
-              <div style={{ fontWeight: 600 }}>
-                From {monthLabel(v.effectiveFrom)} {v.replacedBy && <Chip tone="neutral">Replaced</Chip>}
-              </div>
-              <div className="muted small">
-                {v.setBy} · {dateTimeLabel(v.setAt)} · {v.reason}
-              </div>
-              <div className="small">Law: {v.settings.lawRef}</div>
-            </div>
-          ))}
-          {!data.versions.length && <div className="empty">No change yet: the law as at November 2026 applies.</div>}
-        </div>
-      </section>
-    </div>
-  );
-}
-
-function StatPanel({ title, s }: { title: string; s: Stat }) {
-  const row = (label: string, value: string) => (
-    <div key={label} className="list-item">
-      <span>{label}</span>
-      <span className="small">{value}</span>
-    </div>
-  );
-  return (
-    <section className="panel">
-      <div className="panel-head">
-        <h3>{title}</h3>
-      </div>
-      <div className="list">
-        {row("EPF", `employee ${pct(s.epf.eeRate)}%, employer ${pct(s.epf.erRateLow)}% up to ${rm(s.epf.erLimit)} then ${pct(s.epf.erRateHigh)}%; from ${s.epf.olderAge}: ${pct(s.epf.olderEeRate)}% / ${pct(s.epf.olderErRate)}%; foreign ${pct(s.epf.foreignEeRate)}% / ${pct(s.epf.foreignErRate)}%; never on overtime`)}
-        {row("SOCSO", `employee ${pct(s.socso.eeRate)}%, employer ${pct(s.socso.erRate)}% up to ${rm(s.socso.wageCap)}; from ${s.socso.olderAge}: employer ${pct(s.socso.olderErRate)}%`)}
-        {row("EIS", `${pct(s.eis.eeRate)}% / ${pct(s.eis.erRate)}% up to ${rm(s.eis.wageCap)}, ages ${s.eis.minAge} to ${s.eis.maxAge - 1}${s.eis.malaysiansOnly ? ", Malaysians" : ""}`)}
-        {row("LINDUNG 24 Jam", s.lindung.rate == null ? "dated rates in the LINDUNG rule" : `${pct(s.lindung.rate)}% up to ${rm(s.lindung.wageCap)}`)}
-        {row("HRD levy", `${pct(s.hrd.rate)}% of basic and fixed allowances${s.hrd.malaysiansOnly ? ", Malaysians" : ""}`)}
-        {s.others.map((o) =>
-          row(
-            `${o.name} (${o.code})`,
-            `employee ${pct(o.eeRate)}%, employer ${pct(o.erRate)}%${o.wageCap ? ` up to ${rm(o.wageCap)}` : ""}${o.includeOt ? ", overtime counts" : ", not on overtime"}, ${o.appliesTo === "all" ? "everyone" : o.appliesTo === "malaysian" ? "Malaysians" : "foreign workers"}${o.maxAge ? `, under ${o.maxAge}` : ""}; paid to ${o.payee}`,
-          ),
-        )}
-      </div>
-      <p className="muted small">Law: {s.lawRef}</p>
-    </section>
-  );
-}
-
-function StatForm({ start, month, onDone }: { start: Stat; month: string; onDone: () => void }) {
-  const act = useAction();
-  const [from, setFrom] = useState(month);
-  const [reason, setReason] = useState("");
-  const [lawRef, setLawRef] = useState("");
-  const [f, setF] = useState<Record<string, string>>(() => ({
-    epfEe: pct(start.epf.eeRate),
-    epfErLow: pct(start.epf.erRateLow),
-    epfErHigh: pct(start.epf.erRateHigh),
-    epfLimit: String(start.epf.erLimit),
-    epfForeignEe: pct(start.epf.foreignEeRate),
-    epfForeignEr: pct(start.epf.foreignErRate),
-    socsoEe: pct(start.socso.eeRate),
-    socsoEr: pct(start.socso.erRate),
-    socsoCap: String(start.socso.wageCap),
-    eisEe: pct(start.eis.eeRate),
-    eisEr: pct(start.eis.erRate),
-    eisCap: String(start.eis.wageCap),
-    lindung: pct(start.lindung.rate),
-    hrd: pct(start.hrd.rate),
-  }));
-  const [others, setOthers] = useState<StatOther[]>(start.others);
-  const field = (k: string, label: string, unit = "%") => (
-    <label key={k} className="small" style={{ display: "flex", flexDirection: "column", gap: 2, maxWidth: 150 }}>
-      {label}
-      <span className="row" style={{ gap: 4 }}>
-        <input className="input" inputMode="decimal" aria-label={label} value={f[k]} onChange={(e) => setF((x) => ({ ...x, [k]: e.target.value }))} />
-        {unit}
-      </span>
-    </label>
-  );
-  const setOther = (i: number, patch: Partial<StatOther>) => setOthers((o) => o.map((x, k) => (k === i ? { ...x, ...patch } : x)));
-  const save = () =>
-    act.run(async () => {
-      const r = await api.setStatutory({
-        effectiveFrom: from,
-        reason,
-        settings: {
-          ...start,
-          epf: { ...start.epf, eeRate: fromPct(f.epfEe), erRateLow: fromPct(f.epfErLow), erRateHigh: fromPct(f.epfErHigh), erLimit: Number(f.epfLimit), foreignEeRate: fromPct(f.epfForeignEe), foreignErRate: fromPct(f.epfForeignEr) },
-          socso: { ...start.socso, eeRate: fromPct(f.socsoEe), erRate: fromPct(f.socsoEr), wageCap: Number(f.socsoCap) },
-          eis: { ...start.eis, eeRate: fromPct(f.eisEe), erRate: fromPct(f.eisEr), wageCap: Number(f.eisCap) },
-          lindung: { ...start.lindung, rate: f.lindung.trim() === "" ? null : fromPct(f.lindung) },
-          hrd: { ...start.hrd, rate: fromPct(f.hrd) },
-          others,
-          lawRef,
-        },
-      });
-      onDone();
-      return r;
-    }, "Saved. Pay prepared for that month onwards uses the new settings; recalculate any draft month.");
-  return (
-    <section className="panel">
-      <div className="panel-head">
-        <h3>Change from a month (CEO)</h3>
-      </div>
-      <div className="row" style={{ gap: 8, flexWrap: "wrap", alignItems: "flex-end" }}>
-        <label className="small" style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-          From
-          <input className="input" type="month" aria-label="From month" value={from} onChange={(e) => setFrom(e.target.value)} />
-        </label>
-        {field("epfEe", "EPF employee")}
-        {field("epfErLow", "EPF employer (low)")}
-        {field("epfErHigh", "EPF employer (high)")}
-        {field("epfLimit", "EPF low up to", "RM")}
-        {field("epfForeignEe", "EPF foreign employee")}
-        {field("epfForeignEr", "EPF foreign employer")}
-        {field("socsoEe", "SOCSO employee")}
-        {field("socsoEr", "SOCSO employer")}
-        {field("socsoCap", "SOCSO wage cap", "RM")}
-        {field("eisEe", "EIS employee")}
-        {field("eisEr", "EIS employer")}
-        {field("eisCap", "EIS wage cap", "RM")}
-        {field("lindung", "LINDUNG (blank = rule)")}
-        {field("hrd", "HRD levy")}
-      </div>
-      <h4 className="small" style={{ marginTop: 10 }}>
-        New contributions
-      </h4>
-      <div className="list">
-        {others.map((o, i) => (
-          <div key={i} className="row" style={{ gap: 6, flexWrap: "wrap" }}>
-            <input className="input" style={{ maxWidth: 110 }} aria-label="Code" placeholder="CODE" value={o.code} onChange={(e) => setOther(i, { code: e.target.value.toUpperCase() })} />
-            <input className="input" style={{ maxWidth: 180 }} aria-label="Name" placeholder="Name" value={o.name} onChange={(e) => setOther(i, { name: e.target.value })} />
-            <input className="input" style={{ maxWidth: 90 }} aria-label="Employee %" placeholder="Emp. %" value={pct(o.eeRate)} onChange={(e) => setOther(i, { eeRate: fromPct(e.target.value) || 0 })} />
-            <input className="input" style={{ maxWidth: 90 }} aria-label="Employer %" placeholder="Empr. %" value={pct(o.erRate)} onChange={(e) => setOther(i, { erRate: fromPct(e.target.value) || 0 })} />
-            <input className="input" style={{ maxWidth: 110 }} aria-label="Wage cap" placeholder="Cap RM" value={o.wageCap ?? ""} onChange={(e) => setOther(i, { wageCap: e.target.value ? Number(e.target.value) : null })} />
-            <select className="input" style={{ maxWidth: 150 }} aria-label="Applies to" value={o.appliesTo} onChange={(e) => setOther(i, { appliesTo: e.target.value as StatOther["appliesTo"] })}>
-              <option value="all">Everyone</option>
-              <option value="malaysian">Malaysians</option>
-              <option value="foreign">Foreign workers</option>
-            </select>
-            <label className="row small" style={{ gap: 4 }}>
-              <input type="checkbox" checked={o.includeOt} onChange={(e) => setOther(i, { includeOt: e.target.checked })} />
-              Overtime counts
-            </label>
-            <input className="input" style={{ maxWidth: 160 }} aria-label="Paid to" placeholder="Paid to" value={o.payee} onChange={(e) => setOther(i, { payee: e.target.value })} />
-            <button className="btn btn-ghost btn-sm" onClick={() => setOthers((x) => x.filter((_, k) => k !== i))}>
-              Remove
-            </button>
-          </div>
-        ))}
-      </div>
-      <button
-        className="btn btn-sm"
-        style={{ marginTop: 6 }}
-        onClick={() => setOthers((x) => [...x, { code: "", name: "", eeRate: 0, erRate: 0, wageCap: null, includeOt: false, appliesTo: "all", maxAge: null, payee: "" }])}
-      >
-        Add a contribution
-      </button>
-      <div className="row" style={{ gap: 6, flexWrap: "wrap", marginTop: 10 }}>
-        <input className="input" style={{ maxWidth: 320 }} aria-label="Law reference" placeholder="Law or gazette reference" value={lawRef} onChange={(e) => setLawRef(e.target.value)} />
-        <input className="input" style={{ maxWidth: 320 }} aria-label="Reason" placeholder="Why it changes" value={reason} onChange={(e) => setReason(e.target.value)} />
-        <button className="btn btn-primary btn-sm" disabled={act.busy || reason.trim().length < 5 || lawRef.trim().length < 5} onClick={save}>
-          Save from {monthLabel(from || month)}
-        </button>
-      </div>
-      <ErrorNotice error={act.error} />
-    </section>
-  );
-}
+export { StatutoryRatesView as StatutoryView } from "./StatutoryRates";
 
 const LOAN_STATUS: Record<string, [Tone, string]> = {
   pending_cos: ["warn", "Waiting for the Chief of Staff"],
@@ -1691,26 +1490,56 @@ function LoanForm({ data, onDone }: { data: GuardLoanBoard; onDone: () => void }
       <div className="panel-head">
         <h3>Record an advance or loan</h3>
       </div>
+      {/* P98: each box has its name above it and the boxes share the width (on a phone they no longer pile up unnamed). */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 180px), 1fr))", gap: 12, marginBottom: 10 }}>
+        <label className="field">
+          <span>Guard</span>
+          <Select className="input" aria-label="Guard" value={f.personId} onChange={set("personId")}>
+            <option value="">Pick a guard…</option>
+            {data.guards.map((g) => (
+              <option key={g.id} value={g.id}>
+                {g.name}
+              </option>
+            ))}
+          </Select>
+        </label>
+        <label className="field">
+          <span>Kind</span>
+          <select className="input" aria-label="Kind" value={f.kind} onChange={set("kind")}>
+            <option value="loan">Loan</option>
+            <option value="advance">Advance</option>
+          </select>
+        </label>
+        <label className="field">
+          <span>Limit (RM)</span>
+          <input className="input" aria-label="Limit" inputMode="decimal" placeholder="Limit RM" value={f.limit} onChange={set("limit")} />
+        </label>
+        <label className="field">
+          <span>Amount lent (RM)</span>
+          <input className="input" aria-label="Amount lent" inputMode="decimal" placeholder="Lent RM (= limit)" value={f.amount} onChange={set("amount")} />
+        </label>
+        <label className="field">
+          <span>Purpose</span>
+          <input className="input" aria-label="Purpose" placeholder="Purpose" value={f.purpose} onChange={set("purpose")} />
+        </label>
+        <label className="field">
+          <span>Months to repay</span>
+          <input className="input" aria-label="Months to repay" inputMode="numeric" placeholder="Months" value={f.months} onChange={set("months")} />
+        </label>
+        <label className="field">
+          <span>First repayment month</span>
+          <input className="input" type="month" aria-label="First repayment month" value={f.firstPeriod} onChange={set("firstPeriod")} />
+        </label>
+        <label className="field">
+          <span>Signed agreement reference</span>
+          <input className="input" aria-label="Signed agreement reference" placeholder="Signed agreement ref." value={f.docRef} onChange={set("docRef")} />
+        </label>
+        <label className="field">
+          <span>Date the worker signed</span>
+          <input className="input" type="date" aria-label="Date the worker signed" value={f.signedOn} onChange={set("signedOn")} />
+        </label>
+      </div>
       <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
-        <Select className="input" style={{ maxWidth: 240 }} aria-label="Guard" value={f.personId} onChange={set("personId")}>
-          <option value="">Pick a guard…</option>
-          {data.guards.map((g) => (
-            <option key={g.id} value={g.id}>
-              {g.name}
-            </option>
-          ))}
-        </Select>
-        <select className="input" style={{ maxWidth: 120 }} aria-label="Kind" value={f.kind} onChange={set("kind")}>
-          <option value="loan">Loan</option>
-          <option value="advance">Advance</option>
-        </select>
-        <input className="input" style={{ maxWidth: 110 }} aria-label="Limit" inputMode="decimal" placeholder="Limit RM" value={f.limit} onChange={set("limit")} />
-        <input className="input" style={{ maxWidth: 130 }} aria-label="Amount lent" inputMode="decimal" placeholder="Lent RM (= limit)" value={f.amount} onChange={set("amount")} />
-        <input className="input" style={{ maxWidth: 260 }} aria-label="Purpose" placeholder="Purpose" value={f.purpose} onChange={set("purpose")} />
-        <input className="input" style={{ maxWidth: 110 }} aria-label="Months to repay" inputMode="numeric" placeholder="Months" value={f.months} onChange={set("months")} />
-        <input className="input" type="month" style={{ maxWidth: 170 }} aria-label="First repayment month" value={f.firstPeriod} onChange={set("firstPeriod")} />
-        <input className="input" style={{ maxWidth: 200 }} aria-label="Signed agreement reference" placeholder="Signed agreement ref." value={f.docRef} onChange={set("docRef")} />
-        <input className="input" type="date" style={{ maxWidth: 170 }} aria-label="Date the worker signed" value={f.signedOn} onChange={set("signedOn")} />
         <button
           className="btn btn-primary btn-sm"
           disabled={act.busy || !ready}

@@ -5408,23 +5408,28 @@ export const SCREEN_GUIDES: ScreenGuide[] = [
       {
         "task": "How to read the rates in force",
         "steps": [
-          "Look at \"In force for\" this month.",
-          "Each row shows the employee and employer rates and any wage cap. The law reference is at the bottom."
+          "The summary card (beside the cards on a computer, at the top on a phone) shows the month, where the rates come from, and each scheme's employee and employer rate at a glance.",
+          "Tap a scheme name under the title (EPF, SOCSO, EIS, LINDUNG 24 Jam, HRD levy) to jump to its card.",
+          "Each card has a table: who it is for, what the employee pays and what the employer pays. Under it are the wage cap and other facts. On a phone each row is a small card."
         ]
       },
       {
         "task": "How to see past changes",
         "steps": [
-          "Scroll to \"Changes\". Each shows the month it started, who set it, why, and the law."
+          "Tap \"Changes\" under the title, or scroll to the \"Changes\" card.",
+          "Each change shows the month it started, whether it is in force, coming or replaced, who set it, why, and the law.",
+          "Open \"What changed\" to see each rate before and after."
         ]
       },
       {
         "task": "How to change the rates (CEO)",
         "steps": [
-          "In \"Change from a month (CEO)\", set \"From\".",
-          "Change the boxes you need, such as \"EPF employee\" or \"SOCSO wage cap\".",
-          "For a new contribution, press \"Add a contribution\" and fill its code, name, rates, who it applies to and \"Paid to\".",
-          "Type the \"Law or gazette reference\" and \"Why it changes\", then press \"Save from\" the month."
+          "Press \"Change rates\".",
+          "In \"When it starts\", pick the \"From month\" (last month at the earliest). The boxes start from the rates in force for that month.",
+          "Change only the boxes you need in each scheme's step. Under each box you see the rate now; a red line says what to fix.",
+          "For a new fund or levy, press \"Add a contribution\" and fill its code, name, rates, who it applies to and \"Paid to\".",
+          "Fill \"Law or gazette reference\" and \"Why it changes\", then press \"Review and save\".",
+          "Check each rate's now and new value, then press \"Save from\" the month. Press \"Back to edit\" to change something."
         ]
       }
     ],
@@ -5450,7 +5455,7 @@ export const SCREEN_GUIDES: ScreenGuide[] = [
         "means": "The pay level above which no more is charged."
       }
     ],
-    "notes": "Only the CEO sees the change form. If the page says it is not switched on, pay uses the law as at November 2026. After a change, any draft pay month should be recalculated. The day divisor and other pay law settings are on the Pay formulas screen."
+    "notes": "Only the CEO sees \"Change rates\"; the server checks the change again. If the page says it is not switched on, pay uses the law as at November 2026. After a change, any draft pay month should be recalculated. A new change for a month that already has one replaces it, and the old one stays in the history as replaced. PCB comes from LHDN's e-PCB; the minimum wage, day divisor, overtime and public holiday rates are on the Pay formulas screen."
   },
   {
     "view": "arrivalcash",
