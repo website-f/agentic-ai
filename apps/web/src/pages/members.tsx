@@ -1,6 +1,6 @@
 import {
   CaretDownIcon, CaretLeftIcon, CaretRightIcon, CaretUpIcon, CopyIcon, CrownSimpleIcon, DotsThreeIcon, EnvelopeSimpleIcon, FileXlsIcon, IdentificationCardIcon, KeyIcon, MicrosoftOutlookLogoIcon,
-  PencilSimpleIcon, ShieldSlashIcon, TrashIcon, TreeStructureIcon, UserGearIcon, UserPlusIcon, UsersIcon, UsersThreeIcon, XIcon,
+  PencilSimpleIcon, ShieldCheckIcon, ShieldSlashIcon, TrashIcon, TreeStructureIcon, UserGearIcon, UserPlusIcon, UsersIcon, UsersThreeIcon, XIcon,
 } from "@phosphor-icons/react";
 import { Link } from "@tanstack/react-router";
 import { keepPreviousData, useMutation, useQuery, useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
@@ -36,6 +36,7 @@ import { cn, initials, timeAgo } from "@/lib/utils";
 
 import { MemberIdentityDialog, ResetMicrosoftDialog } from "@/components/member-identity";
 
+import { AccessBadges, AccessFields, accessChanges, accessOf, BulkAccessDialog, DEFAULT_ACCESS, setsAccess, type AccessValue } from "./members-access";
 import { ImportMembersDialog } from "./members-import";
 import { addsDepartments, BulkManagerDialog, editsOrg, ManagesField, NewDepartment, OrgFields, OrgLine, saveManages, TeamDialog } from "./members-org";
 
@@ -203,9 +204,12 @@ function AddMemberDialog({ open, onOpenChange, me }: { open: boolean; onOpenChan
   const [branchIds, setBranchIds] = useState<string[]>(allowed?.length ? [me.scope?.branch_id ?? allowed[0]!] : []);
   const [departmentId, setDepartmentId] = useState(me.scope?.kind === "department" ? me.scope.department_id ?? "" : "");
   const [result, setResult] = useState<{ email: string; password: string | null } | null>(null);
+  // P99: what they reach (owners, admins, management and HR set it).
+  const [access, setAccess] = useState<AccessValue>(DEFAULT_ACCESS);
+  const accessBody = setsAccess(me) && role !== "owner" ? { access: access.access, prima_modules: access.modules } : {};
 
   const add = useMutation({
-    mutationFn: () => api<{ temp_password: string | null }>("/api/members", "POST", { email, name, role, ...placementBody(role, orFirst(branchIds, list), departmentId) }),
+    mutationFn: () => api<{ temp_password: string | null }>("/api/members", "POST", { email, name, role, ...placementBody(role, orFirst(branchIds, list), departmentId), ...accessBody }),
     onSuccess: (r) => {
       qc.invalidateQueries({ queryKey: keys.members });
       qc.invalidateQueries({ queryKey: keys.status });
@@ -248,6 +252,7 @@ function AddMemberDialog({ open, onOpenChange, me }: { open: boolean; onOpenChan
         </div>
         <Placement role={role} branches={branches} branchIds={orFirst(branchIds, list)} departmentId={departmentId} allowed={allowed} canAddDept={addsDepartments(me)}
           onChange={(b, d) => { setBranchIds(b); setDepartmentId(d); }} />
+        {setsAccess(me) ? <AccessFields value={access} onChange={setAccess} ownerTarget={role === "owner"} /> : null}
         <FormError message={add.error && !Object.keys(fields).length ? errorMessage(add.error) : null} />
       </div>
     </ResponsiveDialog>
@@ -279,6 +284,9 @@ function AccessDialog({ members, me, open, onOpenChange, onDone }: {
   const [heads, setHeads] = useState(!!one?.heads_department);
   // P98: the people they manage, many at once (sets those people's "reports to").
   const [manages, setManages] = useState<string[] | null>(null);
+  // P99: what they reach (one person; the ticked people have their own Access button).
+  const editsAccess = !!one && setsAccess(me);
+  const [access, setAccess] = useState<AccessValue>(one ? accessOf(one) : DEFAULT_ACCESS);
   const save = useMutation({
     mutationFn: async () => {
       const place = placementBody(role, orFirst(branchIds, list), departmentId);
@@ -289,7 +297,8 @@ function AccessDialog({ members, me, open, onOpenChange, onDone }: {
               ...(heads !== !!one.heads_department || (heads && place.department_id !== one.department_id) ? { heads_department: heads && !!place.department_id } : {}),
             }
           : {};
-        await api(`/api/members/${one.user_id}`, "PATCH", { role, ...place, ...orgBody });
+        const accessBody = editsAccess && role !== "owner" ? accessChanges(accessOf(one), access) : {};
+        await api(`/api/members/${one.user_id}`, "PATCH", { role, ...place, ...orgBody, ...accessBody });
         if (org && manages && MANAGER_ROLES.includes(role)) {
           const r = await saveManages(one.user_id, manages);
           return { done: 1, skipped: r.skipped, first: r.results.find((x) => !x.ok)?.message ?? null };
@@ -330,6 +339,7 @@ function AccessDialog({ members, me, open, onOpenChange, onDone }: {
         {org && one && MANAGER_ROLES.includes(role) ? (
           <ManagesField member={one} members={everyone} value={manages} onChange={setManages} />
         ) : null}
+        {editsAccess && one ? <AccessFields value={access} onChange={setAccess} member={one} ownerTarget={role === "owner" || one.role === "owner"} /> : null}
         <FormError message={save.error ? errorMessage(save.error) : null} />
       </div>
     </ResponsiveDialog>
@@ -453,7 +463,7 @@ function MemberActions({ member, me }: { member: Member; me: Me }) {
           </Button>
         </MenuTrigger>
         <MenuContent>
-          <MenuItem icon={<PencilSimpleIcon />} onSelect={() => setEditing(true)}>{t("Change role or place")}</MenuItem>
+          <MenuItem icon={<PencilSimpleIcon />} onSelect={() => setEditing(true)}>{fixesPeople ? t("Change role, place or access") : t("Change role or place")}</MenuItem>
           {managesPeople ? <MenuItem icon={<UsersThreeIcon />} onSelect={() => setTeam(true)}>{t("Who they manage")}</MenuItem> : null}
           {fixesPeople ? <MenuItem icon={<IdentificationCardIcon />} onSelect={() => setIdentity(true)}>{t("Change name or email")}</MenuItem> : null}
           {fixesPeople && member.microsoft ? <MenuItem icon={<MicrosoftOutlookLogoIcon />} onSelect={() => setResettingMs(true)}>{t("Reset Microsoft link")}</MenuItem> : null}
@@ -582,7 +592,7 @@ function MembersTable({ rows, me, f, onSort, selected, onTick, onTickPage, canBu
                 </td>
               ) : null}
               <td className="max-w-[20rem] px-3 py-2.5"><NameCell member={m} me={me} seesTwoFactor={seesTwoFactor} /></td>
-              <td className="px-3 py-2.5"><RolePill role={m.role} /></td>
+              <td className="px-3 py-2.5"><span className="flex flex-wrap items-center gap-1"><RolePill role={m.role} /><AccessBadges member={m} /></span></td>
               <td className="px-3 py-2.5 break-words"><Branches member={m} /></td>
               <td className="px-3 py-2.5 break-words">{m.department_name ?? <span className="text-muted">-</span>}</td>
               <td className="px-3 py-2.5"><SignIn member={m} /></td>
@@ -621,6 +631,7 @@ function MemberCards({ rows, me, selected, onTick, canBulk }: {
             </div>
             <div className="flex flex-wrap items-center gap-2">
               <RolePill role={m.role} />
+              <AccessBadges member={m} />
               <StatusPill member={m} />
               {place ? <span className="text-[12px] break-words text-muted">{place}</span> : null}
             </div>
@@ -676,6 +687,7 @@ export function MembersPage() {
   const [bulkAccess, setBulkAccess] = useState(false);
   const [bulkRemove, setBulkRemove] = useState(false);
   const [bulkManager, setBulkManager] = useState(false);
+  const [bulkPrima, setBulkPrima] = useState(false);
   const search = useSearch({ strict: false }) as { add?: number };
   const navigate = useNavigate();
   const [adding, setAdding] = useState(false);
@@ -808,6 +820,11 @@ export function MembersPage() {
                 <Button size="sm" variant="secondary" disabled={!ticked.length} onClick={() => setBulkAccess(true)}>
                   <PencilSimpleIcon size={14} /> {t("Change role or place")}
                 </Button>
+                {setsAccess(me) ? (
+                  <Button size="sm" variant="secondary" onClick={() => setBulkPrima(true)}>
+                    <ShieldCheckIcon size={14} /> {t("Access")}
+                  </Button>
+                ) : null}
                 {editsOrg(me) ? (
                   <Button size="sm" variant="secondary" onClick={() => setBulkManager(true)}>
                     <TreeStructureIcon size={14} /> {t("Reports to")}
@@ -868,6 +885,9 @@ export function MembersPage() {
       ) : null}
       {bulkAccess ? (
         <AccessDialog members={ticked} me={me} open={bulkAccess} onOpenChange={setBulkAccess} onDone={() => setSelected(new Set())} />
+      ) : null}
+      {bulkPrima ? (
+        <BulkAccessDialog userIds={[...selected]} open={bulkPrima} onOpenChange={setBulkPrima} onDone={() => setSelected(new Set())} />
       ) : null}
       {bulkManager ? (
         <BulkManagerDialog userIds={[...selected]} open={bulkManager} onOpenChange={setBulkManager} onDone={() => setSelected(new Set())} />

@@ -26,6 +26,10 @@ function handleAuthError(error: unknown) {
     // P57: the company now requires two-step sign-in and this person has not set it up.
     queryClient.invalidateQueries({ queryKey: ["me"] });
     router.navigate({ to: "/two-step-setup" });
+  } else if (error.code === "prima_only" && path !== "/prima-only") {
+    // P99: their access was changed to Prima only while the office was open.
+    queryClient.invalidateQueries({ queryKey: ["me"] });
+    router.navigate({ to: "/prima-only" });
   }
 }
 

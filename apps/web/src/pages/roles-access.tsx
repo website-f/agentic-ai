@@ -11,6 +11,7 @@ import {
   LockSimpleIcon,
   MinusIcon,
   PlusIcon,
+  ShieldCheckIcon,
   UserGearIcon,
 } from "@phosphor-icons/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -198,6 +199,17 @@ export function RolesAccessPage() {
           {dirty ? <Pill tone="warn">{t("Not saved yet")}</Pill> : null}
         </p>
       </div>
+
+      {/* P99: besides the role, each person's access: the office and Prima, or Prima only, and their Prima modules. */}
+      <Card className="grid gap-1.5 p-4" data-testid="person-access">
+        <p className="flex items-center gap-2 text-[13.5px] font-medium"><ShieldCheckIcon size={16} /> {t("Access for each person")}</p>
+        <p className="text-[12.5px] text-muted">
+          {t("Besides their role, each member has an access: Agentic + Prima (the office and Prima, the default) or Prima only (they sign in on the same page and go straight to Prima). Their Prima modules can be all their Prima role allows, or a chosen list.")}
+        </p>
+        <p className="text-[12.5px]">
+          <a href="/settings/members" className="font-medium text-accent hover:underline">{t("Set it on Members: Change role, place or access.")}</a>
+        </p>
+      </Card>
 
       {sections.length === 0 ? (
         <EmptyState icon={UserGearIcon} title={t("Nothing matches")} body={t("Try another word, such as money, members or AI engine.")}

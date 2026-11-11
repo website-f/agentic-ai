@@ -60,12 +60,15 @@ import { STAFF_PHONE } from "./staff-phone";
 import { TABLES } from "./tables";
 import { TEAM } from "./team";
 import { ROLES_P98 } from "./roles-p98";
+import { ACCESS_P99 } from "./access-p99";
 
 export const MS: Record<string, string> = {
   // P97: first, so an existing translation of the same English wins over these.
   ...TEAM,
   // P98: several branches, searchable selects, Roles and access.
   ...ROLES_P98,
+  // P99: Agentic + Prima or Prima only, and Prima modules.
+  ...ACCESS_P99,
   // P73: first, so an existing translation of the same English always wins.
   // P96: before the rest too, so an existing translation of the same English wins.
   ...TABLES,

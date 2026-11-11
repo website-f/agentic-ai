@@ -100,6 +100,7 @@ const page = {
   deals: lazyRouteComponent(() => import("@/pages/deals"), "DealsPage"),
   money: lazyRouteComponent(() => import("@/pages/money"), "MoneyPage"),
   feedbacks: lazyRouteComponent(() => import("@/pages/feedbacks"), "FeedbacksPage"),
+  primaOnly: lazyRouteComponent(() => import("@/pages/prima-only"), "PrimaOnlyPage"),
 };
 
 // P73: the floating feedback button, over every signed-in page (its own chunk, loaded after
@@ -226,6 +227,22 @@ const twoStepSetupRoute = createRoute({
   component: page.twoStepSetup,
 });
 
+// P99: a Prima-only person lands here after signing in and is sent on to Prima (/prima/);
+// if Prima cannot open yet, this page says why (connect Microsoft, ask the owner).
+const primaOnlyRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/prima-only",
+  beforeLoad: async ({ context, location }) => {
+    let me = await loadMe(context.queryClient, location);
+    if (me.access !== "prima_only") me = await context.queryClient.fetchQuery({ ...meQuery, staleTime: 0 });
+    if (me.user.must_change_password) throw redirect({ to: "/change-password" });
+    if (me.user.two_factor_setup_required) throw redirect({ to: "/two-step-setup" });
+    if (me.access !== "prima_only") throw redirect({ to: "/" });
+    return { me };
+  },
+  component: page.primaOnly,
+});
+
 const appRoute = createRoute({
   getParentRoute: () => rootRoute,
   id: "app",
@@ -233,6 +250,8 @@ const appRoute = createRoute({
     const me = await loadMe(context.queryClient, location);
     if (me.user.must_change_password) throw redirect({ to: "/change-password" });
     if (me.user.two_factor_setup_required) throw redirect({ to: "/two-step-setup" });
+    // P99: a Prima-only person has no office pages: Prima opens for them.
+    if (me.access === "prima_only") throw redirect({ to: "/prima-only" });
     // P36: one guard for every page, the same rule as the sidebar: staff keep to their own
     // desk, their AI and the work they are part of. Their AI's profile is My AI.
     if (!pathAllowed(location.pathname, me.permissions)) {
@@ -252,6 +271,7 @@ const libraryFrameRoute = createRoute({
     const me = await loadMe(context.queryClient, location);
     if (me.user.must_change_password) throw redirect({ to: "/change-password" });
     if (me.user.two_factor_setup_required) throw redirect({ to: "/two-step-setup" });
+    if (me.access === "prima_only") throw redirect({ to: "/prima-only" });
     // Browse (/explorer) is the Library's own page: the same rule as /files.
     if (!pathAllowed(location.pathname === "/explorer" ? "/files" : location.pathname, me.permissions)) throw redirect({ to: "/workspace" });
     return { me };
@@ -876,6 +896,7 @@ const routeTree = rootRoute.addChildren([
   loginRoute,
   changePasswordRoute,
   twoStepSetupRoute,
+  primaOnlyRoute,
   erasedRoute,
   welcomeRoute,
   presentRoute,

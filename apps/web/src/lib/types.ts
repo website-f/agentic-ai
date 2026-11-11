@@ -37,7 +37,13 @@ export interface Me {
   scope?: Scope | null;
   /** P92: the roles this person may give others (the server's own rule). */
   assignable_roles?: Role[];
+  /** P99: Prima only (the office opens Prima for them) and their chosen Prima screens (null: all). */
+  access?: Access;
+  prima_modules?: string[] | null;
 }
+
+/** P99: what a member reaches: the office and Prima, or Prima only. */
+export type Access = "agentic" | "prima_only";
 
 export const hasAny = (me: Me, ...perms: string[]) => perms.some((p) => me.permissions.includes(p));
 
@@ -64,6 +70,9 @@ export interface Member {
   reports_to_name?: string | null;
   heads_department?: boolean;
   manages?: number;
+  /** P99: the office and Prima, or Prima only; their Prima screens (null or missing: all their Prima role allows). */
+  access?: Access;
+  prima_modules?: string[] | null;
 }
 
 export interface Department {

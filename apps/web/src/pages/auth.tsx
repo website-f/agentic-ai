@@ -163,6 +163,8 @@ export function SetupPage() {
 async function landing(qc: QueryClient, me: Me, path: LoginPath, next?: string): Promise<string> {
   // Only an in-app path: "//host", "/\host" or a full URL never sends a person off-site.
   const wanted = safeNext(next, "") || undefined;
+  // P99: a Prima-only person goes straight to Prima (the page sends them on to /prima/).
+  if (me.access === "prima_only") return "/prima-only";
   if (path === "staff" && staffOnly(me.permissions)) {
     try {
       const s = await qc.fetchQuery(staffQuery);
