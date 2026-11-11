@@ -66,25 +66,25 @@ export function SalePapers({ data, m }: { data: ItemBoard; m: ItemBoard['movemen
   ];
   const ack = cur.get('acknowledgement');
   return (
-    <div className="panel" style={{ display: 'grid', gap: 8 }}>
-      <strong>Sale papers: ownership passes only when all four are in</strong>
-      <div className="list">
+    <section className="it-panel">
+      <h3 className="it-h3">Sale papers: ownership passes only when all four are in</h3>
+      <ul className="it-rows it-rows-tight">
         {rows.map(([label, ok, note]) => (
-          <div key={label} className="list-item">
-            <div>
-              <div>{label}</div>
-              <div className="muted small">{note}</div>
-            </div>
+          <li key={label} className="it-row">
+            <span className="it-row-main">
+              <strong>{label}</strong>
+              <span className="muted small">{note}</span>
+            </span>
             <Chip tone={ok ? 'ok' : 'warn'}>{ok ? 'In' : 'Missing'}</Chip>
-          </div>
+          </li>
         ))}
-      </div>
+      </ul>
       {papers.some((p) => p.docId) && (
-        <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
+        <div className="it-row-actions">
           {papers
             .filter((p) => p.docId)
             .map((p) => (
-              <button key={`${p.kind}-${p.at}`} className="btn btn-sm" onClick={() => void view(p.docId!)}>
+              <button key={`${p.kind}-${p.at}`} className="btn btn-sm" type="button" onClick={() => void view(p.docId!)}>
                 Open {SALE_PAPER_LABEL[p.kind].split(' (')[0].toLowerCase()} {p.ref}
               </button>
             ))}
@@ -130,6 +130,6 @@ export function SalePapers({ data, m }: { data: ItemBoard; m: ItemBoard['movemen
         </div>
       )}
       <ErrorNotice error={a.error} />
-    </div>
+    </section>
   );
 }

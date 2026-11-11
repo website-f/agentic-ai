@@ -6,18 +6,28 @@ import { useState } from 'react';
 import { BuildingsIcon, EyeIcon, WarningIcon } from '@phosphor-icons/react';
 import { STATE_LABEL, type ItemState } from '@prima/core';
 import { api, type ItemBoard } from '../../api';
-import { Card, Empty, Stat, Stats } from '../../kit';
+import { Card, Empty, Search, Stat, Stats, Toolbar } from '../../kit';
 import { Chip, ErrorNotice, Loading, dateLabel, useAction, useLoad } from '../../ui';
 import { Scanner } from './Scanner';
-import { STATE_TONE, act } from './shared';
+import { FilterChips, STATE_TONE, TabIntro, act, hasText } from './shared';
 
 export function SiteBoard({ data }: { data: ItemBoard }) {
   const [siteId, setSiteId] = useState(data.siteChoices[0]?.id ?? '');
-  if (!data.siteChoices.length) return <Card title="Site board"><Empty title="No sites to show.">The site board is for the stores, managers and supervisors of a site, and the OM of its area.</Empty></Card>;
+  const intro = <TabIntro title="Site board" sub="What should be at one site: the items there or with the people who work there, who holds them, their condition, when each was last confirmed and what is waiting. An audit scan records what you saw; it never moves anything." />;
+  if (!data.siteChoices.length)
+    return (
+      <div className="it-stack">
+        {intro}
+        <Card>
+          <Empty title="No sites to show.">The site board is for the stores, managers and supervisors of a site, and the OM of its area.</Empty>
+        </Card>
+      </div>
+    );
   return (
     <div className="it-stack">
-      <Card title="Site board" sub="Expected items, holders, condition, last confirmed check and what is waiting.">
-        <Select className="input it-big" aria-label="Site" value={siteId} onChange={(e) => setSiteId(e.target.value)}>
+      {intro}
+      <Card>
+        <Select className="input it-big" aria-label="Site" value={siteId} onChange={(e) => setSiteId(e.target.value)} searchable>
           {data.siteChoices.map((s) => (
             <option key={s.id} value={s.id}>
               {s.name}
@@ -35,8 +45,12 @@ function Board({ siteId }: { siteId: string }) {
   const a = useAction();
   const [audit, setAudit] = useState(false);
   const [seen, setSeen] = useState<string[]>([]);
+  const [q, setQ] = useState('');
+  const [show, setShow] = useState<'all' | 'attention'>('all');
   if (error) return <ErrorNotice error={error} />;
   if (!b) return <Loading what="site board" />;
+  const attention = (r: (typeof b.rows)[number]) => !!(r.waiting || r.overdue || r.openCases || !r.lastConfirmed);
+  const rows = b.rows.filter((r) => (show === 'all' || attention(r)) && hasText(q, r.sku, r.label, r.holder, r.size));
   return (
     <div className="it-stack">
       <Stats>
@@ -88,11 +102,29 @@ function Board({ siteId }: { siteId: string }) {
         </Card>
       )}
       <Card title={`At ${b.site.name}`} flush>
+        {b.rows.length > 0 && (
+          <div className="it-pad">
+            <Toolbar>
+              <Search value={q} onChange={setQ} placeholder="Search item, label or holder" />
+            </Toolbar>
+            <FilterChips
+              label="Show"
+              value={show}
+              onChange={setShow}
+              options={[
+                ['all', 'All', b.rows.length],
+                ['attention', 'Needs attention', b.rows.filter(attention).length],
+              ]}
+            />
+          </div>
+        )}
         {!b.rows.length ? (
-          <Empty title="Nothing is recorded here." />
+          <Empty title="Nothing is recorded here.">Items handed to this site, or to people whose latest shift is here, show on this board.</Empty>
+        ) : !rows.length ? (
+          <Empty title="Nothing matches.">Change the search or choose another filter.</Empty>
         ) : (
           <ul className="it-rows">
-            {b.rows.map((r) => (
+            {rows.map((r) => (
               <li key={r.itemId} className="it-row it-row-col" data-tone={r.overdue || r.openCases ? 'warn' : undefined}>
                 <span className="it-row-line">
                   <span className="it-row-main">

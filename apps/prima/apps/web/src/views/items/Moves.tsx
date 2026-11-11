@@ -7,40 +7,66 @@ import { useEffect, useMemo, useState } from 'react';
 import { ArrowRightIcon, PackageIcon, TruckIcon, XIcon } from '@phosphor-icons/react';
 import { labelDisplay, type ScanEntry } from '@prima/core';
 import { ApiError, type ItemBoard } from '../../api';
-import { Card, Empty, Facts, Steps, type StepState } from '../../kit';
+import { Card, Empty, Facts, Search, Steps, Toolbar, type StepState } from '../../kit';
 import { Chip, Drawer, ErrorNotice, dateLabel, dateTimeLabel, useAction } from '../../ui';
 import { SalePapers } from './SalePapers';
 import { Scanner } from './Scanner';
-import { LINE_TONE, MOVE_TONE, TYPE_LABEL, act, any, partyName, rolesOf, skuName } from './shared';
+import { FilterChips, LINE_TONE, MOVE_TONE, TYPE_LABEL, TabIntro, act, any, hasText, partyName, rolesOf, skuName } from './shared';
 
 type Move = ItemBoard['movements'][number];
 
+// P98: a list to search and filter (open, in transit, received), the main action at the top, and an empty state that
+// says what to do first.
+const OPEN_MOVE = (x: Move) => x.status !== 'received' && x.status !== 'cancelled';
 export function Moves({ data }: { data: ItemBoard }) {
   const [open, setOpen] = useState<string | null>(null);
   const [form, setForm] = useState(false);
+  const [show, setShow] = useState<'open' | 'transit' | 'done' | 'all'>(data.movements.some(OPEN_MOVE) ? 'open' : 'all');
+  const [q, setQ] = useState('');
   const m = data.movements.find((x) => x.id === open) ?? null;
   const mayMove = any(data, 'store', 'manager', 'ops', 'it');
+  const pick = (x: Move) => (show === 'open' ? OPEN_MOVE(x) : show === 'transit' ? x.status === 'dispatched' || x.status === 'partly_received' : show === 'done' ? !OPEN_MOVE(x) : true);
+  const list = data.movements.filter((x) => pick(x) && hasText(q, x.ref, TYPE_LABEL[x.type], partyName(data, x.fromPartyId), x.to.label, x.purpose, x.commercialRef));
+  const newButton = mayMove && !form && (
+    <button className="btn btn-primary" type="button" onClick={() => setForm(true)}>
+      <TruckIcon size={16} aria-hidden="true" /> New movement
+    </button>
+  );
   return (
     <div className="it-stack">
+      <TabIntro
+        title="Send and receive"
+        sub="Sales, rentals, loans, transfers and returns between companies and sites. The sender scans each item out; the receiver scans what arrived. A sale changes the owner only when Finance records it."
+        actions={newButton || undefined}
+      />
       {form && <NewMove data={data} onDone={(id) => (setForm(false), id && setOpen(id))} />}
       {data.checks.inTransit.length > 0 && mayMove && <ReceiveByScan />}
-      <Card
-        title="Sales, rentals, loans, transfers and returns"
-        sub="The receiver checks each item on arrival. A sale changes the owner only when Finance records it; a rental or loan never does."
-        actions={
-          mayMove && !form ? (
-            <button className="btn btn-primary" type="button" onClick={() => setForm(true)}>
-              <TruckIcon size={16} aria-hidden="true" /> New movement
-            </button>
-          ) : undefined
-        }
-        flush
-      >
+      <Card title="Movements" flush>
+        <div className="it-pad">
+          <Toolbar>
+            <Search value={q} onChange={setQ} placeholder="Search reference, company or site" />
+          </Toolbar>
+          <FilterChips
+            label="Show"
+            value={show}
+            onChange={setShow}
+            options={[
+              ['open', 'Open', data.movements.filter(OPEN_MOVE).length],
+              ['transit', 'In transit', data.movements.filter((x) => x.status === 'dispatched' || x.status === 'partly_received').length],
+              ['done', 'Done', data.movements.filter((x) => !OPEN_MOVE(x)).length],
+              ['all', 'All', data.movements.length],
+            ]}
+          />
+        </div>
         {!data.movements.length ? (
-          <Empty title="No movements yet." />
+          <Empty title="No movements yet." action={newButton || undefined}>
+            {mayMove ? 'Start one to send items to another company or a site: pick the items, scan them out, and the receiver scans them in.' : 'Deliveries to and from your companies show here.'}
+          </Empty>
+        ) : !list.length ? (
+          <Empty title="Nothing matches.">Change the search or choose another filter.</Empty>
         ) : (
           <ul className="it-rows">
-            {data.movements.map((x) => (
+            {list.map((x) => (
               <li key={x.id}>
                 <button className="it-row it-row-btn" type="button" onClick={() => setOpen(x.id)}>
                   <span className="it-row-main">

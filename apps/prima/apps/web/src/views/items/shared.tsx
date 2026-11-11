@@ -1,4 +1,5 @@
 // Shared bits of the item register screens (P85 split of views/Items.tsx): labels, tones, roles and small helpers.
+import type { ReactNode } from 'react';
 import type { ItemAction, ItemCategory } from '@prima/core';
 import { api, type ItemBoard } from '../../api';
 
@@ -99,3 +100,38 @@ export const readFile = (f: File) =>
     r.onerror = () => reject(new Error('The file could not be read.'));
     r.readAsDataURL(f);
   });
+
+/**
+ * P98: the head of each Items tab: what the tab is for in one line, and its main action on the right (under it on a
+ * phone, full width).
+ */
+export function TabIntro({ title, sub, actions }: { title: ReactNode; sub: ReactNode; actions?: ReactNode }) {
+  return (
+    <header className="it-intro">
+      <div className="it-intro-text">
+        <h2>{title}</h2>
+        <p className="muted">{sub}</p>
+      </div>
+      {actions && <div className="it-intro-actions">{actions}</div>}
+    </header>
+  );
+}
+
+/** P98: filter chips with their counts (Open 3, All 12); one is chosen. */
+export function FilterChips<K extends string>({ value, onChange, options, label }: { value: K; onChange: (k: K) => void; options: [K, string, number][]; label: string }) {
+  return (
+    <div className="it-chips-row" role="group" aria-label={label}>
+      {options.map(([k, l, n]) => (
+        <button key={k} type="button" className="it-fchip" aria-pressed={value === k} onClick={() => onChange(k)}>
+          <span>{l}</span> <strong>{n}</strong>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/** P98: case-insensitive "does any of these texts contain the search". */
+export const hasText = (q: string, ...texts: (string | null | undefined)[]) => {
+  const t = q.trim().toLowerCase();
+  return !t || texts.some((x) => (x ?? '').toLowerCase().includes(t));
+};

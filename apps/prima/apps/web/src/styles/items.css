@@ -621,7 +621,7 @@
   overflow-x: auto;
   scrollbar-width: none;
   padding: 2px 0 4px;
-  scroll-margin-top: 12px;
+  scroll-margin-top: 96px;
 }
 .it-nav::-webkit-scrollbar {
   display: none;
@@ -1265,5 +1265,162 @@
   .it-cat-main,
   .smi-drop {
     transition: none;
+  }
+}
+
+/* P98 (second pass): every Items tab opens with what it is for (TabIntro), lists filter with counted chips, tables
+   turn into labelled cards on a phone, and every control a thumb uses is at least 44px high. */
+.it-intro {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+.it-intro-text {
+  flex: 1 1 420px;
+  min-width: 0;
+}
+.it-intro h2 {
+  margin: 0;
+  font-size: 20px;
+  letter-spacing: -0.01em;
+}
+.it-intro p {
+  margin: 4px 0 0;
+  max-width: 78ch;
+  text-wrap: pretty;
+}
+.it-intro-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.it-chips-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+.it-fchip {
+  min-height: 44px;
+  padding: 0 14px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  cursor: pointer;
+  transition: background-color 0.2s ease, border-color 0.2s ease;
+}
+.it-fchip:hover {
+  background: var(--surface-2);
+}
+.it-fchip[aria-pressed="true"] {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+}
+.it-fchip:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+.it-row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.it-panel {
+  display: grid;
+  gap: 8px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md, 12px);
+  background: var(--surface);
+}
+.it-details {
+  margin: 0;
+}
+.it-details > summary {
+  min-height: 44px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
+@media (max-width: 719px) {
+  .it-intro-actions {
+    width: 100%;
+  }
+  .it-intro-actions .btn {
+    flex: 1 1 100%;
+    justify-content: center;
+  }
+  /* 44px targets for the tabs' own controls (the drawers opened from them included). */
+  .items-view .btn,
+  .items-view .input,
+  .items-view select,
+  .items-view .seg button,
+  .items-view .k-search input {
+    min-height: 44px;
+  }
+  .items-view .it-row-btn {
+    min-height: 56px;
+  }
+  .items-view .isc-choice {
+    min-height: 44px;
+    align-items: center;
+  }
+  /* A table becomes one card per row, each cell with its column name. */
+  .it-rtable {
+    overflow: visible;
+  }
+  .it-rtable table,
+  .it-rtable tbody,
+  .it-rtable tr,
+  .it-rtable td {
+    display: block;
+    width: 100%;
+  }
+  .it-rtable thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+  }
+  .it-rtable tr {
+    padding: 10px 16px;
+    border-top: 1px solid var(--line);
+  }
+  .it-rtable td {
+    display: grid;
+    grid-template-columns: minmax(0, 40%) minmax(0, 1fr);
+    gap: 8px;
+    padding: 3px 0;
+    border: 0;
+    overflow-wrap: anywhere;
+  }
+  .it-rtable td::before {
+    content: attr(data-label);
+    color: var(--muted);
+    font-size: 13px;
+  }
+}
+
+@media (max-width: 719px) {
+  /* P98: a row with figures on the right puts them under the name on a phone; tab action rows stack. */
+  .it-row:not(.it-row-col):not(.it-cat-row) {
+    flex-wrap: wrap;
+    row-gap: 6px;
+  }
+  .it-row:not(.it-row-col) > .it-row-main {
+    flex: 1 1 100%;
+  }
+  .it-row-side {
+    flex-wrap: wrap;
+  }
+  .it-tabbar-add > * {
+    flex: 1 1 100%;
   }
 }

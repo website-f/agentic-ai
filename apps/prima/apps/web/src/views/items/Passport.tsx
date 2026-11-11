@@ -12,7 +12,7 @@ import { Chip, Drawer, ErrorNotice, Loading, dateLabel, dateTimeLabel, useAction
 import { PrintRun, type PrintResult } from './PrintRun';
 import { Scanner } from './Scanner';
 import { oldRecordLine } from './Stock';
-import { STATE_TONE, TYPE_LABEL, act, partyName, rolesOf, skuName } from './shared';
+import { STATE_TONE, TYPE_LABEL, TabIntro, act, partyName, rolesOf, skuName } from './shared';
 
 export function Find({ data, onRegister, onType }: { data: ItemBoard; onRegister?: (oldTag: string) => void; onType?: (skuId: string) => void }) {
   const [open, setOpen] = useState<{ code?: string; id?: string } | null>(null);
@@ -27,6 +27,7 @@ export function Find({ data, onRegister, onType }: { data: ItemBoard; onRegister
   const recent = data.items.slice(-8).reverse();
   return (
     <div className="it-stack">
+      <TabIntro title="Scan or find" sub="Point the camera at any Prima label, use a barcode scanner, or type the ID. An item opens its passport: owner, holder, place, condition and its whole history. A shelf label opens the item type." />
       <Card title="Find an item" sub="Scan the QR code, the barcode or the RFID tag, or type the ID printed under the code. An item type's shelf label opens the item type. Every company's labels scan here; a scan only finds the record.">
         <Scanner purpose="view" title="Find an item" autoFocus onResult={({ verdict, entry }) => verdict.outcome !== 'not_found' && verdict.itemId && setOpen({ code: entry.code })} onUnknownCode={onRegister} onTypeCode={onType ? typeCode : undefined} />
       </Card>
