@@ -7,7 +7,7 @@ import { api, type ItemBoard } from '../../api';
 import { Card, Empty, Facts, Stat, Stats } from '../../kit';
 import { Chip, Drawer, ErrorNotice, Loading, dateTimeLabel, useAction, useLoad } from '../../ui';
 import { Scanner } from './Scanner';
-import { act, rolesOf } from './shared';
+import { FilterChips, TabIntro, act, rolesOf } from './shared';
 
 export function Counts({ data }: { data: ItemBoard }) {
   const a = useAction();
@@ -20,10 +20,25 @@ export function Counts({ data }: { data: ItemBoard }) {
   const [freeze, setFreeze] = useState(false);
   const [blind, setBlind] = useState(false);
   const [open, setOpen] = useState<string | null>(null);
+  const [form, setForm] = useState(!data.counts.length && parties.length > 0);
+  const [show, setShow] = useState<'active' | 'review' | 'done' | 'all'>('all');
   const sites = data.siteChoices.filter((s) => s.companyId === partyId);
+  const stage = (c: ItemBoard['counts'][number]) => (c.review ? 'done' : c.closed ? 'review' : 'active');
+  const rows = data.counts.filter((c) => show === 'all' || stage(c) === show);
+  const startButton = parties.length > 0 && !form && (
+    <button className="btn btn-primary" type="button" onClick={() => setForm(true)}>
+      <ClipboardTextIcon size={16} aria-hidden="true" /> Start a count
+    </button>
+  );
   return (
     <div className="it-stack">
-      <Card title="Start a count" sub="The expected list is taken at the cut-off. Moves after it are listed, not counted against the store. Freezing moves is for small counts (200 units or fewer).">
+      <TabIntro
+        title="Counts"
+        sub="Count a store or a site by scanning every label. Not found yet is never lost: recount, then a manager who did not count reviews it before any case opens. Nothing is adjusted by a count."
+        actions={startButton || undefined}
+      />
+      {form && (
+      <Card title="Start a count" actions={<button className="btn" type="button" onClick={() => setForm(false)}>Cancel</button>} sub="The expected list is taken at the cut-off. Moves after it are listed, not counted against the store. Freezing moves is for small counts (200 units or fewer).">
         <div className="it-form">
           <label className="isc-field">
             Company
@@ -75,7 +90,7 @@ export function Counts({ data }: { data: ItemBoard }) {
             onClick={() =>
               a
                 .run(() => act({ kind: 'count.start', partyId, siteId: site || undefined, skuIds: skus, cutoffAt: cutoff ? `${cutoff}:00+08:00` : undefined, freeze, blind }), 'Count started.')
-                .then((r) => r && setOpen((r as { result: { id: string } }).result.id))
+                .then((r) => r && (setForm(false), setOpen((r as { result: { id: string } }).result.id)))
             }
           >
             <ClipboardTextIcon size={18} aria-hidden="true" /> Start count
@@ -83,12 +98,32 @@ export function Counts({ data }: { data: ItemBoard }) {
           <ErrorNotice error={a.error} />
         </div>
       </Card>
-      <Card title="Counts" flush>
+      )}
+      <Card title="Counts so far" flush>
+        {data.counts.length > 0 && (
+          <div className="it-pad">
+            <FilterChips
+              label="Show"
+              value={show}
+              onChange={setShow}
+              options={[
+                ['all', 'All', data.counts.length],
+                ['active', 'Counting', data.counts.filter((c) => stage(c) === 'active').length],
+                ['review', 'To review', data.counts.filter((c) => stage(c) === 'review').length],
+                ['done', 'Reviewed', data.counts.filter((c) => stage(c) === 'done').length],
+              ]}
+            />
+          </div>
+        )}
         {!data.counts.length ? (
-          <Empty title="No counts yet." />
+          <Empty title="No counts yet." action={startButton || undefined}>
+            Start one for a store or a site; then scan every label you find.
+          </Empty>
+        ) : !rows.length ? (
+          <Empty title="Nothing here.">Choose another filter.</Empty>
         ) : (
           <ul className="it-rows">
-            {data.counts
+            {rows
               .slice()
               .reverse()
               .map((c) => (

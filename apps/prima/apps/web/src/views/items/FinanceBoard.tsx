@@ -10,7 +10,7 @@ import { api, type ItemBoard, type ItemFinance } from '../../api';
 import { useApp } from '../../App';
 import { Card, Empty, Facts, Stat, Stats } from '../../kit';
 import { Chip, ErrorNotice, Loading, dateTimeLabel, useAction, useLoad } from '../../ui';
-import { act, downloadText, readFile, skuName } from './shared';
+import { TabIntro, act, downloadText, readFile, skuName } from './shared';
 
 type Job = ItemFinance['jobs'][number];
 const LANES: SyncStatus[] = ['not_ready', 'ready', 'queued', 'sent', 'acknowledged', 'reconciled', 'rejected', 'outcome_unknown', 'manual_review'];
@@ -30,15 +30,31 @@ const LANE_TONE: Record<SyncStatus, 'ok' | 'warn' | 'crit' | 'info' | 'neutral'>
 export function FinanceBoard({ data }: { data: ItemBoard }) {
   const [partyId, setPartyId] = useState<string | null>(null);
   const { data: f, error, reload } = useLoad(() => api.itemFinance(partyId), [partyId]);
-  if (error) return <ErrorNotice error={error} />;
-  if (!f) return <Loading what="Finance outbox" />;
+  const intro = (
+    <TabIntro title="Finance and SQL" sub="Export only: each company's SQL book, its item codes, the documents ready to export, the export files you import into SQL Account by hand, and the check against SQL's own listing. Nothing is posted to SQL Account from here." />
+  );
+  if (error)
+    return (
+      <div className="it-stack">
+        {intro}
+        <ErrorNotice error={error} />
+      </div>
+    );
+  if (!f)
+    return (
+      <div className="it-stack">
+        {intro}
+        <Loading what="Finance outbox" />
+      </div>
+    );
   return (
     <div className="it-stack">
+      {intro}
       <p className="notice" data-tone="warn">
         {f.note}
       </p>
       <Card title="Company" sub="Each company has its own SQL book, item codes and outbox.">
-        <Select className="input it-big" aria-label="Company" value={f.partyId} onChange={(e) => setPartyId(e.target.value)}>
+        <Select className="input it-big" aria-label="Company" value={f.partyId} onChange={(e) => setPartyId(e.target.value)} searchable>
           {f.parties.map((p) => (
             <option key={p.id} value={p.id}>
               {p.name}
@@ -407,7 +423,7 @@ function Recon({ f, onDone }: { f: ItemFinance; onDone: () => void }) {
         <Stat label="Not in SQL listing" value={r.docCompare.missing.length} tone={r.docCompare.missing.length ? 'warn' : 'ok'} note={r.docCompare.asOf ? `Listing of ${r.docCompare.asOf}` : 'No listing loaded'} />
       </Stats>
       {r.pairs.length > 0 && (
-        <div className="table-wrap it-table">
+        <div className="table-wrap it-table it-rtable">
           <table>
             <thead>
               <tr>
@@ -423,13 +439,13 @@ function Recon({ f, onDone }: { f: ItemFinance; onDone: () => void }) {
             <tbody>
               {r.pairs.map((p) => (
                 <tr key={p.commercialRef} className={p.oneSided ? 'it-bad' : undefined}>
-                  <td className="mono">{p.commercialRef}</td>
-                  <td>{p.movementRef}</td>
-                  <td>{p.sent}</td>
-                  <td>{p.received}</td>
-                  <td>{p.inTransit}</td>
-                  <td>{p.mine.map((m) => SYNC_STATUS_LABEL[m.status]).join(', ') || 'none'}</td>
-                  <td>{p.other.map((m) => SYNC_STATUS_LABEL[m.status]).join(', ') || 'not visible or none'}</td>
+                  <td className="mono" data-label="Shared ref">{p.commercialRef}</td>
+                  <td data-label="Movement">{p.movementRef}</td>
+                  <td data-label="Sent">{p.sent}</td>
+                  <td data-label="Received">{p.received}</td>
+                  <td data-label="Transit or missing">{p.inTransit}</td>
+                  <td data-label="This book">{p.mine.map((m) => SYNC_STATUS_LABEL[m.status]).join(', ') || 'none'}</td>
+                  <td data-label="Other book">{p.other.map((m) => SYNC_STATUS_LABEL[m.status]).join(', ') || 'not visible or none'}</td>
                 </tr>
               ))}
             </tbody>
@@ -437,7 +453,7 @@ function Recon({ f, onDone }: { f: ItemFinance; onDone: () => void }) {
         </div>
       )}
       {r.stockCompare && (
-        <div className="table-wrap it-table">
+        <div className="table-wrap it-table it-rtable">
           <table>
             <thead>
               <tr>
@@ -451,11 +467,11 @@ function Recon({ f, onDone }: { f: ItemFinance; onDone: () => void }) {
             <tbody>
               {r.stockCompare.rows.map((x) => (
                 <tr key={x.itemCode} className={x.difference && !x.explained.length ? 'it-bad' : undefined}>
-                  <td className="mono">{x.itemCode}</td>
-                  <td>{x.prima}</td>
-                  <td>{x.sql ?? '-'}</td>
-                  <td>{x.difference}</td>
-                  <td>{x.explained.join(', ').replace(/_/g, ' ') || '-'}</td>
+                  <td className="mono" data-label="ItemCode">{x.itemCode}</td>
+                  <td data-label="Prima">{x.prima}</td>
+                  <td data-label="SQL">{x.sql ?? '-'}</td>
+                  <td data-label="Difference">{x.difference}</td>
+                  <td data-label="Explained by">{x.explained.join(', ').replace(/_/g, ' ') || '-'}</td>
                 </tr>
               ))}
             </tbody>

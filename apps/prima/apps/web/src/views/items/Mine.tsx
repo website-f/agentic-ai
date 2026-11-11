@@ -5,12 +5,14 @@ import type { ItemBoard } from '../../api';
 import { Card, Empty, Stat, Stats } from '../../kit';
 import { Chip, dateLabel } from '../../ui';
 import { ConfirmMine } from './Passport';
+import { TabIntro } from './shared';
 
 export function Mine({ data }: { data: ItemBoard }) {
   const waiting = new Set(data.mineWaiting);
   const overdue = new Set(data.mineOverdue);
   return (
     <div className="it-stack">
+      <TabIntro title="My items" sub="What the company handed to you, what waits for you to confirm, and loans or rentals due back. Nothing is ever charged to you automatically." />
       <Stats>
         <Stat label="With me" value={data.mine.length} tone="info" />
         <Stat label="Waiting for me" value={waiting.size} tone={waiting.size ? 'warn' : 'ok'} />
@@ -25,7 +27,7 @@ export function Mine({ data }: { data: ItemBoard }) {
       )}
       {!data.mine.length && (
         <Card title="Items with me">
-          <Empty title="Nothing is recorded with you." />
+          <Empty title="Nothing is recorded with you.">When the store hands you a uniform, device or tool, it shows here and you confirm you got it.</Empty>
         </Card>
       )}
       {data.mine.map(({ item, sku }) => (

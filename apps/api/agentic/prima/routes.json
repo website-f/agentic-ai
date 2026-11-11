@@ -4551,6 +4551,13 @@
   ]
  },
  {
+  "method": "POST",
+  "path": "api/items/import/read",
+  "name": "itemImportRead",
+  "doc": "P98: an item list or stock report saved as PDF, read into rows and columns here (pdfjs-dist gives each piece of text with its place) for the person to check on the Items screen. Only people who may add item types may send one; nothing is saved, and the import afterwards goes through the Items screen's own actions.",
+  "body": "{ data?: unknown }"
+ },
+ {
   "method": "GET",
   "path": "api/items/label/:label",
   "name": "itemByLabel",

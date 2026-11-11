@@ -2,29 +2,44 @@
 // printed and scanned back (paper 3.1), and the labels still to print or to scan back.
 import { Select } from '../../SearchSelect';
 import { useState } from 'react';
-import { PlusIcon, PrinterIcon, TagIcon } from '@phosphor-icons/react';
+import { PlusIcon, PrinterIcon, TagIcon, UploadSimpleIcon } from '@phosphor-icons/react';
 import { ITEM_CATEGORIES, STATE_LABEL, labelDisplay, type PhysicalItem } from '@prima/core';
 import type { ItemBoard } from '../../api';
-import { Card, Empty, Toolbar } from '../../kit';
+import { Card, Empty, Search, Toolbar } from '../../kit';
 import { Chip, ErrorNotice, useAction } from '../../ui';
 import { PrintRun, type PrintResult } from './PrintRun';
-import { ItemImport } from './AddMenu';
-import { CAT_LABEL, STATE_TONE, act, any, handles, partyName, rolesOf, skuName } from './shared';
+import { ItemImport, addParties, mayRegister as mayRegisterOf } from './AddMenu';
+import { CAT_LABEL, STATE_TONE, act, handles, partyName, skuName } from './shared';
 
-export function Stock({ data }: { data: ItemBoard }) {
+export function Stock({ data, onImport, onType }: { data: ItemBoard; onImport?: () => void; onType?: (skuId: string) => void }) {
   const [party, setParty] = useState('');
   const [cat, setCat] = useState('');
+  const [q, setQ] = useState('');
   const [reg, setReg] = useState(false);
-  const rows = data.balance.filter((r) => (!party || r.ownerPartyId === party || r.holderPartyId === party) && (!cat || data.skus.find((s) => s.id === r.skuId)?.category === cat));
-  const mayRegister = any(data, 'store', 'manager', 'it');
+  const [shown, setShown] = useState(100);
+  const skuOf = new Map(data.skus.map((s) => [s.id, s]));
+  const rows = data.balance.filter((r) => {
+    const s = skuOf.get(r.skuId);
+    if (party && r.ownerPartyId !== party && r.holderPartyId !== party) return false;
+    if (cat && s?.category !== cat) return false;
+    if (!q) return true;
+    const t = q.toUpperCase();
+    return !!s && (s.name.toUpperCase().includes(t) || s.code.includes(t) || (s.group ?? '').toUpperCase().includes(t));
+  });
+  const mayRegister = mayRegisterOf(data);
   return (
     <div className="it-stack">
       {mayRegister && !reg && (
         <div className="it-tabbar-add">
           <button className="btn btn-primary" type="button" onClick={() => setReg(true)}>
-            <PlusIcon size={16} weight="bold" aria-hidden="true" /> Register items
+            <PlusIcon size={16} weight="bold" aria-hidden="true" /> Register items or add stock
           </button>
-          <ItemImport data={data} kinds={['itemUnit', 'itemStock']} />
+          {onImport && (
+            <button className="btn" type="button" onClick={onImport}>
+              <UploadSimpleIcon size={16} weight="bold" aria-hidden="true" /> Import stock list (Excel, CSV, PDF)
+            </button>
+          )}
+          <ItemImport data={data} kinds={['itemUnit']} label="Import units with labels" />
         </div>
       )}
       {mayRegister && (reg ? <RegisterPrint data={data} onClose={() => setReg(false)} /> : null)}
@@ -36,6 +51,7 @@ export function Stock({ data }: { data: ItemBoard }) {
       >
         <div className="it-pad">
           <Toolbar>
+            <Search value={q} onChange={(v) => (setQ(v), setShown(100))} placeholder="Search item, code or group" />
             <Select className="input" aria-label="Company" value={party} onChange={(e) => setParty(e.target.value)}>
               <option value="">All companies I can see</option>
               {data.parties.map((p) => (
@@ -55,13 +71,30 @@ export function Stock({ data }: { data: ItemBoard }) {
           </Toolbar>
         </div>
         {!rows.length ? (
-          <Empty title="Nothing here.">Change the company or kind, or register items.</Empty>
+          <Empty
+            title={data.balance.length ? 'Nothing matches.' : 'No stock yet.'}
+            action={
+              !data.balance.length && onImport ? (
+                <button className="btn btn-primary" type="button" onClick={onImport}>
+                  <UploadSimpleIcon size={16} aria-hidden="true" /> Import the stock balance
+                </button>
+              ) : undefined
+            }
+          >
+            {data.balance.length ? 'Change the search, company or kind.' : "Import the old system's stock balance or stock card, or register items and add stock."}
+          </Empty>
         ) : (
           <ul className="it-rows">
-            {rows.map((r, k) => (
+            {rows.slice(0, shown).map((r, k) => (
               <li key={k} className="it-row">
                 <span className="it-row-main">
-                  <strong>{skuName(data, r.skuId)}</strong>
+                  {onType ? (
+                    <button type="button" className="it-link" onClick={() => onType(r.skuId)}>
+                      {skuName(data, r.skuId)}
+                    </button>
+                  ) : (
+                    <strong>{skuName(data, r.skuId)}</strong>
+                  )}
                   <span className="muted">
                     Owner {partyName(data, r.ownerPartyId)} · held by {partyName(data, r.holderPartyId)}: {r.where}
                   </span>
@@ -75,18 +108,30 @@ export function Stock({ data }: { data: ItemBoard }) {
             ))}
           </ul>
         )}
+        {rows.length > shown && (
+          <div className="it-pad">
+            <button className="btn" type="button" onClick={() => setShown(shown + 300)}>
+              Show more (<span>{rows.length - shown}</span> more)
+            </button>
+          </div>
+        )}
       </Card>
     </div>
   );
 }
 
-/** Units of the user's stores with no label yet, or a label not yet scanned back. */
-function LabelsToPrint({ data }: { data: ItemBoard }) {
+/** Units of the user's stores with no label yet, or a label not yet scanned back. `always`: say so when there are none. */
+export function LabelsToPrint({ data, always = false }: { data: ItemBoard; always?: boolean }) {
   const a = useAction();
   const [run, setRun] = useState<PrintResult | null>(null);
-  const todo = data.items.filter((i) => handles(data, i.custody.partyId) && i.state !== 'disposed' && ((i.labelGen ?? 1) === 0 || i.labelVerifiedAt === null));
+  const todo = data.items.filter((i) => (handles(data, i.custody.partyId) || !!data.addRights?.parties.includes(i.custody.partyId)) && i.state !== 'disposed' && ((i.labelGen ?? 1) === 0 || i.labelVerifiedAt === null));
   if (run) return <PrintRun run={run} onDone={() => setRun(null)} />;
-  if (!todo.length) return null;
+  if (!todo.length)
+    return always ? (
+      <Card title="Unit labels" sub="Units tracked one by one get a P1- label for life: print it, stick it on, scan it back.">
+        <p className="muted">No unit labels to print or scan back.</p>
+      </Card>
+    ) : null;
   const unprinted = todo.filter((i) => (i.labelGen ?? 1) === 0);
   return (
     <Card title={`Labels to print or scan back (${todo.length})`} sub="An item is checked into stock only after its printed label is scanned back.">
@@ -136,8 +181,8 @@ export function oldRecordLine(i: PhysicalItem) {
  */
 export function RegisterPrint({ data, onClose, legacyRef: scanned = '' }: { data: ItemBoard; onClose: () => void; legacyRef?: string }) {
   const a = useAction();
-  const roles = rolesOf(data);
-  const parties = data.parties.filter((p) => (roles.get(p.id) ?? []).some((r) => r === 'store' || r === 'manager' || r === 'it'));
+  // P98: the companies the server lets this person add for (the owner: every company).
+  const parties = addParties(data).map(([id, name]) => ({ id, name }));
   const [partyId, setPartyId] = useState(parties[0]?.id ?? '');
   const [skuId, setSkuId] = useState('');
   const [count, setCount] = useState('1');
@@ -182,7 +227,7 @@ export function RegisterPrint({ data, onClose, legacyRef: scanned = '' }: { data
         </label>
         <label className="isc-field">
           Item type
-          <Select className="input" value={skuId} onChange={(e) => setSkuId(e.target.value)}>
+          <Select className="input" value={skuId} onChange={(e) => setSkuId(e.target.value)} searchable>
             <option value="">Choose the item type…</option>
             {data.skus
               .filter((s) => s.tracking !== 'KIT')

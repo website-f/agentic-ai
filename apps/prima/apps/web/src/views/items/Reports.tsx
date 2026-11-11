@@ -7,7 +7,7 @@ import { ITEM_REPORT_KINDS, ITEM_REPORT_TITLE, type ItemReportKind } from '@prim
 import { api, type ItemBoard } from '../../api';
 import { Card, Empty, Toolbar } from '../../kit';
 import { ErrorNotice, Loading, dateTimeLabel, useAction, useLoad } from '../../ui';
-import { downloadText } from './shared';
+import { TabIntro, downloadText } from './shared';
 
 export function Reports({ data }: { data: ItemBoard }) {
   const [kind, setKind] = useState<ItemReportKind>('balance');
@@ -17,7 +17,9 @@ export function Reports({ data }: { data: ItemBoard }) {
   const [page, setPage] = useState(0);
   const size = 50;
   return (
-    <Card title="Reports" sub="Every report shows when its data is from and whose data it covers." flush>
+    <div className="it-stack">
+    <TabIntro title="Reports" sub="Stock, movements, cases and labels from what you may see, each with the time its data is from and whose data it covers. Download any as CSV; the download is recorded." />
+    <Card flush>
       <div className="it-pad">
         <Toolbar
           end={
@@ -57,7 +59,7 @@ export function Reports({ data }: { data: ItemBoard }) {
       ) : !r.rows.length ? (
         <Empty title="Nothing in this report." />
       ) : (
-        <div className="table-wrap it-table">
+        <div className="table-wrap it-table it-rtable">
           <table>
             <thead>
               <tr>
@@ -70,7 +72,9 @@ export function Reports({ data }: { data: ItemBoard }) {
               {r.rows.slice(page * size, page * size + size).map((row, k) => (
                 <tr key={k}>
                   {row.map((cell, j) => (
-                    <td key={j}>{String(cell)}</td>
+                    <td key={j} data-label={r.columns[j]}>
+                      {String(cell)}
+                    </td>
                   ))}
                 </tr>
               ))}
@@ -96,5 +100,6 @@ export function Reports({ data }: { data: ItemBoard }) {
         </div>
       )}
     </Card>
+    </div>
   );
 }

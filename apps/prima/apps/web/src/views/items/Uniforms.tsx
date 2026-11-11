@@ -3,7 +3,8 @@ import { useMemo, useState } from 'react';
 import { ITEM_CATEGORIES, SALE_PAPER_LABEL, STATE_LABEL, TAG_METHODS, TAG_METHOD_LABEL, labelDisplay, type BaseUom, type ItemCategory, type SalePaperKind, type TagMethod, type TrackingMode } from '@prima/core';
 import { api, type ItemBoard } from '../../api';
 import { Chip, Drawer, ErrorNotice, Kpi, Loading, dateLabel, dateTimeLabel, useAction, useLoad } from '../../ui';
-import { act, any, CAT_LABEL, partyName, readFile, rolesOf, skuName, STATE_TONE } from './shared';
+import { act, any, CAT_LABEL, FilterChips, partyName, readFile, rolesOf, skuName, STATE_TONE, TabIntro } from './shared';
+import { Card, Empty, Search, Stat, Stats, Toolbar } from '../../kit';
 
 // Uniform allowance per guard (Fauzan, 6 Nov 2026). Never taken from pay.
 // Moved unchanged from views/Items.tsx in the P85 split; laid out by the item register styles (styles/items.css).
@@ -15,59 +16,75 @@ const UNIFORM_TONE = { due: 'warn', ok: 'ok', at_max: 'neutral' } as const;
 
 export function Uniforms({ data }: { data: ItemBoard }) {
   const u = data.uniforms;
-  const [filter, setFilter] = useState<'due' | 'all'>('due');
+  const [filter, setFilter] = useState<'due' | 'ok' | 'at_max' | 'all'>(u.rows.some((r) => r.status === 'due') ? 'due' : 'all');
   const [q, setQ] = useState('');
+  const [shown, setShown] = useState(100);
   const term = q.trim().toLowerCase();
-  const rows = u.rows.filter((r) => (filter === 'all' || r.status === 'due') && (!term || r.name.toLowerCase().includes(term) || r.staffNo.toLowerCase().includes(term)));
+  const rows = u.rows.filter((r) => (filter === 'all' || r.status === filter) && (!term || r.name.toLowerCase().includes(term) || r.staffNo.toLowerCase().includes(term) || (r.siteName ?? '').toLowerCase().includes(term)));
   const n = (k: keyof typeof UNIFORM_LABEL) => u.rows.filter((r) => r.status === k).length;
   return (
-    <section className="panel">
-      <div className="panel-head">
-        <h3>Uniform allowance per guard</h3>
-      </div>
-      <p className="muted">
-        Each guard gets at least {u.rule.minPerYear} and at most {u.rule.maxPerYear} uniform pieces a year, usually one every {u.rule.everyMonths} months ({u.rule.source}).
-        Counted over the last 12 months; a uniform set counts as one piece. Handing one over sooner needs a reason. A 4th or 5th piece is paid by the guard, with the receipt recorded; more than {u.rule.paidMaxPerYear} is
-        refused. Pieces given before this register count only once a manager records them below.
-      </p>
-      <div className="kpis">
-        <Kpi label="Due now" value={n('due')} tone={n('due') ? 'warn' : 'ok'} />
-        <Kpi label={`Below ${u.rule.minPerYear} this year`} value={u.rows.filter((r) => r.belowMin).length} tone="neutral" />
-        <Kpi label={`Had ${u.rule.maxPerYear} this year`} value={n('at_max')} tone="neutral" />
-        <Kpi label="Guards" value={u.rows.length} tone="neutral" />
-      </div>
+    <div className="it-stack">
+      <TabIntro
+        title="Uniforms"
+        sub={`Each guard gets at least ${u.rule.minPerYear} and at most ${u.rule.maxPerYear} uniform pieces a year, usually one every ${u.rule.everyMonths} months. A 4th or 5th piece is paid by the guard with a receipt; never taken from pay.`}
+      />
+      <Stats>
+        <Stat label="Due now" value={n('due')} tone={n('due') ? 'warn' : 'ok'} onClick={() => setFilter('due')} />
+        <Stat label={`Below ${u.rule.minPerYear} this year`} value={u.rows.filter((r) => r.belowMin).length} tone="neutral" />
+        <Stat label={`Had ${u.rule.maxPerYear} this year`} value={n('at_max')} tone="neutral" onClick={() => setFilter('at_max')} />
+        <Stat label="Guards" value={u.rows.length} tone="neutral" onClick={() => setFilter('all')} />
+      </Stats>
       {u.recordsFor.length > 0 && <PastUniforms data={data} />}
-      <div className="row" style={{ gap: 6, flexWrap: 'wrap', margin: '8px 0' }}>
-        <div className="seg">
-          <button aria-pressed={filter === 'due'} onClick={() => setFilter('due')}>
-            Due now
-          </button>
-          <button aria-pressed={filter === 'all'} onClick={() => setFilter('all')}>
-            All ({u.rows.length})
-          </button>
+      <Card title="Guards" sub={`Counted over the last 12 months; a uniform set counts as one piece (${u.rule.source}). Handing one over sooner needs a reason.`} flush>
+        <div className="it-pad">
+          <Toolbar>
+            <Search value={q} onChange={(v) => (setQ(v), setShown(100))} placeholder="Name, staff number or site" />
+          </Toolbar>
+          <FilterChips
+            label="Show"
+            value={filter}
+            onChange={(k) => (setFilter(k), setShown(100))}
+            options={[
+              ['due', 'Due now', n('due')],
+              ['ok', 'Not due yet', n('ok')],
+              ['at_max', 'Had all free', n('at_max')],
+              ['all', 'All', u.rows.length],
+            ]}
+          />
         </div>
-        <input className="input" aria-label="Find a guard" placeholder="Name or staff number" value={q} onChange={(e) => setQ(e.target.value)} />
-      </div>
-      <div className="list">
-        {!rows.length && <div className="empty">No guard here.</div>}
-        {rows.slice(0, 200).map((r) => (
-          <div key={r.personId} className="list-item" style={{ justifyContent: 'space-between', gap: 6, flexWrap: 'wrap' }}>
-            <div>
-              <strong>{r.name}</strong>
-              <div className="muted small">
-                {r.staffNo} · {partyName(data, r.companyId)}
-                {r.siteName ? ` · ${r.siteName}` : ''}
-                {r.zone ? ` · ${r.zone}` : ''} · {r.free} of {u.rule.maxPerYear} free{r.paid ? ` + ${r.paid} paid` : ''} in 12 months · last {r.last ? dateLabel(r.last) : 'none recorded'}
-                {r.status === 'ok' ? ` · next from ${dateLabel(r.nextDue)}` : ''}
-              </div>
-            </div>
-            <Chip tone={UNIFORM_TONE[r.status]}>{UNIFORM_LABEL[r.status]}</Chip>
+        {!rows.length ? (
+          <Empty title={u.rows.length ? 'Nothing matches.' : 'No guards here yet.'}>{u.rows.length ? 'Change the search or choose another filter.' : 'Guards of the companies you look after show here with their uniform pieces.'}</Empty>
+        ) : (
+          <ul className="it-rows">
+            {rows.slice(0, shown).map((r) => (
+              <li key={r.personId} className="it-row it-row-col">
+                <span className="it-row-line">
+                  <strong>{r.name}</strong>
+                  <Chip tone={UNIFORM_TONE[r.status]}>{UNIFORM_LABEL[r.status]}</Chip>
+                </span>
+                <span className="muted small">
+                  {r.staffNo} · {partyName(data, r.companyId)}
+                  {r.siteName ? ` · ${r.siteName}` : ''}
+                  {r.zone ? ` · ${r.zone}` : ''}
+                </span>
+                <span className="small">
+                  {r.free} of {u.rule.maxPerYear} free{r.paid ? ` + ${r.paid} paid` : ''} in 12 months · last {r.last ? dateLabel(r.last) : 'none recorded'}
+                  {r.status === 'ok' ? ` · next from ${dateLabel(r.nextDue)}` : ''}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+        {rows.length > shown && (
+          <div className="it-pad">
+            <button className="btn" type="button" onClick={() => setShown(shown + 300)}>
+              Show more (<span>{rows.length - shown}</span> more)
+            </button>
           </div>
-        ))}
-        {rows.length > 200 && <div className="muted small">Showing 200 of {rows.length}. Search by name or staff number to find others.</div>}
-      </div>
-      <p className="muted small">To hand over a piece, open the uniform from Find or scan and choose "Hand to a person". The person confirms it in their own sign-in or on the post device.</p>
-    </section>
+        )}
+      </Card>
+      <p className="muted small">To hand over a piece, open the uniform from Scan or find and choose "Hand to a person". The person confirms it in their own sign-in or on the post device.</p>
+    </div>
   );
 }
 
@@ -100,7 +117,7 @@ export function PastUniforms({ data }: { data: ItemBoard }) {
           ? mine.filter((r) => r.regionId === id)
           : mine.filter((r) => r.staffNo === id.trim().toUpperCase());
   return (
-    <details className="panel" style={{ margin: '8px 0' }}>
+    <details className="panel it-details">
       <summary>
         <strong>Record past pieces</strong> <span className="muted small">(given before this register, for one guard or a whole site, zone or region)</span>
       </summary>

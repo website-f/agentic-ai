@@ -1375,6 +1375,9 @@ export class HttpApi implements Api {
   itemResolve(code: string) {
     return this.call<Awaited<ReturnType<Api['itemResolve']>>>('POST', '/items/resolve', { code: code.slice(0, 80) });
   }
+  itemImportRead(data: string) {
+    return this.call<Awaited<ReturnType<Api['itemImportRead']>>>('POST', '/items/import/read', { data });
+  }
   itemPassport(itemId: string) {
     return this.call<Awaited<ReturnType<Api['itemPassport']>>>('GET', `/items/passport/${encodeURIComponent(itemId.slice(0, 80))}`);
   }

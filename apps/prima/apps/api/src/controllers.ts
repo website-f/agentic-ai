@@ -33,6 +33,7 @@ import { ArishaBusy, ArishaUnavailable, IdentityToken, askArisha, askArishaOn, t
 import { arishaProvider, officeModel, type ArishaProvider } from './arisha-office';
 import { AuthGuard, DoorFeedGuard, pilotAdmits, FeedGuard, OfficeSystemGuard, PlannerFeedGuard, UserId, devLoginOn, entraSetup, issueToken, pilotSignInOnly, type AuthedRequest, AnalyticsFeedGuard, InhouseFeedGuard } from './auth';
 import { officeSecret } from './office';
+import { ItemPdfError, readItemReportPdf } from './item-report-pdf';
 import { Db, schemaState } from './db';
 import { FaceEngine, faceEngineConfig, issueFaceChallenge, openFaceChallenge } from './face-engine';
 import { shareBase, shareCsp, shareGonePage, shareReportPage, shareSecret, signShare, verifyShare } from './share-links';
@@ -1685,6 +1686,25 @@ export class AppController {
   @Get('items')
   itemBoard(@UserId() uid: string) {
     return this.db.asUser(uid, (svc, u) => svc.items.board(u));
+  }
+
+  /**
+   * P98: an item list or stock report saved as PDF, read into rows and columns here (pdfjs-dist gives each piece of
+   * text with its place) for the person to check on the Items screen. Only people who may add item types may send one;
+   * nothing is saved, and the import afterwards goes through the Items screen's own actions.
+   */
+  @Post('items/import/read')
+  async itemImportRead(@UserId() uid: string, @Body() b: { data?: unknown }) {
+    const data = str(b.data ?? '', 'data', 3_000_000).replace(/^data:[^,]*,/, '');
+    const allowed = await this.db.asUser(uid, (svc, u) => svc.items.mayAdd(u, 'type', null));
+    if (!allowed) throw new ForbiddenException('Only store staff, managers and the owner import item lists.');
+    if (!/^[A-Za-z0-9+/=\s]*$/.test(data)) throw new BadRequestException('data must be the PDF in base64');
+    try {
+      return await readItemReportPdf(new Uint8Array(Buffer.from(data, 'base64')));
+    } catch (e) {
+      if (e instanceof ItemPdfError) throw new BadRequestException(e.message);
+      throw e;
+    }
   }
 
   @Get('items/label/:label')

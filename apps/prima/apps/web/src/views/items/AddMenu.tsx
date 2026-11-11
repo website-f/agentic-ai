@@ -12,13 +12,18 @@ import { any, rolesOf } from './shared';
 
 export type ItemAddIntent = 'type' | 'register';
 
-/** May add item types: store staff or managers anywhere, or IT for IT devices (the server's sku.add check). */
-export const mayAddTypes = (data: ItemBoard) => any(data, 'store', 'manager') || (rolesOf(data).get('merdeka') ?? []).some((r) => r === 'it' || r === 'manager');
-/** May register units or add stock: store staff, managers or IT of some company (item.register, lot.add). */
-export const mayRegister = (data: ItemBoard) => any(data, 'store', 'manager', 'it');
+// P98 (Fitri, 11 Nov 2026, still no Add for her): the screen used to work out who may add from the item roles alone,
+// which the owner (signed in as the CEO record) does not have: group leaders only read. The server now says it
+// (addRights: the owner may add for every company, P78), and the screen follows it; every action checks again.
+
+/** May add item types: store staff or managers anywhere, IT for IT devices, or the owner (the server's sku.add check). */
+export const mayAddTypes = (data: ItemBoard) => data.addRights?.types ?? (any(data, 'store', 'manager') || (rolesOf(data).get('merdeka') ?? []).some((r) => r === 'it' || r === 'manager'));
+/** May register units or add stock for some company: store staff, managers, IT, or the owner (item.register, lot.add). */
+export const mayRegister = (data: ItemBoard) => (data.addRights ? data.addRights.parties.length > 0 : any(data, 'store', 'manager', 'it'));
 
 /** The companies this person may add items for, as [id, name], for the import's company choice. */
 export function addParties(data: ItemBoard): [string, string][] {
+  if (data.addRights) return data.parties.filter((p) => data.addRights.parties.includes(p.id)).map((p): [string, string] => [p.id, p.name]);
   const roles = rolesOf(data);
   return data.parties.filter((p) => (roles.get(p.id) ?? []).some((r) => r === 'store' || r === 'manager' || r === 'it')).map((p): [string, string] => [p.id, p.name]);
 }
@@ -108,16 +113,20 @@ export function ItemImport({ data, kinds, label = 'Import from file' }: { data: 
   );
 }
 
-/** The top of the Items screen: Add (new item type, register items) and Import from file. */
-export function ItemsAddBar({ data, onAdd }: { data: ItemBoard; onAdd: (what: ItemAddIntent) => void }) {
+/** The top of the Items screen: Add (new item type, register items) and Import from file (any item list or report). */
+export function ItemsAddBar({ data, onAdd, onImport }: { data: ItemBoard; onAdd: (what: ItemAddIntent) => void; onImport: () => void }) {
   const choices: Choice[] = [];
-  if (mayRegister(data)) choices.push({ key: 'register', title: 'Register items', sub: 'Units that each get their own label (radios, torchlights, uniforms), or stock by quantity. Labels are printed and scanned back.', run: () => onAdd('register') });
   if (mayAddTypes(data)) choices.push({ key: 'type', title: 'New item type', sub: 'A kind of item in the catalogue: name, category, size, unit, and whether each unit has its own label.', run: () => onAdd('type') });
+  if (mayRegister(data)) choices.push({ key: 'register', title: 'Register items or add stock', sub: 'Units that each get their own label (radios, torchlights, uniforms), or stock by quantity. Labels are printed and scanned back.', run: () => onAdd('register') });
   if (!choices.length) return null;
   return (
     <div className="it-addbar">
       <ItemMenu primary label="Add" icon={<PlusIcon size={16} weight="bold" aria-hidden="true" />} choices={choices} />
-      <ItemImport data={data} kinds={['itemType', 'itemUnit', 'itemStock']} />
+      {mayAddTypes(data) && mayRegister(data) && (
+        <button className="btn" type="button" onClick={onImport} title="Item lists and stock reports: Excel, CSV, Word or PDF">
+          <UploadSimpleIcon size={16} weight="bold" aria-hidden="true" /> Import from file
+        </button>
+      )}
     </div>
   );
 }

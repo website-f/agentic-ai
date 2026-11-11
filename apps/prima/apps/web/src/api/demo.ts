@@ -2261,6 +2261,10 @@ export class DemoApi implements Api {
   itemResolve(code: string) {
     return this.read((s, u) => s.items.resolve(u, code));
   }
+  /** P98: the demo has no PDF reader on a server: the screen reads the PDF on this device instead. */
+  itemImportRead(_data: string): Promise<import('@prima/core').ReportTable> {
+    return Promise.reject(new Error('PDF_READ_LOCAL'));
+  }
   itemPassport(itemId: string) {
     return this.read((s, u) => s.items.passport(u, itemId));
   }

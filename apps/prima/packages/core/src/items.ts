@@ -142,6 +142,41 @@ export interface ItemSku {
   version: number;
   /** The catalogue is shared by the group; '*' means every signed-in register user may read it. */
   partyIds: Id[];
+  // P98 (Fitri, 11 Nov 2026): what the old system's item list and stock reports say about the type, kept as loaded.
+  /** The old system's item code as printed ("ADD LOGO - ARROW"): the next import finds the type by it. */
+  sourceCode?: string | null;
+  /** The old system's stock group ("AKSESORI", "BAHAN PENCUCI"). */
+  group?: string | null;
+  /** The old system's own unit name when Prima's unit is the nearest one (KG, TONG, DRUM, HELAI). */
+  uomLabel?: string | null;
+  /** Its units with the old system's rate, cost and price (BOX of 1 at 41.90, PCS at 0.70). Shown to stores, managers, Finance and leaders. */
+  units?: ItemSkuUnit[];
+  /** The last supplier cost the old list printed under the item. */
+  lastCost?: { cost: string; uom: string | null; supplier: string | null } | null;
+  /** The old system's stock figure and stock card summary, as a reference: never a Prima movement. */
+  legacy?: ItemSkuLegacy | null;
+}
+
+/** P98: one unit of an item type as the old system priced it. Money is text with two decimals. */
+export interface ItemSkuUnit {
+  uom: string;
+  rate: number | null;
+  cost: string | null;
+  price: string | null;
+}
+
+/** P98: what the old system said about an item type's stock when it was imported. */
+export interface ItemSkuLegacy {
+  qty: number | null;
+  qtyAsOf: IsoDate | null;
+  /** The opening stock Prima recorded from it (null when none: below zero, not whole, already stocked, or tracked by unit). */
+  stocked: { partyId: Id; qty: number } | null;
+  card: { from: IsoDate | null; to: IsoDate | null; opening: number | null; in: number; out: number; balance: number | null; lines: number; docs: Record<string, number> } | null;
+  location: string | null;
+  batch: string | null;
+  note: string | null;
+  at: IsoDateTime;
+  by: string;
 }
 
 // ---------- Legal entities ----------

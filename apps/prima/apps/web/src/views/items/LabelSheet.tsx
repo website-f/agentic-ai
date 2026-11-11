@@ -67,7 +67,7 @@ function Pages({ labels, template, startAt, symbols }: { labels: PrintLabel[]; t
 }
 
 /** Preview and print one run of labels. */
-export function LabelSheet({ labels, template: initial, symbols, onPrinted }: { labels: PrintLabel[]; template: LabelTemplateId; symbols: ('qr' | 'code128')[]; onPrinted?: () => void }) {
+export function LabelSheet({ labels, template: initial, symbols, onPrinted, scanBack = true }: { labels: PrintLabel[]; template: LabelTemplateId; symbols: ('qr' | 'code128')[]; onPrinted?: () => void; scanBack?: boolean }) {
   const [template, setTemplate] = useState<LabelTemplateId>(initial);
   const [startAt, setStartAt] = useState(1);
   const [printing, setPrinting] = useState(false);
@@ -108,7 +108,7 @@ export function LabelSheet({ labels, template: initial, symbols, onPrinted }: { 
       </div>
       <p className="muted small">
         {t.barcode && symbols.includes('code128') ? 'QR code and Code 128 barcode carry the same ID.' : 'QR code only on this size; the ID is printed under it.'} Print at 100% (no
-        scaling). After printing, scan each label back.
+        scaling).{scanBack ? ' After printing, scan each label back.' : ' Stick each on the shelf, bin or box of that item.'}
       </p>
       <div className="lbl-preview" aria-label="Preview">
         <Pages labels={labels.slice(0, perPage(t))} template={template} startAt={startAt} symbols={symbols} />
