@@ -2,7 +2,8 @@ import { ORP_DIVISOR, guardOtHoursPerDay, type PayFormula } from './pay-formulas
 import { eisShare, epfShare, hrdLevy, lindungShare, otherShares, payAccountCheck, pcbEstimate, periodEnd, socsoShare } from './payroll';
 import { DEFAULT_STATUTORY, type StatutorySettings } from './statutory';
 import { holidayPayLost } from './public-holidays';
-import { ageOn } from './time';
+import { ageOn, toMs } from './time';
+import { RULES } from './rules';
 import type { Attendance, Id, IsoDate, IsoDateTime, LeaveRequest, Nationality, PayAccount, Person, PersonRole, Shift, UtilityCharge } from './types';
 
 /**
@@ -16,7 +17,23 @@ import type { Attendance, Id, IsoDate, IsoDateTime, LeaveRequest, Nationality, P
  */
 
 // Pre-repair unpaid snapshots must be recalculated before approval or payment.
-export const GUARD_PAY_CALCULATION_VERSION = 2;
+// 3 (P100 B1b, 11 Nov 2026): overtime follows the hours worked, and hours recorded and paid are compared on every line.
+export const GUARD_PAY_CALCULATION_VERSION = 3;
+
+/**
+ * P100 B1b (Fauzan, 11 Nov 2026: "Salary and total working hours must match"): the hours recorded for a guard's month
+ * (attendance, plus approved paid leave, training and MC days and public holidays at their set hours) beside the hours the
+ * line pays (normal, overtime, rest-day and public-holiday hours, paid leave and holidays). They must be equal; a line
+ * that does not match is held (no submission, approval or payment) until the attendance or leave record is corrected
+ * with its own approval and reason. The pay line itself is never changed to hide it.
+ */
+export interface GuardPayHours {
+  recorded: { worked: number; leave: number; holidays: number; total: number };
+  paid: { normal: number; ot: number; restDay: number; holiday: number; leave: number; holidays: number; notWorked: number; total: number };
+  match: boolean;
+  /** The days whose hours do not match, with why (at most 10 listed). */
+  days: { date: IsoDate; recorded: number; paid: number; why: 'short' | 'over' | 'not_worked' }[];
+}
 
 export type GuardPayStage = 'draft' | 'submitted' | 'approved' | 'paid';
 
@@ -111,6 +128,8 @@ export interface GuardPayLine {
   unlockedShifts: number;
   noClockOut: number;
   flags: string[];
+  /** P100 B1b: hours recorded beside hours paid (calculation version 3 and later). */
+  hours?: GuardPayHours;
 }
 
 export interface GuardPayRun {
@@ -305,6 +324,28 @@ export interface GuardPayInput {
   divisor?: number;
   /** The CEO's statutory settings for the month (EPF, SOCSO, EIS, LINDUNG, HRD and any new contribution). */
   statutory?: StatutorySettings;
+  /** Clock-in and early clock-out grace in minutes (rules OPS-LATE-GRACE and OPS-EARLY-GRACE when not given). */
+  grace?: { late: number; early: number };
+}
+
+const HOUR_MS = 3_600_000;
+
+/**
+ * The hours one completed shift record counts for (P100 B1b): the clocked time inside the rostered shift. A clock-in
+ * within the late grace and a clock-out within the early grace count from the shift start and to the shift end (the
+ * attendance rules do not mark them late or early either); early arrival and staying on are not extra hours. A record with
+ * no shift counts its whole clocked time.
+ */
+export function guardRecordHours(a: Pick<Attendance, 'clockIn' | 'clockOut'>, shift: Pick<Shift, 'start' | 'end'> | undefined, grace: { late: number; early: number }): number {
+  if (!a.clockIn || !a.clockOut) return 0;
+  const inMs = toMs(a.clockIn);
+  const outMs = toMs(a.clockOut);
+  if (!shift) return Math.max(0, (outMs - inMs) / HOUR_MS);
+  const s = toMs(shift.start);
+  const e = toMs(shift.end);
+  const from = (inMs - s) / 60_000 <= grace.late ? s : inMs;
+  const to = (e - outMs) / 60_000 <= grace.early ? e : outMs;
+  return Math.max(0, (Math.min(to, e) - Math.max(from, s)) / HOUR_MS);
 }
 
 /**
@@ -329,6 +370,9 @@ export function buildGuardPayLine(i: GuardPayInput): GuardPayLine {
   const daysBySite = new Map<Id, Set<IsoDate>>();
   const worked = new Set<IsoDate>();
   const siteOn = new Map<IsoDate, Id>();
+  // P100 B1b: clocked hours and completed records per day, for the hours recorded beside the hours paid.
+  const grace = i.grace ?? { late: RULES.lateGraceMin.value, early: RULES.earlyLeaveGraceMin.value };
+  const clockedOn = new Map<IsoDate, { hours: number; records: number }>();
   let doubles = 0;
   for (const { a, shift } of inMonth) {
     const d = attendanceDate(a, shift)!;
@@ -342,6 +386,8 @@ export function buildGuardPayLine(i: GuardPayInput): GuardPayLine {
     }
     if (worked.has(d)) doubles += 1;
     worked.add(d);
+    const c = clockedOn.get(d) ?? { hours: 0, records: 0 };
+    clockedOn.set(d, { hours: c.hours + guardRecordHours(a, shift, grace), records: c.records + 1 });
     if (!siteOn.has(d)) siteOn.set(d, a.siteId);
     if (!daysBySite.has(a.siteId)) daysBySite.set(a.siteId, new Set());
     daysBySite.get(a.siteId)!.add(d);
@@ -439,6 +485,9 @@ export function buildGuardPayLine(i: GuardPayInput): GuardPayLine {
   let normalDays = ordinary;
   let unpaidDays = 0;
   let otHours = 0;
+  // P100 B1b: hours recorded and paid, built with the pay below.
+  const hrs = { worked: 0, leave: 0, holidays: 0, normal: 0, restDay: 0, holiday: 0, ot: 0, notWorked: 0 };
+  const hourDays: GuardPayHours['days'] = [];
   if (f) {
     const a = f.amounts;
     full = a.fullMonthDays ?? 26;
@@ -452,20 +501,44 @@ export function buildGuardPayLine(i: GuardPayInput): GuardPayLine {
     // A month not over yet only deducts the unpaid leave already approved; the rest is counted at month end.
     const short = Math.max(0, full - normalDays - paidLeaveDays - paidHolidays);
     unpaidDays = i.monthOpen ? Math.min(unpaidLeaveDays, full) : a.deductShortDays === false ? Math.min(unpaidLeaveDays + holidaysLost.length, full) : short;
+    // Paid leave, training and MC days and the paid public holidays not worked count at the formula's normal hours, on
+    // both sides. Days of basic paid with nothing recorded (short days not deducted, ACT's setting) are paid, not recorded.
+    hrs.leave = paidLeaveDays * a.normalHoursPerDay;
+    hrs.holidays = a.holidaysArePaidDays === false ? 0 : Math.min([...holidaySet].filter((d) => !worked.has(d)).length, full) * a.normalHoursPerDay;
+    const notWorked = i.monthOpen ? 0 : Math.max(0, full - normalDays - paidLeaveDays - paidHolidays - unpaidDays);
+    hrs.notWorked = notWorked * a.normalHoursPerDay;
+    if (notWorked) hourDays.push({ date: end, recorded: 0, paid: r2(hrs.notWorked), why: 'not_worked' });
     add('Basic pay', 'basic', null, null, null, a.basicMonthly);
     add('Days not worked (unpaid)', 'unpaid', unpaidDays, 'day', -daily, -Math.min(a.basicMonthly, unpaidDays * daily));
     // The last ordinary days past the room are the rest days worked.
     const restSet = new Set(ordinaryDates.slice(ordinaryDates.length - restDays));
     type Cat = 'normal' | 'rest' | 'holiday';
-    const groups = new Map<string, { formula: PayFormula; cat: Cat; days: number }>();
+    const groups = new Map<string, { formula: PayFormula; cat: Cat; days: number; ot: number }>();
     for (const d of dates) {
       const own = perSite ? i.formulaAt(siteOn.get(d)!)?.formula : f;
       // Missing formulas hold the run; never silently substitute the main-site rate.
       if (!own) continue;
       const cat: Cat = holidaySet.has(d) ? 'holiday' : restSet.has(d) ? 'rest' : 'normal';
+      // P100 B1b: the day's hours worked (clocked, less a rest the guard is relieved for), and the overtime it pays:
+      // the hours past normal, up to the formula's overtime for a shift. A short day or hours past the shift do not match.
+      // The relieved rest comes only out of the time past the normal day (a 12-hour shift with 2 h rest is 10 h; an
+      // 8-hour shift is a normal day with its short break), so a shorter shift is never cut below what was clocked.
+      const oa = own.amounts;
+      const c = clockedOn.get(d) ?? { hours: 0, records: 1 };
+      const rest = oa.restRelieved ? Math.min((oa.restHours ?? 0) * c.records, Math.max(0, c.hours - oa.normalHoursPerDay)) : 0;
+      const workedH = r2(Math.max(0, c.hours - rest));
+      const dayOt = r2(Math.min(guardOtHoursPerDay(oa), Math.max(0, workedH - oa.normalHoursPerDay)));
+      const paidH = r2(oa.normalHoursPerDay + dayOt);
+      hrs.worked += workedH;
+      hrs.ot += dayOt;
+      if (cat === 'normal') hrs.normal += oa.normalHoursPerDay;
+      else if (cat === 'rest') hrs.restDay += oa.normalHoursPerDay;
+      else hrs.holiday += oa.normalHoursPerDay;
+      if (Math.abs(workedH - paidH) > 0.01) hourDays.push({ date: d, recorded: workedH, paid: paidH, why: workedH < paidH ? 'short' : 'over' });
       const key = `${own.code}|${cat}`;
-      const g = groups.get(key) ?? { formula: own, cat, days: 0 };
+      const g = groups.get(key) ?? { formula: own, cat, days: 0, ot: 0 };
       g.days += 1;
+      g.ot = r2(g.ot + dayOt);
       groups.set(key, g);
     }
     const codes = new Set([...groups.values()].map((g) => g.formula.code));
@@ -474,23 +547,50 @@ export function buildGuardPayLine(i: GuardPayInput): GuardPayLine {
       const fa = g.formula.amounts;
       const gd = fa.basicMonthly / divisor;
       const gh = gd / fa.normalHoursPerDay;
-      const perDay = guardOtHoursPerDay(fa);
+      // P100 B1b: overtime is the hours actually worked past normal hours, never more than the formula's shift.
+      const ot = g.ot;
       const tag = codes.size > 1 ? ` (${g.formula.code})` : '';
-      otHours += perDay * g.days;
-      if (g.cat === 'normal') add(`Overtime, working days${tag}`, 'ot', perDay * g.days, 'hour', gh * fa.otNormalRate, perDay * g.days * gh * fa.otNormalRate);
+      otHours += ot;
+      if (g.cat === 'normal') add(`Overtime, working days${tag}`, 'ot', ot, 'hour', gh * fa.otNormalRate, ot * gh * fa.otNormalRate);
       if (g.cat === 'rest') {
         add(`Rest day worked${tag}`, 'rest_day', g.days, 'day', gd * fa.restDayDays, g.days * gd * fa.restDayDays);
-        add(`Overtime, rest days${tag}`, 'ot', perDay * g.days, 'hour', gh * fa.otRestDayRate, perDay * g.days * gh * fa.otRestDayRate);
+        add(`Overtime, rest days${tag}`, 'ot', ot, 'hour', gh * fa.otRestDayRate, ot * gh * fa.otRestDayRate);
       }
       if (g.cat === 'holiday') {
         add(`Public holiday worked${tag}`, 'holiday', g.days, 'day', gd * fa.publicHolidayDays, g.days * gd * fa.publicHolidayDays);
-        add(`Overtime, public holidays${tag}`, 'ot', perDay * g.days, 'hour', gh * fa.otPublicHolidayRate, perDay * g.days * gh * fa.otPublicHolidayRate);
+        add(`Overtime, public holidays${tag}`, 'ot', ot, 'hour', gh * fa.otPublicHolidayRate, ot * gh * fa.otPublicHolidayRate);
       }
     }
-    for (const x of a.fixedAllowances ?? []) add(x.label, 'allowance', null, null, null, x.amount);
+    for (const x of a.fixedAllowances ?? []) {
+      add(x.label, 'allowance', null, null, null, x.amount);
+      // P100 C1b (Fauzan, 11 Nov 2026: "Guard leave paid basic only"): paid leave, training and MC days are paid at basic
+      // pay only; no allowance (and no overtime) for those days. The allowance's daily share comes off, never below zero.
+      if (paidLeaveDays > 0 && x.amount > 0) {
+        const perDay = x.amount / divisor;
+        add(`${x.label}: not paid on leave days`, 'allowance', paidLeaveDays, 'day', -perDay, -Math.min(x.amount, perDay * paidLeaveDays));
+      }
+    }
+    if (paidLeaveDays > 0) flags.push(`${paidLeaveDays} paid leave day${paidLeaveDays === 1 ? '' : 's'} at basic pay only: no allowance or overtime for ${paidLeaveDays === 1 ? 'it' : 'them'}`);
     if (f.lawFlags.length) flags.push(`Formula ${f.code} has ${f.lawFlags.length} labour law flag${f.lawFlags.length === 1 ? '' : 's'} (see Pay formulas)`);
   } else if (worked.size) {
     flags.push('No pay formula is set for the main site: ACT must set one before this line can be paid');
+    for (const c of clockedOn.values()) hrs.worked += c.hours;
+  }
+  const recordedTotal = r2(hrs.worked + hrs.leave + hrs.holidays);
+  const paidTotal = r2(hrs.normal + hrs.restDay + hrs.holiday + hrs.ot + hrs.leave + hrs.holidays + hrs.notWorked);
+  const hours: GuardPayHours = {
+    recorded: { worked: r2(hrs.worked), leave: r2(hrs.leave), holidays: r2(hrs.holidays), total: recordedTotal },
+    paid: { normal: r2(hrs.normal), ot: r2(hrs.ot), restDay: r2(hrs.restDay), holiday: r2(hrs.holiday), leave: r2(hrs.leave), holidays: r2(hrs.holidays), notWorked: r2(hrs.notWorked), total: paidTotal },
+    // Only a line with a formula can be paid at all; one without is held for that already.
+    match: !f || Math.abs(recordedTotal - paidTotal) <= 0.01,
+    days: hourDays.sort((x, y) => x.date.localeCompare(y.date)).slice(0, 10),
+  };
+  if (!hours.match) {
+    const why = { short: 'worked less than the normal day paid', over: 'worked past the shift the formula pays', not_worked: 'basic paid for days with no attendance or leave' };
+    const detail = hours.days.map((x) => `${x.date}: ${x.recorded} h recorded, ${x.paid} h paid (${why[x.why]})`).join('; ');
+    holds.push(
+      `Hours do not match: ${recordedTotal} h recorded, ${paidTotal} h paid${detail ? ` (${detail})` : ''}. Correct the attendance or leave record, with its own approval and reason; the pay line is not changed to hide it.`,
+    );
   }
   const extra = i.kept?.extra ?? [];
   for (const x of extra) add(x.label, 'extra', null, null, null, x.amount);
@@ -521,8 +621,8 @@ export function buildGuardPayLine(i: GuardPayInput): GuardPayLine {
   const utility = r2(utilityRows.reduce((n, c) => n + c.share, 0));
   // Advance and loan scheme repayments (Fauzan, 6 Nov 2026): taken only against an approved record, and all the
   // deductions the employer makes together (one-off items, hostel utilities, wage advances and these repayments) stay
-  // within half of the month's wages (EA s.24(8), assumption: statutory shares and PCB are outside the cap). What does
-  // not fit waits for next month; the record's balance stays.
+  // within half of the month's wages (EA s.24(8); statutory shares and PCB are outside the cap, confirmed by Fauzan
+  // 11 Nov 2026, rule PAY-GUARD deductionCapExcludesStatutory). What does not fit waits for next month; the balance stays.
   const cap = r2(Math.max(0, gross) * 0.5);
   const before = r2(utility + otherDeductions + advance);
   let room = r2(Math.max(0, cap - before));
@@ -555,7 +655,9 @@ export function buildGuardPayLine(i: GuardPayInput): GuardPayLine {
     // Already flagged above.
   } else if (p.bank && i.lastBank && i.lastBank !== p.bank.accountMasked) flags.push(`Salary account changed since last month (was ${i.lastBank})`);
   else if (p.bankChangedOn?.slice(0, 7) === i.period) flags.push(`Salary account changed on ${p.bankChangedOn}`);
-  if (p.hiredOn.slice(0, 7) === i.period) flags.push('Joined this month: check the days to pay');
+  // P100 C1 (Fauzan, 11 Nov 2026: "For guard we follow working hours done"): no share of the month; days before joining are
+  // days not worked, and the hours recorded must match the hours paid.
+  if (p.hiredOn.slice(0, 7) === i.period) flags.push(`Joined ${p.hiredOn}: paid for the hours worked from attendance, not a share of the month`);
   if (p.status === 'left') flags.push('Has left: final pay, check any notice pay or deductions');
   if (age >= 60) flags.push('Aged 60 or over: EPF and SOCSO at the older rates, no EIS');
   if (p.nationality === 'MY' && p.lindungOptOut == null && lindung.status === 'deducted') flags.push('LINDUNG 24 Jam deducted: opt-out choice not recorded');
@@ -628,10 +730,11 @@ export function buildGuardPayLine(i: GuardPayInput): GuardPayLine {
     unlockedShifts,
     noClockOut,
     flags: [...flags, ...holds],
+    hours,
   };
 }
 
-/** Existing employer-recovery cap only; statutory shares and PCB remain outside it pending legal review. */
+/** The employer-recovery cap only; statutory shares and PCB are outside it (E12, confirmed by Fauzan 11 Nov 2026). */
 export function guardPayOverDeductionCap(l: GuardPayLine): boolean {
   return r2(l.utility + l.otherDeductions + (l.advance ?? 0) + (l.loan ?? 0)) > r2(Math.max(0, l.gross) * 0.5);
 }
@@ -680,6 +783,10 @@ export function guardPayTotals(lines: GuardPayLine[]) {
     unlocked: lines.reduce((n, l) => n + l.unlockedShifts + l.noClockOut, 0),
     pcbEstimated: lines.filter((l) => l.pcbSource === 'estimate' && l.pcb > 0).length,
     flagged: lines.filter((l) => l.flags.length).length,
+    /** P100 B1b: hours recorded and paid for the whole run, and the lines whose hours do not match (held). */
+    hoursRecorded: r2(lines.reduce((n, l) => n + (l.hours?.recorded.total ?? 0), 0)),
+    hoursPaid: r2(lines.reduce((n, l) => n + (l.hours?.paid.total ?? 0), 0)),
+    hoursMismatch: lines.filter((l) => l.hours && !l.hours.match).length,
   };
 }
 

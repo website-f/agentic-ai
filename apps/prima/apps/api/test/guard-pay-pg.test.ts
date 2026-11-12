@@ -14,6 +14,8 @@ import { guardPayModuleSql } from '../src/schema';
 import { OPTIONAL_MODULE_SPECS } from '../src/release-artifact';
 
 const URL = process.env.DATABASE_URL ?? 'postgres://postgres:localdev@localhost:5432/prima_test';
+// P100 B1: each company prepares its own month; its Company Manager names the preparer (office module).
+const PREPARERS_SQL = readFileSync(resolve(__dirname, '../../../../db/modules/guard-pay-preparers-v1.sql'), 'utf8');
 process.env.DATABASE_URL = URL;
 const ROOT = resolve(process.cwd(), process.cwd().endsWith('/apps/api') ? '../..' : '.');
 
@@ -61,19 +63,22 @@ describe('guard pay run (database)', () => {
   let runId = '';
   before(async () => {
     await resetDb(URL);
+    await sql(PREPARERS_SQL);
     db = new Db();
+    await db.asUser('u-cm-sasa', (svc, u) => svc.payAction(u, 'guard-pay-preparer', { companyId: 'co-sasa', userId: 'u-ae-sasa', action: 'name', reason: 'Prepares the guard pay (test)' }));
   });
   after(async () => {
     await db.onModuleDestroy();
   });
 
-  it('lets HR prepare a company month through the API and keeps other companies out', async () => {
+  it("lets the company's named preparer prepare a month through the API (not HR) and keeps other companies out", async () => {
     const period = new Date(Date.now() + 8 * 3_600_000).toISOString().slice(0, 7);
-    const run = (await db.asUser('u-pwvsb-hr', (svc, u) => svc.prepareGuardPay(u, 'co-sasa', period, []))) as { id: string; lines: { daysWorked: number; formulaCode: string | null }[]; trial: boolean };
+    await assert.rejects(db.asUser('u-pwvsb-hr', (svc, u) => svc.prepareGuardPay(u, 'co-sasa', period, [])), /Not allowed/);
+    const run = (await db.asUser('u-ae-sasa', (svc, u) => svc.prepareGuardPay(u, 'co-sasa', period, []))) as { id: string; lines: { daysWorked: number; formulaCode: string | null }[]; trial: boolean };
     runId = run.id;
     assert.ok(run.lines.length > 200);
-    // HR reads the ACT formulas through the pay_read wall: every line with days worked has its formula.
-    assert.ok(run.lines.filter((l) => l.daysWorked > 0).every((l) => l.formulaCode), 'HR sees the pay formulas');
+    // The preparer's run reads the ACT formulas: every line with days worked has its formula.
+    assert.ok(run.lines.filter((l) => l.daysWorked > 0).every((l) => l.formulaCode), 'the run sees the pay formulas');
     assert.equal(run.trial, true);
     // The company wall: Sasa's run is seen through Sasa only.
     const own = await sql(`SELECT count(*)::int AS n FROM prima.guard_pay_runs`, [], 'co-sasa');
@@ -165,7 +170,7 @@ describe('guard pay run (database)', () => {
       const board = await fresh.asUser('u-pwvsb-hr', (svc, u) => svc.guardPayroll(u));
       assert.equal(board.on, false);
       assert.equal(board.runs.length, 0);
-      await assert.rejects(fresh.asUser('u-pwvsb-hr', (svc, u) => svc.prepareGuardPay(u, 'co-sasa', board.period, [])), /not switched on/);
+      await assert.rejects(fresh.asUser('u-ae-sasa', (svc, u) => svc.prepareGuardPay(u, 'co-sasa', board.period, [])), /not switched on/);
       const mine = await fresh.asUser('u-guard-sasa-1', (svc, u) => svc.myGuardPayslips(u));
       assert.equal(mine.payslips.length, 0);
     } finally {

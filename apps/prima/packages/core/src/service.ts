@@ -620,6 +620,10 @@ import type { JaRecord } from "./types";
 import type { JaSync } from "./types";
 import type { JaWorker } from "./types";
 import type { CooNotice } from "./types";
+import { canBeGuardPayPreparer, guardPayPreparerId, namesGuardPayPreparers, type GuardPayPreparer } from './guard-pay-preparers';
+import { leaveEscalationStep } from './leave-escalate';
+import { CashStandInService, isCashCeo } from './cash-stand-in';
+import { cmsOvertimeHours, staffOtPay, type StaffOtLine } from './staff-ot';
 import { OfflineSyncService } from "./offline-sync";
 import { FIN_AUTO } from "./finance";
 import { FinanceDeskService } from "./finance";
@@ -2335,10 +2339,12 @@ export class PrimaService {
     };
   }
 
-  /** Who decides a guard's leave, and where an unanswered request has moved to after each 12 hours. */
+  /**
+   * Who decides a guard's leave, and where an unanswered request has moved to: one level per working day for guards and
+   * officers (P100 C3, rule LEAVE-ESCALATE; weekends and public holidays do not count), every 12 hours for office staff.
+   */
   private async leaveLadder(q: LeaveRequest, p: Person, ctx: Awaited<ReturnType<PrimaService['ladderContext']>>) {
-    const every = RULES.leaveEscalate.value * 3_600_000;
-    const waited = toMs(q.decidedAt ?? this.now()) - toMs(q.requestedAt);
+    const every = RULES.leaveEscalate.value.officeHours * 3_600_000;
     // A JV branch's own staff: the Branch Manager runs their HR and decides their leave; the company and central HR take
     // the data and monitor (Fauzan, 4 Nov 2026). With no Branch Manager on record, or for the manager's own leave, the
     // usual ladder applies so nobody is left without a decider.
@@ -2413,19 +2419,34 @@ export class PrimaService {
       COO: ctx.users.find((u) => u.opsTier === 'coo'),
       CEO: ctx.users.find((u) => u.opsTier === 'ceo'),
     };
-    const step = Math.min(LEAVE_LADDER.length - 1, Math.max(0, Math.floor(waited / every)));
+    // P100 C3: one level per working day; the guard's state's public holidays (HR's list and the guard lists) do not count.
+    const holidays = await this.leaveEscalationHolidays(q.companyId, st);
+    const { step, nextAt } = leaveEscalationStep(q.requestedAt, q.decidedAt ?? this.now(), LEAVE_LADDER.length, RULES.leaveEscalate.value.guardWorkingDays, holidays);
     const level = LEAVE_LADDER[step];
     return {
       office: false,
       level,
       label: levelLabel(level, sector),
       person: holders[level]?.name ?? 'Not assigned',
-      nextAt: step < LEAVE_LADDER.length - 1 ? fromMs(toMs(q.requestedAt) + (step + 1) * every) : null,
+      nextAt,
       state: st,
       sector,
       jvBranchId: null as Id | null,
       deciderIds: null as Id[] | null,
     };
+  }
+
+  /** P100 C3: the public holidays that stop the leave escalation clock for a guard in this company and state. */
+  private async leaveEscalationHolidays(companyId: Id, state: string): Promise<Set<IsoDate>> {
+    const out = holidayDates(await this.store.list('publicHolidays', {}), state || null);
+    try {
+      const year = this.today().slice(0, 4);
+      for (const l of await this.store.list('publicHolidayLists', { companyId }))
+        if (!l.replacedBy && String(l.year) <= String(Number(year) + 1) && (!l.state || l.state === state)) for (const d of l.days) out.add(d.date);
+    } catch {
+      // The guard lists are in the optional pay formulas module; HR's list alone is used without it.
+    }
+    return out;
   }
 
   /** The OM for the guard's area or anyone above may decide, at any time; the Director Office always. */
@@ -5497,6 +5518,7 @@ export class PrimaService {
       ...(await this.groupHistoryHome(user)),
       ...(await this.hrConsentHome(user)),
       ...(await this.guardPayHome(user)),
+      ...(await this.cashStandInHome(user)),
       ...(await this.branchHome(user)),
       ...(await this.itHome(user)),
       ...(await this.corpHome(user)),
@@ -11630,9 +11652,16 @@ export class PrimaService {
     return user.role === 'pwvsb_officer' && user.department === 'it' && user.itRole === 'manager';
   }
 
-  /** The day measured against working hours (rule HR-STAFF-HOURS): late in, early out, break over the hour. */
-  private staffDayHours(day: IsoDate, clocks: StaffClock[], now: IsoDateTime) {
+  /**
+   * The day measured against working hours (rule HR-STAFF-HOURS): late in, early out, break over the hour. P100 J4: time
+   * away covered by an approved time slip is not a long break (nor late in or early out when the slip covers it).
+   */
+  private staffDayHours(day: IsoDate, clocks: StaffClock[], now: IsoDateTime, slips: { from: string; to: string }[] = []) {
     const h = RULES.staffHours.value;
+    const slipMs = slips.map((s) => [toMs(myt(day, s.from)), toMs(myt(day, s.to))] as const);
+    /** Minutes of a gap covered by the day's approved slips. */
+    const covered = (a: IsoDateTime, b: IsoDateTime) =>
+      slipMs.reduce((n, [s, e]) => n + Math.max(0, (Math.min(toMs(b), e) - Math.max(toMs(a), s)) / 60_000), 0);
     const sorted = [...clocks].sort((a, b) => a.in.receivedAt.localeCompare(b.in.receivedAt));
     if (!sorted.length) return null;
     const firstIn = sorted[0].in.receivedAt;
@@ -11640,13 +11669,22 @@ export class PrimaService {
     const lastOut = last.out?.receivedAt ?? null;
     let workedMin = 0;
     let breakMin = 0;
+    let slipMin = 0;
     sorted.forEach((c, i) => {
       workedMin += Math.max(0, minutesBetween(c.in.receivedAt, c.out?.receivedAt ?? now));
       const prevOut = i > 0 ? sorted[i - 1].out?.receivedAt : undefined;
-      if (prevOut) breakMin += Math.max(0, minutesBetween(prevOut, c.in.receivedAt));
+      if (prevOut) {
+        const gap = Math.max(0, minutesBetween(prevOut, c.in.receivedAt));
+        const slip = Math.min(gap, Math.round(covered(prevOut, c.in.receivedAt)));
+        slipMin += slip;
+        breakMin += gap - slip;
+      }
     });
-    const late = toMs(firstIn) > toMs(myt(day, h.start));
-    const early = !!lastOut && toMs(lastOut) < toMs(myt(day, h.end));
+    // A slip from the start of the day covers a late arrival; one to the end of the day an early leave.
+    const startMs = toMs(myt(day, h.start));
+    const endMs = toMs(myt(day, h.end));
+    const late = toMs(firstIn) > startMs && !slipMs.some(([s, e]) => s <= startMs && e >= toMs(firstIn));
+    const early = !!lastOut && toMs(lastOut) < endMs && !slipMs.some(([s, e]) => s <= toMs(lastOut!) && e >= endMs);
     return {
       start: h.start,
       end: h.end,
@@ -11658,6 +11696,8 @@ export class PrimaService {
       lateMin: late ? minutesBetween(myt(day, h.start), firstIn) : 0,
       early,
       longBreak: breakMin > h.breakMin,
+      /** P100 J4: minutes away on an approved time slip (not counted as a break). */
+      slipMin,
     };
   }
 
@@ -12262,6 +12302,12 @@ export class PrimaService {
     const userMap = new Map(staff.map((u) => [u.id, u]));
     const moves = await this.clocksMovement(clocks, userMap, (c) => homeUsers.has(c.userId));
     const dayPings = clocks.length ? await this.store.list('locationPings', { clockId: clocks.filter((c) => !c.out).map((c) => c.id) }) : [];
+    // P100 J4: the day's approved time slips, so time away on one is not flagged as a long break.
+    // Checked first: a query on a missing table (time slip module not installed) would abort the request.
+    const slipsOn = !this.store.hasTable || (await this.store.hasTable('timeSlips'));
+    const daySlips: { userId: Id; from: string; to: string }[] = slipsOn
+      ? (await this.store.list('timeSlips', { date: day })).filter((s) => s.status === 'approved' && s.date === day)
+      : [];
     const rows = await Promise.all(
       staff.map(async (u) => {
         const mine = clocks.filter((c) => c.userId === u.id).sort((a, b) => b.in.receivedAt.localeCompare(a.in.receivedAt));
@@ -12279,7 +12325,7 @@ export class PrimaService {
           clock: c ? { ...c, in: { ...c.in, image: '' }, out: c.out ? { ...c.out, image: '' } : null } : null,
           door: doorOf(u.id),
           status: !c ? ('not_in' as const) : c.out ? ('out' as const) : ('in' as const),
-          hours: this.staffDayHours(day, mine, this.now()),
+          hours: this.staffDayHours(day, mine, this.now(), daySlips.filter((s) => s.userId === u.id)),
           home: homeUsers.has(u.id),
           // P93: followed, but the last reading is outside the place they are held to: away.
           location: loc === 'tracked' && m?.measure === 'measured' && m.periods.at(-1)?.state === 'outside' ? ('away' as const) : loc,
@@ -27117,10 +27163,25 @@ export class PrimaService {
     };
   }
 
-  /** Last month's wages must be paid by the 7th (Employment Act s.19). */
+  /** P100 F11: a staff month is due on the 29th of the same month (the month's last day when shorter). */
+  private staffPayDue(period: string, day: number = RULES.staffPayroll.value.payByDay): IsoDate {
+    const end = periodEnd(period);
+    const d = `${period}-${String(day).padStart(2, '0')}`;
+    return d < end ? d : end;
+  }
+
+  /** P100 F11 (Fauzan, 11 Nov 2026): a month's staff wages are paid by the 29th of the same month. */
   private staffPayLate(run: StaffPayRun | null, period: string, today: IsoDate): boolean {
-    const due = addDays(periodEnd(period), RULES.staffPayroll.value.payByDay);
-    return today > due && (!run || run.stage !== 'paid');
+    return today > this.staffPayDue(period) && (!run || run.stage !== 'paid');
+  }
+
+  /** P100 F11: the step a month is at and the date it is due by (submit 22nd, CoS 24th, COO 26th, pay 29th). */
+  private staffPayStepDue(run: StaffPayRun | null, period: string) {
+    const s = RULES.staffPayroll.value.steps;
+    const stage = run?.stage ?? 'draft';
+    if (stage === 'paid') return null;
+    const day = { draft: s.submitBy, submitted: s.cosBy, approved: s.cooBy, coo_approved: RULES.staffPayroll.value.payByDay }[stage];
+    return { step: this.staffPayWaiting(stage), by: this.staffPayDue(period, day) };
   }
 
   private prevPeriod(period: string): string {
@@ -27174,6 +27235,9 @@ export class PrimaService {
         stage: r.stage,
         waitingOn: this.staffPayWaiting(r.stage),
         late: this.staffPayLate(r, r.period, today),
+        /** P100 F11: the date this step is due by, and whether it is past. */
+        dueBy: this.staffPayStepDue(r, r.period)?.by ?? null,
+        stepLate: !!this.staffPayStepDue(r, r.period) && today > this.staffPayStepDue(r, r.period)!.by,
         totals: this.staffPayTotals(r.lines),
         mineToAct:
           (role === 'hr' && r.stage === 'draft') ||
@@ -27190,6 +27254,8 @@ export class PrimaService {
         staff: people.filter((p) => p.companyId === id && p.role === 'office' && p.status === 'active').length,
         current: cur ? { id: cur.id, stage: cur.stage } : null,
         lastLate: this.staffPayLate(last, prev, today),
+        /** P100 F11: this month is past the 29th and not paid. */
+        currentLate: this.staffPayLate(cur, period, today),
         last: last ? { id: last.id, stage: last.stage } : null,
       };
     });
@@ -27199,7 +27265,7 @@ export class PrimaService {
       canPrepare: this.staffPayMaker(user),
       period,
       prev,
-      rule: { payByDay: RULES.staffPayroll.value.payByDay, unpaidDivisor: RULES.staffPayroll.value.unpaidDivisor },
+      rule: { payByDay: RULES.staffPayroll.value.payByDay, unpaidDivisor: await this.staffPayDivisor(period), steps: RULES.staffPayroll.value.steps, dueThisMonth: this.staffPayDue(period) },
       employers: status,
       runs: rows,
       mine,
@@ -27282,10 +27348,18 @@ export class PrimaService {
       this.statutorySettingsFor(period),
     ]);
     const people = await this.peopleForPeriod(people0, period);
+    // P100 J4: time slips past their make-up date are settled first (annual, else unpaid leave), so this month's payroll
+    // reads the unpaid leave for slip hours not worked back. Without the time slip module there is nothing to settle.
+    if ((!this.store.hasTable || (await this.store.hasTable('timeSlips'))) && (await this.settleTimeSlips(user)))
+      leaves.push(...(await this.store.list('leaveRequests', { companyId })).filter((l) => l.timeSlipId && !leaves.some((x) => x.id === l.id)));
     // A claim goes into one run only.
     const taken = new Set(runs.filter((r) => r.id !== id).flatMap((r) => r.lines.flatMap((l) => l.claimIds)));
     const allowanceTypes = await this.store.list('allowanceTypes', {});
     const last = runs.find((r) => r.period === this.prevPeriod(period));
+    // P100 C1: the day divisor of the CEO's pay law for the month (26 today), for part months and unpaid days.
+    const divisor = await this.staffPayDivisor(period);
+    // P100 C12 + J3: approved overtime (staff claims and CMS seats) not paid in another run, when HR's switch is on.
+    const ot = await this.staffOtForRun(companyId, period, id, runs);
     const lines = people
       .filter((p) => this.paidInPeriod(p, period))
       .sort((a, b) => a.staffNo.localeCompare(b.staffNo))
@@ -27294,12 +27368,12 @@ export class PrimaService {
         return buildStaffPayLine({
           person: p,
           period,
-          unpaidDivisor: RULES.staffPayroll.value.unpaidDivisor,
+          unpaidDivisor: divisor,
           leaves,
           claims: claims.filter((c) => !taken.has(c.id)),
           kept: before
             ? {
-                extra: before.allowanceLines.filter((a) => !a.fixed).map(({ label, amount, typeId }) => ({ label, amount, ...(typeId ? { typeId } : {}) })),
+                extra: before.allowanceLines.filter((a) => !a.fixed && !a.overtime).map(({ label, amount, typeId }) => ({ label, amount, ...(typeId ? { typeId } : {}) })),
                 pcb: before.pcbSource === 'entered' ? (before.pcbBeforeZakat ?? before.pcb) : null,
                 // HR's part-month figure is kept only while the part of the month is the same.
                 partPay: before.partPay && before.partMonth && (() => {
@@ -27316,7 +27390,13 @@ export class PrimaService {
           allowanceFlagAbove: RULES.insiderControls.value.allowanceFlagAbove,
           types: allowanceTypes,
           statutory,
+          overtime: ot.get(p.id) && !ot.get(p.id)!.off ? ot.get(p.id) : null,
         });
+      })
+      .map((l) => {
+        const o = ot.get(l.personId);
+        // HR's switch off, or the person not named for overtime: the approved hours wait, never paid silently.
+        return o?.off ? { ...l, flags: [...l.flags, `${o.hours} h approved overtime not paid: HR's overtime switch is off or this person is not named for overtime`] } : l;
       })
       .map((l) => this.flagOwnLine(user, l));
     const step = { by: user.name, byId: user.id, at: this.now(), note: '' };
@@ -27349,6 +27429,177 @@ export class PrimaService {
     });
   }
 
+  /**
+   * P100 C1: the day divisor for staff pay in a month: the CEO's pay law setting (EA s.60I, 26 today) when the pay law is
+   * in this database, else rule PAY-STAFF's.
+   */
+  private async staffPayDivisor(period: string): Promise<number> {
+    if (!(await this.payFormulasOn())) return RULES.staffPayroll.value.unpaidDivisor;
+    const d = payLawFor(await this.store.list('payLawVersions', {}), period).ordinaryRateDivisor;
+    return Number.isFinite(d) && d > 0 ? d : RULES.staffPayroll.value.unpaidDivisor;
+  }
+
+  // ---------- P100 C12 + J3: staff overtime lines in the staff payroll (Fauzan, 11 Nov 2026) ----------
+
+  /** Overtime lines (empty before the office module staff-ot-v1 is in this database). */
+  private async staffOtRows(filter: { companyId?: Id; personId?: Id; userId?: Id } = {}): Promise<StaffOtLine[]> {
+    try {
+      return await this.store.list('staffOtLines', filter);
+    } catch (err) {
+      if (err instanceof BadRequest) return [];
+      throw err;
+    }
+  }
+
+  /** The approved overtime each person in a month's run is paid, when HR's overtime switch is on; never twice. */
+  private async staffOtForRun(companyId: Id, period: string, runId: Id, runs: StaffPayRun[]) {
+    const s = await this.overtimeSetting();
+    const law = RULES.staffOvertime.value;
+    const taken = new Set(runs.filter((r) => r.id !== runId).flatMap((r) => r.lines.flatMap((l) => l.overtime?.ids ?? [])));
+    const rows = (await this.staffOtRows({ companyId })).filter((l) => l.status === 'approved' && l.date <= periodEnd(period) && !taken.has(l.id));
+    const out = new Map<Id, { ids: Id[]; hours: number; amount: number; hourly: number; off: boolean }>();
+    for (const personId of new Set(rows.map((l) => l.personId))) {
+      const mine = rows.filter((l) => l.personId === personId);
+      const p = await this.store.get('people', personId);
+      // HR's switch off, or the person not named for overtime: nothing is paid; the approved hours wait.
+      const on = s.enabled && s.personIds.includes(personId);
+      const pay = staffOtPay(p?.basicPay ?? 0, mine, s, law.daysDivisor, law.hoursPerDay);
+      out.set(personId, { ids: on ? mine.map((l) => l.id) : [], hours: pay.hours, amount: on ? pay.amount : 0, hourly: pay.hourly, off: !on });
+    }
+    return out;
+  }
+
+  /** The overtime board: HR sees every line and decides; a staff member sees and claims their own. */
+  private async staffOtView(user: User) {
+    if (user.integration) throw new AccessDenied('hr.monitor', '(overtime)');
+    const s = await this.overtimeSetting();
+    const hr = this.hrMaker(user) || this.keepsHr(user);
+    const me = user.personId ? await this.store.get('people', user.personId) : undefined;
+    const mine = me ? (await this.staffOtRows({ personId: me.id })).filter((l) => l.personId === me.id) : [];
+    const all = hr ? await this.staffOtRows({}) : [];
+    const runs = hr ? await this.store.list('staffPayRuns', {}) : [];
+    const paidIn = new Map(runs.flatMap((r) => r.lines.flatMap((l) => (l.overtime?.ids ?? []).map((id) => [id, `${r.period} (${r.stage})`] as const))));
+    const tag = (l: StaffOtLine) => ({ ...l, paidIn: paidIn.get(l.id) ?? null });
+    return {
+      enabled: s.enabled,
+      rates: { normal: s.normal, restDay: s.restDay, publicHoliday: s.publicHoliday },
+      hoursPerDay: RULES.staffOvertime.value.hoursPerDay,
+      mayClaim: !!me && me.role === 'office' && s.enabled && s.personIds.includes(me.id),
+      canDecide: this.hrMaker(user),
+      canImport: this.hrMaker(user),
+      mine: mine.sort((a, b) => b.date.localeCompare(a.date)).map(tag),
+      lines: all.sort((a, b) => Number(a.status !== 'pending') - Number(b.status !== 'pending') || b.date.localeCompare(a.date)).slice(0, 300).map(tag),
+    };
+  }
+
+  /** A staff member claims their own overtime for a day, with a reason; HR approves it later. */
+  private async claimStaffOt(user: User, b: Record<string, string | undefined>) {
+    const s = await this.overtimeSetting();
+    const me = user.personId ? await this.store.get('people', user.personId) : undefined;
+    if (!me || me.role !== 'office' || user.integration) throw new AccessDenied('hr.monitor', '(overtime: office staff only)');
+    if (!s.enabled) throw new BadRequest('Overtime is switched off by HR.');
+    if (!s.personIds.includes(me.id)) throw new BadRequest('HR has not named you for overtime.');
+    const date = String(b.date ?? '');
+    const today = this.today();
+    if (!isRealDate(date) || date > today || date < addDays(today, -31)) throw new BadRequest('Give a day in the last 31 days.');
+    const hours = Math.round(Number(b.hours) * 100) / 100;
+    if (!Number.isFinite(hours) || hours <= 0 || hours > 12) throw new BadRequest('Give the overtime hours for that day (up to 12).');
+    const kind = (['normal', 'restDay', 'publicHoliday'] as const).find((k) => k === b.kind) ?? null;
+    if (!kind) throw new BadRequest('Choose a working day, a rest day or a public holiday.');
+    const reason = String(b.reason ?? '').trim().slice(0, 300);
+    if (reason.length < 5) throw new BadRequest('Say what the overtime was for.');
+    const at = this.now();
+    const row: StaffOtLine = {
+      id: `ot-${me.id}-${date}-${at.replace(/\D/g, '').slice(8, 14)}`,
+      companyId: me.companyId,
+      personId: me.id,
+      userId: user.id,
+      name: me.name,
+      date,
+      hours,
+      kind,
+      source: 'claim',
+      cmsShiftId: null,
+      reason,
+      status: 'pending',
+      raised: { by: user.name, byId: user.id, at },
+      decided: null,
+    };
+    await this.store.transaction(async (tx) => {
+      await tx.insert('staffOtLines', row);
+      await tx.audit({ at, actor: user.name, companyId: me.companyId === GROUP_EMPLOYER_ID ? null : me.companyId, action: 'hr.ot_claim', entity: 'staff_ot_line', entityId: row.id, summary: `Overtime claimed: ${hours} h on ${date} (${kind}): ${reason}` });
+    });
+    return row;
+  }
+
+  /** HR brings in a month's CMS overtime: each completed seat's hours past the normal day, one line per seat. */
+  private async importCmsOt(user: User, b: Record<string, string | undefined>) {
+    if (!this.hrMaker(user)) throw new AccessDenied('hr.monitor', '(overtime: HR only)');
+    const s = await this.overtimeSetting();
+    if (!s.enabled) throw new BadRequest('Overtime is switched off. Switch it on and name the CMS staff first.');
+    const month = String(b.period ?? '');
+    if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month) || month > this.today().slice(0, 7)) throw new BadRequest('Give the month as YYYY-MM.');
+    const law = RULES.staffOvertime.value;
+    const [shifts, staff, users, holidays] = await Promise.all([this.store.list('cmsShifts'), this.store.list('cmsStaff'), this.store.list('users'), this.store.list('publicHolidays', {})]);
+    const national = holidayDates(holidays, null);
+    const at = this.now();
+    let made = 0;
+    let skipped = 0;
+    await this.store.transaction(async (tx) => {
+      for (const sh of shifts.filter((x) => !x.cancelled && x.date.startsWith(month) && x.clockIn && x.clockOut)) {
+        const cs = cmsStaffOf(staff, sh);
+        const u = cs?.userId ? users.find((x) => x.id === cs.userId) : undefined;
+        const p = u?.personId ? await tx.get('people', u.personId) : undefined;
+        const hours = cmsOvertimeHours(sh, law.hoursPerDay);
+        if (!hours) continue;
+        if (!p || p.role !== 'office' || !s.personIds.includes(p.id)) {
+          skipped += 1;
+          continue;
+        }
+        const id = `ot-cms-${sh.id}`;
+        if (await tx.get('staffOtLines', id)) continue;
+        await tx.insert('staffOtLines', {
+          id,
+          companyId: p.companyId,
+          personId: p.id,
+          userId: u!.id,
+          name: p.name,
+          date: sh.date,
+          hours,
+          kind: national.has(sh.date) ? 'publicHoliday' : 'normal',
+          source: 'cms',
+          cmsShiftId: sh.id,
+          reason: `CMS ${sh.post} seat ${sh.seat}, ${sh.date}: clocked past the normal ${law.hoursPerDay} h`,
+          status: 'pending',
+          raised: { by: user.name, byId: user.id, at },
+          decided: null,
+        });
+        made += 1;
+      }
+      await tx.audit({ at, actor: user.name, companyId: null, action: 'hr.ot_cms_import', entity: 'staff_ot_line', entityId: month, summary: `CMS overtime for ${month} brought in: ${made} new line(s) to approve; ${skipped} seat(s) of staff not named for overtime left out.` });
+    });
+    return { made, skipped };
+  }
+
+  /** HR approves or refuses an overtime line with a reason; nobody decides their own. */
+  private async decideStaffOt(user: User, b: Record<string, string | undefined>) {
+    if (!this.hrMaker(user)) throw new AccessDenied('hr.monitor', '(overtime: HR only)');
+    const id = String(b.id ?? '').slice(0, 160);
+    const approve = String(b.decision) === 'approve';
+    const note = requireApprovalReason(String(b.note ?? ''), approve ? 'approve the overtime' : 'refuse the overtime');
+    return this.store.transaction(async (tx) => {
+      await tx.lock?.('staffOtLines', id);
+      const l = await tx.get('staffOtLines', id);
+      if (!l) throw new NotFound('Overtime line');
+      if (l.status !== 'pending') throw new BadRequest('This overtime is already decided.');
+      if (l.userId === user.id || l.raised.byId === user.id || (user.personId && l.personId === user.personId)) throw new BadRequest('Someone else in HR decides your own overtime.');
+      const at = this.now();
+      await tx.update('staffOtLines', id, { status: approve ? 'approved' : 'refused', decided: { by: user.name, byId: user.id, at, note } });
+      await tx.audit({ at, actor: user.name, companyId: l.companyId === GROUP_EMPLOYER_ID ? null : l.companyId, action: approve ? 'hr.ot_approve' : 'hr.ot_refuse', entity: 'staff_ot_line', entityId: id, summary: `Overtime ${l.hours} h on ${l.date} for ${l.name} ${approve ? 'approved' : 'refused'}: ${note}` });
+      return (await tx.get('staffOtLines', id))!;
+    });
+  }
+
   /** HR's own line, with one-off allowances, is flagged for the Chief of Staff and the COO (insider abuse audit). */
   private flagOwnLine(user: User, line: StaffPayLine): StaffPayLine {
     if (!user.personId || line.personId !== user.personId) return line;
@@ -27375,7 +27626,7 @@ export class PrimaService {
     const pcb = patch.pcb === undefined ? (old.pcbSource === 'entered' ? (old.pcbBeforeZakat ?? old.pcb) : null) : patch.pcb;
     if (pcb != null && !(Number.isFinite(pcb) && pcb >= 0 && pcb < 100000)) throw new BadRequest('Give the PCB in RM.');
     const allowanceTypes = await this.store.list('allowanceTypes', {});
-    const extra = (patch.extra ?? old.allowanceLines.filter((a) => !a.fixed)).map((a) => {
+    const extra = (patch.extra ?? old.allowanceLines.filter((a) => !a.fixed && !a.overtime)).map((a) => {
       const typeId = typeof a.typeId === 'string' && a.typeId ? a.typeId.slice(0, 100) : null;
       const t = typeId ? allowanceTypes.find((x) => x.id === typeId) : undefined;
       if (typeId && !t) throw new BadRequest('Choose the allowance from HR\'s allowance list.');
@@ -27418,13 +27669,15 @@ export class PrimaService {
     const line = buildStaffPayLine({
       person,
       period: run.period,
-      unpaidDivisor: RULES.staffPayroll.value.unpaidDivisor,
+      unpaidDivisor: await this.staffPayDivisor(run.period),
       leaves,
       claims: claims.filter((c) => old.claimIds.includes(c.id)),
       kept: { extra, pcb: pcb == null ? null : Math.round(pcb * 100) / 100, partPay },
       allowanceFlagAbove: RULES.insiderControls.value.allowanceFlagAbove,
       types: allowanceTypes,
       statutory: await this.statutorySettingsFor(run.period),
+      // P100 C12 + J3: the overtime already on the line stays as it was worked out at preparing.
+      overtime: old.overtime ?? null,
     });
     line.flags = [
       ...new Set([...this.flagOwnLine(user, line).flags, ...old.flags.filter((f) => f.startsWith('Basic pay changed') || f.startsWith('Salary account changed'))]),
@@ -27645,7 +27898,7 @@ export class PrimaService {
     };
   }
 
-  /** Home lines: the next approver's turn, and last month not paid by the 7th. */
+  /** Home lines: the next approver's turn with the date it is due by (P100 F11), and a month not paid by the 29th. */
   private async staffPayHome(user: User): Promise<HomeItem[]> {
     const role = this.staffPayRoleOf(user);
     if (!role) return [];
@@ -27655,16 +27908,16 @@ export class PrimaService {
       .map((r) => ({
         tone: r.late ? 'crit' : 'warn',
         tag: 'Staff payroll',
-        title: `${r.companyName} ${r.period}: ${{ draft: 'prepare and submit', submitted: 'approve', approved: 'approve as COO', coo_approved: 'pay through the bank', paid: '' }[r.stage]}`,
-        detail: `${r.totals.headcount} staff · net RM${r.totals.net.toLocaleString('en-MY', { minimumFractionDigits: 2 })}`,
+        title: `${r.companyName} ${r.period}: ${{ draft: 'prepare and submit', submitted: 'approve', approved: 'approve as COO', coo_approved: 'pay through the bank', paid: '' }[r.stage]}${r.dueBy ? ` by ${r.dueBy}` : ''}`,
+        detail: `${r.totals.headcount} staff · net RM${r.totals.net.toLocaleString('en-MY', { minimumFractionDigits: 2 })}${r.stepLate ? ' · past its date' : ''}`,
         go: { view: 'staffpay' },
       }));
-    const late = b.employers.filter((e) => e.lastLate);
+    const late = b.employers.filter((e) => e.lastLate || e.currentLate);
     if (late.length)
       items.unshift({
         tone: 'crit',
         tag: 'Staff payroll',
-        title: `${b.prev} staff salaries not paid by the ${b.rule.payByDay}th: ${late.length} employer${late.length === 1 ? '' : 's'}`,
+        title: `Staff salaries not paid by the ${b.rule.payByDay}th: ${late.length} employer${late.length === 1 ? '' : 's'}`,
         detail: late.map((e) => `${e.companyName} (${e.last ? (this.staffPayWaiting(e.last.stage) ?? 'paid') : 'not prepared'})`).join(', '),
         go: { view: 'staffpay' },
       });
@@ -31333,8 +31586,9 @@ export class PrimaService {
     const out: string[] = [];
     const statutoryProblem = await this.staffPayStatutoryProblem(run, st);
     if (statutoryProblem) out.push(statutoryProblem);
-    const part = run.lines.filter((l) => l.partMonth && !l.partPay);
-    if (part.length) out.push(`Enter the part-month pay for ${part.map((l) => l.name).join(', ')} (no proration rule is set).`);
+    // P100 C1: part months are worked out by Prima (working days x the daily rate); an older line without it is recalculated.
+    const part = run.lines.filter((l) => l.partMonth && !l.partPay && !l.partAuto);
+    if (part.length) out.push(`Recalculate the month: the part-month pay of ${part.map((l) => l.name).join(', ')} was worked out before the working-day rule.`);
     const people = await this.peopleForPeriod(await st.list('people', { companyId: run.companyId }), run.period, st);
     // Who is paid, and for which days, as the records stand now; compared with the month as it was calculated.
     const start = `${run.period}-01`;
@@ -31541,7 +31795,8 @@ export class PrimaService {
 
   // ---------- Guard pay run (Fauzan, 5 Nov 2026, third audit item 1) ----------
   // Prima's own monthly pay for guards, stationed officers and patrolling officers, from locked attendance under the
-  // ACT pay formula used at the site (PR #112). HR prepares each company's month, the COO approves with a reason
+  // ACT pay formula used at the site (PR #112). Each company prepares its own month (P100 B1, Fauzan 11 Nov 2026: the
+  // Company Manager names the preparers; HR and the OMs no longer prepare), the COO approves with a reason
   // (salary-approval rule, 26 Oct 2026), Finance pays through the bank. While the JA Group app still pays guards, a run
   // is a side-by-side trial (rule PAY-GUARD primaPays off): compared with JA's figures and never marked paid.
 
@@ -31568,14 +31823,176 @@ export class PrimaService {
 
   private async guardPayEmployers(user: User): Promise<Id[]> {
     const role = this.guardPayRoleOf(user);
-    if (!role) return [];
+    const preparing = await this.guardPayPreparing(user);
+    if (!role) return preparing;
     const ids = user.role === 'company_manager' ? user.companyIds : tenantCompanyIds(user, await this.grants(), this.today());
-    return ids.filter((id) => !isCentralEmployer(id));
+    return [...new Set([...ids, ...preparing])].filter((id) => !isCentralEmployer(id));
+  }
+
+  // P100 B1 (Fauzan, 11 Nov 2026): each company prepares its own guard pay run. The Company Manager names the preparer(s)
+  // for their company; HR and the OMs no longer prepare. The preparers are kept in prima.guard_pay_preparers (office module).
+
+  /** The preparer list (empty before the office module guard-pay-preparers-v1 is in this database). */
+  private async guardPayPreparerRows(filter: { companyId?: Id[]; userId?: Id } = {}): Promise<GuardPayPreparer[]> {
+    try {
+      return await this.store.list('guardPayPreparers', filter);
+    } catch (err) {
+      if (err instanceof BadRequest) return [];
+      throw err;
+    }
+  }
+
+  /** The companies this user is a named, active preparer for (read from the store, never from the request). */
+  private async guardPayPreparing(user: User): Promise<Id[]> {
+    if (user.integration || (user.role !== 'admin_exec' && user.role !== 'company_manager')) return [];
+    const rows = await this.guardPayPreparerRows({ userId: user.id });
+    const today = this.today();
+    return rows.filter((r) => r.active && canBeGuardPayPreparer(user, r.companyId, today)).map((r) => r.companyId);
+  }
+
+  /** P100 B1: whether this user is a named guard pay preparer for any company (the menu shows Guard pay to them). */
+  async isGuardPayPreparer(user: User): Promise<boolean> {
+    return (await this.guardPayPreparing(user)).length > 0;
+  }
+
+  private async guardPayPreparesFor(user: User, companyId: Id): Promise<boolean> {
+    return (await this.guardPayPreparing(user)).includes(companyId);
+  }
+
+  /** Who prepares each company this user sees, and for its Company Manager the people they may name. */
+  private async guardPayPreparerBoard(user: User, companyIds: Id[]) {
+    if (!companyIds.length) return [];
+    const [rows, users, companies] = await Promise.all([this.guardPayPreparerRows({ companyId: companyIds }), this.store.list('users'), this.store.list('companies', { id: companyIds })]);
+    const today = this.today();
+    return companyIds.map((companyId) => {
+      const names = namesGuardPayPreparers(user, companyId);
+      return {
+        companyId,
+        companyName: companies.find((c) => c.id === companyId)?.name ?? companyId,
+        canName: names,
+        preparers: rows.filter((r) => r.companyId === companyId).sort((a, b) => Number(b.active) - Number(a.active) || a.userName.localeCompare(b.userName)),
+        candidates: names
+          ? users
+              .filter((u) => u.id !== user.id && canBeGuardPayPreparer(u, companyId, today))
+              .map((u) => ({ id: u.id, name: u.name, title: u.title ?? '' }))
+              .sort((a, b) => a.name.localeCompare(b.name))
+          : [],
+      };
+    });
+  }
+
+  /**
+   * The Company Manager names (or removes) a preparer for their company, with a reason. Only an admin executive or another
+   * manager of the same company, never themself, an OM, central HR or a guard. Every change is kept and audited.
+   */
+  async setGuardPayPreparer(user: User, body: { companyId?: string; userId?: string; action?: string; reason?: string }) {
+    const companyId = String(body.companyId ?? '').slice(0, 120);
+    const userId = String(body.userId ?? '').slice(0, 120);
+    const action = body.action === 'remove' ? 'remove' : body.action === 'name' ? 'name' : null;
+    if (!namesGuardPayPreparers(user, companyId)) throw new AccessDenied('hr.monitor', '(guard pay preparers: the Company Manager only)');
+    if (!action) throw new BadRequest('Choose to name or remove a preparer.');
+    const reason = String(body.reason ?? '').trim().slice(0, 300);
+    if (reason.length < 5) throw new BadRequest('Give the reason for this choice.');
+    if (userId === user.id) throw new BadRequest('You monitor the pay run: name someone else in your company to prepare it.');
+    const who = await this.store.get('users', userId);
+    if (!who) throw new NotFound('Staff sign-in');
+    const id = guardPayPreparerId(companyId, userId);
+    const at = this.now();
+    const step = { by: user.name, byId: user.id, at, reason };
+    return this.store.transaction(async (tx) => {
+      await tx.lock?.('guardPayPreparers', id);
+      const old = await tx.get('guardPayPreparers', id);
+      let row: GuardPayPreparer;
+      if (action === 'name') {
+        if (!canBeGuardPayPreparer(who, companyId, this.today()))
+          throw new BadRequest(`${who.name} cannot prepare this company's guard pay: choose an admin executive or manager of the company (not an OM, HR, a guard or a closed account).`);
+        if (old?.active) throw new BadRequest(`${who.name} already prepares this company's guard pay.`);
+        row = {
+          id,
+          companyId,
+          userId,
+          userName: who.name,
+          title: who.title ?? '',
+          active: true,
+          named: step,
+          removed: null,
+          history: old ? [...(old.removed ? [{ what: 'removed' as const, step: old.removed }] : []), { what: 'named' as const, step: old.named }, ...old.history].slice(0, 40) : [],
+        };
+      } else {
+        if (!old?.active) throw new BadRequest(`${who.name} does not prepare this company's guard pay.`);
+        row = { ...old, active: false, removed: step };
+      }
+      if (old) {
+        const { id: _id, companyId: _co, ...patch } = row;
+        await tx.update('guardPayPreparers', id, patch);
+      } else await tx.insert('guardPayPreparers', row);
+      await tx.audit({
+        at,
+        actor: user.name,
+        companyId,
+        action: action === 'name' ? 'guardpay.preparer_named' : 'guardpay.preparer_removed',
+        entity: 'guard_pay_preparer',
+        entityId: id,
+        summary: `${who.name} ${action === 'name' ? 'named to prepare' : 'no longer prepares'} the guard pay run: ${reason}`,
+      });
+      return row;
+    });
+  }
+
+  /** P100 pay: one entry for the pay changes' new actions (one API route and one demo operation). */
+  async payAction(user: User, action: string, body: Record<string, unknown> = {}): Promise<unknown> {
+    const b = (body && typeof body === 'object' ? body : {}) as Record<string, string | undefined>;
+    switch (action) {
+      case 'guard-pay-preparer':
+        return this.setGuardPayPreparer(user, b);
+      // P100 B2: the CEO turns the FD's cash stand-in on (dates or one request), ends it, or marks the FD's decisions seen.
+      // P100 C12 + J3: staff overtime lines.
+      case 'ot-claim':
+        return this.claimStaffOt(user, b);
+      case 'ot-cms-import':
+        return this.importCmsOt(user, b);
+      case 'ot-decide':
+        return this.decideStaffOt(user, b);
+      case 'cash-stand-in-set':
+      case 'cash-stand-in-end':
+      case 'cash-stand-in-seen':
+        return new CashStandInService(this.store, () => this.now()).action(user, action.slice('cash-stand-in-'.length), body);
+      default:
+        throw new BadRequest('Unknown pay action.');
+    }
+  }
+
+  /** P100 B2: the CEO is told of each cash decision the FD made standing in, until marked seen. */
+  private async cashStandInHome(user: User): Promise<HomeItem[]> {
+    if (!isCashCeo(user)) return [];
+    const v = await new CashStandInService(this.store, () => this.now()).view(user);
+    if (!v.unseen.length) return [];
+    return [
+      {
+        tone: 'warn',
+        tag: 'Cash',
+        title: `The Finance Director decided ${v.unseen.length} cash request${v.unseen.length === 1 ? '' : 's'} standing in for you`,
+        detail: v.unseen.map((u) => `${u.ref}: ${u.decision} RM${u.amount.toFixed(2)}`).join(', '),
+        go: { view: 'finance' },
+      },
+    ];
+  }
+
+  /** P100 pay: one entry for the pay changes' new views (one API route and one demo read). */
+  async payView(user: User, view: string, _query: Record<string, string | undefined> = {}): Promise<unknown> {
+    switch (view) {
+      case 'cash-stand-in':
+        return new CashStandInService(this.store, () => this.now()).view(user);
+      case 'staff-ot':
+        return this.staffOtView(user);
+      default:
+        throw new NotFound('Pay view');
+    }
   }
 
   private guardPayWaiting(run: GuardPayRun): string | null {
     if (run.stage === 'approved' && run.trial) return 'Trial: compare with the JA Group app (Prima does not pay guards yet)';
-    return { draft: 'HR to submit', submitted: 'COO to approve', approved: 'Finance to pay', paid: null }[run.stage];
+    return { draft: "The company's preparer to submit", submitted: 'COO to approve', approved: 'Finance to pay', paid: null }[run.stage];
   }
 
   private guardPayLate(run: GuardPayRun | null, period: string, today: IsoDate): boolean {
@@ -31591,7 +32008,8 @@ export class PrimaService {
 
   /** The guard pay screen: each company's month, what waits on whom. */
   async guardPayroll(user: User) {
-    const role = this.guardPayRoleOf(user);
+    const preparing = await this.guardPayPreparing(user);
+    const role = this.guardPayRoleOf(user) ?? (preparing.length ? ('preparer' as const) : null);
     if (!role) throw new AccessDenied('view', '(guard pay)');
     const on = await this.guardPayOn();
     const today = this.today();
@@ -31619,8 +32037,8 @@ export class PrimaService {
         late: this.guardPayLate(r, r.period, today),
         totals: guardPayTotals(r.lines),
         mineToAct:
-          // An open month is a preview: HR's turn comes once the month has ended.
-          (role === 'hr' && r.stage === 'draft' && r.period < period) ||
+          // An open month is a preview: the preparer's turn comes once the month has ended.
+          (preparing.includes(r.companyId) && r.stage === 'draft' && r.period < period) ||
           (this.guardPayApprover(user) && r.stage === 'submitted') ||
           (role === 'finance' && r.stage === 'approved' && !r.trial),
       }));
@@ -31634,11 +32052,16 @@ export class PrimaService {
         current: cur ? { id: cur.id, stage: cur.stage } : null,
         last: last ? { id: last.id, stage: last.stage } : null,
         lastLate: this.guardPayLate(last, prev, today),
+        /** P100 B1: this user is a named preparer for the company. */
+        prepares: preparing.includes(id),
       };
     });
     return {
       role,
       approver: this.guardPayApprover(user),
+      /** P100 B1: the companies this user prepares, and who prepares each company this user sees. */
+      preparing,
+      preparers: await this.guardPayPreparerBoard(user, [...new Set([...employers, ...ids.filter((id) => namesGuardPayPreparers(user, id))])]),
       on,
       period,
       prev,
@@ -31656,9 +32079,12 @@ export class PrimaService {
 
   /** One run in full: every line, the steps taken, JA's figures and what this user may do. */
   async guardPayRun(user: User, runId: Id) {
-    const role = this.guardPayRoleOf(user);
+    const preparing = await this.guardPayPreparing(user);
+    const role = this.guardPayRoleOf(user) ?? (preparing.length ? ('preparer' as const) : null);
     if (!role) throw new AccessDenied('view', '(guard pay)');
     const run = await this.guardPayRunFor(user, runId);
+    // P100 B1: only a preparer the Company Manager named for this company prepares and submits it.
+    const prepares = preparing.includes(run.companyId);
     const co = await this.store.get('companies', run.companyId);
     const approver = this.guardPayApprover(user);
     const totals = guardPayTotals(run.lines);
@@ -31713,8 +32139,8 @@ export class PrimaService {
         code: sha256Hex(payable.map((l) => `${l.staffNo}|${l.bank?.accountMasked ?? ''}|${l.net.toFixed(2)}`).join('\n')).slice(0, 12).toUpperCase(),
       },
       can: {
-        prepare: role === 'hr' && run.stage === 'draft',
-        submit: role === 'hr' && run.stage === 'draft' && run.lines.length > 0,
+        prepare: prepares && run.stage === 'draft',
+        submit: prepares && run.stage === 'draft' && run.lines.length > 0,
         approve: approver && run.stage === 'submitted' && !ownWork,
         pay: role === 'finance' && run.stage === 'approved' && !run.trial,
         return: (approver && run.stage === 'submitted' && !ownWork) || (role === 'finance' && run.stage === 'approved'),
@@ -31912,18 +32338,20 @@ export class PrimaService {
     );
   }
 
-  /** HR builds or rebuilds a company's month. Public holidays are entered by HR from the gazette; nothing is assumed. */
+  /**
+   * The company's named preparer builds or rebuilds its month (P100 B1: no longer HR or an OM). Public holidays come from
+   * the yearly guard lists, or are entered from the gazette for a company with none; nothing is assumed.
+   */
   async prepareGuardPay(user: User, companyId: Id, period: string, holidays?: unknown) {
-    if (this.guardPayRoleOf(user) !== 'hr') throw new AccessDenied('hr.monitor', '(guard pay)');
+    if (!(await this.guardPayPreparesFor(user, companyId))) throw new AccessDenied('hr.monitor', '(guard pay: only a preparer the Company Manager named for this company)');
     if (!(await this.guardPayOn())) throw new BadRequest('The guard pay run is not switched on in this database yet. Ask IT to install the guard pay module after approval.');
-    if (!(await this.guardPayEmployers(user)).includes(companyId)) throw new NotFound('Company');
     if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(period)) throw new BadRequest('Give the month as YYYY-MM.');
     const now = this.today().slice(0, 7);
     if (period > now || period < this.prevPeriod(now)) throw new BadRequest('Guard pay can be prepared for this month or last month only.');
     const id = `gp-${companyId}-${period}`;
     await this.store.lock?.('guardPayRuns', id);
     const existing = await this.store.get('guardPayRuns', id);
-    if (existing && existing.stage !== 'draft') throw new BadRequest('This month is already submitted. It must be returned to HR before it changes.');
+    if (existing && existing.stage !== 'draft') throw new BadRequest("This month is already submitted. It must be returned to the company's preparer before it changes.");
     const ctx = await this.guardPayContext(companyId, period);
     // With a yearly guard list set by the OD or OGM, HR's monthly entry is not used (and not accepted).
     if (ctx.yearly.length && Array.isArray(holidays) && holidays.length)
@@ -31953,8 +32381,9 @@ export class PrimaService {
 
   /** HR adds one-off pay (with a reason in the label) or enters the PCB from LHDN's calculator, while the month is a draft. */
   async setGuardPayLine(user: User, runId: Id, personId: Id, patch: { pcb?: number | null; extra?: { label: string; amount: number; uniformNo?: number }[] }) {
-    if (this.guardPayRoleOf(user) !== 'hr') throw new AccessDenied('hr.monitor', '(guard pay)');
+    if (!(await this.guardPayPreparing(user)).length) throw new AccessDenied('hr.monitor', '(guard pay: only a preparer the Company Manager named for this company)');
     const run = await this.guardPayRunFor(user, runId);
+    if (!(await this.guardPayPreparesFor(user, run.companyId))) throw new AccessDenied('hr.monitor', '(guard pay: only a preparer the Company Manager named for this company)');
     await this.store.lock?.('guardPayRuns', runId);
     const fresh = (await this.store.get('guardPayRuns', runId))!;
     if (fresh.stage !== 'draft') throw new BadRequest('Only a draft can change.');
@@ -31998,6 +32427,9 @@ export class PrimaService {
     }
     const [line] = await this.guardPayLines(run.companyId, run.period, fresh.holidays.map((h) => h.date), new Map([[personId, { extra, pcb: pcb == null ? null : Math.round(pcb * 100) / 100 }]]), personId);
     if (!line) throw new NotFound('Pay line');
+    // P100 B1b: a line whose hours recorded and paid do not match cannot be saved; the attendance or leave is corrected.
+    if (line.hours && !line.hours.match)
+      throw new BadRequest(`${line.staffNo}: hours recorded and paid do not match (${line.hours.recorded.total} h recorded, ${line.hours.paid.total} h paid). Correct the attendance or leave record first, then recalculate.`);
     const big = RULES.insiderControls.value.allowanceFlagAbove;
     for (const a of extra.filter((x) => Math.abs(x.amount) > big)) line.flags.push(`One-off item above RM${big}: ${a.label} RM${a.amount.toFixed(2)}`);
     if (extra.length) line.flags.push(`One-off items entered by ${user.name}: the COO checks them`);
@@ -32086,7 +32518,7 @@ export class PrimaService {
     } else if (action === 'return' && view.can.return) {
       if (!note) throw new BadRequest('Say what needs to change.');
       patch = { stage: 'draft', submitted: null, approved: null, returns: [...run.returns, { ...step, from: run.stage }] };
-      summary = `returned to HR: ${note}`;
+      summary = `returned to the company's preparer: ${note}`;
     } else if (action === 'pay' && run.trial && run.stage === 'approved') {
       throw new BadRequest('The JA Group app still pays guards. This month is a trial to compare; it cannot be paid from Prima until the switch date.');
     } else if (action === 'approve' && run.stage === 'submitted' && this.guardPayApprover(user)) {
@@ -33077,9 +33509,9 @@ export class PrimaService {
     };
   }
 
-  /** Home lines: HR to submit, the COO to approve, Finance to pay, and last month not paid by the 7th. */
+  /** Home lines: the company's preparer to submit, the COO to approve, Finance to pay, and last month not paid by the 7th. */
   private async guardPayHome(user: User): Promise<HomeItem[]> {
-    const role = this.guardPayRoleOf(user);
+    const role = this.guardPayRoleOf(user) ?? ((await this.guardPayPreparing(user)).length ? 'preparer' : null);
     if (!role || !(await this.guardPayOn())) return [];
     const b = await this.guardPayroll(user);
     const items: HomeItem[] = b.runs

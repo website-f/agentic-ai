@@ -1948,6 +1948,12 @@ export class HttpApi implements Api {
   guardPayCash(runId: string, personId: string, action: Parameters<Api['guardPayCash']>[2], body: Parameters<Api['guardPayCash']>[3]) {
     return this.call<unknown>('POST', `/guard-pay/${encodeURIComponent(runId)}/cash/${encodeURIComponent(personId)}/${action}`, body);
   }
+  payAction(action: string, body: Record<string, unknown>) {
+    return this.call<unknown>('POST', `/pay-p100/${encodeURIComponent(action)}`, body);
+  }
+  payView(view: string, _query: Record<string, string>) {
+    return this.call<unknown>('GET', `/pay-p100/${encodeURIComponent(view)}`);
+  }
   recordPayConsent(personId: string, body: Parameters<Api['recordPayConsent']>[1]) {
     return this.call<unknown>('POST', `/guard-pay/consent/${encodeURIComponent(personId)}`, body);
   }

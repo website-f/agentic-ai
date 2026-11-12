@@ -56,10 +56,10 @@ export type JaArea = 'payroll' | 'fwm' | 'incidents' | 'hostels';
 export const RULES = {
   maxGuardAge: rule('HR-AGE-MAX', 60, 'Policy', 'Fauzan, 23 Oct 2026: no guards over 60'),
   maxHoursPerDay: rule('OPS-HOURS-MAX', 12, 'Law', 'Employment Act 1955 s.60A: not more than 12 hours a day including overtime'),
-  minRestHours: rule('OPS-REST-MIN', 8, 'Policy', 'Proposed minimum rest between shifts, for approval'),
+  minRestHours: rule('OPS-REST-MIN', 8, 'Policy', 'Approved by Fauzan, 11 Nov 2026 (round 3, Q5): minimum rest between shifts stays 8 hours.'),
   maxConsecutiveDays: rule('OPS-REST-DAY', 6, 'Law', 'Employment Act 1955 s.59: one rest day each week'),
-  lateGraceMin: rule('OPS-LATE-GRACE', 15, 'Policy', 'Proposed clock-in grace period, for approval'),
-  earlyLeaveGraceMin: rule('OPS-EARLY-GRACE', 15, 'Policy', 'Proposed clock-out grace period, for approval'),
+  lateGraceMin: rule('OPS-LATE-GRACE', 10, 'Policy', 'Approved by Fauzan, 11 Nov 2026 (G5, round 3 Q5): clock-in grace 15 -> 10 minutes; a guard clocking in 11 minutes late is marked late, 10 minutes is not.'),
+  earlyLeaveGraceMin: rule('OPS-EARLY-GRACE', 10, 'Policy', 'Approved by Fauzan, 11 Nov 2026 (G5, round 3 Q5): early clock-out grace 15 -> 10 minutes, the same as clock-in.'),
   offlineSyncMin: rule('OPS-OFFLINE', 5, 'Policy', 'Records reaching the server 5+ minutes late are marked as offline sync'),
   kdnVettingUsualDays: rule(
     'HR-KDN-VETTING',
@@ -631,7 +631,13 @@ export const RULES = {
   staffPayroll: rule(
     'PAY-STAFF',
     {
-      payByDay: 7,
+      /**
+       * P100 F11 (Fauzan, 11 Nov 2026): office staff are paid on the 29th of the SAME month (the last day in February).
+       * The steps before it move earlier: HR submits by the 22nd, the Chief of Staff approves by the 24th, the COO by the
+       * 26th, Finance pays by the 29th. Guards stay on the 7th of the next month (PAY-GUARD).
+       */
+      payByDay: 29,
+      steps: { submitBy: 22, cosBy: 24, cooBy: 26 },
       unpaidDivisor: 26,
       /** SQL Account codes for the journal draft; Finance replaces these with the group's chart of accounts. */
       accounts: {
@@ -652,7 +658,7 @@ export const RULES = {
       },
     },
     'Law',
-    "Fauzan, 27 Oct 2026: guard and officer pay comes from the JA Group app; Prima builds payroll for staff. HR prepares, the Chief of Staff (or the Deputy) approves, then the COO approves (Fauzan, 1 Nov 2026; this replaced the Vice Chairman's monthly consent decided 26 Oct 2026), then Finance pays through the bank's payroll service and posts to SQL Account. The Vice Chairman consents to each salary amount when it is set each year or on review. Every approval carries a comment. Employment Act 1955 s.19: wages within 7 days after the month; s.60I: a monthly-paid employee's daily rate is the monthly pay divided by 26. EPF Third Schedule, SOCSO and EIS tables, HRD levy 1%, PCB from LHDN's e-PCB. Prima drafts files only and never files or pays.",
+    "Fauzan, 27 Oct 2026: guard and officer pay comes from the JA Group app; Prima builds payroll for staff. HR prepares, the Chief of Staff (or the Deputy) approves, then the COO approves (Fauzan, 1 Nov 2026; this replaced the Vice Chairman's monthly consent decided 26 Oct 2026), then Finance pays through the bank's payroll service and posts to SQL Account. The Vice Chairman consents to each salary amount when it is set each year or on review. Every approval carries a comment. Approved by Fauzan, 11 Nov 2026 (F11): office staff are paid on the 29th of the same month, so the month is approved and paid by the 29th (HR submits by the 22nd, the Chief of Staff approves by the 24th, the COO by the 26th); guards stay on the 7th. Employment Act 1955 s.19: wages within 7 days after the month (paying on the 29th is earlier); s.60I: a monthly-paid employee's daily rate is the monthly pay divided by 26. EPF Third Schedule, SOCSO and EIS tables, HRD levy 1%, PCB from LHDN's e-PCB. Prima drafts files only and never files or pays.",
   ),
   it: rule(
     'IT-WATCH',
@@ -739,7 +745,7 @@ export const RULES = {
     'PAY-FORMULA',
     { scopes: ['site', 'company', 'region', 'group'], standardRestHours: [2, 2.5, 3], shiftHours: 12, fullMonthDays: 26, orpDivisor: 26 },
     'Policy',
-    'Fauzan, 5 Nov 2026: the guard salary formula can be set per site, per company, per region or for the whole group, all set by the ACT Director; the standard formula is a full month of 12-hour shifts with 2, 2.5 or 3 hours of rest a day; drivers have an overtime formula; ACT sets the amounts in every formula. Later the same day: ACT sets the overtime formula for everyone (staff overtime too); the ACT Director’s amounts are saved as chosen and labour law is only a flag to the CEO; security guards are exempt from the hours limits. Fauzan, 6 Nov 2026, the usual guard rules (the standard default, ACT can change them): basic covers 45 hours a week, one rest day a week (6 days of 7.5 hours); overtime on a working day 1.5x the hourly rate; on a rest day the first 7.5 hours are one day’s pay and overtime past them 2x; on a public holiday 2 days’ pay for the normal hours and overtime 3x. Hourly rate = basic / 26 / 7.5 = basic / 195, the same as basic x 12 / 52 weeks / 45 hours. The ACT team prepares, the ACT Director makes it live and decides where it is used, with a reason each time; the narrowest choice wins (site, company, region, group). A formula starts this month or later, never in the past. Employment Act 1955 points flagged: minimum wage (Minimum Wages Order 2024, RM1,700), normal hours at most 8 a day and 45 a week (s.60A(1)), overtime at least 1.5x on a working day (s.60A(3)), 2x on a rest day (s.60(3)), 3x on a public holiday (s.60D(3)), rest-day work one extra day and holiday work two extra days; daily rate = monthly / 26, hourly = daily / normal hours (s.60I). Pay below that floor is flagged on the formula and on the CEO’s home, never refused; guard formulas carry no hours-limit flags (exemption), only the rest-break rule. Only entries that cannot be counted are refused.',
+    'Fauzan, 5 Nov 2026: the guard salary formula can be set per site, per company, per region or for the whole group, all set by the ACT Director; the standard formula is a full month of 12-hour shifts with 2, 2.5 or 3 hours of rest a day; drivers have an overtime formula; ACT sets the amounts in every formula. Later the same day: ACT sets the overtime formula for everyone (staff overtime too); the ACT Director’s amounts are saved as chosen and labour law is only a flag to the CEO; security guards are exempt from the hours limits. Fauzan, 6 Nov 2026, the usual guard rules (the standard default, ACT can change them): basic covers 45 hours a week, one rest day a week (6 days of 7.5 hours); overtime on a working day 1.5x the hourly rate; on a rest day the first 7.5 hours are one day’s pay and overtime past them 2x; on a public holiday 2 days’ pay for the normal hours and overtime 3x. Hourly rate = basic / 26 / 7.5 = basic / 195, the same as basic x 12 / 52 weeks / 45 hours. The ACT team prepares, the ACT Director makes it live and decides where it is used, with a reason each time; the narrowest choice wins (site, company, region, group). A formula starts this month or later, never in the past. Employment Act 1955 points flagged: minimum wage (Minimum Wages Order 2024, RM1,700), normal hours at most 8 a day and 45 a week (s.60A(1)), overtime at least 1.5x on a working day (s.60A(3)), 2x on a rest day (s.60(3)), 3x on a public holiday (s.60D(3)), rest-day work one extra day and holiday work two extra days; daily rate = monthly / 26, hourly = daily / normal hours (s.60I). Pay below that floor is flagged on the formula and on the CEO’s home, never refused; guard formulas carry no hours-limit flags (exemption), only the rest-break rule. Only entries that cannot be counted are refused. Approved by Fauzan, 11 Nov 2026 (E13): public holiday pay is 2 extra days on top of the normal day\'s pay (publicHolidayDays 2 in the standard formula; already how the formulas work). The real formula amounts still come from the ACT Director.',
   ),
   guardPayroll: rule(
     'PAY-GUARD',
@@ -756,6 +762,11 @@ export const RULES = {
        * set (EA s.24). 'fourth_fifth_set' turns on that path, flagged for the CEO's legal point on every line.
        */
       uniformDeduction: 'awaiting_decision' as 'awaiting_decision' | 'fourth_fifth_set',
+      /**
+       * E12, approved by Fauzan, 11 Nov 2026: EPF, SOCSO and PCB do NOT count toward the 50% deduction cap (EA s.24(8));
+       * the cap covers the employer's own recoveries (one-off items, hostel utilities, wage advances, loan repayments).
+       */
+      deductionCapExcludesStatutory: true,
       /** SQL Account codes for the journal draft; Finance replaces these with the group's chart of accounts. */
       accounts: {
         wages: '910-000',
@@ -774,7 +785,7 @@ export const RULES = {
       },
     },
     'Policy',
-    "Fauzan, 5 Nov 2026 (third audit, item 1: Build): Prima runs its own monthly guard pay from attendance under the ACT pay formulas (PAY-FORMULA), with payslips and a bank file. Fauzan, 26 Oct 2026: the COO approves all guard and officer salaries. HR prepares each company's month, the COO approves with a reason, Finance pays through the bank; Prima only drafts the files. Fauzan, 5 Nov 2026 00:55Z: the JA Group app keeps running until he picks a switch date, so until then a run is a side-by-side trial compared with JA's figures and cannot be marked paid. Fauzan, 8 Nov 2026: Prima takes over guard pay on 1 August 2027 (switchDate); until then the JA Group app keeps paying guards and Prima pay runs are side-by-side trials only, and the guard pay database is installed later as its own step. primaPays stays off until the switch is made on that date. Employment Act 1955 s.19: wages paid within 7 days after the wage period. KWSP: overtime is not wages for EPF. Public holidays are entered by HR from the gazette for each month; none are assumed.",
+    "Fauzan, 5 Nov 2026 (third audit, item 1: Build): Prima runs its own monthly guard pay from attendance under the ACT pay formulas (PAY-FORMULA), with payslips and a bank file. Fauzan, 26 Oct 2026: the COO approves all guard and officer salaries. HR prepares each company's month, the COO approves with a reason, Finance pays through the bank; Prima only drafts the files. Fauzan, 5 Nov 2026 00:55Z: the JA Group app keeps running until he picks a switch date, so until then a run is a side-by-side trial compared with JA's figures and cannot be marked paid. Fauzan, 8 Nov 2026: Prima takes over guard pay on 1 August 2027 (switchDate); until then the JA Group app keeps paying guards and Prima pay runs are side-by-side trials only, and the guard pay database is installed later as its own step. primaPays stays off until the switch is made on that date. Employment Act 1955 s.19: wages paid within 7 days after the wage period. KWSP: overtime is not wages for EPF. Public holidays are entered by HR from the gazette for each month; none are assumed. Approved by Fauzan, 11 Nov 2026 (E12): EPF, SOCSO and PCB do not count toward the 50% deduction cap; built that way; no longer an assumption.",
   ),
   payLaw: rule(
     'PAY-LAW-CEO',
@@ -1167,9 +1178,14 @@ export const RULES = {
   ),
   leaveEscalate: rule(
     'LEAVE-ESCALATE',
-    12,
+    {
+      /** A guard's or officer's request moves up one level after this many working days (Saturday, Sunday and public holidays do not count). */
+      guardWorkingDays: 1,
+      /** Office staff leave (HR, then the HR Director, then the Director) keeps moving up after this many hours. */
+      officeHours: 12,
+    },
     'Policy',
-    'Fauzan, 25 Oct 2026: a request from a guard or officer is approved or rejected only by the Operations Manager or higher. If it gets no go-ahead or rejection within 12 hours (or 1 working day), it moves up a level: OM, Regional OM, head of operations, COO, CEO. 12 hours used; to confirm against "1 working day".',
+    'Fauzan, 25 Oct 2026: a request from a guard or officer is approved or rejected only by the Operations Manager or higher; unanswered, it moves up a level: OM, Regional OM, head of operations, COO, CEO. Approved by Fauzan, 11 Nov 2026 (handover item C3): "CHANGE from 12 hours to 1 working day per level"; weekends and public holidays do not count. Office staff leave keeps its 12-hour steps (C3 is about guard leave).',
   ),
   upgradeCourses: rule(
     'HR-UPGRADE',
@@ -1656,15 +1672,15 @@ export const RULES = {
   financeForecast13: rule(
     'FIN-CASH13',
     {
-      /** The usual staff pay day when no paid run shows it (Employment Act 1955 s.19: wages within 7 days after the wage period). */
-      payDay: 7,
+      /** The usual staff pay day when no paid run shows it: the 29th of the same month (Fauzan, 11 Nov 2026, F11). */
+      payDay: 29,
       /** A reviewer looks the forecast over at least this often. */
       reviewDays: 7,
       /** Regular payments due this many days ago and still open are counted in week 1. */
       regularLookBackDays: 31,
     },
-    'Unverified',
-    'Fauzan, 2 Nov 2026: yes to suggestion 13, "13-week cash forecast per company: payroll dates, the 15th statutory payments, expected government receipts". Prima fills it from the last statement balances, open payments, the regular payments list (EPF, PERKESO, PCB and HRD on the 15th), the staff payroll at last month\'s net pay on the usual pay day, daily cash lists and government claims; Finance adds what Prima cannot know; a reviewer looks it over weekly; a week below zero shows on FD/CEO home. A forecast only; Prima never moves money.',
+    'Policy',
+    'Approved by Fauzan, 11 Nov 2026 (F11): guards are paid on the 7th (confirmed); office staff are paid on the 29th of the same month. Fauzan, 2 Nov 2026: yes to suggestion 13, "13-week cash forecast per company: payroll dates, the 15th statutory payments, expected government receipts". Prima fills it from the last statement balances, open payments, the regular payments list (EPF, PERKESO, PCB and HRD on the 15th), the staff payroll at last month\'s net pay on the usual pay day, daily cash lists and government claims; Finance adds what Prima cannot know; a reviewer looks it over weekly; a week below zero shows on FD/CEO home. A forecast only; Prima never moves money.',
   ),
   financeCash: rule(
     'FIN-CASH',

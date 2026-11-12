@@ -3417,6 +3417,12 @@ export interface Dataset {
   guardSignInBatches: import('./guard-signins').GuardSignInBatch[];
   /** J6 (P100): each person's alert choices (alert-prefs.ts; db/modules/alert-prefs-v1.sql). */
   alertPrefs: import('./alert-prefs').AlertPrefs[];
+  // P100 pay: the guard pay preparers each Company Manager names (guard-pay-preparers.ts; db/modules/guard-pay-preparers-v1.sql).
+  guardPayPreparers: import('./guard-pay-preparers').GuardPayPreparer[];
+  // P100 pay (B2): the FD's cash stand-ins the CEO turns on (cash-stand-in.ts; db/modules/cash-stand-ins-v1.sql).
+  cashStandIns: import('./cash-stand-in').CashStandIn[];
+  // P100 pay (C12 + J3): staff overtime lines for the staff payroll (staff-ot.ts; db/modules/staff-ot-v1.sql).
+  staffOtLines: import('./staff-ot').StaffOtLine[];
   fwWelfareChecks: FwWelfareCheck[];
   fwPlacements: FwPlacement[];
   fwPlacementHosts: FwPlacementHostView[];
@@ -4169,7 +4175,12 @@ export interface StaffPayLine {
   age: number;
   nationality: Nationality;
   basic: number;
-  allowanceLines: { label: string; amount: number; fixed: boolean; typeId?: Id; epf?: boolean; socso?: boolean; pcb?: boolean; hrd?: boolean }[];
+  allowanceLines: { label: string; amount: number; fixed: boolean; typeId?: Id; epf?: boolean; socso?: boolean; pcb?: boolean; hrd?: boolean; overtime?: boolean }[];
+  /**
+   * P100 C12 + J3: approved overtime paid on this line (HR's switch on, the person named): the lines' ids (each paid in
+   * one run only), hours, the hourly rate (basic / 26 / 8) and the amount. Not EPF wages; SOCSO, EIS and PCB count it.
+   */
+  overtime?: { ids: Id[]; hours: number; hourly: number; amount: number } | null;
   allowances: number;
   unpaidDays: number;
   unpaidDeduction: number;
@@ -4205,6 +4216,14 @@ export interface StaffPayLine {
    * proration rule is set, so HR enters the pay for the days worked (partPay) and the month cannot be submitted until then.
    */
   partMonth?: { from: IsoDate; to: IsoDate } | null;
+  /**
+   * P100 C1 (Fauzan, 11 Nov 2026: "For staff we prorate the daily rate from its salary then give accordingly", working
+   * days): the part-month pay worked out by Prima: daily rate = monthly basic (and fixed allowances) / the pay law's day
+   * divisor (26), times the working days (Monday to Friday) employed in the month, never more than the full month. Shown on
+   * the payslip. HR may still correct it with a reason (partPay).
+   */
+  partAuto?: { workingDays: number; divisor: number; dailyBasic: number; dailyAllowances: number; basic: number; allowances: number } | null;
+  /** HR's correction of the part-month pay, with the reason (always kept). */
   partPay?: { basic: number; allowances: number; note: string; by: string; at: IsoDateTime } | null;
   /** What the line was calculated from (staffPayInputsKey); a draft whose inputs changed is recalculated before submitting. */
   inputs?: string;

@@ -822,6 +822,9 @@ export function generateDataset(opts: SeedOptions): Dataset {
     vehicleTransfers: [],
     guardSignInBatches: [],
     alertPrefs: [],
+    guardPayPreparers: [],
+    cashStandIns: [],
+    staffOtLines: [],
     jaRecords: [],
     jaSyncs: [],
     amUnits: [],
@@ -10520,6 +10523,23 @@ export function generateDataset(opts: SeedOptions): Dataset {
   seedBoardRegisters(ds, today);
   for (const p of ds.people) if (p.staffNo) p.pinHash = DEMO_PIN_KEEPER.hash(demoPin(p.staffNo), demoPinSalt(p.id));
   seedCmsReadiness(ds, now);
+  // P100 pay (B1): each pilot company's manager has named one admin executive to prepare the guard pay run (mock).
+  for (const [companyId, cmId, userId] of [['co-sasa', 'u-cm-sasa', 'u-ae-sasa'], ['co-arsh', 'u-cm-arsh', 'u-ae-arsh'], ['co-inas', 'u-cm-inas', 'u-ae-inas']] as const) {
+    const cm = ds.users.find((u) => u.id === cmId);
+    const u = ds.users.find((x) => x.id === userId);
+    if (!cm || !u || ds.guardPayPreparers.some((p) => p.companyId === companyId && p.userId === userId)) continue;
+    ds.guardPayPreparers.push({
+      id: `gpp-${companyId}-${userId}`,
+      companyId,
+      userId,
+      userName: u.name,
+      title: u.title ?? '',
+      active: true,
+      named: { by: cm.name, byId: cm.id, at: `${addDays(today, -20)}T09:00:00+08:00`, reason: 'Keeps the company office records; prepares the monthly guard pay (mock)' },
+      removed: null,
+      history: [],
+    });
+  }
   return ds;
 }
 

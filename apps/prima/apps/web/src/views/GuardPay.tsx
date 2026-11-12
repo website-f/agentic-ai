@@ -24,15 +24,18 @@ import {
   type Tone,
 } from "../ui";
 import { Empty } from "../kit";
+import { GuardPayPreparers } from "./GuardPayPreparers";
+import { HoursChip, PayHoursTable } from "./PayHours";
 
 /**
  * Guard pay run (Fauzan, 5 Nov 2026). Guards, stationed officers and patrolling officers are paid from locked
- * attendance under the ACT pay formula used at their site. HR prepares each company's month, the COO approves with a
- * reason, Finance pays through the bank. While the JA Group app still pays guards, every month is a trial to compare.
+ * attendance under the ACT pay formula used at their site. Each company prepares its own month (P100 B1: the person its
+ * Company Manager names), the COO approves with a reason, Finance pays through the bank. While the JA Group app still
+ * pays guards, every month is a trial to compare.
  */
 
 const STAGE: Record<GuardPayStage, [Tone, string]> = {
-  draft: ["neutral", "Draft with HR"],
+  draft: ["neutral", "Draft with the company"],
   submitted: ["warn", "With the COO"],
   approved: ["info", "Approved, with Finance"],
   paid: ["ok", "Paid"],
@@ -55,7 +58,8 @@ const monthLabel = (p: string) =>
   });
 
 export function GuardPayView() {
-  const { data, error } = useLoad(() => api.guardPayroll(), []);
+  const [tick, setTick] = useState(0);
+  const { data, error } = useLoad(() => api.guardPayroll(), [tick]);
   const [open, setOpen] = useState<string | null>(null);
   if (error) return <ErrorNotice error={error} />;
   if (!data) return <Loading what="guard pay" />;
@@ -65,9 +69,9 @@ export function GuardPayView() {
         <h1>Guard pay</h1>
         <p className="muted">
           Monthly pay for guards and officers, from locked attendance and the
-          ACT pay formula used at each site. HR prepares, the COO approves with
-          a reason, and Finance pays through the bank. Prima only drafts the
-          files.
+          ACT pay formula used at each site. Each company prepares its own month,
+          the COO approves with a reason, and Finance pays through the bank.
+          Prima only drafts the files.
         </p>
       </div>
       {!data.rule.primaPays && (
@@ -84,6 +88,7 @@ export function GuardPayView() {
           approval.
         </div>
       )}
+      <GuardPayPreparers data={data} onChanged={() => setTick((n) => n + 1)} />
       <ConsentLetters />
       <Runs data={data} onOpen={setOpen} />
       {open && <RunDrawer runId={open} onClose={() => setOpen(null)} />}
@@ -140,7 +145,7 @@ function Runs({
         </div>
         {data.employers.length === 0 && (
           <Empty title="No guards or officers on the pay list yet">
-            A company appears here once it has active guards or officers in People. HR then prepares each month's pay from their locked attendance.
+            A company appears here once it has active guards or officers in People. Its named preparer then prepares each month's pay from their locked attendance.
           </Empty>
         )}
         <div className="list">
@@ -172,7 +177,7 @@ function Runs({
                       {monthLabel(p)}:{" "}
                       <Chip tone={STAGE[r.stage][0]}>{STAGE[r.stage][1]}</Chip>
                     </button>
-                  ) : data.role === "hr" && data.on ? (
+                  ) : e.prepares && data.on ? (
                     <button
                       key={p}
                       className={`btn btn-sm${p === data.prev ? " btn-primary" : ""}`}
@@ -294,8 +299,8 @@ function RunBody({
     URL.revokeObjectURL(url);
   };
   const steps: [string, (typeof run)["prepared"] | null][] = [
-    ["Prepared by HR", run.prepared],
-    ["Submitted by HR", run.submitted],
+    ["Prepared by", run.prepared],
+    ["Submitted by", run.submitted],
     ["Approved by the COO", run.approved],
     ["Paid by Finance", run.paid],
   ];
@@ -312,7 +317,19 @@ function RunBody({
         <Kpi label="Net pay" value={rm(totals.net)} />
         <Kpi label="Employer cost" value={rm(totals.cost)} note="Gross, EPF, SOCSO, EIS, HRD" />
         <Kpi label="Overtime hours" value={totals.otHours.toLocaleString("en-MY")} />
+        <Kpi
+          label="Hours recorded / paid"
+          value={`${(totals.hoursRecorded ?? 0).toLocaleString("en-MY")} / ${(totals.hoursPaid ?? 0).toLocaleString("en-MY")}`}
+          tone={totals.hoursMismatch ? "crit" : "ok"}
+          note={totals.hoursMismatch ? `${totals.hoursMismatch} lines do not match` : "Every line matches"}
+        />
       </div>
+      {(totals.hoursMismatch ?? 0) > 0 && (
+        <div className="pp-blocked" role="alert" data-testid="guard-pay-hours-held">
+          <strong>{totals.hoursMismatch === 1 ? "1 line: hours recorded and paid do not match." : `${totals.hoursMismatch} lines: hours recorded and paid do not match.`}</strong>{" "}
+          The month cannot be submitted or approved, and those lines cannot be changed, until the attendance or leave record is corrected (with its own approval and reason), then recalculated.
+        </div>
+      )}
       {data.ja ? (
         <section className="panel">
           <div className="panel-head">
@@ -472,9 +489,9 @@ function RunBody({
                 <button
                   className="btn btn-sm"
                   disabled={act.busy || !note.trim()}
-                  onClick={() => step(() => api.guardPayStep(run.id, "return", { note }), "Returned to HR.")}
+                  onClick={() => step(() => api.guardPayStep(run.id, "return", { note }), "Returned to the preparer.")}
                 >
-                  Return to HR
+                  Return to the preparer
                 </button>
               )}
             </div>
@@ -542,12 +559,13 @@ function RunBody({
                 {l.formulaCode ?? "No formula"} · {l.daysWorked} days ({l.restDaysWorked} rest, {l.holidaysWorked} holiday) ·{" "}
                 {l.otHours} OT h · gross {rm(l.gross)}
               </div>
+              <HoursChip hours={l.hours} />
               {l.flags.map((f) => (
                 <div key={f} className="small" style={{ color: "var(--warn, #b45309)" }}>
                   {f}
                 </div>
               ))}
-              {can.prepare && <LineEdit runId={run.id} line={l} onChanged={onChanged} />}
+              {can.prepare && (!l.hours || l.hours.match) && <LineEdit runId={run.id} line={l} onChanged={onChanged} />}
               {data.role === "hr" && (l.accountProblem || (l.bank && (l.bank.holder ?? "own") !== "own") || l.bank?.kind === "ewallet") && (
                 <ConsentEdit line={l} onChanged={onChanged} />
               )}
@@ -562,7 +580,7 @@ function RunBody({
 
 /**
  * Public holidays for the month. Guard holidays come from the yearly lists the Operations Director or OGM set (per
- * state); HR enters them here only for a company with no yearly list. Staff holidays are separate.
+ * state); the company's preparer enters them here only for a company with no yearly list. Staff holidays are separate.
  */
 function Holidays({ data, onChanged }: { data: GuardPayRunView; onChanged: () => void }) {
   const { run, can } = data;
@@ -614,7 +632,7 @@ function Holidays({ data, onChanged }: { data: GuardPayRunView; onChanged: () =>
       </div>
       {!run.holidays.length && (
         <p className="muted small">
-          None entered. HR enters the gazetted holidays for the company's states; until then no day is paid at the holiday rate.
+          None entered. The preparer enters the gazetted holidays for the company's states; until then no day is paid at the holiday rate.
         </p>
       )}
       <div className="list">
@@ -782,6 +800,7 @@ export function GuardPayslip({
         {l.formulaCode ? ` (${l.formulaCode} v${l.formulaVersion}, ${l.formulaScope})` : ""} · daily rate {rm(l.dailyRate)} (basic ÷ 26) · hourly{" "}
         {rm(l.hourlyRate)} · {l.daysWorked} days worked, {l.paidLeaveDays} paid leave, full month {l.fullMonthDays}
       </p>
+      <PayHoursTable hours={l.hours} />
       <div className="list">
         {l.items.filter((x) => !(x.kind === "extra" && x.amount < 0) && x.kind !== "advance").map((x) =>
           row(

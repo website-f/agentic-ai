@@ -63,7 +63,10 @@ const REFRESH = [
 //     reports table behind forced row-level security (handler, reviewing handler, named reporter, HR read only), receipt
 //     code and leader count functions, and the report number sequence.
 //   bulk-loads-v1.sql (K8): the record of every bulk load (who, the plan, what went where), seen by the loader and oversight.
-const OFFICE_MODULES = ['owner-test-checkin-v1.sql', 'clock-snaps-v1.sql', 'rba-committee-roster-v1.sql', 'speak-up-wall-v1.sql', 'bulk-loads-v1.sql'];
+//   guard-pay-preparers-v1.sql (P100 B1): who prepares each company's guard pay run, named by its Company Manager.
+//   cash-stand-ins-v1.sql (P100 B2): the CEO lets the Finance Director stand in on cash decisions (dates or one request).
+//   staff-ot-v1.sql (P100 C12 + J3): staff and CMS overtime lines HR approves for the staff payroll.
+const OFFICE_MODULES = ['owner-test-checkin-v1.sql', 'clock-snaps-v1.sql', 'rba-committee-roster-v1.sql', 'speak-up-wall-v1.sql', 'bulk-loads-v1.sql', 'guard-pay-preparers-v1.sql', 'cash-stand-ins-v1.sql', 'staff-ot-v1.sql'];
 // P100 (Fitri, 12 Nov 2026: "just make it live all of it"): the handover's new repeat-safe modules, run on every start
 // AFTER the release modules, because some use a release module's tables or functions (item-warranty-v1 uses
 // item_register's prima.item_parties()). Same rules as above: each file is its own transaction, a second run changes

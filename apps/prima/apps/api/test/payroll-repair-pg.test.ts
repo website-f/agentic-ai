@@ -1,6 +1,8 @@
 // Actual PostgreSQL transactions and company walls, with synthetic data and no external payment.
 import 'reflect-metadata';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { after, beforeEach, describe, it } from 'node:test';
 import { RULES, generateDataset, myt, type GuardPayRun } from '@prima/core';
 import { Db } from '../src/db';
@@ -10,6 +12,9 @@ const URL = process.env.DATABASE_URL ?? 'postgres://postgres@127.0.0.1:55438/pri
 process.env.DATABASE_URL = URL;
 const NOW = myt('2026-11-05', '10:00');
 const clock = () => NOW;
+// P100 B1: each company prepares its own month; its Company Manager names the preparer (office module).
+const PREPARERS_SQL = readFileSync(resolve(__dirname, '../../../../db/modules/guard-pay-preparers-v1.sql'), 'utf8');
+const PREPARER = 'u-ae-arsh';
 
 describe('payroll repair release gates (actual PostgreSQL)', () => {
   let db: Db;
@@ -17,10 +22,19 @@ describe('payroll repair release gates (actual PostgreSQL)', () => {
     if (db) await db.onModuleDestroy();
     await resetDb(URL, NOW);
     db = new Db();
+    await db.pool.query(PREPARERS_SQL);
+    await db.asUser('u-cm-arsh', (svc, u) => svc.payAction(u, 'guard-pay-preparer', { companyId: 'co-arsh', userId: PREPARER, action: 'name', reason: 'Prepares the guard pay (test)' }), clock);
     RULES.guardPayroll.value.primaPays = true;
     // resetDb's default roster history does not reach October; add explicit synthetic closed-month
     // attendance rather than weakening the payroll's empty/negative-line checks for the fixture.
     const history = generateDataset({ today: '2026-11-05', now: NOW, daysBack: 40 });
+    // P100 B1b: a few seeded guards clock out early, so their hours would not match and hold the run; correct those
+    // records as a supervisor would (to the shift end) so these tests stay about their own release gates.
+    const shiftEnd = new Map(history.shifts.map((s) => [s.id, s.end]));
+    for (const a of history.attendance) {
+      const end = a.shiftId ? shiftEnd.get(a.shiftId) : undefined;
+      if (end && a.clockOut && a.locked && Date.parse(a.clockOut) < Date.parse(end)) a.clockOut = end;
+    }
     for (const table of ['shifts', 'attendance'] as const) {
       await db.pool.query(`DELETE FROM prima.${table} WHERE company_id = 'co-arsh'`);
       const rows = history[table].filter((row) => row.companyId === 'co-arsh');
@@ -31,8 +45,8 @@ describe('payroll repair release gates (actual PostgreSQL)', () => {
     await db.pool.query(`UPDATE prima.people SET data = jsonb_set(data, '{bank}', '{"bank":"Synthetic","accountMasked":"****9999"}'::jsonb) WHERE data->'bank' IS NULL OR data->'bank' = 'null'::jsonb`);
   });
   after(async () => { RULES.guardPayroll.value.primaPays = false; if (db) await db.onModuleDestroy(); });
-  const prepare = () => db.asUser('u-pwvsb-hr', (svc, u) => svc.prepareGuardPay(u, 'co-arsh', '2026-10'), clock);
-  const submit = (run: GuardPayRun) => db.asUser('u-pwvsb-hr', (svc, u) => svc.guardPayStep(u, run.id, 'submit'), clock);
+  const prepare = () => db.asUser(PREPARER, (svc, u) => svc.prepareGuardPay(u, 'co-arsh', '2026-10'), clock);
+  const submit = (run: GuardPayRun) => db.asUser(PREPARER, (svc, u) => svc.guardPayStep(u, run.id, 'submit'), clock);
   const approve = (run: GuardPayRun) => db.asUser('u-coo', (svc, u) => svc.guardPayStep(u, run.id, 'approve', { note: 'Synthetic approval' }), clock);
   const save = (run: GuardPayRun) => {
     const { id, companyId: _companyId, ...patch } = run;
@@ -93,7 +107,7 @@ describe('payroll repair release gates (actual PostgreSQL)', () => {
     let locked!: () => void, release!: () => void;
     const acquired = new Promise<void>((resolve) => { locked = resolve; });
     const released = new Promise<void>((resolve) => { release = resolve; });
-    const submitting = db.asUser('u-pwvsb-hr', async (svc, u, store) => {
+    const submitting = db.asUser(PREPARER, async (svc, u, store) => {
       await store.lock!('guardPayRuns', run.id); locked(); await released;
       return svc.guardPayStep(u, run.id, 'submit');
     }, clock);

@@ -52,5 +52,7 @@ Fauzan, 4 Nov 2026. Staff ask to leave the office for a few hours on their own m
 
 - **The database module is not run and not registered** in `db/release-manifest.json`. It needs the CEO-run migration and a release review before the screens work on staging. Until then, the time slip calls fail on a database without the tables. Nothing else is affected.
 - **In the IT pilot (rule PILOT-IT), only pilot users sign in.** Company staff and company heads cannot use it until the pilot widens. The browser walk-through opens every made-up staff member in the test version only (browser flag `prima-demo-all-staff`, read by the demo API). The API build has no such switch.
-- **The staff clock board still flags the time away as a long break.** It does not yet clear the flag for an approved slip.
-- **Payroll does not read unpaid leave from slips yet.** This waits on the staff payroll work.
+- Done (P100 J4, 12 Nov 2026): the staff clock board no longer counts time away on an approved slip as a break (nor as
+  late in or early out when the slip covers the start or end of the day); it shows the slip minutes instead.
+- Done (P100 J4): preparing staff payroll first settles slips past their make-up date, so the month reads the unpaid leave
+  for slip hours not worked back; the pay line names the slip.

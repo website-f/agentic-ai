@@ -417,3 +417,25 @@ channel is switched on), and connecting an AI model for drafting.
 - HR KPI monitoring: on hold until the pilot test 1 results are in (Fauzan, 1 Nov 2026 15:53Z).
 - Overtime claims inside the staff payroll run: waits for Finance PR #49.
 - Papers recorded in Prima flowing back to JA: waits for the live JA link.
+
+## P100 staff payroll changes (Fauzan's 11 Nov 2026 handover)
+
+- **Part month (C1).** A staff member who joins, leaves or transfers within the month is paid the daily rate (monthly
+  basic and fixed allowances divided by the pay law's day divisor, 26 today) times the working days employed (Monday to
+  Friday; a weekday public holiday is a paid day), never more than the full month. Prima works it out and the line and the
+  payslip show the working; HR may still correct it with a reason (kept beside the worked-out figure). The month is no
+  longer held for a hand-typed figure. Open point for Fauzan: with a 5-day office week a whole month has about 22 working
+  days, so a part month comes to about 85% of the calendar share; confirm whether Saturdays should count.
+- **Overtime in the staff payroll (C12 + J3).** HR's overtime switch (Staff overtime setting, HR-OT) now controls whether
+  overtime is paid in the staff payroll run. Overtime lines come from staff claims (a staff member HR named claims a day's
+  hours with a reason) and from the CMS roster (HR brings in a month: each completed CMS seat's hours past the 8-hour day,
+  one line per seat). HR approves or refuses each with a reason, never their own. An approved line is paid once, in the
+  first staff payroll prepared after it, at the HR-OT rates on basic / 26 / 8; it is not EPF wages (SOCSO, EIS and PCB
+  count it). Switch off, or the person not named: approved hours wait and the line says so. Unapproved lines are never
+  paid. Office module `db/modules/staff-ot-v1.sql` (`prima.staff_ot_lines`, forced row-level security: the person and HR
+  and leadership read; the person adds only their own pending claim; HR decides).
+- **Paid by the 29th (F11).** Office staff are paid on the 29th of the same month (the month's last day when shorter), not
+  by the 7th of the next month (rule PAY-STAFF payByDay 29, approved by Fauzan 11 Nov 2026). The steps move earlier: HR
+  submits by the 22nd, the Chief of Staff approves by the 24th, the COO by the 26th, Finance pays by the 29th. Each step's
+  date shows on the run and on the approver's home (marked when past); a month not paid by the 29th is late. The 13-week
+  cash forecast (FIN-CASH13) puts staff payroll on the 29th of the same month. Guards stay on the 7th.

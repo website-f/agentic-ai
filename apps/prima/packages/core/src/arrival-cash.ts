@@ -5,6 +5,7 @@ import { sha256Hex } from './audit';
 import type { Store } from './store';
 import type { EvidenceDoc, User } from './types';
 import type { GuardPayLine } from './guard-pay';
+import { cashDeciderStandIn, isFinanceDirector, recordStandInUse } from './cash-stand-in';
 
 export interface Stamp { byId: string; by: string; at: string }
 export interface ArrivalCashPolicy extends Stamp {
@@ -52,7 +53,8 @@ export class ArrivalCashService {
     const sites=(await this.store.list('sites',{companyId})).filter(s=>!u.siteIds.length || u.siteIds.includes(s.id));
     const shifts=await this.store.list('shifts',{companyId});
     const workers=(await this.store.list('people',{companyId})).filter(p=>p.status==='active' && p.role==='guard' && p.nationality!=='MY' && (!u.siteIds.length || shifts.some(s=>s.personId===p.id && s.status==='published' && u.siteIds.includes(s.siteId)))).map(p=>({id:p.id,name:p.name,staffNo:p.staffNo}));
-    return {companyId, workers, sites:sites.map(s=>({id:s.id,name:s.name})), canRequest: manager(u), canDecide: cashCeo(u), canReview: finance(u),
+    // P100 B2: the FD sees the decide buttons too; the server checks a stand-in the CEO set is on, per request.
+    return {companyId, workers, sites:sites.map(s=>({id:s.id,name:s.name})), canRequest: manager(u), canDecide: cashCeo(u) || isFinanceDirector(u), canReview: finance(u),
       rows: rows.map(r=>({...r, balance:arrivalBalance(r)})),
       gate: 'Separate recoverable arrival advances. Finance/legal review is required before live use. No 60-day rule or default deduction percentage. Finance notices are recorded here; no external notification is sent.'};
   }
@@ -120,13 +122,17 @@ export class ArrivalCashService {
         } else {
           const q=r.requests.find(x=>x.id===input.requestId); if (!q) throw new NotFound('Arrival request');
           if (action==='decide') {
-            if (!cashCeo(u)) return fail();
+            // P100 B2 (Fauzan, 11 Nov 2026): the CEO decides; the FD only while a stand-in the CEO set covers it.
+            const standIn = await cashDeciderStandIn(tx,u,'arrival',companyId,q.id,[q.requested.byId,r.created.byId],now.slice(0,10));
             if (q.requested.byId===u.id) throw new BadRequest('Requester cannot approve their own request.');
             if (q.decision) throw new BadRequest('Request already decided.');
             if (typeof input.approved!=='boolean') throw new BadRequest('Give an explicit approval or refusal.');
             if (input.amount!==q.amount || input.personId!==r.personId) throw new BadRequest('Decision must bind the exact worker and requested amount.');
-            q.decision={...stamp(),approved:input.approved,reason:text(input.reason,'Decision reason')};
+            const reason=text(input.reason,'Decision reason');
+            if (standIn && reason.length<5) throw new BadRequest('Standing in for the CEO needs a reason (at least 5 letters).');
+            q.decision={...stamp(),approved:input.approved,reason:standIn?`Standing in for the CEO (${standIn.id}): ${reason}`:reason};
             r.notices.push({...stamp(),event:'decision',reference:q.id});
+            if (standIn) await recordStandInUse(tx,standIn,{at:now,area:'arrival',companyId,ref:q.id,byId:u.id,by:u.name,decision:input.approved?'approved':'refused',amount:q.amount,reason});
           } else if (action==='handover') {
             if (!manager(u)) return fail();
             if (r.repayments.length) throw new BadRequest('Repayments have started; no further handouts.');

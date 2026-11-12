@@ -38,6 +38,8 @@ import {
 } from "../ui";
 import { Card, Empty, PageHead, Person, Stat, Stats, Steps, type StepState } from "../kit";
 import "../styles/payroll.css";
+import "../styles/pay-p100.css";
+import { StaffOvertime } from "./StaffOvertime";
 
 /**
  * Staff payroll (Fauzan, 27 Oct 2026). Guards and officers are paid from the JA Group app; staff are paid here. HR
@@ -108,8 +110,8 @@ export function StaffPayView() {
           <>
             For staff only; guards and officers are paid from the JA Group app.
             HR prepares, the Chief of Staff approves, then the COO approves, and
-            Finance pays through the bank and posts to SQL Account. Wages are
-            due by the {data.rule.payByDay}th of the next month.
+            Finance pays through the bank and posts to SQL Account.{" "}
+            {`Salaries are paid by the ${data.rule.payByDay}th of the same month: HR submits by the ${data.rule.steps.submitBy}nd, the Chief of Staff approves by the ${data.rule.steps.cosBy}th and the COO by the ${data.rule.steps.cooBy}th.`}
           </>
         }
         actions={
@@ -147,11 +149,18 @@ export function StaffPayView() {
         )}
       </PageHead>
       {current === "runs" ? (
-        <Runs data={data} onOpen={setOpen} seesPayChanges={seesPayChanges} />
+        <>
+          {/* P100 C12 + J3: staff and CMS overtime HR approves, paid once in the next payroll prepared. */}
+          <StaffOvertime />
+          <Runs data={data} onOpen={setOpen} seesPayChanges={seesPayChanges} />
+        </>
       ) : current === "tables" ? (
         <StatTablesView />
       ) : (
-        <Mine data={data} />
+        <>
+          <StaffOvertime />
+          <Mine data={data} />
+        </>
       )}
       {open && <RunDrawer runId={open} onClose={() => setOpen(null)} />}
       {preparing && (
@@ -261,7 +270,7 @@ function Runs({
 }) {
   const act = useAction();
   const mine = data.runs.filter((r) => r.mineToAct);
-  const late = data.employers.filter((e) => e.lastLate);
+  const late = data.employers.filter((e) => e.lastLate || e.currentLate);
   const thisMonth = data.runs.filter((r) => r.period === data.period);
   const flagged = thisMonth.reduce((n, r) => n + r.totals.flagged, 0);
   // This month's runs show on the employer cards; every other run is listed by month underneath.
@@ -288,7 +297,7 @@ function Runs({
           icon={<HourglassMediumIcon size={18} />}
         />
         <Stat
-          label={`${monthLabel(data.prev)} not paid by the ${data.rule.payByDay}th`}
+          label={`Not paid by the ${data.rule.payByDay}th`}
           value={late.length}
           tone={late.length ? "crit" : "ok"}
           note="Employment Act s.19"
@@ -309,8 +318,7 @@ function Runs({
       </Stats>
       {late.length > 0 && (
         <div className="notice" data-tone="crit">
-          {monthLabel(data.prev)} salaries not paid by the {data.rule.payByDay}
-          th: {late.map((e) => e.companyName).join(", ")}.
+          {`Salaries not paid by the ${data.rule.payByDay}th of the month: ${late.map((e) => e.companyName).join(", ")}.`}
         </div>
       )}
       <div className={seesPayChanges ? "pay-board pay-board-two" : "pay-board"}>
@@ -1026,8 +1034,8 @@ function PcbEdit({ runId, line }: { runId: string; line: StaffPayLine }) {
 }
 
 /**
- * Part-month pay (Arisha main review, 3 Nov 2026): no proration rule is set, so HR enters the basic and the fixed
- * allowances for the days worked, with how it was worked out. The month cannot be submitted until every such line has it.
+ * Part-month pay (P100 C1, Fauzan 11 Nov 2026): Prima works it out, the daily rate (monthly / 26, the pay law divisor)
+ * times the working days employed, and shows the working. HR may still correct it, always with a reason.
  */
 function PartPayEdit({ runId, line }: { runId: string; line: StaffPayLine }) {
   const act = useAction();
@@ -1036,9 +1044,8 @@ function PartPayEdit({ runId, line }: { runId: string; line: StaffPayLine }) {
   const [note, setNote] = useState(line.partPay?.note ?? "");
   return (
     <div className="pay-edit">
-      <span className="small pay-edit-label">
-        Part month {dateLabel(line.partMonth!.from)} to {dateLabel(line.partMonth!.to)}:
-      </span>
+      <PartWorking line={line} />
+      <span className="small pay-edit-label">{line.partPay ? "HR's correction:" : "Correct it (with a reason):"}</span>
       <input className="input pay-in-sm" inputMode="decimal" aria-label={`Part-month basic for ${line.name}`} placeholder="Basic, RM" value={basic} onChange={(e) => setBasic(e.target.value)} />
       <input className="input pay-in-md" inputMode="decimal" aria-label={`Part-month allowances for ${line.name}`} placeholder="Fixed allowances, RM" value={allow} onChange={(e) => setAllow(e.target.value)} />
       <input className="input pay-in-lg" aria-label={`How the part-month pay was worked out for ${line.name}`} placeholder="How it was worked out" value={note} onChange={(e) => setNote(e.target.value)} />
@@ -1052,9 +1059,44 @@ function PartPayEdit({ runId, line }: { runId: string; line: StaffPayLine }) {
           )
         }
       >
-        Save part-month pay
+        Save correction
       </button>
+      {line.partPay && (
+        <button
+          className="btn btn-ghost btn-sm"
+          disabled={act.busy}
+          onClick={() => act.run(() => api.setStaffPayLine(runId, line.personId, { partPay: null }), "Back to the worked-out part-month pay.")}
+        >
+          Use the worked-out pay
+        </button>
+      )}
       <ErrorNotice error={act.error} />
+    </div>
+  );
+}
+
+/** P100 C1: how the part month was worked out, shown on the line and the payslip. */
+function PartWorking({ line }: { line: StaffPayLine }) {
+  const a = line.partAuto;
+  if (!line.partMonth || !a) return null;
+  return (
+    <div className="pp-part" data-testid="part-month-working">
+      <strong>
+        Part month {dateLabel(line.partMonth.from)} to {dateLabel(line.partMonth.to)}
+      </strong>
+      <span>
+        {a.workingDays} working days × {rm(a.dailyBasic)} a day (basic ÷ {a.divisor}) = {rm(a.basic)}
+      </span>
+      {a.allowances > 0 && (
+        <span>
+          Fixed allowances: {a.workingDays} × {rm(a.dailyAllowances)} = {rm(a.allowances)}
+        </span>
+      )}
+      {line.partPay && (
+        <span className="pp-part-corrected">
+          Corrected by {line.partPay.by}: basic {rm(line.partPay.basic)}, allowances {rm(line.partPay.allowances)}. {line.partPay.note}
+        </span>
+      )}
     </div>
   );
 }
@@ -1229,8 +1271,9 @@ function Payslip({
           {companyName} · {monthLabel(period)} · {l.jobTitle}
         </span>
       </header>
+      <PartWorking line={l} />
       <div className="pay-slip-rows">
-        {row("Basic pay", l.basic)}
+        {row(l.partMonth ? "Basic pay (part month)" : "Basic pay", l.basic)}
         {l.allowanceLines.map((a) => row(a.label, a.amount))}
         {l.unpaidDays > 0 &&
           row(

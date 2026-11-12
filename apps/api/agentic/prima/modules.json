@@ -1406,6 +1406,7 @@
    "POST guard-pay/consent/:/approve",
    "POST guard-pay/loans",
    "POST guard-pay/loans/:/:",
+   "POST pay-p100/:",
    "POST statutory"
   ],
   "arms": [
@@ -1435,7 +1436,9 @@
   "arrivalcash": [
    "GET finance/arrivalcash/:",
    "GET finance/arrivalcash/:/evidence/:",
-   "POST finance/:/controls/:/:"
+   "GET pay-p100/:",
+   "POST finance/:/controls/:/:",
+   "POST pay-p100/:"
   ],
   "assets": [
    "GET am/rent-check",
@@ -1994,6 +1997,7 @@
    "GET finance/dailycash/mine",
    "GET finance/exceptionalcash/:",
    "GET finance/exceptionalcash/:/evidence/:",
+   "GET pay-p100/:",
    "GET records/:/form",
    "GET records/kinds",
    "GET tender-board",
@@ -2006,6 +2010,7 @@
    "POST companies/:/tenders",
    "POST finance/:/controls/:/:",
    "POST leads/:/:",
+   "POST pay-p100/:",
    "POST quotations/:/:",
    "POST quotations/:/correct",
    "POST tender-groups",
@@ -2084,6 +2089,7 @@
    "GET finance/management-fees",
    "GET finance/settings",
    "GET finance/today",
+   "GET pay-p100/:",
    "GET records/:/form",
    "GET records/kinds",
    "POST finance/:/:/:",
@@ -2096,7 +2102,8 @@
    "POST finance/:/payments/:/:",
    "POST finance/coo/:/:/:",
    "POST finance/management-fees/:",
-   "POST finance/settings"
+   "POST finance/settings",
+   "POST pay-p100/:"
   ],
   "finsites": [
    "GET finance/site-margins",
@@ -2235,6 +2242,7 @@
    "POST guard-pay/consent/:/approve",
    "POST guard-pay/loans",
    "POST guard-pay/loans/:/:",
+   "POST pay-p100/:",
    "POST statutory"
   ],
   "handovers": [
@@ -2507,6 +2515,7 @@
    "POST guard-pay/consent/:/approve",
    "POST guard-pay/loans",
    "POST guard-pay/loans/:/:",
+   "POST pay-p100/:",
    "POST statutory"
   ],
   "meetings": [
@@ -2608,6 +2617,7 @@
    "POST leave/:/hospital-claim",
    "POST me/face",
    "POST me/items/:/:",
+   "POST pay-p100/:",
    "POST people/:/guard-phone/code",
    "POST people/:/hiring-docs",
    "POST people/:/pin",
@@ -3084,12 +3094,14 @@
    "GET finance/cash/mine",
    "GET hr/allowances",
    "GET pay-changes",
+   "GET pay-p100/:",
    "GET staff-pay",
    "GET staff-pay/:",
    "GET staff-pay/my-zakat",
    "GET staff-pay/stat-tables",
    "POST finance/:/controls/:/:",
    "POST pay-changes/:/:",
+   "POST pay-p100/:",
    "POST staff-pay",
    "POST staff-pay/:/:",
    "POST staff-pay/:/files/:",
@@ -3119,6 +3131,7 @@
    "POST guard-pay/consent/:/approve",
    "POST guard-pay/loans",
    "POST guard-pay/loans/:/:",
+   "POST pay-p100/:",
    "POST statutory"
   ],
   "surveys": [

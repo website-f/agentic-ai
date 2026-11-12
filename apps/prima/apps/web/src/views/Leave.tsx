@@ -21,7 +21,7 @@ export const LEAVE_KINDS: LeaveKind[] = [
 /**
  * Leave and absence requests waiting for a decision (Fauzan, 25 Oct 2026). Guards and officers: the OM or higher
  * decides; other staff: the HR administrator or higher, then the Vice Chairman consents (Fauzan, 1 Nov 2026).
- * Unanswered requests move up a level every 12 hours.
+ * Unanswered requests move up a level: after each working day for guards (P100 C3), every 12 hours for office staff.
  */
 export function LeavePanel({
   companyId,
@@ -54,8 +54,7 @@ export function LeavePanel({
         ))}
       </div>
       <div className="muted small" style={{ padding: "8px 12px" }}>
-        Moves up a level after every {data.rule.value} hours without a decision
-        (rule {data.rule.id}).
+        {`Guard leave moves up a level after every ${data.rule.value.guardWorkingDays} working day without a decision (weekends and public holidays do not count); office staff leave after every ${data.rule.value.officeHours} hours (rule ${data.rule.id}).`}
       </div>
     </section>
   );
@@ -341,7 +340,7 @@ export function LeaveForm({
                   proof,
                   correctsId: prefill?.correctsId ?? null,
                 }),
-              "Request sent. The OM decides for guards and officers; for staff, HR decides and the Vice Chairman consents. It moves up if nobody decides within 12 hours.",
+              "Request sent. The OM decides for guards and officers; for staff, HR decides and the Vice Chairman consents. It moves up if nobody decides within 1 working day (12 hours for office staff).",
             );
             if (r) onDone();
           }}

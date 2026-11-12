@@ -1,3 +1,4 @@
+import { CashStandIn } from './CashStandIn';
 import { useState, type ReactNode } from 'react';
 import { api } from '../api';
 import { ErrorNotice, useAction, useLoad } from '../ui';
@@ -31,6 +32,7 @@ export function ExceptionalGuardCash({ companyId, picker }: { companyId: string;
   return <section className="panel" aria-label="Exceptional guard cash">
     <h3>Exceptional guard cash</h3>
     {picker}
+    <CashStandIn companyId={companyId} />
     <p>Operations Managers request support manually. CEO approves each named guard, amount and payment occasion manually. Director Office prepares the approved list in the separate controlled Excel workbook and hands it to Finance.</p>
     <p className="notice">{data.accountingGate} Approval is not a payout. Actual hours and ordinary wages remain unchanged.</p>
     {data.canSubmit && <div className="stack">

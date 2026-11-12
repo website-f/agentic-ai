@@ -69,15 +69,15 @@ function payrollItems(runs: StaffPayRun[], from: IsoDate, to: IsoDate, today: Is
   const net = round2(last.lines.reduce((n, l) => n + l.net, 0));
   if (net <= 0) return [];
   const paid = sorted.find((r) => r.paid);
-  const day = paid ? Number(paid.paid!.paidOn.slice(8, 10)) : R().payDay;
+  // P100 F11: staff are paid on the 29th of the same month; a paid run's own day is not used any more (an older run paid
+  // on the 7th of the next month would put the forecast back on the old day).
+  const day = R().payDay;
   const out: FinCash13Item[] = [];
   for (let k = -1; k <= 4; k++) {
     const on = addMonthsDay(`${from.slice(0, 7)}-${String(day).padStart(2, '0')}`, k);
     if (on > to) break;
-    // The run for the month before the pay day's month (pay is for the month just worked).
-    const [y, m] = on.split('-').map(Number);
-    const p = new Date(Date.UTC(y, m - 2, 1));
-    const period = `${p.getUTCFullYear()}-${String(p.getUTCMonth() + 1).padStart(2, '0')}`;
+    // P100 F11: the run for the pay day's own month (staff are paid on the 29th of the month worked).
+    const period = on.slice(0, 7);
     const run = runs.find((r) => r.period === period);
     if (run?.paid) continue;
     if (on < from && !run) continue;

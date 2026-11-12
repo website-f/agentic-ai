@@ -9,9 +9,13 @@ Switch date (Fauzan, 8 Nov 2026): Prima takes over guard pay on 1 August 2027 (r
 
 ## Who does what
 
+Each security company prepares its own pay run (Fauzan, 11 Nov 2026, P100 B1: "each Company Manager monitors the pay run
+and delegates the preparing to whoever they choose in their company"). HR (PWVSB HR officers) and the OMs no longer prepare.
+
 | Step | Who | Notes |
 | --- | --- | --- |
-| Prepare / recalculate | HR (PWVSB HR officers) | This month or last month. Public holidays come from the yearly guard lists (below). Can enter a PCB from e-PCB or a one-off item with a reason (flagged for the COO). |
+| Name the preparer(s) | The company's Company Manager (or General Manager) | An admin executive or another manager of the same company, with a reason; changeable later (each naming and removal kept and audited). Never themself, an OM, central HR or a guard. Office module `db/modules/guard-pay-preparers-v1.sql` (forced row-level security: only that company's manager writes; read by the company's managers, the person named, HR and leadership). A named preparer gets the read-only `pay_read` door to the ACT formulas, the pay law and the statutory rates. |
+| Prepare / recalculate | The preparer the Company Manager named for that company | This month or last month, their own company only. Public holidays come from the yearly guard lists (below). Can enter a PCB from e-PCB or a one-off item with a reason (flagged for the COO). |
 | Record whose account it is | HR | Own, joint, immediate relative's or close friend's; bank or e-wallet. Someone else's account needs the guard's consent letter, stamped by a Commissioner for Oaths (Pesuruhjaya Sumpah). |
 | Approve a consent letter | COO only, no CEO stand-in (Fauzan, 6 Nov 2026) | Reason required; not the HR officer who recorded it. Until approved the account cannot be paid into. |
 | List a guard for cash | Director Office staff | Only for a guard with pay and a reason. |
@@ -21,11 +25,11 @@ Switch date (Fauzan, 8 Nov 2026): Prima takes over guard pay on 1 August 2027 (r
 | Record an advance or loan | HR | Limit, purpose, repayment period (1-24 months), the worker's signed agreement. |
 | Approve an advance or loan | Chief of Staff, then the CEO | Reason each; nobody decides a record they made or already approved. Finance is told at each step. |
 | Pay out an advance or loan | Finance | Bank reference; only once Prima pays guards (repayments come off Prima's pay run). |
-| Submit | HR | Refused while the month is open, any guard with pay has no account they can be paid into and is not listed for cash, any worked site has no formula, any shift is unlocked or has no clock-out, or a line is negative. |
-| Approve | COO (CEO stands in during the pilot) | Reason required (approval-reasons rule). Nobody approves a month they prepared or submitted. Refused while a cash listing waits for a decision. Can return to HR with a reason. |
+| Submit | The company's preparer | Refused while the month is open, any guard with pay has no account they can be paid into and is not listed for cash, any worked site has no formula, any shift is unlocked or has no clock-out, or a line is negative. |
+| Approve | COO (CEO stands in during the pilot) | Reason required (approval-reasons rule). Nobody approves a month they prepared or submitted. Refused while a cash listing waits for a decision. Can return it to the company's preparer with a reason. |
 | Pay | Finance (FD or a Finance team member) | Bank reference + PCB checked. Refused while the run is a trial or a cash listing is undecided. Paid after the 7th is recorded as late (EA s.19). |
 | Files | Finance (bank file, e-wallet list), HR + Finance (SQL journal, EPF, SOCSO/EIS, PCB lists), Finance + Director Office + COO/CEO (cash list) | After COO approval. A trial file's first line says DO NOT UPLOAD. |
-| View | Group leaders; company manager for their own company | Read only. |
+| View | Group leaders and HR; the Company Manager sees every run of their own company | Read only. |
 | Payslips | The guard or officer, on their Duty screen | Paid months only. |
 
 Rule `PAY-GUARD` (`RULES.guardPayroll`): `primaPays: false` until Fauzan picks the JA switch date. While off, every run
@@ -80,7 +84,7 @@ coo. The letter must have notory stamp by pesuruhjaya sumpah."
   pays it out with a bank reference and sees what is lent and still owed.
 - The pay run takes repayments only from these records: a one-off item naming a loan or advance is refused.
 - All the employer's deductions together (one-off items, hostel utilities, wage advances and these repayments) stay
-  within half the month's wages (EA s.24(8); assumption: statutory shares and PCB are outside the cap). What does not fit
+  within half the month's wages (EA s.24(8); statutory shares and PCB are outside the cap, confirmed by Fauzan 11 Nov 2026, E12). What does not fit
   waits; the balance stays on the record. Over 50% before any repayment holds submission, approval, payment and unpaid-run exports; HR must resolve it.
 - When the month is paid, each repayment comes off its record; at zero it is settled. The database refuses a record
   without both approvals, with the two approvals by the same person, or lending more than its limit.
@@ -104,16 +108,34 @@ coo. The letter must have notory stamp by pesuruhjaya sumpah."
   rate for a missing secondary formula.
 - Days: a shift counts only with a clock-in, a clock-out and the supervisor's lock (W11). Two shifts on one day count once.
 - Full month = the formula's `fullMonthDays` (26). Approved paid leave (annual, MC, training: one normal day, no OT) and every public holiday are paid days.
+  Paid leave is paid at basic pay only (Fauzan, 11 Nov 2026, P100 C1b): each fixed allowance's daily share (allowance / the
+  day divisor) is taken off for every paid leave day, and no overtime is paid for it.
   A dated leave day is counted once, excluding days already worked or counted as paid public holidays. Overlapping
   leave records do not create extra paid days. Ordinary days worked past that room are rest days worked; days short of
   it are unpaid at the daily rate (closed month only).
-- Rates (EA s.60I through the formula): daily = basic / the pay law's day divisor for the month (26 today, set by the CEO in PR #112), hourly = daily / normal hours. Overtime = the formula's OT
-  hours per shift on each day worked, at the working-day, rest-day or holiday rate. Rest-day and holiday work add the
+- Rates (EA s.60I through the formula): daily = basic / the pay law's day divisor for the month (26 today, set by the CEO in PR #112), hourly = daily / normal hours. Overtime = the hours
+  actually worked past the normal day on each day worked, up to the formula's OT hours per shift (P100 B1b), at the working-day, rest-day or holiday rate. Rest-day and holiday work add the
   formula's extra days' wages. Fixed allowances from the formula.
 - Statutory: rates come from the statutory settings in force for the pay month (see below). Today: EPF on gross less
   overtime (KWSP), foreign 2%/2%; SOCSO and LINDUNG 24 Jam in separate columns; EIS for Malaysians 18-59; any new
   contribution the CEO adds is its own column; HRD 1% on basic and fixed allowances, Malaysians; PCB estimate unless
   HR enters the e-PCB figure. Hostel utility deductions HR already approved for that payroll month are deducted.
+
+## Hours recorded and paid must match (P100 B1b, Fauzan 11 Nov 2026)
+
+"Salary and total working hours must match." Every line shows the hours recorded beside the hours paid:
+
+- Recorded: hours worked from locked attendance (clock-in to clock-out inside the rostered shift; a clock-in within the
+  late grace and a clock-out within the early grace count the whole shift, rules OPS-LATE-GRACE and OPS-EARLY-GRACE; a
+  rest the guard is relieved for comes out of the time past the normal day), plus approved paid leave, training and MC
+  days and paid public holidays off at the formula's normal hours.
+- Paid: normal hours, overtime, rest-day and public-holiday hours, paid leave and holidays, and any days of basic paid with
+  nothing recorded (only when ACT's formula says not to deduct short days).
+- A line whose totals differ is held: it cannot be changed (PCB or one-off item), and the run cannot be submitted, approved,
+  paid or exported. Typical causes: a day shorter than the normal day the basic pays, hours past the shift the formula pays
+  (for example two shifts on one day), basic paid for days with no attendance or leave. The fix is the attendance or leave
+  record, corrected with its own approval and reason, then a recalculation. The pay line is never changed to hide it.
+- Calculation version 3: unpaid runs calculated before this must be recalculated.
 
 ## Database
 
@@ -153,7 +175,9 @@ settings below). Both are set by the CEO by month.
 
 ## Open points (assumptions)
 
-1. HR prepares guard pay (same team as staff payroll). Could be company admin or OM instead.
+1. Settled 11 Nov 2026 (P100 B1): each company prepares its own guard pay, by the person its Company Manager names; not
+   HR and not the OM. HR still records salary accounts and consent letters, the advance and loan scheme, and takes the
+   statutory lists after approval.
 2. A zone for bulk advances is a branch.
 3. Officers (stationed and patrolling) use the guard shift formula of their main site.
 4. The test link now carries 40 days of shift history so last month can be run.
@@ -173,5 +197,5 @@ settings below). Both are set by the CEO by month.
   remain unchanged. Older unpaid periods outside the existing preparation window require a separately reviewed
   reconciliation path, rather than silently changing history or extending the window.
 - The enforced 50% test is the existing employer-recovery cap, including utilities, one-off deductions, wage advances
-  and scheme repayments. Whether statutory deductions and PCB belong in the legal cap remains unresolved. This repair
+  and scheme repayments. Statutory deductions and PCB are outside the cap (Fauzan, 11 Nov 2026, E12). This repair
   does not certify legal compliance, modify ACT/CEO legal discretion, change statutory tables or enable live payroll.
