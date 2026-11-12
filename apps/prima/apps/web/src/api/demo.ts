@@ -3006,6 +3006,13 @@ export class DemoApi implements Api {
   async cmsConsoleSignIn(): Promise<{ url: string; expiresInS: number; name: string }> {
     throw new ApiError('CMS sign-in is not set up yet (CMS_URL and CMS_SIGNIN_SECRET).', 503);
   }
+  // P100 newb: J6 each person's alert choices.
+  myAlertPrefs() {
+    return this.read((s, u) => s.myAlertPrefs(u));
+  }
+  setMyAlertPrefs(input: Parameters<Api['setMyAlertPrefs']>[0]) {
+    return this.write<unknown>('setMyAlertPrefs' as Mutations, [input]);
+  }
   // P100 newb: J5 guard sign-ins in bulk.
   guardSignInBoard(companyId?: string) {
     return this.read((s, u) => s.guardSignInBoard(u, companyId));

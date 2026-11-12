@@ -8,6 +8,7 @@
   "memos"
  ],
  "common": [
+  "GET alerts/prefs",
   "GET arisha",
   "GET arisha/draft-form",
   "GET arisha/drafts",
@@ -21,6 +22,7 @@
   "GET org/import/:/template",
   "GET org/inbox",
   "GET org/map",
+  "POST alerts/prefs",
   "POST arisha",
   "POST arisha/drafts",
   "POST arisha/drafts/:/commit",

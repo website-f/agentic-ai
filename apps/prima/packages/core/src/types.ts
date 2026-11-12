@@ -3384,6 +3384,8 @@ export interface Dataset {
   vehicleTransfers: import('./vehicle-transfer').VehicleTransfer[];
   /** J5 (P100): guard sign-ins made in bulk with a review step (guard-signins.ts; db/modules/guard-signins-v1.sql). */
   guardSignInBatches: import('./guard-signins').GuardSignInBatch[];
+  /** J6 (P100): each person's alert choices (alert-prefs.ts; db/modules/alert-prefs-v1.sql). */
+  alertPrefs: import('./alert-prefs').AlertPrefs[];
   fwWelfareChecks: FwWelfareCheck[];
   fwPlacements: FwPlacement[];
   fwPlacementHosts: FwPlacementHostView[];

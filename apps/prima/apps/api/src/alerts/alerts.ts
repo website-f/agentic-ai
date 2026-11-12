@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { alertItem, planAlerts, renderAlertEmail, renderTeamsCard, uniqueAlerts, type AlertItem, type AlertMode, type HomeItem } from '@prima/core';
+import { alertItem, applyAlertPrefs, planAlerts, renderAlertEmail, renderTeamsCard, uniqueAlerts, type AlertItem, type AlertMode, type AlertPrefs, type HomeItem } from '@prima/core';
 
 /**
  * Alerts to Teams and email (staff usability rule 7; Fauzan, 5 Nov 2026: "Yes" to Teams and email alerts).
@@ -155,6 +155,8 @@ export async function runAlerts(deps: {
   today: string;
   recipients: AlertRecipient[];
   itemsFor: (userId: string) => Promise<HomeItem[]>;
+  /** J6: the person's own choices (null = today's defaults). Urgent safety alerts are sent whatever they say. */
+  prefsFor?: (userId: string) => Promise<Pick<AlertPrefs, 'urgent' | 'digest' | 'muted'> | null>;
   ledger: AlertLedger;
   mail: Pick<GraphAlertMail, 'addressOf' | 'send'> | null;
   http: Fetch;
@@ -173,7 +175,13 @@ export async function runAlerts(deps: {
     if (mode === 'urgent' && p.department && config.teams[p.department])
       byDept.set(p.department, [...(byDept.get(p.department) ?? []), ...items.filter((i) => i.tone === 'crit')]);
     if (!deps.mail) continue;
-    const planned = planAlerts(items, mode, () => false);
+    let prefs: Pick<AlertPrefs, 'urgent' | 'digest' | 'muted'> | null = null;
+    try {
+      prefs = deps.prefsFor ? await deps.prefsFor(p.id) : null;
+    } catch {
+      prefs = null; // the choices cannot be read: today's defaults (everything), never fewer safety alerts
+    }
+    const planned = planAlerts(applyAlertPrefs(items, prefs, mode), mode, () => false);
     // Urgent: claim each new red item for this person; digest: claim the day once.
     const claims = mode === 'urgent' ? planned.map((i) => ({ i, id: deliveryId('email', p.id, i.key) })) : [];
     const fresh: { i: AlertItem; id: string }[] = [];

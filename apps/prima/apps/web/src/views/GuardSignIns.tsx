@@ -98,7 +98,7 @@ function Prepare({ data }: { data: GuardSignInBoard }) {
           <ul className="it-rows it-rows-tight" style={{ maxHeight: 360, overflow: 'auto' }}>
             {list.slice(0, 300).map((c) => (
               <li key={c.personId}>
-                <label className="it-row isc-choice" style={{ justifyContent: 'flex-start' }}>
+                <label className="it-row isc-choice" style={{ justifyContent: 'flex-start', flexDirection: 'row', alignItems: 'center', flexWrap: 'nowrap' }}>
                   <input type="checkbox" checked={picked.has(c.personId)} onChange={() => toggle(c.personId)} />
                   <span className="it-row-main">
                     <strong>{c.name}</strong>

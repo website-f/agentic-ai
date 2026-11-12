@@ -2197,6 +2197,16 @@ export const RULES = {
     'Policy',
     "Fauzan, 5 Nov 2026 (\"Build any not build\"): the day-to-day quality pieces on existing records. Service faults are recorded once by the company or Operations, with what was done at once and whether the client was told; serious faults and repeats at the same site go to ACT for the root cause as an ACT finding. Procurement or the company manager rates suppliers on quality, time and paperwork; Stop blocks the supplier and only Finance unblocks. ACT or the Chief of Staff keeps the quality objectives and controlled documents; a document version is approved by a second person, never its writer. Management review: Prima builds the inputs from its own figures and the CEO agrees the record. Guards and officers see none of it. Fauzan, 5 Nov 2026 said yes to the 90-day repeat window, the 12-month supplier re-rating and the 24-month default document review.",
   ),
+  /**
+   * J6 (Fauzan, 11 Nov 2026: staff choose their alerts; urgent safety alerts cannot be switched off). The alert topics
+   * whose urgent (red) alerts are always sent and always shown, whatever a person chose (alert-prefs.ts).
+   */
+  alertSafetyLocked: rule<{ tags: string[] }>(
+    'ALERT-SAFETY-LOCKED',
+    { tags: ['Arms', 'Issue firearm', 'No guard', 'No-show', 'Incidents', 'P1 case', 'P1 cases', 'OSH', 'DOSH', 'PDPA breach'] },
+    'Unverified',
+    'Fauzan, 11 Nov 2026 (J6): staff choose which alerts they receive; urgent safety alerts cannot be switched off. The list is the P100 build\'s proposal for him to confirm: firearms (overdue, not returned, vault, issue), a post with no guard or a guard not turned up, serious incidents and P1 cases, workplace safety (OSH, DOSH accident notices), and a personal data breach (72-hour notice).',
+  ),
   fwmRecruitSteps: rule(
     'FWM-RECRUIT-STEPS',
     ['AGENCY_LICENCE', 'EMBASSY', 'INTERVIEW', 'AGE', 'CONTRACT'],

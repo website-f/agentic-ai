@@ -60,6 +60,8 @@ const MODULE_TABLES: Partial<Record<TableName, string>> = {
   vehicleTransfers: 'Vehicle moves between companies are not installed in this database yet (module vehicle-transfers-v1, run by the CEO).',
   // P100 J5: guard sign-ins in bulk (db/modules/guard-signins-v1.sql, CEO-run migration).
   guardSignInBatches: 'Guard sign-ins in bulk are not installed in this database yet (module guard-signins-v1, run by the CEO).',
+  // P100 J6: each person's alert choices (db/modules/alert-prefs-v1.sql, CEO-run migration).
+  alertPrefs: 'Choosing alerts is not installed in this database yet (module alert-prefs-v1, run by the CEO).',
 };
 
 // Exported for the per-request read snapshots (read-cache.ts, P83).
@@ -257,6 +259,7 @@ ownerTestCheckins: 'prima.owner_test_checkins',
 clockSnaps: 'prima.clock_snaps',
 vehicleTransfers: 'prima.vehicle_transfers',
 guardSignInBatches: 'prima.guard_signin_batches',
+alertPrefs: 'prima.alert_prefs',
 loginHandovers: 'prima.login_handovers',
 hrFilings: 'prima.hr_filings',
 hrCases: 'prima.hr_cases',

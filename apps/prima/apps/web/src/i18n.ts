@@ -4156,7 +4156,28 @@ const ROWS: Row[] = [
   ['Choose at least one guard.', 'Pilih sekurang-kurangnya seorang pengawal.', 'Pilih sekurang-kurangnya seorang guard.'],
   ['This batch was already decided or cancelled. Open it again.', 'Kelompok ini sudah diputuskan atau dibatalkan. Buka semula.', 'Batch ini sudah diputus atau dibatal. Buka semula.'],
   ['Only a batch waiting for approval can be cancelled.', 'Hanya kelompok yang menunggu kelulusan boleh dibatalkan.', 'Hanya batch yang tunggu approval boleh dibatal.'],
-  ['Guard sign-ins in bulk are not installed in this database yet (module guard-signins-v1, run by the CEO).', 'Log masuk pengawal secara pukal belum dipasang dalam pangkalan data ini (modul guard-signins-v1, dijalankan oleh CEO).', 'Sign-in guard pukal belum dipasang dalam database ini (modul guard-signins-v1, dijalankan oleh CEO).']
+  ['Guard sign-ins in bulk are not installed in this database yet (module guard-signins-v1, run by the CEO).', 'Log masuk pengawal secara pukal belum dipasang dalam pangkalan data ini (modul guard-signins-v1, dijalankan oleh CEO).', 'Sign-in guard pukal belum dipasang dalam database ini (modul guard-signins-v1, dijalankan oleh CEO).'],
+  ['Choose my alerts', 'Pilih makluman saya', null],
+  ['My alerts', 'Makluman saya', null],
+  ['Choose what you are told about. Urgent safety alerts always come.', 'Pilih perkara yang anda mahu dimaklumkan. Makluman keselamatan segera sentiasa dihantar.', 'Pilih apa yang anda mahu dimaklumkan. Alert keselamatan segera sentiasa dihantar.'],
+  ['your alert choices', 'pilihan makluman anda', null],
+  ['Choosing alerts is not installed here yet. Until it is, you get every urgent alert and the daily digest.', 'Pilihan makluman belum dipasang di sini. Sehingga itu, anda menerima semua makluman segera dan ringkasan harian.', 'Pilihan alert belum dipasang di sini. Sebelum itu, anda terima semua alert segera dan ringkasan harian.'],
+  ['How you are told', 'Cara anda dimaklumkan', null],
+  ['Urgent alerts by email', 'Makluman segera melalui e-mel', 'Alert segera melalui email'],
+  ['Red items, as soon as they appear. Urgent safety alerts come even when this is off.', 'Perkara merah, sebaik sahaja ia muncul. Makluman keselamatan segera tetap dihantar walaupun ini dimatikan.', 'Item merah, sebaik ia muncul. Alert keselamatan segera tetap dihantar walaupun ini off.'],
+  ['Daily digest by email', 'Ringkasan harian melalui e-mel', 'Ringkasan harian melalui email'],
+  ['Once a day at 8 am: everything still waiting for you.', 'Sekali sehari pada 8 pagi: semua yang masih menunggu anda.', 'Sekali sehari pukul 8 pagi: semua yang masih tunggu anda.'],
+  ['Topics', 'Topik', null],
+  ['Untick a topic you do not want in email or the bell. Your Home to-do list still shows all your work.', 'Nyahtanda topik yang anda tidak mahu dalam e-mel atau loceng. Senarai tugasan di Utama tetap menunjukkan semua kerja anda.', 'Untick topik yang anda tak mahu dalam email atau loceng. Senarai to-do di Home tetap tunjuk semua kerja anda.'],
+  ['Search topics', 'Cari topik', null],
+  ['Urgent safety alert: cannot be switched off', 'Makluman keselamatan segera: tidak boleh dimatikan', 'Alert keselamatan segera: tak boleh di-off'],
+  ['Not saved yet: you get every urgent alert and the daily digest.', 'Belum disimpan: anda menerima semua makluman segera dan ringkasan harian.', 'Belum save: anda terima semua alert segera dan ringkasan harian.'],
+  ['Email and Teams alerts go out only once IT switches them on.', 'Makluman e-mel dan Teams hanya dihantar selepas IT menghidupkannya.', 'Alert email dan Teams hanya dihantar bila IT on-kan.'],
+  ['Save my choices', 'Simpan pilihan saya', 'Save pilihan saya'],
+  ['Your alert choices are saved.', 'Pilihan makluman anda disimpan.', 'Pilihan alert anda sudah disimpan.'],
+  ['Alerts are for staff sign-ins.', 'Makluman adalah untuk log masuk staf.', 'Alert untuk sign-in staf.'],
+  ['Choosing alerts is not installed in this database yet (module alert-prefs-v1, run by the CEO).', 'Pilihan makluman belum dipasang dalam pangkalan data ini (modul alert-prefs-v1, dijalankan oleh CEO).', 'Pilihan alert belum dipasang dalam database ini (modul alert-prefs-v1, dijalankan oleh CEO).'],
+  ['Say whether urgent alerts and the daily digest are on.', 'Nyatakan sama ada makluman segera dan ringkasan harian dihidupkan.', 'Nyatakan sama ada alert segera dan ringkasan harian on.']
 ];
 
 const DICT = new Map<string, [string, string]>();

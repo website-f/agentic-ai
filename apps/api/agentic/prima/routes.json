@@ -116,6 +116,17 @@
   "body": "Record<string, unknown>"
  },
  {
+  "method": "GET",
+  "path": "api/alerts/prefs",
+  "name": "mine"
+ },
+ {
+  "method": "POST",
+  "path": "api/alerts/prefs",
+  "name": "save",
+  "body": "Record<string, unknown>"
+ },
+ {
   "method": "POST",
   "path": "api/am/purchases",
   "name": "buy",

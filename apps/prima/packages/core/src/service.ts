@@ -128,6 +128,7 @@ import { VehicleTransferService } from "./vehicle-transfer";
 import { cmsConsolePerson } from "./cms-console";
 import { ClientPortalService } from "./client-portal";
 import { GuardSignInService } from "./guard-signins";
+import { AlertPrefsService, applyAlertPrefs } from "./alert-prefs";
 import type { MovementSummary } from "./movement";
 import type { RawReading } from "./movement";
 import { mayTestCheckin } from "./owner-test-checkin";
@@ -48377,9 +48378,35 @@ export class PrimaService {
     return items;
   }
 
-  /** The in-app bell: the same alerts as Teams and email, for the signed-in person only. */
+  /**
+   * The in-app bell: the same alerts as Teams and email, for the signed-in person only. J6: without the topics the person
+   * muted, but urgent safety alerts always (alert-prefs.ts).
+   */
   async myAlerts(user: User): Promise<AlertItem[]> {
-    return inAppAlerts((await this.alertItems(user)).map(alertItem));
+    return applyAlertPrefs(inAppAlerts((await this.alertItems(user)).map(alertItem)), await this.alertPrefsRow(user), 'bell');
+  }
+
+  /** J6: each person's alert choices (alert-prefs.ts). */
+  alertPrefs(): AlertPrefsService {
+    return new AlertPrefsService(this.store, () => this.now());
+  }
+
+  /** The person's saved choices, or null (defaults) when none are saved or the module is not installed. */
+  async alertPrefsRow(user: User) {
+    try {
+      return await this.alertPrefs().get(user);
+    } catch (e) {
+      if (e instanceof BadRequest) return null;
+      throw e;
+    }
+  }
+
+  async myAlertPrefs(user: User) {
+    return this.alertPrefs().mine(user, inAppAlerts((await this.alertItems(user)).map(alertItem)));
+  }
+
+  setMyAlertPrefs(user: User, input: { urgent: boolean; digest: boolean; muted: string[] }) {
+    return this.alertPrefs().set(user, input);
   }
 
   /** The IT team's own jobs: given to me, sent back, late, or waiting for my check (nobody checks their own work). */

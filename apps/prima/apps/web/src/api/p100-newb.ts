@@ -38,7 +38,12 @@ export interface ClientPortalOpened {
 /** J5: guard sign-ins in bulk with a review step. */
 export type GuardSignInBoard = R<'guardSignInBoard'>;
 
+/** J6: each person's alert choices. */
+export type MyAlertPrefs = R<'myAlertPrefs'>;
+
 export interface NewbClient {
+  myAlertPrefs(): Promise<MyAlertPrefs>;
+  setMyAlertPrefs(input: { urgent: boolean; digest: boolean; muted: string[] }): Promise<unknown>;
   guardSignInBoard(companyId?: string): Promise<GuardSignInBoard>;
   prepareGuardSignIns(companyId: string, personIds: string[], note: string): Promise<unknown>;
   decideGuardSignIns(id: string, approve: boolean, note: string): Promise<unknown>;
@@ -59,6 +64,8 @@ export interface NewbClient {
 /** The in-browser demo's writes for these calls (demo.ts apply() hands them here first). */
 export function applyNewb(svc: PrimaService, u: import('@prima/core').User, op: string, a: never[]): Promise<unknown> | null {
   switch (op) {
+    case 'setMyAlertPrefs':
+      return svc.setMyAlertPrefs(u, a[0]);
     case 'prepareGuardSignIns':
       return svc.prepareGuardSignIns(u, a[0], a[1], a[2]);
     case 'decideGuardSignIns':
