@@ -2107,6 +2107,13 @@ export const RULES = {
     'Policy',
     'Approved by Fauzan, 11 Nov 2026: staff resignation notice is 1 month for service under 1 year and 3 months for 1 year or more, written in the handbook in English and Malay. It is never shorter than the Employment Act 1955 s.12 notice (4 weeks under 2 years, 6 weeks from 2 to 5 years, 8 weeks from 5 years: rule HR-JOIN-LEAVE); Prima takes the later of the two last days. HR accepts a resignation and confirms the last day; a shorter notice by agreement needs the HR Director, never the staff member or the HR person who asked.',
   ),
+  // P100 newa (J2, Fauzan 11 Nov 2026): equipment warranty claims to the supplier.
+  warrantyClaims: rule(
+    'ITEM-WARRANTY',
+    { supplierReminderDays: 30 },
+    'Unverified',
+    'Approved by Fauzan, 11 Nov 2026: build equipment warranty claims (insurance claims cover policies only). The store, IT or the company manager raises a claim on an item with the warranty card; the company manager approves sending it, never the person who raised it; the supplier repairs, replaces or refuses with their report; the company manager closes it, never the person who recorded the outcome. The 30-day reminder for an item still with the supplier is proposed, for approval (no time limit was set).',
+  ),
   fwRecharge: rule(
     'FW-RECHARGE',
     {

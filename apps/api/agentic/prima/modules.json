@@ -2352,12 +2352,14 @@
    "GET items/passport/:",
    "GET items/reports/:",
    "GET items/site/:",
+   "GET items/warranty",
    "GET records/:/form",
    "GET records/kinds",
    "POST items/act",
    "POST items/import/read",
    "POST items/resolve",
-   "POST items/scan-check"
+   "POST items/scan-check",
+   "POST items/warranty/act"
   ],
   "ja": [
    "GET ja"

@@ -19,6 +19,9 @@ export type PikmBoard = Awaited<ReturnType<PrimaService['pikm']['board']>>;
 export type MyResignation = Awaited<ReturnType<PrimaService['resignations']['mine']>>;
 export type ResignationBoard = Awaited<ReturnType<PrimaService['resignations']['board']>>;
 
+/** J2: warranty claims and the items a claim can be raised on. */
+export type WarrantyBoard = Awaited<ReturnType<PrimaService['warranty']['board']>>;
+
 export interface NewaClient {
   /** E4: payments to dependants abroad waiting for a decision or a transfer. */
   socsoPaymentsAbroad(): Promise<SocsoPayAbroadBoard>;
@@ -40,4 +43,8 @@ export interface NewaClient {
   resignationBoard(): Promise<ResignationBoard>;
   /** E10: one resignation step; the server checks who may do it. */
   resignAct(action: string, body: Record<string, unknown>): Promise<import('@prima/core').Resignation>;
+  /** J2: warranty claims of the companies whose items this person works. */
+  warrantyBoard(): Promise<WarrantyBoard>;
+  /** J2: one warranty step; the server checks who may do it. */
+  warrantyAct(action: string, body: Record<string, unknown>): Promise<import('@prima/core').WarrantyClaim>;
 }

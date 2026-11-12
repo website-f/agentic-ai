@@ -283,3 +283,5 @@ export * from './fw-extras';
 export * from './quality-pikm';
 // P100 newa: E10 staff resignation.
 export * from './hr-resignation';
+// P100 newa: J2 equipment warranty claims.
+export * from './item-warranty';

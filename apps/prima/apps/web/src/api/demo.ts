@@ -4021,6 +4021,7 @@ export class DemoApi implements Api {
     if (area === 'fw') return this.svc.fwExtras.act(u, action, body);
     if (area === 'pikm') return this.svc.pikm.act(u, action, body);
     if (area === 'resign') return this.svc.resignations.act(u, action, body);
+    if (area === 'warranty') return this.svc.warranty.act(u, action, body);
     throw new ApiError('Unknown step.', 400);
   }
   socsoPaymentsAbroad() {
@@ -4052,6 +4053,12 @@ export class DemoApi implements Api {
   }
   resignAct(action: string, body: Record<string, unknown>) {
     return this.write<Awaited<ReturnType<Api['resignAct']>>>('newaAct', ['resign', action, body]);
+  }
+  warrantyBoard() {
+    return this.read((s, u) => s.warranty.board(u));
+  }
+  warrantyAct(action: string, body: Record<string, unknown>) {
+    return this.write<Awaited<ReturnType<Api['warrantyAct']>>>('newaAct', ['warranty', action, body]);
   }
 }
 

@@ -4647,6 +4647,19 @@
  },
  {
   "method": "GET",
+  "path": "api/items/warranty",
+  "name": "board",
+  "doc": "Warranty claims of the companies whose items this person works, with the next step, and the items a claim can be raised on."
+ },
+ {
+  "method": "POST",
+  "path": "api/items/warranty/act",
+  "name": "act",
+  "doc": "One step: raise, approve or refuse, sent to the supplier, the supplier's outcome, or close.",
+  "body": "Record<string, unknown>"
+ },
+ {
+  "method": "GET",
   "path": "api/ja",
   "name": "jaBoard"
  },

@@ -3445,6 +3445,8 @@ export interface Dataset {
   qmsPikmRecords: import('./quality-pikm').PikmRecord[];
   /** P100 (E10): staff resignations (db/modules/hr-resignations-v1.sql). */
   staffResignations: import('./hr-resignation').Resignation[];
+  /** P100 (J2): equipment warranty claims to the supplier (db/modules/item-warranty-v1.sql). */
+  itemWarrantyClaims: import('./item-warranty').WarrantyClaim[];
   fwRecruitFiles: FwRecruitFile[];
 }
 

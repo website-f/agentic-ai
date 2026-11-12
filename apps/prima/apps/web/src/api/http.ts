@@ -3038,5 +3038,11 @@ export class HttpApi implements Api {
   resignAct(action: string, body: Record<string, unknown>) {
     return this.call<Awaited<ReturnType<Api['resignAct']>>>('POST', '/resignations/act', { ...body, action });
   }
+  warrantyBoard() {
+    return this.call<Awaited<ReturnType<Api['warrantyBoard']>>>('GET', '/items/warranty');
+  }
+  warrantyAct(action: string, body: Record<string, unknown>) {
+    return this.call<Awaited<ReturnType<Api['warrantyAct']>>>('POST', '/items/warranty/act', { ...body, action });
+  }
 }
 

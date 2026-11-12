@@ -1059,6 +1059,7 @@ import { SocsoExtrasService } from "./socso-extras";
 import { FwExtrasService } from "./fw-extras";
 import { PikmService } from "./quality-pikm";
 import { ResignationService } from "./hr-resignation";
+import { WarrantyService } from "./item-warranty";
 
 
 
@@ -54120,6 +54121,11 @@ export class PrimaService {
     return new ResignationService(this.store, this);
   }
 
+  /** J2: equipment warranty claims to the supplier, from an item of the items register. */
+  get warranty(): WarrantyService {
+    return new WarrantyService(this.store, this);
+  }
+
   /** Reminders from the P100 newa workflows, for the person's own Home. */
   private async newaHome(user: User): Promise<HomeItem[]> {
     const parts = await Promise.all([
@@ -54127,6 +54133,7 @@ export class PrimaService {
       this.fwExtras.homeItems(user).catch(() => [] as HomeItem[]),
       this.pikm.homeItems(user).catch(() => [] as HomeItem[]),
       this.resignations.homeItems(user).catch(() => [] as HomeItem[]),
+      this.warranty.homeItems(user).catch(() => [] as HomeItem[]),
     ]);
     return parts.flat();
   }
