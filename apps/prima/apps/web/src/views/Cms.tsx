@@ -1,4 +1,5 @@
 import { Select } from '../SearchSelect';
+import { CmsConsoleCard } from './CmsConsole';
 import { useRef, useState } from "react";
 import {
   FootprintsIcon,
@@ -131,6 +132,7 @@ export function CmsView() {
           </>
         }
       />
+      <CmsConsoleCard />
       <Stats>
         <Stat
           label="Emergencies not acknowledged"

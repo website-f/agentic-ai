@@ -2100,6 +2100,62 @@ export class HttpApi implements Api {
   vehicleUsage(month?: string) {
     return this.call<Awaited<ReturnType<Api['vehicleUsage']>>>('GET', `/fleet/usage${month ? `?month=${encodeURIComponent(month)}` : ''}`);
   }
+  // P100 newb: E7 the CMS console opened with the Prima sign-in (apps/api/src/cms-signin.controller.ts).
+  cmsConsole() {
+    return this.call<Awaited<ReturnType<Api['cmsConsole']>>>('GET', '/cms/console');
+  }
+  cmsConsoleSignIn() {
+    return this.call<Awaited<ReturnType<Api['cmsConsoleSignIn']>>>('POST', '/cms/console/sign-in', {});
+  }
+  // P100 newb: J6 each person's alert choices (apps/api/src/alerts/controller.ts).
+  myAlertPrefs() {
+    return this.call<Awaited<ReturnType<Api['myAlertPrefs']>>>('GET', '/alerts/prefs');
+  }
+  setMyAlertPrefs(input: Parameters<Api['setMyAlertPrefs']>[0]) {
+    return this.call<unknown>('POST', '/alerts/prefs', input);
+  }
+  // P100 newb: J5 guard sign-ins in bulk (apps/api/src/guard-signins.controller.ts).
+  guardSignInBoard(companyId?: string) {
+    return this.call<Awaited<ReturnType<Api['guardSignInBoard']>>>('GET', `/guard-signins${companyId ? `?companyId=${encodeURIComponent(companyId)}` : ''}`);
+  }
+  prepareGuardSignIns(companyId: string, personIds: string[], note: string) {
+    return this.call<unknown>('POST', '/guard-signins', { companyId, personIds, note });
+  }
+  decideGuardSignIns(id: string, approve: boolean, note: string) {
+    return this.call<unknown>('POST', `/guard-signins/${encodeURIComponent(id)}/decide`, { approve, note });
+  }
+  cancelGuardSignIns(id: string, reason: string) {
+    return this.call<unknown>('POST', `/guard-signins/${encodeURIComponent(id)}/cancel`, { reason });
+  }
+  // P100 newb: J1 the client portal (apps/api/src/client-portal.controller.ts).
+  clientPortalDesk() {
+    return this.call<Awaited<ReturnType<Api['clientPortalDesk']>>>('GET', '/client-portal');
+  }
+  openClientPortal(clientId: string, input: Parameters<Api['openClientPortal']>[1]) {
+    return this.call<Awaited<ReturnType<Api['openClientPortal']>>>('POST', `/clients/${encodeURIComponent(clientId)}/client-portal`, input);
+  }
+  resetClientPortal(clientId: string, portalUserId: string, reason: string) {
+    return this.call<Awaited<ReturnType<Api['resetClientPortal']>>>('POST', `/clients/${encodeURIComponent(clientId)}/client-portal/${encodeURIComponent(portalUserId)}/reset`, { reason });
+  }
+  closeClientPortal(clientId: string, portalUserId: string, reason: string) {
+    return this.call<unknown>('POST', `/clients/${encodeURIComponent(clientId)}/client-portal/${encodeURIComponent(portalUserId)}/close`, { reason });
+  }
+  // P100 newb: E6 vehicle moves between companies (apps/api/src/vehicle-transfer.controller.ts).
+  vehicleTransferBoard() {
+    return this.call<Awaited<ReturnType<Api['vehicleTransferBoard']>>>('GET', '/fleet/transfers');
+  }
+  requestVehicleTransfer(input: Parameters<Api['requestVehicleTransfer']>[0]) {
+    return this.call<unknown>('POST', '/fleet/transfers', input);
+  }
+  decideVehicleTransfer(id: string, approve: boolean, note: string) {
+    return this.call<unknown>('POST', `/fleet/transfers/${encodeURIComponent(id)}/decide`, { approve, note });
+  }
+  handOverVehicleTransfer(id: string, input: Parameters<Api['handOverVehicleTransfer']>[1]) {
+    return this.call<unknown>('POST', `/fleet/transfers/${encodeURIComponent(id)}/handover`, input);
+  }
+  cancelVehicleTransfer(id: string, reason: string) {
+    return this.call<unknown>('POST', `/fleet/transfers/${encodeURIComponent(id)}/cancel`, { reason });
+  }
   setVehicleFuel(vehicleId: string, input: Parameters<Api['setVehicleFuel']>[1]) {
     return this.call<unknown>('POST', `/fleet/vehicles/${encodeURIComponent(vehicleId)}/fuel-type`, input);
   }

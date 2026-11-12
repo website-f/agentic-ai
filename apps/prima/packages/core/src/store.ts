@@ -141,6 +141,11 @@ export interface Store {
   qualityReady?(): Promise<boolean>;
   /** Screening case files: false until the reviewed database module is installed. The memory store has them. */
   screeningReady?(): Promise<boolean>;
+  /**
+   * J5: makes the guard sign-ins of an approved batch. On PostgreSQL only the database does it (prima.gsb_create, module
+   * guard-signins-v1), re-checking the batch and the approver; the memory store has none and the service does it itself.
+   */
+  createGuardSignIns?(batchId: Id): Promise<{ count: number; skipped: { personId: Id; why: string }[] }>;
   /** Whether the optional Asset Management extras tables exist (db/modules/am-extras-v1.sql). The memory store always has them. */
   amExtrasReady?(): Promise<boolean>;
 }

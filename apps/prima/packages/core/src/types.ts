@@ -3407,6 +3407,12 @@ export interface Dataset {
   clockSnaps: import('./clock-snap').ClockSnap[];
   /** K8 (Fauzan, 11 Nov 2026): the record of every bulk load (bulk-manager-service.ts; db/modules/bulk-loads-v1.sql). */
   bulkLoads: import('./bulk-manager-service').BulkLoad[];
+  /** E6 (P100): moving a vehicle to another group company's use: request, approval, handover (vehicle-transfer.ts; db/modules/vehicle-transfers-v1.sql). */
+  vehicleTransfers: import('./vehicle-transfer').VehicleTransfer[];
+  /** J5 (P100): guard sign-ins made in bulk with a review step (guard-signins.ts; db/modules/guard-signins-v1.sql). */
+  guardSignInBatches: import('./guard-signins').GuardSignInBatch[];
+  /** J6 (P100): each person's alert choices (alert-prefs.ts; db/modules/alert-prefs-v1.sql). */
+  alertPrefs: import('./alert-prefs').AlertPrefs[];
   fwWelfareChecks: FwWelfareCheck[];
   fwPlacements: FwPlacement[];
   fwPlacementHosts: FwPlacementHostView[];
@@ -3815,7 +3821,8 @@ export interface InvoiceProof {
   docId: Id;
 }
 
-export type ClientFeedbackVia = 'meeting' | 'visit' | 'call' | 'email' | 'form';
+/** portal (J1, 11 Nov 2026): the client gave it on the client portal themselves; never chosen by staff (CLIENT_VIA). */
+export type ClientFeedbackVia = 'meeting' | 'visit' | 'call' | 'email' | 'form' | 'portal';
 
 export interface ClientComplaint {
   id: Id;
@@ -3898,6 +3905,8 @@ export interface ClientAccount {
   winBackOn?: IsoDate | null;
   /** Read-only report links shared with the client (client portal, first step). */
   shareLinks?: import('./client-share').ClientShareLink[];
+  /** J1 (11 Nov 2026): named people at the client who sign in to the client portal (client-portal.ts). */
+  portalUsers?: import('./client-portal').ClientPortalUser[];
   /**
    * The client's signed acknowledgement of each month's work, with the client's comment on the work (Fauzan, 4 Nov 2026:
    * for all operations the OM uploads the bill sent and the client's acknowledgement slip or signed paper by the 10th
@@ -3960,6 +3969,10 @@ export interface ClientRequest {
   outcome: string | null;
   /** More or fewer guards changes the contract: the signed variation's reference. */
   variationRef: string | null;
+  /** J1: raised by the client on the client portal (its outcome is shown back to the client there). */
+  viaPortal?: boolean;
+  /** J1: the client's site it is about, when the client named one. */
+  siteId?: Id | null;
 }
 
 export type ClientRenewalDecision = 'renew' | 'renew_new_price' | 'rebid' | 'let_go';

@@ -124,6 +124,11 @@ import { clockCarriesOver } from "./checkin-service";
 import { analyseMovement } from "./movement";
 import { TRACKER_NOTE_KINDS, TRACKER_NOTES_MAX, type TrackerNote } from "./movement";
 import { ClockSnapService } from "./clock-snap-service";
+import { VehicleTransferService } from "./vehicle-transfer";
+import { cmsConsolePerson } from "./cms-console";
+import { ClientPortalService } from "./client-portal";
+import { GuardSignInService } from "./guard-signins";
+import { AlertPrefsService, applyAlertPrefs } from "./alert-prefs";
 import type { MovementSummary } from "./movement";
 import type { RawReading } from "./movement";
 import { mayTestCheckin } from "./owner-test-checkin";
@@ -40893,6 +40898,27 @@ export class PrimaService {
   }
 
   /** A CMS officer clocks in to their own seat on the roster (the seat must be theirs and starting or running now). */
+  /**
+   * E7 (Fauzan, 11 Nov 2026): who opens the CMS console from Prima, and under which roster name (cms-console.ts). The
+   * API signs the one-time ticket; CMS checks it. Written to the audit chain.
+   */
+  /** Whether this person may open the CMS console (for the button on the CMS screen); records nothing. */
+  async cmsConsoleMay(user: User): Promise<boolean> {
+    try {
+      cmsConsolePerson(user, await this.store.list('cmsStaff'));
+      return true;
+    } catch (e) {
+      if (e instanceof AccessDenied) return false;
+      throw e;
+    }
+  }
+
+  async cmsConsoleSignIn(user: User, via: 'microsoft' | 'office' | 'dev') {
+    const person = cmsConsolePerson(user, await this.store.list('cmsStaff'));
+    await this.store.audit({ at: this.now(), actor: user.name, companyId: null, action: 'cms.console.sign_in', entity: 'user', entityId: user.id, summary: `${person.name} opened the CMS console (${person.as === 'roster' ? 'CMS roster' : 'Arms Control'}; signed in to Prima via ${via}).` });
+    return person;
+  }
+
   async cmsSeatClockIn(user: User, shiftId: Id) {
     if (!canUseCms(user)) throw new AccessDenied('cms.desk', '(CMS)');
     const s = await this.store.get('cmsShifts', shiftId);
@@ -45691,6 +45717,7 @@ export class PrimaService {
         .filter((x) => monthInsidePeriod(x.period, l.from, l.to))
         .map((x) => ({ period: x.period, amount: x.amount, sentOn: ([x.hand, x.email, x.portal].filter((p): p is NonNullable<typeof p> => !!p).map((p) => dateOf(p.at)).sort()[0] ?? null) as IsoDate | null })),
       reports: a.reports.filter((x) => monthInsidePeriod(x.period, l.from, l.to)).map((x) => x.period),
+      pdfPeriods: a.reports.filter((x) => x.docId && monthInsidePeriod(x.period, l.from, l.to)).map((x) => x.period),
     };
     if (!preview) {
       const at = this.now();
@@ -45706,6 +45733,70 @@ export class PrimaService {
       });
     }
     return report;
+  }
+
+  /**
+   * J1: a monthly report's PDF through a report link (Fauzan, 11 Nov 2026: "report PDFs on the client link"). Only a
+   * live link, only a month wholly inside the link's period, only a report kept as a file. Counted on the audit chain.
+   */
+  async clientShareReportPdf(companyId: Id, clientId: Id, linkId: Id, period: string) {
+    const gone = () => new NotFound('Report link');
+    const a = (await this.store.list('clientAccounts', { companyId: [companyId] })).find((x) => x.id === clientId);
+    if (!a || a.companyId !== companyId || a.stage === 'ended') throw gone();
+    const l = (a.shareLinks ?? []).find((x) => x.id === linkId);
+    if (!l || !shareLinkLive(l, this.today()) || !monthInsidePeriod(period, l.from, l.to)) throw gone();
+    const d = await this.clientPortal().paper(a, 'report', period);
+    await this.store.audit({ at: this.now(), actor: 'Client report link', companyId: a.companyId, action: 'client.share.pdf', entity: 'client', entityId: a.id, summary: `${a.name}: report link ${l.id} opened the ${period} report PDF.` });
+    return d;
+  }
+
+  /** J1: the client portal (client-portal.ts). The OM manages it, the company manager monitors, the COO oversees. */
+  clientPortal(): ClientPortalService {
+    return new ClientPortalService(this.store, () => this.now(), {
+      scope: (user) => this.clientScope(user),
+      // Managed by the OM (Fauzan, 11 Nov 2026): Operations Managers and above in the area, not supervisors or patrol officers.
+      actsOn: async (user, a) => this.clientRoleOf(user) === 'act' && user.role !== 'supervisor' && user.opsTier !== 'patrol' && (await this.opsCovers(user, a.companyId, a.siteIds)),
+    });
+  }
+
+  /** J5: guard sign-ins in bulk with a review step (guard-signins.ts). */
+  guardSignIns(): GuardSignInService {
+    return new GuardSignInService(this.store, () => this.now(), {
+      visible: async (user) => visibleCompanyIds(user, await this.grants(), this.today()),
+      companyName: async (id) => centralEmployerName(id) ?? (await this.store.get('companies', id))?.name ?? id,
+    });
+  }
+
+  guardSignInBoard(user: User, companyId?: Id) {
+    return this.guardSignIns().board(user, companyId);
+  }
+
+  prepareGuardSignIns(user: User, companyId: Id, personIds: Id[], note: string) {
+    return this.guardSignIns().prepare(user, companyId, personIds, note);
+  }
+
+  decideGuardSignIns(user: User, batchId: Id, approve: boolean, note: string) {
+    return this.guardSignIns().decide(user, batchId, approve, note);
+  }
+
+  cancelGuardSignIns(user: User, batchId: Id, reason: string) {
+    return this.guardSignIns().cancel(user, batchId, reason);
+  }
+
+  clientPortalDesk(user: User) {
+    return this.clientPortal().desk(user);
+  }
+
+  openClientPortal(user: User, clientId: Id, input: { name: string; post: string }) {
+    return this.clientPortal().open(user, clientId, input);
+  }
+
+  resetClientPortal(user: User, clientId: Id, portalUserId: Id, reason: string) {
+    return this.clientPortal().reset(user, clientId, portalUserId, reason);
+  }
+
+  closeClientPortal(user: User, clientId: Id, portalUserId: Id, reason: string) {
+    return this.clientPortal().close(user, clientId, portalUserId, reason);
   }
 
   /** One entry point for the branch screen and API: each action keeps its own checks. */
@@ -48739,9 +48830,35 @@ export class PrimaService {
     return items;
   }
 
-  /** The in-app bell: the same alerts as Teams and email, for the signed-in person only. */
+  /**
+   * The in-app bell: the same alerts as Teams and email, for the signed-in person only. J6: without the topics the person
+   * muted, but urgent safety alerts always (alert-prefs.ts).
+   */
   async myAlerts(user: User): Promise<AlertItem[]> {
-    return inAppAlerts((await this.alertItems(user)).map(alertItem));
+    return applyAlertPrefs(inAppAlerts((await this.alertItems(user)).map(alertItem)), await this.alertPrefsRow(user), 'bell');
+  }
+
+  /** J6: each person's alert choices (alert-prefs.ts). */
+  alertPrefs(): AlertPrefsService {
+    return new AlertPrefsService(this.store, () => this.now());
+  }
+
+  /** The person's saved choices, or null (defaults) when none are saved or the module is not installed. */
+  async alertPrefsRow(user: User) {
+    try {
+      return await this.alertPrefs().get(user);
+    } catch (e) {
+      if (e instanceof BadRequest) return null;
+      throw e;
+    }
+  }
+
+  async myAlertPrefs(user: User) {
+    return this.alertPrefs().mine(user, inAppAlerts((await this.alertItems(user)).map(alertItem)));
+  }
+
+  setMyAlertPrefs(user: User, input: { urgent: boolean; digest: boolean; muted: string[] }) {
+    return this.alertPrefs().set(user, input);
   }
 
   /** The IT team's own jobs: given to me, sent back, late, or waiting for my check (nobody checks their own work). */
@@ -48927,42 +49044,41 @@ export class PrimaService {
    * a car owned by one company and managed by Perfect Global Logistics can be used by another). The owner stays the
    * same; rent is billed to the company using it on the month's last day.
    */
-  async moveVehicleUse(user: User, vehicleId: Id, input: { companyId: Id; from: IsoDate; reason: string }) {
+  async moveVehicleUse(user: User, _vehicleId: Id, _input: { companyId: Id; from: IsoDate; reason: string }): Promise<never> {
     if (this.rentalRoleOf(user) !== 'transport') throw new AccessDenied('view', '(the Transport department moves vehicles)');
-    const v = await this.store.get('vehicles', vehicleId);
-    if (!v) throw new NotFound('Vehicle');
-    const companies = await this.store.list('companies', {});
-    const target = isCentralEmployer(input.companyId) ? { id: input.companyId, name: centralEmployerName(input.companyId)! } : companies.find((c) => c.id === input.companyId);
-    if (!target) throw new BadRequest('Choose the company that will use the vehicle.');
-    const reason = String(input.reason ?? '').trim().slice(0, 300);
-    if (reason.length < 3) throw new BadRequest('Give the reason.');
-    const from = String(input.from ?? '');
-    if (!this.rentDateOk(from)) throw new BadRequest('Give the date: from the first day of last month at the earliest.');
-    const last = [...(v.usedBy ?? [])].sort((a, b) => a.from.localeCompare(b.from)).at(-1);
-    if (last && from <= last.from) throw new BadRequest(`The move must be after the last one (${last.from}).`);
-    const current = vehicleUserOn(v, from);
-    if (current === target.id) throw new BadRequest(`${target.name} already uses ${v.plate} on ${from}.`);
-    const nameOf = (id: Id) => centralEmployerName(id) ?? companies.find((c) => c.id === id)?.name ?? id;
-    const at = this.now();
-    return this.store.transaction(async (tx) => {
-      await tx.lock?.('vehicles', v.id);
-      const cur = (await tx.get('vehicles', v.id))!;
-      if (JSON.stringify(cur.usedBy ?? []) !== JSON.stringify(v.usedBy ?? [])) throw new BadRequest('This vehicle changed while you were working. Open it again.');
-      const updated = await tx.update('vehicles', v.id, {
-        usedBy: [...(v.usedBy ?? []), { companyId: target.id, from, reason, by: user.name, at }],
-        log: [...v.log, { at, by: user.name, what: `Used by ${target.name} from ${from} (was ${nameOf(current)}): ${reason}`, docId: null }],
-      });
-      await tx.audit({
-        at,
-        actor: user.name,
-        companyId: v.companyId,
-        action: 'fleet.move',
-        entity: 'vehicle',
-        entityId: v.id,
-        summary: `${v.plate} used by ${target.name} from ${from}, was ${nameOf(current)}. Owner stays ${nameOf(v.companyId)}. Reason: ${reason}`,
-      });
-      return updated;
+    // E6 (Fauzan, 11 Nov 2026): a move between group companies is asked for, approved by someone else, then handed over
+    // (vehicleTransfers below). The vehicle moves only at the recorded handover; a direct move is no longer taken.
+    throw new BadRequest('A vehicle moves to another company only through a move request approved by someone else and its handover record (Vehicles, Move between companies).');
+  }
+
+  /** E6: moving a vehicle to another group company's use (vehicle-transfer.ts): ask, approve, hand over. */
+  vehicleTransfers(): VehicleTransferService {
+    return new VehicleTransferService(this.store, () => this.now(), {
+      companies: async () => [
+        ...CENTRAL_EMPLOYER_IDS.map((id) => ({ id, name: centralEmployerName(id) ?? id })),
+        ...(await this.store.list('companies', {})).map((c) => ({ id: c.id, name: c.name })),
+      ],
     });
+  }
+
+  vehicleTransferBoard(user: User) {
+    return this.vehicleTransfers().board(user);
+  }
+
+  requestVehicleTransfer(user: User, input: { vehicleId: Id; toCompanyId: Id; wantedOn: IsoDate; reason: string }) {
+    return this.vehicleTransfers().request(user, input);
+  }
+
+  decideVehicleTransfer(user: User, id: Id, approve: boolean, note: string) {
+    return this.vehicleTransfers().decide(user, id, approve, note);
+  }
+
+  handOverVehicleTransfer(user: User, id: Id, input: Parameters<VehicleTransferService['handover']>[2]) {
+    return this.vehicleTransfers().handover(user, id, input);
+  }
+
+  cancelVehicleTransfer(user: User, id: Id, reason: string) {
+    return this.vehicleTransfers().cancel(user, id, reason);
   }
 
   /** The Finance Director or the CEO sets a rented vehicle's monthly rent from the agreement, with a reason, from a month. */

@@ -7769,7 +7769,7 @@ export class ShareController {
     if (!ref) return res.status(404).send(shareGonePage());
     try {
       const report = await this.db.asShareLink(ref.c, (svc) => svc.clientShareReport(ref.c, ref.k, ref.l));
-      return res.status(200).send(shareReportPage(report));
+      return res.status(200).send(shareReportPage(report, { token }));
     } catch {
       return res.status(404).send(shareGonePage());
     }

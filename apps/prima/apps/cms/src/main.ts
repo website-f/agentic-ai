@@ -1,4 +1,5 @@
-// Starts the CMS app. Production needs: CMS_OPERATOR_KEYS, CMS_GATEWAY_KEY/SECRET, PRIMA_TO_CMS_KEY/SECRET, a state
+// Starts the CMS app. Production needs: CMS_SIGNIN_SECRET (operators sign in with Microsoft through Prima, E7; the
+// operator keys CMS_OPERATOR_KEYS only with CMS_BREAK_GLASS=true), CMS_GATEWAY_KEY/SECRET, PRIMA_TO_CMS_KEY/SECRET, a state
 // folder CMS_STATE_DIR (a persistent volume; masterplan §193) and a directory from Prima (CMS_DIRECTORY_FILE, the copy
 // in the saved state, or Prima's signed push). CMS_DEMO=true runs with sample data and one-time random keys printed to
 // the console, for a local look only; it saves state only when CMS_STATE_DIR is also set.
@@ -7,6 +8,7 @@ import { readFileSync } from 'node:fs';
 import { directoryProblems, emptyDirectory, type Directory } from './directory';
 import { demoDirectory } from './demo';
 import { localModelConfig } from './local-model';
+import { signInFromEnv } from './signin';
 import { Hub } from './hub';
 import { GateLists } from './adaptors/anpr';
 import type { Route } from './adaptors/tracker';
@@ -20,7 +22,8 @@ function load(): { dir: Directory; cfg: ServerConfig; demo: boolean } {
     const k = () => randomBytes(18).toString('base64url');
     const op = k();
     console.log(`CMS demo mode. Sample data only. Operator key for this run: ${op}`);
-    return { dir: demoDirectory(), demo, cfg: { operators: new Map([[op, 'Demo operator']]), gateway: { key: k(), secret: k() }, prima: { key: k(), secret: k() }, localModel: localModelConfig() } };
+    // The demo keeps a one-time key for a local look; with CMS_SIGNIN_SECRET set it also takes Prima's tickets.
+    return { dir: demoDirectory(), demo, cfg: { operators: new Map([[op, 'Demo operator']]), signin: signInFromEnv(process.env, true), gateway: { key: k(), secret: k() }, prima: { key: k(), secret: k() }, localModel: localModelConfig() } };
   }
   const cfg = configFromEnv();
   let dir = emptyDirectory();

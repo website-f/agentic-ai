@@ -28,6 +28,8 @@ export async function createApp() {
   app.use(securityHeaders);
   // Client report links are public: a tighter limit per address on top of the general one.
   app.use('/api/share', rateLimit(Number(process.env.SHARE_RATE_LIMIT_PER_MIN ?? 30)));
+  // J1: the client portal is public too (a personal link and an access code): the same tighter limit.
+  app.use('/api/portal', rateLimit(Number(process.env.SHARE_RATE_LIMIT_PER_MIN ?? 30)));
   app.use(rateLimit(undefined, undefined, undefined, undefined, rateIdentity));
   // On Azure the website (Static Web Apps) and the API (Container Apps) have different addresses: only the
   // website named in WEB_ORIGIN may call the API from a browser. Unset in development, where Vite proxies /api.

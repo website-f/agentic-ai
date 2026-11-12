@@ -1,5 +1,5 @@
 import { timingSafeEqual } from 'node:crypto';
-import { BadRequestException, Controller, Get, Headers, HttpCode, Post, Query, ServiceUnavailableException, UnauthorizedException, UseGuards } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, Headers, HttpCode, Post, Query, ServiceUnavailableException, UnauthorizedException, UseGuards } from '@nestjs/common';
 import { RULES, accessClosed, dateOf, type User } from '@prima/core';
 import { AuthGuard, UserId, pilotAdmits } from '../auth';
 import { leadershipOnboardingPermits } from '../arisha-pilot';
@@ -57,6 +57,7 @@ export class AlertsController {
       today,
       recipients,
       itemsFor: (id) => this.db.asUser(id, (svc, u) => svc.alertItems(u)),
+      prefsFor: (id) => this.db.asUser(id, (svc, u) => svc.alertPrefsRow(u)),
       ledger,
       mail: this.rt.mail,
       http: this.rt.http,
@@ -78,8 +79,28 @@ export class AlertsController {
   }
 }
 
+/** J6: each person chooses their own alerts (urgent safety alerts always go out). Their own row only. */
+@Controller('api/alerts')
+@UseGuards(AuthGuard)
+export class AlertPrefsController {
+  constructor(private readonly db: Db) {}
+
+  @Get('prefs')
+  mine(@UserId() uid: string) {
+    return this.db.asUser(uid, (svc, u) => svc.myAlertPrefs(u));
+  }
+
+  @Post('prefs')
+  @HttpCode(200)
+  save(@UserId() uid: string, @Body() b: Record<string, unknown>) {
+    if (typeof b.urgent !== 'boolean' || typeof b.digest !== 'boolean') throw new BadRequestException('urgent and digest must be true or false');
+    if (!Array.isArray(b.muted) || b.muted.length > 100 || b.muted.some((x) => typeof x !== 'string' || x.length > 60)) throw new BadRequestException('muted must be a list of up to 100 topics');
+    return this.db.asUser(uid, (svc, u) => svc.setMyAlertPrefs(u, { urgent: b.urgent as boolean, digest: b.digest as boolean, muted: b.muted as string[] }));
+  }
+}
+
 export const alertsModule = (env: NodeJS.ProcessEnv = process.env) => ({
-  controllers: [AlertsController],
+  controllers: [AlertsController, AlertPrefsController],
   providers: [
     {
       provide: AlertsRuntime,

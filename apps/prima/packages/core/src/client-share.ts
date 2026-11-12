@@ -48,6 +48,8 @@ export interface ClientShareReport {
   incidents: { ref: string; on: IsoDate; site: string; kind: string; severity: string; status: 'Open' | 'In hand' | 'Resolved' }[];
   invoices: { period: string; amount: number; sentOn: IsoDate | null }[];
   reports: string[];
+  /** J1: months whose monthly report is kept as a file, offered as a PDF on the link. */
+  pdfPeriods?: string[];
 }
 
 /** A share link is usable on `today` when it is not revoked and not past its expiry date. */

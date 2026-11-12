@@ -171,7 +171,7 @@ export const RULES = {
     'HR-STAFF-KEEP',
     90,
     'Policy',
-    'Proposed retention of location readings, to confirm with the PDPA notice to staff (location and face are personal data; face is biometric). Approved by Fauzan, 11 Nov 2026 (round 3, G9): keep staff location readings 90 days, as built. The staff privacy notice is still to come from the PDPA officer before real face or location data is collected (K5).',
+    'Approved by Fauzan, 11 Nov 2026 (round 3, G9): keep staff location readings 90 days; site visitor records 7 years. J5: readings older than this are deleted automatically by the daily retention job (db/modules/location-retention-v1.sql), staff clock and guard phone alike; a check-in face photo is dropped after its keep date. The staff privacy notice is still to come from the PDPA officer before real face or location data is collected (K5).',
   ),
   remotePlanMin: rule(
     'HR-WFH-PLAN',
@@ -2209,7 +2209,7 @@ export const RULES = {
       keepPingsDays: 90,
     },
     'Policy',
-    'Third audit item 2, Fauzan 5 Nov 2026: guards sign in on their own phones with face plus PIN, live patrol location, SOS button and a heartbeat to CMS. Heartbeat every 60 s and offline after 5 min follow the JA requirements (2 Nov 2026). Location only on duty (30 min either side of the shift); Fauzan, 5 Nov 2026: no PDPA notice step on the phone. The code and SOS numbers are proposed. Approved by Fauzan, 11 Nov 2026 (round 3, G9 and G16): readings kept 90 days; stay signed in 14 hours; locked 30 minutes after 5 wrong tries, as built (the guard phone stays switched off).',
+    'Third audit item 2, Fauzan 5 Nov 2026: guards sign in on their own phones with face plus PIN, live patrol location, SOS button and a heartbeat to CMS. Heartbeat every 60 s and offline after 5 min follow the JA requirements (2 Nov 2026). Location only on duty (30 min either side of the shift); Fauzan, 5 Nov 2026: no PDPA notice step on the phone. The code and SOS numbers are proposed. Approved by Fauzan, 11 Nov 2026 (round 3, G9 and G16): readings kept 90 days (deleted daily by the location retention job, rule HR-STAFF-KEEP); stay signed in 14 hours; locked 30 minutes after 5 wrong tries, as built (the guard phone stays switched off).',
   ),
   qualityOps: rule(
     'QMS-OPERATIONS',
@@ -2221,6 +2221,16 @@ export const RULES = {
     },
     'Policy',
     "Fauzan, 5 Nov 2026 (\"Build any not build\"): the day-to-day quality pieces on existing records. Service faults are recorded once by the company or Operations, with what was done at once and whether the client was told; serious faults and repeats at the same site go to ACT for the root cause as an ACT finding. Procurement or the company manager rates suppliers on quality, time and paperwork; Stop blocks the supplier and only Finance unblocks. ACT or the Chief of Staff keeps the quality objectives and controlled documents; a document version is approved by a second person, never its writer. Management review: Prima builds the inputs from its own figures and the CEO agrees the record. Guards and officers see none of it. Fauzan, 5 Nov 2026 said yes to the 90-day repeat window, the 12-month supplier re-rating and the 24-month default document review.",
+  ),
+  /**
+   * J6 (Fauzan, 11 Nov 2026: staff choose their alerts; urgent safety alerts cannot be switched off). The alert topics
+   * whose urgent (red) alerts are always sent and always shown, whatever a person chose (alert-prefs.ts).
+   */
+  alertSafetyLocked: rule<{ tags: string[] }>(
+    'ALERT-SAFETY-LOCKED',
+    { tags: ['Arms', 'Issue firearm', 'No guard', 'No-show', 'Incidents', 'P1 case', 'P1 cases', 'OSH', 'DOSH', 'PDPA breach'] },
+    'Unverified',
+    'Fauzan, 11 Nov 2026 (J6): staff choose which alerts they receive; urgent safety alerts cannot be switched off. The list is the P100 build\'s proposal for him to confirm: firearms (overdue, not returned, vault, issue), a post with no guard or a guard not turned up, serious incidents and P1 cases, workplace safety (OSH, DOSH accident notices), and a personal data breach (72-hour notice).',
   ),
   fwmRecruitSteps: rule(
     'FWM-RECRUIT-STEPS',

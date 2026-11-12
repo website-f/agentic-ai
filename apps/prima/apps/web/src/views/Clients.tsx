@@ -9,6 +9,7 @@ import { ProofPicker } from './Proof';
 import { ImportButton } from './ImportDrawer';
 import '../styles/biz.css';
 import { CRM_TABS, CrmView, type CrmTab } from './Crm';
+import { ClientPortalDesk } from './ClientPortal';
 
 /**
  * Client board (Fauzan, 26 Oct 2026). Operations Managers, the Operations Director and officers act on clients:
@@ -28,6 +29,8 @@ const VIA: Record<'meeting' | 'visit' | 'call' | 'email' | 'form', string> = {
   email: 'Email',
   form: 'Feedback form',
 };
+/** J1: how a rating or complaint came, for showing; the client portal is never chosen by staff. */
+const VIA_SHOWN: Record<keyof typeof VIA | 'portal', string> = { ...VIA, portal: 'Client portal' };
 const MEETING: Record<ClientBoard['opsMeetings'][number]['state'], [Tone, string]> = {
   held: ['ok', 'Held, minutes filed'],
   scheduled: ['warn', 'Scheduled'],
@@ -51,7 +54,7 @@ export function ClientsView() {
   const [q, setQ] = useState('');
   const [adding, setAdding] = useState(false);
   const [openId, setOpenId] = useState<string | null>(null);
-  const [tab, setTab] = useState<CrmTab | 'board'>('board');
+  const [tab, setTab] = useState<CrmTab | 'board' | 'portal'>('board');
   if (error)
     return (
       <div className="page">
@@ -67,7 +70,7 @@ export function ClientsView() {
   // Client CRM (Fauzan, 4 Nov 2026): the lifecycle tabs sit beside the board; the Group tab is for group leadership only.
   const tabs = (
     <div className="tabbar crm-tabs" role="tablist" aria-label="Client CRM">
-      {CRM_TABS.filter(([k]) => k !== 'group' || data.leader).map(([k, label]) => (
+      {[...CRM_TABS, ['portal', 'Client portal'] as ['portal', string]].filter(([k]) => k !== 'group' || data.leader).map(([k, label]) => (
         <button key={k} role="tab" aria-selected={tab === k} onClick={() => setTab(k)}>
           {label}
         </button>
@@ -79,7 +82,7 @@ export function ClientsView() {
       <div className="page">
         <PageHead title="Clients" />
         {tabs}
-        <CrmView tab={tab} />
+        {tab === 'portal' ? <ClientPortalDesk /> : <CrmView tab={tab} />}
       </div>
     );
   const act = data.role === 'act';
@@ -375,7 +378,7 @@ function ClientDetail({ a, act, canBill, onClose }: { a: Account; act: boolean; 
                   </span>
                 </span>
                 <span className="bz-row-meta">
-                  {r.from ? `from ${r.from}${r.via ? ` (${VIA[r.via]})` : ''}` : 'who at the client not recorded'}
+                  {r.from ? `from ${r.from}${r.via ? ` (${VIA_SHOWN[r.via]})` : ''}` : 'who at the client not recorded'}
                   {r.comment ? ` · ${r.comment}` : ''}
                 </span>
               </li>
@@ -390,7 +393,7 @@ function ClientDetail({ a, act, canBill, onClose }: { a: Account; act: boolean; 
                 <span className="bz-cl-log-top">
                   <Chip tone={c.resolvedAt ? 'ok' : 'warn'}>{c.resolvedAt ? 'Closed' : 'Open'}</Chip>
                   <span className="bz-sub">
-                    {dateLabel(c.at.slice(0, 10))} · {c.from} ({VIA[c.via]})
+                    {dateLabel(c.at.slice(0, 10))} · {c.from} ({VIA_SHOWN[c.via]})
                   </span>
                 </span>
                 <span>{c.what}</span>

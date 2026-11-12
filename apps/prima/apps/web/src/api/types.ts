@@ -1,4 +1,5 @@
 import { type DraftHelpClient } from './draft-help';
+import type { NewbClient } from './p100-newb';
 import { type ExtractionClient } from './it-extraction';
 import { type AlertItem, type ClientShareLink, type ClientShareReport, type ClientLostReason, type ArishaDraft, type CmsServiceKind, type ArishaAnswer, type ArishaFinanceDraft, type ArishaReviewDraft, type ArishaTurn, type DataMode, type ArmedJobStatus, type AttendanceIssue, type Case, type CaseType, type Company, type DisciplineStep, type FaceCapture, type FollowUpKind, type Home, type GrowthPanel, type GrowthMargin, type IsoDate, type PrimaService, type RecordKind, type ReportDef, type RecordValues, type EvidenceDoc, type FwPaper, type SocsoStatus, type ProofInput, type Quotation, type Severity, type Tender, type TenderDecisionChoice, type TenderBidPart, type TenderPaperKind, type TenderQuery, type TenderRecord, type TenderStatus, type User, type CleaningService, type SecurityPlanService, type CleaningProofInput, type CleaningSetupInput, type FinRequestAction, type FinCheckSection, type FinCloseAction, type FinPackKind, type FinPaymentAction, type FwRecruitStep, type ImportKind, type ImportOptions, type OrgImportReceipt } from '@prima/core';
 import { type ConnectionsClient } from './connections';
@@ -490,7 +491,7 @@ export interface NewQuotation {
 }
 
 /** Everything the screens need. Implemented by the HTTP client and by the in-browser demo. */
-export interface Api extends ConnectionsClient, ExtractionClient, DraftHelpClient, CheckinClient, NewaClient {
+export interface Api extends ConnectionsClient, ExtractionClient, DraftHelpClient, CheckinClient, NewaClient, NewbClient {
   /** Hand-overs between departments and real-data import (connect-departments, 2 Nov 2026). */
   readonly org: OrgClient;
   /** K8: the bulk load helper (data manager and file manager). */

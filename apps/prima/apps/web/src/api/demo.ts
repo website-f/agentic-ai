@@ -2,6 +2,7 @@ import { invalidateDutyContext } from '../duty/context';
 import { AccessDenied, BadRequest, MemoryStore, NotFound, PrimaService, RuleBlocked, dateOf, fromMs, demoPin, generateDataset, makeTestInhouseKey, sampleLabelToken, type ItemAction, type User, type ClientLostReason, type ProofInput, type ReportDef, testReceiptReader, type FinCloseAction, type FinPackKind, type FinPaymentAction, type FinRequestAction, type CmsServiceKind, ImportError, OrgLinkError, registeredRollouts, withOrgLinks, RULES, type FwPaper, QUALITY_OPS_ACTIONS, demoFwRecruitFiles, type OrgImportReceipt } from '@prima/core';
 import { type ExpenseInput, type PdpaCaseInput, type PdpaStepName, type ProductCertInput, type ProductInput, type VehicleRequestInput, type VehicleWorkInput, ApiError, type Api, type CmsSettingsPatch, type FollowUpInput, type LeaveInput, type Me, type PhotoInput, type TenderProtocolInput, type DispatchInput, type DetectionInput, type VideoInput, type PostLogInput, type GateInInput, type NeedsReviewInput, type SiteTaskInput, type DoSiteTaskInput, type ClientCodeInput, type ClientCheckInput, type ClientInspectionInput, type SelfAuditInput, type RbaCommitteeInput, type EthicsInput, type ItEwaste, type FinControlArea, type ArmsRequestAction, type ArmsRequestStepExtra, type AmBuyInput, type RaiseArmsRequestInput, type OfficeDeskInput, type WorkAdjustInput, type WorkReassignInput, type OfficerHoursInput, type CleaningRecordInput, type CleaningSetupInput, type CleaningProofInput, type StockLineInput, type CleaningSlipInput, type ClientWorkAckInput, type GuardTermsInput, type OpportunityInput, type SourceCheckInput, type FwAddFromJaInput, type FwPaperInput, type AmBqActionInput, type PaperReadingResult } from './types';
 import type { DisciplineAppealDecision, PolicyCopyInput, StaffLangId } from './types';
+import { applyNewb } from './p100-newb';
 
 const CLEANING_WRITES = new Set(['saveSetup', 'setMap', 'makePlan', 'publish', 'recordTasks', 'recordDelivery', 'receiveDelivery', 'stockCheck', 'recordClientAck', 'saveSiteKit', 'recordSiteKit', 'approveGift', 'recordTakeBack']);
 
@@ -223,6 +224,9 @@ export class DemoApi implements Api {
 
   private apply(u: User, op: Mutations, args: unknown[]): Promise<unknown> {
     const a = args as never[];
+    // P100 newb: E6, E7, J1, J5 and J6 writes (api/p100-newb.ts).
+    const newb = applyNewb(this.svc, u, op, a);
+    if (newb) return newb;
     switch (op) {
       case 'jaSwitchAct':
         return this.svc.jaSwitchAct(u, a[0], a[1], a[2], a[3]);
@@ -3028,6 +3032,62 @@ export class DemoApi implements Api {
   }
   vehicleRentals(month?: string) {
     return this.read((s, u) => s.vehicleRentals(u, month));
+  }
+  // P100 newb: E7 the CMS console: the demo has no CMS, so it shows as not set up (who may open it is still checked).
+  cmsConsole() {
+    return this.read(async (s, u) => ({ on: false, url: null, may: await s.cmsConsoleMay(u) }));
+  }
+  async cmsConsoleSignIn(): Promise<{ url: string; expiresInS: number; name: string }> {
+    throw new ApiError('CMS sign-in is not set up yet (CMS_URL and CMS_SIGNIN_SECRET).', 503);
+  }
+  // P100 newb: J6 each person's alert choices.
+  myAlertPrefs() {
+    return this.read((s, u) => s.myAlertPrefs(u));
+  }
+  setMyAlertPrefs(input: Parameters<Api['setMyAlertPrefs']>[0]) {
+    return this.write<unknown>('setMyAlertPrefs' as Mutations, [input]);
+  }
+  // P100 newb: J5 guard sign-ins in bulk.
+  guardSignInBoard(companyId?: string) {
+    return this.read((s, u) => s.guardSignInBoard(u, companyId));
+  }
+  prepareGuardSignIns(companyId: string, personIds: string[], note: string) {
+    return this.write<unknown>('prepareGuardSignIns' as Mutations, [companyId, personIds, note]);
+  }
+  decideGuardSignIns(id: string, approve: boolean, note: string) {
+    return this.write<unknown>('decideGuardSignIns' as Mutations, [id, approve, note]);
+  }
+  cancelGuardSignIns(id: string, reason: string) {
+    return this.write<unknown>('cancelGuardSignIns' as Mutations, [id, reason]);
+  }
+  // P100 newb: J1 the client portal (the test version shows the code; there is no public page to link to).
+  clientPortalDesk() {
+    return this.read(async (s, u) => ({ ...(await s.clientPortalDesk(u)), on: false }));
+  }
+  openClientPortal(clientId: string, input: Parameters<Api['openClientPortal']>[1]) {
+    return this.write<Awaited<ReturnType<Api['openClientPortal']>>>('openClientPortal' as Mutations, [clientId, input]);
+  }
+  resetClientPortal(clientId: string, portalUserId: string, reason: string) {
+    return this.write<Awaited<ReturnType<Api['resetClientPortal']>>>('resetClientPortal' as Mutations, [clientId, portalUserId, reason]);
+  }
+  closeClientPortal(clientId: string, portalUserId: string, reason: string) {
+    return this.write<unknown>('closeClientPortal' as Mutations, [clientId, portalUserId, reason]);
+  }
+  // P100 newb: E6 vehicle moves between companies.
+  vehicleTransferBoard() {
+    return this.read((s, u) => s.vehicleTransferBoard(u));
+  }
+  requestVehicleTransfer(input: Parameters<Api['requestVehicleTransfer']>[0]) {
+    return this.write<unknown>('requestVehicleTransfer' as Mutations, [input]);
+  }
+  decideVehicleTransfer(id: string, approve: boolean, note: string) {
+    return this.write<unknown>('decideVehicleTransfer' as Mutations, [id, approve, note]);
+  }
+  handOverVehicleTransfer(id: string, input: Parameters<Api['handOverVehicleTransfer']>[1]) {
+    return this.write<unknown>('handOverVehicleTransfer' as Mutations, [id, input]);
+  }
+  cancelVehicleTransfer(id: string, reason: string) {
+    return this.write<unknown>('cancelVehicleTransfer' as Mutations, [id, reason]);
   }
   recordVehicleRental(vehicleId: string, input: Parameters<Api['recordVehicleRental']>[1]) {
     return this.write<unknown>('recordVehicleRental', [vehicleId, input]);

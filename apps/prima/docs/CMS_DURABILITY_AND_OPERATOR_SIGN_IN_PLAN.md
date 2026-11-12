@@ -88,6 +88,23 @@ retention periods, and whether CMS may share Prima's database server under a sep
 
 ## 3. Operator sign-in plan (replaces `CMS_OPERATOR_KEYS`)
 
+**Built 12 Nov 2026 (E7, Fauzan 11 Nov 2026: "CMS operator Microsoft sign-in: BUILD"), as Microsoft sign-in through
+Prima.** Rather than a second app registration, the operator signs in to Prima the usual way (Microsoft, or the Agentic
+Office that opens Prima) and presses **Open the CMS console** on Prima's CMS screen. Prima decides who may: an active
+person on the CMS roster whose own Prima account is linked to the roster entry, or Arms Control
+(`packages/core/src/cms-console.ts`). Prima's API signs a one-time ticket (`apps/api/src/cms-signin.controller.ts`,
+HMAC-SHA256 with `CMS_SIGNIN_SECRET`, 60 seconds, a random one-time number, the roster name and the sign-in route) and
+sends the browser to `CMS_URL/#ticket=...` (after `#`, so it is never in a server log). The CMS
+(`apps/cms/src/signin.ts`) checks the signature, the time, the route (Microsoft or office; development only in the demo)
+and that the ticket was not used before, then keeps its own session: HttpOnly, Secure, SameSite=Strict cookie, 15
+minutes idle, 12 hours at most; every change also needs the `X-CMS-Request` header. Sign-in and sign-out go on the CMS
+audit; Prima audits each console opening (`cms.console.sign_in`). A refused or replayed ticket is kept with the refused
+feed messages. **The operator key path stays only as a sealed break-glass fallback**: `CMS_OPERATOR_KEYS` is read only
+with `CMS_BREAK_GLASS=true`, and CMS refuses to start with keys set and the switch off. Nothing is switched on: Prima
+needs `CMS_URL` and `CMS_SIGNIN_SECRET` (32+ characters, Key Vault) and the CMS needs the same `CMS_SIGNIN_SECRET`
+(optionally `CMS_PRIMA_SIGNIN_URL` for the button on the CMS page). Still open from the plan below: shift-limited
+sign-in (point 3), and the break-glass holder (point 6, owner decision). The original plan follows.
+
 1. **Microsoft (Entra) sign-in with MFA**, same tenant as Prima (`<tenant-id>`), a separate app registration for CMS
    (`<application-id>`). Authorization code flow with PKCE; the server checks issuer, audience, signature (tenant
    keys), expiry and `amr`/Conditional Access for MFA. No client-side claims are trusted.

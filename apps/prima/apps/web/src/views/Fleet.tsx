@@ -10,6 +10,7 @@ import { Card, Empty, Facts, PageHead, Split, Stat, Stats } from '../kit';
 import { Chip, ErrorNotice, Loading, dateLabel, dateTimeLabel, useAction, useLoad, type Tone } from '../ui';
 import { ProofPicker } from './Proof';
 import { VehicleRentalsPanel } from './VehicleRentals';
+import { VehicleTransfersPanel } from './VehicleTransfers';
 import { FuelUsagePanel, MyFuel } from './FuelUsage';
 import '../styles/ops.css';
 
@@ -75,12 +76,15 @@ export function FleetView() {
         ['hours', 'Trips and driving hours', 0],
         ['usage', 'Fuel and usage', 0],
         ...(rentals ? ([['rentals', 'Rented vehicles', 0]] as [string, string, number][]) : []),
+        // E6 (P100): moving a vehicle to another company's use; Transport asks and hands over, the COO watches.
+        ['transfers', 'Move between companies', 0],
       ]
     : me.user.opsTier === 'ogm'
       ? [
           ['mine', 'My requests', 0],
           ['usage', 'Fuel and usage', 0],
           ['rentals', 'Rented vehicles', 0],
+          ['transfers', 'Move between companies', 0],
         ]
     : data.role === 'cms'
       ? [
@@ -163,6 +167,7 @@ export function FleetView() {
       {view === 'consent' && <Consent data={data} />}
       {view === 'mine' && <Mine data={data} />}
       {view === 'rentals' && <VehicleRentalsPanel />}
+      {view === 'transfers' && <VehicleTransfersPanel />}
       {view === 'usage' && <FuelUsagePanel />}
       {view === 'mine' && <MyFuel />}
     </div>

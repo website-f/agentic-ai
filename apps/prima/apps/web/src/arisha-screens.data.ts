@@ -593,6 +593,15 @@ export const SCREEN_GUIDES: ScreenGuide[] = [
     ],
     "tasks": [
       {
+        "task": "How to make guard sign-ins in bulk (HR, company office, Operations Manager)",
+        "steps": [
+          "Press \"Guard sign-ins (bulk)\" at the top of the screen and choose the company.",
+          "Tick the guards without a sign-in (or \"Choose all shown\"), add a note if you like, and press \"Send ... for approval\".",
+          "Someone else (HR, the company manager, the OGM or Operations Director, or the Chief of Staff) opens the batch, writes a comment and presses \"Approve and make the sign-ins\". You cannot approve your own.",
+          "The guard phone stays switched off until the CEO's go-ahead; the sign-ins are ready for that day."
+        ]
+      },
+      {
         "task": "How to find someone",
         "steps": [
           "Type in \"Search name or staff number\".",
@@ -1511,6 +1520,14 @@ export const SCREEN_GUIDES: ScreenGuide[] = [
       }
     ],
     "tasks": [
+      {
+        "task": "How to open the CMS console (CMS operators)",
+        "steps": [
+          "At the top of the CMS screen, press \"Open the CMS console\". It uses your Prima sign-in (Microsoft): no operator key.",
+          "The console opens in this window and keeps you signed in for your shift; after 15 minutes without use it asks you to open it from Prima again.",
+          "If the card says \"Not set up yet\", IT has not linked Prima and the CMS yet."
+        ]
+      },
       {
         "task": "How to handle an alarm",
         "steps": [
@@ -2965,6 +2982,10 @@ export const SCREEN_GUIDES: ScreenGuide[] = [
     "who": "Directors, group officers, company managers, admin executives and supervisors. Operations Managers, the Operations Director and officers act on clients; the COO and company managers mainly monitor. Billing boxes show only to people allowed to record billing. The \"Group\" tab is for group leadership only.",
     "tabs": [
       {
+        "name": "Client portal",
+        "what": "Named people at each client sign in with a personal link and an access code, see their own sites, monthly reports and signed slips as PDFs, and rate, complain or ask. The OM gives, resets and closes sign-ins; the company manager sees them and may close one; the COO sees every company's."
+      },
+      {
         "name": "Client board",
         "what": "All clients with filters, their checklists and the update box."
       },
@@ -2990,6 +3011,15 @@ export const SCREEN_GUIDES: ScreenGuide[] = [
       }
     ],
     "tasks": [
+      {
+        "task": "How to give a client portal access (Operations Manager)",
+        "steps": [
+          "Open the \"Client portal\" tab and tap the client.",
+          "Under \"Give portal access\", type the person's \"Name\" and \"Post at the client\", press \"Make the sign-in\".",
+          "Copy the code and the link. The code shows once: give it to them yourself, not in the same message as the link.",
+          "What they send lands on the client's page under requests and complaints; answer it there and they see your answer on the portal."
+        ]
+      },
       {
         "task": "How to add a new client",
         "steps": [
@@ -3203,6 +3233,10 @@ export const SCREEN_GUIDES: ScreenGuide[] = [
         "what": "Which company uses each rented vehicle, the rent, and the month's draft rent bills."
       },
       {
+        "name": "Move between companies",
+        "what": "Moving a vehicle to another group company's use: Transport asks, a second Transport member or the COO approves with a comment, Transport records the handover. The owner stays the same."
+      },
+      {
         "name": "Driver consent",
         "what": "Drivers who still need a signed consent to monitoring."
       },
@@ -3217,6 +3251,15 @@ export const SCREEN_GUIDES: ScreenGuide[] = [
         "steps": [
           "Open \"My requests\", fill in \"What it is for\", \"From\" and \"To\".",
           "Choose a \"Vehicle\" or leave \"Any vehicle (Transport chooses)\", then press \"Send request\"."
+        ]
+      },
+      {
+        "task": "How to move a vehicle to another company (Transport)",
+        "steps": [
+          "Open \"Move between companies\" and press \"Ask to move a vehicle\".",
+          "Choose the \"Vehicle\", the \"Company that will use it\" and the date, write the reason, press \"Send for approval\".",
+          "Another Transport member or the COO opens it, writes a comment and presses \"Approve\" or \"Return\". You cannot approve your own.",
+          "On the day, open the move, fill in the odometer, who handed over and who received, the condition and what went with it, and press \"Save the handover\". The vehicle moves then."
         ]
       },
       {

@@ -272,6 +272,11 @@ export * from './owner-test-checkin';
 export * from './movement';
 export * from './clock-snap';
 export * from './clock-snap-service';
+export * from './vehicle-transfer';
+export * from './cms-console';
+export * from './client-portal';
+export * from './guard-signins';
+export * from './alert-prefs';
 // P81 (office): the group's real companies and staff, loaded into an empty database instead of sample data.
 export * from './real-data';
 export * from './settings-home';

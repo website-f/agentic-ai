@@ -1,5 +1,8 @@
 // The operator dashboard (plan section 6), first version: alarm queue, who has been told, device health and refused
 // feeds. Plain HTML and one script file, so the page runs under a strict content security policy with no inline script.
+// E7 (Fauzan, 11 Nov 2026): operators sign in with Microsoft through Prima. Prima sends the browser here with a one-time
+// ticket after "#ticket="; the page hands it to /auth/prima and CMS keeps its own session cookie. The key form shows only
+// while the sealed break-glass key is switched on (CMS_BREAK_GLASS=true).
 
 export const PAGE = `<!doctype html>
 <html lang="en">
@@ -11,8 +14,10 @@ export const PAGE = `<!doctype html>
 </head>
 <body>
 <header><h1>CMS Command Centre</h1><span id="clock"></span>
-<form id="signin"><label>Operator key <input id="token" type="password" autocomplete="off" required></label><button>Sign in</button></form>
-<button id="signout" hidden>Sign out</button></header>
+<div id="signin"><a id="msBtn" class="msbtn" href="#" hidden>Log masuk dengan Microsoft (melalui Prima)</a>
+<span id="msNote" class="unk"></span>
+<form id="keyForm" hidden><label>Kunci kecemasan (break-glass) <input id="token" type="password" autocomplete="off" required></label><button>Masuk</button></form></div>
+<span id="who" class="unk"></span><button id="signout" hidden>Log keluar</button></header>
 <p class="rule">CMS watches and tells. The company decides and acts. Gate and panel commands are off.</p>
 <main hidden id="app">
 <section id="assistant" lang="ms"><h2>Pembantu Pemantauan: perkara utama sekarang <span id="fcount"></span></h2>
@@ -58,6 +63,8 @@ main,.rule{padding:0 16px}.rule{color:var(--muted)}
 table{width:100%;border-collapse:collapse}td,th{text-align:left;padding:6px;border-bottom:1px solid var(--line);vertical-align:top}
 .critical{color:var(--crit);font-weight:600}.high{color:var(--high);font-weight:600}.on{color:var(--ok)}.off{color:var(--crit)}.unk{color:var(--muted)}
 button{margin:2px}section{overflow-x:auto}
+#signin{display:flex;gap:10px;align-items:center;flex-wrap:wrap}.msbtn{display:inline-flex;align-items:center;min-height:44px;padding:0 16px;border-radius:6px;background:#2f2f2f;color:#fff;text-decoration:none;font-weight:600}
+@media (prefers-color-scheme:dark){.msbtn{background:#e8e8e8;color:#111}}
 #findings{padding-left:20px}#findings li{margin:0 0 12px;padding:8px;border:1px solid var(--line);border-radius:6px}
 #findings .why,#findings .next{margin:4px 0 0 0;padding-left:18px}#findings .next li,#findings .why li{border:0;margin:0;padding:0}
 .done{opacity:.7}.brieftext{white-space:pre-wrap;border-left:3px solid var(--line);padding-left:10px}h3{font-size:14px;margin:12px 0 6px}
@@ -66,17 +73,25 @@ button{margin:2px}section{overflow-x:auto}
 export const SCRIPT = `(() => {
   const $ = (id) => document.getElementById(id);
   let token = '';
+  let session = false;
   try { token = sessionStorage.getItem('cmsToken') || ''; } catch {}
   const el = (tag, text, cls) => { const e = document.createElement(tag); if (text !== undefined) e.textContent = text; if (cls) e.className = cls; return e; };
   const t = (iso) => iso ? new Date(iso).toLocaleString() : '';
   async function api(path, body) {
-    const res = await fetch(path, { method: body ? 'POST' : 'GET', headers: { authorization: 'Bearer ' + token, 'content-type': 'application/json' }, body: body ? JSON.stringify(body) : undefined });
+    const headers = { 'content-type': 'application/json', 'x-cms-request': '1' };
+    if (!session && token) headers.authorization = 'Bearer ' + token;
+    const res = await fetch(path, { method: body ? 'POST' : 'GET', headers, credentials: 'same-origin', body: body ? JSON.stringify(body) : undefined });
     if (res.status === 401) { signOut(); throw new Error('Signed out'); }
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Failed');
     return data;
   }
-  function signOut() { token = ''; try { sessionStorage.removeItem('cmsToken'); } catch {} $('app').hidden = true; $('signout').hidden = true; $('signin').hidden = false; }
+  function signOut() {
+    if (session) fetch('/auth/signout', { method: 'POST', headers: { 'x-cms-request': '1' }, credentials: 'same-origin' }).catch(() => {});
+    session = false; token = ''; try { sessionStorage.removeItem('cmsToken'); } catch {}
+    $('app').hidden = true; $('signout').hidden = true; $('signin').hidden = false; $('who').textContent = '';
+  }
+  function signedIn(who) { $('app').hidden = false; $('signout').hidden = false; $('signin').hidden = true; $('who').textContent = who ? 'Operator: ' + who : ''; load(); }
   function closeChoice(id) {
     return new Promise((resolve) => {
       const d = $('closeDialog'); const f = $('closeForm');
@@ -204,11 +219,32 @@ export const SCRIPT = `(() => {
   $('hoGive').addEventListener('click', () => handover('/api/handover/give', {}));
   $('hoAgree').addEventListener('click', () => handover('/api/handover/take', { agree: true }));
   $('hoDisagree').addEventListener('click', () => handover('/api/handover/take', { agree: false }));
-  async function load() { if (!token) return; try { render(await api('/api/state')); renderHandover(await api('/api/handover')); renderAssistant(await api('/api/assistant')); renderKpis(await api('/api/kpis')); } catch {} }
-  $('signin').addEventListener('submit', async (e) => {
-    e.preventDefault(); token = $('token').value; $('token').value = '';
-    try { render(await api('/api/state')); try { sessionStorage.setItem('cmsToken', token); } catch {} $('app').hidden = false; $('signout').hidden = false; $('signin').hidden = true; load(); } catch (err) { alert('Key not accepted'); token = ''; }
+  async function load() { if (!token && !session) return; try { render(await api('/api/state')); renderHandover(await api('/api/handover')); renderAssistant(await api('/api/assistant')); renderKpis(await api('/api/kpis')); } catch {} }
+  $('keyForm').addEventListener('submit', async (e) => {
+    e.preventDefault(); token = $('token').value; $('token').value = ''; session = false;
+    try { render(await api('/api/state')); try { sessionStorage.setItem('cmsToken', token); } catch {} signedIn(''); } catch (err) { alert('Kunci tidak diterima'); token = ''; }
   });
+  async function start() {
+    let opts = { microsoft: false, primaUrl: null, keys: false };
+    try { opts = await (await fetch('/auth/options')).json(); } catch {}
+    if (opts.microsoft && opts.primaUrl) { $('msBtn').href = opts.primaUrl; $('msBtn').hidden = false; }
+    else if (opts.microsoft) $('msNote').textContent = 'Buka CMS dari Prima (skrin CMS, "Buka konsol CMS").';
+    else $('msNote').textContent = 'Log masuk Microsoft belum disediakan pada CMS ini.';
+    $('keyForm').hidden = !opts.keys;
+    const m = /^#ticket=([A-Za-z0-9._-]+)$/.exec(location.hash);
+    if (m) {
+      history.replaceState(null, '', location.pathname);
+      try {
+        const r = await fetch('/auth/prima', { method: 'POST', headers: { 'content-type': 'application/json', 'x-cms-request': '1' }, credentials: 'same-origin', body: JSON.stringify({ ticket: m[1] }) });
+        const d = await r.json();
+        if (!r.ok) throw new Error(d.error || 'Log masuk gagal');
+        session = true; signedIn(d.operator); return;
+      } catch (e) { $('msNote').textContent = e.message; }
+    }
+    try { const r = await fetch('/auth/me', { credentials: 'same-origin' }); if (r.ok) { const d = await r.json(); session = true; signedIn(d.operator); return; } } catch {}
+    if (token && opts.keys) signedIn('');
+  }
+  start();
   $('signout').addEventListener('click', signOut);
   $('briefBtn').addEventListener('click', async () => {
     $('brief').hidden = false; $('briefText').textContent = 'Menyediakan...';
@@ -218,5 +254,4 @@ export const SCRIPT = `(() => {
     } catch (e) { $('briefText').textContent = e.message; }
   });
   setInterval(() => { $('clock').textContent = new Date().toLocaleString(); load(); }, 5000);
-  if (token) { $('app').hidden = false; $('signout').hidden = false; $('signin').hidden = true; load(); }
 })();`;

@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useBackClose } from './back-close';
 import type { AlertItem } from '@prima/core';
 import { api } from './api';
 import type { MyAlerts } from './api/types';
-import { Chip } from './ui';
+import { Chip, Drawer } from './ui';
+import { AlertPrefsPanel } from './views/AlertPrefs';
 
 /**
  * The in-app alert bell (Fauzan, 5 Nov 2026): the same alerts that go to Teams and email also show inside Prima.
@@ -33,6 +35,8 @@ function saveSeen(userId: string, keys: string[]) {
 export function AlertBell({ userId, canOpen, onOpen }: { userId: string; canOpen: (view: string) => boolean; onOpen: (view: string) => void }) {
   const [data, setData] = useState<MyAlerts | null>(null);
   const [open, setOpen] = useState(false);
+  // J6: each person chooses which alerts they receive (urgent safety alerts cannot be switched off).
+  const [prefs, setPrefs] = useState(false);
   // P96: the phone's Back closes the alerts panel.
   useBackClose(open, () => setOpen(false));
   const [seen, setSeen] = useState<Set<string>>(() => readSeen(userId));
@@ -120,8 +124,19 @@ export function AlertBell({ userId, canOpen, onOpen }: { userId: string; canOpen
           <p className="muted small">
             {data?.email || data?.teamsChannel ? 'These alerts are also sent to your email and Teams.' : 'Email and Teams alerts are not switched on yet.'}
           </p>
+          <button className="btn btn-sm" type="button" onClick={() => (setOpen(false), setPrefs(true))}>
+            Choose my alerts
+          </button>
         </div>
       )}
+      {/* Outside the header (its stacking would clip the drawer on a phone). */}
+      {prefs &&
+        createPortal(
+        <Drawer title="My alerts" sub="Choose what you are told about. Urgent safety alerts always come." onClose={() => (setPrefs(false), load())}>
+          <AlertPrefsPanel onDone={() => (setPrefs(false), load())} />
+        </Drawer>,
+          document.body,
+        )}
     </div>
   );
 }

@@ -216,6 +216,11 @@ export class Hub {
     if (this.audit.length > KEEP.audit) this.audit.splice(0, this.audit.length - KEEP.audit);
   }
 
+  /** E7: an operator signing in or out (signin.ts), on the audit trail. */
+  operatorSignIn(operator: string, note: string): void {
+    this.record({ at: this.now().toISOString(), operator, action: 'sign-in', note: note.slice(0, 300) });
+  }
+
   /** Records that a device is alive. Coming back after an outage raises DEVICE_ONLINE. */
   heartbeat(deviceId: string, at = this.now()): void {
     if (!this.dir.devices.has(deviceId)) return;

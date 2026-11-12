@@ -156,14 +156,13 @@ function StartRental({ data }: { data: VehicleRentals }) {
 
 function RentalLine({ v, data }: { v: Row; data: VehicleRentals }) {
   const act = useAction();
-  const [open, setOpen] = useState<'rent' | 'end' | 'changes' | 'move' | null>(null);
-  const [moveTo, setMoveTo] = useState('');
+  const [open, setOpen] = useState<'rent' | 'end' | 'changes' | null>(null);
   const [monthly, setMonthly] = useState(v.rent ? String(v.rent.monthly) : '');
   const [ref, setRef] = useState(v.rent?.agreementRef ?? '');
   const [from, setFrom] = useState(data.month);
   const [on, setOn] = useState(mytNow().slice(0, 10));
   const [reason, setReason] = useState('');
-  const toggle = (k: 'rent' | 'end' | 'changes' | 'move') => {
+  const toggle = (k: 'rent' | 'end' | 'changes') => {
     setReason('');
     setOpen(open === k ? null : k);
   };
@@ -194,11 +193,6 @@ function RentalLine({ v, data }: { v: Row; data: VehicleRentals }) {
           {data.canSetRent && (
             <button className="btn btn-sm" onClick={() => toggle('rent')}>
               Set rent
-            </button>
-          )}
-          {data.canRecord && (
-            <button className="btn btn-sm" onClick={() => toggle('move')}>
-              Move to another company
             </button>
           )}
           {data.canRecord && v.endedOn == null && (
@@ -240,29 +234,6 @@ function RentalLine({ v, data }: { v: Row; data: VehicleRentals }) {
             onClick={() => act.run(async () => (await api.setVehicleRent(v.vehicleId, { monthly: Number(monthly), agreementRef: ref, reason, from }), setOpen(null)), 'Rent saved.')}
           >
             Save rent
-          </button>
-        </div>
-      )}
-      {open === 'move' && (
-        <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
-          <Select className="input" aria-label="Company that will use it" value={moveTo} onChange={(e) => setMoveTo(e.target.value)} style={{ width: 'auto' }}>
-            <option value="">Used by…</option>
-            {data.companies
-              .filter((c) => c.id !== v.companyId)
-              .map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
-          </Select>
-          <input className="input" type="date" aria-label="From date" value={on} onChange={(e) => setOn(e.target.value)} style={{ width: 'auto' }} />
-          <input className="input" aria-label="Reason" placeholder="Reason (required)" value={reason} onChange={(e) => setReason(e.target.value)} />
-          <button
-            className="btn btn-sm btn-primary"
-            disabled={act.busy || !moveTo || !on || reason.trim().length < 3}
-            onClick={() => act.run(async () => (await api.moveVehicleUse(v.vehicleId, { companyId: moveTo, from: on, reason }), setOpen(null)), 'Vehicle moved.')}
-          >
-            Move
           </button>
         </div>
       )}
