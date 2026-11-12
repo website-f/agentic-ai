@@ -1361,7 +1361,9 @@
   "arrivalcash": [
    "GET finance/arrivalcash/:",
    "GET finance/arrivalcash/:/evidence/:",
-   "POST finance/:/controls/:/:"
+   "GET pay-p100/:",
+   "POST finance/:/controls/:/:",
+   "POST pay-p100/:"
   ],
   "assets": [
    "GET am/rent-check",
@@ -1897,6 +1899,7 @@
    "GET finance/dailycash/mine",
    "GET finance/exceptionalcash/:",
    "GET finance/exceptionalcash/:/evidence/:",
+   "GET pay-p100/:",
    "GET records/:/form",
    "GET records/kinds",
    "GET tender-board",
@@ -1909,6 +1912,7 @@
    "POST companies/:/tenders",
    "POST finance/:/controls/:/:",
    "POST leads/:/:",
+   "POST pay-p100/:",
    "POST quotations/:/:",
    "POST quotations/:/correct",
    "POST tender-groups",
@@ -1987,6 +1991,7 @@
    "GET finance/management-fees",
    "GET finance/settings",
    "GET finance/today",
+   "GET pay-p100/:",
    "GET records/:/form",
    "GET records/kinds",
    "POST finance/:/:/:",
@@ -1999,7 +2004,8 @@
    "POST finance/:/payments/:/:",
    "POST finance/coo/:/:/:",
    "POST finance/management-fees/:",
-   "POST finance/settings"
+   "POST finance/settings",
+   "POST pay-p100/:"
   ],
   "fleet": [
    "GET fleet",

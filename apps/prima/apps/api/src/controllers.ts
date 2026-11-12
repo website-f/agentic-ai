@@ -3142,6 +3142,12 @@ export class AppController {
     return this.db.asUser(uid, (svc, u) => svc.guardPayRun(u, id.slice(0, 120)));
   }
 
+  // P100 pay: the pay changes' new views (B2 cash stand-in, ...), one route; the service checks each role.
+  @Get('pay-p100/:view')
+  payView(@UserId() uid: string, @Param('view') view: string) {
+    return this.db.asUser(uid, (svc, u) => svc.payView(u, view.slice(0, 60)));
+  }
+
   // P100 pay: the pay changes' new actions (B1 guard pay preparers, ...), one route; the service checks each role.
   @Post('pay-p100/:action')
   payAction(@UserId() uid: string, @Param('action') action: string, @Body() b: Record<string, unknown>) {

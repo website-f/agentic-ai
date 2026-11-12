@@ -600,6 +600,7 @@ import type { JaSync } from "./types";
 import type { JaWorker } from "./types";
 import type { CooNotice } from "./types";
 import { canBeGuardPayPreparer, guardPayPreparerId, namesGuardPayPreparers, type GuardPayPreparer } from './guard-pay-preparers';
+import { CashStandInService, isCashCeo } from './cash-stand-in';
 import { OfflineSyncService } from "./offline-sync";
 import { FIN_AUTO } from "./finance";
 import { FinanceDeskService } from "./finance";
@@ -5443,6 +5444,7 @@ export class PrimaService {
       ...(await this.groupHistoryHome(user)),
       ...(await this.hrConsentHome(user)),
       ...(await this.guardPayHome(user)),
+      ...(await this.cashStandInHome(user)),
       ...(await this.branchHome(user)),
       ...(await this.itHome(user)),
       ...(await this.corpHome(user)),
@@ -31299,8 +31301,39 @@ export class PrimaService {
     switch (action) {
       case 'guard-pay-preparer':
         return this.setGuardPayPreparer(user, b);
+      // P100 B2: the CEO turns the FD's cash stand-in on (dates or one request), ends it, or marks the FD's decisions seen.
+      case 'cash-stand-in-set':
+      case 'cash-stand-in-end':
+      case 'cash-stand-in-seen':
+        return new CashStandInService(this.store, () => this.now()).action(user, action.slice('cash-stand-in-'.length), body);
       default:
         throw new BadRequest('Unknown pay action.');
+    }
+  }
+
+  /** P100 B2: the CEO is told of each cash decision the FD made standing in, until marked seen. */
+  private async cashStandInHome(user: User): Promise<HomeItem[]> {
+    if (!isCashCeo(user)) return [];
+    const v = await new CashStandInService(this.store, () => this.now()).view(user);
+    if (!v.unseen.length) return [];
+    return [
+      {
+        tone: 'warn',
+        tag: 'Cash',
+        title: `The Finance Director decided ${v.unseen.length} cash request${v.unseen.length === 1 ? '' : 's'} standing in for you`,
+        detail: v.unseen.map((u) => `${u.ref}: ${u.decision} RM${u.amount.toFixed(2)}`).join(', '),
+        go: { view: 'finance' },
+      },
+    ];
+  }
+
+  /** P100 pay: one entry for the pay changes' new views (one API route and one demo read). */
+  async payView(user: User, view: string, _query: Record<string, string | undefined> = {}): Promise<unknown> {
+    switch (view) {
+      case 'cash-stand-in':
+        return new CashStandInService(this.store, () => this.now()).view(user);
+      default:
+        throw new NotFound('Pay view');
     }
   }
 

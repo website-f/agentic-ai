@@ -5,12 +5,13 @@ import { api } from '../api';
 import { ErrorNotice, useLoad, useAction } from '../ui';
 import { Empty } from '../kit';
 import { readAsDataUrl } from './Proof';
+import { CashStandIn } from './CashStandIn';
 type View=Awaited<ReturnType<typeof api.finArrivalCash>>;
 type Row=View['rows'][number];
 export function ArrivalCashView() {
   const {me,companyId}=useApp();
   const [company,setCompany]=useState(companyId);
-  return <div className="page arrival-cash"><style>{`.arrival-cash .stack{display:flex;flex-direction:column;gap:12px}.arrival-cash label{display:flex;flex-direction:column;gap:4px}.arrival-cash input:not([type=checkbox]),.arrival-cash select{box-sizing:border-box;max-width:100%;width:100%;min-width:0}.arrival-cash input[type=checkbox]{align-self:flex-start}.arrival-cash .panel{min-width:0;overflow-wrap:anywhere}.arrival-cash button{max-width:100%;white-space:normal}`}</style><h2>Arrival cash advances</h2><label>Company<Select className="select" aria-label="Arrival company" value={company} onChange={e=>setCompany(e.target.value)}>{me.companies.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</Select></label><ArrivalCompany key={company} companyId={company}/></div>;
+  return <div className="page arrival-cash"><style>{`.arrival-cash .stack{display:flex;flex-direction:column;gap:12px}.arrival-cash label{display:flex;flex-direction:column;gap:4px}.arrival-cash input:not([type=checkbox]),.arrival-cash select{box-sizing:border-box;max-width:100%;width:100%;min-width:0}.arrival-cash input[type=checkbox]{align-self:flex-start}.arrival-cash .panel{min-width:0;overflow-wrap:anywhere}.arrival-cash button{max-width:100%;white-space:normal}`}</style><h2>Arrival cash advances</h2><CashStandIn companyId={company}/><label>Company<Select className="select" aria-label="Arrival company" value={company} onChange={e=>setCompany(e.target.value)}>{me.companies.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</Select></label><ArrivalCompany key={company} companyId={company}/></div>;
 }
 function ArrivalCompany({companyId}:{companyId:string}) {
   const {data,error,reload}=useLoad(()=>api.finArrivalCash(companyId),[companyId]);

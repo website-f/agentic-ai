@@ -33,3 +33,16 @@ Policy review is immutable in this candidate. Changing terms, amending reviews, 
 Unpaid wage-cash listings can be explicitly superseded by DOA in draft/submitted payroll, with a reason. The original named amount, site and decision remain in `cashHistory` alongside the superseding actor/time/reason and an audit event. The replacement uses the recalculated amount/site and requires a fresh CEO decision; replaying supersession on an unchanged pending listing is rejected. A zero-pay recalculation archives the old listing without creating a new handout authorization. Handed-out, receipted or paid records cannot be superseded; no paid reversal policy is introduced. The payroll screen exposes replacement and history.
 
 Wage-cash handover dates must be real calendar dates, within the existing payroll/today bounds and not before either CEO cash approval or payroll approval, using the application's local-date convention. Missing/future approval timestamps are rejected. Regression tests first reproduced the stale approval dead end and acceptance of an impossible date on the prior candidate.
+
+## The Finance Director stands in for the CEO (P100 B2, Fauzan 11 Nov 2026)
+
+"The FD can stand in for the CEO when needed." Cash decisions stay the CEO's. The CEO turns a stand-in on in the app (on
+this screen): for set dates while away, or for one named request, always with a reason; the CEO can end it early, with a
+reason. While it is on, the Finance Director may decide in the CEO's place: the decision needs a reason and is labelled
+"Standing in for the CEO", the FD can never decide a request they made or submitted, and the CEO is told of every
+decision (notice on this screen and on the CEO's home until marked seen). With the stand-in off, the FD is refused.
+Kept in `prima.cash_stand_ins` (office module `db/modules/cash-stand-ins-v1.sql`: forced row-level security, only the CEO
+turns one on or ends it, only the CEO and the FD read it, the FD only adds their own decision to one that is on).
+For exceptional guard cash the manual approval on the DOA list may name the FD only when a stand-in covers the approval
+day or that approval reference, with the FD's reason (`approval.standInReason`). Before real cash is used, Finance and a
+legal adviser still review the cash treatment.

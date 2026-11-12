@@ -58,6 +58,8 @@ const MODULE_TABLES: Partial<Record<TableName, string>> = {
   clockSnaps: 'Check-in face photos are not set up in this database yet (module clock-snaps-v1).',
   // P100 pay (B1): who prepares each company's guard pay run (db/modules/guard-pay-preparers-v1.sql, office prima-setup).
   guardPayPreparers: 'The guard pay preparer list is not set up in this database yet (module guard-pay-preparers-v1).',
+  // P100 pay (B2): the FD's cash stand-ins (db/modules/cash-stand-ins-v1.sql, office prima-setup).
+  cashStandIns: 'The cash stand-in is not set up in this database yet (module cash-stand-ins-v1).',
 };
 
 // Exported for the per-request read snapshots (read-cache.ts, P83).
@@ -254,6 +256,7 @@ checkinEvents: 'prima.checkin_events',
 ownerTestCheckins: 'prima.owner_test_checkins',
 clockSnaps: 'prima.clock_snaps',
 guardPayPreparers: 'prima.guard_pay_preparers',
+cashStandIns: 'prima.cash_stand_ins',
 loginHandovers: 'prima.login_handovers',
 hrFilings: 'prima.hr_filings',
 hrCases: 'prima.hr_cases',

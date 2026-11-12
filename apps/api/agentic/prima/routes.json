@@ -5331,6 +5331,14 @@
  },
  {
   "method": "GET",
+  "path": "api/pay-p100/:view",
+  "name": "payView",
+  "params": [
+   "view"
+  ]
+ },
+ {
+  "method": "GET",
   "path": "api/pdpa",
   "name": "pdpaBoard"
  },

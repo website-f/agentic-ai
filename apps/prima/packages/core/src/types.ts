@@ -3382,6 +3382,8 @@ export interface Dataset {
   clockSnaps: import('./clock-snap').ClockSnap[];
   // P100 pay: the guard pay preparers each Company Manager names (guard-pay-preparers.ts; db/modules/guard-pay-preparers-v1.sql).
   guardPayPreparers: import('./guard-pay-preparers').GuardPayPreparer[];
+  // P100 pay (B2): the FD's cash stand-ins the CEO turns on (cash-stand-in.ts; db/modules/cash-stand-ins-v1.sql).
+  cashStandIns: import('./cash-stand-in').CashStandIn[];
   fwWelfareChecks: FwWelfareCheck[];
   fwPlacements: FwPlacement[];
   fwPlacementHosts: FwPlacementHostView[];

@@ -1924,6 +1924,9 @@ export class HttpApi implements Api {
   payAction(action: string, body: Record<string, unknown>) {
     return this.call<unknown>('POST', `/pay-p100/${encodeURIComponent(action)}`, body);
   }
+  payView(view: string, _query: Record<string, string>) {
+    return this.call<unknown>('GET', `/pay-p100/${encodeURIComponent(view)}`);
+  }
   recordPayConsent(personId: string, body: Parameters<Api['recordPayConsent']>[1]) {
     return this.call<unknown>('POST', `/guard-pay/consent/${encodeURIComponent(personId)}`, body);
   }

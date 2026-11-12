@@ -224,3 +224,23 @@
 .pp-part-corrected {
   color: var(--warn);
 }
+
+/* ---------- B2: the FD's cash stand-in ---------- */
+.pp-notices {
+  border: 1px solid var(--warn);
+  background: var(--warn-soft);
+  border-radius: 10px;
+  padding: 10px 12px;
+  margin-bottom: 12px;
+  display: grid;
+  gap: 6px;
+  font-size: 0.875rem;
+}
+.pp-notices ul {
+  margin: 0;
+  padding-left: 18px;
+}
+.pp-notices .btn {
+  justify-self: start;
+  min-height: 40px;
+}

@@ -2793,6 +2793,9 @@ export class DemoApi implements Api {
   payAction(action: string, body: Record<string, unknown>) {
     return this.write<unknown>('payAction', [action, body]);
   }
+  payView(view: string, query: Record<string, string>) {
+    return this.read((s, u) => s.payView(u, view, query));
+  }
   recordPayConsent(personId: string, body: Parameters<Api['recordPayConsent']>[1]) {
     return this.write<unknown>('recordPayConsent', [personId, body]);
   }

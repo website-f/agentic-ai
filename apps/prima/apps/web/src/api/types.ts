@@ -991,6 +991,8 @@ export interface Api extends ConnectionsClient, ExtractionClient, DraftHelpClien
   recordPayConsent(personId: string, body: PayConsentInput): Promise<unknown>;
   /** P100 pay: the pay changes' new actions (guard pay preparers, ...), one route. */
   payAction(action: string, body: Record<string, unknown>): Promise<unknown>;
+  /** P100 pay: the pay changes' new views (cash stand-in, ...), one route. */
+  payView(view: string, query: Record<string, string>): Promise<unknown>;
   payConsentsWaiting(): Promise<R<'payConsentsWaiting'>>;
   statutoryBoard(): Promise<R<'statutoryBoard'>>;
   setStatutory(body: Parameters<PrimaService['setStatutory']>[1]): Promise<unknown>;

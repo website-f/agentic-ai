@@ -6,13 +6,16 @@ import { dateOf } from './time';
 import { sha256Hex } from './audit';
 import type { Store } from './store';
 import type { EvidenceDoc, FinSign, User } from './types';
+import { cashDeciderStandIn, isFinanceDirector, recordStandInUse, type CashStandIn } from './cash-stand-in';
 
 export interface ExceptionalGuardCash {
   id: string; batchId: string; workbookRef: string; companyId: string;
   personId: string; staffNo: string; name: string; siteId: string; siteName: string;
   occasion: string; amount: number; reason: string;
   request: { byId: string; by: string; at: string; evidence: string };
-  approval: { id: string; byId: string; by: string; at: string; evidence: string; sha256: string };
+  approval: { id: string; byId: string; by: string; at: string; evidence: string; sha256: string;
+    /** P100 B2: the Finance Director approved standing in for the CEO, under this stand-in, with this reason. */
+    standIn?: { id: string; reason: string } };
   submitted: FinSign;
   status: 'submitted' | 'prepared' | 'paid' | 'reconciled' | 'superseded' | 'complete';
   supersedes: string | null;
@@ -146,10 +149,21 @@ export class ExceptionalGuardCashService {
           await this.scope(tx, requester, companyId);
           if ((requester.accessClosedFrom && requester.accessClosedFrom <= dateOf(now))) throw new BadRequest('Requesting OM account is closed.');
           const approver = await tx.get('users', str(app.byId, 'Manual approver'));
-          if (!approver || !executive(approver)) throw new BadRequest('Manual approval must be from the CEO.');
+          // P100 B2 (Fauzan, 11 Nov 2026): the CEO approves; the Finance Director only while a stand-in the CEO set covers
+          // the approval day or this approval reference, with a reason, and never on a request they made or submitted.
+          if (!approver || (!executive(approver) && !isFinanceDirector(approver))) throw new BadRequest('Manual approval must be from the CEO (or the Finance Director standing in).');
           await this.scope(tx, approver, companyId);
           if (approver.accessClosedFrom && approver.accessClosedFrom <= dateOf(now)) throw new BadRequest('Approver account is closed.');
           const requestedAt = timestamp(req.at, now), approvedAt = timestamp(app.at, now);
+          let standIn: CashStandIn | null = null;
+          let standInReason = '';
+          if (!executive(approver)) {
+            if ([requester.id, u.id].includes(approver.id)) throw new BadRequest('The Finance Director made or submitted this request, so cannot approve it, even standing in for the CEO.');
+            standIn = await cashDeciderStandIn(tx, approver, 'exceptional', companyId, str(app.id, 'Approval row reference'), [requester.id, u.id], dateOf(approvedAt)).catch(() => null);
+            if (!standIn) throw new BadRequest('The Finance Director approved without a stand-in the CEO set for that day or this approval.');
+            standInReason = str(app.standInReason, 'Reason the Finance Director gave standing in for the CEO');
+            if (standInReason.length < 5) throw new BadRequest('Standing in for the CEO needs a reason (at least 5 letters).');
+          }
           if (dateOf(approvedAt) > occasion) throw new BadRequest('Manual approval must precede the payment occasion.');
           if (Date.parse(approvedAt) < Date.parse(requestedAt)) throw new BadRequest('Approval must follow the manual request.');
           const approvalId = str(app.id, 'Approval row reference');
@@ -167,11 +181,12 @@ export class ExceptionalGuardCashService {
             personId: p.id, staffNo: p.staffNo, name: p.name, siteId, siteName: site.name, occasion,
             amount: amount(v.amount), reason: str(v.reason, 'Exceptional support reason'),
             request: { byId: requester.id, by: requester.name, at: requestedAt, evidence: requested.id },
-            approval: { id: approvalId, byId: approver.id, by: approver.name, at: approvedAt, evidence: approved.id, sha256: approved.sha256 },
+            approval: { id: approvalId, byId: approver.id, by: approver.name, at: approvedAt, evidence: approved.id, sha256: approved.sha256, ...(standIn ? { standIn: { id: standIn.id, reason: standInReason } } : {}) },
             submitted: sign(), status: 'submitted', supersedes, preparation: null, payout: null, receipt: null, reconciliation: null, accounting: null, classification: 'payroll', budgetCategory: 'Miscellaneous payroll expenses'
           };
           if (previous) rows = rows.map(r => r.id === previous.id ? { ...r, status: 'superseded' } : r);
           rows.push(record); result.push(record);
+          if (standIn) await recordStandInUse(tx, standIn, { at: now, area: 'exceptional', companyId, ref: approvalId, byId: approver.id, by: approver.name, decision: 'approved', amount: record.amount, reason: standInReason });
         }
       } else {
         const original = rows.find(r => r.id === input.id);
@@ -183,7 +198,8 @@ export class ExceptionalGuardCashService {
         if (['personId','siteId','approval','request','occasion','supersedes'].some(k => k in input)) throw new BadRequest('Approved identity and scope are immutable; submit new manual approval.');
         if (action === 'prepare' || action === 'pay') {
           const approver = await tx.get('users', r.approval.byId);
-          if (!approver || !executive(approver)) throw new BadRequest('Fresh CEO approval is required before any new cash handout. Historical records remain unchanged.');
+          // P100 B2: an FD approval counts only when it was recorded standing in for the CEO.
+          if (!approver || !(executive(approver) || (isFinanceDirector(approver) && !!r.approval.standIn))) throw new BadRequest('Fresh CEO approval is required before any new cash handout. Historical records remain unchanged.');
           await this.scope(tx, approver, companyId);
         }
         if (action === 'prepare') {
