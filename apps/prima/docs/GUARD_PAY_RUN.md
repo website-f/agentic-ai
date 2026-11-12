@@ -84,7 +84,7 @@ coo. The letter must have notory stamp by pesuruhjaya sumpah."
   pays it out with a bank reference and sees what is lent and still owed.
 - The pay run takes repayments only from these records: a one-off item naming a loan or advance is refused.
 - All the employer's deductions together (one-off items, hostel utilities, wage advances and these repayments) stay
-  within half the month's wages (EA s.24(8); assumption: statutory shares and PCB are outside the cap). What does not fit
+  within half the month's wages (EA s.24(8); statutory shares and PCB are outside the cap, confirmed by Fauzan 11 Nov 2026, E12). What does not fit
   waits; the balance stays on the record. Over 50% before any repayment holds submission, approval, payment and unpaid-run exports; HR must resolve it.
 - When the month is paid, each repayment comes off its record; at zero it is settled. The database refuses a record
   without both approvals, with the two approvals by the same person, or lending more than its limit.
@@ -197,5 +197,5 @@ settings below). Both are set by the CEO by month.
   remain unchanged. Older unpaid periods outside the existing preparation window require a separately reviewed
   reconciliation path, rather than silently changing history or extending the window.
 - The enforced 50% test is the existing employer-recovery cap, including utilities, one-off deductions, wage advances
-  and scheme repayments. Whether statutory deductions and PCB belong in the legal cap remains unresolved. This repair
+  and scheme repayments. Statutory deductions and PCB are outside the cap (Fauzan, 11 Nov 2026, E12). This repair
   does not certify legal compliance, modify ACT/CEO legal discretion, change statutory tables or enable live payroll.

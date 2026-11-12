@@ -621,8 +621,8 @@ export function buildGuardPayLine(i: GuardPayInput): GuardPayLine {
   const utility = r2(utilityRows.reduce((n, c) => n + c.share, 0));
   // Advance and loan scheme repayments (Fauzan, 6 Nov 2026): taken only against an approved record, and all the
   // deductions the employer makes together (one-off items, hostel utilities, wage advances and these repayments) stay
-  // within half of the month's wages (EA s.24(8), assumption: statutory shares and PCB are outside the cap). What does
-  // not fit waits for next month; the record's balance stays.
+  // within half of the month's wages (EA s.24(8); statutory shares and PCB are outside the cap, confirmed by Fauzan
+  // 11 Nov 2026, rule PAY-GUARD deductionCapExcludesStatutory). What does not fit waits for next month; the balance stays.
   const cap = r2(Math.max(0, gross) * 0.5);
   const before = r2(utility + otherDeductions + advance);
   let room = r2(Math.max(0, cap - before));
@@ -734,7 +734,7 @@ export function buildGuardPayLine(i: GuardPayInput): GuardPayLine {
   };
 }
 
-/** Existing employer-recovery cap only; statutory shares and PCB remain outside it pending legal review. */
+/** The employer-recovery cap only; statutory shares and PCB are outside it (E12, confirmed by Fauzan 11 Nov 2026). */
 export function guardPayOverDeductionCap(l: GuardPayLine): boolean {
   return r2(l.utility + l.otherDeductions + (l.advance ?? 0) + (l.loan ?? 0)) > r2(Math.max(0, l.gross) * 0.5);
 }
