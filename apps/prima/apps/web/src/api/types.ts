@@ -440,6 +440,11 @@ export type RegionalOps = R<'regionalOps'>;
 export type GovOpsMonitor = R<'govOpsMonitor'>;
 export type ManagementFees = R<'managementFees'>;
 export type ManagementFeeBills = R<'managementFeeBills'>;
+// P100 fin: C5 rate book.
+export type RateBook = R<'rateBook'>;
+export type UnbilledSites = R<'unbilledSites'>;
+export type SiteMargins = R<'siteMargins'>;
+export type FinSummary = R<'finSummary'>;
 export type ArmsOverview = R<'armsOverview'>;
 export type ArmsDetail = R<'arms'>;
 export type ArmsControl = R<'armsControl'>;
@@ -488,6 +493,8 @@ export interface NewQuotation {
   ratePerGuard: number;
   validDays: number;
   note?: string;
+  /** C10: how many of the guards are Nepali (hostel and transport cost). */
+  nepaliGuards?: number;
 }
 
 /** Everything the screens need. Implemented by the HTTP client and by the in-browser demo. */
@@ -969,7 +976,7 @@ export interface Api extends ConnectionsClient, ExtractionClient, DraftHelpClien
   finRequests(): Promise<FinRequestList>;
   finCreateRequest(companyId: string, input: Record<string, unknown>): Promise<unknown>;
   finRequestStep(companyId: string, requestId: string, action: FinRequestAction, input: Record<string, unknown>): Promise<unknown>;
-  finSetSettings(values: Record<string, unknown>, comment: string): Promise<unknown>;
+  finSetSettings(values: Record<string, unknown>, comment: string, from?: string): Promise<unknown>;
   finCooStep(companyId: string, paymentId: string, action: 'approve' | 'return', input: Record<string, unknown>): Promise<unknown>;
   finControls(companyId: string, billPeriod?: string): Promise<FinControls>;
   finDashboard(): Promise<FinDashboard>;
@@ -1169,7 +1176,7 @@ export interface Api extends ConnectionsClient, ExtractionClient, DraftHelpClien
   /** P78: enter a new tender for the company. */
   addTender(companyId: string, input: NewTender): Promise<Tender>;
   quotationAction(quotationId: string, action: QuotationAction, note?: string): Promise<Quotation>;
-  correctQuotation(quotationId: string, input: { guards: number; hoursPerDay: 8 | 12; ratePerGuard: number; validUntil: string; reason: string }): Promise<Quotation>;
+  correctQuotation(quotationId: string, input: { guards: number; nepaliGuards?: number; hoursPerDay: 8 | 12; ratePerGuard: number; validUntil: string; reason: string }): Promise<Quotation>;
   updateTender(tenderId: string, status: TenderStatus): Promise<Tender>;
   tenderProtocol(): Promise<TenderProtocolView>;
   setTenderProtocol(input: TenderProtocolInput): Promise<unknown>;
@@ -1226,6 +1233,13 @@ export interface Api extends ConnectionsClient, ExtractionClient, DraftHelpClien
   privateOpsMonitor(month?: string): Promise<GovOpsMonitor>;
   managementFees(): Promise<ManagementFees>;
   managementFeeBills(month?: string): Promise<ManagementFeeBills>;
+  // P100 fin: C5 rate book (rates entered from a month, never preset).
+  rateBook(): Promise<RateBook>;
+  setRate(input: { key: string; companyId: string; from?: string; amount: number | null; reason: string }): Promise<unknown>;
+  unbilledSites(period?: string): Promise<UnbilledSites>;
+  siteMargins(month?: string): Promise<SiteMargins>;
+  finSummary(period?: string): Promise<FinSummary>;
+  clearUnbilledFlag(companyId: string, input: { key: string; reason: string }): Promise<unknown>;
   setManagementFee(
     companyId: string,
     input: { chargedBy: string; kind: 'percent' | 'fixed' | 'end'; value?: number; agreementRef?: string; reason: string; from?: string; inSiteProfit?: boolean },

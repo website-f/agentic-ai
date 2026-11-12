@@ -2835,6 +2835,10 @@ export interface Quotation {
   sent?: { userId: Id; by: string; at: IsoDateTime } | null;
   /** Who recorded the client's answer (accepted or rejected) and when. */
   decided?: { status: 'accepted' | 'rejected'; userId: Id; by: string; at: IsoDateTime } | null;
+  /** C10 (Fauzan, 11 Nov 2026): how many of the guards are Nepali (hostel and transport cost). */
+  nepaliGuards?: number;
+  /** C10: the cost check as last worked out (on save, correction, submit and approval), with the month's rates kept. */
+  costCheck?: import('./quote-cost').QuoteCostCheck | null;
 }
 
 /**
@@ -4976,6 +4980,10 @@ export interface FinStatus {
   approvalLimits?: ApprovalLimits;
   /** Every change to this company's management fees, with the reason, who and when. Append-only. */
   managementFeeLog?: ManagementFeeChange[];
+  /** C5 (Fauzan, 11 Nov 2026): costing rates entered in the app from a month, group or company, append-only (rate-book.ts). */
+  rateLog?: import('./rate-book').RateEntry[];
+  /** F1 (Fauzan, 11 Nov 2026): unbilled-site flags cleared by a Finance reviewer, each with a reason (finance-monitor.ts). */
+  billingClears?: import('./finance-monitor').UnbilledClear[];
 }
 
 // ---------- JA Group app feed (Fauzan, 26 Oct 2026) ----------
@@ -6746,12 +6754,55 @@ export interface FinSettingsValues {
   kpiCloseReviewMinutes: number;
   /** Share of payments and closes accepted without being returned (%). */
   kpiFirstPassPct: number;
+  /**
+   * C4 (Fauzan, 11 Nov 2026: "the FD can adjust these values later"): every number in the confirmed finance and
+   * insurance rules, defaulting to the rule value, changed by the Finance Director or the CEO with a reason, from a date.
+   */
+  ceoNoticeFrom: number;
+  ruleMaxAmount: number;
+  auditCirculateMonths: number;
+  ssmLodgeDays: number;
+  billDiffPct: number;
+  govtPayDays: number;
+  govtFollowUpDays: number;
+  unidentifiedDays: number;
+  caInitialPct: number;
+  caGeneralPct: number;
+  caHeavyVehiclePct: number;
+  caOfficePct: number;
+  caComputerPct: number;
+  caMotorCarPct: number;
+  smallValueMax: number;
+  smallValueCap: number;
+  motorCarCapNew: number;
+  motorCarCapOther: number;
+  smePaidUpMax: number;
+  smeIncomeMax: number;
+  auditRequestDays: number;
+  topSuppliers: number;
+  supplierCheckDays: number;
+  creditOverdueDays: number;
+  creditStaleDays: number;
+  fdMaturityAlertDays: number;
+  depositClaimDays: number;
+  finalInvoiceDays: number;
+  retentionUpdateMonths: number;
+  icExplainMax: number;
+  advanceSettleDays: number;
+  pettyCountByDay: number;
+  cardExplainByDay: number;
+  premiumDueDays: number;
+  premiumEarlyDays: number;
+  guaranteeRemindDays: number;
+  claimNoticeDays: number;
 }
 export type FinApprovalMethod = 'prima' | 'teams';
 export interface FinSettings {
   values: Partial<FinSettingsValues>;
-  set: FinSign;
-  history: { values: Partial<FinSettingsValues>; set: FinSign }[];
+  set: FinSign & { from?: IsoDate };
+  history: { values: Partial<FinSettingsValues>; set: FinSign & { from?: IsoDate } }[];
+  /** C4: changes saved to start on a later day; each applies from its day (finSettingsOf). */
+  scheduled?: { from: IsoDate; values: Partial<FinSettingsValues>; set: FinSign & { from?: IsoDate } }[];
 }
 export interface FinSign {
   by: string;

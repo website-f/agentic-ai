@@ -212,6 +212,7 @@ export function CommercialView({ openTenderId }: { openTenderId?: string } = {})
                     <span className="bz-row-side">
                       <span className="bz-amt">{rm(q.monthlyTotal)}</span>
                       <span className="bz-sub">a month</span>
+                      {q.costCheck && q.costCheck.status !== 'ok' && <Chip tone={COST_TONE[q.costCheck.status]}>{COST_LABEL[q.costCheck.status]}</Chip>}
                       <Chip tone={QUOTE_STATUS[q.status].tone}>{QUOTE_STATUS[q.status].label}</Chip>
                     </span>
                   </button>
@@ -434,6 +435,67 @@ function TenderDrawer({
   );
 }
 
+// C10 (Fauzan, 11 Nov 2026): the quotation's cost check, worked on the server from the pay law, the statutory rates and
+// the rate book. Below cost is flagged with the reason; a missing rate makes the check incomplete, never zero.
+type CostCheckData = NonNullable<Quotation['costCheck']>;
+const COST_TONE: Record<CostCheckData['status'], 'ok' | 'crit' | 'unknown'> = { ok: 'ok', below_cost: 'crit', incomplete: 'unknown' };
+const COST_LABEL: Record<CostCheckData['status'], string> = { ok: 'Covers the cost', below_cost: 'Below cost', incomplete: 'Rate not set' };
+
+function CostCheck({ q }: { q: Quotation }) {
+  const c = q.costCheck;
+  if (!c) return <div className="notice" data-tone="info">The cost check runs when the quotation is saved or corrected.</div>;
+  return (
+    <div className="bz-cost">
+      <div className="bz-cost-head">
+        <span className="bz-sub">Cost check, {c.month}</span>
+        <Chip tone={COST_TONE[c.status]}>{COST_LABEL[c.status]}</Chip>
+      </div>
+      <table className="bz-cost-table">
+        <thead>
+          <tr>
+            <th scope="col">Cost</th>
+            <th scope="col" className="num">Per guard</th>
+            <th scope="col" className="num">Guards</th>
+            <th scope="col" className="num">A month</th>
+          </tr>
+        </thead>
+        <tbody>
+          {c.lines.map((l) => (
+            <tr key={l.key}>
+              <th scope="row">
+                {l.label}
+                <span className="bz-sub">{l.note}</span>
+              </th>
+              <td className="num">{l.perGuard == null ? (l.amount == null ? 'Rate not set' : '–') : rm(l.perGuard)}</td>
+              <td className="num">{l.guards}</td>
+              <td className="num">{l.amount == null ? 'Rate not set' : rm(l.amount)}</td>
+            </tr>
+          ))}
+          <tr className="bz-cost-total">
+            <th scope="row">Total cost</th>
+            <td className="num" />
+            <td className="num" />
+            <td className="num">{c.totalCost == null ? 'Unknown' : rm(c.totalCost)}</td>
+          </tr>
+          <tr className="bz-cost-total">
+            <th scope="row">Price</th>
+            <td className="num" />
+            <td className="num" />
+            <td className="num">{rm(c.price)}</td>
+          </tr>
+        </tbody>
+      </table>
+      {c.reasons.length > 0 && (
+        <div className="notice" data-tone={c.status === 'below_cost' ? 'crit' : 'warn'} role="status">
+          {c.reasons.map((r, i) => (
+            <div key={i}>{r}</div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function QuoteDrawer({ q, can, tenderTitle, onClose }: { q: Quotation; can: Commercial['can']; tenderTitle?: string; onClose: () => void }) {
   const { me } = useApp();
   const act = useAction();
@@ -447,13 +509,14 @@ function QuoteDrawer({ q, can, tenderTitle, onClose }: { q: Quotation; can: Comm
   };
   const ownQuote = q.preparedById === me.user.id;
   // A draft or returned quotation's numbers can be corrected with a reason; every change is audited (review, 2 Nov 2026).
-  const [fix, setFix] = useState<null | { guards: string; hoursPerDay: 8 | 12; ratePerGuard: string; validUntil: string; reason: string }>(null);
+  const [fix, setFix] = useState<null | { guards: string; nepali: string; hoursPerDay: 8 | 12; ratePerGuard: string; validUntil: string; reason: string }>(null);
   const saveFix = async () => {
     if (!fix) return;
     const r = await act.run(
       () =>
         api.correctQuotation(q.id, {
           guards: Number(fix.guards),
+          nepaliGuards: Number(fix.nepali) || 0,
           hoursPerDay: fix.hoursPerDay,
           ratePerGuard: Number(fix.ratePerGuard),
           validUntil: fix.validUntil,
@@ -476,6 +539,7 @@ function QuoteDrawer({ q, can, tenderTitle, onClose }: { q: Quotation; can: Comm
             ['Site', q.siteName || '–'],
             ['Tender', tenderTitle ?? 'Direct quotation'],
             ['Guards', `${q.guards} × ${q.hoursPerDay}-hour shifts`],
+            ['Nepali guards', String(q.nepaliGuards ?? 0)],
             ['Rate per guard', `${rm(q.ratePerGuard)} a month`],
             ['Valid until', dateLabel(q.validUntil)],
             ['Prepared by', `${q.preparedBy}, ${dateTimeLabel(q.preparedAt)}`],
@@ -488,9 +552,7 @@ function QuoteDrawer({ q, can, tenderTitle, onClose }: { q: Quotation; can: Comm
           {q.note}
         </div>
       )}
-      <div className="notice" data-tone="info">
-        Price check is manual for now. Automatic cost checks (minimum wage, overtime, EPF, SOCSO, EIS) start once the costing rules are approved.
-      </div>
+      <CostCheck q={q} />
       {(can.prepare || can.approve) && ['draft', 'returned', 'awaiting_approval', 'approved', 'sent'].includes(q.status) && (
         <div className="field">
           <label className="label" htmlFor="q-note">
@@ -502,7 +564,7 @@ function QuoteDrawer({ q, can, tenderTitle, onClose }: { q: Quotation; can: Comm
       {can.prepare && (q.status === 'draft' || q.status === 'returned') && !fix && (
         <button
           className="btn btn-sm"
-          onClick={() => setFix({ guards: String(q.guards), hoursPerDay: q.hoursPerDay, ratePerGuard: String(q.ratePerGuard), validUntil: q.validUntil, reason: '' })}
+          onClick={() => setFix({ guards: String(q.guards), nepali: String(q.nepaliGuards ?? 0), hoursPerDay: q.hoursPerDay, ratePerGuard: String(q.ratePerGuard), validUntil: q.validUntil, reason: '' })}
         >
           Correct guards, rate or date
         </button>
@@ -514,6 +576,10 @@ function QuoteDrawer({ q, can, tenderTitle, onClose }: { q: Quotation; can: Comm
             <label className="field">
               <span className="label">Guards</span>
               <input className="input" type="number" min={1} max={1000} value={fix.guards} onChange={(e) => setFix({ ...fix, guards: e.target.value })} />
+            </label>
+            <label className="field">
+              <span className="label">Of them, Nepali guards</span>
+              <input className="input" type="number" min={0} max={1000} value={fix.nepali} onChange={(e) => setFix({ ...fix, nepali: e.target.value })} />
             </label>
             <label className="field">
               <span className="label">Hours a day</span>
@@ -730,6 +796,7 @@ function NewQuoteDrawer({
   const [siteName, setSiteName] = useState('');
   const [tenderId, setTenderId] = useState(initial.tenderId ?? '');
   const [guards, setGuards] = useState('4');
+  const [nepali, setNepali] = useState('0');
   const [hours, setHours] = useState<8 | 12>(12);
   const [rate, setRate] = useState('');
   const [validDays, setValidDays] = useState('30');
@@ -745,6 +812,7 @@ function NewQuoteDrawer({
           hoursPerDay: hours,
           ratePerGuard: Number(rate),
           validDays: Number(validDays),
+          nepaliGuards: Number(nepali) || 0,
         }),
       (q) => `${q.ref} saved as a draft.`,
     );
@@ -785,6 +853,12 @@ function NewQuoteDrawer({
           <input id="nq-guards" className="input num" inputMode="numeric" value={guards} onChange={(e) => setGuards(e.target.value)} />
         </div>
         <div className="field">
+          <label className="label" htmlFor="nq-nepali">
+            Of them, Nepali guards
+          </label>
+          <input id="nq-nepali" className="input num" inputMode="numeric" value={nepali} onChange={(e) => setNepali(e.target.value)} />
+        </div>
+        <div className="field">
           <span className="label">Shift length</span>
           <div className="seg" role="group" aria-label="Shift length">
             <button type="button" aria-pressed={hours === 12} onClick={() => setHours(12)}>
@@ -809,7 +883,7 @@ function NewQuoteDrawer({
         </div>
       </div>
       <div className="notice" data-tone="info">
-        Total {rm(total)} a month. Check the rate against wages, overtime and statutory contributions before sending it for approval.
+        Total {rm(total)} a month. When you save, Prima checks it against the minimum wage, overtime, EPF, SOCSO and EIS, and the hostel, transport, uniform and equipment rates in the rate book.
       </div>
       <ErrorNotice error={act.error} />
       <div className="bz-form-foot">

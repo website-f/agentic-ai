@@ -451,6 +451,17 @@ export const RULES = {
     'Policy',
     "HR Phase 3, slice 3F (Fauzan, 2 Nov 2026: appraisal and training 'do it'; payslips delivered in app for staff to download; handbook, code of conduct and IT-use acknowledgements 'do it also'). HR keeps each staff member's training record, with the HRD Corp claim reference where the levy pays (PSMB Act 2001). A yearly appraisal is rated 1 to 5 by an appraiser HR names, never the staff member; the staff member reads it and may add a comment (Prima suggests within 14 days); HR closes it. Every active office staff member acknowledges the latest version of each policy HR publishes; a new version asks again. Appraisal is not the KPI, which is on hold until pilot test 1.",
   ),
+  quoteCost: rule(
+    'COM-QUOTE-COST',
+    {
+      /** The cost checks run on every quotation (Fauzan, 11 Nov 2026: switched on). */
+      enabled: true,
+      /** The age used for the employer's statutory shares when the guards are not named yet (under 60). */
+      ageForStatutory: 30,
+    },
+    'Policy',
+    'Approved by Fauzan, 11 Nov 2026 (C10): "Yes to minimum wage, OT, EPF, SOCSO, EIS. Also hostel cost and transport cost when the guards are Nepali, and costs like uniform and equipment." Every quotation (COM-2) is checked against the cost of its guards for the month: the minimum wage, overtime past the normal hours at the lowest overtime rate (pay law in force), the employer EPF (on basic pay), SOCSO and EIS (statutory rates in force), and the hostel and transport per Nepali guard and the uniform and equipment per guard from the rate book (C5, rates entered in the app, never preset). A price below the total cost is flagged with the reason; a rate not set makes the check incomplete, never zero. The check is kept on the quotation when it is saved, corrected, submitted and approved.',
+  ),
   minimumWage: rule(
     'HR-MIN-WAGE',
     { monthly: 1700, from: '2025-02-01', before: 1500 },
@@ -615,7 +626,7 @@ export const RULES = {
       accounts: { expense: '910-000', accumulated: '160-900', disposalGainLoss: '911-000', cost: '160-000' },
     },
     'Policy',
-    'Lives and limits confirmed by Fauzan 27 Oct 2026; the auditors still confirm the method. Straight line over the useful life with no residual value, starting the month after purchase (MFRS 116 / MPERS section 17 allow it; the auditors confirm the lives). Prima prepares the monthly journal per owner entity; Finance posts it in SQL Account and records the reference here. Disposals: the Finance Director approves a net book value up to RM10,000, the COO above that. Confirmed by Fauzan 27 Oct 2026, adding: an asset fully written off that can still be used is kept in use or refurbished, and reviewed again every 12 months; it is disposed only when it cannot be used or refurbished, and an asset in good condition cannot be put up for disposal once written off. Whether a refurbishment cost is added to the asset or expensed is for Finance and the auditors. Capital allowances for tax (Income Tax Act 1967 Schedule 3) are for the tax agent.',
+    'Lives and limits confirmed by Fauzan 27 Oct 2026; the auditors still confirm the method. Straight line over the useful life with no residual value, starting the month after purchase (MFRS 116 / MPERS section 17 allow it; the auditors confirm the lives). Prima prepares the monthly journal per owner entity; Finance posts it in SQL Account and records the reference here. Disposals: the Finance Director approves a net book value up to RM10,000, the COO above that. Confirmed by Fauzan 27 Oct 2026, adding: an asset fully written off that can still be used is kept in use or refurbished, and reviewed again every 12 months; it is disposed only when it cannot be used or refurbished, and an asset in good condition cannot be put up for disposal once written off. Whether a refurbishment cost is added to the asset or expensed is for Finance and the auditors. Capital allowances for tax (Income Tax Act 1967 Schedule 3): FD confirms from LHDN / Customs.',
   ),
   staffPayroll: rule(
     'PAY-STAFF',
@@ -705,12 +716,11 @@ export const RULES = {
   itRental: rule(
     'IT-RENTAL',
     {
-      /** Monthly rent per device, RM. MADE UP for the test (Fauzan, 28 Oct 2026: real prices given when pilot phase 1 goes live). */
-      monthly: { LAPTOP: 120, DESKTOP: 90, PHONE: 45, TABLET: 40, PRINTER: 80, NETWORK: 60, CCTV: 150, OTHER: 30 } as Record<string, number>,
+      // C5 (Fauzan, 11 Nov 2026): no preset monthly rates. The IT Manager enters each rate in the app from a month.
       billByDay: 7,
     },
-    'Unverified',
-    'Fauzan, 28 Oct 2026: the IT department works through Merdeka Network Sdn Bhd. Merdeka employs and pays the IT team, pays every IT cost and bills from itself; every device is owned by Merdeka and rented to the group companies. Each month Merdeka bills each company for the devices it has in use or in repair (spares are not billed); Fauzan, 1 Nov 2026: the IT Manager enters actual rental rates, IT staff prepare billing records and migrate existing asset/actual historical billing records, while Finance retains payment-record authority. Stored monthly values here are DEMO SIMULATION ONLY and are never a production fallback; real preparation requires effective-dated Manager-entered rates and immutable snapshots. Proposed: the bill goes out by the 7th of the month.',
+    'Policy',
+    'Fauzan, 28 Oct 2026: the IT department works through Merdeka Network Sdn Bhd. Merdeka employs and pays the IT team, pays every IT cost and bills from itself; every device is owned by Merdeka and rented to the group companies. Each month Merdeka bills each company for the devices it has in use or in repair (spares are not billed); Fauzan, 1 Nov 2026: the IT Manager enters actual rental rates, IT staff prepare billing records and migrate existing asset/actual historical billing records, while Finance retains payment-record authority. Approved by Fauzan, 11 Nov 2026: "rates for all things can be set in the system, not predetermined, from now", as prices change each month: the made-up test rates are removed; the IT Manager enters each rate in the app, effective from a month, with a reason; old months keep their rate; a device kind with no rate is not billed and shows "rate not set". Proposed: the bill goes out by the 7th of the month.',
   ),
   itPlan: rule(
     'IT-PLAN',
@@ -1362,15 +1372,22 @@ export const RULES = {
   ),
   insurancePremiumDays: rule(
     'INS-PREMIUM',
-    14,
-    'Unverified',
-    'Malaysian general insurance runs on cash before cover; some corporate policies allow a premium warranty period. Warn 14 days before the premium is due. Confirm each policy with the broker.',
+    {
+      /** Warn this many days before a premium is due (with the broker). */
+      dueDays: 14,
+      /** A first reminder this many days before (Fauzan, 11 Nov 2026). */
+      earlyDays: 30,
+      /** Insurance and bank guarantees: a reminder this many days before each is due, until it is settled. */
+      guaranteeRemindDays: 30,
+    },
+    'Policy',
+    'Malaysian general insurance runs on cash before cover; some corporate policies allow a premium warranty period. Warn 14 days before the premium is due. Confirm each policy with the broker. Approved by Fauzan, 11 Nov 2026: confirmed 14 days, ADD a reminder 30 days before the premium is due (two reminders: 30 and 14), and track every insurance guarantee and bank guarantee until it is settled (released, claimed back or called) with the same 30-day reminder before its due date. The Finance Director can change the days in Finance settings.',
   ),
   insuranceClaimNoticeDays: rule(
     'INS-CLAIM-NOTICE',
     30,
-    'Unverified',
-    'Most policies say notify the insurer as soon as possible. Proposed: 30 days from the incident at the latest. Check each policy wording.',
+    'Policy',
+    'Most policies say notify the insurer as soon as possible. Proposed: 30 days from the incident at the latest. Check each policy wording. Approved by Fauzan, 11 Nov 2026: confirmed, tell the insurer within 30 days of the incident (the FD with the broker); the FD can change it in Finance settings.',
   ),
   insuranceClaimAgeDays: rule('INS-CLAIM-AGE', 90, 'Policy', 'Proposed: a claim still open 90 days after notice is chased with the insurer or broker.'),
   guaranteeLeadDays: rule(
@@ -1458,27 +1475,27 @@ export const RULES = {
   ),
   financePayments: rule(
     'FIN-PAY',
-    { ceoNoticeFrom: 500_000, approvalExpiryDays: 30, cooSubjects: ['operations', 'it', 'fwm', 'inventory', 'transport', 'goodwill'] as string[], maxAmount: 50_000_000, maxEvidence: 10, reasonMin: 10, bankPackByDay: 10, paymentPackByDay: 15 },
-    'Unverified',
-    "Finance Phase 2 (Fauzan, 31 Oct 2026: Phase 2 is Finance, after the IT pilot). Policy (Fauzan): every approval gives at least a comment; the CEO has full authority alongside the Finance Director; SQL Account stays the books. Phase 2 gate (CEO roadmap, 28 Oct 2026): one user may not both authorise and pay a transaction. In Prima a payment is prepared with its SQL Account document and evidence, reviewed by someone else in the team (deputy or leader), approved by someone who neither prepared nor reviewed it, and released in the bank portal by someone who did not approve it, who records the bank's reference. A month-end close is approved by the Finance Director or the CEO only when SQL Account is closed, every bank account is reconciled with its report attached, FS-01, FS-02 and FS-06 are RM0.00 and every other exception is explained (V6). DECIDED (Fauzan, 1 Nov 2026): approval is by subject matter and only the Finance Director, the CEO and the COO approve anything; Finance payments are approved by the Finance Director or the CEO at any amount (team leaders and deputies review, never approve); payments for the departments the COO directly monitors (Operations, IT, Foreign Worker Management, Procurement & Inventory, Transport, Goodwill Empire; Fauzan 27 and 31 Oct 2026) are approved by the COO or the CEO, not the Finance Director; Finance still prepares, reviews and releases them; the CEO is also reminded of payments of RM500,000 or more. DECIDED (Fauzan, 1 Nov 2026): an approved payment not released within 30 days goes back for a fresh approval; the Finance Director sets this and the other Finance timings and thresholds in Prima. PROPOSED: the bank pack is due by the 10th and the payment pack by the 15th.",
+    { ceoNoticeFrom: 200_000, approvalExpiryDays: 30, cooSubjects: ['operations', 'it', 'fwm', 'inventory', 'transport', 'goodwill'] as string[], maxAmount: 50_000_000, maxEvidence: 10, reasonMin: 10, bankPackByDay: 10, paymentPackByDay: 15 },
+    'Policy',
+    "Finance Phase 2 (Fauzan, 31 Oct 2026: Phase 2 is Finance, after the IT pilot). Policy (Fauzan): every approval gives at least a comment; the CEO has full authority alongside the Finance Director; SQL Account stays the books. Phase 2 gate (CEO roadmap, 28 Oct 2026): one user may not both authorise and pay a transaction. In Prima a payment is prepared with its SQL Account document and evidence, reviewed by someone else in the team (deputy or leader), approved by someone who neither prepared nor reviewed it, and released in the bank portal by someone who did not approve it, who records the bank's reference. A month-end close is approved by the Finance Director or the CEO only when SQL Account is closed, every bank account is reconciled with its report attached, FS-01, FS-02 and FS-06 are RM0.00 and every other exception is explained (V6). DECIDED (Fauzan, 1 Nov 2026): approval is by subject matter and only the Finance Director, the CEO and the COO approve anything; Finance payments are approved by the Finance Director or the CEO at any amount (team leaders and deputies review, never approve); payments for the departments the COO directly monitors (Operations, IT, Foreign Worker Management, Procurement & Inventory, Transport, Goodwill Empire; Fauzan 27 and 31 Oct 2026) are approved by the COO or the CEO, not the Finance Director; Finance still prepares, reviews and releases them; the CEO is also reminded of payments of RM500,000 or more. DECIDED (Fauzan, 1 Nov 2026): an approved payment not released within 30 days goes back for a fresh approval; the Finance Director sets this and the other Finance timings and thresholds in Prima. PROPOSED: the bank pack is due by the 10th and the payment pack by the 15th. Approved by Fauzan, 11 Nov 2026: tell the CEO of payments from RM200,000 (was RM500,000); the approval still expires after 30 days; the Finance Director can change the amounts later in Finance settings, with a reason, from a date.",
   ),
   financeSst: rule(
     'FIN-SST',
     { rate: 0.08, threshold: 500_000, periodMonths: 2, toleranceRm: 1, penaltyTiers: [0.1, 0.15, 0.15] as number[], claimMinDocs: 3 },
     'Secondary',
-    "Service Tax Act 2018 as summarised by PwC's 2025/2026 Malaysian Tax Booklet and KPMG's service tax summary (checked 31 Oct 2026; confirm with the tax agent): security services (guards or protection for safety or security, First Schedule Group G item (k)) are taxable and are NOT covered by the Group G business-to-business exemption; the rate is 8% (6% services such as logistics or rental are separate); registration is due once taxable services over 12 months exceed the threshold (RM500,000 for most services; confirm the figure for item (k)); returns (SST-02) are filed in MySST every 2 months and tax is paid by the last day of the month after the taxable period; late payment adds 10% for the first 30 days, then 15% and 15% more. Tax is normally due when payment is received (or 12 months after the service), unless Customs approved invoice-basis accounting. DECIDED (Fauzan, 1 Nov 2026): the group pays service tax when the customer's payment is received, not on invoice, so bad debt relief should rarely be needed; when bad debt relief or a refund of a wrong payment is needed, a full document pack is submitted to Customs for approval (recovery is usually very hard), so Prima keeps the claim, its documents (at least 3), who prepared and who submitted it, and Customs' answer. DECIDED (Fauzan, 1 Nov 2026): SST is charged to the client at 8% of the bill without SST, so the tax inside a payment received is 8/108 of it; the SST on the invoices and the tax worked out from the money received must agree, and the declared tax must equal it. Prima checks: declared tax = 8/108 of the money received (or, for older returns, taxable value x rate) within RM1 or explained; the invoices' SST agrees with it or is explained; filed with the MySST acknowledgement; paid to the Royal Malaysian Customs Department through an approved Prima payment of exactly the declared amount, to a verified payee, by the due date.",
+    "Service Tax Act 2018 as summarised by PwC's 2025/2026 Malaysian Tax Booklet and KPMG's service tax summary (checked 31 Oct 2026; FD confirms from LHDN / Customs): security services (guards or protection for safety or security, First Schedule Group G item (k)) are taxable and are NOT covered by the Group G business-to-business exemption; the rate is 8% (6% services such as logistics or rental are separate); registration is due once taxable services over 12 months exceed the threshold (RM500,000 for most services; confirm the figure for item (k)); returns (SST-02) are filed in MySST every 2 months and tax is paid by the last day of the month after the taxable period; late payment adds 10% for the first 30 days, then 15% and 15% more. Tax is normally due when payment is received (or 12 months after the service), unless Customs approved invoice-basis accounting. DECIDED (Fauzan, 1 Nov 2026): the group pays service tax when the customer's payment is received, not on invoice, so bad debt relief should rarely be needed; when bad debt relief or a refund of a wrong payment is needed, a full document pack is submitted to Customs for approval (recovery is usually very hard), so Prima keeps the claim, its documents (at least 3), who prepared and who submitted it, and Customs' answer. DECIDED (Fauzan, 1 Nov 2026): SST is charged to the client at 8% of the bill without SST, so the tax inside a payment received is 8/108 of it; the SST on the invoices and the tax worked out from the money received must agree, and the declared tax must equal it. Prima checks: declared tax = 8/108 of the money received (or, for older returns, taxable value x rate) within RM1 or explained; the invoices' SST agrees with it or is explained; filed with the MySST acknowledgement; paid to the Royal Malaysian Customs Department through an approved Prima payment of exactly the declared amount, to a verified payee, by the due date. G17 (Fauzan, 11 Nov 2026): no tax agent; the FD confirms these rules from the LHDN and Customs guidance.",
   ),
   financeEInvoice: rule(
     'FIN-EINV',
     { exemptBelow: 3_000_000, consolidateByDay: 7, singleTxnMax: 10_000, cancelHours: 72, checkByDay: 10 },
     'Secondary',
-    "Fauzan, 1 Nov 2026: Malaysia now requires e-Invoicing and it runs from SQL Account. LHDN e-Invoice General Guideline v4.8 and Specific Guideline v4.9 (Aug-Sep 2026), as summarised by Malay Mail (31 Aug 2026) and e-Invoice advisers (checked 1 Nov 2026; confirm with the tax agent): from 1 Sep 2026 taxpayers with annual turnover below RM3 million are exempt (up from RM1 million), the guideline also removes the exemption where a related company has revenue of RM3 million or more (GL 1.6.10). DECIDED (Fauzan, 1 Nov 2026): each group company is its own legal entity and is tested on its OWN turnover; a company starts e-Invoicing when it reaches RM3 million. Phases: above RM100 million from 1 Aug 2024, RM25-100 million from 1 Jan 2025, RM5-25 million from 1 Jul 2025, up to RM5 million from 1 Jan 2026 (relaxation for that phase to 31 Dec 2027); during relaxation monthly consolidated e-Invoices are tolerated and no penalty applies under ITA s.120. Outside relaxation, failing to issue an e-Invoice is an offence under s.120(1)(d) (fine RM200 to RM20,000 per instance, or up to 6 months' jail, or both). Operating rules: sales to buyers who do not ask for an e-Invoice go into a monthly consolidated e-Invoice submitted within 7 days after the month; a single sale above RM10,000 gets its own e-Invoice (not consolidated) from 2026; an e-Invoice is cancelled only within 72 hours of validation, after that a credit or debit note is issued; self-billed e-Invoices are issued for foreign suppliers and agents, payouts to agents and dealers, and other listed cases; a supplier's validated e-Invoice is the proof of expense. SQL Account's MyInvois module submits sales invoices, cash sales, credit and debit notes and self-billed purchase documents, shows Valid, Invalid, Submitting and Cancelled, builds the consolidated e-Invoice, and lists everything in MyInvois Transaction. PROPOSED: the month's e-Invoice check recorded by the 10th; no unvalidated sales document at the close.",
+    "Fauzan, 1 Nov 2026: Malaysia now requires e-Invoicing and it runs from SQL Account. LHDN e-Invoice General Guideline v4.8 and Specific Guideline v4.9 (Aug-Sep 2026), as summarised by Malay Mail (31 Aug 2026) and e-Invoice advisers (checked 1 Nov 2026; FD confirms from LHDN / Customs): from 1 Sep 2026 taxpayers with annual turnover below RM3 million are exempt (up from RM1 million), the guideline also removes the exemption where a related company has revenue of RM3 million or more (GL 1.6.10). DECIDED (Fauzan, 1 Nov 2026): each group company is its own legal entity and is tested on its OWN turnover; a company starts e-Invoicing when it reaches RM3 million. Phases: above RM100 million from 1 Aug 2024, RM25-100 million from 1 Jan 2025, RM5-25 million from 1 Jul 2025, up to RM5 million from 1 Jan 2026 (relaxation for that phase to 31 Dec 2027); during relaxation monthly consolidated e-Invoices are tolerated and no penalty applies under ITA s.120. Outside relaxation, failing to issue an e-Invoice is an offence under s.120(1)(d) (fine RM200 to RM20,000 per instance, or up to 6 months' jail, or both). Operating rules: sales to buyers who do not ask for an e-Invoice go into a monthly consolidated e-Invoice submitted within 7 days after the month; a single sale above RM10,000 gets its own e-Invoice (not consolidated) from 2026; an e-Invoice is cancelled only within 72 hours of validation, after that a credit or debit note is issued; self-billed e-Invoices are issued for foreign suppliers and agents, payouts to agents and dealers, and other listed cases; a supplier's validated e-Invoice is the proof of expense. SQL Account's MyInvois module submits sales invoices, cash sales, credit and debit notes and self-billed purchase documents, shows Valid, Invalid, Submitting and Cancelled, builds the consolidated e-Invoice, and lists everything in MyInvois Transaction. PROPOSED: the month's e-Invoice check recorded by the 10th; no unvalidated sales document at the close. G17 (Fauzan, 11 Nov 2026): no tax agent; the FD confirms these rules from the LHDN and Customs guidance.",
   ),
   financeReceivables: rule(
     'FIN-AR',
     { followUpDays: 30, caseFromDays: 90, writeOffMinDays: 180, writeOffMinEvidence: 2, sstUnpaidMonths: 12, eInvoiceCancelHours: 72 },
     'Secondary',
-    "Fauzan, 1 Nov 2026: invoices are issued but the site or the payer has changed so the invoice does not go through, and the ageing shows it only after 3 months; Finance needs a proper way to cancel and redo an invoice, to handle a payer who will not pay or goes bankrupt, to declare bad debt, and to cancel sales when the audit report has already been signed. Rules applied: an invoice is never deleted; a wrong invoice is reversed by a credit note (an e-Invoice validated less than 72 hours ago may be cancelled in MyInvois instead) and a new invoice issued to the right payer. A credit note or write-off for an invoice in a financial year whose audited accounts are signed is dated in the current open month, never back in the audited year; the Finance Director tells the auditor and decides with the auditor whether it is a material prior-period error (MFRS 108 / MPERS section 10). Bad debt: written off only after recovery steps with evidence and approval by the Finance Director or the CEO (not the preparer); income tax deduction for bad debts under ITA 1967 s.34(2), per LHDN's public ruling. Service tax is due when payment is received or, if unpaid, 12 months after the invoice; where tax was paid and the debt is written off after reasonable recovery efforts, the service tax can be reclaimed as bad debt relief from Customs (Service Tax Act 2018; confirm the steps with the tax agent). PROPOSED: an invoice unpaid 90 days or more needs a case; each open case is followed up at least every 30 days; write-off not before 180 days unless the customer is insolvent, with at least 2 pieces of evidence (demand letter, lawyer's letter, liquidation or bankruptcy notice).",
+    "Fauzan, 1 Nov 2026: invoices are issued but the site or the payer has changed so the invoice does not go through, and the ageing shows it only after 3 months; Finance needs a proper way to cancel and redo an invoice, to handle a payer who will not pay or goes bankrupt, to declare bad debt, and to cancel sales when the audit report has already been signed. Rules applied: an invoice is never deleted; a wrong invoice is reversed by a credit note (an e-Invoice validated less than 72 hours ago may be cancelled in MyInvois instead) and a new invoice issued to the right payer. A credit note or write-off for an invoice in a financial year whose audited accounts are signed is dated in the current open month, never back in the audited year; the Finance Director tells the auditor and decides with the auditor whether it is a material prior-period error (MFRS 108 / MPERS section 10). Bad debt: written off only after recovery steps with evidence and approval by the Finance Director or the CEO (not the preparer); income tax deduction for bad debts under ITA 1967 s.34(2), per LHDN's public ruling. Service tax is due when payment is received or, if unpaid, 12 months after the invoice; where tax was paid and the debt is written off after reasonable recovery efforts, the service tax can be reclaimed as bad debt relief from Customs (Service Tax Act 2018; FD confirms the steps from LHDN / Customs). PROPOSED: an invoice unpaid 90 days or more needs a case; each open case is followed up at least every 30 days; write-off not before 180 days unless the customer is insolvent, with at least 2 pieces of evidence (demand letter, lawyer's letter, liquidation or bankruptcy notice).",
   ),
   financeControls: rule(
     'FIN-CONTROLS',
@@ -1495,8 +1512,8 @@ export const RULES = {
       auditCirculateMonths: 6,
       ssmLodgeDays: 30,
     },
-    'Unverified',
-    "Fauzan, 31 Oct 2026: approvals run in Microsoft Teams and SharePoint and every approver comments whatever the decision, so Prima links each payment to its Teams or SharePoint approval; payments must reach the right person; bank statements are reconciled; ageing is done every month so nothing is Unknown; staff prepare what the auditor needs every month so the audit is not late; proper budgeting and forecasting even though actuals never follow the plan to the dot. Paid to the right person: a payee is entered by one person and verified by another by calling back on a number from an independent source (never the number in the request), a bank detail change holds every unreleased payment to that payee until re-verified, and whoever releases a payment confirms the account's last 4 digits and name in the bank portal match. Companies Act 2016: a private company circulates audited financial statements within 6 months of its year end (s.258) and lodges them with SSM within 30 days of circulation (s.259). PROPOSED, to confirm with the Finance Director: statement lines matched to payments within 3 days of release, a released payment not seen on the statement after 5 days is flagged, ageing recorded by the 10th, the monthly audit file by the 20th, a quarterly forecast by the 20th of the month after each quarter (Fauzan, 1 Nov 2026: forecasts are quarterly and yearly), and a month off the budget by more than 10% and RM5,000 explained.",
+    'Policy',
+    "Fauzan, 31 Oct 2026: approvals run in Microsoft Teams and SharePoint and every approver comments whatever the decision, so Prima links each payment to its Teams or SharePoint approval; payments must reach the right person; bank statements are reconciled; ageing is done every month so nothing is Unknown; staff prepare what the auditor needs every month so the audit is not late; proper budgeting and forecasting even though actuals never follow the plan to the dot. Paid to the right person: a payee is entered by one person and verified by another by calling back on a number from an independent source (never the number in the request), a bank detail change holds every unreleased payment to that payee until re-verified, and whoever releases a payment confirms the account's last 4 digits and name in the bank portal match. Companies Act 2016: a private company circulates audited financial statements within 6 months of its year end (s.258) and lodges them with SSM within 30 days of circulation (s.259). PROPOSED, to confirm with the Finance Director: statement lines matched to payments within 3 days of release, a released payment not seen on the statement after 5 days is flagged, ageing recorded by the 10th, the monthly audit file by the 20th, a quarterly forecast by the 20th of the month after each quarter (Fauzan, 1 Nov 2026: forecasts are quarterly and yearly), and a month off the budget by more than 10% and RM5,000 explained. Approved by Fauzan, 11 Nov 2026: confirmed as is (bank lines matched within 3 days; budget variance flagged at 5% and RM5,000); the Finance Director can change each number in Finance settings.",
   ),
   financeMoneyIn: rule(
     'FIN-MONEYIN',
@@ -1510,8 +1527,8 @@ export const RULES = {
       /** Money in with no invoice is allocated within this many days of the bank date. */
       unidentifiedDays: 7,
     },
-    'Unverified',
-    'Fauzan, 2 Nov 2026: yes to the Finance suggestions doc: every contract\'s monthly billing must have its invoice in SQL Account and a missing one is named at the close (1); a government claims tracker with the date submitted, reference, expected payment date and follow-up (2); and money in with no invoice goes to an unidentified list, to be allocated within 7 days (5). The 14-day government payment term (Treasury practice), the 14-day follow-up and the 1% billing difference are PROPOSALS for the Finance Director to confirm.',
+    'Policy',
+    'Fauzan, 2 Nov 2026: yes to the Finance suggestions doc: every contract\'s monthly billing must have its invoice in SQL Account and a missing one is named at the close (1); a government claims tracker with the date submitted, reference, expected payment date and follow-up (2); and money in with no invoice goes to an unidentified list, to be allocated within 7 days (5). The 14-day government payment term (Treasury practice), the 14-day follow-up and the 1% billing difference are PROPOSALS for the Finance Director to confirm. Approved by Fauzan, 11 Nov 2026: confirmed (1% billing difference, 14-day government term and 14-day follow-up, 7 days to allocate). Government usually pays late: a late government payment is followed up on the government claims tracker and is not raised as a red alarm or a dispute on its own. The Finance Director can change each number in Finance settings.',
   ),
   financeWht: rule(
     'FIN-WHT',
@@ -1543,8 +1560,8 @@ export const RULES = {
       /** An auditor request is due this many days after it is asked, unless the auditor gives a day. */
       auditRequestDays: 14,
     },
-    'Unverified',
-    'Income Tax Act 1967 Schedule 3 and Income Tax (Qualifying Plant Annual Allowances) Rules, as published by LHDN; Fauzan, 2 Nov 2026: yes to suggestions 21 to 23. Rates and caps to be checked by the Finance Director against the current LHDN public rulings before use; the 14 days for auditor requests is a PROPOSAL.',
+    'Policy',
+    'Income Tax Act 1967 Schedule 3 and Income Tax (Qualifying Plant Annual Allowances) Rules, as published by LHDN; Fauzan, 2 Nov 2026: yes to suggestions 21 to 23. Rates and caps to be checked by the Finance Director against the current LHDN public rulings before use; the 14 days for auditor requests is a PROPOSAL. Approved by Fauzan, 11 Nov 2026: confirmed (capital allowance 20%, 14%, 10%, small-asset cap RM2,000); the Finance Director can edit the rates and caps afterwards in Finance settings.',
   ),
   financeSupplierStatements: rule(
     'FIN-SUPSTMT',
@@ -1554,8 +1571,8 @@ export const RULES = {
       /** Days after the quarter ends to agree and review them; after that the close stays open. */
       dueDays: 30,
     },
-    'Unverified',
-    "Fauzan, 2 Nov 2026: yes to suggestion 11 (quarterly supplier statement check for the biggest suppliers). Top 10 and 30 days are PROPOSALS for the Finance Director.",
+    'Policy',
+    "Fauzan, 2 Nov 2026: yes to suggestion 11 (quarterly supplier statement check for the biggest suppliers). Top 10 and 30 days are PROPOSALS for the Finance Director. Approved by Fauzan, 11 Nov 2026: confirmed (top 10 suppliers each quarter, within 30 days); the Finance Director can change them in Finance settings.",
   ),
   financeCredit: rule(
     'FIN-CREDIT',
@@ -1565,8 +1582,8 @@ export const RULES = {
       /** Finance refreshes each limited client's balance from SQL Account at least this often. */
       balanceStaleDays: 35,
     },
-    'Unverified',
-    "Fauzan, 2 Nov 2026: yes to suggestion 4 (credit limit per private client; warn Operations before adding posts for a client over its limit or over 90 days). Limits are set by the Finance Director or the CEO with a reason (Fauzan, 2 Nov 2026); Prima warns and Operations may still add the post with a reason that Finance sees. The 35 days is a PROPOSAL for the FD.",
+    'Policy',
+    "Fauzan, 2 Nov 2026: yes to suggestion 4 (credit limit per private client; warn Operations before adding posts for a client over its limit or over 90 days). Limits are set by the Finance Director or the CEO with a reason (Fauzan, 2 Nov 2026); Prima warns and Operations may still add the post with a reason that Finance sees. The 35 days is a PROPOSAL for the FD. Approved by Fauzan, 11 Nov 2026: confirmed (warn on clients more than 90 days overdue; balance stale after 35 days); the Finance Director can change them in Finance settings.",
   ),
   financeBanking: rule(
     'FIN-BANKING',
@@ -1576,8 +1593,8 @@ export const RULES = {
       /** Words on a statement line that mark a bank charge or fee (money out). */
       chargeWords: ['CHARGE', 'CHRG', 'FEE', 'COMMISSION', 'COMM ', 'SERVICE TAX', 'SST ON', 'STAMP DUTY', 'PENALTY', 'HANDLING', 'ANNUAL FEE', 'CHQ BOOK', 'INTEREST CHARGED', 'OD INTEREST'],
     },
-    'Unverified',
-    'Fauzan, 2 Nov 2026: yes to the Finance suggestions doc: fixed deposits and idle cash with maturity alerts and where the money sits (15), and a monthly review of bank charges against what the bank agreed (16). The 14-day alert and the list of charge words are PROPOSALS for the Finance Director; each bank\'s agreed monthly charges are recorded per account by the team leader, the FD or the CEO.',
+    'Policy',
+    'Fauzan, 2 Nov 2026: yes to the Finance suggestions doc: fixed deposits and idle cash with maturity alerts and where the money sits (15), and a monthly review of bank charges against what the bank agreed (16). The 14-day alert and the list of charge words are PROPOSALS for the Finance Director; each bank\'s agreed monthly charges are recorded per account by the team leader, the FD or the CEO. Approved by Fauzan, 11 Nov 2026: confirmed (fixed deposit maturity alert 14 days before); the Finance Director can change it in Finance settings.',
   ),
   financeContractEnd: rule(
     'FIN-CONTRACT-END',
@@ -1588,9 +1605,11 @@ export const RULES = {
       finalInvoiceDays: 14,
       /** Ended contracts stay on the list this long. */
       showDays: 365,
+      /** Retention held on a tender or contract: its status is updated at least this often (months) until it is back. */
+      retentionUpdateMonths: 2,
     },
-    'Unverified',
-    "Fauzan, 2 Nov 2026: yes to the Finance suggestions doc: client deposits and retention sums held by clients with a claim-back at contract end (3); when a contract ends, billing stops and the deposit, IG or retention claim starts automatically (24); and automation A11, follow-up tasks open by themselves when a contract is cancelled or ends. The 30-day claim and 14-day final invoice limits are PROPOSALS for the Finance Director to confirm.",
+    'Policy',
+    "Fauzan, 2 Nov 2026: yes to the Finance suggestions doc: client deposits and retention sums held by clients with a claim-back at contract end (3); when a contract ends, billing stops and the deposit, IG or retention claim starts automatically (24); and automation A11, follow-up tasks open by themselves when a contract is cancelled or ends. The 30-day claim and 14-day final invoice limits are PROPOSALS for the Finance Director to confirm. Approved by Fauzan, 11 Nov 2026: confirmed (deposits and retention claimed back within 30 days of the contract's end; final invoice within 14 days). ADDED: tenders also carry retention money; it is tracked per tender or contract and Finance is reminded to update its status every 2 months until it is claimed back. The Finance Director can change the numbers in Finance settings.",
   ),
   financeStamp: rule(
     'FIN-STAMP',
@@ -1616,25 +1635,23 @@ export const RULES = {
   financeDailyCash: rule(
     'FIN-DAILYCASH',
     {
-      /** Proposals for the FD: the highest daily rate paid in cash (above it, pay by bank), people on one list, days after the list ends to settle, days for a withdrawal to show on the statement, and how many days a list may start before it is made. */
-      maxDailyRate: 300,
-      maxPeople: 60,
+      /** No daily rate or head-count limit (Fauzan, 11 Nov 2026). Days after the list ends to settle, days for a withdrawal to show on the statement, and how many days a list may start before it is made. */
       settleDays: 3,
       statementDays: 5,
       backdateDays: 3,
       reasonMin: 10,
     },
-    'Unverified',
-    'Fauzan, 2 Nov 2026: "There is one cash payment. We have daily cash buffer that need to be paid. If not, they dont want to work. So create a system that this type of people can be paid. Cash will be collected by coo or ceo to be paid." and "Only fd can approve this. They need to list it for the week or month. Before than prepare cash." Finance lists the people for the week or month, only the Finance Director approves (never the preparer, not the CEO), Finance then withdraws the cash (never above the approved total, found on the bank statement) and hands it to the COO or CEO, who counts it, pays each listed person for each listed day with the signed pay sheet as proof, and gives back what was not paid; Finance counts and banks it, and any difference is explained and accepted by the FD. The limits are proposals for the FD. Fauzan, 6 Nov 2026 ("Buffer also the same" as the guard pay-out rules): each person is paid to a bank account or e-wallet only, and Finance records each day\'s transfer with its reference (never by the FD who approved); cash only when the Director Office lists the person with the reason and the COO or the CEO gives it with a note (never whoever listed), and only that cash is withdrawn and handed over; a relative\'s or friend\'s account needs the person\'s consent letter stamped by a Commissioner for Oaths (Pesuruhjaya Sumpah) and approved by the COO only (Fauzan, 6 Nov 2026: the CEO does not stand in). Later the same day: "Director list will send cash person list per site per name and the amount, cash will be given out by ceo or coo. Signed paper of the receive collected and upload as proof. Upload done by director office." The Director Office lists each cash person with the site and the cash amount (at most their approved pay, and the cash withdrawn is at most these amounts); the COO or CEO pays; the Director Office uploads each signed receipt (PDF, JPEG or PNG, kept with its SHA-256), and the list is not settled until every receipt is in. The FD cannot approve a list until every person can be paid. Prima keeps only the last 4 digits of an account. EA s.25 asks for the worker\'s own or joint bank account: e-wallet and third-party accounts are flagged as legal points for the CEO.',
+    'Policy',
+    'Fauzan, 2 Nov 2026: "There is one cash payment. We have daily cash buffer that need to be paid. If not, they dont want to work. So create a system that this type of people can be paid. Cash will be collected by coo or ceo to be paid." and "Only fd can approve this. They need to list it for the week or month. Before than prepare cash." Finance lists the people for the week or month, only the Finance Director approves (never the preparer, not the CEO), Finance then withdraws the cash (never above the approved total, found on the bank statement) and hands it to the COO or CEO, who counts it, pays each listed person for each listed day with the signed pay sheet as proof, and gives back what was not paid; Finance counts and banks it, and any difference is explained and accepted by the FD. The limits are proposals for the FD. Fauzan, 6 Nov 2026 ("Buffer also the same" as the guard pay-out rules): each person is paid to a bank account or e-wallet only, and Finance records each day\'s transfer with its reference (never by the FD who approved); cash only when the Director Office lists the person with the reason and the COO or the CEO gives it with a note (never whoever listed), and only that cash is withdrawn and handed over; a relative\'s or friend\'s account needs the person\'s consent letter stamped by a Commissioner for Oaths (Pesuruhjaya Sumpah) and approved by the COO only (Fauzan, 6 Nov 2026: the CEO does not stand in). Later the same day: "Director list will send cash person list per site per name and the amount, cash will be given out by ceo or coo. Signed paper of the receive collected and upload as proof. Upload done by director office." The Director Office lists each cash person with the site and the cash amount (at most their approved pay, and the cash withdrawn is at most these amounts); the COO or CEO pays; the Director Office uploads each signed receipt (PDF, JPEG or PNG, kept with its SHA-256), and the list is not settled until every receipt is in. The FD cannot approve a list until every person can be paid. Prima keeps only the last 4 digits of an account. EA s.25 asks for the worker\'s own or joint bank account: e-wallet and third-party accounts are flagged as legal points for the CEO. Approved by Fauzan, 11 Nov 2026: no limit needed: the daily cash rate limit (RM300) and the 60-people limit are removed. The daily cash route is closed anyway; cash is CEO-only and the FD may stand in.',
   ),
   financeIntercompany: rule(
     'FIN-IC',
     {
-      /** Proposal for the FD: a difference above this is corrected in SQL Account, not explained. */
-      explainMax: 5000,
+      /** A difference above this is corrected in SQL Account, not explained (Fauzan, 11 Nov 2026: RM1,000, was RM5,000). */
+      explainMax: 1000,
     },
-    'Unverified',
-    'Fauzan, 2 Nov 2026: yes to suggestion 12, "Intercompany: management fees, recharges and loans between companies agreed on both sides every month" (the transfer pricing file, suggestion 20, "no need for now"). Each company records its month-end balance with each other group company by kind; both sides must come to RM0.00; a difference is corrected or explained by a reviewer who entered neither side; a balance last month must be recorded again; anything not agreed or explained stops both companies\' close. The explain limit is a proposal for the FD.',
+    'Policy',
+    'Fauzan, 2 Nov 2026: yes to suggestion 12, "Intercompany: management fees, recharges and loans between companies agreed on both sides every month" (the transfer pricing file, suggestion 20, "no need for now"). Each company records its month-end balance with each other group company by kind; both sides must come to RM0.00; a difference is corrected or explained by a reviewer who entered neither side; a balance last month must be recorded again; anything not agreed or explained stops both companies\' close. The explain limit is a proposal for the FD. Approved by Fauzan, 11 Nov 2026: an intercompany difference up to RM1,000 may be explained (was RM5,000); above that it is corrected. The Finance Director can adjust it in Finance settings.',
   ),
   financeForecast13: rule(
     'FIN-CASH13',
@@ -1657,8 +1674,8 @@ export const RULES = {
       /** The longest settle-by date Finance may give (Fauzan, 2 Nov 2026: "not more than 30 days"). */
       advanceMaxDays: 30,
       /** One petty cash voucher at most; bigger spending goes through a normal payment. */
-      pettyVoucherMax: 500,
-      pettyFloatMax: 5000,
+      pettyVoucherMax: 50,
+      pettyFloatMax: 500,
       /** The petty cash count for a month is done by this day of the month after. */
       pettyCountByDay: 5,
       /** Card holders explain every line by this day of the month after the statement month. */
@@ -1668,8 +1685,8 @@ export const RULES = {
       /** Two payments to the same supplier for the same amount within this many days are treated as a possible duplicate. */
       duplicateDays: 45,
     },
-    'Unverified',
-    'Fauzan, 2 Nov 2026: yes to the Finance suggestions doc: staff cash advances with a settle-by date, unsettled ones shown to HR and Finance (6); petty cash per office with a float, top-up only with receipts and a monthly count by someone else (7); company credit and fuel cards with each statement matched to receipts and personal use flagged (8); a duplicate supplier invoice check across all companies by supplier, number or amount (9); and a bank mandate register of signatories and portal approvers per account, reviewed when someone leaves (14). The days and ringgit limits are PROPOSALS for the Finance Director to confirm.',
+    'Policy',
+    'Fauzan, 2 Nov 2026: yes to the Finance suggestions doc: staff cash advances with a settle-by date, unsettled ones shown to HR and Finance (6); petty cash per office with a float, top-up only with receipts and a monthly count by someone else (7); company credit and fuel cards with each statement matched to receipts and personal use flagged (8); a duplicate supplier invoice check across all companies by supplier, number or amount (9); and a bank mandate register of signatories and portal approvers per account, reviewed when someone leaves (14). The days and ringgit limits are PROPOSALS for the Finance Director to confirm. Approved by Fauzan, 11 Nov 2026: petty cash float RM500 (was RM5,000) and RM50 per voucher (was RM500); staff advances settled within 30 days (unchanged). The Finance Director sets the right amounts later in Finance settings.',
   ),
   renewals: rule(
     'REG-RENEW',
@@ -1926,7 +1943,7 @@ export const RULES = {
       dueSoonDays: 30,
     },
     'Policy',
-    "Fauzan, 5 Nov 2026: no public listing (KDN does not allow a listed security company), but follow listing-style governance a little. Related-party deals: the Deputy Chief of Staff records, the Chief of Staff reviews with a reason; a board resolution only above a limit the CEO sets (not set yet). Directors declare interests once a year (Companies Act 2016 s.221); the Deputy Chief of Staff collects the forms by hand and marks each done; only the DCoS, CoS and CEO see deals and declarations. Committees keep minutes. The risk register is in ACT only: the ACT Director scores, settles and directs the team; 5x5 scoring, high at 15 (proposal).",
+    "Fauzan, 5 Nov 2026: no public listing (KDN does not allow a listed security company), but follow listing-style governance a little. Related-party deals: the Deputy Chief of Staff records, the Chief of Staff reviews with a reason; a board resolution only above a limit the CEO sets (not set yet). Approved by Fauzan, 11 Nov 2026 (C9): no board-resolution limit for now; every related-party deal recorded sends an information notice to the CEO only (no limit, no block); limits will be set later, as we go along. Directors declare interests once a year (Companies Act 2016 s.221); the Deputy Chief of Staff collects the forms by hand and marks each done; only the DCoS, CoS and CEO see deals and declarations. Committees keep minutes. The risk register is in ACT only: the ACT Director scores, settles and directs the team; 5x5 scoring, high at 15 (proposal).",
   ),
   siteSurvey: rule(
     'SURVEY-OFFLINE',

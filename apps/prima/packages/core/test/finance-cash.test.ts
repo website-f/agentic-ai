@@ -408,6 +408,14 @@ describe("Petty cash", () => {
       "u-pwvsb-hr",
       "u-fin-t1-de2",
     );
+    // C4 (Fauzan, 11 Nov 2026): the rule now proposes a RM500 float and RM50 vouchers, and "FD can set the correct
+    // amounts later". At the proposed amounts a RM1,000 float and a RM60 voucher are refused; this office's flow runs
+    // after the FD sets RM5,000 and RM500 for it, with a reason.
+    await expect(
+      svc.financeControls.pettyAction(de1, C, "add", { office: "PWVSB HQ (mock)", custodianId: "u-pwvsb-hr", payeeId: STAFF_PAYEE, bankId: bank(F()), float: 1000 }),
+    ).rejects.toThrow(/RM500.00/);
+    const fd = await svc.user("u-fd");
+    await svc.finance.setSettings(fd, { values: { pettyFloatMax: 5000, pettyVoucherMax: 500 }, comment: "Synthetic: HQ office amounts" });
     const pc = (await svc.financeControls.pettyAction(de1, C, "add", {
       office: "PWVSB HQ (mock)",
       custodianId: "u-pwvsb-hr",

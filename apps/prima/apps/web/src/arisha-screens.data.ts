@@ -1126,7 +1126,7 @@ export const SCREEN_GUIDES: ScreenGuide[] = [
         "means": "Counts of tenders entered and won and quotations sent and accepted. Counts only, not a ranking."
       }
     ],
-    "notes": "\"Add tender\" and \"New quotation\" only show for people allowed to add tenders or prepare quotes. \"Start preparing\" stays greyed out until the protocol steps are done; the page lists what is still to do. You cannot approve a quotation you prepared yourself; another person must approve it. \"Approve\" stays greyed out until a note is written. Prices are typed in by hand: automatic cost checks (minimum wage, overtime, EPF, SOCSO, EIS) are not on yet. The bid itself is lodged on the buyer's portal by an authorised person; the app only records it."
+    "notes": "\"Add tender\" and \"New quotation\" only show for people allowed to add tenders or prepare quotes. \"Start preparing\" stays greyed out until the protocol steps are done; the page lists what is still to do. You cannot approve a quotation you prepared yourself; another person must approve it. \"Approve\" stays greyed out until a note is written. Prima checks every quotation against its cost for the month: minimum wage, overtime, EPF, SOCSO and EIS, plus hostel and transport for Nepali guards and uniform and equipment for every guard from the rate book. A price below the cost shows \"Below cost\" with the reason; a missing rate shows \"Rate not set\". Type how many of the guards are Nepali when you prepare it. The bid itself is lodged on the buyer's portal by an authorised person; the app only records it."
   },
   {
     "view": "ops",
@@ -5976,5 +5976,103 @@ export const SCREEN_GUIDES: ScreenGuide[] = [
       }
     ],
     "notes": "If the module is not installed, the page shows \"Quality and compliance is not switched on yet. The database part waits for the CEO to approve it.\" Storekeepers and admin executives do not see it. Tabs you do not see are not for your role. The page shows test data."
+  },
+  {
+    "view": "rates",
+    "title": "Rate book",
+    "what": "The rates Prima uses to cost quotations and site profit: hostel and transport per Nepali guard, uniform and equipment per guard, per company and per month. It also lists every other rate list in Prima and who enters it.",
+    "who": "The Finance Director or the CEO enters the rates. Finance teams, the COO and the CEO read them. A Finance team sees its own companies.",
+    "tabs": [],
+    "tasks": [
+      {
+        "task": "How to enter a rate (Finance Director or CEO)",
+        "steps": [
+          "Press \"Enter a rate\".",
+          "Choose the rate, the company (or \"Every company\"), the month it starts from and the amount.",
+          "Write the reason, for example the supplier quote, and press \"Save rate\"."
+        ]
+      },
+      {
+        "task": "How to see which rates are missing",
+        "steps": [
+          "Look at the tiles at the top: each shows how many companies have the rate set this month.",
+          "In the table a cell that says \"Rate not set\" has no rate yet; quotations and site profit show it as missing, never zero."
+        ]
+      }
+    ],
+    "terms": [
+      {
+        "term": "Rate not set",
+        "means": "No rate entered for that month. Prima never uses zero or a guess."
+      },
+      {
+        "term": "Every company",
+        "means": "A rate for all companies; a company's own rate replaces it."
+      }
+    ],
+    "notes": "A rate starts from this month or last month at the earliest, so months already costed keep their old rate. Leave the amount empty to mark it not set, or for one company to go back to the rate for every company. Every change is kept with who entered it and why."
+  },
+  {
+    "view": "finsites",
+    "title": "Site billing and profit",
+    "what": "Every site where guards clocked hours in a month, checked against its contract, its invoice and the client's signed acknowledgement, with hours worked against hours billed. Flags: guards on site with no contract, worked but not invoiced, no client sign-off, and an hours-worked invoice lower than the hours times the rate.",
+    "who": "Finance teams see their own companies, the Finance Director and the CEO see all, a company manager sees their own company. A Finance reviewer (deputy, team leader, FD or CEO) clears a flag with a reason, never the person who recorded the invoice.",
+    "tabs": [],
+    "tasks": [
+      {
+        "task": "How to check a month",
+        "steps": [
+          "Choose the month at the top.",
+          "Look at the sites marked red and read each flag.",
+          "Record the missing invoice in Finance, Checks, Money in, or ask the OM for the client's signed acknowledgement."
+        ]
+      },
+      {
+        "task": "How to clear a flag (Finance reviewer)",
+        "steps": [
+          "Press \"Clear with a reason\" under the flag.",
+          "Write why, for example \"free month in the contract\".",
+          "Press \"Clear the flag\"."
+        ]
+      }
+    ],
+    "terms": [
+      {
+        "term": "Hours billed",
+        "means": "The hours the contract bills for the month; for a fixed fee there are none."
+      }
+    ],
+    "notes": "Prima monitors only. SQL Account stays the book of record and nothing here posts to it. An OM or another company's manager cannot see this list. The \"Profit per site\" tab (Finance, the FD, the CEO and the COO) shows each site's revenue, cost (guard pay with overtime from the pay law, EPF, SOCSO, EIS, the rate book's transport, uniform and equipment, fees) and margin against the target margin the FD or the CEO sets in the Rate book; until one is set it says \"Target not set\"."
+  },
+  {
+    "view": "finsummary",
+    "title": "Monthly finance page",
+    "what": "One page each month with every company in a row and the group total on top: cash today, the week cash runs short, payments due in 30 days, debtors over 90 days and days to collect, banks reconciled by the 10th, books closed by the 15th, open exceptions, unbilled sites and sites below the target margin, and who reviewed the pack.",
+    "who": "The CEO, the Finance Director, the Chairman and the Vice Chairman see the whole group. A Finance team sees its own companies. Nobody else.",
+    "tabs": [],
+    "tasks": [
+      {
+        "task": "How to read the page",
+        "steps": [
+          "Choose the month at the top.",
+          "Look at the red cells first: cash short within 4 weeks, banks not reconciled after the 10th, books not closed after the 15th, unbilled sites, sites below target.",
+          "Open Site billing and profit or Finance for the detail."
+        ]
+      },
+      {
+        "task": "How to print it",
+        "steps": [
+          "Press \"Print\".",
+          "Choose \"Save as PDF\" in the print window, landscape."
+        ]
+      }
+    ],
+    "terms": [
+      {
+        "term": "Unknown",
+        "means": "A figure from SQL Account older than 48 hours: Prima does not show an old number as if it were today's."
+      }
+    ],
+    "notes": "Read-only. The CEO gets a notice on the home screen when the month's page is ready, after the books close on the 15th. Prima monitors only; SQL Account is the book of record."
   }
 ];

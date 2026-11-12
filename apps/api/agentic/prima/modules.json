@@ -908,6 +908,47 @@
     },
     {
      "title": {
+      "en": "Rates and monitoring",
+      "ms": "Kadar dan pemantauan"
+     },
+     "modules": [
+      {
+       "id": "finsummary",
+       "title": {
+        "en": "Monthly finance page",
+        "ms": "Halaman kewangan bulanan"
+       },
+       "blurb": {
+        "en": "One page a month: every company and the group total.",
+        "ms": "Satu halaman sebulan: setiap syarikat dan jumlah kumpulan."
+       }
+      },
+      {
+       "id": "finsites",
+       "title": {
+        "en": "Site billing and profit",
+        "ms": "Bil dan keuntungan tapak"
+       },
+       "blurb": {
+        "en": "Sites where guards worked: billed, signed off, profit.",
+        "ms": "Tapak tempat pengawal bekerja: dibil, disahkan, untung."
+       }
+      },
+      {
+       "id": "rates",
+       "title": {
+        "en": "Rate book",
+        "ms": "Buku kadar"
+       },
+       "blurb": {
+        "en": "Costing rates entered from a month, with history.",
+        "ms": "Kadar kos dimasukkan mengikut bulan, dengan sejarah."
+       }
+      }
+     ]
+    },
+    {
+     "title": {
       "en": "Buying",
       "ms": "Pembelian"
      },
@@ -2057,6 +2098,14 @@
    "POST finance/management-fees/:",
    "POST finance/settings"
   ],
+  "finsites": [
+   "GET finance/site-margins",
+   "GET finance/unbilled-sites",
+   "POST finance/unbilled-sites/:/clear"
+  ],
+  "finsummary": [
+   "GET finance/summary"
+  ],
   "fleet": [
    "GET fleet",
    "GET fleet/rentals",
@@ -2771,6 +2820,10 @@
    "GET quality/register",
    "POST pikm/act",
    "POST quality/:"
+  ],
+  "rates": [
+   "GET finance/rates",
+   "POST finance/rates"
   ],
   "rba": [
    "GET companies/:/rba-traces",

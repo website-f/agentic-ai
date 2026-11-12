@@ -7030,6 +7030,53 @@ export class AppController {
     );
   }
 
+  // C5 rate book (Fauzan, 11 Nov 2026): costing rates entered in the app from a month, never preset.
+  @Get('finance/rates')
+  rateBook(@UserId() uid: string) {
+    return this.db.asUser(uid, (svc, u) => svc.rateBook(u));
+  }
+
+  @Post('finance/rates')
+  setRate(@UserId() uid: string, @Body() b: Record<string, unknown>) {
+    if (b.amount !== null && b.amount !== undefined && typeof b.amount !== 'number') throw new BadRequestException('amount must be a number or null');
+    if (b.from !== undefined && (typeof b.from !== 'string' || !/^\d{4}-\d{2}$/.test(b.from))) throw new BadRequestException('from must be YYYY-MM');
+    return this.db.asUser(uid, (svc, u) =>
+      svc.setRate(u, {
+        key: str(b.key ?? '', 'key', 40),
+        companyId: str(b.companyId ?? '', 'companyId', 40),
+        from: b.from as string | undefined,
+        amount: (b.amount ?? null) as number | null,
+        reason: str(b.reason ?? '', 'reason', 300),
+      }),
+    );
+  }
+
+  // F1 (Fauzan, 11 Nov 2026): every site where guards worked is billed.
+  @Get('finance/unbilled-sites')
+  unbilledSites(@UserId() uid: string, @Query('period') period?: string) {
+    if (period !== undefined && !/^\d{4}-\d{2}$/.test(period)) throw new BadRequestException('period must be YYYY-MM');
+    return this.db.asUser(uid, (svc, u) => svc.unbilledSites(u, period));
+  }
+
+  // F3 (Fauzan, 11 Nov 2026): the CEO's one-page monthly finance summary.
+  @Get('finance/summary')
+  finSummary(@UserId() uid: string, @Query('period') period?: string) {
+    if (period !== undefined && !/^\d{4}-\d{2}$/.test(period)) throw new BadRequestException('period must be YYYY-MM');
+    return this.db.asUser(uid, (svc, u) => svc.finSummary(u, period));
+  }
+
+  // F2 (Fauzan, 11 Nov 2026): profit per site with the target margin.
+  @Get('finance/site-margins')
+  siteMargins(@UserId() uid: string, @Query('month') month?: string) {
+    if (month !== undefined && !/^\d{4}-\d{2}$/.test(month)) throw new BadRequestException('month must be YYYY-MM');
+    return this.db.asUser(uid, (svc, u) => svc.siteMargins(u, month));
+  }
+
+  @Post('finance/unbilled-sites/:companyId/clear')
+  clearUnbilledFlag(@UserId() uid: string, @Param('companyId') companyId: string, @Body() b: Record<string, unknown>) {
+    return this.db.asUser(uid, (svc, u) => svc.clearUnbilledFlag(u, companyId.slice(0, 40), { key: str(b.key ?? '', 'key', 200), reason: str(b.reason ?? '', 'reason', 300) }));
+  }
+
   // The month's management fee bills between group companies (draft, not an invoice).
   @Get('finance/management-fee-bills')
   managementFeeBills(@UserId() uid: string, @Query('month') month?: string) {
@@ -7199,6 +7246,7 @@ export class AppController {
       ratePerGuard: num(b.ratePerGuard, 'ratePerGuard'),
       validDays: b.validDays == null ? 30 : num(b.validDays, 'validDays'),
       note: b.note == null ? '' : str(b.note, 'note', 2000),
+      nepaliGuards: b.nepaliGuards == null ? 0 : num(b.nepaliGuards, 'nepaliGuards'),
     };
     return this.db.asUser(uid, (svc, u) => svc.createQuotation(u, id, input));
   }
@@ -7238,6 +7286,7 @@ export class AppController {
     if (hours !== 8 && hours !== 12) throw new BadRequestException('hoursPerDay must be 8 or 12');
     const input = {
       guards: num(b.guards, 'guards'),
+      ...(b.nepaliGuards == null ? {} : { nepaliGuards: num(b.nepaliGuards, 'nepaliGuards') }),
       hoursPerDay: hours as 8 | 12,
       ratePerGuard: num(b.ratePerGuard, 'ratePerGuard'),
       validUntil: date(b.validUntil, 'validUntil'),

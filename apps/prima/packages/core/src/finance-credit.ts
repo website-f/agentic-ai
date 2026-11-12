@@ -1,3 +1,4 @@
+import type { FinSettingsValues } from "./types";
 import { AccessDenied } from "./access";
 import { isLead } from "./finance";
 import { isoDate } from "./finance";
@@ -48,8 +49,8 @@ export interface FinCreditOverride {
 const norm = (s: string) => s.toUpperCase().replace(/[^A-Z0-9]/g, '');
 
 /** Whether Prima should warn before more posts are added for this client. */
-export function finCreditStatus(f: FinStatus | null, client: ClientAccount, today: IsoDate) {
-  const r = RULES.financeCredit.value;
+export function finCreditStatus(f: FinStatus | null, client: ClientAccount, today: IsoDate, s?: Partial<FinSettingsValues>) {
+  const r = { ...RULES.financeCredit.value, overdueDays: s?.creditOverdueDays ?? RULES.financeCredit.value.overdueDays, balanceStaleDays: s?.creditStaleDays ?? RULES.financeCredit.value.balanceStaleDays };
   const c = (f?.creditLimits ?? []).find((x) => x.clientAccountId === client.id) ?? null;
   const reasons: string[] = [];
   const owed = c?.balance?.owed ?? null;
@@ -147,23 +148,23 @@ export function finCreditAction(ctx: FinCashCtx, f: FinStatus, clients: ClientAc
   throw new BadRequest('Unknown action.');
 }
 
-export function finCreditView(f: FinStatus, clients: ClientAccount[], today: IsoDate) {
+export function finCreditView(f: FinStatus, clients: ClientAccount[], today: IsoDate, s?: Partial<FinSettingsValues>) {
   return {
     clients: clients
       .filter((c) => c.companyId === f.companyId && c.stage !== 'ended')
-      .map((c) => ({ id: c.id, name: c.name, ...finCreditStatus(f, c, today) }))
+      .map((c) => ({ id: c.id, name: c.name, ...finCreditStatus(f, c, today, s) }))
       .sort((a, b) => Number(b.warn) - Number(a.warn) || Number(b.limit != null) - Number(a.limit != null) || a.name.localeCompare(b.name)),
     overrides: (f.creditOverrides ?? []).filter((o) => !o.seen || daysBetween(o.at.slice(0, 10), today) <= 60).sort((a, b) => b.at.localeCompare(a.at)),
-    overdueDays: RULES.financeCredit.value.overdueDays,
+    overdueDays: s?.creditOverdueDays ?? RULES.financeCredit.value.overdueDays,
   };
 }
 
-export function finCreditHome(f: FinStatus, clients: ClientAccount[], today: IsoDate, reviewer: boolean) {
+export function finCreditHome(f: FinStatus, clients: ClientAccount[], today: IsoDate, reviewer: boolean, s?: Partial<FinSettingsValues>) {
   const mine = clients.filter((c) => c.companyId === f.companyId);
   return {
     overridesToSee: reviewer ? (f.creditOverrides ?? []).filter((o) => !o.seen).length : 0,
     balanceStale: (f.creditLimits ?? []).filter(
-      (c) => mine.some((x) => x.id === c.clientAccountId) && finCreditStatus(f, mine.find((x) => x.id === c.clientAccountId)!, today).stale,
+      (c) => mine.some((x) => x.id === c.clientAccountId) && finCreditStatus(f, mine.find((x) => x.id === c.clientAccountId)!, today, s).stale,
     ).length,
   };
 }

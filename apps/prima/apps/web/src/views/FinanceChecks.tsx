@@ -2177,7 +2177,7 @@ function TaxCalendar({ v, co }: { v: FinControls; co: Co }) {
       </div>
       <p className="muted small fin-intro">
         Built from the financial year end. Prima ticks what it can see (SST filed, payments made from the regular payments list, the consolidated e-Invoice). Record the
-        others once filed in the portal. Dates to be confirmed by the tax agent.
+        others once filed in the portal. The Finance Director confirms the dates from LHDN and Customs.
       </p>
       <ErrorNotice error={act.error} />
       <div className="list">

@@ -70,6 +70,8 @@ export interface RelatedPartyDeal {
   recordedBy: string;
   recordedById: Id;
   at: IsoDateTime;
+  /** C9 (Fauzan, 11 Nov 2026): every deal recorded sends an information notice to the CEO, and nobody else. */
+  ceoNotice?: { at: IsoDateTime } | null;
   status: RptStatus;
   review: (RegNote & { agree: boolean }) | null;
   answers: RegNote[];
@@ -839,6 +841,7 @@ export class BoardRegisterService {
       recordedBy: w.by,
       recordedById: w.byId,
       at: w.at,
+      ceoNotice: { at: w.at },
       status: "awaiting_review",
       review: null,
       answers: [],
@@ -853,7 +856,7 @@ export class BoardRegisterService {
         action: "register.deal.add",
         entity: "related_party_deal",
         entityId: deal.id,
-        summary: `${RPT_NATURE_LABEL[nature]} with ${counterparty} (${RPT_PARTY_LABEL[party].toLowerCase()}), RM${amount.toLocaleString("en-MY")}.`,
+        summary: `${RPT_NATURE_LABEL[nature]} with ${counterparty} (${RPT_PARTY_LABEL[party].toLowerCase()}), RM${amount.toLocaleString("en-MY")}. Notice sent to the CEO.`,
       });
       return deal;
     });
@@ -1425,6 +1428,19 @@ export class BoardRegisterService {
     const tag = "Governance registers";
     if (b.deals) {
       const deals = only(b.deals.rows, (r) => r.deal.companyId);
+      // C9 (Fauzan, 11 Nov 2026): each related-party deal recorded is an information notice to the CEO only (no limit,
+      // no block), shown for 14 days after it was recorded.
+      if (!user.integration && user.opsTier === "ceo") {
+        const since = Date.parse(this.clock()) - 14 * 86_400_000;
+        for (const d of deals.filter((x) => x.deal.ceoNotice && Date.parse(x.deal.ceoNotice.at) >= since))
+          items.push({
+            tone: "info",
+            tag,
+            title: `Related-party deal recorded: ${d.deal.counterparty}`,
+            detail: `${d.companyName} · ${RPT_NATURE_LABEL[d.deal.nature]} · RM${d.deal.amount.toLocaleString("en-MY")} · ${d.deal.relationship}`,
+            go: { view: "registers" },
+          });
+      }
       const review = deals.filter((d) => d.canReview);
       if (review.length)
         items.push({

@@ -1,3 +1,16 @@
+import { finSummaryRow } from "./finance-monitor";
+import { finSummaryGroup } from "./finance-monitor";
+import { finSummaryReadyOn } from "./finance-monitor";
+import { finPackData } from "./finance-pack";
+import { finCloseCheck } from "./finance";
+import { rateFor } from "./rate-book";
+import { RATE_INFO } from "./rate-book";
+import type { RateKey } from "./rate-book";
+import { FinMonitorService } from "./finance-monitor";
+import { quoteCostCheck } from "./quote-cost";
+import { DEMO_IT_RENTAL_RATES } from "./demo-rates";
+import { RateBookService } from "./rate-book";
+import { finSettingsOf } from "./finance";
 import { applyArrivalRecovery, checkArrivalSnapshot, recordArrivalRepayments, cashCeo } from './arrival-cash';
 import { withLeavePersonLock } from './leave-lock';
 import { staffZakatReleaseProblem, staffSqlOtherSharesProblem } from './staff-zakat-guards';
@@ -1459,6 +1472,7 @@ export type HomeTone = 'ok' | 'warn' | 'crit' | 'neutral' | 'info';
 
 export type HomeView =
   | 'home'
+  | 'finsummary'
   | 'payreq'
   | 'act'
   | 'staffclock'
@@ -5132,8 +5146,12 @@ export class PrimaService {
       this.store.list('licences', { companyId: ids }),
     ]);
     const renewDays = RULES.insuranceRenewalDays.value;
-    const premiumDays = RULES.insurancePremiumDays.value;
-    const noticeDays = RULES.insuranceClaimNoticeDays.value;
+    // C4 (Fauzan, 11 Nov 2026): the days are Finance settings the FD can change (rule defaults when not readable here).
+    const insSet = finSettingsOf(await this.store.get('finStatus', `fin-${GROUP_EMPLOYER_ID}`).catch(() => null), today);
+    const premiumDays = insSet.premiumDueDays;
+    const premiumEarlyDays = insSet.premiumEarlyDays;
+    const guaranteeRemindDays = insSet.guaranteeRemindDays;
+    const noticeDays = insSet.claimNoticeDays;
     const claimAge = RULES.insuranceClaimAgeDays.value;
     const bondDays = RULES.guaranteeLeadDays.value;
 
@@ -5184,6 +5202,9 @@ export class PrimaService {
           `${label} · due ${-premiumLeft} days ago; cover may not hold`,
         );
       else if (premium === 'due') alert('warn', 'Premium', p.companyId, `Premium RM ${p.premium.toLocaleString('en-MY')} due in ${premiumLeft} days`, label);
+      // The first of two reminders (Fauzan, 11 Nov 2026: 30 and 14 days before the premium is due).
+      else if (premium === 'later' && premiumLeft <= premiumEarlyDays)
+        alert('info', 'Premium', p.companyId, `Premium RM ${p.premium.toLocaleString('en-MY')} due in ${premiumLeft} days`, `${label} · first reminder; arrange payment with the broker`);
       return {
         policy: p,
         companyName: name.get(p.companyId) ?? p.companyId,
@@ -5256,6 +5277,9 @@ export class PrimaService {
       if (state === 'lapsed') alert('crit', 'Guarantee', b.companyId, 'Guarantee expired while the contract runs', `${label} · ${b.contractRef}`);
       if (state === 'extend')
         alert('warn', 'Guarantee', b.companyId, `Guarantee ends in ${left} days, before the contract`, `${label} · contract to ${b.contractEndsOn}`);
+      // F13 (Fauzan, 11 Nov 2026): every guarantee is followed until it is settled, with a reminder before it is due.
+      if ((state === 'ok' || state === 'short') && left >= 0 && left <= guaranteeRemindDays)
+        alert('warn', 'Guarantee', b.companyId, `Guarantee due in ${left} days`, `${label} · ${b.contractRef}; settle it, extend it or ask for its release`);
       if (state === 'release')
         alert(
           'info',
@@ -5737,7 +5761,7 @@ export class PrimaService {
           go: { view: 'ja' },
         });
     }
-    const todo = [...caseItems, ...fwItems, ...leaveItems, ...(await this.finance.home(user)), ...(await this.amHome(user))];
+    const todo = [...caseItems, ...fwItems, ...leaveItems, ...this.finSummaryNotice(user), ...(await this.finance.home(user)), ...(await this.amHome(user))];
     const tiles: HomeTile[] = [
       { label: 'Waiting for your decision', value: todo.length, tone: todo.length ? 'crit' : 'ok', note: 'Approvals and escalations', go: { view: 'home' } },
       { label: 'Bids closing, not signed', value: tenderWatch.length, tone: tenderWatch.length ? 'warn' : 'ok', note: 'Within 7 days', go: { view: 'doa' } },
@@ -10467,10 +10491,13 @@ export class PrimaService {
       ratePerGuard: number;
       validDays: number;
       note?: string;
+      nepaliGuards?: number;
     },
   ) {
     const company = await this.company(user, companyId);
     assertCan(user, await this.grants(), this.today(), 'commercial.prepare', companyId);
+    const nepali = input.nepaliGuards ?? 0;
+    if (!Number.isInteger(nepali) || nepali < 0 || nepali > input.guards) throw new BadRequest('Nepali guards must be a whole number from 0 to the number of guards.');
     if (!input.client.trim()) throw new BadRequest('Name the client.');
     if (!Number.isInteger(input.guards) || input.guards < 1 || input.guards > 1000) throw new BadRequest('Guards must be a whole number from 1 to 1,000.');
     if (!(input.ratePerGuard > 0) || input.ratePerGuard > 50_000) throw new BadRequest('Give the monthly rate per guard in RM.');
@@ -10500,7 +10527,9 @@ export class PrimaService {
       approvedBy: null,
       approvedAt: null,
       note: (input.note ?? '').trim(),
+      nepaliGuards: nepali,
     };
+    q.costCheck = await this.quoteCost(q);
     return this.store.transaction(async (tx) => {
       await tx.insert('quotations', q);
       await tx.audit({
@@ -10510,7 +10539,7 @@ export class PrimaService {
         action: 'quotation.create',
         entity: 'quotation',
         entityId: q.id,
-        summary: `Drafted ${q.ref} for ${q.client}: ${q.guards} guards, RM${q.monthlyTotal.toFixed(2)} a month`,
+        summary: `Drafted ${q.ref} for ${q.client}: ${q.guards} guards, RM${q.monthlyTotal.toFixed(2)} a month${q.costCheck && q.costCheck.status !== 'ok' ? `; cost check: ${q.costCheck.reasons.join(' ')}` : ''}`,
       });
       return q;
     });
@@ -10546,6 +10575,9 @@ export class PrimaService {
       rejected: 'rejected',
     };
     const patch: Partial<Quotation> = { status: status[action] };
+    // C10: the cost check is worked again with this month's rates when the quotation is submitted or approved, and kept.
+    const check = action === 'submit' || action === 'approve' ? await this.quoteCost(q) : null;
+    if (check) patch.costCheck = check;
     if (action === 'approve') Object.assign(patch, { approvedBy: user.name, approvedAt: at });
     if (action === 'sent') patch.sent = { userId: user.id, by: user.name, at };
     if (action === 'accepted' || action === 'rejected') patch.decided = { status: action, userId: user.id, by: user.name, at };
@@ -10559,7 +10591,7 @@ export class PrimaService {
         action: `quotation.${action}`,
         entity: 'quotation',
         entityId: q.id,
-        summary: `${q.ref} ${status[action].replace('_', ' ')}${note?.trim() ? `: ${note.trim()}` : ''}`,
+        summary: `${q.ref} ${status[action].replace('_', ' ')}${note?.trim() ? `: ${note.trim()}` : ''}${check && check.status !== 'ok' ? ` (${check.status === 'below_cost' ? 'BELOW COST' : 'cost check incomplete'}: ${check.reasons.join(' ')})` : ''}`,
       });
       return updated;
     });
@@ -18315,7 +18347,8 @@ export class PrimaService {
   private itRentalView(assets: ItAsset[], bills: ItRentalBill[], ownerName: (id: Id) => string, today: IsoDate) {
     const simulation = this.store.rentalSimulation?.() === true;
     const period = today.slice(0, 7);
-    const rates = RULES.itRental.value.monthly;
+    // C5: only the demo simulation has sample rates; a kind with no rate is "rate not set" (null), never 0.
+    const rates: Record<string, number> = simulation ? DEMO_IT_RENTAL_RATES : {};
     const billed = assets.filter((a) => a.status === 'in_use' || a.status === 'repair');
     const companies = [...new Set(billed.map((a) => a.ownerId))];
     const rows = companies
@@ -18324,12 +18357,13 @@ export class PrimaService {
         const kinds = [...new Set(mine.map((a) => a.kind))].sort();
         const lines = kinds.map((kind) => {
           const count = mine.filter((a) => a.kind === kind).length;
-          return { kind, count, rate: rates[kind] ?? 0, amount: count * (rates[kind] ?? 0) };
+          const rate = rates[kind] ?? null;
+          return { kind, count, rate, amount: rate == null ? null : count * rate };
         });
         const bill = bills.find((b) => b.companyId === cid && b.period === period) ?? null;
-        return { companyId: cid, companyName: ownerName(cid), devices: mine.length, lines, total: lines.reduce((n, l) => n + l.amount, 0), bill };
+        return { companyId: cid, companyName: ownerName(cid), devices: mine.length, lines, total: lines.some((l) => l.amount == null) ? null : lines.reduce((n, l) => n + (l.amount ?? 0), 0), bill };
       })
-      .sort((a, b) => b.total - a.total);
+      .sort((a, b) => (b.total ?? -1) - (a.total ?? -1));
     const late = today.slice(8) > String(RULES.itRental.value.billByDay).padStart(2, '0');
     return {
       billingMode: simulation ? 'demo_simulation' as const : 'setup_required' as const,
@@ -18361,11 +18395,13 @@ export class PrimaService {
     if (await this.store.get('itRentalBills', id)) throw new BadRequest('This month is already billed for this company.');
     const assets = (await this.store.list('itAssets', {})).filter((a) => a.ownerId === companyId && (a.status === 'in_use' || a.status === 'repair'));
     if (!assets.length) throw new BadRequest('This company rents no devices.');
-    const rates = RULES.itRental.value.monthly;
+    const rates: Record<string, number> = DEMO_IT_RENTAL_RATES;
     const kinds = [...new Set(assets.map((a) => a.kind))].sort();
+    const unpriced = kinds.filter((k) => rates[k] == null);
+    if (unpriced.length) throw new BadRequest(`Rate not set for ${unpriced.join(', ')}: the IT Manager enters it first.`);
     const lines = kinds.map((kind) => {
       const count = assets.filter((a) => a.kind === kind).length;
-      return { kind, count, rate: rates[kind] ?? 0, amount: count * (rates[kind] ?? 0) };
+      return { kind, count, rate: rates[kind], amount: count * rates[kind] };
     });
     const at = this.now();
     const bill: ItRentalBill = { id, companyId, period, lines, total: lines.reduce((n, l) => n + l.amount, 0), invoiceRef: ref, issuedBy: user.name, issuedAt: at, paid: null };
@@ -42015,7 +42051,12 @@ export class PrimaService {
     const to = `${addDays(`${m}-28`, 4).slice(0, 7)}-01`;
     const lastDay = addDays(to, -1);
     const r2 = (n: number) => Math.round(n * 100) / 100;
-    const OT_LIMIT = 104; // Employment (Limitation of Overtime Work) Regulations 1980: 104 hours a month.
+    // F2 (Fauzan, 11 Nov 2026): overtime from the pay law in force (lowest overtime rate, normal hours a day, day divisor
+    // and monthly cap), never a fixed 1.5 in the code. The CEO changes the pay law from a month (PAY-LAW-CEO).
+    const law = (await this.payFormulasOn()) ? payLawFor(await this.store.list('payLawVersions', {}), m) : DEFAULT_PAY_LAW;
+    const NORMAL = law.normalHoursDayMax;
+    const OTX = law.otMinNormal;
+    const OT_LIMIT = law.otMonthCap; // Employment (Limitation of Overtime Work) Regulations 1980: 104 hours a month.
     // A month still running is counted to date: the contract value and basic pay for the days so far, today included.
     const inProgress = today < to && today >= from;
     const soFar = inProgress ? (daysBetween(from, today) + 1) / daysBetween(from, to) : 1;
@@ -42056,10 +42097,10 @@ export class PrimaService {
       .filter((a) => a.clockIn && a.clockOut && dateOf(a.clockIn) >= from && dateOf(a.clockIn) < to)
       .map((a) => {
         const h = (toMs(a.clockOut!) - toMs(a.clockIn!)) / 3_600_000;
-        return { a, normal: Math.min(8, h), ot: Math.max(0, h - 8) };
+        return { a, normal: Math.min(NORMAL, h), ot: Math.max(0, h - NORMAL) };
       });
     const rows = allRows.filter((r) => siteIds.has(r.a.siteId));
-    const hourly = (p: Person | undefined) => (p?.basicPay ? p.basicPay / 26 / 8 : null);
+    const hourly = (p: Person | undefined) => (p?.basicPay ? p.basicPay / law.ordinaryRateDivisor / NORMAL : null);
     const hoursOf = new Map<Id, number>();
     for (const r of allRows) hoursOf.set(r.a.personId, (hoursOf.get(r.a.personId) ?? 0) + r.normal + r.ot);
     const monthShifts = shifts.filter((x) => x.personId && x.date >= from && x.date < to);
@@ -42086,7 +42127,7 @@ export class PrimaService {
       const rostered = monthShifts.filter((x) => x.personId === personId && siteIds.has(x.siteId));
       const missed = rostered.filter((x) => x.date < today && !att.some((a) => a.shiftId === x.id)).length;
       if (missed) flags.push(`${missed} rostered shift${missed > 1 ? 's' : ''} with no clock-in`);
-      const expected = hr == null ? null : r2(p!.basicPay! * soFar + ot * hr * 1.5);
+      const expected = hr == null ? null : r2(p!.basicPay! * soFar + ot * hr * OTX);
       // The share of the guard's month spent at these sites: by hours clocked, or by rostered shifts when none are clocked.
       const allHours = hoursOf.get(personId) ?? 0;
       const allShifts = monthShifts.filter((x) => x.personId === personId).length;
@@ -42116,7 +42157,7 @@ export class PrimaService {
         hoursHere: Math.round(here * 10) / 10,
         otherSitesHours: Math.round((allHours - here) * 10) / 10,
         basic: p?.basicPay ?? null,
-        overtimePay: hr == null ? null : r2(ot * hr * 1.5),
+        overtimePay: hr == null ? null : r2(ot * hr * OTX),
         expectedGross: expected,
         // This list's part of the guard's pay, so the government and private totals add up to the company's.
         payHere: expected == null ? null : r2(expected * share),
@@ -42149,6 +42190,25 @@ export class PrimaService {
       for (const id of stayers) hostelCost.set(id, (hostelCost.get(id) ?? 0) + total / stayers.length);
     }
     // A guard's monthly costs go to the sites they worked, by their hours there over all their hours in the company.
+    // F2: shared costs per guard from the rate book (C5): transport for Nepali guards (and the hostel rate where no hostel
+    // bill is recorded for them), uniform and equipment for every guard. A rate not set leaves the site Unknown, never 0.
+    const sharedCost = new Map<Id, number>();
+    const sharedMissing = new Map<Id, string[]>();
+    for (const personId of hoursOf.keys()) {
+      const p = person.get(personId);
+      if (!p) continue;
+      const fin = finRows.find((f) => f.companyId === p.companyId);
+      const keys: RateKey[] = ['uniform', 'equipment', ...((p.nationality === 'NP' ? ['transport_np', ...(hostelCost.has(personId) ? [] : ['hostel_np'])] : []) as RateKey[])];
+      let n = 0;
+      const miss: string[] = [];
+      for (const k of keys) {
+        const r = rateFor(fin, k, m);
+        if (r == null) miss.push(RATE_INFO[k].label);
+        else n += r.amount * soFar;
+      }
+      sharedCost.set(personId, n);
+      if (miss.length) sharedMissing.set(personId, miss);
+    }
 
     // Goodwill items each guard held, charged to the company (rental at month end, sale in the month).
     let itemCost = new Map<Id, number>();
@@ -42207,7 +42267,7 @@ export class PrimaService {
       for (const r of here) {
         const hr = hourly(person.get(r.a.personId));
         if (hr == null) unpriced += 1;
-        else guardCost += r.normal * hr + r.ot * hr * 1.5;
+        else guardCost += r.normal * hr + r.ot * hr * OTX;
       }
       const guardsHere = [...new Set(here.map((r) => r.a.personId))];
       const byHours = (perPerson: Map<Id, number>) =>
@@ -42218,6 +42278,8 @@ export class PrimaService {
         }, 0);
       const statutory = byHours(employer);
       const hostel = byHours(hostelCost);
+      const shared = byHours(sharedCost);
+      const missingRates = [...new Set(guardsHere.flatMap((id) => sharedMissing.get(id) ?? []))];
       // The operations company's management fee, from the agreement Finance entered.
       const finRow = finRows.find((f) => f.companyId === site.companyId);
       const cashRows = (finRow?.exceptionalGuardCash ?? []).filter(r => r.companyId === site.companyId && r.siteId === site.id && r.occasion.slice(0, 7) === m && r.payout);
@@ -42246,12 +42308,26 @@ export class PrimaService {
       // not over, or clock-ins are missing), the margin is not shown as fine.
       const clocked = here.reduce((n, r) => n + r.normal + r.ot, 0);
       const coverage = contractedHours > 0 ? clocked / contractedHours : null;
-      const known = revenue != null && here.length > 0 && unpriced === 0 && (coverage == null || coverage >= 0.9) && mgmtFee != null && otherFees != null;
-      const margin = revenue == null ? null : r2(revenue - guardCost - cashPayroll - statutory - hostel - items - (feeInProfit ? (mgmtFee ?? 0) : 0) - (otherFees ?? 0));
+      const known = revenue != null && here.length > 0 && unpriced === 0 && (coverage == null || coverage >= 0.9) && mgmtFee != null && otherFees != null && missingRates.length === 0;
+      const margin = revenue == null ? null : r2(revenue - guardCost - cashPayroll - statutory - hostel - shared - items - (feeInProfit ? (mgmtFee ?? 0) : 0) - (otherFees ?? 0));
+      const totalCost = revenue == null || margin == null ? null : r2(revenue - margin);
+      const marginPct = margin != null && revenue ? Math.round((margin / revenue) * 1000) / 10 : null;
+      // F2: the target margin the FD or the CEO set (company, else group); none preset ("target not set").
+      const target = rateFor(finRow, 'target_margin', m);
+      const belowTarget = known && marginPct != null && target != null && marginPct < target.amount;
+      const why: string[] = [];
+      if (belowTarget) {
+        why.push(`Margin ${marginPct}% is below the target ${target!.amount}%`);
+        why.push(`Hours paid ${Math.round(clocked)} h against hours billed ${Math.round(contractedHours)} h`);
+        const costLines: [string, number][] = [['guard pay', guardCost + cashPayroll], ['EPF, SOCSO, EIS and levy', statutory], ['hostel', hostel], ['transport, uniform and equipment', shared], ['management fees', (feeInProfit ? (mgmtFee ?? 0) : 0) + (otherFees ?? 0)], ['items', items]];
+        why.push(`Largest costs: ${costLines.filter((x) => x[1] > 0).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([l, v]) => `${l} RM${r2(v).toFixed(2)}`).join(', ')}`);
+        if (clocked > 0 && revenue) why.push(`Price RM${(revenue / Math.max(clocked, 1)).toFixed(2)} an hour worked against cost RM${(totalCost! / Math.max(clocked, 1)).toFixed(2)}`);
+      }
       const notes = [
         ...(cashPayrollPending ? [`Additional payroll cash paid RM${cashPayrollPending.toFixed(2)} awaiting evidence/accounting; margin incomplete`] : []),
         ...(revenue == null ? ['No contract recorded for this site'] : live.some((c) => c.siteIds.length > 1) ? ['Contract shared with other sites, split by hours worked'] : []),
         ...(here.length === 0 ? ['No attendance this month'] : []),
+        ...(missingRates.length ? [`Rate not set: ${missingRates.join(', ')} (Rate book)`] : []),
         ...(unpriced ? [`${unpriced} shift${unpriced > 1 ? 's' : ''} by guards with no basic pay recorded`] : []),
         ...(revenue != null && !fee ? ['Management fee not entered by Finance yet'] : []),
         ...(fee && !feeInProfit ? ['The operations company\'s fee is not taken off this profit and loss (FD or CEO decision)'] : []),
@@ -42281,12 +42357,17 @@ export class PrimaService {
         managementFeeInProfit: feeInProfit,
         otherFees: otherFees == null ? null : r2(otherFees),
         itemCharges: r2(items),
+        sharedCost: missingRates.length ? null : r2(shared),
+        totalCost,
         margin,
-        marginPct: margin != null && revenue ? Math.round((margin / revenue) * 1000) / 10 : null,
+        marginPct,
+        targetPct: target?.amount ?? null,
+        belowTarget,
+        why,
         contractedHours: Math.round(contractedHours),
         clockedHours: Math.round(clocked),
         notes,
-        tone: (!known || cashPayrollPending > 0 ? 'unknown' : margin! < 0 ? 'crit' : 'ok') as 'ok' | 'crit' | 'unknown',
+        tone: (!known || cashPayrollPending > 0 ? 'unknown' : margin! < 0 || belowTarget ? 'crit' : 'ok') as 'ok' | 'crit' | 'unknown',
       };
     });
 
@@ -42373,9 +42454,13 @@ export class PrimaService {
         leavePending: leave.filter((x) => x.status === 'pending').length,
       },
       inProgress,
+      otRate: OTX,
+      basis: 'Estimate from Prima data; SQL Account is the book of record.',
       notes: [
         ...(inProgress ? [`${m} is still running: contract value and basic pay are counted for the days so far.`] : []),
-        'Pay is worked out from Prima clock-ins: basic, plus overtime at 1.5 times the hourly rate (basic ÷ 26 ÷ 8). When the JA Group app has sent a guard\'s pay summary, its basic and overtime are compared with that (allowances are shown in JA\'s gross but not checked). Hours and pay cover the guard\'s whole month in the company; the pay total counts only the part for the hours at these sites. A guard rostered here with no clock-in is listed and flagged.',
+        `Pay is worked out from Prima clock-ins: basic, plus overtime at ${OTX} times the hourly rate (basic ÷ ${law.ordinaryRateDivisor} ÷ ${NORMAL}), from the pay law in force.`,
+        'Estimate from Prima data; SQL Account is the book of record. Shared costs per guard (transport, uniform, equipment, and the hostel rate where no hostel bill is recorded) come from the rate book; a rate not set leaves the site Unknown.',
+        'Checked against JA: When the JA Group app has sent a guard\'s pay summary, its basic and overtime are compared with that (allowances are shown in JA\'s gross but not checked). Hours and pay cover the guard\'s whole month in the company; the pay total counts only the part for the hours at these sites. A guard rostered here with no clock-in is listed and flagged.',
         'Employer costs, the hostel share and Goodwill items are split over each guard\'s hours at every site of the company before this list is cut to your sites, so the government and private lists add up to the company total.',
         'Site margin takes off guard pay, employer EPF, SOCSO and EIS, HRD levy or the foreign worker levy, the hostel share, Goodwill items and the management fee. Income is the invoice for the month, or the contract value until Finance records the invoice; money actually collected comes from Finance once its receipts are connected.',
       ],
@@ -42384,6 +42469,135 @@ export class PrimaService {
 
   private feeSetter(user: User): boolean {
     return canSetManagementFee(user);
+  }
+
+  /**
+   * C5 rate book (Fauzan, 11 Nov 2026: rates are entered in the system, never preset): the costing rates per company
+   * from a month, with history, and where every other rate list is kept. Finance, the COO and the CEO read it; the
+   * Finance Director or the CEO sets it with a reason (rate-book.ts).
+   */
+  async rateBook(user: User) {
+    return new RateBookService(this.store, () => this.now()).view(user);
+  }
+
+  async setRate(user: User, input: { key: unknown; companyId: unknown; from?: unknown; amount: unknown; reason: unknown }) {
+    return new RateBookService(this.store, () => this.now()).set(user, input);
+  }
+
+  /**
+   * F1 (Fauzan, 11 Nov 2026): every site where guards worked is billed. From the month's attendance: no contract, no
+   * invoice, no client sign-off, or an hours-worked invoice below the hours (finance-monitor.ts). Finance teams see their
+   * companies, the company manager their own, the FD and the CEO all; a Finance reviewer clears a flag with a reason.
+   */
+  async unbilledSites(user: User, period?: string) {
+    return new FinMonitorService(this.store, () => this.now()).unbilled(user, period);
+  }
+
+  async clearUnbilledFlag(user: User, companyId: Id, input: { key: unknown; reason: unknown }) {
+    return new FinMonitorService(this.store, () => this.now()).clearUnbilled(user, companyId, input);
+  }
+
+  /**
+   * F3 (Fauzan, 11 Nov 2026): the CEO's notice that the month's one-page finance summary is ready (after the 15th close),
+   * with the link. Read-only.
+   */
+  private finSummaryNotice(user: User): HomeItem[] {
+    if (user.integration || user.opsTier !== 'ceo') return [];
+    const p = new FinMonitorService(this.store, () => this.now()).closePeriod();
+    if (this.today() < finSummaryReadyOn(p)) return [];
+    return [{ tone: 'info', tag: 'Finance', title: `The monthly finance page for ${p} is ready`, detail: 'One page for every company, after the books close on the 15th. Read-only; print it from the browser.', go: { view: 'finsummary' } }];
+  }
+
+  /**
+   * F3 (Fauzan, 11 Nov 2026): one page each month for the CEO, all companies in rows with the group total on top. The CEO,
+   * the FD, the Chairman and the Vice Chairman see the group; a Finance team sees its own companies; nobody else.
+   */
+  async finSummary(user: User, period?: string) {
+    const a = finActor(user);
+    const group = !!a && (a.kind === 'ceo' || a.kind === 'director' || (a.kind === 'viewer' && (user.leadership === 'chairman' || user.leadership === 'vice_chairman')));
+    const team = !!a && (a.kind === 'leader' || a.kind === 'deputy' || a.kind === 'data_entry');
+    if (!group && !team) throw new AccessDenied('view', '(the monthly finance page: the CEO, the FD, the Chairman, the Vice Chairman, and a Finance team for its own companies)');
+    const mon = new FinMonitorService(this.store, () => this.now());
+    const close = mon.closePeriod();
+    const p = typeof period === 'string' && /^\d{4}-(0[1-9]|1[0-2])$/.test(period) && period <= close ? period : close;
+    const today = this.today();
+    const ids = tenantCompanyIds(user, await this.grants(), today);
+    let fins = ids.length ? await this.store.list('finStatus', { companyId: ids }) : [];
+    if (team) fins = fins.filter((f) => f.team === a!.team);
+    const companyIds = fins.map((f) => f.companyId);
+    const [contracts, groupFin, nameOf, s] = await Promise.all([
+      companyIds.length ? this.store.list('contracts', { companyId: companyIds }) : Promise.resolve([]),
+      this.store.get('finStatus', `fin-${GROUP_EMPLOYER_ID}`),
+      this.finance.companyNamer(),
+      this.finance.settings(),
+    ]);
+    const unbilled = await mon.unbilledFor(companyIds, p, fins);
+    // F2's sites below target, from the same site profit and loss (all sectors the person sees).
+    const sites = [...(await this.opsMonitor(user, 'government', p)).sites, ...(await this.opsMonitor(user, 'private', p)).sites];
+    const rows = [];
+    for (const f of fins) {
+      const reviewed = (f.packReviews ?? []).find((r) => r.period === p) ?? null;
+      const closeRow = (f.closes ?? []).find((c) => c.period === p) ?? null;
+      const check = finCloseCheck(f, closeRow, p, this.now(), s, contracts.filter((c) => c.companyId === f.companyId), groupFin ?? null, nameOf);
+      const open = check.blockers.length + check.exceptions.filter((e) => !e.explained).length;
+      const pack = reviewed
+        ? reviewed.snapshot
+        : finPackData(f, { period: p, today, contracts, group: groupFin, runs: await this.store.list('staffPayRuns', { companyId: [f.companyId] }), nameOf, openExceptions: open });
+      rows.push(
+        finSummaryRow(f, {
+          period: p,
+          today,
+          now: this.now(),
+          pack,
+          openExceptions: open,
+          unbilled: unbilled.companies.find((c) => c.companyId === f.companyId)?.flagged ?? 0,
+          belowTarget: sites.filter((x) => x.companyId === f.companyId && x.belowTarget).length,
+          company: nameOf(f.companyId),
+        }),
+      );
+    }
+    rows.sort((x, y) => Number(y.red) - Number(x.red) || x.company.localeCompare(y.company));
+    const g = finSummaryGroup(rows);
+    return {
+      period: p,
+      periods: [close, ...[1, 2].map((k) => { const [yy, mm] = close.split('-').map(Number); const d = new Date(Date.UTC(yy, mm - 1 - k, 1)); return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`; })],
+      today,
+      ready: today >= finSummaryReadyOn(p),
+      scope: group ? ('group' as const) : ('team' as const),
+      red: rows.filter((r) => r.red).length,
+      group: g,
+      rows,
+    };
+  }
+
+  /**
+   * F2 (Fauzan, 11 Nov 2026): profit per site with the target margin, for Finance (their companies), the FD, the CEO and
+   * the COO (all). The same site profit and loss the operations monitors show (opsMonitor, own area there), for both
+   * sectors. An estimate from Prima data; SQL Account is the book of record.
+   */
+  async siteMargins(user: User, month?: string) {
+    const a = finActor(user);
+    const coo = !user.integration && user.role === 'pwvsb_officer' && user.opsTier === 'coo';
+    if (!coo && !(a && a.kind !== 'viewer')) throw new AccessDenied('view', '(profit per site: Finance, the FD, the CEO and the COO; operations see their own area on their monitor)');
+    const gov = await this.opsMonitor(user, 'government', month);
+    const priv = await this.opsMonitor(user, 'private', month);
+    let sites = [...gov.sites, ...priv.sites];
+    if (a && a.kind !== 'ceo' && a.kind !== 'director') {
+      const ids = [...new Set(sites.map((s) => s.companyId))];
+      const fins = ids.length ? await this.store.list('finStatus', { companyId: ids }) : [];
+      const mine = new Set(fins.filter((f) => a.team === f.team).map((f) => f.companyId));
+      sites = sites.filter((s) => mine.has(s.companyId));
+    }
+    const companies = [...new Set(sites.map((s) => s.companyId))];
+    const meta = gov as { otRate?: number; basis?: string };
+    return {
+      month: gov.month,
+      basis: meta.basis ?? 'Estimate from Prima data; SQL Account is the book of record.',
+      otRate: meta.otRate ?? (priv as { otRate?: number }).otRate ?? null,
+      sites: sites.sort((x, y) => Number(y.belowTarget) - Number(x.belowTarget) || (x.marginPct ?? Infinity) - (y.marginPct ?? Infinity)),
+      belowTarget: sites.filter((s) => s.belowTarget).length,
+      targetNotSet: companies.filter((id) => sites.find((s) => s.companyId === id)?.targetPct == null).length,
+    };
   }
 
   /**
@@ -43659,10 +43873,23 @@ export class PrimaService {
    * manager (review finding, 2 Nov 2026). Company staff who prepare quotations only; a reason is needed and every changed
    * value is audited with its old and new value. An approved or sent quotation is never changed here.
    */
+  /**
+   * C10 (Fauzan, 11 Nov 2026): the quotation's cost for this month from the pay law, the statutory rates and the
+   * company's rate book (quote-cost.ts). Off only if the rule is switched off.
+   */
+  private async quoteCost(q: Pick<Quotation, 'companyId' | 'guards' | 'nepaliGuards' | 'hoursPerDay' | 'monthlyTotal'>) {
+    if (!RULES.quoteCost.value.enabled) return null;
+    const month = this.today().slice(0, 7);
+    const law = (await this.payFormulasOn()) ? payLawFor(await this.store.list('payLawVersions', {}), month) : DEFAULT_PAY_LAW;
+    const st = await this.statutorySettingsFor(month);
+    const fin = (await this.store.list('finStatus', { companyId: [q.companyId] })).find((f) => f.companyId === q.companyId) ?? null;
+    return quoteCostCheck(q, month, law, st, fin, this.now());
+  }
+
   async correctQuotation(
     user: User,
     quotationId: Id,
-    input: { guards: number; hoursPerDay: 8 | 12; ratePerGuard: number; validUntil: IsoDate; reason: string },
+    input: { guards: number; nepaliGuards?: number; hoursPerDay: 8 | 12; ratePerGuard: number; validUntil: IsoDate; reason: string },
   ) {
     const found = await this.store.get('quotations', quotationId);
     if (!found) throw new NotFound('Quotation');
@@ -43681,11 +43908,13 @@ export class PrimaService {
       const q = (await tx.get('quotations', quotationId))!;
       if (q.status !== 'draft' && q.status !== 'returned') throw new BadRequest('Only a draft or returned quotation can be corrected.');
       const rate = Math.round(input.ratePerGuard * 100) / 100;
-      const next = { guards: input.guards, hoursPerDay: input.hoursPerDay, ratePerGuard: rate, validUntil: input.validUntil, monthlyTotal: Math.round(input.guards * rate * 100) / 100 };
-      const labels: Record<keyof typeof next, string> = { guards: 'Guards', hoursPerDay: 'Hours a day', ratePerGuard: 'Rate per guard', validUntil: 'Valid until', monthlyTotal: 'Monthly total' };
-      const changed = (Object.keys(next) as (keyof typeof next)[]).filter((k) => q[k] !== next[k]);
+      const nepali = input.nepaliGuards ?? q.nepaliGuards ?? 0;
+      if (!Number.isInteger(nepali) || nepali < 0 || nepali > input.guards) throw new BadRequest('Nepali guards must be a whole number from 0 to the number of guards.');
+      const next = { guards: input.guards, nepaliGuards: nepali, hoursPerDay: input.hoursPerDay, ratePerGuard: rate, validUntil: input.validUntil, monthlyTotal: Math.round(input.guards * rate * 100) / 100 };
+      const labels: Record<keyof typeof next, string> = { guards: 'Guards', nepaliGuards: 'Nepali guards', hoursPerDay: 'Hours a day', ratePerGuard: 'Rate per guard', validUntil: 'Valid until', monthlyTotal: 'Monthly total' };
+      const changed = (Object.keys(next) as (keyof typeof next)[]).filter((k) => (q[k] ?? 0) !== next[k]);
       if (!changed.length) throw new BadRequest('Nothing changed.');
-      const updated = await tx.update('quotations', q.id, next);
+      const updated = await tx.update('quotations', q.id, { ...next, costCheck: await this.quoteCost({ ...q, ...next }) });
       await tx.audit({
         at,
         actor: user.name,

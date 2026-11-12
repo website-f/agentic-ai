@@ -50,6 +50,9 @@ import { BranchWorkView, WorkView } from './views/Work';
 import { SocsoView } from './views/Socso';
 import { HostelsView } from './views/Hostels';
 import { FwCostView } from './views/FwCost';
+import { RateBookView } from './views/RateBook';
+import { FinanceSitesView } from './views/FinanceSites';
+import { FinanceSummaryView } from './views/FinanceSummary';
 import { FwStatView } from './views/FwStat';
 import { ClaimsView } from './views/Claims';
 import { MemosView } from './views/Memos';
@@ -136,7 +139,7 @@ import { officeNarrowed, primaOnly } from './office-access';
 
 
 
-export type ViewName = 'home' | 'overview' | 'company' | 'sites' | 'roster' | 'cleaning' | 'duty' | 'sitestock' | 'people' | 'attendance' | 'cases' | 'compliance' | 'commercial' | 'ops' | 'hr' | 'insurance' | 'arms' | 'cms' | 'cmsready' | 'audit' | 'device' | 'mine' | 'clock' | 'staffclock' | 'work' | 'branchwork' | 'socso' | 'fwm' | 'doa' | 'reports' | 'meetings' | 'hostels' | 'fwcost' | 'fwstat' | 'claims' | 'memos' | 'pdpa' | 'fleet' | 'clients' | 'office' | 'requests' | 'payreq' | 'ja' | 'jaswitch' | 'assets' | 'staffpay' | 'guardpay' | 'advances' | 'statutory' | 'arrivalcash' | 'loans' | 'finance' | 'contracts' | 'branches' | 'it' | 'it-metrics' | 'work-kpi' | 'it-procurement' | 'hr-it-intake' | 'staff-directory' | 'websites' | 'corporate' | 'renewals' | 'credit' | 'purchasing' | 'items' | 'governance' | 'grc' | 'registers' | 'act' | 'payformulas' | 'sitehours' | 'salarycalc' | 'continuity' | 'connections' | 'it-extraction' | 'surveys' | 'handovers' | 'quality' | 'selfaudit' | 'rba' | 'bulk-load' | 'settings';
+export type ViewName = 'home' | 'overview' | 'company' | 'sites' | 'roster' | 'cleaning' | 'duty' | 'sitestock' | 'people' | 'attendance' | 'cases' | 'compliance' | 'commercial' | 'ops' | 'hr' | 'insurance' | 'arms' | 'cms' | 'cmsready' | 'audit' | 'device' | 'mine' | 'clock' | 'staffclock' | 'work' | 'branchwork' | 'socso' | 'fwm' | 'doa' | 'reports' | 'meetings' | 'hostels' | 'fwcost' | 'fwstat' | 'claims' | 'memos' | 'pdpa' | 'fleet' | 'clients' | 'office' | 'requests' | 'payreq' | 'ja' | 'jaswitch' | 'assets' | 'staffpay' | 'guardpay' | 'advances' | 'statutory' | 'arrivalcash' | 'loans' | 'finance' | 'contracts' | 'branches' | 'it' | 'it-metrics' | 'work-kpi' | 'it-procurement' | 'hr-it-intake' | 'staff-directory' | 'websites' | 'corporate' | 'renewals' | 'credit' | 'purchasing' | 'items' | 'governance' | 'grc' | 'registers' | 'act' | 'payformulas' | 'sitehours' | 'salarycalc' | 'continuity' | 'connections' | 'it-extraction' | 'surveys' | 'handovers' | 'quality' | 'selfaudit' | 'rba' | 'bulk-load' | 'rates' | 'finsites' | 'settings' | 'finsummary';
 
 export interface Route {
   view: ViewName;
@@ -311,6 +314,12 @@ const NAV: { view: ViewName; label: string; icon: string; roles: User['role'][];
   // Branches (V11, V12): the company manager approves settlements and reviews branch actions; group leadership watches.
   { view: 'branches', label: 'Branches', icon: 'group', roles: ['director', 'pwvsb_officer', 'company_manager', 'admin_exec'] },
   { view: 'finance', label: 'Finance', icon: 'insurance', roles: ['director', 'pwvsb_officer'] },
+  // P100 fin, C5 (Fauzan, 11 Nov 2026): the rate book; Finance, the COO and the CEO read it, the FD or the CEO sets it.
+  { view: 'rates', label: 'Rate book', icon: 'insurance', roles: ['director', 'pwvsb_officer'] },
+  // P100 fin, F1/F2 (Fauzan, 11 Nov 2026): sites billed and their profit; Finance, the FD, the CEO, the COO and the company manager (own company).
+  // P100 fin, F3 (Fauzan, 11 Nov 2026): one page each month: the CEO, the FD, the Chairman and Vice Chairman, and Finance teams for their companies.
+  { view: 'finsummary', label: 'Monthly finance page', icon: 'insurance', roles: ['director', 'pwvsb_officer'] },
+  { view: 'finsites', label: 'Site billing and profit', icon: 'insurance', roles: ['director', 'pwvsb_officer', 'company_manager'] },
   // IT (Fauzan, 27 Oct 2026): everyone asks IT for help here; IT runs the full asset lifecycle, the COO monitors, the CEO oversees.
   // PWVSB credit (V8, V10): the credit officer, the Finance Director, legal counsel, group leadership and the company manager for its own loans.
   { view: 'credit', label: 'PWVSB credit', icon: 'insurance', roles: ['director', 'pwvsb_officer', 'company_manager'] },
@@ -485,7 +494,10 @@ const VIEW_TOKENS: ViewName[] = [
 'quality',
 'selfaudit',
 'rba',
-'settings'
+'settings',
+'rates',
+'finsites',
+'finsummary'
 ];
 
 function SignIn({ onSignedIn, notice }: { onSignedIn: (me: Me) => void; notice?: string | null }) {
@@ -807,7 +819,7 @@ function Shell({ me, onSignOut, onReset }: { me: Me; onSignOut: () => void; onRe
     pdpa: ['pdpa', 'fleet', 'reports', 'meetings', 'clock'],
     transport: ['fleet', 'reports', 'meetings', 'clock'],
     asset: ['assets', 'reports', 'meetings', 'clock'],
-    finance: ['finance', 'staffpay', 'guardpay', 'advances', 'arrivalcash', 'loans', 'statutory', 'assets', 'credit', 'purchasing', 'items', 'websites', 'reports', 'meetings', 'clock', 'fwcost', 'fwstat'],
+    finance: ['finance', 'finsummary', 'rates', 'finsites', 'staffpay', 'guardpay', 'advances', 'arrivalcash', 'loans', 'statutory', 'assets', 'credit', 'purchasing', 'items', 'websites', 'reports', 'meetings', 'clock', 'fwcost', 'fwstat'],
     it: ['it', 'items', 'websites', 'connections', 'continuity', 'reports', 'meetings', 'clock'],
     legal: ['credit', 'governance', 'corporate', 'reports', 'meetings', 'clock', 'registers'],
     audit: ['act', 'payformulas', 'statutory', 'sitehours', 'salarycalc', 'grc', 'audit', 'selfaudit', 'items', 'websites', 'reports', 'meetings', 'clock', 'renewals', 'cleaning', 'registers', 'quality'],
@@ -893,6 +905,10 @@ function Shell({ me, onSignOut, onReset }: { me: Me; onSignOut: () => void; onRe
         // The COO sees only his payment approvals there (Fauzan, 1 Nov 2026: approval by subject matter).
         me.user.opsTier === 'coo' ||
         (dept === 'finance' && me.user.financeTeam != null)) &&
+      // P100 fin, C5: the rate book for the Finance Director, the CEO, the COO and Finance team members (the server checks it too).
+      (n.view !== 'finsummary' || ['finance_director', 'chairman', 'vice_chairman'].includes(me.user.leadership ?? '') || me.user.opsTier === 'ceo' || (dept === 'finance' && me.user.financeTeam != null)) &&
+      (n.view !== 'finsites' || role === 'company_manager' || me.user.leadership === 'finance_director' || ['ceo', 'coo'].includes(me.user.opsTier ?? '') || (dept === 'finance' && me.user.financeTeam != null)) &&
+      (n.view !== 'rates' || me.user.leadership === 'finance_director' || ['ceo', 'coo'].includes(me.user.opsTier ?? '') || (dept === 'finance' && me.user.financeTeam != null)) &&
       // Hostel bills in operations: the Operations Director and OGM approve; other operations staff do not see them.
       // Vehicles: not for guards and officers (they do not request vehicles here).
       (n.view !== 'fleet' || me.user.opsTier !== 'patrol') &&
@@ -1127,6 +1143,12 @@ function Shell({ me, onSignOut, onReset }: { me: Me; onSignOut: () => void; onRe
         return <HostelsView />;
       case 'fwcost':
         return <FwCostView />;
+      case 'rates':
+        return <RateBookView />;
+      case 'finsites':
+        return <FinanceSitesView />;
+      case 'finsummary':
+        return <FinanceSummaryView />;
       case 'fwstat':
         return <FwStatView />;
       case 'claims':
@@ -1241,6 +1263,9 @@ function Shell({ me, onSignOut, onReset }: { me: Me; onSignOut: () => void; onRe
 
   const companyScoped = ![
     'rba',
+    'rates',
+    'finsites',
+    'finsummary',
     'handovers', 'quality',
     'cmsready',
     'home',

@@ -1837,8 +1837,8 @@ export class HttpApi implements Api {
   finKpi(period?: string) {
     return this.call<Awaited<ReturnType<Api['finKpi']>>>('GET', `/finance/kpi${period ? `?period=${encodeURIComponent(period)}` : ''}`);
   }
-  finSetSettings(values: Record<string, unknown>, comment: string) {
-    return this.call<unknown>('POST', '/finance/settings', { values, comment });
+  finSetSettings(values: Record<string, unknown>, comment: string, from?: string) {
+    return this.call<unknown>('POST', '/finance/settings', { values, comment, ...(from ? { from } : {}) });
   }
   finRequests() {
     return this.call<Awaited<ReturnType<Api['finRequests']>>>('GET', '/finance/requests');
@@ -2556,6 +2556,25 @@ export class HttpApi implements Api {
   }
   setManagementFee(companyId: string, input: Parameters<Api['setManagementFee']>[1]) {
     return this.call<unknown>('POST', `/finance/management-fees/${encodeURIComponent(companyId)}`, input);
+  }
+  // P100 fin: C5 rate book.
+  rateBook() {
+    return this.call<Awaited<ReturnType<Api['rateBook']>>>('GET', '/finance/rates');
+  }
+  setRate(input: Parameters<Api['setRate']>[0]) {
+    return this.call<unknown>('POST', '/finance/rates', input);
+  }
+  finSummary(period?: string) {
+    return this.call<Awaited<ReturnType<Api['finSummary']>>>('GET', `/finance/summary${period ? `?period=${encodeURIComponent(period)}` : ''}`);
+  }
+  siteMargins(month?: string) {
+    return this.call<Awaited<ReturnType<Api['siteMargins']>>>('GET', `/finance/site-margins${month ? `?month=${encodeURIComponent(month)}` : ''}`);
+  }
+  unbilledSites(period?: string) {
+    return this.call<Awaited<ReturnType<Api['unbilledSites']>>>('GET', `/finance/unbilled-sites${period ? `?period=${encodeURIComponent(period)}` : ''}`);
+  }
+  clearUnbilledFlag(companyId: string, input: Parameters<Api['clearUnbilledFlag']>[1]) {
+    return this.call<unknown>('POST', `/finance/unbilled-sites/${encodeURIComponent(companyId)}/clear`, input);
   }
 
 

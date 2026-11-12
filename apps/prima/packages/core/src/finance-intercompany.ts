@@ -67,6 +67,8 @@ export interface FinIcPair {
 
 export interface FinIcCtx {
   user: User;
+  /** C4 (Fauzan, 11 Nov 2026): the FD's explain limit in force (RM1,000 by default). */
+  explainMax?: number;
   /** May the person record for this company (they act on its books)? */
   actsOn: (companyId: Id) => boolean;
   /** Reviewer: the deputy, the team leader, the FD or the CEO. */
@@ -187,8 +189,9 @@ export function finIcAction(ctx: FinIcCtx, g: FinStatus, companyId: Id, action: 
     if (!pair || pair.status !== 'differs') throw new BadRequest('That pair has no difference to explain.');
     if (pair.aEntry!.sign.byId === ctx.user.id || pair.bEntry!.sign.byId === ctx.user.id)
       throw new AccessDenied('view', '(someone who entered neither side explains the difference)');
-    if (Math.abs(pair.difference!) > R().explainMax)
-      throw new BadRequest(`A difference above ${rm(R().explainMax)} is corrected in SQL Account, not explained.`);
+    const explainMax = ctx.explainMax ?? R().explainMax;
+    if (Math.abs(pair.difference!) > explainMax)
+      throw new BadRequest(`A difference above ${rm(explainMax)} is corrected in SQL Account, not explained.`);
     const reason = requireReason(input.comment, 'explain the difference');
     const x: FinIcExplain = { period, a, b, kind, difference: pair.difference!, reason, sign: ctx.sign(reason) };
     const list = [...(g.icExplained ?? []).filter((y) => !(y.period === period && y.a === a && y.b === b && y.kind === kind)), x];

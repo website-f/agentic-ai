@@ -3187,6 +3187,17 @@
  },
  {
   "method": "GET",
+  "path": "api/finance/rates",
+  "name": "rateBook"
+ },
+ {
+  "method": "POST",
+  "path": "api/finance/rates",
+  "name": "setRate",
+  "body": "Record<string, unknown>"
+ },
+ {
+  "method": "GET",
   "path": "api/finance/requests",
   "name": "finRequests"
  },
@@ -3223,8 +3234,41 @@
  },
  {
   "method": "GET",
+  "path": "api/finance/site-margins",
+  "name": "siteMargins",
+  "query": [
+   "month"
+  ]
+ },
+ {
+  "method": "GET",
+  "path": "api/finance/summary",
+  "name": "finSummary",
+  "query": [
+   "period"
+  ]
+ },
+ {
+  "method": "GET",
   "path": "api/finance/today",
   "name": "financeToday"
+ },
+ {
+  "method": "GET",
+  "path": "api/finance/unbilled-sites",
+  "name": "unbilledSites",
+  "query": [
+   "period"
+  ]
+ },
+ {
+  "method": "POST",
+  "path": "api/finance/unbilled-sites/:companyId/clear",
+  "name": "clearUnbilledFlag",
+  "params": [
+   "companyId"
+  ],
+  "body": "Record<string, unknown>"
  },
  {
   "method": "POST",

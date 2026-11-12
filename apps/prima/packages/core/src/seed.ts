@@ -1,3 +1,4 @@
+import { DEMO_IT_RENTAL_RATES } from "./demo-rates";
 import { GROUP_EMPLOYER_ID } from "./access";
 import { IT_COMPANY_ID } from "./access";
 import { hasOwnStaffRecord } from "./access";
@@ -6949,6 +6950,19 @@ export function generateDataset(opts: SeedOptions): Dataset {
         tax: taxItems,
       });
     });
+    // C5 (demo only, synthetic): group rates for three cost lines; transport is left "rate not set" to show the gap.
+    // Real rates are entered by the Finance Director or the CEO in the app. No random numbers are drawn here.
+    for (const f of ds.finStatus)
+      f.rateLog = ([['hostel_np', 180], ['uniform', 25], ['equipment', 15]] as const).map(([key, amount]) => ({
+        key,
+        scope: 'group' as const,
+        from: '2026-01',
+        amount,
+        reason: 'Demo rate (synthetic test data)',
+        by: 'Sharifah Nadia binti Syed Ali',
+        byId: 'u-fd',
+        at: fromMs(nowMs - 30 * 86_400_000),
+      }));
     // Finance Phase 2 (31 Oct 2026): a few payments for Team 1 at each step, so each person has something to act on.
     // Test data only; no random numbers are drawn here, so the rest of the dataset stays the same.
     {
@@ -7818,7 +7832,7 @@ export function generateDataset(opts: SeedOptions): Dataset {
     // Merdeka's rental bills for last month: issued and paid for the pilot companies (made-up prices).
     {
       const last = addDays(`${today.slice(0, 7)}-01`, -1).slice(0, 7);
-      const rates = RULES.itRental.value.monthly;
+      const rates = DEMO_IT_RENTAL_RATES;
       for (const cid of [GROUP_EMPLOYER_ID, 'co-sasa', 'co-arsh', 'co-inas']) {
         const mine = ds.itAssets.filter((a) => a.ownerId === cid && (a.status === 'in_use' || a.status === 'repair'));
         const kinds = [...new Set(mine.map((a) => a.kind))].sort();

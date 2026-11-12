@@ -75,8 +75,8 @@ export function FwCostView() {
       </div>
       <div className="kpis">
         <Kpi label="Working under another job" value={running} tone={running ? 'warn' : 'ok'} note="Placements running today" />
-        {data.rates && <Kpi label="Charge to host" value={rm(data.rates.charge)} tone={data.rates.charge === null ? 'unknown' : 'ok'} note="Per worker per month" />}
-        {data.rates && <Kpi label="Payback to owner" value={rm(data.rates.payback)} tone={data.rates.payback === null ? 'unknown' : 'ok'} note="Per worker per month" />}
+        {data.rates && <Kpi label="Charge to host" value={data.rates.charge === null ? 'Rate not set' : rm(data.rates.charge)} tone={data.rates.charge === null ? 'unknown' : 'ok'} note="Per worker per month" />}
+        {data.rates && <Kpi label="Payback to owner" value={data.rates.payback === null ? 'Rate not set' : rm(data.rates.payback)} tone={data.rates.payback === null ? 'unknown' : 'ok'} note="Per worker per month" />}
         <Kpi label="Months to draft" value={data.toDraft.length} tone={data.toDraft.length ? 'warn' : 'ok'} />
         <Kpi label="Not paid yet" value={unpaid.length} tone={unpaid.length ? 'warn' : 'ok'} note="Approved or billed" />
       </div>

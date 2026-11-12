@@ -14,16 +14,24 @@ export function FinanceSettingsTab() {
   const act = useAction();
   const [draft, setDraft] = useState<Record<string, string>>({});
   const [comment, setComment] = useState('');
+  // C4 (Fauzan, 11 Nov 2026): a change starts today or on a later day the Finance Director chooses.
+  const [from, setFrom] = useState('');
   if (error) return <ErrorNotice error={error} />;
   if (!data) return <Loading what="settings" />;
-  const keys = Object.keys(data.limits) as (keyof typeof data.limits)[];
+  type Key = keyof typeof data.limits;
+  const grouped = new Set(data.groups.flatMap((g) => g.keys as string[]));
+  const groups: { title: string; keys: Key[] }[] = [
+    ...data.groups.map((g) => ({ title: g.title, keys: (g.keys as string[]).filter((k): k is Key => k in data.limits) })),
+    { title: 'Other', keys: (Object.keys(data.limits) as Key[]).filter((k) => !grouped.has(k)) },
+  ].filter((g) => g.keys.length);
   const save = async () => {
     const values: Record<string, unknown> = {};
     for (const [k, v] of Object.entries(draft)) if (v.trim() !== '') values[k] = k === 'selfBilledBy' || k === 'approvalMethod' ? v.trim() : Number(v);
-    const r = await act.run(() => api.finSetSettings(values, comment), 'Settings saved.');
+    const r = await act.run(() => api.finSetSettings(values, comment, from || undefined), from && from > data.today ? 'Saved. It starts on the day chosen.' : 'Settings saved.');
     if (r) {
       setDraft({});
       setComment('');
+      setFrom('');
       setN((x) => x + 1);
     }
   };
@@ -45,6 +53,10 @@ export function FinanceSettingsTab() {
                 <span>Why (needed)</span>
                 <textarea className="textarea" rows={2} value={comment} onChange={(e) => setComment(e.target.value)} />
               </label>
+              <label className="field">
+                <span>Starts on (today if empty)</span>
+                <input className="input fin-w-md" type="date" min={data.today} value={from} onChange={(e) => setFrom(e.target.value)} />
+              </label>
               <button className="btn btn-primary" disabled={act.busy || !Object.values(draft).some((v) => v.trim())} onClick={save}>
                 Save settings
               </button>
@@ -53,7 +65,11 @@ export function FinanceSettingsTab() {
         }
       >
         <div className="fin-rows">
-          {keys.map((k) => (
+          {groups.map((g) => [
+            <div key={`h-${g.title}`} className="fin-kv fin-setting">
+              <strong>{g.title}</strong>
+            </div>,
+            ...g.keys.map((k) => (
             <div key={k} className="fin-kv fin-setting">
               <span className="fin-kv-label">
                 <span>{data.limits[k][2]}</span>
@@ -72,7 +88,8 @@ export function FinanceSettingsTab() {
                 <strong className="fin-num">{data.values[k]}</strong>
               )}
             </div>
-          ))}
+            )),
+          ])}
           <div className="fin-kv fin-setting">
             <span className="fin-kv-label">
               <span>Who issues self-billed e-Invoices (foreign suppliers and agents)</span>
@@ -112,6 +129,23 @@ export function FinanceSettingsTab() {
           </div>
         </div>
       </Card>
+      {data.scheduled.length > 0 && (
+        <Card title="Changes still to start" flush>
+          <div className="fin-rows">
+            {data.scheduled.map((x, i) => (
+              <div key={i} className="fin-kv">
+                <span>
+                  <span className="fin-strong">From {x.from}</span>:{' '}
+                  {Object.entries(x.values)
+                    .map(([k, v]) => `${data.limits[k as Key]?.[2] ?? k} ${v}`)
+                    .join('; ')}
+                  <span className="muted small"> · {x.set.by}: {x.set.comment}</span>
+                </span>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
       {data.canSet && data.noBooks.length > 0 && <StartBooks rows={data.noBooks} onSaved={() => setN((x) => x + 1)} />}
       {data.canSet && data.teams.length > 0 && <TeamPanel rows={data.teams} onSaved={() => setN((x) => x + 1)} />}
       {data.history.length > 0 && (
