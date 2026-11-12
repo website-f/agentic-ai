@@ -510,6 +510,17 @@
        }
       },
       {
+       "id": "bulk-load",
+       "title": {
+        "en": "Bulk load",
+        "ms": "Muat pukal"
+       },
+       "blurb": {
+        "en": "Load a spreadsheet or many files; Prima proposes where each goes.",
+        "ms": "Muatkan hamparan atau banyak fail; Prima mencadangkan ke mana setiap satu pergi."
+       }
+      },
+      {
        "id": "staffclock",
        "title": {
         "en": "Staff clock",
@@ -1462,6 +1473,20 @@
    "POST work/tasks/:/more-time",
    "POST work/tasks/:/reassign",
    "POST work/tasks/:/review"
+  ],
+  "bulk-load": [
+   "GET bulk",
+   "GET bulk/people",
+   "GET records/:/form",
+   "GET records/kinds",
+   "GET staff-directory/status",
+   "POST bulk/ai/files",
+   "POST bulk/ai/plan",
+   "POST bulk/files/file",
+   "POST bulk/files/place",
+   "POST bulk/loads/data",
+   "POST bulk/loads/files",
+   "POST staff-directory/:"
   ],
   "cases": [
    "GET arms/police-help",

@@ -56,6 +56,8 @@ const MODULE_TABLES: Partial<Record<TableName, string>> = {
   ownerTestCheckins: 'The owner test check-in is not set up in this database yet (module owner-test-checkin-v1).',
   // P97: the staff check-in and check-out face photos (db/modules/clock-snaps-v1.sql, applied by the office prima-setup).
   clockSnaps: 'Check-in face photos are not set up in this database yet (module clock-snaps-v1).',
+  // K8: the bulk load records (db/modules/bulk-loads-v1.sql, applied by the office prima-setup).
+  bulkLoads: 'Bulk load records are not set up in this database yet (module bulk-loads-v1).',
 };
 
 // Exported for the per-request read snapshots (read-cache.ts, P83).
@@ -251,6 +253,7 @@ checkinSettings: 'prima.checkin_settings',
 checkinEvents: 'prima.checkin_events',
 ownerTestCheckins: 'prima.owner_test_checkins',
 clockSnaps: 'prima.clock_snaps',
+bulkLoads: 'prima.bulk_loads',
 loginHandovers: 'prima.login_handovers',
 hrFilings: 'prima.hr_filings',
 hrCases: 'prima.hr_cases',

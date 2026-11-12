@@ -995,6 +995,63 @@
  },
  {
   "method": "GET",
+  "path": "api/bulk",
+  "name": "board",
+  "doc": "The screen: destinations this person may load into, document types, their load records, whether AI is on."
+ },
+ {
+  "method": "POST",
+  "path": "api/bulk/ai/files",
+  "name": "aiFiles",
+  "doc": "Arisha AI's suggestion for many files' document types, from masked names and file types only.",
+  "body": "Record<string, unknown>"
+ },
+ {
+  "method": "POST",
+  "path": "api/bulk/ai/plan",
+  "name": "aiPlan",
+  "doc": "Arisha AI's suggestion for a data file's destination and columns, from masked headings and shapes only.",
+  "body": "Record<string, unknown>"
+ },
+ {
+  "method": "POST",
+  "path": "api/bulk/files/file",
+  "name": "file",
+  "doc": "One confirmed file, filed on the person's HR file (the hiring paper's permission check).",
+  "body": "Record<string, unknown>"
+ },
+ {
+  "method": "POST",
+  "path": "api/bulk/files/place",
+  "name": "place",
+  "doc": "Proposals for many files (names and types only): document type and whose file. Changes nothing.",
+  "body": "Record<string, unknown>"
+ },
+ {
+  "method": "POST",
+  "path": "api/bulk/loads/data",
+  "name": "loadData",
+  "doc": "The load record for a data file, after the import or the staff directory send.",
+  "body": "Record<string, unknown>"
+ },
+ {
+  "method": "POST",
+  "path": "api/bulk/loads/files",
+  "name": "loadFiles",
+  "doc": "The load record for many files.",
+  "body": "Record<string, unknown>"
+ },
+ {
+  "method": "GET",
+  "path": "api/bulk/people",
+  "name": "people",
+  "doc": "People whose file this person keeps, by name or staff number (to place a held file).",
+  "query": [
+   "q"
+  ]
+ },
+ {
+  "method": "GET",
   "path": "api/cases",
   "name": "cases",
   "query": [

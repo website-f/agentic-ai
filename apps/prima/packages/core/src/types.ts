@@ -3380,6 +3380,8 @@ export interface Dataset {
   ownerTestCheckins: import('./owner-test-checkin').OwnerTestCheckin[];
   /** P97: the face photo at each staff check-in and check-out (clock-snap.ts; db/modules/clock-snaps-v1.sql). */
   clockSnaps: import('./clock-snap').ClockSnap[];
+  /** K8 (Fauzan, 11 Nov 2026): the record of every bulk load (bulk-manager-service.ts; db/modules/bulk-loads-v1.sql). */
+  bulkLoads: import('./bulk-manager-service').BulkLoad[];
   fwWelfareChecks: FwWelfareCheck[];
   fwPlacements: FwPlacement[];
   fwPlacementHosts: FwPlacementHostView[];

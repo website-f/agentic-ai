@@ -839,6 +839,7 @@ import type { TimeSlip } from "./types";
 import type { TimeSlipApprover } from "./types";
 import type { TimeSlipSetting } from "./types";
 import { StaffDirectoryService } from "./staff-directory";
+import { BulkManagerService } from "./bulk-manager-service";
 import { CleaningService } from "./cleaning-service";
 import type { SiteKitCategory, SiteKitOwner } from "./site-kit";
 import { SecurityPlanService } from "./security-plan";
@@ -46954,6 +46955,29 @@ export class PrimaService {
 
   /** Staff directory bulk load and hand entry (Fauzan, 4 Nov 2026). */
   get staffDirectory(): StaffDirectoryService { return new StaffDirectoryService(this.store, this.clock); }
+
+  /** K8 (Fauzan, 11 Nov 2026): the bulk load helper (data manager and file manager); bulk-manager-service.ts. */
+  get bulkManager(): BulkManagerService { return new BulkManagerService(this.store, this.clock, this); }
+
+  /** K8: the people whose HR file this person keeps; the bulk file manager places files only on these. */
+  async bulkFilePeople(user: User): Promise<Person[]> {
+    const g = await this.grants();
+    const today = this.today();
+    return (await this.store.list('people', {})).filter((p) => p.status !== 'left' && this.canKeepHrFile(user, g, today, p));
+  }
+
+  /** K8: one confirmed file from a bulk load, on the person's HR file with its type as the caption (as a hiring paper). */
+  async fileBulkDoc(user: User, personId: Id, caption: string, proof: ProofInput[]): Promise<{ docId: Id; personId: Id; companyId: Id }> {
+    const person = await this.hrFilePerson(user, personId);
+    const rec = this.proofRecords(user, person.companyId, null, proof, {}, { documentsOnly: true });
+    if (rec.docs.length !== 1) throw new BadRequest('File one document at a time.');
+    const at = this.now();
+    return this.store.transaction(async (tx) => {
+      const [docId] = await this.saveProof(tx, { photos: [], docs: rec.docs.map((d) => ({ ...d, hrPersonId: person.id, caption })) });
+      await tx.audit({ at, actor: user.name, companyId: person.companyId, action: 'bulk.file', entity: 'person', entityId: person.id, summary: `${caption} filed for ${person.staffNo}` });
+      return { docId, personId: person.id, companyId: person.companyId };
+    });
+  }
 
   private cleaningService: CleaningService | null = null;
   /** Cleaning operations (Fauzan, 4 Nov 2026): site set-up, daily plans, OM records with time-marked photos, stock. */

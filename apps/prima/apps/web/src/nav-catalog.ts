@@ -71,7 +71,7 @@ export const NAV_SECTIONS: NavSection[] = [
     title: 'HR',
     blurb: 'Staff, leave, claims and hand-overs.',
     groups: [
-      { title: 'Staff', views: ['hr', 'staff-directory', 'staffclock', 'work-kpi', 'handovers'] },
+      { title: 'Staff', views: ['hr', 'staff-directory', 'bulk-load', 'staffclock', 'work-kpi', 'handovers'] },
       { title: 'Claims and welfare', views: ['claims', 'socso'] },
     ],
   },
@@ -183,6 +183,7 @@ export const NAV_INFO: Record<ViewName, { blurb: string; words: string }> = {
   fleet: { blurb: 'Company vehicles, bookings and drivers.', words: 'vehicle kenderaan car kereta van motorcycle motosikal transport pengangkutan driver pemandu' },
   hr: { blurb: 'HR across the group: staff, leave and cases.', words: 'hr human resources sumber manusia staff kakitangan leave cuti hiring pengambilan' },
   'staff-directory': { blurb: 'Office staff names, posts and contacts.', words: 'staff directory direktori senarai staf phone telefon email emel contact hubungi' },
+  'bulk-load': { blurb: 'Load a spreadsheet or many files; Prima proposes where each goes.', words: 'bulk load muat pukal import excel csv spreadsheet hamparan fail files dokumen documents sijil certificate permit kontrak upload muat naik data manager file manager' },
   staffclock: { blurb: 'Office staff clock-in times.', words: 'staff clock jam staf office hours waktu pejabat attendance kehadiran staf' },
   'work-kpi': { blurb: 'How fast and how well work moves between teams.', words: 'kpi performance prestasi target sasaran workflow' },
   handovers: { blurb: 'Hand over your work before leave or a move.', words: 'hand-over handover serah tugas serahan leave cuti resign letak jawatan transfer pindah' },

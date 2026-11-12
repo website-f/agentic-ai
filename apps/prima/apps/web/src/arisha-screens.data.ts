@@ -5059,6 +5059,78 @@ export const SCREEN_GUIDES: ScreenGuide[] = [
     "notes": "If the module is not ready the page says \"The staff directory is not switched on yet.\" or \"The staff directory is switched on but not yet set up in the database.\" IT sets it up after the CEO approves the release. A batch goes in whole or not at all. People already listed are left out. Personal data: do not copy it out of Prima."
   },
   {
+    "view": "bulk-load",
+    "title": "Bulk load",
+    "what": "Load a whole spreadsheet or many files at once. Prima proposes where everything goes (which record and which field for each column, or which person and document type for each file); you check it, and nothing is saved until you confirm. Every load keeps a record.",
+    "who": "People who keep a record that loads in bulk: HR (staff data and staff files), FWM (foreign workers), company managers and admin executives, IT, Procurement and others for their own records. Directors, the CEO, the COO, group leadership and ACT see every load record.",
+    "tabs": [
+      {
+        "name": "Spreadsheet",
+        "what": "One file of records: choose it, check where it goes and each column, check the rows, then confirm."
+      },
+      {
+        "name": "Many files",
+        "what": "Certificates, permits, contracts and photos: check the type and the person of each file, then file them on people's HR files."
+      },
+      {
+        "name": "Load records",
+        "what": "Every load: who loaded it, the plan, who confirmed or approved it, and what went where."
+      }
+    ],
+    "tasks": [
+      {
+        "task": "How to load a spreadsheet",
+        "steps": [
+          "Open the \"Spreadsheet\" tab and choose the file (Excel, CSV, Word table or PDF list). It is read on your device.",
+          "Under \"Where it goes\" check the record Prima suggests. If Prima is not sure, choose it in \"Record it goes to\".",
+          "Check \"Each column\". A column marked \"Held: choose…\" waits for you: pick its field or press \"Leave it out\".",
+          "Press \"Next: check the rows\". Rows that look wrong or repeated are ticked \"Leave out\"; untick a row to keep it.",
+          "Press \"Next: confirm\", then \"Open the import\" (or \"Send for approval\" for staff data). The record's own check runs on every row before anything is saved."
+        ]
+      },
+      {
+        "task": "How to load the staff list (HR)",
+        "steps": [
+          "Choose the staff file in \"Spreadsheet\"; Prima suggests \"Staff directory (office staff and mailboxes)\".",
+          "Check the columns and the rows to leave out.",
+          "Press \"Send for approval\". The HR Director or the CEO approves it on the \"Staff directory\" screen, never the person who sent it.",
+          "Open \"Load records\" to see when it is approved."
+        ]
+      },
+      {
+        "task": "How to file many documents at once",
+        "steps": [
+          "Open \"Many files\" and choose the files (PDF, JPEG or PNG). Name them with the staff number for a sure match.",
+          "For each file check \"Document type\" and \"Person\". A file marked \"Held for you\" has no person yet: choose one, or type in \"Find by name or staff number\".",
+          "Tick \"Leave out\" for a file that should not be filed.",
+          "Press \"File\" to file the documents. Each goes on that person's HR file."
+        ]
+      },
+      {
+        "task": "How to see what a load did",
+        "steps": [
+          "Open \"Load records\".",
+          "Press a load to see who loaded it, who confirmed or approved it, the column plan, the rows left out with their reasons and where each file went."
+        ]
+      }
+    ],
+    "terms": [
+      {
+        "term": "Held",
+        "means": "Prima is not sure, so it does not decide: you place the column or file, or leave it out."
+      },
+      {
+        "term": "Sure, Likely, Check this",
+        "means": "How sure Prima is of a suggestion. \"Check this\" always needs your look."
+      },
+      {
+        "term": "Load record",
+        "means": "What a load did, kept for good: who, when, the plan, who approved, what went where. It never holds the values from the file."
+      }
+    ],
+    "notes": "You only see the records your role keeps. The Arisha AI button shows only when it is switched on; without it, Prima's own matching does the whole job. The AI never sees values, names or ID numbers, only masked column names and file names. Files must be 700 KB or smaller; pictures are made smaller on your device."
+  },
+  {
     "view": "hr-it-intake",
     "title": "HR / IT coordination",
     "what": "HR prepares a joining or leaving request for a staff member so IT can get ready. It is intake and review only: no Microsoft account or Prima access is created or removed here.",
