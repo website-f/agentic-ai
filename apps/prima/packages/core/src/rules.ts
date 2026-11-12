@@ -1939,7 +1939,7 @@ export const RULES = {
       dueSoonDays: 30,
     },
     'Policy',
-    "Fauzan, 5 Nov 2026: no public listing (KDN does not allow a listed security company), but follow listing-style governance a little. Related-party deals: the Deputy Chief of Staff records, the Chief of Staff reviews with a reason; a board resolution only above a limit the CEO sets (not set yet). Directors declare interests once a year (Companies Act 2016 s.221); the Deputy Chief of Staff collects the forms by hand and marks each done; only the DCoS, CoS and CEO see deals and declarations. Committees keep minutes. The risk register is in ACT only: the ACT Director scores, settles and directs the team; 5x5 scoring, high at 15 (proposal).",
+    "Fauzan, 5 Nov 2026: no public listing (KDN does not allow a listed security company), but follow listing-style governance a little. Related-party deals: the Deputy Chief of Staff records, the Chief of Staff reviews with a reason; a board resolution only above a limit the CEO sets (not set yet). Approved by Fauzan, 11 Nov 2026 (C9): no board-resolution limit for now; every related-party deal recorded sends an information notice to the CEO only (no limit, no block); limits will be set later, as we go along. Directors declare interests once a year (Companies Act 2016 s.221); the Deputy Chief of Staff collects the forms by hand and marks each done; only the DCoS, CoS and CEO see deals and declarations. Committees keep minutes. The risk register is in ACT only: the ACT Director scores, settles and directs the team; 5x5 scoring, high at 15 (proposal).",
   ),
   siteSurvey: rule(
     'SURVEY-OFFLINE',
