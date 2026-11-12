@@ -561,7 +561,16 @@ export function buildGuardPayLine(i: GuardPayInput): GuardPayLine {
         add(`Overtime, public holidays${tag}`, 'ot', ot, 'hour', gh * fa.otPublicHolidayRate, ot * gh * fa.otPublicHolidayRate);
       }
     }
-    for (const x of a.fixedAllowances ?? []) add(x.label, 'allowance', null, null, null, x.amount);
+    for (const x of a.fixedAllowances ?? []) {
+      add(x.label, 'allowance', null, null, null, x.amount);
+      // P100 C1b (Fauzan, 11 Nov 2026: "Guard leave paid basic only"): paid leave, training and MC days are paid at basic
+      // pay only; no allowance (and no overtime) for those days. The allowance's daily share comes off, never below zero.
+      if (paidLeaveDays > 0 && x.amount > 0) {
+        const perDay = x.amount / divisor;
+        add(`${x.label}: not paid on leave days`, 'allowance', paidLeaveDays, 'day', -perDay, -Math.min(x.amount, perDay * paidLeaveDays));
+      }
+    }
+    if (paidLeaveDays > 0) flags.push(`${paidLeaveDays} paid leave day${paidLeaveDays === 1 ? '' : 's'} at basic pay only: no allowance or overtime for ${paidLeaveDays === 1 ? 'it' : 'them'}`);
     if (f.lawFlags.length) flags.push(`Formula ${f.code} has ${f.lawFlags.length} labour law flag${f.lawFlags.length === 1 ? '' : 's'} (see Pay formulas)`);
   } else if (worked.size) {
     flags.push('No pay formula is set for the main site: ACT must set one before this line can be paid');

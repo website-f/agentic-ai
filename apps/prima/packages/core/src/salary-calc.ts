@@ -57,7 +57,12 @@ export function guardSalaryCalc(a: PayFormulaAmounts, input: SalaryCalcInput, la
     if (perDay > 0)
       lines.push({ label: 'Overtime, public holidays', how: `${ph} day(s) x ${perDay} h x ${rm(hourly)} x ${a.otPublicHolidayRate}`, amount: r2(ph * perDay * hourly * a.otPublicHolidayRate) });
   }
-  for (const x of a.fixedAllowances ?? []) lines.push({ label: x.label, how: 'Fixed allowance', amount: r2(x.amount) });
+  for (const x of a.fixedAllowances ?? []) {
+    lines.push({ label: x.label, how: 'Fixed allowance', amount: r2(x.amount) });
+    // P100 C1b (Fauzan, 11 Nov 2026): paid leave, MC and training days are paid at basic only, without the allowance.
+    if (leave > 0 && x.amount > 0)
+      lines.push({ label: `${x.label}: not paid on leave days`, how: `${leave} leave day(s) x ${rm(x.amount / law.ordinaryRateDivisor)} (basic pay only on leave)`, amount: -r2(Math.min(x.amount, (leave * x.amount) / law.ordinaryRateDivisor)) });
+  }
   const gross = r2(lines.reduce((s, l) => s + l.amount, 0));
   const notes: string[] = [];
   if (paidDays > full) notes.push(`Working days, leave, MC, training and paid public holidays add up to ${paidDays}, more than the ${full}-day month. Extra days worked are rest days: enter them as rest days worked.`);

@@ -124,7 +124,7 @@ export function salaryCalcModel(
   const sum = (f: (l: (typeof calc.lines)[number]) => boolean) => r2(calc.lines.filter(f).reduce((n, l) => n + l.amount, 0));
   const otPay = sum((l) => OT.has(l.label) && l.how !== 'Fixed allowance');
   const dayPay = sum((l) => DAY_PAY.has(l.label) && l.how !== 'Fixed allowance');
-  const fixed = sum((l) => l.how === 'Fixed allowance' || fixedLabels.has(l.label));
+  const fixed = sum((l) => l.how === 'Fixed allowance' || fixedLabels.has(l.label) || l.label.endsWith(': not paid on leave days'));
   const gross = calc.gross;
   const epfWages = r2(gross - otPay - (amounts.epfOnRestHolidayPay === false ? dayPay : 0));
   const age = about.ageGroup === 'from60' ? 60 : 30;

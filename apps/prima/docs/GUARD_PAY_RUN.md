@@ -108,6 +108,8 @@ coo. The letter must have notory stamp by pesuruhjaya sumpah."
   rate for a missing secondary formula.
 - Days: a shift counts only with a clock-in, a clock-out and the supervisor's lock (W11). Two shifts on one day count once.
 - Full month = the formula's `fullMonthDays` (26). Approved paid leave (annual, MC, training: one normal day, no OT) and every public holiday are paid days.
+  Paid leave is paid at basic pay only (Fauzan, 11 Nov 2026, P100 C1b): each fixed allowance's daily share (allowance / the
+  day divisor) is taken off for every paid leave day, and no overtime is paid for it.
   A dated leave day is counted once, excluding days already worked or counted as paid public holidays. Overlapping
   leave records do not create extra paid days. Ordinary days worked past that room are rest days worked; days short of
   it are unpaid at the daily rate (closed month only).
