@@ -84,6 +84,16 @@ describe('P100 fin on PostgreSQL', () => {
     );
   });
 
+  it('F1: the unbilled-sites check runs through the restricted login; a manager sees only their company, an OM is refused', async () => {
+    const all = await db.asUser('u-fd', (svc, u) => svc.unbilledSites(u));
+    assert.ok(all.companies.length >= 1);
+    const mine = await db.asUser(manager, (svc, u) => svc.unbilledSites(u));
+    assert.deepEqual(mine.companies.map((c) => c.companyId), [co]);
+    const om = (await q<{ id: string }>(`SELECT id FROM prima.users WHERE data->>'opsTier' = 'om' ORDER BY id LIMIT 1`))[0];
+    await assert.rejects(db.asUser(om.id, (svc, u) => svc.unbilledSites(u)), /unbilled sites/);
+    await assert.rejects(db.asUser(manager, (svc, u) => svc.clearUnbilledFlag(u, co, { key: '2026-10|x|no_contract|', reason: 'Synthetic reason' })), /Finance reviewer/);
+  });
+
   it('C4: the FD changes a confirmed finance number with a reason, now or from a later day; a team leader is refused', async () => {
     await db.asUser('u-fd', (svc, u) => svc.finance.setSettings(u, { values: { icExplainMax: 1200 }, comment: 'Synthetic: auditor agreed' }));
     await db.asUser('u-fd', (svc, u) => svc.finance.setSettings(u, { values: { ceoNoticeFrom: 300000 }, comment: 'Synthetic: board paper', from: '2027-06-01' }));

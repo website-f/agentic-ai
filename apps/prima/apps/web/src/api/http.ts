@@ -2478,6 +2478,12 @@ export class HttpApi implements Api {
   setRate(input: Parameters<Api['setRate']>[0]) {
     return this.call<unknown>('POST', '/finance/rates', input);
   }
+  unbilledSites(period?: string) {
+    return this.call<Awaited<ReturnType<Api['unbilledSites']>>>('GET', `/finance/unbilled-sites${period ? `?period=${encodeURIComponent(period)}` : ''}`);
+  }
+  clearUnbilledFlag(companyId: string, input: Parameters<Api['clearUnbilledFlag']>[1]) {
+    return this.call<unknown>('POST', `/finance/unbilled-sites/${encodeURIComponent(companyId)}/clear`, input);
+  }
 
 
   insurance() {

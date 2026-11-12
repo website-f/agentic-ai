@@ -5857,5 +5857,37 @@ export const SCREEN_GUIDES: ScreenGuide[] = [
       }
     ],
     "notes": "A rate starts from this month or last month at the earliest, so months already costed keep their old rate. Leave the amount empty to mark it not set, or for one company to go back to the rate for every company. Every change is kept with who entered it and why."
+  },
+  {
+    "view": "finsites",
+    "title": "Site billing and profit",
+    "what": "Every site where guards clocked hours in a month, checked against its contract, its invoice and the client's signed acknowledgement, with hours worked against hours billed. Flags: guards on site with no contract, worked but not invoiced, no client sign-off, and an hours-worked invoice lower than the hours times the rate.",
+    "who": "Finance teams see their own companies, the Finance Director and the CEO see all, a company manager sees their own company. A Finance reviewer (deputy, team leader, FD or CEO) clears a flag with a reason, never the person who recorded the invoice.",
+    "tabs": [],
+    "tasks": [
+      {
+        "task": "How to check a month",
+        "steps": [
+          "Choose the month at the top.",
+          "Look at the sites marked red and read each flag.",
+          "Record the missing invoice in Finance, Checks, Money in, or ask the OM for the client's signed acknowledgement."
+        ]
+      },
+      {
+        "task": "How to clear a flag (Finance reviewer)",
+        "steps": [
+          "Press \"Clear with a reason\" under the flag.",
+          "Write why, for example \"free month in the contract\".",
+          "Press \"Clear the flag\"."
+        ]
+      }
+    ],
+    "terms": [
+      {
+        "term": "Hours billed",
+        "means": "The hours the contract bills for the month; for a fixed fee there are none."
+      }
+    ],
+    "notes": "Prima monitors only. SQL Account stays the book of record and nothing here posts to it. An OM or another company's manager cannot see this list."
   }
 ];

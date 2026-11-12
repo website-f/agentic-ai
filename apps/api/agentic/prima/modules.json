@@ -888,6 +888,17 @@
         "en": "Costing rates entered from a month, with history.",
         "ms": "Kadar kos dimasukkan mengikut bulan, dengan sejarah."
        }
+      },
+      {
+       "id": "finsites",
+       "title": {
+        "en": "Site billing and profit",
+        "ms": "Bil dan keuntungan tapak"
+       },
+       "blurb": {
+        "en": "Sites where guards worked: billed, signed off, profit.",
+        "ms": "Tapak tempat pengawal bekerja: dibil, disahkan, untung."
+       }
       }
      ]
     },
@@ -2018,6 +2029,10 @@
    "POST finance/coo/:/:/:",
    "POST finance/management-fees/:",
    "POST finance/settings"
+  ],
+  "finsites": [
+   "GET finance/unbilled-sites",
+   "POST finance/unbilled-sites/:/clear"
   ],
   "fleet": [
    "GET fleet",

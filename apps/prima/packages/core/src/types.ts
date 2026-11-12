@@ -4930,6 +4930,8 @@ export interface FinStatus {
   managementFeeLog?: ManagementFeeChange[];
   /** C5 (Fauzan, 11 Nov 2026): costing rates entered in the app from a month, group or company, append-only (rate-book.ts). */
   rateLog?: import('./rate-book').RateEntry[];
+  /** F1 (Fauzan, 11 Nov 2026): unbilled-site flags cleared by a Finance reviewer, each with a reason (finance-monitor.ts). */
+  billingClears?: import('./finance-monitor').UnbilledClear[];
 }
 
 // ---------- JA Group app feed (Fauzan, 26 Oct 2026) ----------

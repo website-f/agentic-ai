@@ -7012,6 +7012,18 @@ export class AppController {
     );
   }
 
+  // F1 (Fauzan, 11 Nov 2026): every site where guards worked is billed.
+  @Get('finance/unbilled-sites')
+  unbilledSites(@UserId() uid: string, @Query('period') period?: string) {
+    if (period !== undefined && !/^\d{4}-\d{2}$/.test(period)) throw new BadRequestException('period must be YYYY-MM');
+    return this.db.asUser(uid, (svc, u) => svc.unbilledSites(u, period));
+  }
+
+  @Post('finance/unbilled-sites/:companyId/clear')
+  clearUnbilledFlag(@UserId() uid: string, @Param('companyId') companyId: string, @Body() b: Record<string, unknown>) {
+    return this.db.asUser(uid, (svc, u) => svc.clearUnbilledFlag(u, companyId.slice(0, 40), { key: str(b.key ?? '', 'key', 200), reason: str(b.reason ?? '', 'reason', 300) }));
+  }
+
   // The month's management fee bills between group companies (draft, not an invoice).
   @Get('finance/management-fee-bills')
   managementFeeBills(@UserId() uid: string, @Query('month') month?: string) {

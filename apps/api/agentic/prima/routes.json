@@ -3111,6 +3111,23 @@
   "name": "financeToday"
  },
  {
+  "method": "GET",
+  "path": "api/finance/unbilled-sites",
+  "name": "unbilledSites",
+  "query": [
+   "period"
+  ]
+ },
+ {
+  "method": "POST",
+  "path": "api/finance/unbilled-sites/:companyId/clear",
+  "name": "clearUnbilledFlag",
+  "params": [
+   "companyId"
+  ],
+  "body": "Record<string, unknown>"
+ },
+ {
   "method": "POST",
   "path": "api/firearms/:id/collect",
   "name": "collect",

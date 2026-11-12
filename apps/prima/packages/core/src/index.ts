@@ -213,6 +213,7 @@ export * from './alerts';
 export * from './management-fees';
 export * from './rate-book';
 export * from './quote-cost';
+export * from './finance-monitor';
 export * from './vehicle-rental';
 export * from './vehicle-usage';
 export * from './cms-readiness';

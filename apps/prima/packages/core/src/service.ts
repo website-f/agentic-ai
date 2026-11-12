@@ -1,3 +1,4 @@
+import { FinMonitorService } from "./finance-monitor";
 import { quoteCostCheck } from "./quote-cost";
 import { DEMO_IT_RENTAL_RATES } from "./demo-rates";
 import { RateBookService } from "./rate-book";
@@ -41998,6 +41999,19 @@ export class PrimaService {
 
   async setRate(user: User, input: { key: unknown; companyId: unknown; from?: unknown; amount: unknown; reason: unknown }) {
     return new RateBookService(this.store, () => this.now()).set(user, input);
+  }
+
+  /**
+   * F1 (Fauzan, 11 Nov 2026): every site where guards worked is billed. From the month's attendance: no contract, no
+   * invoice, no client sign-off, or an hours-worked invoice below the hours (finance-monitor.ts). Finance teams see their
+   * companies, the company manager their own, the FD and the CEO all; a Finance reviewer clears a flag with a reason.
+   */
+  async unbilledSites(user: User, period?: string) {
+    return new FinMonitorService(this.store, () => this.now()).unbilled(user, period);
+  }
+
+  async clearUnbilledFlag(user: User, companyId: Id, input: { key: unknown; reason: unknown }) {
+    return new FinMonitorService(this.store, () => this.now()).clearUnbilled(user, companyId, input);
   }
 
   /**

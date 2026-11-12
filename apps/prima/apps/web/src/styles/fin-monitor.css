@@ -249,6 +249,28 @@
   color: var(--muted);
 }
 
+/* F1: one company's table, its flags. */
+.fm-company {
+  margin: 8px 0 4px;
+  font-size: 0.92rem;
+  font-weight: 650;
+}
+.fm-flags {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+.fm-flags > li {
+  display: grid;
+  gap: 4px;
+  justify-items: start;
+}
+.fm-flags .btn {
+  min-height: 44px;
+}
+
 @media (max-width: 860px) {
   .fm-page {
     --fm-gap: 16px;
