@@ -148,7 +148,7 @@ export function seedItems(ds: Dataset, today: IsoDate, now: IsoDateTime): void {
   caseRow(2, 'short', sold[9].id, gw, 'MV-0001: one shirt did not arrive. Not in the box');
   const job = (k: number, partyId: string, docType: 'sales_delivery' | 'purchase_receipt' | 'rental_out' | 'rental_in', sourceId: string, qty: number, skuId: string, itemCode: string | null, when: IsoDateTime, commercialRef: string) => {
     const payload = { commercialRef, lines: [{ skuId, itemCode, uom: 'PCS' as const, qty }] };
-    const reasons = ['SQL Account is not connected for this company (paper section 5).', `Legal entity and SQL book for ${party(partyId)} not confirmed (D01).`];
+    const reasons = ['SQL Account is not connected for this company (paper section 5).', `The SQL book for ${party(partyId)} is not recorded and verified yet (D01: one book per company).`];
     if (!itemCode) reasons.push('Some item types have no SQL item code for this book yet (Finance to map).');
     ds.itemSyncJobs.push({ id: `isync-s${k}`, partyId, docType, sourceId, revision: 1, key: syncKey(partyId, docType, sourceId, 1), payloadHash: payloadHash(payload), payload, status: 'not_ready', reasons, at: when, partyIds: [partyId] });
   };

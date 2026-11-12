@@ -65,7 +65,14 @@ deduction, purchase or tax filing.
 ## Decisions still needed (paper section 14)
 
 - **D01** Fauzan, 6 Nov 2026: "Sasa Security" in the paper is an example; the buyer is whichever group company buys.
-  The SQL book per entity is still to confirm, and Goodwill Empire is not yet in the company master.
+  Decided by Fauzan, 11 Nov 2026 (E11): **one SQL Account book per company**, and Goodwill Empire Sdn Bhd is on the
+  company list. In Prima the item register's company list is the central entities (PWVSB, Merdeka Network, Goodwill
+  Empire, `items.ts` CENTRAL_PARTIES) plus every company master record; Goodwill keeps its structural id `goodwill` and,
+  as a central employer, has no company master record (the same as PWVSB and Merdeka). Each company's legal name,
+  registration number and book id are entered by Finance in Items, Finance and SQL (`book.set`), verified by a second
+  Finance person; a book id already recorded for another company is refused. Real company master records are data: they
+  come from the real-data file read by db-setup on an empty database (`scripts/build-real-data.mjs`, `PRIMA_REAL_DATA`),
+  never from code.
 - **D02** Fauzan, 6 Nov 2026: ownership passes to the buyer, and seller and buyer both monitor each item's lifecycle.
   Fauzan, 6 Nov 2026: the trigger is all of receipt, invoice, payment slip and a letter of acknowledgement of the
   items received. Finance then records ownership.
