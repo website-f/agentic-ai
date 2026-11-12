@@ -1814,7 +1814,7 @@ export class FinanceControlsService {
         if (!required && !isLead(a)) throw new AccessDenied('view', '(only the Finance Director or the CEO records that a company does not need e-Invoices)');
         if (!required && revenue >= ev.exemptBelow)
           throw new BadRequest(`Turnover of RM${revenue.toLocaleString('en-MY')} is RM${ev.exemptBelow.toLocaleString('en-MY')} or more: this company must issue e-Invoices.`);
-        const basis = requireReason(input.basis, required && revenue < ev.exemptBelow ? 'say why it issues e-Invoices voluntarily' : 'note the basis (turnover, tax agent advice)');
+        const basis = requireReason(input.basis, required && revenue < ev.exemptBelow ? 'say why it issues e-Invoices voluntarily' : 'note the basis (turnover, LHDN guidance)');
         const startOn = required ? isoDate(input.startOn, 'Date e-Invoicing started for this company') : null;
         const via = (['sql_account', 'portal', 'other'] as const).find((v) => v === input.via) ?? 'sql_account';
         const next = { ...ei, setup: { required, basis, startOn, via, revenue, set: this.sign(user) } };
