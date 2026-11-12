@@ -90,7 +90,9 @@ export function QualityView() {
       </div>
     );
   // Officers only assess their guards (staff-usability rule, Fauzan 5 Nov 2026): they never see standards or clauses.
-  if (!hasReg && !hasFnd && !o && mat.data)
+  // P100 (E9): HR, who keep the yearly medical and the 7-year files, get the full page with the PIKM records tab.
+  const pikmHr = !!pk.data && pk.data.ready && pk.data.canAct.hr;
+  if (!hasReg && !hasFnd && !o && mat.data && !pikmHr)
     return (
       <div className="page">
         <div className="page-head">
@@ -107,6 +109,12 @@ export function QualityView() {
           </Select>
         )}
         <Matrix data={mat.data} />
+        {/* P100 (E9): officers record the site risk briefing before a guard's first shift. */}
+        {hasPikm && pk.data?.ready && (
+          <section style={{ marginTop: 16 }}>
+            <PikmPanel />
+          </section>
+        )}
       </div>
     );
   return (
