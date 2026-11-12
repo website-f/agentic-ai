@@ -970,6 +970,7 @@ export function generateDataset(opts: SeedOptions): Dataset {
     rbaTraceReviews: [],
     ethicsDeclarations: [],
     rbaCommittees: [],
+    rbaCommitteeRosters: [],
     evidenceVideos: [],
     attendanceFollowUps: [],
     evidencePhotos: [],

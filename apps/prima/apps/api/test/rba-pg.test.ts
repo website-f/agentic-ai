@@ -28,7 +28,8 @@ describe('RBA readiness on PostgreSQL', () => {
     await assert.rejects(db.asUser('u-it-ex3', (svc, u) => svc.ethicsBoard(u)), /not installed/);
     const cos = (await owner.query("SELECT data FROM prima.users WHERE id = 'u-cos'")).rows[0].data as User;
     await db.asUser('u-cos', (svc, u) => svc.home(u, cos.companyIds[0]));
-    for (const m of ['client-codes-v1', 'rba-readiness-v1']) {
+    // rba-committee-roster-v1 (H1, 11 Nov 2026): the office's fix on top of rba-readiness-v1, run by prima-setup on every start.
+    for (const m of ['client-codes-v1', 'rba-readiness-v1', 'rba-committee-roster-v1']) {
       const sql = readFileSync(modulePath(m), 'utf8');
       await owner.query(sql);
       await owner.query(sql); // repeat-safe

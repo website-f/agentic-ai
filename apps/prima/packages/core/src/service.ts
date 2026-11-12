@@ -281,7 +281,7 @@ import { NEED_TOPIC_KEYS } from "./client-needs";
 import { SITE_TASK_FOR_LABEL } from "./client-needs";
 import { CLIENT_CODE_LABEL, breakPlanCheck, clientCodeDefaults, hoursReport, roomProblems, selfAuditDue, selfAuditItems } from "./client-codes";
 import { ETHICS_STATEMENTS, WORKER_FOLDERS, pctKpi, pickTraceSample, traceRow, workerFile, zeroKpi, type RbaKpi } from "./rba";
-import type { EthicsDeclaration, RbaCommittee, RbaGrade, RbaTraceReview } from "./types";
+import type { EthicsDeclaration, RbaCommittee, RbaCommitteeRoster, RbaGrade, RbaTraceReview } from "./types";
 import type { ClientCode, ClientCodeCheck, ClientInspection, InspectionLine, InspectionRoom, SelfAudit, SelfAuditScope } from "./types";
 import { DEFAULT_STATUTORY } from "./statutory";
 import { statutoryFor } from "./statutory";
@@ -23129,13 +23129,14 @@ export class PrimaService {
 
   /** The handler writes to the reporter (a question, or where things stand). Only the reporter's code reads it. */
   async whistleMessage(user: User, id: Id, text: string) {
-    const r = await this.store.get('whistleReports', id);
-    if (!r || r.handlerId !== user.id) throw new NotFound('Report');
     const body = (text ?? '').trim().slice(0, 1000);
     if (body.length < 10) throw new BadRequest('Write the message to the reporter (a question, or where the report stands).');
-    if (r.status === 'closed' && !this.whistleFollowUp(r, this.today()).replyWaiting) throw new BadRequest('This report is closed. You can answer the reporter when they write.');
     const at = this.now();
     return this.store.transaction(async (tx) => {
+      // Hold the report and read it again, so a reply or message sent at the same moment is kept, not overwritten.
+      const r = await this.lockedWhistle(tx, id);
+      if (!r || r.handlerId !== user.id) throw new NotFound('Report');
+      if (r.status === 'closed' && !this.whistleFollowUp(r, this.today()).replyWaiting) throw new BadRequest('This report is closed. You can answer the reporter when they write.');
       await tx.update('whistleReports', id, { messages: [...(r.messages ?? []), { at, from: 'handler', text: body }], acknowledgedAt: r.acknowledgedAt ?? at, status: r.status === 'received' ? 'acknowledged' : r.status });
       // The audit trail says a message went to the reporter, never what it says.
       await tx.audit({ at, actor: user.name, companyId: null, action: 'grc.whistle.message', entity: 'whistle_report', entityId: id, summary: `Report ${r.code}: message sent to the reporter.` });
@@ -23149,45 +23150,49 @@ export class PrimaService {
    */
   async whistleReply(user: User, code: string, text: string, retaliation = false) {
     if (user.integration) throw new AccessDenied('view', '(reports)');
-    const r = (await this.store.list('whistleReports', {})).find((x) => x.code === (code ?? '').trim().toUpperCase());
-    if (!r) throw new NotFound('Report');
+    const found = (await this.store.list('whistleReports', {})).find((x) => x.code === (code ?? '').trim().toUpperCase());
+    if (!found) throw new NotFound('Report');
     const body = (text ?? '').trim().slice(0, 2000);
     if (body.length < 10) throw new BadRequest(retaliation ? 'Say what happened to you after you reported, and when.' : 'Write your answer.');
     const rule = RULES.assurance.value;
     const today = this.today();
-    if (r.status === 'closed' && (!r.closedAt || daysBetween(dateOf(r.closedAt), today) > rule.whistleAfterCloseDays))
-      throw new BadRequest(`This report closed more than ${rule.whistleAfterCloseDays} days ago. Make a new report.`);
-    if (r.status === 'closed' && !retaliation) throw new BadRequest('This report is closed. If you were treated badly for reporting, choose "Report retaliation", or make a new report.');
     const at = this.now();
-    const patch: Partial<WhistleReport> = { messages: [...(r.messages ?? []), { at, from: 'reporter', text: body, retaliation: !!retaliation }] };
-    if (retaliation && (r.status === 'closed' || r.status === 'closing')) {
-      patch.status = 'investigating';
-      patch.notes = [...r.notes, { at, by: 'Speak-up channel', text: 'Reopened: the reporter reported retaliation.' }];
-    }
-    await this.store.transaction(async (tx) => {
+    const r = await this.store.transaction(async (tx) => {
+      // Hold the report and read it again, so two replies (or a reply and a handler message) at once are both kept.
+      const r = await this.lockedWhistle(tx, found.id);
+      if (!r) throw new NotFound('Report');
+      if (r.status === 'closed' && (!r.closedAt || daysBetween(dateOf(r.closedAt), today) > rule.whistleAfterCloseDays))
+        throw new BadRequest(`This report closed more than ${rule.whistleAfterCloseDays} days ago. Make a new report.`);
+      if (r.status === 'closed' && !retaliation) throw new BadRequest('This report is closed. If you were treated badly for reporting, choose "Report retaliation", or make a new report.');
+      const patch: Partial<WhistleReport> = { messages: [...(r.messages ?? []), { at, from: 'reporter', text: body, retaliation: !!retaliation }] };
+      if (retaliation && (r.status === 'closed' || r.status === 'closing')) {
+        patch.status = 'investigating';
+        patch.notes = [...r.notes, { at, by: 'Speak-up channel', text: 'Reopened: the reporter reported retaliation.' }];
+      }
       await tx.update('whistleReports', r.id, patch);
       await tx.audit({ at, actor: 'Speak-up channel', companyId: null, action: retaliation ? 'grc.whistle.retaliation' : 'grc.whistle.reply', entity: 'whistle_report', entityId: r.id, summary: `Report ${r.code}: ${retaliation ? 'retaliation reported by the reporter' : 'the reporter answered'}.` });
+      return r;
     });
     return { code: r.code, handledBy: r.handlerName };
   }
 
   async whistleStep(user: User, id: Id, action: 'acknowledge' | 'investigate' | 'note' | 'close', text: string) {
-    const r = await this.store.get('whistleReports', id);
-    if (!r || r.handlerId !== user.id) throw new NotFound('Report');
-    if (r.status === 'closed') throw new BadRequest('This report is closed.');
-    if (r.status === 'closing') throw new BadRequest('The outcome is waiting for a second handler to review.');
     const note = (text ?? '').trim().slice(0, 1000);
     const at = this.now();
-    let patch: Partial<WhistleReport>;
-    if (action === 'acknowledge' && r.status === 'received') patch = { status: 'acknowledged', acknowledgedAt: at };
-    else if (action === 'investigate' && r.status !== 'investigating') patch = { status: 'investigating', acknowledgedAt: r.acknowledgedAt ?? at };
-    else if (action === 'note' && note) patch = { notes: [...r.notes, { at, by: user.name, text: note }] };
-    else if (action === 'close') {
-      if (!note) throw new BadRequest('Record the outcome.');
-      // A second handler not named in the report reviews the outcome before it closes (insider abuse audit, 27 Oct 2026).
-      patch = { status: 'closing', proposedOutcome: note, closeReview: null, acknowledgedAt: r.acknowledgedAt ?? at };
-    } else throw new BadRequest(`You cannot ${action} this report now.`);
     return this.store.transaction(async (tx) => {
+      const r = await this.lockedWhistle(tx, id);
+      if (!r || r.handlerId !== user.id) throw new NotFound('Report');
+      if (r.status === 'closed') throw new BadRequest('This report is closed.');
+      if (r.status === 'closing') throw new BadRequest('The outcome is waiting for a second handler to review.');
+      let patch: Partial<WhistleReport>;
+      if (action === 'acknowledge' && r.status === 'received') patch = { status: 'acknowledged', acknowledgedAt: at };
+      else if (action === 'investigate' && r.status !== 'investigating') patch = { status: 'investigating', acknowledgedAt: r.acknowledgedAt ?? at };
+      else if (action === 'note' && note) patch = { notes: [...r.notes, { at, by: user.name, text: note }] };
+      else if (action === 'close') {
+        if (!note) throw new BadRequest('Record the outcome.');
+        // A second handler not named in the report reviews the outcome before it closes (insider abuse audit, 27 Oct 2026).
+        patch = { status: 'closing', proposedOutcome: note, closeReview: null, acknowledgedAt: r.acknowledgedAt ?? at };
+      } else throw new BadRequest(`You cannot ${action} this report now.`);
       await tx.update('whistleReports', id, patch);
       await tx.audit({
         at,
@@ -23200,6 +23205,16 @@ export class PrimaService {
       });
       return (await tx.get('whistleReports', id))!;
     });
+  }
+
+  /**
+   * Read a speak-up report while holding it until the transaction ends (Fauzan, 11 Nov 2026): messages and notes are
+   * appended to the stored list, so every writer must start from the latest list or a reply sent at the same moment
+   * is lost.
+   */
+  private async lockedWhistle(tx: Store, id: Id): Promise<WhistleReport | undefined> {
+    await tx.lock?.('whistleReports', id);
+    return tx.get('whistleReports', id);
   }
 
   /** A second handler, not the first and not named in the report, may review its proposed outcome. */
@@ -23215,17 +23230,17 @@ export class PrimaService {
 
   /** The second handler agrees and the report closes, or sends it back for more work. */
   async whistleReview(user: User, id: Id, agree: boolean, note: string) {
-    const r = await this.store.get('whistleReports', id);
-    if (!r || !this.canReviewWhistle(user, r)) throw new NotFound('Report');
     const text = (note ?? '').trim().slice(0, 1000);
-    if (!agree && text.length < 3) throw new BadRequest('Say what more is needed.');
-    if (agree) requireApprovalReason(text);
     const at = this.now();
-    const review = { by: user.name, byId: user.id, at, agree, note: text };
-    const patch: Partial<WhistleReport> = agree
-      ? { status: 'closed', outcome: r.proposedOutcome ?? '', closedAt: at, closeReview: review }
-      : { status: 'investigating', closeReview: review, notes: [...r.notes, { at, by: user.name, text: `Sent back: ${text}` }] };
     return this.store.transaction(async (tx) => {
+      const r = await this.lockedWhistle(tx, id);
+      if (!r || !this.canReviewWhistle(user, r)) throw new NotFound('Report');
+      if (!agree && text.length < 3) throw new BadRequest('Say what more is needed.');
+      if (agree) requireApprovalReason(text);
+      const review = { by: user.name, byId: user.id, at, agree, note: text };
+      const patch: Partial<WhistleReport> = agree
+        ? { status: 'closed', outcome: r.proposedOutcome ?? '', closedAt: at, closeReview: review }
+        : { status: 'investigating', closeReview: review, notes: [...r.notes, { at, by: user.name, text: `Sent back: ${text}` }] };
       await tx.update('whistleReports', id, patch);
       await tx.audit({
         at,
@@ -35112,6 +35127,38 @@ export class PrimaService {
     return rows.filter((c) => c.year === year && !c.replacedById).sort((a, b) => b.at.localeCompare(a.at))[0] ?? null;
   }
 
+  /**
+   * What a person sees of this year's committee (Fauzan, 11 Nov 2026). The Chief of Staff or Deputy, who name it, see the
+   * full naming; every other office sign-in sees names and seats only, read from the roster, never the naming itself.
+   */
+  private async rbaCommitteeShown(user: User, year: number): Promise<RbaCommittee | Omit<RbaCommitteeRoster, 'companyId'> | null> {
+    if (isHrDirector(user)) {
+      const c = await this.rbaCommitteeNow(year);
+      // A committee named before the roster existed (module rba-committee-roster-v1) is copied once, when the Chief of
+      // Staff or Deputy next opens the page, so other offices see its names and seats without naming it again.
+      if (c && (!this.store.hasTable || (await this.store.hasTable('rbaCommitteeRosters')))) {
+        const have = await this.store.get('rbaCommitteeRosters', `rbaroster-${year}`);
+        if (have?.committeeId !== c.id) await this.store.transaction((tx) => this.writeRbaRoster(tx, c));
+      }
+      return c;
+    }
+    if (this.store.hasTable && !(await this.store.hasTable('rbaCommitteeRosters'))) return null;
+    const roster = await this.store.get('rbaCommitteeRosters', `rbaroster-${year}`);
+    if (!roster || roster.year !== year) return null;
+    return { id: roster.committeeId, committeeId: roster.committeeId, year: roster.year, at: roster.at, namedBy: roster.namedBy, members: roster.members.map((m) => ({ name: m.name, seat: m.seat })) };
+  }
+
+  /** Write this year's roster from a naming: names and seats only (H1, Fauzan, 11 Nov 2026). */
+  private async writeRbaRoster(tx: Store, c: RbaCommittee): Promise<void> {
+    // Before module rba-committee-roster-v1 is in place the naming still saves; the roster follows once it is installed.
+    if (tx.hasTable && !(await tx.hasTable('rbaCommitteeRosters'))) return;
+    const id = `rbaroster-${c.year}`;
+    const fields = { year: c.year, committeeId: c.id, at: c.at, namedBy: c.namedBy, members: c.members.map((m) => ({ name: m.name, seat: m.seat })) };
+    await tx.lock?.('rbaCommitteeRosters', id);
+    if (await tx.get('rbaCommitteeRosters', id)) await tx.update('rbaCommitteeRosters', id, fields);
+    else await tx.insert('rbaCommitteeRosters', { id, companyId: GROUP_EMPLOYER_ID, ...fields } satisfies RbaCommitteeRoster);
+  }
+
   /** The licensed companies this person may read RBA readiness for. */
   private async rbaCompanyIds(user: User): Promise<Id[]> {
     const role = this.rbaRoleOf(user);
@@ -35223,7 +35270,7 @@ export class PrimaService {
     const today = this.today();
     const year = Number(today.slice(0, 4));
     const ids = await this.rbaCompanyIds(user);
-    const committee = await this.rbaCommitteeNow(year);
+    const committee = await this.rbaCommitteeShown(user, year);
     const allCompanies = (await this.store.list('companies')).filter((c) => !isCentralEmployer(c.id));
     const readable = ids;
     const companies = allCompanies.filter((c) => readable.includes(c.id)).map((c) => ({ id: c.id, name: c.name, code: c.code }));
@@ -35289,6 +35336,8 @@ export class PrimaService {
       const row: RbaCommittee = { id: `rbacom-${year}-${all.length + 1}-${toMs(at)}`, companyId: GROUP_EMPLOYER_ID, year, members, note, namedBy: user.name, namedById: user.id, at, replacedById: null };
       await tx.insert('rbaCommittees', row);
       for (const o of old) await tx.update('rbaCommittees', o.id, { replacedById: row.id });
+      // The roster every office sign-in reads: names and seats only, nothing else from the naming.
+      await this.writeRbaRoster(tx, row);
       await tx.audit({ at, actor: user.name, companyId: GROUP_EMPLOYER_ID, action: 'rba.committee', entity: 'rba_committee', entityId: row.id, summary: `RBA committee ${year}${old.length ? ' changed' : ' named'}: ${members.map((m) => m.name).join(', ')}` });
       return row;
     });

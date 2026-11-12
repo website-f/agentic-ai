@@ -2669,6 +2669,24 @@ export interface RbaCommittee {
   replacedById: Id | null;
 }
 
+/**
+ * What every office sign-in may see of this year's RBA committee: names and seats only (Fauzan, 11 Nov 2026). The full
+ * naming (sign-in ids, the CoS's note, earlier namings) stays on PWVSB's record behind the company wall. One per year,
+ * rewritten whenever the Chief of Staff names or changes the committee.
+ */
+export interface RbaCommitteeRoster {
+  /** rbaroster-<year> */
+  id: Id;
+  /** Always PWVSB. */
+  companyId: Id;
+  year: number;
+  /** The naming this roster was copied from. */
+  committeeId: Id;
+  at: IsoDateTime;
+  namedBy: string;
+  members: { name: string; seat: RbaCommittee['members'][number]['seat'] }[];
+}
+
 /** Who a site task is for. A higher rank may also do a lower rank's task. */
 export type SiteTaskFor = 'guard' | 'officer' | 'patrol_officer';
 
@@ -3185,6 +3203,7 @@ export interface Dataset {
   rbaTraceReviews: RbaTraceReview[];
   ethicsDeclarations: EthicsDeclaration[];
   rbaCommittees: RbaCommittee[];
+  rbaCommitteeRosters: RbaCommitteeRoster[];
   evidenceVideos: EvidenceVideo[];
   attendanceFollowUps: AttendanceFollowUp[];
   evidencePhotos: EvidencePhoto[];

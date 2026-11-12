@@ -1955,6 +1955,9 @@ const ROWS: Row[] = [
   ["Public holidays worked", "Cuti umum bekerja", "Cuti umum kerja"],
   ["Gross pay", "Gaji kasar", "Gross pay"],
   ["Salary", "Gaji", null],
+  // P100 sec: speak-up wall, RBA committee roster, OM uniform requests (Fauzan's 11 Nov 2026 handover, H1 H2 I1)
+  ['Names and seats only. The Chief of Staff keeps the full record.', 'Nama dan kerusi sahaja. Ketua Staf menyimpan rekod penuh.', 'Nama dan seat saja. Chief of Staff simpan rekod penuh.'],
+  ['The RBA committee roster is not set up in this database yet (module rba-committee-roster-v1).', 'Senarai jawatankuasa RBA belum disediakan dalam pangkalan data ini (modul rba-committee-roster-v1).', 'Senarai committee RBA belum di-setup dalam database ini (module rba-committee-roster-v1).'],
   // P97: the salary calculator laid out in steps with a summary (Fitri, 11 Nov 2026)
   ["How a guard's month is counted, step by step, so you know what to expect. Change the days to see the effect. Not a payslip; the pay run uses the formula ACT set for the guard's site.", "Cara bulan seorang pengawal dikira, langkah demi langkah, supaya anda tahu apa yang dijangka. Tukar bilangan hari untuk melihat kesannya. Bukan slip gaji; larian gaji menggunakan formula yang ditetapkan ACT untuk tapak pengawal.", "Cara bulan seorang guard dikira, step by step, supaya anda tahu apa yang dijangka. Tukar hari untuk tengok kesannya. Bukan payslip; pay run guna formula yang ACT set untuk site guard."],
   ["Start again", "Mula semula", null],

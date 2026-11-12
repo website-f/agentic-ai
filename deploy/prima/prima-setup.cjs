@@ -57,7 +57,9 @@ const REFRESH = [
 // nothing. They add new tables only; no existing table, row or policy is changed.
 //   owner-test-checkin-v1.sql: the owner's TEST check-in and check-out with the route between (never attendance or pay).
 //   clock-snaps-v1.sql (P97): the staff check-in and check-out face photos, seen only by the person, their manager and HR.
-const OFFICE_MODULES = ['owner-test-checkin-v1.sql', 'clock-snaps-v1.sql'];
+//   rba-committee-roster-v1.sql (P100 H1, Fauzan 11 Nov 2026): the RBA committee read rule removed and the company wall
+//     TO prima_app (where rba-readiness-v1 is installed), plus the names-and-seats roster other offices read.
+const OFFICE_MODULES = ['owner-test-checkin-v1.sql', 'clock-snaps-v1.sql', 'rba-committee-roster-v1.sql'];
 (async () => {
   const { Client } = require(require.resolve('pg', { paths: [cwd] }));
   const c = new Client({ connectionString: process.env.DATABASE_URL });

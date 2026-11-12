@@ -172,7 +172,7 @@ function Committee({ b }: { b: RbaBoard }) {
   const c = b.committee;
   const act = useAction();
   const [edit, setEdit] = useState(false);
-  const [picked, setPicked] = useState<string[]>(c.current?.members.filter((m) => m.userId).map((m) => m.userId!) ?? []);
+  const [picked, setPicked] = useState<string[]>(c.current?.members.flatMap((m) => ('userId' in m && m.userId ? [m.userId] : [])) ?? []);
   const [others, setOthers] = useState('');
   const [note, setNote] = useState('');
   return (
@@ -201,9 +201,10 @@ function Committee({ b }: { b: RbaBoard }) {
           {c.current && (
             <div className="muted small" style={{ padding: 12 }}>
               Named by {c.current.namedBy} on {c.current.at.slice(0, 10)}
-              {c.current.note ? ` · ${c.current.note}` : ''}
+              {'note' in c.current && c.current.note ? ` · ${c.current.note}` : ''}
             </div>
           )}
+          {c.current && !c.canName && <div className="muted small" style={{ padding: '0 12px 12px' }}>Names and seats only. The Chief of Staff keeps the full record.</div>}
         </div>
       )}
       {edit && (
