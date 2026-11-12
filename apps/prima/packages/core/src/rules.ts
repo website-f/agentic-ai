@@ -451,6 +451,17 @@ export const RULES = {
     'Policy',
     "HR Phase 3, slice 3F (Fauzan, 2 Nov 2026: appraisal and training 'do it'; payslips delivered in app for staff to download; handbook, code of conduct and IT-use acknowledgements 'do it also'). HR keeps each staff member's training record, with the HRD Corp claim reference where the levy pays (PSMB Act 2001). A yearly appraisal is rated 1 to 5 by an appraiser HR names, never the staff member; the staff member reads it and may add a comment (Prima suggests within 14 days); HR closes it. Every active office staff member acknowledges the latest version of each policy HR publishes; a new version asks again. Appraisal is not the KPI, which is on hold until pilot test 1.",
   ),
+  quoteCost: rule(
+    'COM-QUOTE-COST',
+    {
+      /** The cost checks run on every quotation (Fauzan, 11 Nov 2026: switched on). */
+      enabled: true,
+      /** The age used for the employer's statutory shares when the guards are not named yet (under 60). */
+      ageForStatutory: 30,
+    },
+    'Policy',
+    'Approved by Fauzan, 11 Nov 2026 (C10): "Yes to minimum wage, OT, EPF, SOCSO, EIS. Also hostel cost and transport cost when the guards are Nepali, and costs like uniform and equipment." Every quotation (COM-2) is checked against the cost of its guards for the month: the minimum wage, overtime past the normal hours at the lowest overtime rate (pay law in force), the employer EPF (on basic pay), SOCSO and EIS (statutory rates in force), and the hostel and transport per Nepali guard and the uniform and equipment per guard from the rate book (C5, rates entered in the app, never preset). A price below the total cost is flagged with the reason; a rate not set makes the check incomplete, never zero. The check is kept on the quotation when it is saved, corrected, submitted and approved.',
+  ),
   minimumWage: rule(
     'HR-MIN-WAGE',
     { monthly: 1700, from: '2025-02-01', before: 1500 },

@@ -1,3 +1,4 @@
+import { quoteCostCheck } from "./quote-cost";
 import { DEMO_IT_RENTAL_RATES } from "./demo-rates";
 import { RateBookService } from "./rate-book";
 import { finSettingsOf } from "./finance";
@@ -10447,10 +10448,13 @@ export class PrimaService {
       ratePerGuard: number;
       validDays: number;
       note?: string;
+      nepaliGuards?: number;
     },
   ) {
     const company = await this.company(user, companyId);
     assertCan(user, await this.grants(), this.today(), 'commercial.prepare', companyId);
+    const nepali = input.nepaliGuards ?? 0;
+    if (!Number.isInteger(nepali) || nepali < 0 || nepali > input.guards) throw new BadRequest('Nepali guards must be a whole number from 0 to the number of guards.');
     if (!input.client.trim()) throw new BadRequest('Name the client.');
     if (!Number.isInteger(input.guards) || input.guards < 1 || input.guards > 1000) throw new BadRequest('Guards must be a whole number from 1 to 1,000.');
     if (!(input.ratePerGuard > 0) || input.ratePerGuard > 50_000) throw new BadRequest('Give the monthly rate per guard in RM.');
@@ -10480,7 +10484,9 @@ export class PrimaService {
       approvedBy: null,
       approvedAt: null,
       note: (input.note ?? '').trim(),
+      nepaliGuards: nepali,
     };
+    q.costCheck = await this.quoteCost(q);
     return this.store.transaction(async (tx) => {
       await tx.insert('quotations', q);
       await tx.audit({
@@ -10490,7 +10496,7 @@ export class PrimaService {
         action: 'quotation.create',
         entity: 'quotation',
         entityId: q.id,
-        summary: `Drafted ${q.ref} for ${q.client}: ${q.guards} guards, RM${q.monthlyTotal.toFixed(2)} a month`,
+        summary: `Drafted ${q.ref} for ${q.client}: ${q.guards} guards, RM${q.monthlyTotal.toFixed(2)} a month${q.costCheck && q.costCheck.status !== 'ok' ? `; cost check: ${q.costCheck.reasons.join(' ')}` : ''}`,
       });
       return q;
     });
@@ -10526,6 +10532,9 @@ export class PrimaService {
       rejected: 'rejected',
     };
     const patch: Partial<Quotation> = { status: status[action] };
+    // C10: the cost check is worked again with this month's rates when the quotation is submitted or approved, and kept.
+    const check = action === 'submit' || action === 'approve' ? await this.quoteCost(q) : null;
+    if (check) patch.costCheck = check;
     if (action === 'approve') Object.assign(patch, { approvedBy: user.name, approvedAt: at });
     if (action === 'sent') patch.sent = { userId: user.id, by: user.name, at };
     if (action === 'accepted' || action === 'rejected') patch.decided = { status: action, userId: user.id, by: user.name, at };
@@ -10539,7 +10548,7 @@ export class PrimaService {
         action: `quotation.${action}`,
         entity: 'quotation',
         entityId: q.id,
-        summary: `${q.ref} ${status[action].replace('_', ' ')}${note?.trim() ? `: ${note.trim()}` : ''}`,
+        summary: `${q.ref} ${status[action].replace('_', ' ')}${note?.trim() ? `: ${note.trim()}` : ''}${check && check.status !== 'ok' ? ` (${check.status === 'below_cost' ? 'BELOW COST' : 'cost check incomplete'}: ${check.reasons.join(' ')})` : ''}`,
       });
       return updated;
     });
@@ -43239,10 +43248,23 @@ export class PrimaService {
    * manager (review finding, 2 Nov 2026). Company staff who prepare quotations only; a reason is needed and every changed
    * value is audited with its old and new value. An approved or sent quotation is never changed here.
    */
+  /**
+   * C10 (Fauzan, 11 Nov 2026): the quotation's cost for this month from the pay law, the statutory rates and the
+   * company's rate book (quote-cost.ts). Off only if the rule is switched off.
+   */
+  private async quoteCost(q: Pick<Quotation, 'companyId' | 'guards' | 'nepaliGuards' | 'hoursPerDay' | 'monthlyTotal'>) {
+    if (!RULES.quoteCost.value.enabled) return null;
+    const month = this.today().slice(0, 7);
+    const law = (await this.payFormulasOn()) ? payLawFor(await this.store.list('payLawVersions', {}), month) : DEFAULT_PAY_LAW;
+    const st = await this.statutorySettingsFor(month);
+    const fin = (await this.store.list('finStatus', { companyId: [q.companyId] })).find((f) => f.companyId === q.companyId) ?? null;
+    return quoteCostCheck(q, month, law, st, fin, this.now());
+  }
+
   async correctQuotation(
     user: User,
     quotationId: Id,
-    input: { guards: number; hoursPerDay: 8 | 12; ratePerGuard: number; validUntil: IsoDate; reason: string },
+    input: { guards: number; nepaliGuards?: number; hoursPerDay: 8 | 12; ratePerGuard: number; validUntil: IsoDate; reason: string },
   ) {
     const found = await this.store.get('quotations', quotationId);
     if (!found) throw new NotFound('Quotation');
@@ -43261,11 +43283,13 @@ export class PrimaService {
       const q = (await tx.get('quotations', quotationId))!;
       if (q.status !== 'draft' && q.status !== 'returned') throw new BadRequest('Only a draft or returned quotation can be corrected.');
       const rate = Math.round(input.ratePerGuard * 100) / 100;
-      const next = { guards: input.guards, hoursPerDay: input.hoursPerDay, ratePerGuard: rate, validUntil: input.validUntil, monthlyTotal: Math.round(input.guards * rate * 100) / 100 };
-      const labels: Record<keyof typeof next, string> = { guards: 'Guards', hoursPerDay: 'Hours a day', ratePerGuard: 'Rate per guard', validUntil: 'Valid until', monthlyTotal: 'Monthly total' };
-      const changed = (Object.keys(next) as (keyof typeof next)[]).filter((k) => q[k] !== next[k]);
+      const nepali = input.nepaliGuards ?? q.nepaliGuards ?? 0;
+      if (!Number.isInteger(nepali) || nepali < 0 || nepali > input.guards) throw new BadRequest('Nepali guards must be a whole number from 0 to the number of guards.');
+      const next = { guards: input.guards, nepaliGuards: nepali, hoursPerDay: input.hoursPerDay, ratePerGuard: rate, validUntil: input.validUntil, monthlyTotal: Math.round(input.guards * rate * 100) / 100 };
+      const labels: Record<keyof typeof next, string> = { guards: 'Guards', nepaliGuards: 'Nepali guards', hoursPerDay: 'Hours a day', ratePerGuard: 'Rate per guard', validUntil: 'Valid until', monthlyTotal: 'Monthly total' };
+      const changed = (Object.keys(next) as (keyof typeof next)[]).filter((k) => (q[k] ?? 0) !== next[k]);
       if (!changed.length) throw new BadRequest('Nothing changed.');
-      const updated = await tx.update('quotations', q.id, next);
+      const updated = await tx.update('quotations', q.id, { ...next, costCheck: await this.quoteCost({ ...q, ...next }) });
       await tx.audit({
         at,
         actor: user.name,

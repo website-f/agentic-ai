@@ -7181,6 +7181,7 @@ export class AppController {
       ratePerGuard: num(b.ratePerGuard, 'ratePerGuard'),
       validDays: b.validDays == null ? 30 : num(b.validDays, 'validDays'),
       note: b.note == null ? '' : str(b.note, 'note', 2000),
+      nepaliGuards: b.nepaliGuards == null ? 0 : num(b.nepaliGuards, 'nepaliGuards'),
     };
     return this.db.asUser(uid, (svc, u) => svc.createQuotation(u, id, input));
   }
@@ -7220,6 +7221,7 @@ export class AppController {
     if (hours !== 8 && hours !== 12) throw new BadRequestException('hoursPerDay must be 8 or 12');
     const input = {
       guards: num(b.guards, 'guards'),
+      ...(b.nepaliGuards == null ? {} : { nepaliGuards: num(b.nepaliGuards, 'nepaliGuards') }),
       hoursPerDay: hours as 8 | 12,
       ratePerGuard: num(b.ratePerGuard, 'ratePerGuard'),
       validUntil: date(b.validUntil, 'validUntil'),

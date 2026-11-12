@@ -69,6 +69,21 @@ describe('P100 fin on PostgreSQL', () => {
     assert.deepEqual(lead.companies.map((c) => c.companyId).sort(), t1.map((r) => r.company_id).sort());
   });
 
+  it('C10: a quotation made through the restricted login reads its company rate book under the company wall and flags below cost', async () => {
+    const exec = (await q<{ id: string }>(`SELECT id FROM prima.users WHERE data->>'role' = 'admin_exec' AND data->'companyIds' ? $1 ORDER BY id LIMIT 1`, [co]))[0];
+    assert.ok(exec, 'an admin executive of the company');
+    const made = await db.asUser(exec.id, (svc, u) =>
+      svc.createQuotation(u, co, { client: 'Synthetic Client Sdn Bhd', siteName: 'Synthetic site', tenderId: null, guards: 2, nepaliGuards: 1, hoursPerDay: 12, ratePerGuard: 1500, validDays: 30 }),
+    );
+    assert.equal(made.costCheck?.status !== 'ok', true);
+    const transport = made.costCheck!.lines.find((l) => l.key === 'transport_np')!;
+    assert.deepEqual([transport.guards, transport.amount], [1, 95]);
+    await assert.rejects(
+      db.asUser(manager, (svc, u) => svc.quotationAction(u, made.id, 'approve', 'not submitted')),
+      /awaiting|cannot/,
+    );
+  });
+
   it('C4: the FD changes a confirmed finance number with a reason, now or from a later day; a team leader is refused', async () => {
     await db.asUser('u-fd', (svc, u) => svc.finance.setSettings(u, { values: { icExplainMax: 1200 }, comment: 'Synthetic: auditor agreed' }));
     await db.asUser('u-fd', (svc, u) => svc.finance.setSettings(u, { values: { ceoNoticeFrom: 300000 }, comment: 'Synthetic: board paper', from: '2027-06-01' }));

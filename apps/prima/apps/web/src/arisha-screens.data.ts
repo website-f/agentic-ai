@@ -1078,7 +1078,7 @@ export const SCREEN_GUIDES: ScreenGuide[] = [
         "means": "Counts of tenders entered and won and quotations sent and accepted. Counts only, not a ranking."
       }
     ],
-    "notes": "\"Add tender\" and \"New quotation\" only show for people allowed to add tenders or prepare quotes. \"Start preparing\" stays greyed out until the protocol steps are done; the page lists what is still to do. You cannot approve a quotation you prepared yourself; another person must approve it. \"Approve\" stays greyed out until a note is written. Prices are typed in by hand: automatic cost checks (minimum wage, overtime, EPF, SOCSO, EIS) are not on yet. The bid itself is lodged on the buyer's portal by an authorised person; the app only records it."
+    "notes": "\"Add tender\" and \"New quotation\" only show for people allowed to add tenders or prepare quotes. \"Start preparing\" stays greyed out until the protocol steps are done; the page lists what is still to do. You cannot approve a quotation you prepared yourself; another person must approve it. \"Approve\" stays greyed out until a note is written. Prima checks every quotation against its cost for the month: minimum wage, overtime, EPF, SOCSO and EIS, plus hostel and transport for Nepali guards and uniform and equipment for every guard from the rate book. A price below the cost shows \"Below cost\" with the reason; a missing rate shows \"Rate not set\". Type how many of the guards are Nepali when you prepare it. The bid itself is lodged on the buyer's portal by an authorised person; the app only records it."
   },
   {
     "view": "ops",

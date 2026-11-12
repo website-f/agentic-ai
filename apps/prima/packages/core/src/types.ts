@@ -2815,6 +2815,10 @@ export interface Quotation {
   sent?: { userId: Id; by: string; at: IsoDateTime } | null;
   /** Who recorded the client's answer (accepted or rejected) and when. */
   decided?: { status: 'accepted' | 'rejected'; userId: Id; by: string; at: IsoDateTime } | null;
+  /** C10 (Fauzan, 11 Nov 2026): how many of the guards are Nepali (hostel and transport cost). */
+  nepaliGuards?: number;
+  /** C10: the cost check as last worked out (on save, correction, submit and approval), with the month's rates kept. */
+  costCheck?: import('./quote-cost').QuoteCostCheck | null;
 }
 
 /**

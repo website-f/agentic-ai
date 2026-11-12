@@ -2166,3 +2166,53 @@ button.bz-tile:focus-visible {
     grid-column: 2;
   }
 }
+
+/* C10 (P100 fin): the quotation's cost check in the quotation drawer; a table that becomes cards on a phone. */
+.bz-cost {
+  display: grid;
+  gap: 10px;
+  margin: 12px 0;
+}
+.bz-cost-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.bz-cost-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.86rem;
+}
+.bz-cost-table th,
+.bz-cost-table td {
+  padding: 8px 6px;
+  border-bottom: 1px solid color-mix(in srgb, var(--line) 70%, transparent);
+  text-align: left;
+  vertical-align: top;
+}
+.bz-cost-table thead th {
+  position: static;
+  background: none;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+.bz-cost-table tbody th {
+  position: static;
+  background: none;
+  font-weight: 600;
+}
+.bz-cost-table tbody th .bz-sub {
+  display: block;
+  font-weight: 400;
+}
+.bz-cost-table .num {
+  text-align: right;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.bz-cost-total > * {
+  font-weight: 700;
+}
