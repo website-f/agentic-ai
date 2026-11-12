@@ -107,6 +107,19 @@ describe('P100 fin on PostgreSQL', () => {
     await assert.rejects(db.asUser(om.id, (svc, u) => svc.siteMargins(u)), /profit per site/);
   });
 
+  it('F3: the monthly finance page for the CEO and a Finance team through the restricted login; a manager and an OM are refused', async () => {
+    const ceo = await db.asUser('u-fauzan', (svc, u) => svc.finSummary(u));
+    assert.equal(ceo.scope, 'group');
+    assert.ok(ceo.rows.length > 1);
+    assert.equal(ceo.group.row.company, 'Group total');
+    const team = await db.asUser('u-fin-t1-lead', (svc, u) => svc.finSummary(u));
+    const t1 = await q<{ company_id: string }>(`SELECT company_id FROM prima.fin_status WHERE (data->>'team')::int = 1`);
+    assert.deepEqual(team.rows.map((r) => r.companyId).sort(), t1.map((r) => r.company_id).sort());
+    await assert.rejects(db.asUser(manager, (svc, u) => svc.finSummary(u)), /monthly finance page/);
+    const om = (await q<{ id: string }>(`SELECT id FROM prima.users WHERE data->>'opsTier' = 'om' ORDER BY id LIMIT 1`))[0];
+    await assert.rejects(db.asUser(om.id, (svc, u) => svc.finSummary(u)), /monthly finance page/);
+  });
+
   it('C4: the FD changes a confirmed finance number with a reason, now or from a later day; a team leader is refused', async () => {
     await db.asUser('u-fd', (svc, u) => svc.finance.setSettings(u, { values: { icExplainMax: 1200 }, comment: 'Synthetic: auditor agreed' }));
     await db.asUser('u-fd', (svc, u) => svc.finance.setSettings(u, { values: { ceoNoticeFrom: 300000 }, comment: 'Synthetic: board paper', from: '2027-06-01' }));

@@ -103,7 +103,7 @@ export const NAV_SECTIONS: NavSection[] = [
     blurb: 'Accounts, payments, buying and insurance.',
     groups: [
       { title: 'Money', views: ['finance', 'payreq', 'credit'] },
-      { title: 'Rates and monitoring', views: ['rates', 'finsites'] },
+      { title: 'Rates and monitoring', views: ['finsummary', 'finsites', 'rates'] },
       { title: 'Buying', views: ['purchasing', 'requests'] },
       { title: 'Companies', views: ['branches', 'insurance'] },
     ],
@@ -205,6 +205,7 @@ export const NAV_INFO: Record<ViewName, { blurb: string; words: string }> = {
   clients: { blurb: 'Clients and their contact people.', words: 'client pelanggan customer contact hubungan' },
   contracts: { blurb: 'Contracts and getting new sites started.', words: 'contract kontrak agreement perjanjian mobilisation mobilisasi loa' },
   finance: { blurb: 'Accounts, payments and cash for each company.', words: 'finance kewangan accounts akaun sql account invoice invois bank payment bayaran' },
+  finsummary: { blurb: 'One page a month: every company and the group total.', words: 'summary ringkasan monthly bulanan ceo board cash tunai close tutup print cetak' },
   finsites: { blurb: 'Sites where guards worked: billed, signed off, profit.', words: 'unbilled invois belum billing site tapak profit untung margin sign-off' },
   rates: { blurb: 'Costing rates entered from a month, with history.', words: 'rate kadar hostel asrama transport pengangkutan uniform equipment peralatan cost kos' },
   payreq: { blurb: 'Ask for a payment and follow its approvals.', words: 'payment request bayaran pembayaran permohonan bayaran invoice invois supplier pembekal' },

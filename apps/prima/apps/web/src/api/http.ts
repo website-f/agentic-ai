@@ -2478,6 +2478,9 @@ export class HttpApi implements Api {
   setRate(input: Parameters<Api['setRate']>[0]) {
     return this.call<unknown>('POST', '/finance/rates', input);
   }
+  finSummary(period?: string) {
+    return this.call<Awaited<ReturnType<Api['finSummary']>>>('GET', `/finance/summary${period ? `?period=${encodeURIComponent(period)}` : ''}`);
+  }
   siteMargins(month?: string) {
     return this.call<Awaited<ReturnType<Api['siteMargins']>>>('GET', `/finance/site-margins${month ? `?month=${encodeURIComponent(month)}` : ''}`);
   }

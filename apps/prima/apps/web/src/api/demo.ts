@@ -3382,6 +3382,9 @@ export class DemoApi implements Api {
   setRate(input: Parameters<Api['setRate']>[0]) {
     return this.write<unknown>('setRate', [input]);
   }
+  finSummary(period?: string) {
+    return this.read((s, u) => s.finSummary(u, period));
+  }
   siteMargins(month?: string) {
     return this.read((s, u) => s.siteMargins(u, month));
   }

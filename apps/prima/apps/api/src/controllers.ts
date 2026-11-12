@@ -7019,6 +7019,13 @@ export class AppController {
     return this.db.asUser(uid, (svc, u) => svc.unbilledSites(u, period));
   }
 
+  // F3 (Fauzan, 11 Nov 2026): the CEO's one-page monthly finance summary.
+  @Get('finance/summary')
+  finSummary(@UserId() uid: string, @Query('period') period?: string) {
+    if (period !== undefined && !/^\d{4}-\d{2}$/.test(period)) throw new BadRequestException('period must be YYYY-MM');
+    return this.db.asUser(uid, (svc, u) => svc.finSummary(u, period));
+  }
+
   // F2 (Fauzan, 11 Nov 2026): profit per site with the target margin.
   @Get('finance/site-margins')
   siteMargins(@UserId() uid: string, @Query('month') month?: string) {

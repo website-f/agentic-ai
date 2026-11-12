@@ -5889,5 +5889,36 @@ export const SCREEN_GUIDES: ScreenGuide[] = [
       }
     ],
     "notes": "Prima monitors only. SQL Account stays the book of record and nothing here posts to it. An OM or another company's manager cannot see this list. The \"Profit per site\" tab (Finance, the FD, the CEO and the COO) shows each site's revenue, cost (guard pay with overtime from the pay law, EPF, SOCSO, EIS, the rate book's transport, uniform and equipment, fees) and margin against the target margin the FD or the CEO sets in the Rate book; until one is set it says \"Target not set\"."
+  },
+  {
+    "view": "finsummary",
+    "title": "Monthly finance page",
+    "what": "One page each month with every company in a row and the group total on top: cash today, the week cash runs short, payments due in 30 days, debtors over 90 days and days to collect, banks reconciled by the 10th, books closed by the 15th, open exceptions, unbilled sites and sites below the target margin, and who reviewed the pack.",
+    "who": "The CEO, the Finance Director, the Chairman and the Vice Chairman see the whole group. A Finance team sees its own companies. Nobody else.",
+    "tabs": [],
+    "tasks": [
+      {
+        "task": "How to read the page",
+        "steps": [
+          "Choose the month at the top.",
+          "Look at the red cells first: cash short within 4 weeks, banks not reconciled after the 10th, books not closed after the 15th, unbilled sites, sites below target.",
+          "Open Site billing and profit or Finance for the detail."
+        ]
+      },
+      {
+        "task": "How to print it",
+        "steps": [
+          "Press \"Print\".",
+          "Choose \"Save as PDF\" in the print window, landscape."
+        ]
+      }
+    ],
+    "terms": [
+      {
+        "term": "Unknown",
+        "means": "A figure from SQL Account older than 48 hours: Prima does not show an old number as if it were today's."
+      }
+    ],
+    "notes": "Read-only. The CEO gets a notice on the home screen when the month's page is ready, after the books close on the 15th. Prima monitors only; SQL Account is the book of record."
   }
 ];

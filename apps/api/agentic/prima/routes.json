@@ -3115,6 +3115,14 @@
  },
  {
   "method": "GET",
+  "path": "api/finance/summary",
+  "name": "finSummary",
+  "query": [
+   "period"
+  ]
+ },
+ {
+  "method": "GET",
   "path": "api/finance/today",
   "name": "financeToday"
  },

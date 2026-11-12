@@ -299,3 +299,50 @@
     display: none !important;
   }
 }
+
+/* F3: the monthly finance page prints on one landscape page (browser print to PDF). */
+.fm-print-title {
+  display: none;
+}
+.fm-sum-table th,
+.fm-sum-table td {
+  white-space: nowrap;
+}
+@media print {
+  @page {
+    size: A4 landscape;
+    margin: 10mm;
+  }
+  body * {
+    visibility: hidden;
+  }
+  .fm-summary,
+  .fm-summary * {
+    visibility: visible;
+  }
+  .fm-summary {
+    position: absolute;
+    inset: 0 auto auto 0;
+    width: 100%;
+  }
+  .fm-summary .k-head-sub,
+  .fm-summary .notice {
+    display: none;
+  }
+  .fm-print-title {
+    display: block;
+    font-weight: 700;
+  }
+  .fm-sum-table {
+    font-size: 8pt;
+  }
+  .fm-sum-table th,
+  .fm-sum-table td {
+    padding: 3px 4px;
+    white-space: normal;
+  }
+  .fm-card {
+    box-shadow: none;
+    border: 0;
+  }
+}

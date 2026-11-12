@@ -879,14 +879,14 @@
      },
      "modules": [
       {
-       "id": "rates",
+       "id": "finsummary",
        "title": {
-        "en": "Rate book",
-        "ms": "Buku kadar"
+        "en": "Monthly finance page",
+        "ms": "Halaman kewangan bulanan"
        },
        "blurb": {
-        "en": "Costing rates entered from a month, with history.",
-        "ms": "Kadar kos dimasukkan mengikut bulan, dengan sejarah."
+        "en": "One page a month: every company and the group total.",
+        "ms": "Satu halaman sebulan: setiap syarikat dan jumlah kumpulan."
        }
       },
       {
@@ -898,6 +898,17 @@
        "blurb": {
         "en": "Sites where guards worked: billed, signed off, profit.",
         "ms": "Tapak tempat pengawal bekerja: dibil, disahkan, untung."
+       }
+      },
+      {
+       "id": "rates",
+       "title": {
+        "en": "Rate book",
+        "ms": "Buku kadar"
+       },
+       "blurb": {
+        "en": "Costing rates entered from a month, with history.",
+        "ms": "Kadar kos dimasukkan mengikut bulan, dengan sejarah."
        }
       }
      ]
@@ -2034,6 +2045,9 @@
    "GET finance/site-margins",
    "GET finance/unbilled-sites",
    "POST finance/unbilled-sites/:/clear"
+  ],
+  "finsummary": [
+   "GET finance/summary"
   ],
   "fleet": [
    "GET fleet",

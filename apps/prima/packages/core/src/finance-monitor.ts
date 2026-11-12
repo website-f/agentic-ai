@@ -312,3 +312,111 @@ function prevP(p: string) {
   const [y, m] = p.split('-').map(Number);
   return m === 1 ? `${y - 1}-12` : `${y}-${String(m - 1).padStart(2, '0')}`;
 }
+
+// ---------- F3: the CEO's one-page monthly finance summary ----------
+
+export interface FinSummaryRow {
+  companyId: Id;
+  company: string;
+  cash: { value: number | null; unknown: boolean };
+  shortWeek: string | null;
+  shortSoon: boolean;
+  due30: number;
+  over90: { value: number | null; unknown: boolean };
+  daysToCollect: { value: number | null; unknown: boolean };
+  bankRec: { done: number; total: number; late: boolean };
+  closed: { done: boolean; late: boolean };
+  exceptions: number;
+  unbilled: number;
+  belowTarget: number;
+  targetNotSet: boolean;
+  packReviewed: { by: string; at: IsoDateTime } | null;
+  red: boolean;
+}
+
+function nextMonth(p: string) {
+  const [y, m] = p.split('-').map(Number);
+  return m === 12 ? `${y + 1}-01` : `${y}-${String(m + 1).padStart(2, '0')}`;
+}
+
+/** The day the month's page is complete: after the books close on the 15th of the month that follows. */
+export function finSummaryReadyOn(period: string): string {
+  return `${nextMonth(period)}-${String(RULES.finance.value.closeByDay + 1).padStart(2, '0')}`;
+}
+
+/**
+ * One row per company for the month. SQL Account figures (cash, debtors, days to collect) older than FIN-WATCH staleHours
+ * show Unknown. Red only for cash short within 4 weeks, banks not reconciled after the 10th, books not closed after the
+ * 15th, unbilled sites and sites below the target margin.
+ */
+export function finSummaryRow(
+  f: FinStatus,
+  x: {
+    period: string;
+    today: string;
+    now: IsoDateTime;
+    pack: { cash: { total: number | null; firstShortWeek: string | null }; ar: { over90: number } | null; health: { daysToCollect: number | null } };
+    openExceptions: number;
+    unbilled: number;
+    belowTarget: number;
+    company: string;
+  },
+): FinSummaryRow {
+  const w = RULES.finance.value;
+  const stale = !f.sqlLastAt || (toMs(x.now) - toMs(f.sqlLastAt)) / 3_600_000 > w.staleHours;
+  const end = periodEnd(x.period);
+  const next = nextMonth(x.period);
+  const recDone = f.banks.filter((b) => b.reconciledTo && b.reconciledTo >= end).length;
+  const close = (f.closes ?? []).find((c) => c.period === x.period) ?? null;
+  const closed = close?.status === 'approved';
+  const shortWeek = x.pack.cash.firstShortWeek;
+  const shortSoon = !!shortWeek && shortWeek <= addDays(x.today, 28);
+  const due30 = r2((f.payments ?? []).filter((p) => ['prepared', 'reviewed', 'approved'].includes(p.status) && p.dueOn <= addDays(x.today, 30)).reduce((n, p) => n + p.amount, 0));
+  const reviewed = (f.packReviews ?? []).find((r) => r.period === x.period) ?? null;
+  const row: FinSummaryRow = {
+    companyId: f.companyId,
+    company: x.company,
+    cash: { value: stale ? null : x.pack.cash.total, unknown: stale },
+    shortWeek,
+    shortSoon,
+    due30,
+    over90: { value: stale ? null : (x.pack.ar?.over90 ?? null), unknown: stale },
+    daysToCollect: { value: stale ? null : x.pack.health.daysToCollect, unknown: stale },
+    bankRec: { done: recDone, total: f.banks.length, late: recDone < f.banks.length && x.today > `${next}-${String(w.reconcileByDay).padStart(2, '0')}` },
+    closed: { done: closed, late: !closed && x.today > `${next}-${String(w.closeByDay).padStart(2, '0')}` },
+    exceptions: x.openExceptions,
+    unbilled: x.unbilled,
+    belowTarget: x.belowTarget,
+    targetNotSet: !f.rateLog?.some((e) => e.key === 'target_margin' && e.amount != null && e.from <= x.period),
+    packReviewed: reviewed ? { by: reviewed.sign.by, at: reviewed.sign.at } : null,
+    red: false,
+  };
+  row.red = row.shortSoon || row.bankRec.late || row.closed.late || row.unbilled > 0 || row.belowTarget > 0;
+  return row;
+}
+
+/** The group total line: sums of what is known; Unknown companies are counted, not added. */
+export function finSummaryGroup(rows: FinSummaryRow[]): { row: FinSummaryRow; unknownCash: number } {
+  const known = rows.filter((r) => !r.cash.unknown);
+  const sum = (v: (r: FinSummaryRow) => number | null) => r2(known.reduce((n, r) => n + (v(r) ?? 0), 0));
+  const shorts = rows.map((r) => r.shortWeek).filter((s): s is string => !!s).sort();
+  const row: FinSummaryRow = {
+    companyId: 'group',
+    company: 'Group total',
+    cash: { value: known.length ? sum((r) => r.cash.value) : null, unknown: !known.length && rows.length > 0 },
+    shortWeek: shorts[0] ?? null,
+    shortSoon: rows.some((r) => r.shortSoon),
+    due30: r2(rows.reduce((n, r) => n + r.due30, 0)),
+    over90: { value: known.length ? sum((r) => r.over90.value) : null, unknown: !known.length && rows.length > 0 },
+    daysToCollect: { value: null, unknown: false },
+    bankRec: { done: rows.reduce((n, r) => n + r.bankRec.done, 0), total: rows.reduce((n, r) => n + r.bankRec.total, 0), late: rows.some((r) => r.bankRec.late) },
+    closed: { done: rows.length > 0 && rows.every((r) => r.closed.done), late: rows.some((r) => r.closed.late) },
+    exceptions: rows.reduce((n, r) => n + r.exceptions, 0),
+    unbilled: rows.reduce((n, r) => n + r.unbilled, 0),
+    belowTarget: rows.reduce((n, r) => n + r.belowTarget, 0),
+    targetNotSet: rows.some((r) => r.targetNotSet),
+    packReviewed: null,
+    red: rows.some((r) => r.red),
+  };
+  return { row, unknownCash: rows.length - known.length };
+}

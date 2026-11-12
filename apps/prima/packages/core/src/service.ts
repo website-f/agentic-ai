@@ -1,3 +1,8 @@
+import { finSummaryRow } from "./finance-monitor";
+import { finSummaryGroup } from "./finance-monitor";
+import { finSummaryReadyOn } from "./finance-monitor";
+import { finPackData } from "./finance-pack";
+import { finCloseCheck } from "./finance";
 import { rateFor } from "./rate-book";
 import { RATE_INFO } from "./rate-book";
 import type { RateKey } from "./rate-book";
@@ -1452,6 +1457,7 @@ export type HomeTone = 'ok' | 'warn' | 'crit' | 'neutral' | 'info';
 
 export type HomeView =
   | 'home'
+  | 'finsummary'
   | 'payreq'
   | 'act'
   | 'staffclock'
@@ -5724,7 +5730,7 @@ export class PrimaService {
           go: { view: 'ja' },
         });
     }
-    const todo = [...caseItems, ...fwItems, ...leaveItems, ...(await this.finance.home(user)), ...(await this.amHome(user))];
+    const todo = [...caseItems, ...fwItems, ...leaveItems, ...this.finSummaryNotice(user), ...(await this.finance.home(user)), ...(await this.amHome(user))];
     const tiles: HomeTile[] = [
       { label: 'Waiting for your decision', value: todo.length, tone: todo.length ? 'crit' : 'ok', note: 'Approvals and escalations', go: { view: 'home' } },
       { label: 'Bids closing, not signed', value: tenderWatch.length, tone: tenderWatch.length ? 'warn' : 'ok', note: 'Within 7 days', go: { view: 'doa' } },
@@ -42064,6 +42070,79 @@ export class PrimaService {
 
   async clearUnbilledFlag(user: User, companyId: Id, input: { key: unknown; reason: unknown }) {
     return new FinMonitorService(this.store, () => this.now()).clearUnbilled(user, companyId, input);
+  }
+
+  /**
+   * F3 (Fauzan, 11 Nov 2026): the CEO's notice that the month's one-page finance summary is ready (after the 15th close),
+   * with the link. Read-only.
+   */
+  private finSummaryNotice(user: User): HomeItem[] {
+    if (user.integration || user.opsTier !== 'ceo') return [];
+    const p = new FinMonitorService(this.store, () => this.now()).closePeriod();
+    if (this.today() < finSummaryReadyOn(p)) return [];
+    return [{ tone: 'info', tag: 'Finance', title: `The monthly finance page for ${p} is ready`, detail: 'One page for every company, after the books close on the 15th. Read-only; print it from the browser.', go: { view: 'finsummary' } }];
+  }
+
+  /**
+   * F3 (Fauzan, 11 Nov 2026): one page each month for the CEO, all companies in rows with the group total on top. The CEO,
+   * the FD, the Chairman and the Vice Chairman see the group; a Finance team sees its own companies; nobody else.
+   */
+  async finSummary(user: User, period?: string) {
+    const a = finActor(user);
+    const group = !!a && (a.kind === 'ceo' || a.kind === 'director' || (a.kind === 'viewer' && (user.leadership === 'chairman' || user.leadership === 'vice_chairman')));
+    const team = !!a && (a.kind === 'leader' || a.kind === 'deputy' || a.kind === 'data_entry');
+    if (!group && !team) throw new AccessDenied('view', '(the monthly finance page: the CEO, the FD, the Chairman, the Vice Chairman, and a Finance team for its own companies)');
+    const mon = new FinMonitorService(this.store, () => this.now());
+    const close = mon.closePeriod();
+    const p = typeof period === 'string' && /^\d{4}-(0[1-9]|1[0-2])$/.test(period) && period <= close ? period : close;
+    const today = this.today();
+    const ids = tenantCompanyIds(user, await this.grants(), today);
+    let fins = ids.length ? await this.store.list('finStatus', { companyId: ids }) : [];
+    if (team) fins = fins.filter((f) => f.team === a!.team);
+    const companyIds = fins.map((f) => f.companyId);
+    const [contracts, groupFin, nameOf, s] = await Promise.all([
+      companyIds.length ? this.store.list('contracts', { companyId: companyIds }) : Promise.resolve([]),
+      this.store.get('finStatus', `fin-${GROUP_EMPLOYER_ID}`),
+      this.finance.companyNamer(),
+      this.finance.settings(),
+    ]);
+    const unbilled = await mon.unbilledFor(companyIds, p, fins);
+    // F2's sites below target, from the same site profit and loss (all sectors the person sees).
+    const sites = [...(await this.opsMonitor(user, 'government', p)).sites, ...(await this.opsMonitor(user, 'private', p)).sites];
+    const rows = [];
+    for (const f of fins) {
+      const reviewed = (f.packReviews ?? []).find((r) => r.period === p) ?? null;
+      const closeRow = (f.closes ?? []).find((c) => c.period === p) ?? null;
+      const check = finCloseCheck(f, closeRow, p, this.now(), s, contracts.filter((c) => c.companyId === f.companyId), groupFin ?? null, nameOf);
+      const open = check.blockers.length + check.exceptions.filter((e) => !e.explained).length;
+      const pack = reviewed
+        ? reviewed.snapshot
+        : finPackData(f, { period: p, today, contracts, group: groupFin, runs: await this.store.list('staffPayRuns', { companyId: [f.companyId] }), nameOf, openExceptions: open });
+      rows.push(
+        finSummaryRow(f, {
+          period: p,
+          today,
+          now: this.now(),
+          pack,
+          openExceptions: open,
+          unbilled: unbilled.companies.find((c) => c.companyId === f.companyId)?.flagged ?? 0,
+          belowTarget: sites.filter((x) => x.companyId === f.companyId && x.belowTarget).length,
+          company: nameOf(f.companyId),
+        }),
+      );
+    }
+    rows.sort((x, y) => Number(y.red) - Number(x.red) || x.company.localeCompare(y.company));
+    const g = finSummaryGroup(rows);
+    return {
+      period: p,
+      periods: [close, ...[1, 2].map((k) => { const [yy, mm] = close.split('-').map(Number); const d = new Date(Date.UTC(yy, mm - 1 - k, 1)); return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`; })],
+      today,
+      ready: today >= finSummaryReadyOn(p),
+      scope: group ? ('group' as const) : ('team' as const),
+      red: rows.filter((r) => r.red).length,
+      group: g,
+      rows,
+    };
   }
 
   /**
