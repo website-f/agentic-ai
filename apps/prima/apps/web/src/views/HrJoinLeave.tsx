@@ -322,7 +322,7 @@ export function VacanciesPanel() {
     <Card
       flush
       title="Vacancies"
-      sub="The CEO approves a vacancy, then the company head signs the approval. Every step needs a comment."
+      sub="The CEO approves a vacancy, then the company head signs the approval. The CEO approves and signs PWVSB central posts. Every step needs a comment."
       actions={
         <>
           <Chip tone="info">{d.rows.filter((r) => r.status === "open").length} open</Chip>
@@ -451,7 +451,9 @@ export function VacanciesPanel() {
                 </span>
               </div>
               <div className="hx-row-side">
-                <Chip tone={r.status === "open" || r.status === "filled" ? "ok" : r.status === "refused" || r.status === "cancelled" ? "neutral" : "warn"}>{VACANCY_STATUS[r.status]}</Chip>
+                <Chip tone={r.status === "open" || r.status === "filled" ? "ok" : r.status === "refused" || r.status === "cancelled" ? "neutral" : "warn"}>
+                  {r.status === "waiting_head" && r.signer === "ceo" ? "waiting for the CEO to sign" : VACANCY_STATUS[r.status]}
+                </Chip>
               </div>
               {(r.canCeo || r.canSign || r.canClose) && (
                 <div className="hx-row-body">
@@ -459,8 +461,8 @@ export function VacanciesPanel() {
                     <input className="input" placeholder="Comment (needed)" aria-label={`Comment on ${r.title}`} value={note[r.id] ?? ""} onChange={(e) => setNote((x) => ({ ...x, [r.id]: e.target.value }))} />
                     {r.canCeo && (
                       <>
-                        <button className="btn btn-sm btn-primary" disabled={act.busy || !(note[r.id] ?? "").trim()} onClick={() => step(r.id, "ceo_approve", "Approved.")}>
-                          Approve
+                        <button className="btn btn-sm btn-primary" disabled={act.busy || !(note[r.id] ?? "").trim()} onClick={() => step(r.id, "ceo_approve", r.signer === "ceo" ? "Approved and signed." : "Approved.")}>
+                          {r.signer === "ceo" ? "Approve and sign" : "Approve"}
                         </button>
                         <button className="btn btn-sm" disabled={act.busy || !(note[r.id] ?? "").trim()} onClick={() => step(r.id, "ceo_refuse", "Refused.")}>
                           Refuse

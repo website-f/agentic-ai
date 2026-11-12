@@ -66,7 +66,8 @@ const UNVERIFIED = t(
 const NO_LIVE = t('Belum digunakan di pelayan sebenar; diuji dengan data rekaan sahaja.', 'Not yet in use on a live server; tested with made-up data only.');
 
 const isDirector = (u: Parameters<typeof actJobOf>[0]) => actJobOf(u) === 'director';
-const isAuditorOrDirector = (u: Parameters<typeof actJobOf>[0]) => actJobOf(u) === 'auditor' || actJobOf(u) === 'director';
+// C6 (Fauzan, 11 Nov 2026): the ACT Manager also checks fixes and records the teams' work.
+const isAuditorOrDirector = (u: Parameters<typeof actJobOf>[0]) => actJobOf(u) === 'auditor' || actJobOf(u) === 'director' || actJobOf(u) === 'manager';
 
 export const ACT_GUIDE_CARDS: GuideCardSpec[] = [
   {
@@ -104,7 +105,7 @@ export const ACT_GUIDE_CARDS: GuideCardSpec[] = [
     enteredOnce: t('Rujuk nombor rekod yang sudah ada; jangan salin data ke dalam bukti.', 'Refer to the record numbers that already exist; do not copy the data into the proof.'),
     steps: {
       save: t('Bukti kosong ditolak.', 'Empty proof is refused.'),
-      review: t('Juruaudit pasukan menyemak; dapatan tinggi hanya ditutup oleh Pengarah ACT.', 'The team Auditor checks it; a high finding is closed only by the ACT Director.'),
+      review: t('Juruaudit pasukan menyemak; dapatan tinggi perlu semakan kedua oleh Pengurus ACT sebelum ditutup.', 'The team Auditor checks it; a high finding also needs the ACT Manager’s second check before it closes.'),
       returned: t('Jika tidak berkesan, dapatan kembali dengan nota; betulkan dan tanda semula.', 'If it does not work, it comes back with a note; fix it and mark it again.'),
       done: t('Ditutup oleh ACT atas nama penyemak.', 'Closed by ACT under the checker’s name.'),
       recover: t('Jika butang tiada, dapatan bukan atas nama anda: tanya ACT.', 'If the button is missing, the finding is not in your name: ask ACT.'),
@@ -117,7 +118,7 @@ export const ACT_GUIDE_CARDS: GuideCardSpec[] = [
     dept: 'ACT',
     title: t('Semak pembetulan dapatan', 'Check the fix for a finding'),
     purpose: t('Sahkan pembetulan berkesan sebelum menutup.', 'Confirm the fix works before closing.'),
-    who: t('Juruaudit pasukan yang memegang dapatan, atau Pengarah ACT. Dapatan tinggi: Juruaudit hanya boleh hantar balik.', 'The Auditor of the team holding the finding, or the ACT Director. High findings: the Auditor can only send back.'),
+    who: t('Juruaudit pasukan yang memegang dapatan, Pengurus ACT atau Pengarah ACT. Dapatan tinggi: semakan pertama, kemudian semakan kedua oleh Pengurus ACT (bukan penyemak pertama atau orang yang membangkitkannya).', 'The Auditor of the team holding the finding, the ACT Manager or the ACT Director. High findings: a first check, then the ACT Manager’s second check (never the first checker or whoever raised it).'),
     screen: { view: 'act', name: 'ACT', action: t('Dapatan: isi Apa yang disemak, kemudian Berkesan, tutup atau Belum settle.', 'Findings: fill in What you checked, then Fix works, close or Not fixed.') },
     allowed: isAuditorOrDirector,
     fields: [text('note', 'What you checked', true)],
@@ -125,10 +126,10 @@ export const ACT_GUIDE_CARDS: GuideCardSpec[] = [
     enteredOnce: t('Bukti pemilik sudah ada pada dapatan; catat hanya apa yang anda semak.', 'The owner’s proof is already on the finding; record only what you checked.'),
     steps: {
       save: t('Nota semakan wajib.', 'A check note is required.'),
-      review: t('Tiada penyemak kedua untuk sederhana dan rendah; tinggi ditutup oleh Pengarah.', 'No second checker for medium and low; high is closed by the Director.'),
+      review: t('Tiada penyemak kedua untuk sederhana dan rendah; tinggi ditutup selepas semakan kedua Pengurus ACT.', 'No second checker for medium and low; high closes after the ACT Manager’s second check.'),
       returned: t('Belum settle menghantar dapatan kembali kepada pemilik.', 'Not fixed sends the finding back to the owner.'),
       done: t('Ditutup dengan nama dan nota anda.', 'Closed with your name and note.'),
-      recover: t('Pasukan lain tidak boleh menyemak; minta Pengarah ACT menyerahkannya.', 'The other team cannot check it; ask the ACT Director to give it to you.'),
+      recover: t('Pasukan lain tidak boleh menyemak; minta Pengurus atau Pengarah ACT menyerahkannya.', 'The other team cannot check it; ask the ACT Manager or the ACT Director to give it to you.'),
     },
     notVerified: [UNVERIFIED, NO_LIVE],
   },

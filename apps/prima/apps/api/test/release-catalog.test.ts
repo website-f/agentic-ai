@@ -62,8 +62,9 @@ it('Central Admin modules do not hang on IT manual or operations checks',async()
 for(const [name,id,other] of [['centralAdminDelegationsProblems','central_admin_delegations','central_admin_panel'],['centralAdminLegalHoldsProblems','central_admin_legal_holds','central_admin_delegations']] as const)it('Central Admin drift is isolated and sanitized '+id,async()=>{const f=fixture();mock.method(centralAdmin as any,name,async()=>['SECRET internal']);assert.deepEqual(await moduleCatalogProblems(f.client as never,id),['RELEASE_'+id.toUpperCase()+'_NOT_READY']);assert.deepEqual(await moduleCatalogProblems(f.client as never,other),[]);const r=await releaseCatalogState(f.pool,{baseSha256:hash});assert.equal(r.ready,false);assert.equal(r.modules[id].ready,false);assert.equal(r.modules[other].ready,true);assert(!JSON.stringify(r).includes('SECRET'));});
 
 // P96 guard pay (Fauzan, 8 Nov 2026): the pay formulas and guard pay modules are optional, installed later as their own step.
-it('pay formulas and guard pay are optional, never release modules',()=>{
- assert.deepEqual([...OPTIONAL_MODULE_IDS],['pay_formulas','guard_pay']);
+// E5 (Fauzan, 11 Nov 2026): the central employers rule is optional too, installed through the CEO-run migration.
+it('pay formulas, guard pay and the central employers rule are optional, never release modules',()=>{
+ assert.deepEqual([...OPTIONAL_MODULE_IDS],['pay_formulas','guard_pay','central_employers']);
  for(const id of OPTIONAL_MODULE_IDS)assert(!(RELEASE_MODULE_IDS as readonly string[]).includes(id));
 });
 it('the release is ready without the pay modules and never checks them',async()=>{

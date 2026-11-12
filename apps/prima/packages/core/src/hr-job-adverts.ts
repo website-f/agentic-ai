@@ -2,7 +2,7 @@
 // staff, drafted for HR and published to social media.
 //
 // Boundaries kept here:
-// - A post is drafted only for a vacancy that is open (CEO approved, company head or HR Director signed).
+// - A post is drafted only for a vacancy that is open (CEO approved, company head signed; the CEO signs PWVSB central posts, C2, 11 Nov 2026).
 // - A person approves each post before it can go out, and never the person who wrote the current wording.
 // - Approval is bound to the exact wording (version + SHA-256); any edit after approval sends it back to draft.
 // - Social publishing is switched off: no channel is connected, Prima never claims a post went out. HR may record

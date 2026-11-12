@@ -76,6 +76,9 @@ describe('build-real-data: names', () => {
     assert.deepEqual(placeOf('OPERASI KL/ SELANGOR'), { key: 'goodwill', unit: 'operations', area: 'kl-selangor' });
     assert.deepEqual(placeOf('SASA TEAM'), { key: 'sasateam', unit: 'operations' });
     assert.deepEqual(placeOf('PW VENTURE SDN BHD'), { key: 'pwvsb' });
+    // E5 (Fauzan, 11 Nov 2026): PGL employs the Transport department; it is never a licensed company record.
+    assert.deepEqual(placeOf('PERFECT GLOBAL LOGISTICS SDN BHD'), { key: 'pgl', unit: 'transport' });
+    assert.deepEqual(placeOf('PGL'), { key: 'pgl', unit: 'transport' });
     assert.equal(placeOf('PRISMA').asset, true);
     assert.equal(placeOf('ALPHA GUARD SDN BHD').licensed, true);
   });
@@ -92,7 +95,7 @@ describe('build-real-data: the file', () => {
 
   it('has the structural companies, one record per licensed company with its other spellings, and Prisma as asset', () => {
     const by = Object.fromEntries(file.companies.map((c) => [c.key, c]));
-    assert.deepEqual(['pwvsb', 'goodwill', 'sasateam', 'merdeka'].map((k) => by[k].role), ['central', 'gov_ops', 'private_ops', 'it']);
+    assert.deepEqual(['pwvsb', 'goodwill', 'sasateam', 'merdeka', 'pgl'].map((k) => by[k].role), ['central', 'gov_ops', 'private_ops', 'it', 'logistics']);
     const alpha = by['co-alpha-guard-security-services'];
     assert.equal(alpha.name, 'Alpha Guard Security Services Sdn Bhd');
     assert.ok(alpha.aliases.includes('ALPHA GUARD SECURITY SDN BHD'));

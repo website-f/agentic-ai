@@ -71,7 +71,7 @@ const STATUS: Record<FindingRow['finding']['status'], string> = {
   closed: 'Closed',
 };
 const SOURCE = { monitor: 'Compliance monitor', workflow_audit: 'Workflow audit', speak_up: 'Speak up', manual: 'Other' } as const;
-const ROLE = { lead: 'Director', auditor: 'Auditor', enforcement: 'Enforcement officer' } as const;
+const ROLE = { lead: 'Director', manager: 'Manager', auditor: 'Auditor', enforcement: 'Enforcement officer' } as const;
 const FOLLOW = { overdue: 'Past the due date', reopened: 'Fix failed the check', no_plan: 'No plan from the owner yet' } as const;
 const METHOD = { call: 'Phone call', message: 'Message', email: 'Email', visit: 'Visit', meeting: 'Meeting', memo: 'Memo' } as const;
 const toneOf = (t: string) => (t === 'crit' ? 'crit' : t === 'warn' ? 'warn' : undefined);
@@ -160,7 +160,14 @@ export function ActView() {
           onClick={() => setTab('findings')}
         />
         <Stat label="Overdue" value={k.overdue} tone={k.overdue ? 'crit' : 'ok'} icon={<ClockCountdownIcon size={16} />} onClick={() => setTab('findings')} />
-        <Stat label="Fixes to check" value={k.toVerify} tone={k.toVerify ? 'warn' : 'ok'} icon={<SealCheckIcon size={16} />} onClick={() => setTab('findings')} />
+        <Stat
+          label="Fixes to check"
+          value={k.toVerify}
+          tone={k.toVerify ? 'warn' : 'ok'}
+          note={k.secondChecks ? `${k.secondChecks} waiting for the second check` : undefined}
+          icon={<SealCheckIcon size={16} />}
+          onClick={() => setTab('findings')}
+        />
         {watch && (
           <Stat
             label="Workflows due or never audited"
@@ -261,19 +268,26 @@ export function ActView() {
 function Structure({ data }: { data: ActBoard }) {
   const s = data.structure!;
   return (
-    <Card title="Who is in ACT" sub="One Director and two teams, each with an Auditor and an Enforcement officer.">
+    <Card title="Who is in ACT" sub="The Director heads ACT; the ACT Manager leads the work and gives the second check; Team A and Team B each have an Auditor (team lead) and an Enforcement officer.">
       <div className="gv-team">
         <div className="gv-team-card">
           <h3>Director</h3>
           {s.director ? <Person name={s.director.name} /> : <span className="muted small">not assigned</span>}
-          <p>Covers every workflow, closes high findings, reports to the CEO.</p>
+          <p>Head of ACT. Sets the guard pay formulas, reports to the CEO.</p>
+        </div>
+        <div className="gv-team-card">
+          <h3>ACT Manager</h3>
+          {s.manager ? <Person name={s.manager.name} /> : <span className="muted small">not assigned</span>}
+          <p>Leads the work, gives work to the teams and gives the second check on high findings.</p>
         </div>
         {s.teams.map((t) => (
           <div key={t.id} className="gv-team-card">
-            <h3>{t.name}</h3>
-            {t.auditor ? <Person name={t.auditor.name} sub="Auditor" /> : <span className="muted small">Auditor: not assigned</span>}
+            <h3>
+              {t.name} (Team {t.id})
+            </h3>
+            {t.auditor ? <Person name={t.auditor.name} sub="Auditor (team lead)" /> : <span className="muted small">Auditor: not assigned</span>}
             {t.enforcement ? <Person name={t.enforcement.name} sub="Enforcement" /> : <span className="muted small">Enforcement: not assigned</span>}
-            <p>Covers every workflow; keeps each finding it raises until it closes.</p>
+            <p>Covers every workflow; keeps each finding it raises until it closes and sees only its own work.</p>
           </div>
         ))}
       </div>
@@ -394,8 +408,10 @@ function FindingLine({ r, data }: { r: FindingRow; data: ActBoard }) {
   const [g, setG] = useState({ rootCause: '', solution: '', targetOn: '', containment: '', similarWhere: '', effectiveWhen: '', proof: '', note: '', method: 'call', followNote: '', nextOn: '' });
   const follows = f.followUps ?? [];
   // Auditors and Enforcement act only on their own team's findings; the Director on any (server enforces the same).
-  const onTeam = data.job === 'director' || (!!r.team && r.team === data.myTeam);
-  const highForDirector = f.severity === 'high' && !data.canCloseHigh;
+  const onTeam = data.job === 'director' || data.job === 'manager' || (!!r.team && r.team === data.myTeam);
+  // C6 (Fauzan, 11 Nov 2026): a high finding needs a first check and then the ACT Manager's second check (server decides).
+  const check = r.check;
+  const second = check?.stage === 'second';
   const full = f.origin === 'quality';
   const label = f.status === 'closed' ? 'Closed' : r.overdueDays ? `${r.overdueDays} days overdue` : STATUS[f.status];
   const last = f.checks[f.checks.length - 1];
@@ -449,7 +465,12 @@ function FindingLine({ r, data }: { r: FindingRow; data: ActBoard }) {
           { label: 'Raised', state: 'done', note: f.raisedBy },
           { label: 'Owner plans the fix', state: st(0), note: f.plan ? `by ${dateLabel(f.plan.targetOn)}` : undefined },
           { label: 'Owner fixes', state: st(1) },
-          { label: 'ACT checks', state: st(2), note: last ? last.by : undefined },
+          ...(f.severity === 'high'
+            ? [
+                { label: 'First check', state: f.status === 'closed' || second ? ('done' as const) : st(2), note: check?.first?.by ?? undefined },
+                { label: 'Second check (ACT Manager)', state: f.status === 'closed' ? ('done' as const) : second ? ('now' as const) : ('todo' as const), note: f.status === 'closed' && last ? last.by : undefined },
+              ]
+            : [{ label: 'ACT checks', state: st(2), note: last ? last.by : undefined }]),
           { label: 'Closed', state: f.status === 'closed' ? 'done' : 'todo' },
         ]}
       />
@@ -662,21 +683,25 @@ function FindingLine({ r, data }: { r: FindingRow; data: ActBoard }) {
           </div>
         </div>
       )}
-      {data.canCheck && onTeam && f.status === 'fixed' && (
+      {data.canCheck && f.status === 'fixed' && check && !check.canCheck && check.why && (onTeam || second) && <p className="small muted">{check.why}</p>}
+      {data.canCheck && f.status === 'fixed' && check?.canCheck && (
         <div className="gv-box">
-          <div className="gv-box-title">Check the fix</div>
-          {highForDirector && <span className="small">High finding: you can send it back, but only the ACT Director closes it.</span>}
+          <div className="gv-box-title">{second ? 'Second check of the fix' : check.stage === 'first' ? 'First check of the fix' : 'Check the fix'}</div>
+          {check.stage === 'first' && <span className="small">High finding: after your check the ACT Manager gives the second check before it closes.</span>}
+          {second && check.first && (
+            <span className="small">
+              First check by {check.first.by}: {check.first.note}
+            </span>
+          )}
           <input className="input" aria-label="What you checked" placeholder="What you checked" value={g.note} onChange={(e) => setG({ ...g, note: e.target.value })} />
           <div className="gv-btns">
-            {!highForDirector && (
-              <button
-                className="btn btn-sm btn-primary"
-                disabled={act.busy}
-                onClick={() => act.run(() => api.actFindingStep(f.id, 'check', { ok: true, note: g.note }), 'Closed.')}
-              >
-                Fix works, close
-              </button>
-            )}
+            <button
+              className="btn btn-sm btn-primary"
+              disabled={act.busy}
+              onClick={() => act.run(() => api.actFindingStep(f.id, 'check', { ok: true, note: g.note }), check.stage === 'first' ? 'Sent for the second check.' : 'Closed.')}
+            >
+              {check.stage === 'first' ? 'Fix works, send for the second check' : 'Fix works, close'}
+            </button>
             <button
               className="btn btn-sm"
               disabled={act.busy}

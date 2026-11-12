@@ -3398,6 +3398,9 @@ export class ItemService {
     if (legalName.length < 3) throw new BadRequest('Type the legal name as registered.');
     if (regNo.length < 3) throw new BadRequest('Type the registration number.');
     if (!/^[A-Za-z0-9][A-Za-z0-9._-]{1,59}$/.test(sqlBookId)) throw new BadRequest('The SQL book id is 2 to 60 letters, numbers, dots, dashes or underscores (as named in SQL Account).');
+    // E11 (Fauzan, 11 Nov 2026, D01): one SQL Account book per company, so a book recorded for another company is refused.
+    const other = (await tx.list('itemSqlBooks')).find((b) => b.partyId !== a.partyId && b.sqlBookId.toLowerCase() === sqlBookId.toLowerCase());
+    if (other) throw new BadRequest(`One SQL book per company: ${sqlBookId} is already recorded for ${this.partyName(ctx, other.partyId)}.`);
     const counterparties: ItemSqlBook['counterparties'] = [];
     for (const c of a.counterparties ?? []) {
       const partyId = String(c?.partyId ?? '');

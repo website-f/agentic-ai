@@ -265,7 +265,7 @@ describe("Joining and leaving (slice 3B)", () => {
     expect((await svc.vacancyStep(cm, v.id, "close", "Hired")).status).toBe(
       "filled",
     );
-    // A central post raised by HR is signed by the HR Director; the CEO never approves a vacancy he raised.
+    // C2 (Fauzan, 11 Nov 2026): a central post raised by HR is signed by the CEO; the CEO's approval is the signature.
     const hr = await svc.user("u-pwvsb-hr");
     const c = await svc.raiseVacancy(hr, {
       companyId: "pwvsb",
@@ -276,12 +276,14 @@ describe("Joining and leaving (slice 3B)", () => {
       payFrom: null,
       payTo: null,
     });
-    await svc.vacancyStep(ceo, c.id, "ceo_approve", "Yes");
+    const opened = await svc.vacancyStep(ceo, c.id, "ceo_approve", "Yes");
+    expect(opened.status).toBe("open");
+    expect(opened.head?.byId).toBe(ceo.id);
     expect(
       (await svc.vacancies(await svc.user("u-cos"))).rows.find(
         (r) => r.id === c.id,
       )!.canSign,
-    ).toBe(true);
+    ).toBe(false);
     await expect(
       svc.vacancies(await svc.user("u-it-ex3")),
     ).rejects.toBeInstanceOf(AccessDenied);

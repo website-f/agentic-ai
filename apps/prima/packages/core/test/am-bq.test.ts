@@ -9,6 +9,7 @@ import {
   generateDataset,
   myt,
   pastRates,
+  RULES,
   type AmJobKind,
   type AmWorkOrder,
 } from '../src';
@@ -419,5 +420,39 @@ describe('Variation orders (Fauzan, 5 Nov 2026: every price change is a VO)', ()
     await svc.amVoDecide(ceo, 'wo-t1', 'VO1', true, 'Consent');
     expect(await tags(ceo)).toEqual([]);
     expect(await tags(chair)).toHaveLength(1);
+  });
+});
+
+// C13 (Fauzan, 11 Nov 2026): for now EVERY variation order needs the CEO's and then the Chairman's consent, whatever its
+// value; value limits come later. Synthetic amounts only.
+describe('C13: every VO needs CEO and Chairman consent, whatever its value', () => {
+  const add = (qty: number, rate = 7) => ({ lineId: 'L1', item: '', unit: '', qty, rate, note: '' });
+  it('a RM7 VO still waits for the CEO and then the Chairman before it is approved; other roles are refused', async () => {
+    const { svc, ds } = fresh();
+    const { mm, dir } = await approvedBq(svc);
+    await svc.amQuoteAdd(mm, 'wo-t1', quote('Mock Cat A', 7, 250));
+    await svc.amAwardAsk(mm, 'wo-t1', 'Q1', 'Only one contractor so far (test)');
+    await svc.amAwardDecide(dir, 'wo-t1', true, 'Fair price');
+    const ceo = await u(svc, 'u-fauzan');
+    const chair = await u(svc, 'u-chair');
+    const vc = ds.users.find((x) => x.leadership === 'vice_chairman');
+    expect(RULES.amBq.value.voConsent).toEqual(['ceo', 'chairman']);
+    expect(RULES.amBq.source).toMatch(/Approved by Fauzan, 11 Nov 2026/);
+    await svc.amVoAsk(mm, 'wo-t1', { reason: 'One more square metre (test)', contractorRef: 'VO-S', lines: [add(1)] });
+    await svc.amVoDecide(dir, 'wo-t1', 'VO1', true, 'Measured');
+    let vo = (await svc.amBq(mm, 'wo-t1')).bq!.variations![0];
+    expect(vo).toMatchObject({ amount: 7, final: false });
+    expect((await svc.amBq(mm, 'wo-t1')).price).toMatchObject({ openVo: 'VO1', openVoNext: 'ceo' });
+    // Not the COO, the Vice Chairman, the Chairman before the CEO, or Finance.
+    for (const who of [await u(svc, 'u-coo'), chair, await u(svc, 'u-finance-am'), ...(vc ? [vc] : [])])
+      await expect(svc.amVoDecide(who, 'wo-t1', 'VO1', true, 'ok')).rejects.toBeInstanceOf(AccessDenied);
+    await svc.amVoDecide(ceo, 'wo-t1', 'VO1', true, 'Consent (test)');
+    vo = (await svc.amBq(mm, 'wo-t1')).bq!.variations![0];
+    expect(vo.final).toBe(false);
+    expect(ds.amWorkOrders.find((w) => w.id === 'wo-t1')!.cost).toBe(1650);
+    await expect(svc.amVoDecide(ceo, 'wo-t1', 'VO1', true, 'again')).rejects.toThrow(/already took a step/);
+    const r = await svc.amVoDecide(chair, 'wo-t1', 'VO1', true, 'Consent (test)');
+    expect(r.variations![0]).toMatchObject({ final: true, ceo: { approve: true }, chairman: { approve: true } });
+    expect(ds.amWorkOrders.find((w) => w.id === 'wo-t1')!.cost).toBe(1657);
   });
 });

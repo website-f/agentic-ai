@@ -197,7 +197,7 @@ const TEXT: HrCardText[] = [
   {
     id: 'vacancy',
     title: { bm: 'Jawatan kosong', en: 'Vacancy' },
-    purpose: { bm: 'Membuka jawatan; CEO meluluskan dan ketua syarikat menandatangani.', en: 'Open a post; the CEO approves and the company head signs.' },
+    purpose: { bm: 'Membuka jawatan; CEO meluluskan dan ketua syarikat menandatangani (CEO menandatangani jawatan pusat PWVSB).', en: 'Open a post; the CEO approves and the company head signs (the CEO signs PWVSB central posts).' },
     screen: { bm: 'HR → Jawatan kosong', en: 'HR → Vacancies' },
     fields: [
       f('Syarikat, jawatan, jabatan, bilangan', 'Company, title, department, headcount', true, 'contoh · e.g. IT Executive, IT, 1'),
@@ -206,7 +206,7 @@ const TEXT: HrCardText[] = [
     ],
     source: { bm: 'Pelan tenaga kerja jabatan. Tanya ketua jabatan jika julat gaji tidak pasti.', en: 'The department’s staffing plan. Ask the department head if the pay range is unclear.' },
     reuse: { bm: 'Syarikat dan jabatan dipilih daripada senarai sedia ada.', en: 'Company and department come from existing lists.' },
-    after: { bm: 'CEO meluluskan atau menolak dengan komen, kemudian ketua syarikat menandatangani. Untuk jawatan pusat PWVSB, Pengarah HR menandatangani (andaian, menunggu keputusan CEO).', en: 'The CEO approves or refuses with a comment, then the company head signs. For PWVSB central posts the HR Director signs (assumption, awaiting the CEO’s decision).' },
+    after: { bm: 'CEO meluluskan atau menolak dengan komen, kemudian ketua syarikat menandatangani. Untuk jawatan pusat PWVSB, CEO meluluskan dan menandatangani dalam satu langkah (Fauzan, 11 Nov 2026).', en: 'The CEO approves or refuses with a comment, then the company head signs. For PWVSB central posts the CEO approves and signs in one step (Fauzan, 11 Nov 2026).' },
     errors: { bm: 'Yang ditolak tidak boleh diubah; buka jawatan baharu dengan butiran yang betul.', en: 'A refused vacancy cannot be edited; raise a new one with the right details.' },
     checkedAgainst: 'raiseVacancy, vacancyStep',
   },

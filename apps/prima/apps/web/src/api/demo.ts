@@ -3357,6 +3357,9 @@ export class DemoApi implements Api {
   growth() {
     return this.read((s, u) => s.growth(u));
   }
+  settingsHome() {
+    return this.read((s, u) => s.settingsHome(u));
+  }
   approvalLimits() {
     return this.read((s, u) => s.approvalLimits(u));
   }

@@ -2942,8 +2942,10 @@ export interface User {
   /**
    * ACT, Audit, Compliance and Transformation (Fauzan, 2 Nov 2026): 1 Director ('lead', kept for the Arisha pilot
    * record) and 2 teams, each with 1 Auditor and 1 Enforcement officer. Department 'audit'.
+   * C6 (Fauzan, 11 Nov 2026): the ACT Director is the head; an ACT Manager ('manager') leads the work and is the second
+   * checker; Team A (1) and Team B (2) each have an Auditor (team lead) and an Enforcement officer (actTeam).
    */
-  actRole?: 'lead' | 'auditor' | 'enforcement';
+  actRole?: 'lead' | 'manager' | 'auditor' | 'enforcement';
   /**
    * Procurement and Inventory (Fauzan, 27 Oct 2026): under the Operations General Manager, monitored by the COO and
    * CEO; 1 executive and 2 storekeepers. Department 'procurement'.
@@ -5381,7 +5383,12 @@ export interface ActFinding {
   } | null;
   fix: { proof: string; by: string; at: IsoDateTime } | null;
   /** ACT's check that the fix works; a failed check reopens the finding. */
-  checks: { ok: boolean; note: string; by: string; at: IsoDateTime }[];
+  /**
+   * ACT's checks of the fix. C6 (Fauzan, 11 Nov 2026): a high finding needs a first check (the team's Auditor, the ACT
+   * Manager or the Director) and then a second check by the ACT Manager (or the Director), never by the first checker
+   * or the person who raised it. byId and stage are kept from 12 Nov 2026; older checks have neither.
+   */
+  checks: { ok: boolean; note: string; by: string; at: IsoDateTime; byId?: Id; stage?: 'first' | 'second' }[];
   /** Enforcement follow-ups with the owner: a record of each chase, never a penalty. */
   followUps?: { method: ActFollowUpMethod; note: string; nextOn: IsoDate | null; by: string; byId: Id; at: IsoDateTime }[];
   status: 'open' | 'planned' | 'fixed' | 'closed';

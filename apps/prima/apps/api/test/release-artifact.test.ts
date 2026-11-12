@@ -7,10 +7,12 @@ it('only pinned outer transaction is removed, inner guarded blocks stay intact',
 
 it('optional catalog support never authorizes an unmanifested module install',()=>{for(const m of OPTIONAL_MODULE_SPECS) assert.throws(()=>selectedModuleSql(m.id),/Unknown release module/);});
 // P96 guard pay (Fauzan, 8 Nov 2026): installed later, as its own step; Prima takes over guard pay on 1 August 2027.
-it('pay formulas and guard pay are optional with pinned bytes, never mandatory',()=>{
+// E5 (Fauzan, 11 Nov 2026): the central employers rule is optional too, installed through the CEO-run migration.
+it('pay formulas, guard pay and the central employers rule are optional with pinned bytes, never mandatory',()=>{
  assert.deepEqual(OPTIONAL_MODULE_SPECS.map(m=>[m.id,m.path,m.sha256,[...m.requires]]),[
   ['pay_formulas','db/modules/pay-formulas-v1.sql','38718470f582cb438a08d42d6131187aa55c0613e3aa58a924836f77cfbfda72',[]],
-  ['guard_pay','db/modules/guard-pay-v1.sql','c6ca56b61b076181eba45bd1c1c88d766c9339b981e45c41154b8fee0c32d8a1',['pay_formulas']]]);
+  ['guard_pay','db/modules/guard-pay-v1.sql','c6ca56b61b076181eba45bd1c1c88d766c9339b981e45c41154b8fee0c32d8a1',['pay_formulas']],
+  ['central_employers','db/modules/central-employers-v1.sql','29d388a4ef7b80c547ebdf9b903d59b7138499249aae435d47885223595cdd03',['org_links']]]);
  const a=releaseArtifact();
  for(const m of OPTIONAL_MODULE_SPECS){
   assert.equal(sha256(readFileSync(resolve(releaseRoot(),m.path))),m.sha256,m.path+' bytes changed');

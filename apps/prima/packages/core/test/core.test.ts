@@ -3892,7 +3892,8 @@ describe('ACT: Audit, Compliance and Transformation (Fauzan, 27 Oct 2026)', () =
   it('has 1 Director and 2 teams of 1 Auditor and 1 Enforcement officer, watching every company (Fauzan, 2 Nov 2026)', async () => {
     const { svc, ds } = fresh();
     const act = ds.users.filter((u) => u.department === 'audit');
-    expect(act.map((u) => `${u.actRole}${u.actTeam ?? ''}`).sort()).toEqual(['auditor1', 'auditor2', 'enforcement1', 'enforcement2', 'lead']);
+    // C6 (Fauzan, 11 Nov 2026): plus the ACT Manager, who leads the work and gives the second check.
+    expect(act.map((u) => `${u.actRole}${u.actTeam ?? ''}`).sort()).toEqual(['auditor1', 'auditor2', 'enforcement1', 'enforcement2', 'lead', 'manager']);
     const b = await svc.actBoard(await svc.user('u-act-enf2'));
     expect(b.job).toBe('enforcement');
     expect(b.myTeam).toBe(2);
@@ -3906,12 +3907,14 @@ describe('ACT: Audit, Compliance and Transformation (Fauzan, 27 Oct 2026)', () =
     expect(b.signals.length).toBeGreaterThan(15);
     for (const s of b.signals) expect(b.rule.areas.some((a) => a.id === s.area)).toBe(true);
     expect(b.plan.find((p) => p.area.id === 'ROSTER')!.state).toBe('never');
-    expect(b.findings.find((f) => f.finding.id === 'act-f-1')!.escalatedTo).toBe('Chief of Staff');
+    // C6: each team sees its own work; act-f-1 is Team 1's, so Team 2 does not see it and the Director does.
+    expect(b.findings.some((f) => f.finding.id === 'act-f-1')).toBe(false);
+    expect((await svc.actBoard(await svc.user('u-audit'))).findings.find((f) => f.finding.id === 'act-f-1')!.escalatedTo).toBe('Chief of Staff');
     expect(b.canCheck).toBe(false);
     expect((await svc.actBoard(await svc.user('u-act-aud1'))).canCheck).toBe(true);
   });
 
-  it('lets the owner plan and fix, the Auditor check, and only the Director close a high finding', async () => {
+  it('lets the owner plan and fix, the Auditor give the first check, and a second checker close a high finding (C6)', async () => {
     const { svc } = fresh();
     const aud = await svc.user('u-act-aud1');
     const enf = await svc.user('u-act-enf1');
@@ -3931,11 +3934,14 @@ describe('ACT: Audit, Compliance and Transformation (Fauzan, 27 Oct 2026)', () =
     await expect(svc.actFindingStep(cm, f.id, 'fixed', { proof: 'p' })).rejects.toThrow(/cause/);
     await svc.actFindingStep(cm, f.id, 'plan', { rootCause: 'No second signer', solution: 'Two signatures per opening', targetOn: '2026-11-01' });
     await svc.actFindingStep(cm, f.id, 'fixed', { proof: 'Log with two signatures since 1 Nov' });
-    await expect(svc.actFindingStep(enf, f.id, 'check', { ok: true, note: 'Seen' })).rejects.toThrow(/Only an ACT Auditor or the ACT Director can check a fix/);
-    await expect(svc.actFindingStep(aud, f.id, 'check', { ok: true, note: 'Seen' })).rejects.toThrow(/Director/);
+    await expect(svc.actFindingStep(enf, f.id, 'check', { ok: true, note: 'Seen' })).rejects.toThrow(/Only an ACT Auditor, the ACT Manager or the ACT Director can check a fix/);
     const failed = await svc.actFindingStep(aud, f.id, 'check', { ok: false, note: 'One opening unsigned' });
     expect(failed.status).toBe('planned');
     await svc.actFindingStep(cm, f.id, 'fixed', { proof: 'Corrected' });
+    // C6 (Fauzan, 11 Nov 2026): the Auditor's check is the first check; a high finding waits for the second check.
+    const first = await svc.actFindingStep(aud, f.id, 'check', { ok: true, note: 'Seen' });
+    expect(first.status).toBe('fixed');
+    await expect(svc.actFindingStep(aud, f.id, 'check', { ok: true, note: 'Seen again' })).rejects.toThrow(/ACT Manager gives the second check/);
     const closed = await svc.actFindingStep(await svc.user('u-audit'), f.id, 'check', { ok: true, note: 'Seen' });
     expect(closed.status).toBe('closed');
     const mine = await svc.actBoard(cm);
@@ -4040,7 +4046,9 @@ describe('ACT: Audit, Compliance and Transformation (Fauzan, 27 Oct 2026)', () =
     const rw = await svc.assignActWork(dir, { kind: 'report_review', team: 2, defId: rep.defId, period: rep.period });
     expect(rw.area).toBe('REPORTING');
     const after = await svc.actBoard(aud2);
-    expect(after.work.map((x) => x.audit.id).sort()).toEqual([rw.id, w.id].sort());
+    // C6 (Fauzan, 11 Nov 2026): each team sees its own work; the Director sees both teams' work.
+    expect(after.work.map((x) => x.audit.id)).toEqual([rw.id]);
+    expect((await svc.actBoard(dir)).work.map((x) => x.audit.id).sort()).toEqual([rw.id, w.id].sort());
     expect(after.reports.find((r) => r.key === rep.key)!.review!.status).toBe('assigned');
     // Team 2 cannot record Team 1's audit; Team 1's Auditor can, and the plan then counts it.
     await expect(svc.recordActAudit(aud2, { area: 'PAYROLL', companyId: null, doneOn: '2026-10-25', result: 'clean', note: 'x', assignmentId: w.id })).rejects.toThrow(/Team 1/);
@@ -4102,7 +4110,7 @@ describe('ACT: Audit, Compliance and Transformation (Fauzan, 27 Oct 2026)', () =
     expect(closed.status).toBe('closed');
   });
 
-  it('lets the team Auditor send a high finding back but only the Director close it', async () => {
+  it('lets the team Auditor send a high finding back or give the first check, and the ACT Manager close it (C6)', async () => {
     const { svc } = fresh();
     const aud1 = await svc.user('u-act-aud1');
     const dir = await svc.user('u-audit');
@@ -4110,15 +4118,18 @@ describe('ACT: Audit, Compliance and Transformation (Fauzan, 27 Oct 2026)', () =
     const f = await svc.raiseActFinding(aud1, { companyId: 'co-arsh', area: 'ARMS', source: 'workflow_audit', title: 'Rounds not counted', detail: '', severity: 'high', evidence: 'Vault log 3 Nov', ownerUserId: cm.id });
     await svc.actFindingStep(cm, f.id, 'plan', { rootCause: 'No count sheet', solution: 'Count sheet each shift', targetOn: '2026-11-10' });
     await svc.actFindingStep(cm, f.id, 'fixed', { proof: 'Count sheets' });
-    await expect(svc.actFindingStep(aud1, f.id, 'check', { ok: true, note: 'ok' })).rejects.toThrow(/Only the ACT Director can close a high finding/);
     expect((await svc.actFindingStep(aud1, f.id, 'check', { ok: false, note: 'Two shifts missing' })).status).toBe('planned');
     await svc.actFindingStep(cm, f.id, 'fixed', { proof: 'All shifts counted' });
+    expect((await svc.actFindingStep(aud1, f.id, 'check', { ok: true, note: 'ok' })).status).toBe('fixed');
     const board = await svc.actBoard(aud1);
     expect(board.canCloseHigh).toBe(false);
     expect((await svc.actBoard(dir)).canCloseHigh).toBe(true);
-    const done = await svc.actFindingStep(dir, f.id, 'check', { ok: true, note: 'Counted 7 days of sheets' });
+    const mgr = await svc.user('u-act-mgr');
+    expect((await svc.actBoard(mgr)).canCloseHigh).toBe(true);
+    const done = await svc.actFindingStep(mgr, f.id, 'check', { ok: true, note: 'Counted 7 days of sheets' });
     expect(done.status).toBe('closed');
-    expect(done.checks.map((c) => c.ok)).toEqual([false, true]);
+    expect(done.checks.map((c) => c.ok)).toEqual([false, true, true]);
+    expect(done.checks.map((c) => c.stage ?? null)).toEqual(['first', 'first', 'second']);
   });
 
   it('never shows a monthly report as on time when sections of its form are missing', async () => {

@@ -39,6 +39,16 @@ node dist/src/module-install.js --module guard_pay --release-sha <release-sha256
 
 Each selected installation runs under one owner transaction/advisory lock, verifies prerequisites, applies only the fixed hash-pinned module body, and checks its actual catalog before commit. A complete exact existing module is a read-only no-op; partial or drifted state is refused, not overwritten. Any ambiguous failure requires read-only inspection before retry. No generic SQL path or arbitrary module is accepted.
 
+## Optional module: central employers (E5, install through the CEO-run migration)
+
+Fauzan, 11 Nov 2026 (E5): Perfect Global Logistics (PGL) is also an employer of staff. The service, the base schema and the IT cleanup and rental correction scopes already know `pgl`; the one database rule that still listed only PWVSB and Merdeka is the hand-over layer's `prima.org_central_employer` (org-links-v1.sql), which refuses a company-office hand-over line for a central employer. `central_employers` (`db/modules/central-employers-v1.sql`, sha256 `29d388a4ef7b80c547ebdf9b903d59b7138499249aae435d47885223595cdd03`, requires `org_links`) re-states that rule for all five central employers (`pwvsb`, `merdeka`, `goodwill`, `sasateam`, `pgl`) and adds `prima.ce_central_employers()` as its marker. No table, policy or row changes. It is optional (never in the release manifest, never installed by `prima-setup`); the CEO runs it once, after `org_links`:
+
+```
+node dist/src/module-install.js --module central_employers --release-sha <release-sha256> --module-sha 29d388a4ef7b80c547ebdf9b903d59b7138499249aae435d47885223595cdd03 --confirm INSTALL_OPTIONAL_MODULE
+```
+
+Its catalogue check is `central-employers-readiness.ts`; the `org_links` check accepts either the first or the E5 body of `org_central_employer`. Rollback: run the `org_central_employer` block of org-links-v1.sql again and drop `prima.ce_central_employers()`.
+
 With the actual API connection, `node dist/src/release-check.js` verifies the complete release. Catalog-only installer success is not proof that the API login works. Required authority mappings, selected sites/mailbox configuration, and live-provider tests remain separate gates.
 
 ## Deployment transition HOLD

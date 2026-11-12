@@ -3286,6 +3286,17 @@ export function generateDataset(opts: SeedOptions): Dataset {
       companyIds: [],
       siteIds: [],
     },
+    // C6 (Fauzan, 11 Nov 2026): the ACT Manager leads the work and gives the second check. Mock name.
+    {
+      id: 'u-act-mgr',
+      name: 'ACT Manager (mock)',
+      title: 'Manager, Audit, Compliance and Transformation (ACT), PWVSB',
+      role: 'pwvsb_officer',
+      department: 'audit',
+      actRole: 'manager',
+      companyIds: [],
+      siteIds: [],
+    },
     ...([1, 2] as const).flatMap((team) => [
       {
         id: `u-act-aud${team}`,

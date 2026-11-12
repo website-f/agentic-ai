@@ -663,10 +663,12 @@ export function opsCompanyOf(sector: 'government' | 'private' | null | undefined
 export const LOGISTICS_COMPANY_ID = 'pgl';
 export const CENTRAL_EMPLOYER_IDS: readonly Id[] = [GROUP_EMPLOYER_ID, IT_COMPANY_ID, GOV_OPS_COMPANY_ID, PRIVATE_OPS_COMPANY_ID, LOGISTICS_COMPANY_ID];
 
-/** The ACT job of a department member (Director, Auditor or Enforcement), from server identity only. */
-export function actJobOf(user: User): 'director' | 'auditor' | 'enforcement' | null {
+/** The ACT job of a department member (Director, Manager, Auditor or Enforcement), from server identity only. */
+export function actJobOf(user: User): 'director' | 'manager' | 'auditor' | 'enforcement' | null {
   if (actRole(user) !== 'act') return null;
   if (user.actRole === 'lead') return 'director';
+  // C6 (Fauzan, 11 Nov 2026): the ACT Manager leads the work and is the second checker; the Director stays the head.
+  if (user.actRole === 'manager') return 'manager';
   if (user.actRole === 'auditor') return 'auditor';
   if (user.actRole === 'enforcement') return 'enforcement';
   return null;

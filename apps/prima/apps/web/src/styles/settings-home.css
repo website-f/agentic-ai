@@ -1,0 +1,87 @@
+/* J7: the Settings home (P100 org). A list per group; each row turns into a stacked card on a phone. */
+.sh {
+  display: grid;
+  gap: 16px;
+}
+.sh-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.sh-filters .btn {
+  min-height: 44px;
+}
+.sh-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.sh-row {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+  justify-content: space-between;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--line);
+}
+.sh-row:last-child {
+  border-bottom: 0;
+}
+.sh-row[data-state='not_set'],
+.sh-row[data-state='no_screen'] {
+  box-shadow: inset 3px 0 0 var(--warn, #b45309);
+}
+.sh-main {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+.sh-title {
+  font-weight: 600;
+  color: var(--ink);
+}
+.sh-what,
+.sh-detail {
+  font-size: 0.92rem;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+.sh-detail {
+  color: var(--muted);
+}
+.sh-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+.sh-side {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+  flex: none;
+}
+.sh-side .btn {
+  min-height: 44px;
+  min-width: 88px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+@media (max-width: 640px) {
+  .sh-row {
+    flex-direction: column;
+    gap: 10px;
+  }
+  .sh-side {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+  }
+  .sh-side .btn {
+    flex: 1;
+  }
+}

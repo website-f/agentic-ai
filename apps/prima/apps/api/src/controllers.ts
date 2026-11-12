@@ -6770,6 +6770,12 @@ export class AppController {
   }
 
   /** Site margin for the Growth panel, from the Operations monitors' site profit and loss (loaded on its own). */
+  // J7 (Fauzan, 11 Nov 2026): the Settings home, every setting screen with its owner and whether it is set yet.
+  @Get('settings-home')
+  settingsHome(@UserId() uid: string) {
+    return this.db.asUser(uid, (svc, u) => svc.settingsHome(u));
+  }
+
   // The CEO's approval value limits (Fauzan, 3 Nov 2026).
   @Get('approval-limits')
   approvalLimits(@UserId() uid: string) {

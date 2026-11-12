@@ -112,6 +112,9 @@ export function placeOf(company) {
   if (/^PW VENTURE\b|^PWVSB\b/.test(c)) return { key: 'pwvsb' };
   if (/^GOODWILL EMPIRE\b/.test(c)) return { key: 'goodwill' };
   if (/^MERDEKA NETWORK\b/.test(c)) return { key: 'merdeka' };
+  // E5 (Fauzan, 11 Nov 2026): Perfect Global Logistics is a central employer (the Transport department), not a licensed
+  // security company.
+  if (/^PERFECT GLOBAL LOGISTICS\b|^PGL\b/.test(c)) return { key: 'pgl', unit: 'transport' };
   if (/^PRI?SMA\b/.test(c)) return { asset: true, name: c, unit: 'asset' };
   return { licensed: true, name: c };
 }
@@ -140,6 +143,7 @@ const STRUCTURAL = [
   { key: 'goodwill', name: 'Goodwill Empire Sdn Bhd', role: 'gov_ops' },
   { key: 'sasateam', name: 'Sasa Team Sdn Bhd', role: 'private_ops' },
   { key: 'merdeka', name: 'Merdeka Network Sdn Bhd', role: 'it' },
+  { key: 'pgl', name: 'Perfect Global Logistics Sdn Bhd', role: 'logistics' },
 ];
 
 /** The real-data file and the counts (never names or emails) from the parsed rows. */

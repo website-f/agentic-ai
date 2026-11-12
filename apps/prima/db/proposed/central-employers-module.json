@@ -1,0 +1,30 @@
+{
+  "status": "Built 12 Nov 2026 for E5 (Fauzan, 11 Nov 2026: PGL is also an employer of staff; the database rule change is installed through the CEO-run migration). Optional module: not in db/release-manifest.json, so the office's start-up never installs it. The CEO (or the release owner with his go-ahead) installs it once with module-install --confirm INSTALL_OPTIONAL_MODULE, after org_links. This file installs nothing.",
+  "base": {
+    "path": "db/migrations/001_init.sql",
+    "sha256": "c5d8867df97f9535a3f447bdb6e1823e2cd783ad80ea4969edd71f5dc9fedd81"
+  },
+  "after": [
+    "org_links"
+  ],
+  "modules": [
+    {
+      "id": "central_employers",
+      "version": 1,
+      "path": "db/modules/central-employers-v1.sql",
+      "sha256": "29d388a4ef7b80c547ebdf9b903d59b7138499249aae435d47885223595cdd03",
+      "requires": [
+        "org_links"
+      ],
+      "switch": "None. Before the install the database accepts a company-office hand-over line for Goodwill Empire, Sasa Team or Perfect Global Logistics (the service never writes one); after it, the database refuses it for every central employer.",
+      "catalog": "apps/api/src/central-employers-readiness.ts centralEmployersProblems; apps/api/src/org-links-readiness.ts accepts the E5 body of org_central_employer (ORG_CENTRAL_EMPLOYER_E5)",
+      "uses": [
+        "prima.org_central_employer(text) (org_links)",
+        "role prima_app (base)"
+      ],
+      "definer": "None. prima.ce_central_employers() and prima.org_central_employer(text) are plain immutable checks, not callable by prima_app.",
+      "repeatSafe": true,
+      "rollback": "Run the org_central_employer block of db/modules/org-links-v1.sql again (pwvsb and merdeka only) and drop prima.ce_central_employers(). No table or row changes either way."
+    }
+  ]
+}

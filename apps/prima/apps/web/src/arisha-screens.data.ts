@@ -175,7 +175,7 @@ export const SCREEN_GUIDES: ScreenGuide[] = [
         "means": "The case was not answered in the time allowed."
       }
     ],
-    "notes": "If the company has no detailed data yet, only licence dates show and figures are Unknown. \"Add licence\" and \"Import\" only show to people who keep licence records. Vacancies need a comment at every step; the CEO approves first, then the company head signs."
+    "notes": "If the company has no detailed data yet, only licence dates show and figures are Unknown. \"Add licence\" and \"Import\" only show to people who keep licence records. Vacancies need a comment at every step; the CEO approves first, then the company head signs; for PWVSB central posts the CEO approves and signs in one step."
   },
   {
     "view": "office",
@@ -873,6 +873,45 @@ export const SCREEN_GUIDES: ScreenGuide[] = [
       }
     ],
     "notes": "If the list says \"Nothing needs action.\", every licence is valid; press \"All\" to see them. If the add and update buttons are missing, your account is not allowed to record licences."
+  },
+  {
+    "view": "settings",
+    "title": "Settings",
+    "what": "One list of every setting staff enter in Prima: rates, pay rules, public holidays, allowances, approval limits, staff and desks, and the email and report settings. Each shows who keeps it and whether it is set yet.",
+    "who": "Office staff and leaders. You see whether a setting is set for the settings your job keeps or oversees; for the others you see who keeps them.",
+    "tabs": [],
+    "tasks": [
+      {
+        "task": "How to find what is not set yet",
+        "steps": [
+          "Press \"Still to do\" at the top.",
+          "Read the owner on each line.",
+          "If you are the owner, press \"Open\" to go to the screen and enter it."
+        ]
+      },
+      {
+        "task": "How to find one setting",
+        "steps": [
+          "Type a word in \"Search settings\", for example holiday or rate.",
+          "Press \"Open\" on the line."
+        ]
+      }
+    ],
+    "terms": [
+      {
+        "term": "Not set",
+        "means": "The screen is there but nothing is entered yet."
+      },
+      {
+        "term": "Not installed",
+        "means": "The database part for it is not installed yet; IT installs it with the CEO."
+      },
+      {
+        "term": "Server setting, off",
+        "means": "Kept by IT on the server and switched off until the CEO says."
+      }
+    ],
+    "notes": "Amounts are never shown here; open the screen to see them. \"Owner sees it\" means only the owner and group leaders see whether it is set."
   },
   {
     "view": "selfaudit",
@@ -3936,7 +3975,7 @@ export const SCREEN_GUIDES: ScreenGuide[] = [
     "view": "act",
     "title": "ACT",
     "what": "ACT (Audit, Compliance and Transformation) watches compliance, audits each workflow, records problems as findings with an owner, checks the fix and leads improvements.",
-    "who": "The ACT team (a Director and two teams, each with an Auditor and an Enforcement officer) see every tab. Other people see only \"My findings\" and \"Improvements\": the findings ACT gave them to fix. \"Team work\" and \"Patterns and investigations\" are only for ACT.",
+    "who": "The ACT team (the Director, the ACT Manager and two teams, Team A and Team B, each with an Auditor and an Enforcement officer) see every tab; each team sees its own work, the Director and the ACT Manager see both. A high finding closes only after the ACT Manager's second check, never by the first checker or whoever raised it. Other people see only \"My findings\" and \"Improvements\": the findings ACT gave them to fix. \"Team work\" and \"Patterns and investigations\" are only for ACT.",
     "tabs": [
       {
         "name": "Compliance monitor",

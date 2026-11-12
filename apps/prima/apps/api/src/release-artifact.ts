@@ -32,6 +32,9 @@ export const MODULE_SPECS=[
 export const OPTIONAL_MODULE_SPECS=[
  {id:'pay_formulas',path:'db/modules/pay-formulas-v1.sql',sha256:'38718470f582cb438a08d42d6131187aa55c0613e3aa58a924836f77cfbfda72',requires:[]},
  {id:'guard_pay',path:'db/modules/guard-pay-v1.sql',sha256:'c6ca56b61b076181eba45bd1c1c88d766c9339b981e45c41154b8fee0c32d8a1',requires:['pay_formulas']},
+ // E5 (Fauzan, 11 Nov 2026): PGL is also an employer of staff; the hand-over rule learns every central employer. Installed
+ // through the CEO-run migration as its own step (needs org_links), never by the office's start-up loop.
+ {id:'central_employers',path:'db/modules/central-employers-v1.sql',sha256:'29d388a4ef7b80c547ebdf9b903d59b7138499249aae435d47885223595cdd03',requires:['org_links']},
 ] as const satisfies readonly {readonly id:string;readonly path:string;readonly sha256:string;readonly requires:readonly string[]}[];
 export type OptionalModuleId=typeof OPTIONAL_MODULE_SPECS[number]['id'];
 export const isOptionalModule=(id:string):id is OptionalModuleId=>OPTIONAL_MODULE_SPECS.some(m=>m.id===id);

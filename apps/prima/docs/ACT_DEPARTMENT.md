@@ -31,14 +31,21 @@ These are secondary summaries. Legal counsel should confirm the wording against 
 
 | Job | Prima record (mock) | Can do |
 |---|---|---|
-| Director | `u-audit` (`actRole=lead`, kept so the Arisha leadership pilot record does not change) | Sees everything. Closes **high** findings. Records audits, checks fixes, raises findings and leads improvements. |
-| Auditor, Team 1 / Team 2 | `u-act-aud1`, `u-act-aud2` | Runs the workflow audits, raises findings, checks fixes (medium and low), and records audit results. |
+| Director (head of ACT) | `u-audit` (`actRole=lead`, kept so the Arisha leadership pilot record does not change) | Sees everything. Sets the guard pay formulas, the workflow timings and the JA switch-over numbers. Records audits, checks fixes, raises findings and leads improvements; may also give the second check. |
+| ACT Manager (C6, Fauzan 11 Nov 2026) | `u-act-mgr` (`actRole=manager`) | Leads the work: sees both teams, gives findings, audits, reviews and investigations to a team, and gives the **second check** that closes a high finding. Checks the JA switch difference report and approves JA imports. Prepares pay formula drafts but does not make them live. |
+| Auditor (team lead), Team A (1) / Team B (2) | `u-act-aud1`, `u-act-aud2` | Runs the workflow audits, raises findings, checks fixes (closes medium and low, gives the first check on high), and records audit results. |
 | Enforcement, Team 1 / Team 2 | `u-act-enf1`, `u-act-enf2` | Follows up owners who are late (call, message, email, visit, meeting or memo, with the next date), raises findings from spot checks, and ticks improvement steps. Enforcement does **not** check fixes or record audits, so the person chasing an owner is never the person who signs off the fix. |
 
-Both teams cover every workflow (Fauzan, 2 Nov 2026), and **the Director distributes the work**: workflow audits,
-monthly report reviews and findings. A finding an Auditor or Enforcement officer raises stays with their team; one
-the Director raises waits in the Director's to-do list until it is given to Team 1 or Team 2. Work given to a team is
-recorded done by that team's Auditor (or the Director), and nobody from the other team can close it.
+Both teams cover every workflow (Fauzan, 2 Nov 2026), and **the Director or the ACT Manager distributes the work**:
+workflow audits, monthly report reviews and findings. A finding an Auditor or Enforcement officer raises stays with their
+team; one the Director or the Manager raises waits until it is given to Team A (1) or Team B (2). Work given to a team is
+recorded done by that team's Auditor (or the Director or the Manager), and nobody from the other team can close it.
+**Each team sees its own work** (C6): an Auditor or Enforcement officer sees only their team's findings and work (plus
+any finding they raised); the Director and the ACT Manager see both teams.
+
+Each person's job and team are fields of their Prima sign-in (`actRole`, `actTeam`). The app's database login can only
+read sign-in records (by design), so the job and team are set on the same reviewed path that sets every sign-in's
+department and role; the "Who is in ACT" card shows them, with "not assigned" for an empty seat.
 
 ## Monthly reports of each department (Fauzan, 2 Nov 2026)
 
@@ -102,8 +109,10 @@ sends the report, they tick the sections it covers, and ACT sees any section lef
   department goes only to PWVSB staff.
 - **Teams.** Auditors and Enforcement officers act only on findings and work belonging to their own team. A finding
   not yet given to a team waits for the Director.
-- **High findings.** The team Auditor can send a high finding back as not fixed. Only the Director can close it, in
-  the service and on the screen.
+- **High findings (C6, Fauzan 11 Nov 2026).** The team Auditor (or the Manager or the Director) gives the first check
+  or sends it back as not fixed. A passed first check waits for the **second check** by the ACT Manager (the Director
+  may also give it), which closes it. Nobody second-checks their own work: never the first checker, never the person
+  who raised the finding. Enforced in the service; the screen shows the reason when a button is not offered.
 - **Incomplete reports.** A report sent with sections of its form missing shows "Incomplete", never "On time".
 - **Refusals.** ACT refusals give a plain reason instead of the company-grant wording.
 - **Database test.** A PostgreSQL test confirms that the Director's form survives a Director Office save of the

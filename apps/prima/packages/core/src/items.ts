@@ -183,8 +183,10 @@ export interface ItemSkuLegacy {
 
 /**
  * A legal entity that can own or hold items. Security companies come from the company master; PWVSB, Merdeka Network
- * (IT, owns every IT device) and Goodwill Empire (Government Ops, owns and bills guard equipment) are central. Nothing
- * here is verified until Management and Finance confirm the legal name, registration and SQL book (paper D01).
+ * (IT, owns every IT device) and Goodwill Empire (Government Ops, owns and bills guard equipment) are central. E11
+ * (Fauzan, 11 Nov 2026, decision D01): one SQL Account book per company, and Goodwill Empire Sdn Bhd is on this company
+ * list with its own book. Finance enters each company's legal name, registration number and book in the app; nothing
+ * here is verified until a second Finance person verifies the book.
  */
 export interface ItemParty {
   id: Id;
@@ -220,7 +222,7 @@ export const CENTRAL_PARTIES: ItemParty[] = [
     kind: 'central',
     outsideCompanyMaster: true,
     verified: false,
-    note: 'Owns and sells or rents guard equipment (Fauzan, 2 Nov 2026). Not yet in the company master: legal name, registration number and SQL book to be confirmed (paper D01).',
+    note: 'Owns and sells or rents guard equipment (Fauzan, 2 Nov 2026). On the item register company list with its own SQL Account book (Fauzan, 11 Nov 2026, E11: one book per company). A central employer, so it has no company master record, like PWVSB and Merdeka: Finance enters its legal name, registration number and book in Finance and SQL, and a second Finance person verifies it.',
   },
 ];
 
