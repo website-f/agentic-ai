@@ -229,6 +229,19 @@
  },
  {
   "method": "GET",
+  "path": "api/arisha-trainer",
+  "name": "state",
+  "doc": "Whether the AI part is on here (the trainer itself always works from the written guides)."
+ },
+ {
+  "method": "POST",
+  "path": "api/arisha-trainer/ask",
+  "name": "ask",
+  "doc": "One question the guide could not answer, for the AI. Refusals are decided here first, without the AI.",
+  "body": "Record<string, unknown>"
+ },
+ {
+  "method": "GET",
   "path": "api/arisha/draft-form",
   "name": "arishaDraftForm",
   "query": [

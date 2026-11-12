@@ -9,6 +9,7 @@
  ],
  "common": [
   "GET arisha",
+  "GET arisha-trainer",
   "GET arisha/draft-form",
   "GET arisha/drafts",
   "GET arisha/finance-papers",
@@ -22,6 +23,7 @@
   "GET org/inbox",
   "GET org/map",
   "POST arisha",
+  "POST arisha-trainer/ask",
   "POST arisha/drafts",
   "POST arisha/drafts/:/commit",
   "POST arisha/drafts/:/resubmit",

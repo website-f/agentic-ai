@@ -1,0 +1,86 @@
+/* K9: Arisha's training panel (reuses the Arisha panel from styles.css; these are the walk-through parts). */
+.atr-tour-offer,
+.atr-tour {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--primary);
+  border-radius: var(--r);
+  background: var(--accent-soft);
+}
+.atr-tour-offer p,
+.atr-tour p {
+  margin: 0;
+  line-height: 1.5;
+}
+.atr-tour-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.atr-step {
+  font-size: 12px;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--primary);
+}
+.atr-dots {
+  display: inline-flex;
+  gap: 5px;
+}
+.atr-dots i {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--line);
+}
+.atr-dots i[data-on] {
+  background: var(--primary);
+}
+.atr-screen {
+  font-size: 17px;
+}
+.atr-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.atr-nav {
+  justify-content: space-between;
+}
+.atr-big,
+.atr-open {
+  min-height: 44px;
+}
+.atr-open {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.atr-again {
+  margin-top: 8px;
+}
+.atr-foot {
+  margin: 0;
+  padding: 6px 16px 12px;
+}
+/* The walk-through is new for this person: a small dot on the help button until they take it or say "Not now". */
+.launcher-button[data-new] {
+  position: relative;
+}
+.launcher-button[data-new]::after {
+  content: '';
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 12px;
+  height: 12px;
+  border: 2px solid var(--surface);
+  border-radius: 999px;
+  background: var(--warn);
+}

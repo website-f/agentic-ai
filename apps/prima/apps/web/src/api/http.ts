@@ -200,6 +200,12 @@ export class HttpApi implements Api {
     aiFiles: (files) => this.call('POST', '/bulk/ai/files', { files }),
   };
 
+  /** K9: Arisha's training, the AI part (switched off until Fauzan's go-ahead). */
+  readonly trainer: import('./trainer').TrainerClient = {
+    state: () => this.call('GET', '/arisha-trainer'),
+    ask: (input) => this.call('POST', '/arisha-trainer/ask', input),
+  };
+
   /** P81: past attendance from the monthly PDF reports, sent in 1 MB pieces (the office signs JSON of at most 3 MB). */
   readonly attendanceReports: import('./attendance-reports').AttendanceReportsClient = {
     // Built here, not imported: the IT screens' test harnesses load this file with a fixed import list.

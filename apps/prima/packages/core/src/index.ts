@@ -278,3 +278,5 @@ export * from './pdf-table';
 // K8: the bulk load helper (data manager and file manager).
 export * from './bulk-manager';
 export * from './bulk-manager-service';
+// K9: Arisha trains staff (walk-throughs, refusals, the minimal brief).
+export * from './arisha-trainer';

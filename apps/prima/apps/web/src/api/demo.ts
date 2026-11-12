@@ -113,6 +113,12 @@ export class DemoApi implements Api {
     aiFiles: () => Promise.reject(new ApiError('The AI part of the bulk load is not switched on here.', 503, [])),
   };
 
+  /** K9: no AI in the demo build; the trainer answers from the written guide. */
+  readonly trainer: import('./trainer').TrainerClient = {
+    state: async () => ({ ai: false }),
+    ask: () => Promise.reject(new ApiError('Arisha’s AI answers are not switched on here. The written steps still work.', 503, [])),
+  };
+
   private booted: PrimaService | null = null;
   private store: MemoryStore | null = null;
   /** The mock data is made on first use, not while the page opens, so the screen shows at once (Fauzan, 27 Oct 2026). */
