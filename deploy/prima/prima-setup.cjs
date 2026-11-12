@@ -64,6 +64,33 @@ const REFRESH = [
 //     code and leader count functions, and the report number sequence.
 //   bulk-loads-v1.sql (K8): the record of every bulk load (who, the plan, what went where), seen by the loader and oversight.
 const OFFICE_MODULES = ['owner-test-checkin-v1.sql', 'clock-snaps-v1.sql', 'rba-committee-roster-v1.sql', 'speak-up-wall-v1.sql', 'bulk-loads-v1.sql'];
+// P100 (Fitri, 12 Nov 2026: "just make it live all of it"): the handover's new repeat-safe modules, run on every start
+// AFTER the release modules, because some use a release module's tables or functions (item-warranty-v1 uses
+// item_register's prima.item_parties()). Same rules as above: each file is its own transaction, a second run changes
+// nothing, and only new tables, functions and policies are added.
+//   uniform-requests-v1 (I1), quality-pikm-v1 (E8), hr-resignations-v1 (E9), item-warranty-v1 (J2),
+//   vehicle-transfers-v1 (E6), guard-signins-v1 and location-retention-v1 (J5), alert-prefs-v1 (J6).
+const OFFICE_MODULES_AFTER_RELEASE = [
+  'uniform-requests-v1.sql', 'quality-pikm-v1.sql', 'hr-resignations-v1.sql', 'item-warranty-v1.sql',
+  'vehicle-transfers-v1.sql', 'guard-signins-v1.sql', 'location-retention-v1.sql', 'alert-prefs-v1.sql',
+];
+async function officeModules(list) {
+  const { Client } = require(require.resolve('pg', { paths: [cwd] }));
+  const c = new Client({ connectionString: process.env.DATABASE_URL });
+  await c.connect();
+  try {
+    const dir = require('node:path').resolve(cwd, '../../db/modules');
+    for (const f of list) {
+      await c.query(require('node:fs').readFileSync(require('node:path').join(dir, f), 'utf8'));
+      console.log(`prima-setup: office module ${f} in place`);
+    }
+  } catch (e) {
+    await c.query('ROLLBACK').catch(() => {});
+    throw e;
+  } finally {
+    await c.end();
+  }
+}
 (async () => {
   const { Client } = require(require.resolve('pg', { paths: [cwd] }));
   const c = new Client({ connectionString: process.env.DATABASE_URL });
@@ -89,5 +116,6 @@ const OFFICE_MODULES = ['owner-test-checkin-v1.sql', 'clock-snaps-v1.sql', 'rba-
     await c.end();
   }
   installModules();
+  await officeModules(OFFICE_MODULES_AFTER_RELEASE);
   console.log('prima-setup: base and all modules in place');
 })().catch((e) => { console.error('prima-setup: module refresh failed:', e.message); process.exit(1); });
