@@ -5937,6 +5937,11 @@
   "body": "Record<string, unknown>"
  },
  {
+  "method": "GET",
+  "path": "api/settings-home",
+  "name": "settingsHome"
+ },
+ {
   "method": "POST",
   "path": "api/shifts/:id/assign",
   "name": "assign",

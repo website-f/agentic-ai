@@ -88,6 +88,7 @@ import { ReportsView } from './views/Reports';
 import { MeetingsView } from './views/Meetings';
 import { SelfAuditView } from './views/SelfAudit';
 import { RbaView } from './views/Rba';
+import { SettingsHomeView } from './views/SettingsHome';
 import { SurveysView } from './views/Surveys';
 import { forgetOwner, lastOwner, rememberSetup, syncSurveys } from './survey/offline';
 import { CooPaymentsView } from './views/CooPayments';
@@ -134,7 +135,7 @@ import { officeNarrowed, primaOnly } from './office-access';
 
 
 
-export type ViewName = 'home' | 'overview' | 'company' | 'sites' | 'roster' | 'cleaning' | 'duty' | 'sitestock' | 'people' | 'attendance' | 'cases' | 'compliance' | 'commercial' | 'ops' | 'hr' | 'insurance' | 'arms' | 'cms' | 'cmsready' | 'audit' | 'device' | 'mine' | 'clock' | 'staffclock' | 'work' | 'branchwork' | 'socso' | 'fwm' | 'doa' | 'reports' | 'meetings' | 'hostels' | 'fwcost' | 'fwstat' | 'claims' | 'memos' | 'pdpa' | 'fleet' | 'clients' | 'office' | 'requests' | 'payreq' | 'ja' | 'jaswitch' | 'assets' | 'staffpay' | 'guardpay' | 'advances' | 'statutory' | 'arrivalcash' | 'loans' | 'finance' | 'contracts' | 'branches' | 'it' | 'it-metrics' | 'work-kpi' | 'it-procurement' | 'hr-it-intake' | 'staff-directory' | 'websites' | 'corporate' | 'renewals' | 'credit' | 'purchasing' | 'items' | 'governance' | 'grc' | 'registers' | 'act' | 'payformulas' | 'sitehours' | 'salarycalc' | 'continuity' | 'connections' | 'it-extraction' | 'surveys' | 'handovers' | 'quality' | 'selfaudit' | 'rba';
+export type ViewName = 'home' | 'overview' | 'company' | 'sites' | 'roster' | 'cleaning' | 'duty' | 'sitestock' | 'people' | 'attendance' | 'cases' | 'compliance' | 'commercial' | 'ops' | 'hr' | 'insurance' | 'arms' | 'cms' | 'cmsready' | 'audit' | 'device' | 'mine' | 'clock' | 'staffclock' | 'work' | 'branchwork' | 'socso' | 'fwm' | 'doa' | 'reports' | 'meetings' | 'hostels' | 'fwcost' | 'fwstat' | 'claims' | 'memos' | 'pdpa' | 'fleet' | 'clients' | 'office' | 'requests' | 'payreq' | 'ja' | 'jaswitch' | 'assets' | 'staffpay' | 'guardpay' | 'advances' | 'statutory' | 'arrivalcash' | 'loans' | 'finance' | 'contracts' | 'branches' | 'it' | 'it-metrics' | 'work-kpi' | 'it-procurement' | 'hr-it-intake' | 'staff-directory' | 'websites' | 'corporate' | 'renewals' | 'credit' | 'purchasing' | 'items' | 'governance' | 'grc' | 'registers' | 'act' | 'payformulas' | 'sitehours' | 'salarycalc' | 'continuity' | 'connections' | 'it-extraction' | 'surveys' | 'handovers' | 'quality' | 'selfaudit' | 'rba' | 'settings';
 
 export interface Route {
   view: ViewName;
@@ -195,6 +196,8 @@ const NAV: { view: ViewName; label: string; icon: string; roles: User['role'][];
   { view: 'selfaudit', label: 'Yearly self-audit', icon: 'compliance', roles: ['director', 'pwvsb_officer', 'company_manager', 'admin_exec'] },
   // RBA readiness (Fauzan, 8 Nov 2026): every office sign-in signs the ethics declaration once on entering service here; the rest is by role.
   { view: 'rba', label: 'RBA readiness', icon: 'compliance', roles: ['director', 'pwvsb_officer', 'company_manager', 'admin_exec'] },
+  // J7 (Fauzan, 11 Nov 2026): one Settings home, each setting with its owner and whether it is set; the server decides the rest.
+  { view: 'settings', label: 'Settings', icon: 'compliance', roles: ['director', 'pwvsb_officer', 'company_manager', 'admin_exec'] },
   { view: 'commercial', label: 'Tenders & quotes', icon: 'tender', roles: ['director', 'pwvsb_officer', 'company_manager', 'admin_exec'] },
   { view: 'ops', label: 'Regional ops', icon: 'sites', roles: ['director', 'pwvsb_officer'], depts: ['operations'] },
   { view: 'hr', label: 'HR monitor', icon: 'people', roles: ['director', 'pwvsb_officer'], depts: ['hr'] },
@@ -477,7 +480,8 @@ const VIEW_TOKENS: ViewName[] = [
 'cmsready',
 'quality',
 'selfaudit',
-'rba'
+'rba',
+'settings'
 ];
 
 function SignIn({ onSignedIn, notice }: { onSignedIn: (me: Me) => void; notice?: string | null }) {
@@ -827,6 +831,7 @@ function Shell({ me, onSignOut, onReset }: { me: Me; onSignOut: () => void; onRe
         n.view === 'grc' ||
         n.view === 'act' ||
         n.view === 'rba' ||
+        n.view === 'settings' ||
         n.view === 'handovers' ||
         n.view === 'connections' ||
         n.view === 'jaswitch' ||
@@ -1216,6 +1221,8 @@ function Shell({ me, onSignOut, onReset }: { me: Me; onSignOut: () => void; onRe
         return <SelfAuditView />;
       case 'rba':
         return <RbaView />;
+      case 'settings':
+        return <SettingsHomeView />;
       case 'surveys':
         return <SurveysView ownerId={me.user.id} />;
       case 'handovers':

@@ -43,6 +43,8 @@ export const NAV_SECTIONS: NavSection[] = [
     groups: [
       { title: 'Dashboards', views: ['home', 'overview', 'company', 'reports'] },
       { title: 'My work', views: ['mine', 'clock', 'work', 'meetings', 'memos'] },
+      // J7 (Fauzan, 11 Nov 2026): the Settings home, easy to find from every space.
+      { title: 'Settings', views: ['settings'] },
     ],
   },
   {
@@ -216,6 +218,7 @@ export const NAV_INFO: Record<ViewName, { blurb: string; words: string }> = {
   compliance: { blurb: 'Licences and permits, and when they expire.', words: 'licence license lesen permit permit kdn pdrm expiry tamat tempoh' },
   renewals: { blurb: 'Renewals coming due for each company.', words: 'renewal pembaharuan renew expiry tamat tempoh licence lesen road tax cukai jalan' },
   rba: { blurb: 'RBA ethics declarations and readiness.', words: 'rba ethics etika declaration akuan responsible business' },
+  settings: { blurb: 'Every setting, who keeps it and whether it is set yet.', words: 'settings tetapan rate kadar formula holiday cuti umum allowance elaun limit had desk meja setup' },
   selfaudit: { blurb: "The company's yearly self-audit.", words: 'self audit audit kendiri yearly tahunan' },
   act: { blurb: 'Audit findings to fix, and how they are fixed.', words: 'act audit compliance pematuhan transformation transformasi finding findings penemuan' },
   audit: { blurb: 'Who changed what, and when.', words: 'audit trail jejak audit log history sejarah who changed' },

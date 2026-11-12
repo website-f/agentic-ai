@@ -875,6 +875,45 @@ export const SCREEN_GUIDES: ScreenGuide[] = [
     "notes": "If the list says \"Nothing needs action.\", every licence is valid; press \"All\" to see them. If the add and update buttons are missing, your account is not allowed to record licences."
   },
   {
+    "view": "settings",
+    "title": "Settings",
+    "what": "One list of every setting staff enter in Prima: rates, pay rules, public holidays, allowances, approval limits, staff and desks, and the email and report settings. Each shows who keeps it and whether it is set yet.",
+    "who": "Office staff and leaders. You see whether a setting is set for the settings your job keeps or oversees; for the others you see who keeps them.",
+    "tabs": [],
+    "tasks": [
+      {
+        "task": "How to find what is not set yet",
+        "steps": [
+          "Press \"Still to do\" at the top.",
+          "Read the owner on each line.",
+          "If you are the owner, press \"Open\" to go to the screen and enter it."
+        ]
+      },
+      {
+        "task": "How to find one setting",
+        "steps": [
+          "Type a word in \"Search settings\", for example holiday or rate.",
+          "Press \"Open\" on the line."
+        ]
+      }
+    ],
+    "terms": [
+      {
+        "term": "Not set",
+        "means": "The screen is there but nothing is entered yet."
+      },
+      {
+        "term": "Not installed",
+        "means": "The database part for it is not installed yet; IT installs it with the CEO."
+      },
+      {
+        "term": "Server setting, off",
+        "means": "Kept by IT on the server and switched off until the CEO says."
+      }
+    ],
+    "notes": "Amounts are never shown here; open the screen to see them. \"Owner sees it\" means only the owner and group leaders see whether it is set."
+  },
+  {
     "view": "selfaudit",
     "title": "Yearly self-audit",
     "what": "Each company checks itself once a year: the company office, each site, or everything at once. Prima reminds you before it is due and keeps what was found and fixed.",

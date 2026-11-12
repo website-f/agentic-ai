@@ -41,6 +41,7 @@ export type RaiseArmsRequestInput = Parameters<PrimaService['raiseArmsRequest']>
 export type SpecialOpsLegalFlags = R<'specialOpsLegalFlags'>;
 export type ArmsTradingState = R<'armsTrading'>;
 export type ApprovalLimitsView = R<'approvalLimits'>;
+export type SettingsHomeView = R<'settingsHome'>;
 export type TransportBoard = R<'transportBoard'>;
 export type AmRentCheck = R<'amRentCheck'>;
 export type AmBuyInput = Parameters<PrimaService['amBuyRequest']>[1];
@@ -1208,6 +1209,7 @@ export interface Api extends ConnectionsClient, ExtractionClient, DraftHelpClien
   home(companyId?: string): Promise<Home>;
   growth(): Promise<GrowthPanel>;
   growthMargin(): Promise<GrowthMargin>;
+  settingsHome(): Promise<SettingsHomeView>;
   approvalLimits(): Promise<ApprovalLimitsView>;
   setApprovalLimits(body: { claimsMax: number | null; purchasesMax: number | null; comment: string }): Promise<unknown>;
   regionalOps(region?: string): Promise<RegionalOps>;

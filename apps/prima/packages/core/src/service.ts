@@ -839,6 +839,7 @@ import type { TimeSlip } from "./types";
 import type { TimeSlipApprover } from "./types";
 import type { TimeSlipSetting } from "./types";
 import { StaffDirectoryService } from "./staff-directory";
+import { settingsHome } from "./settings-home";
 import { CleaningService } from "./cleaning-service";
 import type { SiteKitCategory, SiteKitOwner } from "./site-kit";
 import { SecurityPlanService } from "./security-plan";
@@ -45862,6 +45863,11 @@ export class PrimaService {
   private async approvalLimitsRow(store: Store = this.store): Promise<ApprovalLimits> {
     const row = await store.get('finStatus', `fin-${GROUP_EMPLOYER_ID}`).catch(() => undefined);
     return row?.approvalLimits ?? { claimsMax: null, purchasesMax: null, set: null, history: [] };
+  }
+
+  /** J7 (Fauzan, 11 Nov 2026): the Settings home, each setting screen with its owner and whether it is set yet. */
+  async settingsHome(user: User) {
+    return settingsHome(this.store, user, this.today());
   }
 
   async approvalLimits(user: User) {
