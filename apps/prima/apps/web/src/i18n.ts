@@ -2115,6 +2115,12 @@ const ROWS: Row[] = [
   ["Hours were not compared on this older calculation. Recalculate the month to see them.", "Jam tidak dibandingkan dalam pengiraan lama ini. Kira semula bulan itu untuk melihatnya.", "Jam tak dibandingkan dalam kiraan lama ini. Recalculate bulan itu untuk tengok."],
   ["The month cannot be submitted or approved, and those lines cannot be changed, until the attendance or leave record is corrected (with its own approval and reason), then recalculated.", "Bulan ini tidak boleh dihantar atau diluluskan, dan baris itu tidak boleh diubah, sehingga rekod kehadiran atau cuti dibetulkan (dengan kelulusan dan sebabnya sendiri), kemudian dikira semula.", "Bulan ini tak boleh submit atau approve, dan line itu tak boleh diubah, sampai rekod attendance atau cuti dibetulkan (dengan approval dan sebab sendiri), kemudian recalculate."],
   ["1 line: hours recorded and paid do not match.", "1 baris: jam direkod dan dibayar tidak sepadan.", "1 line: jam recorded dan paid tak match."],
+  ["HR's correction:", "Pembetulan HR:", null],
+  ["Correct it (with a reason):", "Betulkan (dengan sebab):", null],
+  ["Save correction", "Simpan pembetulan", null],
+  ["Use the worked-out pay", "Guna gaji yang dikira", "Guna gaji yang dikira"],
+  ["Back to the worked-out part-month pay.", "Kembali kepada gaji separuh bulan yang dikira.", null],
+  ["Basic pay (part month)", "Gaji pokok (separuh bulan)", "Basic pay (separuh bulan)"],
   // end P100 pay
   // P96: the switch date (Fauzan, 8 Nov 2026)
   ["Prima takes over guard pay on 1 Aug 2027. Until then runs are trials; JA Group app still pays.", "Prima mengambil alih gaji pengawal pada 1 Ogos 2027. Sehingga itu, setiap pengiraan gaji hanya percubaan; aplikasi JA Group masih membayar gaji.", "Prima ambil alih gaji guard pada 1 Ogos 2027. Sebelum itu, setiap pay run hanya trial; app JA Group masih bayar gaji."],
@@ -4170,6 +4176,9 @@ const PATTERNS: Pat[] = [
   [/^(\d+) lines do not match$/, (m, x) => `${m[1]} ${x ? 'line tak match' : 'baris tidak sepadan'}`],
   [/^(\d+) lines: hours recorded and paid do not match\.$/, (m, x) => (x ? `${m[1]} line: jam recorded dan paid tak match.` : `${m[1]} baris: jam direkod dan dibayar tidak sepadan.`)],
   [/^([\d.,]+) h recorded · ([\d.,]+) h paid$/, (m, x) => (x ? `${m[1]} jam recorded · ${m[2]} jam paid` : `${m[1]} jam direkod · ${m[2]} jam dibayar`)],
+  [/^Part month (.+) to (.+)$/, (m) => `Separuh bulan ${m[1]} hingga ${m[2]}`],
+  [/^(\d+) working days × (RM[\d.,]+) a day \(basic ÷ (\d+)\) = (RM[\d.,]+)$/, (m, x) => `${m[1]} hari bekerja × ${m[2]} sehari (${x ? 'basic' : 'gaji pokok'} ÷ ${m[3]}) = ${m[4]}`],
+  [/^Fixed allowances: (\d+) × (RM[\d.,]+) = (RM[\d.,]+)$/, (m) => `Elaun tetap: ${m[1]} × ${m[2]} = ${m[3]}`],
   // end P100 pay patterns
   // PDPA and insurance registers (5 Nov 2026)
   [/^(\d+) open breach(?:es)? without the data involved or the cause\.$/, (m, x) => `${m[1]} ${x ? 'breach terbuka' : 'pelanggaran terbuka'} tanpa data terlibat atau punca.`],

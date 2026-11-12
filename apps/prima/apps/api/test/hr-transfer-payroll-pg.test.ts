@@ -53,7 +53,7 @@ describe('transfer month payroll and login follow-through under PostgreSQL', () 
   };
   const prepare = (companyId: string) => db.asUser(HR, (svc, u) => svc.prepareStaffPay(u, companyId, period()));
   const submit = (runId: string) => db.asUser(HR, (svc, u) => svc.staffPayStep(u, runId, 'submit', { note: 'Hantar (synthetic)' }));
-  /** HR enters a synthetic part-month figure on every part-month line (no proration rule is set). */
+  /** HR corrects every part-month line with a synthetic figure and a reason (P100 C1: Prima works it out first). */
   const enterPartPay = async (runId: string) => {
     const run = (await admin<{ data: any }>(`SELECT data FROM prima.staff_pay_runs WHERE id = $1`, [runId]))[0].data;
     for (const l of run.lines.filter((x: any) => x.partMonth && !x.partPay))
@@ -78,9 +78,9 @@ describe('transfer month payroll and login follow-through under PostgreSQL', () 
     if (today() !== `${period()}-01`) {
       assert.equal(oldLines.length, 1);
       assert.equal(oldLines[0].partMonth.to, dayAfter(today(), -1));
-      // Submitting is refused until HR enters the part-month pay; then it goes.
-      await assert.rejects(submit(oldRun.id), /part-month pay/);
-      await assert.rejects(submit(newRun.id), /part-month pay/);
+      // P100 C1: no longer held for a hand-typed figure; the line shows the working-day count and daily rate.
+      assert.equal(typeof oldLines[0].partAuto?.workingDays, 'number');
+      assert.equal(oldLines[0].partAuto?.divisor, 26);
     } else assert.equal(oldLines.length, 0);
     await enterPartPay(oldRun.id);
     await enterPartPay(newRun.id);

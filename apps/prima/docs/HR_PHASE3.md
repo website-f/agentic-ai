@@ -417,3 +417,12 @@ channel is switched on), and connecting an AI model for drafting.
 - HR KPI monitoring: on hold until the pilot test 1 results are in (Fauzan, 1 Nov 2026 15:53Z).
 - Overtime claims inside the staff payroll run: waits for Finance PR #49.
 - Papers recorded in Prima flowing back to JA: waits for the live JA link.
+
+## P100 staff payroll changes (Fauzan's 11 Nov 2026 handover)
+
+- **Part month (C1).** A staff member who joins, leaves or transfers within the month is paid the daily rate (monthly
+  basic and fixed allowances divided by the pay law's day divisor, 26 today) times the working days employed (Monday to
+  Friday; a weekday public holiday is a paid day), never more than the full month. Prima works it out and the line and the
+  payslip show the working; HR may still correct it with a reason (kept beside the worked-out figure). The month is no
+  longer held for a hand-typed figure. Open point for Fauzan: with a 5-day office week a whole month has about 22 working
+  days, so a part month comes to about 85% of the calendar share; confirm whether Saturdays should count.

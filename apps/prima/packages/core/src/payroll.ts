@@ -246,6 +246,34 @@ export function staffPayStatutoryKey(settings: StatutorySettings = DEFAULT_STATU
 }
 
 
+/**
+ * P100 C1: the working days (Monday to Friday) from one date to another, both counted. A public holiday on a weekday is a
+ * paid day for a monthly-paid employee (EA s.60D), so it counts as a day employed.
+ */
+export function staffWorkingDays(from: string, to: string): number {
+  let n = 0;
+  for (let t = Date.parse(`${from}T00:00:00Z`); t <= Date.parse(`${to}T00:00:00Z`); t += 86_400_000) {
+    const w = new Date(t).getUTCDay();
+    if (w !== 0 && w !== 6) n += 1;
+  }
+  return n;
+}
+
+/** P100 C1: the part-month pay for the working days employed: monthly / divisor x days, never more than the month. */
+export function staffPartMonthPay(basic: number, fixedAllowances: number, from: string, to: string, divisor: number) {
+  const workingDays = staffWorkingDays(from, to);
+  const dailyBasic = basic / divisor;
+  const dailyAllowances = fixedAllowances / divisor;
+  return {
+    workingDays,
+    divisor,
+    dailyBasic: r2(dailyBasic),
+    dailyAllowances: r2(dailyAllowances),
+    basic: r2(Math.min(basic, dailyBasic * workingDays)),
+    allowances: r2(Math.min(fixedAllowances, dailyAllowances * workingDays)),
+  };
+}
+
 /** One staff member's line for the month, from their record, approved unpaid leave and approved claims not paid yet. */
 export function buildStaffPayLine(args: {
   person: Person;
@@ -276,7 +304,11 @@ export function buildStaffPayLine(args: {
   const to = p.leaving && p.leaving.lastDayOn < end ? p.leaving.lastDayOn : end;
   const partMonth = from > start || to < end ? { from, to } : null;
   const kp = args.kept?.partPay ?? null;
-  const partPay = partMonth ? kp : null;
+  const fullFixed0 = (p.allowances ?? []).reduce((n, a) => n + a.amount, 0);
+  // P100 C1: Prima works out the part month (working days x the daily rate); HR's correction, with a reason, wins.
+  const partAuto = partMonth ? staffPartMonthPay(p.basicPay ?? 0, fullFixed0, partMonth.from, partMonth.to, args.unpaidDivisor) : null;
+  const partPay = partMonth ? (kp ?? (partAuto ? { basic: partAuto.basic, allowances: partAuto.allowances, note: '', by: '', at: '' } : null)) : null;
+  const corrected = partMonth && kp ? kp : null;
   const typed = (a: { label: string; amount: number; typeId?: string }, fixed: boolean) => {
     const t = a.typeId ? args.types?.find((x) => x.id === a.typeId) : undefined;
     return { ...a, fixed, ...(t ? { epf: t.epf, socso: t.socso, pcb: t.pcb, hrd: t.hrd } : {}) };
@@ -332,11 +364,11 @@ export function buildStaffPayLine(args: {
     flags.push(
       `Not counted per HR's allowance list: ${off.map((a) => `${a.label} (${[a.epf === false && 'EPF', a.socso === false && 'SOCSO', a.pcb === false && 'PCB', a.hrd === false && 'HRD'].filter(Boolean).join(', ')})`).join('; ')}`,
     );
-  if (partMonth)
+  if (partMonth && partAuto)
     flags.push(
-      partPay
-        ? `Part month ${partMonth.from} to ${partMonth.to}: pay entered by ${partPay.by} (basic RM${partPay.basic.toFixed(2)}, fixed allowances RM${partPay.allowances.toFixed(2)}): ${partPay.note}`
-        : `Part month ${partMonth.from} to ${partMonth.to}: HR enters the pay for the days worked before this month can be submitted (no proration rule is set)`,
+      corrected
+        ? `Part month ${partMonth.from} to ${partMonth.to}: corrected by ${corrected.by} to basic RM${corrected.basic.toFixed(2)}, fixed allowances RM${corrected.allowances.toFixed(2)} (worked out: RM${partAuto.basic.toFixed(2)} and RM${partAuto.allowances.toFixed(2)}): ${corrected.note}`
+        : `Part month ${partMonth.from} to ${partMonth.to}: ${partAuto.workingDays} working days x RM${partAuto.dailyBasic.toFixed(2)} a day (basic / ${partAuto.divisor}) = RM${partAuto.basic.toFixed(2)}${fullFixed0 ? `; fixed allowances RM${partAuto.allowances.toFixed(2)}` : ''}`,
     );
   if (p.movedFrom && p.hiredOn.slice(0, 7) === period) flags.push(`Transferred in on ${p.hiredOn}: the old employer pays up to the day before`);
   if (p.movedTo && p.leaving && p.leaving.lastDayOn.slice(0, 7) === period) flags.push(`Transferred out after ${p.leaving.lastDayOn}: the new employer pays from the day after`);
@@ -361,7 +393,8 @@ export function buildStaffPayLine(args: {
     bank: p.bank ?? null,
     flags,
     partMonth,
-    partPay,
+    partAuto,
+    partPay: corrected,
     inputs,
     statutoryInputs: staffPayStatutoryKey(args.statutory),
     ...sums,

@@ -646,7 +646,9 @@ export function buildGuardPayLine(i: GuardPayInput): GuardPayLine {
     // Already flagged above.
   } else if (p.bank && i.lastBank && i.lastBank !== p.bank.accountMasked) flags.push(`Salary account changed since last month (was ${i.lastBank})`);
   else if (p.bankChangedOn?.slice(0, 7) === i.period) flags.push(`Salary account changed on ${p.bankChangedOn}`);
-  if (p.hiredOn.slice(0, 7) === i.period) flags.push('Joined this month: check the days to pay');
+  // P100 C1 (Fauzan, 11 Nov 2026: "For guard we follow working hours done"): no share of the month; days before joining are
+  // days not worked, and the hours recorded must match the hours paid.
+  if (p.hiredOn.slice(0, 7) === i.period) flags.push(`Joined ${p.hiredOn}: paid for the hours worked from attendance, not a share of the month`);
   if (p.status === 'left') flags.push('Has left: final pay, check any notice pay or deductions');
   if (age >= 60) flags.push('Aged 60 or over: EPF and SOCSO at the older rates, no EIS');
   if (p.nationality === 'MY' && p.lindungOptOut == null && lindung.status === 'deducted') flags.push('LINDUNG 24 Jam deducted: opt-out choice not recorded');

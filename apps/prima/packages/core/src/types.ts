@@ -4151,6 +4151,14 @@ export interface StaffPayLine {
    * proration rule is set, so HR enters the pay for the days worked (partPay) and the month cannot be submitted until then.
    */
   partMonth?: { from: IsoDate; to: IsoDate } | null;
+  /**
+   * P100 C1 (Fauzan, 11 Nov 2026: "For staff we prorate the daily rate from its salary then give accordingly", working
+   * days): the part-month pay worked out by Prima: daily rate = monthly basic (and fixed allowances) / the pay law's day
+   * divisor (26), times the working days (Monday to Friday) employed in the month, never more than the full month. Shown on
+   * the payslip. HR may still correct it with a reason (partPay).
+   */
+  partAuto?: { workingDays: number; divisor: number; dailyBasic: number; dailyAllowances: number; basic: number; allowances: number } | null;
+  /** HR's correction of the part-month pay, with the reason (always kept). */
   partPay?: { basic: number; allowances: number; note: string; by: string; at: IsoDateTime } | null;
   /** What the line was calculated from (staffPayInputsKey); a draft whose inputs changed is recalculated before submitting. */
   inputs?: string;

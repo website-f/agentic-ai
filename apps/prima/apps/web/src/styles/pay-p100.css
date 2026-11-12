@@ -208,3 +208,19 @@
   margin: 6px 0 0;
   padding-left: 18px;
 }
+
+/* ---------- C1: the part-month working on a staff pay line and payslip ---------- */
+.pp-part {
+  display: grid;
+  gap: 2px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--accent-soft);
+  font-size: 0.8125rem;
+  font-variant-numeric: tabular-nums;
+  margin: 4px 0 8px;
+  flex-basis: 100%;
+}
+.pp-part-corrected {
+  color: var(--warn);
+}

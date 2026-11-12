@@ -26805,7 +26805,7 @@ export class PrimaService {
       canPrepare: this.staffPayMaker(user),
       period,
       prev,
-      rule: { payByDay: RULES.staffPayroll.value.payByDay, unpaidDivisor: RULES.staffPayroll.value.unpaidDivisor },
+      rule: { payByDay: RULES.staffPayroll.value.payByDay, unpaidDivisor: await this.staffPayDivisor(period) },
       employers: status,
       runs: rows,
       mine,
@@ -26892,6 +26892,8 @@ export class PrimaService {
     const taken = new Set(runs.filter((r) => r.id !== id).flatMap((r) => r.lines.flatMap((l) => l.claimIds)));
     const allowanceTypes = await this.store.list('allowanceTypes', {});
     const last = runs.find((r) => r.period === this.prevPeriod(period));
+    // P100 C1: the day divisor of the CEO's pay law for the month (26 today), for part months and unpaid days.
+    const divisor = await this.staffPayDivisor(period);
     const lines = people
       .filter((p) => this.paidInPeriod(p, period))
       .sort((a, b) => a.staffNo.localeCompare(b.staffNo))
@@ -26900,7 +26902,7 @@ export class PrimaService {
         return buildStaffPayLine({
           person: p,
           period,
-          unpaidDivisor: RULES.staffPayroll.value.unpaidDivisor,
+          unpaidDivisor: divisor,
           leaves,
           claims: claims.filter((c) => !taken.has(c.id)),
           kept: before
@@ -26953,6 +26955,16 @@ export class PrimaService {
       });
       return (await tx.get('staffPayRuns', id))!;
     });
+  }
+
+  /**
+   * P100 C1: the day divisor for staff pay in a month: the CEO's pay law setting (EA s.60I, 26 today) when the pay law is
+   * in this database, else rule PAY-STAFF's.
+   */
+  private async staffPayDivisor(period: string): Promise<number> {
+    if (!(await this.payFormulasOn())) return RULES.staffPayroll.value.unpaidDivisor;
+    const d = payLawFor(await this.store.list('payLawVersions', {}), period).ordinaryRateDivisor;
+    return Number.isFinite(d) && d > 0 ? d : RULES.staffPayroll.value.unpaidDivisor;
   }
 
   /** HR's own line, with one-off allowances, is flagged for the Chief of Staff and the COO (insider abuse audit). */
@@ -27024,7 +27036,7 @@ export class PrimaService {
     const line = buildStaffPayLine({
       person,
       period: run.period,
-      unpaidDivisor: RULES.staffPayroll.value.unpaidDivisor,
+      unpaidDivisor: await this.staffPayDivisor(run.period),
       leaves,
       claims: claims.filter((c) => old.claimIds.includes(c.id)),
       kept: { extra, pcb: pcb == null ? null : Math.round(pcb * 100) / 100, partPay },
@@ -30928,8 +30940,9 @@ export class PrimaService {
     const out: string[] = [];
     const statutoryProblem = await this.staffPayStatutoryProblem(run, st);
     if (statutoryProblem) out.push(statutoryProblem);
-    const part = run.lines.filter((l) => l.partMonth && !l.partPay);
-    if (part.length) out.push(`Enter the part-month pay for ${part.map((l) => l.name).join(', ')} (no proration rule is set).`);
+    // P100 C1: part months are worked out by Prima (working days x the daily rate); an older line without it is recalculated.
+    const part = run.lines.filter((l) => l.partMonth && !l.partPay && !l.partAuto);
+    if (part.length) out.push(`Recalculate the month: the part-month pay of ${part.map((l) => l.name).join(', ')} was worked out before the working-day rule.`);
     const people = await this.peopleForPeriod(await st.list('people', { companyId: run.companyId }), run.period, st);
     // Who is paid, and for which days, as the records stand now; compared with the month as it was calculated.
     const start = `${run.period}-01`;
