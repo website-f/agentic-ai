@@ -17,6 +17,7 @@ import {
 import { api, type CompMatrix, type QmsBoard, type QmsFoundationBoard } from '../api';
 import { Chip, ErrorNotice, Kpi, Loading, dateLabel, useAction, useLoad } from '../ui';
 import { Faults, Items, Suppliers } from './QualityOps';
+import { PikmPanel } from './QualityPikm';
 
 /**
  * Quality and compliance (Fauzan, 5 Nov 2026). One requirements and evidence register for ISO 9001:2015 and the
@@ -24,7 +25,7 @@ import { Faults, Items, Suppliers } from './QualityOps';
  * matrix (HR keeps the role profiles; managers and officers assess). Prima never declares a company compliant.
  */
 
-type Tab = 'register' | 'foundation' | 'matrix' | 'faults' | 'suppliers' | 'objectives' | 'documents' | 'review';
+type Tab = 'register' | 'foundation' | 'matrix' | 'faults' | 'suppliers' | 'objectives' | 'documents' | 'review' | 'pikm';
 type Tone = 'ok' | 'warn' | 'crit' | 'info';
 const STATE_TONE: Record<QmsState, Tone> = {
   awaiting_text: 'info',
@@ -48,6 +49,9 @@ export function QualityView() {
   const fnd = useLoad(() => api.qualityFoundation(), []);
   const ops = useLoad(() => api.qualityOps({ companyId }), [companyId]);
   const o = ops.data;
+  // P100 (E9): the PIKM records (medical 56+, briefings, 7-year files, client packs, office alarm and CCTV).
+  const pk = useLoad(() => api.pikmBoard().catch(() => null), []);
+  const hasPikm = !!pk.data && (!pk.data.ready || !!(pk.data.medical || pk.data.briefing || pk.data.retention || pk.data.clientPack || pk.data.officeSystems));
   const inner = o?.role === 'act' || o?.role === 'keep' || o?.role === 'ceo';
   const hasReg = !!reg.data;
   const hasFnd = !!fnd.data;
@@ -63,11 +67,12 @@ export function QualityView() {
       ['review', 'Management review', !!o && inner],
       ['foundation', 'QMS foundation', hasFnd],
       ['matrix', 'Competency matrix', hasMat],
+      ['pikm', 'PIKM records', hasPikm],
     ] as [Tab, string, boolean][]
   ).filter((t) => t[2]);
   const tab: Tab = tabPick && tabs.some((t) => t[0] === tabPick) ? tabPick : (tabs[0]?.[0] ?? 'foundation');
-  if (!reg.data && !mat.data && !fnd.data && !o) {
-    if (reg.error && mat.error && fnd.error && ops.error) return <ErrorNotice error={mat.error} />;
+  if (!reg.data && !mat.data && !fnd.data && !o && !hasPikm) {
+    if (reg.error && mat.error && fnd.error && ops.error && !pk.loading) return <ErrorNotice error={mat.error} />;
     return <Loading what="quality and compliance" />;
   }
   const opsTab = tab === 'faults' || tab === 'suppliers' || tab === 'objectives' || tab === 'documents' || tab === 'review';
@@ -85,7 +90,9 @@ export function QualityView() {
       </div>
     );
   // Officers only assess their guards (staff-usability rule, Fauzan 5 Nov 2026): they never see standards or clauses.
-  if (!hasReg && !hasFnd && !o && mat.data)
+  // P100 (E9): HR, who keep the yearly medical and the 7-year files, get the full page with the PIKM records tab.
+  const pikmHr = !!pk.data && pk.data.ready && pk.data.canAct.hr;
+  if (!hasReg && !hasFnd && !o && mat.data && !pikmHr)
     return (
       <div className="page">
         <div className="page-head">
@@ -102,6 +109,12 @@ export function QualityView() {
           </Select>
         )}
         <Matrix data={mat.data} />
+        {/* P100 (E9): officers record the site risk briefing before a guard's first shift. */}
+        {hasPikm && pk.data?.ready && (
+          <section style={{ marginTop: 16 }}>
+            <PikmPanel />
+          </section>
+        )}
       </div>
     );
   return (
@@ -116,7 +129,7 @@ export function QualityView() {
           Test data. PIKM rows follow the 2022 drafts of Parts 1 and 2. Review and refresher periods approved by the CEO, 8 Nov 2026.
         </p>
       </div>
-      {companies.length > 1 && tab !== 'foundation' && tab !== 'suppliers' && tab !== 'objectives' && tab !== 'documents' && tab !== 'review' && (
+      {companies.length > 1 && tab !== 'foundation' && tab !== 'suppliers' && tab !== 'objectives' && tab !== 'documents' && tab !== 'review' && tab !== 'pikm' && (
         <Select className="select" aria-label="Company" value={current} onChange={(e) => setCompanyId(e.target.value)} style={{ maxWidth: 360, marginBottom: 8 }}>
           {companies.map((c) => (
             <option key={c.id} value={c.id}>
@@ -142,6 +155,7 @@ export function QualityView() {
       {tab === 'objectives' && o && <Items data={o} kind="objective" />}
       {tab === 'documents' && o && <Items data={o} kind="document" />}
       {tab === 'review' && o && <Items data={o} kind="review" />}
+      {tab === 'pikm' && <PikmPanel />}
     </div>
   );
 }

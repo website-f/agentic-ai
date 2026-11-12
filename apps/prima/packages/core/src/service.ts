@@ -1059,6 +1059,11 @@ import type { FwRecruitFile } from "./types";
 import type { FwRecruitStep } from "./types";
 import type { FwRecruitStepRecord } from "./types";
 import type { FwContractLanguage } from "./types";
+import { SocsoExtrasService } from "./socso-extras";
+import { FwExtrasService } from "./fw-extras";
+import { PikmService } from "./quality-pikm";
+import { ResignationService } from "./hr-resignation";
+import { WarrantyService } from "./item-warranty";
 
 
 
@@ -1489,7 +1494,9 @@ export type HomeView =
   | 'payformulas'
   | 'sitehours'
   | 'guardpay' | 'renewals' | 'work' | 'memos' | 'mine' | 'office' | 'registers' | 'meetings' | 'quality'
-  | 'selfaudit' | 'rba';
+  | 'selfaudit' | 'rba'
+  // P100 newa: SOCSO extras (E4) and the items warranty claims (J2) link straight to their screens.
+  | 'socso' | 'items';
 
 
 
@@ -5453,6 +5460,7 @@ export class PrimaService {
       ...(await this.joinLeaveHome(user)),
       ...(await this.hrCaseHome(user)),
       ...(await this.oshHome(user)),
+      ...(await this.newaHome(user)),
       ...(await this.developmentHome(user)),
       ...(await this.screening.homeItems(user)),
       ...(await this.guardTrainingHome(user)),
@@ -5871,6 +5879,7 @@ export class PrimaService {
         go: { view: 'people' as const, personId: b.personId, companyId },
       })),
       ...(jaOwns('hostels') ? [] : await this.hostelReminders(companyId)),
+      ...(await this.newaHome(user)),
       ...(await this.contractHome(user, companyId)),
       ...(await this.branchHome(user, companyId)),
       ...(await this.corpHome(user, companyId)),
@@ -6003,6 +6012,7 @@ export class PrimaService {
       ...(await this.selfAuditHome(user, companyId)),
       ...(await this.purHome(user, companyId)),
       ...(await this.grcHome(user, companyId)),
+      ...(await this.newaHome(user)),
       ...(await this.officeHomeItems(user, companyId)),
     ];
     return {
@@ -10593,6 +10603,8 @@ export class PrimaService {
             amountPaid: null,
             // The family's names, papers and payments are personal data kept by HR.
             dependants: undefined,
+            // P100 (E4): the LINDUNG form (injury) and the payments abroad (family) stay with HR too.
+            socsoExtras: undefined,
             docs: c.docs.filter((d) => !items.find((i) => i.id === d.item)?.medical),
             history: c.history.map((h) => (h.medical ? { ...h, what: 'Medical paper added (kept by HR)' } : h)),
           },
@@ -10631,6 +10643,8 @@ export class PrimaService {
         if (manage)
           for (const x of [...(c.dependants?.people ?? []).flatMap((p) => [...p.relationDocIds, ...p.translationDocIds]), ...(c.dependants?.payments ?? []).flatMap((p) => [...p.docIds, ...(p.received?.docIds ?? [])])])
             refs.add(x);
+        // P100 (E4): the family's or embassy's letter, the bank slip and the family's receipt for a payment abroad.
+        if (manage) for (const p of c.socsoExtras?.payAbroad ?? []) for (const x of [...p.docIds, ...(p.paid?.docIds ?? []), ...(p.received?.docIds ?? [])]) refs.add(x);
         return docs.filter((d) => refs.has(d.id));
       })(),
       items: items
@@ -54457,6 +54471,86 @@ export class PrimaService {
       await tx.audit({ at, actor: user.name, companyId: f.companyId, action: 'fwm.recruit.stop', entity: 'fw_recruit_file', entityId: f.id, summary: `Recruitment of ${f.candidateName} stopped: ${reason}` });
       return updated;
     });
+  }
+
+  // ---------- P100 newa (Fauzan, 11 Nov 2026: "Tell Fitri to build"): E4, E8, E9, E10, J2 ----------
+  // Each workflow lives in its own file; these are the thin doors into it and the few private helpers it reuses.
+
+  /** E4: the SOCSO claim for an HR step (HR of the person's company, never their own claim), as the SOCSO steps use it. */
+  async socsoHrClaim(user: User, claimId: Id, types?: SocsoCaseType[]) {
+    return this.socsoForHr(user, claimId, types);
+  }
+
+  /** E4: one SOCSO claim change with its history line and audit entry, one at a time per claim. */
+  async socsoSave(user: User, c: SocsoClaim, patch: (docIds: Id[], fresh: SocsoClaim) => Partial<SocsoClaim>, what: string, action: string, docs: EvidenceDoc[] = []) {
+    return this.socsoWrite(user, c, patch, what, action, docs);
+  }
+
+  /** E4: papers for a SOCSO step, as documents on the claim. */
+  socsoProofDocs(user: User, c: SocsoClaim, proof: ProofInput[] | undefined, caption: string, need: boolean): EvidenceDoc[] {
+    return this.socsoDocs(user, c, proof, caption, need);
+  }
+
+  /** E4: the LINDUNG claim form, the company's payments to dependants abroad and the SOCSO and DOSH reminders. */
+  get socsoExtras(): SocsoExtrasService {
+    return new SocsoExtrasService(this.store, this);
+  }
+
+  /** E8: who works hostels, as the hostel bills use it. */
+  hostelRole(user: User) {
+    return this.hostelRoleOf(user);
+  }
+
+  /** E8: who works foreign workers, as the FWM board uses it. */
+  fwmRole(user: User) {
+    return this.fwmRoleOf(user);
+  }
+
+  /** P100: papers (PDF, JPEG, PNG or a SharePoint link) as proof records for a company; no photos. */
+  paperDocs(user: User, companyId: Id, proof: ProofInput[] | undefined, caption: string): EvidenceDoc[] {
+    return this.proofRecords(user, companyId, null, proof, {}, { documentsOnly: true }).docs.map((d) => ({ ...d, caption: d.caption || caption }));
+  }
+
+  /** P100: saves paper proof inside the step's transaction; the same file cannot be given twice. */
+  async savePaperDocs(tx: Store, docs: EvidenceDoc[]): Promise<Id[]> {
+    return this.saveProof(tx, { photos: [], docs });
+  }
+
+  /** E8: hostel stays and check-out memos, and the permit task during long SOCSO MC. */
+  get fwExtras(): FwExtrasService {
+    return new FwExtrasService(this.store, this);
+  }
+
+  /** E9: PIKM records next to the quality register (medical 56+, briefings, 7-year files, client packs, alarm and CCTV). */
+  get pikm(): PikmService {
+    return new PikmService(this.store, this);
+  }
+
+  /** E10: the company or null (PWVSB central staff) a staff member's own records sit under, as time slips use it. */
+  staffCompanyOf(user: User): Id | null {
+    return this.staffCompany(user);
+  }
+
+  /** E10: staff resignation: the notice, HR's acceptance and the HR Director's waiver of a shorter notice. */
+  get resignations(): ResignationService {
+    return new ResignationService(this.store, this);
+  }
+
+  /** J2: equipment warranty claims to the supplier, from an item of the items register. */
+  get warranty(): WarrantyService {
+    return new WarrantyService(this.store, this);
+  }
+
+  /** Reminders from the P100 newa workflows, for the person's own Home. */
+  private async newaHome(user: User): Promise<HomeItem[]> {
+    const parts = await Promise.all([
+      this.socsoExtras.homeItems(user).catch(() => [] as HomeItem[]),
+      this.fwExtras.homeItems(user).catch(() => [] as HomeItem[]),
+      this.pikm.homeItems(user).catch(() => [] as HomeItem[]),
+      this.resignations.homeItems(user).catch(() => [] as HomeItem[]),
+      this.warranty.homeItems(user).catch(() => [] as HomeItem[]),
+    ]);
+    return parts.flat();
   }
 }
 

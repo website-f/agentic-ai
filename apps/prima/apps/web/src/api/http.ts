@@ -3019,6 +3019,42 @@ export class HttpApi implements Api {
   }
   qualityOps(opts: { companyId?: string } = {}) {
     return this.call<Awaited<ReturnType<Api['qualityOps']>>>('GET', `/quality/operations${opts.companyId ? `?companyId=${encodeURIComponent(opts.companyId)}` : ''}`);
+  }  // ---------- P100 newa (Fauzan, 11 Nov 2026) ----------
+  socsoPaymentsAbroad() {
+    return this.call<Awaited<ReturnType<Api['socsoPaymentsAbroad']>>>('GET', '/socso-extras/payments-abroad');
+  }
+  socsoExtraAct(action: string, body: Record<string, unknown>) {
+    return this.call<Awaited<ReturnType<Api['socsoExtraAct']>>>('POST', '/socso-extras/act', { ...body, action });
+  }
+  hostelStays() {
+    return this.call<Awaited<ReturnType<Api['hostelStays']>>>('GET', '/fw-extras/hostel-stays');
+  }
+  fwPermitsOnMc() {
+    return this.call<Awaited<ReturnType<Api['fwPermitsOnMc']>>>('GET', '/fw-extras/permits-on-mc');
+  }
+  fwExtraAct(action: string, body: Record<string, unknown>) {
+    return this.call<unknown>('POST', '/fw-extras/act', { ...body, action });
+  }
+  pikmBoard(opts: { companyId?: string } = {}) {
+    return this.call<Awaited<ReturnType<Api['pikmBoard']>>>('GET', `/pikm${opts.companyId ? `?companyId=${encodeURIComponent(opts.companyId)}` : ''}`);
+  }
+  pikmAct(action: string, body: Record<string, unknown>) {
+    return this.call<Awaited<ReturnType<Api['pikmAct']>>>('POST', '/pikm/act', { ...body, action });
+  }
+  myResignation() {
+    return this.call<Awaited<ReturnType<Api['myResignation']>>>('GET', '/resignations/mine');
+  }
+  resignationBoard() {
+    return this.call<Awaited<ReturnType<Api['resignationBoard']>>>('GET', '/resignations');
+  }
+  resignAct(action: string, body: Record<string, unknown>) {
+    return this.call<Awaited<ReturnType<Api['resignAct']>>>('POST', '/resignations/act', { ...body, action });
+  }
+  warrantyBoard() {
+    return this.call<Awaited<ReturnType<Api['warrantyBoard']>>>('GET', '/items/warranty');
+  }
+  warrantyAct(action: string, body: Record<string, unknown>) {
+    return this.call<Awaited<ReturnType<Api['warrantyAct']>>>('POST', '/items/warranty/act', { ...body, action });
   }
 }
 

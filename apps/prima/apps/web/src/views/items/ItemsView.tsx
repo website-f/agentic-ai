@@ -30,6 +30,7 @@ import {
   TagIcon,
   UploadSimpleIcon,
   UserIcon,
+  WrenchIcon,
 } from '@phosphor-icons/react';
 import { api, type ItemBoard } from '../../api';
 import { Card, PageHead, Stat, Stats } from '../../kit';
@@ -51,8 +52,9 @@ import { ItemsAddBar, mayAddTypes, mayRegister, type ItemAddIntent } from './Add
 import { SmartImport } from './SmartImport';
 import { TypeCard, TypeLabelPrint, TypeLabelsPicker } from './TypeLabels';
 import '../../styles/items.css';
+import { WarrantyPanel } from './Warranty';
 
-type Tab = 'home' | 'find' | 'catalogue' | 'stock' | 'labels' | 'moves' | 'site' | 'counts' | 'cases' | 'care' | 'uniforms' | 'reports' | 'finance' | 'mine';
+type Tab = 'home' | 'find' | 'catalogue' | 'stock' | 'labels' | 'moves' | 'site' | 'counts' | 'cases' | 'care' | 'uniforms' | 'reports' | 'finance' | 'mine' | 'warranty';
 
 export function ItemsView() {
   const { data, error } = useLoad(() => api.itemBoard(), []);
@@ -106,6 +108,8 @@ export function ItemsView() {
     ['site', 'Site board', null, data.siteChoices.length > 0, <MapPinIcon key="i" size={18} aria-hidden="true" />],
     ['cases', 'Cases', openCases || null, has, <SirenIcon key="i" size={18} aria-hidden="true" />],
     ['care', 'After-sale care', overdueCare || null, has, <HeartbeatIcon key="i" size={18} aria-hidden="true" />],
+    // P100 (J2): warranty claims to the supplier.
+    ['warranty', 'Warranty', null, has, <WrenchIcon key="i" size={18} aria-hidden="true" />],
     ['uniforms', 'Uniforms', due || null, data.uniforms.rows.length > 0 || !!asksUniforms, <ShirtFoldedIcon key="i" size={18} aria-hidden="true" />],
     ['reports', 'Reports', null, has, <ChartBarIcon key="i" size={18} aria-hidden="true" />],
     ['finance', 'Finance and SQL', null, any(data, 'finance', 'manager', 'view'), <CoinsIcon key="i" size={18} aria-hidden="true" />],
@@ -302,6 +306,8 @@ function Body({
       return <Cases data={data} />;
     case 'care':
       return <Care data={data} />;
+    case 'warranty':
+      return <WarrantyPanel />;
     case 'uniforms':
       return <Uniforms data={data} />;
     case 'reports':

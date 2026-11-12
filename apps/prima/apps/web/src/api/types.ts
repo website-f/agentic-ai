@@ -490,7 +490,7 @@ export interface NewQuotation {
 }
 
 /** Everything the screens need. Implemented by the HTTP client and by the in-browser demo. */
-export interface Api extends ConnectionsClient, ExtractionClient, DraftHelpClient, CheckinClient {
+export interface Api extends ConnectionsClient, ExtractionClient, DraftHelpClient, CheckinClient, NewaClient {
   /** Hand-overs between departments and real-data import (connect-departments, 2 Nov 2026). */
   readonly org: OrgClient;
   /** P81: past attendance from the monthly PDF reports; server only (the demo has none). */
@@ -1498,3 +1498,6 @@ export type FwStatDraftRow = Awaited<ReturnType<PrimaService['fwStatDraft']>>[nu
 export type AmExtrasBoard = Awaited<ReturnType<PrimaService['amExtras']['board']>>;
 export type QmsOpsBoard = Awaited<ReturnType<PrimaService['qualityOps']['board']>>;
 export type FwmRecruitment = R<'fwmRecruitment'>;
+// P100 newa: the new workflows' calls and their types.
+import type { NewaClient } from './newa';
+export type * from './newa';

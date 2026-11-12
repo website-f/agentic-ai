@@ -7,6 +7,7 @@ import { api, type FinRequestList } from '../api';
 import { Card, Empty, Facts, PageHead, Stat, Stats, Steps, type StepState } from '../kit';
 import { Chip, Drawer, ErrorNotice, Loading, dateLabel, dateTimeLabel, useAction, useLoad, type Tone } from '../ui';
 import '../styles/biz.css';
+import { PayAbroadBoard } from './SocsoExtras';
 
 /**
  * Payment requests (Fauzan, 1 Nov 2026): the company head creates the request and says what it is for; the head of that
@@ -139,6 +140,8 @@ export function PaymentRequestsView() {
         <Stat label="Returned" value={returned.length} note="Back with the company head" tone={returned.length ? 'crit' : undefined} icon={<ArrowUUpLeftIcon size={16} />} />
         <Stat label="Approved" value={approved.length} note={approved.length ? sum(approved) : 'Finance pays approved requests'} tone={approved.length ? 'ok' : undefined} icon={<CheckCircleIcon size={16} />} />
       </Stats>
+      {/* P100 (E4): the company's payments to a SOCSO death claim's family abroad, for the FD, CEO and Finance. */}
+      <PayAbroadBoard />
       {(
         [
           ['Waiting for you', mine, 'Your step in the chain. Open one to approve, check or return it.'],

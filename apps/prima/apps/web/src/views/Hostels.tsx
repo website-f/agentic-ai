@@ -10,6 +10,7 @@ import { RecordButton } from './RecordForm';
 import { NoAddNote } from './FwmAdd';
 import { ImportButton } from './ImportDrawer';
 import '../styles/hrx.css';
+import { HostelStaysPanel } from './FwExtras';
 
 /**
  * Hostel bills and utility excess (Fauzan, 26 Oct 2026). Each bill belongs to the company that owns or rents the
@@ -33,7 +34,7 @@ function billTone(b: BillRow): Tone {
 
 export function HostelsView() {
   const { data, error } = useLoad(() => api.hostelBoard(), []);
-  const [tab, setTab] = useState<'bills' | 'utility' | null>(null);
+  const [tab, setTab] = useState<'bills' | 'utility' | 'stays' | null>(null);
   const [q, setQ] = useState('');
   if (error)
     return (
@@ -86,6 +87,10 @@ export function HostelsView() {
           Bills
           {mine.length > 0 && <span className="tab-count">{mine.length}</span>}
         </button>
+        {/* P100 (E8): who lives in each hostel, check-in and the check-out memo. */}
+        <button role="tab" aria-selected={view === 'stays'} onClick={() => setTab('stays')}>
+          Who lives here
+        </button>
         {data.charges.length > 0 && (
           <button role="tab" aria-selected={view === 'utility'} onClick={() => setTab('utility')}>
             Utility excess
@@ -124,6 +129,7 @@ export function HostelsView() {
         </div>
       )}
       {view === 'utility' && <UtilityPanel rows={data.charges} rule={data.rules.utility.source} />}
+      {view === 'stays' && <HostelStaysPanel />}
     </div>
   );
 }

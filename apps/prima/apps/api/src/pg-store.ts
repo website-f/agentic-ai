@@ -46,6 +46,12 @@ const MODULE_TABLES: Partial<Record<TableName, string>> = {
   compAssessments: 'Quality and compliance is not installed in this database yet (module quality-compliance-v1).',
   qmsItems: 'Quality and compliance is not installed in this database yet (module quality-compliance-v1).',
   qmsNonconformities: 'Quality and compliance is not installed in this database yet (module quality-compliance-v1).',
+  // P100 (E9): PIKM records, db/modules/quality-pikm-v1.sql (approved to build; installed by the CEO-run migration).
+  qmsPikmRecords: 'PIKM records are not installed in this database yet (module quality-pikm-v1, run by the CEO).',
+  // P100 (E10): staff resignations, db/modules/hr-resignations-v1.sql (approved to build; installed by the CEO-run migration).
+  staffResignations: 'Resigning in Prima is not installed in this database yet (module hr-resignations-v1, run by the CEO).',
+  // P100 (J2): warranty claims, db/modules/item-warranty-v1.sql (approved to build; installed by the CEO-run migration).
+  itemWarrantyClaims: 'Warranty claims are not installed in this database yet (module item-warranty-v1, run by the CEO).',
   regRelatedParties: 'Governance registers are not installed in this database yet (module governance-registers-v1).',
   regInterests: 'Governance registers are not installed in this database yet (module governance-registers-v1).',
   regCommittees: 'Governance registers are not installed in this database yet (module governance-registers-v1).',
@@ -365,6 +371,9 @@ guardPhoneSessions: 'prima.guard_phone_sessions',
 guardPings: 'prima.guard_pings',
 qmsItems: 'prima.qms_items',
 qmsNonconformities: 'prima.qms_nonconformities',
+qmsPikmRecords: 'prima.qms_pikm_records',
+staffResignations: 'prima.staff_resignations',
+itemWarrantyClaims: 'prima.item_warranty_claims',
 fwRecruitFiles: 'prima.fw_recruit_files'
 };
 
@@ -536,6 +545,9 @@ const HAS_COMPANY_COLUMN = new Set<TableName>([
 'guardPhoneSessions',
 'guardPings',
 'qmsNonconformities',
+'qmsPikmRecords',
+'staffResignations',
+'itemWarrantyClaims',
 'fwRecruitFiles'
 ]);
 

@@ -3330,6 +3330,25 @@
  },
  {
   "method": "POST",
+  "path": "api/fw-extras/act",
+  "name": "act",
+  "doc": "One step: check a worker in, prepare or decide a check-out memo, or send the permit task during SOCSO MC.",
+  "body": "Record<string, unknown>"
+ },
+ {
+  "method": "GET",
+  "path": "api/fw-extras/hostel-stays",
+  "name": "hostelStays",
+  "doc": "Each hostel with who lives there now, free beds, and the check-out memos with their step."
+ },
+ {
+  "method": "GET",
+  "path": "api/fw-extras/permits-on-mc",
+  "name": "permitsOnMc",
+  "doc": "Foreign workers on long SOCSO MC whose permit comes due before the MC ends, and whether FWM sent the task."
+ },
+ {
+  "method": "POST",
   "path": "api/fw-papers/:id/ack",
   "name": "fwPaperAck",
   "doc": "Acknowledge a paper at 30 days or less (rule FWM-ACK).",
@@ -4628,6 +4647,19 @@
  },
  {
   "method": "GET",
+  "path": "api/items/warranty",
+  "name": "board",
+  "doc": "Warranty claims of the companies whose items this person works, with the next step, and the items a claim can be raised on."
+ },
+ {
+  "method": "POST",
+  "path": "api/items/warranty/act",
+  "name": "act",
+  "doc": "One step: raise, approve or refuse, sent to the supplier, the supplier's outcome, or close.",
+  "body": "Record<string, unknown>"
+ },
+ {
+  "method": "GET",
   "path": "api/ja",
   "name": "jaBoard"
  },
@@ -5565,6 +5597,22 @@
  },
  {
   "method": "GET",
+  "path": "api/pikm",
+  "name": "board",
+  "doc": "The PIKM records this person works, with what is due: medicals, briefings, files kept, client packs, alarm and CCTV.",
+  "query": [
+   "companyId"
+  ]
+ },
+ {
+  "method": "POST",
+  "path": "api/pikm/act",
+  "name": "act",
+  "doc": "One PIKM step: record, check, propose, decide, prepare, send or record a service visit.",
+  "body": "Record<string, unknown>"
+ },
+ {
+  "method": "GET",
   "path": "api/products",
   "name": "productBoard"
  },
@@ -5945,6 +5993,25 @@
  },
  {
   "method": "GET",
+  "path": "api/resignations",
+  "name": "board",
+  "doc": "HR's list of resignations with the next step for this person."
+ },
+ {
+  "method": "POST",
+  "path": "api/resignations/act",
+  "name": "act",
+  "doc": "One step: give notice (or HR enters the signed letter), withdraw, accept with the last day, or decide a shorter notice.",
+  "body": "Record<string, unknown>"
+ },
+ {
+  "method": "GET",
+  "path": "api/resignations/mine",
+  "name": "mine",
+  "doc": "The signed-in staff member's own resignation, the notice if they resigned today, and the procedure in both languages."
+ },
+ {
+  "method": "GET",
   "path": "api/salary-calc",
   "name": "salaryCalcData"
  },
@@ -6199,6 +6266,19 @@
   "method": "GET",
   "path": "api/socso",
   "name": "socsoClaims"
+ },
+ {
+  "method": "POST",
+  "path": "api/socso-extras/act",
+  "name": "act",
+  "doc": "One step on a SOCSO claim: prepare or check the LINDUNG form; raise, decide, pay or confirm a payment abroad.",
+  "body": "Record<string, unknown>"
+ },
+ {
+  "method": "GET",
+  "path": "api/socso-extras/payments-abroad",
+  "name": "paymentsAbroad",
+  "doc": "Payments to dependants abroad for the Finance Director, the CEO and Finance: who, how much, why and the next step."
  },
  {
   "method": "GET",

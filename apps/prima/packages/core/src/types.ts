@@ -1242,6 +1242,8 @@ export interface SocsoClaim {
   dependants?: SocsoDependants;
   /** The separate duty to notify DOSH (JKKP) of a workplace accident, OSHA 1994 s.32 and NADOPOD 2004. */
   dosh?: DoshNotice;
+  /** P100 (E4, Fauzan 11 Nov 2026): the LINDUNG claim form and the company's own payments to dependants abroad. */
+  socsoExtras?: import('./socso-extras').SocsoExtras;
 }
 
 /** What a work restriction keeps the person from, until HR clears it. NO_DUTY: no shifts at all. */
@@ -1300,7 +1302,7 @@ export interface FwRenewal {
 }
 
 /** Errands FWM asks the OM to get done with the guard (Fauzan, 26 Oct 2026). */
-export type FwmTaskKind = 'FOMEMA' | 'JIM' | 'TNG' | 'BIOMETRIC' | 'UTILITY_CLAUSE' | 'OTHER';
+export type FwmTaskKind = 'FOMEMA' | 'JIM' | 'TNG' | 'BIOMETRIC' | 'UTILITY_CLAUSE' | 'OTHER' | 'PERMIT_ON_MC';
 
 /** FWM sends a dated task to the OM; the OM sends the guard and uploads proof; FWM accepts or sends it back. */
 export interface FwmTask {
@@ -3462,6 +3464,12 @@ export interface Dataset {
   guardPings: GuardPing[];
   qmsItems: import('./quality-ops').QmsItem[];
   qmsNonconformities: import('./quality-ops').QmsNonconformity[];
+  /** P100 (E9): PIKM records (db/modules/quality-pikm-v1.sql): medical 56+, briefings, 7-year files, client packs, office alarm and CCTV. */
+  qmsPikmRecords: import('./quality-pikm').PikmRecord[];
+  /** P100 (E10): staff resignations (db/modules/hr-resignations-v1.sql). */
+  staffResignations: import('./hr-resignation').Resignation[];
+  /** P100 (J2): equipment warranty claims to the supplier (db/modules/item-warranty-v1.sql). */
+  itemWarrantyClaims: import('./item-warranty').WarrantyClaim[];
   fwRecruitFiles: FwRecruitFile[];
 }
 
@@ -3488,6 +3496,12 @@ export interface HostelStay {
   personName: string;
   from: IsoDate;
   to: IsoDate | null;
+  /** P100 (E8, Fauzan 11 Nov 2026): the room, who checked the worker in, and the check-out memo. Older rows have none. */
+  room?: string;
+  checkedInBy?: string;
+  checkedInById?: Id;
+  checkedInAt?: IsoDateTime;
+  checkout?: import('./fw-extras').CheckoutMemo | null;
 }
 
 export type HostelBillKind = 'RENT' | 'ELECTRICITY' | 'WATER' | 'MAINTENANCE';
