@@ -259,6 +259,18 @@ const ROWS: Row[] = [
   ['Not closed', 'Belum ditutup', 'Belum close'],
   ['Not reviewed', 'Belum disemak', 'Belum review'],
   ['target not set', 'sasaran belum ditetapkan', 'target belum set'],
+  ['Due in 30 days', 'Bayaran 30 hari', 'Payment 30 hari'],
+  ['Debtors 90+ days', 'Penghutang 90+ hari', 'Debtor 90+ hari'],
+  ['Banks reconciled by 10th', 'Bank disesuai (10hb)', 'Bank rec (10hb)'],
+  ['Books closed by 15th', 'Buku ditutup (15hb)', 'Buku close (15hb)'],
+  ['days to collect', 'hari untuk kutip', 'hari untuk collect'],
+  ['the page is complete after the books close on the 15th; until then the figures are still moving.', 'halaman ini lengkap selepas buku ditutup pada 15hb; sehingga itu angka masih berubah.', 'page ini lengkap selepas buku close pada 15hb; sampai itu angka masih berubah.'],
+  ['Need attention', 'Perlu perhatian', null],
+  ['Cash is the latest bank statement balance; the short week comes from the 13-week forecast.', 'Tunai ialah baki penyata bank terkini; minggu tidak cukup diambil daripada ramalan 13 minggu.', 'Cash ialah baki bank statement terkini; minggu tak cukup dari forecast 13 minggu.'],
+  ['Unknown, not in the total', 'Tidak diketahui, tidak dalam jumlah', 'Unknown, tidak dalam total'],
+  ['EPF, SOCSO, EIS', 'KWSP, PERKESO, SIP', 'EPF, SOCSO, EIS'],
+  ['Per guard costs', 'Kos setiap pengawal', 'Kos setiap guard'],
+  ['Incomplete', 'Tidak lengkap', null],
   // P100 fin end
   // P90: Import from any file, and Add where it was missing (Fitri, 9 Nov 2026)
   ['Import from file', 'Import dari fail', 'Import dari file'],

@@ -17,7 +17,7 @@
 /* ---------- Tiles ---------- */
 .fm-tiles {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 190px), 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 150px), 1fr));
   gap: 12px;
 }
 .fm-tile {
@@ -157,6 +157,12 @@
   text-align: right !important;
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
+}
+.fm-table td.fm-wrap {
+  white-space: normal;
+}
+.fm-why {
+  min-width: 240px;
 }
 .fm-red {
   color: var(--crit);
@@ -304,8 +310,21 @@
 .fm-print-title {
   display: none;
 }
+/* Eleven columns fit a 1366 screen: short headers wrap, numbers stay on one line. */
+.fm-sum-table {
+  font-size: 0.8rem;
+}
 .fm-sum-table th,
 .fm-sum-table td {
+  padding: 8px 6px;
+}
+.fm-sum-table thead th {
+  white-space: normal;
+  font-size: 0.66rem;
+  line-height: 1.25;
+  vertical-align: bottom;
+}
+.fm-sum-table td.fm-num {
   white-space: nowrap;
 }
 @media print {

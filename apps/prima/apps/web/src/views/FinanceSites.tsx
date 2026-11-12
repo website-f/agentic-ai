@@ -292,7 +292,9 @@ function Margins() {
                     <th scope="col" className="fm-num">
                       Target
                     </th>
-                    <th scope="col">Why</th>
+                    <th scope="col" className="fm-why">
+                      Why
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
@@ -303,18 +305,19 @@ function Margins() {
                         <span className="fm-sub">{s.companyName}</span>
                       </th>
                       <td className="fm-num">{rm(s.revenue)}</td>
-                      <td className="fm-num">
+                      <td className="fm-num fm-wrap">
                         {rm(s.totalCost)}
-                        <span className="fm-sub">
-                          pay {rm(s.guardCost)} · EPF/SOCSO/EIS {rm(s.statutory)} · shared {s.sharedCost == null ? 'Rate not set' : rm(s.sharedCost)}
-                        </span>
+                        <span className="fm-sub">Guard pay {rm(s.guardCost)}</span>
+                        <span className="fm-sub">EPF, SOCSO, EIS {rm(s.statutory)}</span>
+                        <span className="fm-sub">Per guard costs {s.sharedCost == null ? 'Rate not set' : rm(s.sharedCost)}</span>
                       </td>
                       <td className="fm-num">
-                        <span className={s.belowTarget ? 'fm-red' : s.marginPct == null ? 'fm-unknown' : undefined}>{s.marginPct == null ? 'Unknown' : `${s.marginPct}%`}</span>
+                        <span className={s.belowTarget ? 'fm-red' : s.marginPct == null || s.tone === 'unknown' ? 'fm-unknown' : undefined}>{s.marginPct == null ? 'Unknown' : `${s.marginPct}%`}</span>
                         <span className="fm-sub">{rm(s.margin)}</span>
+                        {s.tone === 'unknown' && s.marginPct != null && <span className="fm-sub">Incomplete</span>}
                       </td>
                       <td className="fm-num">{s.targetPct == null ? <span className="fm-notset">Target not set</span> : `${s.targetPct}%`}</td>
-                      <td>
+                      <td className="fm-why">
                         {s.why.length ? (
                           <ul className="fm-reasons">
                             {s.why.map((w, i) => (
@@ -322,7 +325,11 @@ function Margins() {
                             ))}
                           </ul>
                         ) : (
-                          <span className="fm-sub">{s.notes[0] ?? '–'}</span>
+                          <ul className="fm-reasons">
+                            {s.notes.slice(0, 3).map((w, i) => (
+                              <li key={i}>{w}</li>
+                            ))}
+                          </ul>
                         )}
                       </td>
                     </tr>

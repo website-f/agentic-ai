@@ -115,7 +115,8 @@ export function finUnbilledSites(x: UnbilledInput) {
     };
     let hoursBilled: number | null = live.length ? 0 : null;
     let expected: number | null = null;
-    let invoiced: number | null = live.length ? 0 : null;
+    // What was invoiced for the month (null: no invoice recorded for any of its contracts).
+    let invoiced: number | null = null;
     if (!live.length) flag('no_contract', null, `${r1(w.hours)} hours clocked by ${w.people.size} guard(s) and no live contract covers this site`);
     for (const c of live) {
       const v = versionFor(c, period);
@@ -127,9 +128,8 @@ export function finUnbilledSites(x: UnbilledInput) {
       else hoursBilled = null;
       const line = (x.fin?.billing ?? []).find((b) => b.contractId === c.id && b.period === period) ?? null;
       if (line?.invoice) {
-        if (invoiced != null) invoiced += line.invoice.amount * share;
+        invoiced = (invoiced ?? 0) + line.invoice.amount * share;
       } else if (!line?.none?.checked) {
-        invoiced = invoiced ?? 0;
         flag(
           'not_invoiced',
           c.id,
@@ -398,16 +398,17 @@ export function finSummaryRow(
 /** The group total line: sums of what is known; Unknown companies are counted, not added. */
 export function finSummaryGroup(rows: FinSummaryRow[]): { row: FinSummaryRow; unknownCash: number } {
   const known = rows.filter((r) => !r.cash.unknown);
-  const sum = (v: (r: FinSummaryRow) => number | null) => r2(known.reduce((n, r) => n + (v(r) ?? 0), 0));
+  // A total only from the figures that are there: no company with a figure gives no total, never a zero.
+  const sum = (v: (r: FinSummaryRow) => number | null) => (known.some((r) => v(r) != null) ? r2(known.reduce((n, r) => n + (v(r) ?? 0), 0)) : null);
   const shorts = rows.map((r) => r.shortWeek).filter((s): s is string => !!s).sort();
   const row: FinSummaryRow = {
     companyId: 'group',
     company: 'Group total',
-    cash: { value: known.length ? sum((r) => r.cash.value) : null, unknown: !known.length && rows.length > 0 },
+    cash: { value: sum((r) => r.cash.value), unknown: !known.length && rows.length > 0 },
     shortWeek: shorts[0] ?? null,
     shortSoon: rows.some((r) => r.shortSoon),
     due30: r2(rows.reduce((n, r) => n + r.due30, 0)),
-    over90: { value: known.length ? sum((r) => r.over90.value) : null, unknown: !known.length && rows.length > 0 },
+    over90: { value: sum((r) => r.over90.value), unknown: !known.length && rows.length > 0 },
     daysToCollect: { value: null, unknown: false },
     bankRec: { done: rows.reduce((n, r) => n + r.bankRec.done, 0), total: rows.reduce((n, r) => n + r.bankRec.total, 0), late: rows.some((r) => r.bankRec.late) },
     closed: { done: rows.length > 0 && rows.every((r) => r.closed.done), late: rows.some((r) => r.closed.late) },

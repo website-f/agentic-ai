@@ -28,7 +28,7 @@ function Cells({ r }: { r: Row }) {
       <td className="fm-num">{rm(r.due30)}</td>
       <td className="fm-num">
         <Money v={r.over90} />
-        <span className="fm-sub">{r.daysToCollect.unknown ? 'days to collect Unknown' : r.daysToCollect.value == null ? 'days to collect –' : `${r.daysToCollect.value} days to collect`}</span>
+        {r.daysToCollect.value != null && <span className="fm-sub">{r.daysToCollect.value} days to collect</span>}
       </td>
       <td className={`fm-num${r.bankRec.late ? ' fm-red' : ''}`}>
         {r.bankRec.done} / {r.bankRec.total}
@@ -82,21 +82,22 @@ export function FinanceSummaryView() {
           </p>
           {!data.ready && (
             <div className="notice" data-tone="info">
-              The page for {data.period} is complete after the books close on the 15th; until then the figures are still moving.
+              <span data-no-translate>{data.period}</span>: <span>the page is complete after the books close on the 15th; until then the figures are still moving.</span>
             </div>
           )}
           <section className="fm-card" aria-labelledby="fm-sum-h">
             <div className="fm-card-head">
               <div>
-                <h2 id="fm-sum-h">{data.period}: {data.rows.length} companies</h2>
+                <h2 id="fm-sum-h">
+                  <span data-no-translate>{data.period}</span> · <span>Companies</span>: {data.rows.length}
+                </h2>
                 <p>
-                  {data.red} compan{data.red === 1 ? 'y needs' : 'ies need'} attention. Cash is the latest bank statement balance; the short week comes from the
-                  13-week forecast.
+                  <span>Need attention</span>: {data.red} · <span>Cash is the latest bank statement balance; the short week comes from the 13-week forecast.</span>
                 </p>
               </div>
             </div>
             <div className="fm-card-body">
-              <div className="fm-table-wrap" data-phone="scroll">
+              <div className="fm-table-wrap">
                 <table className="fm-table fm-sum-table">
                   <thead>
                     <tr>
@@ -106,15 +107,15 @@ export function FinanceSummaryView() {
                       </th>
                       <th scope="col">Cash runs short</th>
                       <th scope="col" className="fm-num">
-                        Payments due in 30 days
+                        Due in 30 days
                       </th>
                       <th scope="col" className="fm-num">
-                        Debtors over 90 days
+                        Debtors 90+ days
                       </th>
                       <th scope="col" className="fm-num">
-                        Banks reconciled by the 10th
+                        Banks reconciled by 10th
                       </th>
-                      <th scope="col">Books closed by the 15th</th>
+                      <th scope="col">Books closed by 15th</th>
                       <th scope="col" className="fm-num">
                         Open exceptions
                       </th>
@@ -131,7 +132,11 @@ export function FinanceSummaryView() {
                     <tr data-total>
                       <th scope="row">
                         Group total
-                        {data.group.unknownCash > 0 && <span className="fm-sub">{data.group.unknownCash} compan(ies) Unknown, not in the total</span>}
+                        {data.group.unknownCash > 0 && (
+                          <span className="fm-sub">
+                            <span>Unknown, not in the total</span>: {data.group.unknownCash}
+                          </span>
+                        )}
                       </th>
                       <Cells r={data.group.row} />
                     </tr>
