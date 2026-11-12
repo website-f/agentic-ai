@@ -58,8 +58,10 @@ describe('Site gate record for police: sealed full ID for the in-house server', 
     const dev = (await owner.query("SELECT data FROM prima.users WHERE id = 'u-dev-sasa-001'")).rows[0].data as User;
     const site = (await owner.query('SELECT data FROM prima.sites WHERE id = $1', [dev.siteIds[0]])).rows[0].data as { id: string; companyId: string; lat: number; lng: number };
     const guard = (
-      await owner.query("SELECT data FROM prima.people WHERE data->>'companyId' = $1 AND data->>'status' = 'active' AND data->>'staffNo' IS NOT NULL AND data->>'pinHash' IS NOT NULL LIMIT 1", [site.companyId])
+      await owner.query("SELECT data FROM prima.people WHERE data->>'companyId' = $1 AND data->>'status' = 'active' AND data->>'staffNo' IS NOT NULL AND data->>'pinHash' IS NOT NULL ORDER BY id LIMIT 1", [site.companyId])
     ).rows[0].data as { staffNo: string };
+    // A6 (11 Nov 2026 handover): never count rows the whole shared test database holds; look only at what this test wrote.
+    const seqBefore = Number((await owner.query('SELECT coalesce(max(seq), 0) AS s FROM prima.audit')).rows[0].s);
     const sealed = await sealForInhouse({ keyId: key.keyId, jwk: key.jwk }, { id_number: '880202-10-4321', id_photo: 'data:image/jpeg;base64,c3ludGhldGlj' });
     const r = await db.asUser('u-dev-sasa-001', (svc, u) =>
       svc.gateIn(u, {
@@ -77,8 +79,9 @@ describe('Site gate record for police: sealed full ID for the in-house server', 
     // Look for the whole number, not a 6-digit fragment: random hex (audit hash chain, ciphertext) can contain any
     // 6 digits by chance, which made this check fail once in CI with nothing leaked.
     for (const full of ['880202-10-4321', '880202104321']) assert.ok(!raw.rows[0].t.includes(full));
-    const audit = await owner.query("SELECT count(*)::int AS n FROM prima.audit WHERE data::text LIKE '%880202-10-4321%' OR data::text LIKE '%880202104321%'");
-    assert.equal(audit.rows[0].n, 0);
+    const mine = await owner.query('SELECT data::text AS t FROM prima.audit WHERE seq > $1', [seqBefore]);
+    assert.ok(mine.rowCount! > 0, 'the gate entry wrote its own audit rows');
+    for (const row of mine.rows) for (const full of ['880202-10-4321', '880202104321']) assert.ok(!row.t.includes(full));
     // A resend after a lost signal is the same entry.
     const again = await db.asUser('u-dev-sasa-001', (svc, u) =>
       svc.gateIn(u, { staffNo: guard.staffNo, pin: demoPin(guard.staffNo), kind: 'visitor', clientRef: 'pg-gate-0001', visitor: null, sealed, photo: null }),
@@ -86,12 +89,13 @@ describe('Site gate record for police: sealed full ID for the in-house server', 
     assert.equal(again.resent, true);
     // Staff screens cannot collect the sealed copies.
     await assert.rejects(db.asUser('u-cm-sasa', (svc, u) => svc.inhouseQueue(u)));
-    const q = await db.asUser('u-inhouse-server', (svc, u) => svc.inhouseQueue(u, 50));
-    const mine = q.find((x) => x.id === r.entry.id)!;
-    assert.ok(mine, 'the in-house server sees the queued entry through its company grant');
-    assert.equal((await openSealed(key.privateJwk, mine.sealed)).id_number, '880202-10-4321');
+    // The whole queue (the service's largest page), so entries other tests left queued never push this one out.
+    const q = await db.asUser('u-inhouse-server', (svc, u) => svc.inhouseQueue(u, 500));
+    const queued = q.find((x) => x.id === r.entry.id)!;
+    assert.ok(queued, 'the in-house server sees the queued entry through its company grant');
+    assert.equal((await openSealed(key.privateJwk, queued.sealed)).id_number, '880202-10-4321');
     assert.deepEqual(await db.asUser('u-inhouse-server', (svc, u) => svc.inhouseConfirm(u, [r.entry.id])), { confirmed: 1 });
-    const after_ = await db.asUser('u-inhouse-server', (svc, u) => svc.inhouseQueue(u, 50));
+    const after_ = await db.asUser('u-inhouse-server', (svc, u) => svc.inhouseQueue(u, 500));
     assert.equal(after_.some((x) => x.id === r.entry.id), false);
   });
 });
