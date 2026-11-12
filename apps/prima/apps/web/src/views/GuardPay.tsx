@@ -24,15 +24,17 @@ import {
   type Tone,
 } from "../ui";
 import { Empty } from "../kit";
+import { GuardPayPreparers } from "./GuardPayPreparers";
 
 /**
  * Guard pay run (Fauzan, 5 Nov 2026). Guards, stationed officers and patrolling officers are paid from locked
- * attendance under the ACT pay formula used at their site. HR prepares each company's month, the COO approves with a
- * reason, Finance pays through the bank. While the JA Group app still pays guards, every month is a trial to compare.
+ * attendance under the ACT pay formula used at their site. Each company prepares its own month (P100 B1: the person its
+ * Company Manager names), the COO approves with a reason, Finance pays through the bank. While the JA Group app still
+ * pays guards, every month is a trial to compare.
  */
 
 const STAGE: Record<GuardPayStage, [Tone, string]> = {
-  draft: ["neutral", "Draft with HR"],
+  draft: ["neutral", "Draft with the company"],
   submitted: ["warn", "With the COO"],
   approved: ["info", "Approved, with Finance"],
   paid: ["ok", "Paid"],
@@ -55,7 +57,8 @@ const monthLabel = (p: string) =>
   });
 
 export function GuardPayView() {
-  const { data, error } = useLoad(() => api.guardPayroll(), []);
+  const [tick, setTick] = useState(0);
+  const { data, error } = useLoad(() => api.guardPayroll(), [tick]);
   const [open, setOpen] = useState<string | null>(null);
   if (error) return <ErrorNotice error={error} />;
   if (!data) return <Loading what="guard pay" />;
@@ -65,9 +68,9 @@ export function GuardPayView() {
         <h1>Guard pay</h1>
         <p className="muted">
           Monthly pay for guards and officers, from locked attendance and the
-          ACT pay formula used at each site. HR prepares, the COO approves with
-          a reason, and Finance pays through the bank. Prima only drafts the
-          files.
+          ACT pay formula used at each site. Each company prepares its own month,
+          the COO approves with a reason, and Finance pays through the bank.
+          Prima only drafts the files.
         </p>
       </div>
       {!data.rule.primaPays && (
@@ -84,6 +87,7 @@ export function GuardPayView() {
           approval.
         </div>
       )}
+      <GuardPayPreparers data={data} onChanged={() => setTick((n) => n + 1)} />
       <ConsentLetters />
       <Runs data={data} onOpen={setOpen} />
       {open && <RunDrawer runId={open} onClose={() => setOpen(null)} />}
@@ -140,7 +144,7 @@ function Runs({
         </div>
         {data.employers.length === 0 && (
           <Empty title="No guards or officers on the pay list yet">
-            A company appears here once it has active guards or officers in People. HR then prepares each month's pay from their locked attendance.
+            A company appears here once it has active guards or officers in People. Its named preparer then prepares each month's pay from their locked attendance.
           </Empty>
         )}
         <div className="list">
@@ -172,7 +176,7 @@ function Runs({
                       {monthLabel(p)}:{" "}
                       <Chip tone={STAGE[r.stage][0]}>{STAGE[r.stage][1]}</Chip>
                     </button>
-                  ) : data.role === "hr" && data.on ? (
+                  ) : e.prepares && data.on ? (
                     <button
                       key={p}
                       className={`btn btn-sm${p === data.prev ? " btn-primary" : ""}`}
@@ -294,8 +298,8 @@ function RunBody({
     URL.revokeObjectURL(url);
   };
   const steps: [string, (typeof run)["prepared"] | null][] = [
-    ["Prepared by HR", run.prepared],
-    ["Submitted by HR", run.submitted],
+    ["Prepared by", run.prepared],
+    ["Submitted by", run.submitted],
     ["Approved by the COO", run.approved],
     ["Paid by Finance", run.paid],
   ];
@@ -472,9 +476,9 @@ function RunBody({
                 <button
                   className="btn btn-sm"
                   disabled={act.busy || !note.trim()}
-                  onClick={() => step(() => api.guardPayStep(run.id, "return", { note }), "Returned to HR.")}
+                  onClick={() => step(() => api.guardPayStep(run.id, "return", { note }), "Returned to the preparer.")}
                 >
-                  Return to HR
+                  Return to the preparer
                 </button>
               )}
             </div>
@@ -562,7 +566,7 @@ function RunBody({
 
 /**
  * Public holidays for the month. Guard holidays come from the yearly lists the Operations Director or OGM set (per
- * state); HR enters them here only for a company with no yearly list. Staff holidays are separate.
+ * state); the company's preparer enters them here only for a company with no yearly list. Staff holidays are separate.
  */
 function Holidays({ data, onChanged }: { data: GuardPayRunView; onChanged: () => void }) {
   const { run, can } = data;
@@ -614,7 +618,7 @@ function Holidays({ data, onChanged }: { data: GuardPayRunView; onChanged: () =>
       </div>
       {!run.holidays.length && (
         <p className="muted small">
-          None entered. HR enters the gazetted holidays for the company's states; until then no day is paid at the holiday rate.
+          None entered. The preparer enters the gazetted holidays for the company's states; until then no day is paid at the holiday rate.
         </p>
       )}
       <div className="list">

@@ -56,6 +56,8 @@ const MODULE_TABLES: Partial<Record<TableName, string>> = {
   ownerTestCheckins: 'The owner test check-in is not set up in this database yet (module owner-test-checkin-v1).',
   // P97: the staff check-in and check-out face photos (db/modules/clock-snaps-v1.sql, applied by the office prima-setup).
   clockSnaps: 'Check-in face photos are not set up in this database yet (module clock-snaps-v1).',
+  // P100 pay (B1): who prepares each company's guard pay run (db/modules/guard-pay-preparers-v1.sql, office prima-setup).
+  guardPayPreparers: 'The guard pay preparer list is not set up in this database yet (module guard-pay-preparers-v1).',
 };
 
 // Exported for the per-request read snapshots (read-cache.ts, P83).
@@ -251,6 +253,7 @@ checkinSettings: 'prima.checkin_settings',
 checkinEvents: 'prima.checkin_events',
 ownerTestCheckins: 'prima.owner_test_checkins',
 clockSnaps: 'prima.clock_snaps',
+guardPayPreparers: 'prima.guard_pay_preparers',
 loginHandovers: 'prima.login_handovers',
 hrFilings: 'prima.hr_filings',
 hrCases: 'prima.hr_cases',
@@ -424,6 +427,7 @@ const HAS_COMPANY_COLUMN = new Set<TableName>([
 'staffClocks',
 'locationPings',
 'clockSnaps',
+'guardPayPreparers',
 'remoteArrangements',
 'remoteDays',
 'flexRequests',

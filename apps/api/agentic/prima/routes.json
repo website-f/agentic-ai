@@ -5321,6 +5321,15 @@
   "body": "Record<string, unknown>"
  },
  {
+  "method": "POST",
+  "path": "api/pay-p100/:action",
+  "name": "payAction",
+  "params": [
+   "action"
+  ],
+  "body": "Record<string, unknown>"
+ },
+ {
   "method": "GET",
   "path": "api/pdpa",
   "name": "pdpaBoard"

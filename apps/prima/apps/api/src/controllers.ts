@@ -634,6 +634,8 @@ export class AppController {
       companies: await svc.visibleCompanies(user),
       now: svc.now(),
       dataMode: dataModeOf(process.env.PRIMA_DATA_MODE),
+      // P100 B1: a guard pay preparer named by their Company Manager sees Guard pay in the menu.
+      guardPayPreparer: await svc.isGuardPayPreparer(user),
     }));
   }
 
@@ -3138,6 +3140,14 @@ export class AppController {
   @Get('guard-pay/:id')
   guardPayRun(@UserId() uid: string, @Param('id') id: string) {
     return this.db.asUser(uid, (svc, u) => svc.guardPayRun(u, id.slice(0, 120)));
+  }
+
+  // P100 pay: the pay changes' new actions (B1 guard pay preparers, ...), one route; the service checks each role.
+  @Post('pay-p100/:action')
+  payAction(@UserId() uid: string, @Param('action') action: string, @Body() b: Record<string, unknown>) {
+    const body: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(b ?? {}).slice(0, 40)) body[k.slice(0, 40)] = typeof v === 'string' ? v.slice(0, 2000) : v;
+    return this.db.asUser(uid, (svc, u) => svc.payAction(u, action.slice(0, 60), body));
   }
 
   @Post('guard-pay')

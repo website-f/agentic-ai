@@ -57,7 +57,8 @@ const REFRESH = [
 // nothing. They add new tables only; no existing table, row or policy is changed.
 //   owner-test-checkin-v1.sql: the owner's TEST check-in and check-out with the route between (never attendance or pay).
 //   clock-snaps-v1.sql (P97): the staff check-in and check-out face photos, seen only by the person, their manager and HR.
-const OFFICE_MODULES = ['owner-test-checkin-v1.sql', 'clock-snaps-v1.sql'];
+//   guard-pay-preparers-v1.sql (P100 B1): who prepares each company's guard pay run, named by its Company Manager.
+const OFFICE_MODULES = ['owner-test-checkin-v1.sql', 'clock-snaps-v1.sql', 'guard-pay-preparers-v1.sql'];
 (async () => {
   const { Client } = require(require.resolve('pg', { paths: [cwd] }));
   const c = new Client({ connectionString: process.env.DATABASE_URL });

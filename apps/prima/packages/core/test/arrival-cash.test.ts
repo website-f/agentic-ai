@@ -81,7 +81,7 @@ describe('arrival cash distinct recoverable advance',()=>{
 describe('CEO-only ordinary wage-cash scope',()=>{
  it('denies COO decisions, binds net amount, refuses stale handout and preserves the approval',async()=>{
   const x=await fixture(),hr=x.user('u-pwvsb-hr'),coo=x.user('u-coo');
-  const run=await x.svc.prepareGuardPay(hr,x.companyId,'2026-10'),line=run.lines.find(l=>l.net>0)!;
+  const run=await x.svc.prepareGuardPay(x.preparer,x.companyId,'2026-10'),line=run.lines.find(l=>l.net>0)!;
   await x.svc.guardPayCash(x.doa,run.id,line.personId,'list',{reason:'Synthetic wage cash'});
   await expect(x.svc.guardPayCash(coo,run.id,line.personId,'decide',{give:true,reason:'Not CEO'})).rejects.toThrow('CEO');
   await x.svc.guardPayCash(x.ceo,run.id,line.personId,'decide',{give:true,reason:'Approved exact wage amount'});
@@ -93,7 +93,7 @@ describe('CEO-only ordinary wage-cash scope',()=>{
  });
  it('accepts a genuine transaction-specific wage receipt once and never replays a handout',async()=>{
   const x=await fixture(),hr=x.user('u-pwvsb-hr'),coo=x.user('u-coo');
-  const run=await x.svc.prepareGuardPay(hr,x.companyId,'2026-10'),line=run.lines.find(l=>l.net>0)!;
+  const run=await x.svc.prepareGuardPay(x.preparer,x.companyId,'2026-10'),line=run.lines.find(l=>l.net>0)!;
   await x.svc.guardPayCash(x.doa,run.id,line.personId,'list',{reason:'Synthetic wage cash'});
   await x.svc.guardPayCash(x.ceo,run.id,line.personId,'decide',{give:true,reason:'Approved exact wage amount'});
   const saved=x.ds.guardPayRuns.find(r=>r.id===run.id)!;saved.stage='paid';saved.trial=false;

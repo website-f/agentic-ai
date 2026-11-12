@@ -275,3 +275,5 @@ export * from './clock-snap-service';
 export * from './real-data';
 export * from './import-match';
 export * from './pdf-table';
+// P100 pay
+export * from './guard-pay-preparers';

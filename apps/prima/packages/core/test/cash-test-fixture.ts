@@ -14,6 +14,13 @@ export async function fixture() {
   const companyId=site.companyId, f=ds.finStatus.find(f=>f.companyId===companyId)!;
   const user=(id:string)=>ds.users.find(u=>u.id===id)!;
   const doa=user('u-pwvsb-doa'), fd=user('u-fd'), ceo=user('u-fauzan');
+  // P100 B1: the company's guard pay preparer, named by its Company Manager (a synthetic one when the seed has none).
+  const named=ds.guardPayPreparers.find(p=>p.companyId===companyId && p.active);
+  if (!named) {
+    ds.users.push({id:'u-test-preparer',name:'Test Preparer (synthetic)',title:'Admin Executive (test)',role:'admin_exec',companyIds:[companyId],siteIds:[]} as User);
+    ds.guardPayPreparers.push({id:`gpp-${companyId}-u-test-preparer`,companyId,userId:'u-test-preparer',userName:'Test Preparer (synthetic)',title:'Admin Executive (test)',active:true,named:{by:'Test Manager',byId:'u-test-cm',at:now,reason:'Synthetic preparer for the test'},removed:null,history:[]});
+  }
+  const preparer=user(named?.userId ?? 'u-test-preparer');
   const finance=ds.users.find(u=>u.department==='finance' && u.financeTeam===f.team && u.financeRole==='leader')!;
   const body=(tag='one')=>({version:1,batchId:`batch-${tag}`,workbookRef:'Controlled workbook v1',evidenceChecked:true,rows:[{personId:guard.id,siteId:site.id,occasion:today,amount:150,reason:'New guard needs additional support to attend work',request:{byId:om.id,at:myt(today,'08:00'),evidence:evidence(`om-${tag}`)},approval:{id:`approval-${tag}`,byId:ceo.id,at:myt(today,'09:00'),evidence:evidence(`approval-${tag}`)}}]});
   const action=(u:User,a:string,b:Record<string,unknown>)=>svc.financeControls.exceptionalCashAction(u,companyId,a,b);
@@ -24,5 +31,5 @@ export async function fixture() {
   };
   const receipted=async()=>{const r=await paid();await action(doa,'receipt',{id:r.id,signedAt:now,transactionSpecific:true,signedByPersonId:guard.id,paymentRef:'payment-1',amount:120,evidence:evidence('receipt')});return r;};
   const reconciled=async()=>{const r=await receipted();await action(fd,'reconcile',{id:r.id,returned:30,ref:'deposit-1',evidence:evidence('reconciliation')});return r;};
-  return {ds,svc,site,guard,om,companyId,f,doa,fd,ceo,finance,body,action,submit,paid,receipted,reconciled,user,now:()=>now,setNow:(v:string)=>{now=v;}};
+  return {ds,svc,site,guard,om,companyId,f,doa,fd,ceo,finance,preparer,body,action,submit,paid,receipted,reconciled,user,now:()=>now,setNow:(v:string)=>{now=v;}};
 }

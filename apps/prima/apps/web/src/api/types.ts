@@ -455,6 +455,8 @@ export interface Me {
    * chosen for them (null: all their Prima role allows) plus the ones everyone keeps. Absent outside the office.
    */
   office?: { primaOnly: boolean; modules: string[] | null; always: string[] };
+  /** P100 B1: a guard pay preparer named by their Company Manager (the menu shows Guard pay). */
+  guardPayPreparer?: boolean;
 }
 
 export interface RaiseCaseInput {
@@ -987,6 +989,8 @@ export interface Api extends ConnectionsClient, ExtractionClient, DraftHelpClien
   guardPayExport(runId: string, kind: GuardPayFile): Promise<{ filename: string; body: string; note: string }>;
   guardPayCash(runId: string, personId: string, action: GuardPayCashAction, body: { reason?: string; give?: boolean; on?: string; proof?: ProofInput[]; transactionSpecific?: boolean; amount?: number; signedByPersonId?: string }): Promise<unknown>;
   recordPayConsent(personId: string, body: PayConsentInput): Promise<unknown>;
+  /** P100 pay: the pay changes' new actions (guard pay preparers, ...), one route. */
+  payAction(action: string, body: Record<string, unknown>): Promise<unknown>;
   payConsentsWaiting(): Promise<R<'payConsentsWaiting'>>;
   statutoryBoard(): Promise<R<'statutoryBoard'>>;
   setStatutory(body: Parameters<PrimaService['setStatutory']>[1]): Promise<unknown>;

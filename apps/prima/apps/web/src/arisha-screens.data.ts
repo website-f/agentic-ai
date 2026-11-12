@@ -5281,7 +5281,7 @@ export const SCREEN_GUIDES: ScreenGuide[] = [
     "view": "guardpay",
     "title": "Guard pay",
     "what": "Monthly pay for guards and officers, worked out from locked attendance and the ACT pay formula for each site.",
-    "who": "HR prepares each company's month, the COO approves with a reason, and Finance pays. The Director Office lists guards who need cash; the COO or CEO decides. Company managers see their own company. Guards see their payslips on their Duty screen.",
+    "who": "Each company prepares its own month: the person its Company Manager names. The COO approves with a reason, and Finance pays. The Director Office lists guards who need cash; the COO or CEO decides. Company managers see every month of their own company. Guards see their payslips on their Duty screen.",
     "tabs": [
       {
         "name": "To check",
@@ -5294,7 +5294,14 @@ export const SCREEN_GUIDES: ScreenGuide[] = [
     ],
     "tasks": [
       {
-        "task": "How to prepare a month (HR)",
+        "task": "How to name who prepares (Company Manager)",
+        "steps": [
+          "Under \"Who prepares the pay run\", choose a person in \"Person to prepare\" and type a \"Reason\".",
+          "Press \"Name preparer\". To change, press \"Remove\" beside a name and give the reason."
+        ]
+      },
+      {
+        "task": "How to prepare a month (the company's preparer)",
         "steps": [
           "Under \"By company\", press \"Prepare\" with the month.",
           "Check lines under \"To check\"; open \"PCB or one-off item\" to type \"PCB from e-PCB\" and press \"Save PCB\".",
@@ -5305,7 +5312,7 @@ export const SCREEN_GUIDES: ScreenGuide[] = [
         "task": "How to approve a month (COO)",
         "steps": [
           "Open the month showing \"Your turn\" and read \"Beside the JA Group app\".",
-          "Type a \"Reason or comment\", press \"Approve\" or \"Return to HR\"."
+          "Type a \"Reason or comment\", press \"Approve\" or \"Return to the preparer\"."
         ]
       },
       {

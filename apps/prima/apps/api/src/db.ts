@@ -111,7 +111,18 @@ export class Db implements OnModuleDestroy {
       await client.query(`SELECT set_config('app.user_id', $1, true)`, [user.id]);
       await client.query(`SELECT set_config('app.user_role', $1, true)`, [user.role]);
       await client.query(`SELECT set_config('app.group_user', $1, true)`, [isGroupRole(user) ? 'on' : 'off']);
-      await client.query(`SELECT set_config('app.walls', $1, true)`, [dataWalls(user).join(',')]);
+      const walls = dataWalls(user);
+      // P100 B1: a guard pay preparer named by their Company Manager reads the ACT pay formulas, the pay law and the
+      // statutory rates (read only, the pay_read door HR used before), so their company's run finds its formula.
+      if (!walls.includes('pay_read') && (user.role === 'admin_exec' || user.role === 'company_manager')) {
+        // Checked in two steps: a query on a missing table would abort the whole request's transaction.
+        const present = await client.query(`SELECT to_regclass('prima.guard_pay_preparers') IS NOT NULL AS ok`);
+        const named = present.rows[0]?.ok === true
+          ? await client.query(`SELECT EXISTS (SELECT 1 FROM prima.guard_pay_preparers WHERE data->>'userId' = $1 AND data->>'active' = 'true') AS ok`, [user.id])
+          : null;
+        if (named?.rows[0]?.ok === true) walls.push('pay_read');
+      }
+      await client.query(`SELECT set_config('app.walls', $1, true)`, [walls.join(',')]);
       // Hand-overs between departments ride the audit log in this same transaction, when switched on.
       // P83: per-request read snapshots (read-cache.ts): one query per table instead of one per company.
       const reads = process.env.PRIMA_READ_SNAPSHOTS === 'false' ? pgStore : withReadSnapshots(pgStore, client, (t) => TABLE[t]);

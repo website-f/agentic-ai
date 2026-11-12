@@ -348,8 +348,8 @@ const NAV: { view: ViewName; label: string; icon: string; roles: User['role'][];
   // Group websites (Fauzan, 27 Oct 2026): IT runs the register and reviews; each company answers for its own websites.
   { view: 'websites', label: 'Websites', icon: 'device', roles: ['director', 'pwvsb_officer', 'company_manager', 'admin_exec'] },
   { view: 'staffpay', label: 'Staff payroll', icon: 'audit', roles: ['director', 'pwvsb_officer', 'company_manager', 'admin_exec'] },
-  // Guard pay run (Fauzan, 5 Nov 2026): HR prepares, the COO approves, Finance pays.
-  { view: 'guardpay', label: 'Guard pay', icon: 'audit', roles: ['director', 'pwvsb_officer', 'company_manager'] },
+  // Guard pay run (Fauzan, 5 Nov 2026; P100 B1 11 Nov 2026): each company's named preparer prepares, the COO approves, Finance pays.
+  { view: 'guardpay', label: 'Guard pay', icon: 'audit', roles: ['director', 'pwvsb_officer', 'company_manager', 'admin_exec'] },
   // Wage advances (Fauzan, 6 Nov 2026): the OM sets, the OD or OGM approves, Finance pays.
   { view: 'advances', label: 'Wage advances', icon: 'audit', roles: ['director', 'pwvsb_officer'] },
   // Statutory rates (Fauzan, 6 Nov 2026): the CEO sets EPF, SOCSO and the rest by month; HR, Finance and ACT see them.
@@ -862,7 +862,7 @@ function Shell({ me, onSignOut, onReset }: { me: Me; onSignOut: () => void; onRe
         role === 'company_manager' ||
         (!!me.user.personId && role !== 'supervisor' && me.user.opsTier !== 'patrol')) &&
       // Guard pay: HR, Finance teams, group leadership (the COO approves) and the company manager for their own company.
-      (n.view !== 'guardpay' || leader || dept === 'hr' || dept === 'director_office' || (dept === 'finance' && me.user.financeTeam != null) || role === 'company_manager') &&
+      (n.view !== 'guardpay' || leader || dept === 'hr' || dept === 'director_office' || (dept === 'finance' && me.user.financeTeam != null) || role === 'company_manager' || me.guardPayPreparer === true) &&
       // Advances: the OM, the Operations Director and OGM, HR, Finance teams and group leadership.
       (n.view !== 'arrivalcash' || me.user.opsTier === 'ceo' || dept === 'finance' || (dept === 'fwm' && me.user.fwmRole === 'manager')) &&
       (n.view !== 'loans' || leader || dept === 'hr' || (dept === 'finance' && me.user.financeTeam != null) || ['coo', 'ceo'].includes(me.user.opsTier ?? '')) &&

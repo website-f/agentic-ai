@@ -1,6 +1,8 @@
 // Actual PostgreSQL transactions and company walls, with synthetic data and no external payment.
 import 'reflect-metadata';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { after, beforeEach, describe, it } from 'node:test';
 import { RULES, generateDataset, myt, type GuardPayRun } from '@prima/core';
 import { Db } from '../src/db';
@@ -10,6 +12,9 @@ const URL = process.env.DATABASE_URL ?? 'postgres://postgres@127.0.0.1:55438/pri
 process.env.DATABASE_URL = URL;
 const NOW = myt('2026-11-05', '10:00');
 const clock = () => NOW;
+// P100 B1: each company prepares its own month; its Company Manager names the preparer (office module).
+const PREPARERS_SQL = readFileSync(resolve(__dirname, '../../../../db/modules/guard-pay-preparers-v1.sql'), 'utf8');
+const PREPARER = 'u-ae-arsh';
 
 describe('payroll repair release gates (actual PostgreSQL)', () => {
   let db: Db;
@@ -17,6 +22,8 @@ describe('payroll repair release gates (actual PostgreSQL)', () => {
     if (db) await db.onModuleDestroy();
     await resetDb(URL, NOW);
     db = new Db();
+    await db.pool.query(PREPARERS_SQL);
+    await db.asUser('u-cm-arsh', (svc, u) => svc.payAction(u, 'guard-pay-preparer', { companyId: 'co-arsh', userId: PREPARER, action: 'name', reason: 'Prepares the guard pay (test)' }), clock);
     RULES.guardPayroll.value.primaPays = true;
     // resetDb's default roster history does not reach October; add explicit synthetic closed-month
     // attendance rather than weakening the payroll's empty/negative-line checks for the fixture.
@@ -31,8 +38,8 @@ describe('payroll repair release gates (actual PostgreSQL)', () => {
     await db.pool.query(`UPDATE prima.people SET data = jsonb_set(data, '{bank}', '{"bank":"Synthetic","accountMasked":"****9999"}'::jsonb) WHERE data->'bank' IS NULL OR data->'bank' = 'null'::jsonb`);
   });
   after(async () => { RULES.guardPayroll.value.primaPays = false; if (db) await db.onModuleDestroy(); });
-  const prepare = () => db.asUser('u-pwvsb-hr', (svc, u) => svc.prepareGuardPay(u, 'co-arsh', '2026-10'), clock);
-  const submit = (run: GuardPayRun) => db.asUser('u-pwvsb-hr', (svc, u) => svc.guardPayStep(u, run.id, 'submit'), clock);
+  const prepare = () => db.asUser(PREPARER, (svc, u) => svc.prepareGuardPay(u, 'co-arsh', '2026-10'), clock);
+  const submit = (run: GuardPayRun) => db.asUser(PREPARER, (svc, u) => svc.guardPayStep(u, run.id, 'submit'), clock);
   const approve = (run: GuardPayRun) => db.asUser('u-coo', (svc, u) => svc.guardPayStep(u, run.id, 'approve', { note: 'Synthetic approval' }), clock);
   const save = (run: GuardPayRun) => {
     const { id, companyId: _companyId, ...patch } = run;
@@ -93,7 +100,7 @@ describe('payroll repair release gates (actual PostgreSQL)', () => {
     let locked!: () => void, release!: () => void;
     const acquired = new Promise<void>((resolve) => { locked = resolve; });
     const released = new Promise<void>((resolve) => { release = resolve; });
-    const submitting = db.asUser('u-pwvsb-hr', async (svc, u, store) => {
+    const submitting = db.asUser(PREPARER, async (svc, u, store) => {
       await store.lock!('guardPayRuns', run.id); locked(); await released;
       return svc.guardPayStep(u, run.id, 'submit');
     }, clock);

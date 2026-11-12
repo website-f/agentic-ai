@@ -1331,6 +1331,7 @@
    "POST guard-pay/consent/:/approve",
    "POST guard-pay/loans",
    "POST guard-pay/loans/:/:",
+   "POST pay-p100/:",
    "POST statutory"
   ],
   "arms": [
@@ -2122,6 +2123,7 @@
    "POST guard-pay/consent/:/approve",
    "POST guard-pay/loans",
    "POST guard-pay/loans/:/:",
+   "POST pay-p100/:",
    "POST statutory"
   ],
   "handovers": [
@@ -2377,6 +2379,7 @@
    "POST guard-pay/consent/:/approve",
    "POST guard-pay/loans",
    "POST guard-pay/loans/:/:",
+   "POST pay-p100/:",
    "POST statutory"
   ],
   "meetings": [
@@ -2472,6 +2475,7 @@
    "POST leave/:/hospital-claim",
    "POST me/face",
    "POST me/items/:/:",
+   "POST pay-p100/:",
    "POST people/:/guard-phone/code",
    "POST people/:/hiring-docs",
    "POST people/:/pin",
@@ -2955,6 +2959,7 @@
    "POST guard-pay/consent/:/approve",
    "POST guard-pay/loans",
    "POST guard-pay/loans/:/:",
+   "POST pay-p100/:",
    "POST statutory"
   ],
   "surveys": [

@@ -1,0 +1,142 @@
+/* =====================================================================================================================
+   P100 pay (Fauzan's 11 Nov 2026 handover): the guard pay preparers (B1), hours recorded beside hours paid (B1b), the
+   part-month working (C1), the FD cash stand-in (B2), overtime in staff payroll (C12/J3). Same look as the P97/P98
+   salary calculator and statutory rates screens: cards on the surface colour, one line of help, big phone targets.
+   Colours, radii and controls come from styles.css tokens only; works in light and dark, 360 px up to 1366 px.
+   ===================================================================================================================== */
+
+.pp-card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  box-shadow: var(--shadow);
+  padding: 16px 20px;
+  margin: 0 0 16px;
+  min-width: 0;
+}
+.pp-card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  margin-bottom: 12px;
+}
+.pp-card-head > div {
+  flex: 1 1 260px;
+  min-width: 0;
+}
+.pp-card-head h2 {
+  font-size: 1rem;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  margin: 0;
+}
+.pp-card-head p {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 0.875rem;
+  max-width: 70ch;
+}
+.pp-more {
+  margin-top: 8px;
+  min-height: 44px;
+}
+
+/* ---------- B1: one card per company, its preparers and the naming form ---------- */
+.pp-companies {
+  display: grid;
+  gap: 12px;
+}
+@media (min-width: 900px) {
+  .pp-companies {
+    grid-template-columns: repeat(auto-fit, minmax(380px, 1fr));
+  }
+}
+.pp-company {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 12px 14px;
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+.pp-company-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.pp-people {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+.pp-person {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.pp-person-text {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  flex: 1 1 200px;
+}
+.pp-person-name {
+  font-weight: 600;
+}
+.pp-person-sub,
+.pp-person-why {
+  color: var(--muted);
+  font-size: 0.8125rem;
+  overflow-wrap: anywhere;
+}
+.pp-inline-form,
+.pp-name-form {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: flex-end;
+}
+.pp-inline-form .input {
+  flex: 1 1 200px;
+}
+.pp-field {
+  display: grid;
+  gap: 4px;
+  flex: 1 1 220px;
+  min-width: 0;
+  font-size: 0.8125rem;
+  color: var(--muted);
+}
+.pp-name-form .btn,
+.pp-inline-form .btn {
+  min-height: 44px;
+}
+.pp-blocked {
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--warn-soft);
+  color: var(--ink);
+  font-size: 0.8125rem;
+}
+.pp-history summary {
+  cursor: pointer;
+  font-size: 0.8125rem;
+  color: var(--muted);
+  min-height: 32px;
+  display: flex;
+  align-items: center;
+}
+.pp-history ul {
+  margin: 4px 0 0;
+  padding-left: 18px;
+  font-size: 0.8125rem;
+  color: var(--muted);
+}

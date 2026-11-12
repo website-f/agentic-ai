@@ -599,6 +599,7 @@ import type { JaRecord } from "./types";
 import type { JaSync } from "./types";
 import type { JaWorker } from "./types";
 import type { CooNotice } from "./types";
+import { canBeGuardPayPreparer, guardPayPreparerId, namesGuardPayPreparers, type GuardPayPreparer } from './guard-pay-preparers';
 import { OfflineSyncService } from "./offline-sync";
 import { FIN_AUTO } from "./finance";
 import { FinanceDeskService } from "./finance";
@@ -31135,7 +31136,8 @@ export class PrimaService {
 
   // ---------- Guard pay run (Fauzan, 5 Nov 2026, third audit item 1) ----------
   // Prima's own monthly pay for guards, stationed officers and patrolling officers, from locked attendance under the
-  // ACT pay formula used at the site (PR #112). HR prepares each company's month, the COO approves with a reason
+  // ACT pay formula used at the site (PR #112). Each company prepares its own month (P100 B1, Fauzan 11 Nov 2026: the
+  // Company Manager names the preparers; HR and the OMs no longer prepare), the COO approves with a reason
   // (salary-approval rule, 26 Oct 2026), Finance pays through the bank. While the JA Group app still pays guards, a run
   // is a side-by-side trial (rule PAY-GUARD primaPays off): compared with JA's figures and never marked paid.
 
@@ -31162,14 +31164,136 @@ export class PrimaService {
 
   private async guardPayEmployers(user: User): Promise<Id[]> {
     const role = this.guardPayRoleOf(user);
-    if (!role) return [];
+    const preparing = await this.guardPayPreparing(user);
+    if (!role) return preparing;
     const ids = user.role === 'company_manager' ? user.companyIds : tenantCompanyIds(user, await this.grants(), this.today());
-    return ids.filter((id) => !isCentralEmployer(id));
+    return [...new Set([...ids, ...preparing])].filter((id) => !isCentralEmployer(id));
+  }
+
+  // P100 B1 (Fauzan, 11 Nov 2026): each company prepares its own guard pay run. The Company Manager names the preparer(s)
+  // for their company; HR and the OMs no longer prepare. The preparers are kept in prima.guard_pay_preparers (office module).
+
+  /** The preparer list (empty before the office module guard-pay-preparers-v1 is in this database). */
+  private async guardPayPreparerRows(filter: { companyId?: Id[]; userId?: Id } = {}): Promise<GuardPayPreparer[]> {
+    try {
+      return await this.store.list('guardPayPreparers', filter);
+    } catch (err) {
+      if (err instanceof BadRequest) return [];
+      throw err;
+    }
+  }
+
+  /** The companies this user is a named, active preparer for (read from the store, never from the request). */
+  private async guardPayPreparing(user: User): Promise<Id[]> {
+    if (user.integration || (user.role !== 'admin_exec' && user.role !== 'company_manager')) return [];
+    const rows = await this.guardPayPreparerRows({ userId: user.id });
+    const today = this.today();
+    return rows.filter((r) => r.active && canBeGuardPayPreparer(user, r.companyId, today)).map((r) => r.companyId);
+  }
+
+  /** P100 B1: whether this user is a named guard pay preparer for any company (the menu shows Guard pay to them). */
+  async isGuardPayPreparer(user: User): Promise<boolean> {
+    return (await this.guardPayPreparing(user)).length > 0;
+  }
+
+  private async guardPayPreparesFor(user: User, companyId: Id): Promise<boolean> {
+    return (await this.guardPayPreparing(user)).includes(companyId);
+  }
+
+  /** Who prepares each company this user sees, and for its Company Manager the people they may name. */
+  private async guardPayPreparerBoard(user: User, companyIds: Id[]) {
+    if (!companyIds.length) return [];
+    const [rows, users, companies] = await Promise.all([this.guardPayPreparerRows({ companyId: companyIds }), this.store.list('users'), this.store.list('companies', { id: companyIds })]);
+    const today = this.today();
+    return companyIds.map((companyId) => {
+      const names = namesGuardPayPreparers(user, companyId);
+      return {
+        companyId,
+        companyName: companies.find((c) => c.id === companyId)?.name ?? companyId,
+        canName: names,
+        preparers: rows.filter((r) => r.companyId === companyId).sort((a, b) => Number(b.active) - Number(a.active) || a.userName.localeCompare(b.userName)),
+        candidates: names
+          ? users
+              .filter((u) => u.id !== user.id && canBeGuardPayPreparer(u, companyId, today))
+              .map((u) => ({ id: u.id, name: u.name, title: u.title ?? '' }))
+              .sort((a, b) => a.name.localeCompare(b.name))
+          : [],
+      };
+    });
+  }
+
+  /**
+   * The Company Manager names (or removes) a preparer for their company, with a reason. Only an admin executive or another
+   * manager of the same company, never themself, an OM, central HR or a guard. Every change is kept and audited.
+   */
+  async setGuardPayPreparer(user: User, body: { companyId?: string; userId?: string; action?: string; reason?: string }) {
+    const companyId = String(body.companyId ?? '').slice(0, 120);
+    const userId = String(body.userId ?? '').slice(0, 120);
+    const action = body.action === 'remove' ? 'remove' : body.action === 'name' ? 'name' : null;
+    if (!namesGuardPayPreparers(user, companyId)) throw new AccessDenied('hr.monitor', '(guard pay preparers: the Company Manager only)');
+    if (!action) throw new BadRequest('Choose to name or remove a preparer.');
+    const reason = String(body.reason ?? '').trim().slice(0, 300);
+    if (reason.length < 5) throw new BadRequest('Give the reason for this choice.');
+    if (userId === user.id) throw new BadRequest('You monitor the pay run: name someone else in your company to prepare it.');
+    const who = await this.store.get('users', userId);
+    if (!who) throw new NotFound('Staff sign-in');
+    const id = guardPayPreparerId(companyId, userId);
+    const at = this.now();
+    const step = { by: user.name, byId: user.id, at, reason };
+    return this.store.transaction(async (tx) => {
+      await tx.lock?.('guardPayPreparers', id);
+      const old = await tx.get('guardPayPreparers', id);
+      let row: GuardPayPreparer;
+      if (action === 'name') {
+        if (!canBeGuardPayPreparer(who, companyId, this.today()))
+          throw new BadRequest(`${who.name} cannot prepare this company's guard pay: choose an admin executive or manager of the company (not an OM, HR, a guard or a closed account).`);
+        if (old?.active) throw new BadRequest(`${who.name} already prepares this company's guard pay.`);
+        row = {
+          id,
+          companyId,
+          userId,
+          userName: who.name,
+          title: who.title ?? '',
+          active: true,
+          named: step,
+          removed: null,
+          history: old ? [...(old.removed ? [{ what: 'removed' as const, step: old.removed }] : []), { what: 'named' as const, step: old.named }, ...old.history].slice(0, 40) : [],
+        };
+      } else {
+        if (!old?.active) throw new BadRequest(`${who.name} does not prepare this company's guard pay.`);
+        row = { ...old, active: false, removed: step };
+      }
+      if (old) {
+        const { id: _id, companyId: _co, ...patch } = row;
+        await tx.update('guardPayPreparers', id, patch);
+      } else await tx.insert('guardPayPreparers', row);
+      await tx.audit({
+        at,
+        actor: user.name,
+        companyId,
+        action: action === 'name' ? 'guardpay.preparer_named' : 'guardpay.preparer_removed',
+        entity: 'guard_pay_preparer',
+        entityId: id,
+        summary: `${who.name} ${action === 'name' ? 'named to prepare' : 'no longer prepares'} the guard pay run: ${reason}`,
+      });
+      return row;
+    });
+  }
+
+  /** P100 pay: one entry for the pay changes' new actions (one API route and one demo operation). */
+  async payAction(user: User, action: string, body: Record<string, unknown> = {}): Promise<unknown> {
+    const b = (body && typeof body === 'object' ? body : {}) as Record<string, string | undefined>;
+    switch (action) {
+      case 'guard-pay-preparer':
+        return this.setGuardPayPreparer(user, b);
+      default:
+        throw new BadRequest('Unknown pay action.');
+    }
   }
 
   private guardPayWaiting(run: GuardPayRun): string | null {
     if (run.stage === 'approved' && run.trial) return 'Trial: compare with the JA Group app (Prima does not pay guards yet)';
-    return { draft: 'HR to submit', submitted: 'COO to approve', approved: 'Finance to pay', paid: null }[run.stage];
+    return { draft: "The company's preparer to submit", submitted: 'COO to approve', approved: 'Finance to pay', paid: null }[run.stage];
   }
 
   private guardPayLate(run: GuardPayRun | null, period: string, today: IsoDate): boolean {
@@ -31185,7 +31309,8 @@ export class PrimaService {
 
   /** The guard pay screen: each company's month, what waits on whom. */
   async guardPayroll(user: User) {
-    const role = this.guardPayRoleOf(user);
+    const preparing = await this.guardPayPreparing(user);
+    const role = this.guardPayRoleOf(user) ?? (preparing.length ? ('preparer' as const) : null);
     if (!role) throw new AccessDenied('view', '(guard pay)');
     const on = await this.guardPayOn();
     const today = this.today();
@@ -31213,8 +31338,8 @@ export class PrimaService {
         late: this.guardPayLate(r, r.period, today),
         totals: guardPayTotals(r.lines),
         mineToAct:
-          // An open month is a preview: HR's turn comes once the month has ended.
-          (role === 'hr' && r.stage === 'draft' && r.period < period) ||
+          // An open month is a preview: the preparer's turn comes once the month has ended.
+          (preparing.includes(r.companyId) && r.stage === 'draft' && r.period < period) ||
           (this.guardPayApprover(user) && r.stage === 'submitted') ||
           (role === 'finance' && r.stage === 'approved' && !r.trial),
       }));
@@ -31228,11 +31353,16 @@ export class PrimaService {
         current: cur ? { id: cur.id, stage: cur.stage } : null,
         last: last ? { id: last.id, stage: last.stage } : null,
         lastLate: this.guardPayLate(last, prev, today),
+        /** P100 B1: this user is a named preparer for the company. */
+        prepares: preparing.includes(id),
       };
     });
     return {
       role,
       approver: this.guardPayApprover(user),
+      /** P100 B1: the companies this user prepares, and who prepares each company this user sees. */
+      preparing,
+      preparers: await this.guardPayPreparerBoard(user, [...new Set([...employers, ...ids.filter((id) => namesGuardPayPreparers(user, id))])]),
       on,
       period,
       prev,
@@ -31250,9 +31380,12 @@ export class PrimaService {
 
   /** One run in full: every line, the steps taken, JA's figures and what this user may do. */
   async guardPayRun(user: User, runId: Id) {
-    const role = this.guardPayRoleOf(user);
+    const preparing = await this.guardPayPreparing(user);
+    const role = this.guardPayRoleOf(user) ?? (preparing.length ? ('preparer' as const) : null);
     if (!role) throw new AccessDenied('view', '(guard pay)');
     const run = await this.guardPayRunFor(user, runId);
+    // P100 B1: only a preparer the Company Manager named for this company prepares and submits it.
+    const prepares = preparing.includes(run.companyId);
     const co = await this.store.get('companies', run.companyId);
     const approver = this.guardPayApprover(user);
     const totals = guardPayTotals(run.lines);
@@ -31307,8 +31440,8 @@ export class PrimaService {
         code: sha256Hex(payable.map((l) => `${l.staffNo}|${l.bank?.accountMasked ?? ''}|${l.net.toFixed(2)}`).join('\n')).slice(0, 12).toUpperCase(),
       },
       can: {
-        prepare: role === 'hr' && run.stage === 'draft',
-        submit: role === 'hr' && run.stage === 'draft' && run.lines.length > 0,
+        prepare: prepares && run.stage === 'draft',
+        submit: prepares && run.stage === 'draft' && run.lines.length > 0,
         approve: approver && run.stage === 'submitted' && !ownWork,
         pay: role === 'finance' && run.stage === 'approved' && !run.trial,
         return: (approver && run.stage === 'submitted' && !ownWork) || (role === 'finance' && run.stage === 'approved'),
@@ -31506,18 +31639,20 @@ export class PrimaService {
     );
   }
 
-  /** HR builds or rebuilds a company's month. Public holidays are entered by HR from the gazette; nothing is assumed. */
+  /**
+   * The company's named preparer builds or rebuilds its month (P100 B1: no longer HR or an OM). Public holidays come from
+   * the yearly guard lists, or are entered from the gazette for a company with none; nothing is assumed.
+   */
   async prepareGuardPay(user: User, companyId: Id, period: string, holidays?: unknown) {
-    if (this.guardPayRoleOf(user) !== 'hr') throw new AccessDenied('hr.monitor', '(guard pay)');
+    if (!(await this.guardPayPreparesFor(user, companyId))) throw new AccessDenied('hr.monitor', '(guard pay: only a preparer the Company Manager named for this company)');
     if (!(await this.guardPayOn())) throw new BadRequest('The guard pay run is not switched on in this database yet. Ask IT to install the guard pay module after approval.');
-    if (!(await this.guardPayEmployers(user)).includes(companyId)) throw new NotFound('Company');
     if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(period)) throw new BadRequest('Give the month as YYYY-MM.');
     const now = this.today().slice(0, 7);
     if (period > now || period < this.prevPeriod(now)) throw new BadRequest('Guard pay can be prepared for this month or last month only.');
     const id = `gp-${companyId}-${period}`;
     await this.store.lock?.('guardPayRuns', id);
     const existing = await this.store.get('guardPayRuns', id);
-    if (existing && existing.stage !== 'draft') throw new BadRequest('This month is already submitted. It must be returned to HR before it changes.');
+    if (existing && existing.stage !== 'draft') throw new BadRequest("This month is already submitted. It must be returned to the company's preparer before it changes.");
     const ctx = await this.guardPayContext(companyId, period);
     // With a yearly guard list set by the OD or OGM, HR's monthly entry is not used (and not accepted).
     if (ctx.yearly.length && Array.isArray(holidays) && holidays.length)
@@ -31547,8 +31682,9 @@ export class PrimaService {
 
   /** HR adds one-off pay (with a reason in the label) or enters the PCB from LHDN's calculator, while the month is a draft. */
   async setGuardPayLine(user: User, runId: Id, personId: Id, patch: { pcb?: number | null; extra?: { label: string; amount: number; uniformNo?: number }[] }) {
-    if (this.guardPayRoleOf(user) !== 'hr') throw new AccessDenied('hr.monitor', '(guard pay)');
+    if (!(await this.guardPayPreparing(user)).length) throw new AccessDenied('hr.monitor', '(guard pay: only a preparer the Company Manager named for this company)');
     const run = await this.guardPayRunFor(user, runId);
+    if (!(await this.guardPayPreparesFor(user, run.companyId))) throw new AccessDenied('hr.monitor', '(guard pay: only a preparer the Company Manager named for this company)');
     await this.store.lock?.('guardPayRuns', runId);
     const fresh = (await this.store.get('guardPayRuns', runId))!;
     if (fresh.stage !== 'draft') throw new BadRequest('Only a draft can change.');
@@ -31680,7 +31816,7 @@ export class PrimaService {
     } else if (action === 'return' && view.can.return) {
       if (!note) throw new BadRequest('Say what needs to change.');
       patch = { stage: 'draft', submitted: null, approved: null, returns: [...run.returns, { ...step, from: run.stage }] };
-      summary = `returned to HR: ${note}`;
+      summary = `returned to the company's preparer: ${note}`;
     } else if (action === 'pay' && run.trial && run.stage === 'approved') {
       throw new BadRequest('The JA Group app still pays guards. This month is a trial to compare; it cannot be paid from Prima until the switch date.');
     } else if (action === 'approve' && run.stage === 'submitted' && this.guardPayApprover(user)) {
@@ -32671,9 +32807,9 @@ export class PrimaService {
     };
   }
 
-  /** Home lines: HR to submit, the COO to approve, Finance to pay, and last month not paid by the 7th. */
+  /** Home lines: the company's preparer to submit, the COO to approve, Finance to pay, and last month not paid by the 7th. */
   private async guardPayHome(user: User): Promise<HomeItem[]> {
-    const role = this.guardPayRoleOf(user);
+    const role = this.guardPayRoleOf(user) ?? ((await this.guardPayPreparing(user)).length ? 'preparer' : null);
     if (!role || !(await this.guardPayOn())) return [];
     const b = await this.guardPayroll(user);
     const items: HomeItem[] = b.runs

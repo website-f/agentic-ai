@@ -3380,6 +3380,8 @@ export interface Dataset {
   ownerTestCheckins: import('./owner-test-checkin').OwnerTestCheckin[];
   /** P97: the face photo at each staff check-in and check-out (clock-snap.ts; db/modules/clock-snaps-v1.sql). */
   clockSnaps: import('./clock-snap').ClockSnap[];
+  // P100 pay: the guard pay preparers each Company Manager names (guard-pay-preparers.ts; db/modules/guard-pay-preparers-v1.sql).
+  guardPayPreparers: import('./guard-pay-preparers').GuardPayPreparer[];
   fwWelfareChecks: FwWelfareCheck[];
   fwPlacements: FwPlacement[];
   fwPlacementHosts: FwPlacementHostView[];
