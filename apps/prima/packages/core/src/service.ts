@@ -27942,10 +27942,12 @@ export class PrimaService {
   }
 
   // Vacancies (rule HR-VACANCY): HR or the company manager raises; the CEO approves; the company head signs.
+  // C2 (Fauzan, 11 Nov 2026): a PWVSB central post is signed by the CEO, not the HR Director. The CEO's approval of a
+  // central post is also its signature (one CEO step); a central post left waiting for a signature is signed by the CEO.
 
   private companyHeadSigns(user: User, v: Vacancy): boolean {
     if (user.integration) return false;
-    if (v.companyId === GROUP_EMPLOYER_ID) return isHrDirector(user);
+    if (v.companyId === GROUP_EMPLOYER_ID) return user.opsTier === 'ceo';
     return user.role === 'company_manager' && user.companyIds.includes(v.companyId);
   }
 
@@ -27979,8 +27981,12 @@ export class PrimaService {
           ...v,
           companyName: v.companyId === GROUP_EMPLOYER_ID ? 'PWVSB (central)' : (companies.find((c) => c.id === v.companyId)?.name ?? v.companyId),
           canCeo: ceo && v.status === 'waiting_ceo' && v.raisedById !== user.id,
-          canSign: v.status === 'waiting_head' && this.companyHeadSigns(user, v) && v.ceo?.byId !== user.id,
-          canClose: (hr || this.companyHeadSigns(user, v)) && (v.status === 'open' || v.status === 'waiting_ceo' || v.status === 'waiting_head'),
+          // A company head never signs a vacancy they approved as CEO; for a central post the CEO approves and signs.
+          canSign: v.status === 'waiting_head' && this.companyHeadSigns(user, v) && (v.companyId === GROUP_EMPLOYER_ID || v.ceo?.byId !== user.id),
+          signer: v.companyId === GROUP_EMPLOYER_ID ? ('ceo' as const) : ('company_head' as const),
+          canClose:
+            (hr || this.companyHeadSigns(user, v) || (v.companyId === GROUP_EMPLOYER_ID && isHrDirector(user))) &&
+            (v.status === 'open' || v.status === 'waiting_ceo' || v.status === 'waiting_head'),
           ...this.advertView(user, v, companies.find((c) => c.id === v.companyId)?.name ?? 'PWVSB', minimumWage),
           // A guard or officer post in a state no OM covers has nobody to approve its job post.
           advertApproverMissing:
@@ -28052,12 +28058,17 @@ export class PrimaService {
     let closeNote: string | null = null;
     if ((action === 'ceo_approve' || action === 'ceo_refuse') && view.canCeo) {
       const text = requireApprovalReason(note, action === 'ceo_approve' ? 'approve' : 'refuse');
-      patch = { status: action === 'ceo_approve' ? 'waiting_head' : 'refused', ceo: { by: user.name, byId: user.id, at, note: text, approve: action === 'ceo_approve' } };
-      summary = `${action === 'ceo_approve' ? 'approved' : 'refused'} by the CEO: ${text}`;
+      const central = v.companyId === GROUP_EMPLOYER_ID && action === 'ceo_approve';
+      const ceo = { by: user.name, byId: user.id, at, note: text, approve: action === 'ceo_approve' };
+      // C2: the CEO signs central posts, so the CEO's approval of one is its signature and the post opens.
+      patch = central
+        ? { status: 'open', ceo, head: { by: user.name, byId: user.id, at, note: text } }
+        : { status: action === 'ceo_approve' ? 'waiting_head' : 'refused', ceo };
+      summary = central ? `approved and signed by the CEO (central post): ${text}` : `${action === 'ceo_approve' ? 'approved' : 'refused'} by the CEO: ${text}`;
     } else if (action === 'sign' && view.canSign) {
       const text = requireApprovalReason(note, 'sign');
       patch = { status: 'open', head: { by: user.name, byId: user.id, at, note: text } };
-      summary = `approval signed by the company head: ${text}`;
+      summary = v.companyId === GROUP_EMPLOYER_ID ? `approval signed by the CEO (central post): ${text}` : `approval signed by the company head: ${text}`;
     } else if (action === 'close' && view.canClose) {
       const text = requireApprovalReason(note, 'close it');
       patch = { status: v.status === 'open' ? 'filled' : 'cancelled', closed: { by: user.name, byId: user.id, at, note: text } };

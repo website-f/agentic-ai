@@ -79,7 +79,7 @@ Fauzan approved all 21 gaps in the doc *HR gaps still to cover (Phase 3)*. His n
 - Working from home is only for staff HR allows. The system blocks it until then.
 - Retrenchment is a how-to guide for HR. Retirement at 60 works the same as for guards for now.
 - OSHA items 13 to 15 are approved.
-- Vacancies: the CEO approves and the company head signs the approval.
+- Vacancies: the CEO approves and the company head signs the approval. PWVSB central posts: the CEO approves and signs in one step (Fauzan, 11 Nov 2026, C2).
 - Payslips are delivered in the app and staff download them.
 - Handbook, code of conduct and IT-use acknowledgements are approved.
 - Statutory dates are shown as the latest allowed date, not an exact date.
@@ -364,7 +364,7 @@ Rule `HR-JOB-ADVERT`. Code: `packages/core/src/hr-job-adverts.ts`, `PrimaService
 
 - A vacancy now says whether it is for office staff, a guard or a patrolling officer. Guard and officer posts also
   name the state.
-- Once a vacancy is open (CEO approved, company head or HR Director signed), HR or the company manager writes the
+- Once a vacancy is open (CEO approved, company head signed; the CEO signs PWVSB central posts, C2, 11 Nov 2026), HR or the company manager writes the
   job post: "Draft for me" makes a bilingual BM + English draft from the job facts only (title, department, pay
   range, headcount, employer, how to apply, closing date). No AI model is connected yet, so the draft is labelled
   as Prima's template; `PrimaService.advertDrafter` is where a model plugs in later, and its output would be

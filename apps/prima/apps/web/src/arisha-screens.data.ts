@@ -175,7 +175,7 @@ export const SCREEN_GUIDES: ScreenGuide[] = [
         "means": "The case was not answered in the time allowed."
       }
     ],
-    "notes": "If the company has no detailed data yet, only licence dates show and figures are Unknown. \"Add licence\" and \"Import\" only show to people who keep licence records. Vacancies need a comment at every step; the CEO approves first, then the company head signs."
+    "notes": "If the company has no detailed data yet, only licence dates show and figures are Unknown. \"Add licence\" and \"Import\" only show to people who keep licence records. Vacancies need a comment at every step; the CEO approves first, then the company head signs; for PWVSB central posts the CEO approves and signs in one step."
   },
   {
     "view": "office",

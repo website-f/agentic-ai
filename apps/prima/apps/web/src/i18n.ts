@@ -1842,6 +1842,12 @@ const ROWS: Row[] = [
   ['Record review', 'Rekod semakan', 'Rekod review'],
   ['Who fixes the gap', 'Siapa membaiki jurang', 'Siapa fix gap'],
   ['Raise gap as ACT finding', 'Bangkitkan jurang sebagai penemuan ACT', 'Raise gap sebagai finding ACT'],
+  // P100 org: C2 central vacancies, C6 ACT, Settings home (Fauzan's 11 Nov 2026 handover)
+  ['The CEO approves a vacancy, then the company head signs the approval. The CEO approves and signs PWVSB central posts. Every step needs a comment.', 'CEO meluluskan jawatan kosong, kemudian ketua syarikat menandatangani kelulusan. CEO meluluskan dan menandatangani jawatan pusat PWVSB. Setiap langkah perlu komen.', 'CEO approve jawatan kosong, kemudian ketua syarikat sign approval. CEO approve dan sign jawatan pusat PWVSB. Setiap langkah perlu komen.'],
+  ['Approve and sign', 'Lulus dan tandatangan', 'Approve dan sign'],
+  ['Approved and signed.', 'Diluluskan dan ditandatangani.', 'Approved dan signed.'],
+  ['waiting for the CEO to sign', 'menunggu tandatangan CEO', 'tunggu CEO sign'],
+  // END P100 org
   // P91: Add and Import at the top of the business screens (Fitri, 9 Nov 2026)
   ['Import tenders', 'Import tender', 'Import tender'],
   ['Import bank accounts', 'Import akaun bank', 'Import akaun bank'],

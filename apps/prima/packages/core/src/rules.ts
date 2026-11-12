@@ -411,9 +411,9 @@ export const RULES = {
   ),
   vacancy: rule(
     'HR-VACANCY',
-    { needsCeo: true, headSigns: true },
+    { needsCeo: true, headSigns: true, centralSigner: 'ceo' as const },
     'Policy',
-    "Fauzan, 2 Nov 2026: a vacancy is approved by the CEO, and the company head signs the approval (the company is the employer). HR or the company manager raises it; for PWVSB central posts the HR Director (Chief of Staff or Deputy Chief of Staff) signs as head (confirmed by Fauzan in the 5 Nov 2026 audit, decision 6). Every step carries a comment; nobody approves their own request.",
+    "Fauzan, 2 Nov 2026: a vacancy is approved by the CEO, and the company head signs the approval (the company is the employer). HR or the company manager raises it. Every step carries a comment; nobody approves their own request. Approved by Fauzan, 11 Nov 2026 (workflow map C2): \"CEO\" signs vacancies for PWVSB central posts, not the HR Director (this replaces the 5 Nov 2026 audit decision 6 for central posts). For a central post the CEO's approval is also the signature (one CEO step), so it opens once the CEO approves; company vacancies are unchanged (CEO approves, then the company head signs).",
   ),
   jobAdvert: rule(
     'HR-JOB-ADVERT',

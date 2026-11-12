@@ -44,7 +44,7 @@ Main decisions so far:
 - The CoS or DCoS is the HR Director.
 - Staff payroll: the CoS approves, then the COO. The Vice Chairman consents to salary amounts.
 - Every approval needs a comment, and nobody approves their own.
-- Working from home is only for staff HR allows; vacancies are approved by the CEO and signed by the company head.
+- Working from home is only for staff HR allows; vacancies are approved by the CEO and signed by the company head; PWVSB central posts are signed by the CEO (Fauzan, 11 Nov 2026, C2).
 
 Next slices:
 - 3G (JA guards keyed once) and 3D (minimum wage, overtime off, IC on EPF/SOCSO files) are built; overtime claims in payroll wait for Finance PR #49.
