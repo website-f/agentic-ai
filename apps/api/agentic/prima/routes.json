@@ -1236,6 +1236,11 @@
  },
  {
   "method": "GET",
+  "path": "api/client-portal",
+  "name": "desk"
+ },
+ {
+  "method": "GET",
   "path": "api/clients",
   "name": "clientBoard"
  },
@@ -1253,6 +1258,35 @@
    "id"
   ],
   "body": "{ invoicedTo?: unknown; overdueAmount?: unknown; overdueDays?: unknown }"
+ },
+ {
+  "method": "POST",
+  "path": "api/clients/:id/client-portal",
+  "name": "open",
+  "params": [
+   "id"
+  ],
+  "body": "Record<string, unknown>"
+ },
+ {
+  "method": "POST",
+  "path": "api/clients/:id/client-portal/:userId/close",
+  "name": "close",
+  "params": [
+   "id",
+   "userId"
+  ],
+  "body": "Record<string, unknown>"
+ },
+ {
+  "method": "POST",
+  "path": "api/clients/:id/client-portal/:userId/reset",
+  "name": "reset",
+  "params": [
+   "id",
+   "userId"
+  ],
+  "body": "Record<string, unknown>"
  },
  {
   "method": "POST",

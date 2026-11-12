@@ -9,7 +9,7 @@ import { api } from '../api';
 import type { VehicleTransferBoard } from '../api/p100-newb';
 import { Card, Empty, Facts, Search, Steps, Toolbar, type StepState } from '../kit';
 import { Chip, Drawer, ErrorNotice, Loading, dateLabel, dateTimeLabel, useAction, useLoad, type Tone } from '../ui';
-import { FilterChips, TabIntro, hasText } from './items/shared';
+import { FilterChips, TabIntro, hasText } from './nb-shared';
 import '../styles/items.css';
 import '../styles/p100-newb.css';
 

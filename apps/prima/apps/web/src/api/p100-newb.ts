@@ -26,7 +26,20 @@ export interface CmsConsoleStatus {
   may: boolean;
 }
 
+/** J1: the client portal desk (OM manages, company manager monitors, COO oversees). */
+export type ClientPortalDesk = R<'clientPortalDesk'> & { on: boolean };
+export interface ClientPortalOpened {
+  user: Awaited<ReturnType<PrimaService['openClientPortal']>>['user'];
+  code: string;
+  /** The personal link to give the client; null when the portal is off (or in the test version). */
+  url: string | null;
+}
+
 export interface NewbClient {
+  clientPortalDesk(): Promise<ClientPortalDesk>;
+  openClientPortal(clientId: string, input: { name: string; post: string }): Promise<ClientPortalOpened>;
+  resetClientPortal(clientId: string, portalUserId: string, reason: string): Promise<ClientPortalOpened>;
+  closeClientPortal(clientId: string, portalUserId: string, reason: string): Promise<unknown>;
   cmsConsole(): Promise<CmsConsoleStatus>;
   cmsConsoleSignIn(): Promise<{ url: string; expiresInS: number; name: string }>;
   vehicleTransferBoard(): Promise<VehicleTransferBoard>;
@@ -39,6 +52,12 @@ export interface NewbClient {
 /** The in-browser demo's writes for these calls (demo.ts apply() hands them here first). */
 export function applyNewb(svc: PrimaService, u: import('@prima/core').User, op: string, a: never[]): Promise<unknown> | null {
   switch (op) {
+    case 'openClientPortal':
+      return svc.openClientPortal(u, a[0], a[1]).then((r) => ({ user: r.user, code: r.code, url: null }));
+    case 'resetClientPortal':
+      return svc.resetClientPortal(u, a[0], a[1], a[2]).then((r) => ({ user: r.user, code: r.code, url: null }));
+    case 'closeClientPortal':
+      return svc.closeClientPortal(u, a[0], a[1], a[2]);
     case 'requestVehicleTransfer':
       return svc.requestVehicleTransfer(u, a[0]);
     case 'decideVehicleTransfer':

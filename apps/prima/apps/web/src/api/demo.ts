@@ -3006,6 +3006,19 @@ export class DemoApi implements Api {
   async cmsConsoleSignIn(): Promise<{ url: string; expiresInS: number; name: string }> {
     throw new ApiError('CMS sign-in is not set up yet (CMS_URL and CMS_SIGNIN_SECRET).', 503);
   }
+  // P100 newb: J1 the client portal (the test version shows the code; there is no public page to link to).
+  clientPortalDesk() {
+    return this.read(async (s, u) => ({ ...(await s.clientPortalDesk(u)), on: false }));
+  }
+  openClientPortal(clientId: string, input: Parameters<Api['openClientPortal']>[1]) {
+    return this.write<Awaited<ReturnType<Api['openClientPortal']>>>('openClientPortal' as Mutations, [clientId, input]);
+  }
+  resetClientPortal(clientId: string, portalUserId: string, reason: string) {
+    return this.write<Awaited<ReturnType<Api['resetClientPortal']>>>('resetClientPortal' as Mutations, [clientId, portalUserId, reason]);
+  }
+  closeClientPortal(clientId: string, portalUserId: string, reason: string) {
+    return this.write<unknown>('closeClientPortal' as Mutations, [clientId, portalUserId, reason]);
+  }
   // P100 newb: E6 vehicle moves between companies.
   vehicleTransferBoard() {
     return this.read((s, u) => s.vehicleTransferBoard(u));

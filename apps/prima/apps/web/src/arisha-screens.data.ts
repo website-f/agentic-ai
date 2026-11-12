@@ -2934,6 +2934,10 @@ export const SCREEN_GUIDES: ScreenGuide[] = [
     "who": "Directors, group officers, company managers, admin executives and supervisors. Operations Managers, the Operations Director and officers act on clients; the COO and company managers mainly monitor. Billing boxes show only to people allowed to record billing. The \"Group\" tab is for group leadership only.",
     "tabs": [
       {
+        "name": "Client portal",
+        "what": "Named people at each client sign in with a personal link and an access code, see their own sites, monthly reports and signed slips as PDFs, and rate, complain or ask. The OM gives, resets and closes sign-ins; the company manager sees them and may close one; the COO sees every company's."
+      },
+      {
         "name": "Client board",
         "what": "All clients with filters, their checklists and the update box."
       },
@@ -2959,6 +2963,15 @@ export const SCREEN_GUIDES: ScreenGuide[] = [
       }
     ],
     "tasks": [
+      {
+        "task": "How to give a client portal access (Operations Manager)",
+        "steps": [
+          "Open the \"Client portal\" tab and tap the client.",
+          "Under \"Give portal access\", type the person's \"Name\" and \"Post at the client\", press \"Make the sign-in\".",
+          "Copy the code and the link. The code shows once: give it to them yourself, not in the same message as the link.",
+          "What they send lands on the client's page under requests and complaints; answer it there and they see your answer on the portal."
+        ]
+      },
       {
         "task": "How to add a new client",
         "steps": [

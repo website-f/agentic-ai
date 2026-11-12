@@ -81,7 +81,7 @@ export function shareGonePage(): string {
   return page('Report link', `<h1>This report link is not available</h1><p class="muted">It may have expired or been withdrawn. Please ask your security company for a new link.</p>`);
 }
 
-export function shareReportPage(r: ClientShareReport): string {
+export function shareReportPage(r: ClientShareReport, opts: { token?: string } = {}): string {
   const sites = r.sites.length
     ? `<div class="wrap"><table><thead><tr><th>Site</th><th>Patrol checkpoints scanned</th><th>Supervisor visits</th></tr></thead><tbody>${r.sites
         .map((s) => `<tr><td>${esc(s.name)}</td><td>${s.patrolScans}</td><td>${s.visits}</td></tr>`)
@@ -97,7 +97,11 @@ export function shareReportPage(r: ClientShareReport): string {
         .map((x) => `<tr><td>${esc(x.period)}</td><td>${esc(money(x.amount))}</td><td>${esc(x.sentOn ?? 'Not yet sent')}</td></tr>`)
         .join('')}</tbody></table></div><p class="muted">This lists invoices sent for months wholly inside this period. It is not a statement of account and does not show payments.</p>`
     : `<p class="muted">No invoices are recorded for this period.</p>`;
-  const reports = r.reports.length ? `<p>Monthly service reports sent for: ${r.reports.map(esc).join(', ')}.</p>` : `<p class="muted">No monthly service reports recorded for this period.</p>`;
+  // J1 (11 Nov 2026): a report kept as a file opens as its PDF from the link (a relative address: the token's own path).
+  const pdf = new Set(r.pdfPeriods ?? []);
+  const token = opts.token ?? null;
+  const reportItem = (p: string) => (token && pdf.has(p) ? `<a href="${esc(token)}/doc/report/${esc(p)}">${esc(p)} (PDF)</a>` : esc(p));
+  const reports = r.reports.length ? `<p>Monthly service reports sent for: ${r.reports.map(reportItem).join(', ')}.</p>` : `<p class="muted">No monthly service reports recorded for this period.</p>`;
   return page(
     `Service report: ${r.clientName}`,
     `<h1>Service report for ${esc(r.clientName)}</h1>

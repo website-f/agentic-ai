@@ -2080,6 +2080,19 @@ export class HttpApi implements Api {
   cmsConsoleSignIn() {
     return this.call<Awaited<ReturnType<Api['cmsConsoleSignIn']>>>('POST', '/cms/console/sign-in', {});
   }
+  // P100 newb: J1 the client portal (apps/api/src/client-portal.controller.ts).
+  clientPortalDesk() {
+    return this.call<Awaited<ReturnType<Api['clientPortalDesk']>>>('GET', '/client-portal');
+  }
+  openClientPortal(clientId: string, input: Parameters<Api['openClientPortal']>[1]) {
+    return this.call<Awaited<ReturnType<Api['openClientPortal']>>>('POST', `/clients/${encodeURIComponent(clientId)}/client-portal`, input);
+  }
+  resetClientPortal(clientId: string, portalUserId: string, reason: string) {
+    return this.call<Awaited<ReturnType<Api['resetClientPortal']>>>('POST', `/clients/${encodeURIComponent(clientId)}/client-portal/${encodeURIComponent(portalUserId)}/reset`, { reason });
+  }
+  closeClientPortal(clientId: string, portalUserId: string, reason: string) {
+    return this.call<unknown>('POST', `/clients/${encodeURIComponent(clientId)}/client-portal/${encodeURIComponent(portalUserId)}/close`, { reason });
+  }
   // P100 newb: E6 vehicle moves between companies (apps/api/src/vehicle-transfer.controller.ts).
   vehicleTransferBoard() {
     return this.call<Awaited<ReturnType<Api['vehicleTransferBoard']>>>('GET', '/fleet/transfers');

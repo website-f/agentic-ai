@@ -126,6 +126,7 @@ import { TRACKER_NOTE_KINDS, TRACKER_NOTES_MAX, type TrackerNote } from "./movem
 import { ClockSnapService } from "./clock-snap-service";
 import { VehicleTransferService } from "./vehicle-transfer";
 import { cmsConsolePerson } from "./cms-console";
+import { ClientPortalService } from "./client-portal";
 import type { MovementSummary } from "./movement";
 import type { RawReading } from "./movement";
 import { mayTestCheckin } from "./owner-test-checkin";
@@ -45290,6 +45291,7 @@ export class PrimaService {
         .filter((x) => monthInsidePeriod(x.period, l.from, l.to))
         .map((x) => ({ period: x.period, amount: x.amount, sentOn: ([x.hand, x.email, x.portal].filter((p): p is NonNullable<typeof p> => !!p).map((p) => dateOf(p.at)).sort()[0] ?? null) as IsoDate | null })),
       reports: a.reports.filter((x) => monthInsidePeriod(x.period, l.from, l.to)).map((x) => x.period),
+      pdfPeriods: a.reports.filter((x) => x.docId && monthInsidePeriod(x.period, l.from, l.to)).map((x) => x.period),
     };
     if (!preview) {
       const at = this.now();
@@ -45305,6 +45307,46 @@ export class PrimaService {
       });
     }
     return report;
+  }
+
+  /**
+   * J1: a monthly report's PDF through a report link (Fauzan, 11 Nov 2026: "report PDFs on the client link"). Only a
+   * live link, only a month wholly inside the link's period, only a report kept as a file. Counted on the audit chain.
+   */
+  async clientShareReportPdf(companyId: Id, clientId: Id, linkId: Id, period: string) {
+    const gone = () => new NotFound('Report link');
+    const a = (await this.store.list('clientAccounts', { companyId: [companyId] })).find((x) => x.id === clientId);
+    if (!a || a.companyId !== companyId || a.stage === 'ended') throw gone();
+    const l = (a.shareLinks ?? []).find((x) => x.id === linkId);
+    if (!l || !shareLinkLive(l, this.today()) || !monthInsidePeriod(period, l.from, l.to)) throw gone();
+    const d = await this.clientPortal().paper(a, 'report', period);
+    await this.store.audit({ at: this.now(), actor: 'Client report link', companyId: a.companyId, action: 'client.share.pdf', entity: 'client', entityId: a.id, summary: `${a.name}: report link ${l.id} opened the ${period} report PDF.` });
+    return d;
+  }
+
+  /** J1: the client portal (client-portal.ts). The OM manages it, the company manager monitors, the COO oversees. */
+  clientPortal(): ClientPortalService {
+    return new ClientPortalService(this.store, () => this.now(), {
+      scope: (user) => this.clientScope(user),
+      // Managed by the OM (Fauzan, 11 Nov 2026): Operations Managers and above in the area, not supervisors or patrol officers.
+      actsOn: async (user, a) => this.clientRoleOf(user) === 'act' && user.role !== 'supervisor' && user.opsTier !== 'patrol' && (await this.opsCovers(user, a.companyId, a.siteIds)),
+    });
+  }
+
+  clientPortalDesk(user: User) {
+    return this.clientPortal().desk(user);
+  }
+
+  openClientPortal(user: User, clientId: Id, input: { name: string; post: string }) {
+    return this.clientPortal().open(user, clientId, input);
+  }
+
+  resetClientPortal(user: User, clientId: Id, portalUserId: Id, reason: string) {
+    return this.clientPortal().reset(user, clientId, portalUserId, reason);
+  }
+
+  closeClientPortal(user: User, clientId: Id, portalUserId: Id, reason: string) {
+    return this.clientPortal().close(user, clientId, portalUserId, reason);
   }
 
   /** One entry point for the branch screen and API: each action keeps its own checks. */

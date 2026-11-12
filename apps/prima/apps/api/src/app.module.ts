@@ -23,6 +23,7 @@ import { AttendanceReportsController, AttendanceUploads } from './attendance-rep
 // P100 newb: E6 vehicle moves between companies.
 import { VehicleTransferController } from './vehicle-transfer.controller';
 import { CmsSignInController } from './cms-signin.controller';
+import { ClientPortalController, ClientPortalStaffController, ShareReportPdfController } from './client-portal.controller';
 
 const jobEmail = jobEmailRuntimeModule();
 const teamsEvidence=teamsEvidenceModule();
@@ -30,7 +31,7 @@ const alerts = alertsModule();
 const m365 = m365ConnectionsModule();
 
 @Module({
-  controllers: [HealthController, AttendanceReportsController, AuthController, OfficeController, CheckinController, AppController, JaFeedController, DoorFeedController, PlannerFeedController, AnalyticsFeedController, InhouseFeedController, ConnectionsController, ItExtractionController, ItImportReviewController, ...jobEmail.controllers,...teamsEvidence.controllers, OfflineController, ...SPECIAL_OPS_CONTROLLERS, ...WHATSAPP_CONTROLLERS, OrgHealthController, OrgController, ...m365.controllers, ShareController, StaffDirectoryController, CleaningController, ...alerts.controllers, DraftHelpController, GuardPhoneOpenController, GuardPhoneController, VehicleTransferController, CmsSignInController],
+  controllers: [HealthController, AttendanceReportsController, AuthController, OfficeController, CheckinController, AppController, JaFeedController, DoorFeedController, PlannerFeedController, AnalyticsFeedController, InhouseFeedController, ConnectionsController, ItExtractionController, ItImportReviewController, ...jobEmail.controllers,...teamsEvidence.controllers, OfflineController, ...SPECIAL_OPS_CONTROLLERS, ...WHATSAPP_CONTROLLERS, OrgHealthController, OrgController, ...m365.controllers, ShareController, StaffDirectoryController, CleaningController, ...alerts.controllers, DraftHelpController, GuardPhoneOpenController, GuardPhoneController, VehicleTransferController, CmsSignInController, ClientPortalController, ClientPortalStaffController, ShareReportPdfController],
   providers: [Db, { provide: SharePointConnections, useFactory: () => new SharePointConnections() }, { provide: AttendanceUploads, useFactory: () => new AttendanceUploads() }, ...jobEmail.providers,...teamsEvidence.providers, WhatsAppRunner, ...m365.providers, ...alerts.providers],
 })
 export class AppModule {}

@@ -273,6 +273,7 @@ export * from './clock-snap';
 export * from './clock-snap-service';
 export * from './vehicle-transfer';
 export * from './cms-console';
+export * from './client-portal';
 // P81 (office): the group's real companies and staff, loaded into an empty database instead of sample data.
 export * from './real-data';
 export * from './import-match';

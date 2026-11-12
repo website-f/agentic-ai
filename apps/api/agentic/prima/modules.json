@@ -1524,6 +1524,7 @@
    "PUT cleaning/sites/:/setup"
   ],
   "clients": [
+   "GET client-portal",
    "GET clients",
    "GET clients/:/share-links",
    "GET clients/:/share-links/:/preview",
@@ -1537,6 +1538,9 @@
    "GET sites/:/instructions",
    "POST clients",
    "POST clients/:/billing",
+   "POST clients/:/client-portal",
+   "POST clients/:/client-portal/:/close",
+   "POST clients/:/client-portal/:/reset",
    "POST clients/:/complaints",
    "POST clients/:/complaints/:/resolve",
    "POST clients/:/contact",
@@ -2027,7 +2031,6 @@
    "POST fleet/vehicles/:/rental",
    "POST fleet/vehicles/:/rental/end",
    "POST fleet/vehicles/:/work",
-   "POST items/act",
    "POST people/:/monitoring-consent"
   ],
   "fwcost": [
