@@ -3936,7 +3936,7 @@ export const SCREEN_GUIDES: ScreenGuide[] = [
     "view": "act",
     "title": "ACT",
     "what": "ACT (Audit, Compliance and Transformation) watches compliance, audits each workflow, records problems as findings with an owner, checks the fix and leads improvements.",
-    "who": "The ACT team (a Director and two teams, each with an Auditor and an Enforcement officer) see every tab. Other people see only \"My findings\" and \"Improvements\": the findings ACT gave them to fix. \"Team work\" and \"Patterns and investigations\" are only for ACT.",
+    "who": "The ACT team (the Director, the ACT Manager and two teams, Team A and Team B, each with an Auditor and an Enforcement officer) see every tab; each team sees its own work, the Director and the ACT Manager see both. A high finding closes only after the ACT Manager's second check, never by the first checker or whoever raised it. Other people see only \"My findings\" and \"Improvements\": the findings ACT gave them to fix. \"Team work\" and \"Patterns and investigations\" are only for ACT.",
     "tabs": [
       {
         "name": "Compliance monitor",

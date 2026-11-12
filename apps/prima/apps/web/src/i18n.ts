@@ -1847,6 +1847,18 @@ const ROWS: Row[] = [
   ['Approve and sign', 'Lulus dan tandatangan', 'Approve dan sign'],
   ['Approved and signed.', 'Diluluskan dan ditandatangani.', 'Approved dan signed.'],
   ['waiting for the CEO to sign', 'menunggu tandatangan CEO', 'tunggu CEO sign'],
+  ['The Director heads ACT; the ACT Manager leads the work and gives the second check; Team A and Team B each have an Auditor (team lead) and an Enforcement officer.', 'Pengarah mengetuai ACT; Pengurus ACT memimpin kerja dan membuat semakan kedua; Pasukan A dan Pasukan B masing-masing ada Juruaudit (ketua pasukan) dan Pegawai Penguatkuasa.', 'Director ketuai ACT; ACT Manager pimpin kerja dan buat second check; Team A dan Team B masing-masing ada Auditor (team lead) dan Enforcement officer.'],
+  ['ACT Manager', 'Pengurus ACT', 'ACT Manager'],
+  ['Head of ACT. Sets the guard pay formulas, reports to the CEO.', 'Ketua ACT. Menetapkan formula gaji pengawal, melapor kepada CEO.', 'Ketua ACT. Set formula gaji guard, report kepada CEO.'],
+  ['Leads the work, gives work to the teams and gives the second check on high findings.', 'Memimpin kerja, memberi kerja kepada pasukan dan membuat semakan kedua bagi dapatan tinggi.', 'Pimpin kerja, beri kerja kepada team dan buat second check untuk finding tinggi.'],
+  ['Auditor (team lead)', 'Juruaudit (ketua pasukan)', 'Auditor (team lead)'],
+  ['Covers every workflow; keeps each finding it raises until it closes and sees only its own work.', 'Meliputi setiap aliran kerja; memegang setiap dapatan yang dibangkitkan sehingga ditutup dan hanya melihat kerja sendiri.', 'Cover setiap workflow; pegang setiap finding yang dibangkitkan sampai tutup dan nampak kerja sendiri sahaja.'],
+  ['Second check (ACT Manager)', 'Semakan kedua (Pengurus ACT)', 'Second check (ACT Manager)'],
+  ['Second check of the fix', 'Semakan kedua pembetulan', 'Second check pembetulan'],
+  ['First check of the fix', 'Semakan pertama pembetulan', 'First check pembetulan'],
+  ['High finding: after your check the ACT Manager gives the second check before it closes.', 'Dapatan tinggi: selepas semakan anda, Pengurus ACT membuat semakan kedua sebelum ia ditutup.', 'Finding tinggi: lepas check anda, ACT Manager buat second check sebelum tutup.'],
+  ['Fix works, send for the second check', 'Pembetulan berkesan, hantar untuk semakan kedua', 'Fix berkesan, hantar untuk second check'],
+  ['Sent for the second check.', 'Dihantar untuk semakan kedua.', 'Dihantar untuk second check.'],
   // END P100 org
   // P91: Add and Import at the top of the business screens (Fitri, 9 Nov 2026)
   ['Import tenders', 'Import tender', 'Import tender'],

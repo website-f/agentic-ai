@@ -545,9 +545,11 @@ export const RULES = {
        * (Fauzan, 2 Nov 2026): a finding stays with the team that raised it until it closes.
        */
       teams: [
-        { id: 1, name: 'Team 1' },
-        { id: 2, name: 'Team 2' },
+        { id: 1, name: 'Team A' },
+        { id: 2, name: 'Team B' },
       ] as { id: 1 | 2; name: string }[],
+      /** C6 (Fauzan, 11 Nov 2026): high findings close only after the ACT Manager's second check. */
+      secondCheck: { severities: ['high'] as ('high' | 'medium' | 'low')[], by: 'manager' as const },
       areas: [
         { id: 'ATTENDANCE', name: 'Guard attendance and clocking', months: 6 },
         { id: 'PATROL', name: 'Patrols, incidents and cases', months: 6 },
@@ -571,7 +573,7 @@ export const RULES = {
       ] as { id: string; name: string; months: number }[],
     },
     'Policy',
-    'Fauzan, 27 Oct 2026: ACT (Audit, Compliance and Transformation) monitors all compliance, audits every workflow, checks all discrepancies, finds solutions and leads the improvement. Confirmed by Fauzan 27 Oct 2026: fix within 14/30/60 days by severity; overdue findings shown to the Chief of Staff, then the COO after 14 days and the CEO after 30; high-risk workflows audited every 6 months, the rest yearly; improvements approved by the COO or CEO. Nothing is automatic discipline. Fauzan, 2 Nov 2026: ACT monitors all, with 1 Director and 2 teams of 1 Auditor and 1 Enforcement officer. Fauzan, 2 Nov 2026: both teams cover every workflow (no split); the ACT Director distributes the work to the two teams (audits, monthly report reviews, findings); ACT also monitors each department’s monthly report. Proposed: the Auditor audits and checks fixes, Enforcement follows up owners and does spot checks, only the Director closes a high finding; the 5-day plan follow-up and the 7-day follow-up cycle await Fauzan.',
+    'Fauzan, 27 Oct 2026: ACT (Audit, Compliance and Transformation) monitors all compliance, audits every workflow, checks all discrepancies, finds solutions and leads the improvement. Confirmed by Fauzan 27 Oct 2026: fix within 14/30/60 days by severity; overdue findings shown to the Chief of Staff, then the COO after 14 days and the CEO after 30; high-risk workflows audited every 6 months, the rest yearly; improvements approved by the COO or CEO. Nothing is automatic discipline. Fauzan, 2 Nov 2026: ACT monitors all, with 1 Director and 2 teams of 1 Auditor and 1 Enforcement officer. Fauzan, 2 Nov 2026: both teams cover every workflow (no split); the ACT Director distributes the work to the two teams (audits, monthly report reviews, findings); ACT also monitors each department’s monthly report. Proposed: the Auditor audits and checks fixes, Enforcement follows up owners and does spot checks; the 5-day plan follow-up and the 7-day follow-up cycle await Fauzan. Approved by Fauzan, 11 Nov 2026 (workflow map C6): the ACT Director is the head of ACT (and keeps setting the guard pay formulas); an ACT Manager leads the work and is the second checker; Team A and Team B each have an Auditor (team lead) and an Enforcement officer. A high finding closes only after the ACT Manager\'s second check (the Director may also give it), never by the person who gave the first check or raised it; each team sees its own work, the Director and the ACT Manager see both teams.',
   ),
   meetingPrep: rule(
     'MTG-PREP',
@@ -2156,7 +2158,7 @@ export const RULES = {
       reportRows: 500,
     },
     'Policy',
-    "Fauzan, 5 Nov 2026 (third audit item 3, plan 'How we switch safely'): Prima and JA run the same month side by side for one company and one area; a difference report lists every mismatch and each is explained or fixed; ACT checks the report (proposed: ACT Lead or Deputy, never someone who explained a difference in it); the CEO switches the area, and a switch can be undone; JA stays read-only for 3 months after. Fauzan, 5 Nov 2026: 'Every formula can set by act director': the ACT Director sets these numbers in the app (a run keeps the values it started with). Starting values: 30 days side by side, pay to the sen, attendance hours may differ by 15 minutes, incidents match by site within 60 minutes, JA read-only 92 days. Recommended order: incidents, attendance and patrol, guard pay, then hostels; foreign worker papers live in both apps and never switch. JA history comes by a one-time import of JA exports, staged by ACT and approved by another person (ACT Lead or Deputy); the import never creates people and refuses full IC numbers.",
+    "Fauzan, 5 Nov 2026 (third audit item 3, plan 'How we switch safely'): Prima and JA run the same month side by side for one company and one area; a difference report lists every mismatch and each is explained or fixed; ACT checks the report (proposed: ACT Lead or Deputy, never someone who explained a difference in it; approved by Fauzan, 11 Nov 2026 (C6): the ACT Manager checks the report and approves imports, or the ACT Director); the CEO switches the area, and a switch can be undone; JA stays read-only for 3 months after. Fauzan, 5 Nov 2026: 'Every formula can set by act director': the ACT Director sets these numbers in the app (a run keeps the values it started with). Starting values: 30 days side by side, pay to the sen, attendance hours may differ by 15 minutes, incidents match by site within 60 minutes, JA read-only 92 days. Recommended order: incidents, attendance and patrol, guard pay, then hostels; foreign worker papers live in both apps and never switch. JA history comes by a one-time import of JA exports, staged by ACT and approved by another person (ACT Lead or Deputy); the import never creates people and refuses full IC numbers.",
   ),
   guardPhone: rule<{
     heartbeatSec: number;

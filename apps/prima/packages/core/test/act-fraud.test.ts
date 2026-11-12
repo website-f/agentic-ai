@@ -48,7 +48,7 @@ describe('ACT fraud anomalies and investigations (masterplan item 241)', () => {
     const board = await svc.actBoard(aud1);
     const key = board.anomalies.find((r) => r.key === 'duplicate_claim')!.items[0].key;
     // Enforcement does not open investigations; an Auditor opens one for their own team.
-    await expect(svc.openActInvestigation(enf1, { title: 'Duplicate claim', anomalyKey: key, note: 'From the anomaly list' })).rejects.toThrow(/Director or an ACT Auditor/);
+    await expect(svc.openActInvestigation(enf1, { title: 'Duplicate claim', anomalyKey: key, note: 'From the anomaly list' })).rejects.toThrow(/ACT Manager or an ACT Auditor/);
     const row = await svc.openActInvestigation(aud1, { title: 'Duplicate claim', anomalyKey: key, note: 'From the anomaly list' });
     expect(row.team).toBe(1);
     await expect(svc.openActInvestigation(dir, { title: 'Again', anomalyKey: key, note: 'Same anomaly' })).rejects.toThrow(/already covers/);

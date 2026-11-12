@@ -21092,15 +21092,19 @@ export class PrimaService {
     ]);
     const mine = (f: { ownerUserId: Id }) => f.ownerUserId === user.id;
     if (!role && !findings.some(mine) && !improvements.some(mine)) throw new ActDenied('This screen is for ACT and for the owners of ACT findings.');
+    // C6 (Fauzan, 11 Nov 2026): each team sees its own work; the Director and the ACT Manager see both teams.
+    const teamMember = job === 'auditor' || job === 'enforcement';
+    const teamSees = (x: { team?: 1 | 2 | null; raisedById?: Id }) => !teamMember || (!!x.team && x.team === user.actTeam) || x.raisedById === user.id;
     const cname = (id: Id | null) => (id ? (companies.find((c) => c.id === id)?.name ?? id) : 'PWVSB');
     const area = (id: string) => rule.areas.find((a) => a.id === id)?.name ?? id;
     const findingRows = findings
-      .filter((f) => role || mine(f))
+      .filter((f) => (role && teamSees(f)) || mine(f))
       .map((f) => {
         const st = this.actFindingState(f, today);
         // An owner sees ACT's findings on their own work, not ACT's internal follow-up log.
         const finding = role === 'act' ? f : { ...f, followUps: undefined };
-        return { finding, companyName: cname(f.companyId), areaName: area(f.area), mine: mine(f), ...st, followUp: role === 'act' ? st.followUp : null };
+        const check = job ? this.actCheckState(f, user) : null;
+        return { finding, companyName: cname(f.companyId), areaName: area(f.area), mine: mine(f), ...st, followUp: role === 'act' ? st.followUp : null, check };
       })
       .sort(
         (a, b) =>
@@ -21192,7 +21196,7 @@ export class PrimaService {
     const reports = role ? await this.actReportMonitor(audits) : [];
     const work = role
       ? audits
-          .filter((x) => x.status === 'assigned')
+          .filter((x) => x.status === 'assigned' && teamSees(x))
           .map((x) => ({
             audit: x,
             label:
@@ -21215,6 +21219,7 @@ export class PrimaService {
       structure: role
         ? {
             director: person(staff.find((u) => u.actRole === 'lead')),
+            manager: person(staff.find((u) => u.actRole === 'manager')),
             teams: rule.teams.map((t) => ({
               ...t,
               auditor: person(staff.find((u) => u.actRole === 'auditor' && u.actTeam === t.id)),
@@ -21228,7 +21233,7 @@ export class PrimaService {
       anomalies,
       investigations,
       fraudRule: RULES.actFraud,
-      canAssign: job === 'director',
+      canAssign: job === 'director' || job === 'manager',
       reportForms: role
         ? (await this.store.list('reportDefs'))
             .filter((d) => d.active && d.frequency === 'monthly' && d.from === 'department')
@@ -21260,13 +21265,15 @@ export class PrimaService {
       // P78: the owner (master administrator) raises findings, records audits and field checks, and proposes
       // improvements; ACT keeps every check, follow-up and close.
       canRaise: (role === 'act' && !!job) || isOwnerAdmin(user),
-      canRecordAudit: job === 'director' || job === 'auditor' || isOwnerAdmin(user),
-      canCheck: job === 'director' || job === 'auditor',
-      canCloseHigh: job === 'director',
+      canRecordAudit: job === 'director' || job === 'manager' || job === 'auditor' || isOwnerAdmin(user),
+      canCheck: job === 'director' || job === 'manager' || job === 'auditor',
+      // C6: the ACT Manager (or the Director) gives the second check that closes a high finding.
+      canCloseHigh: job === 'director' || job === 'manager',
       kpis: {
         open: open.length,
         overdue: open.filter((r) => r.overdueDays > 0).length,
         toVerify: open.filter((r) => r.finding.status === 'fixed').length,
+        secondChecks: open.filter((r) => r.check?.stage === 'second').length,
         high: open.filter((r) => r.finding.severity === 'high').length,
         plansOverdue: plan.filter((p) => p.state === 'overdue' || p.state === 'never').length,
         fieldChecksDue: plan.filter((p) => p.field.state === 'overdue' || p.field.state === 'never').length,
@@ -21434,7 +21441,7 @@ export class PrimaService {
       }
     } else if (action === 'assign') {
       // The Director distributes the work (Fauzan, 2 Nov 2026): gives a finding to a team, or moves it.
-      if (job !== 'director') throw new ActDenied('Only the ACT Director can give work to a team.');
+      if (job !== 'director' && job !== 'manager') throw new ActDenied('Only the ACT Director or the ACT Manager can give work to a team.');
       const team: 1 | 2 | null = body.team === 1 || body.team === 2 ? body.team : null;
       if (!team) throw new BadRequest('Choose Team 1 or Team 2.');
       if (f.team === team) throw new BadRequest(`Already with Team ${team}.`);
@@ -21450,14 +21457,23 @@ export class PrimaService {
       if (nextOn && nextOn < this.today()) throw new BadRequest('The next follow-up date cannot be in the past.');
       patch = { followUps: [...(f.followUps ?? []), { method, note, nextOn, by: user.name, byId: user.id, at }] };
     } else {
-      if (job !== 'director' && job !== 'auditor') throw new ActDenied('Only an ACT Auditor or the ACT Director can check a fix.');
+      if (job !== 'director' && job !== 'manager' && job !== 'auditor') throw new ActDenied('Only an ACT Auditor, the ACT Manager or the ACT Director can check a fix.');
       this.actOnTeam(user, job, f);
       if (f.status !== 'fixed') throw new BadRequest('Only a finding the owner marked fixed.');
       const note = (body.note ?? '').trim().slice(0, 500);
       if (!note) throw new BadRequest('Say what you checked.');
       const ok = body.ok === true;
-      if (ok && f.severity === 'high' && job !== 'director') throw new ActDenied('Only the ACT Director can close a high finding. Send it back as not fixed, or leave it for the Director.');
-      patch = { checks: [...f.checks, { ok, note, by: user.name, at }], status: ok ? 'closed' : 'planned', fix: ok ? f.fix : null };
+      // C6 (Fauzan, 11 Nov 2026): a high finding closes only after a second check by the ACT Manager (or the Director),
+      // never by the person who gave the first check or raised it.
+      const cs = this.actCheckState(f, user);
+      if (!cs.canCheck) throw new ActDenied(cs.why ?? 'You cannot check this fix.');
+      const stage = cs.stage === 'first' || cs.stage === 'second' ? cs.stage : undefined;
+      const closes = ok && cs.stage !== 'first';
+      patch = {
+        checks: [...f.checks, { ok, note, by: user.name, byId: user.id, at, ...(stage ? { stage } : {}) }],
+        status: closes ? 'closed' : ok ? 'fixed' : 'planned',
+        fix: ok ? f.fix : null,
+      };
     }
     return this.store.transaction(async (tx) => {
       await tx.update('actFindings', id, patch);
@@ -21468,7 +21484,7 @@ export class PrimaService {
         action: `act.finding.${action}`,
         entity: 'act_finding',
         entityId: id,
-        summary: `${f.ref} ${action === 'check' ? (body.ok ? 'verified and closed' : 'check failed, reopened') : action === 'follow_up' ? `followed up (${body.method})` : action === 'assign' ? `given to Team ${body.team}` : action}.`,
+        summary: `${f.ref} ${action === 'check' ? (body.ok ? (patch.status === 'closed' ? (f.severity === 'high' ? 'second check passed and closed' : 'verified and closed') : "first check passed, waiting for the ACT Manager's second check") : 'check failed, reopened') : action === 'follow_up' ? `followed up (${body.method})` : action === 'assign' ? `given to Team ${body.team}` : action}.`,
       });
       return (await tx.get('actFindings', id))!;
     });
@@ -21489,8 +21505,8 @@ export class PrimaService {
   ) {
     const job = this.actJob(user);
     // P78: the owner records an audit done; work the Director gave a team stays with that team.
-    if (job !== 'director' && job !== 'auditor' && !(isOwnerAdmin(user) && !input.assignmentId))
-      throw new ActDenied('Only an ACT Auditor or the ACT Director can record audits and reviews.');
+    if (job !== 'director' && job !== 'manager' && job !== 'auditor' && !(isOwnerAdmin(user) && !input.assignmentId))
+      throw new ActDenied('Only an ACT Auditor, the ACT Manager or the ACT Director can record audits and reviews.');
     if (!/^\d{4}-\d{2}-\d{2}$/.test(input.doneOn ?? '') || input.doneOn > this.today()) throw new BadRequest('Give the date it was done, not in the future.');
     const note = (input.note ?? '').trim().slice(0, 500);
     if (!note) throw new BadRequest('Say what was checked.');
@@ -21644,8 +21660,9 @@ export class PrimaService {
       if (x.finding.status === 'closed') return false;
       if (x.mine) return true;
       if (b.role !== 'act') return !!x.escalatedTo;
-      if (b.job === 'director') return (x.finding.status === 'fixed' && x.finding.severity === 'high') || !!x.escalatedTo || !x.team;
-      if (b.job === 'auditor') return x.finding.status === 'fixed' && x.finding.severity !== 'high' && inTeam(x.team);
+      if (b.job === 'manager') return (x.finding.status === 'fixed' && x.check?.stage === 'second' && x.check.canCheck) || !x.team;
+      if (b.job === 'director') return (x.finding.status === 'fixed' && x.finding.severity === 'high' && !!x.check?.canCheck) || !!x.escalatedTo || !x.team;
+      if (b.job === 'auditor') return x.finding.status === 'fixed' && x.check?.stage !== 'second' && inTeam(x.team);
       if (b.job === 'enforcement') return !!x.followUp && inTeam(x.team);
       return false;
     };
@@ -21662,8 +21679,10 @@ export class PrimaService {
               ? `Fix by ${r.finding.plan?.targetOn ?? r.finding.dueOn}, then mark fixed`
               : 'Waiting for ACT to check'
           : r.finding.status === 'fixed'
-            ? `${r.companyName}: check the fix`
-            : !r.team && b.job === 'director'
+            ? r.check?.stage === 'second'
+              ? `${r.companyName}: second check (first check by ${r.check.first?.by ?? 'ACT'})`
+              : `${r.companyName}: check the fix`
+            : !r.team && (b.job === 'director' || b.job === 'manager')
               ? `${r.companyName}: give it to Team 1 or Team 2`
               : r.followUp && b.job === 'enforcement'
               ? `${r.companyName}: follow up ${r.finding.ownerName} (${FOLLOW[r.followUp]})`
@@ -21671,7 +21690,7 @@ export class PrimaService {
         go: { view: 'act' },
       });
     // Work the Director gave to the team: audits and monthly report reviews.
-    for (const w of b.work.filter((x) => (b.job === 'auditor' && x.mine) || (b.job === 'director' && x.overdue)).slice(0, 3))
+    for (const w of b.work.filter((x) => (b.job === 'auditor' && x.mine) || ((b.job === 'director' || b.job === 'manager') && x.overdue)).slice(0, 3))
       items.push({
         tone: w.overdue ? 'crit' : 'info',
         tag: 'ACT',
@@ -21679,7 +21698,7 @@ export class PrimaService {
         detail: `Team ${w.audit.team} · due ${w.audit.dueOn}${w.audit.assigned?.note ? ` · ${w.audit.assigned.note}` : ''}`,
         go: { view: 'act' },
       });
-    if (b.job === 'director' || b.job === 'auditor') {
+    if (b.job === 'director' || b.job === 'manager' || b.job === 'auditor') {
       const open = b.signals.filter((s) => s.count > 0 && !s.coveredBy.length && s.tone === 'crit');
       if (open.length)
         items.push({
@@ -42499,8 +42518,32 @@ export class PrimaService {
   }
 
   /** The ACT job of a department member: Director, Auditor or Enforcement officer. Server identity only. */
-  private actJob(user: User): 'director' | 'auditor' | 'enforcement' | null {
+  private actJob(user: User): 'director' | 'manager' | 'auditor' | 'enforcement' | null {
     return this.actRoleOf(user) === 'act' ? actJobOf(user) : null;
+  }
+
+  /**
+   * Where the check of a fixed finding stands (C6, Fauzan, 11 Nov 2026). Low and medium findings close on one check by
+   * the team's Auditor, the ACT Manager or the Director. A high finding needs a first check, then a second check by the
+   * ACT Manager (or the Director), who is never the first checker nor the person who raised the finding.
+   */
+  private actCheckState(f: ActFinding, user: User) {
+    type Stage = 'single' | 'first' | 'second';
+    const none = { stage: null as Stage | null, first: null as { by: string; at: string; note: string } | null, canCheck: false, why: null as string | null };
+    if (f.status !== 'fixed') return none;
+    const job = this.actJob(user);
+    const since = f.fix?.at ?? '';
+    const first = f.severity === 'high' ? ([...f.checks].reverse().find((c) => c.stage === 'first' && c.ok && c.at >= since) ?? null) : null;
+    const stage: Stage = f.severity !== 'high' ? 'single' : first ? 'second' : 'first';
+    const leads = job === 'director' || job === 'manager';
+    const onTeam = leads || (job === 'auditor' && !!f.team && f.team === user.actTeam);
+    let why: string | null = null;
+    if (stage === 'second') {
+      if (!leads) why = 'The ACT Manager gives the second check on a high finding.';
+      else if (first?.byId === user.id || (!first?.byId && first?.by === user.name)) why = 'You gave the first check, so someone else gives the second check.';
+      else if (f.raisedById === user.id) why = 'You raised this finding, so someone else gives the second check.';
+    } else if (!onTeam) why = job === 'auditor' ? `This finding is with Team ${f.team ?? '?'}.` : 'Only an ACT Auditor, the ACT Manager or the Director checks a fix.';
+    return { stage, first: first ? { by: first.by, at: first.at, note: first.note } : null, canCheck: !why, why };
   }
 
   /**
@@ -42803,17 +42846,17 @@ export class PrimaService {
   private actCanSeeInvestigation(user: User, a: ActAudit): boolean {
     const job = this.actJob(user);
     if (!job || a.kind !== 'investigation') return false;
-    return job === 'director' || (!!a.team && a.team === user.actTeam);
+    return job === 'director' || job === 'manager' || (!!a.team && a.team === user.actTeam);
   }
 
   /** Open a restricted investigation file: the ACT Director (for any team) or an Auditor (for their own team). */
   async openActInvestigation(user: User, input: { title: string; team?: 1 | 2 | null; anomalyKey?: string | null; findingId?: Id | null; note: string }) {
     const job = this.actJob(user);
-    if (job !== 'director' && job !== 'auditor') throw new ActDenied('Only the ACT Director or an ACT Auditor opens an investigation.');
+    if (job !== 'director' && job !== 'manager' && job !== 'auditor') throw new ActDenied('Only the ACT Director, the ACT Manager or an ACT Auditor opens an investigation.');
     const title = (input.title ?? '').trim().slice(0, 160);
     const note = (input.note ?? '').trim().slice(0, 1000);
     if (title.length < 5 || note.length < 5) throw new BadRequest('Give a short title and what started it.');
-    const team: 1 | 2 | null = job === 'director' ? (input.team === 1 || input.team === 2 ? input.team : null) : (user.actTeam ?? null);
+    const team: 1 | 2 | null = job === 'director' || job === 'manager' ? (input.team === 1 || input.team === 2 ? input.team : null) : (user.actTeam ?? null);
     if (job === 'auditor' && !team) throw new ActDenied('You are not in an ACT team yet.');
     if (input.findingId && !(await this.store.get('actFindings', input.findingId))) throw new NotFound('Finding');
     const anomalyKey = input.anomalyKey ? String(input.anomalyKey).slice(0, 200) : null;
@@ -42927,7 +42970,7 @@ export class PrimaService {
         next = { ...inv, notes: [...inv.notes, { at, by: user.name, text }], custody: [...inv.custody, { at, by: user.name, byId: user.id, action: 'note', detail: 'Note added' }] };
         summary = `Note added to ${inv.ref}.`;
       } else if (input.action === 'assign') {
-        if (job !== 'director') throw new ActDenied('Only the ACT Director gives an investigation to a team.');
+        if (job !== 'director' && job !== 'manager') throw new ActDenied('Only the ACT Director or the ACT Manager gives an investigation to a team.');
         if (input.team !== 1 && input.team !== 2) throw new BadRequest('Choose Team 1 or Team 2.');
         team = input.team;
         next = { ...inv, custody: [...inv.custody, { at, by: user.name, byId: user.id, action: 'assigned', detail: `Given to Team ${team}` }] };
@@ -42961,10 +43004,10 @@ export class PrimaService {
   }
 
   /** Auditors and Enforcement officers act only on their own team's findings; the Director acts on any. */
-  private actOnTeam(user: User, job: 'director' | 'auditor' | 'enforcement', f: ActFinding) {
-    if (job === 'director') return;
+  private actOnTeam(user: User, job: 'director' | 'manager' | 'auditor' | 'enforcement', f: ActFinding) {
+    if (job === 'director' || job === 'manager') return;
     if (!f.team) throw new ActDenied('The ACT Director has not given this finding to a team yet.');
-    if (f.team !== user.actTeam) throw new ActDenied(`This finding is with Team ${f.team}; only Team ${f.team} or the ACT Director can act on it.`);
+    if (f.team !== user.actTeam) throw new ActDenied(`This finding is with Team ${f.team}; only Team ${f.team}, the ACT Manager or the ACT Director can act on it.`);
   }
 
   private actTeamFor(user: User): 1 | 2 | null {
@@ -43158,7 +43201,8 @@ export class PrimaService {
       note?: string;
     },
   ) {
-    if (this.actJob(user) !== 'director') throw new ActDenied('Only the ACT Director can give work to a team.');
+    const assigner = this.actJob(user);
+    if (assigner !== 'director' && assigner !== 'manager') throw new ActDenied('Only the ACT Director or the ACT Manager can give work to a team.');
     const rule = RULES.act.value;
     const team: 1 | 2 | null = input.team === 1 || input.team === 2 ? input.team : null;
     if (!team) throw new BadRequest('Choose Team 1 or Team 2.');
