@@ -58,6 +58,8 @@ const MODULE_TABLES: Partial<Record<TableName, string>> = {
   clockSnaps: 'Check-in face photos are not set up in this database yet (module clock-snaps-v1).',
   // P100 E6: moving vehicles between group companies (db/modules/vehicle-transfers-v1.sql, CEO-run migration).
   vehicleTransfers: 'Vehicle moves between companies are not installed in this database yet (module vehicle-transfers-v1, run by the CEO).',
+  // P100 J5: guard sign-ins in bulk (db/modules/guard-signins-v1.sql, CEO-run migration).
+  guardSignInBatches: 'Guard sign-ins in bulk are not installed in this database yet (module guard-signins-v1, run by the CEO).',
 };
 
 // Exported for the per-request read snapshots (read-cache.ts, P83).
@@ -254,6 +256,7 @@ checkinEvents: 'prima.checkin_events',
 ownerTestCheckins: 'prima.owner_test_checkins',
 clockSnaps: 'prima.clock_snaps',
 vehicleTransfers: 'prima.vehicle_transfers',
+guardSignInBatches: 'prima.guard_signin_batches',
 loginHandovers: 'prima.login_handovers',
 hrFilings: 'prima.hr_filings',
 hrCases: 'prima.hr_cases',
@@ -428,6 +431,7 @@ const HAS_COMPANY_COLUMN = new Set<TableName>([
 'locationPings',
 'clockSnaps',
 'vehicleTransfers',
+'guardSignInBatches',
 'remoteArrangements',
 'remoteDays',
 'flexRequests',
@@ -1013,6 +1017,12 @@ async list<T extends TableName>(table: T, filter?: Filter<T>, range?: Range<T>):
   }
 
   /** Expire and clear Arisha IT import reviews; the database function changes and audits each in one step. */
+  /** J5: the database makes the guard sign-ins of an approved batch (prima.gsb_create re-checks everything). */
+  async createGuardSignIns(batchId: string): Promise<{ count: number; skipped: { personId: string; why: string }[] }> {
+    const r = await this.client.query('SELECT prima.gsb_create($1) AS r', [batchId]);
+    return r.rows[0].r as { count: number; skipped: { personId: string; why: string }[] };
+  }
+
   async tidyItImportReviews(by: string): Promise<{ id: string; kind: string; outcome: 'expired' | 'purged' }[]> {
     const res = await this.client.query('SELECT review_id, review_kind, outcome FROM prima.tidy_it_import_reviews($1)', [by]);
     return res.rows.map((r: { review_id: string; review_kind: string; outcome: 'expired' | 'purged' }) => ({ id: r.review_id, kind: r.review_kind, outcome: r.outcome }));

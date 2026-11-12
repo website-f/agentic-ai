@@ -170,8 +170,8 @@ export const RULES = {
   staffTrackKeepDays: rule(
     'HR-STAFF-KEEP',
     90,
-    'Unverified',
-    'Proposed retention of location readings, to confirm with the PDPA notice to staff (location and face are personal data; face is biometric).',
+    'Policy',
+    'Approved by Fauzan, 11 Nov 2026 (G9): keep staff location readings 90 days; site visitor records 7 years. J5: readings older than this are deleted automatically by the daily retention job (db/modules/location-retention-v1.sql), staff clock and guard phone alike; a check-in face photo is dropped after its keep date. The PDPA notice to staff is still to be written (K5).',
   ),
   remotePlanMin: rule(
     'HR-WFH-PLAN',
@@ -2184,7 +2184,7 @@ export const RULES = {
       keepPingsDays: 90,
     },
     'Policy',
-    'Third audit item 2, Fauzan 5 Nov 2026: guards sign in on their own phones with face plus PIN, live patrol location, SOS button and a heartbeat to CMS. Heartbeat every 60 s and offline after 5 min follow the JA requirements (2 Nov 2026). Location only on duty (30 min either side of the shift); Fauzan, 5 Nov 2026: no PDPA notice step on the phone. Keeping readings 90 days and the code, session, lock and SOS numbers are PROPOSED.',
+    'Third audit item 2, Fauzan 5 Nov 2026: guards sign in on their own phones with face plus PIN, live patrol location, SOS button and a heartbeat to CMS. Heartbeat every 60 s and offline after 5 min follow the JA requirements (2 Nov 2026). Location only on duty (30 min either side of the shift); Fauzan, 5 Nov 2026: no PDPA notice step on the phone. Keeping readings 90 days and the code, session, lock and SOS numbers are PROPOSED. Approved by Fauzan, 11 Nov 2026 (G9): location readings kept 90 days (deleted daily by the location retention job, rule HR-STAFF-KEEP).',
   ),
   qualityOps: rule(
     'QMS-OPERATIONS',

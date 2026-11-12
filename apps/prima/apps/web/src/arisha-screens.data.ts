@@ -593,6 +593,15 @@ export const SCREEN_GUIDES: ScreenGuide[] = [
     ],
     "tasks": [
       {
+        "task": "How to make guard sign-ins in bulk (HR, company office, Operations Manager)",
+        "steps": [
+          "Press \"Guard sign-ins (bulk)\" at the top of the screen and choose the company.",
+          "Tick the guards without a sign-in (or \"Choose all shown\"), add a note if you like, and press \"Send ... for approval\".",
+          "Someone else (HR, the company manager, the OGM or Operations Director, or the Chief of Staff) opens the batch, writes a comment and presses \"Approve and make the sign-ins\". You cannot approve your own.",
+          "The guard phone stays switched off until the CEO's go-ahead; the sign-ins are ready for that day."
+        ]
+      },
+      {
         "task": "How to find someone",
         "steps": [
           "Type in \"Search name or staff number\".",

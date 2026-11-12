@@ -2080,6 +2080,19 @@ export class HttpApi implements Api {
   cmsConsoleSignIn() {
     return this.call<Awaited<ReturnType<Api['cmsConsoleSignIn']>>>('POST', '/cms/console/sign-in', {});
   }
+  // P100 newb: J5 guard sign-ins in bulk (apps/api/src/guard-signins.controller.ts).
+  guardSignInBoard(companyId?: string) {
+    return this.call<Awaited<ReturnType<Api['guardSignInBoard']>>>('GET', `/guard-signins${companyId ? `?companyId=${encodeURIComponent(companyId)}` : ''}`);
+  }
+  prepareGuardSignIns(companyId: string, personIds: string[], note: string) {
+    return this.call<unknown>('POST', '/guard-signins', { companyId, personIds, note });
+  }
+  decideGuardSignIns(id: string, approve: boolean, note: string) {
+    return this.call<unknown>('POST', `/guard-signins/${encodeURIComponent(id)}/decide`, { approve, note });
+  }
+  cancelGuardSignIns(id: string, reason: string) {
+    return this.call<unknown>('POST', `/guard-signins/${encodeURIComponent(id)}/cancel`, { reason });
+  }
   // P100 newb: J1 the client portal (apps/api/src/client-portal.controller.ts).
   clientPortalDesk() {
     return this.call<Awaited<ReturnType<Api['clientPortalDesk']>>>('GET', '/client-portal');

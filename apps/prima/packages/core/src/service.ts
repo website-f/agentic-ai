@@ -127,6 +127,7 @@ import { ClockSnapService } from "./clock-snap-service";
 import { VehicleTransferService } from "./vehicle-transfer";
 import { cmsConsolePerson } from "./cms-console";
 import { ClientPortalService } from "./client-portal";
+import { GuardSignInService } from "./guard-signins";
 import type { MovementSummary } from "./movement";
 import type { RawReading } from "./movement";
 import { mayTestCheckin } from "./owner-test-checkin";
@@ -45331,6 +45332,30 @@ export class PrimaService {
       // Managed by the OM (Fauzan, 11 Nov 2026): Operations Managers and above in the area, not supervisors or patrol officers.
       actsOn: async (user, a) => this.clientRoleOf(user) === 'act' && user.role !== 'supervisor' && user.opsTier !== 'patrol' && (await this.opsCovers(user, a.companyId, a.siteIds)),
     });
+  }
+
+  /** J5: guard sign-ins in bulk with a review step (guard-signins.ts). */
+  guardSignIns(): GuardSignInService {
+    return new GuardSignInService(this.store, () => this.now(), {
+      visible: async (user) => visibleCompanyIds(user, await this.grants(), this.today()),
+      companyName: async (id) => centralEmployerName(id) ?? (await this.store.get('companies', id))?.name ?? id,
+    });
+  }
+
+  guardSignInBoard(user: User, companyId?: Id) {
+    return this.guardSignIns().board(user, companyId);
+  }
+
+  prepareGuardSignIns(user: User, companyId: Id, personIds: Id[], note: string) {
+    return this.guardSignIns().prepare(user, companyId, personIds, note);
+  }
+
+  decideGuardSignIns(user: User, batchId: Id, approve: boolean, note: string) {
+    return this.guardSignIns().decide(user, batchId, approve, note);
+  }
+
+  cancelGuardSignIns(user: User, batchId: Id, reason: string) {
+    return this.guardSignIns().cancel(user, batchId, reason);
   }
 
   clientPortalDesk(user: User) {

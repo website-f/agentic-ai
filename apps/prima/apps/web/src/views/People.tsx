@@ -17,6 +17,7 @@ import { jumpTo } from './AddImportMenu';
 import { FaceCapture } from './FaceCheck';
 import { GroupHistoryTab, HistoryLookupPanel } from './StaffHistory';
 import { GuardPhoneCard } from './GuardPhoneOffice';
+import { GuardSignInsButton } from './GuardSignIns';
 import '../styles/people.css';
 
 export function People({ openPersonId }: { openPersonId?: string }) {
@@ -65,6 +66,7 @@ export function People({ openPersonId }: { openPersonId?: string }) {
           <>
             <ImportButton kind="officeStaff" companyId={companyId} label="Import office staff" />
             <RecordButton kind="officeStaff" companyId={companyId} label="Add office staff" primary />
+            <GuardSignInsButton user={me.user} />
             {historyRole && (
               <button className="btn" aria-pressed={hireCheck} onClick={() => setHireCheck(!hireCheck)}>
                 Look up staff history

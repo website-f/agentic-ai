@@ -3944,6 +3944,38 @@
  },
  {
   "method": "GET",
+  "path": "api/guard-signins",
+  "name": "board",
+  "query": [
+   "companyId"
+  ]
+ },
+ {
+  "method": "POST",
+  "path": "api/guard-signins",
+  "name": "prepare",
+  "body": "Record<string, unknown>"
+ },
+ {
+  "method": "POST",
+  "path": "api/guard-signins/:id/cancel",
+  "name": "cancel",
+  "params": [
+   "id"
+  ],
+  "body": "Record<string, unknown>"
+ },
+ {
+  "method": "POST",
+  "path": "api/guard-signins/:id/decide",
+  "name": "decide",
+  "params": [
+   "id"
+  ],
+  "body": "Record<string, unknown>"
+ },
+ {
+  "method": "GET",
   "path": "api/home",
   "name": "home",
   "query": [

@@ -3006,6 +3006,19 @@ export class DemoApi implements Api {
   async cmsConsoleSignIn(): Promise<{ url: string; expiresInS: number; name: string }> {
     throw new ApiError('CMS sign-in is not set up yet (CMS_URL and CMS_SIGNIN_SECRET).', 503);
   }
+  // P100 newb: J5 guard sign-ins in bulk.
+  guardSignInBoard(companyId?: string) {
+    return this.read((s, u) => s.guardSignInBoard(u, companyId));
+  }
+  prepareGuardSignIns(companyId: string, personIds: string[], note: string) {
+    return this.write<unknown>('prepareGuardSignIns' as Mutations, [companyId, personIds, note]);
+  }
+  decideGuardSignIns(id: string, approve: boolean, note: string) {
+    return this.write<unknown>('decideGuardSignIns' as Mutations, [id, approve, note]);
+  }
+  cancelGuardSignIns(id: string, reason: string) {
+    return this.write<unknown>('cancelGuardSignIns' as Mutations, [id, reason]);
+  }
   // P100 newb: J1 the client portal (the test version shows the code; there is no public page to link to).
   clientPortalDesk() {
     return this.read(async (s, u) => ({ ...(await s.clientPortalDesk(u)), on: false }));

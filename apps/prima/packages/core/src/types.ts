@@ -3382,6 +3382,8 @@ export interface Dataset {
   clockSnaps: import('./clock-snap').ClockSnap[];
   /** E6 (P100): moving a vehicle to another group company's use: request, approval, handover (vehicle-transfer.ts; db/modules/vehicle-transfers-v1.sql). */
   vehicleTransfers: import('./vehicle-transfer').VehicleTransfer[];
+  /** J5 (P100): guard sign-ins made in bulk with a review step (guard-signins.ts; db/modules/guard-signins-v1.sql). */
+  guardSignInBatches: import('./guard-signins').GuardSignInBatch[];
   fwWelfareChecks: FwWelfareCheck[];
   fwPlacements: FwPlacement[];
   fwPlacementHosts: FwPlacementHostView[];

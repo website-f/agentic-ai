@@ -35,7 +35,14 @@ export interface ClientPortalOpened {
   url: string | null;
 }
 
+/** J5: guard sign-ins in bulk with a review step. */
+export type GuardSignInBoard = R<'guardSignInBoard'>;
+
 export interface NewbClient {
+  guardSignInBoard(companyId?: string): Promise<GuardSignInBoard>;
+  prepareGuardSignIns(companyId: string, personIds: string[], note: string): Promise<unknown>;
+  decideGuardSignIns(id: string, approve: boolean, note: string): Promise<unknown>;
+  cancelGuardSignIns(id: string, reason: string): Promise<unknown>;
   clientPortalDesk(): Promise<ClientPortalDesk>;
   openClientPortal(clientId: string, input: { name: string; post: string }): Promise<ClientPortalOpened>;
   resetClientPortal(clientId: string, portalUserId: string, reason: string): Promise<ClientPortalOpened>;
@@ -52,6 +59,12 @@ export interface NewbClient {
 /** The in-browser demo's writes for these calls (demo.ts apply() hands them here first). */
 export function applyNewb(svc: PrimaService, u: import('@prima/core').User, op: string, a: never[]): Promise<unknown> | null {
   switch (op) {
+    case 'prepareGuardSignIns':
+      return svc.prepareGuardSignIns(u, a[0], a[1], a[2]);
+    case 'decideGuardSignIns':
+      return svc.decideGuardSignIns(u, a[0], a[1], a[2]);
+    case 'cancelGuardSignIns':
+      return svc.cancelGuardSignIns(u, a[0], a[1]);
     case 'openClientPortal':
       return svc.openClientPortal(u, a[0], a[1]).then((r) => ({ user: r.user, code: r.code, url: null }));
     case 'resetClientPortal':

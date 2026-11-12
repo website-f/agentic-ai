@@ -24,6 +24,8 @@ import { AttendanceReportsController, AttendanceUploads } from './attendance-rep
 import { VehicleTransferController } from './vehicle-transfer.controller';
 import { CmsSignInController } from './cms-signin.controller';
 import { ClientPortalController, ClientPortalStaffController, ShareReportPdfController } from './client-portal.controller';
+import { GuardSignInsController } from './guard-signins.controller';
+import { LocationRetentionJob } from './location-retention';
 
 const jobEmail = jobEmailRuntimeModule();
 const teamsEvidence=teamsEvidenceModule();
@@ -31,7 +33,7 @@ const alerts = alertsModule();
 const m365 = m365ConnectionsModule();
 
 @Module({
-  controllers: [HealthController, AttendanceReportsController, AuthController, OfficeController, CheckinController, AppController, JaFeedController, DoorFeedController, PlannerFeedController, AnalyticsFeedController, InhouseFeedController, ConnectionsController, ItExtractionController, ItImportReviewController, ...jobEmail.controllers,...teamsEvidence.controllers, OfflineController, ...SPECIAL_OPS_CONTROLLERS, ...WHATSAPP_CONTROLLERS, OrgHealthController, OrgController, ...m365.controllers, ShareController, StaffDirectoryController, CleaningController, ...alerts.controllers, DraftHelpController, GuardPhoneOpenController, GuardPhoneController, VehicleTransferController, CmsSignInController, ClientPortalController, ClientPortalStaffController, ShareReportPdfController],
-  providers: [Db, { provide: SharePointConnections, useFactory: () => new SharePointConnections() }, { provide: AttendanceUploads, useFactory: () => new AttendanceUploads() }, ...jobEmail.providers,...teamsEvidence.providers, WhatsAppRunner, ...m365.providers, ...alerts.providers],
+  controllers: [HealthController, AttendanceReportsController, AuthController, OfficeController, CheckinController, AppController, JaFeedController, DoorFeedController, PlannerFeedController, AnalyticsFeedController, InhouseFeedController, ConnectionsController, ItExtractionController, ItImportReviewController, ...jobEmail.controllers,...teamsEvidence.controllers, OfflineController, ...SPECIAL_OPS_CONTROLLERS, ...WHATSAPP_CONTROLLERS, OrgHealthController, OrgController, ...m365.controllers, ShareController, StaffDirectoryController, CleaningController, ...alerts.controllers, DraftHelpController, GuardPhoneOpenController, GuardPhoneController, VehicleTransferController, CmsSignInController, ClientPortalController, ClientPortalStaffController, ShareReportPdfController, GuardSignInsController],
+  providers: [Db, LocationRetentionJob, { provide: SharePointConnections, useFactory: () => new SharePointConnections() }, { provide: AttendanceUploads, useFactory: () => new AttendanceUploads() }, ...jobEmail.providers,...teamsEvidence.providers, WhatsAppRunner, ...m365.providers, ...alerts.providers],
 })
 export class AppModule {}
