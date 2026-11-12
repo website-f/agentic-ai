@@ -103,7 +103,7 @@ import { NavMenu } from './NavMenu';
 import { AppGrid, AppSwitcher, SpacePhoneBar, SpaceRailHead, SpotSearch } from './Spaces';
 import { LaunchpadView, SpaceRoute } from './views/SpaceRoute';
 import { appsOf, rememberView, spaceLayout, spaceOf, usesApps, type SpaceId } from './nav-catalog';
-import { officeNarrowed, primaOnly } from './office-access';
+import { asTop, myName, officeNarrowed, primaOnly } from './office-access';
 
 
 
@@ -1328,7 +1328,7 @@ function Shell({ me, onSignOut, onReset }: { me: Me; onSignOut: () => void; onRe
       {/* P80: one launcher, bottom right: Arisha (everyone who opens Prima; she teaches and guides, never decides) and
           the office's feedback and Rules & guide. Never for integration logins. */}
       {!me.user.integration && (
-        <Launcher key={me.user.id} user={me.user} view={route.view} viewLabel={nav.find((n) => n.view === route.view)?.label ?? route.view} menu={nav.map((n) => n.label)} />
+        <Launcher key={me.user.id} user={asTop(me) ? { ...me.user, name: myName(me) } : me.user} view={route.view} viewLabel={nav.find((n) => n.view === route.view)?.label ?? route.view} menu={nav.map((n) => n.label)} />
       )}
       <div className="shell">
         <aside className="rail">
@@ -1363,8 +1363,14 @@ function Shell({ me, onSignOut, onReset }: { me: Me; onSignOut: () => void; onRe
           </nav>
           <div className="rail-foot">
             <div>
-              <div style={{ fontWeight: 600 }}>{me.user.name}</div>
-              <div className="muted small">{me.user.title}</div>
+              <div style={{ fontWeight: 600 }} data-no-translate>{myName(me)}</div>
+              {asTop(me) ? (
+                <div className="muted small">
+                  <span>Opens Prima as</span> <span data-no-translate>{me.user.title || me.user.name}</span>
+                </div>
+              ) : (
+                <div className="muted small">{me.user.title}</div>
+              )}
             </div>
             <LangPicker compact />
             <div className="row">

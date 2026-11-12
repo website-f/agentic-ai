@@ -462,7 +462,15 @@ export interface Me {
    * P99: inside the Agentic Office, what the office gives this person: Prima only (no office pages), and the Prima screens
    * chosen for them (null: all their Prima role allows) plus the ones everyone keeps. Absent outside the office.
    */
-  office?: { primaOnly: boolean; modules: string[] | null; always: string[] };
+  office?: {
+    primaOnly: boolean;
+    modules: string[] | null;
+    always: string[];
+    /** P101: the person signed in to the office (an older office sends none). */
+    name?: string;
+    /** P101: they open Prima as its shared top record (owners and the developer), so `user` is not them. */
+    asTop?: boolean;
+  };
   /** P100 B1: a guard pay preparer named by their Company Manager (the menu shows Guard pay). */
   guardPayPreparer?: boolean;
 }

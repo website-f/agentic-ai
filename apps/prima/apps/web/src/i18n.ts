@@ -4991,7 +4991,9 @@ const ROWS: Row[] = [
   ['Your alert choices are saved.', 'Pilihan makluman anda disimpan.', 'Pilihan alert anda sudah disimpan.'],
   ['Alerts are for staff sign-ins.', 'Makluman adalah untuk log masuk staf.', 'Alert untuk sign-in staf.'],
   ['Choosing alerts is not installed in this database yet (module alert-prefs-v1, run by the CEO).', 'Pilihan makluman belum dipasang dalam pangkalan data ini (modul alert-prefs-v1, dijalankan oleh CEO).', 'Pilihan alert belum dipasang dalam database ini (modul alert-prefs-v1, dijalankan oleh CEO).'],
-  ['Say whether urgent alerts and the daily digest are on.', 'Nyatakan sama ada makluman segera dan ringkasan harian dihidupkan.', 'Nyatakan sama ada alert segera dan ringkasan harian on.']
+  ['Say whether urgent alerts and the daily digest are on.', 'Nyatakan sama ada makluman segera dan ringkasan harian dihidupkan.', 'Nyatakan sama ada alert segera dan ringkasan harian on.'],
+  // P101 (Fitri, 12 Nov 2026): an owner or the developer, named as themself, on the shared top record
+  ['Opens Prima as', 'Buka Prima sebagai', null],
 ];
 
 const DICT = new Map<string, [string, string]>();

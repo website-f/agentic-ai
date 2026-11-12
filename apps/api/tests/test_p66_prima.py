@@ -603,6 +603,11 @@ async def test_the_owner_always_opens_prima_as_its_top_record(client, prima_on, 
     n = len(prima_on)
     await client.get("/api/prima/api/leave")
     assert len(prima_on) == n + 1
+    # P101: Prima greets the person signed in to the office, not the shared top record's name.
+    mine = (await client.get("/api/auth/me")).json()["user"]["name"]
+    me = (await client.get("/api/prima/api/me")).json()
+    assert me["user"]["name"] == "Fauzan" and mine and mine != "Fauzan"
+    assert me["office"]["name"] == mine and me["office"]["asTop"] is True
 
 
 def test_branch_suggestion_knows_the_companies_other_names():

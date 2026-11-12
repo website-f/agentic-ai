@@ -5,6 +5,7 @@ import { GrowthPanel, iconFor } from './Growth';
 import { ApprovalLimitsPanel } from './ApprovalLimits';
 import { setFinTarget } from '../finTarget';
 import { api } from '../api';
+import { myName } from '../office-access';
 import { useApp } from '../App';
 import { Chip, ErrorNotice, Loading, n, useLoad, type Tone } from '../ui';
 import { Card, Empty, PageHead, Stat, Stats } from '../kit';
@@ -149,7 +150,7 @@ export function HomeView() {
       {/* P91 (Fitri, 9 Nov 2026): a long menu becomes apps: a greeting, one search, the app cards and the person's own
           screens on top; the decisions and key numbers follow. A short menu keeps the plain page title. */}
       {apps && openSpace ? (
-        <HomeLaunchpad name={me.user.name} intro={data.intro} menu={menu ?? []} userId={me.user.id} waiting={waitingBySpace(data.todo)} onView={(v) => go({ view: v })} onSpace={openSpace} />
+        <HomeLaunchpad name={myName(me)} intro={data.intro} menu={menu ?? []} userId={me.user.id} waiting={waitingBySpace(data.todo)} onView={(v) => go({ view: v })} onSpace={openSpace} />
       ) : (
         <PageHead title={data.title} sub={data.intro} />
       )}

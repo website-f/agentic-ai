@@ -16,3 +16,14 @@ export function officeNarrowed<T extends { view: string }>(items: T[], office?: 
 
 /** Someone the office gave Prima only: no way back to the office's pages, and signing out signs out of the office. */
 export const primaOnly = (me: Me) => me.office?.primaOnly === true;
+
+/**
+ * P101 (Fitri, 12 Nov 2026: "why it says welcome fauzan ... make sure its dynamic"): the name of the person using
+ * Prima. Inside the office it is the office's signed-in person: owners and the developer open Prima as its top record
+ * (the CEO's), which several people share, so the record's own name would greet the wrong person. Elsewhere it is the
+ * Prima record's name.
+ */
+export const myName = (me: Me): string => me.office?.name?.trim() || me.user.name;
+
+/** P101: they open Prima as its shared top record, so the record's name and title are not theirs. */
+export const asTop = (me: Me): boolean => me.office?.asTop === true && !!me.office?.name?.trim();

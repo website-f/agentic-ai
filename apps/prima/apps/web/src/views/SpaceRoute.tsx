@@ -1,5 +1,6 @@
 import type { HomeLink } from '@prima/core';
 import { api } from '../api';
+import { myName } from '../office-access';
 import { useApp } from '../App';
 import { setFinTarget } from '../finTarget';
 import { HomeLaunchpad, SpaceHome } from '../Spaces';
@@ -35,7 +36,7 @@ export function LaunchpadView() {
   const main = items.filter((i) => spaceOf(i.view) !== 'home').slice(0, 3);
   return (
     <div className="page home">
-      {openSpace && <HomeLaunchpad name={me.user.name} menu={items} main={main} userId={me.user.id} waiting={{}} onView={(v) => go({ view: v })} onSpace={openSpace} />}
+      {openSpace && <HomeLaunchpad name={myName(me)} menu={items} main={main} userId={me.user.id} waiting={{}} onView={(v) => go({ view: v })} onSpace={openSpace} />}
     </div>
   );
 }

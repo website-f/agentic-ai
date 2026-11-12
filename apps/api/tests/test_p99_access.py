@@ -105,8 +105,11 @@ async def test_a_prima_only_person_reaches_prima_and_nothing_else(client, prima_
         assert (await c.get("/api/prima/status")).json()["linked"]
         r = await c.get("/api/prima/api/me")
         assert r.status_code == 200
-        assert r.json()["office"] == {
-            "primaOnly": True, "modules": None, "always": list(modules.ALWAYS)
+        office_part = r.json()["office"]
+        # P101: the office person, for Prima's greeting
+        assert office_part.pop("name") == me["user"]["name"]
+        assert office_part == {
+            "primaOnly": True, "modules": None, "always": list(modules.ALWAYS), "asTop": False
         }  # fmt: skip
         assert (await c.get("/api/prima/api/leave")).json()["as"] == f"u-off-{siti_id}"
         assert (await c.get("/api/me/prefs")).status_code == 200

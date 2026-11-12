@@ -11,6 +11,7 @@ import {
   type ProofInput,
 } from "@prima/core";
 import { api, type PoliceHelpBoard } from "../api";
+import { myName } from "../office-access";
 import { useApp } from "../App";
 import {
   Chip,
@@ -321,7 +322,7 @@ function AskDrawer({
     policeUnit: "",
     officer: "",
     asked: "",
-    contactName: me.user.name,
+    contactName: myName(me),
     contactPhone: "",
   });
   const act = useAction();

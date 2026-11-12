@@ -356,6 +356,12 @@ def _with_office(ans: client.Answer, principal: Principal) -> bytes:
         "primaOnly": principal.access == "prima_only",
         "modules": list(chosen) if chosen is not None else None,
         "always": list(modules.ALWAYS),
+        # P101 (Fitri, 12 Nov 2026: "why it says welcome fauzan while i am logged in as
+        # developer"): the person signed in to the office, for Prima's greeting and name.
+        # Owners and the developer (an owner) open Prima as its top record
+        # (client.opens_as_top), which several people share, so its name is not theirs.
+        "name": principal.user.name,
+        "asTop": principal.role == "owner",
     }
     return json.dumps(data, separators=(",", ":"), ensure_ascii=False).encode()
 
