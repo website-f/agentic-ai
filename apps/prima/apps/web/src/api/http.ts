@@ -2073,6 +2073,13 @@ export class HttpApi implements Api {
   vehicleUsage(month?: string) {
     return this.call<Awaited<ReturnType<Api['vehicleUsage']>>>('GET', `/fleet/usage${month ? `?month=${encodeURIComponent(month)}` : ''}`);
   }
+  // P100 newb: E7 the CMS console opened with the Prima sign-in (apps/api/src/cms-signin.controller.ts).
+  cmsConsole() {
+    return this.call<Awaited<ReturnType<Api['cmsConsole']>>>('GET', '/cms/console');
+  }
+  cmsConsoleSignIn() {
+    return this.call<Awaited<ReturnType<Api['cmsConsoleSignIn']>>>('POST', '/cms/console/sign-in', {});
+  }
   // P100 newb: E6 vehicle moves between companies (apps/api/src/vehicle-transfer.controller.ts).
   vehicleTransferBoard() {
     return this.call<Awaited<ReturnType<Api['vehicleTransferBoard']>>>('GET', '/fleet/transfers');

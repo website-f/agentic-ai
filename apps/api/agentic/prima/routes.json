@@ -1428,6 +1428,18 @@
  },
  {
   "method": "GET",
+  "path": "api/cms/console",
+  "name": "status",
+  "doc": "Whether the CMS console can be opened from here (no secret, no address beyond the CMS's own)."
+ },
+ {
+  "method": "POST",
+  "path": "api/cms/console/sign-in",
+  "name": "signIn",
+  "doc": "A one-time ticket for the CMS console, for a person Prima allows (roster staff or Arms Control)."
+ },
+ {
+  "method": "GET",
   "path": "api/cms/dispatches",
   "name": "cmsDispatches"
  },

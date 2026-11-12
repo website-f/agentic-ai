@@ -2999,6 +2999,13 @@ export class DemoApi implements Api {
   vehicleRentals(month?: string) {
     return this.read((s, u) => s.vehicleRentals(u, month));
   }
+  // P100 newb: E7 the CMS console: the demo has no CMS, so it shows as not set up (who may open it is still checked).
+  cmsConsole() {
+    return this.read(async (s, u) => ({ on: false, url: null, may: await s.cmsConsoleMay(u) }));
+  }
+  async cmsConsoleSignIn(): Promise<{ url: string; expiresInS: number; name: string }> {
+    throw new ApiError('CMS sign-in is not set up yet (CMS_URL and CMS_SIGNIN_SECRET).', 503);
+  }
   // P100 newb: E6 vehicle moves between companies.
   vehicleTransferBoard() {
     return this.read((s, u) => s.vehicleTransferBoard(u));

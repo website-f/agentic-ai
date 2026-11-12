@@ -19,7 +19,16 @@ export interface VehicleHandoverInput {
   note?: string;
 }
 
+/** E7: opening the CMS console with the Prima sign-in. */
+export interface CmsConsoleStatus {
+  on: boolean;
+  url: string | null;
+  may: boolean;
+}
+
 export interface NewbClient {
+  cmsConsole(): Promise<CmsConsoleStatus>;
+  cmsConsoleSignIn(): Promise<{ url: string; expiresInS: number; name: string }>;
   vehicleTransferBoard(): Promise<VehicleTransferBoard>;
   requestVehicleTransfer(input: { vehicleId: string; toCompanyId: string; wantedOn: string; reason: string }): Promise<unknown>;
   decideVehicleTransfer(id: string, approve: boolean, note: string): Promise<unknown>;

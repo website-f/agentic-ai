@@ -1473,6 +1473,14 @@ export const SCREEN_GUIDES: ScreenGuide[] = [
     ],
     "tasks": [
       {
+        "task": "How to open the CMS console (CMS operators)",
+        "steps": [
+          "At the top of the CMS screen, press \"Open the CMS console\". It uses your Prima sign-in (Microsoft): no operator key.",
+          "The console opens in this window and keeps you signed in for your shift; after 15 minutes without use it asks you to open it from Prima again.",
+          "If the card says \"Not set up yet\", IT has not linked Prima and the CMS yet."
+        ]
+      },
+      {
         "task": "How to handle an alarm",
         "steps": [
           "Open \"Emergencies and incidents\".",

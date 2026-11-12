@@ -4072,7 +4072,14 @@ const ROWS: Row[] = [
   ['Give the reason for cancelling.', 'Berikan sebab pembatalan.', 'Bagi sebab batal.'],
   ['Only an open move can be cancelled.', 'Hanya pindahan yang masih terbuka boleh dibatalkan.', 'Hanya pindahan yang masih open boleh dibatal.'],
   ['A vehicle moves to another company only through a move request approved by someone else and its handover record (Vehicles, Move between companies).', 'Kenderaan berpindah ke syarikat lain hanya melalui permohonan pindah yang diluluskan oleh orang lain dan rekod serahannya (Kenderaan, Pindah antara syarikat).', 'Kenderaan pindah ke syarikat lain hanya melalui permohonan pindah yang di-approve oleh orang lain dan rekod handover (Kenderaan, Pindah antara syarikat).'],
-  ['Vehicle moves between companies are not installed in this database yet (module vehicle-transfers-v1, run by the CEO).', 'Pindahan kenderaan antara syarikat belum dipasang dalam pangkalan data ini (modul vehicle-transfers-v1, dijalankan oleh CEO).', 'Pindahan kenderaan antara syarikat belum dipasang dalam database ini (modul vehicle-transfers-v1, dijalankan oleh CEO).']
+  ['Vehicle moves between companies are not installed in this database yet (module vehicle-transfers-v1, run by the CEO).', 'Pindahan kenderaan antara syarikat belum dipasang dalam pangkalan data ini (modul vehicle-transfers-v1, dijalankan oleh CEO).', 'Pindahan kenderaan antara syarikat belum dipasang dalam database ini (modul vehicle-transfers-v1, dijalankan oleh CEO).'],
+  ['CMS console', 'Konsol CMS', null],
+  ['The 24-hour console opens with your Prima sign-in (Microsoft). No operator key is needed.', 'Konsol 24 jam dibuka dengan log masuk Prima anda (Microsoft). Kunci operator tidak diperlukan.', 'Konsol 24 jam dibuka dengan sign-in Prima anda (Microsoft). Tak perlu kunci operator.'],
+  ['Not set up yet', 'Belum disediakan', null],
+  ['Open the CMS console', 'Buka konsol CMS', null],
+  ['IT sets the CMS address and the shared sign-in secret on Prima and on the CMS server. Until then the console cannot be opened from here.', 'IT menetapkan alamat CMS dan rahsia log masuk bersama pada Prima dan pada pelayan CMS. Sehingga itu konsol tidak boleh dibuka dari sini.', 'IT set alamat CMS dan rahsia sign-in bersama pada Prima dan server CMS. Sebelum itu konsol tak boleh dibuka dari sini.'],
+  ['CMS sign-in is not set up yet (CMS_URL and CMS_SIGNIN_SECRET).', 'Log masuk CMS belum disediakan (CMS_URL dan CMS_SIGNIN_SECRET).', 'Sign-in CMS belum disediakan (CMS_URL dan CMS_SIGNIN_SECRET).'],
+  ['The CMS console is not opened from a guard phone.', 'Konsol CMS tidak dibuka dari telefon pengawal.', 'Konsol CMS tak dibuka dari telefon guard.']
 ];
 
 const DICT = new Map<string, [string, string]>();

@@ -97,7 +97,7 @@ How alerts stop and escalate:
 
 **Alarm panels.** SIA DC-09 over TCP on `CMS_DC09_PORT`. Encrypted DC-09 frames are refused until each panel's AES key is set up.
 
-**Operators.** Send `Authorization: Bearer <operator key>`. Keys come from `CMS_OPERATOR_KEYS`, a JSON map of key to operator name; each key must be at least 24 characters.
+**Operators.** E7 (Fauzan, 11 Nov 2026): operators sign in with Microsoft through Prima. Prima's CMS screen has "Open the CMS console"; Prima checks the roster and sends the browser here with a one-time ticket (60 seconds, signed with `CMS_SIGNIN_SECRET`, the same value on both sides). `POST /auth/prima` takes it once and sets the session cookie (15 minutes idle, 12 hours at most); `GET /auth/me`, `POST /auth/signout`, `GET /auth/options`. Changes need the `X-CMS-Request: 1` header. The old `Authorization: Bearer <operator key>` works only as a sealed break-glass fallback: `CMS_OPERATOR_KEYS` (JSON map of key to operator name, each key at least 24 characters) is read only with `CMS_BREAK_GLASS=true`, and CMS refuses to start with keys set and the switch off.
 - `GET /api/state`
 - `GET /api/assistant`: ranked findings, reasons, suggested steps and the connected-systems watch.
 - `GET /api/assistant/briefing`: the in-house model's draft shift briefing (`{state: off | ok | failed}`).

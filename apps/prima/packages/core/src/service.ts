@@ -125,6 +125,7 @@ import { analyseMovement } from "./movement";
 import { TRACKER_NOTE_KINDS, TRACKER_NOTES_MAX, type TrackerNote } from "./movement";
 import { ClockSnapService } from "./clock-snap-service";
 import { VehicleTransferService } from "./vehicle-transfer";
+import { cmsConsolePerson } from "./cms-console";
 import type { MovementSummary } from "./movement";
 import type { RawReading } from "./movement";
 import { mayTestCheckin } from "./owner-test-checkin";
@@ -40495,6 +40496,27 @@ export class PrimaService {
   }
 
   /** A CMS officer clocks in to their own seat on the roster (the seat must be theirs and starting or running now). */
+  /**
+   * E7 (Fauzan, 11 Nov 2026): who opens the CMS console from Prima, and under which roster name (cms-console.ts). The
+   * API signs the one-time ticket; CMS checks it. Written to the audit chain.
+   */
+  /** Whether this person may open the CMS console (for the button on the CMS screen); records nothing. */
+  async cmsConsoleMay(user: User): Promise<boolean> {
+    try {
+      cmsConsolePerson(user, await this.store.list('cmsStaff'));
+      return true;
+    } catch (e) {
+      if (e instanceof AccessDenied) return false;
+      throw e;
+    }
+  }
+
+  async cmsConsoleSignIn(user: User, via: 'microsoft' | 'office' | 'dev') {
+    const person = cmsConsolePerson(user, await this.store.list('cmsStaff'));
+    await this.store.audit({ at: this.now(), actor: user.name, companyId: null, action: 'cms.console.sign_in', entity: 'user', entityId: user.id, summary: `${person.name} opened the CMS console (${person.as === 'roster' ? 'CMS roster' : 'Arms Control'}; signed in to Prima via ${via}).` });
+    return person;
+  }
+
   async cmsSeatClockIn(user: User, shiftId: Id) {
     if (!canUseCms(user)) throw new AccessDenied('cms.desk', '(CMS)');
     const s = await this.store.get('cmsShifts', shiftId);
