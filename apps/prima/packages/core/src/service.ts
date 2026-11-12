@@ -50484,7 +50484,8 @@ export class PrimaService {
     if (!reason) throw new BadRequest(approve ? 'Say why you are approving (a short comment is enough).' : 'Say why the variation order is turned down.');
     const who = await this.amVoStep(user, bq, vo);
     const step: AmBqStep = { by: user.name, byId: user.id, at: this.now(), approve, note: reason };
-    const final = approve && who === 'chairman';
+    // C13 (Fauzan, 11 Nov 2026): whatever its value, a VO is approved only once the CEO and then the Chairman consent.
+    const final = approve && who === 'chairman' && !!vo.ceo?.approve;
     const updated: AmVariation = { ...vo, [who]: step, final };
     const next: AmBq = { ...bq, variations: bq.variations!.map((v) => (v.id === voId ? updated : v)) };
     const price = this.amPriceNow(next);

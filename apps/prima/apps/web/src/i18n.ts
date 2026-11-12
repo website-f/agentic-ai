@@ -1859,6 +1859,7 @@ const ROWS: Row[] = [
   ['High finding: after your check the ACT Manager gives the second check before it closes.', 'Dapatan tinggi: selepas semakan anda, Pengurus ACT membuat semakan kedua sebelum ia ditutup.', 'Finding tinggi: lepas check anda, ACT Manager buat second check sebelum tutup.'],
   ['Fix works, send for the second check', 'Pembetulan berkesan, hantar untuk semakan kedua', 'Fix berkesan, hantar untuk second check'],
   ['Sent for the second check.', 'Dihantar untuk semakan kedua.', 'Dihantar untuk second check.'],
+  ["After approval, every variation order, whatever its value, needs the CEO's consent and then the Chairman's before the price changes.", 'Selepas kelulusan, setiap perintah perubahan kerja, walau berapa pun nilainya, perlu persetujuan CEO dan kemudian Pengerusi sebelum harga berubah.', 'Lepas approval, setiap variation order, walau berapa pun nilainya, perlu consent CEO dan kemudian Pengerusi sebelum harga berubah.'],
   // END P100 org
   // P91: Add and Import at the top of the business screens (Fitri, 9 Nov 2026)
   ['Import tenders', 'Import tender', 'Import tender'],

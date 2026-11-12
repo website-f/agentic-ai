@@ -873,7 +873,7 @@ function Variations({ data, workOrderId, reload }: { data: AmBqView; workOrderId
         </div>
       )}
       {price.openVo && price.openVoCooToo && price.openVoNext === "approval" && <p className="muted small">The COO also approves {price.openVo}.</p>}
-      <p className="muted small">After approval, every variation order needs the CEO's consent and then the Chairman's before the price changes.</p>
+      <p className="muted small">After approval, every variation order, whatever its value, needs the CEO's consent and then the Chairman's before the price changes.</p>
       {data.can.decideVo && price.openVo && (
         <Decide
           label={`variation order ${price.openVo}`}
