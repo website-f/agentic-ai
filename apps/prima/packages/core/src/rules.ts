@@ -2100,6 +2100,13 @@ export const RULES = {
     'Policy',
     'Approved by Fauzan, 11 Nov 2026: build the PIKM quality items: a yearly medical for guards aged 56 and over, a site risk briefing before deployment, personnel records kept 7 years, the client information pack and office alarm and CCTV records (PIKM Part 1, 2022 draft: 7.1, 9.4, 9.3, 6.3). Prima shows guards rostered at a site for the first time in the next 7 days as "to brief". The 7 years run from the last working day; a file under a legal hold stays; Prima never deletes a record line, the HR Director only clears a file for disposal. Employment Act records stay 6 years by law (HR-JOIN-LEAVE); the longer PIKM period applies.',
   ),
+  // P100 newa (E10, Fauzan 11 Nov 2026): the resignation notice in the handbook.
+  resignationNotice: rule(
+    'HR-RESIGN-NOTICE',
+    { underOneYearMonths: 1, oneYearOrMoreMonths: 3 },
+    'Policy',
+    'Approved by Fauzan, 11 Nov 2026: staff resignation notice is 1 month for service under 1 year and 3 months for 1 year or more, written in the handbook in English and Malay. It is never shorter than the Employment Act 1955 s.12 notice (4 weeks under 2 years, 6 weeks from 2 to 5 years, 8 weeks from 5 years: rule HR-JOIN-LEAVE); Prima takes the later of the two last days. HR accepts a resignation and confirms the last day; a shorter notice by agreement needs the HR Director, never the staff member or the HR person who asked.',
+  ),
   fwRecharge: rule(
     'FW-RECHARGE',
     {

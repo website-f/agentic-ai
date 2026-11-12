@@ -1058,6 +1058,7 @@ import type { FwContractLanguage } from "./types";
 import { SocsoExtrasService } from "./socso-extras";
 import { FwExtrasService } from "./fw-extras";
 import { PikmService } from "./quality-pikm";
+import { ResignationService } from "./hr-resignation";
 
 
 
@@ -54109,12 +54110,23 @@ export class PrimaService {
     return new PikmService(this.store, this);
   }
 
+  /** E10: the company or null (PWVSB central staff) a staff member's own records sit under, as time slips use it. */
+  staffCompanyOf(user: User): Id | null {
+    return this.staffCompany(user);
+  }
+
+  /** E10: staff resignation: the notice, HR's acceptance and the HR Director's waiver of a shorter notice. */
+  get resignations(): ResignationService {
+    return new ResignationService(this.store, this);
+  }
+
   /** Reminders from the P100 newa workflows, for the person's own Home. */
   private async newaHome(user: User): Promise<HomeItem[]> {
     const parts = await Promise.all([
       this.socsoExtras.homeItems(user).catch(() => [] as HomeItem[]),
       this.fwExtras.homeItems(user).catch(() => [] as HomeItem[]),
       this.pikm.homeItems(user).catch(() => [] as HomeItem[]),
+      this.resignations.homeItems(user).catch(() => [] as HomeItem[]),
     ]);
     return parts.flat();
   }

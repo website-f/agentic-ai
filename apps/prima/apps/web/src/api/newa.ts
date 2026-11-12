@@ -15,6 +15,10 @@ export type PermitsOnMcBoard = Awaited<ReturnType<PrimaService['fwExtras']['perm
 /** E9: PIKM records (medical 56+, briefings, 7-year files, client packs, office alarm and CCTV). */
 export type PikmBoard = Awaited<ReturnType<PrimaService['pikm']['board']>>;
 
+/** E10: the staff member's own resignation, and HR's list. */
+export type MyResignation = Awaited<ReturnType<PrimaService['resignations']['mine']>>;
+export type ResignationBoard = Awaited<ReturnType<PrimaService['resignations']['board']>>;
+
 export interface NewaClient {
   /** E4: payments to dependants abroad waiting for a decision or a transfer. */
   socsoPaymentsAbroad(): Promise<SocsoPayAbroadBoard>;
@@ -30,4 +34,10 @@ export interface NewaClient {
   pikmBoard(opts?: { companyId?: string }): Promise<PikmBoard>;
   /** E9: one PIKM step; the server checks who may do it and every field. */
   pikmAct(action: string, body: Record<string, unknown>): Promise<import('@prima/core').PikmRecord>;
+  /** E10: the staff member's own resignation and the notice. */
+  myResignation(): Promise<MyResignation>;
+  /** E10: HR's list of resignations. */
+  resignationBoard(): Promise<ResignationBoard>;
+  /** E10: one resignation step; the server checks who may do it. */
+  resignAct(action: string, body: Record<string, unknown>): Promise<import('@prima/core').Resignation>;
 }

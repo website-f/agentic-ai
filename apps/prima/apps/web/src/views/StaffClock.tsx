@@ -28,6 +28,7 @@ import { useApp } from '../App';
 import { MyCheckinCard, OUTCOME, VERDICT, whereText } from './CheckIn';
 import { CheckinPlacesView, CheckinReviewView } from './CheckinPlaces';
 import { MyTimeSlipSection, TimeSlipBoardView } from './TimeSlip';
+import { MyResignationSection } from './Resignation';
 import { OwnerTestCheckinView } from './OwnerTestCheckin';
 import { MOVE_FLAG, MovementChips, MovementView, flagText } from './Movement';
 import { ClockPhotoCard } from './ClockPhoto';
@@ -275,6 +276,8 @@ export function MyClockView() {
         <TrainingPanel mine />
         <HrGuide staffSide />
         <MyTimeSlipSection />
+        {/* P100 (E10): the resignation procedure and giving notice. */}
+        <MyResignationSection />
       </div>
       {record && <ClockDetail id={record} onClose={() => setRecord(null)} />}
     </div>

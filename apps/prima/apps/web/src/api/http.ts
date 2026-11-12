@@ -3029,5 +3029,14 @@ export class HttpApi implements Api {
   pikmAct(action: string, body: Record<string, unknown>) {
     return this.call<Awaited<ReturnType<Api['pikmAct']>>>('POST', '/pikm/act', { ...body, action });
   }
+  myResignation() {
+    return this.call<Awaited<ReturnType<Api['myResignation']>>>('GET', '/resignations/mine');
+  }
+  resignationBoard() {
+    return this.call<Awaited<ReturnType<Api['resignationBoard']>>>('GET', '/resignations');
+  }
+  resignAct(action: string, body: Record<string, unknown>) {
+    return this.call<Awaited<ReturnType<Api['resignAct']>>>('POST', '/resignations/act', { ...body, action });
+  }
 }
 

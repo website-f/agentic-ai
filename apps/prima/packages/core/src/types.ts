@@ -3443,6 +3443,8 @@ export interface Dataset {
   qmsNonconformities: import('./quality-ops').QmsNonconformity[];
   /** P100 (E9): PIKM records (db/modules/quality-pikm-v1.sql): medical 56+, briefings, 7-year files, client packs, office alarm and CCTV. */
   qmsPikmRecords: import('./quality-pikm').PikmRecord[];
+  /** P100 (E10): staff resignations (db/modules/hr-resignations-v1.sql). */
+  staffResignations: import('./hr-resignation').Resignation[];
   fwRecruitFiles: FwRecruitFile[];
 }
 

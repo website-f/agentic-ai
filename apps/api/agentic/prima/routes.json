@@ -5959,6 +5959,25 @@
  },
  {
   "method": "GET",
+  "path": "api/resignations",
+  "name": "board",
+  "doc": "HR's list of resignations with the next step for this person."
+ },
+ {
+  "method": "POST",
+  "path": "api/resignations/act",
+  "name": "act",
+  "doc": "One step: give notice (or HR enters the signed letter), withdraw, accept with the last day, or decide a shorter notice.",
+  "body": "Record<string, unknown>"
+ },
+ {
+  "method": "GET",
+  "path": "api/resignations/mine",
+  "name": "mine",
+  "doc": "The signed-in staff member's own resignation, the notice if they resigned today, and the procedure in both languages."
+ },
+ {
+  "method": "GET",
   "path": "api/salary-calc",
   "name": "salaryCalcData"
  },
