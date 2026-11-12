@@ -101,6 +101,24 @@ export class DemoApi implements Api {
     importAiColumns: async () => ({ matches: [], source: 'none' }),
   };
 
+  /** K8: the bulk load helper on the demo's own service (kept until the page reloads); no AI in the demo build. */
+  readonly bulk: import('./bulk').BulkClient = {
+    board: () => this.read(async (s, u) => ({ ...(await s.bulkManager.board(u)), ai: false })),
+    place: (files) => this.read((s, u) => s.bulkManager.placeFiles(u, files)),
+    people: (q) => this.read((s, u) => s.bulkManager.findPeople(u, q)),
+    file: (input) => this.read((s, u) => s.bulkManager.fileOne(u, input)),
+    recordFiles: (input) => this.read((s, u) => s.bulkManager.recordFiles(u, input)),
+    recordData: (input) => this.read((s, u) => s.bulkManager.recordData(u, input)),
+    aiPlan: () => Promise.reject(new ApiError('The AI part of the bulk load is not switched on here.', 503, [])),
+    aiFiles: () => Promise.reject(new ApiError('The AI part of the bulk load is not switched on here.', 503, [])),
+  };
+
+  /** K9: no AI in the demo build; the trainer answers from the written guide. */
+  readonly trainer: import('./trainer').TrainerClient = {
+    state: async () => ({ ai: false }),
+    ask: () => Promise.reject(new ApiError('Arisha’s AI answers are not switched on here. The written steps still work.', 503, [])),
+  };
+
   private booted: PrimaService | null = null;
   private store: MemoryStore | null = null;
   /** The mock data is made on first use, not while the page opens, so the screen shows at once (Fauzan, 27 Oct 2026). */

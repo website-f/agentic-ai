@@ -3,6 +3,8 @@ import { ItExtractionController } from './arisha-it-extraction.controller';
 import { ItImportReviewController } from './arisha-it-import.controller';
 import { DraftHelpController } from './draft-help.controller';
 import { StaffDirectoryController } from './staff-directory.controller';
+import { BulkManagerController } from './bulk-manager.controller';
+import { ArishaTrainerController } from './arisha-trainer.controller';
 import { jobEmailRuntimeModule } from './connections-mail/controllers';
 import { Module } from '@nestjs/common';
 import { AnalyticsFeedController, AppController, InhouseFeedController, AuthController, DoorFeedController, HealthController, JaFeedController, OfficeController, PlannerFeedController, ShareController } from './controllers';
@@ -33,7 +35,7 @@ const alerts = alertsModule();
 const m365 = m365ConnectionsModule();
 
 @Module({
-  controllers: [HealthController, AttendanceReportsController, AuthController, OfficeController, CheckinController, AppController, JaFeedController, DoorFeedController, PlannerFeedController, AnalyticsFeedController, InhouseFeedController, ConnectionsController, ItExtractionController, ItImportReviewController, ...jobEmail.controllers,...teamsEvidence.controllers, OfflineController, ...SPECIAL_OPS_CONTROLLERS, ...WHATSAPP_CONTROLLERS, OrgHealthController, OrgController, ...m365.controllers, ShareController, StaffDirectoryController, CleaningController, ...alerts.controllers, DraftHelpController, GuardPhoneOpenController, GuardPhoneController, SocsoExtrasController, FwExtrasController, PikmController, ResignationsController, WarrantyController],
+  controllers: [HealthController, AttendanceReportsController, AuthController, OfficeController, CheckinController, AppController, JaFeedController, DoorFeedController, PlannerFeedController, AnalyticsFeedController, InhouseFeedController, ConnectionsController, ItExtractionController, ItImportReviewController, ...jobEmail.controllers,...teamsEvidence.controllers, OfflineController, ...SPECIAL_OPS_CONTROLLERS, ...WHATSAPP_CONTROLLERS, OrgHealthController, OrgController, ...m365.controllers, ShareController, StaffDirectoryController, CleaningController, ...alerts.controllers, DraftHelpController, GuardPhoneOpenController, GuardPhoneController, SocsoExtrasController, FwExtrasController, PikmController, ResignationsController, BulkManagerController, ArishaTrainerController, WarrantyController],
   providers: [Db, { provide: SharePointConnections, useFactory: () => new SharePointConnections() }, { provide: AttendanceUploads, useFactory: () => new AttendanceUploads() }, ...jobEmail.providers,...teamsEvidence.providers, WhatsAppRunner, ...m365.providers, ...alerts.providers],
 })
 export class AppModule {}

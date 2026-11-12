@@ -493,6 +493,10 @@ export interface NewQuotation {
 export interface Api extends ConnectionsClient, ExtractionClient, DraftHelpClient, CheckinClient, NewaClient {
   /** Hand-overs between departments and real-data import (connect-departments, 2 Nov 2026). */
   readonly org: OrgClient;
+  /** K8: the bulk load helper (data manager and file manager). */
+  readonly bulk: import('./bulk').BulkClient;
+  /** K9: Arisha's training, the AI part (off until switched on). */
+  readonly trainer: import('./trainer').TrainerClient;
   /** P81: past attendance from the monthly PDF reports; server only (the demo has none). */
   readonly attendanceReports?: import('./attendance-reports').AttendanceReportsClient;
   m365Call(expectedUserId: string, method: 'GET' | 'POST', path: string, body?: unknown, signal?: AbortSignal): Promise<unknown>;

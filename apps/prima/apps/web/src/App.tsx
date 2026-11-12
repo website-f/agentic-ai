@@ -7,9 +7,10 @@ import { CleanupReceiptRecovery } from './views/ItCleanup';
 import { ItProcurement } from './views/ItProcurement';
 import { HrItIntake } from './views/HrItIntake';
 import { StaffDirectory } from './views/StaffDirectory';
+import { BulkLoad } from './views/BulkLoad';
 import { ItExtractionWorkspace } from './views/ItExtractionWorkspace';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { type Company, type User, RULES, hasOwnStaffRecord, isActHead, isGroupLeader, isOwnerAdmin, jaOwns, seesArmsDetail, workKpiScope, finRequestInMenu, canSeeJaSwitch } from '@prima/core';
+import { type Company, type User, RULES, hasOwnStaffRecord, isActHead, isGroupLeader, isOwnerAdmin, jaOwns, seesArmsDetail, workKpiScope, finRequestInMenu, canSeeJaSwitch, bulkLoadInMenu } from '@prima/core';
 import { ApiError, api, type Me } from './api';
 import { ArrowLeftIcon, HouseIcon, MagnifyingGlassIcon, SquaresFourIcon } from '@phosphor-icons/react';
 import { publishPage, rulesFor } from './prima-page';
@@ -135,7 +136,7 @@ import { officeNarrowed, primaOnly } from './office-access';
 
 
 
-export type ViewName = 'home' | 'overview' | 'company' | 'sites' | 'roster' | 'cleaning' | 'duty' | 'sitestock' | 'people' | 'attendance' | 'cases' | 'compliance' | 'commercial' | 'ops' | 'hr' | 'insurance' | 'arms' | 'cms' | 'cmsready' | 'audit' | 'device' | 'mine' | 'clock' | 'staffclock' | 'work' | 'branchwork' | 'socso' | 'fwm' | 'doa' | 'reports' | 'meetings' | 'hostels' | 'fwcost' | 'fwstat' | 'claims' | 'memos' | 'pdpa' | 'fleet' | 'clients' | 'office' | 'requests' | 'payreq' | 'ja' | 'jaswitch' | 'assets' | 'staffpay' | 'guardpay' | 'advances' | 'statutory' | 'arrivalcash' | 'loans' | 'finance' | 'contracts' | 'branches' | 'it' | 'it-metrics' | 'work-kpi' | 'it-procurement' | 'hr-it-intake' | 'staff-directory' | 'websites' | 'corporate' | 'renewals' | 'credit' | 'purchasing' | 'items' | 'governance' | 'grc' | 'registers' | 'act' | 'payformulas' | 'sitehours' | 'salarycalc' | 'continuity' | 'connections' | 'it-extraction' | 'surveys' | 'handovers' | 'quality' | 'selfaudit' | 'rba' | 'settings';
+export type ViewName = 'home' | 'overview' | 'company' | 'sites' | 'roster' | 'cleaning' | 'duty' | 'sitestock' | 'people' | 'attendance' | 'cases' | 'compliance' | 'commercial' | 'ops' | 'hr' | 'insurance' | 'arms' | 'cms' | 'cmsready' | 'audit' | 'device' | 'mine' | 'clock' | 'staffclock' | 'work' | 'branchwork' | 'socso' | 'fwm' | 'doa' | 'reports' | 'meetings' | 'hostels' | 'fwcost' | 'fwstat' | 'claims' | 'memos' | 'pdpa' | 'fleet' | 'clients' | 'office' | 'requests' | 'payreq' | 'ja' | 'jaswitch' | 'assets' | 'staffpay' | 'guardpay' | 'advances' | 'statutory' | 'arrivalcash' | 'loans' | 'finance' | 'contracts' | 'branches' | 'it' | 'it-metrics' | 'work-kpi' | 'it-procurement' | 'hr-it-intake' | 'staff-directory' | 'websites' | 'corporate' | 'renewals' | 'credit' | 'purchasing' | 'items' | 'governance' | 'grc' | 'registers' | 'act' | 'payformulas' | 'sitehours' | 'salarycalc' | 'continuity' | 'connections' | 'it-extraction' | 'surveys' | 'handovers' | 'quality' | 'selfaudit' | 'rba' | 'bulk-load' | 'settings';
 
 export interface Route {
   view: ViewName;
@@ -347,6 +348,8 @@ const NAV: { view: ViewName; label: string; icon: string; roles: User['role'][];
   { view: 'it-metrics', label: 'Workflow time & quality', icon: 'device', roles: ['director','pwvsb_officer','company_manager','admin_exec'] },
   // Staff directory (Fauzan, 4 Nov 2026): HR, the HR Director, the CEO and IT only; never a sign-in.
   { view: 'staff-directory', label: 'Staff directory', icon: 'audit', roles: ['director', 'pwvsb_officer'] },
+  // K8 (Fauzan, 11 Nov 2026): bulk loads of data files and many documents, for the people who keep those records.
+  { view: 'bulk-load', label: 'Bulk load', icon: 'audit', roles: ['director', 'pwvsb_officer', 'company_manager', 'admin_exec'] },
   { view: 'hr-it-intake', label: 'HR / IT coordination', icon: 'device', roles: ['director','pwvsb_officer','company_manager','admin_exec','supervisor'] },
   // Group websites (Fauzan, 27 Oct 2026): IT runs the register and reviews; each company answers for its own websites.
   { view: 'websites', label: 'Websites', icon: 'device', roles: ['director', 'pwvsb_officer', 'company_manager', 'admin_exec'] },
@@ -459,6 +462,7 @@ const VIEW_TOKENS: ViewName[] = [
   'it-procurement',
   'hr-it-intake',
   'staff-directory',
+  'bulk-load',
   'websites',
   'corporate',
   'renewals',
@@ -827,6 +831,7 @@ function Shell({ me, onSignOut, onReset }: { me: Me; onSignOut: () => void; onRe
         n.view === 'work-kpi' ||
         n.view === 'hr-it-intake' ||
         n.view === 'staff-directory' ||
+        n.view === 'bulk-load' ||
         n.view === 'it-procurement' ||
         n.view === 'grc' ||
         n.view === 'act' ||
@@ -851,6 +856,8 @@ function Shell({ me, onSignOut, onReset }: { me: Me; onSignOut: () => void; onRe
       // Salary calculator: the OM and above, ACT and group leadership (Fauzan, 6 Nov 2026).
       (n.view !== 'salarycalc' || leader || dept === 'audit' || ['om', 'regional', 'ogm', 'ops_director', 'coo', 'ceo'].includes(me.user.opsTier ?? '')) &&
       (n.view !== 'hr-it-intake' || !me.user.integration) &&
+      // K8: bulk load for the people who keep a record that loads in bulk, and oversight; the server lists what each may write.
+      (n.view !== 'bulk-load' || bulkLoadInMenu(me.user)) &&
       (n.view !== 'staff-directory' ||
         (!me.user.integration && (dept === 'hr' || dept === 'it' || ['cos', 'deputy_cos'].includes(me.user.leadership ?? '') || me.user.opsTier === 'ceo'))) &&
       (n.view !== 'it-extraction' || (!me.user.integration && me.user.id === 'u-fauzan' && me.user.opsTier === 'ceo')) &&
@@ -1170,6 +1177,8 @@ function Shell({ me, onSignOut, onReset }: { me: Me; onSignOut: () => void; onRe
         return <ItProcurement />;
       case 'staff-directory':
         return <StaffDirectory />;
+      case 'bulk-load':
+        return <BulkLoad />;
       case 'hr-it-intake':
         return <HrItIntake />;
       case 'it':

@@ -24,7 +24,8 @@ guards then move into Prima (Fauzan, 4 Nov 2026). Build guard screens so the mov
 3. Each role sees only its own menu.
 4. Staff screens in Bahasa Melayu, plain words, large buttons that work on a phone. Never name Claude or any AI tool in
    staff screens or guides; refer staff to the Project Director. (The four-leader Arisha pilot is a leadership tool,
-   not a staff screen.)
+   not a staff screen.) Changed by Fauzan, 11 Nov 2026 (K9): staff screens may offer Arisha as a read-only trainer
+   ("Learn with Arisha"); still never Claude or an AI vendor's name. See CLAUDE.md, "Workflow boundaries".
 5. Survey forms take photos and measurements directly and work offline; they sync when signal returns; nothing is
    retyped.
 6. SharePoint files are opened by link, not uploaded as copies.

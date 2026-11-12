@@ -62,7 +62,8 @@ const REFRESH = [
 //   speak-up-wall-v1.sql (P100 H2, Fauzan 11 Nov 2026: "Yes. But HR can see it"; approved to install): the speak-up
 //     reports table behind forced row-level security (handler, reviewing handler, named reporter, HR read only), receipt
 //     code and leader count functions, and the report number sequence.
-const OFFICE_MODULES = ['owner-test-checkin-v1.sql', 'clock-snaps-v1.sql', 'rba-committee-roster-v1.sql', 'speak-up-wall-v1.sql'];
+//   bulk-loads-v1.sql (K8): the record of every bulk load (who, the plan, what went where), seen by the loader and oversight.
+const OFFICE_MODULES = ['owner-test-checkin-v1.sql', 'clock-snaps-v1.sql', 'rba-committee-roster-v1.sql', 'speak-up-wall-v1.sql', 'bulk-loads-v1.sql'];
 (async () => {
   const { Client } = require(require.resolve('pg', { paths: [cwd] }));
   const c = new Client({ connectionString: process.env.DATABASE_URL });

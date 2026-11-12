@@ -89,8 +89,8 @@ async function inflatePdf(b: Uint8Array): Promise<Uint8Array> {
   return out;
 }
 
-/** Any supported file to its sheets of cell text. */
-async function sheetsOf(f: File): Promise<XlsxSheet[]> {
+/** Any supported file to its sheets of cell text. K8: the bulk load helper reads files the same way. */
+export async function sheetsOf(f: File): Promise<XlsxSheet[]> {
   const name = f.name.toLowerCase();
   if (name.endsWith('.xls') || name.endsWith('.numbers') || name.endsWith('.ods') || name.endsWith('.doc'))
     throw new Error('This is an older or other office format. Open it and save it as Excel (.xlsx), Word (.docx), PDF or CSV, then choose it again.');
@@ -183,16 +183,31 @@ const errOf = (e: unknown): Err => ({ message: e instanceof ApiError || e instan
 /** What each column is matched to, and how sure: from the matcher, then the person's own choices. */
 type ColState = { field: string; level: SmartLevel | null; how: SmartColumn['how']; why: string };
 
+/** K8: a file the bulk load helper already read and planned: its table (header row first), the field of each column. */
+export interface ImportStart {
+  fileName: string;
+  table: string[][];
+  mapping: string[];
+  /** Rows (file numbering) the person chose to leave out in the plan. */
+  skip?: number[];
+}
+
 export function ImportDrawer({
   kind,
   companyId: given,
   choices: offered,
   onClose,
+  start,
+  onImported,
 }: {
   kind: ImportKind;
   companyId: string | null;
   choices?: [string, string][];
   onClose: () => void;
+  /** K8: start at the column check with the bulk load helper's plan, instead of choosing a file. */
+  start?: ImportStart;
+  /** K8: told when the rows are imported (the receipt, and the problems of the rows left out). */
+  onImported?: (r: OrgImportReceipt, refused: { row: number; reasons: string[] }[]) => void;
 }) {
   const { me } = useApp();
   const { bump } = useContext(RefreshContext);
@@ -264,6 +279,19 @@ export function ImportDrawer({
         : [],
     [tpl],
   );
+  // K8: the bulk load helper's plan: matched here as usual, then each column set to the field the person confirmed.
+  const started = useRef(false);
+  useEffect(() => {
+    if (!start || started.current || !fields.length) return;
+    started.current = true;
+    setFileName(start.fileName);
+    const m = smartMatch(start.table, fields, { headerRow: 0 });
+    setPrep({ table: start.table, headerRow: 0, droppedRows: [], splits: [] });
+    setCols(m.columns);
+    setState(m.columns.map((c, i) => (start.mapping[i] ? { field: start.mapping[i], level: 'sure', how: 'manual', why: 'Placed in the bulk load plan you confirmed.' } : { field: '', level: null, how: null, why: '' })));
+    setSkip(start.skip ?? []);
+    setStep('map');
+  }, [start, fields]);
   const fieldLabel = (key: string) => (key === COMPANY_FIELD ? 'Company (each row to the company it names)' : (fields.find((f) => f.key === key)?.label ?? key));
 
   /** Match a sheet here on the device: no network, a fraction of a second. */
@@ -383,6 +411,7 @@ export function ImportDrawer({
       const r = await api.org.importCommit(kind, cid, toCsv(grid), preview.fingerprint, { mapping, headerRow: 0, skip });
       rememberLayout(kind, prep.table[0], mapping);
       setReceipt(r);
+      onImported?.(r, preview.rows.filter((x) => x.skipped || !x.ok).map((x) => ({ row: x.row, reasons: x.problems.length ? x.problems : ['Left out by the person loading.'] })));
       setStep('done');
     } catch (e) {
       setError(errOf(e));

@@ -1,13 +1,16 @@
 import { useCallback, useEffect, useId, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from 'react';
-import { BookOpenTextIcon, ChatCircleDotsIcon, MegaphoneSimpleIcon, XIcon } from '@phosphor-icons/react';
+import { BookOpenTextIcon, ChatCircleDotsIcon, GraduationCapIcon, MegaphoneSimpleIcon, XIcon } from '@phosphor-icons/react';
 import type { User } from '@prima/core';
 import { Arisha, useArishaReady } from './Arisha';
+import { useApp, type ViewName } from './App';
+import { ArishaTrainer, trainerTourNew } from './ArishaTrainer';
 import { ArishaAvatar } from './ArishaAvatar';
 import { useLang, type Lang } from './i18n';
 
 /**
  * P80: Prima's one floating launcher, bottom right (above the tab bar on a phone). It opens a small sheet:
  *   Ask Arisha                    the AI assistant panel (Arisha.tsx), when she is on for this person;
+ *   Learn with Arisha             K9: Arisha trains staff (ArishaTrainer.tsx), for everyone, AI or not;
  *   Give feedback                 the Agentic Office's feedback, and
  *   Rules & guide for this page   its Rules & guide, both through the office's widget (/feedback-widget.js), which
  *                                 main.tsx loads in host mode so it draws no button of its own.
@@ -56,10 +59,12 @@ const T: Record<string, Record<Lang, string>> = {
   feedbackHint: { en: 'Tell the developer what to fix or add', ms: 'Beritahu pembangun apa yang perlu dibaiki atau ditambah', mix: 'Bagitahu developer apa nak fix atau tambah' },
   guide: { en: 'Rules & guide for this page', ms: 'Peraturan & panduan halaman ini', mix: 'Rules & guide untuk page ini' },
   guideHint: { en: 'What this page is for, its steps and rules', ms: 'Tujuan halaman ini, langkah dan peraturannya', mix: 'Page ini untuk apa, step dan rules dia' },
+  learn: { en: 'Learn with Arisha', ms: 'Belajar dengan Arisha', mix: 'Belajar dengan Arisha' },
+  learnHint: { en: 'Steps for your role on this screen, and a first walk-through', ms: 'Langkah untuk peranan anda di skrin ini, dan lawatan pertama', mix: 'Step untuk role anda di skrin ini, dan walk-through pertama' },
 };
 
 interface Item {
-  id: 'arisha' | Panel;
+  id: 'arisha' | 'learn' | Panel;
   icon: ReactNode;
   label: string;
   hint: string;
@@ -72,11 +77,17 @@ export function Launcher({ user, view, viewLabel, menu }: { user: User; view: st
   const feedback = useOfficeFeedback();
   const [sheet, setSheet] = useState(false);
   const [arishaOpen, setArishaOpen] = useState(false);
+  const [learnOpen, setLearnOpen] = useState(false);
+  const { go } = useApp();
+  // K9 (Fauzan, 11 Nov 2026): every person, staff screens included, may learn with Arisha; it needs no AI.
+  const learn = !user.integration;
+  const fresh = learn && trainerTourNew(user);
   const button = useRef<HTMLButtonElement | null>(null);
   const sheetRef = useRef<HTMLDivElement | null>(null);
   const sheetId = useId();
 
   const items: Item[] = [
+    ...(learn ? [{ id: 'learn' as const, icon: <GraduationCapIcon size={20} weight="fill" aria-hidden="true" />, label: t('learn'), hint: t('learnHint') }] : []),
     ...(arisha.ready ? [{ id: 'arisha' as const, icon: <ArishaAvatar size={36} decorative />, label: t('ask'), hint: t('askHint') }] : []),
     ...(feedback.enabled
       ? [
@@ -94,10 +105,15 @@ export function Launcher({ user, view, viewLabel, menu }: { user: User; view: st
     setArishaOpen(false);
     requestAnimationFrame(() => button.current?.focus());
   }, []);
+  const closeLearn = useCallback(() => {
+    setLearnOpen(false);
+    requestAnimationFrame(() => button.current?.focus());
+  }, []);
 
   const choose = (id: Item['id']) => {
     closeSheet(false);
     if (id === 'arisha') setArishaOpen(true);
+    else if (id === 'learn') setLearnOpen(true);
     else if (!window.AgenticFeedback?.open(id)) requestAnimationFrame(() => button.current?.focus());
   };
 
@@ -133,7 +149,7 @@ export function Launcher({ user, view, viewLabel, menu }: { user: User; view: st
 
   return (
     <>
-      <div className="launcher" data-feedback-ignore="" data-no-translate hidden={arishaOpen}>
+      <div className="launcher" data-feedback-ignore="" data-no-translate hidden={arishaOpen || learnOpen}>
         {sheet && <div className="launcher-catch" aria-hidden="true" onPointerDown={() => closeSheet()} />}
         {sheet && (
           <div className="launcher-sheet" id={sheetId} ref={sheetRef} role="menu" aria-label={t('heading')} onKeyDown={onSheetKey}>
@@ -154,6 +170,7 @@ export function Launcher({ user, view, viewLabel, menu }: { user: User; view: st
           type="button"
           className="launcher-button"
           data-face={sheet ? 'close' : arisha.ready ? 'arisha' : 'help'}
+          data-new={fresh || undefined}
           aria-label={only ? only.label : sheet ? t('close') : t('help')}
           title={only ? only.label : sheet ? t('close') : t('help')}
           aria-haspopup={only ? undefined : 'menu'}
@@ -170,6 +187,9 @@ export function Launcher({ user, view, viewLabel, menu }: { user: User; view: st
           )}
         </button>
       </div>
+      {learn && (
+        <ArishaTrainer key={`learn-${user.id}`} user={user} view={view} menu={menu} open={learnOpen} onClose={closeLearn} go={(v) => (go({ view: v as ViewName }), setLearnOpen(false))} />
+      )}
       {arisha.ready && (
         <Arisha
           key={user.id}

@@ -64,3 +64,22 @@ Bank checker/maker alert mailboxes (one pair per company) are mailboxes, not peo
 Off by default. To switch on in an environment, after the CEO approves the release: run
 `db/modules/staff-directory-v1.sql` once, then set `STAFF_DIRECTORY_ENABLED=true`. Until then the screen says it is not
 switched on. The directory never creates a sign-in, grant, staff record or Microsoft link.
+
+### Turning it on (K2, Fauzan 11 Nov 2026: "Yes, turn on")
+
+The switch stays an environment setting; the code never turns it on by itself. In each environment, after the backup
+and restore test (K3):
+
+1. The schema owner installs the module once: `db/modules/staff-directory-v1.sql` (proposed module list in
+   `docs/RELEASE_CANDIDATE_UPGRADE_AND_RECOVERY.md`, section 6). It is not repeat-safe, so it is not in the office's
+   start-up modules: run it once, by the documented migration path.
+2. Set `STAFF_DIRECTORY_ENABLED=true` in the Prima API's environment (the API container's settings) and restart it.
+3. Check `GET /api/staff-directory/status` signed in as HR: it must say `{ "enabled": true, "ready": true }`.
+4. Test with made-up rows first (the 50-person check in `packages/core/test/staff-directory-bulk.test.ts` and
+   `apps/api/test/staff-directory-bulk-pg.test.ts`), then load the real file through the screen only (K10).
+
+A row that cannot be read is refused with its reason. HR either fixes it and previews again, or ticks "Leave out the
+rows with problems and send the rest": the batch then keeps each refused row with its reasons, and the batch list shows
+rows in the file, loaded, refused and already listed, the counts K10 asks for in the RESULTS LOG. The HR Director
+(Chief of Staff or Deputy) or the CEO approves with a comment, never the person who sent it. The Bulk load screen (K8)
+can also send a staff spreadsheet in any layout to the staff directory through the same approval.

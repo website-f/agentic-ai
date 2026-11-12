@@ -67,6 +67,8 @@ const MODULE_TABLES: Partial<Record<TableName, string>> = {
   // P100 I1: OM uniform requests (db/modules/uniform-requests-v1.sql): built and tested, NOT on the release list until the
   // CEO says so, so prima-setup does not run it; until then the screens say this in words.
   stockRequests: 'Uniform requests are not installed in this database yet (module uniform-requests-v1, run by the CEO).',
+  // K8: the bulk load records (db/modules/bulk-loads-v1.sql, applied by the office prima-setup).
+  bulkLoads: 'Bulk load records are not set up in this database yet (module bulk-loads-v1).',
 };
 
 // Exported for the per-request read snapshots (read-cache.ts, P83).
@@ -264,6 +266,7 @@ checkinSettings: 'prima.checkin_settings',
 checkinEvents: 'prima.checkin_events',
 ownerTestCheckins: 'prima.owner_test_checkins',
 clockSnaps: 'prima.clock_snaps',
+bulkLoads: 'prima.bulk_loads',
 loginHandovers: 'prima.login_handovers',
 hrFilings: 'prima.hr_filings',
 hrCases: 'prima.hr_cases',
