@@ -14,12 +14,13 @@ import {
   type Person,
   type Shift,
 } from '../src';
+import { closeShortShifts } from './full-shifts';
 
 // Prima's own guard pay run (Fauzan, 5 Nov 2026). Synthetic data only: made-up people, placeholder formula amounts.
 const TODAY = '2026-11-05';
 const NOW = myt(TODAY, '10:00');
 const fresh = () => {
-  const ds = generateDataset({ today: TODAY, now: NOW, daysBack: 40 });
+  const ds = closeShortShifts(generateDataset({ today: TODAY, now: NOW, daysBack: 40 }));
   return { ds, svc: new PrimaService(new MemoryStore(ds), () => NOW) };
 };
 
@@ -111,7 +112,7 @@ describe('independent payroll review regressions', () => {
   });
   it('never deducts an approved advance that was never paid and is subsequently cancelled', async () => {
     RULES.guardPayroll.value.primaPays = true;
-    const ds=generateDataset({today:TODAY,now:NOW,daysBack:40});
+    const ds=closeShortShifts(generateDataset({ today: TODAY, now: NOW, daysBack: 40 }));
     for (const p of ds.people) if (!p.bank) p.bank={ bank:'Synthetic',accountMasked:'****9999' };
     let now = myt('2026-10-19','10:00');
     const svc=new PrimaService(new MemoryStore(ds), () => now);
@@ -250,7 +251,7 @@ describe('payroll repair boundaries', () => {
 
   it('requires recalculation after an advance is paid and refuses another payout after submission', async () => {
     RULES.guardPayroll.value.primaPays = true;
-    const ds = generateDataset({ today: TODAY, now: NOW, daysBack: 40 });
+    const ds = closeShortShifts(generateDataset({ today: TODAY, now: NOW, daysBack: 40 }));
     for (const p of ds.people) if (!p.bank) p.bank = { bank: 'Synthetic', accountMasked: '****9999' };
     let now = myt('2026-10-19', '10:00');
     const svc = new PrimaService(new MemoryStore(ds), () => now);

@@ -28,6 +28,13 @@ describe('payroll repair release gates (actual PostgreSQL)', () => {
     // resetDb's default roster history does not reach October; add explicit synthetic closed-month
     // attendance rather than weakening the payroll's empty/negative-line checks for the fixture.
     const history = generateDataset({ today: '2026-11-05', now: NOW, daysBack: 40 });
+    // P100 B1b: a few seeded guards clock out early, so their hours would not match and hold the run; correct those
+    // records as a supervisor would (to the shift end) so these tests stay about their own release gates.
+    const shiftEnd = new Map(history.shifts.map((s) => [s.id, s.end]));
+    for (const a of history.attendance) {
+      const end = a.shiftId ? shiftEnd.get(a.shiftId) : undefined;
+      if (end && a.clockOut && a.locked && Date.parse(a.clockOut) < Date.parse(end)) a.clockOut = end;
+    }
     for (const table of ['shifts', 'attendance'] as const) {
       await db.pool.query(`DELETE FROM prima.${table} WHERE company_id = 'co-arsh'`);
       const rows = history[table].filter((row) => row.companyId === 'co-arsh');

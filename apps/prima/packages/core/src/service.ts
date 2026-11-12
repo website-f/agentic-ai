@@ -31728,6 +31728,9 @@ export class PrimaService {
     }
     const [line] = await this.guardPayLines(run.companyId, run.period, fresh.holidays.map((h) => h.date), new Map([[personId, { extra, pcb: pcb == null ? null : Math.round(pcb * 100) / 100 }]]), personId);
     if (!line) throw new NotFound('Pay line');
+    // P100 B1b: a line whose hours recorded and paid do not match cannot be saved; the attendance or leave is corrected.
+    if (line.hours && !line.hours.match)
+      throw new BadRequest(`${line.staffNo}: hours recorded and paid do not match (${line.hours.recorded.total} h recorded, ${line.hours.paid.total} h paid). Correct the attendance or leave record first, then recalculate.`);
     const big = RULES.insiderControls.value.allowanceFlagAbove;
     for (const a of extra.filter((x) => Math.abs(x.amount) > big)) line.flags.push(`One-off item above RM${big}: ${a.label} RM${a.amount.toFixed(2)}`);
     if (extra.length) line.flags.push(`One-off items entered by ${user.name}: the COO checks them`);

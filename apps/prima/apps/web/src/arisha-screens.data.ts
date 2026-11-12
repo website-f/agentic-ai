@@ -5344,6 +5344,10 @@ export const SCREEN_GUIDES: ScreenGuide[] = [
         "means": "Final attendance for the month; pay is counted from it."
       },
       {
+        "term": "Hours recorded and paid",
+        "means": "Each line shows both; they must match. A line that does not match is held until the attendance or leave is corrected."
+      },
+      {
         "term": "Trial",
         "means": "A month worked out only to compare with the JA Group app; nobody is paid from it."
       },

@@ -25,6 +25,7 @@ import {
 } from "../ui";
 import { Empty } from "../kit";
 import { GuardPayPreparers } from "./GuardPayPreparers";
+import { HoursChip, PayHoursTable } from "./PayHours";
 
 /**
  * Guard pay run (Fauzan, 5 Nov 2026). Guards, stationed officers and patrolling officers are paid from locked
@@ -316,7 +317,19 @@ function RunBody({
         <Kpi label="Net pay" value={rm(totals.net)} />
         <Kpi label="Employer cost" value={rm(totals.cost)} note="Gross, EPF, SOCSO, EIS, HRD" />
         <Kpi label="Overtime hours" value={totals.otHours.toLocaleString("en-MY")} />
+        <Kpi
+          label="Hours recorded / paid"
+          value={`${(totals.hoursRecorded ?? 0).toLocaleString("en-MY")} / ${(totals.hoursPaid ?? 0).toLocaleString("en-MY")}`}
+          tone={totals.hoursMismatch ? "crit" : "ok"}
+          note={totals.hoursMismatch ? `${totals.hoursMismatch} lines do not match` : "Every line matches"}
+        />
       </div>
+      {(totals.hoursMismatch ?? 0) > 0 && (
+        <div className="pp-blocked" role="alert" data-testid="guard-pay-hours-held">
+          <strong>{totals.hoursMismatch === 1 ? "1 line: hours recorded and paid do not match." : `${totals.hoursMismatch} lines: hours recorded and paid do not match.`}</strong>{" "}
+          The month cannot be submitted or approved, and those lines cannot be changed, until the attendance or leave record is corrected (with its own approval and reason), then recalculated.
+        </div>
+      )}
       {data.ja ? (
         <section className="panel">
           <div className="panel-head">
@@ -546,12 +559,13 @@ function RunBody({
                 {l.formulaCode ?? "No formula"} · {l.daysWorked} days ({l.restDaysWorked} rest, {l.holidaysWorked} holiday) ·{" "}
                 {l.otHours} OT h · gross {rm(l.gross)}
               </div>
+              <HoursChip hours={l.hours} />
               {l.flags.map((f) => (
                 <div key={f} className="small" style={{ color: "var(--warn, #b45309)" }}>
                   {f}
                 </div>
               ))}
-              {can.prepare && <LineEdit runId={run.id} line={l} onChanged={onChanged} />}
+              {can.prepare && (!l.hours || l.hours.match) && <LineEdit runId={run.id} line={l} onChanged={onChanged} />}
               {data.role === "hr" && (l.accountProblem || (l.bank && (l.bank.holder ?? "own") !== "own") || l.bank?.kind === "ewallet") && (
                 <ConsentEdit line={l} onChanged={onChanged} />
               )}
@@ -786,6 +800,7 @@ export function GuardPayslip({
         {l.formulaCode ? ` (${l.formulaCode} v${l.formulaVersion}, ${l.formulaScope})` : ""} · daily rate {rm(l.dailyRate)} (basic ÷ 26) · hourly{" "}
         {rm(l.hourlyRate)} · {l.daysWorked} days worked, {l.paidLeaveDays} paid leave, full month {l.fullMonthDays}
       </p>
+      <PayHoursTable hours={l.hours} />
       <div className="list">
         {l.items.filter((x) => !(x.kind === "extra" && x.amount < 0) && x.kind !== "advance").map((x) =>
           row(

@@ -111,13 +111,29 @@ coo. The letter must have notory stamp by pesuruhjaya sumpah."
   A dated leave day is counted once, excluding days already worked or counted as paid public holidays. Overlapping
   leave records do not create extra paid days. Ordinary days worked past that room are rest days worked; days short of
   it are unpaid at the daily rate (closed month only).
-- Rates (EA s.60I through the formula): daily = basic / the pay law's day divisor for the month (26 today, set by the CEO in PR #112), hourly = daily / normal hours. Overtime = the formula's OT
-  hours per shift on each day worked, at the working-day, rest-day or holiday rate. Rest-day and holiday work add the
+- Rates (EA s.60I through the formula): daily = basic / the pay law's day divisor for the month (26 today, set by the CEO in PR #112), hourly = daily / normal hours. Overtime = the hours
+  actually worked past the normal day on each day worked, up to the formula's OT hours per shift (P100 B1b), at the working-day, rest-day or holiday rate. Rest-day and holiday work add the
   formula's extra days' wages. Fixed allowances from the formula.
 - Statutory: rates come from the statutory settings in force for the pay month (see below). Today: EPF on gross less
   overtime (KWSP), foreign 2%/2%; SOCSO and LINDUNG 24 Jam in separate columns; EIS for Malaysians 18-59; any new
   contribution the CEO adds is its own column; HRD 1% on basic and fixed allowances, Malaysians; PCB estimate unless
   HR enters the e-PCB figure. Hostel utility deductions HR already approved for that payroll month are deducted.
+
+## Hours recorded and paid must match (P100 B1b, Fauzan 11 Nov 2026)
+
+"Salary and total working hours must match." Every line shows the hours recorded beside the hours paid:
+
+- Recorded: hours worked from locked attendance (clock-in to clock-out inside the rostered shift; a clock-in within the
+  late grace and a clock-out within the early grace count the whole shift, rules OPS-LATE-GRACE and OPS-EARLY-GRACE; a
+  rest the guard is relieved for comes out of the time past the normal day), plus approved paid leave, training and MC
+  days and paid public holidays off at the formula's normal hours.
+- Paid: normal hours, overtime, rest-day and public-holiday hours, paid leave and holidays, and any days of basic paid with
+  nothing recorded (only when ACT's formula says not to deduct short days).
+- A line whose totals differ is held: it cannot be changed (PCB or one-off item), and the run cannot be submitted, approved,
+  paid or exported. Typical causes: a day shorter than the normal day the basic pays, hours past the shift the formula pays
+  (for example two shifts on one day), basic paid for days with no attendance or leave. The fix is the attendance or leave
+  record, corrected with its own approval and reason, then a recalculation. The pay line is never changed to hide it.
+- Calculation version 3: unpaid runs calculated before this must be recalculated.
 
 ## Database
 

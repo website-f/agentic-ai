@@ -140,3 +140,71 @@
   font-size: 0.8125rem;
   color: var(--muted);
 }
+
+/* ---------- B1b: hours recorded beside hours paid ---------- */
+.pp-hours-chip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: 0.8125rem;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.pp-hours {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 12px 14px;
+  margin: 8px 0 12px;
+  display: grid;
+  gap: 10px;
+}
+.pp-hours[data-match='no'] {
+  border-color: var(--crit);
+}
+.pp-hours-cols {
+  display: grid;
+  gap: 12px;
+}
+@media (min-width: 560px) {
+  .pp-hours-cols {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+.pp-hours-col h4 {
+  margin: 0 0 6px;
+  font-size: 0.8125rem;
+  font-weight: 650;
+  color: var(--muted);
+  text-transform: none;
+}
+.pp-hours-col dl {
+  margin: 0;
+  display: grid;
+  gap: 4px;
+}
+.pp-hours-col dl > div,
+.pp-hours-total {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 0.875rem;
+  font-variant-numeric: tabular-nums;
+}
+.pp-hours-col dd {
+  margin: 0;
+}
+.pp-hours-total {
+  border-top: 1px solid var(--line);
+  margin-top: 6px;
+  padding-top: 6px;
+}
+.pp-ok-note {
+  margin: 0;
+  font-size: 0.8125rem;
+  color: var(--ok);
+}
+.pp-blocked ul {
+  margin: 6px 0 0;
+  padding-left: 18px;
+}

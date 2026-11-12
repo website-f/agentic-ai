@@ -14,6 +14,7 @@ import {
   type Person,
   type Shift,
 } from '../src';
+import { closeShortShifts } from './full-shifts';
 
 // Prima's own guard pay run (Fauzan, 5 Nov 2026). Synthetic data only: made-up people, placeholder formula amounts.
 const TODAY = '2026-11-05';
@@ -23,7 +24,7 @@ const NOW = myt(TODAY, '10:00');
 const PREPARER: Record<string, string> = { 'co-sasa': 'u-ae-sasa', 'co-arsh': 'u-ae-arsh', 'co-inas': 'u-ae-inas' };
 const prep = (svc: PrimaService, companyId: string) => svc.user(PREPARER[companyId] ?? `no-preparer-${companyId}`);
 const fresh = () => {
-  const ds = generateDataset({ today: TODAY, now: NOW, daysBack: 40 });
+  const ds = closeShortShifts(generateDataset({ today: TODAY, now: NOW, daysBack: 40 }));
   return { ds, svc: new PrimaService(new MemoryStore(ds), () => NOW) };
 };
 
