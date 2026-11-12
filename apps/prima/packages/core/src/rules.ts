@@ -97,7 +97,7 @@ export const RULES = {
     'HR-SOCSO-CHECKIN',
     7,
     'Policy',
-    'SOCSO Claims SOP, rehabilitation section (26 Oct 2026): the officer checks in with an injured guard every week while off work and for the first month back. Proposed, for approval.',
+    'SOCSO Claims SOP, rehabilitation section (26 Oct 2026): the officer checks in with an injured guard every week while off work and for the first month back. Approved by Fauzan, 11 Nov 2026 (round 3, G14): weekly check-in, as built.',
   ),
   staffPingMin: rule(
     'HR-STAFF-PING',
@@ -170,8 +170,8 @@ export const RULES = {
   staffTrackKeepDays: rule(
     'HR-STAFF-KEEP',
     90,
-    'Unverified',
-    'Proposed retention of location readings, to confirm with the PDPA notice to staff (location and face are personal data; face is biometric).',
+    'Policy',
+    'Proposed retention of location readings, to confirm with the PDPA notice to staff (location and face are personal data; face is biometric). Approved by Fauzan, 11 Nov 2026 (round 3, G9): keep staff location readings 90 days, as built. The staff privacy notice is still to come from the PDPA officer before real face or location data is collected (K5).',
   ),
   remotePlanMin: rule(
     'HR-WFH-PLAN',
@@ -253,7 +253,7 @@ export const RULES = {
     'ARMS-OVERDUE',
     { alertMin: 15, escalateMin: 30, lossCaseMin: 120 },
     'Policy',
-    'Master plan W13 (V13/V14 arms design): firearm not back 15 minutes after due alerts, 30 minutes escalates, 2 hours opens a loss case. Proposed, for approval with Arms Control.',
+    'Master plan W13 (V13/V14 arms design): firearm not back 15 minutes after due alerts, 30 minutes escalates, 2 hours opens a loss case. Approved by Fauzan, 11 Nov 2026 (round 3, G7): alert 15 min, escalate 30 min, possible-loss case 2 hours, as built.',
   ),
   armsWitness: rule(
     'ARMS-WITNESS',
@@ -474,13 +474,13 @@ export const RULES = {
       ],
     },
     'Policy',
-    'Fauzan, 26 Oct 2026: hostel billing reminds the company that owns or rents the hostel to ask for payment approval, sent to FWM; the Operations Director (private) or OGM (government) approves, then the COO; FWM keeps the approvals and the payment slip. Reminder days 14, 7 and 3 before due, then daily, and the overdue ladder (Chief of Staff from day 1, COO from day 7, CEO from day 14) are proposed.',
+    'Fauzan, 26 Oct 2026: hostel billing reminds the company that owns or rents the hostel to ask for payment approval, sent to FWM; the Operations Director (private) or OGM (government) approves, then the COO; FWM keeps the approvals and the payment slip. Reminder days 14, 7 and 3 before due, then daily, are proposed. Approved by Fauzan, 11 Nov 2026 (round 3, G11): the overdue ladder, Chief of Staff after 1 day, COO after 7 days, CEO after 14 days, as built.',
   ),
   utilityAllowance: rule(
     'FWM-UTILITY',
     { electricity: 30, water: 20, noticesBeforeDeduction: 2, maxDeductionShareOfBasic: 0.5 },
     'Policy',
-    'Fauzan, 26 Oct 2026: the system works out each hostel electricity and water bill above RM30 (electricity) and RM20 (water) per person a month, pro-rated by bed-days, and HR decides per person: a notice or a deduction. The 1st and 2nd time are notices only; from the 3rd a deduction may be chosen, only when the contract of employment has the utility clause. The count never resets. Legal item L4: Practice (JTK verbal, Fauzan 26 Oct 2026); JTK written confirmation not on file yet. Total deductions in a month kept within 50% of wages (Employment Act s.24(8), check proposed).',
+    'Fauzan, 26 Oct 2026: the system works out each hostel electricity and water bill above RM30 (electricity) and RM20 (water) per person a month, pro-rated by bed-days, and HR decides per person: a notice or a deduction. The 1st and 2nd time are notices only; from the 3rd a deduction may be chosen, only when the contract of employment has the utility clause. The count never resets. Legal item L4: Practice (JTK verbal, Fauzan 26 Oct 2026); JTK written confirmation not on file yet. Total deductions in a month kept within 50% of wages (Employment Act s.24(8)). Approved by Fauzan, 11 Nov 2026 (round 3, G11): deduction only above RM30 electricity and RM20 water per person a month, after 2 notices, capped at 50% of basic, as built.',
   ),
   fleetReminders: rule(
     'FLEET-REMIND',
@@ -1115,7 +1115,7 @@ export const RULES = {
       ],
     },
     'Policy',
-    "V15 (24 Oct 2026) continuity workstream and Fauzan, 24 Oct 2026: all data in Malaysia, with a cloud copy, Fauzan's own server and an emergency server. Proposed targets: live operations (Prima, CMS) back within 4 hours losing at most 1 hour of data; finance (SQL Account) within 24 hours losing at most 24 hours. Restore test every 6 months and a playbook drill every year; a copy with no backup or restore test on record is unknown. Targets are proposals for Fauzan and IT to confirm.",
+    "V15 (24 Oct 2026) continuity workstream and Fauzan, 24 Oct 2026: all data in Malaysia, with a cloud copy, Fauzan's own server and an emergency server. Proposed targets: live operations (Prima, CMS) back within 4 hours losing at most 1 hour of data; finance (SQL Account) within 24 hours losing at most 24 hours. Restore test every 6 months and a playbook drill every year; a copy with no backup or restore test on record is unknown. Approved by Fauzan, 11 Nov 2026 (round 3, G13): Prima and CMS back within 4 hours losing at most 1 hour of data; Finance 24 hours / 24 hours; restore test every 6 months; drill every 12 months. Fitri runs the tests and drills; the first restore test is done before real data goes in (K3).",
   ),
   pdpaRights: rule(
     'PDPA-RIGHTS',
@@ -1263,7 +1263,7 @@ export const RULES = {
     'SITE-GATE',
     { keepYears: 7, keepYearsMin: 2, keepYearsMax: 7, shownIdChars: 4, postLogMaxChars: 1000, insideAlertHours: 12, sentLaterMin: 10, offlineMaxDays: 7, paperPagesMax: 10 },
     'Policy',
-    'Fauzan, 6 Nov 2026: the shared site device is the one-stop guard duty device: post log, visitor log with evidence, vehicle plates against the site list. Police require the full details of people coming in and out kept for 2 to 7 years, so the full ID number, the IC picture and written in/out book pages are kept, sealed on the device for the in-house server only (screens show the last 4 characters). Kept 7 years here, the top of the police range, until the PDPA officer and counsel set it within 2 to 7. With no internet the device keeps entries encrypted and sends them when the signal returns (up to 7 days, proposed). Visitors need a notice at the gate.',
+    'Fauzan, 6 Nov 2026: the shared site device is the one-stop guard duty device: post log, visitor log with evidence, vehicle plates against the site list. Police require the full details of people coming in and out kept for 2 to 7 years, so the full ID number, the IC picture and written in/out book pages are kept, sealed on the device for the in-house server only (screens show the last 4 characters). Kept 7 years here, the top of the police range (Approved by Fauzan, 11 Nov 2026 (round 3, G9): site visitor records kept 7 years). With no internet the device keeps entries encrypted and sends them when the signal returns (up to 7 days, proposed). Visitors need a notice at the gate.',
   ),
   siteTasks: rule(
     'SITE-TASK',
@@ -1298,7 +1298,7 @@ export const RULES = {
       videoKeepDays: 90,
     },
     'Policy',
-    'Fauzan, 6 Nov 2026: CMS can send an instruction, an alert or an urgent alert to a site shared device, also when AI analytics on CCTV or a sensor pin-points something. The guard verifies with a time-stamped photo, or a video from the device or a bodycam linked to it. CMS monitors and tells; the company decides. Timings, video length and the 90-day keep period are proposed; video is personal data under PDPA (notice, viewers and keep period need the PDPA officer).',
+    'Fauzan, 6 Nov 2026: CMS can send an instruction, an alert or an urgent alert to a site shared device, also when AI analytics on CCTV or a sensor pin-points something. The guard verifies with a time-stamped photo, or a video from the device or a bodycam linked to it. CMS monitors and tells; the company decides. Video is personal data under PDPA (notice and viewers need the PDPA officer). Approved by Fauzan, 11 Nov 2026 (round 3, G8): acknowledged within 60 seconds (urgent), 3 minutes (alert) and 15 minutes (instruction); video kept 90 days, as built.',
   ),
   evidenceGeo: rule(
     'EVID-GEO',
@@ -1310,7 +1310,7 @@ export const RULES = {
     'HR-HANDBOOK',
     { warningValidMonths: 12, showCauseReplyDays: 3, suspensionMaxDays: 14 },
     'Policy',
-    'Fauzan, 25 Oct 2026: one disciplinary handbook for every guard in every company, and it must follow labour law. The ladder (verbal, written, final warning, show-cause, domestic inquiry, then an inquiry outcome), a warning counting for 12 months and 3 days to answer a show-cause letter are proposed until Group HR and counsel issue the handbook.',
+    'Fauzan, 25 Oct 2026: one disciplinary handbook for every guard in every company, and it must follow labour law. The ladder (verbal, written, final warning, show-cause, domestic inquiry, then an inquiry outcome), a warning counting for 12 months and 3 days to answer a show-cause letter are proposed until Group HR and counsel issue the handbook. Approved by Fauzan, 11 Nov 2026 (round 3, G6): show-cause reply time 3 days for guards (office staff 7 days, rule HR-CASE), approved as they are. The round 3 answer to Q6 ("same for both", 7 days) differs and is asked again.',
   ),
   disciplineLaw: rule(
     'EA-DISCIPLINE',
@@ -1328,7 +1328,7 @@ export const RULES = {
     'ARMS-DOOR-MATCH',
     15,
     'Policy',
-    'V14 s.209 and s.226: a vault door opening with no issue, return or count within 15 minutes is flagged for an independent check. Proposed window, for approval.',
+    'V14 s.209 and s.226: a vault door opening with no issue, return or count within 15 minutes is flagged for an independent check. Approved by Fauzan, 11 Nov 2026 (round 3, G7): flag after 15 minutes, as built.',
   ),
   policeReportDays: rule(
     'ARMS-POLICE-REPORT',
@@ -1390,7 +1390,7 @@ export const RULES = {
       { kind: 'CASH_IN_TRANSIT', when: 'cit', why: 'Cash-in-transit cover for CIT, CDM and vault jobs' },
     ],
     'Policy',
-    'Proposed minimum cover per company, for approval with the Chief of Staff and counsel',
+    'Minimum cover per company. Approved by Fauzan, 11 Nov 2026 (round 3, G12): the Chief of Staff signs off each company\'s minimum insurance list with the lawyer (counsel).',
   ),
   clockInWindowMin: rule('OPS-CLOCK-WINDOW', 60, 'Policy', 'Clock-in allowed from 60 minutes before shift start'),
   licenceLeadDays: rule<Record<LicenceType, number>>(
@@ -1427,7 +1427,7 @@ export const RULES = {
       RANGE_PRACTICE: 30,
     },
     'Policy',
-    'Proposed reminder lead times for personal permits, for approval',
+    'Approved by Fauzan, 11 Nov 2026 (round 3, G10): reminders before expiry, KDN guard card 60 days, PLKS 90, passport 180, FOMEMA 60, foreign worker insurance 60, as built. The other lead times stay as proposed.',
   ),
   caseSla: rule<Record<Severity, string>>(
     'CASE-SLA',
@@ -1950,7 +1950,7 @@ export const RULES = {
     'HR-LINDUNG-VERIFY',
     2,
     'Policy',
-    'LINDUNG 24 Jam (5 Nov 2026): PERKESO emails the company to confirm the worker is employed; HR answers within 2 working days so the benefit is not held up. Company target, not law; PERKESO sets no deadline in its FAQ. Proposed, for approval.',
+    'LINDUNG 24 Jam (5 Nov 2026): PERKESO emails the company to confirm the worker is employed; HR answers within 2 working days so the benefit is not held up. Company target, not law; PERKESO sets no deadline in its FAQ. Approved by Fauzan, 11 Nov 2026 (round 3, G14): answer within 2 working days, as built.',
   ),
   doshFormWorkingDays: rule(
     'OSH-DOSH-NOTICE',
@@ -2077,7 +2077,7 @@ export const RULES = {
     'MEMO-READ',
     { readWithinDays: 3 },
     'Policy',
-    'Fauzan, 26 Oct 2026: readers tap "I have read this" and the publisher sees who read it. The 3-day read-by date and the publisher reminder to those who have not read are proposed (5 Nov 2026).',
+    'Fauzan, 26 Oct 2026: readers tap "I have read this" and the publisher sees who read it. The publisher reminds those who have not read. Approved by Fauzan, 11 Nov 2026 (round 3, G14): memo read within 3 days, as built.',
   ),
   quality: rule(
     'QMS-REGISTER',
@@ -2144,7 +2144,7 @@ export const RULES = {
       pmLeadDays: 14,
     },
     'Policy',
-    'Fauzan, 26 Oct 2026: Asset Management finds tenants, monitors utilities and runs the resorts and orchards. Fauzan, 5 Nov 2026 (third audit, item 4 "Build"): add the contractors list, finding tenants, utility meters, resort bookings, orchard harvest and planned maintenance. Proposed for approval: the team adds a contractor and the Asset Director approves it for use, suspends or blacklists it with a reason; every finished job is rated; the Asset Director approves every tenancy offer, by someone other than whoever made it, and an offer under the asking rent needs a reason; each meter is read monthly with a photo and a big jump is flagged; the Asset Director sets each resort\'s price list, a price under it needs a reason, an outside booking is confirmed with a 30% deposit and a hold lapses after 3 days; every harvest sale has a weighing slip, and a price drop of 20%, spoilage over 10% or more than 5% kept or given away is flagged; planned jobs turn into work orders 14 days before they are due and only the Asset Director pauses a job the law or a licence requires. Finance confirms every payment in the bank. All figures proposed, for Fauzan to confirm.',
+    'Fauzan, 26 Oct 2026: Asset Management finds tenants, monitors utilities and runs the resorts and orchards. Fauzan, 5 Nov 2026 (third audit, item 4 "Build"): add the contractors list, finding tenants, utility meters, resort bookings, orchard harvest and planned maintenance. Proposed for approval: the team adds a contractor and the Asset Director approves it for use, suspends or blacklists it with a reason; every finished job is rated; the Asset Director approves every tenancy offer, by someone other than whoever made it, and an offer under the asking rent needs a reason; each meter is read monthly with a photo and a big jump is flagged; the Asset Director sets each resort\'s price list, a price under it needs a reason, an outside booking is confirmed with a 30% deposit and a hold lapses after 3 days; every harvest sale has a weighing slip, and a price drop of 20%, spoilage over 10% or more than 5% kept or given away is flagged; planned jobs turn into work orders 14 days before they are due and only the Asset Director pauses a job the law or a licence requires. Finance confirms every payment in the bank. Approved by Fauzan, 11 Nov 2026 (round 3, G15): CIDB expiry warning 30 days; a contractor rated under 3 is low-rated; an empty unit advertised within 7 days; letting starts 90 days before a tenancy ends; a meter reading at 2x the usual is flagged, as built. The other figures stay proposed.',
   ),
   jaSwitch: rule(
     'JA-SWITCH',
@@ -2188,7 +2188,7 @@ export const RULES = {
       keepPingsDays: 90,
     },
     'Policy',
-    'Third audit item 2, Fauzan 5 Nov 2026: guards sign in on their own phones with face plus PIN, live patrol location, SOS button and a heartbeat to CMS. Heartbeat every 60 s and offline after 5 min follow the JA requirements (2 Nov 2026). Location only on duty (30 min either side of the shift); Fauzan, 5 Nov 2026: no PDPA notice step on the phone. Keeping readings 90 days and the code, session, lock and SOS numbers are PROPOSED.',
+    'Third audit item 2, Fauzan 5 Nov 2026: guards sign in on their own phones with face plus PIN, live patrol location, SOS button and a heartbeat to CMS. Heartbeat every 60 s and offline after 5 min follow the JA requirements (2 Nov 2026). Location only on duty (30 min either side of the shift); Fauzan, 5 Nov 2026: no PDPA notice step on the phone. The code and SOS numbers are proposed. Approved by Fauzan, 11 Nov 2026 (round 3, G9 and G16): readings kept 90 days; stay signed in 14 hours; locked 30 minutes after 5 wrong tries, as built (the guard phone stays switched off).',
   ),
   qualityOps: rule(
     'QMS-OPERATIONS',
