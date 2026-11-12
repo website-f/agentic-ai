@@ -83,8 +83,8 @@ export function ClientDeposits({ v }: { v: FinControls }) {
         </button>
       </div>
       <p className="muted small fin-intro">
-        Money a client keeps until the contract ends. A second person checks each one. Claim it back when the contract ends; Prima finds the payment on the bank
-        statement.
+        Money a client keeps until the contract ends, including retention on tenders. A second person checks each one. Retention still out needs a status
+        update every {ce.retentionUpdateMonths} months until it is back. Claim it back when the contract ends; Prima finds the payment on the bank statement.
       </p>
       <ErrorNotice error={act.error} />
       {adding && (
@@ -105,6 +105,18 @@ export function ClientDeposits({ v }: { v: FinControls }) {
               ))}
             </Select>
           </Field>
+          {ce.tenders.length > 0 && (
+            <Field label="Tender (retention on a tender)">
+              <Select className="select" value={f.tenderId ?? ''} onChange={set('tenderId')}>
+                <option value="">Not on a tender</option>
+                {ce.tenders.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.ref} · {t.title}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+          )}
           {!f.contractId && (
             <Field label="Client">
               <input className="input" value={f.client ?? ''} onChange={set('client')} />
@@ -126,7 +138,7 @@ export function ClientDeposits({ v }: { v: FinControls }) {
             className="btn btn-primary btn-sm"
             disabled={act.busy}
             onClick={async () => {
-              if (await go('add', { ...f, amount: Number(f.amount), dueBackOn: f.dueBackOn || undefined }, 'Added. Someone else checks it next.')) {
+              if (await go('add', { ...f, amount: Number(f.amount), dueBackOn: f.dueBackOn || undefined, tenderId: f.tenderId || undefined }, 'Added. Someone else checks it next.')) {
                 setAdding(false);
                 setF({ kind: 'deposit' });
               }
@@ -157,10 +169,12 @@ function DepositLine({ d, go, busy }: { d: Dep; go: (action: string, input: Reco
         <span>
           {d.kind === 'deposit' ? 'Deposit' : 'Retention'} {rm(d.amount)} · {d.client}
           {d.contractRef && ` · ${d.contractRef}`}
+          {d.tenderRef && <span> · tender {d.tenderRef}</span>}
           {d.dueBack && d.status !== 'refunded' && d.status !== 'written_off' && <span className="muted"> · due back {dateLabel(d.dueBack)}</span>}
           {d.refund && <span className="muted"> · paid back {dateLabel(d.refund.date)}</span>}
         </span>
         <span className="row">
+          {d.update && <Chip tone={d.update.due ? 'warn' : 'neutral'}>{d.update.due ? 'Status update due' : `Next update ${dateLabel(d.update.dueOn)}`}</Chip>}
           <Chip tone={tone}>{label}</Chip>
           {['pending', 'held', 'claimed'].includes(d.status) && (
             <button className="btn btn-sm" onClick={() => setOpen(!open)}>
@@ -169,8 +183,23 @@ function DepositLine({ d, go, busy }: { d: Dep; go: (action: string, input: Reco
           )}
         </span>
       </div>
+      {d.update?.lastText && (
+        <div className="muted small">
+          Last update {dateLabel(d.update.lastOn)}: {d.update.lastText}
+        </div>
+      )}
       {open && (
         <div className="fin-pt">
+          {d.kind === 'retention' && (
+            <div className="fin-mt">
+              <Field label="Status now (who you asked and what they said)">
+                <input className="input" value={f.status ?? ''} onChange={set('status')} />
+              </Field>
+              <button className="btn btn-sm" disabled={busy || (f.status ?? '').trim().length < 5} onClick={() => go('status', { depositId: d.id, comment: f.status }, 'Status recorded.')}>
+                Record the status
+              </button>
+            </div>
+          )}
           {d.status === 'pending' && (
             <>
               <Field label="What you checked it against">

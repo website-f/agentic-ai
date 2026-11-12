@@ -1,3 +1,4 @@
+import { RULES } from "./rules";
 import { AccessDenied } from "./access";
 import { isLead } from "./finance";
 import { isoDate } from "./finance";
@@ -266,8 +267,8 @@ export function finRegularExceptions(f: FinStatus, period: string, today: IsoDat
 }
 
 /** Counts for the Finance home, for one company. */
-export function finRegularHome(f: FinStatus, a: FinActor, userId: Id, today: IsoDate, s: Pick<FinSettingsValues, 'matchDays'>) {
-  const c = { toCheck: 0, toPay: 0, dueSoon: 0, late: 0, noBill: 0, notSeen: 0, expiring: 0, gToCheck: 0, gExpiring: 0, gClaim: 0, gWaiting: 0, collateral: 0 };
+export function finRegularHome(f: FinStatus, a: FinActor, userId: Id, today: IsoDate, s: Pick<FinSettingsValues, 'matchDays'> & Partial<Pick<FinSettingsValues, 'guaranteeRemindDays'>>) {
+  const c = { toCheck: 0, toPay: 0, dueSoon: 0, late: 0, noBill: 0, notSeen: 0, expiring: 0, gToCheck: 0, gExpiring: 0, gDue: 0, gClaim: 0, gWaiting: 0, collateral: 0 };
   const reviewer = isLead(a) || a.kind === 'leader' || a.kind === 'deputy';
   for (const r of f.regular ?? []) {
     if (r.status === 'pending' && reviewer && r.added.byId !== userId) c.toCheck += 1;
@@ -291,6 +292,8 @@ export function finRegularHome(f: FinStatus, a: FinActor, userId: Id, today: Iso
     if (g.status === 'pending' && reviewer && g.added.byId !== userId) c.gToCheck += 1;
     if (['active', 'released', 'claimed'].includes(g.status)) c.collateral += g.collateral;
     if (g.status === 'active' && daysBetween(today, g.expiresOn) <= FIN_REGULAR_RULE.expiryWarnDays && g.expiresOn >= today) c.gExpiring += 1;
+    // F13 (Fauzan, 11 Nov 2026): the 30-day reminder before an IG or BG is due, until it is settled.
+    if (g.status === 'active' && g.expiresOn >= today && daysBetween(today, g.expiresOn) <= (s.guaranteeRemindDays ?? RULES.insurancePremiumDays.value.guaranteeRemindDays)) c.gDue += 1;
     if (g.collateral > 0 && ['active', 'released'].includes(g.status) && (g.release || g.expiresOn < today) && daysBetween(g.release?.on ?? g.expiresOn, today) >= FIN_REGULAR_RULE.claimAfterDays) c.gClaim += 1;
     if (g.status === 'claimed' && g.claim && daysBetween(g.claim.on, today) > FIN_REGULAR_RULE.claimWaitDays) c.gWaiting += 1;
   }

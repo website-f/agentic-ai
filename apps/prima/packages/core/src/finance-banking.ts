@@ -1,3 +1,4 @@
+import type { FinSettingsValues } from "./types";
 import { AccessDenied } from "./access";
 import { isoDate } from "./finance";
 import { noSecrets } from "./finance";
@@ -120,8 +121,8 @@ export function finFdAction(ctx: FinCashCtx, f: FinStatus, action: string, input
   if (d.status === 'pending') throw new BadRequest('A second person checks it first.');
   if (action === 'renew') {
     if (d.status !== 'placed') throw new BadRequest('Only a placed deposit is renewed.');
-    if (daysBetween(ctx.today, d.maturesOn) > RULES.financeBanking.value.maturityAlertDays)
-      throw new BadRequest(`Renew within ${RULES.financeBanking.value.maturityAlertDays} days of maturity.`);
+    const alertDays = ctx.fs?.fdMaturityAlertDays ?? RULES.financeBanking.value.maturityAlertDays;
+    if (daysBetween(ctx.today, d.maturesOn) > alertDays) throw new BadRequest(`Renew within ${alertDays} days of maturity.`);
     const to = isoDate(input.to, 'New maturity');
     if (to <= d.maturesOn) throw new BadRequest('The new maturity is not later.');
     const rate = Number(input.rate);
@@ -280,8 +281,8 @@ export function finChargeAction(ctx: FinCashCtx, f: FinStatus, openPeriod: strin
 }
 
 /** Where the money sits: each account's last statement balance, and the deposits placed. */
-export function finBankingView(f: FinStatus, period: string, today: IsoDate) {
-  const alert = RULES.financeBanking.value.maturityAlertDays;
+export function finBankingView(f: FinStatus, period: string, today: IsoDate, s?: Partial<FinSettingsValues>) {
+  const alert = s?.fdMaturityAlertDays ?? RULES.financeBanking.value.maturityAlertDays;
   const fds = (f.fixedDeposits ?? []).map((d) => ({
     ...d,
     interest: finFdInterest(d.amount, d.rate, d.renewals.length ? d.renewals[d.renewals.length - 1].from : d.placedOn, d.maturesOn),
@@ -303,8 +304,8 @@ export function finBankingView(f: FinStatus, period: string, today: IsoDate) {
   };
 }
 
-export function finBankingHome(f: FinStatus, period: string, today: IsoDate, userId: Id, reviewer: boolean) {
-  const v = finBankingView(f, period, today);
+export function finBankingHome(f: FinStatus, period: string, today: IsoDate, userId: Id, reviewer: boolean, s?: Partial<FinSettingsValues>) {
+  const v = finBankingView(f, period, today, s);
   return {
     fdDecide: v.fds.filter((d) => d.decide && !d.matured).length,
     fdMatured: v.fds.filter((d) => d.matured).length,

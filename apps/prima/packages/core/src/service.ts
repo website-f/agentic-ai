@@ -1,5 +1,6 @@
 import { DEMO_IT_RENTAL_RATES } from "./demo-rates";
 import { RateBookService } from "./rate-book";
+import { finSettingsOf } from "./finance";
 import { applyArrivalRecovery, checkArrivalSnapshot, recordArrivalRepayments, cashCeo } from './arrival-cash';
 import { withLeavePersonLock } from './leave-lock';
 import { staffZakatReleaseProblem, staffSqlOtherSharesProblem } from './staff-zakat-guards';
@@ -5104,8 +5105,12 @@ export class PrimaService {
       this.store.list('licences', { companyId: ids }),
     ]);
     const renewDays = RULES.insuranceRenewalDays.value;
-    const premiumDays = RULES.insurancePremiumDays.value;
-    const noticeDays = RULES.insuranceClaimNoticeDays.value;
+    // C4 (Fauzan, 11 Nov 2026): the days are Finance settings the FD can change (rule defaults when not readable here).
+    const insSet = finSettingsOf(await this.store.get('finStatus', `fin-${GROUP_EMPLOYER_ID}`).catch(() => null), today);
+    const premiumDays = insSet.premiumDueDays;
+    const premiumEarlyDays = insSet.premiumEarlyDays;
+    const guaranteeRemindDays = insSet.guaranteeRemindDays;
+    const noticeDays = insSet.claimNoticeDays;
     const claimAge = RULES.insuranceClaimAgeDays.value;
     const bondDays = RULES.guaranteeLeadDays.value;
 
@@ -5156,6 +5161,9 @@ export class PrimaService {
           `${label} · due ${-premiumLeft} days ago; cover may not hold`,
         );
       else if (premium === 'due') alert('warn', 'Premium', p.companyId, `Premium RM ${p.premium.toLocaleString('en-MY')} due in ${premiumLeft} days`, label);
+      // The first of two reminders (Fauzan, 11 Nov 2026: 30 and 14 days before the premium is due).
+      else if (premium === 'later' && premiumLeft <= premiumEarlyDays)
+        alert('info', 'Premium', p.companyId, `Premium RM ${p.premium.toLocaleString('en-MY')} due in ${premiumLeft} days`, `${label} · first reminder; arrange payment with the broker`);
       return {
         policy: p,
         companyName: name.get(p.companyId) ?? p.companyId,
@@ -5228,6 +5236,9 @@ export class PrimaService {
       if (state === 'lapsed') alert('crit', 'Guarantee', b.companyId, 'Guarantee expired while the contract runs', `${label} · ${b.contractRef}`);
       if (state === 'extend')
         alert('warn', 'Guarantee', b.companyId, `Guarantee ends in ${left} days, before the contract`, `${label} · contract to ${b.contractEndsOn}`);
+      // F13 (Fauzan, 11 Nov 2026): every guarantee is followed until it is settled, with a reminder before it is due.
+      if ((state === 'ok' || state === 'short') && left >= 0 && left <= guaranteeRemindDays)
+        alert('warn', 'Guarantee', b.companyId, `Guarantee due in ${left} days`, `${label} · ${b.contractRef}; settle it, extend it or ask for its release`);
       if (state === 'release')
         alert(
           'info',

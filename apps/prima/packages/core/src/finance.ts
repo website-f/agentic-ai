@@ -212,8 +212,66 @@ export function finDefaults(): FinSettingsValues {
     kpiReworkMinutes: 20,
     kpiCloseReviewMinutes: 90,
     kpiFirstPassPct: 90,
+    // C4 (Fauzan, 11 Nov 2026): the confirmed rule values, each an FD setting.
+    ceoNoticeFrom: pay.ceoNoticeFrom,
+    ruleMaxAmount: ctl.ruleMaxAmount,
+    auditCirculateMonths: ctl.auditCirculateMonths,
+    ssmLodgeDays: ctl.ssmLodgeDays,
+    billDiffPct: RULES.financeMoneyIn.value.billDiffPct,
+    govtPayDays: RULES.financeMoneyIn.value.govtPayDays,
+    govtFollowUpDays: RULES.financeMoneyIn.value.govtFollowUpDays,
+    unidentifiedDays: RULES.financeMoneyIn.value.unidentifiedDays,
+    caInitialPct: RULES.financeYearEnd.value.initialPct,
+    caGeneralPct: RULES.financeYearEnd.value.annualPct.general,
+    caHeavyVehiclePct: RULES.financeYearEnd.value.annualPct.heavy_vehicle,
+    caOfficePct: RULES.financeYearEnd.value.annualPct.office,
+    caComputerPct: RULES.financeYearEnd.value.annualPct.computer,
+    caMotorCarPct: RULES.financeYearEnd.value.annualPct.motor_car,
+    smallValueMax: RULES.financeYearEnd.value.smallValueMax,
+    smallValueCap: RULES.financeYearEnd.value.smallValueCap,
+    motorCarCapNew: RULES.financeYearEnd.value.motorCarCapNew,
+    motorCarCapOther: RULES.financeYearEnd.value.motorCarCapOther,
+    smePaidUpMax: RULES.financeYearEnd.value.smePaidUpMax,
+    smeIncomeMax: RULES.financeYearEnd.value.smeIncomeMax,
+    auditRequestDays: RULES.financeYearEnd.value.auditRequestDays,
+    topSuppliers: RULES.financeSupplierStatements.value.topSuppliers,
+    supplierCheckDays: RULES.financeSupplierStatements.value.dueDays,
+    creditOverdueDays: RULES.financeCredit.value.overdueDays,
+    creditStaleDays: RULES.financeCredit.value.balanceStaleDays,
+    fdMaturityAlertDays: RULES.financeBanking.value.maturityAlertDays,
+    depositClaimDays: RULES.financeContractEnd.value.claimWithinDays,
+    finalInvoiceDays: RULES.financeContractEnd.value.finalInvoiceDays,
+    retentionUpdateMonths: RULES.financeContractEnd.value.retentionUpdateMonths,
+    icExplainMax: RULES.financeIntercompany.value.explainMax,
+    advanceSettleDays: RULES.financeCash.value.advanceSettleDays,
+    pettyCountByDay: RULES.financeCash.value.pettyCountByDay,
+    cardExplainByDay: RULES.financeCash.value.cardExplainByDay,
+    premiumDueDays: RULES.insurancePremiumDays.value.dueDays,
+    premiumEarlyDays: RULES.insurancePremiumDays.value.earlyDays,
+    guaranteeRemindDays: RULES.insurancePremiumDays.value.guaranteeRemindDays,
+    claimNoticeDays: RULES.insuranceClaimNoticeDays.value,
   };
 }
+
+/** Settings that are amounts or percentages (sen and decimals allowed); every other setting is a whole number. */
+export const FIN_SETTING_DECIMALS: string[] = ['varianceMinRm', 'sstThreshold', 'variancePct', 'pettyVoucherMax', 'pettyFloatMax', 'ceoNoticeFrom', 'ruleMaxAmount', 'billDiffPct', 'caInitialPct', 'caGeneralPct', 'caHeavyVehiclePct', 'caOfficePct', 'caComputerPct', 'caMotorCarPct', 'smallValueMax', 'smallValueCap', 'motorCarCapNew', 'motorCarCapOther', 'smePaidUpMax', 'smeIncomeMax', 'icExplainMax'];
+
+/** C4: which rule each setting belongs to, for the Finance settings screen. */
+export const FIN_SETTING_GROUPS: { title: string; keys: (keyof FinSettingsValues)[] }[] = [
+  { title: 'Payments (FIN-PAY)', keys: ['ceoNoticeFrom', 'approvalExpiryDays', 'escalateAfterDays', 'bankPackByDay', 'paymentPackByDay'] },
+  { title: 'Controls (FIN-CONTROLS)', keys: ['matchDays', 'ruleMaxAmount', 'unclearedDays', 'ageingByDay', 'monthlyPackByDay', 'forecastByDay', 'variancePct', 'varianceMinRm', 'auditCirculateMonths', 'ssmLodgeDays'] },
+  { title: 'Money in (FIN-MONEYIN)', keys: ['billDiffPct', 'govtPayDays', 'govtFollowUpDays', 'unidentifiedDays', 'writeOffMinEvidence'] },
+  { title: 'Contract end and retention (FIN-CONTRACT-END)', keys: ['depositClaimDays', 'finalInvoiceDays', 'retentionUpdateMonths'] },
+  { title: 'Credit (FIN-CREDIT)', keys: ['creditOverdueDays', 'creditStaleDays'] },
+  { title: 'Banking (FIN-BANKING)', keys: ['fdMaturityAlertDays'] },
+  { title: 'Supplier statements (FIN-SUPSTMT)', keys: ['topSuppliers', 'supplierCheckDays'] },
+  { title: 'Intercompany (FIN-IC)', keys: ['icExplainMax'] },
+  { title: 'Cash (FIN-CASH)', keys: ['pettyVoucherMax', 'pettyFloatMax', 'pettyCountByDay', 'cardExplainByDay', 'advanceSettleDays'] },
+  { title: 'Insurance (INS-PREMIUM, INS-CLAIM-NOTICE)', keys: ['premiumEarlyDays', 'premiumDueDays', 'guaranteeRemindDays', 'claimNoticeDays'] },
+  { title: 'Year end (FIN-YEAREND)', keys: ['caInitialPct', 'caGeneralPct', 'caHeavyVehiclePct', 'caOfficePct', 'caComputerPct', 'caMotorCarPct', 'smallValueMax', 'smallValueCap', 'motorCarCapNew', 'motorCarCapOther', 'smePaidUpMax', 'smeIncomeMax', 'auditRequestDays'] },
+  { title: 'Tax (FIN-SST, FIN-EINV)', keys: ['sstThreshold', 'eInvoiceCheckByDay'] },
+  { title: 'Close, budget and KPIs', keys: ['closeApproveByDay', 'varianceByDay', 'budgetByDecDay', 'kpiReviewMinutes', 'kpiReleaseMinutes', 'kpiReworkMinutes', 'kpiCloseReviewMinutes', 'kpiFirstPassPct'] },
+];
 
 /** The allowed range for each number the Finance Director sets, and what it means on the screen. */
 export const FIN_SETTING_LIMITS: Record<Exclude<keyof FinSettingsValues, 'selfBilledBy' | 'approvalMethod'>, [number, number, string]> = {
@@ -241,11 +299,50 @@ export const FIN_SETTING_LIMITS: Record<Exclude<keyof FinSettingsValues, 'selfBi
   kpiReworkMinutes: [1, 2400, 'KPI target (provisional): resubmit within office minutes of a return'],
   kpiCloseReviewMinutes: [1, 2400, 'KPI target (provisional): review the month-end close within office minutes'],
   kpiFirstPassPct: [0, 100, 'KPI target (provisional): % accepted first time, without a return'],
+  ceoNoticeFrom: [0, 1_000_000_000, 'Tell the CEO of payments from (RM)'],
+  ruleMaxAmount: [0, 10_000_000, 'A remembered bank-line explanation covers lines up to (RM)'],
+  auditCirculateMonths: [1, 18, 'Audited accounts circulated within (months of the year end)'],
+  ssmLodgeDays: [1, 120, 'Accounts lodged with SSM within (days of circulation)'],
+  billDiffPct: [0, 100, 'An invoice more than this % off the contract needs a reason'],
+  govtPayDays: [1, 365, 'A government claim is expected to be paid within (days)'],
+  govtFollowUpDays: [1, 120, 'An unpaid government claim is followed up every (days)'],
+  unidentifiedDays: [1, 60, 'Money in with no invoice is allocated within (days)'],
+  caInitialPct: [0, 100, 'Capital allowance: initial allowance (%)'],
+  caGeneralPct: [0, 100, 'Capital allowance: annual, general plant (%)'],
+  caHeavyVehiclePct: [0, 100, 'Capital allowance: annual, heavy vehicles (%)'],
+  caOfficePct: [0, 100, 'Capital allowance: annual, office equipment (%)'],
+  caComputerPct: [0, 100, 'Capital allowance: annual, computers (%)'],
+  caMotorCarPct: [0, 100, 'Capital allowance: annual, motor cars (%)'],
+  smallValueMax: [0, 1_000_000, 'Small value asset: each at most (RM)'],
+  smallValueCap: [0, 10_000_000, 'Small value assets: yearly cap (RM)'],
+  motorCarCapNew: [0, 10_000_000, 'Motor car qualifying cost, new and RM150,000 or less (RM)'],
+  motorCarCapOther: [0, 10_000_000, 'Motor car qualifying cost, other (RM)'],
+  smePaidUpMax: [0, 10_000_000_000, 'SME for income tax: paid-up capital at most (RM)'],
+  smeIncomeMax: [0, 10_000_000_000, 'SME for income tax: gross business income at most (RM)'],
+  auditRequestDays: [1, 120, 'An auditor request is answered within (days)'],
+  topSuppliers: [1, 100, 'Biggest suppliers whose statements are checked each quarter'],
+  supplierCheckDays: [1, 120, 'Supplier statements agreed within (days after the quarter)'],
+  creditOverdueDays: [1, 365, 'Warn Operations on a client overdue more than (days)'],
+  creditStaleDays: [1, 365, "A client's balance is stale after (days)"],
+  fdMaturityAlertDays: [1, 120, 'Fixed deposit maturity alert (days before)'],
+  depositClaimDays: [1, 365, "Deposits and retention claimed back within (days of the contract's end)"],
+  finalInvoiceDays: [1, 120, "Final invoice recorded within (days of the contract's end)"],
+  retentionUpdateMonths: [1, 12, 'Retention status updated every (months) until it is back'],
+  icExplainMax: [0, 1_000_000_000, 'Intercompany difference that may be explained, at most (RM)'],
+  advanceSettleDays: [1, 30, 'A staff advance is settled within (days)'],
+  pettyCountByDay: [1, 28, 'Petty cash counted by (day of next month)'],
+  cardExplainByDay: [1, 28, 'Card statement explained by (day of next month)'],
+  premiumDueDays: [1, 120, 'Insurance premium warning (days before due)'],
+  premiumEarlyDays: [1, 180, 'Insurance premium first reminder (days before due)'],
+  guaranteeRemindDays: [1, 180, 'Insurance and bank guarantees: reminder (days before due)'],
+  claimNoticeDays: [1, 365, 'Tell the insurer within (days of the incident)'],
 };
 
 /** The settings in force: the Finance Director's values over the rule defaults. They live on PWVSB's own row. */
-export function finSettingsOf(group: Pick<FinStatus, 'settings'> | null | undefined): FinSettingsValues {
-  return { ...finDefaults(), ...(group?.settings?.values ?? {}) };
+export function finSettingsOf(group: Pick<FinStatus, 'settings'> | null | undefined, today?: IsoDate): FinSettingsValues {
+  // C4: a change saved to start on a later day applies from that day.
+  const due = today ? (group?.settings?.scheduled ?? []).filter((x) => x.from <= today).sort((a, b) => a.from.localeCompare(b.from) || a.set.at.localeCompare(b.set.at)) : [];
+  return Object.assign({ ...finDefaults(), ...(group?.settings?.values ?? {}) }, ...due.map((x) => x.values));
 }
 
 function nextMonthDay(period: string, day: number): IsoDate {
@@ -730,10 +827,10 @@ export function finCloseCheck(
   raw.push(...regEx);
   if (!regEx.length && (f.regular ?? []).some((r) => r.status === 'active')) done.push('Every regular payment due in the month paid or seen on the statement');
   // Advances, petty cash and company cards (Fauzan, 2 Nov 2026).
-  const cashEx = finCashExceptions(f, period, dateOf(now));
+  const cashEx = finCashExceptions(f, period, dateOf(now), s);
   raw.push(...cashEx);
   // Money in (Fauzan, 2 Nov 2026): every contract billed, government claims followed up, money in allocated.
-  const inEx = finMoneyInExceptions(f, contracts, period, dateOf(now));
+  const inEx = finMoneyInExceptions(f, contracts, period, dateOf(now), s);
   raw.push(...inEx);
   // Stamp duty (Fauzan, 2 Nov 2026): agreements stamped in time, certificates checked, refunds of cancelled ones followed.
   raw.push(...finStampExceptions(f, dateOf(now)));
@@ -1117,7 +1214,7 @@ export class FinanceDeskService {
 
   /** The group Finance settings in force (Fauzan, 1 Nov 2026: the Finance Director sets them). */
   async settings(store: Store = this.store): Promise<FinSettingsValues> {
-    return finSettingsOf(await store.get('finStatus', `fin-${GROUP_EMPLOYER_ID}`));
+    return finSettingsOf(await store.get('finStatus', `fin-${GROUP_EMPLOYER_ID}`), this.today());
   }
 
   /** What is set, by whom, and the defaults, for the Finance settings screen. Every Finance person may read them. */
@@ -1125,9 +1222,13 @@ export class FinanceDeskService {
     const a = this.actor(user);
     const row = await this.store.get('finStatus', `fin-${GROUP_EMPLOYER_ID}`);
     return {
-      values: finSettingsOf(row),
+      values: finSettingsOf(row, this.today()),
       defaults: finDefaults(),
       limits: FIN_SETTING_LIMITS,
+      groups: FIN_SETTING_GROUPS,
+      decimals: FIN_SETTING_DECIMALS,
+      today: this.today(),
+      scheduled: (row?.settings?.scheduled ?? []).filter((x) => x.from > this.today()),
       set: row?.settings?.set ?? null,
       history: (row?.settings?.history ?? []).slice(-12),
       canSet: isLead(a),
@@ -1168,7 +1269,16 @@ export class FinanceDeskService {
       const comment = requireComment(input.comment, 'change the settings (why)');
       const raw = (input.values ?? {}) as Record<string, unknown>;
       if (typeof raw !== 'object' || Array.isArray(raw)) throw new BadRequest('Send the settings as an object.');
-      const next: Partial<FinSettingsValues> = { ...(row.settings?.values ?? {}) };
+      // C4: a change starts today, or on a later day (within a year) the FD chooses; never in the past.
+      const today = this.today();
+      const from = input.from == null || input.from === '' ? today : isoDate(input.from, 'Starts on');
+      if (from < today) throw new BadRequest('A settings change starts today or later, never in the past.');
+      if (daysBetween(today, from) > 366) throw new BadRequest('A settings change starts within a year.');
+      // Changes scheduled for today or earlier are folded in first, so this change sits on top of them.
+      const dueNow = (row.settings?.scheduled ?? []).filter((x) => x.from <= today);
+      const later = (row.settings?.scheduled ?? []).filter((x) => x.from > today);
+      const base: Partial<FinSettingsValues> = Object.assign({ ...(row.settings?.values ?? {}) }, ...dueNow.map((x) => x.values));
+      const next: Partial<FinSettingsValues> = from > today ? {} : { ...base };
       const changed: string[] = [];
       const teamMoves: { id: Id; team: number }[] = [];
       for (const [k, v] of Object.entries(raw)) {
@@ -1201,7 +1311,7 @@ export class FinanceDeskService {
         const lim = FIN_SETTING_LIMITS[k as keyof typeof FIN_SETTING_LIMITS];
         if (!lim) throw new BadRequest(`Unknown setting ${k}.`);
         const n = typeof v === 'number' ? v : Number(v);
-        const whole = !['varianceMinRm', 'sstThreshold', 'variancePct', 'pettyVoucherMax', 'pettyFloatMax'].includes(k);
+        const whole = !FIN_SETTING_DECIMALS.includes(k);
         if (!Number.isFinite(n) || n < lim[0] || n > lim[1] || (whole && !Number.isInteger(n)))
           throw new BadRequest(`${lim[2]}: give ${whole ? 'a whole number' : 'a number'} from ${lim[0]} to ${lim[1]}.`);
         (next as Record<string, number>)[k] = n;
@@ -1220,11 +1330,19 @@ export class FinanceDeskService {
         await tx.audit({ at: this.now(), actor: user.name, companyId: null, action: 'finance.teams.set', entity: 'fin_status', entityId: id, summary: `Finance teams changed: ${changed.join('; ')}. ${comment}`.slice(0, 900) });
         return finSettingsOf(row);
       }
-      const set = { by: user.name, byId: user.id, at: this.now(), comment };
-      const settings = { values: next, set, history: [...(row.settings?.history ?? []), ...(row.settings ? [{ values: row.settings.values, set: row.settings.set }] : [])].slice(-50) };
+      const set = { by: user.name, byId: user.id, at: this.now(), comment, from };
+      if (from > today) {
+        if (teamMoves.length) throw new BadRequest('Team moves apply at once; save them without a later start date.');
+        const scheduled = [...later, { from, values: next, set }].sort((a, b) => a.from.localeCompare(b.from) || a.set.at.localeCompare(b.set.at));
+        const settings = { values: base, set: row.settings?.set ?? set, history: row.settings?.history ?? [], scheduled };
+        await tx.update('finStatus', id, { settings });
+        await tx.audit({ at: this.now(), actor: user.name, companyId: null, action: 'finance.settings.scheduled', entity: 'fin_status', entityId: id, summary: `Finance settings to change from ${from}: ${changed.join('; ')}. ${comment}`.slice(0, 900) });
+        return finSettingsOf({ settings }, today);
+      }
+      const settings = { values: next, set, history: [...(row.settings?.history ?? []), ...(row.settings ? [{ values: row.settings.values, set: row.settings.set }] : [])].slice(-50), scheduled: later };
       await tx.update('finStatus', id, { settings });
       await tx.audit({ at: this.now(), actor: user.name, companyId: null, action: 'finance.settings.set', entity: 'fin_status', entityId: id, summary: `Finance settings changed: ${changed.join('; ')}. ${comment}`.slice(0, 900) });
-      return finSettingsOf({ settings });
+      return finSettingsOf({ settings }, today);
     });
   }
 
@@ -1397,7 +1515,7 @@ export class FinanceDeskService {
       actor: a,
       me: user.id,
       period,
-      rule: { ...RULES.financePayments.value, approvalExpiryDays: s.approvalExpiryDays },
+      rule: { ...RULES.financePayments.value, approvalExpiryDays: s.approvalExpiryDays, ceoNoticeFrom: s.ceoNoticeFrom },
       settings: s,
       teamsReady: this.teamsApprovals,
       companies: out,
@@ -2029,7 +2147,7 @@ export class FinanceDeskService {
         // Each person is reminded of their own level only: the CEO of CEO-level payments, the Finance Director of
         // Director-level ones, the team leader of leader-level ones. They can still act on lower levels on the screen.
         // Since 1 Nov 2026 the Finance Director is reminded of every payment to approve; the CEO of large ones.
-        const ownLevel = a.kind === 'director' || (a.kind === 'ceo' && p.amount >= RULES.financePayments.value.ceoNoticeFrom) ? p.needs : 'none';
+        const ownLevel = a.kind === 'director' || (a.kind === 'ceo' && p.amount >= d.settings.ceoNoticeFrom) ? p.needs : 'none';
         if (p.may.includes('review') && (a.kind === 'leader' || a.kind === 'deputy')) count.review += 1;
         if (p.may.includes('approve') && p.needs === ownLevel) {
           count.approve += 1;

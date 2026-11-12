@@ -1,3 +1,4 @@
+import type { FinSettingsValues } from "./types";
 import { AccessDenied } from "./access";
 import { isLead } from "./finance";
 import { isoDate } from "./finance";
@@ -41,6 +42,8 @@ export interface FinCashCtx {
   userById: (id: Id) => User | undefined;
   /** The Finance Director's petty cash limits, when set (Fauzan, 2 Nov 2026). */
   petty?: { voucherMax: number; floatMax: number };
+  /** C4 (Fauzan, 11 Nov 2026): the Finance settings in force; each rule number falls back to its rule default. */
+  fs?: Partial<FinSettingsValues>;
 }
 type Out<T> = {
   patch: Partial<FinStatus>;
@@ -396,7 +399,7 @@ export function finAdvancePrecheck(
   );
   const settleBy =
     input.settleBy == null || input.settleBy === ""
-      ? addDays(ctx.today, R().advanceSettleDays)
+      ? addDays(ctx.today, ctx.fs?.advanceSettleDays ?? R().advanceSettleDays)
       : isoDate(input.settleBy, "Settle by");
   if (settleBy < ctx.today)
     throw new BadRequest("The settle-by date is in the past.");
@@ -1244,6 +1247,7 @@ export function finCashExceptions(
   f: FinStatus,
   period: string,
   today: IsoDate,
+  s?: Partial<FinSettingsValues>,
 ): { key: string; text: string }[] {
   const out: { key: string; text: string }[] = [];
   const end = nextMonthDay(period, 0);
@@ -1269,7 +1273,7 @@ export function finCashExceptions(
         k.on.slice(0, 7) === nextMonthDay(period, 1).slice(0, 7),
     );
     const last = counts
-      .filter((k) => k.on <= nextMonthDay(period, R().pettyCountByDay))
+      .filter((k) => k.on <= nextMonthDay(period, s?.pettyCountByDay ?? R().pettyCountByDay))
       .slice(-1)[0];
     if (!last)
       out.push({
@@ -1400,7 +1404,7 @@ export function finCashHome(
 }
 
 /** What one person (any staff member) has to do on their own advances, cards and float. */
-export function finCashMine(f: FinStatus, userId: Id, today: IsoDate) {
+export function finCashMine(f: FinStatus, userId: Id, today: IsoDate, s?: Partial<FinSettingsValues>) {
   const advances = (f.advances ?? [])
     .filter(
       (x) =>
@@ -1426,7 +1430,7 @@ export function finCashMine(f: FinStatus, userId: Id, today: IsoDate) {
       issuer: c.issuer,
       last4: c.last4,
       statements: c.statements.filter((s) => !s.reviewed),
-      explainBy: (p: string) => nextMonthDay(p, R().cardExplainByDay),
+      explainBy: (p: string) => nextMonthDay(p, s?.cardExplainByDay ?? R().cardExplainByDay),
     }))
     .map(({ explainBy, ...c }) => ({
       ...c,

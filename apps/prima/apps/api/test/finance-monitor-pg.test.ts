@@ -68,4 +68,16 @@ describe('P100 fin on PostgreSQL', () => {
     const t1 = await q<{ company_id: string }>(`SELECT company_id FROM prima.fin_status WHERE (data->>'team')::int = 1`);
     assert.deepEqual(lead.companies.map((c) => c.companyId).sort(), t1.map((r) => r.company_id).sort());
   });
+
+  it('C4: the FD changes a confirmed finance number with a reason, now or from a later day; a team leader is refused', async () => {
+    await db.asUser('u-fd', (svc, u) => svc.finance.setSettings(u, { values: { icExplainMax: 1200 }, comment: 'Synthetic: auditor agreed' }));
+    await db.asUser('u-fd', (svc, u) => svc.finance.setSettings(u, { values: { ceoNoticeFrom: 300000 }, comment: 'Synthetic: board paper', from: '2027-06-01' }));
+    const row = (await q<{ s: { values: Record<string, number>; scheduled: { from: string; values: Record<string, number> }[] } }>(`SELECT data->'settings' AS s FROM prima.fin_status WHERE id = 'fin-pwvsb'`))[0].s;
+    assert.equal(row.values.icExplainMax, 1200);
+    assert.equal(row.values.ceoNoticeFrom, undefined);
+    assert.deepEqual(row.scheduled.map((x) => [x.from, x.values.ceoNoticeFrom]), [['2027-06-01', 300000]]);
+    const view = await db.asUser('u-fin-t1-lead', (svc, u) => svc.finance.settingsView(u));
+    assert.equal(view.values.ceoNoticeFrom, 200000);
+    await assert.rejects(db.asUser('u-fin-t1-lead', (svc, u) => svc.finance.setSettings(u, { values: { icExplainMax: 1 }, comment: 'Synthetic' })), /Finance Director or the CEO/);
+  });
 });

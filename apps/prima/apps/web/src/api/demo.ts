@@ -832,7 +832,7 @@ export class DemoApi implements Api {
       case 'finAddPaper':
         return this.svc.addFinPaper(u, a[0], a[1], a[2]);
       case 'finSetSettings':
-        return this.svc.finance.setSettings(u, { values: a[0], comment: a[1] });
+        return this.svc.finance.setSettings(u, { values: a[0], comment: a[1], ...(a[2] ? { from: a[2] } : {}) });
       case 'finCreateRequest':
         return this.svc.financeRequests.create(u, a[0], a[1]);
       case 'finRequestStep':
@@ -2682,8 +2682,8 @@ export class DemoApi implements Api {
   finKpi(period?: string) {
     return this.read((s, u) => s.financeKpi.view(u, period));
   }
-  finSetSettings(values: Record<string, unknown>, comment: string) {
-    return this.write<unknown>('finSetSettings', [values, comment]);
+  finSetSettings(values: Record<string, unknown>, comment: string, from?: string) {
+    return this.write<unknown>('finSetSettings', from ? [values, comment, from] : [values, comment]);
   }
   finRequests() {
     return this.read((s, u) => s.financeRequests.list(u));

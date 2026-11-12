@@ -1810,8 +1810,8 @@ export class HttpApi implements Api {
   finKpi(period?: string) {
     return this.call<Awaited<ReturnType<Api['finKpi']>>>('GET', `/finance/kpi${period ? `?period=${encodeURIComponent(period)}` : ''}`);
   }
-  finSetSettings(values: Record<string, unknown>, comment: string) {
-    return this.call<unknown>('POST', '/finance/settings', { values, comment });
+  finSetSettings(values: Record<string, unknown>, comment: string, from?: string) {
+    return this.call<unknown>('POST', '/finance/settings', { values, comment, ...(from ? { from } : {}) });
   }
   finRequests() {
     return this.call<Awaited<ReturnType<Api['finRequests']>>>('GET', '/finance/requests');

@@ -961,7 +961,7 @@ export interface Api extends ConnectionsClient, ExtractionClient, DraftHelpClien
   finRequests(): Promise<FinRequestList>;
   finCreateRequest(companyId: string, input: Record<string, unknown>): Promise<unknown>;
   finRequestStep(companyId: string, requestId: string, action: FinRequestAction, input: Record<string, unknown>): Promise<unknown>;
-  finSetSettings(values: Record<string, unknown>, comment: string): Promise<unknown>;
+  finSetSettings(values: Record<string, unknown>, comment: string, from?: string): Promise<unknown>;
   finCooStep(companyId: string, paymentId: string, action: 'approve' | 'return', input: Record<string, unknown>): Promise<unknown>;
   finControls(companyId: string, billPeriod?: string): Promise<FinControls>;
   finDashboard(): Promise<FinDashboard>;

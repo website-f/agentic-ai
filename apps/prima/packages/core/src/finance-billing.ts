@@ -1,3 +1,4 @@
+import type { FinSettingsValues } from "./types";
 import { AccessDenied } from "./access";
 import { isoDate } from "./finance";
 import { noSecrets } from "./finance";
@@ -161,7 +162,7 @@ export function finBillingAction(
     const sent = clients.find((x) => x.id === c.clientAccountId)?.invoices?.find((x) => x.period === period)?.amount ?? null;
     const target = due.expected ?? sent;
     const diffPct = target ? (Math.abs(amount - target) / target) * 100 : 0;
-    if (diffPct > R().billDiffPct)
+    if (diffPct > (ctx.fs?.billDiffPct ?? R().billDiffPct))
       note = requireReason(
         input.note,
         `the invoice is RM${amount.toFixed(2)}, not the ${due.expected ? "contract's" : 'amount sent to the client,'} RM${target!.toFixed(2)}`,
@@ -269,9 +270,9 @@ const openClaim = (c: FinGovtClaim) => c.status === 'submitted' || c.status === 
 const lastTouch = (c: FinGovtClaim) => c.log.reduce((d, l) => (l.at.slice(0, 10) > d ? l.at.slice(0, 10) : d), c.submittedOn);
 
 /** A claim past its expected payment date with no follow-up within the follow-up days (or past the next follow-up date). */
-export function finGovtStale(c: FinGovtClaim, today: IsoDate): boolean {
+export function finGovtStale(c: FinGovtClaim, today: IsoDate, followUpDays: number = R().govtFollowUpDays): boolean {
   if (!openClaim(c) || today <= c.expectedBy) return false;
-  return (c.nextOn != null && c.nextOn < today) || daysBetween(lastTouch(c), today) > R().govtFollowUpDays;
+  return (c.nextOn != null && c.nextOn < today) || daysBetween(lastTouch(c), today) > followUpDays;
 }
 
 export function finGovtAction(ctx: FinCashCtx, f: FinStatus, action: string, input: Record<string, unknown>): Out<unknown> {
@@ -287,7 +288,7 @@ export function finGovtAction(ctx: FinCashCtx, f: FinStatus, action: string, inp
     ...(on ? { on } : {}),
   });
   const nextOnOf = (v: unknown) => {
-    if (v == null || v === '') return addDays(ctx.today, R().govtFollowUpDays);
+    if (v == null || v === '') return addDays(ctx.today, ctx.fs?.govtFollowUpDays ?? R().govtFollowUpDays);
     const d = isoDate(v, 'Next follow-up');
     if (d <= ctx.today || daysBetween(ctx.today, d) > 60) throw new BadRequest('The next follow-up is after today and within 60 days.');
     return d;
@@ -301,7 +302,7 @@ export function finGovtAction(ctx: FinCashCtx, f: FinStatus, action: string, inp
     const claimRef = noSecrets(text(input.claimRef, 'Claim reference (ePerolehan, iGFMAS, letter or file number)', 2, 80), 'Claim reference');
     const submittedOn = isoDate(input.submittedOn, 'Date submitted');
     if (submittedOn > ctx.today) throw new BadRequest('The claim is recorded once it is submitted.');
-    const expectedBy = input.expectedBy ? isoDate(input.expectedBy, 'Expected payment date') : addDays(submittedOn, R().govtPayDays);
+    const expectedBy = input.expectedBy ? isoDate(input.expectedBy, 'Expected payment date') : addDays(submittedOn, ctx.fs?.govtPayDays ?? R().govtPayDays);
     if (expectedBy < submittedOn) throw new BadRequest('Payment is expected after the claim is submitted.');
     const contractId = typeof input.contractId === 'string' && input.contractId ? input.contractId.slice(0, 120) : null;
     const id = `govt-${f.companyId}-${String(list.length + 1).padStart(3, '0')}`;
@@ -352,7 +353,7 @@ export function finGovtAction(ctx: FinCashCtx, f: FinStatus, action: string, inp
     const on = isoDate(input.submittedOn, 'Date resubmitted');
     if (on > ctx.today || on < c.submittedOn) throw new BadRequest('The resubmission date is between the first submission and today.');
     const claimRef = input.claimRef ? noSecrets(text(input.claimRef, 'Claim reference', 2, 80), 'Claim reference') : c.claimRef;
-    const expectedBy = addDays(on, R().govtPayDays);
+    const expectedBy = addDays(on, ctx.fs?.govtPayDays ?? R().govtPayDays);
     const t = requireReason(input.comment, 'say what was corrected');
     const n: FinGovtClaim = {
       ...c,
@@ -482,9 +483,8 @@ function moneyIn(f: FinStatus): Located[] {
 }
 
 /** Money in with no match yet, oldest first, with how many days it has waited. */
-export function finUnidentified(f: FinStatus, today: IsoDate) {
+export function finUnidentified(f: FinStatus, today: IsoDate, limit: number = R().unidentifiedDays) {
   const claims = (f.govtClaims ?? []).filter(openClaim);
-  const limit = R().unidentifiedDays;
   return moneyIn(f)
     .filter(({ line }) => !line.match)
     .sort((a, b) => a.line.date.localeCompare(b.line.date))
@@ -593,7 +593,7 @@ export function finAllocateAction(ctx: FinCashCtx, f: FinStatus, action: string,
 // ---------- Close, home and view ----------
 
 /** Named at the month-end close: contracts not billed, government claims overdue and not followed up, money in not allocated. */
-export function finMoneyInExceptions(f: FinStatus, contracts: Contract[] | null, period: string, today: IsoDate) {
+export function finMoneyInExceptions(f: FinStatus, contracts: Contract[] | null, period: string, today: IsoDate, s?: Partial<FinSettingsValues>) {
   const out: { key: string; text: string }[] = [];
   const end = periodEnd(period);
   if (contracts)
@@ -606,12 +606,12 @@ export function finMoneyInExceptions(f: FinStatus, contracts: Contract[] | null,
           text: `${r.client} (contract ${r.contractRef}): "no invoice for ${period}" is waiting for someone else to check it`,
         });
     }
-  for (const c of (f.govtClaims ?? []).filter((x) => finGovtStale(x, today)))
+  for (const c of (f.govtClaims ?? []).filter((x) => finGovtStale(x, today, s?.govtFollowUpDays)))
     out.push({
       key: `govt:${c.id}`,
       text: `Government claim ${c.invoiceNo} (${c.agency}, RM${c.amount.toFixed(2)}) was expected by ${c.expectedBy} and has not been followed up`,
     });
-  for (const u of finUnidentified(f, today))
+  for (const u of finUnidentified(f, today, s?.unidentifiedDays))
     if (u.date <= end && u.late)
       out.push({
         key: `unid:${u.lineId}`,
@@ -627,16 +627,16 @@ export function finMoneyInExceptions(f: FinStatus, contracts: Contract[] | null,
 }
 
 /** Counts for Finance home. */
-export function finMoneyInHome(f: FinStatus, ctx: { userId: Id; reviewer: boolean }, contracts: Contract[] | null, period: string, today: IsoDate) {
+export function finMoneyInHome(f: FinStatus, ctx: { userId: Id; reviewer: boolean }, contracts: Contract[] | null, period: string, today: IsoDate, s?: Partial<FinSettingsValues>) {
   const rows = contracts ? finBillingRows(f, contracts, [], period) : [];
   const claims = f.govtClaims ?? [];
-  const unid = finUnidentified(f, today);
+  const unid = finUnidentified(f, today, s?.unidentifiedDays);
   return {
     billMissing: rows.filter((r) => r.status === 'missing').length,
     billToCheck: ctx.reviewer ? rows.filter((r) => r.status === 'none_to_check' && r.none?.byId !== ctx.userId).length : 0,
     govtOverdue: claims.filter((c) => openClaim(c) && c.expectedBy < today).length,
     govtOverdueAmount: round2(claims.filter((c) => openClaim(c) && c.expectedBy < today).reduce((n, c) => n + c.amount, 0)),
-    govtStale: claims.filter((c) => finGovtStale(c, today)).length,
+    govtStale: claims.filter((c) => finGovtStale(c, today, s?.govtFollowUpDays)).length,
     govtFollowToday: claims.filter((c) => openClaim(c) && c.nextOn != null && c.nextOn <= today).length,
     unidentified: unid.length,
     unidentifiedLate: unid.filter((u) => u.late).length,
@@ -645,11 +645,11 @@ export function finMoneyInHome(f: FinStatus, ctx: { userId: Id; reviewer: boolea
 }
 
 /** The Money in tab: billing for the chosen month, government claims, unidentified money in and allocations to check. */
-export function finMoneyInView(f: FinStatus, contracts: Contract[], clients: ClientAccount[], period: string, today: IsoDate) {
+export function finMoneyInView(f: FinStatus, contracts: Contract[], clients: ClientAccount[], period: string, today: IsoDate, s?: Partial<FinSettingsValues>) {
   const claims = [...(f.govtClaims ?? [])].sort((a, b) => Number(openClaim(b)) - Number(openClaim(a)) || a.expectedBy.localeCompare(b.expectedBy));
   return {
     period,
-    rule: RULES.financeMoneyIn,
+    rule: { ...RULES.financeMoneyIn, value: { ...RULES.financeMoneyIn.value, ...(s ? { billDiffPct: s.billDiffPct ?? R().billDiffPct, govtPayDays: s.govtPayDays ?? R().govtPayDays, govtFollowUpDays: s.govtFollowUpDays ?? R().govtFollowUpDays, unidentifiedDays: s.unidentifiedDays ?? R().unidentifiedDays } : {}) } },
     billing: finBillingRows(f, contracts, clients, period),
     contracts: contracts.filter((c) => c.companyId === f.companyId).map((c) => ({ id: c.id, ref: c.ref, client: c.clientName })),
     govt: claims
@@ -657,10 +657,10 @@ export function finMoneyInView(f: FinStatus, contracts: Contract[], clients: Cli
       .map((c) => ({
         ...c,
         overdue: openClaim(c) && c.expectedBy < today,
-        stale: finGovtStale(c, today),
+        stale: finGovtStale(c, today, s?.govtFollowUpDays),
         daysOut: openClaim(c) ? daysBetween(c.submittedOn, today) : null,
       })),
-    unidentified: finUnidentified(f, today),
+    unidentified: finUnidentified(f, today, s?.unidentifiedDays),
     toCheck: finAllocationsToCheck(f),
     // Recently allocated and checked, for reference.
     allocated: moneyIn(f)

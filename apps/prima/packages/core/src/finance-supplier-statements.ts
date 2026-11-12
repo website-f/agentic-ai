@@ -1,3 +1,4 @@
+import type { FinSettingsValues } from "./types";
 import { AccessDenied } from "./access";
 import { noSecrets } from "./finance";
 import { requireReason } from "./finance";
@@ -45,7 +46,7 @@ export function finLastQuarter(today: IsoDate): { quarter: string; endOn: IsoDat
 }
 
 /** The biggest suppliers by money released to them in the 12 months to the quarter end. */
-export function finBigSuppliers(f: FinStatus, endOn: IsoDate) {
+export function finBigSuppliers(f: FinStatus, endOn: IsoDate, top: number = RULES.financeSupplierStatements.value.topSuppliers) {
   const from = addDays(endOn, -365);
   const paid = new Map<Id, number>();
   for (const p of f.payments ?? [])
@@ -54,14 +55,14 @@ export function finBigSuppliers(f: FinStatus, endOn: IsoDate) {
   return [...paid.entries()]
     .map(([payeeId, amount]) => ({ payeeId, supplier: (f.payees ?? []).find((x) => x.id === payeeId)?.name ?? payeeId, paid12m: r2(amount) }))
     .sort((a, b) => b.paid12m - a.paid12m)
-    .slice(0, RULES.financeSupplierStatements.value.topSuppliers);
+    .slice(0, top);
 }
 
-export function finSupplierStatementsView(f: FinStatus, today: IsoDate) {
+export function finSupplierStatementsView(f: FinStatus, today: IsoDate, s?: Partial<FinSettingsValues>) {
   const { quarter, endOn } = finLastQuarter(today);
-  const dueOn = addDays(endOn, RULES.financeSupplierStatements.value.dueDays);
+  const dueOn = addDays(endOn, s?.supplierCheckDays ?? RULES.financeSupplierStatements.value.dueDays);
   const checks = f.supplierChecks ?? [];
-  const rows = finBigSuppliers(f, endOn).map((s) => ({ ...s, check: checks.find((c) => c.payeeId === s.payeeId && c.quarter === quarter) ?? null }));
+  const rows = finBigSuppliers(f, endOn, s?.topSuppliers).map((s) => ({ ...s, check: checks.find((c) => c.payeeId === s.payeeId && c.quarter === quarter) ?? null }));
   return {
     quarter,
     endOn,
@@ -80,7 +81,7 @@ export function finSupplierStatementAction(ctx: FinCashCtx, f: FinStatus, action
   const list = f.supplierChecks ?? [];
   if (action === 'record') {
     const { quarter, endOn } = finLastQuarter(ctx.today);
-    const big = finBigSuppliers(f, endOn).find((x) => x.payeeId === input.payeeId) ?? null;
+    const big = finBigSuppliers(f, endOn, ctx.fs?.topSuppliers).find((x) => x.payeeId === input.payeeId) ?? null;
     const payee = (f.payees ?? []).find((x) => x.id === input.payeeId);
     if (!payee) throw new NotFound('Supplier');
     if (list.some((c) => c.payeeId === payee.id && c.quarter === quarter)) throw new BadRequest(`${payee.name} is already checked for ${quarter}.`);
@@ -142,8 +143,8 @@ export function finSupplierStatementExceptions(f: FinStatus, today: IsoDate) {
     }));
 }
 
-export function finSupplierStatementHome(f: FinStatus, today: IsoDate, userId: Id, reviewer: boolean) {
-  const v = finSupplierStatementsView(f, today);
+export function finSupplierStatementHome(f: FinStatus, today: IsoDate, userId: Id, reviewer: boolean, s?: Partial<FinSettingsValues>) {
+  const v = finSupplierStatementsView(f, today, s);
   return {
     toCheck: v.rows.filter((r) => !r.check).length,
     toReview: reviewer ? v.rows.filter((r) => r.check && !r.check.reviewed && r.check.prepared.byId !== userId).length : 0,
