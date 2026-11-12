@@ -11583,9 +11583,16 @@ export class PrimaService {
     return user.role === 'pwvsb_officer' && user.department === 'it' && user.itRole === 'manager';
   }
 
-  /** The day measured against working hours (rule HR-STAFF-HOURS): late in, early out, break over the hour. */
-  private staffDayHours(day: IsoDate, clocks: StaffClock[], now: IsoDateTime) {
+  /**
+   * The day measured against working hours (rule HR-STAFF-HOURS): late in, early out, break over the hour. P100 J4: time
+   * away covered by an approved time slip is not a long break (nor late in or early out when the slip covers it).
+   */
+  private staffDayHours(day: IsoDate, clocks: StaffClock[], now: IsoDateTime, slips: { from: string; to: string }[] = []) {
     const h = RULES.staffHours.value;
+    const slipMs = slips.map((s) => [toMs(myt(day, s.from)), toMs(myt(day, s.to))] as const);
+    /** Minutes of a gap covered by the day's approved slips. */
+    const covered = (a: IsoDateTime, b: IsoDateTime) =>
+      slipMs.reduce((n, [s, e]) => n + Math.max(0, (Math.min(toMs(b), e) - Math.max(toMs(a), s)) / 60_000), 0);
     const sorted = [...clocks].sort((a, b) => a.in.receivedAt.localeCompare(b.in.receivedAt));
     if (!sorted.length) return null;
     const firstIn = sorted[0].in.receivedAt;
@@ -11593,13 +11600,22 @@ export class PrimaService {
     const lastOut = last.out?.receivedAt ?? null;
     let workedMin = 0;
     let breakMin = 0;
+    let slipMin = 0;
     sorted.forEach((c, i) => {
       workedMin += Math.max(0, minutesBetween(c.in.receivedAt, c.out?.receivedAt ?? now));
       const prevOut = i > 0 ? sorted[i - 1].out?.receivedAt : undefined;
-      if (prevOut) breakMin += Math.max(0, minutesBetween(prevOut, c.in.receivedAt));
+      if (prevOut) {
+        const gap = Math.max(0, minutesBetween(prevOut, c.in.receivedAt));
+        const slip = Math.min(gap, Math.round(covered(prevOut, c.in.receivedAt)));
+        slipMin += slip;
+        breakMin += gap - slip;
+      }
     });
-    const late = toMs(firstIn) > toMs(myt(day, h.start));
-    const early = !!lastOut && toMs(lastOut) < toMs(myt(day, h.end));
+    // A slip from the start of the day covers a late arrival; one to the end of the day an early leave.
+    const startMs = toMs(myt(day, h.start));
+    const endMs = toMs(myt(day, h.end));
+    const late = toMs(firstIn) > startMs && !slipMs.some(([s, e]) => s <= startMs && e >= toMs(firstIn));
+    const early = !!lastOut && toMs(lastOut) < endMs && !slipMs.some(([s, e]) => s <= toMs(lastOut!) && e >= endMs);
     return {
       start: h.start,
       end: h.end,
@@ -11611,6 +11627,8 @@ export class PrimaService {
       lateMin: late ? minutesBetween(myt(day, h.start), firstIn) : 0,
       early,
       longBreak: breakMin > h.breakMin,
+      /** P100 J4: minutes away on an approved time slip (not counted as a break). */
+      slipMin,
     };
   }
 
@@ -12215,6 +12233,12 @@ export class PrimaService {
     const userMap = new Map(staff.map((u) => [u.id, u]));
     const moves = await this.clocksMovement(clocks, userMap, (c) => homeUsers.has(c.userId));
     const dayPings = clocks.length ? await this.store.list('locationPings', { clockId: clocks.filter((c) => !c.out).map((c) => c.id) }) : [];
+    // P100 J4: the day's approved time slips, so time away on one is not flagged as a long break.
+    // Checked first: a query on a missing table (time slip module not installed) would abort the request.
+    const slipsOn = !this.store.hasTable || (await this.store.hasTable('timeSlips'));
+    const daySlips: { userId: Id; from: string; to: string }[] = slipsOn
+      ? (await this.store.list('timeSlips', { date: day })).filter((s) => s.status === 'approved' && s.date === day)
+      : [];
     const rows = await Promise.all(
       staff.map(async (u) => {
         const mine = clocks.filter((c) => c.userId === u.id).sort((a, b) => b.in.receivedAt.localeCompare(a.in.receivedAt));
@@ -12232,7 +12256,7 @@ export class PrimaService {
           clock: c ? { ...c, in: { ...c.in, image: '' }, out: c.out ? { ...c.out, image: '' } : null } : null,
           door: doorOf(u.id),
           status: !c ? ('not_in' as const) : c.out ? ('out' as const) : ('in' as const),
-          hours: this.staffDayHours(day, mine, this.now()),
+          hours: this.staffDayHours(day, mine, this.now(), daySlips.filter((s) => s.userId === u.id)),
           home: homeUsers.has(u.id),
           // P93: followed, but the last reading is outside the place they are held to: away.
           location: loc === 'tracked' && m?.measure === 'measured' && m.periods.at(-1)?.state === 'outside' ? ('away' as const) : loc,
@@ -26909,6 +26933,10 @@ export class PrimaService {
       this.statutorySettingsFor(period),
     ]);
     const people = await this.peopleForPeriod(people0, period);
+    // P100 J4: time slips past their make-up date are settled first (annual, else unpaid leave), so this month's payroll
+    // reads the unpaid leave for slip hours not worked back. Without the time slip module there is nothing to settle.
+    if ((!this.store.hasTable || (await this.store.hasTable('timeSlips'))) && (await this.settleTimeSlips(user)))
+      leaves.push(...(await this.store.list('leaveRequests', { companyId })).filter((l) => l.timeSlipId && !leaves.some((x) => x.id === l.id)));
     // A claim goes into one run only.
     const taken = new Set(runs.filter((r) => r.id !== id).flatMap((r) => r.lines.flatMap((l) => l.claimIds)));
     const allowanceTypes = await this.store.list('allowanceTypes', {});

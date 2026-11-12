@@ -387,6 +387,9 @@ export function buildStaffPayLine(args: {
     flags.push('LINDUNG 24 Jam deducted: opt-out choice not recorded');
   if (sums.gross > 0 && sums.deductions > sums.gross / 2) flags.push(`Deductions RM${sums.deductions.toFixed(2)} exceed half of gross pay: review the applicable deduction limits and zakat choice`);
   if (unpaidDays) flags.push(`${unpaidDays} day${unpaidDays === 1 ? '' : 's'} unpaid leave deducted`);
+  // P100 J4: unpaid leave Prima took for time slip hours not worked back (rule HR-TIME-SLIP) is named on the line.
+  const slipUnpaid = args.leaves.filter((l) => l.personId === p.id && l.kind === 'UNPAID' && l.status === 'approved' && l.from.slice(0, 7) === period && l.timeSlipId);
+  if (slipUnpaid.length) flags.push(`Of which ${slipUnpaid.reduce((n, l) => n + l.days, 0)} day(s) for time slip hours not worked back (${slipUnpaid.map((l) => l.timeSlipId).join(', ')})`);
   return {
     personId: p.id,
     staffNo: p.staffNo,
