@@ -602,6 +602,7 @@ import type { CooNotice } from "./types";
 import { canBeGuardPayPreparer, guardPayPreparerId, namesGuardPayPreparers, type GuardPayPreparer } from './guard-pay-preparers';
 import { leaveEscalationStep } from './leave-escalate';
 import { CashStandInService, isCashCeo } from './cash-stand-in';
+import { cmsOvertimeHours, staffOtPay, type StaffOtLine } from './staff-ot';
 import { OfflineSyncService } from "./offline-sync";
 import { FIN_AUTO } from "./finance";
 import { FinanceDeskService } from "./finance";
@@ -26914,6 +26915,8 @@ export class PrimaService {
     const last = runs.find((r) => r.period === this.prevPeriod(period));
     // P100 C1: the day divisor of the CEO's pay law for the month (26 today), for part months and unpaid days.
     const divisor = await this.staffPayDivisor(period);
+    // P100 C12 + J3: approved overtime (staff claims and CMS seats) not paid in another run, when HR's switch is on.
+    const ot = await this.staffOtForRun(companyId, period, id, runs);
     const lines = people
       .filter((p) => this.paidInPeriod(p, period))
       .sort((a, b) => a.staffNo.localeCompare(b.staffNo))
@@ -26927,7 +26930,7 @@ export class PrimaService {
           claims: claims.filter((c) => !taken.has(c.id)),
           kept: before
             ? {
-                extra: before.allowanceLines.filter((a) => !a.fixed).map(({ label, amount, typeId }) => ({ label, amount, ...(typeId ? { typeId } : {}) })),
+                extra: before.allowanceLines.filter((a) => !a.fixed && !a.overtime).map(({ label, amount, typeId }) => ({ label, amount, ...(typeId ? { typeId } : {}) })),
                 pcb: before.pcbSource === 'entered' ? (before.pcbBeforeZakat ?? before.pcb) : null,
                 // HR's part-month figure is kept only while the part of the month is the same.
                 partPay: before.partPay && before.partMonth && (() => {
@@ -26944,7 +26947,13 @@ export class PrimaService {
           allowanceFlagAbove: RULES.insiderControls.value.allowanceFlagAbove,
           types: allowanceTypes,
           statutory,
+          overtime: ot.get(p.id) && !ot.get(p.id)!.off ? ot.get(p.id) : null,
         });
+      })
+      .map((l) => {
+        const o = ot.get(l.personId);
+        // HR's switch off, or the person not named for overtime: the approved hours wait, never paid silently.
+        return o?.off ? { ...l, flags: [...l.flags, `${o.hours} h approved overtime not paid: HR's overtime switch is off or this person is not named for overtime`] } : l;
       })
       .map((l) => this.flagOwnLine(user, l));
     const step = { by: user.name, byId: user.id, at: this.now(), note: '' };
@@ -26987,6 +26996,167 @@ export class PrimaService {
     return Number.isFinite(d) && d > 0 ? d : RULES.staffPayroll.value.unpaidDivisor;
   }
 
+  // ---------- P100 C12 + J3: staff overtime lines in the staff payroll (Fauzan, 11 Nov 2026) ----------
+
+  /** Overtime lines (empty before the office module staff-ot-v1 is in this database). */
+  private async staffOtRows(filter: { companyId?: Id; personId?: Id; userId?: Id } = {}): Promise<StaffOtLine[]> {
+    try {
+      return await this.store.list('staffOtLines', filter);
+    } catch (err) {
+      if (err instanceof BadRequest) return [];
+      throw err;
+    }
+  }
+
+  /** The approved overtime each person in a month's run is paid, when HR's overtime switch is on; never twice. */
+  private async staffOtForRun(companyId: Id, period: string, runId: Id, runs: StaffPayRun[]) {
+    const s = await this.overtimeSetting();
+    const law = RULES.staffOvertime.value;
+    const taken = new Set(runs.filter((r) => r.id !== runId).flatMap((r) => r.lines.flatMap((l) => l.overtime?.ids ?? [])));
+    const rows = (await this.staffOtRows({ companyId })).filter((l) => l.status === 'approved' && l.date <= periodEnd(period) && !taken.has(l.id));
+    const out = new Map<Id, { ids: Id[]; hours: number; amount: number; hourly: number; off: boolean }>();
+    for (const personId of new Set(rows.map((l) => l.personId))) {
+      const mine = rows.filter((l) => l.personId === personId);
+      const p = await this.store.get('people', personId);
+      // HR's switch off, or the person not named for overtime: nothing is paid; the approved hours wait.
+      const on = s.enabled && s.personIds.includes(personId);
+      const pay = staffOtPay(p?.basicPay ?? 0, mine, s, law.daysDivisor, law.hoursPerDay);
+      out.set(personId, { ids: on ? mine.map((l) => l.id) : [], hours: pay.hours, amount: on ? pay.amount : 0, hourly: pay.hourly, off: !on });
+    }
+    return out;
+  }
+
+  /** The overtime board: HR sees every line and decides; a staff member sees and claims their own. */
+  private async staffOtView(user: User) {
+    if (user.integration) throw new AccessDenied('hr.monitor', '(overtime)');
+    const s = await this.overtimeSetting();
+    const hr = this.hrMaker(user) || this.keepsHr(user);
+    const me = user.personId ? await this.store.get('people', user.personId) : undefined;
+    const mine = me ? (await this.staffOtRows({ personId: me.id })).filter((l) => l.personId === me.id) : [];
+    const all = hr ? await this.staffOtRows({}) : [];
+    const runs = hr ? await this.store.list('staffPayRuns', {}) : [];
+    const paidIn = new Map(runs.flatMap((r) => r.lines.flatMap((l) => (l.overtime?.ids ?? []).map((id) => [id, `${r.period} (${r.stage})`] as const))));
+    const tag = (l: StaffOtLine) => ({ ...l, paidIn: paidIn.get(l.id) ?? null });
+    return {
+      enabled: s.enabled,
+      rates: { normal: s.normal, restDay: s.restDay, publicHoliday: s.publicHoliday },
+      hoursPerDay: RULES.staffOvertime.value.hoursPerDay,
+      mayClaim: !!me && me.role === 'office' && s.enabled && s.personIds.includes(me.id),
+      canDecide: this.hrMaker(user),
+      canImport: this.hrMaker(user),
+      mine: mine.sort((a, b) => b.date.localeCompare(a.date)).map(tag),
+      lines: all.sort((a, b) => Number(a.status !== 'pending') - Number(b.status !== 'pending') || b.date.localeCompare(a.date)).slice(0, 300).map(tag),
+    };
+  }
+
+  /** A staff member claims their own overtime for a day, with a reason; HR approves it later. */
+  private async claimStaffOt(user: User, b: Record<string, string | undefined>) {
+    const s = await this.overtimeSetting();
+    const me = user.personId ? await this.store.get('people', user.personId) : undefined;
+    if (!me || me.role !== 'office' || user.integration) throw new AccessDenied('hr.monitor', '(overtime: office staff only)');
+    if (!s.enabled) throw new BadRequest('Overtime is switched off by HR.');
+    if (!s.personIds.includes(me.id)) throw new BadRequest('HR has not named you for overtime.');
+    const date = String(b.date ?? '');
+    const today = this.today();
+    if (!isRealDate(date) || date > today || date < addDays(today, -31)) throw new BadRequest('Give a day in the last 31 days.');
+    const hours = Math.round(Number(b.hours) * 100) / 100;
+    if (!Number.isFinite(hours) || hours <= 0 || hours > 12) throw new BadRequest('Give the overtime hours for that day (up to 12).');
+    const kind = (['normal', 'restDay', 'publicHoliday'] as const).find((k) => k === b.kind) ?? null;
+    if (!kind) throw new BadRequest('Choose a working day, a rest day or a public holiday.');
+    const reason = String(b.reason ?? '').trim().slice(0, 300);
+    if (reason.length < 5) throw new BadRequest('Say what the overtime was for.');
+    const at = this.now();
+    const row: StaffOtLine = {
+      id: `ot-${me.id}-${date}-${at.replace(/\D/g, '').slice(8, 14)}`,
+      companyId: me.companyId,
+      personId: me.id,
+      userId: user.id,
+      name: me.name,
+      date,
+      hours,
+      kind,
+      source: 'claim',
+      cmsShiftId: null,
+      reason,
+      status: 'pending',
+      raised: { by: user.name, byId: user.id, at },
+      decided: null,
+    };
+    await this.store.transaction(async (tx) => {
+      await tx.insert('staffOtLines', row);
+      await tx.audit({ at, actor: user.name, companyId: me.companyId === GROUP_EMPLOYER_ID ? null : me.companyId, action: 'hr.ot_claim', entity: 'staff_ot_line', entityId: row.id, summary: `Overtime claimed: ${hours} h on ${date} (${kind}): ${reason}` });
+    });
+    return row;
+  }
+
+  /** HR brings in a month's CMS overtime: each completed seat's hours past the normal day, one line per seat. */
+  private async importCmsOt(user: User, b: Record<string, string | undefined>) {
+    if (!this.hrMaker(user)) throw new AccessDenied('hr.monitor', '(overtime: HR only)');
+    const s = await this.overtimeSetting();
+    if (!s.enabled) throw new BadRequest('Overtime is switched off. Switch it on and name the CMS staff first.');
+    const month = String(b.period ?? '');
+    if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month) || month > this.today().slice(0, 7)) throw new BadRequest('Give the month as YYYY-MM.');
+    const law = RULES.staffOvertime.value;
+    const [shifts, staff, users, holidays] = await Promise.all([this.store.list('cmsShifts'), this.store.list('cmsStaff'), this.store.list('users'), this.store.list('publicHolidays', {})]);
+    const national = holidayDates(holidays, null);
+    const at = this.now();
+    let made = 0;
+    let skipped = 0;
+    await this.store.transaction(async (tx) => {
+      for (const sh of shifts.filter((x) => !x.cancelled && x.date.startsWith(month) && x.clockIn && x.clockOut)) {
+        const cs = cmsStaffOf(staff, sh);
+        const u = cs?.userId ? users.find((x) => x.id === cs.userId) : undefined;
+        const p = u?.personId ? await tx.get('people', u.personId) : undefined;
+        const hours = cmsOvertimeHours(sh, law.hoursPerDay);
+        if (!hours) continue;
+        if (!p || p.role !== 'office' || !s.personIds.includes(p.id)) {
+          skipped += 1;
+          continue;
+        }
+        const id = `ot-cms-${sh.id}`;
+        if (await tx.get('staffOtLines', id)) continue;
+        await tx.insert('staffOtLines', {
+          id,
+          companyId: p.companyId,
+          personId: p.id,
+          userId: u!.id,
+          name: p.name,
+          date: sh.date,
+          hours,
+          kind: national.has(sh.date) ? 'publicHoliday' : 'normal',
+          source: 'cms',
+          cmsShiftId: sh.id,
+          reason: `CMS ${sh.post} seat ${sh.seat}, ${sh.date}: clocked past the normal ${law.hoursPerDay} h`,
+          status: 'pending',
+          raised: { by: user.name, byId: user.id, at },
+          decided: null,
+        });
+        made += 1;
+      }
+      await tx.audit({ at, actor: user.name, companyId: null, action: 'hr.ot_cms_import', entity: 'staff_ot_line', entityId: month, summary: `CMS overtime for ${month} brought in: ${made} new line(s) to approve; ${skipped} seat(s) of staff not named for overtime left out.` });
+    });
+    return { made, skipped };
+  }
+
+  /** HR approves or refuses an overtime line with a reason; nobody decides their own. */
+  private async decideStaffOt(user: User, b: Record<string, string | undefined>) {
+    if (!this.hrMaker(user)) throw new AccessDenied('hr.monitor', '(overtime: HR only)');
+    const id = String(b.id ?? '').slice(0, 160);
+    const approve = String(b.decision) === 'approve';
+    const note = requireApprovalReason(String(b.note ?? ''), approve ? 'approve the overtime' : 'refuse the overtime');
+    return this.store.transaction(async (tx) => {
+      await tx.lock?.('staffOtLines', id);
+      const l = await tx.get('staffOtLines', id);
+      if (!l) throw new NotFound('Overtime line');
+      if (l.status !== 'pending') throw new BadRequest('This overtime is already decided.');
+      if (l.userId === user.id || l.raised.byId === user.id || (user.personId && l.personId === user.personId)) throw new BadRequest('Someone else in HR decides your own overtime.');
+      const at = this.now();
+      await tx.update('staffOtLines', id, { status: approve ? 'approved' : 'refused', decided: { by: user.name, byId: user.id, at, note } });
+      await tx.audit({ at, actor: user.name, companyId: l.companyId === GROUP_EMPLOYER_ID ? null : l.companyId, action: approve ? 'hr.ot_approve' : 'hr.ot_refuse', entity: 'staff_ot_line', entityId: id, summary: `Overtime ${l.hours} h on ${l.date} for ${l.name} ${approve ? 'approved' : 'refused'}: ${note}` });
+      return (await tx.get('staffOtLines', id))!;
+    });
+  }
+
   /** HR's own line, with one-off allowances, is flagged for the Chief of Staff and the COO (insider abuse audit). */
   private flagOwnLine(user: User, line: StaffPayLine): StaffPayLine {
     if (!user.personId || line.personId !== user.personId) return line;
@@ -27013,7 +27183,7 @@ export class PrimaService {
     const pcb = patch.pcb === undefined ? (old.pcbSource === 'entered' ? (old.pcbBeforeZakat ?? old.pcb) : null) : patch.pcb;
     if (pcb != null && !(Number.isFinite(pcb) && pcb >= 0 && pcb < 100000)) throw new BadRequest('Give the PCB in RM.');
     const allowanceTypes = await this.store.list('allowanceTypes', {});
-    const extra = (patch.extra ?? old.allowanceLines.filter((a) => !a.fixed)).map((a) => {
+    const extra = (patch.extra ?? old.allowanceLines.filter((a) => !a.fixed && !a.overtime)).map((a) => {
       const typeId = typeof a.typeId === 'string' && a.typeId ? a.typeId.slice(0, 100) : null;
       const t = typeId ? allowanceTypes.find((x) => x.id === typeId) : undefined;
       if (typeId && !t) throw new BadRequest('Choose the allowance from HR\'s allowance list.');
@@ -27063,6 +27233,8 @@ export class PrimaService {
       allowanceFlagAbove: RULES.insiderControls.value.allowanceFlagAbove,
       types: allowanceTypes,
       statutory: await this.statutorySettingsFor(run.period),
+      // P100 C12 + J3: the overtime already on the line stays as it was worked out at preparing.
+      overtime: old.overtime ?? null,
     });
     line.flags = [
       ...new Set([...this.flagOwnLine(user, line).flags, ...old.flags.filter((f) => f.startsWith('Basic pay changed') || f.startsWith('Salary account changed'))]),
@@ -31320,6 +31492,13 @@ export class PrimaService {
       case 'guard-pay-preparer':
         return this.setGuardPayPreparer(user, b);
       // P100 B2: the CEO turns the FD's cash stand-in on (dates or one request), ends it, or marks the FD's decisions seen.
+      // P100 C12 + J3: staff overtime lines.
+      case 'ot-claim':
+        return this.claimStaffOt(user, b);
+      case 'ot-cms-import':
+        return this.importCmsOt(user, b);
+      case 'ot-decide':
+        return this.decideStaffOt(user, b);
       case 'cash-stand-in-set':
       case 'cash-stand-in-end':
       case 'cash-stand-in-seen':
@@ -31350,6 +31529,8 @@ export class PrimaService {
     switch (view) {
       case 'cash-stand-in':
         return new CashStandInService(this.store, () => this.now()).view(user);
+      case 'staff-ot':
+        return this.staffOtView(user);
       default:
         throw new NotFound('Pay view');
     }

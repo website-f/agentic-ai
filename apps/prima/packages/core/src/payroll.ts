@@ -292,6 +292,8 @@ export function buildStaffPayLine(args: {
   types?: AllowanceType[];
   /** The CEO's statutory settings for the month. */
   statutory?: StatutorySettings;
+  /** P100 C12 + J3: approved overtime to pay on this line (HR's switch on, the person named). */
+  overtime?: { ids: string[]; hours: number; hourly: number; amount: number } | null;
 }): StaffPayLine {
   const { person: p, period } = args;
   const zakatChoice = staffZakatPreview(p, period);
@@ -321,7 +323,13 @@ export function buildStaffPayLine(args: {
     const drift = Math.round((partPay.allowances - fixedLines.reduce((n, a) => n + a.amount, 0)) * 100) / 100;
     fixedLines[fixedLines.length - 1].amount = Math.round((fixedLines[fixedLines.length - 1].amount + drift) * 100) / 100;
   }
-  const allowanceLines = [...fixedLines, ...extra.map((a) => typed(a, false))];
+  const otPay = args.overtime && args.overtime.amount > 0 ? args.overtime : null;
+  const allowanceLines = [
+    ...fixedLines,
+    ...extra.map((a) => typed(a, false)),
+    // Overtime is not wages for EPF (KWSP); SOCSO, EIS and PCB count it; not part of the HRD levy basis.
+    ...(otPay ? [{ label: `Overtime (${otPay.hours} h approved)`, amount: otPay.amount, fixed: false, typeId: undefined as string | undefined, epf: false, socso: true, pcb: true, hrd: false, overtime: true }] : []),
+  ];
   const unpaidDays = args.leaves
     .filter((l) => l.personId === p.id && l.kind === 'UNPAID' && l.status === 'approved' && l.from.slice(0, 7) === period)
     .reduce((n, l) => n + l.days, 0);
@@ -392,6 +400,7 @@ export function buildStaffPayLine(args: {
     claimIds: claims.map((c) => c.id),
     bank: p.bank ?? null,
     flags,
+    overtime: otPay,
     partMonth,
     partAuto,
     partPay: corrected,

@@ -60,6 +60,8 @@ const MODULE_TABLES: Partial<Record<TableName, string>> = {
   guardPayPreparers: 'The guard pay preparer list is not set up in this database yet (module guard-pay-preparers-v1).',
   // P100 pay (B2): the FD's cash stand-ins (db/modules/cash-stand-ins-v1.sql, office prima-setup).
   cashStandIns: 'The cash stand-in is not set up in this database yet (module cash-stand-ins-v1).',
+  // P100 pay (C12 + J3): staff overtime lines (db/modules/staff-ot-v1.sql, office prima-setup).
+  staffOtLines: 'Staff overtime lines are not set up in this database yet (module staff-ot-v1).',
 };
 
 // Exported for the per-request read snapshots (read-cache.ts, P83).
@@ -257,6 +259,7 @@ ownerTestCheckins: 'prima.owner_test_checkins',
 clockSnaps: 'prima.clock_snaps',
 guardPayPreparers: 'prima.guard_pay_preparers',
 cashStandIns: 'prima.cash_stand_ins',
+staffOtLines: 'prima.staff_ot_lines',
 loginHandovers: 'prima.login_handovers',
 hrFilings: 'prima.hr_filings',
 hrCases: 'prima.hr_cases',
@@ -431,6 +434,7 @@ const HAS_COMPANY_COLUMN = new Set<TableName>([
 'locationPings',
 'clockSnaps',
 'guardPayPreparers',
+'staffOtLines',
 'remoteArrangements',
 'remoteDays',
 'flexRequests',

@@ -39,6 +39,7 @@ import {
 import { Card, Empty, PageHead, Person, Stat, Stats, Steps, type StepState } from "../kit";
 import "../styles/payroll.css";
 import "../styles/pay-p100.css";
+import { StaffOvertime } from "./StaffOvertime";
 
 /**
  * Staff payroll (Fauzan, 27 Oct 2026). Guards and officers are paid from the JA Group app; staff are paid here. HR
@@ -148,11 +149,18 @@ export function StaffPayView() {
         )}
       </PageHead>
       {current === "runs" ? (
-        <Runs data={data} onOpen={setOpen} seesPayChanges={seesPayChanges} />
+        <>
+          {/* P100 C12 + J3: staff and CMS overtime HR approves, paid once in the next payroll prepared. */}
+          <StaffOvertime />
+          <Runs data={data} onOpen={setOpen} seesPayChanges={seesPayChanges} />
+        </>
       ) : current === "tables" ? (
         <StatTablesView />
       ) : (
-        <Mine data={data} />
+        <>
+          <StaffOvertime />
+          <Mine data={data} />
+        </>
       )}
       {open && <RunDrawer runId={open} onClose={() => setOpen(null)} />}
       {preparing && (

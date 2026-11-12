@@ -426,3 +426,11 @@ channel is switched on), and connecting an AI model for drafting.
   payslip show the working; HR may still correct it with a reason (kept beside the worked-out figure). The month is no
   longer held for a hand-typed figure. Open point for Fauzan: with a 5-day office week a whole month has about 22 working
   days, so a part month comes to about 85% of the calendar share; confirm whether Saturdays should count.
+- **Overtime in the staff payroll (C12 + J3).** HR's overtime switch (Staff overtime setting, HR-OT) now controls whether
+  overtime is paid in the staff payroll run. Overtime lines come from staff claims (a staff member HR named claims a day's
+  hours with a reason) and from the CMS roster (HR brings in a month: each completed CMS seat's hours past the 8-hour day,
+  one line per seat). HR approves or refuses each with a reason, never their own. An approved line is paid once, in the
+  first staff payroll prepared after it, at the HR-OT rates on basic / 26 / 8; it is not EPF wages (SOCSO, EIS and PCB
+  count it). Switch off, or the person not named: approved hours wait and the line says so. Unapproved lines are never
+  paid. Office module `db/modules/staff-ot-v1.sql` (`prima.staff_ot_lines`, forced row-level security: the person and HR
+  and leadership read; the person adds only their own pending claim; HR decides).
