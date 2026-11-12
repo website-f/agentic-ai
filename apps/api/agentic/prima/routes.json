@@ -5584,6 +5584,22 @@
  },
  {
   "method": "GET",
+  "path": "api/pikm",
+  "name": "board",
+  "doc": "The PIKM records this person works, with what is due: medicals, briefings, files kept, client packs, alarm and CCTV.",
+  "query": [
+   "companyId"
+  ]
+ },
+ {
+  "method": "POST",
+  "path": "api/pikm/act",
+  "name": "act",
+  "doc": "One PIKM step: record, check, propose, decide, prepare, send or record a service visit.",
+  "body": "Record<string, unknown>"
+ },
+ {
+  "method": "GET",
   "path": "api/products",
   "name": "productBoard"
  },

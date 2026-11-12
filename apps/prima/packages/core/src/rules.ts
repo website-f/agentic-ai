@@ -2093,6 +2093,13 @@ export const RULES = {
     'Policy',
     "Fauzan, 5 Nov 2026: extend the existing Prima modules into one connected quality and compliance system for the SIRIM/PIKM code and ISO 9001:2015, not a separate app. One requirements and evidence register for both standards, each standard and edition kept separate. ACT keeps the list, links existing approved records and checks the evidence; a person who links evidence never checks it. The app never declares a company compliant: missing evidence shows Unknown. Gaps go to an ACT finding (the existing corrective-action steps), not a second CAPA system. Competency matrix per role in HR: credentials are read from the existing records; skills are assessed by a manager or officer, never by the person themselves. Staff never see or fill in clause checklists. Fauzan, 8 Nov 2026 approved as built: 12-month evidence review, 60-day due-soon, refreshers every 12 months for guards and officers and 24 months for office Prima and PDPA training, the four starter role profiles, the screening check lists, repeat screening every 36 months (staff and guards) and 12 months (directors and shareholders), and OM or company manager recording code-of-conduct briefings.",
   ),
+  // P100 newa (E9, Fauzan 11 Nov 2026): PIKM records Prima did not keep.
+  pikmRecords: rule(
+    'PIKM-RECORDS',
+    { medicalFromAge: 56, medicalEveryMonths: 12, briefingFirstShiftDays: 7, keepYears: 7 },
+    'Policy',
+    'Approved by Fauzan, 11 Nov 2026: build the PIKM quality items: a yearly medical for guards aged 56 and over, a site risk briefing before deployment, personnel records kept 7 years, the client information pack and office alarm and CCTV records (PIKM Part 1, 2022 draft: 7.1, 9.4, 9.3, 6.3). Prima shows guards rostered at a site for the first time in the next 7 days as "to brief". The 7 years run from the last working day; a file under a legal hold stays; Prima never deletes a record line, the HR Director only clears a file for disposal. Employment Act records stay 6 years by law (HR-JOIN-LEAVE); the longer PIKM period applies.',
+  ),
   fwRecharge: rule(
     'FW-RECHARGE',
     {

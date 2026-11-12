@@ -4019,6 +4019,7 @@ export class DemoApi implements Api {
   private newaApply(u: User, area: string, action: string, body: Record<string, unknown>): Promise<unknown> {
     if (area === 'socso') return this.svc.socsoExtras.act(u, action, body);
     if (area === 'fw') return this.svc.fwExtras.act(u, action, body);
+    if (area === 'pikm') return this.svc.pikm.act(u, action, body);
     throw new ApiError('Unknown step.', 400);
   }
   socsoPaymentsAbroad() {
@@ -4035,6 +4036,12 @@ export class DemoApi implements Api {
   }
   fwExtraAct(action: string, body: Record<string, unknown>) {
     return this.write<unknown>('newaAct', ['fw', action, body]);
+  }
+  pikmBoard(opts: { companyId?: string } = {}) {
+    return this.read((s, u) => s.pikm.board(u, opts));
+  }
+  pikmAct(action: string, body: Record<string, unknown>) {
+    return this.write<Awaited<ReturnType<Api['pikmAct']>>>('newaAct', ['pikm', action, body]);
   }
 }
 

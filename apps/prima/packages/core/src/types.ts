@@ -3441,6 +3441,8 @@ export interface Dataset {
   guardPings: GuardPing[];
   qmsItems: import('./quality-ops').QmsItem[];
   qmsNonconformities: import('./quality-ops').QmsNonconformity[];
+  /** P100 (E9): PIKM records (db/modules/quality-pikm-v1.sql): medical 56+, briefings, 7-year files, client packs, office alarm and CCTV. */
+  qmsPikmRecords: import('./quality-pikm').PikmRecord[];
   fwRecruitFiles: FwRecruitFile[];
 }
 

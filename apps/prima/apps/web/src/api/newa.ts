@@ -12,6 +12,9 @@ export type HostelStaysBoard = Awaited<ReturnType<PrimaService['fwExtras']['stay
 /** E8: foreign workers on long SOCSO MC with a permit coming due. */
 export type PermitsOnMcBoard = Awaited<ReturnType<PrimaService['fwExtras']['permitsBoard']>>;
 
+/** E9: PIKM records (medical 56+, briefings, 7-year files, client packs, office alarm and CCTV). */
+export type PikmBoard = Awaited<ReturnType<PrimaService['pikm']['board']>>;
+
 export interface NewaClient {
   /** E4: payments to dependants abroad waiting for a decision or a transfer. */
   socsoPaymentsAbroad(): Promise<SocsoPayAbroadBoard>;
@@ -23,4 +26,8 @@ export interface NewaClient {
   fwPermitsOnMc(): Promise<PermitsOnMcBoard>;
   /** E8: check in, a check-out memo, its decision, or the permit task; the server checks who may. */
   fwExtraAct(action: string, body: Record<string, unknown>): Promise<unknown>;
+  /** E9: the PIKM records this person works, with what is due. */
+  pikmBoard(opts?: { companyId?: string }): Promise<PikmBoard>;
+  /** E9: one PIKM step; the server checks who may do it and every field. */
+  pikmAct(action: string, body: Record<string, unknown>): Promise<import('@prima/core').PikmRecord>;
 }

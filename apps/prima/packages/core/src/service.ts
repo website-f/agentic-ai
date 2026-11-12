@@ -1057,6 +1057,7 @@ import type { FwRecruitStepRecord } from "./types";
 import type { FwContractLanguage } from "./types";
 import { SocsoExtrasService } from "./socso-extras";
 import { FwExtrasService } from "./fw-extras";
+import { PikmService } from "./quality-pikm";
 
 
 
@@ -54103,9 +54104,18 @@ export class PrimaService {
     return new FwExtrasService(this.store, this);
   }
 
+  /** E9: PIKM records next to the quality register (medical 56+, briefings, 7-year files, client packs, alarm and CCTV). */
+  get pikm(): PikmService {
+    return new PikmService(this.store, this);
+  }
+
   /** Reminders from the P100 newa workflows, for the person's own Home. */
   private async newaHome(user: User): Promise<HomeItem[]> {
-    const parts = await Promise.all([this.socsoExtras.homeItems(user).catch(() => [] as HomeItem[]), this.fwExtras.homeItems(user).catch(() => [] as HomeItem[])]);
+    const parts = await Promise.all([
+      this.socsoExtras.homeItems(user).catch(() => [] as HomeItem[]),
+      this.fwExtras.homeItems(user).catch(() => [] as HomeItem[]),
+      this.pikm.homeItems(user).catch(() => [] as HomeItem[]),
+    ]);
     return parts.flat();
   }
 }

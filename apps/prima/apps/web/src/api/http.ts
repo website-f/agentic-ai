@@ -3023,5 +3023,11 @@ export class HttpApi implements Api {
   fwExtraAct(action: string, body: Record<string, unknown>) {
     return this.call<unknown>('POST', '/fw-extras/act', { ...body, action });
   }
+  pikmBoard(opts: { companyId?: string } = {}) {
+    return this.call<Awaited<ReturnType<Api['pikmBoard']>>>('GET', `/pikm${opts.companyId ? `?companyId=${encodeURIComponent(opts.companyId)}` : ''}`);
+  }
+  pikmAct(action: string, body: Record<string, unknown>) {
+    return this.call<Awaited<ReturnType<Api['pikmAct']>>>('POST', '/pikm/act', { ...body, action });
+  }
 }
 

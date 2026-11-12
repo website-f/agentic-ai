@@ -279,3 +279,5 @@ export * from './pdf-table';
 export * from './socso-extras';
 // P100 newa: E8 foreign workers (hostel stays, check-out memo, permit task during SOCSO MC).
 export * from './fw-extras';
+// P100 newa: E9 PIKM records.
+export * from './quality-pikm';

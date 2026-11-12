@@ -2677,10 +2677,12 @@
    "POST purchasing/suppliers/:/:"
   ],
   "quality": [
+   "GET pikm",
    "GET quality/foundation",
    "GET quality/matrix",
    "GET quality/operations",
    "GET quality/register",
+   "POST pikm/act",
    "POST quality/:"
   ],
   "rba": [

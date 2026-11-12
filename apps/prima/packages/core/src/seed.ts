@@ -950,6 +950,7 @@ export function generateDataset(opts: SeedOptions): Dataset {
     qmsFoundation: [],
     qmsItems: [],
     qmsNonconformities: [],
+    qmsPikmRecords: [],
     compProfiles: [],
     compAssessments: [],
     phoneExtensions: [],
