@@ -2031,6 +2031,7 @@
    "POST finance/settings"
   ],
   "finsites": [
+   "GET finance/site-margins",
    "GET finance/unbilled-sites",
    "POST finance/unbilled-sites/:/clear"
   ],

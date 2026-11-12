@@ -86,7 +86,9 @@ describe('Government Operations monitor', () => {
     expect(row.statutory).toBeGreaterThan(0);
     expect(row.hostel).toBe(0);
     expect(row.managementFee).toBe(10_000);
-    expect(row.margin).toBeCloseTo(100_000 - 3780 - row.statutory - row.itemCharges - 10_000, 2);
+    // F2 (11 Nov 2026): the rate book's shared costs per guard come off too (the demo seed's uniform RM25 + equipment RM15).
+    expect(row.sharedCost).toBe(40);
+    expect(row.margin).toBeCloseTo(100_000 - 3780 - row.statutory - row.itemCharges - 10_000 - 40, 2);
     expect(row.tone).toBe('ok');
     expect(row.notes).toContain('No invoice recorded for the month, so the contract value is used');
     expect(r.notes.join(' ')).toMatch(/employer EPF, SOCSO and EIS/);
@@ -159,7 +161,7 @@ describe('Government Operations monitor', () => {
     // RM4,000 shared by two people staying: RM2,000 for our guard, all of it on this site.
     expect(row.hostel).toBe(2000);
     expect(row.managementFee).toBe(9500);
-    expect(row.margin).toBeCloseTo(95_000 - 3780 - row.statutory - 2000 - row.itemCharges - 9500, 2);
+    expect(row.margin).toBeCloseTo(95_000 - 3780 - row.statutory - 2000 - row.itemCharges - 9500 - (row.sharedCost ?? 0), 2);
   });
 
   it('lets only the Finance Director or the CEO enter a management fee, with the agreement reference, and audits it', async () => {

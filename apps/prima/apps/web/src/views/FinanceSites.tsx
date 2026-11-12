@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { api, type UnbilledSites } from '../api';
+import { api, type SiteMargins, type UnbilledSites } from '../api';
+import { useApp } from '../App';
 import { Chip, ErrorNotice, Loading, dateTimeLabel, useAction, useLoad } from '../ui';
 import '../styles/fin-monitor.css';
 
@@ -10,6 +11,7 @@ import '../styles/fin-monitor.css';
 
 const rm = (n: number | null | undefined) => (n == null ? 'Unknown' : `RM${n.toLocaleString('en-MY', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`);
 const hrs = (n: number | null | undefined) => (n == null ? '–' : `${n.toLocaleString('en-MY', { maximumFractionDigits: 1 })} h`);
+type Tab = 'unbilled' | 'margins';
 
 function Head({ children }: { children?: React.ReactNode }) {
   return (
@@ -27,10 +29,24 @@ function Head({ children }: { children?: React.ReactNode }) {
 }
 
 export function FinanceSitesView() {
+  const { me } = useApp();
+  // A company manager sees the billing check for their own company; profit per site is for Finance, the COO and the CEO.
+  const margins = me.user.role !== 'company_manager';
+  const [tab, setTab] = useState<Tab>('unbilled');
   return (
     <div className="page fm-page">
       <Head />
-      <Unbilled />
+      {margins && (
+        <div className="tabbar" role="tablist" aria-label="Site billing and profit">
+          <button role="tab" aria-selected={tab === 'unbilled'} onClick={() => setTab('unbilled')}>
+            Unbilled sites
+          </button>
+          <button role="tab" aria-selected={tab === 'margins'} onClick={() => setTab('margins')}>
+            Profit per site
+          </button>
+        </div>
+      )}
+      {tab === 'unbilled' || !margins ? <Unbilled /> : <Margins />}
     </div>
   );
 }
@@ -211,3 +227,113 @@ function Flag({ f, companyId, canClear, onDone }: { f: FlagRow; companyId: strin
     </li>
   );
 }
+
+// ---------- F2: profit per site ----------
+
+function Margins() {
+  const [month, setMonth] = useState<string | undefined>(undefined);
+  const { data, error } = useLoad(() => api.siteMargins(month), [month]);
+  const [q, setQ] = useState('');
+  const [below, setBelow] = useState(false);
+  if (error) return <ErrorNotice error={error} />;
+  if (!data) return <Loading what="profit per site" />;
+  const shown = data.sites.filter((s) => (!below || s.belowTarget) && (!q.trim() || `${s.siteName} ${s.companyName}`.toLowerCase().includes(q.trim().toLowerCase())));
+  return (
+    <>
+      <div className="fm-tiles">
+        <div className="fm-tile" data-tone={data.belowTarget ? 'crit' : undefined}>
+          <span className="fm-tile-label">Sites below target</span>
+          <span className="fm-tile-value">{data.belowTarget}</span>
+          <span className="fm-tile-note">of {data.sites.length} sites in {data.month}</span>
+        </div>
+        <div className="fm-tile" data-tone={data.targetNotSet ? 'unknown' : undefined}>
+          <span className="fm-tile-label">Target not set</span>
+          <span className="fm-tile-value">{data.targetNotSet}</span>
+          <span className="fm-tile-note">Companies with no target margin (FD or CEO, Rate book)</span>
+        </div>
+        <div className="fm-tile">
+          <span className="fm-tile-label">Overtime rate used</span>
+          <span className="fm-tile-value">{data.otRate}x</span>
+          <span className="fm-tile-note">From the pay law in force</span>
+        </div>
+      </div>
+      <section className="fm-card" aria-labelledby="fm-mar-h">
+        <div className="fm-card-head">
+          <div>
+            <h2 id="fm-mar-h">Profit per site</h2>
+            <p>{data.basis}</p>
+          </div>
+        </div>
+        <div className="fm-card-body">
+          <div className="fm-tools">
+            <input className="input" type="month" aria-label="Month" value={data.month} max={data.month} onChange={(e) => setMonth(e.target.value || undefined)} />
+            <input className="input" aria-label="Find a site or company" placeholder="Find a site or company" value={q} onChange={(e) => setQ(e.target.value)} />
+            <label className="check">
+              <input type="checkbox" checked={below} onChange={(e) => setBelow(e.target.checked)} /> Below target only
+            </label>
+          </div>
+          {shown.length === 0 ? (
+            <p className="muted">No site matches this.</p>
+          ) : (
+            <div className="fm-table-wrap">
+              <table className="fm-table">
+                <thead>
+                  <tr>
+                    <th scope="col">Site</th>
+                    <th scope="col" className="fm-num">
+                      Revenue
+                    </th>
+                    <th scope="col" className="fm-num">
+                      Cost
+                    </th>
+                    <th scope="col" className="fm-num">
+                      Margin
+                    </th>
+                    <th scope="col" className="fm-num">
+                      Target
+                    </th>
+                    <th scope="col">Why</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {shown.map((s) => (
+                    <tr key={s.siteId} data-tone={s.belowTarget ? 'crit' : undefined}>
+                      <th scope="row">
+                        {s.siteName}
+                        <span className="fm-sub">{s.companyName}</span>
+                      </th>
+                      <td className="fm-num">{rm(s.revenue)}</td>
+                      <td className="fm-num">
+                        {rm(s.totalCost)}
+                        <span className="fm-sub">
+                          pay {rm(s.guardCost)} · EPF/SOCSO/EIS {rm(s.statutory)} · shared {s.sharedCost == null ? 'Rate not set' : rm(s.sharedCost)}
+                        </span>
+                      </td>
+                      <td className="fm-num">
+                        <span className={s.belowTarget ? 'fm-red' : s.marginPct == null ? 'fm-unknown' : undefined}>{s.marginPct == null ? 'Unknown' : `${s.marginPct}%`}</span>
+                        <span className="fm-sub">{rm(s.margin)}</span>
+                      </td>
+                      <td className="fm-num">{s.targetPct == null ? <span className="fm-notset">Target not set</span> : `${s.targetPct}%`}</td>
+                      <td>
+                        {s.why.length ? (
+                          <ul className="fm-reasons">
+                            {s.why.map((w, i) => (
+                              <li key={i}>{w}</li>
+                            ))}
+                          </ul>
+                        ) : (
+                          <span className="fm-sub">{s.notes[0] ?? '–'}</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      </section>
+    </>
+  );
+}
+

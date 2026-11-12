@@ -3107,6 +3107,14 @@
  },
  {
   "method": "GET",
+  "path": "api/finance/site-margins",
+  "name": "siteMargins",
+  "query": [
+   "month"
+  ]
+ },
+ {
+  "method": "GET",
   "path": "api/finance/today",
   "name": "financeToday"
  },

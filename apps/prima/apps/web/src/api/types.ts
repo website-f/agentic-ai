@@ -440,6 +440,7 @@ export type ManagementFeeBills = R<'managementFeeBills'>;
 // P100 fin: C5 rate book.
 export type RateBook = R<'rateBook'>;
 export type UnbilledSites = R<'unbilledSites'>;
+export type SiteMargins = R<'siteMargins'>;
 export type ArmsOverview = R<'armsOverview'>;
 export type ArmsDetail = R<'arms'>;
 export type ArmsControl = R<'armsControl'>;
@@ -1224,6 +1225,7 @@ export interface Api extends ConnectionsClient, ExtractionClient, DraftHelpClien
   rateBook(): Promise<RateBook>;
   setRate(input: { key: string; companyId: string; from?: string; amount: number | null; reason: string }): Promise<unknown>;
   unbilledSites(period?: string): Promise<UnbilledSites>;
+  siteMargins(month?: string): Promise<SiteMargins>;
   clearUnbilledFlag(companyId: string, input: { key: string; reason: string }): Promise<unknown>;
   setManagementFee(
     companyId: string,

@@ -25,7 +25,7 @@ import type { User } from "./types";
  * people (quotations) and its operations monitors (site profit) can read them under the company wall. A rate set "for
  * every company" is written to each company's record as a group rate; a company rate overrides it.
  */
-export type RateKey = 'hostel_np' | 'transport_np' | 'uniform' | 'equipment';
+export type RateKey = 'hostel_np' | 'transport_np' | 'uniform' | 'equipment' | 'target_margin';
 export const RATE_KEYS: RateKey[] = ['hostel_np', 'transport_np', 'uniform', 'equipment'];
 
 export const RATE_INFO: Record<RateKey, { label: string; unit: string; who: 'nepali' | 'all'; max: number }> = {
@@ -33,6 +33,8 @@ export const RATE_INFO: Record<RateKey, { label: string; unit: string; who: 'nep
   transport_np: { label: 'Transport, per Nepali guard', unit: 'RM per guard a month', who: 'nepali', max: 100_000 },
   uniform: { label: 'Uniform, per guard', unit: 'RM per guard a month', who: 'all', max: 100_000 },
   equipment: { label: 'Equipment, per guard', unit: 'RM per guard a month', who: 'all', max: 100_000 },
+  // F2 (Fauzan, 11 Nov 2026): the target margin per site, set by the FD or the CEO; no value is preset.
+  target_margin: { label: 'Target margin per site', unit: '% of the site revenue', who: 'all', max: 100 },
 };
 
 /** One change to a rate on a company's Finance record. Append-only. amount null: not set (group) or "use the group rate" (company). */
@@ -144,11 +146,13 @@ export class RateBookService {
       earliestFrom: monthBeforeRate(m),
       canSet: r.set,
       keys: RATE_KEYS.map((k) => ({ key: k, ...RATE_INFO[k] })),
+      targetKey: { key: 'target_margin' as const, ...RATE_INFO.target_margin },
       companies: rows
         .map((f) => ({
           companyId: f.companyId,
           companyName: nameOf(f.companyId),
           rates: RATE_KEYS.map((k) => ({ key: k, now: rateFor(f, k, m), later: rateChangesAfter(f, k, m) })),
+          target: { now: rateFor(f, 'target_margin', m), later: rateChangesAfter(f, 'target_margin', m) },
         }))
         .sort((a, b) => a.companyName.localeCompare(b.companyName)),
       history,
@@ -196,7 +200,7 @@ export class RateBookService {
    */
   async set(user: User, input: { key: unknown; companyId: unknown; from?: unknown; amount: unknown; reason: unknown }) {
     if (!this.roleOf(user).set) throw new AccessDenied('view', '(only the Finance Director or the CEO sets rates)');
-    const key = RATE_KEYS.find((k) => k === input.key);
+    const key = ([...RATE_KEYS, 'target_margin'] as RateKey[]).find((k) => k === input.key);
     if (!key) throw new BadRequest('Choose which rate to set.');
     const m = this.today().slice(0, 7);
     const from = typeof input.from === 'string' && input.from ? input.from : m;

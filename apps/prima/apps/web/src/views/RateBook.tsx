@@ -13,7 +13,7 @@ import '../styles/fin-monitor.css';
  */
 
 type Data = RateBook;
-type Key = Data['keys'][number]['key'];
+type Key = Data['keys'][number]['key'] | Data['targetKey']['key'];
 type InForce = Data['companies'][number]['rates'][number]['now'];
 
 const rm = (n: number) => `RM${n.toLocaleString('en-MY', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -157,6 +157,34 @@ export function RateBookView() {
           )}
         </div>
       </section>
+      <section className="fm-card" aria-labelledby="fm-target-h">
+        <div className="fm-card-head">
+          <div>
+            <h2 id="fm-target-h">Target margin per site</h2>
+            <p>The margin each site should make, as a % of its revenue. Profit per site flags a site below it. No target is preset: until one is set the screen says Target not set.</p>
+          </div>
+        </div>
+        <div className="fm-card-body">
+          <ul className="fm-list">
+            {shown.map((c) => (
+              <li key={c.companyId}>
+                <span className="fm-list-main">
+                  <strong>{c.companyName}</strong>
+                  {c.target.now ? (
+                    <span>
+                      {c.target.now.amount}% · {c.target.now.scope === 'group' ? 'Every company' : 'This company'} · from <span data-no-translate>{c.target.now.from}</span>
+                    </span>
+                  ) : (
+                    <span>
+                      <span className="fm-notset">Target not set</span>
+                    </span>
+                  )}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      </section>
       <OtherLists data={data} />
       <section className="fm-card" aria-labelledby="fm-hist-h">
         <div className="fm-card-head">
@@ -174,7 +202,8 @@ export function RateBookView() {
                 <li key={`${h.at}-${h.key}-${h.companyId ?? 'all'}-${i}`}>
                   <span className="fm-list-main">
                     <strong>
-                      {data.keys.find((k) => k.key === h.key)?.label}: {h.amount == null ? (h.scope === 'group' ? 'Rate not set' : 'Back to the rate for every company') : rm(h.amount)}
+                      {[...data.keys, data.targetKey].find((k) => k.key === h.key)?.label}:{' '}
+                      {h.amount == null ? (h.scope === 'group' ? 'Rate not set' : 'Back to the rate for every company') : h.key === 'target_margin' ? `${h.amount}%` : rm(h.amount)}
                     </strong>
                     <span>
                       {h.companyName} · from <span data-no-translate>{h.from}</span> · {h.by}, {dateTimeLabel(h.at)}
@@ -265,7 +294,7 @@ function EnterRate({ data, onClose, onSaved }: { data: Data; onClose: () => void
           <label className="field">
             <span className="label">Rate</span>
             <select className="select" value={key} onChange={(e) => setKey(e.target.value as Key)}>
-              {data.keys.map((k) => (
+              {[...data.keys, data.targetKey].map((k) => (
                 <option key={k.key} value={k.key}>
                   {k.label}
                 </option>
@@ -288,7 +317,7 @@ function EnterRate({ data, onClose, onSaved }: { data: Data; onClose: () => void
             <input className="input" type="month" min={data.earliestFrom} value={from} aria-invalid={!fromOk} onChange={(e) => setFrom(e.target.value)} />
           </label>
           <label className="field">
-            <span className="label">{data.keys.find((k) => k.key === key)?.unit}</span>
+            <span className="label">{[...data.keys, data.targetKey].find((k) => k.key === key)?.unit}</span>
             <input className="input" inputMode="decimal" placeholder="Rate not set" value={amount} aria-invalid={!amountOk} onChange={(e) => setAmount(e.target.value)} />
           </label>
           <label className="field fm-span">

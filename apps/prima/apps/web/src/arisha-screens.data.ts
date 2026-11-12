@@ -5888,6 +5888,6 @@ export const SCREEN_GUIDES: ScreenGuide[] = [
         "means": "The hours the contract bills for the month; for a fixed fee there are none."
       }
     ],
-    "notes": "Prima monitors only. SQL Account stays the book of record and nothing here posts to it. An OM or another company's manager cannot see this list."
+    "notes": "Prima monitors only. SQL Account stays the book of record and nothing here posts to it. An OM or another company's manager cannot see this list. The \"Profit per site\" tab (Finance, the FD, the CEO and the COO) shows each site's revenue, cost (guard pay with overtime from the pay law, EPF, SOCSO, EIS, the rate book's transport, uniform and equipment, fees) and margin against the target margin the FD or the CEO sets in the Rate book; until one is set it says \"Target not set\"."
   }
 ];

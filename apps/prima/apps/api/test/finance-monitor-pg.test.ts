@@ -94,6 +94,19 @@ describe('P100 fin on PostgreSQL', () => {
     await assert.rejects(db.asUser(manager, (svc, u) => svc.clearUnbilledFlag(u, co, { key: '2026-10|x|no_contract|', reason: 'Synthetic reason' })), /Finance reviewer/);
   });
 
+  it('F2: profit per site runs through the restricted login for the FD and the COO; a manager and an OM are refused; the target needs the FD', async () => {
+    await db.asUser('u-fd', (svc, u) => svc.setRate(u, { key: 'target_margin', companyId: 'all', from: '2026-11', amount: 15, reason: 'Synthetic group target' }));
+    const fd = await db.asUser('u-fd', (svc, u) => svc.siteMargins(u));
+    assert.ok(fd.sites.length > 0);
+    assert.ok(fd.sites.every((s) => s.targetPct === 15));
+    const coo = await db.asUser('u-coo', (svc, u) => svc.siteMargins(u));
+    assert.equal(coo.sites.length, fd.sites.length);
+    await assert.rejects(db.asUser('u-coo', (svc, u) => svc.setRate(u, { key: 'target_margin', companyId: 'all', from: '2026-11', amount: 1, reason: 'Synthetic' })), /Finance Director or the CEO/);
+    await assert.rejects(db.asUser(manager, (svc, u) => svc.siteMargins(u)), /profit per site/);
+    const om = (await q<{ id: string }>(`SELECT id FROM prima.users WHERE data->>'opsTier' = 'om' ORDER BY id LIMIT 1`))[0];
+    await assert.rejects(db.asUser(om.id, (svc, u) => svc.siteMargins(u)), /profit per site/);
+  });
+
   it('C4: the FD changes a confirmed finance number with a reason, now or from a later day; a team leader is refused', async () => {
     await db.asUser('u-fd', (svc, u) => svc.finance.setSettings(u, { values: { icExplainMax: 1200 }, comment: 'Synthetic: auditor agreed' }));
     await db.asUser('u-fd', (svc, u) => svc.finance.setSettings(u, { values: { ceoNoticeFrom: 300000 }, comment: 'Synthetic: board paper', from: '2027-06-01' }));
