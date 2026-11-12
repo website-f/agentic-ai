@@ -5,6 +5,7 @@ import { api, type ItemBoard } from '../../api';
 import { Chip, Drawer, ErrorNotice, Kpi, Loading, dateLabel, dateTimeLabel, useAction, useLoad } from '../../ui';
 import { act, any, CAT_LABEL, FilterChips, partyName, readFile, rolesOf, skuName, STATE_TONE, TabIntro } from './shared';
 import { Card, Empty, Search, Stat, Stats, Toolbar } from '../../kit';
+import { UniformRequestsPanel } from '../UniformRequests';
 
 // Uniform allowance per guard (Fauzan, 6 Nov 2026). Never taken from pay.
 // Moved unchanged from views/Items.tsx in the P85 split; laid out by the item register styles (styles/items.css).
@@ -28,6 +29,8 @@ export function Uniforms({ data }: { data: ItemBoard }) {
         title="Uniforms"
         sub={`Each guard gets at least ${u.rule.minPerYear} and at most ${u.rule.maxPerYear} uniform pieces a year, usually one every ${u.rule.everyMonths} months. A 4th or 5th piece is paid by the guard with a receipt; never taken from pay.`}
       />
+      {/* I1 (Fauzan, 11 Nov 2026): the OM's requests to the Goodwill store and the store's queue, in one place. */}
+      <UniformRequestsPanel place="uniforms" />
       <Stats>
         <Stat label="Due now" value={n('due')} tone={n('due') ? 'warn' : 'ok'} onClick={() => setFilter('due')} />
         <Stat label={`Below ${u.rule.minPerYear} this year`} value={u.rows.filter((r) => r.belowMin).length} tone="neutral" />

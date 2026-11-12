@@ -1443,6 +1443,15 @@ export class HttpApi implements Api {
   stockReturn(id: string, condition: Parameters<Api['stockReturn']>[1], note: string) {
     return this.call<unknown>('POST', `/purchasing/issues/${encodeURIComponent(id)}/return`, { condition, note });
   }
+  uniformRequests() {
+    return this.call<Awaited<ReturnType<Api['uniformRequests']>>>('GET', '/purchasing/uniform-requests');
+  }
+  requestUniform(input: Parameters<Api['requestUniform']>[0]) {
+    return this.call<unknown>('POST', '/purchasing/uniform-requests', input);
+  }
+  decideUniformRequest(id: string, action: Parameters<Api['decideUniformRequest']>[1], input: Parameters<Api['decideUniformRequest']>[2]) {
+    return this.call<unknown>('POST', `/purchasing/uniform-requests/${encodeURIComponent(id)}/${action}`, input);
+  }
   ceoInstructions() {
     return this.call<Awaited<ReturnType<Api['ceoInstructions']>>>('GET', '/ceo/instructions');
   }

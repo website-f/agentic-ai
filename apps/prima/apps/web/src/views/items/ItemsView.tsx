@@ -56,6 +56,9 @@ type Tab = 'home' | 'find' | 'catalogue' | 'stock' | 'labels' | 'moves' | 'site'
 
 export function ItemsView() {
   const { data, error } = useLoad(() => api.itemBoard(), []);
+  // I1 (P100): an OM who asks the Goodwill store for uniforms, or the store that decides, gets the Uniforms tab even with
+  // no guards in the item register (the request panel lives there). False when the module is not installed yet.
+  const { data: asksUniforms } = useLoad(() => api.uniformRequests().then((r) => r.canRequest || r.canDecide, () => false), []);
   const [tab, setTab] = useState<Tab | null>(null);
   const [adding, setAdding] = useState<{ what: ItemAddIntent; oldTag?: string; n: number } | null>(null);
   const [importing, setImporting] = useState(false);
@@ -103,7 +106,7 @@ export function ItemsView() {
     ['site', 'Site board', null, data.siteChoices.length > 0, <MapPinIcon key="i" size={18} aria-hidden="true" />],
     ['cases', 'Cases', openCases || null, has, <SirenIcon key="i" size={18} aria-hidden="true" />],
     ['care', 'After-sale care', overdueCare || null, has, <HeartbeatIcon key="i" size={18} aria-hidden="true" />],
-    ['uniforms', 'Uniforms', due || null, data.uniforms.rows.length > 0, <ShirtFoldedIcon key="i" size={18} aria-hidden="true" />],
+    ['uniforms', 'Uniforms', due || null, data.uniforms.rows.length > 0 || !!asksUniforms, <ShirtFoldedIcon key="i" size={18} aria-hidden="true" />],
     ['reports', 'Reports', null, has, <ChartBarIcon key="i" size={18} aria-hidden="true" />],
     ['finance', 'Finance and SQL', null, any(data, 'finance', 'manager', 'view'), <CoinsIcon key="i" size={18} aria-hidden="true" />],
     ['mine', 'My items', data.mine.length, true, <UserIcon key="i" size={18} aria-hidden="true" />],

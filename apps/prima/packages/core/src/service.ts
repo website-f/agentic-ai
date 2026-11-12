@@ -368,6 +368,8 @@ import type { PurRequest } from "./types";
 import type { PurSupplier } from "./types";
 import type { PurCategory } from "./types";
 import type { StockIssue } from "./types";
+import type { StockRequest } from "./types";
+import { UNIFORM_RULE } from "./items";
 import type { WitnessInput } from "./types";
 import type { StockItem } from "./types";
 import type { CreditLoan } from "./types";
@@ -1712,6 +1714,19 @@ function withCooNotice(list: CooNotice[] | undefined, recId: Id, n: Omit<CooNoti
 function unseenCooNotices(list: CooNotice[] | undefined, userId: Id): CooNotice[] {
   return (list ?? []).filter((n) => n.to.includes(userId) && !n.seen.includes(userId));
 }
+
+/**
+ * Uniform requests from Operations Managers (Fauzan, 11 Nov 2026) follow the uniform allowance (Fauzan, 6 Nov 2026):
+ * up to 3 free pieces in 12 months, usually 1 every 6 months (earlier with the reason given), a 4th or 5th only when the
+ * guard pays (receipt recorded, never from pay), the 6th refused. At most 3 pieces in one request.
+ */
+export const UNIFORM_REQUEST_RULE = {
+  freePerYear: UNIFORM_RULE.maxPerYear,
+  paidMaxPerYear: UNIFORM_RULE.paidMaxPerYear,
+  everyMonths: UNIFORM_RULE.everyMonths,
+  maxPerRequest: 3,
+  source: 'Fauzan, 6 and 11 Nov 2026',
+} as const;
 
 export class PrimaService {
   constructor(
@@ -24375,6 +24390,196 @@ export class PrimaService {
     });
   }
 
+  // ---------- Uniform requests from Operations Managers (Fauzan, 11 Nov 2026) ----------
+  // "Create button from om to need uniform. Let the om collect signature as the shared device or guard app still not
+  // available." The OM asks the Goodwill store for a uniform for a guard; the store issues it through the usual
+  // handover (store -> OM -> patrolling officer -> guard), so the OM collects the signatures on their own phone.
+
+  /** Who may ask: a government-side OM or Regional OM, who then carries the item and collects the signatures. */
+  private canRequestUniform(user: User): boolean {
+    return !user.integration && this.isGovOm(user);
+  }
+
+  /** Uniform pieces a person had from the Goodwill store in the last 12 months (returned pieces still count once). */
+  private async uniformHistory(personId: Id, today: IsoDate) {
+    const [issues, items] = await Promise.all([
+      this.store.list('stockIssues', { companyId: [GOV_OPS_COMPANY_ID] }),
+      this.store.list('stockItems', { companyId: [GOV_OPS_COMPANY_ID] }),
+    ]);
+    const uniform = new Set(items.filter((i) => i.kind === 'UNIFORM').map((i) => i.id));
+    const from = addMonthsIso(today, -12);
+    const mine = issues.filter((i) => i.personId === personId && uniform.has(i.itemId) && dateOf(i.issuedAt) > from);
+    const last = mine.map((i) => dateOf(i.issuedAt)).sort().pop() ?? null;
+    return { pieces: mine.reduce((n, i) => n + i.qty, 0), last };
+  }
+
+  /** The OM's own requests, or for the store, Procurement and the OGM every request; plus the uniforms in the store. */
+  async uniformRequests(user: User) {
+    const store = this.purRoleOf(user, GOV_OPS_COMPANY_ID);
+    const decide = store === 'store' || store === 'proc';
+    const ask = this.canRequestUniform(user);
+    if (!decide && !ask && !this.isOgm(user)) throw new AccessDenied('view', '(government Operations Managers, the OGM and the Goodwill store)');
+    const [rows, items] = await Promise.all([
+      this.store.list('stockRequests', { companyId: [GOV_OPS_COMPANY_ID] }),
+      this.store.list('stockItems', { companyId: [GOV_OPS_COMPANY_ID] }),
+    ]);
+    const since = addDays(this.today(), -60);
+    const seeAll = decide || this.isOgm(user);
+    // P100: the patrolling officers the store may name when it issues (active, of the companies with open requests).
+    const billTo = [...new Set(rows.filter((r) => r.status === 'open').map((r) => r.billTo))];
+    const patrols =
+      decide && billTo.length
+        ? (await this.store.list('people', { companyId: billTo }))
+            .filter((p) => p.status === 'active' && p.role === 'patrol_officer')
+            .map((p) => ({ id: p.id, name: p.name, companyId: p.companyId }))
+            .sort((a, b) => a.name.localeCompare(b.name))
+        : [];
+    return {
+      me: user.id,
+      canRequest: ask,
+      canDecide: decide,
+      patrols,
+      rule: UNIFORM_REQUEST_RULE,
+      uniforms: items
+        .filter((i) => i.kind === 'UNIFORM')
+        .map((i) => ({ id: i.id, name: `${i.name}${i.size ? ` (${i.size})` : ''}`, onHand: i.onHand }))
+        .sort((a, b) => a.name.localeCompare(b.name)),
+      requests: rows
+        .filter((r) => (seeAll || r.requestedById === user.id) && (r.status === 'open' || dateOf(r.requestedAt) >= since))
+        .sort((a, b) => Number(b.status === 'open') - Number(a.status === 'open') || b.requestedAt.localeCompare(a.requestedAt)),
+    };
+  }
+
+  /** The OM asks the Goodwill store for a uniform for one guard or patrolling officer, with a reason. */
+  async requestUniform(
+    user: User,
+    input: { staffNo: string; stockItemId: Id; qty: number; reason: string; guardPays?: { receiptNo: string; amount: number } | null },
+  ) {
+    if (!this.canRequestUniform(user)) throw new AccessDenied('view', '(a government Operations Manager asks for a uniform)');
+    const staffNo = String(input.staffNo ?? '').trim().toUpperCase().slice(0, 40);
+    const reason = String(input.reason ?? '').trim().slice(0, 300);
+    if (!staffNo) throw new BadRequest("Give the guard's staff number.");
+    if (!reason) throw new BadRequest('Say why the guard needs it (new guard, worn out, torn, wrong size…).');
+    const qty = Number(input.qty);
+    if (!Number.isInteger(qty) || qty < 1 || qty > UNIFORM_REQUEST_RULE.maxPerRequest) throw new BadRequest(`Pieces: 1 to ${UNIFORM_REQUEST_RULE.maxPerRequest}.`);
+    const item = await this.store.get('stockItems', String(input.stockItemId ?? ''));
+    if (!item || item.companyId !== GOV_OPS_COMPANY_ID || item.kind !== 'UNIFORM') throw new BadRequest('Choose a uniform from the Goodwill store.');
+    const person = (await this.store.list('people', { staffNo })).find((p) => p.status === 'active');
+    const today = this.today();
+    if (
+      !person ||
+      isCentralEmployer(person.companyId) ||
+      !['guard', 'patrol_officer', 'supervisor'].includes(person.role) ||
+      !can(user, await this.grants(), today, 'view', person.companyId)
+    )
+      throw new BadRequest(`No active guard or officer with staff number ${staffNo} that you cover.`);
+    await this.store.lock?.('people', person.id);
+    const all = await this.store.list('stockRequests', { companyId: [GOV_OPS_COMPANY_ID] });
+    const open = all.filter((r) => r.personId === person.id && r.status === 'open');
+    if (open.some((r) => r.stockItemId === item.id)) throw new BadRequest(`${person.name} already has an open request for ${item.name}. Wait for the store.`);
+    const history = await this.uniformHistory(person.id, today);
+    const waiting = open.reduce((n, r) => n + r.qty, 0);
+    const after = history.pieces + waiting + qty;
+    const R = UNIFORM_REQUEST_RULE;
+    if (after > R.paidMaxPerYear)
+      throw new BadRequest(`${person.name} would have ${after} pieces in 12 months. No more than ${R.paidMaxPerYear}; the 6th is refused.`);
+    let guardPays: StockRequest['guardPays'] = null;
+    if (after > R.freePerYear) {
+      const receiptNo = String(input.guardPays?.receiptNo ?? '').trim().slice(0, 60);
+      const amount = Math.round(Number(input.guardPays?.amount) * 100) / 100;
+      if (!receiptNo || !(amount > 0))
+        throw new BadRequest(
+          `${person.name} would have ${after} pieces in 12 months; ${R.freePerYear} are free. A 4th or 5th piece only when the guard pays: give the receipt number and amount. It is never taken from pay.`,
+        );
+      guardPays = { receiptNo, amount };
+    }
+    const early = !!history.last && addMonthsIso(history.last, R.everyMonths) > today;
+    const at = this.now();
+    const r: StockRequest = {
+      id: `ureq-${person.id}-${toMs(at)}-${all.length + 1}`,
+      companyId: GOV_OPS_COMPANY_ID,
+      personId: person.id,
+      personName: person.name,
+      staffNo: person.staffNo,
+      billTo: person.companyId,
+      stockItemId: item.id,
+      itemName: `${item.name}${item.size ? ` (${item.size})` : ''}`,
+      qty,
+      reason,
+      history,
+      early,
+      guardPays,
+      requestedAt: at,
+      requestedBy: user.name,
+      requestedById: user.id,
+      status: 'open',
+      decided: null,
+    };
+    return this.store.transaction(async (tx) => {
+      await tx.insert('stockRequests', r);
+      await tx.audit({
+        at,
+        actor: user.name,
+        companyId: GOV_OPS_COMPANY_ID,
+        action: 'store.uniform.request',
+        entity: 'stock_request',
+        entityId: r.id,
+        summary: `${user.name} asked for ${qty} x ${r.itemName} for ${person.name} (${person.staffNo}): ${reason}${early ? ' (within 6 months of the last piece)' : ''}${
+          guardPays ? `; guard pays, receipt ${guardPays.receiptNo}, RM${guardPays.amount.toFixed(2)}` : ''
+        }.`,
+      });
+      return r;
+    });
+  }
+
+  /**
+   * The Goodwill store issues a requested uniform (through the requesting OM, then the patrolling officer, then the
+   * guard) or refuses it with a reason; the OM who asked may cancel while it is open.
+   */
+  async decideUniformRequest(user: User, id: Id, input: { action: 'issue' | 'refuse' | 'cancel'; note?: string; patrolPersonId?: Id }) {
+    await this.store.lock?.('stockRequests', id);
+    const r = await this.store.get('stockRequests', id);
+    if (!r) throw new NotFound('Uniform request');
+    if (r.status !== 'open') throw new BadRequest(`This request is already ${r.status}.`);
+    const note = String(input.note ?? '').trim().slice(0, 300);
+    const at = this.now();
+    const close = async (status: StockRequest['status'], issueId?: Id) => {
+      const decided = { at, by: user.name, byId: user.id, note, ...(issueId ? { issueId } : {}) };
+      return this.store.transaction(async (tx) => {
+        await tx.update('stockRequests', id, { status, decided });
+        await tx.audit({
+          at,
+          actor: user.name,
+          companyId: GOV_OPS_COMPANY_ID,
+          action: `store.uniform.${status}`,
+          entity: 'stock_request',
+          entityId: id,
+          summary: `${r.qty} x ${r.itemName} for ${r.personName}: ${status}${note ? ` (${note})` : ''}.`,
+        });
+        return (await tx.get('stockRequests', id))!;
+      });
+    };
+    if (input.action === 'cancel') {
+      if (r.requestedById !== user.id) throw new AccessDenied('view', '(only the person who asked cancels a request)');
+      return close('cancelled');
+    }
+    const role = this.purRoleOf(user, GOV_OPS_COMPANY_ID);
+    if (role !== 'store' && role !== 'proc') throw new AccessDenied('view', '(the Goodwill store decides uniform requests)');
+    if (input.action === 'refuse') {
+      if (!note) throw new BadRequest('Say why the request is refused.');
+      return close('refused');
+    }
+    if (input.action !== 'issue') throw new BadRequest('Choose issue, refuse or cancel.');
+    const issue = await this.stockIssue(user, GOV_OPS_COMPANY_ID, {
+      itemId: r.stockItemId,
+      personId: r.personId,
+      qty: r.qty,
+      omUserId: r.requestedById,
+      ...(input.patrolPersonId ? { patrolPersonId: input.patrolPersonId } : {}),
+    });
+    return close('issued', issue.id);
+  }
+
   async stockReturn(user: User, issueId: Id, condition: 'good' | 'worn' | 'damaged' | 'lost', note: string) {
     await this.store.lock?.('stockIssues', issueId);
     const i = await this.store.get('stockIssues', issueId);
@@ -24539,9 +24744,11 @@ export class PrimaService {
   /** Items issued to this person, for them to confirm in their own details (Fauzan, 27 Oct 2026). */
   async myItems(user: User) {
     const toPassOn = await this.itemsToPassOn(user);
-    if (!user.personId) return { items: [], toPassOn };
+    // A government OM gets the "Ask for a uniform" button (Fauzan, 11 Nov 2026).
+    const canRequestUniform = this.canRequestUniform(user);
+    if (!user.personId) return { items: [], toPassOn, canRequestUniform };
     const person = await this.store.get('people', user.personId);
-    if (!person) return { items: [], toPassOn };
+    if (!person) return { items: [], toPassOn, canRequestUniform };
     const [issues, items] = await Promise.all([
       this.store.list('stockIssues', { companyId: [person.companyId] }),
       this.store.list('stockItems', { companyId: [person.companyId] }),
@@ -24555,6 +24762,7 @@ export class PrimaService {
           return { issue: i, itemName: it ? `${it.name}${it.size ? ` (${it.size})` : ''}` : i.itemId, consumable: !!it?.consumable };
         }),
       toPassOn,
+      canRequestUniform,
     };
   }
 
@@ -24624,6 +24832,23 @@ export class PrimaService {
         detail: [...new Set(collect.map((t) => t.issue.personName))].slice(0, 3).join(', '),
         go: { view: 'purchasing', companyId },
       });
+    // Uniform requests from Operations Managers waiting for the Goodwill store (Fauzan, 11 Nov 2026).
+    const storeRole = this.purRoleOf(user, GOV_OPS_COMPANY_ID);
+    if (!companyId && (storeRole === 'store' || storeRole === 'proc')) {
+      try {
+        const open = (await this.store.list('stockRequests', { companyId: [GOV_OPS_COMPANY_ID] })).filter((r) => r.status === 'open');
+        if (open.length)
+          items.push({
+            tone: 'warn',
+            tag: 'Store',
+            title: `${open.length} uniform request${open.length === 1 ? '' : 's'} from Operations Managers`,
+            detail: open.slice(0, 3).map((r) => `${r.itemName} for ${r.personName}`).join(' · '),
+            go: { view: 'purchasing', companyId: GOV_OPS_COMPANY_ID },
+          });
+      } catch {
+        // The optional module may not be installed yet; the home page never fails for it.
+      }
+    }
     return [...handover, ...items];
   }
 

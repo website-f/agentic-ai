@@ -239,6 +239,7 @@ export type CreditBoard = R<'creditBoard'>;
 export type CreditLoanInput = Parameters<PrimaService['addCreditLoan']>[2];
 export type CreditCorrectionInput = Parameters<PrimaService['creditCorrectRecord']>[2];
 export type PurBoard = R<'purBoard'>;
+export type UniformRequests = R<'uniformRequests'>;
 export type ItemBoard = Awaited<ReturnType<PrimaService['items']['board']>>;
 export type ItemPassport = Awaited<ReturnType<PrimaService['items']['resolve']>>;
 export type ItemDevicePending = Awaited<ReturnType<PrimaService['items']['devicePending']>>;
@@ -903,6 +904,9 @@ export interface Api extends ConnectionsClient, ExtractionClient, DraftHelpClien
     },
   ): Promise<unknown>;
   stockReturn(id: string, condition: 'good' | 'worn' | 'damaged' | 'lost', note: string): Promise<unknown>;
+  uniformRequests(): Promise<UniformRequests>;
+  requestUniform(input: { staffNo: string; stockItemId: string; qty: number; reason: string; guardPays?: { receiptNo: string; amount: number } | null }): Promise<unknown>;
+  decideUniformRequest(id: string, action: 'issue' | 'refuse' | 'cancel', input: { note?: string; patrolPersonId?: string }): Promise<unknown>;
   corpFilingStep(id: string, action: 'prepare' | 'lodge' | 'receipt', body: { ref?: string; on?: string }): Promise<unknown>;
   raiseCorpChange(companyId: string, input: CorpChangeInput): Promise<unknown>;
   addCorpFiling(companyId: string, input: CorpFilingInput): Promise<unknown>;

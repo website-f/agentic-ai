@@ -3357,6 +3357,8 @@ export interface Dataset {
   purRequests: PurRequest[];
   stockItems: StockItem[];
   stockIssues: StockIssue[];
+  /** OM requests a uniform for a guard (Fauzan, 11 Nov 2026); optional module db/modules/uniform-requests-v1.sql. */
+  stockRequests: StockRequest[];
   govMandates: GovMandate[];
   grcObligations: GrcObligation[];
   whistleReports: WhistleReport[];
@@ -5777,6 +5779,37 @@ export interface StockItem {
   charge?: 'rental' | 'sale' | null;
   rentalMonthly?: number | null;
   salePrice?: number | null;
+}
+
+/**
+ * An Operations Manager asks the Goodwill store for a uniform for a guard (Fauzan, 11 Nov 2026: "Create button from om
+ * to need uniform"). The store issues it through the usual handover (store -> OM -> patrolling officer -> guard), the
+ * OM collecting the signatures on their own phone while guards have no shared device or app, or refuses with a reason.
+ */
+export interface StockRequest {
+  id: Id;
+  /** The store that serves the request: Goodwill Empire (GOV_OPS_COMPANY_ID). */
+  companyId: Id;
+  personId: Id;
+  personName: string;
+  staffNo: string;
+  /** The guard's own company, which Goodwill bills once the guard has the item. */
+  billTo: Id;
+  stockItemId: Id;
+  itemName: string;
+  qty: number;
+  reason: string;
+  /** Uniform pieces this person had from the store in the 12 months before the request, and the date of the last one. */
+  history: { pieces: number; last: IsoDate | null };
+  /** Within 6 months of the last piece (allowed with the reason given). */
+  early: boolean;
+  /** A 4th or 5th piece in 12 months: the guard pays, with the receipt (never taken from pay). */
+  guardPays: { receiptNo: string; amount: number } | null;
+  requestedAt: IsoDateTime;
+  requestedBy: string;
+  requestedById: Id;
+  status: 'open' | 'issued' | 'refused' | 'cancelled';
+  decided: { at: IsoDateTime; by: string; byId: Id; note: string; issueId?: Id } | null;
 }
 
 export interface StockIssue {

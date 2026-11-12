@@ -58,6 +58,9 @@ const MODULE_TABLES: Partial<Record<TableName, string>> = {
   ownerTestCheckins: 'The owner test check-in is not set up in this database yet (module owner-test-checkin-v1).',
   // P97: the staff check-in and check-out face photos (db/modules/clock-snaps-v1.sql, applied by the office prima-setup).
   clockSnaps: 'Check-in face photos are not set up in this database yet (module clock-snaps-v1).',
+  // P100 I1: OM uniform requests (db/modules/uniform-requests-v1.sql): built and tested, NOT on the release list until the
+  // CEO says so, so prima-setup does not run it; until then the screens say this in words.
+  stockRequests: 'Uniform requests are not installed in this database yet (module uniform-requests-v1, run by the CEO).',
 };
 
 // Exported for the per-request read snapshots (read-cache.ts, P83).
@@ -168,6 +171,7 @@ purSuppliers: 'prima.pur_suppliers',
 purRequests: 'prima.pur_requests',
 stockItems: 'prima.stock_items',
 stockIssues: 'prima.stock_issues',
+stockRequests: 'prima.stock_requests',
 govMandates: 'prima.gov_mandates',
 grcObligations: 'prima.grc_obligations',
 whistleReports: 'prima.whistle_reports',
@@ -399,6 +403,7 @@ const HAS_COMPANY_COLUMN = new Set<TableName>([
 'purRequests',
 'stockItems',
 'stockIssues',
+'stockRequests',
 'govMandates',
 'grcObligations',
 'oshAssessments',

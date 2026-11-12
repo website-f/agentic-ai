@@ -1,0 +1,142 @@
+/* I1 (P100): OM uniform requests and the Goodwill store queue. Phone first: 44 px targets, one column at 390 px, the
+   decision buttons full width on a phone. Colours from styles.css tokens only. */
+
+.ur-pad {
+  padding: 12px 18px;
+}
+.ur-big {
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+.ur-rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.ur-rows > li + li {
+  border-top: 1px solid var(--line);
+}
+.ur-row {
+  display: grid;
+  gap: 8px;
+  padding: 14px 18px;
+  min-width: 0;
+}
+.ur-row[data-status='open'] {
+  box-shadow: inset 3px 0 0 var(--warn, #b7791f);
+}
+.ur-row-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+}
+.ur-row-main {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.ur-row-main strong {
+  overflow-wrap: anywhere;
+}
+.ur-who {
+  color: var(--muted);
+  font-size: 13px;
+}
+.ur-facts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+  font-size: 13px;
+}
+.ur-decided {
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--surface-2, var(--bg));
+}
+.ur-decide {
+  display: grid;
+  gap: 8px;
+}
+.ur-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.ur-form {
+  display: grid;
+  gap: 12px;
+}
+.ur-field {
+  display: grid;
+  gap: 6px;
+  font-size: 14px;
+}
+.ur-field > span:first-child {
+  font-weight: 600;
+}
+.ur-input {
+  min-height: 44px;
+  font-size: 16px;
+}
+.ur-seg {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+.ur-seg .btn {
+  min-height: 44px;
+  font-size: 16px;
+  justify-content: center;
+}
+.ur-seg .btn[aria-pressed='true'],
+.ur-chips .btn[aria-pressed='true'] {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--on-accent, #fff);
+}
+.ur-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.ur-chips .btn {
+  min-height: 40px;
+}
+.ur-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-size: 14px;
+  min-height: 44px;
+}
+.ur-check input {
+  width: 22px;
+  height: 22px;
+  margin-top: 1px;
+  flex: none;
+}
+.ur-two {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+@media (max-width: 560px) {
+  .ur-two {
+    grid-template-columns: 1fr;
+  }
+  .ur-actions .ur-big {
+    flex: 1 1 100%;
+  }
+  .ur-row,
+  .ur-pad {
+    padding-left: 14px;
+    padding-right: 14px;
+  }
+}

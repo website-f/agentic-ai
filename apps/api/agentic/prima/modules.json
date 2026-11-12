@@ -2338,12 +2338,15 @@
    "GET items/passport/:",
    "GET items/reports/:",
    "GET items/site/:",
+   "GET purchasing/uniform-requests",
    "GET records/:/form",
    "GET records/kinds",
    "POST items/act",
    "POST items/import/read",
    "POST items/resolve",
-   "POST items/scan-check"
+   "POST items/scan-check",
+   "POST purchasing/uniform-requests",
+   "POST purchasing/uniform-requests/:/:"
   ],
   "ja": [
    "GET ja"
@@ -2424,6 +2427,7 @@
    "GET people/:",
    "GET people/:/docs",
    "GET people/:/profile",
+   "GET purchasing/uniform-requests",
    "GET records/:/form",
    "GET records/kinds",
    "GET socso",
@@ -2477,6 +2481,8 @@
    "POST people/:/pin",
    "POST people/:/socso",
    "POST purchasing/issues/:/handover/:",
+   "POST purchasing/uniform-requests",
+   "POST purchasing/uniform-requests/:/:",
    "POST socso/:/appointments",
    "POST socso/:/checkins",
    "POST socso/:/death-notices",
@@ -2651,6 +2657,7 @@
   "purchasing": [
    "GET purchasing",
    "GET purchasing/issues/:/proof",
+   "GET purchasing/uniform-requests",
    "GET records/:/form",
    "GET records/kinds",
    "POST purchasing/:/issues",
@@ -2660,7 +2667,9 @@
    "POST purchasing/issues/:/return",
    "POST purchasing/requests/:/:",
    "POST purchasing/stock/:/count",
-   "POST purchasing/suppliers/:/:"
+   "POST purchasing/suppliers/:/:",
+   "POST purchasing/uniform-requests",
+   "POST purchasing/uniform-requests/:/:"
   ],
   "quality": [
    "GET quality/foundation",

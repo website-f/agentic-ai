@@ -924,6 +924,7 @@ export function generateDataset(opts: SeedOptions): Dataset {
     purRequests: [],
     stockItems: [],
     stockIssues: [],
+    stockRequests: [],
     govMandates: [],
     grcObligations: [],
     whistleReports: [],
@@ -8293,6 +8294,28 @@ export function generateDataset(opts: SeedOptions): Dataset {
       ['Floor cleaner 5 L', 'CLEANING', null, 24, 10],
       ['Mop and bucket set', 'CLEANING', null, 6, 4],
     ];
+    // Goodwill's store (Fauzan, 2 Nov 2026) keeps the guards' uniforms, so an OM's uniform request (11 Nov 2026) has
+    // something to ask for in the test version. Synthetic sizes and counts, sold at no price until Goodwill sets one.
+    ds.stockItems.push(
+      ...(
+        [
+          ['Uniform shirt', 'M', 30],
+          ['Uniform shirt', 'L', 25],
+          ['Uniform trousers', '32', 20],
+        ] as const
+      ).map(([name, size, onHand], k): StockItem => ({
+        id: `stk-${GOV_OPS_COMPANY_ID}-uni-${k + 1}`,
+        companyId: GOV_OPS_COMPANY_ID,
+        sku: `GW-UNI-${String(k + 1).padStart(3, '0')}`,
+        name,
+        kind: 'UNIFORM',
+        size,
+        onHand,
+        reorderAt: 10,
+        charge: 'sale',
+        salePrice: null,
+      })),
+    );
     for (const [companyId, who] of Object.entries(COS) as [keyof typeof COS, (typeof COS)[keyof typeof COS]][]) {
       const items: StockItem[] = STOCK.map(([name, kind, size, onHand, reorderAt], k) => ({
         id: `stk-${companyId}-${k + 1}`,

@@ -5702,6 +5702,27 @@
   "body": "{ note?: unknown }"
  },
  {
+  "method": "GET",
+  "path": "api/purchasing/uniform-requests",
+  "name": "uniformRequests"
+ },
+ {
+  "method": "POST",
+  "path": "api/purchasing/uniform-requests",
+  "name": "requestUniform",
+  "body": "Record<string, unknown>"
+ },
+ {
+  "method": "POST",
+  "path": "api/purchasing/uniform-requests/:id/:action",
+  "name": "decideUniformRequest",
+  "params": [
+   "id",
+   "action"
+  ],
+  "body": "Record<string, unknown>"
+ },
+ {
   "method": "POST",
   "path": "api/quality/:action",
   "name": "qualityAction",

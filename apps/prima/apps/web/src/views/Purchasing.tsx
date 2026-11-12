@@ -18,6 +18,7 @@ import { DeliveryProofPanel } from './DeliveryProof';
 import { RecordButton, useRecordKinds } from './RecordForm';
 import { ImportButton } from './ImportDrawer';
 import { WitnessField, emptyWitness } from './Witness';
+import { UniformRequestsPanel } from './UniformRequests';
 import { Card, Empty, Facts, PageHead, Search, Stat, Stats, Steps, Toolbar, type StepState } from '../kit';
 import { Chip, Drawer, ErrorNotice, Loading, dateLabel, dateTimeLabel, useAction, useLoad } from '../ui';
 import '../styles/biz.css';
@@ -1168,6 +1169,8 @@ function Store({ data }: { data: PurBoard }) {
           <ImportButton kind="stockItem" />
         </div>
       )}
+      {/* I1 (Fauzan, 11 Nov 2026): uniform requests from Operations Managers, first, for the Goodwill store to decide. */}
+      {company && companiesOf(data).some((c) => c.id === 'goodwill') && <UniformRequestsPanel place="store" />}
       {data.losses.length > 0 && (
         <Card title="Lost or damaged, waiting for confirmation" sub="The company manager confirms or refuses each loss." flush>
           <ul className="bz-rows">

@@ -1808,6 +1808,39 @@ export class AppController {
     );
   }
 
+  // Uniform requests from government Operations Managers to the Goodwill store (Fauzan, 11 Nov 2026).
+  @Get('purchasing/uniform-requests')
+  uniformRequests(@UserId() uid: string) {
+    return this.db.asUser(uid, (svc, u) => svc.uniformRequests(u));
+  }
+
+  @Post('purchasing/uniform-requests')
+  requestUniform(@UserId() uid: string, @Body() b: Record<string, unknown>) {
+    const pays = b.guardPays && typeof b.guardPays === 'object' ? (b.guardPays as Record<string, unknown>) : null;
+    return this.db.asUser(uid, (svc, u) =>
+      svc.requestUniform(u, {
+        staffNo: str(b.staffNo ?? '', 'staffNo', 40),
+        stockItemId: str(b.stockItemId ?? '', 'stockItemId', 160),
+        qty: Number(b.qty),
+        reason: str(b.reason ?? '', 'reason', 300),
+        guardPays: pays ? { receiptNo: str(pays.receiptNo ?? '', 'receiptNo', 60), amount: Number(pays.amount) } : null,
+      }),
+    );
+  }
+
+  @Post('purchasing/uniform-requests/:id/:action')
+  decideUniformRequest(@UserId() uid: string, @Param('id') id: string, @Param('action') action: string, @Body() b: Record<string, unknown>) {
+    const a = (['issue', 'refuse', 'cancel'] as const).find((x) => x === action);
+    if (!a) throw new BadRequestException('action must be issue, refuse or cancel');
+    return this.db.asUser(uid, (svc, u) =>
+      svc.decideUniformRequest(u, id.slice(0, 160), {
+        action: a,
+        note: str(b.note ?? '', 'note', 300),
+        patrolPersonId: b.patrolPersonId == null ? undefined : str(b.patrolPersonId, 'patrolPersonId', 160),
+      }),
+    );
+  }
+
   // Proof that a Goodwill item reached the guard, with each file checked against its recorded SHA-256 (Fauzan, 2 Nov 2026).
   @Get('purchasing/issues/:id/proof')
   deliveryProof(@UserId() uid: string, @Param('id') id: string) {

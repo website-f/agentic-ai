@@ -4,6 +4,7 @@ import { api, type MyItems } from '../api';
 import { Chip, ErrorNotice, dateLabel, useAction, useLoad } from '../ui';
 import { ProofPicker } from './Proof';
 import { SignaturePad } from './SignaturePad';
+import { UniformRequestsPanel } from './UniformRequests';
 
 type Row = MyItems['items'][number];
 
@@ -30,6 +31,8 @@ export function MyItemsPanel() {
   if (!data) return null;
   return (
     <>
+      {/* I1 (Fauzan, 11 Nov 2026): a government OM asks the Goodwill store for a guard's uniform. */}
+      {data.canRequestUniform && <UniformRequestsPanel place="mine" />}
       {data.toPassOn.length > 0 && <PassOnPanel rows={data.toPassOn} />}
       {data.items.length > 0 && <IssuedToMe items={data.items} />}
     </>
