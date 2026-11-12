@@ -703,12 +703,11 @@ export const RULES = {
   itRental: rule(
     'IT-RENTAL',
     {
-      /** Monthly rent per device, RM. MADE UP for the test (Fauzan, 28 Oct 2026: real prices given when pilot phase 1 goes live). */
-      monthly: { LAPTOP: 120, DESKTOP: 90, PHONE: 45, TABLET: 40, PRINTER: 80, NETWORK: 60, CCTV: 150, OTHER: 30 } as Record<string, number>,
+      // C5 (Fauzan, 11 Nov 2026): no preset monthly rates. The IT Manager enters each rate in the app from a month.
       billByDay: 7,
     },
-    'Unverified',
-    'Fauzan, 28 Oct 2026: the IT department works through Merdeka Network Sdn Bhd. Merdeka employs and pays the IT team, pays every IT cost and bills from itself; every device is owned by Merdeka and rented to the group companies. Each month Merdeka bills each company for the devices it has in use or in repair (spares are not billed); Fauzan, 1 Nov 2026: the IT Manager enters actual rental rates, IT staff prepare billing records and migrate existing asset/actual historical billing records, while Finance retains payment-record authority. Stored monthly values here are DEMO SIMULATION ONLY and are never a production fallback; real preparation requires effective-dated Manager-entered rates and immutable snapshots. Proposed: the bill goes out by the 7th of the month.',
+    'Policy',
+    'Fauzan, 28 Oct 2026: the IT department works through Merdeka Network Sdn Bhd. Merdeka employs and pays the IT team, pays every IT cost and bills from itself; every device is owned by Merdeka and rented to the group companies. Each month Merdeka bills each company for the devices it has in use or in repair (spares are not billed); Fauzan, 1 Nov 2026: the IT Manager enters actual rental rates, IT staff prepare billing records and migrate existing asset/actual historical billing records, while Finance retains payment-record authority. Approved by Fauzan, 11 Nov 2026: "rates for all things can be set in the system, not predetermined, from now", as prices change each month: the made-up test rates are removed; the IT Manager enters each rate in the app, effective from a month, with a reason; old months keep their rate; a device kind with no rate is not billed and shows "rate not set". Proposed: the bill goes out by the 7th of the month.',
   ),
   itPlan: rule(
     'IT-PLAN',

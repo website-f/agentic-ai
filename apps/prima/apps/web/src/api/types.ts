@@ -437,6 +437,8 @@ export type RegionalOps = R<'regionalOps'>;
 export type GovOpsMonitor = R<'govOpsMonitor'>;
 export type ManagementFees = R<'managementFees'>;
 export type ManagementFeeBills = R<'managementFeeBills'>;
+// P100 fin: C5 rate book.
+export type RateBook = R<'rateBook'>;
 export type ArmsOverview = R<'armsOverview'>;
 export type ArmsDetail = R<'arms'>;
 export type ArmsControl = R<'armsControl'>;
@@ -1215,6 +1217,9 @@ export interface Api extends ConnectionsClient, ExtractionClient, DraftHelpClien
   privateOpsMonitor(month?: string): Promise<GovOpsMonitor>;
   managementFees(): Promise<ManagementFees>;
   managementFeeBills(month?: string): Promise<ManagementFeeBills>;
+  // P100 fin: C5 rate book (rates entered from a month, never preset).
+  rateBook(): Promise<RateBook>;
+  setRate(input: { key: string; companyId: string; from?: string; amount: number | null; reason: string }): Promise<unknown>;
   setManagementFee(
     companyId: string,
     input: { chargedBy: string; kind: 'percent' | 'fixed' | 'end'; value?: number; agreementRef?: string; reason: string; from?: string; inSiteProfit?: boolean },

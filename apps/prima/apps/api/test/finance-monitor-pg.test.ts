@@ -1,0 +1,71 @@
+// P100 fin against a real local PostgreSQL (throwaway database; the tests reset it): the rate book (C5) saves through
+// the restricted database login on each company's Finance record, a company's own people read its rates under the
+// company wall, and the wrong roles are refused. Synthetic data only, never staging.
+import 'reflect-metadata';
+import assert from 'node:assert/strict';
+import { after, before, describe, it } from 'node:test';
+import { Client } from 'pg';
+import { Db } from '../src/db';
+import { resetDb } from '../src/reset-db';
+
+const URL = process.env.DATABASE_URL ?? 'postgres://postgres:localdev@localhost:5432/prima_test';
+process.env.DATABASE_URL = URL;
+process.env.DEV_TOKEN_SECRET = process.env.DEV_TOKEN_SECRET ?? 'test-secret';
+
+async function q<T = Record<string, unknown>>(sql: string, args: unknown[] = []): Promise<T[]> {
+  const c = new Client({ connectionString: URL });
+  await c.connect();
+  try {
+    return (await c.query(sql, args)).rows as T[];
+  } finally {
+    await c.end();
+  }
+}
+
+describe('P100 fin on PostgreSQL', () => {
+  let db: Db;
+  let co: string;
+  let other: string;
+  let manager: string;
+  before(async () => {
+    await resetDb(URL);
+    db = new Db();
+    // A company manager and their company, and another company with books.
+    const m = (await q<{ id: string; co: string }>(
+      `SELECT u.id, u.data->'companyIds'->>0 AS co FROM prima.users u
+        WHERE u.data->>'role' = 'company_manager' AND EXISTS (SELECT 1 FROM prima.fin_status f WHERE f.company_id = u.data->'companyIds'->>0)
+        ORDER BY u.id LIMIT 1`,
+    ))[0];
+    manager = m.id;
+    co = m.co;
+    other = (await q<{ company_id: string }>(`SELECT company_id FROM prima.fin_status WHERE company_id <> $1 AND company_id <> 'pwvsb' ORDER BY company_id LIMIT 1`, [co]))[0].company_id;
+  });
+  after(async () => {
+    await db.onModuleDestroy();
+  });
+
+  it('C5: the FD sets a rate for every company and one company, saved on each Finance record through the restricted login', async () => {
+    await db.asUser('u-fd', (svc, u) => svc.setRate(u, { key: 'transport_np', companyId: 'all', from: '2026-11', amount: 95, reason: 'Synthetic bus contract' }));
+    await db.asUser('u-fauzan', (svc, u) => svc.setRate(u, { key: 'transport_np', companyId: other, from: '2026-11', amount: 120, reason: 'Synthetic own van' }));
+    const rows = await q<{ company_id: string; log: { key: string; scope: string; amount: number }[] }>(`SELECT company_id, data->'rateLog' AS log FROM prima.fin_status`);
+    for (const r of rows) assert.ok(r.log.some((e) => e.key === 'transport_np' && e.scope === 'group' && e.amount === 95), r.company_id);
+    assert.ok(rows.find((r) => r.company_id === other)!.log.some((e) => e.scope === 'company' && e.amount === 120));
+    const audit = await q<{ data: { action: string } }>(`SELECT data FROM prima.audit WHERE data->>'action' = 'fin.rate.set'`);
+    assert.equal(audit.length, 2);
+  });
+
+  it('C5: a company manager is refused the rate book; the COO and a Finance team read it', async () => {
+    await assert.rejects(db.asUser(manager, (svc, u) => svc.rateBook(u)), /rate book/);
+    await assert.rejects(
+      db.asUser(manager, (svc, u) => svc.setRate(u, { key: 'uniform', companyId: co, from: '2026-11', amount: 1, reason: 'Synthetic' })),
+      /Finance Director or the CEO/,
+    );
+    await assert.rejects(db.asUser('u-coo', (svc, u) => svc.setRate(u, { key: 'uniform', companyId: 'all', from: '2026-11', amount: 1, reason: 'Synthetic' })), /Finance Director or the CEO/);
+    const book = await db.asUser('u-coo', (svc, u) => svc.rateBook(u));
+    assert.ok(book.companies.length > 1);
+    assert.equal(book.canSet, false);
+    const lead = await db.asUser('u-fin-t1-lead', (svc, u) => svc.rateBook(u));
+    const t1 = await q<{ company_id: string }>(`SELECT company_id FROM prima.fin_status WHERE (data->>'team')::int = 1`);
+    assert.deepEqual(lead.companies.map((c) => c.companyId).sort(), t1.map((r) => r.company_id).sort());
+  });
+});

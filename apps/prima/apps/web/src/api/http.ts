@@ -2471,6 +2471,13 @@ export class HttpApi implements Api {
   setManagementFee(companyId: string, input: Parameters<Api['setManagementFee']>[1]) {
     return this.call<unknown>('POST', `/finance/management-fees/${encodeURIComponent(companyId)}`, input);
   }
+  // P100 fin: C5 rate book.
+  rateBook() {
+    return this.call<Awaited<ReturnType<Api['rateBook']>>>('GET', '/finance/rates');
+  }
+  setRate(input: Parameters<Api['setRate']>[0]) {
+    return this.call<unknown>('POST', '/finance/rates', input);
+  }
 
 
   insurance() {

@@ -6991,6 +6991,27 @@ export class AppController {
     );
   }
 
+  // C5 rate book (Fauzan, 11 Nov 2026): costing rates entered in the app from a month, never preset.
+  @Get('finance/rates')
+  rateBook(@UserId() uid: string) {
+    return this.db.asUser(uid, (svc, u) => svc.rateBook(u));
+  }
+
+  @Post('finance/rates')
+  setRate(@UserId() uid: string, @Body() b: Record<string, unknown>) {
+    if (b.amount !== null && b.amount !== undefined && typeof b.amount !== 'number') throw new BadRequestException('amount must be a number or null');
+    if (b.from !== undefined && (typeof b.from !== 'string' || !/^\d{4}-\d{2}$/.test(b.from))) throw new BadRequestException('from must be YYYY-MM');
+    return this.db.asUser(uid, (svc, u) =>
+      svc.setRate(u, {
+        key: str(b.key ?? '', 'key', 40),
+        companyId: str(b.companyId ?? '', 'companyId', 40),
+        from: b.from as string | undefined,
+        amount: (b.amount ?? null) as number | null,
+        reason: str(b.reason ?? '', 'reason', 300),
+      }),
+    );
+  }
+
   // The month's management fee bills between group companies (draft, not an invoice).
   @Get('finance/management-fee-bills')
   managementFeeBills(@UserId() uid: string, @Query('month') month?: string) {

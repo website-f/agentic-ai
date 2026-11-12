@@ -1,3 +1,5 @@
+import { DEMO_IT_RENTAL_RATES } from "./demo-rates";
+import { RateBookService } from "./rate-book";
 import { applyArrivalRecovery, checkArrivalSnapshot, recordArrivalRepayments, cashCeo } from './arrival-cash';
 import { withLeavePersonLock } from './leave-lock';
 import { staffZakatReleaseProblem, staffSqlOtherSharesProblem } from './staff-zakat-guards';
@@ -18278,7 +18280,8 @@ export class PrimaService {
   private itRentalView(assets: ItAsset[], bills: ItRentalBill[], ownerName: (id: Id) => string, today: IsoDate) {
     const simulation = this.store.rentalSimulation?.() === true;
     const period = today.slice(0, 7);
-    const rates = RULES.itRental.value.monthly;
+    // C5: only the demo simulation has sample rates; a kind with no rate is "rate not set" (null), never 0.
+    const rates: Record<string, number> = simulation ? DEMO_IT_RENTAL_RATES : {};
     const billed = assets.filter((a) => a.status === 'in_use' || a.status === 'repair');
     const companies = [...new Set(billed.map((a) => a.ownerId))];
     const rows = companies
@@ -18287,12 +18290,13 @@ export class PrimaService {
         const kinds = [...new Set(mine.map((a) => a.kind))].sort();
         const lines = kinds.map((kind) => {
           const count = mine.filter((a) => a.kind === kind).length;
-          return { kind, count, rate: rates[kind] ?? 0, amount: count * (rates[kind] ?? 0) };
+          const rate = rates[kind] ?? null;
+          return { kind, count, rate, amount: rate == null ? null : count * rate };
         });
         const bill = bills.find((b) => b.companyId === cid && b.period === period) ?? null;
-        return { companyId: cid, companyName: ownerName(cid), devices: mine.length, lines, total: lines.reduce((n, l) => n + l.amount, 0), bill };
+        return { companyId: cid, companyName: ownerName(cid), devices: mine.length, lines, total: lines.some((l) => l.amount == null) ? null : lines.reduce((n, l) => n + (l.amount ?? 0), 0), bill };
       })
-      .sort((a, b) => b.total - a.total);
+      .sort((a, b) => (b.total ?? -1) - (a.total ?? -1));
     const late = today.slice(8) > String(RULES.itRental.value.billByDay).padStart(2, '0');
     return {
       billingMode: simulation ? 'demo_simulation' as const : 'setup_required' as const,
@@ -18324,11 +18328,13 @@ export class PrimaService {
     if (await this.store.get('itRentalBills', id)) throw new BadRequest('This month is already billed for this company.');
     const assets = (await this.store.list('itAssets', {})).filter((a) => a.ownerId === companyId && (a.status === 'in_use' || a.status === 'repair'));
     if (!assets.length) throw new BadRequest('This company rents no devices.');
-    const rates = RULES.itRental.value.monthly;
+    const rates: Record<string, number> = DEMO_IT_RENTAL_RATES;
     const kinds = [...new Set(assets.map((a) => a.kind))].sort();
+    const unpriced = kinds.filter((k) => rates[k] == null);
+    if (unpriced.length) throw new BadRequest(`Rate not set for ${unpriced.join(', ')}: the IT Manager enters it first.`);
     const lines = kinds.map((kind) => {
       const count = assets.filter((a) => a.kind === kind).length;
-      return { kind, count, rate: rates[kind] ?? 0, amount: count * (rates[kind] ?? 0) };
+      return { kind, count, rate: rates[kind], amount: count * rates[kind] };
     });
     const at = this.now();
     const bill: ItRentalBill = { id, companyId, period, lines, total: lines.reduce((n, l) => n + l.amount, 0), invoiceRef: ref, issuedBy: user.name, issuedAt: at, paid: null };
@@ -41959,6 +41965,19 @@ export class PrimaService {
 
   private feeSetter(user: User): boolean {
     return canSetManagementFee(user);
+  }
+
+  /**
+   * C5 rate book (Fauzan, 11 Nov 2026: rates are entered in the system, never preset): the costing rates per company
+   * from a month, with history, and where every other rate list is kept. Finance, the COO and the CEO read it; the
+   * Finance Director or the CEO sets it with a reason (rate-book.ts).
+   */
+  async rateBook(user: User) {
+    return new RateBookService(this.store, () => this.now()).view(user);
+  }
+
+  async setRate(user: User, input: { key: unknown; companyId: unknown; from?: unknown; amount: unknown; reason: unknown }) {
+    return new RateBookService(this.store, () => this.now()).set(user, input);
   }
 
   /**

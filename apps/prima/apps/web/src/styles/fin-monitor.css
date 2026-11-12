@@ -1,0 +1,279 @@
+/* =====================================================================================================================
+   P100 fin: the rate book (C5), site billing and profit (F1, F2) and the CEO's monthly finance page (F3), laid out like
+   the P98 statutory and salary calculator screens: a plain purpose line, grouped cards, tables that become cards on a
+   phone (mobile.ts), 44 px targets. Tokens from styles.css only; light and dark.
+   ===================================================================================================================== */
+
+.fm-page {
+  --fm-gap: 20px;
+  display: grid;
+  gap: var(--fm-gap);
+  min-width: 0;
+}
+.fm-head .k-head-actions {
+  flex-wrap: wrap;
+}
+
+/* ---------- Tiles ---------- */
+.fm-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 190px), 1fr));
+  gap: 12px;
+}
+.fm-tile {
+  display: grid;
+  gap: 4px;
+  padding: 14px 16px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  box-shadow: var(--shadow);
+  min-width: 0;
+}
+.fm-tile[data-tone='crit'] {
+  border-color: color-mix(in srgb, var(--crit) 45%, var(--line));
+  background: color-mix(in srgb, var(--crit-soft) 55%, var(--surface));
+}
+.fm-tile[data-tone='unknown'] {
+  border-color: color-mix(in srgb, var(--unknown) 35%, var(--line));
+}
+.fm-tile-label {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--muted);
+}
+.fm-tile-value {
+  font-size: 1.35rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  font-variant-numeric: tabular-nums;
+}
+.fm-tile[data-tone='crit'] .fm-tile-value {
+  color: var(--crit);
+}
+.fm-tile[data-tone='unknown'] .fm-tile-value {
+  color: var(--unknown);
+}
+.fm-tile-note {
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+/* ---------- Cards ---------- */
+.fm-card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  box-shadow: var(--shadow);
+  min-width: 0;
+}
+.fm-card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  padding: 16px 20px 0;
+}
+.fm-card-head h2 {
+  font-size: 1rem;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  margin: 0;
+}
+.fm-card-head p {
+  margin: 2px 0 0;
+  color: var(--muted);
+  font-size: 0.84rem;
+}
+.fm-card-body {
+  padding: 14px 20px 18px;
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+}
+.fm-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+.fm-tools .input,
+.fm-tools .select {
+  min-height: 44px;
+}
+.fm-tools .input {
+  flex: 1 1 220px;
+  max-width: 360px;
+}
+
+/* ---------- Tables (cards on a phone through mobile.ts) ---------- */
+.fm-table-wrap {
+  min-width: 0;
+  overflow-x: auto;
+}
+.fm-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.88rem;
+}
+.fm-table th,
+.fm-table td {
+  padding: 10px 10px;
+  border-bottom: 1px solid color-mix(in srgb, var(--line) 70%, transparent);
+  text-align: left;
+  vertical-align: top;
+}
+.fm-table thead th {
+  position: static;
+  background: none;
+  padding-top: 0;
+  font-size: 0.72rem;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+  border-bottom: 1px solid var(--line);
+}
+.fm-table tbody th {
+  position: static;
+  background: none;
+  font-weight: 600;
+  color: var(--ink);
+  letter-spacing: 0;
+}
+.fm-table tbody tr:last-child > * {
+  border-bottom: 0;
+}
+.fm-table tr[data-tone='crit'] > * {
+  background: color-mix(in srgb, var(--crit-soft) 45%, transparent);
+}
+.fm-table tr[data-total] > * {
+  font-weight: 700;
+  border-bottom: 2px solid var(--line);
+  background: color-mix(in srgb, var(--accent-soft) 45%, transparent);
+}
+.fm-num {
+  text-align: right !important;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.fm-red {
+  color: var(--crit);
+  font-weight: 700;
+}
+.fm-unknown {
+  color: var(--unknown);
+  font-weight: 600;
+}
+.fm-sub {
+  display: block;
+  font-size: 0.76rem;
+  color: var(--muted);
+  font-weight: 400;
+}
+.fm-notset {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: var(--unknown-soft);
+  color: var(--unknown);
+  font-size: 0.78rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* ---------- Forms ---------- */
+.fm-form {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr));
+  gap: 12px 14px;
+}
+.fm-form .fm-span {
+  grid-column: 1 / -1;
+}
+.fm-form .input,
+.fm-form .select,
+.fm-form .textarea {
+  min-height: 44px;
+  width: 100%;
+}
+.fm-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.fm-actions .btn {
+  min-height: 44px;
+}
+
+/* ---------- Lists ---------- */
+.fm-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+}
+.fm-list > li {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  padding: 10px 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--line) 70%, transparent);
+  min-width: 0;
+}
+.fm-list > li:last-child {
+  border-bottom: 0;
+}
+.fm-list-main {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  flex: 1 1 260px;
+}
+.fm-list-main > span {
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+.fm-list .btn {
+  min-height: 44px;
+}
+.fm-reasons {
+  margin: 4px 0 0;
+  padding-left: 18px;
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+
+@media (max-width: 860px) {
+  .fm-page {
+    --fm-gap: 16px;
+  }
+  .fm-card-head {
+    padding: 14px 16px 0;
+  }
+  .fm-card-body {
+    padding: 12px 16px 16px;
+  }
+  .fm-page input.input,
+  .fm-page textarea.textarea,
+  .fm-page select.select {
+    font-size: 1rem;
+  }
+}
+@media (max-width: 640px) {
+  .fm-table[data-phone='cards'] > tbody > tr > td.fm-num {
+    text-align: left !important;
+  }
+}
+@media print {
+  .fm-head .k-head-actions,
+  .fm-tools,
+  .fm-noprint {
+    display: none !important;
+  }
+}

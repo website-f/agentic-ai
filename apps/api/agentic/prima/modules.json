@@ -874,6 +874,25 @@
     },
     {
      "title": {
+      "en": "Rates and monitoring",
+      "ms": "Kadar dan pemantauan"
+     },
+     "modules": [
+      {
+       "id": "rates",
+       "title": {
+        "en": "Rate book",
+        "ms": "Buku kadar"
+       },
+       "blurb": {
+        "en": "Costing rates entered from a month, with history.",
+        "ms": "Kadar kos dimasukkan mengikut bulan, dengan sejarah."
+       }
+      }
+     ]
+    },
+    {
+     "title": {
       "en": "Buying",
       "ms": "Pembelian"
      },
@@ -2668,6 +2687,10 @@
    "GET quality/operations",
    "GET quality/register",
    "POST quality/:"
+  ],
+  "rates": [
+   "GET finance/rates",
+   "POST finance/rates"
   ],
   "rba": [
    "GET companies/:/rba-traces",

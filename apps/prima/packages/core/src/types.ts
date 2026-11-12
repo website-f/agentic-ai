@@ -4924,6 +4924,8 @@ export interface FinStatus {
   approvalLimits?: ApprovalLimits;
   /** Every change to this company's management fees, with the reason, who and when. Append-only. */
   managementFeeLog?: ManagementFeeChange[];
+  /** C5 (Fauzan, 11 Nov 2026): costing rates entered in the app from a month, group or company, append-only (rate-book.ts). */
+  rateLog?: import('./rate-book').RateEntry[];
 }
 
 // ---------- JA Group app feed (Fauzan, 26 Oct 2026) ----------

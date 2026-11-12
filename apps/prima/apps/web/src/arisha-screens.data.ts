@@ -5822,5 +5822,40 @@ export const SCREEN_GUIDES: ScreenGuide[] = [
       }
     ],
     "notes": "If the module is not installed, the page shows \"Quality and compliance is not switched on yet. The database part waits for the CEO to approve it.\" Storekeepers and admin executives do not see it. Tabs you do not see are not for your role. The page shows test data."
+  },
+  {
+    "view": "rates",
+    "title": "Rate book",
+    "what": "The rates Prima uses to cost quotations and site profit: hostel and transport per Nepali guard, uniform and equipment per guard, per company and per month. It also lists every other rate list in Prima and who enters it.",
+    "who": "The Finance Director or the CEO enters the rates. Finance teams, the COO and the CEO read them. A Finance team sees its own companies.",
+    "tabs": [],
+    "tasks": [
+      {
+        "task": "How to enter a rate (Finance Director or CEO)",
+        "steps": [
+          "Press \"Enter a rate\".",
+          "Choose the rate, the company (or \"Every company\"), the month it starts from and the amount.",
+          "Write the reason, for example the supplier quote, and press \"Save rate\"."
+        ]
+      },
+      {
+        "task": "How to see which rates are missing",
+        "steps": [
+          "Look at the tiles at the top: each shows how many companies have the rate set this month.",
+          "In the table a cell that says \"Rate not set\" has no rate yet; quotations and site profit show it as missing, never zero."
+        ]
+      }
+    ],
+    "terms": [
+      {
+        "term": "Rate not set",
+        "means": "No rate entered for that month. Prima never uses zero or a guess."
+      },
+      {
+        "term": "Every company",
+        "means": "A rate for all companies; a company's own rate replaces it."
+      }
+    ],
+    "notes": "A rate starts from this month or last month at the earliest, so months already costed keep their old rate. Leave the amount empty to mark it not set, or for one company to go back to the rate for every company. Every change is kept with who entered it and why."
   }
 ];

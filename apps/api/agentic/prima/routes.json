@@ -3060,6 +3060,17 @@
  },
  {
   "method": "GET",
+  "path": "api/finance/rates",
+  "name": "rateBook"
+ },
+ {
+  "method": "POST",
+  "path": "api/finance/rates",
+  "name": "setRate",
+  "body": "Record<string, unknown>"
+ },
+ {
+  "method": "GET",
   "path": "api/finance/requests",
   "name": "finRequests"
  },

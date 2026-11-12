@@ -211,6 +211,7 @@ export * from './tender-sources';
 
 export * from './alerts';
 export * from './management-fees';
+export * from './rate-book';
 export * from './vehicle-rental';
 export * from './vehicle-usage';
 export * from './cms-readiness';
