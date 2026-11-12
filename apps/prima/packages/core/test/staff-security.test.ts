@@ -168,12 +168,12 @@ describe('department walls', () => {
     // Arisha main, 84b056e: IT reads the login handover, never the movement row (pay, private reason).
     expect(walls('u-it-ex1')).not.toContain('staff_movements');
     // HR also reads pay formulas, pay law and statutory settings, without a write wall.
-    expect(walls('u-pwvsb-hr')).toEqual(['pay_read', 'offboard', 'staff_ids', 'staff_accounts', 'staff_faces', 'hr_cases', 'applicants', 'staff_movements', 'login_handover', 'staff_history', 'history_lookup', 'history_local']);
+    expect(walls('u-pwvsb-hr')).toEqual(['pay_read', 'offboard', 'staff_ids', 'staff_accounts', 'staff_faces', 'hr_cases', 'applicants', 'staff_movements', 'login_handover', 'speak_up_hr', 'staff_history', 'history_lookup', 'history_local']);
     // HR wall (slice 3A part 3): Finance reads salary accounts, never the full IC.
     expect(walls('u-fd')).toContain('staff_accounts');
     expect(walls('u-fd')).not.toContain('staff_ids');
     // ACT audits assets but never writes them, ACT head included.
-    expect(walls('u-act-aud1')).toEqual(['asset_read', 'act', 'corporate', 'legal', 'reg_risk']);
+    expect(walls('u-act-aud1')).toEqual(['asset_read', 'act', 'corporate', 'legal', 'speak_up_counts', 'reg_risk']);
     expect(walls('u-audit')).toContain('asset_read');
     expect(walls('u-audit')).not.toContain('asset_write');
     expect(walls('u-legal')).toEqual(['corporate', 'legal', 'mandates', 'arms']);

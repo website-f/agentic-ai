@@ -81,6 +81,9 @@ describe('J5 guard sign-ins and location retention (PostgreSQL)', () => {
     // The database itself refuses to make sign-ins for a batch that is not approved, or for its preparer.
     await assert.rejects(asApp(`SELECT prima.gsb_create($1)`, [b.id], 'u-pwvsb-hr', companyId), /not approved/);
     await assert.rejects(asApp(`INSERT INTO prima.users (id, data) VALUES ('u-x', '{}'::jsonb)`, [], 'u-pwvsb-hr', companyId), /permission denied/);
+    // Audit P100: the preparer cannot hand the batch to a colleague and approve it, nor write someone else's decision.
+    await assert.rejects(asApp(`UPDATE prima.guard_signin_batches SET data = data || jsonb_build_object('preparedById', 'u-someone-else') WHERE id = $1`, [b.id], 'u-pwvsb-hr', companyId), /keeps its preparer/);
+    await assert.rejects(asApp(`UPDATE prima.guard_signin_batches SET data = data || jsonb_build_object('status', 'approved', 'decision', jsonb_build_object('approve', true, 'note', 'Looks fine', 'byId', $2::text)) WHERE id = $1`, [b.id, cm], 'u-pwvsb-hr', companyId), /Only the person deciding/);
     const done = await db.asUser(cm, (svc, u) => svc.decideGuardSignIns(u, b.id, true, 'Checked against the list'));
     assert.equal(done.status, 'created');
     assert.equal(done.created?.count, 2);
@@ -100,7 +103,9 @@ describe('J5 guard sign-ins and location retention (PostgreSQL)', () => {
     await assert.rejects(asApp(`SELECT prima.purge_location_readings(90)`, [], 'u-pwvsb-hr', ''), /retention job/);
     const c = await db.pool.connect();
     try {
-      await assert.rejects(runLocationRetention(c, 7), /at least 30 days/);
+      await assert.rejects(runLocationRetention(c, 7), /at least 90 days/);
+      // Audit P100: even a session that names itself the job cannot cut the approved 90-day keep short.
+      await assert.rejects(asApp(`SELECT set_config('app.job', 'location-retention', true), prima.purge_location_readings(30)`, [], 'u-pwvsb-hr', ''), /at least 90 days/);
       const r = await runLocationRetention(c, 90);
       assert.equal(r.installed, true);
       assert.ok(r.staff >= 1);

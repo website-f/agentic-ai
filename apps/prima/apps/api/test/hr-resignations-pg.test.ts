@@ -88,5 +88,7 @@ describe('E10 staff resignations (database, row-level security)', () => {
     const own = await asApp('SELECT count(*)::int AS n FROM prima.staff_resignations', [], { userId: 'u-ae-arsh', group: false, companies: '' });
     assert.equal(own.rows[0].n, 1);
     await assert.rejects(asApp('DELETE FROM prima.staff_resignations', [], { userId: 'u-ae-arsh', group: false, companies: 'co-arsh' }), /permission denied/);
+    // Audit P100: a person's own row cannot be moved, or written, under another company.
+    await assert.rejects(asApp(`UPDATE prima.staff_resignations SET company_id = 'co-sasa', data = data || '{"companyId":"co-sasa"}'::jsonb WHERE id = $1`, [r.id], { userId: 'u-ae-arsh', group: false, companies: '' }), /row-level security/);
   });
 });

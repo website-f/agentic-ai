@@ -232,19 +232,22 @@ export class ClientPortalService {
       if (p.lockedUntil && toMs(p.lockedUntil) > toMs(at)) return { ok: false as const, locked: true };
       const good = normalCode(code).length === 16 && portalCodeHash(p.id, code) === p.codeHash;
       const tries = good ? 0 : p.failedTries + 1;
-      const lockedUntil = !good && tries >= r.maxFailedTries ? new Date(toMs(at) + r.lockMin * 60_000).toISOString() : good ? null : p.lockedUntil;
-      const next: ClientPortalUser = { ...p, failedTries: lockedUntil && !good ? 0 : tries, lockedUntil, ...(good ? { lastSignInAt: at } : {}) };
+      // A lock that has run out is cleared, so the next five wrong codes lock again (audit P100: an old, past lockedUntil
+      // used to reset the count on every wrong code and the sign-in never locked a second time).
+      const newLock = !good && tries >= r.maxFailedTries;
+      const lockedUntil = newLock ? new Date(toMs(at) + r.lockMin * 60_000).toISOString() : null;
+      const next: ClientPortalUser = { ...p, failedTries: newLock ? 0 : tries, lockedUntil, ...(good ? { lastSignInAt: at } : {}) };
       await tx.update('clientAccounts', a.id, { portalUsers: (a.portalUsers ?? []).map((x) => (x.id === p.id ? next : x)) });
       await tx.audit({
         at,
         actor: `Client portal: ${p.name}`,
         companyId: a.companyId,
-        action: good ? 'client.portal.sign_in' : lockedUntil ? 'client.portal.locked' : 'client.portal.wrong_code',
+        action: good ? 'client.portal.sign_in' : newLock ? 'client.portal.locked' : 'client.portal.wrong_code',
         entity: 'client',
         entityId: a.id,
-        summary: `${a.name}: ${p.name} ${good ? 'signed in to the client portal' : lockedUntil ? `locked out until ${lockedUntil} after ${r.maxFailedTries} wrong codes` : 'typed a wrong portal code'}.`,
+        summary: `${a.name}: ${p.name} ${good ? 'signed in to the client portal' : newLock ? `locked out until ${lockedUntil} after ${r.maxFailedTries} wrong codes` : 'typed a wrong portal code'}.`,
       });
-      return good ? { ok: true as const, version: p.sessionVersion, name: p.name } : { ok: false as const, locked: !!lockedUntil };
+      return good ? { ok: true as const, version: p.sessionVersion, name: p.name } : { ok: false as const, locked: newLock };
     });
   }
 

@@ -6,7 +6,7 @@
 -- prima.purge_location_readings(keep_days) deletes staff clock readings (prima.location_pings) and guard phone readings
 -- (prima.guard_pings) taken before the cut-off, and drops the photo of a staff check-in face photo past its keep date
 -- (prima.clock_snaps, when that module is installed), keeping the row. It runs only for the retention job (the API's own
--- daily job sets app.job = 'location-retention'), never for a person's request, and refuses a keep period under 30 days.
+-- daily job sets app.job = 'location-retention'), never for a person's request, and refuses a keep period under 90 days (the approved keep, G9; audit P100).
 -- The app login still has no DELETE right on these tables: only this function deletes, as the schema owner.
 BEGIN;
 -- The schema owner reaches these rows only through the function below (as prima.audit_owner_read does for the audit).
@@ -31,7 +31,7 @@ DECLARE
   photos int := 0;
 BEGIN
   IF coalesce(current_setting('app.job', true), '') <> 'location-retention' THEN RAISE EXCEPTION 'Only the location retention job deletes readings'; END IF;
-  IF keep_days IS NULL OR keep_days < 30 THEN RAISE EXCEPTION 'Readings are kept at least 30 days'; END IF;
+  IF keep_days IS NULL OR keep_days < 90 THEN RAISE EXCEPTION 'Readings are kept at least 90 days (rule HR-STAFF-KEEP)'; END IF;
   cutoff := now() - make_interval(days => keep_days);
   DELETE FROM prima.location_pings WHERE (data->>'capturedAt')::timestamptz < cutoff;
   GET DIAGNOSTICS staff = ROW_COUNT;

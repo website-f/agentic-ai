@@ -69,6 +69,27 @@ CREATE POLICY gsb_update ON prima.guard_signin_batches FOR UPDATE TO prima_app
   WITH CHECK (company_id = ANY (prima.visible_companies()) AND prima.gsb_role(current_setting('app.user_id', true), company_id) IS NOT NULL
               AND data->>'status' <> 'created');
 
+-- The API login may change a batch's status and decision, never who prepared it, its rows, its id or its company; and a
+-- decision is always the caller's own (audit P100: otherwise a rewritten preparedById or decision.byId would let one
+-- person both prepare and approve). The schema owner (prima.gsb_create) is not limited here.
+CREATE OR REPLACE FUNCTION prima.gsb_pin() RETURNS trigger LANGUAGE plpgsql SET search_path = pg_catalog, prima AS $$
+BEGIN
+  IF current_user <> 'prima_app' THEN RETURN NEW; END IF;
+  IF NEW.id IS DISTINCT FROM OLD.id OR NEW.company_id IS DISTINCT FROM OLD.company_id
+     OR NEW.data->'preparedById' IS DISTINCT FROM OLD.data->'preparedById' OR NEW.data->'rows' IS DISTINCT FROM OLD.data->'rows' THEN
+    RAISE EXCEPTION 'A guard sign-in batch keeps its preparer, rows and company';
+  END IF;
+  IF NEW.data->'decision' IS DISTINCT FROM OLD.data->'decision' THEN
+    IF OLD.data->>'status' <> 'prepared' OR NEW.data#>>'{decision,byId}' IS DISTINCT FROM current_setting('app.user_id', true) THEN
+      RAISE EXCEPTION 'Only the person deciding records a decision, once';
+    END IF;
+  END IF;
+  RETURN NEW;
+END
+$$;
+DROP TRIGGER IF EXISTS gsb_pin ON prima.guard_signin_batches;
+CREATE TRIGGER gsb_pin BEFORE UPDATE ON prima.guard_signin_batches FOR EACH ROW EXECUTE FUNCTION prima.gsb_pin();
+
 -- The schema owner (only ever reached through prima.gsb_create below) reads and finishes a batch; as on prima.audit.
 DROP POLICY IF EXISTS gsb_owner ON prima.guard_signin_batches;
 CREATE POLICY gsb_owner ON prima.guard_signin_batches TO CURRENT_USER USING (true) WITH CHECK (true);

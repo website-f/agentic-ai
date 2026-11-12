@@ -63,12 +63,16 @@ describe('E7 operator sign-in through Prima', () => {
     await new Promise<void>((r) => srv.listen(0, '127.0.0.1', r));
     const base = `http://127.0.0.1:${(srv.address() as AddressInfo).port}`;
     const post = (path: string, body: unknown, headers: Record<string, string> = {}) =>
-      fetch(`${base}${path}`, { method: 'POST', headers: { 'content-type': 'application/json', ...headers }, body: JSON.stringify(body) });
+      fetch(`${base}${path}`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-cms-request': '1', ...headers }, body: JSON.stringify(body) });
     try {
       assert.deepEqual(await (await fetch(`${base}/auth/options`)).json(), { microsoft: true, primaUrl: 'https://prima.example.test/#cms', keys: false });
       assert.equal((await fetch(`${base}/api/state`)).status, 401);
       assert.equal((await fetch(`${base}/api/state`, { headers: { authorization: 'Bearer operator-key-for-tests-only-0001' } })).status, 401);
       const ticket = signTicket(claims(), SECRET);
+      // Audit P100: a cross-site form post (no X-CMS-Request header) cannot sign this browser in, and does not use the ticket.
+      const csrf = await fetch(`${base}/auth/prima`, { method: 'POST', headers: { 'content-type': 'text/plain' }, body: JSON.stringify({ ticket }) });
+      assert.equal(csrf.status, 403);
+      assert.equal(csrf.headers.get('set-cookie'), null);
       const r = await post('/auth/prima', { ticket });
       assert.equal(r.status, 200);
       assert.deepEqual(await r.json(), { operator: 'Synthetic Operator', via: 'microsoft' });
@@ -84,7 +88,7 @@ describe('E7 operator sign-in through Prima', () => {
       const alarm = hub.queue()[0];
       assert.ok(alarm);
       {
-        assert.equal((await post(`/api/alarms/${alarm.id}/acknowledge`, {}, { cookie: jar })).status, 403);
+        assert.equal((await post(`/api/alarms/${alarm.id}/acknowledge`, {}, { cookie: jar, 'x-cms-request': '' })).status, 403);
         assert.equal((await post(`/api/alarms/${alarm.id}/acknowledge`, {}, { cookie: jar, 'x-cms-request': '1' })).status, 200);
         assert.equal(hub.audit.find((a) => a.action === 'acknowledge')?.operator, 'Synthetic Operator');
       }

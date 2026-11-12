@@ -58,6 +58,23 @@ describe('J1 client portal', () => {
     expect((await svc.clientPortalDesk(om)).clients.find((c) => c.clientId === a.id)?.waiting.map((w) => w.kind)).toEqual(['complaint']);
   });
 
+  it('locks again after a lock has run out (audit P100: a past lock no longer resets the count on every wrong code)', async () => {
+    const { store, om, a } = await setup();
+    let now = NOW;
+    const svc = new PrimaService(store, () => now);
+    const o = await svc.openClientPortal(om, a.id, { name: 'Synthetic Third Person', post: 'Admin Officer' });
+    const portal = svc.clientPortal();
+    const wrong = () => portal.signIn(a.companyId, a.id, o.user.id, 'AAAA-AAAA-AAAA-AAAA');
+    for (let i = 0; i < 4; i++) expect(await wrong()).toEqual({ ok: false, locked: false });
+    expect(await wrong()).toEqual({ ok: false, locked: true });
+    now = myt(TODAY, '10:31'); // the 30-minute lock has run out
+    for (let i = 0; i < 4; i++) expect(await wrong()).toEqual({ ok: false, locked: false });
+    expect(await wrong()).toEqual({ ok: false, locked: true });
+    expect(await portal.signIn(a.companyId, a.id, o.user.id, o.code)).toEqual({ ok: false, locked: true });
+    now = myt(TODAY, '11:02');
+    expect(await portal.signIn(a.companyId, a.id, o.user.id, o.code)).toMatchObject({ ok: true });
+  });
+
   it('locks after five wrong codes, ends sessions on reset and close, and refuses the wrong roles', async () => {
     const { ds, svc, om, a } = await setup();
     const o = await svc.openClientPortal(om, a.id, { name: 'Synthetic Second Person', post: 'Head of Security' });

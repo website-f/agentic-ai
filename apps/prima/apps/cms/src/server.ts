@@ -184,6 +184,8 @@ export function handler(cfg: ServerConfig, state: AppState, clock: () => number 
       if (req.method === 'GET' && path === '/auth/options') return send(res, 200, { microsoft: !!cfg.signin, primaUrl: cfg.signin?.primaUrl ?? null, keys: cfg.operators.size > 0 });
       if (req.method === 'POST' && path === '/auth/prima') {
         if (!cfg.signin || !sessions) throw new HttpError(404, 'Microsoft sign-in through Prima is not set up on this CMS.');
+        // Audit P100: another site cannot send this header, so it cannot sign this browser in as someone else (login CSRF).
+        if (req.headers['x-cms-request'] !== '1') throw new HttpError(403, 'Request refused.');
         const body = json((await readBody(req)) || '{}') as Record<string, unknown>;
         const t = clock();
         const check = verifyTicket(body.ticket, cfg.signin, t);
@@ -207,6 +209,7 @@ export function handler(cfg: ServerConfig, state: AppState, clock: () => number 
         return send(res, 200, { operator: s.operator, via: s.via });
       }
       if (req.method === 'POST' && path === '/auth/signout') {
+        if (req.headers['x-cms-request'] !== '1') throw new HttpError(403, 'Request refused.');
         const s = sessions?.end(sessionCookie(req.headers.cookie)) ?? null;
         if (s) {
           hub.operatorSignIn(s.operator, 'signed out');

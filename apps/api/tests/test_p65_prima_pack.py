@@ -124,7 +124,7 @@ def test_the_bundled_pack_splits_workflows_rules_forms_and_it_guides():
     assert len(keys) == len(pack.docs)  # one key per section
     for n in range(1, 35):  # every workflow W1-W34 is its own SOP
         assert f"prima:docs/system/04-workflows.md#w{n}" in keys
-    assert "Prima · W12 Monthly staff payroll" in titles
+    assert "Prima · W12 Monthly staff payroll (PAY-1)" in titles
     assert "Prima · Rule register · Payroll (PAY)" in titles
     assert "Prima · Record form · Office staff member (officeStaff)" in titles
     assert "Prima · Business rules · 3.2 Approval chains (who approves what)" in titles
@@ -133,7 +133,7 @@ def test_the_bundled_pack_splits_workflows_rules_forms_and_it_guides():
     assert sum(1 for k in keys if k.startswith("prima:docs/system/screens/")) == 10
     assert all(len(d.title) <= 160 and len(d.body) <= 40_000 for d in pack.docs)
     payroll = next(d for d in pack.docs if d.key.endswith("#w12"))
-    assert payroll.body.startswith("Prima Secure · Workflow W12 Monthly staff payroll (People)")
+    assert payroll.body.startswith("Prima Secure · Workflow W12 Monthly staff payroll (PAY-1) (People)")
     assert "Chief of Staff (or Deputy) approves" in payroll.body
     rules = next(d for d in pack.docs if d.title == "Prima · Rule register · Payroll (PAY)")
     assert "Unverified (a working assumption" in rules.body
@@ -284,9 +284,9 @@ async def test_agents_find_the_payroll_workflow_and_are_told_to_follow_it(
         hits = await library.search(db, library.for_agent(agent), "monthly staff payroll")
         # Among the first few: the test search (hash embeddings, keyword stats from whatever
         # earlier tests indexed) can tie it with the screens guide that names payroll too.
-        assert "Prima · W12 Monthly staff payroll" in [h.title for h in hits[:3]]
+        assert "Prima · W12 Monthly staff payroll (PAY-1)" in [h.title for h in hits[:3]]
         found = await find_sops(db, agent, "monthly staff payroll approval")
-        assert "Prima · W12 Monthly staff payroll" in found
+        assert "Prima · W12 Monthly staff payroll (PAY-1)" in found
         prompt = await system_prompt(db, agent, "task")
     assert "## Company procedures" in prompt
     assert "Prima Secure pack" in prompt and "find_sop or search_library" in prompt
