@@ -2889,7 +2889,7 @@ describe('Staff payroll (Fauzan, 27 Oct 2026)', () => {
     expect((await svc.staffPayroll(await svc.user('u-finance-am'))).role).toBeNull();
   });
 
-  it("puts each approver's turn on their home, and last month unpaid after the 7th in front of the CEO", async () => {
+  it("puts each approver's turn on their home with its date, and a month unpaid after the 29th in front of the CEO (P100 F11)", async () => {
     const { svc, store } = fresh();
     const tags = async (id: string) => {
       const h = await svc.home(await svc.user(id));
@@ -2900,9 +2900,9 @@ describe('Staff payroll (Fauzan, 27 Oct 2026)', () => {
     expect((await tags('u-vchair')).length).toBe(0);
     expect((await tags('u-fd')).some((t) => t.includes('pay through the bank'))).toBe(true);
     // In the pilot the CEO approves for the Chief of Staff, so that turn shows too.
-    expect((await tags('u-fauzan')).some((t) => t.includes('not paid by the 7th'))).toBe(false);
+    expect((await tags('u-fauzan')).some((t) => t.includes('not paid by the 29th'))).toBe(false);
     await store.update('staffPayRuns', 'sp-co-inas-2026-09', { stage: 'coo_approved', paid: null });
-    expect((await tags('u-fauzan')).some((t) => t.includes('not paid by the 7th'))).toBe(true);
+    expect((await tags('u-fauzan')).some((t) => t.includes('not paid by the 29th'))).toBe(true);
   });
 });
 

@@ -110,8 +110,8 @@ export function StaffPayView() {
           <>
             For staff only; guards and officers are paid from the JA Group app.
             HR prepares, the Chief of Staff approves, then the COO approves, and
-            Finance pays through the bank and posts to SQL Account. Wages are
-            due by the {data.rule.payByDay}th of the next month.
+            Finance pays through the bank and posts to SQL Account.{" "}
+            {`Salaries are paid by the ${data.rule.payByDay}th of the same month: HR submits by the ${data.rule.steps.submitBy}nd, the Chief of Staff approves by the ${data.rule.steps.cosBy}th and the COO by the ${data.rule.steps.cooBy}th.`}
           </>
         }
         actions={
@@ -270,7 +270,7 @@ function Runs({
 }) {
   const act = useAction();
   const mine = data.runs.filter((r) => r.mineToAct);
-  const late = data.employers.filter((e) => e.lastLate);
+  const late = data.employers.filter((e) => e.lastLate || e.currentLate);
   const thisMonth = data.runs.filter((r) => r.period === data.period);
   const flagged = thisMonth.reduce((n, r) => n + r.totals.flagged, 0);
   // This month's runs show on the employer cards; every other run is listed by month underneath.
@@ -297,7 +297,7 @@ function Runs({
           icon={<HourglassMediumIcon size={18} />}
         />
         <Stat
-          label={`${monthLabel(data.prev)} not paid by the ${data.rule.payByDay}th`}
+          label={`Not paid by the ${data.rule.payByDay}th`}
           value={late.length}
           tone={late.length ? "crit" : "ok"}
           note="Employment Act s.19"
@@ -318,8 +318,7 @@ function Runs({
       </Stats>
       {late.length > 0 && (
         <div className="notice" data-tone="crit">
-          {monthLabel(data.prev)} salaries not paid by the {data.rule.payByDay}
-          th: {late.map((e) => e.companyName).join(", ")}.
+          {`Salaries not paid by the ${data.rule.payByDay}th of the month: ${late.map((e) => e.companyName).join(", ")}.`}
         </div>
       )}
       <div className={seesPayChanges ? "pay-board pay-board-two" : "pay-board"}>

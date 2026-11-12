@@ -618,7 +618,13 @@ export const RULES = {
   staffPayroll: rule(
     'PAY-STAFF',
     {
-      payByDay: 7,
+      /**
+       * P100 F11 (Fauzan, 11 Nov 2026): office staff are paid on the 29th of the SAME month (the last day in February).
+       * The steps before it move earlier: HR submits by the 22nd, the Chief of Staff approves by the 24th, the COO by the
+       * 26th, Finance pays by the 29th. Guards stay on the 7th of the next month (PAY-GUARD).
+       */
+      payByDay: 29,
+      steps: { submitBy: 22, cosBy: 24, cooBy: 26 },
       unpaidDivisor: 26,
       /** SQL Account codes for the journal draft; Finance replaces these with the group's chart of accounts. */
       accounts: {
@@ -639,7 +645,7 @@ export const RULES = {
       },
     },
     'Law',
-    "Fauzan, 27 Oct 2026: guard and officer pay comes from the JA Group app; Prima builds payroll for staff. HR prepares, the Chief of Staff (or the Deputy) approves, then the COO approves (Fauzan, 1 Nov 2026; this replaced the Vice Chairman's monthly consent decided 26 Oct 2026), then Finance pays through the bank's payroll service and posts to SQL Account. The Vice Chairman consents to each salary amount when it is set each year or on review. Every approval carries a comment. Employment Act 1955 s.19: wages within 7 days after the month; s.60I: a monthly-paid employee's daily rate is the monthly pay divided by 26. EPF Third Schedule, SOCSO and EIS tables, HRD levy 1%, PCB from LHDN's e-PCB. Prima drafts files only and never files or pays.",
+    "Fauzan, 27 Oct 2026: guard and officer pay comes from the JA Group app; Prima builds payroll for staff. HR prepares, the Chief of Staff (or the Deputy) approves, then the COO approves (Fauzan, 1 Nov 2026; this replaced the Vice Chairman's monthly consent decided 26 Oct 2026), then Finance pays through the bank's payroll service and posts to SQL Account. The Vice Chairman consents to each salary amount when it is set each year or on review. Every approval carries a comment. Approved by Fauzan, 11 Nov 2026 (F11): office staff are paid on the 29th of the same month, so the month is approved and paid by the 29th (HR submits by the 22nd, the Chief of Staff approves by the 24th, the COO by the 26th); guards stay on the 7th. Employment Act 1955 s.19: wages within 7 days after the month (paying on the 29th is earlier); s.60I: a monthly-paid employee's daily rate is the monthly pay divided by 26. EPF Third Schedule, SOCSO and EIS tables, HRD levy 1%, PCB from LHDN's e-PCB. Prima drafts files only and never files or pays.",
   ),
   it: rule(
     'IT-WATCH',
@@ -1642,15 +1648,15 @@ export const RULES = {
   financeForecast13: rule(
     'FIN-CASH13',
     {
-      /** The usual staff pay day when no paid run shows it (Employment Act 1955 s.19: wages within 7 days after the wage period). */
-      payDay: 7,
+      /** The usual staff pay day when no paid run shows it: the 29th of the same month (Fauzan, 11 Nov 2026, F11). */
+      payDay: 29,
       /** A reviewer looks the forecast over at least this often. */
       reviewDays: 7,
       /** Regular payments due this many days ago and still open are counted in week 1. */
       regularLookBackDays: 31,
     },
-    'Unverified',
-    'Fauzan, 2 Nov 2026: yes to suggestion 13, "13-week cash forecast per company: payroll dates, the 15th statutory payments, expected government receipts". Prima fills it from the last statement balances, open payments, the regular payments list (EPF, PERKESO, PCB and HRD on the 15th), the staff payroll at last month\'s net pay on the usual pay day, daily cash lists and government claims; Finance adds what Prima cannot know; a reviewer looks it over weekly; a week below zero shows on FD/CEO home. A forecast only; Prima never moves money.',
+    'Policy',
+    'Approved by Fauzan, 11 Nov 2026 (F11): guards are paid on the 7th (confirmed); office staff are paid on the 29th of the same month. Fauzan, 2 Nov 2026: yes to suggestion 13, "13-week cash forecast per company: payroll dates, the 15th statutory payments, expected government receipts". Prima fills it from the last statement balances, open payments, the regular payments list (EPF, PERKESO, PCB and HRD on the 15th), the staff payroll at last month\'s net pay on the usual pay day, daily cash lists and government claims; Finance adds what Prima cannot know; a reviewer looks it over weekly; a week below zero shows on FD/CEO home. A forecast only; Prima never moves money.',
   ),
   financeCash: rule(
     'FIN-CASH',

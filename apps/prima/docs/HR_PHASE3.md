@@ -434,3 +434,8 @@ channel is switched on), and connecting an AI model for drafting.
   count it). Switch off, or the person not named: approved hours wait and the line says so. Unapproved lines are never
   paid. Office module `db/modules/staff-ot-v1.sql` (`prima.staff_ot_lines`, forced row-level security: the person and HR
   and leadership read; the person adds only their own pending claim; HR decides).
+- **Paid by the 29th (F11).** Office staff are paid on the 29th of the same month (the month's last day when shorter), not
+  by the 7th of the next month (rule PAY-STAFF payByDay 29, approved by Fauzan 11 Nov 2026). The steps move earlier: HR
+  submits by the 22nd, the Chief of Staff approves by the 24th, the COO by the 26th, Finance pays by the 29th. Each step's
+  date shows on the run and on the approver's home (marked when past); a month not paid by the 29th is late. The 13-week
+  cash forecast (FIN-CASH13) puts staff payroll on the 29th of the same month. Guards stay on the 7th.

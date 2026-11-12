@@ -26768,10 +26768,25 @@ export class PrimaService {
     };
   }
 
-  /** Last month's wages must be paid by the 7th (Employment Act s.19). */
+  /** P100 F11: a staff month is due on the 29th of the same month (the month's last day when shorter). */
+  private staffPayDue(period: string, day: number = RULES.staffPayroll.value.payByDay): IsoDate {
+    const end = periodEnd(period);
+    const d = `${period}-${String(day).padStart(2, '0')}`;
+    return d < end ? d : end;
+  }
+
+  /** P100 F11 (Fauzan, 11 Nov 2026): a month's staff wages are paid by the 29th of the same month. */
   private staffPayLate(run: StaffPayRun | null, period: string, today: IsoDate): boolean {
-    const due = addDays(periodEnd(period), RULES.staffPayroll.value.payByDay);
-    return today > due && (!run || run.stage !== 'paid');
+    return today > this.staffPayDue(period) && (!run || run.stage !== 'paid');
+  }
+
+  /** P100 F11: the step a month is at and the date it is due by (submit 22nd, CoS 24th, COO 26th, pay 29th). */
+  private staffPayStepDue(run: StaffPayRun | null, period: string) {
+    const s = RULES.staffPayroll.value.steps;
+    const stage = run?.stage ?? 'draft';
+    if (stage === 'paid') return null;
+    const day = { draft: s.submitBy, submitted: s.cosBy, approved: s.cooBy, coo_approved: RULES.staffPayroll.value.payByDay }[stage];
+    return { step: this.staffPayWaiting(stage), by: this.staffPayDue(period, day) };
   }
 
   private prevPeriod(period: string): string {
@@ -26825,6 +26840,9 @@ export class PrimaService {
         stage: r.stage,
         waitingOn: this.staffPayWaiting(r.stage),
         late: this.staffPayLate(r, r.period, today),
+        /** P100 F11: the date this step is due by, and whether it is past. */
+        dueBy: this.staffPayStepDue(r, r.period)?.by ?? null,
+        stepLate: !!this.staffPayStepDue(r, r.period) && today > this.staffPayStepDue(r, r.period)!.by,
         totals: this.staffPayTotals(r.lines),
         mineToAct:
           (role === 'hr' && r.stage === 'draft') ||
@@ -26841,6 +26859,8 @@ export class PrimaService {
         staff: people.filter((p) => p.companyId === id && p.role === 'office' && p.status === 'active').length,
         current: cur ? { id: cur.id, stage: cur.stage } : null,
         lastLate: this.staffPayLate(last, prev, today),
+        /** P100 F11: this month is past the 29th and not paid. */
+        currentLate: this.staffPayLate(cur, period, today),
         last: last ? { id: last.id, stage: last.stage } : null,
       };
     });
@@ -26850,7 +26870,7 @@ export class PrimaService {
       canPrepare: this.staffPayMaker(user),
       period,
       prev,
-      rule: { payByDay: RULES.staffPayroll.value.payByDay, unpaidDivisor: await this.staffPayDivisor(period) },
+      rule: { payByDay: RULES.staffPayroll.value.payByDay, unpaidDivisor: await this.staffPayDivisor(period), steps: RULES.staffPayroll.value.steps, dueThisMonth: this.staffPayDue(period) },
       employers: status,
       runs: rows,
       mine,
@@ -27483,7 +27503,7 @@ export class PrimaService {
     };
   }
 
-  /** Home lines: the next approver's turn, and last month not paid by the 7th. */
+  /** Home lines: the next approver's turn with the date it is due by (P100 F11), and a month not paid by the 29th. */
   private async staffPayHome(user: User): Promise<HomeItem[]> {
     const role = this.staffPayRoleOf(user);
     if (!role) return [];
@@ -27493,16 +27513,16 @@ export class PrimaService {
       .map((r) => ({
         tone: r.late ? 'crit' : 'warn',
         tag: 'Staff payroll',
-        title: `${r.companyName} ${r.period}: ${{ draft: 'prepare and submit', submitted: 'approve', approved: 'approve as COO', coo_approved: 'pay through the bank', paid: '' }[r.stage]}`,
-        detail: `${r.totals.headcount} staff · net RM${r.totals.net.toLocaleString('en-MY', { minimumFractionDigits: 2 })}`,
+        title: `${r.companyName} ${r.period}: ${{ draft: 'prepare and submit', submitted: 'approve', approved: 'approve as COO', coo_approved: 'pay through the bank', paid: '' }[r.stage]}${r.dueBy ? ` by ${r.dueBy}` : ''}`,
+        detail: `${r.totals.headcount} staff · net RM${r.totals.net.toLocaleString('en-MY', { minimumFractionDigits: 2 })}${r.stepLate ? ' · past its date' : ''}`,
         go: { view: 'staffpay' },
       }));
-    const late = b.employers.filter((e) => e.lastLate);
+    const late = b.employers.filter((e) => e.lastLate || e.currentLate);
     if (late.length)
       items.unshift({
         tone: 'crit',
         tag: 'Staff payroll',
-        title: `${b.prev} staff salaries not paid by the ${b.rule.payByDay}th: ${late.length} employer${late.length === 1 ? '' : 's'}`,
+        title: `Staff salaries not paid by the ${b.rule.payByDay}th: ${late.length} employer${late.length === 1 ? '' : 's'}`,
         detail: late.map((e) => `${e.companyName} (${e.last ? (this.staffPayWaiting(e.last.stage) ?? 'paid') : 'not prepared'})`).join(', '),
         go: { view: 'staffpay' },
       });

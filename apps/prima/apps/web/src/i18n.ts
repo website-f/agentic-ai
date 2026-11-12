@@ -4229,6 +4229,9 @@ const PATTERNS: Pat[] = [
   [/^To approve \((\d+)\)$/, (m, x) => `${x ? 'Untuk approve' : 'Untuk diluluskan'} (${m[1]})`],
   [/^Paid in payroll (.+)$/, (m) => `Dibayar dalam gaji ${m[1]}`],
   [/^Overtime \(([\d.]+) h approved\)$/, (m, x) => `${x ? 'OT' : 'Kerja lebih masa'} (${m[1]} jam diluluskan)`],
+  [/^Salaries are paid by the (\d+)th of the same month: HR submits by the (\d+)nd, the Chief of Staff approves by the (\d+)th and the COO by the (\d+)th\.$/, (m, x) => (x ? `Gaji dibayar sebelum ${m[1]} hari bulan yang sama: HR submit sebelum ${m[2]} hb, Ketua Staf approve sebelum ${m[3]} hb dan COO sebelum ${m[4]} hb.` : `Gaji dibayar sebelum ${m[1]} haribulan bulan yang sama: HR menghantar sebelum ${m[2]} haribulan, Ketua Staf meluluskan sebelum ${m[3]} haribulan dan COO sebelum ${m[4]} haribulan.`)],
+  [/^Not paid by the (\d+)th$/, (m, x) => (x ? `Belum dibayar sebelum ${m[1]} hb` : `Tidak dibayar sebelum ${m[1]} haribulan`)],
+  [/^Salaries not paid by the (\d+)th of the month: (.+)\.$/, (m) => `Gaji tidak dibayar sebelum ${m[1]} haribulan: ${m[2]}.`],
   // end P100 pay patterns
   // PDPA and insurance registers (5 Nov 2026)
   [/^(\d+) open breach(?:es)? without the data involved or the cause\.$/, (m, x) => `${m[1]} ${x ? 'breach terbuka' : 'pelanggaran terbuka'} tanpa data terlibat atau punca.`],
