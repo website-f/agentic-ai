@@ -13,7 +13,7 @@
 //    never invented. Payroll refuses to pay a record without its birth date, joining date or nationality.
 //  - no sample people, sample sign-ins, "(mock)" companies, licences, branches, sites or rosters.
 
-import { GOV_OPS_COMPANY_ID, GROUP_EMPLOYER_ID, IT_COMPANY_ID, PRIVATE_OPS_COMPANY_ID, PWVSB_HQ_BRANCH, isCentralEmployer } from './access';
+import { GOV_OPS_COMPANY_ID, GROUP_EMPLOYER_ID, IT_COMPANY_ID, LOGISTICS_COMPANY_ID, LOGISTICS_COMPANY_NAME, PRIVATE_OPS_COMPANY_ID, PWVSB_HQ_BRANCH, isCentralEmployer } from './access';
 import { sha256Hex } from './audit';
 import { regionOfState } from './regions';
 import { addDays } from './time';
@@ -22,16 +22,20 @@ import type { AuthorityGrant, Company, Dataset, Id, IsoDate, Nationality, Person
 export const REAL_DATA_FORMAT = 'prima-real-data';
 export const REAL_DATA_VERSION = 1;
 
-/** What a company is in the group. Only 'licensed' and 'asset' get a company record. */
-export type RealCompanyRole = 'licensed' | 'central' | 'gov_ops' | 'private_ops' | 'asset' | 'it';
-export const REAL_COMPANY_ROLES: readonly RealCompanyRole[] = ['licensed', 'central', 'gov_ops', 'private_ops', 'asset', 'it'];
+/**
+ * What a company is in the group. Only 'licensed' and 'asset' get a company record. E5 (Fauzan, 11 Nov 2026): Perfect
+ * Global Logistics ('logistics') is also an employer of staff (the Transport department), a central employer like the rest.
+ */
+export type RealCompanyRole = 'licensed' | 'central' | 'gov_ops' | 'private_ops' | 'asset' | 'it' | 'logistics';
+export const REAL_COMPANY_ROLES: readonly RealCompanyRole[] = ['licensed', 'central', 'gov_ops', 'private_ops', 'asset', 'it', 'logistics'];
 
 /** The structural employer ids the code depends on, by role. */
-export const STRUCTURAL_COMPANY_IDS: Readonly<Record<'central' | 'gov_ops' | 'private_ops' | 'it', Id>> = {
+export const STRUCTURAL_COMPANY_IDS: Readonly<Record<'central' | 'gov_ops' | 'private_ops' | 'it' | 'logistics', Id>> = {
   central: GROUP_EMPLOYER_ID,
   gov_ops: GOV_OPS_COMPANY_ID,
   private_ops: PRIVATE_OPS_COMPANY_ID,
   it: IT_COMPANY_ID,
+  logistics: LOGISTICS_COMPANY_ID,
 };
 
 /**
@@ -74,6 +78,7 @@ export const CENTRAL_ALIASES: Readonly<Record<Id, readonly string[]>> = {
     'Operasi Sarawak',
   ],
   [PRIVATE_OPS_COMPANY_ID]: ['Sasa Team Sdn Bhd', 'Sasa Team'],
+  [LOGISTICS_COMPANY_ID]: [LOGISTICS_COMPANY_NAME, 'Perfect Global Logistics', 'PGL'],
 };
 
 /** The full names of the central employers, for the office's list of Prima companies. */
@@ -82,11 +87,14 @@ export const CENTRAL_FULL_NAMES: Readonly<Record<Id, string>> = {
   [IT_COMPANY_ID]: 'Merdeka Network Sdn Bhd',
   [GOV_OPS_COMPANY_ID]: 'Goodwill Empire Sdn Bhd',
   [PRIVATE_OPS_COMPANY_ID]: 'Sasa Team Sdn Bhd',
+  [LOGISTICS_COMPANY_ID]: LOGISTICS_COMPANY_NAME,
 };
 
 /** Departments a staff member's unit maps to (the central departments of types.ts User['department']). */
-export type RealUnit = 'hr' | 'it' | 'finance' | 'audit' | 'cms' | 'fwm' | 'operations' | 'asset';
+export type RealUnit = 'hr' | 'it' | 'finance' | 'audit' | 'cms' | 'fwm' | 'operations' | 'asset' | 'transport';
 export const REAL_UNIT_LABEL: Readonly<Record<RealUnit, string>> = {
+  // E5 (Fauzan, 11 Nov 2026): Perfect Global Logistics employs the Transport department.
+  transport: 'Transport',
   hr: 'HR',
   it: 'IT',
   finance: 'Finance',
@@ -114,7 +122,7 @@ export const REAL_AREAS: Readonly<Record<string, { label: string; states: string
 export type RealRoleHint = 'manager' | 'leader' | 'staff';
 
 export interface RealCompany {
-  /** 'pwvsb', 'goodwill', 'sasateam' or 'merdeka' for the central employers; 'co-<name>' for a company record. */
+  /** 'pwvsb', 'goodwill', 'sasateam', 'merdeka' or 'pgl' for the central employers; 'co-<name>' for a company record. */
   key: Id;
   name: string;
   role: RealCompanyRole;

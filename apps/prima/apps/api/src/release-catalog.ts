@@ -16,6 +16,7 @@ import {fwWelfareProblems} from './fw-welfare-readiness';
 import {fwRecruitProblems} from './fw-recruit-readiness';
 import {payFormulasProblems} from './pay-formulas-readiness';
 import {guardPayProblems} from './guard-pay-readiness';
+import {centralEmployersProblems} from './central-employers-readiness';
 
 // Agentic Office: upstream activates the first seven; the office database already has the rest installed, so the office
 // release keeps them activated (same order as release-artifact.ts MODULE_SPECS and db/release-manifest.json).
@@ -23,7 +24,7 @@ export const RELEASE_MODULE_IDS = ['procurement','rental_corrections','cleanup',
 // Upstream keeps the Central Admin modules optional (catalog-only); the office activates them above. Guard pay (Fauzan,
 // 8 Nov 2026): the pay formulas and guard pay modules are optional, installed later as their own step and never with a
 // release (Prima takes over guard pay on 1 August 2027). Their catalogue checks stay, so an operator can verify them.
-export const OPTIONAL_MODULE_IDS = ['pay_formulas','guard_pay'] as const;
+export const OPTIONAL_MODULE_IDS = ['pay_formulas','guard_pay','central_employers'] as const;
 export type ReleaseModuleId = typeof RELEASE_MODULE_IDS[number] | typeof OPTIONAL_MODULE_IDS[number];
 type CatalogClient = Pick<PoolClient,'query'>;
 type ReleaseClient = Pick<PoolClient,'query'|'release'>;
@@ -59,6 +60,8 @@ export async function moduleCatalogProblems(client:CatalogClient,id:ReleaseModul
     // guardPayProblems also reports the pay formulas module when that is not ready.
     if(id==='guard_pay')return (await guardPayProblems(client)).length?[moduleCode(id)]:[];
     if(id==='fw_recruit')return (await fwRecruitProblems(client)).length?[moduleCode(id)]:[];
+    // E5: every central employer in the hand-over rule; the hand-over layer itself must still match its catalogue.
+    if(id==='central_employers')return (await orgLinksProblems(client)).length||(await centralEmployersProblems(client)).length?[moduleCode(id)]:[];
     if(id==='central_admin_panel')return (await centralAdminWallsProblems(client)).length||(await centralAdminPanelProblems(client)).length?[moduleCode(id)]:[];
     if((await itManualProblems(client)).length || (await itOperationsProblems(client)).length)return [moduleCode(id)];
     const checks={procurement:procurementProblems,rental_corrections:rentalCorrectionProblems,cleanup:cleanupSchemaProblems,metrics:workflowMetricProblems};

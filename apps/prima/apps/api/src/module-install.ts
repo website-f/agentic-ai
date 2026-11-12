@@ -28,6 +28,8 @@ const PREFIX:Record<ReleaseModuleId,{tables:string[];functions:string|null;polic
  pay_formulas:{tables:['pay_formulas','pay_formula_uses','pay_law_versions','site_hours_approvals','public_holiday_lists'],functions:null},
  guard_pay:{tables:['guard_pay_runs','guard_pay_advances','guard_loans','statutory_versions'],functions:null},
  fw_recruit:{tables:['fw_recruit_files'],functions:null},
+ // E5 (Fauzan, 11 Nov 2026): no table; its own function prefix ce_ marks it present.
+ central_employers:{tables:[],functions:'ce_'},
 };
 type Client=Pick<PoolClient,'query'>;
 const asApp=async<T>(c:Client,fn:()=>Promise<T>)=>{await c.query('SET LOCAL ROLE prima_app');try{return await fn();}finally{await c.query('RESET ROLE');}};

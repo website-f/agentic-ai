@@ -1,6 +1,7 @@
 // What is missing in the database for the hand-over layer (db/modules/org-links-v1.sql). Names only, never data.
 import type { Pool } from 'pg';
 import { ORG_LINKS_CATALOG } from './org-links-catalog';
+import { ORG_CENTRAL_EMPLOYER_E5 } from './central-employers-readiness';
 
 const TABLES = ['org_events', 'org_tasks', 'org_notices', 'org_imports'];
 const ENTRY_CHECKS = ['org_event_matches_audit', 'org_task_matches_event', 'org_notice_matches_task', 'org_finance_team', 'org_run_by'];
@@ -85,7 +86,8 @@ export async function orgLinksProblems(pool: Pick<Pool, 'query'>): Promise<strin
     const got = new Map(live[kind].map((x) => [x.split('|')[0], x]));
     for (const [k, x] of got) {
       if (!want.has(k)) out.push(`Unexpected ${CATALOG_LABEL[kind].toLowerCase()} ${k}.`);
-      else if (want.get(k) !== x) out.push(`${CATALOG_LABEL[kind]} ${k} differs from the reviewed module.`);
+      // E5 (db/modules/central-employers-v1.sql) re-states the central-employer rule with every central employer.
+      else if (want.get(k) !== x && !(kind === 'functions' && x === ORG_CENTRAL_EMPLOYER_E5)) out.push(`${CATALOG_LABEL[kind]} ${k} differs from the reviewed module.`);
     }
     for (const k of want.keys()) if (!got.has(k)) out.push(`${CATALOG_LABEL[kind]} ${k} is missing.`);
   }
