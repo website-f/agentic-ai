@@ -56,10 +56,10 @@ export type JaArea = 'payroll' | 'fwm' | 'incidents' | 'hostels';
 export const RULES = {
   maxGuardAge: rule('HR-AGE-MAX', 60, 'Policy', 'Fauzan, 23 Oct 2026: no guards over 60'),
   maxHoursPerDay: rule('OPS-HOURS-MAX', 12, 'Law', 'Employment Act 1955 s.60A: not more than 12 hours a day including overtime'),
-  minRestHours: rule('OPS-REST-MIN', 8, 'Policy', 'Proposed minimum rest between shifts, for approval'),
+  minRestHours: rule('OPS-REST-MIN', 8, 'Policy', 'Approved by Fauzan, 11 Nov 2026 (round 3, Q5): minimum rest between shifts stays 8 hours.'),
   maxConsecutiveDays: rule('OPS-REST-DAY', 6, 'Law', 'Employment Act 1955 s.59: one rest day each week'),
-  lateGraceMin: rule('OPS-LATE-GRACE', 15, 'Policy', 'Proposed clock-in grace period, for approval'),
-  earlyLeaveGraceMin: rule('OPS-EARLY-GRACE', 15, 'Policy', 'Proposed clock-out grace period, for approval'),
+  lateGraceMin: rule('OPS-LATE-GRACE', 10, 'Policy', 'Approved by Fauzan, 11 Nov 2026 (G5, round 3 Q5): clock-in grace 15 -> 10 minutes; a guard clocking in 11 minutes late is marked late, 10 minutes is not.'),
+  earlyLeaveGraceMin: rule('OPS-EARLY-GRACE', 10, 'Policy', 'Approved by Fauzan, 11 Nov 2026 (G5, round 3 Q5): early clock-out grace 15 -> 10 minutes, the same as clock-in.'),
   offlineSyncMin: rule('OPS-OFFLINE', 5, 'Policy', 'Records reaching the server 5+ minutes late are marked as offline sync'),
   kdnVettingUsualDays: rule(
     'HR-KDN-VETTING',
