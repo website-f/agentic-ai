@@ -3007,6 +3007,12 @@ export class HttpApi implements Api {
   }
   qualityOps(opts: { companyId?: string } = {}) {
     return this.call<Awaited<ReturnType<Api['qualityOps']>>>('GET', `/quality/operations${opts.companyId ? `?companyId=${encodeURIComponent(opts.companyId)}` : ''}`);
+  }  // ---------- P100 newa (Fauzan, 11 Nov 2026) ----------
+  socsoPaymentsAbroad() {
+    return this.call<Awaited<ReturnType<Api['socsoPaymentsAbroad']>>>('GET', '/socso-extras/payments-abroad');
+  }
+  socsoExtraAct(action: string, body: Record<string, unknown>) {
+    return this.call<Awaited<ReturnType<Api['socsoExtraAct']>>>('POST', '/socso-extras/act', { ...body, action });
   }
 }
 

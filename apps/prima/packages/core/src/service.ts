@@ -1055,6 +1055,7 @@ import type { FwRecruitFile } from "./types";
 import type { FwRecruitStep } from "./types";
 import type { FwRecruitStepRecord } from "./types";
 import type { FwContractLanguage } from "./types";
+import { SocsoExtrasService } from "./socso-extras";
 
 
 
@@ -1485,7 +1486,9 @@ export type HomeView =
   | 'payformulas'
   | 'sitehours'
   | 'guardpay' | 'renewals' | 'work' | 'memos' | 'mine' | 'office' | 'registers' | 'meetings' | 'quality'
-  | 'selfaudit' | 'rba';
+  | 'selfaudit' | 'rba'
+  // P100 newa: SOCSO extras (E4) and the items warranty claims (J2) link straight to their screens.
+  | 'socso' | 'items';
 
 
 
@@ -5436,6 +5439,7 @@ export class PrimaService {
       ...(await this.joinLeaveHome(user)),
       ...(await this.hrCaseHome(user)),
       ...(await this.oshHome(user)),
+      ...(await this.newaHome(user)),
       ...(await this.developmentHome(user)),
       ...(await this.screening.homeItems(user)),
       ...(await this.guardTrainingHome(user)),
@@ -5854,6 +5858,7 @@ export class PrimaService {
         go: { view: 'people' as const, personId: b.personId, companyId },
       })),
       ...(jaOwns('hostels') ? [] : await this.hostelReminders(companyId)),
+      ...(await this.newaHome(user)),
       ...(await this.contractHome(user, companyId)),
       ...(await this.branchHome(user, companyId)),
       ...(await this.corpHome(user, companyId)),
@@ -5986,6 +5991,7 @@ export class PrimaService {
       ...(await this.selfAuditHome(user, companyId)),
       ...(await this.purHome(user, companyId)),
       ...(await this.grcHome(user, companyId)),
+      ...(await this.newaHome(user)),
       ...(await this.officeHomeItems(user, companyId)),
     ];
     return {
@@ -10576,6 +10582,8 @@ export class PrimaService {
             amountPaid: null,
             // The family's names, papers and payments are personal data kept by HR.
             dependants: undefined,
+            // P100 (E4): the LINDUNG form (injury) and the payments abroad (family) stay with HR too.
+            socsoExtras: undefined,
             docs: c.docs.filter((d) => !items.find((i) => i.id === d.item)?.medical),
             history: c.history.map((h) => (h.medical ? { ...h, what: 'Medical paper added (kept by HR)' } : h)),
           },
@@ -10614,6 +10622,8 @@ export class PrimaService {
         if (manage)
           for (const x of [...(c.dependants?.people ?? []).flatMap((p) => [...p.relationDocIds, ...p.translationDocIds]), ...(c.dependants?.payments ?? []).flatMap((p) => [...p.docIds, ...(p.received?.docIds ?? [])])])
             refs.add(x);
+        // P100 (E4): the family's or embassy's letter, the bank slip and the family's receipt for a payment abroad.
+        if (manage) for (const p of c.socsoExtras?.payAbroad ?? []) for (const x of [...p.docIds, ...(p.paid?.docIds ?? []), ...(p.received?.docIds ?? [])]) refs.add(x);
         return docs.filter((d) => refs.has(d.id));
       })(),
       items: items
@@ -54042,6 +54052,35 @@ export class PrimaService {
       await tx.audit({ at, actor: user.name, companyId: f.companyId, action: 'fwm.recruit.stop', entity: 'fw_recruit_file', entityId: f.id, summary: `Recruitment of ${f.candidateName} stopped: ${reason}` });
       return updated;
     });
+  }
+
+  // ---------- P100 newa (Fauzan, 11 Nov 2026: "Tell Fitri to build"): E4, E8, E9, E10, J2 ----------
+  // Each workflow lives in its own file; these are the thin doors into it and the few private helpers it reuses.
+
+  /** E4: the SOCSO claim for an HR step (HR of the person's company, never their own claim), as the SOCSO steps use it. */
+  async socsoHrClaim(user: User, claimId: Id, types?: SocsoCaseType[]) {
+    return this.socsoForHr(user, claimId, types);
+  }
+
+  /** E4: one SOCSO claim change with its history line and audit entry, one at a time per claim. */
+  async socsoSave(user: User, c: SocsoClaim, patch: (docIds: Id[], fresh: SocsoClaim) => Partial<SocsoClaim>, what: string, action: string, docs: EvidenceDoc[] = []) {
+    return this.socsoWrite(user, c, patch, what, action, docs);
+  }
+
+  /** E4: papers for a SOCSO step, as documents on the claim. */
+  socsoProofDocs(user: User, c: SocsoClaim, proof: ProofInput[] | undefined, caption: string, need: boolean): EvidenceDoc[] {
+    return this.socsoDocs(user, c, proof, caption, need);
+  }
+
+  /** E4: the LINDUNG claim form, the company's payments to dependants abroad and the SOCSO and DOSH reminders. */
+  get socsoExtras(): SocsoExtrasService {
+    return new SocsoExtrasService(this.store, this);
+  }
+
+  /** Reminders from the P100 newa workflows, for the person's own Home. */
+  private async newaHome(user: User): Promise<HomeItem[]> {
+    const parts = await Promise.all([this.socsoExtras.homeItems(user).catch(() => [] as HomeItem[])]);
+    return parts.flat();
   }
 }
 

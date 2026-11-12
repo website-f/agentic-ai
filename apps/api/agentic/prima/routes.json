@@ -6175,6 +6175,19 @@
   "name": "socsoClaims"
  },
  {
+  "method": "POST",
+  "path": "api/socso-extras/act",
+  "name": "act",
+  "doc": "One step on a SOCSO claim: prepare or check the LINDUNG form; raise, decide, pay or confirm a payment abroad.",
+  "body": "Record<string, unknown>"
+ },
+ {
+  "method": "GET",
+  "path": "api/socso-extras/payments-abroad",
+  "name": "paymentsAbroad",
+  "doc": "Payments to dependants abroad for the Finance Director, the CEO and Finance: who, how much, why and the next step."
+ },
+ {
   "method": "GET",
   "path": "api/socso/:id",
   "name": "socsoClaim",

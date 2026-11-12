@@ -1242,6 +1242,8 @@ export interface SocsoClaim {
   dependants?: SocsoDependants;
   /** The separate duty to notify DOSH (JKKP) of a workplace accident, OSHA 1994 s.32 and NADOPOD 2004. */
   dosh?: DoshNotice;
+  /** P100 (E4, Fauzan 11 Nov 2026): the LINDUNG claim form and the company's own payments to dependants abroad. */
+  socsoExtras?: import('./socso-extras').SocsoExtras;
 }
 
 /** What a work restriction keeps the person from, until HR clears it. NO_DUTY: no shifts at all. */

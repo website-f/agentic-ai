@@ -20,6 +20,7 @@ import { Card, Empty, Facts, PageHead, Person, Search, Stat, Stats, Steps, Toolb
 import { Chip, Drawer, ErrorNotice, Loading, dateLabel, dateTimeLabel, hhmm, useAction, useLoad, type Tone } from '../ui';
 import { DocList, ProofPicker } from './Proof';
 import { DoshPanel, DoshRegisterPanel, FamilyPanel, LindungPanel } from './SocsoMore';
+import { DoshDraftPanel, LindungFormPanel, PayAbroadPanel } from './SocsoExtras';
 import { useApp } from '../App';
 import '../styles/hrx.css';
 
@@ -617,9 +618,24 @@ export function SocsoClaimBody({ id }: { id: string }) {
         )}
       </div>
       {view === 'rehab' && <RehabPanel d={data} />}
-      {view === 'lindung' && data.lindung && <LindungPanel d={data} />}
-      {view === 'family' && <FamilyPanel d={data} />}
-      {view === 'dosh' && data.dosh && <DoshPanel d={data} />}
+      {view === 'lindung' && data.lindung && (
+        <>
+          <LindungPanel d={data} />
+          <LindungFormPanel d={data} />
+        </>
+      )}
+      {view === 'family' && (
+        <>
+          <FamilyPanel d={data} />
+          <PayAbroadPanel d={data} />
+        </>
+      )}
+      {view === 'dosh' && data.dosh && (
+        <>
+          <DoshPanel d={data} />
+          <DoshDraftPanel d={data} />
+        </>
+      )}
       {view === 'claim' && (
         <>
           <section className="sx-sec">

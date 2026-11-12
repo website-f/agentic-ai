@@ -1,0 +1,56 @@
+/* P100 newa (Fauzan, 11 Nov 2026): the new workflow screens (SOCSO extras, hostel stays, PIKM records, resignations,
+   warranty claims). Office kit look: cards, a list that becomes cards on a phone, 44 px targets, and paper sheets that
+   print black on white through their own print layer. */
+.nw-stack { display: flex; flex-direction: column; gap: 12px; }
+.nw-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.nw-spread { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between; }
+.nw-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; }
+.nw-form .field { margin: 0; }
+.nw-form .nw-wide { grid-column: 1 / -1; }
+.nw-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.nw-note { color: var(--muted); font-size: 13px; margin: 0; }
+.nw-list { display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: var(--r); overflow: hidden; background: var(--surface); }
+.nw-item { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) auto; gap: 8px 14px; align-items: start; padding: 12px 14px; border-top: 1px solid var(--line); }
+.nw-item:first-child { border-top: 0; }
+.nw-item-main { min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.nw-item-main strong { overflow-wrap: anywhere; }
+.nw-item-side { display: flex; flex-direction: column; gap: 4px; align-items: flex-start; font-size: 13px; color: var(--muted); min-width: 0; }
+.nw-item-end { display: flex; flex-direction: column; gap: 6px; align-items: flex-end; }
+.nw-item-act { grid-column: 1 / -1; display: flex; flex-direction: column; gap: 8px; padding-top: 8px; border-top: 1px dashed var(--line); }
+.nw-amount { font-variant-numeric: tabular-nums; font-weight: 600; white-space: nowrap; }
+.nw-steps { display: flex; flex-wrap: wrap; gap: 4px 10px; font-size: 12px; color: var(--muted); }
+.nw-steps span[data-done='true'] { color: var(--ok); font-weight: 600; }
+.nw-steps span[data-now='true'] { color: var(--ink); font-weight: 600; }
+.nw-text { white-space: pre-wrap; line-height: 1.55; font-size: 14px; margin: 0; }
+.nw-tabs { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; padding-bottom: 2px; }
+.nw-tabs::-webkit-scrollbar { display: none; }
+.nw-tabs button { flex: 0 0 auto; }
+@media (max-width: 719px) {
+  .nw-item { grid-template-columns: minmax(0, 1fr); }
+  .nw-item-end { align-items: stretch; }
+  .nw-actions .btn, .nw-item-end .btn, .nw-item-act .btn { min-height: 44px; flex: 1 1 auto; }
+  .nw-form { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* The paper to print: shown on screen as a preview, printed alone through #newa-print. */
+.nw-sheet { background: #fff; color: #111; border: 1px solid #bbb; border-radius: 4px; padding: 20px 22px; font-size: 13px; line-height: 1.45; max-width: 820px; overflow-x: auto; }
+.nw-sheet h3 { margin: 0 0 2px; font-size: 16px; color: #111; }
+.nw-sheet .nw-sheet-sub { margin: 0 0 12px; color: #444; font-size: 12px; }
+.nw-sheet table { width: 100%; border-collapse: collapse; }
+.nw-sheet th, .nw-sheet td { border: 1px solid #999; padding: 6px 8px; text-align: left; vertical-align: top; overflow-wrap: anywhere; }
+.nw-sheet th { width: 38%; background: #f2f2f2; font-weight: 600; }
+.nw-sheet th small { display: block; font-weight: 400; color: #555; }
+.nw-sheet .nw-sheet-draft { display: inline-block; border: 2px solid #b00; color: #b00; padding: 2px 8px; font-weight: 700; margin-bottom: 8px; }
+.nw-sheet .nw-sign { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-top: 26px; }
+.nw-sheet .nw-sign div { border-top: 1px solid #333; padding-top: 4px; font-size: 12px; }
+@media (max-width: 719px) {
+  .nw-sheet { padding: 12px; font-size: 12px; }
+  .nw-sheet th { width: 42%; }
+}
+#newa-print { display: none; }
+@media print {
+  body:has(> #newa-print:not(:empty)) > :not(#newa-print) { display: none !important; }
+  body:has(> #newa-print:not(:empty)) { background: #fff !important; margin: 0; }
+  #newa-print:not(:empty) { display: block; }
+  #newa-print .nw-sheet { border: 0; max-width: none; padding: 12mm; }
+}
