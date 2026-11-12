@@ -2040,6 +2040,8 @@
   "fwm": [
    "GET cms/guard-phones",
    "GET companies/:/guard-phones",
+   "GET fw-extras/hostel-stays",
+   "GET fw-extras/permits-on-mc",
    "GET fwm",
    "GET fwm/docs/:",
    "GET fwm/recruitment",
@@ -2050,6 +2052,7 @@
    "GET records/kinds",
    "POST coo-notices/:/:/seen",
    "POST fw-checks/:/close",
+   "POST fw-extras/act",
    "POST fw-papers/:/ack",
    "POST fwm-tasks/:/done",
    "POST fwm-tasks/:/review",
@@ -2136,9 +2139,12 @@
    "POST approval-limits"
   ],
   "hostels": [
+   "GET fw-extras/hostel-stays",
+   "GET fw-extras/permits-on-mc",
    "GET hostels",
    "GET records/:/form",
    "GET records/kinds",
+   "POST fw-extras/act",
    "POST fwm/workers",
    "POST hostel-bills",
    "POST hostel-bills/:/:",

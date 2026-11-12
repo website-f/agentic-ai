@@ -24,6 +24,7 @@ import { FwmRecruitmentPanel } from './FwmRecruitment';
 import { FwAddMenu, NoAddNote } from './FwmAdd';
 import { GuardPhoneCard } from './GuardPhoneOffice';
 import '../styles/hrx.css';
+import { PermitOnMcCard } from './FwExtras';
 
 /**
  * Foreign Worker Management (Fauzan, 26 Oct 2026). FWM renews every foreign worker's papers and sends the OMs dated
@@ -381,6 +382,8 @@ export function FwmView() {
         </div>
       )}
 
+      {/* P100 (E8): workers on long SOCSO MC whose permit comes due, with the task to the OM. */}
+      {view === 'tasks' && <PermitOnMcCard />}
       {view === 'tasks' && (
         <Card title="Tasks to the OMs" actions={<span className="hx-count">{openTasks} open</span>} flush>
           {tasksFound.length === 0 ? (

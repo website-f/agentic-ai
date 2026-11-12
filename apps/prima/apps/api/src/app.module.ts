@@ -21,6 +21,7 @@ import { OfflineController } from './offline.controller';
 import { CheckinController } from './checkin.controller';
 // P100 newa (Fauzan, 11 Nov 2026): new workflow controllers.
 import { SocsoExtrasController } from './socso-extras.controller';
+import { FwExtrasController } from './fw-extras.controller';
 import { AttendanceReportsController, AttendanceUploads } from './attendance-reports.controller';
 
 const jobEmail = jobEmailRuntimeModule();
@@ -29,7 +30,7 @@ const alerts = alertsModule();
 const m365 = m365ConnectionsModule();
 
 @Module({
-  controllers: [HealthController, AttendanceReportsController, AuthController, OfficeController, CheckinController, AppController, JaFeedController, DoorFeedController, PlannerFeedController, AnalyticsFeedController, InhouseFeedController, ConnectionsController, ItExtractionController, ItImportReviewController, ...jobEmail.controllers,...teamsEvidence.controllers, OfflineController, ...SPECIAL_OPS_CONTROLLERS, ...WHATSAPP_CONTROLLERS, OrgHealthController, OrgController, ...m365.controllers, ShareController, StaffDirectoryController, CleaningController, ...alerts.controllers, DraftHelpController, GuardPhoneOpenController, GuardPhoneController, SocsoExtrasController],
+  controllers: [HealthController, AttendanceReportsController, AuthController, OfficeController, CheckinController, AppController, JaFeedController, DoorFeedController, PlannerFeedController, AnalyticsFeedController, InhouseFeedController, ConnectionsController, ItExtractionController, ItImportReviewController, ...jobEmail.controllers,...teamsEvidence.controllers, OfflineController, ...SPECIAL_OPS_CONTROLLERS, ...WHATSAPP_CONTROLLERS, OrgHealthController, OrgController, ...m365.controllers, ShareController, StaffDirectoryController, CleaningController, ...alerts.controllers, DraftHelpController, GuardPhoneOpenController, GuardPhoneController, SocsoExtrasController, FwExtrasController],
   providers: [Db, { provide: SharePointConnections, useFactory: () => new SharePointConnections() }, { provide: AttendanceUploads, useFactory: () => new AttendanceUploads() }, ...jobEmail.providers,...teamsEvidence.providers, WhatsAppRunner, ...m365.providers, ...alerts.providers],
 })
 export class AppModule {}

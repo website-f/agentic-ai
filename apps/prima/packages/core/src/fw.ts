@@ -33,6 +33,8 @@ export const FWM_TASK_LABEL: Record<FwmTaskKind, string> = {
   BIOMETRIC: 'Biometric or photo capture',
   UTILITY_CLAUSE: 'Add the utility clause to the contract',
   OTHER: 'Other errand',
+  // P100 (E8, Fauzan 11 Nov 2026): a permit falling due while the worker is on long SOCSO MC.
+  PERMIT_ON_MC: 'Permit renewal during SOCSO MC',
 };
 
 /** Who is told at each stage. Escalation goes FWM, Chief of Staff, COO, CEO (Fauzan, 26 Oct 2026). */

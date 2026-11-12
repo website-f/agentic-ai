@@ -3014,5 +3014,14 @@ export class HttpApi implements Api {
   socsoExtraAct(action: string, body: Record<string, unknown>) {
     return this.call<Awaited<ReturnType<Api['socsoExtraAct']>>>('POST', '/socso-extras/act', { ...body, action });
   }
+  hostelStays() {
+    return this.call<Awaited<ReturnType<Api['hostelStays']>>>('GET', '/fw-extras/hostel-stays');
+  }
+  fwPermitsOnMc() {
+    return this.call<Awaited<ReturnType<Api['fwPermitsOnMc']>>>('GET', '/fw-extras/permits-on-mc');
+  }
+  fwExtraAct(action: string, body: Record<string, unknown>) {
+    return this.call<unknown>('POST', '/fw-extras/act', { ...body, action });
+  }
 }
 

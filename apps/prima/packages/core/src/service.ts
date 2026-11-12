@@ -1056,6 +1056,7 @@ import type { FwRecruitStep } from "./types";
 import type { FwRecruitStepRecord } from "./types";
 import type { FwContractLanguage } from "./types";
 import { SocsoExtrasService } from "./socso-extras";
+import { FwExtrasService } from "./fw-extras";
 
 
 
@@ -54077,9 +54078,34 @@ export class PrimaService {
     return new SocsoExtrasService(this.store, this);
   }
 
+  /** E8: who works hostels, as the hostel bills use it. */
+  hostelRole(user: User) {
+    return this.hostelRoleOf(user);
+  }
+
+  /** E8: who works foreign workers, as the FWM board uses it. */
+  fwmRole(user: User) {
+    return this.fwmRoleOf(user);
+  }
+
+  /** P100: papers (PDF, JPEG, PNG or a SharePoint link) as proof records for a company; no photos. */
+  paperDocs(user: User, companyId: Id, proof: ProofInput[] | undefined, caption: string): EvidenceDoc[] {
+    return this.proofRecords(user, companyId, null, proof, {}, { documentsOnly: true }).docs.map((d) => ({ ...d, caption: d.caption || caption }));
+  }
+
+  /** P100: saves paper proof inside the step's transaction; the same file cannot be given twice. */
+  async savePaperDocs(tx: Store, docs: EvidenceDoc[]): Promise<Id[]> {
+    return this.saveProof(tx, { photos: [], docs });
+  }
+
+  /** E8: hostel stays and check-out memos, and the permit task during long SOCSO MC. */
+  get fwExtras(): FwExtrasService {
+    return new FwExtrasService(this.store, this);
+  }
+
   /** Reminders from the P100 newa workflows, for the person's own Home. */
   private async newaHome(user: User): Promise<HomeItem[]> {
-    const parts = await Promise.all([this.socsoExtras.homeItems(user).catch(() => [] as HomeItem[])]);
+    const parts = await Promise.all([this.socsoExtras.homeItems(user).catch(() => [] as HomeItem[]), this.fwExtras.homeItems(user).catch(() => [] as HomeItem[])]);
     return parts.flat();
   }
 }

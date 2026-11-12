@@ -3330,6 +3330,25 @@
  },
  {
   "method": "POST",
+  "path": "api/fw-extras/act",
+  "name": "act",
+  "doc": "One step: check a worker in, prepare or decide a check-out memo, or send the permit task during SOCSO MC.",
+  "body": "Record<string, unknown>"
+ },
+ {
+  "method": "GET",
+  "path": "api/fw-extras/hostel-stays",
+  "name": "hostelStays",
+  "doc": "Each hostel with who lives there now, free beds, and the check-out memos with their step."
+ },
+ {
+  "method": "GET",
+  "path": "api/fw-extras/permits-on-mc",
+  "name": "permitsOnMc",
+  "doc": "Foreign workers on long SOCSO MC whose permit comes due before the MC ends, and whether FWM sent the task."
+ },
+ {
+  "method": "POST",
   "path": "api/fw-papers/:id/ack",
   "name": "fwPaperAck",
   "doc": "Acknowledge a paper at 30 days or less (rule FWM-ACK).",

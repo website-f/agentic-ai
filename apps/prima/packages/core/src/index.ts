@@ -277,3 +277,5 @@ export * from './import-match';
 export * from './pdf-table';
 // P100 newa (Fauzan, 11 Nov 2026): E4 SOCSO extras.
 export * from './socso-extras';
+// P100 newa: E8 foreign workers (hostel stays, check-out memo, permit task during SOCSO MC).
+export * from './fw-extras';

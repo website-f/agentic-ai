@@ -1302,7 +1302,7 @@ export interface FwRenewal {
 }
 
 /** Errands FWM asks the OM to get done with the guard (Fauzan, 26 Oct 2026). */
-export type FwmTaskKind = 'FOMEMA' | 'JIM' | 'TNG' | 'BIOMETRIC' | 'UTILITY_CLAUSE' | 'OTHER';
+export type FwmTaskKind = 'FOMEMA' | 'JIM' | 'TNG' | 'BIOMETRIC' | 'UTILITY_CLAUSE' | 'OTHER' | 'PERMIT_ON_MC';
 
 /** FWM sends a dated task to the OM; the OM sends the guard and uploads proof; FWM accepts or sends it back. */
 export interface FwmTask {
@@ -3467,6 +3467,12 @@ export interface HostelStay {
   personName: string;
   from: IsoDate;
   to: IsoDate | null;
+  /** P100 (E8, Fauzan 11 Nov 2026): the room, who checked the worker in, and the check-out memo. Older rows have none. */
+  room?: string;
+  checkedInBy?: string;
+  checkedInById?: Id;
+  checkedInAt?: IsoDateTime;
+  checkout?: import('./fw-extras').CheckoutMemo | null;
 }
 
 export type HostelBillKind = 'RENT' | 'ELECTRICITY' | 'WATER' | 'MAINTENANCE';

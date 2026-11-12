@@ -4018,6 +4018,7 @@ export class DemoApi implements Api {
   }  // ---------- P100 newa (Fauzan, 11 Nov 2026) ----------
   private newaApply(u: User, area: string, action: string, body: Record<string, unknown>): Promise<unknown> {
     if (area === 'socso') return this.svc.socsoExtras.act(u, action, body);
+    if (area === 'fw') return this.svc.fwExtras.act(u, action, body);
     throw new ApiError('Unknown step.', 400);
   }
   socsoPaymentsAbroad() {
@@ -4025,6 +4026,15 @@ export class DemoApi implements Api {
   }
   socsoExtraAct(action: string, body: Record<string, unknown>) {
     return this.write<Awaited<ReturnType<Api['socsoExtraAct']>>>('newaAct', ['socso', action, body]);
+  }
+  hostelStays() {
+    return this.read((s, u) => s.fwExtras.staysBoard(u));
+  }
+  fwPermitsOnMc() {
+    return this.read((s, u) => s.fwExtras.permitsBoard(u));
+  }
+  fwExtraAct(action: string, body: Record<string, unknown>) {
+    return this.write<unknown>('newaAct', ['fw', action, body]);
   }
 }
 
