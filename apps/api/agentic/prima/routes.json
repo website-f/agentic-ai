@@ -3174,6 +3174,44 @@
  },
  {
   "method": "GET",
+  "path": "api/fleet/transfers",
+  "name": "board"
+ },
+ {
+  "method": "POST",
+  "path": "api/fleet/transfers",
+  "name": "request",
+  "body": "Record<string, unknown>"
+ },
+ {
+  "method": "POST",
+  "path": "api/fleet/transfers/:id/cancel",
+  "name": "cancel",
+  "params": [
+   "id"
+  ],
+  "body": "Record<string, unknown>"
+ },
+ {
+  "method": "POST",
+  "path": "api/fleet/transfers/:id/decide",
+  "name": "decide",
+  "params": [
+   "id"
+  ],
+  "body": "Record<string, unknown>"
+ },
+ {
+  "method": "POST",
+  "path": "api/fleet/transfers/:id/handover",
+  "name": "handover",
+  "params": [
+   "id"
+  ],
+  "body": "Record<string, unknown>"
+ },
+ {
+  "method": "GET",
   "path": "api/fleet/usage",
   "name": "vehicleUsage",
   "query": [

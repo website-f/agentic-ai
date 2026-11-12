@@ -1,0 +1,104 @@
+/* P100 (newb): vehicle moves (E6), the CMS sign-in card (E7), the client portal desk (J1), guard sign-ins in bulk (J5)
+   and each person's alert choices (J6). Built on the items kit (styles/items.css); colours from styles.css tokens only.
+   Phone first: one column and 44 px targets; two columns from 720 px. */
+
+.nb-grid {
+  grid-template-columns: 1fr;
+}
+@media (min-width: 720px) {
+  .nb-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+  .nb-span {
+    grid-column: 1 / -1;
+  }
+}
+.nb-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 10px;
+}
+.nb-actions .btn {
+  min-height: 44px;
+}
+@media (max-width: 480px) {
+  .nb-actions .btn {
+    flex: 1 1 auto;
+  }
+}
+.nb-due {
+  color: var(--warn);
+  font-size: 12.5px;
+  font-weight: 600;
+}
+.nb-more {
+  border-top: 1px solid var(--line);
+  padding-top: 10px;
+  display: grid;
+  gap: 8px;
+}
+.nb-more > summary {
+  cursor: pointer;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  color: var(--muted);
+}
+.nb-checks {
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  padding: 6px 12px 8px;
+  margin: 10px 0 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  column-gap: 12px;
+}
+.nb-checks > legend {
+  font-size: 13px;
+  color: var(--muted);
+  padding: 0 4px;
+}
+.nb-note {
+  background: var(--surface-2);
+  border-radius: var(--r);
+  padding: 10px 12px;
+  font-size: 13.5px;
+  color: var(--muted);
+}
+.nb-lock {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.nb-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 56px;
+  padding: 10px 18px;
+}
+.nb-toggle input[type='checkbox'] {
+  width: 22px;
+  height: 22px;
+  flex: none;
+}
+.nb-toggle-text {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.nb-toggle-text span {
+  font-size: 13px;
+  color: var(--muted);
+}
+.nb-mono {
+  font-family: var(--font-mono);
+  letter-spacing: 0.06em;
+  font-size: 18px;
+  word-break: break-all;
+}

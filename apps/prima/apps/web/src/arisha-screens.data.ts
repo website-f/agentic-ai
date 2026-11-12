@@ -3164,6 +3164,10 @@ export const SCREEN_GUIDES: ScreenGuide[] = [
         "what": "Which company uses each rented vehicle, the rent, and the month's draft rent bills."
       },
       {
+        "name": "Move between companies",
+        "what": "Moving a vehicle to another group company's use: Transport asks, a second Transport member or the COO approves with a comment, Transport records the handover. The owner stays the same."
+      },
+      {
         "name": "Driver consent",
         "what": "Drivers who still need a signed consent to monitoring."
       },
@@ -3178,6 +3182,15 @@ export const SCREEN_GUIDES: ScreenGuide[] = [
         "steps": [
           "Open \"My requests\", fill in \"What it is for\", \"From\" and \"To\".",
           "Choose a \"Vehicle\" or leave \"Any vehicle (Transport chooses)\", then press \"Send request\"."
+        ]
+      },
+      {
+        "task": "How to move a vehicle to another company (Transport)",
+        "steps": [
+          "Open \"Move between companies\" and press \"Ask to move a vehicle\".",
+          "Choose the \"Vehicle\", the \"Company that will use it\" and the date, write the reason, press \"Send for approval\".",
+          "Another Transport member or the COO opens it, writes a comment and presses \"Approve\" or \"Return\". You cannot approve your own.",
+          "On the day, open the move, fill in the odometer, who handed over and who received, the condition and what went with it, and press \"Save the handover\". The vehicle moves then."
         ]
       },
       {

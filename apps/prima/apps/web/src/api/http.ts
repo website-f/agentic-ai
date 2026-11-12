@@ -2073,6 +2073,22 @@ export class HttpApi implements Api {
   vehicleUsage(month?: string) {
     return this.call<Awaited<ReturnType<Api['vehicleUsage']>>>('GET', `/fleet/usage${month ? `?month=${encodeURIComponent(month)}` : ''}`);
   }
+  // P100 newb: E6 vehicle moves between companies (apps/api/src/vehicle-transfer.controller.ts).
+  vehicleTransferBoard() {
+    return this.call<Awaited<ReturnType<Api['vehicleTransferBoard']>>>('GET', '/fleet/transfers');
+  }
+  requestVehicleTransfer(input: Parameters<Api['requestVehicleTransfer']>[0]) {
+    return this.call<unknown>('POST', '/fleet/transfers', input);
+  }
+  decideVehicleTransfer(id: string, approve: boolean, note: string) {
+    return this.call<unknown>('POST', `/fleet/transfers/${encodeURIComponent(id)}/decide`, { approve, note });
+  }
+  handOverVehicleTransfer(id: string, input: Parameters<Api['handOverVehicleTransfer']>[1]) {
+    return this.call<unknown>('POST', `/fleet/transfers/${encodeURIComponent(id)}/handover`, input);
+  }
+  cancelVehicleTransfer(id: string, reason: string) {
+    return this.call<unknown>('POST', `/fleet/transfers/${encodeURIComponent(id)}/cancel`, { reason });
+  }
   setVehicleFuel(vehicleId: string, input: Parameters<Api['setVehicleFuel']>[1]) {
     return this.call<unknown>('POST', `/fleet/vehicles/${encodeURIComponent(vehicleId)}/fuel-type`, input);
   }

@@ -3380,6 +3380,8 @@ export interface Dataset {
   ownerTestCheckins: import('./owner-test-checkin').OwnerTestCheckin[];
   /** P97: the face photo at each staff check-in and check-out (clock-snap.ts; db/modules/clock-snaps-v1.sql). */
   clockSnaps: import('./clock-snap').ClockSnap[];
+  /** E6 (P100): moving a vehicle to another group company's use: request, approval, handover (vehicle-transfer.ts; db/modules/vehicle-transfers-v1.sql). */
+  vehicleTransfers: import('./vehicle-transfer').VehicleTransfer[];
   fwWelfareChecks: FwWelfareCheck[];
   fwPlacements: FwPlacement[];
   fwPlacementHosts: FwPlacementHostView[];

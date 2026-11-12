@@ -96,29 +96,31 @@ describe('vehicles rented from Perfect Global Logistics', () => {
     const other = ds.companies.find((c) => c.id !== 'co-sasa')!;
     await svc.recordVehicleRental(transport, 'veh-sasa-1', { ownerId: 'pgl', since: '2026-10-01', reason: 'PGL manages it' });
     await svc.setVehicleRent(fd, 'veh-sasa-1', { monthly: 1500, agreementRef: 'SYN', reason: 'Agreement', from: '2026-10' });
-    await svc.moveVehicleUse(transport, 'veh-sasa-1', { companyId: other.id, from: '2026-11-10', reason: 'Needed at their sites' });
+    // E6 (11 Nov 2026): a move is asked for, approved by someone else and handed over; the vehicle moves at the handover.
+    const move = async (to: string, on: string, reason: string) => {
+      const t = await svc.requestVehicleTransfer(transport, { vehicleId: 'veh-sasa-1', toCompanyId: to, wantedOn: on, reason });
+      await svc.decideVehicleTransfer(coo, t.id, true, 'Approved');
+      return svc.handOverVehicleTransfer(transport, t.id, { on, odometerKm: 1000, handedBy: 'Synthetic A', receivedBy: 'Synthetic B', condition: 'Good', items: ['keys'] });
+    };
+    await move(other.id, '2026-11-03', 'Needed at their sites');
     const v = (await store.get('vehicles', 'veh-sasa-1'))!;
     expect(v.companyId).toBe('co-sasa');
-    expect(vehicleUserOn(v, '2026-11-09')).toBe('co-sasa');
-    expect(vehicleUserOn(v, '2026-11-10')).toBe(other.id);
+    expect(vehicleUserOn(v, '2026-11-02')).toBe('co-sasa');
+    expect(vehicleUserOn(v, '2026-11-03')).toBe(other.id);
     // October stays with the owner company; November goes to the company using it on the 30th.
     expect((await svc.vehicleRentals(fd, '2026-10')).bills).toEqual([expect.objectContaining({ companyId: 'co-sasa', amount: 1500 })]);
     const nov = await svc.vehicleRentals(fd, '2026-11');
     expect(nov.bills).toEqual([expect.objectContaining({ companyId: other.id, amount: 1500 })]);
     expect(nov.vehicles[0]).toMatchObject({ ownedById: 'co-sasa', companyId: other.id });
-    // Today (5 Nov) the owner still uses it: the move starts on the 10th.
-    expect((await svc.fleetBoard(transport)).board.find((x) => x.id === 'veh-sasa-1')?.usedByName).toBeNull();
+    expect((await svc.fleetBoard(transport)).board.find((x) => x.id === 'veh-sasa-1')?.usedByName).toBe(other.name);
     const audit = (await store.list('audit', {})).filter((a) => a.action === 'fleet.move');
     expect(audit[0].summary).toContain('Reason: Needed at their sites');
     expect(audit[0].summary).toContain('Owner stays');
-    // Refusals: not Transport, no reason, same company, not after the last move, old date, unknown company.
+    // The direct move without a request and an approval is refused; the wrong role first.
     for (const u of [fd, coo]) await expect(svc.moveVehicleUse(u, 'veh-sasa-1', { companyId: 'co-sasa', from: '2026-11-20', reason: 'X y z' })).rejects.toThrow(/Transport department/);
-    await expect(svc.moveVehicleUse(transport, 'veh-sasa-1', { companyId: 'co-sasa', from: '2026-11-20', reason: '' })).rejects.toThrow(/reason/);
-    await expect(svc.moveVehicleUse(transport, 'veh-sasa-1', { companyId: other.id, from: '2026-11-20', reason: 'Again' })).rejects.toThrow(/already uses/);
-    await expect(svc.moveVehicleUse(transport, 'veh-sasa-1', { companyId: 'co-sasa', from: '2026-11-10', reason: 'Same day' })).rejects.toThrow(/after the last one/);
-    await expect(svc.moveVehicleUse(transport, 'veh-sasa-1', { companyId: 'co-nope', from: '2026-11-20', reason: 'Nope' })).rejects.toThrow(/Choose the company/);
+    await expect(svc.moveVehicleUse(transport, 'veh-sasa-1', { companyId: 'co-sasa', from: '2026-11-20', reason: 'Direct' })).rejects.toThrow(/approved by someone else/);
     // Moving back to the owner, or to a central company such as Perfect Global Logistics itself, works.
-    await svc.moveVehicleUse(transport, 'veh-sasa-1', { companyId: 'pgl', from: '2026-11-28', reason: 'Back to the PGL yard' });
+    await move('pgl', '2026-11-05', 'Back to the PGL yard');
     expect((await svc.vehicleRentals(fd, '2026-11')).bills).toEqual([expect.objectContaining({ companyId: 'pgl', companyName: 'Perfect Global Logistics Sdn Bhd' })]);
   });
 

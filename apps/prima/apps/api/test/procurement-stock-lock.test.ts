@@ -3,6 +3,8 @@
 // database that this test resets.
 import 'reflect-metadata';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { after, before, describe, it } from 'node:test';
 import { Client } from 'pg';
 import { Db } from '../src/db';
@@ -206,7 +208,12 @@ describe('procurement store locking on PostgreSQL', () => {
     // Moved to another company's use: the owner row stays under its own company; the bill goes to the user.
     const vRow = (await owner.query(`SELECT data->>'companyId' AS company_id FROM prima.vehicles WHERE id = $1`, [v.id])).rows[0];
     const userCo = (await owner.query(`SELECT id FROM prima.companies WHERE id <> $1 ORDER BY id LIMIT 1`, [vRow.company_id])).rows[0].id;
-    await db.asUser('u-transport', (svc, u) => svc.moveVehicleUse(u, v.id, { companyId: userCo, from: `${today}-01`, reason: 'Synthetic move' }));
+    // E6 (11 Nov 2026): the move is asked for, approved by the COO and handed over (module vehicle-transfers-v1).
+    await owner.query(readFileSync(resolve(__dirname, '../../../../db/modules/vehicle-transfers-v1.sql'), 'utf8'));
+    const day1 = `${today}-01`;
+    const vt = await db.asUser('u-transport', (svc, u) => svc.requestVehicleTransfer(u, { vehicleId: v.id, toCompanyId: userCo, wantedOn: day1, reason: 'Synthetic move' }));
+    await db.asUser('u-coo', (svc, u) => svc.decideVehicleTransfer(u, vt.id, true, 'Synthetic approval'));
+    await db.asUser('u-transport', (svc, u) => svc.handOverVehicleTransfer(u, vt.id, { on: day1, odometerKm: 1, handedBy: 'Synthetic A', receivedBy: 'Synthetic B', condition: 'Good', items: ['keys'] }));
     assert.equal((await owner.query(`SELECT data->>'companyId' AS c FROM prima.vehicles WHERE id = $1`, [v.id])).rows[0].c, vRow.company_id);
     const bills = await db.asUser('u-fd', (svc, u) => svc.vehicleRentals(u));
     assert.ok(bills.bills.some((b) => b.companyId === userCo && b.amount === 1800));

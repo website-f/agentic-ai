@@ -124,6 +124,7 @@ import { clockCarriesOver } from "./checkin-service";
 import { analyseMovement } from "./movement";
 import { TRACKER_NOTE_KINDS, TRACKER_NOTES_MAX, type TrackerNote } from "./movement";
 import { ClockSnapService } from "./clock-snap-service";
+import { VehicleTransferService } from "./vehicle-transfer";
 import type { MovementSummary } from "./movement";
 import type { RawReading } from "./movement";
 import { mayTestCheckin } from "./owner-test-checkin";
@@ -48475,42 +48476,41 @@ export class PrimaService {
    * a car owned by one company and managed by Perfect Global Logistics can be used by another). The owner stays the
    * same; rent is billed to the company using it on the month's last day.
    */
-  async moveVehicleUse(user: User, vehicleId: Id, input: { companyId: Id; from: IsoDate; reason: string }) {
+  async moveVehicleUse(user: User, _vehicleId: Id, _input: { companyId: Id; from: IsoDate; reason: string }): Promise<never> {
     if (this.rentalRoleOf(user) !== 'transport') throw new AccessDenied('view', '(the Transport department moves vehicles)');
-    const v = await this.store.get('vehicles', vehicleId);
-    if (!v) throw new NotFound('Vehicle');
-    const companies = await this.store.list('companies', {});
-    const target = isCentralEmployer(input.companyId) ? { id: input.companyId, name: centralEmployerName(input.companyId)! } : companies.find((c) => c.id === input.companyId);
-    if (!target) throw new BadRequest('Choose the company that will use the vehicle.');
-    const reason = String(input.reason ?? '').trim().slice(0, 300);
-    if (reason.length < 3) throw new BadRequest('Give the reason.');
-    const from = String(input.from ?? '');
-    if (!this.rentDateOk(from)) throw new BadRequest('Give the date: from the first day of last month at the earliest.');
-    const last = [...(v.usedBy ?? [])].sort((a, b) => a.from.localeCompare(b.from)).at(-1);
-    if (last && from <= last.from) throw new BadRequest(`The move must be after the last one (${last.from}).`);
-    const current = vehicleUserOn(v, from);
-    if (current === target.id) throw new BadRequest(`${target.name} already uses ${v.plate} on ${from}.`);
-    const nameOf = (id: Id) => centralEmployerName(id) ?? companies.find((c) => c.id === id)?.name ?? id;
-    const at = this.now();
-    return this.store.transaction(async (tx) => {
-      await tx.lock?.('vehicles', v.id);
-      const cur = (await tx.get('vehicles', v.id))!;
-      if (JSON.stringify(cur.usedBy ?? []) !== JSON.stringify(v.usedBy ?? [])) throw new BadRequest('This vehicle changed while you were working. Open it again.');
-      const updated = await tx.update('vehicles', v.id, {
-        usedBy: [...(v.usedBy ?? []), { companyId: target.id, from, reason, by: user.name, at }],
-        log: [...v.log, { at, by: user.name, what: `Used by ${target.name} from ${from} (was ${nameOf(current)}): ${reason}`, docId: null }],
-      });
-      await tx.audit({
-        at,
-        actor: user.name,
-        companyId: v.companyId,
-        action: 'fleet.move',
-        entity: 'vehicle',
-        entityId: v.id,
-        summary: `${v.plate} used by ${target.name} from ${from}, was ${nameOf(current)}. Owner stays ${nameOf(v.companyId)}. Reason: ${reason}`,
-      });
-      return updated;
+    // E6 (Fauzan, 11 Nov 2026): a move between group companies is asked for, approved by someone else, then handed over
+    // (vehicleTransfers below). The vehicle moves only at the recorded handover; a direct move is no longer taken.
+    throw new BadRequest('A vehicle moves to another company only through a move request approved by someone else and its handover record (Vehicles, Move between companies).');
+  }
+
+  /** E6: moving a vehicle to another group company's use (vehicle-transfer.ts): ask, approve, hand over. */
+  vehicleTransfers(): VehicleTransferService {
+    return new VehicleTransferService(this.store, () => this.now(), {
+      companies: async () => [
+        ...CENTRAL_EMPLOYER_IDS.map((id) => ({ id, name: centralEmployerName(id) ?? id })),
+        ...(await this.store.list('companies', {})).map((c) => ({ id: c.id, name: c.name })),
+      ],
     });
+  }
+
+  vehicleTransferBoard(user: User) {
+    return this.vehicleTransfers().board(user);
+  }
+
+  requestVehicleTransfer(user: User, input: { vehicleId: Id; toCompanyId: Id; wantedOn: IsoDate; reason: string }) {
+    return this.vehicleTransfers().request(user, input);
+  }
+
+  decideVehicleTransfer(user: User, id: Id, approve: boolean, note: string) {
+    return this.vehicleTransfers().decide(user, id, approve, note);
+  }
+
+  handOverVehicleTransfer(user: User, id: Id, input: Parameters<VehicleTransferService['handover']>[2]) {
+    return this.vehicleTransfers().handover(user, id, input);
+  }
+
+  cancelVehicleTransfer(user: User, id: Id, reason: string) {
+    return this.vehicleTransfers().cancel(user, id, reason);
   }
 
   /** The Finance Director or the CEO sets a rented vehicle's monthly rent from the agreement, with a reason, from a month. */
