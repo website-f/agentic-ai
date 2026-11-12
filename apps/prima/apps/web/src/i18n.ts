@@ -4108,6 +4108,9 @@ const ROWS: Row[] = [
   ['A picture with no document word in its name.', 'Gambar tanpa perkataan dokumen dalam namanya.', null],
   ['The file name does not say what it is. Choose the type.', 'Nama fail tidak menyatakan apa ia. Pilih jenisnya.', 'Nama file tak sebut apa ia. Pilih jenisnya.'],
   ['No column matches.', 'Tiada lajur yang sepadan.', 'Tiada column yang sepadan.'],
+  // K2 staff directory: leave out bad rows (StaffDirectory.tsx)
+  ['Refused rows and why', 'Baris yang ditolak dan sebabnya', 'Row yang ditolak dan sebab'],
+  ['Leave out the rows with problems and send the rest', 'Jangan masukkan baris yang bermasalah dan hantar yang selebihnya', 'Jangan masukkan row yang ada masalah dan hantar yang lain'],
 ];
 
 const DICT = new Map<string, [string, string]>();

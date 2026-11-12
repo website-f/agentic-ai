@@ -1,5 +1,6 @@
 import { Select } from '../SearchSelect';
 import { useMemo, useRef, useState } from "react";
+import { useLang } from "../i18n";
 import {
   STAFF_DIRECTORY_ISSUE_LABELS,
   type StaffDirectoryIssue,
@@ -216,6 +217,7 @@ type BatchRow = Awaited<
 >["batches"][number];
 
 function Batches({ batches }: { batches: BatchRow[] }) {
+  const { lang } = useLang();
   const act = useAction();
   const [comment, setComment] = useState<Record<string, string>>({});
   const decide = (id: string, approve: boolean) =>
@@ -259,6 +261,24 @@ function Batches({ batches }: { batches: BatchRow[] }) {
                   {x.preparedBy} on {x.preparedAt.slice(0, 10)}
                 </span>
               </div>
+              {/* K2/K10: the counts for the load log, and each refused row with its reason. */}
+              <span className="small" data-no-translate>
+                {lang === "en"
+                  ? `${x.inFile} rows in the file · ${x.status === "approved" ? x.rows : 0} loaded · ${x.refused.length} refused · ${x.alreadyIn} already listed`
+                  : `${x.inFile} baris dalam fail · ${x.status === "approved" ? x.rows : 0} dimuatkan · ${x.refused.length} ditolak · ${x.alreadyIn} sudah tersenarai`}
+              </span>
+              {x.refused.length > 0 && (
+                <details className="small">
+                  <summary>Refused rows and why</summary>
+                  <ul style={{ margin: "4px 0 0", paddingLeft: 18 }}>
+                    {x.refused.map((r) => (
+                      <li key={r.row} data-no-translate>
+                        {`${lang === "en" ? "Row" : "Baris"} ${r.row}: ${r.reasons.join(" ")}`}
+                      </li>
+                    ))}
+                  </ul>
+                </details>
+              )}
               {x.decidedBy && (
                 <span className="small">
                   {x.status} by {x.decidedBy} on {x.decidedAt?.slice(0, 10)}:{" "}
@@ -317,12 +337,15 @@ function Import() {
   const [source, setSource] = useState("");
   const [text, setText] = useState("");
   const [preview, setPreview] = useState<StaffDirectoryPreview | null>(null);
+  // K2: send the good rows and leave out the rows with problems; each one's reason is kept on the batch.
+  const [leaveOut, setLeaveOut] = useState(false);
   // A preview that finishes after a later edit is dropped, so what is sent is what was previewed.
   const round = useRef(0);
   const edit = (change: () => void) => {
     round.current++;
     change();
     setPreview(null);
+    setLeaveOut(false);
   };
   const readFile = (f: File | undefined) => {
     if (!f) return;
@@ -351,7 +374,7 @@ function Import() {
   const bad = preview ? preview.rows.filter((r) => r.errors.length) : [];
   const blocked =
     !preview ||
-    bad.length > 0 ||
+    (bad.length > 0 && !leaveOut) ||
     preview.problems.length > 0 ||
     preview.missingColumns.length > 0 ||
     preview.ready === 0;
@@ -363,7 +386,8 @@ function Import() {
             text,
             source,
             fingerprint: preview!.fingerprint,
-          }) as Promise<{ rows: number }>,
+            leaveOutBad: leaveOut,
+          }) as Promise<{ rows: number; refused: number }>,
         (r) => `Sent ${r.rows} people for approval.`,
       )
       .then((r) => r && edit(() => setText("")));
@@ -440,10 +464,22 @@ function Import() {
               </p>
             )}
             {bad.length > 0 && (
-              <p className="notice" data-tone="crit">
-                Fix row {bad.map((r) => r.row).join(", ")} and preview again; a
-                batch goes in whole or not at all.
-              </p>
+              <div className="notice" data-tone={leaveOut ? "warn" : "crit"}>
+                <p style={{ margin: 0 }}>
+                  Fix row {bad.map((r) => r.row).join(", ")} and preview again, or
+                  leave them out: the reasons are kept on the batch for the
+                  approver.
+                </p>
+                <label className="row" style={{ gap: 8, minHeight: 44, cursor: "pointer" }}>
+                  <input
+                    type="checkbox"
+                    checked={leaveOut}
+                    onChange={(e) => setLeaveOut(e.target.checked)}
+                    style={{ width: 20, height: 20 }}
+                  />
+                  <span>Leave out the rows with problems and send the rest</span>
+                </label>
+              </div>
             )}
             <p className="small">
               {preview.rows.length} rows read · {preview.ready} new ·{" "}
