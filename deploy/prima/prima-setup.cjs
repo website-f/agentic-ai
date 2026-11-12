@@ -59,7 +59,10 @@ const REFRESH = [
 //   clock-snaps-v1.sql (P97): the staff check-in and check-out face photos, seen only by the person, their manager and HR.
 //   rba-committee-roster-v1.sql (P100 H1, Fauzan 11 Nov 2026): the RBA committee read rule removed and the company wall
 //     TO prima_app (where rba-readiness-v1 is installed), plus the names-and-seats roster other offices read.
-const OFFICE_MODULES = ['owner-test-checkin-v1.sql', 'clock-snaps-v1.sql', 'rba-committee-roster-v1.sql'];
+//   speak-up-wall-v1.sql (P100 H2, Fauzan 11 Nov 2026: "Yes. But HR can see it"; approved to install): the speak-up
+//     reports table behind forced row-level security (handler, reviewing handler, named reporter, HR read only), receipt
+//     code and leader count functions, and the report number sequence.
+const OFFICE_MODULES = ['owner-test-checkin-v1.sql', 'clock-snaps-v1.sql', 'rba-committee-roster-v1.sql', 'speak-up-wall-v1.sql'];
 (async () => {
   const { Client } = require(require.resolve('pg', { paths: [cwd] }));
   const c = new Client({ connectionString: process.env.DATABASE_URL });

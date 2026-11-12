@@ -50,6 +50,16 @@ export type Filter<T extends TableName> = { [K in keyof Row<T>]?: Row<T>[K] | Ro
 export interface Store {
   /** Whether a table is installed: a separately applied database module may not be yet. Absent = always installed. */
   hasTable?(table: TableName): Promise<boolean>;
+  /**
+   * H2 (11 Nov 2026): speak-up reports behind the database wall (db/modules/speak-up-wall-v1.sql). True once it is in
+   * place; then report numbers, receipt codes and leader counts go through the database's own functions, because a
+   * session reads only the reports it may. Absent (memory) or false: the service reads its own list.
+   */
+  speakUpWallReady?(): Promise<boolean>;
+  speakUpNextNumber?(): Promise<number>;
+  speakUpStatus?(code: string): Promise<import('./speak-up').SpeakUpReceipt | null>;
+  speakUpReply?(input: { code: string; text: string; retaliation: boolean; at: IsoDateTime; today: IsoDate; afterCloseDays: number }): Promise<import('./speak-up').SpeakUpReplyResult>;
+  speakUpSignals?(): Promise<import('./speak-up').SpeakUpSignal[]>;
   workflowMetricProblems?():Promise<string[]>;
   workflowMetricNextSegment?(ref:import('./it-workflow-metrics-types').MetricRef):Promise<number>;
   workflowMetricLock?(ref:import('./it-workflow-metrics-types').MetricRef|null):Promise<void>;

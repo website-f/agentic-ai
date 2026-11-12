@@ -363,6 +363,7 @@ import type { GiftEntry } from "./types";
 import type { GrcObligation } from "./types";
 import type { OshAssessment } from "./types";
 import type { WhistleReport } from "./types";
+import { holdsSpeakUpHrWall, speakUpCodeSuffix, speakUpReceiptOf, speakUpSignalOf, type SpeakUpReceipt, type SpeakUpSignal } from "./speak-up";
 import type { PurRequest } from "./types";
 import type { PurSupplier } from "./types";
 import type { PurCategory } from "./types";
@@ -20895,7 +20896,8 @@ export class PrimaService {
       this.store.list('credentials', {}),
       this.store.list('armsMovements', {}),
       this.store.list('insurancePolicies', {}),
-      this.store.list('whistleReports', {}),
+      // H2: counts only, through the speak-up wall (no text reaches ACT).
+      this.speakUpSignals(),
       this.store.list('giftEntries', {}),
       this.store.list('oshAssessments', {}),
       this.store.list('payChanges', {}),
@@ -22865,7 +22867,34 @@ export class PrimaService {
       .filter((r) => r.reporterId === user.id)
       .map((r) => ({ code: r.code, at: r.at, category: r.category, status: r.status, outcome: r.status === 'closed' ? r.outcome : null }));
     const leader = isGroupLeader(user) || user.department === 'audit';
-    const openReports = reports.filter((r) => r.status !== 'closed');
+    // H2: leaders and ACT count from the wall's no-text function; the reports they read stay only their own.
+    const signals = leader ? await this.speakUpSignals() : [];
+    const openReports = signals.filter((r) => r.status !== 'closed');
+    // HR reads reports, read only (Fauzan, 11 Nov 2026: "Yes. But HR can see it"); never one that names them or that
+    // they handle or sent, and never who sent an anonymous one (it is not kept). The handler decides.
+    // The company a report is about, by name (HR reads across the group, not only the companies it audits).
+    const groupCos = holdsSpeakUpHrWall(user) ? await this.store.list('companies', {}) : [];
+    const coName = (id: Id | null) => (id ? (groupCos.find((c) => c.id === id)?.name ?? name(id)) : 'Not given');
+    const hrReports = holdsSpeakUpHrWall(user)
+      ? reports
+          .filter((r) => !r.implicatedUserIds.includes(user.id) && r.handlerId !== user.id && r.reporterId !== user.id)
+          .map((r) => ({
+            id: r.id,
+            code: r.code,
+            at: r.at,
+            category: r.category,
+            companyName: coName(r.companyId),
+            summary: r.summary,
+            anonymous: r.anonymous,
+            reporterName: r.anonymous ? null : r.reporterName,
+            handlerName: r.handlerName,
+            status: r.status,
+            outcome: r.status === 'closed' ? r.outcome : null,
+            closedAt: r.closedAt,
+            messages: (r.messages ?? []).length,
+          }))
+          .sort((a, b) => Number(a.status === 'closed') - Number(b.status === 'closed') || b.at.localeCompare(a.at))
+      : null;
     const handlers = (await this.store.list('users', {}))
       .filter((u) => rule.whistleHandlers.includes(u.id))
       .map((u) => ({ id: u.id, name: u.name, title: u.title }));
@@ -22885,12 +22914,13 @@ export class PrimaService {
       toReview,
       mine,
       handlers,
+      hrReports,
       whistleStats: leader
         ? {
             open: openReports.length,
             ackLate: openReports.filter((r) => r.status === 'received' && daysBetween(dateOf(r.at), today) > rule.whistleAckDays).length,
             updateDue: openReports.filter((r) => this.whistleFollowUp(r, today).updateDue).length,
-            retaliation: reports.filter((r) => this.whistleFollowUp(r, today).retaliation).length,
+            retaliation: signals.filter((r) => this.whistleFollowUp(r, today).retaliation).length,
           }
         : null,
       kpis: {
@@ -23055,10 +23085,12 @@ export class PrimaService {
         'Every handler is named in this report, so it cannot be handled here. Raise it with the Chairman directly.',
       );
     const at = this.now();
-    const all = await this.store.list('whistleReports', {});
-    const code = `SU-${String(all.length + 1).padStart(4, '0')}-${(toMs(at) % 46656).toString(36).toUpperCase().padStart(3, '0')}`;
+    // H2: the number comes from the database sequence once the wall is in place (a reporter cannot count reports they
+    // cannot see); the code ends in 8 random characters, so it cannot be guessed from the time it was sent.
+    const n = (await this.speakUpWall()) ? await this.store.speakUpNextNumber!() : (await this.store.list('whistleReports', {})).length + 1;
+    const code = `SU-${String(n).padStart(4, '0')}-${speakUpCodeSuffix()}`;
     const r: WhistleReport = {
-      id: `wb-${all.length + 1}-${toMs(at)}`,
+      id: `wb-${n}-${toMs(at)}`,
       code,
       at,
       anonymous: !!input.anonymous,
@@ -23094,7 +23126,7 @@ export class PrimaService {
 
   /** Anyone holding the receipt code may see where the report stands, and the messages with the handler. */
   async whistleStatus(code: string) {
-    const r = (await this.store.list('whistleReports', {})).find((x) => x.code === (code ?? '').trim().toUpperCase());
+    const r = await this.whistleByCode(code);
     if (!r) throw new NotFound('Report');
     const rule = RULES.assurance.value;
     const today = this.today();
@@ -23109,8 +23141,31 @@ export class PrimaService {
     };
   }
 
+  /**
+   * H2: one report by its receipt code, reduced to what the code opens (status, outcome, messages). Behind the database
+   * wall this is the database's own function, since the person holding the code may not read the report itself.
+   */
+  private async whistleByCode(code: string): Promise<SpeakUpReceipt | null> {
+    const c = (code ?? '').trim().toUpperCase();
+    if (!c) return null;
+    if (await this.speakUpWall()) return this.store.speakUpStatus!(c);
+    const r = (await this.store.list('whistleReports', {})).find((x) => x.code === c);
+    return r ? speakUpReceiptOf(r) : null;
+  }
+
+  /** H2: whether report numbers, receipt codes and counts go through the speak-up wall's database functions. */
+  private async speakUpWall(): Promise<boolean> {
+    return !!this.store.speakUpWallReady && (await this.store.speakUpWallReady());
+  }
+
+  /** What leaders and ACT count from: never the text (through the wall's function once it is in place). */
+  private async speakUpSignals(): Promise<SpeakUpSignal[]> {
+    if (await this.speakUpWall()) return this.store.speakUpSignals!();
+    return (await this.store.list('whistleReports', {})).map(speakUpSignalOf);
+  }
+
   /** Where the handler stands with the reporter: an answer waiting, retaliation reported, or an update due. */
-  private whistleFollowUp(r: WhistleReport, today: IsoDate) {
+  private whistleFollowUp(r: Pick<WhistleReport, 'status' | 'at' | 'acknowledgedAt'> & { messages?: { at: string; from: 'handler' | 'reporter'; retaliation?: boolean }[] }, today: IsoDate) {
     const rule = RULES.assurance.value;
     const msgs = r.messages ?? [];
     // By position, not time: messages are kept in the order they were written.
@@ -23150,6 +23205,7 @@ export class PrimaService {
    */
   async whistleReply(user: User, code: string, text: string, retaliation = false) {
     if (user.integration) throw new AccessDenied('view', '(reports)');
+    if (await this.speakUpWall()) return this.whistleReplyByWall(code, text, retaliation);
     const found = (await this.store.list('whistleReports', {})).find((x) => x.code === (code ?? '').trim().toUpperCase());
     if (!found) throw new NotFound('Report');
     const body = (text ?? '').trim().slice(0, 2000);
@@ -23174,6 +23230,29 @@ export class PrimaService {
       return r;
     });
     return { code: r.code, handledBy: r.handlerName };
+  }
+
+  /**
+   * H2: the reply through the database's own function (prima.speak_up_reply), which holds the report while it appends,
+   * with the same rules as above. The person holding the code never reads the report itself.
+   */
+  private async whistleReplyByWall(code: string, text: string, retaliation: boolean) {
+    const body = (text ?? '').trim().slice(0, 2000);
+    if (body.length < 10) throw new BadRequest(retaliation ? 'Say what happened to you after you reported, and when.' : 'Write your answer.');
+    const rule = RULES.assurance.value;
+    const at = this.now();
+    const out = await this.store.transaction(async (tx) => {
+      const res = await tx.speakUpReply!({ code: (code ?? '').trim().toUpperCase(), text: body, retaliation: !!retaliation, at, today: this.today(), afterCloseDays: rule.whistleAfterCloseDays });
+      if ('error' in res) {
+        if (res.error === 'closed_long') throw new BadRequest(`This report closed more than ${rule.whistleAfterCloseDays} days ago. Make a new report.`);
+        if (res.error === 'closed') throw new BadRequest('This report is closed. If you were treated badly for reporting, choose "Report retaliation", or make a new report.');
+        if (res.error === 'too_short') throw new BadRequest('Write your answer.');
+        throw new NotFound('Report');
+      }
+      await tx.audit({ at, actor: 'Speak-up channel', companyId: null, action: retaliation ? 'grc.whistle.retaliation' : 'grc.whistle.reply', entity: 'whistle_report', entityId: res.id, summary: `Report ${res.code}: ${retaliation ? 'retaliation reported by the reporter' : 'the reporter answered'}.` });
+      return res;
+    });
+    return { code: out.code, handledBy: out.handlerName };
   }
 
   async whistleStep(user: User, id: Id, action: 'acknowledge' | 'investigate' | 'note' | 'close', text: string) {

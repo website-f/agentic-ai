@@ -177,6 +177,7 @@ export * from './finance-ledger';
 export * from './central-admin';
 export * from './central-admin-guide';
 export * from './walls';
+export * from './speak-up';
 
 export * from './special-ops';
 export * from './special-ops-guide';

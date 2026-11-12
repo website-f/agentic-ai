@@ -12,6 +12,7 @@ import { cleaningOpsInstalled } from './cleaning-ops-readiness';
 import { ITEM_TABLE_NAMES, ITEM_V2_TABLE_NAMES, itemRegisterInstalled, itemRegisterProblems, itemRegisterV2Installed, itemRegisterV2Problems } from './item-register-readiness';
 import { GENESIS_HASH, RefusedAfterSave, chainEntry, type AuditBody, type AuditEntry, type Filter, type Id, type Range, type Row, type Store, type TableName, type ItTicket, type GroupHistoryLookupRow, type GroupPersonNotes, type RehireStatus, BadRequest } from '@prima/core';
 import type { PoolClient } from 'pg';
+import type { SpeakUpReceipt, SpeakUpReplyResult, SpeakUpSignal } from '@prima/core';
 
 /**
  * Tables from a proposed module (db/modules) that a database may not have yet. Reading one that is missing says so in
@@ -788,6 +789,35 @@ async list<T extends TableName>(table: T, filter?: Filter<T>, range?: Range<T>):
     const r = await this.client.query('SELECT prima.org_finance_team($1) AS team', [companyId]);
     const t = r.rows[0]?.team;
     return Number.isInteger(t) ? t : null;
+  }
+
+  private speakUpWallPresent: boolean | null = null;
+  /** H2: whether the speak-up wall (db/modules/speak-up-wall-v1.sql) is in place in this database. */
+  async speakUpWallReady(): Promise<boolean> {
+    if (this.speakUpWallPresent === null)
+      this.speakUpWallPresent = (await this.client.query("SELECT to_regprocedure('prima.speak_up_signals()') IS NOT NULL AND to_regclass('prima.speak_up_number_seq') IS NOT NULL AS ok")).rows[0].ok === true;
+    return this.speakUpWallPresent;
+  }
+
+  /** The next speak-up report number, from the database sequence (a reporter cannot count the reports they cannot see). */
+  async speakUpNextNumber(): Promise<number> {
+    return Number((await this.client.query("SELECT nextval('prima.speak_up_number_seq') AS n")).rows[0].n);
+  }
+
+  /** What a receipt code opens (prima.speak_up_status): status, outcome and messages of that one report; null if none. */
+  async speakUpStatus(code: string): Promise<SpeakUpReceipt | null> {
+    return ((await this.client.query('SELECT prima.speak_up_status($1) AS r', [code])).rows[0]?.r ?? null) as SpeakUpReceipt | null;
+  }
+
+  /** The reporter's reply by receipt code (prima.speak_up_reply), holding the report while it appends. */
+  async speakUpReply(i: { code: string; text: string; retaliation: boolean; at: string; today: string; afterCloseDays: number }): Promise<SpeakUpReplyResult> {
+    const r = await this.client.query('SELECT prima.speak_up_reply($1, $2, $3, $4, $5::date, $6) AS r', [i.code, i.text, i.retaliation, i.at, i.today, i.afterCloseDays]);
+    return r.rows[0].r as SpeakUpReplyResult;
+  }
+
+  /** Leaders and ACT: no text, for the counts (prima.speak_up_signals; empty without the speak_up_counts wall). */
+  async speakUpSignals(): Promise<SpeakUpSignal[]> {
+    return ((await this.client.query('SELECT prima.speak_up_signals() AS r')).rows[0]?.r ?? []) as SpeakUpSignal[];
   }
 
   /** The office running a company (hand-over receivers), read by the module's function; null before run links exist. */

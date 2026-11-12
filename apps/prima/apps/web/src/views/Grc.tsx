@@ -15,7 +15,7 @@ import '../styles/gov.css';
  * never reaches anyone it names.
  */
 
-type Tab = 'speak' | 'gifts' | 'obligations' | 'osh' | 'reports';
+type Tab = 'speak' | 'gifts' | 'obligations' | 'osh' | 'reports' | 'hr';
 type Obl = GrcBoard['obligations'][number];
 
 const STREAM: Record<GrcStream, string> = {
@@ -73,6 +73,7 @@ export function GrcView() {
   ];
   if (sees) tabs.push(['obligations', 'Obligations'], ['osh', 'Site safety']);
   if (data.handled.length || data.toReview.length) tabs.push(['reports', `Reports to handle (${k.reportsToHandle})`]);
+  if (data.hrReports) tabs.push(['hr', 'Speak-up reports (HR)']);
   return (
     <div className="page gv-page">
       <PageHead
@@ -141,6 +142,7 @@ export function GrcView() {
       {tab === 'obligations' && <Obligations data={data} />}
       {tab === 'osh' && <Osh data={data} />}
       {tab === 'reports' && <Reports data={data} />}
+      {tab === 'hr' && data.hrReports && <HrReports rows={data.hrReports} />}
       {adding && (
         <Drawer title="Add an obligation" sub="Something a company must prove it does, how often, and the law or policy behind it." onClose={() => setAdding(false)}>
           <NewObligation
@@ -281,7 +283,7 @@ function SpeakUp({ data }: { data: GrcBoard }) {
               <input
                 className="input"
                 aria-label="Receipt code"
-                placeholder="Receipt code, e.g. SU-0001-K7Q"
+                placeholder="Receipt code, e.g. SU-0001-K7Q2M9XA"
                 value={code}
                 onChange={(e) => setCode(e.target.value)}
               />
@@ -784,6 +786,77 @@ function Reports({ data }: { data: GrcBoard }) {
           </ul>
         </Card>
       )}
+    </div>
+  );
+}
+
+const STATUS: Record<NonNullable<GrcBoard['hrReports']>[number]['status'], ['ok' | 'warn' | 'crit' | 'info', string]> = {
+  received: ['warn', 'Received'],
+  acknowledged: ['info', 'Acknowledged'],
+  investigating: ['info', 'Investigating'],
+  closing: ['warn', 'Outcome under review'],
+  closed: ['ok', 'Closed'],
+};
+
+/**
+ * H2 (Fauzan, 11 Nov 2026: "Yes. But HR can see it"): HR reads speak-up reports, read only. The handler decides. A
+ * report that names the HR officer never reaches them (the database refuses it too), and an anonymous reporter's
+ * identity is not kept, so nobody can see it.
+ */
+function HrReports({ rows }: { rows: NonNullable<GrcBoard['hrReports']> }) {
+  const [q, setQ] = useState('');
+  const [show, setShow] = useState<'open' | 'closed' | 'all'>('open');
+  const needle = q.trim().toLowerCase();
+  const list = rows.filter(
+    (r) =>
+      (show === 'all' || (show === 'open') === (r.status !== 'closed')) &&
+      (!needle || [r.code, r.summary, r.companyName, r.handlerName, CATEGORY[r.category]].some((x) => x.toLowerCase().includes(needle))),
+  );
+  return (
+    <div className="gv-stack">
+      <p className="notice" data-tone="info">
+        Read only. The handler decides and talks to the reporter. Keep what you read confidential; a report that names you is not shown to you.
+      </p>
+      <Card title="Speak-up reports" sub="What was reported, where it stands and who handles it." flush>
+        <Toolbar>
+          <input className="input" type="search" aria-label="Search reports" placeholder="Search code, company, handler or words" value={q} onChange={(e) => setQ(e.target.value)} />
+          <Select className="select gv-filter" aria-label="Which reports" value={show} onChange={(e) => setShow(e.target.value as typeof show)}>
+            <option value="open">Open</option>
+            <option value="closed">Closed</option>
+            <option value="all">All</option>
+          </Select>
+        </Toolbar>
+        {!list.length && <Empty title={rows.length ? 'No report matches.' : 'No speak-up reports.'} />}
+        <ul className="gv-list">
+          {list.map((r) => (
+            <li key={r.id} className="gv-item" data-tone={STATUS[r.status][0] === 'warn' ? 'warn' : undefined}>
+              <div className="gv-item-head">
+                <div className="gv-item-main">
+                  <div className="gv-item-title">
+                    <span className="mono">{r.code}</span>: {CATEGORY[r.category]} · {r.companyName}
+                  </div>
+                  <div className="gv-item-meta">
+                    Sent {dateTimeLabel(r.at)} · {r.anonymous ? 'Anonymous' : `By ${r.reporterName ?? 'a named reporter'}`} · Handled by {r.handlerName}
+                    {r.messages ? ` · ${r.messages} message${r.messages > 1 ? 's' : ''} with the reporter` : ''}
+                  </div>
+                </div>
+                <div className="gv-item-state">
+                  <Chip tone={STATUS[r.status][0]}>{STATUS[r.status][1]}</Chip>
+                </div>
+              </div>
+              <blockquote className="gv-quote">{r.summary}</blockquote>
+              {r.outcome && (
+                <div className="gv-lines">
+                  <div>
+                    <span className="gv-k">Outcome{r.closedAt ? `, ${dateLabel(r.closedAt)}` : ''}</span>
+                    {r.outcome}
+                  </div>
+                </div>
+              )}
+            </li>
+          ))}
+        </ul>
+      </Card>
     </div>
   );
 }
