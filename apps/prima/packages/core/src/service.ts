@@ -600,6 +600,7 @@ import type { JaSync } from "./types";
 import type { JaWorker } from "./types";
 import type { CooNotice } from "./types";
 import { canBeGuardPayPreparer, guardPayPreparerId, namesGuardPayPreparers, type GuardPayPreparer } from './guard-pay-preparers';
+import { leaveEscalationStep } from './leave-escalate';
 import { CashStandInService, isCashCeo } from './cash-stand-in';
 import { OfflineSyncService } from "./offline-sync";
 import { FIN_AUTO } from "./finance";
@@ -2293,10 +2294,12 @@ export class PrimaService {
     };
   }
 
-  /** Who decides a guard's leave, and where an unanswered request has moved to after each 12 hours. */
+  /**
+   * Who decides a guard's leave, and where an unanswered request has moved to: one level per working day for guards and
+   * officers (P100 C3, rule LEAVE-ESCALATE; weekends and public holidays do not count), every 12 hours for office staff.
+   */
   private async leaveLadder(q: LeaveRequest, p: Person, ctx: Awaited<ReturnType<PrimaService['ladderContext']>>) {
-    const every = RULES.leaveEscalate.value * 3_600_000;
-    const waited = toMs(q.decidedAt ?? this.now()) - toMs(q.requestedAt);
+    const every = RULES.leaveEscalate.value.officeHours * 3_600_000;
     // A JV branch's own staff: the Branch Manager runs their HR and decides their leave; the company and central HR take
     // the data and monitor (Fauzan, 4 Nov 2026). With no Branch Manager on record, or for the manager's own leave, the
     // usual ladder applies so nobody is left without a decider.
@@ -2371,19 +2374,34 @@ export class PrimaService {
       COO: ctx.users.find((u) => u.opsTier === 'coo'),
       CEO: ctx.users.find((u) => u.opsTier === 'ceo'),
     };
-    const step = Math.min(LEAVE_LADDER.length - 1, Math.max(0, Math.floor(waited / every)));
+    // P100 C3: one level per working day; the guard's state's public holidays (HR's list and the guard lists) do not count.
+    const holidays = await this.leaveEscalationHolidays(q.companyId, st);
+    const { step, nextAt } = leaveEscalationStep(q.requestedAt, q.decidedAt ?? this.now(), LEAVE_LADDER.length, RULES.leaveEscalate.value.guardWorkingDays, holidays);
     const level = LEAVE_LADDER[step];
     return {
       office: false,
       level,
       label: levelLabel(level, sector),
       person: holders[level]?.name ?? 'Not assigned',
-      nextAt: step < LEAVE_LADDER.length - 1 ? fromMs(toMs(q.requestedAt) + (step + 1) * every) : null,
+      nextAt,
       state: st,
       sector,
       jvBranchId: null as Id | null,
       deciderIds: null as Id[] | null,
     };
+  }
+
+  /** P100 C3: the public holidays that stop the leave escalation clock for a guard in this company and state. */
+  private async leaveEscalationHolidays(companyId: Id, state: string): Promise<Set<IsoDate>> {
+    const out = holidayDates(await this.store.list('publicHolidays', {}), state || null);
+    try {
+      const year = this.today().slice(0, 4);
+      for (const l of await this.store.list('publicHolidayLists', { companyId }))
+        if (!l.replacedBy && String(l.year) <= String(Number(year) + 1) && (!l.state || l.state === state)) for (const d of l.days) out.add(d.date);
+    } catch {
+      // The guard lists are in the optional pay formulas module; HR's list alone is used without it.
+    }
+    return out;
   }
 
   /** The OM for the guard's area or anyone above may decide, at any time; the Director Office always. */

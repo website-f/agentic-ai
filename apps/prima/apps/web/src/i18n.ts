@@ -2142,6 +2142,7 @@ const ROWS: Row[] = [
   ["Turn stand-in on", "Hidupkan pengganti", "On kan stand-in"],
   ["Stand-in on. The FD may now decide in your place.", "Pengganti aktif. FD kini boleh membuat keputusan bagi pihak anda.", "Stand-in on. FD boleh decide bagi pihak anda."],
   ["Stand-in ended.", "Pengganti ditamatkan.", "Stand-in tamat."],
+  ["Request sent. The OM decides for guards and officers; for staff, HR decides and the Vice Chairman consents. It moves up if nobody decides within 1 working day (12 hours for office staff).", "Permohonan dihantar. OM membuat keputusan bagi pengawal dan pegawai; bagi staf, HR membuat keputusan dan Naib Pengerusi memberi persetujuan. Ia naik ke peringkat seterusnya jika tiada keputusan dalam 1 hari bekerja (12 jam bagi staf pejabat).", "Request dihantar. OM decide untuk guard dan pegawai; untuk staf, HR decide dan Naib Pengerusi consent. Ia naik level kalau tiada keputusan dalam 1 hari bekerja (12 jam untuk staf pejabat)."],
   // end P100 pay
   // P96: the switch date (Fauzan, 8 Nov 2026)
   ["Prima takes over guard pay on 1 Aug 2027. Until then runs are trials; JA Group app still pays.", "Prima mengambil alih gaji pengawal pada 1 Ogos 2027. Sehingga itu, setiap pengiraan gaji hanya percubaan; aplikasi JA Group masih membayar gaji.", "Prima ambil alih gaji guard pada 1 Ogos 2027. Sebelum itu, setiap pay run hanya trial; app JA Group masih bayar gaji."],
@@ -4203,6 +4204,7 @@ const PATTERNS: Pat[] = [
   [/^(\d+) decisions? the FD made for you$/, (m, x) => `${m[1]} keputusan ${x ? 'yang FD buat' : 'yang dibuat FD'} bagi pihak anda`],
   [/^Away (.+) to (.+)$/, (m) => `Tiada ${m[1]} hingga ${m[2]}`],
   [/^Set by (.+) on (.+): (.+)$/, (m) => `Ditetapkan oleh ${m[1]} pada ${m[2]}: ${m[3]}`],
+  [/^Guard leave moves up a level after every (\d+) working day without a decision \(weekends and public holidays do not count\); office staff leave after every (\d+) hours \(rule (.+)\)\.$/, (m, x) => (x ? `Cuti guard naik level selepas setiap ${m[1]} hari bekerja tanpa keputusan (hujung minggu dan cuti umum tidak dikira); cuti staf pejabat selepas setiap ${m[2]} jam (rule ${m[3]}).` : `Cuti pengawal naik ke peringkat seterusnya selepas setiap ${m[1]} hari bekerja tanpa keputusan (hujung minggu dan cuti umum tidak dikira); cuti staf pejabat selepas setiap ${m[2]} jam (peraturan ${m[3]}).`)],
   // end P100 pay patterns
   // PDPA and insurance registers (5 Nov 2026)
   [/^(\d+) open breach(?:es)? without the data involved or the cause\.$/, (m, x) => `${m[1]} ${x ? 'breach terbuka' : 'pelanggaran terbuka'} tanpa data terlibat atau punca.`],

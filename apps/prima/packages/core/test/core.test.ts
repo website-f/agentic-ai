@@ -1353,7 +1353,7 @@ describe('Guard profile and leave (Fauzan, 25 Oct 2026)', () => {
     expect((await svc.guardProfile(cm, at(6).id)).leave.balances.sick.entitled).toBe(22);
   });
 
-  it('takes a leave request on the site device; only the OM or higher decides, and it moves up after 12 hours', async () => {
+  it('takes a leave request on the site device; only the OM or higher decides, and it moves up after 1 working day', async () => {
     const { svc, ds } = fresh();
     const dev = await svc.user('u-dev-sasa-001');
     const site = ds.sites.find((s) => s.id === dev.siteIds[0])!;
@@ -1375,8 +1375,11 @@ describe('Guard profile and leave (Fauzan, 25 Oct 2026)', () => {
     expect(list.rows.find((r) => r.request.id === q.id)!.waitingWith!.level).toBe('OM');
     await expect(svc.decideLeave(om, q.id, false, '')).rejects.toThrow(/why/);
     expect((await svc.decideLeave(om, q.id, true, 'Covered by buffer guard')).status).toBe('approved');
-    // The seeded request waiting 15 hours has moved up to the Regional OM.
+    // P100 C3: one level per working day. A request from Friday 09:00 has waited 25.5 working hours by Monday 10:30
+    // (the weekend does not count), so it has moved up one level to the Regional OM.
     const rom = await svc.user('u-rom-central');
+    const emergency = ds.leaveRequests.find((r) => r.kind === 'EMERGENCY' && r.status === 'pending')!;
+    emergency.requestedAt = myt('2026-10-23', '09:00');
     const waiting = (await svc.leaveRequests(await svc.user('u-fauzan'))).rows.find((r) => r.request.kind === 'EMERGENCY')!;
     expect(waiting.waitingWith!.level).toBe('ROM');
     expect(waiting.waitingWith!.label).toBe('Regional Operations Manager');

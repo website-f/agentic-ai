@@ -1155,9 +1155,14 @@ export const RULES = {
   ),
   leaveEscalate: rule(
     'LEAVE-ESCALATE',
-    12,
+    {
+      /** A guard's or officer's request moves up one level after this many working days (Saturday, Sunday and public holidays do not count). */
+      guardWorkingDays: 1,
+      /** Office staff leave (HR, then the HR Director, then the Director) keeps moving up after this many hours. */
+      officeHours: 12,
+    },
     'Policy',
-    'Fauzan, 25 Oct 2026: a request from a guard or officer is approved or rejected only by the Operations Manager or higher. If it gets no go-ahead or rejection within 12 hours (or 1 working day), it moves up a level: OM, Regional OM, head of operations, COO, CEO. 12 hours used; to confirm against "1 working day".',
+    'Fauzan, 25 Oct 2026: a request from a guard or officer is approved or rejected only by the Operations Manager or higher; unanswered, it moves up a level: OM, Regional OM, head of operations, COO, CEO. Approved by Fauzan, 11 Nov 2026 (handover item C3): "CHANGE from 12 hours to 1 working day per level"; weekends and public holidays do not count. Office staff leave keeps its 12-hour steps (C3 is about guard leave).',
   ),
   upgradeCourses: rule(
     'HR-UPGRADE',

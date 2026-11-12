@@ -64,7 +64,7 @@ export type Action =
   | 'leave.request'
   /**
    * Approve or reject leave and absence reasons: the Operations Manager or higher only (Fauzan, 25 Oct 2026), under
-   * the company's management agreement. Unanswered requests move up a level every 12 hours (rule LEAVE-ESCALATE).
+   * the company's management agreement. Unanswered requests move up a level after each working day (rule LEAVE-ESCALATE).
    */
   | 'leave.decide'
   /** Share the company office's work out to desks: the company's own Company Manager or GM only (Fauzan, 2 Nov 2026). */
