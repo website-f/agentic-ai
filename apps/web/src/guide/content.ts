@@ -42,8 +42,9 @@ export interface FlowDoc {
   steps: string[];
 }
 
-/** Sidebar order of the groups. */
-export const GUIDE_GROUPS = ["Home", "Office", "Work", "Documents", "Collaboration", "Knowledge", "Operations", "Admin", "Help"] as const;
+/** Sidebar order of the groups: the office sidebar's own sections (nav.ts), so a chapter sits
+ * where its page sits in the sidebar (content.test.ts checks it). */
+export const GUIDE_GROUPS = ["Today", "Work", "Prima", "Library", "AI team", "Settings", "Developer", "Help"] as const;
 
 const s = (text: string, target?: string): DocStep => (target ? { text, target } : { text });
 
@@ -57,24 +58,25 @@ export const PAGE_DOCS: Record<string, PageDoc> = {
       "See four live counts: **Agents**, **Working now**, **Waiting on you** and **To review**. Click one to jump to that list.",
       "Answer agents that check in or hit a budget warning under **Agents asking**: **Give a task**, **See budget** or **Dismiss**.",
       "Watch **Spend vs budget**: every agent with a budget, and who is close to the limit.",
-      "Follow the **Getting started** checklist: branches, members, AI providers and your first agent.",
+      "Follow the **Getting started** checklist: your AI, your company and its AI team, your documents, your people and the first task.",
       "Check the **System** panel: every part of the system, running or down. It refreshes every 15 seconds.",
       "Staff: create or open your AI twin from the **Meet your AI twin** card.",
     ],
     spots: {
       "home.health": "System health: every service, running or down, checked every 15 seconds.",
-      "home.getting-started": "The four first steps for a new office, with a button for each.",
+      "home.getting-started": "The five first steps for a new office, with a button for each.",
       "home.shortcuts": "Quick links to Organization, Members and Agents.",
     },
     howto: [
       {
-        title: "Set up a new office in four steps",
+        title: "Set up a new office, step by step",
         steps: [
-          s("Find the **Getting started** card. It shows how many of the four steps are done.", "home.getting-started"),
-          s("Click **Add branch** to create one branch for each company you run."),
-          s("Click **Add member** to invite the people who will use the office."),
-          s("Click **Connect** to add an AI provider. A free tier is enough to start."),
-          s("Click **New agent** to build your first agent. The card ticks itself off as you go."),
+          s("Find the **Getting started** card. It shows how many of the five steps are done.", "home.getting-started"),
+          s("Click **Connect** and paste one AI key. Groq and OpenRouter have free tiers."),
+          s("Click **Add company**. Name it and pick your industry: its departments and a ready-made AI team are made for you."),
+          s("Click **Upload** to put your SOPs and documents in the Library."),
+          s("Click **Add people** to invite your staff and set their daily AI allowance."),
+          s("Click **New task** to give the first task. Each step ticks itself off when it is done."),
         ],
       },
       {
@@ -97,9 +99,9 @@ export const PAGE_DOCS: Record<string, PageDoc> = {
   workspace: {
     purpose: "Your own desk, for everyone from staff to owners: what needs you today, everything you pinned, and one bar to reach any page, person, task, document or agent. Show, hide and order its parts the way you like. The other pages are still there to browse.",
     can: [
-      "Search or jump anywhere from the bar at the top, or with Ctrl K: pages, people, tasks, documents, agents, contacts and reports.",
+      "Search or jump anywhere from the bar at the top, or with Ctrl K: pages, people, tasks, documents, agents and reports.",
       "Hand a question to your AI worker: it searches the documents, answers with the file and page it used and, if you ask, prepares a document.",
-      "Pin anything: pages of the office and Prima, tasks, files, documents, agents, reports, contacts and web links. Rename pins, keep them in folders and drag them into order.",
+      "Pin anything: pages of the office and Prima, tasks, files, documents, agents, reports and web links. Rename pins, keep them in folders and drag them into order.",
       "Run a workflow again straight from **My procedures** or a pin.",
       "Follow **My work**: what you asked for, what your AI workers are doing, and the documents and files they made.",
       "Keep your own files in **My workspace files**, next to everything your AI made for you.",
@@ -164,7 +166,7 @@ export const PAGE_DOCS: Record<string, PageDoc> = {
     tips: [
       "Anything your AI worker makes, or anyone makes on a task you gave, lands on your workspace by itself.",
       "Staff see only their own company's guidelines and their own work. Owners see their own desk too, not everyone else's.",
-      "A pinned item that was deleted stays on your workspace, marked **No longer there**, until you unpin it.",
+      "A pinned item that was deleted stays on your workspace, marked **Not available: removed, or you can no longer open it**, until you unpin it.",
     ],
     who: "Everyone. Asking your AI worker and uploading need a role that can create work.",
     related: ["my-worker", "files", "sops", "workflows", "documents", "tasks"],
@@ -334,7 +336,7 @@ export const PAGE_DOCS: Record<string, PageDoc> = {
     can: [
       "Pick a period: **Today**, **7 days**, **30 days** or **90 days**.",
       "Read the totals: agents, tasks done, failed, waiting on people, reports and AI spend.",
-      "Compare companies in the **Branches compared** table. Click a column to sort, or a company to open its office.",
+      "Compare companies in the **Companies compared** table. Click a column to sort, or a company to open its office.",
       "Ask for a **Briefing**: a short summary written from the numbers on the page.",
       "See what **Needs attention**: failures, long waits, incidents and budgets.",
     ],
@@ -349,7 +351,7 @@ export const PAGE_DOCS: Record<string, PageDoc> = {
         steps: [
           s("Choose the period, for example **7 days**.", "overview.range"),
           s("Click **Brief me** in the briefing card. It reads only the numbers on this page.", "overview.briefing"),
-          s("Scroll to **Branches compared** to show the details behind it.", "overview.branches"),
+          s("Scroll to **Companies compared** to show the details behind it.", "overview.branches"),
         ],
       },
     ],
@@ -602,7 +604,7 @@ export const PAGE_DOCS: Record<string, PageDoc> = {
       "See what is waiting in **Waiting**, and past decisions in **History**.",
       "For a tool request: **Approve once**, **Always allow** that agent, or **Deny** with a reason.",
       "For a question: tap a suggested answer or type your own, then **Send answer**.",
-      "For a budget stop: **Allow more** or **Stop the task**.",
+      "For a budget stop: **Allow more** or **Stop the whole task**.",
       "Decide from a phone notification too: it opens a one-screen page for that decision.",
     ],
     spots: {
@@ -801,7 +803,7 @@ export const PAGE_DOCS: Record<string, PageDoc> = {
     can: [
       "Pick the company under **Company**, then drop files, whole folders or a .zip on the upload area.",
       "Follow each upload as it is unpacked, read and sorted, then read its report: what was found, what went to the library and what was held back.",
-      "Browse the company's folders, search, filter by kind or department, or group the list **By kind** or **By department**.",
+      "Browse the company's folders and search them, or filter the list by **Kind** or **Department**.",
       "Open a file to see a preview, its summary, kind, department and folder, and change any of them.",
       "Download one file, a folder, everything for the company, or just the files you ticked, as a zip.",
       "Turn a procedure into an SOP or a workflow with **Make an SOP** or **Build a workflow**.",
@@ -846,7 +848,7 @@ export const PAGE_DOCS: Record<string, PageDoc> = {
           s("Click a file to open it: a preview, what it is and where it sits. **Download** gives you the original.", "files.list"),
           s("Click **Download folder** to get the folder you are in as a zip.", "files.download-folder"),
           s("Click **Download everything** to get all of the company's files.", "files.download-all"),
-          s("To download a few, tick them and click **Download zip**."),
+          s("To download a few, tick them and click **Download as zip**."),
         ],
       },
       {
@@ -1422,7 +1424,7 @@ export const PAGE_DOCS: Record<string, PageDoc> = {
         title: "Connect an AI provider",
         steps: [
           s("On **Providers**, pick a provider under **Connect a provider**.", "ai-engine.add"),
-          s("Click **Get a key** to get one from the provider, then paste it."),
+          s("Use the provider's **Get a … key** link to get one, then paste it."),
           s("Click **Test connection**, then **Save provider**."),
         ],
       },
@@ -1537,7 +1539,7 @@ export const PAGE_DOCS: Record<string, PageDoc> = {
           s("Type the **Company name** and pick a colour."),
           s("Pick the **Industry**, such as Trading & retail."),
           s("Keep **Add a ready-made AI team** on and check **Who joins**."),
-          s("Click **Create branch**. The company appears with its departments and agents.", "organization.company"),
+          s("Click **Create company**. The company appears with its departments and agents.", "organization.company"),
         ],
       },
     ],
@@ -1610,7 +1612,7 @@ export const PAGE_DOCS: Record<string, PageDoc> = {
   tutorial: {
     purpose: "Learn the system for your role, step by step: from your first agent to giving tasks and seeing results.",
     can: [
-      "Follow your role's track: **Owner**, **Management**, **Staff** or **Approver & viewer**.",
+      "Follow your role's track: **Owner**, **Management**, **Staff** or **Approver**.",
       "Open a lesson's steps, or click **Show me** to go to the right page.",
       "Lessons tick themselves off when the system sees you did them.",
       "Search lessons, the glossary and common questions.",
@@ -1758,6 +1760,393 @@ export const PAGE_DOCS: Record<string, PageDoc> = {
     related: ["workspace", "my-worker", "tasks", "workflows", "approvals", "documents", "files"],
   },
 
+
+  // ------------------------------------------------------------------ P102: pages that had no chapter
+  mail: {
+    purpose: "Your own Outlook mail, calendar and Teams chats in one page, with the replies your AI drafted waiting for you to send.",
+    can: [
+      "Switch between **Outlook mail** and **Teams** at the top, and pick a **Mailbox**: **My Outlook** or a shared one.",
+      "See what came in under **Recent mail**, and what your AI did with each mail.",
+      "Check, change and send the replies your AI drafted under **Waiting for your approval**. Nothing goes out until you press **Send**.",
+      "Add a meeting your AI suggested with **Add to calendar**. Guests are invited only then.",
+      "Open a Teams chat and press **Ask my AI about it** for a short summary and a suggested answer.",
+    ],
+    spots: {
+      "mail.drafts": "Replies and calendar changes your AI drafted. You check each one before it goes.",
+    },
+    howto: [
+      {
+        title: "Connect your Outlook",
+        steps: [
+          s("Open **Microsoft 365** in the sidebar, under Work."),
+          s("Click **Connect Outlook**."),
+          s("Sign in with your work email and password. You come back here and your mail starts to show."),
+        ],
+      },
+      {
+        title: "Send a reply your AI drafted",
+        steps: [
+          s("Find the draft under **Waiting for your approval**.", "mail.drafts"),
+          s("Read it. Change the subject or the words if you need to."),
+          s("Click **Send**. Or click **Discard** to throw it away: nothing is sent."),
+        ],
+      },
+      {
+        title: "Go through a Teams chat with your AI",
+        steps: [
+          s("Click **Teams**, then **Chats**."),
+          s("Click a chat. It opens at the side."),
+          s("Click **Ask my AI about it**. Your AI sums it up and suggests an answer for you to check."),
+        ],
+      },
+    ],
+    tips: [
+      "Your AI does not send mail or Teams messages by itself. Every reply waits here for you.",
+      "Shared mailboxes, such as accounts@ or tender@, are added by an admin on **Channels**.",
+    ],
+    who: "Anyone with their own AI or a private assistant, once they connect their own Microsoft account. Admins also see the shared mailboxes.",
+    related: ["channels", "assistants", "my-worker"],
+  },
+
+  objectives: {
+    purpose: "The company's goals: how far each has come, when it is due and what its work has cost.",
+    can: [
+      "Add a goal with **New objective**, with a target, a due date and a budget if you like.",
+      "Open an objective and click **New task**: the task is linked to it, so agents see why the work matters.",
+      "Close one with **Mark done**, or change it with **Edit**.",
+    ],
+    spots: {},
+    howto: [
+      {
+        title: "Add an objective and give it work",
+        steps: [
+          s("Click **New objective**."),
+          s("Type the **Objective**. Add a target, a due date or a budget if you want."),
+          s("Click **Create objective**. Its panel opens."),
+          s("Click **New task** in the panel to give the first piece of work."),
+        ],
+      },
+    ],
+    tips: ["At 80% of an objective's budget you get a notice. At 100%, new work under it waits for an approval."],
+    who: "Owners and managers add and change objectives. Others who see the office can read them.",
+    related: ["tasks", "impact"],
+  },
+
+  prima: {
+    purpose: "The door to Prima Secure, the group's operations app for rosters, attendance, cases, HR and claims.",
+    can: [
+      "Open Prima in one click once your Microsoft account is connected.",
+      "Try it first with **Preview with sample data**: made-up data, nothing is saved.",
+      "Owners: link office people to their Prima staff records under **People in Prima**.",
+    ],
+    spots: {},
+    howto: [
+      {
+        title: "Open Prima for the first time",
+        steps: [
+          s("Click **Prima** in the sidebar. On a phone, tap **Clock in** at the bottom."),
+          s("Click **Connect Microsoft**."),
+          s("Sign in with your work email and password, the same as for Outlook. You come back and Prima opens."),
+        ],
+      },
+      {
+        title: "Link people to Prima (owners)",
+        steps: [
+          s("Click **People in Prima**."),
+          s("Click **Link all suggested** to link everyone the office matched, or pick a staff record for one person."),
+          s("Click **Back to Prima**."),
+        ],
+      },
+    ],
+    tips: ["Your AI reads Prima's SOPs and workflows in the Library, so it follows the same rules as you."],
+    who: "Everyone. Owners also link people and companies to Prima.",
+    related: ["workspace", "files"],
+  },
+
+  timetable: {
+    purpose: "Each agent's working day, like a staff rota: its hours, its daily duties and the work waiting for its next shift.",
+    can: [
+      "See every agent's day at a glance. Move day by day, or go **Back to today**.",
+      "Click an agent to set its **Working hours** and lunch break.",
+      "Give an agent a daily duty with **Add a duty**, or **Pause** one.",
+    ],
+    spots: {},
+    howto: [
+      {
+        title: "Set an agent's working hours",
+        steps: [
+          s("Click the agent's row. Its day opens at the side."),
+          s("Turn off **Works any time**, then pick the days, **Starts** and **Ends**."),
+          s("Click **Save hours**. Work that arrives after hours waits for the next shift."),
+        ],
+      },
+      {
+        title: "Give an agent a daily duty",
+        steps: [
+          s("Click the agent's row."),
+          s("Under **Add a duty**, pick a ready-made duty, or **Something else**."),
+          s("Check when it runs. Turn on **A person checks each result** if you want to see each one first."),
+          s("Click **Add duty**."),
+        ],
+      },
+    ],
+    tips: ["Urgent work still reaches an agent after hours when **Urgent work any time** is on."],
+    who: "Owners and managers. People who manage agents, or their own AI, can change hours and duties.",
+    related: ["agents", "schedules", "office"],
+  },
+
+  roles: {
+    purpose: "What each role may do, area by area. Only the owner changes it.",
+    can: [
+      "Switch a permission on or off for a role. A changed one gets an orange dot.",
+      "Read every change under **Check the changes** before it is saved.",
+      "Undo one role with **Reset**, or every role with **Reset to defaults**.",
+    ],
+    spots: {},
+    howto: [
+      {
+        title: "Change what a role may do",
+        steps: [
+          s("Find the permission. Type in the search box to find it fast."),
+          s("Flip the switch in the role's column."),
+          s("Click **Save changes** and read the list under **Check the changes**."),
+          s("Click **Save changes** again. Each person gets the new access on their next click."),
+        ],
+      },
+    ],
+    tips: ["To change one person's role or place, use **Members and roles** instead."],
+    who: "The owner only.",
+    related: ["settings", "activity"],
+  },
+
+  "staff-computers": {
+    purpose: "Every company computer your staff linked: who has which, whether it is online, and the folders it shares.",
+    can: [
+      "Find a computer by person, company or name, or show only the **Online** ones.",
+      "Click **Open** to see its screen and fetch files. The computer shows a notice while you use it.",
+      "Turn on a company backup of the shared folders with **Backup settings**.",
+    ],
+    spots: {},
+    howto: [
+      {
+        title: "Open a staff computer",
+        steps: [
+          s("Type a name in the search box, or set the status to **Online**."),
+          s("Click **Open** on its row. Its screen opens."),
+        ],
+      },
+      {
+        title: "Back up staff computers",
+        steps: [
+          s("Click **Backup settings**."),
+          s("Turn on **Back up shared folders automatically**."),
+          s("Pick where to keep the backup and how often."),
+          s("Click **Save**."),
+        ],
+      },
+    ],
+    tips: ["The backup needs a place to keep it: add one first under **File storage**."],
+    who: "Owners, admins and managers. Only owners change the backup.",
+    related: ["computers", "web-connections", "storage"],
+  },
+
+  "ai-use": {
+    purpose: "Each person's daily AI allowance, what staff may use their AI for, and what was refused.",
+    can: [
+      "See who used how much today, and who is near or at their limit.",
+      "Give one person more with **Change**.",
+      "Set the amount for everyone under **Daily AI allowance**.",
+      "Keep staff AI on work with **Check requests are about work**, and read **Refused requests**.",
+    ],
+    spots: {},
+    howto: [
+      {
+        title: "Give one person a bigger allowance",
+        steps: [
+          s("Find them in the list and click **Change**."),
+          s("Choose **Their own amount**, then type or pick an amount."),
+          s("Click **Save allowance**."),
+        ],
+      },
+      {
+        title: "Set the allowance for everyone",
+        steps: [
+          s("Under **Daily AI allowance**, enter the **Tokens per person per day**."),
+          s("Pick the roles it applies to."),
+          s("Click **Save allowance**. It counts from now, for today too."),
+        ],
+      },
+    ],
+    tips: ["Nobody changes their own allowance. Ask an owner or admin."],
+    who: "Owners, admins and managers. Changing the rules needs the right to manage members.",
+    related: ["settings", "ai-engine"],
+  },
+
+  "web-connections": {
+    purpose: "How the AI's browser reaches websites: through a company computer, from this server, or through your own proxies.",
+    can: [
+      "Choose **Browse through a computer**, **Browse from here** or **Use your proxies**.",
+      "List the sites that go that way, for example ePerolehan.",
+      "Try a site under **Check the connection**.",
+    ],
+    spots: {},
+    howto: [
+      {
+        title: "Open a site through an office computer",
+        steps: [
+          s("Click **Browse through a computer**."),
+          s("Pick the computer under **Which computer**."),
+          s("Check the **Sites** list."),
+          s("Click **Save**. Someone at that computer allows it once."),
+        ],
+      },
+      {
+        title: "Check that a site opens",
+        steps: [
+          s("Type the address under **Site**."),
+          s("Click **Check**. You see which way it went and what the site answered."),
+        ],
+      },
+    ],
+    tips: ["Some government sites open only from a Malaysian address. Browsing through an office computer solves that."],
+    who: "Owners.",
+    related: ["staff-computers", "computers", "logins"],
+  },
+
+  "approved-services": {
+    purpose: "A lock that lets company information go only to outside services you approved.",
+    can: [
+      "See every outside service the office uses: AI providers, storage, messaging and the web.",
+      "**Approve** a service, with where it keeps data and what it may receive.",
+      "Turn on **Only use approved services**: the rest are blocked.",
+      "**Withdraw** an approval, or **Download the approved list**.",
+    ],
+    spots: {},
+    howto: [
+      {
+        title: "Approve a service and turn on the lock",
+        steps: [
+          s("Click **Approve** on the service's row."),
+          s("Fill in where it keeps data and what data it may receive, then click **Approve**."),
+          s("Turn on the switch under **Only use approved services**."),
+          s("A blocked service that is wanted later shows **Waiting for you**. Approve it or keep it blocked."),
+        ],
+      },
+    ],
+    tips: ["The approved list is a good record for an audit or a tender."],
+    who: "Owners.",
+    related: ["ai-engine", "web-connections", "activity"],
+  },
+
+  storage: {
+    purpose: "Where company files are kept: the app's database, this server's disk, a cloud bucket or your own file server.",
+    can: [
+      "Add a place with **Add storage**. It is tested before it is saved.",
+      "Choose where new files go with **Keep new files here**.",
+      "Feed the Library from a storage with **Import its documents into the Library**.",
+    ],
+    spots: {},
+    howto: [
+      {
+        title: "Add a cloud bucket",
+        steps: [
+          s("Click **Add storage**."),
+          s("Pick the kind and fill in its fields."),
+          s("Click **Test and save**. It writes, reads and deletes a test file first."),
+        ],
+      },
+      {
+        title: "Bring a storage's documents into the Library",
+        steps: [
+          s("On the storage, turn on **Import its documents into the Library**."),
+          s("Pick the company and the folders, then click **Save**."),
+          s("Click **Import now**. After that it is checked every hour."),
+        ],
+      },
+    ],
+    tips: ["A storage can be removed only once no files are kept there."],
+    who: "Owners and admins.",
+    related: ["files", "staff-computers"],
+  },
+
+  feedbacks: {
+    purpose: "Everything people sent from the feedback button: notes and marked-up screenshots of any page.",
+    can: [
+      "Switch the button on or off with **Feedback button for everyone**.",
+      "Open an item, set **Where it stands** and write **Your answer**.",
+      "Write **House rules** that show on every page, or on one page.",
+    ],
+    spots: {},
+    howto: [
+      {
+        title: "Answer a feedback",
+        steps: [
+          s("Click a card. It opens at the side."),
+          s("Pick a status under **Where it stands**. It saves at once."),
+          s("Type under **Your answer** and click **Save answer**. The sender sees it."),
+        ],
+      },
+      {
+        title: "Add a house rule",
+        steps: [
+          s("Open the **House rules** tab."),
+          s("Click **Add a rule** and write it in a few words."),
+          s("Click **Save house rules**. Everyone sees it under Rules & guide."),
+        ],
+      },
+    ],
+    tips: ["New feedback appears by itself, without reloading the page."],
+    who: "The system's developer only.",
+    related: ["activity"],
+  },
+
+  start: {
+    purpose: "A short checklist of what makes the office work for you. Each step ticks itself when it is done.",
+    can: [
+      "Do the step marked **Next** first. Each step has its own button.",
+      "Ask how on any step: the help assistant explains it.",
+      "Staff get their own steps: hire your AI worker, set its hours and link your phone.",
+    ],
+    spots: {},
+    howto: [
+      {
+        title: "Finish your setup",
+        steps: [
+          s("Open the setting-up checklist under **Help** in the sidebar."),
+          s("Find the step marked **Next** and click its button."),
+          s("Do the step on the page that opens."),
+          s("Come back. The step now has a green tick."),
+        ],
+      },
+    ],
+    tips: ["The steps you see depend on your role. Staff and owners see different lists."],
+    who: EVERYONE,
+    related: ["home", "tutorial", "workspace"],
+  },
+
+  present: {
+    purpose: "A ready-made presentation of Agentic Office for clients and colleagues, full screen, built from real screenshots.",
+    can: [
+      "Move with the arrow keys or Space, or click the right or left half of a slide.",
+      "Open your notes with **Presenter notes (N)**, and jump to any slide with **All slides (O)**.",
+      "Make a PDF with **Print or save as PDF**.",
+    ],
+    spots: {},
+    howto: [
+      {
+        title: "Give the presentation",
+        steps: [
+          s("Open **Learn** under Help in the sidebar, then the **Present** tab."),
+          s("Press **Full screen (F)**."),
+          s("Move with the arrow keys or Space. Press N for your notes."),
+          s("Click **Exit** when you are done."),
+        ],
+      },
+    ],
+    tips: ["On a phone the slides show as cards you scroll, with the notes under each one."],
+    who: EVERYONE,
+    related: ["tutorial", "demo-day"],
+  },
 };
 
 /** Captions for the recorded flows (GUIDE_FLOWS in targets.ts). */
@@ -1796,7 +2185,7 @@ export const FLOW_DOCS: Record<string, FlowDoc> = {
       "Open Organization and click New branch.",
       "Type the company name and pick the industry.",
       "Keep Add a ready-made AI team on and check who joins.",
-      "Click Create branch: the departments and agents appear.",
+      "Click Create company: the departments and agents appear.",
     ],
   },
   "hire-worker": {

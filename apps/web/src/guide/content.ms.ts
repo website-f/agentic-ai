@@ -18,24 +18,25 @@ export const PAGE_DOCS_MS: Record<string, PageDoc> = {
       "Lihat empat kiraan langsung: **Ejen**, **Sedang bekerja**, **Menunggu anda** dan **Untuk disemak**. Klik satu untuk terus ke senarai itu.",
       "Balas ejen yang menghubungi anda atau yang mencecah amaran bajet di bawah **Ejen yang bertanya**: **Beri tugasan**, **Lihat bajet** atau **Abaikan**.",
       "Pantau **Perbelanjaan berbanding bajet**: setiap ejen yang ada bajet, dan siapa yang hampir mencecah had.",
-      "Ikut senarai semak **Bermula**: cawangan, ahli, penyedia AI dan ejen pertama anda.",
+      "Ikut senarai semak **Langkah permulaan**: AI anda, syarikat dan pasukan AI-nya, dokumen anda, orang anda dan tugasan pertama.",
       "Semak panel **Sistem**: setiap bahagian sistem, sama ada berjalan atau terhenti. Panel ini dikemas kini setiap 15 saat.",
       "Kakitangan: cipta atau buka kembar AI anda daripada kad **Kenali kembar AI anda**.",
     ],
     spots: {
       "home.health": "Kesihatan sistem: setiap perkhidmatan, berjalan atau terhenti, disemak setiap 15 saat.",
-      "home.getting-started": "Empat langkah pertama untuk pejabat baharu, dengan satu butang bagi setiap langkah.",
+      "home.getting-started": "Lima langkah pertama untuk pejabat baharu, dengan satu butang bagi setiap langkah.",
       "home.shortcuts": "Pautan pantas ke Organisasi, Ahli dan Ejen.",
     },
     howto: [
       {
-        title: "Sediakan pejabat baharu dalam empat langkah",
+        title: "Sediakan pejabat baharu, langkah demi langkah",
         steps: [
-          s("Cari kad **Bermula**. Kad ini menunjukkan berapa daripada empat langkah sudah selesai.", "home.getting-started"),
-          s("Klik **Tambah cawangan** untuk mencipta satu cawangan bagi setiap syarikat yang anda uruskan."),
-          s("Klik **Tambah ahli** untuk menjemput mereka yang akan menggunakan pejabat ini."),
-          s("Klik **Sambung** untuk menambah penyedia AI. Pakej percuma pun cukup untuk bermula."),
-          s("Klik **Ejen baharu** untuk membina ejen pertama anda. Kad ini menandakan sendiri setiap langkah yang sudah siap."),
+          s("Cari kad **Langkah permulaan**. Kad ini menunjukkan berapa daripada lima langkah sudah selesai.", "home.getting-started"),
+          s("Klik **Sambung** dan tampal satu kunci AI. Groq dan OpenRouter ada pakej percuma."),
+          s("Klik **Tambah syarikat**. Namakannya dan pilih industri anda: jabatan dan pasukan AI siap sedia dibuat untuk anda."),
+          s("Klik **Muat naik** untuk meletakkan SOP dan dokumen anda dalam Perpustakaan."),
+          s("Klik **Tambah orang** untuk menjemput kakitangan anda dan menetapkan elaun AI harian mereka."),
+          s("Klik **Tugasan baharu** untuk memberi tugasan pertama. Setiap langkah ditanda sendiri apabila selesai."),
         ],
       },
       {
@@ -48,7 +49,7 @@ export const PAGE_DOCS_MS: Record<string, PageDoc> = {
       },
     ],
     tips: [
-      "Kad **Bermula** tidak dipaparkan kepada kakitangan. Mereka nampak kad kembar AI mereka.",
+      "Kad **Langkah permulaan** tidak dipaparkan kepada kakitangan. Mereka nampak kad kembar AI mereka.",
       "Amaran bajet bermula pada 80% had ejen. Pada 100%, ejen berhenti seketika dan bertanya.",
     ],
     who: EVERYONE,
@@ -58,9 +59,9 @@ export const PAGE_DOCS_MS: Record<string, PageDoc> = {
   workspace: {
     purpose: "Meja anda sendiri, untuk semua orang daripada kakitangan hingga pemilik: apa yang perlukan anda hari ini, semua yang anda semat, dan satu bar untuk ke mana-mana halaman, orang, tugasan, dokumen atau ejen. Tunjuk, sorok dan susun bahagiannya mengikut cara anda. Halaman lain masih ada untuk dilayari.",
     can: [
-      "Cari atau pergi ke mana-mana dari bar di atas, atau dengan Ctrl K: halaman, orang, tugasan, dokumen, ejen, hubungan dan laporan.",
+      "Cari atau pergi ke mana-mana dari bar di atas, atau dengan Ctrl K: halaman, orang, tugasan, dokumen, ejen dan laporan.",
       "Serahkan soalan kepada pekerja AI anda: ia mencari dalam dokumen, menjawab dengan fail dan halaman yang digunakan dan, jika diminta, menyediakan dokumen.",
-      "Semat apa sahaja: halaman pejabat dan Prima, tugasan, fail, dokumen, ejen, laporan, hubungan dan pautan web. Tukar nama semat, simpan dalam folder dan seret mengikut susunan.",
+      "Semat apa sahaja: halaman pejabat dan Prima, tugasan, fail, dokumen, ejen, laporan dan pautan web. Tukar nama semat, simpan dalam folder dan seret mengikut susunan.",
       "Jalankan aliran kerja semula terus dari **Prosedur saya** atau pin.",
       "Ikuti **Kerja saya**: apa yang anda minta, apa yang pekerja AI anda sedang buat, dan dokumen serta fail yang dihasilkan.",
       "Simpan fail anda sendiri dalam **Fail meja kerja saya**, bersama semua yang dibuat oleh AI untuk anda.",
@@ -125,7 +126,7 @@ export const PAGE_DOCS_MS: Record<string, PageDoc> = {
     tips: [
       "Apa sahaja yang dibuat oleh pekerja AI anda, atau sesiapa sahaja pada tugasan yang anda beri, masuk ke meja kerja anda dengan sendiri.",
       "Kakitangan hanya nampak garis panduan syarikat mereka dan kerja mereka sendiri. Pemilik juga nampak meja mereka sendiri, bukan meja orang lain.",
-      "Item disemat yang telah dipadam kekal di meja kerja anda, bertanda **Sudah tiada**, sehingga anda nyahsemat.",
+      "Item disemat yang telah dipadam kekal di meja kerja anda, bertanda **Tidak tersedia: telah dibuang, atau anda tidak lagi boleh membukanya**, sehingga anda nyahsemat.",
     ],
     who: "Semua orang. Meminta pekerja AI anda dan memuat naik memerlukan peranan yang boleh mencipta kerja.",
     related: ["my-worker", "files", "sops", "workflows", "documents", "tasks"],
@@ -295,7 +296,7 @@ export const PAGE_DOCS_MS: Record<string, PageDoc> = {
     can: [
       "Pilih tempoh: **Hari ini**, **7 hari**, **30 hari** atau **90 hari**.",
       "Baca jumlahnya: ejen, tugasan selesai, gagal, menunggu orang, laporan dan belanja AI.",
-      "Bandingkan syarikat dalam jadual **Perbandingan cawangan**. Klik lajur untuk menyusun, atau klik syarikat untuk membuka pejabatnya.",
+      "Bandingkan syarikat dalam jadual **Perbandingan syarikat**. Klik lajur untuk menyusun, atau klik syarikat untuk membuka pejabatnya.",
       "Minta **Taklimat**: rumusan pendek yang ditulis berdasarkan angka di halaman ini.",
       "Lihat apa yang **Perlu perhatian**: kegagalan, tugasan yang lama menunggu, insiden dan bajet.",
     ],
@@ -310,7 +311,7 @@ export const PAGE_DOCS_MS: Record<string, PageDoc> = {
         steps: [
           s("Pilih tempoh, contohnya **7 hari**.", "overview.range"),
           s("Klik **Beri taklimat** dalam kad taklimat. Ia hanya membaca angka di halaman ini.", "overview.briefing"),
-          s("Tatal ke **Perbandingan cawangan** untuk menunjukkan butiran di sebaliknya.", "overview.branches"),
+          s("Tatal ke **Perbandingan syarikat** untuk menunjukkan butiran di sebaliknya.", "overview.branches"),
         ],
       },
     ],
@@ -563,7 +564,7 @@ export const PAGE_DOCS_MS: Record<string, PageDoc> = {
       "Lihat apa yang menunggu dalam **Menunggu**, dan keputusan lalu dalam **Sejarah**.",
       "Untuk permintaan alat: **Luluskan sekali**, **Sentiasa benarkan** ejen itu, atau **Tolak** dengan sebab.",
       "Untuk soalan: ketik jawapan yang dicadangkan atau taip jawapan sendiri, kemudian **Hantar jawapan**.",
-      "Untuk bajet yang terhenti: **Benarkan lagi** atau **Hentikan tugasan**.",
+      "Untuk bajet yang terhenti: **Benarkan lagi** atau **Hentikan seluruh tugasan**.",
       "Anda juga boleh membuat keputusan daripada pemberitahuan telefon: ia membuka satu halaman ringkas untuk keputusan itu.",
     ],
     spots: {
@@ -762,7 +763,7 @@ export const PAGE_DOCS_MS: Record<string, PageDoc> = {
     can: [
       "Pilih syarikat di **Syarikat**, kemudian lepaskan fail, seluruh folder atau .zip di ruang muat naik.",
       "Ikuti setiap muat naik semasa ia dibuka, dibaca dan diisih, kemudian baca laporannya: apa yang ditemui, apa yang masuk perpustakaan dan apa yang ditahan.",
-      "Semak imbas folder syarikat, cari, tapis ikut jenis atau jabatan, atau kumpulkan senarai **Ikut jenis** atau **Ikut jabatan**.",
+      "Semak imbas folder syarikat dan cari di dalamnya, atau tapis senarai ikut **Jenis** atau **Jabatan**.",
       "Buka fail untuk melihat pratonton, ringkasan, jenis, jabatan dan foldernya, dan ubah mana-mana yang perlu.",
       "Muat turun satu fail, satu folder, semua fail syarikat, atau fail yang anda tandakan sahaja, sebagai zip.",
       "Jadikan prosedur sebagai SOP atau aliran kerja dengan **Jadikan SOP** atau **Bina aliran kerja**.",
@@ -807,7 +808,7 @@ export const PAGE_DOCS_MS: Record<string, PageDoc> = {
           s("Klik fail untuk membukanya: pratonton, apa fail itu dan di mana letaknya. **Muat turun** memberi anda fail asal.", "files.list"),
           s("Klik **Muat turun folder** untuk mendapatkan folder semasa sebagai zip.", "files.download-folder"),
           s("Klik **Muat turun semuanya** untuk mendapatkan semua fail syarikat.", "files.download-all"),
-          s("Untuk memuat turun beberapa fail, tandakan fail itu dan klik **Muat turun zip**."),
+          s("Untuk memuat turun beberapa fail, tandakan fail itu dan klik **Muat turun sebagai zip**."),
         ],
       },
       {
@@ -1383,7 +1384,7 @@ export const PAGE_DOCS_MS: Record<string, PageDoc> = {
         title: "Sambungkan penyedia AI",
         steps: [
           s("Di **Penyedia**, pilih penyedia di bawah **Sambung penyedia**.", "ai-engine.add"),
-          s("Klik **Dapatkan kunci** untuk mendapatkannya daripada penyedia, kemudian tampal."),
+          s("Guna pautan **Dapatkan kunci …** penyedia untuk mendapatkannya, kemudian tampal."),
           s("Klik **Uji sambungan**, kemudian **Simpan penyedia**."),
         ],
       },
@@ -1498,7 +1499,7 @@ export const PAGE_DOCS_MS: Record<string, PageDoc> = {
           s("Taip **Nama syarikat** dan pilih warna."),
           s("Pilih **Industri**, contohnya Perdagangan & runcit."),
           s("Biarkan **Tambah pasukan AI siap sedia** dihidupkan dan semak **Siapa yang menyertai**."),
-          s("Klik **Cipta cawangan**. Syarikat itu muncul bersama jabatan dan ejennya.", "organization.company"),
+          s("Klik **Cipta syarikat**. Syarikat itu muncul bersama jabatan dan ejennya.", "organization.company"),
         ],
       },
     ],
@@ -1571,7 +1572,7 @@ export const PAGE_DOCS_MS: Record<string, PageDoc> = {
   tutorial: {
     purpose: "Belajar menggunakan sistem ini mengikut peranan anda, langkah demi langkah: dari ejen pertama hingga memberi tugasan dan melihat hasilnya.",
     can: [
-      "Ikuti laluan peranan anda: **Pemilik**, **Pengurusan**, **Kakitangan** atau **Pelulus & pemerhati**.",
+      "Ikuti laluan peranan anda: **Pemilik**, **Pengurusan**, **Kakitangan** atau **Pelulus**.",
       "Buka langkah sesuatu pelajaran, atau klik **Tunjukkan** untuk pergi ke halaman yang betul.",
       "Pelajaran ditanda selesai dengan sendiri apabila sistem nampak anda sudah melakukannya.",
       "Cari pelajaran, glosari dan soalan lazim.",
@@ -1719,6 +1720,393 @@ export const PAGE_DOCS_MS: Record<string, PageDoc> = {
     related: ["workspace", "my-worker", "tasks", "workflows", "approvals", "documents", "files"],
   },
 
+
+  // ------------------------------------------------------------------ P102: halaman yang belum ada bab
+  mail: {
+    purpose: "E-mel Outlook, kalendar dan sembang Teams anda sendiri dalam satu halaman, bersama balasan yang dideraf oleh AI anda dan menunggu untuk anda hantar.",
+    can: [
+      "Tukar antara **E-mel Outlook** dan **Teams** di bahagian atas, dan pilih **Peti mel**: **Outlook saya** atau peti mel kongsi.",
+      "Lihat apa yang masuk di bawah **Mel terkini**, dan apa yang AI anda buat dengan setiap e-mel.",
+      "Semak, ubah dan hantar balasan yang dideraf oleh AI anda di bawah **Menunggu kelulusan anda**. Tiada apa yang keluar sehingga anda tekan **Hantar**.",
+      "Tambah mesyuarat yang dicadangkan oleh AI anda dengan **Tambah ke kalendar**. Tetamu dijemput hanya pada masa itu.",
+      "Buka sembang Teams dan tekan **Tanya AI saya tentangnya** untuk ringkasan pendek dan cadangan jawapan.",
+    ],
+    spots: {
+      "mail.drafts": "Balasan dan perubahan kalendar yang dideraf oleh AI anda. Anda semak setiap satu sebelum ia dihantar.",
+    },
+    howto: [
+      {
+        title: "Sambungkan Outlook anda",
+        steps: [
+          s("Buka **Microsoft 365** di bar sisi, di bawah Kerja."),
+          s("Klik **Sambungkan Outlook**."),
+          s("Log masuk dengan e-mel dan kata laluan kerja anda. Anda kembali ke sini dan e-mel anda mula dipaparkan."),
+        ],
+      },
+      {
+        title: "Hantar balasan yang dideraf oleh AI anda",
+        steps: [
+          s("Cari draf itu di bawah **Menunggu kelulusan anda**.", "mail.drafts"),
+          s("Baca draf itu. Ubah subjek atau ayatnya jika perlu."),
+          s("Klik **Hantar**. Atau klik **Buang** untuk membuangnya: tiada apa yang dihantar."),
+        ],
+      },
+      {
+        title: "Teliti sembang Teams bersama AI anda",
+        steps: [
+          s("Klik **Teams**, kemudian **Sembang**."),
+          s("Klik satu sembang. Ia dibuka di sisi."),
+          s("Klik **Tanya AI saya tentangnya**. AI anda meringkaskannya dan mencadangkan jawapan untuk anda semak."),
+        ],
+      },
+    ],
+    tips: [
+      "AI anda tidak menghantar e-mel atau mesej Teams sendiri. Setiap balasan menunggu anda di sini.",
+      "Peti mel kongsi, seperti accounts@ atau tender@, ditambah oleh admin di **Saluran**.",
+    ],
+    who: "Sesiapa yang ada AI sendiri atau pembantu peribadi, selepas menyambungkan akaun Microsoft mereka sendiri. Admin juga nampak peti mel kongsi.",
+    related: ["channels", "assistants", "my-worker"],
+  },
+
+  objectives: {
+    purpose: "Matlamat syarikat: sejauh mana setiap satu sudah tercapai, bila tarikh akhirnya dan berapa kos kerjanya.",
+    can: [
+      "Tambah matlamat dengan **Objektif baharu**, bersama sasaran, tarikh akhir dan bajet jika mahu.",
+      "Buka objektif dan klik **Tugasan baharu**: tugasan itu dipautkan kepadanya, jadi ejen faham kenapa kerja itu penting.",
+      "Tutup objektif dengan **Tandakan selesai**, atau ubahnya dengan **Ubah**.",
+    ],
+    spots: {},
+    howto: [
+      {
+        title: "Tambah objektif dan beri kerja kepadanya",
+        steps: [
+          s("Klik **Objektif baharu**."),
+          s("Taip **Objektif**. Tambah sasaran, tarikh akhir atau bajet jika mahu."),
+          s("Klik **Cipta objektif**. Panelnya dibuka."),
+          s("Klik **Tugasan baharu** dalam panel itu untuk memberi kerja pertama."),
+        ],
+      },
+    ],
+    tips: ["Pada 80% bajet objektif, anda menerima notis. Pada 100%, kerja baharu di bawahnya menunggu kelulusan."],
+    who: "Pemilik dan pengurus menambah dan mengubah objektif. Orang lain yang boleh melihat pejabat boleh membacanya.",
+    related: ["tasks", "impact"],
+  },
+
+  prima: {
+    purpose: "Pintu ke Prima Secure, aplikasi operasi kumpulan untuk jadual tugas, kehadiran, kes, HR dan tuntutan.",
+    can: [
+      "Buka Prima dengan satu klik selepas akaun Microsoft anda disambungkan.",
+      "Cuba dahulu dengan **Pratonton dengan data contoh**: data rekaan, tiada apa yang disimpan.",
+      "Pemilik: pautkan orang pejabat kepada rekod staf Prima mereka di bawah **Orang dalam Prima**.",
+    ],
+    spots: {},
+    howto: [
+      {
+        title: "Buka Prima buat kali pertama",
+        steps: [
+          s("Klik **Prima** di bar sisi. Di telefon, ketik **Daftar masuk** di bahagian bawah."),
+          s("Klik **Sambungkan Microsoft**."),
+          s("Log masuk dengan e-mel dan kata laluan kerja anda, sama seperti untuk Outlook. Anda kembali dan Prima dibuka."),
+        ],
+      },
+      {
+        title: "Pautkan orang kepada Prima (pemilik)",
+        steps: [
+          s("Klik **Orang dalam Prima**."),
+          s("Klik **Pautkan semua cadangan** untuk memautkan semua yang dipadankan oleh pejabat, atau pilih rekod staf untuk seorang."),
+          s("Klik **Kembali ke Prima**."),
+        ],
+      },
+    ],
+    tips: ["AI anda membaca SOP dan aliran kerja Prima dalam Perpustakaan, jadi ia mengikut peraturan yang sama seperti anda."],
+    who: "Semua orang. Pemilik juga memautkan orang dan syarikat kepada Prima.",
+    related: ["workspace", "files"],
+  },
+
+  timetable: {
+    purpose: "Hari bekerja setiap ejen, seperti jadual giliran staf: waktunya, tugas hariannya dan kerja yang menunggu syif seterusnya.",
+    can: [
+      "Lihat hari setiap ejen sekali imbas. Gerak hari demi hari, atau pilih **Kembali ke hari ini**.",
+      "Klik ejen untuk menetapkan **Waktu bekerja** dan rehat tengah harinya.",
+      "Beri ejen tugas harian dengan **Tambah tugas**, atau **Jeda** satu tugas.",
+    ],
+    spots: {},
+    howto: [
+      {
+        title: "Tetapkan waktu bekerja ejen",
+        steps: [
+          s("Klik baris ejen itu. Harinya dibuka di sisi."),
+          s("Matikan **Bekerja bila-bila masa**, kemudian pilih hari, **Mula** dan **Tamat**."),
+          s("Klik **Simpan waktu**. Kerja yang tiba selepas waktu bekerja menunggu syif seterusnya."),
+        ],
+      },
+      {
+        title: "Beri ejen tugas harian",
+        steps: [
+          s("Klik baris ejen itu."),
+          s("Di bawah **Tambah tugas**, pilih tugas siap sedia, atau **Lain-lain**."),
+          s("Semak bila ia berjalan. Hidupkan **Seseorang menyemak setiap hasil** jika anda mahu melihat setiap satu dahulu."),
+          s("Klik **Tambah tugas**."),
+        ],
+      },
+    ],
+    tips: ["Kerja segera masih sampai kepada ejen selepas waktu bekerja apabila **Kerja segera bila-bila masa** dihidupkan."],
+    who: "Pemilik dan pengurus. Mereka yang mengurus ejen, atau AI sendiri, boleh mengubah waktu dan tugas.",
+    related: ["agents", "schedules", "office"],
+  },
+
+  roles: {
+    purpose: "Apa yang setiap peranan boleh buat, mengikut bahagian. Hanya pemilik yang mengubahnya.",
+    can: [
+      "Hidupkan atau matikan kebenaran untuk sesuatu peranan. Yang diubah diberi titik oren.",
+      "Baca setiap perubahan di bawah **Semak perubahan** sebelum disimpan.",
+      "Batalkan satu peranan dengan **Set semula**, atau semua peranan dengan **Kembali ke asal**.",
+    ],
+    spots: {},
+    howto: [
+      {
+        title: "Ubah apa yang sesuatu peranan boleh buat",
+        steps: [
+          s("Cari kebenaran itu. Taip dalam kotak carian untuk mencarinya dengan cepat."),
+          s("Tukar suis dalam lajur peranan itu."),
+          s("Klik **Simpan perubahan** dan baca senarai di bawah **Semak perubahan**."),
+          s("Klik **Simpan perubahan** sekali lagi. Setiap orang mendapat akses baharu pada klik seterusnya."),
+        ],
+      },
+    ],
+    tips: ["Untuk mengubah peranan atau tempat seseorang, guna **Ahli dan peranan**."],
+    who: "Pemilik sahaja.",
+    related: ["settings", "activity"],
+  },
+
+  "staff-computers": {
+    purpose: "Setiap komputer syarikat yang dipautkan oleh staf anda: siapa memegang yang mana, sama ada dalam talian, dan folder yang dikongsinya.",
+    can: [
+      "Cari komputer mengikut orang, syarikat atau nama, atau tunjukkan yang **Dalam talian** sahaja.",
+      "Klik **Buka** untuk melihat skrinnya dan mengambil fail. Komputer itu memaparkan notis semasa anda menggunakannya.",
+      "Hidupkan sandaran syarikat bagi folder yang dikongsi dengan **Tetapan sandaran**.",
+    ],
+    spots: {},
+    howto: [
+      {
+        title: "Buka komputer staf",
+        steps: [
+          s("Taip nama dalam kotak carian, atau tetapkan status kepada **Dalam talian**."),
+          s("Klik **Buka** pada barisnya. Skrinnya dibuka."),
+        ],
+      },
+      {
+        title: "Sandarkan komputer staf",
+        steps: [
+          s("Klik **Tetapan sandaran**."),
+          s("Hidupkan **Sandarkan folder yang dikongsi secara automatik**."),
+          s("Pilih tempat menyimpan sandaran dan kekerapannya."),
+          s("Klik **Simpan**."),
+        ],
+      },
+    ],
+    tips: ["Sandaran perlukan tempat untuk disimpan: tambah satu dahulu di **Storan fail**."],
+    who: "Pemilik, admin dan pengurus. Hanya pemilik mengubah sandaran.",
+    related: ["computers", "web-connections", "storage"],
+  },
+
+  "ai-use": {
+    purpose: "Elaun AI harian setiap orang, apa yang staf boleh guna AI mereka untuk, dan apa yang ditolak.",
+    can: [
+      "Lihat siapa guna berapa banyak hari ini, dan siapa yang hampir atau sudah mencecah had.",
+      "Beri seseorang lebih dengan **Tukar**.",
+      "Tetapkan jumlah untuk semua orang di bawah **Elaun AI harian**.",
+      "Pastikan AI staf untuk kerja dengan **Semak permintaan berkaitan kerja**, dan baca **Permintaan yang ditolak**.",
+    ],
+    spots: {},
+    howto: [
+      {
+        title: "Beri seseorang elaun yang lebih besar",
+        steps: [
+          s("Cari mereka dalam senarai dan klik **Tukar**."),
+          s("Pilih **Jumlah sendiri**, kemudian taip atau pilih jumlahnya."),
+          s("Klik **Simpan elaun**."),
+        ],
+      },
+      {
+        title: "Tetapkan elaun untuk semua orang",
+        steps: [
+          s("Di bawah **Elaun AI harian**, masukkan **Token setiap orang sehari**."),
+          s("Pilih peranan yang terlibat."),
+          s("Klik **Simpan elaun**. Ia dikira mulai sekarang, termasuk hari ini."),
+        ],
+      },
+    ],
+    tips: ["Tiada sesiapa boleh mengubah elaun sendiri. Minta pemilik atau admin."],
+    who: "Pemilik, admin dan pengurus. Mengubah peraturan memerlukan hak mengurus ahli.",
+    related: ["settings", "ai-engine"],
+  },
+
+  "web-connections": {
+    purpose: "Cara pelayar AI sampai ke laman web: melalui komputer syarikat, dari pelayan ini, atau melalui proksi anda sendiri.",
+    can: [
+      "Pilih **Layari melalui komputer**, **Layari dari sini** atau **Guna proksi anda**.",
+      "Senaraikan laman yang melalui jalan itu, contohnya ePerolehan.",
+      "Cuba satu laman di bawah **Semak sambungan**.",
+    ],
+    spots: {},
+    howto: [
+      {
+        title: "Buka laman melalui komputer pejabat",
+        steps: [
+          s("Klik **Layari melalui komputer**."),
+          s("Pilih komputer di bawah **Komputer mana**."),
+          s("Semak senarai **Laman**."),
+          s("Klik **Simpan**. Seseorang di komputer itu membenarkannya sekali."),
+        ],
+      },
+      {
+        title: "Pastikan laman boleh dibuka",
+        steps: [
+          s("Taip alamatnya di bawah **Laman**."),
+          s("Klik **Semak**. Anda nampak jalan mana yang diguna dan apa jawapan laman itu."),
+        ],
+      },
+    ],
+    tips: ["Sesetengah laman kerajaan hanya dibuka dari alamat Malaysia. Melayari melalui komputer pejabat menyelesaikannya."],
+    who: "Pemilik.",
+    related: ["staff-computers", "computers", "logins"],
+  },
+
+  "approved-services": {
+    purpose: "Kunci yang membenarkan maklumat syarikat pergi hanya kepada perkhidmatan luar yang anda luluskan.",
+    can: [
+      "Lihat setiap perkhidmatan luar yang digunakan pejabat: penyedia AI, storan, pesanan dan web.",
+      "**Luluskan** perkhidmatan, bersama tempat ia menyimpan data dan apa yang boleh diterimanya.",
+      "Hidupkan **Guna perkhidmatan yang diluluskan sahaja**: yang lain disekat.",
+      "**Tarik balik** kelulusan, atau **Muat turun senarai yang diluluskan**.",
+    ],
+    spots: {},
+    howto: [
+      {
+        title: "Luluskan perkhidmatan dan hidupkan kunci",
+        steps: [
+          s("Klik **Luluskan** pada baris perkhidmatan itu."),
+          s("Isi tempat ia menyimpan data dan data yang boleh diterimanya, kemudian klik **Luluskan**."),
+          s("Hidupkan suis di bawah **Guna perkhidmatan yang diluluskan sahaja**."),
+          s("Perkhidmatan disekat yang diperlukan kemudian menunjukkan **Menunggu anda**. Luluskan atau terus sekat."),
+        ],
+      },
+    ],
+    tips: ["Senarai yang diluluskan ialah rekod yang baik untuk audit atau tender."],
+    who: "Pemilik.",
+    related: ["ai-engine", "web-connections", "activity"],
+  },
+
+  storage: {
+    purpose: "Tempat fail syarikat disimpan: pangkalan data aplikasi, cakera pelayan ini, baldi awan atau pelayan fail anda sendiri.",
+    can: [
+      "Tambah tempat dengan **Tambah storan**. Ia diuji sebelum disimpan.",
+      "Pilih tempat fail baharu pergi dengan **Simpan fail baharu di sini**.",
+      "Isi Perpustakaan daripada storan dengan **Import dokumennya ke dalam Perpustakaan**.",
+    ],
+    spots: {},
+    howto: [
+      {
+        title: "Tambah baldi awan",
+        steps: [
+          s("Klik **Tambah storan**."),
+          s("Pilih jenisnya dan isi medannya."),
+          s("Klik **Uji dan simpan**. Ia menulis, membaca dan memadam fail ujian dahulu."),
+        ],
+      },
+      {
+        title: "Bawa dokumen storan ke dalam Perpustakaan",
+        steps: [
+          s("Pada storan itu, hidupkan **Import dokumennya ke dalam Perpustakaan**."),
+          s("Pilih syarikat dan folder, kemudian klik **Simpan**."),
+          s("Klik **Import sekarang**. Selepas itu ia disemak setiap jam."),
+        ],
+      },
+    ],
+    tips: ["Storan hanya boleh dibuang apabila tiada fail lagi disimpan di situ."],
+    who: "Pemilik dan admin.",
+    related: ["files", "staff-computers"],
+  },
+
+  feedbacks: {
+    purpose: "Semua yang dihantar melalui butang maklum balas: nota dan tangkapan skrin bertanda dari mana-mana halaman.",
+    can: [
+      "Hidupkan atau matikan butang itu dengan **Butang maklum balas untuk semua**.",
+      "Buka satu item, tetapkan **Status** dan tulis **Jawapan anda**.",
+      "Tulis **Peraturan syarikat** yang dipaparkan di setiap halaman, atau di satu halaman.",
+    ],
+    spots: {},
+    howto: [
+      {
+        title: "Jawab maklum balas",
+        steps: [
+          s("Klik satu kad. Ia dibuka di sisi."),
+          s("Pilih status di bawah **Status**. Ia disimpan serta-merta."),
+          s("Taip di bawah **Jawapan anda** dan klik **Simpan jawapan**. Penghantar akan nampak."),
+        ],
+      },
+      {
+        title: "Tambah peraturan syarikat",
+        steps: [
+          s("Buka tab **Peraturan syarikat**."),
+          s("Klik **Tambah peraturan** dan tulis dalam beberapa perkataan."),
+          s("Klik **Simpan peraturan syarikat**. Semua orang nampak di bawah Peraturan & panduan."),
+        ],
+      },
+    ],
+    tips: ["Maklum balas baharu muncul sendiri, tanpa memuat semula halaman."],
+    who: "Pembangun sistem sahaja.",
+    related: ["activity"],
+  },
+
+  start: {
+    purpose: "Senarai semak pendek tentang apa yang menjadikan pejabat berfungsi untuk anda. Setiap langkah ditanda sendiri apabila selesai.",
+    can: [
+      "Buat langkah bertanda **Seterusnya** dahulu. Setiap langkah ada butangnya sendiri.",
+      "Tanya cara bagi mana-mana langkah: pembantu bantuan menerangkannya.",
+      "Staf mendapat langkah sendiri: ambil pekerja AI anda, tetapkan waktunya dan pautkan telefon anda.",
+    ],
+    spots: {},
+    howto: [
+      {
+        title: "Selesaikan persediaan anda",
+        steps: [
+          s("Buka senarai semak persediaan di bawah **Bantuan** di bar sisi."),
+          s("Cari langkah bertanda **Seterusnya** dan klik butangnya."),
+          s("Buat langkah itu pada halaman yang dibuka."),
+          s("Kembali. Langkah itu kini ada tanda hijau."),
+        ],
+      },
+    ],
+    tips: ["Langkah yang anda nampak bergantung pada peranan anda. Staf dan pemilik nampak senarai berbeza."],
+    who: EVERYONE,
+    related: ["home", "tutorial", "workspace"],
+  },
+
+  present: {
+    purpose: "Pembentangan siap tentang Agentic Office untuk pelanggan dan rakan sekerja, dalam skrin penuh, dibina daripada tangkapan skrin sebenar.",
+    can: [
+      "Gerak dengan kekunci anak panah atau Space, atau klik separuh kanan atau kiri slaid.",
+      "Buka nota anda dengan **Nota pembentang (N)**, dan lompat ke mana-mana slaid dengan **Semua slaid (O)**.",
+      "Buat PDF dengan **Cetak atau simpan sebagai PDF**.",
+    ],
+    spots: {},
+    howto: [
+      {
+        title: "Buat pembentangan",
+        steps: [
+          s("Buka **Belajar** di bawah Bantuan di bar sisi, kemudian tab **Bentang**."),
+          s("Tekan **Skrin penuh (F)**."),
+          s("Gerak dengan kekunci anak panah atau Space. Tekan N untuk nota anda."),
+          s("Klik **Keluar** apabila selesai."),
+        ],
+      },
+    ],
+    tips: ["Di telefon, slaid dipaparkan sebagai kad yang anda tatal, dengan nota di bawah setiap satu."],
+    who: EVERYONE,
+    related: ["tutorial", "demo-day"],
+  },
 };
 
 /** Captions for the recorded flows, in Malay. */
@@ -1757,7 +2145,7 @@ export const FLOW_DOCS_MS: Record<string, FlowDoc> = {
       "Buka Organisasi dan klik Cawangan baharu.",
       "Taip nama syarikat dan pilih industri.",
       "Biarkan Tambah pasukan AI siap sedia dihidupkan dan semak siapa yang menyertai.",
-      "Klik Cipta cawangan: jabatan dan ejen akan muncul.",
+      "Klik Cipta syarikat: jabatan dan ejen akan muncul.",
     ],
   },
   "hire-worker": {

@@ -8,6 +8,8 @@ import { FIXTURE_MANIFEST } from "./fixture";
 import { guidePageFor } from "./lookup";
 import { SLIDES } from "./slides";
 import { GUIDE_FLOWS, GUIDE_PAGES, pageById } from "./targets";
+import { whereOf } from "./where";
+import { ALL_NAV, NAV } from "@/nav";
 
 const ROUTES = new Set([...routerSource.matchAll(/path:\s*"([^"]+)"/g)].map((m) => m[1]!));
 const TARGET_IDS = new Set(GUIDE_PAGES.flatMap((p) => p.targets.map((t) => t.id)));
@@ -59,6 +61,37 @@ describe("guide content", () => {
 
   it("groups pages like the sidebar", () => {
     for (const p of GUIDE_PAGES) expect(GUIDE_GROUPS as readonly string[], p.id).toContain(p.group);
+    // The groups are the sidebar's own sections, in the sidebar's order.
+    const titles = NAV.map((s) => s.title);
+    const at = GUIDE_GROUPS.map((g) => titles.indexOf(g));
+    expect(at.every((i) => i >= 0), GUIDE_GROUPS.join()).toBe(true);
+    expect([...at].sort((a, b) => a - b)).toEqual(at);
+    // Each chapter sits under the section its page is in ("Where to find it" starts there).
+    for (const p of GUIDE_PAGES) expect(whereOf(p.route)?.trail[0]?.label, p.id).toBe(p.group);
+  });
+
+  it("has a chapter for every page in the sidebar (P102)", () => {
+    // The customers-and-money module (CRM, Contacts, Deals, Money) is being removed; approval
+    // limits are about its bills and invoices. The guide does not explain itself.
+    const SKIP = new Set(["/crm", "/contacts", "/deals", "/money", "/settings/approval-limits", "/guide"]);
+    const routes = new Set(GUIDE_PAGES.map((p) => p.route));
+    for (const i of ALL_NAV) {
+      if (i.hidden || SKIP.has(i.to)) continue;
+      expect(routes.has(i.to) || !!guidePageFor(i.to), i.to).toBe(true);
+    }
+    for (const r of ["/crm", "/contacts", "/deals", "/money"]) expect(routes.has(r), r).toBe(false);
+  });
+
+  it("says where to find each page in the sidebar", () => {
+    const labels = (r: string) => whereOf(r)?.trail.map((s) => (s.tab ? `${s.label} tab` : s.label));
+    expect(labels("/")).toEqual(["Today", "Command center"]);
+    expect(labels("/impact")).toEqual(["Today", "Command center", "Impact tab"]);
+    expect(labels("/documents")).toEqual(["Library", "Documents tab"]);
+    expect(labels("/prima")).toEqual(["Prima"]);
+    expect(labels("/channels")).toEqual(["Settings", "Channels tab"]);
+    expect(whereOf("/settings/members")?.folded).toBe(true);
+    expect(labels("/brain")).toEqual(["AI team", "Knowledge & skills", "Brain tab"]); // an advanced page, but a hub tab
+    for (const p of GUIDE_PAGES) expect(whereOf(p.route), p.id).toBeDefined();
   });
 
   it("captions every recorded flow", () => {

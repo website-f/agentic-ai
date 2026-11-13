@@ -7,25 +7,20 @@ import type { GUIDE_FLOWS, GuidePage, GuideTarget } from "./targets";
 const t = (id: string, label: string): GuideTarget => ({ id, label });
 
 export const GROUP_LABELS_MS: Record<string, string> = {
-  Home: "Utama",
-  Office: "Pejabat",
+  Today: "Hari ini",
   Work: "Kerja",
-  Documents: "Dokumen",
-  Collaboration: "Kerjasama",
-  Knowledge: "Pengetahuan",
-  Operations: "Operasi",
-  Admin: "Admin",
+  Prima: "Prima",
+  Library: "Perpustakaan",
+  "AI team": "Pasukan AI",
+  Settings: "Tetapan",
+  Developer: "Pembangun",
   Help: "Bantuan",
 };
 
 export const GUIDE_PAGES_MS: GuidePage[] = [
-  // ---------------------------------------------------------------- Home
+  // ---------------------------------------------------------------- Today
   {
-    id: "home", route: "/", title: "Pusat arahan", group: "Home", states: [],
-    targets: [t("home.health", "Kesihatan sistem"), t("home.getting-started", "Senarai semak Bermula"), t("home.shortcuts", "Pintasan")],
-  },
-  {
-    id: "workspace", route: "/workspace", title: "Meja kerja saya", group: "Home",
+    id: "workspace", route: "/workspace", title: "Meja kerja saya", group: "Today",
     states: [],
     targets: [
       t("desk.tabs", "Tab meja kerja"), t("desk.ask", "Cari atau pergi ke mana-mana"), t("desk.stats", "Kerja di tangan saya"), t("desk.pinned", "Disemat"),
@@ -34,50 +29,36 @@ export const GUIDE_PAGES_MS: GuidePage[] = [
     ],
   },
   {
-    id: "my-worker", route: "/my-worker", title: "AI saya", group: "Home", who: "Kakitangan",
+    id: "home", route: "/", title: "Pusat arahan", group: "Today", states: [],
+    targets: [t("home.health", "Kesihatan sistem"), t("home.getting-started", "Senarai semak Langkah permulaan"), t("home.shortcuts", "Pintasan")],
+  },
+  {
+    id: "overview", route: "/overview", title: "Gambaran syarikat", group: "Today",
+    states: [],
+    targets: [t("overview.range", "Tempoh"), t("overview.branches", "Semua syarikat sebelah-menyebelah"), t("overview.briefing", "Taklimat AI")],
+  },
+  {
+    id: "impact", route: "/impact", title: "Impak", group: "Today", who: "Pemilik dan pengurus",
+    states: [{ key: "roi", how: "Tatal ke bawah ke kalkulator ROI dan cadangan Cuba" }],
+    targets: [t("impact.totals", "Hasil terukur"), t("impact.roi", "Kalkulator ROI"), t("impact.try", "Cuba")],
+  },
+  {
+    id: "my-worker", route: "/my-worker", title: "AI saya", group: "Today", who: "Kakitangan",
     states: [{ key: "welcome", how: "Log masuk kali pertama sebagai kakitangan: langkah Ambil pekerja AI anda (/welcome)" }],
     targets: [t("my-worker.status", "Apa yang sedang dibuatnya"), t("my-worker.actions", "Beri tugasan, sembang, tukar waktu"), t("my-worker.week", "Minggu kerjanya")],
   },
   {
-    id: "assistants", route: "/assistants", title: "Pembantu saya", group: "Home", who: "Pemilik dan pengurus",
+    id: "assistants", route: "/assistants", title: "Pembantu saya", group: "Today", who: "Pemilik dan pengurus",
     states: [],
     targets: [t("assistants.chat", "Sembang dengan pembantu anda"), t("assistants.quick", "Soalan sekali ketik"), t("assistants.connections", "Gmail, Calendar dan WhatsApp")],
   },
   {
-    id: "computers", route: "/computers", title: "Komputer saya", group: "Home", who: "Sesiapa yang ada AI sendiri (kembar AI atau pembantu peribadi)",
+    id: "computers", route: "/computers", title: "Komputer saya", group: "Today", who: "Sesiapa yang ada AI sendiri (kembar AI atau pembantu peribadi)",
     states: [{ key: "activity", how: "Klik Aktiviti terkini pada komputer" }],
     targets: [
       t("computers.link", "Pautkan komputer"), t("computers.device", "Komputer yang dipautkan"), t("computers.folders", "Folder yang boleh dilihat AI anda"),
       t("computers.activity", "Apa yang dibuat AI anda padanya"), t("computers.safety", "Apa yang boleh dan tidak boleh dibuatnya"),
     ],
-  },
-  {
-    id: "overview", route: "/overview", title: "Gambaran syarikat", group: "Home",
-    states: [],
-    targets: [t("overview.range", "Tempoh"), t("overview.branches", "Semua syarikat sebelah-menyebelah"), t("overview.briefing", "Taklimat AI")],
-  },
-  {
-    id: "impact", route: "/impact", title: "Impak", group: "Home", who: "Pemilik dan pengurus",
-    states: [{ key: "roi", how: "Tatal ke bawah ke kalkulator ROI dan cadangan Cuba" }],
-    targets: [t("impact.totals", "Hasil terukur"), t("impact.roi", "Kalkulator ROI"), t("impact.try", "Cuba")],
-  },
-  // ---------------------------------------------------------------- Office
-  {
-    id: "office", route: "/office", title: "Ruang pejabat", group: "Office",
-    states: [{ key: "agent", how: "Klik ejen di mejanya: panel sisinya terbuka" }],
-    targets: [t("office.floor", "Pejabat langsung"), t("office.branch", "Pilih syarikat")],
-  },
-  {
-    id: "monitor", route: "/monitor", title: "Pantau", group: "Office", states: [],
-    targets: [t("monitor.agents", "Ejen yang sedang bekerja"), t("monitor.screen", "Skrin langsung dan langkah")],
-  },
-  {
-    id: "agents", route: "/agents", title: "Ejen", group: "Office",
-    states: [
-      { key: "new", how: "Klik Ejen baharu: pembina ejen (/agents/new)" },
-      { key: "detail", how: "Klik kad ejen: halaman butirannya" },
-    ],
-    targets: [t("agents.new", "Ejen baharu"), t("agents.card", "Kad ejen"), t("agents.org", "Paparan carta organisasi")],
   },
   // ---------------------------------------------------------------- Work
   {
@@ -93,6 +74,16 @@ export const GUIDE_PAGES_MS: GuidePage[] = [
     targets: [t("approvals.card", "Keputusan yang menunggu"), t("approvals.actions", "Lulus, sentiasa benarkan atau tolak"), t("approvals.history", "Sejarah")],
   },
   {
+    id: "chat", route: "/chat", title: "Sembang", group: "Work",
+    states: [{ key: "conversation", how: "Pilih ejen: perbualan skrin penuh terbuka" }],
+    targets: [t("chat.agents", "Pilih ejen"), t("chat.composer", "Taip, atau tahan mikrofon")],
+  },
+  {
+    id: "mail", route: "/mail", title: "Microsoft 365", group: "Work", who: "Mereka yang ada AI sendiri atau pembantu peribadi",
+    states: [],
+    targets: [t("mail.drafts", "Menunggu kelulusan anda")],
+  },
+  {
     id: "forms", route: "/forms", title: "Borang", group: "Work",
     states: [
       { key: "handin", how: "Klik Hantar pada borang: muat naik borang yang diisi dan resit" },
@@ -105,17 +96,22 @@ export const GUIDE_PAGES_MS: GuidePage[] = [
     targets: [t("reports.list", "Laporan yang ditulis ejen"), t("reports.search", "Cari")],
   },
   {
-    id: "chat", route: "/chat", title: "Sembang", group: "Work",
-    states: [{ key: "conversation", how: "Pilih ejen: perbualan skrin penuh terbuka" }],
-    targets: [t("chat.agents", "Pilih ejen"), t("chat.composer", "Taip, atau tahan mikrofon")],
-  },
-  // ---------------------------------------------------------------- Documents
-  {
-    id: "company-kit", route: "/company-kit", title: "Kit syarikat", group: "Documents", states: [],
-    targets: [t("company-kit.fields", "Fakta syarikat"), t("company-kit.save", "Simpan")],
+    id: "workflows", route: "/workflows", title: "Aliran kerja", group: "Work",
+    states: [{ key: "editor", how: "Buka aliran kerja: editor skrin penuh" }],
+    targets: [t("workflows.new", "Aliran kerja baharu"), t("workflows.list", "Aliran kerja"), t("workflows.run", "Jalankan")],
   },
   {
-    id: "files", route: "/files", title: "Perpustakaan: Semak imbas", group: "Documents",
+    id: "objectives", route: "/objectives", title: "Objektif", group: "Work", who: "Pemilik dan pengurus", states: [],
+    targets: [],
+  },
+  // ---------------------------------------------------------------- Prima
+  {
+    id: "prima", route: "/prima", title: "Prima", group: "Prima", states: [],
+    targets: [],
+  },
+  // ---------------------------------------------------------------- Library
+  {
+    id: "files", route: "/files", title: "Perpustakaan: Semak imbas", group: "Library",
     states: [{ key: "sheet", how: "Klik fail: pratonton dan apa yang dibaca daripadanya" }],
     targets: [
       t("files.company", "Pilih syarikat"), t("files.upload", "Muat naik fail, folder atau zip"), t("files.report", "Laporan muat naik"),
@@ -125,101 +121,156 @@ export const GUIDE_PAGES_MS: GuidePage[] = [
     ],
   },
   {
-    id: "templates", route: "/templates", title: "Templat", group: "Documents", states: [],
-    targets: [t("templates.new", "Templat baharu"), t("templates.list", "Templat")],
-  },
-  {
-    id: "documents", route: "/documents", title: "Dokumen", group: "Documents",
+    id: "documents", route: "/documents", title: "Dokumen", group: "Library",
     states: [{ key: "editor", how: "Buka dokumen: editor dengan medan dan pratonton" }],
     targets: [t("documents.new", "Dokumen baharu"), t("documents.list", "Dokumen dan semakannya")],
   },
   {
-    id: "packs", route: "/packs", title: "Pek", group: "Documents", states: [],
-    targets: [t("packs.new", "Pek baharu"), t("packs.list", "Pek dan kemajuannya")],
-  },
-  // ---------------------------------------------------------------- Collaboration
-  {
-    id: "meetings", route: "/meetings", title: "Mesyuarat", group: "Collaboration", states: [],
-    targets: [t("meetings.list", "Mesyuarat"), t("meetings.new", "Mula mesyuarat")],
-  },
-  {
-    id: "broadcasts", route: "/broadcasts", title: "Hebahan", group: "Collaboration", states: [],
-    targets: [t("broadcasts.compose", "Tulis hebahan"), t("broadcasts.list", "Dihantar dan diakui")],
-  },
-  // ---------------------------------------------------------------- Knowledge
-  {
-    id: "sops", route: "/sops", title: "SOP", group: "Knowledge", states: [],
+    id: "sops", route: "/sops", title: "SOP", group: "Library", states: [],
     targets: [t("sops.new", "SOP baharu"), t("sops.list", "SOP ikut skop")],
   },
   {
-    id: "library", route: "/library", title: "Garis panduan", group: "Knowledge", states: [],
+    id: "library", route: "/library", title: "Garis panduan", group: "Library", states: [],
     targets: [t("library.upload", "Muat naik garis panduan"), t("library.sources", "Sumber dan status"), t("library.search", "Cuba cari"), t("library.sharepoint", "SharePoint dan OneDrive")],
   },
   {
-    id: "brain", route: "/brain", title: "Brain", group: "Knowledge", states: [],
-    targets: [t("brain.tabs", "Halaman, fakta, carian, graf, mimpi"), t("brain.search", "Cari")],
+    id: "templates", route: "/templates", title: "Templat", group: "Library", states: [],
+    targets: [t("templates.new", "Templat baharu"), t("templates.list", "Templat")],
   },
   {
-    id: "skills", route: "/skills", title: "Kemahiran", group: "Knowledge",
+    id: "packs", route: "/packs", title: "Pek", group: "Library", states: [],
+    targets: [t("packs.new", "Pek baharu"), t("packs.list", "Pek dan kemajuannya")],
+  },
+  {
+    id: "company-kit", route: "/company-kit", title: "Kit syarikat", group: "Library", states: [],
+    targets: [t("company-kit.fields", "Fakta syarikat"), t("company-kit.save", "Simpan")],
+  },
+  // ---------------------------------------------------------------- AI team
+  {
+    id: "agents", route: "/agents", title: "Ejen", group: "AI team",
+    states: [
+      { key: "new", how: "Klik Ejen baharu: pembina ejen (/agents/new)" },
+      { key: "detail", how: "Klik kad ejen: halaman butirannya" },
+    ],
+    targets: [t("agents.new", "Ejen baharu"), t("agents.card", "Kad ejen"), t("agents.org", "Paparan carta organisasi")],
+  },
+  {
+    id: "timetable", route: "/timetable", title: "Jadual waktu", group: "AI team", who: "Pemilik dan pengurus", states: [],
+    targets: [],
+  },
+  {
+    id: "monitor", route: "/monitor", title: "Pantau", group: "AI team", states: [],
+    targets: [t("monitor.agents", "Ejen yang sedang bekerja"), t("monitor.screen", "Skrin langsung dan langkah")],
+  },
+  {
+    id: "meetings", route: "/meetings", title: "Mesyuarat", group: "AI team", states: [],
+    targets: [t("meetings.list", "Mesyuarat"), t("meetings.new", "Mula mesyuarat")],
+  },
+  {
+    id: "broadcasts", route: "/broadcasts", title: "Hebahan", group: "AI team", states: [],
+    targets: [t("broadcasts.compose", "Tulis hebahan"), t("broadcasts.list", "Dihantar dan diakui")],
+  },
+  {
+    id: "office", route: "/office", title: "Ruang pejabat", group: "AI team",
+    states: [{ key: "agent", how: "Klik ejen di mejanya: panel sisinya terbuka" }],
+    targets: [t("office.floor", "Pejabat langsung"), t("office.branch", "Pilih syarikat")],
+  },
+  {
+    id: "learning", route: "/learning", title: "Pembelajaran", group: "AI team", states: [],
+    targets: [t("learning.kpis", "Apa yang dipelajari"), t("learning.autopilot", "Autopilot dan semakan kendiri"), t("learning.recent", "Keputusan terkini")],
+  },
+  {
+    id: "skills", route: "/skills", title: "Kemahiran", group: "AI team",
     states: [{ key: "sheet", how: "Klik kemahiran: langkah, ujian, versi, Tambah baik dengan AI" }],
     targets: [t("skills.list", "Kemahiran"), t("skills.proposals", "Cadangan yang menunggu"), t("skills.teach", "Ajar daripada sumber")],
   },
   {
-    id: "learning", route: "/learning", title: "Pembelajaran", group: "Knowledge", states: [],
-    targets: [t("learning.kpis", "Apa yang dipelajari"), t("learning.autopilot", "Autopilot dan semakan kendiri"), t("learning.recent", "Keputusan terkini")],
+    id: "brain", route: "/brain", title: "Brain", group: "AI team", states: [],
+    targets: [t("brain.tabs", "Halaman, fakta, carian, graf, mimpi"), t("brain.search", "Cari")],
   },
   {
-    id: "blueprints", route: "/blueprints", title: "Pelan tugas", group: "Knowledge", states: [],
+    id: "blueprints", route: "/blueprints", title: "Pelan tugas", group: "AI team", states: [],
     targets: [t("blueprints.new", "Pelan tugas baharu"), t("blueprints.apply", "Guna pada ejen")],
   },
+  // ---------------------------------------------------------------- Settings
   {
-    id: "workflows", route: "/workflows", title: "Aliran kerja", group: "Knowledge",
-    states: [{ key: "editor", how: "Buka aliran kerja: editor skrin penuh" }],
-    targets: [t("workflows.new", "Aliran kerja baharu"), t("workflows.list", "Aliran kerja"), t("workflows.run", "Jalankan")],
-  },
-  // ---------------------------------------------------------------- Operations
-  {
-    id: "schedules", route: "/schedules", title: "Jadual", group: "Operations", states: [],
-    targets: [t("schedules.new", "Jadual baharu"), t("schedules.list", "Jadual dan larian")],
-  },
-  {
-    id: "logins", route: "/logins", title: "Log masuk", group: "Operations", states: [],
-    targets: [t("logins.new", "Tambah log masuk"), t("logins.list", "Log masuk, dikunci kepada lamannya")],
-  },
-  {
-    id: "ai-engine", route: "/ai-engine", title: "Enjin AI", group: "Operations", who: "Pemilik dan pentadbir",
-    states: [],
-    targets: [t("ai-engine.tabs", "Penyedia, kumpulan model, penggunaan, ruang uji"), t("ai-engine.add", "Tambah penyedia")],
-  },
-  {
-    id: "mcp-servers", route: "/mcp-servers", title: "Alat MCP", group: "Operations", states: [],
-    targets: [t("mcp-servers.add", "Sambung pelayan")],
-  },
-  {
-    id: "channels", route: "/channels", title: "Saluran", group: "Operations", states: [],
-    targets: [t("channels.whatsapp", "WhatsApp"), t("channels.telegram", "Telegram"), t("channels.push", "Pemberitahuan telefon")],
-  },
-  // ---------------------------------------------------------------- Admin
-  {
-    id: "organization", route: "/organization", title: "Organisasi", group: "Admin",
+    id: "organization", route: "/organization", title: "Organisasi", group: "Settings",
     states: [{ key: "new", how: "Klik Tambah syarikat: industri dan pasukan AI siap sedia" }],
     targets: [t("organization.add", "Tambah syarikat"), t("organization.company", "Syarikat dan jabatannya")],
   },
   {
-    id: "activity", route: "/activity", title: "Aktiviti", group: "Admin", states: [],
-    targets: [t("activity.filter", "Penapis"), t("activity.list", "Setiap perubahan, mengikut turutan")],
-  },
-  {
-    id: "settings", route: "/settings/members", title: "Ahli dan tetapan", group: "Admin", states: [],
+    id: "settings", route: "/settings/members", title: "Ahli dan tetapan", group: "Settings", states: [],
     targets: [t("settings.add", "Tambah ahli"), t("settings.list", "Orang dan peranan")],
   },
+  {
+    id: "roles", route: "/settings/roles", title: "Peranan dan akses", group: "Settings", who: "Pemilik", states: [],
+    targets: [],
+  },
+  {
+    id: "staff-computers", route: "/staff-computers", title: "Komputer staf", group: "Settings", who: "Pemilik, admin dan pengurus", states: [],
+    targets: [],
+  },
+  {
+    id: "ai-use", route: "/settings/ai-use", title: "Penggunaan dan had AI", group: "Settings", who: "Pemilik, admin dan pengurus", states: [],
+    targets: [],
+  },
+  {
+    id: "web-connections", route: "/web-connections", title: "Sambungan web", group: "Settings", who: "Pemilik", states: [],
+    targets: [],
+  },
+  {
+    id: "approved-services", route: "/approved-services", title: "Perkhidmatan diluluskan", group: "Settings", who: "Pemilik", states: [],
+    targets: [],
+  },
+  {
+    id: "channels", route: "/channels", title: "Saluran", group: "Settings", states: [],
+    targets: [t("channels.whatsapp", "WhatsApp"), t("channels.telegram", "Telegram"), t("channels.push", "Pemberitahuan telefon")],
+  },
+  {
+    id: "ai-engine", route: "/ai-engine", title: "Enjin AI", group: "Settings", who: "Pemilik dan pentadbir",
+    states: [],
+    targets: [t("ai-engine.tabs", "Penyedia, kumpulan model, penggunaan, ruang uji"), t("ai-engine.add", "Tambah penyedia")],
+  },
+  {
+    id: "storage", route: "/settings/storage", title: "Storan fail", group: "Settings", who: "Pemilik dan admin", states: [],
+    targets: [],
+  },
+  {
+    id: "logins", route: "/logins", title: "Log masuk", group: "Settings", states: [],
+    targets: [t("logins.new", "Tambah log masuk"), t("logins.list", "Log masuk, dikunci kepada lamannya")],
+  },
+  {
+    id: "schedules", route: "/schedules", title: "Jadual", group: "Settings", states: [],
+    targets: [t("schedules.new", "Jadual baharu"), t("schedules.list", "Jadual dan larian")],
+  },
+  {
+    id: "mcp-servers", route: "/mcp-servers", title: "Alat MCP", group: "Settings", states: [],
+    targets: [t("mcp-servers.add", "Sambung pelayan")],
+  },
+  {
+    id: "activity", route: "/activity", title: "Aktiviti", group: "Settings", states: [],
+    targets: [t("activity.filter", "Penapis"), t("activity.list", "Setiap perubahan, mengikut turutan")],
+  },
+  // ---------------------------------------------------------------- Developer
+  {
+    id: "feedbacks", route: "/feedbacks", title: "Maklum balas", group: "Developer", who: "Pembangun sistem", states: [],
+    targets: [],
+  },
   // ---------------------------------------------------------------- Help
+  {
+    id: "start", route: "/start", title: "Persediaan", group: "Help", states: [],
+    targets: [],
+  },
   {
     id: "tutorial", route: "/tutorial", title: "Tutorial", group: "Help", states: [],
     targets: [t("tutorial.tracks", "Laluan peranan anda"), t("tutorial.next", "Seterusnya")],
   },
   {
     id: "demo-day", route: "/tutorial", title: "Demo: sehari bekerja bersama ejen AI", group: "Help", states: [],
+    targets: [],
+  },
+  {
+    id: "present", route: "/present", title: "Bentang", group: "Help", states: [],
     targets: [],
   },
 ];
