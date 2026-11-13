@@ -117,7 +117,6 @@ export const PAGE_TIPS: Record<string, Partial<Record<Audience, Tip>>> = {
       steps: [
         msg("Approve or deny each request; a reason teaches the agent."),
         msg("Approve always for a tool you trust, so it stops asking."),
-        msg("Too many small money approvals? Set limits in Settings > Approval limits."),
       ],
     },
   },
@@ -134,7 +133,7 @@ export const PAGE_TIPS: Record<string, Partial<Record<Audience, Tip>>> = {
       steps: [
         msg("Pick a mailbox at the top, then check Waiting for your approval."),
         msg("Add Rules so routine mail is handled the same way every time."),
-        msg("Shared mailboxes save attachments into the Library and turn bills into payables."),
+        msg("Shared mailboxes save attachments into the Library."),
       ],
     },
   },
@@ -178,59 +177,12 @@ export const PAGE_TIPS: Record<string, Partial<Record<Audience, Tip>>> = {
       ],
     },
   },
-  "/crm": {
-    staff: {
-      what: msg("The parts of the company's CRM the owner shared with you."),
-      steps: [
-        msg("Pick a list from the tabs at the top; tap a row to see everything about it."),
-        msg("Use Search and Filter to find what you need."),
-      ],
-    },
-    manager: {
-      what: msg("Everything about your business in one place, built the way you work."),
-      steps: [
-        msg("Tap Add to CRM: add what the office already has, or a starter for your kind of business."),
-        msg("Make your own list for anything else, then add the fields you want."),
-        msg("Connect your other systems in Connections, and share parts with your team in Sharing."),
-      ],
-    },
-  },
   "/start": {
     manager: {
       what: msg("The few things to set up so the office works for you, in order."),
       steps: [
         msg("Do the first step that is not ticked yet; each one opens the right page."),
         msg("Steps tick themselves when they are done."),
-      ],
-    },
-  },
-  "/contacts": {
-    staff: {
-      what: msg("Customers and suppliers, with everything that happened with each."),
-      steps: [msg("Search for a company to see its emails, deals and invoices.")],
-    },
-    manager: {
-      what: msg("Customers and suppliers, and the full history with each: email, deals, invoices."),
-      steps: [msg("Add contacts by hand or import a spreadsheet."), msg("Open one to see its timeline and what is owed.")],
-    },
-  },
-  "/deals": {
-    staff: {
-      what: msg("Sales in progress, from first contact to won or lost."),
-      steps: [msg("Move a deal to its next stage as it changes."), msg("Ask your AI to draft the next follow-up.")],
-    },
-    manager: {
-      what: msg("The sales pipeline: every deal, its value and stage."),
-      steps: [msg("Drag deals between stages, or let agents update them from email.")],
-    },
-  },
-  "/money": {
-    manager: {
-      what: msg("What customers owe you and what you owe suppliers, with what is overdue and coming."),
-      steps: [
-        msg("Approve bills in Payables: check what the AI read, correct it if needed, then Approve."),
-        msg("Upload receipts and bills here, or let staff send photos on WhatsApp."),
-        msg("Send reminders for overdue invoices from each invoice."),
       ],
     },
   },
@@ -341,12 +293,6 @@ export const PAGE_TIPS: Record<string, Partial<Record<Audience, Tip>>> = {
     manager: {
       what: msg("Where company files are kept: the database, this server's disk, a bucket or your file server."),
       steps: [msg("Add storage and test it."), msg("Turn on Import to bring its documents into the Library.")],
-    },
-  },
-  "/settings/approval-limits": {
-    manager: {
-      what: msg("Let small, routine money steps go through without waiting for you."),
-      steps: [msg("Set the amount for bills from known suppliers."), msg("Check What went through on its own now and then.")],
     },
   },
   "/ai-engine": {

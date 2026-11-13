@@ -9,11 +9,11 @@ import { MAX_UPLOAD_MB, type DocFile } from "./documents";
 import type { ReviewStatus } from "./provenance";
 import type { WorkHours } from "./staff";
 
-/** P97: also any screen of the app or Prima (`route`, its address in this site), a web link,
- * a report and a contact. */
+/** P97: also any screen of the app or Prima (`route`, its address in this site), a web link
+ * and a report. */
 export type PinKind =
   | "sop" | "workflow" | "file" | "document" | "template" | "page" | "task" | "agent" | "search"
-  | "route" | "link" | "report" | "contact";
+  | "route" | "link" | "report";
 
 export interface Pin {
   id: string;
@@ -136,7 +136,7 @@ export interface Desk {
   };
   work: DeskWork[];
   waiting: {
-    approvals: { id: string; kind: string; tool_name: string; reason: string; task_id: string; task_title: string; created_at: string }[];
+    approvals: { id: string; kind: string; tool_name: string; tool_label?: string; reason: string; task_id: string; task_title: string; created_at: string }[];
     reviews: { id: string; title: string; url: string }[];
     documents: { id: string; title: string; url: string }[];
   };
@@ -210,15 +210,15 @@ export function layoutOf(desk: Pick<Desk, "layout"> | undefined): DeskLayout {
 }
 
 export interface FoundItem {
-  kind: "task" | "agent" | "person" | "contact" | "report";
+  kind: "task" | "agent" | "person" | "report";
   id: string;
   title: string;
   sub: string;
   url: string;
 }
-export type Found = Record<"tasks" | "agents" | "people" | "contacts" | "reports", FoundItem[]>;
+export type Found = Record<"tasks" | "agents" | "people" | "reports", FoundItem[]>;
 
-/** P97: tasks, agents, people, contacts and reports by name, only what the person may open. */
+/** P97: tasks, agents, people and reports by name, only what the person may open. */
 export const findQuery = (q: string, enabled = true) =>
   queryOptions({
     queryKey: deskKeys.find(q),

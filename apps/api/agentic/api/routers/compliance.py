@@ -24,7 +24,6 @@ from ...engine import compliance, privacy
 from ...models import (
     AIProvider,
     Channel,
-    CrmConnector,
     GoogleAccount,
     McpServer,
     MicrosoftAccount,
@@ -93,10 +92,6 @@ async def services_in_use(db: AsyncSession, ws_id: str) -> list[dict[str, Any]]:
         add("proxy", "Web proxies", "The company's own proxy list (Settings > Web connections)")
     for m in (await db.scalars(select(McpServer).where(McpServer.workspace_id == ws_id))).all():
         add(f"mcp:{m.id}", m.name, _host(m.url))
-    for c in (
-        await db.scalars(select(CrmConnector).where(CrmConnector.workspace_id == ws_id))
-    ).all():
-        add(f"connector:{c.id}", c.name, c.kind)
     return out
 
 

@@ -85,8 +85,6 @@ _ADMIN = {
     "channels.manage",
     "vault.manage",
     "assistants.use",
-    "finance.view",
-    "finance.manage",
     # P92: the AI engine's pages and reads (providers, models, usage), file storage settings
     # and MCP tools, each its own switch so the owner can give or take them per role.
     "engine.view",
@@ -101,10 +99,6 @@ _LEADERSHIP = _ADMIN - {"engine.manage", "engine.view", "storage.manage", "mcp.m
 # P36 "office.view": the office beyond your own work (the command center, every agent, the
 # brain, skills, schedules, the company overview, setup pages). Everyone but staff, who
 # keep to their own desk, their own AI and the work and files they are part of.
-
-# P35 "finance.view" / "finance.manage": money owed to and by the companies (invoices, bills,
-# payments, reminders). Owner and admin for the whole workspace; a branch manager for their
-# own company only (api/routers/money.py scopes it). Nobody else sees money.
 
 # P30 "assistants.use": private personal assistants (company pulse, team performance, Gmail,
 # calendar, chasing people) are for people who manage others: owner, admin, branch manager,
@@ -126,8 +120,6 @@ PERMISSIONS: dict[str, frozenset[str]] = {
             "vault.manage",
             "team.manage",
             "assistants.use",
-            "finance.view",
-            "finance.manage",
         }
     ),
     # The same within one department.
@@ -163,15 +155,15 @@ PERMISSIONS: dict[str, frozenset[str]] = {
 # (revoke) per workspace: Workspace.settings["role_permissions"] = {role: {"grant": [...],
 # "revoke": [...]}}, edited on Settings > Roles and access (api/routers/role_access.py). The
 # owner role itself is never edited, and the owner-only powers below are never given to
-# anyone: making owners, editing role access, the CRM (shared part by part, P50) and the
-# developer's feedback page. "read" (signing in at all) is never taken away.
+# anyone: making owners, editing role access and the developer's feedback page. "read"
+# (signing in at all) is never taken away.
 #
 # Each signed-in request reads the workspace's settings with the session (api/deps.py) and
 # sets the table for that request (use_settings), so can() and every check built on it
 # follow a change from the person's next request on. Code outside a request (bots, workers)
 # that never set it uses the defaults.
 ROLE_ACCESS_SETTING = "role_permissions"
-OWNER_ONLY = frozenset({"members.assign_owner", "roles.manage", "crm.access", "feedback.manage"})
+OWNER_ONLY = frozenset({"members.assign_owner", "roles.manage", "feedback.manage"})
 LOCKED = frozenset({"read"})
 EDITABLE_ROLES = tuple(r for r in ROLES if r != "owner")
 GRANTABLE = frozenset().union(*PERMISSIONS.values()) - OWNER_ONLY - LOCKED

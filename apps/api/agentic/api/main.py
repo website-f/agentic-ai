@@ -78,7 +78,6 @@ RAW_UPLOAD_PREFIXES: tuple[str, ...] = ("/api/devices/uploads/",)
 # P31: a PC authenticates with its link code or bearer token, not a session, so a stray
 # cookie never asks it for a CSRF token.
 DEVICE_PATHS = ("/api/devices/claim", "/api/devices/uploads/", "/api/devices/self/")
-CRM_HOOK_PREFIX = "/api/crm/hooks/"
 # P34: Microsoft Graph's webhook. Its validation handshake is a text/plain POST, and Graph
 # never has a session; the clientState of each notification authenticates it.
 PUBLIC_HOOK_PATHS = {"/api/integrations/microsoft/notify"}
@@ -144,10 +143,7 @@ async def csrf_guard(request: Request, call_next):
             return _error(415, "json_required", tr("Send requests as application/json."))
         # Signed webhooks (WhatsApp) never use the session cookie, so CSRF does not apply.
         exempt = (
-            path in CSRF_EXEMPT
-            or path.startswith(WEBHOOK_PREFIX)
-            or path.startswith(DEVICE_PATHS)
-            or path.startswith(CRM_HOOK_PREFIX)  # P50: another system, its token is the key
+            path in CSRF_EXEMPT or path.startswith(WEBHOOK_PREFIX) or path.startswith(DEVICE_PATHS)
         )
         if not exempt and request.cookies.get(SESSION_COOKIE):
             cookie = request.cookies.get(CSRF_COOKIE, "")
@@ -402,17 +398,6 @@ from .routers import microsoft as microsoft_router  # noqa: E402
 
 app.include_router(microsoft_router.router)
 
-# P35: customers and suppliers, the sales pipeline, money owed to and by the companies. A
-# party sheet arrives as raw bytes like /api/files.
-from .routers import money as money_router  # noqa: E402
-from .routers import parties as parties_router  # noqa: E402
-
-RAW_UPLOAD_PATHS.add(parties_router.IMPORT_PATH)
-MULTIPART_PATHS.add(parties_router.IMPORT_PATH)
-app.include_router(parties_router.router)
-app.include_router(money_router.router)
-RAW_UPLOAD_PATHS.add("/api/money/receipts")  # P43: receipts dropped on the Money page
-
 # P36: each person's daily AI allowance and the work-scope guard (the owner's controls).
 from .routers import allowances as allowances_router  # noqa: E402
 
@@ -450,11 +435,6 @@ from .routers import mail_rules as mail_rules_router  # noqa: E402
 
 app.include_router(mail_rules_router.router)
 
-# P46: approval limits by amount (small routine money steps go through on their own).
-from .routers import approval_limits as approval_limits_router  # noqa: E402
-
-app.include_router(approval_limits_router.router)
-
 # P48: everything waiting on this person, in one place (the bell).
 from .routers import needs as needs_router  # noqa: E402
 
@@ -470,11 +450,6 @@ from .routers import help as help_router  # noqa: E402
 
 app.include_router(help_router.router)
 
-
-# P50: the universal CRM (owner's; shared per object). Webhooks from other systems post here.
-from .routers import crm_hub as crm_hub_router  # noqa: E402
-
-app.include_router(crm_hub_router.router)
 
 # P57: Settings > Data and privacy: export all data, erase this workspace (owner only).
 from .routers import erasure as erasure_router  # noqa: E402

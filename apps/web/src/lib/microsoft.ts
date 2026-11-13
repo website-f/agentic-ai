@@ -65,6 +65,9 @@ export interface MicrosoftAccount {
   channels_ok?: boolean;
   /** P80: the connection may read SharePoint / OneDrive files for the Library (else reconnect once). */
   files_ok?: boolean;
+  /** P102: may start a new Teams chat with anyone in the organisation (after "Allow new Teams
+   * chats" once). Replying in chats that already exist never needs it. */
+  new_chats_ok?: boolean;
   last_sync_at: string | null;
   webhooks: WebhookMode;
   /** What Microsoft last said, when something went wrong (already in the UI language). */
@@ -81,8 +84,6 @@ export interface MailboxRules {
   digest: { enabled: boolean; time: string };
   /** Remind when a thread waits this long for a reply (0 = off). */
   follow_up_hours: number;
-  /** P35, shared mailboxes: a PDF or picture on an invoice mail becomes a bill waiting for approval. */
-  capture_bills?: boolean;
 }
 
 /** active = being read; paused = stopped by an admin; error = Microsoft refused (see last_error). */
@@ -180,6 +181,9 @@ export const startMicrosoftConnect = () => api<{ url: string }>(`${MS_PATH}/conn
 
 /** P80: the same, also asking to read SharePoint / OneDrive files (only the Library asks this). */
 export const startSharePointConnect = () => api<{ url: string }>(`${MS_PATH}/connect`, "POST", { with_files: true });
+
+/** P102: the same, also allowing new Teams chats (a first message to anyone); back on the Teams tab. */
+export const startNewChatsConnect = () => api<{ url: string }>(`${MS_PATH}/connect`, "POST", { with_new_chats: true });
 
 export const getMicrosoftAccount = () => api<MicrosoftAccount>(`${MS_PATH}/account`);
 
@@ -280,7 +284,6 @@ export function normalizeRules(r: Partial<MailboxRules> | null | undefined): Mai
     save_attachments: typeof r?.save_attachments === "boolean" ? r.save_attachments : DEFAULT_RULES.save_attachments,
     digest: { enabled: typeof r?.digest?.enabled === "boolean" ? r.digest.enabled : DEFAULT_RULES.digest.enabled, time },
     follow_up_hours: Number.isFinite(hours) && hours >= 0 ? Math.round(hours) : DEFAULT_RULES.follow_up_hours,
-    ...(typeof r?.capture_bills === "boolean" ? { capture_bills: r.capture_bills } : {}),
   };
 }
 
@@ -354,7 +357,6 @@ export function rulesSummary(rules: MailboxRules, t: Translate): string[] {
     ? t("Tasks: {list}", { list: r.create_tasks_for.map((c) => t(CATEGORY_LABEL[c]).toLowerCase()).join(", ") })
     : t("No tasks"));
   if (r.save_attachments) parts.push(t("Saves attachments"));
-  if (r.capture_bills) parts.push(t("Captures bills"));
   if (r.digest.enabled) parts.push(t("Digest {time}", { time: r.digest.time }));
   if (r.follow_up_hours > 0) parts.push(t("Follow up after {n}h", { n: r.follow_up_hours }));
   return parts;
@@ -423,8 +425,36 @@ export function actionLink(a: MailAction, canAssist: boolean):
   return null;
 }
 
-/** Drafts and proposed events from before P34 have no provider: they are Google's. */
-export const providerOf = (d: { provider?: "google" | "microsoft" | null }) => (d.provider === "microsoft" ? "microsoft" : "google");
+/** Drafts and proposed events from before P34 have no provider: they are Google's. P102: a
+ * Teams message waiting for approval is "teams". */
+export type DraftProvider = "google" | "microsoft" | "teams";
+export const providerOf = (d: { provider?: DraftProvider | null }): DraftProvider =>
+  d.provider === "microsoft" || d.provider === "teams" ? d.provider : "google";
+
+/** P102: what one connection lets the person's AI do, line by line, for the Microsoft 365
+ * page and My connections: on, or what is missing and the one action that fixes it. */
+export type CapabilityKey = "mail" | "calendar" | "teams" | "new_chats" | "channels";
+export type CapabilityFix = "reconnect" | "new_chats" | "admin";
+export interface Capability { key: CapabilityKey; ok: boolean; fix: CapabilityFix | null }
+
+export function capabilities(a: MicrosoftAccount | null | undefined): Capability[] {
+  if (!a?.connected) return [];
+  const teams = a.teams_ok !== false;
+  return [
+    { key: "mail", ok: a.mail_ok, fix: a.mail_ok ? null : "reconnect" },
+    { key: "calendar", ok: a.calendar_ok, fix: a.calendar_ok ? null : "reconnect" },
+    { key: "teams", ok: teams, fix: teams ? null : "reconnect" },
+    { key: "new_chats", ok: a.new_chats_ok === true, fix: a.new_chats_ok === true ? null : teams ? "new_chats" : "reconnect" },
+    { key: "channels", ok: a.channels_ok === true, fix: a.channels_ok === true ? null : "admin" },
+  ];
+}
+
+/** The one button the page offers: a plain reconnect when something basic is missing, else
+ * "Allow new Teams chats" (which also reconnects), else nothing the person can do alone. */
+export function nextFix(caps: Capability[]): "reconnect" | "new_chats" | null {
+  if (caps.some((c) => c.fix === "reconnect")) return "reconnect";
+  return caps.some((c) => c.fix === "new_chats") ? "new_chats" : null;
+}
 
 // ---------------------------------------------------------------- Teams (P52): your own chats
 

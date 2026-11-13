@@ -40,10 +40,8 @@ const page = {
   members: lazyRouteComponent(() => import("@/pages/members"), "MembersPage"),
   aiUse: lazyRouteComponent(() => import("@/pages/ai-use"), "AiUsePage"),
   storage: lazyRouteComponent(() => import("@/pages/storage"), "StoragePage"),
-  approvalLimits: lazyRouteComponent(() => import("@/pages/approval-limits"), "ApprovalLimitsPage"),
   timetable: lazyRouteComponent(() => import("@/pages/timetable"), "TimetablePage"),
   start: lazyRouteComponent(() => import("@/pages/start"), "StartPage"),
-  crm: lazyRouteComponent(() => import("@/pages/crm"), "CrmPage"),
   activity: lazyRouteComponent(() => import("@/pages/activity"), "ActivityPage"),
   aiEngine: lazyRouteComponent(() => import("@/pages/ai-engine"), "AIEnginePage"),
   agents: lazyRouteComponent(() => import("@/pages/agents/roster"), "AgentsPage"),
@@ -95,10 +93,6 @@ const page = {
   webConnections: lazyRouteComponent(() => import("@/pages/web-connections"), "WebConnectionsPage"),
   prima: lazyRouteComponent(() => import("@/pages/prima"), "PrimaPage"),
   mail: lazyRouteComponent(() => import("@/pages/mail"), "MailPage"),
-  contacts: lazyRouteComponent(() => import("@/pages/contacts"), "ContactsPage"),
-  contactDetail: lazyRouteComponent(() => import("@/pages/contacts/detail"), "ContactDetailPage"),
-  deals: lazyRouteComponent(() => import("@/pages/deals"), "DealsPage"),
-  money: lazyRouteComponent(() => import("@/pages/money"), "MoneyPage"),
   feedbacks: lazyRouteComponent(() => import("@/pages/feedbacks"), "FeedbacksPage"),
   primaOnly: lazyRouteComponent(() => import("@/pages/prima-only"), "PrimaOnlyPage"),
 };
@@ -327,8 +321,6 @@ const rolesAccessRoute = createRoute({
 });
 // P40: where company files are kept, and storage that feeds the Library.
 const storageRoute = createRoute({ getParentRoute: () => appRoute, path: "/settings/storage", component: page.storage });
-// P46: small routine money steps that go through without a person.
-const approvalLimitsRoute = createRoute({ getParentRoute: () => appRoute, path: "/settings/approval-limits", component: page.approvalLimits });
 // P47: every agent's working day (hours, breaks, duties), like a staff rota.
 const timetableRoute = createRoute({
   getParentRoute: () => appRoute,
@@ -341,19 +333,6 @@ const timetableRoute = createRoute({
 });
 // P49: the few steps that make the office work, ticked from real data.
 const startRoute = createRoute({ getParentRoute: () => appRoute, path: "/start", component: page.start });
-// P50: the CRM (the owner's; others see what the owner shared, the API decides).
-const CRM_TABS = ["dashboard", "connections", "sharing", "setup"] as const;
-const crmRoute = createRoute({
-  getParentRoute: () => appRoute,
-  path: "/crm",
-  validateSearch: (s: Record<string, unknown>): { o?: string; v?: string; r?: string; tab?: (typeof CRM_TABS)[number] } => ({
-    o: str(s.o),
-    v: str(s.v),
-    r: str(s.r),
-    tab: CRM_TABS.find((x) => x === s.tab),
-  }),
-  component: page.crm,
-});
 
 const activityRoute = createRoute({
   getParentRoute: () => appRoute,
@@ -680,14 +659,26 @@ const impactRoute = createRoute({
 });
 
 // The user guide: an index of every page, and one page's annotated doc at /guide/<page id>.
+// P102: full screen without the app shell (its own header and chapter list), signed in.
+const guideFrameRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  id: "guide-frame",
+  beforeLoad: async ({ context, location }) => {
+    const me = await loadMe(context.queryClient, location);
+    if (me.user.must_change_password) throw redirect({ to: "/change-password" });
+    if (me.user.two_factor_setup_required) throw redirect({ to: "/two-step-setup" });
+    if (me.access === "prima_only") throw redirect({ to: "/prima-only" });
+    return { me };
+  },
+});
 const guideRoute = createRoute({
-  getParentRoute: () => appRoute,
+  getParentRoute: () => guideFrameRoute,
   path: "/guide",
   validateSearch: (s: Record<string, unknown>): { q?: string } => ({ q: str(s.q) }),
   component: page.guide,
 });
 const guidePageRoute = createRoute({
-  getParentRoute: () => appRoute,
+  getParentRoute: () => guideFrameRoute,
   path: "/guide/$page",
   validateSearch: (s: Record<string, unknown>): { state?: string; device?: "desktop" | "mobile" } => ({
     state: str(s.state),
@@ -788,46 +779,6 @@ const mailRoute = createRoute({
   component: page.mail,
 });
 
-// P35 Business: contacts (customers, suppliers), the sales pipeline, and money owed both ways.
-const CONTACT_ROLES = ["customer", "supplier", "partner", "lead"] as const;
-const contactsRoute = createRoute({
-  getParentRoute: () => appRoute,
-  path: "/contacts",
-  validateSearch: (s: Record<string, unknown>): { q?: string; role?: (typeof CONTACT_ROLES)[number]; new?: number; import?: number } => ({
-    q: str(s.q), role: CONTACT_ROLES.find((r) => r === s.role), new: num(s.new), import: num(s.import),
-  }),
-  component: page.contacts,
-});
-const CONTACT_TABS = ["overview", "timeline", "deals", "money"] as const;
-const contactDetailRoute = createRoute({
-  getParentRoute: () => appRoute,
-  path: "/contacts/$partyId",
-  validateSearch: (s: Record<string, unknown>): { tab?: (typeof CONTACT_TABS)[number] } => ({ tab: CONTACT_TABS.find((x) => x === s.tab) }),
-  component: page.contactDetail,
-});
-// deal opens one deal's sheet; new=1 (with party) opens the new-deal form.
-const dealsRoute = createRoute({
-  getParentRoute: () => appRoute,
-  path: "/deals",
-  validateSearch: (s: Record<string, unknown>): { deal?: string; new?: number; party?: string } => ({ deal: str(s.deal), new: num(s.new), party: str(s.party) }),
-  component: page.deals,
-});
-// Needs finance.view. doc opens one invoice or bill; new=invoice|bill (with party) opens a form.
-const moneyRoute = createRoute({
-  getParentRoute: () => appRoute,
-  path: "/money",
-  validateSearch: (s: Record<string, unknown>): { tab?: "receivable" | "payable"; doc?: string; new?: "invoice" | "bill"; party?: string } => ({
-    tab: s.tab === "receivable" || s.tab === "payable" ? s.tab : undefined,
-    doc: str(s.doc),
-    new: s.new === "invoice" || s.new === "bill" ? s.new : undefined,
-    party: str(s.party),
-  }),
-  beforeLoad: ({ context }) => {
-    if (!context.me.permissions.includes("finance.view")) throw redirect({ to: "/contacts" });
-  },
-  component: page.money,
-});
-
 const objectivesRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/objectives",
@@ -901,6 +852,7 @@ const routeTree = rootRoute.addChildren([
   welcomeRoute,
   presentRoute,
   chatFullRoute,
+  guideFrameRoute.addChildren([guideRoute, guidePageRoute]),
   libraryFrameRoute.addChildren([
     explorerRoute,
     filesRoute,
@@ -921,10 +873,8 @@ const routeTree = rootRoute.addChildren([
     aiUseRoute,
     rolesAccessRoute,
     storageRoute,
-    approvalLimitsRoute,
     timetableRoute,
     startRoute,
-    crmRoute,
     activityRoute,
     aiEngineRoute,
     agentsRoute,
@@ -955,8 +905,6 @@ const routeTree = rootRoute.addChildren([
     formsRoute,
     tutorialRoute,
     impactRoute,
-    guideRoute,
-    guidePageRoute,
     objectivesRoute,
     computersRoute,
     staffComputersRoute,
@@ -965,10 +913,6 @@ const routeTree = rootRoute.addChildren([
     primaRoute,
     remoteRoute,
     mailRoute,
-    contactsRoute,
-    contactDetailRoute,
-    dealsRoute,
-    moneyRoute,
     feedbacksRoute,
   ]),
 ]);

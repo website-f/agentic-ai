@@ -48,7 +48,7 @@ function ExportCard({ data }: { data: DataOverview }) {
   return (
     <Card>
       <CardHeader icon={<IconTile icon={FileZipIcon} size="sm" tone="info" />} title={t("Export all data")}
-        description={t("One ZIP with every record, every file in its folder, the memory as markdown, documents and CRM records as CSV. Passwords and keys are never included.")} />
+        description={t("One ZIP with every record, every file in its folder, and the memory and documents as markdown. Passwords and keys are never included.")} />
       <CardBody className="grid gap-3">
         {busy && ex ? (
           <Progress value={ex.progress} label={t("Making the export: {step}", { step: t(EXPORT_STEPS[ex.step] ?? ex.step) })} />
@@ -97,7 +97,7 @@ function Consequences({ data }: { data: DataOverview }) {
     <div className="grid gap-3 text-[13px]">
       <ul className="grid list-disc gap-1.5 pl-5">
         <li>{t("Everything in {name} is deleted: every record, file, memory page, document, conversation, prompt, AI answer, search index and log.", { name: data.workspace.name })}</li>
-        <li>{t("Every connection is cut first: Microsoft 365 and Google sign-ins, Telegram and WhatsApp, linked computers, AI provider keys, tool servers, CRM sync links and saved logins.")}</li>
+        <li>{t("Every connection is cut first: Microsoft 365 and Google sign-ins, Telegram and WhatsApp, linked computers, AI provider keys, tool servers and saved logins.")}</li>
         <li>{t("{n} people belong only to this workspace: their accounts are deleted. People who also belong to another workspace keep their account there.", { n: data.members.only_here })}</li>
         <li>{t("Copies in the server's encrypted backups are overwritten by the backup cycle within {days} days.", { days: data.backup_days })}</li>
         <li className="font-medium text-danger">{t("This cannot be undone. Export first if you need a copy.")}</li>

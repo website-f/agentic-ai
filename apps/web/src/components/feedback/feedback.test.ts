@@ -5,7 +5,7 @@ import { navItemFor, pathAllowed } from "@/nav";
 
 import { composeNote, type Mark } from "./annotator";
 
-const OWNER = ["read", "office.view", "org.read", "members.manage", "org.manage", "audit.read", "work.write", "approvals.decide", "agents.manage", "crm.access"];
+const OWNER = ["read", "office.view", "org.read", "members.manage", "org.manage", "audit.read", "work.write", "approvals.decide", "agents.manage"];
 
 describe("P73 feedback", () => {
   it("keeps the Feedbacks page to the developer", () => {

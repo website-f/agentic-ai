@@ -101,7 +101,7 @@ async def learning_week(
     """P45: what each agent (that the person may see) learned in one week: this week, or
     `week` ("2026-W43"). Built from what the office keeps; no model call."""
     from ...brain import weekly
-    from ...crm.service import today
+    from ...services.clock import today
 
     ws = await db.get(Workspace, principal.workspace_id)
     assert ws is not None

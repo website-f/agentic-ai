@@ -93,21 +93,12 @@ def _assignable(role: str, ws_settings: dict | None) -> list[str]:
 async def _extra_permissions(
     db: AsyncSession, workspace_id: str, user_id: str, role: str
 ) -> set[str]:
-    """P50: the CRM is the owner's, and anyone the owner shared part of it with.
+    """P92: only an owner edits what each role may do (Settings > Roles and access).
     P73: the developer (an owner marked by the operator) also manages feedback."""
-    from ...models import CrmAccess
-
-    if role == "owner":
-        user = await db.get(User, user_id)
-        # P92: only an owner edits what each role may do (Settings > Roles and access).
-        extra = {"crm.access", "roles.manage"}
-        return extra | ({DEVELOPER_PERMISSION} if is_developer(user, role) else set())
-    shared = await db.scalar(
-        select(CrmAccess.id)
-        .where(CrmAccess.workspace_id == workspace_id, CrmAccess.user_id == user_id)
-        .limit(1)
-    )
-    return {"crm.access"} if shared else set()
+    if role != "owner":
+        return set()
+    user = await db.get(User, user_id)
+    return {"roles.manage"} | ({DEVELOPER_PERMISSION} if is_developer(user, role) else set())
 
 
 @router.get("/setup-status")

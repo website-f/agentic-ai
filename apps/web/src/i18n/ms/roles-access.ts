@@ -28,8 +28,8 @@ export const ROLES_ACCESS: Record<string, string> = {
   "(partly)": "(sebahagian)",
   "{area} for {role}": "{area} untuk {role}",
   "{n} changed": "{n} diubah",
-  "Customers (CRM) are shared part by part from the CRM page. Prima uses each person's own Prima access, and the owner links people on the Prima page.":
-    "Pelanggan (CRM) dikongsi sebahagian demi sebahagian dari halaman CRM. Prima menggunakan akses Prima setiap orang sendiri, dan pemilik memautkan orang di halaman Prima.",
+  "Prima uses each person's own Prima access, and the owner links people on the Prima page.":
+    "Prima menggunakan akses Prima setiap orang sendiri, dan pemilik memautkan orang di halaman Prima.",
   "A person who can manage members can only give roles with no more access than their own.":
     "Orang yang boleh mengurus ahli hanya boleh memberi peranan yang aksesnya tidak lebih daripada akses mereka sendiri.",
   "Reset every role to its defaults?": "Kembalikan semua peranan kepada asal?",
@@ -53,8 +53,8 @@ export const ROLES_ACCESS: Record<string, string> = {
   "Add and change the people below them in their branch or department.":
     "Tambah dan ubah orang di bawah mereka dalam cawangan atau jabatan mereka.",
   "Organisation settings": "Tetapan organisasi",
-  "Companies, departments, approval limits, web connections and approved services.":
-    "Syarikat, jabatan, had kelulusan, sambungan web dan perkhidmatan yang diluluskan.",
+  "Companies, departments, web connections and approved services.":
+    "Syarikat, jabatan, sambungan web dan perkhidmatan yang diluluskan.",
   "The whole office": "Seluruh pejabat",
   "Command center, every agent, schedules, reports and the company overview.":
     "Pusat kawalan, semua ejen, jadual, laporan dan gambaran keseluruhan syarikat.",
@@ -68,12 +68,6 @@ export const ROLES_ACCESS: Record<string, string> = {
   "Brain and learning": "Brain dan pembelajaran",
   "What the office knows and how agents learn.":
     "Apa yang pejabat tahu dan cara ejen belajar.",
-  "Money: see": "Wang: lihat",
-  "Invoices, bills, payments and cash flow.":
-    "Invois, bil, bayaran dan aliran tunai.",
-  "Money: change": "Wang: ubah",
-  "Record payments, send reminders, approve bills.":
-    "Rekod bayaran, hantar peringatan, luluskan bil.",
   "Library files and saved logins": "Fail perpustakaan dan log masuk tersimpan",
   "Manage company files and the website logins agents use.":
     "Urus fail syarikat dan log masuk laman web yang digunakan ejen.",

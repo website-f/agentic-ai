@@ -67,13 +67,6 @@ async def database():
 
 
 TABLES = (
-    "crm_access",
-    "crm_connectors",
-    "crm_widgets",
-    "crm_views",
-    "crm_records",
-    "crm_fields",
-    "crm_objects",
     "mail_rules",
     "routines",
     "storage_targets",

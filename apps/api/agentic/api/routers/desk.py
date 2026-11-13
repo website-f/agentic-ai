@@ -14,14 +14,13 @@ their workspace.
 - GET    /api/desk                 the whole desk in one call
 - GET    /api/desk/items           what is pinned (for pin buttons elsewhere)
 - POST   /api/desk/items           pin something (sop, workflow, file, document, template,
-                                   page, task, agent, search; P97: route, link, report,
-                                   contact)
+                                   page, task, agent, search; P97: route, link, report)
 - PATCH  /api/desk/items/{id}      P97: rename a pin (its own name) or move it to a folder
 - DELETE /api/desk/items/{id}      unpin
 - PUT    /api/desk/items/order     reorder the pins (P97: and move them between folders)
 - PUT    /api/desk/layout          P97: which desk sections show, in what order, and folders
 - POST   /api/desk/folders/rename  P97: rename a folder, or remove it (its pins stay)
-- GET    /api/desk/find            P97: find tasks, agents, people, contacts and reports
+- GET    /api/desk/find            P97: find tasks, agents, people and reports
 - GET    /api/desk/meetings        P97: today's meetings from the person's own calendar
 - POST   /api/desk/ask             give a question or a job to one of their AI workers
 - POST   /api/desk/files           upload a file into their workspace
@@ -45,7 +44,6 @@ from ...agents import launch
 from ...assistants.access import may_assist
 from ...core.db import get_db
 from ...core.valkey import valkey
-from ...crm import access as crm_access
 from ...documents import provenance, service
 from ...i18n import lookup, tr
 from ...models import (
@@ -59,7 +57,6 @@ from ...models import (
     Document,
     GoogleAccount,
     Membership,
-    Party,
     Report,
     Task,
     User,
@@ -88,7 +85,6 @@ KINDS = (
     "route",
     "link",
     "report",
-    "contact",
 )
 PinKind = Literal[
     "sop",
@@ -103,7 +99,6 @@ PinKind = Literal[
     "route",
     "link",
     "report",
-    "contact",
 ]
 MAX_PINS = 60
 MAX_FOLDERS = 20
@@ -122,7 +117,6 @@ URLS = {
     "agent": "/chat?agent={id}",
     "search": "/search?q={id}",
     "report": "/reports?r={id}",
-    "contact": "/contacts/{id}",
 }
 
 
@@ -307,18 +301,6 @@ async def _resolve(
         q = report_scoped(select(Report).where(Report.workspace_id == ws), principal)
         for r in (await db.scalars(q.where(Report.id.in_(ids)))).all():
             info[("report", r.id)] = {"title": r.title, "sub": r.summary[:120], "status": None}
-    if ids := by.get("contact"):
-        rows = await db.scalars(
-            select(Party).where(
-                Party.workspace_id == ws, Party.id.in_(ids), crm_access.party_where(principal)
-            )
-        )
-        for c in rows.all():
-            info[("contact", c.id)] = {
-                "title": c.name,
-                "sub": c.industry or c.kind,
-                "status": c.status,
-            }
     out: list[dict[str, Any]] = []
     for it in items:
         if it.kind == "search":
@@ -957,6 +939,8 @@ async def _files(db: AsyncSession, principal: Principal) -> dict[str, Any]:
 async def _waiting(db: AsyncSession, principal: Principal, agent_ids: list[str]) -> dict[str, Any]:
     """What waits for this person: their AI workers' questions and approvals, their work in
     review, and documents made for them that wait for review."""
+    from ...agents.tools import TOOLS  # P102: a tool's name for people, never its code name
+
     mine = select(Task.id).where(*_mine(principal, agent_ids))
     roots = func.coalesce(Task.root_task_id, Task.id)
     family = select(Task.id).where(Task.workspace_id == principal.workspace_id, roots.in_(mine))
@@ -997,6 +981,7 @@ async def _waiting(db: AsyncSession, principal: Principal, agent_ids: list[str])
                 "id": a.id,
                 "kind": a.kind,
                 "tool_name": a.tool_name,
+                "tool_label": tr(TOOLS[a.tool_name].label) if a.tool_name in TOOLS else "",
                 "reason": a.reason,
                 "task_id": a.task_id,
                 "task_title": title,
@@ -1086,7 +1071,7 @@ async def find(
     principal: Principal = Depends(require("read")),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, list[dict[str, Any]]]:
-    """Tasks, agents, people, contacts and reports whose name matches, for the desk's search
+    """Tasks, agents, people and reports whose name matches, for the desk's search
     bar and the command palette (pages and documents come from the app and /api/search).
     Each list is only what this person may open, by the same rules as the pages that show
     them; people only for those who look after members."""
@@ -1096,7 +1081,6 @@ async def find(
         "tasks": [],
         "agents": [],
         "people": [],
-        "contacts": [],
         "reports": [],
     }
     tq = select(Task).where(Task.workspace_id == ws, func.lower(Task.title).like(like, escape="\\"))
@@ -1160,22 +1144,6 @@ async def find(
                     "url": "/settings/members",
                 }
             )
-    cq = select(Party).where(
-        Party.workspace_id == ws,
-        Party.status == "active",
-        crm_access.party_where(principal),
-        func.lower(Party.name).like(like, escape="\\"),
-    )
-    for c in (await db.scalars(cq.order_by(func.lower(Party.name)).limit(FIND_EACH))).all():
-        out["contacts"].append(
-            {
-                "kind": "contact",
-                "id": c.id,
-                "title": c.name,
-                "sub": c.industry or c.kind,
-                "url": url_of("contact", c.id),
-            }
-        )
     rq = report_scoped(
         select(Report).where(
             Report.workspace_id == ws, func.lower(Report.title).like(like, escape="\\")

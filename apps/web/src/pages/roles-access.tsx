@@ -325,7 +325,7 @@ export function RolesAccessPage() {
         <p className="font-medium text-fg">{t("Who can change this page")}</p>
         <p>{t("Only owners. Every save is written to the audit log (Activity) with what changed.")}</p>
         <p>{t("A person who can manage members can only give roles with no more access than their own.")}</p>
-        <p>{t("Customers (CRM) are shared part by part from the CRM page. Prima uses each person's own Prima access, and the owner links people on the Prima page.")}</p>
+        <p>{t("Prima uses each person's own Prima access, and the owner links people on the Prima page.")}</p>
       </Card>
 
       <ResponsiveDialog open={reviewing} onOpenChange={setReviewing} title={t("Check the changes")}

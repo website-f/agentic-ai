@@ -273,7 +273,7 @@ STAFF_OK = {
     "/api/me/assigned-tasks", "/api/team/people",
     "/api/branches/starter-teams", "/api/broadcasts", "/api/budgets", "/api/calendar-drafts",
     "/api/channels", "/api/channels/{channel_id}/whatsapp", "/api/chat/recent",
-    "/api/company-kits", "/api/deals", "/api/deals/summary",
+    "/api/company-kits",
     "/api/departments/{dept_id}/review-policy", "/api/desk", "/api/desk/ask-targets",
     "/api/desk/items", "/api/devices", "/api/doc-templates", "/api/documents",
     "/api/documents/review-queue", "/api/documents/review-queue/count", "/api/documents/stats",
@@ -284,7 +284,7 @@ STAFF_OK = {
     "/api/library/linked", "/api/mail/activity", "/api/me/allowance", "/api/me/needs",
     "/api/me/prefs", "/api/me/staff", "/api/me/twin", "/api/me/worker", "/api/meetings",
     "/api/members", "/api/minutes", "/api/minutes/settings", "/api/monitor/wall",
-    "/api/objectives", "/api/packs", "/api/parties", "/api/parties/duplicates", "/api/pings",
+    "/api/objectives", "/api/packs", "/api/pings",
     "/api/prima/status", "/api/push/devices", "/api/push/key", "/api/reports", "/api/runs",
     "/api/schedules", "/api/search/suggest", "/api/sops", "/api/system/status",
     "/api/tasks", "/api/timetable", "/api/tutorial/progress", "/api/vault/logins",
@@ -297,7 +297,7 @@ STAFF_REFUSED = {
     "/api/skills", "/api/skill-proposals", "/api/learning/overview",
     "/api/learning/week", "/api/objectives/{objective_id}", "/api/objectives/{objective_id}/tasks",
     "/api/ai/providers", "/api/ai/usage", "/api/audit", "/api/overview", "/api/impact",
-    "/api/allowances", "/api/crm", "/api/workspace/data", "/api/office/{branch_id}",
+    "/api/allowances", "/api/workspace/data", "/api/office/{branch_id}",
 }  # fmt: skip
 
 
@@ -428,7 +428,6 @@ STAFF_WRITE_OK = {
     ("PUT", "/api/me/worker/workflows"),
     ("POST", "/api/documents"),  # a draft document of their own
     ("POST", "/api/doc-templates/detect"),  # reads placeholders from the text sent, saves nothing
-    ("POST", "/api/parties/import"),  # a preview of a sheet sent, saves nothing
     ("POST", "/api/library/delete"),  # nothing named, nothing removed (each item is checked)
     ("POST", "/api/tasks/retry-failed"),  # only failed work of their own (scope.task_where)
     ("POST", "/api/devices/link-code"),  # linking their own computer (P92 own PC)

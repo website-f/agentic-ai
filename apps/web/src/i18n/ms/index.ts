@@ -9,11 +9,8 @@ import { BUILDERS } from "./builders";
 import { CHAT } from "./chat";
 import { COMMON } from "./common";
 import { COMPUTERS } from "./computers";
-import { CRM } from "./crm";
-import { CRM_BUILDER } from "./crm-builder";
-import { CRM_CONNECTIONS } from "./crm-connections";
-import { CRM_HUB } from "./crm-hub";
 import { DESK } from "./desk";
+import { GENERAL } from "./general";
 import { FILES } from "./files";
 import { FORMS } from "./forms";
 import { GUIDE } from "./guide";
@@ -95,15 +92,13 @@ export const MS: Record<string, string> = {
   ...COMPUTERS,
   ...PRIVACY,
   ...MICROSOFT,
-  ...CRM,
+  // P102: shared rows that lived in crm.ts, where the CRM spread sat.
+  ...GENERAL,
   ...AI_USE,
   ...SPEECH,
   ...STORAGE,
   ...TIPS,
   ...WORK_MORE,
-  ...CRM_HUB,
-  ...CRM_BUILDER,
-  ...CRM_CONNECTIONS,
   ...WORKSPACE_HUB,
   ...STAFF_COMPUTERS,
   ...INSTALL,

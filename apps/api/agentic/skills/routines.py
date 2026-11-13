@@ -963,7 +963,6 @@ class Plan:
 
 async def _offered(db: AsyncSession, agent: Agent, task: Task) -> set[str]:
     from ..agents import runtime  # late: the runtime imports this module
-    from ..crm.access import money_ready
     from ..devices.core import pc_ready
     from ..microsoft.access import mail_ready
 
@@ -973,7 +972,6 @@ async def _offered(db: AsyncSession, agent: Agent, task: Task) -> set[str]:
         mcp=await runtime._has_mcp(db, agent.workspace_id),
         pc=await pc_ready(db, agent),
         mail=await mail_ready(db, agent),
-        finance=await money_ready(db, agent),
     )
     return {str(s["function"]["name"]) for s in schemas}
 

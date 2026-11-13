@@ -7,10 +7,10 @@ const STAFF = ["read", "work.write", "approvals.decide", "agents.own", "vault.ow
 const OWNER = [
   "read", "office.view", "org.read", "members.manage", "org.manage", "audit.read", "work.write", "approvals.decide",
   "agents.manage", "engine.manage", "brain.manage", "channels.manage", "vault.manage", "assistants.use",
-  "finance.view", "finance.manage", "members.assign_owner", "engine.view", "storage.manage", "mcp.manage", "roles.manage", "crm.access",
+  "members.assign_owner", "engine.view", "storage.manage", "mcp.manage", "roles.manage",
 ];
 // P92: management and HR: an admin's access without the AI engine, file storage and MCP tools.
-const MANAGEMENT = OWNER.filter((p) => !["members.assign_owner", "engine.manage", "engine.view", "storage.manage", "mcp.manage", "roles.manage", "crm.access"].includes(p));
+const MANAGEMENT = OWNER.filter((p) => !["members.assign_owner", "engine.manage", "engine.view", "storage.manage", "mcp.manage", "roles.manage"].includes(p));
 const VIEWER = ["read", "office.view", "org.read", "engine.view"];
 
 describe("P36: one guard for pages and the sidebar", () => {
@@ -20,14 +20,14 @@ describe("P36: one guard for pages and the sidebar", () => {
     }
     for (const path of [
       "/", "/overview", "/agents", "/agents/ag_1", "/agents/new", "/office", "/monitor", "/brain", "/skills", "/learning",
-      "/organization", "/schedules", "/ai-engine", "/activity", "/settings/members", "/settings/ai-use", "/objectives", "/money",
+      "/organization", "/schedules", "/ai-engine", "/activity", "/settings/members", "/settings/ai-use", "/objectives",
     ]) {
       expect(pathAllowed(path, STAFF), path).toBe(false);
     }
   });
 
   it("lets the owner everywhere", () => {
-    for (const path of ["/", "/agents/ag_1", "/brain", "/settings/members", "/settings/ai-use", "/ai-engine", "/money"]) {
+    for (const path of ["/", "/agents/ag_1", "/brain", "/settings/members", "/settings/ai-use", "/ai-engine"]) {
       expect(pathAllowed(path, OWNER), path).toBe(true);
     }
   });
@@ -38,6 +38,12 @@ describe("P36: one guard for pages and the sidebar", () => {
     expect(navItemFor("/sops")?.to).toBe("/sops");
     expect(navItemFor("/")?.to).toBe("/");
   });
+
+  it("P102: has no Customers and money pages (the CRM, contacts, deals, money, approval limits)", () => {
+    for (const path of ["/crm", "/contacts", "/contacts/pt_1", "/deals", "/money", "/settings/approval-limits"]) {
+      expect(navItemFor(path)?.to ?? "", path).not.toMatch(/^\/(crm|contacts|deals|money|settings\/approval-limits)/);
+    }
+  });
 });
 
 describe("P92: AI engine, file storage and MCP tools are their own switches", () => {
@@ -45,7 +51,7 @@ describe("P92: AI engine, file storage and MCP tools are their own switches", ()
     for (const path of ["/ai-engine", "/settings/storage", "/mcp-servers", "/settings/roles"]) {
       expect(pathAllowed(path, MANAGEMENT), path).toBe(false);
     }
-    for (const path of ["/", "/agents/ag_1", "/brain", "/settings/members", "/settings/ai-use", "/money", "/activity", "/organization", "/channels", "/approvals"]) {
+    for (const path of ["/", "/agents/ag_1", "/brain", "/settings/members", "/settings/ai-use", "/activity", "/organization", "/channels", "/approvals"]) {
       expect(pathAllowed(path, MANAGEMENT), path).toBe(true);
     }
   });

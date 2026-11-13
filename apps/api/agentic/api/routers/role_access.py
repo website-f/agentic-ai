@@ -6,7 +6,7 @@ The defaults are the table in core/security.py (PERMISSIONS). The owner gives a 
 next request follows it, on the server and in the app's menu (/api/auth/me).
 
 Never editable: the owner role itself, the owner-only powers (making owners, this page, the
-CRM, the developer's feedback page) and "read" (signing in at all).
+developer's feedback page) and "read" (signing in at all).
 """
 
 from typing import Any
@@ -177,7 +177,7 @@ async def put_role_access(
 
 
 def _summary(before: dict[str, Any], after: dict[str, Any]) -> str:
-    """'hr: +engine.view; management: -finance.manage' for the audit trail."""
+    """'hr: +engine.view; management: -audit.read' for the audit trail."""
     parts = []
     for role in ROLES:
         if before.get(role) == after.get(role):

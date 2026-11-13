@@ -16,7 +16,7 @@ vi.mock("@/components/page", () => ({
 }));
 
 const ADMIN = ["read", "office.view", "org.read", "members.manage", "org.manage", "audit.read", "work.write", "approvals.decide", "agents.manage",
-  "engine.manage", "brain.manage", "channels.manage", "vault.manage", "assistants.use", "finance.view", "finance.manage", "engine.view",
+  "engine.manage", "brain.manage", "channels.manage", "vault.manage", "assistants.use", "engine.view",
   "storage.manage", "mcp.manage"];
 const LEAD = ADMIN.filter((p) => !["engine.manage", "engine.view", "storage.manage", "mcp.manage"].includes(p));
 const row = (role: string, def: string[], grant: string[] = [], revoke: string[] = []) => ({
@@ -26,7 +26,7 @@ const row = (role: string, def: string[], grant: string[] = [], revoke: string[]
 const DATA = {
   roles: [row("owner", [...ADMIN, "members.assign_owner"]), row("admin", ADMIN), row("viewer", ["read", "office.view", "org.read", "engine.view"]),
     row("management", LEAD), row("hr", LEAD, [], ["audit.read"])],
-  grantable: [], owner_only: ["members.assign_owner", "roles.manage", "crm.access", "feedback.manage"],
+  grantable: [], owner_only: ["members.assign_owner", "roles.manage", "feedback.manage"],
 };
 
 let puts: unknown[] = [];
@@ -71,7 +71,7 @@ describe("Roles and access", { timeout: 30_000 }, () => {
     expect(within(matrix).getByLabelText("AI engine: see for Admin")).toHaveAttribute("aria-checked", "true");
     expect(within(matrix).getByLabelText("Audit log for HR")).toHaveAttribute("aria-checked", "false");
     // Areas group the rows; each row says what it opens.
-    expect(within(matrix).getByRole("columnheader", { name: "Money" })).toBeInTheDocument();
+    expect(within(matrix).getByRole("columnheader", { name: "System and connections" })).toBeInTheDocument();
     expect(within(matrix).getAllByText(/Opens: .*File storage/).length).toBeGreaterThan(0);
   });
 
@@ -81,19 +81,19 @@ describe("Roles and access", { timeout: 30_000 }, () => {
     const save = screen.getByRole("button", { name: "Save changes" });
     expect(save).toBeDisabled();
     fireEvent.click(within(matrix).getByLabelText("AI engine: see for Management"));
-    fireEvent.click(within(matrix).getByLabelText("Money: change for Management"));
+    fireEvent.click(within(matrix).getByLabelText("Channels for Management"));
     expect(screen.getByText("Not saved yet")).toBeInTheDocument();
     fireEvent.click(save);
     const review = await screen.findByTestId("roles-review");
     expect(review).toHaveTextContent("Management");
     expect(review).toHaveTextContent("GetsAI engine: see");
-    expect(review).toHaveTextContent("LosesMoney: change");
+    expect(review).toHaveTextContent("LosesChannels");
     expect(review).toHaveTextContent("Against the default: 1 more, 1 less.");
     expect(review).not.toHaveTextContent("HR"); // HR is not changed by this save
     expect(puts).toHaveLength(0);
     fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Save changes" }));
     await waitFor(() => expect(puts).toHaveLength(1));
-    expect(puts[0]).toEqual({ roles: { hr: { grant: [], revoke: ["audit.read"] }, management: { grant: ["engine.view"], revoke: ["finance.manage"] } } });
+    expect(puts[0]).toEqual({ roles: { hr: { grant: [], revoke: ["audit.read"] }, management: { grant: ["engine.view"], revoke: ["channels.manage"] } } });
   });
 
   it("resets one role to its default and finds permissions by a word", async () => {
@@ -102,8 +102,8 @@ describe("Roles and access", { timeout: 30_000 }, () => {
     fireEvent.click(within(matrix).getByRole("button", { name: "Reset HR" }));
     expect(within(matrix).getByLabelText("Audit log for HR")).toHaveAttribute("aria-checked", "true");
     expect(screen.getByText("Not saved yet")).toBeInTheDocument();
-    fireEvent.change(screen.getByPlaceholderText("Search permissions or pages"), { target: { value: "money" } });
-    expect(within(matrix).getByLabelText("Money: see for Admin")).toBeInTheDocument();
+    fireEvent.change(screen.getByPlaceholderText("Search permissions or pages"), { target: { value: "storage" } });
+    expect(within(matrix).getByLabelText("File storage for Admin")).toBeInTheDocument();
     expect(within(matrix).queryByLabelText("Audit log for HR")).toBeNull();
     fireEvent.change(screen.getByPlaceholderText("Search permissions or pages"), { target: { value: "zzz" } });
     expect(screen.getByText("Nothing matches")).toBeInTheDocument();
@@ -114,7 +114,7 @@ describe("Roles and access", { timeout: 30_000 }, () => {
     const phone = await screen.findByTestId("roles-phone");
     // Management first; one switch per permission.
     const switches = within(phone).getAllByRole("switch");
-    expect(switches.length).toBe(21);
+    expect(switches.length).toBe(19);
     expect(within(phone).getByLabelText("File storage for Management")).toHaveAttribute("aria-checked", "false");
     expect(within(phone).getByLabelText("Members and roles for Management")).toHaveAttribute("aria-checked", "true");
   });

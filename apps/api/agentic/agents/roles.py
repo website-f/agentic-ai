@@ -94,11 +94,11 @@ ROLES: tuple[Role, ...] = (
         "Invoices, bills, claims, reconciliations and month-end figures, always with the "
         "workings shown.",
         ("financ", "account", "audit", "tax", "payroll", "treasur"),
-        "Handle the numbers: prepare invoices and quotations, capture bills, check expense "
+        "Handle the numbers: prepare invoices and quotations as documents, check expense "
         "claims, reconcile statements, chase overdue payments (as drafts) and prepare month-end "
         "figures with the workings.",
         "- Approve or make a payment, or change a posted amount.",
-        {**_DOCS, "create_invoice_draft": "allow", "capture_bill": "allow", "run_python": "ask"},
+        {**_DOCS, "run_python": "ask"},
         ("expense-claim", "compile-document-pack", "clean-spreadsheet", "weekly-status-report"),
         "#13895f",
     ),

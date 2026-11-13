@@ -232,17 +232,6 @@ CATEGORIES: dict[str, tuple[str, ...]] = {
         "brain_dreams",
         "knowledge_chunks",
     ),
-    "CRM, contacts and money": (
-        "crm_objects",
-        "crm_fields",
-        "crm_records",
-        "parties",
-        "party_contacts",
-        "deals",
-        "money_docs",
-        "payments",
-        "interactions",
-    ),
     "Mail and calendar": ("mail_items", "email_drafts", "calendar_proposals", "mail_rules"),
     "Meeting recordings": ("meeting_recordings",),
     "People and access": (
@@ -251,7 +240,6 @@ CATEGORIES: dict[str, tuple[str, ...]] = {
         "users",
         "auth_sessions",
         "api_tokens",
-        "crm_access",
     ),
 }
 
@@ -284,7 +272,6 @@ async def providers(db: AsyncSession, ws_id: str) -> list[dict[str, str]]:
     from ..models import (
         AIProvider,
         Channel,
-        CrmConnector,
         GoogleAccount,
         Integration,
         McpServer,
@@ -321,11 +308,6 @@ async def providers(db: AsyncSession, ws_id: str) -> list[dict[str, str]]:
         out.append({"kind": "Mail and calendar", "name": "Google", "where": f"{n_g}"})
     for m in (await db.scalars(select(McpServer).where(McpServer.workspace_id == ws_id))).all():
         out.append({"kind": "Tool server (MCP)", "name": m.name, "where": _host(m.url)})
-    for c in (
-        await db.scalars(select(CrmConnector).where(CrmConnector.workspace_id == ws_id))
-    ).all():
-        where = _host(str((c.config or {}).get("base_url") or (c.config or {}).get("url") or ""))
-        out.append({"kind": "CRM connector", "name": c.name, "where": where or c.kind})
     for i in (await db.scalars(select(Integration).where(Integration.workspace_id == ws_id))).all():
         out.append({"kind": "Integration", "name": i.kind, "where": ""})
     return out
@@ -375,7 +357,6 @@ KEY_ID_TABLES = (
     "branches",
     "departments",
     "credentials",
-    "crm_connectors",
     "storage_targets",
     "mcp_servers",
     "ai_providers",

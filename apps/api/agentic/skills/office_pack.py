@@ -119,7 +119,7 @@ A customer or supplier asked something, complained or chased an order, and a rep
 
 ## Steps
 1. Read the whole message; note every question asked.
-2. Check what the office knows: recall/memory, the CRM, past quotations or invoices, SOPs.
+2. Check what the office knows: recall/memory, past quotations or invoices, SOPs.
 3. Answer every question in order. Facts only from company records; if unsure, say you will
    check and by when.
 4. Match their language (English or Malay) and keep a warm, professional tone.

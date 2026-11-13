@@ -1,7 +1,6 @@
 """SQLAlchemy models. Every tenant-owned row carries workspace_id; queries filter on it."""
 
 from datetime import date, datetime
-from decimal import Decimal
 from typing import Any
 
 from pgvector.sqlalchemy import Vector
@@ -24,7 +23,7 @@ from sqlalchemy import (
     UniqueConstraint,
     func,
 )
-from sqlalchemy.dialects.postgresql import ARRAY, JSONB, TSVECTOR
+from sqlalchemy.dialects.postgresql import JSONB, TSVECTOR
 from sqlalchemy.orm import Mapped, deferred, mapped_column, relationship
 
 from ..core.db import Base, Timestamps
@@ -180,9 +179,6 @@ class Branch(Timestamps, Base):
     data_level: Mapped[str] = mapped_column(
         String(16), default="standard", server_default="standard"
     )
-    # P35: payment reminders for this company's receivables (crm/reminders.py):
-    # {"enabled": bool, "days": [-3, 1, 7, 14, 30], "channel": "email"}. None = the defaults.
-    reminder_policy: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
 
     departments: Mapped[list["Department"]] = relationship(
         back_populates="branch",
@@ -1910,14 +1906,14 @@ class DeskItem(Base):
     """P26: something a person keeps on their workspace (their desk): a pinned SOP, workflow,
     file, document, template, wiki page, task, agent or saved search. `ref` is the item's id,
     or the words of a saved search. P97: also any screen of the app or of Prima (`route`, its
-    address inside the site), a web link (`link`), a report and a contact; a pin may carry the
+    address inside the site), a web link (`link`) and a report; a pin may carry the
     person's own name for it (`label`) and sit in one of their folders (`folder`)."""
 
     __tablename__ = "desk_items"
     __table_args__ = (
         CheckConstraint(
             "kind IN ('sop', 'workflow', 'file', 'document', 'template', 'page', 'task', "
-            "'agent', 'search', 'route', 'link', 'report', 'contact')",
+            "'agent', 'search', 'route', 'link', 'report')",
             name="ck_desk_items_kind",
         ),
         UniqueConstraint("user_id", "kind", "ref", name="uq_desk_items_user_ref"),
@@ -2255,378 +2251,6 @@ class DeviceActivity(Base):
     ts: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
-
-
-# ---------------------------------------------------------------- P35 customers, deals, money
-
-
-class Party(Timestamps, Base):
-    """P35: a customer, supplier, partner or lead (a company or a person). branch_id None =
-    shared by every company of the workspace; else it belongs to that company. `name_key` is
-    the name normalised for matching (crm/service.name_key). `external` holds the ids an
-    accounting system knows it by ({"xero": "...", "bukku": ...})."""
-
-    __tablename__ = "parties"
-    __table_args__ = (
-        CheckConstraint("kind IN ('company', 'person')", name="ck_parties_kind"),
-        CheckConstraint("status IN ('active', 'archived')", name="ck_parties_status"),
-        CheckConstraint(
-            "source IN ('manual', 'email', 'import', 'accounting')", name="ck_parties_source"
-        ),
-    )
-
-    id: Mapped[str] = mapped_column(String(40), primary_key=True, default=lambda: new_id("pt"))
-    workspace_id: Mapped[str] = mapped_column(ForeignKey("workspaces.id", ondelete="CASCADE"))
-    branch_id: Mapped[str | None] = mapped_column(ForeignKey("branches.id", ondelete="CASCADE"))
-    kind: Mapped[str] = mapped_column(String(10), default="company")
-    roles: Mapped[list[str]] = mapped_column(ARRAY(String(16)), default=list)
-    name: Mapped[str] = mapped_column(String(200))
-    name_key: Mapped[str] = mapped_column(String(200), default="")
-    legal_name: Mapped[str] = mapped_column(String(200), default="")
-    reg_no: Mapped[str] = mapped_column(String(60), default="")
-    tin: Mapped[str] = mapped_column(String(40), default="")
-    sst_no: Mapped[str] = mapped_column(String(40), default="")
-    industry: Mapped[str] = mapped_column(String(80), default="")
-    email: Mapped[str] = mapped_column(String(254), default="")
-    phone: Mapped[str] = mapped_column(String(60), default="")
-    website: Mapped[str] = mapped_column(String(200), default="")
-    # {"lines": [...], "city", "postcode", "state", "country"}
-    address: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
-    currency: Mapped[str] = mapped_column(String(3), default="MYR")
-    payment_terms_days: Mapped[int] = mapped_column(Integer, default=30)
-    credit_limit: Mapped[Decimal | None] = mapped_column(Numeric(14, 2))
-    tags: Mapped[list[str]] = mapped_column(ARRAY(String(40)), default=list)
-    notes: Mapped[str] = mapped_column(Text, default="")
-    owner_user_id: Mapped[str | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
-    status: Mapped[str] = mapped_column(String(10), default="active")
-    source: Mapped[str] = mapped_column(String(12), default="manual")
-    external: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
-    created_by: Mapped[str] = mapped_column(String(80), default="")
-
-
-class PartyContact(Timestamps, Base):
-    """P35: a person at a party (the accounts clerk, the buyer)."""
-
-    __tablename__ = "party_contacts"
-
-    id: Mapped[str] = mapped_column(String(40), primary_key=True, default=lambda: new_id("pc"))
-    workspace_id: Mapped[str] = mapped_column(ForeignKey("workspaces.id", ondelete="CASCADE"))
-    party_id: Mapped[str] = mapped_column(ForeignKey("parties.id", ondelete="CASCADE"), index=True)
-    name: Mapped[str] = mapped_column(String(200))
-    title: Mapped[str] = mapped_column(String(120), default="")
-    email: Mapped[str] = mapped_column(String(254), default="")
-    phone: Mapped[str] = mapped_column(String(60), default="")
-    is_primary: Mapped[bool] = mapped_column(Boolean, default=False)
-    notes: Mapped[str] = mapped_column(Text, default="")
-
-
-class Deal(Timestamps, Base):
-    """P35: a sale in the pipeline, from lead to won or lost."""
-
-    __tablename__ = "deals"
-    __table_args__ = (
-        CheckConstraint(
-            "stage IN ('lead', 'qualified', 'proposal', 'negotiation', 'won', 'lost')",
-            name="ck_deals_stage",
-        ),
-    )
-
-    id: Mapped[str] = mapped_column(String(40), primary_key=True, default=lambda: new_id("dl"))
-    workspace_id: Mapped[str] = mapped_column(ForeignKey("workspaces.id", ondelete="CASCADE"))
-    branch_id: Mapped[str | None] = mapped_column(ForeignKey("branches.id", ondelete="CASCADE"))
-    party_id: Mapped[str] = mapped_column(ForeignKey("parties.id", ondelete="CASCADE"))
-    title: Mapped[str] = mapped_column(String(200))
-    value: Mapped[Decimal] = mapped_column(Numeric(14, 2), default=0)
-    currency: Mapped[str] = mapped_column(String(3), default="MYR")
-    stage: Mapped[str] = mapped_column(String(12), default="lead")
-    probability: Mapped[int] = mapped_column(Integer, default=10)
-    expected_close: Mapped[date | None] = mapped_column(Date)
-    owner_user_id: Mapped[str | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
-    agent_id: Mapped[str | None] = mapped_column(ForeignKey("agents.id", ondelete="SET NULL"))
-    source: Mapped[str] = mapped_column(String(40), default="")
-    next_step: Mapped[str] = mapped_column(String(300), default="")
-    next_step_due: Mapped[date | None] = mapped_column(Date)
-    lost_reason: Mapped[str] = mapped_column(String(300), default="")
-    position: Mapped[float] = mapped_column(Float, default=0)
-    closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    created_by: Mapped[str] = mapped_column(String(80), default="")
-
-
-class MoneyDoc(Timestamps, Base):
-    """P35: money owed to us (receivable: our invoice) or by us (payable: a supplier's bill),
-    for one of our companies (branch_id). "Overdue" is computed, never stored. Bills captured
-    from email wait for a person (awaiting_approval); `duplicate_of` points at the bill it
-    looks like. `reminders`: the payment reminders made for it ([{"step", "at", ...}])."""
-
-    __tablename__ = "money_docs"
-    __table_args__ = (
-        CheckConstraint("direction IN ('receivable', 'payable')", name="ck_money_docs_direction"),
-        CheckConstraint(
-            "status IN ('draft', 'awaiting_approval', 'approved', 'sent', 'partially_paid',"
-            " 'paid', 'void')",
-            name="ck_money_docs_status",
-        ),
-        CheckConstraint(
-            "source IN ('manual', 'document', 'email', 'upload', 'accounting')",
-            name="ck_money_docs_source",
-        ),
-    )
-
-    id: Mapped[str] = mapped_column(String(40), primary_key=True, default=lambda: new_id("iv"))
-    workspace_id: Mapped[str] = mapped_column(ForeignKey("workspaces.id", ondelete="CASCADE"))
-    branch_id: Mapped[str] = mapped_column(ForeignKey("branches.id", ondelete="CASCADE"))
-    party_id: Mapped[str] = mapped_column(ForeignKey("parties.id", ondelete="CASCADE"))
-    direction: Mapped[str] = mapped_column(String(12))
-    number: Mapped[str] = mapped_column(String(60), default="")
-    reference: Mapped[str] = mapped_column(String(120), default="")
-    issue_date: Mapped[date] = mapped_column(Date)
-    due_date: Mapped[date | None] = mapped_column(Date)
-    currency: Mapped[str] = mapped_column(String(3), default="MYR")
-    subtotal: Mapped[Decimal] = mapped_column(Numeric(14, 2), default=0)
-    tax_total: Mapped[Decimal] = mapped_column(Numeric(14, 2), default=0)
-    total: Mapped[Decimal] = mapped_column(Numeric(14, 2), default=0)
-    amount_paid: Mapped[Decimal] = mapped_column(Numeric(14, 2), default=0)
-    status: Mapped[str] = mapped_column(String(20), default="draft")
-    # [{"description", "qty", "unit_price", "tax_rate", "amount"}]
-    lines: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, default=list)
-    document_id: Mapped[str | None] = mapped_column(ForeignKey("documents.id", ondelete="SET NULL"))
-    file_id: Mapped[str | None] = mapped_column(ForeignKey("files.id", ondelete="SET NULL"))
-    mail_item_id: Mapped[str | None] = mapped_column(
-        ForeignKey("mail_items.id", ondelete="SET NULL")
-    )
-    source: Mapped[str] = mapped_column(String(12), default="manual")
-    external: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
-    notes: Mapped[str] = mapped_column(Text, default="")
-    approved_by: Mapped[str | None] = mapped_column(String(80))
-    approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    duplicate_of: Mapped[str | None] = mapped_column(
-        ForeignKey("money_docs.id", ondelete="SET NULL")
-    )
-    # The approval task made for a captured bill (closed when it is approved or voided).
-    task_id: Mapped[str | None] = mapped_column(ForeignKey("tasks.id", ondelete="SET NULL"))
-    reminders: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, default=list)
-    created_by: Mapped[str] = mapped_column(String(80), default="")
-
-
-class Payment(Base):
-    """P35: money that moved against a money doc (recorded by a person with finance.manage)."""
-
-    __tablename__ = "payments"
-    __table_args__ = (
-        CheckConstraint(
-            "method IN ('bank_transfer', 'duitnow', 'fpx', 'cash', 'cheque', 'card', 'online',"
-            " 'other')",
-            name="ck_payments_method",
-        ),
-    )
-
-    id: Mapped[str] = mapped_column(String(40), primary_key=True, default=lambda: new_id("py"))
-    workspace_id: Mapped[str] = mapped_column(ForeignKey("workspaces.id", ondelete="CASCADE"))
-    money_doc_id: Mapped[str] = mapped_column(
-        ForeignKey("money_docs.id", ondelete="CASCADE"), index=True
-    )
-    amount: Mapped[Decimal] = mapped_column(Numeric(14, 2))
-    paid_at: Mapped[date] = mapped_column(Date)
-    method: Mapped[str] = mapped_column(String(16), default="bank_transfer")
-    reference: Mapped[str] = mapped_column(String(120), default="")
-    recorded_by: Mapped[str] = mapped_column(String(80))
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), nullable=False
-    )
-
-
-class Interaction(Base):
-    """P35: one thing that happened with a party (an email, a note, a call, an invoice, a
-    payment, a deal move), newest first on its timeline. Links point at the row it is about;
-    `summary` is short and may be untrusted (an email's subject)."""
-
-    __tablename__ = "interactions"
-    __table_args__ = (
-        CheckConstraint(
-            "kind IN ('email_in', 'email_out', 'note', 'call', 'meeting', 'task', 'document',"
-            " 'invoice', 'payment', 'deal')",
-            name="ck_interactions_kind",
-        ),
-        Index("ix_interactions_party_at", "party_id", "at"),
-    )
-
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
-    workspace_id: Mapped[str] = mapped_column(ForeignKey("workspaces.id", ondelete="CASCADE"))
-    party_id: Mapped[str] = mapped_column(ForeignKey("parties.id", ondelete="CASCADE"))
-    kind: Mapped[str] = mapped_column(String(12))
-    mail_item_id: Mapped[str | None] = mapped_column(
-        ForeignKey("mail_items.id", ondelete="SET NULL"), index=True
-    )
-    task_id: Mapped[str | None] = mapped_column(ForeignKey("tasks.id", ondelete="SET NULL"))
-    document_id: Mapped[str | None] = mapped_column(ForeignKey("documents.id", ondelete="SET NULL"))
-    money_doc_id: Mapped[str | None] = mapped_column(
-        ForeignKey("money_docs.id", ondelete="SET NULL")
-    )
-    deal_id: Mapped[str | None] = mapped_column(ForeignKey("deals.id", ondelete="SET NULL"))
-    summary: Mapped[str] = mapped_column(String(500), default="")
-    data: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
-    at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
-    actor: Mapped[str] = mapped_column(String(80))
-
-
-# ---------------------------------------------------------------- P50 the universal CRM
-
-
-class CrmObject(Timestamps, Base):
-    """P50: one thing a business tracks in its CRM: a custom object (Projects, Properties,
-    Patients...), a built-in one shown from the office's own data (contacts, deals, invoices,
-    tasks... `source`), or one synced from another system (`connector_id`). Its fields are
-    CrmField rows; its records CrmRecord rows (for a built-in object: only the values of the
-    extra fields people added)."""
-
-    __tablename__ = "crm_objects"
-    __table_args__ = (
-        UniqueConstraint("workspace_id", "key", name="uq_crm_objects_key"),
-        CheckConstraint("kind IN ('custom', 'builtin', 'synced')", name="ck_crm_objects_kind"),
-    )
-
-    id: Mapped[str] = mapped_column(String(40), primary_key=True, default=lambda: new_id("co"))
-    workspace_id: Mapped[str] = mapped_column(ForeignKey("workspaces.id", ondelete="CASCADE"))
-    key: Mapped[str] = mapped_column(String(60))
-    name: Mapped[str] = mapped_column(String(80))
-    singular: Mapped[str] = mapped_column(String(80), default="")
-    description: Mapped[str] = mapped_column(String(300), default="")
-    icon: Mapped[str] = mapped_column(String(40), default="cube")
-    color: Mapped[str] = mapped_column(String(20), default="#13895f")
-    kind: Mapped[str] = mapped_column(String(10), default="custom")
-    source: Mapped[str | None] = mapped_column(String(40))  # builtin: parties | deals | ...
-    connector_id: Mapped[str | None] = mapped_column(String(40))
-    title_field: Mapped[str] = mapped_column(String(60), default="name")
-    position: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
-    archived: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
-    # counters for auto-number fields and small per-object settings
-    meta: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict, server_default="{}")
-    created_by: Mapped[str] = mapped_column(String(80))
-
-
-class CrmField(Timestamps, Base):
-    """P50: a column of a CRM object. `type`: text | long_text | number | money | percent |
-    date | datetime | checkbox | select | multi_select | email | phone | url | rating | person |
-    relation | file | auto. `options`: choices [{value, label, color}], currency, relation
-    target object key, rating max... `builtin`: maps to the office's own data (read only).
-    `source_path`: where a synced record keeps it (a.b.c)."""
-
-    __tablename__ = "crm_fields"
-    __table_args__ = (UniqueConstraint("object_id", "key", name="uq_crm_fields_key"),)
-
-    id: Mapped[str] = mapped_column(String(40), primary_key=True, default=lambda: new_id("cf"))
-    workspace_id: Mapped[str] = mapped_column(ForeignKey("workspaces.id", ondelete="CASCADE"))
-    object_id: Mapped[str] = mapped_column(ForeignKey("crm_objects.id", ondelete="CASCADE"))
-    key: Mapped[str] = mapped_column(String(60))
-    label: Mapped[str] = mapped_column(String(80))
-    type: Mapped[str] = mapped_column(String(20), default="text")
-    options: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict, server_default="{}")
-    required: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
-    hidden: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
-    builtin: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
-    source_path: Mapped[str | None] = mapped_column(String(200))
-    position: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
-    created_by: Mapped[str] = mapped_column(String(80))
-
-
-class CrmRecord(Timestamps, Base):
-    """P50: one row of a CRM object: `data` holds its values by field key. `external_id`: the
-    office row it belongs to (a built-in object's extra fields) or the other system's id (a
-    synced record)."""
-
-    __tablename__ = "crm_records"
-    __table_args__ = (
-        UniqueConstraint("object_id", "external_id", name="uq_crm_records_external"),
-        Index("ix_crm_records_object", "object_id", "updated_at"),
-        Index("ix_crm_records_data", "data", postgresql_using="gin"),
-    )
-
-    id: Mapped[str] = mapped_column(String(40), primary_key=True, default=lambda: new_id("cr"))
-    workspace_id: Mapped[str] = mapped_column(ForeignKey("workspaces.id", ondelete="CASCADE"))
-    object_id: Mapped[str] = mapped_column(ForeignKey("crm_objects.id", ondelete="CASCADE"))
-    data: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict, server_default="{}")
-    title: Mapped[str] = mapped_column(String(300), default="")
-    external_id: Mapped[str | None] = mapped_column(String(200))
-    created_by: Mapped[str] = mapped_column(String(80))
-    updated_by: Mapped[str] = mapped_column(String(80), default="")
-
-
-class CrmView(Timestamps, Base):
-    """P50: a saved way to look at an object: table | board | calendar | cards, with its
-    columns, filters, sort, board grouping and date field (`config`)."""
-
-    __tablename__ = "crm_views"
-
-    id: Mapped[str] = mapped_column(String(40), primary_key=True, default=lambda: new_id("cv"))
-    workspace_id: Mapped[str] = mapped_column(ForeignKey("workspaces.id", ondelete="CASCADE"))
-    object_id: Mapped[str] = mapped_column(ForeignKey("crm_objects.id", ondelete="CASCADE"))
-    name: Mapped[str] = mapped_column(String(80))
-    kind: Mapped[str] = mapped_column(String(10), default="table")
-    config: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict, server_default="{}")
-    position: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
-    created_by: Mapped[str] = mapped_column(String(80))
-
-
-class CrmWidget(Timestamps, Base):
-    """P50: a dashboard tile: number | bar | pie | line | list, over one object (`config`:
-    object key, metric count|sum|avg, field, group_by, date field and period, filters)."""
-
-    __tablename__ = "crm_widgets"
-
-    id: Mapped[str] = mapped_column(String(40), primary_key=True, default=lambda: new_id("cw"))
-    workspace_id: Mapped[str] = mapped_column(ForeignKey("workspaces.id", ondelete="CASCADE"))
-    title: Mapped[str] = mapped_column(String(120))
-    kind: Mapped[str] = mapped_column(String(10), default="number")
-    config: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict, server_default="{}")
-    position: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
-    size: Mapped[str] = mapped_column(String(6), default="sm")  # sm | md | lg
-    created_by: Mapped[str] = mapped_column(String(80))
-
-
-class CrmConnector(Timestamps, Base):
-    """P50: another system the CRM reads from: rest (a JSON API), csv (a CSV address, e.g. a
-    published Google Sheet) or webhook (the other system sends records here). Secrets in
-    `config` are encrypted (*_enc). Its records land in one synced object."""
-
-    __tablename__ = "crm_connectors"
-    __table_args__ = (
-        CheckConstraint("kind IN ('rest', 'csv', 'webhook')", name="ck_crm_connectors_kind"),
-    )
-
-    id: Mapped[str] = mapped_column(String(40), primary_key=True, default=lambda: new_id("cc"))
-    workspace_id: Mapped[str] = mapped_column(ForeignKey("workspaces.id", ondelete="CASCADE"))
-    name: Mapped[str] = mapped_column(String(120))
-    kind: Mapped[str] = mapped_column(String(10))
-    preset: Mapped[str | None] = mapped_column(String(40))
-    config: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict, server_default="{}")
-    object_id: Mapped[str | None] = mapped_column(ForeignKey("crm_objects.id", ondelete="SET NULL"))
-    every_minutes: Mapped[int] = mapped_column(Integer, default=60, server_default="60")
-    enabled: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
-    webhook_hash: Mapped[str | None] = mapped_column(String(64), unique=True)
-    last_sync_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    last_status: Mapped[str] = mapped_column(String(10), default="never")  # never | ok | error
-    last_error: Mapped[str | None] = mapped_column(String(500))
-    stats: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict, server_default="{}")
-    created_by: Mapped[str] = mapped_column(String(80))
-
-
-class CrmAccess(Timestamps, Base):
-    """P50: the CRM is the owner's; a grant lets one person see (or change) one object,
-    without the fields listed in `hidden_fields`. `object_id` null: the dashboard."""
-
-    __tablename__ = "crm_access"
-    __table_args__ = (
-        UniqueConstraint("workspace_id", "user_id", "object_id", name="uq_crm_access"),
-        CheckConstraint("level IN ('view', 'edit')", name="ck_crm_access_level"),
-    )
-
-    id: Mapped[str] = mapped_column(String(40), primary_key=True, default=lambda: new_id("ca"))
-    workspace_id: Mapped[str] = mapped_column(ForeignKey("workspaces.id", ondelete="CASCADE"))
-    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
-    object_id: Mapped[str | None] = mapped_column(ForeignKey("crm_objects.id", ondelete="CASCADE"))
-    level: Mapped[str] = mapped_column(String(6), default="view")
-    hidden_fields: Mapped[list[str]] = mapped_column(JSONB, default=list, server_default="[]")
-    granted_by: Mapped[str] = mapped_column(String(80))
 
 
 class PrimaLink(Timestamps, Base):

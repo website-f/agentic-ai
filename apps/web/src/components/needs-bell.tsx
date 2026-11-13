@@ -1,5 +1,5 @@
 /** P48 "Needs you": a bell in the top bar with everything waiting on this person (approvals,
- * decisions, work to accept, drafts to send, bills to approve...), each a link to where it is
+ * decisions, work to accept, drafts to send, skills to trust...), each a link to where it is
  * done. Only what they may act on (GET /api/me/needs).
  * P56: one line per thing, newest first, scrolling inside the panel; the kinds at the top
  * filter it; "Mark all as read" makes the badge count only what comes after. */
@@ -13,7 +13,6 @@ import {
   GraduationCapIcon,
   HandIcon,
   KanbanIcon,
-  ReceiptIcon,
   SealCheckIcon,
   ShieldCheckIcon,
   SparkleIcon,
@@ -32,7 +31,7 @@ import { api } from "@/lib/api";
 import { cn, timeAgo } from "@/lib/utils";
 
 export interface NeedItem {
-  key: "approvals" | "assigned" | "blocked" | "reviews" | "documents" | "failed" | "drafts" | "bills" | "skills" | "routines" | "services";
+  key: "approvals" | "assigned" | "blocked" | "reviews" | "documents" | "failed" | "drafts" | "skills" | "routines" | "services";
   count: number;
   to: string;
   search: Record<string, string>;
@@ -65,7 +64,6 @@ const LOOK: Record<NeedItem["key"], { icon: Icon; label: string; one: string; to
   documents: { icon: FileTextIcon, label: msg("{n} documents made by AI to review"), one: msg("Document to review"), tone: "text-info" },
   failed: { icon: WarningCircleIcon, label: msg("{n} of your tasks failed this week"), one: msg("Task failed"), tone: "text-danger" },
   drafts: { icon: EnvelopeSimpleIcon, label: msg("{n} email drafts to check and send"), one: msg("Email draft"), tone: "text-info" },
-  bills: { icon: ReceiptIcon, label: msg("{n} bills and receipts to approve"), one: msg("Bill to approve"), tone: "text-warn" },
   skills: { icon: SparkleIcon, label: msg("{n} skill proposals to decide"), one: msg("Skill proposal"), tone: "text-accent" },
   routines: { icon: GraduationCapIcon, label: msg("{n} learned routines to trust"), one: msg("Learned routine"), tone: "text-accent" },
   services: { icon: ShieldCheckIcon, label: msg("{n} outside services wait for approval"), one: msg("Service to approve"), tone: "text-warn" },

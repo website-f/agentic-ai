@@ -184,7 +184,7 @@ async def apply(
             continue
         then = rule.then or {}
         rule.matched = (rule.matched or 0) + 1
-        from ..crm.service import now
+        from ..services.clock import now
 
         rule.last_matched_at = now()
         _add_action(item, {"kind": "rule", "label": rule.name, "rule_id": rule.id})

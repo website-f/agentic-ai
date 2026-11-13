@@ -51,7 +51,7 @@ async def test_only_the_developer_has_the_feedbacks_page(client):
     me = (await client.get("/api/auth/me")).json()
     assert me["user"]["is_developer"] is True
     assert "feedback.manage" in me["permissions"]
-    assert "crm.access" in me["permissions"]  # still everything an owner has
+    assert "roles.manage" in me["permissions"]  # still everything an owner has
     cfg = (await client.get("/api/feedback/config")).json()
     assert cfg == {"enabled": False, "developer": True, "rules": []}
 

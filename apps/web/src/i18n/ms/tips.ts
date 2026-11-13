@@ -94,8 +94,6 @@ export const TIPS: Record<string, string> = {
   "Approve or deny each request; a reason teaches the agent.": "Luluskan atau tolak setiap permintaan; sebab yang diberi mengajar ejen.",
   "Approve always for a tool you trust, so it stops asking.":
     "Pilih Sentiasa benarkan untuk alat yang anda percayai, supaya ia berhenti bertanya.",
-  "Too many small money approvals? Set limits in Settings > Approval limits.":
-    "Terlalu banyak kelulusan wang yang kecil? Tetapkan had di Tetapan > Had kelulusan.",
 
   // outlook
   "Your Outlook, read by your AI: sorted, summarised, with drafts waiting for you.":
@@ -108,8 +106,8 @@ export const TIPS: Record<string, string> = {
   "Pick a mailbox at the top, then check Waiting for your approval.": "Pilih peti mel di atas, kemudian semak Menunggu kelulusan anda.",
   "Add Rules so routine mail is handled the same way every time.":
     "Tambah Peraturan supaya mel rutin diuruskan dengan cara yang sama setiap kali.",
-  "Shared mailboxes save attachments into the Library and turn bills into payables.":
-    "Peti mel kongsi menyimpan lampiran ke dalam Perpustakaan dan memasukkan bil ke Belum bayar.",
+  "Shared mailboxes save attachments into the Library.":
+    "Peti mel kongsi menyimpan lampiran ke dalam Perpustakaan.",
 
   // chat
   "Talk to your AI for quick answers and small jobs.": "Bersembang dengan AI anda untuk jawapan pantas dan kerja kecil.",

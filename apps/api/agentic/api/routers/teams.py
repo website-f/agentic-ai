@@ -858,7 +858,7 @@ async def timetable_day(
     working hours, breaks and duties at their times. Staff see their own AI only."""
     from datetime import date as _date
 
-    from ...crm.service import today
+    from ...services.clock import today
     from ...teams import timetable
 
     ws = await db.get(Workspace, principal.workspace_id)

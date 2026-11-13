@@ -29,7 +29,7 @@ MIN_SOUL = 300
 # Outward actions never start as "allow" in a drafted blueprint: a person decides each time.
 NEVER_ALLOW = frozenset(
     {"browser_submit", "browser_upload", "pc_save_to_pc", "email_draft", "notify_person",
-     "run_python", "tool_call", "outlook_draft", "create_invoice_draft"}
+     "run_python", "tool_call", "outlook_draft"}
 )  # fmt: skip
 
 RECRUITER_TOOLS = {

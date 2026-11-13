@@ -25,9 +25,6 @@ from agentic.erasure import certificate, erase, export, jobs
 from agentic.models import (
     AIProvider,
     AuditLog,
-    CrmField,
-    CrmObject,
-    CrmRecord,
     DocFile,
     Document,
     ErasureRecord,
@@ -122,23 +119,6 @@ async def _second_workspace(shared_user_id: str | None = None) -> dict:
 
 async def _company_data(client, ws_id: str, slug: str) -> None:
     async with SessionLocal() as db:
-        obj = CrmObject(workspace_id=ws_id, key="leads", name="Leads", created_by="x")
-        db.add(obj)
-        await db.flush()
-        db.add(
-            CrmField(
-                workspace_id=ws_id, object_id=obj.id, key="company", label="Company", created_by="x"
-            )
-        )
-        db.add(
-            CrmRecord(
-                workspace_id=ws_id,
-                object_id=obj.id,
-                title="Maju",
-                data={"company": "Maju Trading", "api_key": "sk-crm-zzz"},
-                created_by="x",
-            )
-        )
         db.add(
             Document(workspace_id=ws_id, title="Quote 7", body="# Quote\nRM 100", created_by="x")
         )
@@ -177,7 +157,7 @@ async def test_export_has_this_workspaces_rows_and_files_and_no_secrets(
     eid = r.json()["id"]
     assert jobs_fake["export"] == [eid]
     counts = await export.build(eid)
-    assert counts["files"] == 2 and counts["vault_pages"] == 1 and counts["crm_records"] == 1
+    assert counts["files"] == 2 and counts["vault_pages"] == 1 and "crm_records" not in counts
 
     r = await client.get(f"/api/workspace/data/exports/{eid}")
     ex = r.json()
@@ -191,13 +171,11 @@ async def test_export_has_this_workspaces_rows_and_files_and_no_secrets(
     names = set(z.namelist())
     everything = b"".join(z.read(n) for n in names)
 
-    # Files with their original bytes, in their folders; the brain; documents; CRM; index.
+    # Files with their original bytes, in their folders; the brain; documents; index.
     assert z.read("files/price list.txt") == b"Cement RM 25 a bag"
     assert z.read("files/notes.txt") == b"kept in the database"
     assert z.read("vault/wiki/hello.md").decode().startswith("# Hello")
     assert "RM 100" in z.read("documents/Quote 7.md").decode()
-    crm = z.read("crm/leads.csv").decode("utf-8-sig")
-    assert "Maju Trading" in crm and "sk-crm-zzz" not in crm and "[redacted]" in crm
     assert {"README.md", "index.html", "manifest.json"} <= names
     # This workspace's rows, by table.
     files = json.loads(z.read("tables/files.json"))
@@ -212,7 +190,6 @@ async def test_export_has_this_workspaces_rows_and_files_and_no_secrets(
     assert len(json.loads(z.read("tables/audit_log.json"))) >= 1
     # No secret, nothing of the other workspace.
     assert GOOD_KEY.encode() not in everything and b"$argon2" not in everything
-    assert b"sk-crm-zzz" not in everything
     assert b["id"].encode() not in everything and b"SECRET-OF-B" not in everything
     assert b"enc-of-b" not in everything
 

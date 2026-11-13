@@ -5,18 +5,18 @@ import { AREAS, changesOf, diffOf, effectiveOf, opensOf, resetRole, sameChanges,
 // What the API may change (core/security.py GRANTABLE): every one has an area on the page.
 const GRANTABLE = [
   "agents.manage", "agents.own", "approvals.decide", "assistants.use", "audit.read", "brain.manage", "channels.manage", "engine.manage",
-  "engine.view", "finance.manage", "finance.view", "mcp.manage", "members.manage", "office.view", "org.manage", "org.read", "storage.manage",
+  "engine.view", "mcp.manage", "members.manage", "office.view", "org.manage", "org.read", "storage.manage",
   "team.manage", "vault.manage", "vault.own", "work.write",
 ];
 const HR_DEFAULT = ["read", "office.view", "org.read", "members.manage", "org.manage", "audit.read", "work.write", "approvals.decide", "agents.manage",
-  "brain.manage", "channels.manage", "vault.manage", "assistants.use", "finance.view", "finance.manage"];
+  "brain.manage", "channels.manage", "vault.manage", "assistants.use"];
 const area = (key: string) => AREAS.find((a) => a.key === key)!;
 
 describe("P92/P98: Roles and access rows", () => {
   it("covers every permission the owner may change, never an owner-only one or read", () => {
     const covered = new Set(AREAS.flatMap((a) => a.perms));
     expect([...covered].sort()).toEqual([...GRANTABLE].sort());
-    for (const p of ["members.assign_owner", "roles.manage", "crm.access", "feedback.manage", "read"]) expect(covered.has(p)).toBe(false);
+    for (const p of ["members.assign_owner", "roles.manage", "feedback.manage", "read"]) expect(covered.has(p)).toBe(false);
   });
 
   it("turns an area on and off as the smallest change from the defaults", () => {

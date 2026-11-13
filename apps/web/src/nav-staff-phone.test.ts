@@ -46,7 +46,7 @@ describe("P92: the staff More sheet", () => {
 
   it("is short and grouped", () => {
     expect(paths.length).toBeLessThanOrEqual(12);
-    expect(sections.map((s) => s.title)).toEqual(["Today", "Work", "Customers and money", "Prima", "Library", "Settings"]);
+    expect(sections.map((s) => s.title)).toEqual(["Today", "Work", "Prima", "Library", "Settings"]);
   });
 
   it("has Approvals (no longer a tab) and Prima (its tab opens only the clock), not the tabs", () => {
@@ -56,7 +56,7 @@ describe("P92: the staff More sheet", () => {
   });
 
   it("has nothing high-level", () => {
-    for (const p of ["/", "/agents", "/brain", "/skills", "/learning", "/objectives", "/money", "/ai-engine", "/organization", "/settings/members", "/activity", "/schedules", "/mcp-servers", "/settings/storage"]) {
+    for (const p of ["/", "/agents", "/brain", "/skills", "/learning", "/objectives", "/ai-engine", "/organization", "/settings/members", "/activity", "/schedules", "/mcp-servers", "/settings/storage"]) {
       expect(paths, p).not.toContain(p);
     }
     expect(paths.every((p) => pathAllowed(p, STAFF))).toBe(true);

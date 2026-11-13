@@ -26,7 +26,6 @@ from ..core.config import settings
 from ..core.db import SessionLocal
 from ..core.redact import redact
 from ..core.workspace_settings import max_task_model_calls
-from ..crm.access import MONEY_TOOLS, explicit_money, money_ready
 from ..devices.core import PC_TOOLS, pc_ready
 from ..devices.core import personal as pc_personal
 from ..engine import acting, gateway
@@ -556,7 +555,6 @@ def offered_tools(
     mcp: bool = False,
     pc: bool = False,
     mail: bool = False,
-    finance: bool = False,
     teams: bool = False,
 ) -> list[dict[str, Any]]:
     """Denied tools are not even shown to the model. Team tools exist only inside tasks, and
@@ -564,9 +562,7 @@ def offered_tools(
     the workspace has a connected MCP server, so offices that use none pay no prompt tokens.
     The PC tools (P31) only when `pc` (devices.core.pc_ready: the person's own AI, with a
     linked computer). The Outlook tools (P34) only when `mail` (microsoft.access.mail_ready:
-    its person's own Outlook, or a shared mailbox assigned to it). The money tools (P35)
-    only when `finance` (crm.access.money_ready: an agent in a finance department) or a
-    person gave the agent that tool on purpose."""
+    its person's own Outlook, or a shared mailbox assigned to it)."""
     out = []
     for n, mode in modes_for(agent).items():
         if mode == "deny" or n in GLOBAL_DENY:
@@ -586,8 +582,6 @@ def offered_tools(
         if n in TEAMS_TOOLS and not teams:  # its person's own Teams (P52)
             continue
         if n in PRIMA_TOOLS and not prima_ready(agent.workspace_id):  # P66: Prima is here
-            continue
-        if n in MONEY_TOOLS and not (finance or explicit_money(agent, n)):  # P35
             continue
         if n == "delegate" and not delegation.can_delegate(agent, task):
             continue
@@ -752,25 +746,6 @@ async def _resolve_calls(
                 "the link came from this task's own search results or pages",
                 False,
             )
-        if (
-            decision.effect == "ask"
-            and not decision.hardline
-            and name not in (agent.tools or {})  # nobody chose "ask" for it on purpose
-        ):
-            from ..crm import limits
-
-            why = await limits.allows_tool(db, agent.workspace_id, name, args)
-            if why:
-                # P46: a small routine money step under the owner's approval limit.
-                decision = policy.Decision("allow", f"approval_limit.{name}", why, False)
-                await task_event(
-                    db,
-                    task,
-                    "auto_approved",
-                    limits.ACTOR,
-                    f"went ahead without asking: {why}",
-                    {"tool": name, "rule": decision.rule},
-                )
         if name in TEAM_TOOLS and (
             decision.effect == "allow" or (approved_team and decision.effect != "deny")
         ):
@@ -1473,7 +1448,6 @@ async def _run_task_step(task_id: str) -> StepResult:
                             mail=await mail_ready(db, agent) and await owner_asks(db, agent, task),
                             teams=await teams_ready(db, agent)
                             and await owner_asks(db, agent, task),
-                            finance=await money_ready(db, agent),
                         ),
                         history,
                     ),
@@ -2400,7 +2374,6 @@ async def _chat_turn(
                 pc=await pc_ready(db, agent) and mine,
                 mail=await mail_ready(db, agent) and mine,
                 teams=await teams_ready(db, agent) and mine,
-                finance=await money_ready(db, agent),
             )
         )
         # P96: the same first question, same person, same sources: the answer it gave before.
@@ -2593,7 +2566,7 @@ async def chat_once(db: AsyncSession, agent: Agent, convo: list[dict[str, Any]])
                 agent.model_group,
                 messages,
                 task="agent.api",
-                tools=offered_tools(agent, finance=await money_ready(db, agent)),
+                tools=offered_tools(agent),
                 max_tokens=1200,
                 agent_id=agent.id,
                 branch_id=agent.branch_id,

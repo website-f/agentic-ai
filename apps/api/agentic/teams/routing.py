@@ -35,8 +35,6 @@ ABILITY = {
     "browser_open": "browse websites portals online",
     "web_search": "research web search find out",
     "research_gather": "research web sources",
-    "create_invoice_draft": "invoice billing accounts",
-    "capture_bill": "bills expenses receipts accounts",
     "run_python": "spreadsheet numbers analysis charts",
     "meeting_minutes": "meeting minutes",
     "send_email": "email send reply",

@@ -421,6 +421,7 @@ async def test_connect_is_bound_to_the_starting_session(client, llm, temporal, m
         "teams_ok": False,  # P52: connected before Teams was granted (GRANTED has no Chat.Read)
         "channels_ok": False,  # P63: only once an admin turned on Teams channel posts
         "files_ok": False,  # P80: SharePoint reading (GRANTED has no Files.Read.All)
+        "new_chats_ok": False,  # P102: new Teams chats (GRANTED has no Chat.Create)
         "last_sync_at": None,
         "webhooks": "polling",
         "last_error": None,
@@ -561,7 +562,6 @@ async def test_admin_consent_then_shared_mailbox_rbac_403(client, llm, temporal,
         "save_attachments": True,
         "digest": {"enabled": True, "time": "08:00"},
         "follow_up_hours": 48,
-        "capture_bills": True,
     }
     assert mb["webhooks"] == "polling" and mb["status"] == "active"
     async with SessionLocal() as db:

@@ -6,14 +6,11 @@ Layout (also in the README.md and index.html inside the ZIP):
     files/<folder>/<name>    every file's original bytes, in its Library folder
     vault/<path>.md          the brain (memory) as markdown, as Obsidian opens it
     documents/<title>.md     documents as they are stored (markdown with the company's blocks)
-    crm/<object>.csv         CRM records, one CSV per object
 
 Embeddings and search indexes are not exported: they are derived from the text above.
 """
 
-import csv
 import hashlib
-import io
 import json
 import logging
 import os
@@ -138,7 +135,7 @@ async def write_zip(
     """Everything of one workspace into an open ZIP. Returns the manifest."""
     from ..brain import vault
     from ..documents import storage
-    from ..models import CrmField, CrmObject, CrmRecord, DocFile, Document, Workspace
+    from ..models import DocFile, Document, Workspace
 
     ws = await db.get(Workspace, ws_id)
     if ws is None:
@@ -152,7 +149,6 @@ async def write_zip(
         "files_unreadable": [],
         "vault_pages": 0,
         "documents": 0,
-        "crm_objects": {},
     }
     # ---- tables
     sch = await inventory.schema(db)
@@ -233,35 +229,6 @@ async def write_zip(
         )
     manifest["documents"] = len(docs)
 
-    # ---- CRM records as CSV
-    await on_step(93, "crm")
-    objs = (await db.scalars(select(CrmObject).where(CrmObject.workspace_id == ws_id))).all()
-    for o in objs:
-        fields = (
-            await db.scalars(
-                select(CrmField).where(CrmField.object_id == o.id).order_by(CrmField.position)
-            )
-        ).all()
-        keys = [f.key for f in fields]
-        recs = (await db.scalars(select(CrmRecord).where(CrmRecord.object_id == o.id))).all()
-        extra = sorted({k for r in recs for k in (r.data or {}) if k not in keys})
-        buf = io.StringIO()
-        w = csv.writer(buf)
-        w.writerow(["id", "title", *keys, *extra, "created_at", "updated_at"])
-        for r in recs:
-            data = inventory.redact_json(r.data or {})
-            w.writerow(
-                [
-                    r.id,
-                    r.title,
-                    *[_cell(data.get(k)) for k in (*keys, *extra)],
-                    r.created_at.isoformat() if r.created_at else "",
-                    r.updated_at.isoformat() if r.updated_at else "",
-                ]
-            )
-        z.writestr(f"crm/{safe_name(o.key, o.id)}.csv", ("﻿" + buf.getvalue()).encode())
-        manifest["crm_objects"][o.key] = len(recs)
-
     await on_step(97, "index")
     z.writestr("README.md", readme(manifest))
     z.writestr("index.html", index_html(manifest))
@@ -269,14 +236,6 @@ async def write_zip(
         "manifest.json", json.dumps(manifest, indent=2, default=_json_default, ensure_ascii=False)
     )
     return manifest
-
-
-def _cell(v: Any) -> str:
-    if v is None:
-        return ""
-    if isinstance(v, dict | list):
-        return json.dumps(v, ensure_ascii=False, default=_json_default)
-    return str(v)
 
 
 async def _vault_pages(db: AsyncSession, ws: Any, vault: Any) -> dict[str, str]:
@@ -315,7 +274,6 @@ Made: {m["created_at"]}
 - vault/: {m["vault_pages"]} pages of the AI's memory (the brain), as markdown. Obsidian
   opens this folder as a vault.
 - documents/: {m["documents"]} documents as they are stored (markdown).
-- crm/: CRM records, one CSV per object (opens in Excel).
 - manifest.json: the counts below, as data.
 
 Embeddings and search indexes are not exported: they are derived from the text above and
@@ -338,10 +296,6 @@ def index_html(m: dict[str, Any]) -> str:
         f"<tr><td><a href='tables/{html.escape(t)}.json'>{html.escape(t)}</a></td><td>{n}</td></tr>"
         for t, n in sorted(m["tables"].items())
     )
-    crm = "".join(
-        f"<li><a href='crm/{html.escape(k)}.csv'>{html.escape(k)}</a>: {n} records</li>"
-        for k, n in sorted(m["crm_objects"].items())
-    )
     return f"""<!doctype html><html><head><meta charset="utf-8">
 <title>Export of {html.escape(ws["name"])}</title>
 <style>body{{font:14px system-ui,sans-serif;max-width:760px;margin:2em auto;padding:0 1em}}
@@ -352,7 +306,6 @@ td{{padding:2px 12px 2px 0}}</style></head><body>
 <li><b>files/</b>: {m["files"]} files, original bytes, in their folders</li>
 <li><b>vault/</b>: {m["vault_pages"]} memory pages (markdown; open the folder in Obsidian)</li>
 <li><b>documents/</b>: {m["documents"]} documents as stored (markdown)</li>
-<li><b>crm/</b>: CRM records as CSV<ul>{crm}</ul></li>
 <li><b>tables/</b>: every record as JSON. Secrets show as "[redacted]".</li>
 </ul>
 <p>Embeddings and search indexes are not included: they are derived from the text.</p>
@@ -401,7 +354,6 @@ async def build(export_id: str, beat: Beat | None = None) -> dict[str, Any]:
         "files_unreadable": len(manifest["files_unreadable"]),
         "vault_pages": manifest["vault_pages"],
         "documents": manifest["documents"],
-        "crm_records": sum(manifest["crm_objects"].values()),
     }
     async with SessionLocal() as db:
         ex = await db.get(WorkspaceExport, export_id)

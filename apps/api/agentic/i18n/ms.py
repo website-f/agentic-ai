@@ -1744,28 +1744,9 @@ MS: dict[str, str] = {
     "That is a lot of files for one day. Upload the rest on the web.": (
         "Banyak fail untuk sehari. Muat naik selebihnya di web."
     ),
-    "Saved {name} in your workspace. Your account is not placed in a company yet, so finance cannot get it: ask your manager to set your company.": (
-        "{name} disimpan di meja kerja anda. Akaun anda belum diletakkan dalam syarikat, jadi "
-        "kewangan tidak dapat menerimanya: minta pengurus anda tetapkan syarikat anda."
-    ),
-    "Saved {name} in your workspace, but it could not be read as a bill or receipt: {why} Upload a clearer photo, or tell me what to do with it.": (
-        "{name} disimpan di meja kerja anda, tetapi tidak dapat dibaca sebagai bil atau resit: "
-        "{why} Muat naik gambar yang lebih jelas, atau beritahu saya apa perlu dibuat dengannya."
-    ),
-    "Saved {name} in your workspace. Reading it as a receipt did not work this time; finance can still capture it on the Money page.": (
-        "{name} disimpan di meja kerja anda. Membacanya sebagai resit tidak berjaya kali ini; "
-        "kewangan masih boleh merekodkannya di halaman Wang."
-    ),
-    "Got it: {supplier}, {amount} on {date}. It looks like one already sent, so finance will check it before approving.": (
-        "Diterima: {supplier}, {amount} pada {date}. Ia nampak sama seperti yang sudah dihantar, "
-        "jadi kewangan akan menyemaknya sebelum meluluskan."
-    ),
-    "Got it: {supplier}, {amount} on {date}. Sent to finance as your claim: you will be paid back once it is approved.": (
-        "Diterima: {supplier}, {amount} pada {date}. Dihantar ke kewangan sebagai tuntutan anda: "
-        "wang anda dibayar balik selepas diluluskan."
-    ),
-    "Got it: {supplier}, {amount} on {date}. It waits for approval on the Money page.": (
-        "Diterima: {supplier}, {amount} pada {date}. Ia menunggu kelulusan di halaman Wang."
+    "Saved {name} in your workspace, in {folder}. Send it again with a note to tell me what to do with it.": (
+        "{name} disimpan di meja kerja anda, dalam {folder}. Hantar semula dengan nota untuk "
+        "beritahu saya apa perlu dibuat dengannya."
     ),
     "{name} could not be read: the picture is unclear, or no AI model that reads pictures is set up (AI Engine > Vision).": (
         "{name} tidak dapat dibaca: gambarnya kabur, atau belum ada model AI yang membaca gambar "
@@ -1925,6 +1906,35 @@ MS: dict[str, str] = {
     "List Teams chats": "Senaraikan sembang Teams",
     "Read a Teams chat": "Baca sembang Teams",
     "Send a Teams message": "Hantar mesej Teams",
+    # ------------------------------------------------------------ P102 Teams and Outlook drafts
+    "Draft a Teams message": "Draf mesej Teams",
+    "Draft an Outlook forward": "Draf e-mel majuan Outlook",
+    "{name} drafted a Teams message": "{name} sudah mendraf mesej Teams",
+    "To {to} in Teams:\n\n{preview}\n\nApprove to send it.": (
+        "Kepada {to} dalam Teams:\n\n{preview}\n\nLuluskan untuk menghantarnya."
+    ),
+    "Starting a new Teams chat is not allowed yet. Press Allow new Teams chats on Microsoft 365 > Teams, then send it again.": (  # noqa: E501
+        "Memulakan sembang Teams baharu belum dibenarkan. Tekan Benarkan sembang Teams baharu di "
+        "Microsoft 365 > Teams, kemudian hantar semula."
+    ),
+    "Teams did not allow this message. Reconnect Microsoft 365, then try again.": (
+        "Teams tidak membenarkan mesej ini. Sambung semula Microsoft 365, kemudian cuba lagi."
+    ),
+    "No one with the address {to} was found in your organisation's Teams.": (
+        "Tiada sesiapa dengan alamat {to} dalam Teams organisasi anda."
+    ),
+    "That Teams chat was not found. It may have been deleted.": (
+        "Sembang Teams itu tidak dijumpai. Mungkin ia sudah dipadam."
+    ),
+    "A Teams message is sent only from its own person's Teams.": (
+        "Mesej Teams hanya dihantar daripada Teams pemiliknya sendiri."
+    ),
+    "Microsoft did not start the Teams chat.": "Microsoft tidak memulakan sembang Teams itu.",
+    "Starting new Teams chats was not allowed. Your Microsoft 365 admin can allow Chat.Create for this app (Azure portal > App registrations > API permissions). Your mail and Teams replies keep working.": (  # noqa: E501
+        "Memulakan sembang Teams baharu tidak dibenarkan. Pentadbir Microsoft 365 anda boleh "
+        "membenarkan Chat.Create untuk aplikasi ini (portal Azure > App registrations > API "
+        "permissions). E-mel dan balasan Teams anda terus berfungsi."
+    ),
     # ------------------------------------------------------------ P63 Teams channel posts
     "List Teams channels": "Senaraikan saluran Teams",
     "Read a Teams channel": "Baca saluran Teams",

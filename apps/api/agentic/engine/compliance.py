@@ -1,6 +1,6 @@
 """P57: the approved-services lock. A client's NDA may say company information goes only to
 outside services (AI providers, cloud storage, messaging, the web, Microsoft 365, Google, MCP
-servers, CRM connections) the company approved in writing, for stated data and locations.
+servers) the company approved in writing, for stated data and locations.
 
 Off (the default): everything works as before. On: a service that is not on the workspace's
 approved list is not used at all; the attempt is recorded as a request ("Fitri's twin wanted
@@ -10,7 +10,7 @@ model, this server's disk) needs no approval.
 
 Kept in the workspace's settings ("compliance"): {"lock": bool, "approved": {key: {...}},
 "requests": {key: {...}}}. Keys: ai:<provider id>, storage:<target id>, web, telegram,
-whatsapp, push, m365, google, mcp:<server id>, connector:<connector id>.
+whatsapp, push, m365, google, mcp:<server id>.
 """
 
 import logging
@@ -64,7 +64,6 @@ KINDS: dict[str, str] = {
     "m365": "Microsoft 365",
     "google": "Google",
     "mcp": "Outside tools (MCP)",
-    "connector": "CRM connection",
     "proxy": "Web proxies",
 }
 

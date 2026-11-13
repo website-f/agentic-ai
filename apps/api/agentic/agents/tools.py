@@ -1249,7 +1249,8 @@ for _name, _label, _desc, _params, _req, _risk, _mode in (
         "browser_scroll",
         "Scroll the page",
         "Scroll down or up (the element tree already covers the whole page; scroll for "
-        "pages that load more as you go).",
+        "pages that load more as you go). To find a record, use the site's own search box "
+        "or browser_find, not scrolling.",
         {"direction": {"type": "string", "enum": ["down", "up"]}},
         [],
         "low",
@@ -1546,14 +1547,6 @@ TOOLS.update({t.name: t for t in TEAMS_TOOLS})
 from .prima_tools import PRIMA_TOOLS  # noqa: E402
 
 TOOLS.update({t.name: t for t in PRIMA_TOOLS})
-
-# P35: customers, suppliers and deals (every agent, its own company's), and money (finance
-# agents only: crm/access.MONEY_TOOLS). Approving, paying and voiding are never tools.
-from .crm_tools import CRM_TOOLS  # noqa: E402
-from .money_tools import MONEY_TOOLS  # noqa: E402
-
-TOOLS.update({t.name: t for t in CRM_TOOLS})
-TOOLS.update({t.name: t for t in MONEY_TOOLS})
 
 # P41: the Recruiter drafts agent blueprints from its research.
 from .recruiter import DRAFT_BLUEPRINT  # noqa: E402

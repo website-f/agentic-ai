@@ -1,9 +1,7 @@
 import {
-  AddressBookIcon,
   UserGearIcon,
   GlobeIcon,
   ShieldCheckIcon,
-  ChartPieSliceIcon,
   ListChecksIcon,
   CalendarDotsIcon,
   BrainIcon,
@@ -41,9 +39,7 @@ import {
   GaugeIcon,
   GearSixIcon,
   HardDrivesIcon,
-  ScalesIcon,
   GraduationCapIcon,
-  HandshakeIcon,
   KanbanIcon,
   LightningIcon,
   PlugsConnectedIcon,
@@ -89,11 +85,7 @@ export type AppPath =
   | "/objectives"
   | "/approvals"
   | "/mail"
-  | "/contacts"
-  | "/crm"
   | "/start"
-  | "/deals"
-  | "/money"
   | "/chat"
   | "/meetings"
   | "/broadcasts"
@@ -114,7 +106,6 @@ export type AppPath =
   | "/settings/members"
   | "/settings/ai-use"
   | "/settings/storage"
-  | "/settings/approval-limits"
   | "/settings/roles"
   | "/timetable"
   | "/tutorial"
@@ -153,7 +144,7 @@ export interface NavSection {
 
 // Titles, labels, hints and blurbs are English keys (msg); render them with t().
 // P49: grouped the way a business owner thinks, not the way the system is built: today, the
-// work, customers and money, the Library, the AI team, and settings folded away. Pages few
+// work, Prima, the Library, the AI team, and settings folded away. Pages few
 // people need are "advanced": hidden until "Show all pages", always searchable.
 export const NAV: NavSection[] = [
   {
@@ -188,17 +179,6 @@ export const NAV: NavSection[] = [
       { to: "/reports", label: msg("Reports"), icon: ClipboardTextIcon, blurb: msg("What agents wrote up for you: summaries and tables you can sort and download.") },
       { to: "/workflows", label: msg("Workflows"), icon: FlowArrowIcon, perm: ["agents.manage", "agents.own", "work.write"], blurb: msg("Draw how a job is done as connected steps, or let an analyst agent draft it. Attach it to agents as their procedure, or run a job through it: each step goes to its agent, and you take the decisions.") },
       { to: "/objectives", advanced: true, label: msg("Objectives"), icon: TargetIcon, perm: "office.view", blurb: msg("What the company's work is for: progress, due dates and what each goal cost, including everything its tasks handed out. Agents see why linked work matters.") },
-    ],
-  },
-  {
-    title: msg("Customers and money"),
-    hint: msg("Everything about your customers, sales and money in one place."),
-    open: "all",
-    items: [
-      { to: "/crm", label: msg("CRM"), icon: ChartPieSliceIcon, perm: "crm.access", blurb: msg("Everything about your business in one place: customers, sales, money, work and anything else you track, with data from your other systems. Yours alone until you share parts of it.") },
-      { to: "/contacts", label: msg("Contacts"), icon: AddressBookIcon, blurb: msg("Customers, suppliers, partners and leads: their people, TIN and SSM, every mail, task, invoice and deal with them, and what they owe.") },
-      { to: "/deals", label: msg("Deals"), icon: HandshakeIcon, blurb: msg("The sales pipeline as a board, from lead to won or lost. Drag a deal along as it moves; each stage shows its count and value.") },
-      { to: "/money", label: msg("Money"), icon: CoinsIcon, perm: "finance.view", blurb: msg("Invoices customers owe you and bills you owe suppliers (captured from email), what is overdue, the cash coming in and going out, and payment reminders.") },
     ],
   },
   // P65: Prima Secure (apps/prima), PWVSB's operations app, beside the office at /prima/.
@@ -255,7 +235,6 @@ export const NAV: NavSection[] = [
       { to: "/settings/members", label: msg("Members and roles"), icon: UsersIcon, perm: ["members.manage", "team.manage"], hidden: true, blurb: msg("Add teammates and decide what each one can do.") },
       { to: "/settings/roles", label: msg("Roles and access"), icon: UserGearIcon, perm: "roles.manage", hidden: true, blurb: msg("What each role may do, area by area. Only the owner changes it.") },
       { to: "/settings/ai-use", label: msg("AI use and limits"), icon: CoinsIcon, perm: ["members.manage", "team.manage"], blurb: msg("Each person's daily AI allowance, what staff may use their AI for, and what was refused.") },
-      { to: "/settings/approval-limits", label: msg("Approval limits"), icon: ScalesIcon, perm: "org.manage", blurb: msg("Let small, routine money steps go through without waiting for you: bills under an amount from known suppliers, small invoice drafts.") },
       { to: "/web-connections", label: msg("Web connections"), icon: GlobeIcon, perm: "org.manage", blurb: msg("How the AI's browsers reach websites: this server, a company computer, or your own proxies.") },
       { to: "/approved-services", label: msg("Approved services"), icon: ShieldCheckIcon, perm: "org.manage", blurb: msg("Which outside services may receive company information (AI providers, storage, messaging, the web). Turn on to use only approved ones.") },
       { to: "/channels", label: msg("Channels"), icon: PlugsConnectedIcon, blurb: msg("Phone notifications, Telegram, API tokens, and which agent answers where.") },
@@ -306,10 +285,9 @@ export const HUBS: Hub[] = [
   { label: msg("My AI"), tabs: ["/my-worker", "/assistants", "/computers"] },
   { label: msg("Forms & reports"), tabs: ["/forms", "/reports"] },
   { label: msg("Workflows & goals"), tabs: ["/workflows", "/objectives"] },
-  { label: msg("Customers"), tabs: ["/contacts", "/deals"] },
   { label: msg("Agents"), tabs: ["/agents", "/timetable", "/monitor", "/meetings", "/broadcasts"] },
   { label: msg("Knowledge & skills"), tabs: ["/learning", "/skills", "/brain", "/blueprints"] },
-  { label: msg("Organization & people"), tabs: ["/organization", "/settings/members", "/settings/roles", "/staff-computers", "/settings/ai-use", "/settings/approval-limits", "/approved-services", "/web-connections"] },
+  { label: msg("Organization & people"), tabs: ["/organization", "/settings/members", "/settings/roles", "/staff-computers", "/settings/ai-use", "/approved-services", "/web-connections"] },
   { label: msg("Settings"), tabs: ["/settings", "/channels", "/ai-engine", "/settings/storage", "/logins", "/schedules", "/mcp-servers", "/activity"] },
   { label: msg("Learn"), tabs: ["/tutorial", "/guide", "/present"] },
 ];

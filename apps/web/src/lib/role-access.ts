@@ -40,10 +40,9 @@ export const SECTIONS: string[] = [
   msg("Office and daily work"),
   msg("AI team and knowledge"),
   msg("People and organisation"),
-  msg("Money"),
   msg("System and connections"),
 ];
-const [WORK, AI, PEOPLE, MONEY, SYSTEM] = SECTIONS as [string, string, string, string, string];
+const [WORK, AI, PEOPLE, SYSTEM] = SECTIONS as [string, string, string, string];
 
 /** One row per permission, in plain words; English keys (render with t()). */
 export const AREAS: Area[] = [
@@ -59,10 +58,8 @@ export const AREAS: Area[] = [
   { key: "members", section: PEOPLE, label: msg("Members and roles"), hint: msg("Add people, change their role, name or email, reset passwords. Never more access than their own."), perms: ["members.manage"] },
   { key: "team", section: PEOPLE, label: msg("Their own team"), hint: msg("Add and change the people below them in their branch or department."), perms: ["team.manage"] },
   { key: "org-see", section: PEOPLE, label: msg("Organisation: see"), hint: msg("See every company and department and the setup pages, without changing them."), perms: ["org.read"] },
-  { key: "org-change", section: PEOPLE, label: msg("Organisation: change"), hint: msg("Companies, departments, approval limits, web connections and approved services."), perms: ["org.manage"] },
+  { key: "org-change", section: PEOPLE, label: msg("Organisation: change"), hint: msg("Companies, departments, web connections and approved services."), perms: ["org.manage"] },
   { key: "audit", section: PEOPLE, label: msg("Audit log"), hint: msg("Every change made by people and agents."), perms: ["audit.read"] },
-  { key: "money-see", section: MONEY, label: msg("Money: see"), hint: msg("Invoices, bills, payments and cash flow."), perms: ["finance.view"] },
-  { key: "money-change", section: MONEY, label: msg("Money: change"), hint: msg("Record payments, send reminders, approve bills."), perms: ["finance.manage"] },
   { key: "engine-see", section: SYSTEM, label: msg("AI engine: see"), hint: msg("The AI providers, models and what the AI costs."), perms: ["engine.view"] },
   { key: "engine-change", section: SYSTEM, label: msg("AI engine: change"), hint: msg("Add or remove AI keys, choose models, privacy masking."), perms: ["engine.manage"] },
   { key: "storage", section: SYSTEM, label: msg("File storage"), hint: msg("Where company files are kept, with bucket keys and file server passwords."), perms: ["storage.manage"] },

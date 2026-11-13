@@ -1,10 +1,10 @@
 """P97: the desk as each person's virtual desk.
 
-Pin anything (a screen of the app or Prima, a web link, a report, a contact) with the server
+Pin anything (a screen of the app or Prima, a web link, a report) with the server
 checking what may be pinned; rename pins, keep them in folders, reorder and move them; the
 desk's sections shown, hidden and reordered per person; pins that are no longer the person's
 to see show as unavailable without saying what the thing is now; finding tasks, agents,
-people, contacts and reports by name within what the person may open; today's meetings.
+people and reports by name within what the person may open; today's meetings.
 """
 
 from datetime import UTC, datetime, timedelta
@@ -12,7 +12,7 @@ from datetime import UTC, datetime, timedelta
 from sqlalchemy import select
 
 from agentic.core.db import SessionLocal
-from agentic.models import SOP, Agent, GoogleAccount, Party, Report, Task, User
+from agentic.models import SOP, Agent, GoogleAccount, Report, Task, User
 
 from .conftest import csrf
 from .test_agents import llm, office, temporal  # noqa: F401
@@ -66,11 +66,8 @@ async def test_screens_links_and_what_may_not_be_pinned(client, llm, temporal):
         await staff.aclose()
 
 
-async def test_reports_and_contacts_only_when_the_person_sees_them(client, llm, temporal):
+async def test_reports_only_when_the_person_sees_them(client, llm, temporal):
     o = await office(client)
-    o["b2"] = (
-        await client.post("/api/branches", json={"name": "Jaya Bhd"}, headers=csrf(client))
-    ).json()
     staff, twin = await _staff_with_twin(client, o)
     owner = await client.get("/api/auth/me")
     owner_id = owner.json()["user"]["id"]
@@ -87,15 +84,9 @@ async def test_reports_and_contacts_only_when_the_person_sees_them(client, llm, 
         private = Report(
             workspace_id=ws, owner_user_id=owner_id, title="Owner mail digest", created_at=now
         )
-        here = Party(
-            workspace_id=ws, branch_id=o["branch"]["id"], name="Syarikat Contoh", roles=["customer"]
-        )
-        there = Party(
-            workspace_id=ws, branch_id=o["b2"]["id"], name="Jaya Supplies", roles=["supplier"]
-        )
-        db.add_all([mine, private, here, there])
+        db.add_all([mine, private])
         await db.commit()
-        ids = {"mine": mine.id, "private": private.id, "here": here.id, "there": there.id}
+        ids = {"mine": mine.id, "private": private.id}
     try:
         r = await _pin(staff, "report", ids["mine"])
         assert r.status_code == 201, r.text
@@ -103,9 +94,8 @@ async def test_reports_and_contacts_only_when_the_person_sees_them(client, llm, 
             r.json()["title"] == "Aging October" and r.json()["url"] == f"/reports?r={ids['mine']}"
         )
         assert (await _pin(staff, "report", ids["private"])).status_code == 404
-        r = await _pin(staff, "contact", ids["here"])
-        assert r.status_code == 201 and r.json()["url"] == f"/contacts/{ids['here']}"
-        assert (await _pin(staff, "contact", ids["there"])).status_code == 404
+        # P102: contacts went with the Customers and money module.
+        assert (await _pin(staff, "contact", "pt_any")).status_code == 422
         # The client's title is not trusted for things with an id: the real name is kept.
         r = await _pin(staff, "task", "tk_nope", "Anything")
         assert r.status_code == 404
@@ -281,21 +271,13 @@ async def test_find_only_what_the_person_may_open(client, llm, temporal):
                     source="desk",
                 )
             )
-        db.add(
-            Party(
-                workspace_id=ws,
-                branch_id=o["branch"]["id"],
-                name="Aging Partners Sdn Bhd",
-                roles=["customer"],
-            )
-        )
         await db.commit()
     try:
         r = await staff.get("/api/desk/find", params={"q": "aging"})
         assert r.status_code == 200, r.text
         f = r.json()
         assert [t["title"] for t in f["tasks"]] == ["Aging report October"]
-        assert [c["title"] for c in f["contacts"]] == ["Aging Partners Sdn Bhd"]
+        assert "contacts" not in f  # P102: the Customers and money module is gone
         assert f["people"] == []  # staff do not look after members
         f = (await staff.get("/api/desk/find", params={"q": "twin"})).json()
         assert [a["id"] for a in f["agents"]] == [twin["id"]]  # never someone else's own AI

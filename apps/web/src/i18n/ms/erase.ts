@@ -9,8 +9,8 @@ export const ERASE: Record<string, string> = {
 
   // export
   "Export all data": "Eksport semua data",
-  "One ZIP with every record, every file in its folder, the memory as markdown, documents and CRM records as CSV. Passwords and keys are never included.":
-    "Satu ZIP dengan setiap rekod, setiap fail dalam foldernya, memori sebagai markdown, dokumen, dan rekod CRM sebagai CSV. Kata laluan dan kunci tidak pernah disertakan.",
+  "One ZIP with every record, every file in its folder, and the memory and documents as markdown. Passwords and keys are never included.":
+    "Satu ZIP dengan setiap rekod, setiap fail dalam foldernya, serta memori dan dokumen sebagai markdown. Kata laluan dan kunci tidak pernah disertakan.",
   "Making the export: {step}": "Menyediakan eksport: {step}",
   "Ready: {size}. It can be downloaded once, until {date}.": "Sedia: {size}. Boleh dimuat turun sekali sahaja, sehingga {date}.",
   "Download the ZIP": "Muat turun ZIP",
@@ -31,8 +31,8 @@ export const ERASE: Record<string, string> = {
     "Untuk penamatan kontrak: semua yang disimpan oleh ruang kerja ini dipadam di sini dan sijil pemadaman dibuat untuk pelanggan anda.",
   "Everything in {name} is deleted: every record, file, memory page, document, conversation, prompt, AI answer, search index and log.":
     "Semua dalam {name} dipadam: setiap rekod, fail, halaman memori, dokumen, perbualan, arahan, jawapan AI, indeks carian dan log.",
-  "Every connection is cut first: Microsoft 365 and Google sign-ins, Telegram and WhatsApp, linked computers, AI provider keys, tool servers, CRM sync links and saved logins.":
-    "Setiap sambungan diputuskan dahulu: log masuk Microsoft 365 dan Google, Telegram dan WhatsApp, komputer yang dipautkan, kunci penyedia AI, pelayan alat, pautan segerak CRM dan log masuk yang disimpan.",
+  "Every connection is cut first: Microsoft 365 and Google sign-ins, Telegram and WhatsApp, linked computers, AI provider keys, tool servers and saved logins.":
+    "Setiap sambungan diputuskan dahulu: log masuk Microsoft 365 dan Google, Telegram dan WhatsApp, komputer yang dipautkan, kunci penyedia AI, pelayan alat dan log masuk yang disimpan.",
   "{n} people belong only to this workspace: their accounts are deleted. People who also belong to another workspace keep their account there.":
     "{n} orang hanya berada dalam ruang kerja ini: akaun mereka dipadam. Orang yang juga berada dalam ruang kerja lain kekal dengan akaun mereka di sana.",
   "Copies in the server's encrypted backups are overwritten by the backup cycle within {days} days.":

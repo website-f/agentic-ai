@@ -7,7 +7,6 @@ and the phone's More menu). Only what they may act on, each with where to do it:
   accept, and documents an AI made for them to review;
 - their own failed tasks of the last week (retry, another AI, or finish it themselves);
 - email drafts waiting to be sent (their Outlook, and shared mailboxes they approve);
-- bills and receipts waiting for approval (finance);
 - skill proposals and routines that wait to be trusted (people who manage agents).
 
 GET /api/me/needs -> {"total", "unread", "items": [{"key", "count", "to", "search"}],
@@ -25,20 +24,18 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...core.db import get_db
 from ...core.security import can
-from ...crm import access as crm_access
-from ...crm.service import now
 from ...microsoft import access as mail_access
 from ...models import (
     Approval,
     Document,
     EmailDraft,
-    MoneyDoc,
     Routine,
     SharedMailbox,
     SkillProposal,
     Task,
 )
 from ...services import prefs
+from ...services.clock import now
 from ..deps import Principal, current_principal
 from .desk import _mine, my_agents
 
@@ -184,20 +181,6 @@ async def needs(
         (EmailDraft.id, EmailDraft.subject, EmailDraft.created_at),
         "/mail",
     )
-
-    if can(role, "finance.manage"):
-        await add(
-            "bills",
-            select(MoneyDoc.id).where(
-                MoneyDoc.workspace_id == ws,
-                MoneyDoc.status == "awaiting_approval",
-                MoneyDoc.direction == "payable",
-                crm_access.finance_where(principal),
-            ),
-            (MoneyDoc.id, MoneyDoc.number, MoneyDoc.created_at),
-            "/money",
-            {"tab": "payable"},
-        )
 
     if any(can(role, p) for p in ("brain.manage", "agents.manage", "team.manage")):
         await add(

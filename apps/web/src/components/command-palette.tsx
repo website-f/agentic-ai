@@ -1,5 +1,5 @@
 import {
-  AddressBookIcon, ArrowElbowDownLeftIcon, ArrowsDownUpIcon, ClipboardTextIcon, FileMagnifyingGlassIcon, FileTextIcon, KanbanIcon, MagnifyingGlassIcon, MonitorIcon, MoonIcon, PlusIcon,
+  ArrowElbowDownLeftIcon, ArrowsDownUpIcon, ClipboardTextIcon, FileMagnifyingGlassIcon, FileTextIcon, KanbanIcon, MagnifyingGlassIcon, MonitorIcon, MoonIcon, PlusIcon,
   PushPinIcon, SignOutIcon, SparkleIcon, SunIcon, TextAlignLeftIcon, UserFocusIcon, UserGearIcon, UserIcon, UserPlusIcon, type Icon,
 } from "@phosphor-icons/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -63,7 +63,7 @@ export function CommandPalette() {
   const { data: me } = useQuery(meQuery);
   const { data: sug } = useQuery(suggestQuery(typed, co.isAll ? undefined : co.selected?.id, open && typed.length >= 2));
   const titles = typed.length >= 2 ? (sug?.suggestions ?? []).filter((s) => s.kind === "title" || s.kind === "heading").slice(0, 4) : [];
-  // P97: tasks, agents, people, contacts and reports by name (only what this person may open).
+  // P97: tasks, agents, people and reports by name (only what this person may open).
   const { data: found } = useQuery(findQuery(typed, open));
   const qc = useQueryClient();
   const where = useRouterState({ select: (s) => s.location });
@@ -93,7 +93,6 @@ export function CommandPalette() {
     { key: "tasks", heading: t("Tasks"), icon: KanbanIcon },
     { key: "people", heading: t("People"), icon: UserIcon },
     { key: "agents", heading: t("Agents"), icon: UserFocusIcon },
-    { key: "contacts", heading: t("Contacts"), icon: AddressBookIcon },
     { key: "reports", heading: t("Reports"), icon: ClipboardTextIcon },
   ];
 

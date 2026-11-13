@@ -2,7 +2,7 @@
 
 1. prepare      count what there is (rows per table, members, outside services) and note it
 2. revoke       sign everyone out of it, lock its members out, destroy every stored secret
-                (AI keys, Microsoft / Google tokens, channel tokens, MCP and CRM secrets,
+                (AI keys, Microsoft / Google tokens, channel tokens, MCP secrets,
                 saved logins), revoke linked computers, stop running work and its schedules
                 in Temporal (and delete those workflow histories)
 3. storage      delete every object this app wrote for it in every storage target (its files,
@@ -161,7 +161,6 @@ async def revoke(rid: str) -> dict[str, int]:
         Channel,
         Credential,
         CredentialState,
-        CrmConnector,
         Device,
         DeviceLinkCode,
         GoogleAccount,
@@ -320,18 +319,6 @@ async def revoke(rid: str) -> dict[str, int]:
                 .values(username_enc="", password_enc="")
             )
         add("Saved logins destroyed (credentials vault)", len(cred_ids))
-        conns = (
-            await db.scalars(select(CrmConnector).where(CrmConnector.workspace_id == ws_id))
-        ).all()
-        for c in conns:
-            c.config = {
-                k: v
-                for k, v in (c.config or {}).items()
-                if not (k.endswith("_enc") or k.lower() in inventory.SECRET_KEYS)
-            }
-            c.enabled = False
-            c.webhook_hash = None
-        add("CRM connector secrets destroyed, sync links disabled", len(conns))
 
         # Work: agents paused, schedules off; then Temporal.
         await db.execute(update(Agent).where(Agent.workspace_id == ws_id).values(status="paused"))

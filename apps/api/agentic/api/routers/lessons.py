@@ -315,7 +315,7 @@ async def digest(
 ) -> dict[str, Any]:
     """ "Getting smarter every day": what one day taught (default today, workspace time).
     Built from what the office keeps, without a model call."""
-    from ...crm.service import today
+    from ...services.clock import today
 
     ws = await db.get(Workspace, principal.workspace_id)
     assert ws is not None

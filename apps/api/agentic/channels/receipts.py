@@ -3,16 +3,13 @@
 The file is always kept, in the sender's own workspace ("My workspace/From my phone"), and
 read like any upload. Then:
 
-- No caption, or a caption that says what it is ("receipt", "resit", "bill", "invoice",
-  "claim", "tuntutan", ...): it is read as a bill or receipt (crm/capture) into the sender's
-  company's payables, waiting for a person with finance access. A staff member's receipt is
-  an expense claim: they paid it, so finance is told to reimburse them. Someone with finance
-  access sending one means the company paid it, unless they say "claim".
+- No caption, or a caption that only says what it is ("receipt", "resit", "bill", "invoice",
+  "claim", "tuntutan", ...): it is kept, and the sender is told where.
 - Any other caption is an instruction: it goes to their AI like a typed message, with a note
   that the file is in their workspace (file id), so the AI can read it.
 
 The sender only ever reaches their own workspace and their own company; a file is data,
-never an instruction (capture fences it; the AI reads it as a file).
+never an instruction (the AI reads it as a file).
 """
 
 import logging
@@ -22,10 +19,9 @@ from dataclasses import dataclass
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..core.security import can
 from ..core.valkey import valkey
 from ..i18n import Msg
-from ..models import Branch, DocFile, Membership, User
+from ..models import Branch, Membership, User
 
 log = logging.getLogger("agentic.channels.receipts")
 
@@ -37,7 +33,6 @@ RECEIPT_WORDS = re.compile(
     r"perbelanjaan|reimburse|ganti\s*balik|payable)\b",
     re.I,
 )
-CLAIM_WORDS = re.compile(r"\b(claim|claims|tuntutan|reimburse|ganti\s*balik|my\s+own)\b", re.I)
 
 
 @dataclass
@@ -79,7 +74,7 @@ def safe_name(name: str, mime: str) -> str:
         "application/pdf": ".pdf",
     }.get(mime.split(";")[0].strip().lower(), "")
     if not base:
-        from ..crm.service import now
+        from ..services.clock import now
 
         base = "phone-" + now().strftime("%Y%m%d-%H%M%S")
     if ext and not base.lower().endswith(ext):
@@ -105,7 +100,7 @@ async def _folder(db: AsyncSession, workspace_id: str, branch_id: str | None) ->
 
 
 async def _over_limit(workspace_id: str, user_id: str) -> bool:
-    from ..crm.service import now
+    from ..services.clock import now
 
     key = f"phonefiles:{workspace_id}:{user_id}:{now().date().isoformat()}"
     n = await valkey().incr(key)
@@ -117,9 +112,7 @@ async def _over_limit(workspace_id: str, user_id: str) -> bool:
 async def take(
     db: AsyncSession, workspace_id: str, user_id: str, sent: Sent, *, via: str
 ) -> Outcome:
-    """Keep the file, then read it as a receipt or hand it to the person's AI."""
-    from ..crm import capture
-    from ..crm import service as svc
+    """Keep the file, then hand it to the person's AI when the caption asks for something."""
     from ..documents import service as doc_service
 
     mime = (sent.mime or "").split(";")[0].strip().lower()
@@ -166,79 +159,12 @@ async def take(
             ),
             file_id=file_id,
         )
-    if branch_id is None:
-        return Outcome(
-            Msg(
-                "Saved {name} in your workspace. Your account is not placed in a company yet, "
-                "so finance cannot get it: ask your manager to set your company.",
-                name=name,
-            ),
-            file_id=file_id,
-        )
-    claim = not can(m.role, "finance.manage") or bool(CLAIM_WORDS.search(caption))
-    f = await db.get(DocFile, file_id)
-    assert f is not None
-    try:
-        doc = await capture.capture(
-            db,
-            f=f,
-            branch_id=branch_id,
-            actor=f"user:{user_id}",
-            paid_by=user if claim else None,
-            source="upload",
-        )
-    except capture.CaptureFailed as e:
-        await db.rollback()
-        return Outcome(
-            Msg(
-                "Saved {name} in your workspace, but it could not be read as a bill or "
-                "receipt: {why} Upload a clearer photo, or tell me what to do with it.",
-                name=name,
-                why=e.message.render() if isinstance(e.message, Msg) else str(e.message),
-            ),
-            file_id=file_id,
-        )
-    except Exception:  # noqa: BLE001 - the file is kept whatever happens to the reading
-        log.warning("receipt capture failed for %s", file_id, exc_info=True)
-        await db.rollback()
-        return Outcome(
-            Msg(
-                "Saved {name} in your workspace. Reading it as a receipt did not work this "
-                "time; finance can still capture it on the Money page.",
-                name=name,
-            ),
-            file_id=file_id,
-        )
-    from ..models import Party
-
-    party = await db.get(Party, doc.party_id)
-    values = {
-        "supplier": party.name if party else "-",
-        "amount": svc.amount_text(doc.currency, doc.total),
-        "date": doc.issue_date.isoformat(),
-    }
-    if doc.duplicate_of:
-        return Outcome(
-            Msg(
-                "Got it: {supplier}, {amount} on {date}. It looks like one already sent, so "
-                "finance will check it before approving.",
-                **values,
-            ),
-            file_id=file_id,
-        )
-    if claim:
-        return Outcome(
-            Msg(
-                "Got it: {supplier}, {amount} on {date}. Sent to finance as your claim: you "
-                "will be paid back once it is approved.",
-                **values,
-            ),
-            file_id=file_id,
-        )
     return Outcome(
         Msg(
-            "Got it: {supplier}, {amount} on {date}. It waits for approval on the Money page.",
-            **values,
+            "Saved {name} in your workspace, in {folder}. Send it again with a note to tell me "
+            "what to do with it.",
+            name=name,
+            folder=folder,
         ),
         file_id=file_id,
     )

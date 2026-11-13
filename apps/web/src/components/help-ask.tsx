@@ -43,7 +43,7 @@ const STAFF_SUGGESTIONS = [
 const MANAGER_SUGGESTIONS = [
   msg("What should I set up first?"),
   msg("How do I add my company's SOPs?"),
-  msg("How do I approve supplier bills?"),
+  msg("How do I add a new staff member?"),
   msg("How do I give an agent a daily duty?"),
 ];
 

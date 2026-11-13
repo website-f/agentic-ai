@@ -13,7 +13,6 @@
 import { MyAssignedTasks } from "@/components/my-assigned-tasks";
 import { assignedTasksQuery } from "@/lib/people";
 import {
-  AddressBookIcon,
   AppWindowIcon,
   ArrowDownIcon,
   ArrowRightIcon,
@@ -110,6 +109,7 @@ import { formsQuery, needsMe, urgency } from "@/lib/forms";
 import { meQuery } from "@/lib/queries";
 import { usePalette } from "@/lib/stores";
 import { cn, timeAgo } from "@/lib/utils";
+import { toolText } from "@/lib/work";
 import type { Workflow } from "@/lib/workflows";
 import { ALL_NAV, navItemFor, pathAllowed } from "@/nav";
 import { StartRunDialog } from "@/pages/workflows/run";
@@ -134,7 +134,6 @@ export const PIN_ICON: Record<PinKind, Icon> = {
   route: AppWindowIcon,
   link: GlobeIcon,
   report: ClipboardTextIcon,
-  contact: AddressBookIcon,
 };
 
 const PIN_TONE: Record<PinKind, Tone> = {
@@ -150,7 +149,6 @@ const PIN_TONE: Record<PinKind, Tone> = {
   route: "info",
   link: "neutral",
   report: "orange",
-  contact: "pink",
 };
 
 const KIND_LABEL: Record<PinKind, string> = {
@@ -166,7 +164,6 @@ const KIND_LABEL: Record<PinKind, string> = {
   route: msg("Page"),
   link: msg("Web link"),
   report: msg("Report"),
-  contact: msg("Contact"),
 };
 
 /** The office path of a screen pin, without its ?query or #hash. */
@@ -352,7 +349,7 @@ function Today({ desk, onTab }: { desk: Desk; onTab: (tab: DeskTab) => void }) {
       icon: a.kind === "question" ? SparkleIcon : SealCheckIcon,
       tone: "text-warn",
       title: a.kind === "question" ? (a.reason || a.task_title) : a.task_title,
-      hint: a.kind === "question" ? t("Your AI asks you · {task}", { task: a.task_title }) : t("Waiting for your OK: {what}", { what: a.tool_name }),
+      hint: a.kind === "question" ? t("Your AI asks you · {task}", { task: a.task_title }) : t("Waiting for your OK: {what}", { what: toolText(a) }),
       to: <Link to="/approvals" className="hit">{go(t("Answer"), t("Answer"))}</Link>,
     })),
     ...w.documents.map((d) => ({
@@ -647,7 +644,7 @@ function Pinned({ desk, folders }: { desk: Desk; folders: string[] }) {
       ) : (
         <div className="grid gap-3 rounded-[var(--radius-md)] border border-dashed border-border bg-surface/60 px-5 py-6 text-[13.5px] text-muted sm:grid-cols-[auto_minmax(0,1fr)_auto] sm:items-center">
           <PushPinIcon size={22} weight="duotone" className="text-accent" />
-          <p>{t("Pin anything you use often: a page, a task, a file, a document, an agent, a report, a contact or a web link. Press the pin next to it, or Ctrl K and Pin this page.")}</p>
+          <p>{t("Pin anything you use often: a page, a task, a file, a document, an agent, a report or a web link. Press the pin next to it, or Ctrl K and Pin this page.")}</p>
           <Button size="sm" onClick={() => setDialog({ kind: "add" })}><PlusIcon size={15} /> {t("Pin a page or link")}</Button>
         </div>
       )}
@@ -893,7 +890,7 @@ function AddPinDialog({ open, onOpenChange, folders, pins }: { open: boolean; on
   };
   return (
     <ResponsiveDialog open={open} onOpenChange={onOpenChange} title={t("Pin to my desk")}
-      description={t("To pin a task, file, document, agent, report or contact, press the pin next to it. On any page, Ctrl K then Pin this page.")}
+      description={t("To pin a task, file, document, agent or report, press the pin next to it. On any page, Ctrl K then Pin this page.")}
       className="w-[min(94vw,36rem)]">
       <div className="grid gap-4">
         <Segmented label={t("What to pin")} value={mode} onChange={setMode}

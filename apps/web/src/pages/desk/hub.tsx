@@ -89,9 +89,6 @@ export function DeskShortcuts({ desk, onTab }: { desk: Desk; onTab: (tab: DeskTa
     page("/chat", "neutral", t("Talk to any agent")),
     page("/mail", "info", t("Mail and what the AI did with it")),
     page("/files", "accent", t("The company's documents, in folders")),
-    page("/crm", "pink", t("Customers, sales and anything you track")),
-    page("/contacts", "orange", t("Customers and suppliers")),
-    page("/money", "ok", t("Invoices, bills and receipts")),
     page("/computers", "neutral", t("Your own PC, from anywhere")),
   ];
   const items = all.filter((x): x is Shortcut => !!x);

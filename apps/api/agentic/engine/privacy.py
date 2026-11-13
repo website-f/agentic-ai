@@ -12,8 +12,8 @@ placeholder in every call and the provider's prompt cache keeps working. The per
 mapping (placeholder -> real) lives only in memory for that request.
 
 Detection: a per-workspace dictionary of known values from the database (members, branches,
-company kits, P35 customers / suppliers and their contacts; built at most once a minute per
-process, and again at once when they change) plus pattern detectors. Where two
+company kits; built at most once a minute per process, and again at once when they
+change) plus pattern detectors. Where two
 findings overlap, the longest wins.
 
 Routing (gateway.py): a company's data level (branches.data_level) limits which providers may
@@ -41,8 +41,6 @@ from ..models import (
     Branch,
     CompanyKit,
     Membership,
-    Party,
-    PartyContact,
     Task,
     User,
     Workspace,
@@ -633,48 +631,6 @@ async def known_values(
                 literals.append(("IC", v))
             elif "passport" in key:
                 literals.append(("PASSPORT", v))
-    # P35: customers, suppliers and their people. A company party is another company
-    # (COMPANY), a person party and every contact a person; their ids are references.
-    for kind, name, legal, email, phone, tin, reg_no, sst_no in (
-        await db.execute(
-            select(
-                Party.kind,
-                Party.name,
-                Party.legal_name,
-                Party.email,
-                Party.phone,
-                Party.tin,
-                Party.reg_no,
-                Party.sst_no,
-            ).where(Party.workspace_id == workspace_id)
-        )
-    ).all():
-        for n in (name, legal):
-            if not (n or "").strip():
-                continue
-            if kind == "person":
-                person(n)
-            else:
-                literals.append(("COMPANY", n.strip()))
-        if email:
-            literals.append(("EMAIL", email))
-        if phone:
-            literals.append(("PHONE", phone))
-        for ref in (tin, reg_no, sst_no):
-            if (ref or "").strip():
-                literals.append(("REF", ref.strip()))
-    for name, email, phone in (
-        await db.execute(
-            select(PartyContact.name, PartyContact.email, PartyContact.phone).where(
-                PartyContact.workspace_id == workspace_id
-            )
-        )
-    ).all():
-        person(name or "")
-        if email:
-            literals.append(("EMAIL", email))
-        if phone:
-            literals.append(("PHONE", phone))
     return literals, firsts
 
 

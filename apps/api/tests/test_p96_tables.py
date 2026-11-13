@@ -169,7 +169,7 @@ async def test_ai_use_table_keeps_its_walls(client):
 # ------------------------------------------------- the other lists that became tables
 
 
-async def test_activity_approvals_and_contacts_come_in_numbered_pages(client):
+async def test_activity_and_approvals_come_in_numbered_pages(client):
     from datetime import timedelta
 
     from agentic.models import Approval, AuditLog, Task
@@ -260,25 +260,6 @@ async def test_activity_approvals_and_contacts_come_in_numbered_pages(client):
         )
     ).json()
     assert [a["decided_at"] for a in by_decided] == sorted(a["decided_at"] for a in by_decided)
-
-    # Contacts: numbered pages with the total, sorted both ways.
-    for i in range(12):
-        r = await client.post(
-            "/api/parties",
-            json={"name": f"Syarikat {i:02d}", "roles": ["customer"]},
-            headers=csrf(client),
-        )
-        assert r.status_code in (200, 201), r.text
-    r = await client.get("/api/parties", params={"page": 2, "size": 5})
-    assert r.status_code == 200, r.text
-    assert int(r.headers["X-Total-Count"]) == 12 and r.json()["total"] == 12
-    assert [p["name"] for p in r.json()["items"]] == [f"Syarikat {i:02d}" for i in range(5, 10)]
-    r = await client.get("/api/parties", params={"page": 1, "size": 3, "sort": "-name"})
-    assert [p["name"] for p in r.json()["items"]] == ["Syarikat 11", "Syarikat 10", "Syarikat 09"]
-    r = await client.get("/api/parties", params={"page": 1, "q": "syarikat 07"})
-    assert r.json()["total"] == 1  # the phrase, as before
-    r = await client.get("/api/parties", params={"page": 1, "sort": "balance"})
-    assert r.status_code == 422
 
 
 async def test_the_run_ledger_comes_in_numbered_pages(client):

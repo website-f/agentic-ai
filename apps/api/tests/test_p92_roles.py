@@ -85,16 +85,16 @@ def test_saved_role_access_is_cleaned_and_applied():
         ROLE_ACCESS_SETTING: {
             "hr": {
                 "grant": ["engine.view", "audit.read", "nonsense"],
-                "revoke": ["finance.manage"],
+                "revoke": ["assistants.use"],
             },
             "owner": {"revoke": ["members.manage"]},  # the owner is never edited
-            "viewer": {"grant": ["members.assign_owner", "roles.manage", "crm.access"]},
+            "viewer": {"grant": ["members.assign_owner", "roles.manage", "feedback.manage"]},
             "staff": {"revoke": ["read"]},  # signing in is never taken away
             "ghost": {"grant": ["audit.read"]},
         }
     }
-    assert role_overrides(raw) == {"hr": {"grant": ["engine.view"], "revoke": ["finance.manage"]}}
-    assert "engine.view" in effective("hr", raw) and "finance.manage" not in effective("hr", raw)
+    assert role_overrides(raw) == {"hr": {"grant": ["engine.view"], "revoke": ["assistants.use"]}}
+    assert "engine.view" in effective("hr", raw) and "assistants.use" not in effective("hr", raw)
     assert effective("owner", raw) == PERMISSIONS["owner"]
     assert effective("viewer", raw) == PERMISSIONS["viewer"]
     assert "read" in effective("staff", raw)
@@ -140,7 +140,7 @@ async def test_management_and_hr_are_refused_the_engine_storage_and_mcp(
 
         # Everywhere else an admin goes, they go.
         assert (await c.get("/api/audit")).status_code == 200
-        assert (await c.get("/api/money")).status_code == 200
+        assert (await c.get("/api/branches")).status_code == 200
         assert (await c.get("/api/members?page=1")).status_code == 200
         r = await c.post("/api/branches", json={"name": f"{role} Sdn Bhd"}, headers=csrf(c))
         assert r.status_code == 201, r.text
@@ -249,7 +249,7 @@ async def test_the_owner_changes_role_access_and_it_applies_on_the_next_request(
             client,
             {
                 "hr": {"grant": ["engine.view"]},
-                "management": {"revoke": ["audit.read", "finance.manage"]},
+                "management": {"revoke": ["audit.read", "assistants.use"]},
             },
         )
         assert r.status_code == 200
@@ -267,7 +267,7 @@ async def test_the_owner_changes_role_access_and_it_applies_on_the_next_request(
         assert entries[1].after == {
             "roles": {
                 "hr": {"grant": ["engine.view"], "revoke": []},
-                "management": {"grant": [], "revoke": ["audit.read", "finance.manage"]},
+                "management": {"grant": [], "revoke": ["assistants.use", "audit.read"]},
             }
         }
 
@@ -292,7 +292,6 @@ async def test_role_access_refuses_what_can_never_change(client, llm, temporal):
         ({"owner": {"revoke": ["audit.read"]}}, "owner_locked"),
         ({"hr": {"grant": ["members.assign_owner"]}}, "owner_only_permission"),
         ({"admin": {"grant": ["roles.manage"]}}, "owner_only_permission"),
-        ({"viewer": {"grant": ["crm.access"]}}, "owner_only_permission"),
         ({"staff": {"grant": ["feedback.manage"]}}, "owner_only_permission"),
         ({"staff": {"revoke": ["read"]}}, "locked_permission"),
         ({"hr": {"grant": ["engine.everything"]}}, "unknown_permission"),

@@ -26,7 +26,6 @@ from ..api.scope import Scope
 from ..assistants.names import ASSISTANT_ONLY
 from ..core.config import settings
 from ..core.security import can
-from ..crm.access import MONEY_TOOLS, has_money
 from ..devices.core import PC_TOOLS, has_device, personal
 from ..engine import compliance
 from ..microsoft.access import MAIL_TOOLS, TEAMS_TOOLS, has_mailbox, has_teams
@@ -37,10 +36,11 @@ from .tools import FOLLOWS, GLOBAL_DENY, TOOLS, check_url_arg, mode_of
 
 MAX_ARGS_CHARS = 20_000
 # Outward actions a person signs off every time, whatever an agent's settings say.
-# P52: teams_send is here (not just default "ask") so an agent on "auto" cannot send a Teams
-# message to anyone without the person — its own description promises a person approves it,
-# and outside Teams/mail content could otherwise steer it into sending data out.
-ALWAYS_ASK = frozenset({"browser_submit", "browser_upload", "pc_save_to_pc", "teams_send"})
+# P102: teams_send is no longer here: it only DRAFTS a Teams message, which waits for the
+# connection's own person (microsoft/approvals.py) and is posted only when they press Send,
+# like an Outlook draft. That keeps "nothing is sent until its person approves it" on any
+# autonomy, works in chat too, and no manager can approve a message sent as someone else.
+ALWAYS_ASK = frozenset({"browser_submit", "browser_upload", "pc_save_to_pc"})
 # Tools whose approver is the person asking: when someone who could approve the agent's
 # requests asks for it directly in chat ("every Monday 9am send me the report"), that request
 # is the approval. Anywhere else (a task, an email the agent read) a person approves it,
@@ -212,11 +212,6 @@ async def _evaluate(
         )
     if not why and tool_name in PRIMA_TOOLS and not prima_ready(agent.workspace_id):  # P66
         why = "Prima is not set up on this server"
-    if not why and tool_name in MONEY_TOOLS and not await has_money(agent, tool_name):  # P35
-        why = (
-            "money is for agents in a finance department (finance, accounts, kewangan, akaun) "
-            "or ones a person gave this tool to"
-        )
     if why:
         return Decision(
             "deny", f"hidden.{tool_name}", f"{agent.name} does not have {tool.label}: {why}."

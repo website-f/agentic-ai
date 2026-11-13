@@ -246,12 +246,12 @@ async def test_the_roles_matrix_saves_resets_and_is_owner_only(client, llm, temp
     try:
         r = await client.put(
             "/api/org/role-access",
-            json={"roles": {"hr": {"grant": ["engine.view"], "revoke": ["finance.manage"]}}},
+            json={"roles": {"hr": {"grant": ["engine.view"], "revoke": ["assistants.use"]}}},
             headers=csrf(client),
         )
         assert r.status_code == 200, r.text
         hr = next(x for x in r.json()["roles"] if x["role"] == "hr")
-        assert "engine.view" in hr["effective"] and "finance.manage" not in hr["effective"]
+        assert "engine.view" in hr["effective"] and "assistants.use" not in hr["effective"]
         owner = next(x for x in r.json()["roles"] if x["role"] == "owner")
         assert owner["editable"] is False
         r = await client.put(
@@ -280,7 +280,7 @@ async def test_the_roles_matrix_saves_resets_and_is_owner_only(client, llm, temp
             )
         assert len(rows) == 2
         assert rows[0].after == {
-            "roles": {"hr": {"grant": ["engine.view"], "revoke": ["finance.manage"]}}
+            "roles": {"hr": {"grant": ["engine.view"], "revoke": ["assistants.use"]}}
         }
         assert rows[1].after == {"roles": {}} and "hr: default" in (rows[1].note or "")
     finally:

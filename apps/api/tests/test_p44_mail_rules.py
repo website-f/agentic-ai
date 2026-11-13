@@ -191,7 +191,7 @@ async def test_shared_attachments_join_the_library_and_invoices_stay_with_financ
     clerk = await make_agent(
         o, ws_id, None, name="Accounts Clerk", department_id=o["depts"]["Finance"]
     )
-    mb = await shared_mailbox(ws_id, o["branch"]["id"], clerk.id, capture_bills=False)
+    mb = await shared_mailbox(ws_id, o["branch"]["id"], clerk.id)
     outlook.add(mb.id, "i1", subject="Invoice 9", attachments=[attachment("a1", "inv.txt")])
     item = await mail_item(mb, "i1", subject="Invoice 9", has_attachments=True)
     ai.answer = {**ai.answer, "category": "invoice"}

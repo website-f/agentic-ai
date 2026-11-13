@@ -5,8 +5,8 @@ transaction (the caller commits, or rolls back for a dry run):
 
 - Members: everyone except the owners leaves the workspace. With the membership go what
   lets them in or acts for them here: sessions, linked computers, their own Microsoft
-  mailbox and Gmail links, push subscriptions, Telegram links, API tokens, CRM grants and
-  their Prima link. Someone who belongs to no other workspace is deactivated, not deleted:
+  mailbox and Gmail links, push subscriptions, Telegram links, API tokens and their Prima
+  link. Someone who belongs to no other workspace is deactivated, not deleted:
   the audit log and their past work still name them, and adding them again turns them back
   on (members.add_one).
 - Companies: the ones picked go, with their departments and what belongs only to a company
@@ -46,7 +46,6 @@ from ..models import (
     Branch,
     Channel,
     ChannelLink,
-    CrmAccess,
     Department,
     Device,
     DocFile,
@@ -214,7 +213,7 @@ class Result:
     accounts_deactivated: int = 0
     sessions_ended: int = 0
     prima_links_ended: int = 0
-    connections_removed: int = 0  # computers, mailboxes, Gmail, push, Telegram, CRM grants
+    connections_removed: int = 0  # computers, mailboxes, Gmail, push, Telegram
     api_tokens_revoked: int = 0
     companies_removed: int = 0
     companies_kept: int = 0
@@ -439,7 +438,7 @@ async def reset(
                 delete(PrimaLink).where(PrimaLink.workspace_id == ws_id, PrimaLink.user_id.in_(ids))
             )
         )
-        for model in (PushSubscription, CrmAccess, MicrosoftAccount, GoogleAccount, Device):
+        for model in (PushSubscription, MicrosoftAccount, GoogleAccount, Device):
             res.connections_removed += _rows(
                 await db.execute(
                     delete(model).where(model.workspace_id == ws_id, model.user_id.in_(ids))
