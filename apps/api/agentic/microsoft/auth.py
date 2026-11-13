@@ -91,18 +91,27 @@ async def _configured(db: AsyncSession, workspace_id: str) -> app.AppConfig:
 
 
 async def scopes_for(
-    db: AsyncSession, cfg: app.AppConfig, workspace_id: str, user_id: str | None, files: bool
+    db: AsyncSession,
+    cfg: app.AppConfig,
+    workspace_id: str,
+    user_id: str | None,
+    files: bool,
+    chats: bool = False,
 ) -> str:
     """P80: what a person's sign-in asks for: the office's scopes, plus file reading when they
-    asked for it now (`files`) or granted it before (so it is never lost on a later sign-in)."""
-    if not files and user_id:
+    asked for it now (`files`) or granted it before (so it is never lost on a later sign-in).
+    P102: the same for starting new Teams chats (`chats`, app.CHAT_CREATE)."""
+    if (not files or not chats) and user_id:
         acct = await db.scalar(
             select(MicrosoftAccount).where(
                 MicrosoftAccount.workspace_id == workspace_id, MicrosoftAccount.user_id == user_id
             )
         )
-        files = acct is not None and has_scope(acct.scopes, app.FILES_SCOPES[0])
-    return app.with_files(cfg.scopes) if files else cfg.scopes
+        granted = acct.scopes if acct is not None else ""
+        files = files or has_scope(granted, app.FILES_SCOPES[0])
+        chats = chats or has_scope(granted, app.CHAT_CREATE)
+    scope = app.with_files(cfg.scopes) if files else cfg.scopes
+    return app.with_new_chats(scope) if chats else scope
 
 
 async def auth_url(
@@ -113,12 +122,14 @@ async def auth_url(
     base: str,
     *,
     with_files: bool = False,
+    with_new_chats: bool = False,
 ) -> str:
     """Microsoft's sign-in page for this person. `base` is the public address the callback
     returns to; it is remembered in the state so the token call uses the same one. P80:
-    `with_files` also asks to read their SharePoint / OneDrive files (the Library)."""
+    `with_files` also asks to read their SharePoint / OneDrive files (the Library). P102:
+    `with_new_chats` also asks to start new Teams chats (the Teams tab)."""
     cfg = await _configured(db, workspace_id)
-    scope = await scopes_for(db, cfg, workspace_id, user_id, with_files)
+    scope = await scopes_for(db, cfg, workspace_id, user_id, with_files, with_new_chats)
     state = secrets.token_urlsafe(24)
     verifier = secrets.token_urlsafe(48)
     challenge = (
@@ -136,6 +147,7 @@ async def auth_url(
                 "redirect": redirect,
                 "scope": scope,
                 "files": with_files,
+                "chats": with_new_chats,
             }
         ),
         ex=STATE_TTL,
@@ -154,13 +166,22 @@ async def auth_url(
     return f"{app.LOGIN}/{cfg.tenant}/oauth2/v2.0/authorize?{urllib.parse.urlencode(q)}"
 
 
-async def started_with_files(state: str) -> bool:
-    """P80: was this connect started by the Library's "allow SharePoint" (with_files)?"""
+async def _started(state: str, key: str) -> bool:
     raw = await valkey().get(f"msauth:{state}") if state else None
     try:
-        return bool(raw and json.loads(raw).get("files"))
+        return bool(raw and json.loads(raw).get(key))
     except ValueError:
         return False
+
+
+async def started_with_files(state: str) -> bool:
+    """P80: was this connect started by the Library's "allow SharePoint" (with_files)?"""
+    return await _started(state, "files")
+
+
+async def started_with_new_chats(state: str) -> bool:
+    """P102: was this connect started by the Teams tab's "Allow new Teams chats"?"""
+    return await _started(state, "chats")
 
 
 async def drop_state(state: str) -> None:
@@ -255,6 +276,9 @@ async def store(
         # take back what this person granted for the Library; the next refresh asks for it,
         # and drops it if it was withdrawn (access_token).
         granted = app.with_files(granted)
+    had_chats = has_scope(acct.scopes or "", app.CHAT_CREATE)
+    if had_chats and not changed_mailbox and not has_scope(granted, app.CHAT_CREATE):
+        granted = app.with_new_chats(granted)  # P102: the same for new Teams chats
     acct.scopes = granted
     acct.token_enc = crypto.encrypt(tok["refresh_token"], acct.aad)
     acct.status, acct.last_error = "connected", None
@@ -284,9 +308,12 @@ def has_scope(granted: str, scope: str) -> bool:
 def refresh_scopes(asked: str, granted: str) -> str:
     """P80: what a token refresh asks for: the office's scopes, plus Files.Read.All /
     Sites.Read.All only when this person granted them (the Library's reconnect). Asking for
-    them without that grant would make Microsoft refuse the refresh and stop their mail too."""
-    asked = " ".join(s for s in asked.split() if s not in app.FILES_SCOPES)
-    return app.with_files(asked) if has_scope(granted, app.FILES_SCOPES[0]) else asked
+    them without that grant would make Microsoft refuse the refresh and stop their mail too.
+    P102: the same for Chat.Create (the Teams tab's "Allow new Teams chats")."""
+    asked = " ".join(s for s in asked.split() if s not in app.OPT_IN_SCOPES)
+    if has_scope(granted, app.FILES_SCOPES[0]):
+        asked = app.with_files(asked)
+    return app.with_new_chats(asked) if has_scope(granted, app.CHAT_CREATE) else asked
 
 
 async def _cache(account_id: str, tok: dict[str, Any]) -> None:
@@ -317,9 +344,14 @@ async def access_token(db: AsyncSession, acct: MicrosoftAccount, force: bool = F
         },
     )
     # P63: Teams channel posts were switched on but this person's grant lacks them (no consent
-    # yet); P80: their file reading was withdrawn (an admin revoked it). Either way, keep mail
-    # and everything else working with the scopes they still have.
-    for drop in ({app.CHANNEL_SCOPE} if cfg.teams_channels else set(), set(app.FILES_SCOPES)):
+    # yet); P80: their file reading was withdrawn (an admin revoked it); P102: the same for
+    # starting new Teams chats. Either way, keep mail and everything else working with the
+    # scopes they still have.
+    for drop in (
+        {app.CHANNEL_SCOPE} if cfg.teams_channels else set(),
+        set(app.FILES_SCOPES),
+        {app.CHAT_CREATE},
+    ):
         if str(tok.get("error") or "") not in RECONNECT_ERRORS or not drop & set(want.split()):
             continue
         want = " ".join(s for s in want.split() if s not in drop)

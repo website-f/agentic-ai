@@ -325,6 +325,17 @@ class Graph:
             },
         )
 
+    async def create_forward_draft(
+        self, message_id: str, to: list[str] | str, body_html: str
+    ) -> dict[str, Any]:
+        """P102: a forward of a mail to `to`, in the mailbox's Drafts, with `body_html` above
+        the forwarded original (Graph's createForward). Nothing is sent. Returns the draft."""
+        return await self.request(
+            "POST",
+            f"{self.root}/messages/{_q(message_id)}/createForward",
+            json={"comment": body_html, "toRecipients": recipients(to)},
+        )
+
     async def update_draft(self, draft_id: str, **changes: Any) -> dict[str, Any]:
         """PATCH a draft. Friendly keys: subject, body_html, to, cc; anything else is sent
         as is (Graph message properties)."""
@@ -534,6 +545,25 @@ class Graph:
             "POST",
             f"/chats/{_q(chat_id)}/messages",
             json={"body": {"contentType": "text", "content": text}},
+        )
+
+    async def one_on_one_chat(self, my_id: str, address: str) -> dict[str, Any]:
+        """P102: the one-to-one chat between the signed-in person (`my_id`, their Entra object
+        id) and someone in their organisation (`address`: their sign-in address or id).
+        Microsoft returns the chat they already have, or starts one. Needs Chat.Create
+        (app.CHAT_CREATE). Call only after a person approved the message it is for."""
+
+        def member(who: str) -> dict[str, Any]:
+            return {
+                "@odata.type": "#microsoft.graph.aadUserConversationMember",
+                "roles": ["owner"],
+                "user@odata.bind": f"{GRAPH}/users('{who.replace(chr(39), '')}')",
+            }
+
+        return await self.request(
+            "POST",
+            "/chats",
+            json={"chatType": "oneOnOne", "members": [member(my_id), member(address)]},
         )
 
     async def joined_teams(self) -> list[dict[str, Any]]:

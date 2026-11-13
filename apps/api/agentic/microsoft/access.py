@@ -164,6 +164,7 @@ MAIL_TOOLS = frozenset(
         "outlook_read",
         "outlook_draft_reply",
         "outlook_draft",
+        "outlook_draft_forward",  # P102
         "outlook_save_attachment",
         "outlook_calendar_agenda",
         "outlook_free_slots",

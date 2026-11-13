@@ -4,7 +4,7 @@
 import {
   CalendarBlankIcon, CalendarCheckIcon, CalendarPlusIcon, CalendarXIcon, ChartLineUpIcon, CheckCircleIcon, ChatCircleDotsIcon,
   EnvelopeSimpleIcon, GearSixIcon, VideoCameraIcon, LockSimpleIcon, MicrosoftOutlookLogoIcon, PaperPlaneRightIcon, PlusIcon, SparkleIcon, TrashIcon,
-  WarningCircleIcon, WhatsappLogoIcon, type Icon,
+  WarningCircleIcon, WhatsappLogoIcon, ArrowBendUpLeftIcon, MicrosoftTeamsLogoIcon, ShareFatIcon, type Icon,
 } from "@phosphor-icons/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate, useSearch } from "@tanstack/react-router";
@@ -138,57 +138,109 @@ function Welcome({ presets, onPick }: { presets: Preset[]; onPick: (k: Preset["k
 // ---------------------------------------------------------------- drafts
 
 /** An email an assistant drafted (Gmail or, P34, Outlook). Exported for the Mail page. */
+/** P102: what pressing Send does, in plain words: the card's title. */
+export function draftKind(d: EmailDraft): NonNullable<EmailDraft["kind"]> {
+  if (d.kind) return d.kind;
+  if (providerOf(d) === "teams") return "teams";
+  if (!d.is_reply) return "new";
+  return /^(fw|fwd):/i.test(d.subject) ? "forward" : "reply";
+}
+
+export function draftTitle(d: EmailDraft, t: ReturnType<typeof useT>): string {
+  const subject = d.subject || t("(no subject)");
+  switch (draftKind(d)) {
+    case "teams":
+      return d.is_reply ? t("Reply to {name} in Teams", { name: d.subject || d.to }) : t("Teams message to {to}", { to: d.to });
+    case "reply":
+      return t("Reply to {to}: {subject}", { to: d.to, subject });
+    case "forward":
+      return t("Forward to {to}: {subject}", { to: d.to, subject });
+    default:
+      return t("Send email to {to}: {subject}", { to: d.to, subject });
+  }
+}
+
+const DRAFT_ICON: Record<NonNullable<EmailDraft["kind"]>, Icon> = {
+  new: EnvelopeSimpleIcon,
+  reply: ArrowBendUpLeftIcon,
+  forward: ShareFatIcon,
+  teams: MicrosoftTeamsLogoIcon,
+};
+
+/** A message the AI wrote, waiting for its person: who it goes to and what approving does
+ * (the title), the full text to read and change, then Send. Nothing goes out before that. */
 export function DraftCard({ d }: { d: EmailDraft }) {
   const t = useT();
   const qc = useQueryClient();
-  const outlook = providerOf(d) === "microsoft";
+  const provider = providerOf(d);
+  const kind = draftKind(d);
+  const teams = kind === "teams";
+  const app = teams ? "Teams" : provider === "microsoft" ? "Outlook" : "Gmail";
   const [body, setBody] = useState(d.body);
   const [subject, setSubject] = useState(d.subject);
   const [discarding, setDiscarding] = useState(false);
-  const edited = body !== d.body || subject !== d.subject;
+  const edited = body !== d.body || (!teams && subject !== d.subject);
+  const changes = teams ? { body } : { body, subject };
   const refresh = () => { qc.invalidateQueries({ queryKey: assistantKeys.allDrafts }); qc.invalidateQueries({ queryKey: assistantKeys.home }); };
   const save = useMutation({
-    mutationFn: () => api<EmailDraft>(`/api/email-drafts/${d.id}`, "PATCH", { body, subject }),
-    onSuccess: () => { refresh(); toast.success(outlook ? t("Draft updated in Outlook.") : t("Draft updated in Gmail.")); },
+    mutationFn: () => api<EmailDraft>(`/api/email-drafts/${d.id}`, "PATCH", changes),
+    onSuccess: () => { refresh(); toast.success(teams ? t("Saved.") : provider === "microsoft" ? t("Draft updated in Outlook.") : t("Draft updated in Gmail.")); },
     onError: (e) => toast.error(errorMessage(e)),
   });
+  const who = d.to.replace(/<.*>/, "").trim() || d.to;
   const send = useMutation({
     mutationFn: async () => {
-      if (edited) await api(`/api/email-drafts/${d.id}`, "PATCH", { body, subject });
+      if (edited) await api(`/api/email-drafts/${d.id}`, "PATCH", changes);
       return api<EmailDraft>(`/api/email-drafts/${d.id}/send`, "POST");
     },
-    onSuccess: () => { refresh(); toast.success(t("Sent to {to}.", { to: d.to.replace(/<.*>/, "").trim() || d.to })); },
-    onError: (e) => toast.error(errorMessage(e)),
+    onSuccess: () => { refresh(); toast.success(teams ? t("Sent in Teams to {to}.", { to: d.subject || who }) : t("Sent to {to}.", { to: who })); },
+    onError: (e) => { refresh(); toast.error(errorMessage(e)); },
   });
   const discard = useMutation({
     mutationFn: () => api(`/api/email-drafts/${d.id}/discard`, "POST"),
     onSuccess: () => { refresh(); toast.success(t("Discarded.")); },
   });
+  const context = d.original_from || d.original_snippet;
   return (
     <Card>
-      <CardHeader icon={<IconTile icon={outlook ? MicrosoftOutlookLogoIcon : EnvelopeSimpleIcon} tone="info" size="sm" />}
-        title={<span className="break-words">{t("To {to}", { to: d.to })}</span>}
-        description={[outlook ? "Outlook" : "Gmail", d.agent_name ? t("Drafted by {name}", { name: d.agent_name }) : null, timeAgo(d.created_at)].filter(Boolean).join(" · ")}
+      <CardHeader icon={<IconTile icon={DRAFT_ICON[kind]} tone={teams ? "violet" : "info"} size="sm" />}
+        title={<span className="break-words">{draftTitle(d, t)}</span>}
+        description={[app, d.agent_name ? t("Drafted by {name}", { name: d.agent_name }) : null, timeAgo(d.created_at)].filter(Boolean).join(" · ")}
         actions={<Pill tone="warn">{t("Waiting for you")}</Pill>} />
       <CardBody className="grid gap-3">
-        {d.is_reply && d.original_from ? (
+        {d.is_reply && context ? (
           <div className="rounded-[var(--radius-sm)] border-l-2 border-border bg-surface-2/50 px-3 py-2 text-[12.5px] text-muted">
-            <p className="font-medium text-fg">{t("In reply to {from}", { from: d.original_from })}</p>
-            {d.original_snippet ? <p className="mt-0.5 line-clamp-2">{d.original_snippet}</p> : null}
+            {d.original_from ? (
+              <p className="font-medium text-fg">
+                {teams ? t("Last message from {from}", { from: d.original_from }) : kind === "forward" ? t("Forwarding mail from {from}", { from: d.original_from }) : t("In reply to {from}", { from: d.original_from })}
+              </p>
+            ) : null}
+            {d.original_snippet ? <p className="mt-0.5 line-clamp-3 whitespace-pre-wrap">{d.original_snippet}</p> : null}
           </div>
         ) : null}
-        <Input value={subject} onChange={(e) => setSubject(e.target.value)} aria-label={t("Subject")} className="font-medium" />
-        <textarea value={body} onChange={(e) => setBody(e.target.value)} rows={7} aria-label={t("Email body")}
+        {!teams && d.cc ? <p className="text-[12.5px] break-words text-muted">{t("Cc: {cc}", { cc: d.cc })}</p> : null}
+        {teams ? null : <Input value={subject} onChange={(e) => setSubject(e.target.value)} aria-label={t("Subject")} className="font-medium" />}
+        <textarea value={body} onChange={(e) => setBody(e.target.value)} rows={teams ? 4 : 7} aria-label={teams ? t("Teams message") : t("Email body")}
           className="w-full rounded-sm border border-border bg-surface px-3 py-2.5 text-[14px] leading-relaxed [field-sizing:content] focus-visible:border-accent focus-visible:ring-3 focus-visible:ring-accent/20 focus-visible:outline-none" />
+        <p className="text-[12.5px] text-muted">
+          {teams
+            ? t("This is the whole message. Change anything you like, then press Send in Teams. Nothing is sent before that.")
+            : kind === "forward"
+              ? t("Your note goes above the forwarded mail and its attachments. Nothing is sent before you press Send.")
+              : t("This is the whole text you write. Change anything you like, then press Send. Nothing is sent before that.")}
+        </p>
         <div className="flex flex-wrap items-center gap-2 max-sm:[&>button]:flex-1">
-          <Button loading={send.isPending} onClick={() => send.mutate()}><PaperPlaneRightIcon size={15} weight="fill" /> {edited ? t("Save and send") : t("Send")}</Button>
+          <Button loading={send.isPending} onClick={() => send.mutate()}>
+            <PaperPlaneRightIcon size={15} weight="fill" /> {edited ? t("Save and send") : teams ? t("Send in Teams") : t("Send")}
+          </Button>
           {edited ? <Button variant="outline" loading={save.isPending} onClick={() => save.mutate()}>{t("Save changes")}</Button> : null}
           <Button variant="ghost" className="hover:text-danger" onClick={() => setDiscarding(true)}><TrashIcon size={14} /> {t("Discard")}</Button>
         </div>
-        {d.error ? <p className="text-[12.5px] text-danger">{d.error}</p> : null}
+        {d.error ? <p role="alert" className="text-[12.5px] break-words text-danger">{d.error}</p> : null}
       </CardBody>
-      <ConfirmDialog open={discarding} onOpenChange={setDiscarding} title={t("Discard this draft?")} danger confirmLabel={t("Discard")}
-        body={outlook ? t("It is removed from your Outlook drafts. Nothing was sent.") : t("It is removed from your Gmail drafts. Nothing was sent.")} onConfirm={async () => { await discard.mutateAsync(); }} />
+      <ConfirmDialog open={discarding} onOpenChange={setDiscarding} title={teams ? t("Discard this message?") : t("Discard this draft?")} danger confirmLabel={t("Discard")}
+        body={teams ? t("It is deleted. Nothing was sent in Teams.") : provider === "microsoft" ? t("It is removed from your Outlook drafts. Nothing was sent.") : t("It is removed from your Gmail drafts. Nothing was sent.")}
+        onConfirm={async () => { await discard.mutateAsync(); }} />
     </Card>
   );
 }
@@ -261,7 +313,7 @@ function Drafts({ home }: { home: AssistantsHome }) {
         : t("Connect it in Settings and your assistants can read your inbox and calendar, draft replies and propose events. Nothing is sent or added until you approve it here.")} />;
   }
   const done = [
-    ...all.filter((d) => d.status !== "pending").map((d) => ({ id: d.id, icon: providerOf(d) === "microsoft" ? MicrosoftOutlookLogoIcon : EnvelopeSimpleIcon, status: d.status, ok: d.status === "sent", text: `${d.subject} → ${d.to}`, at: d.decided_at ?? d.created_at })),
+    ...all.filter((d) => d.status !== "pending").map((d) => ({ id: d.id, icon: providerOf(d) === "teams" ? MicrosoftTeamsLogoIcon : providerOf(d) === "microsoft" ? MicrosoftOutlookLogoIcon : EnvelopeSimpleIcon, status: d.status, ok: d.status === "sent", text: draftTitle(d, t), at: d.decided_at ?? d.created_at })),
     ...allEvents.filter((d) => d.status !== "pending").map((d) => ({ id: d.id, icon: CAL_LOOK[d.action].icon, status: d.status, ok: d.status === "done", text: `${t(CAL_LOOK[d.action].verb)}: ${d.title}`, at: d.decided_at ?? d.created_at })),
   ].sort((a, b) => b.at.localeCompare(a.at));
   return (

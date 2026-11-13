@@ -1,9 +1,12 @@
 /** P52 Microsoft 365 → Teams: your own Teams chats (never anyone else's), through your own
  * Microsoft 365 connection. Open one to read it, or hand it to your AI ("what needs me here?").
  * Your AI can also read and (after you approve) answer your chats itself (agents/teams_tools).
+ * P102: "Draft a reply" in a chat and "Message someone" (a first message to anyone in the
+ * organisation) ask your AI for a draft; it waits under Waiting for your approval and is sent
+ * only when you press Send in Teams. A first message needs "Allow new Teams chats" once.
  * P63: and, read only, the posts of the channels in the teams you are a member of, once your
  * Microsoft 365 admin turned that on (Channels > Microsoft 365) and you reconnected. */
-import { ArrowBendDownRightIcon, ArrowSquareOutIcon, ChatsTeardropIcon, HashIcon, LockSimpleIcon, MicrosoftTeamsLogoIcon, SparkleIcon, UsersThreeIcon } from "@phosphor-icons/react";
+import { ArrowBendDownRightIcon, ArrowBendUpLeftIcon, ArrowSquareOutIcon, ChatsTeardropIcon, HashIcon, LockSimpleIcon, MicrosoftTeamsLogoIcon, PencilSimpleLineIcon, SparkleIcon, UsersThreeIcon } from "@phosphor-icons/react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -11,6 +14,8 @@ import { toast } from "sonner";
 import { EmptyState } from "@/components/page";
 import { Button } from "@/components/ui/button";
 import { ListCard, ListRow, Meta } from "@/components/ui/card";
+import { ResponsiveDialog } from "@/components/ui/dialog";
+import { Field, TextareaField } from "@/components/ui/field";
 import { Segmented } from "@/components/ui/segmented";
 import { Select } from "@/components/ui/select";
 import { SideSheet } from "@/components/ui/side-sheet";
@@ -21,6 +26,7 @@ import {
   microsoftAccountQuery,
   microsoftConfigQuery,
   startMicrosoftConnect,
+  startNewChatsConnect,
   teamsChannelQuery,
   teamsChannelsQuery,
   teamsChatQuery,
@@ -65,7 +71,7 @@ export function TeamsPanel() {
   if (needsReconnect) {
     return (
       <EmptyState icon={MicrosoftTeamsLogoIcon} title={t("Allow Teams once")}
-        body={t("Your connection was made before Teams was added. Reconnect once and Microsoft asks you to allow reading and sending your Teams chats.")}
+        body={t("Your connection was made before Teams was added. Reconnect once and Microsoft asks you to allow reading and answering your Teams chats.")}
         action={<Button loading={connect.isPending} onClick={() => connect.mutate()}>{t("Reconnect Microsoft 365")}</Button>} />
     );
   }
@@ -73,23 +79,71 @@ export function TeamsPanel() {
     <>
       <Segmented label={t("Teams")} size="sm" value={view} onChange={setView} className="w-full sm:w-fit [&>button]:flex-1"
         options={[{ value: "chats", label: t("Chats") }, { value: "channels", label: t("Channels") }]} />
-      {view === "channels" ? <ChannelsView channelsOk={account.data.channels_ok === true} /> : <ChatsList />}
+      {view === "channels" ? <ChannelsView channelsOk={account.data.channels_ok === true} /> : <ChatsList newChats={account.data.new_chats_ok === true} />}
     </>
   );
 }
 
-function ChatsList() {
+/** P102: ask your AI for a first Teams message to someone (by work email). The draft waits for
+ * you under Waiting for your approval; nothing is sent before you press Send in Teams. */
+function NewMessage({ newChats, onClose }: { newChats: boolean; onClose: () => void }) {
+  const t = useT();
+  const ask = useAskMyAi();
+  const allow = useMutation({
+    mutationFn: startNewChatsConnect,
+    onSuccess: (r) => { window.location.href = r.url; },
+    onError: (e) => toast.error(errorMessage(e)),
+  });
+  const [to, setTo] = useState("");
+  const [what, setWhat] = useState("");
+  const email = /^[^@\s<>]+@[^@\s<>]+\.[^@\s<>]+$/.test(to.trim());
+  const go = () => ask.mutate(
+    { text: t("Draft a Teams message to {to} with teams_send (to = {to}). What it should say: {what}. Do not send it: I read and approve it first on the Microsoft 365 page.", { to: to.trim(), what: what.trim() }) },
+    { onSuccess: onClose },
+  );
+  return (
+    <ResponsiveDialog open onOpenChange={(o) => !o && onClose()} title={t("Message someone in Teams")}
+      description={t("Your AI writes the message. You read it and press Send in Teams under Waiting for your approval. Nothing is sent before that.")}
+      footer={<>
+        <Button variant="ghost" onClick={onClose}>{t("Cancel")}</Button>
+        <Button disabled={!email || !what.trim()} loading={ask.isPending} onClick={go}><SparkleIcon size={15} /> {t("Ask my AI to draft it")}</Button>
+      </>}>
+      <div className="grid gap-3">
+        <Field label={t("To (work email)")} type="email" autoComplete="off" placeholder="ali@company.com" value={to} onChange={(e) => setTo(e.target.value)} />
+        <TextareaField label={t("What should it say?")} rows={3} value={what} onChange={(e) => setWhat(e.target.value)}
+          placeholder={t("e.g. The tender pack is ready, I will bring it at 3pm.")} />
+        {!newChats ? (
+          <div className="grid gap-2 rounded-[var(--radius-md)] border border-dashed border-warn/40 bg-warn/5 px-3 py-2.5 text-[12.5px]">
+            <p>{t("For someone you have never chatted with in Teams, allow new Teams chats first (one more Microsoft sign-in). Replying in chats you already have works now.")}</p>
+            <Button size="sm" variant="outline" className="w-fit" loading={allow.isPending} onClick={() => allow.mutate()}>{t("Allow new Teams chats")}</Button>
+          </div>
+        ) : null}
+      </div>
+    </ResponsiveDialog>
+  );
+}
+
+function ChatsList({ newChats }: { newChats: boolean }) {
   const t = useT();
   const chats = useQuery(teamsChatsQuery);
   const [open, setOpen] = useState<TeamsChat | null>(null);
+  const [composing, setComposing] = useState(false);
+  const newButton = (
+    <Button size="sm" variant="outline" className="max-sm:w-full" onClick={() => setComposing(true)}><PencilSimpleLineIcon size={15} /> {t("Message someone")}</Button>
+  );
+  const dialog = composing ? <NewMessage newChats={newChats} onClose={() => setComposing(false)} /> : null;
   if (chats.isLoading) return <div className="grid gap-2">{[0, 1, 2, 3].map((i) => <Skeleton key={i} className="h-16 rounded-[var(--radius-md)]" />)}</div>;
   if (chats.error) return <p role="alert" className="text-[13.5px] text-danger">{errorMessage(chats.error)}</p>;
   if (!chats.data?.length) {
-    return <EmptyState icon={ChatsTeardropIcon} title={t("No Teams chats yet")} body={t("Chats you have in Microsoft Teams show here.")} />;
+    return <>{dialog}<EmptyState icon={ChatsTeardropIcon} title={t("No Teams chats yet")} body={t("Chats you have in Microsoft Teams show here.")} action={newButton} /></>;
   }
   return (
     <>
-      <p className="text-[12.5px] text-muted">{t("Only your own chats, from your own connection. Your AI can read them and draft answers that you approve.")}</p>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="min-w-0 flex-1 basis-64 text-[12.5px] text-muted">{t("Only your own chats, from your own connection. Open a chat to read it or to have your AI draft a reply; you approve every message before it is sent.")}</p>
+        {newButton}
+      </div>
+      {dialog}
       <ListCard>
         {chats.data.map((c) => (
           <ListRow key={c.id} onClick={() => setOpen(c)}
@@ -110,14 +164,37 @@ function ChatSheet({ chat, onClose }: { chat: TeamsChat; onClose: () => void }) 
   const t = useT();
   const msgs = useQuery(teamsChatQuery(chat.id));
   const ask = useAskMyAi();
+  const draft = useAskMyAi();
+  const [replying, setReplying] = useState(false);
+  const [what, setWhat] = useState("");
+  const askDraft = () => draft.mutate(
+    { text: what.trim()
+      ? t("Draft a reply in my Teams chat \"{title}\" (chat {id}) with teams_send. What it should say: {what}. Do not send it: I read and approve it first on the Microsoft 365 page.", { title: chat.title, id: chat.id, what: what.trim() })
+      : t("Read my Teams chat \"{title}\" (chat {id}) with teams_read_chat, then draft the reply I should send with teams_send. Do not send it: I read and approve it first on the Microsoft 365 page.", { title: chat.title, id: chat.id }) },
+    { onSuccess: () => { setReplying(false); setWhat(""); } },
+  );
   return (
     <SideSheet open onOpenChange={(o) => !o && onClose()} size="md" title={chat.title} description={t("Teams chat")}
       actions={<>
-        <Button loading={ask.isPending} onClick={() => ask.mutate({ text: t("Read my Teams chat \"{title}\" (chat {id}) with teams_read_chat and tell me what needs my attention, what was decided and what I should answer.", { title: chat.title, id: chat.id }) })}>
+        <Button onClick={() => setReplying((r) => !r)} aria-expanded={replying}>
+          <ArrowBendUpLeftIcon size={15} /> {t("Draft a reply")}
+        </Button>
+        <Button variant="outline" loading={ask.isPending} onClick={() => ask.mutate({ text: t("Read my Teams chat \"{title}\" (chat {id}) with teams_read_chat and tell me what needs my attention, what was decided and what I should answer.", { title: chat.title, id: chat.id }) })}>
           <SparkleIcon size={15} /> {t("Ask my AI about it")}
         </Button>
         {chat.url ? <Button variant="outline" asChild><a href={chat.url} target="_blank" rel="noreferrer noopener"><ArrowSquareOutIcon size={15} /> {t("Open in Teams")}</a></Button> : null}
       </>}>
+      {replying ? (
+        <div className="mb-4 grid gap-2 rounded-[var(--radius-md)] border border-accent/30 bg-accent-soft/40 p-3">
+          <TextareaField label={t("What should the reply say? (optional)")} rows={3} value={what} onChange={(e) => setWhat(e.target.value)}
+            placeholder={t("Leave it empty and your AI answers what needs answering.")} />
+          <p className="text-[12.5px] text-muted">{t("Your AI writes it; you read it and press Send in Teams under Waiting for your approval. Nothing is sent before that.")}</p>
+          <div className="flex flex-wrap gap-2">
+            <Button size="sm" loading={draft.isPending} onClick={askDraft}><SparkleIcon size={14} /> {t("Ask my AI to draft it")}</Button>
+            <Button size="sm" variant="ghost" onClick={() => setReplying(false)}>{t("Cancel")}</Button>
+          </div>
+        </div>
+      ) : null}
       {msgs.isLoading ? <div className="grid gap-2">{[0, 1, 2].map((i) => <Skeleton key={i} className="h-14" />)}</div>
         : msgs.error ? <p role="alert" className="text-danger">{errorMessage(msgs.error)}</p>
         : !msgs.data?.length ? <p className="text-[13px] text-muted">{t("No messages.")}</p> : (

@@ -165,6 +165,11 @@ export interface TaskEvent {
   data: Record<string, unknown> | null;
 }
 
+/** P102: what a waiting approval wants to do, in words: the server's tool label, else the
+ * code name made readable ("outlook_draft_reply" -> "Outlook draft reply"), never raw. */
+export const toolText = (a: { tool_name: string; tool_label?: string | null }): string =>
+  a.tool_label || a.tool_name.replace(/_/g, " ").replace(/^./, (c) => c.toUpperCase());
+
 export interface Approval {
   id: string;
   kind: "tool" | "question" | "budget";

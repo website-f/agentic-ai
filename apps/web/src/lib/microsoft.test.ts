@@ -5,6 +5,7 @@ import { translate } from "@/i18n";
 import {
   actionLink,
   addMailbox,
+  capabilities,
   clientIdProblem,
   DEFAULT_RULES,
   disconnectMicrosoft,
@@ -19,6 +20,7 @@ import {
   mailKeys,
   microsoftAccountQuery,
   needsReconnect,
+  nextFix,
   normalizeRules,
   providerOf,
   readMsReturn,
@@ -27,6 +29,7 @@ import {
   saveMicrosoftConfig,
   startAdminConsent,
   startMicrosoftConnect,
+  startNewChatsConnect,
   tenantProblem,
   testMailbox,
   updateMailbox,
@@ -205,5 +208,21 @@ describe("status and links", () => {
   it("treats drafts without a provider as Google's", () => {
     expect(providerOf({})).toBe("google");
     expect(providerOf({ provider: "microsoft" })).toBe("microsoft");
+    expect(providerOf({ provider: "teams" })).toBe("teams");
+  });
+
+  it("says what the connection lets the AI do, and the one button that fixes the rest", async () => {
+    const base: MicrosoftAccount = { connected: true, email: "a@x.com", display_name: "A", status: "connected", mail_ok: true, calendar_ok: true, teams_ok: true, channels_ok: false, new_chats_ok: false, last_sync_at: null, webhooks: "live" };
+    const caps = capabilities(base);
+    expect(caps.map((c) => [c.key, c.ok])).toEqual([["mail", true], ["calendar", true], ["teams", true], ["new_chats", false], ["channels", false]]);
+    expect(caps.find((c) => c.key === "channels")?.fix).toBe("admin"); // not the person's to fix
+    expect(nextFix(caps)).toBe("new_chats");
+    expect(nextFix(capabilities({ ...base, teams_ok: false }))).toBe("reconnect");
+    expect(nextFix(capabilities({ ...base, new_chats_ok: true }))).toBeNull();
+    expect(capabilities({ ...base, connected: false })).toEqual([]);
+    const f = stub({ url: "https://login.microsoftonline.com/organizations/oauth2/v2.0/authorize?x" });
+    await startNewChatsConnect();
+    expect(call(f)).toEqual({ url: "/api/integrations/microsoft/connect", method: "POST", body: { with_new_chats: true } });
+    vi.unstubAllGlobals();
   });
 });

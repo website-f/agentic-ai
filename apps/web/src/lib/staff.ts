@@ -111,7 +111,7 @@ export interface WorkerHome {
   today?: WorkerTask[];
   upcoming?: { id: string; title: string; at: string; starts_at: string }[];
   waiting?: {
-    approvals: { id: string; kind: string; tool_name: string; reason: string; task_id: string; task_title: string; created_at: string }[];
+    approvals: { id: string; kind: string; tool_name: string; tool_label?: string; reason: string; task_id: string; task_title: string; created_at: string }[];
     reviews: WorkerTask[];
   };
   duties?: { id: string; title: string; brief: string; cron: string; enabled: boolean; urgent: boolean; next_run: string | null; last_run_at: string | null }[];

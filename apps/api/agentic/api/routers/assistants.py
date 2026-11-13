@@ -456,6 +456,16 @@ def _not_for_role(principal: Principal) -> None:
         )
 
 
+def _draft_kind(d: EmailDraft) -> str:
+    """P102: what approving it does: a Teams message, or an email that is new, a reply or a
+    forward (Outlook names its forwards FW:)."""
+    if d.provider == ms_approvals.TEAMS:
+        return "teams"
+    if not d.in_reply_to:
+        return "new"
+    return "forward" if d.subject.upper().startswith(("FW:", "FWD:")) else "reply"
+
+
 def _draft_out(d: EmailDraft, agent_name: str | None, box: Any = None) -> dict[str, Any]:
     return {
         "id": d.id,
@@ -467,6 +477,7 @@ def _draft_out(d: EmailDraft, agent_name: str | None, box: Any = None) -> dict[s
         "original_from": d.original_from,
         "original_snippet": d.original_snippet,
         "is_reply": bool(d.in_reply_to),
+        "kind": _draft_kind(d),
         "agent_id": d.agent_id,
         "agent_name": agent_name,
         "error": d.error,
@@ -492,12 +503,21 @@ def _scope_kw(principal: Principal) -> dict[str, Any]:
 async def _ms_draft(db: AsyncSession, principal: Principal, draft_id: str) -> tuple[Any, Any]:
     """(Outlook draft, its mailbox) when the person may approve it, else (None, None)."""
     d = await db.get(EmailDraft, draft_id)
-    if d is None or d.workspace_id != principal.workspace_id or d.provider != "microsoft":
+    if d is None or d.workspace_id != principal.workspace_id or d.provider not in MS_DRAFTS:
         return None, None
     box = await ms_approvals.box_of(db, d)
     if not await ms_approvals.may_approve(db, box, **_scope_kw(principal)):
         return None, None
     return d, box
+
+
+# Drafts that live in Microsoft 365: Outlook mail, and (P102) Teams messages.
+MS_DRAFTS = frozenset({"microsoft", ms_approvals.TEAMS})
+
+
+def _ms_failed(d: EmailDraft, e: MicrosoftError) -> Exception:
+    code = "teams_failed" if d.provider == ms_approvals.TEAMS else "outlook_failed"
+    return api_error(status.HTTP_502_BAD_GATEWAY, code, str(e))
 
 
 async def _my_draft(
@@ -556,7 +576,7 @@ async def list_drafts(
     )
     out = []
     for d, n in rows:
-        box = await ms_approvals.box_of(db, d) if d.provider == "microsoft" else None
+        box = await ms_approvals.box_of(db, d) if d.provider in MS_DRAFTS else None
         out.append(_draft_out(d, n, box))
     return out
 
@@ -578,11 +598,12 @@ async def edit_draft(
 ) -> dict[str, Any]:
     md, box = await _ms_draft(db, principal, draft_id)
     if md is not None:
+        old = md.body
         _edit(md, body)
         try:
-            await ms_approvals.update_draft(db, md, box)
+            await ms_approvals.update_draft(db, md, box, old_body=old)
         except MicrosoftError as e:
-            raise api_error(status.HTTP_502_BAD_GATEWAY, "outlook_failed", str(e)) from e
+            raise _ms_failed(md, e) from e
         await db.commit()
         return _draft_out(md, None, box)
     d, acct = await _my_draft(db, principal, draft_id)
@@ -619,7 +640,7 @@ async def send_draft(
         try:
             await ms_approvals.send_draft(db, md, box, principal.actor)
         except MicrosoftError as e:
-            raise api_error(status.HTTP_502_BAD_GATEWAY, "outlook_failed", str(e)) from e
+            raise _ms_failed(md, e) from e
         return _draft_out(md, None, box)
     d, acct = await _my_draft(db, principal, draft_id)
     if d.status != "pending":

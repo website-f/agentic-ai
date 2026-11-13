@@ -201,7 +201,7 @@ export function Section({
   guide?: string;
 }) {
   return (
-    <section data-guide={guide} className={cn("grid min-w-0 gap-3", className)}>
+    <section data-guide={guide} className={cn("grid min-w-0 grid-cols-[minmax(0,1fr)] gap-3", className)}>
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div className="min-w-0">
           <h2 className="text-[15px] font-semibold">{title}</h2>

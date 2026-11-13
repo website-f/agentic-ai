@@ -9,8 +9,9 @@ mailbox, `mailbox` (the address) says which.
 
 - outlook_search / outlook_read: read mail. Everything from an email (sender, subject,
   body, attachment names) is fenced as untrusted data, with the threat note on top.
-- outlook_draft_reply / outlook_draft: a draft in the mailbox's Outlook Drafts, recorded
-  for approval (microsoft/approvals.py). NOTHING is sent until a person approves it.
+- outlook_draft_reply / outlook_draft / outlook_draft_forward (P102): a draft in the
+  mailbox's Outlook Drafts, recorded for approval (microsoft/approvals.py). NOTHING is sent
+  until a person approves it.
 - outlook_save_attachment: an attachment into the office files through the usual upload
   path (secrets scan, quarantine, reading, indexing), like the mail pipeline does.
 - outlook_calendar_agenda / outlook_free_slots: read the mailbox's calendar.
@@ -375,6 +376,46 @@ async def _draft(ctx: ToolContext, args: dict[str, Any]) -> str:
         cc=", ".join(cc),
         subject=subject,
         body=body,
+    )
+    return _drafted(box, row.id)
+
+
+async def _draft_forward(ctx: ToolContext, args: dict[str, Any]) -> str:
+    """P102: forward an email (with its attachments) to someone, as a draft to approve."""
+    from ..assistants.calendar_tools import _attendees
+    from ..microsoft.approvals import text_to_html
+
+    raw = str(args.get("message_id") or "")
+    note = str(args.get("body") or "").strip()
+    try:
+        to = _attendees(args.get("to"))
+    except ValueError as e:
+        return f"Error: {e}."
+    if not to:
+        return "Error: give to (the email addresses to forward it to)."
+    box = await _box(ctx, args, raw)
+    if isinstance(box, str):
+        return box
+    mid, item = await _message_id(ctx, box, raw)
+    if not mid:
+        return "Error: no such email in this mailbox. Use outlook_search to find its id."
+    try:
+        g = await graph.for_box(ctx.db, box)
+        original = await g.get_message(mid, body=False)
+        draft = await g.create_forward_draft(mid, to, text_to_html(note) if note else "")
+    except MicrosoftError as e:
+        return _err(e)
+    row = await approvals.record_draft(
+        ctx.db,
+        box=box,
+        agent=ctx.agent,
+        draft=draft,
+        to=", ".join(to),
+        cc="",
+        subject=str(draft.get("subject") or f"FW: {original.get('subject') or ''}"),
+        body=note,
+        original=original,
+        item=item,
     )
     return _drafted(box, row.id)
 
@@ -905,6 +946,23 @@ MAIL_TOOLS: list[Tool] = [
         "medium",
         "allow",
         _draft,
+    ),
+    Tool(
+        "outlook_draft_forward",
+        "Draft an Outlook forward",
+        "Forward an email (by its id, with its attachments) to other people, as a draft in "
+        "Outlook's Drafts with your short note on top. NOT sent: a person approves it first.",
+        _p(
+            {
+                "message_id": {"type": "string"},
+                "to": {"type": "array", "items": {"type": "string"}},
+                "body": {"type": "string", "description": "A short note above the forwarded mail"},
+            },
+            ["message_id", "to"],
+        ),
+        "medium",
+        "allow",
+        _draft_forward,
     ),
     Tool(
         "outlook_save_attachment",

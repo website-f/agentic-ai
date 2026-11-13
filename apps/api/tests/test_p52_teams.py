@@ -119,10 +119,15 @@ async def test_my_teams_chats_and_my_ai_only(client, llm, temporal, ms):
             ToolContext(db=db, agent=company, workspace=ws, task=None, person=me), "teams_chats", {}
         )
         assert "no Microsoft 365 connection" in out
-        # Sending is the twin's person's to approve (default mode ask); when run, it sends.
-        assert (
-            await runtime.run_tool(
-                mine, "teams_send", {"chat_id": "19:chat-1", "text": "Sending now"}
-            )
-        ) == "Sent in Teams."
-        assert sent and b"Sending now" in sent[0]
+        # P102: it only drafts; the twin's person approves it, and only then is it posted.
+        out = await runtime.run_tool(
+            mine, "teams_send", {"chat_id": "19:chat-1", "text": "Sending now"}
+        )
+        assert "NOTHING is sent" in out and sent == []
+    drafts = (await client.get("/api/email-drafts")).json()
+    assert [d["kind"] for d in drafts] == ["teams"]
+    r = await client.post(
+        f"/api/email-drafts/{drafts[0]['id']}/send", json={}, headers=csrf(client)
+    )
+    assert r.status_code == 200, r.text
+    assert sent and b"Sending now" in sent[0]

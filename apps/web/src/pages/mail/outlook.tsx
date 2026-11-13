@@ -6,12 +6,18 @@
 import {
   ArrowClockwiseIcon,
   CalendarBlankIcon,
+  ChatsCircleIcon,
   CheckCircleIcon,
+  EnvelopeSimpleIcon,
+  HashIcon,
   InfoIcon,
   LinkBreakIcon,
   MicrosoftOutlookLogoIcon,
+  MicrosoftTeamsLogoIcon,
   PlugsIcon,
+  ShieldCheckIcon,
   WarningCircleIcon,
+  type Icon,
 } from "@phosphor-icons/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
@@ -26,10 +32,11 @@ import { Input } from "@/components/ui/field";
 import { Pill } from "@/components/ui/pill";
 import { Skeleton } from "@/components/ui/skeleton";
 import { SwitchField } from "@/components/ui/switch";
-import { useT } from "@/i18n";
+import { msg, useT } from "@/i18n";
 import { errorMessage } from "@/lib/api";
 import { assistantKeys } from "@/lib/assistants";
 import {
+  capabilities,
   CATEGORY_LABEL,
   disconnectMicrosoft,
   isMissingApi,
@@ -39,12 +46,15 @@ import {
   microsoftKeys,
   microsoftPrefsQuery,
   needsReconnect,
+  nextFix,
   readMsReturn,
   saveMicrosoftPrefs,
   startMicrosoftConnect,
+  startNewChatsConnect,
   TASK_CATEGORIES,
   WEBHOOK_LABEL,
   WEBHOOK_TONE,
+  type CapabilityKey,
   type MailboxRules,
   type MicrosoftAccount,
   type TaskCategory,
@@ -158,6 +168,108 @@ export function MissingServer({ className }: { className?: string }) {
   );
 }
 
+// ---------------------------------------------------------------- P102: what the AI may do
+
+const CAP_LOOK: Record<CapabilityKey, { icon: Icon; label: string; on: string; off: string }> = {
+  mail: {
+    icon: EnvelopeSimpleIcon,
+    label: msg("Outlook mail"),
+    on: msg("Reads your mail. Drafts replies, forwards and new emails to anyone."),
+    off: msg("Not allowed at sign-in. Reconnect and accept every permission Microsoft asks for."),
+  },
+  calendar: {
+    icon: CalendarBlankIcon,
+    label: msg("Calendar"),
+    on: msg("Reads your calendar and proposes events."),
+    off: msg("Not allowed at sign-in. Reconnect and accept every permission Microsoft asks for."),
+  },
+  teams: {
+    icon: MicrosoftTeamsLogoIcon,
+    label: msg("Teams chats"),
+    on: msg("Reads your chats and drafts replies in them."),
+    off: msg("Your connection was made before Teams was added. Reconnect once."),
+  },
+  new_chats: {
+    icon: ChatsCircleIcon,
+    label: msg("New Teams chats"),
+    on: msg("Drafts a first message to anyone in your organisation."),
+    off: msg("Off for now: your AI can only reply in chats you already have."),
+  },
+  channels: {
+    icon: HashIcon,
+    label: msg("Teams channels"),
+    on: msg("Reads the posts in your teams' channels (read only)."),
+    off: msg("Off: your Microsoft 365 admin turns it on first (Channels > Microsoft 365)."),
+  },
+};
+
+function useRedirect(start: () => Promise<{ url: string }>) {
+  return useMutation({
+    mutationFn: start,
+    onSuccess: (r) => { window.location.href = r.url; },
+    onError: (e) => toast.error(errorMessage(e)),
+  });
+}
+
+/** The one button that fixes what is missing: a reconnect, or "Allow new Teams chats". */
+export function FixButton({ account, size = "sm" }: { account: MicrosoftAccount; size?: "sm" | "md" }) {
+  const t = useT();
+  const reconnect = useRedirect(startMicrosoftConnect);
+  const allow = useRedirect(startNewChatsConnect);
+  const fix = nextFix(capabilities(account));
+  if (fix === "reconnect") {
+    return <Button size={size} loading={reconnect.isPending} onClick={() => reconnect.mutate()}><ArrowClockwiseIcon size={14} /> {t("Reconnect Microsoft 365")}</Button>;
+  }
+  if (fix === "new_chats") {
+    return <Button size={size} variant="outline" loading={allow.isPending} onClick={() => allow.mutate()}><ChatsCircleIcon size={14} /> {t("Allow new Teams chats")}</Button>;
+  }
+  return null;
+}
+
+/** P102: on top of the Microsoft 365 page: what is connected, what the AI may do with each
+ * part (read, draft; send only after you approve), what is missing and the button to fix it. */
+export function MicrosoftAbilities({ account }: { account: MicrosoftAccount }) {
+  const t = useT();
+  const caps = capabilities(account);
+  return (
+    <Card data-guide="mail.abilities">
+      <CardHeader icon={<IconTile icon={MicrosoftOutlookLogoIcon} tone="info" size="sm" />}
+        title={t("What your AI can do with Microsoft 365")}
+        description={<span className="flex flex-wrap items-center gap-x-2.5 gap-y-1 sm:gap-x-1.5"><Meta items={accountMeta(account, t)} /></span>}
+        actions={<FixButton account={account} />} />
+      <CardBody className="grid gap-3">
+        <ul className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+          {caps.map((c) => {
+            const look = CAP_LOOK[c.key];
+            return (
+              <li key={c.key} className={cn("flex min-w-0 items-start gap-2.5 rounded-[var(--radius-md)] border px-3 py-2.5", c.ok ? "border-border" : "border-dashed border-warn/40 bg-warn/5")}>
+                <look.icon size={18} weight="duotone" className={cn("mt-0.5 shrink-0", c.ok ? "text-info" : "text-muted")} />
+                <span className="grid min-w-0 gap-0.5">
+                  <span className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[13.5px] font-medium">
+                    {t(look.label)}
+                    {c.ok
+                      ? <Pill tone="ok" className="py-0 text-[11.5px]"><CheckCircleIcon size={11} weight="fill" /> {t("On")}</Pill>
+                      : <Pill tone="warn" className="py-0 text-[11.5px]">{t("Off")}</Pill>}
+                  </span>
+                  <span className="text-[12.5px] break-words text-muted">{t(c.ok ? look.on : look.off)}</span>
+                </span>
+              </li>
+            );
+          })}
+        </ul>
+        <p className="flex items-start gap-2 text-[12.5px] text-fg/85">
+          <ShieldCheckIcon size={16} weight="duotone" className="mt-0.5 shrink-0 text-ok" />
+          <span className="min-w-0">{t("Your AI only reads and drafts. Nothing is sent, posted or booked until you press Send or Confirm under Waiting for your approval.")}</span>
+        </p>
+        <p className="flex items-start gap-2 text-[12.5px] text-muted">
+          <InfoIcon size={16} className="mt-0.5 shrink-0" />
+          <span className="min-w-0">{t("To get a draft, ask your AI in My AI, for example: \"Reply to Siti in Teams that the pack is ready\" or \"Email ali@company.com the meeting notes\".")}</span>
+        </p>
+      </CardBody>
+    </Card>
+  );
+}
+
 /** "Connected as aina@company.com · Live · synced 2 min ago". */
 export function accountMeta(a: MicrosoftAccount, t: ReturnType<typeof useT>) {
   return [
@@ -241,8 +353,14 @@ export function OutlookConnection({ bare, className }: { bare?: boolean; classNa
               </p>
             ) : (
               <p className="mt-1.5 flex flex-wrap gap-1.5">
-                <Pill tone={acct.mail_ok ? "ok" : "warn"}>{acct.mail_ok ? <CheckCircleIcon size={12} weight="fill" /> : <WarningCircleIcon size={12} />} {t("Mail")}</Pill>
-                <Pill tone={acct.calendar_ok ? "ok" : "warn"}>{acct.calendar_ok ? <CalendarBlankIcon size={12} weight="fill" /> : <WarningCircleIcon size={12} />} {t("Calendar")}</Pill>
+                {capabilities(acct).map((c) => {
+                  const look = CAP_LOOK[c.key];
+                  return (
+                    <Pill key={c.key} tone={c.ok ? "ok" : "neutral"} title={t(c.ok ? look.on : look.off)}>
+                      {c.ok ? <CheckCircleIcon size={12} weight="fill" /> : <WarningCircleIcon size={12} />} {t(look.label)}
+                    </Pill>
+                  );
+                })}
               </p>
             )}
             {!reconnect && (!acct.mail_ok || !acct.calendar_ok) ? (
@@ -251,9 +369,9 @@ export function OutlookConnection({ bare, className }: { bare?: boolean; classNa
           </div>
         </div>
         <div className="flex flex-wrap gap-2 max-sm:w-full max-sm:pl-11">
-          {reconnect || !acct.mail_ok || !acct.calendar_ok ? (
+          {reconnect ? (
             <Button size="sm" loading={connect.isPending} onClick={() => connect.mutate()}><ArrowClockwiseIcon size={14} /> {t("Reconnect")}</Button>
-          ) : null}
+          ) : <FixButton account={acct} />}
           <Button size="sm" variant="ghost" onClick={() => setConfirmOff(true)}><LinkBreakIcon size={15} /> {t("Disconnect")}</Button>
         </div>
       </div>
@@ -276,7 +394,7 @@ export function OutlookConnection({ bare, className }: { bare?: boolean; classNa
   return (
     <Card className={className} data-guide="outlook.connection">
       <CardHeader icon={<IconTile icon={MicrosoftOutlookLogoIcon} tone="info" size="sm" />} title="Outlook"
-        description={t("Your AI reads your Outlook mail and calendar, drafts replies and proposes events. Nothing is sent until you approve it.")}
+        description={t("Your AI reads your Outlook mail, calendar and Teams chats, drafts replies and messages, and proposes events. Nothing is sent until you approve it.")}
         actions={pill} />
       <CardBody className="grid gap-3">
         {body}
@@ -302,7 +420,7 @@ export function OutlookRow() {
   const status = acct
     ? reconnect ? <span className="text-danger">{t("Microsoft stopped accepting this connection. Reconnect to fix it.")}</span>
       : <span className="flex flex-wrap items-center gap-x-1.5 gap-y-1"><Meta items={accountMeta(acct, t)} /></span>
-    : cfg.configured ? t("Read your Outlook mail and calendar, and draft replies you approve.")
+    : cfg.configured ? t("Read your Outlook mail, calendar and Teams chats, and draft replies you approve.")
     : cfg.can_configure ? t("Set up Microsoft 365 first (Channels > Microsoft 365).") : t("Ask an admin to set up Microsoft 365.");
   const action = acct ? (
     <>

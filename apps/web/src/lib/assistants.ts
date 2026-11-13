@@ -49,8 +49,11 @@ export interface EmailDraft {
   error: string | null;
   created_at: string;
   decided_at: string | null;
-  /** P34: which mailbox it lives in (absent on older servers = Google). */
-  provider?: "google" | "microsoft";
+  /** P34: which mailbox it lives in (absent on older servers = Google). P102: "teams" is a
+   * Teams message (`subject` = who the chat is with, `to` = the address for a new chat). */
+  provider?: "google" | "microsoft" | "teams";
+  /** P102: what Send does: a new email, a reply, a forward, or a Teams message. */
+  kind?: "new" | "reply" | "forward" | "teams";
   /** P34: a person's own Outlook, or a shared mailbox (approved by its managers). */
   mailbox_kind?: "personal" | "shared";
   mailbox_label?: string;

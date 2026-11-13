@@ -62,7 +62,7 @@ import {
   type WorkHours,
 } from "@/lib/staff";
 import { cn, timeAgo } from "@/lib/utils";
-import { workKeys, type Agent } from "@/lib/work";
+import { toolText, workKeys, type Agent } from "@/lib/work";
 import { OutlookConnection, ReconnectBanner, useMsReturn } from "@/pages/mail/outlook";
 import { MyAiTabs } from "@/pages/my-ai/tabs";
 import { ChoiceCard, DutyForm, EMPTY_DUTY, HoursEditor, UrgentPill, useDutyReady, WeekTimeline } from "@/pages/welcome/parts";
@@ -222,7 +222,7 @@ function Home({ data, twin }: { data: WorkerHome; twin: Agent }) {
                     key={a.id}
                     onClick={() => navigate({ to: "/approve/$approvalId", params: { approvalId: a.id } })}
                     leading={<IconTile icon={a.kind === "question" ? ChatCircleDotsIcon : SealCheckIcon} size="sm" tone="warn" />}
-                    title={a.reason || (a.kind === "question" ? t("It has a question") : t("Wants to use {tool}", { tool: a.tool_name }))}
+                    title={a.reason || (a.kind === "question" ? t("It has a question") : t("Wants to use {tool}", { tool: toolText(a) }))}
                     meta={<Meta items={[a.task_title, timeAgo(a.created_at)]} />}
                     trailing={<Pill tone="warn">{a.kind === "question" ? t("Question") : t("Approve?")}</Pill>}
                   />

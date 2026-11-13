@@ -55,7 +55,7 @@ import { meQuery } from "@/lib/queries";
 import { cn, timeAgo } from "@/lib/utils";
 import { CalendarDraftCard, DraftCard } from "@/pages/assistants";
 
-import { accountMeta, MissingServer, OutlookConnection, useMsReturn } from "./outlook";
+import { MicrosoftAbilities, MissingServer, OutlookConnection, useMsReturn } from "./outlook";
 import { TeamsPanel } from "./teams";
 
 const ACTION_ICON: Record<MailActionKind, Icon> = {
@@ -126,6 +126,9 @@ export function MailPage() {
             action={config.data?.can_configure ? <Button asChild><Link to="/channels">{t("Open Channels")}</Link></Button> : undefined} />
         ) : (
           <>
+            {/* P102: what is connected and what the AI may do, then what waits for a yes. */}
+            {account.data?.connected && account.data.status !== "reconnect_needed" ? <MicrosoftAbilities account={account.data} /> : null}
+            <WaitingDrafts assist={assist} />
             <Segmented label={t("Microsoft 365")} value={app} onChange={setApp} className="w-full sm:w-fit [&>button]:flex-1"
               options={[{ value: "mail", label: t("Outlook mail") }, { value: "teams", label: "Teams" }]} />
             {app === "teams" ? <TeamsPanel /> : <>
@@ -142,12 +145,10 @@ export function MailPage() {
 
             {box === "personal" ? <PersonalMailbox /> : current ? <SharedStatus box={current} /> : null}
 
-            {box === "personal" && account.data?.connected ? <WaitingDrafts assist={assist} /> : null}
-
             {!ready ? null : (
               <Section title={t("Recent mail")} description={t("Newest first. Chips show what the AI did; open one to see the task, the file or the draft.")}
                 actions={items.length ? (
-                  <Segmented<Filter> size="sm" label={t("Which mail")} value={filter} onChange={setFilter}
+                  <Segmented<Filter> size="sm" label={t("Which mail")} value={filter} onChange={setFilter} className="w-full sm:w-fit"
                     options={FILTERS.map((f) => ({ value: f, label: f === "all" ? t("All") : t(STATUS_LABEL[f]), count: counts[f] }))} />
                 ) : null}>
                 {activity.isLoading ? (
@@ -200,12 +201,7 @@ function PersonalMailbox() {
     );
   }
   if (account.data.status === "reconnect_needed") return <OutlookConnection />;
-  return (
-    <p className="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[12.5px] text-muted sm:gap-x-1.5">
-      <MicrosoftOutlookLogoIcon size={16} weight="duotone" className="shrink-0 text-info" />
-      <Meta items={accountMeta(account.data, t)} />
-    </p>
-  );
+  return null; // connected: the summary on top says so (MicrosoftAbilities)
 }
 
 function SharedStatus({ box }: { box: SharedMailbox }) {
@@ -232,19 +228,20 @@ function SharedStatus({ box }: { box: SharedMailbox }) {
   );
 }
 
-/** Replies the AI drafted in Outlook, waiting for the person (the same cards as My assistants). */
+/** Emails and Teams messages the AI drafted, and calendar changes it proposed, waiting for the
+ * person (the same cards as My assistants). P102: Teams messages too, on both tabs. */
 function WaitingDrafts({ assist }: { assist: boolean }) {
   const t = useT();
   const drafts = useQuery({ ...draftsQuery("pending"), retry: false });
   const events = useQuery({ ...calendarDraftsQuery("pending"), retry: false });
-  const mail = (drafts.data ?? []).filter((d) => providerOf(d) === "microsoft");
+  const mail = (drafts.data ?? []).filter((d) => providerOf(d) !== "google");
   const cal = (events.data ?? []).filter((d) => providerOf(d) === "microsoft");
   if (!mail.length && !cal.length) return null;
   // Grouped by mailbox: a person's own Outlook, and each shared mailbox they approve for.
   const labels = [...new Set([...mail, ...cal].map((d) => d.mailbox_label ?? ""))];
   return (
     <Section guide="mail.drafts" title={<span id="mail-drafts" className="scroll-mt-20">{t("Waiting for your approval")}</span>}
-      description={t("Replies and calendar changes the AI prepared in Outlook. Nothing is sent or booked until you approve it.")}
+      description={t("Emails, Teams messages and calendar changes your AI prepared. Read each one, change it if you like, then press Send or Confirm. Nothing is sent or booked until you do.")}
       actions={assist ? <Link to="/assistants" search={{ tab: "drafts" }} className="text-[13px] text-accent hover:underline">{t("All drafts")} →</Link> : null}>
       <div className="grid gap-4">
         {labels.map((label) => (

@@ -264,4 +264,77 @@ export const MICROSOFT: Record<string, string> = {
     "Balasan dan perubahan kalendar yang disediakan oleh AI dalam Outlook. Tiada yang dihantar atau ditempah sehingga anda meluluskannya.",
   "Due {date}": "Tarikh akhir {date}",
   "Replied": "Sudah dibalas",
+  // P102: drafts to approve (titles say what Send does), what the AI may do, Teams messages
+  "Reply to {name} in Teams": "Balas {name} dalam Teams",
+  "Teams message to {to}": "Mesej Teams kepada {to}",
+  "Reply to {to}: {subject}": "Balas kepada {to}: {subject}",
+  "Forward to {to}: {subject}": "Majukan kepada {to}: {subject}",
+  "Send email to {to}: {subject}": "Hantar e-mel kepada {to}: {subject}",
+  "Sent in Teams to {to}.": "Dihantar dalam Teams kepada {to}.",
+  "Last message from {from}": "Mesej terakhir daripada {from}",
+  "Forwarding mail from {from}": "Memajukan e-mel daripada {from}",
+  "Cc: {cc}": "Sk: {cc}",
+  "Teams message": "Mesej Teams",
+  "This is the whole message. Change anything you like, then press Send in Teams. Nothing is sent before that.":
+    "Inilah keseluruhan mesej. Ubah apa-apa yang anda mahu, kemudian tekan Hantar dalam Teams. Tiada yang dihantar sebelum itu.",
+  "Your note goes above the forwarded mail and its attachments. Nothing is sent before you press Send.":
+    "Nota anda diletakkan di atas e-mel yang dimajukan berserta lampirannya. Tiada yang dihantar sebelum anda tekan Hantar.",
+  "This is the whole text you write. Change anything you like, then press Send. Nothing is sent before that.":
+    "Inilah keseluruhan teks yang anda tulis. Ubah apa-apa yang anda mahu, kemudian tekan Hantar. Tiada yang dihantar sebelum itu.",
+  "Send in Teams": "Hantar dalam Teams",
+  "Discard this message?": "Buang mesej ini?",
+  "It is deleted. Nothing was sent in Teams.": "Mesej ini dipadam. Tiada yang dihantar dalam Teams.",
+  "Emails, Teams messages and calendar changes your AI prepared. Read each one, change it if you like, then press Send or Confirm. Nothing is sent or booked until you do.":
+    "E-mel, mesej Teams dan perubahan kalendar yang disediakan oleh AI anda. Baca setiap satu, ubah jika perlu, kemudian tekan Hantar atau Sahkan. Tiada yang dihantar atau ditempah sehingga anda berbuat demikian.",
+  "Reads your mail. Drafts replies, forwards and new emails to anyone.":
+    "Membaca e-mel anda. Mendraf balasan, e-mel majuan dan e-mel baharu kepada sesiapa sahaja.",
+  "Not allowed at sign-in. Reconnect and accept every permission Microsoft asks for.":
+    "Tidak dibenarkan semasa log masuk. Sambung semula dan terima setiap kebenaran yang diminta oleh Microsoft.",
+  "Reads your calendar and proposes events.": "Membaca kalendar anda dan mencadangkan acara.",
+  "Teams chats": "Sembang Teams",
+  "Reads your chats and drafts replies in them.": "Membaca sembang anda dan mendraf balasan di dalamnya.",
+  "Your connection was made before Teams was added. Reconnect once.":
+    "Sambungan anda dibuat sebelum Teams ditambah. Sambung semula sekali.",
+  "New Teams chats": "Sembang Teams baharu",
+  "Drafts a first message to anyone in your organisation.": "Mendraf mesej pertama kepada sesiapa sahaja dalam organisasi anda.",
+  "Off for now: your AI can only reply in chats you already have.":
+    "Belum dihidupkan: AI anda hanya boleh membalas dalam sembang yang sudah ada.",
+  "Teams channels": "Saluran Teams",
+  "Reads the posts in your teams' channels (read only).": "Membaca mesej dalam saluran pasukan anda (baca sahaja).",
+  "Off: your Microsoft 365 admin turns it on first (Channels > Microsoft 365).":
+    "Mati: pentadbir Microsoft 365 anda perlu menghidupkannya dahulu (Saluran > Microsoft 365).",
+  "Allow new Teams chats": "Benarkan sembang Teams baharu",
+  "What your AI can do with Microsoft 365": "Apa yang AI anda boleh buat dengan Microsoft 365",
+  "Your AI only reads and drafts. Nothing is sent, posted or booked until you press Send or Confirm under Waiting for your approval.":
+    "AI anda hanya membaca dan mendraf. Tiada yang dihantar, disiarkan atau ditempah sehingga anda tekan Hantar atau Sahkan di bawah Menunggu kelulusan anda.",
+  "To get a draft, ask your AI in My AI, for example: \"Reply to Siti in Teams that the pack is ready\" or \"Email ali@company.com the meeting notes\".":
+    "Untuk mendapatkan draf, minta AI anda di AI saya, contohnya: \"Balas Siti dalam Teams bahawa pek sudah siap\" atau \"E-melkan nota mesyuarat kepada ali@company.com\".",
+  "Your AI reads your Outlook mail, calendar and Teams chats, drafts replies and messages, and proposes events. Nothing is sent until you approve it.":
+    "AI anda membaca e-mel Outlook, kalendar dan sembang Teams anda, mendraf balasan dan mesej, serta mencadangkan acara. Tiada yang dihantar sehingga anda meluluskannya.",
+  "Read your Outlook mail, calendar and Teams chats, and draft replies you approve.":
+    "Baca e-mel Outlook, kalendar dan sembang Teams anda, dan draf balasan untuk anda luluskan.",
+  "Your connection was made before Teams was added. Reconnect once and Microsoft asks you to allow reading and answering your Teams chats.":
+    "Sambungan anda dibuat sebelum Teams ditambah. Sambung semula sekali dan Microsoft akan meminta anda membenarkan bacaan dan balasan sembang Teams anda.",
+  "Draft a Teams message to {to} with teams_send (to = {to}). What it should say: {what}. Do not send it: I read and approve it first on the Microsoft 365 page.":
+    "Draf mesej Teams kepada {to} dengan teams_send (to = {to}). Isi mesej: {what}. Jangan hantar: saya akan baca dan luluskan dahulu di halaman Microsoft 365.",
+  "Message someone in Teams": "Hantar mesej kepada seseorang dalam Teams",
+  "Your AI writes the message. You read it and press Send in Teams under Waiting for your approval. Nothing is sent before that.":
+    "AI anda menulis mesej itu. Anda baca dan tekan Hantar dalam Teams di bawah Menunggu kelulusan anda. Tiada yang dihantar sebelum itu.",
+  "Ask my AI to draft it": "Minta AI saya mendrafnya",
+  "To (work email)": "Kepada (e-mel kerja)",
+  "e.g. The tender pack is ready, I will bring it at 3pm.": "cth. Pek tender sudah siap, saya bawa pada pukul 3 petang.",
+  "For someone you have never chatted with in Teams, allow new Teams chats first (one more Microsoft sign-in). Replying in chats you already have works now.":
+    "Untuk orang yang belum pernah bersembang dengan anda dalam Teams, benarkan sembang Teams baharu dahulu (satu lagi log masuk Microsoft). Membalas dalam sembang yang sudah ada boleh dibuat sekarang.",
+  "Message someone": "Hantar mesej",
+  "Only your own chats, from your own connection. Open a chat to read it or to have your AI draft a reply; you approve every message before it is sent.":
+    "Hanya sembang anda sendiri, daripada sambungan anda sendiri. Buka sembang untuk membacanya atau minta AI anda mendraf balasan; anda meluluskan setiap mesej sebelum ia dihantar.",
+  "Draft a reply in my Teams chat \"{title}\" (chat {id}) with teams_send. What it should say: {what}. Do not send it: I read and approve it first on the Microsoft 365 page.":
+    "Draf balasan dalam sembang Teams saya \"{title}\" (sembang {id}) dengan teams_send. Isi balasan: {what}. Jangan hantar: saya akan baca dan luluskan dahulu di halaman Microsoft 365.",
+  "Read my Teams chat \"{title}\" (chat {id}) with teams_read_chat, then draft the reply I should send with teams_send. Do not send it: I read and approve it first on the Microsoft 365 page.":
+    "Baca sembang Teams saya \"{title}\" (sembang {id}) dengan teams_read_chat, kemudian draf balasan yang patut saya hantar dengan teams_send. Jangan hantar: saya akan baca dan luluskan dahulu di halaman Microsoft 365.",
+  "Draft a reply": "Draf balasan",
+  "What should the reply say? (optional)": "Apa isi balasan itu? (pilihan)",
+  "Leave it empty and your AI answers what needs answering.": "Biarkan kosong dan AI anda akan menjawab apa yang perlu dijawab.",
+  "Your AI writes it; you read it and press Send in Teams under Waiting for your approval. Nothing is sent before that.":
+    "AI anda menulisnya; anda baca dan tekan Hantar dalam Teams di bawah Menunggu kelulusan anda. Tiada yang dihantar sebelum itu.",
 };

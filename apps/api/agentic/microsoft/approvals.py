@@ -5,7 +5,12 @@ The AI never sends mail or changes a calendar by itself:
   an EmailDraft(provider="microsoft"); it is sent (graph.send_draft) only when a person
   approves it, and discarding it deletes the Outlook draft;
 - a new, changed or cancelled event is a CalendarProposal(provider="microsoft"); only the
-  person's "confirm" creates, updates or cancels it in Outlook.
+  person's "confirm" creates, updates or cancels it in Outlook;
+- P102: a Teams message (a reply in a chat, or a first message to anyone in the
+  organisation) is an EmailDraft(provider="teams") kept in the office only (Teams has no
+  drafts); it is posted (graph.send_chat_message, after graph.one_on_one_chat for a new chat)
+  only when the person approves it. Only the connection's own person approves it: never a
+  manager, never anyone else.
 
 Who approves: a personal mailbox's are its owner's; a shared mailbox's are approved by its
 viewers who manage it (owner/admin, the branch managers of its company). Every send,
@@ -78,10 +83,17 @@ async def may_approve(
 
 
 async def _ask(
-    db: AsyncSession, box: Box, title: str, body: str, dedupe: str, *, can_assist: dict[str, bool]
+    db: AsyncSession,
+    box: Box,
+    title: str,
+    body: str,
+    dedupe: str,
+    *,
+    can_assist: dict[str, bool],
+    page: str = "/mail#mail-drafts",
 ) -> None:
     """Notify whoever approves: a person's own drafts open on My assistants when they have
-    assistants, else on the Mail page."""
+    assistants, else on the Mail page (`page`)."""
     from ..assistants.access import may_assist
     from ..channels import deliver
     from ..models import Membership
@@ -92,7 +104,7 @@ async def _ask(
             m = await db.get(Membership, (box.workspace_id, uid))
             can_assist[uid] = bool(m and may_assist(m.role))
         own = can_assist[uid] and is_personal(box)
-        url = "/assistants?tab=drafts" if own else "/mail#mail-drafts"
+        url = "/assistants?tab=drafts" if own else page
         ids += await deliver.notify_user(
             db, box.workspace_id, uid, title, body, url, dedupe=f"{dedupe}:{uid}"
         )
@@ -162,25 +174,52 @@ async def record_draft(
     return row
 
 
-async def update_draft(db: AsyncSession, d: EmailDraft, box: Box) -> None:
+async def update_draft(
+    db: AsyncSession, d: EmailDraft, box: Box, old_body: str | None = None
+) -> None:
+    """The person edited a draft: Outlook's copy changes too. P102: in a reply or forward only
+    the AI's text is swapped (`old_body` was it), so the quoted or forwarded mail below it
+    stays; when it cannot be found the whole body is replaced, as before."""
+    if d.provider == TEAMS:
+        return  # P102: a Teams message lives only here until it is sent
     g = await graph.for_box(db, box)
-    await g.update_draft(
-        d.gmail_draft_id, subject=d.subject, body_html=text_to_html(d.body), to=d.to, cc=d.cc
-    )
+    body_html = text_to_html(d.body)
+    if d.in_reply_to and old_body is not None:
+        try:
+            current = await g.get_message(d.gmail_draft_id, body_type="html")
+        except graph.MicrosoftError:
+            current = {}
+        html_now = str((current.get("body") or {}).get("content") or "")
+        mine = text_to_html(old_body)
+        if old_body and mine in html_now:
+            body_html = html_now.replace(mine, text_to_html(d.body), 1)
+        elif not old_body and html_now:
+            body_html = text_to_html(d.body) + html_now  # a forward that had no note yet
+    await g.update_draft(d.gmail_draft_id, subject=d.subject, body_html=body_html, to=d.to, cc=d.cc)
 
 
 async def send_draft(db: AsyncSession, d: EmailDraft, box: Box, actor: str) -> None:
-    """The person approved: Outlook sends the draft. Raises GraphError (the caller says
-    what went wrong); a refusal (4xx) marks the draft failed."""
+    """The person approved: Outlook sends the draft (P102: or Teams posts the message).
+    Raises GraphError (the caller says what went wrong); a refusal (4xx) marks the draft
+    failed."""
+    if d.provider == TEAMS:
+        await _send_teams(db, d, box)
+        await audit.record(
+            db,
+            d.workspace_id,
+            actor,
+            "teams_message.sent",
+            target=d.id,
+            after={"to": d.to, "chat_id": d.thread_id, "new_chat": not d.in_reply_to,
+                   "agent_id": d.agent_id},
+        )  # fmt: skip
+        await db.commit()
+        return
     g = await graph.for_box(db, box)
     try:
         await g.send_draft(d.gmail_draft_id)
     except graph.GraphError as e:
-        if e.status not in (0, 429) and e.status < 500:
-            d.status, d.error = "failed", str(e)[:500]
-        else:
-            d.error = str(e)[:500]
-        await db.commit()
+        await _failed(db, d, e)
         raise
     d.status, d.decided_at, d.error = "sent", now(), None
     await audit.record(
@@ -195,10 +234,19 @@ async def send_draft(db: AsyncSession, d: EmailDraft, box: Box, actor: str) -> N
     await db.commit()
 
 
+async def _failed(db: AsyncSession, d: EmailDraft, e: graph.GraphError) -> None:
+    """A refusal (4xx) fails the draft for good; anything else can be tried again."""
+    if e.status not in (0, 429) and e.status < 500:
+        d.status, d.error = "failed", str(e)[:500]
+    else:
+        d.error = str(e)[:500]
+    await db.commit()
+
+
 async def discard_draft(db: AsyncSession, d: EmailDraft, box: Box | None, actor: str) -> None:
     if d.status != "pending":
         return
-    if box is not None:
+    if box is not None and d.provider != TEAMS:
         try:
             g = await graph.for_box(db, box)
             await g.delete_message(d.gmail_draft_id)
@@ -211,9 +259,106 @@ async def discard_draft(db: AsyncSession, d: EmailDraft, box: Box | None, actor:
         actor,
         "email_draft.discarded",
         target=d.id,
-        after={"provider": "microsoft", "subject": d.subject[:200]},
+        after={"provider": d.provider or "microsoft", "subject": d.subject[:200]},
     )
     await db.commit()
+
+
+# ---------------------------------------------------------------- Teams messages (P102)
+
+TEAMS = "teams"
+TEAMS_MAX = 4000  # characters in one message
+
+
+async def record_teams_draft(
+    db: AsyncSession,
+    *,
+    acct: MicrosoftAccount,
+    agent: Agent | None,
+    chat_id: str,
+    to: str,
+    title: str,
+    text: str,
+    last_from: str = "",
+    last_text: str = "",
+) -> EmailDraft:
+    """A Teams message the AI wrote, waiting for its person. `chat_id` is the chat it answers
+    (`title`: who is in it); empty for a first message to `to` (an address in the
+    organisation), whose one-to-one chat is found or started only once it is approved."""
+    row = EmailDraft(
+        workspace_id=acct.workspace_id,
+        user_id=acct.user_id,
+        agent_id=agent.id if agent is not None else None,
+        account_id=None,
+        gmail_draft_id="",
+        thread_id=chat_id[:400],
+        in_reply_to=chat_id[:400],
+        to=to,
+        cc="",
+        subject=title[:400],
+        body=text[:TEAMS_MAX],
+        original_from=last_from[:300],
+        original_snippet=last_text[:1000],
+        provider=TEAMS,
+        ms_account_id=acct.id,
+        shared_mailbox_id=None,
+    )
+    db.add(row)
+    await db.commit()
+    await _ask(
+        db,
+        acct,
+        Msg("{name} drafted a Teams message", name=agent.name if agent is not None else ""),
+        Msg(
+            "To {to} in Teams:\n\n{preview}\n\nApprove to send it.",
+            to=title or to,
+            preview=text[:300] + ("…" if len(text) > 300 else ""),
+        ),
+        f"draft:{row.id}",
+        can_assist={},
+        page="/mail?app=teams#mail-drafts",
+    )
+    return row
+
+
+def _teams_error(e: graph.GraphError, d: EmailDraft) -> graph.GraphError:
+    """What went wrong posting a Teams message, in words the person can act on."""
+    if e.status == 403:
+        text = (
+            Msg(
+                "Starting a new Teams chat is not allowed yet. Press Allow new Teams chats on "
+                "Microsoft 365 > Teams, then send it again."
+            )
+            if not d.in_reply_to
+            else Msg("Teams did not allow this message. Reconnect Microsoft 365, then try again.")
+        )
+    elif not d.in_reply_to and e.status in (400, 404):
+        text = Msg("No one with the address {to} was found in your organisation's Teams.", to=d.to)
+    elif e.status == 404:
+        text = Msg("That Teams chat was not found. It may have been deleted.")
+    else:
+        return e
+    return type(e)(text, e.status, e.code)
+
+
+async def _send_teams(db: AsyncSession, d: EmailDraft, box: Box) -> None:
+    if not is_personal(box) or d.ms_account_id != box.id:
+        raise graph.GraphError(Msg("A Teams message is sent only from its own person's Teams."))
+    g = await graph.for_account(db, box)
+    try:
+        chat_id = d.thread_id
+        if not chat_id:
+            me = box.ms_user_id or str((await g.me()).get("id") or "")
+            chat_id = str((await g.one_on_one_chat(me, d.to)).get("id") or "")
+            if not chat_id:
+                raise graph.GraphError(Msg("Microsoft did not start the Teams chat."), 502)
+            d.thread_id = chat_id[:400]
+        await g.send_chat_message(chat_id, d.body[:TEAMS_MAX])
+    except graph.GraphError as e:
+        err = _teams_error(e, d)
+        await _failed(db, d, err)
+        raise err from e
+    d.status, d.decided_at, d.error = "sent", now(), None
 
 
 # ---------------------------------------------------------------- calendar proposals

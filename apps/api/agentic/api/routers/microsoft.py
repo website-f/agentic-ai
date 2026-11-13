@@ -192,6 +192,8 @@ class ConnectIn(BaseModel):
     # P80: also allow reading SharePoint / OneDrive files (the Library's "Reconnect Microsoft
     # 365 to allow SharePoint"). Never asked for otherwise.
     with_files: bool = False
+    # P102: also allow starting new Teams chats (the Teams tab's "Allow new Teams chats").
+    with_new_chats: bool = False
 
 
 @router.post(f"{BASE}/connect")
@@ -219,6 +221,7 @@ async def microsoft_connect(
             principal.session_id,
             base,
             with_files=bool(body and body.with_files),
+            with_new_chats=bool(body and body.with_new_chats),
         )
     except NotConfigured as e:
         raise api_error(status.HTTP_409_CONFLICT, "not_configured", str(e)) from e
@@ -301,11 +304,15 @@ async def microsoft_callback(
         return await _sign_in(request, background, db, state, code, error, error_description)
     home = await _home(db, principal)
     files = await auth.started_with_files(state)
+    chats = await auth.started_with_new_chats(state)
+    extra: dict[str, str] = {}
     if files:  # P80: the Library's SharePoint reconnect comes back to the Library
         home = "/library"
+    elif chats:  # P102: "Allow new Teams chats" comes back to the Teams tab
+        home, extra = "/mail", {"app": "teams"}
 
     def back(result: str, msg: str = "") -> RedirectResponse:
-        q = urllib.parse.urlencode({"ms": result, **({"msg": msg[:200]} if msg else {})})
+        q = urllib.parse.urlencode({**extra, "ms": result, **({"msg": msg[:200]} if msg else {})})
         return RedirectResponse(f"{home}?{q}", status_code=303)
 
     if error and files:
@@ -319,6 +326,18 @@ async def microsoft_callback(
                 "Files.Read.All and Sites.Read.All to this app (Azure portal > App "
                 "registrations > API permissions > Grant admin consent), then try again. Your "
                 "sign-in and mail keep working."
+            ),
+        )
+    if error and chats:
+        # P102: starting new chats refused. The existing connection (mail, calendar, Teams
+        # replies) keeps working as it was.
+        await auth.drop_state(state)
+        return back(
+            "error",
+            tr(
+                "Starting new Teams chats was not allowed. Your Microsoft 365 admin can allow "
+                "Chat.Create for this app (Azure portal > App registrations > API permissions). "
+                "Your mail and Teams replies keep working."
             ),
         )
     if error:
@@ -362,6 +381,7 @@ async def microsoft_account(
             "teams_ok": False,
             "channels_ok": False,
             "files_ok": False,
+            "new_chats_ok": False,
             "last_sync_at": None,
             "webhooks": "off",
             "last_error": None,
@@ -379,6 +399,9 @@ async def microsoft_account(
         # P80: SharePoint / OneDrive reading for the Library needs a reconnect for connections
         # made before it was added.
         "files_ok": auth.has_scope(acct.scopes, app.FILES_SCOPES[0]),
+        # P102: may start a new Teams chat with anyone (a first message), after "Allow new
+        # Teams chats" once. Replying in existing chats never needs it.
+        "new_chats_ok": auth.has_scope(acct.scopes, app.CHAT_CREATE),
         "last_sync_at": acct.last_sync_at,
         "webhooks": await sync.webhooks_state(db, acct),
         "last_error": render(acct.last_error) if acct.last_error else None,

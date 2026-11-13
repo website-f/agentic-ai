@@ -48,10 +48,32 @@ TEAMS_SCOPES = ("Chat.Read", "ChatMessage.Send", "Team.ReadBasic.All", "Channel.
 FILES_SCOPES = ("Files.Read.All", "Sites.Read.All")
 
 
+# P102: start a new one-to-one Teams chat with anyone in the organisation (Graph POST /chats),
+# so the AI can draft a Teams message to someone the person has never chatted with. A person
+# may consent to it themselves, but it is never part of everyone's sign-in: asking for it would
+# make every existing connection's token refresh fail until they sign in again, and could stop
+# sign-in where an admin approved the office's permissions for everyone. Asked for only by the
+# Teams tab's "Allow new Teams chats", and from then on in that person's own sign-ins and
+# refreshes (like FILES_SCOPES). Replying in a chat that already exists never needs it.
+CHAT_CREATE = "Chat.Create"
+# Scopes a person adds for themselves with a reconnect; kept only while they have them.
+OPT_IN_SCOPES = (*FILES_SCOPES, CHAT_CREATE)
+
+
+def with_scopes(scopes: str, extra: tuple[str, ...]) -> str:
+    """The scopes plus `extra` (each once)."""
+    have = scopes.split()
+    return " ".join(have + [s for s in extra if s not in have])
+
+
 def with_files(scopes: str) -> str:
     """The scopes plus the file-reading ones (once)."""
-    have = scopes.split()
-    return " ".join(have + [s for s in FILES_SCOPES if s not in have])
+    return with_scopes(scopes, FILES_SCOPES)
+
+
+def with_new_chats(scopes: str) -> str:
+    """P102: the scopes plus starting new Teams chats (once)."""
+    return with_scopes(scopes, (CHAT_CREATE,))
 
 
 # P63: the posts in the Teams channels a person belongs to. Only an admin may consent to it,

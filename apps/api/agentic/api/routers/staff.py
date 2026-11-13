@@ -711,6 +711,8 @@ async def my_worker(
         for t in rows
     ]
     out = await agent_out(db, a, None, principal)
+    from ...agents.tools import TOOLS  # P102: a tool's name for people, never its code name
+
     return {
         **base,
         "twin": out,
@@ -726,6 +728,7 @@ async def my_worker(
                     "id": ap.id,
                     "kind": ap.kind,
                     "tool_name": ap.tool_name,
+                    "tool_label": tr(TOOLS[ap.tool_name].label) if ap.tool_name in TOOLS else "",
                     "reason": ap.reason,
                     "task_id": ap.task_id,
                     "task_title": title,
