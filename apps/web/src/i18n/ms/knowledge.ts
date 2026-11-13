@@ -513,6 +513,8 @@ export const KNOWLEDGE: Record<string, string> = {
   "Every agent, in one company only.": "Semua ejen, dalam satu syarikat sahaja.",
   "Every agent.": "Semua ejen.",
   "Who can use it": "Siapa boleh guna",
+  "Reference files": "Fail rujukan",
+  "Agents open one of these only when a step needs it. They are kept in the Brain under skills/{name}/.": "Ejen membuka salah satu fail ini hanya apabila sesuatu langkah memerlukannya. Fail ini disimpan dalam Brain di bawah skills/{name}/.",
   "Every agent": "Semua ejen",
   "Chosen agents": "Ejen terpilih",
   "Learned in an isolated company, so only its agents see it.": "Dipelajari dalam syarikat terasing, jadi hanya ejennya yang nampak.",

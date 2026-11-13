@@ -68,8 +68,16 @@ class FakeLocator:
     """Records the interaction ops so a test can assert their order/count."""
 
     def __init__(
-        self, *, editable=False, submit=False, transaction=False, is_password=False, tag="input"
+        self,
+        *,
+        editable=False,
+        submit=False,
+        transaction=False,
+        is_password=False,
+        tag="input",
+        label="x",
     ) -> None:
+        self.label = label
         self.value = "prefilled"
         self.focused = False
         self.editable = editable
@@ -119,7 +127,7 @@ class FakeLocator:
 
     async def evaluate(self, js, *args):
         if "transaction" in js:  # SUBMIT_JS
-            return {"submit": self.submit, "transaction": self.transaction, "label": "x"}
+            return {"submit": self.submit, "transaction": self.transaction, "label": self.label}
         if "editable" in js:  # FIELD_JS
             return {"editable": self.editable, "focused": self.focused, "tag": self.tag}
         if "type === 'password'" in js:  # the secret password-field guard
@@ -220,6 +228,26 @@ async def test_submit_gate_blocks_until_approved():
     assert "SUBMIT_NEEDS_APPROVAL" in res["error"] and loc.clicks == 0
     res = await service._do_click(page, loc, allow_submit=True)
     assert "error" not in res and loc.clicks == 1
+
+
+async def test_a_search_button_is_an_ordinary_click():
+    """P102: a form's search button (ePerolehan's "Cari") only looks things up: no approval.
+    A button whose label also says it changes data still waits for a person."""
+    page = FakePage()
+    for label in ("Cari", "Carian btnSearch", "Search", " Tapis", "Lihat"):
+        loc = FakeLocator(editable=False, submit=True, label=label)
+        res = await service._do_click(page, loc, allow_submit=False)
+        assert "error" not in res and loc.clicks == 1, label
+    for label, transaction in (
+        ("Hantar", True),
+        ("Cari dan Simpan", True),
+        ("Send", False),
+        ("x", False),
+        ("Search " + "z" * 80, False),
+    ):
+        loc = FakeLocator(editable=False, submit=True, transaction=transaction, label=label)
+        res = await service._do_click(page, loc, allow_submit=False)
+        assert "SUBMIT_NEEDS_APPROVAL" in res["error"] and loc.clicks == 0, label
 
 
 async def test_focus_then_type_is_exactly_one_click():

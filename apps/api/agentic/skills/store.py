@@ -362,16 +362,30 @@ BUILTIN_CASES[eperolehan.NAME] = eperolehan.CASES  # P92: so a fold of lessons c
 # The starters every workspace had before P19, so older workspaces gain only the new ones.
 _FIRST_BUILTIN = ("compare-quotes", "meeting-notes")
 
+# P102: a built-in skill's text grew after workspaces were seeded (eperolehan.ADDED). Each
+# workspace takes the additions once per revision (recorded in its settings).
+BUILTIN_REV = 2
+_REV_KEY = "builtin_skills_rev"
+
+
+def _current(settings: dict[str, Any], all_names: set[str]) -> bool:
+    seeded = settings.get("builtin_skills")
+    return (
+        isinstance(seeded, list)
+        and all_names <= set(seeded)
+        and settings.get(_REV_KEY, 1) >= BUILTIN_REV
+    )
+
 
 async def ensure_builtin(db: AsyncSession, ws: Workspace) -> None:
     """Add the built-in starters a workspace has not had yet. Each is seeded once (recorded
-    in workspace settings), so a starter someone deleted does not come back."""
+    in workspace settings), so a starter someone deleted does not come back. A starter's
+    later additions reach an older workspace once (BUILTIN_REV)."""
     seeded_key = "builtin_skills"
     all_names = {b[0] for b in BUILTIN}
     settings = dict(ws.settings or {})
-    seeded = settings.get(seeded_key)
-    if isinstance(seeded, list) and all_names <= set(seeded):
-        return  # the usual case: one dict lookup, no query
+    if _current(settings, all_names):
+        return  # the usual case: two dict lookups, no query
     # P96: many first steps at once (50 people pressing Start, or the first steps after a
     # deploy that adds a starter) raced here: one seeded, the others failed their step on
     # uq_skills_ws_name, and each wrote the workspace settings back whole over changes made
@@ -379,10 +393,10 @@ async def ensure_builtin(db: AsyncSession, ws: Workspace) -> None:
     # seeing what the one before it wrote (the lock goes at the commit below).
     await db.refresh(ws, ["settings"], with_for_update=True)
     settings = dict(ws.settings or {})
-    seeded = settings.get(seeded_key)
-    if isinstance(seeded, list) and all_names <= set(seeded):
+    if _current(settings, all_names):
         await db.commit()  # the one before us did it
         return
+    seeded = settings.get(seeded_key)
     if not isinstance(seeded, list):
         have = await db.scalar(
             select(func.count()).select_from(Skill).where(Skill.workspace_id == ws.id)
@@ -390,8 +404,12 @@ async def ensure_builtin(db: AsyncSession, ws: Workspace) -> None:
         seeded = list(_FIRST_BUILTIN) if have else []
     existing = set((await db.scalars(select(Skill.name).where(Skill.workspace_id == ws.id))).all())
     todo = [b for b in BUILTIN if b[0] not in seeded and b[0] not in existing]
+    older = settings.get(_REV_KEY, 1) < BUILTIN_REV
     settings[seeded_key] = sorted({*seeded, *all_names})
+    settings[_REV_KEY] = BUILTIN_REV
     ws.settings = settings
+    if older and eperolehan.NAME in existing:
+        await eperolehan.upgrade(db, ws)  # a skill seeded now has the new text already
     if not todo:
         await db.commit()
         return
@@ -511,13 +529,17 @@ async def load(
     if skill is None:
         return f"Error: there is no skill called {name!r} for you. Check the skills list."
     if file:
-        path = f"skills/{skill.name}/{file.strip().strip('/')}"
+        path = file_path(skill.name, file)
         page = await db.scalar(
             select(BrainPage).where(
                 BrainPage.workspace_id == agent.workspace_id, BrainPage.path == path
             )
         )
-        return page.body if page else f"Error: {skill.name} has no file {file!r}."
+        if page is not None:
+            return page.body
+        listed = await files_of(db, agent.workspace_id, skill.name)
+        have = ", ".join(f for f, _ in listed[:FILES_LISTED]) or "none"
+        return f"Error: {skill.name} has no file {file!r}. Its files: {have}."
     already = (
         await db.scalar(
             select(SkillUse.id).where(SkillUse.skill_id == skill.id, SkillUse.task_id == task_id)
@@ -543,7 +565,47 @@ async def load(
         "skill.used",
         {"skill_id": skill.id, "agent_id": agent.id, "task_id": task_id},
     )
-    return f"Skill {skill.name} (version {skill.version}). Follow it:\n\n{skill.body}"
+    text = f"Skill {skill.name} (version {skill.version}). Follow it:\n\n{skill.body}"
+    listed = await files_of(db, agent.workspace_id, skill.name)
+    if listed:
+        text += (
+            f"\n\nThis skill's supporting files (load one only when a step needs it, with "
+            f"use_skill(name='{skill.name}', file='<file>'); a long one comes in parts):\n"
+            + "\n".join(f"- {f} ({n:,} characters)" for f, n in listed[:FILES_LISTED])
+        )
+    return text
+
+
+# P102: a skill brought in from a folder (skills/folder_import.py) has supporting files: the
+# brain pages skills/<name>/<file> beside its SKILL.md.
+FILES_LISTED = 60
+
+
+def file_path(name: str, file: str) -> str:
+    """The brain path of a skill's supporting file, from what an agent passes: the file as
+    listed ('references/guide.md'), without '.md', or with the skills/<name>/ prefix."""
+    f = file.strip().replace("\\", "/").strip("/")
+    f = f.removeprefix(f"skills/{name}/")
+    if not f.lower().endswith(".md"):
+        f += ".md"
+    return f"skills/{name}/{f}"
+
+
+async def files_of(db: AsyncSession, workspace_id: str, name: str) -> list[tuple[str, int]]:
+    """A skill's supporting files: (file, characters), by file name."""
+    prefix = f"skills/{name}/"
+    rows = (
+        await db.execute(
+            select(BrainPage.path, func.length(BrainPage.body))
+            .where(
+                BrainPage.workspace_id == workspace_id,
+                BrainPage.path.startswith(prefix, autoescape=True),
+                BrainPage.path != vault_path(name),
+            )
+            .order_by(BrainPage.path)
+        )
+    ).all()
+    return [(p.removeprefix(prefix), int(n or 0)) for p, n in rows]
 
 
 async def task_tokens(db: AsyncSession, task_id: str) -> int:
@@ -781,6 +843,17 @@ async def _mirror(
     await brain_store.save_page(
         db, ws, vault_path(s.name), fmt.render(meta, s.body), author, message
     )
+
+
+async def mirror(
+    db: AsyncSession,
+    ws: Workspace,
+    s: Skill,
+    message: str,
+    author: brain_store.Author | None = None,
+) -> None:
+    """Write the skill's current text to the vault (skills/<name>/SKILL.md). Commits."""
+    await _mirror(db, ws, s, author or brain_store.SYSTEM, message)
 
 
 async def _cases_from(db: AsyncSession, skill: Skill, p: SkillProposal, actor: str) -> None:

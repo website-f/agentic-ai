@@ -19,6 +19,10 @@ ordinary pages: people read and edit them on the Brain page, the vault keeps the
   numbers, query strings and record ids in addresses are never written; a person's private
   assistant writes nothing.
 
+P102: the built-in carries a rev in its frontmatter. A workspace whose copy is older gets the
+jobs and pitfalls added since (checking the inbox for a QT number or title, searching by the
+screen's own search box, stopping at a captcha) once, its own edits and learned paths kept.
+
 Safety: the playbook is data about a site's layout, sent fenced and labelled as not
 instructions. It never changes what the agent may do: sends, uploads, sign-ins, approvals,
 allowed sites, site budgets and the person's own PC rule apply as always.
@@ -40,7 +44,7 @@ from ..models import Agent, AgentMessage, BrainPage, Task, Workspace
 log = logging.getLogger("agentic.playbook")
 
 FOLDER = "wiki/sites"
-MAX_SHOWN = 3200  # characters of a playbook in a task's first message
+MAX_SHOWN = 4800  # characters of a playbook in a task's first message (P102: was 3200)
 MAX_PATHS = 6  # learned paths kept per site (newest first)
 MAX_STEPS = 30  # actions kept per learned path
 LEARNED = "## Learned paths"
@@ -74,6 +78,7 @@ BUILTIN: dict[str, str] = {
 host: eperolehan.gov.my
 kind: site-playbook
 source: public ePerolehan supplier manuals (eperolehan.gov.my/download-supplier), then runs
+rev: 2
 ---
 # Site playbook: eperolehan.gov.my
 
@@ -101,6 +106,16 @@ Task List, Notice Board.
 3. in its row the tick icon (Semak Kelayakan), then button "Semak"; success reads "Layak"
 4. link "Klik sini untuk sediakan / kemaskini cadangan tawaran" opens the proposal; it may
    create the draft, so it counts as a send (browser_submit, a person approves)
+### Check the inbox for a quotation number or title
+Signed in. Labels differ between releases: confirm on the page.
+1. the to-do inbox is link "Senarai Tugasan" (Task List) in the menu; messages and alerts
+   sit under the bell or "Notifikasi" / "Peti Masuk" at the top
+2. in the screen's search panel type the number (QT and its digits) in the document number
+   field, or a short distinctive part of the title in the title field, then click its search
+   button ("Cari"); one browser_steps call
+3. read the matching rows: number, title, type, status, date received; a row opens by its
+   number or title link, "<< Kembali" goes back to the list
+No search panel: browser_find with the number or the title words. Never scroll page by page.
 ### Tender documents
 In the proposal ("Penyediaan Kertas Cadangan") the side menu "Dokumen Sebut Harga / Tender"
 shows SENARAI DOKUMEN: a download icon per row, or "Muat Turun Semua". eP charges no fee.
@@ -119,6 +134,10 @@ Saya".
 
 ## Pitfalls
 - Closing time is usually 12:00 PM on the closing date: read it from the notice.
+- Search by the number, or by a short distinctive part of the title spelled exactly as
+  printed (the search is strict about spelling and punctuation), not the whole title.
+- A sign-in page in the middle of work means the session ended: sign in once more. A
+  captcha, a one-time code or a security question: stop and ask a person.
 - Use the in-app "<< Kembali" and the breadcrumbs, not the browser's Back.
 - Labels are in English when the account's language (Akaun Saya) is English.
 - Signing ("Tanda Tangan") asks for the security answer and the certificate PIN: a person.
@@ -156,12 +175,85 @@ async def save(
     )
 
 
+_REV = re.compile(r"^rev:\s*(\d+)\s*$", re.M)
+_JOB = re.compile(r"^### (.+?)\s*$", re.M)
+_TOP = re.compile(r"^## ", re.M)
+
+
+def _rev(body: str) -> int:
+    from ..brain.pages import parse_frontmatter
+
+    meta, _ = parse_frontmatter(body or "")
+    try:
+        return int(meta.get("rev") or 1)
+    except (TypeError, ValueError):
+        return 1
+
+
+def _part(body: str, heading: str) -> str:
+    """The text under a `## heading` up to the next `## ` heading ("" when absent)."""
+    m = re.search(rf"^## {re.escape(heading)}\s*$", body, re.M)
+    if m is None:
+        return ""
+    nxt = _TOP.search(body, m.end())
+    return body[m.end() : nxt.start() if nxt else len(body)]
+
+
+def _bullets(text: str) -> list[str]:
+    """The `- ` items of a list, each with its indented continuation lines."""
+    out: list[str] = []
+    for ln in text.splitlines():
+        if ln.startswith("- "):
+            out.append(ln)
+        elif out and ln.startswith("  ") and ln.strip():
+            out[-1] += "\n" + ln
+    return out
+
+
+def upgraded(body: str, builtin: str) -> str:
+    """P102: a playbook laid in from an older built-in, with the jobs and pitfalls the
+    built-in gained since (matched by heading or first line), everything else in it kept (a
+    person's edits, the learned paths), and the built-in's rev in its frontmatter. The same
+    text when it is already at that rev."""
+    new = _rev(builtin)
+    if _rev(body) >= new:
+        return body
+    out = body
+    have = {h.strip().casefold() for h in _JOB.findall(out)}
+    jobs = _part(builtin, "Jobs")
+    for m in _JOB.finditer(jobs):
+        if m.group(1).strip().casefold() in have:
+            continue
+        nxt = _JOB.search(jobs, m.end())
+        text = jobs[m.start() : nxt.start() if nxt else len(jobs)].rstrip() + "\n"
+        at = re.search(r"^## (Pitfalls|Learned paths)\s*$", out, re.M)
+        out = (out[: at.start()] + text + "\n" + out[at.start() :]) if at else out + "\n" + text
+    for item in _bullets(_part(builtin, "Pitfalls")):
+        if item.split("\n", 1)[0] in out:
+            continue
+        at = re.search(r"^## Pitfalls\s*$", out, re.M)
+        if at is not None:
+            out = out[: at.end()] + "\n" + item + out[at.end() :]
+    if _REV.search(out):
+        return _REV.sub(f"rev: {new}", out, count=1)
+    if out.startswith("---\n"):
+        return f"---\nrev: {new}\n" + out[4:]
+    return f"---\nrev: {new}\n---\n" + out
+
+
 async def ensure(db: AsyncSession, ws: Workspace, host: str) -> BrainPage | None:
-    """The site's playbook; the built-in one is laid in the first time it is needed."""
+    """The site's playbook; the built-in one is laid in the first time it is needed, and
+    what the built-in gained since reaches an older copy once (P102)."""
     page = await page_of(db, ws.id, host)
-    if page is None and host_key(host) in BUILTIN:
-        await save(db, ws, host, BUILTIN[host_key(host)], "system", "Agentic Office")
+    builtin = BUILTIN.get(host_key(host))
+    if page is None and builtin is not None:
+        await save(db, ws, host, builtin, "system", "Agentic Office")
         page = await page_of(db, ws.id, host)
+    elif page is not None and builtin is not None:
+        body = upgraded(page.body, builtin)
+        if body != page.body:
+            await save(db, ws, host, body, "system", "Agentic Office")
+            page = await page_of(db, ws.id, host)
     return page
 
 
@@ -223,9 +315,11 @@ async def block_for_task(db: AsyncSession, agent: Agent, task: Task) -> str:
                 + fence(_shown(page.body))
                 + "\nUse it: open the page you need directly when it gives the address, and "
                 "send the clicks and fields you already know as ONE browser_steps call (by role "
-                "and name), checking the result, instead of looking for each button. If the "
-                "site differs, follow the site and correct the playbook (write_page, mode "
-                "append) with what you saw."
+                "and name), checking the result, instead of looking for each button. To find "
+                "a record (a reference number, a title), type it into the screen's own search "
+                "box and click its search button, or browser_find it: never scroll page by "
+                "page. If the site differs, follow the site and correct the playbook "
+                "(write_page, mode append) with what you saw."
             )
         elif modes.get("web_search") == "allow" and modes.get("write_page") == "allow":
             out.append(

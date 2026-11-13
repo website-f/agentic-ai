@@ -37,7 +37,7 @@ big change. Every action returns a JPEG frame for the live monitor.
 Form submits are refused unless the call says allow_submit (the agent's browser_submit
 tool, which always needs a person's approval). Controls whose label says they change data
 (save, simpan, upload, perakuan, serah, selesai, sediakan ...) count as submits whatever
-their tag, links included.
+their tag, links included. A search or filter button ("Cari", "Search") is not (P102).
 
 Downloads (a click that downloads a file, a PDF a tab opens) are kept in the session until
 the worker collects them into the company's files. A new tab becomes the page the agent
@@ -425,6 +425,23 @@ SUBMIT_JS = r"""(el) => {
     || (el.tagName === 'INPUT' && (el.type === 'submit' || el.type === 'image'));
   return {submit: submit || transaction, transaction, label};
 }"""
+
+# P102: a form's search or filter button (ePerolehan's "Cari", a list's "Search") only looks
+# things up, so it is an ordinary click: looking up a quotation by its number or title no
+# longer waits for a person at every search. Only when its label starts with a search word
+# and has no word of a change (save, submit, sign ... as above), and is short.
+SEARCH_LABEL = re.compile(
+    r"^\W*(cari|carian|search|find|filter|tapis|papar|paparkan|lihat|view)\b", re.I
+)
+
+
+def searches(info: dict[str, Any]) -> bool:
+    label = str(info.get("label") or "").strip()
+    return (
+        not info.get("transaction")
+        and 0 < len(label) <= 60
+        and SEARCH_LABEL.search(label) is not None
+    )
 
 # Is this element a text field the agent types into, and is it already focused? Lets `click`
 # no-op on a field that is already focused and tell the agent the field is ready for `type`,
@@ -1889,7 +1906,7 @@ async def _do_click(page: Any, loc: Any, *, allow_submit: bool) -> dict[str, Any
     the field is focused (one click, and only if it was not already) and the agent is told to
     `type` next — so it does not keep re-clicking a field that showed no visible change."""
     info = await loc.evaluate(SUBMIT_JS)
-    if info["submit"] and not allow_submit:
+    if info["submit"] and not allow_submit and not searches(info):
         what = "changes external data" if info.get("transaction") else "sends the form"
         return {"error": f"SUBMIT_NEEDS_APPROVAL: this control {what}. Use browser_submit."}
     field = await loc.evaluate(FIELD_JS)

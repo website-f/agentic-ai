@@ -173,7 +173,9 @@ async def match(db: AsyncSession, agent: Agent, text: str) -> list[Skill]:
     light = (await db.execute(usable(select(*cols)))).all()
     picked: list[str] = []
     if browser_grant.about_text(text):
-        picked += [r[0] for r in light if r[1] == eperolehan.NAME]
+        # P102: the office's bid know-how linked to the ePerolehan skill comes with it.
+        for name in (eperolehan.NAME, *eperolehan.linked(ws)):
+            picked += [r[0] for r in light if r[1] == name]
     if vec is not None:
         close = sorted(
             (r for r in light if r[3] is not None and float(r[3]) >= GRANT_SIMILARITY),
@@ -357,13 +359,12 @@ async def _for_task(db: AsyncSession, task: Task, agent: Agent, actor: str | Non
         from ..skills import eperolehan
 
         brief = task.brief or ""
-        lines = [n for n in out.given if f"use_skill(name='{n}')" not in brief]
-        if eperolehan.NAME in lines:
+        names = [n for n in out.given if n != eperolehan.NAME]
+        if eperolehan.NAME in out.given and browser_grant._skill_marker() not in brief:  # noqa: SLF001
             # Tender work follows the skill with its live pitfalls (browser_grant attaches
-            # them when the agent already had it; it has it now).
-            lines.remove(eperolehan.NAME)
-            if browser_grant._skill_marker() not in brief:  # noqa: SLF001
-                brief += await eperolehan.attach(db, agent, task)
+            # them when the agent already had it; it has it now), and its linked skills.
+            brief += await eperolehan.attach(db, agent, task)
+        lines = [n for n in names if f"use_skill(name='{n}')" not in brief]
         task.brief = brief + _brief_line(lines)
     await db.commit()
     for name in out.given:

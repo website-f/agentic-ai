@@ -72,6 +72,8 @@ export interface SkillDetail extends Skill {
   proposals: { id: string; kind: ProposalKind; status: string; created_at: string }[];
   /** P96: this person may publish it (edit straight away, retire, restore, choose who uses it). */
   can_publish?: boolean;
+  /** P102: supporting files brought in with the skill (agents open them when a step needs one). */
+  files?: { file: string; chars: number }[];
 }
 
 export type ProposalKind = "new" | "patch" | "merge" | "retire";

@@ -82,6 +82,8 @@ class SkillDetail(SkillOut):
     eval_cases: list[dict[str, Any]]
     last_eval: dict[str, Any] | None
     proposals: list[dict[str, Any]]
+    # P102: supporting files (a skill brought in from a folder): [{"file", "chars"}].
+    files: list[dict[str, Any]] = []
     # P96: this person may publish it (edit straight away, retire, revert, choose who uses
     # it): the page shows those buttons only then (may_publish is the rule).
     can_publish: bool = False
@@ -435,6 +437,9 @@ async def _detail(db: AsyncSession, s: Skill, p: Principal | None = None) -> Ski
         proposals=[
             {"id": x.id, "kind": x.kind, "status": x.status, "created_at": x.created_at}
             for x in props
+        ],
+        files=[
+            {"file": f, "chars": n} for f, n in await store.files_of(db, s.workspace_id, s.name)
         ],
         can_publish=p is not None and await may_publish(db, p, s),
     )

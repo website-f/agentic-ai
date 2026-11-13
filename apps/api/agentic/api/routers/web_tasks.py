@@ -116,8 +116,9 @@ def brief_for(body: WebTaskIn) -> str:
             "3. On the portal, open the tender, check eligibility and download every tender "
             "document it offers. Downloads are saved to the company's files by themselves "
             "(folder Web downloads/<site>, a zip unpacked into its documents); read them with "
-            "read_file. A button that sends a form needs browser_submit and a person's "
-            "approval, even when it only searches or downloads: say exactly that in why.",
+            "read_file. A search button (Cari, Carian, Search) is an ordinary click; any "
+            "other button that sends a form needs browser_submit and a person's approval, "
+            "even when it only downloads: say exactly that in why.",
             "4. Keep an evidence manifest of every portal field and required attachment, with "
             "each value's source (tender document, company document, portal, person, public "
             "web), as a working note at wiki/tenders/<tender-reference>.md, not as a document.",

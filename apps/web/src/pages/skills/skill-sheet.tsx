@@ -1,5 +1,5 @@
 import {
-  ArrowCounterClockwiseIcon, ArchiveIcon, ChartLineUpIcon, CheckCircleIcon, ClockCounterClockwiseIcon, CoinsIcon, FlaskIcon,
+  ArrowCounterClockwiseIcon, ArchiveIcon, ChartLineUpIcon, CheckCircleIcon, ClockCounterClockwiseIcon, CoinsIcon, FileTextIcon, FlaskIcon,
   GitCommitIcon, ListChecksIcon, PencilSimpleIcon, PlusIcon, SparkleIcon, TrashIcon, TrendDownIcon, UsersThreeIcon,
 } from "@phosphor-icons/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -281,6 +281,20 @@ export function SkillSheet({ id, canWrite, onClose }: { id: string; canDecide?: 
           <Block icon={ListChecksIcon} tone="accent" title={t("Instructions")}>
             <div className="min-w-0 rounded-[var(--radius-md)] border border-border bg-surface px-4 py-3.5 sm:px-5"><Markdown>{s.body}</Markdown></div>
           </Block>
+
+          {s.files?.length ? (
+            <Block icon={FileTextIcon} tone="info" title={t("Reference files")} count={s.files.length}>
+              <p className="text-[12.5px] text-muted">{t("Agents open one of these only when a step needs it. They are kept in the Brain under skills/{name}/.", { name: s.name })}</p>
+              <ul className="grid gap-1">
+                {s.files.map((f) => (
+                  <li key={f.file} className="flex min-w-0 items-baseline justify-between gap-3 text-[13px]">
+                    <span className="min-w-0 break-all font-mono">{f.file}</span>
+                    <span className="shrink-0 text-[12px] text-muted tabular">{t("{n} characters", { n: f.chars.toLocaleString() })}</span>
+                  </li>
+                ))}
+              </ul>
+            </Block>
+          ) : null}
 
           <Block icon={UsersThreeIcon} tone="violet" title={t("Who can use it")}>
             <Audience key={s.agent_ids.join(",")} s={s} canDecide={canDecide} />

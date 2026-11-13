@@ -68,5 +68,15 @@ describe("skill sheet buttons follow what the server allows", () => {
     expect(within(dialog).queryByRole("button", { name: /Restore version/ })).toBeNull();
     expect(within(dialog).queryByRole("radiogroup", { name: "Who can use it" })).toBeNull();
     expect(within(dialog).getByText("Every agent.")).toBeInTheDocument();
+    expect(within(dialog).queryByText("Reference files")).toBeNull();
+  });
+
+  it("P102: a skill brought in from a folder lists its reference files", async () => {
+    serve({ ...skill(true), files: [{ file: "references/portal-guide.md", chars: 7752 }, { file: "tools.md", chars: 1381 }] });
+    open();
+    const dialog = await screen.findByRole("dialog");
+    expect(await within(dialog).findByText("Reference files")).toBeInTheDocument();
+    expect(within(dialog).getByText("references/portal-guide.md")).toBeInTheDocument();
+    expect(within(dialog).getByText("tools.md")).toBeInTheDocument();
   });
 });

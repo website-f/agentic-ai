@@ -21,6 +21,14 @@ _INTERNAL = re.compile(
     re.I,
 )
 _TOOL_REF = re.compile(r"`([a-z_]{3,40})`")
+# P102: a rule that keeps approvals ("never send without explicit approval") reads like
+# skipping one to the threat patterns. Such a phrase (a negation, at most two words, then
+# "without [one word] approval") is left out of the override check only.
+_KEEPS_APPROVAL = re.compile(
+    r"\b(?:never|not|don't|do not|must not|cannot)\s+(?:\w+\s+){0,2}without\s+(?:\w+\s+)?"
+    r"approvals?\b",
+    re.I,
+)
 _SPECIFIC = re.compile(
     r"\b(?:RM|USD|\$)\s?\d[\d,]*(?:\.\d+)?\b|\b\d{1,2} (?:Jan|Feb|Mar|Apr|May|"
     r"Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]* \d{4}\b"
@@ -36,7 +44,7 @@ def scan(body: str, description: str, known_tools: set[str]) -> list[dict[str, A
 
     if _SECRET.search(text):
         add("block", "secret", "Looks like it contains a password, key, card or IC number.")
-    if threats.scan(text, "strict"):
+    if threats.scan(_KEEPS_APPROVAL.sub(" ", text), "strict"):
         add("block", "override", "Tries to override the rules or skip approvals.")
     if _INTERNAL.search(text):
         add("block", "internal_address", "Points at an internal or metadata address.")
