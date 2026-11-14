@@ -1,15 +1,7 @@
 import { Select } from './SearchSelect';
 import { installScrollStrips } from './scroll-strip';
-import { ArrivalCashView } from './views/ArrivalCash';
-import { ItMetrics } from './views/ItMetrics';
-import { WorkKpiView } from './views/WorkKpi';
 import { CleanupReceiptRecovery } from './views/ItCleanup';
-import { ItProcurement } from './views/ItProcurement';
-import { HrItIntake } from './views/HrItIntake';
-import { StaffDirectory } from './views/StaffDirectory';
-import { BulkLoad } from './views/BulkLoad';
-import { ItExtractionWorkspace } from './views/ItExtractionWorkspace';
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { createContext, lazy, Suspense, useCallback, useContext, useEffect, useMemo, useRef, useState, type ComponentType } from 'react';
 import { type Company, type User, RULES, hasOwnStaffRecord, isActHead, isGroupLeader, isOwnerAdmin, jaOwns, seesArmsDetail, workKpiScope, finRequestInMenu, canSeeJaSwitch, bulkLoadInMenu } from '@prima/core';
 import { ApiError, api, type Me } from './api';
 import { ArrowLeftIcon, HouseIcon, MagnifyingGlassIcon, SquaresFourIcon } from '@phosphor-icons/react';
@@ -23,87 +15,237 @@ import { ArishaReviewQueue } from './ArishaReviewQueue';
 import { ConfidentialityGate } from './Confidential';
 import { Launcher } from './Launcher';
 import { LANGS, LangCtx, saveLang, savedLang, startTranslator, useLang, type Lang } from './i18n';
-import { Overview } from './views/Overview';
-import { CompanyView } from './views/Company';
-import { Sites } from './views/Sites';
-import { RosterView } from './views/Roster';
-import { CleaningView } from './views/Cleaning';
-import { DutyView, SiteStockView } from './views/SitePlans';
-import { People } from './views/People';
-import { AttendanceView } from './views/Attendance';
-import { Cases } from './views/Cases';
-import { ComplianceView } from './views/Compliance';
-import { CommercialView } from './views/Commercial';
-import { HrView } from './views/Hr';
-import { InsuranceView } from './views/Insurance';
-import { CmsView } from './views/Cms';
-import { CmsReadinessView } from './views/CmsReadiness';
-import { OpsView } from './views/Ops';
 import { HomeView } from './views/Home';
-import { ArmsView } from './views/Arms';
-import { AuditView } from './views/Audit';
-import { Device } from './views/Device';
-import { MyDuty } from './views/MyDuty';
 import { GuardPhoneApp } from './views/GuardPhone';
 import { MyClockView, StaffClockBoardView, StaffTracker } from './views/StaffClock';
-import { BranchWorkView, WorkView } from './views/Work';
-import { SocsoView } from './views/Socso';
-import { HostelsView } from './views/Hostels';
-import { FwCostView } from './views/FwCost';
-import { RateBookView } from './views/RateBook';
-import { FinanceSitesView } from './views/FinanceSites';
-import { FinanceSummaryView } from './views/FinanceSummary';
-import { FwStatView } from './views/FwStat';
-import { ClaimsView } from './views/Claims';
-import { MemosView } from './views/Memos';
-import { PdpaView } from './views/Pdpa';
-import { FleetView } from './views/Fleet';
-import { ClientsView } from './views/Clients';
-import { OfficeView } from './views/Office';
-import { RequestsView } from './views/Requests';
-import { JaView } from './views/Ja';
-import { JaSwitchView } from './views/JaSwitch';
-import { AssetsView } from './views/Assets';
-import { StaffPayView } from './views/StaffPay';
-import { GuardAdvancesView, GuardLoansView, GuardPayView, StatutoryView } from './views/GuardPay';
-import { FinanceView } from './views/Finance';
-import { ContractsView } from './views/Contracts';
-import { BranchesView } from './views/Branches';
-import { ItView } from './views/It';
-import { RenewalsView } from './views/Renewals';
-import { CorporateView } from './views/Corporate';
-import { CreditView } from './views/Credit';
-import { PurchasingView } from './views/Purchasing';
-import { ItemsView } from './views/Items';
-import { GovernanceView } from './views/Governance';
-import { GrcView } from './views/Grc';
-import { RegistersView } from './views/Registers';
-import { ActView } from './views/Act';
-import { PayFormulasView } from './views/PayFormulas';
-import { SiteHoursView } from './views/SiteHours';
-import { SalaryCalcView } from './views/SalaryCalc';
-import { ContinuityView } from './views/Continuity';
-import { WebsitesView } from './views/Websites';
-import { ConnectionsView } from './views/Connections';
-import { OfficeConnections } from './views/OfficeConnections';
-import { FwmView } from './views/Fwm';
-import { DirectorOfficeView } from './views/DirectorOffice';
-import { ReportsView } from './views/Reports';
-import { MeetingsView } from './views/Meetings';
-import { SelfAuditView } from './views/SelfAudit';
-import { RbaView } from './views/Rba';
-import { SettingsHomeView } from './views/SettingsHome';
 import { SurveysView } from './views/Surveys';
 import { forgetOwner, lastOwner, rememberSetup, syncSurveys } from './survey/offline';
-import { CooPaymentsView } from './views/CooPayments';
-import { PaymentRequestsView } from './views/PaymentRequests';
-import { HandoversView } from './views/Handovers';
-import { QualityView } from './views/Quality';
 import { NavMenu } from './NavMenu';
 import { AppGrid, AppSwitcher, SpacePhoneBar, SpaceRailHead, SpotSearch } from './Spaces';
 import { LaunchpadView, SpaceRoute } from './views/SpaceRoute';
 import { appsOf, rememberView, spaceLayout, spaceOf, usesApps, type SpaceId } from './nav-catalog';
 import { asTop, myName, officeNarrowed, primaOnly } from './office-access';
+
+/**
+ * P103 (speed): each screen's code is its own file, fetched when the screen first opens, so Prima opens with only the
+ * home screen's code (it was one 6 MB script). A little after the app opens, the screens in this person's own menu are
+ * fetched quietly too (prefetchMenuScreens), so moving between them stays instant and they open with no signal later.
+ */
+function screenCode<M>(load: () => Promise<M>): Promise<M> {
+  return load().catch((e: unknown) => {
+    // A new version of Prima replaced this screen's file while the app was open: reload once to get the new files.
+    try {
+      const last = Number(sessionStorage.getItem('prima-code-reload') || 0);
+      if (navigator.onLine && Date.now() - last > 60_000) {
+        sessionStorage.setItem('prima-code-reload', String(Date.now()));
+        location.reload();
+        return new Promise<M>(() => undefined);
+      }
+    } catch {
+      /* storage blocked: show the error as before */
+    }
+    throw e;
+  });
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- each screen keeps its own props
+function lazyView<M extends Record<K, ComponentType<any>>, K extends keyof M & string>(load: () => Promise<M>, name: K) {
+  return lazy(() => screenCode(load).then((m) => ({ default: m[name] })));
+}
+
+const ArrivalCashView = lazyView(() => import('./views/ArrivalCash'), 'ArrivalCashView');
+const ItMetrics = lazyView(() => import('./views/ItMetrics'), 'ItMetrics');
+const WorkKpiView = lazyView(() => import('./views/WorkKpi'), 'WorkKpiView');
+const ItProcurement = lazyView(() => import('./views/ItProcurement'), 'ItProcurement');
+const HrItIntake = lazyView(() => import('./views/HrItIntake'), 'HrItIntake');
+const StaffDirectory = lazyView(() => import('./views/StaffDirectory'), 'StaffDirectory');
+const BulkLoad = lazyView(() => import('./views/BulkLoad'), 'BulkLoad');
+const ItExtractionWorkspace = lazyView(() => import('./views/ItExtractionWorkspace'), 'ItExtractionWorkspace');
+const Overview = lazyView(() => import('./views/Overview'), 'Overview');
+const CompanyView = lazyView(() => import('./views/Company'), 'CompanyView');
+const Sites = lazyView(() => import('./views/Sites'), 'Sites');
+const RosterView = lazyView(() => import('./views/Roster'), 'RosterView');
+const CleaningView = lazyView(() => import('./views/Cleaning'), 'CleaningView');
+const DutyView = lazyView(() => import('./views/SitePlans'), 'DutyView');
+const SiteStockView = lazyView(() => import('./views/SitePlans'), 'SiteStockView');
+const People = lazyView(() => import('./views/People'), 'People');
+const AttendanceView = lazyView(() => import('./views/Attendance'), 'AttendanceView');
+const Cases = lazyView(() => import('./views/Cases'), 'Cases');
+const ComplianceView = lazyView(() => import('./views/Compliance'), 'ComplianceView');
+const CommercialView = lazyView(() => import('./views/Commercial'), 'CommercialView');
+const HrView = lazyView(() => import('./views/Hr'), 'HrView');
+const InsuranceView = lazyView(() => import('./views/Insurance'), 'InsuranceView');
+const CmsView = lazyView(() => import('./views/Cms'), 'CmsView');
+const CmsReadinessView = lazyView(() => import('./views/CmsReadiness'), 'CmsReadinessView');
+const OpsView = lazyView(() => import('./views/Ops'), 'OpsView');
+const ArmsView = lazyView(() => import('./views/Arms'), 'ArmsView');
+const AuditView = lazyView(() => import('./views/Audit'), 'AuditView');
+const Device = lazyView(() => import('./views/Device'), 'Device');
+const MyDuty = lazyView(() => import('./views/MyDuty'), 'MyDuty');
+const BranchWorkView = lazyView(() => import('./views/Work'), 'BranchWorkView');
+const WorkView = lazyView(() => import('./views/Work'), 'WorkView');
+const SocsoView = lazyView(() => import('./views/Socso'), 'SocsoView');
+const HostelsView = lazyView(() => import('./views/Hostels'), 'HostelsView');
+const FwCostView = lazyView(() => import('./views/FwCost'), 'FwCostView');
+const RateBookView = lazyView(() => import('./views/RateBook'), 'RateBookView');
+const FinanceSitesView = lazyView(() => import('./views/FinanceSites'), 'FinanceSitesView');
+const FinanceSummaryView = lazyView(() => import('./views/FinanceSummary'), 'FinanceSummaryView');
+const FwStatView = lazyView(() => import('./views/FwStat'), 'FwStatView');
+const ClaimsView = lazyView(() => import('./views/Claims'), 'ClaimsView');
+const MemosView = lazyView(() => import('./views/Memos'), 'MemosView');
+const PdpaView = lazyView(() => import('./views/Pdpa'), 'PdpaView');
+const FleetView = lazyView(() => import('./views/Fleet'), 'FleetView');
+const ClientsView = lazyView(() => import('./views/Clients'), 'ClientsView');
+const OfficeView = lazyView(() => import('./views/Office'), 'OfficeView');
+const RequestsView = lazyView(() => import('./views/Requests'), 'RequestsView');
+const JaView = lazyView(() => import('./views/Ja'), 'JaView');
+const JaSwitchView = lazyView(() => import('./views/JaSwitch'), 'JaSwitchView');
+const AssetsView = lazyView(() => import('./views/Assets'), 'AssetsView');
+const StaffPayView = lazyView(() => import('./views/StaffPay'), 'StaffPayView');
+const GuardAdvancesView = lazyView(() => import('./views/GuardPay'), 'GuardAdvancesView');
+const GuardLoansView = lazyView(() => import('./views/GuardPay'), 'GuardLoansView');
+const GuardPayView = lazyView(() => import('./views/GuardPay'), 'GuardPayView');
+const StatutoryView = lazyView(() => import('./views/GuardPay'), 'StatutoryView');
+const FinanceView = lazyView(() => import('./views/Finance'), 'FinanceView');
+const ContractsView = lazyView(() => import('./views/Contracts'), 'ContractsView');
+const BranchesView = lazyView(() => import('./views/Branches'), 'BranchesView');
+const ItView = lazyView(() => import('./views/It'), 'ItView');
+const RenewalsView = lazyView(() => import('./views/Renewals'), 'RenewalsView');
+const CorporateView = lazyView(() => import('./views/Corporate'), 'CorporateView');
+const CreditView = lazyView(() => import('./views/Credit'), 'CreditView');
+const PurchasingView = lazyView(() => import('./views/Purchasing'), 'PurchasingView');
+const ItemsView = lazyView(() => import('./views/Items'), 'ItemsView');
+const GovernanceView = lazyView(() => import('./views/Governance'), 'GovernanceView');
+const GrcView = lazyView(() => import('./views/Grc'), 'GrcView');
+const RegistersView = lazyView(() => import('./views/Registers'), 'RegistersView');
+const ActView = lazyView(() => import('./views/Act'), 'ActView');
+const PayFormulasView = lazyView(() => import('./views/PayFormulas'), 'PayFormulasView');
+const SiteHoursView = lazyView(() => import('./views/SiteHours'), 'SiteHoursView');
+const SalaryCalcView = lazyView(() => import('./views/SalaryCalc'), 'SalaryCalcView');
+const ContinuityView = lazyView(() => import('./views/Continuity'), 'ContinuityView');
+const WebsitesView = lazyView(() => import('./views/Websites'), 'WebsitesView');
+const ConnectionsView = lazyView(() => import('./views/Connections'), 'ConnectionsView');
+const OfficeConnections = lazyView(() => import('./views/OfficeConnections'), 'OfficeConnections');
+const FwmView = lazyView(() => import('./views/Fwm'), 'FwmView');
+const DirectorOfficeView = lazyView(() => import('./views/DirectorOffice'), 'DirectorOfficeView');
+const ReportsView = lazyView(() => import('./views/Reports'), 'ReportsView');
+const MeetingsView = lazyView(() => import('./views/Meetings'), 'MeetingsView');
+const SelfAuditView = lazyView(() => import('./views/SelfAudit'), 'SelfAuditView');
+const RbaView = lazyView(() => import('./views/Rba'), 'RbaView');
+const SettingsHomeView = lazyView(() => import('./views/SettingsHome'), 'SettingsHomeView');
+const CooPaymentsView = lazyView(() => import('./views/CooPayments'), 'CooPaymentsView');
+const PaymentRequestsView = lazyView(() => import('./views/PaymentRequests'), 'PaymentRequestsView');
+const HandoversView = lazyView(() => import('./views/Handovers'), 'HandoversView');
+const QualityView = lazyView(() => import('./views/Quality'), 'QualityView');
+
+/** The code of each menu screen, fetched ahead (see prefetchMenuScreens). */
+const SCREEN_CODE: Partial<Record<ViewName, () => Promise<unknown>>> = {
+  overview: () => import('./views/Overview'),
+  company: () => import('./views/Company'),
+  sites: () => import('./views/Sites'),
+  roster: () => import('./views/Roster'),
+  cleaning: () => import('./views/Cleaning'),
+  duty: () => import('./views/SitePlans'),
+  sitestock: () => import('./views/SitePlans'),
+  people: () => import('./views/People'),
+  attendance: () => import('./views/Attendance'),
+  cases: () => import('./views/Cases'),
+  compliance: () => import('./views/Compliance'),
+  commercial: () => import('./views/Commercial'),
+  ops: () => import('./views/Ops'),
+  hr: () => import('./views/Hr'),
+  insurance: () => import('./views/Insurance'),
+  arms: () => import('./views/Arms'),
+  cms: () => import('./views/Cms'),
+  cmsready: () => import('./views/CmsReadiness'),
+  audit: () => import('./views/Audit'),
+  device: () => import('./views/Device'),
+  mine: () => import('./views/MyDuty'),
+  work: () => import('./views/Work'),
+  branchwork: () => import('./views/Work'),
+  socso: () => import('./views/Socso'),
+  hostels: () => import('./views/Hostels'),
+  fwcost: () => import('./views/FwCost'),
+  rates: () => import('./views/RateBook'),
+  finsites: () => import('./views/FinanceSites'),
+  finsummary: () => import('./views/FinanceSummary'),
+  fwstat: () => import('./views/FwStat'),
+  claims: () => import('./views/Claims'),
+  memos: () => import('./views/Memos'),
+  pdpa: () => import('./views/Pdpa'),
+  fleet: () => import('./views/Fleet'),
+  clients: () => import('./views/Clients'),
+  office: () => import('./views/Office'),
+  requests: () => import('./views/Requests'),
+  payreq: () => import('./views/PaymentRequests'),
+  ja: () => import('./views/Ja'),
+  jaswitch: () => import('./views/JaSwitch'),
+  assets: () => import('./views/Assets'),
+  staffpay: () => import('./views/StaffPay'),
+  guardpay: () => import('./views/GuardPay'),
+  advances: () => import('./views/GuardPay'),
+  loans: () => import('./views/GuardPay'),
+  statutory: () => import('./views/GuardPay'),
+  arrivalcash: () => import('./views/ArrivalCash'),
+  finance: () => Promise.all([import('./views/Finance'), import('./views/CooPayments')]),
+  contracts: () => import('./views/Contracts'),
+  branches: () => import('./views/Branches'),
+  'it-metrics': () => import('./views/ItMetrics'),
+  'work-kpi': () => import('./views/WorkKpi'),
+  'it-procurement': () => import('./views/ItProcurement'),
+  'staff-directory': () => import('./views/StaffDirectory'),
+  'bulk-load': () => import('./views/BulkLoad'),
+  'hr-it-intake': () => import('./views/HrItIntake'),
+  it: () => import('./views/It'),
+  websites: () => import('./views/Websites'),
+  corporate: () => import('./views/Corporate'),
+  renewals: () => import('./views/Renewals'),
+  credit: () => import('./views/Credit'),
+  purchasing: () => import('./views/Purchasing'),
+  items: () => import('./views/Items'),
+  governance: () => import('./views/Governance'),
+  quality: () => import('./views/Quality'),
+  grc: () => import('./views/Grc'),
+  registers: () => import('./views/Registers'),
+  act: () => import('./views/Act'),
+  payformulas: () => import('./views/PayFormulas'),
+  sitehours: () => import('./views/SiteHours'),
+  salarycalc: () => import('./views/SalaryCalc'),
+  continuity: () => import('./views/Continuity'),
+  'it-extraction': () => import('./views/ItExtractionWorkspace'),
+  connections: () => Promise.all([import('./views/Connections'), import('./views/OfficeConnections')]),
+  fwm: () => import('./views/Fwm'),
+  doa: () => import('./views/DirectorOffice'),
+  reports: () => import('./views/Reports'),
+  meetings: () => import('./views/Meetings'),
+  selfaudit: () => import('./views/SelfAudit'),
+  rba: () => import('./views/Rba'),
+  settings: () => import('./views/SettingsHome'),
+  handovers: () => import('./views/Handovers'),
+};
+
+/**
+ * After the first screen shows, fetch the code of the other screens in this person's menu, one after another and only
+ * when the browser is idle; not on a data saver connection. A failed fetch is simply tried again when the screen opens.
+ */
+function prefetchMenuScreens(views: ViewName[]): () => void {
+  const conn = (navigator as Navigator & { connection?: { saveData?: boolean } }).connection;
+  if (conn?.saveData) return () => undefined;
+  const queue = [...new Set(views)].map((v) => SCREEN_CODE[v]).filter((f): f is () => Promise<unknown> => !!f);
+  let stopped = false;
+  const idle = (fn: () => void) =>
+    typeof window.requestIdleCallback === 'function' ? window.requestIdleCallback(fn, { timeout: 4000 }) : window.setTimeout(fn, 300);
+  const next = () => {
+    const load = queue.shift();
+    if (stopped || !load) return;
+    load().catch(() => undefined).finally(() => idle(next));
+  };
+  const start = window.setTimeout(() => idle(next), 2500);
+  return () => {
+    stopped = true;
+    window.clearTimeout(start);
+  };
+}
 
 
 
@@ -1062,6 +1204,8 @@ function Shell({ me, onSignOut, onReset }: { me: Me; onSignOut: () => void; onRe
 
   const navKey = nav.map((n) => n.view).join(',');
   const canOpen = useCallback((v: ViewName) => navKey.split(',').includes(v), [navKey]);
+  // P103: once the first screen is up, fetch the code of the other screens in this person's menu.
+  useEffect(() => prefetchMenuScreens(navKey.split(',') as ViewName[]), [navKey]);
   const menuKey = nav.map((n) => `${n.view}:${n.label}`).join(',');
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const menu = useMemo(() => {
@@ -1445,7 +1589,10 @@ function Shell({ me, onSignOut, onReset }: { me: Me; onSignOut: () => void; onRe
           </header>
           {/* P90: every screen sits in one page frame (padding, width, rhythm), even one that draws no .page of its own. */}
           {apps && space && <SpacePhoneBar id={space} menu={menu} current={route.view === 'home' ? null : route.view} onHome={() => openSpace(null)} onSpace={openSpace} onView={(v) => go({ view: v })} />}
-          <div className="view-host">{view}</div>
+          <div className="view-host">
+            {/* P103: a screen's code arrives the first time it opens (lazyView); this shows meanwhile. */}
+            <Suspense fallback={<Loading what="the screen" />}>{view}</Suspense>
+          </div>
         </div>
         <nav className="tabs" aria-label="Main">
           {/* P91: with apps, the phone's tabs are Home, Apps, Search, the person's own clock or work, and More. */}
