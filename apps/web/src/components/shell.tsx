@@ -41,12 +41,11 @@ import { agentsQuery } from "@/lib/work";
 import { ALL_NAV, HELP_SECTION, hubOf, NAV, sidebarItems, type NavItem, type NavSection } from "@/nav";
 import { moreItems, TAB_TARGET, tabBarFor } from "@/nav"; // P92: the staff phone bar
 
-import { CommandPalette } from "./command-palette";
 import { openTaskComposer } from "./task-composer/store";
-import { TaskComposerHost } from "./task-composer/task-composer";
 import { HeaderSearch } from "./search-box";
 import { LogoMark, Wordmark } from "./logo";
-import { HelpAskSheet, useHelpAsk } from "./help-ask";
+import { useHelpAsk } from "./help-ask-store";
+import { LazyCommandPalette, LazyHelpAskSheet, LazyTaskComposerHost } from "./lazy-hosts";
 import { InstallApp } from "./install-app";
 import { NeedsBell } from "./needs-bell";
 import { NavProgress } from "./nav-progress";
@@ -856,9 +855,9 @@ export function AppShell() {
         </main>
       </div>
       <MobileTabBar />
-      <CommandPalette />
-      <TaskComposerHost />
-      <HelpAskSheet />
+      <LazyCommandPalette />
+      <LazyTaskComposerHost />
+      <LazyHelpAskSheet />
       <OfflineBanner />
       <NavProgress />
       <InstallApp />

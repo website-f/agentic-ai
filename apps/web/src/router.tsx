@@ -8,24 +8,35 @@ import {
   Outlet,
   redirect,
   useRouter,
+  type AnyRouter,
   type ParsedLocation,
 } from "@tanstack/react-router";
 import { lazy, Suspense } from "react";
 import { safeFrom } from "@/components/chat/links";
 import { STORE_VIEWS, type StoreView } from "@/lib/file-store";
 
-import { AppShell } from "@/components/shell";
 import { Button } from "@/components/ui/button";
 import { useT } from "@/i18n";
-import { ApiError, errorMessage } from "@/lib/api";
+import { ApiError, errorMessage, readCookie } from "@/lib/api";
 import { meQuery, setupStatusQuery } from "@/lib/queries";
 import { assistantsFallback, canAssist, TWIN_TABS, type TwinTab } from "@/lib/my-ai";
 import { staffOnly, twinQuery } from "@/lib/twin";
-import { ALL_NAV, pathAllowed, type AppPath } from "@/nav";
+import type { AppPath } from "@/nav";
 import type { Me } from "@/lib/types";
-import { NotFoundPage, PlaceholderPage } from "@/pages/placeholder";
 
-// Each page is its own chunk: the shell loads first, pages load on demand.
+// P104: the navigation (every page's icon) comes with the shell; the access check waits for it
+// alongside "who am I", so neither the sign-in page nor the first download carries it.
+const loadNav = () => import("@/nav");
+// P104: a page's first data is asked for while its code downloads, and on hover (lib/prefetch).
+type Prefetch = typeof import("@/lib/prefetch");
+const prefetch = (fn: (p: Prefetch) => void) => {
+  void import("@/lib/prefetch").then(fn, () => {});
+};
+const NotFoundPage = lazyRouteComponent(() => import("@/pages/placeholder"), "NotFoundPage");
+
+// Each page is its own chunk, and so is the signed-in shell (P104: the sign-in page needs
+// neither); pages load on demand.
+const AppShell = lazyRouteComponent(() => import("@/components/shell"), "AppShell");
 const page = {
   setup: lazyRouteComponent(() => import("@/pages/auth"), "SetupPage"),
   login: lazyRouteComponent(() => import("@/pages/auth"), "LoginPage"),
@@ -191,10 +202,18 @@ const loginRoute = createRoute({
     sso_error: typeof s.sso_error === "string" ? s.sso_error.slice(0, 200) : undefined,
   }),
   beforeLoad: async ({ context, search }) => {
-    if (search.sso !== "done" && (await alreadySignedIn(context.queryClient))) throw redirect({ to: "/" });
-    const s = await context.queryClient.fetchQuery(setupStatusQuery).catch(() => null);
+    // P104: both questions at once (each is a round trip); the answers are used as before.
+    const [signedIn, s] = await Promise.all([
+      search.sso !== "done" ? alreadySignedIn(context.queryClient) : null,
+      context.queryClient.fetchQuery(setupStatusQuery).catch(() => null),
+    ]);
+    if (signedIn) throw redirect({ to: "/" });
     if (s?.needs_setup) throw redirect({ to: "/setup" });
   },
+  // P104: while the person types, the code of where they land next (their workspace, or the
+  // page they were on their way to) downloads in the background.
+  loaderDeps: ({ search }) => ({ next: search.next }),
+  loader: ({ deps }) => whenIdle(() => preloadChunksFor(deps.next?.startsWith("/") && !deps.next.startsWith("//") ? deps.next : "/workspace")),
   component: page.login,
 });
 
@@ -241,7 +260,7 @@ const appRoute = createRoute({
   getParentRoute: () => rootRoute,
   id: "app",
   beforeLoad: async ({ context, location }) => {
-    const me = await loadMe(context.queryClient, location);
+    const [me, { pathAllowed }] = await Promise.all([loadMe(context.queryClient, location), loadNav()]);
     if (me.user.must_change_password) throw redirect({ to: "/change-password" });
     if (me.user.two_factor_setup_required) throw redirect({ to: "/two-step-setup" });
     // P99: a Prima-only person has no office pages: Prima opens for them.
@@ -253,6 +272,7 @@ const appRoute = createRoute({
     }
     return { me };
   },
+  loader: ({ context }) => prefetch((p) => p.warmShell(context.queryClient)),
   component: AppShell,
 });
 
@@ -262,7 +282,7 @@ const libraryFrameRoute = createRoute({
   getParentRoute: () => rootRoute,
   id: "library",
   beforeLoad: async ({ context, location }) => {
-    const me = await loadMe(context.queryClient, location);
+    const [me, { pathAllowed }] = await Promise.all([loadMe(context.queryClient, location), loadNav()]);
     if (me.user.must_change_password) throw redirect({ to: "/change-password" });
     if (me.user.two_factor_setup_required) throw redirect({ to: "/two-step-setup" });
     if (me.access === "prima_only") throw redirect({ to: "/prima-only" });
@@ -273,7 +293,12 @@ const libraryFrameRoute = createRoute({
   component: page.libraryFrame,
 });
 
-const homeRoute = createRoute({ getParentRoute: () => appRoute, path: "/", component: page.home });
+const homeRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/",
+  loader: ({ context, preload }) => prefetch((p) => p.warmHome(context.queryClient, preload)),
+  component: page.home,
+});
 const assistantsRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/assistants",
@@ -381,12 +406,14 @@ const tasksRoute = createRoute({
   validateSearch: (s: Record<string, unknown>): { task?: string; new?: number; agent?: string; brief?: string; objective?: string; who?: string } => ({
     task: str(s.task), new: num(s.new), agent: str(s.agent), brief: str(s.brief), objective: str(s.objective), who: str(s.who),
   }),
+  loader: ({ context, preload }) => prefetch((p) => p.warmTasks(context.queryClient, preload)),
   component: page.tasks,
 });
 const approvalsRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/approvals",
   validateSearch: (s: Record<string, unknown>): { tab?: "pending" | "history" } => ({ tab: s.tab === "history" ? "history" : undefined }),
+  loader: ({ context, preload }) => prefetch((p) => p.warmApprovals(context.queryClient, preload)),
   component: page.approvals,
 });
 const broadcastsRoute = createRoute({
@@ -403,6 +430,7 @@ const chatRoute = createRoute({
   beforeLoad: ({ search }) => {
     if (search.agent) throw redirect({ to: "/chat/$agentId", params: { agentId: search.agent }, search: { from: "/chat" } });
   },
+  loader: ({ context, preload }) => prefetch((p) => p.warmChat(context.queryClient, preload)),
   component: page.chat,
 });
 const sopsRoute = createRoute({
@@ -623,6 +651,8 @@ const deskRoute = createRoute({
   validateSearch: (s: Record<string, unknown>): { tab?: (typeof DESK_TABS)[number] } => ({
     tab: DESK_TABS.includes(s.tab as (typeof DESK_TABS)[number]) ? (s.tab as (typeof DESK_TABS)[number]) : undefined,
   }),
+  loaderDeps: ({ search }) => ({ tab: search.tab }),
+  loader: ({ context, preload, deps }) => prefetch((p) => p.warmDesk(context.queryClient, preload, deps.tab)),
   component: page.desk,
 });
 
@@ -776,6 +806,8 @@ const mailRoute = createRoute({
   beforeLoad: ({ context }) => {
     if (!["agents.own", "assistants.use", "channels.manage"].some((p) => context.me.permissions.includes(p))) throw redirect({ to: "/workspace" });
   },
+  loaderDeps: ({ search }) => ({ box: search.box }),
+  loader: ({ context, preload, deps }) => prefetch((p) => p.warmMail(context.queryClient, preload, deps.box)),
   component: page.mail,
 });
 
@@ -834,11 +866,19 @@ const feedbacksRoute = createRoute({
 
 // Kept for pages that have not shipped yet (none right now).
 export function placeholder<P extends AppPath>(path: P) {
-  const item = ALL_NAV.find((n) => n.to === path)!;
+  const Placeholder = lazy(() =>
+    Promise.all([loadNav(), import("@/pages/placeholder")]).then(([nav, p]) => ({
+      default: () => <p.PlaceholderPage item={nav.ALL_NAV.find((n) => n.to === path)!} />,
+    })),
+  );
   return createRoute({
     getParentRoute: () => appRoute,
     path,
-    component: () => <PlaceholderPage item={item} />,
+    component: () => (
+      <Suspense fallback={null}>
+        <Placeholder />
+      </Suspense>
+    ),
   });
 }
 
@@ -917,8 +957,48 @@ const routeTree = rootRoute.addChildren([
   ]),
 ]);
 
+/**
+ * P104: start downloading the code of what the address opens (the shell and the page) at once,
+ * alongside "who am I", instead of after it. Pages behind sign-in only when this browser looks
+ * signed in (the CSRF cookie lives exactly as long as the session), so a first visit to "/"
+ * does not fetch the office's code just to land on the sign-in page.
+ */
+export function preloadMatchedChunks(router: ChunkRouter): void {
+  try {
+    const [routes] = router.getMatchedRoutes(router.latestLocation.pathname);
+    const needsSession = routes.some((r) => r.id === appRoute.id || r.id === libraryFrameRoute.id);
+    if (needsSession && !readCookie("agentic_csrf")) return;
+  } catch {
+    return; // the router loads them itself
+  }
+  preloadChunksFor(router.latestLocation.pathname, router);
+}
+
+type ChunkRouter = Pick<AnyRouter, "getMatchedRoutes" | "loadRouteChunk" | "latestLocation">;
+let theRouter: ChunkRouter | null = null;
+
+/** Download the code of every route `pathname` opens (no data, no checks). */
+function preloadChunksFor(pathname: string, router = theRouter): void {
+  if (!router) return;
+  try {
+    const [routes] = router.getMatchedRoutes(pathname.split(/[?#]/)[0]!);
+    for (const r of routes) void Promise.resolve(router.loadRouteChunk(r)).catch(() => {});
+  } catch {
+    /* the router loads them itself when the page opens */
+  }
+}
+
+/** After the current page has settled: a second, then when the browser is idle. */
+function whenIdle(fn: () => void): void {
+  if (typeof window === "undefined") return;
+  window.setTimeout(() => {
+    if ("requestIdleCallback" in window) window.requestIdleCallback(fn, { timeout: 3000 });
+    else fn();
+  }, 1000);
+}
+
 export function makeRouter(queryClient: QueryClient) {
-  return createRouter({
+  const router = createRouter({
     routeTree,
     context: { queryClient },
     defaultPreload: "intent",
@@ -927,6 +1007,8 @@ export function makeRouter(queryClient: QueryClient) {
     // The full-screen Library scrolls inside its own area: a new page starts at its top.
     scrollToTopSelectors: ["#library-main"],
   });
+  theRouter = router;
+  return router;
 }
 
 declare module "@tanstack/react-router" {

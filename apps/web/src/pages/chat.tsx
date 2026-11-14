@@ -7,22 +7,18 @@ import { useMemo, useState } from "react";
 
 import { AgentAvatar } from "@/components/agent-avatar";
 import { chatRoute } from "@/components/chat/links";
-import { SessionIcon, type ChatSession } from "@/components/chat/sessions";
+import { SessionIcon } from "@/components/chat/sessions";
 import { EmptyState, Page, PageHeader, Section } from "@/components/page";
 import { Button } from "@/components/ui/button";
 import { Pill } from "@/components/ui/pill";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useT } from "@/i18n";
-import { api } from "@/lib/api";
 import { meQuery } from "@/lib/queries";
 import { staffOnly } from "@/lib/twin";
 import { cn, timeAgo } from "@/lib/utils";
 import { agentsQuery, type Agent } from "@/lib/work";
+import { recentChatsQuery } from "@/lib/chat-recent";
 
-/** GET /api/chat/recent: the person's own latest conversations, across their agents. */
-interface RecentChat extends ChatSession {
-  agent: { id: string; name: string; color: string; role: string; private: boolean; is_twin: boolean };
-}
 
 export function ChatPage() {
   const t = useT();
@@ -34,10 +30,7 @@ export function ChatPage() {
   const active = useMemo(() => (agents ?? []).filter((a) => a.status !== "retired" && !a.view_only), [agents]);
   const shown = active.filter((a) => `${a.name} ${a.role} ${a.department_name ?? ""}`.toLowerCase().includes(q.toLowerCase()));
   // One request for the latest conversations across every agent you chat with.
-  const { data: recentRows = [] } = useQuery({
-    queryKey: ["chat", "recent"],
-    queryFn: () => api<RecentChat[]>("/api/chat/recent?limit=12"),
-  });
+  const { data: recentRows = [] } = useQuery(recentChatsQuery);
   const recent = recentRows.slice(0, 6).map((s) => ({ s, agent: s.agent }));
   const open = (a: Pick<Agent, "id">, session?: string) => navigate(chatRoute(a.id, { from: "/chat", session }));
 

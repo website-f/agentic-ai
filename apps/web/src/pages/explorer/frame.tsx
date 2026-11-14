@@ -11,12 +11,11 @@ import { Outlet, useNavigate, useRouter, useRouterState } from "@tanstack/react-
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { safeFrom } from "@/components/chat/links";
-import { CommandPalette } from "@/components/command-palette";
+import { LazyCommandPalette as CommandPalette, LazyTaskComposerHost as TaskComposerHost } from "@/components/lazy-hosts";
 import { NeedsBell } from "@/components/needs-bell";
 import { IconTile } from "@/components/page";
 import { SearchField } from "@/components/search-box";
 import { useDeviceSync, UserMenu } from "@/components/shell";
-import { TaskComposerHost } from "@/components/task-composer/task-composer";
 import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/select";
 import { useT } from "@/i18n";

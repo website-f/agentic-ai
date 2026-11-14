@@ -6,11 +6,16 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { Toaster } from "sonner";
 
+import { loadLanguage, setDictionaryLoader, useLang } from "@/i18n";
 import { ApiError } from "@/lib/api";
 import { installNativeLinks, markNativeApp } from "@/lib/native";
 import { useTheme } from "@/lib/stores";
 import { applyUpdate } from "@/lib/unsaved";
-import { makeRouter } from "@/router";
+import { makeRouter, preloadMatchedChunks } from "@/router";
+
+// P104: the Malay text is its own file, fetched only for people who read Malay (see i18n).
+setDictionaryLoader(() => import("@/i18n/ms").then((m) => m.MS));
+const langReady = loadLanguage(useLang.getState().lang);
 
 // Session ended or a password change became mandatory while the app was open:
 // send the person to the right screen instead of showing a broken page.
@@ -45,6 +50,8 @@ const queryClient: QueryClient = new QueryClient({
 });
 
 const router = makeRouter(queryClient);
+// P104: the code of the page being opened downloads while "who am I" is asked, not after.
+preloadMatchedChunks(router);
 
 // P96: inside the phone app wrapper (Capacitor) only: no page bounce, and new-window links and
 // downloads go through its plugins. Nothing changes in a browser.
@@ -67,13 +74,16 @@ function ThemedToaster() {
   );
 }
 
-createRoot(document.getElementById("root")!).render(
-  <StrictMode>
-    <QueryClientProvider client={queryClient}>
-      <RouterProvider router={router} />
-      <ThemedToaster />
-    </QueryClientProvider>
-  </StrictMode>,
+// Malay readers: the first screen waits for its text (fetched alongside the app's code).
+void langReady.then(() =>
+  createRoot(document.getElementById("root")!).render(
+    <StrictMode>
+      <QueryClientProvider client={queryClient}>
+        <RouterProvider router={router} />
+        <ThemedToaster />
+      </QueryClientProvider>
+    </StrictMode>,
+  ),
 );
 
 if (import.meta.env.PROD) {

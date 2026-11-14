@@ -24,7 +24,8 @@ import sonnerCss from "sonner/dist/styles.css?inline";
 import { IGNORE_ATTR } from "@/components/feedback/capture";
 import { Feedback } from "@/components/feedback/core";
 import { setFeedbackLayerParent } from "@/components/feedback/liquid-layer";
-import { useLang } from "@/i18n";
+import { addDictionary, useLang } from "@/i18n";
+import { MS } from "@/i18n/ms"; // trimmed to the widget's own lines by widget-i18n-plugin
 import { api } from "@/lib/api";
 import { feedbackConfigQuery } from "@/lib/feedback";
 import type { Me } from "@/lib/types";
@@ -33,6 +34,8 @@ import { createBridge, hostMode, type Bridge } from "./host";
 import { primaPath, readPrimaLang, readPrimaPage, widgetUnwelcome } from "./prima";
 import { PrimaRulesPanel } from "./prima-rules";
 import css from "./widget.css?inline";
+
+addDictionary("ms", MS); // the office fetches it on demand (P104); the widget carries its own
 
 type Theme = "light" | "dark";
 

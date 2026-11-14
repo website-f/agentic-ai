@@ -17,7 +17,7 @@ import { Link, useNavigate } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 
-import { useHelpAsk } from "@/components/help-ask";
+import { useHelpAsk } from "@/components/help-ask-store";
 import { IconTile, type Tone } from "@/components/page";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";

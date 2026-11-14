@@ -11,8 +11,6 @@
 import { useCallback } from "react";
 import { create } from "zustand";
 
-import { MS } from "./ms";
-
 export type Lang = "en" | "ms";
 export type Vars = Record<string, string | number>;
 
@@ -42,6 +40,40 @@ interface LangState {
   setLang: (lang: Lang) => void;
 }
 
+/**
+ * P104: the Malay dictionary (~600 KB) is its own file, fetched only by people who read Malay.
+ * The app's entry (main.tsx) says how to fetch it (`setDictionaryLoader`) and waits for it
+ * before the first screen, so nothing flashes in English; tests and the feedback widget hand
+ * it in directly (`addDictionary`). The fetch lives in the entry on purpose: a chunk that
+ * names the dictionary's file would change with every new Malay line, and so would every
+ * page that imports this module.
+ */
+const DICTS: Record<Lang, Record<string, string> | undefined> = { en: {}, ms: undefined };
+let loader: ((lang: Lang) => Promise<Record<string, string>>) | null = null;
+const loading: Partial<Record<Lang, Promise<void>>> = {};
+
+export function setDictionaryLoader(fn: (lang: Lang) => Promise<Record<string, string>>): void {
+  loader = fn;
+}
+
+export function addDictionary(lang: Lang, dict: Record<string, string>): void {
+  DICTS[lang] = dict;
+}
+
+/** Resolves once `lang`'s text is in place (at once when it is, or nothing can fetch it). */
+export function loadLanguage(lang: Lang): Promise<void> {
+  if (DICTS[lang] || !loader) return Promise.resolve();
+  const fetchDict = loader;
+  return (loading[lang] ??= fetchDict(lang).then(
+    (dict) => addDictionary(lang, dict),
+    () => {
+      delete loading[lang]; // offline: English for now, the next switch tries again
+    },
+  ));
+}
+
+let wanted: Lang | null = null;
+
 export const useLang = create<LangState>((set) => ({
   lang: readLang(),
   setLang: (lang) => {
@@ -50,13 +82,17 @@ export const useLang = create<LangState>((set) => ({
     } catch {
       /* storage blocked: the language still applies for this visit */
     }
-    applyLang(lang);
-    set({ lang });
+    wanted = lang;
+    const apply = () => {
+      if (wanted !== lang) return; // switched again while the text was on its way
+      applyLang(lang);
+      set({ lang });
+    };
+    if (DICTS[lang] || !loader) apply();
+    else void loadLanguage(lang).then(apply);
   },
 }));
 applyLang(useLang.getState().lang);
-
-const DICTS: Record<Lang, Record<string, string>> = { en: {}, ms: MS };
 
 /**
  * One English word, two meanings: tag it with "|", e.g. t("Open|verb") for the button and
@@ -66,7 +102,8 @@ const DICTS: Record<Lang, Record<string, string>> = { en: {}, ms: MS };
 export function translate(lang: Lang, text: string, vars?: Vars): string {
   const bar = text.indexOf("|");
   const plain = bar > 0 ? text.slice(0, bar) : text;
-  const s = lang === "en" ? plain : (DICTS[lang][text] ?? DICTS[lang][plain] ?? plain);
+  const dict = DICTS[lang];
+  const s = lang === "en" || !dict ? plain : (dict[text] ?? dict[plain] ?? plain);
   return vars ? s.replace(/\{(\w+)\}/g, (m, k: string) => (k in vars ? String(vars[k]) : m)) : s;
 }
 

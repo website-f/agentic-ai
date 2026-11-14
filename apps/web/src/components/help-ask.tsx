@@ -8,7 +8,6 @@ import { useNavigate, useRouterState } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { create } from "zustand";
 
 import { Button } from "@/components/ui/button";
 import { SideSheet } from "@/components/ui/side-sheet";
@@ -20,19 +19,9 @@ import { tutorialProgressQuery } from "@/lib/tutorial";
 import { staffOnly } from "@/lib/twin";
 import { ALL_NAV } from "@/nav";
 
-interface HelpState {
-  open: boolean;
-  question: string;
-  ask: (question?: string) => void;
-  close: () => void;
-}
+import { useHelpAsk } from "./help-ask-store";
 
-export const useHelpAsk = create<HelpState>((set) => ({
-  open: false,
-  question: "",
-  ask: (question = "") => set({ open: true, question }),
-  close: () => set({ open: false, question: "" }),
-}));
+export { useHelpAsk };
 
 const STAFF_SUGGESTIONS = [
   msg("How do I give my AI a task?"),

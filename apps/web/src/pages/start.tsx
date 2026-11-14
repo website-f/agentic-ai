@@ -5,7 +5,7 @@ import { ArrowRightIcon, ChatCircleDotsIcon, CheckCircleIcon, RocketLaunchIcon }
 import { useQuery, useSuspenseQuery } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
 
-import { useHelpAsk } from "@/components/help-ask";
+import { useHelpAsk } from "@/components/help-ask-store";
 import { Page, PageHeader } from "@/components/page";
 import { openTaskComposer } from "@/components/task-composer/store";
 import { Button } from "@/components/ui/button";

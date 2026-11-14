@@ -7,7 +7,7 @@ import { useEffect, type ReactNode } from "react";
 
 import { ChatView } from "@/components/chat/chat-view";
 import { safeFrom } from "@/components/chat/links";
-import { TaskComposerHost } from "@/components/task-composer/task-composer";
+import { LazyTaskComposerHost as TaskComposerHost } from "@/components/lazy-hosts";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useT } from "@/i18n";

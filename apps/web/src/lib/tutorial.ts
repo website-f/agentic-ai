@@ -47,7 +47,7 @@ export const tutorialProgressQuery = queryOptions({
 export const prefsQuery = queryOptions({
   queryKey: tutorialKeys.prefs,
   queryFn: () => api<Prefs>("/api/me/prefs"),
-  staleTime: 60_000,
+  staleTime: 5 * 60_000, // P104: changed here only, and saved over the cached copy at once
 });
 
 /** Merge a few settings into users.prefs: sub-keys you send replace, null removes one. */

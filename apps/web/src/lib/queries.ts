@@ -12,10 +12,16 @@ export const keys = {
   audit: ["audit"] as const,
 };
 
+// P104: who am I, the companies and the saved preferences change rarely, and every change made
+// here refreshes them at once; moving between pages no longer asks for them again each minute.
+// A change made elsewhere (a role, a new company) shows within five minutes, or at once when the
+// server answers that something is no longer allowed.
+const STEADY = 5 * 60_000;
+
 export const meQuery = queryOptions({
   queryKey: keys.me,
   queryFn: () => api<Me>("/api/auth/me"),
-  staleTime: 60_000,
+  staleTime: STEADY,
   retry: false,
 });
 
@@ -35,6 +41,7 @@ export const systemStatusQuery = queryOptions({
 export const branchesQuery = queryOptions({
   queryKey: keys.branches,
   queryFn: () => api<Branch[]>("/api/branches"),
+  staleTime: STEADY,
 });
 
 export const membersQuery = queryOptions({

@@ -31,7 +31,7 @@ import { deskKeys, followWorkflow, type Desk, type DeskPerson, type DeskWorkflow
 import { describeHours } from "@/lib/staff";
 import { cn } from "@/lib/utils";
 import { NODE_COLOR, NODE_TYPES, type NodeType, type Workflow } from "@/lib/workflows";
-import { StartRunDialog } from "@/pages/workflows/run";
+import { LazyStartRunDialog as StartRunDialog } from "@/pages/workflows/start-run-lazy";
 
 import { HowDoI, useAskMyAi } from "./hub";
 

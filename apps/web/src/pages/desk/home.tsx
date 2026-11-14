@@ -112,7 +112,7 @@ import { cn, timeAgo } from "@/lib/utils";
 import { toolText } from "@/lib/work";
 import type { Workflow } from "@/lib/workflows";
 import { ALL_NAV, navItemFor, pathAllowed } from "@/nav";
-import { StartRunDialog } from "@/pages/workflows/run";
+import { LazyStartRunDialog as StartRunDialog } from "@/pages/workflows/start-run-lazy";
 import { whenText } from "@/pages/forms/words";
 
 import { AskPanel } from "./ask";
