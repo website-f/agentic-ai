@@ -1,33 +1,119 @@
 {
- "generated_at": "2026-10-07T04:36:14.277Z",
+ "generated_at": "2026-11-14T08:54:13.632Z",
  "source": "Sample companies (demo data)",
  "shots": {
+  "workspace": {
+   "desktop": {
+    "src": "/guide-media/shots/workspace-desktop.webp",
+    "w": 1440,
+    "h": 1167,
+    "boxes": [
+     {
+      "id": "desk.tabs",
+      "x": 0.2069,
+      "y": 0.2575,
+      "w": 0.7556,
+      "h": 0.036
+     },
+     {
+      "id": "desk.ask",
+      "x": 0.2069,
+      "y": 0.3106,
+      "w": 0.7556,
+      "h": 0.0943
+     },
+     {
+      "id": "desk.stats",
+      "x": 0.6162,
+      "y": 0.4584,
+      "w": 0.3462,
+      "h": 0.3676
+     },
+     {
+      "id": "desk.pinned",
+      "x": 0.2069,
+      "y": 0.85,
+      "w": 0.7556,
+      "h": 0.1153
+     },
+     {
+      "id": "desk.waiting",
+      "x": 0.2069,
+      "y": 0.4289,
+      "w": 0.7556,
+      "h": 0.3972
+     }
+    ]
+   },
+   "mobile": {
+    "src": "/guide-media/shots/workspace-mobile.webp",
+    "w": 786,
+    "h": 4260,
+    "boxes": [
+     {
+      "id": "desk.tabs",
+      "x": 0,
+      "y": 0.186,
+      "w": 1,
+      "h": 0.0197
+     },
+     {
+      "id": "desk.ask",
+      "x": 0.0407,
+      "y": 0.2151,
+      "w": 0.9186,
+      "h": 0.0535
+     },
+     {
+      "id": "desk.stats",
+      "x": 0.0407,
+      "y": 0.5434,
+      "w": 0.9186,
+      "h": 0.2042
+     },
+     {
+      "id": "desk.pinned",
+      "x": 0.0407,
+      "y": 0.7589,
+      "w": 0.9186,
+      "h": 0.1093
+     },
+     {
+      "id": "desk.waiting",
+      "x": 0.0407,
+      "y": 0.2799,
+      "w": 0.9186,
+      "h": 0.4677
+     }
+    ]
+   }
+  },
   "home": {
    "desktop": {
     "src": "/guide-media/shots/home-desktop.webp",
     "w": 1440,
-    "h": 1293,
+    "h": 1612,
     "boxes": [
      {
       "id": "home.health",
-      "x": 0.6175,
-      "y": 0.6094,
-      "w": 0.345,
-      "h": 0.2933
+      "x": 0.6186,
+      "y": 0.6152,
+      "w": 0.3592,
+      "h": 0.3123
      },
      {
       "id": "home.getting-started",
-      "x": 0.2069,
-      "y": 0.6094,
-      "w": 0.3967,
-      "h": 0.2933
+      "x": 0.1917,
+      "y": 0.6152,
+      "w": 0.413,
+      "h": 0.3123
      },
      {
       "id": "home.shortcuts",
-      "x": 0.2069,
-      "y": 0.9182,
-      "w": 0.7556,
-      "h": 0.0503
+      "x": 0.1917,
+      "y": 0.94,
+      "w": 0.7861,
+      "h": 0.0403
      }
     ]
    },
@@ -37,234 +123,11 @@
     "h": 4260,
     "boxes": [
      {
-      "id": "home.health",
-      "x": 0.0407,
-      "y": 0.7626,
-      "w": 0.9186,
-      "h": 0.1697
-     },
-     {
       "id": "home.getting-started",
       "x": 0.0407,
-      "y": 0.523,
+      "y": 0.6445,
       "w": 0.9186,
-      "h": 0.2302
-     },
-     {
-      "id": "home.shortcuts",
-      "x": 0.0407,
-      "y": 0.9417,
-      "w": 0.9186,
-      "h": 0.0583
-     }
-    ]
-   }
-  },
-  "workspace": {
-   "desktop": {
-    "src": "/guide-media/shots/workspace-desktop.webp",
-    "w": 1440,
-    "h": 1209,
-    "boxes": [
-     {
-      "id": "desk.tabs",
-      "x": 0.1917,
-      "y": 0.1706,
-      "w": 0.7861,
-      "h": 0.0347
-     },
-     {
-      "id": "desk.ask",
-      "x": 0.1917,
-      "y": 0.415,
-      "w": 0.7861,
-      "h": 0.1489
-     },
-     {
-      "id": "desk.stats",
-      "x": 0.1917,
-      "y": 0.5804,
-      "w": 0.7861,
-      "h": 0.1042
-     },
-     {
-      "id": "desk.pinned",
-      "x": 0.1917,
-      "y": 0.7012,
-      "w": 0.5167,
-      "h": 0.1592
-     },
-     {
-      "id": "desk.waiting",
-      "x": 0.7222,
-      "y": 0.7012,
-      "w": 0.2556,
-      "h": 0.2721
-     }
-    ]
-   },
-   "mobile": {
-    "src": "/guide-media/shots/workspace-mobile.webp",
-    "w": 786,
-    "h": 4208,
-    "boxes": [
-     {
-      "id": "desk.tabs",
-      "x": 0,
-      "y": 0.1065,
-      "w": 1,
-      "h": 0.02
-     },
-     {
-      "id": "desk.ask",
-      "x": 0.0407,
-      "y": 0.3066,
-      "w": 0.9186,
-      "h": 0.1636
-     },
-     {
-      "id": "desk.stats",
-      "x": 0.0407,
-      "y": 0.4797,
-      "w": 0.9186,
-      "h": 0.1134
-     },
-     {
-      "id": "desk.pinned",
-      "x": 0.0407,
-      "y": 0.6025,
-      "w": 0.9186,
-      "h": 0.1151
-     },
-     {
-      "id": "desk.waiting",
-      "x": 0.0407,
-      "y": 0.7272,
-      "w": 0.9186,
-      "h": 0.2272
-     }
-    ]
-   }
-  },
-  "my-worker": {
-   "desktop": {
-    "src": "/guide-media/shots/my-worker-desktop.webp",
-    "w": 1440,
-    "h": 1294,
-    "boxes": [
-     {
-      "id": "my-worker.status",
-      "x": 0.2743,
-      "y": 0.2575,
-      "w": 0.2587,
-      "h": 0.0493
-     },
-     {
-      "id": "my-worker.actions",
-      "x": 0.7229,
-      "y": 0.2283,
-      "w": 0.2222,
-      "h": 0.0804
-     },
-     {
-      "id": "my-worker.week",
-      "x": 0.6469,
-      "y": 0.654,
-      "w": 0.3156,
-      "h": 0.3149
-     }
-    ]
-   },
-   "mobile": {
-    "src": "/guide-media/shots/my-worker-mobile.webp",
-    "w": 786,
-    "h": 4260,
-    "boxes": [
-     {
-      "id": "my-worker.status",
-      "x": 0.2672,
-      "y": 0.1702,
-      "w": 0.6489,
-      "h": 0.0299
-     },
-     {
-      "id": "my-worker.actions",
-      "x": 0.084,
-      "y": 0.2299,
-      "w": 0.8321,
-      "h": 0.0488
-     },
-     {
-      "id": "my-worker.week",
-      "x": 0.0407,
-      "y": 0.9164,
-      "w": 0.9186,
-      "h": 0.0836
-     }
-    ]
-   }
-  },
-  "my-worker:welcome": {
-   "desktop": {
-    "src": "/guide-media/shots/my-worker-welcome-desktop.webp",
-    "w": 1440,
-    "h": 900,
-    "boxes": []
-   },
-   "mobile": {
-    "src": "/guide-media/shots/my-worker-welcome-mobile.webp",
-    "w": 786,
-    "h": 1704,
-    "boxes": []
-   }
-  },
-  "assistants": {
-   "desktop": {
-    "src": "/guide-media/shots/assistants-desktop.webp",
-    "w": 1440,
-    "h": 900,
-    "boxes": [
-     {
-      "id": "assistants.chat",
-      "x": 0.3806,
-      "y": 0.2292,
-      "w": 0.5972,
-      "h": 0.3297
-     },
-     {
-      "id": "assistants.quick",
-      "x": 0.3979,
-      "y": 0.3414,
-      "w": 0.5625,
-      "h": 0.04
-     },
-     {
-      "id": "assistants.connections",
-      "x": 0.1917,
-      "y": 0.4192,
-      "w": 0.1778,
-      "h": 0.0769
-     }
-    ]
-   },
-   "mobile": {
-    "src": "/guide-media/shots/assistants-mobile.webp",
-    "w": 786,
-    "h": 1964,
-    "boxes": [
-     {
-      "id": "assistants.chat",
-      "x": 0.0407,
-      "y": 0.3949,
-      "w": 0.9186,
-      "h": 0.5069
-     },
-     {
-      "id": "assistants.quick",
-      "x": 0.084,
-      "y": 0.5578,
-      "w": 0.8321,
-      "h": 0.1711
+      "h": 0.2885
      }
     ]
    }
@@ -311,13 +174,6 @@
       "h": 0.0216
      },
      {
-      "id": "overview.branches",
-      "x": 0.0407,
-      "y": 0.9119,
-      "w": 0.9186,
-      "h": 0.0881
-     },
-     {
       "id": "overview.briefing",
       "x": 0.0407,
       "y": 0.6692,
@@ -335,9 +191,9 @@
     "boxes": [
      {
       "id": "impact.totals",
-      "x": 0.2069,
-      "y": 0.1146,
-      "w": 0.7556,
+      "x": 0.1917,
+      "y": 0.2017,
+      "w": 0.7861,
       "h": 0.0731
      }
     ]
@@ -350,7 +206,7 @@
      {
       "id": "impact.totals",
       "x": 0.0407,
-      "y": 0.1343,
+      "y": 0.236,
       "w": 0.9186,
       "h": 0.1759
      }
@@ -365,15 +221,15 @@
     "boxes": [
      {
       "id": "impact.roi",
-      "x": 0.2069,
-      "y": 0.0797,
-      "w": 0.7556,
+      "x": 0.1917,
+      "y": 0.0794,
+      "w": 0.7861,
       "h": 0.4531
      },
      {
       "id": "impact.try",
-      "x": 0.2188,
-      "y": 0.8842,
+      "x": 0.2035,
+      "y": 0.8631,
       "w": 0.0529,
       "h": 0.0356
      }
@@ -387,9 +243,1148 @@
      {
       "id": "impact.roi",
       "x": 0.0407,
-      "y": 0.0848,
+      "y": 0.0845,
       "w": 0.9186,
       "h": 0.8589
+     }
+    ]
+   }
+  },
+  "my-worker": {
+   "desktop": {
+    "src": "/guide-media/shots/my-worker-desktop.webp",
+    "w": 1440,
+    "h": 1654,
+    "boxes": [
+     {
+      "id": "my-worker.status",
+      "x": 0.259,
+      "y": 0.3878,
+      "w": 0.2587,
+      "h": 0.0385
+     },
+     {
+      "id": "my-worker.actions",
+      "x": 0.7382,
+      "y": 0.3649,
+      "w": 0.2222,
+      "h": 0.0629
+     },
+     {
+      "id": "my-worker.week",
+      "x": 0.6492,
+      "y": 0.7294,
+      "w": 0.3286,
+      "h": 0.2464
+     }
+    ]
+   },
+   "mobile": {
+    "src": "/guide-media/shots/my-worker-mobile.webp",
+    "w": 786,
+    "h": 4260,
+    "boxes": [
+     {
+      "id": "my-worker.status",
+      "x": 0.2672,
+      "y": 0.3695,
+      "w": 0.6489,
+      "h": 0.0299
+     },
+     {
+      "id": "my-worker.actions",
+      "x": 0.084,
+      "y": 0.4292,
+      "w": 0.8321,
+      "h": 0.0488
+     }
+    ]
+   }
+  },
+  "my-worker:welcome": {
+   "desktop": {
+    "src": "/guide-media/shots/my-worker-welcome-desktop.webp",
+    "w": 1440,
+    "h": 900,
+    "boxes": []
+   },
+   "mobile": {
+    "src": "/guide-media/shots/my-worker-welcome-mobile.webp",
+    "w": 786,
+    "h": 1704,
+    "boxes": []
+   }
+  },
+  "assistants": {
+   "desktop": {
+    "src": "/guide-media/shots/assistants-desktop.webp",
+    "w": 1440,
+    "h": 900,
+    "boxes": [
+     {
+      "id": "assistants.chat",
+      "x": 0.3806,
+      "y": 0.4294,
+      "w": 0.5972,
+      "h": 0.3297
+     },
+     {
+      "id": "assistants.quick",
+      "x": 0.3979,
+      "y": 0.5417,
+      "w": 0.5625,
+      "h": 0.04
+     },
+     {
+      "id": "assistants.connections",
+      "x": 0.1917,
+      "y": 0.6194,
+      "w": 0.1778,
+      "h": 0.1258
+     }
+    ]
+   },
+   "mobile": {
+    "src": "/guide-media/shots/assistants-mobile.webp",
+    "w": 786,
+    "h": 2482,
+    "boxes": [
+     {
+      "id": "assistants.chat",
+      "x": 0.0407,
+      "y": 0.5218,
+      "w": 0.9186,
+      "h": 0.4011
+     },
+     {
+      "id": "assistants.quick",
+      "x": 0.084,
+      "y": 0.6507,
+      "w": 0.8321,
+      "h": 0.1354
+     }
+    ]
+   }
+  },
+  "computers": {
+   "desktop": {
+    "src": "/guide-media/shots/computers-desktop.webp",
+    "w": 1440,
+    "h": 1656,
+    "boxes": [
+     {
+      "id": "computers.link",
+      "x": 0.8654,
+      "y": 0.0859,
+      "w": 0.1124,
+      "h": 0.0242
+     },
+     {
+      "id": "computers.device",
+      "x": 0.1917,
+      "y": 0.2476,
+      "w": 0.7861,
+      "h": 0.5347
+     },
+     {
+      "id": "computers.folders",
+      "x": 0.2063,
+      "y": 0.5572,
+      "w": 0.7569,
+      "h": 0.1786
+     },
+     {
+      "id": "computers.activity",
+      "x": 0.2063,
+      "y": 0.7479,
+      "w": 0.7569,
+      "h": 0.0217
+     },
+     {
+      "id": "computers.safety",
+      "x": 0.1917,
+      "y": 0.7944,
+      "w": 0.7861,
+      "h": 0.1864
+     }
+    ]
+   },
+   "mobile": {
+    "src": "/guide-media/shots/computers-mobile.webp",
+    "w": 786,
+    "h": 4260,
+    "boxes": [
+     {
+      "id": "computers.link",
+      "x": 0.0407,
+      "y": 0.1014,
+      "w": 0.9186,
+      "h": 0.0188
+     },
+     {
+      "id": "computers.device",
+      "x": 0.0407,
+      "y": 0.2736,
+      "w": 0.9186,
+      "h": 0.7254
+     }
+    ]
+   }
+  },
+  "computers:activity": {
+   "desktop": {
+    "src": "/guide-media/shots/computers-activity-desktop.webp",
+    "w": 1440,
+    "h": 1800,
+    "boxes": [
+     {
+      "id": "computers.link",
+      "x": 0.8654,
+      "y": 0.079,
+      "w": 0.1124,
+      "h": 0.0222
+     },
+     {
+      "id": "computers.device",
+      "x": 0.1917,
+      "y": 0.2278,
+      "w": 0.7861,
+      "h": 0.7722
+     },
+     {
+      "id": "computers.folders",
+      "x": 0.2063,
+      "y": 0.5126,
+      "w": 0.7569,
+      "h": 0.1643
+     },
+     {
+      "id": "computers.activity",
+      "x": 0.2063,
+      "y": 0.6881,
+      "w": 0.7569,
+      "h": 0.3119
+     }
+    ]
+   },
+   "mobile": {
+    "src": "/guide-media/shots/computers-activity-mobile.webp",
+    "w": 786,
+    "h": 4260,
+    "boxes": [
+     {
+      "id": "computers.link",
+      "x": 0.0407,
+      "y": 0.1014,
+      "w": 0.9186,
+      "h": 0.0188
+     },
+     {
+      "id": "computers.device",
+      "x": 0.0407,
+      "y": 0.2736,
+      "w": 0.9186,
+      "h": 0.7264
+     }
+    ]
+   }
+  },
+  "tasks": {
+   "desktop": {
+    "src": "/guide-media/shots/tasks-desktop.webp",
+    "w": 1440,
+    "h": 1013,
+    "boxes": [
+     {
+      "id": "tasks.new",
+      "x": 0.8956,
+      "y": 0.1404,
+      "w": 0.0822,
+      "h": 0.0395
+     },
+     {
+      "id": "tasks.columns",
+      "x": 0.1694,
+      "y": 0.5775,
+      "w": 0.8306,
+      "h": 0.4146
+     },
+     {
+      "id": "tasks.card",
+      "x": 0.1979,
+      "y": 0.6473,
+      "w": 0.2042,
+      "h": 0.1344
+     },
+     {
+      "id": "tasks.search",
+      "x": 0.1917,
+      "y": 0.3406,
+      "w": 0.4283,
+      "h": 0.0395
+     }
+    ]
+   },
+   "mobile": {
+    "src": "/guide-media/shots/tasks-mobile.webp",
+    "w": 786,
+    "h": 2086,
+    "boxes": [
+     {
+      "id": "tasks.new",
+      "x": 0.8473,
+      "y": 0.3612,
+      "w": 0.112,
+      "h": 0.0422
+     },
+     {
+      "id": "tasks.search",
+      "x": 0.0407,
+      "y": 0.3631,
+      "w": 0.7863,
+      "h": 0.0384
+     }
+    ]
+   }
+  },
+  "tasks:new": {
+   "desktop": {
+    "src": "/guide-media/shots/tasks-new-desktop.webp",
+    "w": 1440,
+    "h": 900,
+    "boxes": []
+   },
+   "mobile": {
+    "src": "/guide-media/shots/tasks-new-mobile.webp",
+    "w": 786,
+    "h": 1704,
+    "boxes": []
+   }
+  },
+  "tasks:sheet": {
+   "desktop": {
+    "src": "/guide-media/shots/tasks-sheet-desktop.webp",
+    "w": 1440,
+    "h": 900,
+    "boxes": []
+   }
+  },
+  "approvals": {
+   "desktop": {
+    "src": "/guide-media/shots/approvals-desktop.webp",
+    "w": 1440,
+    "h": 900,
+    "boxes": [
+     {
+      "id": "approvals.card",
+      "x": 0.2069,
+      "y": 0.3992,
+      "w": 0.3736,
+      "h": 0.3642
+     },
+     {
+      "id": "approvals.actions",
+      "x": 0.2188,
+      "y": 0.6147,
+      "w": 0.35,
+      "h": 0.08
+     },
+     {
+      "id": "approvals.history",
+      "x": 0.2069,
+      "y": 0.3347,
+      "w": 0.1182,
+      "h": 0.0422
+     }
+    ]
+   },
+   "mobile": {
+    "src": "/guide-media/shots/approvals-mobile.webp",
+    "w": 786,
+    "h": 4260,
+    "boxes": [
+     {
+      "id": "approvals.card",
+      "x": 0.0407,
+      "y": 0.2181,
+      "w": 0.9186,
+      "h": 0.1921
+     },
+     {
+      "id": "approvals.actions",
+      "x": 0.084,
+      "y": 0.3182,
+      "w": 0.8321,
+      "h": 0.0526
+     },
+     {
+      "id": "approvals.history",
+      "x": 0.0407,
+      "y": 0.1871,
+      "w": 0.4332,
+      "h": 0.0216
+     }
+    ]
+   }
+  },
+  "chat": {
+   "desktop": {
+    "src": "/guide-media/shots/chat-desktop.webp",
+    "w": 1440,
+    "h": 900,
+    "boxes": [
+     {
+      "id": "chat.agents",
+      "x": 0.2069,
+      "y": 0.5242,
+      "w": 0.7556,
+      "h": 0.4022
+     }
+    ]
+   },
+   "mobile": {
+    "src": "/guide-media/shots/chat-mobile.webp",
+    "w": 786,
+    "h": 3668,
+    "boxes": [
+     {
+      "id": "chat.agents",
+      "x": 0.0407,
+      "y": 0.3466,
+      "w": 0.9186,
+      "h": 0.6009
+     }
+    ]
+   }
+  },
+  "chat:conversation": {
+   "desktop": {
+    "src": "/guide-media/shots/chat-conversation-desktop.webp",
+    "w": 1440,
+    "h": 900,
+    "boxes": [
+     {
+      "id": "chat.composer",
+      "x": 0.3194,
+      "y": 0.8933,
+      "w": 0.5611,
+      "h": 0.0756
+     }
+    ]
+   },
+   "mobile": {
+    "src": "/guide-media/shots/chat-conversation-mobile.webp",
+    "w": 786,
+    "h": 1704,
+    "boxes": [
+     {
+      "id": "chat.composer",
+      "x": 0,
+      "y": 0.8709,
+      "w": 1,
+      "h": 0.0775
+     }
+    ]
+   }
+  },
+  "mail": {
+   "desktop": {
+    "src": "/guide-media/shots/mail-desktop.webp",
+    "w": 1440,
+    "h": 900,
+    "boxes": []
+   },
+   "mobile": {
+    "src": "/guide-media/shots/mail-mobile.webp",
+    "w": 786,
+    "h": 1766,
+    "boxes": []
+   }
+  },
+  "forms": {
+   "desktop": {
+    "src": "/guide-media/shots/forms-desktop.webp",
+    "w": 1440,
+    "h": 900,
+    "boxes": [
+     {
+      "id": "forms.tabs",
+      "x": 0.1917,
+      "y": 0.4294,
+      "w": 0.7861,
+      "h": 0.0467
+     }
+    ]
+   },
+   "mobile": {
+    "src": "/guide-media/shots/forms-mobile.webp",
+    "w": 786,
+    "h": 1966,
+    "boxes": [
+     {
+      "id": "forms.tabs",
+      "x": 0,
+      "y": 0.5285,
+      "w": 1,
+      "h": 0.0427
+     }
+    ]
+   }
+  },
+  "reports": {
+   "desktop": {
+    "src": "/guide-media/shots/reports-desktop.webp",
+    "w": 1440,
+    "h": 1215,
+    "boxes": [
+     {
+      "id": "reports.list",
+      "x": 0.1917,
+      "y": 0.3609,
+      "w": 0.2333,
+      "h": 0.6391
+     },
+     {
+      "id": "reports.search",
+      "x": 0.1917,
+      "y": 0.3181,
+      "w": 0.2333,
+      "h": 0.0329
+     }
+    ]
+   },
+   "mobile": {
+    "src": "/guide-media/shots/reports-mobile.webp",
+    "w": 786,
+    "h": 3430,
+    "boxes": [
+     {
+      "id": "reports.list",
+      "x": 0.0407,
+      "y": 0.2778,
+      "w": 0.9186,
+      "h": 0.666
+     },
+     {
+      "id": "reports.search",
+      "x": 0.0407,
+      "y": 0.2475,
+      "w": 0.9186,
+      "h": 0.0233
+     }
+    ]
+   }
+  },
+  "workflows": {
+   "desktop": {
+    "src": "/guide-media/shots/workflows-desktop.webp",
+    "w": 1440,
+    "h": 900,
+    "boxes": [
+     {
+      "id": "workflows.new",
+      "x": 0.8736,
+      "y": 0.1806,
+      "w": 0.1042,
+      "h": 0.0444
+     },
+     {
+      "id": "workflows.list",
+      "x": 0.1917,
+      "y": 0.7069,
+      "w": 0.7861,
+      "h": 0.2597
+     }
+    ]
+   },
+   "mobile": {
+    "src": "/guide-media/shots/workflows-mobile.webp",
+    "w": 786,
+    "h": 3448,
+    "boxes": [
+     {
+      "id": "workflows.new",
+      "x": 0.0407,
+      "y": 0.137,
+      "w": 0.9186,
+      "h": 0.0232
+     },
+     {
+      "id": "workflows.list",
+      "x": 0.0407,
+      "y": 0.5541,
+      "w": 0.9186,
+      "h": 0.2781
+     }
+    ]
+   }
+  },
+  "workflows:editor": {
+   "desktop": {
+    "src": "/guide-media/shots/workflows-editor-desktop.webp",
+    "w": 1440,
+    "h": 900,
+    "boxes": [
+     {
+      "id": "workflows.run",
+      "x": 0.9153,
+      "y": 0.014,
+      "w": 0.0486,
+      "h": 0.0356
+     }
+    ]
+   },
+   "mobile": {
+    "src": "/guide-media/shots/workflows-editor-mobile.webp",
+    "w": 786,
+    "h": 1704,
+    "boxes": [
+     {
+      "id": "workflows.run",
+      "x": 0.397,
+      "y": 0.0672,
+      "w": 0.0967,
+      "h": 0.0376
+     }
+    ]
+   }
+  },
+  "objectives": {
+   "desktop": {
+    "src": "/guide-media/shots/objectives-desktop.webp",
+    "w": 1440,
+    "h": 900,
+    "boxes": []
+   },
+   "mobile": {
+    "src": "/guide-media/shots/objectives-mobile.webp",
+    "w": 786,
+    "h": 1882,
+    "boxes": []
+   }
+  },
+  "prima": {
+   "desktop": {
+    "src": "/guide-media/shots/prima-desktop.webp",
+    "w": 1440,
+    "h": 900,
+    "boxes": []
+   },
+   "mobile": {
+    "src": "/guide-media/shots/prima-mobile.webp",
+    "w": 786,
+    "h": 1942,
+    "boxes": []
+   }
+  },
+  "files": {
+   "desktop": {
+    "src": "/guide-media/shots/files-desktop.webp",
+    "w": 1440,
+    "h": 900,
+    "boxes": [
+     {
+      "id": "files.company",
+      "x": 0.1435,
+      "y": 0.0128,
+      "w": 0.1556,
+      "h": 0.0356
+     },
+     {
+      "id": "files.tree",
+      "x": 0.0056,
+      "y": 0.1211,
+      "w": 0.166,
+      "h": 0.5467
+     },
+     {
+      "id": "shell.search",
+      "x": 0.6903,
+      "y": 0.0106,
+      "w": 0.2222,
+      "h": 0.04
+     }
+    ]
+   },
+   "mobile": {
+    "src": "/guide-media/shots/files-mobile.webp",
+    "w": 786,
+    "h": 1704,
+    "boxes": [
+     {
+      "id": "files.company",
+      "x": 0.1374,
+      "y": 0.0065,
+      "w": 0.4478,
+      "h": 0.0516
+     }
+    ]
+   }
+  },
+  "documents": {
+   "desktop": {
+    "src": "/guide-media/shots/documents-desktop.webp",
+    "w": 1440,
+    "h": 900,
+    "boxes": [
+     {
+      "id": "documents.new",
+      "x": 0.5962,
+      "y": 0.1889,
+      "w": 0.1077,
+      "h": 0.0444
+     },
+     {
+      "id": "documents.list",
+      "x": 0.1222,
+      "y": 0.6133,
+      "w": 0.7556,
+      "h": 0.3836
+     }
+    ]
+   },
+   "mobile": {
+    "src": "/guide-media/shots/documents-mobile.webp",
+    "w": 786,
+    "h": 1704,
+    "boxes": [
+     {
+      "id": "documents.new",
+      "x": 0.0407,
+      "y": 0.2861,
+      "w": 0.9186,
+      "h": 0.0469
+     }
+    ]
+   }
+  },
+  "documents:editor": {
+   "desktop": {
+    "src": "/guide-media/shots/documents-editor-desktop.webp",
+    "w": 1440,
+    "h": 900,
+    "boxes": []
+   },
+   "mobile": {
+    "src": "/guide-media/shots/documents-editor-mobile.webp",
+    "w": 786,
+    "h": 1704,
+    "boxes": []
+   }
+  },
+  "sops": {
+   "desktop": {
+    "src": "/guide-media/shots/sops-desktop.webp",
+    "w": 1440,
+    "h": 900,
+    "boxes": [
+     {
+      "id": "sops.new",
+      "x": 0.6219,
+      "y": 0.1889,
+      "w": 0.082,
+      "h": 0.0444
+     }
+    ]
+   },
+   "mobile": {
+    "src": "/guide-media/shots/sops-mobile.webp",
+    "w": 786,
+    "h": 1704,
+    "boxes": [
+     {
+      "id": "sops.new",
+      "x": 0.5102,
+      "y": 0.2861,
+      "w": 0.4491,
+      "h": 0.0469
+     }
+    ]
+   }
+  },
+  "library": {
+   "desktop": {
+    "src": "/guide-media/shots/library-desktop.webp",
+    "w": 1440,
+    "h": 900,
+    "boxes": [
+     {
+      "id": "library.upload",
+      "x": 0.1222,
+      "y": 0.26,
+      "w": 0.3736,
+      "h": 0.3494
+     },
+     {
+      "id": "library.search",
+      "x": 0.1222,
+      "y": 0.7994,
+      "w": 0.7556,
+      "h": 0.1683
+     },
+     {
+      "id": "library.sharepoint",
+      "x": 0.1222,
+      "y": 0.6317,
+      "w": 0.7556,
+      "h": 0.1456
+     }
+    ]
+   },
+   "mobile": {
+    "src": "/guide-media/shots/library-mobile.webp",
+    "w": 786,
+    "h": 1704,
+    "boxes": [
+     {
+      "id": "library.upload",
+      "x": 0.0407,
+      "y": 0.3612,
+      "w": 0.9186,
+      "h": 0.3817
+     }
+    ]
+   }
+  },
+  "templates": {
+   "desktop": {
+    "src": "/guide-media/shots/templates-desktop.webp",
+    "w": 1440,
+    "h": 900,
+    "boxes": [
+     {
+      "id": "templates.new",
+      "x": 0.6012,
+      "y": 0.2114,
+      "w": 0.1026,
+      "h": 0.0444
+     },
+     {
+      "id": "templates.list",
+      "x": 0.1222,
+      "y": 0.3492,
+      "w": 0.7556,
+      "h": 0.6508
+     }
+    ]
+   },
+   "mobile": {
+    "src": "/guide-media/shots/templates-mobile.webp",
+    "w": 786,
+    "h": 1704,
+    "boxes": [
+     {
+      "id": "templates.new",
+      "x": 0.5127,
+      "y": 0.2861,
+      "w": 0.4466,
+      "h": 0.0469
+     }
+    ]
+   }
+  },
+  "packs": {
+   "desktop": {
+    "src": "/guide-media/shots/packs-desktop.webp",
+    "w": 1440,
+    "h": 900,
+    "boxes": [
+     {
+      "id": "packs.new",
+      "x": 0.6194,
+      "y": 0.2114,
+      "w": 0.0845,
+      "h": 0.0444
+     },
+     {
+      "id": "packs.list",
+      "x": 0.1222,
+      "y": 0.4447,
+      "w": 0.7556,
+      "h": 0.1728
+     }
+    ]
+   },
+   "mobile": {
+    "src": "/guide-media/shots/packs-mobile.webp",
+    "w": 786,
+    "h": 1704,
+    "boxes": [
+     {
+      "id": "packs.new",
+      "x": 0.0407,
+      "y": 0.3099,
+      "w": 0.9186,
+      "h": 0.0469
+     },
+     {
+      "id": "packs.list",
+      "x": 0.0407,
+      "y": 0.7447,
+      "w": 0.9186,
+      "h": 0.2553
+     }
+    ]
+   }
+  },
+  "company-kit": {
+   "desktop": {
+    "src": "/guide-media/shots/company-kit-desktop.webp",
+    "w": 1440,
+    "h": 900,
+    "boxes": [
+     {
+      "id": "company-kit.fields",
+      "x": 0.1222,
+      "y": 0.3239,
+      "w": 0.4972,
+      "h": 0.3689
+     },
+     {
+      "id": "company-kit.save",
+      "x": 0.6451,
+      "y": 0.7494,
+      "w": 0.2208,
+      "h": 0.0444
+     }
+    ]
+   },
+   "mobile": {
+    "src": "/guide-media/shots/company-kit-mobile.webp",
+    "w": 786,
+    "h": 4260,
+    "boxes": [
+     {
+      "id": "company-kit.fields",
+      "x": 0.0407,
+      "y": 0.3649,
+      "w": 0.9186,
+      "h": 0.2249
+     },
+     {
+      "id": "company-kit.save",
+      "x": 0.0407,
+      "y": 0.9756,
+      "w": 0.9186,
+      "h": 0.0188
+     }
+    ]
+   }
+  },
+  "agents": {
+   "desktop": {
+    "src": "/guide-media/shots/agents-desktop.webp",
+    "w": 1440,
+    "h": 900,
+    "boxes": [
+     {
+      "id": "agents.new",
+      "x": 0.8899,
+      "y": 0.1581,
+      "w": 0.0879,
+      "h": 0.0444
+     },
+     {
+      "id": "agents.card",
+      "x": 0.1917,
+      "y": 0.7494,
+      "w": 0.2565,
+      "h": 0.1697
+     },
+     {
+      "id": "agents.org",
+      "x": 0.1917,
+      "y": 0.5917,
+      "w": 0.1633,
+      "h": 0.0422
+     }
+    ]
+   },
+   "mobile": {
+    "src": "/guide-media/shots/agents-mobile.webp",
+    "w": 786,
+    "h": 4260,
+    "boxes": [
+     {
+      "id": "agents.new",
+      "x": 0.0407,
+      "y": 0.0919,
+      "w": 0.9186,
+      "h": 0.0188
+     },
+     {
+      "id": "agents.card",
+      "x": 0.0407,
+      "y": 0.4262,
+      "w": 0.9186,
+      "h": 0.0717
+     },
+     {
+      "id": "agents.org",
+      "x": 0.0407,
+      "y": 0.3558,
+      "w": 0.5984,
+      "h": 0.0216
+     }
+    ]
+   }
+  },
+  "agents:new": {
+   "desktop": {
+    "src": "/guide-media/shots/agents-new-desktop.webp",
+    "w": 1440,
+    "h": 900,
+    "boxes": []
+   },
+   "mobile": {
+    "src": "/guide-media/shots/agents-new-mobile.webp",
+    "w": 786,
+    "h": 3652,
+    "boxes": []
+   }
+  },
+  "agents:detail": {
+   "desktop": {
+    "src": "/guide-media/shots/agents-detail-desktop.webp",
+    "w": 1440,
+    "h": 900,
+    "boxes": []
+   },
+   "mobile": {
+    "src": "/guide-media/shots/agents-detail-mobile.webp",
+    "w": 786,
+    "h": 4260,
+    "boxes": []
+   }
+  },
+  "timetable": {
+   "desktop": {
+    "src": "/guide-media/shots/timetable-desktop.webp",
+    "w": 1440,
+    "h": 900,
+    "boxes": []
+   },
+   "mobile": {
+    "src": "/guide-media/shots/timetable-mobile.webp",
+    "w": 786,
+    "h": 4144,
+    "boxes": []
+   }
+  },
+  "monitor": {
+   "desktop": {
+    "src": "/guide-media/shots/monitor-desktop.webp",
+    "w": 1440,
+    "h": 1800,
+    "boxes": [
+     {
+      "id": "monitor.agents",
+      "x": 0.1917,
+      "y": 0.2017,
+      "w": 0.1778,
+      "h": 0.5667
+     },
+     {
+      "id": "monitor.screen",
+      "x": 0.3833,
+      "y": 0.2017,
+      "w": 0.5944,
+      "h": 0.7983
+     }
+    ]
+   },
+   "mobile": {
+    "src": "/guide-media/shots/monitor-mobile.webp",
+    "w": 786,
+    "h": 4260,
+    "boxes": [
+     {
+      "id": "monitor.agents",
+      "x": 0,
+      "y": 0.1974,
+      "w": 1,
+      "h": 0.0283
+     },
+     {
+      "id": "monitor.screen",
+      "x": 0.0407,
+      "y": 0.2351,
+      "w": 0.9186,
+      "h": 0.7649
+     }
+    ]
+   }
+  },
+  "meetings": {
+   "desktop": {
+    "src": "/guide-media/shots/meetings-desktop.webp",
+    "w": 1440,
+    "h": 900,
+    "boxes": [
+     {
+      "id": "meetings.list",
+      "x": 0.1917,
+      "y": 0.7169,
+      "w": 0.7861,
+      "h": 0.2061
+     },
+     {
+      "id": "meetings.new",
+      "x": 0.8787,
+      "y": 0.1806,
+      "w": 0.099,
+      "h": 0.0444
+     }
+    ]
+   },
+   "mobile": {
+    "src": "/guide-media/shots/meetings-mobile.webp",
+    "w": 786,
+    "h": 2594,
+    "boxes": [
+     {
+      "id": "meetings.new",
+      "x": 0.0407,
+      "y": 0.1822,
+      "w": 0.9186,
+      "h": 0.0308
+     }
+    ]
+   }
+  },
+  "broadcasts": {
+   "desktop": {
+    "src": "/guide-media/shots/broadcasts-desktop.webp",
+    "w": 1440,
+    "h": 1045,
+    "boxes": [
+     {
+      "id": "broadcasts.compose",
+      "x": 0.1917,
+      "y": 0.3474,
+      "w": 0.3847,
+      "h": 0.6222
+     },
+     {
+      "id": "broadcasts.list",
+      "x": 0.5931,
+      "y": 0.399,
+      "w": 0.3847,
+      "h": 0.1689
+     }
+    ]
+   },
+   "mobile": {
+    "src": "/guide-media/shots/broadcasts-mobile.webp",
+    "w": 786,
+    "h": 3086,
+    "boxes": [
+     {
+      "id": "broadcasts.compose",
+      "x": 0.0407,
+      "y": 0.2594,
+      "w": 0.9186,
+      "h": 0.4721
      }
     ]
    }
@@ -444,923 +1439,48 @@
     "w": 1440,
     "h": 900,
     "boxes": []
-   },
-   "mobile": {
-    "src": "/guide-media/shots/office-agent-mobile.webp",
-    "w": 786,
-    "h": 1704,
-    "boxes": []
    }
   },
-  "monitor": {
+  "learning": {
    "desktop": {
-    "src": "/guide-media/shots/monitor-desktop.webp",
-    "w": 1440,
-    "h": 1690,
-    "boxes": [
-     {
-      "id": "monitor.agents",
-      "x": 0.1917,
-      "y": 0.122,
-      "w": 0.1778,
-      "h": 0.6036
-     },
-     {
-      "id": "monitor.screen",
-      "x": 0.3833,
-      "y": 0.122,
-      "w": 0.5944,
-      "h": 0.8592
-     }
-    ]
-   },
-   "mobile": {
-    "src": "/guide-media/shots/monitor-mobile.webp",
-    "w": 786,
-    "h": 4260,
-    "boxes": [
-     {
-      "id": "monitor.agents",
-      "x": 0,
-      "y": 0.1052,
-      "w": 1,
-      "h": 0.0283
-     },
-     {
-      "id": "monitor.screen",
-      "x": 0.0407,
-      "y": 0.1428,
-      "w": 0.9186,
-      "h": 0.8572
-     }
-    ]
-   }
-  },
-  "agents": {
-   "desktop": {
-    "src": "/guide-media/shots/agents-desktop.webp",
-    "w": 1440,
-    "h": 900,
-    "boxes": [
-     {
-      "id": "agents.new",
-      "x": 0.8746,
-      "y": 0.1581,
-      "w": 0.0879,
-      "h": 0.0444
-     },
-     {
-      "id": "agents.card",
-      "x": 0.2069,
-      "y": 0.5492,
-      "w": 0.2463,
-      "h": 0.1697
-     },
-     {
-      "id": "agents.org",
-      "x": 0.2069,
-      "y": 0.3914,
-      "w": 0.1633,
-      "h": 0.0422
-     }
-    ]
-   },
-   "mobile": {
-    "src": "/guide-media/shots/agents-mobile.webp",
-    "w": 786,
-    "h": 4260,
-    "boxes": [
-     {
-      "id": "agents.new",
-      "x": 0.0407,
-      "y": 0.0919,
-      "w": 0.9186,
-      "h": 0.0188
-     },
-     {
-      "id": "agents.card",
-      "x": 0.0407,
-      "y": 0.3137,
-      "w": 0.9186,
-      "h": 0.0717
-     },
-     {
-      "id": "agents.org",
-      "x": 0.0407,
-      "y": 0.2433,
-      "w": 0.5984,
-      "h": 0.0216
-     }
-    ]
-   }
-  },
-  "agents:new": {
-   "desktop": {
-    "src": "/guide-media/shots/agents-new-desktop.webp",
+    "src": "/guide-media/shots/learning-desktop.webp",
     "w": 1440,
     "h": 900,
     "boxes": []
    },
    "mobile": {
-    "src": "/guide-media/shots/agents-new-mobile.webp",
-    "w": 786,
-    "h": 3172,
-    "boxes": []
-   }
-  },
-  "agents:detail": {
-   "desktop": {
-    "src": "/guide-media/shots/agents-detail-desktop.webp",
-    "w": 1440,
-    "h": 900,
-    "boxes": []
-   },
-   "mobile": {
-    "src": "/guide-media/shots/agents-detail-mobile.webp",
+    "src": "/guide-media/shots/learning-mobile.webp",
     "w": 786,
     "h": 4260,
     "boxes": []
-   }
-  },
-  "tasks": {
-   "desktop": {
-    "src": "/guide-media/shots/tasks-desktop.webp",
-    "w": 1440,
-    "h": 900,
-    "boxes": [
-     {
-      "id": "tasks.new",
-      "x": 0.8956,
-      "y": 0.1581,
-      "w": 0.0822,
-      "h": 0.0444
-     },
-     {
-      "id": "tasks.columns",
-      "x": 0.1917,
-      "y": 0.2958,
-      "w": 0.7861,
-      "h": 0.6911
-     },
-     {
-      "id": "tasks.card",
-      "x": 0.3303,
-      "y": 0.3744,
-      "w": 0.1116,
-      "h": 0.1991
-     },
-     {
-      "id": "tasks.search",
-      "x": 0.1917,
-      "y": 0.2292,
-      "w": 0.354,
-      "h": 0.0444
-     }
-    ]
-   },
-   "mobile": {
-    "src": "/guide-media/shots/tasks-mobile.webp",
-    "w": 786,
-    "h": 1772,
-    "boxes": [
-     {
-      "id": "tasks.new",
-      "x": 0.8473,
-      "y": 0.1797,
-      "w": 0.112,
-      "h": 0.0497
-     },
-     {
-      "id": "tasks.columns",
-      "x": 0,
-      "y": 0.3648,
-      "w": 1,
-      "h": 0.5655
-     },
-     {
-      "id": "tasks.card",
-      "x": 0.0636,
-      "y": 0.4447,
-      "w": 0.7684,
-      "h": 0.1536
-     },
-     {
-      "id": "tasks.search",
-      "x": 0.0407,
-      "y": 0.182,
-      "w": 0.7863,
-      "h": 0.0451
-     }
-    ]
-   }
-  },
-  "tasks:new": {
-   "desktop": {
-    "src": "/guide-media/shots/tasks-new-desktop.webp",
-    "w": 1440,
-    "h": 900,
-    "boxes": []
-   },
-   "mobile": {
-    "src": "/guide-media/shots/tasks-new-mobile.webp",
-    "w": 786,
-    "h": 1704,
-    "boxes": []
-   }
-  },
-  "tasks:sheet": {
-   "desktop": {
-    "src": "/guide-media/shots/tasks-sheet-desktop.webp",
-    "w": 1440,
-    "h": 900,
-    "boxes": []
-   },
-   "mobile": {
-    "src": "/guide-media/shots/tasks-sheet-mobile.webp",
-    "w": 786,
-    "h": 1704,
-    "boxes": []
-   }
-  },
-  "approvals": {
-   "desktop": {
-    "src": "/guide-media/shots/approvals-desktop.webp",
-    "w": 1440,
-    "h": 900,
-    "boxes": [
-     {
-      "id": "approvals.card",
-      "x": 0.2069,
-      "y": 0.2711,
-      "w": 0.3736,
-      "h": 0.3642
-     },
-     {
-      "id": "approvals.actions",
-      "x": 0.2188,
-      "y": 0.4867,
-      "w": 0.35,
-      "h": 0.0356
-     },
-     {
-      "id": "approvals.history",
-      "x": 0.2069,
-      "y": 0.2067,
-      "w": 0.1182,
-      "h": 0.0422
-     }
-    ]
-   },
-   "mobile": {
-    "src": "/guide-media/shots/approvals-mobile.webp",
-    "w": 786,
-    "h": 4260,
-    "boxes": [
-     {
-      "id": "approvals.card",
-      "x": 0.0407,
-      "y": 0.1266,
-      "w": 0.9186,
-      "h": 0.1734
-     },
-     {
-      "id": "approvals.actions",
-      "x": 0.084,
-      "y": 0.2268,
-      "w": 0.8321,
-      "h": 0.0338
-     },
-     {
-      "id": "approvals.history",
-      "x": 0.0407,
-      "y": 0.0957,
-      "w": 0.4332,
-      "h": 0.0216
-     }
-    ]
-   }
-  },
-  "forms": {
-   "desktop": {
-    "src": "/guide-media/shots/forms-desktop.webp",
-    "w": 1440,
-    "h": 900,
-    "boxes": [
-     {
-      "id": "forms.tabs",
-      "x": 0.1917,
-      "y": 0.2292,
-      "w": 0.7861,
-      "h": 0.0467
-     }
-    ]
-   },
-   "mobile": {
-    "src": "/guide-media/shots/forms-mobile.webp",
-    "w": 786,
-    "h": 1704,
-    "boxes": [
-     {
-      "id": "forms.tabs",
-      "x": 0,
-      "y": 0.3286,
-      "w": 1,
-      "h": 0.0493
-     }
-    ]
-   }
-  },
-  "reports": {
-   "desktop": {
-    "src": "/guide-media/shots/reports-desktop.webp",
-    "w": 1440,
-    "h": 1034,
-    "boxes": [
-     {
-      "id": "reports.list",
-      "x": 0.1917,
-      "y": 0.2498,
-      "w": 0.2333,
-      "h": 0.7502
-     },
-     {
-      "id": "reports.search",
-      "x": 0.1917,
-      "y": 0.1995,
-      "w": 0.2333,
-      "h": 0.0387
-     }
-    ]
-   },
-   "mobile": {
-    "src": "/guide-media/shots/reports-mobile.webp",
-    "w": 786,
-    "h": 2988,
-    "boxes": [
-     {
-      "id": "reports.list",
-      "x": 0.0407,
-      "y": 0.1712,
-      "w": 0.9186,
-      "h": 0.7646
-     },
-     {
-      "id": "reports.search",
-      "x": 0.0407,
-      "y": 0.1364,
-      "w": 0.9186,
-      "h": 0.0268
-     }
-    ]
-   }
-  },
-  "chat": {
-   "desktop": {
-    "src": "/guide-media/shots/chat-desktop.webp",
-    "w": 1440,
-    "h": 900,
-    "boxes": [
-     {
-      "id": "chat.agents",
-      "x": 0.2069,
-      "y": 0.3961,
-      "w": 0.7556,
-      "h": 0.4022
-     }
-    ]
-   },
-   "mobile": {
-    "src": "/guide-media/shots/chat-mobile.webp",
-    "w": 786,
-    "h": 3358,
-    "boxes": [
-     {
-      "id": "chat.agents",
-      "x": 0.0407,
-      "y": 0.2863,
-      "w": 0.9186,
-      "h": 0.6563
-     }
-    ]
-   }
-  },
-  "chat:conversation": {
-   "desktop": {
-    "src": "/guide-media/shots/chat-conversation-desktop.webp",
-    "w": 1440,
-    "h": 900,
-    "boxes": [
-     {
-      "id": "chat.composer",
-      "x": 0.3194,
-      "y": 0.9017,
-      "w": 0.5611,
-      "h": 0.0756
-     }
-    ]
-   },
-   "mobile": {
-    "src": "/guide-media/shots/chat-conversation-mobile.webp",
-    "w": 786,
-    "h": 1704,
-    "boxes": [
-     {
-      "id": "chat.composer",
-      "x": 0,
-      "y": 0.9225,
-      "w": 1,
-      "h": 0.0775
-     }
-    ]
-   }
-  },
-  "company-kit": {
-   "desktop": {
-    "src": "/guide-media/shots/company-kit-desktop.webp",
-    "w": 1440,
-    "h": 900,
-    "boxes": [
-     {
-      "id": "company-kit.fields",
-      "x": 0.2069,
-      "y": 0.3383,
-      "w": 0.4972,
-      "h": 0.3689
-     },
-     {
-      "id": "company-kit.save",
-      "x": 0.7299,
-      "y": 0.7639,
-      "w": 0.2208,
-      "h": 0.0444
-     }
-    ]
-   },
-   "mobile": {
-    "src": "/guide-media/shots/company-kit-mobile.webp",
-    "w": 786,
-    "h": 4260,
-    "boxes": [
-     {
-      "id": "company-kit.fields",
-      "x": 0.0407,
-      "y": 0.3447,
-      "w": 0.9186,
-      "h": 0.2249
-     },
-     {
-      "id": "company-kit.save",
-      "x": 0.0407,
-      "y": 0.9437,
-      "w": 0.9186,
-      "h": 0.0188
-     }
-    ]
-   }
-  },
-  "files": {
-   "desktop": {
-    "src": "/guide-media/shots/files-desktop.webp",
-    "w": 1440,
-    "h": 900,
-    "boxes": [
-     {
-      "id": "files.company",
-      "x": 0.1917,
-      "y": 0.2744,
-      "w": 0.7861,
-      "h": 0.0733
-     },
-     {
-      "id": "shell.search",
-      "x": 0.5765,
-      "y": 0.0106,
-      "w": 0.2222,
-      "h": 0.04
-     }
-    ]
-   },
-   "mobile": {
-    "src": "/guide-media/shots/files-mobile.webp",
-    "w": 786,
-    "h": 2950,
-    "boxes": [
-     {
-      "id": "files.company",
-      "x": 0.0407,
-      "y": 0.2175,
-      "w": 0.9186,
-      "h": 0.0656
-     }
-    ]
-   }
-  },
-  "templates": {
-   "desktop": {
-    "src": "/guide-media/shots/templates-desktop.webp",
-    "w": 1440,
-    "h": 1117,
-    "boxes": [
-     {
-      "id": "templates.new",
-      "x": 0.8599,
-      "y": 0.1119,
-      "w": 0.1026,
-      "h": 0.0358
-     },
-     {
-      "id": "templates.list",
-      "x": 0.2069,
-      "y": 0.2748,
-      "w": 0.7556,
-      "h": 0.6961
-     }
-    ]
-   },
-   "mobile": {
-    "src": "/guide-media/shots/templates-mobile.webp",
-    "w": 786,
-    "h": 4260,
-    "boxes": [
-     {
-      "id": "templates.new",
-      "x": 0.5127,
-      "y": 0.0933,
-      "w": 0.4466,
-      "h": 0.0188
-     },
-     {
-      "id": "templates.list",
-      "x": 0.0407,
-      "y": 0.2041,
-      "w": 0.9186,
-      "h": 0.7959
-     }
-    ]
-   }
-  },
-  "documents": {
-   "desktop": {
-    "src": "/guide-media/shots/documents-desktop.webp",
-    "w": 1440,
-    "h": 942,
-    "boxes": [
-     {
-      "id": "documents.new",
-      "x": 0.8548,
-      "y": 0.1327,
-      "w": 0.1077,
-      "h": 0.0425
-     },
-     {
-      "id": "documents.list",
-      "x": 0.2069,
-      "y": 0.5998,
-      "w": 0.7556,
-      "h": 0.3665
-     }
-    ]
-   },
-   "mobile": {
-    "src": "/guide-media/shots/documents-mobile.webp",
-    "w": 786,
-    "h": 3620,
-    "boxes": [
-     {
-      "id": "documents.new",
-      "x": 0.0407,
-      "y": 0.1098,
-      "w": 0.9186,
-      "h": 0.0221
-     },
-     {
-      "id": "documents.list",
-      "x": 0.0407,
-      "y": 0.5068,
-      "w": 0.9186,
-      "h": 0.4402
-     }
-    ]
-   }
-  },
-  "documents:editor": {
-   "desktop": {
-    "src": "/guide-media/shots/documents-editor-desktop.webp",
-    "w": 1440,
-    "h": 900,
-    "boxes": []
-   },
-   "mobile": {
-    "src": "/guide-media/shots/documents-editor-mobile.webp",
-    "w": 786,
-    "h": 3438,
-    "boxes": []
-   }
-  },
-  "packs": {
-   "desktop": {
-    "src": "/guide-media/shots/packs-desktop.webp",
-    "w": 1440,
-    "h": 900,
-    "boxes": [
-     {
-      "id": "packs.new",
-      "x": 0.878,
-      "y": 0.1614,
-      "w": 0.0845,
-      "h": 0.0444
-     },
-     {
-      "id": "packs.list",
-      "x": 0.2069,
-      "y": 0.4592,
-      "w": 0.7556,
-      "h": 0.1728
-     }
-    ]
-   },
-   "mobile": {
-    "src": "/guide-media/shots/packs-mobile.webp",
-    "w": 786,
-    "h": 2046,
-    "boxes": [
-     {
-      "id": "packs.new",
-      "x": 0.0407,
-      "y": 0.2141,
-      "w": 0.9186,
-      "h": 0.0391
-     },
-     {
-      "id": "packs.list",
-      "x": 0.0407,
-      "y": 0.586,
-      "w": 0.9186,
-      "h": 0.3196
-     }
-    ]
-   }
-  },
-  "meetings": {
-   "desktop": {
-    "src": "/guide-media/shots/meetings-desktop.webp",
-    "w": 1440,
-    "h": 900,
-    "boxes": [
-     {
-      "id": "meetings.list",
-      "x": 0.2069,
-      "y": 0.5167,
-      "w": 0.7556,
-      "h": 0.2278
-     },
-     {
-      "id": "meetings.new",
-      "x": 0.8635,
-      "y": 0.1806,
-      "w": 0.099,
-      "h": 0.0444
-     }
-    ]
-   },
-   "mobile": {
-    "src": "/guide-media/shots/meetings-mobile.webp",
-    "w": 786,
-    "h": 2154,
-    "boxes": [
-     {
-      "id": "meetings.list",
-      "x": 0.0407,
-      "y": 0.5887,
-      "w": 0.9186,
-      "h": 0.3217
-     },
-     {
-      "id": "meetings.new",
-      "x": 0.0407,
-      "y": 0.2194,
-      "w": 0.9186,
-      "h": 0.0371
-     }
-    ]
-   }
-  },
-  "broadcasts": {
-   "desktop": {
-    "src": "/guide-media/shots/broadcasts-desktop.webp",
-    "w": 1440,
-    "h": 900,
-    "boxes": [
-     {
-      "id": "broadcasts.compose",
-      "x": 0.1917,
-      "y": 0.2292,
-      "w": 0.3847,
-      "h": 0.7225
-     },
-     {
-      "id": "broadcasts.list",
-      "x": 0.5931,
-      "y": 0.2892,
-      "w": 0.3847,
-      "h": 0.1961
-     }
-    ]
-   },
-   "mobile": {
-    "src": "/guide-media/shots/broadcasts-mobile.webp",
-    "w": 786,
-    "h": 2694,
-    "boxes": [
-     {
-      "id": "broadcasts.compose",
-      "x": 0.0407,
-      "y": 0.1513,
-      "w": 0.9186,
-      "h": 0.5408
-     },
-     {
-      "id": "broadcasts.list",
-      "x": 0.0407,
-      "y": 0.75,
-      "w": 0.9186,
-      "h": 0.1785
-     }
-    ]
-   }
-  },
-  "sops": {
-   "desktop": {
-    "src": "/guide-media/shots/sops-desktop.webp",
-    "w": 1440,
-    "h": 900,
-    "boxes": [
-     {
-      "id": "sops.new",
-      "x": 0.8805,
-      "y": 0.1389,
-      "w": 0.082,
-      "h": 0.0444
-     },
-     {
-      "id": "sops.list",
-      "x": 0.2069,
-      "y": 0.3411,
-      "w": 0.7556,
-      "h": 0.5997
-     }
-    ]
-   },
-   "mobile": {
-    "src": "/guide-media/shots/sops-mobile.webp",
-    "w": 786,
-    "h": 2266,
-    "boxes": [
-     {
-      "id": "sops.new",
-      "x": 0.5102,
-      "y": 0.1754,
-      "w": 0.4491,
-      "h": 0.0353
-     },
-     {
-      "id": "sops.list",
-      "x": 0.0407,
-      "y": 0.3837,
-      "w": 0.9186,
-      "h": 0.5313
-     }
-    ]
-   }
-  },
-  "library": {
-   "desktop": {
-    "src": "/guide-media/shots/library-desktop.webp",
-    "w": 1440,
-    "h": 1378,
-    "boxes": [
-     {
-      "id": "library.upload",
-      "x": 0.2069,
-      "y": 0.1792,
-      "w": 0.3736,
-      "h": 0.2282
-     },
-     {
-      "id": "library.sources",
-      "x": 0.2069,
-      "y": 0.5885,
-      "w": 0.7556,
-      "h": 0.3882
-     },
-     {
-      "id": "library.search",
-      "x": 0.2069,
-      "y": 0.422,
-      "w": 0.7556,
-      "h": 0.1099
-     }
-    ]
-   },
-   "mobile": {
-    "src": "/guide-media/shots/library-mobile.webp",
-    "w": 786,
-    "h": 4260,
-    "boxes": [
-     {
-      "id": "library.upload",
-      "x": 0.0407,
-      "y": 0.1506,
-      "w": 0.9186,
-      "h": 0.1527
-     },
-     {
-      "id": "library.sources",
-      "x": 0.0407,
-      "y": 0.5694,
-      "w": 0.9186,
-      "h": 0.4306
-     },
-     {
-      "id": "library.search",
-      "x": 0.0407,
-      "y": 0.4303,
-      "w": 0.9186,
-      "h": 0.0987
-     }
-    ]
-   }
-  },
-  "brain": {
-   "desktop": {
-    "src": "/guide-media/shots/brain-desktop.webp",
-    "w": 1440,
-    "h": 900,
-    "boxes": [
-     {
-      "id": "brain.tabs",
-      "x": 0.1917,
-      "y": 0.3933,
-      "w": 0.2742,
-      "h": 0.0422
-     },
-     {
-      "id": "brain.search",
-      "x": 0.1917,
-      "y": 0.5111,
-      "w": 0.2,
-      "h": 0.0444
-     }
-    ]
-   },
-   "mobile": {
-    "src": "/guide-media/shots/brain-mobile.webp",
-    "w": 786,
-    "h": 4238,
-    "boxes": [
-     {
-      "id": "brain.tabs",
-      "x": 0.0407,
-      "y": 0.2535,
-      "w": 0.9186,
-      "h": 0.0217
-     },
-     {
-      "id": "brain.search",
-      "x": 0.0407,
-      "y": 0.3073,
-      "w": 0.9186,
-      "h": 0.0189
-     }
-    ]
    }
   },
   "skills": {
    "desktop": {
     "src": "/guide-media/shots/skills-desktop.webp",
     "w": 1440,
-    "h": 1515,
+    "h": 1800,
     "boxes": [
      {
       "id": "skills.list",
-      "x": 0.2069,
-      "y": 0.3078,
-      "w": 0.7556,
-      "h": 0.671
+      "x": 0.1917,
+      "y": 0.3592,
+      "w": 0.7861,
+      "h": 0.6408
      },
      {
       "id": "skills.proposals",
-      "x": 0.3979,
-      "y": 0.1361,
-      "w": 0.1826,
-      "h": 0.0832
+      "x": 0.3903,
+      "y": 0.2147,
+      "w": 0.1903,
+      "h": 0.07
      },
      {
       "id": "skills.teach",
-      "x": 0.7448,
-      "y": 0.0939,
+      "x": 0.6556,
+      "y": 0.079,
       "w": 0.132,
-      "h": 0.0264
+      "h": 0.0222
      }
     ]
    },
@@ -1370,16 +1490,9 @@
     "h": 4260,
     "boxes": [
      {
-      "id": "skills.list",
-      "x": 0.0407,
-      "y": 0.3431,
-      "w": 0.9186,
-      "h": 0.6569
-     },
-     {
       "id": "skills.proposals",
       "x": 0.5153,
-      "y": 0.141,
+      "y": 0.2668,
       "w": 0.444,
       "h": 0.0532
      },
@@ -1407,53 +1520,46 @@
     "boxes": []
    }
   },
-  "learning": {
+  "brain": {
    "desktop": {
-    "src": "/guide-media/shots/learning-desktop.webp",
+    "src": "/guide-media/shots/brain-desktop.webp",
     "w": 1440,
-    "h": 1800,
+    "h": 900,
     "boxes": [
      {
-      "id": "learning.kpis",
+      "id": "brain.tabs",
       "x": 0.1917,
-      "y": 0.1356,
-      "w": 0.7861,
-      "h": 0.1467
+      "y": 0.5936,
+      "w": 0.2742,
+      "h": 0.0422
      },
      {
-      "id": "learning.autopilot",
-      "x": 0.656,
-      "y": 0.2933,
-      "w": 0.3218,
-      "h": 0.3131
-     },
-     {
-      "id": "learning.recent",
+      "id": "brain.search",
       "x": 0.1917,
-      "y": 0.6175,
-      "w": 0.4505,
-      "h": 0.3825
+      "y": 0.7114,
+      "w": 0.2,
+      "h": 0.0444
      }
     ]
    },
    "mobile": {
-    "src": "/guide-media/shots/learning-mobile.webp",
+    "src": "/guide-media/shots/brain-mobile.webp",
     "w": 786,
     "h": 4260,
     "boxes": [
      {
-      "id": "learning.kpis",
+      "id": "brain.tabs",
       "x": 0.0407,
-      "y": 0.1717,
+      "y": 0.3369,
       "w": 0.9186,
-      "h": 0.1708
+      "h": 0.0216
      },
      {
-      "id": "learning.autopilot",
+      "id": "brain.search",
       "x": 0.0407,
-      "y": 0.563,
+      "y": 0.3904,
       "w": 0.9186,
-      "h": 0.3048
+      "h": 0.0188
      }
     ]
    }
@@ -1462,336 +1568,42 @@
    "desktop": {
     "src": "/guide-media/shots/blueprints-desktop.webp",
     "w": 1440,
-    "h": 900,
+    "h": 1022,
     "boxes": [
      {
       "id": "blueprints.new",
-      "x": 0.8598,
-      "y": 0.1581,
+      "x": 0.8751,
+      "y": 0.1392,
       "w": 0.1027,
-      "h": 0.0444
+      "h": 0.0391
      },
      {
       "id": "blueprints.apply",
-      "x": 0.2188,
-      "y": 0.5836,
-      "w": 0.2227,
-      "h": 0.0356
+      "x": 0.2035,
+      "y": 0.9291,
+      "w": 0.2329,
+      "h": 0.0313
      }
     ]
    },
    "mobile": {
     "src": "/guide-media/shots/blueprints-mobile.webp",
     "w": 786,
-    "h": 2660,
+    "h": 4260,
     "boxes": [
      {
       "id": "blueprints.new",
-      "x": 0.0407,
-      "y": 0.1624,
-      "w": 0.9186,
-      "h": 0.0301
+      "x": 0.5127,
+      "y": 0.1014,
+      "w": 0.4466,
+      "h": 0.0188
      },
      {
       "id": "blueprints.apply",
       "x": 0.084,
-      "y": 0.5391,
+      "y": 0.5636,
       "w": 0.8321,
-      "h": 0.0271
-     }
-    ]
-   }
-  },
-  "workflows": {
-   "desktop": {
-    "src": "/guide-media/shots/workflows-desktop.webp",
-    "w": 1440,
-    "h": 900,
-    "boxes": [
-     {
-      "id": "workflows.new",
-      "x": 0.8583,
-      "y": 0.1806,
-      "w": 0.1042,
-      "h": 0.0444
-     },
-     {
-      "id": "workflows.list",
-      "x": 0.2069,
-      "y": 0.4806,
-      "w": 0.7556,
-      "h": 0.2597
-     }
-    ]
-   },
-   "mobile": {
-    "src": "/guide-media/shots/workflows-mobile.webp",
-    "w": 786,
-    "h": 2884,
-    "boxes": [
-     {
-      "id": "workflows.new",
-      "x": 0.0407,
-      "y": 0.1638,
-      "w": 0.9186,
-      "h": 0.0277
-     },
-     {
-      "id": "workflows.list",
-      "x": 0.0407,
-      "y": 0.4665,
-      "w": 0.9186,
-      "h": 0.3324
-     }
-    ]
-   }
-  },
-  "workflows:editor": {
-   "desktop": {
-    "src": "/guide-media/shots/workflows-editor-desktop.webp",
-    "w": 1440,
-    "h": 900,
-    "boxes": [
-     {
-      "id": "workflows.run",
-      "x": 0.9153,
-      "y": 0.014,
-      "w": 0.0486,
-      "h": 0.0356
-     }
-    ]
-   },
-   "mobile": {
-    "src": "/guide-media/shots/workflows-editor-mobile.webp",
-    "w": 786,
-    "h": 1704,
-    "boxes": [
-     {
-      "id": "workflows.run",
-      "x": 0.397,
-      "y": 0.0672,
-      "w": 0.0967,
-      "h": 0.0376
-     }
-    ]
-   }
-  },
-  "schedules": {
-   "desktop": {
-    "src": "/guide-media/shots/schedules-desktop.webp",
-    "w": 1440,
-    "h": 968,
-    "boxes": [
-     {
-      "id": "schedules.new",
-      "x": 0.8594,
-      "y": 0.4238,
-      "w": 0.1031,
-      "h": 0.0413
-     },
-     {
-      "id": "schedules.list",
-      "x": 0.2069,
-      "y": 0.4817,
-      "w": 0.7556,
-      "h": 0.4853
-     }
-    ]
-   },
-   "mobile": {
-    "src": "/guide-media/shots/schedules-mobile.webp",
-    "w": 786,
-    "h": 3288,
-    "boxes": [
-     {
-      "id": "schedules.new",
-      "x": 0.0407,
-      "y": 0.3528,
-      "w": 0.9186,
-      "h": 0.0243
-     },
-     {
-      "id": "schedules.list",
-      "x": 0.0407,
-      "y": 0.3869,
-      "w": 0.9186,
-      "h": 0.5549
-     }
-    ]
-   }
-  },
-  "logins": {
-   "desktop": {
-    "src": "/guide-media/shots/logins-desktop.webp",
-    "w": 1440,
-    "h": 900,
-    "boxes": [
-     {
-      "id": "logins.new",
-      "x": 0.8686,
-      "y": 0.1581,
-      "w": 0.0939,
-      "h": 0.0444
-     },
-     {
-      "id": "logins.list",
-      "x": 0.2069,
-      "y": 0.2892,
-      "w": 0.7556,
-      "h": 0.4294
-     }
-    ]
-   },
-   "mobile": {
-    "src": "/guide-media/shots/logins-mobile.webp",
-    "w": 786,
-    "h": 2032,
-    "boxes": [
-     {
-      "id": "logins.new",
-      "x": 0.0407,
-      "y": 0.2126,
-      "w": 0.9186,
-      "h": 0.0394
-     },
-     {
-      "id": "logins.list",
-      "x": 0.0407,
-      "y": 0.3287,
-      "w": 0.9186,
-      "h": 0.4577
-     }
-    ]
-   }
-  },
-  "ai-engine": {
-   "desktop": {
-    "src": "/guide-media/shots/ai-engine-desktop.webp",
-    "w": 1440,
-    "h": 1232,
-    "boxes": [
-     {
-      "id": "ai-engine.tabs",
-      "x": 0.1917,
-      "y": 0.1674,
-      "w": 0.3351,
-      "h": 0.0308
-     },
-     {
-      "id": "ai-engine.add",
-      "x": 0.1917,
-      "y": 0.775,
-      "w": 0.7861,
-      "h": 0.1993
-     }
-    ]
-   },
-   "mobile": {
-    "src": "/guide-media/shots/ai-engine-mobile.webp",
-    "w": 786,
-    "h": 4260,
-    "boxes": [
-     {
-      "id": "ai-engine.tabs",
-      "x": 0.0407,
-      "y": 0.0957,
-      "w": 0.9186,
-      "h": 0.0216
-     },
-     {
-      "id": "ai-engine.add",
-      "x": 0.0407,
-      "y": 0.7518,
-      "w": 0.9186,
-      "h": 0.2482
-     }
-    ]
-   }
-  },
-  "mcp-servers": {
-   "desktop": {
-    "src": "/guide-media/shots/mcp-servers-desktop.webp",
-    "w": 1440,
-    "h": 900,
-    "boxes": [
-     {
-      "id": "mcp-servers.add",
-      "x": 0.8542,
-      "y": 0.1806,
-      "w": 0.1083,
-      "h": 0.0444
-     }
-    ]
-   },
-   "mobile": {
-    "src": "/guide-media/shots/mcp-servers-mobile.webp",
-    "w": 786,
-    "h": 1896,
-    "boxes": [
-     {
-      "id": "mcp-servers.add",
-      "x": 0.0407,
-      "y": 0.2706,
-      "w": 0.9186,
-      "h": 0.0422
-     }
-    ]
-   }
-  },
-  "channels": {
-   "desktop": {
-    "src": "/guide-media/shots/channels-desktop.webp",
-    "w": 1440,
-    "h": 1051,
-    "boxes": [
-     {
-      "id": "channels.whatsapp",
-      "x": 0.2069,
-      "y": 0.5735,
-      "w": 0.7556,
-      "h": 0.3877
-     },
-     {
-      "id": "channels.telegram",
-      "x": 0.5917,
-      "y": 0.1962,
-      "w": 0.3708,
-      "h": 0.3582
-     },
-     {
-      "id": "channels.push",
-      "x": 0.2069,
-      "y": 0.1962,
-      "w": 0.3708,
-      "h": 0.196
-     }
-    ]
-   },
-   "mobile": {
-    "src": "/guide-media/shots/channels-mobile.webp",
-    "w": 786,
-    "h": 4260,
-    "boxes": [
-     {
-      "id": "channels.whatsapp",
-      "x": 0.0407,
-      "y": 0.4332,
-      "w": 0.9186,
-      "h": 0.2628
-     },
-     {
-      "id": "channels.telegram",
-      "x": 0.0407,
-      "y": 0.2332,
-      "w": 0.9186,
-      "h": 0.1906
-     },
-     {
-      "id": "channels.push",
-      "x": 0.0407,
-      "y": 0.0957,
-      "w": 0.9186,
-      "h": 0.1282
+      "h": 0.0169
      }
     ]
    }
@@ -1804,38 +1616,38 @@
     "boxes": [
      {
       "id": "organization.add",
-      "x": 0.8692,
+      "x": 0.8845,
       "y": 0.1356,
       "w": 0.0933,
       "h": 0.0444
      },
      {
       "id": "organization.company",
-      "x": 0.2069,
-      "y": 0.3644,
-      "w": 0.7556,
-      "h": 0.2028
+      "x": 0.1917,
+      "y": 0.5647,
+      "w": 0.7861,
+      "h": 0.2783
      }
     ]
    },
    "mobile": {
     "src": "/guide-media/shots/organization-mobile.webp",
     "w": 786,
-    "h": 3060,
+    "h": 3972,
     "boxes": [
      {
       "id": "organization.add",
       "x": 0.0407,
-      "y": 0.1279,
+      "y": 0.0986,
       "w": 0.9186,
-      "h": 0.0261
+      "h": 0.0201
      },
      {
       "id": "organization.company",
       "x": 0.0407,
-      "y": 0.3361,
+      "y": 0.3795,
       "w": 0.9186,
-      "h": 0.2879
+      "h": 0.2762
      }
     ]
    }
@@ -1854,25 +1666,366 @@
     "boxes": []
    }
   },
+  "settings": {
+   "desktop": {
+    "src": "/guide-media/shots/settings-desktop.webp",
+    "w": 1440,
+    "h": 1163,
+    "boxes": [
+     {
+      "id": "settings.add",
+      "x": 0.8806,
+      "y": 0.1223,
+      "w": 0.0972,
+      "h": 0.0344
+     },
+     {
+      "id": "settings.list",
+      "x": 0.1917,
+      "y": 0.4521,
+      "w": 0.7861,
+      "h": 0.5131
+     }
+    ]
+   },
+   "mobile": {
+    "src": "/guide-media/shots/settings-mobile.webp",
+    "w": 786,
+    "h": 4260,
+    "boxes": [
+     {
+      "id": "settings.add",
+      "x": 0.0407,
+      "y": 0.1144,
+      "w": 0.9186,
+      "h": 0.0188
+     },
+     {
+      "id": "settings.list",
+      "x": 0.0407,
+      "y": 0.3905,
+      "w": 0.9186,
+      "h": 0.6095
+     }
+    ]
+   }
+  },
+  "roles": {
+   "desktop": {
+    "src": "/guide-media/shots/roles-desktop.webp",
+    "w": 1440,
+    "h": 900,
+    "boxes": []
+   },
+   "mobile": {
+    "src": "/guide-media/shots/roles-mobile.webp",
+    "w": 786,
+    "h": 4260,
+    "boxes": []
+   }
+  },
+  "staff-computers": {
+   "desktop": {
+    "src": "/guide-media/shots/staff-computers-desktop.webp",
+    "w": 1440,
+    "h": 900,
+    "boxes": []
+   },
+   "mobile": {
+    "src": "/guide-media/shots/staff-computers-mobile.webp",
+    "w": 786,
+    "h": 1704,
+    "boxes": []
+   }
+  },
+  "ai-use": {
+   "desktop": {
+    "src": "/guide-media/shots/ai-use-desktop.webp",
+    "w": 1440,
+    "h": 900,
+    "boxes": []
+   },
+   "mobile": {
+    "src": "/guide-media/shots/ai-use-mobile.webp",
+    "w": 786,
+    "h": 4260,
+    "boxes": []
+   }
+  },
+  "web-connections": {
+   "desktop": {
+    "src": "/guide-media/shots/web-connections-desktop.webp",
+    "w": 1440,
+    "h": 900,
+    "boxes": []
+   },
+   "mobile": {
+    "src": "/guide-media/shots/web-connections-mobile.webp",
+    "w": 786,
+    "h": 3158,
+    "boxes": []
+   }
+  },
+  "approved-services": {
+   "desktop": {
+    "src": "/guide-media/shots/approved-services-desktop.webp",
+    "w": 1440,
+    "h": 900,
+    "boxes": []
+   },
+   "mobile": {
+    "src": "/guide-media/shots/approved-services-mobile.webp",
+    "w": 786,
+    "h": 2602,
+    "boxes": []
+   }
+  },
+  "channels": {
+   "desktop": {
+    "src": "/guide-media/shots/channels-desktop.webp",
+    "w": 1440,
+    "h": 1231,
+    "boxes": [
+     {
+      "id": "channels.whatsapp",
+      "x": 0.1917,
+      "y": 0.6361,
+      "w": 0.7861,
+      "h": 0.331
+     },
+     {
+      "id": "channels.telegram",
+      "x": 0.5917,
+      "y": 0.314,
+      "w": 0.3861,
+      "h": 0.3058
+     },
+     {
+      "id": "channels.push",
+      "x": 0.1917,
+      "y": 0.314,
+      "w": 0.3861,
+      "h": 0.1673
+     }
+    ]
+   },
+   "mobile": {
+    "src": "/guide-media/shots/channels-mobile.webp",
+    "w": 786,
+    "h": 4260,
+    "boxes": [
+     {
+      "id": "channels.whatsapp",
+      "x": 0.0407,
+      "y": 0.5552,
+      "w": 0.9186,
+      "h": 0.2628
+     },
+     {
+      "id": "channels.telegram",
+      "x": 0.0407,
+      "y": 0.3552,
+      "w": 0.9186,
+      "h": 0.1906
+     },
+     {
+      "id": "channels.push",
+      "x": 0.0407,
+      "y": 0.2176,
+      "w": 0.9186,
+      "h": 0.1282
+     }
+    ]
+   }
+  },
+  "ai-engine": {
+   "desktop": {
+    "src": "/guide-media/shots/ai-engine-desktop.webp",
+    "w": 1440,
+    "h": 1800,
+    "boxes": [
+     {
+      "id": "ai-engine.tabs",
+      "x": 0.1917,
+      "y": 0.2147,
+      "w": 0.3842,
+      "h": 0.0211
+     },
+     {
+      "id": "ai-engine.add",
+      "x": 0.1917,
+      "y": 0.7383,
+      "w": 0.7861,
+      "h": 0.2617
+     }
+    ]
+   },
+   "mobile": {
+    "src": "/guide-media/shots/ai-engine-mobile.webp",
+    "w": 786,
+    "h": 4260,
+    "boxes": [
+     {
+      "id": "ai-engine.tabs",
+      "x": 0.0407,
+      "y": 0.2176,
+      "w": 0.9186,
+      "h": 0.0216
+     }
+    ]
+   }
+  },
+  "storage": {
+   "desktop": {
+    "src": "/guide-media/shots/storage-desktop.webp",
+    "w": 1440,
+    "h": 900,
+    "boxes": []
+   },
+   "mobile": {
+    "src": "/guide-media/shots/storage-mobile.webp",
+    "w": 786,
+    "h": 2212,
+    "boxes": []
+   }
+  },
+  "logins": {
+   "desktop": {
+    "src": "/guide-media/shots/logins-desktop.webp",
+    "w": 1440,
+    "h": 900,
+    "boxes": [
+     {
+      "id": "logins.new",
+      "x": 0.8839,
+      "y": 0.1581,
+      "w": 0.0939,
+      "h": 0.0444
+     },
+     {
+      "id": "logins.list",
+      "x": 0.1917,
+      "y": 0.4894,
+      "w": 0.7861,
+      "h": 0.4294
+     }
+    ]
+   },
+   "mobile": {
+    "src": "/guide-media/shots/logins-mobile.webp",
+    "w": 786,
+    "h": 2512,
+    "boxes": [
+     {
+      "id": "logins.new",
+      "x": 0.0407,
+      "y": 0.172,
+      "w": 0.9186,
+      "h": 0.0318
+     },
+     {
+      "id": "logins.list",
+      "x": 0.0407,
+      "y": 0.4566,
+      "w": 0.9186,
+      "h": 0.3702
+     }
+    ]
+   }
+  },
+  "schedules": {
+   "desktop": {
+    "src": "/guide-media/shots/schedules-desktop.webp",
+    "w": 1440,
+    "h": 1148,
+    "boxes": [
+     {
+      "id": "schedules.new",
+      "x": 0.8747,
+      "y": 0.5144,
+      "w": 0.1031,
+      "h": 0.0348
+     },
+     {
+      "id": "schedules.list",
+      "x": 0.1917,
+      "y": 0.5632,
+      "w": 0.7861,
+      "h": 0.4092
+     }
+    ]
+   },
+   "mobile": {
+    "src": "/guide-media/shots/schedules-mobile.webp",
+    "w": 786,
+    "h": 3992,
+    "boxes": [
+     {
+      "id": "schedules.new",
+      "x": 0.0407,
+      "y": 0.4106,
+      "w": 0.9186,
+      "h": 0.02
+     },
+     {
+      "id": "schedules.list",
+      "x": 0.0407,
+      "y": 0.4386,
+      "w": 0.9186,
+      "h": 0.5134
+     }
+    ]
+   }
+  },
+  "mcp-servers": {
+   "desktop": {
+    "src": "/guide-media/shots/mcp-servers-desktop.webp",
+    "w": 1440,
+    "h": 900,
+    "boxes": [
+     {
+      "id": "mcp-servers.add",
+      "x": 0.8694,
+      "y": 0.1806,
+      "w": 0.1083,
+      "h": 0.0444
+     }
+    ]
+   },
+   "mobile": {
+    "src": "/guide-media/shots/mcp-servers-mobile.webp",
+    "w": 786,
+    "h": 2290,
+    "boxes": [
+     {
+      "id": "mcp-servers.add",
+      "x": 0.0407,
+      "y": 0.224,
+      "w": 0.9186,
+      "h": 0.0349
+     }
+    ]
+   }
+  },
   "activity": {
    "desktop": {
     "src": "/guide-media/shots/activity-desktop.webp",
     "w": 1440,
-    "h": 1504,
+    "h": 1800,
     "boxes": [
      {
       "id": "activity.filter",
-      "x": 0.2069,
-      "y": 0.1371,
+      "x": 0.4947,
+      "y": 0.2153,
       "w": 0.4831,
-      "h": 0.0253
+      "h": 0.0211
      },
      {
       "id": "activity.list",
-      "x": 0.2069,
-      "y": 0.1784,
-      "w": 0.7556,
-      "h": 0.7949
+      "x": 0.1917,
+      "y": 0.2147,
+      "w": 0.7861,
+      "h": 0.7853
      }
     ]
    },
@@ -1884,62 +2037,39 @@
      {
       "id": "activity.filter",
       "x": 0.0407,
-      "y": 0.1219,
+      "y": 0.2386,
       "w": 0.9186,
       "h": 0.0216
-     },
-     {
-      "id": "activity.list",
-      "x": 0.0407,
-      "y": 0.1548,
-      "w": 0.9186,
-      "h": 0.6478
      }
     ]
    }
   },
-  "settings": {
+  "feedbacks": {
    "desktop": {
-    "src": "/guide-media/shots/settings-desktop.webp",
+    "src": "/guide-media/shots/feedbacks-desktop.webp",
     "w": 1440,
     "h": 900,
-    "boxes": [
-     {
-      "id": "settings.add",
-      "x": 0.8653,
-      "y": 0.1356,
-      "w": 0.0972,
-      "h": 0.0444
-     },
-     {
-      "id": "settings.list",
-      "x": 0.2069,
-      "y": 0.3689,
-      "w": 0.7556,
-      "h": 0.5519
-     }
-    ]
+    "boxes": []
    },
    "mobile": {
-    "src": "/guide-media/shots/settings-mobile.webp",
+    "src": "/guide-media/shots/feedbacks-mobile.webp",
     "w": 786,
     "h": 4260,
-    "boxes": [
-     {
-      "id": "settings.add",
-      "x": 0.5127,
-      "y": 0.0919,
-      "w": 0.4466,
-      "h": 0.0188
-     },
-     {
-      "id": "settings.list",
-      "x": 0.0407,
-      "y": 0.2485,
-      "w": 0.9186,
-      "h": 0.3656
-     }
-    ]
+    "boxes": []
+   }
+  },
+  "start": {
+   "desktop": {
+    "src": "/guide-media/shots/start-desktop.webp",
+    "w": 1440,
+    "h": 900,
+    "boxes": []
+   },
+   "mobile": {
+    "src": "/guide-media/shots/start-mobile.webp",
+    "w": 786,
+    "h": 4002,
+    "boxes": []
    }
   },
   "tutorial": {
@@ -1950,16 +2080,16 @@
     "boxes": [
      {
       "id": "tutorial.tracks",
-      "x": 0.2069,
-      "y": 0.2303,
+      "x": 0.1917,
+      "y": 0.3025,
       "w": 0.2911,
       "h": 0.0422
      },
      {
       "id": "tutorial.next",
-      "x": 0.2069,
-      "y": 0.2958,
-      "w": 0.7556,
+      "x": 0.1917,
+      "y": 0.3681,
+      "w": 0.7861,
       "h": 0.1543
      }
     ]
@@ -1972,14 +2102,14 @@
      {
       "id": "tutorial.tracks",
       "x": 0.0407,
-      "y": 0.1052,
+      "y": 0.1357,
       "w": 0.9186,
       "h": 0.0216
      },
      {
       "id": "tutorial.next",
       "x": 0.0407,
-      "y": 0.1606,
+      "y": 0.1911,
       "w": 0.9186,
       "h": 0.1058
      }
@@ -2000,176 +2130,18 @@
     "boxes": []
    }
   },
-  "computers": {
+  "present": {
    "desktop": {
-    "src": "/guide-media/shots/computers-desktop.webp",
+    "src": "/guide-media/shots/present-desktop.webp",
     "w": 1440,
-    "h": 1145,
-    "boxes": [
-     {
-      "id": "computers.link",
-      "x": 0.8501,
-      "y": 0.1242,
-      "w": 0.1124,
-      "h": 0.0349
-     },
-     {
-      "id": "computers.device",
-      "x": 0.2069,
-      "y": 0.1801,
-      "w": 0.7556,
-      "h": 0.5046
-     },
-     {
-      "id": "computers.folders",
-      "x": 0.2215,
-      "y": 0.3592,
-      "w": 0.7264,
-      "h": 0.2583
-     },
-     {
-      "id": "computers.activity",
-      "x": 0.2215,
-      "y": 0.6349,
-      "w": 0.7264,
-      "h": 0.0314
-     },
-     {
-      "id": "computers.safety",
-      "x": 0.2069,
-      "y": 0.7022,
-      "w": 0.7556,
-      "h": 0.2697
-     }
-    ]
+    "h": 900,
+    "boxes": []
    },
    "mobile": {
-    "src": "/guide-media/shots/computers-mobile.webp",
-    "w": 786,
-    "h": 3374,
-    "boxes": [
-     {
-      "id": "computers.link",
-      "x": 0.0407,
-      "y": 0.128,
-      "w": 0.9186,
-      "h": 0.0237
-     },
-     {
-      "id": "computers.device",
-      "x": 0.0407,
-      "y": 0.166,
-      "w": 0.9186,
-      "h": 0.4286
-     },
-     {
-      "id": "computers.folders",
-      "x": 0.084,
-      "y": 0.3542,
-      "w": 0.8321,
-      "h": 0.1971
-     },
-     {
-      "id": "computers.activity",
-      "x": 0.084,
-      "y": 0.5631,
-      "w": 0.8321,
-      "h": 0.0213
-     },
-     {
-      "id": "computers.safety",
-      "x": 0.0407,
-      "y": 0.6064,
-      "w": 0.9186,
-      "h": 0.3369
-     }
-    ]
-   }
-  },
-  "computers:activity": {
-   "desktop": {
-    "src": "/guide-media/shots/computers-activity-desktop.webp",
-    "w": 1440,
-    "h": 1800,
-    "boxes": [
-     {
-      "id": "computers.link",
-      "x": 0.8501,
-      "y": 0.079,
-      "w": 0.1124,
-      "h": 0.0222
-     },
-     {
-      "id": "computers.device",
-      "x": 0.2069,
-      "y": 0.1146,
-      "w": 0.7556,
-      "h": 0.7174
-     },
-     {
-      "id": "computers.folders",
-      "x": 0.2215,
-      "y": 0.2285,
-      "w": 0.7264,
-      "h": 0.1643
-     },
-     {
-      "id": "computers.activity",
-      "x": 0.2215,
-      "y": 0.4039,
-      "w": 0.7264,
-      "h": 0.4164
-     },
-     {
-      "id": "computers.safety",
-      "x": 0.2069,
-      "y": 0.8431,
-      "w": 0.7556,
-      "h": 0.1569
-     }
-    ]
-   },
-   "mobile": {
-    "src": "/guide-media/shots/computers-activity-mobile.webp",
+    "src": "/guide-media/shots/present-mobile.webp",
     "w": 786,
     "h": 4260,
-    "boxes": [
-     {
-      "id": "computers.link",
-      "x": 0.0407,
-      "y": 0.1014,
-      "w": 0.9186,
-      "h": 0.0188
-     },
-     {
-      "id": "computers.device",
-      "x": 0.0407,
-      "y": 0.1315,
-      "w": 0.9186,
-      "h": 0.7167
-     },
-     {
-      "id": "computers.folders",
-      "x": 0.084,
-      "y": 0.2805,
-      "w": 0.8321,
-      "h": 0.1561
-     },
-     {
-      "id": "computers.activity",
-      "x": 0.084,
-      "y": 0.446,
-      "w": 0.8321,
-      "h": 0.3941
-     },
-     {
-      "id": "computers.safety",
-      "x": 0.0407,
-      "y": 0.8575,
-      "w": 0.9186,
-      "h": 0.1425
-     }
-    ]
+    "boxes": []
    }
   }
  },
@@ -2179,38 +2151,38 @@
    "poster": "/guide-media/videos/create-agent-poster.webp",
    "w": 1280,
    "h": 800,
-   "duration": 27.2,
+   "duration": 30.9,
    "chapters": [
     {
      "t": 0.2,
      "label": "Agents: your AI team, by department"
     },
     {
-     "t": 3.8,
+     "t": 4.1,
      "label": "Pick a starting point"
     },
     {
-     "t": 7.1,
+     "t": 7.9,
      "label": "Choose its company and department"
     },
     {
-     "t": 9.6,
+     "t": 11,
      "label": "Give it a name and a job title"
     },
     {
-     "t": 15.5,
+     "t": 18.3,
      "label": "SOPs it follows"
     },
     {
-     "t": 17.8,
+     "t": 20.6,
      "label": "What it may do, and what it must ask first"
     },
     {
-     "t": 20.2,
+     "t": 23.2,
      "label": "Review and create"
     },
     {
-     "t": 23.5,
+     "t": 26.7,
      "label": "The new agent joins the team"
     }
    ],
@@ -2221,38 +2193,38 @@
    "poster": "/guide-media/videos/give-task-poster.webp",
    "w": 1280,
    "h": 800,
-   "duration": 46.6,
+   "duration": 50,
    "chapters": [
     {
      "t": 0.2,
      "label": "The task board"
     },
     {
-     "t": 2.8,
+     "t": 3,
      "label": "Say what you need"
     },
     {
-     "t": 9.7,
+     "t": 11.6,
      "label": "Pick how it works"
     },
     {
-     "t": 11.2,
+     "t": 13.2,
      "label": "Pick the agent"
     },
     {
-     "t": 12.3,
+     "t": 14.3,
      "label": "Start it"
     },
     {
-     "t": 14.2,
+     "t": 17.2,
      "label": "Follow the plan, live"
     },
     {
-     "t": 39.3,
+     "t": 42.2,
      "label": "The result waits for your review"
     },
     {
-     "t": 43.7,
+     "t": 46.7,
      "label": "Accept it"
     }
    ],
@@ -2263,7 +2235,7 @@
    "poster": "/guide-media/videos/approve-poster.webp",
    "w": 1280,
    "h": 800,
-   "duration": 23.4,
+   "duration": 25.4,
    "chapters": [
     {
      "t": 0.2,
@@ -2274,15 +2246,15 @@
      "label": "Read what the agent wants to do, and why"
     },
     {
-     "t": 4.6,
+     "t": 4.7,
      "label": "Approve once"
     },
     {
-     "t": 7.7,
+     "t": 8.1,
      "label": "History keeps every decision"
     },
     {
-     "t": 12.4,
+     "t": 12.7,
      "label": "The agent carries on and hands in the result"
     }
    ],
@@ -2293,27 +2265,19 @@
    "poster": "/guide-media/videos/add-company-poster.webp",
    "w": 1280,
    "h": 800,
-   "duration": 24.2,
+   "duration": 22.8,
    "chapters": [
     {
      "t": 0.2,
      "label": "Your companies"
     },
     {
-     "t": 2.8,
+     "t": 3.2,
      "label": "Name the company"
     },
     {
-     "t": 6.2,
+     "t": 7.7,
      "label": "Pick its industry: the AI team to match"
-    },
-    {
-     "t": 12.1,
-     "label": "Create it"
-    },
-    {
-     "t": 15.8,
-     "label": "Its AI team is ready, desk by desk"
     }
    ],
    "device": "desktop"
@@ -2323,30 +2287,30 @@
    "poster": "/guide-media/videos/hire-worker-poster.webp",
    "w": 786,
    "h": 1704,
-   "duration": 34.8,
+   "duration": 40.8,
    "chapters": [
     {
      "t": 0.2,
      "label": "Where you work (set by your manager)"
     },
     {
-     "t": 3.6,
+     "t": 3.7,
      "label": "Meet your AI worker"
     },
     {
-     "t": 10.8,
+     "t": 13,
      "label": "Give it a job"
     },
     {
-     "t": 17.4,
+     "t": 21.6,
      "label": "When it works and rests"
     },
     {
-     "t": 21.5,
+     "t": 25.9,
      "label": "The offer: check and hire"
     },
     {
-     "t": 28.7,
+     "t": 34.7,
      "label": "Its first day: working on your task"
     }
    ],
@@ -2357,7 +2321,7 @@
    "poster": "/guide-media/videos/phone-tour-poster.webp",
    "w": 786,
    "h": 1704,
-   "duration": 30.9,
+   "duration": 33.2,
    "chapters": [
     {
      "t": 0.2,
@@ -2368,15 +2332,15 @@
      "label": "Approvals: decide from your phone"
     },
     {
-     "t": 7.3,
+     "t": 7.5,
      "label": "Tasks: the board, one column at a time"
     },
     {
-     "t": 17.8,
+     "t": 19.7,
      "label": "Chat: full screen, easy to read"
     },
     {
-     "t": 26.5,
+     "t": 28.3,
      "label": "Everything else is under More"
     }
    ],

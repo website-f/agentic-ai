@@ -35,6 +35,9 @@ const ENV = {
   AGENTIC_VAULT_DIR: path.join(WORK, "vault"),
   AGENTIC_EMBED_BACKEND: "hash",
   AGENTIC_DEV_SEED: "false",
+  // P57 made two-step sign-in the default for new offices; the fictional demo office is seeded without it
+  // (as the tests do), or the seed's own API calls are refused.
+  AGENTIC_NEW_WORKSPACE_REQUIRE_2FA: "off",
   AGENTIC_LOCAL_LLM_URL: "",
   AGENTIC_API_URL: `http://127.0.0.1:${API_PORT}`,
   PYTHONUNBUFFERED: "1",
@@ -42,11 +45,15 @@ const ENV = {
 
 const kids = [];
 const log = (...a) => console.log("[refresh]", ...a);
+// On Windows the commands run through the shell (so `uv` and `npx` resolve), which joins the arguments
+// unquoted: a path with a space (the repo lives in "agentic-ai (main)" since 13 Nov 2026) must be quoted.
+const WIN = process.platform === "win32";
+const shellArgs = (argv) => (WIN ? argv.map((a) => (/[\s()&^|<>]/.test(a) ? `"${a}"` : a)) : argv);
 
 function start(name, cmd, argv, cwd) {
   fs.mkdirSync(WORK, { recursive: true });
   const out = fs.openSync(path.join(WORK, `${name}.log`), "w");
-  const p = spawn(cmd, argv, { cwd, env: ENV, stdio: ["ignore", out, out], shell: process.platform === "win32", windowsHide: true });
+  const p = spawn(cmd, shellArgs(argv), { cwd, env: ENV, stdio: ["ignore", out, out], shell: WIN, windowsHide: true });
   kids.push({ name, p });
   log(`started ${name} (pid ${p.pid}, log .work/${name}.log)`);
   return p;
@@ -80,7 +87,7 @@ function waitFor(url, ms = 90000) {
 }
 
 function run(cmd, argv, cwd) {
-  execFileSync(cmd, argv, { cwd, env: ENV, stdio: "inherit", shell: process.platform === "win32" });
+  execFileSync(cmd, shellArgs(argv), { cwd, env: ENV, stdio: "inherit", shell: WIN });
 }
 
 async function main() {
