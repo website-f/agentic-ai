@@ -12,7 +12,6 @@ export const NEEDS_MEMORY: Record<string, string> = {
   "Document to review": "Dokumen untuk disemak",
   "Task failed": "Tugasan gagal",
   "Email draft": "Draf e-mel",
-  "Bill to approve": "Bil untuk diluluskan",
   "Skill proposal": "Cadangan kemahiran",
   "Learned routine": "Rutin yang dipelajari",
   "{n} new things need you": "{n} perkara baharu perlukan anda",

@@ -146,24 +146,8 @@ export const TIPS: Record<string, string> = {
   // contacts, deals, money
   "Customers and suppliers, with everything that happened with each.":
     "Pelanggan dan pembekal, dengan semua yang berlaku dengan setiap satu.",
-  "Search for a company to see its emails, deals and invoices.": "Cari syarikat untuk melihat e-mel, urusan jualan dan invoisnya.",
-  "Customers and suppliers, and the full history with each: email, deals, invoices.":
-    "Pelanggan dan pembekal, serta sejarah penuh dengan setiap satu: e-mel, urusan jualan, invois.",
-  "Add contacts by hand or import a spreadsheet.": "Tambah kenalan secara manual atau import hamparan.",
   "Open one to see its timeline and what is owed.": "Buka satu untuk melihat garis masanya dan jumlah yang terhutang.",
-  "Sales in progress, from first contact to won or lost.": "Jualan yang sedang berjalan, dari hubungan pertama hingga berjaya atau terlepas.",
-  "Move a deal to its next stage as it changes.": "Alihkan urusan jualan ke peringkat seterusnya bila ia berubah.",
   "Ask your AI to draft the next follow-up.": "Minta AI anda mendraf susulan seterusnya.",
-  "The sales pipeline: every deal, its value and stage.": "Saluran jualan: setiap urusan jualan, nilai dan peringkatnya.",
-  "Drag deals between stages, or let agents update them from email.":
-    "Seret urusan jualan antara peringkat, atau biar ejen mengemas kininya daripada e-mel.",
-  "What customers owe you and what you owe suppliers, with what is overdue and coming.":
-    "Apa yang pelanggan hutang kepada anda dan apa yang anda hutang kepada pembekal, termasuk yang tertunggak dan akan tiba.",
-  "Approve bills in Payables: check what the AI read, correct it if needed, then Approve.":
-    "Luluskan bil dalam Belum bayar: semak apa yang dibaca AI, betulkan jika perlu, kemudian Luluskan.",
-  "Upload receipts and bills here, or let staff send photos on WhatsApp.":
-    "Muat naik resit dan bil di sini, atau biar kakitangan menghantar gambar melalui WhatsApp.",
-  "Send reminders for overdue invoices from each invoice.": "Hantar peringatan untuk invois tertunggak dari setiap invois.",
 
   // library
   "The company Library: SOPs, policies, templates and documents your AI reads before it works.":
@@ -248,9 +232,6 @@ export const TIPS: Record<string, string> = {
     "Tempat fail syarikat disimpan: pangkalan data, cakera pelayan ini, bucket atau pelayan fail anda.",
   "Add storage and test it.": "Tambah storan dan ujinya.",
   "Turn on Import to bring its documents into the Library.": "Hidupkan Import untuk membawa dokumennya ke dalam Perpustakaan.",
-  "Let small, routine money steps go through without waiting for you.":
-    "Biar urusan wang yang kecil dan rutin diteruskan tanpa menunggu anda.",
-  "Set the amount for bills from known suppliers.": "Tetapkan jumlah untuk bil daripada pembekal yang dikenali.",
   "Check What went through on its own now and then.": "Sesekali semak Apa yang lulus sendiri.",
   "The AI models the office uses, what they cost, and how private each company's data stays.":
     "Model AI yang digunakan pejabat, kosnya, dan sejauh mana data setiap syarikat kekal peribadi.",

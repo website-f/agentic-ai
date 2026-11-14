@@ -9,7 +9,6 @@ export const WORK_MORE: Record<string, string> = {
   "{n} documents made by AI to review": "{n} dokumen buatan AI untuk disemak",
   "{n} of your tasks failed this week": "{n} tugasan anda gagal minggu ini",
   "{n} email drafts to check and send": "{n} draf e-mel untuk disemak dan dihantar",
-  "{n} bills and receipts to approve": "{n} bil dan resit untuk diluluskan",
   "{n} skill proposals to decide": "{n} cadangan kemahiran untuk diputuskan",
   "{n} learned routines to trust": "{n} rutin yang dipelajari untuk dipercayai",
   "{n} things need you": "{n} perkara perlukan anda",
@@ -18,7 +17,6 @@ export const WORK_MORE: Record<string, string> = {
 
   // money labels
   "Claim: reimburse {name}": "Tuntutan: bayar balik kepada {name}",
-  "Receipt, already paid": "Resit, sudah dibayar",
 
   // nav
   Timetable: "Jadual waktu",
@@ -26,35 +24,16 @@ export const WORK_MORE: Record<string, string> = {
     "Hari bekerja setiap ejen, seperti jadual giliran kakitangan: waktu bekerjanya, tugas hariannya, dan apa yang menunggu syif seterusnya.",
   "What the office knows: facts agents learned, wiki pages, and a nightly tidy-up that keeps them correct.":
     "Apa yang pejabat tahu: fakta yang dipelajari ejen, halaman wiki, dan kemas kini setiap malam yang memastikannya betul.",
-  "Approval limits": "Had kelulusan",
-  "Let small, routine money steps go through without waiting for you: bills under an amount from known suppliers, small invoice drafts.":
-    "Biar urusan wang yang kecil dan rutin diteruskan tanpa menunggu anda: bil bawah satu jumlah daripada pembekal yang dikenali, draf invois kecil.",
   "Connect tools from other systems (MCP): a tracker, a CRM, or your own server. Agents ask before every call.":
     "Sambungkan alat daripada sistem lain (MCP): penjejak, CRM, atau pelayan anda sendiri. Ejen bertanya dahulu sebelum setiap panggilan.",
 
   // approval limits
-  "Saved. It applies from the next bill or invoice.": "Disimpan. Ia terpakai mulai bil atau invois seterusnya.",
-  "Let small, routine money steps go through without waiting for you. Anything over a limit, unusual or new still waits for a person, as before.":
-    "Biar urusan wang yang kecil dan rutin diteruskan tanpa menunggu anda. Apa-apa yang melebihi had, luar biasa atau baharu tetap menunggu seseorang, seperti biasa.",
-  "Approve small supplier bills and receipts on their own": "Luluskan bil dan resit kecil daripada pembekal secara automatik",
-  "Bills read from email, phone photos or uploads. A receipt already paid is then recorded as paid; a staff member's claim waits to be paid back.":
-    "Bil yang dibaca daripada e-mel, gambar telefon atau muat naik. Resit yang sudah dibayar kemudian direkodkan sebagai dibayar; tuntutan kakitangan menunggu untuk dibayar balik.",
   "Up to (RM)": "Sehingga (RM)",
-  "Only from suppliers you have approved a bill from before": "Hanya daripada pembekal yang pernah anda luluskan bilnya",
-  "Recommended: the first bill from anyone new always waits for you.":
-    "Disyorkan: bil pertama daripada sesiapa yang baharu sentiasa menunggu anda.",
-  "Let agents draft customer invoices without asking": "Benarkan ejen mendraf invois pelanggan tanpa bertanya",
-  "Only drafts: a person still approves and sends every invoice.":
-    "Draf sahaja: seseorang tetap meluluskan dan menghantar setiap invois.",
   "At most this many a day go through on their own": "Paling banyak sebegini sehari diteruskan secara automatik",
   "{n} so far today. After that, everything waits for a person until tomorrow.":
     "{n} setakat hari ini. Selepas itu, semuanya menunggu seseorang hingga esok.",
-  "Always waits for a person: anything over a limit, possible duplicates, other currencies, and bills from new suppliers (unless you turn that off).":
-    "Sentiasa menunggu seseorang: apa-apa yang melebihi had, kemungkinan pendua, mata wang lain, dan bil daripada pembekal baharu (melainkan anda matikannya).",
   "What went through on its own": "Apa yang lulus sendiri",
   "Nothing yet": "Belum ada",
-  "Each bill or invoice draft that goes through under a limit is listed here, with a link to check it.":
-    "Setiap bil atau draf invois yang diteruskan di bawah had disenaraikan di sini, dengan pautan untuk menyemaknya.",
 
   // brain
   "What the office knows: facts agents learned, wiki pages, and a nightly tidy-up that merges and corrects them.":
@@ -131,37 +110,17 @@ export const WORK_MORE: Record<string, string> = {
   // money: bills and receipts
   Receipt: "Resit",
   "Approved and recorded as paid.": "Diluluskan dan direkodkan sebagai dibayar.",
-  "Approved. Pay {name} back, then record the payment.": "Diluluskan. Bayar balik kepada {name}, kemudian rekodkan bayaran.",
   Correct: "Betulkan",
-  "Upload receipts and bills": "Muat naik resit dan bil",
-  "New invoice (to a customer)": "Invois baharu (kepada pelanggan)",
-  "Type in a bill (from a supplier)": "Masukkan bil (daripada pembekal)",
-  "Read a bill already in the Library": "Baca bil yang sudah ada dalam Perpustakaan",
-  "Supplier bills and receipts are read and listed here for approval: from your mailboxes, photos staff send on WhatsApp or Telegram, or files you upload here.":
-    "Bil dan resit pembekal dibaca dan disenaraikan di sini untuk kelulusan: daripada peti mel anda, gambar yang dihantar kakitangan melalui WhatsApp atau Telegram, atau fail yang anda muat naik di sini.",
-  "As on the bill": "Seperti dalam bil",
   "Pick the supplier.": "Pilih pembekal.",
   "Saved. Approve it when it is right.": "Disimpan. Luluskannya bila sudah betul.",
-  "Bill saved. Approve it when it is right.": "Bil disimpan. Luluskannya bila sudah betul.",
-  "Correct this bill": "Betulkan bil ini",
-  "Edit invoice": "Ubah invois",
-  "New bill": "Bil baharu",
   "Fix anything the AI read wrong (supplier, number, dates, amounts) before you approve it.":
     "Betulkan apa-apa yang AI salah baca (pembekal, nombor, tarikh, jumlah) sebelum anda meluluskannya.",
-  "Type in a bill you received on paper. It waits for approval like any other bill.":
-    "Masukkan bil yang anda terima dalam bentuk kertas. Ia menunggu kelulusan seperti bil lain.",
-  "Bill or receipt number": "Nombor bil atau resit",
   "Our PO number, if any.": "Nombor PO kita, jika ada.",
   "e.g. Paid by cash at the counter.": "cth. Dibayar tunai di kaunter.",
-  "Photos or PDFs, as many as you like. Each is read into a bill that waits for your approval. Receipts already paid are recorded as paid when you approve them.":
-    "Gambar atau PDF, seberapa banyak yang anda mahu. Setiap satu dibaca menjadi bil yang menunggu kelulusan anda. Resit yang sudah dibayar direkodkan sebagai dibayar bila anda meluluskannya.",
   "For which company": "Untuk syarikat mana",
   "Who paid": "Siapa yang bayar",
   "The company (or not paid yet)": "Syarikat (atau belum dibayar)",
-  "{name}, from their own money (a claim)": "{name}, guna duit sendiri (tuntutan)",
   "Drop photos or PDFs here, or click to choose": "Lepaskan gambar atau PDF di sini, atau klik untuk memilih",
-  "Up to {mb} MB each. Phone photos work: keep the whole receipt in view.":
-    "Sehingga {mb} MB setiap satu. Gambar telefon boleh: pastikan seluruh resit kelihatan.",
   "Waiting…": "Menunggu…",
   "Check it": "Semak",
   "Not read": "Tidak dapat dibaca",

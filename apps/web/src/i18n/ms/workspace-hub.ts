@@ -2,9 +2,6 @@
  * wider task board, and starting the CRM over. */
 export const WORKSPACE_HUB: Record<string, string> = {
   // CRM: what is in it now, start over
-  "Removed from the CRM.": "Dibuang daripada CRM.",
-  "Your CRM is empty again. Build it the way you want.": "CRM anda kosong semula. Bina ia mengikut cara anda.",
-  "Your CRM now": "CRM anda sekarang",
   "Added something by mistake? Remove it here and add another. Your office's own data is never deleted.":
     "Tersilap tambah sesuatu? Buang di sini dan tambah yang lain. Data pejabat anda sendiri tidak akan dipadam.",
   "From your office": "Daripada pejabat anda",
@@ -14,9 +11,6 @@ export const WORKSPACE_HUB: Record<string, string> = {
   "Want a clean slate? Start over removes every list, the dashboard, the connections and the sharing.":
     "Mahu mula semula dari kosong? Mula semula membuang setiap senarai, papan pemuka, sambungan dan perkongsian.",
   "Start over": "Mula semula",
-  "Start the CRM over?": "Mulakan semula CRM?",
-  "Every list you made with its records, every tile, connection and share is removed. The office's own contacts, deals, invoices and tasks stay exactly as they are. This cannot be undone.":
-    "Setiap senarai yang anda buat bersama rekodnya, setiap jubin, sambungan dan perkongsian akan dibuang. Kenalan, urus niaga, invois dan tugasan pejabat sendiri kekal seperti sedia ada. Ini tidak boleh dibatalkan.",
 
   // workspace: go to
   "Go to": "Pergi ke",
@@ -30,7 +24,6 @@ export const WORKSPACE_HUB: Record<string, string> = {
   "The company's documents, in folders": "Dokumen syarikat, dalam folder",
   "Customers, sales and anything you track": "Pelanggan, jualan dan apa sahaja yang anda jejaki",
   "Customers and suppliers": "Pelanggan dan pembekal",
-  "Invoices, bills and receipts": "Invois, bil dan resit",
   "Your own PC, from anywhere": "PC anda sendiri, dari mana-mana",
 
   // workspace: how do I…?
