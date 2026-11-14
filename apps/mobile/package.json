@@ -1,0 +1,28 @@
+{
+  "name": "agentic-mobile",
+  "private": true,
+  "version": "0.1.0",
+  "description": "P104: the Agentic Office + Prima phone app (Capacitor, Android and iOS).",
+  "type": "module",
+  "scripts": {
+    "build:web": "node scripts/build-web.mjs",
+    "identity": "node scripts/identity.mjs",
+    "sync": "npm run build:web && npm run identity && cap sync",
+    "android:debug": "npm run sync && node scripts/gradle.mjs assembleDebug",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@aparajita/capacitor-secure-storage": "^8.0.1",
+    "@capacitor/android": "^8.6.2",
+    "@capacitor/browser": "^8.0.5",
+    "@capacitor/core": "^8.6.2",
+    "@capacitor/filesystem": "^8.1.5",
+    "@capacitor/ios": "^8.6.2",
+    "@capacitor/share": "^8.0.3"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^8.6.2",
+    "esbuild": "^0.28.2",
+    "typescript": "^5.9.3"
+  }
+}

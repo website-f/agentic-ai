@@ -12,10 +12,18 @@ from fastapi.responses import JSONResponse
 
 from .. import __version__
 from ..brain import embed
+from ..core.config import settings
 from ..core.db import engine
 from ..core.valkey import close_valkey
 from ..i18n import Msg, current_lang, normalize, render, reset_lang, set_lang, tr
-from .deps import CSRF_COOKIE, CSRF_HEADER, LANG_HEADER, SESSION_COOKIE
+from .deps import (
+    APP_CLIENT_HEADER,
+    APP_SESSION_HEADER,
+    CSRF_COOKIE,
+    CSRF_HEADER,
+    LANG_HEADER,
+    SESSION_COOKIE,
+)
 from .routers import (
     agents,
     ai_engine,
@@ -332,6 +340,39 @@ for r in (
 
 # Outermost, so even the CSRF and JSON checks answer in the person's language.
 app.add_middleware(LanguageMiddleware)
+
+# P104: the phone app's pages (capacitor://localhost, https://localhost) call the API from their
+# own origin. Only those origins, and never with cookies (allow_credentials stays off): the app
+# signs in with a bearer token (deps.session_token). Browsers on this site are not affected.
+# max_age: the WebView asks once per address per 2 hours, not before every call.
+if settings.app_origins.strip():
+    from fastapi.middleware.cors import CORSMiddleware
+
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=[o.strip() for o in settings.app_origins.split(",") if o.strip()],
+        allow_credentials=False,
+        allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
+        allow_headers=[
+            "authorization",
+            "content-type",
+            "last-event-id",
+            APP_CLIENT_HEADER,
+            CSRF_HEADER,
+            LANG_HEADER,
+            "x-file-type",
+        ],
+        expose_headers=[
+            APP_SESSION_HEADER,
+            "content-disposition",
+            "x-next-cursor",
+            "x-total-count",
+            "x-screen-width",
+            "x-screen-height",
+            "retry-after",
+        ],
+        max_age=7200,
+    )
 
 # Meeting minutes from a recording: the upload streams raw bytes like /api/files.
 from .routers import minutes as minutes_router  # noqa: E402

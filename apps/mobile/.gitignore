@@ -1,0 +1,4 @@
+node_modules/
+# Built by scripts/build-web.mjs (npm run build:web): never committed.
+www/
+build/

@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Debug builds only: a test build may talk to an API on this PC (MOBILE_SERVER=http://localhost:PORT
+     with `adb reverse`). Release builds keep Android's default: HTTPS only. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+    <application
+        android:networkSecurityConfig="@xml/debug_network_security_config"
+        tools:ignore="UnusedAttribute" />
+</manifest>

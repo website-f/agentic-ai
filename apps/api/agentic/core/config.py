@@ -29,6 +29,10 @@ class Settings(BaseSettings):
     # until the stack sits behind TLS.
     cookie_secure: bool = False
     session_days: int = Field(default=14, ge=1, le=90)
+    # P104: the phone app's page origins (Capacitor: iOS, Android), comma-separated. Only these
+    # may call the API from another origin, without cookies (the app signs in with a bearer
+    # token, api/deps.py). Empty: no other origin at all.
+    app_origins: str = "capacitor://localhost,https://localhost"
 
     # 32 random bytes, base64url. Wraps every stored secret. Required outside dev.
     master_key: str = ""

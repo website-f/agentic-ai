@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Field, FormError } from "@/components/ui/field";
 import { msg, useT } from "@/i18n";
 import { api, ApiError } from "@/lib/api";
+import { isNativeApp } from "@/lib/native";
 import { keys, meQuery } from "@/lib/queries";
 import { safeNext } from "@/lib/search";
 import { ssoKey, type SsoOptions } from "@/lib/signin-emails";
@@ -339,10 +340,12 @@ function MicrosoftSignIn({ staff, next, error, form }: {
 }) {
   const emailInput = () => form.current?.elements.namedItem("email") as HTMLInputElement | null | undefined;
   const t = useT();
-  const sso = useQuery({ queryKey: ["auth", "sso"], queryFn: () => api<{ microsoft: boolean }>("/api/auth/sso"), staleTime: 60_000 });
+  // P104: not in the phone app yet (Microsoft's page would sign in the phone's browser, not the app).
+  const app = isNativeApp();
+  const sso = useQuery({ queryKey: ["auth", "sso"], queryFn: () => api<{ microsoft: boolean }>("/api/auth/sso"), staleTime: 60_000, enabled: !app });
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<string | null>(error ?? null);
-  if (!sso.data?.microsoft) return problem ? <div className="mb-4"><FormError message={problem} /></div> : null;
+  if (app || !sso.data?.microsoft) return problem ? <div className="mb-4"><FormError message={problem} /></div> : null;
   const go = async () => {
     setBusy(true);
     setProblem(null);

@@ -23,6 +23,29 @@ from .scope import Scope
 SESSION_COOKIE = "agentic_session"
 CSRF_COOKIE = "agentic_csrf"
 CSRF_HEADER = "x-csrf-token"
+# P104: the phone app (apps/mobile) runs its screens from the phone, so its page is not on this
+# site and cookies cannot carry its sign-in (iOS blocks them). It says so on every call
+# (X-Agentic-Client: app); its sign-in answers with the session token in X-Agentic-Session
+# instead of cookies, and it sends that token back as "Authorization: Bearer ...". A browser never
+# adds that header by itself, so a page on another site cannot use it (no CSRF), and it is the
+# same server-side session: it expires, and signing out (or a password change) ends it.
+APP_CLIENT_HEADER = "x-agentic-client"
+APP_SESSION_HEADER = "x-agentic-session"
+
+
+def is_app_client(request: Request) -> bool:
+    return request.headers.get(APP_CLIENT_HEADER, "").strip().lower() == "app"
+
+
+def session_token(request: Request) -> str:
+    """The browser's session cookie; else, from the phone app only, its bearer token."""
+    cookie = request.cookies.get(SESSION_COOKIE)
+    if cookie:
+        return cookie
+    if not is_app_client(request):
+        return ""
+    raw = request.headers.get("authorization") or ""
+    return raw[7:].strip() if raw[:7].lower() == "bearer " else ""
 
 
 @dataclass(frozen=True)
@@ -153,6 +176,10 @@ async def start_session(
             ip=client_ip(request),
         )
     )
+    if is_app_client(request):
+        # P104: the phone app keeps the token in the phone's secure storage; no cookies.
+        response.headers[APP_SESSION_HEADER] = token
+        return
     max_age = settings.session_days * 86400
     response.set_cookie(
         SESSION_COOKIE,
@@ -181,7 +208,7 @@ def clear_session_cookies(response: Response) -> None:
 
 
 async def _load_principal(request: Request, db: AsyncSession) -> Principal:
-    token = request.cookies.get(SESSION_COOKIE)
+    token = session_token(request)
     if not token:
         raise api_error(status.HTTP_401_UNAUTHORIZED, "not_authenticated", "Sign in to continue.")
     session = await db.get(AuthSession, token_hash(token))
