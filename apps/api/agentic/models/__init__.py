@@ -306,7 +306,12 @@ class LLMCall(Base):
     name without a foreign key, so deleting a provider keeps its history."""
 
     __tablename__ = "llm_calls"
-    __table_args__ = (Index("ix_llm_calls_ws_ts", "workspace_id", "ts"),)
+    __table_args__ = (
+        Index("ix_llm_calls_ws_ts", "workspace_id", "ts"),
+        # P103 (migration 0064): an agent's spend today, and a provider's recent failures.
+        Index("ix_llm_calls_agent_ts", "agent_id", "ts"),
+        Index("ix_llm_calls_provider_ts", "provider_id", "ts"),
+    )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     workspace_id: Mapped[str] = mapped_column(String(40))
@@ -648,7 +653,11 @@ class Event(Base):
     """Every live event, kept briefly so a phone that slept can replay what it missed."""
 
     __tablename__ = "events"
-    __table_args__ = (Index("ix_events_ws_seq", "workspace_id", "seq"),)
+    __table_args__ = (
+        Index("ix_events_ws_seq", "workspace_id", "seq"),
+        # P103 (migration 0064): the latest event of a kind.
+        Index("ix_events_ws_type_ts", "workspace_id", "type", "ts"),
+    )
 
     seq: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     workspace_id: Mapped[str] = mapped_column(String(40))
