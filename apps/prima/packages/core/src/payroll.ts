@@ -6,6 +6,9 @@ import { DEFAULT_STATUTORY } from "./statutory";
 import { otherShare } from "./statutory";
 import type { StatutorySettings } from "./statutory";
 import { ageOn } from "./time";
+import { addDays } from "./time";
+import { weekday } from "./time";
+import type { IsoDate } from "./types";
 import type { AllowanceType } from "./types";
 import type { LeaveRequest } from "./types";
 import type { Nationality } from "./types";
@@ -154,6 +157,8 @@ export interface StaffPayInput {
   zakatPercent?: number;
   /** EPF and PERKESO tables loaded and checked in Prima; the built-in tables otherwise. */
   tables?: StatTable[];
+  /** Part P24 (answer 32): staff stay damage the staff member acknowledged with written consent, deducted once. */
+  recoveries?: number;
 }
 
 
@@ -178,7 +183,7 @@ export function staffPaySums(i: StaffPayInput) {
   const pcbBeforeZakat = i.pcbEntered ?? pcbEstimate(taxable, epf.ee, socso.ee + eis.ee);
   const zakat = r2(Math.max(0, gross) * Math.max(0, i.zakatPercent ?? 0) / 100);
   const pcb = r2(Math.max(0, pcbBeforeZakat - zakat));
-  const deductions = r2(epf.ee + socso.ee + lindung.ee + eis.ee + pcb + zakat + othersEe);
+  const deductions = r2(epf.ee + socso.ee + lindung.ee + eis.ee + pcb + zakat + othersEe + Math.max(0, i.recoveries ?? 0));
   return {
     allowances,
     unpaidDeduction,
@@ -246,35 +251,37 @@ export function staffPayStatutoryKey(settings: StatutorySettings = DEFAULT_STATU
 }
 
 
-/**
- * P100 C1: the working days (Monday to Friday) from one date to another, both counted. A public holiday on a weekday is a
- * paid day for a monthly-paid employee (EA s.60D), so it counts as a day employed.
- */
-export function staffWorkingDays(from: string, to: string): number {
+/** One staff member's line for the month, from their record, approved unpaid leave and approved claims not paid yet. */
+/** Office working days from one day to another: Monday to Friday, without the public holidays given. */
+export function staffWorkingDays(from: IsoDate, to: IsoDate, holidays?: Set<IsoDate>): number {
   let n = 0;
-  for (let t = Date.parse(`${from}T00:00:00Z`); t <= Date.parse(`${to}T00:00:00Z`); t += 86_400_000) {
-    const w = new Date(t).getUTCDay();
-    if (w !== 0 && w !== 6) n += 1;
+  for (let d = from; d <= to; d = addDays(d, 1)) {
+    const w = weekday(d);
+    if (w !== 0 && w !== 6 && !holidays?.has(d)) n++;
   }
   return n;
 }
 
-/** P100 C1: the part-month pay for the working days employed: monthly / divisor x days, never more than the month. */
-export function staffPartMonthPay(basic: number, fixedAllowances: number, from: string, to: string, divisor: number) {
-  const workingDays = staffWorkingDays(from, to);
-  const dailyBasic = basic / divisor;
-  const dailyAllowances = fixedAllowances / divisor;
+/**
+ * Prima's part-month figure (C1): (basic and fixed allowances) / the month's working days x working days employed,
+ * capped at the month (Fauzan, 14 Nov 2026: divide by that month's working days, not 26).
+ */
+export function staffPartMonthPay(basic: number, fixed: number, from: IsoDate, to: IsoDate, divisor: number, holidays?: Set<IsoDate>): NonNullable<StaffPayLine['partPay']> {
+  const days = staffWorkingDays(from, to, holidays);
+  const r2 = (n: number) => Math.round(n * 100) / 100;
+  const b = Math.min(basic, r2((basic / divisor) * days));
+  const a = Math.min(fixed, r2((fixed / divisor) * days));
   return {
-    workingDays,
-    divisor,
-    dailyBasic: r2(dailyBasic),
-    dailyAllowances: r2(dailyAllowances),
-    basic: r2(Math.min(basic, dailyBasic * workingDays)),
-    allowances: r2(Math.min(fixedAllowances, dailyAllowances * workingDays)),
+    basic: b,
+    allowances: a,
+    note: `Prima: RM${r2(basic / divisor).toFixed(2)} basic${fixed > 0 ? ` and RM${r2(fixed / divisor).toFixed(2)} fixed allowances` : ''} a day (monthly / ${divisor} working days this month) x ${days} working day${days === 1 ? '' : 's'} employed, ${from} to ${to}`,
+    by: 'Prima',
+    at: `${to}T00:00:00.000Z`,
+    auto: true,
+    workingDays: days,
   };
 }
 
-/** One staff member's line for the month, from their record, approved unpaid leave and approved claims not paid yet. */
 export function buildStaffPayLine(args: {
   person: Person;
   period: string;
@@ -292,8 +299,12 @@ export function buildStaffPayLine(args: {
   types?: AllowanceType[];
   /** The CEO's statutory settings for the month. */
   statutory?: StatutorySettings;
-  /** P100 C12 + J3: approved overtime to pay on this line (HR's switch on, the person named). */
-  overtime?: { ids: string[]; hours: number; hourly: number; amount: number } | null;
+  /** Public holidays in the person's state, for the part-month working days (none given: none counted). */
+  holidays?: Set<IsoDate>;
+  /** C12: approved CMS overtime for the month (not EPF wages; SOCSO, EIS and PCB count it). */
+  overtime?: { label: string; amount: number }[];
+  /** Part P24: consented staff stay damage recoveries due (answer 32). */
+  recoveries?: { id: string; label: string; amount: number }[];
 }): StaffPayLine {
   const { person: p, period } = args;
   const zakatChoice = staffZakatPreview(p, period);
@@ -306,29 +317,28 @@ export function buildStaffPayLine(args: {
   const to = p.leaving && p.leaving.lastDayOn < end ? p.leaving.lastDayOn : end;
   const partMonth = from > start || to < end ? { from, to } : null;
   const kp = args.kept?.partPay ?? null;
-  const fullFixed0 = (p.allowances ?? []).reduce((n, a) => n + a.amount, 0);
-  // P100 C1: Prima works out the part month (working days x the daily rate); HR's correction, with a reason, wins.
-  const partAuto = partMonth ? staffPartMonthPay(p.basicPay ?? 0, fullFixed0, partMonth.from, partMonth.to, args.unpaidDivisor) : null;
-  const partPay = partMonth ? (kp ?? (partAuto ? { basic: partAuto.basic, allowances: partAuto.allowances, note: '', by: '', at: '' } : null)) : null;
-  const corrected = partMonth && kp ? kp : null;
+  const fullFixed = (p.allowances ?? []).reduce((n, a) => n + a.amount, 0);
+  // Part month (Fauzan, 11 Nov 2026, C1; divisor changed 14 Nov 2026): daily rate = (monthly basic and fixed
+  // allowances) / the working days in that month, paid = daily rate x working days employed (Saturdays, Sundays and
+  // public holidays not counted), never more than the full month. HR may still enter its own figure, which replaces Prima's.
+  const monthDays = Math.max(1, staffWorkingDays(start, end, args.holidays));
+  const partPay = partMonth ? (kp && !kp.auto ? kp : staffPartMonthPay(p.basicPay ?? 0, fullFixed, partMonth.from, partMonth.to, monthDays, args.holidays)) : null;
   const typed = (a: { label: string; amount: number; typeId?: string }, fixed: boolean) => {
     const t = a.typeId ? args.types?.find((x) => x.id === a.typeId) : undefined;
     return { ...a, fixed, ...(t ? { epf: t.epf, socso: t.socso, pcb: t.pcb, hrd: t.hrd } : {}) };
   };
-  // HR's part-month figure scales the fixed allowances together, keeping each one's EPF, SOCSO, PCB and HRD ticks.
-  const fullFixed = (p.allowances ?? []).reduce((n, a) => n + a.amount, 0);
+  // The part-month figure scales the fixed allowances together, keeping each one's EPF, SOCSO, PCB and HRD ticks.
   const factor = partPay && fullFixed > 0 ? partPay.allowances / fullFixed : 1;
   const fixedLines = (p.allowances ?? []).map((a) => typed({ ...a, amount: Math.round(a.amount * factor * 100) / 100 }, true));
   if (partPay && fixedLines.length) {
     const drift = Math.round((partPay.allowances - fixedLines.reduce((n, a) => n + a.amount, 0)) * 100) / 100;
     fixedLines[fixedLines.length - 1].amount = Math.round((fixedLines[fixedLines.length - 1].amount + drift) * 100) / 100;
   }
-  const otPay = args.overtime && args.overtime.amount > 0 ? args.overtime : null;
   const allowanceLines = [
     ...fixedLines,
-    ...extra.map((a) => typed(a, false)),
-    // Overtime is not wages for EPF (KWSP); SOCSO, EIS and PCB count it; not part of the HRD levy basis.
-    ...(otPay ? [{ label: `Overtime (${otPay.hours} h approved)`, amount: otPay.amount, fixed: false, typeId: undefined as string | undefined, epf: false, socso: true, pcb: true, hrd: false, overtime: true }] : []),
+    ...extra.filter((a) => a.typeId !== 'cms-ot').map((a) => typed(a, false)),
+    // Overtime pay is not EPF wages (EPF Act s.2, "wages" excludes overtime); SOCSO and EIS count it.
+    ...(args.overtime ?? []).map((o) => ({ label: o.label, amount: o.amount, fixed: false, typeId: 'cms-ot', epf: false, socso: true, pcb: true, hrd: false })),
   ];
   const unpaidDays = args.leaves
     .filter((l) => l.personId === p.id && l.kind === 'UNPAID' && l.status === 'approved' && l.from.slice(0, 7) === period)
@@ -336,7 +346,7 @@ export function buildStaffPayLine(args: {
   const claims = args.claims.filter((c) => c.personId === p.id && c.status === 'approved');
   const inputs = staffPayInputsKey(p, period, args.types, unpaidDays);
   const basic = partPay ? partPay.basic : (p.basicPay ?? 0);
-  const sums = staffPaySums({
+  const sumsArgs = {
     basic,
     allowances: allowanceLines,
     unpaidDays,
@@ -349,8 +359,29 @@ export function buildStaffPayLine(args: {
     lindungOptedOut: p.lindungOptOut === true,
     statutory: args.statutory,
     zakatPercent: zakatChoice.percent,
-  });
+  };
+  // Review B2 (Fauzan, 11 Nov 2026 round 3 Q3): employer recoveries (stay damage, item damage or loss) together never
+  // take more than half of gross pay; EPF, SOCSO, EIS, PCB and zakat are outside that limit. Recoveries are taken in
+  // order; the rest of a recovery carries to the next month, as guard pay does.
+  const grossOnly = staffPaySums(sumsArgs).gross;
+  let room = Math.max(0, Math.floor(grossOnly * 50) / 100);
+  const parts: { id: string; label: string; amount: number; full: boolean; due: number }[] = [];
+  for (const r of args.recoveries ?? []) {
+    const due = Math.round(Math.max(0, r.amount) * 100) / 100;
+    const take = Math.round(Math.min(due, room) * 100) / 100;
+    room = Math.round((room - take) * 100) / 100;
+    parts.push({ id: r.id, label: r.label, amount: take, full: take >= due, due });
+  }
+  const recovered = Math.round(parts.reduce((n, r) => n + r.amount, 0) * 100) / 100;
+  const sums = staffPaySums({ ...sumsArgs, recoveries: recovered });
   const flags: string[] = [];
+  for (const r of parts) {
+    if (r.full) flags.push(`${r.label}: RM${r.amount.toFixed(2)} deducted (acknowledged with written consent)`);
+    else
+      flags.push(
+        `${r.label}: RM${r.amount.toFixed(2)} of RM${r.due.toFixed(2)} deducted (recoveries are limited to half of gross pay); RM${(r.due - r.amount).toFixed(2)} carries to the next month`,
+      );
+  }
   // Presence warnings only: full member/tax identifiers stay out of broadly visible payroll lines.
   if (!p.epfNo) flags.push('No EPF (KWSP) number on record');
   if (!p.socsoNo) flags.push('No SOCSO (PERKESO) number on record');
@@ -372,11 +403,13 @@ export function buildStaffPayLine(args: {
     flags.push(
       `Not counted per HR's allowance list: ${off.map((a) => `${a.label} (${[a.epf === false && 'EPF', a.socso === false && 'SOCSO', a.pcb === false && 'PCB', a.hrd === false && 'HRD'].filter(Boolean).join(', ')})`).join('; ')}`,
     );
-  if (partMonth && partAuto)
+  if (partMonth)
     flags.push(
-      corrected
-        ? `Part month ${partMonth.from} to ${partMonth.to}: corrected by ${corrected.by} to basic RM${corrected.basic.toFixed(2)}, fixed allowances RM${corrected.allowances.toFixed(2)} (worked out: RM${partAuto.basic.toFixed(2)} and RM${partAuto.allowances.toFixed(2)}): ${corrected.note}`
-        : `Part month ${partMonth.from} to ${partMonth.to}: ${partAuto.workingDays} working days x RM${partAuto.dailyBasic.toFixed(2)} a day (basic / ${partAuto.divisor}) = RM${partAuto.basic.toFixed(2)}${fullFixed0 ? `; fixed allowances RM${partAuto.allowances.toFixed(2)}` : ''}`,
+      partPay
+        ? partPay.auto
+          ? `Part month ${partMonth.from} to ${partMonth.to}: basic RM${partPay.basic.toFixed(2)}, fixed allowances RM${partPay.allowances.toFixed(2)} (${partPay.note}); HR may enter its own figure with a reason`
+          : `Part month ${partMonth.from} to ${partMonth.to}: pay entered by ${partPay.by} (basic RM${partPay.basic.toFixed(2)}, fixed allowances RM${partPay.allowances.toFixed(2)}): ${partPay.note}`
+        : `Part month ${partMonth.from} to ${partMonth.to}: HR enters the pay for the days worked before this month can be submitted`,
     );
   if (p.movedFrom && p.hiredOn.slice(0, 7) === period) flags.push(`Transferred in on ${p.hiredOn}: the old employer pays up to the day before`);
   if (p.movedTo && p.leaving && p.leaving.lastDayOn.slice(0, 7) === period) flags.push(`Transferred out after ${p.leaving.lastDayOn}: the new employer pays from the day after`);
@@ -385,15 +418,22 @@ export function buildStaffPayLine(args: {
   if (!partMonth && minimumWageShort(basic, period) > 0) flags.push(`Basic pay RM${basic.toFixed(2)} is below the minimum wage of RM${minimumWageFor(period).toFixed(2)}`);
   if (p.nationality === 'MY' && p.lindungOptOut == null && sums.lindungStatus === 'deducted')
     flags.push('LINDUNG 24 Jam deducted: opt-out choice not recorded');
-  if (sums.gross > 0 && sums.deductions > sums.gross / 2) flags.push(`Deductions RM${sums.deductions.toFixed(2)} exceed half of gross pay: review the applicable deduction limits and zakat choice`);
+  const statutoryAndZakat = Math.round((sums.deductions - recovered) * 100) / 100;
+  if (sums.gross > 0 && statutoryAndZakat > sums.gross / 2)
+    flags.push(`Statutory deductions and zakat RM${statutoryAndZakat.toFixed(2)} are more than half of gross pay: check the zakat choice`);
   if (unpaidDays) flags.push(`${unpaidDays} day${unpaidDays === 1 ? '' : 's'} unpaid leave deducted`);
-  // P100 J4: unpaid leave Prima took for time slip hours not worked back (rule HR-TIME-SLIP) is named on the line.
-  const slipUnpaid = args.leaves.filter((l) => l.personId === p.id && l.kind === 'UNPAID' && l.status === 'approved' && l.from.slice(0, 7) === period && l.timeSlipId);
-  if (slipUnpaid.length) flags.push(`Of which ${slipUnpaid.reduce((n, l) => n + l.days, 0)} day(s) for time slip hours not worked back (${slipUnpaid.map((l) => l.timeSlipId).join(', ')})`);
   return {
     personId: p.id,
     staffNo: p.staffNo,
     name: p.name,
+    ...(parts.some((r) => r.amount > 0)
+      ? {
+          // recoveryIds: recoveries finished in this run (marked recovered when the run is paid); parts: what was taken.
+          recoveryIds: parts.filter((r) => r.full && r.amount > 0).map((r) => r.id),
+          recoveries: recovered,
+          recoveryParts: parts.filter((r) => r.amount > 0).map((r) => ({ id: r.id, amount: r.amount })),
+        }
+      : {}),
     jobTitle: p.jobTitle ?? '',
     age,
     nationality: p.nationality,
@@ -403,10 +443,8 @@ export function buildStaffPayLine(args: {
     claimIds: claims.map((c) => c.id),
     bank: p.bank ?? null,
     flags,
-    overtime: otPay,
     partMonth,
-    partAuto,
-    partPay: corrected,
+    partPay,
     inputs,
     statutoryInputs: staffPayStatutoryKey(args.statutory),
     ...sums,

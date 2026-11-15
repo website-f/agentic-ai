@@ -1,4 +1,3 @@
-import { DEMO_IT_RENTAL_RATES } from "./demo-rates";
 import { GROUP_EMPLOYER_ID } from "./access";
 import { IT_COMPANY_ID } from "./access";
 import { hasOwnStaffRecord } from "./access";
@@ -785,6 +784,15 @@ export function generateDataset(opts: SeedOptions): Dataset {
     remoteDays: [],
     timeSlips: [],
     timeSlipSettings: [],
+    staffOtClaims: [],
+    warrantyClaims: [],
+    siteCoverage: [],
+    rosterVersions: [],
+    rosterDays: [],
+    attendanceBreaks: [],
+    rosterEvidence: [],
+    guardAllowances: [],
+    lumpSumAgreements: [],
     socsoClaims: [],
     fwRenewals: [],
     fwmTasks: [],
@@ -818,13 +826,6 @@ export function generateDataset(opts: SeedOptions): Dataset {
     checkinEvents: [],
     ownerTestCheckins: [],
     clockSnaps: [],
-    bulkLoads: [],
-    vehicleTransfers: [],
-    guardSignInBatches: [],
-    alertPrefs: [],
-    guardPayPreparers: [],
-    cashStandIns: [],
-    staffOtLines: [],
     jaRecords: [],
     jaSyncs: [],
     amUnits: [],
@@ -902,7 +903,7 @@ export function generateDataset(opts: SeedOptions): Dataset {
     itRentalRates: [],
     itAssetInspections: [],
     itOperationalReceipts: [],
-    itCleanupNominations: [], itCleanupArchives: [], itCleanupReceipts: [], itCleanupPlanBindings: [], orgEvents: [], orgTasks: [], orgNotices: [], orgImports: [], attendanceImports: [], attendanceDays: [], attendanceMatches: [],
+    itCleanupNominations: [], itCleanupArchives: [], itCleanupReceipts: [], itCleanupPlanBindings: [], orgEvents: [], orgTasks: [], orgNotices: [], orgImports: [], attendanceImports: [], attendanceDays: [], attendanceMatches: [], orgImportOks: [], problemReports: [], accountRequests: [], hrLists: [], consentGates: [], fwMoves: [], hostelNeeds: [], hostelRecs: [], stayRequests: [], ssRecs: [], itPolicyRecs: [], armsPolicyRecs: [], officeAmRecs: [], kdnRecs: [], toolboxRecs: [], inventoryRecs: [], amRentalRecs: [], groupMonthRecs: [], dutyRegisterRecs: [],
     itMetricStreams: [], itMetricReceipts: [], itMetricTargets: [], itMetricCalendars: [],
     cleaningSites: [], cleaningDays: [], cleaningStock: [], siteKits: [], dutyPlans: [], guardTerms: [],
     itPurchaseFinanceAuthorities: [], itProcurementPackets: [], itProcurementReceipts: [],
@@ -959,9 +960,6 @@ export function generateDataset(opts: SeedOptions): Dataset {
     qmsFoundation: [],
     qmsItems: [],
     qmsNonconformities: [],
-    qmsPikmRecords: [],
-    staffResignations: [],
-    itemWarrantyClaims: [],
     compProfiles: [],
     compAssessments: [],
     phoneExtensions: [],
@@ -977,6 +975,9 @@ export function generateDataset(opts: SeedOptions): Dataset {
     siteTaskLogs: [],
     clientCodes: [],
     clientCodeChecks: [],
+    sqlPostings: [],
+    guardPayPreparers: [],
+    sqlPostingExceptions: [],
     clientInspections: [],
     selfAudits: [],
     rbaTraceReviews: [],
@@ -3297,17 +3298,6 @@ export function generateDataset(opts: SeedOptions): Dataset {
       companyIds: [],
       siteIds: [],
     },
-    // C6 (Fauzan, 11 Nov 2026): the ACT Manager leads the work and gives the second check. Mock name.
-    {
-      id: 'u-act-mgr',
-      name: 'ACT Manager (mock)',
-      title: 'Manager, Audit, Compliance and Transformation (ACT), PWVSB',
-      role: 'pwvsb_officer',
-      department: 'audit',
-      actRole: 'manager',
-      companyIds: [],
-      siteIds: [],
-    },
     ...([1, 2] as const).flatMap((team) => [
       {
         id: `u-act-aud${team}`,
@@ -4270,10 +4260,17 @@ export function generateDataset(opts: SeedOptions): Dataset {
         Object.assign(ds.leaveRequests[ds.leaveRequests.length - 1], { illness: ILL[n % ILL.length], clinic: CLINIC[n % CLINIC.length] });
       }
     }
-    // Waiting for a decision: one fresh, one past 12 hours (now with the Regional OM), one reason for an absence.
+    // Waiting for a decision: one fresh, one past 1 working day (now with the Regional OM), one reason for an absence.
     const sasaGuards = ds.people.filter((x) => x.companyId === 'co-sasa' && x.role === 'guard' && x.status === 'active');
     leave(sasaGuards[3], 'ANNUAL', addDays(today, 5), 3, 'pending', 'Balik kampung for a wedding', nowMs - 2 * 3_600_000, false, null);
-    leave(sasaGuards[8], 'EMERGENCY', addDays(today, 1), 1, 'pending', 'Child in hospital', nowMs - 15 * 3_600_000, false, null);
+    // C3 (11 Nov 2026): one level per working day, so this one was asked at 00:30 on the working day before the latest
+    // working day, and has just moved up to the Regional OM.
+    const isWorkDay = (d: IsoDate) => ![0, 6].includes(new Date(`${d}T00:00:00Z`).getUTCDay());
+    let lastWork = today;
+    while (!isWorkDay(lastWork)) lastWork = addDays(lastWork, -1);
+    let prevWork = addDays(lastWork, -1);
+    while (!isWorkDay(prevWork)) prevWork = addDays(prevWork, -1);
+    leave(sasaGuards[8], 'EMERGENCY', addDays(today, 1), 1, 'pending', 'Child in hospital', toMs(myt(prevWork, '00:30')), false, null);
     const absent = ds.shifts.find(
       (sh) => sh.companyId === 'co-sasa' && sh.personId && sh.date === addDays(today, -1) && !ds.attendance.some((a) => a.shiftId === sh.id),
     );
@@ -6854,7 +6851,8 @@ export function generateDataset(opts: SeedOptions): Dataset {
     const staffPaid = new Set(ds.staffPayRuns.filter((x) => x.period === prevP && x.stage === 'paid').map((x) => x.companyId));
     entities.forEach((e, k) => {
       const team = e.id === GROUP_EMPLOYER_ID ? 1 : (k % 7) + 1;
-      const fyEnd = k % 5 === 3 ? '06-30' : '12-31';
+      // Finance 27 M2 (Fauzan, 2 Nov 2026): every group company's year ends 31 December.
+      const fyEnd = '12-31';
       // The financial year that ended most recently.
       let fy = `${y}-${fyEnd}`;
       if (fy >= today) fy = `${y - 1}-${fyEnd}`;
@@ -6953,19 +6951,6 @@ export function generateDataset(opts: SeedOptions): Dataset {
         tax: taxItems,
       });
     });
-    // C5 (demo only, synthetic): group rates for three cost lines; transport is left "rate not set" to show the gap.
-    // Real rates are entered by the Finance Director or the CEO in the app. No random numbers are drawn here.
-    for (const f of ds.finStatus)
-      f.rateLog = ([['hostel_np', 180], ['uniform', 25], ['equipment', 15]] as const).map(([key, amount]) => ({
-        key,
-        scope: 'group' as const,
-        from: '2026-01',
-        amount,
-        reason: 'Demo rate (synthetic test data)',
-        by: 'Sharifah Nadia binti Syed Ali',
-        byId: 'u-fd',
-        at: fromMs(nowMs - 30 * 86_400_000),
-      }));
     // Finance Phase 2 (31 Oct 2026): a few payments for Team 1 at each step, so each person has something to act on.
     // Test data only; no random numbers are drawn here, so the rest of the dataset stays the same.
     {
@@ -7556,7 +7541,8 @@ export function generateDataset(opts: SeedOptions): Dataset {
       const by = people[(i * 7) % people.length];
       const ageH = r.int(1, 120);
       const st: ItTicket['status'] = i < 14 ? 'resolved' : i < 20 ? 'in_progress' : 'open';
-      const sla = RULES.it.value.slaHours[priority];
+      // Mock fix times only (the old 4/24/72-hour fix limits are no longer targets, Merdeka IT-POL-004).
+      const sla = ({ P1: 4, P2: 24, P3: 72, P4: 120 } as const)[priority];
       ds.itTickets.push({
         id: `it-t-${i + 1}`,
         ref: `IT-${String(i + 1).padStart(4, '0')}`,
@@ -7570,6 +7556,7 @@ export function generateDataset(opts: SeedOptions): Dataset {
         assignedTo: st === 'open' ? null : `IT Executive ${(i % 4) + 1} (mock)`,
         assignedToId: st === 'open' ? (i === 24 ? 'u-it-ex2' : null) : `u-it-ex${(i % 4) + 1}`,
         status: st,
+        firstResponseAt: st === 'open' ? null : fromMs(toMs(ago(ageH)) + (i % 4 === 0 ? 90 : 10) * 60_000),
         resolvedAt: st === 'resolved' ? fromMs(toMs(ago(ageH)) + (i % 5 === 0 ? sla + 2 : Math.max(1, sla / 3)) * 3_600_000) : null,
         resolution: st === 'resolved' ? (category === 'M365' ? 'Walked through it with the staff member' : 'Fixed and tested with the staff member') : '',
         confirmedAt: st === 'resolved' && i % 3 !== 0 ? ago(Math.max(0, ageH - 6)) : null,
@@ -7835,7 +7822,7 @@ export function generateDataset(opts: SeedOptions): Dataset {
     // Merdeka's rental bills for last month: issued and paid for the pilot companies (made-up prices).
     {
       const last = addDays(`${today.slice(0, 7)}-01`, -1).slice(0, 7);
-      const rates = DEMO_IT_RENTAL_RATES;
+      const rates = RULES.itRental.value.monthly;
       for (const cid of [GROUP_EMPLOYER_ID, 'co-sasa', 'co-arsh', 'co-inas']) {
         const mine = ds.itAssets.filter((a) => a.ownerId === cid && (a.status === 'in_use' || a.status === 'repair'));
         const kinds = [...new Set(mine.map((a) => a.kind))].sort();
@@ -10154,6 +10141,19 @@ export function generateDataset(opts: SeedOptions): Dataset {
     ds.payFormulaUses.push(use('pfu-group-staff', 'staff_ot', 'group', null, 'STAFF-OT', 'Group default overtime for all other staff.'));
     const site = ds.sites.find((s) => s.companyId === 'co-sasa');
     if (site) ds.payFormulaUses.push(use('pfu-site-example', 'guard_shift', 'site', site.id, 'STD-12H-R3', 'Example: this site gives 3 hours rest with a relief guard.'));
+    // B1b (14 Nov 2026): hours paid must match hours worked, so a site whose posts all run 8-hour or office-hours shifts
+    // uses a formula of that shift length (test amounts). A site with mixed shift lengths keeps the group formula and
+    // its lines are held until ACT sets the right formula, as they would be in real use.
+    ds.payFormulas.push(
+      f('STD-8H', 'guard_shift', '8-hour shift, no rest, full month', { ...standardGuardAmounts(0), shiftHours: 8, restRelieved: false }),
+      f('STD-9H-R1', 'guard_shift', 'Office hours, 9 hours with 1 hour rest, full month', { ...standardGuardAmounts(1), shiftHours: 9 }),
+    );
+    for (const st of ds.sites) {
+      if (st.id === site?.id) continue;
+      const kinds = new Set(ds.posts.filter((p) => p.siteId === st.id).map((p) => p.shiftStructure));
+      const code = kinds.size === 1 ? ({ B: 'STD-8H', E: 'STD-9H-R1' } as Record<string, string>)[[...kinds][0]] : undefined;
+      if (code) ds.payFormulaUses.push(use(`pfu-site-${st.id}`, 'guard_shift', 'site', st.id, code, `This site's posts all run ${code === 'STD-8H' ? '8-hour' : 'office-hours'} shifts.`));
+    }
   }
   // Guard and officer salary accounts for the guard pay run (Fauzan, 5 Nov 2026), masked test numbers on their own
   // random stream. One Sasa guard has none, so HR sees the warning.
@@ -10519,27 +10519,46 @@ export function generateDataset(opts: SeedOptions): Dataset {
 
   // Asset Management extras (Fauzan, 5 Nov 2026): contractors, letting files, meters, resort bookings, harvests, planned jobs.
   seedAmExtras(ds, today);
+  // Part P26: two made-up homestay houses (short stays: direct, Airbnb and staff stays). One is set up, one waits.
+  ds.amProperties.push(
+    {
+      id: 'am-p-hs1',
+      kind: 'HOMESTAY',
+      name: 'Homestay Teluk Cempedak (mock)',
+      town: 'Kuantan',
+      state: 'Pahang',
+      detail: 'Three-bedroom house, 6 beds',
+      licences: [],
+      months: [],
+      stay: {
+        capacity: { HOUSE: 1 },
+        rates: { HOUSE: 350 },
+        setBy: 'Asset Director (mock)',
+        setAt: now,
+        policy: { sstRegistered: false, motacNo: '', motacExpiresOn: null, checkInTime: '15:00', checkOutTime: '12:00', freeCancelDays: 7, lateCancelKeepPct: 50, noShowKeepPct: 100, setBy: 'Asset Director (mock)', setAt: now },
+        house: {
+          use: 'SHORT_STAY', beds: 6, maxGuests: 6, keys: 2, keyMethod: 'KEY', hk: 'clean', hkBy: 'Resort Executive (mock)', hkById: 'u-asset-rx1', hkAt: now, safetyDefect: null,
+          platforms: ['Airbnb'], airbnb: { listed: true, listing: 'Teluk Cempedak family house (mock)', cancelPolicy: 'MODERATE' }, depositPct: 50, damageDeposit: null,
+          rules: ['Approved purpose only', 'Keep the house clean', 'No illegal activity', 'No changes without written approval', 'Report damage at once', 'Return the keys at the end', 'Never more guests than allowed'],
+          licence: null,
+          inventory: [
+            { item: 'TV', qty: 1, room: 'Living room', value: 1200, condition: 'good' },
+            { item: 'Fridge', qty: 1, room: 'Kitchen', value: 1500, condition: 'good' },
+            { item: 'Washing machine', qty: 1, room: 'Kitchen', value: 1300, condition: 'good' },
+            { item: 'Air-con unit', qty: 3, room: 'Bedrooms', value: 1400, condition: 'good' },
+            { item: 'Mattress', qty: 6, room: 'Bedrooms', value: 300, condition: 'good' },
+            { item: 'Plates', qty: 12, room: 'Kitchen', value: 8, condition: 'good' },
+          ],
+          lastDeepCleanOn: addDays(today, -40), staysSinceDeepClean: 4, lastFullCountOn: addDays(today, -40), setBy: 'Asset Director (mock)', setAt: now,
+        },
+      },
+    },
+    { id: 'am-p-hs2', kind: 'HOMESTAY', name: 'Homestay Bentong (mock)', town: 'Bentong', state: 'Pahang', detail: 'Two-bedroom house, 4 beds', licences: [], months: [] },
+  );
   // Test PINs are kept only as hashes, as real ones are (pin.ts); testers work them out from the staff number.
   seedBoardRegisters(ds, today);
   for (const p of ds.people) if (p.staffNo) p.pinHash = DEMO_PIN_KEEPER.hash(demoPin(p.staffNo), demoPinSalt(p.id));
   seedCmsReadiness(ds, now);
-  // P100 pay (B1): each pilot company's manager has named one admin executive to prepare the guard pay run (mock).
-  for (const [companyId, cmId, userId] of [['co-sasa', 'u-cm-sasa', 'u-ae-sasa'], ['co-arsh', 'u-cm-arsh', 'u-ae-arsh'], ['co-inas', 'u-cm-inas', 'u-ae-inas']] as const) {
-    const cm = ds.users.find((u) => u.id === cmId);
-    const u = ds.users.find((x) => x.id === userId);
-    if (!cm || !u || ds.guardPayPreparers.some((p) => p.companyId === companyId && p.userId === userId)) continue;
-    ds.guardPayPreparers.push({
-      id: `gpp-${companyId}-${userId}`,
-      companyId,
-      userId,
-      userName: u.name,
-      title: u.title ?? '',
-      active: true,
-      named: { by: cm.name, byId: cm.id, at: `${addDays(today, -20)}T09:00:00+08:00`, reason: 'Keeps the company office records; prepares the monthly guard pay (mock)' },
-      removed: null,
-      history: [],
-    });
-  }
   return ds;
 }
 

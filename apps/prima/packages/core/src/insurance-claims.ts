@@ -10,6 +10,7 @@ import type { IsoDate } from "./types";
 
 /** Documents insurers usually ask for, by cover. The insurer's own list wins: staff may add any other document. */
 export const CLAIM_DOCS: Record<InsuranceKind, string[]> = {
+  PROFESSIONAL_INDEMNITY: ['Claim form', 'Incident report', "Client's letter of claim", 'Contract and service record'],
   PUBLIC_LIABILITY: ['Claim form', 'Incident report', 'Police report', "Third party's letter of demand"],
   GROUP_PERSONAL_ACCIDENT: ['Claim form', 'Incident report', 'Medical report', 'Hospital or clinic bill'],
   GROUP_HOSPITALISATION: ['Claim form', 'Medical report', 'Hospital bill'],

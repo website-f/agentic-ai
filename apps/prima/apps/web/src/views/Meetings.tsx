@@ -4,6 +4,8 @@ import { CalendarBlankIcon, ChecksIcon, ClipboardTextIcon, ClockCountdownIcon, E
 import { myt } from '@prima/core';
 import { api, type Meetings } from '../api';
 import { useApp } from '../App';
+import { ToolboxPanel } from './Toolbox';
+import { GroupMonthlyPanel } from './GroupMonthly';
 import { saveFile } from '../save';
 import { tr, useLang } from '../i18n';
 import { Chip, notify, Drawer, ErrorNotice, Loading, dateLabel, dateTimeLabel, hhmm, useAction, useLoad, type Tone } from '../ui';
@@ -128,7 +130,7 @@ const EVERY: Record<PlanRow['every'], string> = {
 export function MeetingsView() {
   const { lang } = useLang();
   const { data, error } = useLoad(() => api.meetings(), []);
-  const [tab, setTab] = useState<'calendar' | 'meetings' | 'mine' | 'plan' | 'sections'>('meetings');
+  const [tab, setTab] = useState<'calendar' | 'meetings' | 'mine' | 'plan' | 'sections' | 'toolbox' | 'monthly'>('meetings');
   const [open, setOpen] = useState<string | null>(null);
   const [creating, setCreating] = useState<Draft | null>(null);
   if (error)
@@ -228,10 +230,18 @@ export function MeetingsView() {
             Monthly operations
           </button>
         )}
+        <button role="tab" aria-selected={tab === 'toolbox'} onClick={() => setTab('toolbox')}>
+          Toolbox
+        </button>
+        <button role="tab" aria-selected={tab === 'monthly'} onClick={() => setTab('monthly')}>
+          Mesyuarat bulanan JA Group
+        </button>
         <button role="tab" aria-selected={tab === 'calendar'} onClick={() => setTab('calendar')}>
           Calendar
         </button>
       </div>
+      {tab === 'toolbox' && <ToolboxPanel meetings={data.rows.map((r) => r.meeting)} />}
+      {tab === 'monthly' && <GroupMonthlyPanel />}
       {tab === 'calendar' && <Calendar data={data} />}
       {tab === 'meetings' &&
         (data.rows.length === 0 ? (

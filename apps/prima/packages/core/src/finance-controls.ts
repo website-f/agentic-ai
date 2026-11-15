@@ -1,4 +1,5 @@
 import { ArrivalCashService } from './arrival-cash';
+import { sqlArPayload, sqlEnqueue } from './sql-posting';
 import { ExceptionalGuardCashService } from './exceptional-guard-cash';
 import { finBudgetInForce } from "./finance-plan3";
 import { finBudgetRevisionAction } from "./finance-plan3";
@@ -474,7 +475,7 @@ export const FIN_CHECK_SECTION_OF: Record<string, FinCheckSection> = {
   bankFail: 'bank', 'reg.notSeen': 'bank', 'bk.fdDecide': 'bank', 'bk.fdMatured': 'bank', 'bk.fdToCheck': 'bank', 'bk.chargesOver': 'bank',
   arStale: 'in', arToReview: 'in', writeOffs: 'in', arApprove: 'in', ageReview: 'in', receiptsWaiting: 'in', 'mi.billMissing': 'in', 'mi.billToCheck': 'in',
   'mi.govtStale': 'in', 'mi.govtOverdue': 'in', 'mi.govtFollowToday': 'in', 'mi.unidentified': 'in', 'mi.unidentifiedLate': 'in', 'mi.allocToCheck': 'in',
-  'ce.endsLate': 'in', 'ce.endsOpen': 'in', 'ce.depositToCheck': 'in', 'ce.retentionUpdate': 'in', 'reg.gDue': 'cash',
+  'ce.endsLate': 'in', 'ce.endsOpen': 'in', 'ce.depositToCheck': 'in', 'ce.retentionToUpdate': 'in',
   'stamp.stampLate': 'in', 'stamp.stampDue': 'in', 'stamp.stampToCheck': 'in', 'stamp.refundLate': 'in', 'stamp.refundOpen': 'in',
   'cash.advOverdue': 'cash', 'cash.advToCheck': 'cash', 'cash.pettyToCheck': 'cash', 'cash.cardToCheck': 'cash', 'cash.pettyCount': 'cash', 'cash.pettyTopUp': 'cash',
   'cash.cardLoad': 'cash', 'cash.cardToReview': 'cash', 'c13.short': 'cash', 'c13.review': 'cash',
@@ -515,10 +516,20 @@ export class FinanceControlsService {
       const f = await this.desk.row(tx, user, a, companyId);
       const out = fn(f, a, await this.desk.settings(tx));
       if (Object.keys(out.patch).length) await tx.update('finStatus', f.id, out.patch);
+      // SQL Account posting link (Build 1): a customer receipt newly found on the bank statement gets its customer
+      // payment job in this same transaction (it waits until posting is switched on for receipts).
+      if (out.patch.arCases) await this.queueReceipts(tx, f, { ...f, ...out.patch });
       if (out.also) await out.also(tx);
       await this.desk.log(tx, user, f, out.action, out.summary.slice(0, 900));
       return out.result;
     });
+  }
+
+  private async queueReceipts(tx: Store, before: FinStatus, after: FinStatus) {
+    const was = new Set((before.arCases ?? []).flatMap((c) => (c.receipts ?? []).filter((r) => r.matched).map((r) => `${c.id}.${r.id}`)));
+    for (const c of after.arCases ?? [])
+      for (const r of c.receipts ?? [])
+        if (r.matched && !was.has(`${c.id}.${r.id}`)) await sqlEnqueue(tx, after, 'receipt', `${c.id}.${r.id}`, sqlArPayload(after, c, r), this.now());
   }
 
   // ---------- Payees: paid to the right person ----------
@@ -679,7 +690,7 @@ export class FinanceControlsService {
           result: { found },
         };
       }
-      return finRegularAction({ ...this.ctx(user, a), payrollOwes }, f, action, input);
+      return finRegularAction({ ...this.ctx(user, a), payrollOwes, unusualPct: { high: s.regularHighPct, low: s.regularLowPct } }, f, action, input);
     });
   }
 
@@ -819,8 +830,7 @@ export class FinanceControlsService {
   async depositAction(user: User, companyId: Id, action: string, input: Record<string, unknown>) {
     const contracts = await this.contractsOf([companyId]);
     const ctx = await this.cashCtx(user, this.desk.actor(user));
-    const tenders = (await this.store.list('tenders', { companyId: [companyId] })).filter((t) => t.companyId === companyId);
-    return this.change<unknown>(user, companyId, (f, a) => finDepositAction({ ...ctx, a }, f, contracts, action, input, tenders));
+    return this.change<unknown>(user, companyId, (f, a) => finDepositAction({ ...ctx, a }, f, contracts, action, input));
   }
 
   async guaranteeAction(user: User, companyId: Id, action: string, input: Record<string, unknown>) {
@@ -841,7 +851,7 @@ export class FinanceControlsService {
       senior: !!a && this.senior(a),
       userById: (id) => users.get(id),
       petty: { voucherMax: st.pettyVoucherMax, floatMax: st.pettyFloatMax },
-      fs: st,
+      settings: st,
     };
   }
 
@@ -1194,8 +1204,9 @@ export class FinanceControlsService {
   /** The 13-week forecast: add or remove a line Finance knows about, or review the week's forecast. */
   async cash13Action(user: User, companyId: Id, action: string, input: Record<string, unknown>) {
     const runs = await this.payRunsOf(companyId);
+    const payDay = (await this.desk.settings()).staffPayDay;
     return this.change<unknown>(user, companyId, (f, a) =>
-      finCash13Action({ user, a, reviewer: this.reviewer(a), today: this.today(), sign: (c = '') => this.sign(user, c) }, f, runs, action, input),
+      finCash13Action({ user, a, reviewer: this.reviewer(a), today: this.today(), sign: (c = '') => this.sign(user, c), payDay }, f, runs, action, input),
     );
   }
 
@@ -1205,7 +1216,7 @@ export class FinanceControlsService {
     const close = (f.closes ?? []).find((c) => c.period === period) ?? null;
     const check = finCloseCheck(f, close, period, this.now(), ctx.s, ctx.contracts.filter((c) => c.companyId === f.companyId), ctx.group ?? null, ctx.nameOf);
     const open = check.blockers.length + check.exceptions.filter((e) => !e.explained).length;
-    return finPackData(f, { period, today: this.today(), contracts: ctx.contracts, group: ctx.group, runs: await this.payRunsOf(f.companyId), nameOf: ctx.nameOf, openExceptions: open });
+    return finPackData(f, { period, today: this.today(), contracts: ctx.contracts, group: ctx.group, runs: await this.payRunsOf(f.companyId), nameOf: ctx.nameOf, openExceptions: open, payDay: (await this.desk.settings()).staffPayDay });
   }
   private async packCtx(companyIds: Id[]) {
     return {
@@ -1319,8 +1330,7 @@ export class FinanceControlsService {
     const ids = [...new Set([...user.companyIds, GROUP_EMPLOYER_ID])];
     const rows = await this.store.list('finStatus', { companyId: ids });
     const today = this.today();
-    const fs = await this.desk.settings();
-    return rows.map((f) => finCashMine(f, user.id, today, fs)).filter((x) => x.advances.length || x.cards.length || x.petty.length);
+    return rows.map((f) => finCashMine(f, user.id, today)).filter((x) => x.advances.length || x.cards.length || x.petty.length);
   }
 
   /** Overdue staff advances across every company, for central HR (Fauzan, 2 Nov 2026: shown to HR and Finance). */
@@ -1706,7 +1716,7 @@ export class FinanceControlsService {
           const pattern = norm(words).slice(0, 40);
           if (pattern.length < 3) throw new BadRequest('Give the words that identify this kind of line (at least 3 letters).');
           const cap = input.maxAmount == null || input.maxAmount === '' ? round2(Math.abs(line.amount) * 2) : money(input.maxAmount, 'Up to amount');
-          if (cap > s.ruleMaxAmount) throw new BadRequest(`A remembered rule covers lines up to RM${s.ruleMaxAmount.toLocaleString('en-MY')}; larger ones are explained one by one.`);
+          if (cap > RULES.financeControls.value.ruleMaxAmount) throw new BadRequest(`A remembered rule covers lines up to RM${RULES.financeControls.value.ruleMaxAmount.toLocaleString('en-MY')}; larger ones are explained one by one.`);
           const list = f.matchRules ?? [];
           if (list.some((r) => r.pattern === pattern && r.bankId === st.bankId)) throw new BadRequest('A rule with these words is already remembered for this account.');
           rule = { id: `rule-${f.companyId}-${String(list.length + 1).padStart(3, '0')}`, bankId: st.bankId, pattern, direction: line.amount > 0 ? 'in' : 'out', maxAmount: cap, note, by: user.name, byId: user.id, at: this.now(), used: 0 };
@@ -1814,7 +1824,7 @@ export class FinanceControlsService {
         if (!required && !isLead(a)) throw new AccessDenied('view', '(only the Finance Director or the CEO records that a company does not need e-Invoices)');
         if (!required && revenue >= ev.exemptBelow)
           throw new BadRequest(`Turnover of RM${revenue.toLocaleString('en-MY')} is RM${ev.exemptBelow.toLocaleString('en-MY')} or more: this company must issue e-Invoices.`);
-        const basis = requireReason(input.basis, required && revenue < ev.exemptBelow ? 'say why it issues e-Invoices voluntarily' : 'note the basis (turnover, LHDN guidance)');
+        const basis = requireReason(input.basis, required && revenue < ev.exemptBelow ? 'say why it issues e-Invoices voluntarily' : 'note the basis (turnover, tax agent advice)');
         const startOn = required ? isoDate(input.startOn, 'Date e-Invoicing started for this company') : null;
         const via = (['sql_account', 'portal', 'other'] as const).find((v) => v === input.via) ?? 'sql_account';
         const next = { ...ei, setup: { required, basis, startOn, via, revenue, set: this.sign(user) } };
@@ -2673,7 +2683,7 @@ export class FinanceControlsService {
     const [y] = today.split('-').map(Number);
     let lastFy = `${y}-${fyEnd}`;
     if (lastFy >= today) lastFy = `${y - 1}-${fyEnd}`;
-    const circulateBy = lastDayOf(addMonthsP(lastFy.slice(0, 7), ctl.auditCirculateMonths));
+    const circulateBy = lastDayOf(addMonthsP(lastFy.slice(0, 7), RULES.financeControls.value.auditCirculateMonths));
     const payees = (f.payees ?? []).map((p) => ({
       ...p,
       held: (f.payments ?? []).filter((x) => x.payeeId === p.id && p.status !== 'verified' && ['prepared', 'reviewed', 'approved'].includes(x.status)).length,
@@ -2746,21 +2756,21 @@ export class FinanceControlsService {
         const contracts = await this.contractsOf([companyId]);
         const clients = (await this.store.list('clientAccounts', { companyId: [companyId] })).filter((x) => x.companyId === companyId);
         const asked = typeof billPeriod === 'string' && /^\d{4}-\d{2}$/.test(billPeriod) && billPeriod <= close && billPeriod >= addMonthsP(close, -2) ? billPeriod : close;
-        return { ...finMoneyInView(f, contracts, clients, asked, today, ctl), periods: [close, addMonthsP(close, -1), addMonthsP(close, -2)], stamp: finStampView(f, contracts, today) };
+        return { ...finMoneyInView(f, contracts, clients, asked, today), periods: [close, addMonthsP(close, -1), addMonthsP(close, -2)], stamp: finStampView(f, contracts, today) };
       })(),
-      contractEnd: finContractEndView(f, await this.contractsOf([companyId]), today, ctl, await this.store.list('tenders', { companyId: [companyId] })),
-      banking: finBankingView(f, close, today, ctl),
-      yearEnd: finYearEndView(f, today, ctl),
-      supplierStatements: finSupplierStatementsView(f, today, ctl),
-      credit: finCreditView(f, (await this.store.list('clientAccounts', { companyId: [companyId] })).filter((x) => x.companyId === companyId), today, ctl),
+      contractEnd: finContractEndView(f, await this.contractsOf([companyId]), today, (await this.desk.settings()).retentionPromptMonths),
+      banking: finBankingView(f, close, today),
+      yearEnd: finYearEndView(f, today, await this.desk.settings()),
+      supplierStatements: finSupplierStatementsView(f, today),
+      credit: finCreditView(f, (await this.store.list('clientAccounts', { companyId: [companyId] })).filter((x) => x.companyId === companyId), today),
       intercompany: await (async () => {
         const g = companyId === GROUP_EMPLOYER_ID ? f : await this.store.get('finStatus', `fin-${GROUP_EMPLOYER_ID}`);
         const nameOf = await this.desk.companyNamer();
         const companies = [GROUP_EMPLOYER_ID, ...(await this.store.list('companies')).map((c) => c.id)].filter((id) => id !== companyId).map((id) => ({ id, name: nameOf(id) }));
         const periods = [close, addMonthsP(close, -1), addMonthsP(close, -2)];
-        return { pairs: finIcView(g, companyId, periods, nameOf), companies, periods, explainMax: ctl.icExplainMax };
+        return { pairs: finIcView(g, companyId, periods, nameOf), companies, periods, explainMax: (await this.desk.settings()).icExplainMax };
       })(),
-      cash13: finCash13(f, await this.payRunsOf(companyId), today),
+      cash13: finCash13(f, await this.payRunsOf(companyId), today, (await this.desk.settings()).staffPayDay),
       ledger: await (async () => {
         const g = companyId === GROUP_EMPLOYER_ID ? f : await this.store.get('finStatus', `fin-${GROUP_EMPLOYER_ID}`);
         const ic = g ? finIcPairs(g, close).filter((x) => x.a === companyId || x.b === companyId).map((x) => ({ status: x.status, diff: x.difference ?? 0 })) : null;
@@ -2770,7 +2780,7 @@ export class FinanceControlsService {
         const users = await this.store.list('users');
         return { lists: finDailyCashView(f, today), collectors: users.filter((u) => this.isCollector(u) && !u.accessClosedFrom).map((u) => ({ id: u.id, name: `${u.name} (${u.opsTier === 'ceo' ? 'CEO' : 'COO'})` })), rules: RULES.financeDailyCash.value };
       })(),
-      audit: { lastFyEnd: lastFy, circulateBy, lodgeBy: addDays(circulateBy, ctl.ssmLodgeDays), formCBy: lastDayOf(addMonthsP(lastFy.slice(0, 7), 7)) },
+      audit: { lastFyEnd: lastFy, circulateBy, lodgeBy: addDays(circulateBy, RULES.financeControls.value.ssmLodgeDays), formCBy: lastDayOf(addMonthsP(lastFy.slice(0, 7), 7)) },
     };
   }
 
@@ -2832,7 +2842,7 @@ export class FinanceControlsService {
     let varAccept = 0;
     const bankFail: string[] = [];
     let receiptsWaiting = 0;
-    const reg = { toCheck: 0, toPay: 0, dueSoon: 0, late: 0, noBill: 0, notSeen: 0, expiring: 0, gToCheck: 0, gExpiring: 0, gDue: 0, gClaim: 0, gWaiting: 0, collateral: 0, hostelUnseen: 0, hostelOverdue: 0 };
+    const reg = { toCheck: 0, toPay: 0, dueSoon: 0, late: 0, noBill: 0, notSeen: 0, expiring: 0, gToCheck: 0, gExpiring: 0, gClaim: 0, gWaiting: 0, collateral: 0, hostelUnseen: 0, hostelOverdue: 0 };
     const hostelOf = new Map<Id, HostelBill[]>();
     if (!jaOwns('hostels'))
       for (const b of await this.store.list('hostelBills', { companyId: rows.map((r) => r.companyId) })) hostelOf.set(b.companyId, [...(hostelOf.get(b.companyId) ?? []), b]);
@@ -2845,7 +2855,7 @@ export class FinanceControlsService {
     const c13 = { short: [] as string[], review: 0 };
     const icGroup = await this.store.get('finStatus', `fin-${GROUP_EMPLOYER_ID}`);
     let icOpen = 0;
-    const ce = { endsOpen: 0, endsLate: 0, depositToCheck: 0, retentionUpdate: 0 };
+    const ce = { endsOpen: 0, endsLate: 0, depositToCheck: 0, retentionToUpdate: 0 };
     const bk = { fdDecide: 0, fdMatured: 0, fdToCheck: 0, chargesOver: 0 };
     const ye = { whtLate: 0, whtSoon: 0, whtToCheck: 0, toPost: 0, auditMine: 0, auditLate: 0 };
     const mi = { billMissing: 0, billToCheck: 0, govtOverdue: 0, govtOverdueAmount: 0, govtStale: 0, govtFollowToday: 0, unidentified: 0, unidentifiedLate: 0, allocToCheck: 0 };
@@ -2862,22 +2872,22 @@ export class FinanceControlsService {
     });
     for (const f of rows) {
       const before = counters();
-      const m = finMoneyInHome(f, { userId: user.id, reviewer: this.reviewer(a) }, allContracts, this.desk.closePeriod(), today, st);
+      const m = finMoneyInHome(f, { userId: user.id, reviewer: this.reviewer(a) }, allContracts, this.desk.closePeriod(), today);
       for (const k of Object.keys(m) as (keyof typeof m)[]) mi[k] = round2(mi[k] + m[k]);
       if (a.team == null || f.team === a.team) {
         icOpen += finIcExceptions(icGroup, f.companyId, this.desk.closePeriod()).length;
-        const fc = finCash13(f, await this.payRunsOf(f.companyId), today);
+        const fc = finCash13(f, await this.payRunsOf(f.companyId), today, (await this.desk.settings()).staffPayDay);
         if (fc.firstShort && (a.kind === 'ceo' || a.kind === 'director' || this.reviewer(a))) c13.short.push(`${f.companyId}: week of ${fc.firstShort.from}, RM${fc.firstShort.closing.toFixed(2)}`);
         if (fc.reviewDue && this.reviewer(a) && a.kind !== 'ceo' && a.kind !== 'director' && (f.payments ?? []).length) c13.review++;
       }
-      const eh = finContractEndHome(f, allContracts, today, user.id, this.reviewer(a), st);
+      const eh = finContractEndHome(f, allContracts, today, user.id, this.reviewer(a), st.retentionPromptMonths);
       for (const k of Object.keys(eh) as (keyof typeof eh)[]) ce[k] += eh[k];
-      const bh = finBankingHome(f, this.desk.closePeriod(), today, user.id, this.reviewer(a), st);
+      const bh = finBankingHome(f, this.desk.closePeriod(), today, user.id, this.reviewer(a));
       for (const k of Object.keys(bh) as (keyof typeof bh)[]) bk[k] += bh[k];
       if (a.kind !== 'coo') purToPay += finPurchasesToPay(f, purs, sups).length;
-      const ssh = finSupplierStatementHome(f, today, user.id, this.reviewer(a), st);
+      const ssh = finSupplierStatementHome(f, today, user.id, this.reviewer(a));
       for (const k of Object.keys(ssh) as (keyof typeof ssh)[]) ss[k] += ssh[k];
-      const crh = finCreditHome(f, allClients, today, this.reviewer(a), st);
+      const crh = finCreditHome(f, allClients, today, this.reviewer(a));
       for (const k of Object.keys(crh) as (keyof typeof crh)[]) cr[k] += crh[k];
       const yh = finYearEndHome(f, this.desk.closePeriod(), today, user.id, this.reviewer(a));
       for (const k of Object.keys(yh) as (keyof typeof yh)[]) ye[k] += yh[k];
@@ -3003,9 +3013,7 @@ export class FinanceControlsService {
     if (reg.noBill && a.kind !== 'ceo') items.push({ tone: 'warn', tag: 'Finance', title: `${reg.noBill} bill(s) or contribution file(s) not recorded`, detail: 'Record the amount with the document; the payment must equal it', go: go('reg.noBill') });
     if (reg.toCheck || reg.gToCheck) items.push({ tone: 'warn', tag: 'Finance', title: `${reg.toCheck + reg.gToCheck} regular payment(s) or guarantee(s) to check`, detail: 'Check against the agreement, bill or letter; nobody checks their own entry', go: go('reg.toCheck', 'reg.gToCheck') });
     if (reg.expiring && a.kind !== 'ceo') items.push({ tone: 'warn', tag: 'Finance', title: `${reg.expiring} insurance polic(ies) ending within 60 days`, detail: 'Renew before cover lapses', go: go('reg.expiring') });
-    // F13 (Fauzan, 11 Nov 2026): every IG and BG is followed until settled, with a reminder 30 days before it is due.
-    if (reg.gDue) items.push({ tone: 'crit', tag: 'Finance', title: `${reg.gDue} IG/BG due within ${st.guaranteeRemindDays} days`, detail: 'Settle it: extend it, get the release letter or claim back the collateral', go: go('reg.gDue') });
-    else if (reg.gExpiring) items.push({ tone: 'warn', tag: 'Finance', title: `${reg.gExpiring} IG/BG expiring within 60 days`, detail: 'Extend it, or get the client’s release letter', go: go('reg.gExpiring') });
+    if (reg.gExpiring) items.push({ tone: 'warn', tag: 'Finance', title: `${reg.gExpiring} IG/BG expiring within 60 days`, detail: 'Extend it, or get the client’s release letter', go: go('reg.gExpiring') });
     if (reg.gClaim) items.push({ tone: 'crit', tag: 'Finance', title: `${reg.gClaim} IG/BG released or expired: claim back the cash collateral`, detail: 'Send the claim to the insurer or bank with the release letter', go: go('reg.gClaim') });
     if (reg.gWaiting) items.push({ tone: 'warn', tag: 'Finance', title: `${reg.gWaiting} collateral claim(s) with no refund after 30 days`, detail: 'Follow up the insurer or bank', go: go('reg.gWaiting') });
     if (reg.hostelUnseen && a.kind !== 'data_entry')
@@ -3016,11 +3024,13 @@ export class FinanceControlsService {
     // Money in (Fauzan, 2 Nov 2026): contracts not billed, government claims, unidentified money in.
     if (mi.billMissing && a.kind !== 'ceo') items.push({ tone: 'crit', tag: 'Finance', title: `${mi.billMissing} contract(s) with no invoice recorded for ${this.desk.closePeriod()}`, detail: 'Record the SQL Account invoice number, or why there is none', go: go('mi.billMissing') });
     if (mi.billToCheck) items.push({ tone: 'warn', tag: 'Finance', title: `${mi.billToCheck} "no invoice" reason(s) to check`, detail: 'A month a contract was not billed; nobody checks their own', go: go('mi.billToCheck') });
-    if (mi.govtStale) items.push({ tone: 'crit', tag: 'Finance', title: `${mi.govtStale} government claim(s) overdue and not followed up`, detail: 'Call the agency and record what they said', go: go('mi.govtStale') });
-    else if (mi.govtOverdue && isLead(a)) items.push({ tone: 'warn', tag: 'Finance', title: `${mi.govtOverdue} government claim(s) past the expected payment date`, detail: `RM${mi.govtOverdueAmount.toLocaleString('en-MY', { minimumFractionDigits: 2 })} waiting; followed up`, go: go('mi.govtOverdue') });
+    // Government usually pays late (Fauzan, 11 Nov 2026): lateness alone is never a red alarm; it shows on the
+    // government claims tracker. A missed follow-up is a reminder to Finance, and a late claim an information line.
+    if (mi.govtStale) items.push({ tone: 'warn', tag: 'Finance', title: `${mi.govtStale} late government claim(s) not followed up`, detail: 'Call the agency and record what they said', go: go('mi.govtStale') });
+    else if (mi.govtOverdue && isLead(a)) items.push({ tone: 'info', tag: 'Finance', title: `${mi.govtOverdue} government claim(s) past the expected payment date`, detail: `RM${mi.govtOverdueAmount.toLocaleString('en-MY', { minimumFractionDigits: 2 })} waiting; followed up`, go: go('mi.govtOverdue') });
     if (mi.govtFollowToday && !mi.govtStale && a.kind !== 'ceo') items.push({ tone: 'warn', tag: 'Finance', title: `${mi.govtFollowToday} government claim(s) to follow up today`, detail: 'Record who you spoke to and the next date', go: go('mi.govtFollowToday', 'mi.govtStale') });
-    if (mi.unidentifiedLate) items.push({ tone: 'crit', tag: 'Finance', title: `${mi.unidentifiedLate} money-in line(s) unidentified for more than ${st.unidentifiedDays} days`, detail: 'Find the payer and allocate it to the invoice', go: go('mi.unidentifiedLate') });
-    else if (mi.unidentified && a.kind !== 'ceo') items.push({ tone: 'warn', tag: 'Finance', title: `${mi.unidentified} money-in line(s) to identify`, detail: `Allocate within ${st.unidentifiedDays} days of the bank date`, go: go('mi.unidentified') });
+    if (mi.unidentifiedLate) items.push({ tone: 'crit', tag: 'Finance', title: `${mi.unidentifiedLate} money-in line(s) unidentified for more than ${RULES.financeMoneyIn.value.unidentifiedDays} days`, detail: 'Find the payer and allocate it to the invoice', go: go('mi.unidentifiedLate') });
+    else if (mi.unidentified && a.kind !== 'ceo') items.push({ tone: 'warn', tag: 'Finance', title: `${mi.unidentified} money-in line(s) to identify`, detail: `Allocate within ${RULES.financeMoneyIn.value.unidentifiedDays} days of the bank date`, go: go('mi.unidentified') });
     if (stamp.stampLate && a.kind !== 'ceo') items.push({ tone: 'crit', tag: 'Finance', title: `${stamp.stampLate} agreement(s) past the 30-day stamping limit`, detail: 'Stamp in STAMPS now; late penalties grow', go: go('stamp.stampLate') });
     if (stamp.stampDue && a.kind !== 'ceo') items.push({ tone: 'warn', tag: 'Finance', title: `${stamp.stampDue} agreement(s) to stamp within 7 days`, detail: 'Stamp in STAMPS and record the certificate', go: go('stamp.stampDue') });
     if (stamp.stampToCheck) items.push({ tone: 'warn', tag: 'Finance', title: `${stamp.stampToCheck} stamp certificate(s) to check`, detail: 'Against the STAMPS certificate; nobody checks their own', go: go('stamp.stampToCheck') });
@@ -3029,13 +3039,11 @@ export class FinanceControlsService {
     // Contract ends and money held by clients (suggestions 3 and 24, A11).
     if (ce.endsLate && a.kind !== 'ceo') items.push({ tone: 'crit', tag: 'Finance', title: `${ce.endsLate} ended contract(s) with follow-ups past their date`, detail: 'Final invoice, deposit or retention, IG/BG collateral, stamp duty refund', go: go('ce.endsLate') });
     else if (ce.endsOpen && a.kind !== 'ceo') items.push({ tone: 'warn', tag: 'Finance', title: `${ce.endsOpen} ended contract(s) with follow-ups open`, detail: 'Prima listed what to do: final invoice, money held by the client, guarantees', go: go('ce.endsOpen') });
-    // F8 (Fauzan, 11 Nov 2026): retention on tenders and contracts, a status update every 2 months until it is back.
-    if (ce.retentionUpdate && a.kind !== 'ceo')
-      items.push({ tone: 'warn', tag: 'Finance', title: `${ce.retentionUpdate} retention status update(s) due`, detail: `Ask the client where the retention stands and record it; every ${st.retentionUpdateMonths} months until it is back`, go: go('ce.retentionUpdate') });
+    if (ce.retentionToUpdate && a.kind !== 'ceo') items.push({ tone: 'warn', tag: 'Finance', title: `${ce.retentionToUpdate} retention sum(s) due a status update`, detail: `Retention still held by a client is updated every ${st.retentionPromptMonths} months until it is claimed back`, go: go('ce.retentionToUpdate') });
     if (ce.depositToCheck) items.push({ tone: 'warn', tag: 'Finance', title: `${ce.depositToCheck} client deposit(s) or retention to check`, detail: 'Against the contract or the receipt; nobody checks their own', go: go('ce.depositToCheck') });
     // Fixed deposits and bank charges (suggestions 15 and 16).
     if (bk.fdMatured && a.kind !== 'ceo') items.push({ tone: 'crit', tag: 'Finance', title: `${bk.fdMatured} fixed deposit(s) matured with no decision`, detail: 'Renew it or uplift it; the bank may renew at its own rate', go: go('bk.fdMatured') });
-    if (bk.fdDecide && a.kind !== 'ceo') items.push({ tone: 'warn', tag: 'Finance', title: `${bk.fdDecide} fixed deposit(s) maturing within ${st.fdMaturityAlertDays} days`, detail: 'Decide: renew (with the new rate) or uplift', go: go('bk.fdDecide') });
+    if (bk.fdDecide && a.kind !== 'ceo') items.push({ tone: 'warn', tag: 'Finance', title: `${bk.fdDecide} fixed deposit(s) maturing within ${RULES.financeBanking.value.maturityAlertDays} days`, detail: 'Decide: renew (with the new rate) or uplift', go: go('bk.fdDecide') });
     if (bk.fdToCheck) items.push({ tone: 'warn', tag: 'Finance', title: `${bk.fdToCheck} fixed deposit(s) to check`, detail: "Against the bank's placement confirmation; nobody checks their own", go: go('bk.fdToCheck') });
     if (bk.chargesOver) items.push({ tone: 'warn', tag: 'Finance', title: `${bk.chargesOver} account(s) charged more than the bank agreed`, detail: 'Ask the bank for a refund, or explain why the charges are right', go: go('bk.chargesOver') });
     if (purToPay && a.kind !== 'ceo') items.push({ tone: 'warn', tag: 'Finance', title: `${purToPay} purchase(s) matched and posted, ready to pay`, detail: 'Order, goods received and invoice agree in Procurement; New payment fills it from the purchase', go: { view: 'finance', tab: 'payments' } });

@@ -201,6 +201,7 @@ export class SpecialOpsController {
       port,
       nextServiceOn: b.nextServiceOn == null ? undefined : date(b.nextServiceOn, 'nextServiceOn'),
       changes: changesOf(b.changes),
+      supplierId: b.supplierId == null || b.supplierId === '' ? undefined : id(str(b.supplierId, 'supplierId', 120)),
     };
     const reason = b.reason == null ? '' : str(b.reason, 'reason', 1000);
     return this.loggingTradeRefusal(uid, this.db.asUser(uid, (svc, u) => svc.armsRequestStep(u, id(rid), action, reason, extra)));
@@ -309,6 +310,87 @@ export class SpecialOpsController {
   }
 
   // ---------- 4H trading and import ----------
+
+  // ---------- Part R: arms, vault, licence and bulletproof jacket policies ----------
+
+  @Post('arms/policy/:op')
+  armsPolicy(@UserId() uid: string, @Param('op') op: string, @Body() b: Record<string, unknown>) {
+    if (!/^[a-zA-Z]{2,30}$/.test(op)) throw new BadRequestException('Unknown arms policy action');
+    if (!b || typeof b !== 'object' || Array.isArray(b)) throw new BadRequestException('Send the details as an object');
+    return this.loggingTradeRefusal(uid, this.db.asUser(uid, (svc, u) => svc.armsPolicyAct(u, op, b)));
+  }
+
+  // ---------- Part W: KDN licence renewal 2027 (records only; Prima never logs in to eSIMS, lodges or pays) ----------
+
+  @Post('renewals/kdn/:op')
+  kdnRenewal(@UserId() uid: string, @Param('op') op: string, @Body() b: Record<string, unknown>) {
+    if (!/^[a-zA-Z]{2,30}$/.test(op)) throw new BadRequestException('Unknown KDN renewal action');
+    if (!b || typeof b !== 'object' || Array.isArray(b)) throw new BadRequestException('Send the details as an object');
+    return this.db.asUser(uid, (svc, u) => svc.kdnAct(u, op, b));
+  }
+
+  // ---------- Part X: company and department toolbox meetings ----------
+
+  @Post('toolbox/:op')
+  toolbox(@UserId() uid: string, @Param('op') op: string, @Body() b: Record<string, unknown>) {
+    if (!/^[a-zA-Z]{2,30}$/.test(op)) throw new BadRequestException('Unknown toolbox action');
+    if (!b || typeof b !== 'object' || Array.isArray(b)) throw new BadRequestException('Send the details as an object');
+    return this.db.asUser(uid, (svc, u) => svc.toolboxAct(u, op, b));
+  }
+
+  // ---------- Part Y: monthly JA Group meeting, accounts report tracker, duty checklists ----------
+
+  @Post('group-month/:op')
+  groupMonth(@UserId() uid: string, @Param('op') op: string, @Body() b: Record<string, unknown>) {
+    if (!/^[a-zA-Z]{2,30}$/.test(op)) throw new BadRequestException('Unknown monthly meeting action');
+    if (!b || typeof b !== 'object' || Array.isArray(b)) throw new BadRequestException('Send the details as an object');
+    return this.db.asUser(uid, (svc, u) => svc.groupMonthAct(u, op, b));
+  }
+
+  // ---------- Part Z: duty map registers ----------
+
+  @Post('registers/:op')
+  registers(@UserId() uid: string, @Param('op') op: string, @Body() b: Record<string, unknown>) {
+    if (!/^[a-zA-Z]{2,30}$/.test(op)) throw new BadRequestException('Unknown register action');
+    if (!b || typeof b !== 'object' || Array.isArray(b)) throw new BadRequestException('Send the details as an object');
+    return this.db.asUser(uid, (svc, u) => svc.registerAct(u, op, b));
+  }
+
+  // ---------- Part T: site supplies requests (KBK, PKK Nepal, PKK Local), Min/Max, bulk, uniform record ----------
+
+  @Post('supplies/:op')
+  supplies(@UserId() uid: string, @Param('op') op: string, @Body() b: Record<string, unknown>) {
+    if (!/^[a-zA-Z]{2,30}$/.test(op)) throw new BadRequestException('Unknown supplies action');
+    if (!b || typeof b !== 'object' || Array.isArray(b)) throw new BadRequestException('Send the details as an object');
+    return this.db.asUser(uid, (svc, u) => svc.siteSuppliesAct(u, op, b));
+  }
+
+  // ---------- Part U: inventory control (counts, freeze, variances, stock card, buffer, KPIs, report, disposal, charges) ----------
+
+  @Post('inventory/:op')
+  inventory(@UserId() uid: string, @Param('op') op: string, @Body() b: Record<string, unknown>) {
+    if (!/^[a-zA-Z]{2,30}$/.test(op)) throw new BadRequestException('Unknown inventory action');
+    if (!b || typeof b !== 'object' || Array.isArray(b)) throw new BadRequestException('Send the details as an object');
+    return this.db.asUser(uid, (svc, u) => svc.inventoryAct(u, op, b));
+  }
+
+  // ---------- Part V: rental homes (letting, application, agreement and stamping, rent, zakat, arrears, move-out, repairs) ----------
+
+  @Post('am-rental/:op')
+  amRental(@UserId() uid: string, @Param('op') op: string, @Body() b: Record<string, unknown>) {
+    if (!/^[a-zA-Z]{2,30}$/.test(op)) throw new BadRequestException('Unknown rental action');
+    if (!b || typeof b !== 'object' || Array.isArray(b)) throw new BadRequestException('Send the details as an object');
+    return this.db.asUser(uid, (svc, u) => svc.amRentalAct(u, op, b));
+  }
+
+  // ---------- Part S: office assets (repairs, inventory, disposal, building purchase, office rent, visits) ----------
+
+  @Post('am/office/:op')
+  officeAm(@UserId() uid: string, @Param('op') op: string, @Body() b: Record<string, unknown>) {
+    if (!/^[a-zA-Z]{2,30}$/.test(op)) throw new BadRequestException('Unknown office asset action');
+    if (!b || typeof b !== 'object' || Array.isArray(b)) throw new BadRequestException('Send the details as an object');
+    return this.db.asUser(uid, (svc, u) => svc.officeAmAct(u, op, b));
+  }
 
   @Get('arms/trading')
   trading(@UserId() uid: string) {

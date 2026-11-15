@@ -155,6 +155,8 @@ export function SmartImport({ data, onClose }: { data: ItemBoard; onClose: () =>
   const [off, setOff] = useState<Set<string>>(new Set());
   const [server, setServer] = useState<Map<string, { outcome?: ItemListOutcome; problems: string[] }>>(new Map());
   const [run, setRun] = useState<{ phase: 'check' | 'import'; done: number; total: number } | null>(null);
+  // N2 (Fauzan, 11 Nov 2026): the backup checked before a bulk load; the CEO OKs each load before the next one.
+  const [backup, setBackup] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<{ outcomes: ItemListOutcome[]; failed: { key: string; problems: string[] }[]; already: number } | null>(null);
   const [labels, setLabels] = useState(false);
@@ -278,7 +280,7 @@ export function SmartImport({ data, onClose }: { data: ItemBoard; onClose: () =>
           const skip = bad.map((i) => p.rows[i].row);
           const fp = bad.length ? (await api.org.importPreview('itemList', party || null, csv, { ...opts, skip })).fingerprint : p.fingerprint;
           if (bad.length < b.length) {
-            const r = await api.org.importCommit('itemList', party || null, csv, fp, { ...opts, skip });
+            const r = await api.org.importCommit('itemList', party || null, csv, fp, { ...opts, skip, backup: backup.trim() || undefined });
             outcomes.push(...((r as { outcomes?: ItemListOutcome[] }).outcomes ?? []));
           }
         }
@@ -506,9 +508,12 @@ export function SmartImport({ data, onClose }: { data: ItemBoard; onClose: () =>
                   Check <span>{plans.filter((p) => p.include).length}</span> items
                 </button>
               ) : (
+                <>
+                <input className="input" aria-label="Backup checked before this load" title="Backup checked before this load (its date or reference)" value={backup} onChange={(e) => setBackup(e.target.value)} placeholder="e.g. nightly backup 14 Nov restored on test" />
                 <button className="btn btn-primary it-big" type="button" disabled={!!run || !plans.some((p) => p.include && !p.problems.length)} onClick={() => void importAll()}>
                   Import <span>{plans.filter((p) => p.include && !p.problems.length).length}</span> items
                 </button>
+                </>
               )}
             </>
           )}

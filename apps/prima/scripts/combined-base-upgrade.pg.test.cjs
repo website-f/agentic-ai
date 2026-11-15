@@ -16,7 +16,11 @@ const SYNTHETIC_PASSWORD = 'prima-local-synthetic-only';
 const MODULE_IDS = ['procurement', 'rental_corrections', 'cleanup', 'metrics', 'job_email'];
 // Modules added to the release after the frozen main artifact: absent from the old
 // database, so the base upgrade alone must leave them not ready until installed.
-const NEW_MODULE_IDS = ['item_register', 'item_register_v2'];
+// A3 (Fauzan, 11 Nov 2026): the other 25 database parts joined the release list after the item register;
+// Part H (PR #139 reference) added the speak-up wall as the 26th.
+const NEW_MODULE_IDS = JSON.parse(fs.readFileSync(path.join(path.resolve(__dirname, '..'), 'db/release-manifest.json'), 'utf8')).modules.map(m => m.id).filter(id => !MODULE_IDS.includes(id));
+assert.equal(NEW_MODULE_IDS[0], 'item_register');
+assert.equal(NEW_MODULE_IDS.length, 28); // Agentic Office: plus the QR item register part two (P85)
 const sha = bytes => crypto.createHash('sha256').update(bytes).digest('hex');
 
 // No default URL, remote hosts, standard production port, arbitrary credentials,
@@ -54,7 +58,7 @@ const nextSql = fs.readFileSync(path.join(ROOT, currentManifest.base.path), 'utf
 const NEXT_SHA = sha(nextSql);
 assert.equal(NEXT_SHA, currentManifest.base.sha256, 'Combined base does not match release manifest');
 assert.notEqual(NEXT_SHA, OLD_SHA, 'Regression requires a changed combined base');
-assert.deepEqual(currentManifest.modules.map(m=>m.id), [...MODULE_IDS, ...NEW_MODULE_IDS], 'The five frozen modules plus the reviewed item register (two parts) only');
+assert.deepEqual(currentManifest.modules.map(m=>m.id), [...MODULE_IDS, ...NEW_MODULE_IDS], 'The five frozen modules, then the item register and the 25 A3 modules');
 // Test-only exact source delta, not an operator migration command. Immutable old
 // SQL remains the starting point. Reject every unreviewed change beyond two scope functions.
 const moduleDeltaBodies = [];
@@ -279,16 +283,18 @@ for (const [profile, attributes] of [
       }
       await assert.rejects(() => installSelectedModule(owner, {id: 'item_register', releaseSha256: artifact.sha256, moduleSha256: itemModule.sha256, confirm: 'yes'}, ROOT), /Exact selected module/);
       await installSelectedModule(owner, {id: 'item_register', releaseSha256: artifact.sha256, moduleSha256: itemModule.sha256, confirm: 'INSTALL_SELECTED_MODULE'}, ROOT);
-      // P85: the second part (label print log, SQL books, export files, counters) installs after the first.
-      const v2Module = artifact.manifest.modules.find(m => m.id === 'item_register_v2');
-      assert.equal((await releaseCatalogState(pool, {baseSha256: NEXT_SHA})).ready, false, 'release held until the second item part is in');
-      await installSelectedModule(owner, {id: 'item_register_v2', releaseSha256: artifact.sha256, moduleSha256: v2Module.sha256, confirm: 'INSTALL_SELECTED_MODULE'}, ROOT);
+      assert.equal((await releaseCatalogState(pool, {baseSha256: NEXT_SHA})).ready, false, 'The A3 modules are still missing');
+      // A3 (Fauzan, 11 Nov 2026): the 25 other database parts install on the upgraded database in manifest order.
+      for (const id of NEW_MODULE_IDS.slice(1)) {
+        const m = artifact.manifest.modules.find(x => x.id === id);
+        assert.equal((await installSelectedModule(owner, {id, releaseSha256: artifact.sha256, moduleSha256: m.sha256, confirm: 'INSTALL_SELECTED_MODULE'}, ROOT)).status, 'installed', id);
+      }
       const installed = await releaseCatalogState(pool, {baseSha256: NEXT_SHA});
       assert.equal(installed.ready, true, JSON.stringify(installed));
       const kept = await rowsSnapshot(observer, afterNames);
       for (const n of afterNames) assert.deepEqual(kept[n], afterRows[n], 'Item install changed old rows: ' + n);
       await installSelectedModule(owner, {id: 'item_register', releaseSha256: artifact.sha256, moduleSha256: itemModule.sha256, confirm: 'INSTALL_SELECTED_MODULE'}, ROOT);
-      t.diagnostic('Pinned installer adds the item register only on exact confirmation, keeps every row, repeats as a no-op, and the complete seven-module release then validates');
+      t.diagnostic('Pinned installer adds the item register only on exact confirmation, keeps every row, repeats as a no-op, the 25 A3 modules install in order, and the complete 31-module release then validates');
     } finally {
       await pool?.end();
       await runtime?.end();

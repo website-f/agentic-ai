@@ -153,3 +153,33 @@ export function withOverride(
     note: `${o.days} days given by HR (${o.by}): ${o.note}`,
   };
 }
+
+/**
+ * C3 (Fauzan, 11 Nov 2026, rule LEAVE-ESCALATE): a guard's or officer's leave request moves up one level after each
+ * working day nobody acts on it. Saturdays, Sundays and public holidays do not count. A request made on a day off
+ * starts its clock at the start of the next working day. Returns the moment each level ends (`deadlines[k]` is when
+ * step k moves to step k+1), so the ladder step is the number of deadlines already passed.
+ */
+export function workingDayDeadlines(
+  startedAt: string,
+  holidays: Set<IsoDate>,
+  steps: number,
+): string[] {
+  const isWork = (d: IsoDate) => {
+    const w = weekday(d);
+    return w !== 0 && w !== 6 && !holidays.has(d);
+  };
+  let day = startedAt.slice(0, 10);
+  let time = startedAt.slice(10); // "THH:MM:SS+08:00"
+  if (!isWork(day)) {
+    while (!isWork(day)) day = nextDay(day);
+    time = "T00:00:00+08:00";
+  }
+  const out: string[] = [];
+  for (let k = 0; k < steps; k++) {
+    day = nextDay(day);
+    while (!isWork(day)) day = nextDay(day);
+    out.push(`${day}${time}`);
+  }
+  return out;
+}

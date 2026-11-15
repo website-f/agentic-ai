@@ -139,9 +139,11 @@ export interface AmMeter {
 
 // ---------- Resort bookings ----------
 
-export const AM_STAY_TYPES = ['ROOM', 'CHALET', 'HALL', 'CAMPSITE'] as const;
+export const AM_STAY_TYPES = ['ROOM', 'CHALET', 'HALL', 'CAMPSITE', 'HOUSE'] as const;
+/** The resort kinds of room (a homestay house is HOUSE, set through the short-stay screen, Part P26). */
+export const AM_RESORT_TYPES = ['ROOM', 'CHALET', 'HALL', 'CAMPSITE'] as const;
 export type AmStayType = (typeof AM_STAY_TYPES)[number];
-export const AM_STAY_LABEL: Record<AmStayType, string> = { ROOM: 'Room', CHALET: 'Chalet', HALL: 'Function hall', CAMPSITE: 'Camping pitch' };
+export const AM_STAY_LABEL: Record<AmStayType, string> = { ROOM: 'Room', CHALET: 'Chalet', HALL: 'Function hall', CAMPSITE: 'Camping pitch', HOUSE: 'Whole house' };
 
 /** A resort's rooms and the price list, set by the Asset Director. Stored on the property record. */
 export interface AmStaySetup {
@@ -274,6 +276,11 @@ export interface AmBooking {
   settlement?: { keepPct: number; keep: number; refundDue: number; refunded: number } | null;
   /** Extras on the bill: meals, extra bed, activities, damage. A correction is a minus line with a reason. */
   charges?: { id: Id; on: IsoDate; what: string; amount: number; reason: string; by: string; at: IsoDateTime }[];
+  /** Part P19: how the rate is charged (resorts: per unit per night). Staff stays: RM300 a person a night. */
+  rateBasis?: 'PER_UNIT_NIGHT' | 'PER_PERSON_NIGHT' | 'PER_PERSON_STAY' | 'PER_PERSON_MONTH';
+  persons?: number;
+  /** Part P19-P39: a short stay on a homestay house (direct, Airbnb, other platform or staff stay). */
+  ss?: import('./short-stays').SsBookingInfo;
 }
 
 // ---------- Orchard harvest ----------
@@ -350,13 +357,15 @@ export function addMonths(d: IsoDate, n: number): IsoDate {
 export const nights = (b: Pick<AmBooking, 'checkIn' | 'checkOut'>) => Math.max(0, daysBetween(b.checkIn, b.checkOut));
 const r2 = (n: number) => Math.round(n * 100) / 100;
 /** The guest's bill: room charge, extras, service tax, tourism tax (foreign guests) and the state fee. */
-export function bookingBill(b: Pick<AmBooking, 'checkIn' | 'checkOut' | 'qty' | 'rate' | 'type' | 'taxRates' | 'foreign' | 'charges'>) {
+export function bookingBill(b: Pick<AmBooking, 'checkIn' | 'checkOut' | 'qty' | 'rate' | 'type' | 'taxRates' | 'foreign' | 'charges'> & { rateBasis?: AmBooking['rateBasis']; persons?: number }) {
   const n = nights(b);
-  const room = r2(b.rate * b.qty * n);
+  const persons = Math.max(1, b.persons ?? 1);
+  const units = b.rateBasis === 'PER_PERSON_NIGHT' ? persons * n : b.rateBasis === 'PER_PERSON_STAY' ? persons : b.rateBasis === 'PER_PERSON_MONTH' ? persons * Math.max(1, Math.ceil(n / 30)) : b.qty * n;
+  const room = r2(b.rate * units);
   const extras = r2((b.charges ?? []).reduce((x, c) => x + c.amount, 0));
   const t = b.taxRates;
   const sst = t ? r2(((room + extras) * t.sstPct) / 100) : 0;
-  const perRoomNights = isSleepType(b.type) ? b.qty * n : 0;
+  const perRoomNights = isSleepType(b.type) || b.type === 'HOUSE' ? b.qty * n : 0;
   const tourism = t && b.foreign ? r2(t.tourismTaxPerNight * perRoomNights) : 0;
   const stateFee = t ? r2(t.stateFeePerNight * perRoomNights) : 0;
   return { room, extras, sst, tourism, stateFee, total: r2(room + extras + sst + tourism + stateFee) };

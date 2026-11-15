@@ -12,6 +12,10 @@ import { AmBqDrawer } from "./AmBq";
 import { AmExtrasPanel, type AmExtrasSection } from "./AmExtras";
 import { FixedAssetsPanel, METHOD as DISPOSAL_METHOD } from "./FixedAssets";
 import { RecordButton } from "./RecordForm";
+import { FwHostelPanel } from "./FwHostel";
+import { ShortStaysPanel } from "./ShortStays";
+import { OfficeAmPanel } from "./OfficeAm";
+import { RentalPanel } from "./Rental";
 import { ImportButton } from "./ImportDrawer";
 import { Card, Empty, PageHead, Search, Stat, Stats, Toolbar } from "../kit";
 import {
@@ -44,6 +48,8 @@ type Tab =
   | "properties"
   | "check"
   | "buy"
+  | "office"
+  | "homes"
   | AmExtrasSection;
 const TABS: [Tab, string][] = [
   ["overview", "Overview"],
@@ -56,6 +62,8 @@ const TABS: [Tab, string][] = [
   ["properties", "Resorts, orchards, training"],
   ["check", "System check"],
   ["buy", "Purchases"],
+  ["office", "Pejabat (offices)"],
+  ["homes", "Rumah sewa (rental homes)"],
   ["contractors", "Contractors"],
   ["letting", "Finding tenants"],
   ["meters", "Meters"],
@@ -89,6 +97,7 @@ const KIND: Record<AmBoard["properties"][number]["kind"], string> = {
   RESORT: "Resort",
   ORCHARD: "Orchard",
   TRAINING: "Training facility",
+  HOMESTAY: "Homestay house",
 };
 const rm = (n: number) => `RM${Math.round(n).toLocaleString("en-MY")}`;
 /** Row edge colour for a tone: only problems get one. */
@@ -155,6 +164,8 @@ export function AssetsView() {
       {data.can.approveLetters && data.lateUpdates.length > 0 && (
         <LateUpdates data={data} />
       )}
+      <FwHostelPanel />
+      <ShortStaysPanel />
       <div
         className="tabbar bz-am-tabs"
         role="tablist"
@@ -187,6 +198,8 @@ export function AssetsView() {
       {tab === "properties" && <Properties data={data} />}
       {tab === "check" && <RentCheck />}
       {tab === "buy" && <Purchases data={data} />}
+      {tab === "office" && <OfficeAmPanel />}
+      {tab === "homes" && <RentalPanel />}
       <OpsGuide area="assets" />
     </div>
   );
@@ -425,6 +438,8 @@ const METHOD = {
   TRANSFER: "Bank transfer",
   CHEQUE: "Cheque",
   ONLINE: "Online (FPX, DuitNow)",
+  EWALLET: "E-wallet (owner merchant account)",
+  CDM: "Cash deposit machine (CDM, slip)",
 } as const;
 const FOLLOW = {
   CALL: "Phone call",

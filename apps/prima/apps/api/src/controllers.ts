@@ -9,6 +9,7 @@ import type {
   ItAsset,
   ItAssetKind,
   ItTicketCategory,
+  ItTicketPriority,
   CaseType,
   DisciplineStep,
   FaceCapture,
@@ -27,7 +28,7 @@ import type {
   ClientRenewalDecision,
   ClientRequestKind,
 } from '@prima/core';
-import { type DispatchLevel, type DispatchProof, type PostLogKind, type SealedBundle, type VisitorIdKind, type ItemAction, CLIENT_LOST_REASON, CLIENT_PERSON_ROLE, CLIENT_RENEWAL_ANSWER, CLIENT_RENEWAL_DECISION, CLIENT_REQUEST_KIND, CLIENT_VIA, isRealDate, rebalanceAiNames, CMS_READINESS_KEYS, type CmsDeviceKind, type CmsReadinessKey, RECORD_KINDS, RULES, arishaFormView, dataModeOf, arishaKind, arishaToolsFor, inPilot, type ArishaTurn, type AmJobKind, type ArishaReviewDraft, QUALITY_OPS_ACTIONS, ITEM_REPORT_KINDS, type ScanPurpose, CENTRAL_ALIASES, CENTRAL_EMPLOYER_IDS, CENTRAL_FULL_NAMES, accessClosed, arishaMayConsult, dateOf, fromMs } from '@prima/core';
+import { type DispatchLevel, type DispatchProof, type PostLogKind, type SealedBundle, type VisitorIdKind, type ItemAction, type FinSiteFlagKind, CLIENT_LOST_REASON, CLIENT_PERSON_ROLE, CLIENT_RENEWAL_ANSWER, CLIENT_RENEWAL_DECISION, CLIENT_REQUEST_KIND, CLIENT_VIA, isRealDate, rebalanceAiNames, CMS_READINESS_KEYS, type CmsDeviceKind, type CmsReadinessKey, RECORD_KINDS, RULES, arishaFormView, dataModeOf, arishaKind, arishaToolsFor, inPilot, type ArishaTurn, type AmJobKind, type ArishaReviewDraft, QUALITY_OPS_ACTIONS, ITEM_REPORT_KINDS, type ScanPurpose, CENTRAL_ALIASES, CENTRAL_EMPLOYER_IDS, CENTRAL_FULL_NAMES, accessClosed, arishaMayConsult, dateOf, fromMs } from '@prima/core';
 import { ArishaBusy, ArishaUnavailable, IdentityToken, askArisha, askArishaOn, type ArishaModel } from './arisha';
 // P80: Arisha runs on the office's AI inside the Agentic Office (arisha-office.ts); Azure OpenAI stays the fallback.
 import { arishaProvider, officeModel, type ArishaProvider } from './arisha-office';
@@ -36,7 +37,8 @@ import { officeSecret } from './office';
 import { ItemPdfError, readItemReportPdf } from './item-report-pdf';
 import { Db, schemaState } from './db';
 import { FaceEngine, faceEngineConfig, issueFaceChallenge, openFaceChallenge } from './face-engine';
-import { shareBase, shareCsp, shareGonePage, shareReportPage, shareSecret, signShare, verifyShare } from './share-links';
+import { BadRequest as CoreBadRequest } from '@prima/core';
+import { shareBase, shareCsp, shareGonePage, shareReportPage, shareSecret, shareSentPage, signShare, verifyShare } from './share-links';
 import type { Response } from 'express';
 import { WebConnectors, webConnectorConfig } from './web-connectors';
 import { sharedContractReaderOnline } from './contract-paper-online';
@@ -634,8 +636,6 @@ export class AppController {
       companies: await svc.visibleCompanies(user),
       now: svc.now(),
       dataMode: dataModeOf(process.env.PRIMA_DATA_MODE),
-      // P100 B1: a guard pay preparer named by their Company Manager sees Guard pay in the menu.
-      guardPayPreparer: await svc.isGuardPayPreparer(user),
     }));
   }
 
@@ -1086,6 +1086,62 @@ export class AppController {
     return this.db.asUser(uid, (svc, u) => svc.hostelBoard(u));
   }
 
+  // Part P (Fitri package, 13-14 Nov 2026): foreign worker moves, hostel needs, inventory, checks, damage, repairs.
+  @Get('fw-hostel')
+  fwHostelBoard(@UserId() uid: string) {
+    return this.db.asUser(uid, (svc, u) => svc.fwMoves.board(u));
+  }
+
+  @Get('fw-hostel/ja-differences')
+  fwHostelJa(@UserId() uid: string) {
+    return this.db.asUser(uid, (svc, u) => svc.fwMoves.jaDifferences(u));
+  }
+
+  @Post('fw-hostel/:action')
+  fwHostelAct(@UserId() uid: string, @Param('action') action: string, @Body() b: Record<string, unknown>) {
+    if (!b || typeof b !== 'object' || Array.isArray(b)) throw new BadRequestException('body must be an object');
+    return this.db.asUser(uid, (svc, u) => svc.fwMoves.act(u, action.slice(0, 40), b));
+  }
+
+  // Part P19-P39: short stays on the homestay houses (Asset Management, Finance, staff stay applicants).
+  @Get('short-stays')
+  shortStaysBoard(@UserId() uid: string) {
+    return this.db.asUser(uid, (svc, u) => svc.shortStays.board(u));
+  }
+
+  @Post('short-stays/:action')
+  shortStaysAct(@UserId() uid: string, @Param('action') action: string, @Body() b: Record<string, unknown>) {
+    if (!b || typeof b !== 'object' || Array.isArray(b)) throw new BadRequestException('body must be an object');
+    return this.db.asUser(uid, (svc, u) => svc.shortStays.act(u, action.slice(0, 40), b));
+  }
+
+  // E8 (Fitri package, 14 Nov 2026): FWM keeps hostels and stays in Prima, with the check-out memo.
+  @Post('hostels/:id/check-in')
+  hostelCheckIn(@UserId() uid: string, @Param('id') id: string, @Body() b: Record<string, unknown>) {
+    if (!b || typeof b !== 'object') throw new BadRequestException('body must be an object');
+    return this.db.asUser(uid, (svc, u) => svc.hostelCheckIn(u, { hostelId: id.slice(0, 120), personId: str(b.personId, 'personId', 120), from: date(b.from, 'from') }));
+  }
+
+  @Post('hostel-stays/:id/check-out')
+  hostelCheckOut(@UserId() uid: string, @Param('id') id: string, @Body() b: Record<string, unknown>) {
+    if (!b || typeof b !== 'object') throw new BadRequestException('body must be an object');
+    const reason = (['REPATRIATED', 'MOVED_HOSTEL', 'TRANSFERRED', 'RESIGNED', 'ABSCONDED', 'OTHER'] as const).find((k) => k === b.reason);
+    if (!reason) throw new BadRequestException('reason not known');
+    if (typeof b.keysReturned !== 'boolean' || typeof b.utilitiesSettled !== 'boolean') throw new BadRequestException('keysReturned and utilitiesSettled must be true or false');
+    return this.db.asUser(uid, (svc, u) =>
+      svc.hostelCheckOut(u, {
+        stayId: id.slice(0, 160),
+        on: date(b.on, 'on'),
+        reason,
+        keysReturned: b.keysReturned as boolean,
+        utilitiesSettled: b.utilitiesSettled as boolean,
+        roomCondition: str(b.roomCondition, 'roomCondition', 500),
+        belongings: str(b.belongings, 'belongings', 300),
+        note: b.note == null ? '' : str(b.note, 'note', 500),
+      }),
+    );
+  }
+
   @Post('hostel-bills')
   addHostelBill(@UserId() uid: string, @Body() b: Record<string, unknown>) {
     const kind = (['RENT', 'ELECTRICITY', 'WATER', 'MAINTENANCE'] as const).find((k) => k === b.kind);
@@ -1172,6 +1228,7 @@ export class AppController {
           travel,
           forPersonId: b.forPersonId == null ? null : str(b.forPersonId, 'forPersonId', 120),
           walletIds: walletIds(b.walletIds),
+          itPurchaseRef: b.itPurchaseRef == null ? null : str(b.itPurchaseRef, 'itPurchaseRef', 40),
         },
         proofList(b.proof),
       ),
@@ -1615,7 +1672,7 @@ export class AppController {
   }
 
   @Post('purchasing/:companyId/requests')
-  raisePurRequest(@UserId() uid: string, @Param('companyId') companyId: string, @Body() b: { title?: unknown; category?: unknown; lines?: unknown }) {
+  raisePurRequest(@UserId() uid: string, @Param('companyId') companyId: string, @Body() b: { title?: unknown; category?: unknown; lines?: unknown; forOffice?: unknown }) {
     if (!Array.isArray(b.lines) || b.lines.length > 30) throw new BadRequestException('lines must be a list of up to 30');
     const lines = (b.lines as Record<string, unknown>[]).map((l) => ({
       item: str(l?.item ?? '', 'item', 80),
@@ -1624,7 +1681,7 @@ export class AppController {
       unitPrice: Number(l?.unitPrice),
     }));
     const category = (['UNIFORM', 'GUARD_EQUIPMENT', 'PATROL_DEVICE', 'SERVICES', 'OTHER'] as const).find((x) => x === b.category) ?? 'OTHER';
-    return this.db.asUser(uid, (svc, u) => svc.raisePurRequest(u, companyId.slice(0, 40), { title: str(b.title ?? '', 'title', 120), category, lines }));
+    return this.db.asUser(uid, (svc, u) => svc.raisePurRequest(u, companyId.slice(0, 40), { title: str(b.title ?? '', 'title', 120), category, lines, forOffice: b.forOffice === true }));
   }
 
   @Post('purchasing/requests/:id/:action')
@@ -1651,6 +1708,13 @@ export class AppController {
         ref: opt('ref', 60),
         note: opt('note', 300),
         qty: Array.isArray(b.qty) ? b.qty.map(Number) : undefined,
+        condition: Array.isArray(b.condition)
+          ? b.condition.slice(0, 30).map((c: { damaged?: unknown; wrong?: unknown; note?: unknown }) => ({
+              damaged: Number(c?.damaged ?? 0),
+              wrong: Number(c?.wrong ?? 0),
+              note: typeof c?.note === 'string' ? c.note.slice(0, 300) : '',
+            }))
+          : undefined,
         eInvoiceUuid: opt('eInvoiceUuid', 64),
         number: opt('number', 40),
         sqlRef: opt('sqlRef', 40),
@@ -1806,6 +1870,10 @@ export class AppController {
         slip: b.slip == null ? undefined : proofList(b.slip),
         omUserId: b.omUserId == null ? undefined : str(b.omUserId, 'omUserId', 160),
         patrolPersonId: b.patrolPersonId == null ? undefined : str(b.patrolPersonId, 'patrolPersonId', 160),
+        course:
+          b.course && typeof b.course === 'object' && ((b.course as { kind?: unknown }).kind === 'CSG' || (b.course as { kind?: unknown }).kind === 'TNG')
+            ? { kind: (b.course as { kind: 'CSG' | 'TNG' }).kind, date: date((b.course as { date?: unknown }).date, 'course.date') }
+            : null,
       }),
     );
   }
@@ -1875,9 +1943,14 @@ export class AppController {
   }
 
   @Post('purchasing/issues/:id/confirm-loss')
-  confirmStockLoss(@UserId() uid: string, @Param('id') id: string, @Body() b: { ok?: unknown; note?: unknown }) {
+  confirmStockLoss(@UserId() uid: string, @Param('id') id: string, @Body() b: { ok?: unknown; note?: unknown; cause?: unknown; photo?: unknown }) {
     if (typeof b.ok !== 'boolean') throw new BadRequestException('ok must be true or false');
-    return this.db.asUser(uid, (svc, u) => svc.confirmStockLoss(u, id.slice(0, 160), b.ok as boolean, str(b.note ?? '', 'note', 300)));
+    return this.db.asUser(uid, (svc, u) =>
+      svc.confirmStockLoss(u, id.slice(0, 160), b.ok as boolean, str(b.note ?? '', 'note', 300), {
+        cause: typeof b.cause === 'string' ? b.cause.slice(0, 20) : undefined,
+        photo: b.photo == null ? undefined : proofList(b.photo),
+      }),
+    );
   }
 
   @Post('purchasing/stock/:id/count')
@@ -1889,6 +1962,21 @@ export class AppController {
   @Get('me/items')
   myItems(@UserId() uid: string) {
     return this.db.asUser(uid, (svc, u) => svc.myItems(u));
+  }
+
+  // Lapor hilang / dicuri / rosak (Merdeka IT policies Q12): the person reports an IT device they hold.
+  @Post('me/it-devices/report')
+  reportItDevice(@UserId() uid: string, @Body() b: Record<string, unknown>) {
+    return this.db.asUser(uid, (svc, u) =>
+      svc.reportItDevice(u, {
+        assetId: str(b.assetId, 'assetId', 120),
+        kind: str(b.kind, 'kind', 12) as 'lost' | 'stolen' | 'damaged' | 'not_working',
+        detail: str(b.detail ?? '', 'detail', 1000),
+        policeReportNo: b.policeReportNo == null ? undefined : str(b.policeReportNo, 'policeReportNo', 60),
+        policePhoto: b.policePhoto == null ? [] : proofList(b.policePhoto),
+        contactPhone: b.contactPhone == null ? undefined : str(b.contactPhone, 'contactPhone', 30),
+      }),
+    );
   }
 
   @Post('me/items/:id/:answer')
@@ -2376,10 +2464,12 @@ export class AppController {
   raiseItTicket(@UserId() uid: string, @Body() b: Record<string, unknown>) {
     return this.db.asUser(uid, (svc, u) =>
       svc.raiseItTicket(u, {
-        category: str(b.category, 'category', 10) as ItTicketCategory,
-        priority: str(b.priority, 'priority', 2) as 'P1' | 'P2' | 'P3',
+        category: str(b.category, 'category', 12) as ItTicketCategory,
+        priority: str(b.priority, 'priority', 2) as ItTicketPriority,
         title: str(b.title ?? '', 'title', 120),
         detail: str(b.detail ?? '', 'detail', 1000),
+        contactPhone: b.contactPhone == null ? null : str(b.contactPhone, 'contactPhone', 30),
+        photos: b.photos == null ? [] : proofList(b.photos),
       }),
     );
   }
@@ -2907,6 +2997,81 @@ export class AppController {
     return this.db.asUser(uid, (svc, u) => svc.finance.cooStep(u, companyId.slice(0, 120), paymentId.slice(0, 160), a, b ?? {}));
   }
 
+  // Finance monitoring F1-F3 (Fauzan, 11 Nov 2026): unbilled sites, profit per site against a target, the CEO's page.
+  @Get('finance/unbilled')
+  finUnbilled(@UserId() uid: string, @Query('month') month?: string) {
+    return this.db.asUser(uid, (svc, u) => svc.unbilledSites(u, month));
+  }
+
+  @Post('finance/unbilled/clear')
+  finClearUnbilled(@UserId() uid: string, @Body() b: { companyId: string; period: string; siteId: string; kind: FinSiteFlagKind; reason: string }) {
+    if (!b || typeof b !== 'object') throw new BadRequestException('Send the flag to clear');
+    return this.db.asUser(uid, (svc, u) => svc.clearUnbilledFlag(u, b));
+  }
+
+  @Get('finance/site-profit')
+  finSiteProfit(@UserId() uid: string, @Query('month') month?: string) {
+    return this.db.asUser(uid, (svc, u) => svc.siteProfit(u, month));
+  }
+
+  @Post('finance/site-profit/target')
+  finSetSiteTarget(@UserId() uid: string, @Body() b: { companyId: string | null; pct: number | null; reason: string }) {
+    if (!b || typeof b !== 'object') throw new BadRequestException('Send the target');
+    return this.db.asUser(uid, (svc, u) => svc.setSiteTarget(u, b));
+  }
+
+  @Post('finance/site-profit/costs')
+  finSetSiteCosts(@UserId() uid: string, @Body() b: { rates: Record<string, number | null>; reason: string }) {
+    if (!b || typeof b !== 'object') throw new BadRequestException('Send the rates');
+    return this.db.asUser(uid, (svc, u) => svc.setSiteCostRates(u, b));
+  }
+
+  @Get('finance/summary')
+  finCeoSummary(@UserId() uid: string) {
+    return this.db.asUser(uid, (svc, u) => svc.ceoFinanceSummary(u));
+  }
+
+  // SQL Account posting link, Build 1 (Fauzan, 13 Nov 2026). Posting stays off unless SQL_POSTING_ENABLED=true and an
+  // adapter is installed; the queue, codes and exceptions work without it.
+  @Get('finance/sql-posting')
+  finSqlPosting(@UserId() uid: string) {
+    return this.db.asUser(uid, (svc, u) => svc.financeSqlPosting.view(u));
+  }
+
+  @Post('finance/sql-posting/switch')
+  finSqlPostingSwitch(@UserId() uid: string, @Body() b: { companyId: string; on: boolean; docTypes: Record<string, boolean>; reason: string }) {
+    if (!b || typeof b !== 'object' || typeof b.companyId !== 'string') throw new BadRequestException('Send the company and the switches');
+    return this.db.asUser(uid, (svc, u) => svc.financeSqlPosting.setSwitch(u, b.companyId, b));
+  }
+
+  @Post('finance/sql-posting/code')
+  finSqlPostingCode(@UserId() uid: string, @Body() b: { companyId: string; action: string } & Record<string, unknown>) {
+    if (!b || typeof b !== 'object' || typeof b.companyId !== 'string' || typeof b.action !== 'string') throw new BadRequestException('Send the company and the action');
+    return this.db.asUser(uid, (svc, u) => svc.financeSqlPosting.codeAction(u, b.companyId, b.action, b));
+  }
+
+  @Post('finance/sql-posting/exception')
+  finSqlPostingException(@UserId() uid: string, @Body() b: { id: string; action: string } & Record<string, unknown>) {
+    if (!b || typeof b !== 'object' || typeof b.id !== 'string' || typeof b.action !== 'string') throw new BadRequestException('Send the exception and the action');
+    return this.db.asUser(uid, (svc, u) => svc.financeSqlPosting.exceptionAction(u, b.id, b.action, b));
+  }
+
+  @Post('finance/sql-posting/paste')
+  finSqlPostingPaste(@UserId() uid: string, @Body() b: { companyId: string; csv: string }) {
+    if (!b || typeof b !== 'object' || typeof b.companyId !== 'string') throw new BadRequestException('Send the company and the listing');
+    return this.db.asUser(uid, (svc, u) => svc.financeSqlPosting.pasteListing(u, b.companyId, b.csv));
+  }
+
+  @Post('finance/sql-posting/send')
+  finSqlPostingSend(@UserId() uid: string) {
+    return this.db.asUser(uid, (svc, u) => svc.financeSqlPosting.sendNow(u));
+  }
+
+  @Post('finance/sql-posting/check')
+  finSqlPostingCheck(@UserId() uid: string) {
+    return this.db.asUser(uid, (svc, u) => svc.financeSqlPosting.checkNow(u));
+  }
+
   // The Finance dashboard and each company's monthly pack (Fauzan, 2 Nov 2026).
   @Get('finance/dashboard')
   finDashboard(@UserId() uid: string) {
@@ -3175,24 +3340,23 @@ export class AppController {
     return this.db.asUser(uid, (svc, u) => svc.guardPayRun(u, id.slice(0, 120)));
   }
 
-  // P100 pay: the pay changes' new views (B2 cash stand-in, ...), one route; the service checks each role.
-  @Get('pay-p100/:view')
-  payView(@UserId() uid: string, @Param('view') view: string) {
-    return this.db.asUser(uid, (svc, u) => svc.payView(u, view.slice(0, 60)));
-  }
-
-  // P100 pay: the pay changes' new actions (B1 guard pay preparers, ...), one route; the service checks each role.
-  @Post('pay-p100/:action')
-  payAction(@UserId() uid: string, @Param('action') action: string, @Body() b: Record<string, unknown>) {
-    const body: Record<string, unknown> = {};
-    for (const [k, v] of Object.entries(b ?? {}).slice(0, 40)) body[k.slice(0, 40)] = typeof v === 'string' ? v.slice(0, 2000) : v;
-    return this.db.asUser(uid, (svc, u) => svc.payAction(u, action.slice(0, 60), body));
-  }
-
   @Post('guard-pay')
   prepareGuardPay(@UserId() uid: string, @Body() b: { companyId?: unknown; period?: unknown; holidays?: unknown }) {
     const holidays = b.holidays === undefined ? undefined : Array.isArray(b.holidays) ? b.holidays.slice(0, 11) : b.holidays;
     return this.db.asUser(uid, (svc, u) => svc.prepareGuardPay(u, str(b.companyId, 'companyId', 120), str(b.period, 'period', 7), holidays));
+  }
+
+  // Fauzan, 15 Nov 2026: a later run of the month pays the guards whose absence waited for the OD/OGM decision.
+  @Post('guard-pay/:id/later')
+  prepareGuardPayLater(@UserId() uid: string, @Param('id') id: string) {
+    return this.db.asUser(uid, (svc, u) => svc.prepareGuardPayLater(u, id.slice(0, 120)));
+  }
+
+  // B1 (Fauzan, 11 Nov 2026): the Company Manager names who prepares the company's guard pay run, with a reason.
+  @Post('guard-pay/preparers/:companyId')
+  setGuardPayPreparers(@UserId() uid: string, @Param('companyId') companyId: string, @Body() b: { userIds?: unknown; reason?: unknown }) {
+    const userIds = Array.isArray(b.userIds) ? b.userIds.slice(0, 10).map((x) => String(x).slice(0, 120)) : [];
+    return this.db.asUser(uid, (svc, u) => svc.setGuardPayPreparers(u, companyId.slice(0, 120), { userIds, reason: b.reason }));
   }
 
   @Post('guard-pay/:id/lines/:personId')
@@ -3380,7 +3544,7 @@ export class AppController {
 
   @Post('act/findings/:id/:action')
   actFindingStep(@UserId() uid: string, @Param('id') id: string, @Param('action') action: string, @Body() b: Record<string, unknown>) {
-    const a = (['plan', 'fixed', 'check', 'follow_up', 'assign'] as const).find((x) => x === action);
+    const a = (['plan', 'fixed', 'check', 'follow_up', 'assign', 'defer', 'resume'] as const).find((x) => x === action);
     if (!a) throw new BadRequestException('unknown finding step');
     const opt = (k: string, max: number) => (b[k] == null ? undefined : str(b[k], k, max));
     return this.db.asUser(uid, (svc, u) =>
@@ -3397,6 +3561,7 @@ export class AppController {
         method: opt('method', 20),
         nextOn: b.nextOn == null || b.nextOn === '' ? undefined : date(b.nextOn, 'nextOn'),
         team: b.team == null ? undefined : Number(b.team),
+        until: b.until == null || b.until === '' ? undefined : date(b.until, 'until'),
       }),
     );
   }
@@ -3767,9 +3932,45 @@ export class AppController {
     );
   }
 
+  // Part N8: Report a problem (any staff), answered by IT support.
+  @Get('problems')
+  problems(@UserId() uid: string) {
+    return this.db.asUser(uid, (svc, u) => svc.problems.list(u));
+  }
+
+  @Post('problems')
+  reportProblem(@UserId() uid: string, @Body() b: Record<string, unknown>) {
+    return this.db.asUser(uid, (svc, u) => svc.problems.report(u, { what: b?.what, screen: b?.screen, photo: b?.photo }));
+  }
+
+  @Post('problems/:id/reply')
+  replyProblem(@UserId() uid: string, @Param('id') id: string, @Body() b: Record<string, unknown>) {
+    return this.db.asUser(uid, (svc, u) => svc.problems.reply(u, id.slice(0, 80), String(b?.text ?? '')));
+  }
+
+  // Accounts and Access (Fauzan, 15 Nov 2026): IT or HR prepares; the HR Director or the CEO approves; module accounts-access-v1.
+  @Get('accounts')
+  accountsBoard(@UserId() uid: string) {
+    return this.db.asUser(uid, (svc, u) => svc.accounts.board(u));
+  }
+
+  @Post('accounts/:action')
+  accountsAct(@UserId() uid: string, @Param('action') action: string, @Body() b: Record<string, unknown>) {
+    if (!b || typeof b !== 'object' || Array.isArray(b)) throw new BadRequestException('Send an object');
+    if (!['submit', 'decide'].includes(action)) throw new BadRequestException('Unknown action');
+    return this.db.asUser(uid, (svc, u) => svc.accounts.act(u, action, b));
+  }
+
+  // Part N4: the CEO adds a company to the company list (audited draft; database module company-add-v1).
+  @Post('companies')
+  addCompany(@UserId() uid: string, @Body() b: Record<string, unknown>) {
+    if (!b || typeof b !== 'object' || Array.isArray(b)) throw new BadRequestException('Send the company as an object');
+    return this.db.asUser(uid, (svc, u) => svc.addCompany(u, b));
+  }
+
   @Post('asset-units/:id/payments')
   amRecordPayment(@UserId() uid: string, @Param('id') id: string, @Body() b: Record<string, unknown>) {
-    const method = (['CASH', 'TRANSFER', 'CHEQUE', 'ONLINE'] as const).find((x) => x === b.method);
+    const method = (['CASH', 'TRANSFER', 'CHEQUE', 'ONLINE', 'EWALLET', 'CDM'] as const).find((x) => x === b.method);
     if (!method) throw new BadRequestException('method');
     return this.db.asUser(uid, (svc, u) =>
       svc.amRecordPayment(u, id.slice(0, 80), {
@@ -3777,6 +3978,7 @@ export class AppController {
         method,
         on: date(b.on, 'on'),
         ref: b.ref == null ? '' : str(b.ref, 'ref', 60),
+        slip: Array.isArray(b.slip) ? (b.slip as never[]).slice(0, 3) : [],
       }),
     );
   }
@@ -4072,6 +4274,20 @@ export class AppController {
   }
 
   // ----- Client board (Fauzan, 26 Oct 2026) -----
+  // E9 (Fitri package, PIKM/ISO): the client information pack, and the site risk briefing before a first shift.
+  @Get('clients/:id/info-pack')
+  clientInfoPack(@UserId() uid: string, @Param('id') id: string) {
+    return this.db.asUser(uid, (svc, u) => svc.clientInfoPack(u, id.slice(0, 120)));
+  }
+
+  @Post('quality/risk-briefing')
+  recordRiskBriefing(@UserId() uid: string, @Body() b: Record<string, unknown>) {
+    if (!b || typeof b !== 'object') throw new BadRequestException('body must be an object');
+    return this.db.asUser(uid, (svc, u) =>
+      svc.recordRiskBriefing(u, { personId: str(b.personId, 'personId', 120), siteId: str(b.siteId, 'siteId', 120), on: date(b.on, 'on'), note: str(b.note, 'note', 300) }),
+    );
+  }
+
   @Get('clients')
   clientBoard(@UserId() uid: string) {
     return this.db.asUser(uid, (svc, u) => svc.clientBoard(u));
@@ -4313,6 +4529,12 @@ export class AppController {
   }
 
   // ----- Client report links (Fauzan, 3 Nov 2026: "Shared report links first") -----
+  /** Client portal board (A7): OM manages, company manager monitors, COO oversees. */
+  @Get('client-portal')
+  clientPortalBoard(@UserId() uid: string) {
+    return this.db.asUser(uid, (svc, u) => svc.clientPortalBoard(u));
+  }
+
   @Get('clients/:id/share-links')
   clientShareLinks(@UserId() uid: string, @Param('id') id: string) {
     return this.db.asUser(uid, async (svc, u) => {
@@ -4761,6 +4983,22 @@ export class AppController {
     );
   }
 
+  // Part N18: paper PDPA consent for face and location (no scan), and the gate switch.
+  @Get('pdpa-paper-consents')
+  paperConsents(@UserId() uid: string) {
+    return this.db.asUser(uid, (svc, u) => svc.paperConsent.board(u));
+  }
+
+  @Post('pdpa-paper-consents')
+  recordPaperConsent(@UserId() uid: string, @Body() b: Record<string, unknown>) {
+    return this.db.asUser(uid, (svc, u) => svc.paperConsent.record(u, b ?? {}));
+  }
+
+  @Post('pdpa-paper-consents/gate')
+  setPaperConsentGate(@UserId() uid: string, @Body() b: { on?: unknown; reason?: unknown }) {
+    return this.db.asUser(uid, (svc, u) => svc.paperConsent.setGate(u, b.on === true, str(b.reason, 'reason', 300)));
+  }
+
   @Post('pdpa-consents/:id/withdraw')
   withdrawPdpaConsent(@UserId() uid: string, @Param('id') id: string, @Body() b: Record<string, unknown>) {
     return this.db.asUser(uid, (svc, u) => svc.withdrawPdpaConsent(u, id.slice(0, 80), date(b.on, 'on'), str(b.note, 'note', 300)));
@@ -5129,6 +5367,38 @@ export class AppController {
     return this.db.asUser(uid, (svc, u) => svc.hrLeaveSettings(u));
   }
 
+  // Part N17: Group HR lists (guard courses, claim clauses, discipline steps), kept by the HR Administrator by date.
+  @Get('hr/lists')
+  hrLists(@UserId() uid: string) {
+    return this.db.asUser(uid, (svc, u) => svc.hrLists.view(u));
+  }
+
+  @Post('hr/lists/:kind')
+  setHrList(@UserId() uid: string, @Param('kind') kind: string, @Body() b: Record<string, unknown>) {
+    return this.db.asUser(uid, (svc, u) => svc.hrLists.set(u, kind.slice(0, 40) as never, b ?? {}));
+  }
+
+  // Part N5: opening balances for staff who started before Prima (HR enters, a second HR person checks).
+  @Get('hr/opening-balances')
+  openingBalances(@UserId() uid: string, @Query('companyId') companyId: string) {
+    return this.db.asUser(uid, (svc, u) => svc.openingBalances(u, String(companyId ?? '').slice(0, 60)));
+  }
+
+  @Post('hr/people/:personId/opening-balance')
+  setOpeningBalance(@UserId() uid: string, @Param('personId') personId: string, @Body() b: Record<string, unknown>) {
+    return this.db.asUser(uid, (svc, u) => svc.setOpeningBalance(u, personId.slice(0, 80), b ?? {}));
+  }
+
+  @Post('hr/people/:personId/opening-balance/check')
+  checkOpeningBalance(@UserId() uid: string, @Param('personId') personId: string, @Body() b: Record<string, unknown>) {
+    return this.db.asUser(uid, (svc, u) => svc.checkOpeningBalance(u, personId.slice(0, 80), b?.comment == null ? '' : str(b.comment, 'comment', 500)));
+  }
+
+  @Post('hr/opening-balances/load')
+  loadOpeningBalances(@UserId() uid: string, @Body() b: Record<string, unknown>) {
+    return this.db.asUser(uid, (svc, u) => svc.loadOpeningBalances(u, str(b?.companyId, 'companyId', 60), String(b?.csv ?? '').slice(0, 1_000_000), b?.reason == null ? '' : str(b.reason, 'reason', 500)));
+  }
+
   @Post('hr/people/:personId/leave-days')
   setLeaveOverride(@UserId() uid: string, @Param('personId') personId: string, @Body() b: Record<string, unknown>) {
     if (b.days !== null && typeof b.days !== 'number') throw new BadRequestException('days must be a number or null');
@@ -5209,6 +5479,12 @@ export class AppController {
   @Get('hr/people/:personId/leaving-guide')
   leavingGuide(@UserId() uid: string, @Param('personId') personId: string) {
     return this.db.asUser(uid, (svc, u) => svc.leavingGuide(u, personId.slice(0, 80)));
+  }
+
+  // Part N14: HR saves the final pay it checked (a reason on any change to Prima's working).
+  @Post('hr/people/:personId/final-pay')
+  setFinalPay(@UserId() uid: string, @Param('personId') personId: string, @Body() b: Record<string, unknown>) {
+    return this.db.asUser(uid, (svc, u) => svc.setFinalPay(u, personId.slice(0, 80), b ?? {}));
   }
 
   // Staff movement (Fauzan, 3 Nov 2026): promotion, transfer to another group company, secondment.
@@ -5411,6 +5687,20 @@ export class AppController {
   @Get('hr/osh')
   officeOsh(@UserId() uid: string) {
     return this.db.asUser(uid, (svc, u) => svc.officeOsh(u));
+  }
+
+  // C8: HR lets a coordinator outside HR see the accident card (off by default).
+  @Post('hr/osh/coordinator-sees')
+  setOshCoordinatorSees(@UserId() uid: string, @Body() b: Record<string, unknown>) {
+    if (!b || typeof b !== 'object' || Array.isArray(b)) throw new BadRequestException('Send the change as an object');
+    return this.db.asUser(uid, (svc, u) => svc.setOshCoordinatorSees(u, b));
+  }
+
+  // C7: Arms Control makes the vault RFID scan compulsory or optional (optional by default).
+  @Post('arms/rfid-required')
+  setArmsRfidRequired(@UserId() uid: string, @Body() b: Record<string, unknown>) {
+    if (!b || typeof b !== 'object' || Array.isArray(b)) throw new BadRequestException('Send the change as an object');
+    return this.db.asUser(uid, (svc, u) => svc.setArmsRfidRequired(u, b));
   }
 
   @Post('hr/osh/coordinator')
@@ -5816,6 +6106,76 @@ export class AppController {
     if (b.verdict !== 'accepted' && b.verdict !== 'queried') throw new BadRequestException('verdict must be accepted or queried');
     const verdict = b.verdict;
     return this.db.asUser(uid, (svc, u) => svc.remoteReview(u, id.slice(0, 80), verdict, b.note == null ? '' : str(b.note, 'note', 1000)));
+  }
+
+  // A13 (Fitri package): staff choose their email and Teams alerts.
+  @Get('me/alert-prefs')
+  myAlertPrefs(@UserId() uid: string) {
+    return this.db.asUser(uid, (svc, u) => svc.myAlertPrefs(u));
+  }
+
+  @Post('me/alert-prefs')
+  setMyAlertPrefs(@UserId() uid: string, @Body() b: Record<string, unknown>) {
+    if (!b || typeof b !== 'object' || typeof b.digest !== 'boolean' || !Array.isArray(b.muted)) throw new BadRequestException('digest must be true or false and muted a list');
+    return this.db.asUser(uid, (svc, u) => svc.setMyAlertPrefs(u, { digest: b.digest as boolean, muted: (b.muted as unknown[]).filter((x): x is string => typeof x === 'string').slice(0, 60) }));
+  }
+
+  // A8 (Fitri package): equipment warranty claims for IT assets and issued store items.
+  @Get('warranty-claims')
+  warrantyBoard(@UserId() uid: string) {
+    return this.db.asUser(uid, (svc, u) => svc.warrantyBoard(u));
+  }
+
+  @Post('warranty-claims')
+  reportWarrantyFault(@UserId() uid: string, @Body() b: Record<string, unknown>) {
+    if (!b || typeof b !== 'object') throw new BadRequestException('body must be an object');
+    const source = b.source === 'it_asset' || b.source === 'stock' ? b.source : null;
+    if (!source) throw new BadRequestException('source must be it_asset or stock');
+    return this.db.asUser(uid, (svc, u) => svc.reportWarrantyFault(u, { source, itemId: str(b.itemId, 'itemId', 160), fault: str(b.fault, 'fault', 500), faultOn: date(b.faultOn, 'faultOn'), proof: proofList(b.proof) }));
+  }
+
+  @Post('warranty-claims/:id/check')
+  checkWarrantyClaim(@UserId() uid: string, @Param('id') id: string, @Body() b: Record<string, unknown>) {
+    return this.db.asUser(uid, (svc, u) =>
+      svc.checkWarrantyClaim(u, id.slice(0, 120), { supplier: str(b?.supplier, 'supplier', 120), warrantyTo: b?.warrantyTo ? date(b.warrantyTo, 'warrantyTo') : null, note: b?.note == null ? '' : str(b.note, 'note', 300), proof: proofList(b?.proof) }),
+    );
+  }
+
+  @Post('warranty-claims/:id/send')
+  sendWarrantyClaim(@UserId() uid: string, @Param('id') id: string, @Body() b: Record<string, unknown>) {
+    return this.db.asUser(uid, (svc, u) => svc.sendWarrantyClaim(u, id.slice(0, 120), { on: date(b?.on, 'on'), supplierRef: str(b?.supplierRef, 'supplierRef', 80) }));
+  }
+
+  @Post('warranty-claims/:id/close')
+  closeWarrantyClaim(@UserId() uid: string, @Param('id') id: string, @Body() b: Record<string, unknown>) {
+    const result = (['repaired', 'replaced', 'refused'] as const).find((r) => r === b?.result);
+    if (!result) throw new BadRequestException('result must be repaired, replaced or refused');
+    return this.db.asUser(uid, (svc, u) => svc.closeWarrantyClaim(u, id.slice(0, 120), { result, note: str(b.note, 'note', 300), replacementSerial: b.replacementSerial == null ? null : str(b.replacementSerial, 'replacementSerial', 80) }));
+  }
+
+  // A9 (Fitri package): office staff overtime claims, paid only while HR has overtime on for the person (rule HR-OT).
+  @Get('me/overtime')
+  myOtClaims(@UserId() uid: string) {
+    return this.db.asUser(uid, (svc, u) => svc.myOtClaims(u));
+  }
+
+  @Post('me/overtime')
+  requestOtClaim(@UserId() uid: string, @Body() b: Record<string, unknown>) {
+    if (!b || typeof b !== 'object') throw new BadRequestException('body must be an object');
+    const kind = (['normal', 'restDay', 'publicHoliday'] as const).find((k) => k === b.kind);
+    if (!kind) throw new BadRequestException('kind must be normal, restDay or publicHoliday');
+    if (typeof b.hours !== 'number') throw new BadRequestException('hours must be a number');
+    return this.db.asUser(uid, (svc, u) => svc.requestOtClaim(u, { date: date(b.date, 'date'), hours: b.hours as number, kind, reason: str(b.reason, 'reason', 300) }));
+  }
+
+  @Post('me/overtime/:id/cancel')
+  cancelOtClaim(@UserId() uid: string, @Param('id') id: string) {
+    return this.db.asUser(uid, (svc, u) => svc.cancelOtClaim(u, id.slice(0, 160)));
+  }
+
+  @Post('overtime/:id/decide')
+  decideOtClaim(@UserId() uid: string, @Param('id') id: string, @Body() b: { approve?: unknown; note?: unknown }) {
+    return this.db.asUser(uid, (svc, u) => svc.decideOtClaim(u, id.slice(0, 160), b.approve === true, b.note == null ? '' : str(b.note, 'note', 500)));
   }
 
   // Time slip (Fauzan, 4 Nov 2026, rule HR-TIME-SLIP)
@@ -6786,16 +7146,34 @@ export class AppController {
   }
 
   /** Site margin for the Growth panel, from the Operations monitors' site profit and loss (loaded on its own). */
-  // J7 (Fauzan, 11 Nov 2026): the Settings home, every setting screen with its owner and whether it is set yet.
-  @Get('settings-home')
-  settingsHome(@UserId() uid: string) {
-    return this.db.asUser(uid, (svc, u) => svc.settingsHome(u));
-  }
-
   // The CEO's approval value limits (Fauzan, 3 Nov 2026).
   @Get('approval-limits')
   approvalLimits(@UserId() uid: string) {
     return this.db.asUser(uid, (svc, u) => svc.approvalLimits(u));
+  }
+
+  // B2 (Fauzan, 11 Nov 2026): the Finance Director's cash stand-in, turned on by the CEO.
+  @Get('cash-stand-in')
+  cashStandIn(@UserId() uid: string) {
+    return this.db.asUser(uid, (svc, u) => svc.cashStandInBoard(u));
+  }
+
+  @Post('cash-stand-in')
+  setCashStandIn(@UserId() uid: string, @Body() b: Record<string, unknown>) {
+    if (!b || typeof b !== 'object' || Array.isArray(b)) throw new BadRequestException('Send the change as an object');
+    return this.db.asUser(uid, (svc, u) => svc.setCashStandIn(u, b));
+  }
+
+  // B3 (Fauzan, 14 Nov 2026 "No skipping. We run also."): the Vice Chairman's consent on office staff leave, a CEO switch.
+  @Get('staff-leave-vc')
+  staffLeaveVc(@UserId() uid: string) {
+    return this.db.asUser(uid, (svc, u) => svc.staffLeaveVcSetting(u));
+  }
+
+  @Post('staff-leave-vc')
+  setStaffLeaveVc(@UserId() uid: string, @Body() b: Record<string, unknown>) {
+    if (!b || typeof b !== 'object' || Array.isArray(b)) throw new BadRequestException('Send the change as an object');
+    return this.db.asUser(uid, (svc, u) => svc.setStaffLeaveVc(u, b));
   }
 
   @Post('approval-limits')
@@ -6817,6 +7195,18 @@ export class AppController {
   @Get('cms')
   cms(@UserId() uid: string) {
     return this.db.asUser(uid, (svc, u) => svc.cms(u));
+  }
+
+  // C12 (Fauzan, 11 Nov 2026): CMS overtime for the month, approved by Arms Control into the staff payroll.
+  @Get('cms/overtime')
+  cmsOvertime(@UserId() uid: string, @Query('period') period: string) {
+    return this.db.asUser(uid, (svc, u) => svc.cmsOvertime(u, String(period ?? '')));
+  }
+
+  @Post('cms/overtime/approve')
+  approveCmsOvertime(@UserId() uid: string, @Body() b: Record<string, unknown>) {
+    if (!b || typeof b !== 'object' || Array.isArray(b)) throw new BadRequestException('Send the approval as an object');
+    return this.db.asUser(uid, (svc, u) => svc.approveCmsOvertime(u, b));
   }
 
   @Post('cms/settings')
@@ -7046,53 +7436,6 @@ export class AppController {
     );
   }
 
-  // C5 rate book (Fauzan, 11 Nov 2026): costing rates entered in the app from a month, never preset.
-  @Get('finance/rates')
-  rateBook(@UserId() uid: string) {
-    return this.db.asUser(uid, (svc, u) => svc.rateBook(u));
-  }
-
-  @Post('finance/rates')
-  setRate(@UserId() uid: string, @Body() b: Record<string, unknown>) {
-    if (b.amount !== null && b.amount !== undefined && typeof b.amount !== 'number') throw new BadRequestException('amount must be a number or null');
-    if (b.from !== undefined && (typeof b.from !== 'string' || !/^\d{4}-\d{2}$/.test(b.from))) throw new BadRequestException('from must be YYYY-MM');
-    return this.db.asUser(uid, (svc, u) =>
-      svc.setRate(u, {
-        key: str(b.key ?? '', 'key', 40),
-        companyId: str(b.companyId ?? '', 'companyId', 40),
-        from: b.from as string | undefined,
-        amount: (b.amount ?? null) as number | null,
-        reason: str(b.reason ?? '', 'reason', 300),
-      }),
-    );
-  }
-
-  // F1 (Fauzan, 11 Nov 2026): every site where guards worked is billed.
-  @Get('finance/unbilled-sites')
-  unbilledSites(@UserId() uid: string, @Query('period') period?: string) {
-    if (period !== undefined && !/^\d{4}-\d{2}$/.test(period)) throw new BadRequestException('period must be YYYY-MM');
-    return this.db.asUser(uid, (svc, u) => svc.unbilledSites(u, period));
-  }
-
-  // F3 (Fauzan, 11 Nov 2026): the CEO's one-page monthly finance summary.
-  @Get('finance/summary')
-  finSummary(@UserId() uid: string, @Query('period') period?: string) {
-    if (period !== undefined && !/^\d{4}-\d{2}$/.test(period)) throw new BadRequestException('period must be YYYY-MM');
-    return this.db.asUser(uid, (svc, u) => svc.finSummary(u, period));
-  }
-
-  // F2 (Fauzan, 11 Nov 2026): profit per site with the target margin.
-  @Get('finance/site-margins')
-  siteMargins(@UserId() uid: string, @Query('month') month?: string) {
-    if (month !== undefined && !/^\d{4}-\d{2}$/.test(month)) throw new BadRequestException('month must be YYYY-MM');
-    return this.db.asUser(uid, (svc, u) => svc.siteMargins(u, month));
-  }
-
-  @Post('finance/unbilled-sites/:companyId/clear')
-  clearUnbilledFlag(@UserId() uid: string, @Param('companyId') companyId: string, @Body() b: Record<string, unknown>) {
-    return this.db.asUser(uid, (svc, u) => svc.clearUnbilledFlag(u, companyId.slice(0, 40), { key: str(b.key ?? '', 'key', 200), reason: str(b.reason ?? '', 'reason', 300) }));
-  }
-
   // The month's management fee bills between group companies (draft, not an invoice).
   @Get('finance/management-fee-bills')
   managementFeeBills(@UserId() uid: string, @Query('month') month?: string) {
@@ -7302,7 +7645,6 @@ export class AppController {
     if (hours !== 8 && hours !== 12) throw new BadRequestException('hoursPerDay must be 8 or 12');
     const input = {
       guards: num(b.guards, 'guards'),
-      ...(b.nepaliGuards == null ? {} : { nepaliGuards: num(b.nepaliGuards, 'nepaliGuards') }),
       hoursPerDay: hours as 8 | 12,
       ratePerGuard: num(b.ratePerGuard, 'ratePerGuard'),
       validUntil: date(b.validUntil, 'validUntil'),
@@ -7834,9 +8176,63 @@ export class ShareController {
     if (!ref) return res.status(404).send(shareGonePage());
     try {
       const report = await this.db.asShareLink(ref.c, (svc) => svc.clientShareReport(ref.c, ref.k, ref.l));
-      return res.status(200).send(shareReportPage(report, { token }));
+      return res.status(200).send(shareReportPage(report, token));
     } catch {
       return res.status(404).send(shareGonePage());
+    }
+  }
+
+  /** Client portal (A7): the client sends feedback or a request from the link page (plain form post). */
+  @Post(':token/feedback')
+  feedback(@Param('token') token: string, @Body() b: Record<string, unknown>, @Res() res: Response) {
+    return this.send(token, 'feedback', b, res);
+  }
+
+  @Post(':token/request')
+  request(@Param('token') token: string, @Body() b: Record<string, unknown>, @Res() res: Response) {
+    return this.send(token, 'request', b, res);
+  }
+
+  private async send(token: string, kind: 'feedback' | 'request', b: Record<string, unknown>, res: Response) {
+    res.setHeader('Content-Security-Policy', shareCsp());
+    res.setHeader('X-Robots-Tag', 'noindex, nofollow');
+    res.type('html');
+    const ref = shareBase() === null ? null : verifyShare(token, shareSecret());
+    if (!ref) return res.status(404).send(shareGonePage());
+    const s = (v: unknown, n: number) => (typeof v === 'string' ? v.slice(0, n) : '');
+    try {
+      await this.db.asShareLink(ref.c, (svc) =>
+        svc.clientShareSend(ref.c, ref.k, ref.l, {
+          kind,
+          from: s(b?.from, 120),
+          score: Number(s(b?.score, 2)),
+          comment: s(b?.comment, 500),
+          requestKind: s(b?.requestKind, 30),
+          what: s(b?.what, 500),
+          neededBy: s(b?.neededBy, 10) || null,
+        }),
+      );
+      return res.status(200).send(shareSentPage(true, kind === 'feedback' ? 'Your feedback has been sent to your security company.' : 'Your request has been sent. Your Operations Manager will follow it up.'));
+    } catch (e) {
+      if (e instanceof CoreBadRequest) return res.status(400).send(shareSentPage(false, e.message));
+      return res.status(404).send(shareGonePage());
+    }
+  }
+
+  /** Client portal (A7): one month's report PDF from the link. */
+  @Get(':token/report/:period')
+  async reportFile(@Param('token') token: string, @Param('period') period: string, @Res() res: Response) {
+    res.setHeader('X-Robots-Tag', 'noindex, nofollow');
+    const ref = shareBase() === null ? null : verifyShare(token, shareSecret());
+    if (!ref || !/^\d{4}-\d{2}$/.test(period)) return res.status(404).type('html').send(shareGonePage());
+    try {
+      const f = await this.db.asShareLink(ref.c, (svc) => svc.clientShareReportFile(ref.c, ref.k, ref.l, period));
+      const bytes = Buffer.from(f.data.slice(f.data.indexOf(',') + 1), 'base64');
+      res.setHeader('Content-Disposition', `attachment; filename="${f.name}"`);
+      res.setHeader('X-Content-Type-Options', 'nosniff');
+      return res.status(200).type('application/pdf').send(bytes);
+    } catch {
+      return res.status(404).type('html').send(shareGonePage());
     }
   }
 }

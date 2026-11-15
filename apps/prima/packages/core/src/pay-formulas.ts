@@ -64,6 +64,27 @@ export interface PayFormulaAmounts {
   deductShortDays?: boolean;
   /** Rest-day and holiday day pay counts as EPF wages (default yes). Overtime never does (KWSP). */
   epfOnRestHolidayPay?: boolean;
+  // ----- Roster engine (Part O, Fauzan 13 Nov 2026), chosen PER SITE by the ACT Director on the formula -----
+  /**
+   * 'count_days' (default, the method before Part O), 'roster_hybrid' (basic guaranteed, OT from verified minutes,
+   * rest-day pay only from the published roster) or 'hourly' (v3: a genuinely hourly-paid guard).
+   */
+  payMode?: 'count_days' | 'roster_hybrid' | 'hourly';
+  /** Part month and unpaid days on this site: basic / this number (IKEA 22, some sites 24, default 26). */
+  normalWorkingDaysPerMonth?: number;
+  /** 'working_days' (Fauzan's choice, 13 Nov 2026) or EA s.18A calendar days. */
+  incompleteMonthMethod?: 'working_days' | 's18A_calendar';
+  /** Overtime rate base: statutory (basic / 26 / normal hours) or a fixed company RM base per hour; the higher is paid. */
+  otRateBase?: 'statutory' | 'fixed';
+  otFixedBase?: number;
+  otRateRounding?: 'rate_to_sen_first' | 'exact';
+  /** Work on an OFF-ADD day: like rest-day work (Fauzan 13 Nov 23:16Z), ordinary OT, or held for a decision. */
+  restDayExtraTreatment?: 'same_as_rest_day' | 'ordinary_ot' | 'ask_each_time';
+  /** Rest-day normal hours at the fixed base and hours above normal at fixed base x restDayOtMultiplier. */
+  restDayNormalRateBase?: 'statutory' | 'fixed';
+  restDayOtMultiplier?: number;
+  /** pay mode 'hourly': RM per normal hour (at least the minimum hourly wage). */
+  hourlyRate?: number;
   // ----- Driver overtime formulas -----
   /** Meal allowance for each overtime day of at least mealAfterHours overtime, RM. 0 = none. */
   otMealAllowance?: number;

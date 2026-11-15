@@ -9,6 +9,7 @@ import { CalendarGroup, DateLeaf } from './Compliance';
 import { RecordButton } from './RecordForm';
 import { ImportButton } from './ImportDrawer';
 import '../styles/hrx.css';
+import { KdnRenewalPanel } from './KdnRenewal';
 
 /**
  * Renewals and compliance calendar (Central Admin 5C, Fauzan 2 Nov 2026). Each company renews its own licences,
@@ -67,6 +68,8 @@ export function RenewalsView() {
     () =>
       (data?.rows ?? []).filter(
         (r) =>
+          // The KDN licence is worked on the KDN panel above (Part W).
+          r.licence.type !== 'KDN_LICENCE' &&
           (all || r.stage !== 'ok') &&
           (!company || r.licence.companyId === company) &&
           (!focus ||
@@ -121,6 +124,7 @@ export function RenewalsView() {
         </p>
       </PageHead>
       <CentralAdminGuide view="renewals" />
+      <KdnRenewalPanel />
       <Stats>
         <Stat
           label="Expired"

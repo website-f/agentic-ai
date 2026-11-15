@@ -67,8 +67,6 @@ export interface FinIcPair {
 
 export interface FinIcCtx {
   user: User;
-  /** C4 (Fauzan, 11 Nov 2026): the FD's explain limit in force (RM1,000 by default). */
-  explainMax?: number;
   /** May the person record for this company (they act on its books)? */
   actsOn: (companyId: Id) => boolean;
   /** Reviewer: the deputy, the team leader, the FD or the CEO. */
@@ -78,6 +76,8 @@ export interface FinIcCtx {
   /** The latest month that may be recorded (the month being closed or earlier). */
   maxPeriod: string;
   sign: (comment?: string) => FinSign;
+  /** The Finance Director's limit on a difference that may be explained (Fauzan, 11 Nov 2026: RM1,000, FD adjusts). */
+  explainMax?: number;
 }
 
 type Out<T> = { patch: Partial<FinStatus>; action: string; summary: string; result: T };

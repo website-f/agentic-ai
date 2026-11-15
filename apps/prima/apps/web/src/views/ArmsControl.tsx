@@ -1,3 +1,4 @@
+import { Select } from '../SearchSelect';
 import { api, type ArmsControl } from '../api';
 import { useApp } from '../App';
 import { useState } from 'react';
@@ -850,6 +851,8 @@ function Requests({ data }: { data: ArmsControl }) {
               {r.request.state === 'draft' && <Resubmit id={r.request.id} label={r.request.ref} quantity={r.request.quantity ?? null} estCost={r.request.estCost ?? null} busy={busy} run={run} />}
               {r.request.state !== 'closed' && r.request.state !== 'draft' && (
                 <StepActions
+                  dealers={r.request.kind === 'ACQUIRE' || r.request.kind === 'SERVICE' ? data.suppliers.map(({ supplier }) => ({ id: supplier.id, name: supplier.name })) : undefined}
+                  dealerId={r.request.supplierId ?? null}
                   id={r.request.id}
                   label={r.request.ref}
                   state={r.request.state}
@@ -901,10 +904,23 @@ const STEP_ACTIONS: Partial<Record<Step, { action: StepAction; label: string; pr
   reconciled: [{ action: 'close', label: 'Close', primary: true }],
 };
 
-export function StepActions(props: { id: string; label: string; state: Step; note: string; onNote: (v: string) => void; busy: boolean; run: ReturnType<typeof useAction>['run'] }) {
-  const { id, label, state, note, onNote, busy, run } = props;
+export function StepActions(props: {
+  id: string;
+  label: string;
+  state: Step;
+  note: string;
+  onNote: (v: string) => void;
+  busy: boolean;
+  run: ReturnType<typeof useAction>['run'];
+  /** Part R13: on a buy or service request at Arms Control review, the licensed dealer to name before passing. */
+  dealers?: { id: string; name: string }[];
+  dealerId?: string | null;
+}) {
+  const { id, label, state, note, onNote, busy, run, dealers } = props;
+  const [dealer, setDealer] = useState(props.dealerId ?? '');
   const actions = STEP_ACTIONS[state] ?? [];
   if (!actions.length) return null;
+  const naming = !!dealers && (state === 'submitted' || state === 'arms_review');
   const today = new Date().toISOString().slice(0, 10);
   return (
     <div className="op-act">
@@ -915,14 +931,30 @@ export function StepActions(props: { id: string; label: string; state: Step; not
         value={note}
         onChange={(e) => onNote(e.target.value)}
       />
+      {naming && (
+        <Select className="input" aria-label={`Licensed dealer for ${label}`} value={dealer} onChange={(e) => setDealer(e.target.value)} style={{ minWidth: 160 }}>
+          <option value="">Licensed dealer…</option>
+          {dealers!.map((d) => (
+            <option key={d.id} value={d.id}>
+              {d.name}
+            </option>
+          ))}
+        </Select>
+      )}
       {actions.map((a) => (
         <button
           key={a.action}
           className={`btn btn-sm${a.primary ? ' btn-primary' : ''}`}
-          disabled={busy || ((a.needsReason || a.police) && note.trim().length < 3)}
+          disabled={busy || ((a.needsReason || a.police) && note.trim().length < 3) || (naming && a.action === 'pass' && !dealer)}
           onClick={() =>
             run(
-              () => api.armsRequestStep(id, a.action, a.police ? '' : note, a.police ? { policeApproval: { ref: note.trim(), on: today } } : {}),
+              () =>
+                api.armsRequestStep(
+                  id,
+                  a.action,
+                  a.police ? '' : note,
+                  a.police ? { policeApproval: { ref: note.trim(), on: today } } : naming && a.action === 'pass' && dealer ? { supplierId: dealer } : {},
+                ),
               `${label}: ${a.label.toLowerCase()} recorded`,
             )
           }

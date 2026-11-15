@@ -184,3 +184,52 @@ export function GuardPhonesBoard() {
     </>
   );
 }
+
+/** A12: codes for every guard of the company with no phone yet, for a printed enrolment sheet. Shown once. */
+export function GuardPhoneBulkCodes({ companyId }: { companyId: string }) {
+  const [out, setOut] = useState<Awaited<ReturnType<typeof api.guardPhoneCodes>> | null>(null);
+  const act = useAction();
+  return (
+    <details className="panel">
+      <summary>Phone codes for all guards without a phone</summary>
+      <p className="muted small">Each code works once, for {24} hours, and is shown only here. Print or copy the sheet, then hand each guard their own code.</p>
+      <button className="btn btn-sm" disabled={act.busy} onClick={() => act.run(() => api.guardPhoneCodes(companyId), 'Codes made.').then((r) => r && setOut(r))}>
+        Make codes
+      </button>
+      {out && (
+        <table className="table small" style={{ marginTop: 8 }}>
+          <thead>
+            <tr>
+              <th>Staff no</th>
+              <th>Name</th>
+              <th>Code</th>
+              <th>Valid until</th>
+            </tr>
+          </thead>
+          <tbody>
+            {out.codes.map((c) => (
+              <tr key={c.phoneId}>
+                <td>{c.staffNo}</td>
+                <td>{c.name}</td>
+                <td>
+                  <code>{c.code}</code>
+                </td>
+                <td>{c.expiresAt}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+      {out && out.skipped.length > 0 && (
+        <ul className="small">
+          {out.skipped.map((x) => (
+            <li key={x.personId}>
+              {x.name}: {x.why}
+            </li>
+          ))}
+        </ul>
+      )}
+      <ErrorNotice error={act.error} />
+    </details>
+  );
+}

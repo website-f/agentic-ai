@@ -62,6 +62,23 @@ export function OfficeOshPanel({ coordinatorOnly = false }: { coordinatorOnly?: 
                   {r.noAssessment && <Chip tone="warn">no office risk assessment</Chip>}
                 </div>
                 <div className="hx-row-body">
+                  {r.incidentsHidden && <p className="hx-row-meta">You report accidents here; HR keeps the accident card for now.</p>}
+                  {r.canAppoint && r.coordinator && (() => {
+                    const on = r.coordinator.seesIncidents?.at(-1)?.on ?? false;
+                    return (
+                      <div className="hp-inline">
+                        <span className="small">Coordinator sees the accident card: {on ? "yes" : "no (HR monitors)"}</span>
+                        <input className="input" aria-label={`Why, for ${r.companyName}`} placeholder="Why (needed)" value={f(k("seesWhy"))} onChange={(e) => set(k("seesWhy"), e.target.value)} />
+                        <button
+                          className="btn btn-sm"
+                          disabled={act.busy || f(k("seesWhy")).trim().length < 5}
+                          onClick={() => act.run(() => api.setOshCoordinatorSees({ recordId: r.coordinator!.id, on: !on, reason: f(k("seesWhy")) }), "Saved.").then((x) => x !== undefined && b.reload())}
+                        >
+                          {on ? "Stop" : "Let them see it"}
+                        </button>
+                      </div>
+                    );
+                  })()}
                   {r.canAppoint && staff.length > 0 && (
                     <div className="hp-inline">
                       <Select className="select" aria-label={`OSH coordinator for ${r.companyName}`} value={f(k("coord"))} onChange={(e) => set(k("coord"), e.target.value)}>

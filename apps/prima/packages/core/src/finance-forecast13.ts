@@ -61,22 +61,22 @@ function addMonthsDay(d: IsoDate, k: number): IsoDate {
   return new Date(Date.UTC(t.getUTCFullYear(), t.getUTCMonth(), Math.min(day, last))).toISOString().slice(0, 10);
 }
 
-/** The staff payroll dates in the window: the usual pay day (from the last paid run, else the rule's day) at last month's net pay. */
-function payrollItems(runs: StaffPayRun[], from: IsoDate, to: IsoDate, today: IsoDate): FinCash13Item[] {
+/**
+ * The staff payroll dates in the window: each month's pay day (the 29th of the same month, Fauzan 11 Nov 2026; the FD
+ * can change it) at that month's run, else last month's net pay as an estimate.
+ */
+function payrollItems(runs: StaffPayRun[], from: IsoDate, to: IsoDate, today: IsoDate, payDay: number): FinCash13Item[] {
   const sorted = [...runs].sort((a, b) => b.period.localeCompare(a.period));
   const last = sorted[0];
   if (!last) return [];
   const net = round2(last.lines.reduce((n, l) => n + l.net, 0));
   if (net <= 0) return [];
-  const paid = sorted.find((r) => r.paid);
-  // P100 F11: staff are paid on the 29th of the same month; a paid run's own day is not used any more (an older run paid
-  // on the 7th of the next month would put the forecast back on the old day).
-  const day = R().payDay;
+  const day = Math.min(31, Math.max(1, Math.round(payDay)));
   const out: FinCash13Item[] = [];
   for (let k = -1; k <= 4; k++) {
     const on = addMonthsDay(`${from.slice(0, 7)}-${String(day).padStart(2, '0')}`, k);
     if (on > to) break;
-    // P100 F11: the run for the pay day's own month (staff are paid on the 29th of the month worked).
+    // Staff are paid in the month worked, so the pay day's own month is the run's period.
     const period = on.slice(0, 7);
     const run = runs.find((r) => r.period === period);
     if (run?.paid) continue;
@@ -88,7 +88,7 @@ function payrollItems(runs: StaffPayRun[], from: IsoDate, to: IsoDate, today: Is
 }
 
 /** Everything Prima expects in and out from today to the end of the 13th week. */
-export function finCash13Items(f: FinStatus, runs: StaffPayRun[], today: IsoDate) {
+export function finCash13Items(f: FinStatus, runs: StaffPayRun[], today: IsoDate, payDay: number = R().payDay) {
   const start = finWeekStart(today);
   const end = addDays(start, 13 * 7 - 1);
   const out: FinCash13Item[] = [];
@@ -127,7 +127,7 @@ export function finCash13Items(f: FinStatus, runs: StaffPayRun[], today: IsoDate
       });
     }
   }
-  out.push(...payrollItems(runs, start, end, today));
+  out.push(...payrollItems(runs, start, end, today, payDay));
   for (const l of f.dailyCash ?? []) {
     if (!['to_approve', 'approved', 'with_collector'].includes(l.status)) continue;
     const left = round2(l.total - finDailyCashWithdrawn(l));
@@ -176,11 +176,11 @@ export function finCash13Items(f: FinStatus, runs: StaffPayRun[], today: IsoDate
 }
 
 /** The 13 weeks: opening balance, money in and out, and each week's closing. */
-export function finCash13(f: FinStatus, runs: StaffPayRun[], today: IsoDate) {
+export function finCash13(f: FinStatus, runs: StaffPayRun[], today: IsoDate, payDay?: number) {
   const banks = finCashNeed(f, today);
   const known = banks.filter((b) => b.balance != null);
   const opening = round2(known.reduce((n, b) => n + (b.balance ?? 0), 0));
-  const items = finCash13Items(f, runs, today);
+  const items = finCash13Items(f, runs, today, payDay);
   let bal = opening;
   const weeks = Array.from({ length: 13 }, (_, i) => {
     const from = addDays(items.start, i * 7);
@@ -216,6 +216,8 @@ export interface FinCash13Ctx {
   reviewer: boolean;
   today: IsoDate;
   sign: (comment?: string) => FinSign;
+  /** The staff pay day in force (Finance settings). */
+  payDay?: number;
 }
 
 /** Add or remove a line Finance knows about; a reviewer marks the week's forecast as looked over. */
@@ -264,7 +266,7 @@ export function finCash13Action(ctx: FinCash13Ctx, f: FinStatus, runs: StaffPayR
   if (action === 'review') {
     if (!ctx.reviewer) throw new AccessDenied('view', '(the deputy, the team leader, the Finance Director or the CEO reviews the forecast)');
     const c = requireComment(input.comment, 'review the forecast');
-    const v = finCash13(f, runs, ctx.today);
+    const v = finCash13(f, runs, ctx.today, ctx.payDay);
     const r = { ...ctx.sign(c), lowest: v.lowest, firstShortWeek: v.firstShort?.week ?? null };
     return {
       patch: { cash13Reviews: [...(f.cash13Reviews ?? []), r].slice(-60) },

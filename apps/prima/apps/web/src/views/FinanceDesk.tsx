@@ -218,7 +218,7 @@ function PayLine({ c, p, onOpen }: { c: Co; p: Pay; onOpen: (id: string, edit?: 
         <span className="fin-chips fin-pay-tags">
           {p.budget && p.budget.over > 0 && <Chip tone="warn">Over budget {rm(p.budget.over)}</Chip>}
           {p.watch.length > 0 && <Chip tone="info">{p.watch[0]}</Chip>}
-          <Chip tone={PAY[p.status][0]}>{p.status === 'reviewed' && p.approvalMethod === 'teams' ? 'Waiting for approval in Teams' : PAY[p.status][1]}</Chip>
+          <Chip tone={PAY[p.status][0]}>{p.status === 'reviewed' && p.approvalMethod === 'teams' ? 'Waiting for approval in Teams' : p.status === 'reviewed' && p.approvalMethod === 'sharepoint' ? 'Waiting for approval in SharePoint' : PAY[p.status][1]}</Chip>
         </span>
       </button>
       {p.may.includes('resubmit') && (
@@ -265,7 +265,7 @@ function PaymentDrawer({ c, p, startEdit = false, onClose }: { c: Co; p: Pay; st
         <div className="list fin-dl">
           <div className="list-item">
             <span>Status</span>
-            <Chip tone={PAY[p.status][0]}>{p.status === 'reviewed' && p.approvalMethod === 'teams' ? 'Waiting for approval in Teams' : PAY[p.status][1]}</Chip>
+            <Chip tone={PAY[p.status][0]}>{p.status === 'reviewed' && p.approvalMethod === 'teams' ? 'Waiting for approval in Teams' : p.status === 'reviewed' && p.approvalMethod === 'sharepoint' ? 'Waiting for approval in SharePoint' : PAY[p.status][1]}</Chip>
           </div>
           <div className="list-item">
             <span>Purpose</span>
@@ -781,14 +781,13 @@ export function NewPayment({ desk, onClose }: { desk: FinDesk; onClose: () => vo
             ))}
         </Select>
       </Field>
-      {desk.teamsReady && (
-        <Field label="Approved in (one only, never both)">
-          <select className="select" value={f.approvalMethod || desk.settings.approvalMethod} onChange={(e) => set('approvalMethod')(e.target.value)}>
-            <option value="prima">Prima</option>
-            <option value="teams">Teams</option>
-          </select>
-        </Field>
-      )}
+      <Field label="Approved in (one only, never both)">
+        <select className="select" value={f.approvalMethod || desk.settings.approvalMethod} onChange={(e) => set('approvalMethod')(e.target.value)}>
+          <option value="prima">Prima</option>
+          {desk.teamsReady && <option value="teams">Teams</option>}
+          <option value="sharepoint">SharePoint form (link the approved request)</option>
+        </select>
+      </Field>
       <Field label="Purpose">
         <input className="input" value={f.purpose} onChange={(e) => set('purpose')(e.target.value)} />
       </Field>

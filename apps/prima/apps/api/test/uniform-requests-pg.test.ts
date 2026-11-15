@@ -75,26 +75,4 @@ describe('uniform requests on PostgreSQL', () => {
     assert.equal(mine.canRequestUniform, true);
     assert.equal(mine.toPassOn.filter((x) => x.issue.itemId === SHIRT).length, 1);
   });
-
-  it('P100: repeat-safe, for the API role only; the store sees the patrolling officers; wrong roles are refused', async () => {
-    // The office runs modules on every start once approved: a second run changes nothing.
-    await owner.query(readFileSync(resolve(__dirname, '../../../../db/modules/uniform-requests-v1.sql'), 'utf8'));
-    const p = await owner.query(`SELECT policyname, roles::text AS roles FROM pg_policies WHERE schemaname = 'prima' AND tablename = 'stock_requests'`);
-    assert.deepEqual(p.rows, [{ policyname: 'company_wall', roles: '{prima_app}' }]);
-    // The database refuses a request of 4 pieces, or a paid piece without its receipt, whatever writes it.
-    const bad = (data: object) => owner.query(`INSERT INTO prima.stock_requests (id, company_id, data) VALUES ('ur-bad', 'goodwill', $1)`, [{ id: 'ur-bad', companyId: 'goodwill', status: 'open', ...data }]);
-    await assert.rejects(bad({ qty: 4 }), /ur_shape/);
-    await assert.rejects(bad({ qty: 1, guardPays: { receiptNo: '', amount: 30 } }), /ur_shape/);
-    // A second request for the same guard: the store's view names the patrolling officers it may choose.
-    await db.asUser('u-om-klang', (svc, u) => svc.requestUniform(u, { staffNo: guard.staffNo, stockItemId: SHIRT, qty: 1, reason: 'Wrong size' }));
-    const q = await db.asUser('u-proc-store1', (svc, u) => svc.uniformRequests(u));
-    assert.equal(q.canDecide, true);
-    assert.equal(q.me, 'u-proc-store1');
-    assert.equal(q.requests.filter((r) => r.status === 'open').length, 1);
-    assert.ok(q.patrols.some((x) => x.id === po));
-    // A guard's sign-in and an outside company manager neither ask nor read the queue.
-    const g = (await owner.query("SELECT id FROM prima.users WHERE data->>'role' = 'guard' ORDER BY id LIMIT 1")).rows[0].id as string;
-    await assert.rejects(db.asUser(g, (svc, u) => svc.uniformRequests(u)), /Operations Managers|denied|not allowed/i);
-    await assert.rejects(db.asUser('u-cm-sasa', (svc, u) => svc.requestUniform(u, { staffNo: guard.staffNo, stockItemId: SHIRT, qty: 1, reason: 'x' })), /Operations Manager asks|denied/i);
-  });
 });

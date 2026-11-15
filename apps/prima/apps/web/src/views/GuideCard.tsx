@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { trainerAnswer, trainerWalkThrough } from '@prima/core';
 import { api, type GuideCardItem } from '../api';
 import { useLang } from '../i18n';
 import { Chip, ErrorNotice, Loading, useLoad } from '../ui';
@@ -139,6 +140,7 @@ export function MyGuide() {
       <p className="muted" data-no-translate title={data.version}>
         {L('Tugas yang anda dibenarkan sahaja.', 'Only the tasks you are allowed to do.')}
       </p>
+      {data.cards.length > 0 && <AskArisha cards={data.cards} />}
       {!data.cards.length && <p className="muted" data-no-translate>{L('Tiada tugas untuk dipandu.', 'No tasks to guide.')}</p>}
       <div className="list">
         {data.cards.map((c) => (
@@ -154,4 +156,50 @@ export function RecordGuide({ kind }: { kind: string }) {
   const { data } = useLoad(() => api.org.guide(), []);
   const card = data?.cards.find((c) => c.id === `record.${kind}`);
   return card ? <GuideCardView card={card} /> : null;
+}
+
+/**
+ * "Bagaimana saya...? / How do I...?" (K9 / N3, Fauzan 11 Nov 2026): Arisha answers from this person's own cards only,
+ * Bahasa Melayu first, and walks a new person through their first tasks. Read only: she never saves, approves or sends.
+ */
+function AskArisha({ cards }: { cards: Parameters<typeof trainerAnswer>[0] }) {
+  const [q, setQ] = useState('');
+  const [a, setA] = useState<ReturnType<typeof trainerAnswer> | null>(null);
+  const [walk, setWalk] = useState(false);
+  return (
+    <div className="card small" style={{ padding: 10, display: 'flex', flexDirection: 'column', gap: 6 }}>
+      <div style={{ fontWeight: 600 }}>Tanya Arisha / Ask Arisha</div>
+      <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
+        <input className="input" placeholder="Bagaimana saya... / How do I..." aria-label="Question" value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && setA(trainerAnswer(cards, q))} />
+        <button className="btn btn-sm" disabled={!q.trim()} onClick={() => setA(trainerAnswer(cards, q))}>
+          Tanya / Ask
+        </button>
+        <button className="btn btn-ghost btn-sm" onClick={() => setWalk(!walk)}>
+          Mula di sini / Start here
+        </button>
+      </div>
+      {a && (
+        <div>
+          <div>{a.reply.bm}</div>
+          <div className="muted">{a.reply.en}</div>
+          <ol>
+            {a.steps.map((s) => (
+              <li key={s.cardId}>
+                <strong>{s.title.bm}</strong> / {s.title.en}: buka / open <em>{s.screen}</em>, {s.action.bm} ({s.action.en}){s.status !== 'ready' ? ' (belum sedia / not ready here)' : ''}
+              </li>
+            ))}
+          </ol>
+        </div>
+      )}
+      {walk && (
+        <ol>
+          {trainerWalkThrough(cards).map((s) => (
+            <li key={s.cardId}>
+              {s.title.bm} / {s.title.en}: <em>{s.screen}</em>, {s.action.bm}
+            </li>
+          ))}
+        </ol>
+      )}
+    </div>
+  );
 }

@@ -1,3 +1,6 @@
+import { SiteSuppliesPanel } from './SiteSupplies';
+import { InventoryPanel } from './Inventory';
+import { WarrantyClaimsSection } from './Warranty';
 import { Select } from '../SearchSelect';
 import { useState, type ReactNode } from 'react';
 import {
@@ -15,10 +18,10 @@ import type { ProofInput, PurCategory } from '@prima/core';
 import { api, type PurBoard, type PurRequestInput } from '../api';
 import { ProofPicker } from './Proof';
 import { DeliveryProofPanel } from './DeliveryProof';
+import { UniformRequestLine } from './MyItems';
 import { RecordButton, useRecordKinds } from './RecordForm';
 import { ImportButton } from './ImportDrawer';
 import { WitnessField, emptyWitness } from './Witness';
-import { UniformRequestsPanel } from './UniformRequests';
 import { Card, Empty, Facts, PageHead, Search, Stat, Stats, Steps, Toolbar, type StepState } from '../kit';
 import { Chip, Drawer, ErrorNotice, Loading, dateLabel, dateTimeLabel, useAction, useLoad } from '../ui';
 import '../styles/biz.css';
@@ -196,7 +199,7 @@ export function PurchasingView() {
       </div>
       {tab === 'requests' && <Requests data={data} form={newReq} setForm={setNewReq} />}
       {tab === 'suppliers' && <Suppliers data={data} />}
-      {tab === 'store' && <Store data={data} />}
+      {tab === 'store' && <><Store data={data} /><WarrantyClaimsSection source="stock" /></>}
     </div>
   );
 }
@@ -1169,8 +1172,6 @@ function Store({ data }: { data: PurBoard }) {
           <ImportButton kind="stockItem" />
         </div>
       )}
-      {/* I1 (Fauzan, 11 Nov 2026): uniform requests from Operations Managers, first, for the Goodwill store to decide. */}
-      {company && companiesOf(data).some((c) => c.id === 'goodwill') && <UniformRequestsPanel place="store" />}
       {data.losses.length > 0 && (
         <Card title="Lost or damaged, waiting for confirmation" sub="The company manager confirms or refuses each loss." flush>
           <ul className="bz-rows">
@@ -1258,6 +1259,9 @@ function Store({ data }: { data: PurBoard }) {
           {!data.stock.length && <Empty title="No store items yet." action={<RecordButton kind="stockItem" label="Add store item" primary />} />}
         </div>
       </Card>
+      {company && companiesOf(data).some((c) => c.id === 'goodwill') && <UniformRequestQueue data={data} />}
+      {company && companiesOf(data).some((c) => c.id === 'goodwill') && <SiteSuppliesPanel />}
+      {company && companiesOf(data).some((c) => c.id === 'goodwill') && <InventoryPanel />}
       <div className={company ? 'bz-two bz-pu-issue' : 'bz-stack'}>
         {company && <IssueForm data={data} />}
         <Card title="Issued and not yet returned" sub={data.issues.length > 50 ? `Latest 50 of ${data.issues.length}` : `${data.issues.length} issued`} flush>
@@ -1282,6 +1286,8 @@ function Store({ data }: { data: PurBoard }) {
 function LossLine({ l }: { l: PurBoard['losses'][number] }) {
   const act = useAction();
   const [note, setNote] = useState('');
+  const [cause, setCause] = useState('');
+  const [photo, setPhoto] = useState<ProofInput[]>([]);
   const r = l.issue.returned!;
   return (
     <div className="bz-row bz-pu-block-row" data-tone="warn">
@@ -1301,7 +1307,24 @@ function LossLine({ l }: { l: PurBoard['losses'][number] }) {
         {l.canConfirm ? (
           <div className="bz-pu-block">
             <input className="input" aria-label="Note" placeholder="Note (needed to refuse)" value={note} onChange={(e) => setNote(e.target.value)} />
-            <button className="btn btn-sm btn-primary" disabled={act.busy || !note.trim()} onClick={() => act.run(() => api.confirmStockLoss(l.issue.id, true, note), 'Loss confirmed.')}>
+            <label className="small">
+              Cause (Part U17){' '}
+              <Select className="select" aria-label="Cause" value={cause} onChange={(e) => setCause(e.target.value)}>
+                <option value="">Not given</option>
+                <option value="WEAR">Normal wear</option>
+                <option value="ACCIDENT">Accident</option>
+                <option value="NEGLIGENCE">Negligence (charged on next pay, HR reviews)</option>
+                <option value="MISUSE">Misuse (charged on next pay, HR reviews)</option>
+                <option value="UNKNOWN">Unknown</option>
+              </Select>
+            </label>
+            {(cause === 'NEGLIGENCE' || cause === 'MISUSE') && (
+              <>
+                <span className="muted small">Employment Act 1955 s.24: a damage deduction generally needs the worker’s written agreement or the Labour Director General’s permission; HR reviews it before the pay run.</span>
+                <ProofPicker site={null} refText="Photo of the damage" items={photo} onChange={setPhoto} documentsOnly />
+              </>
+            )}
+            <button className="btn btn-sm btn-primary" disabled={act.busy || !note.trim()} onClick={() => act.run(() => api.confirmStockLoss(l.issue.id, true, note, { ...(cause ? { cause } : {}), photo }), 'Loss confirmed.')}>
               Confirm
             </button>
             <button
@@ -1643,5 +1666,78 @@ function Reopen({ r }: { r: ReqRow['req'] }) {
       </div>
       <ErrorNotice error={act.error} />
     </section>
+  );
+}
+
+/**
+ * Uniform requests from government Operations Managers (Fauzan, 11 Nov 2026). The store issues the uniform to the OM who
+ * asked (then the patrolling officer, then the guard, who sign on the OM's phone), or refuses with a reason.
+ */
+function UniformRequestQueue({ data }: { data: PurBoard }) {
+  const { data: q, error } = useLoad(() => api.uniformRequests(), []);
+  if (error) return <ErrorNotice error={error} />;
+  if (!q || !q.canDecide) return null;
+  const open = q.requests.filter((r) => r.status === 'open');
+  return (
+    <section className="panel">
+      <div className="panel-head">
+        <h3>Uniform requests from Operations Managers</h3>
+        {open.length > 0 && <Chip tone="warn">{open.length} waiting</Chip>}
+      </div>
+      {q.requests.length === 0 && <p className="muted small">No requests in the last 60 days.</p>}
+      <div className="list">
+        {q.requests.map((r) => (
+          <UniformRequestLine key={r.id} r={r}>
+            {r.status === 'open' && <DecideUniform r={r} data={data} />}
+          </UniformRequestLine>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function DecideUniform({ r, data }: { r: { id: string; personId: string; billTo: string }; data: PurBoard }) {
+  const act = useAction();
+  const [note, setNote] = useState('');
+  const receiver = data.people.find((p) => p.id === r.personId);
+  const needsPatrol = !receiver || receiver.role !== 'patrol_officer';
+  const patrols = data.people.filter((p) => p.role === 'patrol_officer' && p.companyId === r.billTo);
+  const [patrolPersonId, setPatrolPersonId] = useState('');
+  return (
+    <div style={{ display: 'grid', gap: 6 }}>
+      {needsPatrol && (
+        <Select className="input" aria-label="Patrolling officer" value={patrolPersonId} onChange={(e) => setPatrolPersonId(e.target.value)}>
+          <option value="">Patrolling officer who hands it to the guard…</option>
+          {patrols.map((p) => (
+            <option key={p.id} value={p.id}>
+              {p.name}
+            </option>
+          ))}
+        </Select>
+      )}
+      <input className="input" aria-label="Note" placeholder="Note (required to refuse)" value={note} onChange={(e) => setNote(e.target.value)} />
+      <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
+        <button
+          className="btn btn-sm btn-primary"
+          disabled={act.busy || (needsPatrol && !patrolPersonId)}
+          onClick={() =>
+            act.run(
+              () => api.decideUniformRequest(r.id, 'issue', { note, ...(needsPatrol ? { patrolPersonId } : {}) }),
+              'Issued. Waiting for the Operations Manager to confirm.',
+            )
+          }
+        >
+          Issue to the OM
+        </button>
+        <button
+          className="btn btn-sm"
+          disabled={act.busy || !note.trim()}
+          onClick={() => act.run(() => api.decideUniformRequest(r.id, 'refuse', { note }), 'Refused. The OM can see why.')}
+        >
+          Refuse
+        </button>
+      </div>
+      <ErrorNotice error={act.error} />
+    </div>
   );
 }

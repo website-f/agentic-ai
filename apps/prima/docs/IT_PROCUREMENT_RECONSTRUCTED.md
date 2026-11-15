@@ -25,3 +25,14 @@ Historical paid/received records remain read-only `legacy_unverified`; no PO, in
 ## Release gates
 
 Install only the separately reviewed transactional module and narrow existing-stock guard change under explicit migration approval. Verify catalog bodies, owner/ACLs, exact unconditional triggers, FORCE RLS, indexes and mandatory dependencies. Actual restricted-login PostgreSQL/concurrency/rollback tests and combined browser/UI tests remain mandatory. No production mapping is seeded. No startup auto-install or provider activation occurs.
+
+## Merdeka IT policies (Part Q, 13-14 Nov 2026)
+
+The written procurement policy adds, around the existing IT purchase (unchanged guards): an equipment request from any
+department (Q6), the technical assessment with spare stock shown (Q7), quote details with physical or online type and a
+comparison table and recommendation (Q8, IT-BUY stays 3 + 1), the Finance budget check as a record (Q9), receiving with a
+GRN and quarantine (Q10), stage time frames (Q13) and the documents kept for 5 years (Q14). These live in
+`prima.it_policy_recs` (`db/modules/it-policies-v1.sql`, CEO-installed). Route (b), paying before delivery when the
+chosen supplier requires it, is approved with the purchase and flagged when undelivered after the quoted lead time;
+posting the payment before receipt still needs a reviewed change to this module's payment guard. See
+`docs/IT_POLICIES_MERDEKA.md`.

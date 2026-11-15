@@ -9,13 +9,10 @@ Switch date (Fauzan, 8 Nov 2026): Prima takes over guard pay on 1 August 2027 (r
 
 ## Who does what
 
-Each security company prepares its own pay run (Fauzan, 11 Nov 2026, P100 B1: "each Company Manager monitors the pay run
-and delegates the preparing to whoever they choose in their company"). HR (PWVSB HR officers) and the OMs no longer prepare.
-
 | Step | Who | Notes |
 | --- | --- | --- |
-| Name the preparer(s) | The company's Company Manager (or General Manager) | An admin executive or another manager of the same company, with a reason; changeable later (each naming and removal kept and audited). Never themself, an OM, central HR or a guard. Office module `db/modules/guard-pay-preparers-v1.sql` (forced row-level security: only that company's manager writes; read by the company's managers, the person named, HR and leadership). A named preparer gets the read-only `pay_read` door to the ACT formulas, the pay law and the statutory rates. |
-| Prepare / recalculate | The preparer the Company Manager named for that company | This month or last month, their own company only. Public holidays come from the yearly guard lists (below). Can enter a PCB from e-PCB or a one-off item with a reason (flagged for the COO). |
+| Name who prepares | Company Manager (B1, Fauzan 11 Nov 2026) | Names one or more people in the company office, with a reason; changeable later, every naming kept. Operations Managers cannot be named. Module `db/modules/guard-pay-preparers-v1.sql` is proposed, not on the release list; until the CEO installs it HR keeps preparing. |
+| Prepare / recalculate | The company executive the Company Manager named (B1). HR and OMs no longer prepare once the module is installed | This month or last month. Public holidays come from the yearly guard lists (below). Can enter a PCB from e-PCB or a one-off item with a reason (flagged for the COO). |
 | Record whose account it is | HR | Own, joint, immediate relative's or close friend's; bank or e-wallet. Someone else's account needs the guard's consent letter, stamped by a Commissioner for Oaths (Pesuruhjaya Sumpah). |
 | Approve a consent letter | COO only, no CEO stand-in (Fauzan, 6 Nov 2026) | Reason required; not the HR officer who recorded it. Until approved the account cannot be paid into. |
 | List a guard for cash | Director Office staff | Only for a guard with pay and a reason. |
@@ -25,11 +22,11 @@ and delegates the preparing to whoever they choose in their company"). HR (PWVSB
 | Record an advance or loan | HR | Limit, purpose, repayment period (1-24 months), the worker's signed agreement. |
 | Approve an advance or loan | Chief of Staff, then the CEO | Reason each; nobody decides a record they made or already approved. Finance is told at each step. |
 | Pay out an advance or loan | Finance | Bank reference; only once Prima pays guards (repayments come off Prima's pay run). |
-| Submit | The company's preparer | Refused while the month is open, any guard with pay has no account they can be paid into and is not listed for cash, any worked site has no formula, any shift is unlocked or has no clock-out, or a line is negative. |
-| Approve | COO (CEO stands in during the pilot) | Reason required (approval-reasons rule). Nobody approves a month they prepared or submitted. Refused while a cash listing waits for a decision. Can return it to the company's preparer with a reason. |
+| Submit | The named company preparer (B1) | Refused while the month is open, any guard with pay has no account they can be paid into and is not listed for cash, any worked site has no formula, any shift is unlocked or has no clock-out, or a line is negative. |
+| Approve | COO (CEO stands in during the pilot) | Reason required (approval-reasons rule). Nobody approves a month they prepared or submitted. Refused while a cash listing waits for a decision. Can return to the company with a reason. |
 | Pay | Finance (FD or a Finance team member) | Bank reference + PCB checked. Refused while the run is a trial or a cash listing is undecided. Paid after the 7th is recorded as late (EA s.19). |
 | Files | Finance (bank file, e-wallet list), HR + Finance (SQL journal, EPF, SOCSO/EIS, PCB lists), Finance + Director Office + COO/CEO (cash list) | After COO approval. A trial file's first line says DO NOT UPLOAD. |
-| View | Group leaders and HR; the Company Manager sees every run of their own company | Read only. |
+| View | Group leaders; company manager for their own company | Read only. |
 | Payslips | The guard or officer, on their Duty screen | Paid months only. |
 
 Rule `PAY-GUARD` (`RULES.guardPayroll`): `primaPays: false` until Fauzan picks the JA switch date. While off, every run
@@ -84,7 +81,7 @@ coo. The letter must have notory stamp by pesuruhjaya sumpah."
   pays it out with a bank reference and sees what is lent and still owed.
 - The pay run takes repayments only from these records: a one-off item naming a loan or advance is refused.
 - All the employer's deductions together (one-off items, hostel utilities, wage advances and these repayments) stay
-  within half the month's wages (EA s.24(8); statutory shares and PCB are outside the cap, confirmed by Fauzan 11 Nov 2026, E12). What does not fit
+  within half the month's wages (EA s.24(8); confirmed by Fauzan, 11 Nov 2026 round 3 Q3: EPF, SOCSO and PCB are outside the cap). What does not fit
   waits; the balance stays on the record. Over 50% before any repayment holds submission, approval, payment and unpaid-run exports; HR must resolve it.
 - When the month is paid, each repayment comes off its record; at zero it is settled. The database refuses a record
   without both approvals, with the two approvals by the same person, or lending more than its limit.
@@ -108,34 +105,16 @@ coo. The letter must have notory stamp by pesuruhjaya sumpah."
   rate for a missing secondary formula.
 - Days: a shift counts only with a clock-in, a clock-out and the supervisor's lock (W11). Two shifts on one day count once.
 - Full month = the formula's `fullMonthDays` (26). Approved paid leave (annual, MC, training: one normal day, no OT) and every public holiday are paid days.
-  Paid leave is paid at basic pay only (Fauzan, 11 Nov 2026, P100 C1b): each fixed allowance's daily share (allowance / the
-  day divisor) is taken off for every paid leave day, and no overtime is paid for it.
   A dated leave day is counted once, excluding days already worked or counted as paid public holidays. Overlapping
   leave records do not create extra paid days. Ordinary days worked past that room are rest days worked; days short of
   it are unpaid at the daily rate (closed month only).
-- Rates (EA s.60I through the formula): daily = basic / the pay law's day divisor for the month (26 today, set by the CEO in PR #112), hourly = daily / normal hours. Overtime = the hours
-  actually worked past the normal day on each day worked, up to the formula's OT hours per shift (P100 B1b), at the working-day, rest-day or holiday rate. Rest-day and holiday work add the
+- Rates (EA s.60I through the formula): daily = basic / the pay law's day divisor for the month (26 today, set by the CEO in PR #112), hourly = daily / normal hours. Overtime = the formula's OT
+  hours per shift on each day worked, at the working-day, rest-day or holiday rate. Rest-day and holiday work add the
   formula's extra days' wages. Fixed allowances from the formula.
 - Statutory: rates come from the statutory settings in force for the pay month (see below). Today: EPF on gross less
   overtime (KWSP), foreign 2%/2%; SOCSO and LINDUNG 24 Jam in separate columns; EIS for Malaysians 18-59; any new
   contribution the CEO adds is its own column; HRD 1% on basic and fixed allowances, Malaysians; PCB estimate unless
   HR enters the e-PCB figure. Hostel utility deductions HR already approved for that payroll month are deducted.
-
-## Hours recorded and paid must match (P100 B1b, Fauzan 11 Nov 2026)
-
-"Salary and total working hours must match." Every line shows the hours recorded beside the hours paid:
-
-- Recorded: hours worked from locked attendance (clock-in to clock-out inside the rostered shift; a clock-in within the
-  late grace and a clock-out within the early grace count the whole shift, rules OPS-LATE-GRACE and OPS-EARLY-GRACE; a
-  rest the guard is relieved for comes out of the time past the normal day), plus approved paid leave, training and MC
-  days and paid public holidays off at the formula's normal hours.
-- Paid: normal hours, overtime, rest-day and public-holiday hours, paid leave and holidays, and any days of basic paid with
-  nothing recorded (only when ACT's formula says not to deduct short days).
-- A line whose totals differ is held: it cannot be changed (PCB or one-off item), and the run cannot be submitted, approved,
-  paid or exported. Typical causes: a day shorter than the normal day the basic pays, hours past the shift the formula pays
-  (for example two shifts on one day), basic paid for days with no attendance or leave. The fix is the attendance or leave
-  record, corrected with its own approval and reason, then a recalculation. The pay line is never changed to hide it.
-- Calculation version 3: unpaid runs calculated before this must be recalculated.
 
 ## Database
 
@@ -175,9 +154,7 @@ settings below). Both are set by the CEO by month.
 
 ## Open points (assumptions)
 
-1. Settled 11 Nov 2026 (P100 B1): each company prepares its own guard pay, by the person its Company Manager names; not
-   HR and not the OM. HR still records salary accounts and consent letters, the advance and loan scheme, and takes the
-   statutory lists after approval.
+1. Decided (Fauzan, 11 Nov 2026, B1): each company prepares its own run; the Company Manager names the preparer(s); the OM does not prepare. The Company Manager sees every run of the company.
 2. A zone for bulk advances is a branch.
 3. Officers (stationed and patrolling) use the guard shift formula of their main site.
 4. The test link now carries 40 days of shift history so last month can be run.
@@ -197,5 +174,48 @@ settings below). Both are set by the CEO by month.
   remain unchanged. Older unpaid periods outside the existing preparation window require a separately reviewed
   reconciliation path, rather than silently changing history or extending the window.
 - The enforced 50% test is the existing employer-recovery cap, including utilities, one-off deductions, wage advances
-  and scheme repayments. Statutory deductions and PCB are outside the cap (Fauzan, 11 Nov 2026, E12). This repair
+  and scheme repayments. Whether statutory deductions and PCB belong in the legal cap remains unresolved. This repair
   does not certify legal compliance, modify ACT/CEO legal discretion, change statutory tables or enable live payroll.
+
+## Roster engine sites (Part O, 13 Nov 2026)
+
+When the main site's formula has `payMode` `roster_hybrid` (or `hourly`), the line is built by the roster engine
+(`hybridPay`, see docs/GUARD_ROSTER_ENGINE.md): basic is guaranteed, unpaid days only for UPL, decided ABS and days not
+employed at basic / the site's normal working days, overtime from verified minutes, and rest-day pay only for duties on
+OFF dates of the published roster. Without the published roster the line is held. Every other site keeps the day-count
+method above unchanged.
+
+## An absence still waiting for the OD/OGM decision (Fauzan, 15 Nov 2026: "Only that guard's pay waits")
+
+- An ABS day the OD/OGM has not decided (paid or unpaid) puts the line on `waiting`, not on `holds`. Preparing the
+  month keeps that guard out of the run (`run.waiting`); the run is submitted, approved and paid for everyone else,
+  and its totals, bank, e-wallet, SQL and statutory files leave the guard out.
+- Once the OD/OGM decides, the company's preparer uses "Pay decided guards in a later run" on the month (allowed once
+  the month itself is submitted). The later run (`<month id>-later-N`, `laterOf` = the month) holds only the decided
+  guards, for the same period, and goes through the same submit, COO approval with a reason and Finance payment. A
+  guard still undecided stays waiting; a draft later run is recalculated, never duplicated.
+- A guard is paid in only one run of the month: a recalculated month leaves out anyone already in a later run, and a
+  line still waiting can never be submitted, approved, paid or exported. Advances are checked against the run that
+  pays the guard. The JA comparison and the RBA trace read the month and its later runs together.
+- No new database module: later runs are ordinary rows of `prima.guard_pay_runs`.
+
+## Hours paid must match hours recorded (B1b, Fauzan 11 Nov 2026)
+
+"Salary and total working hours must match." Every guard pay line (calculation version 3) shows:
+
+- **Hours recorded**: duty hours from locked attendance, counted inside the shift times (a clock-in or clock-out within
+  10 minutes of the shift time counts as on time, rule G5), less the unpaid rest when the guard is relieved; plus paid
+  leave and paid public holidays not worked, at the formula's normal hours a day. A late arrival or early leave the
+  company excused (attendance follow-up "Excused", with its reason and proof) counts in full.
+- **Hours paid**: normal, overtime, rest-day and public-holiday hours the line pays, plus the same leave and holiday hours.
+  Roster engine sites (Part O) use the OM-verified duty minutes on both sides.
+
+A line whose hours do not match is held: it cannot be saved, and the month cannot be submitted, approved, paid or
+exported. A guard paid for more hours than attendance shows is refused, never paid silently. The fix is to correct the
+attendance or leave record (with its own approval and reason), or for ACT to set a formula with the right shift
+length, never to override the pay line. A formula with no shift length shows "hours not compared".
+
+Older drafts (version 2) must be recalculated before they move on. Staff payroll is monthly and day-based (part months
+by working days), and no staff member is paid by the hour in Prima today, so the check runs on guard pay only. The demo
+data now gives 8-hour and office-hours sites their own test formulas (STD-8H, STD-9H-R1); a guard who works shifts of
+different lengths in one month on one formula is held, as in real use.

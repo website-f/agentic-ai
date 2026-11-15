@@ -24,14 +24,11 @@ import {
   type Tone,
 } from "../ui";
 import { Empty } from "../kit";
-import { GuardPayPreparers } from "./GuardPayPreparers";
-import { HoursChip, PayHoursTable } from "./PayHours";
 
 /**
  * Guard pay run (Fauzan, 5 Nov 2026). Guards, stationed officers and patrolling officers are paid from locked
- * attendance under the ACT pay formula used at their site. Each company prepares its own month (P100 B1: the person its
- * Company Manager names), the COO approves with a reason, Finance pays through the bank. While the JA Group app still
- * pays guards, every month is a trial to compare.
+ * attendance under the ACT pay formula used at their site. HR prepares each company's month, the COO approves with a
+ * reason, Finance pays through the bank. While the JA Group app still pays guards, every month is a trial to compare.
  */
 
 const STAGE: Record<GuardPayStage, [Tone, string]> = {
@@ -58,8 +55,7 @@ const monthLabel = (p: string) =>
   });
 
 export function GuardPayView() {
-  const [tick, setTick] = useState(0);
-  const { data, error } = useLoad(() => api.guardPayroll(), [tick]);
+  const { data, error } = useLoad(() => api.guardPayroll(), []);
   const [open, setOpen] = useState<string | null>(null);
   if (error) return <ErrorNotice error={error} />;
   if (!data) return <Loading what="guard pay" />;
@@ -69,9 +65,10 @@ export function GuardPayView() {
         <h1>Guard pay</h1>
         <p className="muted">
           Monthly pay for guards and officers, from locked attendance and the
-          ACT pay formula used at each site. Each company prepares its own month,
-          the COO approves with a reason, and Finance pays through the bank.
-          Prima only drafts the files.
+          ACT pay formula used at each site. The company executive the Company
+          Manager names prepares, the COO approves with a reason, and Finance
+          pays through the bank. Prima only drafts the
+          files.
         </p>
       </div>
       {!data.rule.primaPays && (
@@ -88,10 +85,75 @@ export function GuardPayView() {
           approval.
         </div>
       )}
-      <GuardPayPreparers data={data} onChanged={() => setTick((n) => n + 1)} />
       <ConsentLetters />
       <Runs data={data} onOpen={setOpen} />
       {open && <RunDrawer runId={open} onClose={() => setOpen(null)} />}
+    </div>
+  );
+}
+
+/** B1 (11 Nov 2026): the Company Manager names who prepares the company's guard pay run, with a reason. */
+function Preparers({ e }: { e: GuardPayBoard["employers"][number] }) {
+  const act = useAction();
+  const [editing, setEditing] = useState(false);
+  const [ids, setIds] = useState<string[]>(e.preparers?.userIds ?? []);
+  const [reason, setReason] = useState("");
+  const names = e.preparerNames.length ? e.preparerNames.join(", ") : null;
+  return (
+    <div className="small" style={{ marginTop: 4 }}>
+      <span className="muted">Prepared by: </span>
+      {names ?? <Chip tone="warn">nobody named yet</Chip>}
+      {e.canNamePreparers && !editing && (
+        <button className="btn btn-ghost btn-sm" style={{ marginLeft: 6 }} onClick={() => setEditing(true)}>
+          {names ? "Change" : "Name who prepares"}
+        </button>
+      )}
+      {editing && (
+        <div className="stack" style={{ gap: 6, marginTop: 6 }}>
+          {e.office.map((o) => (
+            <label key={o.id} className="row" style={{ gap: 6 }}>
+              <input
+                type="checkbox"
+                checked={ids.includes(o.id)}
+                onChange={(ev) => setIds(ev.target.checked ? [...ids, o.id] : ids.filter((x) => x !== o.id))}
+              />
+              {o.name} <span className="muted">{o.title}</span>
+            </label>
+          ))}
+          <input className="input" placeholder="Reason (required)" value={reason} onChange={(ev) => setReason(ev.target.value)} />
+          <ErrorNotice error={act.error} />
+          <div className="row" style={{ gap: 6 }}>
+            <button
+              className="btn btn-primary btn-sm"
+              disabled={act.busy || reason.trim().length < 5}
+              onClick={() =>
+                act.run(() => api.setGuardPayPreparers(e.companyId, ids, reason), "Saved. They can now prepare and submit the run.").then((r) => { if (r !== undefined) setEditing(false); })
+              }
+            >
+              Save
+            </button>
+            <button className="btn btn-ghost btn-sm" onClick={() => setEditing(false)}>
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** B1b: hours recorded beside hours paid. A line that does not match is held until attendance or leave is corrected. */
+function HoursLine({ h, full }: { h: NonNullable<GuardPayLine["hours"]>; full?: boolean }) {
+  if (h.notCompared) return <div className="small muted">Hours not compared: {h.notCompared}</div>;
+  return (
+    <div className="small" style={h.match ? undefined : { color: "var(--crit, #b91c1c)" }}>
+      Hours recorded {h.recorded} · hours paid {h.paid} {h.match ? <Chip tone="ok">match</Chip> : <Chip tone="crit">do not match</Chip>}
+      {full && (
+        <div className="muted">
+          Recorded: duty {h.duty}, paid leave {h.leave}, holidays {h.holiday}. Paid: normal {h.normal}, overtime {h.ot}, rest day {h.restDay}, public holiday{" "}
+          {h.publicHoliday}, leave {h.leave}, holidays {h.holiday}.
+        </div>
+      )}
     </div>
   );
 }
@@ -145,7 +207,7 @@ function Runs({
         </div>
         {data.employers.length === 0 && (
           <Empty title="No guards or officers on the pay list yet">
-            A company appears here once it has active guards or officers in People. Its named preparer then prepares each month's pay from their locked attendance.
+            A company appears here once it has active guards or officers in People. HR then prepares each month's pay from their locked attendance.
           </Empty>
         )}
         <div className="list">
@@ -160,6 +222,7 @@ function Runs({
                 <div className="muted small">
                   {e.guards} guards and officers
                 </div>
+                <Preparers e={e} />
               </div>
               <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
                 {(
@@ -299,8 +362,8 @@ function RunBody({
     URL.revokeObjectURL(url);
   };
   const steps: [string, (typeof run)["prepared"] | null][] = [
-    ["Prepared by", run.prepared],
-    ["Submitted by", run.submitted],
+    ["Prepared by HR", run.prepared],
+    ["Submitted by HR", run.submitted],
     ["Approved by the COO", run.approved],
     ["Paid by Finance", run.paid],
   ];
@@ -312,24 +375,38 @@ function RunBody({
           Trial beside the JA Group app: compare, do not pay.
         </div>
       )}
+      {run.laterOf && (
+        <div className="notice" data-tone="info">
+          Later run for {run.period}: it pays only the guards whose absence waited for the OD/OGM decision. The rest of the month was paid in the company's own run.
+        </div>
+      )}
+      {data.waiting.length > 0 && (
+        <div className="notice" data-tone="warn">
+          <strong>
+            {data.waiting.length} guard{data.waiting.length === 1 ? "" : "s"} not in this run
+          </strong>{" "}
+          (only their pay waits; everyone else is paid here). Each is paid in a later run once the OD/OGM decides the absence.
+          <ul style={{ margin: "4px 0 0 18px", padding: 0 }}>
+            {data.waiting.map((w) => (
+              <li key={w.personId}>
+                {w.staffNo} {w.name}: {w.why.join(" ")}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {data.laterRuns.length > 0 && (
+        <div className="muted small">
+          Later runs this month:{" "}
+          {data.laterRuns.map((r) => `${r.staffNos.join(", ") || "nobody"} (${r.stage})`).join("; ")}
+        </div>
+      )}
       <div className="kpis">
         <Kpi label="Guards and officers" value={totals.headcount} />
         <Kpi label="Net pay" value={rm(totals.net)} />
         <Kpi label="Employer cost" value={rm(totals.cost)} note="Gross, EPF, SOCSO, EIS, HRD" />
         <Kpi label="Overtime hours" value={totals.otHours.toLocaleString("en-MY")} />
-        <Kpi
-          label="Hours recorded / paid"
-          value={`${(totals.hoursRecorded ?? 0).toLocaleString("en-MY")} / ${(totals.hoursPaid ?? 0).toLocaleString("en-MY")}`}
-          tone={totals.hoursMismatch ? "crit" : "ok"}
-          note={totals.hoursMismatch ? `${totals.hoursMismatch} lines do not match` : "Every line matches"}
-        />
       </div>
-      {(totals.hoursMismatch ?? 0) > 0 && (
-        <div className="pp-blocked" role="alert" data-testid="guard-pay-hours-held">
-          <strong>{totals.hoursMismatch === 1 ? "1 line: hours recorded and paid do not match." : `${totals.hoursMismatch} lines: hours recorded and paid do not match.`}</strong>{" "}
-          The month cannot be submitted or approved, and those lines cannot be changed, until the attendance or leave record is corrected (with its own approval and reason), then recalculated.
-        </div>
-      )}
       {data.ja ? (
         <section className="panel">
           <div className="panel-head">
@@ -453,9 +530,23 @@ function RunBody({
                 <button
                   className="btn btn-sm"
                   disabled={act.busy}
-                  onClick={() => step(() => api.prepareGuardPay(run.companyId, run.period), "Recalculated from the latest attendance.")}
+                  onClick={() =>
+                    step(
+                      () => (run.laterOf ? api.prepareGuardPayLater(run.laterOf) : api.prepareGuardPay(run.companyId, run.period)),
+                      "Recalculated from the latest attendance.",
+                    )
+                  }
                 >
                   Recalculate
+                </button>
+              )}
+              {can.prepareLater && (
+                <button
+                  className="btn btn-sm"
+                  disabled={act.busy}
+                  onClick={() => step(() => api.prepareGuardPayLater(run.id), "Later run prepared for the guards whose absence is now decided.")}
+                >
+                  Pay decided guards in a later run
                 </button>
               )}
               {can.submit && (
@@ -489,9 +580,9 @@ function RunBody({
                 <button
                   className="btn btn-sm"
                   disabled={act.busy || !note.trim()}
-                  onClick={() => step(() => api.guardPayStep(run.id, "return", { note }), "Returned to the preparer.")}
+                  onClick={() => step(() => api.guardPayStep(run.id, "return", { note }), "Returned to HR.")}
                 >
-                  Return to the preparer
+                  Return to HR
                 </button>
               )}
             </div>
@@ -559,13 +650,23 @@ function RunBody({
                 {l.formulaCode ?? "No formula"} · {l.daysWorked} days ({l.restDaysWorked} rest, {l.holidaysWorked} holiday) ·{" "}
                 {l.otHours} OT h · gross {rm(l.gross)}
               </div>
-              <HoursChip hours={l.hours} />
+              {l.hours && <HoursLine h={l.hours} />}
               {l.flags.map((f) => (
                 <div key={f} className="small" style={{ color: "var(--warn, #b45309)" }}>
                   {f}
                 </div>
               ))}
-              {can.prepare && (!l.hours || l.hours.match) && <LineEdit runId={run.id} line={l} onChanged={onChanged} />}
+              {(l.exceptions ?? []).length > 0 && (
+                <div className="small" style={{ marginTop: 4 }}>
+                  <strong>Exception list</strong> (the rest of the month is paid)
+                  <ul style={{ margin: "2px 0 0 18px", padding: 0 }}>
+                    {(l.exceptions ?? []).map((x) => (
+                      <li key={x}>{x}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {can.prepare && <LineEdit runId={run.id} line={l} onChanged={onChanged} />}
               {data.role === "hr" && (l.accountProblem || (l.bank && (l.bank.holder ?? "own") !== "own") || l.bank?.kind === "ewallet") && (
                 <ConsentEdit line={l} onChanged={onChanged} />
               )}
@@ -580,7 +681,7 @@ function RunBody({
 
 /**
  * Public holidays for the month. Guard holidays come from the yearly lists the Operations Director or OGM set (per
- * state); the company's preparer enters them here only for a company with no yearly list. Staff holidays are separate.
+ * state); HR enters them here only for a company with no yearly list. Staff holidays are separate.
  */
 function Holidays({ data, onChanged }: { data: GuardPayRunView; onChanged: () => void }) {
   const { run, can } = data;
@@ -632,7 +733,7 @@ function Holidays({ data, onChanged }: { data: GuardPayRunView; onChanged: () =>
       </div>
       {!run.holidays.length && (
         <p className="muted small">
-          None entered. The preparer enters the gazetted holidays for the company's states; until then no day is paid at the holiday rate.
+          None entered. HR enters the gazetted holidays for the company's states; until then no day is paid at the holiday rate.
         </p>
       )}
       <div className="list">
@@ -800,7 +901,7 @@ export function GuardPayslip({
         {l.formulaCode ? ` (${l.formulaCode} v${l.formulaVersion}, ${l.formulaScope})` : ""} · daily rate {rm(l.dailyRate)} (basic ÷ 26) · hourly{" "}
         {rm(l.hourlyRate)} · {l.daysWorked} days worked, {l.paidLeaveDays} paid leave, full month {l.fullMonthDays}
       </p>
-      <PayHoursTable hours={l.hours} />
+      {l.hours && <HoursLine h={l.hours} full />}
       <div className="list">
         {l.items.filter((x) => !(x.kind === "extra" && x.amount < 0) && x.kind !== "advance").map((x) =>
           row(

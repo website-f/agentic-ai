@@ -310,8 +310,9 @@ export function ClaimsPolicy({ d, self }: { d: GuardProfile; self?: boolean }) {
   const r = d.policies.claims;
   return (
     <Sec title="What can be claimed">
+      {!r.set && <p className="pp-note">Not set by HR.</p>}
       <div className="list pp-box">
-        {r.value.map((c) => (
+        {r.items.map((c) => (
           <div key={c.clause} className="list-item">
             <div>
               <div>
@@ -323,11 +324,7 @@ export function ClaimsPolicy({ d, self }: { d: GuardProfile; self?: boolean }) {
           </div>
         ))}
       </div>
-      {!self && (
-        <p className="pp-note">
-          {r.id} · Draft. {r.source}
-        </p>
-      )}
+      {r.set && !self && <p className="pp-note">Set by HR, in force from {r.from}.</p>}
     </Sec>
   );
 }
@@ -339,8 +336,9 @@ export function DisciplinePolicy({ d }: { d: GuardProfile }) {
       <details className="pp-box pp-details">
         <summary>Disciplinary policy and who decides</summary>
         <div className="pp-details-body">
+          {!r.steps.set && <p className="pp-note">Discipline steps: not set by HR.</p>}
           <ol className="list pp-policy-steps">
-            {r.value.steps.map((s) => (
+            {r.steps.items.map((s) => (
               <li key={s.step} className="list-item pp-stack">
                 <div className="pp-strong">{s.step}</div>
                 <div className="small">{s.when}</div>
@@ -351,12 +349,13 @@ export function DisciplinePolicy({ d }: { d: GuardProfile }) {
             ))}
           </ol>
           <ul className="small pp-principles">
-            {r.value.principles.map((p) => (
+            {r.principles.value.principles.map((p) => (
               <li key={p}>{p}</li>
             ))}
           </ul>
           <p className="pp-note">
-            {r.id} · Draft. {r.source}
+            {r.steps.set ? `Steps set by HR, in force from ${r.steps.from}. ` : ''}
+            {r.principles.id}. {r.principles.source}
           </p>
         </div>
       </details>

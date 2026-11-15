@@ -1,10 +1,11 @@
-import { useState } from 'react';
+import { Select } from '../SearchSelect';
+import { SiteSuppliesPanel } from './SiteSupplies';
+import { useState, type ReactNode } from 'react';
 import type { ProofInput } from '@prima/core';
-import { api, type MyItems } from '../api';
+import { api, type MyItems, type UniformRequests } from '../api';
 import { Chip, ErrorNotice, dateLabel, useAction, useLoad } from '../ui';
 import { ProofPicker } from './Proof';
 import { SignaturePad } from './SignaturePad';
-import { UniformRequestsPanel } from './UniformRequests';
 
 type Row = MyItems['items'][number];
 
@@ -31,11 +32,98 @@ export function MyItemsPanel() {
   if (!data) return null;
   return (
     <>
-      {/* I1 (Fauzan, 11 Nov 2026): a government OM asks the Goodwill store for a guard's uniform. */}
-      {data.canRequestUniform && <UniformRequestsPanel place="mine" />}
+      {data.canRequestUniform && <UniformRequestPanel />}
+      {data.canRequestUniform && <SiteSuppliesPanel canAsk />}
       {data.toPassOn.length > 0 && <PassOnPanel rows={data.toPassOn} />}
       {data.items.length > 0 && <IssuedToMe items={data.items} />}
+      {(data.itDevices ?? []).length > 0 && <MyItDevices rows={data.itDevices} />}
+      <MyCharges />
     </>
+  );
+}
+
+/** Part U-X12: a company item damage charge on the person's next pay, shown to them before pay day. */
+function MyCharges() {
+  const { data } = useLoad(() => api.inventoryAct('myCharges', {}).catch(() => ({ rows: [] })) as Promise<{ rows: { id: string; status: string; item: string; amount: number | null; cause: string; period: string; hr: { decision: string; note: string } | null }[] }>, []);
+  if (!data || !data.rows.length) return null;
+  return (
+    <section className="panel">
+      <div className="panel-head">
+        <h3>Kerosakan / kehilangan barang syarikat</h3>
+      </div>
+      {data.rows.map((r) => (
+        <div key={r.id} className="item small">
+          {r.item} · {r.cause} · {r.amount === null ? 'menunggu harga' : `RM${r.amount.toFixed(2)} pada gaji ${r.period}`} <Chip tone={r.status === 'cancelled' ? 'ok' : 'warn'}>{r.status}</Chip>
+          {r.hr ? ` · HR: ${r.hr.decision} (${r.hr.note})` : ' · menunggu semakan HR'}
+        </div>
+      ))}
+    </section>
+  );
+}
+
+type Device = MyItems['itDevices'][number];
+
+/**
+ * "Barang saya": the IT devices this person holds (Merdeka circular MN/CIR/IT/003/2026 point 6). Lapor hilang /
+ * dicuri / rosak opens a help request linked to the device. For a theft the police report number and photo are
+ * optional, with no deadline.
+ */
+function MyItDevices({ rows }: { rows: Device[] }) {
+  return (
+    <section className="panel">
+      <div className="panel-head">
+        <h3>Peranti IT saya</h3>
+      </div>
+      <div className="list">
+        {rows.map((d) => (
+          <DeviceLine key={d.assetId} d={d} />
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function DeviceLine({ d }: { d: Device }) {
+  const act = useAction();
+  const [open, setOpen] = useState(false);
+  const [kind, setKind] = useState<'lost' | 'stolen' | 'damaged' | 'not_working'>('damaged');
+  const [detail, setDetail] = useState('');
+  const [police, setPolice] = useState('');
+  const [photo, setPhoto] = useState<ProofInput[]>([]);
+  return (
+    <div className="list-item" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 6 }}>
+      <div className="row" style={{ justifyContent: 'space-between', gap: 6, flexWrap: 'wrap' }}>
+        <div>
+          <div style={{ fontWeight: 600 }}>{d.name}</div>
+          <div className="muted small">
+            {d.label}
+            {d.serial ? ` · ${d.serial}` : ''}
+          </div>
+        </div>
+        {d.report ? <Chip tone="warn">Dilaporkan: {d.report.ref}</Chip> : <button className="btn btn-sm" onClick={() => setOpen(!open)}>Lapor hilang / dicuri / rosak</button>}
+      </div>
+      {open && !d.report && (
+        <>
+          <Select className="select" aria-label="What happened" value={kind} onChange={(e) => setKind(e.target.value as typeof kind)}>
+            <option value="damaged">Rosak</option>
+            <option value="not_working">Tidak berfungsi</option>
+            <option value="lost">Hilang</option>
+            <option value="stolen">Dicuri</option>
+          </Select>
+          <textarea className="input" aria-label="What happened, where and when" placeholder="Apa berlaku, di mana dan bila" value={detail} onChange={(e) => setDetail(e.target.value)} />
+          {kind === 'stolen' && (
+            <>
+              <input className="input" aria-label="Police report number (optional)" placeholder="Nombor laporan polis (pilihan)" value={police} onChange={(e) => setPolice(e.target.value)} />
+              <ProofPicker site={null} refText="Gambar laporan polis (pilihan)" items={photo} onChange={setPhoto} documentsOnly noLinks />
+            </>
+          )}
+          <button className="btn btn-primary btn-sm" disabled={act.busy} onClick={() => void act.run(() => api.reportItDevice({ assetId: d.assetId, kind, detail, policeReportNo: police || undefined, policePhoto: photo }), 'Dihantar kepada IT.')}>
+            Hantar laporan
+          </button>
+        </>
+      )}
+      <ErrorNotice error={act.error} />
+    </div>
   );
 }
 
@@ -251,6 +339,150 @@ function PassOnLine({ r }: { r: PassOn }) {
           )}
         </>
       )}
+      <ErrorNotice error={act.error} />
+    </div>
+  );
+}
+
+type UReq = UniformRequests['requests'][number];
+
+const REQ_TONE = { open: 'warn', issued: 'ok', refused: 'crit', cancelled: 'neutral' } as const;
+const REQ_LABEL = { open: 'Waiting for the store', issued: 'Issued: confirm and collect signatures below', refused: 'Refused', cancelled: 'Cancelled' } as const;
+
+/**
+ * An Operations Manager asks the Goodwill store for a uniform for a guard (Fauzan, 11 Nov 2026). Once the store issues
+ * it, it appears under "Items to pass on", where the patrolling officer and the guard sign on this phone, because the
+ * shared site device and the guard app are not available yet.
+ */
+function UniformRequestPanel() {
+  const { data, error } = useLoad(() => api.uniformRequests(), []);
+  const act = useAction();
+  const [open, setOpen] = useState(false);
+  const [staffNo, setStaffNo] = useState('');
+  const [itemId, setItemId] = useState('');
+  const [qty, setQty] = useState('1');
+  const [reason, setReason] = useState('');
+  const [pays, setPays] = useState(false);
+  const [receiptNo, setReceiptNo] = useState('');
+  const [amount, setAmount] = useState('');
+  if (error) return <ErrorNotice error={error} />;
+  if (!data) return null;
+  const waiting = data.requests.filter((r) => r.status === 'open').length;
+  return (
+    <section className="panel">
+      <div className="panel-head">
+        <h3>Uniform requests</h3>
+        {waiting > 0 && <Chip tone="warn">{waiting} waiting</Chip>}
+        <button className="btn btn-sm btn-primary" onClick={() => setOpen(!open)}>
+          Ask for a uniform
+        </button>
+      </div>
+      <p className="muted small">
+        Ask the Goodwill store for a uniform for a guard. Up to {data.rule.freePerYear} free pieces in 12 months, usually 1 every{' '}
+        {data.rule.everyMonths} months. Pieces after the free ones only if the guard pays (never from pay). When the store issues it, it comes to you; the
+        patrolling officer and the guard sign on your phone under "Items to pass on".
+      </p>
+      {open && (
+        <div style={{ display: 'grid', gap: 6 }}>
+          <input className="input" aria-label="Guard staff number" placeholder="Guard's staff number" value={staffNo} onChange={(e) => setStaffNo(e.target.value)} />
+          <Select className="input" aria-label="Uniform" value={itemId} onChange={(e) => setItemId(e.target.value)}>
+            <option value="">Uniform and size…</option>
+            {data.uniforms.map((u) => (
+              <option key={u.id} value={u.id}>
+                {u.name} ({u.onHand} in store)
+              </option>
+            ))}
+          </Select>
+          <input className="input" aria-label="Pieces" placeholder="Pieces" inputMode="numeric" value={qty} onChange={(e) => setQty(e.target.value)} />
+          <input
+            className="input"
+            aria-label="Why the guard needs it"
+            placeholder="Why: new guard, worn out, torn, wrong size…"
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+          />
+          <label className="small row" style={{ gap: 6 }}>
+            <input type="checkbox" checked={pays} onChange={(e) => setPays(e.target.checked)} /> The guard pays for this piece (after the free ones in 12 months)
+          </label>
+          {pays && (
+            <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
+              <input className="input" aria-label="Receipt number" placeholder="Receipt number" value={receiptNo} onChange={(e) => setReceiptNo(e.target.value)} />
+              <input className="input" aria-label="Amount paid (RM)" placeholder="Amount paid (RM)" inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} />
+            </div>
+          )}
+          <button
+            className="btn btn-sm btn-primary"
+            disabled={act.busy || !staffNo.trim() || !itemId || !reason.trim()}
+            onClick={() =>
+              act.run(
+                async () => {
+                  await api.requestUniform({
+                    staffNo,
+                    stockItemId: itemId,
+                    qty: Number(qty),
+                    reason,
+                    guardPays: pays ? { receiptNo, amount: Number(amount) } : null,
+                  });
+                  setStaffNo('');
+                  setReason('');
+                  setPays(false);
+                  setReceiptNo('');
+                  setAmount('');
+                  setOpen(false);
+                },
+                'Sent to the Goodwill store.',
+              )
+            }
+          >
+            Send to the store
+          </button>
+          <ErrorNotice error={act.error} />
+        </div>
+      )}
+      {data.requests.length > 0 && (
+        <div className="list">
+          {data.requests.map((r) => (
+            <UniformRequestLine key={r.id} r={r} mine />
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+export function UniformRequestLine({ r, mine, children }: { r: UReq; mine?: boolean; children?: ReactNode }) {
+  const act = useAction();
+  return (
+    <div className="list-item" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 6 }}>
+      <div className="row" style={{ justifyContent: 'space-between', gap: 6, flexWrap: 'wrap' }}>
+        <div style={{ minWidth: 0 }}>
+          <div style={{ fontWeight: 600 }}>
+            {r.qty} x {r.itemName} for {r.personName} ({r.staffNo})
+          </div>
+          <div className="muted small">
+            Asked {dateLabel(r.requestedAt.slice(0, 10))} by {r.requestedBy} · {r.reason}
+            {` · ${r.history.pieces} piece${r.history.pieces === 1 ? '' : 's'} in 12 months`}
+            {r.history.last ? `, last ${dateLabel(r.history.last)}` : ''}
+            {r.early ? ' · within 6 months of the last piece' : ''}
+            {r.guardPays ? ` · guard pays, receipt ${r.guardPays.receiptNo}, RM${r.guardPays.amount.toFixed(2)}` : ''}
+          </div>
+          {r.decided && (
+            <div className="small">
+              {r.decided.by} {dateLabel(r.decided.at.slice(0, 10))}
+              {r.decided.note ? `: ${r.decided.note}` : ''}
+            </div>
+          )}
+        </div>
+        <Chip tone={REQ_TONE[r.status]}>{REQ_LABEL[r.status]}</Chip>
+      </div>
+      {mine && r.status === 'open' && (
+        <div className="row" style={{ gap: 6 }}>
+          <button className="btn btn-sm" disabled={act.busy} onClick={() => act.run(() => api.decideUniformRequest(r.id, 'cancel', {}), 'Request cancelled.')}>
+            Cancel request
+          </button>
+        </div>
+      )}
+      {children}
       <ErrorNotice error={act.error} />
     </div>
   );

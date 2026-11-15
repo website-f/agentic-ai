@@ -3,14 +3,13 @@ import { ItExtractionController } from './arisha-it-extraction.controller';
 import { ItImportReviewController } from './arisha-it-import.controller';
 import { DraftHelpController } from './draft-help.controller';
 import { StaffDirectoryController } from './staff-directory.controller';
-import { BulkManagerController } from './bulk-manager.controller';
-import { ArishaTrainerController } from './arisha-trainer.controller';
 import { jobEmailRuntimeModule } from './connections-mail/controllers';
 import { Module } from '@nestjs/common';
 import { AnalyticsFeedController, AppController, InhouseFeedController, AuthController, DoorFeedController, HealthController, JaFeedController, OfficeController, PlannerFeedController, ShareController } from './controllers';
 import { Db } from './db';
 import { GuardPhoneController, GuardPhoneOpenController } from './guard-phone.controller';
 import { CleaningController } from './cleaning.controller';
+import { RosterController } from './roster.controller';
 import { ConnectionsController } from './connections.controller';
 import { SharePointConnections } from './connections';
 import { alertsModule } from './alerts/controller';
@@ -21,19 +20,7 @@ import { WHATSAPP_CONTROLLERS, WhatsAppRunner } from './whatsapp';
 import { OfflineController } from './offline.controller';
 // Agentic Office: office sign-in/hosting routes, staff check-in by place and the InfoTech attendance PDF reports.
 import { CheckinController } from './checkin.controller';
-// P100 newa (Fauzan, 11 Nov 2026): new workflow controllers.
-import { SocsoExtrasController } from './socso-extras.controller';
-import { FwExtrasController } from './fw-extras.controller';
-import { PikmController } from './pikm.controller';
-import { ResignationsController } from './resignations.controller';
-import { WarrantyController } from './warranty.controller';
 import { AttendanceReportsController, AttendanceUploads } from './attendance-reports.controller';
-// P100 newb: E6 vehicle moves between companies.
-import { VehicleTransferController } from './vehicle-transfer.controller';
-import { CmsSignInController } from './cms-signin.controller';
-import { ClientPortalController, ClientPortalStaffController, ShareReportPdfController } from './client-portal.controller';
-import { GuardSignInsController } from './guard-signins.controller';
-import { LocationRetentionJob } from './location-retention';
 
 const jobEmail = jobEmailRuntimeModule();
 const teamsEvidence=teamsEvidenceModule();
@@ -41,7 +28,7 @@ const alerts = alertsModule();
 const m365 = m365ConnectionsModule();
 
 @Module({
-  controllers: [HealthController, AttendanceReportsController, AuthController, OfficeController, CheckinController, AppController, JaFeedController, DoorFeedController, PlannerFeedController, AnalyticsFeedController, InhouseFeedController, ConnectionsController, ItExtractionController, ItImportReviewController, ...jobEmail.controllers, ...teamsEvidence.controllers, OfflineController, ...SPECIAL_OPS_CONTROLLERS, ...WHATSAPP_CONTROLLERS, OrgHealthController, OrgController, ...m365.controllers, ShareController, StaffDirectoryController, CleaningController, ...alerts.controllers, DraftHelpController, GuardPhoneOpenController, GuardPhoneController, VehicleTransferController, CmsSignInController, ClientPortalController, ClientPortalStaffController, ShareReportPdfController, GuardSignInsController, SocsoExtrasController, FwExtrasController, PikmController, ResignationsController, BulkManagerController, ArishaTrainerController, WarrantyController],
-  providers: [Db, LocationRetentionJob, { provide: SharePointConnections, useFactory: () => new SharePointConnections() }, { provide: AttendanceUploads, useFactory: () => new AttendanceUploads() }, ...jobEmail.providers, ...teamsEvidence.providers, WhatsAppRunner, ...m365.providers, ...alerts.providers],
+  controllers: [HealthController, AttendanceReportsController, AuthController, OfficeController, CheckinController, AppController, JaFeedController, DoorFeedController, PlannerFeedController, AnalyticsFeedController, InhouseFeedController, ConnectionsController, ItExtractionController, ItImportReviewController, ...jobEmail.controllers,...teamsEvidence.controllers, OfflineController, ...SPECIAL_OPS_CONTROLLERS, ...WHATSAPP_CONTROLLERS, OrgHealthController, OrgController, ...m365.controllers, ShareController, StaffDirectoryController, CleaningController, RosterController, ...alerts.controllers, DraftHelpController, GuardPhoneOpenController, GuardPhoneController],
+  providers: [Db, { provide: SharePointConnections, useFactory: () => new SharePointConnections() }, { provide: AttendanceUploads, useFactory: () => new AttendanceUploads() }, ...jobEmail.providers,...teamsEvidence.providers, WhatsAppRunner, ...m365.providers, ...alerts.providers],
 })
 export class AppModule {}

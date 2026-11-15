@@ -42,7 +42,7 @@ deduction, purchase or tax filing.
 | Concurrency and double taps | Every write carries a request id (same id + same change = first result; different change = refused); per-item locks; version checks. |
 | SQL outbox | `ItemSyncJob` per book, document type, source and revision, with payload hash. Always `not_ready` with reasons. No sending code exists. |
 | Reconciliation | Board checks: in transit, ownership to record, one-sided documents, overdue rentals, unconfirmed handovers, negative stock, open cases, unverified opening balances. |
-| Uniform allowance (Fauzan, 6 Nov 2026) | Each guard gets at least 2 and at most 3 uniform pieces a year, usually 1 every 6 months (`UNIFORM_RULE`). Counted per person over the last 12 months; one unit counts once even if handed over again; a uniform set counts as one piece. A piece within 6 months of the last needs a reason (kept in the audit trail). A 4th or 5th piece in 12 months is allowed only when the guard pays, with the receipt number and amount recorded (`UniformRecord` kind `paid`, never taken from pay); a 6th is refused. A company manager records pieces given before the register (kind `past`) for one guard or in bulk for a site (latest shift), zone (branch state) or region; each guard is checked on its own and skipped if it would go over 3 free pieces or already has an entry that day. Uniforms tab for the store, managers and group leaders; the guard sees their own count. |
+| Uniform allowance (Fauzan, 6 Nov 2026) | Each guard gets at least 2 and at most 3 uniform pieces a year, usually 1 every 6 months (`UNIFORM_RULE`). Counted per person over the last 12 months; one unit counts once even if handed over again; a uniform set counts as one piece. A piece within 6 months of the last needs a reason (kept in the audit trail). Every piece after the 3rd in 12 months is allowed only when the guard pays, with the receipt number and amount recorded (`UniformRecord` kind `paid`, never taken from pay); no upper limit while the setting `UNIFORM_RULE.paidMaxPerYear` is empty (Fauzan, 13 Nov 2026 23:52Z; earlier a 6th was refused). A company manager records pieces given before the register (kind `past`) for one guard or in bulk for a site (latest shift), zone (branch state) or region; each guard is checked on its own and skipped if it would go over 3 free pieces or already has an entry that day. Uniforms tab for the store, managers and group leaders; the guard sees their own count. |
 | Company walls | Rows carry `partyIds`; another company's people are shown as "a <company> staff member"; another company's label returns "not found". |
 
 ## Who does what (assumptions to confirm)
@@ -65,14 +65,7 @@ deduction, purchase or tax filing.
 ## Decisions still needed (paper section 14)
 
 - **D01** Fauzan, 6 Nov 2026: "Sasa Security" in the paper is an example; the buyer is whichever group company buys.
-  Decided by Fauzan, 11 Nov 2026 (E11): **one SQL Account book per company**, and Goodwill Empire Sdn Bhd is on the
-  company list. In Prima the item register's company list is the central entities (PWVSB, Merdeka Network, Goodwill
-  Empire, `items.ts` CENTRAL_PARTIES) plus every company master record; Goodwill keeps its structural id `goodwill` and,
-  as a central employer, has no company master record (the same as PWVSB and Merdeka). Each company's legal name,
-  registration number and book id are entered by Finance in Items, Finance and SQL (`book.set`), verified by a second
-  Finance person; a book id already recorded for another company is refused. Real company master records are data: they
-  come from the real-data file read by db-setup on an empty database (`scripts/build-real-data.mjs`, `PRIMA_REAL_DATA`),
-  never from code.
+  The SQL book per entity is still to confirm, and Goodwill Empire is not yet in the company master.
 - **D02** Fauzan, 6 Nov 2026: ownership passes to the buyer, and seller and buyer both monitor each item's lifecycle.
   Fauzan, 6 Nov 2026: the trigger is all of receipt, invoice, payment slip and a letter of acknowledgement of the
   items received. Finance then records ownership.
@@ -120,3 +113,20 @@ Lifecycle event and case authors carry their own company scope, separately from 
 The optional PostgreSQL store now calls the existing protection verifier before item-table reads/writes, including required unique-index presence/validity checks. This is a fail-closed catalogue gate, not proof that policy expressions, index definitions, or production RLS behave correctly. The proposed module remains outside startup migrations. No live database activation, migration, server-face enablement, SQL Account posting or payment is part of these repairs.
 
 Regression checks include synthetic MemoryStore workflows, mocked camera cancellation and catalogue responses, plus disposable PostgreSQL16 tests for simultaneous stock receipts, a blocked stale read, replay, company walls, append-only grants and readiness drift. CI runs these against its ephemeral service, never a live database. Physical browser/camera checks and broader operational concurrency/security validation remain required before activation.
+
+## IT section: Merdeka IT policies (Part Q, 13-14 Nov 2026)
+
+An IT asset is handed over only with its item-register label linked, the serial, the purchase details and cost (or
+"maklumat pembelian tiada" for an old asset with no purchase evidence; never invented), the custodian and the location
+(Q11), and, when it goes to a different person, a checked data wipe (Q17). The item register's own disposal request
+refuses IT-linked units: an IT device is disposed only through the IT disposal record (Q16), so there is one disposal
+record per device. See `docs/IT_POLICIES_MERDEKA.md`.
+
+## Part U (14 Nov 2026): counts and disposal
+
+- Store items are counted in the inventory count sessions (`docs/INVENTORY_CONTROL.md`). The register's own unit
+  counts stay as they are.
+- A store item or a site item goes to disposal through the inventory disposal case (`docs/DISPOSAL_OF_GOODS.md`). A
+  register unit keeps the register's `dispose` case.
+- A confirmed loss or damage records its cause. Negligence or misuse decided by the manager becomes a damage charge,
+  which HR reviews (U-X12). This replaces "never charged" for company item damage only.

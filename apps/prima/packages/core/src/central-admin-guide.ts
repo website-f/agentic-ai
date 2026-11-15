@@ -36,7 +36,7 @@ export interface GuideField {
 export interface GuideCard {
   id: string;
   roles: GuideRoleKey[];
-  view: 'corporate' | 'renewals' | 'credit' | 'doa' | 'requests' | 'work';
+  view: 'corporate' | 'renewals' | 'credit' | 'doa' | 'requests' | 'work' | 'meetings';
   tab?: string;
   title: T;
   purpose: T;
@@ -258,6 +258,142 @@ export const CENTRAL_ADMIN_GUIDE: GuideCard[] = [
       'No button? The step belongs to someone else or an earlier step is not done.',
     ),
     limits: t('Aplikasi tidak menghantar apa-apa kepada agensi dan tidak membayar.', 'The app sends nothing to the agency and pays nothing.'),
+  },
+  {
+    id: 'toolbox',
+    roles: ['admin_exec', 'company_manager', 'director_office', 'task_owner'],
+    view: 'meetings',
+    title: t('Mesyuarat Toolbox syarikat dan jabatan', 'Company and department toolbox meeting'),
+    purpose: t(
+      'Mesyuarat status setiap 2 minggu dengan agenda piawai yang memantau seluruh pengurusan syarikat atau jabatan.',
+      'The status meeting every 2 weeks with the standard agenda that monitors the whole management of the company or department.',
+    ),
+    responsible: t(
+      'Eksekutif pentadbiran atau ahli jabatan menyediakan; pengarah yang mempengerusikan (atau pengurus syarikat, ketua jabatan, atau pengarah pusat yang hadir) mengesahkan.',
+      'An admin executive or a department member prepares; the director who chairs (or the company manager, the department head, or the visiting central director) verifies.',
+    ),
+    where: t(
+      'Mesyuarat > Toolbox > pilih mesyuarat > "Bina pek status", tandakan setiap seksyen, "Hantar untuk pengesahan", "Sahkan".',
+      'Meetings > Toolbox > choose the meeting > "Bina pek status", tick each section, "Hantar untuk pengesahan", "Sahkan".',
+    ),
+    fields: [
+      f('Baris status', 'Status line', false, 'Perkara, status, pemilik, tarikh sasaran', 'Matter, status, owner, target date', 'Cawangan Kedah: alamat baharu (mock)'),
+      f('Minit atau nota AI', 'Minutes or AI notes', true, 'Teks atau fail (Loop, Notes, Word, PDF)', 'Text or file (Loop, Notes, Word, PDF)', 'loop-notes.pdf (mock)'),
+    ],
+    source: t(
+      'Pek status dibina daripada rekod syarikat atau jabatan sendiri dalam Prima; perkara lain sebagai baris status.',
+      "The status pack is built from the company's or department's own records in Prima; other matters as status lines.",
+    ),
+    ask: t('Kewangan untuk bil, PGM dan SULIT; Pentadbiran Pusat untuk lesen; Pejabat Pengarah untuk giliran pengarah pusat.', 'Finance for billing, PGM and SULIT; Central Admin for licences; the Director Office for the central director rotation.'),
+    reuse: t('Baris terbuka dibawa ke mesyuarat seterusnya dengan sendirinya.', 'Open lines carry into the next meeting by themselves.'),
+    steps: [
+      t('Bina pek status sebelum mesyuarat; kemas kini baris status.', 'Build the status pack before the meeting; update the status lines.'),
+      t('Tandakan setiap seksyen "berubah" atau "tiada perubahan"; tampal minit atau nota AI dan tandakan sudah disemak.', 'Tick each section "changed" or "no change"; paste the minutes or AI notes and tick that you checked them.'),
+      t('Hantar untuk pengesahan; pengesah memberi ulasan; minit dikunci dan boleh dimuat turun.', 'Submit for verification; the verifier comments; the minutes lock and can be downloaded.'),
+    ],
+    returned: t('Dikembalikan dengan sebab: betulkan dan hantar semula.', 'Returned with a reason: fix and submit again.'),
+    evidence: t('Pek beku dengan tarikh data, siapa menyediakan dan mengesahkan, setiap versi dalam sejarah.', 'The frozen pack with its data date, who prepared and verified, every version in the history.'),
+    recover: t('Ditolak kerana sama seperti mesyuarat lepas? Kemas kini minit atau beri sebab.', 'Refused as the same as the last meeting? Update the minutes or give the reason.'),
+    limits: t('Prima tidak menyambung ke Loop atau OneNote; tampal atau muat naik sahaja. Tiada nombor IC atau nombor akaun penuh.', 'Prima does not connect to Loop or OneNote; paste or upload only. No IC numbers or full account numbers.'),
+  },
+  {
+    id: 'group-monthly',
+    roles: ['admin_exec', 'company_manager', 'director_office'],
+    view: 'meetings',
+    title: t('Laporan mesyuarat bulanan JA Group', 'Monthly JA Group meeting report'),
+    purpose: t(
+      'Setiap syarikat melapor 14 perkara setiap bulan; laporan dibina dari rekod Prima dan pek toolbox yang disahkan, jadi tiada jadual ditaip dua kali.',
+      "Every company reports on 14 items each month; the report is built from Prima's records and the verified toolbox pack, so no table is typed twice.",
+    ),
+    responsible: t(
+      'Eksekutif pentadbiran menyediakan; pengurus syarikat mengesahkan (bukan penyedia). Unit HR menetapkan tarikh dan melihat siapa belum hantar.',
+      'The admin executive prepares; the company manager verifies (never the preparer). Unit HR sets the date and sees who has not sent.',
+    ),
+    where: t(
+      'Mesyuarat > Mesyuarat bulanan JA Group > "Laporan bulanan" > "Bina laporan dari rekod", "Simpan catatan", "Hantar untuk pengesahan".',
+      'Meetings > Mesyuarat bulanan JA Group > "Laporan bulanan" > "Bina laporan dari rekod", "Simpan catatan", "Hantar untuk pengesahan".',
+    ),
+    fields: [
+      f('Catatan perkara', 'Item note', false, 'Status terkini dan tanda berubah / tiada perubahan', 'Latest status and the changed / no change tick', 'Modal berbayar RM500,000 (mock)'),
+      f('Kaedah bayaran gaji pengawal', 'Guard pay method', true, 'Bilangan pindahan, tiada akaun bank, tunai', 'Counts by transfer, no bank account, cash', '40 / 2 / 1 (mock)'),
+    ],
+    source: t('Pek toolbox terakhir yang disahkan, daftar setiausaha syarikat, kes Undang-undang, daftar JTK dan kiraan bayaran gaji.', 'The last verified toolbox pack, the company secretary register, Legal cases, the JTK register and the pay method counts.'),
+    ask: t('Unit HR untuk tarikh mesyuarat; Audit Dalaman untuk penjejak laporan akaun.', 'Unit HR for the meeting date; Internal Audit for the accounts report tracker.'),
+    reuse: t('Pek toolbox disahkan digunakan semula; hanya perkara bulanan ditambah.', 'The verified toolbox pack is reused; only the monthly items are added.'),
+    steps: [
+      t('Rekod kiraan bayaran gaji pengawal dan daftar JTK bulan itu.', 'Record the guard pay method counts and the JTK register for the month.'),
+      t('Bina laporan, tulis catatan dan tandakan setiap perkara; hantar 3 hari bekerja sebelum mesyuarat.', 'Build the report, write the notes and tick every item; submit 3 working days before the meeting.'),
+      t('Pengurus syarikat mengesahkan dengan ulasan atau mengembalikan dengan sebab.', 'The company manager verifies with a comment or returns it with a reason.'),
+    ],
+    returned: t('Dikembalikan dengan sebab: betulkan dan hantar semula.', 'Returned with a reason: fix and submit again.'),
+    evidence: t('Laporan beku dengan tarikh data, penyedia dan pengesah dalam sejarah.', 'The frozen report with its data date, the preparer and the verifier in the history.'),
+    recover: t('Ditolak kerana catatan sama seperti bulan lepas? Kemas kini catatan atau tandakan tiada perubahan.', "Refused as the same as last month? Update the note or tick no change."),
+    limits: t('Prima tidak menghantar jemputan Outlook. Butiran atas nama individu hanya dalam SULIT; tiada nama pengadu JTK.', 'Prima sends no Outlook invite. Items in one person\'s name only in SULIT; no JTK complainant names.'),
+  },
+  {
+    id: 'duty-checklist',
+    roles: ['company_manager', 'admin_exec', 'task_owner'],
+    view: 'meetings',
+    title: t('Senarai tugas harian, bulanan dan tahunan', 'Daily, monthly and yearly duty checklist'),
+    purpose: t('Senarai tugas sebenar menggantikan pelan peranan draf; setiap baris ada tempoh dan PIC.', 'The real duty checklist replaces the draft role playbook; every line has a window and a person in charge.'),
+    responsible: t('Pengurus syarikat atau ketua unit memuat dan menjaga senarai; PIC membuat tugas; pengurus, atau penyemak yang dinamakan pada baris itu, menerima atau mengembalikan. Rekod daftar (pemfaktoran, notis kontrak, HRDF, tabung kebajikan dan lain-lain) di tab "Daftar tugas".', 'The company manager or the unit head loads and keeps the list; the person in charge does the task; the manager, or the checker named on that line, accepts or returns it. Register records (factoring, contract notices, HRDF, welfare fund and others) are on the "Daftar tugas" tab.'),
+    where: t('Mesyuarat > Mesyuarat bulanan JA Group > "Senarai tugas" > "Muat templat kumpulan" atau "Tambah baris".', 'Meetings > Mesyuarat bulanan JA Group > "Senarai tugas" > "Muat templat kumpulan" or "Tambah baris".'),
+    fields: [f('Tempoh', 'Window', true, 'Dari hari hingga hari (contoh 5-15hb); bulan untuk tugas tahunan', 'From day to day (e.g. 5-15hb); the month for a yearly duty', '5-15 (mock)')],
+    source: t('Templat kumpulan dari senarai semak setiap syarikat; syarikat menambah atau membuang barisnya sendiri.', "The group template from every company's checklist; each company adds or removes its own lines."),
+    ask: t('Ketua anda untuk baris yang tiada dalam templat.', 'Your head for a line the template lacks.'),
+    reuse: t('Tugas dibuka sendiri dalam Kerja Saya pada awal tempohnya.', 'The task opens by itself in My Work at the start of its window.'),
+    steps: [
+      t('Muat templat untuk setiap orang dan tetapkan pengganti.', 'Load the template for each person and set a backup.'),
+      t('Siapkan tugas dalam tempoh dengan bukti; itu dikira tepat masa dalam KPI.', 'Finish the task inside its window with proof; that counts as on time in the KPI.'),
+    ],
+    returned: t('Tugas dikembalikan oleh pengurus: betulkan dan tandakan siap semula.', 'A task returned by the manager: fix it and mark it done again.'),
+    evidence: t('Bukti pada tugas, siapa menerima, dan sejarah setiap baris senarai.', 'The proof on the task, who accepted it, and the history of every checklist line.'),
+    recover: t('Baris salah? Pengurus "Buang baris" dengan sebab dan tambah yang betul.', 'A wrong line? The manager uses "Buang baris" with a reason and adds the right one.'),
+    limits: t('Baris sebenar dimuat apabila data sebenar dibenarkan; ujian guna data rekaan.', 'Real lines are loaded when real data is allowed; tests use made-up data.'),
+  },
+  {
+    id: 'renewal-kdn',
+    roles: ['admin_exec', 'company_manager', 'corp_owner'],
+    view: 'renewals',
+    title: t('Pembaharuan Lesen KDN 2027', 'KDN licence renewal 2027'),
+    purpose: t(
+      'Senarai semak KDN tahunan, semakan tarikh setiap dokumen, eSIMS, janji temu Hari Bertemu Pelanggan dan keputusan hari itu.',
+      "KDN's yearly checklist, a date check on each paper, eSIMS, the Hari Bertemu Pelanggan appointment and the result of the day.",
+    ),
+    responsible: t(
+      'Eksekutif pentadbiran menyediakan; ketua syarikat mengesahkan bilangan CSG/TNG; pengurus syarikat menyemak; pengarah menandatangani; Kewangan tanda SST; FWM tanda pengawal Nepal dalam eSIMS.',
+      'An admin executive prepares; the company head confirms the CSG/TNG counts; the company manager checks; a director signs; Finance ticks SST; FWM marks Nepali guards in eSIMS.',
+    ),
+    where: t(
+      'Pembaharuan > Pembaharuan Lesen KDN > syarikat > "Buka pembaharuan KDN", "Sedia" bagi setiap dokumen, "Rekod janji temu", "Keputusan hari itu", "Muat turun pek pendrive".',
+      'Renewals > KDN licence renewal > company > "Buka pembaharuan KDN", "Sedia" on each paper, "Rekod janji temu", "Keputusan hari itu", "Muat turun pek pendrive".',
+    ),
+    fields: [
+      f('Fail PDF atau imbasan', 'PDF or scan', true, 'Fail', 'File', 'insolvency-search.pdf (mock)'),
+      f('Tarikh dokumen atau bulan diliputi', 'Paper date or months covered', true, 'Tarikh atau YYYY-MM', 'Date or YYYY-MM', '2026-10-05, 2026-01 to 2026-07 (mock)'),
+      f('Sesi, tarikh dan rujukan janji temu eSIMS', 'Session, date and eSIMS appointment reference', true, 'Nombor, tarikh, teks', 'Number, date, text', 'Sesi 5, 24/11/2026, JT-1 (mock)'),
+    ],
+    source: t(
+      'Surat dan senarai semak KDN tahun ini; eSIMS (di luar aplikasi); rekod Kewangan, insurans dan FWM dalam Prima sebagai petunjuk sahaja.',
+      "This year's KDN letter and checklist; eSIMS (outside the app); Prima's Finance, insurance and FWM records as hints only.",
+    ),
+    ask: t(
+      'Pentadbiran Pusat untuk tetingkap dan 2(b); Kewangan untuk SST; FWM untuk pengawal Nepal.',
+      'Central Admin for the window and 2(b); Finance for SST; FWM for Nepali guards.',
+    ),
+    reuse: t('Lesen KDN sedia ada dibuka dari senarai.', 'The existing KDN licence opens from the list.'),
+    steps: [
+      t('Buka pembaharuan; sediakan setiap dokumen dengan fail dan tarikh.', 'Open the renewal; make each paper ready with its file and date.'),
+      t('Kemas kini eSIMS; tempah janji temu dalam sesi; ketua sahkan bilangan; pengurus semak.', 'Update eSIMS; book the appointment in a session; the head confirms the counts; the manager checks.'),
+      t('Pengarah tanda akuan dan tandatangan; muat turun pek; rekod yuran dan keputusan hari itu.', 'A director ticks the declaration and signs; download the pack; record the fee and the result of the day.'),
+    ],
+    returned: t(
+      'Dokumen tidak lengkap: dokumen yang dinamakan dibuka semula dan sesi 7 dibuka untuk syarikat ini.',
+      'Papers lacking: the named papers reopen and session 7 opens to this company.',
+    ),
+    evidence: t('Fail, tarikh, tandatangan pengarah dan keputusan dalam sejarah lesen; ikrar anti rasuah disimpan untuk ACT.', 'Files, dates, the director signature and the result in the licence history; the anti-corruption pledge kept for ACT.'),
+    recover: t('Tidak boleh tandatangan? Senarai "Sebelum tandatangan" menunjukkan apa yang belum siap.', 'Cannot sign? The "Sebelum tandatangan" list shows what is not done.'),
+    limits: t('Prima tidak log masuk eSIMS, tidak menghantar dan tidak membayar. Tiada hadiah kepada pegawai KDN.', 'Prima never logs in to eSIMS, lodges or pays. No gifts to KDN officers.'),
   },
   {
     id: 'panel-firm',
@@ -701,6 +837,7 @@ const NAMES: Record<GuideCard['view'], string> = {
   doa: 'Director Office',
   requests: 'Requests',
   work: 'Work',
+  meetings: 'Meetings',
 };
 
 /** What the shared format needs beyond the cards above: whom to ask (a desk, or the record keepers), the review step,
@@ -736,6 +873,40 @@ const EXTRA: Record<string, Pick<SharedGuideCardSpec, 'status' | 'sources' | 'no
       ),
     ],
     actions: ['renewal.'],
+  },
+  toolbox: {
+    status: 'ready',
+    sources: [{ what: st('', ''), askDesk: 'company_office' }],
+    review: st('Pengarah yang mempengerusikan, pengurus syarikat, ketua jabatan atau pengarah pusat mengesahkan; bukan penyedia.', 'The director who chairs, the company manager, the department head or the central director verifies; never the preparer.'),
+    notVerified: [st('Modul rekod toolbox belum dipasang di mana-mana pangkalan data.', 'The toolbox records module is not installed in any database yet.')],
+    actions: ['toolbox.'],
+  },
+  'group-monthly': {
+    status: 'ready',
+    sources: [{ what: st('', ''), askDesk: 'company_office' }],
+    review: st('Pengurus syarikat mengesahkan laporan syarikat; ketua unit untuk laporan unit; bukan penyedia.', 'The company manager verifies the company report; the unit head the unit report; never the preparer.'),
+    notVerified: [st('Modul rekod mesyuarat bulanan belum dipasang di mana-mana pangkalan data.', 'The monthly meeting records module is not installed in any database yet.')],
+    actions: ['groupMonth.report.', 'groupMonth.jtk', 'groupMonth.payMethod'],
+  },
+  'duty-checklist': {
+    status: 'ready',
+    sources: [{ what: st('', ''), askDesk: 'company_office' }],
+    review: st('Pengurus, ketua atau penyemak yang dinamakan menerima atau mengembalikan tugas; bukan orang yang membuatnya.', 'The manager, head or named checker accepts or returns the task; never the person who did it.'),
+    notVerified: [st('Modul rekod mesyuarat bulanan dan modul daftar tugas belum dipasang di mana-mana pangkalan data.', 'The monthly meeting records module and the duty registers module are not installed in any database yet.')],
+    actions: ['groupMonth.duty'],
+  },
+  'renewal-kdn': {
+    status: 'ready',
+    sources: [
+      { what: st('', ''), askDesk: 'company_office' },
+      { what: st('Pengesahan tiada tunggakan SST.', 'The no-SST-arrears confirmation.'), askDesk: 'finance' },
+    ],
+    review: st('Pengurus syarikat menyemak; seorang pengarah syarikat menandatangani, bukan penyedia atau penyemak.', 'The company manager checks; a director of the company signs, never the preparer or the checker.'),
+    notVerified: [
+      st('Tiada sambungan ke eSIMS; janji temu dan penghantaran dibuat di luar aplikasi.', 'No connection to eSIMS; the appointment and lodging happen outside the app.'),
+      st('Modul rekod KDN belum dipasang di mana-mana pangkalan data.', 'The KDN records module is not installed in any database yet.'),
+    ],
+    actions: ['renewal.kdn.'],
   },
   'panel-firm': {
     status: 'partial',

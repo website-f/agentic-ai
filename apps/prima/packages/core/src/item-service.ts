@@ -1,4 +1,5 @@
 // One item register for the whole group: server rules (Fauzan, 6 Nov 2026; Fitri's paper v1.0 sections 2-10).
+import { sqlConfirmedBook } from './sql-posting';
 // Every write is checked here, whatever the screen shows: who the user is, which legal entity they act for, the item's
 // state and version, and the request id (a double tap or retry never repeats a change). A scan only finds a record.
 
@@ -1874,7 +1875,8 @@ export class ItemService {
    */
   private async queueSync(tx: Store, ctx: Ctx, m: ItemMovement, partyId: Id, docType: ItemSyncJob['docType'], payload: ItemSyncJob['payload'], revision = 1) {
     const book = (await tx.get('itemSqlBooks', partyId)) ?? null;
-    const bookId = book?.sqlBookId ?? BOOK_UNSET;
+    // The book recorded on the item register (P85), else the company's SQL Account book Finance confirmed (Build 1).
+    const bookId = book?.sqlBookId ?? sqlConfirmedBook(await tx.get('finStatus', `fin-${partyId}`).catch(() => undefined)) ?? BOOK_UNSET;
     const key = syncKey(partyId, docType, m.id, revision, bookId);
     const hash = payloadHash(payload);
     const [existing] = await tx.list('itemSyncJobs', { key });
@@ -2656,7 +2658,7 @@ export class ItemService {
         if (a.paidByGuard) throw new BadRequest('This garment was already counted for this person. Do not record another payment.');
         uniformNote = ' Previously counted garment returned to the same person.';
       } else if (t.free >= R.maxPerYear) {
-        if (t.free + t.paid >= R.paidMaxPerYear)
+        if (R.paidMaxPerYear !== null && t.free + t.paid >= R.paidMaxPerYear)
           throw new BadRequest(`${to.label} already had ${t.free + t.paid} uniform pieces in the last 12 months (${t.paid} paid by the guard). The most is ${R.paidMaxPerYear}.`);
         const pay = a.paidByGuard;
         const ref = clip(pay?.receiptRef ?? '', 60);
@@ -2844,6 +2846,8 @@ export class ItemService {
     const item = await this.byLabel(ctx, a.label);
     const sku = await tx.get('itemSkus', item.skuId);
     if (!this.canHandle(ctx, item.custody.partyId, sku)) throw new ItemDenied('Only the store asks to dispose of an item.');
+    // One device, one disposal record (Merdeka IT-POL-005, Part Q16): an IT device is disposed through IT's disposal record.
+    if (item.itAssetId) throw new BadRequest('An IT device is disposed through the IT disposal record (Borang Pelupusan); its label retires with it.');
     if (item.state !== 'quarantine') throw new BadRequest('Only items taken back and checked (quarantine) can be put up for disposal.');
     if (item.ownerPartyId !== item.custody.partyId) throw new BadRequest('It belongs to another company: return it to the owner instead.');
     const reason = clip(a.reason, 300);
@@ -3398,9 +3402,6 @@ export class ItemService {
     if (legalName.length < 3) throw new BadRequest('Type the legal name as registered.');
     if (regNo.length < 3) throw new BadRequest('Type the registration number.');
     if (!/^[A-Za-z0-9][A-Za-z0-9._-]{1,59}$/.test(sqlBookId)) throw new BadRequest('The SQL book id is 2 to 60 letters, numbers, dots, dashes or underscores (as named in SQL Account).');
-    // E11 (Fauzan, 11 Nov 2026, D01): one SQL Account book per company, so a book recorded for another company is refused.
-    const other = (await tx.list('itemSqlBooks')).find((b) => b.partyId !== a.partyId && b.sqlBookId.toLowerCase() === sqlBookId.toLowerCase());
-    if (other) throw new BadRequest(`One SQL book per company: ${sqlBookId} is already recorded for ${this.partyName(ctx, other.partyId)}.`);
     const counterparties: ItemSqlBook['counterparties'] = [];
     for (const c of a.counterparties ?? []) {
       const partyId = String(c?.partyId ?? '');

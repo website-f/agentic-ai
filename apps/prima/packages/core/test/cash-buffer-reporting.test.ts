@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { MemoryStore, PrimaService, generateDataset, myt, type User, type GuardPayRun, type StaffPayRun, type GuardLoan } from '../src';
 import { buildStaffPayLine } from '../src/payroll';
+import { guardPayPrep } from './guard-pay-preparer';
 
 import { evidence, fixture } from './cash-test-fixture';
 
@@ -29,15 +30,15 @@ describe('additional payroll cash reporting boundary (8 November correction)', (
     expect(ds.evidenceDocs.filter(d=>d.id.startsWith('doc-excash-'))).toHaveLength(6);
   });
   it('does not create repayments or change ordinary payroll when a separate historical loan already exists',async()=>{
-    const x=await fixture();const hr=x.user('u-pwvsb-hr');
+    const x=await fixture();const hr=x.user('u-pwvsb-hr'),prep=await guardPayPrep(x.svc,[x.companyId]);
     const sign={by:'Synthetic Finance',byId:x.fd.id,at:x.now(),note:'Historical synthetic record'};
     const loan:GuardLoan={id:'synthetic-existing-loan',companyId:x.companyId,personId:x.guard.id,staffNo:x.guard.staffNo,name:x.guard.name,kind:'loan',limit:300,amount:300,purpose:'Separate existing loan',months:3,instalment:100,firstPeriod:'2026-10',signature:{docRef:'synthetic-loan-agreement',signedOn:'2026-10-01',recordedBy:hr.name,recordedById:hr.id,recordedAt:x.now()},status:'paid_out',requested:sign,cos:sign,ceo:sign,rejected:null,paidOut:{...sign,bankRef:'synthetic-bank-loan',paidOn:'2026-10-01'},repaid:[],balance:300,financeNotices:[],flags:[]};
     x.ds.guardLoans.push(loan);
-    const before=await x.svc.prepareGuardPay(x.preparer,x.companyId,'2026-10');
+    const before=await x.svc.prepareGuardPay(prep,x.companyId,'2026-10');
     expect(before.lines.some(l=>l.personId===x.guard.id)).toBe(true);
     const repayments=structuredClone(x.ds.guardLoans),advances=structuredClone(x.ds.guardPayAdvances);
     const r=await x.reconciled();await x.action(x.fd,'post',{id:r.id,journalRef:'separate-support-journal',payrollRecordRef:'pending-treatment-register',additionalPayrollConfirmed:true,treatmentStatus:'pending',evidence:evidence('separate-support')});
-    const after=await x.svc.prepareGuardPay(x.preparer,x.companyId,'2026-10');
+    const after=await x.svc.prepareGuardPay(prep,x.companyId,'2026-10');
     expect(after.lines).toEqual(before.lines);expect(after.cash).toEqual([]);
     expect(x.ds.guardLoans).toEqual(repayments);expect(x.ds.guardPayAdvances).toEqual(advances);
   });

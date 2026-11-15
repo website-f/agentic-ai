@@ -1,11 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
 import { useBackClose } from './back-close';
 import type { AlertItem } from '@prima/core';
 import { api } from './api';
 import type { MyAlerts } from './api/types';
-import { Chip, Drawer } from './ui';
-import { AlertPrefsPanel } from './views/AlertPrefs';
+import { Chip } from './ui';
 
 /**
  * The in-app alert bell (Fauzan, 5 Nov 2026): the same alerts that go to Teams and email also show inside Prima.
@@ -35,8 +33,6 @@ function saveSeen(userId: string, keys: string[]) {
 export function AlertBell({ userId, canOpen, onOpen }: { userId: string; canOpen: (view: string) => boolean; onOpen: (view: string) => void }) {
   const [data, setData] = useState<MyAlerts | null>(null);
   const [open, setOpen] = useState(false);
-  // J6: each person chooses which alerts they receive (urgent safety alerts cannot be switched off).
-  const [prefs, setPrefs] = useState(false);
   // P96: the phone's Back closes the alerts panel.
   useBackClose(open, () => setOpen(false));
   const [seen, setSeen] = useState<Set<string>>(() => readSeen(userId));
@@ -124,19 +120,45 @@ export function AlertBell({ userId, canOpen, onOpen }: { userId: string; canOpen
           <p className="muted small">
             {data?.email || data?.teamsChannel ? 'These alerts are also sent to your email and Teams.' : 'Email and Teams alerts are not switched on yet.'}
           </p>
-          <button className="btn btn-sm" type="button" onClick={() => (setOpen(false), setPrefs(true))}>
-            Choose my alerts
-          </button>
+          <AlertChoices />
         </div>
       )}
-      {/* Outside the header (its stacking would clip the drawer on a phone). */}
-      {prefs &&
-        createPortal(
-        <Drawer title="My alerts" sub="Choose what you are told about. Urgent safety alerts always come." onClose={() => (setPrefs(false), load())}>
-          <AlertPrefsPanel onDone={() => (setPrefs(false), load())} />
-        </Drawer>,
-          document.body,
-        )}
+    </div>
+  );
+}
+
+/** A13: choose the daily summary and the topics sent by email and Teams. Safety topics cannot be muted. */
+function AlertChoices() {
+  const [open, setOpen] = useState(false);
+  const [data, setData] = useState<Awaited<ReturnType<typeof api.myAlertPrefs>> | null>(null);
+  const [msg, setMsg] = useState('');
+  const load = () => api.myAlertPrefs().then(setData, () => setMsg('Could not load your choices.'));
+  if (!open)
+    return (
+      <button className="btn btn-ghost btn-sm" onClick={() => (setOpen(true), void load())}>
+        Choose my email and Teams alerts
+      </button>
+    );
+  if (!data) return <p className="muted small">{msg || 'Loading...'}</p>;
+  if (!data.canChoose) return <p className="muted small">Your sign-in has no staff record yet, so alerts follow the default.</p>;
+  const save = (digest: boolean, muted: string[]) =>
+    api.setMyAlertPrefs({ digest, muted }).then(
+      () => (setMsg('Saved.'), void load()),
+      (e: unknown) => setMsg(e instanceof Error ? e.message : 'Not saved.'),
+    );
+  return (
+    <div className="small">
+      <label>
+        <input type="checkbox" checked={data.digest} onChange={(e) => void save(e.target.checked, data.muted)} /> Daily summary at 8 am
+      </label>
+      <div className="muted">Topics (untick to stop them by email and Teams; the bell still shows them):</div>
+      {data.topics.map((t) => (
+        <label key={t.tag} style={{ display: 'block' }}>
+          <input type="checkbox" disabled={t.locked} checked={!t.muted} onChange={(e) => void save(data.digest, e.target.checked ? data.muted.filter((m) => m !== t.tag) : [...data.muted, t.tag])} /> {t.tag}
+          {t.locked && <span className="muted"> (always sent)</span>}
+        </label>
+      ))}
+      {msg && <p className="muted">{msg}</p>}
     </div>
   );
 }

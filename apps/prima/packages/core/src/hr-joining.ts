@@ -250,3 +250,36 @@ export function retirementsDue(people: Person[], today: IsoDate) {
       over: ageOn(p.dob, today) >= r.retireAge,
     }));
 }
+
+/**
+ * E10 (Fauzan, 11 Nov 2026): the staff resignation procedure in the handbook, in English and Malay. Company notice is
+ * 1 month for service under 1 year and 3 months for 1 year or more. It is never shorter than the Employment Act s.12
+ * (4, 6 or 8 weeks), and the longer of the two applies.
+ */
+export function resignationNotice(years: number): { months: number; actWeeks: number; days: number; basis: string } {
+  const months = years < 1 ? 1 : 3;
+  const actWeeks = noticeWeeks(years);
+  const days = Math.max(Math.round(months * 30.44), actWeeks * 7);
+  return { months, actWeeks, days, basis: `${months} month${months === 1 ? '' : 's'} (company), never less than the Act's ${actWeeks} weeks` };
+}
+
+export const RESIGNATION_PROCEDURE: { en: string[]; ms: string[] } = {
+  en: [
+    'Write your resignation letter to your Company Manager (or department head), with copy to HR, and date it.',
+    'Notice: 1 month if you have served under 1 year; 3 months if you have served 1 year or more. Your contract applies if it gives longer.',
+    'Your notice starts the day after HR receives the letter. HR confirms your last working day in writing.',
+    'You or the company may pay salary in place of notice for the days not worked, if both agree in writing.',
+    'Annual leave not taken is settled in the final pay or, with your manager agreeing, taken during the notice.',
+    'Before your last day: hand over your work, return company items, devices and cards, and sign the handover list.',
+    'HR closes your system access the day after your last working day and gives you your final pay statement and release letter.',
+  ],
+  ms: [
+    'Tulis surat peletakan jawatan kepada Pengurus Syarikat (atau ketua jabatan), salinan kepada HR, dan bertarikh.',
+    'Notis: 1 bulan jika berkhidmat kurang daripada 1 tahun; 3 bulan jika berkhidmat 1 tahun atau lebih. Kontrak anda terpakai jika lebih panjang.',
+    'Notis bermula sehari selepas HR menerima surat. HR mengesahkan hari kerja terakhir anda secara bertulis.',
+    'Anda atau syarikat boleh membayar gaji sebagai ganti notis bagi hari tidak bekerja, jika kedua-dua pihak bersetuju secara bertulis.',
+    'Cuti tahunan yang belum diambil diselesaikan dalam gaji akhir atau, dengan persetujuan pengurus, diambil semasa notis.',
+    'Sebelum hari terakhir: serahkan tugas, pulangkan barang, peranti dan kad syarikat, dan tandatangani senarai serahan.',
+    'HR menutup akses sistem anda sehari selepas hari kerja terakhir dan memberikan penyata gaji akhir serta surat pelepasan.',
+  ],
+};

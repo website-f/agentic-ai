@@ -13,6 +13,7 @@ Everything here runs on mock data. Nothing is deployed, no migration runs, and n
    - **Monthly staff payroll:** HR prepares, then the Chief of Staff approves, then the COO approves, then Finance pays.
    - **Salary amounts** (set each year or on review): HR proposes, the Chief of Staff or Deputy verifies, then the Vice Chairman consents.
    - **Staff leave:** the HR Administrator decides, then the Vice Chairman consents.
+     B3 (14 Nov 2026): the CEO can switch the Vice Chairman's step off on Home, with a reason (default on). When off, HR's approval is final; leave already waiting for consent still waits.
 3. **Governance.** The HR department governs HR in every company with full authority. Each company only monitors its own staff's HR.
 4. **Comments.** Every approval carries a comment (decided 31 Oct 2026). Any short comment is accepted.
 
@@ -79,7 +80,7 @@ Fauzan approved all 21 gaps in the doc *HR gaps still to cover (Phase 3)*. His n
 - Working from home is only for staff HR allows. The system blocks it until then.
 - Retrenchment is a how-to guide for HR. Retirement at 60 works the same as for guards for now.
 - OSHA items 13 to 15 are approved.
-- Vacancies: the CEO approves and the company head signs the approval. PWVSB central posts: the CEO approves and signs in one step (Fauzan, 11 Nov 2026, C2).
+- Vacancies: the CEO approves and the company head signs the approval.
 - Payslips are delivered in the app and staff download them.
 - Handbook, code of conduct and IT-use acknowledgements are approved.
 - Statutory dates are shown as the latest allowed date, not an exact date.
@@ -364,7 +365,7 @@ Rule `HR-JOB-ADVERT`. Code: `packages/core/src/hr-job-adverts.ts`, `PrimaService
 
 - A vacancy now says whether it is for office staff, a guard or a patrolling officer. Guard and officer posts also
   name the state.
-- Once a vacancy is open (CEO approved, company head signed; the CEO signs PWVSB central posts, C2, 11 Nov 2026), HR or the company manager writes the
+- Once a vacancy is open (CEO approved, company head or HR Director signed), HR or the company manager writes the
   job post: "Draft for me" makes a bilingual BM + English draft from the job facts only (title, department, pay
   range, headcount, employer, how to apply, closing date). No AI model is connected yet, so the draft is labelled
   as Prima's template; `PrimaService.advertDrafter` is where a model plugs in later, and its output would be
@@ -417,25 +418,3 @@ channel is switched on), and connecting an AI model for drafting.
 - HR KPI monitoring: on hold until the pilot test 1 results are in (Fauzan, 1 Nov 2026 15:53Z).
 - Overtime claims inside the staff payroll run: waits for Finance PR #49.
 - Papers recorded in Prima flowing back to JA: waits for the live JA link.
-
-## P100 staff payroll changes (Fauzan's 11 Nov 2026 handover)
-
-- **Part month (C1).** A staff member who joins, leaves or transfers within the month is paid the daily rate (monthly
-  basic and fixed allowances divided by the pay law's day divisor, 26 today) times the working days employed (Monday to
-  Friday; a weekday public holiday is a paid day), never more than the full month. Prima works it out and the line and the
-  payslip show the working; HR may still correct it with a reason (kept beside the worked-out figure). The month is no
-  longer held for a hand-typed figure. Open point for Fauzan: with a 5-day office week a whole month has about 22 working
-  days, so a part month comes to about 85% of the calendar share; confirm whether Saturdays should count.
-- **Overtime in the staff payroll (C12 + J3).** HR's overtime switch (Staff overtime setting, HR-OT) now controls whether
-  overtime is paid in the staff payroll run. Overtime lines come from staff claims (a staff member HR named claims a day's
-  hours with a reason) and from the CMS roster (HR brings in a month: each completed CMS seat's hours past the 8-hour day,
-  one line per seat). HR approves or refuses each with a reason, never their own. An approved line is paid once, in the
-  first staff payroll prepared after it, at the HR-OT rates on basic / 26 / 8; it is not EPF wages (SOCSO, EIS and PCB
-  count it). Switch off, or the person not named: approved hours wait and the line says so. Unapproved lines are never
-  paid. Office module `db/modules/staff-ot-v1.sql` (`prima.staff_ot_lines`, forced row-level security: the person and HR
-  and leadership read; the person adds only their own pending claim; HR decides).
-- **Paid by the 29th (F11).** Office staff are paid on the 29th of the same month (the month's last day when shorter), not
-  by the 7th of the next month (rule PAY-STAFF payByDay 29, approved by Fauzan 11 Nov 2026). The steps move earlier: HR
-  submits by the 22nd, the Chief of Staff approves by the 24th, the COO by the 26th, Finance pays by the 29th. Each step's
-  date shows on the run and on the approver's home (marked when past); a month not paid by the 29th is late. The 13-week
-  cash forecast (FIN-CASH13) puts staff payroll on the 29th of the same month. Guards stay on the 7th.

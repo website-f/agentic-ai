@@ -297,7 +297,8 @@ describe('Regular meetings for every staff member (rule MTG-PLAN)', () => {
     await expect(svc.scheduleMeeting(await svc.user('u-cm-arsh'), input)).rejects.toBeInstanceOf(AccessDenied);
     await expect(svc.scheduleMeeting(cm, { ...input, seriesKey: 'nope:x' })).rejects.toThrow(/not in the plan/);
     const m = await svc.scheduleMeeting(cm, input);
-    expect(m).toMatchObject({ companyId: 'co-sasa', kind: 'management', seriesKey: 'co-office:co-sasa' });
+    // Part X (Fauzan, 14 Nov 2026): the company office meeting is the company toolbox meeting.
+    expect(m).toMatchObject({ companyId: 'co-sasa', kind: 'toolbox', seriesKey: 'co-office:co-sasa' });
     await expect(svc.scheduleMeeting(cm, input)).rejects.toThrow(/already set/);
     expect((await svc.meetings(cm)).plan.find((p) => p.seriesKey === 'co-office:co-sasa')!.state).toBe('scheduled');
     // An admin executive of the company is invited and sees it as theirs to attend.
@@ -376,7 +377,7 @@ describe('Regular meetings for every staff member (rule MTG-PLAN)', () => {
     const office = plan.find((p) => p.seriesKey === 'co-office:co-sasa')!;
     expect(office.important.length).toBeGreaterThan(0);
     expect(office.agenda.slice(0, office.important.length)).toEqual(office.important);
-    expect(office.agenda).toContain('Action items from the last meeting');
+    expect(office.agenda).toContain('f) Caruman berkanun dan cukai');
     const board = plan.find((p) => p.seriesKey === 'co-board:co-sasa')!;
     expect(board.important.some((x) => x.startsWith('Tenders'))).toBe(false);
   });

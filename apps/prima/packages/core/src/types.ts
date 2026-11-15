@@ -325,6 +325,22 @@ export interface PayAccount {
   } | null;
 }
 
+/** Part N5: opening balances for a person who started before Prima (one year at a time). */
+export interface OpeningBalance {
+  year: string;
+  /** The day the figures run to (the day before Prima starts for the person). */
+  asAt: IsoDate;
+  /** Leave days already taken this year before Prima. */
+  leave: { annual: number; sick: number; hospital: number; unpaid: number };
+  /** Year-to-date pay and deductions before Prima (RM). */
+  pay: { gross: number; epf: number; socsoEis: number; pcb: number; zakat: number; months: number };
+  reason: string;
+  by: string;
+  byId: Id;
+  at: IsoDateTime;
+  checked: { by: string; byId: Id; at: IsoDateTime; comment: string } | null;
+}
+
 export interface Person {
   id: Id;
   companyId: Id;
@@ -363,6 +379,9 @@ export interface Person {
   utilityAck?: { docId: Id; by: string; at: IsoDateTime } | null;
   /** Job title for office staff, e.g. Admin Executive. */
   jobTitle?: string;
+  /** Part P5: the work site set on Receive of an approved move (a site of another company keeps the employer). */
+  workSiteId?: Id | null;
+  workSiteFrom?: IsoDate | null;
   /**
    * The language the person reads best (IWAY finding, Fauzan 6 Nov 2026: each worker gets the handbook and code of
    * conduct in their mother tongue; English and Malay always). HR sets it. Missing means Nepali for a Nepali national and
@@ -415,6 +434,22 @@ export interface Person {
    */
   leaveOverrides?: Partial<Record<LeaveOverrideKind, { days: number; note: string; by: string; byId: Id; at: IsoDateTime }>>;
   /**
+   * Part N5 (Fitri package, 13 Nov 2026): what happened this year before Prima, as at the day Prima starts for this
+   * person. HR enters or bulk-loads it with a reason; it counts only once a second HR person has checked it.
+   */
+  openingBalance?: OpeningBalance | null;
+  /** Part N14: the final pay HR checked and saved (Prima's working kept beside it; any change has a reason). */
+  finalPay?: {
+    figures: { lastMonth: number; unusedLeave: number; noticeInLieu: number; terminationBenefit: number };
+    prima: { lastMonth: number; unusedLeave: number; noticeInLieu: number; terminationBenefit: number };
+    changed: string[];
+    reason: string;
+    noticeOwedBy: 'staff' | 'company' | null;
+    by: string;
+    byId: Id;
+    at: IsoDateTime;
+  } | null;
+  /**
    * Working from home is open only to staff HR has allowed (Fauzan, 2 Nov 2026: "only HR can choose ... the system will
    * block it until HR turns it on for the staff member"). Null or missing: not allowed.
    */
@@ -451,6 +486,12 @@ export interface Person {
    * want and how much the percentage of it"): the zakat body and the percentage of gross pay. Null or missing: none.
    */
   zakat?: { body: string; percent: number; set: { by: string; byId: Id; at: IsoDateTime } } | null;
+  /**
+   * A13 (Fitri package, Fauzan 11 Nov 2026): the person's own choice of alerts by email and Teams. digest false = no
+   * daily summary; muted = topics (home item tags) not sent. Topics on the rule ALERT-CHOICE locked list are always sent.
+   * The in-app bell always shows everything.
+   */
+  alertPrefs?: { digest: boolean; muted: string[]; at: IsoDateTime } | null;
   /** Every change of the zakat choice, newest last (kept 24). */
   zakatHistory?: { body: string | null; percent: number | null; by: string; byId: Id; at: IsoDateTime }[];
 }
@@ -597,7 +638,11 @@ export type CredentialType =
   | 'KDN_LETTER'
   | 'FIREARM_PERMIT'
   /** Range practice for an armed guard; expiresOn is when the next practice is due. */
-  | 'RANGE_PRACTICE';
+  | 'RANGE_PRACTICE'
+  /** E9 (PIKM/ISO, Fauzan 11 Nov 2026): yearly medical fitness check for a guard aged 56 or over. */
+  | 'MEDICAL_CHECK'
+  /** E9: site risk briefing before the first deployment at a site; number is "SITE <site id>", no expiry. */
+  | 'SITE_BRIEFING';
 
 export interface Credential {
   id: Id;
@@ -608,6 +653,11 @@ export interface Credential {
   issuedOn: IsoDate;
   /** null means it does not expire (e.g. CSG training certificate). */
   expiresOn: IsoDate | null;
+  /** FIREARM_PERMIT only (Part R7): which arms licence this is; absent on older rows ("kategori belum direkod"). */
+  licenceCategory?: ArmsLicenceCategory | null;
+  licenceCategoryOther?: string | null;
+  /** FIREARM_PERMIT only (Part R8): suspended or cancelled by the police; the person cannot do armed duty. */
+  licenceState?: 'active' | 'suspended' | 'cancelled' | null;
   /** Who entered it in Prima (HR or the company head, Fauzan 2 Nov 2026); absent when it came from JA or the seed. */
   recordedBy?: string | null;
   recordedById?: Id | null;
@@ -640,6 +690,19 @@ export type LicenceType =
   | 'VENDOR_PANEL'
   | 'ISO_CERT'
   | 'FIRE_CERT'
+  /** E9 (PIKM 6.3): office or operations centre alarm and CCTV, with the installer and service record. */
+  | 'OFFICE_ALARM'
+  | 'OFFICE_CCTV'
+  /** Part Z3 (Fauzan, 14 Nov 2026, from the company checklists): the yearly dates every company keeps. */
+  | 'PIKM_MEMBERSHIP'
+  | 'MOF_DIGITAL_CERT'
+  | 'BUMIPUTERA_STATUS'
+  | 'BOND'
+  | 'CARRY_USE'
+  | 'CNU'
+  | 'AMRA'
+  | 'LHDN_TCC'
+  | 'CIDB'
   | 'OTHER_COMPLIANCE';
 
 export interface CompanyLicence {
@@ -977,7 +1040,16 @@ export interface PatrolScan {
 // ---------- Arms control (V13, V14) ----------
 
 /** Fixed statuses. There is no "kept by guard" status; UNVERIFIED is never counted as secure. */
-export type FirearmStatus = 'IN_VAULT' | 'ISSUED' | 'MAINTENANCE' | 'UNVERIFIED' | 'LOST' | 'DEPOSITED' | 'OFF_REGISTER';
+/**
+ * Arms policies (Part R1, 13-14 Nov 2026): IN_VAULT and ISSUED mean "baik"; NEEDS_MAINTENANCE, UNDER_INSPECTION,
+ * DAMAGED, IN_REPAIR and UNUSABLE are out of use ("ROSAK - JANGAN DIGUNAKAN") until the reuse confirmation. MAINTENANCE
+ * stays for old rows ("dalam penyelenggaraan").
+ */
+export type FirearmStatus = 'IN_VAULT' | 'ISSUED' | 'MAINTENANCE' | 'UNVERIFIED' | 'LOST' | 'DEPOSITED' | 'OFF_REGISTER' | 'NEEDS_MAINTENANCE' | 'UNDER_INSPECTION' | 'DAMAGED' | 'IN_REPAIR' | 'UNUSABLE';
+/** Firearm statuses that are out of use until the reuse confirmation (Part R5). */
+export const FIREARM_OUT_OF_USE: FirearmStatus[] = ['MAINTENANCE', 'NEEDS_MAINTENANCE', 'UNDER_INSPECTION', 'DAMAGED', 'IN_REPAIR', 'UNUSABLE'];
+/** Arms licence categories (Part R7, R-X4): the named licence holder, vault keeper, armed field duty, bodyguard. */
+export type ArmsLicenceCategory = 'PELESEN_A' | 'AMRA' | 'CNU' | 'BODYGUARD' | 'OTHER';
 
 /** An approved armoury or safe of one licensed company. Exact locations stay off general screens. */
 export interface Vault {
@@ -1004,6 +1076,16 @@ export interface Vault {
   /** The Amra (armoury keeper) who issues and receives at this vault, usually admin staff (Fauzan, 25 Oct 2026). */
   custodian: string;
   custodianRole?: string;
+  /** Part R7: the A licence holder and the Amra as staff links (person ids); the text names stay for old rows. */
+  aLicenceHolderPersonId?: Id | null;
+  custodianPersonId?: Id | null;
+  /**
+   * Part R10: access by written authorisation. Each entry has the letter, who gave it (never the person themselves) and
+   * why; removal keeps the entry with its date and reason. When present, the active names here are the authorised list.
+   */
+  authorisedStaff?: { personId: Id | null; name: string; letterRef: string; letterOn: IsoDate; givenBy: string; givenById: Id; reason: string; removedOn?: IsoDate | null; removedReason?: string | null }[];
+  /** Part R30: a police approval to keep dealer trade stock in this vault, for one place of business. */
+  tradeStoreApproval?: { ref: string; on: IsoDate; docId: Id | null; placeOfBusiness: string } | null;
   /** Holder of this vault's A licence, usually a director or manager of the company (Fauzan, 25 Oct 2026). */
   aLicenceHolder?: string;
   aLicenceRole?: string;
@@ -1042,6 +1124,8 @@ export interface AmmoStock {
   counted: number | null;
   countedAt: IsoDateTime | null;
   countedBy: string | null;
+  /** Part R30: OPERATIONAL (default) rounds move on guard issues; TRADE rounds never do. */
+  ownership?: 'OPERATIONAL' | 'TRADE';
   /** Second person who checked the count. The same person counting and checking is flagged. */
   checkedBy: string | null;
   /**
@@ -1128,6 +1212,13 @@ export interface ArmsRequest {
   log?: { at: IsoDateTime; by: string; byId: Id; from: ArmsRequestState; to: ArmsRequestState; action: string; reason: string }[];
   /** Arms trading and import (slice 4H): only while the CEO's trading switch is on. */
   trade?: ArmsTradeDetail | null;
+  /**
+   * Part R16: the police approval letter's details. Purchase, receipt and reconcile stay within it (type, quantity,
+   * calibre, rounds) and within 14 days of its date (R-X6).
+   */
+  approvalLetter?: { permitNo: string; on: IsoDate; validUntil: IsoDate | null; firearmKind: string | null; firearmQty: number; calibre: string | null; rounds: number; conditions: string; holderName: string; docId: Id | null } | null;
+  /** Part R12: the internal purchase request form (ACQUIRE). */
+  buyForm?: { purpose: string; firearmKind: string | null; firearmQty: number; calibre: string | null; rounds: number; location: string; namedPersonIds: Id[]; justification: string; extraReason: string } | null;
 }
 
 export interface Firearm {
@@ -1242,8 +1333,6 @@ export interface SocsoClaim {
   dependants?: SocsoDependants;
   /** The separate duty to notify DOSH (JKKP) of a workplace accident, OSHA 1994 s.32 and NADOPOD 2004. */
   dosh?: DoshNotice;
-  /** P100 (E4, Fauzan 11 Nov 2026): the LINDUNG claim form and the company's own payments to dependants abroad. */
-  socsoExtras?: import('./socso-extras').SocsoExtras;
 }
 
 /** What a work restriction keeps the person from, until HR clears it. NO_DUTY: no shifts at all. */
@@ -1302,7 +1391,7 @@ export interface FwRenewal {
 }
 
 /** Errands FWM asks the OM to get done with the guard (Fauzan, 26 Oct 2026). */
-export type FwmTaskKind = 'FOMEMA' | 'JIM' | 'TNG' | 'BIOMETRIC' | 'UTILITY_CLAUSE' | 'OTHER' | 'PERMIT_ON_MC';
+export type FwmTaskKind = 'FOMEMA' | 'JIM' | 'TNG' | 'BIOMETRIC' | 'UTILITY_CLAUSE' | 'OTHER';
 
 /** FWM sends a dated task to the OM; the OM sends the guard and uploads proof; FWM accepts or sends it back. */
 export interface FwmTask {
@@ -2174,6 +2263,10 @@ export interface CmsStaff {
 /** CMS parameters, set by Arms Control (Fauzan, 25 Oct 2026). One record for the whole group. */
 export interface CmsSettings {
   id: 'cms';
+  /** C12: the month's CMS overtime hours Arms Control approved for each CMS staff member, with the reason. */
+  otApprovals?: import('./cms-overtime').CmsOvertimeApproval[];
+  /** C7: the vault RFID scan made compulsory or optional by Arms Control, newest last (default optional). */
+  armsRfidRequired?: { on: boolean; reason: string; by: string; byId: Id; at: IsoDateTime }[];
   /** Two 12-hour shifts or three 8-hour shifts a day. */
   shiftPattern: '2x12' | '3x8';
   /** When the first shift of the day starts, HH:MM Malaysia time. */
@@ -2835,10 +2928,10 @@ export interface Quotation {
   sent?: { userId: Id; by: string; at: IsoDateTime } | null;
   /** Who recorded the client's answer (accepted or rejected) and when. */
   decided?: { status: 'accepted' | 'rejected'; userId: Id; by: string; at: IsoDateTime } | null;
-  /** C10 (Fauzan, 11 Nov 2026): how many of the guards are Nepali (hostel and transport cost). */
+  /** C10: how many of the guards are Nepali (hostel and transport costs). */
   nepaliGuards?: number;
-  /** C10: the cost check as last worked out (on save, correction, submit and approval), with the month's rates kept. */
-  costCheck?: import('./quote-cost').QuoteCostCheck | null;
+  /** C10: the cost check worked out when it was drafted and again when it was submitted. */
+  costCheck?: import('./quotation-cost').QuotationCostCheck;
 }
 
 /**
@@ -2948,9 +3041,8 @@ export interface User {
   /**
    * ACT, Audit, Compliance and Transformation (Fauzan, 2 Nov 2026): 1 Director ('lead', kept for the Arisha pilot
    * record) and 2 teams, each with 1 Auditor and 1 Enforcement officer. Department 'audit'.
-   * C6 (Fauzan, 11 Nov 2026): the ACT Director is the head; an ACT Manager ('manager') leads the work and is the second
-   * checker; Team A (1) and Team B (2) each have an Auditor (team lead) and an Enforcement officer (actTeam).
    */
+  // C6 (Fauzan, 11 Nov 2026): the ACT Manager leads the work and is the second checker, across both teams.
   actRole?: 'lead' | 'manager' | 'auditor' | 'enforcement';
   /**
    * Procurement and Inventory (Fauzan, 27 Oct 2026): under the Operations General Manager, monitored by the COO and
@@ -3019,6 +3111,10 @@ export interface User {
   opsSector?: 'government' | 'private';
   /** The ACT team (1 or 2) an Auditor or Enforcement officer belongs to; each team covers its own workflows. */
   actTeam?: 1 | 2;
+  /** The staff directory line this account was made from (Accounts and Access, 15 Nov 2026). */
+  directoryId?: Id;
+  /** The approved Accounts and Access request that made this account. */
+  accountRequestId?: Id;
 }
 
 /**
@@ -3053,6 +3149,7 @@ export interface AuditEntry {
 /** Cover a security company carries. Each policy belongs to one company; PWVSB never holds a company's cover (V7). */
 export type InsuranceKind =
   | 'PUBLIC_LIABILITY'
+  | 'PROFESSIONAL_INDEMNITY'
   | 'GROUP_PERSONAL_ACCIDENT'
   | 'GROUP_HOSPITALISATION'
   | 'FW_HOSPITALISATION'
@@ -3153,6 +3250,20 @@ export interface Dataset {
   /** One item register for the whole group (Fauzan, 6 Nov 2026; Fitri's paper v1.0): catalogue, units, stock, movements, cases, counts, SQL outbox. */
   itemSkus: import('./items').ItemSku[];
   physicalItems: import('./items').PhysicalItem[];
+  /** Merdeka IT policy records (Part Q6-Q23): one table, append-only history per record. */
+  itPolicyRecs: import('./it-policy-service').ItPolicyRec[];
+  armsPolicyRecs: import('./arms-policy-service').ArmsPolicyRec[];
+  officeAmRecs: import('./office-am-service').OfficeAmRec[];
+  kdnRecs: import('./kdn-renewal').KdnRec[];
+  /** Part X: company and department toolbox meeting records (minutes, status lines, registers, site talks). */
+  toolboxRecs: import('./toolbox-service').ToolboxRec[];
+  /** Part Y: monthly JA Group meeting reports, registers, accounts report tracker and duty checklists. */
+  groupMonthRecs: import('./group-month-service').GmRec[];
+  /** Part Z: duty map registers (factoring, school contributions, notices, HRDF, PTPTN, Protégé, welfare fund, Nepal unit, audit, key log, set-up checklist, payback, OM records). */
+  dutyRegisterRecs: import('./duty-registers').RegRec[];
+  /** Part U: stock counts, variance, week closes, adjustments, disposal cases, damage charges, monthly reports. */
+  inventoryRecs: import('./inventory-control').InvRec[];
+  amRentalRecs: import('./am-rental').RentRec[];
   itemLots: import('./items').ItemLot[];
   itemEvents: import('./items').ItemEvent[];
   itemMovements: import('./items').ItemMovement[];
@@ -3208,6 +3319,10 @@ export interface Dataset {
   clientCodeChecks: ClientCodeCheck[];
   clientInspections: ClientInspection[];
   selfAudits: SelfAudit[];
+  sqlPostings: import('./sql-posting').SqlPostingJob[];
+  /** B1 (Fauzan, 11 Nov 2026): who prepares each company's guard pay run, named by the Company Manager. Append only. */
+  guardPayPreparers: GuardPayPreparerEntry[];
+  sqlPostingExceptions: import('./sql-posting').SqlPostingException[];
   rbaTraceReviews: RbaTraceReview[];
   ethicsDeclarations: EthicsDeclaration[];
   rbaCommittees: RbaCommittee[];
@@ -3396,6 +3511,16 @@ export interface Dataset {
   attendanceImports: import('./attendance-reports').AttendanceImport[];
   attendanceDays: import('./attendance-reports').AttendanceDayRow[];
   attendanceMatches: import('./attendance-reports').AttendanceMatch[];
+  orgImportOks: import('./org-import').OrgImportOk[];
+  problemReports: import('./problem-reports').ProblemReport[];
+  accountRequests: import('./accounts-access').AccountRequest[];
+  hrLists: import('./hr-lists').HrList[];
+  consentGates: import('./paper-consent').ConsentGate[];
+  fwMoves: import('./fw-moves').FwMove[];
+  stayRequests: import('./short-stays').StayRequest[];
+  ssRecs: import('./short-stays').SsRec[];
+  hostelNeeds: import('./fw-moves').HostelNeed[];
+  hostelRecs: import('./fw-moves').HostelRec[];
   /** Company office desks (Fauzan, 2 Nov 2026): who owns and backs up each area of the company's work. */
   companyDesks: import('./company-office').CompanyDeskAssignment[];
   /** Which licensed company's office runs a company (Fauzan, 3 Nov 2026), set by the CEO. */
@@ -3409,20 +3534,6 @@ export interface Dataset {
   ownerTestCheckins: import('./owner-test-checkin').OwnerTestCheckin[];
   /** P97: the face photo at each staff check-in and check-out (clock-snap.ts; db/modules/clock-snaps-v1.sql). */
   clockSnaps: import('./clock-snap').ClockSnap[];
-  /** K8 (Fauzan, 11 Nov 2026): the record of every bulk load (bulk-manager-service.ts; db/modules/bulk-loads-v1.sql). */
-  bulkLoads: import('./bulk-manager-service').BulkLoad[];
-  /** E6 (P100): moving a vehicle to another group company's use: request, approval, handover (vehicle-transfer.ts; db/modules/vehicle-transfers-v1.sql). */
-  vehicleTransfers: import('./vehicle-transfer').VehicleTransfer[];
-  /** J5 (P100): guard sign-ins made in bulk with a review step (guard-signins.ts; db/modules/guard-signins-v1.sql). */
-  guardSignInBatches: import('./guard-signins').GuardSignInBatch[];
-  /** J6 (P100): each person's alert choices (alert-prefs.ts; db/modules/alert-prefs-v1.sql). */
-  alertPrefs: import('./alert-prefs').AlertPrefs[];
-  // P100 pay: the guard pay preparers each Company Manager names (guard-pay-preparers.ts; db/modules/guard-pay-preparers-v1.sql).
-  guardPayPreparers: import('./guard-pay-preparers').GuardPayPreparer[];
-  // P100 pay (B2): the FD's cash stand-ins the CEO turns on (cash-stand-in.ts; db/modules/cash-stand-ins-v1.sql).
-  cashStandIns: import('./cash-stand-in').CashStandIn[];
-  // P100 pay (C12 + J3): staff overtime lines for the staff payroll (staff-ot.ts; db/modules/staff-ot-v1.sql).
-  staffOtLines: import('./staff-ot').StaffOtLine[];
   fwWelfareChecks: FwWelfareCheck[];
   fwPlacements: FwPlacement[];
   fwPlacementHosts: FwPlacementHostView[];
@@ -3430,6 +3541,17 @@ export interface Dataset {
   fwCostCharges: FwCostCharge[];
   timeSlips: TimeSlip[];
   timeSlipSettings: TimeSlipSetting[];
+  /** A9 (Fitri package): office staff overtime claims, paid in the staff payroll run only when HR switches overtime on. */
+  staffOtClaims: StaffOtClaim[];
+  warrantyClaims: import('./warranty-claims').WarrantyClaim[];
+  /** Guard roster engine (Part O, Fauzan 13-14 Nov 2026; module guard-roster-v1, not installed until the CEO says). */
+  siteCoverage: import('./roster-records').SiteCoverageRow[];
+  rosterVersions: import('./roster-records').RosterVersionRow[];
+  rosterDays: import('./roster-records').RosterDayRow[];
+  attendanceBreaks: import('./roster-records').AttendanceBreakRow[];
+  rosterEvidence: import('./roster-records').RosterEvidenceRow[];
+  guardAllowances: import('./roster-records').GuardAllowanceRow[];
+  lumpSumAgreements: import('./roster-records').LumpSumRow[];
   /** Staff directory (Fauzan, 4 Nov 2026): office staff and their mailboxes; never access by itself. */
   staffDirectory: import('./staff-directory').StaffDirectoryEntry[];
   staffDirectoryBatches: import('./staff-directory').StaffDirectoryBatch[];
@@ -3482,12 +3604,6 @@ export interface Dataset {
   guardPings: GuardPing[];
   qmsItems: import('./quality-ops').QmsItem[];
   qmsNonconformities: import('./quality-ops').QmsNonconformity[];
-  /** P100 (E9): PIKM records (db/modules/quality-pikm-v1.sql): medical 56+, briefings, 7-year files, client packs, office alarm and CCTV. */
-  qmsPikmRecords: import('./quality-pikm').PikmRecord[];
-  /** P100 (E10): staff resignations (db/modules/hr-resignations-v1.sql). */
-  staffResignations: import('./hr-resignation').Resignation[];
-  /** P100 (J2): equipment warranty claims to the supplier (db/modules/item-warranty-v1.sql). */
-  itemWarrantyClaims: import('./item-warranty').WarrantyClaim[];
   fwRecruitFiles: FwRecruitFile[];
 }
 
@@ -3503,6 +3619,15 @@ export interface Hostel {
   tenure: 'OWNED' | 'RENTED';
   /** Nepali guards work at private-sector sites, so the Operations Director approves; OGM for government. */
   sector: 'private' | 'government';
+  /** Part P-G: the accommodation certificate (Act 446); warned when missing or expired, never a block. */
+  cert?: { number: string; issuedOn: IsoDate; expiresOn: IsoDate; doc: string | null; by: string; at: IsoDateTime } | null;
+  /** Part P13: the hostel supervisor (usually a resident), set by the OM from a date; earlier ones kept. */
+  supervisor?: { personId: Id | null; name: string | null; from: IsoDate; by: string; at: IsoDateTime } | null;
+  supervisorHistory?: { personId: Id | null; name: string | null; from: IsoDate; by: string; at: IsoDateTime }[];
+  /** The OM who looks after this hostel (set when the OM names the supervisor). */
+  omUserId?: Id | null;
+  /** Part P18: a hostel used by a manager of Nepali workers follows the same rules. */
+  usedByNepalManager?: boolean;
 }
 
 /** A worker living in a hostel from one date to another, for bed-days. */
@@ -3514,12 +3639,13 @@ export interface HostelStay {
   personName: string;
   from: IsoDate;
   to: IsoDate | null;
-  /** P100 (E8, Fauzan 11 Nov 2026): the room, who checked the worker in, and the check-out memo. Older rows have none. */
-  room?: string;
-  checkedInBy?: string;
-  checkedInById?: Id;
-  checkedInAt?: IsoDateTime;
-  checkout?: import('./fw-extras').CheckoutMemo | null;
+  /** E8: who in FWM checked the worker in (stays recorded in Prima). */
+  checkedInBy?: { by: string; byId: Id; at: IsoDateTime } | null;
+  /** E8: the check-out memo FWM wrote when the worker left. */
+  checkOut?: import('./fw-hostel').HostelCheckOutMemo | null;
+  /** Part P1: optional room, and why the stay ended. */
+  room?: string | null;
+  endReason?: string | null;
 }
 
 export type HostelBillKind = 'RENT' | 'ELECTRICITY' | 'WATER' | 'MAINTENANCE';
@@ -3831,8 +3957,8 @@ export interface InvoiceProof {
   docId: Id;
 }
 
-/** portal (J1, 11 Nov 2026): the client gave it on the client portal themselves; never chosen by staff (CLIENT_VIA). */
-export type ClientFeedbackVia = 'meeting' | 'visit' | 'call' | 'email' | 'form' | 'portal';
+/** 'link' is given by the client through their report link (client portal, A7); staff never choose it. */
+export type ClientFeedbackVia = 'meeting' | 'visit' | 'call' | 'email' | 'form' | 'link';
 
 export interface ClientComplaint {
   id: Id;
@@ -3915,8 +4041,6 @@ export interface ClientAccount {
   winBackOn?: IsoDate | null;
   /** Read-only report links shared with the client (client portal, first step). */
   shareLinks?: import('./client-share').ClientShareLink[];
-  /** J1 (11 Nov 2026): named people at the client who sign in to the client portal (client-portal.ts). */
-  portalUsers?: import('./client-portal').ClientPortalUser[];
   /**
    * The client's signed acknowledgement of each month's work, with the client's comment on the work (Fauzan, 4 Nov 2026:
    * for all operations the OM uploads the bill sent and the client's acknowledgement slip or signed paper by the 10th
@@ -3979,10 +4103,6 @@ export interface ClientRequest {
   outcome: string | null;
   /** More or fewer guards changes the contract: the signed variation's reference. */
   variationRef: string | null;
-  /** J1: raised by the client on the client portal (its outcome is shown back to the client there). */
-  viaPortal?: boolean;
-  /** J1: the client's site it is about, when the client named one. */
-  siteId?: Id | null;
 }
 
 export type ClientRenewalDecision = 'renew' | 'renew_new_price' | 'rebid' | 'let_go';
@@ -4085,7 +4205,8 @@ export interface ClaimRate {
   setAt: IsoDateTime;
 }
 
-export type StaffClaimKind = 'MEDICAL' | 'DENTAL' | 'OPTICAL' | 'CHECKUP' | 'TRAVEL';
+/** IT_EQUIPMENT: IT equipment or software, paid back only against an approved IT purchase (circular MN/CIR/IT/003/2026 point 3). */
+export type StaffClaimKind = 'MEDICAL' | 'DENTAL' | 'OPTICAL' | 'CHECKUP' | 'TRAVEL' | 'IT_EQUIPMENT';
 
 export interface StaffClaim {
   id: Id;
@@ -4136,6 +4257,8 @@ export interface StaffClaim {
   headIds?: Id[];
   headNames?: string[];
   headCheck?: HostelBillStep | null;
+  /** IT equipment or software: the approved IT purchase it was bought under (Q15). Without one it cannot be approved. */
+  itPurchaseRef?: string | null;
   createdAt: IsoDateTime;
 }
 
@@ -4171,16 +4294,16 @@ export interface StaffPayLine {
   personId: Id;
   staffNo: string;
   name: string;
+  /** Part P24: staff stay damage recovered in this run, with the staff member's written consent (answer 32). */
+  recoveryIds?: Id[];
+  recoveries?: number;
+  /** Review B2: the amount of each recovery taken in this run (a part when the half-of-gross limit applies). */
+  recoveryParts?: { id: Id; amount: number }[];
   jobTitle: string;
   age: number;
   nationality: Nationality;
   basic: number;
-  allowanceLines: { label: string; amount: number; fixed: boolean; typeId?: Id; epf?: boolean; socso?: boolean; pcb?: boolean; hrd?: boolean; overtime?: boolean }[];
-  /**
-   * P100 C12 + J3: approved overtime paid on this line (HR's switch on, the person named): the lines' ids (each paid in
-   * one run only), hours, the hourly rate (basic / 26 / 8) and the amount. Not EPF wages; SOCSO, EIS and PCB count it.
-   */
-  overtime?: { ids: Id[]; hours: number; hourly: number; amount: number } | null;
+  allowanceLines: { label: string; amount: number; fixed: boolean; typeId?: Id; epf?: boolean; socso?: boolean; pcb?: boolean; hrd?: boolean }[];
   allowances: number;
   unpaidDays: number;
   unpaidDeduction: number;
@@ -4216,15 +4339,8 @@ export interface StaffPayLine {
    * proration rule is set, so HR enters the pay for the days worked (partPay) and the month cannot be submitted until then.
    */
   partMonth?: { from: IsoDate; to: IsoDate } | null;
-  /**
-   * P100 C1 (Fauzan, 11 Nov 2026: "For staff we prorate the daily rate from its salary then give accordingly", working
-   * days): the part-month pay worked out by Prima: daily rate = monthly basic (and fixed allowances) / the pay law's day
-   * divisor (26), times the working days (Monday to Friday) employed in the month, never more than the full month. Shown on
-   * the payslip. HR may still correct it with a reason (partPay).
-   */
-  partAuto?: { workingDays: number; divisor: number; dailyBasic: number; dailyAllowances: number; basic: number; allowances: number } | null;
-  /** HR's correction of the part-month pay, with the reason (always kept). */
-  partPay?: { basic: number; allowances: number; note: string; by: string; at: IsoDateTime } | null;
+  /** Part-month pay: Prima's working-days figure (auto, Fauzan 11 Nov 2026), or HR's own figure with a reason. */
+  partPay?: { basic: number; allowances: number; note: string; by: string; at: IsoDateTime; auto?: boolean; workingDays?: number } | null;
   /** What the line was calculated from (staffPayInputsKey); a draft whose inputs changed is recalculated before submitting. */
   inputs?: string;
   /** Effective statutory contribution settings used in this calculation; missing legacy evidence requires recalculation. */
@@ -4438,7 +4554,8 @@ export interface ItAsset {
   location: string;
   boughtOn: IsoDate;
   warrantyTo: IsoDate | null;
-  status: 'in_use' | 'spare' | 'repair' | 'disposal_pending' | 'disposed';
+  /** lost and stolen: reported by the person (Merdeka circular MN/CIR/IT/003/2026 point 6, Q12). */
+  status: 'in_use' | 'spare' | 'repair' | 'disposal_pending' | 'disposed' | 'lost' | 'stolen';
   lastCheckedOn: IsoDate | null;
   /** The purchase it came from, when bought through Prima. */
   purchaseId?: Id | null;
@@ -4470,6 +4587,8 @@ export interface ItPurchase {
   at: IsoDateTime;
   reason: string;
   items: { kind: ItAssetKind; description: string; qty: number; unitPrice: number }[];
+  /** V10 (Part V, 14 Nov 2026): a software or subscription purchase (no device is tagged on receipt). Missing = equipment. */
+  type?: 'EQUIPMENT' | 'SOFTWARE_SUBSCRIPTION';
   total: number;
   /**
    * IT says what is needed and the IT Manager (or the COO, for the IT Manager's own request) agrees the need; then
@@ -4506,7 +4625,9 @@ export interface ItDomain {
   up: boolean | null;
 }
 
-export type ItTicketCategory = 'ACCOUNT' | 'DEVICE' | 'M365' | 'NETWORK' | 'PRIMA' | 'WEBSITE' | 'SOCIAL' | 'EMAIL' | 'OTHER';
+export type ItTicketCategory = 'ACCOUNT' | 'DEVICE' | 'M365' | 'NETWORK' | 'PRIMA' | 'WEBSITE' | 'SOCIAL' | 'EMAIL' | 'OTHER' | 'SOFTWARE' | 'SECURITY' | 'PROCUREMENT';
+/** Help request priority. P4 (Rendah) added by the Merdeka ticket policy IT-POL-004 (13 Nov 2026); IT jobs stay P1-P3. */
+export type ItTicketPriority = 'P1' | 'P2' | 'P3' | 'P4';
 /** The receipt of one approved IT import batch. */
 export interface ItImportReceipt {
   created: string[];
@@ -4524,10 +4645,28 @@ export interface ItTicket {
   raisedBy: string;
   raisedById: Id;
   category: ItTicketCategory;
-  priority: 'P1' | 'P2' | 'P3';
+  priority: ItTicketPriority;
   title: string;
   detail: string;
   at: IsoDateTime;
+  /** First response (server time): when IT first took, assigned or acknowledged it (Merdeka IT-POL-004, Q1). */
+  firstResponseAt?: IsoDateTime | null;
+  /** The person's contact number when raising it (prefilled from the profile, editable). */
+  contactPhone?: string | null;
+  /** A screenshot or photo from the person (same proof store as IT proof); left out of the board. */
+  photos?: ItProof[];
+  /** IT referred it to a vendor; the ticket stays with the assigned IT person and on IT's clock (Q4). */
+  vendorReferral?: { vendor: string; caseNo: string; on: IsoDate; byId: Id; answer?: string; answeredOn?: IsoDate | null } | null;
+  /** Root cause on resolve; required for P1 and SECURITY (Q4). */
+  rootCause?: string | null;
+  /** A device report from the person's items (lost, stolen, damaged, not working), linked to the IT asset (Q12). */
+  deviceReport?: { assetId: Id; kind: 'lost' | 'stolen' | 'damaged' | 'not_working'; policeReportNo?: string | null; policePhoto?: ItProof[] } | null;
+  /** Priority changes by IT, each with a reason (a SECURITY request lowered below P2, for example). */
+  priorityChanges?: { at: IsoDateTime; byId: Id; from: ItTicketPriority; to: ItTicketPriority; reason: string }[];
+  /** Notes added by the person (a repeat of the same problem) and by IT (vendor referral and answers). */
+  notes?: { at: IsoDateTime; byId: Id; by: string; text: string }[];
+  /** A PROCUREMENT request turned into an IT purchase request (Q2, Q6). */
+  purchaseRequestId?: Id | null;
   assignedTo: string | null;
   status: 'open' | 'in_progress' | 'resolved';
   resolvedAt: IsoDateTime | null;
@@ -4872,6 +5011,8 @@ export interface FinStatus {
   team: number;
   /** Financial year end as MM-DD. */
   fyEnd: string;
+  /** Changes to the year end by the FD or the CEO, with the reason (Finance 27 M2). */
+  fyEndHistory?: { from: string; to: string; by: string; byId: Id; at: IsoDateTime; comment: string }[];
   /** Last time Prima received this company's figures from SQL Account; null means never. */
   sqlLastAt: IsoDateTime | null;
   /** Last month end closed in SQL Account. */
@@ -4964,6 +5105,10 @@ export interface FinStatus {
   sqlDiscovery?: import('./finance-ledger').FinSqlDiscovery | null;
   /** Every SQL Account connector read, accepted or rejected (append only). */
   sqlSyncs?: import('./finance-ledger').FinSqlSync[];
+  /** SQL Account posting switched on for this company and per document type (Fauzan, 13 Nov 2026, Build 1). Off by default. */
+  sqlPosting?: import('./sql-posting').FinSqlPostingSwitch | null;
+  /** SQL Account customer codes per customer, entered by Finance and checked by a second person (L4). */
+  sqlCustomerCodes?: import('./sql-posting').FinSqlCustomerCode[];
   /** Bank mandates (who signs and approves for each account), every version kept (Fauzan, 2 Nov 2026). */
   mandates?: FinMandate[];
   /** Staff cash advances, petty cash floats and company cards (Fauzan, 2 Nov 2026). */
@@ -4972,6 +5117,12 @@ export interface FinStatus {
   cards?: FinCard[];
   /** Each contract's monthly invoice in SQL Account, or why there is none (Fauzan, 2 Nov 2026). */
   billing?: import('./finance-billing').FinBillingLine[];
+  /** F1 (Fauzan, 11 Nov 2026): unbilled-site flags a Finance reviewer cleared with a reason. */
+  siteFlagClears?: import('./finance-site-checks').FinSiteFlagClear[];
+  /** F2, on PWVSB's row: target margins (group default and per company), set by the FD or the CEO with a reason. */
+  siteTargets?: import('./finance-site-checks').FinSiteTargets;
+  /** F2, on PWVSB's row: shared monthly costs per guard (transport for foreign guards, uniform, equipment). */
+  siteCostRates?: import('./finance-site-checks').FinSiteCostRates;
   /** Claims submitted to government clients and their follow-up until paid (Fauzan, 2 Nov 2026). */
   govtClaims?: import('./finance-billing').FinGovtClaim[];
   /** Agreements to stamp, their STAMPS certificates, and refunds of duty on cancelled agreements (Fauzan, 2 Nov 2026). */
@@ -4997,12 +5148,12 @@ export interface FinStatus {
   managementFees?: Record<Id, ManagementFee | null | undefined>;
   /** Group row only: the CEO's approval value limits (Fauzan, 3 Nov 2026). See ApprovalLimits. */
   approvalLimits?: ApprovalLimits;
+  /** B2: the CEO's cash stand-in for the Finance Director (group row only). */
+  cashStandIn?: import('./cash-stand-in').CashStandIn;
+  /** B3: the CEO's switch for the Vice Chairman's consent on office staff leave (group row only). Last entry in force; default on. */
+  staffLeaveVcConsent?: { on: boolean; reason: string; by: string; byId: Id; at: IsoDateTime }[];
   /** Every change to this company's management fees, with the reason, who and when. Append-only. */
   managementFeeLog?: ManagementFeeChange[];
-  /** C5 (Fauzan, 11 Nov 2026): costing rates entered in the app from a month, group or company, append-only (rate-book.ts). */
-  rateLog?: import('./rate-book').RateEntry[];
-  /** F1 (Fauzan, 11 Nov 2026): unbilled-site flags cleared by a Finance reviewer, each with a reason (finance-monitor.ts). */
-  billingClears?: import('./finance-monitor').UnbilledClear[];
 }
 
 // ---------- JA Group app feed (Fauzan, 26 Oct 2026) ----------
@@ -5158,7 +5309,15 @@ export interface AmPayment {
   id: Id;
   on: IsoDate;
   amount: number;
-  method: 'CASH' | 'TRANSFER' | 'CHEQUE' | 'ONLINE';
+  /**
+   * EWALLET (Part S-X31, 14 Nov 2026): only into the owner company's own merchant or e-wallet account. CDM (Part V
+   * V-X14): cash paid into the bank at a cash deposit machine, with the slip photo; rental homes take no CASH.
+   */
+  method: 'CASH' | 'TRANSFER' | 'CHEQUE' | 'ONLINE' | 'EWALLET' | 'CDM';
+  /** CDM slip photo (V-X14) or the tenant's transfer proof, kept so a deposit claim years later can be checked (V27). */
+  proof?: ItProof[];
+  /** The official receipt number, issued only at Finance's bank confirmation (V27); receiptNo is the team's note number. */
+  officialReceiptNo?: string | null;
   receiptNo: string;
   ref: string;
   /** Which months it paid, and how much of each. */
@@ -5209,6 +5368,12 @@ export interface AmTenancy {
     consent: { on: boolean; by: string; at: IsoDateTime; how: string } | null;
     reminders: AmRentReminder[];
   } | null;
+  /** Part V: the rental home application this tenancy came from (keys handover, V48). */
+  rentalAppId?: Id | null;
+  /** V69: the tenancy's notice days (default 30). */
+  noticeDays?: number;
+  /** V-X29: who paid each part of the deposit (a zakat-paid deposit goes back to the zakat body). */
+  depositPayers?: { amount: number; payer: string; payerName: string }[];
 }
 
 export interface AmUnit {
@@ -5226,8 +5391,27 @@ export interface AmUnit {
   insuranceExpiry: IsoDate;
   assessmentDue: IsoDate;
   quitRentDue: IsoDate;
-  meters: { kind: 'ELECTRICITY' | 'WATER'; account: string; payer: 'tenant' | 'owner'; lastReadOn: IsoDate | null }[];
+  meters: {
+    kind: 'ELECTRICITY' | 'WATER';
+    account: string;
+    payer: 'tenant' | 'owner';
+    lastReadOn: IsoDate | null;
+    /** Part S60: the account holder, the name the deposit is in, the deposit and the latest bill (entered, or from Finance bills). */
+    accountHolder?: string | null;
+    depositName?: string | null;
+    deposit?: number | null;
+    latestBill?: { amount: number; on: IsoDate } | null;
+  }[];
   tenancy: AmTenancy | null;
+  /** Part S59: rental, or the group's own use (company and department). Missing = RENTAL. */
+  use?: 'RENTAL' | 'OWN_USE';
+  ownUse?: { companyId: Id; department: string } | null;
+  /** Part S59: from the building purchase file (S51-S58), never typed twice. */
+  purchase?: { buyingCompanyId: Id; fileId: Id; price: number; on: IsoDate; spaRef: string; titleNo: string; bank: string; loanRegularId: Id | null; keyOn: IsoDate | null; vaultRef: string | null } | null;
+  /** Part S46: strata details (entered, never assumed). Service charge and sinking fund are paid through Finance regular payments. */
+  strata?: { strata: boolean; jmbName: string; jmbContact: string; serviceCharge: number | null; sinkingFund: number | null } | null;
+  /** Part S63: an office let to a company (Rekod Sewa Pejabat). */
+  office?: boolean;
   /**
    * What the developer's own system last said about this unit (slice 4G feed). Kept apart from Prima's tenancy: a
    * difference is shown for the team to check, never copied over, and a payment it reports is not banked money.
@@ -5247,7 +5431,8 @@ export interface AmWorkOrder {
   unitId: Id | null;
   propertyId: Id | null;
   title: string;
-  source: 'tenant' | 'planned' | 'inspection';
+  /** 'staff': a staff office repair request (Part S1); 'inspection': found on a periodic office visit (S80). */
+  source: 'tenant' | 'planned' | 'inspection' | 'staff';
   raisedOn: IsoDate;
   dueOn: IsoDate;
   status: 'open' | 'in_progress' | 'done';
@@ -5256,6 +5441,12 @@ export interface AmWorkOrder {
   doneOn: IsoDate | null;
   /** Bill of quantities, quotes and award for a job sent out to a contractor (Fauzan, 5 Nov 2026). */
   bq?: AmBq | null;
+  /** Part P8 / P16: a hostel job, from an approved need or an approved maintenance request. */
+  hostelId?: Id | null;
+  hostelNeedId?: Id | null;
+  hostelMaintId?: Id | null;
+  /** Part S: the office repair record that carries the request, quotes, approvals, payment and report. */
+  officeRepairId?: Id | null;
 }
 
 export interface AmAsset {
@@ -5271,6 +5462,9 @@ export interface AmAsset {
   condition: 'good' | 'fair' | 'poor';
   keeper: string;
   status: 'in_use' | 'disposal_pending' | 'disposed' | 'buy_requested' | 'buy_approved' | 'buy_refused';
+  /** Part P8: a hostel purchase, from an approved hostel need. */
+  hostelId?: Id | null;
+  hostelNeedId?: Id | null;
   lastCheckedOn: IsoDate | null;
   /** Disposal: the Asset Management team asks, Finance (or the COO for a larger book value) approves, the team records it. */
   disposal?: AmDisposal | null;
@@ -5387,7 +5581,7 @@ export interface AmDepnPosting {
 
 export interface AmProperty {
   id: Id;
-  kind: 'RESORT' | 'ORCHARD' | 'TRAINING';
+  kind: 'RESORT' | 'ORCHARD' | 'TRAINING' | 'HOMESTAY';
   name: string;
   town: string;
   state: string;
@@ -5395,7 +5589,7 @@ export interface AmProperty {
   licences: { name: string; expiresOn: IsoDate }[];
   months: { period: string; income: number; cost: number; occupancyPct: number | null; harvestKg: number | null; bookings: number | null }[];
   /** A resort's rooms and approved price list (Fauzan, 5 Nov 2026, rule AM-EXTRAS). */
-  stay?: import('./am-extras').AmStaySetup | null;
+  stay?: (import('./am-extras').AmStaySetup & { house?: import('./short-stays').SsHouse }) | null;
 }
 
 // ---------- ACT: Audit, Compliance and Transformation (Fauzan, 27 Oct 2026) ----------
@@ -5439,15 +5633,14 @@ export interface ActFinding {
   } | null;
   fix: { proof: string; by: string; at: IsoDateTime } | null;
   /** ACT's check that the fix works; a failed check reopens the finding. */
-  /**
-   * ACT's checks of the fix. C6 (Fauzan, 11 Nov 2026): a high finding needs a first check (the team's Auditor, the ACT
-   * Manager or the Director) and then a second check by the ACT Manager (or the Director), never by the first checker
-   * or the person who raised it. byId and stage are kept from 12 Nov 2026; older checks have neither.
-   */
-  checks: { ok: boolean; note: string; by: string; at: IsoDateTime; byId?: Id; stage?: 'first' | 'second' }[];
+  checks: { ok: boolean; note: string; by: string; at: IsoDateTime }[];
+  /** C6: the Auditor's first check that the fix works, waiting for the ACT Manager's second check (never the same person). */
+  firstCheck?: { note: string; by: string; byId: Id; at: IsoDateTime } | null;
   /** Enforcement follow-ups with the owner: a record of each chase, never a penalty. */
   followUps?: { method: ActFollowUpMethod; note: string; nextOn: IsoDate | null; by: string; byId: Id; at: IsoDateTime }[];
   status: 'open' | 'planned' | 'fixed' | 'closed';
+  /** Part U20: deferred (tertangguh) by the ACT Director with a reason, until a date. */
+  deferred?: { until: IsoDate; reason: string; by: string; byId: Id; at: IsoDateTime } | null;
   /** Raised from the quality system (a register gap or a service fault): the full corrective-action detail is needed. */
   origin?: 'quality';
 }
@@ -5794,7 +5987,11 @@ export interface PurRequest {
   rejected: PurStep | null;
   po: { ref: string; by: string; at: IsoDateTime; amount: number } | null;
   /** Goods received note: quantity received per line. */
-  grn: (PurStep & { qty: number[] }) | null;
+  grn: (PurStep & { qty: number[]; condition?: { good: number; damaged: number; wrong: number; note: string }[]; docIds?: Id[]; /** Part U16: the supplier's delivery order number and a photo of it. */ doNo?: string; doDocIds?: Id[] }) | null;
+  /** Part U-X14: an office purchase (3 shop quotes AND 2 online prices). */
+  forOffice?: boolean;
+  /** Part T3d: the site supplies requests whose "buy" lines this purchase covers. */
+  siteRequestIds?: Id[];
   invoice: { eInvoiceUuid: string; number: string; amount: number; by: string; at: IsoDateTime } | null;
   match: { ok: boolean; notes: string[]; by: string; at: IsoDateTime } | null;
   posted: { sqlRef: string; by: string; at: IsoDateTime } | null;
@@ -5842,6 +6039,15 @@ export interface StockItem {
   charge?: 'rental' | 'sale' | null;
   rentalMonthly?: number | null;
   salePrice?: number | null;
+  /**
+   * Part T4 (Fitri package, 13 Nov 2026): the store's MAXIMUM beside reorderAt (the minimum). Null or missing means
+   * "not set"; no number is ever invented. Set by the Procurement executive, each change kept with who and why.
+   */
+  maxAt?: number | null;
+  minMaxHistory?: { at: IsoDateTime; by: string; byId: Id; min: number; max: number | null; reason: string }[];
+  /** Part U8: the CSG/TNG course uniform buffer set by the OGM (null = not set); each change kept. */
+  courseBufferAt?: number | null;
+  courseBufferHistory?: { at: IsoDateTime; by: string; level: number | null; reason: string }[];
 }
 
 /**
@@ -5873,6 +6079,13 @@ export interface StockRequest {
   requestedById: Id;
   status: 'open' | 'issued' | 'refused' | 'cancelled';
   decided: { at: IsoDateTime; by: string; byId: Id; note: string; issueId?: Id } | null;
+  /**
+   * Part T (Fitri package, 13 Nov 2026): the same table also holds the site supplies request (Permohonan Pesanan
+   * Barang) and its settings, site contract types, site Min/Max proposals and bulk sends. Missing means the Part I
+   * single-guard uniform request. The site supplies data is in ss (see site-supplies.ts).
+   */
+  kind?: 'uniform' | 'site_supplies' | 'ss_settings' | 'ss_site' | 'ss_minmax' | 'ss_bulk';
+  ss?: Record<string, unknown>;
 }
 
 export interface StockIssue {
@@ -5921,8 +6134,20 @@ export interface StockIssue {
     condition: 'good' | 'worn' | 'damaged' | 'lost';
     note: string;
     /** A lost or damaged item waits for the company manager to confirm it (insider abuse audit, 27 Oct 2026). */
-    confirmed?: { by: string; at: IsoDateTime; note: string } | null;
+    confirmed?: { by: string; at: IsoDateTime; note: string; cause?: 'WEAR' | 'ACCIDENT' | 'NEGLIGENCE' | 'MISUSE' | 'UNKNOWN' } | null;
   } | null;
+  /** Part T8: condition at issue, and a tag number for marked equipment (the item register unit id once installed). */
+  condition?: 'new' | 'good_used' | null;
+  tag?: string | null;
+  /** Part T: the site supplies request (and bulk send) this issue came from. */
+  requestId?: Id | null;
+  /**
+   * Part T12: a returned damaged or worn piece disposed of. A piece with a company or contract mark needs "marks
+   * removed" ticked and a photo; the decider is not the person who recorded the return.
+   */
+  disposed?: { at: IsoDateTime; by: string; byId: Id; reason: string; marked: boolean; marksRemoved: boolean; photoIds: Id[] } | null;
+  /** Part U8: an issue for a CSG/TNG course (kept apart from the 12-month uniform record). */
+  course?: { kind: 'CSG' | 'TNG'; date: IsoDate } | null;
 }
 
 /** A second person who signs in with their staff number and PIN to witness (insider abuse audit, 27 Oct 2026). */
@@ -6415,6 +6640,11 @@ export interface OshCoordinator extends OfficeOshBase {
   /** Training certificate or course reference, if the coordinator has one. */
   trainingRef: string | null;
   endedOn: IsoDate | null;
+  /**
+   * C8 (Fauzan, 11 Nov 2026: "let HR monitor first"): a coordinator outside HR reports accidents but does not see the
+   * accident card until HR switches this on for them, with a reason. Newest last; off by default.
+   */
+  seesIncidents?: { on: boolean; reason: string; by: string; byId: Id; at: IsoDateTime }[];
 }
 
 /** An office risk assessment (HIRARC, OSHA 1994 s.18B) for one workplace of the employer. */
@@ -6702,6 +6932,8 @@ export interface FinPayment {
   external?: FinExternalApproval | null;
   /** The Teams approval Prima read itself from the protected results list (read-only connection, off by default). */
   teams?: FinTeamsRead | null;
+  /** The SQL Account payment voucher Prima posted for it (Build 1, 13 Nov 2026); Finance no longer types it by hand. */
+  sqlPost?: { docNo: string; on: IsoDate } | null;
   /** The bank statement line that shows the money left, once matched. */
   cleared?: { statementId: Id; lineId: Id; date: IsoDate } | null;
   /** The supplier's validated e-Invoice (MyInvois UUID) or the self-billed e-Invoice this payment settles (1 Nov 2026). */
@@ -6773,55 +7005,41 @@ export interface FinSettingsValues {
   kpiCloseReviewMinutes: number;
   /** Share of payments and closes accepted without being returned (%). */
   kpiFirstPassPct: number;
-  /**
-   * C4 (Fauzan, 11 Nov 2026: "the FD can adjust these values later"): every number in the confirmed finance and
-   * insurance rules, defaulting to the rule value, changed by the Finance Director or the CEO with a reason, from a date.
-   */
+  /** Finance rules confirmed by Fauzan, 11 Nov 2026; the Finance Director can adjust them later. */
+  /** The CEO is reminded of payments of this amount or more (RM). */
   ceoNoticeFrom: number;
-  ruleMaxAmount: number;
-  auditCirculateMonths: number;
-  ssmLodgeDays: number;
-  billDiffPct: number;
-  govtPayDays: number;
-  govtFollowUpDays: number;
-  unidentifiedDays: number;
-  caInitialPct: number;
-  caGeneralPct: number;
-  caHeavyVehiclePct: number;
-  caOfficePct: number;
-  caComputerPct: number;
-  caMotorCarPct: number;
-  smallValueMax: number;
-  smallValueCap: number;
-  motorCarCapNew: number;
-  motorCarCapOther: number;
-  smePaidUpMax: number;
-  smeIncomeMax: number;
-  auditRequestDays: number;
-  topSuppliers: number;
-  supplierCheckDays: number;
-  creditOverdueDays: number;
-  creditStaleDays: number;
-  fdMaturityAlertDays: number;
-  depositClaimDays: number;
-  finalInvoiceDays: number;
-  retentionUpdateMonths: number;
+  /** An intercompany difference up to this may be explained; above it, it is corrected in SQL Account (RM). */
   icExplainMax: number;
-  advanceSettleDays: number;
-  pettyCountByDay: number;
-  cardExplainByDay: number;
-  premiumDueDays: number;
-  premiumEarlyDays: number;
-  guaranteeRemindDays: number;
-  claimNoticeDays: number;
+  /** Staff are paid on this day of the same month (the month's last day if shorter). */
+  staffPayDay: number;
+  /** Retention money still held by a client is updated at least every this many months until claimed back. */
+  retentionPromptMonths: number;
+  /** Year-end capital allowance rates and caps (Income Tax Act 1967 Schedule 3), editable by the FD. */
+  yeInitialPct: number;
+  yeAnnualGeneralPct: number;
+  yeAnnualHeavyVehiclePct: number;
+  yeAnnualOfficePct: number;
+  yeAnnualComputerPct: number;
+  yeAnnualMotorCarPct: number;
+  yeSmallValueMax: number;
+  yeSmallValueCap: number;
+  yeMotorCarCapNew: number;
+  yeMotorCarCapOther: number;
+  yeSmePaidUpMax: number;
+  yeSmeIncomeMax: number;
+  /** Lighter check L3 (Fauzan, 2 Nov 2026): a varying regular bill more than this % above its last-three average is explained. */
+  regularHighPct: number;
+  /** Lighter check L3: a varying regular bill more than this % below its last-three average is explained. */
+  regularLowPct: number;
 }
-export type FinApprovalMethod = 'prima' | 'teams';
+/** Part Y Y8b (Fauzan, 14 Nov 2026, "do both"): a payment may also be approved in a SharePoint / Power Automate form; one place only. */
+export type FinApprovalMethod = 'prima' | 'teams' | 'sharepoint';
+/** A settings change, with the day it takes effect (Fauzan, 11 Nov 2026: "effective from a date"); none = when set. */
+export type FinSettingsSign = FinSign & { effectiveFrom?: IsoDate };
 export interface FinSettings {
   values: Partial<FinSettingsValues>;
-  set: FinSign & { from?: IsoDate };
-  history: { values: Partial<FinSettingsValues>; set: FinSign & { from?: IsoDate } }[];
-  /** C4: changes saved to start on a later day; each applies from its day (finSettingsOf). */
-  scheduled?: { from: IsoDate; values: Partial<FinSettingsValues>; set: FinSign & { from?: IsoDate } }[];
+  set: FinSettingsSign;
+  history: { values: Partial<FinSettingsValues>; set: FinSettingsSign }[];
 }
 export interface FinSign {
   by: string;
@@ -6919,6 +7137,8 @@ export interface FinPayee {
   verified: (FinSign & { method: 'callback' | 'document' | 'bank_name_check'; contact: string; numberSource: string }) | null;
   /** Earlier bank details, kept for the audit trail. */
   history: { bank: string; accountLast4: string; accountName: string; until: IsoDateTime; by: string }[];
+  /** The payee's SQL Account code (supplier, or the account a payment to it is charged to), checked by a second person (L4). */
+  sqlCode?: import('./sql-posting').FinSqlCode | null;
 }
 
 /** One line of a bank statement as loaded from the bank's CSV. Money out is negative. */
@@ -7541,7 +7761,7 @@ export interface RenewalCase {
   openedBy: string;
   openedById: Id;
   /** The paper checklist, from the RENEWAL-PAPERS rule, ticked by the company. */
-  papers: { name: string; done: RenewalMark | null; ref?: string | null }[];
+  papers: { name: string; done: RenewalMark | null; ref?: string | null; kdn?: import('./kdn-renewal').KdnPaperState | null }[];
   signed: RenewalMark | null;
   /** Fee paid through Finance: the payment reference Finance gives. */
   fee: (RenewalMark & { ref: string; amount: number | null }) | null;
@@ -7551,6 +7771,8 @@ export interface RenewalCase {
   returns: RenewalMark[];
   renewed: (RenewalMark & { newExpiresOn: IsoDate; oldExpiresOn: IsoDate | null; certificateRef: string }) | null;
   confirmed: RenewalMark | null;
+  /** KDN private agency licence only (Part W, Fauzan 14 Nov 2026): the yearly KDN checklist, eSIMS, appointment, session. */
+  kdn?: import('./kdn-renewal').KdnCase | null;
 }
 
 export type ReportFrequency = 'weekly' | 'fortnightly' | 'monthly' | 'quarterly' | 'yearly' | 'once';
@@ -8340,6 +8562,30 @@ export type TimeSlipApprover = 'head' | 'hr';
  * HR-TIME-SLIP). The hours are worked back after office hours within the make-up period; hours not worked back are
  * taken from annual leave in half days. Approving it never changes pay by itself.
  */
+/**
+ * A9 (Fitri package, Fauzan 11 Nov 2026): an office staff member claims overtime worked; the same head who approves
+ * time slips approves it with a comment (never their own); the staff payroll run pays approved hours at HR's rates only
+ * while HR has overtime switched on for that person (rule HR-OT). Otherwise the run shows the claim as not paid.
+ */
+export interface StaffOtClaim {
+  id: Id;
+  userId: Id;
+  userName: string;
+  personId: Id | null;
+  companyId: Id | null;
+  department: User['department'] | null;
+  date: IsoDate;
+  hours: number;
+  kind: 'normal' | 'restDay' | 'publicHoliday';
+  reason: string;
+  requestedAt: IsoDateTime;
+  status: 'pending' | 'approved' | 'refused' | 'cancelled';
+  decidedBy: string | null;
+  decidedById: Id | null;
+  decidedAt: IsoDateTime | null;
+  decisionNote: string;
+}
+
 export interface TimeSlip {
   id: Id;
   userId: Id;
@@ -9010,6 +9256,10 @@ export interface PdpaConsent {
   recordedBy: string;
   recordedAt: IsoDateTime;
   withdrawn: { on: IsoDate; note: string; by: string; at: IsoDateTime } | null;
+  /** Part N18 paper consent: the person, what was consented to, and the paper reference (no scan). */
+  personId?: Id;
+  scope?: 'face' | 'location';
+  paperRef?: string;
 }
 
 /** How the worker applied for LINDUNG 24 Jam benefit: online, or Form 34 (non-work accident notice) at a PERKESO counter. */
@@ -9369,6 +9619,17 @@ export interface FwRecruitFile {
   stopReason: string | null;
   stoppedBy: string | null;
   stoppedAt: IsoDateTime | null;
+  by: string;
+  byId: Id;
+  at: IsoDateTime;
+}
+
+/** B1: one naming by a Company Manager of who prepares the company's guard pay run. The newest row is in force. */
+export interface GuardPayPreparerEntry {
+  id: Id;
+  companyId: Id;
+  userIds: Id[];
+  reason: string;
   by: string;
   byId: Id;
   at: IsoDateTime;

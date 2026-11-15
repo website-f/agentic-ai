@@ -170,6 +170,15 @@ describe("related-party deals", () => {
     ).toBe("done");
   });
 
+  it("C9: a recorded related-party deal sends a notice to the CEO only", async () => {
+    const { svc } = fresh();
+    await svc.registers.act(await svc.user("u-dcos"), "addDeal", deal("co-arsh", 8_000));
+    const title = (i: { title: string }) => i.title.startsWith("Related-party deal recorded");
+    expect((await svc.registers.homeItems(await svc.user("u-fauzan"))).some(title)).toBe(true);
+    for (const id of ["u-cos", "u-dcos", "u-cm-arsh"])
+      expect((await svc.registers.homeItems(await svc.user(id))).some(title)).toBe(false);
+  });
+
   it("only the CEO sets the board limit, with a reason; then large deals need a board resolution", async () => {
     const { svc } = fresh();
     const ceo = await svc.user("u-fauzan");

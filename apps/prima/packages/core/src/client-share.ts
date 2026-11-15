@@ -27,7 +27,17 @@ export interface ClientShareLink {
   revokeReason: string | null;
   views: number;
   lastViewAt: IsoDateTime | null;
+  /** Feedback and requests the client sent through this link today (client portal, A7): at most SHARE_MAX_POSTS_PER_DAY. */
+  posts?: { on: IsoDate; n: number } | null;
 }
+
+/** Who a client's own feedback or request is recorded as. */
+export const SHARE_CLIENT_ACTOR = 'Client (report link)';
+/** Client portal (A7, Fauzan 11 Nov 2026): what a client may send through one link in one day. */
+export const SHARE_MAX_POSTS_PER_DAY = 5;
+/** Request kinds a client may choose on the link page (the rest are recorded by Operations). */
+export const SHARE_REQUEST_KINDS = ['more_guards', 'fewer_guards', 'temporary', 'schedule', 'other'] as const;
+
 
 /** Case kinds a client may see on its own report. Staffing, identity, arms and compliance cases stay internal. */
 export const SHARE_CASE_LABEL: Record<string, string> = {
@@ -48,8 +58,10 @@ export interface ClientShareReport {
   incidents: { ref: string; on: IsoDate; site: string; kind: string; severity: string; status: 'Open' | 'In hand' | 'Resolved' }[];
   invoices: { period: string; amount: number; sentOn: IsoDate | null }[];
   reports: string[];
-  /** J1: months whose monthly report is kept as a file, offered as a PDF on the link. */
-  pdfPeriods?: string[];
+  /** Months whose report PDF the client can download from the link. */
+  reportFiles?: string[];
+  /** Whether the client may send feedback and requests from this page. */
+  canSend?: boolean;
 }
 
 /** A share link is usable on `today` when it is not revoked and not past its expiry date. */

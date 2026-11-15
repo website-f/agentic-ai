@@ -1,4 +1,5 @@
 import { AccessDenied } from "./access";
+import { sqlCloseBlockers, sqlEnqueue, sqlPvPayload } from './sql-posting';
 import { GROUP_EMPLOYER_ID } from "./access";
 import { centralEmployerName } from "./access";
 import { isActHead } from "./access";
@@ -178,6 +179,7 @@ export const FIN_TEAMS = 7;
 export function finDefaults(): FinSettingsValues {
   const pay = RULES.financePayments.value;
   const ctl = RULES.financeControls.value;
+  const ye = RULES.financeYearEnd.value;
   return {
     approvalExpiryDays: pay.approvalExpiryDays,
     bankPackByDay: pay.bankPackByDay,
@@ -212,66 +214,43 @@ export function finDefaults(): FinSettingsValues {
     kpiReworkMinutes: 20,
     kpiCloseReviewMinutes: 90,
     kpiFirstPassPct: 90,
-    // C4 (Fauzan, 11 Nov 2026): the confirmed rule values, each an FD setting.
+    // Confirmed by Fauzan, 11 Nov 2026; the Finance Director adjusts them later here.
     ceoNoticeFrom: pay.ceoNoticeFrom,
-    ruleMaxAmount: ctl.ruleMaxAmount,
-    auditCirculateMonths: ctl.auditCirculateMonths,
-    ssmLodgeDays: ctl.ssmLodgeDays,
-    billDiffPct: RULES.financeMoneyIn.value.billDiffPct,
-    govtPayDays: RULES.financeMoneyIn.value.govtPayDays,
-    govtFollowUpDays: RULES.financeMoneyIn.value.govtFollowUpDays,
-    unidentifiedDays: RULES.financeMoneyIn.value.unidentifiedDays,
-    caInitialPct: RULES.financeYearEnd.value.initialPct,
-    caGeneralPct: RULES.financeYearEnd.value.annualPct.general,
-    caHeavyVehiclePct: RULES.financeYearEnd.value.annualPct.heavy_vehicle,
-    caOfficePct: RULES.financeYearEnd.value.annualPct.office,
-    caComputerPct: RULES.financeYearEnd.value.annualPct.computer,
-    caMotorCarPct: RULES.financeYearEnd.value.annualPct.motor_car,
-    smallValueMax: RULES.financeYearEnd.value.smallValueMax,
-    smallValueCap: RULES.financeYearEnd.value.smallValueCap,
-    motorCarCapNew: RULES.financeYearEnd.value.motorCarCapNew,
-    motorCarCapOther: RULES.financeYearEnd.value.motorCarCapOther,
-    smePaidUpMax: RULES.financeYearEnd.value.smePaidUpMax,
-    smeIncomeMax: RULES.financeYearEnd.value.smeIncomeMax,
-    auditRequestDays: RULES.financeYearEnd.value.auditRequestDays,
-    topSuppliers: RULES.financeSupplierStatements.value.topSuppliers,
-    supplierCheckDays: RULES.financeSupplierStatements.value.dueDays,
-    creditOverdueDays: RULES.financeCredit.value.overdueDays,
-    creditStaleDays: RULES.financeCredit.value.balanceStaleDays,
-    fdMaturityAlertDays: RULES.financeBanking.value.maturityAlertDays,
-    depositClaimDays: RULES.financeContractEnd.value.claimWithinDays,
-    finalInvoiceDays: RULES.financeContractEnd.value.finalInvoiceDays,
-    retentionUpdateMonths: RULES.financeContractEnd.value.retentionUpdateMonths,
     icExplainMax: RULES.financeIntercompany.value.explainMax,
-    advanceSettleDays: RULES.financeCash.value.advanceSettleDays,
-    pettyCountByDay: RULES.financeCash.value.pettyCountByDay,
-    cardExplainByDay: RULES.financeCash.value.cardExplainByDay,
-    premiumDueDays: RULES.insurancePremiumDays.value.dueDays,
-    premiumEarlyDays: RULES.insurancePremiumDays.value.earlyDays,
-    guaranteeRemindDays: RULES.insurancePremiumDays.value.guaranteeRemindDays,
-    claimNoticeDays: RULES.insuranceClaimNoticeDays.value,
+    staffPayDay: RULES.staffPayroll.value.payDay,
+    retentionPromptMonths: RULES.financeContractEnd.value.retentionPromptMonths,
+    yeInitialPct: ye.initialPct,
+    yeAnnualGeneralPct: ye.annualPct.general,
+    yeAnnualHeavyVehiclePct: ye.annualPct.heavy_vehicle,
+    yeAnnualOfficePct: ye.annualPct.office,
+    yeAnnualComputerPct: ye.annualPct.computer,
+    yeAnnualMotorCarPct: ye.annualPct.motor_car,
+    yeSmallValueMax: ye.smallValueMax,
+    yeSmallValueCap: ye.smallValueCap,
+    yeMotorCarCapNew: ye.motorCarCapNew,
+    yeMotorCarCapOther: ye.motorCarCapOther,
+    yeSmePaidUpMax: ye.smePaidUpMax,
+    yeSmeIncomeMax: ye.smeIncomeMax,
+    regularHighPct: RULES.financeRegularBills.value.unusualHighPct,
+    regularLowPct: RULES.financeRegularBills.value.unusualLowPct,
   };
 }
 
-/** Settings that are amounts or percentages (sen and decimals allowed); every other setting is a whole number. */
-export const FIN_SETTING_DECIMALS: string[] = ['varianceMinRm', 'sstThreshold', 'variancePct', 'pettyVoucherMax', 'pettyFloatMax', 'ceoNoticeFrom', 'ruleMaxAmount', 'billDiffPct', 'caInitialPct', 'caGeneralPct', 'caHeavyVehiclePct', 'caOfficePct', 'caComputerPct', 'caMotorCarPct', 'smallValueMax', 'smallValueCap', 'motorCarCapNew', 'motorCarCapOther', 'smePaidUpMax', 'smeIncomeMax', 'icExplainMax'];
-
-/** C4: which rule each setting belongs to, for the Finance settings screen. */
-export const FIN_SETTING_GROUPS: { title: string; keys: (keyof FinSettingsValues)[] }[] = [
-  { title: 'Payments (FIN-PAY)', keys: ['ceoNoticeFrom', 'approvalExpiryDays', 'escalateAfterDays', 'bankPackByDay', 'paymentPackByDay'] },
-  { title: 'Controls (FIN-CONTROLS)', keys: ['matchDays', 'ruleMaxAmount', 'unclearedDays', 'ageingByDay', 'monthlyPackByDay', 'forecastByDay', 'variancePct', 'varianceMinRm', 'auditCirculateMonths', 'ssmLodgeDays'] },
-  { title: 'Money in (FIN-MONEYIN)', keys: ['billDiffPct', 'govtPayDays', 'govtFollowUpDays', 'unidentifiedDays', 'writeOffMinEvidence'] },
-  { title: 'Contract end and retention (FIN-CONTRACT-END)', keys: ['depositClaimDays', 'finalInvoiceDays', 'retentionUpdateMonths'] },
-  { title: 'Credit (FIN-CREDIT)', keys: ['creditOverdueDays', 'creditStaleDays'] },
-  { title: 'Banking (FIN-BANKING)', keys: ['fdMaturityAlertDays'] },
-  { title: 'Supplier statements (FIN-SUPSTMT)', keys: ['topSuppliers', 'supplierCheckDays'] },
-  { title: 'Intercompany (FIN-IC)', keys: ['icExplainMax'] },
-  { title: 'Cash (FIN-CASH)', keys: ['pettyVoucherMax', 'pettyFloatMax', 'pettyCountByDay', 'cardExplainByDay', 'advanceSettleDays'] },
-  { title: 'Insurance (INS-PREMIUM, INS-CLAIM-NOTICE)', keys: ['premiumEarlyDays', 'premiumDueDays', 'guaranteeRemindDays', 'claimNoticeDays'] },
-  { title: 'Year end (FIN-YEAREND)', keys: ['caInitialPct', 'caGeneralPct', 'caHeavyVehiclePct', 'caOfficePct', 'caComputerPct', 'caMotorCarPct', 'smallValueMax', 'smallValueCap', 'motorCarCapNew', 'motorCarCapOther', 'smePaidUpMax', 'smeIncomeMax', 'auditRequestDays'] },
-  { title: 'Tax (FIN-SST, FIN-EINV)', keys: ['sstThreshold', 'eInvoiceCheckByDay'] },
-  { title: 'Close, budget and KPIs', keys: ['closeApproveByDay', 'varianceByDay', 'budgetByDecDay', 'kpiReviewMinutes', 'kpiReleaseMinutes', 'kpiReworkMinutes', 'kpiCloseReviewMinutes', 'kpiFirstPassPct'] },
-];
+/** The year-end rates in force: the rule's shape with the Finance Director's values (Fauzan, 11 Nov 2026). */
+export function finYearEndRules(s: Partial<FinSettingsValues> = {}) {
+  const v = { ...finDefaults(), ...s };
+  return {
+    ...RULES.financeYearEnd.value,
+    initialPct: v.yeInitialPct,
+    annualPct: { general: v.yeAnnualGeneralPct, heavy_vehicle: v.yeAnnualHeavyVehiclePct, office: v.yeAnnualOfficePct, computer: v.yeAnnualComputerPct, motor_car: v.yeAnnualMotorCarPct },
+    smallValueMax: v.yeSmallValueMax,
+    smallValueCap: v.yeSmallValueCap,
+    motorCarCapNew: v.yeMotorCarCapNew,
+    motorCarCapOther: v.yeMotorCarCapOther,
+    smePaidUpMax: v.yeSmePaidUpMax,
+    smeIncomeMax: v.yeSmeIncomeMax,
+  };
+}
 
 /** The allowed range for each number the Finance Director sets, and what it means on the screen. */
 export const FIN_SETTING_LIMITS: Record<Exclude<keyof FinSettingsValues, 'selfBilledBy' | 'approvalMethod'>, [number, number, string]> = {
@@ -299,50 +278,57 @@ export const FIN_SETTING_LIMITS: Record<Exclude<keyof FinSettingsValues, 'selfBi
   kpiReworkMinutes: [1, 2400, 'KPI target (provisional): resubmit within office minutes of a return'],
   kpiCloseReviewMinutes: [1, 2400, 'KPI target (provisional): review the month-end close within office minutes'],
   kpiFirstPassPct: [0, 100, 'KPI target (provisional): % accepted first time, without a return'],
-  ceoNoticeFrom: [0, 1_000_000_000, 'Tell the CEO of payments from (RM)'],
-  ruleMaxAmount: [0, 10_000_000, 'A remembered bank-line explanation covers lines up to (RM)'],
-  auditCirculateMonths: [1, 18, 'Audited accounts circulated within (months of the year end)'],
-  ssmLodgeDays: [1, 120, 'Accounts lodged with SSM within (days of circulation)'],
-  billDiffPct: [0, 100, 'An invoice more than this % off the contract needs a reason'],
-  govtPayDays: [1, 365, 'A government claim is expected to be paid within (days)'],
-  govtFollowUpDays: [1, 120, 'An unpaid government claim is followed up every (days)'],
-  unidentifiedDays: [1, 60, 'Money in with no invoice is allocated within (days)'],
-  caInitialPct: [0, 100, 'Capital allowance: initial allowance (%)'],
-  caGeneralPct: [0, 100, 'Capital allowance: annual, general plant (%)'],
-  caHeavyVehiclePct: [0, 100, 'Capital allowance: annual, heavy vehicles (%)'],
-  caOfficePct: [0, 100, 'Capital allowance: annual, office equipment (%)'],
-  caComputerPct: [0, 100, 'Capital allowance: annual, computers (%)'],
-  caMotorCarPct: [0, 100, 'Capital allowance: annual, motor cars (%)'],
-  smallValueMax: [0, 1_000_000, 'Small value asset: each at most (RM)'],
-  smallValueCap: [0, 10_000_000, 'Small value assets: yearly cap (RM)'],
-  motorCarCapNew: [0, 10_000_000, 'Motor car qualifying cost, new and RM150,000 or less (RM)'],
-  motorCarCapOther: [0, 10_000_000, 'Motor car qualifying cost, other (RM)'],
-  smePaidUpMax: [0, 10_000_000_000, 'SME for income tax: paid-up capital at most (RM)'],
-  smeIncomeMax: [0, 10_000_000_000, 'SME for income tax: gross business income at most (RM)'],
-  auditRequestDays: [1, 120, 'An auditor request is answered within (days)'],
-  topSuppliers: [1, 100, 'Biggest suppliers whose statements are checked each quarter'],
-  supplierCheckDays: [1, 120, 'Supplier statements agreed within (days after the quarter)'],
-  creditOverdueDays: [1, 365, 'Warn Operations on a client overdue more than (days)'],
-  creditStaleDays: [1, 365, "A client's balance is stale after (days)"],
-  fdMaturityAlertDays: [1, 120, 'Fixed deposit maturity alert (days before)'],
-  depositClaimDays: [1, 365, "Deposits and retention claimed back within (days of the contract's end)"],
-  finalInvoiceDays: [1, 120, "Final invoice recorded within (days of the contract's end)"],
-  retentionUpdateMonths: [1, 12, 'Retention status updated every (months) until it is back'],
-  icExplainMax: [0, 1_000_000_000, 'Intercompany difference that may be explained, at most (RM)'],
-  advanceSettleDays: [1, 30, 'A staff advance is settled within (days)'],
-  pettyCountByDay: [1, 28, 'Petty cash counted by (day of next month)'],
-  cardExplainByDay: [1, 28, 'Card statement explained by (day of next month)'],
-  premiumDueDays: [1, 120, 'Insurance premium warning (days before due)'],
-  premiumEarlyDays: [1, 180, 'Insurance premium first reminder (days before due)'],
-  guaranteeRemindDays: [1, 180, 'Insurance and bank guarantees: reminder (days before due)'],
-  claimNoticeDays: [1, 365, 'Tell the insurer within (days of the incident)'],
+  ceoNoticeFrom: [0, 50_000_000, 'The CEO is reminded of payments from (RM)'],
+  icExplainMax: [0, 1_000_000, 'Intercompany difference that may be explained, not corrected: up to (RM)'],
+  staffPayDay: [1, 31, 'Staff pay day (day of the same month; the last day if the month is shorter)'],
+  retentionPromptMonths: [1, 12, 'Retention held by a client: ask for a status update every (months)'],
+  yeInitialPct: [0, 100, 'Capital allowance: initial allowance (%)'],
+  yeAnnualGeneralPct: [0, 100, 'Capital allowance: annual, general plant and machinery (%)'],
+  yeAnnualHeavyVehiclePct: [0, 100, 'Capital allowance: annual, heavy vehicles (%)'],
+  yeAnnualOfficePct: [0, 100, 'Capital allowance: annual, office equipment and furniture (%)'],
+  yeAnnualComputerPct: [0, 100, 'Capital allowance: annual, computers (%)'],
+  yeAnnualMotorCarPct: [0, 100, 'Capital allowance: annual, motor cars (%)'],
+  yeSmallValueMax: [0, 100_000, 'Small value asset: each at most (RM)'],
+  yeSmallValueCap: [0, 10_000_000, 'Small value assets: yearly total cap, not for SMEs (RM)'],
+  yeMotorCarCapNew: [0, 10_000_000, 'Motor car qualifying cost cap, new and RM150,000 or less (RM)'],
+  yeMotorCarCapOther: [0, 10_000_000, 'Motor car qualifying cost cap, otherwise (RM)'],
+  yeSmePaidUpMax: [0, 1_000_000_000, 'SME for income tax: paid-up capital at most (RM)'],
+  yeSmeIncomeMax: [0, 10_000_000_000, 'SME for income tax: gross business income at most (RM)'],
+  regularHighPct: [0, 100, 'Regular bills: explain a varying bill more than this % above the last three (%)'],
+  regularLowPct: [0, 100, 'Regular bills: explain a varying bill more than this % below the last three (%)'],
 };
+
+/** Settings values the Finance Director may give with cents or decimals; every other setting is a whole number. */
+export const FIN_SETTING_DECIMALS = ['varianceMinRm', 'sstThreshold', 'variancePct', 'pettyVoucherMax', 'pettyFloatMax', 'ceoNoticeFrom', 'icExplainMax', 'yeSmallValueMax', 'yeSmallValueCap', 'yeMotorCarCapNew', 'yeMotorCarCapOther', 'yeSmePaidUpMax', 'yeSmeIncomeMax', 'regularHighPct', 'regularLowPct'];
+
+/** Finance 27 M2 (Fauzan, 2 Nov 2026: "FY ends 31 Dec"): every new company Finance record starts with this year end. */
+export const FIN_DEFAULT_YEAR_END = '12-31';
+
+/** A year end as MM-DD on a real last-or-any day of a month (29 February is not accepted: it is not every year). */
+export function finYearEndValue(v: unknown): string {
+  const t = String(v ?? '').trim();
+  const m = /^(\d{2})-(\d{2})$/.exec(t);
+  const mm = m ? Number(m[1]) : 0;
+  const dd = m ? Number(m[2]) : 0;
+  const days = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+  if (!m || mm < 1 || mm > 12 || dd < 1 || dd > days[mm - 1]) throw new BadRequest('Year end: a day of the year as MM-DD, for example 12-31.');
+  return t;
+}
 
 /** The settings in force: the Finance Director's values over the rule defaults. They live on PWVSB's own row. */
 export function finSettingsOf(group: Pick<FinStatus, 'settings'> | null | undefined, today?: IsoDate): FinSettingsValues {
-  // C4: a change saved to start on a later day applies from that day.
-  const due = today ? (group?.settings?.scheduled ?? []).filter((x) => x.from <= today).sort((a, b) => a.from.localeCompare(b.from) || a.set.at.localeCompare(b.set.at)) : [];
-  return Object.assign({ ...finDefaults(), ...(group?.settings?.values ?? {}) }, ...due.map((x) => x.values));
+  if (!today || !group?.settings) return { ...finDefaults(), ...(group?.settings?.values ?? {}) };
+  // Effective from a date (Fauzan, 11 Nov 2026): the latest version whose day has come. Versions are in date order,
+  // because a change can never take effect before one already set.
+  const st = group.settings;
+  const versions = [...st.history, { values: st.values, set: st.set }].filter((v) => finSettingsEffective(v.set) <= today);
+  const v = versions[versions.length - 1];
+  return v ? { ...finDefaults(), ...v.values } : finDefaults();
+}
+
+/** The day a settings version takes effect: the day given, else the day it was set. */
+export function finSettingsEffective(set: { at: IsoDateTime; effectiveFrom?: IsoDate }): IsoDate {
+  return set.effectiveFrom ?? set.at.slice(0, 10);
 }
 
 function nextMonthDay(period: string, day: number): IsoDate {
@@ -827,10 +813,10 @@ export function finCloseCheck(
   raw.push(...regEx);
   if (!regEx.length && (f.regular ?? []).some((r) => r.status === 'active')) done.push('Every regular payment due in the month paid or seen on the statement');
   // Advances, petty cash and company cards (Fauzan, 2 Nov 2026).
-  const cashEx = finCashExceptions(f, period, dateOf(now), s);
+  const cashEx = finCashExceptions(f, period, dateOf(now));
   raw.push(...cashEx);
   // Money in (Fauzan, 2 Nov 2026): every contract billed, government claims followed up, money in allocated.
-  const inEx = finMoneyInExceptions(f, contracts, period, dateOf(now), s);
+  const inEx = finMoneyInExceptions(f, contracts, period, dateOf(now));
   raw.push(...inEx);
   // Stamp duty (Fauzan, 2 Nov 2026): agreements stamped in time, certificates checked, refunds of cancelled ones followed.
   raw.push(...finStampExceptions(f, dateOf(now)));
@@ -1187,10 +1173,10 @@ export class FinanceDeskService {
     private teamsApprovals = false,
   ) {}
 
-  private now(): IsoDateTime {
+  now(): IsoDateTime {
     return this.clock();
   }
-  private today(): IsoDate {
+  today(): IsoDate {
     return dateOf(this.clock());
   }
   private prevPeriod(period: string): string {
@@ -1223,12 +1209,10 @@ export class FinanceDeskService {
     const row = await this.store.get('finStatus', `fin-${GROUP_EMPLOYER_ID}`);
     return {
       values: finSettingsOf(row, this.today()),
+      /** A change set to take effect on a later day, shown until then. */
+      upcoming: row?.settings && finSettingsEffective(row.settings.set) > this.today() ? { values: finSettingsOf(row), set: row.settings.set } : null,
       defaults: finDefaults(),
       limits: FIN_SETTING_LIMITS,
-      groups: FIN_SETTING_GROUPS,
-      decimals: FIN_SETTING_DECIMALS,
-      today: this.today(),
-      scheduled: (row?.settings?.scheduled ?? []).filter((x) => x.from > this.today()),
       set: row?.settings?.set ?? null,
       history: (row?.settings?.history ?? []).slice(-12),
       canSet: isLead(a),
@@ -1237,7 +1221,7 @@ export class FinanceDeskService {
         ? await (async () => {
             const nameOf = await this.companyNamer();
             return (await this.store.list('finStatus', { companyId: await this.companies(user) }))
-              .map((f) => ({ companyId: f.companyId, name: nameOf(f.companyId), team: f.team }))
+              .map((f) => ({ companyId: f.companyId, name: nameOf(f.companyId), team: f.team, fyEnd: f.fyEnd ?? FIN_DEFAULT_YEAR_END, fyEndHistory: (f.fyEndHistory ?? []).slice(-5) }))
               .sort((x, y) => x.name.localeCompare(y.name));
           })()
         : [],
@@ -1267,20 +1251,25 @@ export class FinanceDeskService {
       const row = await tx.get('finStatus', id);
       if (!row) throw new NotFound('Group Finance settings');
       const comment = requireComment(input.comment, 'change the settings (why)');
+      // Effective from a date (Fauzan, 11 Nov 2026): today unless a later day is given, never before a change already set.
+      const today = this.today();
+      let effectiveFrom: IsoDate | undefined;
+      if (input.effectiveFrom != null && input.effectiveFrom !== '') {
+        const d = String(input.effectiveFrom);
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(d) || Number.isNaN(Date.parse(`${d}T00:00:00Z`))) throw new BadRequest('Effective from: a date (YYYY-MM-DD).');
+        if (d < today) throw new BadRequest('Effective from: today or a later day; a setting is never backdated.');
+        if (d > addDays(today, 366)) throw new BadRequest('Effective from: within a year.');
+        if (d > today) effectiveFrom = d;
+      }
+      const lastFrom = row.settings ? finSettingsEffective(row.settings.set) : null;
+      if (lastFrom && (effectiveFrom ?? today) < lastFrom)
+        throw new BadRequest(`A change already takes effect on ${lastFrom}; give that day or a later one.`);
       const raw = (input.values ?? {}) as Record<string, unknown>;
       if (typeof raw !== 'object' || Array.isArray(raw)) throw new BadRequest('Send the settings as an object.');
-      // C4: a change starts today, or on a later day (within a year) the FD chooses; never in the past.
-      const today = this.today();
-      const from = input.from == null || input.from === '' ? today : isoDate(input.from, 'Starts on');
-      if (from < today) throw new BadRequest('A settings change starts today or later, never in the past.');
-      if (daysBetween(today, from) > 366) throw new BadRequest('A settings change starts within a year.');
-      // Changes scheduled for today or earlier are folded in first, so this change sits on top of them.
-      const dueNow = (row.settings?.scheduled ?? []).filter((x) => x.from <= today);
-      const later = (row.settings?.scheduled ?? []).filter((x) => x.from > today);
-      const base: Partial<FinSettingsValues> = Object.assign({ ...(row.settings?.values ?? {}) }, ...dueNow.map((x) => x.values));
-      const next: Partial<FinSettingsValues> = from > today ? {} : { ...base };
+      const next: Partial<FinSettingsValues> = { ...(row.settings?.values ?? {}) };
       const changed: string[] = [];
       const teamMoves: { id: Id; team: number }[] = [];
+      const yearEndMoves: { id: Id; fyEnd: string }[] = [];
       for (const [k, v] of Object.entries(raw)) {
         if (k === 'teams') {
           // Fauzan, 2 Nov 2026: the FD decides which team handles which company; it changes every year.
@@ -1291,6 +1280,17 @@ export class FinanceDeskService {
             if (!ids.includes(cid)) throw new NotFound('Company books');
             if (!Number.isInteger(team) || team < 1 || team > FIN_TEAMS) throw new BadRequest(`Team: a number from 1 to ${FIN_TEAMS}.`);
             teamMoves.push({ id: `fin-${cid}`, team });
+          }
+          continue;
+        }
+        if (k === 'yearEnds') {
+          // Finance 27 M2 (Fauzan, 2 Nov 2026): every company's year ends 31 December unless the FD or the CEO changes
+          // one company's year end, with a reason; the old and new ends are kept.
+          if (!v || typeof v !== 'object' || Array.isArray(v)) throw new BadRequest('Send the year ends as company: MM-DD.');
+          const ids = await this.companies(user);
+          for (const [cid, e] of Object.entries(v as Record<string, unknown>)) {
+            if (!ids.includes(cid)) throw new NotFound('Company books');
+            yearEndMoves.push({ id: `fin-${cid}`, fyEnd: finYearEndValue(e) });
           }
           continue;
         }
@@ -1325,21 +1325,24 @@ export class FinanceDeskService {
         await tx.update('finStatus', m.id, { team: m.team });
         changed.push(`${f.companyId} from team ${f.team} to team ${m.team}`);
       }
+      for (const m of yearEndMoves) {
+        await tx.lock?.('finStatus', m.id);
+        const f = await tx.get('finStatus', m.id);
+        if (!f) throw new NotFound('Company books');
+        if (f.fyEnd === m.fyEnd) continue;
+        const entry = { from: f.fyEnd, to: m.fyEnd, by: user.name, byId: user.id, at: this.now(), comment };
+        await tx.update('finStatus', m.id, { fyEnd: m.fyEnd, fyEndHistory: [...(f.fyEndHistory ?? []), entry].slice(-20) });
+        await tx.audit({ at: this.now(), actor: user.name, companyId: f.companyId, action: 'finance.year_end.set', entity: 'fin_status', entityId: m.id, summary: `Financial year end changed from ${f.fyEnd} to ${m.fyEnd}. ${comment}`.slice(0, 900) });
+        changed.push(`${f.companyId} year end ${f.fyEnd} to ${m.fyEnd}`);
+      }
       if (!changed.length) throw new BadRequest('Nothing to change.');
-      if (teamMoves.length && !Object.keys(raw).some((k) => k !== 'teams')) {
+      if ((teamMoves.length || yearEndMoves.length) && !Object.keys(raw).some((k) => k !== 'teams' && k !== 'yearEnds')) {
+        if (!teamMoves.length) return finSettingsOf(row);
         await tx.audit({ at: this.now(), actor: user.name, companyId: null, action: 'finance.teams.set', entity: 'fin_status', entityId: id, summary: `Finance teams changed: ${changed.join('; ')}. ${comment}`.slice(0, 900) });
         return finSettingsOf(row);
       }
-      const set = { by: user.name, byId: user.id, at: this.now(), comment, from };
-      if (from > today) {
-        if (teamMoves.length) throw new BadRequest('Team moves apply at once; save them without a later start date.');
-        const scheduled = [...later, { from, values: next, set }].sort((a, b) => a.from.localeCompare(b.from) || a.set.at.localeCompare(b.set.at));
-        const settings = { values: base, set: row.settings?.set ?? set, history: row.settings?.history ?? [], scheduled };
-        await tx.update('finStatus', id, { settings });
-        await tx.audit({ at: this.now(), actor: user.name, companyId: null, action: 'finance.settings.scheduled', entity: 'fin_status', entityId: id, summary: `Finance settings to change from ${from}: ${changed.join('; ')}. ${comment}`.slice(0, 900) });
-        return finSettingsOf({ settings }, today);
-      }
-      const settings = { values: next, set, history: [...(row.settings?.history ?? []), ...(row.settings ? [{ values: row.settings.values, set: row.settings.set }] : [])].slice(-50), scheduled: later };
+      const set = { by: user.name, byId: user.id, at: this.now(), comment, ...(effectiveFrom ? { effectiveFrom } : {}) };
+      const settings = { values: next, set, history: [...(row.settings?.history ?? []), ...(row.settings ? [{ values: row.settings.values, set: row.settings.set }] : [])].slice(-50) };
       await tx.update('finStatus', id, { settings });
       await tx.audit({ at: this.now(), actor: user.name, companyId: null, action: 'finance.settings.set', entity: 'fin_status', entityId: id, summary: `Finance settings changed: ${changed.join('; ')}. ${comment}`.slice(0, 900) });
       return finSettingsOf({ settings }, today);
@@ -1527,7 +1530,9 @@ export class FinanceDeskService {
   /** The preparer may pick Prima or Teams for this payment; the Finance Director's setting is the default. */
   private methodChosen(v: unknown, s: FinSettingsValues): FinApprovalMethod {
     if (v == null || v === '') return this.methodFor(s);
-    if (v !== 'prima' && v !== 'teams') throw new BadRequest("Approve in: choose 'prima' or 'teams'.");
+    // Part Y Y8b: 'sharepoint' = approved in IT's SharePoint / Power Automate form and recorded here from its link
+    // (Prima does not connect to Power Automate). One place only: Prima then never approves it as well.
+    if (v !== 'prima' && v !== 'teams' && v !== 'sharepoint') throw new BadRequest("Approve in: choose 'prima', 'teams' or 'sharepoint'.");
     if (v === 'teams' && !this.teamsApprovals) throw new BadRequest('The Teams approval connection is not switched on yet, so this payment is approved in Prima.');
     return v;
   }
@@ -1615,7 +1620,15 @@ export class FinanceDeskService {
     const dueOn = isoDate(input.dueOn, 'Due date');
     const bankId = typeof input.bankId === 'string' ? input.bankId : '';
     if (!f.banks.some((b) => b.id === bankId)) throw new BadRequest("Choose one of this company's bank accounts to pay from.");
-    const sqlRef = text(input.sqlRef, 'SQL Account document number', 2, 40);
+    // Fauzan, 14 Nov 2026: once Prima posts this company's payment vouchers into SQL Account, the field holds only the
+    // SQL Account bill it pays and may be empty, so the same payment is never typed in by hand as well.
+    const posting = !!f.sqlPosting?.on && !!f.sqlPosting.docTypes.GL_PV;
+    const sqlRef = posting
+      ? typeof input.sqlRef === 'string' && input.sqlRef.trim()
+        ? text(input.sqlRef, 'SQL Account bill number', 2, 40)
+        : ''
+      : text(input.sqlRef, 'SQL Account document number', 2, 40);
+    if (posting && /^PV/i.test(sqlRef)) throw new BadRequest('Prima posts the payment voucher itself for this company: give only the SQL Account bill it pays (or leave it empty).');
     if (!Array.isArray(input.evidence) || input.evidence.length === 0) throw new BadRequest('Attach at least one supporting document (invoice, approval or claim).');
     if (input.evidence.length > r.maxEvidence) throw new BadRequest(`At most ${r.maxEvidence} supporting documents.`);
     const evidence = input.evidence.map((e, i) => noSecrets(text(e, `Document ${i + 1}`, 2, 300), `Document ${i + 1}`));
@@ -1936,6 +1949,32 @@ export class FinanceDeskService {
           throw new BadRequest(`${was.approver}'s rejection (${was.comment}) is recorded and stays. Return or cancel this payment instead of linking it again.`);
         next = { ...p, external, steps: [...p.steps, this.step(user, 'evidence', `${external.system} approval ${external.requestRef}: ${external.url}`)] };
         summary = `linked to ${external.system} approval ${external.requestRef} (${external.decisions.map((d) => `${d.approver} ${d.decision}`).join('; ') || 'no decision yet'})`;
+        // Part Y Y8b (Fauzan, 14 Nov 2026): one payment is approved in ONE place. Once approved in Prima, a SharePoint
+        // approval is not recorded; a payment set for SharePoint becomes approved only from its approved SharePoint request.
+        const spApproved = external.system === 'sharepoint' && external.decisions.some((d) => d.decision === 'approved') && !external.decisions.some((d) => d.decision === 'rejected');
+        const method = p.approvalMethod ?? 'prima';
+        if (spApproved && method !== 'sharepoint' && (p.status === 'approved' || approverOf(p.steps)))
+          throw new BadRequest(`This payment was already approved in ${method === 'teams' ? 'Teams' : 'Prima'}. One payment is approved in one place only; the SharePoint approval is not recorded.`);
+        if (spApproved && method === 'sharepoint' && p.status === 'reviewed') {
+          if (paymentPreparers(p).includes(user.id) || reviewerOf(p.steps)?.byId === user.id) throw new AccessDenied('view', '(the preparer or the reviewer does not record the approval of the same payment)');
+          const users = (await tx.list('users')).filter((u) => !u.integration);
+          const approver = external.decisions
+            .filter((d) => d.decision === 'approved')
+            .map((d) => ({ d, u: users.find((u) => u.name.trim().toLowerCase() === d.approver.trim().toLowerCase()) }))
+            .find((x) => x.u && finCoversApproval(this.actor(x.u), p.needs) && !paymentPreparers(p).includes(x.u.id) && reviewerOf(p.steps)?.byId !== x.u.id);
+          if (!approver)
+            throw new BadRequest(p.needs === 'coo' ? 'The SharePoint approval must be by the COO or the CEO (not the preparer or the reviewer).' : 'The SharePoint approval must be by the Finance Director or the CEO (not the preparer or the reviewer).');
+          const payee = p.payeeId ? (f.payees ?? []).find((x) => x.id === p.payeeId) : null;
+          if (p.payeeId && payee?.status !== 'verified') throw new BadRequest(`${p.payee}'s bank details are not verified. Record the approval after verification.`);
+          next = {
+            ...next,
+            status: 'approved',
+            payeeBank: payee ? { bank: payee.bank, accountLast4: payee.accountLast4, accountName: payee.accountName, rev: payee.history.length } : (p.payeeBank ?? null),
+            expiresOn: dateOf(fromMs(toMs(this.now()) + s.approvalExpiryDays * 86_400_000)),
+            steps: [...next.steps, { step: 'approved', by: approver.u!.name, byId: approver.u!.id, at: this.now(), comment: `Approved in SharePoint ${external.requestRef} on ${approver.d.decidedOn} (recorded by ${user.name}): ${approver.d.comment}`.slice(0, 500) }],
+          };
+          summary += `; APPROVED in SharePoint by ${approver.u!.name}`;
+        }
       } else {
         const reason = requireReason(input.comment, 'cancel it');
         next = { ...p, status: 'cancelled', steps: [...p.steps, this.step(user, 'cancelled', reason)] };
@@ -1950,6 +1989,12 @@ export class FinanceDeskService {
       const pettyCash = action === 'cancel' ? finPettyFreeTopUp(f, p.id) : undefined;
       const advances = action === 'cancel' && (f.advances ?? []).some((x) => x.paymentId === p.id && x.status === 'open') ? (f.advances ?? []).map((x) => (x.paymentId === p.id && x.status === 'open' ? { ...x, status: 'cancelled' as const } : x)) : undefined;
       await tx.update('finStatus', f.id, { payments: payments.map((x) => (x.id === p.id ? next : x)), ...(requests !== f.requests ? { requests } : {}), ...(regular ? { regular } : {}), ...(pettyCash ? { pettyCash } : {}), ...(advances ? { advances } : {}) });
+      // SQL Account posting link (Fauzan, 13 Nov 2026, Build 1): the payment voucher job is written in this same
+      // transaction, so a released payment never lacks its job. It waits until posting is switched on.
+      if (action === 'release') {
+        const fNext = { ...f, payments: payments.map((x) => (x.id === p.id ? next : x)) };
+        await sqlEnqueue(tx, fNext, 'payment', next.id, sqlPvPayload(fNext, next), this.now());
+      }
       await this.log(tx, user, f, `finance.payment.${action}`, `Payment ${p.id} to ${p.payee} RM${next.amount.toFixed(2)} ${summary}`.slice(0, 900));
       return next;
     });
@@ -1959,6 +2004,8 @@ export class FinanceDeskService {
     const prepared = paymentPreparers(p).includes(user.id);
     if (action === 'approve' && (p.approvalMethod ?? 'prima') === 'teams')
       return '(this payment is approved in Teams, as the Finance Director or the CEO set; Prima records the Teams result, it is never approved twice)';
+    if (action === 'approve' && p.approvalMethod === 'sharepoint')
+      return '(this payment is approved in its SharePoint form; link the approved SharePoint request here, it is never approved twice)';
     if ((action === 'review' || action === 'approve') && prepared) return '(nobody reviews or approves a payment they prepared)';
     if (action === 'approve' && reviewerOf(p.steps)?.byId === user.id) return '(the reviewer cannot also approve)';
     if (action === 'approve' && !finCoversApproval(a, p.needs))
@@ -1987,6 +2034,7 @@ export class FinanceDeskService {
       const group = f.companyId === GROUP_EMPLOYER_ID ? f : await tx.get('finStatus', `fin-${GROUP_EMPLOYER_ID}`);
       const icName = await this.companyNamer(tx);
       const check = finCloseCheck(f, c, period, this.now(), s, contracts, group, icName);
+      check.blockers.push(...(await sqlCloseBlockers(tx, f.companyId)));
       if (!['evidence', 'explain', 'prepare', 'review', 'approve', 'return', 'reopen'].includes(action)) throw new BadRequest('Unknown close action.');
       const may = this.closeMay(user, a, c, check);
       if (!may.includes(action)) {
@@ -2142,12 +2190,13 @@ export class FinanceDeskService {
     const short: string[] = [];
     const watched: string[] = [];
     let approveRm = 0;
+    const { ceoNoticeFrom } = await this.settings();
     for (const c of d.companies) {
       for (const p of c.payments) {
         // Each person is reminded of their own level only: the CEO of CEO-level payments, the Finance Director of
         // Director-level ones, the team leader of leader-level ones. They can still act on lower levels on the screen.
         // Since 1 Nov 2026 the Finance Director is reminded of every payment to approve; the CEO of large ones.
-        const ownLevel = a.kind === 'director' || (a.kind === 'ceo' && p.amount >= d.settings.ceoNoticeFrom) ? p.needs : 'none';
+        const ownLevel = a.kind === 'director' || (a.kind === 'ceo' && p.amount >= ceoNoticeFrom) ? p.needs : 'none';
         if (p.may.includes('review') && (a.kind === 'leader' || a.kind === 'deputy')) count.review += 1;
         if (p.may.includes('approve') && p.needs === ownLevel) {
           count.approve += 1;

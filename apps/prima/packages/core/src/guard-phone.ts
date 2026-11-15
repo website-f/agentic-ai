@@ -1,4 +1,5 @@
 import { AccessDenied } from "./access";
+import { PaperConsentService } from "./paper-consent";
 import { sha256Hex } from "./audit";
 import type { FaceFrame } from "./face";
 import type { FaceStep } from "./face";
@@ -42,7 +43,7 @@ export type GuardFaceProof =
 
 export type GuardSignInResult =
   | { ok: true; session: GuardPhoneSession }
-  | { ok: false; reason: 'pin' | 'face' | 'locked' | 'no_face'; message: string; lockedUntil: IsoDateTime | null };
+  | { ok: false; reason: 'pin' | 'face' | 'locked' | 'no_face' | 'no_consent'; message: string; lockedUntil: IsoDateTime | null };
 
 /** Heartbeat state as CMS sees it. */
 export type GuardPhoneState = 'live' | 'late' | 'offline';
@@ -179,6 +180,32 @@ export class GuardPhoneService {
       });
     });
     return { phoneId: id, userId: login.id, code: `${code.slice(0, 4)}-${code.slice(4)}`, expiresAt: row.codeExpiresAt!, staffNo: p.staffNo, name: p.name };
+  }
+
+  /**
+   * A12 (Fitri package): codes for many guards at once, for a printed enrolment sheet. With no list, every active guard
+   * or officer of the company this user may enrol who has a PIN and a sign-in but no phone yet. At most 100 at a time;
+   * each code is shown once, here only.
+   */
+  async issueCodes(user: User, companyId: Id, personIds: Id[] = []) {
+    const people = (await this.store.list('people', { companyId })).filter((p) => p.role !== 'office' && this.svc.mayManageGuardPhone(user, p));
+    if (!people.length) throw new AccessDenied('view', '(the company office or HR enrols guard phones)');
+    const phones = await this.store.list('guardPhones', { companyId });
+    const nowMs = toMs(this.now());
+    const pick = personIds.length
+      ? people.filter((p) => personIds.includes(p.id))
+      : people.filter((p) => p.status === 'active' && !phones.some((x) => x.personId === p.id && (x.status === 'active' || (x.status === 'issued' && x.codeExpiresAt && toMs(x.codeExpiresAt) > nowMs))));
+    if (pick.length > 100) throw new BadRequest('At most 100 codes at a time. Pick fewer people.');
+    const codes: Awaited<ReturnType<GuardPhoneService['issueCode']>>[] = [];
+    const skipped: { personId: Id; name: string; why: string }[] = [];
+    for (const p of pick.sort((a, b) => a.staffNo.localeCompare(b.staffNo))) {
+      try {
+        codes.push(await this.issueCode(user, p.id));
+      } catch (e) {
+        skipped.push({ personId: p.id, name: p.name, why: e instanceof Error ? e.message : 'not issued' });
+      }
+    }
+    return { codes, skipped };
   }
 
   /** The company's guard phones for the office: who has one, since when, last seen; never a code or a secret. */
@@ -359,6 +386,7 @@ export class GuardPhoneService {
     if (typeof input.photo !== 'string' || !/^data:image\/jpeg;base64,/.test(input.photo)) throw new BadRequest('Take the photo with the app camera.');
     if (input.photo.length > 2_500_000) throw new BadRequest('The photo is too large.');
     if (!validFaceDescriptor(input.descriptor)) throw new BadRequest('No face was found in the photo. Face the camera in good light and try again.');
+    if (!(await this.svc.paperConsent.allowed(p.id, 'face'))) return { ok: false as const, message: PaperConsentService.message('face') };
     const old = await this.store.get('staffFaces', p.id);
     if (old?.status === 'approved') throw new BadRequest('Your face is already registered. Ask HR to remove it before registering again.');
     const at = this.now();
@@ -395,6 +423,8 @@ export class GuardPhoneService {
     const ph = await this.device(user, d);
     if (this.locked(ph)) return { ok: false, reason: 'locked', message: `Too many wrong tries. This phone is locked until ${ph.lockedUntil!.slice(11, 16)}.`, lockedUntil: ph.lockedUntil };
     if (!(await this.svc.guardPinUsable(p))) throw new AccessDenied('view', '(your record is not active)');
+    // Part N18: with the paper consent gate on, face sign-in needs the person's signed PDPA consent on paper.
+    if (!(await this.svc.paperConsent.allowed(p.id, 'face'))) return { ok: false, reason: 'no_consent', message: PaperConsentService.message('face'), lockedUntil: null };
     const reg = await this.store.get('staffFaces', p.id);
     if (reg?.status !== 'approved')
       return { ok: false, reason: 'no_face', message: reg?.status === 'pending' ? 'Your face is waiting for HR to approve it.' : 'Register your face first.', lockedUntil: null };
@@ -504,10 +534,12 @@ export class GuardPhoneService {
     const nowMs = toMs(at);
     const duty = await this.dutyNow(p, nowMs);
     const battery = typeof input.battery === 'number' && input.battery >= 0 && input.battery <= 100 ? Math.round(input.battery) : null;
-    let location: 'kept' | 'none' | 'off_duty' | 'too_soon' = 'none';
+    let location: 'kept' | 'none' | 'off_duty' | 'too_soon' | 'no_consent' = 'none';
     let ping: GuardPing | null = null;
     if (coordOk(input.lat, input.lng)) {
       if (!duty) location = 'off_duty';
+      // Part N18: with the paper consent gate on, no location is kept without the person's signed consent.
+      else if (!(await this.svc.paperConsent.allowed(p.id, 'location'))) location = 'no_consent';
       else if (s.lastPingAt && nowMs - toMs(s.lastPingAt) < r.pingEverySec * 1000 - 5_000) location = 'too_soon';
       else {
         const site = await this.store.get('sites', duty.siteId);

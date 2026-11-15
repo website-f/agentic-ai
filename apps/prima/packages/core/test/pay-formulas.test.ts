@@ -203,12 +203,12 @@ describe('who sets pay formulas', () => {
     expect((await svc.withdrawPayFormula(la, d.id)).status).toBe('withdrawn');
   });
 
-  it('seeds the three standard guard formulas and the driver overtime formula for the whole group', async () => {
+  it('seeds the standard guard formulas (12-hour, plus 8-hour and office hours for B1b) and the driver overtime formula for the whole group', async () => {
     const { svc } = fresh();
     const b = await svc.payFormulaBoard(await svc.user('u-audit'));
     expect(b.role).toBe('director');
     const codes = b.formulas.filter((r) => r.inForce).map((r) => r.formula.code).sort();
-    expect(codes).toEqual(['DRV-OT', 'STAFF-OT', 'STD-12H-R2', 'STD-12H-R2.5', 'STD-12H-R3']);
+    expect(codes).toEqual(['DRV-OT', 'STAFF-OT', 'STD-12H-R2', 'STD-12H-R2.5', 'STD-12H-R3', 'STD-8H', 'STD-9H-R1']);
     expect(b.uses.filter((u) => u.current && u.use.scope === 'group').map((u) => u.use.formulaCode).sort()).toEqual(['DRV-OT', 'STAFF-OT', 'STD-12H-R2']);
     for (const r of b.formulas) expect(r.check.refuse).toEqual([]);
   });

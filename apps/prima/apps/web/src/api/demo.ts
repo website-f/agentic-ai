@@ -1,9 +1,9 @@
 import { invalidateDutyContext } from '../duty/context';
 import { AccessDenied, BadRequest, MemoryStore, NotFound, PrimaService, RuleBlocked, dateOf, fromMs, demoPin, generateDataset, makeTestInhouseKey, sampleLabelToken, type ItemAction, type User, type ClientLostReason, type ProofInput, type ReportDef, testReceiptReader, type FinCloseAction, type FinPackKind, type FinPaymentAction, type FinRequestAction, type CmsServiceKind, ImportError, OrgLinkError, registeredRollouts, withOrgLinks, RULES, type FwPaper, QUALITY_OPS_ACTIONS, demoFwRecruitFiles, type OrgImportReceipt } from '@prima/core';
 import { type ExpenseInput, type PdpaCaseInput, type PdpaStepName, type ProductCertInput, type ProductInput, type VehicleRequestInput, type VehicleWorkInput, ApiError, type Api, type CmsSettingsPatch, type FollowUpInput, type LeaveInput, type Me, type PhotoInput, type TenderProtocolInput, type DispatchInput, type DetectionInput, type VideoInput, type PostLogInput, type GateInInput, type NeedsReviewInput, type SiteTaskInput, type DoSiteTaskInput, type ClientCodeInput, type ClientCheckInput, type ClientInspectionInput, type SelfAuditInput, type RbaCommitteeInput, type EthicsInput, type ItEwaste, type FinControlArea, type ArmsRequestAction, type ArmsRequestStepExtra, type AmBuyInput, type RaiseArmsRequestInput, type OfficeDeskInput, type WorkAdjustInput, type WorkReassignInput, type OfficerHoursInput, type CleaningRecordInput, type CleaningSetupInput, type CleaningProofInput, type StockLineInput, type CleaningSlipInput, type ClientWorkAckInput, type GuardTermsInput, type OpportunityInput, type SourceCheckInput, type FwAddFromJaInput, type FwPaperInput, type AmBqActionInput, type PaperReadingResult } from './types';
-import type { DisciplineAppealDecision, PolicyCopyInput, StaffLangId } from './types';
-import { applyNewb } from './p100-newb';
+import type { DisciplineAppealDecision, PolicyCopyInput, RosterActName, StaffLangId } from './types';
 
+const ROSTER_WRITES = new Set(['saveSiteCoverage', 'saveRosterDraft', 'rosterStep', 'recordRosterActual', 'proposeRosterCorrection', 'decideRosterCorrection', 'decideRosterAbsence', 'recordRosterBreak', 'confirmRosterBreak', 'recordRosterEvidence', 'proposeGuardAllowance', 'decideGuardAllowance', 'proposeLumpSum', 'approveLumpSum', 'setLumpSumSwitch', 'decideMyLumpSum', 'checkRosterEvidence']);
 const CLEANING_WRITES = new Set(['saveSetup', 'setMap', 'makePlan', 'publish', 'recordTasks', 'recordDelivery', 'receiveDelivery', 'stockCheck', 'recordClientAck', 'saveSiteKit', 'recordSiteKit', 'approveGift', 'recordTakeBack']);
 
 const LOG_KEY = 'prima-demo-log-v1';
@@ -67,7 +67,7 @@ function toApiError(e: unknown): never {
 }
 
 type Mutations =
-  'orgClose' | 'orgRead' | 'orgImport' | 'assign' | 'publish' | 'lockAttendance' | 'clockIn' | 'clockOut' | 'scan' | 'raiseCase' | 'addCasePhoto' | 'startSiteVisit' | 'addVisitPhoto' | 'closeSiteVisit' | 'siteSurveyReceive' | 'siteSurveyPhoto' | 'siteSurveyReview' | 'updateCase' | 'signOffCase' | 'createQuotation' | 'quotationAction' | 'correctQuotation' | 'updateTender' | 'setTenderProtocol' | 'doTenderStep' | 'staffClockIn' | 'registerFace' | 'staffFaceCheck' | 'decideFace' | 'removeFace' | 'addPublicHoliday' | 'removePublicHoliday' | 'setLeaveOverride' | 'setWfhAllowed' | 'requestFlex' | 'decideFlex' | 'recordHrFiling' | 'openHrCase' | 'hrCaseStep' | 'appointOshCoordinator' | 'recordOfficeAssessment' | 'reportOshIncident' | 'recordOshReport' | 'recordTraining' | 'recordGuardPaper' | 'historyLookup' | 'markByLookup' | 'linkExistingRecords' | 'setRehire' | 'linkHistory' | 'separateHistory' | 'addOldEmployment' | 'carryHistoryPaper' | 'openAppraisal' | 'rateAppraisal' | 'commentAppraisal' | 'closeAppraisal' | 'publishPolicy' | 'setStaffOvertime' | 'updateHrLegalCheck' | 'acknowledgePolicy' | 'recordBriefingAcks' | 'addPolicyCopy' | 'setMotherTongue' | 'lodgeDisciplineAppeal' | 'decideDisciplineAppeal' | 'screeningAct' | 'screeningRepeat' | 'decideProbation' | 'raiseVacancy' | 'vacancyStep' | 'advertStep' | 'addApplicant' | 'applicantStep' | 'prepareStaffMovement' | 'staffMovementStep' | 'cancelStaffMovement' | 'applyStaffMovement' | 'authoriseMovementLogin' | 'confirmMovementLogin' | 'applyDueStaffMovements' | 'saveAllowanceType' | 'requestAllowanceChange' | 'eaDraft' | 'employeeRegister' | 'staffSessionStart' | 'acceptConfidentiality' | 'setApprovalLimits' | 'staffSessionEnd' | 'startSocsoClaim' | 'addSocsoDoc' | 'overrideSocsoDoc' | 'advanceSocsoClaim' | 'setSocsoRehab' | 'addSocsoAppointment' | 'addSocsoRestriction' | 'clearSocsoRestriction' | 'addSocsoCheckIn' | 'recordLindung' | 'verifyLindung' | 'addSocsoDependant' | 'addDependantPaper' | 'confirmDependantRoute' | 'recordDeathNotice' | 'addDependantPayment' | 'confirmDependantReceived' | 'assessDosh' | 'recordDoshImmediate' | 'recordDoshForm' | 'recordDoshClientTold' | 'submitFwRenewal' | 'recordFwPaper' | 'ackFwPaper' | 'addFwWorkerFromJa' | 'addFwWorker' | 'createTenderGroup' | 'recordTenderOpportunity' | 'enterTenderOpportunity' | 'addTenderSource' | 'loadTenderSourceStarter' | 'updateTenderSource' | 'recordTenderSourceCheck' | 'uploadHiringDoc' | 'updateHospitalClaim' | 'createFwmTask' | 'doneFwmTask' | 'reviewFwmTask' | 'recordFwCheck' | 'closeFwCheck' | 'openFwRecruitFile' | 'setFwRecruitTravel' | 'recordFwRecruitStep' | 'clearFwRecruitFile' | 'recordFwRecruitArrival' | 'stopFwRecruitFile' | 'addHostelBill' | 'requestHostelPayment' | 'checkHostelBill' | 'approveHostelBill' | 'uploadHostelSlip' | 'decideUtilityCharge' | 'ackUtilityNotice' | 'fileUtilityPaper' | 'submitStaffClaim' | 'addReceipts' | 'receiptAction' | 'headVerifyClaim' | 'prepareStaffPay' | 'setMyZakat' | 'loadStatTable' | 'checkStatTable' | 'setEmployerNos' | 'setFinPack' | 'finCreatePayment' | 'finPaymentStep' | 'finCooStep' | 'finCreateRequest' | 'finRequestStep' | 'finSetSettings' | 'finCloseStep' | 'finControlAction' | 'setMobItem' | 'setCmsService' | 'verifyCmsContact' | 'recordCmsTest' | 'acceptCmsService' | 'approveBranchSettlement' | 'addBranch' | 'branchAct' | 'branchSettlementAct' | 'insuranceClaimAct' | 'raiseItTicket' | 'websiteAction' | 'registerAction' | 'websiteSyncFeed' | 'corpFilingStep' | 'renewalStep' | 'saveCompanyFile' | 'addPanelFirm' | 'panelFirmStep' | 'adviserMoneyStep' | 'addDelegation' | 'delegationStep' | 'addCriticalRole' | 'placeLegalHold' | 'releaseLegalHold' | 'criticalRoleStep' | 'creditCheckLenderLicence' | 'ceoInstruct' | 'checkCompanyFile' | 'runCreditCheck' | 'creditDecide' | 'creditEnforcementStep' | 'creditRepayment' | 'creditChargeLodged' | 'creditStamped' | 'creditCorrectCollateral' | 'creditCorrectRecord' | 'creditDispute' | 'addCreditLoan' | 'corpAuditStep' | 'addSalesLead' | 'postDepreciation' | 'raiseActFinding' | 'actFindingStep' | 'recordActAudit' | 'assignActWork' | 'setActReportForm' | 'setActTiming' | 'recordActFieldCheck' | 'openActInvestigation' | 'addActEvidence' | 'actEvidence' | 'actInvestigationStep' | 'addActImprovement' | 'actImprovementStep' | 'amDisposalStep' | 'amLifeReview' | 'amBqAction' | 'amRecordPayment' | 'arishaSubmit' | 'arishaCommit' | 'arishaResubmit' | 'arishaReturn' | 'saveRecord' | 'decidePayChange' | 'savePayFormula' | 'decidePayFormula' | 'withdrawPayFormula' | 'setPayFormulaUse' | 'approveSiteHours' | 'savePayLaw' | 'setPublicHolidays' | 'amReversePayment' | 'amBankCash' | 'amFollowUp' | 'amDecideLetter' | 'salesLeadStep' | 'addLegalMatter' | 'legalMatterStep' | 'bcmRecord' | 'bcmDrill' | 'recordPdpaDpo' | 'addPdpaRequest' | 'pdpaRequestStep' | 'grcEvidence' | 'grcCheck' | 'recordOshAssessment' | 'submitWhistle' | 'whistleStep' | 'declareGift' | 'decideGift' | 'addGovMandate' | 'govMandateStep' | 'raisePurRequest' | 'purStep' | 'addPurSupplier' | 'purSupplierStep' | 'stockIssue' | 'requestUniform' | 'decideUniformRequest' | 'itemAct' | 'confirmMyItem' | 'handoverStep' | 'setManagementFee' | 'stockReturn' | 'raiseCorpChange' | 'decideCorpChange' | 'recordCorpBoard' | 'itTicketStep' | 'itAct' | 'staffDirectoryAct' | 'setItOnboardingStep' | 'setItTenderItem' | 'setItAsset' | 'itMaintenance' | 'raiseItPurchase' | 'itPurchaseStep' | 'reviewBranchAction' | 'addBranchAgreement' | 'contractStep' | 'contractReview' | 'addContractVariation' | 'addContract' | 'addClientAccount' | 'setStaffPayLine' | 'staffPayStep' | 'staffPayExport' | 'prepareGuardPay' | 'setGuardPayLine' | 'guardPayStep' | 'guardPayExport' | 'guardPayCash' | 'recordPayConsent' | 'approvePayConsent' | 'setStatutory' | 'setGuardAdvances' | 'changeGuardAdvance' | 'approveGuardAdvances' | 'payGuardAdvance' | 'recordGuardLoan' | 'guardLoanStep' | 'cosDecideClaim' | 'hrDecideClaim' | 'cooDecideClaim' | 'financePayClaim' | 'setClaimRate' | 'publishMemo' | 'withdrawMemo' | 'remindMemo' | 'changeMeeting' | 'cancelMeeting' | 'answerMeeting' | 'openPdpaCase' | 'requestVehicle' | 'recordVehicleRental' | 'endVehicleRental' | 'setVehicleRent' | 'moveVehicleUse' | 'setVehicleFuel' | 'addVehicleCard' | 'endVehicleCard' | 'recordFuel' | 'reviewFuel' | 'clientStep' | 'setOfficeDesks' | 'setCompanyRunBy' | 'clientInvoice' | 'clientWorkAck' | 'setInvoicePortal' | 'createClientShareLink' | 'revokeClientShareLink' | 'saveExpense' | 'prefillOfficeRequest' | 'submitExpense' | 'decideExpense' | 'startOffboarding' | 'setClientOwner' | 'addClientPerson' | 'updateClientPerson' | 'addClientRequest' | 'closeClientRequest' | 'decideClientRenewal' | 'sendClientRenewalOffer' | 'answerClientRenewal' | 'clientContact' | 'clientReport' | 'clientRating' | 'clientComplaint' | 'resolveClientComplaint' | 'clientBilling' | 'saveProduct' | 'saveProductCert' | 'decideVehicleRequest' | 'vehicleOut' | 'vehicleIn' | 'recordVehicleWork' | 'fileMonitoringConsent' | 'setStaffPin' | 'closeAccess' | 'pdpaStep' | 'savePdpaRegisterItem' | 'setPdpaSettings' | 'pdpaRegisterStep' | 'recordPdpaConsent' | 'withdrawPdpaConsent' | 'pdpaBreachDetails' | 'recordInsurancePremium' | 'renewInsurancePolicy' | 'cancelInsurancePolicy' | 'readMemo' | 'staffClockOut' | 'staffPing' | 'staffPings' | 'remoteApply' | 'remotePlan' | 'remoteTask' | 'remoteCheckIn' | 'remoteReport' | 'remoteDecide' | 'remoteEnd' | 'remoteReview' | 'requestTimeSlip' | 'cancelTimeSlip' | 'decideTimeSlip' | 'seenTimeSlip' | 'setTimeSlipApprover' | 'workCheckIn' | 'workTaskAdd' | 'workTaskDone' | 'workTaskLate' | 'workTaskReview' | 'workTaskReassign' | 'workTaskAdjust' | 'seenCooNotice' | 'helpAsk' | 'helpAnswer' | 'oneOnOneRecord' | 'playbookSignOff' | 'plannerSync' | 'branchCheckSubmit' | 'branchVisitRecord' | 'confirmTenderNa' | 'undoTenderStep' | 'planTenderStep' | 'decideTender' | 'setTenderRecord' | 'addTenderQuery' | 'setTenderQuery' | 'addTenderPapers' | 'setTenderBidFiles' | 'uploadTenderBidFile' | 'confirmTenderBidFile' | 'draftTenderChecklist' | 'reviewTenderChecklist' | 'verifyTender' | 'submitTender' | 'submitReport' | 'setReportDefs' | 'scheduleMeeting' | 'addMinutes' | 'checkMeetingSummary' | 'setMeetingAction' | 'setMeetingPrep' | 'issueFirearm' | 'returnFirearm' | 'planArmedJob' | 'updateArmedJob' | 'escalateFirearm' | 'countVault' | 'setPatrolInterval' | 'assignCmsShift' | 'updateCmsSettings' | 'setCmsReadinessAnswer' | 'saveCmsReadinessDevice' | 'removeCmsReadinessDevice' | 'reviewCmsReadiness' | 'planCmsRoster' | 'recordCmsHandover' | 'giveCmsHandover' | 'cmsSeatClockIn' | 'cmsSeatClockOut' | 'releaseCmsSeat' | 'logCallback' | 'acknowledgeAlarm' | 'sendDispatch' | 'closeDispatch' | 'cancelDispatch' | 'simulateDetection' | 'dispatchSeen' | 'acknowledgeDispatch' | 'addDispatchPhoto' | 'addDispatchVideo' | 'replyDispatch' | 'addPostLog' | 'gateIn' | 'gateOut' | 'saveNeedsReview' | 'setSiteTask' | 'stopSiteTask' | 'setGateLog' | 'doSiteTask' | 'followUpAttendance' | 'requestLeave' | 'decideLeave' | 'closeAlarm' | 'requestTrip' | 'decideTrip' | 'whistleReview' | 'confirmStockLoss' | 'stockCount' | 'amDecideReversal' | 'reviewFalseAlarm' | 'reviewArmsRequest' | 'armsRequestStep' | 'raiseArmsRequest' | 'setArmsTrading' | 'amBuyRequest' | 'amBuyDecide' | 'amBuyReceived' | 'amBuyReprice' | 'amWhatsAppConsent' | 'amWhatsAppSettle' | 'amQueueRentReminders' | 'recordFwPlacement' | 'endFwPlacement' | 'setFwCostRate' | 'addFwCostLegalNote' | 'draftFwCostMonth' | 'decideFwCostCharges' | 'bookFwCostCharge' | 'askPoliceHelp' | 'assignPoliceHelp' | 'recordPoliceHelpOutcome' | 'answerPoliceHelp' | 'withdrawPoliceHelp' | 'cleaningOp' | 'dutyOp' | 'addMobItem' | 'certifyContractRound' | 'renewContract' | 'linkContractClient' | 'qualityAction' | 'fwStatAct' | 'clientDiligenceAct' | 'siteInstructionsAct' | 'amExtrasAct' | 'jaSwitchAct' | 'jaImportStage' | 'jaSwitchSettings' | 'jaImportDecide' | 'whistleReply' | 'whistleMessage' | 'saveClientCode' | 'stopClientCode' | 'checkClientRequirement' | 'saveClientInspection' | 'fixInspectionLine' | 'saveSelfAudit' | 'nameRbaCommittee' | 'runRbaTrace' | 'settleRbaTraceRow' | 'signEthicsDeclaration' | 'reviewEthicsInterests' | 'fixSelfAuditLine' | 'setClientReport' | 'addShifts' | 'addTender' | 'finAddBankAccount' | 'finStartBooks' | 'finAddPaper' | 'startCompanyFile' | 'addCorpAudit' | 'addBcmSystem' | 'addGrcObligation' | 'addCorpFiling' | 'checkIn' | 'saveCheckinPlace' | 'ownerTestCheckin' | 'setCheckinPlaceActive' | 'setCheckinPolicy' | 'setCheckinRules' | 'decideCheckin' | 'decideClockPhoto' | 'addMeetingAction' | 'setRate' | 'clearUnbilledFlag' | 'payAction' | 'newaAct';
+  'orgClose' | 'orgRead' | 'orgImport' | 'assign' | 'publish' | 'lockAttendance' | 'clockIn' | 'clockOut' | 'scan' | 'raiseCase' | 'addCasePhoto' | 'startSiteVisit' | 'addVisitPhoto' | 'closeSiteVisit' | 'siteSurveyReceive' | 'siteSurveyPhoto' | 'siteSurveyReview' | 'updateCase' | 'signOffCase' | 'createQuotation' | 'quotationAction' | 'correctQuotation' | 'updateTender' | 'setTenderProtocol' | 'doTenderStep' | 'staffClockIn' | 'registerFace' | 'staffFaceCheck' | 'decideFace' | 'removeFace' | 'addPublicHoliday' | 'removePublicHoliday' | 'setLeaveOverride' | 'setWfhAllowed' | 'requestFlex' | 'decideFlex' | 'recordHrFiling' | 'openHrCase' | 'hrCaseStep' | 'appointOshCoordinator' | 'recordOfficeAssessment' | 'reportOshIncident' | 'recordOshReport' | 'recordTraining' | 'recordGuardPaper' | 'historyLookup' | 'markByLookup' | 'linkExistingRecords' | 'setRehire' | 'linkHistory' | 'separateHistory' | 'addOldEmployment' | 'carryHistoryPaper' | 'openAppraisal' | 'rateAppraisal' | 'commentAppraisal' | 'closeAppraisal' | 'publishPolicy' | 'setStaffOvertime' | 'updateHrLegalCheck' | 'acknowledgePolicy' | 'recordBriefingAcks' | 'addPolicyCopy' | 'setMotherTongue' | 'lodgeDisciplineAppeal' | 'decideDisciplineAppeal' | 'screeningAct' | 'screeningRepeat' | 'decideProbation' | 'raiseVacancy' | 'vacancyStep' | 'advertStep' | 'addApplicant' | 'applicantStep' | 'prepareStaffMovement' | 'staffMovementStep' | 'cancelStaffMovement' | 'applyStaffMovement' | 'authoriseMovementLogin' | 'confirmMovementLogin' | 'applyDueStaffMovements' | 'saveAllowanceType' | 'requestAllowanceChange' | 'eaDraft' | 'employeeRegister' | 'staffSessionStart' | 'acceptConfidentiality' | 'setApprovalLimits' | 'staffSessionEnd' | 'startSocsoClaim' | 'addSocsoDoc' | 'overrideSocsoDoc' | 'advanceSocsoClaim' | 'setSocsoRehab' | 'addSocsoAppointment' | 'addSocsoRestriction' | 'clearSocsoRestriction' | 'addSocsoCheckIn' | 'recordLindung' | 'verifyLindung' | 'addSocsoDependant' | 'addDependantPaper' | 'confirmDependantRoute' | 'recordDeathNotice' | 'addDependantPayment' | 'confirmDependantReceived' | 'assessDosh' | 'recordDoshImmediate' | 'recordDoshForm' | 'recordDoshClientTold' | 'submitFwRenewal' | 'recordFwPaper' | 'ackFwPaper' | 'addFwWorkerFromJa' | 'addFwWorker' | 'createTenderGroup' | 'recordTenderOpportunity' | 'enterTenderOpportunity' | 'addTenderSource' | 'loadTenderSourceStarter' | 'updateTenderSource' | 'recordTenderSourceCheck' | 'uploadHiringDoc' | 'updateHospitalClaim' | 'createFwmTask' | 'doneFwmTask' | 'reviewFwmTask' | 'recordFwCheck' | 'closeFwCheck' | 'openFwRecruitFile' | 'setFwRecruitTravel' | 'recordFwRecruitStep' | 'clearFwRecruitFile' | 'recordFwRecruitArrival' | 'stopFwRecruitFile' | 'addHostelBill' | 'requestHostelPayment' | 'checkHostelBill' | 'approveHostelBill' | 'uploadHostelSlip' | 'decideUtilityCharge' | 'ackUtilityNotice' | 'fileUtilityPaper' | 'submitStaffClaim' | 'addReceipts' | 'receiptAction' | 'headVerifyClaim' | 'prepareStaffPay' | 'setMyZakat' | 'loadStatTable' | 'checkStatTable' | 'setEmployerNos' | 'setFinPack' | 'finCreatePayment' | 'finPaymentStep' | 'finCooStep' | 'finCreateRequest' | 'finRequestStep' | 'finSetSettings' | 'finCloseStep' | 'finControlAction' | 'setMobItem' | 'setCmsService' | 'verifyCmsContact' | 'recordCmsTest' | 'acceptCmsService' | 'approveBranchSettlement' | 'addBranch' | 'branchAct' | 'branchSettlementAct' | 'insuranceClaimAct' | 'raiseItTicket' | 'websiteAction' | 'registerAction' | 'websiteSyncFeed' | 'corpFilingStep' | 'renewalStep' | 'saveCompanyFile' | 'addPanelFirm' | 'panelFirmStep' | 'adviserMoneyStep' | 'addDelegation' | 'delegationStep' | 'addCriticalRole' | 'placeLegalHold' | 'releaseLegalHold' | 'criticalRoleStep' | 'creditCheckLenderLicence' | 'ceoInstruct' | 'checkCompanyFile' | 'runCreditCheck' | 'creditDecide' | 'creditEnforcementStep' | 'creditRepayment' | 'creditChargeLodged' | 'creditStamped' | 'creditCorrectCollateral' | 'creditCorrectRecord' | 'creditDispute' | 'addCreditLoan' | 'corpAuditStep' | 'addSalesLead' | 'postDepreciation' | 'raiseActFinding' | 'actFindingStep' | 'recordActAudit' | 'assignActWork' | 'setActReportForm' | 'setActTiming' | 'recordActFieldCheck' | 'openActInvestigation' | 'addActEvidence' | 'actEvidence' | 'actInvestigationStep' | 'addActImprovement' | 'actImprovementStep' | 'amDisposalStep' | 'amLifeReview' | 'amBqAction' | 'amRecordPayment' | 'arishaSubmit' | 'arishaCommit' | 'arishaResubmit' | 'arishaReturn' | 'saveRecord' | 'decidePayChange' | 'savePayFormula' | 'decidePayFormula' | 'withdrawPayFormula' | 'setPayFormulaUse' | 'approveSiteHours' | 'savePayLaw' | 'setPublicHolidays' | 'amReversePayment' | 'amBankCash' | 'amFollowUp' | 'amDecideLetter' | 'salesLeadStep' | 'addLegalMatter' | 'legalMatterStep' | 'bcmRecord' | 'bcmDrill' | 'recordPdpaDpo' | 'addPdpaRequest' | 'pdpaRequestStep' | 'grcEvidence' | 'grcCheck' | 'recordOshAssessment' | 'submitWhistle' | 'whistleStep' | 'declareGift' | 'decideGift' | 'addGovMandate' | 'govMandateStep' | 'raisePurRequest' | 'purStep' | 'addPurSupplier' | 'purSupplierStep' | 'stockIssue' | 'itemAct' | 'confirmMyItem' | 'handoverStep' | 'setManagementFee' | 'stockReturn' | 'raiseCorpChange' | 'decideCorpChange' | 'recordCorpBoard' | 'itTicketStep' | 'itAct' | 'staffDirectoryAct' | 'setItOnboardingStep' | 'setItTenderItem' | 'setItAsset' | 'itMaintenance' | 'raiseItPurchase' | 'itPurchaseStep' | 'reviewBranchAction' | 'addBranchAgreement' | 'contractStep' | 'contractReview' | 'addContractVariation' | 'addContract' | 'addClientAccount' | 'setStaffPayLine' | 'staffPayStep' | 'staffPayExport' | 'prepareGuardPay' | 'setGuardPayLine' | 'guardPayStep' | 'guardPayExport' | 'guardPayCash' | 'recordPayConsent' | 'approvePayConsent' | 'setStatutory' | 'setGuardAdvances' | 'changeGuardAdvance' | 'approveGuardAdvances' | 'payGuardAdvance' | 'recordGuardLoan' | 'guardLoanStep' | 'cosDecideClaim' | 'hrDecideClaim' | 'cooDecideClaim' | 'financePayClaim' | 'setClaimRate' | 'publishMemo' | 'withdrawMemo' | 'remindMemo' | 'changeMeeting' | 'cancelMeeting' | 'answerMeeting' | 'openPdpaCase' | 'requestVehicle' | 'recordVehicleRental' | 'endVehicleRental' | 'setVehicleRent' | 'moveVehicleUse' | 'setVehicleFuel' | 'addVehicleCard' | 'endVehicleCard' | 'recordFuel' | 'reviewFuel' | 'clientStep' | 'setOfficeDesks' | 'setCompanyRunBy' | 'clientInvoice' | 'clientWorkAck' | 'setInvoicePortal' | 'createClientShareLink' | 'revokeClientShareLink' | 'saveExpense' | 'prefillOfficeRequest' | 'submitExpense' | 'decideExpense' | 'startOffboarding' | 'setClientOwner' | 'addClientPerson' | 'updateClientPerson' | 'addClientRequest' | 'closeClientRequest' | 'decideClientRenewal' | 'sendClientRenewalOffer' | 'answerClientRenewal' | 'clientContact' | 'clientReport' | 'clientRating' | 'clientComplaint' | 'resolveClientComplaint' | 'clientBilling' | 'saveProduct' | 'saveProductCert' | 'decideVehicleRequest' | 'vehicleOut' | 'vehicleIn' | 'recordVehicleWork' | 'fileMonitoringConsent' | 'setStaffPin' | 'closeAccess' | 'pdpaStep' | 'savePdpaRegisterItem' | 'setPdpaSettings' | 'pdpaRegisterStep' | 'recordPdpaConsent' | 'withdrawPdpaConsent' | 'pdpaBreachDetails' | 'recordInsurancePremium' | 'renewInsurancePolicy' | 'cancelInsurancePolicy' | 'readMemo' | 'staffClockOut' | 'staffPing' | 'staffPings' | 'remoteApply' | 'remotePlan' | 'remoteTask' | 'remoteCheckIn' | 'remoteReport' | 'remoteDecide' | 'remoteEnd' | 'remoteReview' | 'requestTimeSlip' | 'cancelTimeSlip' | 'decideTimeSlip' | 'seenTimeSlip' | 'setTimeSlipApprover' | 'workCheckIn' | 'workTaskAdd' | 'workTaskDone' | 'workTaskLate' | 'workTaskReview' | 'workTaskReassign' | 'workTaskAdjust' | 'seenCooNotice' | 'helpAsk' | 'helpAnswer' | 'oneOnOneRecord' | 'playbookSignOff' | 'plannerSync' | 'branchCheckSubmit' | 'branchVisitRecord' | 'confirmTenderNa' | 'undoTenderStep' | 'planTenderStep' | 'decideTender' | 'setTenderRecord' | 'addTenderQuery' | 'setTenderQuery' | 'addTenderPapers' | 'setTenderBidFiles' | 'uploadTenderBidFile' | 'confirmTenderBidFile' | 'draftTenderChecklist' | 'reviewTenderChecklist' | 'verifyTender' | 'submitTender' | 'submitReport' | 'setReportDefs' | 'scheduleMeeting' | 'addMinutes' | 'checkMeetingSummary' | 'setMeetingAction' | 'setMeetingPrep' | 'issueFirearm' | 'returnFirearm' | 'planArmedJob' | 'updateArmedJob' | 'escalateFirearm' | 'countVault' | 'setPatrolInterval' | 'assignCmsShift' | 'updateCmsSettings' | 'setCmsReadinessAnswer' | 'saveCmsReadinessDevice' | 'removeCmsReadinessDevice' | 'reviewCmsReadiness' | 'planCmsRoster' | 'recordCmsHandover' | 'giveCmsHandover' | 'cmsSeatClockIn' | 'cmsSeatClockOut' | 'releaseCmsSeat' | 'logCallback' | 'acknowledgeAlarm' | 'sendDispatch' | 'closeDispatch' | 'cancelDispatch' | 'simulateDetection' | 'dispatchSeen' | 'acknowledgeDispatch' | 'addDispatchPhoto' | 'addDispatchVideo' | 'replyDispatch' | 'addPostLog' | 'gateIn' | 'gateOut' | 'saveNeedsReview' | 'setSiteTask' | 'stopSiteTask' | 'setGateLog' | 'doSiteTask' | 'followUpAttendance' | 'requestLeave' | 'decideLeave' | 'closeAlarm' | 'requestTrip' | 'decideTrip' | 'whistleReview' | 'confirmStockLoss' | 'stockCount' | 'amDecideReversal' | 'reviewFalseAlarm' | 'reviewArmsRequest' | 'armsRequestStep' | 'raiseArmsRequest' | 'setArmsTrading' | 'amBuyRequest' | 'amBuyDecide' | 'amBuyReceived' | 'amBuyReprice' | 'amWhatsAppConsent' | 'amWhatsAppSettle' | 'amQueueRentReminders' | 'recordFwPlacement' | 'endFwPlacement' | 'setFwCostRate' | 'addFwCostLegalNote' | 'draftFwCostMonth' | 'decideFwCostCharges' | 'bookFwCostCharge' | 'askPoliceHelp' | 'assignPoliceHelp' | 'recordPoliceHelpOutcome' | 'answerPoliceHelp' | 'withdrawPoliceHelp' | 'cleaningOp' | 'dutyOp' | 'addMobItem' | 'certifyContractRound' | 'renewContract' | 'linkContractClient' | 'qualityAction' | 'fwStatAct' | 'clientDiligenceAct' | 'siteInstructionsAct' | 'amExtrasAct' | 'jaSwitchAct' | 'jaImportStage' | 'jaSwitchSettings' | 'jaImportDecide' | 'whistleReply' | 'whistleMessage' | 'saveClientCode' | 'stopClientCode' | 'checkClientRequirement' | 'saveClientInspection' | 'fixInspectionLine' | 'saveSelfAudit' | 'nameRbaCommittee' | 'runRbaTrace' | 'settleRbaTraceRow' | 'signEthicsDeclaration' | 'reviewEthicsInterests' | 'fixSelfAuditLine' | 'setClientReport' | 'addShifts' | 'addTender' | 'finAddBankAccount' | 'finStartBooks' | 'finAddPaper' | 'startCompanyFile' | 'addCorpAudit' | 'addBcmSystem' | 'addGrcObligation' | 'addCorpFiling' | 'checkIn' | 'saveCheckinPlace' | 'ownerTestCheckin' | 'setCheckinPlaceActive' | 'setCheckinPolicy' | 'setCheckinRules' | 'decideCheckin' | 'decideClockPhoto' | 'addMeetingAction' | 'setOshCoordinatorSees' | 'setArmsRfidRequired' | 'setStaffLeaveVc' | 'setCashStandIn' | 'hostelCheckIn' | 'recordRiskBriefing' | 'guardPhoneCodes' | 'setMyAlertPrefs' | 'hostelCheckOut' | 'finClearUnbilled' | 'finSetSiteTarget' | 'finSetSiteCosts' | 'finSqlPostingAct' | 'reportItDevice' | 'armsPolicyAct' | 'officeAmAct' | 'kdnAct' | 'toolboxAct' | 'groupMonthAct' | 'registerAct' | 'siteSuppliesAct' | 'inventoryAct' | 'amRentalAct' | 'prepareGuardPayLater' | 'setGuardPayPreparers' | 'requestOtClaim' | 'setHrList' | 'fwHostelAct' | 'shortStayAct' | 'recordPaperConsent' | 'setPaperConsentGate' | 'setFinalPay' | 'reportProblem' | 'replyProblem' | 'accountsAct' | 'setOpeningBalance' | 'checkOpeningBalance' | 'loadOpeningBalances' | 'addCompany' | 'orgImportOk' | 'decideUniformRequest' | 'requestUniform' | 'reportWarrantyFault' | 'checkWarrantyClaim' | 'sendWarrantyClaim' | 'closeWarrantyClaim' | 'cancelOtClaim' | 'decideOtClaim' | 'approveCmsOvertime' | 'rosterOp';
 
 export class DemoApi implements Api {
   async m365Call(): Promise<unknown> { throw new Error('Microsoft integration requires the signed-in server app.'); }
@@ -90,6 +90,7 @@ export class DemoApi implements Api {
 
   readonly org: import('./types').OrgClient = {
     guide: () => this.read(async (s, u) => s.guideCards(u)),
+    processes: () => this.read(async (s, u) => s.processSheet(u)),
     inbox: (offset = 0) => this.read((s, u) => s.orgLinks.inbox(u, { offset })).catch(orgError),
     close: (taskId, outcome, note) => this.write<unknown>('orgClose', [taskId, outcome, note]).catch(orgError),
     read: (taskId) => this.write<unknown>('orgRead', [taskId]).catch(orgError),
@@ -100,24 +101,8 @@ export class DemoApi implements Api {
     // P90: no AI in the demo build; the in-browser matcher does the work.
     importAiState: async () => ({ on: false }),
     importAiColumns: async () => ({ matches: [], source: 'none' }),
-  };
-
-  /** K8: the bulk load helper on the demo's own service (kept until the page reloads); no AI in the demo build. */
-  readonly bulk: import('./bulk').BulkClient = {
-    board: () => this.read(async (s, u) => ({ ...(await s.bulkManager.board(u)), ai: false })),
-    place: (files) => this.read((s, u) => s.bulkManager.placeFiles(u, files)),
-    people: (q) => this.read((s, u) => s.bulkManager.findPeople(u, q)),
-    file: (input) => this.read((s, u) => s.bulkManager.fileOne(u, input)),
-    recordFiles: (input) => this.read((s, u) => s.bulkManager.recordFiles(u, input)),
-    recordData: (input) => this.read((s, u) => s.bulkManager.recordData(u, input)),
-    aiPlan: () => Promise.reject(new ApiError('The AI part of the bulk load is not switched on here.', 503, [])),
-    aiFiles: () => Promise.reject(new ApiError('The AI part of the bulk load is not switched on here.', 503, [])),
-  };
-
-  /** K9: no AI in the demo build; the trainer answers from the written guide. */
-  readonly trainer: import('./trainer').TrainerClient = {
-    state: async () => ({ ai: false }),
-    ask: () => Promise.reject(new ApiError('Arisha’s AI answers are not switched on here. The written steps still work.', 503, [])),
+    importLoads: () => this.read((s, u) => s.orgImport.loads(u)).catch(orgError),
+    importOk: (id, comment) => this.write<unknown>('orgImportOk', [id, comment]).catch(orgError),
   };
 
   private booted: PrimaService | null = null;
@@ -224,9 +209,6 @@ export class DemoApi implements Api {
 
   private apply(u: User, op: Mutations, args: unknown[]): Promise<unknown> {
     const a = args as never[];
-    // P100 newb: E6, E7, J1, J5 and J6 writes (api/p100-newb.ts).
-    const newb = applyNewb(this.svc, u, op, a);
-    if (newb) return newb;
     switch (op) {
       case 'jaSwitchAct':
         return this.svc.jaSwitchAct(u, a[0], a[1], a[2], a[3]);
@@ -284,6 +266,10 @@ export class DemoApi implements Api {
         return this.svc.setTenderProtocol(u, a[0]);
       case 'doTenderStep':
         return this.svc.doTenderStep(u, a[0], a[1], a[2], a[3], a[4]);
+      case 'setCashStandIn':
+        return this.svc.setCashStandIn(u, args[0] as Record<string, unknown>);
+      case 'setStaffLeaveVc':
+        return this.svc.setStaffLeaveVc(u, args[0] as Record<string, unknown>);
       case 'setApprovalLimits':
         return this.svc.setApprovalLimits(u, args[0] as Record<string, unknown>);
       case 'acceptConfidentiality':
@@ -306,6 +292,22 @@ export class DemoApi implements Api {
         return this.svc.addPublicHoliday(u, a[0]);
       case 'removePublicHoliday':
         return this.svc.removePublicHoliday(u, a[0], a[1]);
+      case 'setOpeningBalance':
+        return this.svc.setOpeningBalance(u, a[0], a[1]);
+      case 'checkOpeningBalance':
+        return this.svc.checkOpeningBalance(u, a[0], a[1]);
+      case 'recordPaperConsent':
+        return this.svc.paperConsent.record(u, a[0]);
+      case 'setPaperConsentGate':
+        return this.svc.paperConsent.setGate(u, a[0], a[1]);
+      case 'fwHostelAct':
+        return this.svc.fwMoves.act(u, a[0], a[1]);
+      case 'shortStayAct':
+        return this.svc.shortStays.act(u, a[0], a[1]);
+      case 'setHrList':
+        return this.svc.hrLists.set(u, a[0], a[1]);
+      case 'loadOpeningBalances':
+        return this.svc.loadOpeningBalances(u, a[0], a[1], a[2]);
       case 'setLeaveOverride':
         return this.svc.setLeaveOverride(u, a[0], a[1], a[2], a[3]);
       case 'setWfhAllowed':
@@ -318,6 +320,10 @@ export class DemoApi implements Api {
         return this.svc.openHrCase(u, a[0]);
       case 'hrCaseStep':
         return this.svc.hrCaseStep(u, a[0], a[1]);
+      case 'setOshCoordinatorSees':
+        return this.svc.setOshCoordinatorSees(u, a[0] as Record<string, unknown>);
+      case 'setArmsRfidRequired':
+        return this.svc.setArmsRfidRequired(u, a[0] as Record<string, unknown>);
       case 'appointOshCoordinator':
         return this.svc.appointOshCoordinator(u, a[0]);
       case 'recordOfficeAssessment':
@@ -491,6 +497,11 @@ export class DemoApi implements Api {
         if (!CLEANING_WRITES.has(name)) throw new ApiError('Unknown cleaning action.', 400);
         return (this.svc.cleaning as unknown as Record<string, (u: User, ...x: unknown[]) => Promise<unknown>>)[name](u, ...rest);
       }
+      case 'rosterOp': {
+        const [name, ...rest] = args as [string, ...unknown[]];
+        if (!ROSTER_WRITES.has(name)) throw new ApiError('Unknown roster action.', 400);
+        return (this.svc as unknown as Record<string, (u: User, ...x: unknown[]) => Promise<unknown>>)[name](u, ...rest);
+      }
       case 'dutyOp': {
         const [name, ...rest] = args as [string, ...unknown[]];
         if (name !== 'publishPosts' && name !== 'publishRoute' && name !== 'saveTerms') throw new ApiError('Unknown duty action.', 400);
@@ -516,6 +527,16 @@ export class DemoApi implements Api {
         return this.svc.stopFwRecruitFile(u, a[0], a[1]);
       case 'addHostelBill':
         return this.svc.addHostelBill(u, a[0], a[1]);
+      case 'setMyAlertPrefs':
+        return this.svc.setMyAlertPrefs(u, a[0]);
+      case 'guardPhoneCodes':
+        return this.svc.guardPhone.issueCodes(u, a[0], a[1]);
+      case 'recordRiskBriefing':
+        return this.svc.recordRiskBriefing(u, a[0]);
+      case 'hostelCheckIn':
+        return this.svc.hostelCheckIn(u, { hostelId: a[0], personId: a[1], from: a[2] });
+      case 'hostelCheckOut':
+        return this.svc.hostelCheckOut(u, Object.assign({ stayId: a[0] as string }, a[1] as object) as unknown as Parameters<PrimaService['hostelCheckOut']>[1]);
       case 'requestHostelPayment':
         return this.svc.requestHostelPayment(u, a[0], a[1]);
       case 'checkHostelBill':
@@ -566,6 +587,18 @@ export class DemoApi implements Api {
         return this.svc.orgLinks.markRead(u, a[0]);
       case 'orgImport':
         return this.svc.orgImport.commit(u, a[0], a[1], a[2], a[3], a[4]);
+      case 'reportProblem':
+        return this.svc.problems.report(u, a[0]);
+      case 'accountsAct':
+        return this.svc.accounts.act(u, a[0], a[1]);
+      case 'replyProblem':
+        return this.svc.problems.reply(u, a[0], a[1]);
+      case 'setFinalPay':
+        return this.svc.setFinalPay(u, a[0], a[1]);
+      case 'addCompany':
+        return this.svc.addCompany(u, a[0]);
+      case 'orgImportOk':
+        return this.svc.orgImport.okLoad(u, a[0], a[1]);
       case 'raiseActFinding':
         return this.svc.raiseActFinding(u, a[0]);
       case 'actFindingStep':
@@ -729,10 +762,6 @@ export class DemoApi implements Api {
         return this.svc.handoverStep(u, a[0], a[1], a[2]);
       case 'setManagementFee':
         return this.svc.setManagementFee(u, a[0], a[1]);
-      case 'clearUnbilledFlag':
-        return this.svc.clearUnbilledFlag(u, a[0], a[1]);
-      case 'setRate':
-        return this.svc.setRate(u, a[0] as Parameters<PrimaService['setRate']>[1]);
       case 'stockIssue':
         return this.svc.stockIssue(u, a[0], a[1]);
       case 'requestUniform':
@@ -791,12 +820,32 @@ export class DemoApi implements Api {
         return this.svc.websites.syncFromFeed(u, a[0]);
       case 'raiseItTicket':
         return this.svc.raiseItTicket(u, a[0]);
+      case 'reportItDevice':
+        return this.svc.reportItDevice(u, a[0]);
       case 'itTicketStep':
         return this.svc.itTicketStep(u, a[0], a[1], a[2]);
       case 'staffDirectoryAct':
         return this.svc.staffDirectory.act(u, a[0], a[1]);
       case 'itAct':
         return this.svc.itAct(u, a[0], a[1]);
+      case 'armsPolicyAct':
+        return this.svc.armsPolicyAct(u, a[0], a[1]);
+      case 'officeAmAct':
+        return this.svc.officeAmAct(u, a[0], a[1]);
+      case 'kdnAct':
+        return this.svc.kdnAct(u, a[0], a[1]);
+      case 'toolboxAct':
+        return this.svc.toolboxAct(u, a[0], a[1]);
+      case 'groupMonthAct':
+        return this.svc.groupMonthAct(u, a[0], a[1]);
+      case 'registerAct':
+        return this.svc.registerAct(u, a[0], a[1]);
+      case 'siteSuppliesAct':
+        return this.svc.siteSuppliesAct(u, a[0], a[1]);
+      case 'inventoryAct':
+        return this.svc.inventoryAct(u, a[0], a[1]);
+      case 'amRentalAct':
+        return this.svc.amRentalAct(u, a[0], a[1]);
       case 'setItOnboardingStep':
         return this.svc.setItOnboardingStep(u, a[0], a[1], a[2], a[3], a[4]);
       case 'setItTenderItem':
@@ -859,8 +908,24 @@ export class DemoApi implements Api {
         return this.svc.finance.startBooks(u, a[0], a[1]);
       case 'finAddPaper':
         return this.svc.addFinPaper(u, a[0], a[1], a[2]);
+      case 'finClearUnbilled':
+        return this.svc.clearUnbilledFlag(u, a[0]);
+      case 'finSetSiteTarget':
+        return this.svc.setSiteTarget(u, a[0]);
+      case 'finSetSiteCosts':
+        return this.svc.setSiteCostRates(u, a[0]);
+      case 'finSqlPostingAct': {
+        const p = this.svc.financeSqlPosting;
+        const [kind, b] = a as unknown as [string, Record<string, unknown>];
+        if (kind === 'switch') return p.setSwitch(u, String(b.companyId), b);
+        if (kind === 'code') return p.codeAction(u, String(b.companyId), String(b.action), b);
+        if (kind === 'exception') return p.exceptionAction(u, String(b.id), String(b.action), b);
+        if (kind === 'paste') return p.pasteListing(u, String(b.companyId), b.csv);
+        if (kind === 'send') return p.sendNow(u);
+        return p.checkNow(u);
+      }
       case 'finSetSettings':
-        return this.svc.finance.setSettings(u, { values: a[0], comment: a[1], ...(a[2] ? { from: a[2] } : {}) });
+        return this.svc.finance.setSettings(u, { values: a[0], comment: a[1], ...(a[2] ? { effectiveFrom: a[2] } : {}) });
       case 'finCreateRequest':
         return this.svc.financeRequests.create(u, a[0], a[1]);
       case 'finRequestStep':
@@ -891,14 +956,16 @@ export class DemoApi implements Api {
         return this.svc.staffPayExport(u, a[0], a[1]);
       case 'prepareGuardPay':
         return this.svc.prepareGuardPay(u, a[0], a[1], a[2] ?? undefined);
+      case 'prepareGuardPayLater':
+        return this.svc.prepareGuardPayLater(u, a[0]);
+      case 'setGuardPayPreparers':
+        return this.svc.setGuardPayPreparers(u, a[0], { userIds: a[1], reason: a[2] });
       case 'setGuardPayLine':
         return this.svc.setGuardPayLine(u, a[0], a[1], a[2]);
       case 'guardPayStep':
         return this.svc.guardPayStep(u, a[0], a[1], a[2]);
       case 'guardPayExport':
         return this.svc.guardPayExport(u, a[0], a[1]);
-      case 'payAction':
-        return this.svc.payAction(u, a[0], a[1] ?? {});
       case 'guardPayCash':
         return this.svc.guardPayCash(u, a[0], a[1], a[2], a[3] ?? {});
       case 'recordPayConsent':
@@ -1112,6 +1179,20 @@ export class DemoApi implements Api {
         return this.svc.cancelTimeSlip(u, a[0]);
       case 'decideTimeSlip':
         return this.svc.decideTimeSlip(u, a[0], a[1], a[2]);
+      case 'reportWarrantyFault':
+        return this.svc.reportWarrantyFault(u, a[0] as never);
+      case 'checkWarrantyClaim':
+        return this.svc.checkWarrantyClaim(u, a[0] as string, a[1] as never);
+      case 'sendWarrantyClaim':
+        return this.svc.sendWarrantyClaim(u, a[0] as string, a[1] as never);
+      case 'closeWarrantyClaim':
+        return this.svc.closeWarrantyClaim(u, a[0] as string, a[1] as never);
+      case 'requestOtClaim':
+        return this.svc.requestOtClaim(u, a[0]);
+      case 'cancelOtClaim':
+        return this.svc.cancelOtClaim(u, a[0]);
+      case 'decideOtClaim':
+        return this.svc.decideOtClaim(u, a[0], a[1], a[2]);
       case 'seenTimeSlip':
         return this.svc.seenTimeSlip(u, a[0]);
       case 'setTimeSlipApprover':
@@ -1206,6 +1287,8 @@ export class DemoApi implements Api {
         return this.svc.countVault(u, a[0], a[1]);
       case 'assignCmsShift':
         return this.svc.assignCmsShift(u, a[0], a[1]);
+      case 'approveCmsOvertime':
+        return this.svc.approveCmsOvertime(u, a[0] as Record<string, unknown>);
       case 'updateCmsSettings':
         return this.svc.updateCmsSettings(u, a[0]);
       case 'setCmsReadinessAnswer':
@@ -1306,7 +1389,7 @@ export class DemoApi implements Api {
       case 'whistleReview':
         return this.svc.whistleReview(u, a[0], a[1], a[2]);
       case 'confirmStockLoss':
-        return this.svc.confirmStockLoss(u, a[0], a[1], a[2]);
+        return this.svc.confirmStockLoss(u, a[0], a[1], a[2], a[3] ?? {});
       case 'stockCount':
         return this.svc.stockCount(u, a[0], a[1], a[2]);
       case 'amDecideReversal':
@@ -1373,9 +1456,6 @@ export class DemoApi implements Api {
         return this.svc.fwStatAct(u, a[0], a[1]);
       case 'amExtrasAct':
         return this.svc.amExtras.act(u, a[0], a[1], a[2], a[3]);
-      // P100 newa: one write for the new workflows, [area, action, body]; each area's service checks the step.
-      case 'newaAct':
-        return this.newaApply(u, a[0], a[1], a[2]);
     }
   }
 
@@ -1413,7 +1493,7 @@ export class DemoApi implements Api {
   }
 
   me(): Promise<Me> {
-    return this.read(async (svc, user) => ({ user, companies: await svc.visibleCompanies(user), now: svc.now(), dataMode: 'test' as const, guardPayPreparer: await svc.isGuardPayPreparer(user) }));
+    return this.read(async (svc, user) => ({ user, companies: await svc.visibleCompanies(user), now: svc.now(), dataMode: 'test' as const }));
   }
 
   overview() {
@@ -1492,6 +1572,48 @@ export class DemoApi implements Api {
   hrLeaveSettings() {
     return this.read((s, u) => s.hrLeaveSettings(u));
   }
+  paperConsents() {
+    return this.read((s, u) => s.paperConsent.board(u));
+  }
+  recordPaperConsent(input: Record<string, unknown>) {
+    return this.write<unknown>('recordPaperConsent', [input]);
+  }
+  setPaperConsentGate(on: boolean, reason: string) {
+    return this.write<unknown>('setPaperConsentGate', [on, reason]);
+  }
+  fwHostel() {
+    return this.read((s, u) => s.fwMoves.board(u));
+  }
+  fwHostelJa() {
+    return this.read((s, u) => s.fwMoves.jaDifferences(u));
+  }
+  fwHostelAct(action: string, body: Record<string, unknown>) {
+    return this.write<unknown>('fwHostelAct', [action, body]);
+  }
+  shortStays() {
+    return this.read((s, u) => s.shortStays.board(u));
+  }
+  shortStayAct(action: string, body: Record<string, unknown>) {
+    return this.write<unknown>('shortStayAct', [action, body]);
+  }
+  hrLists() {
+    return this.read((s, u) => s.hrLists.view(u));
+  }
+  setHrList(kind: Parameters<Api['setHrList']>[0], input: Record<string, unknown>) {
+    return this.write<unknown>('setHrList', [kind, input]);
+  }
+  openingBalances(companyId: string) {
+    return this.read((s, u) => s.openingBalances(u, companyId));
+  }
+  setOpeningBalance(personId: string, input: Record<string, unknown>) {
+    return this.write<unknown>('setOpeningBalance', [personId, input]);
+  }
+  checkOpeningBalance(personId: string, comment: string) {
+    return this.write<unknown>('checkOpeningBalance', [personId, comment]);
+  }
+  loadOpeningBalances(companyId: string, csv: string, reason: string) {
+    return this.write<Awaited<ReturnType<PrimaService['loadOpeningBalances']>>>('loadOpeningBalances', [companyId, csv, reason]);
+  }
   setLeaveOverride(personId: string, kind: Parameters<Api['setLeaveOverride']>[1], days: number | null, note: string) {
     return this.write('setLeaveOverride', [personId, kind, days, note]);
   }
@@ -1518,6 +1640,12 @@ export class DemoApi implements Api {
   }
   officeOsh() {
     return this.read((s, u) => s.officeOsh(u));
+  }
+  setOshCoordinatorSees(body: { recordId: string; on: boolean; reason: string }) {
+    return this.write<unknown>('setOshCoordinatorSees', [body]);
+  }
+  setArmsRfidRequired(body: { on: boolean; reason: string }) {
+    return this.write<unknown>('setArmsRfidRequired', [body]);
   }
   appointOshCoordinator(input: Parameters<Api['appointOshCoordinator']>[0]) {
     return this.write('appointOshCoordinator', [input]);
@@ -1654,6 +1782,9 @@ export class DemoApi implements Api {
   }
   decideProbation(personId: string, decision: 'confirm' | 'extend', newEndsOn: string | null, note: string) {
     return this.write('decideProbation', [personId, decision, newEndsOn, note]);
+  }
+  setFinalPay(personId: string, input: Record<string, unknown>) {
+    return this.write<unknown>('setFinalPay', [personId, input]);
   }
   leavingGuide(personId: string) {
     return this.read((s, u) => s.leavingGuide(u, personId));
@@ -1822,6 +1953,33 @@ export class DemoApi implements Api {
   myTimeSlips() {
     return this.read((s, u) => s.myTimeSlips(u));
   }
+  warrantyBoard() {
+    return this.read((s, u) => s.warrantyBoard(u));
+  }
+  reportWarrantyFault(input: Parameters<Api['reportWarrantyFault']>[0]) {
+    return this.write<unknown>('reportWarrantyFault', [input]);
+  }
+  checkWarrantyClaim(id: string, input: Parameters<Api['checkWarrantyClaim']>[1]) {
+    return this.write<unknown>('checkWarrantyClaim', [id, input]);
+  }
+  sendWarrantyClaim(id: string, input: Parameters<Api['sendWarrantyClaim']>[1]) {
+    return this.write<unknown>('sendWarrantyClaim', [id, input]);
+  }
+  closeWarrantyClaim(id: string, input: Parameters<Api['closeWarrantyClaim']>[1]) {
+    return this.write<unknown>('closeWarrantyClaim', [id, input]);
+  }
+  myOtClaims() {
+    return this.read((s, u) => s.myOtClaims(u));
+  }
+  requestOtClaim(input: Parameters<Api['requestOtClaim']>[0]) {
+    return this.write<unknown>('requestOtClaim', [input]);
+  }
+  cancelOtClaim(id: string) {
+    return this.write<unknown>('cancelOtClaim', [id]);
+  }
+  decideOtClaim(id: string, approve: boolean, note: string) {
+    return this.write<unknown>('decideOtClaim', [id, approve, note]);
+  }
   requestTimeSlip(input: { date: string; from: string; to: string; reason: string }) {
     return this.write('requestTimeSlip', [input]);
   }
@@ -1960,6 +2118,12 @@ export class DemoApi implements Api {
   }
   addHostelBill(input: Parameters<Api['addHostelBill']>[0], proof: ProofInput[]) {
     return this.write<unknown>('addHostelBill', [input, proof]);
+  }
+  hostelCheckIn(hostelId: string, personId: string, from: string) {
+    return this.write<unknown>('hostelCheckIn', [hostelId, personId, from]);
+  }
+  hostelCheckOut(stayId: string, input: Parameters<Api['hostelCheckOut']>[1]) {
+    return this.write<unknown>('hostelCheckOut', [stayId, input]);
   }
   hostelBillStep(billId: string, step: 'request' | 'check' | 'approve' | 'slip', ok: boolean, note: string, proof: ProofInput[] = []) {
     if (step === 'request') return this.write<unknown>('requestHostelPayment', [billId, note]);
@@ -2149,6 +2313,24 @@ export class DemoApi implements Api {
   recordForm(kind: Parameters<Api['recordForm']>[0], id: string | null, companyId: string | null) {
     return this.read((s, u) => s.recordForm(u, kind, id, companyId));
   }
+  problems() {
+    return this.read((s, u) => s.problems.list(u));
+  }
+  accounts() {
+    return this.read((s, u) => s.accounts.board(u));
+  }
+  accountsAct(action: 'submit' | 'decide', input: Record<string, unknown>) {
+    return this.write<unknown>('accountsAct', [action, input]);
+  }
+  reportProblem(input: { what: string; screen: string; photo?: string | null }) {
+    return this.write<unknown>('reportProblem', [input]);
+  }
+  replyProblem(id: string, text: string) {
+    return this.write<unknown>('replyProblem', [id, text]);
+  }
+  addCompany(input: Record<string, unknown>) {
+    return this.write<unknown>('addCompany', [input]);
+  }
   saveRecord(kind: Parameters<Api['saveRecord']>[0], id: string | null, companyId: string | null, values: Parameters<Api['saveRecord']>[3]) {
     return this.write<unknown>('saveRecord', [kind, id, companyId, values]);
   }
@@ -2326,6 +2508,9 @@ export class DemoApi implements Api {
   }
   myItems() {
     return this.read((s, u) => s.myItems(u));
+  }
+  reportItDevice(input: Parameters<Api['reportItDevice']>[0]) {
+    return this.write<unknown>('reportItDevice', [input]);
   }
   deliveryProof(issueId: string) {
     return this.read((s, u) => s.deliveryProof(u, issueId));
@@ -2724,8 +2909,8 @@ export class DemoApi implements Api {
   finKpi(period?: string) {
     return this.read((s, u) => s.financeKpi.view(u, period));
   }
-  finSetSettings(values: Record<string, unknown>, comment: string, from?: string) {
-    return this.write<unknown>('finSetSettings', from ? [values, comment, from] : [values, comment]);
+  finSetSettings(values: Record<string, unknown>, comment: string) {
+    return this.write<unknown>('finSetSettings', [values, comment]);
   }
   finRequests() {
     return this.read((s, u) => s.financeRequests.list(u));
@@ -2759,6 +2944,30 @@ export class DemoApi implements Api {
   }
   finDashboard() {
     return this.read((s, u) => s.financeControls.dashboard(u));
+  }
+  finUnbilled(month?: string) {
+    return this.read((s, u) => s.unbilledSites(u, month));
+  }
+  finClearUnbilled(input: Parameters<Api['finClearUnbilled']>[0]) {
+    return this.write<unknown>('finClearUnbilled', [input]);
+  }
+  finSiteProfit(month?: string) {
+    return this.read((s, u) => s.siteProfit(u, month));
+  }
+  finSetSiteTarget(input: Parameters<Api['finSetSiteTarget']>[0]) {
+    return this.write<unknown>('finSetSiteTarget', [input]);
+  }
+  finSetSiteCosts(input: Parameters<Api['finSetSiteCosts']>[0]) {
+    return this.write<unknown>('finSetSiteCosts', [input]);
+  }
+  finCeoSummary() {
+    return this.read((s, u) => s.ceoFinanceSummary(u));
+  }
+  finSqlPosting() {
+    return this.read((s, u) => s.financeSqlPosting.view(u));
+  }
+  finSqlPostingAct(kind: Parameters<Api['finSqlPostingAct']>[0], input: Record<string, unknown>) {
+    return this.write<unknown>('finSqlPostingAct', [kind, input]);
   }
   finChecksTodo() {
     return this.read((s, u) => s.financeControls.checksTodo(u));
@@ -2820,6 +3029,12 @@ export class DemoApi implements Api {
   prepareGuardPay(companyId: string, period: string, holidays?: { date: string; label: string }[]) {
     return this.write<unknown>('prepareGuardPay', [companyId, period, holidays]);
   }
+  prepareGuardPayLater(runId: string) {
+    return this.write<unknown>('prepareGuardPayLater', [runId]);
+  }
+  setGuardPayPreparers(companyId: string, userIds: string[], reason: string) {
+    return this.write<unknown>('setGuardPayPreparers', [companyId, userIds, reason]);
+  }
   setGuardPayLine(runId: string, personId: string, patch: Parameters<Api['setGuardPayLine']>[2]) {
     return this.write<unknown>('setGuardPayLine', [runId, personId, patch]);
   }
@@ -2831,12 +3046,6 @@ export class DemoApi implements Api {
   }
   guardPayCash(runId: string, personId: string, action: Parameters<Api['guardPayCash']>[2], body: Parameters<Api['guardPayCash']>[3]) {
     return this.write<unknown>('guardPayCash', [runId, personId, action, body]);
-  }
-  payAction(action: string, body: Record<string, unknown>) {
-    return this.write<unknown>('payAction', [action, body]);
-  }
-  payView(view: string, query: Record<string, string>) {
-    return this.read((s, u) => s.payView(u, view, query));
   }
   recordPayConsent(personId: string, body: Parameters<Api['recordPayConsent']>[1]) {
     return this.write<unknown>('recordPayConsent', [personId, body]);
@@ -2921,6 +3130,9 @@ export class DemoApi implements Api {
     return this.write<unknown>('setInvoicePortal', [accountId, portal]);
   }
   // The test build has no server, so a link cannot be opened from outside: staff use Preview to see the client page.
+  clientPortalBoard() {
+    return this.read((s, u) => s.clientPortalBoard(u));
+  }
   clientShareLinks(accountId: string) {
     return this.read(async (s, u) => ({ ...(await s.clientShareLinks(u, accountId)), linksOn: true }));
   }
@@ -2972,6 +3184,12 @@ export class DemoApi implements Api {
   }
   clientBoard() {
     return this.read((s, u) => s.clientBoard(u));
+  }
+  clientInfoPack(clientId: string) {
+    return this.read((s, u) => s.clientInfoPack(u, clientId));
+  }
+  recordRiskBriefing(input: Parameters<Api['recordRiskBriefing']>[0]) {
+    return this.write<unknown>('recordRiskBriefing', [input]);
   }
   clientStep(accountId: string, phase: 'onboarding' | 'offboarding', key: string, note: string, proof: ProofInput[]) {
     return this.write<unknown>('clientStep', [accountId, phase, key, note, proof]);
@@ -3045,62 +3263,6 @@ export class DemoApi implements Api {
   vehicleRentals(month?: string) {
     return this.read((s, u) => s.vehicleRentals(u, month));
   }
-  // P100 newb: E7 the CMS console: the demo has no CMS, so it shows as not set up (who may open it is still checked).
-  cmsConsole() {
-    return this.read(async (s, u) => ({ on: false, url: null, may: await s.cmsConsoleMay(u) }));
-  }
-  async cmsConsoleSignIn(): Promise<{ url: string; expiresInS: number; name: string }> {
-    throw new ApiError('CMS sign-in is not set up yet (CMS_URL and CMS_SIGNIN_SECRET).', 503);
-  }
-  // P100 newb: J6 each person's alert choices.
-  myAlertPrefs() {
-    return this.read((s, u) => s.myAlertPrefs(u));
-  }
-  setMyAlertPrefs(input: Parameters<Api['setMyAlertPrefs']>[0]) {
-    return this.write<unknown>('setMyAlertPrefs' as Mutations, [input]);
-  }
-  // P100 newb: J5 guard sign-ins in bulk.
-  guardSignInBoard(companyId?: string) {
-    return this.read((s, u) => s.guardSignInBoard(u, companyId));
-  }
-  prepareGuardSignIns(companyId: string, personIds: string[], note: string) {
-    return this.write<unknown>('prepareGuardSignIns' as Mutations, [companyId, personIds, note]);
-  }
-  decideGuardSignIns(id: string, approve: boolean, note: string) {
-    return this.write<unknown>('decideGuardSignIns' as Mutations, [id, approve, note]);
-  }
-  cancelGuardSignIns(id: string, reason: string) {
-    return this.write<unknown>('cancelGuardSignIns' as Mutations, [id, reason]);
-  }
-  // P100 newb: J1 the client portal (the test version shows the code; there is no public page to link to).
-  clientPortalDesk() {
-    return this.read(async (s, u) => ({ ...(await s.clientPortalDesk(u)), on: false }));
-  }
-  openClientPortal(clientId: string, input: Parameters<Api['openClientPortal']>[1]) {
-    return this.write<Awaited<ReturnType<Api['openClientPortal']>>>('openClientPortal' as Mutations, [clientId, input]);
-  }
-  resetClientPortal(clientId: string, portalUserId: string, reason: string) {
-    return this.write<Awaited<ReturnType<Api['resetClientPortal']>>>('resetClientPortal' as Mutations, [clientId, portalUserId, reason]);
-  }
-  closeClientPortal(clientId: string, portalUserId: string, reason: string) {
-    return this.write<unknown>('closeClientPortal' as Mutations, [clientId, portalUserId, reason]);
-  }
-  // P100 newb: E6 vehicle moves between companies.
-  vehicleTransferBoard() {
-    return this.read((s, u) => s.vehicleTransferBoard(u));
-  }
-  requestVehicleTransfer(input: Parameters<Api['requestVehicleTransfer']>[0]) {
-    return this.write<unknown>('requestVehicleTransfer' as Mutations, [input]);
-  }
-  decideVehicleTransfer(id: string, approve: boolean, note: string) {
-    return this.write<unknown>('decideVehicleTransfer' as Mutations, [id, approve, note]);
-  }
-  handOverVehicleTransfer(id: string, input: Parameters<Api['handOverVehicleTransfer']>[1]) {
-    return this.write<unknown>('handOverVehicleTransfer' as Mutations, [id, input]);
-  }
-  cancelVehicleTransfer(id: string, reason: string) {
-    return this.write<unknown>('cancelVehicleTransfer' as Mutations, [id, reason]);
-  }
   recordVehicleRental(vehicleId: string, input: Parameters<Api['recordVehicleRental']>[1]) {
     return this.write<unknown>('recordVehicleRental', [vehicleId, input]);
   }
@@ -3155,6 +3317,9 @@ export class DemoApi implements Api {
   }
   guardPhones(companyId: string) {
     return this.read((s, u) => s.guardPhone.phones(u, companyId));
+  }
+  guardPhoneCodes(companyId: string, personIds: string[] = []) {
+    return this.write<Awaited<ReturnType<Api['guardPhoneCodes']>>>('guardPhoneCodes', [companyId, personIds]);
   }
   revokeGuardPhone(phoneId: string, reason: string) {
     return this.read((s, u) => s.guardPhone.revoke(u, phoneId, reason));
@@ -3337,6 +3502,19 @@ export class DemoApi implements Api {
   advanceSocsoClaim(id: string, to: Parameters<Api['advanceSocsoClaim']>[1], input: Parameters<Api['advanceSocsoClaim']>[2]) {
     return this.write<unknown>('advanceSocsoClaim', [id, to, input]);
   }
+  // Guard roster engine (Part O).
+  guardRosterBoard(siteId: string, month: string) {
+    return this.read((s, u) => s.rosterBoard(u, siteId, month));
+  }
+  myGuardRoster(month: string) {
+    return this.read((s, u) => s.myRoster(u, month));
+  }
+  proposeGuardRoster(siteId: string, month: string, input: { pattern: '5on2off' | '6on1off'; personIds: string[] }) {
+    return this.read((s, u) => s.proposeRosterMonth(u, siteId, month, input));
+  }
+  rosterAct(name: RosterActName, args: unknown[]) {
+    return this.write<unknown>('rosterOp', [name, ...args]);
+  }
   // Cleaning planner, site fittings, Inventory and duty plans.
   cleaningBoard(date?: string) {
     return this.read((s, u) => s.cleaning.board(u, date));
@@ -3444,17 +3622,32 @@ export class DemoApi implements Api {
     // The test link has no Teams or email: the bell is the only place alerts show here.
     return this.read(async (s, u) => ({ items: await s.myAlerts(u), email: false, teamsChannel: false }));
   }
+  myAlertPrefs() {
+    return this.read((s, u) => s.myAlertPrefs(u));
+  }
+  setMyAlertPrefs(input: { digest: boolean; muted: string[] }) {
+    return this.write<unknown>('setMyAlertPrefs', [input]);
+  }
   home(companyId?: string) {
     return this.read((s, u) => s.home(u, companyId));
   }
   growth() {
     return this.read((s, u) => s.growth(u));
   }
-  settingsHome() {
-    return this.read((s, u) => s.settingsHome(u));
-  }
   approvalLimits() {
     return this.read((s, u) => s.approvalLimits(u));
+  }
+  cashStandIn() {
+    return this.read((s, u) => s.cashStandInBoard(u));
+  }
+  setCashStandIn(body: Record<string, unknown>) {
+    return this.write('setCashStandIn', [body]);
+  }
+  staffLeaveVc() {
+    return this.read((s, u) => s.staffLeaveVcSetting(u));
+  }
+  setStaffLeaveVc(body: { on: boolean; reason: string }) {
+    return this.write('setStaffLeaveVc', [body]);
   }
   setApprovalLimits(body: { claimsMax: number | null; purchasesMax: number | null; comment: string }) {
     return this.write('setApprovalLimits', [body]);
@@ -3479,25 +3672,6 @@ export class DemoApi implements Api {
   }
   setManagementFee(companyId: string, input: Parameters<Api['setManagementFee']>[1]) {
     return this.write<unknown>('setManagementFee', [companyId, input]);
-  }
-  // P100 fin: C5 rate book.
-  rateBook() {
-    return this.read((s, u) => s.rateBook(u));
-  }
-  setRate(input: Parameters<Api['setRate']>[0]) {
-    return this.write<unknown>('setRate', [input]);
-  }
-  finSummary(period?: string) {
-    return this.read((s, u) => s.finSummary(u, period));
-  }
-  siteMargins(month?: string) {
-    return this.read((s, u) => s.siteMargins(u, month));
-  }
-  unbilledSites(period?: string) {
-    return this.read((s, u) => s.unbilledSites(u, period));
-  }
-  clearUnbilledFlag(companyId: string, input: Parameters<Api['clearUnbilledFlag']>[1]) {
-    return this.write<unknown>('clearUnbilledFlag', [companyId, input]);
   }
 
 
@@ -3533,6 +3707,12 @@ export class DemoApi implements Api {
   }
   reviewCmsReadiness(siteId: string, input: Parameters<Api['reviewCmsReadiness']>[1]) {
     return this.write<Awaited<ReturnType<Api['reviewCmsReadiness']>>>('reviewCmsReadiness', [siteId, input]);
+  }
+  cmsOvertime(period: string) {
+    return this.read((s, u) => s.cmsOvertime(u, period));
+  }
+  approveCmsOvertime(body: { period: string; staffId: string; reason: string }) {
+    return this.write<unknown>('approveCmsOvertime', [body]);
   }
   updateCmsSettings(patch: CmsSettingsPatch) {
     return this.write<unknown>('updateCmsSettings', [patch]);
@@ -3732,8 +3912,8 @@ export class DemoApi implements Api {
   whistleReview(id: string, agree: boolean, note: string) {
     return this.write<unknown>('whistleReview', [id, agree, note]);
   }
-  confirmStockLoss(id: string, ok: boolean, note: string) {
-    return this.write<unknown>('confirmStockLoss', [id, ok, note]);
+  confirmStockLoss(id: string, ok: boolean, note: string, extra: { cause?: string; photo?: unknown[] } = {}) {
+    return this.write<unknown>('confirmStockLoss', [id, ok, note, extra]);
   }
   stockCount(itemId: string, counted: number, witness: { staffNo: string; pin: string }) {
     return this.write<unknown>('stockCount', [itemId, counted, witness]);
@@ -3767,6 +3947,34 @@ export class DemoApi implements Api {
   }
   armsTrading() {
     return this.read((s, u) => s.armsTrading(u));
+  }
+  officeAmAct(op: string, input: Record<string, unknown>) {
+    return op === 'board' ? this.read((s, u) => s.officeAmAct(u, op, input)) : this.write<unknown>('officeAmAct', [op, input]);
+  }
+  kdnAct(op: string, input: Record<string, unknown>) {
+    return op === 'board' ? this.read((s, u) => s.kdnAct(u, op, input)) : this.write<unknown>('kdnAct', [op, input]);
+  }
+  toolboxAct(op: string, input: Record<string, unknown>) {
+    return ['board', 'registers', 'siteTalks'].includes(op) ? this.read((s, u) => s.toolboxAct(u, op, input)) : this.write<unknown>('toolboxAct', [op, input]);
+  }
+  groupMonthAct(op: string, input: Record<string, unknown>) {
+    return ['board', 'reportView', 'registers', 'acctTracker', 'ryg', 'duties', 'dutyKpi', 'calendar'].includes(op) ? this.read((s, u) => s.groupMonthAct(u, op, input)) : this.write<unknown>('groupMonthAct', [op, input]);
+  }
+  registerAct(op: string, input: Record<string, unknown>) {
+    return ['board', 'list', 'rentalMonth'].includes(op) ? this.read((s, u) => s.registerAct(u, op, input)) : this.write<unknown>('registerAct', [op, input]);
+  }
+
+  siteSuppliesAct(op: string, input: Record<string, unknown>) {
+    return ['board', 'view', 'options', 'uniformRecord', 'returns', 'doPdf'].includes(op) ? this.read((s, u) => s.siteSuppliesAct(u, op, input)) : this.write<unknown>('siteSuppliesAct', [op, input]);
+  }
+  amRentalAct(op: string, input: Record<string, unknown>) {
+    return ['board', 'export'].includes(op) ? this.read((s, u) => s.amRentalAct(u, op, input)) : this.write<unknown>('amRentalAct', [op, input]);
+  }
+  inventoryAct(op: string, input: Record<string, unknown>) {
+    return ['board', 'card', 'weekReview', 'match', 'myCharges', 'countPdf', 'reportPdf', 'disposalPdf'].includes(op) ? this.read((s, u) => s.inventoryAct(u, op, input)) : this.write<unknown>('inventoryAct', [op, input]);
+  }
+  armsPolicyAct(op: string, input: Record<string, unknown>) {
+    return op === 'board' || op === 'buyFile' ? this.read((s, u) => s.armsPolicyAct(u, op, input)) : this.write<unknown>('armsPolicyAct', [op, input]);
   }
   setArmsTrading(on: boolean, reason: string) {
     return this.write<unknown>('setArmsTrading', [on, reason]);
@@ -4140,50 +4348,6 @@ export class DemoApi implements Api {
   }
   qualityOps(opts: { companyId?: string } = {}) {
     return this.read((s, u) => s.qualityOps.board(u, opts));
-  }  // ---------- P100 newa (Fauzan, 11 Nov 2026) ----------
-  private newaApply(u: User, area: string, action: string, body: Record<string, unknown>): Promise<unknown> {
-    if (area === 'socso') return this.svc.socsoExtras.act(u, action, body);
-    if (area === 'fw') return this.svc.fwExtras.act(u, action, body);
-    if (area === 'pikm') return this.svc.pikm.act(u, action, body);
-    if (area === 'resign') return this.svc.resignations.act(u, action, body);
-    if (area === 'warranty') return this.svc.warranty.act(u, action, body);
-    throw new ApiError('Unknown step.', 400);
-  }
-  socsoPaymentsAbroad() {
-    return this.read((s, u) => s.socsoExtras.board(u));
-  }
-  socsoExtraAct(action: string, body: Record<string, unknown>) {
-    return this.write<Awaited<ReturnType<Api['socsoExtraAct']>>>('newaAct', ['socso', action, body]);
-  }
-  hostelStays() {
-    return this.read((s, u) => s.fwExtras.staysBoard(u));
-  }
-  fwPermitsOnMc() {
-    return this.read((s, u) => s.fwExtras.permitsBoard(u));
-  }
-  fwExtraAct(action: string, body: Record<string, unknown>) {
-    return this.write<unknown>('newaAct', ['fw', action, body]);
-  }
-  pikmBoard(opts: { companyId?: string } = {}) {
-    return this.read((s, u) => s.pikm.board(u, opts));
-  }
-  pikmAct(action: string, body: Record<string, unknown>) {
-    return this.write<Awaited<ReturnType<Api['pikmAct']>>>('newaAct', ['pikm', action, body]);
-  }
-  myResignation() {
-    return this.read((s, u) => s.resignations.mine(u));
-  }
-  resignationBoard() {
-    return this.read((s, u) => s.resignations.board(u));
-  }
-  resignAct(action: string, body: Record<string, unknown>) {
-    return this.write<Awaited<ReturnType<Api['resignAct']>>>('newaAct', ['resign', action, body]);
-  }
-  warrantyBoard() {
-    return this.read((s, u) => s.warranty.board(u));
-  }
-  warrantyAct(action: string, body: Record<string, unknown>) {
-    return this.write<Awaited<ReturnType<Api['warrantyAct']>>>('newaAct', ['warranty', action, body]);
   }
 }
 

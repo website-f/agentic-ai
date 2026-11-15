@@ -2,7 +2,7 @@ import { Select } from './SearchSelect';
 import { installScrollStrips } from './scroll-strip';
 import { CleanupReceiptRecovery } from './views/ItCleanup';
 import { createContext, lazy, Suspense, useCallback, useContext, useEffect, useMemo, useRef, useState, type ComponentType } from 'react';
-import { type Company, type User, RULES, hasOwnStaffRecord, isActHead, isGroupLeader, isOwnerAdmin, jaOwns, seesArmsDetail, workKpiScope, finRequestInMenu, canSeeJaSwitch, bulkLoadInMenu } from '@prima/core';
+import { type Company, type User, RULES, hasOwnStaffRecord, isActHead, isGroupLeader, isOwnerAdmin, jaOwns, seesArmsDetail, workKpiScope, finRequestInMenu, canSeeJaSwitch } from '@prima/core';
 import { ApiError, api, type Me } from './api';
 import { ArrowLeftIcon, HouseIcon, MagnifyingGlassIcon, SquaresFourIcon } from '@phosphor-icons/react';
 import { publishPage, rulesFor } from './prima-page';
@@ -16,6 +16,7 @@ import { ConfidentialityGate } from './Confidential';
 import { Launcher } from './Launcher';
 import { LANGS, LangCtx, saveLang, savedLang, startTranslator, useLang, type Lang } from './i18n';
 import { HomeView } from './views/Home';
+import { ReportProblemButton } from './views/ReportProblem';
 import { GuardPhoneApp } from './views/GuardPhone';
 import { MyClockView, StaffClockBoardView, StaffTracker } from './views/StaffClock';
 import { SurveysView } from './views/Surveys';
@@ -59,12 +60,14 @@ const WorkKpiView = lazyView(() => import('./views/WorkKpi'), 'WorkKpiView');
 const ItProcurement = lazyView(() => import('./views/ItProcurement'), 'ItProcurement');
 const HrItIntake = lazyView(() => import('./views/HrItIntake'), 'HrItIntake');
 const StaffDirectory = lazyView(() => import('./views/StaffDirectory'), 'StaffDirectory');
-const BulkLoad = lazyView(() => import('./views/BulkLoad'), 'BulkLoad');
+const AccountsAccess = lazyView(() => import('./views/AccountsAccess'), 'AccountsAccess');
 const ItExtractionWorkspace = lazyView(() => import('./views/ItExtractionWorkspace'), 'ItExtractionWorkspace');
 const Overview = lazyView(() => import('./views/Overview'), 'Overview');
 const CompanyView = lazyView(() => import('./views/Company'), 'CompanyView');
 const Sites = lazyView(() => import('./views/Sites'), 'Sites');
 const RosterView = lazyView(() => import('./views/Roster'), 'RosterView');
+const GuardRosterView = lazyView(() => import('./views/GuardRoster'), 'GuardRosterView');
+const MyGuardRosterPanel = lazyView(() => import('./views/GuardRoster'), 'MyGuardRosterPanel');
 const CleaningView = lazyView(() => import('./views/Cleaning'), 'CleaningView');
 const DutyView = lazyView(() => import('./views/SitePlans'), 'DutyView');
 const SiteStockView = lazyView(() => import('./views/SitePlans'), 'SiteStockView');
@@ -87,9 +90,6 @@ const WorkView = lazyView(() => import('./views/Work'), 'WorkView');
 const SocsoView = lazyView(() => import('./views/Socso'), 'SocsoView');
 const HostelsView = lazyView(() => import('./views/Hostels'), 'HostelsView');
 const FwCostView = lazyView(() => import('./views/FwCost'), 'FwCostView');
-const RateBookView = lazyView(() => import('./views/RateBook'), 'RateBookView');
-const FinanceSitesView = lazyView(() => import('./views/FinanceSites'), 'FinanceSitesView');
-const FinanceSummaryView = lazyView(() => import('./views/FinanceSummary'), 'FinanceSummaryView');
 const FwStatView = lazyView(() => import('./views/FwStat'), 'FwStatView');
 const ClaimsView = lazyView(() => import('./views/Claims'), 'ClaimsView');
 const MemosView = lazyView(() => import('./views/Memos'), 'MemosView');
@@ -132,7 +132,6 @@ const ReportsView = lazyView(() => import('./views/Reports'), 'ReportsView');
 const MeetingsView = lazyView(() => import('./views/Meetings'), 'MeetingsView');
 const SelfAuditView = lazyView(() => import('./views/SelfAudit'), 'SelfAuditView');
 const RbaView = lazyView(() => import('./views/Rba'), 'RbaView');
-const SettingsHomeView = lazyView(() => import('./views/SettingsHome'), 'SettingsHomeView');
 const CooPaymentsView = lazyView(() => import('./views/CooPayments'), 'CooPaymentsView');
 const PaymentRequestsView = lazyView(() => import('./views/PaymentRequests'), 'PaymentRequestsView');
 const HandoversView = lazyView(() => import('./views/Handovers'), 'HandoversView');
@@ -144,6 +143,7 @@ const SCREEN_CODE: Partial<Record<ViewName, () => Promise<unknown>>> = {
   company: () => import('./views/Company'),
   sites: () => import('./views/Sites'),
   roster: () => import('./views/Roster'),
+  guardroster: () => import('./views/GuardRoster'),
   cleaning: () => import('./views/Cleaning'),
   duty: () => import('./views/SitePlans'),
   sitestock: () => import('./views/SitePlans'),
@@ -166,9 +166,6 @@ const SCREEN_CODE: Partial<Record<ViewName, () => Promise<unknown>>> = {
   socso: () => import('./views/Socso'),
   hostels: () => import('./views/Hostels'),
   fwcost: () => import('./views/FwCost'),
-  rates: () => import('./views/RateBook'),
-  finsites: () => import('./views/FinanceSites'),
-  finsummary: () => import('./views/FinanceSummary'),
   fwstat: () => import('./views/FwStat'),
   claims: () => import('./views/Claims'),
   memos: () => import('./views/Memos'),
@@ -194,7 +191,7 @@ const SCREEN_CODE: Partial<Record<ViewName, () => Promise<unknown>>> = {
   'work-kpi': () => import('./views/WorkKpi'),
   'it-procurement': () => import('./views/ItProcurement'),
   'staff-directory': () => import('./views/StaffDirectory'),
-  'bulk-load': () => import('./views/BulkLoad'),
+  accounts: () => import('./views/AccountsAccess'),
   'hr-it-intake': () => import('./views/HrItIntake'),
   it: () => import('./views/It'),
   websites: () => import('./views/Websites'),
@@ -220,7 +217,6 @@ const SCREEN_CODE: Partial<Record<ViewName, () => Promise<unknown>>> = {
   meetings: () => import('./views/Meetings'),
   selfaudit: () => import('./views/SelfAudit'),
   rba: () => import('./views/Rba'),
-  settings: () => import('./views/SettingsHome'),
   handovers: () => import('./views/Handovers'),
 };
 
@@ -281,7 +277,7 @@ function prefetchMenuScreens(views: ViewName[]): () => void {
 
 
 
-export type ViewName = 'home' | 'overview' | 'company' | 'sites' | 'roster' | 'cleaning' | 'duty' | 'sitestock' | 'people' | 'attendance' | 'cases' | 'compliance' | 'commercial' | 'ops' | 'hr' | 'insurance' | 'arms' | 'cms' | 'cmsready' | 'audit' | 'device' | 'mine' | 'clock' | 'staffclock' | 'work' | 'branchwork' | 'socso' | 'fwm' | 'doa' | 'reports' | 'meetings' | 'hostels' | 'fwcost' | 'fwstat' | 'claims' | 'memos' | 'pdpa' | 'fleet' | 'clients' | 'office' | 'requests' | 'payreq' | 'ja' | 'jaswitch' | 'assets' | 'staffpay' | 'guardpay' | 'advances' | 'statutory' | 'arrivalcash' | 'loans' | 'finance' | 'contracts' | 'branches' | 'it' | 'it-metrics' | 'work-kpi' | 'it-procurement' | 'hr-it-intake' | 'staff-directory' | 'websites' | 'corporate' | 'renewals' | 'credit' | 'purchasing' | 'items' | 'governance' | 'grc' | 'registers' | 'act' | 'payformulas' | 'sitehours' | 'salarycalc' | 'continuity' | 'connections' | 'it-extraction' | 'surveys' | 'handovers' | 'quality' | 'selfaudit' | 'rba' | 'bulk-load' | 'rates' | 'finsites' | 'settings' | 'finsummary';
+export type ViewName = 'home' | 'overview' | 'company' | 'sites' | 'roster' | 'guardroster' | 'cleaning' | 'duty' | 'sitestock' | 'people' | 'attendance' | 'cases' | 'compliance' | 'commercial' | 'ops' | 'hr' | 'insurance' | 'arms' | 'cms' | 'cmsready' | 'audit' | 'device' | 'mine' | 'clock' | 'staffclock' | 'work' | 'branchwork' | 'socso' | 'fwm' | 'doa' | 'reports' | 'meetings' | 'hostels' | 'fwcost' | 'fwstat' | 'claims' | 'memos' | 'pdpa' | 'fleet' | 'clients' | 'office' | 'requests' | 'payreq' | 'ja' | 'jaswitch' | 'assets' | 'staffpay' | 'guardpay' | 'advances' | 'statutory' | 'arrivalcash' | 'loans' | 'finance' | 'contracts' | 'branches' | 'it' | 'it-metrics' | 'work-kpi' | 'it-procurement' | 'hr-it-intake' | 'staff-directory' | 'accounts' | 'websites' | 'corporate' | 'renewals' | 'credit' | 'purchasing' | 'items' | 'governance' | 'grc' | 'registers' | 'act' | 'payformulas' | 'sitehours' | 'salarycalc' | 'continuity' | 'connections' | 'it-extraction' | 'surveys' | 'handovers' | 'quality' | 'selfaudit' | 'rba';
 
 export interface Route {
   view: ViewName;
@@ -331,6 +327,8 @@ const NAV: { view: ViewName; label: string; icon: string; roles: User['role'][];
   { view: 'office', label: 'Company office', icon: 'company', roles: ['director', 'company_manager', 'admin_exec'] },
   { view: 'sites', label: 'Sites', icon: 'sites', roles: ['director', 'pwvsb_officer', 'company_manager', 'admin_exec', 'supervisor'] },
   { view: 'roster', label: 'Roster', icon: 'roster', roles: ['director', 'pwvsb_officer', 'company_manager', 'admin_exec', 'supervisor'] },
+  // Guard roster engine (Part O, 13-14 Nov 2026): month roster, approval chain, breaks, allowances, lump sum. Trial.
+  { view: 'guardroster', label: 'Guard roster (engine)', icon: 'roster', roles: ['director', 'pwvsb_officer', 'company_manager'] },
   { view: 'duty', label: 'Guard duty plans', icon: 'roster', roles: ['director', 'pwvsb_officer', 'company_manager', 'admin_exec'] },
   { view: 'cleaning', label: 'Cleaning plans', icon: 'sites', roles: ['director', 'pwvsb_officer', 'company_manager', 'admin_exec'] },
   { view: 'sitestock', label: 'Site stock and fittings', icon: 'cart', roles: ['director', 'pwvsb_officer'] },
@@ -342,8 +340,6 @@ const NAV: { view: ViewName; label: string; icon: string; roles: User['role'][];
   { view: 'selfaudit', label: 'Yearly self-audit', icon: 'compliance', roles: ['director', 'pwvsb_officer', 'company_manager', 'admin_exec'] },
   // RBA readiness (Fauzan, 8 Nov 2026): every office sign-in signs the ethics declaration once on entering service here; the rest is by role.
   { view: 'rba', label: 'RBA readiness', icon: 'compliance', roles: ['director', 'pwvsb_officer', 'company_manager', 'admin_exec'] },
-  // J7 (Fauzan, 11 Nov 2026): one Settings home, each setting with its owner and whether it is set; the server decides the rest.
-  { view: 'settings', label: 'Settings', icon: 'compliance', roles: ['director', 'pwvsb_officer', 'company_manager', 'admin_exec'] },
   { view: 'commercial', label: 'Tenders & quotes', icon: 'tender', roles: ['director', 'pwvsb_officer', 'company_manager', 'admin_exec'] },
   { view: 'ops', label: 'Regional ops', icon: 'sites', roles: ['director', 'pwvsb_officer'], depts: ['operations'] },
   { view: 'hr', label: 'HR monitor', icon: 'people', roles: ['director', 'pwvsb_officer'], depts: ['hr'] },
@@ -456,12 +452,6 @@ const NAV: { view: ViewName; label: string; icon: string; roles: User['role'][];
   // Branches (V11, V12): the company manager approves settlements and reviews branch actions; group leadership watches.
   { view: 'branches', label: 'Branches', icon: 'group', roles: ['director', 'pwvsb_officer', 'company_manager', 'admin_exec'] },
   { view: 'finance', label: 'Finance', icon: 'insurance', roles: ['director', 'pwvsb_officer'] },
-  // P100 fin, C5 (Fauzan, 11 Nov 2026): the rate book; Finance, the COO and the CEO read it, the FD or the CEO sets it.
-  { view: 'rates', label: 'Rate book', icon: 'insurance', roles: ['director', 'pwvsb_officer'] },
-  // P100 fin, F1/F2 (Fauzan, 11 Nov 2026): sites billed and their profit; Finance, the FD, the CEO, the COO and the company manager (own company).
-  // P100 fin, F3 (Fauzan, 11 Nov 2026): one page each month: the CEO, the FD, the Chairman and Vice Chairman, and Finance teams for their companies.
-  { view: 'finsummary', label: 'Monthly finance page', icon: 'insurance', roles: ['director', 'pwvsb_officer'] },
-  { view: 'finsites', label: 'Site billing and profit', icon: 'insurance', roles: ['director', 'pwvsb_officer', 'company_manager'] },
   // IT (Fauzan, 27 Oct 2026): everyone asks IT for help here; IT runs the full asset lifecycle, the COO monitors, the CEO oversees.
   // PWVSB credit (V8, V10): the credit officer, the Finance Director, legal counsel, group leadership and the company manager for its own loans.
   { view: 'credit', label: 'PWVSB credit', icon: 'insurance', roles: ['director', 'pwvsb_officer', 'company_manager'] },
@@ -499,14 +489,14 @@ const NAV: { view: ViewName; label: string; icon: string; roles: User['role'][];
   { view: 'it-metrics', label: 'Workflow time & quality', icon: 'device', roles: ['director','pwvsb_officer','company_manager','admin_exec'] },
   // Staff directory (Fauzan, 4 Nov 2026): HR, the HR Director, the CEO and IT only; never a sign-in.
   { view: 'staff-directory', label: 'Staff directory', icon: 'audit', roles: ['director', 'pwvsb_officer'] },
-  // K8 (Fauzan, 11 Nov 2026): bulk loads of data files and many documents, for the people who keep those records.
-  { view: 'bulk-load', label: 'Bulk load', icon: 'audit', roles: ['director', 'pwvsb_officer', 'company_manager', 'admin_exec'] },
+  // Accounts and Access (Fauzan, 15 Nov 2026): IT or HR prepares sign-ins and company access; the HR Director or the CEO approves.
+  { view: 'accounts', label: 'Accounts and access', icon: 'audit', roles: ['director', 'pwvsb_officer'] },
   { view: 'hr-it-intake', label: 'HR / IT coordination', icon: 'device', roles: ['director','pwvsb_officer','company_manager','admin_exec','supervisor'] },
   // Group websites (Fauzan, 27 Oct 2026): IT runs the register and reviews; each company answers for its own websites.
   { view: 'websites', label: 'Websites', icon: 'device', roles: ['director', 'pwvsb_officer', 'company_manager', 'admin_exec'] },
   { view: 'staffpay', label: 'Staff payroll', icon: 'audit', roles: ['director', 'pwvsb_officer', 'company_manager', 'admin_exec'] },
-  // Guard pay run (Fauzan, 5 Nov 2026; P100 B1 11 Nov 2026): each company's named preparer prepares, the COO approves, Finance pays.
-  { view: 'guardpay', label: 'Guard pay', icon: 'audit', roles: ['director', 'pwvsb_officer', 'company_manager', 'admin_exec'] },
+  // Guard pay run (Fauzan, 5 Nov 2026): HR prepares, the COO approves, Finance pays.
+  { view: 'guardpay', label: 'Guard pay', icon: 'audit', roles: ['director', 'pwvsb_officer', 'company_manager'] },
   // Wage advances (Fauzan, 6 Nov 2026): the OM sets, the OD or OGM approves, Finance pays.
   { view: 'advances', label: 'Wage advances', icon: 'audit', roles: ['director', 'pwvsb_officer'] },
   // Statutory rates (Fauzan, 6 Nov 2026): the CEO sets EPF, SOCSO and the rest by month; HR, Finance and ACT see them.
@@ -555,6 +545,7 @@ const ROLE_LABEL: Record<User['role'], string> = {
 };
 
 const VIEW_TOKENS: ViewName[] = [
+  'guardroster',
   'cleaning',
   'duty',
   'sitestock',
@@ -613,7 +604,7 @@ const VIEW_TOKENS: ViewName[] = [
   'it-procurement',
   'hr-it-intake',
   'staff-directory',
-  'bulk-load',
+  'accounts',
   'websites',
   'corporate',
   'renewals',
@@ -635,11 +626,7 @@ const VIEW_TOKENS: ViewName[] = [
 'cmsready',
 'quality',
 'selfaudit',
-'rba',
-'settings',
-'rates',
-'finsites',
-'finsummary'
+'rba'
 ];
 
 function SignIn({ onSignedIn, notice }: { onSignedIn: (me: Me) => void; notice?: string | null }) {
@@ -931,6 +918,7 @@ function Shell({ me, onSignOut, onReset }: { me: Me; onSignOut: () => void; onRe
       'hostels',
       'sites',
       'roster',
+      'guardroster',
       'duty',
       'cleaning',
       'sitestock',
@@ -961,10 +949,10 @@ function Shell({ me, onSignOut, onReset }: { me: Me; onSignOut: () => void; onRe
     pdpa: ['pdpa', 'fleet', 'reports', 'meetings', 'clock'],
     transport: ['fleet', 'reports', 'meetings', 'clock'],
     asset: ['assets', 'reports', 'meetings', 'clock'],
-    finance: ['finance', 'finsummary', 'rates', 'finsites', 'staffpay', 'guardpay', 'advances', 'arrivalcash', 'loans', 'statutory', 'assets', 'credit', 'purchasing', 'items', 'websites', 'reports', 'meetings', 'clock', 'fwcost', 'fwstat'],
+    finance: ['finance', 'staffpay', 'guardpay', 'advances', 'arrivalcash', 'loans', 'statutory', 'assets', 'credit', 'purchasing', 'items', 'websites', 'reports', 'meetings', 'clock', 'fwcost', 'fwstat'],
     it: ['it', 'items', 'websites', 'connections', 'continuity', 'reports', 'meetings', 'clock'],
     legal: ['credit', 'governance', 'corporate', 'reports', 'meetings', 'clock', 'registers'],
-    audit: ['act', 'payformulas', 'statutory', 'sitehours', 'salarycalc', 'grc', 'audit', 'selfaudit', 'items', 'websites', 'reports', 'meetings', 'clock', 'renewals', 'cleaning', 'registers', 'quality'],
+    audit: ['act', 'guardroster', 'payformulas', 'statutory', 'sitehours', 'salarycalc', 'grc', 'audit', 'selfaudit', 'items', 'websites', 'reports', 'meetings', 'clock', 'renewals', 'cleaning', 'registers', 'quality'],
     // Procurement and Inventory: 1 executive and 2 storekeepers under the OGM (Fauzan, 27 Oct 2026).
     procurement: ['purchasing', 'items', 'reports', 'meetings', 'clock', 'sitestock', 'quality'],
   };
@@ -985,12 +973,11 @@ function Shell({ me, onSignOut, onReset }: { me: Me; onSignOut: () => void; onRe
         n.view === 'work-kpi' ||
         n.view === 'hr-it-intake' ||
         n.view === 'staff-directory' ||
-        n.view === 'bulk-load' ||
+        n.view === 'accounts' ||
         n.view === 'it-procurement' ||
         n.view === 'grc' ||
         n.view === 'act' ||
         n.view === 'rba' ||
-        n.view === 'settings' ||
         n.view === 'handovers' ||
         n.view === 'connections' ||
         n.view === 'jaswitch' ||
@@ -1010,10 +997,11 @@ function Shell({ me, onSignOut, onReset }: { me: Me; onSignOut: () => void; onRe
       // Salary calculator: the OM and above, ACT and group leadership (Fauzan, 6 Nov 2026).
       (n.view !== 'salarycalc' || leader || dept === 'audit' || ['om', 'regional', 'ogm', 'ops_director', 'coo', 'ceo'].includes(me.user.opsTier ?? '')) &&
       (n.view !== 'hr-it-intake' || !me.user.integration) &&
-      // K8: bulk load for the people who keep a record that loads in bulk, and oversight; the server lists what each may write.
-      (n.view !== 'bulk-load' || bulkLoadInMenu(me.user)) &&
       (n.view !== 'staff-directory' ||
         (!me.user.integration && (dept === 'hr' || dept === 'it' || ['cos', 'deputy_cos'].includes(me.user.leadership ?? '') || me.user.opsTier === 'ceo'))) &&
+      (n.view !== 'accounts' ||
+        (!me.user.integration &&
+          ((dept === 'it' && ['manager', 'lead', 'executive'].includes(me.user.itRole ?? '')) || dept === 'hr' || ['cos', 'deputy_cos'].includes(me.user.leadership ?? '') || me.user.opsTier === 'ceo'))) &&
       (n.view !== 'it-extraction' || (!me.user.integration && me.user.id === 'u-fauzan' && me.user.opsTier === 'ceo')) &&
       // Every office staff member checks their own Microsoft 365 connections; the server checks role and identity again.
       (n.view !== 'connections' || !me.user.integration) &&
@@ -1028,7 +1016,7 @@ function Shell({ me, onSignOut, onReset }: { me: Me; onSignOut: () => void; onRe
         role === 'company_manager' ||
         (!!me.user.personId && role !== 'supervisor' && me.user.opsTier !== 'patrol')) &&
       // Guard pay: HR, Finance teams, group leadership (the COO approves) and the company manager for their own company.
-      (n.view !== 'guardpay' || leader || dept === 'hr' || dept === 'director_office' || (dept === 'finance' && me.user.financeTeam != null) || role === 'company_manager' || me.guardPayPreparer === true) &&
+      (n.view !== 'guardpay' || leader || dept === 'hr' || dept === 'director_office' || (dept === 'finance' && me.user.financeTeam != null) || role === 'company_manager') &&
       // Advances: the OM, the Operations Director and OGM, HR, Finance teams and group leadership.
       (n.view !== 'arrivalcash' || me.user.opsTier === 'ceo' || dept === 'finance' || (dept === 'fwm' && me.user.fwmRole === 'manager')) &&
       (n.view !== 'loans' || leader || dept === 'hr' || (dept === 'finance' && me.user.financeTeam != null) || ['coo', 'ceo'].includes(me.user.opsTier ?? '')) &&
@@ -1047,16 +1035,12 @@ function Shell({ me, onSignOut, onReset }: { me: Me; onSignOut: () => void; onRe
         // The COO sees only his payment approvals there (Fauzan, 1 Nov 2026: approval by subject matter).
         me.user.opsTier === 'coo' ||
         (dept === 'finance' && me.user.financeTeam != null)) &&
-      // P100 fin, C5: the rate book for the Finance Director, the CEO, the COO and Finance team members (the server checks it too).
-      (n.view !== 'finsummary' || ['finance_director', 'chairman', 'vice_chairman'].includes(me.user.leadership ?? '') || me.user.opsTier === 'ceo' || (dept === 'finance' && me.user.financeTeam != null)) &&
-      (n.view !== 'finsites' || role === 'company_manager' || me.user.leadership === 'finance_director' || ['ceo', 'coo'].includes(me.user.opsTier ?? '') || (dept === 'finance' && me.user.financeTeam != null)) &&
-      (n.view !== 'rates' || me.user.leadership === 'finance_director' || ['ceo', 'coo'].includes(me.user.opsTier ?? '') || (dept === 'finance' && me.user.financeTeam != null)) &&
       // Hostel bills in operations: the Operations Director and OGM approve; other operations staff do not see them.
       // Vehicles: not for guards and officers (they do not request vehicles here).
       (n.view !== 'fleet' || me.user.opsTier !== 'patrol') &&
       // A far-branch manager runs the branch, not the company office.
       (n.view !== 'office' || !me.user.branchId) &&
-      (n.view !== 'requests' || dept !== 'operations' || leader || me.user.opsTier === 'om') &&
+      (n.view !== 'requests' || dept !== 'operations' || leader || me.user.opsTier === 'om' || me.user.opsTier === 'ogm') &&
       (n.view !== 'clients' || dept !== 'operations' || leader || ['om', 'regional', 'ogm', 'ops_director', 'patrol'].includes(me.user.opsTier ?? '')) &&
       // Procurement sits under the OGM, so operations sees it only as OGM or Operations Director.
       (n.view !== 'purchasing' || dept !== 'operations' || leader || ['ogm', 'ops_director'].includes(me.user.opsTier ?? '')) &&
@@ -1239,6 +1223,8 @@ function Shell({ me, onSignOut, onReset }: { me: Me; onSignOut: () => void; onRe
         return <Sites openSiteId={route.siteId} />;
       case 'roster':
         return <RosterView siteId={route.siteId} />;
+      case 'guardroster':
+        return <GuardRosterView />;
       case 'cleaning':
         return <CleaningView />;
       case 'duty':
@@ -1272,7 +1258,14 @@ function Shell({ me, onSignOut, onReset }: { me: Me; onSignOut: () => void; onRe
       case 'device':
         return <Device />;
       case 'mine':
-        return <MyDuty />;
+        return me.user.role === 'guard' ? (
+          <>
+            <MyDuty />
+            <MyGuardRosterPanel />
+          </>
+        ) : (
+          <MyDuty />
+        );
       case 'clock':
         return <MyClockView />;
       case 'staffclock':
@@ -1287,12 +1280,6 @@ function Shell({ me, onSignOut, onReset }: { me: Me; onSignOut: () => void; onRe
         return <HostelsView />;
       case 'fwcost':
         return <FwCostView />;
-      case 'rates':
-        return <RateBookView />;
-      case 'finsites':
-        return <FinanceSitesView />;
-      case 'finsummary':
-        return <FinanceSummaryView />;
       case 'fwstat':
         return <FwStatView />;
       case 'claims':
@@ -1343,8 +1330,8 @@ function Shell({ me, onSignOut, onReset }: { me: Me; onSignOut: () => void; onRe
         return <ItProcurement />;
       case 'staff-directory':
         return <StaffDirectory />;
-      case 'bulk-load':
-        return <BulkLoad />;
+      case 'accounts':
+        return <AccountsAccess />;
       case 'hr-it-intake':
         return <HrItIntake />;
       case 'it':
@@ -1396,8 +1383,6 @@ function Shell({ me, onSignOut, onReset }: { me: Me; onSignOut: () => void; onRe
         return <SelfAuditView />;
       case 'rba':
         return <RbaView />;
-      case 'settings':
-        return <SettingsHomeView />;
       case 'surveys':
         return <SurveysView ownerId={me.user.id} />;
       case 'handovers':
@@ -1407,9 +1392,6 @@ function Shell({ me, onSignOut, onReset }: { me: Me; onSignOut: () => void; onRe
 
   const companyScoped = ![
     'rba',
-    'rates',
-    'finsites',
-    'finsummary',
     'handovers', 'quality',
     'cmsready',
     'home',
@@ -1578,6 +1560,7 @@ function Shell({ me, onSignOut, onReset }: { me: Me; onSignOut: () => void; onRe
                 }}
               />
             )}
+            {!me.user.integration && role !== 'site_device' && <ReportProblemButton screen={route.view} />}
             <span className="mono num muted small" title="Malaysia time">
               {hhmm(clock)} MYT
             </span>

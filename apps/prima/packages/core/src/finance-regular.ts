@@ -39,7 +39,7 @@ export const FIN_ZAKAT_BODIES = ['Zakat Kuala Lumpur', 'Zakat Selangor', 'Zakat 
 const FD_KINDS: FinRegularKind[] = ['statutory', 'zakat', 'tax', 'levy'];
 const SUBJECTS: FinSubject[] = ['finance', 'operations', 'it', 'fwm', 'inventory', 'transport', 'goodwill'];
 /** How many days ahead a due date shows and a payment is prepared; how far ahead an expiry is warned. */
-export const FIN_REGULAR_RULE = { aheadDays: 7, expiryWarnDays: 60, unusualHigh: 1.25, unusualLow: 0.5, claimWaitDays: 30, claimAfterDays: 14 };
+export const FIN_REGULAR_RULE = { aheadDays: 7, expiryWarnDays: 60, claimWaitDays: 30, claimAfterDays: 14 };
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
 const norm = (x: string) => x.toUpperCase().replace(/[^A-Z0-9]/g, '');
@@ -267,8 +267,8 @@ export function finRegularExceptions(f: FinStatus, period: string, today: IsoDat
 }
 
 /** Counts for the Finance home, for one company. */
-export function finRegularHome(f: FinStatus, a: FinActor, userId: Id, today: IsoDate, s: Pick<FinSettingsValues, 'matchDays'> & Partial<Pick<FinSettingsValues, 'guaranteeRemindDays'>>) {
-  const c = { toCheck: 0, toPay: 0, dueSoon: 0, late: 0, noBill: 0, notSeen: 0, expiring: 0, gToCheck: 0, gExpiring: 0, gDue: 0, gClaim: 0, gWaiting: 0, collateral: 0 };
+export function finRegularHome(f: FinStatus, a: FinActor, userId: Id, today: IsoDate, s: Pick<FinSettingsValues, 'matchDays'>) {
+  const c = { toCheck: 0, toPay: 0, dueSoon: 0, late: 0, noBill: 0, notSeen: 0, expiring: 0, gToCheck: 0, gExpiring: 0, gClaim: 0, gWaiting: 0, collateral: 0 };
   const reviewer = isLead(a) || a.kind === 'leader' || a.kind === 'deputy';
   for (const r of f.regular ?? []) {
     if (r.status === 'pending' && reviewer && r.added.byId !== userId) c.toCheck += 1;
@@ -292,8 +292,6 @@ export function finRegularHome(f: FinStatus, a: FinActor, userId: Id, today: Iso
     if (g.status === 'pending' && reviewer && g.added.byId !== userId) c.gToCheck += 1;
     if (['active', 'released', 'claimed'].includes(g.status)) c.collateral += g.collateral;
     if (g.status === 'active' && daysBetween(today, g.expiresOn) <= FIN_REGULAR_RULE.expiryWarnDays && g.expiresOn >= today) c.gExpiring += 1;
-    // F13 (Fauzan, 11 Nov 2026): the 30-day reminder before an IG or BG is due, until it is settled.
-    if (g.status === 'active' && g.expiresOn >= today && daysBetween(today, g.expiresOn) <= (s.guaranteeRemindDays ?? RULES.insurancePremiumDays.value.guaranteeRemindDays)) c.gDue += 1;
     if (g.collateral > 0 && ['active', 'released'].includes(g.status) && (g.release || g.expiresOn < today) && daysBetween(g.release?.on ?? g.expiresOn, today) >= FIN_REGULAR_RULE.claimAfterDays) c.gClaim += 1;
     if (g.status === 'claimed' && g.claim && daysBetween(g.claim.on, today) > FIN_REGULAR_RULE.claimWaitDays) c.gWaiting += 1;
   }
@@ -328,6 +326,17 @@ export function finRegularView(f: FinStatus, today: IsoDate, s: Pick<FinSettings
 
 // ---------- Changes ----------
 
+/**
+ * Lighter check L3: whether a varying bill is more than the limits away from the last-three average. Worked in cents,
+ * so exactly 10% (RM1,100.00 on RM1,000) is not unusual and RM1,100.01 is.
+ */
+export function finRegularUnusual(amount: number, avg: number, pct: { high: number; low: number } = { high: RULES.financeRegularBills.value.unusualHighPct, low: RULES.financeRegularBills.value.unusualLowPct }): boolean {
+  const c = Math.round(amount * 100);
+  const hi = Math.round(avg * (100 + pct.high));
+  const lo = Math.round(avg * (100 - pct.low));
+  return c > hi || c < lo;
+}
+
 export interface FinRegularCtx {
   user: User;
   a: FinActor;
@@ -340,6 +349,8 @@ export interface FinRegularCtx {
    * LHDN PCB and HRD Corp the statutory total. Null when that payroll is not approved yet.
    */
   payrollOwes?: (wagePeriod: string, body: string) => number | null;
+  /** Lighter check L3: the Finance Director's limits in force (default 10% and 10%). */
+  unusualPct?: { high: number; low: number };
 }
 
 function regularFields(f: FinStatus, input: Record<string, unknown>) {
@@ -454,10 +465,11 @@ export function finRegularAction(ctx: FinRegularCtx, f: FinStatus, action: strin
       amount = money(input.amount, 'Billed amount');
       doc = docs(input.doc, r.kind === 'statutory' ? 'contribution file or e-PCB summary' : r.kind === 'zakat' ? 'zakat deduction list' : 'bill')[0];
     }
-    // Unusual amount: well above or below the last three bills needs an explanation.
+    // Unusual amount (lighter check L3, Fauzan 2 Nov 2026): more than 10% above or below the average of the last three
+    // bills needs an explanation; exactly 10% needs none. The Finance Director sets the two limits.
     const last = r.dues.filter((x) => x.bill && x.period < d.period).sort((x, y) => y.period.localeCompare(x.period)).slice(0, 3);
     const avg = last.length ? last.reduce((n, x) => n + x.bill!.amount, 0) / last.length : null;
-    const odd = avg != null && (amount > avg * FIN_REGULAR_RULE.unusualHigh || amount < avg * FIN_REGULAR_RULE.unusualLow);
+    const odd = avg != null && finRegularUnusual(amount, avg, ctx.unusualPct);
     const unusual = odd ? requireReason(input.unusual, `explain why RM${amount.toFixed(2)} differs so much from the usual RM${round2(avg!).toFixed(2)}`) : null;
     const next: FinRegular = { ...r, dues: [...r.dues.filter((x) => x.period !== d.period), { ...d, bill: { ...ctx.sign(), amount, doc, unusual } }] };
     return { patch: save(next), action: 'finance.regular.bill', summary: `${r.name} ${d.period}: RM${amount.toFixed(2)} recorded from ${doc}${unusual ? ` (unusual: ${unusual})` : ''}.`, result: next };

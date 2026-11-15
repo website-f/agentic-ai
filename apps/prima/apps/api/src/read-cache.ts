@@ -109,6 +109,13 @@ export function withReadSnapshots<S extends Store>(store: S, client: Pick<PoolCl
     const n = (reads.get(table) ?? 0) + 1;
     reads.set(table, n);
     if (n < SNAPSHOT_AFTER) return undefined;
+    // P105: a table of a module not installed in this database (upstream's 24 off-list modules) is never snapshotted:
+    // its reads go to PgStore, which answers "not installed" without a failed query that would abort the transaction.
+    const exists = await client.query('SELECT to_regclass($1) IS NOT NULL AS ok', [tableOf(table)]);
+    if (exists.rows[0]?.ok !== true) {
+      snaps.set(table, 'too-big');
+      return snaps.get(table);
+    }
     const res = await client.query(`SELECT data FROM ${tableOf(table)} LIMIT ${MAX_ROWS + 1}`);
     let snap: Snap;
     if (res.rows.length > MAX_ROWS) snap = 'too-big';

@@ -16,6 +16,7 @@ import {
   senFromText,
   senLabel,
   syncKey,
+  BOOK_UNSET,
   type Dataset,
   type ItemAction,
   type ItemMovement,
@@ -256,7 +257,7 @@ describe('send and receive by scanning', () => {
     const t = fresh();
     const { items } = await stocked(t, 2);
     const m = await sale(t, items);
-    const key = syncKey('co-sasa', 'purchase_receipt', m.id, 1);
+    const key = syncKey('co-sasa', 'purchase_receipt', m.id, 1, BOOK_UNSET);
     t.ds.itemSyncJobs.push({ id: 'isync-planted', partyId: 'co-sasa', docType: 'purchase_receipt', sourceId: m.id, revision: 1, key, payloadHash: 'not-the-same', payload: { commercialRef: null, lines: [] }, status: 'not_ready', reasons: [], at: NOW, partyIds: ['co-sasa'] } as ItemSyncJob);
     await expect(t.act(SASA_CM, { kind: 'move.receive', movementId: m.id, lines: [{ itemId: items[0].id, result: 'received' }] })).rejects.toThrow(/different document/);
   });

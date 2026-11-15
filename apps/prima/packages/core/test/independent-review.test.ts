@@ -1,3 +1,4 @@
+import { guardPayPrep } from './guard-pay-preparer';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
   MemoryStore,
@@ -14,13 +15,12 @@ import {
   type Person,
   type Shift,
 } from '../src';
-import { closeShortShifts } from './full-shifts';
 
 // Prima's own guard pay run (Fauzan, 5 Nov 2026). Synthetic data only: made-up people, placeholder formula amounts.
 const TODAY = '2026-11-05';
 const NOW = myt(TODAY, '10:00');
 const fresh = () => {
-  const ds = closeShortShifts(generateDataset({ today: TODAY, now: NOW, daysBack: 40 }));
+  const ds = generateDataset({ today: TODAY, now: NOW, daysBack: 40 });
   return { ds, svc: new PrimaService(new MemoryStore(ds), () => NOW) };
 };
 
@@ -112,11 +112,11 @@ describe('independent payroll review regressions', () => {
   });
   it('never deducts an approved advance that was never paid and is subsequently cancelled', async () => {
     RULES.guardPayroll.value.primaPays = true;
-    const ds=closeShortShifts(generateDataset({ today: TODAY, now: NOW, daysBack: 40 }));
+    const ds=generateDataset({today:TODAY,now:NOW,daysBack:40});
     for (const p of ds.people) if (!p.bank) p.bank={ bank:'Synthetic',accountMasked:'****9999' };
     let now = myt('2026-10-19','10:00');
     const svc=new PrimaService(new MemoryStore(ds), () => now);
-    const om=await svc.user('u-om-klang'), hr=await svc.user('u-pwvsb-hr'), fin=await svc.user('u-fin-t1-lead'), coo=await svc.user('u-coo');
+    const om=await svc.user('u-om-klang'), hr=await svc.user('u-pwvsb-hr'), prep = await guardPayPrep(svc), fin=await svc.user('u-fin-t1-lead'), coo=await svc.user('u-coo');
     const b=await svc.guardAdvances(om,{companyId:'co-arsh'});
     const target=b.choices.guards[0];
     await svc.setGuardAdvances(om,{companyId:'co-arsh',period:'2026-10',basis:'guard',ref:target.id,amount:100,payOn:'2026-10-20',reason:'Synthetic review advance'});
@@ -124,11 +124,11 @@ describe('independent payroll review regressions', () => {
     const approver=await svc.user(a.approverTier==='ogm'?'u-ogm':'u-opsdir');
     await svc.approveGuardAdvances(approver,[a.id],'Synthetic approval');
     now=NOW;
-    const run=await svc.prepareGuardPay(await svc.user('u-ae-arsh'),'co-arsh','2026-10');
+    const run=await svc.prepareGuardPay(prep,'co-arsh','2026-10');
     const l=run.lines.find(x=>x.personId===target.id)!;
     expect(l.advance).toBe(0);
     expect(l.advanceIds).toEqual([]);
-    await svc.guardPayStep(await svc.user('u-ae-arsh'),run.id,'submit');
+    await svc.guardPayStep(prep,run.id,'submit');
     await svc.guardPayStep(coo,run.id,'approve',{note:'Synthetic review approval'});
     await svc.changeGuardAdvance(om,a.id,{action:'cancel',reason:'Advance never paid'});
     const paid=await svc.guardPayStep(fin,run.id,'pay',{bankRef:'SYNTHETIC-NO-TRANSFER',paidOn:TODAY,pcbChecked:true});
@@ -140,14 +140,14 @@ describe('independent payroll review regressions', () => {
   it('blocks more than half gross pay in employer deductions before submission', async () => {
     const {svc,ds}=fresh();
     for (const p of ds.people) if (!p.bank) p.bank={bank:'Synthetic',accountMasked:'****9999'};
-    const hr=await svc.user('u-pwvsb-hr'), coo=await svc.user('u-coo');
-    const run=await svc.prepareGuardPay(await svc.user('u-ae-arsh'),'co-arsh','2026-10');
+    const hr=await svc.user('u-pwvsb-hr'), prep = await guardPayPrep(svc), coo=await svc.user('u-coo');
+    const run=await svc.prepareGuardPay(prep,'co-arsh','2026-10');
     const l=run.lines.find(x=>x.gross>1000)!;
     const deduction=Math.round(l.gross*0.6*100)/100;
-    const changed=await svc.setGuardPayLine(await svc.user('u-ae-arsh'),run.id,l.personId,{extra:[{label:'Synthetic approved recovery',amount:-deduction}]});
+    const changed=await svc.setGuardPayLine(prep,run.id,l.personId,{extra:[{label:'Synthetic approved recovery',amount:-deduction}]});
     expect(changed.otherDeductions).toBeGreaterThan(changed.gross*0.5);
     expect(changed.net).toBeGreaterThan(0);
-    await expect(svc.guardPayStep(await svc.user('u-ae-arsh'),run.id,'submit')).rejects.toThrow(/50%/);
+    await expect(svc.guardPayStep(prep,run.id,'submit')).rejects.toThrow(/50%/);
     expect((await svc.guardPayRun(coo,run.id)).run.stage).toBe('draft');
   });
 });
@@ -228,8 +228,8 @@ describe('payroll repair boundaries', () => {
     RULES.guardPayroll.value.primaPays = true;
     const { svc, ds } = fresh();
     for (const p of ds.people) if (!p.bank) p.bank = { bank: 'Synthetic', accountMasked: '****9999' };
-    const hr = await svc.user('u-pwvsb-hr'), coo = await svc.user('u-coo'), fin = await svc.user('u-fin-t1-lead');
-    const run = await svc.prepareGuardPay(await svc.user('u-ae-arsh'), 'co-arsh', '2026-10');
+    const hr = await svc.user('u-pwvsb-hr'), prep = await guardPayPrep(svc), coo = await svc.user('u-coo'), fin = await svc.user('u-fin-t1-lead');
+    const run = await svc.prepareGuardPay(prep, 'co-arsh', '2026-10');
     const bad = run.lines.find((l) => l.gross > 1000)!;
     const error = problem === 'missing formula' ? /no pay formula/ : problem === 'ambiguous leave' ? /dates are unclear/ : problem === 'deduction cap' ? /50%/ : /recalculate/;
     // Simulate stored submitted/approved snapshots produced before checks or stale stored data.
@@ -237,7 +237,7 @@ describe('payroll repair boundaries', () => {
     if (problem === 'ambiguous leave') bad.holds = ['Leave dates are unclear'];
     if (problem === 'deduction cap') { bad.otherDeductions = bad.gross * 0.6; bad.holds = []; }
     if (problem === 'legacy snapshot') delete bad.calculationVersion;
-    await expect(svc.guardPayStep(await svc.user('u-ae-arsh'), run.id, 'submit')).rejects.toThrow(error);
+    await expect(svc.guardPayStep(prep, run.id, 'submit')).rejects.toThrow(error);
     expect(run.stage).toBe('draft');
     run.stage = 'submitted';
     await expect(svc.guardPayStep(coo, run.id, 'approve', { note: 'Synthetic review' })).rejects.toThrow(error);
@@ -251,25 +251,25 @@ describe('payroll repair boundaries', () => {
 
   it('requires recalculation after an advance is paid and refuses another payout after submission', async () => {
     RULES.guardPayroll.value.primaPays = true;
-    const ds = closeShortShifts(generateDataset({ today: TODAY, now: NOW, daysBack: 40 }));
+    const ds = generateDataset({ today: TODAY, now: NOW, daysBack: 40 });
     for (const p of ds.people) if (!p.bank) p.bank = { bank: 'Synthetic', accountMasked: '****9999' };
     let now = myt('2026-10-19', '10:00');
     const svc = new PrimaService(new MemoryStore(ds), () => now);
-    const om = await svc.user('u-om-klang'), hr = await svc.user('u-pwvsb-hr'), coo = await svc.user('u-coo'), fin = await svc.user('u-fin-t1-lead');
+    const om = await svc.user('u-om-klang'), hr = await svc.user('u-pwvsb-hr'), prep = await guardPayPrep(svc), coo = await svc.user('u-coo'), fin = await svc.user('u-fin-t1-lead');
     const board = await svc.guardAdvances(om, { companyId: 'co-arsh' });
     const chosen = board.choices.guards.slice(0, 2);
     for (const p of chosen) await svc.setGuardAdvances(om, { companyId: 'co-arsh', period: '2026-10', basis: 'guard', ref: p.id, amount: 100, payOn: '2026-10-20', reason: 'Synthetic advance' });
     const advances = (await svc.guardAdvances(om, { companyId: 'co-arsh', period: '2026-10' })).advances;
     for (const a of advances) await svc.approveGuardAdvances(await svc.user(a.approverTier === 'ogm' ? 'u-ogm' : 'u-opsdir'), [a.id], 'Synthetic approval');
     now = NOW;
-    const run = await svc.prepareGuardPay(await svc.user('u-ae-arsh'), 'co-arsh', '2026-10');
+    const run = await svc.prepareGuardPay(prep, 'co-arsh', '2026-10');
     expect(run.lines.find((l) => l.personId === advances[0].personId)?.advance).toBe(0);
     await expect(svc.payGuardAdvance(fin, advances[0].id, { bankRef: 'NO-TRANSFER', paidOn: TODAY })).rejects.toThrow(/within the advance month/);
     await svc.payGuardAdvance(fin, advances[0].id, { bankRef: 'NO-TRANSFER', paidOn: '2026-10-20' });
-    await expect(svc.guardPayStep(await svc.user('u-ae-arsh'), run.id, 'submit')).rejects.toThrow(/Paid advances have changed/);
-    const recalculated = await svc.prepareGuardPay(await svc.user('u-ae-arsh'), 'co-arsh', '2026-10');
+    await expect(svc.guardPayStep(prep, run.id, 'submit')).rejects.toThrow(/Paid advances have changed/);
+    const recalculated = await svc.prepareGuardPay(prep, 'co-arsh', '2026-10');
     expect(recalculated.lines.find((l) => l.personId === advances[0].personId)?.advance).toBe(100);
-    await svc.guardPayStep(await svc.user('u-ae-arsh'), run.id, 'submit');
+    await svc.guardPayStep(prep, run.id, 'submit');
     await expect(svc.payGuardAdvance(fin, advances[1].id, { bankRef: 'NO-TRANSFER', paidOn: '2026-10-20' })).rejects.toThrow(/already submitted or paid/);
     await svc.guardPayStep(coo, run.id, 'approve', { note: 'Synthetic approval' });
     const paid = await svc.guardPayStep(fin, run.id, 'pay', { bankRef: 'NO-TRANSFER', paidOn: TODAY, pcbChecked: true });
@@ -285,8 +285,8 @@ describe('stale advance recovery snapshots', () => {
     RULES.guardPayroll.value.primaPays = true;
     const { svc, ds } = fresh();
     for (const p of ds.people) if (!p.bank) p.bank = { bank: 'Synthetic', accountMasked: '****9999' };
-    const hr = await svc.user('u-pwvsb-hr'), coo = await svc.user('u-coo'), fin = await svc.user('u-fin-t1-lead');
-    const run = await svc.prepareGuardPay(await svc.user('u-ae-arsh'), 'co-arsh', '2026-10');
+    const hr = await svc.user('u-pwvsb-hr'), prep = await guardPayPrep(svc), coo = await svc.user('u-coo'), fin = await svc.user('u-fin-t1-lead');
+    const run = await svc.prepareGuardPay(prep, 'co-arsh', '2026-10');
     const l = run.lines.find((x) => x.gross > 1000)!;
     l.advance = 100;
     l.advanceIds = ['cancelled-or-removed-advance'];

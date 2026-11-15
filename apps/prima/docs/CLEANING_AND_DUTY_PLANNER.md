@@ -87,6 +87,14 @@ Fauzan approved preparing this on 4 Nov 2026. Nothing has been run against stagi
 
 Last local run: PostgreSQL 16, `cleaning-ops-pg.test.ts` passed (4 Nov 2026, with guard terms and a client slip).
 
+## Site supplies requests and Min/Max (Part T, 13 Nov 2026)
+
+A KBK site asks for supplies through the site supplies request ([SITE_SUPPLIES_REQUESTS.md](SITE_SUPPLIES_REQUESTS.md)).
+The store's issue creates the site delivery and takes the stock off the store in the same step; the delivery line
+carries the store item, the area and the condition at issue. Deliveries the OM records by hand stay "not from store".
+Each site supply may have a Min and Max on hand (OM proposes, OGM approves); until set it shows "not set", and the
+new flags are below Min and above Max. Site fittings may name the person responsible (T10).
+
 ## Not done / open
 
 

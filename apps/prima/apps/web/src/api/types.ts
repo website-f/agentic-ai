@@ -1,5 +1,4 @@
 import { type DraftHelpClient } from './draft-help';
-import type { NewbClient } from './p100-newb';
 import { type ExtractionClient } from './it-extraction';
 import { type AlertItem, type ClientShareLink, type ClientShareReport, type ClientLostReason, type ArishaDraft, type CmsServiceKind, type ArishaAnswer, type ArishaFinanceDraft, type ArishaReviewDraft, type ArishaTurn, type DataMode, type ArmedJobStatus, type AttendanceIssue, type Case, type CaseType, type Company, type DisciplineStep, type FaceCapture, type FollowUpKind, type Home, type GrowthPanel, type GrowthMargin, type IsoDate, type PrimaService, type RecordKind, type ReportDef, type RecordValues, type EvidenceDoc, type FwPaper, type SocsoStatus, type ProofInput, type Quotation, type Severity, type Tender, type TenderDecisionChoice, type TenderBidPart, type TenderPaperKind, type TenderQuery, type TenderRecord, type TenderStatus, type User, type CleaningService, type SecurityPlanService, type CleaningProofInput, type CleaningSetupInput, type FinRequestAction, type FinCheckSection, type FinCloseAction, type FinPackKind, type FinPaymentAction, type FwRecruitStep, type ImportKind, type ImportOptions, type OrgImportReceipt } from '@prima/core';
 import { type ConnectionsClient } from './connections';
@@ -10,7 +9,15 @@ export interface MyAlerts { items: AlertItem[]; email: boolean; teamsChannel: bo
 export type { ConnectionsClient, SharePointStatus, SharePointCheck, SharePointLibraries, SharePointItems } from './connections';
 export type { ClientShareLink, ClientShareReport } from '@prima/core';
 /** linksOn is false when the server has no link key or public address set: links cannot be made there. */
-export type ClientShareLinksView = { canCreate: boolean; links: (ClientShareLink & { live: boolean })[]; linksOn: boolean };
+export type ClientShareLinksView = {
+  canCreate: boolean;
+  canRevoke?: boolean;
+  links: (ClientShareLink & { live: boolean })[];
+  linksOn: boolean;
+  /** Client portal (A7): what the client sent through its links. */
+  fromLink?: { ratings: { at: string; score: number; comment: string; from?: string }[]; requests: { id: string; kind: string; what: string; from: string; at: string; neededBy: string | null; status: string }[] };
+};
+export type ClientPortalBoard = Awaited<ReturnType<import('@prima/core').PrimaService['clientPortalBoard']>>;
 export type { CleaningProofInput, CleaningSetupInput } from '@prima/core';
 
 type CS<K extends keyof CleaningService> = CleaningService[K] extends (...args: never[]) => Promise<infer T> ? T : never;
@@ -42,7 +49,7 @@ export type RaiseArmsRequestInput = Parameters<PrimaService['raiseArmsRequest']>
 export type SpecialOpsLegalFlags = R<'specialOpsLegalFlags'>;
 export type ArmsTradingState = R<'armsTrading'>;
 export type ApprovalLimitsView = R<'approvalLimits'>;
-export type SettingsHomeView = R<'settingsHome'>;
+export type CashStandInView = R<'cashStandInBoard'>;
 export type TransportBoard = R<'transportBoard'>;
 export type AmRentCheck = R<'amRentCheck'>;
 export type AmBuyInput = Parameters<PrimaService['amBuyRequest']>[1];
@@ -71,7 +78,14 @@ export type StaffClockDetail = R<'staffClockDetail'>;
 export type MyRemote = R<'myRemote'>;
 export type RemoteBoard = R<'remoteBoard'>;
 export type MyTimeSlips = R<'myTimeSlips'>;
+export type MyOtClaims = R<'myOtClaims'>;
+export type WarrantyBoard = R<'warrantyBoard'>;
 export type TimeSlipBoard = R<'timeSlipBoard'>;
+export type GuardRosterBoard = R<'rosterBoard'>;
+export type MyGuardRoster = R<'myRoster'>;
+/** Guard roster writes (Part O); every permission is checked by the server. */
+export type RosterActName = 'saveSiteCoverage' | 'saveRosterDraft' | 'rosterStep' | 'recordRosterActual' | 'proposeRosterCorrection' | 'decideRosterCorrection' | 'decideRosterAbsence' | 'recordRosterBreak' | 'confirmRosterBreak' | 'recordRosterEvidence' | 'proposeGuardAllowance' | 'decideGuardAllowance' | 'proposeLumpSum' | 'approveLumpSum' | 'setLumpSumSwitch' | 'decideMyLumpSum' | 'checkRosterEvidence';
+export type GuardRosterProposal = R<'proposeRosterMonth'>;
 export type RemoteApplyInput = Parameters<PrimaService['remoteApply']>[1];
 export type MyWork = R<'myWork'>;
 export type TeamWork = R<'teamWork'>;
@@ -176,6 +190,15 @@ export type SocsoAdvanceInput = NonNullable<Parameters<PrimaService['advanceSocs
 export type FwmBoard = R<'fwmBoard'>;
 export type WorkKpi = R<'workKpi'>;
 export type HostelBoard = R<'hostelBoard'>;
+export interface HostelCheckOutInput {
+  on: string;
+  reason: 'REPATRIATED' | 'MOVED_HOSTEL' | 'TRANSFERRED' | 'RESIGNED' | 'ABSCONDED' | 'OTHER';
+  keysReturned: boolean;
+  utilitiesSettled: boolean;
+  roomCondition: string;
+  belongings: string;
+  note?: string;
+}
 export type StaffClaims = R<'staffClaims'>;
 export type MyReceipts = R<'myReceipts'>;
 export type Memos = R<'memos'>;
@@ -184,6 +207,7 @@ export type FleetBoard = R<'fleetBoard'>;
 export type VehicleRentals = R<'vehicleRentals'>;
 export type VehicleUsage = R<'vehicleUsage'>;
 export type ClientBoard = R<'clientBoard'>;
+export type ClientInfoPack = R<'clientInfoPack'>;
 export type CrmBoard = R<'crmBoard'>;
 export type CrmClient = R<'crmClient'>;
 export type ClientDiligenceView = Awaited<ReturnType<PrimaService['clientQuality']['diligence']>>;
@@ -217,6 +241,10 @@ export type FinRequestList = Awaited<ReturnType<PrimaService['financeRequests'][
 export type FinCooDesk = Awaited<ReturnType<PrimaService['finance']['cooDesk']>>;
 export type FinControls = Awaited<ReturnType<PrimaService['financeControls']['view']>>;
 export type FinDashboard = Awaited<ReturnType<PrimaService['financeControls']['dashboard']>>;
+export type FinUnbilled = Awaited<ReturnType<PrimaService['unbilledSites']>>;
+export type FinSiteProfit = Awaited<ReturnType<PrimaService['siteProfit']>>;
+export type FinCeoSummary = Awaited<ReturnType<PrimaService['ceoFinanceSummary']>>;
+export type FinSqlPosting = Awaited<ReturnType<PrimaService['financeSqlPosting']['view']>>;
 export type FinPack = Awaited<ReturnType<PrimaService['financeControls']['pack']>>;
 export type FinControlArea = 'payees' | 'statements' | 'ageing' | 'sst' | 'plan' | 'einvoice' | 'ar' | 'bankrec' | 'regular' | 'guarantees' | 'tax' | 'mandates' | 'advances' | 'petty' | 'cards' | 'billing' | 'govt' | 'moneyin' | 'stamp' | 'dailycash' | 'exceptionalcash' | 'arrivalcash' | 'intercompany' | 'cash13' | 'pack' | 'hostel' | 'deposits' | 'fd' | 'charges' | 'wht' | 'schedules' | 'assets' | 'audit' | 'credit' | 'supstatements' | 'figures' | 'coa' | 'sql';
 export type ContractBoard = R<'contracts'>;
@@ -440,11 +468,6 @@ export type RegionalOps = R<'regionalOps'>;
 export type GovOpsMonitor = R<'govOpsMonitor'>;
 export type ManagementFees = R<'managementFees'>;
 export type ManagementFeeBills = R<'managementFeeBills'>;
-// P100 fin: C5 rate book.
-export type RateBook = R<'rateBook'>;
-export type UnbilledSites = R<'unbilledSites'>;
-export type SiteMargins = R<'siteMargins'>;
-export type FinSummary = R<'finSummary'>;
 export type ArmsOverview = R<'armsOverview'>;
 export type ArmsDetail = R<'arms'>;
 export type ArmsControl = R<'armsControl'>;
@@ -471,8 +494,6 @@ export interface Me {
     /** P101: they open Prima as its shared top record (owners and the developer), so `user` is not them. */
     asTop?: boolean;
   };
-  /** P100 B1: a guard pay preparer named by their Company Manager (the menu shows Guard pay). */
-  guardPayPreparer?: boolean;
 }
 
 export interface RaiseCaseInput {
@@ -503,18 +524,14 @@ export interface NewQuotation {
   ratePerGuard: number;
   validDays: number;
   note?: string;
-  /** C10: how many of the guards are Nepali (hostel and transport cost). */
+  /** C10: how many of the guards are Nepali (hostel and transport costs). */
   nepaliGuards?: number;
 }
 
 /** Everything the screens need. Implemented by the HTTP client and by the in-browser demo. */
-export interface Api extends ConnectionsClient, ExtractionClient, DraftHelpClient, CheckinClient, NewaClient, NewbClient {
+export interface Api extends ConnectionsClient, ExtractionClient, DraftHelpClient, CheckinClient {
   /** Hand-overs between departments and real-data import (connect-departments, 2 Nov 2026). */
   readonly org: OrgClient;
-  /** K8: the bulk load helper (data manager and file manager). */
-  readonly bulk: import('./bulk').BulkClient;
-  /** K9: Arisha's training, the AI part (off until switched on). */
-  readonly trainer: import('./trainer').TrainerClient;
   /** P81: past attendance from the monthly PDF reports; server only (the demo has none). */
   readonly attendanceReports?: import('./attendance-reports').AttendanceReportsClient;
   m365Call(expectedUserId: string, method: 'GET' | 'POST', path: string, body?: unknown, signal?: AbortSignal): Promise<unknown>;
@@ -561,6 +578,20 @@ export interface Api extends ConnectionsClient, ExtractionClient, DraftHelpClien
   removePublicHoliday(id: string, note: string): Promise<unknown>;
   hrLeaveSettings(): Promise<HrLeaveSettings>;
   setLeaveOverride(personId: string, kind: 'ANNUAL' | 'SICK' | 'MATERNITY' | 'PATERNITY', days: number | null, note: string): Promise<unknown>;
+  paperConsents(): Promise<Awaited<ReturnType<PrimaService['paperConsent']['board']>>>;
+  recordPaperConsent(input: Record<string, unknown>): Promise<unknown>;
+  setPaperConsentGate(on: boolean, reason: string): Promise<unknown>;
+  fwHostel(): Promise<Awaited<ReturnType<PrimaService['fwMoves']['board']>>>;
+  fwHostelJa(): Promise<Awaited<ReturnType<PrimaService['fwMoves']['jaDifferences']>>>;
+  fwHostelAct(action: string, body: Record<string, unknown>): Promise<unknown>;
+  shortStays(): Promise<Awaited<ReturnType<PrimaService['shortStays']['board']>>>;
+  shortStayAct(action: string, body: Record<string, unknown>): Promise<unknown>;
+  hrLists(): Promise<Awaited<ReturnType<PrimaService['hrLists']['view']>>>;
+  setHrList(kind: 'guard_courses' | 'claim_clauses' | 'discipline_steps', input: Record<string, unknown>): Promise<unknown>;
+  openingBalances(companyId: string): Promise<Awaited<ReturnType<PrimaService['openingBalances']>>>;
+  setOpeningBalance(personId: string, input: Record<string, unknown>): Promise<unknown>;
+  checkOpeningBalance(personId: string, comment: string): Promise<unknown>;
+  loadOpeningBalances(companyId: string, csv: string, reason: string): Promise<Awaited<ReturnType<PrimaService['loadOpeningBalances']>>>;
   setWfhAllowed(personId: string, allow: boolean, note: string): Promise<unknown>;
   flexRequests(): Promise<FlexRequests>;
   requestFlex(input: FlexInput): Promise<unknown>;
@@ -571,6 +602,8 @@ export interface Api extends ConnectionsClient, ExtractionClient, DraftHelpClien
   hrCaseStep(id: string, input: HrCaseStepInput): Promise<unknown>;
   officeOsh(): Promise<OfficeOshBoard>;
   appointOshCoordinator(input: OshCoordinatorInput): Promise<unknown>;
+  setOshCoordinatorSees(body: { recordId: string; on: boolean; reason: string }): Promise<unknown>;
+  setArmsRfidRequired(body: { on: boolean; reason: string }): Promise<unknown>;
   recordOfficeAssessment(input: OfficeAssessmentInput): Promise<unknown>;
   reportOshIncident(input: OshIncidentInput): Promise<unknown>;
   recordOshReport(id: string, input: OshReportInput): Promise<unknown>;
@@ -615,6 +648,7 @@ export interface Api extends ConnectionsClient, ExtractionClient, DraftHelpClien
   employeeRegister(companyId: string): Promise<{ filename: string; body: string }>;
   decideProbation(personId: string, decision: 'confirm' | 'extend', newEndsOn: string | null, note: string): Promise<unknown>;
   leavingGuide(personId: string): Promise<LeavingGuide>;
+  setFinalPay(personId: string, input: Record<string, unknown>): Promise<unknown>;
   vacancies(): Promise<Vacancies>;
   staffMovements(): Promise<StaffMovements>;
   prepareStaffMovement(input: Parameters<PrimaService['prepareStaffMovement']>[1]): Promise<unknown>;
@@ -655,6 +689,15 @@ export interface Api extends ConnectionsClient, ExtractionClient, DraftHelpClien
   remoteEnd(id: string, note: string): Promise<unknown>;
   remoteReview(dayId: string, verdict: 'accepted' | 'queried', note: string): Promise<unknown>;
   myTimeSlips(): Promise<MyTimeSlips>;
+  myOtClaims(): Promise<MyOtClaims>;
+  warrantyBoard(): Promise<WarrantyBoard>;
+  reportWarrantyFault(input: { source: 'it_asset' | 'stock'; itemId: string; fault: string; faultOn: string; proof: unknown[] }): Promise<unknown>;
+  checkWarrantyClaim(id: string, input: { supplier: string; warrantyTo?: string | null; note?: string; proof?: unknown[] }): Promise<unknown>;
+  sendWarrantyClaim(id: string, input: { on: string; supplierRef: string }): Promise<unknown>;
+  closeWarrantyClaim(id: string, input: { result: 'repaired' | 'replaced' | 'refused'; note: string; replacementSerial?: string | null }): Promise<unknown>;
+  requestOtClaim(input: { date: string; hours: number; kind: 'normal' | 'restDay' | 'publicHoliday'; reason: string }): Promise<unknown>;
+  cancelOtClaim(id: string): Promise<unknown>;
+  decideOtClaim(id: string, approve: boolean, note: string): Promise<unknown>;
   requestTimeSlip(input: { date: string; from: string; to: string; reason: string }): Promise<unknown>;
   cancelTimeSlip(id: string): Promise<unknown>;
   timeSlipBoard(): Promise<TimeSlipBoard>;
@@ -700,6 +743,8 @@ export interface Api extends ConnectionsClient, ExtractionClient, DraftHelpClien
   fwmBoard(): Promise<FwmBoard>;
   hostelBoard(): Promise<HostelBoard>;
   addHostelBill(input: HostelBillInput, proof: ProofInput[]): Promise<unknown>;
+  hostelCheckIn(hostelId: string, personId: string, from: string): Promise<unknown>;
+  hostelCheckOut(stayId: string, input: HostelCheckOutInput): Promise<unknown>;
   hostelBillStep(billId: string, step: 'request' | 'check' | 'approve' | 'slip', ok: boolean, note: string, proof?: ProofInput[]): Promise<unknown>;
   decideUtilityCharge(chargeId: string, decision: 'NOTICE' | 'DEDUCTION', note: string): Promise<unknown>;
   ackUtilityNotice(chargeId: string): Promise<unknown>;
@@ -717,6 +762,8 @@ export interface Api extends ConnectionsClient, ExtractionClient, DraftHelpClien
   saveProductCert(productId: string, input: ProductCertInput, proof: ProofInput[]): Promise<unknown>;
   proposalReadiness(productIds: string[]): Promise<ProposalCheck>;
   clientBoard(): Promise<ClientBoard>;
+  clientInfoPack(clientId: string): Promise<ClientInfoPack>;
+  recordRiskBriefing(input: { personId: string; siteId: string; on: string; note: string }): Promise<unknown>;
   companyOffice(companyId: string): Promise<CompanyOffice>;
   companyOffices(): Promise<CompanyOffices>;
   setOfficeDesks(companyId: string, desks: OfficeDeskInput[], note: string): Promise<unknown>;
@@ -817,7 +864,7 @@ export interface Api extends ConnectionsClient, ExtractionClient, DraftHelpClien
   fixedAssets(): Promise<FixedAssets>;
   actBoard(): Promise<ActBoard>;
   raiseActFinding(input: ActFindingInput): Promise<unknown>;
-  actFindingStep(id: string, action: 'plan' | 'fixed' | 'check' | 'follow_up' | 'assign', body: ActFindingBody): Promise<unknown>;
+  actFindingStep(id: string, action: 'plan' | 'fixed' | 'check' | 'follow_up' | 'assign' | 'defer' | 'resume', body: ActFindingBody): Promise<unknown>;
   recordActAudit(input: ActAuditInput): Promise<unknown>;
   assignActWork(input: Parameters<PrimaService['assignActWork']>[1]): Promise<unknown>;
   setActReportForm(input: Parameters<PrimaService['setActReportForm']>[1]): Promise<unknown>;
@@ -864,6 +911,12 @@ export interface Api extends ConnectionsClient, ExtractionClient, DraftHelpClien
   setPublicHolidays(input: PublicHolidaysInput): Promise<unknown>;
   recordForm(kind: RecordKind, id: string | null, companyId: string | null): Promise<RecordFormData>;
   saveRecord(kind: RecordKind, id: string | null, companyId: string | null, values: RecordValues): Promise<unknown>;
+  addCompany(input: Record<string, unknown>): Promise<unknown>;
+  problems(): Promise<Awaited<ReturnType<PrimaService['problems']['list']>>>;
+  accounts(): Promise<Awaited<ReturnType<PrimaService['accounts']['board']>>>;
+  accountsAct(action: 'submit' | 'decide', input: Record<string, unknown>): Promise<unknown>;
+  reportProblem(input: { what: string; screen: string; photo?: string | null }): Promise<unknown>;
+  replyProblem(id: string, text: string): Promise<unknown>;
   amRecordPayment(unitId: string, input: Parameters<PrimaService['amRecordPayment']>[2]): Promise<unknown>;
   amReversePayment(unitId: string, paymentId: string, reason: string): Promise<unknown>;
   amBankCash(unitId: string, paymentId: string, input: { on: string; slipRef: string }): Promise<unknown>;
@@ -906,6 +959,7 @@ export interface Api extends ConnectionsClient, ExtractionClient, DraftHelpClien
     body: PurStepBody,
   ): Promise<unknown>;
   myItems(): Promise<MyItems>;
+  reportItDevice(input: Parameters<PrimaService['reportItDevice']>[1]): Promise<unknown>;
   deliveryProof(issueId: string): Promise<DeliveryProof>;
   confirmMyItem(id: string, received: boolean, note: string): Promise<unknown>;
   addPurSupplier(companyId: string, input: PurSupplierInput): Promise<unknown>;
@@ -986,10 +1040,19 @@ export interface Api extends ConnectionsClient, ExtractionClient, DraftHelpClien
   finRequests(): Promise<FinRequestList>;
   finCreateRequest(companyId: string, input: Record<string, unknown>): Promise<unknown>;
   finRequestStep(companyId: string, requestId: string, action: FinRequestAction, input: Record<string, unknown>): Promise<unknown>;
-  finSetSettings(values: Record<string, unknown>, comment: string, from?: string): Promise<unknown>;
+  finSetSettings(values: Record<string, unknown>, comment: string, effectiveFrom?: string): Promise<unknown>;
   finCooStep(companyId: string, paymentId: string, action: 'approve' | 'return', input: Record<string, unknown>): Promise<unknown>;
   finControls(companyId: string, billPeriod?: string): Promise<FinControls>;
   finDashboard(): Promise<FinDashboard>;
+  finUnbilled(month?: string): Promise<FinUnbilled>;
+  finClearUnbilled(input: { companyId: string; period: string; siteId: string; kind: FinUnbilled['companies'][number]['rows'][number]['flags'][number]['kind']; reason: string }): Promise<unknown>;
+  finSiteProfit(month?: string): Promise<FinSiteProfit>;
+  finSetSiteTarget(input: { companyId: string | null; pct: number | null; reason: string }): Promise<unknown>;
+  finSetSiteCosts(input: { rates: Record<string, number | null>; reason: string }): Promise<unknown>;
+  finCeoSummary(): Promise<FinCeoSummary>;
+  /** SQL Account posting link (Build 1, 13 Nov 2026): the queue, codes and exceptions; sending stays off until switched on. */
+  finSqlPosting(): Promise<FinSqlPosting>;
+  finSqlPostingAct(kind: 'switch' | 'code' | 'exception' | 'paste' | 'send' | 'check', input: Record<string, unknown>): Promise<unknown>;
   finChecksTodo(): Promise<Record<string, Partial<Record<FinCheckSection, number>>>>;
   finPack(companyId: string, period?: string): Promise<FinPack>;
   finControlAction(companyId: string, area: FinControlArea, action: string, input: Record<string, unknown>): Promise<unknown>;
@@ -1009,15 +1072,13 @@ export interface Api extends ConnectionsClient, ExtractionClient, DraftHelpClien
   guardPayRun(runId: string): Promise<GuardPayRunView>;
   myGuardPayslips(): Promise<GuardPaySlips>;
   prepareGuardPay(companyId: string, period: string, holidays?: { date: string; label: string }[]): Promise<unknown>;
+  prepareGuardPayLater(runId: string): Promise<unknown>;
   setGuardPayLine(runId: string, personId: string, patch: GuardPayLinePatch): Promise<unknown>;
+  setGuardPayPreparers(companyId: string, userIds: string[], reason: string): Promise<unknown>;
   guardPayStep(runId: string, action: GuardPayAction, body: GuardPayStepBody): Promise<unknown>;
   guardPayExport(runId: string, kind: GuardPayFile): Promise<{ filename: string; body: string; note: string }>;
   guardPayCash(runId: string, personId: string, action: GuardPayCashAction, body: { reason?: string; give?: boolean; on?: string; proof?: ProofInput[]; transactionSpecific?: boolean; amount?: number; signedByPersonId?: string }): Promise<unknown>;
   recordPayConsent(personId: string, body: PayConsentInput): Promise<unknown>;
-  /** P100 pay: the pay changes' new actions (guard pay preparers, ...), one route. */
-  payAction(action: string, body: Record<string, unknown>): Promise<unknown>;
-  /** P100 pay: the pay changes' new views (cash stand-in, ...), one route. */
-  payView(view: string, query: Record<string, string>): Promise<unknown>;
   payConsentsWaiting(): Promise<R<'payConsentsWaiting'>>;
   statutoryBoard(): Promise<R<'statutoryBoard'>>;
   setStatutory(body: Parameters<PrimaService['setStatutory']>[1]): Promise<unknown>;
@@ -1035,6 +1096,7 @@ export interface Api extends ConnectionsClient, ExtractionClient, DraftHelpClien
   setInvoicePortal(accountId: string, portal: string | null): Promise<unknown>;
   /** Client report links (Fauzan, 3 Nov 2026): read-only, expiring, one client's own sites. */
   clientShareLinks(accountId: string): Promise<ClientShareLinksView>;
+  clientPortalBoard(): Promise<ClientPortalBoard>;
   createClientShareLink(accountId: string, input: { recipient: string; from: string; to: string; days: number }): Promise<{ link: ClientShareLink; url: string | null }>;
   revokeClientShareLink(accountId: string, linkId: string, reason: string): Promise<unknown>;
   previewClientShareLink(accountId: string, linkId: string): Promise<ClientShareReport>;
@@ -1089,6 +1151,7 @@ export interface Api extends ConnectionsClient, ExtractionClient, DraftHelpClien
   setStaffPin(personId: string, pin: string): Promise<unknown>;
   /** Guards' own phones (GUARD_PHONE=on): a one-time enrolment code, the company's phones, retire one, the CMS board. */
   guardPhoneCode(personId: string): Promise<GuardPhoneCode>;
+  guardPhoneCodes(companyId: string, personIds?: string[]): Promise<{ codes: GuardPhoneCode[]; skipped: { personId: string; name: string; why: string }[] }>;
   guardPhones(companyId: string): Promise<GuardPhoneList>;
   revokeGuardPhone(phoneId: string, reason: string): Promise<unknown>;
   cmsGuardPhones(): Promise<GuardPhoneBoard>;
@@ -1190,7 +1253,7 @@ export interface Api extends ConnectionsClient, ExtractionClient, DraftHelpClien
   /** P78: enter a new tender for the company. */
   addTender(companyId: string, input: NewTender): Promise<Tender>;
   quotationAction(quotationId: string, action: QuotationAction, note?: string): Promise<Quotation>;
-  correctQuotation(quotationId: string, input: { guards: number; nepaliGuards?: number; hoursPerDay: 8 | 12; ratePerGuard: number; validUntil: string; reason: string }): Promise<Quotation>;
+  correctQuotation(quotationId: string, input: { guards: number; hoursPerDay: 8 | 12; ratePerGuard: number; validUntil: string; reason: string }): Promise<Quotation>;
   updateTender(tenderId: string, status: TenderStatus): Promise<Tender>;
   tenderProtocol(): Promise<TenderProtocolView>;
   setTenderProtocol(input: TenderProtocolInput): Promise<unknown>;
@@ -1239,21 +1302,17 @@ export interface Api extends ConnectionsClient, ExtractionClient, DraftHelpClien
   home(companyId?: string): Promise<Home>;
   growth(): Promise<GrowthPanel>;
   growthMargin(): Promise<GrowthMargin>;
-  settingsHome(): Promise<SettingsHomeView>;
   approvalLimits(): Promise<ApprovalLimitsView>;
+  staffLeaveVc(): Promise<StaffLeaveVcView>;
+  setStaffLeaveVc(body: { on: boolean; reason: string }): Promise<unknown>;
+  cashStandIn(): Promise<CashStandInView>;
+  setCashStandIn(body: Record<string, unknown>): Promise<unknown>;
   setApprovalLimits(body: { claimsMax: number | null; purchasesMax: number | null; comment: string }): Promise<unknown>;
   regionalOps(region?: string): Promise<RegionalOps>;
   govOpsMonitor(month?: string): Promise<GovOpsMonitor>;
   privateOpsMonitor(month?: string): Promise<GovOpsMonitor>;
   managementFees(): Promise<ManagementFees>;
   managementFeeBills(month?: string): Promise<ManagementFeeBills>;
-  // P100 fin: C5 rate book (rates entered from a month, never preset).
-  rateBook(): Promise<RateBook>;
-  setRate(input: { key: string; companyId: string; from?: string; amount: number | null; reason: string }): Promise<unknown>;
-  unbilledSites(period?: string): Promise<UnbilledSites>;
-  siteMargins(month?: string): Promise<SiteMargins>;
-  finSummary(period?: string): Promise<FinSummary>;
-  clearUnbilledFlag(companyId: string, input: { key: string; reason: string }): Promise<unknown>;
   setManagementFee(
     companyId: string,
     input: { chargedBy: string; kind: 'percent' | 'fixed' | 'end'; value?: number; agreementRef?: string; reason: string; from?: string; inSiteProfit?: boolean },
@@ -1273,6 +1332,8 @@ export interface Api extends ConnectionsClient, ExtractionClient, DraftHelpClien
   removeCmsReadinessDevice(siteId: string, deviceId: string, reason: string): Promise<CmsReadinessResult>;
   reviewCmsReadiness(siteId: string, input: { decision: 'pass' | 'return'; note: string; fingerprint: string }): Promise<CmsReadinessResult>;
   updateCmsSettings(patch: CmsSettingsPatch): Promise<unknown>;
+  cmsOvertime(period: string): Promise<Awaited<ReturnType<PrimaService['cmsOvertime']>>>;
+  approveCmsOvertime(body: { period: string; staffId: string; reason: string }): Promise<unknown>;
   planCmsRoster(days: number): Promise<unknown>;
   recordCmsHandover(shiftId: string, note: string, agree?: boolean): Promise<unknown>;
   giveCmsHandover(shiftId: string, note: string): Promise<unknown>;
@@ -1327,7 +1388,7 @@ export interface Api extends ConnectionsClient, ExtractionClient, DraftHelpClien
   requestTrip(input: { date: string; destination: string; purpose: string; forPersonId?: string }): Promise<unknown>;
   decideTrip(id: string, ok: boolean, note: string): Promise<unknown>;
   whistleReview(id: string, agree: boolean, note: string): Promise<unknown>;
-  confirmStockLoss(id: string, ok: boolean, note: string): Promise<unknown>;
+  confirmStockLoss(id: string, ok: boolean, note: string, extra?: { cause?: string; photo?: unknown[] }): Promise<unknown>;
   stockCount(itemId: string, counted: number, witness: { staffNo: string; pin: string }): Promise<unknown>;
   amDecideReversal(unitId: string, paymentId: string, approve: boolean, note: string): Promise<unknown>;
   reviewFalseAlarm(id: string, agree: boolean, note: string): Promise<unknown>;
@@ -1337,6 +1398,19 @@ export interface Api extends ConnectionsClient, ExtractionClient, DraftHelpClien
   specialOpsLegalFlags(): Promise<SpecialOpsLegalFlags>;
   armsRequestStep(id: string, action: ArmsRequestAction, reason: string, extra?: ArmsRequestStepExtra): Promise<unknown>;
   armsTrading(): Promise<ArmsTradingState>;
+  /** Part R: one door for the arms policy actions (damage, inspection, licences, vaults, buying, jackets, dealer). */
+  armsPolicyAct(op: string, input: Record<string, unknown>): Promise<unknown>;
+  officeAmAct(op: string, input: Record<string, unknown>): Promise<unknown>;
+  /** Part W: one door for the KDN licence renewal 2027 steps. */
+  kdnAct(op: string, input: Record<string, unknown>): Promise<unknown>;
+  /** Part X: one door for the company and department toolbox meeting steps. */
+  toolboxAct(op: string, input: Record<string, unknown>): Promise<unknown>;
+  groupMonthAct(op: string, input: Record<string, unknown>): Promise<unknown>;
+  registerAct(op: string, input: Record<string, unknown>): Promise<unknown>;
+  /** Part T: one door for the site supplies request steps (KBK, PKK Nepal, PKK Local). */
+  siteSuppliesAct(op: string, input: Record<string, unknown>): Promise<unknown>;
+  inventoryAct(op: string, input: Record<string, unknown>): Promise<unknown>;
+  amRentalAct(op: string, input: Record<string, unknown>): Promise<unknown>;
   setArmsTrading(on: boolean, reason: string): Promise<unknown>;
   transportBoard(): Promise<TransportBoard>;
   amRentCheck(): Promise<AmRentCheck>;
@@ -1357,6 +1431,11 @@ export interface Api extends ConnectionsClient, ExtractionClient, DraftHelpClien
   escalateFirearm(movementId: string): Promise<Case>;
   countVault(vaultId: string, input: { counted: number; witness: { staffNo: string; pin: string } }): Promise<{ expected: number; counted: number; ok: boolean; caseRef: string | null }>;
   // Cleaning planner, site fittings, Inventory site board and guard/officer duty plans (4 Nov 2026).
+  // Guard roster engine (Part O, 13-14 Nov 2026).
+  guardRosterBoard(siteId: string, month: string): Promise<GuardRosterBoard>;
+  myGuardRoster(month: string): Promise<MyGuardRoster>;
+  rosterAct(name: RosterActName, args: unknown[]): Promise<unknown>;
+  proposeGuardRoster(siteId: string, month: string, input: { pattern: '5on2off' | '6on1off'; personIds: string[] }): Promise<GuardRosterProposal>;
   cleaningBoard(date?: IsoDate): Promise<CleaningBoard>;
   cleaningSite(siteId: string, date?: IsoDate): Promise<CleaningSiteView>;
   cleaningProof(siteId: string, docId: string): Promise<CleaningProofView>;
@@ -1394,6 +1473,8 @@ export interface Api extends ConnectionsClient, ExtractionClient, DraftHelpClien
   withdrawPoliceHelp(id: string, note: string): Promise<unknown>;
   /** The in-app alert bell: my own alerts (the same as Teams and email), red first. */
   myAlerts(): Promise<MyAlerts>;
+  myAlertPrefs(): Promise<R<'myAlertPrefs'>>;
+  setMyAlertPrefs(input: { digest: boolean; muted: string[] }): Promise<unknown>;
   registerBoard(): Promise<RegBoard>;
   registerAction(action: string, input: Record<string, unknown>): Promise<unknown>;
   recordLindung(id: string, input: Parameters<PrimaService['recordLindung']>[2]): Promise<unknown>;
@@ -1444,10 +1525,12 @@ export type OrgInbox = Awaited<ReturnType<PrimaService['orgLinks']['inbox']>>;
 export type OrgMap = Awaited<ReturnType<PrimaService['orgLinks']['map']>> & { rollouts?: { key: string; label: string }[] };
 export type OrgImportTemplate = ReturnType<PrimaService['orgImport']['template']>;
 export type OrgImportPreview = Awaited<ReturnType<PrimaService['orgImport']['preview']>>;
+export type OrgImportLoads = Awaited<ReturnType<PrimaService['orgImport']['loads']>>;
 export type GuideCards = ReturnType<PrimaService['guideCards']>;
 export type GuideCardItem = GuideCards['cards'][number];
 export interface OrgClient {
   guide(): Promise<GuideCards>;
+  processes(): Promise<ReturnType<PrimaService['processSheet']>>;
   inbox(offset?: number): Promise<OrgInbox>;
   close(taskId: string, outcome: 'done' | 'not_needed', note: string): Promise<unknown>;
   read(taskId: string): Promise<unknown>;
@@ -1457,6 +1540,8 @@ export interface OrgClient {
   importCommit(kind: ImportKind, companyId: string | null, csv: string, fingerprint: string, opts?: ImportOptions): Promise<OrgImportReceipt>;
   /** P90: whether the optional AI helper is on here, and its suggestions from column names and value shapes only. */
   importAiState(): Promise<{ on: boolean }>;
+  importLoads(): Promise<OrgImportLoads>;
+  importOk(id: string, comment: string): Promise<unknown>;
   importAiColumns(kind: ImportKind, columns: { index: number; header: string; shapes: string[] }[]): Promise<{ matches: { index: number; field: string }[]; source: string }>;
 }
 
@@ -1531,6 +1616,8 @@ export type FwStatDraftRow = Awaited<ReturnType<PrimaService['fwStatDraft']>>[nu
 export type AmExtrasBoard = Awaited<ReturnType<PrimaService['amExtras']['board']>>;
 export type QmsOpsBoard = Awaited<ReturnType<PrimaService['qualityOps']['board']>>;
 export type FwmRecruitment = R<'fwmRecruitment'>;
-// P100 newa: the new workflows' calls and their types.
-import type { NewaClient } from './newa';
-export type * from './newa';
+export interface StaffLeaveVcView {
+  on: boolean;
+  canSet: boolean;
+  history: { on: boolean; reason: string; by: string; byId: string; at: string }[];
+}

@@ -1,6 +1,7 @@
 import {useState} from 'react';
 import {api} from '../api';import{useApp}from'../App';
 import{Chip,ErrorNotice,Loading,useLoad}from'../ui';
+import{IT_POLICY_DOCS,IT_POLICY_EFFECTIVE}from'@prima/core';
 import{nextJobSteps,sourceTabs,workflows,type GuideTab}from'../it-guide/catalog';
 export function ItGuide({allowedTabs,onOpen}:{allowedTabs:string[];onOpen:(tab:GuideTab)=>void}){
  const{me}=useApp();const owner=me.user.id;const[expanded,setExpanded]=useState<string|null>(null);
@@ -18,6 +19,9 @@ export function ItGuide({allowedTabs,onOpen}:{allowedTabs:string[];onOpen:(tab:G
   {verifiedCounts&&<p className="small">Authorized board summary: {verifiedCounts[0]} open jobs · {verifiedCounts[1]} waiting for checks · {verifiedCounts[2]} late. These are scoped snapshot counts, not proof of completion.</p>}
   <h4>Your permitted next job actions</h4>{!next.length&&<p>No next job action is available in this snapshot. That is not proof that all IT work is complete; check the authorized registers below.</p>}
   {next.map(j=><article className="card" key={j.id}><strong>{j.title}</strong><p>Status: {j.status} · due {j.dueOn} · next responsible person/route: {j.owner}</p><p>{j.action}</p><p className="small">{j.missing}</p><button className="btn" onClick={()=>open('jobs')}>Open Jobs to review {j.id}</button></article>)}
+  <h4>Polisi IT Merdeka Network (berkuat kuasa {IT_POLICY_EFFECTIVE})</h4>
+  <p className="small">Kerja IT mengikut dasar bertulis: tiket (respons P1 15 minit, P2 1 jam, P3 4 jam, P4 1 hari bekerja; hanya pemohon menutup tiket), perolehan (permohonan, penilaian teknikal, 3 sebut harga fizikal + 1 dalam talian, semakan bajet, GRN dan kuarantin), daftar aset sebelum serahan, pelupusan (satu rekod, IT Manager, ketua syarikat dan HQ meluluskan, pemadaman data disemak dahulu), perjanjian sewaan, akaun M365 (MFA wajib), domain baharu (CEO meluluskan) dan daftar harta intelek. Buka tab Polisi IT. Salinan BM yang ditandatangani dan salinan Inggeris yang disemak disimpan dalam perpustakaan polisi HR.</p>
+  <ul className="small">{IT_POLICY_DOCS.map(d=><li key={d.code}>{d.code}: {d.title}</li>)}</ul>
   <h4>Workflow catalog</h4><p className="small">These are {workflows.length} guidance groupings, not {workflows.length} verified deployed modules. Availability, tenant connections and approvals remain separate.</p>
   {workflows.map(flow=>{const accessible=flow.tab!==null&&tabs.includes(flow.tab);return <article className="card" key={flow.id}><button className="link-button" aria-expanded={expanded===flow.id} onClick={()=>setExpanded(expanded===flow.id?null:flow.id)}>{flow.title}</button> <Chip tone={accessible?'info':'unknown'}>{accessible?'Authorized screen available':'Separate setup / not available in this view'}</Chip>{expanded===flow.id&&<div><ol>{flow.steps.map((step,i)=><li key={i}>{step}</li>)}</ol><p><strong>You will need:</strong> {flow.inputs}</p><p><strong>Doer:</strong> Enter actual data and evidence only in the permitted workflow.</p><p><strong>Monitor/checker:</strong> {flow.checker}</p><p><strong>Approver:</strong> {flow.approver}</p><p><strong>Overseer:</strong> {flow.overseer}</p>{flow.setup&&<p className="notice" data-tone="unknown">{flow.setup}</p>}{accessible?<button className="btn" onClick={()=>open(flow.tab!)}>Open authorized {flow.title} screen</button>:<p>No action is offered here. Ask the authorized owner to resolve setup or permissions; do not use another person's account.</p>}</div>}</article>})}
  </section>;

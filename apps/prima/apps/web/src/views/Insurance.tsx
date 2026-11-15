@@ -111,7 +111,7 @@ export function InsuranceView() {
           label="Premiums to pay"
           value={rm(t.premiumUnpaid)}
           tone={t.premiumsOverdue ? 'crit' : t.premiumsDue ? 'warn' : 'ok'}
-          note={`${t.premiumsOverdue} overdue, ${t.premiumsDue} due in ${data.rules.premiumDays} days`}
+          note={`${t.premiumsOverdue} overdue, ${t.premiumsDue} due within ${data.rules.premiumDays.firstDays} days (second reminder at ${data.rules.premiumDays.secondDays})`}
           icon={<CoinsIcon size={16} />}
           onClick={() => setTab('premiums')}
         />

@@ -1,5 +1,4 @@
 import { Select } from '../SearchSelect';
-import { CmsConsoleCard } from './CmsConsole';
 import { useRef, useState } from "react";
 import {
   FootprintsIcon,
@@ -132,7 +131,6 @@ export function CmsView() {
           </>
         }
       />
-      <CmsConsoleCard />
       <Stats>
         <Stat
           label="Emergencies not acknowledged"
@@ -226,6 +224,7 @@ export function CmsView() {
       {tab === "settings" && <Settings data={data} />}
       {tab === "duties" && <Duties data={data} />}
       {tab === "staff" && <Staff data={data} />}
+      {tab === "staff" && data.canManage && <CmsOvertimePanel />}
       {tab === "commissioning" && <Commissioning />}
     </div>
   );
@@ -2006,6 +2005,69 @@ function AttendanceAlertsPanel({ data }: { data: Cms }) {
           canDesk={data.canDesk}
           onClose={() => setOpen(null)}
         />
+      )}
+    </section>
+  );
+}
+
+// C12 (Fauzan, 11 Nov 2026): overtime on CMS seats goes into the staff payroll once Arms Control approves the month.
+function CmsOvertimePanel() {
+  const last = (() => {
+    const d = new Date();
+    d.setDate(1);
+    d.setMonth(d.getMonth() - 1);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+  })();
+  const [period, setPeriod] = useState(last);
+  const { data, error, reload } = useLoad(() => api.cmsOvertime(period), [period]);
+  const [why, setWhy] = useState<Record<string, string>>({});
+  const act = useAction();
+  return (
+    <section className="panel">
+      <div className="panel-head">
+        <h2>CMS overtime</h2>
+        <input className="input" type="month" aria-label="Month" value={period} onChange={(e) => setPeriod(e.target.value)} />
+      </div>
+      {error && <ErrorNotice error={error} />}
+      {!data && !error && <Loading what="CMS overtime" />}
+      {data && (
+        <>
+          <p className="muted small">{data.rule}</p>
+          {data.rows.length === 0 && <p className="muted small">No overtime on CMS seats this month.</p>}
+          <div className="list">
+            {data.rows.map((r) => (
+              <div key={r.staffId} className="list-item" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 4 }}>
+                <div className="row" style={{ justifyContent: 'space-between' }}>
+                  <strong>{r.name}</strong>
+                  <span>
+                    {r.hours} hours on {r.seats} seat{r.seats === 1 ? '' : 's'}
+                  </span>
+                </div>
+                {r.approved ? (
+                  <div className="small">
+                    Approved by {r.approved.by}: {r.approved.reason}
+                  </div>
+                ) : !r.linked ? (
+                  <div className="muted small">Link this person to their Prima account first.</div>
+                ) : r.canApprove ? (
+                  <div className="row" style={{ gap: 6 }}>
+                    <input className="input" aria-label="Why" placeholder="Why (needed)" value={why[r.staffId] ?? ''} onChange={(e) => setWhy({ ...why, [r.staffId]: e.target.value })} />
+                    <button
+                      className="btn btn-sm"
+                      disabled={act.busy || (why[r.staffId] ?? '').trim().length < 3}
+                      onClick={() => act.run(() => api.approveCmsOvertime({ period, staffId: r.staffId, reason: why[r.staffId] ?? '' }), 'Overtime approved.').then((x) => x !== undefined && reload())}
+                    >
+                      Approve
+                    </button>
+                  </div>
+                ) : (
+                  <div className="muted small">Someone else approves this.</div>
+                )}
+              </div>
+            ))}
+          </div>
+          <ErrorNotice error={act.error} />
+        </>
       )}
     </section>
   );

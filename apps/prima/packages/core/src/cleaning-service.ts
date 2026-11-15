@@ -288,6 +288,12 @@ export class CleaningService {
   private today(): IsoDate {
     return dateOf(this.clock());
   }
+  /** Part U19: expected life per equipment kind from the inventory settings (empty until the OGM sets it). */
+  private async lifeMonths(): Promise<Record<string, number>> {
+    if (this.store.hasTable && !(await this.store.hasTable('inventoryRecs'))) return RULES.inventoryControl.value.expectedLifeMonths;
+    const row = (await this.store.get('inventoryRecs', 'inv-settings').catch(() => undefined)) as { d?: { expectedLifeMonths?: Record<string, number> } } | undefined;
+    return row?.d?.expectedLifeMonths ?? RULES.inventoryControl.value.expectedLifeMonths;
+  }
   private async grants(): Promise<AuthorityGrant[]> {
     return this.store.list('grants');
   }
@@ -926,7 +932,7 @@ export class CleaningService {
     const kit = (await this.store.get('siteKits', `kit-${siteId}`)) ?? null;
     const ids = new Set(kit?.records.flatMap((r) => r.proofIds) ?? []);
     const proofs = kit ? (await this.store.list('evidenceDocs', { companyId: site.companyId })).filter((d) => ids.has(d.id)).map((d) => ({ id: d.id, caption: d.caption, timeMark: d.timeMark ?? null, receivedAt: d.receivedAt })) : [];
-    return { site: { id: site.id, name: site.name, client: site.client, companyId: site.companyId }, access, kit, status: kit ? siteKitStatus(kit, this.today()) : null, proofs };
+    return { site: { id: site.id, name: site.name, client: site.client, companyId: site.companyId }, access, kit, status: kit ? siteKitStatus(kit, this.today(), await this.lifeMonths()) : null, proofs };
   }
 
   /** The OM plans what the site needs. Saving a new list needs the version seen. */
@@ -944,7 +950,12 @@ export class CleaningService {
       const atEnd = x.atEnd === 'hand_over' ? ('hand_over' as const) : ('take_back' as const);
       const handOverRef = text(x.handOverRef, `Line ${i + 1} contract clause`, 120, false);
       if (atEnd === 'hand_over' && !handOverRef) throw new BadRequest(`Line ${i + 1}: give the contract clause that hands it over.`);
-      return { id: x.id, name: text(x.name, `Line ${i + 1} name`, 120), category: x.category as SiteKitCategory, required: int(x.required, `Line ${i + 1} needed`, 0, 1000), owner: x.owner as SiteKitOwner, note: text(x.note, `Line ${i + 1} note`, 300, false), atEnd, handOverRef };
+      // Part T10: shared equipment may name the person responsible (patrolling officer or supervisor named by the OM).
+      const r = x.responsible as Record<string, unknown> | null | undefined;
+      const rName = r ? text(r.name, `Line ${i + 1} responsible person`, 120, false) : '';
+      const rRole = r && ['patrol_officer', 'supervisor', 'other'].includes(String(r.role)) ? (r.role as 'patrol_officer' | 'supervisor' | 'other') : 'other';
+      const responsible = rName ? { name: rName, role: rRole, personId: typeof r?.personId === 'string' && ID.test(r.personId) ? r.personId : null } : null;
+      return { id: x.id, name: text(x.name, `Line ${i + 1} name`, 120), category: x.category as SiteKitCategory, required: int(x.required, `Line ${i + 1} needed`, 0, 1000), owner: x.owner as SiteKitOwner, note: text(x.note, `Line ${i + 1} note`, 300, false), atEnd, handOverRef, responsible };
     });
     const now = this.now();
     return this.store.transaction(async (tx) => {

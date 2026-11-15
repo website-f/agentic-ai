@@ -209,6 +209,13 @@ export class GuardPhoneController {
     return this.db.asUser(uid, (svc, u) => svc.guardPhone.issueCode(u, id.slice(0, 120)));
   }
 
+  @Post('companies/:id/guard-phones/codes')
+  issueCodes(@UserId() uid: string, @Param('id') id: string, @Body() b: Record<string, unknown>) {
+    on();
+    const ids = Array.isArray(b?.personIds) ? (b.personIds as unknown[]).filter((x): x is string => typeof x === 'string').map((x) => x.slice(0, 120)).slice(0, 101) : [];
+    return this.db.asUser(uid, (svc, u) => svc.guardPhone.issueCodes(u, id.slice(0, 120), ids));
+  }
+
   @Get('companies/:id/guard-phones')
   phones(@UserId() uid: string, @Param('id') id: string) {
     on();

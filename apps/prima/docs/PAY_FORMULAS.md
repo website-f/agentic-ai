@@ -219,3 +219,11 @@ Fauzan approved installing it (5 Nov 2026); it goes in through the release path 
   `GET /site-hours`, `POST /site-hours/approve`, `apps/web/src/views/SiteHours.tsx`.
 - Tests: `packages/core/test/pay-formulas.test.ts`, `packages/core/test/site-hours.test.ts`,
   `apps/api/test/pay-formulas-pg.test.ts`.
+
+## Roster engine settings (Part O, 13 Nov 2026)
+
+Guard formulas can carry `payMode` (`count_days` default, `roster_hybrid`, `hourly`), `normalWorkingDaysPerMonth` (IKEA
+22, some sites 24, default 26), `incompleteMonthMethod` (`working_days` or `s18A_calendar`), `otRateBase` with
+`otFixedBase` and `otRateRounding`, `restDayExtraTreatment`, `restDayNormalRateBase`, `restDayOtMultiplier` and
+`hourlyRate`. The ACT Director sets them per site. A divisor under 26 and normal hours above 8 are law flags for the
+CEO, never refusals. See docs/GUARD_ROSTER_ENGINE.md.

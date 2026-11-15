@@ -43,14 +43,11 @@ const proposal = JSON.parse(readFileSync(resolve(ROOT, 'db/proposed/pay-formulas
 const manifest = JSON.parse(readFileSync(resolve(ROOT, 'db/release-manifest.json'), 'utf8')) as { base: { sha256: string }; modules: { id: string }[] };
 
 describe('pay formulas module (files)', () => {
-  // P96 (Fauzan, 8 Nov 2026): an optional module, installed later as its own step and never with a release; its bytes are
-  // pinned in OPTIONAL_MODULE_SPECS, the same as its proposal, and it is not in the release manifest.
-  it('pins the module bytes on the release base as an optional module, never in the release manifest', () => {
+  it('pins the module bytes on the release base and is on the release list (A3, 11 Nov 2026)', () => {
     assert.equal(proposal.base.sha256, manifest.base.sha256);
     const m = proposal.modules[0];
     assert.equal(createHash('sha256').update(readFileSync(resolve(ROOT, m.path))).digest('hex'), m.sha256);
-    assert.equal(manifest.modules.find((x) => x.id === m.id), undefined, 'not in the release manifest');
-    assert.equal(OPTIONAL_MODULE_SPECS.find((x) => x.id === m.id)?.sha256, m.sha256, 'optional, with the same bytes');
+    assert.ok(manifest.modules.some((x) => x.id === m.id), 'on the release list (A3)');
     assert.equal(readFileSync(resolve(ROOT, m.path), 'utf8'), payFormulasModuleSql());
   });
 });

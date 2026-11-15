@@ -514,7 +514,11 @@ export interface FinSqlSync {
   at: IsoDateTime;
 }
 
-/** The only shape a connector may have: reads, never writes. No implementation in this repository calls SQL Account. */
+/**
+ * The read-only connector shape. Writing to SQL Account is allowed only through SqlAccountPoster (sql-posting.ts), the
+ * vendor API or SDK, one company book per call (Fauzan, 13 Nov 2026, Build 1); never its tables. No implementation in
+ * this repository calls SQL Account.
+ */
 export interface SqlAccountReader {
   readPeriod(companyFile: string, period: string): Promise<FinSqlSnapshot>;
 }

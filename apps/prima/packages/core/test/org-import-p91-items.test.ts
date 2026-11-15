@@ -1,6 +1,7 @@
 // P91 (Fitri, 9 Nov 2026: "where do I add the items? Add manually, or by Excel/PDF?"): item types, units with labels and
 // bulk stock load from the old system's lists through the Items screen's own actions and permission checks. Messy
 // synthetic sheets only (Malay and English headers, a title above, columns in any order).
+import { noLoadGate } from './no-load-gate';
 import { describe, expect, it } from 'vitest';
 import {
   EXTRA_IMPORTS,
@@ -28,7 +29,7 @@ const NOW = myt(TODAY, '10:30');
 
 function fresh() {
   const ds = generateDataset({ today: TODAY, now: NOW });
-  const store = withOrgLinks(new MemoryStore(ds));
+  const store = noLoadGate(withOrgLinks(new MemoryStore(ds)));
   const svc = new PrimaService(store, () => NOW);
   const user = (id: string) => ds.users.find((u) => u.id === id)!;
   return { ds, svc, user };

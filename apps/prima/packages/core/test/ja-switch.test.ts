@@ -1,3 +1,4 @@
+import { guardPayPrep } from './guard-pay-preparer';
 import { describe, expect, it } from 'vitest';
 import {
   MemoryStore,
@@ -206,7 +207,7 @@ describe('the switch-over numbers', () => {
 describe('guard pay side by side on test data', () => {
   it('compares the COO-approved Prima pay run with the JA payslips, to the tolerance the ACT Director set, then switches', async () => {
     const { svc, ds } = fresh();
-    const hr = await svc.user('u-pwvsb-hr');
+    const hr = await svc.user('u-pwvsb-hr'), prep = await guardPayPrep(svc);
     const coo = await svc.user('u-coo');
     const ceo = await svc.user('u-fauzan');
     const stager = await svc.user('u-act-aud1');
@@ -219,10 +220,10 @@ describe('guard pay side by side on test data', () => {
     await svc.jaSwitchAct(coo, 'co-arsh', 'payroll', 'start', { from, note: 'Arrow Shield pay side by side' });
 
     // HR prepares October, the COO approves it.
-    const run = await svc.prepareGuardPay(await svc.user('u-ae-arsh'), 'co-arsh', '2026-10', []);
+    const run = await svc.prepareGuardPay(prep, 'co-arsh', '2026-10', []);
     let r = await svc.jaSwitchReport(lead, 'co-arsh', 'payroll');
     expect(r.comparison!.primaReady).toBe(false);
-    await svc.guardPayStep(await svc.user('u-ae-arsh'), run.id, 'submit');
+    await svc.guardPayStep(prep, run.id, 'submit');
     await svc.guardPayStep(coo, run.id, 'approve', { note: 'Side-by-side month checked' });
 
     // The JA payslips for the same guards: one RM0.30 rounding (inside the tolerance), one RM25 overtime gap, one guard JA does not pay.

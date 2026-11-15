@@ -13,6 +13,7 @@ export const CAT_LABEL: Record<ItemCategory, string> = {
   uniform: 'Uniform',
   footwear: 'Shoes and boots',
   vest: 'Vests',
+  ballistic_vest: 'Bulletproof jackets',
   torchlight: 'Torchlights',
   radio: 'Radios',
   phone: 'Phones',

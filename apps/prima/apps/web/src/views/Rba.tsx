@@ -204,7 +204,6 @@ function Committee({ b }: { b: RbaBoard }) {
               {'note' in c.current && c.current.note ? ` · ${c.current.note}` : ''}
             </div>
           )}
-          {c.current && !c.canName && <div className="muted small" style={{ padding: '0 12px 12px' }}>Names and seats only. The Chief of Staff keeps the full record.</div>}
         </div>
       )}
       {edit && (

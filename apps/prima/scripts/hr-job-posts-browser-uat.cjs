@@ -121,13 +121,9 @@ const TAG = 'UAT synthetic';
     step('company manager sees no applicant list', !(await vac(GUARD).getByRole('button', { name: /^Applicants/ }).count()));
     await as('Aisyah binti Rahman');
     await nav(['HR monitor', 'HR', 'People']);
-    {
-      const it = vac(CLERK);
-      await it.getByLabel(`Comment on ${CLERK}`).fill('Signed for PWVSB (synthetic)');
-      await it.getByRole('button', { name: 'Sign the approval' }).click();
-      await p.waitForTimeout(900);
-    }
-    step('HR Director signs the central vacancy', /open/.test(await vac(CLERK).innerText()));
+    // C2 (Fauzan, 11 Nov 2026): the CEO signs a PWVSB central post, so his approval already opened it;
+    // the HR Director has nothing to sign.
+    step('central vacancy is open on the CEO signature; the HR Director has no sign button', /open/.test(await vac(CLERK).innerText()) && !(await vac(CLERK).getByRole('button', { name: 'Sign the approval' }).count()));
 
     // 3. HR drafts the guard job post, checks JobStreet is marked paid, sends it for approval.
     await as('PWVSB HR');

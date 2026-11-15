@@ -10,6 +10,8 @@
     "start:dev": "npm run build && node dist/src/main.js",
     "db:reset": "npm run build && node dist/src/reset-db.js",
     "entra:link": "node dist/src/entra-link.js",
+    "guards:logins": "node dist/src/guard-logins.js",
+    "locations:purge": "node dist/src/purge-locations.js",
     "db:setup": "node dist/src/db-setup.js",
     "pins:hash": "node dist/src/hash-pins.js",
     "reviews:tidy": "node dist/src/tidy-reviews.js",

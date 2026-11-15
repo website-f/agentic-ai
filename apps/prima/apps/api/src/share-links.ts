@@ -65,10 +65,13 @@ th,td{text-align:left;padding:8px 10px;border-bottom:1px solid #e3e6ea;font-size
 @media (prefers-color-scheme:dark){body{background:#14171b;color:#e6e9ed}table{background:#1c2026}th{background:#262b33}
 th,td{border-color:#2f353e}.muted{color:#9aa4b0}.note{background:#2a2414;border-color:#5a4a1e}}`;
 
-/** CSP for the page: no scripts, no images, no forms, only the one inline style above (by its hash). */
+/**
+ * CSP for the page: no scripts, no images, only the one inline style above (by its hash). Forms post only back to this
+ * API (client portal A7: feedback and requests).
+ */
 export function shareCsp(): string {
   const h = createHash('sha256').update(SHARE_STYLE).digest('base64');
-  return `default-src 'none'; style-src 'sha256-${h}'; frame-ancestors 'none'; form-action 'none'; base-uri 'none'`;
+  return `default-src 'none'; style-src 'sha256-${h}'; frame-ancestors 'none'; form-action 'self'; base-uri 'none'`;
 }
 
 function page(title: string, body: string): string {
@@ -81,7 +84,40 @@ export function shareGonePage(): string {
   return page('Report link', `<h1>This report link is not available</h1><p class="muted">It may have expired or been withdrawn. Please ask your security company for a new link.</p>`);
 }
 
-export function shareReportPage(r: ClientShareReport, opts: { token?: string } = {}): string {
+const REQUEST_LABEL: Record<string, string> = {
+  more_guards: 'More guards',
+  fewer_guards: 'Fewer guards',
+  temporary: 'Temporary post or event',
+  schedule: 'Change of hours or schedule',
+  other: 'Other request',
+};
+
+/** The two forms a client uses (client portal A7). Plain HTML posts, no script. token is the link's own token. */
+function sendForms(token: string): string {
+  const t = encodeURIComponent(token);
+  return `<h2>Tell us how we are doing</h2>
+<form method="post" action="${t}/feedback"><p><label>Your name and position<br><input name="from" maxlength="120" required></label></p>
+<p><label>Score (1 very unhappy, 5 very happy)<br><select name="score" required><option value="">Choose</option>${[5, 4, 3, 2, 1].map((n) => `<option value="${n}">${n}</option>`).join('')}</select></label></p>
+<p><label>Comment<br><textarea name="comment" maxlength="500" rows="3"></textarea></label></p><p><button type="submit">Send feedback</button></p></form>
+<h2>Make a request</h2>
+<form method="post" action="${t}/request"><p><label>Your name and position<br><input name="from" maxlength="120" required></label></p>
+<p><label>What do you need<br><select name="requestKind" required><option value="">Choose</option>${Object.entries(REQUEST_LABEL).map(([k, v]) => `<option value="${k}">${esc(v)}</option>`).join('')}</select></label></p>
+<p><label>Details<br><textarea name="what" maxlength="500" rows="3" required></textarea></label></p>
+<p><label>Needed by (optional)<br><input type="date" name="neededBy"></label></p><p><button type="submit">Send request</button></p></form>
+<p class="muted">Your Operations Manager handles what you send here. For anything urgent, please call your security company.</p>`;
+}
+
+/** The answer after a client sends feedback or a request. */
+export function shareSentPage(ok: boolean, message: string): string {
+  return page(
+    ok ? 'Sent' : 'Not sent',
+    ok
+      ? `<h1>Thank you</h1><p>${esc(message)}</p><p class="muted">You can go back to your report.</p>`
+      : `<h1>Not sent</h1><p>${esc(message)}</p><p class="muted">Please go back and try again, or contact your account manager.</p>`,
+  );
+}
+
+export function shareReportPage(r: ClientShareReport, token: string | null = null): string {
   const sites = r.sites.length
     ? `<div class="wrap"><table><thead><tr><th>Site</th><th>Patrol checkpoints scanned</th><th>Supervisor visits</th></tr></thead><tbody>${r.sites
         .map((s) => `<tr><td>${esc(s.name)}</td><td>${s.patrolScans}</td><td>${s.visits}</td></tr>`)
@@ -97,16 +133,15 @@ export function shareReportPage(r: ClientShareReport, opts: { token?: string } =
         .map((x) => `<tr><td>${esc(x.period)}</td><td>${esc(money(x.amount))}</td><td>${esc(x.sentOn ?? 'Not yet sent')}</td></tr>`)
         .join('')}</tbody></table></div><p class="muted">This lists invoices sent for months wholly inside this period. It is not a statement of account and does not show payments.</p>`
     : `<p class="muted">No invoices are recorded for this period.</p>`;
-  // J1 (11 Nov 2026): a report kept as a file opens as its PDF from the link (a relative address: the token's own path).
-  const pdf = new Set(r.pdfPeriods ?? []);
-  const token = opts.token ?? null;
-  const reportItem = (p: string) => (token && pdf.has(p) ? `<a href="${esc(token)}/doc/report/${esc(p)}">${esc(p)} (PDF)</a>` : esc(p));
-  const reports = r.reports.length ? `<p>Monthly service reports sent for: ${r.reports.map(reportItem).join(', ')}.</p>` : `<p class="muted">No monthly service reports recorded for this period.</p>`;
+  const files = new Set(token ? (r.reportFiles ?? []) : []);
+  const reports = r.reports.length
+    ? `<p>Monthly service reports sent for: ${r.reports.map((p) => (files.has(p) ? `<a href="${encodeURIComponent(token!)}/report/${esc(p)}">${esc(p)} (PDF)</a>` : esc(p))).join(', ')}.</p>`
+    : `<p class="muted">No monthly service reports recorded for this period.</p>`;
   return page(
     `Service report: ${r.clientName}`,
     `<h1>Service report for ${esc(r.clientName)}</h1>
 <p class="muted">From ${esc(r.companyName)}. Period ${esc(r.from)} to ${esc(r.to)}. Prepared ${esc(r.generatedAt.slice(0, 16).replace('T', ' '))}. This link works until ${esc(r.expiresOn)}.</p>
 <h2>Your sites</h2>${sites}<h2>Incidents at your sites</h2>${incidents}<h2>Invoices</h2>${invoices}<h2>Monthly reports</h2>${reports}
-<p class="note">Read-only summary from your security company's records. For questions or corrections, contact your account manager.</p>`,
+${token && r.canSend ? sendForms(token) : ''}<p class="note">Summary from your security company's records. For questions or corrections, contact your account manager.</p>`,
   );
 }

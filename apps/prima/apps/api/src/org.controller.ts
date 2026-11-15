@@ -57,6 +57,12 @@ export class OrgController {
     return mapped(this.db.asUser(uid, async (svc, u) => svc.guideCards(u)));
   }
 
+  /** V13: the read-only process page: owner, approvers, papers, records kept and time targets per workflow rule. */
+  @Get('processes')
+  processes(@UserId() uid: string) {
+    return mapped(this.db.asUser(uid, async (svc, u) => svc.processSheet(u)));
+  }
+
   /** My hand-overs from other departments. */
   @Get('inbox')
   inbox(@UserId() uid: string, @Query('offset') offset?: string) {
@@ -97,7 +103,7 @@ export class OrgController {
   commit(@UserId() uid: string, @Param('kind') kind: string, @Body() b: Record<string, unknown>) {
     const k = kindOf(kind);
     return mapped(
-      this.db.asUser(uid, (svc, u) => svc.orgImport.commit(u, k, str(b?.companyId, 60) || null, str(b?.csv, 1_000_001), str(b?.fingerprint, 64), importOptions(b))),
+      this.db.asUser(uid, (svc, u) => svc.orgImport.commit(u, k, str(b?.companyId, 60) || null, str(b?.csv, 1_000_001), str(b?.fingerprint, 64), { ...importOptions(b), backup: str(b?.backup, 200) })),
     );
   }
 
@@ -147,6 +153,17 @@ export class OrgController {
       console.error('Import AI request failed'); // Never log the brief or the answer.
       throw new ServiceUnavailableException('The AI helper could not answer. Match the columns yourself; the rest of the import works without it.');
     }
+  }
+
+  // N2 bulk data load (Fauzan, 11 Nov 2026): each load's counts, and the CEO's OK before that person's next load.
+  @Get('import-loads')
+  loads(@UserId() uid: string) {
+    return mapped(this.db.asUser(uid, (svc, u) => svc.orgImport.loads(u)));
+  }
+
+  @Post('import-loads/:id/ok')
+  okLoad(@UserId() uid: string, @Param('id') id: string, @Body() b: Record<string, unknown>) {
+    return mapped(this.db.asUser(uid, (svc, u) => svc.orgImport.okLoad(u, str(id, 120), str(b?.comment, 500))));
   }
 }
 

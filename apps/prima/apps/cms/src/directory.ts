@@ -92,6 +92,11 @@ export interface DeskSeat {
   staffName: string | null;
   /** Clocked in on Prima and not yet out. Older copies leave it out, and then the desk treats the person as on the desk. */
   onDesk?: boolean;
+  /**
+   * The Microsoft account object ID of the rostered person's own Prima account (E7). Only used when operator Microsoft
+   * sign-in is on; older copies and people with no linked account leave it out.
+   */
+  entraOid?: string;
 }
 
 export interface Directory {

@@ -1,0 +1,33 @@
+# Quick checks for pushes to ordinary development branches (about 2 to 3 minutes).
+# The full "CI" workflow (ci.yml) still runs on every pull request and on main and release branches,
+# and those full checks are what protect main. This workflow is never a substitute for them.
+name: Quick checks
+on:
+  push:
+    branches-ignore:
+      - main
+      - 'release/**'
+permissions:
+  contents: read
+concurrency:
+  group: quick-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quick:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Workflow and release contract tests
+        run: node --test scripts/staging-schema-gate.test.mjs scripts/release-workflow-contract.test.mjs scripts/arisha-readiness.test.mjs
+      - run: npm ci
+      - run: npm run build -w @prima/core
+      - name: Typecheck all workspaces
+        run: npm run typecheck

@@ -47,6 +47,9 @@ describe('client report link signing', () => {
     assert.ok(html.includes('&lt;script&gt;'));
     assert.match(html, /does not show payments/);
     assert.match(shareCsp(), /default-src 'none'; style-src 'sha256-/);
+    assert.match(shareCsp(), /form-action 'self'/);
+    // A preview (no token) has no forms and no download links.
+    assert.ok(!html.includes('<form'));
     assert.ok(!shareCsp().includes('script-src'));
   });
 });
@@ -89,6 +92,26 @@ describe('client report links on PostgreSQL', () => {
     const actions = await db.asUser('u-fauzan', async (_svc, _u, store) => (await store.list('audit', {})).filter((a) => a.entityId === acct.id).map((a) => a.action));
     for (const a of ['client.share.create', 'client.share.view', 'client.share.revoke']) assert.ok(actions.includes(a), a);
   });
+  it('client portal (A7): the client sends feedback and a request through the link, inside its own company only', async () => {
+    const today = nowMyt().slice(0, 10);
+    const siteId = await db.asUser('u-cm-sasa', async (svc, u) => (await svc.clientBoard(u)).canAdd.find((c) => c.companyId === 'co-sasa')!.sites[0].id);
+    const acct = await db.asUser('u-cm-sasa', (svc, u) => svc.addClientAccount(u, { companyId: 'co-sasa', name: 'PG Portal Client', siteIds: [siteId], contractEndsOn: null }));
+    const { link } = await db.asUser('u-cm-sasa', (svc, u) => svc.createClientShareLink(u, acct.id, { recipient: 'Facilities manager', from: addDays(today, -30), to: today, days: 5 }));
+    await db.asShareLink('co-sasa', (svc) => svc.clientShareSend('co-sasa', acct.id, link.id, { kind: 'feedback', from: 'Facilities manager', score: 4, comment: 'Good' }));
+    await db.asShareLink('co-sasa', (svc) => svc.clientShareSend('co-sasa', acct.id, link.id, { kind: 'request', from: 'Facilities manager', requestKind: 'schedule', what: 'Start the night shift at 7pm' }));
+    await assert.rejects(db.asShareLink('co-inas', (svc) => svc.clientShareSend('co-inas', acct.id, link.id, { kind: 'feedback', from: 'Facilities manager', score: 5 })), /not found/i);
+    const seen = await db.asUser('u-cm-sasa', (svc, u) => svc.clientShareLinks(u, acct.id));
+    assert.equal(seen.fromLink.ratings.length, 1);
+    assert.equal(seen.fromLink.requests.length, 1);
+    const board = await db.asUser('u-coo', (svc, u) => svc.clientPortalBoard(u));
+    assert.equal(board.rows.find((r) => r.clientId === acct.id)?.openRequests, 1);
+    const actions = await db.asUser('u-fauzan', async (_svc, _u, store) => (await store.list('audit', {})).filter((a) => a.entityId === acct.id).map((a) => a.action));
+    for (const a of ['client.share.feedback', 'client.share.request']) assert.ok(actions.includes(a), a);
+    const html = shareReportPage(await db.asShareLink('co-sasa', (svc) => svc.clientShareReport('co-sasa', acct.id, link.id)), 'tok.sig');
+    assert.match(html, /action="tok.sig\/feedback"/);
+    assert.ok(!html.includes('<script'));
+  });
+
   it('keeps a revoke and a new link when views race them (Arisha main, 3 Nov 2026)', async () => {
     const today = nowMyt().slice(0, 10);
     const siteId = await db.asUser('u-cm-sasa', async (svc, u) => (await svc.clientBoard(u)).canAdd.find((c) => c.companyId === 'co-sasa')!.sites[0].id);

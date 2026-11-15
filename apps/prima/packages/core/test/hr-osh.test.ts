@@ -49,7 +49,14 @@ describe('Office OSH', () => {
     expect(i.reportBy).toBe(addDays(TODAY, 7));
     const board = await svc.officeOsh(coord);
     expect(board.rows.every((r) => r.companyId === companyId)).toBe(true);
-    expect(board.rows[0].incidents[0].form).toBe('JKKP 6');
+    // C8 (Fauzan, 11 Nov 2026): the coordinator reports, but HR keeps the accident card until HR lets them see it.
+    expect(board.rows[0].incidents).toEqual([]);
+    expect(board.rows[0].incidentsHidden).toBe(true);
+    const rec = (await svc.officeOsh(hr)).rows.find((r) => r.companyId === companyId)!.coordinator!;
+    await expect(svc.setOshCoordinatorSees(coord, { recordId: rec.id, on: true, reason: 'Trained now' })).rejects.toBeInstanceOf(AccessDenied);
+    await expect(svc.setOshCoordinatorSees(hr, { recordId: rec.id, on: true, reason: '' })).rejects.toThrow(/reason/);
+    await svc.setOshCoordinatorSees(hr, { recordId: rec.id, on: true, reason: 'Coordinator trained, HR agrees' });
+    expect((await svc.officeOsh(coord)).rows[0].incidents[0].form).toBe('JKKP 6');
     await expect(svc.recordOshReport(coord, i.id, { reportedOn: TODAY, ref: '' })).rejects.toThrow(/reference/);
     await svc.recordOshReport(coord, i.id, { reportedOn: TODAY, ref: 'JKKP6-0001' });
     await expect(svc.recordOshReport(hr, i.id, { reportedOn: TODAY, ref: 'again' })).rejects.toThrow(/Already/);

@@ -98,6 +98,8 @@ export interface FinPackInput {
   nameOf: (id: Id) => string;
   /** Close exceptions still open for the month, worked out by the caller. */
   openExceptions: number;
+  /** The staff pay day in force (Finance settings). */
+  payDay?: number;
 }
 
 /** Everything in the pack, worked out from Finance's own records. */
@@ -111,7 +113,7 @@ export function finPackData(f: FinStatus, x: FinPackInput) {
     return { bank: `${b.bank} ${b.accountMasked}`, closing: st ? st.closing : null };
   });
   const cashKnown = banks.filter((b) => b.closing != null);
-  const c13 = finCash13(f, x.runs, today);
+  const c13 = finCash13(f, x.runs, today, x.payDay);
   // Invoices over 90 days.
   const age = (f.ageing ?? []).find((a) => a.period === period) ?? null;
   const arTotal = age ? round2(age.ar.current + age.ar.d1to30 + age.ar.d31to60 + age.ar.d61to90 + age.ar.over90) : null;

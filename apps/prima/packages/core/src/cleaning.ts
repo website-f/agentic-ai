@@ -151,6 +151,9 @@ export interface CleaningSupply {
   perDay: number;
   /** Brands the client approved (KPM Lampiran A4), for the store and the supervisor to check. */
   approvedBrands: string;
+  /** Part T4: site Min and Max on hand, set by the OM and approved by the OGM. Null or missing = not set. */
+  minOnHand?: number | null;
+  maxOnHand?: number | null;
 }
 
 /**
@@ -165,7 +168,15 @@ export interface CleaningStockEntry {
   kind: 'delivery' | 'check' | 'client_ack';
   date: IsoDate;
   /** Supply counts: sent (delivery), received (delivery, by the supervisor) or on hand (check). */
-  supplies: { supplyId: Id; sent: number | null; counted: number | null }[];
+  supplies: {
+    supplyId: Id;
+    sent: number | null;
+    counted: number | null;
+    /** Part T5/T8: the store item it came out of (missing = not from store), the area and the condition at issue. */
+    stockItemId?: Id | null;
+    area?: string | null;
+    condition?: 'new' | 'good_used' | null;
+  }[];
   /** Equipment: sent (delivery) or working and broken (check). */
   equipment: { equipmentId: Id; sent: number | null; working: number | null; broken: number | null }[];
   note: string;
@@ -178,6 +189,8 @@ export interface CleaningStockEntry {
   proofIds: Id[];
   /** kind client_ack only. */
   ack?: CleaningClientAck | null;
+  /** Part T3e: the site supplies request this delivery came from (store stock was taken off in the same step). */
+  requestId?: Id | null;
 }
 
 /**
@@ -933,7 +946,7 @@ export function setupProblems(site: CleaningSite): string[] {
 
 // ---------- Supplies and equipment ----------
 
-export type SupplyFlag = 'over_use' | 'under_use' | 'reorder' | 'short_delivery' | 'no_check' | 'ok';
+export type SupplyFlag = 'over_use' | 'under_use' | 'reorder' | 'short_delivery' | 'no_check' | 'below_min' | 'above_max' | 'ok';
 
 export interface SupplyStatus {
   supply: CleaningSupply;
@@ -1000,6 +1013,9 @@ export function stockStatus(
     if (usePct !== null && usePct < R.underUsePct) flags.push('under_use');
     if (daysLeft !== null && daysLeft < R.reorderDays) flags.push('reorder');
     if (shortDelivered > 0) flags.push('short_delivery');
+    // Part T4: Min/Max only when set; "not set" is never a default number.
+    if (onHand !== null && sup.minOnHand != null && onHand < sup.minOnHand) flags.push('below_min');
+    if (onHand !== null && sup.maxOnHand != null && onHand > sup.maxOnHand) flags.push('above_max');
     if (!flags.length) flags.push('ok');
     return { supply: sup, onHand, lastCheck: last?.date ?? null, used, budget, usePct, shortDelivered, daysLeft, flags };
   });

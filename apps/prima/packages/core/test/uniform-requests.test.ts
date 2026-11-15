@@ -87,7 +87,7 @@ describe('Uniform requests: the OM asks, the store issues, the OM collects the s
     expect((await svc.decideUniformRequest(om, again.id, { action: 'cancel' })).status).toBe('cancelled');
   });
 
-  it('follows the uniform allowance: 3 free in 12 months, 4th and 5th only when the guard pays, 6th refused', async () => {
+  it('follows the uniform allowance: 3 free in 12 months, every piece after that only when the guard pays, no upper limit', async () => {
     const { svc, shirt, guard, po, om, sk } = await setup();
     const issue = async (qty: number, guardPays?: { receiptNo: string; amount: number }) => {
       const r = await svc.requestUniform(om, { staffNo: guard.staffNo, stockItemId: shirt.id, qty, reason: 'Replacement', guardPays });
@@ -95,11 +95,12 @@ describe('Uniform requests: the OM asks, the store issues, the OM collects the s
       return r;
     };
     await issue(3);
-    await expect(svc.requestUniform(om, { staffNo: guard.staffNo, stockItemId: shirt.id, qty: 1, reason: 'Torn' })).rejects.toThrow(/only when the guard pays/);
+    await expect(svc.requestUniform(om, { staffNo: guard.staffNo, stockItemId: shirt.id, qty: 1, reason: 'Torn' })).rejects.toThrow(/paid by the guard/);
     const paid = await issue(2, { receiptNo: 'R-001', amount: 80 });
     expect(paid).toMatchObject({ history: { pieces: 3, last: TODAY }, early: true, guardPays: { receiptNo: 'R-001', amount: 80 } });
-    await expect(
-      svc.requestUniform(om, { staffNo: guard.staffNo, stockItemId: shirt.id, qty: 1, reason: 'Torn', guardPays: { receiptNo: 'R-2', amount: 40 } }),
-    ).rejects.toThrow(/the 6th is refused/);
+    // Fauzan, 13 Nov 2026: the 6th piece is allowed when the guard pays.
+    const sixth = await issue(1, { receiptNo: 'R-2', amount: 40 });
+    expect(sixth.guardPays).toMatchObject({ receiptNo: 'R-2' });
+    await expect(svc.requestUniform(om, { staffNo: guard.staffNo, stockItemId: shirt.id, qty: 1, reason: 'Torn' })).rejects.toThrow(/paid by the guard/);
   });
 });

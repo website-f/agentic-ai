@@ -1,9 +1,21 @@
 name: CI
+# Full checks run on every pull request and on pushes to main and release branches.
+# Pushes to ordinary development branches run only "Quick checks" (quick-checks.yml),
+# so one push to a PR branch no longer starts two identical full runs.
 on:
   push:
+    branches:
+      - main
+      - 'release/**'
   pull_request:
+  workflow_dispatch:
 permissions:
   contents: read
+# A newer push to the same pull request cancels the older, now-stale PR run.
+# Runs on main and release branches are never cancelled.
+concurrency:
+  group: ci-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   test:
@@ -55,6 +67,8 @@ jobs:
         env:
           NODE_OPTIONS: --max-old-space-size=6144
         run: npm test -w @prima/core -- --maxWorkers=1
+      - name: Release list fingerprints match the pinned module SQL (disposable database)
+        run: DATABASE_URL=postgres://postgres:ci@localhost:5432/postgres node scripts/release-module-fingerprints.cjs --check
       - run: npm test -w @prima/api
       - run: npm test -w @prima/cms
       - name: Test offline replay over isolated HTTP and PostgreSQL

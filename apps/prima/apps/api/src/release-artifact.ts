@@ -9,36 +9,40 @@ export const MODULE_SPECS=[
  {id:'job_email',path:'apps/api/src/connections-mail/job-email-v2.sql',requires:[]},
  // One item register (Fauzan, 6 Nov 2026; owner chose the release path for staging, 8 Nov 2026).
  {id:'item_register',path:'db/modules/item-register-v1.sql',requires:[]},
+ // Agentic Office: the QR item register part two (P85, the office's own; not upstream), right after the item register.
  {id:'item_register_v2',path:'db/modules/item-register-v2.sql',requires:['item_register']},
- // Agentic Office: the office database already has these modules installed (P85 and the combined candidate), so the
- // office release keeps them activated after upstream's seven, in the order of upstream's db/proposed `after` lists.
+ // All 25 other database parts on the release list (A3: Fauzan, 11 Nov 2026, "install all 25"). Order: dependencies
+ // first (guard_pay after pay_formulas, panel after walls, run links after company office). The CEO runs each install.
  {id:'central_admin_walls',path:'db/modules/central-admin-walls-v1.sql',requires:[]},
  {id:'central_admin_panel',path:'db/modules/central-admin-panel-v1.sql',requires:['central_admin_walls']},
  {id:'central_admin_delegations',path:'db/modules/central-admin-delegations-v1.sql',requires:[]},
  {id:'central_admin_legal_holds',path:'db/modules/central-admin-legal-holds-v1.sql',requires:[]},
+ {id:'client_codes',path:'db/modules/client-codes-v1.sql',requires:[]},
  {id:'company_office',path:'db/modules/company-office-v1.sql',requires:[]},
  {id:'company_run_links',path:'db/modules/company-run-links-v1.sql',requires:['company_office']},
  {id:'org_links',path:'db/modules/org-links-v1.sql',requires:[]},
  {id:'special_ops',path:'db/modules/special-ops-v1.sql',requires:[]},
  {id:'fw_welfare',path:'db/modules/fw-welfare-v1.sql',requires:[]},
  {id:'fw_recruit',path:'db/modules/fw-recruit-v1.sql',requires:[]},
+ {id:'fw_recruitment_cost',path:'db/modules/fw-recruitment-cost-v1.sql',requires:[]},
+ {id:'fw_epf_socso_recharge',path:'db/modules/fw-epf-socso-recharge-v1.sql',requires:[]},
+ {id:'pay_formulas',path:'db/modules/pay-formulas-v1.sql',requires:[]},
+ {id:'guard_pay',path:'db/modules/guard-pay-v1.sql',requires:['pay_formulas']},
+ {id:'am_extras',path:'db/modules/am-extras-v1.sql',requires:[]},
+ {id:'cleaning_ops',path:'db/modules/cleaning-ops-v1.sql',requires:[]},
+ {id:'governance_registers',path:'db/modules/governance-registers-v1.sql',requires:[]},
+ {id:'pdpa_register',path:'db/modules/pdpa-register-v1.sql',requires:[]},
+ {id:'quality_compliance',path:'db/modules/quality-compliance-v1.sql',requires:[]},
+ {id:'rba_readiness',path:'db/modules/rba-readiness-v1.sql',requires:[]},
+ {id:'site_surveys',path:'db/modules/site-surveys-v1.sql',requires:[]},
+ {id:'staff_directory',path:'db/modules/staff-directory-v1.sql',requires:[]},
+ {id:'tender_opportunities',path:'db/modules/tender-opportunities-v1.sql',requires:[]},
+ {id:'time_slip',path:'db/modules/time-slip-v1.sql',requires:[]},
+ {id:'speak_up_wall',path:'db/modules/speak-up-wall-v1.sql',requires:[]},
 ] as const;
-// Optional modules. Never included in release activation implicitly and never in db/release-manifest.json, so the office's
-// prima-setup (which installs every manifest module) never installs them. Upstream lists the four Central Admin modules
-// here; the office activates those above. Guard pay (Fauzan, 8 Nov 2026): the pay formulas and guard pay database is
-// installed LATER, as its own step; Prima takes over guard pay on 1 August 2027 and until then the JA Group app pays and
-// Prima pay runs are side-by-side trials only. An operator installs them one at a time, pay_formulas then guard_pay, with
-// the explicit optional confirmation (docs/RELEASE_MODULE_INSTALLATION.md). The bytes are pinned here, not in the manifest.
-export const OPTIONAL_MODULE_SPECS=[
- {id:'pay_formulas',path:'db/modules/pay-formulas-v1.sql',sha256:'38718470f582cb438a08d42d6131187aa55c0613e3aa58a924836f77cfbfda72',requires:[]},
- {id:'guard_pay',path:'db/modules/guard-pay-v1.sql',sha256:'c6ca56b61b076181eba45bd1c1c88d766c9339b981e45c41154b8fee0c32d8a1',requires:['pay_formulas']},
- // E5 (Fauzan, 11 Nov 2026): PGL is also an employer of staff; the hand-over rule learns every central employer. Installed
- // through the CEO-run migration as its own step (needs org_links), never by the office's start-up loop.
- {id:'central_employers',path:'db/modules/central-employers-v1.sql',sha256:'29d388a4ef7b80c547ebdf9b903d59b7138499249aae435d47885223595cdd03',requires:['org_links']},
-] as const satisfies readonly {readonly id:string;readonly path:string;readonly sha256:string;readonly requires:readonly string[]}[];
-export type OptionalModuleId=typeof OPTIONAL_MODULE_SPECS[number]['id'];
-export const isOptionalModule=(id:string):id is OptionalModuleId=>OPTIONAL_MODULE_SPECS.some(m=>m.id===id);
-export type ReleaseModuleId=typeof MODULE_SPECS[number]['id'] | typeof OPTIONAL_MODULE_SPECS[number]['id'];
+// Catalog-only optional modules: none since A3 (11 Nov 2026) put every module on the release list.
+export const OPTIONAL_MODULE_SPECS:readonly {id:string;path:string;requires:readonly string[]}[]=[];
+export type ReleaseModuleId=typeof MODULE_SPECS[number]['id'];
 export type ReleaseArtifact={version:1;base:{path:string;sha256:string};modules:Array<{id:ReleaseModuleId;path:string;sha256:string;requires:readonly string[]}>};
 export const releaseRoot=()=>resolve(__dirname,'../../../..');
 export const sha256=(b:string|Buffer)=>createHash('sha256').update(b).digest('hex');
@@ -53,5 +57,3 @@ export function releaseArtifact(root=releaseRoot()):{manifest:ReleaseArtifact;sh
  return {manifest:m,sha256:sha256(bytes)};
 }
 export function selectedModuleSql(id:ReleaseModuleId,root=releaseRoot()){const a=releaseArtifact(root),m=a.manifest.modules.find(x=>x.id===id);if(!m)throw Error('Unknown release module.');return {artifact:a,module:m,sql:readFileSync(resolve(root,m.path),'utf8')};}
-/** An optional module's pinned bytes, bound to the exact verified release. Only the explicit operator command uses this. */
-export function optionalModuleSql(id:ReleaseModuleId,root=releaseRoot()){const a=releaseArtifact(root),s=OPTIONAL_MODULE_SPECS.find(x=>x.id===id);if(!s||a.manifest.modules.some(x=>x.id===id))throw Error('Unknown optional module.');const p=resolve(root,s.path);if(!lstatSync(p).isFile()||lstatSync(p).isSymbolicLink())throw Error('Optional module SQL unavailable.');const bytes=readFileSync(p);if(sha256(bytes)!==s.sha256)throw Error('Packaged optional SQL does not match its pinned hash.');return {artifact:a,module:{id:s.id as ReleaseModuleId,path:s.path,sha256:s.sha256,requires:s.requires as readonly string[]},sql:bytes.toString('utf8')};}

@@ -189,6 +189,9 @@ def build(src: Path) -> dict[str, object]:
     for m in re.finditer(r"import \{([^}]+)\} from '\./(views/[^']+)'", app):
         for name in m.group(1).split(","):
             component[name.strip().split(" as ")[-1]] = m.group(2)
+    # P103: screens load on first open (const X = lazyView(() => import('./views/Y'), 'X')).
+    for m in re.finditer(r"const (\w+) = lazyView\(\(\) => import\('\./(views/[^']+)'\)", app):
+        component[m.group(1)] = m.group(2)
     switch = app[app.index("const view = (() => {") :]
     switch = switch[: switch.index("})();")]
     screens: dict[str, list[str]] = {}

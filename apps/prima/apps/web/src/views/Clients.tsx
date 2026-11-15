@@ -9,7 +9,6 @@ import { ProofPicker } from './Proof';
 import { ImportButton } from './ImportDrawer';
 import '../styles/biz.css';
 import { CRM_TABS, CrmView, type CrmTab } from './Crm';
-import { ClientPortalDesk } from './ClientPortal';
 
 /**
  * Client board (Fauzan, 26 Oct 2026). Operations Managers, the Operations Director and officers act on clients:
@@ -29,8 +28,8 @@ const VIA: Record<'meeting' | 'visit' | 'call' | 'email' | 'form', string> = {
   email: 'Email',
   form: 'Feedback form',
 };
-/** J1: how a rating or complaint came, for showing; the client portal is never chosen by staff. */
-const VIA_SHOWN: Record<keyof typeof VIA | 'portal', string> = { ...VIA, portal: 'Client portal' };
+/** For showing a record: the client's own report link too (client portal A7); staff never choose it. */
+const VIA_SHOWN: Record<keyof typeof VIA | 'link', string> = { ...VIA, link: 'Report link' };
 const MEETING: Record<ClientBoard['opsMeetings'][number]['state'], [Tone, string]> = {
   held: ['ok', 'Held, minutes filed'],
   scheduled: ['warn', 'Scheduled'],
@@ -54,7 +53,7 @@ export function ClientsView() {
   const [q, setQ] = useState('');
   const [adding, setAdding] = useState(false);
   const [openId, setOpenId] = useState<string | null>(null);
-  const [tab, setTab] = useState<CrmTab | 'board' | 'portal'>('board');
+  const [tab, setTab] = useState<CrmTab | 'board'>('board');
   if (error)
     return (
       <div className="page">
@@ -70,7 +69,7 @@ export function ClientsView() {
   // Client CRM (Fauzan, 4 Nov 2026): the lifecycle tabs sit beside the board; the Group tab is for group leadership only.
   const tabs = (
     <div className="tabbar crm-tabs" role="tablist" aria-label="Client CRM">
-      {[...CRM_TABS, ['portal', 'Client portal'] as ['portal', string]].filter(([k]) => k !== 'group' || data.leader).map(([k, label]) => (
+      {CRM_TABS.filter(([k]) => k !== 'group' || data.leader).map(([k, label]) => (
         <button key={k} role="tab" aria-selected={tab === k} onClick={() => setTab(k)}>
           {label}
         </button>
@@ -82,7 +81,7 @@ export function ClientsView() {
       <div className="page">
         <PageHead title="Clients" />
         {tabs}
-        {tab === 'portal' ? <ClientPortalDesk /> : <CrmView tab={tab} />}
+        <CrmView tab={tab} />
       </div>
     );
   const act = data.role === 'act';
@@ -123,6 +122,7 @@ export function ClientsView() {
         }
       />
       {tabs}
+      <ClientPortalPanel />
       <Stats>
         <Stat label="Clients" value={data.accounts.length} icon={<UsersThreeIcon size={16} />} tone="info" onClick={() => setFilter('all')} />
         <Stat
@@ -302,6 +302,7 @@ function ClientDetail({ a, act, canBill, onClose }: { a: Account; act: boolean; 
         </div>
       )}
 
+      <InfoPack clientId={a.id} siteIds={a.siteIds} />
       {phases.map(([phase, steps]) => (
         <section key={phase} className="bz-sec">
           <div className="bz-sec-head">
@@ -926,7 +927,7 @@ function ShareLinks({ a }: { a: Account }) {
                     >
                       Preview
                     </button>
-                    {l.live && (
+                    {l.live && d.canRevoke !== false && (
                       <button
                         className="btn btn-ghost btn-sm"
                         onClick={() => {
@@ -964,9 +965,83 @@ function ShareLinks({ a }: { a: Account }) {
           </div>
         </div>
       )}
+      {d?.fromLink && (d.fromLink.ratings.length > 0 || d.fromLink.requests.length > 0) && (
+        <div className="card" style={{ padding: 8 }}>
+          <div style={{ fontWeight: 600 }}>Sent by the client through the link</div>
+          {d.fromLink.ratings.map((r) => (
+            <div key={r.at}>
+              {dateTimeLabel(r.at)}: score {r.score} of 5 from {r.from ?? 'the client'}{r.comment ? `: ${r.comment}` : ''}
+            </div>
+          ))}
+          {d.fromLink.requests.map((q) => (
+            <div key={q.id}>
+              {dateTimeLabel(q.at)}: request from {q.from}: {q.what}
+              {q.neededBy ? ` (needed by ${dateLabel(q.neededBy)})` : ''} <Chip tone={q.status === 'open' ? 'warn' : 'neutral'}>{q.status === 'open' ? 'Open' : 'Closed'}</Chip>
+            </div>
+          ))}
+          <div className="muted">The Operations Manager in the area closes requests under Requests on this client.</div>
+        </div>
+      )}
       <ErrorNotice error={act.error} />
       {preview && <SharePreview r={preview} onClose={() => setPreview(null)} />}
     </section>
+  );
+}
+
+/** Client portal board (A7): the OM manages links and what clients send, the company manager monitors, the COO oversees. */
+export function ClientPortalPanel() {
+  const [open, setOpen] = useState(false);
+  const view = useLoad(() => (open ? api.clientPortalBoard() : Promise.resolve(null)), [open]);
+  if (!open)
+    return (
+      <div>
+        <button className="btn btn-ghost btn-sm" onClick={() => setOpen(true)}>
+          Client portal: links and what clients sent
+        </button>
+      </div>
+    );
+  const d = view.data;
+  return (
+    <div className="card small" style={{ padding: 10, display: 'flex', flexDirection: 'column', gap: 6 }}>
+      <div style={{ fontWeight: 600 }}>Client portal</div>
+      {view.error && <ErrorNotice error={{ message: view.error, findings: [] }} />}
+      {!d && !view.error && <Loading what="client portal" />}
+      {d && (
+        <>
+          <div className="muted">{d.role === 'om' ? 'You make the links and handle what clients send.' : d.role === 'company' ? 'You monitor your clients\' links and what they send.' : 'You oversee every client portal.'} {d.openRequests} open request{d.openRequests === 1 ? '' : 's'} from clients.</div>
+          {d.rows.length === 0 ? (
+            <div className="muted">No clients in your view.</div>
+          ) : (
+            <div className="table-wrap">
+              <table className="small">
+                <thead>
+                  <tr>
+                    <th>Client</th>
+                    <th>Company</th>
+                    <th>Open links</th>
+                    <th>Opened</th>
+                    <th>Last score</th>
+                    <th>Open requests</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {d.rows.map((r) => (
+                    <tr key={r.clientId}>
+                      <td>{r.client}</td>
+                      <td>{r.companyName}</td>
+                      <td>{r.liveLinks}</td>
+                      <td>{r.views ? `${r.views}x${r.lastViewAt ? `, last ${dateTimeLabel(r.lastViewAt)}` : ''}` : 'Not yet'}</td>
+                      <td>{r.lastScore ?? 'None yet'}{r.lowScores ? <Chip tone="warn">{r.lowScores} low</Chip> : null}</td>
+                      <td>{r.openRequests}{r.lateRequests ? <Chip tone="crit">{r.lateRequests} late</Chip> : null}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </>
+      )}
+    </div>
   );
 }
 
@@ -1131,5 +1206,76 @@ function NewClientForm({ options, onDone }: { options: ClientBoard['canAdd']; on
         </button>
       </div>
     </Drawer>
+  );
+}
+
+/** E9 (PIKM): the client information pack from Prima records, and the site risk briefing before a guard's first shift. */
+function InfoPack({ clientId, siteIds }: { clientId: string; siteIds: string[] }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <details onToggle={(e) => setOpen((e.target as HTMLDetailsElement).open)}>
+      <summary style={{ fontWeight: 600 }}>Client information pack and risk briefings</summary>
+      {open && <InfoPackBody clientId={clientId} siteIds={siteIds} />}
+    </details>
+  );
+}
+
+function InfoPackBody({ clientId, siteIds }: { clientId: string; siteIds: string[] }) {
+  const { data, error } = useLoad(() => api.clientInfoPack(clientId), [clientId]);
+  const [brief, setBrief] = useState({ personId: '', siteId: siteIds[0] ?? '', on: '', note: '' });
+  const act = useAction();
+  if (error) return <ErrorNotice error={error} />;
+  if (!data) return <Loading what="pack" />;
+  const tone = (st: string): Tone => (st === 'valid' || st === 'set' ? 'ok' : st === 'expired' ? 'crit' : 'unknown');
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+      <div>
+        {data.company?.name ?? 'Company unknown'} · {data.sites.map((x) => x.name).join(', ') || 'No site'}
+        {data.unknown > 0 && <Chip tone="unknown">{data.unknown} unknown</Chip>}
+      </div>
+      <ul style={{ margin: 0, paddingLeft: 18 }}>
+        {data.papers.map((p) => (
+          <li key={p.what}>
+            {p.what}: {p.reference ?? 'no record'} {p.expiresOn ? `(to ${dateLabel(p.expiresOn)})` : ''} <Chip tone={tone(p.state)}>{p.state}</Chip>
+          </li>
+        ))}
+        {data.insurance.map((p, i) => (
+          <li key={i}>
+            Insurance {p.what}: {p.insurer ?? 'no record'} {p.policyNo ?? ''} <Chip tone={tone(p.state)}>{p.state}</Chip>
+          </li>
+        ))}
+      </ul>
+      <div style={{ fontWeight: 600 }}>Who to call</div>
+      <ol style={{ margin: 0, paddingLeft: 18 }}>
+        {data.contacts.map((c) => (
+          <li key={c.step}>
+            {c.step}: {c.name ?? <Chip tone="unknown">not set</Chip>}
+          </li>
+        ))}
+      </ol>
+      <div style={{ fontWeight: 600 }}>Complaints</div>
+      <ol style={{ margin: 0, paddingLeft: 18 }}>
+        {data.complaints.map((c) => (
+          <li key={c}>{c}</li>
+        ))}
+      </ol>
+      <div style={{ fontWeight: 600 }}>Record a site risk briefing (before a guard's first shift here)</div>
+      <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
+        <Select className="select" value={brief.siteId} onChange={(e) => setBrief({ ...brief, siteId: e.target.value })} aria-label="Site">
+          {data.sites.map((x) => (
+            <option key={x.id} value={x.id}>
+              {x.name}
+            </option>
+          ))}
+        </Select>
+        <input placeholder="Guard record ID" value={brief.personId} onChange={(e) => setBrief({ ...brief, personId: e.target.value })} aria-label="Guard record ID" />
+        <input type="date" value={brief.on} onChange={(e) => setBrief({ ...brief, on: e.target.value })} aria-label="Briefing date" />
+        <input placeholder="What it covered" value={brief.note} onChange={(e) => setBrief({ ...brief, note: e.target.value })} aria-label="What it covered" />
+        <button className="btn btn-sm" disabled={act.busy || !brief.personId || !brief.siteId || !brief.on} onClick={() => act.run(() => api.recordRiskBriefing({ ...brief, personId: brief.personId.trim() }), 'Briefing recorded')}>
+          Record
+        </button>
+      </div>
+      {act.error && <ErrorNotice error={act.error} />}
+    </div>
   );
 }

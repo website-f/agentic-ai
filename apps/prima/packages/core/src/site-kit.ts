@@ -21,6 +21,8 @@ export interface SiteKitItem {
    */
   atEnd?: 'take_back' | 'hand_over';
   handOverRef?: string;
+  /** Part T10: the person responsible for shared equipment (patrolling officer or supervisor named by the OM). */
+  responsible?: { name: string; role: 'patrol_officer' | 'supervisor' | 'other'; personId?: Id | null } | null;
 }
 
 export interface SiteKitRecord {
@@ -76,13 +78,21 @@ export interface SiteKitItemStatus {
   /** Needed minus working; positive is short. */
   short: number | null;
   lastOn: IsoDate | null;
+  /** Part U19: first installed, and past the expected life for its kind (setting, empty until set). */
+  installedOn?: IsoDate | null;
+  pastLife?: boolean;
 }
 
-export function siteKitStatus(kit: SiteKit, today: IsoDate) {
+export function siteKitStatus(kit: SiteKit, today: IsoDate, lifeMonths: Record<string, number> = {}) {
   const items = kit.items.map((item): SiteKitItemStatus => {
     const rec = [...kit.records].reverse().find((r) => r.lines.some((l) => l.itemId === item.id));
     const l = rec?.lines.find((x) => x.itemId === item.id);
+    const installedOn = kit.records.find((r) => r.kind === 'install' && r.lines.some((x) => x.itemId === item.id))?.date ?? null;
+    const life = lifeMonths[item.category] ?? lifeMonths[item.name] ?? null;
+    const pastLife = !!(installedOn && life && Date.parse(`${today}T00:00:00Z`) - Date.parse(`${installedOn}T00:00:00Z`) > life * 30 * 86_400_000);
     return {
+      installedOn,
+      pastLife,
       item,
       inPlace: l?.inPlace ?? null,
       working: l?.working ?? null,
@@ -100,6 +110,7 @@ export function siteKitStatus(kit: SiteKit, today: IsoDate) {
     short: items.filter((i) => (i.short ?? 0) > 0).length,
     broken: items.filter((i) => (i.broken ?? 0) > 0).length,
     neverRecorded: items.filter((i) => i.lastOn === null).length,
+    pastLife: items.filter((i) => i.pastLife).length,
   };
 }
 

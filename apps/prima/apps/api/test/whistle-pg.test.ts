@@ -1,8 +1,7 @@
 // Speak-up (whistleblowing) controls against a real local PostgreSQL (Fauzan, 11 Nov 2026, before the feature goes
 // live): (1) replies and handler messages sent at the same moment are all kept, none overwritten; (2) the RBA committee
 // row on PWVSB's record is not readable in full by any account with database read access: other offices get names and
-// seats only, through the roster table of module rba-committee-roster-v1 (the office's fix on top of rba-readiness-v1,
-// run by prima-setup on every start). Synthetic data only; the test resets the throwaway database.
+// seats only, through one narrow database function. Synthetic data only; the test resets the throwaway database.
 import 'reflect-metadata';
 import assert from 'node:assert/strict';
 import { after, before, describe, it } from 'node:test';
@@ -25,7 +24,7 @@ describe('Speak-up and RBA committee controls on PostgreSQL', () => {
     db = new Db();
     owner = new Client({ connectionString: URL });
     await owner.connect();
-    for (const m of ['client-codes-v1', 'rba-readiness-v1', 'rba-committee-roster-v1']) {
+    for (const m of ['client-codes-v1', 'rba-readiness-v1']) {
       const sql = readFileSync(modulePath(m), 'utf8');
       await owner.query(sql);
       await owner.query(sql); // repeat-safe
@@ -66,16 +65,6 @@ describe('Speak-up and RBA committee controls on PostgreSQL', () => {
     const r2 = await messagesOf(id);
     assert.ok(r2.notes.some((n) => n.text === 'Synthetic handler note while the reporter writes.'));
     assert.ok((r2.messages ?? []).some((m) => m.text === 'Synthetic: my shifts were cut after I reported.'));
-  });
-
-  it('the module removes the open read rule and walls the RBA tables for the API role only', async () => {
-    const p = await owner.query(`SELECT tablename, policyname, roles::text AS roles FROM pg_policies WHERE schemaname = 'prima'
-      AND tablename IN ('rba_committees', 'rba_trace_reviews', 'ethics_declarations', 'rba_committee_rosters') ORDER BY 1, 2`);
-    assert.ok(!p.rows.some((r) => r.policyname === 'committee_read'), 'committee_read is gone');
-    for (const t of ['rba_committees', 'rba_trace_reviews', 'ethics_declarations'])
-      assert.deepEqual(p.rows.filter((r) => r.tablename === t).map((r) => [r.policyname, r.roles]), [['company_wall', '{prima_app}']]);
-    const f = await owner.query(`SELECT relrowsecurity, relforcerowsecurity FROM pg_class WHERE oid = 'prima.rba_committee_rosters'::regclass`);
-    assert.deepEqual(f.rows[0], { relrowsecurity: true, relforcerowsecurity: true });
   });
 
   it('a read-only account cannot read the committee row; offices see names and seats only', async () => {
@@ -136,14 +125,8 @@ describe('Speak-up and RBA committee controls on PostgreSQL', () => {
     const guard = (await owner.query("SELECT id FROM prima.users WHERE data->>'role' = 'guard' LIMIT 1")).rows[0]?.id as string | undefined;
     if (guard) assert.equal((await db.asUser(guard, async (_svc, _u, store) => store.list('rbaCommitteeRosters'))).length, 0);
     assert.ok(!JSON.stringify(cur).includes('Synthetic private note'));
-    // A second naming in the same year rewrites the one roster row (names and seats of the new naming only).
-    const c2 = await db.asUser('u-cos', (svc, u) => svc.nameRbaCommittee(u, { memberUserIds: ['u-opsdir', 'u-cm-sasa'], note: 'Synthetic second note' }));
-    const b2 = await db.asUser('u-cm-sasa', (svc, u) => svc.rbaBoard(u));
-    assert.equal((b2.committee.current as { id: string }).id, c2.id);
-    assert.equal((b2.committee.current as { members: unknown[] }).members.length, 2);
-    assert.equal((await owner.query('SELECT 1 FROM prima.rba_committee_rosters')).rowCount, 1);
     // The Chief of Staff, who names the committee, still sees the full row.
     const cos = await db.asUser('u-cos', (svc, u) => svc.rbaBoard(u));
-    assert.equal((cos.committee.current as { note?: string }).note, 'Synthetic second note');
+    assert.equal((cos.committee.current as { note?: string }).note, 'Synthetic private note from the CoS');
   });
 });

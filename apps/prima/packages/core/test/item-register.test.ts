@@ -642,7 +642,7 @@ describe('one item register', () => {
     expect((await t.board(GUARD)).myUniform).toMatchObject({ pieces: 1, rule: { maxPerYear: 3 } });
     expect((await t.board('u-cm-arsh')).uniforms.rows.some((x) => x.companyId === 'co-sasa')).toBe(false);
   });
-  it('uniform: a 4th and 5th piece only when the guard pays, with the receipt; never more than 5', async () => {
+  it('uniform: every piece after the 3rd only when the guard pays, with the receipt; no upper limit (13 Nov 2026)', async () => {
     const t = fresh();
     const items = await registerShirts(t, 6);
     const m = await saleOf(t, items);
@@ -660,14 +660,15 @@ describe('one item register', () => {
     await expect(t.act(SASA_CM, { kind: 'issue', label: items[3].token, personId: g.id, paidByGuard: { receiptRef: 'RC-MOCK-01', amount: 0 } })).rejects.toThrow(/receipt number/);
     await t.act(SASA_CM, { kind: 'issue', label: items[3].token, personId: g.id, paidByGuard: paid });
     await t.act(SASA_CM, { kind: 'issue', label: items[4].token, personId: g.id, paidByGuard: { receiptRef: 'RC-MOCK-02', amount: 45 } });
-    await expect(t.act(SASA_CM, { kind: 'issue', label: items[5].token, personId: g.id, paidByGuard: { receiptRef: 'RC-MOCK-03', amount: 45 } })).rejects.toThrow(/most is 5/);
+    await expect(t.act(SASA_CM, { kind: 'issue', label: items[5].token, personId: g.id })).rejects.toThrow(/receipt|pays/i);
+    await t.act(SASA_CM, { kind: 'issue', label: items[5].token, personId: g.id, paidByGuard: { receiptRef: 'RC-MOCK-03', amount: 45 } });
     const recs = t.ds.uniformRecords.filter((r) => r.personId === g.id);
     // P85: money is kept as whole sen (no floating point).
-    expect(recs.map((r) => [r.kind, r.receiptRef, r.amountSen])).toEqual([['paid', 'RC-MOCK-01', '4500'], ['paid', 'RC-MOCK-02', '4500']]);
+    expect(recs.map((r) => [r.kind, r.receiptRef, r.amountSen])).toEqual([['paid', 'RC-MOCK-01', '4500'], ['paid', 'RC-MOCK-02', '4500'], ['paid', 'RC-MOCK-03', '4500']]);
     expect(t.ds.audit.some((x) => x.action === 'item.issue' && /paid by the guard: receipt RC-MOCK-01, RM45.00. Not taken from pay/.test(x.summary))).toBe(true);
     expect(t.ds.audit.filter((x) => x.action === 'item.issue' && /paid by the guard/.test(x.summary)).every((x) => !/Never charged/.test(x.summary))).toBe(true);
     const r = (await t.board(SASA_CM)).uniforms.rows.find((x) => x.personId === g.id)!;
-    expect([r.free, r.paid, r.pieces, r.status]).toEqual([3, 2, 5, 'at_max']);
+    expect([r.free, r.paid, r.pieces, r.status]).toEqual([3, 3, 6, 'at_max']);
   });
 
   it('uniform: a manager records past pieces in bulk for a site, zone or region; each guard is checked on its own', async () => {

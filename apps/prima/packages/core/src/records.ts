@@ -196,6 +196,17 @@ export const RECORD_KINDS: Record<RecordKind, RecordKindSpec> = {
         ['VENDOR_PANEL', 'Vendor registration (client or agency panel)'],
         ['ISO_CERT', 'ISO certification'],
         ['FIRE_CERT', 'Fire certificate'],
+        ['OFFICE_ALARM', 'Office alarm (installer and service)'],
+        ['OFFICE_CCTV', 'Office CCTV (installer and service)'],
+        ['PIKM_MEMBERSHIP', 'PIKM membership'],
+        ['MOF_DIGITAL_CERT', 'MOF digital certificate'],
+        ['BUMIPUTERA_STATUS', 'Bumiputera status (MOF)'],
+        ['BOND', 'Performance bond or bank guarantee'],
+        ['CARRY_USE', 'Firearm Carry & Use permit'],
+        ['CNU', 'CNU (firearm use for a client)'],
+        ['AMRA', 'AMRA (arms custodian) approval'],
+        ['LHDN_TCC', 'LHDN tax clearance (TCC)'],
+        ['CIDB', 'CIDB registration'],
         ['OTHER_COMPLIANCE', 'Other compliance'],
       ]),
       text('title', 'Which one', false, 'For example "MBPJ premise licence, Petaling Jaya office", "Petronas vendor panel", "ISO 9001".'),
@@ -214,6 +225,7 @@ export const RECORD_KINDS: Record<RecordKind, RecordKindSpec> = {
     fields: [
       pick('kind', 'Cover', [
         ['PUBLIC_LIABILITY', 'Public liability'],
+        ['PROFESSIONAL_INDEMNITY', 'Professional indemnity'],
         ['GROUP_PERSONAL_ACCIDENT', 'Group personal accident'],
         ['GROUP_HOSPITALISATION', 'Group hospitalisation'],
         ['FW_HOSPITALISATION', 'Foreign worker hospitalisation'],
@@ -493,6 +505,10 @@ export const RECORD_KINDS: Record<RecordKind, RecordKindSpec> = {
       ]),
       {
         ...text('serial', 'Serial number', true, 'As stamped on the firearm and its licence. Set once. Other screens show only the last 4.'),
+        restricted: true,
+      },
+      {
+        ...text('serialConfirm', 'Serial number again', false, 'Type it a second time when it is first set (V16). Not stored.'),
         restricted: true,
       },
       text('rfidTag', 'RFID tag', false, 'Scan the tag with the vault reader, or type the code printed on it. Leave empty only if not tagged yet.'),

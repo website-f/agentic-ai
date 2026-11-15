@@ -1,6 +1,7 @@
 import { Select } from '../SearchSelect';
 import { useState } from 'react';
 import { ClockCountdownIcon, CrosshairIcon, ScanIcon, ShieldCheckIcon, WarningIcon } from '@phosphor-icons/react';
+import { ArmsPolicyPanel } from './ArmsPolicyPanel';
 import { REGIONS, type ArmedJobKind, type ArmedJobStatus, type ArmsOverdueState, type FirearmStatus } from '@prima/core';
 import { api, type ArmsDetail } from '../api';
 import { useApp } from '../App';
@@ -19,6 +20,11 @@ const FIREARM_STATUS: Record<FirearmStatus, { label: string; tone: Tone }> = {
   UNVERIFIED: { label: 'Unverified', tone: 'crit' },
   LOST: { label: 'Lost', tone: 'crit' },
   DEPOSITED: { label: 'With the police', tone: 'neutral' },
+  NEEDS_MAINTENANCE: { label: 'Perlu penyelenggaraan', tone: 'warn' },
+  UNDER_INSPECTION: { label: 'Dalam pemeriksaan', tone: 'warn' },
+  DAMAGED: { label: 'ROSAK - jangan digunakan', tone: 'crit' },
+  IN_REPAIR: { label: 'Dalam pembaikan', tone: 'neutral' },
+  UNUSABLE: { label: 'Tidak boleh digunakan', tone: 'crit' },
   OFF_REGISTER: { label: 'Off the register', tone: 'neutral' },
 };
 
@@ -60,6 +66,7 @@ export function ArmsView() {
           <CompanyArms companyId={companyId} />
         </>
       )}
+      <ArmsPolicyPanel />
     </div>
   );
 }
@@ -185,6 +192,7 @@ function CompanyArms({ companyId }: { companyId: string }) {
           icon={<WarningIcon size={16} />}
         />
       </Stats>
+      <RfidSwitch on={data.rfid.scanRequired} canSet={!!data.rfid.canSetScan} />
       <ErrorNotice error={act.error} />
       {!can && <div className="notice">You can view this. Only the company&apos;s manager or the site supervisor issues, receives and counts firearms.</div>}
 
@@ -966,5 +974,25 @@ function PlanJobDrawer({ data, onClose }: { data: ArmsDetail; onClose: () => voi
         </div>
       </div>
     </Drawer>
+  );
+}
+
+// C7 (Fauzan, 11 Nov 2026): the vault RFID scan stays optional until every firearm is tagged; Arms Control switches it.
+function RfidSwitch({ on, canSet }: { on: boolean; canSet: boolean }) {
+  const act = useAction();
+  const [why, setWhy] = useState('');
+  return (
+    <div className="row small" style={{ gap: 6, flexWrap: 'wrap', margin: '6px 0' }}>
+      <span>RFID scan at the vault: {on ? 'compulsory' : 'optional'}</span>
+      {canSet && (
+        <>
+          <input className="input" aria-label="Why" placeholder="Why (needed)" value={why} onChange={(e) => setWhy(e.target.value)} />
+          <button className="btn btn-sm" disabled={act.busy || why.trim().length < 5} onClick={() => act.run(() => api.setArmsRfidRequired({ on: !on, reason: why }), 'Saved. Reload to see it.')}>
+            {on ? 'Make optional' : 'Make compulsory'}
+          </button>
+        </>
+      )}
+      <ErrorNotice error={act.error} />
+    </div>
   );
 }

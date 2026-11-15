@@ -7,6 +7,7 @@ import { canSetManagementFee } from "./ops-access";
 import { clientRoleOf } from "./ops-access";
 import { managementFeeBillScope } from "./ops-access";
 import type { User } from "./types";
+import { assetRole } from "./access";
 import { vehicleRentalRole } from "./ops-access";
 import { vehicleUsageRole } from "./ops-access";
 
@@ -128,6 +129,128 @@ export const OPS_GUIDE_CARDS: OpsGuideCard[] = [
       t('Tandatangan jari belum diuji pada telefon sebenar.', 'The finger signature is not yet tested on a real phone.'),
       t('Lokasi telefon dilaporkan oleh telefon dan tidak disemak.', 'The phone location is as the phone reports it and is not checked.'),
     ],
+  },
+  {
+    id: 'ops.supplies.request',
+    status: 'ready',
+    dept: 'Government Operations and Procurement',
+    title: t('Permohonan Pesanan Barang untuk tapak (KBK, PKK Nepal, PKK)', 'Site supplies request (KBK, PKK Nepal, PKK Local)'),
+    purpose: t(
+      'Satu permohonan untuk tapak kebersihan dan tapak pengawal: minta, semak awal (Nepal), sahkan, semak stok, keluarkan atau beli, hantar dan terima.',
+      'One request for cleaning and guard sites: ask, first check (Nepal), confirm, stock check, issue or buy, deliver and receive.',
+    ),
+    who: t(
+      'OM atau Pengurus Wilayah memasukkan untuk penyelia atau peronda; eksekutif pentadbiran HQ Gov Ops menyemak awal (Nepal); OGM atau timbalan yang dinamakan mengesahkan; penjaga stor menyemak stok; eksekutif Perolehan memutuskan keluar atau beli.',
+      'The OM or Regional OM enters it for the supervisor or patrolling officer; the Gov Ops HQ admin executive does the first check (Nepal); the OGM or a named deputy confirms; a storekeeper checks the stock; the Procurement executive decides issue or buy.',
+    ),
+    screen: { view: 'mine', name: 'Duty', action: t('Permohonan Pesanan Barang: Minta bekalan untuk tapak, muat tapak, tambah baris, Hantar permohonan.', 'Site supplies: Minta bekalan untuk tapak, load the site, add lines, Hantar permohonan.') },
+    allowed: (u) =>
+      !u.integration &&
+      (canRecordHandover(u, today()) || u.department === 'procurement' || u.opsTier === 'ogm' || u.opsTier === 'ops_director' || u.role === 'admin_exec'),
+    fields: [
+      { key: 'stockItemId', label: 'Item', required: true, format: t('Pilih daripada senarai stor.', 'Choose from the store list.'), example: 'Synthetic floor cleaner' },
+      { key: 'qty', label: 'Quantity', required: true, format: t('Nombor bulat, sekurang-kurangnya 1.', 'A whole number, at least 1.'), example: '5' },
+      { key: 'staffNo', label: 'Guard staff number', required: false, format: t('Satu baris bagi setiap pengawal untuk barang peribadi (wajib untuk uniform Nepal).', 'One line per guard for a personal item (needed for a Nepal uniform).'), example: 'SYN0001', rule: t('Helai ke-4 ke atas dalam 12 bulan dibayar sendiri dengan resit; tidak dipotong gaji.', 'The 4th piece onwards in 12 months is paid by the person with a receipt; never from pay.') },
+      { key: 'supplyId', label: 'Site supply or equipment (KBK)', required: false, format: t('Bekalan tapak yang diisi semula.', 'The site supply it refills.'), example: 'Floor cleaner' },
+      { key: 'alsoSentBy', label: 'Also sent by', required: false, format: t('Borang kertas, e-mel atau SharePoint semasa peralihan.', 'Paper form, email or SharePoint during the changeover.'), example: 'sharepoint SP-12' },
+    ],
+    sources: [{ what: t('Senarai barang dan stok di stor Goodwill.', 'The item list and stock in the Goodwill store.'), askDesk: 'procurement' }],
+    enteredOnce: t('Ringkasan setiap barang dan saiz dibina oleh aplikasi; tiada siapa menaip ringkasan.', 'The summary per item and size is built by the app; nobody types it.'),
+    actions: ['supplies.request', 'supplies.first_check', 'supplies.confirm', 'supplies.stock_check', 'supplies.decide', 'supplies.issue', 'supplies.bulk_count', 'supplies.hand_out', 'supplies.close'],
+    steps: {
+      save: t('Hantar permohonan; status Dalam Semakan Awal (Nepal) atau Dalam Kelulusan.', 'Submit; the status is Dalam Semakan Awal (Nepal) or Dalam Kelulusan.'),
+      review: t('OGM mengesahkan atau menukar kuantiti dengan sebab; tiada siapa mengesahkan permohonan sendiri.', 'The OGM confirms or changes quantities with a reason; nobody confirms their own request.'),
+      returned: t('Dikembalikan pada semakan awal: betulkan dan Hantar semula.', 'Returned at the first check: fix it and submit again.'),
+      done: t('Siap bila setiap baris dihantar dan diterima, atau ditutup dengan sebab.', 'Siap when every line is delivered and received, or closed with a reason.'),
+      recover: t('Butang tiada? Langkah itu milik orang lain atau langkah sebelumnya belum selesai.', 'No button? The step belongs to someone else or an earlier step is not done.'),
+    },
+    notVerified: [
+      t('E-mel kepada peminta belum dihidupkan; notis dalam aplikasi sahaja.', 'Email to the requester is not switched on; in-app notices only.'),
+      t('Tiada sambungan ke SharePoint atau Power Automate.', 'No connection to SharePoint or Power Automate.'),
+    ],
+  },
+  {
+    id: 'ops.inventory.count',
+    status: 'ready',
+    dept: 'Government Operations and Procurement',
+    title: t('Kiraan stok bulanan dan besar; Isnin: sahkan baki pembukaan', 'Monthly and major stock count; Monday: confirm the opening balance'),
+    purpose: t(
+      'Kira stor setiap bulan; kiraan besar 6 bulanan pada 2-5 PM membekukan stok keluar masuk. Setiap Isnin sahkan baki penutup minggu lepas sebagai baki pembukaan.',
+      'Count the store every month; the 6-monthly major count at 2-5 PM stops stock in and out. Every Monday confirm last week\u2019s closing balance as the opening balance.',
+    ),
+    who: t('Penjaga stor mengira dengan saksi (no. staf dan PIN); OGM boleh benarkan satu pergerakan segera dengan sebab.', 'A storekeeper counts with a witness (staff number and PIN); the OGM may let one urgent move through with a reason.'),
+    screen: { view: 'purchasing', name: 'Purchasing', action: t('Kawalan Inventori: Mula kiraan bulanan / besar, isi fizikal, Selesai dengan saksi.', 'Inventory control: start the monthly or major count, enter physical counts, finish with a witness.') },
+    allowed: (u) => !u.integration && (u.department === 'procurement' || u.opsTier === 'ogm'),
+    fields: [
+      { key: 'physical', label: 'Physical count', required: true, format: t('Nombor bulat yang dikira.', 'The whole number counted.'), example: '24' },
+      { key: 'reason', label: 'Variance reason', required: false, format: t('Wajib jika berbeza: kurang, hilang, rosak, salah kira, keluar / terima tidak direkod, lain-lain.', 'Needed when different: shortage, lost, damaged, counting error, issue or receipt not recorded, other.'), example: 'shortage' },
+      { key: 'witness', label: 'Witness', required: true, format: t('No. staf dan PIN orang lain dari syarikat stor.', 'Staff number and PIN of someone else from the store\u2019s company.'), example: 'SYN0002' },
+    ],
+    sources: [{ what: t('Senarai barang stor dan kad stok.', 'The store item list and the stock card.'), askDesk: 'procurement' }],
+    enteredOnce: t(
+      'Kertas ke Prima: Borang Permohonan = permohonan bekalan; PO dan GRN = pembelian; Borang Keluar = keluaran / penghantaran tapak; Kad Stok = kad stok; Rekod Uniform/PPE = rekod uniform; Borang Kiraan = sesi kiraan (PDF); Laporan Varians = baris varians (PDF); Rekod Pemulangan / Pelupusan = pemulangan / kes pelupusan; Laporan Bulanan = laporan inventori; Min/Max = tetapan Min/Max dan simpanan.',
+      'Paper to Prima: Request Form = site supplies request; PO and GRN = the purchase; Issue Form = issue / site delivery; Stock Card = stock card; Uniform/PPE Record = uniform record; Count Sheet = count session (PDF); Variance Report = variance lines (PDF); Return / Disposal Record = return / disposal case; Monthly Report = inventory report; Min/Max = Min/Max and buffer settings.',
+    ),
+    actions: ['inventory.count.start', 'inventory.count.finish', 'inventory.count.urgent', 'inventory.week_close'],
+    steps: {
+      save: t('Simpan kiraan; selesai dengan saksi. Stok dibuka semula bila kiraan besar selesai.', 'Save the count; finish with a witness. Stock reopens when the major count is finished.'),
+      review: t('Eksekutif Perolehan memutuskan setiap varians; bukan pengira atau saksi.', 'The Procurement executive decides each variance; never the counter or the witness.'),
+      returned: t('Varians ditolak oleh OGM: putuskan semula dengan bukti.', 'A variance the OGM did not approve: decide it again with evidence.'),
+      done: t('Ditutup bila setiap varians dijelaskan atau dilaraskan.', 'Closed when every variance is explained or adjusted.'),
+      recover: t('Stok dibekukan? Minta OGM benarkan satu pergerakan segera dengan sebab.', 'Stock frozen? Ask the OGM to let one urgent move through with a reason.'),
+    },
+    notVerified: [t('Modul inventori dipasang oleh CEO sahaja.', 'The inventory module is installed by the CEO only.')],
+  },
+  {
+    id: 'ops.inventory.variance',
+    status: 'ready',
+    dept: 'Government Operations and Procurement',
+    title: t('Semak varians dan laporan inventori bulanan', 'Decide variances and the monthly inventory report'),
+    purpose: t('Satu-satunya cara membetulkan buku stok; laporan bulanan dengan 7 KPI dan "data setakat".', 'The only way to correct the stock book; the monthly report with the 7 KPIs and "data as at".'),
+    who: t('Eksekutif Perolehan (Admin); OGM meluluskan pelarasan melebihi RM500 dan menyemak laporan.', 'The Procurement executive (Admin); the OGM approves adjustments above RM500 and reviews the report.'),
+    screen: { view: 'purchasing', name: 'Purchasing', action: t('Kawalan Inventori: Laporan varians, Putuskan; Laporan bulanan, Hantar.', 'Inventory control: variance report, Decide; monthly report, Submit.') },
+    allowed: (u) => !u.integration && ((u.department === 'procurement' && u.procRole !== 'storekeeper') || u.opsTier === 'ogm'),
+    fields: [
+      { key: 'reason', label: 'Reason, evidence and corrective action', required: true, format: t('Teks pendek.', 'Short text.'), example: 'Issue slip found, recorded late' },
+      { key: 'cause', label: 'Cause', required: false, format: t('Haus biasa, kemalangan, kecuaian, salah guna, tidak diketahui. Kecuaian atau salah guna = caj pada gaji berikutnya, HR menyemak.', 'Normal wear, accident, negligence, misuse, unknown. Negligence or misuse = a charge on the next pay, HR reviews.'), example: 'WEAR', rule: t('Employment Act 1955 s.24: potongan kerosakan biasanya perlu persetujuan bertulis pekerja.', 'Employment Act 1955 s.24: a damage deduction generally needs the worker\u2019s written agreement.') },
+    ],
+    sources: [{ what: t('Kad stok dan rekod keluar / terima.', 'The stock card and the issue / receipt records.'), askDesk: 'procurement' }],
+    enteredOnce: t('Pelarasan menulis satu baris pada kad stok; Kewangan diberitahu nilai hapus kira.', 'An adjustment writes one line on the stock card; Finance is told the write-off value.'),
+    actions: ['inventory.adjust', 'inventory.charge'],
+    steps: {
+      save: t('Jelaskan (rekod yang hilang dimasukkan) atau laraskan buku.', 'Explain (the missing record was entered) or adjust the book.'),
+      review: t('OGM untuk nilai melebihi RM500; OGM menyemak laporan bulanan.', 'The OGM for a value above RM500; the OGM reviews the monthly report.'),
+      returned: t('Laporan dikembalikan: betulkan dan hantar semula.', 'Report returned: fix it and submit again.'),
+      done: t('Laporan yang dihantar dibekukan; pembetulan kemudian jadi nota bulan berikutnya.', 'A submitted report is frozen; a later correction is a note on next month\u2019s report.'),
+      recover: t('Tiada harga? Caj menunggu harga dimasukkan; tidak pernah diteka.', 'No price? The charge waits for one; never guessed.'),
+    },
+    notVerified: [t('Gaji pengawal masih dalam JA: caj pengawal disenaraikan untuk dimasukkan ke JA.', 'Guard pay is still in JA: a guard\u2019s charge is listed for keying into JA.')],
+  },
+  {
+    id: 'ops.inventory.disposal',
+    status: 'ready',
+    dept: 'Government Operations and Procurement',
+    title: t('Permohonan pelupusan barang stor dan tapak (PKK, KBK)', 'Disposal of store and site items (PKK, KBK)'),
+    purpose: t('Satu kes: permohonan, semakan, penilaian, kelulusan, kaedah, pelaksanaan, bukti, kemas kini, selesai.', 'One case: request, review, assessment, approval, method, execution, evidence, record update, close.'),
+    who: t('Penjaga stor (barang stor) atau OM (barang tapak) memohon; eksekutif Perolehan menyemak dan menutup; OGM meluluskan RM1,000 ke atas, jualan dan barang sensitif.', 'A storekeeper (store items) or the OM (site items) asks; the Procurement executive reviews and closes; the OGM approves RM1,000 and above, any sale and sensitive items.'),
+    screen: { view: 'purchasing', name: 'Purchasing', action: t('Kawalan Inventori: Mohon pelupusan.', 'Inventory control: Mohon pelupusan.') },
+    allowed: (u) => !u.integration && (u.department === 'procurement' || u.opsTier === 'ogm' || canRecordHandover(u, today())),
+    fields: [
+      { key: 'reason', label: 'Reason', required: true, format: t('Daripada senarai polisi.', 'From the policy list.'), example: 'damaged' },
+      { key: 'photo', label: 'Photo', required: false, format: t('Wajib untuk barang rosak atau tidak selamat.', 'Needed for a damaged or unsafe item.'), example: 'photo' },
+      { key: 'marksRemoved', label: 'Marks removed', required: false, format: t('Uniform bertanda syarikat / klien / kontrak.', 'A uniform with company, client or contract marks.'), example: 'yes' },
+    ],
+    sources: [{ what: t('Kad stok dan sejarah barang.', 'The stock card and item history.'), askDesk: 'procurement' }],
+    enteredOnce: t('Barang stor keluar dari stok boleh guna semasa permohonan ("menunggu pelupusan").', 'Store items leave usable stock at request ("menunggu pelupusan").'),
+    actions: ['inventory.disposal.request', 'inventory.disposal.close'],
+    steps: {
+      save: t('Hantar permohonan.', 'Send the request.'),
+      review: t('Semakan oleh orang lain: kuantiti, keadaan, pemilikan dan kontrak.', 'Reviewed by someone else: quantity, condition, ownership and contract.'),
+      returned: t('Ditolak: barang kekal atau dikembalikan ke stok.', 'Not approved: the items stay or come back to stock.'),
+      done: t('SELESAI bila bukti untuk kaedah, tanda dibuang dan padam data lengkap; sasaran 10 hari bekerja.', 'SELESAI when the method\u2019s evidence, marks removed and the data wipe are complete; target 10 working days.'),
+      recover: t('Tidak boleh tutup? Lihat senarai yang tertinggal pada mesej.', 'Cannot close? The message lists what is missing.'),
+    },
+    notVerified: [t('Wang jualan direkod oleh Kewangan, bukan stor.', 'Sale money is recorded by Finance, never by the store.')],
   },
   ...(['government', 'private'] as const).map(
     (sector): OpsGuideCard => ({
@@ -432,5 +555,68 @@ export const OPS_GUIDE_CARDS: OpsGuideCard[] = [
       recover: t('Aduan yang ditutup tidak boleh dibuka semula; rekod aduan baharu jika berulang.', 'A closed complaint cannot be reopened; log a new one if it happens again.'),
     },
     notVerified: [t(`Had ${r.complaintDays} hari dan ${r.complaintsWarn} aduan dalam 90 hari ialah cadangan.`, `The ${r.complaintDays}-day limit and ${r.complaintsWarn} complaints in 90 days are proposals.`)],
+  },
+  {
+    id: 'am.rental.home',
+    status: 'ready',
+    dept: 'Asset Management',
+    title: t('Rumah sewa: dari Kosong hingga kunci, dan keluar semula', 'Rental homes: from vacant to the keys, and moving out'),
+    purpose: t(
+      'Tujuh langkah: 1 iklan (balas pertanyaan dalam 2 jam pejabat), 2 permohonan dan keputusan (Pengarah Aset, kemudian Pengerusi atau Naib Pengerusi), 3 perjanjian dan setem LHDN (penyewa bayar duti), 4 kutipan sewa bulanan (invois 20-24hb, bayar 25hb-10hb), 5 tunggakan 3 bulan dan notis 14 hari, 6 keluar dan deposit (pemeriksaan ikut peraturan 2 petang, penyata dalam 24 jam, pulangan 2-3 hari bekerja), 7 pembaikan (siapa bayar: pemilik, penyewa atau belum jelas).',
+      'Seven steps: 1 advert (reply to an enquiry within 2 office hours), 2 application and decision (Asset Director, then the Chairman or Vice Chairman), 3 agreement and LHDN stamping (the tenant pays the duty), 4 monthly rent (invoices 20th-24th, pay 25th-10th), 5 3-month arrears and the 14-day notice, 6 moving out and the deposit (inspection by the 2 pm rule, statement in 24 hours, refund in 2-3 working days), 7 repairs (who pays: owner, tenant or unclear).',
+    ),
+    who: t(
+      'Eksekutif admin sewaan mencadang dan merekod; Pengarah Aset meluluskan (bukan pencadang); Kewangan sahaja mengesahkan wang dari bank dan mengeluarkan resit rasmi.',
+      'The rental admin executive proposes and records; the Asset Director approves (never the proposer); only Finance confirms money from the bank and issues the official receipt.',
+    ),
+    screen: { view: 'assets', name: 'Asset Management', action: t('Rumah sewa: pilih tab langkah (Iklan, Permohonan, Perjanjian & setem, Kutipan sewa, Tunggakan, Keluar & deposit, Pembaikan).', 'Rental homes: pick the step tab (Advert, Application, Agreement and stamping, Rent, Arrears, Moving out, Repairs).') },
+    allowed: (u) => !u.integration && (assetRole(u) === 'team' || u.leadership === 'finance_director' || (u.role === 'pwvsb_officer' && u.department === 'finance')),
+    fields: [
+      { key: 'at', label: 'Enquiry date and time', required: true, format: t('Tarikh DAN masa pertanyaan; jawapan pertama dikira daripadanya.', 'The date AND time of the enquiry; the first reply is counted from it.'), example: '2026-11-18T10:15' },
+      { key: 'result', label: 'Screening result', required: true, format: t('BERMINAT DAN LAYAK / PERLU MAKLUMAT / TIDAK LAYAK (sebab ringkas, sama untuk semua) / TIDAK BERMINAT.', 'Interested and eligible / needs more information / not eligible (short reason, the same for everyone) / not interested.'), example: 'BERMINAT_LAYAK' },
+      { key: 'amount', label: 'Amount in the bank (Finance)', required: true, format: t('Hanya Kewangan, daripada penyata bank syarikat pemilik. Slip penyewa bukan wang.', "Finance only, from the owner company's bank statement. The tenant's slip is not money."), example: '3600' },
+    ],
+    sources: [{ what: t('Kertas Prisma Wiramaju V-D6..V-D46 dalam perpustakaan dasar.', 'The Prisma Wiramaju papers V-D6..V-D46 in the policy library.'), askDesk: null, askName: 'The Asset Director, who keeps the rental settings and templates' }],
+    enteredOnce: t(
+      'Dimasukkan sekali: sewa, deposit dan terma daripada keputusan Pengarah Aset mengisi iklan, permohonan deposit (DPR), perjanjian, notis dan invois; tiada taip semula.',
+      "Entered once: the rent, deposit and terms from the Asset Director's decision fill the advert, the deposit request (DPR), the agreement, the notice and the invoice check; nothing is retyped.",
+    ),
+    actions: ['asset.rental.listing', 'asset.rental.application', 'asset.rental.agreement', 'asset.rental.collection', 'asset.rental.arrears', 'asset.rental.moveout', 'asset.rental.repair'],
+    steps: {
+      save: t('Setiap langkah direkod dengan masa dan sejarah yang tidak boleh dipadam.', 'Every step is kept with its time and a history that cannot be deleted.'),
+      review: t('Pengarah Aset meluluskan; Pengerusi atau Naib Pengerusi bersetuju untuk penyewa baharu dan pindaan sewa, deposit atau tempoh; Naib Pengerusi untuk pembaikan melebihi RM5,000, CEO melebihi RM50,000.', 'The Asset Director approves; the Chairman or Vice Chairman consents to a new tenant and to a change of rent, deposit or term; the Vice Chairman for repairs above RM5,000, the CEO above RM50,000.'),
+      returned: t('Ditolak: sebab direkod; betulkan dan hantar semula.', 'Refused: the reason is kept; correct it and send again.'),
+      done: t('Kunci diserah hanya bila semua syarat lengkap; fail keluar ditutup hanya bila wang, utiliti dan pemeriksaan selesai.', 'Keys are handed over only when every condition is met; a move-out file closes only when money, utilities and the inspection are settled.'),
+      recover: t('Selepas notis 14 hari: Pengarah Aset memutuskan (surat peguam atau pelan bayaran). Tiada tukar kunci tanpa pengesahan bertulis peguam syarikat.', "After the 14-day notice: the Asset Director decides (lawyer's letter or a payment plan). No lock-out without the company lawyer's written confirmation."),
+    },
+    notVerified: [t('Modul rumah sewa dipasang oleh CEO sahaja; e-Duti Setem dan SQL Account tidak disambung (pasukan merekod apa yang dibuat di sana).', 'The rental module is installed by the CEO only; e-Duti Setem and SQL Account are not connected (the team records what was done there).')],
+  },
+  {
+    id: 'it.website.project',
+    status: 'ready',
+    dept: 'IT',
+    title: t('Laman web baharu atau perubahan besar', 'A new website or a big website change'),
+    purpose: t(
+      'Ketua syarikat memohon; IT menyemak dan menganggar; CEO meluluskan kos dan skop; pemilik kandungan menyediakan kandungan dan menguji; pelulus kandungan melancarkan.',
+      'The company head asks; IT checks and estimates; the CEO approves the cost and scope; the content owner prepares the content and tests; the content approver launches.',
+    ),
+    who: t('Pengurus syarikat (atau COO / CEO) memohon; IT membina; CEO meluluskan.', 'The company manager (or the COO / CEO) asks; IT builds; the CEO approves.'),
+    screen: { view: 'it', name: 'IT', action: t('Polisi IT: Laman web baharu.', 'IT policies: New website.') },
+    allowed: (u) => !u.integration && (u.role === 'company_manager' || u.opsTier === 'coo' || u.opsTier === 'ceo' || u.department === 'it'),
+    fields: [
+      { key: 'scope', label: 'Scope', required: true, format: t('Apa yang diperlukan.', 'What is needed.'), example: 'Company profile site, 5 pages' },
+      { key: 'contentApproverId', label: 'Content approver', required: true, format: t('Bukan pemilik kandungan.', 'Not the content owner.'), example: 'u-cm-sasa' },
+    ],
+    sources: [{ what: t('Profil syarikat dan idea.', 'The company profile and ideas.'), askDesk: null, askName: 'The company manager' }],
+    enteredOnce: t('Dimasukkan sekali; setiap langkah membaca permohonan yang sama.', 'Entered once; every step reads the same request.'),
+    actions: ['it.policy.webProject'],
+    steps: {
+      save: t('Permohonan disimpan dengan fail.', 'The request is saved with its files.'),
+      review: t('CEO meluluskan kos dan skop (bukan pemohon).', 'The CEO approves the cost and scope (never the requester).'),
+      returned: t('UAT gagal: kembali kepada kandungan.', 'UAT failed: back to the content.'),
+      done: t('Langsung bila pelulus kandungan menerbitkan dengan pautan https.', 'Live when the content approver publishes with an https link.'),
+      recover: t('Tersalah: rekod langkah semula dengan sebab.', 'A mistake: record the step again with a reason.'),
+    },
+    notVerified: [t('Tiada sambungan hos; IT merekod apa yang diterbitkan.', 'No hosting connection; IT records what was published.')],
   },
 ];

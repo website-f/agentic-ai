@@ -1,5 +1,3 @@
-import type { FinSettingsValues } from "./types";
-import type { Tender } from "./types";
 import { AccessDenied } from "./access";
 import { isLead } from "./finance";
 import { isoDate } from "./finance";
@@ -37,34 +35,28 @@ export interface FinClientDeposit {
   claim: (FinSign & { on: IsoDate; ref: string; docs: string[] }) | null;
   refund: { statementId: Id; lineId: Id; date: IsoDate; amount: number } | null;
   writtenOff: (FinSign & { amount: number }) | null;
-  /** F8 (Fauzan, 11 Nov 2026): the tender the money is held on (tenders also carry retention), when it is a tender. */
-  tenderId?: Id | null;
+  /** The tender or contract reference the retention is held under, when there is no contract record (Fauzan, 11 Nov 2026). */
   tenderRef?: string | null;
-  /** F8: each status update (who asked whom, what they said), at least every 2 months until the money is back. */
-  updates?: { on: IsoDate; text: string; by: string; byId: Id; at: string }[];
+  /** Status updates on retention still held (Fauzan, 11 Nov 2026: asked every 2 months until it is claimed back). */
+  updates?: (FinSign & { note: string })[];
 }
 
-/** Money still out with the client: not paid back and not written off. */
-const stillOut = (d: Pick<FinClientDeposit, 'status'>) => d.status === 'pending' || d.status === 'held' || d.status === 'claimed';
-
-function addMonthsDate(d: IsoDate, months: number): IsoDate {
+function addMonthsOn(d: IsoDate, k: number): IsoDate {
   const [y, m, day] = d.split('-').map(Number);
-  const t = new Date(Date.UTC(y, m - 1 + months, 1));
+  const t = new Date(Date.UTC(y, m - 1 + k, 1));
   const last = new Date(Date.UTC(t.getUTCFullYear(), t.getUTCMonth() + 1, 0)).getUTCDate();
-  return `${t.getUTCFullYear()}-${String(t.getUTCMonth() + 1).padStart(2, '0')}-${String(Math.min(day, last)).padStart(2, '0')}`;
+  return new Date(Date.UTC(t.getUTCFullYear(), t.getUTCMonth(), Math.min(day, last))).toISOString().slice(0, 10);
 }
 
 /**
- * F8 (Fauzan, 11 Nov 2026): retention held by a client (on a tender or a contract) has its status updated every
- * retentionUpdateMonths (2) until it is claimed back: the next update is due that long after the last update (or after
- * it was recorded). Null once the money is back or written off, and for deposits.
+ * When a retention's next status update is due (Fauzan, 11 Nov 2026): every few months (2 by default, the FD sets it)
+ * from the last update, the check or the day it was entered, until the money is back or written off. Null when none
+ * is needed (a deposit, or retention already settled).
  */
-export function finRetentionUpdate(d: FinClientDeposit, today: IsoDate, months: number = RULES.financeContractEnd.value.retentionUpdateMonths) {
-  if (d.kind !== 'retention' || !stillOut(d)) return null;
-  const last = [...(d.updates ?? [])].sort((a, b) => b.on.localeCompare(a.on))[0] ?? null;
-  const from = last?.on ?? d.added.at.slice(0, 10);
-  const dueOn = addMonthsDate(from, months);
-  return { lastOn: last?.on ?? null, lastText: last?.text ?? null, dueOn, due: dueOn <= today };
+export function finRetentionUpdateBy(d: FinClientDeposit, months: number = RULES.financeContractEnd.value.retentionPromptMonths): IsoDate | null {
+  if (d.kind !== 'retention' || !['held', 'claimed'].includes(d.status)) return null;
+  const last = [d.added.at, d.checked?.at, d.claim?.at, ...(d.updates ?? []).map((u) => u.at)].filter((x): x is string => !!x).sort().pop()!;
+  return addMonthsOn(last.slice(0, 10), Math.max(1, Math.round(months)));
 }
 
 /** The day a contract stopped: the day it was terminated, else its end date. */
@@ -73,10 +65,10 @@ export function finContractEndOn(c: Pick<Contract, 'endOn' | 'endedOn'>): IsoDat
 }
 
 /** The day a deposit or retention is expected back: as agreed, else the contract's end plus the claim days. */
-export function finDepositDueBack(d: FinClientDeposit, contracts: Contract[], claimDays: number = RULES.financeContractEnd.value.claimWithinDays): IsoDate | null {
+export function finDepositDueBack(d: FinClientDeposit, contracts: Contract[]): IsoDate | null {
   if (d.dueBackOn) return d.dueBackOn;
   const c = d.contractId ? contracts.find((x) => x.id === d.contractId) : null;
-  return c ? addDays(finContractEndOn(c), claimDays) : null;
+  return c ? addDays(finContractEndOn(c), RULES.financeContractEnd.value.claimWithinDays) : null;
 }
 
 type Out<T> = { patch: Partial<FinStatus>; action: string; summary: string; result: T };
@@ -88,14 +80,7 @@ const money = (v: unknown, what: string): number => {
 };
 
 /** Add (from the contract or the client's letter), check (someone else), claim back, write off (FD or CEO). */
-export function finDepositAction(
-  ctx: FinCashCtx,
-  f: FinStatus,
-  contracts: Contract[],
-  action: string,
-  input: Record<string, unknown>,
-  tenders: Pick<Tender, 'id' | 'companyId' | 'ref' | 'title' | 'buyer'>[] = [],
-): Out<unknown> {
+export function finDepositAction(ctx: FinCashCtx, f: FinStatus, contracts: Contract[], action: string, input: Record<string, unknown>): Out<unknown> {
   if (!ctx.a || ctx.a.kind === 'viewer' || ctx.a.kind === 'coo') throw new AccessDenied('view', '(Finance staff keep deposits and retention)');
   const list = f.clientDeposits ?? [];
   const save = (d: FinClientDeposit) => ({ clientDeposits: list.some((x) => x.id === d.id) ? list.map((x) => (x.id === d.id ? d : x)) : [...list, d] });
@@ -105,18 +90,15 @@ export function finDepositAction(
     const contractId = typeof input.contractId === 'string' && input.contractId ? input.contractId : null;
     const c = contractId ? contracts.find((x) => x.id === contractId && x.companyId === f.companyId) : null;
     if (contractId && !c) throw new NotFound('Contract');
-    // F8: retention on a tender (Fauzan, 11 Nov 2026: tenders also carry retention money).
-    const tenderId = typeof input.tenderId === 'string' && input.tenderId ? input.tenderId : null;
-    const t = tenderId ? tenders.find((x) => x.id === tenderId && x.companyId === f.companyId) : null;
-    if (tenderId && !t) throw new NotFound('Tender');
     const heldSince = isoDate(input.heldSince, 'Held since');
     if (heldSince > ctx.today) throw new BadRequest('"Held since" cannot be in the future.');
     const dueBackOn = input.dueBackOn ? isoDate(input.dueBackOn, 'Due back on') : null;
+    const tenderRef = typeof input.tenderRef === 'string' && input.tenderRef.trim() ? noSecrets(text(input.tenderRef, 'Tender or contract reference', 2, 80), 'Reference') : null;
     const d: FinClientDeposit = {
       id: `dep-${f.companyId}-${String(list.length + 1).padStart(3, '0')}`,
       companyId: f.companyId,
       contractId,
-      client: c ? c.clientName : t && !input.client ? t.buyer : noSecrets(text(input.client, 'Client', 2, 160), 'Client'),
+      client: c ? c.clientName : noSecrets(text(input.client, 'Client', 2, 160), 'Client'),
       kind,
       amount: money(input.amount, 'Amount held'),
       heldSince,
@@ -127,29 +109,17 @@ export function finDepositAction(
       claim: null,
       refund: null,
       writtenOff: null,
-      tenderId: t ? t.id : null,
-      tenderRef: t ? t.ref : null,
-      updates: [],
+      ...(tenderRef ? { tenderRef } : {}),
     };
     return {
       patch: save(d),
       action: 'finance.deposit.added',
-      summary: `${kind} RM${d.amount.toFixed(2)} held by ${d.client}${c ? ` (${c.ref})` : ''}${t ? ` on tender ${t.ref}` : ''}; waiting for a second person to check.`,
+      summary: `${kind} RM${d.amount.toFixed(2)} held by ${d.client}${c ? ` (${c.ref})` : ''}; waiting for a second person to check.`,
       result: d,
     };
   }
   const d = list.find((x) => x.id === input.depositId);
   if (!d) throw new NotFound('Deposit or retention');
-  if (action === 'status') {
-    // F8: the status of money still with the client, at least every 2 months until it is back.
-    if (!stillOut(d)) throw new BadRequest('This money is already back or written off.');
-    const note = noSecrets(text(input.comment, 'The status now (who you asked and what they said)', 5, 400), 'Status');
-    const on = isoDate(input.on ?? ctx.today, 'Date of the update');
-    if (on > ctx.today) throw new BadRequest('The update date cannot be in the future.');
-    const s = ctx.sign(note);
-    const next: FinClientDeposit = { ...d, updates: [...(d.updates ?? []), { on, text: note, by: s.by, byId: s.byId, at: s.at }] };
-    return { patch: save(next), action: 'finance.deposit.status', summary: `${d.kind} ${d.id} (${d.client}${d.tenderRef ? `, tender ${d.tenderRef}` : ''}) status: ${note}`, result: next };
-  }
   if (action === 'check') {
     if (!ctx.reviewer) throw new AccessDenied('view', '(the deputy, the team leader, the Finance Director or the CEO checks it)');
     if (d.status !== 'pending') throw new BadRequest('Nothing to check.');
@@ -158,9 +128,17 @@ export function finDepositAction(
     return { patch: save(next), action: 'finance.deposit.checked', summary: `${d.kind} ${d.id} for ${d.client} checked.`, result: next };
   }
   if (d.status === 'pending') throw new BadRequest('A second person checks it first.');
+  if (action === 'update') {
+    // A retention status update (Fauzan, 11 Nov 2026): what the client said, where the final account stands.
+    if (d.kind !== 'retention') throw new BadRequest('Status updates are for retention money.');
+    if (!['held', 'claimed'].includes(d.status)) throw new BadRequest('This retention is already settled.');
+    const note = noSecrets(text(input.note ?? input.comment, 'Where the retention stands', 5, 300), 'Note');
+    const next: FinClientDeposit = { ...d, updates: [...(d.updates ?? []), { ...ctx.sign(note), note }].slice(-40) };
+    return { patch: save(next), action: 'finance.deposit.update', summary: `Retention RM${d.amount.toFixed(2)} held by ${d.client}: ${note}`, result: next };
+  }
   if (action === 'claim') {
     if (d.status !== 'held') throw new BadRequest('Only money still held is claimed back.');
-    const due = finDepositDueBack(d, contracts, ctx.fs?.depositClaimDays);
+    const due = finDepositDueBack(d, contracts);
     const c = d.contractId ? contracts.find((x) => x.id === d.contractId) : null;
     const ended = c ? finContractEndOn(c) <= ctx.today : false;
     if (!ended && !(due && due <= ctx.today) && !input.comment) throw new BadRequest('The contract has not ended; say why it is claimed back now.');
@@ -253,8 +231,8 @@ export interface FinEndStep {
  * Every contract that ended in the last year, with its follow-ups and whether each is done. Prima opens these by itself
  * the day the contract ends or is terminated (A11); billing stops at that day.
  */
-export function finContractEnds(f: FinStatus, contracts: Contract[], today: IsoDate, s?: Partial<FinSettingsValues>) {
-  const rule = { ...RULES.financeContractEnd.value, claimWithinDays: s?.depositClaimDays ?? RULES.financeContractEnd.value.claimWithinDays, finalInvoiceDays: s?.finalInvoiceDays ?? RULES.financeContractEnd.value.finalInvoiceDays };
+export function finContractEnds(f: FinStatus, contracts: Contract[], today: IsoDate) {
+  const rule = RULES.financeContractEnd.value;
   const out: { contract: { id: Id; ref: string; client: string; endOn: IsoDate; terminated: boolean }; steps: FinEndStep[]; open: number; late: number }[] = [];
   for (const c of contracts) {
     if (c.companyId !== f.companyId) continue;
@@ -273,7 +251,7 @@ export function finContractEnds(f: FinStatus, contracts: Contract[], today: IsoD
       });
     }
     for (const d of (f.clientDeposits ?? []).filter((x) => x.contractId === c.id)) {
-      const by = finDepositDueBack(d, contracts, rule.claimWithinDays);
+      const by = finDepositDueBack(d, contracts);
       steps.push({
         kind: 'deposit',
         text: `${d.kind === 'deposit' ? 'Deposit' : 'Retention'} RM${d.amount.toFixed(2)}: ${d.status === 'refunded' ? `paid back ${d.refund!.date}` : d.status === 'written_off' ? 'written off' : d.status === 'claimed' ? `claimed ${d.claim!.on}, waiting for the money` : 'claim it back'}`,
@@ -312,37 +290,35 @@ export function finContractEnds(f: FinStatus, contracts: Contract[], today: IsoD
   return out.sort((a, b) => b.open - a.open || b.contract.endOn.localeCompare(a.contract.endOn));
 }
 
-export function finContractEndHome(f: FinStatus, contracts: Contract[], today: IsoDate, userId: Id, reviewer: boolean, s?: Partial<FinSettingsValues>) {
-  const ends = finContractEnds(f, contracts, today, s);
+export function finContractEndHome(f: FinStatus, contracts: Contract[], today: IsoDate, userId: Id, reviewer: boolean, retentionMonths?: number) {
+  const ends = finContractEnds(f, contracts, today);
   return {
+    retentionToUpdate: (f.clientDeposits ?? []).filter((d) => {
+      const by = finRetentionUpdateBy(d, retentionMonths);
+      return !!by && by <= today;
+    }).length,
     endsOpen: ends.filter((e) => e.open > 0).length,
     endsLate: ends.filter((e) => e.late > 0).length,
     depositToCheck: reviewer ? (f.clientDeposits ?? []).filter((d) => d.status === 'pending' && d.added.byId !== userId).length : 0,
-    // F8: retention whose status update is due (every 2 months until it is back).
-    retentionUpdate: (f.clientDeposits ?? []).filter((d) => finRetentionUpdate(d, today, s?.retentionUpdateMonths)?.due).length,
   };
 }
 
 /** Everything the panel needs: deposits held, contracts that ended and their follow-ups, and contracts to link to. */
-export function finContractEndView(
-  f: FinStatus,
-  contracts: Contract[],
-  today: IsoDate,
-  s?: Partial<FinSettingsValues>,
-  tenders: Pick<Tender, 'id' | 'companyId' | 'ref' | 'title'>[] = [],
-) {
+export function finContractEndView(f: FinStatus, contracts: Contract[], today: IsoDate, retentionMonths?: number) {
   const mine = contracts.filter((c) => c.companyId === f.companyId);
   return {
+    retentionMonths: retentionMonths ?? RULES.financeContractEnd.value.retentionPromptMonths,
     deposits: (f.clientDeposits ?? []).map((d) => ({
       ...d,
-      dueBack: finDepositDueBack(d, contracts, s?.depositClaimDays),
+      updateBy: finRetentionUpdateBy(d, retentionMonths),
+      updateDue: (() => {
+        const by = finRetentionUpdateBy(d, retentionMonths);
+        return !!by && by <= today;
+      })(),
+      dueBack: finDepositDueBack(d, contracts),
       contractRef: mine.find((c) => c.id === d.contractId)?.ref ?? null,
-      // F8: the next status update for retention still out.
-      update: finRetentionUpdate(d, today, s?.retentionUpdateMonths),
     })),
-    retentionUpdateMonths: s?.retentionUpdateMonths ?? RULES.financeContractEnd.value.retentionUpdateMonths,
-    tenders: tenders.filter((t) => t.companyId === f.companyId).map((t) => ({ id: t.id, ref: t.ref, title: t.title })).sort((a, b) => a.ref.localeCompare(b.ref)),
-    ends: finContractEnds(f, contracts, today, s),
+    ends: finContractEnds(f, contracts, today),
     contracts: mine.map((c) => ({ id: c.id, ref: c.ref, client: c.clientName, endOn: finContractEndOn(c) })).sort((a, b) => a.client.localeCompare(b.client)),
   };
 }

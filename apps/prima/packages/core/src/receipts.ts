@@ -5,7 +5,7 @@ import type { StaffClaimKind } from "./types";
 
 /** What kind of spending a receipt looks like (the claim kinds, plus travel parts and anything else). */
 export type ReceiptKind = StaffClaimKind | 'TOLL' | 'PARKING' | 'HOTEL' | 'FUEL' | 'OTHER';
-export const RECEIPT_KINDS: ReceiptKind[] = ['MEDICAL', 'DENTAL', 'OPTICAL', 'CHECKUP', 'TOLL', 'PARKING', 'HOTEL', 'FUEL', 'OTHER'];
+export const RECEIPT_KINDS: ReceiptKind[] = ['MEDICAL', 'DENTAL', 'OPTICAL', 'CHECKUP', 'TOLL', 'PARKING', 'HOTEL', 'FUEL', 'IT_EQUIPMENT', 'OTHER'];
 
 /** What a reader found on a receipt. Every field may be missing; nothing here is trusted until the staff member confirms it. */
 export interface ReceiptRead {
@@ -89,6 +89,8 @@ export function receiptKindOf(textIn: string): ReceiptKind | null {
   if (/parking|letak kereta|parkir/.test(t)) return 'PARKING';
   if (/hotel|inn\b|resort|penginapan|check-?in/.test(t)) return 'HOTEL';
   if (/petrol|shell|petronas|caltex|bhp|petron|ron ?9[57]|diesel/.test(t)) return 'FUEL';
+  // IT equipment or software, small consumables included (Merdeka circular MN/CIR/IT/003/2026 point 3).
+  if (/laptop|komputer|computer|\bmouse\b|tetikus|keyboard|papan kekunci|kabel|cable|\busb\b|printer|pencetak|toner|monitor|router|software|perisian|licen[cs]e|lesen perisian|\bssd\b|hard ?disk|charger|pengecas|webcam|headset/.test(t)) return 'IT_EQUIPMENT';
   return null;
 }
 

@@ -2,6 +2,7 @@
 // workers might get their own login just for guard kind of things"). Who may add a foreign worker, old paper dates as
 // opening records that keep the copy rule, the board's phone sign-in state, and a foreign worker on the guard phone.
 // Synthetic data only.
+import { noLoadGate } from './no-load-gate';
 import { describe, expect, it } from 'vitest';
 import {
   AccessDenied,
@@ -26,7 +27,7 @@ const pdf = (name: string): ProofInput => ({ kind: 'document' as const, name, da
 
 function fresh() {
   const ds = generateDataset({ today: TODAY, now: NOW });
-  const svc = new PrimaService(withOrgLinks(new MemoryStore(ds)), () => NOW);
+  const svc = new PrimaService(noLoadGate(withOrgLinks(new MemoryStore(ds))), () => NOW);
   const user = (id: string) => ds.users.find((u) => u.id === id)!;
   return { ds, svc, user };
 }

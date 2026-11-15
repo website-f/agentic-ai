@@ -57,6 +57,7 @@ const CATEGORY_SYNONYMS: Record<ItemCategory, string[]> = {
   uniform: ['uniform', 'uniforms', 'seragam', 'pakaian', 'baju', 'shirt', 'kemeja', 'seluar', 'trousers', 'pants', 'cap', 'topi', 'beret', 'belt', 'tali pinggang', 'jacket', 'jaket', 'tie'],
   footwear: ['footwear', 'kasut', 'shoe', 'shoes', 'boot', 'boots', 'but', 'sandal'],
   vest: ['vest', 'vests', 'rompi', 'reflective vest', 'safety vest'],
+  ballistic_vest: ['ballistic vest', 'bulletproof vest', 'bullet proof vest', 'body armour', 'body armor', 'jaket kalis peluru', 'vest kalis peluru'],
   torchlight: ['torch', 'torchlight', 'torchlights', 'lampu suluh', 'flashlight', 'lampu'],
   radio: ['radio', 'radios', 'walkie talkie', 'walkie', 'walkie-talkie', 'handheld radio', 'ht'],
   phone: ['phone', 'phones', 'telefon', 'handphone', 'mobile', 'smartphone', 'telefon bimbit'],

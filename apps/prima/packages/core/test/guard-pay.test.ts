@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import {
   AccessDenied,
+  DEFAULT_PAY_LAW,
   MemoryStore,
   PrimaService,
   RULES,
@@ -8,23 +9,21 @@ import {
   leaveDaysIn,
   generateDataset,
   myt,
+  rosterPayInput,
   standardGuardAmounts,
   type Attendance,
   type PayFormula,
   type Person,
   type Shift,
 } from '../src';
-import { closeShortShifts } from './full-shifts';
+import { guardPayPrep } from './guard-pay-preparer';
 
 // Prima's own guard pay run (Fauzan, 5 Nov 2026). Synthetic data only: made-up people, placeholder formula amounts.
 const TODAY = '2026-11-05';
 const CEO = 'u-fauzan';
 const NOW = myt(TODAY, '10:00');
-// P100 B1: each company prepares its own month; the seed has each pilot company's manager name one admin executive.
-const PREPARER: Record<string, string> = { 'co-sasa': 'u-ae-sasa', 'co-arsh': 'u-ae-arsh', 'co-inas': 'u-ae-inas' };
-const prep = (svc: PrimaService, companyId: string) => svc.user(PREPARER[companyId] ?? `no-preparer-${companyId}`);
 const fresh = () => {
-  const ds = closeShortShifts(generateDataset({ today: TODAY, now: NOW, daysBack: 40 }));
+  const ds = generateDataset({ today: TODAY, now: NOW, daysBack: 40 });
   return { ds, svc: new PrimaService(new MemoryStore(ds), () => NOW) };
 };
 
@@ -129,6 +128,18 @@ describe('guard pay line from attendance and the ACT formula', () => {
     expect(leave.otHours).toBe(60);
   });
 
+  it('C1b: pays paid leave at basic pay only, so a fixed allowance is not paid on leave days', () => {
+    const withAllowance = (): PayFormula => ({ ...formula(), amounts: { ...standardGuardAmounts(2), fixedAllowances: [{ label: 'Synthetic shift allowance', amount: 260 }] } });
+    const leaves = [{ id: 'l1', companyId: 'c1', personId: 'p1', kind: 'ANNUAL', from: '2026-10-27', to: '2026-10-28', days: 2, status: 'approved' } as never];
+    const l = line(days(24), { leaves, formulaAt: () => ({ formula: withAllowance(), scope: 'Whole group' }) });
+    const cut = l.items.find((x) => x.label === 'Synthetic shift allowance: not paid on leave days')!;
+    expect(cut.qty).toBe(2);
+    expect(cut.amount).toBeCloseTo(-20, 2);
+    // No leave: the allowance is paid in full.
+    const full = line(days(26), { formulaAt: () => ({ formula: withAllowance(), scope: 'Whole group' }) });
+    expect(full.items.some((x) => x.label.endsWith('not paid on leave days'))).toBe(false);
+  });
+
   it('never counts a shift the supervisor has not locked, or one with no clock-out', () => {
     const open = days(3, 's1', { locked: false, from: 24 });
     const noOut = days(1, 's1', { from: 27 });
@@ -165,7 +176,7 @@ describe('guard pay line from attendance and the ACT formula', () => {
   });
 });
 
-describe('guard pay run: the company preparer prepares, the COO approves, Finance pays', () => {
+describe('guard pay run: the company prepares, the COO approves, Finance pays', () => {
   afterEach(() => {
     RULES.guardPayroll.value.primaPays = false;
   });
@@ -174,19 +185,30 @@ describe('guard pay run: the company preparer prepares, the COO approves, Financ
     const { svc, ds } = fresh();
     // Sasa's guard holidays for the year come from the OD/OGM list; give this test a holiday in October.
     ds.publicHolidayLists[0].days.push({ date: '2026-10-20', label: 'Test holiday' });
-    const hr = await svc.user('u-pwvsb-hr');
+    const prep = await guardPayPrep(svc);
     const coo = await svc.user('u-coo');
     const fin = await svc.user('u-fin-t1-lead');
-    const board = await svc.guardPayroll(hr);
-    expect(board.role).toBe('hr');
+    const board = await svc.guardPayroll(prep);
+    expect(board.role).toBe('company');
+    expect(board.employers.find((e) => e.companyId === 'co-sasa')?.prepares).toBe(true);
+    // B1 (Fauzan, 11 Nov 2026): HR and Operations Managers no longer prepare; only the person the Company Manager names.
+    const hrUser = await svc.user('u-pwvsb-hr');
+    await expect(svc.prepareGuardPay(hrUser, 'co-sasa', '2026-10')).rejects.toBeInstanceOf(AccessDenied);
+    await expect(svc.prepareGuardPay(await svc.user('u-om-klang'), 'co-sasa', '2026-10')).rejects.toBeInstanceOf(AccessDenied);
+    await expect(svc.prepareGuardPay(await svc.user('u-ae-arsh'), 'co-arsh', '2026-10')).rejects.toBeInstanceOf(AccessDenied);
+    await expect(svc.setGuardPayPreparers(hrUser, 'co-arsh', { userIds: ['u-ae-arsh'], reason: 'HR tries to name' })).rejects.toBeInstanceOf(AccessDenied);
+    const cmArsh = await svc.user('u-cm-arsh');
+    await expect(svc.setGuardPayPreparers(cmArsh, 'co-arsh', { userIds: ['u-ae-arsh'], reason: '' })).rejects.toThrow(/reason/);
+    await expect(svc.setGuardPayPreparers(cmArsh, 'co-arsh', { userIds: ['u-pwvsb-hr'], reason: 'Wrong person' })).rejects.toThrow(/work in this company/);
+    await expect(svc.setGuardPayPreparers(cmArsh, 'co-sasa', { userIds: [], reason: 'Not my company' })).rejects.toBeInstanceOf(AccessDenied);
     expect(board.rule.primaPays).toBe(false);
     expect(board.employers.map((e) => e.companyId)).toEqual(expect.arrayContaining(['co-sasa', 'co-arsh', 'co-inas']));
     // A company with a yearly guard list: HR does not enter holidays (staff holidays are separate and not read).
-    await expect(svc.prepareGuardPay(await prep(svc, 'co-sasa'), 'co-sasa', '2026-10', [{ date: '2026-10-20', label: 'x' }])).rejects.toThrow(/Operations Director or the OGM/);
+    await expect(svc.prepareGuardPay(prep, 'co-sasa', '2026-10', [{ date: '2026-10-20', label: 'x' }])).rejects.toThrow(/Operations Director or the OGM/);
     // A company with no yearly list: HR's dates must be real dates in the month.
-    await expect(svc.prepareGuardPay(await prep(svc, 'co-arsh'), 'co-arsh', '2026-10', [{ date: '2026-11-01', label: 'x' }])).rejects.toThrow(/in 2026-10/);
-    await expect(svc.prepareGuardPay(await prep(svc, 'co-sasa'), 'co-sasa', '2026-09')).rejects.toThrow(/last month/);
-    const run = await svc.prepareGuardPay(await prep(svc, 'co-sasa'), 'co-sasa', '2026-10');
+    await expect(svc.prepareGuardPay(prep, 'co-arsh', '2026-10', [{ date: '2026-11-01', label: 'x' }])).rejects.toThrow(/in 2026-10/);
+    await expect(svc.prepareGuardPay(prep, 'co-sasa', '2026-09')).rejects.toThrow(/last month/);
+    const run = await svc.prepareGuardPay(prep, 'co-sasa', '2026-10');
     expect(run.holidaySource).toBe('yearly');
     expect(run.trial).toBe(true);
     expect(run.lines.length).toBeGreaterThan(250);
@@ -195,15 +217,15 @@ describe('guard pay run: the company preparer prepares, the COO approves, Financ
     expect(run.lines.some((l) => l.formulaCode === 'STD-12H-R3')).toBe(true);
     expect(run.lines.some((l) => l.holidaysWorked > 0)).toBe(true);
     // A few guards have no salary account: HR cannot submit until fixed.
-    await expect(svc.guardPayStep(await prep(svc, run.companyId), run.id, 'submit')).rejects.toThrow(/cannot be paid/);
+    await expect(svc.guardPayStep(prep, run.id, 'submit')).rejects.toThrow(/cannot be paid/);
     const store = (svc as unknown as { store: MemoryStore }).store;
     for (const l of run.lines.filter((x) => !x.bank)) await store.update('people', l.personId, { bank: { bank: 'Test Bank', accountMasked: '****9999' } });
-    await svc.prepareGuardPay(await prep(svc, 'co-sasa'), 'co-sasa', '2026-10');
-    expect((await svc.guardPayRun(hr, run.id)).run.lines.some((l) => l.holidayDates?.includes('2026-10-20'))).toBe(true);
+    await svc.prepareGuardPay(prep, 'co-sasa', '2026-10');
+    expect((await svc.guardPayRun(prep, run.id)).run.lines.some((l) => l.holidayDates?.includes('2026-10-20'))).toBe(true);
     // HR cannot approve, the COO cannot approve a draft.
-    await expect(svc.guardPayStep(coo, run.id, 'approve', { note: 'ok' })).rejects.toThrow(/preparer to submit/);
-    await svc.guardPayStep(await prep(svc, run.companyId), run.id, 'submit');
-    await expect(svc.guardPayStep(hr, run.id, 'approve', { note: 'ok' })).rejects.toThrow(/COO to approve/);
+    await expect(svc.guardPayStep(coo, run.id, 'approve', { note: 'ok' })).rejects.toThrow(/Company to submit/);
+    await svc.guardPayStep(prep, run.id, 'submit');
+    await expect(svc.guardPayStep(prep, run.id, 'approve', { note: 'ok' })).rejects.toThrow(/COO to approve/);
     await expect(svc.guardPayStep(coo, run.id, 'approve')).rejects.toThrow(/reason/);
     const ok = await svc.guardPayStep(coo, run.id, 'approve', { note: 'Checked overtime against the roster' });
     expect(ok.stage).toBe('approved');
@@ -212,7 +234,7 @@ describe('guard pay run: the company preparer prepares, the COO approves, Financ
     const bank = await svc.guardPayExport(fin, run.id, 'bank');
     expect(bank.body.split('\n')[0]).toMatch(/TRIAL RUN.*DO NOT UPLOAD/);
     expect(bank.filename).toMatch(/TRIAL/);
-    await expect(svc.guardPayExport(hr, run.id, 'bank')).rejects.toBeInstanceOf(AccessDenied);
+    await expect(svc.guardPayExport(prep, run.id, 'bank')).rejects.toBeInstanceOf(AccessDenied);
     // The journal balances.
     const sql = await svc.guardPayExport(fin, run.id, 'sql');
     const rows = sql.body.trim().split('\n').slice(2).map((l) => l.split(','));
@@ -227,16 +249,17 @@ describe('guard pay run: the company preparer prepares, the COO approves, Financ
     expect(RULES.guardPayroll.source).toMatch(/1 August 2027/);
     const { svc, ds } = fresh();
     const hr = await svc.user('u-pwvsb-hr');
+    const prep = await guardPayPrep(svc);
     const coo = await svc.user('u-coo');
     const fin = await svc.user('u-fin-t1-lead');
     for (const p of ds.people) if (!p.bank) p.bank = { bank: 'Test Bank', accountMasked: '****9999' };
     const board = await svc.guardPayroll(hr);
     expect(board.rule.switchDate).toBe('2027-08-01');
     // A month before the switch date: prepared, submitted and approved as a trial, never paid.
-    const run = await svc.prepareGuardPay(await prep(svc, 'co-sasa'), 'co-sasa', '2026-10', []);
+    const run = await svc.prepareGuardPay(prep, 'co-sasa', '2026-10', []);
     expect(`${run.period}-01` < RULES.guardPayroll.value.switchDate).toBe(true);
     expect(run.trial).toBe(true);
-    await svc.guardPayStep(await prep(svc, run.companyId), run.id, 'submit');
+    await svc.guardPayStep(prep, run.id, 'submit');
     await svc.guardPayStep(coo, run.id, 'approve', { note: 'Checked against the JA figures' });
     await expect(svc.guardPayStep(fin, run.id, 'pay', { bankRef: 'M2U-GUARD-1', pcbChecked: true, paidOn: '2026-11-05' })).rejects.toThrow(/JA Group app still pays/);
     expect((await svc.guardPayRun(fin, run.id)).run.stage).toBe('approved');
@@ -245,14 +268,14 @@ describe('guard pay run: the company preparer prepares, the COO approves, Financ
   it('once Prima pays guards, Finance marks paid and the guard sees the payslip', async () => {
     RULES.guardPayroll.value.primaPays = true;
     const { svc, ds } = fresh();
-    const hr = await svc.user('u-pwvsb-hr');
+    const prep = await guardPayPrep(svc);
     const coo = await svc.user('u-coo');
     const fin = await svc.user('u-fin-t1-lead');
     const guard = await svc.user('u-guard-sasa-1');
     for (const p of ds.people) if (!p.bank) p.bank = { bank: 'Test Bank', accountMasked: '****9999' };
-    const run = await svc.prepareGuardPay(await prep(svc, 'co-sasa'), 'co-sasa', '2026-10', []);
+    const run = await svc.prepareGuardPay(prep, 'co-sasa', '2026-10', []);
     expect(run.trial).toBe(false);
-    await svc.guardPayStep(await prep(svc, run.companyId), run.id, 'submit');
+    await svc.guardPayStep(prep, run.id, 'submit');
     await svc.guardPayStep(coo, run.id, 'approve', { note: 'Approved' });
     await expect(svc.guardPayStep(fin, run.id, 'pay', { bankRef: 'B1' })).rejects.toThrow(/PCB/);
     const paid = await svc.guardPayStep(fin, run.id, 'pay', { bankRef: 'M2U-GUARD-1', pcbChecked: true, paidOn: '2026-11-05' });
@@ -266,54 +289,40 @@ describe('guard pay run: the company preparer prepares, the COO approves, Financ
 
   it('a return needs a reason; this month cannot be submitted early; the preparer cannot approve', async () => {
     const { svc } = fresh();
-    const hr = await svc.user('u-pwvsb-hr');
+    const prep = await guardPayPrep(svc);
     const coo = await svc.user('u-coo');
-    const cur = await svc.prepareGuardPay(await prep(svc, 'co-inas'), 'co-inas', '2026-11', []);
-    await expect(svc.guardPayStep(await prep(svc, cur.companyId), cur.id, 'submit')).rejects.toThrow(/not over/);
+    const cur = await svc.prepareGuardPay(prep, 'co-inas', '2026-11', []);
+    await expect(svc.guardPayStep(prep, cur.id, 'submit')).rejects.toThrow(/not over/);
     const store = (svc as unknown as { store: MemoryStore }).store;
-    const run = await svc.prepareGuardPay(await prep(svc, 'co-arsh'), 'co-arsh', '2026-10', []);
+    const run = await svc.prepareGuardPay(prep, 'co-arsh', '2026-10', []);
     for (const l of run.lines.filter((x) => !x.bank)) await store.update('people', l.personId, { bank: { bank: 'Test Bank', accountMasked: '****9999' } });
-    await svc.prepareGuardPay(await prep(svc, 'co-arsh'), 'co-arsh', '2026-10');
-    await svc.guardPayStep(await prep(svc, run.companyId), run.id, 'submit');
-    await expect(svc.prepareGuardPay(await prep(svc, 'co-arsh'), 'co-arsh', '2026-10')).rejects.toThrow(/already submitted/);
+    await svc.prepareGuardPay(prep, 'co-arsh', '2026-10');
+    await svc.guardPayStep(prep, run.id, 'submit');
+    await expect(svc.prepareGuardPay(prep, 'co-arsh', '2026-10')).rejects.toThrow(/already submitted/);
     await expect(svc.guardPayStep(coo, run.id, 'return')).rejects.toThrow(/change/);
     const back = await svc.guardPayStep(coo, run.id, 'return', { note: 'Recheck the rest days' });
     expect(back.stage).toBe('draft');
     expect(back.returns).toHaveLength(1);
     // A one-off item needs a reason and is flagged for the COO.
     const pid = back.lines[0].personId;
-    await expect(svc.setGuardPayLine(await prep(svc, run.companyId), run.id, pid, { extra: [{ label: '', amount: 50 }] })).rejects.toThrow(/reason/);
-    // Uniform and item deductions stay switched off until management and legal decide (Fauzan, 8 Nov 2026; rule PAY-GUARD
-    // uniformDeduction 'awaiting_decision'). Equipment is never charged to the guard either way (EA s.24).
-    await expect(svc.setGuardPayLine(await prep(svc, run.companyId), run.id, pid, { extra: [{ label: 'Uniform deduction (test)', amount: -20 }] })).rejects.toThrow(/switched off until management and legal decide/);
-    await expect(svc.setGuardPayLine(await prep(svc, run.companyId), run.id, pid, { extra: [{ label: 'Uniform', amount: -20, uniformNo: 2 }] })).rejects.toThrow(/switched off/);
-    await expect(svc.setGuardPayLine(await prep(svc, run.companyId), run.id, pid, { extra: [{ label: 'Uniform set (test)', amount: -20, uniformNo: 4 }] })).rejects.toThrow(/switched off/);
-    await expect(svc.setGuardPayLine(await prep(svc, run.companyId), run.id, pid, { extra: [{ label: 'Lost radio', amount: -50 }] })).rejects.toThrow(/Equipment is never charged/);
-    await expect(svc.setGuardPayLine(await prep(svc, run.companyId), run.id, pid, { extra: [{ label: 'Damaged item (test)', amount: -30 }] })).rejects.toThrow(/switched off/);
+    await expect(svc.setGuardPayLine(prep, run.id, pid, { extra: [{ label: '', amount: 50 }] })).rejects.toThrow(/reason/);
+    // Uniforms and equipment are never charged, except a set after the 3rd (Fauzan, 6 and 13 Nov 2026).
+    await expect(svc.setGuardPayLine(prep, run.id, pid, { extra: [{ label: 'Uniform deduction (test)', amount: -20 }] })).rejects.toThrow(/after the 3rd/);
+    await expect(svc.setGuardPayLine(prep, run.id, pid, { extra: [{ label: 'Uniform', amount: -20, uniformNo: 2 }] })).rejects.toThrow(/after the 3rd/);
+    await expect(svc.setGuardPayLine(prep, run.id, pid, { extra: [{ label: 'Lost radio', amount: -50 }] })).rejects.toThrow(/never charged/);
     // Free to resign (RBA checklist A6): no fine, deposit, fee or penalty, and nothing for leaving, as a one-off item.
     for (const label of ['Late fine (test)', 'Resignation penalty', 'Deposit (test)', 'Agency fee', 'Short notice (test)'])
-      await expect(svc.setGuardPayLine(await prep(svc, run.companyId), run.id, pid, { extra: [{ label, amount: -30 }] })).rejects.toThrow(/fine, deposit|resigning or leaving/);
-    // If management turns on PR #120's path, only a 4th or 5th uniform set is charged, flagged as a legal point for the CEO.
-    const policy = RULES.guardPayroll.value as { uniformDeduction: string };
-    policy.uniformDeduction = 'fourth_fifth_set';
-    try {
-      await expect(svc.setGuardPayLine(await prep(svc, run.companyId), run.id, pid, { extra: [{ label: 'Uniform', amount: -20, uniformNo: 2 }] })).rejects.toThrow(/4th or 5th set/);
-      await expect(svc.setGuardPayLine(await prep(svc, run.companyId), run.id, pid, { extra: [{ label: 'Damaged item (test)', amount: -30 }] })).rejects.toThrow(/switched off/);
-      const u = await svc.setGuardPayLine(await prep(svc, run.companyId), run.id, pid, { extra: [{ label: 'Uniform set (test)', amount: -20, uniformNo: 4 }] });
-      expect(u.flags.join(' ')).toMatch(/legal point for the CEO/);
-    } finally {
-      policy.uniformDeduction = 'awaiting_decision';
-    }
-    // Another one-off deduction still goes through, flagged for the COO.
-    const l = await svc.setGuardPayLine(await prep(svc, run.companyId), run.id, pid, { extra: [{ label: 'Overpayment last month (test)', amount: -20 }] });
-    expect(l.items.some((x) => x.kind === 'extra' && x.amount === -20)).toBe(true);
+      await expect(svc.setGuardPayLine(prep, run.id, pid, { extra: [{ label, amount: -30 }] })).rejects.toThrow(/fine, deposit|resigning or leaving/);
+    const l = await svc.setGuardPayLine(prep, run.id, pid, { extra: [{ label: 'Uniform set (test)', amount: -20, uniformNo: 4 }] });
+    expect(l.items.some((x) => x.kind === 'extra' && x.amount === -20 && /uniform no\. 4/.test(x.label))).toBe(true);
+    expect(l.flags.join(' ')).toMatch(/EA s.24/);
     expect(l.flags.join(' ')).toMatch(/COO checks/);
   });
 
   it('keeps everyone else out, on the direct calls too', async () => {
     const { svc } = fresh();
-    const hr = await svc.user('u-pwvsb-hr');
-    const run = await svc.prepareGuardPay(await prep(svc, 'co-sasa'), 'co-sasa', '2026-10', []);
+    const prep = await guardPayPrep(svc);
+    const run = await svc.prepareGuardPay(prep, 'co-sasa', '2026-10', []);
     for (const id of ['u-guard-sasa-1', 'u-fwm-mgr']) {
       const u = await svc.user(id);
       await expect(svc.guardPayroll(u)).rejects.toBeInstanceOf(AccessDenied);
@@ -371,20 +380,20 @@ describe('review fixes', () => {
     expect(line([], { person: person({ bank: null }), formulaAt: () => null }).flags.join(' ')).not.toMatch(/salary account/);
   });
 
-  it('keeps nil lines out of the bank file and its control total; the preparer is not asked to act on an open month', async () => {
+  it('keeps nil lines out of the bank file and its control total; HR is not asked to act on an open month', async () => {
     const { svc, ds } = fresh();
-    const hr = await svc.user('u-pwvsb-hr');
+    const prep = await guardPayPrep(svc);
     const coo = await svc.user('u-coo');
     const fin = await svc.user('u-fin-t1-lead');
     for (const p of ds.people) if (!p.bank) p.bank = { bank: 'Test Bank', accountMasked: '****9999' };
     const idle = ds.people.find((p) => p.companyId === 'co-inas' && p.role === 'guard' && p.status === 'active')!;
     ds.attendance = ds.attendance.filter((a) => a.personId !== idle.id);
-    await svc.prepareGuardPay(await prep(svc, 'co-inas'), 'co-inas', '2026-11', []);
-    expect((await svc.guardPayroll(await prep(svc, 'co-inas'))).runs.find((r) => r.period === '2026-11')?.mineToAct).toBe(false);
-    const run = await svc.prepareGuardPay(await prep(svc, 'co-inas'), 'co-inas', '2026-10', []);
+    await svc.prepareGuardPay(prep, 'co-inas', '2026-11', []);
+    expect((await svc.guardPayroll(prep)).runs.find((r) => r.period === '2026-11')?.mineToAct).toBe(false);
+    const run = await svc.prepareGuardPay(prep, 'co-inas', '2026-10', []);
     const nil = run.lines.find((l) => l.personId === idle.id)!;
     expect(nil.net).toBe(0);
-    await svc.guardPayStep(await prep(svc, run.companyId), run.id, 'submit');
+    await svc.guardPayStep(prep, run.id, 'submit');
     await svc.guardPayStep(coo, run.id, 'approve', { note: 'Checked' });
     const view = await svc.guardPayRun(fin, run.id);
     expect(view.control.count).toBe(run.lines.filter((l) => l.net > 0).length);
@@ -422,17 +431,17 @@ describe('guard pay: bank or e-wallet only, cash by the COO or CEO, advances (Fa
 
   it("refuses someone else's account without written consent, and HR records the consent", async () => {
     const { svc, ds } = fresh();
-    const hr = await svc.user('u-pwvsb-hr');
+    const prep = await guardPayPrep(svc), hr = await svc.user('u-pwvsb-hr');
     const store = (svc as unknown as { store: MemoryStore }).store;
-    const run0 = await svc.prepareGuardPay(await prep(svc, 'co-arsh'), 'co-arsh', '2026-10', []);
+    const run0 = await svc.prepareGuardPay(prep, 'co-arsh', '2026-10', []);
     for (const l of run0.lines.filter((x) => !x.bank)) await store.update('people', l.personId, { bank: { bank: 'Test Bank', accountMasked: '****9999' } });
     const paid = run0.lines.find((l) => l.net > 0)!;
     const p = ds.people.find((x) => x.id === paid.personId)!;
     await store.update('people', p.id, { bank: { bank: 'Test Bank', accountMasked: '****1111', holder: 'relative', holderName: 'Test Sibling', relationship: 'brother' } });
-    const run = await svc.prepareGuardPay(await prep(svc, 'co-arsh'), 'co-arsh', '2026-10');
+    const run = await svc.prepareGuardPay(prep, 'co-arsh', '2026-10');
     const line = run.lines.find((l) => l.personId === p.id)!;
     expect(line.accountProblem).toMatch(/no written consent/);
-    await expect(svc.guardPayStep(await prep(svc, run.companyId), run.id, 'submit')).rejects.toThrow(/cannot be paid/);
+    await expect(svc.guardPayStep(prep, run.id, 'submit')).rejects.toThrow(/cannot be paid/);
     // Consent needs the form reference and the date signed.
     await expect(svc.recordPayConsent(hr, p.id, { holder: 'relative', holderName: 'Test Sibling', relationship: 'brother' })).rejects.toThrow(/consent form/);
     await expect(svc.recordPayConsent(await svc.user('u-cm-arsh'), p.id, { holder: 'own' })).rejects.toBeInstanceOf(AccessDenied);
@@ -440,7 +449,7 @@ describe('guard pay: bank or e-wallet only, cash by the COO or CEO, advances (Fa
     // The letter needs a Commissioner for Oaths stamp, then the COO's approval, before the account can be used.
     await expect(svc.recordPayConsent(hr, p.id, letter)).rejects.toThrow(/Commissioner for Oaths/);
     await svc.recordPayConsent(hr, p.id, { ...letter, commissioner: 'Test Commissioner', stampRef: 'PS-T-1', stampedOn: '2026-10-02' });
-    const waiting = await svc.prepareGuardPay(await prep(svc, 'co-arsh'), 'co-arsh', '2026-10');
+    const waiting = await svc.prepareGuardPay(prep, 'co-arsh', '2026-10');
     expect(waiting.lines.find((l) => l.personId === p.id)!.accountProblem).toMatch(/waiting for the COO/);
     const coo = await svc.user('u-coo');
     expect((await svc.payConsentsWaiting(coo)).some((c) => c.personId === p.id && c.canApprove)).toBe(true);
@@ -449,21 +458,21 @@ describe('guard pay: bank or e-wallet only, cash by the COO or CEO, advances (Fa
     await expect(svc.approvePayConsent(await svc.user('u-fauzan'), p.id, 'okay')).rejects.toBeInstanceOf(AccessDenied);
     await expect(svc.approvePayConsent(coo, p.id, '')).rejects.toThrow(/reason/);
     await svc.approvePayConsent(coo, p.id, 'Letter stamped and checked');
-    const again = await svc.prepareGuardPay(await prep(svc, 'co-arsh'), 'co-arsh', '2026-10');
+    const again = await svc.prepareGuardPay(prep, 'co-arsh', '2026-10');
     const l2 = again.lines.find((l) => l.personId === p.id)!;
     expect(l2.accountProblem).toBeNull();
     expect(l2.flags.join(' ')).toMatch(/EA s.25/);
-    await svc.guardPayStep(await prep(svc, run.companyId), run.id, 'submit');
+    await svc.guardPayStep(prep, run.id, 'submit');
   });
 
   it('pays an e-wallet separately and requires CEO approval for wage cash', async () => {
     const { svc, ds } = fresh();
-    const hr = await svc.user('u-pwvsb-hr');
+    const prep = await guardPayPrep(svc);
     const coo = await svc.user('u-coo');
     const fin = await svc.user('u-fin-t1-lead');
     const doa = await svc.user('u-pwvsb-doa');
     const store = (svc as unknown as { store: MemoryStore }).store;
-    const run = await svc.prepareGuardPay(await prep(svc, 'co-arsh'), 'co-arsh', '2026-10', []);
+    const run = await svc.prepareGuardPay(prep, 'co-arsh', '2026-10', []);
     const noAcc = run.lines.filter((l) => !l.bank && l.net > 0);
     for (const l of noAcc.slice(1)) await store.update('people', l.personId, { bank: { bank: 'Test Bank', accountMasked: '****9999' } });
     const withPay = run.lines.filter((l) => l.bank && l.net > 0);
@@ -472,14 +481,14 @@ describe('guard pay: bank or e-wallet only, cash by the COO or CEO, advances (Fa
     // One guard without an account: HR cannot submit until the Director Office lists them for cash.
     const cashGuard = noAcc[0] ?? withPay[1];
     if (!noAcc[0]) await store.update('people', cashGuard.personId, { bank: null });
-    await svc.prepareGuardPay(await prep(svc, 'co-arsh'), 'co-arsh', '2026-10');
-    await expect(svc.guardPayStep(await prep(svc, run.companyId), run.id, 'submit')).rejects.toThrow(/cannot be paid/);
+    await svc.prepareGuardPay(prep, 'co-arsh', '2026-10');
+    await expect(svc.guardPayStep(prep, run.id, 'submit')).rejects.toThrow(/cannot be paid/);
     await svc.guardPayCash(doa, run.id, cashGuard.personId, 'list', { reason: 'Cash requested' });
     await expect(svc.guardPayCash(coo, run.id, cashGuard.personId, 'decide', {give:true,reason:'COO cannot approve'})).rejects.toThrow(/CEO/);
     await svc.guardPayCash(await svc.user(CEO), run.id, cashGuard.personId, 'decide', {give:true,reason:'CEO approved named amount'});
     await store.update('people', cashGuard.personId, { bank: { bank: 'Test Bank', accountMasked: '****9999' } });
-    await svc.prepareGuardPay(await prep(svc, 'co-arsh'), 'co-arsh', '2026-10');
-    await svc.guardPayStep(await prep(svc, run.companyId), run.id, 'submit');
+    await svc.prepareGuardPay(prep, 'co-arsh', '2026-10');
+    await svc.guardPayStep(prep, run.id, 'submit');
     await svc.guardPayStep(coo, run.id, 'approve', { note: 'Checked' });
     const ew = await svc.guardPayExport(fin, run.id, 'ewallet');
     expect(ew.body).toContain('****2222');
@@ -493,7 +502,7 @@ describe('guard pay: bank or e-wallet only, cash by the COO or CEO, advances (Fa
     const om = await svc.user('u-om-klang');
     const od = await svc.user('u-opsdir');
     const ogm = await svc.user('u-ogm');
-    const hr = await svc.user('u-pwvsb-hr');
+    const prep = await guardPayPrep(svc), hr = await svc.user('u-pwvsb-hr');
     const board = await svc.guardAdvances(om, {});
     const companyId = board.companyId;
     const site = board.choices.sites[0];
@@ -520,7 +529,7 @@ describe('guard pay: bank or e-wallet only, cash by the COO or CEO, advances (Fa
     expect(changed.version).toBe(2);
     await svc.approveGuardAdvances(right, [a.id], 'Change approved');
     // Approval alone is not payment: the current month must not recover money never paid.
-    const run = await svc.prepareGuardPay(await prep(svc, companyId), companyId, '2026-11');
+    const run = await svc.prepareGuardPay(prep, companyId, '2026-11');
     const line = run.lines.find((l) => l.personId === a.personId)!;
     expect(line.advance).toBe(0);
     expect(line.items.some((x) => x.kind === 'advance')).toBe(false);
@@ -548,24 +557,24 @@ describe('cash by exception and the advance and loan scheme (Fauzan, 6 Nov 2026)
   async function approvedCash() {
     RULES.guardPayroll.value.primaPays = true;
     const { svc, ds } = fresh();
-    const hr = await svc.user('u-pwvsb-hr'), doa = await svc.user('u-pwvsb-doa');
+    const prep = await guardPayPrep(svc), doa = await svc.user('u-pwvsb-doa');
     const ceo = await svc.user(CEO), coo = await svc.user('u-coo'), fin = await svc.user('u-fin-t1-lead');
     for (const p of ds.people) if (!p.bank) p.bank = { bank: 'Test Bank', accountMasked: '****9999' };
-    const run = await svc.prepareGuardPay(await prep(svc, 'co-arsh'), 'co-arsh', '2026-10', []);
+    const run = await svc.prepareGuardPay(prep, 'co-arsh', '2026-10', []);
     const guard = run.lines.find(l => l.net > 100)!;
     await svc.guardPayCash(doa, run.id, guard.personId, 'list', { reason: 'Synthetic cash request' });
     await svc.guardPayCash(ceo, run.id, guard.personId, 'decide', { give: true, reason: 'Named wage approved' });
-    await svc.guardPayStep(await prep(svc, run.companyId), run.id, 'submit');
+    await svc.guardPayStep(prep, run.id, 'submit');
     await svc.guardPayStep(coo, run.id, 'approve', { note: 'Payroll checked' });
-    return { svc, ds, hr, doa, ceo, coo, fin, run, guard };
+    return { svc, ds, prep, doa, ceo, coo, fin, run, guard };
   }
 
   it('supersedes an unpaid stale wage-cash approval with an audited fresh CEO decision', async () => {
-    const { svc, ds, hr, doa, ceo, coo, fin, run, guard } = await approvedCash();
+    const { svc, ds, prep, doa, ceo, coo, fin, run, guard } = await approvedCash();
     const original = structuredClone(ds.guardPayRuns.find(r => r.id === run.id)!.cash![0]);
     await svc.guardPayStep(fin, run.id, 'return', { note: 'Correct PCB before paying' });
-    const changed = await svc.setGuardPayLine(await prep(svc, run.companyId), run.id, guard.personId, { pcb: guard.pcb + 1 });
-    await expect(svc.guardPayStep(await prep(svc, run.companyId), run.id, 'submit')).rejects.toThrow(/stale/);
+    const changed = await svc.setGuardPayLine(prep, run.id, guard.personId, { pcb: guard.pcb + 1 });
+    await expect(svc.guardPayStep(prep, run.id, 'submit')).rejects.toThrow(/stale/);
     await expect(svc.guardPayCash(ceo, run.id, guard.personId, 'supersede', { reason: 'Corrected amount' })).rejects.toThrow(/Director Office/);
     await expect(svc.guardPayCash(doa, run.id, guard.personId, 'supersede', { reason: '' })).rejects.toThrow(/why|reason/i);
     await svc.guardPayCash(doa, run.id, guard.personId, 'supersede', { reason: 'Corrected PCB; seek new CEO approval' });
@@ -576,7 +585,7 @@ describe('cash by exception and the advance and loan scheme (Fauzan, 6 Nov 2026)
     expect(stored.cash![0].amount).toBe(changed.net);
     expect(stored.cash![0].decision).toBeNull();
     await expect(svc.guardPayCash(doa, run.id, guard.personId, 'supersede', { reason: 'Replayed correction' })).rejects.toThrow(/fresh|pending/);
-    await svc.guardPayStep(await prep(svc, run.companyId), run.id, 'submit');
+    await svc.guardPayStep(prep, run.id, 'submit');
     await expect(svc.guardPayStep(coo, run.id, 'approve', { note: 'Checked' })).rejects.toThrow(/CEO/);
     await svc.guardPayCash(ceo, run.id, guard.personId, 'decide', { give: true, reason: 'Corrected amount checked' });
     await svc.guardPayStep(coo, run.id, 'approve', { note: 'Revised payroll checked' });
@@ -608,7 +617,7 @@ describe('cash by exception and the advance and loan scheme (Fauzan, 6 Nov 2026)
   });
 
   it('retains site changes and zero-pay approvals in history without authorizing another handout', async () => {
-    const { svc, ds, hr, doa, fin, run, guard } = await approvedCash();
+    const { svc, ds, prep, doa, fin, run, guard } = await approvedCash();
     await svc.guardPayStep(fin, run.id, 'return', { note: 'Correct site and wages' });
     const stored = ds.guardPayRuns.find(r => r.id === run.id)!;
     const line = stored.lines.find(l => l.personId === guard.personId)!;
@@ -619,7 +628,7 @@ describe('cash by exception and the advance and loan scheme (Fauzan, 6 Nov 2026)
     expect(current.cashHistory![0].entry.approvedSiteId).toBe(oldSite);
     expect(current.cash![0].approvedSiteId).toBe(line.mainSiteId);
     expect(current.cash![0].decision).toBeNull();
-    await svc.setGuardPayLine(await prep(svc, run.companyId), run.id, guard.personId, { pcb: guard.pcb + guard.net });
+    await svc.setGuardPayLine(prep, run.id, guard.personId, { pcb: guard.pcb + guard.net });
     await svc.guardPayCash(doa, run.id, guard.personId, 'supersede', { reason: 'Corrected wages leave no cash payable' });
     current = ds.guardPayRuns.find(r => r.id === run.id)!;
     expect(current.cash).toHaveLength(0);
@@ -639,8 +648,8 @@ describe('cash by exception and the advance and loan scheme (Fauzan, 6 Nov 2026)
   });
 
   it('retains legacy signed receipts while rejecting replayed historical handouts', async () => {
-    const { svc, ds } = fresh(); const hr=await svc.user('u-pwvsb-hr'), doa=await svc.user('u-pwvsb-doa'), coo=await svc.user('u-coo');
-    const run=await svc.prepareGuardPay(await prep(svc, 'co-sasa'), 'co-sasa','2026-10',[]); const g=run.lines.find(l=>l.net>0)!;
+    const { svc, ds } = fresh(); const prep = await guardPayPrep(svc), doa=await svc.user('u-pwvsb-doa'), coo=await svc.user('u-coo');
+    const run=await svc.prepareGuardPay(prep,'co-sasa','2026-10',[]); const g=run.lines.find(l=>l.net>0)!;
     const stored=ds.guardPayRuns.find(r=>r.id===run.id)!;
     stored.cash=[{personId:g.personId,staffNo:g.staffNo,name:g.name,siteName:g.mainSiteName,amount:g.net,reason:'Historical fixture only',listedBy:doa.name,listedById:doa.id,listedAt:NOW,decision:{by:coo.name,byId:coo.id,at:NOW,note:'Historical',give:true,tier:'coo'},handedOut:{by:coo.name,byId:coo.id,at:NOW,note:'Historical',on:TODAY,tier:'coo'},receipt:null}];
     await expect(svc.guardPayCash(coo,run.id,g.personId,'handout',{})).rejects.toThrow();
@@ -652,7 +661,7 @@ describe('cash by exception and the advance and loan scheme (Fauzan, 6 Nov 2026)
   it('a loan needs a limit, purpose, period and signature; CoS then CEO approve; Finance pays out and is told; the pay run takes it back', async () => {
     RULES.guardPayroll.value.primaPays = true;
     const { svc, ds } = fresh();
-    const hr = await svc.user('u-pwvsb-hr');
+    const prep = await guardPayPrep(svc), hr = await svc.user('u-pwvsb-hr');
     const cos = await svc.user('u-cos');
     const ceo = await svc.user(CEO);
     const coo = await svc.user('u-coo');
@@ -686,15 +695,15 @@ describe('cash by exception and the advance and loan scheme (Fauzan, 6 Nov 2026)
     // No loan or advance as a one-off item: only against the record. (Test shortcut: start repayments from October,
     // a closed month, so the run can be paid today.)
     await (svc as unknown as { store: MemoryStore }).store.update('guardLoans', rec.id, { firstPeriod: '2026-10' });
-    const run = await svc.prepareGuardPay(await prep(svc, 'co-sasa'), 'co-sasa', '2026-10', []);
-    await expect(svc.setGuardPayLine(await prep(svc, run.companyId), run.id, guardId, { extra: [{ label: 'Loan repayment', amount: -50 }] })).rejects.toThrow(/approved record/);
+    const run = await svc.prepareGuardPay(prep, 'co-sasa', '2026-10', []);
+    await expect(svc.setGuardPayLine(prep, run.id, guardId, { extra: [{ label: 'Loan repayment', amount: -50 }] })).rejects.toThrow(/approved record/);
     const line = run.lines.find((l) => l.personId === guardId)!;
     const taken = line.loan ?? 0;
     expect(taken).toBeLessThanOrEqual(100);
     if (line.gross >= 200) expect(taken).toBe(100);
     expect(taken).toBeLessThanOrEqual(line.gross * 0.5);
     // A paid month takes the repayment off the record.
-    await svc.guardPayStep(await prep(svc, run.companyId), run.id, 'submit');
+    await svc.guardPayStep(prep, run.id, 'submit');
     await svc.guardPayStep(coo, run.id, 'approve', { note: 'Approved' });
     await svc.guardPayStep(fin, run.id, 'pay', { bankRef: 'M2U-1', pcbChecked: true, paidOn: '2026-11-05' });
     // The SQL journal still balances with the repayment in it.
@@ -725,18 +734,18 @@ describe('the CEO sets statutory rates and new contributions by month (Fauzan, 6
   it('keeps the law as at Nov 2026 by default, and a CEO change applies from its month with a reason', async () => {
     const { svc } = fresh();
     const ceo = await svc.user(CEO);
-    const hr = await svc.user('u-pwvsb-hr');
+    const prep = await guardPayPrep(svc), hr = await svc.user('u-pwvsb-hr');
     const board = await svc.statutoryBoard(hr);
     expect(board.canSet).toBe(false);
     expect(board.inForce.epf.eeRate).toBe(0.11);
-    const before = await svc.prepareGuardPay(await prep(svc, 'co-arsh'), 'co-arsh', '2026-10', []);
+    const before = await svc.prepareGuardPay(prep, 'co-arsh', '2026-10', []);
     const pick = before.lines.find((l) => l.nationality === 'MY' && l.gross > 0 && l.age < 60)!;
     const settings = { ...board.inForce, epf: { ...board.inForce.epf, eeRate: 0.09 }, others: [{ code: 'NEWFUND', name: 'New fund (test)', eeRate: 0.01, erRate: 0.02, wageCap: 3000, includeOt: false, appliesTo: 'all' as const, maxAge: null, payee: 'Test agency' }], lawRef: 'Test gazette 2026' };
     await expect(svc.setStatutory(hr, { effectiveFrom: '2026-10', settings, reason: 'Test change' })).rejects.toBeInstanceOf(AccessDenied);
     await expect(svc.setStatutory(ceo, { effectiveFrom: '2026-10', settings, reason: '' })).rejects.toThrow(/why/);
     await expect(svc.setStatutory(ceo, { effectiveFrom: '2026-10', settings: { ...settings, epf: { ...settings.epf, eeRate: 0.9 } }, reason: 'Test change' })).rejects.toThrow(/EPF/);
     await svc.setStatutory(ceo, { effectiveFrom: '2026-10', settings, reason: 'New law from October (test)' });
-    const after = await svc.prepareGuardPay(await prep(svc, 'co-arsh'), 'co-arsh', '2026-10');
+    const after = await svc.prepareGuardPay(prep, 'co-arsh', '2026-10');
     const l = after.lines.find((x) => x.personId === pick.personId)!;
     expect(l.epfEe).toBeLessThan(pick.epfEe);
     const nf = l.others!.find((o) => o.code === 'NEWFUND')!;
@@ -745,8 +754,8 @@ describe('the CEO sets statutory rates and new contributions by month (Fauzan, 6
     const hrRun = after;
     const store = (svc as unknown as { store: MemoryStore }).store;
     for (const x of hrRun.lines) if (x.accountProblem) await store.update('people', x.personId, { bank: { bank: 'Test Bank', accountMasked: '****9999' } });
-    await svc.prepareGuardPay(await prep(svc, 'co-arsh'), 'co-arsh', '2026-10');
-    await svc.guardPayStep(await prep(svc, hrRun.companyId), hrRun.id, 'submit');
+    await svc.prepareGuardPay(prep, 'co-arsh', '2026-10');
+    await svc.guardPayStep(prep, hrRun.id, 'submit');
     await svc.guardPayStep(await svc.user('u-coo'), hrRun.id, 'approve', { note: 'Checked' });
     const sql = await svc.guardPayExport(await svc.user('u-fin-t1-lead'), hrRun.id, 'sql');
     expect(sql.body).toContain('NEWFUND');
@@ -760,90 +769,100 @@ describe('the CEO sets statutory rates and new contributions by month (Fauzan, 6
   });
 });
 
-describe('P100 B1: each company prepares its own guard pay run (Fauzan, 11 Nov 2026)', () => {
-  it('refuses HR and the OMs; a named preparer prepares and submits their own company only', async () => {
-    const { svc } = fresh();
-    const hr = await svc.user('u-pwvsb-hr');
-    const om = await svc.user('u-om-klang');
-    const sasaPrep = await prep(svc, 'co-sasa');
-    await expect(svc.prepareGuardPay(hr, 'co-sasa', '2026-10', [])).rejects.toBeInstanceOf(AccessDenied);
-    await expect(svc.prepareGuardPay(om, 'co-sasa', '2026-10', [])).rejects.toBeInstanceOf(AccessDenied);
-    // Another company's preparer neither prepares nor sees Sasa's month.
-    await expect(svc.prepareGuardPay(await prep(svc, 'co-arsh'), 'co-sasa', '2026-10', [])).rejects.toBeInstanceOf(AccessDenied);
-    const board = await svc.guardPayroll(sasaPrep);
-    expect(board.role).toBe('preparer');
-    expect(board.preparing).toEqual(['co-sasa']);
-    expect(board.employers.find((e) => e.companyId === 'co-sasa')?.prepares).toBe(true);
-    const run = await svc.prepareGuardPay(sasaPrep, 'co-sasa', '2026-10', []);
-    expect(run.prepared.byId).toBe('u-ae-sasa');
-    expect(run.trial).toBe(true);
-    await expect(svc.guardPayRun(await prep(svc, 'co-arsh'), run.id)).rejects.toThrow(/not found/i);
-    // HR still sees the run but has no step in it; nor does the company manager.
-    const hrView = await svc.guardPayRun(hr, run.id);
-    expect(hrView.can.prepare || hrView.can.submit).toBe(false);
-    await expect(svc.setGuardPayLine(hr, run.id, run.lines[0].personId, { pcb: 0 })).rejects.toBeInstanceOf(AccessDenied);
-    const cm = await svc.guardPayRun(await svc.user('u-cm-sasa'), run.id);
-    expect(cm.can.prepare || cm.can.submit || cm.can.approve).toBe(false);
-    expect((await svc.guardPayRun(sasaPrep, run.id)).can.prepare).toBe(true);
+describe('guard pay run on the roster engine (Part O, roster_hybrid per site)', () => {
+  const ikea = (): PayFormula => ({
+    ...formula(),
+    code: 'T-HYB',
+    amounts: { ...standardGuardAmounts(0), basicMonthly: 1700, normalHoursPerDay: 9, workDaysPerWeek: 5, payMode: 'roster_hybrid', normalWorkingDaysPerMonth: 22, otRateBase: 'fixed', otFixedBase: 8.72, otRateRounding: 'rate_to_sen_first', restDayNormalRateBase: 'fixed', restDayOtMultiplier: 2 },
   });
-
-  it('the Company Manager names and removes preparers with a reason, never themself, an OM, HR or another company', async () => {
-    const { svc, ds } = fresh();
-    const cm = await svc.user('u-cm-sasa');
-    const other = await svc.user('u-cm-arsh');
-    const hr = await svc.user('u-pwvsb-hr');
-    const name = (u: Awaited<ReturnType<typeof svc.user>>, userId: string, reason = 'Keeps the site rosters (test)', action = 'name') =>
-      svc.payAction(u, 'guard-pay-preparer', { companyId: 'co-sasa', userId, action, reason });
-    await expect(name(hr, 'u-ae-sasa-2')).rejects.toBeInstanceOf(AccessDenied);
-    await expect(name(other, 'u-ae-sasa-2')).rejects.toBeInstanceOf(AccessDenied);
-    await expect(name(await svc.user('u-ae-sasa'), 'u-ae-sasa-2')).rejects.toBeInstanceOf(AccessDenied);
-    await expect(name(cm, 'u-ae-sasa-2', 'ok')).rejects.toThrow(/reason/);
-    await expect(name(cm, 'u-cm-sasa')).rejects.toThrow(/name someone else/);
-    await expect(name(cm, 'u-om-klang')).rejects.toThrow(/cannot prepare/);
-    await expect(name(cm, 'u-pwvsb-hr')).rejects.toThrow(/cannot prepare/);
-    await expect(name(cm, 'u-ae-arsh')).rejects.toThrow(/cannot prepare/);
-    await expect(name(cm, 'u-ae-sasa')).rejects.toThrow(/already prepares/);
-    const board0 = await svc.guardPayroll(cm);
-    const mine = board0.preparers.find((c) => c.companyId === 'co-sasa')!;
-    expect(mine.canName).toBe(true);
-    expect(mine.candidates.map((c) => c.id)).toEqual(expect.arrayContaining(['u-ae-sasa-2', 'u-gm-sasa']));
-    expect(mine.candidates.some((c) => c.id === 'u-cm-sasa' || c.id === 'u-om-klang' || c.id === 'u-pwvsb-hr')).toBe(false);
-    // Another company's manager does not see Sasa's preparers.
-    expect((await svc.guardPayroll(other)).preparers.some((c) => c.companyId === 'co-sasa')).toBe(false);
-    await name(cm, 'u-ae-sasa-2', 'Second preparer while the first is on leave (test)');
-    const second = await svc.user('u-ae-sasa-2');
-    expect((await svc.guardPayroll(second)).preparing).toEqual(['co-sasa']);
-    await svc.prepareGuardPay(second, 'co-sasa', '2026-10', []);
-    // Removed with a reason: the first preparer can no longer prepare; the change is kept.
-    await expect(name(cm, 'u-ae-sasa', 'no', 'remove')).rejects.toThrow(/reason/);
-    const gone = (await name(cm, 'u-ae-sasa', 'Moved to the front desk (test)', 'remove')) as { active: boolean; removed: { reason: string } };
-    expect(gone.active).toBe(false);
-    expect(gone.removed.reason).toMatch(/front desk/);
-    await expect(svc.prepareGuardPay(await svc.user('u-ae-sasa'), 'co-sasa', '2026-10', [])).rejects.toBeInstanceOf(AccessDenied);
-    await expect(svc.guardPayroll(await svc.user('u-ae-sasa'))).rejects.toBeInstanceOf(AccessDenied);
-    // Named again later: the earlier naming and removal stay in the history.
-    const back = (await name(cm, 'u-ae-sasa', 'Back from the front desk (test)')) as { history: { what: string }[] };
-    expect(back.history.map((h) => h.what)).toEqual(['removed', 'named']);
-    expect(ds.audit.filter((a) => a.action === 'guardpay.preparer_named' || a.action === 'guardpay.preparer_removed').length).toBe(3);
+  const roster = (work: number) => {
+    const ds = Array.from({ length: 31 }, (_, k) => `2026-10-${String(k + 1).padStart(2, '0')}`);
+    const daysR = ds.map((date, k) => ({ date, planned: (k < work ? 'WORK_D' : k % 7 === 0 ? 'OFF_REST' : 'OFF_ADD') as never, actual: null }));
+    return { days: daysR, duties: daysR.filter((d) => d.planned === 'WORK_D').map((d) => ({ date: d.date, siteId: 's1', planned: d.planned, workedMinutes: 720, publicHoliday: false })), absDecidedUnpaid: [] };
+  };
+  it('21 duties + 10 OFF in October: no deduction and OT from verified minutes (the October error is gone)', () => {
+    const l = line(days(21), { formulaAt: () => ({ formula: ikea(), scope: 'Site' }), roster: roster(21) });
+    expect(l.unpaidDays).toBe(0);
+    expect(l.restDaysWorked).toBe(0);
+    expect(l.otHours).toBe(63);
+    expect(l.gross).toBe(2524.04);
+    expect(l.holds ?? []).toEqual([]);
   });
-
-  it('the Company Manager sees every run of their company; nobody approves a month they prepared; the COO approves with a reason', async () => {
-    const { svc, ds } = fresh();
-    for (const p of ds.people) if (!p.bank) p.bank = { bank: 'Test Bank', accountMasked: '****9999' };
-    const p = await prep(svc, 'co-arsh');
-    const run = await svc.prepareGuardPay(p, 'co-arsh', '2026-10', []);
-    const cur = await svc.prepareGuardPay(p, 'co-arsh', '2026-11', []);
-    const cmBoard = await svc.guardPayroll(await svc.user('u-cm-arsh'));
-    expect(cmBoard.runs.map((r) => r.id).sort()).toEqual([run.id, cur.id].sort());
-    await svc.guardPayStep(p, run.id, 'submit');
-    await expect(svc.guardPayStep(p, run.id, 'approve', { note: 'Approving my own month' })).rejects.toThrow(/COO to approve/);
-    const coo = await svc.user('u-coo');
-    await expect(svc.guardPayStep(coo, run.id, 'approve', { note: '' })).rejects.toThrow(/reason/);
-    const ok = await svc.guardPayStep(coo, run.id, 'approve', { note: 'Checked against JA (test)' });
-    expect(ok.stage).toBe('approved');
-    expect(ok.trial).toBe(true);
-    const run2 = await svc.prepareGuardPay(await prep(svc, 'co-sasa'), 'co-sasa', '2026-10', []);
-    const ceoView = await svc.guardPayRun(await svc.user(CEO), run2.id);
-    expect(ceoView.can.prepare).toBe(false);
+  it('the count_days method is unchanged: the same month on the old formula still deducts 5 short days', () => {
+    expect(line(days(21)).unpaidDays).toBe(5);
+  });
+  it('an engine site with no published roster is held, never paid by day counts', () => {
+    const l = line(days(21), { formulaAt: () => ({ formula: ikea(), scope: 'Site' }) });
+    expect((l.holds ?? []).join(' ')).toMatch(/published roster/);
+  });
+  // Review of PR #141, batch 1 (14 Nov 2026).
+  it('D1: roster actuals recorded but attendance not locked yet: the basic is still paid from the roster site formula', () => {
+    const l = line(days(21, 's1', { locked: false }), { formulaAt: () => ({ formula: ikea(), scope: 'Site' }), roster: { ...roster(21), siteId: 's1' } });
+    expect(l.gross).toBe(2524.04);
+    expect(l.holds ?? []).toEqual([]);
+  });
+  it('D2: one unverified duty goes to the exception list; the line is not held and the verified pay is kept', () => {
+    const r = roster(21);
+    r.duties[0] = { ...r.duties[0], workedMinutes: null };
+    const l = line(days(21), { formulaAt: () => ({ formula: ikea(), scope: 'Site' }), roster: r });
+    expect(l.holds ?? []).toEqual([]);
+    expect(l.exceptions).toHaveLength(1);
+    expect(l.exceptions![0]).toMatch(/not verified/);
+    expect(l.gross).toBeGreaterThan(1700);
+  });
+  it('D5: the minimum wage comes from the CEO pay law: once RM2,000 is gazetted, a RM1,700 basic on the engine is refused', () => {
+    const law = { ...DEFAULT_PAY_LAW, nextMinimumWage: { from: '2026-10', amount: 2000, gazetted: true } };
+    const l = line(days(21), { formulaAt: () => ({ formula: ikea(), scope: 'Site' }), roster: roster(21), payLaw: law });
+    expect((l.holds ?? []).join(' ')).toMatch(/minimum wage of RM2000/);
+    // Announced but not gazetted: a flag only.
+    const f = line(days(21), { formulaAt: () => ({ formula: ikea(), scope: 'Site' }), roster: roster(21), payLaw: { ...DEFAULT_PAY_LAW, nextMinimumWage: { from: '2026-10', amount: 2000, gazetted: false } } });
+    expect(f.holds ?? []).toEqual([]);
+    expect(f.flags.join(' ')).toMatch(/announced at RM2000/);
+  });
+  it('audit P1: the OD/OGM decision on an absence reaches the line as pending (held), paid or unpaid', () => {
+    const month = '2026-10';
+    const dates = Array.from({ length: 31 }, (_, k) => `${month}-${String(k + 1).padStart(2, '0')}`);
+    const rows = (decision: null | { unpaid: boolean }) =>
+      dates.map((date, k) => ({
+        id: `rd-v-p-${date}`, companyId: 'co-x', rosterVersionId: 'rv-test', personId: 'p-test', siteId: 's1', postId: null, date,
+        planned: k < 22 ? 'WORK_D' : 'OFF_REST',
+        actual: k < 22 ? (k === 5 ? 'ABS' : 'WORK_D') : null,
+        plannedStart: k < 22 ? `${date}T08:00:00+08:00` : null, plannedEnd: k < 22 ? `${date}T20:00:00+08:00` : null,
+        removed: false, actualById: 'u-om', actualCorrection: null,
+        absDecision: k === 5 && decision ? { ...decision, byId: 'u-od', at: `${date}T12:00:00+08:00`, reason: 'Synthetic decision' } : null,
+      }));
+    const att = dates.slice(0, 22).filter((_, k) => k !== 5).map((date, k) => ({ id: `a-${k}`, companyId: 'co-x', siteId: 's1', shiftId: null, personId: 'p-test', deviceId: 'd', clockIn: `${date}T08:00:00+08:00`, clockOut: `${date}T20:00:00+08:00`, lat: null, lng: null, distanceM: null, photo: true, flags: [], locked: true }));
+    const roster = (decision: null | { unpaid: boolean }) =>
+      rosterPayInput({ personId: 'p-test', month, versions: [{ id: 'rv-test', siteId: 's1', month, status: 'published' }] as never, days: rows(decision) as never, attendance: att as never, breaks: [], coverage: [], allowances: [], lumpSums: [], armedUntil: null, employedDays: 31 })!;
+    const run = (decision: null | { unpaid: boolean }) => line(days(21), { formulaAt: () => ({ formula: ikea(), scope: 'Site' }), roster: { ...roster(decision), siteId: 's1' } });
+    const pending = run(null);
+    // Fauzan, 15 Nov 2026: only that guard's pay waits; it is not a hold on the whole run.
+    expect(pending.holds ?? []).toEqual([]);
+    expect((pending.waiting ?? []).join(' ')).toMatch(/Absence on 2026-10-06 waits for the OD\/OGM decision/);
+    const paid = run({ unpaid: false });
+    expect(roster({ unpaid: false }).absDecidedPaid).toEqual(['2026-10-06']);
+    expect(paid.holds ?? []).toEqual([]);
+    expect(paid.waiting).toBeUndefined();
+    const unpaid = run({ unpaid: true });
+    expect(unpaid.holds ?? []).toEqual([]);
+    expect(unpaid.unpaidDays).toBe(1);
+    expect(unpaid.gross).toBeLessThan(paid.gross);
+  });
+  it('S1 and audit P1: an absence waiting for the decision holds the line; decided paid or unpaid it does not; a late unpaid decision comes off next month', () => {
+    const r = roster(21);
+    r.days[25] = { ...r.days[25], planned: 'WORK_D' as never, actual: 'ABS' as never };
+    // Fauzan's audit of 4b708ae (P1): pending, decided paid and decided unpaid are three different results.
+    const l = line(days(21), { formulaAt: () => ({ formula: ikea(), scope: 'Site' }), roster: r });
+    expect((l.waiting ?? []).join(' ')).toMatch(/Absence on 2026-10-26 waits for the OD\/OGM decision/);
+    expect(l.holds ?? []).toEqual([]);
+    const paid = line(days(21), { formulaAt: () => ({ formula: ikea(), scope: 'Site' }), roster: { ...r, absDecidedPaid: ['2026-10-26'] } });
+    expect(paid.holds ?? []).toEqual([]);
+    expect(paid.gross).toBe(2524.04);
+    const unpaid = line(days(21), { formulaAt: () => ({ formula: ikea(), scope: 'Site' }), roster: { ...r, absDecidedUnpaid: ['2026-10-26'] } });
+    expect(unpaid.holds ?? []).toEqual([]);
+    expect(unpaid.gross).toBe(Math.round((2524.04 - Math.round((1700 / 22) * 100) / 100) * 100) / 100);
+    const late = line(days(21), { formulaAt: () => ({ formula: ikea(), scope: 'Site' }), roster: { ...roster(21), lateUnpaid: ['2026-09-14'] } });
+    expect(late.gross).toBe(Math.round((2524.04 - Math.round((1700 / 22) * 100) / 100) * 100) / 100);
+    expect(late.flags.join(' ')).toMatch(/decided unpaid after that run was submitted/);
   });
 });

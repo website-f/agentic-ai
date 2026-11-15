@@ -8,24 +8,23 @@
   "memos"
  ],
  "common": [
-  "GET alerts/prefs",
   "GET arisha",
-  "GET arisha-trainer",
   "GET arisha/draft-form",
   "GET arisha/drafts",
   "GET arisha/finance-papers",
   "GET auth/users",
   "GET draft-help",
   "GET me",
+  "GET me/alert-prefs",
   "GET me/confidentiality",
   "GET org/guide",
   "GET org/import-ai",
+  "GET org/import-loads",
   "GET org/import/:/template",
   "GET org/inbox",
   "GET org/map",
-  "POST alerts/prefs",
+  "GET org/processes",
   "POST arisha",
-  "POST arisha-trainer/ask",
   "POST arisha/drafts",
   "POST arisha/drafts/:/commit",
   "POST arisha/drafts/:/resubmit",
@@ -36,8 +35,10 @@
   "POST arisha/summary",
   "POST auth/dev-login",
   "POST draft-help/:",
+  "POST me/alert-prefs",
   "POST me/clock/session-start",
   "POST me/confidentiality",
+  "POST org/import-loads/:/ok",
   "POST org/import/:/ai-columns",
   "POST org/import/:/commit",
   "POST org/import/:/preview",
@@ -191,25 +192,6 @@
        }
       }
      ]
-    },
-    {
-     "title": {
-      "en": "Settings",
-      "ms": "Tetapan"
-     },
-     "modules": [
-      {
-       "id": "settings",
-       "title": {
-        "en": "Settings",
-        "ms": "Tetapan"
-       },
-       "blurb": {
-        "en": "Every setting, who keeps it and whether it is set yet.",
-        "ms": "Setiap tetapan, siapa menjaganya dan sama ada sudah ditetapkan."
-       }
-      }
-     ]
     }
    ]
   },
@@ -313,6 +295,17 @@
        "blurb": {
         "en": "Who works which shift at which site.",
         "ms": "Siapa bertugas syif mana di tapak mana."
+       }
+      },
+      {
+       "id": "guardroster",
+       "title": {
+        "en": "Guard roster (engine)",
+        "ms": "Jadual tugas pengawal (enjin)"
+       },
+       "blurb": {
+        "en": "Month roster with breaks, approvals and pay (trial).",
+        "ms": "Jadual tugas bulanan dengan rehat, kelulusan dan gaji (percubaan)."
        }
       },
       {
@@ -530,17 +523,6 @@
        "blurb": {
         "en": "Office staff names, posts and contacts.",
         "ms": "Nama, jawatan dan hubungan staf pejabat."
-       }
-      },
-      {
-       "id": "bulk-load",
-       "title": {
-        "en": "Bulk load",
-        "ms": "Muat pukal"
-       },
-       "blurb": {
-        "en": "Load a spreadsheet or many files; Prima proposes where each goes.",
-        "ms": "Muatkan hamparan atau banyak fail; Prima mencadangkan ke mana setiap satu pergi."
        }
       },
       {
@@ -908,47 +890,6 @@
     },
     {
      "title": {
-      "en": "Rates and monitoring",
-      "ms": "Kadar dan pemantauan"
-     },
-     "modules": [
-      {
-       "id": "finsummary",
-       "title": {
-        "en": "Monthly finance page",
-        "ms": "Halaman kewangan bulanan"
-       },
-       "blurb": {
-        "en": "One page a month: every company and the group total.",
-        "ms": "Satu halaman sebulan: setiap syarikat dan jumlah kumpulan."
-       }
-      },
-      {
-       "id": "finsites",
-       "title": {
-        "en": "Site billing and profit",
-        "ms": "Bil dan keuntungan tapak"
-       },
-       "blurb": {
-        "en": "Sites where guards worked: billed, signed off, profit.",
-        "ms": "Tapak tempat pengawal bekerja: dibil, disahkan, untung."
-       }
-      },
-      {
-       "id": "rates",
-       "title": {
-        "en": "Rate book",
-        "ms": "Buku kadar"
-       },
-       "blurb": {
-        "en": "Costing rates entered from a month, with history.",
-        "ms": "Kadar kos dimasukkan mengikut bulan, dengan sejarah."
-       }
-      }
-     ]
-    },
-    {
-     "title": {
       "en": "Buying",
       "ms": "Pembelian"
      },
@@ -1261,6 +1202,17 @@
        }
       },
       {
+       "id": "accounts",
+       "title": {
+        "en": "Accounts and access",
+        "ms": "Akaun dan akses"
+       },
+       "blurb": {
+        "en": "Staff sign-ins and company access, approved.",
+        "ms": "Log masuk staf dan akses syarikat, diluluskan."
+       }
+      },
+      {
        "id": "it-procurement",
        "title": {
         "en": "IT purchase fulfilment",
@@ -1370,6 +1322,10 @@
   }
  ],
  "calls": {
+  "accounts": [
+   "GET accounts",
+   "POST accounts/:"
+  ],
   "act": [
    "GET act",
    "GET act/investigations/:/evidence/:",
@@ -1398,6 +1354,7 @@
    "POST guard-pay/:/:",
    "POST guard-pay/:/cash/:/:",
    "POST guard-pay/:/files/:",
+   "POST guard-pay/:/later",
    "POST guard-pay/:/lines/:",
    "POST guard-pay/advances",
    "POST guard-pay/advances/:",
@@ -1406,7 +1363,7 @@
    "POST guard-pay/consent/:/approve",
    "POST guard-pay/loans",
    "POST guard-pay/loans/:/:",
-   "POST pay-p100/:",
+   "POST guard-pay/preparers/:",
    "POST statutory"
   ],
   "arms": [
@@ -1428,17 +1385,18 @@
    "POST arms/police-help/:/assign",
    "POST arms/police-help/:/outcome",
    "POST arms/police-help/:/withdraw",
+   "POST arms/policy/:",
    "POST arms/requests",
    "POST arms/requests/:/step",
+   "POST arms/rfid-required",
    "POST arms/trading",
+   "POST it/act/:",
    "POST vaults/:/count"
   ],
   "arrivalcash": [
    "GET finance/arrivalcash/:",
    "GET finance/arrivalcash/:/evidence/:",
-   "GET pay-p100/:",
-   "POST finance/:/controls/:/:",
-   "POST pay-p100/:"
+   "POST finance/:/controls/:/:"
   ],
   "assets": [
    "GET am/rent-check",
@@ -1447,8 +1405,12 @@
    "GET assets/extras",
    "GET assets/fixed",
    "GET assets/work-orders/:/bq",
+   "GET fw-hostel",
    "GET records/:/form",
    "GET records/kinds",
+   "GET short-stays",
+   "POST am-rental/:",
+   "POST am/office/:",
    "POST am/purchases",
    "POST am/purchases/:/decide",
    "POST am/purchases/:/received",
@@ -1465,7 +1427,10 @@
    "POST assets/:/disposal/:",
    "POST assets/:/life/:",
    "POST assets/depreciation",
-   "POST assets/extras/:/:"
+   "POST assets/extras/:/:",
+   "POST fw-hostel/:",
+   "POST it/act/:",
+   "POST short-stays/:"
   ],
   "attendance": [
    "GET attendance-reports",
@@ -1541,20 +1506,6 @@
    "POST work/tasks/:/reassign",
    "POST work/tasks/:/review"
   ],
-  "bulk-load": [
-   "GET bulk",
-   "GET bulk/people",
-   "GET records/:/form",
-   "GET records/kinds",
-   "GET staff-directory/status",
-   "POST bulk/ai/files",
-   "POST bulk/ai/plan",
-   "POST bulk/files/file",
-   "POST bulk/files/place",
-   "POST bulk/loads/data",
-   "POST bulk/loads/files",
-   "POST staff-directory/:"
-  ],
   "cases": [
    "GET arms/police-help",
    "GET cases",
@@ -1618,6 +1569,7 @@
   "clients": [
    "GET client-portal",
    "GET clients",
+   "GET clients/:/info-pack",
    "GET clients/:/share-links",
    "GET clients/:/share-links/:/preview",
    "GET contracts",
@@ -1630,9 +1582,6 @@
    "GET sites/:/instructions",
    "POST clients",
    "POST clients/:/billing",
-   "POST clients/:/client-portal",
-   "POST clients/:/client-portal/:/close",
-   "POST clients/:/client-portal/:/reset",
    "POST clients/:/complaints",
    "POST clients/:/complaints/:/resolve",
    "POST clients/:/contact",
@@ -1666,6 +1615,7 @@
    "POST crm/clients/:/renewal/offer",
    "POST crm/clients/:/requests",
    "POST crm/clients/:/requests/:",
+   "POST quality/risk-briefing",
    "POST sites/:/instructions/:"
   ],
   "clock": [
@@ -1689,14 +1639,13 @@
    "GET me/checkin",
    "GET me/clock",
    "GET me/face",
+   "GET me/overtime",
    "GET me/remote",
    "GET me/test-checkin",
    "GET me/time-slips",
    "GET records/:/form",
    "GET records/kinds",
    "GET remote",
-   "GET resignations",
-   "GET resignations/mine",
    "GET staff-clock",
    "GET staff-clock-photos",
    "GET staff-clock/:",
@@ -1719,6 +1668,7 @@
    "POST hr/legal/:",
    "POST hr/osh/assessments",
    "POST hr/osh/coordinator",
+   "POST hr/osh/coordinator-sees",
    "POST hr/osh/incidents",
    "POST hr/osh/incidents/:/report",
    "POST hr/overtime",
@@ -1738,6 +1688,8 @@
    "POST me/clock/pings",
    "POST me/face",
    "POST me/face/challenge",
+   "POST me/overtime",
+   "POST me/overtime/:/cancel",
    "POST me/remote/apply",
    "POST me/remote/check-in",
    "POST me/remote/plan",
@@ -1746,10 +1698,10 @@
    "POST me/test-checkin/:",
    "POST me/time-slips",
    "POST me/time-slips/:/cancel",
+   "POST overtime/:/decide",
    "POST remote-days/:/review",
    "POST remote/:/decide",
    "POST remote/:/end",
-   "POST resignations/act",
    "POST staff-clock-photos/:",
    "POST time-slips/:/decide",
    "POST time-slips/:/seen",
@@ -1759,9 +1711,9 @@
    "GET arms/police-help",
    "GET cms",
    "GET cms/commissioning",
-   "GET cms/console",
    "GET cms/dispatches",
    "GET cms/guard-phones",
+   "GET cms/overtime",
    "GET companies/:/guard-phones",
    "GET companies/:/people/:/discipline",
    "GET device/dispatches",
@@ -1780,10 +1732,10 @@
    "POST cms/alarms/:/close",
    "POST cms/alarms/:/review",
    "POST cms/calls/:/callback",
-   "POST cms/console/sign-in",
    "POST cms/dispatches",
    "POST cms/dispatches/:/cancel",
    "POST cms/dispatches/:/close",
+   "POST cms/overtime/approve",
    "POST cms/roster/plan",
    "POST cms/settings",
    "POST cms/shifts/:/assign",
@@ -1792,6 +1744,7 @@
    "POST cms/shifts/:/handover",
    "POST cms/shifts/:/handover-out",
    "POST cms/shifts/:/release",
+   "POST companies/:/guard-phones/codes",
    "POST contracts/:/cms-service/accept/:",
    "POST contracts/:/cms-service/contacts/:/verify",
    "POST contracts/:/cms-service/tests",
@@ -1859,6 +1812,9 @@
   ],
   "company": [
    "GET companies/:/dashboard",
+   "GET finance/site-profit",
+   "GET finance/summary",
+   "GET finance/unbilled",
    "GET hr/ea",
    "GET hr/join-leave",
    "GET hr/movements",
@@ -1869,12 +1825,16 @@
    "GET vacancies",
    "GET vacancies/:/applicants",
    "POST applicants/:/:",
+   "POST finance/site-profit/costs",
+   "POST finance/site-profit/target",
+   "POST finance/unbilled/clear",
    "POST hr/filings",
    "POST hr/movements",
    "POST hr/movements/:/cancel",
    "POST hr/movements/:/login/authorise",
    "POST hr/movements/:/step",
    "POST hr/movements/apply-due",
+   "POST hr/people/:/final-pay",
    "POST hr/people/:/probation",
    "POST vacancies",
    "POST vacancies/:/:",
@@ -1997,7 +1957,6 @@
    "GET finance/dailycash/mine",
    "GET finance/exceptionalcash/:",
    "GET finance/exceptionalcash/:/evidence/:",
-   "GET pay-p100/:",
    "GET records/:/form",
    "GET records/kinds",
    "GET tender-board",
@@ -2010,7 +1969,6 @@
    "POST companies/:/tenders",
    "POST finance/:/controls/:/:",
    "POST leads/:/:",
-   "POST pay-p100/:",
    "POST quotations/:/:",
    "POST quotations/:/correct",
    "POST tender-groups",
@@ -2088,8 +2046,11 @@
    "GET finance/management-fee-bills",
    "GET finance/management-fees",
    "GET finance/settings",
+   "GET finance/site-profit",
+   "GET finance/sql-posting",
+   "GET finance/summary",
    "GET finance/today",
-   "GET pay-p100/:",
+   "GET finance/unbilled",
    "GET records/:/form",
    "GET records/kinds",
    "POST finance/:/:/:",
@@ -2103,36 +2064,27 @@
    "POST finance/coo/:/:/:",
    "POST finance/management-fees/:",
    "POST finance/settings",
-   "POST pay-p100/:"
-  ],
-  "finsites": [
-   "GET finance/site-margins",
-   "GET finance/unbilled-sites",
-   "POST finance/unbilled-sites/:/clear"
-  ],
-  "finsummary": [
-   "GET finance/summary"
+   "POST finance/site-profit/costs",
+   "POST finance/site-profit/target",
+   "POST finance/sql-posting/:",
+   "POST finance/unbilled/clear"
   ],
   "fleet": [
    "GET fleet",
    "GET fleet/rentals",
-   "GET fleet/transfers",
    "GET fleet/usage",
    "GET records/:/form",
    "GET records/kinds",
    "GET transport/board",
    "POST fleet/requests",
    "POST fleet/requests/:/decide",
-   "POST fleet/transfers",
-   "POST fleet/transfers/:/cancel",
-   "POST fleet/transfers/:/decide",
-   "POST fleet/transfers/:/handover",
    "POST fleet/vehicles/:/cards",
    "POST fleet/vehicles/:/cards/:/end",
    "POST fleet/vehicles/:/fuel",
    "POST fleet/vehicles/:/fuel-type",
    "POST fleet/vehicles/:/fuel/:/review",
    "POST fleet/vehicles/:/in",
+   "POST fleet/vehicles/:/move",
    "POST fleet/vehicles/:/out",
    "POST fleet/vehicles/:/rent",
    "POST fleet/vehicles/:/rental",
@@ -2157,8 +2109,6 @@
   "fwm": [
    "GET cms/guard-phones",
    "GET companies/:/guard-phones",
-   "GET fw-extras/hostel-stays",
-   "GET fw-extras/permits-on-mc",
    "GET fwm",
    "GET fwm/docs/:",
    "GET fwm/recruitment",
@@ -2167,9 +2117,9 @@
    "GET hr/history/person/:",
    "GET records/:/form",
    "GET records/kinds",
+   "POST companies/:/guard-phones/codes",
    "POST coo-notices/:/:/seen",
    "POST fw-checks/:/close",
-   "POST fw-extras/act",
    "POST fw-papers/:/ack",
    "POST fwm-tasks/:/done",
    "POST fwm-tasks/:/review",
@@ -2234,6 +2184,7 @@
    "POST guard-pay/:/:",
    "POST guard-pay/:/cash/:/:",
    "POST guard-pay/:/files/:",
+   "POST guard-pay/:/later",
    "POST guard-pay/:/lines/:",
    "POST guard-pay/advances",
    "POST guard-pay/advances/:",
@@ -2242,30 +2193,59 @@
    "POST guard-pay/consent/:/approve",
    "POST guard-pay/loans",
    "POST guard-pay/loans/:/:",
-   "POST pay-p100/:",
+   "POST guard-pay/preparers/:",
    "POST statutory"
+  ],
+  "guardroster": [
+   "GET companies/:/sites",
+   "GET me/roster",
+   "GET roster/sites/:",
+   "POST me/lump-sums/:",
+   "POST roster/allowances/:/decide",
+   "POST roster/breaks/:/confirm",
+   "POST roster/days/:/absence",
+   "POST roster/days/:/actual",
+   "POST roster/days/:/breaks",
+   "POST roster/days/:/correction",
+   "POST roster/days/:/correction/decide",
+   "POST roster/evidence/:/check",
+   "POST roster/lump-sums/:/approve",
+   "POST roster/sites/:/allowances",
+   "POST roster/sites/:/evidence",
+   "POST roster/sites/:/lump-sum-switch",
+   "POST roster/sites/:/lump-sums",
+   "POST roster/sites/:/months/:/proposal",
+   "POST roster/versions/:/step",
+   "PUT roster/sites/:/coverage",
+   "PUT roster/sites/:/months/:"
   ],
   "handovers": [
    "GET records/:/form",
-   "GET records/kinds"
+   "GET records/kinds",
+   "POST people/:/hiring-docs"
   ],
   "home": [
    "GET approval-limits",
+   "GET cash-stand-in",
    "GET growth",
    "GET growth/margin",
    "GET home",
-   "POST approval-limits"
+   "GET staff-leave-vc",
+   "POST approval-limits",
+   "POST cash-stand-in",
+   "POST staff-leave-vc"
   ],
   "hostels": [
-   "GET fw-extras/hostel-stays",
-   "GET fw-extras/permits-on-mc",
+   "GET fw-hostel",
    "GET hostels",
    "GET records/:/form",
    "GET records/kinds",
-   "POST fw-extras/act",
+   "POST fw-hostel/:",
    "POST fwm/workers",
    "POST hostel-bills",
    "POST hostel-bills/:/:",
+   "POST hostel-stays/:/check-out",
+   "POST hostels/:/check-in",
    "POST people/:/utility-paper",
    "POST utility-charges/:/ack",
    "POST utility-charges/:/decide"
@@ -2286,7 +2266,6 @@
    "GET discipline/appeals",
    "GET dosh/register/:",
    "GET flex",
-   "GET guard-signins",
    "GET hr",
    "GET hr/allowances",
    "GET hr/appraisals",
@@ -2299,7 +2278,9 @@
    "GET hr/join-leave",
    "GET hr/leave-settings",
    "GET hr/legal",
+   "GET hr/lists",
    "GET hr/movements",
+   "GET hr/opening-balances",
    "GET hr/osh",
    "GET hr/overtime",
    "GET hr/people/:/leaving-guide",
@@ -2314,11 +2295,8 @@
    "GET people/:/profile",
    "GET records/:/form",
    "GET records/kinds",
-   "GET resignations",
-   "GET resignations/mine",
    "GET shifts/:/candidates",
    "GET socso",
-   "GET socso-extras/payments-abroad",
    "GET socso/:",
    "GET vacancies",
    "GET vacancies/:/applicants",
@@ -2333,14 +2311,12 @@
    "POST attendance-reports/uploads/:/save",
    "POST attendance/follow-up",
    "POST companies/:/attendance/lock",
+   "POST companies/:/guard-phones/codes",
    "POST discipline/:/appeal",
    "POST discipline/:/appeal/decide",
    "POST flex",
    "POST flex/:/decide",
    "POST guard-phones/:/revoke",
-   "POST guard-signins",
-   "POST guard-signins/:/cancel",
-   "POST guard-signins/:/decide",
    "POST hr/allowances/staff/:",
    "POST hr/allowances/types",
    "POST hr/appraisals",
@@ -2362,19 +2338,25 @@
    "POST hr/holidays",
    "POST hr/holidays/:/remove",
    "POST hr/legal/:",
+   "POST hr/lists/:",
    "POST hr/movements",
    "POST hr/movements/:/cancel",
    "POST hr/movements/:/login/authorise",
    "POST hr/movements/:/step",
    "POST hr/movements/apply-due",
+   "POST hr/opening-balances/load",
    "POST hr/osh/assessments",
    "POST hr/osh/coordinator",
+   "POST hr/osh/coordinator-sees",
    "POST hr/osh/incidents",
    "POST hr/osh/incidents/:/report",
    "POST hr/overtime",
    "POST hr/overtime/preview",
+   "POST hr/people/:/final-pay",
    "POST hr/people/:/leave-days",
    "POST hr/people/:/mother-tongue",
+   "POST hr/people/:/opening-balance",
+   "POST hr/people/:/opening-balance/check",
    "POST hr/people/:/probation",
    "POST hr/people/:/wfh",
    "POST hr/policies",
@@ -2393,8 +2375,6 @@
    "POST people/:/hiring-docs",
    "POST people/:/pin",
    "POST people/:/socso",
-   "POST resignations/act",
-   "POST socso-extras/act",
    "POST socso/:/appointments",
    "POST socso/:/checkins",
    "POST socso/:/death-notices",
@@ -2436,8 +2416,10 @@
    "GET it",
    "GET it/plan",
    "GET login-handovers",
+   "GET problems",
    "GET records/:/form",
    "GET records/kinds",
+   "GET warranty-claims",
    "GET websites",
    "POST hr/movements/:/login/confirm",
    "POST it/act/:",
@@ -2448,6 +2430,12 @@
    "POST it/purchases/:/:",
    "POST it/tickets",
    "POST it/tickets/:/:",
+   "POST problems",
+   "POST problems/:/reply",
+   "POST warranty-claims",
+   "POST warranty-claims/:/check",
+   "POST warranty-claims/:/close",
+   "POST warranty-claims/:/send",
    "POST websites-sync",
    "POST websites/:"
   ],
@@ -2471,17 +2459,12 @@
    "GET items/passport/:",
    "GET items/reports/:",
    "GET items/site/:",
-   "GET items/warranty",
-   "GET purchasing/uniform-requests",
    "GET records/:/form",
    "GET records/kinds",
    "POST items/act",
    "POST items/import/read",
    "POST items/resolve",
-   "POST items/scan-check",
-   "POST items/warranty/act",
-   "POST purchasing/uniform-requests",
-   "POST purchasing/uniform-requests/:/:"
+   "POST items/scan-check"
   ],
   "ja": [
    "GET ja"
@@ -2507,6 +2490,7 @@
    "POST guard-pay/:/:",
    "POST guard-pay/:/cash/:/:",
    "POST guard-pay/:/files/:",
+   "POST guard-pay/:/later",
    "POST guard-pay/:/lines/:",
    "POST guard-pay/advances",
    "POST guard-pay/advances/:",
@@ -2515,11 +2499,13 @@
    "POST guard-pay/consent/:/approve",
    "POST guard-pay/loans",
    "POST guard-pay/loans/:/:",
-   "POST pay-p100/:",
+   "POST guard-pay/preparers/:",
    "POST statutory"
   ],
   "meetings": [
    "GET meetings",
+   "POST group-month/:",
+   "POST it/act/:",
    "POST meetings",
    "POST meetings/:/actions",
    "POST meetings/:/actions/:",
@@ -2528,7 +2514,9 @@
    "POST meetings/:/change",
    "POST meetings/:/minutes",
    "POST meetings/:/prep",
-   "POST meetings/:/summary-check"
+   "POST meetings/:/summary-check",
+   "POST registers/:",
+   "POST toolbox/:"
   ],
   "memos": [
    "GET memos",
@@ -2542,6 +2530,7 @@
    "GET cms/guard-phones",
    "GET companies/:/guard-phones",
    "GET companies/:/people",
+   "GET companies/:/sites",
    "GET dosh/register/:",
    "GET guard-pay",
    "GET guard-pay/:",
@@ -2549,35 +2538,40 @@
    "GET guard-pay/consents",
    "GET guard-pay/loans",
    "GET guard-pay/mine",
-   "GET guard-signins",
    "GET hr/appraisals",
    "GET hr/guard-training",
    "GET hr/history/board",
    "GET hr/history/person/:",
    "GET hr/legal",
+   "GET hr/lists",
+   "GET hr/opening-balances",
    "GET hr/overtime",
    "GET hr/policies",
    "GET hr/training",
    "GET leave",
    "GET me/duty",
    "GET me/items",
+   "GET me/roster",
    "GET people/:",
    "GET people/:/docs",
    "GET people/:/profile",
    "GET purchasing/uniform-requests",
    "GET records/:/form",
    "GET records/kinds",
+   "GET roster/sites/:",
    "GET socso",
-   "GET socso-extras/payments-abroad",
    "GET socso/:",
    "GET statutory",
+   "GET warranty-claims",
    "POST accounts/:/close",
+   "POST companies/:/guard-phones/codes",
    "POST discipline/:/appeal",
    "POST discipline/:/appeal/decide",
    "POST guard-pay",
    "POST guard-pay/:/:",
    "POST guard-pay/:/cash/:/:",
    "POST guard-pay/:/files/:",
+   "POST guard-pay/:/later",
    "POST guard-pay/:/lines/:",
    "POST guard-pay/advances",
    "POST guard-pay/advances/:",
@@ -2586,10 +2580,8 @@
    "POST guard-pay/consent/:/approve",
    "POST guard-pay/loans",
    "POST guard-pay/loans/:/:",
+   "POST guard-pay/preparers/:",
    "POST guard-phones/:/revoke",
-   "POST guard-signins",
-   "POST guard-signins/:/cancel",
-   "POST guard-signins/:/decide",
    "POST hr/appraisals",
    "POST hr/appraisals/:/close",
    "POST hr/appraisals/:/comment",
@@ -2604,20 +2596,27 @@
    "POST hr/history/rehire",
    "POST hr/history/separate",
    "POST hr/legal/:",
+   "POST hr/lists/:",
+   "POST hr/opening-balances/load",
    "POST hr/overtime",
    "POST hr/overtime/preview",
    "POST hr/people/:/mother-tongue",
+   "POST hr/people/:/opening-balance",
+   "POST hr/people/:/opening-balance/check",
    "POST hr/policies",
    "POST hr/policies/:/acknowledge",
    "POST hr/policies/:/briefing",
    "POST hr/policies/:/copies",
    "POST hr/training",
+   "POST inventory/:",
+   "POST it/act/:",
    "POST leave",
    "POST leave/:/decide",
    "POST leave/:/hospital-claim",
    "POST me/face",
+   "POST me/it-devices/report",
    "POST me/items/:/:",
-   "POST pay-p100/:",
+   "POST me/lump-sums/:",
    "POST people/:/guard-phone/code",
    "POST people/:/hiring-docs",
    "POST people/:/pin",
@@ -2625,7 +2624,21 @@
    "POST purchasing/issues/:/handover/:",
    "POST purchasing/uniform-requests",
    "POST purchasing/uniform-requests/:/:",
-   "POST socso-extras/act",
+   "POST roster/allowances/:/decide",
+   "POST roster/breaks/:/confirm",
+   "POST roster/days/:/absence",
+   "POST roster/days/:/actual",
+   "POST roster/days/:/breaks",
+   "POST roster/days/:/correction",
+   "POST roster/days/:/correction/decide",
+   "POST roster/evidence/:/check",
+   "POST roster/lump-sums/:/approve",
+   "POST roster/sites/:/allowances",
+   "POST roster/sites/:/evidence",
+   "POST roster/sites/:/lump-sum-switch",
+   "POST roster/sites/:/lump-sums",
+   "POST roster/sites/:/months/:/proposal",
+   "POST roster/versions/:/step",
    "POST socso/:/appointments",
    "POST socso/:/checkins",
    "POST socso/:/death-notices",
@@ -2646,7 +2659,14 @@
    "POST socso/:/restrictions",
    "POST socso/:/restrictions/:/clear",
    "POST socso/:/status",
-   "POST statutory"
+   "POST statutory",
+   "POST supplies/:",
+   "POST warranty-claims",
+   "POST warranty-claims/:/check",
+   "POST warranty-claims/:/close",
+   "POST warranty-claims/:/send",
+   "PUT roster/sites/:/coverage",
+   "PUT roster/sites/:/months/:"
   ],
   "office": [
    "GET companies/:/office",
@@ -2672,6 +2692,7 @@
    "POST applicants/:/:",
    "POST finance/management-fees/:",
    "POST hr/filings",
+   "POST hr/people/:/final-pay",
    "POST hr/people/:/probation",
    "POST leave",
    "POST leave/:/decide",
@@ -2683,7 +2704,8 @@
   "overview": [
    "GET group/overview",
    "GET records/:/form",
-   "GET records/kinds"
+   "GET records/kinds",
+   "POST companies"
   ],
   "payformulas": [
    "GET pay-formulas",
@@ -2696,13 +2718,12 @@
   ],
   "payreq": [
    "GET finance/requests",
-   "GET socso-extras/payments-abroad",
    "POST finance/requests/:",
-   "POST finance/requests/:/:/:",
-   "POST socso-extras/act"
+   "POST finance/requests/:/:/:"
   ],
   "pdpa": [
    "GET pdpa",
+   "GET pdpa-paper-consents",
    "GET pdpa-register",
    "GET pdpa/:/docs",
    "GET pdpa/rights",
@@ -2713,6 +2734,8 @@
    "POST pdpa-breach/:/details",
    "POST pdpa-consents",
    "POST pdpa-consents/:/withdraw",
+   "POST pdpa-paper-consents",
+   "POST pdpa-paper-consents/gate",
    "POST pdpa-register/:/:",
    "POST pdpa-settings",
    "POST pdpa/:/:",
@@ -2728,12 +2751,13 @@
    "GET companies/:/guard-phones",
    "GET companies/:/people",
    "GET dosh/register/:",
-   "GET guard-signins",
    "GET hr/appraisals",
    "GET hr/guard-training",
    "GET hr/history/board",
    "GET hr/history/person/:",
    "GET hr/legal",
+   "GET hr/lists",
+   "GET hr/opening-balances",
    "GET hr/overtime",
    "GET hr/policies",
    "GET hr/training",
@@ -2744,15 +2768,12 @@
    "GET records/:/form",
    "GET records/kinds",
    "GET socso",
-   "GET socso-extras/payments-abroad",
    "GET socso/:",
    "POST accounts/:/close",
+   "POST companies/:/guard-phones/codes",
    "POST discipline/:/appeal",
    "POST discipline/:/appeal/decide",
    "POST guard-phones/:/revoke",
-   "POST guard-signins",
-   "POST guard-signins/:/cancel",
-   "POST guard-signins/:/decide",
    "POST hr/appraisals",
    "POST hr/appraisals/:/close",
    "POST hr/appraisals/:/comment",
@@ -2767,9 +2788,13 @@
    "POST hr/history/rehire",
    "POST hr/history/separate",
    "POST hr/legal/:",
+   "POST hr/lists/:",
+   "POST hr/opening-balances/load",
    "POST hr/overtime",
    "POST hr/overtime/preview",
    "POST hr/people/:/mother-tongue",
+   "POST hr/people/:/opening-balance",
+   "POST hr/people/:/opening-balance/check",
    "POST hr/policies",
    "POST hr/policies/:/acknowledge",
    "POST hr/policies/:/briefing",
@@ -2783,7 +2808,6 @@
    "POST people/:/hiring-docs",
    "POST people/:/pin",
    "POST people/:/socso",
-   "POST socso-extras/act",
    "POST socso/:/appointments",
    "POST socso/:/checkins",
    "POST socso/:/death-notices",
@@ -2806,34 +2830,40 @@
    "POST socso/:/status"
   ],
   "purchasing": [
+   "GET me/items",
    "GET purchasing",
    "GET purchasing/issues/:/proof",
    "GET purchasing/uniform-requests",
    "GET records/:/form",
    "GET records/kinds",
+   "GET warranty-claims",
+   "POST inventory/:",
+   "POST it/act/:",
+   "POST me/it-devices/report",
+   "POST me/items/:/:",
    "POST purchasing/:/issues",
    "POST purchasing/:/requests",
    "POST purchasing/:/suppliers",
    "POST purchasing/issues/:/confirm-loss",
+   "POST purchasing/issues/:/handover/:",
    "POST purchasing/issues/:/return",
    "POST purchasing/requests/:/:",
    "POST purchasing/stock/:/count",
    "POST purchasing/suppliers/:/:",
    "POST purchasing/uniform-requests",
-   "POST purchasing/uniform-requests/:/:"
+   "POST purchasing/uniform-requests/:/:",
+   "POST supplies/:",
+   "POST warranty-claims",
+   "POST warranty-claims/:/check",
+   "POST warranty-claims/:/close",
+   "POST warranty-claims/:/send"
   ],
   "quality": [
-   "GET pikm",
    "GET quality/foundation",
    "GET quality/matrix",
    "GET quality/operations",
    "GET quality/register",
-   "POST pikm/act",
    "POST quality/:"
-  ],
-  "rates": [
-   "GET finance/rates",
-   "POST finance/rates"
   ],
   "rba": [
    "GET companies/:/rba-traces",
@@ -2857,7 +2887,9 @@
    "GET records/:/form",
    "GET records/kinds",
    "GET renewals",
-   "POST renewals/:/:"
+   "POST it/act/:",
+   "POST renewals/:/:",
+   "POST renewals/kdn/:"
   ],
   "reports": [
    "GET reports",
@@ -2867,10 +2899,14 @@
   "requests": [
    "GET requests",
    "GET requests/:/docs",
+   "GET short-stays",
+   "POST am/office/:",
    "POST expenses/prefill",
+   "POST it/act/:",
    "POST requests",
    "POST requests/:/decide",
-   "POST requests/:/submit"
+   "POST requests/:/submit",
+   "POST short-stays/:"
   ],
   "roster": [
    "GET companies/:/sites",
@@ -2896,9 +2932,6 @@
    "POST companies/:/self-audits",
    "POST self-audits/:/fix",
    "POST sites/:/client-codes"
-  ],
-  "settings": [
-   "GET settings-home"
   ],
   "sitehours": [
    "GET public-holidays",
@@ -2970,10 +3003,8 @@
    "GET companies/:/people",
    "GET dosh/register/:",
    "GET socso",
-   "GET socso-extras/payments-abroad",
    "GET socso/:",
    "POST people/:/socso",
-   "POST socso-extras/act",
    "POST socso/:/appointments",
    "POST socso/:/checkins",
    "POST socso/:/death-notices",
@@ -3023,14 +3054,13 @@
    "GET me/checkin",
    "GET me/clock",
    "GET me/face",
+   "GET me/overtime",
    "GET me/remote",
    "GET me/test-checkin",
    "GET me/time-slips",
    "GET records/:/form",
    "GET records/kinds",
    "GET remote",
-   "GET resignations",
-   "GET resignations/mine",
    "GET staff-clock",
    "GET staff-clock-photos",
    "GET staff-clock/:",
@@ -3053,6 +3083,7 @@
    "POST hr/legal/:",
    "POST hr/osh/assessments",
    "POST hr/osh/coordinator",
+   "POST hr/osh/coordinator-sees",
    "POST hr/osh/incidents",
    "POST hr/osh/incidents/:/report",
    "POST hr/overtime",
@@ -3072,6 +3103,8 @@
    "POST me/clock/pings",
    "POST me/face",
    "POST me/face/challenge",
+   "POST me/overtime",
+   "POST me/overtime/:/cancel",
    "POST me/remote/apply",
    "POST me/remote/check-in",
    "POST me/remote/plan",
@@ -3080,10 +3113,10 @@
    "POST me/test-checkin/:",
    "POST me/time-slips",
    "POST me/time-slips/:/cancel",
+   "POST overtime/:/decide",
    "POST remote-days/:/review",
    "POST remote/:/decide",
    "POST remote/:/end",
-   "POST resignations/act",
    "POST staff-clock-photos/:",
    "POST time-slips/:/decide",
    "POST time-slips/:/seen",
@@ -3094,14 +3127,12 @@
    "GET finance/cash/mine",
    "GET hr/allowances",
    "GET pay-changes",
-   "GET pay-p100/:",
    "GET staff-pay",
    "GET staff-pay/:",
    "GET staff-pay/my-zakat",
    "GET staff-pay/stat-tables",
    "POST finance/:/controls/:/:",
    "POST pay-changes/:/:",
-   "POST pay-p100/:",
    "POST staff-pay",
    "POST staff-pay/:/:",
    "POST staff-pay/:/files/:",
@@ -3123,6 +3154,7 @@
    "POST guard-pay/:/:",
    "POST guard-pay/:/cash/:/:",
    "POST guard-pay/:/files/:",
+   "POST guard-pay/:/later",
    "POST guard-pay/:/lines/:",
    "POST guard-pay/advances",
    "POST guard-pay/advances/:",
@@ -3131,7 +3163,7 @@
    "POST guard-pay/consent/:/approve",
    "POST guard-pay/loans",
    "POST guard-pay/loans/:/:",
-   "POST pay-p100/:",
+   "POST guard-pay/preparers/:",
    "POST statutory"
   ],
   "surveys": [

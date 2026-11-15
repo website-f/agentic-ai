@@ -92,11 +92,6 @@ export interface StaffDirectoryBatch {
   rows: (StaffDirectoryFields & { row: number; companyId: Id | null })[];
   /** Rows of the file already in the directory when it was prepared, left out. */
   alreadyIn: number[];
-  /**
-   * K2 (Fauzan, 11 Nov 2026): rows HR chose to leave out because they could not be read, each with its reasons, so the
-   * count of rows in the file, loaded and refused can be given for every load (K10). Missing on older batches.
-   */
-  refused?: { row: number; reasons: string[] }[];
   preparedById: Id;
   preparedBy: string;
   preparedAt: IsoDateTime;
@@ -333,9 +328,6 @@ export class StaffDirectoryService {
           source: b.source,
           rows: b.rows.length,
           alreadyIn: b.alreadyIn.length,
-          // K2/K10: the counts for the load log: rows in the file, loaded (on approval) and refused with reasons.
-          inFile: b.rows.length + b.alreadyIn.length + (b.refused?.length ?? 0),
-          refused: b.refused ?? [],
           preparedBy: b.preparedBy,
           preparedAt: b.preparedAt,
           status: b.status,
@@ -451,12 +443,10 @@ export class StaffDirectoryService {
   /**
    * HR sends a checked batch for approval. Refused while any row has an error, so what is approved is the whole file
    * less the rows already in the directory. The same rows cannot be sent again unless the earlier batch was returned.
-   * K2 (Fauzan, 11 Nov 2026: "turn on" the bulk load, a bad row refused with a reason): with `leaveOutBad` HR sends the
-   * good rows and the rows with errors are left out, each kept on the batch with its reasons for the approver to see.
    */
   async submit(
     user: User,
-    input: { text: string; source: string; fingerprint: string; leaveOutBad?: boolean },
+    input: { text: string; source: string; fingerprint: string },
   ) {
     return this.store.transaction(async (tx) => {
       await this.ready(tx);
@@ -473,12 +463,9 @@ export class StaffDirectoryService {
           `These columns are missing: ${p.missingColumns.join(", ")}.`,
         );
       const bad = p.rows.filter((x) => x.errors.length);
-      if (bad.length && input.leaveOutBad !== true)
+      if (bad.length)
         throw new BadRequest(
-          `Fix row ${bad.map((x) => x.row).join(", ")} first, or leave ${bad.length === 1 ? "it" : "them"} out: ${bad
-            .slice(0, 5)
-            .map((x) => `row ${x.row}: ${x.errors.join(" ")}`)
-            .join("; ")}`,
+          `Fix row ${bad.map((x) => x.row).join(", ")} first; a batch goes in whole or not at all.`,
         );
       if (!p.ready)
         throw new BadRequest(
@@ -500,12 +487,9 @@ export class StaffDirectoryService {
         source: p.source,
         fingerprint: p.fingerprint,
         rows: p.rows
-          .filter((x) => !x.alreadyIn && !x.errors.length)
+          .filter((x) => !x.alreadyIn)
           .map(({ issues: _i, errors: _e, alreadyIn: _a, ...f }) => f),
         alreadyIn: p.rows.filter((x) => x.alreadyIn).map((x) => x.row),
-        ...(bad.length
-          ? { refused: bad.map((x) => ({ row: x.row, reasons: x.errors.slice(0, 6) })) }
-          : {}),
         preparedById: u.id,
         preparedBy: u.name,
         preparedAt: at,
@@ -523,13 +507,12 @@ export class StaffDirectoryService {
         action: "staff_directory.batch.submit",
         entity: "staff_directory_batch",
         entityId: batch.id,
-        summary: `Staff directory batch of ${batch.rows.length} rows from ${batch.source} sent for approval; ${batch.alreadyIn.length} rows already in; ${bad.length} rows left out with their reasons. Fingerprint ${p.fingerprint.slice(0, 12)}.`,
+        summary: `Staff directory batch of ${batch.rows.length} rows from ${batch.source} sent for approval; ${batch.alreadyIn.length} rows already in. Fingerprint ${p.fingerprint.slice(0, 12)}.`,
       });
       return {
         id: batch.id,
         rows: batch.rows.length,
         alreadyIn: batch.alreadyIn.length,
-        refused: bad.length,
       };
     });
   }
@@ -701,7 +684,6 @@ export class StaffDirectoryService {
           text: str("text", STAFF_DIRECTORY_MAX_CHARS + 1),
           source: str("source", MAX.source + 1),
           fingerprint: str("fingerprint", 64),
-          leaveOutBad: i.leaveOutBad === true,
         });
       case "decide":
         return this.decide(user, {

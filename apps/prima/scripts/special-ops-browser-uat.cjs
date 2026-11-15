@@ -122,6 +122,9 @@ const step = async (name, fn) => {
     await p.locator('[role=tab]:visible', { hasText: /^Requests/ }).first().click();
     const item = p.locator('.list-item').filter({ hasText: TITLE }).first();
     await item.getByPlaceholder('Reason (needed for a decision)').fill('Quantity now matches two sessions');
+    // Part R13: a buy goes only to a licensed dealer, named by Arms Control from the supplier file.
+    assert.equal(await item.getByRole('button', { name: 'Pass to company' }).isDisabled(), true);
+    await item.getByLabel(/Licensed dealer for/).selectOption({ index: 1 });
     await item.getByRole('button', { name: 'Pass to company' }).click();
     await toast(/pass to company recorded/i);
   });

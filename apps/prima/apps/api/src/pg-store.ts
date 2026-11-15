@@ -10,14 +10,15 @@ import { itManualProblems } from './it-manual-readiness';
 import { amExtrasInstalled } from './am-extras-readiness';
 import { cleaningOpsInstalled } from './cleaning-ops-readiness';
 import { ITEM_TABLE_NAMES, ITEM_V2_TABLE_NAMES, itemRegisterInstalled, itemRegisterProblems, itemRegisterV2Installed, itemRegisterV2Problems } from './item-register-readiness';
-import { GENESIS_HASH, RefusedAfterSave, chainEntry, type AuditBody, type AuditEntry, type Filter, type Id, type Range, type Row, type Store, type TableName, type ItTicket, type GroupHistoryLookupRow, type GroupPersonNotes, type RehireStatus, BadRequest } from '@prima/core';
+import { GENESIS_HASH, RefusedAfterSave, chainEntry, type AuditBody, type AuditEntry, type Filter, type Id, type Range, type Row, type Store, type SpeakUpWall, type TableName, type ItTicket, type GroupHistoryLookupRow, type GroupPersonNotes, type RehireStatus, BadRequest } from '@prima/core';
 import type { PoolClient } from 'pg';
-import type { SpeakUpReceipt, SpeakUpReplyResult, SpeakUpSignal } from '@prima/core';
 
 /**
  * Tables from a proposed module (db/modules) that a database may not have yet. Reading one that is missing says so in
  * words instead of failing as a server error, and never reads as an empty (all clear) register.
  */
+const ROSTER_TABLES = ['siteCoverage', 'rosterVersions', 'rosterDays', 'attendanceBreaks', 'rosterEvidence', 'guardAllowances', 'lumpSumAgreements'] as const;
+const ROSTER_MISSING = 'The guard roster is not installed in this database yet (module guard-roster-v1, run by the CEO).';
 const MODULE_TABLES: Partial<Record<TableName, string>> = {
   // P88 (office): every table of the new upstream modules says so in words until the CEO approves installing it.
   fwStatCharges: 'Foreign worker EPF and SOCSO recharges are not switched on in this database yet (module fw-epf-socso-recharge-v1).',
@@ -35,10 +36,34 @@ const MODULE_TABLES: Partial<Record<TableName, string>> = {
   clientCodeChecks: 'Client requirements and the yearly self-audit are not installed in this database yet (module client-codes-v1).',
   clientInspections: 'Client requirements and the yearly self-audit are not installed in this database yet (module client-codes-v1).',
   selfAudits: 'Client requirements and the yearly self-audit are not installed in this database yet (module client-codes-v1).',
+  guardPayPreparers: 'Naming who prepares the guard pay run is not installed in this database yet (module guard-pay-preparers-v1, run by the CEO).',
+  problemReports: 'Report a problem is not installed in this database yet (module problem-reports-v1, run by the CEO).',
+  accountRequests: 'Accounts and Access is not installed in this database yet (module accounts-access-v1).',
+  fwMoves: 'Hostel moves are not installed in this database yet (module fw-moves-v1, run by the CEO).',
+  hostelNeeds: 'Hostel needs are not installed in this database yet (module fw-moves-v1, run by the CEO).',
+  hostelRecs: 'Hostel inventory and checks are not installed in this database yet (module fw-moves-v1, run by the CEO).',
+  stayRequests: 'Staff stay requests are not installed in this database yet (module short-stays-v1, run by the CEO).',
+  ssRecs: 'Short stays are not installed in this database yet (module short-stays-v1, run by the CEO).',
+  itPolicyRecs: 'IT policy records are not installed in this database yet (module it-policies-v1, run by the CEO).',
+  armsPolicyRecs: 'Arms policy records are not installed in this database yet (module arms-policies-v1, run by the CEO).',
+  officeAmRecs: 'Office asset records are not installed in this database yet (module office-am-v1, run by the CEO).',
+  kdnRecs: 'KDN renewal records are not installed in this database yet (module kdn-renewal-v1, run by the CEO).',
+  toolboxRecs: 'Toolbox records are not installed in this database yet (module toolbox-v1, run by the CEO).',
+  groupMonthRecs: 'Monthly group meeting records are not installed in this database yet (module group-monthly-v1, run by the CEO).',
+  dutyRegisterRecs: 'Duty registers are not installed in this database yet (module duty-registers-v1, run by the CEO).',
+  inventoryRecs: 'Inventory control records are not installed in this database yet (module inventory-control-v1, run by the CEO).',
+  amRentalRecs: 'Rental home records are not installed in this database yet (module am-rental-v1, run by the CEO).',
+  consentGates: 'Paper consent is not installed in this database yet (module paper-consent-v1, run by the CEO).',
+  hrLists: 'HR lists are not installed in this database yet (module hr-lists-v1, run by the CEO).',
+  orgImportOks: 'The bulk load OK is not installed in this database yet (module bulk-load-ok-v1, run by the CEO).',
+  staffOtClaims: 'Office overtime claims are not installed in this database yet (module staff-ot-claims-v1, run by the CEO).',
+  warrantyClaims: 'Equipment warranty claims are not installed in this database yet (module warranty-claims-v1, run by the CEO).',
+  sqlPostings: 'The SQL Account posting link is not installed in this database yet (module sql-posting-v1, run by the CEO).',
+  sqlPostingExceptions: 'The SQL Account posting link is not installed in this database yet (module sql-posting-v1, run by the CEO).',
   rbaTraceReviews: 'RBA readiness is not installed in this database yet (module rba-readiness-v1).',
   ethicsDeclarations: 'RBA readiness is not installed in this database yet (module rba-readiness-v1).',
   rbaCommittees: 'RBA readiness is not installed in this database yet (module rba-readiness-v1).',
-  rbaCommitteeRosters: 'The RBA committee roster is not set up in this database yet (module rba-committee-roster-v1).',
+  rbaCommitteeRosters: 'RBA readiness is not installed in this database yet (module rba-readiness-v1).',
   qmsRequirements: 'Quality and compliance is not installed in this database yet (module quality-compliance-v1).',
   qmsEntries: 'Quality and compliance is not installed in this database yet (module quality-compliance-v1).',
   qmsFoundation: 'Quality and compliance is not installed in this database yet (module quality-compliance-v1).',
@@ -46,12 +71,6 @@ const MODULE_TABLES: Partial<Record<TableName, string>> = {
   compAssessments: 'Quality and compliance is not installed in this database yet (module quality-compliance-v1).',
   qmsItems: 'Quality and compliance is not installed in this database yet (module quality-compliance-v1).',
   qmsNonconformities: 'Quality and compliance is not installed in this database yet (module quality-compliance-v1).',
-  // P100 (E9): PIKM records, db/modules/quality-pikm-v1.sql (approved to build; installed by the CEO-run migration).
-  qmsPikmRecords: 'PIKM records are not installed in this database yet (module quality-pikm-v1, run by the CEO).',
-  // P100 (E10): staff resignations, db/modules/hr-resignations-v1.sql (approved to build; installed by the CEO-run migration).
-  staffResignations: 'Resigning in Prima is not installed in this database yet (module hr-resignations-v1, run by the CEO).',
-  // P100 (J2): warranty claims, db/modules/item-warranty-v1.sql (approved to build; installed by the CEO-run migration).
-  itemWarrantyClaims: 'Warranty claims are not installed in this database yet (module item-warranty-v1, run by the CEO).',
   regRelatedParties: 'Governance registers are not installed in this database yet (module governance-registers-v1).',
   regInterests: 'Governance registers are not installed in this database yet (module governance-registers-v1).',
   regCommittees: 'Governance registers are not installed in this database yet (module governance-registers-v1).',
@@ -64,23 +83,8 @@ const MODULE_TABLES: Partial<Record<TableName, string>> = {
   ownerTestCheckins: 'The owner test check-in is not set up in this database yet (module owner-test-checkin-v1).',
   // P97: the staff check-in and check-out face photos (db/modules/clock-snaps-v1.sql, applied by the office prima-setup).
   clockSnaps: 'Check-in face photos are not set up in this database yet (module clock-snaps-v1).',
-  // P100 I1: OM uniform requests (db/modules/uniform-requests-v1.sql): built and tested, NOT on the release list until the
-  // CEO says so, so prima-setup does not run it; until then the screens say this in words.
+  ...Object.fromEntries(ROSTER_TABLES.map((t) => [t, ROSTER_MISSING])),
   stockRequests: 'Uniform requests are not installed in this database yet (module uniform-requests-v1, run by the CEO).',
-  // K8: the bulk load records (db/modules/bulk-loads-v1.sql, applied by the office prima-setup).
-  bulkLoads: 'Bulk load records are not set up in this database yet (module bulk-loads-v1).',
-  // P100 E6: moving vehicles between group companies (db/modules/vehicle-transfers-v1.sql, CEO-run migration).
-  vehicleTransfers: 'Vehicle moves between companies are not installed in this database yet (module vehicle-transfers-v1, run by the CEO).',
-  // P100 J5: guard sign-ins in bulk (db/modules/guard-signins-v1.sql, CEO-run migration).
-  guardSignInBatches: 'Guard sign-ins in bulk are not installed in this database yet (module guard-signins-v1, run by the CEO).',
-  // P100 J6: each person's alert choices (db/modules/alert-prefs-v1.sql, CEO-run migration).
-  alertPrefs: 'Choosing alerts is not installed in this database yet (module alert-prefs-v1, run by the CEO).',
-  // P100 pay (B1): who prepares each company's guard pay run (db/modules/guard-pay-preparers-v1.sql, office prima-setup).
-  guardPayPreparers: 'The guard pay preparer list is not set up in this database yet (module guard-pay-preparers-v1).',
-  // P100 pay (B2): the FD's cash stand-ins (db/modules/cash-stand-ins-v1.sql, office prima-setup).
-  cashStandIns: 'The cash stand-in is not set up in this database yet (module cash-stand-ins-v1).',
-  // P100 pay (C12 + J3): staff overtime lines (db/modules/staff-ot-v1.sql, office prima-setup).
-  staffOtLines: 'Staff overtime lines are not set up in this database yet (module staff-ot-v1).',
 };
 
 // Exported for the per-request read snapshots (read-cache.ts, P83).
@@ -161,6 +165,9 @@ clientCodes: 'prima.client_codes',
 clientCodeChecks: 'prima.client_code_checks',
 clientInspections: 'prima.client_inspections',
 selfAudits: 'prima.self_audits',
+sqlPostings: 'prima.sql_postings',
+guardPayPreparers: 'prima.guard_pay_preparers',
+sqlPostingExceptions: 'prima.sql_posting_exceptions',
 rbaTraceReviews: 'prima.rba_trace_reviews',
 ethicsDeclarations: 'prima.ethics_declarations',
 rbaCommittees: 'prima.rba_committees',
@@ -278,13 +285,6 @@ checkinSettings: 'prima.checkin_settings',
 checkinEvents: 'prima.checkin_events',
 ownerTestCheckins: 'prima.owner_test_checkins',
 clockSnaps: 'prima.clock_snaps',
-bulkLoads: 'prima.bulk_loads',
-vehicleTransfers: 'prima.vehicle_transfers',
-guardSignInBatches: 'prima.guard_signin_batches',
-alertPrefs: 'prima.alert_prefs',
-guardPayPreparers: 'prima.guard_pay_preparers',
-cashStandIns: 'prima.cash_stand_ins',
-staffOtLines: 'prima.staff_ot_lines',
 loginHandovers: 'prima.login_handovers',
 hrFilings: 'prima.hr_filings',
 hrCases: 'prima.hr_cases',
@@ -341,6 +341,17 @@ attendanceMatches: 'prima.attendance_matches',
 orgTasks:'prima.org_tasks',
 orgNotices:'prima.org_notices',
 orgImports:'prima.org_imports',
+orgImportOks:'prima.org_import_oks',
+problemReports:'prima.problem_reports',
+accountRequests:'prima.account_requests',
+hrLists:'prima.hr_lists',
+consentGates:'prima.consent_gates',
+fwMoves:'prima.fw_moves',
+hostelNeeds:'prima.hostel_needs',
+hostelRecs:'prima.hostel_recs',
+stayRequests:'prima.stay_requests',
+ssRecs:'prima.short_stay_recs',
+itPolicyRecs:'prima.it_policy_recs', armsPolicyRecs:'prima.arms_policy_recs', officeAmRecs:'prima.office_am_recs', kdnRecs:'prima.kdn_recs', toolboxRecs:'prima.toolbox_recs', inventoryRecs:'prima.inventory_recs', amRentalRecs:'prima.am_rental_recs', groupMonthRecs:'prima.group_month_recs', dutyRegisterRecs:'prima.duty_register_recs',
 companyDesks: 'prima.company_desks',
 companyRunLinks: 'prima.company_run_links',
 fwWelfareChecks: 'prima.fw_welfare_checks',
@@ -349,7 +360,16 @@ fwPlacementHosts: 'prima.fw_placement_hosts',
 fwCostRates: 'prima.fw_cost_rates',
 fwCostCharges: 'prima.fw_cost_charges',
 timeSlips: 'prima.time_slips',
+staffOtClaims: 'prima.staff_ot_claims',
+warrantyClaims: 'prima.warranty_claims',
 timeSlipSettings: 'prima.time_slip_settings',
+siteCoverage: 'prima.site_coverage',
+rosterVersions: 'prima.roster_versions',
+rosterDays: 'prima.roster_days',
+attendanceBreaks: 'prima.attendance_breaks',
+rosterEvidence: 'prima.roster_evidence',
+guardAllowances: 'prima.guard_allowances',
+lumpSumAgreements: 'prima.lump_sum_agreements',
 staffDirectory: 'prima.staff_directory',
 staffDirectoryBatches: 'prima.staff_directory_batches',
 cleaningSites: 'prima.cleaning_sites',
@@ -392,9 +412,6 @@ guardPhoneSessions: 'prima.guard_phone_sessions',
 guardPings: 'prima.guard_pings',
 qmsItems: 'prima.qms_items',
 qmsNonconformities: 'prima.qms_nonconformities',
-qmsPikmRecords: 'prima.qms_pikm_records',
-staffResignations: 'prima.staff_resignations',
-itemWarrantyClaims: 'prima.item_warranty_claims',
 fwRecruitFiles: 'prima.fw_recruit_files'
 };
 
@@ -421,6 +438,7 @@ const HAS_COMPANY_COLUMN = new Set<TableName>([
 'checkinRules',
 'checkinSettings',
 'checkinEvents',
+'inventoryRecs',
 'siteHoursApprovals',
 'publicHolidayLists',
 'guardPayRuns',
@@ -462,10 +480,6 @@ const HAS_COMPANY_COLUMN = new Set<TableName>([
 'staffClocks',
 'locationPings',
 'clockSnaps',
-'vehicleTransfers',
-'guardSignInBatches',
-'guardPayPreparers',
-'staffOtLines',
 'remoteArrangements',
 'remoteDays',
 'flexRequests',
@@ -526,6 +540,9 @@ const HAS_COMPANY_COLUMN = new Set<TableName>([
 'clientCodeChecks',
 'clientInspections',
 'selfAudits',
+'sqlPostings',
+'sqlPostingExceptions',
+'guardPayPreparers',
 'rbaTraceReviews',
 'ethicsDeclarations',
 'rbaCommittees',
@@ -549,6 +566,15 @@ const HAS_COMPANY_COLUMN = new Set<TableName>([
 'fwCostCharges',
 'timeSlips',
 'timeSlipSettings',
+'staffOtClaims',
+'warrantyClaims',
+'siteCoverage',
+'rosterVersions',
+'rosterDays',
+'attendanceBreaks',
+'rosterEvidence',
+'guardAllowances',
+'lumpSumAgreements',
 'cleaningSites',
 'cleaningDays',
 'cleaningStock',
@@ -570,10 +596,8 @@ const HAS_COMPANY_COLUMN = new Set<TableName>([
 'guardPhoneSessions',
 'guardPings',
 'qmsNonconformities',
-'qmsPikmRecords',
-'staffResignations',
-'itemWarrantyClaims',
-'fwRecruitFiles'
+'fwRecruitFiles',
+...ROSTER_TABLES
 ]);
 
 /**
@@ -628,6 +652,24 @@ export class PgStore implements Store {
       this.officeReady = (await this.client.query("SELECT to_regclass('prima.company_desks') IS NOT NULL AS ok")).rows[0].ok === true;
     return this.officeReady;
   }
+  private speakUpWall: Promise<SpeakUpWall | null> | null = null;
+  /** The speak-up reports wall (db/modules/speak-up-wall-v1.sql), or null before it is installed. */
+  speakUp(): Promise<SpeakUpWall | null> {
+    return (this.speakUpWall ??= (async () => {
+      const ok = (await this.client.query("SELECT to_regprocedure('prima.speak_up_by_code(text)') IS NOT NULL AS ok")).rows[0].ok === true;
+      if (!ok) return null;
+      const c = this.client;
+      const wall: SpeakUpWall = {
+        byCode: async (code) => (await c.query('SELECT prima.speak_up_by_code($1) AS r', [code])).rows[0]?.r ?? null,
+        append: async (code, message, note, afterCloseDays, today) =>
+          (await c.query('SELECT prima.speak_up_append($1, $2::jsonb, $3::jsonb, $4, $5::date) AS r', [code, JSON.stringify(message), JSON.stringify(note), afterCloseDays, today])).rows[0].r,
+        meta: async () => (await c.query('SELECT r FROM prima.speak_up_meta() AS r')).rows.map((x) => x.r),
+        nextNumber: async () => Number((await c.query('SELECT prima.speak_up_next_number() AS n')).rows[0].n),
+      };
+      return wall;
+    })());
+  }
+
   private runLinksReady: boolean | null = null;
   /** Whether the optional module for companies run by another office (db/modules/company-run-links-v1.sql) is applied. */
   async companyRunLinksReady(): Promise<boolean> {
@@ -833,35 +875,6 @@ async list<T extends TableName>(table: T, filter?: Filter<T>, range?: Range<T>):
     return Number.isInteger(t) ? t : null;
   }
 
-  private speakUpWallPresent: boolean | null = null;
-  /** H2: whether the speak-up wall (db/modules/speak-up-wall-v1.sql) is in place in this database. */
-  async speakUpWallReady(): Promise<boolean> {
-    if (this.speakUpWallPresent === null)
-      this.speakUpWallPresent = (await this.client.query("SELECT to_regprocedure('prima.speak_up_signals()') IS NOT NULL AND to_regclass('prima.speak_up_number_seq') IS NOT NULL AS ok")).rows[0].ok === true;
-    return this.speakUpWallPresent;
-  }
-
-  /** The next speak-up report number, from the database sequence (a reporter cannot count the reports they cannot see). */
-  async speakUpNextNumber(): Promise<number> {
-    return Number((await this.client.query("SELECT nextval('prima.speak_up_number_seq') AS n")).rows[0].n);
-  }
-
-  /** What a receipt code opens (prima.speak_up_status): status, outcome and messages of that one report; null if none. */
-  async speakUpStatus(code: string): Promise<SpeakUpReceipt | null> {
-    return ((await this.client.query('SELECT prima.speak_up_status($1) AS r', [code])).rows[0]?.r ?? null) as SpeakUpReceipt | null;
-  }
-
-  /** The reporter's reply by receipt code (prima.speak_up_reply), holding the report while it appends. */
-  async speakUpReply(i: { code: string; text: string; retaliation: boolean; at: string; today: string; afterCloseDays: number }): Promise<SpeakUpReplyResult> {
-    const r = await this.client.query('SELECT prima.speak_up_reply($1, $2, $3, $4, $5::date, $6) AS r', [i.code, i.text, i.retaliation, i.at, i.today, i.afterCloseDays]);
-    return r.rows[0].r as SpeakUpReplyResult;
-  }
-
-  /** Leaders and ACT: no text, for the counts (prima.speak_up_signals; empty without the speak_up_counts wall). */
-  async speakUpSignals(): Promise<SpeakUpSignal[]> {
-    return ((await this.client.query('SELECT prima.speak_up_signals() AS r')).rows[0]?.r ?? []) as SpeakUpSignal[];
-  }
-
   /** The office running a company (hand-over receivers), read by the module's function; null before run links exist. */
   async orgRunBy(companyId: Id): Promise<Id | null> {
     const r = await this.client.query('SELECT prima.org_run_by($1) AS run_by', [companyId]);
@@ -933,6 +946,12 @@ async list<T extends TableName>(table: T, filter?: Filter<T>, range?: Range<T>):
       await this.client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [`am-extras:${table}:${id}`]);
       return;
     }
+    // Guard roster: one key per record or per site-month (ids 'roster:<site>:<month>'), even before the row exists;
+    // compliance evidence has no UPDATE right, so a row lock is not available there.
+    if ((ROSTER_TABLES as readonly TableName[]).includes(table)) {
+      await this.client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [`guard-roster:${id}`]);
+      return;
+    }
     // Pay formula saves serialize on one key, even before any row exists (new codes and place choices).
     if ((await this.payFormulaTable(table)) === 'missing') throw new Error(missingMessage(table));
     // A company's month serializes even before its run row exists (two HR officers preparing at once).
@@ -970,6 +989,8 @@ async list<T extends TableName>(table: T, filter?: Filter<T>, range?: Range<T>):
     // Serialize creation too: SELECT FOR UPDATE alone cannot lock a missing draft.
     if (table === 'arishaDrafts') await this.client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [`arisha-draft:${id}`]);
     // One staff directory change at a time (batch send, approval, hand entry), even before any batch row exists.
+    // One Accounts and Access change at a time (send, approve), even before any request row exists.
+    if (table === 'accountRequests') await this.client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [`accounts:${id}`]);
     if (table === 'staffDirectoryBatches') await this.client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [`staff-directory:${id}`]);
     if (table === 'itImportReviews') await this.client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [`it-import-review:${id}`]);
     // Website cycle creation and reminder dedupe serialize even before the singleton settings row exists.
@@ -988,6 +1009,12 @@ async list<T extends TableName>(table: T, filter?: Filter<T>, range?: Range<T>):
     // Leave: "a refusal is corrected once" and "one MC is used once" serialize on a key, not a row (Arisha review, 3 Nov 2026).
     if (table === 'leaveRequests' && /^leave-(correct|mc):/.test(id)) {
       await this.client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [id]);
+      return;
+    }
+    // Review of PR #141: one bank credit per rent payment (B1) and one Finance payment per repair job (B4) serialize
+    // on a key, since the check reads many rows and no single row is there to lock.
+    if ((table === 'amUnits' && id.startsWith('bankref:')) || (table === 'officeAmRecs' && id.startsWith('finpay:'))) {
+      await this.client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [`${table}:${id}`]);
       return;
     }
     await this.client.query(`SELECT 1 FROM ${TABLE[table]} WHERE id = $1 FOR UPDATE`, [id]);
@@ -1058,6 +1085,17 @@ async list<T extends TableName>(table: T, filter?: Filter<T>, range?: Range<T>):
     return res.rows[0].data as Row<T>;
   }
 
+  /** Accounts and Access: the company names for preparing access (IT sees no company itself). */
+  async accountCompanies(): Promise<{ id: string; code: string; name: string }[]> {
+    return (await this.client.query('SELECT id, code, name FROM prima.acc_companies()')).rows;
+  }
+
+  /** Accounts and Access: an approved request is written by prima.apply_account_request, which checks every rule again. */
+  async applyAccountRequest(requestId: Id): Promise<{ at: string; users: Id[]; grants: Id[]; ended: Id[] }> {
+    const res = await this.client.query('SELECT prima.apply_account_request($1) AS r', [requestId]);
+    return res.rows[0].r;
+  }
+
   /** Offboarding goes through prima.close_access: the API holds no other right to change accounts or grants. */
   async closeAccess(userId: Id, from: string, closed: { by: string; at: string; reason: string }): Promise<number> {
     const res = await this.client.query('SELECT prima.close_access($1, $2::date, $3::jsonb) AS n', [userId, from, JSON.stringify(closed)]);
@@ -1084,12 +1122,6 @@ async list<T extends TableName>(table: T, filter?: Filter<T>, range?: Range<T>):
   }
 
   /** Expire and clear Arisha IT import reviews; the database function changes and audits each in one step. */
-  /** J5: the database makes the guard sign-ins of an approved batch (prima.gsb_create re-checks everything). */
-  async createGuardSignIns(batchId: string): Promise<{ count: number; skipped: { personId: string; why: string }[] }> {
-    const r = await this.client.query('SELECT prima.gsb_create($1) AS r', [batchId]);
-    return r.rows[0].r as { count: number; skipped: { personId: string; why: string }[] };
-  }
-
   async tidyItImportReviews(by: string): Promise<{ id: string; kind: string; outcome: 'expired' | 'purged' }[]> {
     const res = await this.client.query('SELECT review_id, review_kind, outcome FROM prima.tidy_it_import_reviews($1)', [by]);
     return res.rows.map((r: { review_id: string; review_kind: string; outcome: 'expired' | 'purged' }) => ({ id: r.review_id, kind: r.review_kind, outcome: r.outcome }));

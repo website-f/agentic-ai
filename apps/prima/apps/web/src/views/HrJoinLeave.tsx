@@ -236,6 +236,25 @@ export function JoinLeavePanel() {
                 : "not due (under 12 months)"}
               .
             </p>
+            <div className="hx-row-text">
+              Resignation notice: {guide.resignation.basis} ({guide.resignation.days} days).
+              {guide.resignation.short && ` Notice given is ${guide.resignation.givenDays} days, shorter than this: agree pay in place of notice in writing, or correct the last day.`}
+            </div>
+            <div className="hx-row-text">Personnel records are kept until {guide.recordsKeptUntil} (7 years after the last day).</div>
+            <FinalPayBlock guide={guide} />
+            <details style={{ marginTop: 4 }}>
+              <summary>Resignation procedure (handbook, English and Malay)</summary>
+              <ol className="hp-guide-steps">
+                {guide.resignation.procedure.en.map((s) => (
+                  <li key={s}>{s}</li>
+                ))}
+              </ol>
+              <ol className="hp-guide-steps" lang="ms">
+                {guide.resignation.procedure.ms.map((s) => (
+                  <li key={s}>{s}</li>
+                ))}
+              </ol>
+            </details>
             <ol className="hp-guide-steps">
               {guide.steps.map((s) => (
                 <li key={s}>{s}</li>
@@ -322,7 +341,7 @@ export function VacanciesPanel() {
     <Card
       flush
       title="Vacancies"
-      sub="The CEO approves a vacancy, then the company head signs the approval. The CEO approves and signs PWVSB central posts. Every step needs a comment."
+      sub="The CEO approves a vacancy, then the company head signs the approval. Every step needs a comment."
       actions={
         <>
           <Chip tone="info">{d.rows.filter((r) => r.status === "open").length} open</Chip>
@@ -451,9 +470,7 @@ export function VacanciesPanel() {
                 </span>
               </div>
               <div className="hx-row-side">
-                <Chip tone={r.status === "open" || r.status === "filled" ? "ok" : r.status === "refused" || r.status === "cancelled" ? "neutral" : "warn"}>
-                  {r.status === "waiting_head" && r.signer === "ceo" ? "waiting for the CEO to sign" : VACANCY_STATUS[r.status]}
-                </Chip>
+                <Chip tone={r.status === "open" || r.status === "filled" ? "ok" : r.status === "refused" || r.status === "cancelled" ? "neutral" : "warn"}>{VACANCY_STATUS[r.status]}</Chip>
               </div>
               {(r.canCeo || r.canSign || r.canClose) && (
                 <div className="hx-row-body">
@@ -461,8 +478,8 @@ export function VacanciesPanel() {
                     <input className="input" placeholder="Comment (needed)" aria-label={`Comment on ${r.title}`} value={note[r.id] ?? ""} onChange={(e) => setNote((x) => ({ ...x, [r.id]: e.target.value }))} />
                     {r.canCeo && (
                       <>
-                        <button className="btn btn-sm btn-primary" disabled={act.busy || !(note[r.id] ?? "").trim()} onClick={() => step(r.id, "ceo_approve", r.signer === "ceo" ? "Approved and signed." : "Approved.")}>
-                          {r.signer === "ceo" ? "Approve and sign" : "Approve"}
+                        <button className="btn btn-sm btn-primary" disabled={act.busy || !(note[r.id] ?? "").trim()} onClick={() => step(r.id, "ceo_approve", "Approved.")}>
+                          Approve
                         </button>
                         <button className="btn btn-sm" disabled={act.busy || !(note[r.id] ?? "").trim()} onClick={() => step(r.id, "ceo_refuse", "Refused.")}>
                           Refuse
@@ -882,6 +899,43 @@ function ApplicantList({ vacancyId, count, hired, headcount }: { vacancyId: stri
         Hide
       </button>
       <ErrorNotice error={act.error} />
+    </div>
+  );
+}
+
+/** Part N14: Prima's working of the final pay, for HR to check and save with a reason on any change. */
+function FinalPayBlock({ guide }: { guide: Awaited<ReturnType<typeof api.leavingGuide>> }) {
+  const act = useAction();
+  const f = guide.finalPay;
+  const [v, setV] = useState<Record<string, string>>({});
+  const rm = (n: number) => `RM${n.toLocaleString("en-MY", { minimumFractionDigits: 2 })}`;
+  return (
+    <div style={{ marginTop: 6 }}>
+      <div style={{ fontWeight: 600 }}>Final pay (Prima's working, HR checks)</div>
+      <div>Last month {f.lastMonth.from} to {f.lastMonth.to}: {rm(f.lastMonth.basic + f.lastMonth.allowances)}. {f.lastMonth.note}</div>
+      <div>
+        Unused annual leave: {f.unusedLeave.days} day(s) ({f.unusedLeave.entitledToDate} due for {f.unusedLeave.monthsCounted} month(s), {f.unusedLeave.taken} taken) = {rm(f.unusedLeave.amount)}
+      </div>
+      <div>
+        Notice: {f.notice.givenDays} of {f.notice.requiredDays} days given
+        {f.notice.shortDays > 0 ? `; ${f.notice.shortDays} days short = ${rm(f.notice.amount)} owed by the ${f.notice.owedBy === "staff" ? "staff member" : "company"}` : ""}.
+      </div>
+      {guide.finalPaySaved && (
+        <div className="muted">
+          Saved by {guide.finalPaySaved.by}: {guide.finalPaySaved.reason}
+          {guide.finalPaySaved.changed.length ? ` (changed ${guide.finalPaySaved.changed.join(", ")})` : ""}
+        </div>
+      )}
+      <ErrorNotice error={act.error} />
+      <div className="row" style={{ gap: 6, flexWrap: "wrap", marginTop: 4 }}>
+        {(["lastMonth", "unusedLeave", "noticeInLieu", "terminationBenefit"] as const).map((k) => (
+          <input key={k} className="input" style={{ width: 130 }} aria-label={k} placeholder={k} value={v[k] ?? ""} onChange={(e) => setV((x) => ({ ...x, [k]: e.target.value }))} />
+        ))}
+        <input className="input" aria-label="Reason" placeholder="Reason (needed)" value={v.reason ?? ""} onChange={(e) => setV((x) => ({ ...x, reason: e.target.value }))} />
+        <button className="btn btn-sm" disabled={act.busy} onClick={() => void act.run(() => api.setFinalPay(guide.personId, v), "Final pay saved.")}>
+          Save final pay
+        </button>
+      </div>
     </div>
   );
 }

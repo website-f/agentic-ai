@@ -64,7 +64,7 @@ export type Action =
   | 'leave.request'
   /**
    * Approve or reject leave and absence reasons: the Operations Manager or higher only (Fauzan, 25 Oct 2026), under
-   * the company's management agreement. Unanswered requests move up a level after each working day (rule LEAVE-ESCALATE).
+   * the company's management agreement. Unanswered requests move up a level every 12 hours (rule LEAVE-ESCALATE).
    */
   | 'leave.decide'
   /** Share the company office's work out to desks: the company's own Company Manager or GM only (Fauzan, 2 Nov 2026). */
@@ -663,11 +663,10 @@ export function opsCompanyOf(sector: 'government' | 'private' | null | undefined
 export const LOGISTICS_COMPANY_ID = 'pgl';
 export const CENTRAL_EMPLOYER_IDS: readonly Id[] = [GROUP_EMPLOYER_ID, IT_COMPANY_ID, GOV_OPS_COMPANY_ID, PRIVATE_OPS_COMPANY_ID, LOGISTICS_COMPANY_ID];
 
-/** The ACT job of a department member (Director, Manager, Auditor or Enforcement), from server identity only. */
+/** The ACT job of a department member (Director, Auditor or Enforcement), from server identity only. */
 export function actJobOf(user: User): 'director' | 'manager' | 'auditor' | 'enforcement' | null {
   if (actRole(user) !== 'act') return null;
   if (user.actRole === 'lead') return 'director';
-  // C6 (Fauzan, 11 Nov 2026): the ACT Manager leads the work and is the second checker; the Director stays the head.
   if (user.actRole === 'manager') return 'manager';
   if (user.actRole === 'auditor') return 'auditor';
   if (user.actRole === 'enforcement') return 'enforcement';

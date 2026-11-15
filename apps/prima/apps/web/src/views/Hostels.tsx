@@ -2,7 +2,7 @@ import { Select } from '../SearchSelect';
 import { useState } from 'react';
 import { ClockCountdownIcon, LightningIcon, TrayIcon } from '@phosphor-icons/react';
 import type { ProofInput } from '@prima/core';
-import { api, type HostelBillInput, type HostelBoard } from '../api';
+import { api, type HostelBillInput, type HostelBoard, type HostelCheckOutInput } from '../api';
 import { Card, Empty, PageHead, Search, Stat, Stats, Steps, Toolbar, type StepState } from '../kit';
 import { Chip, ErrorNotice, Loading, dateLabel, dateTimeLabel, useAction, useLoad, type Tone } from '../ui';
 import { ProofPicker } from './Proof';
@@ -10,7 +10,7 @@ import { RecordButton } from './RecordForm';
 import { NoAddNote } from './FwmAdd';
 import { ImportButton } from './ImportDrawer';
 import '../styles/hrx.css';
-import { HostelStaysPanel } from './FwExtras';
+import { FwHostelPanel } from './FwHostel';
 
 /**
  * Hostel bills and utility excess (Fauzan, 26 Oct 2026). Each bill belongs to the company that owns or rents the
@@ -83,14 +83,17 @@ export function HostelsView() {
         )}
       </Stats>
       <div className="tabbar hx-tabs" role="tablist" aria-label="Hostel sections">
+      <FwHostelPanel />
         <button role="tab" aria-selected={view === 'bills'} onClick={() => setTab('bills')}>
           Bills
           {mine.length > 0 && <span className="tab-count">{mine.length}</span>}
         </button>
-        {/* P100 (E8): who lives in each hostel, check-in and the check-out memo. */}
-        <button role="tab" aria-selected={view === 'stays'} onClick={() => setTab('stays')}>
-          Who lives here
-        </button>
+        {(data.canManageStays || data.stays.length > 0) && (
+          <button role="tab" aria-selected={view === 'stays'} onClick={() => setTab('stays')}>
+            Who lives where
+            {data.openCheckOuts > 0 && <span className="tab-count">{data.openCheckOuts}</span>}
+          </button>
+        )}
         {data.charges.length > 0 && (
           <button role="tab" aria-selected={view === 'utility'} onClick={() => setTab('utility')}>
             Utility excess
@@ -129,7 +132,7 @@ export function HostelsView() {
         </div>
       )}
       {view === 'utility' && <UtilityPanel rows={data.charges} rule={data.rules.utility.source} />}
-      {view === 'stays' && <HostelStaysPanel />}
+      {view === 'stays' && <StaysPanel data={data} />}
     </div>
   );
 }
@@ -558,6 +561,110 @@ function ChargeItem({ r }: { r: ChargeRow }) {
           </>
         )}
       </div>
+    </div>
+  );
+}
+
+type StayRow = HostelBoard['stays'][number];
+
+/** E8: FWM checks workers in and out; the check-out memo stays on the worker's file, open points shown to all. */
+function StaysPanel({ data }: { data: HostelBoard }) {
+  const [hostelId, setHostelId] = useState(data.hostels[0]?.hostel.id ?? '');
+  const [personId, setPersonId] = useState('');
+  const [from, setFrom] = useState('');
+  const checkIn = useAction();
+  return (
+    <div className="panel">
+      <h3>Who lives where</h3>
+      <p className="muted">One hostel at a time, never more people than beds. When a worker leaves, FWM writes the check-out memo: keys, room, utilities and belongings.</p>
+      {data.canManageStays && data.hostels.length > 0 && (
+        <div className="row" style={{ gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
+          <Select className="select" value={hostelId} onChange={(e) => setHostelId(e.target.value)} aria-label="Hostel">
+            {data.hostels.map((h) => (
+              <option key={h.hostel.id} value={h.hostel.id}>
+                {h.hostel.name} ({h.residents}/{h.hostel.beds})
+              </option>
+            ))}
+          </Select>
+          <input placeholder="Worker record ID" value={personId} onChange={(e) => setPersonId(e.target.value)} aria-label="Worker record ID" />
+          <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} aria-label="Check-in date" />
+          <button disabled={!hostelId || !personId || !from || checkIn.busy} onClick={() => checkIn.run(() => api.hostelCheckIn(hostelId, personId.trim(), from))}>
+            Check in
+          </button>
+        </div>
+      )}
+      {checkIn.error && <ErrorNotice error={checkIn.error} />}
+      {data.stays.length === 0 && <div className="empty">No one recorded yet.</div>}
+      {data.stays.map((r) => (
+        <StayItem key={r.stay.id} r={r} reasons={data.checkOutReasons} />
+      ))}
+    </div>
+  );
+}
+
+function StayItem({ r, reasons }: { r: StayRow; reasons: HostelBoard['checkOutReasons'] }) {
+  const [open, setOpen] = useState(false);
+  const [f, setF] = useState<HostelCheckOutInput>({ on: '', reason: 'REPATRIATED', keysReturned: true, utilitiesSettled: true, roomCondition: '', belongings: 'none' });
+  const act = useAction();
+  const memo = r.stay.checkOut;
+  return (
+    <div className="item">
+      <div className="row" style={{ justifyContent: 'space-between' }}>
+        <div>
+          <strong>{r.stay.personName}</strong> · {r.hostelName} · {r.companyName}
+          <div className="muted">
+            From {dateLabel(r.stay.from)}
+            {r.stay.to ? ` to ${dateLabel(r.stay.to)}` : ', living here'}
+          </div>
+        </div>
+        {memo ? <Chip tone={memo.openPoints.length ? 'warn' : 'ok'}>{memo.openPoints.length ? `${memo.openPoints.length} open` : 'Checked out'}</Chip> : <Chip tone="neutral">In</Chip>}
+      </div>
+      {memo && (
+        <details>
+          <summary>Check-out memo ({reasons[memo.reason].en}), by {memo.by}, {dateTimeLabel(memo.at)}</summary>
+          <pre style={{ whiteSpace: 'pre-wrap' }}>{memo.text.en}</pre>
+          <pre style={{ whiteSpace: 'pre-wrap' }} lang="ms">{memo.text.ms}</pre>
+        </details>
+      )}
+      {r.canCheckOut && !open && <button onClick={() => setOpen(true)}>Check out</button>}
+      {r.canCheckOut && open && (
+        <div className="form">
+          <label>
+            Date <input type="date" value={f.on} onChange={(e) => setF({ ...f, on: e.target.value })} />
+          </label>
+          <label>
+            Reason
+            <Select className="select" aria-label="Reason" value={f.reason} onChange={(e) => setF({ ...f, reason: e.target.value as HostelCheckOutInput['reason'] })}>
+              {Object.entries(reasons).map(([k, v]) => (
+                <option key={k} value={k}>
+                  {v.en}
+                </option>
+              ))}
+            </Select>
+          </label>
+          <label>
+            <input type="checkbox" checked={f.keysReturned} onChange={(e) => setF({ ...f, keysReturned: e.target.checked })} /> Keys returned
+          </label>
+          <label>
+            <input type="checkbox" checked={f.utilitiesSettled} onChange={(e) => setF({ ...f, utilitiesSettled: e.target.checked })} /> Utilities for the part month worked out
+          </label>
+          <label>
+            Room and items as found <input value={f.roomCondition} onChange={(e) => setF({ ...f, roomCondition: e.target.value })} />
+          </label>
+          <label>
+            Belongings left behind <input value={f.belongings} onChange={(e) => setF({ ...f, belongings: e.target.value })} />
+          </label>
+          <div className="row" style={{ gap: 8 }}>
+            <button disabled={act.busy || !f.on} onClick={() => act.run(() => api.hostelCheckOut(r.stay.id, f))}>
+              Save memo and check out
+            </button>
+            <button className="ghost" onClick={() => setOpen(false)}>
+              Cancel
+            </button>
+          </div>
+          {act.error && <ErrorNotice error={act.error} />}
+        </div>
+      )}
     </div>
   );
 }

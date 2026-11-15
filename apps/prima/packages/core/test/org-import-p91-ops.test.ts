@@ -1,5 +1,6 @@
 // P91: Operations, Security, Equipment and HR records load from old lists through each screen's own add, with its own
 // permission. Synthetic data only.
+import { noLoadGate } from './no-load-gate';
 import { describe, expect, it } from 'vitest';
 import { EXTRA_IMPORTS, IMPORTABLE_KINDS, MemoryStore, PrimaService, generateDataset, myt, normaliseTable, prepareSheet, smartMatch, toCsv, withOrgLinks, type AlignField } from '../src';
 import { cardKind, fuelOf, idAgrees, paperType, P91_IMPORT_KINDS, type P91ImportKind } from '../src/org-import-ops';
@@ -9,7 +10,7 @@ const NOW = myt(TODAY, '10:30');
 
 function fresh() {
   const ds = generateDataset({ today: TODAY, now: NOW });
-  const store = withOrgLinks(new MemoryStore(ds));
+  const store = noLoadGate(withOrgLinks(new MemoryStore(ds)));
   const svc = new PrimaService(store, () => NOW);
   const user = (id: string) => ds.users.find((u) => u.id === id)!;
   return { ds, svc, user };

@@ -1,5 +1,19 @@
 [
  {
+  "method": "GET",
+  "path": "api/accounts",
+  "name": "accountsBoard"
+ },
+ {
+  "method": "POST",
+  "path": "api/accounts/:action",
+  "name": "accountsAct",
+  "params": [
+   "action"
+  ],
+  "body": "Record<string, unknown>"
+ },
+ {
   "method": "POST",
   "path": "api/accounts/:id/close",
   "name": "closeAccess",
@@ -116,14 +130,21 @@
   "body": "Record<string, unknown>"
  },
  {
-  "method": "GET",
-  "path": "api/alerts/prefs",
-  "name": "mine"
+  "method": "POST",
+  "path": "api/am-rental/:op",
+  "name": "amRental",
+  "params": [
+   "op"
+  ],
+  "body": "Record<string, unknown>"
  },
  {
   "method": "POST",
-  "path": "api/alerts/prefs",
-  "name": "save",
+  "path": "api/am/office/:op",
+  "name": "officeAm",
+  "params": [
+   "op"
+  ],
   "body": "Record<string, unknown>"
  },
  {
@@ -237,19 +258,6 @@
   "name": "arisha",
   "doc": "Arisha's chat (P80: everyone may consult her); preparation is independently scoped and never saves records.",
   "body": "{ brief?: unknown; history?: unknown; quick?: unknown }"
- },
- {
-  "method": "GET",
-  "path": "api/arisha-trainer",
-  "name": "state",
-  "doc": "Whether the AI part is on here (the trainer itself always works from the written guides)."
- },
- {
-  "method": "POST",
-  "path": "api/arisha-trainer/ask",
-  "name": "ask",
-  "doc": "One question the guide could not answer, for the AI. Refusals are decided here first, without the AI.",
-  "body": "Record<string, unknown>"
  },
  {
   "method": "GET",
@@ -520,6 +528,15 @@
   "body": "Record<string, unknown>"
  },
  {
+  "method": "POST",
+  "path": "api/arms/policy/:op",
+  "name": "armsPolicy",
+  "params": [
+   "op"
+  ],
+  "body": "Record<string, unknown>"
+ },
+ {
   "method": "GET",
   "path": "api/arms/renewals",
   "name": "renewals"
@@ -546,6 +563,12 @@
   "params": [
    "id"
   ],
+  "body": "Record<string, unknown>"
+ },
+ {
+  "method": "POST",
+  "path": "api/arms/rfid-required",
+  "name": "setArmsRfidRequired",
   "body": "Record<string, unknown>"
  },
  {
@@ -1019,63 +1042,6 @@
  },
  {
   "method": "GET",
-  "path": "api/bulk",
-  "name": "board",
-  "doc": "The screen: destinations this person may load into, document types, their load records, whether AI is on."
- },
- {
-  "method": "POST",
-  "path": "api/bulk/ai/files",
-  "name": "aiFiles",
-  "doc": "Arisha AI's suggestion for many files' document types, from masked names and file types only.",
-  "body": "Record<string, unknown>"
- },
- {
-  "method": "POST",
-  "path": "api/bulk/ai/plan",
-  "name": "aiPlan",
-  "doc": "Arisha AI's suggestion for a data file's destination and columns, from masked headings and shapes only.",
-  "body": "Record<string, unknown>"
- },
- {
-  "method": "POST",
-  "path": "api/bulk/files/file",
-  "name": "file",
-  "doc": "One confirmed file, filed on the person's HR file (the hiring paper's permission check).",
-  "body": "Record<string, unknown>"
- },
- {
-  "method": "POST",
-  "path": "api/bulk/files/place",
-  "name": "place",
-  "doc": "Proposals for many files (names and types only): document type and whose file. Changes nothing.",
-  "body": "Record<string, unknown>"
- },
- {
-  "method": "POST",
-  "path": "api/bulk/loads/data",
-  "name": "loadData",
-  "doc": "The load record for a data file, after the import or the staff directory send.",
-  "body": "Record<string, unknown>"
- },
- {
-  "method": "POST",
-  "path": "api/bulk/loads/files",
-  "name": "loadFiles",
-  "doc": "The load record for many files.",
-  "body": "Record<string, unknown>"
- },
- {
-  "method": "GET",
-  "path": "api/bulk/people",
-  "name": "people",
-  "doc": "People whose file this person keeps, by name or staff number (to place a held file).",
-  "query": [
-   "q"
-  ]
- },
- {
-  "method": "GET",
   "path": "api/cases",
   "name": "cases",
   "query": [
@@ -1124,6 +1090,17 @@
   "params": [
    "id"
   ],
+  "body": "Record<string, unknown>"
+ },
+ {
+  "method": "GET",
+  "path": "api/cash-stand-in",
+  "name": "cashStandIn"
+ },
+ {
+  "method": "POST",
+  "path": "api/cash-stand-in",
+  "name": "setCashStandIn",
   "body": "Record<string, unknown>"
  },
  {
@@ -1318,7 +1295,8 @@
  {
   "method": "GET",
   "path": "api/client-portal",
-  "name": "desk"
+  "name": "clientPortalBoard",
+  "doc": "Client portal board (A7): OM manages, company manager monitors, COO oversees."
  },
  {
   "method": "GET",
@@ -1339,35 +1317,6 @@
    "id"
   ],
   "body": "{ invoicedTo?: unknown; overdueAmount?: unknown; overdueDays?: unknown }"
- },
- {
-  "method": "POST",
-  "path": "api/clients/:id/client-portal",
-  "name": "open",
-  "params": [
-   "id"
-  ],
-  "body": "Record<string, unknown>"
- },
- {
-  "method": "POST",
-  "path": "api/clients/:id/client-portal/:userId/close",
-  "name": "close",
-  "params": [
-   "id",
-   "userId"
-  ],
-  "body": "Record<string, unknown>"
- },
- {
-  "method": "POST",
-  "path": "api/clients/:id/client-portal/:userId/reset",
-  "name": "reset",
-  "params": [
-   "id",
-   "userId"
-  ],
-  "body": "Record<string, unknown>"
  },
  {
   "method": "POST",
@@ -1396,6 +1345,14 @@
    "id"
   ],
   "body": "{ kind?: unknown; note?: unknown }"
+ },
+ {
+  "method": "GET",
+  "path": "api/clients/:id/info-pack",
+  "name": "clientInfoPack",
+  "params": [
+   "id"
+  ]
  },
  {
   "method": "POST",
@@ -1543,18 +1500,6 @@
  },
  {
   "method": "GET",
-  "path": "api/cms/console",
-  "name": "status",
-  "doc": "Whether the CMS console can be opened from here (no secret, no address beyond the CMS's own)."
- },
- {
-  "method": "POST",
-  "path": "api/cms/console/sign-in",
-  "name": "signIn",
-  "doc": "A one-time ticket for the CMS console, for a person Prima allows (roster staff or Arms Control)."
- },
- {
-  "method": "GET",
   "path": "api/cms/dispatches",
   "name": "cmsDispatches"
  },
@@ -1594,6 +1539,20 @@
   "query": [
    "month"
   ]
+ },
+ {
+  "method": "GET",
+  "path": "api/cms/overtime",
+  "name": "cmsOvertime",
+  "query": [
+   "period"
+  ]
+ },
+ {
+  "method": "POST",
+  "path": "api/cms/overtime/approve",
+  "name": "approveCmsOvertime",
+  "body": "Record<string, unknown>"
  },
  {
   "method": "GET",
@@ -1701,6 +1660,12 @@
   "params": [
    "id"
   ],
+  "body": "Record<string, unknown>"
+ },
+ {
+  "method": "POST",
+  "path": "api/companies",
+  "name": "addCompany",
   "body": "Record<string, unknown>"
  },
  {
@@ -1816,6 +1781,15 @@
   "params": [
    "id"
   ]
+ },
+ {
+  "method": "POST",
+  "path": "api/companies/:id/guard-phones/codes",
+  "name": "issueCodes",
+  "params": [
+   "id"
+  ],
+  "body": "Record<string, unknown>"
  },
  {
   "method": "GET",
@@ -3187,17 +3161,6 @@
  },
  {
   "method": "GET",
-  "path": "api/finance/rates",
-  "name": "rateBook"
- },
- {
-  "method": "POST",
-  "path": "api/finance/rates",
-  "name": "setRate",
-  "body": "Record<string, unknown>"
- },
- {
-  "method": "GET",
   "path": "api/finance/requests",
   "name": "finRequests"
  },
@@ -3234,19 +3197,67 @@
  },
  {
   "method": "GET",
-  "path": "api/finance/site-margins",
-  "name": "siteMargins",
+  "path": "api/finance/site-profit",
+  "name": "finSiteProfit",
   "query": [
    "month"
   ]
  },
  {
+  "method": "POST",
+  "path": "api/finance/site-profit/costs",
+  "name": "finSetSiteCosts",
+  "body": "{ rates: Record<string, number | null>; reason: string }"
+ },
+ {
+  "method": "POST",
+  "path": "api/finance/site-profit/target",
+  "name": "finSetSiteTarget",
+  "body": "{ companyId: string | null; pct: number | null; reason: string }"
+ },
+ {
+  "method": "GET",
+  "path": "api/finance/sql-posting",
+  "name": "finSqlPosting"
+ },
+ {
+  "method": "POST",
+  "path": "api/finance/sql-posting/check",
+  "name": "finSqlPostingCheck"
+ },
+ {
+  "method": "POST",
+  "path": "api/finance/sql-posting/code",
+  "name": "finSqlPostingCode",
+  "body": "{ companyId: string; action: string } & Record<string, unknown>"
+ },
+ {
+  "method": "POST",
+  "path": "api/finance/sql-posting/exception",
+  "name": "finSqlPostingException",
+  "body": "{ id: string; action: string } & Record<string, unknown>"
+ },
+ {
+  "method": "POST",
+  "path": "api/finance/sql-posting/paste",
+  "name": "finSqlPostingPaste",
+  "body": "{ companyId: string; csv: string }"
+ },
+ {
+  "method": "POST",
+  "path": "api/finance/sql-posting/send",
+  "name": "finSqlPostingSend"
+ },
+ {
+  "method": "POST",
+  "path": "api/finance/sql-posting/switch",
+  "name": "finSqlPostingSwitch",
+  "body": "{ companyId: string; on: boolean; docTypes: Record<string, boolean>; reason: string }"
+ },
+ {
   "method": "GET",
   "path": "api/finance/summary",
-  "name": "finSummary",
-  "query": [
-   "period"
-  ]
+  "name": "finCeoSummary"
  },
  {
   "method": "GET",
@@ -3255,20 +3266,17 @@
  },
  {
   "method": "GET",
-  "path": "api/finance/unbilled-sites",
-  "name": "unbilledSites",
+  "path": "api/finance/unbilled",
+  "name": "finUnbilled",
   "query": [
-   "period"
+   "month"
   ]
  },
  {
   "method": "POST",
-  "path": "api/finance/unbilled-sites/:companyId/clear",
-  "name": "clearUnbilledFlag",
-  "params": [
-   "companyId"
-  ],
-  "body": "Record<string, unknown>"
+  "path": "api/finance/unbilled/clear",
+  "name": "finClearUnbilled",
+  "body": "{ companyId: string; period: string; siteId: string; kind: FinSiteFlagKind; reason: string }"
  },
  {
   "method": "POST",
@@ -3342,44 +3350,6 @@
    "id"
   ],
   "body": "{ ok?: unknown; vehicleId?: unknown; note?: unknown }"
- },
- {
-  "method": "GET",
-  "path": "api/fleet/transfers",
-  "name": "board"
- },
- {
-  "method": "POST",
-  "path": "api/fleet/transfers",
-  "name": "request",
-  "body": "Record<string, unknown>"
- },
- {
-  "method": "POST",
-  "path": "api/fleet/transfers/:id/cancel",
-  "name": "cancel",
-  "params": [
-   "id"
-  ],
-  "body": "Record<string, unknown>"
- },
- {
-  "method": "POST",
-  "path": "api/fleet/transfers/:id/decide",
-  "name": "decide",
-  "params": [
-   "id"
-  ],
-  "body": "Record<string, unknown>"
- },
- {
-  "method": "POST",
-  "path": "api/fleet/transfers/:id/handover",
-  "name": "handover",
-  "params": [
-   "id"
-  ],
-  "body": "Record<string, unknown>"
  },
  {
   "method": "GET",
@@ -3538,23 +3508,23 @@
   "body": "Record<string, unknown>"
  },
  {
+  "method": "GET",
+  "path": "api/fw-hostel",
+  "name": "fwHostelBoard"
+ },
+ {
   "method": "POST",
-  "path": "api/fw-extras/act",
-  "name": "act",
-  "doc": "One step: check a worker in, prepare or decide a check-out memo, or send the permit task during SOCSO MC.",
+  "path": "api/fw-hostel/:action",
+  "name": "fwHostelAct",
+  "params": [
+   "action"
+  ],
   "body": "Record<string, unknown>"
  },
  {
   "method": "GET",
-  "path": "api/fw-extras/hostel-stays",
-  "name": "hostelStays",
-  "doc": "Each hostel with who lives there now, free beds, and the check-out memos with their step."
- },
- {
-  "method": "GET",
-  "path": "api/fw-extras/permits-on-mc",
-  "name": "permitsOnMc",
-  "doc": "Foreign workers on long SOCSO MC whose permit comes due before the MC ends, and whether FWM sent the task."
+  "path": "api/fw-hostel/ja-differences",
+  "name": "fwHostelJa"
  },
  {
   "method": "POST",
@@ -3890,6 +3860,15 @@
   "body": "{ text?: unknown; retaliation?: unknown }"
  },
  {
+  "method": "POST",
+  "path": "api/group-month/:op",
+  "name": "groupMonth",
+  "params": [
+   "op"
+  ],
+  "body": "Record<string, unknown>"
+ },
+ {
   "method": "GET",
   "path": "api/group/overview",
   "name": "overview"
@@ -3952,6 +3931,14 @@
   "params": [
    "id",
    "kind"
+  ]
+ },
+ {
+  "method": "POST",
+  "path": "api/guard-pay/:id/later",
+  "name": "prepareGuardPayLater",
+  "params": [
+   "id"
   ]
  },
  {
@@ -4056,6 +4043,15 @@
   "name": "myGuardPayslips"
  },
  {
+  "method": "POST",
+  "path": "api/guard-pay/preparers/:companyId",
+  "name": "setGuardPayPreparers",
+  "params": [
+   "companyId"
+  ],
+  "body": "{ userIds?: unknown; reason?: unknown }"
+ },
+ {
   "method": "GET",
   "path": "api/guard-phone/me",
   "name": "me"
@@ -4088,38 +4084,6 @@
  },
  {
   "method": "GET",
-  "path": "api/guard-signins",
-  "name": "board",
-  "query": [
-   "companyId"
-  ]
- },
- {
-  "method": "POST",
-  "path": "api/guard-signins",
-  "name": "prepare",
-  "body": "Record<string, unknown>"
- },
- {
-  "method": "POST",
-  "path": "api/guard-signins/:id/cancel",
-  "name": "cancel",
-  "params": [
-   "id"
-  ],
-  "body": "Record<string, unknown>"
- },
- {
-  "method": "POST",
-  "path": "api/guard-signins/:id/decide",
-  "name": "decide",
-  "params": [
-   "id"
-  ],
-  "body": "Record<string, unknown>"
- },
- {
-  "method": "GET",
   "path": "api/home",
   "name": "home",
   "query": [
@@ -4143,9 +4107,27 @@
   "body": "{ ok?: unknown; note?: unknown; proof?: unknown }"
  },
  {
+  "method": "POST",
+  "path": "api/hostel-stays/:id/check-out",
+  "name": "hostelCheckOut",
+  "params": [
+   "id"
+  ],
+  "body": "Record<string, unknown>"
+ },
+ {
   "method": "GET",
   "path": "api/hostels",
   "name": "hostelBoard"
+ },
+ {
+  "method": "POST",
+  "path": "api/hostels/:id/check-in",
+  "name": "hostelCheckIn",
+  "params": [
+   "id"
+  ],
+  "body": "Record<string, unknown>"
  },
  {
   "method": "GET",
@@ -4392,6 +4374,20 @@
  },
  {
   "method": "GET",
+  "path": "api/hr/lists",
+  "name": "hrLists"
+ },
+ {
+  "method": "POST",
+  "path": "api/hr/lists/:kind",
+  "name": "setHrList",
+  "params": [
+   "kind"
+  ],
+  "body": "Record<string, unknown>"
+ },
+ {
+  "method": "GET",
   "path": "api/hr/movements",
   "name": "staffMovements"
  },
@@ -4453,6 +4449,20 @@
  },
  {
   "method": "GET",
+  "path": "api/hr/opening-balances",
+  "name": "openingBalances",
+  "query": [
+   "companyId"
+  ]
+ },
+ {
+  "method": "POST",
+  "path": "api/hr/opening-balances/load",
+  "name": "loadOpeningBalances",
+  "body": "Record<string, unknown>"
+ },
+ {
+  "method": "GET",
   "path": "api/hr/osh",
   "name": "officeOsh"
  },
@@ -4466,6 +4476,12 @@
   "method": "POST",
   "path": "api/hr/osh/coordinator",
   "name": "appointOshCoordinator",
+  "body": "Record<string, unknown>"
+ },
+ {
+  "method": "POST",
+  "path": "api/hr/osh/coordinator-sees",
+  "name": "setOshCoordinatorSees",
   "body": "Record<string, unknown>"
  },
  {
@@ -4512,6 +4528,15 @@
  },
  {
   "method": "POST",
+  "path": "api/hr/people/:personId/final-pay",
+  "name": "setFinalPay",
+  "params": [
+   "personId"
+  ],
+  "body": "Record<string, unknown>"
+ },
+ {
+  "method": "POST",
   "path": "api/hr/people/:personId/leave-days",
   "name": "setLeaveOverride",
   "params": [
@@ -4526,6 +4551,24 @@
   "params": [
    "personId"
   ]
+ },
+ {
+  "method": "POST",
+  "path": "api/hr/people/:personId/opening-balance",
+  "name": "setOpeningBalance",
+  "params": [
+   "personId"
+  ],
+  "body": "Record<string, unknown>"
+ },
+ {
+  "method": "POST",
+  "path": "api/hr/people/:personId/opening-balance/check",
+  "name": "checkOpeningBalance",
+  "params": [
+   "personId"
+  ],
+  "body": "Record<string, unknown>"
  },
  {
   "method": "POST",
@@ -4668,6 +4711,15 @@
   "name": "renewInsurancePolicy",
   "params": [
    "id"
+  ],
+  "body": "Record<string, unknown>"
+ },
+ {
+  "method": "POST",
+  "path": "api/inventory/:op",
+  "name": "inventory",
+  "params": [
+   "op"
   ],
   "body": "Record<string, unknown>"
  },
@@ -4888,19 +4940,6 @@
  },
  {
   "method": "GET",
-  "path": "api/items/warranty",
-  "name": "board",
-  "doc": "Warranty claims of the companies whose items this person works, with the next step, and the items a claim can be raised on."
- },
- {
-  "method": "POST",
-  "path": "api/items/warranty/act",
-  "name": "act",
-  "doc": "One step: raise, approve or refuse, sent to the supplier, the supplier's outcome, or close.",
-  "body": "Record<string, unknown>"
- },
- {
-  "method": "GET",
   "path": "api/ja",
   "name": "jaBoard"
  },
@@ -5049,6 +5088,17 @@
  },
  {
   "method": "GET",
+  "path": "api/me/alert-prefs",
+  "name": "myAlertPrefs"
+ },
+ {
+  "method": "POST",
+  "path": "api/me/alert-prefs",
+  "name": "setMyAlertPrefs",
+  "body": "Record<string, unknown>"
+ },
+ {
+  "method": "GET",
   "path": "api/me/checkin",
   "name": "mine"
  },
@@ -5149,6 +5199,12 @@
   "doc": "The head-movement challenge for the open clock, signed by the server (FACE_ENGINE=server only)."
  },
  {
+  "method": "POST",
+  "path": "api/me/it-devices/report",
+  "name": "reportItDevice",
+  "body": "Record<string, unknown>"
+ },
+ {
   "method": "GET",
   "path": "api/me/items",
   "name": "myItems"
@@ -5162,6 +5218,25 @@
    "answer"
   ],
   "body": "{ note?: unknown }"
+ },
+ {
+  "method": "GET",
+  "path": "api/me/overtime",
+  "name": "myOtClaims"
+ },
+ {
+  "method": "POST",
+  "path": "api/me/overtime",
+  "name": "requestOtClaim",
+  "body": "Record<string, unknown>"
+ },
+ {
+  "method": "POST",
+  "path": "api/me/overtime/:id/cancel",
+  "name": "cancelOtClaim",
+  "params": [
+   "id"
+  ]
  },
  {
   "method": "GET",
@@ -5459,6 +5534,20 @@
   "doc": "P90: is the optional AI helper switched on here (the screen shows its button only then)."
  },
  {
+  "method": "GET",
+  "path": "api/org/import-loads",
+  "name": "loads"
+ },
+ {
+  "method": "POST",
+  "path": "api/org/import-loads/:id/ok",
+  "name": "okLoad",
+  "params": [
+   "id"
+  ],
+  "body": "Record<string, unknown>"
+ },
+ {
   "method": "POST",
   "path": "api/org/import/:kind/ai-columns",
   "name": "importAiColumns",
@@ -5528,6 +5617,21 @@
  },
  {
   "method": "GET",
+  "path": "api/org/processes",
+  "name": "processes",
+  "doc": "V13: the read-only process page: owner, approvers, papers, records kept and time targets per workflow rule."
+ },
+ {
+  "method": "POST",
+  "path": "api/overtime/:id/decide",
+  "name": "decideOtClaim",
+  "params": [
+   "id"
+  ],
+  "body": "{ approve?: unknown; note?: unknown }"
+ },
+ {
+  "method": "GET",
   "path": "api/pay-changes",
   "name": "payChanges"
  },
@@ -5594,23 +5698,6 @@
   "body": "Record<string, unknown>"
  },
  {
-  "method": "POST",
-  "path": "api/pay-p100/:action",
-  "name": "payAction",
-  "params": [
-   "action"
-  ],
-  "body": "Record<string, unknown>"
- },
- {
-  "method": "GET",
-  "path": "api/pay-p100/:view",
-  "name": "payView",
-  "params": [
-   "view"
-  ]
- },
- {
   "method": "GET",
   "path": "api/pdpa",
   "name": "pdpaBoard"
@@ -5644,6 +5731,23 @@
    "id"
   ],
   "body": "Record<string, unknown>"
+ },
+ {
+  "method": "GET",
+  "path": "api/pdpa-paper-consents",
+  "name": "paperConsents"
+ },
+ {
+  "method": "POST",
+  "path": "api/pdpa-paper-consents",
+  "name": "recordPaperConsent",
+  "body": "Record<string, unknown>"
+ },
+ {
+  "method": "POST",
+  "path": "api/pdpa-paper-consents/gate",
+  "name": "setPaperConsentGate",
+  "body": "{ on?: unknown; reason?: unknown }"
  },
  {
   "method": "GET",
@@ -5855,18 +5959,22 @@
  },
  {
   "method": "GET",
-  "path": "api/pikm",
-  "name": "board",
-  "doc": "The PIKM records this person works, with what is due: medicals, briefings, files kept, client packs, alarm and CCTV.",
-  "query": [
-   "companyId"
-  ]
+  "path": "api/problems",
+  "name": "problems"
  },
  {
   "method": "POST",
-  "path": "api/pikm/act",
-  "name": "act",
-  "doc": "One PIKM step: record, check, propose, decide, prepare, send or record a service visit.",
+  "path": "api/problems",
+  "name": "reportProblem",
+  "body": "Record<string, unknown>"
+ },
+ {
+  "method": "POST",
+  "path": "api/problems/:id/reply",
+  "name": "replyProblem",
+  "params": [
+   "id"
+  ],
   "body": "Record<string, unknown>"
  },
  {
@@ -5931,7 +6039,7 @@
   "params": [
    "companyId"
   ],
-  "body": "{ title?: unknown; category?: unknown; lines?: unknown }"
+  "body": "{ title?: unknown; category?: unknown; lines?: unknown; forOffice?: unknown }"
  },
  {
   "method": "POST",
@@ -5949,7 +6057,7 @@
   "params": [
    "id"
   ],
-  "body": "{ ok?: unknown; note?: unknown }"
+  "body": "{ ok?: unknown; note?: unknown; cause?: unknown; photo?: unknown }"
  },
  {
   "method": "POST",
@@ -6069,6 +6177,12 @@
  },
  {
   "method": "POST",
+  "path": "api/quality/risk-briefing",
+  "name": "recordRiskBriefing",
+  "body": "Record<string, unknown>"
+ },
+ {
+  "method": "POST",
   "path": "api/quotations/:id/:action",
   "name": "quotationAction",
   "params": [
@@ -6150,6 +6264,15 @@
   "body": "Record<string, unknown>"
  },
  {
+  "method": "POST",
+  "path": "api/registers/:op",
+  "name": "registers",
+  "params": [
+   "op"
+  ],
+  "body": "Record<string, unknown>"
+ },
+ {
   "method": "GET",
   "path": "api/remote",
   "name": "remoteBoard"
@@ -6195,6 +6318,15 @@
    "action"
   ],
   "body": "{ index?: unknown; name?: unknown; ref?: unknown; amount?: unknown; on?: unknown; note?: unknown; newExpiresOn?: unknown; ok?: unknown },"
+ },
+ {
+  "method": "POST",
+  "path": "api/renewals/kdn/:op",
+  "name": "kdnRenewal",
+  "params": [
+   "op"
+  ],
+  "body": "Record<string, unknown>"
  },
  {
   "method": "GET",
@@ -6251,25 +6383,6 @@
  },
  {
   "method": "GET",
-  "path": "api/resignations",
-  "name": "board",
-  "doc": "HR's list of resignations with the next step for this person."
- },
- {
-  "method": "POST",
-  "path": "api/resignations/act",
-  "name": "act",
-  "doc": "One step: give notice (or HR enters the signed letter), withdraw, accept with the last day, or decide a shorter notice.",
-  "body": "Record<string, unknown>"
- },
- {
-  "method": "GET",
-  "path": "api/resignations/mine",
-  "name": "mine",
-  "doc": "The signed-in staff member's own resignation, the notice if they resigned today, and the procedure in both languages."
- },
- {
-  "method": "GET",
   "path": "api/salary-calc",
   "name": "salaryCalcData"
  },
@@ -6281,11 +6394,6 @@
    "id"
   ],
   "body": "Record<string, unknown>"
- },
- {
-  "method": "GET",
-  "path": "api/settings-home",
-  "name": "settingsHome"
  },
  {
   "method": "POST",
@@ -6306,6 +6414,20 @@
   "params": [
    "id"
   ]
+ },
+ {
+  "method": "GET",
+  "path": "api/short-stays",
+  "name": "shortStaysBoard"
+ },
+ {
+  "method": "POST",
+  "path": "api/short-stays/:action",
+  "name": "shortStaysAct",
+  "params": [
+   "action"
+  ],
+  "body": "Record<string, unknown>"
  },
  {
   "method": "GET",
@@ -6524,19 +6646,6 @@
   "method": "GET",
   "path": "api/socso",
   "name": "socsoClaims"
- },
- {
-  "method": "POST",
-  "path": "api/socso-extras/act",
-  "name": "act",
-  "doc": "One step on a SOCSO claim: prepare or check the LINDUNG form; raise, decide, pay or confirm a payment abroad.",
-  "body": "Record<string, unknown>"
- },
- {
-  "method": "GET",
-  "path": "api/socso-extras/payments-abroad",
-  "name": "paymentsAbroad",
-  "doc": "Payments to dependants abroad for the Finance Director, the CEO and Finance: who, how much, why and the next step."
  },
  {
   "method": "GET",
@@ -6762,6 +6871,17 @@
  },
  {
   "method": "GET",
+  "path": "api/staff-leave-vc",
+  "name": "staffLeaveVc"
+ },
+ {
+  "method": "POST",
+  "path": "api/staff-leave-vc",
+  "name": "setStaffLeaveVc",
+  "body": "Record<string, unknown>"
+ },
+ {
+  "method": "GET",
   "path": "api/staff-pay",
   "name": "staffPayroll"
  },
@@ -6857,6 +6977,15 @@
   "method": "POST",
   "path": "api/statutory",
   "name": "setStatutory",
+  "body": "Record<string, unknown>"
+ },
+ {
+  "method": "POST",
+  "path": "api/supplies/:op",
+  "name": "supplies",
+  "params": [
+   "op"
+  ],
   "body": "Record<string, unknown>"
  },
  {
@@ -7131,6 +7260,15 @@
   "body": "{ approver?: unknown; note?: unknown }"
  },
  {
+  "method": "POST",
+  "path": "api/toolbox/:op",
+  "name": "toolbox",
+  "params": [
+   "op"
+  ],
+  "body": "Record<string, unknown>"
+ },
+ {
   "method": "GET",
   "path": "api/transport/board",
   "name": "transport"
@@ -7249,6 +7387,44 @@
   "method": "POST",
   "path": "api/visits/:id/photos",
   "name": "visitPhoto",
+  "params": [
+   "id"
+  ],
+  "body": "Record<string, unknown>"
+ },
+ {
+  "method": "GET",
+  "path": "api/warranty-claims",
+  "name": "warrantyBoard"
+ },
+ {
+  "method": "POST",
+  "path": "api/warranty-claims",
+  "name": "reportWarrantyFault",
+  "body": "Record<string, unknown>"
+ },
+ {
+  "method": "POST",
+  "path": "api/warranty-claims/:id/check",
+  "name": "checkWarrantyClaim",
+  "params": [
+   "id"
+  ],
+  "body": "Record<string, unknown>"
+ },
+ {
+  "method": "POST",
+  "path": "api/warranty-claims/:id/close",
+  "name": "closeWarrantyClaim",
+  "params": [
+   "id"
+  ],
+  "body": "Record<string, unknown>"
+ },
+ {
+  "method": "POST",
+  "path": "api/warranty-claims/:id/send",
+  "name": "sendWarrantyClaim",
   "params": [
    "id"
   ],

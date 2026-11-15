@@ -24,7 +24,6 @@ import { FwmRecruitmentPanel } from './FwmRecruitment';
 import { FwAddMenu, NoAddNote } from './FwmAdd';
 import { GuardPhoneCard } from './GuardPhoneOffice';
 import '../styles/hrx.css';
-import { PermitOnMcCard } from './FwExtras';
 
 /**
  * Foreign Worker Management (Fauzan, 26 Oct 2026). FWM renews every foreign worker's papers and sends the OMs dated
@@ -143,6 +142,23 @@ export function FwmView() {
         }
       />
       <CooNoticesPanel notices={data.cooNotices} />
+      {data.longMc.length > 0 && (
+        <Card
+          title="Papers to plan while on SOCSO medical leave"
+          sub="These workers are on a long SOCSO medical leave, and a paper runs out during it or within 60 days after. Plan the renewal with HR; the worker cannot be sent on an errand while on MC."
+        >
+          <ul className="list">
+            {data.longMc.map((r) => (
+              <li className="list-item" key={r.person.id ?? r.person.staffNo} style={{ flexDirection: 'column', alignItems: 'stretch', gap: 2 }}>
+                <span>
+                  <strong>{r.person.name}</strong> ({r.person.staffNo}) · {r.person.companyName} · on MC until {r.mcUntil} ({r.mcDays} days)
+                </span>
+                <span className="muted small">{r.papers.map((p) => `${p.label} expires ${p.expiresOn}${p.beforeMcEnds ? ' (before the MC ends)' : ''}`).join('; ')}</span>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      )}
       {board ? (
         <Stats>
           {data.level && data.level !== 'FWM' && (
@@ -382,8 +398,6 @@ export function FwmView() {
         </div>
       )}
 
-      {/* P100 (E8): workers on long SOCSO MC whose permit comes due, with the task to the OM. */}
-      {view === 'tasks' && <PermitOnMcCard />}
       {view === 'tasks' && (
         <Card title="Tasks to the OMs" actions={<span className="hx-count">{openTasks} open</span>} flush>
           {tasksFound.length === 0 ? (

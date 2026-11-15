@@ -2,7 +2,7 @@ import { AccessDenied } from "./access";
 import { assetRole } from "./access";
 import { AM_AD_CHANNELS } from "./am-extras";
 import { AM_LOST_REASONS } from "./am-extras";
-import { AM_STAY_TYPES } from "./am-extras";
+import { AM_RESORT_TYPES as AM_STAY_TYPES } from "./am-extras";
 import { AM_TRADES } from "./am-extras";
 import { CIDB_GRADES } from "./am-extras";
 import { bookingHolds } from "./am-extras";
@@ -797,7 +797,8 @@ export class AmExtrasService {
   async resortPolicy(user: User, propertyId: Id, b: Body) {
     this.director(user, 'sets resort house rules');
     const p0 = await this.store.get('amProperties', propertyId);
-    if (!p0 || p0.kind !== 'RESORT') throw new NotFound('Resort');
+    // Part P26: a homestay house takes the same house rules, licences and taxes as a resort.
+    if (!p0 || (p0.kind !== 'RESORT' && p0.kind !== 'HOMESTAY')) throw new NotFound('Resort');
     const checkInTime = text(b.checkInTime, 5);
     const checkOutTime = text(b.checkOutTime, 5);
     const freeCancelDays = num(b.freeCancelDays);
@@ -999,6 +1000,8 @@ export class AmExtrasService {
     this.team(user, 'runs resort bookings');
     const step = pick(['pay', 'confirm', 'checkin', 'checkout', 'cancel', 'noshow', 'charge', 'refund'] as const, b.step);
     if (!step) throw new BadRequest('Unknown step.');
+    // Part P19-P39: a short stay on a homestay house runs through the short-stay steps, not the resort desk.
+    if ((await this.store.get('amBookings', id))?.ss) throw new BadRequest('This is a short stay: use the Short stays screen.');
     if (step === 'checkin' || step === 'checkout') return this.frontDesk(user, id, step, b, version);
     const today = this.today();
     return this.change(user, 'amBookings', id, version, (row) => {
@@ -1207,6 +1210,7 @@ export class AmExtrasService {
     const slipRef = text(b.slipRef, 40);
     return this.change(user, 'amBookings', id, version, (row) => {
       const k = row as unknown as AmBooking;
+      if (k.ss) throw new BadRequest('A short-stay payment is confirmed with its official receipt on the Short stays screen.');
       const p = k.payments.find((x) => x.id === paymentId);
       if (!p) throw new NotFound('Payment');
       if (p.banked) throw new BadRequest('Already confirmed in the bank.');

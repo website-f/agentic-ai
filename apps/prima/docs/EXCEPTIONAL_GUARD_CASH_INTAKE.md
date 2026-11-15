@@ -62,15 +62,11 @@ Finance `reviewTreatment` after required processing:
 ```
 Both use existing company/team/site authorization and company transaction locking. The latter only accepts a posted pending row once, retains the original accounting record, logs the reviewer and exposes review evidence only to the existing authorized audience. Review does not perform tax calculations or external posting. Do not assert review/record completion without actual evidence. A pending expense is visible in site P&L, while the cash row explicitly retains its pending treatment status.
 
-## The Finance Director stands in for the CEO (P100 B2, Fauzan 11 Nov 2026)
+## Finance Director stand-in (B2, Fauzan 11 Nov 2026)
 
-"The FD can stand in for the CEO when needed." Cash decisions stay the CEO's. The CEO turns a stand-in on in the app (on
-this screen): for set dates while away, or for one named request, always with a reason; the CEO can end it early, with a
-reason. While it is on, the Finance Director may decide in the CEO's place: the decision needs a reason and is labelled
-"Standing in for the CEO", the FD can never decide a request they made or submitted, and the CEO is told of every
-decision (notice on this screen and on the CEO's home until marked seen). With the stand-in off, the FD is refused.
-Kept in `prima.cash_stand_ins` (office module `db/modules/cash-stand-ins-v1.sql`: forced row-level security, only the CEO
-turns one on or ends it, only the CEO and the FD read it, the FD only adds their own decision to one that is on).
-For exceptional guard cash the manual approval on the DOA list may name the FD only when a stand-in covers the approval
-day or that approval reference, with the FD's reason (`approval.standInReason`). Before real cash is used, Finance and a
-legal adviser still review the cash treatment.
+Cash decisions stay with the CEO. The CEO can turn on a stand-in on the home screen ("Cash: Finance Director stands
+in"): for set dates while away (at most 31 days at a time), or for one named request. While it covers a request, the
+Finance Director can decide it (arrival cash) or be the recorded approver (exceptional guard cash), with a reason. The
+FD never decides a request they made. Every FD decision is kept on the group Finance record and listed for the CEO
+until marked seen; a named stand-in ends once used. With the stand-in off, the FD is refused. Before real cash is used,
+Finance and a legal adviser still review the cash treatment (from the 8 Nov merge).

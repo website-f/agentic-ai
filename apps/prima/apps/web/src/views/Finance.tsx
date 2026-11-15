@@ -23,6 +23,7 @@ import { ImportButton } from './ImportDrawer';
 import { Chip, Drawer, ErrorNotice, Loading, dateLabel, dateTimeLabel, useAction, useLoad, type Tone } from '../ui';
 import { Card, Empty, PageHead, Stat, Stats } from '../kit';
 import '../styles/finance.css';
+import { CeoSummaryTab, FinanceSitesTab } from './FinanceMonitor';
 
 /**
  * Finance (Fauzan, 27 Oct 2026). The Finance Director and 7 teams keep every company's books in SQL Account, which
@@ -34,7 +35,7 @@ import '../styles/finance.css';
  */
 
 type Row = FinBoard['rows'][number];
-type Tab = 'teams' | 'payments' | 'close' | 'checks' | 'banks' | 'books' | 'papers' | 'settings' | 'kpi' | 'dashboard';
+type Tab = 'teams' | 'payments' | 'close' | 'checks' | 'banks' | 'books' | 'papers' | 'settings' | 'kpi' | 'dashboard' | 'summary' | 'sites';
 
 const TONE: Record<Row['tone'], [Tone, string]> = {
   crit: ['crit', 'Act now'],
@@ -86,6 +87,10 @@ export function FinanceView() {
     ...(desk
       ? ([
           ['dashboard', 'Dashboard'],
+          // F3: the CEO's one page (CEO, FD, Chairman, Vice Chairman, a Finance team for its companies).
+          ...(desk.actor.kind !== 'coo' && (desk.actor.kind !== 'viewer' || ['chairman', 'vice_chairman'].includes(me.user.leadership ?? '')) ? ([['summary', 'Monthly page']] as [Tab, string][]) : []),
+          // F1 and F2: unbilled sites and profit per site.
+          ...(desk.actor.kind !== 'viewer' ? ([['sites', 'Sites billed and profit']] as [Tab, string][]) : []),
           ['payments', 'Payments'],
           ['close', 'Month-end close'],
         ] as [Tab, string][])
@@ -229,6 +234,16 @@ export function FinanceView() {
       {tab === 'dashboard' && desk && (
         <div className="fin-body">
           <FinanceDashboardTab />
+        </div>
+      )}
+      {tab === 'summary' && desk && (
+        <div className="fin-body">
+          <CeoSummaryTab />
+        </div>
+      )}
+      {tab === 'sites' && desk && (
+        <div className="fin-body">
+          <FinanceSitesTab />
         </div>
       )}
       {tab === 'banks' && <Banks data={data} onOpen={setOpen} />}

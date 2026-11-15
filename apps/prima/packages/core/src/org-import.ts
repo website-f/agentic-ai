@@ -21,6 +21,28 @@
 // may be skipped (the commit is all or none for the rows chosen); a "Company" column sends each row to the company it
 // names. Clients, contracts and leave entitlements import too, each row through the same service call as its own form
 // (addClientAccount, addContract, setLeaveOverride), never a side door.
+import { registerWall } from "./walls";
+
+/**
+ * N2 bulk data load (Fauzan, 11 Nov 2026): the backup is checked before a load, and the counts of each load go to the
+ * CEO, who OKs it before that person's next load. The CEO holds this wall (reads every load and records the OK).
+ */
+export function holdsBulkLoadOk(user: User): boolean {
+  return !user.integration && user.opsTier === 'ceo';
+}
+registerWall('bulk_load_ok', holdsBulkLoadOk);
+
+/** The CEO's OK on one load, with a comment. Never on his own load. */
+export interface OrgImportOk {
+  id: Id;
+  receiptId: Id;
+  /** Who made the load the OK is for. */
+  importerId: Id;
+  byId: Id;
+  by: string;
+  at: IsoDateTime;
+  comment: string;
+}
 
 import { sha256Hex } from './audit';
 import { BILLING_METHOD_LABEL } from './contracts';
@@ -428,6 +450,10 @@ export interface OrgImportReceipt {
   companyIds?: Id[];
   /** P98: what each item of an item list did (returned with the import, not kept in the receipt). */
   outcomes?: ItemListOutcome[];
+  /** N2: what the person said about the backup checked before the load (date or reference). */
+  backup?: string;
+  /** N2: counts sent to the CEO: rows in the file, loaded, refused (always 0: all rows or none). */
+  counts?: { inFile: number; loaded: number; refused: number; ignoredColumns: string[] };
 }
 
 export interface ImportRowResult {
@@ -451,6 +477,8 @@ export interface ImportOptions {
   headerRow?: number | null;
   /** File row numbers (as the preview gives them) not to import. */
   skip?: number[] | null;
+  /** N2: what the person said about the backup checked before the load (date or reference). */
+  backup?: string;
 }
 
 type RecordFormLike = {
@@ -1113,18 +1141,29 @@ export class OrgImportService {
     const p = await this.prepare(user, kind, companyId, csv, opt);
     if (!/^[0-9a-f]{64}$/.test(fingerprint ?? '') || fingerprint !== p.fingerprint)
       throw new ImportError('The file changed since the preview. Preview it again.', 409);
+    if ((await this.store.list('orgImports', {})).some((x) => x.fingerprint === p.fingerprint)) throw new ImportError('This file was already imported.', 409);
+    const gate = await this.gateOn();
+    const backup = String(opt.backup ?? '').trim().slice(0, 200);
+    if (gate && !holdsBulkLoadOk(user)) {
+      if (backup.length < 3) throw new ImportError('Say which backup was checked before this load (its date or reference).', 400);
+      const waiting = await this.waitingOk(user);
+      if (waiting.length)
+        throw new ImportError(`Your load of ${waiting[0].rows} record(s) on ${waiting[0].at.slice(0, 10)} is waiting for the CEO's OK; the next load can go after it.`, 409);
+    }
+    if (!/^[0-9a-f]{64}$/.test(fingerprint ?? '') || fingerprint !== p.fingerprint)
+      throw new ImportError('The file changed since the preview. Preview it again.', 409);
     if (p.missing.length) throw new ImportError(`Columns needed: ${p.missing.join(', ')}.`, 400);
     const chosen = p.rows.filter((r) => !r.skipped);
     if (!chosen.length) throw new ImportError('Every row is skipped. Choose at least one row to import.', 400);
     const bad = chosen.filter((r) => r.problems.length);
     if (bad.length) throw new ImportError(`Fix or skip rows ${bad.map((r) => r.row).slice(0, 10).join(', ')} first.`, 400);
-    return this.commitOnce(user, kind, p).catch((e) => {
+    return this.commitOnce(user, kind, p, backup, p.ignored).catch((e) => {
       if (sameTimeClash(e)) throw new ImportError(SAME_TIME, 409);
       throw e;
     });
   }
 
-  private commitOnce(user: User, kind: ImportKind, p: Awaited<ReturnType<OrgImportService['prepare']>>) {
+  private commitOnce(user: User, kind: ImportKind, p: Awaited<ReturnType<OrgImportService['prepare']>>, backup = '', ignored: string[] = []) {
     const chosen = p.rows.filter((r) => !r.skipped);
     // P81: the database transaction makes it all or none; the in-memory store (demo, tests) has no rollback of its
     // own, so there the snapshot unit wraps it and a refused row puts back what the earlier rows wrote.
@@ -1169,6 +1208,8 @@ export class OrgImportService {
         at,
         ...(skippedRows.length ? { skippedRows } : {}),
         ...(companyIds.length > 1 ? { companyIds } : {}),
+        ...(backup ? { backup } : {}),
+        counts: { inFile: p.rows.length, loaded: recordIds.length || chosen.length, refused: skippedRows.length, ignoredColumns: ignored.slice(0, 20) },
       };
       await tx.insert('orgImports', receipt);
       await tx.audit({
@@ -1182,5 +1223,86 @@ export class OrgImportService {
       });
       return outcomes.length ? { ...receipt, outcomes } : receipt;
     });
+  }
+
+  /** N2: the CEO OK gate runs where its table is installed (module bulk-load-ok-v1); elsewhere loads work as before. */
+  private async gateOn(): Promise<boolean> {
+    return !this.store.hasTable || (await this.store.hasTable('orgImportOks'));
+  }
+
+  /** This person's loads the CEO has not OK'd yet. */
+  private async waitingOk(user: User): Promise<OrgImportReceipt[]> {
+    const mine = (await this.store.list('orgImports', {})).filter((r) => r.byId === user.id);
+    if (!mine.length) return [];
+    const ok = new Set((await this.store.list('orgImportOks', {})).map((o) => o.receiptId));
+    return mine.filter((r) => !ok.has(r.id)).sort((a, b) => a.at.localeCompare(b.at));
+  }
+
+  /** Loads with their counts and OK: the CEO sees every load, others their own. */
+  async loads(user: User) {
+    const gate = await this.gateOn();
+    const ceo = holdsBulkLoadOk(user);
+    const rows = (await this.store.list('orgImports', {})).filter((r) => ceo || r.byId === user.id);
+    const oks = gate ? await this.store.list('orgImportOks', {}) : [];
+    const okOf = new Map(oks.map((o) => [o.receiptId, o]));
+    return {
+      gate,
+      canOk: gate && ceo,
+      loads: rows
+        .sort((a, b) => b.at.localeCompare(a.at))
+        .slice(0, 50)
+        .map((r) => ({
+          id: r.id,
+          kind: r.kind,
+          label: importSpec(r.kind)?.label ?? r.kind,
+          companyId: r.companyId,
+          by: r.by,
+          at: r.at,
+          backup: r.backup ?? null,
+          counts: r.counts ?? { inFile: r.rows, loaded: r.rows, refused: 0, ignoredColumns: [] },
+          ok: okOf.get(r.id) ? { by: okOf.get(r.id)!.by, at: okOf.get(r.id)!.at, comment: okOf.get(r.id)!.comment } : null,
+          mayOk: gate && ceo && r.byId !== user.id && !okOf.has(r.id),
+        })),
+    };
+  }
+
+  /** The CEO OKs one load with a comment, so that person may load the next file. Never his own; once only. */
+  async okLoad(user: User, receiptId: Id, comment: string) {
+    if (!holdsBulkLoadOk(user)) throw new ImportError('Only the CEO OKs a bulk load.', 403);
+    if (!(await this.gateOn())) throw new ImportError('The bulk load OK is not installed in this database yet (module bulk-load-ok-v1, run by the CEO).', 409);
+    const why = String(comment ?? '').trim().slice(0, 500);
+    if (why.length < 3) throw new ImportError('Write a comment with the OK (a short one is fine).', 400);
+    return this.store.transaction(async (tx) => {
+      const r = (await tx.list('orgImports', {})).find((x) => x.id === receiptId);
+      if (!r) throw new ImportError('That load was not found.', 400);
+      if (r.byId === user.id) throw new ImportError('Nobody OKs their own load.', 403);
+      const id = `oimpok-${r.id}`;
+      if (await tx.get('orgImportOks', id)) throw new ImportError('That load is already OK.', 409);
+      const at = this.now();
+      const ok: OrgImportOk = { id, receiptId: r.id, importerId: r.byId, byId: user.id, by: user.name, at, comment: why };
+      await tx.insert('orgImportOks', ok);
+      await tx.audit({ at, actor: user.name, companyId: r.companyId, action: 'org.import.ok', entity: 'org_import', entityId: r.id, summary: `Bulk load of ${r.rows} record(s) by ${r.by} OK'd: ${why}`.slice(0, 900) });
+      return ok;
+    });
+  }
+
+  /** The CEO's Home: loads waiting for his OK, with the counts. */
+  async homeItems(user: User) {
+    if (!holdsBulkLoadOk(user) || !(await this.gateOn())) return [];
+    const v = await this.loads(user);
+    const waiting = v.loads.filter((l) => l.mayOk);
+    if (!waiting.length) return [];
+    return [
+      {
+        tone: 'warn' as const,
+        tag: 'Bulk data',
+        title: `${waiting.length} bulk load(s) waiting for your OK`,
+        detail: waiting
+          .slice(0, 3)
+          .map((l) => `${l.label}: ${l.counts.loaded} loaded of ${l.counts.inFile} by ${l.by}`)
+          .join(' · '),
+        go: { view: 'handovers' as const },
+      },
+    ];
   }
 }

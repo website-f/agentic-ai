@@ -59,6 +59,8 @@ export * from './time';
 export * from './rules';
 export * from './regions';
 export * from './checks';
+export * from './roster-engine';
+export * from './roster-records';
 export * from './access';
 export * from './rollouts';
 export * from './audit';
@@ -162,6 +164,9 @@ export * from './receipts';
 export * from './finance-teams';
 export * from './finance-billing';
 export * from './finance-contract-end';
+export * from './finance-site-checks';
+export * from './sql-posting';
+export * from './finance-sql-posting';
 export * from './finance-banking';
 export * from './finance-yearend';
 export * from './finance-credit';
@@ -177,7 +182,6 @@ export * from './finance-ledger';
 export * from './central-admin';
 export * from './central-admin-guide';
 export * from './walls';
-export * from './speak-up';
 
 export * from './special-ops';
 export * from './special-ops-guide';
@@ -212,9 +216,6 @@ export * from './tender-sources';
 
 export * from './alerts';
 export * from './management-fees';
-export * from './rate-book';
-export * from './quote-cost';
-export * from './finance-monitor';
 export * from './vehicle-rental';
 export * from './vehicle-usage';
 export * from './cms-readiness';
@@ -233,6 +234,7 @@ export * from './work-kpi-special-ops';
 export * from './work-kpi-cms-readiness';
 export * from './work-kpi-ops';
 export * from './work-kpi-cleaning';
+export * from './work-kpi-inventory';
 export * from './work-kpi-police-help';
 export * from './work-kpi-act';
 export * from './work-kpi-company-office';
@@ -275,33 +277,40 @@ export * from './owner-test-checkin';
 export * from './movement';
 export * from './clock-snap';
 export * from './clock-snap-service';
-export * from './vehicle-transfer';
-export * from './cms-console';
-export * from './client-portal';
-export * from './guard-signins';
-export * from './alert-prefs';
 // P81 (office): the group's real companies and staff, loaded into an empty database instead of sample data.
 export * from './real-data';
-export * from './settings-home';
 export * from './import-match';
 export * from './pdf-table';
-// P100 newa (Fauzan, 11 Nov 2026): E4 SOCSO extras.
-export * from './socso-extras';
-// P100 newa: E8 foreign workers (hostel stays, check-out memo, permit task during SOCSO MC).
-export * from './fw-extras';
-// P100 newa: E9 PIKM records.
-export * from './quality-pikm';
-// P100 newa: E10 staff resignation.
-export * from './hr-resignation';
-// P100 newa: J2 equipment warranty claims.
-export * from './item-warranty';
-// K8: the bulk load helper (data manager and file manager).
-export * from './bulk-manager';
-export * from './bulk-manager-service';
-// K9: Arisha trains staff (walk-throughs, refusals, the minimal brief).
-export * from './arisha-trainer';
-// P100 pay
-export * from './guard-pay-preparers';
-export * from './leave-escalate';
 export * from './cash-stand-in';
-export * from './staff-ot';
+export * from './quotation-cost';
+export * from './fw-hostel';
+export * from './warranty-claims';
+export * from './speak-up';
+export * from './bulk-helper';
+// Agentic Office: the import screen's own valueShape (import-match.ts) is the package's; the bulk helper keeps its own inside.
+export { valueShape } from './import-match';
+export * from './trainer';
+export * from './guard-logins';
+export * from './cms-overtime';
+export * from './office-rollout';
+export * from './company-add';
+export * from './problem-reports';
+export * from './accounts-access';
+export * from './hr-lists';
+export * from './paper-consent';
+export * from './fw-moves';
+export * from './short-stays';
+export * from './it-policies';
+export * from './it-policy-service';
+export * from './arms-policy-service';
+export * from './office-am-service';
+export * from './kdn-renewal';
+export * from './toolbox-service';
+export * from './group-month-service';
+export * from './duty-registers';
+export * from './site-supplies';
+export * from './inventory-control';
+export * from './am-rental';
+export * from './simple-pdf';
+
+export * from './process-sheet';

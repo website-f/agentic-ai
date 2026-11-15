@@ -265,7 +265,8 @@ describe("Joining and leaving (slice 3B)", () => {
     expect((await svc.vacancyStep(cm, v.id, "close", "Hired")).status).toBe(
       "filled",
     );
-    // C2 (Fauzan, 11 Nov 2026): a central post raised by HR is signed by the CEO; the CEO's approval is the signature.
+    // C2 (Fauzan, 11 Nov 2026): a central post raised by HR is signed by the CEO, no longer the HR Director; the CEO
+    // never approves a vacancy he raised.
     const hr = await svc.user("u-pwvsb-hr");
     const c = await svc.raiseVacancy(hr, {
       companyId: "pwvsb",
@@ -276,9 +277,10 @@ describe("Joining and leaving (slice 3B)", () => {
       payFrom: null,
       payTo: null,
     });
+    // The CEO's approval is also his signature: the post opens at once, and the HR Director cannot sign it.
     const opened = await svc.vacancyStep(ceo, c.id, "ceo_approve", "Yes");
     expect(opened.status).toBe("open");
-    expect(opened.head?.byId).toBe(ceo.id);
+    expect(opened.head!.byId).toBe(ceo.id);
     expect(
       (await svc.vacancies(await svc.user("u-cos"))).rows.find(
         (r) => r.id === c.id,
@@ -287,5 +289,15 @@ describe("Joining and leaving (slice 3B)", () => {
     await expect(
       svc.vacancies(await svc.user("u-it-ex3")),
     ).rejects.toBeInstanceOf(AccessDenied);
+  });
+});
+
+import { resignationNotice as _rn, RESIGNATION_PROCEDURE as _rp } from '../src/hr-joining';
+describe('E10: resignation notice and procedure', () => {
+  it('is 1 month under 1 year and 3 months after, never below the Act, in English and Malay', () => {
+    expect(_rn(0.5)).toMatchObject({ months: 1, actWeeks: 4, days: 30 });
+    expect(_rn(1.5).months).toBe(3);
+    expect(_rn(6).days).toBeGreaterThanOrEqual(8 * 7);
+    expect(_rp.en).toHaveLength(_rp.ms.length);
   });
 });

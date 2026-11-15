@@ -161,7 +161,8 @@ export const finDailyCashHeldBy = (l: FinDailyCashList, userId: Id) =>
 function readPeople(v: unknown, from: IsoDate, to: IsoDate, today: IsoDate, sign: () => FinSign): FinDailyCashPerson[] {
   const list = Array.isArray(v) ? v : [];
   if (!list.length) throw new BadRequest('List at least one person to be paid in cash.');
-  // F9 (Fauzan, 11 Nov 2026): no limit on the number of people on a list.
+  // No business limit on the number of people (Fauzan, 11 Nov 2026); this is only the size one record can hold.
+  if (list.length > 1000) throw new BadRequest('One list holds up to 1,000 people; split it into more lists.');
   const seen = new Set<string>();
   return list.map((raw, i) => {
     const p = (raw ?? {}) as Record<string, unknown>;
@@ -175,7 +176,6 @@ function readPeople(v: unknown, from: IsoDate, to: IsoDate, today: IsoDate, sign
     const work = noSecrets(text(p.work, `Person ${n}: work or site`, 2, 120), 'Work');
     const dailyRate = money(p.dailyRate, `${name}: daily rate`);
     const { pay, account } = readPay(p, name, today, sign);
-    // F9 (Fauzan, 11 Nov 2026): no daily rate limit for cash.
     const all = datesBetween(from, to);
     const days = Array.isArray(p.days)
       ? [...new Set(p.days.map((d, k) => isoDate(d, `${name}: day ${k + 1}`)))].sort()

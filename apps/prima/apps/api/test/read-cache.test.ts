@@ -35,6 +35,8 @@ function harness(rows: Record<string, R[]>) {
   };
   const client = {
     async query(text: string) {
+      // P105: the snapshot first asks whether the table exists (a module not installed is never snapshotted).
+      if (text.startsWith('SELECT to_regclass')) return { rows: [{ ok: true }] };
       sql.push(text);
       const table = /FROM (\S+)/.exec(text)![1];
       return { rows: data[table].slice(0, MAX_ROWS + 1).map((d) => ({ data: structuredClone(d) })) };

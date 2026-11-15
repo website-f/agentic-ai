@@ -32,6 +32,32 @@ function witnessIn(ds: Dataset, companyId: string, notIds: (string | undefined)[
   return { staffNo: p.staffNo, pin: demoPin(p.staffNo) };
 }
 
+const PDF = (n: string) => [{ kind: 'document', name: `${n}.pdf`, data: `data:application/pdf;base64,${Buffer.from('%PDF-1.4 ' + n).toString('base64')}` }];
+/** Part R13: buying and servicing need a dealer with a valid licence on file. */
+const licensedDealer = (ds: { armsSuppliers: { id: string; licenceRef?: string | null; licenceExpiresOn?: string | null }[] }) => {
+  Object.assign(ds.armsSuppliers[0], { licenceRef: 'DL-TEST-1', licenceExpiresOn: '2027-12-31' });
+  return ds.armsSuppliers[0].id;
+};
+
+describe('Part R13 dealer named at Arms Control review', () => {
+  it('a buy request raised without a dealer cannot pass until Arms Control names a licensed one; a service-only field is refused elsewhere', async () => {
+    const { svc, ds } = fresh();
+    const gm = await svc.user('u-gm-sasa');
+    const asst = await svc.user('u-pwvsb-arms-asst');
+    const r = await svc.raiseArmsRequest(gm, { companyId: 'co-sasa', kind: 'ACQUIRE', title: 'Buy cartridges (test)', note: 'Range practice (test)', quantity: 100 });
+    await expect(svc.armsRequestStep(asst, r.id, 'pass', 'Checked (test)')).rejects.toThrow(/Name the licensed dealer/);
+    await expect(svc.armsRequestStep(asst, r.id, 'pass', 'Checked (test)', { supplierId: 'no-such-supplier' })).rejects.toThrow(/Supplier not found/);
+    // A supplier with no dealer licence on file is refused.
+    const unlicensed = ds.armsSuppliers.find((x) => !x.licenceRef) ?? Object.assign(ds.armsSuppliers[1] ?? ds.armsSuppliers[0], { licenceRef: null });
+    await expect(svc.armsRequestStep(asst, r.id, 'pass', 'Checked (test)', { supplierId: unlicensed.id })).rejects.toThrow(/no dealer licence|expired/);
+    const dealer = licensedDealer(ds);
+    await svc.armsRequestStep(asst, r.id, 'pass', 'Checked (test)', { supplierId: dealer });
+    const saved = ds.armsRequests.find((x) => x.id === r.id)!;
+    expect(saved.state).toBe('company_auth');
+    expect(saved.supplierId).toBe(dealer);
+  });
+});
+
 describe('4B arms register', () => {
   it('keys rounds once: a receipt, an issue and a return move the ledger; a count difference opens a case and never changes it', async () => {
     const { svc, ds } = fresh();
@@ -170,7 +196,8 @@ describe('4C arms requests and the supplier file', () => {
     const asst = await svc.user('u-pwvsb-arms-asst');
     const cm = await svc.user('u-cm-sasa');
     const coo = await svc.user('u-coo');
-    const r = await svc.raiseArmsRequest(arms, { companyId: 'co-sasa', kind: 'ACQUIRE', title: 'Buy 9 mm rounds for range practice', note: 'Range season', calibre: '9 mm', quantity: 500, estCost: 1250 });
+    const supplierId = licensedDealer(ds);
+    const r = await svc.raiseArmsRequest(arms, { companyId: 'co-sasa', kind: 'ACQUIRE', title: 'Buy 9 mm rounds for range practice', note: 'Range season', calibre: '9 mm', quantity: 500, estCost: 1250, supplierId });
     expect(r.state).toBe('arms_review');
     await expect(svc.armsRequestStep(arms, r.id, 'pass', 'ok')).rejects.toThrow(/Someone else/);
     await expect(svc.armsRequestStep(asst, r.id, 'pass', '')).rejects.toThrow(/reason/);
@@ -187,8 +214,14 @@ describe('4C arms requests and the supplier file', () => {
     expect(s.request.state).toBe('approved');
     await svc.armsRequestStep(asst, r.id, 'verify', 'Boxes counted against the delivery order');
     const ledger = ds.ammoStocks.find((x) => x.id === 'ammo-va-sasa-1-pistol')!.ledger;
+    // Part R16-R17: the approval letter and the receiving check come before the register changes.
+    await expect(svc.armsRequestStep(asst, r.id, 'reconcile', '')).rejects.toThrow(/approval letter/);
+    await svc.armsPolicyAct(cm, 'approvalLetter', { requestId: r.id, permitNo: 'PDRM/BELI/9', on: TODAY, firearmQty: 0, calibre: '9 mm', rounds: 500, holderName: 'Licence holder (test)', docs: PDF('letter') });
+    await expect(svc.armsRequestStep(asst, r.id, 'reconcile', '')).rejects.toThrow(/receiving check/);
+    await svc.armsPolicyAct(asst, 'armsGrn', { requestId: r.id, roundsCounted: 480, calibre: '9 mm', doNo: 'DO-1', checks: Object.fromEntries(['quantity', 'type', 'serials', 'deliveryOrder', 'invoice', 'condition', 'approvalLetter', 'supplier'].map((k) => [k, true])) });
     await svc.armsRequestStep(asst, r.id, 'reconcile', '');
-    expect(ds.ammoStocks.find((x) => x.id === 'ammo-va-sasa-1-pistol')!.ledger).toBe(ledger + 500);
+    // What was counted in (480), not what was ordered (500).
+    expect(ds.ammoStocks.find((x) => x.id === 'ammo-va-sasa-1-pistol')!.ledger).toBe(ledger + 480);
     s = await svc.armsRequestStep(asst, r.id, 'close', '');
     expect(s.request.state).toBe('closed');
     expect(s.request.log!.map((l) => l.to)).toEqual(['arms_review', 'company_auth', 'regulator_pending', 'regulator_pending', 'approved', 'verified', 'reconciled', 'closed']);
@@ -238,12 +271,12 @@ describe('4C arms requests and the supplier file', () => {
 
 describe('Company arms requests and director-only legal points (review, 2 Nov 2026)', () => {
   it('the company raises a request on its own screen, Arms Control sends it back, the requester corrects it, and the manager authorises', async () => {
-    const { svc } = fresh();
+    const { svc, ds } = fresh();
     const gm = await svc.user('u-gm-sasa');
     const cm = await svc.user('u-cm-sasa');
     const asst = await svc.user('u-pwvsb-arms-asst');
     const sv = await svc.user('u-sv-sasa');
-    const r = await svc.raiseArmsRequest(gm, { companyId: 'co-sasa', kind: 'ACQUIRE', title: 'Buy 12 gauge cartridges', note: 'Range practice, quotation on file', calibre: '12 gauge', quantity: 800, estCost: 2400 });
+    const r = await svc.raiseArmsRequest(gm, { companyId: 'co-sasa', kind: 'ACQUIRE', title: 'Buy 12 gauge cartridges', note: 'Range practice, quotation on file', calibre: '12 gauge', quantity: 800, estCost: 2400, supplierId: licensedDealer(ds) });
     let screen = await svc.arms(gm, 'co-sasa');
     expect(screen.can.raise).toBe(true);
     expect(screen.requests.find((x) => x.request.id === r.id)?.mine).toBe(true);
@@ -527,8 +560,15 @@ describe('4H arms trading and import, behind the CEO switch', () => {
     await expect(svc.setArmsTrading(ceo, true, 'Licence approved')).rejects.toThrow(/dealer licence/);
     const dl = ds.dealerLicences[0];
     Object.assign(dl, { status: 'approved', reference: 'DL/2026/1', expiresOn: '2027-12-31' });
+    // Part R29: the licence needs its place of business and a copy, and the reason names it.
+    await expect(svc.setArmsTrading(ceo, true, 'Dealer licence DL/2026/1 approved')).rejects.toThrow(/place of business/);
+    Object.assign(dl, { placeOfBusiness: 'Business premises (test)', docId: 'sha-test' });
+    await expect(svc.setArmsTrading(ceo, true, 'Licence approved by the police')).rejects.toThrow(/Name the dealer licence number/);
     await svc.setArmsTrading(ceo, true, 'Dealer licence DL/2026/1 approved');
     expect((await svc.armsTrading(arms)).on).toBe(true);
+    // Part R29: with the switch on, a company still trades only under its own dealer licence.
+    await expect(raise()).rejects.toBeInstanceOf(TradingOff);
+    ds.dealerLicences.push({ ...dl, id: 'dl-co-sasa-test', companyId: 'co-sasa', reference: 'DL/2026/2' } as never);
 
     // Import: CPO licence, then KDN, then ship through Port Klang or KLIA.
     const r = await raise();

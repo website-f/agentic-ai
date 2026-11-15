@@ -23,12 +23,12 @@ import { FaceCapture, FaceChallengeCapture } from './FaceCheck';
 import { FlexPanel } from './HrLeave';
 import { OfficeOshPanel } from './HrOsh';
 import { AppraisalsPanel, PoliciesPanel, TrainingPanel } from './HrDevelop';
+import { ProcessPanel } from './ProcessPage';
 import { HrGuide } from './HrGuide';
 import { useApp } from '../App';
 import { MyCheckinCard, OUTCOME, VERDICT, whereText } from './CheckIn';
 import { CheckinPlacesView, CheckinReviewView } from './CheckinPlaces';
 import { MyTimeSlipSection, TimeSlipBoardView } from './TimeSlip';
-import { MyResignationSection } from './Resignation';
 import { OwnerTestCheckinView } from './OwnerTestCheckin';
 import { MOVE_FLAG, MovementChips, MovementView, flagText } from './Movement';
 import { ClockPhotoCard } from './ClockPhoto';
@@ -37,6 +37,7 @@ import { inAppShell } from '../native';
 // P93: the tracker moved to its own file (adaptive, offline queue, back-on-screen reading); App.tsx imports it from here.
 export { StaffTracker } from './StaffTracker';
 import '../styles/selfservice.css';
+import { MyOvertimeSection } from './Overtime';
 
 const FLAG_LABEL: Record<StaffClockFlag, string> = {
   NO_GPS: 'No location',
@@ -272,12 +273,12 @@ export function MyClockView() {
         <FlexPanel />
         <OfficeOshPanel coordinatorOnly />
         <PoliciesPanel mine />
+        <ProcessPanel />
         <AppraisalsPanel mine />
         <TrainingPanel mine />
         <HrGuide staffSide />
         <MyTimeSlipSection />
-        {/* P100 (E10): the resignation procedure and giving notice. */}
-        <MyResignationSection />
+        <MyOvertimeSection />
       </div>
       {record && <ClockDetail id={record} onClose={() => setRecord(null)} />}
     </div>

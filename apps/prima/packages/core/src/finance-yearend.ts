@@ -1,10 +1,11 @@
-import type { FinSettingsValues } from "./types";
 import { AccessDenied } from "./access";
 import { isLead } from "./finance";
 import { isoDate } from "./finance";
 import { noSecrets } from "./finance";
 import { requireReason } from "./finance";
 import { text } from "./finance";
+import { finYearEndRules } from "./finance";
+import type { FinSettingsValues } from "./types";
 import type { FinCashCtx } from "./finance-cash";
 import { RULES } from "./rules";
 import { BadRequest } from "./service";
@@ -275,37 +276,14 @@ export interface FinTaxProfile {
   set: FinSign;
 }
 
-/** C4 (Fauzan, 11 Nov 2026): the year-end rates and caps in force, the Finance Director's settings over the rule. */
-export function finYearEndRule(s?: Partial<FinSettingsValues>) {
-  const r = RULES.financeYearEnd.value;
-  if (!s) return r;
-  return {
-    ...r,
-    initialPct: s.caInitialPct ?? r.initialPct,
-    annualPct: {
-      general: s.caGeneralPct ?? r.annualPct.general,
-      heavy_vehicle: s.caHeavyVehiclePct ?? r.annualPct.heavy_vehicle,
-      office: s.caOfficePct ?? r.annualPct.office,
-      computer: s.caComputerPct ?? r.annualPct.computer,
-      motor_car: s.caMotorCarPct ?? r.annualPct.motor_car,
-    },
-    smallValueMax: s.smallValueMax ?? r.smallValueMax,
-    smallValueCap: s.smallValueCap ?? r.smallValueCap,
-    motorCarCapNew: s.motorCarCapNew ?? r.motorCarCapNew,
-    motorCarCapOther: s.motorCarCapOther ?? r.motorCarCapOther,
-    smePaidUpMax: s.smePaidUpMax ?? r.smePaidUpMax,
-    smeIncomeMax: s.smeIncomeMax ?? r.smeIncomeMax,
-    auditRequestDays: s.auditRequestDays ?? r.auditRequestDays,
-  };
-}
-
 export function finIsSme(p: Pick<FinTaxProfile, 'paidUp' | 'grossIncome' | 'bigRelated'>, s?: Partial<FinSettingsValues>) {
-  const r = finYearEndRule(s);
+  const r = finYearEndRules(s);
   return p.paidUp <= r.smePaidUpMax && p.grossIncome <= r.smeIncomeMax && !p.bigRelated;
 }
 
 export function finCapitalAllowances(assets: FinAsset[], year: number, sme: boolean | null = null, s?: Partial<FinSettingsValues>) {
-  const r = finYearEndRule(s);
+  // The Finance Director's rates and caps (Fauzan, 11 Nov 2026), defaulting to the published Schedule 3 values.
+  const r = finYearEndRules(s);
   const rows = assets
     .filter((a) => Number(a.acquiredOn.slice(0, 4)) <= year && !(a.disposed && Number(a.disposed.on.slice(0, 4)) < year))
     .map((a) => {
@@ -379,8 +357,8 @@ export function finAssetAction(ctx: FinCashCtx, f: FinStatus, action: string, in
     const cls = classes.find((k) => k === input.cls);
     if (!cls) throw new BadRequest(`Class: ${classes.join(', ')}.`);
     const cost = money(input.cost, 'Cost');
-    if (cls === 'small_value' && cost > finYearEndRule(ctx.fs).smallValueMax)
-      throw new BadRequest(`A small value asset costs RM${finYearEndRule(ctx.fs).smallValueMax} or less.`);
+    const smallMax = finYearEndRules(ctx.settings).smallValueMax;
+    if (cls === 'small_value' && cost > smallMax) throw new BadRequest(`A small value asset costs RM${smallMax} or less.`);
     const acquiredOn = isoDate(input.acquiredOn, 'Bought on');
     if (acquiredOn > ctx.today) throw new BadRequest('"Bought on" cannot be in the future.');
     const sqlCode = noSecrets(text(input.sqlCode, 'SQL Account asset code', 1, 40), 'Code');
@@ -413,7 +391,7 @@ export function finAssetAction(ctx: FinCashCtx, f: FinStatus, action: string, in
         'Say whether a company above RM2.5 million paid-up owns more than 50% of this one, or this one owns more than 50% of it (yes or no).',
       );
     const p = { paidUp, grossIncome, bigRelated: input.bigRelated };
-    const profile: FinTaxProfile = { ...p, sme: finIsSme(p, ctx.fs), set: ctx.sign(text(input.comment ?? 'From SSM and the accounts', 'Where it comes from', 3, 300)) };
+    const profile: FinTaxProfile = { ...p, sme: finIsSme(p, ctx.settings), set: ctx.sign(text(input.comment ?? 'From SSM and the accounts', 'Where it comes from', 3, 300)) };
     return {
       patch: { taxProfile: profile },
       action: 'finance.tax.profile',
@@ -495,7 +473,7 @@ export function finAuditRequestAction(ctx: FinCashCtx, f: FinStatus, action: str
       .filter(Boolean)
       .slice(0, 50);
     if (!items.length) throw new BadRequest("List the auditor's items, one per line.");
-    const dueOn = isoDate(input.dueOn ?? addDays(askedOn, finYearEndRule(ctx.fs).auditRequestDays), 'Due on');
+    const dueOn = isoDate(input.dueOn ?? addDays(askedOn, RULES.financeYearEnd.value.auditRequestDays), 'Due on');
     const added = items.map((it, i) => ({
       id: `aud-${f.companyId}-${year}-${String(list.length + i + 1).padStart(3, '0')}`,
       companyId: f.companyId,

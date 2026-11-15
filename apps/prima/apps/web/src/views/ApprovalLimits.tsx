@@ -101,3 +101,47 @@ export function ApprovalLimitsPanel() {
     </section>
   );
 }
+
+// B3 (Fauzan, 14 Nov 2026 "No skipping. We run also."): office staff leave goes HR, then the Vice Chairman consents.
+// The CEO can switch the Vice Chairman's step off (HR's approval is then final) and on again, always with a reason.
+export function StaffLeaveVcPanel() {
+  const { data, error, reload } = useLoad(() => api.staffLeaveVc(), []);
+  const [reason, setReason] = useState('');
+  const act = useAction();
+  if (error) return <ErrorNotice error={error} />;
+  if (!data) return <Loading what="leave consent setting" />;
+  const flip = () =>
+    act.run(() => api.setStaffLeaveVc({ on: !data.on, reason }), 'Leave setting saved.').then((r) => {
+      if (r === undefined) return;
+      setReason('');
+      reload();
+    });
+  const last = data.history[0];
+  return (
+    <section className="panel" aria-labelledby="leave-vc-title">
+      <div className="panel-head">
+        <h2 id="leave-vc-title">Office staff leave: Vice Chairman's consent</h2>
+        <Chip tone={data.on ? 'ok' : 'info'}>{data.on ? 'On' : 'Off'}</Chip>
+      </div>
+      <p className="muted small">
+        {data.on
+          ? 'HR approves office staff leave, then the Vice Chairman consents.'
+          : "HR's approval is final. Leave already waiting for the Vice Chairman still waits."}
+      </p>
+      {last && (
+        <div className="muted small">
+          Last change: {last.by}, {last.at.slice(0, 16).replace('T', ' ')}: {last.reason}
+        </div>
+      )}
+      {data.canSet && (
+        <div className="row" style={{ marginTop: 8, gap: 6 }}>
+          <input className="input" aria-label="Why" placeholder="Why (needed)" value={reason} onChange={(e) => setReason(e.target.value)} />
+          <button className="btn btn-sm" disabled={act.busy || reason.trim().length < 5} onClick={flip}>
+            {data.on ? 'Switch off' : 'Switch on'}
+          </button>
+        </div>
+      )}
+      <ErrorNotice error={act.error} />
+    </section>
+  );
+}

@@ -112,6 +112,18 @@ export function deployability(person: Person, credentials: Credential[], on: Iso
     });
   }
   const latest = latestCredentials(credentials.filter((c) => c.personId === person.id));
+  // E9: yearly medical for a guard or officer aged 56 or over (rule QMS-MEDICAL-56).
+  const med = RULES.medicalFromAge.value;
+  if (person.role !== 'office' && age >= med.fromAge) {
+    const m = latest.get('MEDICAL_CHECK');
+    if (!m || !m.expiresOn || m.expiresOn < on)
+      findings.push({
+        level: med.level,
+        code: 'MEDICAL_56',
+        message: `${person.name} is ${age}: the yearly medical check is ${m ? `out of date since ${m.expiresOn ?? 'unknown'}` : 'not on record'}.`,
+        ruleId: RULES.medicalFromAge.id,
+      });
+  }
   for (const type of requiredCredentials(person, armed)) {
     const r = checkRequirement(person, latest, type, on);
     if (r.level !== 'ok') findings.push({ level: r.level, code: r.code, message: r.message!, ruleId: r.ruleId });
@@ -247,6 +259,14 @@ export function checkAssignment(args: { person: Person; credentials: Credential[
   }
 
   findings.push(...deployability(person, credentials, shift.date, site.armed));
+  // E9: site risk briefing before the first shift at a medium or high risk site (rule QMS-RISK-BRIEF). Only when the
+  // guard has no earlier shift at this site in what the roster holds.
+  const rb = RULES.riskBriefing.value;
+  if (rb.risks.includes(site.risk) && !otherShifts.some((o) => o.siteId === site.id && o.date < shift.date)) {
+    const briefed = credentials.some((c) => c.personId === person.id && c.type === 'SITE_BRIEFING' && c.number === `SITE ${site.id}` && c.issuedOn <= shift.date);
+    if (!briefed)
+      findings.push({ level: rb.level, code: 'RISK_BRIEFING', message: `First shift at a ${site.risk} risk site: record the site risk briefing for ${person.name} first.`, ruleId: RULES.riskBriefing.id });
+  }
   if (person.nationality !== 'MY' && site.sector === 'government' && RULES.fwPrivateOnly.value) {
     findings.push({
       level: 'block',
@@ -455,6 +475,10 @@ export function armsIssueCheck(args: {
   firearmBusy: boolean;
   /** The RFID tag code read at the vault, if the firearm was scanned (rule ARMS-RFID). */
   rfidScan?: string | null;
+  /** C7: whether Arms Control has made the scan compulsory (default: the rule value, off). */
+  scanRequired?: boolean;
+  /** Part R: findings from the arms policy records (vault applying, vault staff licence, licence category, maintenance). */
+  policy?: Finding[];
 }): Finding[] {
   const { person, credentials, firearm, vault, site, shift, issuer, witness, today } = args;
   const out: Finding[] = [];
@@ -466,7 +490,9 @@ export function armsIssueCheck(args: {
   if (!site.armed) block('NOT_ARMED_SITE', `${site.name} is not an armed post.`);
   if (!shift || shift.personId !== person.id || shift.siteId !== site.id)
     block('NO_ARMED_SHIFT', `${person.name} is not rostered at ${site.name} for this shift.`);
-  if (firearm.status !== 'IN_VAULT' || args.firearmBusy)
+  if (['MAINTENANCE', 'NEEDS_MAINTENANCE', 'UNDER_INSPECTION', 'DAMAGED', 'IN_REPAIR', 'UNUSABLE'].includes(firearm.status))
+    block('NOT_IN_VAULT', `ROSAK - JANGAN DIGUNAKAN: ${firearm.tag} (${firearm.status.replace(/_/g, ' ').toLowerCase()}). It returns to use only after the reuse confirmation.`, 'ARMS-DAMAGE');
+  else if (firearm.status !== 'IN_VAULT' || args.firearmBusy)
     block('NOT_IN_VAULT', `${firearm.tag} is not in the vault (status ${firearm.status.replace('_', ' ').toLowerCase()}).`);
   if (!firearm.licenceExpiresOn || firearm.licenceExpiresOn < today)
     block('FIREARM_LICENCE', `${firearm.tag}: firearm licence ${firearm.licenceExpiresOn ? 'expired' : 'not recorded'}.`);
@@ -489,10 +515,11 @@ export function armsIssueCheck(args: {
         : `${firearm.tag} has no RFID tag recorded. Record its tag first.`,
       'ARMS-RFID',
     );
-  else if (!scan && RULES.armsRfid.value.scanRequired) block('RFID_NOT_SCANNED', `Scan ${firearm.tag}’s RFID tag before issuing.`, 'ARMS-RFID');
+  else if (!scan && (args.scanRequired ?? RULES.armsRfid.value.scanRequired)) block('RFID_NOT_SCANNED', `Scan ${firearm.tag}’s RFID tag before issuing.`, 'ARMS-RFID');
   if (!witness.trim()) block('NO_WITNESS', 'A second person must witness the issue.', 'ARMS-WITNESS');
   else if (witness.trim().toLowerCase() === issuer.trim().toLowerCase() || witness.trim().toLowerCase() === person.name.toLowerCase())
     block('SAME_WITNESS', 'The witness must be someone other than the issuer and the guard.', 'ARMS-WITNESS');
+  out.push(...(args.policy ?? []));
   return out;
 }
 

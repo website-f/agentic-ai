@@ -1,8 +1,8 @@
 // HTTP server for the CMS app. Two kinds of caller:
 // - Feeds (site gateways, cloud adaptors, Prima): every call signed (X-Api-Key, X-Timestamp, X-Signature), refused if not.
-// - Operators: E7 (Fauzan, 11 Nov 2026) Microsoft sign-in through Prima (signin.ts): a one-time ticket from Prima, then
-//   CMS's own short session cookie. The personal operator key is only a sealed break-glass fallback, off unless
-//   CMS_BREAK_GLASS=true. There is no command route: CMS cannot open gates or arm panels.
+// - Operators: a personal key per operator (CMS_OPERATOR_KEYS), or, when CMS_ENTRA_SIGN_IN=true, Microsoft (Entra)
+//   sign-in with MFA admitted only by Prima's desk roster (operator-sign-in.ts, E7). There is no command route: CMS
+//   cannot open gates or arm panels.
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { createServer as createTcpServer, type Server as TcpServer } from 'node:net';
 import { createHash, timingSafeEqual } from 'node:crypto';
@@ -15,17 +15,21 @@ import { GateLists, PROFILES, plateEvent, readFromJson, type Vehicle, type Visit
 import { fixEvents, type Fix, type Route } from './adaptors/tracker';
 import { handleFrame } from './adaptors/sia-dc09';
 import { CSS, PAGE, SCRIPT } from './dashboard';
-import { CLEAR_COOKIE, Sessions, sessionCookie, setCookie, signInFromEnv, verifyTicket, type SignInConfig } from './signin';
+import { cmsEntraConfig, rosterAccess, SignInError, tenantKeys, verifyOperatorToken, type CmsEntraConfig, type KeySource } from './operator-sign-in';
 
 export const MAX_BODY = 256 * 1024;
 /** How long one shift briefing from the in-house model is reused before a new one is asked for. */
 export const BRIEFING_REUSE_MS = 60_000;
 
 export interface ServerConfig {
-  /** Operator key -> operator name. Break-glass only (CMS_BREAK_GLASS=true); empty when switched off. */
+  /** Operator key -> operator name. With Microsoft sign-in on: empty, or the one sealed break-glass key. */
   operators: Map<string, string>;
-  /** E7: Microsoft sign-in through Prima (signin.ts). Absent or null: off. */
-  signin?: SignInConfig | null;
+  /** Operator Microsoft sign-in (E7). Absent or null: off, keys as before. */
+  entra?: CmsEntraConfig | null;
+  /** The tenant's signing keys (tests replace it). */
+  entraKeys?: KeySource;
+  /** With Microsoft sign-in on, the sealed key is accepted only while CMS_BREAK_GLASS=true. */
+  breakGlass?: boolean;
   gateway: { key: string; secret: string };
   prima: { key: string; secret: string };
   /** The CMS's own in-house model for the shift briefing (local-model.ts). Absent or null: off. */
@@ -34,25 +38,19 @@ export interface ServerConfig {
   modelFetch?: Parameters<typeof shiftBriefing>[3];
 }
 
-/**
- * Reads the configuration from the environment. Operators sign in with Microsoft through Prima (CMS_SIGNIN_SECRET). The
- * operator keys (CMS_OPERATOR_KEYS) are read only with CMS_BREAK_GLASS=true; set without it, CMS refuses to start so a
- * forgotten key list is never quietly live. Refuses to start without any way for operators to sign in, or without the
- * feed secrets.
- */
+/** Reads the configuration from the environment. Refuses to start without operator keys and feed secrets. */
 export function configFromEnv(env: NodeJS.ProcessEnv = process.env): ServerConfig {
-  const signin = signInFromEnv(env);
-  const raw = env.CMS_OPERATOR_KEYS;
+  const entra = cmsEntraConfig(env);
   const breakGlass = env.CMS_BREAK_GLASS === 'true';
-  if (raw && !breakGlass) throw new Error('CMS_OPERATOR_KEYS is set but CMS_BREAK_GLASS is not true. Operators sign in with Microsoft through Prima; remove the keys, or set CMS_BREAK_GLASS=true only while Microsoft sign-in is down.');
-  let operators = new Map<string, string>();
-  if (breakGlass) {
-    if (!raw) throw new Error('CMS_BREAK_GLASS=true needs CMS_OPERATOR_KEYS (JSON: {"<key>":"<operator name>"}).');
-    const obj = JSON.parse(raw) as Record<string, string>;
-    operators = new Map(Object.entries(obj).filter(([k, v]) => k.length >= 24 && typeof v === 'string' && v.trim()));
-    if (!operators.size) throw new Error('CMS_OPERATOR_KEYS has no usable key (each key at least 24 characters).');
-  }
-  if (!signin && !operators.size) throw new Error('CMS_SIGNIN_SECRET is not set: operators sign in with Microsoft through Prima (the same secret Prima holds).');
+  const raw = env.CMS_OPERATOR_KEYS;
+  if (!raw && !entra) throw new Error('CMS_OPERATOR_KEYS is not set (JSON: {"<key>":"<operator name>"}).');
+  const obj = (raw ? JSON.parse(raw) : {}) as Record<string, string>;
+  const operators = new Map(Object.entries(obj).filter(([k, v]) => k.length >= 24 && typeof v === 'string' && v.trim()));
+  if (!entra && !operators.size) throw new Error('CMS_OPERATOR_KEYS has no usable key (each key at least 24 characters).');
+  // Cut-over (plan section 3.7): with Microsoft sign-in on, personal keys are refused at start, except one sealed
+  // break-glass key while CMS_BREAK_GLASS=true.
+  if (entra && raw && !breakGlass) throw new Error('Microsoft sign-in is on: remove CMS_OPERATOR_KEYS, or set CMS_BREAK_GLASS=true with the one sealed key.');
+  if (entra && breakGlass && operators.size !== 1) throw new Error('CMS_BREAK_GLASS=true needs exactly one sealed key in CMS_OPERATOR_KEYS.');
   const need = (n: string) => {
     const v = env[n];
     if (!v) throw new Error(`${n} is not set.`);
@@ -60,7 +58,8 @@ export function configFromEnv(env: NodeJS.ProcessEnv = process.env): ServerConfi
   };
   return {
     operators,
-    signin,
+    entra,
+    breakGlass,
     gateway: { key: need('CMS_GATEWAY_KEY'), secret: need('CMS_GATEWAY_SECRET') },
     prima: { key: need('PRIMA_TO_CMS_KEY'), secret: need('PRIMA_TO_CMS_SECRET') },
     localModel: localModelConfig(env),
@@ -102,10 +101,9 @@ function json(body: string): unknown {
   }
 }
 
-function send(res: ServerResponse, status: number, body: unknown, type = 'application/json', extra: Record<string, string> = {}): void {
+function send(res: ServerResponse, status: number, body: unknown, type = 'application/json'): void {
   const text = type === 'application/json' ? JSON.stringify(body) : String(body);
   res.writeHead(status, {
-    ...extra,
     'content-type': `${type}; charset=utf-8`,
     'cache-control': 'no-store',
     'x-content-type-options': 'nosniff',
@@ -128,8 +126,8 @@ export interface AppState {
   persist?: () => void;
   /** The last shift briefing and the one being made (kept with the app state so every request shares it). */
   briefing?: { pending: Promise<Briefing> | null; last: Briefing | null; at: number };
-  /** E7: operator sessions after Microsoft sign-in through Prima (made on first use). */
-  sessions?: Sessions;
+  /** Every use of the break-glass key while Microsoft sign-in is on (reported to the CEO). */
+  breakGlassUses?: { at: string; operator: string; path: string }[];
 }
 
 export function handler(cfg: ServerConfig, state: AppState, clock: () => number = Date.now) {
@@ -148,23 +146,30 @@ export function handler(cfg: ServerConfig, state: AppState, clock: () => number 
     return send(res, 200, body);
   };
 
-  const sessions = cfg.signin ? (state.sessions ??= new Sessions(cfg.signin)) : null;
-  /**
-   * Who is acting: the session after Microsoft sign-in through Prima (a change must also carry the X-CMS-Request header,
-   * which another site cannot send), or, only while break-glass is on, an operator key.
-   */
-  const operator = (req: IncomingMessage): string => {
-    const sid = sessionCookie(req.headers.cookie);
-    if (sid && sessions) {
-      const s = sessions.get(sid, clock());
-      if (!s) throw new HttpError(401, 'Your CMS sign-in has ended. Open CMS from Prima again.');
-      if (req.method !== 'GET' && req.headers['x-cms-request'] !== '1') throw new HttpError(403, 'Request refused.');
-      return s.operator;
-    }
+  const keys = cfg.entra ? (cfg.entraKeys ?? tenantKeys(cfg.entra.tenantId)) : null;
+  /** The operator's name. A change (any POST) needs a current seat when Microsoft sign-in is on. */
+  const operator = async (req: IncomingMessage): Promise<string> => {
     const h = String(req.headers.authorization ?? '');
-    const key = h.startsWith('Bearer ') ? h.slice(7) : '';
-    if (key) for (const [k, name] of cfg.operators) if (sameText(k, key)) return name;
-    throw new HttpError(401, cfg.operators.size ? 'Operator key not accepted.' : 'Sign in with Microsoft through Prima.');
+    const token = h.startsWith('Bearer ') ? h.slice(7) : '';
+    const path = new URL(req.url ?? '/', 'http://cms.local').pathname;
+    if (cfg.entra && keys && token.split('.').length === 3) {
+      try {
+        const oid = await verifyOperatorToken(token, cfg.entra, keys, clock());
+        const who = rosterAccess(oid, hub.directory.d.desk, clock(), cfg.entra.graceMin);
+        if (req.method !== 'GET' && !who.canAct) throw new SignInError(403, 'You are not on a CMS seat now: you may look, not act.');
+        return who.name;
+      } catch (e) {
+        if (e instanceof SignInError) throw new HttpError(e.status, e.message);
+        throw e;
+      }
+    }
+    if (token && (!cfg.entra || cfg.breakGlass))
+      for (const [k, name] of cfg.operators)
+        if (sameText(k, token)) {
+          if (cfg.entra) (state.breakGlassUses ??= []).push({ at: new Date(clock()).toISOString(), operator: name, path });
+          return name;
+        }
+    throw new HttpError(401, cfg.entra ? 'Sign in with Microsoft.' : 'Operator key not accepted.');
   };
 
   const signedBy = (req: IncomingMessage, body: string, who: { key: string; secret: string }) => {
@@ -180,46 +185,8 @@ export function handler(cfg: ServerConfig, state: AppState, clock: () => number 
       if (req.method === 'GET' && path === '/app.css') return send(res, 200, CSS, 'text/css');
       if (req.method === 'GET' && path === '/healthz') return send(res, 200, { ok: true });
 
-      // E7: how operators sign in (no secrets): Microsoft through Prima, and whether the break-glass key is on.
-      if (req.method === 'GET' && path === '/auth/options') return send(res, 200, { microsoft: !!cfg.signin, primaUrl: cfg.signin?.primaUrl ?? null, keys: cfg.operators.size > 0 });
-      if (req.method === 'POST' && path === '/auth/prima') {
-        if (!cfg.signin || !sessions) throw new HttpError(404, 'Microsoft sign-in through Prima is not set up on this CMS.');
-        // Audit P100: another site cannot send this header, so it cannot sign this browser in as someone else (login CSRF).
-        if (req.headers['x-cms-request'] !== '1') throw new HttpError(403, 'Request refused.');
-        const body = json((await readBody(req)) || '{}') as Record<string, unknown>;
-        const t = clock();
-        const check = verifyTicket(body.ticket, cfg.signin, t);
-        if (!check.ok) {
-          hub.refuse('operator-sign-in', `ticket refused: ${check.reason}`);
-          throw new HttpError(401, 'This sign-in link is not valid or has expired. Open CMS from Prima again.');
-        }
-        const s = sessions.start(check.claims, t);
-        if (!s) {
-          hub.refuse('operator-sign-in', 'ticket used twice');
-          throw new HttpError(401, 'This sign-in link was already used. Open CMS from Prima again.');
-        }
-        hub.operatorSignIn(s.operator, `signed in through Prima (${s.via}), Prima record ${s.sub}`);
-        save();
-        return send(res, 200, { operator: s.operator, via: s.via }, 'application/json', { 'set-cookie': setCookie(s.id, cfg.signin.maxHours * 3600) });
-      }
-      if (req.method === 'GET' && path === '/auth/me') {
-        const sid = sessionCookie(req.headers.cookie);
-        const s = sid && sessions ? sessions.get(sid, clock()) : null;
-        if (!s) throw new HttpError(401, 'Not signed in.');
-        return send(res, 200, { operator: s.operator, via: s.via });
-      }
-      if (req.method === 'POST' && path === '/auth/signout') {
-        if (req.headers['x-cms-request'] !== '1') throw new HttpError(403, 'Request refused.');
-        const s = sessions?.end(sessionCookie(req.headers.cookie)) ?? null;
-        if (s) {
-          hub.operatorSignIn(s.operator, 'signed out');
-          save();
-        }
-        return send(res, 200, { ok: true }, 'application/json', { 'set-cookie': CLEAR_COOKIE });
-      }
-
       if (req.method === 'GET' && path === '/api/state') {
-        operator(req);
+        await operator(req);
         return send(res, 200, {
           queue: hub.queue(),
           notifications: hub.notifications.slice(-50).reverse(),
@@ -227,11 +194,12 @@ export function handler(cfg: ServerConfig, state: AppState, clock: () => number 
           gaps: hub.gaps.slice(-50).reverse(),
           refused: hub.refused.slice(-50).reverse(),
           primaRejected: hub.primaLink.parked.slice(-50).reverse(),
+          breakGlassUses: (state.breakGlassUses ?? []).slice(-50).reverse(),
         });
       }
 
       if (req.method === 'GET' && path === '/api/kpis') {
-        operator(req);
+        await operator(req);
         try {
           return send(res, 200, hub.kpis({ from: url.searchParams.get('from') ?? undefined, to: url.searchParams.get('to') ?? undefined }));
         } catch (e) {
@@ -242,11 +210,11 @@ export function handler(cfg: ServerConfig, state: AppState, clock: () => number 
 
       // Shift handover at the desk: who is handing over to whom (roster from Prima), and the two steps.
       if (req.method === 'GET' && path === '/api/handover') {
-        const who = operator(req);
+        const who = await operator(req);
         return send(res, 200, { operator: who, ...hub.deskHandover() });
       }
       if (req.method === 'POST' && (path === '/api/handover/give' || path === '/api/handover/take')) {
-        const who = operator(req);
+        const who = await operator(req);
         const body = json((await readBody(req)) || '{}') as Record<string, unknown>;
         try {
           if (path === '/api/handover/give') return saved(res, hub.giveHandover(who, String(body.note ?? '')));
@@ -259,12 +227,12 @@ export function handler(cfg: ServerConfig, state: AppState, clock: () => number 
       }
 
       if (req.method === 'GET' && path === '/api/assistant') {
-        operator(req);
+        await operator(req);
         return send(res, 200, assess(hub, clock()));
       }
 
       if (req.method === 'GET' && path === '/api/assistant/briefing') {
-        operator(req);
+        await operator(req);
         // One request to the in-house model at a time, and a briefing is reused for a minute, so several operators
         // pressing the button do not queue up work on the model server.
         const t = clock();
@@ -283,7 +251,7 @@ export function handler(cfg: ServerConfig, state: AppState, clock: () => number 
       }
 
       if (req.method === 'POST' && path === '/api/assistant/feedback') {
-        const who = operator(req);
+        const who = await operator(req);
         const body = json((await readBody(req)) || '{}') as Record<string, unknown>;
         if (typeof body.useful !== 'boolean') throw new HttpError(400, 'Say whether the finding was useful (true or false).');
         try {
@@ -296,7 +264,7 @@ export function handler(cfg: ServerConfig, state: AppState, clock: () => number 
 
       const alarmAction = /^\/api\/alarms\/([^/]+)\/(acknowledge|actioned|close|escalate)$/.exec(path);
       if (req.method === 'POST' && alarmAction) {
-        const who = operator(req);
+        const who = await operator(req);
         const body = json((await readBody(req)) || '{}') as Record<string, string>;
         const id = decodeURIComponent(alarmAction[1]);
         try {

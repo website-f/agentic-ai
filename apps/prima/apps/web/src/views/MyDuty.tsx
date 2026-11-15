@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { CalendarBlankIcon, ClockIcon, FootprintsIcon, ShieldCheckIcon, UserMinusIcon } from '@phosphor-icons/react';
+import { WarrantyClaimsSection } from './Warranty';
 import { jaOwns } from '@prima/core';
 import { api, type MyDuty as Duty } from '../api';
 import { Card, PageHead, Stat, Stats } from '../kit';
@@ -119,6 +120,7 @@ export function MyDuty() {
       )}
 
       <MyItemsPanel />
+      <WarrantyClaimsSection source="stock" />
       {!staff && <PoliciesPanel mine />}
       <PoliciesPanel briefing />
 

@@ -42,7 +42,8 @@ describe('HR database wall', () => {
     expect(seesStaffIds(u('u-fd'))).toBe(false);
     expect(seesStaffAccounts(u('u-fd'))).toBe(true);
     // A company manager reads their own company's staff numbers only (Fauzan, 1 Nov 2026), never as part of the HR wall.
-    expect(dataWalls(u('u-cm-sasa'))).toEqual(['staff_company', 'staff_movements', 'corporate', 'legal', 'mandates', 'arms']);
+    // Part Q (13 Nov 2026): a company manager is also a party to the IT policy register.
+    expect(dataWalls(u('u-cm-sasa'))).toEqual(['staff_company', 'staff_movements', 'corporate', 'legal', 'mandates', 'arms', 'it_policy_party']);
     expect(seesStaffNumbersOf(u('u-cm-sasa'), 'co-sasa', 'ids')).toBe(true);
     expect(seesStaffNumbersOf(u('u-cm-sasa'), 'co-arsh', 'ids')).toBe(false);
     expect(seesStaffNumbersOf(u('u-ae-arsh'), 'co-arsh', 'accounts')).toBe(false);

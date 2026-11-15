@@ -14,20 +14,14 @@ export function FinanceSettingsTab() {
   const act = useAction();
   const [draft, setDraft] = useState<Record<string, string>>({});
   const [comment, setComment] = useState('');
-  // C4 (Fauzan, 11 Nov 2026): a change starts today or on a later day the Finance Director chooses.
   const [from, setFrom] = useState('');
   if (error) return <ErrorNotice error={error} />;
   if (!data) return <Loading what="settings" />;
-  type Key = keyof typeof data.limits;
-  const grouped = new Set(data.groups.flatMap((g) => g.keys as string[]));
-  const groups: { title: string; keys: Key[] }[] = [
-    ...data.groups.map((g) => ({ title: g.title, keys: (g.keys as string[]).filter((k): k is Key => k in data.limits) })),
-    { title: 'Other', keys: (Object.keys(data.limits) as Key[]).filter((k) => !grouped.has(k)) },
-  ].filter((g) => g.keys.length);
+  const keys = Object.keys(data.limits) as (keyof typeof data.limits)[];
   const save = async () => {
     const values: Record<string, unknown> = {};
     for (const [k, v] of Object.entries(draft)) if (v.trim() !== '') values[k] = k === 'selfBilledBy' || k === 'approvalMethod' ? v.trim() : Number(v);
-    const r = await act.run(() => api.finSetSettings(values, comment, from || undefined), from && from > data.today ? 'Saved. It starts on the day chosen.' : 'Settings saved.');
+    const r = await act.run(() => api.finSetSettings(values, comment, from || undefined), from ? `Settings saved, in force from ${from}.` : 'Settings saved.');
     if (r) {
       setDraft({});
       setComment('');
@@ -41,6 +35,11 @@ export function FinanceSettingsTab() {
         The Finance Director (or the CEO) sets these for every company. Each change needs a comment and is kept.
         {data.set ? ` Last changed by ${data.set.by} on ${dateTimeLabel(data.set.at)}: ${data.set.comment}` : ' Nothing changed yet: the proposed defaults apply.'}
       </p>
+      {data.upcoming && (
+        <p className="notice" data-tone="warn">
+          A change by {data.upcoming.set.by} takes effect on {data.upcoming.set.effectiveFrom}: {data.upcoming.set.comment}. Until then the values below stay in force.
+        </p>
+      )}
       <ErrorNotice error={act.error} />
       <Card
         title="Limits and rules in force"
@@ -54,8 +53,8 @@ export function FinanceSettingsTab() {
                 <textarea className="textarea" rows={2} value={comment} onChange={(e) => setComment(e.target.value)} />
               </label>
               <label className="field">
-                <span>Starts on (today if empty)</span>
-                <input className="input fin-w-md" type="date" min={data.today} value={from} onChange={(e) => setFrom(e.target.value)} />
+                <span>In force from (leave empty for today)</span>
+                <input className="input" type="date" style={{ width: 180 }} value={from} onChange={(e) => setFrom(e.target.value)} />
               </label>
               <button className="btn btn-primary" disabled={act.busy || !Object.values(draft).some((v) => v.trim())} onClick={save}>
                 Save settings
@@ -65,15 +64,16 @@ export function FinanceSettingsTab() {
         }
       >
         <div className="fin-rows">
-          {groups.map((g) => [
-            <div key={`h-${g.title}`} className="fin-kv fin-setting">
-              <strong>{g.title}</strong>
-            </div>,
-            ...g.keys.map((k) => (
+          {keys.map((k) => (
             <div key={k} className="fin-kv fin-setting">
               <span className="fin-kv-label">
                 <span>{data.limits[k][2]}</span>
                 {data.values[k] !== data.defaults[k] && <span className="muted small">proposed {data.defaults[k]}</span>}
+                {data.upcoming && data.upcoming.values[k] !== data.values[k] && (
+                  <span className="muted small">
+                    from {data.upcoming.set.effectiveFrom}: {data.upcoming.values[k]}
+                  </span>
+                )}
               </span>
               {data.canSet ? (
                 <input
@@ -88,8 +88,7 @@ export function FinanceSettingsTab() {
                 <strong className="fin-num">{data.values[k]}</strong>
               )}
             </div>
-            )),
-          ])}
+          ))}
           <div className="fin-kv fin-setting">
             <span className="fin-kv-label">
               <span>Who issues self-billed e-Invoices (foreign suppliers and agents)</span>
@@ -129,25 +128,9 @@ export function FinanceSettingsTab() {
           </div>
         </div>
       </Card>
-      {data.scheduled.length > 0 && (
-        <Card title="Changes still to start" flush>
-          <div className="fin-rows">
-            {data.scheduled.map((x, i) => (
-              <div key={i} className="fin-kv">
-                <span>
-                  <span className="fin-strong">From {x.from}</span>:{' '}
-                  {Object.entries(x.values)
-                    .map(([k, v]) => `${data.limits[k as Key]?.[2] ?? k} ${v}`)
-                    .join('; ')}
-                  <span className="muted small"> · {x.set.by}: {x.set.comment}</span>
-                </span>
-              </div>
-            ))}
-          </div>
-        </Card>
-      )}
       {data.canSet && data.noBooks.length > 0 && <StartBooks rows={data.noBooks} onSaved={() => setN((x) => x + 1)} />}
       {data.canSet && data.teams.length > 0 && <TeamPanel rows={data.teams} onSaved={() => setN((x) => x + 1)} />}
+      {data.canSet && data.teams.length > 0 && <YearEndPanel rows={data.teams} onSaved={() => setN((x) => x + 1)} />}
       {data.history.length > 0 && (
         <Card title="Earlier settings" flush>
           <div className="fin-rows">
@@ -156,7 +139,10 @@ export function FinanceSettingsTab() {
                 <span>
                   <span className="fin-strong">{h.set.by}</span>: {h.set.comment}
                 </span>
-                <span className="muted small fin-nowrap">{dateTimeLabel(h.set.at)}</span>
+                <span className="muted small fin-nowrap">
+                  {dateTimeLabel(h.set.at)}
+                  {h.set.effectiveFrom ? `, in force from ${h.set.effectiveFrom}` : ''}
+                </span>
               </div>
             ))}
           </div>
@@ -288,5 +274,72 @@ function TeamPanel({ rows, onSaved }: { rows: { companyId: string; name: string;
         ))}
       </div>
     </Card>
+  );
+}
+
+/**
+ * Financial year ends (Finance 27 M2, Fauzan 2 Nov 2026): every company's year ends 31 December; the Finance Director
+ * or the CEO changes one company's year end with a reason, and the change is kept.
+ */
+function YearEndPanel({ rows, onSaved }: { rows: { companyId: string; name: string; fyEnd: string; fyEndHistory: { from: string; to: string; by: string; at: string; comment: string }[] }[]; onSaved: () => void }) {
+  const act = useAction();
+  const [ends, setEnds] = useState<Record<string, string>>({});
+  const [comment, setComment] = useState('');
+  const changed = Object.entries(ends).filter(([id, e]) => e.trim() && rows.find((r) => r.companyId === id)?.fyEnd !== e.trim());
+  const odd = rows.filter((r) => r.fyEnd !== '12-31' || r.fyEndHistory.length);
+  return (
+    <section className="panel">
+      <div className="panel-head">
+        <h3>Financial year ends</h3>
+      </div>
+      <p className="muted small" style={{ padding: '0 12px' }}>
+        Every company's financial year ends on 31 December. Change one only when its year end really differs (MM-DD, for example 06-30); the reason and the old date are kept.
+      </p>
+      <ErrorNotice error={act.error} />
+      <div className="list">
+        {rows.map((r) => (
+          <div key={r.companyId} className="list-item" style={{ gap: 8, flexWrap: 'wrap' }}>
+            <span style={{ flex: 1, minWidth: 0 }}>
+              {r.name}
+              {r.fyEndHistory.length > 0 && (
+                <span className="muted small">
+                  {' '}
+                  · was {r.fyEndHistory[r.fyEndHistory.length - 1].from}, changed by {r.fyEndHistory[r.fyEndHistory.length - 1].by}: {r.fyEndHistory[r.fyEndHistory.length - 1].comment}
+                </span>
+              )}
+            </span>
+            <input
+              className="input"
+              aria-label={`Year end for ${r.name}`}
+              value={ends[r.companyId] ?? r.fyEnd}
+              onChange={(e) => setEnds((m) => ({ ...m, [r.companyId]: e.target.value }))}
+              style={{ width: 90 }}
+            />
+          </div>
+        ))}
+      </div>
+      {odd.length === 0 && changed.length === 0 && <p className="muted small" style={{ padding: '0 12px' }}>All companies end their year on 31 December.</p>}
+      {changed.length > 0 && (
+        <div style={{ padding: 12 }}>
+          <label className="field">
+            <span>Why (needed)</span>
+            <input className="input" value={comment} onChange={(e) => setComment(e.target.value)} />
+          </label>
+          <button
+            className="btn btn-primary btn-sm"
+            disabled={act.busy}
+            onClick={async () => {
+              if (await act.run(() => api.finSetSettings({ yearEnds: Object.fromEntries(changed.map(([id, e]) => [id, e.trim()])) }, comment), `${changed.length} year end(s) changed.`)) {
+                setEnds({});
+                setComment('');
+                onSaved();
+              }
+            }}
+          >
+            Save {changed.length} year end(s)
+          </button>
+        </div>
+      )}
+    </section>
   );
 }

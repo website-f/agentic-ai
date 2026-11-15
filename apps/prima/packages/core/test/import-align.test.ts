@@ -1,4 +1,5 @@
 // P81: any spreadsheet, auto-aligned to the record's fields. Synthetic data only.
+import { noLoadGate } from './no-load-gate';
 import { deflateRawSync, inflateRawSync } from 'node:zlib';
 import { describe, expect, it } from 'vitest';
 import {
@@ -30,7 +31,7 @@ const NOW = myt(TODAY, '10:30');
 
 function fresh() {
   const ds = generateDataset({ today: TODAY, now: NOW });
-  const store = withOrgLinks(new MemoryStore(ds));
+  const store = noLoadGate(withOrgLinks(new MemoryStore(ds)));
   const svc = new PrimaService(store, () => NOW);
   const user = (id: string) => ds.users.find((u) => u.id === id)!;
   // A company manager and the company they run, whatever the seed's companies are called.

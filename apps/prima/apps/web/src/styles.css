@@ -1709,6 +1709,24 @@ dl.facts dd {
     display: none;
   }
 }
+/* Printable guard roster (Part O). */
+@media print {
+  .print-sheet,
+  .print-sheet * {
+    visibility: visible;
+  }
+  .print-sheet {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    font-size: 9pt;
+  }
+  .print-sheet .no-print {
+    display: none;
+  }
+}
+
 /* Client CRM (Fauzan, 4 Nov 2026): large tap targets for phones. */
 .crm-tabs button {
   min-height: 40px;

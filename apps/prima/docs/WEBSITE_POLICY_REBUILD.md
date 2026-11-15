@@ -38,3 +38,10 @@ Every dormant/closed save requires a valid documented reason, supplied now or re
 ## Validation boundaries
 
 New focused synthetic tests cover checker separation, requester scope/Mine, current-role loss, stale/duplicate decisions, strict boolean, explicit delegation, legacy reopening, serialized races, valid date boundaries and deduplicated notices. A restricted-localhost PostgreSQL service test was authored in `it-ticket-refs-rls.test.ts` for concurrent confirmation and evidence-preserving reopen. It has **not** been executed locally. No browser, live Microsoft provider, production database or deployment validation is claimed.
+
+## Merdeka IT policies: domains (Part Q22, 13-14 Nov 2026)
+
+A new domain is requested in IT > Polisi IT, approved by the CEO, bought from a registrar on the IT Manager's approved
+list in the company's name (a registrant that looks like a person is flagged) and becomes active only with the Microsoft
+365 domain verification screenshot. Registrar lock and 2FA are recorded per domain; "unknown" shows amber, never green.
+Website and domain records here are unchanged. See `docs/IT_POLICIES_MERDEKA.md`.

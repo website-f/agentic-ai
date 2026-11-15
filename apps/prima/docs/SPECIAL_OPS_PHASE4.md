@@ -176,3 +176,56 @@ Each call carries `x-api-key`, `x-timestamp` (within 5 minutes) and `x-signature
   - API: 174 of 174 passed;
   - web typecheck and demo build passed;
   - script tests: 53 of 53 passed.
+
+## Part R arms policies (Fitri package, 13-14 Nov 2026)
+
+Built on the PR 141 branch from `2026-11-13_arms-vault-licence-jacket-policies-part-R.txt` (R1-R32) and Fauzan's
+answers R-X1..R-X11. Source code only: nothing is merged, deployed or migrated. The circulars are in force from
+1 Nov 2026 and the other papers from 18 Nov 2026 (rule ARMS-POLICY `inForce`).
+
+**Where it lives.** `packages/core/src/arms-policy-service.ts` (one door, `svc.armsPolicyAct(user, op, input)`), the
+API route `POST /arms/policy/:op` (special-ops.controller.ts, trade refusals logged outside the transaction), the screen
+section "Polisi senjata" at the foot of Arms control (`apps/web/src/views/ArmsPolicyPanel.tsx`), three guide cards in
+`special-ops-guide.ts`, and one new database module `db/modules/arms-policies-v1.sql` (table
+`prima.arms_policy_recs`, not in `db/release-manifest.json`; the CEO installs it with `infra/run-db-migration.sh`).
+
+| Part | What is built | Rule / check |
+|---|---|---|
+| R1 | New firearm statuses NEEDS_MAINTENANCE, UNDER_INSPECTION, DAMAGED, IN_REPAIR, UNUSABLE; each blocks the issue ("ROSAK - JANGAN DIGUNAKAN"); out of use only through the reuse confirmation; every change in a status log | `FIREARM_OUT_OF_USE`, armsIssueCheck NOT_IN_VAULT (ARMS-DAMAGE) |
+| R2 | Damage report (photos, holder, first action), firearm marked DAMAGED; refused while issued (return first); categories Light / Medium / Critical; only Arms Control lowers a category, with a reason; Critical opens a P1 ARMS case | ARMS-DAMAGE targets: light 24 h, medium report 24 h + 2 working days, critical at once |
+| R3 | Inspection checklist; a failed check opens the damage report with the findings | FIREARM_INSPECT_CHECKS |
+| R4 | Repairs through a SERVICE request to a licensed dealer; IN_REPAIR while away; back from service = UNDER_INSPECTION, not IN_VAULT | dealerProblem |
+| R5 | Reuse confirmed by Arms Control, never the reporter or the repairer, after a passing inspection; medium needs the company manager's review, critical also the company director's | reuse |
+| R6 | Possible negligence: HR links its own discipline case. Never a pay deduction, never automatic | negligenceLink |
+| R7 | Arms licence category on the licence record (Pelesen A, AMRA, CNU, bodyguard, other) and its state (active / suspended / cancelled). A licence without a category only warns at issue unless Arms Control turns on `categoryRequired` (switch, default off) | FIREARM_PERMIT reminder now 90 days (HR-CRED-LEAD) |
+| R8 | Staff licence application: HR eligibility, restricted record and drug check, need, documents, Administration Manager check (not the preparer), support letter, submission, police stages, decision, licence book (dates from the book, no default length), appeal; renewals due list | licStep |
+| R9 | Vault application: the vault is created as APPLYING (nothing can be placed in or issued from it); council, IPD, inspections, support, approval, access list, active | VAULT_STEPS, VAULT_APPLYING |
+| R10 | Vault access by written authorisation, never self-given; access log with a witness; an unlisted entry opens a P1 case; the A licence holder and the Amra need valid licences or the vault blocks issues | VAULT_STAFF_LICENCE |
+| R11 | Vault inspection with corrective actions (owner and date), vault changes with police approval when needed | vaultInspect, vaultChange |
+| R12 | Internal purchase form with holdings against the need (signed armed posts and open armed jobs); more than the need needs a reason | buyForm, holdings |
+| R13 | Only licensed dealers: ACQUIRE and SERVICE refused at Arms Control's pass, order and reconcile when the supplier has no valid licence | dealerProblem |
+| R14-R15 | Police application pack: what Prima already holds is not keyed again; sending to the IPD needs a complete pack; monthly follow-up reminder | packState, ipdSent, ARMS-POLICY followUpDays 30 |
+| R16 | Approval letter details (permit, date, type, quantity, calibre, rounds, holder, copy); 14-day window with reminders on day 7 and 10; after day 14 no order, receipt or reconcile | windowProblem, buyWindowDays 14 |
+| R17 | Receiving by an appointed officer who is not the requester; no more than the letter allows; a mismatch opens a case and the company manager confirms; reconcile adds the rounds COUNTED and creates the firearms (serial set once, UNDER_INSPECTION before first issue) | armsGrn, reconcileBuy |
+| R18 | Finance budget check on the pack; purchase file A-F | armsBudget, buyFile |
+| R19-R22 | Bulletproof jackets, owned by Goodwill Empire (R-X7), item category `ballistic_vest` (R-X8): register, purchase with need / specification / three quotes (price alone cannot win, no product documents cannot win, split-purchase warning), receiving, issue and return (never guard to guard; handover records both), inspection, quarantine decided by someone else, loss | JACKET_* checklists |
+| R23-R25 | Settings (Arms Control, with a reason), board, home items | ARMS-MAINT-DAYS 120 days, due soon 14 |
+| R28 | Dealer licence application per company; the issued licence is written with its number, place of business, copy, valid to 31 December | dealerStep |
+| R29 | Trading needs, per company, an approved licence with number, place of business and copy, valid today, even with the CEO switch on; switch-on needs such a licence and the reason must name its number | tradeProblem, setArmsTrading |
+| R30 | Trade ammunition on its own TRADE ledger, only into a store with its own police approval; guard issues and returns never touch it | tradeStore, ammoMoveTx |
+| R31 | Readiness list per dealer company: UNKNOWN until recorded with a document | readinessList |
+
+**Walls.** The service refuses the board to anyone outside the arms wall (Finance, the CoS, PWVSB legal); the store
+team sees jackets only. In PostgreSQL the read, insert and update policies apply the arms wall AND the company wall;
+jacket records are also open to the procurement and store team within its company wall; PWVSB HR reads licence
+applications and damage reports; Finance reads the purchase pack. History is append-only, identity never changes,
+and nothing is deleted (trigger `arpol_guard`, DELETE and TRUNCATE revoked).
+
+**Still off or outside Prima.** Arms trading stays OFF (CEO switch). Sharing an operational vault with trade stock
+stays OFF until the police view is recorded (readiness line `policeViewSharedVault`). Police-dependent times are
+"expected" and flagged, never a block. No automatic pay deduction. Dealer names and signers from the papers are
+entered by Arms Control in the app, not in code.
+
+**Tests.** Mock: `packages/core/test/arms-policies.test.ts` (17) and the updated `special-ops-4b-4h.test.ts` (22).
+PostgreSQL: `apps/api/test/arms-policies-pg.test.ts` (walls, inserts outside the wall refused, append-only, no delete,
+grants), run apart from the mocks.

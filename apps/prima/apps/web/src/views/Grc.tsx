@@ -73,7 +73,7 @@ export function GrcView() {
   ];
   if (sees) tabs.push(['obligations', 'Obligations'], ['osh', 'Site safety']);
   if (data.handled.length || data.toReview.length) tabs.push(['reports', `Reports to handle (${k.reportsToHandle})`]);
-  if (data.hrReports) tabs.push(['hr', 'Speak-up reports (HR)']);
+  if (data.hrReads?.length) tabs.push(['hr', `Reports for HR (${data.hrReads.length})`]);
   return (
     <div className="page gv-page">
       <PageHead
@@ -142,7 +142,7 @@ export function GrcView() {
       {tab === 'obligations' && <Obligations data={data} />}
       {tab === 'osh' && <Osh data={data} />}
       {tab === 'reports' && <Reports data={data} />}
-      {tab === 'hr' && data.hrReports && <HrReports rows={data.hrReports} />}
+      {tab === 'hr' && <HrReads rows={data.hrReads ?? []} />}
       {adding && (
         <Drawer title="Add an obligation" sub="Something a company must prove it does, how often, and the law or policy behind it." onClose={() => setAdding(false)}>
           <NewObligation
@@ -283,7 +283,7 @@ function SpeakUp({ data }: { data: GrcBoard }) {
               <input
                 className="input"
                 aria-label="Receipt code"
-                placeholder="Receipt code, e.g. SU-0001-K7Q2M9XA"
+                placeholder="Receipt code, e.g. SU-0001-K7Q"
                 value={code}
                 onChange={(e) => setCode(e.target.value)}
               />
@@ -790,77 +790,6 @@ function Reports({ data }: { data: GrcBoard }) {
   );
 }
 
-const STATUS: Record<NonNullable<GrcBoard['hrReports']>[number]['status'], ['ok' | 'warn' | 'crit' | 'info', string]> = {
-  received: ['warn', 'Received'],
-  acknowledged: ['info', 'Acknowledged'],
-  investigating: ['info', 'Investigating'],
-  closing: ['warn', 'Outcome under review'],
-  closed: ['ok', 'Closed'],
-};
-
-/**
- * H2 (Fauzan, 11 Nov 2026: "Yes. But HR can see it"): HR reads speak-up reports, read only. The handler decides. A
- * report that names the HR officer never reaches them (the database refuses it too), and an anonymous reporter's
- * identity is not kept, so nobody can see it.
- */
-function HrReports({ rows }: { rows: NonNullable<GrcBoard['hrReports']> }) {
-  const [q, setQ] = useState('');
-  const [show, setShow] = useState<'open' | 'closed' | 'all'>('open');
-  const needle = q.trim().toLowerCase();
-  const list = rows.filter(
-    (r) =>
-      (show === 'all' || (show === 'open') === (r.status !== 'closed')) &&
-      (!needle || [r.code, r.summary, r.companyName, r.handlerName, CATEGORY[r.category]].some((x) => x.toLowerCase().includes(needle))),
-  );
-  return (
-    <div className="gv-stack">
-      <p className="notice" data-tone="info">
-        Read only. The handler decides and talks to the reporter. Keep what you read confidential; a report that names you is not shown to you.
-      </p>
-      <Card title="Speak-up reports" sub="What was reported, where it stands and who handles it." flush>
-        <Toolbar>
-          <input className="input" type="search" aria-label="Search reports" placeholder="Search code, company, handler or words" value={q} onChange={(e) => setQ(e.target.value)} />
-          <Select className="select gv-filter" aria-label="Which reports" value={show} onChange={(e) => setShow(e.target.value as typeof show)}>
-            <option value="open">Open</option>
-            <option value="closed">Closed</option>
-            <option value="all">All</option>
-          </Select>
-        </Toolbar>
-        {!list.length && <Empty title={rows.length ? 'No report matches.' : 'No speak-up reports.'} />}
-        <ul className="gv-list">
-          {list.map((r) => (
-            <li key={r.id} className="gv-item" data-tone={STATUS[r.status][0] === 'warn' ? 'warn' : undefined}>
-              <div className="gv-item-head">
-                <div className="gv-item-main">
-                  <div className="gv-item-title">
-                    <span className="mono">{r.code}</span>: {CATEGORY[r.category]} · {r.companyName}
-                  </div>
-                  <div className="gv-item-meta">
-                    Sent {dateTimeLabel(r.at)} · {r.anonymous ? 'Anonymous' : `By ${r.reporterName ?? 'a named reporter'}`} · Handled by {r.handlerName}
-                    {r.messages ? ` · ${r.messages} message${r.messages > 1 ? 's' : ''} with the reporter` : ''}
-                  </div>
-                </div>
-                <div className="gv-item-state">
-                  <Chip tone={STATUS[r.status][0]}>{STATUS[r.status][1]}</Chip>
-                </div>
-              </div>
-              <blockquote className="gv-quote">{r.summary}</blockquote>
-              {r.outcome && (
-                <div className="gv-lines">
-                  <div>
-                    <span className="gv-k">Outcome{r.closedAt ? `, ${dateLabel(r.closedAt)}` : ''}</span>
-                    {r.outcome}
-                  </div>
-                </div>
-              )}
-            </li>
-          ))}
-        </ul>
-      </Card>
-    </div>
-  );
-}
-
 /** The notes on a report, oldest first, as a small timeline. */
 function Notes({ notes }: { notes: { at: string; by: string; text: string }[] }) {
   if (!notes.length) return null;
@@ -1163,5 +1092,42 @@ function NewObligation({ data, onDone }: { data: GrcBoard; onDone: (saved: boole
         </button>
       </div>
     </div>
+  );
+}
+
+/** HR reads speak-up reports (Fauzan, 11 Nov 2026), never one that names them. Read only: the handler decides. */
+function HrReads({ rows }: { rows: NonNullable<Awaited<ReturnType<typeof api.grcBoard>>['hrReads']> }) {
+  return (
+    <Card title="Reports for HR" sub="Read only. The handler decides and talks to the reporter. Reports that name you are not shown. An anonymous reporter is never identified." flush>
+      {!rows.length && <Empty title="No reports for HR." />}
+      <ul className="gv-list">
+        {rows.map((r) => (
+          <li key={r.code} className="gv-item">
+            <div className="gv-item-head">
+              <div className="gv-item-main">
+                <div className="gv-item-title">
+                  <span className="gv-co mono">{r.code}</span> · {r.category}
+                </div>
+                <div className="gv-item-meta">
+                  {r.companyName} · handled by {r.handlerName} · {r.anonymous ? 'Anonymous' : `From ${r.reporterName ?? 'not given'}`}, {dateLabel(r.at.slice(0, 10))}
+                </div>
+              </div>
+              <div className="gv-item-state">
+                <Chip tone="info">{r.status}</Chip>
+              </div>
+            </div>
+            <div className="gv-lines">
+              <div>{r.summary}</div>
+              {r.outcome && (
+                <div>
+                  <span className="gv-k">Outcome</span>
+                  {r.outcome}
+                </div>
+              )}
+            </div>
+          </li>
+        ))}
+      </ul>
+    </Card>
   );
 }

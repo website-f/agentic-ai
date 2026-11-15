@@ -3,6 +3,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import {
   CameraIcon,
   CarIcon,
+  DesktopIcon,
   EyeglassesIcon,
   FirstAidKitIcon,
   HourglassMediumIcon,
@@ -49,6 +50,7 @@ const KIND_LABEL: Record<StaffClaimKind, string> = {
   OPTICAL: 'Optical',
   CHECKUP: 'Yearly check-up',
   TRAVEL: 'Travel',
+  IT_EQUIPMENT: 'IT equipment or software',
 };
 const KIND_ICON: Record<StaffClaimKind, ReactNode> = {
   MEDICAL: <FirstAidKitIcon size={18} />,
@@ -56,6 +58,7 @@ const KIND_ICON: Record<StaffClaimKind, ReactNode> = {
   OPTICAL: <EyeglassesIcon size={18} />,
   CHECKUP: <StethoscopeIcon size={18} />,
   TRAVEL: <CarIcon size={18} />,
+  IT_EQUIPMENT: <DesktopIcon size={18} />,
 };
 const VEHICLE_LABEL: Record<ClaimVehicle, string> = {
   CAR: 'Own car',
@@ -430,7 +433,7 @@ function claimSteps(c: Claim): { label: string; state: StepState; note?: string 
 
 function ClaimLine({ c, children, self }: { c: Claim; children?: ReactNode; self?: boolean }) {
   const t = c.travel;
-  const meta = [c.note, c.enteredBy ? `entered by HR (${c.enteredBy.by})` : '', c.paid ? `paid by ${c.paid.by}, ${c.paid.ref}` : ''].filter(Boolean);
+  const meta = [c.note, c.enteredBy ? `entered by HR (${c.enteredBy.by})` : '', c.paid ? `paid by ${c.paid.by}, ${c.paid.ref}` : '', c.kind === 'IT_EQUIPMENT' ? `IT purchase ${c.itPurchaseRef ?? 'none'}` : ''].filter(Boolean);
   const trail = [
     c.cosApproval?.note ? `Chief of Staff: ${c.cosApproval.by}, ${c.cosApproval.note}` : '',
     c.headCheck?.note ? `Company head: ${c.headCheck.by}, ${c.headCheck.note}` : '',
@@ -573,6 +576,7 @@ function NewClaim({ data, onDone, forPersonId, fromWallet }: { data: StaffClaims
   const [amount, setAmount] = useState(fromWallet && fromWallet.kind !== 'TRAVEL' ? fromWallet.amount : 0);
   const walletIds = fromWallet?.walletIds ?? [];
   const [note, setNote] = useState('');
+  const [itRef, setItRef] = useState('');
   const [proof, setProof] = useState<ProofInput[]>([]);
   const [trip, setTrip] = useState({
     destination: '',
@@ -595,7 +599,7 @@ function NewClaim({ data, onDone, forPersonId, fromWallet }: { data: StaffClaims
   const usable = forPersonId ? [] : data.myTrips.filter((t) => t.status === 'approved' && !t.claimId && t.date <= today());
   const receiptsNeeded = (!travel || trip.toll + trip.parking + trip.hotel > 0) && !walletIds.length;
   const num = (v: string) => Math.max(0, Number(v) || 0);
-  const input: StaffClaimInput = travel ? { kind, date, note, travel: trip, forPersonId, walletIds } : { kind, date, amount, note, forPersonId, walletIds };
+  const input: StaffClaimInput = travel ? { kind, date, note, travel: trip, forPersonId, walletIds } : { kind, date, amount, note, forPersonId, walletIds, ...(kind === 'IT_EQUIPMENT' ? { itPurchaseRef: itRef || null } : {}) };
   return (
     <div className="lv-formbox" ref={box}>
       <h3 className="lv-formbox-title">New claim</h3>
@@ -632,6 +636,13 @@ function NewClaim({ data, onDone, forPersonId, fromWallet }: { data: StaffClaims
         <p className="lv-hint lv-full">
           Claims are made within {data.claimMaxAgeDays} days of the receipt or trip. The same receipt or trip cannot be claimed twice.
         </p>
+        {kind === 'IT_EQUIPMENT' && (
+          <label className="field lv-full">
+            <span className="label">IT purchase reference</span>
+            <input className="input" aria-label="IT purchase reference" placeholder="IT purchase reference (from IT)" value={itRef} onChange={(e) => setItRef(e.target.value)} />
+            <span className="lv-hint">IT equipment and software, cables and mice included, are paid back only against an IT purchase the CEO approved (circular MN/CIR/IT/003/2026). Without one the claim cannot be approved.</span>
+          </label>
+        )}
         {travel && (
           <>
             <label className="field lv-full">
@@ -799,6 +810,8 @@ function Queue({ rows, total }: { rows: QueueRow[]; total: number }) {
         )}
         {rows.map((r) => (
           <ClaimLine key={r.claim.id} c={r.claim}>
+            {r.itPoNote && r.claim.status !== 'rejected' && r.claim.status !== 'approved' && <p className="notice" data-tone="crit"><span>{r.itPoNote}: this IT claim cannot be approved; it can only be rejected.</span></p>}
+            {(r as { softwareNote?: string | null }).softwareNote && r.claim.status !== 'rejected' && r.claim.status !== 'approved' && <p className="notice" data-tone="warn"><span>{(r as { softwareNote?: string | null }).softwareNote}</span></p>}
             {r.canHead && <HeadVerify r={r} />}
             {(r.canCos || r.canHr || r.canCoo) && <Decide r={r} />}
             {r.canPay && <Pay r={r} />}
@@ -984,7 +997,7 @@ const RECEIPT_LABEL: Record<string, string> = {
   FUEL: 'Fuel (travel)',
   OTHER: 'Other',
 };
-const CLAIM_KINDS: string[] = ['MEDICAL', 'DENTAL', 'OPTICAL', 'CHECKUP'];
+const CLAIM_KINDS: string[] = ['MEDICAL', 'DENTAL', 'OPTICAL', 'CHECKUP', 'IT_EQUIPMENT'];
 let testReceipts = 0;
 
 function Wallet({ onClaim }: { onClaim: (w: FromWallet) => void }) {

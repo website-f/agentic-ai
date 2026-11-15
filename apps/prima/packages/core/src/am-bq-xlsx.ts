@@ -304,3 +304,5 @@ export function bqWorkbookXlsx(input: BqWorkbookInput): Uint8Array {
     { name: 'xl/worksheets/sheet3.xml', data: enc.encode(sh.nota) },
   ]);
 }
+/** Plain ZIP (stored) of named files; shared by other pack exports. */
+export function zipFiles(files: { name: string; data: Uint8Array }[]): Uint8Array { return zip(files); }

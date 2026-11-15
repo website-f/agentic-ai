@@ -7,6 +7,8 @@ import { Card, PageHead, Stat, Stats, Steps, type StepState } from '../kit';
 import { Chip, ErrorNotice, Loading, dateTimeLabel, useAction, useLoad, type Tone } from '../ui';
 import { DocList, ProofPicker } from './Proof';
 import '../styles/selfservice.css';
+import { StayRequestPanel } from './ShortStays';
+import { OfficeRequestPanel } from './OfficeAm';
 
 /**
  * Operation claims and office requests (Fauzan, 26 Oct 2026). The Operations Manager sets the month's operation claim
@@ -90,6 +92,8 @@ export function RequestsView() {
         <Stat label="Waiting for you" value={data.waiting} tone={data.waiting ? 'warn' : 'ok'} icon={<HourglassIcon size={16} />} onClick={() => setFilter('mine')} />
         <Stat label="Open" value={open.length} note={rm(open.reduce((n, r) => n + r.total, 0))} icon={<ReceiptIcon size={16} />} onClick={() => setFilter('open')} />
       </Stats>
+      <StayRequestPanel />
+      <OfficeRequestPanel />
       {data.can.office && !adding && (
         <Card title="Start from last month" sub="Rent or utilities from last month's approved request: check the amount, attach this month's bill and send.">
           <div className="ss-actions">

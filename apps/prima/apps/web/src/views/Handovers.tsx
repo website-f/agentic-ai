@@ -2,6 +2,7 @@ import { Select } from '../SearchSelect';
 import { useContext, useState } from 'react';
 import { ArrowSquareOutIcon, BellIcon, ClockCountdownIcon, TrayIcon } from '@phosphor-icons/react';
 import { Ctx, useApp, type ViewName } from '../App';
+import { ColumnHelper } from './BulkHelper';
 import { MyGuide } from './GuideCard';
 import { ImportButton } from './ImportDrawer';
 import { api, type OrgImportPreview, type OrgInbox } from '../api';
@@ -366,6 +367,8 @@ function ImportView() {
   const [companyId, setCompanyId] = useState('');
   const [csv, setCsv] = useState('');
   const [preview, setPreview] = useState<OrgImportPreview | null>(null);
+  const [backup, setBackup] = useState('');
+  const [n, setN] = useState(0);
   const tpl = useLoad(() => api.org.importTemplate(kind), [kind]);
   const { run, busy, error } = useAction();
   const reset = () => setPreview(null);
@@ -392,9 +395,9 @@ function ImportView() {
               disabled={busy || !preview?.canImport}
               onClick={() =>
                 run(
-                  () => api.org.importCommit(kind, companyId || null, csv, preview!.fingerprint),
-                  (r) => `Imported ${(r as { rows: number }).rows} records.`,
-                ).then((r) => r && reset())
+                  () => api.org.importCommit(kind, companyId || null, csv, preview!.fingerprint, { backup }),
+                  (r) => `Imported ${(r as { rows: number }).rows} records. The counts went to the CEO for his OK.`,
+                ).then((r) => r && (reset(), setN((x) => x + 1)))
               }
             >
               Import {preview?.okRows ?? ''} rows
@@ -447,6 +450,11 @@ function ImportView() {
             <span className="label">Or paste the CSV</span>
             <textarea className="textarea ho-csv" aria-label="CSV" rows={6} value={csv} onChange={(e) => (setCsv(e.target.value), reset())} />
           </label>
+          <ColumnHelper csv={csv} kind={kind as RecordKind} onKind={(k) => (setKind(k), reset())} onCsv={(c) => (setCsv(c), reset())} />
+          <label className="field">
+            <span className="label">Backup checked before this load (its date or reference)</span>
+            <input className="input" aria-label="Backup checked before this load" value={backup} onChange={(e) => setBackup(e.target.value)} placeholder="e.g. nightly backup 14 Nov restored on test" />
+          </label>
           <ErrorNotice error={error} />
         </div>
       </Card>
@@ -483,6 +491,53 @@ function ImportView() {
           )}
         </>
       )}
+      <ImportLoads key={n} />
     </div>
+  );
+}
+
+/**
+ * N2 bulk data load (Fauzan, 11 Nov 2026): each load's counts (in the file, loaded, refused) go to the CEO, who OKs a
+ * load with a comment before that person loads the next file. Never his own.
+ */
+function ImportLoads() {
+  const v = useLoad(() => api.org.importLoads(), []);
+  const { run, busy, error } = useAction();
+  const [why, setWhy] = useState<Record<string, string>>({});
+  if (!v.data || !v.data.loads.length) return null;
+  return (
+    <section className="panel" style={{ marginTop: 12 }}>
+      <div className="panel-head">
+        <h3>Loads and the CEO's OK</h3>
+      </div>
+      {!v.data.gate && <p className="muted small">The CEO's OK step is not installed in this database yet; loads work as before.</p>}
+      <ErrorNotice error={error} />
+      <div className="list">
+        {v.data.loads.map((l) => (
+          <div key={l.id} className="list-item" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 4 }}>
+            <div style={{ fontWeight: 600 }}>
+              {l.label}: {l.counts.loaded} loaded of {l.counts.inFile} in the file, {l.counts.refused} refused
+            </div>
+            <div className="muted small">
+              {l.by} · {dateTimeLabel(l.at)}
+              {l.backup ? ` · backup: ${l.backup}` : ''}
+              {l.counts.ignoredColumns.length ? ` · columns not used: ${l.counts.ignoredColumns.join(', ')}` : ''}
+            </div>
+            {l.ok ? (
+              <div className="small">OK by {l.ok.by}: {l.ok.comment}</div>
+            ) : l.mayOk ? (
+              <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
+                <input className="input" aria-label="Comment with the OK" value={why[l.id] ?? ''} onChange={(e) => setWhy((m) => ({ ...m, [l.id]: e.target.value }))} placeholder="Comment (needed)" />
+                <button className="btn btn-sm" disabled={busy} onClick={() => run(() => api.org.importOk(l.id, why[l.id] ?? ''), 'Load OK.').then((r) => r && v.reload())}>
+                  OK this load
+                </button>
+              </div>
+            ) : (
+              v.data!.gate && <div className="muted small">Waiting for the CEO's OK before the next load.</div>
+            )}
+          </div>
+        ))}
+      </div>
+    </section>
   );
 }

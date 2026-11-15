@@ -47,19 +47,17 @@ export type AuditBody = Omit<AuditEntry, 'hash' | 'prevHash' | 'seq'>;
 /** Equality filter on top-level fields; an array value means "field is one of". */
 export type Filter<T extends TableName> = { [K in keyof Row<T>]?: Row<T>[K] | Row<T>[K][] };
 
+/** What the speak-up database wall offers (see Store.speakUp). */
+export interface SpeakUpWall {
+  byCode(code: string): Promise<{ id: string; code: string; at: string; status: string; outcome: string | null; closedAt: string | null; handlerName: string; messages: { at: string; from: 'handler' | 'reporter'; text: string; retaliation?: boolean }[] } | null>;
+  append(code: string, message: { at: string; from: 'reporter'; text: string; retaliation: boolean }, note: { at: string; by: string; text: string }, afterCloseDays: number, today: string): Promise<{ id: string; code: string; handlerName: string } | { error: 'not_found' | 'bad_message' | 'closed_too_long' | 'closed' }>;
+  meta(): Promise<{ at: string; status: string; acknowledgedAt: string | null; closedAt: string | null; messages: { at: string; from: 'handler' | 'reporter'; retaliation: boolean }[] }[]>;
+  nextNumber(): Promise<number>;
+}
+
 export interface Store {
   /** Whether a table is installed: a separately applied database module may not be yet. Absent = always installed. */
   hasTable?(table: TableName): Promise<boolean>;
-  /**
-   * H2 (11 Nov 2026): speak-up reports behind the database wall (db/modules/speak-up-wall-v1.sql). True once it is in
-   * place; then report numbers, receipt codes and leader counts go through the database's own functions, because a
-   * session reads only the reports it may. Absent (memory) or false: the service reads its own list.
-   */
-  speakUpWallReady?(): Promise<boolean>;
-  speakUpNextNumber?(): Promise<number>;
-  speakUpStatus?(code: string): Promise<import('./speak-up').SpeakUpReceipt | null>;
-  speakUpReply?(input: { code: string; text: string; retaliation: boolean; at: IsoDateTime; today: IsoDate; afterCloseDays: number }): Promise<import('./speak-up').SpeakUpReplyResult>;
-  speakUpSignals?(): Promise<import('./speak-up').SpeakUpSignal[]>;
   workflowMetricProblems?():Promise<string[]>;
   workflowMetricNextSegment?(ref:import('./it-workflow-metrics-types').MetricRef):Promise<number>;
   workflowMetricLock?(ref:import('./it-workflow-metrics-types').MetricRef|null):Promise<void>;
@@ -91,6 +89,12 @@ export interface Store {
   insertMany?<T extends TableName>(table: T, rows: Row<T>[]): Promise<void>;
   update<T extends TableName>(table: T, id: Id, patch: Partial<Row<T>>): Promise<Row<T>>;
   audit(body: AuditBody): Promise<AuditEntry>;
+  /**
+   * Speak-up reports behind the database wall (module speak-up-wall-v1, Fitri package H2). Present only when the wall
+   * is installed: the receipt code, counts and numbering then go through the database's own functions. Absent means
+   * the table has no wall and the service reads it as before.
+   */
+  speakUp?(): Promise<SpeakUpWall | null>;
   /** Run several writes as one unit. */
   transaction<R>(fn: (store: Store) => Promise<R>): Promise<R>;
   /**
@@ -109,6 +113,10 @@ export interface Store {
    * Offboarding: close an account from a day and end its company grants the day before; returns how many grants
    * ended. The database store calls prima.close_access, the only way the API may change accounts and grants.
    */
+  /** Accounts and Access: the database store calls prima.apply_account_request, the only other way the API writes accounts and grants. */
+  /** Accounts and Access: id, code and name of every company, for those who prepare or approve access. */
+  accountCompanies?(): Promise<{ id: Id; code: string; name: string }[]>;
+  applyAccountRequest?(requestId: Id): Promise<{ at: IsoDateTime; users: Id[]; grants: Id[]; ended: Id[] }>;
   closeAccess?(userId: Id, from: IsoDate, closed: NonNullable<User['accessClosed']>): Promise<number>;
   /**
    * The Finance team (a number) recorded for a company, read past the company wall by the database's own function
@@ -141,11 +149,6 @@ export interface Store {
   qualityReady?(): Promise<boolean>;
   /** Screening case files: false until the reviewed database module is installed. The memory store has them. */
   screeningReady?(): Promise<boolean>;
-  /**
-   * J5: makes the guard sign-ins of an approved batch. On PostgreSQL only the database does it (prima.gsb_create, module
-   * guard-signins-v1), re-checking the batch and the approver; the memory store has none and the service does it itself.
-   */
-  createGuardSignIns?(batchId: Id): Promise<{ count: number; skipped: { personId: Id; why: string }[] }>;
   /** Whether the optional Asset Management extras tables exist (db/modules/am-extras-v1.sql). The memory store always has them. */
   amExtrasReady?(): Promise<boolean>;
 }

@@ -245,6 +245,18 @@ describe('CMS desk handover reaches Prima as the company record', () => {
     expect(Object.keys(dir.desk[0]).sort()).toEqual(['end', 'id', 'onDesk', 'post', 'staffName', 'start']);
   });
 
+  it('E7: a seat carries the Microsoft object ID of the rostered person\'s own linked account, and only then', async () => {
+    const { ds, svc } = fresh();
+    const staff = ds.cmsStaff.find((c) => c.active && c.userId)!;
+    const user = ds.users.find((u) => u.id === staff.userId)!;
+    user.entraOid = '00000000-0000-4000-8000-0000000000C1';
+    const dir = await svc.cmsDirectory(await svc.user('u-cms-link'));
+    const mine = dir.desk.filter((s) => s.staffName === staff.name);
+    expect(mine.length).toBeGreaterThan(0);
+    expect(mine.every((s) => s.entraOid === '00000000-0000-4000-8000-0000000000c1')).toBe(true);
+    expect(dir.desk.filter((s) => s.staffName !== staff.name).every((s) => !('entraOid' in s))).toBe(true);
+  });
+
   it('refuses a desk handover outside the seat time, or one with no written step while the outgoing Head Control is on the desk', async () => {
     const { ds, svc, at } = fresh();
     const { day, night } = twoShifts(ds);

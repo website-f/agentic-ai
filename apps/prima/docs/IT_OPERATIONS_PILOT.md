@@ -32,3 +32,13 @@ The existing IT Plan and board KPI now use this inspection ledger and calendar d
 New immutable rate, inspection and operational-receipt tables; existing rental bills receive forced RLS and immutable snapshot guards with Finance-only paid-field updates. New readiness composes prior manual-register protections and new operational catalog checks. Prior manual asset role guard is narrowly widened to current IT staff, as explicitly authorized.
 
 No migration is executed. Actual restricted-role PostgreSQL concurrency/rollback/trigger tests, migration rehearsal, full browser recovery/account-switching checks and authorized deployment remain release gates. Receipt deletion/retention is not introduced; an approved retention process must preserve replay protection. Synthetic passing tests do not authorize live billing, account grants or activation.
+
+## Merdeka IT policies (Part Q, 13-14 Nov 2026)
+
+Tickets follow IT-POL-004: response targets P1 15 min, P2 1 h, P3 4 h, P4 1 working day in office hours (the old fix
+limits are no longer targets), only the person confirms a fix (reminders on day 3 and 5, then the IT Manager chases),
+root cause for P1 and Security, a monthly service report. Device rental adds a rental agreement per company with a print
+view and the signed copy link, and an accessories check on return (Q19). Disposal is one record with an inspection,
+three approvals (IT Manager, the head using the device, the COO as HQ), a checked data wipe, the certificate and photos
+(Q16, Q17). Refurbishment 36 months, end-of-life review 48 (phones and tablets 36) and maintenance 6 months appear as
+regular work (Q18). See `docs/IT_POLICIES_MERDEKA.md`.

@@ -44,7 +44,10 @@ describe('Central Admin guide cards', () => {
     expect(await ids('u-pwvsb-doa')).toContain('director-office-lists');
     expect(await ids('u-bm-sasa-1')).toEqual(expect.arrayContaining(['renewal']));
     expect(await ids('u-bm-sasa-1')).not.toContain('company-file-draft');
-    expect(await ids('u-fwm-ex1')).toEqual(['task-finish']);
+    // Part X: every department member holds the toolbox meeting.
+    // Part Y: everyone with tasks also has the duty checklist card.
+    expect(await ids('u-fwm-ex1')).toEqual(['toolbox', 'duty-checklist', 'task-finish']);
+    expect(await ids('u-ae-sasa')).toEqual(expect.arrayContaining(['group-monthly', 'duty-checklist']));
     expect(centralAdminGuideFor(await svc.user('u-cm-sasa'), 'credit').cards).toEqual([]);
   });
 });

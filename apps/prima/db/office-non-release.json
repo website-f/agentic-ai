@@ -1,0 +1,29 @@
+{
+  "note": "Agentic Office (P105): the 24 modules off the release list that Fauzan approved on 15 Nov 2026 (\"Let him run the 24 package\"), in his order, run once each after the release modules by deploy/prima/prima-setup.cjs. A module is skipped when its marker (SQL that is true once the module is in) holds. scripts/office-module-allowances.cjs reads the same list.",
+  "modules": [
+    { "file": "guard-pay-preparers-v1.sql", "marker": "to_regclass('prima.guard_pay_preparers') IS NOT NULL" },
+    { "file": "guard-roster-v1.sql", "marker": "to_regprocedure('prima.roster_version_guard()') IS NOT NULL" },
+    { "file": "hr-lists-v1.sql", "marker": "to_regclass('prima.hr_lists') IS NOT NULL" },
+    { "file": "paper-consent-v1.sql", "marker": "to_regclass('prima.consent_gates') IS NOT NULL" },
+    { "file": "staff-ot-claims-v1.sql", "marker": "to_regclass('prima.staff_ot_claims') IS NOT NULL" },
+    { "file": "problem-reports-v1.sql", "marker": "to_regclass('prima.problem_reports') IS NOT NULL" },
+    { "file": "business-walls-v1.sql", "marker": "to_regprocedure('prima.bw_company_ok(text)') IS NOT NULL" },
+    { "file": "bulk-load-ok-v1.sql", "marker": "to_regclass('prima.org_import_oks') IS NOT NULL" },
+    { "file": "company-add-v1.sql", "marker": "EXISTS (SELECT 1 FROM pg_policy WHERE polname = 'company_ceo_insert' AND polrelid = 'prima.companies'::regclass)" },
+    { "file": "toolbox-v1.sql", "marker": "to_regclass('prima.toolbox_recs') IS NOT NULL" },
+    { "file": "group-monthly-v1.sql", "marker": "to_regclass('prima.group_month_recs') IS NOT NULL" },
+    { "file": "duty-registers-v1.sql", "marker": "to_regclass('prima.duty_register_recs') IS NOT NULL" },
+    { "file": "it-policies-v1.sql", "marker": "to_regclass('prima.it_policy_recs') IS NOT NULL" },
+    { "file": "warranty-claims-v1.sql", "marker": "to_regclass('prima.warranty_claims') IS NOT NULL" },
+    { "file": "uniform-requests-v1.sql", "marker": "to_regclass('prima.stock_requests') IS NOT NULL" },
+    { "file": "inventory-control-v1.sql", "marker": "to_regclass('prima.inventory_recs') IS NOT NULL" },
+    { "file": "office-am-v1.sql", "marker": "to_regclass('prima.office_am_recs') IS NOT NULL" },
+    { "file": "am-rental-v1.sql", "marker": "to_regclass('prima.am_rental_recs') IS NOT NULL" },
+    { "file": "fw-moves-v1.sql", "marker": "to_regclass('prima.fw_moves') IS NOT NULL" },
+    { "file": "short-stays-v1.sql", "marker": "to_regclass('prima.stay_requests') IS NOT NULL" },
+    { "file": "arms-policies-v1.sql", "marker": "to_regclass('prima.arms_policy_recs') IS NOT NULL" },
+    { "file": "kdn-renewal-v1.sql", "marker": "to_regclass('prima.kdn_recs') IS NOT NULL" },
+    { "file": "sql-posting-v1.sql", "marker": "to_regclass('prima.sql_postings') IS NOT NULL" },
+    { "file": "central-admin-legal-holds-v2.sql", "marker": "EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'legal_holds_tbl_known' AND conrelid = 'prima.legal_holds'::regclass)" }
+  ]
+}

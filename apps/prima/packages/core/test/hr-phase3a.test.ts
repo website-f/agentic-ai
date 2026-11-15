@@ -82,6 +82,22 @@ describe('Staff leave: HR decides, the Vice Chairman consents (Fauzan, 1 Nov 202
     expect(ds.audit.some((e) => e.action === 'leave.vc_consent')).toBe(true);
   });
 
+  it('B3: the CEO can switch the consent off with a reason; then HR approval is final; on again restores it', async () => {
+    const { svc, q } = await staffLeave();
+    const [hr, ceo, vc, cos] = await Promise.all(['u-pwvsb-hr', 'u-fauzan', 'u-vchair', 'u-cos'].map((id) => svc.user(id)));
+    expect((await svc.staffLeaveVcSetting(vc)).on).toBe(true);
+    await expect(svc.setStaffLeaveVc(cos, { on: false, reason: 'HR Director tries' })).rejects.toBeInstanceOf(AccessDenied);
+    await expect(svc.setStaffLeaveVc(ceo, { on: false, reason: '' })).rejects.toBeInstanceOf(BadRequest);
+    await svc.setStaffLeaveVc(ceo, { on: false, reason: 'Vice Chairman agreed HR decides staff leave' });
+    const done = await svc.decideLeave(hr, q.id, true, 'Cover arranged');
+    expect(done.status).toBe('approved');
+    expect(done.hrApproval ?? null).toBeNull();
+    await svc.setStaffLeaveVc(ceo, { on: true, reason: 'Back to consent for the year-end' });
+    const s = await svc.staffLeaveVcSetting(ceo);
+    expect(s.on).toBe(true);
+    expect(s.history).toHaveLength(2);
+  });
+
   it('lets the Vice Chairman refuse with a reason, and HR reject outright', async () => {
     const { svc, q } = await staffLeave();
     const [hr, vc] = await Promise.all(['u-pwvsb-hr', 'u-vchair'].map((id) => svc.user(id)));

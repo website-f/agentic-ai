@@ -17,10 +17,11 @@ describe('Ops guide cards', () => {
       for (const s of c.sources) expect(s.askDesk != null || !!s.askName, c.id).toBe(true);
     }
     expect(new Set(OPS_GUIDE_CARDS.map((c) => c.id)).size).toBe(OPS_GUIDE_CARDS.length);
-    // Twelve cards: Goodwill issue, Goodwill handover, two monitors (government, private), fee entry, fee bills, client
+    // Sixteen cards: Goodwill issue, site supplies request (Part T), three inventory cards (Part U), Goodwill handover, two monitors (government, private), fee entry, fee bills, client
     // rating, client complaint, the two vehicle rental cards and the two transport usage cards (5 Nov 2026).
     expect(OPS_GUIDE_CARDS.map((c) => c.id).sort()).toEqual(
       [
+        'am.rental.home',
         'client.complaint',
         'client.rating',
         'fin.management_fee.bills',
@@ -29,10 +30,15 @@ describe('Ops guide cards', () => {
         'fleet.rental.rent',
         'fleet.usage.fuel',
         'fleet.usage.review',
+        'it.website.project',
         'ops.goodwill.handover',
         'ops.goodwill.issue',
+        'ops.inventory.count',
+        'ops.inventory.disposal',
+        'ops.inventory.variance',
         'ops.monitor.government',
         'ops.monitor.private',
+        'ops.supplies.request',
       ],
     );
   });

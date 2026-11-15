@@ -53,16 +53,16 @@ describe('transfer month payroll and login follow-through under PostgreSQL', () 
   };
   const prepare = (companyId: string) => db.asUser(HR, (svc, u) => svc.prepareStaffPay(u, companyId, period()));
   const submit = (runId: string) => db.asUser(HR, (svc, u) => svc.staffPayStep(u, runId, 'submit', { note: 'Hantar (synthetic)' }));
-  /** HR corrects every part-month line with a synthetic figure and a reason (P100 C1: Prima works it out first). */
+  /** HR overrides Prima's automatic part-month figure (Fauzan, 11 Nov 2026) with a synthetic one on every part-month line. */
   const enterPartPay = async (runId: string) => {
     const run = (await admin<{ data: any }>(`SELECT data FROM prima.staff_pay_runs WHERE id = $1`, [runId]))[0].data;
-    for (const l of run.lines.filter((x: any) => x.partMonth && !x.partPay))
+    for (const l of run.lines.filter((x: any) => x.partMonth && (!x.partPay || x.partPay.auto)))
       await db.asUser(HR, (svc, u) => svc.setStaffPayLine(u, runId, l.personId, { partPay: { basic: 100, allowances: 0, note: 'Synthetic part-month figure' } }));
   };
   const linesFor = async (runId: string, personId: string) =>
     (await admin<{ data: any }>(`SELECT data FROM prima.staff_pay_runs WHERE id = $1`, [runId]))[0].data.lines.filter((l: any) => l.personId === personId);
 
-  it('a transfer taking effect mid-month: the old employer pays up to the day before, the new one from the date, each waiting for HR\'s part-month figure', async () => {
+  it('a transfer taking effect mid-month: the old employer pays up to the day before, the new one from the date, each with Prima\'s own part-month figure', async () => {
     // Today is the effective date, so the last approval applies it (unless today is the 1st, when nothing is part-month).
     const { personId, fromCompany, m } = await transfer('u-it-ex2', 'SASA-PG-910', today());
     const done = (await admin<{ data: any }>(`SELECT data FROM prima.staff_movements WHERE id = $1`, [m.id]))[0].data;
@@ -78,9 +78,8 @@ describe('transfer month payroll and login follow-through under PostgreSQL', () 
     if (today() !== `${period()}-01`) {
       assert.equal(oldLines.length, 1);
       assert.equal(oldLines[0].partMonth.to, dayAfter(today(), -1));
-      // P100 C1: no longer held for a hand-typed figure; the line shows the working-day count and daily rate.
-      assert.equal(typeof oldLines[0].partAuto?.workingDays, 'number');
-      assert.equal(oldLines[0].partAuto?.divisor, 26);
+      // Prima works out the part-month pay itself (basic / 26 x working days, capped at the full basic); HR may change it.
+      assert.equal(oldLines[0].partPay?.auto, true);
     } else assert.equal(oldLines.length, 0);
     await enterPartPay(oldRun.id);
     await enterPartPay(newRun.id);

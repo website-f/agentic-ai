@@ -124,7 +124,7 @@ describe('Government claims (suggestion 2)', () => {
     })) as { id: string; expectedBy: string };
     expect(c.expectedBy).toBe('2026-09-24');
     const home = await svc.financeControls.home(dep);
-    expect(home.some((t) => /government claim\(s\) overdue and not followed up/.test(t.title))).toBe(true);
+    expect(home.some((t) => /late government claim\(s\) not followed up/.test(t.title))).toBe(true);
     expect(finMoneyInExceptions(F(), null, '2026-09', TODAY).some((e) => e.key === `govt:${c.id}`)).toBe(true);
     await expect(svc.financeControls.govtAction(de1, C, 'follow', { claimId: c.id, comment: 'ok' })).rejects.toThrow(/Say why|at least/);
     await svc.financeControls.govtAction(de1, C, 'follow', { claimId: c.id, comment: 'Called Puan Aminah at JKR finance: in iGFMAS for payment next week' });

@@ -12,6 +12,7 @@
 // shows what would be sent and why it is not ready.
 
 import { sha256Hex } from './audit';
+import { sqlPostingKey } from './sql-posting';
 import type { Id, IsoDate, IsoDateTime } from './types';
 
 // ---------- Catalogue (SKU) ----------
@@ -20,6 +21,8 @@ export type ItemCategory =
   | 'uniform'
   | 'footwear'
   | 'vest'
+  /** Part R19-R22 (R-X8): bulletproof jackets, owned by Goodwill Empire, serialised, with a 5-year life. */
+  | 'ballistic_vest'
   | 'torchlight'
   | 'radio'
   | 'phone'
@@ -37,6 +40,7 @@ export const ITEM_CATEGORIES: ItemCategory[] = [
   'uniform',
   'footwear',
   'vest',
+  'ballistic_vest',
   'torchlight',
   'radio',
   'phone',
@@ -82,7 +86,12 @@ export interface ItemSqlCode {
  * Counted over the last 12 months per person. A uniform set handed over together counts as one piece. A piece handed
  * over before 6 months have passed since the last one needs a reason; a fourth piece within 12 months is refused.
  */
-export const UNIFORM_RULE = { minPerYear: 2, maxPerYear: 3, paidMaxPerYear: 5, everyMonths: 6, source: 'Fauzan, 6 Nov 2026' } as const;
+/**
+ * Pieces after the free ones are paid by the guard with a receipt. paidMaxPerYear is the upper limit on all pieces in 12
+ * months, or null for no limit (Fauzan, 13 Nov 2026 23:52Z: "uniform 6th piece allowed, paid", no upper limit, kept as a
+ * setting; earlier 5).
+ */
+export const UNIFORM_RULE: { readonly minPerYear: 2; readonly maxPerYear: 3; readonly paidMaxPerYear: number | null; readonly everyMonths: 6; readonly source: string } = { minPerYear: 2, maxPerYear: 3, paidMaxPerYear: null, everyMonths: 6, source: 'Fauzan, 6 Nov 2026; paid pieces without an upper limit 13 Nov 2026' };
 
 /**
  * A uniform record that is not a labelled handover (Fauzan, 6 Nov 2026):
@@ -183,16 +192,14 @@ export interface ItemSkuLegacy {
 
 /**
  * A legal entity that can own or hold items. Security companies come from the company master; PWVSB, Merdeka Network
- * (IT, owns every IT device) and Goodwill Empire (Government Ops, owns and bills guard equipment) are central. E11
- * (Fauzan, 11 Nov 2026, decision D01): one SQL Account book per company, and Goodwill Empire Sdn Bhd is on this company
- * list with its own book. Finance enters each company's legal name, registration number and book in the app; nothing
- * here is verified until a second Finance person verifies the book.
+ * (IT, owns every IT device) and Goodwill Empire (Government Ops, owns and bills guard equipment) are central. Nothing
+ * here is verified until Management and Finance confirm the legal name, registration and SQL book (paper D01).
  */
 export interface ItemParty {
   id: Id;
   name: string;
   kind: 'security_company' | 'central';
-  /** Not yet in the Prima company master (Goodwill Empire). */
+  /** Not yet in the Prima company master (none now: Goodwill Empire was added, round 3 Q4, 11 Nov 2026). */
   outsideCompanyMaster: boolean;
   verified: false;
   note: string;
@@ -220,9 +227,9 @@ export const CENTRAL_PARTIES: ItemParty[] = [
     id: GOODWILL_PARTY_ID,
     name: 'Goodwill Empire Sdn Bhd',
     kind: 'central',
-    outsideCompanyMaster: true,
+    outsideCompanyMaster: false,
     verified: false,
-    note: 'Owns and sells or rents guard equipment (Fauzan, 2 Nov 2026). On the item register company list with its own SQL Account book (Fauzan, 11 Nov 2026, E11: one book per company). A central employer, so it has no company master record, like PWVSB and Merdeka: Finance enters its legal name, registration number and book in Finance and SQL, and a second Finance person verifies it.',
+    note: 'Owns and sells or rents guard equipment (Fauzan, 2 Nov 2026). On the company list with its own SQL Account book (Fauzan, 11 Nov 2026, round 3 Q4: one book per company); legal name and registration number still confirmed by Management and Finance (paper D01).',
   },
 ];
 
@@ -979,11 +986,6 @@ export const STATE_LABEL: Record<ItemState, string> = {
 /** No SQL book recorded yet for the company: its documents stay not ready. */
 export const BOOK_UNSET = 'book-unset';
 
-/** Idempotency key for one SQL Account document: party + book + type + source + revision (paper section 7). */
-export function syncKey(partyId: Id, docType: ItemSyncJob['docType'], sourceId: Id, revision: number, book: string = BOOK_UNSET): string {
-  return `${partyId}|${book}|${docType}|${sourceId}|r${revision}`;
-}
-
 /** Whole sen from a ringgit amount typed as text ("45", "45.5", "45.50"); null when it is not a plain amount. */
 export function senFromText(v: unknown): Sen | null {
   const s = String(v ?? '').trim().replace(/^RM\s*/i, '').replace(/,/g, '');
@@ -1000,6 +1002,14 @@ export function senLabel(sen: Sen | null | undefined): string {
   const d = (neg ? sen.slice(1) : sen).padStart(3, '0');
   const whole = d.slice(0, -2).replace(/^0+(?=\d)/, '').replace(/\B(?=(\d{3})+(?!\d))/g, ',');
   return `${neg ? '-' : ''}RM${whole}.${d.slice(-2)}`;
+}
+
+/**
+ * Idempotency key for one SQL Account document: party + book + type + source + revision (paper section 7). Shared with
+ * the SQL Account posting queue (Build 1, 13 Nov 2026): the book is the company's confirmed SQL Account book.
+ */
+export function syncKey(partyId: Id, docType: ItemSyncJob['docType'], sourceId: Id, revision: number, book: string | null = null): string {
+  return sqlPostingKey(partyId, book, docType, sourceId, revision);
 }
 
 export function payloadHash(payload: ItemSyncJob['payload']): string {

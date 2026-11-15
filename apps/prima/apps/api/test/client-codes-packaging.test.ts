@@ -25,18 +25,16 @@ describe('client codes packaging proposal (files)', () => {
     assert.equal(sha(read(proposal.base.path)), proposal.base.sha256);
     for (const m of proposal.modules) assert.equal(sha(read(m.path)), m.sha256, `${m.id} bytes differ from the proposal`);
   });
-  it('installs after every manifest module and stays out of the manifest until the release owner adds it', () => {
-    // Agentic Office: the office release activates this module (its database already has it). It must sit in the
-    // manifest after everything upstream installs first, with the proposal's exact bytes. Upstream keeps it a proposal.
+  it('is on the release list (A3, Fauzan 11 Nov 2026) with the proposal\'s bytes, dependencies and order', () => {
     const order = manifest.modules.map((m) => m.id);
     for (const m of proposal.modules) {
-      const at = order.indexOf(m.id);
-      const pinned = (manifest.modules as Array<{ id: string; path?: string; sha256?: string }>)[at];
-      if (at < 0) continue; // still a proposal here: nothing to check beyond the after list
-      assert.deepEqual({ path: pinned.path, sha256: pinned.sha256 }, { path: m.path, sha256: m.sha256 });
+      const entry = (manifest.modules as unknown as { id: string; path: string; sha256: string; requires: string[] }[]).find((x) => x.id === m.id);
+      assert.ok(entry, `${m.id} is on the release list`);
+      assert.equal(entry.path, m.path);
+      assert.equal(entry.sha256, m.sha256);
+      assert.deepEqual(entry.requires, m.requires);
+      for (const a of (proposal as { after?: string[] }).after ?? []) assert.ok(order.indexOf(a) < order.indexOf(m.id), `${m.id} installs after ${a}`);
     }
-    for (const id of proposal.after ?? []) assert.ok(order.includes(id), `${id} is installed before this proposal`);
-    for (const m of proposal.modules) { const at = order.indexOf(m.id); if (at >= 0) for (const id of proposal.after ?? []) assert.ok(order.indexOf(id) < at, `${id} before ${m.id}`); }
   });
   it('has no destructive or grant-widening statement; it drops only its own company wall policy', () => {
     for (const m of proposal.modules) {

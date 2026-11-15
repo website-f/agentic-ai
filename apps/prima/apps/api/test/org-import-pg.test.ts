@@ -25,6 +25,7 @@ const path = (f: string) => resolve(process.cwd(), process.cwd().endsWith('/apps
 const users = [
   { id: 'it-mgr', name: 'Synthetic IT Manager', role: 'pwvsb_officer', department: 'it', itRole: 'manager', companyIds: [], siteIds: [] },
   { id: 'it-mgr-2', name: 'Synthetic IT Manager Two', role: 'pwvsb_officer', department: 'it', itRole: 'manager', companyIds: [], siteIds: [] },
+  { id: 'ceo-syn', name: 'Synthetic CEO', role: 'director', opsTier: 'ceo', companyIds: [], siteIds: [] },
 ].map((u) => ({ title: u.name, ...u })) as unknown as User[];
 
 const NOW = '2026-11-02T10:30:00+08:00';
@@ -182,5 +183,40 @@ describe('import preview on PostgreSQL keeps nothing', () => {
     const loser = winner === 'it-mgr' ? 'it-mgr-2' : 'it-mgr';
     await assert.rejects(as(loser, (svc, _s, u) => svc.orgImport.commit(u, 'itDomain', null, CLEAN, b.fingerprint)), /already imported/);
     assert.deepEqual(await persisted(), end);
+  });
+
+  it('N2: with the OK module installed a load needs the backup checked and the CEO OK of the last one; the database refuses anyone else\'s OK', async () => {
+    const a = await connect(url.toString());
+    try {
+      await a.query(readFileSync(path('db/modules/bulk-load-ok-v1.sql'), 'utf8'));
+    } finally {
+      await a.end();
+    }
+    const NEXT = 'name,kind,registrar\nsynthetic-n2.example,domain,R\n';
+    const p = await as('it-mgr-2', (svc, _s, u) => svc.orgImport.preview(u, 'itDomain', null, NEXT));
+    // it-mgr-2 or it-mgr already loaded a file above; whoever did is waiting for the OK.
+    const loads = await as('ceo-syn', (svc, _s, u) => svc.orgImport.loads(u));
+    assert.equal(loads.gate, true);
+    const first = loads.loads[0];
+    assert.equal(first.mayOk, true);
+    assert.deepEqual([first.counts.inFile, first.counts.loaded, first.counts.refused], [2, 2, 0]);
+    const who = first.by === 'Synthetic IT Manager' ? 'it-mgr' : 'it-mgr-2';
+    const p2 = who === 'it-mgr-2' ? p : await as('it-mgr', (svc, _s, u) => svc.orgImport.preview(u, 'itDomain', null, NEXT));
+    await assert.rejects(as(who, (svc, _s, u) => svc.orgImport.commit(u, 'itDomain', null, NEXT, p2.fingerprint)), /backup/);
+    await assert.rejects(as(who, (svc, _s, u) => svc.orgImport.commit(u, 'itDomain', null, NEXT, p2.fingerprint, { backup: 'Backup 2 Nov (synthetic)' })), /waiting for the CEO/);
+    // An IT Manager cannot OK, in the app or straight into the table.
+    await assert.rejects(as('it-mgr', (svc, _s, u) => svc.orgImport.okLoad(u, first.id, 'Fine')), /Only the CEO/);
+    await assert.rejects(
+      as('it-mgr', (_svc, _s, _u, c) => c.query('INSERT INTO prima.org_import_oks(id,data) VALUES($1,$2)', ['x', { id: 'x', receiptId: first.id, importerId: 'it-mgr-2', byId: 'it-mgr' }])),
+      /row-level security/,
+    );
+    await assert.rejects(as('ceo-syn', (svc, _s, u) => svc.orgImport.okLoad(u, first.id, '')), /comment/);
+    await as('ceo-syn', (svc, _s, u) => svc.orgImport.okLoad(u, first.id, 'Counts match the file (synthetic).'));
+    await assert.rejects(as('ceo-syn', (svc, _s, u) => svc.orgImport.okLoad(u, first.id, 'Again')), /already OK/);
+    const r = await as(who, (svc, _s, u) => svc.orgImport.commit(u, 'itDomain', null, NEXT, p2.fingerprint, { backup: 'Backup 2 Nov (synthetic)' }));
+    assert.equal(r.backup, 'Backup 2 Nov (synthetic)');
+    // The importer sees the OK on their own load.
+    const mine = await as(who, (svc, _s, u) => svc.orgImport.loads(u));
+    assert.ok(mine.loads.find((l) => l.id === first.id)?.ok);
   });
 });

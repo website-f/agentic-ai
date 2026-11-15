@@ -590,7 +590,7 @@ export const ORG_FLOWS: readonly OrgFlow[] = Object.freeze([
     actions: [],
     targets: [{ desk: 'act', kind: 'info', task: 'Postings missing in SQL Account show as ACT signals.' }],
     status: 'waits',
-    note: 'Waits for a read-only SQL Account link; staff paste the export today.',
+    note: 'Build 1 (13 Nov 2026): Prima posts into each company book and checks it daily (Finance > Checks > SQL Account link). Stays waits until the CEO switches posting on; staff paste the export today.',
   },
 ] satisfies OrgFlow[]);
 

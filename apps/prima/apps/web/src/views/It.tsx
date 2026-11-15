@@ -1,5 +1,7 @@
 import { Select } from '../SearchSelect';
 import {ItPurchaseDecision} from './ItPurchaseDecision';
+import { WarrantyClaimsSection } from './Warranty';
+import { ProblemReportsSection } from './ReportProblem';
 import {WebTicketReview,WebTicketHistory} from './WebTicketReview';
 import{RentalCorrections}from'./RentalCorrections';
 import { ItOnboardingStep } from './ItOnboardingStep';
@@ -21,6 +23,10 @@ import { ItOperations } from './ItOperations';
 import { ItGuide } from './ItGuide';
 import { Chip, Drawer, ErrorNotice, Loading, dataNotice, dateLabel, dateTimeLabel, useAction, useLoad } from '../ui';
 import '../styles/it.css';
+import { IT_PRIORITY_HELP, IT_TICKET_PRIORITIES, type ProofInput } from '@prima/core';
+import { ItPolicyPanel } from './ItPolicyPanel';
+import { ProofPicker } from './Proof';
+import { RecordPrimaConfirm, ServiceReport, TicketPolicyFacts, TicketPolicyTools } from './ItPolicies';
 
 /**
  * IT (Fauzan, 27 Oct 2026). IT runs the full lifecycle of IT and electronic assets: request, purchase, receive and tag,
@@ -33,7 +39,7 @@ import '../styles/it.css';
  * an approval inbox. Staff who only ask IT for help see their own form and requests, nothing else.
  */
 
-type Tab = 'guide' | 'import' | 'audit' | 'work' | 'plan' | 'rental' | 'jobs' | 'team' | 'systems' | 'assets' | 'purchases' | 'maintenance' | 'websites' | 'tickets' | 'onboarding' | 'tenders' | 'mine';
+type Tab = 'guide' | 'import' | 'audit' | 'work' | 'plan' | 'rental' | 'jobs' | 'team' | 'systems' | 'assets' | 'purchases' | 'maintenance' | 'websites' | 'tickets' | 'onboarding' | 'tenders' | 'mine' | 'policy';
 type AssetRow = NonNullable<ItBoard['assets']>[number];
 type Asset = AssetRow['asset'];
 const manualRecord=(row:unknown)=>(row as {manual?:{kind?:string;unitLabel?:string;companyId?:string|null;purchaseDateUnknown?:boolean;personUserId?:string|null}}).manual;
@@ -56,6 +62,8 @@ const STATUS: Record<Asset['status'], [Parameters<typeof Chip>[0]['tone'], strin
   repair: ['warn', 'In repair'],
   disposal_pending: ['warn', 'Disposal asked'],
   disposed: ['unknown', 'Disposed'],
+  lost: ['crit', 'Hilang'],
+  stolen: ['crit', 'Dicuri'],
 };
 const CATEGORY = {
   ACCOUNT: 'Account or password',
@@ -66,6 +74,9 @@ const CATEGORY = {
   WEBSITE: 'Website',
   SOCIAL: 'Social media',
   EMAIL: 'Company email',
+  SOFTWARE: 'Software (Perisian)',
+  SECURITY: 'Security (Keselamatan)',
+  PROCUREMENT: 'Buy IT equipment (Perolehan)',
   OTHER: 'Other',
 } as const;
 
@@ -79,7 +90,7 @@ export function ItView() {
   const staff = data.role === 'manager' || data.role === 'team';
   const watcher = data.role === 'coo' || data.role === 'view';
   const tabs: [Tab, string][] = !k
-    ? [['mine', 'My requests']]
+    ? [['mine', 'My requests'], ['policy', 'Polisi IT']]
     : data.role === 'hr'
       ? [
           ['team', 'Team'],
@@ -90,10 +101,12 @@ export function ItView() {
             ['purchases', 'Purchases'],
             ['rental', 'Device rental'],
             ['assets', 'Assets'],
+            ['policy', 'Polisi IT'],
           ]
       : data.role === 'audit'
         ? [
             ['audit', 'Audit'],
+            ['policy', 'Polisi IT'],
             ['plan', 'Plan'],
             ['team', 'Team'],
             ['jobs', 'Jobs'],
@@ -122,6 +135,7 @@ export function ItView() {
         ['tenders', 'Tenders (eP)'],
         ['onboarding', 'Joining and leaving'],
         ['mine', 'My requests'],
+        ['policy', 'Polisi IT'],
         // The CEO's batch import of open IT work (task T9).
         ...(arishaLeader(me.user) === 'ceo' ? ([['import', 'Import']] as [Tab, string][]) : []),
       ];
@@ -177,7 +191,7 @@ export function ItView() {
             label="Help requests open"
             value={k.ticketsOpen}
             tone={k.ticketsLate ? 'crit' : 'ok'}
-            note={`${k.ticketsLate} past the time limit`}
+            note={`${k.ticketsLate} first response late`}
             icon={<LifebuoyIcon size={16} />}
             onClick={opens('tickets')}
           />
@@ -236,7 +250,7 @@ export function ItView() {
         {current === 'work' && <MyWork data={data} openTab={setTab} />}
         {current === 'plan' && <ItPlanView board={data} />}
         {current === 'rental' && <><ItOperations mode="billing" /><RentalCorrections/></>}
-        {current === 'jobs' && <Jobs data={data} />}
+        {current === 'jobs' && <><Jobs data={data} /><ProblemReportsSection /></>}
         {current === 'team' && (
           <>
             <AwayPanel data={data} />
@@ -244,7 +258,7 @@ export function ItView() {
           </>
         )}
         {current === 'systems' && <>{manualItVisible(me.user)&&<ItManualPanel mode="systems"/>}<Systems data={data} /></>}
-        {current === 'assets' && <>{manualItVisible(me.user)&&<ItManualPanel mode="assets" extra={<ImportButton kind="itAsset" label="Import IT equipment from file" />}/>}<Assets data={data} staff={staff} /></>}
+        {current === 'assets' && <>{manualItVisible(me.user)&&<ItManualPanel mode="assets" extra={<ImportButton kind="itAsset" label="Import IT equipment from file" />}/>}<Assets data={data} staff={staff} /><WarrantyClaimsSection source="it_asset" /></>}
         {current === 'purchases' && <Purchases data={data} staff={staff} />}
         {current === 'maintenance' && <><Maintenance data={data} staff={staff} /><ItOperations mode="inspection"/></>}
         {current === 'websites' && <WebsitesView />}
@@ -252,6 +266,7 @@ export function ItView() {
         {current === 'onboarding' && <>{manualItVisible(me.user)&&<ItManualPanel mode="intake"/>}<Onboarding data={data} staff={staff} /></>}
         {current === 'tenders' && <ItTenders data={data} />}
         {current === 'mine' && <Mine data={data} />}
+        {current === 'policy' && <ItPolicyPanel />}
         {current === 'import' && arishaLeader(me.user) === 'ceo' && <ItImport />}
       </div>
     </div>
@@ -372,7 +387,7 @@ function AssetDrawer({ row: r, staff, manager, onClose }: { row: AssetRow; staff
   // RBA C2 (8 Nov 2026): a disposal names the licensed e-waste contractor and its consignment note or certificate.
   const [contractor, setContractor] = useState('');
   const [noteRef, setNoteRef] = useState('');
-  const move = (status: Asset['status'], ok: string) =>
+  const move = (status: Exclude<Asset['status'], 'lost' | 'stolen'>, ok: string) =>
     act.run(() => api.setItAsset(a.id, status, status === 'in_use' ? who : null, note, status === 'disposed' ? { contractor: contractor.trim(), noteRef: noteRef.trim() } : null), ok);
   return (
     <Drawer title={`${a.tag} · ${a.model}`} sub={`${KIND[a.kind]} · ${manualRecord(a)?.kind==='asset'?assetProvenance(r):`owned by Merdeka Network, rented to ${r.ownerName}`}`} onClose={onClose}>
@@ -594,8 +609,16 @@ function PurchaseForm({ onDone }: { onDone: () => void }) {
   const [desc, setDesc] = useState('');
   const [qty, setQty] = useState('1');
   const [price, setPrice] = useState('');
+  const [type, setType] = useState<'EQUIPMENT' | 'SOFTWARE_SUBSCRIPTION'>('EQUIPMENT');
   return (
     <div className="it-form">
+      <label className="field it-span">
+        <span className="label">Purchase type</span>
+        <Select className="select" aria-label="Purchase type" value={type} onChange={(e) => setType(e.target.value as 'EQUIPMENT' | 'SOFTWARE_SUBSCRIPTION')}>
+          <option value="EQUIPMENT">Peralatan / equipment</option>
+          <option value="SOFTWARE_SUBSCRIPTION">Perisian / langganan (software or subscription)</option>
+        </Select>
+      </label>
       <label className="field it-span">
         <span className="label">Why it is needed</span>
         <input className="input" aria-label="Why" placeholder="Why it is needed" value={reason} onChange={(e) => setReason(e.target.value)} />
@@ -646,7 +669,7 @@ function PurchaseForm({ onDone }: { onDone: () => void }) {
           onClick={() =>
             act
               .run(
-                () => api.raiseItPurchase({ ownerId: owner, reason, items: [{ kind, description: desc, qty: Number(qty), unitPrice: Number(price) }] }),
+                () => api.raiseItPurchase({ ownerId: owner, reason, type, items: [{ kind, description: desc, qty: Number(qty), unitPrice: Number(price) }] }),
                 'Sent to the IT Manager.',
               )
               .then((r) => r && onDone())
@@ -721,7 +744,7 @@ function Tickets({ data, staff }: { data: ItBoard; staff: boolean }) {
   return (
     <Card
       title="Help requests"
-      sub={`Time limits: P1 ${data.rule.slaHours.P1} hours, P2 ${data.rule.slaHours.P2} hours, P3 ${data.rule.slaHours.P3} hours.`}
+      sub={`Response targets (Merdeka ticket policy): P1 ${data.rule.responseMinutes.P1} minutes, P2 ${data.rule.responseMinutes.P2 / 60} hour, P3 ${data.rule.responseMinutes.P3 / 60} hours, P4 ${data.rule.p4ResponseWorkingDays} working day (${data.rule.officeHours.start}-${data.rule.officeHours.end}, Monday to Friday). The resolved time is shown for information only. A request closes only when the person confirms.`}
       actions={
         <>
           <button className="btn btn-sm" aria-pressed={showDone} onClick={() => setShowDone(!showDone)}>
@@ -763,6 +786,8 @@ function Tickets({ data, staff }: { data: ItBoard; staff: boolean }) {
           <span>Status</span>
         </div>
       )}
+      {!data.holidaysSet && <p className="muted small">Public holidays are not entered yet, so the P4 working day counts every weekday.</p>}
+      <ServiceReport role={data.role} />
       <ul className="it-rows">
         {rows.map((t) => (
           <TicketLine key={t.ticket.id} t={t} staff={staff} data={data} />
@@ -775,17 +800,20 @@ function Tickets({ data, staff }: { data: ItBoard; staff: boolean }) {
 function TicketLine({ t: row, staff, data }: { t: NonNullable<ItBoard['tickets']>[number]; staff: boolean; data: ItBoard }) {
   const act = useAction();
   const [note, setNote] = useState('');
+  const [rootCause, setRootCause] = useState('');
+  const { me } = useApp();
   const t = row.ticket;
   const done = t.status === 'resolved';
   const extra = [
-    done ? t.resolution : '',
+    done ? `Selesai ${dateTimeLabel(t.resolvedAt ?? t.at)} · ${t.resolution}` : '',
     done && t.resolvedBy ? `fixed by ${t.resolvedBy}` : '',
-    done && !row.webPolicy ? (row.confirm === 'confirmed' ? (t.confirmedVia ? `confirmed: ${t.confirmedVia}` : 'confirmed by the person') : row.confirm === 'waiting' ? 'waiting for the person to confirm' : 'not answered, counted as confirmed') : '',
+    done && !row.webPolicy ? (row.confirm === 'confirmed' ? (t.confirmedVia ? `confirmed: ${t.confirmedVia}` : 'confirmed by the person') : row.confirmState.state === 'chase' ? `menunggu pengesahan (${row.confirmState.daysWaiting} days): chase the person` : 'waiting for the person to confirm') : '',
+    t.rootCause ? `punca utama: ${t.rootCause}` : '',
     t.reopened ? `reopened ${t.reopened}×` : '',
     row.toCoo ? 'the COO sees it' : '',
   ].filter(Boolean);
   return (
-    <li className="it-item" data-late={row.breached ? 'yes' : undefined}>
+    <li className="it-item" data-late={row.breached && !done ? 'yes' : undefined}>
       <div className="it-ticket">
         <span className="it-pri" data-pri={t.priority}>{t.priority}</span>
         <span className="it-ticket-main">
@@ -804,17 +832,20 @@ function TicketLine({ t: row, staff, data }: { t: NonNullable<ItBoard['tickets']
         </span>
         <span className="it-ticket-due">
           <span className="it-cell-label">Due </span>
-          {done ? '—' : dateTimeLabel(row.due)}
+          {row.response.respondedAt ? row.response.responseLabel : `${row.response.responseLabel} (by ${dateTimeLabel(row.due)})`}
         </span>
         <span className="it-ticket-state">
-          <Chip tone={row.breached ? 'crit' : done ? 'ok' : t.status === 'in_progress' ? 'info' : 'warn'}>
-            {row.webPolicy&&done?(t.confirmedAt?'Fix confirmed':'Resolved; confirmation pending'):row.breached ? (done ? 'Resolved late' : 'Past time limit') : done ? 'Resolved' : t.status === 'in_progress' ? 'Being worked' : 'Open'}
+          <Chip tone={row.breached && !done ? 'crit' : done ? 'ok' : t.status === 'in_progress' ? 'info' : 'warn'}>
+            {row.webPolicy&&done?(t.confirmedAt?'Fix confirmed':'Resolved; confirmation pending'):row.breached ? (done ? 'Resolved; response was late' : row.response.respondedAt ? 'Response was late' : 'No response yet, late') : done ? 'Resolved' : t.status === 'in_progress' ? 'Being worked' : 'Open'}
           </Chip>
         </span>
       </div>
+      <TicketPolicyFacts ticket={t} />
       {!row.webPolicy && row.canRecord && row.confirm === 'waiting' && <RecordConfirm id={t.id} />}
+      {!row.webPolicy && staff && done && !t.confirmedAt && !t.raisedFor && (row.confirmState.state === 'reminder' || row.confirmState.state === 'chase') && <RecordPrimaConfirm id={t.id} />}
       {row.webPolicy&&<WebTicketReview key={t.id} confirmedAt={t.confirmedAt} policy={row.webPolicy} submit={(action,note,expectedResolutionVersion)=>api.itAct(action==='reopen'?'reopenWebTicket':'confirmTicket',{id:t.id,note,expectedResolutionVersion,...(action==='reopen'?{}:{fixed:action==='confirm'})})}/>}
       {row.webPolicy&&<WebTicketHistory entries={t.webHistory}/>}
+      {staff && !done && !row.webPolicy && <TicketPolicyTools ticket={t} lead={me.user.itRole === 'lead' || me.user.itRole === 'manager'} />}
       {(row.canAssign || (staff && row.canWork)) && (
         <div className="it-work">
           {row.canAssign && (
@@ -823,6 +854,7 @@ function TicketLine({ t: row, staff, data }: { t: NonNullable<ItBoard['tickets']
           {staff && row.canWork && (
             <>
               <input className="input it-work-note" aria-label="What fixed it" placeholder="What fixed it" value={note} onChange={(e) => setNote(e.target.value)} />
+              {row.rootCauseNeeded && <input className="input it-work-note" aria-label="Root cause" placeholder="Punca utama (root cause, required for P1 and security)" value={rootCause} onChange={(e) => setRootCause(e.target.value)} />}
               {t.status === 'open' && (
                 <button className="btn btn-sm" disabled={act.busy} onClick={() => act.run(() => api.itTicketStep(t.id, 'take', ''), 'Taken.')}>
                   Take it
@@ -830,8 +862,8 @@ function TicketLine({ t: row, staff, data }: { t: NonNullable<ItBoard['tickets']
               )}
               <button
                 className="btn btn-sm btn-primary"
-                disabled={act.busy || !note.trim()}
-                onClick={() => act.run(() => api.itTicketStep(t.id, 'resolve', note), 'Resolved.')}
+                disabled={act.busy || !note.trim() || (row.rootCauseNeeded && rootCause.trim().length < 3)}
+                onClick={() => act.run(() => api.itAct('ticketStep', { id: t.id, step: 'resolve', note, rootCause }), 'Resolved.')}
               >
                 Resolve
               </button>
@@ -907,10 +939,25 @@ function Onboarding({ data, staff }: { data: ItBoard; staff: boolean }) {
 function Mine({ data }: { data: ItBoard }) {
   const act = useAction();
   const [category, setCategory] = useState<keyof typeof CATEGORY>('M365');
-  const [priority, setPriority] = useState<'P1' | 'P2' | 'P3'>('P3');
+  const [priority, setPriority] = useState<'P1' | 'P2' | 'P3' | 'P4'>('P3');
   const [title, setTitle] = useState('');
   const [detail, setDetail] = useState('');
   const openCount = data.mine.filter((t) => t.status !== 'resolved').length;
+  const [phone, setPhone] = useState('');
+  const [photos, setPhotos] = useState<ProofInput[]>([]);
+  const [dup, setDup] = useState<{ id: string; ref: string; title: string } | null>(null);
+  const [saved, setSaved] = useState<string | null>(null);
+  const reset = (ref: string) => {
+    setSaved(ref);
+    setTitle('');
+    setDetail('');
+    setPhotos([]);
+    setDup(null);
+  };
+  const send = () =>
+    act.run(() => api.raiseItTicket({ category, priority, title, detail, contactPhone: phone || null, photos }), 'Sent to IT.').then((r) => {
+      if (r) reset((r as { ref: string }).ref);
+    });
   return (
     <div className="it-mine">
       <Card title="Ask IT for help" sub="Say what is wrong and how much it stops your work. IT replies within the time limit for that urgency.">
@@ -927,39 +974,62 @@ function Mine({ data }: { data: ItBoard }) {
           </label>
           <label className="field">
             <span className="label">Urgency</span>
-            <select className="select" aria-label="Urgency" value={priority} onChange={(e) => setPriority(e.target.value as 'P1' | 'P2' | 'P3')}>
-              <option value="P1">P1: I cannot work at all</option>
-              <option value="P2">P2: work is slowed down</option>
-              <option value="P3">P3: a question or training</option>
-            </select>
+            <Select className="select" aria-label="Urgency" value={priority} onChange={(e) => setPriority(e.target.value as 'P1' | 'P2' | 'P3' | 'P4')}>
+              {IT_TICKET_PRIORITIES.map((p) => (
+                <option key={p} value={p}>
+                  {p}: {IT_PRIORITY_HELP[p]}
+                </option>
+              ))}
+            </Select>
           </label>
+          {category === 'SECURITY' && <p className="muted small it-span">A security request starts at P1 or P2 and goes to the IT Lead at once.</p>}
           <label className="field it-span">
             <span className="label">What is wrong</span>
-            <input className="input" aria-label="What is wrong" placeholder="What is wrong" value={title} onChange={(e) => setTitle(e.target.value)} />
+            <input className="input" aria-label="What is wrong" placeholder="Apa masalahnya? (wajib)" value={title} onChange={(e) => setTitle(e.target.value)} />
           </label>
           <label className="field it-span">
             <span className="label">Details (optional)</span>
             <textarea className="input" aria-label="Details" placeholder="Details (optional)" value={detail} onChange={(e) => setDetail(e.target.value)} />
           </label>
+          <label className="field">
+            <span className="label">Contact number</span>
+            <input className="input" aria-label="Contact number" placeholder="Nombor telefon untuk dihubungi" value={phone} onChange={(e) => setPhone(e.target.value)} />
+          </label>
+          <div className="field it-span">
+            <ProofPicker site={null} refText="Tangkapan skrin atau gambar (pilihan)" items={photos} onChange={setPhotos} documentsOnly noLinks />
+          </div>
           <div className="it-form-foot it-span">
             <ErrorNotice error={act.error} />
-            <button
-              className="btn btn-primary"
-              disabled={act.busy || !title.trim()}
-              onClick={() =>
-                act
-                  .run(() => api.raiseItTicket({ category, priority, title, detail }), 'Sent to IT.')
-                  .then((r) => {
-                    if (r) {
-                      setTitle('');
-                      setDetail('');
-                    }
+            {dup ? (
+              <div className="notice" data-tone="warn">
+                <span>
+                  Ini masalah yang sama? You already have {dup.ref} ({dup.title}) open from the last 24 hours.
+                </span>
+                <div className="row" style={{ gap: 6 }}>
+                  <button className="btn btn-sm btn-primary" disabled={act.busy} onClick={() => void act.run(() => api.itAct('ticketAddNote', { id: dup.id, note: `${title}${detail ? `: ${detail}` : ''}` }), 'Added to your request.').then((r) => r && reset(dup.ref))}>
+                    Ya, tambah pada {dup.ref}
+                  </button>
+                  <button className="btn btn-sm" disabled={act.busy} onClick={() => void send()}>
+                    Tidak, permintaan baharu
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <button
+                className="btn btn-primary"
+                disabled={act.busy || !title.trim()}
+                onClick={() =>
+                  void act.run(() => api.itAct('ticketDuplicate', { category })).then((d) => {
+                    if (d) setDup(d as { id: string; ref: string; title: string });
+                    else void send();
                   })
-              }
-            >
-              Send to IT
-            </button>
+                }
+              >
+                Send to IT
+              </button>
+            )}
           </div>
+          {saved && <p className="notice it-span" data-tone="ok"><span>Nombor tiket anda: {saved}. IT akan menghubungi anda.</span></p>}
         </div>
       </Card>
       <Card title="My requests" sub={data.mine.length ? `${openCount} open · ${data.mine.length} in all` : undefined} flush>

@@ -43,8 +43,6 @@ export const NAV_SECTIONS: NavSection[] = [
     groups: [
       { title: 'Dashboards', views: ['home', 'overview', 'company', 'reports'] },
       { title: 'My work', views: ['mine', 'clock', 'work', 'meetings', 'memos'] },
-      // J7 (Fauzan, 11 Nov 2026): the Settings home, easy to find from every space.
-      { title: 'Settings', views: ['settings'] },
     ],
   },
   {
@@ -53,7 +51,7 @@ export const NAV_SECTIONS: NavSection[] = [
     blurb: 'Sites, guards, rosters and attendance.',
     groups: [
       { title: 'Sites and areas', views: ['ops', 'sites', 'branchwork', 'surveys', 'sitehours'] },
-      { title: 'Guards and duty', views: ['people', 'roster', 'duty', 'attendance', 'cleaning'] },
+      { title: 'Guards and duty', views: ['people', 'roster', 'guardroster', 'duty', 'attendance', 'cleaning'] },
     ],
   },
   {
@@ -73,7 +71,7 @@ export const NAV_SECTIONS: NavSection[] = [
     title: 'HR',
     blurb: 'Staff, leave, claims and hand-overs.',
     groups: [
-      { title: 'Staff', views: ['hr', 'staff-directory', 'bulk-load', 'staffclock', 'work-kpi', 'handovers'] },
+      { title: 'Staff', views: ['hr', 'staff-directory', 'staffclock', 'work-kpi', 'handovers'] },
       { title: 'Claims and welfare', views: ['claims', 'socso'] },
     ],
   },
@@ -105,7 +103,6 @@ export const NAV_SECTIONS: NavSection[] = [
     blurb: 'Accounts, payments, buying and insurance.',
     groups: [
       { title: 'Money', views: ['finance', 'payreq', 'credit'] },
-      { title: 'Rates and monitoring', views: ['finsummary', 'finsites', 'rates'] },
       { title: 'Buying', views: ['purchasing', 'requests'] },
       { title: 'Companies', views: ['branches', 'insurance'] },
     ],
@@ -133,7 +130,7 @@ export const NAV_SECTIONS: NavSection[] = [
     title: 'IT and systems',
     blurb: 'IT help, equipment, websites and the JA app.',
     groups: [
-      { title: 'IT help', views: ['it', 'hr-it-intake', 'it-procurement'] },
+      { title: 'IT help', views: ['it', 'hr-it-intake', 'accounts', 'it-procurement'] },
       { title: 'Systems and data', views: ['connections', 'websites', 'continuity', 'it-metrics', 'it-extraction'] },
       { title: 'JA Group app', views: ['ja', 'jaswitch'] },
     ],
@@ -173,6 +170,7 @@ export const NAV_INFO: Record<ViewName, { blurb: string; words: string }> = {
   sitehours: { blurb: 'Allowed guard hours per site each month.', words: 'man-hours manhours jam kerja hours jam site hours overtime lebih masa ot' },
   people: { blurb: 'Guards and officers: details, papers and history.', words: 'guard guards pengawal officer pegawai people kakitangan worker pekerja staff' },
   roster: { blurb: 'Who works which shift at which site.', words: 'roster jadual schedule shift syif giliran' },
+  guardroster: { blurb: 'Month roster with breaks, approvals and pay (trial).', words: 'roster jadual engine enjin month bulan breaks rehat allowance elaun lump sum' },
   duty: { blurb: 'Duty plans for each guard post.', words: 'duty plan pelan tugas post pos patrol rondaan' },
   attendance: { blurb: 'Who came, who was late and who was absent.', words: 'attendance kehadiran clock in timesheet absent tidak hadir ponteng late lewat leave cuti' },
   cleaning: { blurb: 'Cleaning plans and checks for each site.', words: 'cleaning pembersihan cleaner pencuci' },
@@ -186,7 +184,6 @@ export const NAV_INFO: Record<ViewName, { blurb: string; words: string }> = {
   fleet: { blurb: 'Company vehicles, bookings and drivers.', words: 'vehicle kenderaan car kereta van motorcycle motosikal transport pengangkutan driver pemandu' },
   hr: { blurb: 'HR across the group: staff, leave and cases.', words: 'hr human resources sumber manusia staff kakitangan leave cuti hiring pengambilan' },
   'staff-directory': { blurb: 'Office staff names, posts and contacts.', words: 'staff directory direktori senarai staf phone telefon email emel contact hubungi' },
-  'bulk-load': { blurb: 'Load a spreadsheet or many files; Prima proposes where each goes.', words: 'bulk load muat pukal import excel csv spreadsheet hamparan fail files dokumen documents sijil certificate permit kontrak upload muat naik data manager file manager' },
   staffclock: { blurb: 'Office staff clock-in times.', words: 'staff clock jam staf office hours waktu pejabat attendance kehadiran staf' },
   'work-kpi': { blurb: 'How fast and how well work moves between teams.', words: 'kpi performance prestasi target sasaran workflow' },
   handovers: { blurb: 'Hand over your work before leave or a move.', words: 'hand-over handover serah tugas serahan leave cuti resign letak jawatan transfer pindah' },
@@ -208,9 +205,6 @@ export const NAV_INFO: Record<ViewName, { blurb: string; words: string }> = {
   clients: { blurb: 'Clients and their contact people.', words: 'client pelanggan customer contact hubungan' },
   contracts: { blurb: 'Contracts and getting new sites started.', words: 'contract kontrak agreement perjanjian mobilisation mobilisasi loa' },
   finance: { blurb: 'Accounts, payments and cash for each company.', words: 'finance kewangan accounts akaun sql account invoice invois bank payment bayaran' },
-  finsummary: { blurb: 'One page a month: every company and the group total.', words: 'summary ringkasan monthly bulanan ceo board cash tunai close tutup print cetak' },
-  finsites: { blurb: 'Sites where guards worked: billed, signed off, profit.', words: 'unbilled invois belum billing site tapak profit untung margin sign-off' },
-  rates: { blurb: 'Costing rates entered from a month, with history.', words: 'rate kadar hostel asrama transport pengangkutan uniform equipment peralatan cost kos' },
   payreq: { blurb: 'Ask for a payment and follow its approvals.', words: 'payment request bayaran pembayaran permohonan bayaran invoice invois supplier pembekal' },
   requests: { blurb: 'Operation claims and office needs.', words: 'request permohonan permintaan office needs keperluan pejabat operation claims tuntutan operasi' },
   purchasing: { blurb: 'Buying, suppliers and the uniform store.', words: 'procurement perolehan purchase pembelian buy beli supplier pembekal po purchase order store stor uniform' },
@@ -223,7 +217,6 @@ export const NAV_INFO: Record<ViewName, { blurb: string; words: string }> = {
   compliance: { blurb: 'Licences and permits, and when they expire.', words: 'licence license lesen permit permit kdn pdrm expiry tamat tempoh' },
   renewals: { blurb: 'Renewals coming due for each company.', words: 'renewal pembaharuan renew expiry tamat tempoh licence lesen road tax cukai jalan' },
   rba: { blurb: 'RBA ethics declarations and readiness.', words: 'rba ethics etika declaration akuan responsible business' },
-  settings: { blurb: 'Every setting, who keeps it and whether it is set yet.', words: 'settings tetapan rate kadar formula holiday cuti umum allowance elaun limit had desk meja setup' },
   selfaudit: { blurb: "The company's yearly self-audit.", words: 'self audit audit kendiri yearly tahunan' },
   act: { blurb: 'Audit findings to fix, and how they are fixed.', words: 'act audit compliance pematuhan transformation transformasi finding findings penemuan' },
   audit: { blurb: 'Who changed what, and when.', words: 'audit trail jejak audit log history sejarah who changed' },
@@ -234,6 +227,7 @@ export const NAV_INFO: Record<ViewName, { blurb: string; words: string }> = {
   corporate: { blurb: 'Company secretary filings and the board.', words: 'company secretary setiausaha syarikat ssm board lembaga director pengarah filing' },
   pdpa: { blurb: 'Personal data protection: consent and requests.', words: 'pdpa privacy privasi personal data data peribadi consent persetujuan' },
   it: { blurb: 'Ask IT for help, and IT equipment.', words: 'it help bantuan computer komputer laptop printer ticket tiket password kata laluan' },
+  accounts: { blurb: 'Staff sign-ins and company access, approved.', words: 'accounts akaun access akses sign-in login log masuk company syarikat it hr' },
   'hr-it-intake': { blurb: 'Accounts for staff joining, moving or leaving.', words: 'new staff staf baru joining leaving onboarding offboarding account akaun login hr it' },
   'it-procurement': { blurb: 'Buying IT equipment through to delivery.', words: 'it purchase pembelian it laptop computer komputer buy beli' },
   connections: { blurb: 'Check your Outlook, Teams and SharePoint access.', words: 'microsoft 365 outlook teams sharepoint email emel connection sambungan' },

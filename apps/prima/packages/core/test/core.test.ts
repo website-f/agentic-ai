@@ -615,7 +615,9 @@ describe('HR monitoring and arms control', () => {
     expect(me.hiring.items.every((i) => i.done)).toBe(true);
     expect(me.hiring.canUpload).toBe(false);
     expect(me.medical!.some((m) => m.illness === 'Dengue fever')).toBe(true);
-    expect(me.policies.discipline.value.steps.length).toBeGreaterThan(3);
+    // N17 (14 Nov 2026): discipline steps are keyed in by HR; until then the profile says not set by HR, and the principles stay.
+    expect(me.policies.discipline.steps.set).toBe(false);
+    expect(me.policies.discipline.principles.value.principles.length).toBeGreaterThan(3);
     const duty = await svc.myDuty(guardUser);
     expect(duty.reminders.every((r) => !/Tell your office/.test(r.text))).toBe(true);
 
@@ -1375,11 +1377,8 @@ describe('Guard profile and leave (Fauzan, 25 Oct 2026)', () => {
     expect(list.rows.find((r) => r.request.id === q.id)!.waitingWith!.level).toBe('OM');
     await expect(svc.decideLeave(om, q.id, false, '')).rejects.toThrow(/why/);
     expect((await svc.decideLeave(om, q.id, true, 'Covered by buffer guard')).status).toBe('approved');
-    // P100 C3: one level per working day. A request from Friday 09:00 has waited 25.5 working hours by Monday 10:30
-    // (the weekend does not count), so it has moved up one level to the Regional OM.
+    // The seeded request waiting 1 working day has moved up to the Regional OM.
     const rom = await svc.user('u-rom-central');
-    const emergency = ds.leaveRequests.find((r) => r.kind === 'EMERGENCY' && r.status === 'pending')!;
-    emergency.requestedAt = myt('2026-10-23', '09:00');
     const waiting = (await svc.leaveRequests(await svc.user('u-fauzan'))).rows.find((r) => r.request.kind === 'EMERGENCY')!;
     expect(waiting.waitingWith!.level).toBe('ROM');
     expect(waiting.waitingWith!.label).toBe('Regional Operations Manager');
@@ -1494,7 +1493,8 @@ describe('Chief of Staff insurance section (Fauzan, 25 Oct 2026)', () => {
     for (const k of ['crit:Premium', 'crit:Cover lapsed', 'crit:Claim', 'crit:Guarantee', 'crit:No cover', 'warn:Renewal', 'info:Guarantee'])
       expect(kinds).toContain(k);
     const arsh = b.rows.find((r) => r.company.id === 'co-arsh');
-    expect(arsh?.hasDetail && arsh.missing.map((m) => m.kind)).toEqual(['FIDELITY_GUARANTEE']);
+    // Part W (14 Nov 2026): professional indemnity is required cover for every company (KDN renewal 2027 item 3.6).
+    expect(arsh?.hasDetail && arsh.missing.map((m) => m.kind).sort()).toEqual(['FIDELITY_GUARANTEE', 'PROFESSIONAL_INDEMNITY']);
     expect(b.guarantees.find((g) => g.guarantee.id === 'gt-inas-1')?.state).toBe('lapsed');
     expect(b.guarantees.find((g) => g.guarantee.id === 'gt-arsh-1')?.state).toBe('release');
     expect(b.claims.find((c) => c.claim.id === 'cl-sasa-2')).toMatchObject({ open: true });
@@ -1703,7 +1703,7 @@ describe('Attendance alerts to the PIC (Shahirah, 25 Oct 2026)', () => {
     await expect(act(cm, 'DISMISSAL')).rejects.toThrow(/domestic inquiry/);
     await expect(act(cm, 'DOMESTIC_INQUIRY')).rejects.toThrow(/show-cause/);
     const sc = await act(cm, 'SHOW_CAUSE');
-    expect(sc.record.replyDue).toBe(addDays(TODAY, 3));
+    expect(sc.record.replyDue).toBe(addDays(TODAY, 7));
     await expect(act(cm, 'DOMESTIC_INQUIRY')).rejects.toThrow(/reply, due/);
     const h = await svc.disciplineHistory(cm, 'co-sasa', ns.personId!);
     expect(h.suggested).toBe('DOMESTIC_INQUIRY');
@@ -2222,8 +2222,10 @@ describe('Hostel bills and utility excess (Fauzan, 26 Oct 2026)', () => {
     const row = board.hostels[0].bills.find((b) => b.bill.id === rent.id)!;
     expect([row.bill.request, row.bill.fwmCheck, row.bill.sectorApproval, row.bill.cooApproval, row.bill.slip].every(Boolean)).toBe(true);
     expect(board.hostels[0].history.length).toBe(6);
-    // A guard supervisor or OM has no hostel screen.
-    await expect(svc.hostelBoard(await svc.user('u-om-klang'))).rejects.toBeInstanceOf(AccessDenied);
+    // Part P2 (Fauzan, 14 Nov 2026): the OM of the area opens the hostel screen to raise hostel needs, but sees no bills.
+    const om = await svc.hostelBoard(await svc.user('u-om-klang'));
+    expect(om).toMatchObject({ role: 'om', canAddBill: false });
+    expect(om.hostels.flatMap((h) => h.bills)).toHaveLength(0);
   });
 
   it('works out the utility excess by bed-days and allows a deduction only from the 3rd time with the contract clause', async () => {
@@ -2889,7 +2891,7 @@ describe('Staff payroll (Fauzan, 27 Oct 2026)', () => {
     expect((await svc.staffPayroll(await svc.user('u-finance-am'))).role).toBeNull();
   });
 
-  it("puts each approver's turn on their home with its date, and a month unpaid after the 29th in front of the CEO (P100 F11)", async () => {
+  it("puts each approver's turn on their home, and last month unpaid after the pay day (29th) in front of the CEO", async () => {
     const { svc, store } = fresh();
     const tags = async (id: string) => {
       const h = await svc.home(await svc.user(id));
@@ -2900,9 +2902,9 @@ describe('Staff payroll (Fauzan, 27 Oct 2026)', () => {
     expect((await tags('u-vchair')).length).toBe(0);
     expect((await tags('u-fd')).some((t) => t.includes('pay through the bank'))).toBe(true);
     // In the pilot the CEO approves for the Chief of Staff, so that turn shows too.
-    expect((await tags('u-fauzan')).some((t) => t.includes('not paid by the 29th'))).toBe(false);
+    expect((await tags('u-fauzan')).some((t) => t.includes('not paid by the pay day'))).toBe(false);
     await store.update('staffPayRuns', 'sp-co-inas-2026-09', { stage: 'coo_approved', paid: null });
-    expect((await tags('u-fauzan')).some((t) => t.includes('not paid by the 29th'))).toBe(true);
+    expect((await tags('u-fauzan')).some((t) => t.includes('not paid by the pay day'))).toBe(true);
   });
 });
 
@@ -3149,7 +3151,7 @@ describe('IT department (Fauzan, 27 Oct 2026)', () => {
     await svc.purStep(coo, pr.id, 'approve', { note: 'ok' });
     await svc.purStep(ceo, pr.id, 'approve', { note: 'ok' });
     await svc.purStep(proc, pr.id, 'order', { ref: 'PO-IT-1' });
-    await svc.purStep(sk, pr.id, 'receive', { qty: [1] });
+    await svc.purStep(sk, pr.id, 'receive', { qty: [1], ref: 'DO-SYN-1', proof: [proof()] });
     const done = await svc.itPurchaseStep(ex, p.id, 'receive');
     expect(done.received!.assetIds).toHaveLength(1);
     const a = (await svc.itBoard(mgr)).assets!.find((x) => x.asset.id === done.received!.assetIds[0])!.asset;
@@ -3170,13 +3172,15 @@ describe('IT department (Fauzan, 27 Oct 2026)', () => {
     const ex = await svc.user('u-it-ex1');
     const mgr = await svc.user('u-it-mgr');
     const a = (await svc.itBoard(mgr)).assets!.find((x) => x.asset.status === 'in_use')!.asset;
-    await expect(svc.setItAsset(mgr, a.id, 'disposed', null)).rejects.toThrow(/Ask for disposal/);
-    await expect(svc.setItAsset(ex, a.id, 'disposal_pending', null, '')).rejects.toThrow(/why/);
-    await svc.setItAsset(ex, a.id, 'disposal_pending', null, 'Screen broken, not worth repair');
-    await expect(svc.setItAsset(ex, a.id, 'disposed', null)).rejects.toBeInstanceOf(AccessDenied);
-    // E-waste (RBA checklist C1): the licensed contractor and its consignment note are needed to dispose.
-    await expect(svc.setItAsset(mgr, a.id, 'disposed', null)).rejects.toThrow(/e-waste contractor/);
-    const gone = await svc.setItAsset(mgr, a.id, 'disposed', null, '', { contractor: 'Synthetic E-Waste Recycler', noteRef: 'CN-TEST-001' });
+    // Part Q16 (Merdeka IT-POL-005): disposal goes only through the disposal record; the direct path is refused.
+    await expect(svc.setItAsset(mgr, a.id, 'disposed', null)).rejects.toThrow(/disposal record/);
+    await expect(svc.setItAsset(ex, a.id, 'disposal_pending', null, 'Screen broken')).rejects.toThrow(/disposal record/);
+    // The record's own path keeps the earlier guards: pending first, the IT Manager only, the e-waste note.
+    await expect(svc.setItAssetViaPolicy(mgr, a.id, 'disposed', 'x')).rejects.toThrow(/Ask for disposal/);
+    await svc.setItAssetViaPolicy(ex, a.id, 'disposal_pending', 'Screen broken, not worth repair');
+    await expect(svc.setItAssetViaPolicy(ex, a.id, 'disposed', 'x')).rejects.toBeInstanceOf(AccessDenied);
+    await expect(svc.setItAssetViaPolicy(mgr, a.id, 'disposed', '')).rejects.toThrow(/e-waste contractor/);
+    const gone = await svc.setItAssetViaPolicy(mgr, a.id, 'disposed', '', { contractor: 'Synthetic E-Waste Recycler', noteRef: 'CN-TEST-001' });
     expect(gone.disposal).toMatchObject({ reason: 'Screen broken, not worth repair', doneBy: mgr.name, ewaste: { contractor: 'Synthetic E-Waste Recycler', noteRef: 'CN-TEST-001' } });
     const s = await svc.itMaintenance(
       ex,
@@ -3484,9 +3488,9 @@ describe('Procurement and Inventory (V5; Fauzan, 27 Oct 2026)', () => {
     await svc.purStep(coo, r.id, 'approve', { note: 'ok' });
     expect((await svc.purStep(ceo, r.id, 'approve', { note: 'ok' })).status).toBe('approved');
     await svc.purStep(ex, r.id, 'order', { ref: 'PO-1' });
-    await expect(svc.purStep(ex, r.id, 'receive', { qty: [150] })).rejects.toThrow(/cannot receive/);
+    await expect(svc.purStep(ex, r.id, 'receive', { qty: [150], ref: 'DO-SYN-1', proof: [proof()] })).rejects.toThrow(/cannot receive/);
     const before = (await svc.purBoard(sk)).stock.find((s) => s.item.id === 'stk-co-arsh-7')!.item.onHand;
-    await svc.purStep(sk, r.id, 'receive', { qty: [150] });
+    await svc.purStep(sk, r.id, 'receive', { qty: [150], ref: 'DO-SYN-1', proof: [proof()] });
     const row = (await svc.purBoard(sk)).stock.find((s) => s.item.id === 'stk-co-arsh-7')!;
     expect(row.item.onHand).toBe(before + 150);
     expect(row.life.received).toBeGreaterThanOrEqual(150);
@@ -3514,7 +3518,7 @@ describe('Procurement and Inventory (V5; Fauzan, 27 Oct 2026)', () => {
     await expect(svc.confirmMyItem(await svc.user('u-cm-sasa'), i.id, true)).rejects.toThrow();
     await expect(svc.confirmMyItem(staff, i.id, false)).rejects.toThrow(/what is wrong/);
     expect((await svc.confirmMyItem(staff, i.id, true)).acknowledged).toBe(true);
-    await expect(svc.stockReturn(sk, i.id, 'lost', '')).rejects.toThrow(/Nothing is charged/);
+    await expect(svc.stockReturn(sk, i.id, 'lost', '')).rejects.toThrow(/manager who confirms it decides the cause/);
     expect((await svc.stockReturn(sk, i.id, 'lost', 'Left on the bus')).returned!.condition).toBe('lost');
     const sasa = await svc.purBoard(await svc.user('u-cm-sasa'));
     expect(sasa.requests.every((r) => r.req.companyId === 'co-sasa')).toBe(true);
@@ -3776,7 +3780,8 @@ describe('Rent paid and unpaid (Fauzan, 27 Oct 2026)', () => {
     expect(letUnit.months.every((m) => m.paid <= m.amount)).toBe(true);
     expect(b.lettersToApprove.length).toBe(1);
     expect(b.kpis.brokenPromises).toBe(1);
-    const a = b.arrears.find((x) => !x.internal && x.owed > 0 && !ds.amUnits.find((u) => u.id === x.id)!.tenancy!.payments)!;
+    // V-X14: rental homes take no cash rent, so the cash path is tried on a non-home unit.
+    const a = b.arrears.find((x) => !x.internal && x.owed > 0 && !ds.amUnits.find((u) => u.id === x.id)!.tenancy!.payments && ds.amUnits.find((u) => u.id === x.id)!.type !== 'RESIDENTIAL')!;
     await expect(svc.amRecordPayment(await svc.user('u-fd'), a.id, { amount: 10, method: 'CASH', on: TODAY, receiptNo: 'OR-1' })).rejects.toThrow();
     await expect(svc.amRecordPayment(re, a.id, { amount: a.due + 1, method: 'CASH', on: TODAY, receiptNo: 'OR-1' })).rejects.toThrow(/more than/);
     const paid = await svc.amRecordPayment(re, a.id, { amount: 10, method: 'CASH', on: TODAY, receiptNo: 'OR-1' });
@@ -3895,8 +3900,7 @@ describe('ACT: Audit, Compliance and Transformation (Fauzan, 27 Oct 2026)', () =
   it('has 1 Director and 2 teams of 1 Auditor and 1 Enforcement officer, watching every company (Fauzan, 2 Nov 2026)', async () => {
     const { svc, ds } = fresh();
     const act = ds.users.filter((u) => u.department === 'audit');
-    // C6 (Fauzan, 11 Nov 2026): plus the ACT Manager, who leads the work and gives the second check.
-    expect(act.map((u) => `${u.actRole}${u.actTeam ?? ''}`).sort()).toEqual(['auditor1', 'auditor2', 'enforcement1', 'enforcement2', 'lead', 'manager']);
+    expect(act.map((u) => `${u.actRole}${u.actTeam ?? ''}`).sort()).toEqual(['auditor1', 'auditor2', 'enforcement1', 'enforcement2', 'lead']);
     const b = await svc.actBoard(await svc.user('u-act-enf2'));
     expect(b.job).toBe('enforcement');
     expect(b.myTeam).toBe(2);
@@ -3910,14 +3914,12 @@ describe('ACT: Audit, Compliance and Transformation (Fauzan, 27 Oct 2026)', () =
     expect(b.signals.length).toBeGreaterThan(15);
     for (const s of b.signals) expect(b.rule.areas.some((a) => a.id === s.area)).toBe(true);
     expect(b.plan.find((p) => p.area.id === 'ROSTER')!.state).toBe('never');
-    // C6: each team sees its own work; act-f-1 is Team 1's, so Team 2 does not see it and the Director does.
-    expect(b.findings.some((f) => f.finding.id === 'act-f-1')).toBe(false);
-    expect((await svc.actBoard(await svc.user('u-audit'))).findings.find((f) => f.finding.id === 'act-f-1')!.escalatedTo).toBe('Chief of Staff');
+    expect(b.findings.find((f) => f.finding.id === 'act-f-1')!.escalatedTo).toBe('Chief of Staff');
     expect(b.canCheck).toBe(false);
     expect((await svc.actBoard(await svc.user('u-act-aud1'))).canCheck).toBe(true);
   });
 
-  it('lets the owner plan and fix, the Auditor give the first check, and a second checker close a high finding (C6)', async () => {
+  it('lets the owner plan and fix, the Auditor check, and only the Director close a high finding', async () => {
     const { svc } = fresh();
     const aud = await svc.user('u-act-aud1');
     const enf = await svc.user('u-act-enf1');
@@ -3938,13 +3940,10 @@ describe('ACT: Audit, Compliance and Transformation (Fauzan, 27 Oct 2026)', () =
     await svc.actFindingStep(cm, f.id, 'plan', { rootCause: 'No second signer', solution: 'Two signatures per opening', targetOn: '2026-11-01' });
     await svc.actFindingStep(cm, f.id, 'fixed', { proof: 'Log with two signatures since 1 Nov' });
     await expect(svc.actFindingStep(enf, f.id, 'check', { ok: true, note: 'Seen' })).rejects.toThrow(/Only an ACT Auditor, the ACT Manager or the ACT Director can check a fix/);
+    await expect(svc.actFindingStep(aud, f.id, 'check', { ok: true, note: 'Seen' })).rejects.toThrow(/Director/);
     const failed = await svc.actFindingStep(aud, f.id, 'check', { ok: false, note: 'One opening unsigned' });
     expect(failed.status).toBe('planned');
     await svc.actFindingStep(cm, f.id, 'fixed', { proof: 'Corrected' });
-    // C6 (Fauzan, 11 Nov 2026): the Auditor's check is the first check; a high finding waits for the second check.
-    const first = await svc.actFindingStep(aud, f.id, 'check', { ok: true, note: 'Seen' });
-    expect(first.status).toBe('fixed');
-    await expect(svc.actFindingStep(aud, f.id, 'check', { ok: true, note: 'Seen again' })).rejects.toThrow(/ACT Manager gives the second check/);
     const closed = await svc.actFindingStep(await svc.user('u-audit'), f.id, 'check', { ok: true, note: 'Seen' });
     expect(closed.status).toBe('closed');
     const mine = await svc.actBoard(cm);
@@ -4049,9 +4048,7 @@ describe('ACT: Audit, Compliance and Transformation (Fauzan, 27 Oct 2026)', () =
     const rw = await svc.assignActWork(dir, { kind: 'report_review', team: 2, defId: rep.defId, period: rep.period });
     expect(rw.area).toBe('REPORTING');
     const after = await svc.actBoard(aud2);
-    // C6 (Fauzan, 11 Nov 2026): each team sees its own work; the Director sees both teams' work.
-    expect(after.work.map((x) => x.audit.id)).toEqual([rw.id]);
-    expect((await svc.actBoard(dir)).work.map((x) => x.audit.id).sort()).toEqual([rw.id, w.id].sort());
+    expect(after.work.map((x) => x.audit.id).sort()).toEqual([rw.id, w.id].sort());
     expect(after.reports.find((r) => r.key === rep.key)!.review!.status).toBe('assigned');
     // Team 2 cannot record Team 1's audit; Team 1's Auditor can, and the plan then counts it.
     await expect(svc.recordActAudit(aud2, { area: 'PAYROLL', companyId: null, doneOn: '2026-10-25', result: 'clean', note: 'x', assignmentId: w.id })).rejects.toThrow(/Team 1/);
@@ -4113,7 +4110,7 @@ describe('ACT: Audit, Compliance and Transformation (Fauzan, 27 Oct 2026)', () =
     expect(closed.status).toBe('closed');
   });
 
-  it('lets the team Auditor send a high finding back or give the first check, and the ACT Manager close it (C6)', async () => {
+  it('lets the team Auditor send a high finding back but only the Director close it', async () => {
     const { svc } = fresh();
     const aud1 = await svc.user('u-act-aud1');
     const dir = await svc.user('u-audit');
@@ -4121,18 +4118,15 @@ describe('ACT: Audit, Compliance and Transformation (Fauzan, 27 Oct 2026)', () =
     const f = await svc.raiseActFinding(aud1, { companyId: 'co-arsh', area: 'ARMS', source: 'workflow_audit', title: 'Rounds not counted', detail: '', severity: 'high', evidence: 'Vault log 3 Nov', ownerUserId: cm.id });
     await svc.actFindingStep(cm, f.id, 'plan', { rootCause: 'No count sheet', solution: 'Count sheet each shift', targetOn: '2026-11-10' });
     await svc.actFindingStep(cm, f.id, 'fixed', { proof: 'Count sheets' });
+    await expect(svc.actFindingStep(aud1, f.id, 'check', { ok: true, note: 'ok' })).rejects.toThrow(/Only the ACT Director can close a high finding/);
     expect((await svc.actFindingStep(aud1, f.id, 'check', { ok: false, note: 'Two shifts missing' })).status).toBe('planned');
     await svc.actFindingStep(cm, f.id, 'fixed', { proof: 'All shifts counted' });
-    expect((await svc.actFindingStep(aud1, f.id, 'check', { ok: true, note: 'ok' })).status).toBe('fixed');
     const board = await svc.actBoard(aud1);
     expect(board.canCloseHigh).toBe(false);
     expect((await svc.actBoard(dir)).canCloseHigh).toBe(true);
-    const mgr = await svc.user('u-act-mgr');
-    expect((await svc.actBoard(mgr)).canCloseHigh).toBe(true);
-    const done = await svc.actFindingStep(mgr, f.id, 'check', { ok: true, note: 'Counted 7 days of sheets' });
+    const done = await svc.actFindingStep(dir, f.id, 'check', { ok: true, note: 'Counted 7 days of sheets' });
     expect(done.status).toBe('closed');
-    expect(done.checks.map((c) => c.ok)).toEqual([false, true, true]);
-    expect(done.checks.map((c) => c.stage ?? null)).toEqual(['first', 'first', 'second']);
+    expect(done.checks.map((c) => c.ok)).toEqual([false, true]);
   });
 
   it('never shows a monthly report as on time when sections of its form are missing', async () => {
@@ -4286,7 +4280,8 @@ describe('Add and edit forms for plain records (Fauzan, 27 Oct 2026)', () => {
       rent: 900,
       deposit: 1800,
       utilityDeposit: 300,
-      stamped: true,
+      // Part V: a rental home is stamped only from its agreement's checked LHDN certificate.
+      stamped: false,
     });
     expect(ds.amUnits.find((u) => u.id === vacant.id)!.tenancy!.tenant).toBe('Test Tenant');
     await svc.saveRecord(team, 'amTenancy', vacant.id, null, { ended: true });
@@ -4315,15 +4310,18 @@ describe('Firearm serial numbers and RFID tags (Fauzan, 27 Oct 2026)', () => {
     const logged = ds.audit.at(-1)!;
     expect(logged.summary).toContain('RFID tag:');
     expect(logged.summary).not.toContain(free.serial!);
+    // V16: a new serial is typed twice and the two must match.
+    await expect(svc.saveRecord(arms, 'firearm', null, 'co-sasa', { ...base, tag: 'SASA-NEW1', serial: 'ab 12345678', serialConfirm: 'AB12345679', rfidTag: null })).rejects.toThrow(/twice/);
     const added = (await svc.saveRecord(arms, 'firearm', null, 'co-sasa', {
       ...base,
       tag: 'SASA-NEW1',
       serial: 'ab 12345678',
+      serialConfirm: 'AB12345678',
       rfidTag: null,
     })) as { id: string };
     const neu = ds.firearms.find((f) => f.id === added.id)!;
     expect([neu.serial, neu.serialMasked]).toEqual(['AB12345678', '****5678']);
-    await expect(svc.saveRecord(arms, 'firearm', null, 'co-sasa', { ...base, tag: 'SASA-NEW2', serial: 'AB12345678' })).rejects.toThrow(/already recorded/);
+    await expect(svc.saveRecord(arms, 'firearm', null, 'co-sasa', { ...base, tag: 'SASA-NEW2', serial: 'AB12345678', serialConfirm: 'AB12345678' })).rejects.toThrow(/already recorded/);
 
     // Issue and return: a wrong tag stops it; no scan is recorded as not scanned.
     const armedSite = ds.sites.find((s) => s.companyId === 'co-sasa' && s.armed)!;
@@ -4342,6 +4340,16 @@ describe('Firearm serial numbers and RFID tags (Fauzan, 27 Oct 2026)', () => {
     const r = await svc.returnFirearm(cm, { movementId: m.id, roundsReturned: 5, witness: W });
     expect(r.movement.returnCheck).toBe('manual');
     expect((await svc.arms(cm, 'co-sasa')).rfid.notScannedWeek).toBeGreaterThan(0);
+    // C7 (Fauzan, 11 Nov 2026): Arms Control makes the scan compulsory only once every firearm has a tag, with a reason.
+    expect((await svc.arms(cm, 'co-sasa')).rfid.scanRequired).toBe(false);
+    await expect(svc.setArmsRfidRequired(cm, { on: true, reason: 'All tagged now' })).rejects.toBeInstanceOf(AccessDenied);
+    await expect(svc.setArmsRfidRequired(arms, { on: true, reason: 'All tagged now' })).rejects.toThrow(/no RFID tag yet/);
+    ds.firearms.forEach((f, n) => { if (!f.rfidTag) f.rfidTag = `E2TEST${String(n).padStart(6, '0')}`; });
+    await svc.setArmsRfidRequired(arms, { on: true, reason: 'Every firearm tagged (synthetic)' });
+    expect((await svc.arms(cm, 'co-sasa')).rfid.scanRequired).toBe(true);
+    await expect(svc.issueFirearm(cm, { shiftId: shift.id, firearmId: free.id, rounds: 5, witness: W })).rejects.toBeInstanceOf(RuleBlocked);
+    await svc.setArmsRfidRequired(arms, { on: false, reason: 'Reader broken at the vault' });
+    expect((await svc.arms(cm, 'co-sasa')).rfid.scanRequired).toBe(false);
     expect(verifyChain(ds.audit)).toBeNull();
   });
 });
@@ -4772,8 +4780,8 @@ describe('Insider abuse audit fixes (Fauzan, 27 Oct 2026)', () => {
     await svc.purStep(coo, r.id, 'approve', { note: 'ok' });
     await svc.purStep(ceo, r.id, 'approve', { note: 'ok' });
     await svc.purStep(ex, r.id, 'order', { ref: 'PO-9' });
-    await expect(svc.purStep(sk, r.id, 'receive', { qty: [12] })).rejects.toThrow(/only 10 ordered/);
-    await svc.purStep(sk, r.id, 'receive', { qty: [10] });
+    await expect(svc.purStep(sk, r.id, 'receive', { qty: [12], ref: 'DO-SYN-1', proof: [proof()] })).rejects.toThrow(/only 10 ordered/);
+    await svc.purStep(sk, r.id, 'receive', { qty: [10], ref: 'DO-SYN-1', proof: [proof()] });
     // A loss waits for the company manager.
     const person = ds.people.find((p) => p.companyId === 'co-arsh' && p.status === 'active')!;
     const i = await svc.stockIssue(sk, 'co-arsh', { itemId: 'stk-co-arsh-7', personId: person.id, qty: 1 });

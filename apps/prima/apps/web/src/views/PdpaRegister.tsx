@@ -320,6 +320,7 @@ export function ConsentsPanel() {
         Each person's signed consent for an entry that relies on consent (face sign-in, location, dashcam), with the signed form attached. A withdrawal is
         kept on the register, never deleted. Use the staff or guard number, never the IC number.
       </p>
+      <PaperConsentPanel />
       {adding && <ConsentForm items={consentItems} onDone={() => setAdding(false)} />}
       <div className="list">
         {data.consents.length === 0 && <div className="empty">No consents recorded yet.</div>}
@@ -506,5 +507,67 @@ export function BreachRegisterPanel({ data }: { data: PdpaBoard }) {
         </table>
       </div>
     </section>
+  );
+}
+
+/**
+ * Part N18 (Fitri package, 14 Nov 2026): consent for face sign-in and location is collected on paper by the PDPA
+ * officer. Only a small record is kept here (staff or guard number, face, location or both, date signed, paper
+ * reference); no scan. With the gate on, face sign-in and location work for a person only with a live record.
+ */
+function PaperConsentPanel() {
+  const v = useLoad(() => api.paperConsents(), []);
+  const act = useAction();
+  const [f, setF] = useState<Record<string, string>>({ scope: 'both' });
+  const [why, setWhy] = useState('');
+  if (!v.data) return v.error ? <ErrorNotice error={v.error} /> : null;
+  const d = v.data;
+  return (
+    <div style={{ padding: 12, display: 'grid', gap: 6, borderBottom: '1px solid var(--line, #ddd)' }}>
+      <strong>Paper consent for face sign-in and location</strong>
+      <p className="muted small">
+        {d.gateOn
+          ? 'The gate is on: face sign-in and location work for a person only after their signed paper consent is recorded here. A recorded withdrawal stops them.'
+          : 'The gate is off: face sign-in and location work as before. Switch it on once the paper round has started.'}
+        {!d.installed && ' Not installed in this database yet.'}
+      </p>
+      <ErrorNotice error={act.error} />
+      {d.canSwitch && (
+        <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
+          <input className="input" aria-label="Reason" placeholder="Reason (needed)" value={why} onChange={(e) => setWhy(e.target.value)} />
+          <button className="btn btn-sm" disabled={act.busy} onClick={() => act.run(() => api.setPaperConsentGate(!d.gateOn, why), d.gateOn ? 'Gate switched off.' : 'Gate switched on.').then((r) => r && (setWhy(''), v.reload()))}>
+            {d.gateOn ? 'Switch the gate off' : 'Switch the gate on'}
+          </button>
+        </div>
+      )}
+      {d.canRecord && (
+        <div style={{ display: 'grid', gap: 6 }}>
+          <label className="field">
+            <span>Staff or guard number (never the IC number)</span>
+            <input className="input" value={f.staffNo ?? ''} onChange={(e) => setF((x) => ({ ...x, staffNo: e.target.value }))} />
+          </label>
+          <label className="field">
+            <span>Consented to</span>
+            <select className="input" value={f.scope} onChange={(e) => setF((x) => ({ ...x, scope: e.target.value }))}>
+              <option value="both">Face and location</option>
+              <option value="face">Face only</option>
+              <option value="location">Location only</option>
+            </select>
+          </label>
+          <label className="field">
+            <span>Date signed (YYYY-MM-DD)</span>
+            <input className="input" value={f.signedOn ?? ''} onChange={(e) => setF((x) => ({ ...x, signedOn: e.target.value }))} />
+          </label>
+          <label className="field">
+            <span>Paper reference number</span>
+            <input className="input" value={f.paperRef ?? ''} onChange={(e) => setF((x) => ({ ...x, paperRef: e.target.value }))} />
+          </label>
+          <button className="btn btn-primary btn-sm" disabled={act.busy} onClick={() => act.run(() => api.recordPaperConsent(f), 'Paper consent recorded.').then((r) => r && (setF({ scope: 'both' }), v.reload()))}>
+            Record paper consent
+          </button>
+        </div>
+      )}
+      <p className="muted small">Paper consents appear in the list below; withdraw one there.</p>
+    </div>
   );
 }

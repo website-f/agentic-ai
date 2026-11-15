@@ -3,7 +3,7 @@ import { api } from '../api';
 import { RecordButton } from './RecordForm';
 import { useState } from 'react';
 import { useApp } from '../App';
-import { Chip, ExpiryChip, Loading, ErrorNotice, n, useLoad, type Tone } from '../ui';
+import { Chip, ExpiryChip, Loading, ErrorNotice, n, useAction, useLoad, type Tone } from '../ui';
 import { PageHead, Search, Stat, Stats, Toolbar } from '../kit';
 import '../styles/leadership.css';
 
@@ -33,8 +33,8 @@ const SHOW: [Show, string][] = [
 ];
 
 export function Overview() {
-  const { go, setCompanyId } = useApp();
-  const { data, error } = useLoad(() => api.overview(), []);
+  const { go, setCompanyId, me } = useApp();
+  const { data, error, reload } = useLoad(() => api.overview(), []);
   const [q, setQ] = useState('');
   const [show, setShow] = useState<Show>('all');
   const [allCards, setAllCards] = useState(false);
@@ -202,6 +202,58 @@ export function Overview() {
           </button>
         )}
       </section>
+      {me.user.opsTier === 'ceo' && <AddCompany onAdded={reload} />}
     </div>
+  );
+}
+
+/**
+ * Part N4: the CEO adds a company (audited, SSM number and source document, a reason). It starts as a draft; the
+ * Deputy Chief of Staff or the CEO checks it against SSM in the company record.
+ */
+function AddCompany({ onAdded }: { onAdded: () => void }) {
+  const act = useAction();
+  const [open, setOpen] = useState(false);
+  const [f, setF] = useState<Record<string, string>>({});
+  const field = (k: string, label: string, placeholder = '') => (
+    <label className="field">
+      <span>{label}</span>
+      <input className="input" value={f[k] ?? ''} placeholder={placeholder} onChange={(e) => setF((x) => ({ ...x, [k]: e.target.value }))} />
+    </label>
+  );
+  return (
+    <section className="panel">
+      <div className="panel-head">
+        <h3>Add a company</h3>
+        <button className="btn btn-sm" onClick={() => setOpen((o) => !o)}>
+          {open ? 'Close' : 'Add a company'}
+        </button>
+      </div>
+      {open && (
+        <div style={{ padding: 12, display: 'grid', gap: 8 }}>
+          <ErrorNotice error={act.error} />
+          {field('code', 'Company code', 'e.g. GWE')}
+          {field('name', 'Registered company name')}
+          {field('ssmNo', 'SSM registration number')}
+          {field('state', 'Primary state')}
+          {field('headOfCompany', 'Head of company (optional)')}
+          {field('sourceRef', 'Source document reference', 'SSM document name and reference')}
+          {field('reason', 'Why it is added (needed)')}
+          <button
+            className="btn btn-primary btn-sm"
+            disabled={act.busy}
+            onClick={async () => {
+              if (await act.run(() => api.addCompany(f), 'Company added as a draft. Check it against SSM in its company record.')) {
+                setF({});
+                setOpen(false);
+                onAdded();
+              }
+            }}
+          >
+            Add as a draft
+          </button>
+        </div>
+      )}
+    </section>
   );
 }

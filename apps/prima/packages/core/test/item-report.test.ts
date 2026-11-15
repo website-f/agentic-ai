@@ -3,6 +3,7 @@
 // the page, plus the same lists as Excel and CSV. Every fixture is synthetic: made-up companies, items and suppliers in
 // the layout of the real reports (title block, repeated page header, groups, second units, supplier cost lines, wrapped
 // codes, negative balances, a movement ledger with "... Continued" and totals).
+import { noLoadGate } from './no-load-gate';
 import { deflateRawSync, inflateRawSync } from 'node:zlib';
 import { describe, expect, it } from 'vitest';
 import {
@@ -323,7 +324,7 @@ const TODAY = '2026-11-11';
 const NOW = myt(TODAY, '10:30');
 function fresh() {
   const ds = generateDataset({ today: TODAY, now: NOW });
-  const store = withOrgLinks(new MemoryStore(ds));
+  const store = noLoadGate(withOrgLinks(new MemoryStore(ds)));
   const svc = new PrimaService(store, () => NOW);
   const user = (id: string) => ds.users.find((u) => u.id === id)!;
   return { ds, svc, store, user };

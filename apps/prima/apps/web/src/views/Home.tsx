@@ -2,7 +2,8 @@ import { useState } from 'react';
 import { ArrowRightIcon, CaretDownIcon } from '@phosphor-icons/react';
 import { isGroupLeader, type HomeItem, type HomeLink } from '@prima/core';
 import { GrowthPanel, iconFor } from './Growth';
-import { ApprovalLimitsPanel } from './ApprovalLimits';
+import { ApprovalLimitsPanel, StaffLeaveVcPanel } from './ApprovalLimits';
+import { CashStandInPanel } from './CashStandIn';
 import { setFinTarget } from '../finTarget';
 import { api } from '../api';
 import { myName } from '../office-access';
@@ -175,6 +176,8 @@ export function HomeView() {
       {/* Growth for group leadership (Fauzan, 3 Nov 2026): after the decisions and key numbers, before the monitor list. */}
       {isGroupLeader(me.user) && !companyScoped && <GrowthPanel />}
       {me.user.opsTier === 'ceo' && !companyScoped && <ApprovalLimitsPanel />}
+      {me.user.opsTier === 'ceo' && !companyScoped && <StaffLeaveVcPanel />}
+      {(me.user.opsTier === 'ceo' || me.user.leadership === 'finance_director') && !companyScoped && <CashStandInPanel />}
       {data.watch ? (
         <GroupedList id="home-watch" title={data.watchTitle ?? 'Monitor'} items={data.watch} empty="Nothing to watch right now." open={open} />
       ) : (

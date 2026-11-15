@@ -12,6 +12,7 @@ import { ClientDeposits, ContractEnds } from './FinanceContractEnd';
 import { BankCharges, FixedDeposits } from './FinanceBanking';
 import { YearEndPanels } from './FinanceYearEnd';
 import { LedgerPanels } from './FinanceLedger';
+import { SqlAccountLinkPanel } from './FinanceSqlLink';
 import { ClientCredit, SupplierStatements } from './FinanceCredit';
 import { Chip, ErrorNotice, Loading, dateLabel, dateTimeLabel, useAction, useLoad, type Tone } from '../ui';
 
@@ -60,7 +61,7 @@ const SECTIONS: [FinCheckSection, string, string][] = [
   ['bank', 'Bank', 'Statements, matching, bank reconciliations, where the money sits, fixed deposits and bank charges'],
   ['in', 'Money in', 'Invoices per contract, government claims, money in, stamp duty, contracts that ended, deposits held by clients, client credit limits, ageing and overdue invoices'],
   ['cash', 'Cash and cards', 'Staff advances, petty cash, company cards and the 13-week cash forecast'],
-  ['tax', 'Tax and month-end', 'Tax calendar, e-Invoice, SST, intercompany balances, budget, statement checks FS-01 to FS-12, chart of accounts mapping, SQL Account connection, withholding tax, prepayments and accruals, fixed assets, auditor requests and audit dates'],
+  ['tax', 'Tax and month-end', 'Tax calendar, e-Invoice, SST, intercompany balances, budget, statement checks FS-01 to FS-12, chart of accounts mapping, SQL Account connection and posting link, withholding tax, prepayments and accruals, fixed assets, auditor requests and audit dates'],
 ];
 
 /**
@@ -164,6 +165,7 @@ export function ChecksTab({ desk, target }: { desk: FinDesk; target?: { section?
               <Intercompany v={data} co={co} />
               <Plan v={data} co={co} lead={lead} me={desk.me} />
               <LedgerPanels v={data} co={co} lead={lead} me={desk.me} reviewer={lead || desk.actor.kind === 'leader' || desk.actor.kind === 'deputy'} />
+              <SqlAccountLinkPanel companyId={co.companyId} />
               <YearEndPanels v={data} co={co} />
               <AuditDates v={data} />
             </>
@@ -2177,7 +2179,7 @@ function TaxCalendar({ v, co }: { v: FinControls; co: Co }) {
       </div>
       <p className="muted small fin-intro">
         Built from the financial year end. Prima ticks what it can see (SST filed, payments made from the regular payments list, the consolidated e-Invoice). Record the
-        others once filed in the portal. The Finance Director confirms the dates from LHDN and Customs.
+        others once filed in the portal. The Finance Director confirms the dates from the published LHDN, SSM and Customs guidance.
       </p>
       <ErrorNotice error={act.error} />
       <div className="list">

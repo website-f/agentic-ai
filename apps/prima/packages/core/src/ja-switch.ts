@@ -201,11 +201,8 @@ export interface JaSettingsRecord {
 const isCeo = (u: User) => u.opsTier === 'ceo';
 const isCoo = (u: User) => u.opsTier === 'coo';
 const isAct = (u: User) => u.role === 'pwvsb_officer' && u.department === 'audit' && !!u.actRole;
-/**
- * Who checks the difference report and approves imports. C6 (Fauzan, 11 Nov 2026): the ACT Manager is the second checker;
- * the ACT Director (head) may also check. Never someone who explained a difference in the report or staged the import.
- */
-const isActChecker = (u: User) => isAct(u) && (u.actRole === 'manager' || u.actRole === 'lead');
+/** ACT Lead checks the difference report and approve imports (proposed; the plan suggested ACT). */
+const isActChecker = (u: User) => isAct(u) && u.actRole === 'lead';
 const OPS_EXPLAINERS = ['om', 'regional', 'ogm', 'ops_director'];
 
 /** Who sees the switch-over screen. */
@@ -802,15 +799,16 @@ export class JaSwitchService {
       const prima: Omit<JaPayslipRow, 'kind'>[] = [];
       const missing: string[] = [];
       for (const m of months) {
-        const run = runs
-          .filter((r) => r.period === m && (r.stage === 'approved' || r.stage === 'paid'))
-          .sort((a, b) => b.prepared.at.localeCompare(a.prepared.at))[0];
+        const ready = runs.filter((r) => r.period === m && (r.stage === 'approved' || r.stage === 'paid'));
+        const run = ready.filter((r) => !r.laterOf).sort((a, b) => b.prepared.at.localeCompare(a.prepared.at))[0];
         if (!run) {
           missing.push(m);
           continue;
         }
+        // Guards whose absence waited for a decision are paid in a later run of the same month (Fauzan, 15 Nov 2026).
+        const lines = [run, ...ready.filter((r) => r.laterOf === run.id)].flatMap((r) => r.lines);
         // A guard with nothing to pay gets no payslip in JA either, so only paid lines are compared.
-        for (const l of run.lines.filter((x) => x.gross > 0 || x.net !== 0)) prima.push({ staffNo: l.staffNo, period: m, gross: l.gross, net: l.net, epf: l.epfEe, socso: l.socsoEe, eis: l.eisEe, pcb: l.pcb });
+        for (const l of lines.filter((x) => x.gross > 0 || x.net !== 0)) prima.push({ staffNo: l.staffNo, period: m, gross: l.gross, net: l.net, epf: l.epfEe, socso: l.socsoEe, eis: l.eisEe, pcb: l.pcb });
       }
       if (missing.length)
         return { ...base, primaReady: false, primaNote: `No COO-approved Prima guard pay run yet for ${missing.join(', ')}. HR prepares it and the COO approves it first.` };
@@ -1069,7 +1067,7 @@ export class JaSwitchService {
         rec.explanations = [...rec.explanations.filter((e) => e.key !== key), { key, kind, note, ...who }];
         summary = `Difference ${key} ${kind}: ${note}`;
       } else if (action === 'check') {
-        if (!isActChecker(user)) throw new AccessDenied('view', '(only the ACT Manager or the ACT Director checks the report)');
+        if (!isActChecker(user)) throw new AccessDenied('view', '(only the ACT Lead checks the report)');
         if (rec.state !== 'side_by_side' || !rec.run) throw new BadInput('There is no side-by-side run.');
         if (rec.run.to >= today) throw new BadInput(`The run ends on ${rec.run.to}; check it after that day.`);
         if (rec.explanations.some((e) => e.byId === user.id)) throw new BadInput('You explained a difference in this report, so someone else in ACT checks it.');
@@ -1195,7 +1193,7 @@ export class JaSwitchService {
 
   async decideImport(user: User, idIn: unknown, body: Record<string, unknown>) {
     const ctx = await this.ctx(user);
-    if (!isActChecker(user)) throw new AccessDenied('view', '(only the ACT Manager or the ACT Director approves a JA import)');
+    if (!isActChecker(user)) throw new AccessDenied('view', '(only the ACT Lead approves a JA import)');
     const id = `ja:import:${String(idIn).slice(0, 160)}`;
     return this.store.transaction(async (tx) => {
       await tx.lock?.('jaRecords', id);

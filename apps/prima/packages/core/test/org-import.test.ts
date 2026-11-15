@@ -67,7 +67,7 @@ describe('import', () => {
     const p = await svc.orgImport.preview(it, 'itDomain', null, good);
     expect(p.canImport).toBe(true);
     await expect(svc.orgImport.commit(it, 'itDomain', null, good + 'extra.example,domain,X\n', p.fingerprint)).rejects.toThrow(/changed since the preview/);
-    const r = await svc.orgImport.commit(it, 'itDomain', null, good, p.fingerprint);
+    const r = await svc.orgImport.commit(it, 'itDomain', null, good, p.fingerprint, { backup: 'Backup checked 14 Nov (mock)' });
     expect(r.rows).toBe(2);
     expect(r.recordIds).toHaveLength(2);
     expect(ds.itDomains.filter((d) => d.name.startsWith('synthetic-'))).toHaveLength(2);
@@ -92,7 +92,29 @@ describe('import', () => {
     const p = await svc.orgImport.preview(hr, 'officeStaff', 'pwvsb', csv);
     expect(p.rows[0].problems).toEqual([]);
     expect(JSON.stringify(p)).not.toContain('900101011234');
-    await svc.orgImport.commit(hr, 'officeStaff', 'pwvsb', csv, p.fingerprint);
+    await svc.orgImport.commit(hr, 'officeStaff', 'pwvsb', csv, p.fingerprint, { backup: 'Backup checked 14 Nov (mock)' });
     expect(ds.orgTasks.filter((t) => t.flowId === 'staff_join')).toHaveLength(0);
+  });
+
+  it('N2: the backup is named, the counts go to the CEO and his OK comes before the next load; never his own, never by another role', async () => {
+    const { svc, user } = fresh();
+    const it = user('u-it-mgr');
+    const ceo = user('u-fauzan');
+    const p = await svc.orgImport.preview(it, 'itDomain', null, good);
+    await expect(svc.orgImport.commit(it, 'itDomain', null, good, p.fingerprint)).rejects.toThrow(/backup/);
+    const r = await svc.orgImport.commit(it, 'itDomain', null, good, p.fingerprint, { backup: 'Backup 26 Oct restored on test (mock)' });
+    expect(r.counts).toEqual({ inFile: 2, loaded: 2, refused: 0, ignoredColumns: [] });
+    const next = 'name,kind,registrar\nsynthetic-three.example,domain,R\n';
+    const p2 = await svc.orgImport.preview(it, 'itDomain', null, next);
+    await expect(svc.orgImport.commit(it, 'itDomain', null, next, p2.fingerprint, { backup: 'Same backup (mock)' })).rejects.toThrow(/waiting for the CEO/);
+    const home = await svc.orgImport.homeItems(ceo);
+    expect(home[0].title).toMatch(/1 bulk load/);
+    expect(home[0].detail).toMatch(/2 loaded of 2/);
+    await expect(svc.orgImport.okLoad(user('u-pwvsb-hr'), r.id, 'Fine')).rejects.toThrow(/Only the CEO/);
+    await expect(svc.orgImport.okLoad(ceo, r.id, '')).rejects.toThrow(/comment/);
+    await svc.orgImport.okLoad(ceo, r.id, 'Counts match (mock).');
+    expect(await svc.orgImport.homeItems(ceo)).toEqual([]);
+    await svc.orgImport.commit(it, 'itDomain', null, next, p2.fingerprint, { backup: 'Same backup (mock)' });
+    expect((await svc.orgImport.loads(it)).loads.find((l) => l.id === r.id)?.ok?.comment).toMatch(/Counts match/);
   });
 });

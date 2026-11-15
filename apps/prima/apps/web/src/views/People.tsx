@@ -1,3 +1,6 @@
+import { OpeningBalancesButton } from './OpeningBalances';
+import { HrListsButton } from './HrLists';
+import { FileHelper } from './BulkHelper';
 import { Select } from '../SearchSelect';
 import { useEffect, useState } from 'react';
 import { CheckCircleIcon, PhoneIcon, ProhibitIcon, UsersThreeIcon, WarningIcon } from '@phosphor-icons/react';
@@ -16,8 +19,7 @@ import { GuardTrainingPanel } from './HrDevelop';
 import { jumpTo } from './AddImportMenu';
 import { FaceCapture } from './FaceCheck';
 import { GroupHistoryTab, HistoryLookupPanel } from './StaffHistory';
-import { GuardPhoneCard } from './GuardPhoneOffice';
-import { GuardSignInsButton } from './GuardSignIns';
+import { GuardPhoneBulkCodes, GuardPhoneCard } from './GuardPhoneOffice';
 import '../styles/people.css';
 
 export function People({ openPersonId }: { openPersonId?: string }) {
@@ -66,7 +68,10 @@ export function People({ openPersonId }: { openPersonId?: string }) {
           <>
             <ImportButton kind="officeStaff" companyId={companyId} label="Import office staff" />
             <RecordButton kind="officeStaff" companyId={companyId} label="Add office staff" primary />
-            <GuardSignInsButton user={me.user} />
+            {companyId !== GROUP_EMPLOYER_ID && <GuardPhoneBulkCodes companyId={companyId} />}
+            {me.user.department === 'hr' && <OpeningBalancesButton companyId={companyId} />}
+            {me.user.role === 'pwvsb_officer' && (me.user.department === 'hr' || me.user.leadership === 'cos' || me.user.leadership === 'deputy_cos') && <HrListsButton />}
+            {me.user.department === 'hr' && <FileHelperButton people={(data ?? []).map((r) => ({ id: r.person.id, name: r.person.name, staffNo: r.person.staffNo }))} />}
             {historyRole && (
               <button className="btn" aria-pressed={hireCheck} onClick={() => setHireCheck(!hireCheck)}>
                 Look up staff history
@@ -510,6 +515,21 @@ export function TrainingTab({ d }: { d: GuardProfile }) {
           ))}
         </div>
       </Sec>
+      <Sec title="Courses a guard needs">
+        {!d.courses.set && <p className="muted small">Not set by HR.</p>}
+        <div className="list pp-box">
+          {d.courses.items.map((c) => (
+            <div key={c.name} className="list-item">
+              <div>
+                <div>{c.name}</div>
+                <div className="muted small">{c.byWhen}</div>
+              </div>
+              <Chip tone={c.needed === 'required' ? 'info' : 'neutral'}>{c.needed === 'required' ? 'Required' : 'Optional'}</Chip>
+            </div>
+          ))}
+        </div>
+        {d.courses.set && <p className="muted small">Set by HR, in force from {d.courses.from}.</p>}
+      </Sec>
       <Sec title="Chances to upgrade">
         <div className="list pp-box">
           {d.upgrades.map((u) => (
@@ -621,6 +641,8 @@ export function LeaveTab({ d, personId, self }: { d: GuardProfile; personId: str
       <div className="pp-bar">
         <p className="pp-note">
           {b.years} year{b.years === 1 ? '' : 's'} of service. {b.note ? `${b.note} ` : ''}
+          {b.lapse ? `${b.lapse.days} annual leave day(s) left lapse on ${b.lapse.on}${b.lapse.carryForward ? ` (up to ${b.lapse.carryForward} carry into next year)` : ''}. ` : ''}
+          {b.opening ? `Includes the opening balance before Prima (to ${b.opening.asAt}): annual ${b.opening.annual}, sick ${b.opening.sick}, hospital ${b.opening.hospital} days. ` : ''}
           {!self && b.rule.source}
         </p>
         {d.access.requestLeave && !asking && (
@@ -867,4 +889,11 @@ export function DisciplineAppealBox({ x, self, onChange }: { x: DisciplineEntry;
       <ErrorNotice error={act.error} />
     </div>
   );
+}
+
+
+/** HR's file manager for many papers at once (K8 / N2). */
+function FileHelperButton({ people }: { people: { id: string; name: string; staffNo: string }[] }) {
+  const [open, setOpen] = useState(false);
+  return open ? <FileHelper people={people} /> : <button className="btn" onClick={() => setOpen(true)}>File many papers</button>;
 }

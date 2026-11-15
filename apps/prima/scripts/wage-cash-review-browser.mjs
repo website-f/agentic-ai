@@ -10,14 +10,18 @@ if (process.env.CI_SYNTHETIC_BROWSER !== 'true' || !process.env.PLAYWRIGHT_MODUL
 const day = '2026-11-05', at = myt(day, '10:00');
 const ds = generateDataset({ today: day, now: at, daysBack: 40 });
 const svc = new PrimaService(new MemoryStore(ds), () => at);
-const run = await svc.prepareGuardPay(await svc.user('u-pwvsb-hr'), 'co-arsh', '2026-10', []);
-const guard = run.lines.find(l => l.net > 100);
+// B1 (11 Nov 2026): the Company Manager names who prepares; B1b: pick a line whose hours match.
+const naming = { userIds: ['u-ae-arsh'], reason: 'Synthetic: admin executive prepares pay' };
+await svc.setGuardPayPreparers(await svc.user('u-cm-arsh'), 'co-arsh', naming);
+const run = await svc.prepareGuardPay(await svc.user('u-ae-arsh'), 'co-arsh', '2026-10', []);
+const guard = run.lines.find(l => l.net > 100 && (!l.hours || l.hours.match));
 assert(guard);
 const log = [
-  { userId: 'u-pwvsb-hr', op: 'prepareGuardPay', args: ['co-arsh', '2026-10', []], made: 'synthetic-run' },
+  { userId: 'u-cm-arsh', op: 'setGuardPayPreparers', args: ['co-arsh', naming.userIds, naming.reason] },
+  { userId: 'u-ae-arsh', op: 'prepareGuardPay', args: ['co-arsh', '2026-10', []], made: 'synthetic-run' },
   { userId: 'u-pwvsb-doa', op: 'guardPayCash', args: ['synthetic-run', guard.personId, 'list', { reason: 'Synthetic wage cash request' }] },
   { userId: 'u-fauzan', op: 'guardPayCash', args: ['synthetic-run', guard.personId, 'decide', { give: true, reason: 'Original named amount approved' }] },
-  { userId: 'u-pwvsb-hr', op: 'setGuardPayLine', args: ['synthetic-run', guard.personId, { pcb: guard.pcb + 1 }] },
+  { userId: 'u-ae-arsh', op: 'setGuardPayLine', args: ['synthetic-run', guard.personId, { pcb: guard.pcb + 1 }] },
 ].map(c => ({ day, at, ...c }));
 const html = await readFile(new URL('../apps/web/dist-demo/index.html', import.meta.url));
 const server = createServer((req, res) => { res.writeHead(200, { 'content-type': 'text/html' }); res.end(html); });
@@ -48,7 +52,7 @@ try {
     await page.getByRole('button', { name: /Saya setuju|I agree/ }).click({ timeout: 2500 }).catch(() => {});
     await page.getByRole('button', { name: 'EN', exact: true }).click({ timeout: 1000 }).catch(() => {});
     await page.getByRole('button', { name: 'Guard pay', exact: true }).first().click();
-    await page.getByRole('button', { name: /^October 2026: Draft with HR/ }).first().click();
+    await page.getByRole('button', { name: /^October 2026: Draft with the company/ }).first().click();
     const panel = page.locator('section').filter({ has: page.getByRole('heading', { name: 'How it is paid', exact: true }) });
     await panel.getByRole('heading', { name: 'How it is paid', exact: true }).waitFor();
     await page.setViewportSize({ width, height: 1000 });

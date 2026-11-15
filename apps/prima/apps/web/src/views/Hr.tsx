@@ -8,7 +8,6 @@ import { CmsHoursPanel } from './CmsHours';
 import { LeavePanel } from './Leave';
 import { FlexPanel, HolidaysPanel, HrLeaveSettingsPanel } from './HrLeave';
 import { JoinLeavePanel, VacanciesPanel } from './HrJoinLeave';
-import { ResignationPolicyCard, ResignationsPanel } from './Resignation';
 import { StaffMovementPanel } from './HrMovement';
 import { GroupHistoryPanel, HistoryLookupPanel } from './StaffHistory';
 import { AllowancesPanel } from './HrAllowances';
@@ -179,8 +178,6 @@ export function HrView() {
       </Group>
       <Group {...move}>
         <JoinLeavePanel />
-        {/* P100 (E10): resignations and the shorter-notice decision. */}
-        <ResignationsPanel />
         <VacanciesPanel />
         <StaffMovementPanel />
         <HistoryLookupPanel />
@@ -197,7 +194,6 @@ export function HrView() {
         <AppraisalsPanel />
         <TrainingPanel />
         <PoliciesPanel />
-        <ResignationPolicyCard />
         <HrGuide />
       </Group>
       <Group {...leave}>

@@ -8,6 +8,7 @@ import { StaffMovementPanel } from './HrMovement';
 import { RecordButton, useRecordKinds } from './RecordForm';
 import { ImportButton } from './ImportDrawer';
 import '../styles/leadership.css';
+import { UnbilledSitesPanel } from './FinanceMonitor';
 
 export function CompanyView() {
   const { companyId, go, me } = useApp();
@@ -16,6 +17,8 @@ export function CompanyView() {
     <>
       <VacanciesPanel />
       <StaffMovementPanel onlyIfAny />
+      {/* F1 (Fauzan, 11 Nov 2026): the company manager sees its own company's unbilled sites. */}
+      <UnbilledSitesPanel companyId={companyId} />
     </>
   ) : null;
   const { data, error } = useLoad(() => api.dashboard(companyId), [companyId]);
