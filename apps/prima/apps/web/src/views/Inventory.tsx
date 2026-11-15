@@ -1,9 +1,9 @@
 import { Select } from '../SearchSelect';
-import { useState } from 'react';
+import { createContext, useContext, useState } from 'react';
 import { api } from '../api';
 import { saveFile } from '../save';
 import { Chip, Loading, dateLabel, useAction, useLoad } from '../ui';
-import { OpForm } from './ItPolicyPanel';
+import { OpForm, type Field } from './ItPolicyPanel';
 
 /**
  * Kawalan Inventori (Part U, Fitri package; Fauzan's answers 14 Nov 2026): the monthly and the 6-monthly major stock
@@ -35,6 +35,17 @@ type Board = {
   dataAsAt: string;
 };
 const send = (op: string) => (i: Record<string, unknown>) => api.inventoryAct(op, i);
+
+/**
+ * P105: the store's items (from the store list on the same screen), so a field that names a store item is a
+ * searchable pick-list by name instead of a typed record id nobody sees. Empty: the typed field stays.
+ */
+const StoreItems = createContext<{ id: string; label: string }[]>([]);
+function useItemField() {
+  const items = useContext(StoreItems);
+  return (k: string, l: string): Field =>
+    items.length ? { k, l, t: 'select', o: items.map((x) => x.id), labels: Object.fromEntries(items.map((x) => [x.id, x.label])) } : { k, l };
+}
 const REASONS = ['shortage', 'lost', 'damaged', 'counting_error', 'issue_not_recorded', 'receipt_not_recorded', 'other'];
 const CAUSES = ['WEAR', 'ACCIDENT', 'NEGLIGENCE', 'MISUSE', 'UNKNOWN'];
 const DISP_STATUS: Record<string, string> = { semakan: 'Semakan', kelulusan: 'Kelulusan', kaedah: 'Kaedah', pelaksanaan: 'Pelaksanaan', bukti: 'Bukti', selesai: 'Selesai', ditolak: 'Ditolak' };
@@ -55,13 +66,14 @@ async function pdf(op: string, id: string) {
   return p;
 }
 
-export function InventoryPanel() {
+export function InventoryPanel({ items = [] }: { items?: { id: string; label: string }[] }) {
   const { data, error } = useLoad(() => api.inventoryAct('board', {}) as Promise<Board>, []);
   const act = useAction();
   if (error) return null;
   if (!data) return <Loading what="inventory control" />;
   const k = data.kpi;
   return (
+    <StoreItems.Provider value={items}>
     <section className="panel">
       <div className="panel-head">
         <h3>Kawalan Inventori</h3>
@@ -116,7 +128,7 @@ export function InventoryPanel() {
       )}
       {data.bufferStale.length > 0 && <p className="muted small">Paras simpanan perlu disemak semula: {data.bufferStale.map((b) => b.name).join(', ')}</p>}
       {data.can.mgmt && (
-        <OpForm title="Tetapkan simpanan kursus (OGM)" op="buffer" send={send('buffer')} fields={[{ k: 'itemId', l: 'ID barang' }, { k: 'level', l: 'Paras simpanan', t: 'number' }, { k: 'reason', l: 'Sebab (pengambilan kursus)' }]} />
+        <OpForm title="Tetapkan simpanan kursus (OGM)" op="buffer" send={send('buffer')} fields={[(items.length ? { k: 'itemId', l: 'Barang', t: 'select', o: items.map((x) => x.id), labels: Object.fromEntries(items.map((x) => [x.id, x.label])) } : { k: 'itemId', l: 'ID barang' }) as Field, { k: 'level', l: 'Paras simpanan', t: 'number' }, { k: 'reason', l: 'Sebab (pengambilan kursus)' }]} />
       )}
       {data.suggestions.length > 0 && <p className="muted small">Cadangan pesanan (bukan automatik): {data.suggestions.map((s) => `${s.name} ${s.s.qty}`).join(', ')}</p>}
       <h4>Kes pelupusan</h4>
@@ -171,10 +183,12 @@ export function InventoryPanel() {
       <Match />
       <p className="muted small">Rekod inventori, kiraan dan pelupusan disimpan sekurang-kurangnya {data.settings.recordsYears} tahun.</p>
     </section>
+    </StoreItems.Provider>
   );
 }
 
 function OpenCount({ c, canCount, canMgmt }: { c: NonNullable<Board['openCount']>; canCount: boolean; canMgmt: boolean }) {
+  const itemField = useItemField();
   const act = useAction();
   const [v, setV] = useState<Record<string, { physical: string; reason: string; note: string }>>({});
   const [w, setW] = useState({ staffNo: '', pin: '' });
@@ -252,7 +266,7 @@ function OpenCount({ c, canCount, canMgmt }: { c: NonNullable<Board['openCount']
         </div>
       )}
       {canMgmt && c.frozen && (
-        <OpForm title="Benarkan satu pergerakan segera (OGM)" op="urgent" send={send('urgent')} fields={[{ k: 'itemId', l: 'ID barang' }, { k: 'qty', l: 'Kuantiti', t: 'number' }, { k: 'reason', l: 'Kenapa tidak boleh tunggu' }]} />
+        <OpForm title="Benarkan satu pergerakan segera (OGM)" op="urgent" send={send('urgent')} fields={[itemField('itemId', 'Barang'), { k: 'qty', l: 'Kuantiti', t: 'number' }, { k: 'reason', l: 'Kenapa tidak boleh tunggu' }]} />
       )}
     </div>
   );
@@ -283,13 +297,14 @@ function Variances({ c, canDecide, canMgmt, limit }: { c: Board['counts'][number
 }
 
 function NewDisposal() {
+  const itemField = useItemField();
   return (
     <OpForm
       title="Mohon pelupusan (satu barang)"
       op="disposalRequest"
       send={(i) => api.inventoryAct('disposalRequest', { storeId: i.storeId, siteId: i.siteId || undefined, lines: [{ itemId: i.itemId || undefined, name: i.name, qty: Number(i.qty), reason: i.reason, condition: i.condition, location: i.location, photo: i.photo }] })}
       fields={[
-        { k: 'itemId', l: 'ID barang stor (kosong untuk barang tapak)' },
+        itemField('itemId', 'Barang stor (kosong untuk barang tapak)'),
         { k: 'name', l: 'Nama barang (barang tapak)' },
         { k: 'siteId', l: 'ID tapak (barang tapak)' },
         { k: 'qty', l: 'Kuantiti', t: 'number' },

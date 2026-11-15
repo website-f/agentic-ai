@@ -10,8 +10,9 @@ export function ReportProblemButton({ screen }: { screen: string }) {
   const [open, setOpen] = useState(false);
   return (
     <>
-      <button className="btn btn-sm" onClick={() => setOpen((o) => !o)} aria-expanded={open}>
-        Lapor masalah / Report a problem
+      {/* P105: one language at a time (BM: "Lapor masalah"), so the header fits a phone. */}
+      <button className="btn btn-sm" onClick={() => setOpen((o) => !o)} aria-expanded={open} aria-label="Report a problem" title="Report a problem">
+        Report a problem
       </button>
       {open && (
         <div className="panel" style={{ position: 'fixed', right: 16, top: 64, zIndex: 50, width: 'min(420px, calc(100vw - 32px))', maxHeight: '75vh', overflow: 'auto' }}>
@@ -36,19 +37,19 @@ function ReportProblem({ screen, onClose }: { screen: string; onClose: () => voi
   return (
     <div style={{ padding: 12, display: 'grid', gap: 8 }}>
       <div className="row" style={{ justifyContent: 'space-between' }}>
-        <strong>Lapor masalah / Report a problem</strong>
+        <strong>Report a problem</strong>
         <button className="btn btn-sm" onClick={onClose}>
-          Tutup / Close
+          Close
         </button>
       </div>
       <p className="muted small">Screen: {screen}. Write only about the problem; do not copy other people's records.</p>
       <ErrorNotice error={act.error} />
       <label className="field">
-        <span>Apa yang berlaku? / What went wrong?</span>
-        <textarea className="input" rows={3} value={what} onChange={(e) => setWhat(e.target.value)} />
+        <span className="label">What went wrong?</span>
+        <textarea className="input" rows={3} aria-label="What went wrong?" value={what} onChange={(e) => setWhat(e.target.value)} />
       </label>
       <label className="field">
-        <span>Gambar (pilihan) / Picture (optional)</span>
+        <span className="label">Picture (optional, up to 500 KB)</span>
         <input type="file" accept="image/png,image/jpeg,image/webp" onChange={(e) => readPhoto(e.target.files?.[0])} />
       </label>
       <button
@@ -56,7 +57,7 @@ function ReportProblem({ screen, onClose }: { screen: string; onClose: () => voi
         disabled={act.busy || what.trim().length < 5}
         onClick={() => act.run(() => api.reportProblem({ what, screen, photo }), 'Sent. IT support will reply here.').then((r) => r && (setWhat(''), setPhoto(null), mine.reload()))}
       >
-        Hantar / Send
+        Send
       </button>
       {(mine.data?.reports ?? []).filter((r) => !mine.data?.support || r.reporterId === undefined || !r.mayReply).length > 0 && (
         <div className="list">

@@ -1260,8 +1260,12 @@ function Store({ data }: { data: PurBoard }) {
         </div>
       </Card>
       {company && companiesOf(data).some((c) => c.id === 'goodwill') && <UniformRequestQueue data={data} />}
-      {company && companiesOf(data).some((c) => c.id === 'goodwill') && <SiteSuppliesPanel />}
-      {company && companiesOf(data).some((c) => c.id === 'goodwill') && <InventoryPanel />}
+      {/* P105: also for the OGM, who confirms supplies requests and decides the big adjustments and disposals, and for the
+          readers (Finance, ACT, the COO, the CEO); each panel shows only what the server gives this person, nothing otherwise. */}
+      {companiesOf(data).some((c) => c.id === 'goodwill') && <SiteSuppliesPanel />}
+      {companiesOf(data).some((c) => c.id === 'goodwill') && (
+        <InventoryPanel items={data.stock.filter((s) => s.item.companyId === 'goodwill').map((s) => ({ id: s.item.id, label: s.item.name }))} />
+      )}
       <div className={company ? 'bz-two bz-pu-issue' : 'bz-stack'}>
         {company && <IssueForm data={data} />}
         <Card title="Issued and not yet returned" sub={data.issues.length > 50 ? `Latest 50 of ${data.issues.length}` : `${data.issues.length} issued`} flush>

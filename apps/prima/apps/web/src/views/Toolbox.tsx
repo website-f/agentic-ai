@@ -42,12 +42,52 @@ type Talks = { days: number; rows: { siteId: string; siteName: string; state: st
 
 const send = (op: string) => (i: Record<string, unknown>) => api.toolboxAct(op, i);
 const STATUS: readonly string[] = ['baru', 'dalam_proses', 'menunggu', 'selesai', 'tiada'];
+const STATUS_LABEL: Record<string, string> = { baru: 'Baru', dalam_proses: 'Dalam proses', menunggu: 'Menunggu', selesai: 'Selesai', tiada: 'Tiada' };
+const MEETING_STATUS: Record<string, string> = { draft: 'Draf', submitted: 'Menunggu pengesahan', returned: 'Dikembalikan', verified: 'Disahkan' };
 
-export function ToolboxPanel({ meetings }: { meetings: { id: string; title: string; start: string; kind: string; seriesKey?: string | null }[] }) {
+/** P105: central departments by name, not by their code (the board sends `dept:<code>`). */
+export const DEPT_BM: Record<string, string> = {
+  arms_control: 'Kawalan Senjata',
+  asset: 'Pengurusan Aset',
+  audit: 'Audit Dalaman',
+  chief_of_staff: 'Pejabat Ketua Staf',
+  cms: 'CMS (pusat kawalan)',
+  director_office: 'Pejabat Pengarah',
+  finance: 'Kewangan',
+  fwm: 'Pengurusan Pekerja Asing (FWM)',
+  hr: 'HR',
+  it: 'IT',
+  legal: 'Undang-undang',
+  operations: 'Operasi',
+  pdpa: 'PDPA',
+  procurement: 'Perolehan',
+  transport: 'Pengangkutan',
+  act: 'ACT',
+};
+export const scopeName = (name: string) => DEPT_BM[name] ?? (/^Unit [a-z_]+$/.test(name) ? `Unit ${DEPT_BM[name.slice(5)] ?? name.slice(5)}` : name);
+
+/** People an organiser may name (from the Meetings board). */
+export type PickPerson = { id: string; name: string; title?: string };
+/**
+ * P105: a person is picked by name from the list the Meetings screen already has; with no list (the person cannot
+ * schedule meetings) the field stays a typed user ID as before. The value sent is the user ID either way.
+ */
+export function personField(k: string, l: string, people: PickPerson[]): Field {
+  // t: 'text' keeps OpForm from reading a key such as ownerId as a company pick-list.
+  if (!people.length) return { k, l: `${l} (ID pengguna)`, t: 'text' };
+  return { k, l, t: 'select', o: people.map((p) => p.id), labels: Object.fromEntries(people.map((p) => [p.id, p.title ? `${p.name} (${p.title})` : p.name])) };
+}
+
+export function ToolboxPanel({ meetings, people = [] }: { meetings: { id: string; title: string; start: string; kind: string; seriesKey?: string | null }[]; people?: PickPerson[] }) {
   const { data } = useLoad(() => api.toolboxAct('board', {}) as Promise<Board>, []);
   const talks = useLoad(() => api.toolboxAct('siteTalks', {}) as Promise<Talks>, []);
   const [open, setOpen] = useState<string | null>(null);
+  const [siteQ, setSiteQ] = useState('');
   const mine = meetings.filter((m) => m.kind === 'toolbox' || m.seriesKey?.startsWith('co-office:') || m.seriesKey?.startsWith('dept-toolbox:'));
+  // Sites with no talk in the period first, then by name; a search box because an OM area can hold many sites.
+  const siteRows = (talks.data?.rows ?? [])
+    .filter((r) => !siteQ || r.siteName.toLowerCase().includes(siteQ.toLowerCase()))
+    .sort((a, b) => Number(b.due) - Number(a.due) || a.siteName.localeCompare(b.siteName));
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
       <CentralAdminGuide view="meetings" />
@@ -61,15 +101,18 @@ export function ToolboxPanel({ meetings }: { meetings: { id: string; title: stri
             {data.rows.map((r) => (
               <div key={r.scope} className="item">
                 <div className="item-main">
-                  <strong>{r.name}</strong> {r.late ? <Chip tone="warn">Belum disahkan dalam 2 minggu</Chip> : <Chip tone="ok">Terkini</Chip>}{' '}
-                  {r.directorMissed && <Chip tone="crit">Lawatan pengarah pusat: tiada</Chip>}
+                  <strong>{scopeName(r.name)}</strong>
+                  <span className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
+                    {r.late ? <Chip tone="warn">Belum disahkan dalam 2 minggu</Chip> : <Chip tone="ok">Terkini</Chip>}
+                    {r.directorMissed && <Chip tone="crit">Lawatan pengarah pusat: tiada</Chip>}
+                  </span>
                   <div className="muted small">
                     Terakhir {r.lastMeeting ? dateLabel(r.lastMeeting) : 'tiada'} · baris terbuka {r.openLines}
                     {r.staleMax ? ` · tiada perubahan ${r.staleMax} mesyuarat` : ''}
                     {r.tell ? ` · dimaklumkan kepada ${r.tell}` : ''} · merah {r.red} · pengarah {r.director ?? 'belum ditetapkan'}
                   </div>
                   {data.can.rotation && (
-                    <OpForm title="Tetapkan pengarah pusat" op="rotation" send={send('rotation')} fixed={{ scope: r.scope }} fields={[{ k: 'directorId', l: 'Pengarah (ID pengguna)' }, { k: 'reason', l: 'Sebab' }]} />
+                    <OpForm title="Tetapkan pengarah pusat" op="rotation" send={send('rotation')} fixed={{ scope: r.scope }} fields={[personField('directorId', 'Pengarah pusat', people), { k: 'reason', l: 'Sebab' }]} />
                   )}
                 </div>
               </div>
@@ -82,7 +125,7 @@ export function ToolboxPanel({ meetings }: { meetings: { id: string; title: stri
           <h3>Mesyuarat toolbox saya</h3>
         </div>
         <div className="list">
-          {mine.length === 0 && <p className="muted">Tiada mesyuarat toolbox. Tetapkannya dari "Regular meetings".</p>}
+          {mine.length === 0 && <p className="muted">Tiada mesyuarat toolbox lagi. Tetapkannya dari tab "Mesyuarat berkala".</p>}
           {mine.map((m) => (
             <button key={m.id} className="list-item list-button" onClick={() => setOpen(open === m.id ? null : m.id)}>
               <span>
@@ -91,16 +134,22 @@ export function ToolboxPanel({ meetings }: { meetings: { id: string; title: stri
             </button>
           ))}
         </div>
-        {open && <ToolboxMeeting id={open} />}
+        {open && <ToolboxMeeting id={open} people={people} />}
       </section>
       {talks.data && (
         <section className="panel">
           <div className="panel-head">
             <h3>Taklimat toolbox tapak (OM)</h3>
-            <span className="muted small">Setiap tapak sekurang-kurangnya sekali dalam {talks.data.days} hari</span>
+            <span className="muted small">
+              Setiap tapak sekurang-kurangnya sekali dalam {talks.data.days} hari · {talks.data.rows.filter((r) => r.due).length} belum ada taklimat
+            </span>
           </div>
+          {talks.data.rows.length > 8 && (
+            <input className="input" type="search" aria-label="Cari tapak" placeholder="Cari tapak" value={siteQ} onChange={(e) => setSiteQ(e.target.value)} style={{ margin: '8px 0' }} />
+          )}
           <div className="list">
-            {talks.data.rows.slice(0, 40).map((r) => (
+            {siteRows.length === 0 && <p className="muted">{siteQ ? 'Tiada tapak sepadan.' : 'Tiada tapak dalam kawasan anda.'}</p>}
+            {siteRows.slice(0, 40).map((r) => (
               <div key={r.siteId} className="item">
                 <div className="item-main">
                   {r.siteName} {r.due ? <Chip tone="warn">Belum ada taklimat</Chip> : <Chip tone="ok">{dateLabel(r.last!)}</Chip>}
@@ -120,6 +169,7 @@ export function ToolboxPanel({ meetings }: { meetings: { id: string; title: stri
                 </div>
               </div>
             ))}
+            {siteRows.length > 40 && <p className="muted small">40 daripada {siteRows.length} tapak ditunjukkan; cari untuk tapak lain.</p>}
           </div>
         </section>
       )}
@@ -127,7 +177,7 @@ export function ToolboxPanel({ meetings }: { meetings: { id: string; title: stri
   );
 }
 
-function ToolboxMeeting({ id }: { id: string }) {
+function ToolboxMeeting({ id, people }: { id: string; people: PickPerson[] }) {
   const { data, error } = useLoad(() => api.toolboxAct('view', { meetingId: id }) as Promise<View>, [id]);
   const act = useAction();
   const [text, setText] = useState<string | null>(null);
@@ -143,10 +193,10 @@ function ToolboxMeeting({ id }: { id: string }) {
       return p;
     }, 'Minit dimuat turun.');
   const lineFields: Field[] = [
-    { k: 'section', l: 'Seksyen', t: 'select', o: data.agenda.map((a) => a.key) },
+    { k: 'section', l: 'Seksyen', t: 'select', o: data.agenda.map((a) => a.key), labels: Object.fromEntries(data.agenda.map((a) => [a.key, `${a.key}) ${a.title}`])) },
     { k: 'matter', l: 'Perkara' },
-    { k: 'status', l: 'Status', t: 'select', o: STATUS },
-    { k: 'ownerId', l: 'Pemilik (ID pengguna, pilihan)' },
+    { k: 'status', l: 'Status', t: 'select', o: STATUS, labels: STATUS_LABEL },
+    personField('ownerId', 'Pemilik (pilihan)', people),
     { k: 'target', l: 'Tarikh sasaran', t: 'date' },
     { k: 'note', l: 'Nota' },
   ];
@@ -155,7 +205,7 @@ function ToolboxMeeting({ id }: { id: string }) {
       <strong>
         {data.title} · {data.bil}
       </strong>{' '}
-      <Chip tone={data.status === 'verified' ? 'ok' : data.status === 'submitted' ? 'info' : 'neutral'}>{data.status}</Chip>
+      <Chip tone={data.status === 'verified' ? 'ok' : data.status === 'submitted' ? 'info' : 'neutral'}>{MEETING_STATUS[data.status] ?? data.status}</Chip>
       <div className="muted small">
         {data.packAt ? `Data setakat ${data.packAt.slice(0, 16).replace('T', ' ')}` : 'Pek status belum dibina'}
         {data.preparedBy ? ` · disediakan oleh ${data.preparedBy}` : ''}
@@ -184,10 +234,11 @@ function ToolboxMeeting({ id }: { id: string }) {
           {data.can.prepare && !locked && data.packAt && (
             <>
               {' '}
-              <button className="btn btn-sm" onClick={() => void tick(a.key, 'changed')}>
+              {/* P105: the chosen answer is shown as pressed; the other can still be picked to change it. */}
+              <button className={`btn btn-sm${data.ticks[a.key] && !data.ticks[a.key].startsWith('nochange') ? ' btn-primary' : ''}`} aria-pressed={!!data.ticks[a.key] && !data.ticks[a.key].startsWith('nochange')} disabled={act.busy} onClick={() => void tick(a.key, 'changed')}>
                 Berubah
               </button>{' '}
-              <button className="btn btn-sm" onClick={() => void tick(a.key, 'nochange')}>
+              <button className={`btn btn-sm${data.ticks[a.key]?.startsWith('nochange') ? ' btn-primary' : ''}`} aria-pressed={!!data.ticks[a.key]?.startsWith('nochange')} disabled={act.busy} onClick={() => void tick(a.key, 'nochange')}>
                 Tiada perubahan
               </button>
             </>
@@ -202,11 +253,11 @@ function ToolboxMeeting({ id }: { id: string }) {
               .filter((l) => l.section === a.key)
               .map((l) => (
                 <li key={l.id}>
-                  {l.matter}: {l.status}
+                  {l.matter}: {STATUS_LABEL[l.status] ?? l.status}
                   {l.ownerName ? ` · ${l.ownerName}` : ''}
                   {l.target ? ` · sasaran ${l.target}` : ''}
                   {l.stale >= 3 ? ` · tiada perubahan ${l.stale} mesyuarat` : ''}
-                  {data.can.prepare && <OpForm title="Kemas kini" op="line" send={send('line')} fixed={{ scope: data.scope, id: l.id }} fields={[{ k: 'status', l: 'Status', t: 'select', o: STATUS }, { k: 'note', l: 'Nota' }]} />}
+                  {data.can.prepare && <OpForm title="Kemas kini" op="line" send={send('line')} fixed={{ scope: data.scope, id: l.id }} fields={[{ k: 'status', l: 'Status', t: 'select', o: STATUS, labels: STATUS_LABEL }, { k: 'note', l: 'Nota' }]} />}
                 </li>
               ))}
           </ul>
@@ -258,7 +309,7 @@ function Registers({ companyId }: { companyId: string }) {
           { k: 'state', l: 'Negeri' },
           { k: 'zone', l: 'Zon' },
           { k: 'address', l: 'Alamat penuh' },
-          { k: 'kdnStatus', l: 'Status KDN', t: 'select', o: ['lulus', 'dalam_proses', 'batal'] },
+          { k: 'kdnStatus', l: 'Status KDN', t: 'select', o: ['lulus', 'dalam_proses', 'batal'], labels: { lulus: 'Lulus', dalam_proses: 'Dalam proses', batal: 'Batal' } },
           { k: 'pbtStatus', l: 'Status lesen PBT' },
           { k: 'vault', l: 'Bilik kebal', t: 'check' },
           { k: 'chosen', l: 'Cawangan pilihan zon', t: 'check' },

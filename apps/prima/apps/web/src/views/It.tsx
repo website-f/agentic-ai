@@ -90,7 +90,7 @@ export function ItView() {
   const staff = data.role === 'manager' || data.role === 'team';
   const watcher = data.role === 'coo' || data.role === 'view';
   const tabs: [Tab, string][] = !k
-    ? [['mine', 'My requests'], ['policy', 'Polisi IT']]
+    ? [['mine', 'My requests'], ['policy', 'IT policies']]
     : data.role === 'hr'
       ? [
           ['team', 'Team'],
@@ -101,12 +101,12 @@ export function ItView() {
             ['purchases', 'Purchases'],
             ['rental', 'Device rental'],
             ['assets', 'Assets'],
-            ['policy', 'Polisi IT'],
+            ['policy', 'IT policies'],
           ]
       : data.role === 'audit'
         ? [
             ['audit', 'Audit'],
-            ['policy', 'Polisi IT'],
+            ['policy', 'IT policies'],
             ['plan', 'Plan'],
             ['team', 'Team'],
             ['jobs', 'Jobs'],
@@ -135,7 +135,7 @@ export function ItView() {
         ['tenders', 'Tenders (eP)'],
         ['onboarding', 'Joining and leaving'],
         ['mine', 'My requests'],
-        ['policy', 'Polisi IT'],
+        ['policy', 'IT policies'],
         // The CEO's batch import of open IT work (task T9).
         ...(arishaLeader(me.user) === 'ceo' ? ([['import', 'Import']] as [Tab, string][]) : []),
       ];
@@ -266,7 +266,7 @@ export function ItView() {
         {current === 'onboarding' && <>{manualItVisible(me.user)&&<ItManualPanel mode="intake"/>}<Onboarding data={data} staff={staff} /></>}
         {current === 'tenders' && <ItTenders data={data} />}
         {current === 'mine' && <Mine data={data} />}
-        {current === 'policy' && <ItPolicyPanel />}
+        {current === 'policy' && <ItPolicyPanel assets={(data.assets ?? []).map((r) => ({ id: r.asset.id, label: `${r.asset.tag} · ${r.asset.model}` }))} companyNames={Object.fromEntries((data.assets ?? []).map((r) => [r.asset.ownerId, r.ownerName]))} />}
         {current === 'import' && arishaLeader(me.user) === 'ceo' && <ItImport />}
       </div>
     </div>

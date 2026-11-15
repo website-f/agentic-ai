@@ -120,7 +120,7 @@ export function MyDuty() {
       )}
 
       <MyItemsPanel />
-      <WarrantyClaimsSection source="stock" />
+      <WarrantyClaimsSection source="stock" hideWhenEmpty />
       {!staff && <PoliciesPanel mine />}
       <PoliciesPanel briefing />
 

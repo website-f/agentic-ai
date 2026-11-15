@@ -1,8 +1,10 @@
 import { Select } from '../SearchSelect';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { api } from '../api';
 import { Chip, Loading, useAction, useLoad } from '../ui';
 import { OpForm, type Field } from './ItPolicyPanel';
+import { personField, scopeName, type PickPerson } from './Toolbox';
+import { useApp } from '../App';
 
 /**
  * Mesyuarat bulanan JA Group (Part Y, Fauzan's answers 14 Nov 2026): each company reports on the 14-item template and
@@ -75,10 +77,24 @@ const STATUS_BM: Record<string, [string, 'ok' | 'warn' | 'crit' | 'neutral' | 'i
   verified: ['Disahkan', 'ok'],
 };
 
-export function GroupMonthlyPanel() {
+const MINUTES_BM: Record<string, string> = { none: 'belum ditulis', draft: 'draf', submitted: 'menunggu pengesahan', returned: 'dikembalikan', verified: 'disahkan' };
+const EVERY_OPT = { daily: 'Harian', weekly: 'Mingguan', monthly: 'Bulanan', yearly: 'Tahunan', adhoc: 'Ad hoc' };
+const TEMPLATE_BM: Record<string, string> = { company_manager: 'Pengurus syarikat', admin_exec: 'Eksekutif pentadbiran' };
+
+export function GroupMonthlyPanel({ people = [] }: { people?: PickPerson[] }) {
   const [tab, setTab] = useState<'board' | 'report' | 'audit' | 'duties' | 'registers'>('board');
   const [period, setPeriod] = useState(lastMonth());
   const [scope, setScope] = useState('');
+  // P105: the company or unit is picked by name from the board's list (it was typed as "co:co-sasa" / "dept:it").
+  const board = useLoad(() => send('board')({ period }) as Promise<Board>, [period]);
+  const me = useApp()?.me;
+  // Without the group board (a company or unit person), their own companies and unit are the choices.
+  const own = [...(me?.companies ?? []).map((c) => ({ scope: `co:${c.id}`, name: c.name })), ...(me?.user.department ? [{ scope: `dept:${me.user.department}`, name: `Unit ${scopeName(me.user.department)}` }] : [])];
+  const scopes = board.data ? board.data.rows.map((r) => ({ scope: r.scope, name: scopeName(r.name) })) : board.error ? own : [];
+  const onlyOne = !board.data && board.error && own.length === 1 ? own[0].scope : '';
+  useEffect(() => {
+    if (onlyOne && !scope) setScope(onlyOne);
+  }, [onlyOne, scope]);
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
       <div className="tabbar" role="tablist" aria-label="Monthly group meeting">
@@ -101,21 +117,38 @@ export function GroupMonthlyPanel() {
           Bulan dilaporkan <input className="input" type="month" value={period} onChange={(e) => setPeriod(e.target.value)} />
         </label>
         <label className="small">
-          Syarikat / unit <input className="input" placeholder="co:co-sasa atau dept:it" value={scope} onChange={(e) => setScope(e.target.value.trim())} />
+          Syarikat / unit{' '}
+          {scopes.length ? (
+            <Select className="select" aria-label="Syarikat / unit" value={scope} onChange={(e) => setScope(e.target.value)}>
+              <option value="">Pilih syarikat atau unit</option>
+              {scopes.map((x) => (
+                <option key={x.scope} value={x.scope}>
+                  {x.name}
+                </option>
+              ))}
+            </Select>
+          ) : (
+            <input className="input" placeholder="co:co-sasa atau dept:it" value={scope} onChange={(e) => setScope(e.target.value.trim())} />
+          )}
         </label>
       </div>
-      {tab === 'board' && <BoardTab period={period} onPick={(s) => (setScope(s), setTab('report'))} />}
+      {tab === 'board' && <BoardTab board={board} period={period} onPick={(s) => (setScope(s), setTab('report'))} />}
       {tab === 'report' && (scope ? <ReportTab scope={scope} period={period} /> : <p className="muted">Pilih syarikat atau unit (dari senarai "Siapa sudah hantar").</p>)}
-      {tab === 'audit' && <AuditTab period={period} />}
-      {tab === 'duties' && (scope ? <DutiesTab scope={scope} period={period} /> : <p className="muted">Pilih syarikat atau unit untuk senarai tugasnya.</p>)}
-      {tab === 'registers' && <RegistersTab companyId={scope.startsWith('co:') ? scope.slice(3) : ''} />}
+      {tab === 'audit' && <AuditTab period={period} companies={scopes.filter((x) => x.scope.startsWith('co:'))} />}
+      {tab === 'duties' && (scope ? <DutiesTab scope={scope} period={period} people={people} /> : <p className="muted">Pilih syarikat atau unit untuk senarai tugasnya.</p>)}
+      {tab === 'registers' && <RegistersTab companyId={scope.startsWith('co:') ? scope.slice(3) : ''} people={people} />}
     </div>
   );
 }
 
-function BoardTab({ period, onPick }: { period: string; onPick: (scope: string) => void }) {
-  const { data, error } = useLoad(() => send('board')({ period }) as Promise<Board>, [period]);
-  if (error) return <p className="muted">{error}</p>;
+function BoardTab({ board, period, onPick }: { board: { data: Board | null; error: string | null }; period: string; onPick: (scope: string) => void }) {
+  const { data, error } = board;
+  if (error)
+    return (
+      <p className="muted">
+        Senarai &quot;Siapa sudah hantar&quot; untuk Unit HR, Pejabat Pengarah dan kepimpinan kumpulan. Pilih syarikat atau unit anda di atas, kemudian buka &quot;Laporan bulanan&quot; atau &quot;Senarai tugas&quot;.
+      </p>
+    );
   if (!data) return <Loading what="monthly meeting" />;
   return (
     <section className="panel">
@@ -126,7 +159,7 @@ function BoardTab({ period, onPick }: { period: string; onPick: (scope: string) 
         </span>
       </div>
       <p className="small">
-        Disahkan {data.sent} daripada {data.rows.length}. Minit: {data.minutesStatus}.
+        Disahkan {data.sent} daripada {data.rows.length}. Minit: {MINUTES_BM[data.minutesStatus] ?? data.minutesStatus}.
       </p>
       {data.can.organise && (
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
@@ -147,11 +180,15 @@ function BoardTab({ period, onPick }: { period: string; onPick: (scope: string) 
         {data.rows.map((r) => (
           <div key={r.scope} className="item">
             <div className="item-main">
-              <button className="btn btn-sm" onClick={() => onPick(r.scope)}>
-                {r.name}
-              </button>{' '}
-              <Chip tone={STATUS_BM[r.status]?.[1] ?? 'neutral'}>{STATUS_BM[r.status]?.[0] ?? r.status}</Chip> {r.late && <Chip tone="warn">Lewat</Chip>} {r.red && <Chip tone="crit">Tiada pada hari mesyuarat</Chip>}
-              {r.verifiedBy && <span className="muted small"> · disahkan oleh {r.verifiedBy}</span>}
+              <span className="row" style={{ gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+                <button className="btn btn-sm" onClick={() => onPick(r.scope)}>
+                  {scopeName(r.name)}
+                </button>
+                <Chip tone={STATUS_BM[r.status]?.[1] ?? 'neutral'}>{STATUS_BM[r.status]?.[0] ?? r.status}</Chip>
+                {r.late && <Chip tone="warn">Lewat</Chip>}
+                {r.red && <Chip tone="crit">Tiada pada hari mesyuarat</Chip>}
+                {r.verifiedBy && <span className="muted small">disahkan oleh {r.verifiedBy}</span>}
+              </span>
             </div>
           </div>
         ))}
@@ -246,7 +283,7 @@ function ReportTab({ scope, period }: { scope: string; period: string }) {
   );
 }
 const JTK: Field[] = [
-  { k: 'type', l: 'Jenis', t: 'select', o: ['complaint', 'audit'] },
+  { k: 'type', l: 'Jenis', t: 'select', o: ['complaint', 'audit'], labels: { complaint: 'Aduan', audit: 'Audit' } },
   { k: 'ref', l: 'Rujukan JTK' },
   { k: 'receivedOn', l: 'Tarikh diterima', t: 'date' },
   { k: 'staffNo', l: 'No. pekerja (bukan nama)' },
@@ -257,7 +294,7 @@ const JTK: Field[] = [
   { k: 'close', l: 'Tutup rekod ini', t: 'check' },
 ];
 
-function AuditTab({ period }: { period: string }) {
+function AuditTab({ period, companies }: { period: string; companies: { scope: string; name: string }[] }) {
   const grid = useLoad(() => send('acctTracker')({ year: period.slice(0, 4) }) as Promise<{ months: string[]; rows: { companyId: string; name: string; cells: { period: string; state: string; lateDays: number | null }[] }[] }>, [period]);
   const ryg = useLoad(() => send('ryg')({}) as Promise<Ryg>, []);
   const act = useAction();
@@ -279,7 +316,7 @@ function AuditTab({ period }: { period: string }) {
         <button className="btn btn-sm" disabled={act.busy} onClick={() => void act.run(() => send('rygFreeze')({}), 'Laporan Jumaat dihantar.')}>
           Hantar laporan Jumaat (merah/kuning/hijau)
         </button>
-        <OpForm title="Semak laporan akaun" op="acctReview" send={send('acctReview')} fields={[{ k: 'companyId', l: 'Syarikat (ID)' }, { k: 'period', l: 'Bulan (YYYY-MM)' }, { k: 'comment', l: 'Ulasan semakan' }]} />
+        <OpForm title="Semak laporan akaun" op="acctReview" send={send('acctReview')} fields={[companies.length ? { k: 'companyId', l: 'Syarikat', t: 'select', o: companies.map((c) => c.scope.slice(3)), labels: Object.fromEntries(companies.map((c) => [c.scope.slice(3), c.name])) } : { k: 'companyId', l: 'Syarikat (ID)' }, { k: 'period', l: 'Bulan (YYYY-MM)' }, { k: 'comment', l: 'Ulasan semakan' }]} />
       </div>
       <div className="list">
         {grid.data.rows.map((r) => (
@@ -300,7 +337,7 @@ function AuditTab({ period }: { period: string }) {
   );
 }
 
-function DutiesTab({ scope, period }: { scope: string; period: string }) {
+function DutiesTab({ scope, period, people }: { scope: string; period: string; people: PickPerson[] }) {
   const { data, error } = useLoad(() => send('duties')({ scope }) as Promise<Duties>, [scope]);
   const kpi = useLoad(() => send('dutyKpi')({ scope, month: period }) as Promise<{ people: { userId: string; name: string; due: number; onTime: number; onTimePct: number | null }[] }>, [scope, period]);
   if (error) return <p className="muted">{error}</p>;
@@ -313,7 +350,7 @@ function DutiesTab({ scope, period }: { scope: string; period: string }) {
       </div>
       {data.can.keep && (
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-          <OpForm title="Muat templat kumpulan" op="dutyLoad" send={send('dutyLoad')} fixed={{ scope }} fields={[{ k: 'role', l: 'Templat', t: 'select', o: Object.keys(data.templates) }, { k: 'picId', l: 'PIC (ID pengguna)' }, { k: 'backupId', l: 'Ganti (ID pengguna)' }, { k: 'checkerId', l: 'Penyemak (ID pengguna, bukan PIC)' }]} />
+          <OpForm title="Muat templat kumpulan" op="dutyLoad" send={send('dutyLoad')} fixed={{ scope }} fields={[{ k: 'role', l: 'Templat', t: 'select', o: Object.keys(data.templates), labels: Object.fromEntries(Object.entries(data.templates).map(([k, n]) => [k, `${TEMPLATE_BM[k] ?? k} (${n} baris)`])) }, personField('picId', 'PIC', people), personField('backupId', 'Ganti', people), personField('checkerId', 'Penyemak (bukan PIC)', people)]} />
           <OpForm
             title="Tambah baris"
             op="dutyAdd"
@@ -321,14 +358,14 @@ function DutiesTab({ scope, period }: { scope: string; period: string }) {
             fixed={{ scope }}
             fields={[
               { k: 'text', l: 'Tugas' },
-              { k: 'every', l: 'Kekerapan', t: 'select', o: ['daily', 'weekly', 'monthly', 'yearly', 'adhoc'] },
+              { k: 'every', l: 'Kekerapan', t: 'select', o: ['daily', 'weekly', 'monthly', 'yearly', 'adhoc'], labels: EVERY_OPT },
               { k: 'fromDay', l: 'Dari hari (hb)', t: 'number' },
               { k: 'toDay', l: 'Hingga hari (hb)', t: 'number' },
               { k: 'month', l: 'Bulan (tahunan)', t: 'number' },
               { k: 'weekday', l: 'Hari (mingguan, 1-5)', t: 'number' },
-              { k: 'picId', l: 'PIC (ID pengguna)' },
-              { k: 'backupId', l: 'Ganti (ID pengguna)' },
-              { k: 'checkerId', l: 'Penyemak (ID pengguna, bukan PIC)' },
+              personField('picId', 'PIC', people),
+              personField('backupId', 'Ganti', people),
+              personField('checkerId', 'Penyemak (bukan PIC)', people),
               { k: 'sopRef', l: 'Rujukan SOP' },
             ]}
           />
@@ -416,7 +453,7 @@ const reg = (op: string) => (i: Record<string, unknown>) => api.registerAct(op, 
 const REG_STATUS: Record<string, [string, 'ok' | 'warn' | 'crit' | 'neutral' | 'info']> = { submitted: ['Menunggu semakan', 'info'], returned: ['Dikembalikan', 'warn'], checked: ['Disemak', 'ok'], closed: ['Direkod', 'ok'] };
 
 /** Part Z4-Z13: the duty map registers (records only; no provider is connected and Prima moves no money). */
-function RegistersTab({ companyId }: { companyId: string }) {
+function RegistersTab({ companyId, people }: { companyId: string; people: PickPerson[] }) {
   const [kind, setKind] = useState('');
   const { data, error } = useLoad(() => reg('board')({ companyId }) as Promise<RegBoard>, [companyId]);
   if (error) return <p className="muted">{error}</p>;
@@ -427,7 +464,7 @@ function RegistersTab({ companyId }: { companyId: string }) {
         <h3>Daftar tugas syarikat dan unit</h3>
         <span className="muted small">Rekod sahaja: nombor pekerja, bukan nama; tiada nombor IC atau akaun bank. Penyedia tidak menyemak rekodnya sendiri.</span>
       </div>
-      {!companyId && <p className="muted small">Taip syarikat (co:...) di atas untuk daftar syarikat; daftar unit dipaparkan di bawah.</p>}
+      {!companyId && <p className="muted small">Pilih syarikat di atas untuk daftar syarikat; daftar unit dipaparkan di bawah.</p>}
       <div className="list">
         {data.registers.map((r) => (
           <div key={`${r.kind}-${r.companyId ?? 'g'}`} className="item">
@@ -472,7 +509,7 @@ function RegistersTab({ companyId }: { companyId: string }) {
           </div>
         </div>
       )}
-      <OpForm title="Tetapkan pelulus tabung kebajikan (CoS / DCoS)" op="setApprover" send={reg('setApprover')} fields={[{ k: 'userId', l: 'Pelulus (ID pengguna)' }, { k: 'reason', l: 'Sebab' }]} />
+      <OpForm title="Tetapkan pelulus tabung kebajikan (CoS / DCoS)" op="setApprover" send={reg('setApprover')} fields={[personField('userId', 'Pelulus', people), { k: 'reason', l: 'Sebab' }]} />
       {kind && <RegisterList kind={kind} companyId={companyId} />}
     </section>
   );

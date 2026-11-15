@@ -234,14 +234,14 @@ export function MeetingsView() {
           Toolbox
         </button>
         <button role="tab" aria-selected={tab === 'monthly'} onClick={() => setTab('monthly')}>
-          Mesyuarat bulanan JA Group
+          JA Group monthly meeting
         </button>
         <button role="tab" aria-selected={tab === 'calendar'} onClick={() => setTab('calendar')}>
           Calendar
         </button>
       </div>
-      {tab === 'toolbox' && <ToolboxPanel meetings={data.rows.map((r) => r.meeting)} />}
-      {tab === 'monthly' && <GroupMonthlyPanel />}
+      {tab === 'toolbox' && <ToolboxPanel meetings={data.rows.map((r) => r.meeting)} people={data.people} />}
+      {tab === 'monthly' && <GroupMonthlyPanel people={data.people} />}
       {tab === 'calendar' && <Calendar data={data} />}
       {tab === 'meetings' &&
         (data.rows.length === 0 ? (

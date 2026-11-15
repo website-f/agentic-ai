@@ -1,26 +1,35 @@
 import { Select } from '../SearchSelect';
 import { useMemo, useState } from 'react';
 import { api } from '../api';
-import { Chip, ErrorNotice, Kpi, Loading, dateLabel, dateTimeLabel, useAction, useLoad } from '../ui';
+import { Card, Empty, PageHead, Search, Stat, Stats } from '../kit';
+import { Chip, ErrorNotice, Loading, dateLabel, dateTimeLabel, useAction, useLoad } from '../ui';
 
 /**
  * Accounts and Access (Fauzan, 15 Nov 2026). IT or central HR prepares sign-ins and company access as one request; the
  * HR Director (Chief of Staff or Deputy) or the CEO approves it with a comment, never their own, and then it all goes in
  * at once. The server and the database check every rule again; this screen only helps fill the request in.
+ * P105: the office kit look (page head, cards, search, rows that fit a phone), BM rows, and check-boxes in place of the
+ * multi-pick lists for regions and states (the searchable pick-list chooses one value only).
  */
 type Board = Awaited<ReturnType<typeof api.accounts>>;
 type Line = Record<string, unknown> & { op: 'create' | 'update'; label: string };
 type Access = { companyId: string; scope: 'act' | 'monitor' };
+
+const SCOPE: Record<Access['scope'], string> = { act: 'acts on', monitor: 'monitors only' };
+const STATUS: Record<string, string> = { waiting: 'Waiting for approval', approved: 'Approved', returned: 'Returned' };
+const SHOW = 200;
 
 export function AccountsAccess() {
   const board = useLoad(() => api.accounts(), []);
   if (board.loading && !board.data) return <Loading what="accounts" />;
   if (board.error || !board.data)
     return (
-      <section className="panel">
-        <h3>Accounts and access</h3>
-        <ErrorNotice error={board.error} />
-      </section>
+      <div className="page">
+        <PageHead title="Accounts and access" sub="Who can sign in to Prima and which companies they see." />
+        <Card>
+          <ErrorNotice error={board.error} />
+        </Card>
+      </div>
     );
   return <Screen b={board.data} />;
 }
@@ -30,31 +39,27 @@ function Screen({ b }: { b: Board }) {
   const [find, setFind] = useState('');
   const [changing, setChanging] = useState<string | null>(null);
   const company = (id: string) => b.companies.find((c) => c.id === id)?.name ?? id;
-  const shown = useMemo(() => {
+  const matching = useMemo(() => {
     const q = find.trim().toLowerCase();
-    return b.accounts.filter((a) => !q || `${a.name} ${a.title} ${a.kind}`.toLowerCase().includes(q)).slice(0, 200);
+    return b.accounts.filter((a) => !q || `${a.name} ${a.title} ${a.kind}`.toLowerCase().includes(q));
   }, [b, find]);
+  const shown = matching.slice(0, SHOW);
   const waiting = b.requests.filter((r) => r.status === 'waiting');
+  const notLinked = b.accounts.filter((a) => !a.linked && !a.closedFrom).length;
   const add = (l: Line) => setLines((x) => [...x, l]);
+  const count = find.trim() ? `${matching.length} of ${b.accounts.length}` : `${b.accounts.length} accounts`;
   return (
-    <>
-      <section className="panel">
-        <div className="panel-head">
-          <h3>Accounts and access</h3>
-        </div>
-        <div className="panel-body">
-          <p className="muted small">
-            Who can sign in to Prima and which companies they see. IT or HR prepares; the HR Director or the CEO approves with a comment, never their
-            own. A leader's account needs the CEO. Closing a leaver's access stays in HR's leaving steps.
-          </p>
-        </div>
-        <div className="kpis">
-          <Kpi label="Accounts" value={b.accounts.length} />
-          <Kpi label="Not linked to Microsoft" value={b.accounts.filter((a) => !a.linked && !a.closedFrom).length} tone="warn" />
-          <Kpi label="Directory lines with no account" value={b.directory.length} tone={b.directory.length ? 'info' : 'ok'} />
-          <Kpi label="Requests waiting" value={waiting.length} tone={waiting.length ? 'info' : 'neutral'} />
-        </div>
-      </section>
+    <div className="page">
+      <PageHead
+        title="Accounts and access"
+        sub="Who can sign in to Prima and which companies they see. IT or HR prepares a request; the HR Director or the CEO approves it with a comment, never their own. A leader's account needs the CEO. Closing a leaver's access stays in HR's leaving steps."
+      />
+      <Stats>
+        <Stat label="Accounts" value={b.accounts.length} />
+        <Stat label="Not linked to Microsoft" value={notLinked} tone={notLinked ? 'warn' : 'ok'} />
+        <Stat label="Directory lines with no account" value={b.directory.length} tone={b.directory.length ? 'info' : 'ok'} />
+        <Stat label="Requests waiting" value={waiting.length} tone={waiting.length ? 'info' : 'neutral'} />
+      </Stats>
       {b.requests.length > 0 && <Requests b={b} company={company} />}
       {b.me.prepare && (
         <>
@@ -63,56 +68,67 @@ function Screen({ b }: { b: Board }) {
           {lines.length > 0 && <Draft lines={lines} setLines={setLines} />}
         </>
       )}
-      <section className="panel">
-        <div className="panel-head">
-          <h3>Everyone with an account</h3>
-        </div>
-        <div className="panel-body">
-          <input className="input" aria-label="Find" placeholder="Find a name, title or kind" value={find} onChange={(e) => setFind(e.target.value)} />
-          <div className="list" style={{ marginTop: 6 }}>
-            {shown.map((a) => (
-              <div key={a.id} className="list-item" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 4 }}>
-                <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
-                  <strong>{a.name}</strong>
-                  <span className="muted small">{a.title}</span>
-                  <span className="small">{a.kind}</span>
-                  {a.linked ? <Chip tone="ok">Microsoft linked</Chip> : <Chip tone="warn">Not linked</Chip>}
-                  {!a.hrRecord && <Chip tone="neutral">No HR record</Chip>}
-                  {a.closedFrom && <Chip tone="crit">Closed from {dateLabel(a.closedFrom)}</Chip>}
-                </div>
-                <span className="small muted">
-                  {a.companyIds.length ? `Company: ${a.companyIds.map(company).join(', ')}` : ''}
-                  {a.access.length > 4
-                    ? `${a.companyIds.length ? ' · ' : ''}Access to ${a.access.length} companies (${a.access.filter((g) => g.scope === 'act').length} act, ${a.access.filter((g) => g.scope === 'monitor').length} monitor)`
-                    : a.access.length
-                      ? `${a.companyIds.length ? ' · ' : ''}Access: ${a.access.map((g) => `${company(g.companyId)} (${g.scope})`).join(', ')}`
-                      : ''}
-                </span>
-                {b.me.prepare && a.mayChange && !a.closedFrom && (
-                  changing === a.id ? (
-                    <ChangeAccount
-                      b={b}
-                      a={a}
-                      onAdd={(l) => {
-                        add(l);
-                        setChanging(null);
-                      }}
-                      onCancel={() => setChanging(null)}
-                    />
-                  ) : (
-                    <div>
-                      <button className="btn" disabled={lines.some((l) => l.userId === a.id)} onClick={() => setChanging(a.id)}>
-                        Change name, link or access
-                      </button>
+      <Card title="Everyone with an account" actions={<span className="hx-count">{count}</span>}>
+        <div className="hx-stack-tight">
+          <Search value={find} onChange={setFind} placeholder="Find a name, title or kind" label="Find" />
+          {shown.length === 0 ? (
+            <Empty title={find.trim() ? 'Nobody matches.' : 'No accounts yet.'} />
+          ) : (
+            <ul className="hx-rows">
+              {shown.map((a) => (
+                <li key={a.id} className="hx-row" data-tone={a.closedFrom ? 'crit' : undefined}>
+                  <div className="hx-row-main">
+                    <span className="hx-row-title">{a.name}</span>
+                    <span className="hx-row-meta">
+                      {a.title}
+                      {a.kind ? ` · ${a.kind}` : ''}
+                    </span>
+                    {(a.companyIds.length > 0 || a.access.length > 0) && (
+                      <span className="hx-row-meta">
+                        {a.companyIds.length ? `Company: ${a.companyIds.map(company).join(', ')}` : ''}
+                        {a.access.length > 4
+                          ? `${a.companyIds.length ? ' · ' : ''}Sees ${a.access.length} companies (acts on ${a.access.filter((g) => g.scope === 'act').length}, monitors ${a.access.filter((g) => g.scope === 'monitor').length})`
+                          : a.access.length
+                            ? `${a.companyIds.length ? ' · ' : ''}Sees ${a.access.map((g) => `${company(g.companyId)} (${SCOPE[g.scope as Access['scope']] ?? g.scope})`).join(', ')}`
+                            : ''}
+                      </span>
+                    )}
+                  </div>
+                  <div className="hx-row-side">
+                    {a.linked ? <Chip tone="ok">Microsoft linked</Chip> : <Chip tone="warn">Not linked</Chip>}
+                    {!a.hrRecord && <Chip tone="neutral">No HR record</Chip>}
+                    {a.closedFrom && <Chip tone="crit">Closed from {dateLabel(a.closedFrom)}</Chip>}
+                  </div>
+                  {b.me.prepare && a.mayChange && !a.closedFrom && (
+                    <div className="hx-row-body">
+                      {changing === a.id ? (
+                        <ChangeAccount
+                          b={b}
+                          a={a}
+                          onAdd={(l) => {
+                            add(l);
+                            setChanging(null);
+                          }}
+                          onCancel={() => setChanging(null)}
+                        />
+                      ) : (
+                        <div className="hx-row-actions">
+                          <button className="btn btn-sm" disabled={lines.some((l) => l.userId === a.id)} onClick={() => setChanging(a.id)}>
+                            Change name, link or access
+                          </button>
+                          {lines.some((l) => l.userId === a.id) && <span className="small muted">In your request</span>}
+                        </div>
+                      )}
                     </div>
-                  )
-                )}
-              </div>
-            ))}
-          </div>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+          {matching.length > SHOW && <p className="hx-source">Showing the first {SHOW} of {matching.length}. Search to find someone else.</p>}
         </div>
-      </section>
-    </>
+      </Card>
+    </div>
   );
 }
 
@@ -122,31 +138,31 @@ function Requests({ b, company }: { b: Board; company: (id: string) => string })
   const name = (id: string) => b.accounts.find((a) => a.id === id)?.name ?? id;
   const decide = (id: string, approve: boolean) =>
     void act.run(() => api.accountsAct('decide', { requestId: id, approve, comment: comment[id] ?? '' }), approve ? 'Approved: the accounts and access are in.' : 'Returned to the preparer.');
+  const waiting = b.requests.filter((r) => r.status === 'waiting').length;
   return (
-    <section className="panel">
-      <div className="panel-head">
-        <h3>Requests</h3>
-      </div>
-      <div className="panel-body">
-        <ErrorNotice error={act.error} />
-        <div className="list">
-          {b.requests.slice(0, 30).map((r) => (
-            <div key={r.id} className="list-item" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 4 }}>
-              <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
-                <strong>{r.reason}</strong>
-                <Chip tone={r.status === 'waiting' ? 'info' : r.status === 'approved' ? 'ok' : 'warn'}>{r.status}</Chip>
-                <span className="small muted">
-                  {r.preparedBy}, {dateTimeLabel(r.preparedAt)}
-                  {r.decidedBy ? ` · ${r.status} by ${r.decidedBy}: ${r.comment}` : ''}
-                </span>
-              </div>
-              <ul className="small" style={{ margin: 0, paddingLeft: 18 }}>
+    <Card title="Requests" sub="Approve or return each request with a comment. Nobody decides their own request." actions={<span className="hx-count">{waiting} waiting</span>}>
+      <ErrorNotice error={act.error} />
+      <ul className="hx-rows">
+        {b.requests.slice(0, 30).map((r) => (
+          <li key={r.id} className="hx-row" data-tone={r.status === 'returned' ? 'warn' : undefined}>
+            <div className="hx-row-main">
+              <span className="hx-row-title">{r.reason}</span>
+              <span className="hx-row-meta">
+                {r.preparedBy}, {dateTimeLabel(r.preparedAt)}
+                {r.decidedBy ? ` · ${r.status} by ${r.decidedBy}: ${r.comment}` : ''}
+              </span>
+            </div>
+            <div className="hx-row-side">
+              <Chip tone={r.status === 'waiting' ? 'info' : r.status === 'approved' ? 'ok' : 'warn'}>{STATUS[r.status] ?? r.status}</Chip>
+            </div>
+            <div className="hx-row-body">
+              <ul className="hx-row-text" style={{ margin: 0, paddingLeft: 18 }}>
                 {r.items.map((i, n) =>
                   i.op === 'create' ? (
                     <li key={n}>
                       New: {i.name} ({i.title}), {b.templates.find((t) => t.key === i.template)?.label}
                       {i.companyId ? `, ${company(i.companyId)}` : ''}
-                      {i.access.length ? `, sees ${i.access.map((a) => `${company(a.companyId)} (${a.scope})`).join(', ')}` : ''}
+                      {i.access.length ? `, sees ${i.access.map((a) => `${company(a.companyId)} (${SCOPE[a.scope as Access['scope']] ?? a.scope})`).join(', ')}` : ''}
                       {i.entraOid ? ', Microsoft account given' : ''}
                     </li>
                   ) : (
@@ -156,71 +172,104 @@ function Requests({ b, company }: { b: Board; company: (id: string) => string })
                       {i.title ? `, title to ${i.title}` : ''}
                       {i.entraOid ? ', link Microsoft account' : ''}
                       {i.personId ? ', join HR record' : ''}
-                      {i.addAccess.length ? `, add ${i.addAccess.map((a) => `${company(a.companyId)} (${a.scope})`).join(', ')}` : ''}
+                      {i.addAccess.length ? `, add ${i.addAccess.map((a) => `${company(a.companyId)} (${SCOPE[a.scope as Access['scope']] ?? a.scope})`).join(', ')}` : ''}
                       {i.endAccess.length ? `, end ${i.endAccess.length} access` : ''}
                     </li>
                   ),
                 )}
               </ul>
-              {r.status === 'waiting' && r.items.some((i) => (i.op === 'create' ? i.access.length : i.addAccess.length) > 0) && <span className="small muted">Company access added runs to {dateLabel(r.accessUntil)}.</span>}
+              {r.status === 'waiting' && r.items.some((i) => (i.op === 'create' ? i.access.length : i.addAccess.length) > 0) && (
+                <span className="small muted">Company access added runs to {dateLabel(r.accessUntil)}.</span>
+              )}
               {r.mayDecide && (
-                <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
-                  <input
-                    className="input"
-                    aria-label="Comment"
-                    placeholder="Comment (needed)"
-                    value={comment[r.id] ?? ''}
-                    onChange={(e) => setComment({ ...comment, [r.id]: e.target.value })}
-                  />
-                  <button className="btn primary" disabled={act.busy} onClick={() => decide(r.id, true)}>
-                    Approve
-                  </button>
-                  <button className="btn" disabled={act.busy} onClick={() => decide(r.id, false)}>
-                    Return
-                  </button>
+                <div className="hx-form">
+                  <label className="field">
+                    <span className="label">Your comment (needed, 3 characters or more)</span>
+                    <input
+                      className="input"
+                      aria-label="Comment"
+                      placeholder="Comment (needed)"
+                      value={comment[r.id] ?? ''}
+                      onChange={(e) => setComment({ ...comment, [r.id]: e.target.value })}
+                    />
+                  </label>
+                  <div className="hx-form-actions">
+                    <button className="btn btn-primary" disabled={act.busy} onClick={() => decide(r.id, true)}>
+                      Approve
+                    </button>
+                    <button className="btn" disabled={act.busy} onClick={() => decide(r.id, false)}>
+                      Return
+                    </button>
+                  </div>
                 </div>
               )}
               {r.status === 'waiting' && !r.mayDecide && b.me.approve && <span className="small muted">Someone else decides this request (yours, about you, or a leader's account).</span>}
-              {r.applied && <span className="small muted">Made {r.applied.users.map(name).join(', ') || 'no new accounts'}.</span>}
+              {r.status === 'waiting' && !b.me.approve && <span className="small muted">Waiting for the HR Director or the CEO.</span>}
+              {r.applied && <span className="small muted">Accounts made: {r.applied.users.map(name).join(', ') || 'none'}.</span>}
             </div>
-          ))}
-        </div>
-      </div>
-    </section>
+          </li>
+        ))}
+      </ul>
+    </Card>
+  );
+}
+
+function Checks({ label, value, onChange, opts }: { label: string; value: string[]; onChange: (v: string[]) => void; opts: [string, string][] }) {
+  return (
+    <fieldset className="field hx-form-wide" style={{ border: 0, padding: 0, margin: 0 }}>
+      <span className="label">{label}</span>
+      <ul className="hx-checks" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))' }}>
+        {opts.map(([k, l]) => (
+          <li key={k}>
+            <label>
+              <input type="checkbox" checked={value.includes(k)} onChange={(e) => onChange(e.target.checked ? [...value, k] : value.filter((x) => x !== k))} />
+              {l}
+            </label>
+          </li>
+        ))}
+      </ul>
+    </fieldset>
   );
 }
 
 function AccessPicker({ b, value, onChange }: { b: Board; value: Access[]; onChange: (v: Access[]) => void }) {
   const [scope, setScope] = useState<'act' | 'monitor'>('act');
+  const [q, setQ] = useState('');
   const has = (id: string) => value.some((v) => v.companyId === id);
+  const list = b.companies.filter((c) => !q.trim() || c.name.toLowerCase().includes(q.trim().toLowerCase()));
   return (
-    <div className="small" style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-      <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
-        <span>Companies this person may</span>
-        <Select className="select" aria-label="Act or monitor" value={scope} onChange={(e) => setScope(e.target.value as 'act' | 'monitor')}>
-          <option value="act">act on</option>
-          <option value="monitor">monitor only</option>
+    <div className="field hx-form-wide">
+      <span className="label">Companies this person may see ({value.length} chosen)</span>
+      <div className="hx-form-actions">
+        <Select className="select hx-filter" aria-label="Act or monitor" value={scope} onChange={(e) => setScope(e.target.value as 'act' | 'monitor')}>
+          <option value="act">Act on (work in the company)</option>
+          <option value="monitor">Monitor only</option>
         </Select>
-        <button className="btn" type="button" onClick={() => onChange(b.companies.map((c) => ({ companyId: c.id, scope })))}>
+        <button className="btn btn-sm" type="button" onClick={() => onChange(b.companies.map((c) => ({ companyId: c.id, scope })))}>
           All companies
         </button>
-        <button className="btn" type="button" onClick={() => onChange([])}>
+        <button className="btn btn-sm" type="button" onClick={() => onChange([])}>
           None
         </button>
       </div>
-      <div style={{ maxHeight: 160, overflowY: 'auto', border: '1px solid var(--line, #ddd)', padding: 4 }}>
-        {b.companies.map((c) => (
-          <label key={c.id} style={{ display: 'block' }}>
-            <input
-              type="checkbox"
-              checked={has(c.id)}
-              onChange={(e) => onChange(e.target.checked ? [...value, { companyId: c.id, scope }] : value.filter((v) => v.companyId !== c.id))}
-            />{' '}
-            {c.name}
-            {has(c.id) ? ` (${value.find((v) => v.companyId === c.id)!.scope})` : ''}
-          </label>
+      {b.companies.length > 8 && <Search value={q} onChange={setQ} placeholder="Find a company" label="Find a company" />}
+      <ul className="hx-checks" style={{ maxHeight: 220, overflowY: 'auto', border: '1px solid var(--line)', borderRadius: 'var(--r-md)', padding: 8, background: 'var(--surface)' }}>
+        {list.map((c) => (
+          <li key={c.id}>
+            <label>
+              <input
+                type="checkbox"
+                checked={has(c.id)}
+                onChange={(e) => onChange(e.target.checked ? [...value, { companyId: c.id, scope }] : value.filter((v) => v.companyId !== c.id))}
+              />
+              <span>
+                {c.name}
+                {has(c.id) ? ` (${SCOPE[value.find((v) => v.companyId === c.id)!.scope]})` : ''}
+              </span>
+            </label>
+          </li>
         ))}
-      </div>
+      </ul>
     </div>
   );
 }
@@ -240,15 +289,7 @@ function NewAccount({ b, onAdd }: { b: Board; onAdd: (l: Line) => void }) {
   const [personId, setPersonId] = useState('');
   const tpl = b.templates.find((x) => x.key === t)!;
   const needs = tpl.needs as string[];
-  const multi = (v: string[], set: (x: string[]) => void, opts: [string, string][], label: string) => (
-    <Select className="select" multiple aria-label={label} value={v} onChange={(e) => set([...e.target.selectedOptions].map((o) => o.value))} style={{ minHeight: 80 }}>
-      {opts.map(([k, l]) => (
-        <option key={k} value={k}>
-          {l}
-        </option>
-      ))}
-    </Select>
-  );
+  const ready = name.trim().length >= 2 && title.trim().length >= 2 && (tpl.where === 'office' ? !!companyId : access.length > 0);
   const addLine = () => {
     onAdd({
       op: 'create',
@@ -273,14 +314,11 @@ function NewAccount({ b, onAdd }: { b: Board; onAdd: (l: Line) => void }) {
     setPersonId('');
   };
   return (
-    <section className="panel">
-      <div className="panel-head">
-        <h3>Add a new account</h3>
-      </div>
-      <div className="panel-body" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-        <label className="small">
-          Kind of account{' '}
-          <Select className="select" value={t} onChange={(e) => setT(e.target.value)}>
+    <Card title="Add a new account" sub="Each line goes into one request. Nothing changes until the HR Director or the CEO approves it.">
+      <div className="hx-form-grid">
+        <label className="field">
+          <span className="label">Kind of account</span>
+          <Select className="select" aria-label="Kind of account" value={t} onChange={(e) => setT(e.target.value)}>
             {b.templates.map((x) => (
               <option key={x.key} value={x.key}>
                 {x.label}
@@ -289,10 +327,11 @@ function NewAccount({ b, onAdd }: { b: Board; onAdd: (l: Line) => void }) {
           </Select>
         </label>
         {b.people.length > 0 && (
-          <label className="small">
-            HR record (fills the name){' '}
+          <label className="field">
+            <span className="label">HR record (fills the name)</span>
             <Select
               className="select"
+              aria-label="HR record"
               value={personId}
               onChange={(e) => {
                 setPersonId(e.target.value);
@@ -312,11 +351,17 @@ function NewAccount({ b, onAdd }: { b: Board; onAdd: (l: Line) => void }) {
             </Select>
           </label>
         )}
-        <input className="input" aria-label="Full name" placeholder="Full name" value={name} onChange={(e) => setName(e.target.value)} />
-        <input className="input" aria-label="Job title" placeholder="Job title" value={title} onChange={(e) => setTitle(e.target.value)} />
+        <label className="field">
+          <span className="label">Full name</span>
+          <input className="input" aria-label="Full name" placeholder="As on the IC" value={name} onChange={(e) => setName(e.target.value)} />
+        </label>
+        <label className="field">
+          <span className="label">Job title</span>
+          <input className="input" aria-label="Job title" placeholder="For example: Admin Executive" value={title} onChange={(e) => setTitle(e.target.value)} />
+        </label>
         {tpl.where === 'office' ? (
-          <label className="small">
-            Company{' '}
+          <label className="field">
+            <span className="label">Company</span>
             <Select className="select" aria-label="Company of the new account" value={companyId} onChange={(e) => setCompanyId(e.target.value)}>
               <option value="">Choose</option>
               {b.companies.map((c) => (
@@ -330,9 +375,9 @@ function NewAccount({ b, onAdd }: { b: Board; onAdd: (l: Line) => void }) {
           <AccessPicker b={b} value={access} onChange={setAccess} />
         )}
         {needs.includes('financeTeam') && (
-          <label className="small">
-            Finance team{' '}
-            <Select className="select" value={financeTeam} onChange={(e) => setFinanceTeam(e.target.value)}>
+          <label className="field">
+            <span className="label">Finance team</span>
+            <Select className="select" aria-label="Finance team" value={financeTeam} onChange={(e) => setFinanceTeam(e.target.value)}>
               <option value="">Choose</option>
               {[1, 2, 3, 4, 5, 6, 7].map((x) => (
                 <option key={x} value={x}>
@@ -343,9 +388,9 @@ function NewAccount({ b, onAdd }: { b: Board; onAdd: (l: Line) => void }) {
           </label>
         )}
         {needs.includes('actTeam') && (
-          <label className="small">
-            ACT team{' '}
-            <Select className="select" value={actTeam} onChange={(e) => setActTeam(e.target.value)}>
+          <label className="field">
+            <span className="label">ACT team</span>
+            <Select className="select" aria-label="ACT team" value={actTeam} onChange={(e) => setActTeam(e.target.value)}>
               <option value="">Choose</option>
               <option value="1">Team A (1)</option>
               <option value="2">Team B (2)</option>
@@ -353,31 +398,29 @@ function NewAccount({ b, onAdd }: { b: Board; onAdd: (l: Line) => void }) {
           </label>
         )}
         {needs.includes('opsSector') && (
-          <label className="small">
-            Side{' '}
-            <Select className="select" value={opsSector} onChange={(e) => setOpsSector(e.target.value)}>
+          <label className="field">
+            <span className="label">Side</span>
+            <Select className="select" aria-label="Side" value={opsSector} onChange={(e) => setOpsSector(e.target.value)}>
               <option value="">Both</option>
               <option value="government">Government (Goodwill Empire)</option>
               <option value="private">Private (Sasa Team)</option>
             </Select>
           </label>
         )}
-        {needs.includes('regionIds') && <label className="small">Regions covered {multi(regionIds, setRegionIds, b.regions.map((r) => [r.id, r.name]), 'Regions')}</label>}
-        {needs.includes('areaStates') && <label className="small">States covered {multi(areaStates, setAreaStates, b.states.map((s) => [s, s]), 'States')}</label>}
-        <input
-          className="input"
-          aria-label="Microsoft object ID"
-          placeholder="Microsoft object ID (optional; from the Entra admin centre)"
-          value={entraOid}
-          onChange={(e) => setOid(e.target.value)}
-        />
-        <div>
-          <button className="btn" onClick={addLine}>
-            Add to the request
-          </button>
-        </div>
+        {needs.includes('regionIds') && <Checks label="Regions covered" value={regionIds} onChange={setRegionIds} opts={b.regions.map((r) => [r.id, r.name])} />}
+        {needs.includes('areaStates') && <Checks label="States covered" value={areaStates} onChange={setAreaStates} opts={b.states.map((s) => [s, s])} />}
+        <label className="field hx-form-wide">
+          <span className="label">Microsoft object ID (optional)</span>
+          <input className="input" aria-label="Microsoft object ID" placeholder="From the Entra admin centre" value={entraOid} onChange={(e) => setOid(e.target.value)} />
+        </label>
       </div>
-    </section>
+      <div className="hx-form-actions" style={{ marginTop: 12 }}>
+        <button className="btn" disabled={!ready} onClick={addLine}>
+          Add to the request
+        </button>
+        {!ready && <span className="small muted">{tpl.where === 'office' ? 'Fill in the name, the job title and the company.' : 'Fill in the name and the job title, and choose at least one company.'}</span>}
+      </div>
+    </Card>
   );
 }
 
@@ -385,6 +428,7 @@ function FromDirectory({ b, onAdd, taken }: { b: Board; onAdd: (l: Line[]) => vo
   const [pick, setPick] = useState<Record<string, string>>({});
   const free = b.directory.filter((d) => !taken.some((l) => l.directoryId === d.id));
   const office = b.templates.filter((t) => t.where === 'office');
+  const matched = free.filter((d) => d.companyId);
   const addAll = () => {
     const ls: Line[] = free
       .filter((d) => pick[d.id])
@@ -403,24 +447,27 @@ function FromDirectory({ b, onAdd, taken }: { b: Board; onAdd: (l: Line[]) => vo
     onAdd(ls);
     setPick({});
   };
+  const picked = Object.values(pick).filter(Boolean).length;
   return (
-    <section className="panel">
-      <div className="panel-head">
-        <h3>From the staff directory (company office staff)</h3>
-      </div>
-      <div className="panel-body">
-        <p className="muted small">Pick the kind of account for each person; leave it empty to skip. Central staff are added one by one above, with their companies.</p>
-        <div className="list">
-          {free
-            .filter((d) => d.companyId)
-            .slice(0, 300)
-            .map((d) => (
-              <div key={d.id} className="list-item row" style={{ gap: 6, flexWrap: 'wrap' }}>
-                <strong>{d.name}</strong>
-                <span className="small muted">
+    <Card
+      title="From the staff directory (company office staff)"
+      sub="Pick the kind of account for each person; leave it on Skip to leave them out. Central staff are added one by one above, with their companies."
+      actions={<span className="hx-count">{matched.length} with no account</span>}
+    >
+      {matched.length === 0 ? (
+        <Empty title="Everyone in the directory is in your request or has an account." />
+      ) : (
+        <ul className="hx-rows">
+          {matched.slice(0, 300).map((d) => (
+            <li key={d.id} className="hx-row">
+              <div className="hx-row-main">
+                <span className="hx-row-title">{d.name}</span>
+                <span className="hx-row-meta">
                   {d.title || 'no title'} · {d.orgUnit}
                 </span>
-                <Select className="select" aria-label={`Kind for ${d.name}`} value={pick[d.id] ?? ''} onChange={(e) => setPick({ ...pick, [d.id]: e.target.value })}>
+              </div>
+              <div className="hx-row-body">
+                <Select className="select hx-filter" aria-label={`Kind for ${d.name}`} value={pick[d.id] ?? ''} onChange={(e) => setPick({ ...pick, [d.id]: e.target.value })}>
                   <option value="">Skip</option>
                   {office.map((t) => (
                     <option key={t.key} value={t.key}>
@@ -429,14 +476,17 @@ function FromDirectory({ b, onAdd, taken }: { b: Board; onAdd: (l: Line[]) => vo
                   ))}
                 </Select>
               </div>
-            ))}
-        </div>
-        {free.some((d) => !d.companyId) && <p className="small muted">{free.filter((d) => !d.companyId).length} line(s) are not matched to a company; add them by hand above.</p>}
-        <button className="btn" disabled={!Object.values(pick).some(Boolean)} onClick={addAll}>
+            </li>
+          ))}
+        </ul>
+      )}
+      {free.some((d) => !d.companyId) && <p className="hx-source">{free.filter((d) => !d.companyId).length} line(s) are not matched to a company; add them by hand above.</p>}
+      <div className="hx-form-actions" style={{ marginTop: 12 }}>
+        <button className="btn" disabled={!picked} onClick={addAll}>
           Add the picked people to the request
         </button>
       </div>
-    </section>
+    </Card>
   );
 }
 
@@ -447,43 +497,66 @@ function ChangeAccount({ b, a, onAdd, onCancel }: { b: Board; a: Board['accounts
   const [personId, setPersonId] = useState('');
   const [addAccess, setAddAccess] = useState<Access[]>([]);
   const [endAccess, setEnd] = useState<string[]>([]);
+  const something = !!(name.trim() || title.trim() || entraOid.trim() || personId || addAccess.length || endAccess.length);
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 4, borderLeft: '3px solid var(--line, #ddd)', paddingLeft: 8 }}>
-      <input className="input" aria-label="New name" placeholder={`New name (now ${a.name})`} value={name} onChange={(e) => setName(e.target.value)} />
-      <input className="input" aria-label="New title" placeholder={`New title (now ${a.title})`} value={title} onChange={(e) => setTitle(e.target.value)} />
-      {!a.linked && <input className="input" aria-label="Microsoft object ID" placeholder="Microsoft object ID to link" value={entraOid} onChange={(e) => setOid(e.target.value)} />}
-      {!a.hrRecord && b.people.length > 0 && (
-        <Select className="select" aria-label="HR record" value={personId} onChange={(e) => setPersonId(e.target.value)}>
-          <option value="">No HR record change</option>
-          {b.people.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.name} ({p.staffNo})
-            </option>
-          ))}
-        </Select>
-      )}
-      {a.role === 'pwvsb_officer' && <AccessPicker b={{ ...b, companies: b.companies.filter((c) => !a.access.some((g) => g.companyId === c.id)) }} value={addAccess} onChange={setAddAccess} />}
-      {a.access.length > 0 && (
-        <div className="small">
-          End access:{' '}
-          {a.access.map((g) => (
-            <label key={g.id} style={{ marginRight: 8 }}>
-              <input type="checkbox" checked={endAccess.includes(g.id)} onChange={(e) => setEnd(e.target.checked ? [...endAccess, g.id] : endAccess.filter((x) => x !== g.id))} />{' '}
-              {b.companies.find((c) => c.id === g.companyId)?.name ?? g.companyId}
-            </label>
-          ))}
-        </div>
-      )}
-      <div className="row" style={{ gap: 6 }}>
+    <div className="hx-form">
+      <h3 className="hx-form-title">Change {a.name}</h3>
+      <div className="hx-form-grid">
+        <label className="field">
+          <span className="label">New name</span>
+          <input className="input" aria-label="New name" placeholder={`Now: ${a.name}`} value={name} onChange={(e) => setName(e.target.value)} />
+        </label>
+        <label className="field">
+          <span className="label">New title</span>
+          <input className="input" aria-label="New title" placeholder={`Now: ${a.title}`} value={title} onChange={(e) => setTitle(e.target.value)} />
+        </label>
+        {!a.linked && (
+          <label className="field">
+            <span className="label">Microsoft object ID to link</span>
+            <input className="input" aria-label="Microsoft object ID" placeholder="From the Entra admin centre" value={entraOid} onChange={(e) => setOid(e.target.value)} />
+          </label>
+        )}
+        {!a.hrRecord && b.people.length > 0 && (
+          <label className="field">
+            <span className="label">HR record</span>
+            <Select className="select" aria-label="HR record" value={personId} onChange={(e) => setPersonId(e.target.value)}>
+              <option value="">No HR record change</option>
+              {b.people.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name} ({p.staffNo})
+                </option>
+              ))}
+            </Select>
+          </label>
+        )}
+        {a.role === 'pwvsb_officer' && <AccessPicker b={{ ...b, companies: b.companies.filter((c) => !a.access.some((g) => g.companyId === c.id)) }} value={addAccess} onChange={setAddAccess} />}
+        {a.access.length > 0 && (
+          <fieldset className="field hx-form-wide" style={{ border: 0, padding: 0, margin: 0 }}>
+            <span className="label">End access (stops the day before approval)</span>
+            <ul className="hx-checks" style={{ maxHeight: 220, overflowY: 'auto' }}>
+              {a.access.map((g) => (
+                <li key={g.id}>
+                  <label>
+                    <input type="checkbox" checked={endAccess.includes(g.id)} onChange={(e) => setEnd(e.target.checked ? [...endAccess, g.id] : endAccess.filter((x) => x !== g.id))} />
+                    {b.companies.find((c) => c.id === g.companyId)?.name ?? g.companyId}
+                  </label>
+                </li>
+              ))}
+            </ul>
+          </fieldset>
+        )}
+      </div>
+      <div className="hx-form-actions">
         <button
-          className="btn"
+          className="btn btn-primary btn-sm"
+          disabled={!something}
           onClick={() =>
             onAdd({ op: 'update', label: `Change ${a.name}`, userId: a.id, name: name || null, title: title || null, entraOid: entraOid.trim() || null, personId: personId || null, addAccess, endAccess })
           }
         >
           Add to the request
         </button>
-        <button className="btn" onClick={onCancel}>
+        <button className="btn btn-sm btn-ghost" onClick={onCancel}>
           Cancel
         </button>
       </div>
@@ -502,33 +575,37 @@ function Draft({ lines, setLines }: { lines: Line[]; setLines: (f: (x: Line[]) =
         if (r) setLines(() => []);
       });
   return (
-    <section className="panel">
-      <div className="panel-head">
-        <h3>Your request ({lines.length} line{lines.length === 1 ? '' : 's'})</h3>
-      </div>
-      <div className="panel-body" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-        <ol className="small" style={{ margin: 0, paddingLeft: 18 }}>
-          {lines.map((l, n) => (
-            <li key={n}>
-              {l.label}{' '}
-              <button className="btn" onClick={() => setLines((x) => x.filter((_, i) => i !== n))}>
+    <Card title="Your request" sub="Check the lines, say why, then send it. Approved lines go in together, or none of them does." actions={<span className="hx-count">{lines.length === 1 ? '1 line' : `${lines.length} lines`}</span>}>
+      <ul className="hx-rows">
+        {lines.map((l, n) => (
+          <li key={n} className="hx-row">
+            <div className="hx-row-main">
+              <span className="hx-row-title">{l.label}</span>
+            </div>
+            <div className="hx-row-side">
+              <button className="btn btn-sm btn-ghost" onClick={() => setLines((x) => x.filter((_, i) => i !== n))}>
                 Remove
               </button>
-            </li>
-          ))}
-        </ol>
-        <input className="input" aria-label="Why" placeholder="Why (for example: Sasa office staff starting 18 Nov)" value={reason} onChange={(e) => setReason(e.target.value)} />
-        <label className="small">
-          Company access runs to (empty: one year){' '}
-          <input className="input" type="date" value={until} onChange={(e) => setUntil(e.target.value)} />
+            </div>
+          </li>
+        ))}
+      </ul>
+      <div className="hx-form-grid" style={{ marginTop: 12 }}>
+        <label className="field">
+          <span className="label">Why (needed)</span>
+          <input className="input" aria-label="Why" placeholder="For example: Sasa office staff starting 18 Nov" value={reason} onChange={(e) => setReason(e.target.value)} />
         </label>
-        <ErrorNotice error={act.error} />
-        <div>
-          <button className="btn primary" disabled={act.busy} onClick={send}>
-            Send for approval
-          </button>
-        </div>
+        <label className="field">
+          <span className="label">Company access runs to (empty: one year)</span>
+          <input className="input" type="date" aria-label="Company access runs to" value={until} onChange={(e) => setUntil(e.target.value)} />
+        </label>
       </div>
-    </section>
+      <ErrorNotice error={act.error} />
+      <div className="hx-form-actions" style={{ marginTop: 12 }}>
+        <button className="btn btn-primary" disabled={act.busy || reason.trim().length < 3} onClick={send}>
+          Send for approval
+        </button>
+      </div>
+    </Card>
   );
 }

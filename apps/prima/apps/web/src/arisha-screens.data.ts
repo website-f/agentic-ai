@@ -1402,6 +1402,15 @@ export const SCREEN_GUIDES: ScreenGuide[] = [
           "Fill in \"Helper\", \"Helper's work phone\" and \"How\" (\"By phone\" or \"Going there\"), press \"Save helper\", then call the company.",
           "Afterwards press \"Record help given\", write what happened, add proof such as the register page the police signed, and press \"Save\". The company confirms."
         ]
+      },
+      {
+        "task": "How to record the monthly firearm record (before the 28th)",
+        "steps": [
+          "Scroll to \"Polisi senjata\" and press \"Rekod bulanan senjata\".",
+          "Pick the firearm by its tag, the month, the duty officer and the condition.",
+          "If nothing is wrong tick \"Tiada masalah\"; otherwise write the damage found. Typing NA is refused.",
+          "Attach the firearm photo (and the maintenance form if maintenance was done), then press \"Send\"."
+        ]
       }
     ],
     "terms": [
@@ -1925,6 +1934,14 @@ export const SCREEN_GUIDES: ScreenGuide[] = [
       {
         "name": "Calendar",
         "what": "Meetings, action items, tender closing dates and reports due in the next 60 days."
+      },
+      {
+        "name": "Toolbox",
+        "what": "Every company's and central department's 2-weekly toolbox meeting: the status pack, minutes, verification, and the OM's site safety talks."
+      },
+      {
+        "name": "JA Group monthly meeting",
+        "what": "Who has sent the monthly report, each company's or unit's report, the accounts report tracker, duty checklists and the duty registers."
       }
     ],
     "tasks": [
@@ -1992,6 +2009,34 @@ export const SCREEN_GUIDES: ScreenGuide[] = [
           "Open \"Calendar\".",
           "Press \"Add all to Outlook\", or \"Outlook\" on one line.",
           "Open the file that downloads."
+        ]
+      },
+      {
+        "task": "How to prepare the company or department toolbox meeting",
+        "steps": [
+          "Open \"Toolbox\" and press your meeting under \"Mesyuarat toolbox saya\" (set it first from \"Regular meetings\" if it is not there).",
+          "Press \"Bina pek status\": Prima fills each section from your own records and freezes it with its time.",
+          "For every section press \"Berubah\" or \"Tiada perubahan\"; add status lines with \"Baris status\".",
+          "Type the minutes and press \"Simpan draf\". Pasted AI notes must be ticked with \"Saya sudah semak nota AI\".",
+          "Press \"Hantar untuk pengesahan\". The director who chairs (or the company manager) verifies with a comment; you cannot verify your own."
+        ]
+      },
+      {
+        "task": "How to send the company's monthly report for the JA Group meeting",
+        "steps": [
+          "Open \"JA Group monthly meeting\", then \"Laporan bulanan\".",
+          "Pick your company in \"Syarikat / unit\" and press \"Bina laporan dari rekod\".",
+          "For each of the 14 items choose \"berubah\" or \"tiada perubahan\" and write the latest status, then press \"Simpan catatan\".",
+          "Press \"Hantar untuk pengesahan\" at least 3 working days before the meeting. The company manager or a director verifies with a comment."
+        ]
+      },
+      {
+        "task": "How to keep a duty checklist (Senarai tugas)",
+        "steps": [
+          "Open \"JA Group monthly meeting\", pick the company or unit, then \"Senarai tugas\".",
+          "Press \"Muat templat kumpulan\", choose the template and pick the PIC, the backup and a checker (not the PIC).",
+          "Add a line with \"Tambah baris\"; removing one with \"Buang baris\" needs a reason.",
+          "Each line opens as a task in My Work on the first day of its window."
         ]
       }
     ],
@@ -2735,6 +2780,15 @@ export const SCREEN_GUIDES: ScreenGuide[] = [
           "Open \"Utility excess\" and press \"HR to decide\".",
           "Press \"Give a notice\" or \"Deduct from pay\".",
           "When the worker signs, press \"Worker signed the notice\"."
+        ]
+      },
+      {
+        "task": "How a foreign worker move goes through",
+        "steps": [
+          "Under \"Pindah hostel / site\" each person signs their own step with a comment: PIC of the old site, PIC of the new site, FWM, the company head, then the Operations Director or OGM.",
+          "After approval the old site's PIC presses \"Lepaskan\" (attendance and room checked), then \"Rekod perjalanan\".",
+          "The new site's PIC presses \"Terima\" after checking the worker's face or card and giving the safety briefing; the stay is recorded.",
+          "FWM updates JA and presses \"Tutup pindah\" with the JA reference, the headcount and documents ticked. A move not closed in 24 hours is shown in red."
         ]
       }
     ],
@@ -4382,6 +4436,16 @@ export const SCREEN_GUIDES: ScreenGuide[] = [
         "steps": [
           "Press \"Add licence\" and fill in the form."
         ]
+      },
+      {
+        "task": "How to prepare the KDN licence renewal 2027",
+        "steps": [
+          "Find your company under \"Pembaharuan Lesen KDN 2027\" and press \"Buka pembaharuan KDN\".",
+          "For each paper press \"Sedia\", attach the PDF or the scan of the signed copy and fill its date; a paper that fails its check is refused.",
+          "Record \"eSIMS dikemas kini\", the counts (\"Sahkan bilangan CSG/TNG\") and the appointment (\"Rekod janji temu\", pick the session).",
+          "The company manager presses \"Semak dokumen (pengurus)\"; a director of the company then signs with \"Tandatangan pengarah\". Signing is refused until every step is done.",
+          "Press \"Muat turun pek pendrive\" for the soft copies. Prima never logs in to eSIMS, lodges or pays."
+        ]
       }
     ],
     "terms": [
@@ -5088,7 +5152,7 @@ export const SCREEN_GUIDES: ScreenGuide[] = [
           "Pick the \"Site\" and the \"Month\" at the top.",
           "Use the \"Auto-roster suggestion\" or fill the days yourself.",
           "Press \"Save draft\". Prima checks the client limits and the law points.",
-          "Write a \"Reason\" if asked and press \"Submit\"."
+          "Under \"Next step\" write a \"Reason\" (5 characters or more) and press \"Submit\"."
         ]
       },
       {
@@ -5100,10 +5164,19 @@ export const SCREEN_GUIDES: ScreenGuide[] = [
         ]
       },
       {
+        "task": "How to record what happened on a day (OM or site supervisor)",
+        "steps": [
+          "On a published month, tap the guard's day.",
+          "Choose \"What happened\" (for example ABS if the guard did not come) and press \"Record what happened\".",
+          "An absence waits for the Operations Director or OGM to press \"Absence unpaid\" or \"Absence paid\" with a reason. Until then only that guard's pay waits."
+        ]
+      },
+      {
         "task": "How to change a published roster",
         "steps": [
-          "Press \"Make a new version\". The published version stays as it was.",
-          "Change the days, then \"Submit\" again for the same approvals."
+          "Press \"Change the published roster (new version)\". The published version stays as it was.",
+          "Change the days, write \"Why the published roster changes (needed)\" and press \"Make a new version\".",
+          "\"Submit\" it again for the same approvals."
         ]
       }
     ],
@@ -5129,7 +5202,7 @@ export const SCREEN_GUIDES: ScreenGuide[] = [
       {
         "task": "How to ask for a new account",
         "steps": [
-          "In \"Add a new account\" fill the person's details and the \"Companies this person may\" see or act for.",
+          "In \"Add a new account\" choose the \"Kind of account\", fill the \"Full name\" and \"Job title\", and choose the company (company office staff) or tick the companies this person may see (central staff).",
           "Press \"Add to the request\".",
           "Under \"Your request\" write \"Why\" and press \"Send for approval\"."
         ]
@@ -5137,7 +5210,7 @@ export const SCREEN_GUIDES: ScreenGuide[] = [
       {
         "task": "How to add company office staff from the staff directory",
         "steps": [
-          "In \"From the staff directory (company office staff)\" tick the people.",
+          "In \"From the staff directory (company office staff)\" choose the kind of account for each person (leave \"Skip\" for the others).",
           "Press \"Add the picked people to the request\", then \"Send for approval\"."
         ]
       },
@@ -5152,8 +5225,8 @@ export const SCREEN_GUIDES: ScreenGuide[] = [
         "task": "How to approve or return a request",
         "steps": [
           "Under \"Requests\" read each line.",
-          "Write the \"Comment (needed)\".",
-          "Press \"Approve\" or \"Return\"."
+          "Write your comment (3 characters or more).",
+          "Press \"Approve\" or \"Return\". You cannot decide your own request or one about your own account; a leader's account needs the CEO."
         ]
       }
     ],

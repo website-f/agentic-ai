@@ -2,6 +2,7 @@ import { Select } from '../SearchSelect';
 import { useState } from 'react';
 import { api, type FinCeoSummary, type FinSiteProfit, type FinUnbilled } from '../api';
 import { Chip, ErrorNotice, Kpi, Loading, dateTimeLabel, useAction, useLoad } from '../ui';
+import { Search } from '../kit';
 
 /**
  * Finance monitoring F1-F3 (Fauzan, 11 Nov 2026): unbilled sites, profit per site against a target margin, and one page
@@ -29,9 +30,23 @@ export function UnbilledSitesPanel({ companyId }: { companyId?: string }) {
   const act = useAction();
   const [clearing, setClearing] = useState<{ companyId: string; siteId: string; flag: Flag } | null>(null);
   const [reason, setReason] = useState('');
+  // P105: with 100+ sites the list is searched and filtered, open flags first, and each company shows a few rows at first.
+  const [q, setQ] = useState('');
+  const [co, setCo] = useState('');
+  const [openOnly, setOpenOnly] = useState(true);
+  const [more, setMore] = useState<Record<string, boolean>>({});
   if (error) return <ErrorNotice error={error} />;
   if (!data) return <Loading what="unbilled sites" />;
   const companies = companyId ? data.companies.filter((c) => c.companyId === companyId) : data.companies;
+  const needle = q.trim().toLowerCase();
+  const shownCos = companies
+    .filter((c) => !co || c.companyId === co)
+    .map((c) => ({
+      ...c,
+      rows: c.rows.filter((r) => (!openOnly || r.flags.some((f) => !f.cleared)) && (!needle || `${r.siteName} ${r.contractRef ?? ''}`.toLowerCase().includes(needle))),
+    }))
+    .filter((c) => c.rows.length > 0);
+  const PER_COMPANY = 15;
   const clear = async () => {
     if (!clearing) return;
     const r = await act.run(() => api.finClearUnbilled({ companyId: clearing.companyId, period: data.period, siteId: clearing.siteId, kind: clearing.flag.kind, reason }), 'Flag cleared.');
@@ -56,10 +71,35 @@ export function UnbilledSitesPanel({ companyId }: { companyId?: string }) {
         <Kpi label="Open flags" value={companies.reduce((k, c) => k + c.open, 0)} tone={companies.some((c) => c.open) ? 'warn' : 'ok'} />
       </div>
       {companies.length === 0 && <p className="muted" style={{ padding: 12 }}>No site had guards or a live contract in {data.period}.</p>}
-      {companies.map((c) => (
+      {companies.length > 0 && (
+        <div className="row" style={{ gap: 8, flexWrap: 'wrap', alignItems: 'center', padding: '8px 12px' }}>
+          <Search value={q} onChange={setQ} placeholder="Search site or contract" label="Search site or contract" />
+          {!companyId && companies.length > 1 && (
+            <Select className="select" aria-label="Company" value={co} onChange={(e) => setCo(e.target.value)}>
+              <option value="">All companies</option>
+              {companies.map((c) => (
+                <option key={c.companyId} value={c.companyId}>
+                  {c.companyName}
+                </option>
+              ))}
+            </Select>
+          )}
+          <label className="small row" style={{ gap: 6, alignItems: 'center', minHeight: 44 }}>
+            <input type="checkbox" checked={openOnly} onChange={(e) => setOpenOnly(e.target.checked)} /> Only sites with an open flag
+          </label>
+        </div>
+      )}
+      {companies.length > 0 && shownCos.length === 0 && (
+        <p className="muted" style={{ padding: 12 }}>
+          {openOnly && !needle && !co ? 'No open flags: every site is billed.' : 'No site matches.'}
+        </p>
+      )}
+      {shownCos.map((c) => (
         <div key={c.companyId} style={{ overflowX: 'auto' }}>
-          <h4 style={{ margin: '12px 12px 4px' }}>{c.companyName}</h4>
-          <table className="table" data-no-translate>
+          <h4 style={{ margin: '12px 12px 4px' }}>
+            {c.companyName} <span className="muted small">({c.rows.length})</span>
+          </h4>
+          <table className="table">
             <thead>
               <tr>
                 <th>Site</th>
@@ -72,9 +112,9 @@ export function UnbilledSitesPanel({ companyId }: { companyId?: string }) {
               </tr>
             </thead>
             <tbody>
-              {c.rows.map((r) => (
+              {(more[c.companyId] ? c.rows : c.rows.slice(0, PER_COMPANY)).map((r) => (
                 <tr key={r.siteId}>
-                  <td>{r.siteName}</td>
+                  <td data-no-translate>{r.siteName}</td>
                   <td>
                     {r.contractRef ?? '–'}
                     {r.method && <span className="muted small"> {r.method}</span>}
@@ -96,9 +136,23 @@ export function UnbilledSitesPanel({ companyId }: { companyId?: string }) {
                           <div className="muted small">
                             Cleared by {f.cleared.sign.by}, {dateTimeLabel(f.cleared.sign.at)}: {f.cleared.reason}
                           </div>
+                        ) : clearing && clearing.companyId === c.companyId && clearing.siteId === r.siteId && clearing.flag.kind === f.kind ? (
+                          // P105: the reason box opens under the flag itself, not at the foot of a long list.
+                          <div className="panel" style={{ marginTop: 6 }}>
+                            <label className="field">
+                              <span>Why (needed, for example "free month in contract")</span>
+                              <textarea className="textarea" rows={2} value={reason} onChange={(e) => setReason(e.target.value)} />
+                            </label>
+                            <button className="btn btn-sm btn-primary" disabled={act.busy || reason.trim().length < 10} onClick={clear}>
+                              Clear the flag
+                            </button>{' '}
+                            <button className="btn btn-sm" onClick={() => setClearing(null)}>
+                              Cancel
+                            </button>
+                          </div>
                         ) : (
                           data.canClear && (
-                            <button className="link-button small" onClick={() => setClearing({ companyId: c.companyId, siteId: r.siteId, flag: f })}>
+                            <button className="link-button small" onClick={() => (setClearing({ companyId: c.companyId, siteId: r.siteId, flag: f }), setReason(''))}>
                               Clear with a reason
                             </button>
                           )
@@ -110,23 +164,13 @@ export function UnbilledSitesPanel({ companyId }: { companyId?: string }) {
               ))}
             </tbody>
           </table>
+          {c.rows.length > PER_COMPANY && (
+            <button className="btn btn-sm" style={{ margin: '6px 12px' }} onClick={() => setMore((m) => ({ ...m, [c.companyId]: !m[c.companyId] }))}>
+              {more[c.companyId] ? 'Show fewer' : <>Show all <span className="muted">{c.rows.length}</span></>}
+            </button>
+          )}
         </div>
       ))}
-      {clearing && (
-        <div className="panel" style={{ margin: 12 }}>
-          <strong>Clear "{clearing.flag.label}"</strong>
-          <label className="field">
-            <span>Why (needed, for example "free month in contract")</span>
-            <textarea className="textarea" rows={2} value={reason} onChange={(e) => setReason(e.target.value)} />
-          </label>
-          <button className="btn btn-primary" disabled={act.busy || reason.trim().length < 10} onClick={clear}>
-            Clear the flag
-          </button>{' '}
-          <button className="btn" onClick={() => setClearing(null)}>
-            Cancel
-          </button>
-        </div>
-      )}
     </section>
   );
 }
@@ -140,8 +184,14 @@ export function SiteProfitPanel() {
   const [n, setN] = useState(0);
   const { data, error } = useLoad(() => api.finSiteProfit(month), [month, n]);
   const [open, setOpen] = useState<string | null>(null);
+  const [q, setQ] = useState('');
+  const [underOnly, setUnderOnly] = useState(false);
+  const [all, setAll] = useState(false);
   if (error) return <ErrorNotice error={error} />;
   if (!data) return <Loading what="site profit" />;
+  const needle = q.trim().toLowerCase();
+  const rows = data.sites.filter((s) => (!underOnly || s.belowTarget || s.tone === 'crit') && (!needle || `${s.siteName} ${s.companyName}`.toLowerCase().includes(needle)));
+  const PAGE = 25;
   return (
     <section className="panel">
       <div className="panel-head">
@@ -155,8 +205,14 @@ export function SiteProfitPanel() {
         <Kpi label="Sites under target" value={data.belowTarget} tone={data.belowTarget ? 'crit' : 'ok'} note={data.targets.group?.pct == null ? 'Group target not set' : `Group target ${data.targets.group.pct}%`} />
         <Kpi label="Sites" value={data.sites.length} tone="neutral" />
       </div>
+      <div className="row" style={{ gap: 8, flexWrap: 'wrap', alignItems: 'center', padding: '8px 12px' }}>
+        <Search value={q} onChange={setQ} placeholder="Search site or company" label="Search site or company" />
+        <label className="small row" style={{ gap: 6, alignItems: 'center', minHeight: 44 }}>
+          <input type="checkbox" checked={underOnly} onChange={(e) => setUnderOnly(e.target.checked)} /> Only sites under target or at a loss
+        </label>
+      </div>
       <div style={{ overflowX: 'auto' }}>
-        <table className="table" data-no-translate>
+        <table className="table">
           <thead>
             <tr>
               <th>Site</th>
@@ -168,11 +224,17 @@ export function SiteProfitPanel() {
             </tr>
           </thead>
           <tbody>
-            {data.sites.map((s) => (
+            {(all ? rows : rows.slice(0, PAGE)).map((s) => (
               <SiteLine key={s.siteId} s={s} open={open === s.siteId} onOpen={() => setOpen(open === s.siteId ? null : s.siteId)} />
             ))}
           </tbody>
         </table>
+        {!rows.length && <p className="muted" style={{ padding: 12 }}>No site matches.</p>}
+        {rows.length > PAGE && (
+          <button className="btn btn-sm" style={{ margin: '6px 12px' }} onClick={() => setAll(!all)}>
+            {all ? 'Show fewer' : <>Show all <span className="muted">{rows.length}</span></>}
+          </button>
+        )}
       </div>
       {data.canSet && <TargetForm data={data} onSaved={() => setN((x) => x + 1)} />}
     </section>
@@ -183,8 +245,8 @@ function SiteLine({ s, open, onOpen }: { s: SiteRow; open: boolean; onOpen: () =
   return (
     <>
       <tr onClick={onOpen} style={{ cursor: 'pointer' }}>
-        <td>{s.siteName}</td>
-        <td>{s.companyName}</td>
+        <td data-no-translate>{s.siteName}</td>
+        <td data-no-translate>{s.companyName}</td>
         <td style={{ textAlign: 'right' }}>{rmK(s.revenue)}</td>
         <td style={{ textAlign: 'right' }}>
           {rmK(s.margin)}

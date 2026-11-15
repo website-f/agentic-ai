@@ -121,7 +121,11 @@ function KdnRow({ r, b }: { r: Row; b: Board }) {
   return (
     <div className="item">
       <div className="item-main">
-        <strong>{r.companyName}</strong> <Chip tone={tone}>{label}</Chip> {r.late && <Chip tone="crit">Lewat: kepada {r.late}</Chip>}
+        <strong>{r.companyName}</strong>
+        <span className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
+          <Chip tone={tone}>{label}</Chip>
+          {r.late && <Chip tone="crit">Lewat: kepada {r.late}</Chip>}
+        </span>
         <div className="muted small">
           {r.reference} · tamat {r.expiresOn ? dateLabel(r.expiresOn) : 'tiada rekod'} · dokumen {r.papers.ready}/{r.papers.of}
           {r.appointment ? ` · janji temu sesi ${r.appointment.session}, ${dateLabel(r.appointment.on)} ${r.appointment.time}` : r.countdown.nextSession ? ` · sesi seterusnya ${r.countdown.nextSession.no} dalam ${r.countdown.daysToNext} hari` : ''}
@@ -173,7 +177,7 @@ function KdnRow({ r, b }: { r: Row; b: Board }) {
                 send={send('appointment')}
                 fixed={L}
                 fields={[
-                  { k: 'session', l: 'Sesi', t: 'number' },
+                  { k: 'session', l: 'Sesi', t: 'select', o: b.window.sessions.map((x) => String(x.no)), labels: Object.fromEntries(b.window.sessions.map((x) => [String(x.no), `Sesi ${x.no}: ${dateLabel(x.from)} - ${dateLabel(x.to)}${b.window.returnOnlySessions.includes(x.no) ? ' (dikembalikan sahaja)' : ''}`])) },
                   { k: 'on', l: 'Tarikh', t: 'date' },
                   { k: 'time', l: 'Masa (HH:MM)' },
                   { k: 'ref', l: 'Rujukan janji temu eSIMS' },
@@ -188,7 +192,7 @@ function KdnRow({ r, b }: { r: Row; b: Board }) {
                   send={send('result')}
                   fixed={L}
                   fields={[
-                    { k: 'kind', l: 'Keputusan', t: 'select', o: ['accepted', 'lacking', 'counter'] },
+                    { k: 'kind', l: 'Keputusan', t: 'select', o: ['accepted', 'lacking', 'counter'], labels: { accepted: 'Diterima KDN', lacking: 'Dokumen tidak lengkap', counter: 'Ditinggalkan di kaunter' } },
                     { k: 'on', l: 'Tarikh', t: 'date' },
                     { k: 'ref', l: 'Rujukan KDN' },
                     { k: 'lacking', l: 'Item tidak lengkap (cth 1.2, 3.7)', t: 'list' },

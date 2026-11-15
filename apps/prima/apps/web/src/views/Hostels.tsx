@@ -82,8 +82,9 @@ export function HostelsView() {
           />
         )}
       </Stats>
-      <div className="tabbar hx-tabs" role="tablist" aria-label="Hostel sections">
+      {/* P105: the moves / needs / checks panel sits above the hostel tabs (as upstream), not inside the tab bar. */}
       <FwHostelPanel />
+      <div className="tabbar hx-tabs" role="tablist" aria-label="Hostel sections">
         <button role="tab" aria-selected={view === 'bills'} onClick={() => setTab('bills')}>
           Bills
           {mine.length > 0 && <span className="tab-count">{mine.length}</span>}

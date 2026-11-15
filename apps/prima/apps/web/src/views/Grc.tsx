@@ -1106,7 +1106,7 @@ function HrReads({ rows }: { rows: NonNullable<Awaited<ReturnType<typeof api.grc
             <div className="gv-item-head">
               <div className="gv-item-main">
                 <div className="gv-item-title">
-                  <span className="gv-co mono">{r.code}</span> · {r.category}
+                  <span className="gv-co mono">{r.code}</span> · {CATEGORY[r.category as WhistleInput['category']] ?? r.category}
                 </div>
                 <div className="gv-item-meta">
                   {r.companyName} · handled by {r.handlerName} · {r.anonymous ? 'Anonymous' : `From ${r.reporterName ?? 'not given'}`}, {dateLabel(r.at.slice(0, 10))}

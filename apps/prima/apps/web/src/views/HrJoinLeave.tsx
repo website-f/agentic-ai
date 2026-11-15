@@ -3,6 +3,7 @@ import { useState } from "react";
 import { isOwnerAdmin } from "@prima/core";
 import { api, type Vacancies } from "../api";
 import { useApp } from "../App";
+import { useLang } from "../i18n";
 import { Card, Empty } from "../kit";
 import { Chip, ErrorNotice, Loading, dateLabel, useAction, useLoad } from "../ui";
 import "../styles/hrx.css";
@@ -242,19 +243,7 @@ export function JoinLeavePanel() {
             </div>
             <div className="hx-row-text">Personnel records are kept until {guide.recordsKeptUntil} (7 years after the last day).</div>
             <FinalPayBlock guide={guide} />
-            <details style={{ marginTop: 4 }}>
-              <summary>Resignation procedure (handbook, English and Malay)</summary>
-              <ol className="hp-guide-steps">
-                {guide.resignation.procedure.en.map((s) => (
-                  <li key={s}>{s}</li>
-                ))}
-              </ol>
-              <ol className="hp-guide-steps" lang="ms">
-                {guide.resignation.procedure.ms.map((s) => (
-                  <li key={s}>{s}</li>
-                ))}
-              </ol>
-            </details>
+            <ResignationProcedure procedure={guide.resignation.procedure} />
             <ol className="hp-guide-steps">
               {guide.steps.map((s) => (
                 <li key={s}>{s}</li>
@@ -903,6 +892,41 @@ function ApplicantList({ vacancyId, count, hired, headcount }: { vacancyId: stri
   );
 }
 
+/**
+ * Part E: the handbook's resignation procedure. P105: shown in the screen language (Malay for BM and BM+EN), with the
+ * other language one tap away, instead of both lists one under the other.
+ */
+function ResignationProcedure({ procedure }: { procedure: { en: string[]; ms: string[] } }) {
+  const { lang } = useLang();
+  const first = lang === "en" ? procedure.en : procedure.ms;
+  const other = lang === "en" ? procedure.ms : procedure.en;
+  return (
+    <details style={{ marginTop: 4 }}>
+      <summary>Resignation procedure (handbook)</summary>
+      <ol className="hp-guide-steps" lang={lang === "en" ? "en" : "ms"} data-no-translate>
+        {first.map((s) => (
+          <li key={s}>{s}</li>
+        ))}
+      </ol>
+      <details style={{ marginTop: 4 }}>
+        <summary className="small">{lang === "en" ? "In Malay" : "In English"}</summary>
+        <ol className="hp-guide-steps" lang={lang === "en" ? "ms" : "en"} data-no-translate>
+          {other.map((s) => (
+            <li key={s}>{s}</li>
+          ))}
+        </ol>
+      </details>
+    </details>
+  );
+}
+
+const FINAL_PAY_FIELDS: [k: "lastMonth" | "unusedLeave" | "noticeInLieu" | "terminationBenefit", label: string][] = [
+  ["lastMonth", "Last month's pay (RM)"],
+  ["unusedLeave", "Unused annual leave (RM)"],
+  ["noticeInLieu", "Pay in place of notice (RM)"],
+  ["terminationBenefit", "Termination benefit (RM)"],
+];
+
 /** Part N14: Prima's working of the final pay, for HR to check and save with a reason on any change. */
 function FinalPayBlock({ guide }: { guide: Awaited<ReturnType<typeof api.leavingGuide>> }) {
   const act = useAction();
@@ -910,8 +934,8 @@ function FinalPayBlock({ guide }: { guide: Awaited<ReturnType<typeof api.leaving
   const [v, setV] = useState<Record<string, string>>({});
   const rm = (n: number) => `RM${n.toLocaleString("en-MY", { minimumFractionDigits: 2 })}`;
   return (
-    <div style={{ marginTop: 6 }}>
-      <div style={{ fontWeight: 600 }}>Final pay (Prima's working, HR checks)</div>
+    <div className="hx-form" style={{ marginTop: 6 }}>
+      <h3 className="hx-form-title">Final pay (Prima's working, HR checks)</h3>
       <div>Last month {f.lastMonth.from} to {f.lastMonth.to}: {rm(f.lastMonth.basic + f.lastMonth.allowances)}. {f.lastMonth.note}</div>
       <div>
         Unused annual leave: {f.unusedLeave.days} day(s) ({f.unusedLeave.entitledToDate} due for {f.unusedLeave.monthsCounted} month(s), {f.unusedLeave.taken} taken) = {rm(f.unusedLeave.amount)}
@@ -927,12 +951,21 @@ function FinalPayBlock({ guide }: { guide: Awaited<ReturnType<typeof api.leaving
         </div>
       )}
       <ErrorNotice error={act.error} />
-      <div className="row" style={{ gap: 6, flexWrap: "wrap", marginTop: 4 }}>
-        {(["lastMonth", "unusedLeave", "noticeInLieu", "terminationBenefit"] as const).map((k) => (
-          <input key={k} className="input" style={{ width: 130 }} aria-label={k} placeholder={k} value={v[k] ?? ""} onChange={(e) => setV((x) => ({ ...x, [k]: e.target.value }))} />
+      <p className="small muted">Leave a figure empty to keep Prima&apos;s working. A different figure needs a reason of 10 characters or more.</p>
+      <div className="hx-form-grid">
+        {FINAL_PAY_FIELDS.map(([k, label]) => (
+          <label key={k} className="field">
+            <span className="label">{label}</span>
+            <input className="input" inputMode="decimal" aria-label={label} placeholder="Prima's figure" value={v[k] ?? ""} onChange={(e) => setV((x) => ({ ...x, [k]: e.target.value }))} />
+          </label>
         ))}
-        <input className="input" aria-label="Reason" placeholder="Reason (needed)" value={v.reason ?? ""} onChange={(e) => setV((x) => ({ ...x, reason: e.target.value }))} />
-        <button className="btn btn-sm" disabled={act.busy} onClick={() => void act.run(() => api.setFinalPay(guide.personId, v), "Final pay saved.")}>
+        <label className="field hx-form-wide">
+          <span className="label">Reason (needed)</span>
+          <input className="input" aria-label="Reason" placeholder="For example: checked against the leave card" value={v.reason ?? ""} onChange={(e) => setV((x) => ({ ...x, reason: e.target.value }))} />
+        </label>
+      </div>
+      <div className="hx-form-actions">
+        <button className="btn btn-sm btn-primary" disabled={act.busy || !(v.reason ?? "").trim()} onClick={() => void act.run(() => api.setFinalPay(guide.personId, v), "Final pay saved.")}>
           Save final pay
         </button>
       </div>

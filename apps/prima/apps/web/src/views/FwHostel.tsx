@@ -42,6 +42,112 @@ function NoteAct({ label, onGo, busy, tone }: { label: string; onGo: (note: stri
   );
 }
 
+const ST: Record<string, string> = {
+  submitted: 'Menunggu tandatangan',
+  returned: 'Dipulangkan',
+  rejected: 'Ditolak',
+  approved: 'Diluluskan',
+  released: 'Dilepaskan',
+  moved: 'Dalam perjalanan',
+  received: 'Diterima di tapak baru',
+  closed: 'Ditutup',
+  cancelled: 'Dibatalkan',
+  fwm_checked: 'Disahkan FWM',
+  ordered: 'Dipesan',
+  delivered: 'Dihantar',
+  reported: 'Dilaporkan',
+  decided: 'Diputuskan',
+  done: 'Siap',
+  landlord: 'Tuan rumah',
+};
+const st = (x: string) => ST[x] ?? x;
+const STEP_BM: Record<string, string> = {
+  originPic: 'PIC tapak asal setuju lepaskan',
+  newPic: 'PIC tapak baru setuju terima',
+  fwm: 'FWM semak',
+  hq: 'Ketua syarikat lulus (HQ)',
+  ketua: 'Ketua Operasi lulus (OD / OGM)',
+};
+const CAUSE_BM: Record<string, string> = { WEAR: 'Haus biasa', ACCIDENT: 'Kemalangan', NEGLIGENCE: 'Kecuaian', MISUSE: 'Salah guna', VANDALISM: 'Vandalisme', UNKNOWN: 'Tidak diketahui' };
+
+/**
+ * P105: the steps after approval (release, on the way, receive) and FWM's close, each with the ticks the server asks
+ * for. Upstream offered only the sign steps and a close that ticked the headcount and documents by itself.
+ */
+function MoveSteps({ m, role, busy, go }: { m: AnyRec & { newArrival?: boolean }; role: string; busy: boolean; go: (action: string, body: Record<string, unknown>, ok: string) => unknown }) {
+  const [f, setF] = useState<Record<string, unknown>>({});
+  const [photos, setPhotos] = useState<string[]>([]);
+  const tick = (k: string, l: string) => (
+    <label className="row small" style={{ gap: 6, minHeight: 44 }}>
+      <input type="checkbox" checked={!!f[k]} onChange={(e) => setF({ ...f, [k]: e.target.checked })} /> {l}
+    </label>
+  );
+  const text = (k: string, l: string, type = 'text') => <input className="input" type={type} aria-label={l} placeholder={l} value={String(f[k] ?? '')} onChange={(e) => setF({ ...f, [k]: e.target.value })} />;
+  const list = (k: string) => String(f[k] ?? '').split(',').map((x) => x.trim()).filter(Boolean);
+  const ops = role === 'om' || role === 'company';
+  if (m.status === 'approved' && !m.newArrival && ops)
+    return (
+      <div style={{ display: 'grid', gap: 6 }}>
+        <strong className="small">Lepaskan pekerja (PIC tapak asal)</strong>
+        {tick('attendanceChecked', 'Kehadiran disemak')}
+        {tick('roomChecked', 'Bilik disemak')}
+        {text('itemsReturned', 'Barang dipulangkan (pisah dengan koma)')}
+        {text('note', 'Nota (pilihan)')}
+        <Photos label="Gambar jika ada barang kurang" onChange={setPhotos} />
+        <button className="btn btn-primary btn-sm" disabled={busy} onClick={() => go('releaseMove', { id: m.id, attendanceChecked: !!f.attendanceChecked, roomChecked: !!f.roomChecked, itemsReturned: list('itemsReturned'), note: f.note, photos }, 'Pekerja dilepaskan.')}>
+          Lepaskan
+        </button>
+      </div>
+    );
+  if ((m.status === 'released' || (m.newArrival && m.status === 'approved')) && (ops || role === 'fwm'))
+    return (
+      <div style={{ display: 'grid', gap: 6 }}>
+        <strong className="small">Dalam perjalanan</strong>
+        {text('transport', 'Pengangkutan (cth. van syarikat)')}
+        {text('on', 'Tarikh pindah', 'date')}
+        {text('carries', 'Barang dibawa (pisah dengan koma)')}
+        <button className="btn btn-primary btn-sm" disabled={busy} onClick={() => go('transitMove', { id: m.id, transport: f.transport, on: f.on, carries: list('carries') }, 'Direkod dalam perjalanan.')}>
+          Rekod perjalanan
+        </button>
+      </div>
+    );
+  if (m.status === 'moved' && ops)
+    return (
+      <div style={{ display: 'grid', gap: 6 }}>
+        <strong className="small">Terima di tapak baru (PIC tapak baru)</strong>
+        {tick('arrived', 'Pekerja sudah sampai')}
+        <label className="small">
+          Pengenalan disemak dengan{' '}
+          <Select className="select" aria-label="Pengenalan" value={String(f.identity ?? '')} onChange={(e) => setF({ ...f, identity: e.target.value })}>
+            <option value="">-</option>
+            <option value="face">Wajah</option>
+            <option value="card">Kad pekerja</option>
+          </Select>
+        </label>
+        {tick('briefing', 'Taklimat keselamatan dan peraturan asrama diberi')}
+        {text('room', 'Bilik (pilihan)')}
+        {text('note', 'Nota (pilihan)')}
+        <Photos label="Gambar jika ada barang kurang" onChange={setPhotos} />
+        <button className="btn btn-primary btn-sm" disabled={busy} onClick={() => go('receiveMove', { id: m.id, arrived: !!f.arrived, identity: f.identity, briefing: !!f.briefing, room: f.room || null, note: f.note, photos }, 'Pekerja diterima; penginapan direkod.')}>
+          Terima
+        </button>
+      </div>
+    );
+  if (m.status === 'received' && role === 'fwm')
+    return (
+      <div style={{ display: 'grid', gap: 6 }}>
+        <strong className="small">Tutup pindah (FWM, selepas dikemas kini dalam JA)</strong>
+        {text('jaRef', 'Rujukan JA')}
+        {tick('headcountOk', 'Senarai pekerja dan bilangan betul')}
+        {tick('documentsKept', 'Dokumen disimpan')}
+        <button className="btn btn-primary btn-sm" disabled={busy} onClick={() => go('closeMove', { id: m.id, jaRef: f.jaRef, headcountOk: !!f.headcountOk, documentsKept: !!f.documentsKept }, 'Pindah ditutup.')}>
+          Tutup pindah
+        </button>
+      </div>
+    );
+  return null;
+}
+
 export function FwHostelPanel() {
   const v = useLoad(() => api.fwHostel(), []);
   const act = useAction();
@@ -158,7 +264,9 @@ export function FwHostelPanel() {
                   <input className="input" placeholder="Barang / item" value={String(f.item ?? '')} onChange={(e) => setF({ ...f, item: e.target.value })} />
                   <Select className="input" value={String(f.cause ?? 'UNKNOWN')} onChange={(e) => setF({ ...f, cause: e.target.value })}>
                     {['WEAR', 'ACCIDENT', 'NEGLIGENCE', 'MISUSE', 'VANDALISM', 'UNKNOWN'].map((c) => (
-                      <option key={c}>{c}</option>
+                      <option key={c} value={c}>
+                        {CAUSE_BM[c]}
+                      </option>
                     ))}
                   </Select>
                   <input className="input" placeholder="Nota / note" value={String(f.note ?? '')} onChange={(e) => setF({ ...f, note: e.target.value })} />
@@ -171,7 +279,7 @@ export function FwHostelPanel() {
               {form === `need:${h.hostel.id}` && (
                 <div style={{ display: 'grid', gap: 6 }}>
                   <input className="input" placeholder="Barang / item" value={String(f.item ?? '')} onChange={(e) => setF({ ...f, item: e.target.value })} />
-                  <input className="input" placeholder="Kuantiti / qty" value={String(f.qty ?? '')} onChange={(e) => setF({ ...f, qty: e.target.value })} />
+                  <input className="input" type="number" min={1} placeholder="Kuantiti / qty" value={String(f.qty ?? '')} onChange={(e) => setF({ ...f, qty: e.target.value })} />
                   <Select className="input" value={String(f.reason ?? 'REPLACE_DAMAGED')} onChange={(e) => setF({ ...f, reason: e.target.value })}>
                     {Object.entries((d as { reasons?: { need: Record<string, { ms: string }> } }).reasons?.need ?? {}).map(([k, r]) => (
                       <option key={k} value={k}>
@@ -180,7 +288,7 @@ export function FwHostelPanel() {
                     ))}
                   </Select>
                   <input className="input" placeholder="Justifikasi (perlu)" value={String(f.justification ?? '')} onChange={(e) => setF({ ...f, justification: e.target.value })} />
-                  <input className="input" placeholder="Tarikh perlu / needed by (YYYY-MM-DD)" value={String(f.neededBy ?? '')} onChange={(e) => setF({ ...f, neededBy: e.target.value })} />
+                  <input className="input" type="date" aria-label="Tarikh perlu / needed by" value={String(f.neededBy ?? '')} onChange={(e) => setF({ ...f, neededBy: e.target.value })} />
                   <button className="btn btn-primary btn-sm" disabled={act.busy} onClick={() => go('raiseNeed', { id: h.hostel.id, items: [{ name: f.item, qty: Number(f.qty) }], reason: f.reason ?? 'REPLACE_DAMAGED', justification: f.justification, neededBy: f.neededBy }, 'Need sent to FWM.')}>
                     Hantar
                   </button>
@@ -218,21 +326,20 @@ export function FwHostelPanel() {
                 <span>
                   <span className="mono small">{r.move.form}</span> {r.move.type} · {r.move.workers.map((w) => w.name).join(', ')} · mula {r.move.startOn}
                 </span>
-                <Chip tone={r.move.status === 'closed' ? 'ok' : r.move.status === 'rejected' ? 'crit' : 'info'}>{r.move.status}</Chip>
+                <Chip tone={r.move.status === 'closed' ? 'ok' : r.move.status === 'rejected' ? 'crit' : 'info'}>{st(r.move.status)}</Chip>
               </div>
               {r.move.warnings.length > 0 && <div className="small">{r.move.warnings.join(' · ')}</div>}
               {r.canSign.map((step) => (
                 <div key={step} className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
-                  <span className="small">{step}:</span>
+                  <span className="small">{STEP_BM[step] ?? step}:</span>
                   <NoteAct label="Lulus / Approve" tone="primary" busy={act.busy} onGo={(note) => go('decideMove', { id: r.move.id, step, decision: 'approve', note }, 'Signed.')} />
                   <NoteAct label="Tolak / Reject" busy={act.busy} onGo={(note) => go('decideMove', { id: r.move.id, step, decision: 'reject', note }, 'Rejected.')} />
                   {step === 'fwm' && <NoteAct label="Pulangkan / Return" busy={act.busy} onGo={(note) => go('decideMove', { id: r.move.id, step, decision: 'return', note }, 'Returned to the OM.')} />}
                 </div>
               ))}
               {r.moveLate && <Chip tone="crit">{`Lewat: ${r.moveLate.days} hari bekerja selepas lulus (sasaran ${r.moveLate.target})`}</Chip>}
-              {r.notClosedHours >= 24 && role === 'fwm' && (
-                <NoteAct label="Tutup (rujukan JA) / Close" busy={act.busy} onGo={(jaRef) => go('closeMove', { id: r.move.id, jaRef, headcountOk: true, documentsKept: true }, 'Closed.')} />
-              )}
+              {r.notClosedHours >= 24 && <Chip tone="crit">{`Belum ditutup ${r.notClosedHours} jam selepas diterima`}</Chip>}
+              <MoveSteps m={r.move} role={role} busy={act.busy} go={go} />
             </div>
           ))}
         </div>
@@ -247,7 +354,7 @@ export function FwHostelPanel() {
                 <span>
                   <span className="mono small">{n.form}</span> {n.hostelName}: {n.items.map((i) => `${i.qty} x ${i.name}`).join(', ')}
                 </span>
-                <Chip tone="info">{n.status}</Chip>
+                <Chip tone="info">{st(n.status)}</Chip>
               </div>
               {role === 'fwm' && n.status === 'submitted' && <NoteAct label="Sahkan / Verify" tone="primary" busy={act.busy} onGo={(note) => go('decideNeed', { id: n.id, step: 'fwm', note }, 'Verified.')} />}
               {role === 'sector' && n.status === 'fwm_checked' && (
@@ -292,7 +399,7 @@ export function FwHostelPanel() {
             <div key={x.id} className="list-item" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 4 }}>
               <div className="row" style={{ justifyContent: 'space-between' }}>
                 <span>{x.lines.map((l) => `${l.qty} x ${l.item}`).join(', ')}</span>
-                <Chip tone={x.status === 'closed' ? 'ok' : 'warn'}>{x.status}</Chip>
+                <Chip tone={x.status === 'closed' ? 'ok' : 'warn'}>{st(x.status)}</Chip>
               </div>
               {x.penalty && (
                 <div className="small">
@@ -317,7 +424,7 @@ export function FwHostelPanel() {
                 </span>
                 <span className="row" style={{ gap: 4 }}>
                   {m.critical && <Chip tone="crit">Kritikal</Chip>}
-                  <Chip tone="info">{m.status}</Chip>
+                  <Chip tone="info">{st(m.status)}</Chip>
                 </span>
               </div>
               {role === 'fwm' && m.status === 'reported' && <NoteAct label="Semak / Check" tone="primary" busy={act.busy} onGo={(note) => go('maintStep', { id: m.id, step: 'fwm', note }, 'Checked.')} />}

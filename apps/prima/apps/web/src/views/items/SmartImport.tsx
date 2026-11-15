@@ -463,6 +463,19 @@ export function SmartImport({ data, onClose }: { data: ItemBoard; onClose: () =>
             />
           )}
 
+          {/* P105: before a big import, say plainly how the parts and the CEO's OK work (N2). */}
+          {step === 3 && checked && plans.filter((p) => p.include && !p.problems.length).length > IMPORT_BATCH && (
+            <p className="notice" data-tone="info">
+              A long list goes in parts of 100 items. Where the CEO OKs each bulk load, only the first part goes in now. After the CEO's OK, open this import again
+              with the same files and press Import: the parts already in are skipped and the next part goes in.
+            </p>
+          )}
+          {step === 4 && result && error && /waiting for the CEO's OK/.test(error) && (
+            <p className="notice" data-tone="warn">
+              The rest of the list waits for the CEO's OK of the part just loaded. After the OK, open this import again with the same files and press Import; the
+              parts already in are skipped.
+            </p>
+          )}
           {step === 4 && result && (
             <Summary data={data} result={result} party={party} onLabels={() => setLabels(true)} />
           )}
@@ -509,7 +522,10 @@ export function SmartImport({ data, onClose }: { data: ItemBoard; onClose: () =>
                 </button>
               ) : (
                 <>
-                <input className="input" aria-label="Backup checked before this load" title="Backup checked before this load (its date or reference)" value={backup} onChange={(e) => setBackup(e.target.value)} placeholder="e.g. nightly backup 14 Nov restored on test" />
+                <label className="field" style={{ flex: '1 1 260px', margin: 0 }}>
+                  <span className="label">Backup checked before this load (its date or reference)</span>
+                  <input className="input" aria-label="Backup checked before this load" value={backup} onChange={(e) => setBackup(e.target.value)} placeholder="e.g. nightly backup 14 Nov restored on test" />
+                </label>
                 <button className="btn btn-primary it-big" type="button" disabled={!!run || !plans.some((p) => p.include && !p.problems.length)} onClick={() => void importAll()}>
                   Import <span>{plans.filter((p) => p.include && !p.problems.length).length}</span> items
                 </button>

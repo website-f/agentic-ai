@@ -44,7 +44,7 @@ const step = (name, ok) => { if (!ok) failed++; console.log(`${ok ? 'PASS' : 'FA
     await p.getByRole('button', { name: 'Send for approval' }).click(); await p.waitForTimeout(1200);
     step(`${w}: request is waiting`, /waiting/.test(await p.innerText('body')));
     await as('Fauzan'); await nav('Accounts and access');
-    const req = p.locator('.list-item', { hasText: 'Synthetic office staff starting 18 Nov' }).first();
+    const req = p.locator('.hx-row', { hasText: 'Synthetic office staff starting 18 Nov' }).first();
     await req.getByRole('button', { name: 'Approve' }).click(); await p.waitForTimeout(800);
     step(`${w}: approval without a comment is refused`, /comment/i.test(await p.innerText('body')));
     await req.getByLabel('Comment').fill('Checked against the synthetic list');

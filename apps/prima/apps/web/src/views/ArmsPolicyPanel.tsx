@@ -1,6 +1,7 @@
 import { Select } from '../SearchSelect';
 import { useState } from 'react';
 import { api } from '../api';
+import { useApp } from '../App';
 import { Loading, useLoad } from '../ui';
 import { OpForm, type Field } from './ItPolicyPanel';
 
@@ -63,30 +64,46 @@ const send = (input: Record<string, unknown>) => {
   const checks: Record<string, boolean> = {};
   for (const [k, v] of Object.entries(rest)) {
     if (k.startsWith('checks.')) checks[k.slice(7)] = v === true;
-    else out[k] = v;
+    else if (k !== 'noProblem') out[k] = v;
   }
   if (Object.keys(checks).length) out.checks = checks;
+  // V14 (P105): "Tiada masalah" is a tick on the monthly record, never typed; the server reads it as TIADA_MASALAH.
+  if (rest.noProblem === true) out.damage = 'TIADA_MASALAH';
   return api.armsPolicyAct(String(op), out);
 };
 const F = (props: { title: string; op: string; fields: Field[]; fixed?: Record<string, unknown> }) => <OpForm {...props} send={send} />;
 const checks = (keys: readonly string[]): Field[] => keys.map((k) => ({ k: `checks.${k}`, l: k, t: 'check' as const }));
+const CONDITION_BM = { GOOD: 'Baik', NEEDS_ATTENTION: 'Perlu perhatian', UNUSABLE: 'Tidak boleh digunakan' };
+const CATEGORY_BM = { LIGHT: 'Ringan', MEDIUM: 'Sederhana', CRITICAL: 'Kritikal' };
 const REASON: Field = { k: 'reason', l: 'Sebab (reason)' };
 const DOCS: Field = { k: 'docs', l: 'Dokumen', t: 'proof' };
 const ON: Field = { k: 'on', l: 'Tarikh', t: 'date' };
 /** V16: "Sejarah" of a firearm, vault or licence, from the audit log. */
-function History() {
+function History({ known }: { known: Record<string, Record<string, string>> }) {
   const [entity, setEntity] = useState('firearm');
   const [id, setId] = useState('');
+  // P105: pick the firearm, vault or licence by its tag or name when the board knows it; typing the id stays possible.
+  const pick = Object.entries(known[entity] ?? {});
   const [rows, setRows] = useState<{ at: string; by: string; what: string; note: string }[] | null>(null);
   const [err, setErr] = useState('');
   return (
     <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
-      <Select className="select" aria-label="Record" value={entity} onChange={(e) => setEntity(e.target.value)}>
+      <Select className="select" aria-label="Record" value={entity} onChange={(e) => (setEntity(e.target.value), setId(''))}>
         <option value="firearm">Senjata</option>
         <option value="vault">Bilik kebal</option>
         <option value="credential">Lesen</option>
       </Select>
-      <input className="input" aria-label="Record id" placeholder="Record id" value={id} onChange={(e) => setId(e.target.value)} />
+      {pick.length > 0 && (
+        <Select className="select" aria-label="Rekod" value={pick.some(([k]) => k === id) ? id : ''} onChange={(e) => setId(e.target.value)}>
+          <option value="">Pilih rekod</option>
+          {pick.map(([k, label]) => (
+            <option key={k} value={k}>
+              {label}
+            </option>
+          ))}
+        </Select>
+      )}
+      <input className="input" aria-label="Record id" placeholder={pick.length ? 'atau taip ID rekod' : 'ID rekod'} value={id} onChange={(e) => setId(e.target.value)} />
       <button className="btn btn-sm" onClick={() => api.armsPolicyAct('history', { entity, id }).then((r) => (setRows(r as never), setErr(''))).catch((e: Error) => setErr(e.message))}>
         Sejarah
       </button>
@@ -118,7 +135,7 @@ function RecordActions({ r, b }: { r: Rec; b: Board }) {
       if (r.status === 'closed') return null;
       return (
         <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
-          <F title="Kategori" op="damageCategory" fixed={id} fields={[{ k: 'category', l: 'Category', t: 'select', o: ['LIGHT', 'MEDIUM', 'CRITICAL'] }, REASON]} />
+          <F title="Kategori" op="damageCategory" fixed={id} fields={[{ k: 'category', l: 'Category', t: 'select', o: ['LIGHT', 'MEDIUM', 'CRITICAL'], labels: CATEGORY_BM }, REASON]} />
           <F title="Semakan pengurus / pengarah" op="damageReview" fixed={id} fields={[REASON]} />
           {r.d.negligence ? <F title="Pautkan kes HR" op="negligenceLink" fixed={id} fields={[{ k: 'hrCaseRef', l: 'HR case reference' }]} /> : null}
         </div>
@@ -210,11 +227,18 @@ function BuyRow({ x, b }: { x: Board['tiles']['buys'][number]; b: Board }) {
 
 export function ArmsPolicyPanel() {
   const { data: b, error } = useLoad(() => api.armsPolicyAct('board', {}) as Promise<Board>, []);
+  const companies = useApp()?.me.companies ?? [];
   if (error) return null; // Outside the arms wall: nothing to show.
   if (!b) return <Loading what="arms policies" />;
   const t = b.tiles;
   const firearms = [...t.firearmsOutOfUse.map((f) => ({ id: f.id, tag: `${f.tag} (${f.status})` })), ...t.maintenance.map((f) => ({ id: f.firearmId, tag: f.tag }))];
-  const firearmField: Field = { k: 'firearmId', l: 'Firearm', t: 'select', o: [...new Set(firearms.map((f) => f.id))] };
+  // P105: the pick-lists show the firearm tag and the vault name, never the record id.
+  const tagOf: Record<string, string> = Object.fromEntries([...firearms, ...t.monthly.missing.map((x) => ({ id: x.firearmId, tag: x.tag }))].reverse().map((f) => [f.id, f.tag]));
+  const vaultName: Record<string, string> = Object.fromEntries([...t.vaultsBlocked.map((v) => [v.id, v.name]), ...t.extinguishers.map((x) => [x.vaultId, x.name])]);
+  const coName = (id: string) => companies.find((c) => c.id === id)?.name ?? id;
+  const vaultField: Field = Object.keys(vaultName).length ? { k: 'vaultId', l: 'Vault', t: 'select', o: Object.keys(vaultName), labels: vaultName } : { k: 'vaultId', l: 'Vault id' };
+  const companyField: Field = { k: 'companyId', l: 'Company', t: 'select', o: companies.map((c) => c.id), labels: Object.fromEntries(companies.map((c) => [c.id, c.name])) };
+  const firearmField: Field = { k: 'firearmId', l: 'Firearm', t: 'select', o: [...new Set(firearms.map((f) => f.id))], labels: tagOf };
   const ac = b.role === 'arms_control';
   return (
     <section className="panel" style={{ marginTop: 16 }}>
@@ -263,39 +287,39 @@ export function ArmsPolicyPanel() {
       <div className="row" style={{ gap: 6, flexWrap: 'wrap', margin: '8px 0' }}>
         {b.role !== 'stores' && (
           <>
-            <F title="Laporkan kerosakan" op="damageReport" fields={[firearmField, { k: 'what', l: 'What is wrong' }, { k: 'category', l: 'Category', t: 'select', o: ['LIGHT', 'MEDIUM', 'CRITICAL'] }, { k: 'how', l: 'How it happened' }, { k: 'firstAction', l: 'First action' }, { k: 'negligence', l: 'Possible negligence', t: 'check' }, { k: 'negligenceFacts', l: 'Facts (if negligence)' }, { k: 'photos', l: 'Photos', t: 'photos' }]} />
+            <F title="Laporkan kerosakan" op="damageReport" fields={[firearmField, { k: 'what', l: 'What is wrong' }, { k: 'category', l: 'Category', t: 'select', o: ['LIGHT', 'MEDIUM', 'CRITICAL'], labels: CATEGORY_BM }, { k: 'how', l: 'How it happened' }, { k: 'firstAction', l: 'First action' }, { k: 'negligence', l: 'Possible negligence', t: 'check' }, { k: 'negligenceFacts', l: 'Facts (if negligence)' }, { k: 'photos', l: 'Photos', t: 'photos' }]} />
             <F title="Pemeriksaan senjata" op="inspect" fields={[firearmField, ...checks(INSPECT), { k: 'maintenance', l: 'Maintenance done' }, { k: 'materials', l: 'Materials used' }, { k: 'findings', l: 'Findings' }, { k: 'photos', l: 'Photos', t: 'photos' }]} />
-            <F title="Rekod bulanan senjata" op="monthly" fields={[{ k: 'firearmId', l: 'Firearm', t: 'select', o: t.monthly.missing.map((x) => x.firearmId) }, { k: 'month', l: 'Month (YYYY-MM)' }, { k: 'dutyOfficer', l: 'Duty officer' }, { k: 'condition', l: 'Condition', t: 'select', o: ['GOOD', 'NEEDS_ATTENTION', 'UNUSABLE'] }, { k: 'damage', l: 'Damage found (type TIADA_MASALAH if none)' }, { k: 'checkOn', l: 'Check date', t: 'date' }, { k: 'nextMaintenanceOn', l: 'Next maintenance (blank = +120 days)', t: 'date' }, { k: 'maintenanceDone', l: 'Maintenance done this month', t: 'check' }, { k: 'photo', l: 'Firearm photo', t: 'photos' }, { k: 'maintenanceForm', l: 'Maintenance form', t: 'proof' }]} />
-            <F title="Alat pemadam api" op="extinguisher" fields={[{ k: 'vaultId', l: 'Vault', t: 'select', o: t.extinguishers.map((x) => x.vaultId) }, { k: 'serial', l: 'Serial' }, { k: 'location', l: 'Location in the vault' }, { k: 'lastServiceOn', l: 'Last service', t: 'date' }, { k: 'expiresOn', l: 'Expiry', t: 'date' }, { k: 'certificate', l: 'Certificate', t: 'proof' }]} />
+            <F title="Rekod bulanan senjata" op="monthly" fields={[{ k: 'firearmId', l: 'Firearm', t: 'select', o: t.monthly.missing.map((x) => x.firearmId), labels: tagOf }, { k: 'month', l: 'Month (YYYY-MM)' }, { k: 'dutyOfficer', l: 'Duty officer' }, { k: 'condition', l: 'Condition', t: 'select', o: ['GOOD', 'NEEDS_ATTENTION', 'UNUSABLE'], labels: CONDITION_BM }, { k: 'noProblem', l: 'Tiada masalah', t: 'check' }, { k: 'damage', l: 'Damage found (leave empty when "Tiada masalah" is ticked)' }, { k: 'checkOn', l: 'Check date', t: 'date' }, { k: 'nextMaintenanceOn', l: 'Next maintenance (blank = +120 days)', t: 'date' }, { k: 'maintenanceDone', l: 'Maintenance done this month', t: 'check' }, { k: 'photo', l: 'Firearm photo', t: 'photos' }, { k: 'maintenanceForm', l: 'Maintenance form', t: 'proof' }]} />
+            <F title="Alat pemadam api" op="extinguisher" fields={[{ k: 'vaultId', l: 'Vault', t: 'select', o: t.extinguishers.map((x) => x.vaultId), labels: vaultName },{ k: 'serial', l: 'Serial' }, { k: 'location', l: 'Location in the vault' }, { k: 'lastServiceOn', l: 'Last service', t: 'date' }, { k: 'expiresOn', l: 'Expiry', t: 'date' }, { k: 'certificate', l: 'Certificate', t: 'proof' }]} />
             <F title="Tukar status" op="setStatus" fields={[firearmField, { k: 'status', l: 'Status', t: 'select', o: ['NEEDS_MAINTENANCE', 'UNDER_INSPECTION', 'UNUSABLE'] }, REASON]} />
             {ac && <F title="Sahkan guna semula" op="reuse" fields={[firearmField, { k: 'reason', l: 'What was checked' }, DOCS]} />}
             <F title="Hantar / terima pembaikan" op="repairSent" fields={[{ k: 'requestId', l: 'Service request id' }, { k: 'note', l: "Dealer's receipt note" }, DOCS]} />
             <F title="Pembaikan kembali" op="repairBack" fields={[{ k: 'requestId', l: 'Service request id' }, DOCS]} />
             <F title="Permohonan lesen" op="licenceApp" fields={[{ k: 'personId', l: 'Staff (person id)' }, { k: 'category', l: 'Category', t: 'select', o: ['PELESEN_A', 'AMRA', 'CNU', 'BODYGUARD', 'OTHER'] }, { k: 'categoryOther', l: 'Other licence name' }, { k: 'type', l: 'Type', t: 'select', o: ['NEW', 'RENEWAL'] }]} />
             <F title="Status lesen" op="licState" fields={[{ k: 'credentialId', l: 'Licence (credential id)' }, { k: 'state', l: 'State', t: 'select', o: ['active', 'suspended', 'cancelled'] }, REASON]} />
-            <F title="Permohonan bilik kebal" op="vaultApp" fields={[{ k: 'companyId', l: 'Company' }, { k: 'name', l: 'Vault name' }, { k: 'kind', l: 'Kind', t: 'select', o: ['COMPANY_ARMOURY', 'POLICE_STATION', 'CLIENT_SAFE'] }, { k: 'liaison', l: 'Liaison (role)' }]} />
-            <F title="Kebenaran akses" op="vaultAuth" fields={[{ k: 'vaultId', l: 'Vault id' }, { k: 'name', l: 'Name' }, { k: 'personId', l: 'Person id' }, { k: 'letterRef', l: 'Letter reference' }, { k: 'letterOn', l: 'Letter date', t: 'date' }, REASON]} />
-            <F title="Batal akses" op="vaultAuthRemove" fields={[{ k: 'vaultId', l: 'Vault id' }, { k: 'name', l: 'Name' }, REASON]} />
-            <F title="Log bilik kebal" op="vaultLog" fields={[{ k: 'vaultId', l: 'Vault id' }, { k: 'person', l: 'Who entered' }, { k: 'purpose', l: 'Purpose' }, { k: 'witness', l: 'Witness' }]} />
-            <F title="Pemeriksaan bilik kebal" op="vaultInspect" fields={[{ k: 'vaultId', l: 'Vault id' }, ...checks(['inventory', 'accessList', 'approval', 'sop']), { k: 'faults', l: 'Faults' }, { k: 'serious', l: 'Serious', t: 'check' }, { k: 'photos', l: 'Photos', t: 'photos' }]} />
-            <F title="Perubahan bilik kebal" op="vaultChange" fields={[{ k: 'vaultId', l: 'Vault id' }, { k: 'what', l: 'What changes' }, { k: 'policeNeeded', l: 'Police approval needed', t: 'check' }, { k: 'policeRef', l: 'Police reference' }, REASON]} />
+            <F title="Permohonan bilik kebal" op="vaultApp" fields={[companyField, { k: 'name', l: 'Vault name' }, { k: 'kind', l: 'Kind', t: 'select', o: ['COMPANY_ARMOURY', 'POLICE_STATION', 'CLIENT_SAFE'] }, { k: 'liaison', l: 'Liaison (role)' }]} />
+            <F title="Kebenaran akses" op="vaultAuth" fields={[vaultField, { k: 'name', l: 'Name' }, { k: 'personId', l: 'Person id' }, { k: 'letterRef', l: 'Letter reference' }, { k: 'letterOn', l: 'Letter date', t: 'date' }, REASON]} />
+            <F title="Batal akses" op="vaultAuthRemove" fields={[vaultField, { k: 'name', l: 'Name' }, REASON]} />
+            <F title="Log bilik kebal" op="vaultLog" fields={[vaultField, { k: 'person', l: 'Who entered' }, { k: 'purpose', l: 'Purpose' }, { k: 'witness', l: 'Witness' }]} />
+            <F title="Pemeriksaan bilik kebal" op="vaultInspect" fields={[vaultField, ...checks(['inventory', 'accessList', 'approval', 'sop']), { k: 'faults', l: 'Faults' }, { k: 'serious', l: 'Serious', t: 'check' }, { k: 'photos', l: 'Photos', t: 'photos' }]} />
+            <F title="Perubahan bilik kebal" op="vaultChange" fields={[vaultField, { k: 'what', l: 'What changes' }, { k: 'policeNeeded', l: 'Police approval needed', t: 'check' }, { k: 'policeRef', l: 'Police reference' }, REASON]} />
           </>
         )}
         <F title="Daftar jaket" op="jacket" fields={[{ k: 'serial', l: 'Serial' }, { k: 'maker', l: 'Maker' }, { k: 'model', l: 'Model' }, { k: 'size', l: 'Size' }, { k: 'level', l: 'Protection level' }, { k: 'standard', l: 'Standard' }, { k: 'madeOn', l: 'Made on', t: 'date' }, { k: 'warrantyEnd', l: 'Warranty end', t: 'date' }, { k: 'serviceLifeEnd', l: 'Service life end', t: 'date' }, { k: 'location', l: 'Location' }, DOCS]} />
         <F title="Mohon jaket" op="jacketBuy" fields={[{ k: 'project', l: 'Project or location' }, { k: 'purpose', l: 'Purpose' }, { k: 'guards', l: 'Guards', t: 'number' }, { k: 'held', l: 'Held now', t: 'number' }, { k: 'needed', l: 'Needed', t: 'number' }, { k: 'justification', l: 'Justification' }, { k: 'estCost', l: 'Estimated cost (RM)', t: 'number' }]} />
         {b.role !== 'company' && <F title="Terima jaket" op="jacketGrn" fields={[{ k: 'buyId', l: 'Purchase id' }, ...checks(JACKET_RECEIVE), { k: 'qty', l: 'Quantity', t: 'number' }, { k: 'note', l: 'What does not match' }]} />}
-        {b.role !== 'stores' && <F title="Permohonan lesen peniaga" op="dealerApp" fields={[{ k: 'companyId', l: 'Company' }, { k: 'placeOfBusiness', l: 'Place of business' }]} />}
-        {ac && <F title="Kelulusan stor dagangan" op="tradeStore" fields={[{ k: 'vaultId', l: 'Vault id' }, { k: 'ref', l: 'Police reference' }, ON, { k: 'placeOfBusiness', l: 'Place of business' }, DOCS]} />}
-        {ac && <F title="Rekod kesediaan" op="readiness" fields={[{ k: 'companyId', l: 'Company' }, { k: 'line', l: 'Line', t: 'select', o: ['policeViewSharedVault', 'counselOpinion', 'kdnCircular2017', 'importRoute', 'stockInsurance', 'sqlAccounts', 'staffLicences'] }, { k: 'ref', l: 'Reference' }, ON, { k: 'note', l: 'Note' }, DOCS]} />}
+        {b.role !== 'stores' && <F title="Permohonan lesen peniaga" op="dealerApp" fields={[companyField, { k: 'placeOfBusiness', l: 'Place of business' }]} />}
+        {ac && <F title="Kelulusan stor dagangan" op="tradeStore" fields={[vaultField, { k: 'ref', l: 'Police reference' }, ON, { k: 'placeOfBusiness', l: 'Place of business' }, DOCS]} />}
+        {ac && <F title="Rekod kesediaan" op="readiness" fields={[companyField, { k: 'line', l: 'Line', t: 'select', o: ['policeViewSharedVault', 'counselOpinion', 'kdnCircular2017', 'importRoute', 'stockInsurance', 'sqlAccounts', 'staffLicences'] }, { k: 'ref', l: 'Reference' }, ON, { k: 'note', l: 'Note' }, DOCS]} />}
       </div>
-      {b.role !== 'stores' && <History />}
+      {b.role !== 'stores' && <History known={{ firearm: tagOf, vault: vaultName, credential: Object.fromEntries(t.licencesExpiring.map((x) => [x.credentialId, `${x.category ?? 'Lesen'} (tamat ${x.expiresOn})`])) }} />}
       {b.role !== 'stores' && t.completeness.some((c) => !c.complete) && (
         <>
           <h3>Rekod belum lengkap (setiap syarikat)</h3>
           <ul className="small">
             {t.completeness.filter((c) => !c.complete).map((c) => (
               <li key={c.companyId}>
-                {c.companyId}: {c.firearms} senjata, {c.vaults} bilik kebal, {c.licences} lesen CNU / Bodyguard; belum lengkap: {c.missing.slice(0, 8).join('; ')}
+                {coName(c.companyId)}: {c.firearms} senjata, {c.vaults} bilik kebal, {c.licences} lesen CNU / Bodyguard; belum lengkap: {c.missing.slice(0, 8).join('; ')}
                 {c.missing.length > 8 ? ` (+${c.missing.length - 8})` : ''}
               </li>
             ))}
@@ -362,7 +386,7 @@ export function ArmsPolicyPanel() {
           <h3>Kesediaan dagangan (kekal DITUTUP)</h3>
           {b.readiness.map((c) => (
             <p key={c.companyId} className="small">
-              <strong>{c.companyId}</strong>: {c.lines.map((l) => `${l.line} ${l.state === 'DONE' ? 'siap' : 'TIDAK DIKETAHUI'}`).join(', ')}
+              <strong>{coName(c.companyId)}</strong>: {c.lines.map((l) => `${l.line} ${l.state === 'DONE' ? 'siap' : 'TIDAK DIKETAHUI'}`).join(', ')}
             </p>
           ))}
         </>

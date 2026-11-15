@@ -523,8 +523,8 @@ function PaperConsentPanel() {
   if (!v.data) return v.error ? <ErrorNotice error={v.error} /> : null;
   const d = v.data;
   return (
-    <div style={{ padding: 12, display: 'grid', gap: 6, borderBottom: '1px solid var(--line, #ddd)' }}>
-      <strong>Paper consent for face sign-in and location</strong>
+    <div className="hx-form" style={{ margin: 12 }}>
+      <h3 className="hx-form-title">Paper consent for face sign-in and location</h3>
       <p className="muted small">
         {d.gateOn
           ? 'The gate is on: face sign-in and location work for a person only after their signed paper consent is recorded here. A recorded withdrawal stops them.'
@@ -533,38 +533,40 @@ function PaperConsentPanel() {
       </p>
       <ErrorNotice error={act.error} />
       {d.canSwitch && (
-        <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
-          <input className="input" aria-label="Reason" placeholder="Reason (needed)" value={why} onChange={(e) => setWhy(e.target.value)} />
-          <button className="btn btn-sm" disabled={act.busy} onClick={() => act.run(() => api.setPaperConsentGate(!d.gateOn, why), d.gateOn ? 'Gate switched off.' : 'Gate switched on.').then((r) => r && (setWhy(''), v.reload()))}>
+        <div className="hx-form-actions">
+          <input className="input" aria-label="Reason" placeholder="Reason (needed)" value={why} onChange={(e) => setWhy(e.target.value)} style={{ flex: '1 1 220px' }} />
+          <button className="btn btn-sm" disabled={act.busy || !why.trim()} onClick={() => act.run(() => api.setPaperConsentGate(!d.gateOn, why), d.gateOn ? 'Gate switched off.' : 'Gate switched on.').then((r) => r && (setWhy(''), v.reload()))}>
             {d.gateOn ? 'Switch the gate off' : 'Switch the gate on'}
           </button>
         </div>
       )}
       {d.canRecord && (
-        <div style={{ display: 'grid', gap: 6 }}>
+        <div className="hx-form-grid">
           <label className="field">
-            <span>Staff or guard number (never the IC number)</span>
-            <input className="input" value={f.staffNo ?? ''} onChange={(e) => setF((x) => ({ ...x, staffNo: e.target.value }))} />
+            <span className="label">Staff or guard number (never the IC number)</span>
+            <input className="input" aria-label="Staff or guard number" value={f.staffNo ?? ''} onChange={(e) => setF((x) => ({ ...x, staffNo: e.target.value }))} />
           </label>
           <label className="field">
-            <span>Consented to</span>
-            <select className="input" value={f.scope} onChange={(e) => setF((x) => ({ ...x, scope: e.target.value }))}>
+            <span className="label">Consented to</span>
+            <Select className="select" aria-label="Consented to" value={f.scope} onChange={(e) => setF((x) => ({ ...x, scope: e.target.value }))}>
               <option value="both">Face and location</option>
               <option value="face">Face only</option>
               <option value="location">Location only</option>
-            </select>
+            </Select>
           </label>
           <label className="field">
-            <span>Date signed (YYYY-MM-DD)</span>
-            <input className="input" value={f.signedOn ?? ''} onChange={(e) => setF((x) => ({ ...x, signedOn: e.target.value }))} />
+            <span className="label">Date signed</span>
+            <input className="input" type="date" aria-label="Date signed" value={f.signedOn ?? ''} onChange={(e) => setF((x) => ({ ...x, signedOn: e.target.value }))} />
           </label>
           <label className="field">
-            <span>Paper reference number</span>
-            <input className="input" value={f.paperRef ?? ''} onChange={(e) => setF((x) => ({ ...x, paperRef: e.target.value }))} />
+            <span className="label">Paper reference number</span>
+            <input className="input" aria-label="Paper reference number" value={f.paperRef ?? ''} onChange={(e) => setF((x) => ({ ...x, paperRef: e.target.value }))} />
           </label>
-          <button className="btn btn-primary btn-sm" disabled={act.busy} onClick={() => act.run(() => api.recordPaperConsent(f), 'Paper consent recorded.').then((r) => r && (setF({ scope: 'both' }), v.reload()))}>
+          <div className="hx-form-actions hx-form-wide">
+          <button className="btn btn-primary btn-sm" disabled={act.busy || !f.staffNo?.trim() || !f.signedOn || !f.paperRef?.trim()} onClick={() => act.run(() => api.recordPaperConsent(f), 'Paper consent recorded.').then((r) => r && (setF({ scope: 'both' }), v.reload()))}>
             Record paper consent
           </button>
+          </div>
         </div>
       )}
       <p className="muted small">Paper consents appear in the list below; withdraw one there.</p>

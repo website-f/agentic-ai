@@ -1,8 +1,9 @@
 import { Select } from '../SearchSelect';
-import { useState } from 'react';
+import { createContext, useContext, useState } from 'react';
 import type { ProofInput } from '@prima/core';
 import { api } from '../api';
-import { ErrorNotice, Loading, useAction, useLoad } from '../ui';
+import { ErrorNotice, Loading, humanize, useAction, useLoad } from '../ui';
+import { useApp } from '../App';
 import { ProofPicker } from './Proof';
 
 /**
@@ -13,7 +14,7 @@ import { ProofPicker } from './Proof';
  * domain security, and the IP register. Every rule is checked again on the server.
  */
 
-type Rec = { id: string; kind: string; ref: string; status: string; at: string; by: string; requesterId?: string; lineManagerId?: string; purchaseId?: string; assetId?: string; companyId?: string | null; d: Record<string, unknown> };
+type Rec = { id: string; kind: string; ref: string; status: string; at: string; by: string; requesterId?: string; lineManagerId?: string; purchaseId?: string; assetId?: string; companyId?: string | null; d: Record<string, unknown>; history?: { at: string; by: string; action: string; note: string }[] };
 type PurchaseRow = {
   purchaseId: string;
   ref: string;
@@ -55,7 +56,7 @@ type Board = {
 };
 
 const WEB_FIELDS: Field[] = [
-  { k: 'companyId', l: 'Company id' },
+  { k: 'companyId', l: 'Company' },
   { k: 'kind', l: 'New website or major redesign', t: 'select', o: ['new', 'redesign'] },
   { k: 'siteName', l: 'Website name' },
   { k: 'scope', l: 'Scope and functions wanted', t: 'area' },
@@ -113,7 +114,42 @@ const IT_FORBIDDEN_BM = [
   'Jangan beli langganan Microsoft atau perisian lain untuk syarikat di luar pembelian IT.',
 ];
 
-export type Field = { k: string; l: string; t?: 'text' | 'number' | 'date' | 'select' | 'yn' | 'check' | 'proof' | 'photos' | 'list' | 'area'; o?: readonly string[] };
+/** `labels` (P105): what a select shows for each value (a name for an id, plain words for a code); the value sent is unchanged. */
+export type Field = { k: string; l: string; t?: 'text' | 'number' | 'date' | 'select' | 'yn' | 'check' | 'proof' | 'photos' | 'list' | 'area' | 'company'; o?: readonly string[]; labels?: Readonly<Record<string, string>> };
+
+/** P105: a field that names a company by its id is a pick-list of the person's companies (the value sent is still the id). */
+const COMPANY_KEYS = /^(companyId|ownerId|ownerCompanyId|managingCompanyId|tenantCompanyId)$/;
+const isCompanyField = (f: Field) => f.t === 'company' || (!f.t && COMPANY_KEYS.test(f.k));
+
+/**
+ * P105: the IT assets the person may pick (tag and model), given by the IT screen. The policy steps name an asset by its
+ * record id, which nobody sees on screen; with this list an "Asset" field is a searchable pick-list by tag instead.
+ */
+export const ItAssetChoices = createContext<{ id: string; label: string }[]>([]);
+const isAssetField = (f: Field) => !f.t && f.k === 'assetId';
+
+function AssetPick({ value, onChange, label = 'Asset' }: { value: string; onChange: (v: string) => void; label?: string }) {
+  const assets = useContext(ItAssetChoices);
+  if (!assets.length) return <input className="input" aria-label={label} placeholder={label} value={value} onChange={(e) => onChange(e.target.value)} />;
+  return (
+    <Select className="select" aria-label={label} value={value} onChange={(e) => onChange(e.target.value)}>
+      <option value="">Choose the asset (tag)</option>
+      {assets.map((a) => (
+        <option key={a.id} value={a.id}>
+          {a.label}
+        </option>
+      ))}
+    </Select>
+  );
+}
+
+/** P105: a stored code shown as words ("beyond_repair" becomes "Beyond repair"); codes in capitals (P1, KBK) stay. */
+export function optionLabel(o: string): string {
+  if (o === 'yes') return 'Yes';
+  if (o === 'no') return 'No';
+  if (o === 'unknown') return 'Unknown';
+  return /[a-z]/.test(o) ? humanize(o) : o.replace(/_/g, ' ');
+}
 
 const KIND_BM: Record<string, string> = {
   request: 'Permohonan peralatan IT',
@@ -137,12 +173,26 @@ const KIND_BM: Record<string, string> = {
   settings: 'Tetapan',
 };
 
+/**
+ * P105: what the server says back when it is not a plain save, so the person sees it instead of "Saved.": a message
+ * ("Fix it yourself, no request needed.") or a report that went to IT as a help request.
+ */
+function answerText(r: unknown): string | null {
+  if (!r || typeof r !== 'object') return null;
+  const x = r as { message?: unknown; goesTo?: unknown };
+  if (typeof x.message === 'string' && x.message) return x.message;
+  if (x.goesTo === 'IT') return 'This is an IT device: it went to IT as a help request. Follow it under IT > My requests.';
+  return null;
+}
+
 /** One small form that sends one policy action (the IT door by default; the arms policy panel passes its own). */
 export function OpForm({ title, op, fields, fixed = {}, done = 'Saved.', send: sendTo }: { title: string; op: string; fields: Field[]; fixed?: Record<string, unknown>; done?: string; send?: (input: Record<string, unknown>) => Promise<unknown> }) {
   const act = useAction();
+  const { me } = useApp();
   const [open, setOpen] = useState(false);
   const [v, setV] = useState<Record<string, unknown>>({});
   const set = (k: string, x: unknown) => setV((p) => ({ ...p, [k]: x }));
+  const companies = me?.companies ?? [];
   const send = () => {
     const out: Record<string, unknown> = { op, ...fixed };
     for (const f of fields) {
@@ -152,7 +202,7 @@ export function OpForm({ title, op, fields, fixed = {}, done = 'Saved.', send: s
       else if (f.t === 'proof' || f.t === 'photos') out[f.k] = (x as ProofInput[] | undefined) ?? [];
       else if (x !== undefined) out[f.k] = x;
     }
-    void act.run(() => (sendTo ? sendTo(out) : api.itAct('policyAct', out)), done).then((r) => r && (setV({}), setOpen(false)));
+    void act.run(() => (sendTo ? sendTo(out) : api.itAct('policyAct', out)), (r: unknown) => answerText(r) ?? done).then((r) => r && (setV({}), setOpen(false)));
   };
   if (!open)
     return (
@@ -170,7 +220,26 @@ export function OpForm({ title, op, fields, fixed = {}, done = 'Saved.', send: s
             <Select className="select" aria-label={f.l} value={String(v[f.k] ?? '')} onChange={(e) => set(f.k, e.target.value)}>
               <option value="">-</option>
               {(f.t === 'yn' ? ['yes', 'no', 'unknown'] : f.o ?? []).map((o) => (
-                <option key={o}>{o}</option>
+                <option key={o} value={o}>
+                  {f.labels?.[o] ?? optionLabel(o)}
+                </option>
+              ))}
+            </Select>
+          </label>
+        ) : isAssetField(f) ? (
+          <label key={f.k} className="small">
+            {f.l === 'Asset id' ? 'Asset' : f.l}{' '}
+            <AssetPick value={String(v[f.k] ?? '')} onChange={(x) => set(f.k, x)} label={f.l === 'Asset id' ? 'Asset' : f.l} />
+          </label>
+        ) : isCompanyField(f) && companies.length > 0 ? (
+          <label key={f.k} className="small">
+            {f.l}{' '}
+            <Select className="select" aria-label={f.l} value={String(v[f.k] ?? '')} onChange={(e) => set(f.k, e.target.value)}>
+              <option value="">-</option>
+              {companies.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
               ))}
             </Select>
           </label>
@@ -251,8 +320,14 @@ function MineSection({ b }: { b: Board }) {
             {b.mine.map((r) => (
               <tr key={r.id}>
                 <td>{r.ref}</td>
-                <td>{KIND_BM[r.kind] ?? r.kind}</td>
-                <td>{r.status}</td>
+                <td>
+                  {KIND_BM[r.kind] ?? r.kind}
+                  {summary(r) && <div className="muted small">{summary(r)}</div>}
+                </td>
+                <td>
+                  {humanize(r.status)}
+                  {/^(declined|rejected|returned)$/.test(r.status) && r.history?.length ? <div className="muted small">{r.history[r.history.length - 1].by}: {r.history[r.history.length - 1].note}</div> : null}
+                </td>
                 <td>
                   {r.kind === 'acctReq' && r.status === 'submitted' && r.lineManagerId && r.requesterId !== r.lineManagerId && (
                     <OpForm title="Support as line manager" op="acctStep" fixed={{ id: r.id, step: 'support' }} fields={[DECISION, REASON]} />
@@ -284,20 +359,33 @@ function summary(r: Rec): string {
   const pick = ['item', 'qty', 'brandModel', 'reason', 'condition', 'method', 'outcome', 'email', 'type', 'fullName', 'name', 'domain', 'lock', 'twoFa', 'doNo', 'available', 'billing', 'start', 'missing', 'registrantFlag'];
   return pick
     .filter((k) => d[k] != null && d[k] !== '' && !(Array.isArray(d[k]) && !(d[k] as unknown[]).length))
-    .map((k) => `${k}: ${Array.isArray(d[k]) ? (d[k] as unknown[]).join(', ') : String(d[k])}`)
+    .map((k) => `${humanize(k)}: ${Array.isArray(d[k]) ? (d[k] as unknown[]).join(', ') : String(d[k])}`)
     .slice(0, 5)
     .join(' · ');
 }
 
+/** P105: where a disposal waits, in words (Q16: IT Manager, then the head, then HQ). */
+const DISPOSAL_STATUS: Record<string, string> = {
+  asked: 'Waiting for the inspection',
+  inspected: 'Waiting for the IT Manager',
+  manager: 'Waiting for the head of the company or department',
+  head: 'Waiting for HQ (the COO)',
+  approved: 'Approved: record the disposal when done',
+};
+const statusLabel = (r: Rec) => (r.kind === 'disposal' ? DISPOSAL_STATUS[r.status] : undefined) ?? humanize(r.status);
+
 /** The actions that fit one record, for the person looking at it; the server decides who may. */
 function RecordActions({ r, b }: { r: Rec; b: Board }) {
   const it = b.role === 'manager' || b.role === 'it';
+  const assets = useContext(ItAssetChoices);
   const out: JSX.Element[] = [];
   if (r.kind === 'request' && r.status === 'submitted' && it) {
-    out.push(<OpForm key="p" title="Jadikan pembelian IT" op="requestToPurchase" fixed={{ id: r.id }} fields={[{ k: 'kind', l: 'Asset kind', t: 'select', o: ['LAPTOP', 'DESKTOP', 'PHONE', 'TABLET', 'PRINTER', 'NETWORK', 'CCTV', 'OTHER'] }, { k: 'unitPrice', l: 'Estimated unit price (RM)', t: 'number' }, { k: 'ownerId', l: 'Owner company id (blank = Merdeka)' }]} done="IT purchase opened." />);
+    out.push(<OpForm key="p" title="Jadikan pembelian IT" op="requestToPurchase" fixed={{ id: r.id }} fields={[{ k: 'kind', l: 'Asset kind', t: 'select', o: ['LAPTOP', 'DESKTOP', 'PHONE', 'TABLET', 'PRINTER', 'NETWORK', 'CCTV', 'OTHER'] }, { k: 'unitPrice', l: 'Estimated unit price (RM)', t: 'number' }, { k: 'ownerId', l: 'Owner company (blank = Merdeka Network)' }]} done="IT purchase opened." />);
     out.push(<OpForm key="d" title="Decline" op="requestDecline" fixed={{ id: r.id }} fields={[REASON]} />);
   }
   if (r.kind === 'disposal') {
+    // P105: the IT Manager approves first and nobody approves what they inspected, so the Lead or an Executive inspects.
+    if (r.status === 'asked' && b.role === 'manager') out.push(<p key="hint" className="muted small">You approve first: the IT Lead or an IT Executive records the inspection.</p>);
     if (r.status === 'asked' && it) out.push(<OpForm key="i" title="Record the inspection" op="disposalInspect" fixed={{ id: r.id }} fields={[{ k: 'repairable', l: 'Repairable', t: 'check' }, { k: 'repairOptions', l: 'Repair options' }, { k: 'repairCost', l: 'Repair cost (RM)', t: 'number' }, { k: 'photos', l: 'Photos of the device', t: 'photos' }]} />);
     if (['inspected', 'manager', 'head'].includes(r.status)) out.push(<OpForm key="a" title="Approve or reject" op="disposalDecide" fixed={{ id: r.id }} fields={[DECISION, REASON]} />);
     if (r.status === 'approved' && b.role === 'manager')
@@ -313,7 +401,7 @@ function RecordActions({ r, b }: { r: Rec; b: Board }) {
   }
   if (r.kind === 'wipe' && r.status === 'done' && it) out.push(<OpForm key="c" title="Check the wipe" op="wipeCheck" fixed={{ id: r.id }} fields={[{ k: 'reason', l: 'What you checked' }]} />);
   if (r.kind === 'grn' && (r.d.quarantine as string[] | undefined)?.length && it)
-    out.push(<OpForm key="r" title="Release a unit from quarantine" op="grnRelease" fixed={{ id: r.id }} fields={[{ k: 'assetId', l: 'Asset id', t: 'select', o: r.d.quarantine as string[] }, REASON]} />);
+    out.push(<OpForm key="r" title="Release a unit from quarantine" op="grnRelease" fixed={{ id: r.id }} fields={[{ k: 'assetId', l: 'Unit in quarantine', t: 'select', o: r.d.quarantine as string[], labels: Object.fromEntries(assets.map((a) => [a.id, a.label])) }, REASON]} />);
   if (r.kind === 'agreement' && r.status !== 'signed' && b.role === 'manager')
     out.push(<OpForm key="s" title="Record the signed copy" op="agreementSigned" fixed={{ id: r.id }} fields={[{ k: 'link', l: 'SharePoint link (https://)' }, { k: 'signedOn', l: 'Signed on', t: 'date' }, { k: 'forA', l: 'Signed for Merdeka (Pihak A), by role' }, { k: 'forB', l: 'Signed for the company (Pihak B), by role' }, { k: 'witness', l: 'Witness (role)' }]} />);
   if (r.kind === 'agreement') out.push(<AgreementPrint key="pr" r={r} />);
@@ -428,7 +516,7 @@ function PurchasesSection({ b }: { b: Board }) {
               </tbody>
             </table>
           )}
-          {p.docsMissing.length > 0 && <div className="muted small">Documents still missing: {p.docsMissing.join(', ')} · keep until {p.keepUntil}</div>}
+          {p.docsMissing.length > 0 && <div className="muted small">Documents still missing: {p.docsMissing.map(docLabel).join(', ')} · keep until {p.keepUntil}</div>}
           <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
             {it && (
               <>
@@ -539,10 +627,10 @@ function ItTools({ b }: { b: Board }) {
         <RefurbForm />
         <OpForm title="Penilaian akhir hayat" op="eol" fields={[{ k: 'assetId', l: 'Asset id' }, { k: 'outcome', l: 'Outcome', t: 'select', o: ['keep', 'refurbish', 'reassign', 'retire'] }, REASON]} />
         <ReturnForm />
-        {mgr && <OpForm title="Perjanjian sewaan baharu" op="agreement" fields={[{ k: 'companyId', l: 'Company id' }, { k: 'agreementNo', l: 'Agreement number' }, { k: 'start', l: 'Start', t: 'date' }, { k: 'end', l: 'End (blank = until ended)', t: 'date' }, { k: 'rateBasis', l: 'Rate basis', t: 'select', o: ['month', 'year'] }, { k: 'billing', l: 'Billing', t: 'select', o: ['monthly', 'quarterly', 'yearly'] }, { k: 'paymentDays', l: 'Payment days (30)', t: 'number' }, { k: 'noticeDays', l: 'Notice days (30)', t: 'number' }, { k: 'cureDays', l: 'Days to fix a breach', t: 'number' }, { k: 'replaceAfterDays', l: 'Replace a faulty device within (working days)', t: 'number' }, { k: 'defectDays', l: 'Report a defect within (days)', t: 'number' }, REASON]} />}
-        <OpForm title="Akaun M365 (daftar)" op="m365" fields={[{ k: 'type', l: 'Type', t: 'select', o: ['licensed', 'shared', 'service', 'guest'] }, { k: 'email', l: 'Email' }, { k: 'displayName', l: 'Display name' }, { k: 'ownerName', l: 'Owner (a person, by role)' }, { k: 'ownerUserId', l: 'Owner Prima user id' }, { k: 'department', l: 'Department' }, { k: 'licence', l: 'Licence', t: 'select', o: ((b.settings?.licences as string[]) ?? ['Business Basic', 'Business Standard', 'Business Premium', 'E3', 'none']) }, { k: 'createdOn', l: 'Created on', t: 'date' }, { k: 'approvalRef', l: 'Approval reference' }, { k: 'mfa', l: 'MFA registered', t: 'yn' }, { k: 'guestExpiry', l: 'Guest expiry', t: 'date' }, { k: 'onboardingId', l: 'Joiner checklist id' }, { k: 'trainingOn', l: 'Training given on', t: 'date' }, { k: 'status', l: 'Status', t: 'select', o: ['active', 'blocked', 'deleted'] }, { k: 'companyId', l: 'Company id' }, { k: 'note', l: 'Note' }]} />
+        {mgr && <OpForm title="Perjanjian sewaan baharu" op="agreement" fields={[{ k: 'companyId', l: 'Company' }, { k: 'agreementNo', l: 'Agreement number' }, { k: 'start', l: 'Start', t: 'date' }, { k: 'end', l: 'End (blank = until ended)', t: 'date' }, { k: 'rateBasis', l: 'Rate basis', t: 'select', o: ['month', 'year'] }, { k: 'billing', l: 'Billing', t: 'select', o: ['monthly', 'quarterly', 'yearly'] }, { k: 'paymentDays', l: 'Payment days (30)', t: 'number' }, { k: 'noticeDays', l: 'Notice days (30)', t: 'number' }, { k: 'cureDays', l: 'Days to fix a breach', t: 'number' }, { k: 'replaceAfterDays', l: 'Replace a faulty device within (working days)', t: 'number' }, { k: 'defectDays', l: 'Report a defect within (days)', t: 'number' }, REASON]} />}
+        <OpForm title="Akaun M365 (daftar)" op="m365" fields={[{ k: 'type', l: 'Type', t: 'select', o: ['licensed', 'shared', 'service', 'guest'] }, { k: 'email', l: 'Email' }, { k: 'displayName', l: 'Display name' }, { k: 'ownerName', l: 'Owner (a person, by role)' }, { k: 'ownerUserId', l: 'Owner Prima user id' }, { k: 'department', l: 'Department' }, { k: 'licence', l: 'Licence', t: 'select', o: ((b.settings?.licences as string[]) ?? ['Business Basic', 'Business Standard', 'Business Premium', 'E3', 'none']) }, { k: 'createdOn', l: 'Created on', t: 'date' }, { k: 'approvalRef', l: 'Approval reference' }, { k: 'mfa', l: 'MFA registered', t: 'yn' }, { k: 'guestExpiry', l: 'Guest expiry', t: 'date' }, { k: 'onboardingId', l: 'Joiner checklist id' }, { k: 'trainingOn', l: 'Training given on', t: 'date' }, { k: 'status', l: 'Status', t: 'select', o: ['active', 'blocked', 'deleted'] }, { k: 'companyId', l: 'Company' }, { k: 'note', l: 'Note' }]} />
         <OpForm title="Keselamatan domain" op="domainSec" fields={[{ k: 'domain', l: 'Domain' }, { k: 'lock', l: 'Registrar lock', t: 'yn' }, { k: 'twoFa', l: 'Registrar 2FA', t: 'yn' }, { k: 'note', l: 'Note' }]} />
-        <OpForm title="Daftar harta intelek" op="ip" fields={[{ k: 'name', l: 'Asset name' }, { k: 'type', l: 'Type', t: 'select', o: ['logo', 'brand_guidelines', 'company_profile', 'presentation', 'brochure', 'template', 'marketing', 'digital_media', 'source_code', 'trademark', 'copyright', 'other'] }, { k: 'companyId', l: 'Owner company id' }, { k: 'description', l: 'Description' }, { k: 'custodian', l: 'Custodian (role)' }, { k: 'provider', l: 'Provider' }, { k: 'registeredOn', l: 'Registered on', t: 'date' }, { k: 'expiresOn', l: 'Expires on', t: 'date' }, { k: 'storageLink', l: 'SharePoint link' }, { k: 'accessWhere', l: 'Where access is kept (never the password)' }, { k: 'docs', l: 'Documents' }, { k: 'outsideApproved', l: 'Outside use approved', t: 'check' }]} />
+        <OpForm title="Daftar harta intelek" op="ip" fields={[{ k: 'name', l: 'Asset name' }, { k: 'type', l: 'Type', t: 'select', o: ['logo', 'brand_guidelines', 'company_profile', 'presentation', 'brochure', 'template', 'marketing', 'digital_media', 'source_code', 'trademark', 'copyright', 'other'] }, { k: 'companyId', l: 'Owner company' }, { k: 'description', l: 'Description' }, { k: 'custodian', l: 'Custodian (role)' }, { k: 'provider', l: 'Provider' }, { k: 'registeredOn', l: 'Registered on', t: 'date' }, { k: 'expiresOn', l: 'Expires on', t: 'date' }, { k: 'storageLink', l: 'SharePoint link' }, { k: 'accessWhere', l: 'Where access is kept (never the password)' }, { k: 'docs', l: 'Documents' }, { k: 'outsideApproved', l: 'Outside use approved', t: 'check' }]} />
         {mgr && <OpForm title="Tetapan polisi IT" op="setSettings" fields={[{ k: 'namingConvention', l: 'Asset naming convention' }, { k: 'licences', l: 'Microsoft 365 licence names', t: 'list' }, { k: 'registrars', l: 'Approved registrars', t: 'list' }, REASON]} />}
       </div>
     </div>
@@ -564,7 +652,7 @@ function RefurbForm() {
     );
   return (
     <div className="panel">
-      <input className="input" aria-label="Asset id" placeholder="Asset id" value={assetId} onChange={(e) => setAssetId(e.target.value)} />
+      <AssetPick value={assetId} onChange={setAssetId} />
       {REFURB.map((k) => (
         <label key={k} className="small" style={{ marginRight: 8 }}>
           <input type="checkbox" checked={!!checks[k]} onChange={(e) => setChecks((p) => ({ ...p, [k]: e.target.checked }))} /> {k}
@@ -594,7 +682,7 @@ function ReturnForm() {
     );
   return (
     <div className="panel">
-      <input className="input" aria-label="Asset id" placeholder="Asset id" value={assetId} onChange={(e) => setAssetId(e.target.value)} />
+      <AssetPick value={assetId} onChange={setAssetId} />
       {ACC.map((k) => (
         <label key={k} className="small" style={{ marginRight: 8 }}>
           <input type="checkbox" checked={!!returned[k]} onChange={(e) => setReturned((p) => ({ ...p, [k]: e.target.checked }))} /> {k} returned
@@ -609,116 +697,197 @@ function ReturnForm() {
   );
 }
 
-export function ItPolicyPanel() {
+/** P105: the documents a purchase file still needs, in words. */
+const DOC_LABEL: Record<string, string> = {
+  assessment: 'Technical assessment',
+  quotes: 'Quotes',
+  approvals: 'Approvals',
+  po: 'Purchase order',
+  deliveryOrder: 'Delivery order',
+  grn: 'Goods received note',
+  taxInvoice: 'Tax invoice',
+  warrantyCertificate: 'Warranty certificate',
+  userAcknowledgement: "User's acknowledgement",
+  assetAssignment: 'Asset assignment',
+};
+const docLabel = (k: string) => DOC_LABEL[k] ?? humanize(k);
+
+/** P105: the periodic asset work, searchable by tag, a few rows at first (a large register lists hundreds). */
+function DuesSection({ dues }: { dues: NonNullable<Board['dues']> }) {
+  const [q, setQ] = useState('');
+  const [all, setAll] = useState(false);
+  const hit = dues.filter((d) => !q.trim() || `${d.tag} ${d.label}`.toLowerCase().includes(q.trim().toLowerCase()));
+  const shown = all ? hit : hit.slice(0, 8);
+  return (
+    <div className="panel">
+      <div className="row" style={{ gap: 8, flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between' }}>
+        <h3>Kerja berkala aset ({dues.length})</h3>
+        <input className="input" style={{ maxWidth: 260 }} aria-label="Search by asset tag" placeholder="Search by asset tag" value={q} onChange={(e) => setQ(e.target.value)} />
+      </div>
+      <ul className="small">
+        {shown.map((d) => (
+          <li key={d.assetId + d.what}>
+            {d.tag}: {d.label}
+          </li>
+        ))}
+      </ul>
+      {!hit.length && <p className="muted small">No asset matches.</p>}
+      {hit.length > 8 && (
+        <button className="btn btn-sm" onClick={() => setAll(!all)}>
+          {all ? 'Show fewer' : <>Show all <span className="muted">{hit.length}</span></>}
+        </button>
+      )}
+    </div>
+  );
+}
+
+/** P105: domain security, the ones to fix first; the rest folded away. */
+function DomainSecuritySection({ rows }: { rows: NonNullable<Board['domainSecurity']> }) {
+  const [all, setAll] = useState(false);
+  const todo = rows.filter((d) => d.tone !== 'ok');
+  const shown = all ? rows : todo.slice(0, 6);
+  return (
+    <div className="panel">
+      <h3>Keselamatan domain</h3>
+      <p className="muted small">
+        {todo.length ? (
+          <>
+            Registrar lock or 2FA not confirmed yet: <strong>{todo.length}</strong> / {rows.length}
+          </>
+        ) : (
+          'Registrar lock and 2FA confirmed on every domain.'
+        )}
+      </p>
+      <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
+        {shown.map((d) => (
+          <span key={d.domain} className="chip" data-tone={d.tone}>
+            {d.domain}: lock {d.lock}, 2FA {d.twoFa}
+          </span>
+        ))}
+      </div>
+      {(rows.length > shown.length || all) && (
+        <button className="btn btn-sm" style={{ marginTop: 6 }} onClick={() => setAll(!all)}>
+          {all ? 'Show fewer' : <>Show all <span className="muted">{rows.length}</span></>}
+        </button>
+      )}
+    </div>
+  );
+}
+
+/** "Polisi IT". `assets` (P105): the IT register from the IT screen, so asset fields are pick-lists by tag. */
+export function ItPolicyPanel({ assets = [], companyNames = {} }: { assets?: { id: string; label: string }[]; companyNames?: Record<string, string> }) {
   const { data: b, error } = useLoad(() => api.itAct('policyAct', { op: 'board' }) as Promise<Board>, []);
+  const { me } = useApp();
   const [kind, setKind] = useState('ALL');
   if (error) return <ErrorNotice error={error} />;
   if (!b) return <Loading what="IT policies" />;
   const it = b.role === 'manager' || b.role === 'it';
   const recs = (b.records ?? []).filter((r) => r.kind !== 'settings' && (kind === 'ALL' || r.kind === kind));
+  const coName = (id: string) => me?.companies.find((c) => c.id === id)?.name ?? companyNames[id] ?? id;
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-      <div className="panel">
-        <h3>Polisi IT Merdeka Network (berkuat kuasa {b.effective})</h3>
-        <ul className="small">
-          {b.docs.map((d) => (
-            <li key={d.code}>
-              {d.code}: {d.title}
-            </li>
-          ))}
-        </ul>
-        <p className="muted small">The signed BM copy and the checked English copy are kept in the HR policy library; staff acknowledge them there.</p>
-      </div>
-      <div className="panel">
-        <h3>Dilarang / not allowed</h3>
-        <ul className="small">
-          {IT_FORBIDDEN_BM.map((x) => (
-            <li key={x}>{x}</li>
-          ))}
-        </ul>
-      </div>
-      <MineSection b={b} />
-      {it && <LateSection b={b} />}
-      {b.role !== 'staff' && (
-        <>
-          <PurchasesSection b={b} />
-          {it && <ItTools b={b} />}
-          {(b.dues?.length ?? 0) > 0 && (
-            <div className="panel">
-              <h3>Kerja berkala aset</h3>
-              <ul className="small">
-                {b.dues!.slice(0, 50).map((d) => (
-                  <li key={d.assetId + d.what}>
-                    {d.tag}: {d.label}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-          {(b.quarantine?.length ?? 0) > 0 && <p className="notice" data-tone="warn">Kuarantin: {b.quarantine!.join(', ')}</p>}
-          {(b.noAgreement?.length ?? 0) > 0 && <p className="notice" data-tone="warn">Using Merdeka devices with no signed rental agreement: {b.noAgreement!.join(', ')}</p>}
-          {(b.m365Review?.some((r) => r.problems.length) ?? false) && (
-            <div className="panel">
-              <h3>Semakan akaun M365</h3>
-              <ul className="small">
-                {b.m365Review!.filter((r) => r.problems.length).map((r) => (
-                  <li key={r.id}>
-                    {r.email} ({r.type}): {r.problems.join(', ')}
-                  </li>
-                ))}
-              </ul>
-              {(b.licenceUse ?? []).map((l) => (
-                <div key={l.licence} className="muted small">
-                  {l.licence}: {l.used} used{l.bought != null ? ` of ${l.bought} bought` : ''}
-                </div>
-              ))}
-            </div>
-          )}
-          {(b.domainSecurity?.length ?? 0) > 0 && (
-            <div className="panel">
-              <h3>Keselamatan domain</h3>
-              {b.domainSecurity!.map((d) => (
-                <span key={d.domain} className="chip" data-tone={d.tone} style={{ marginRight: 6 }}>
-                  {d.domain}: lock {d.lock}, 2FA {d.twoFa}
-                </span>
-              ))}
-            </div>
-          )}
-          <div className="panel">
-            <div className="row" style={{ gap: 6 }}>
-              <h3>Rekod</h3>
-              <Select className="select" aria-label="Record kind" value={kind} onChange={(e) => setKind(e.target.value)}>
-                <option value="ALL">All</option>
-                {Object.entries(KIND_BM)
-                  .filter(([k]) => k !== 'settings')
-                  .map(([k, l]) => (
-                    <option key={k} value={k}>
-                      {l}
-                    </option>
-                  ))}
-              </Select>
-            </div>
-            {b.wipeReadOnly && <p className="muted small">PDPA officer: the data wipe log, read only.</p>}
-            {recs.length ? (
-              <table className="table small">
-                <tbody>
-                  {recs.slice(0, 200).map((r) => (
-                    <tr key={r.id}>
-                      <td>{r.ref}</td>
-                      <td>{KIND_BM[r.kind] ?? r.kind}</td>
-                      <td>{r.status}</td>
-                      <td>{summary(r)}</td>
-                      <td>{!b.wipeReadOnly && <RecordActions r={r} b={b} />}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            ) : (
-              <p className="muted small">No records.</p>
+    <ItAssetChoices.Provider value={assets}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <details className="panel" open={b.role === 'staff'}>
+          <summary>
+            <strong>Polisi IT Merdeka Network (berkuat kuasa {b.effective})</strong>
+          </summary>
+          <ul className="small">
+            {b.docs.map((d) => (
+              <li key={d.code}>
+                {d.code}: {d.title}
+              </li>
+            ))}
+          </ul>
+          <p className="muted small">The signed BM copy and the checked English copy are kept in the HR policy library; staff acknowledge them there.</p>
+        </details>
+        <div className="panel">
+          <h3>Dilarang / not allowed</h3>
+          <ul className="small">
+            {IT_FORBIDDEN_BM.map((x) => (
+              <li key={x}>{x}</li>
+            ))}
+          </ul>
+        </div>
+        <MineSection b={b} />
+        {it && <LateSection b={b} />}
+        {b.role !== 'staff' && (
+          <>
+            <PurchasesSection b={b} />
+            {it && <ItTools b={b} />}
+            {(b.dues?.length ?? 0) > 0 && <DuesSection dues={b.dues!} />}
+            {(b.quarantine?.length ?? 0) > 0 && (
+              <p className="notice" data-tone="warn">
+                Kuarantin: {b.quarantine!.map((id) => assets.find((a) => a.id === id)?.label ?? id).join(', ')}
+              </p>
             )}
-          </div>
-        </>
-      )}
-    </div>
+            {(b.noAgreement?.length ?? 0) > 0 && (
+              <p className="notice" data-tone="warn">
+                Using Merdeka devices with no signed rental agreement: {b.noAgreement!.map(coName).join(', ')}
+              </p>
+            )}
+            {(b.m365Review?.some((r) => r.problems.length) ?? false) && (
+              <div className="panel">
+                <h3>Semakan akaun M365</h3>
+                <ul className="small">
+                  {b.m365Review!.filter((r) => r.problems.length).map((r) => (
+                    <li key={r.id}>
+                      {r.email} ({r.type}): {r.problems.join(', ')}
+                    </li>
+                  ))}
+                </ul>
+                {(b.licenceUse ?? []).map((l) => (
+                  <div key={l.licence} className="muted small">
+                    {l.licence}: {l.used} used{l.bought != null ? ` of ${l.bought} bought` : ''}
+                  </div>
+                ))}
+              </div>
+            )}
+            {(b.domainSecurity?.length ?? 0) > 0 && <DomainSecuritySection rows={b.domainSecurity!} />}
+            <div className="panel">
+              <div className="row" style={{ gap: 6 }}>
+                <h3>Rekod</h3>
+                <Select className="select" aria-label="Record kind" value={kind} onChange={(e) => setKind(e.target.value)}>
+                  <option value="ALL">All</option>
+                  {Object.entries(KIND_BM)
+                    .filter(([k]) => k !== 'settings')
+                    .map(([k, l]) => (
+                      <option key={k} value={k}>
+                        {l}
+                      </option>
+                    ))}
+                </Select>
+              </div>
+              {b.wipeReadOnly && <p className="muted small">PDPA officer: the data wipe log, read only.</p>}
+              {recs.length ? (
+                <table className="table small">
+                  <thead>
+                    <tr>
+                      <th>Reference</th>
+                      <th>Record</th>
+                      <th>Status</th>
+                      <th>Details</th>
+                      <th>Next step</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {recs.slice(0, 200).map((r) => (
+                      <tr key={r.id}>
+                        <td>{r.ref}</td>
+                        <td>{KIND_BM[r.kind] ?? r.kind}</td>
+                        <td>{statusLabel(r)}</td>
+                        <td>{summary(r)}</td>
+                        <td>{!b.wipeReadOnly && <RecordActions r={r} b={b} />}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              ) : (
+                <p className="muted small">No records.</p>
+              )}
+            </div>
+          </>
+        )}
+      </div>
+    </ItAssetChoices.Provider>
   );
 }

@@ -64,11 +64,8 @@ export function GuardPayView() {
       <div className="page-head">
         <h1>Guard pay</h1>
         <p className="muted">
-          Monthly pay for guards and officers, from locked attendance and the
-          ACT pay formula used at each site. The company executive the Company
-          Manager names prepares, the COO approves with a reason, and Finance
-          pays through the bank. Prima only drafts the
-          files.
+          {/* P105: plainer order of who does what (B1: the Company Manager names who prepares). */}
+          Monthly pay for guards and officers, from locked attendance and the ACT pay formula used at each site. A company executive named by the Company Manager prepares it, the COO approves with a reason, and Finance pays through the bank. Prima only drafts the files.
         </p>
       </div>
       {!data.rule.primaPays && (

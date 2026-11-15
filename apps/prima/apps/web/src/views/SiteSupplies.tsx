@@ -6,6 +6,39 @@ import { Chip, Loading, dateLabel, useAction, useLoad } from '../ui';
 import { OpForm } from './ItPolicyPanel';
 import { ProofPicker } from './Proof';
 import { saveFile } from '../save';
+import { useApp } from '../App';
+
+/**
+ * P105: the OM picks the site by name from the sites they cover (every company they see), instead of typing a site
+ * record id that no screen shows. The list is read once when the form opens.
+ */
+function SitePick({ value, onChange }: { value: string; onChange: (id: string) => void }) {
+  const { me } = useApp();
+  const { data } = useLoad(
+    () =>
+      Promise.all(
+        (me?.companies ?? []).map((c) =>
+          api
+            .sites(c.id)
+            .then((rows) => rows.map((r) => ({ id: r.site.id, name: r.site.name, company: c.name })))
+            .catch(() => [] as { id: string; name: string; company: string }[]),
+        ),
+      ).then((x) => x.flat()),
+    [],
+  );
+  if (!data) return <Loading what="your sites" />;
+  if (!data.length) return <input className="input" placeholder="ID tapak" aria-label="ID tapak" value={value} onChange={(e) => onChange(e.target.value)} />;
+  return (
+    <Select className="select" aria-label="Tapak" value={value} onChange={(e) => onChange(e.target.value)}>
+      <option value="">Pilih tapak</option>
+      {data.map((s) => (
+        <option key={s.id} value={s.id}>
+          {s.name} · {s.company}
+        </option>
+      ))}
+    </Select>
+  );
+}
 
 /**
  * Permohonan Pesanan Barang (Part T, Fitri package; Fauzan's answers 13 Nov 2026): one site supplies request for
@@ -418,7 +451,7 @@ function NewRequest() {
     <div className="panel" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
       <strong>Permohonan Pesanan Barang</strong>
       <div style={{ display: 'flex', gap: 6 }}>
-        <input className="input" placeholder="ID tapak" aria-label="ID tapak" value={siteId} onChange={(e) => setSiteId(e.target.value)} />
+        <SitePick value={siteId} onChange={setSiteId} />
         <button className="btn btn-sm" disabled={act.busy || !siteId} onClick={() => act.run(async () => setOpt((await api.siteSuppliesAct('options', { siteId })) as Options), 'Senarai dimuatkan.')}>
           Muat tapak
         </button>

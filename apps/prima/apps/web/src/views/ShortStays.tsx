@@ -1,6 +1,7 @@
 import { Select } from '../SearchSelect';
 import { useState } from 'react';
 import { api } from '../api';
+import { useApp } from '../App';
 import { Chip, ErrorNotice, Kpi, useAction, useLoad } from '../ui';
 
 /**
@@ -17,6 +18,8 @@ interface Field {
   label: string;
   type?: FieldType;
   options?: readonly string[];
+  /** P105: what the pick-list shows for each value (the house name for its id); the value sent is unchanged. */
+  labels?: Readonly<Record<string, string>>;
 }
 
 const CHECKLIST = [
@@ -59,7 +62,7 @@ function ActForm({ title, fields, fixed, action, onDone, busy, run }: { title: s
               <option value="">—</option>
               {(f.options ?? []).map((o) => (
                 <option key={o} value={o}>
-                  {o}
+                  {f.labels?.[o] ?? o}
                 </option>
               ))}
             </Select>
@@ -170,6 +173,7 @@ export function ShortStaysPanel() {
   if (!d || d.role === 'requester') return null;
   const run = (action: string, body: Record<string, unknown>, ok: string) => act.run(() => api.shortStayAct(action, body), ok).then((r) => (r && v.reload(), r));
   const t = d.tiles!;
+  const houseNames: Record<string, string> = Object.fromEntries(d.houses.map((h) => [h.id, h.name]));
   const team = d.role === 'team' || d.role === 'director';
   const done = () => setForm(null);
   const F = (key: string, title: string, action: string, fields: Field[], fixed: Record<string, unknown> = {}) =>
@@ -286,7 +290,7 @@ export function ShortStaysPanel() {
             </button>
           </span>
           {F('book', 'Borang tempahan / Booking form', 'book', [
-            { name: 'propertyId', label: 'House', type: 'select', options: d.houses.filter((h) => h.house).map((h) => h.id) },
+            { name: 'propertyId', label: 'House', type: 'select', labels: houseNames, options: d.houses.filter((h) => h.house).map((h) => h.id) },
             { name: 'guest', label: 'Customer name' },
             { name: 'phone', label: 'Phone' },
             { name: 'checkIn', label: 'Check-in', type: 'date' },
@@ -302,7 +306,7 @@ export function ShortStaysPanel() {
             { name: 'consent', label: 'Written PDPA consent taken', type: 'check' },
           ])}
           {F('airbnb', 'Tempahan Airbnb / Airbnb reservation', 'airbnb', [
-            { name: 'propertyId', label: 'House', type: 'select', options: d.houses.filter((h) => h.house?.airbnb?.listed).map((h) => h.id) },
+            { name: 'propertyId', label: 'House', type: 'select', labels: houseNames, options: d.houses.filter((h) => h.house?.airbnb?.listed).map((h) => h.id) },
             { name: 'code', label: 'Airbnb confirmation code' },
             { name: 'guestName', label: 'Guest name on Airbnb' },
             { name: 'persons', label: 'Guests', type: 'number' },
@@ -315,7 +319,7 @@ export function ShortStaysPanel() {
             { name: 'copy', label: 'Reservation copy (screenshot)', type: 'photo' },
           ])}
           {F('enquiry', 'Pertanyaan / Enquiry', 'enquiry', [
-            { name: 'propertyId', label: 'House', type: 'select', options: d.houses.map((h) => h.id) },
+            { name: 'propertyId', label: 'House', type: 'select', labels: houseNames, options: d.houses.map((h) => h.id) },
             { name: 'channel', label: 'Channel (WhatsApp, phone, platform, walk-in)' },
             { name: 'from', label: 'From', type: 'date' },
             { name: 'to', label: 'To', type: 'date' },
@@ -417,7 +421,7 @@ export function ShortStaysPanel() {
                   Sahkan (Finance sudah sahkan) / Confirm paid
                 </button>
               )}
-              {F(`rq:${r.id}`, 'Semak permohonan / Check request', 'request.check', [{ name: 'outcome', label: 'Outcome', type: 'select', options: ['confirm', 'return', 'not_available'] }, { name: 'propertyId', label: 'House', type: 'select', options: d.houses.map((h) => h.id) }, { name: 'note', label: 'Note' }], { id: r.id })}
+              {F(`rq:${r.id}`, 'Semak permohonan / Check request', 'request.check', [{ name: 'outcome', label: 'Outcome', type: 'select', options: ['confirm', 'return', 'not_available'] }, { name: 'propertyId', label: 'House', type: 'select', labels: houseNames, options: d.houses.map((h) => h.id) }, { name: 'note', label: 'Note' }], { id: r.id })}
             </div>
           ))}
         </div>
@@ -532,7 +536,7 @@ export function ShortStaysPanel() {
             </button>
           </span>
           {F('clean', 'Cucian / Clean', 'clean', [
-            { name: 'propertyId', label: 'House', type: 'select', options: d.houses.map((h) => h.id) },
+            { name: 'propertyId', label: 'House', type: 'select', labels: houseNames, options: d.houses.map((h) => h.id) },
             { name: 'bookingId', label: 'Booking id (turnover)' },
             { name: 'type', label: 'Type', type: 'select', options: ['TURNOVER', 'FINAL', 'DEEP', 'NEEDED'] },
             { name: 'cleaner', label: 'Cleaner' },
@@ -584,7 +588,18 @@ export function ShortStaysPanel() {
 }
 
 /** Staff stay requests for Government Operations and HQ departments ("Mohon rumah pekerja"), and damage acknowledgement. */
+const REQ_ST: Record<string, string> = {
+  submitted: 'Dihantar / Sent',
+  held: 'Ditahan / Held',
+  confirmed: 'Disahkan / Confirmed',
+  returned: 'Dikembalikan / Returned',
+  not_available: 'Tiada rumah / Not available',
+  cancelled: 'Dibatalkan / Cancelled',
+  closed: 'Selesai / Closed',
+};
+
 export function StayRequestPanel() {
+  const me = useApp()?.me.user;
   const v = useLoad(() => api.shortStays(), []);
   const act = useAction();
   const [open, setOpen] = useState(false);
@@ -636,8 +651,14 @@ export function StayRequestPanel() {
           </label>
           <label className="field">
             <span>Penghuni (ID pengguna staf, dipisah koma) / Occupants (staff user ids, comma list)</span>
-            <input className="input" onChange={(e) => set('occupantIds', e.target.value)} />
+            <input className="input" value={String(f.occupantIds ?? '')} onChange={(e) => set('occupantIds', e.target.value)} />
           </label>
+          {me && !String(f.occupantIds ?? '').split(',').map((x) => x.trim()).includes(me.id) && (
+            // P105: the requester is often one of the occupants; one tap adds their own staff user id.
+            <button type="button" className="btn btn-sm" onClick={() => set('occupantIds', [String(f.occupantIds ?? '').trim(), me.id].filter(Boolean).join(', '))}>
+              Tambah saya sebagai penghuni / Add me
+            </button>
+          )}
           <label className="field">
             <span>Penerima kunci / Key receiver</span>
             <input className="input" onChange={(e) => set('keyReceiver', e.target.value)} />
@@ -682,7 +703,7 @@ export function StayRequestPanel() {
           <div key={r.id} className="list-item" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 4 }}>
             <div className="row" style={{ justifyContent: 'space-between', gap: 6 }}>
               <strong>{r.ref}</strong>
-              <Chip tone={r.status === 'returned' ? 'warn' : 'info'}>{r.status}</Chip>
+              <Chip tone={r.status === 'returned' ? 'warn' : 'info'}>{REQ_ST[r.status] ?? r.status}</Chip>
             </div>
             <div className="muted small">
               {r.checkIn} to {r.checkOut} · {r.persons} occupant(s) · RM{r.price} {r.note ? `· ${r.note}` : ''}
