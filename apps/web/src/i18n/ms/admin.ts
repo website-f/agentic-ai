@@ -163,6 +163,23 @@ export const ADMIN: Record<string, string> = {
   "Agents ask for a group, never a provider. The first model answers; if it is down, rate limited or out of credit, the next one does.":
     "Ejen meminta kumpulan, bukan penyedia. Model pertama yang menjawab. Jika ia terputus, kena had kadar atau kehabisan kredit, model seterusnya mengambil alih.",
   "Drag the handle to change the order.": "Seret pemegang untuk menukar urutan.",
+  // P105: models that share the work, and how each one answers
+  "Models marked Share take turns at the top, so the work is spread and answers stay fast. Answer times and success are for the last 24 hours.":
+    "Model bertanda Kongsi bergilir-gilir di atas, jadi kerja diagihkan dan jawapan kekal pantas. Masa jawapan dan kejayaan adalah untuk 24 jam lepas.",
+  "Share the work between these: turn on Share for two or more models and they take turns answering.":
+    "Kongsi kerja antara model ini: hidupkan Kongsi untuk dua model atau lebih dan mereka bergilir-gilir menjawab.",
+  "{n} models share the work and take turns. The others step in when they cannot answer.":
+    "{n} model berkongsi kerja dan bergilir-gilir. Yang lain mengambil alih bila mereka tidak dapat menjawab.",
+  "Shares the work": "Berkongsi kerja",
+  "Share the work: {model}": "Kongsi kerja: {model}",
+  "Shares the work. Click to make it a backup again.": "Berkongsi kerja. Klik untuk jadikan ia sandaran semula.",
+  "Share the work with the other shared models": "Kongsi kerja dengan model lain yang berkongsi",
+  "Share": "Kongsi",
+  "Sharing": "Berkongsi",
+  "No calls in the last 24 hours": "Tiada panggilan dalam 24 jam lepas",
+  "Last 24 hours: {n} calls, {ok} answered, average answer time {time}":
+    "24 jam lepas: {n} panggilan, {ok} dijawab, purata masa jawapan {time}",
+  "{rate}% ok": "{rate}% berjaya",
 
   // ---------------------------------------------------------------- AI engine: playground
   "The request failed.": "Permintaan gagal.",

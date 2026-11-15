@@ -20,7 +20,28 @@ def _mentions(body: str, *words: str) -> bool:
     return any(w in b for w in words)
 
 
+# P105: the provider refused THIS request for its size (Groq's free tier "Request too large
+# ... tokens per minute", a 413, a prompt over the context window). Another model may take it;
+# the provider is fine for everyone else, so nothing is cooled and nothing waits.
+TOO_LARGE_WORDS = (
+    "request too large",
+    "request entity too large",
+    "payload too large",
+    "context_length_exceeded",
+    "maximum context length",
+    "context window",
+    "prompt is too long",
+    "reduce the length of the messages",
+)
+
+
 def classify_response(status: int, body: str, host: str, retry_after: str | None = None) -> Failure:
+    if status == 413 or (status in (400, 429) and _mentions(body, *TOO_LARGE_WORDS)):
+        return Failure(
+            "too_large",
+            "This request is too big for this model (its size or per-minute token limit). "
+            "Another model was asked.",
+        )
     if status == 401:
         return Failure(
             "auth_rejected",

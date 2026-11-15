@@ -10,7 +10,7 @@ import {
 } from "@dnd-kit/core";
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { ArrowsDownUpIcon, DotsSixVerticalIcon, PlusIcon, SnowflakeIcon, StackIcon, WarningIcon, XIcon } from "@phosphor-icons/react";
+import { ArrowsClockwiseIcon, ArrowsDownUpIcon, DotsSixVerticalIcon, PlusIcon, SnowflakeIcon, StackIcon, WarningIcon, XIcon } from "@phosphor-icons/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Command } from "cmdk";
 import { Popover } from "radix-ui";
@@ -23,9 +23,46 @@ import { useT } from "@/i18n";
 import { api, errorMessage } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
-import { aiKeys, groupsQuery, modelsQuery, providerColors, providersQuery, type AIModel, type Group, type GroupMember, type Provider } from "./data";
+import {
+  aiKeys,
+  answerTime,
+  groupsQuery,
+  groupStatsQuery,
+  modelsQuery,
+  providerColors,
+  providersQuery,
+  sharedFirst,
+  withShared,
+  type AIModel,
+  type Group,
+  type GroupMember,
+  type MemberStats,
+  type Provider,
+} from "./data";
 
-const memberKey = (m: GroupMember) => `${m.provider_id}::${m.model_id}`;
+const memberKey = (m: Pick<GroupMember, "provider_id" | "model_id">) => `${m.provider_id}::${m.model_id}`;
+
+/** P105: "1.2 s · 98% ok · 140 calls" over the last 24 hours. */
+function StatsLine({ stats }: { stats?: MemberStats }) {
+  const t = useT();
+  if (!stats || !stats.calls) return <span className="text-muted/80">{t("No calls in the last 24 hours")}</span>;
+  const rate = stats.success_rate === null ? null : Math.round(stats.success_rate * 100);
+  return (
+    <span
+      className="tabular"
+      title={t("Last 24 hours: {n} calls, {ok} answered, average answer time {time}", {
+        n: stats.calls,
+        ok: stats.ok,
+        time: stats.avg_ms === null ? "-" : answerTime(stats.avg_ms),
+      })}
+    >
+      {stats.avg_ms !== null ? <>{answerTime(stats.avg_ms)} · </> : null}
+      <span className={cn(rate !== null && rate < 80 && "text-warn")}>{t("{rate}% ok", { rate: rate ?? 0 })}</span>
+      {" · "}
+      {stats.calls === 1 ? t("1 call") : t("{n} calls", { n: stats.calls })}
+    </span>
+  );
+}
 
 function MemberRow({
   member,
@@ -34,6 +71,8 @@ function MemberRow({
   model,
   color,
   canManage,
+  stats,
+  onShare,
   onRemove,
 }: {
   member: GroupMember;
@@ -42,6 +81,8 @@ function MemberRow({
   model?: AIModel;
   color: string;
   canManage: boolean;
+  stats?: MemberStats;
+  onShare: (on: boolean) => void;
   onRemove: () => void;
 }) {
   const t = useT();
@@ -72,11 +113,20 @@ function MemberRow({
           <DotsSixVerticalIcon size={16} weight="bold" />
         </button>
       ) : null}
-      <span className="grid size-5 shrink-0 place-items-center rounded-full bg-surface-2 font-mono text-[11px] text-muted tabular">{index + 1}</span>
+      {member.shared ? (
+        <span className="grid size-5 shrink-0 place-items-center rounded-full bg-accent/15 text-accent" title={t("Shares the work")}>
+          <ArrowsClockwiseIcon size={12} weight="bold" />
+        </span>
+      ) : (
+        <span className="grid size-5 shrink-0 place-items-center rounded-full bg-surface-2 font-mono text-[11px] text-muted tabular">{index + 1}</span>
+      )}
       <span aria-hidden className="size-2.5 shrink-0 rounded-full" style={{ background: color }} />
       <span className="min-w-0 flex-1">
         <span className="block truncate font-mono text-[12.5px]" title={member.model_id}>{member.model_id}</span>
         <span className="block truncate text-[11.5px] text-muted">{provider?.name ?? t("Removed provider")}</span>
+        <span className="block truncate text-[11.5px] text-muted">
+          <StatsLine stats={stats} />
+        </span>
       </span>
       {warning ? (
         <span className="flex shrink-0 items-center gap-1 text-[11.5px] text-warn" title={warning}>
@@ -86,6 +136,23 @@ function MemberRow({
         <span className="flex shrink-0 items-center gap-1 text-[11.5px] text-info" title={t("Resting after an error")}>
           <SnowflakeIcon size={13} />
         </span>
+      ) : null}
+      {canManage ? (
+        <button
+          type="button"
+          role="switch"
+          aria-checked={!!member.shared}
+          aria-label={t("Share the work: {model}", { model: member.model_id })}
+          title={member.shared ? t("Shares the work. Click to make it a backup again.") : t("Share the work with the other shared models")}
+          onClick={() => onShare(!member.shared)}
+          className={cn(
+            "flex h-9 shrink-0 items-center gap-1 rounded-sm border px-2 text-[12px] transition-colors sm:h-8",
+            member.shared ? "border-accent/40 bg-accent/10 text-accent" : "border-border text-muted hover:border-accent hover:text-accent",
+          )}
+        >
+          <ArrowsClockwiseIcon size={14} weight={member.shared ? "bold" : "regular"} />
+          <span className="hidden @md:inline">{member.shared ? t("Sharing") : t("Share")}</span>
+        </button>
       ) : null}
       {canManage ? (
         <button type="button" onClick={onRemove} aria-label={t("Remove {model}", { model: member.model_id })} className="grid size-9 shrink-0 place-items-center rounded-sm text-muted hover:bg-danger/10 hover:text-danger sm:size-8">
@@ -172,12 +239,14 @@ function GroupCard({
   models,
   colors,
   canManage,
+  stats,
 }: {
   group: Group;
   providers: Map<string, Provider>;
   models: AIModel[];
   colors: Map<string, string>;
   canManage: boolean;
+  stats: Map<string, MemberStats>;
 }) {
   const t = useT();
   const qc = useQueryClient();
@@ -187,11 +256,12 @@ function GroupCard({
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   );
   const save = useMutation({
-    mutationFn: (members: GroupMember[]) => api<Group>(`/api/ai/groups/${group.name}`, "PUT", { members }),
+    // P105: the API keeps shared members on top; the screen does the same straight away.
+    mutationFn: (members: GroupMember[]) => api<Group>(`/api/ai/groups/${group.name}`, "PUT", { members: sharedFirst(members) }),
     onMutate: async (members) => {
-      await qc.cancelQueries({ queryKey: aiKeys.groups });
+      await qc.cancelQueries({ queryKey: aiKeys.groups, exact: true });
       const prev = qc.getQueryData<Group[]>(aiKeys.groups);
-      qc.setQueryData<Group[]>(aiKeys.groups, (old) => old?.map((g) => (g.name === group.name ? { ...g, members } : g)));
+      qc.setQueryData<Group[]>(aiKeys.groups, (old) => old?.map((g) => (g.name === group.name ? { ...g, members: sharedFirst(members) } : g)));
       return { prev };
     },
     onError: (e, _v, ctx) => {
@@ -202,6 +272,7 @@ function GroupCard({
   });
   const modelLookup = useMemo(() => new Map(models.map((m) => [memberKey({ provider_id: m.provider_id, model_id: m.model_id }), m])), [models]);
   const ids = group.members.map(memberKey);
+  const sharing = group.members.filter((m) => m.shared).length;
 
   const onDragEnd = (e: DragEndEvent) => {
     if (!e.over || e.active.id === e.over.id) return;
@@ -211,7 +282,7 @@ function GroupCard({
   };
 
   return (
-    <section className="flex min-w-0 flex-col overflow-hidden rounded-[var(--radius-md)] border border-border bg-surface shadow-[0_1px_2px_hsl(var(--shadow)/0.04)]">
+    <section className="@container flex min-w-0 flex-col overflow-hidden rounded-[var(--radius-md)] border border-border bg-surface shadow-[0_1px_2px_hsl(var(--shadow)/0.04)]">
       <header className="flex items-start gap-3 border-b border-border px-4 py-3.5">
         <IconTile icon={StackIcon} size="sm" tone={group.members.length ? "accent" : "neutral"} />
         <div className="min-w-0 flex-1">
@@ -227,6 +298,12 @@ function GroupCard({
                 : t("{n} models in fallback order", { n: group.members.length })
               : t("No models yet")}
           </p>
+          {sharing >= 2 ? (
+            <p className="mt-1 flex items-start gap-1 text-[12px] text-accent">
+              <ArrowsClockwiseIcon size={13} weight="bold" className="mt-0.5 shrink-0" />
+              <span>{t("{n} models share the work and take turns. The others step in when they cannot answer.", { n: sharing })}</span>
+            </p>
+          ) : null}
         </div>
       </header>
       <div className="flex flex-1 flex-col bg-surface-2/30 p-3">
@@ -242,12 +319,17 @@ function GroupCard({
                 model={modelLookup.get(memberKey(m))}
                 color={colors.get(m.provider_id) ?? "var(--series-other)"}
                 canManage={canManage}
+                stats={stats.get(memberKey(m))}
+                onShare={(on) => save.mutate(withShared(group.members, m, on))}
                 onRemove={() => save.mutate(group.members.filter((x) => memberKey(x) !== memberKey(m)))}
               />
             ))}
           </ol>
         </SortableContext>
       </DndContext>
+      {canManage && group.members.length >= 2 && sharing < 2 ? (
+        <p className="mt-2 text-[12px] text-muted">{t("Share the work between these: turn on Share for two or more models and they take turns answering.")}</p>
+      ) : null}
       {!group.members.length ? (
         <p className="rounded-sm border border-dashed border-border bg-surface/60 px-3 py-4 text-center text-[12.5px] text-muted">
           {t("Empty. Agents asking for {group} will get an error until you add a model.", { group: group.label.toLowerCase() })}
@@ -268,6 +350,8 @@ export function GroupsTab({ canManage }: { canManage: boolean }) {
   const { data: groups, isLoading } = useQuery(groupsQuery);
   const { data: providerList = [] } = useQuery(providersQuery);
   const { data: models = [] } = useQuery(modelsQuery());
+  const { data: statList = [] } = useQuery(groupStatsQuery);
+  const stats = useMemo(() => new Map(statList.map((s) => [memberKey(s), s])), [statList]);
   const providers = useMemo(() => new Map(providerList.map((p) => [p.id, p])), [providerList]);
   const colors = useMemo(() => providerColors(providerList), [providerList]);
 
@@ -279,12 +363,13 @@ export function GroupsTab({ canManage }: { canManage: boolean }) {
         <IconTile icon={ArrowsDownUpIcon} size="sm" tone="info" />
         <p className="min-w-0 text-[13px] text-muted">
           {t("Agents ask for a group, never a provider. The first model answers; if it is down, rate limited or out of credit, the next one does.")}{" "}
-          {canManage ? <span className="text-fg">{t("Drag the handle to change the order.")}</span> : null}
+          {canManage ? <span className="text-fg">{t("Drag the handle to change the order.")}</span> : null}{" "}
+          {t("Models marked Share take turns at the top, so the work is spread and answers stay fast. Answer times and success are for the last 24 hours.")}
         </p>
       </div>
       <div className="grid grid-cols-[minmax(0,1fr)] gap-4 md:grid-cols-2 xl:grid-cols-3">
         {groups?.map((g) => (
-          <GroupCard key={g.name} group={g} providers={providers} models={models} colors={colors} canManage={canManage} />
+          <GroupCard key={g.name} group={g} providers={providers} models={models} colors={colors} canManage={canManage} stats={stats} />
         ))}
       </div>
     </div>

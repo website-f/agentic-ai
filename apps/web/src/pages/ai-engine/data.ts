@@ -66,6 +66,37 @@ export interface AIModel {
 export interface GroupMember {
   provider_id: string;
   model_id: string;
+  /** P105: shares the work: shared members sit at the top and take turns. */
+  shared?: boolean;
+}
+
+/** P105: how one member answered over the last 24 hours (GET /api/ai/groups/stats). */
+export interface MemberStats {
+  provider_id: string;
+  model_id: string;
+  calls: number;
+  ok: number;
+  success_rate: number | null;
+  avg_ms: number | null;
+}
+
+/** P105: the shared members first (in their order), then the rest: the order the API keeps. */
+export function sharedFirst(members: GroupMember[]): GroupMember[] {
+  return [...members.filter((m) => m.shared), ...members.filter((m) => !m.shared)];
+}
+
+/** P105: turn sharing on or off for one member (by provider + model), keeping the API's order. */
+export function withShared(members: GroupMember[], target: GroupMember, on: boolean): GroupMember[] {
+  return sharedFirst(
+    members.map((m) =>
+      m.provider_id === target.provider_id && m.model_id === target.model_id ? { provider_id: m.provider_id, model_id: m.model_id, ...(on ? { shared: true } : {}) } : m,
+    ),
+  );
+}
+
+/** "1.2 s" / "850 ms": an average answer time, short. */
+export function answerTime(ms: number): string {
+  return ms >= 1000 ? `${(ms / 1000).toFixed(ms >= 10_000 ? 0 : 1)} s` : `${Math.round(ms)} ms`;
 }
 
 export interface Group {
@@ -178,6 +209,7 @@ export const aiKeys = {
   providers: ["ai", "providers"] as const,
   models: (providerId?: string) => ["ai", "models", providerId ?? "all"] as const,
   groups: ["ai", "groups"] as const,
+  groupStats: ["ai", "groups", "stats"] as const,
   usage: (days: number) => ["ai", "usage", days] as const,
   cacheHealth: (days: number) => ["ai", "cache-health", days] as const,
 };
@@ -208,6 +240,13 @@ export const modelsQuery = (providerId?: string) =>
 export const groupsQuery = queryOptions({
   queryKey: aiKeys.groups,
   queryFn: () => api<Group[]>("/api/ai/groups"),
+});
+
+/** P105: each member's answer time and success over the last 24 hours. */
+export const groupStatsQuery = queryOptions({
+  queryKey: aiKeys.groupStats,
+  queryFn: () => api<MemberStats[]>("/api/ai/groups/stats"),
+  refetchInterval: 60_000,
 });
 
 /** Groups an agent can think with: not embeddings, speech to text or image generation. */

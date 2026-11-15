@@ -37,6 +37,7 @@ from ..ai_schemas import (
     GroupMember,
     GroupOut,
     GroupUpdateIn,
+    MemberStatsOut,
     ModelOut,
     ModelUpdateIn,
     OrderIn,
@@ -622,8 +623,15 @@ async def update_group(
         k = (m.provider_id, m.model_id)
         if k not in seen:
             seen.add(k)
-            members.append(m.model_dump())
-    before = {"members": len(g.members)}
+            row = {"provider_id": m.provider_id, "model_id": m.model_id}
+            members.append({**row, "shared": True} if m.shared else row)
+    # P105: the models that share the work sit at the top (they take turns), then the rest
+    # in the order given.
+    members = [m for m in members if m.get("shared")] + [m for m in members if not m.get("shared")]
+    before = {
+        "members": len(g.members),
+        "shared": sum(1 for m in g.members if m.get("shared")),
+    }
     g.members = members
     await audit.record(
         db,
@@ -632,7 +640,7 @@ async def update_group(
         "ai.group_updated",
         target=g.name,
         before=before,
-        after={"members": len(members)},
+        after={"members": len(members), "shared": sum(1 for m in members if m.get("shared"))},
     )
     await db.commit()
     return GroupOut(
@@ -643,6 +651,70 @@ async def update_group(
         kind=_group_kind(g.name),
         size=len(g.members or []),
     )
+
+
+@router.get("/groups/stats")
+async def group_stats(
+    hours: int = Query(default=24, ge=1, le=168),
+    principal: Principal = Depends(require("engine.view")),
+    db: AsyncSession = Depends(get_db),
+) -> list[MemberStatsOut]:
+    """P105: per group member, its calls, success rate and average answer time lately, so
+    the owner sees the work being shared. One grouped query on (provider_id, ts)."""
+    rows = await store.ensure_default_groups(db, principal.workspace_id)
+    members = list(
+        dict.fromkeys((m["provider_id"], m["model_id"]) for g in rows for m in g.members or [])
+    )
+    if not members:
+        return []
+    by_provider: dict[str, list[str]] = {}
+    for pid, mid in members:
+        by_provider.setdefault(pid, []).append(mid)
+    good = LLMCall.status == "ok"
+    q = (
+        select(
+            LLMCall.provider_id,
+            LLMCall.model,
+            func.count().label("calls"),
+            func.coalesce(func.sum(case((good, 1), else_=0)), 0).label("ok"),
+            func.coalesce(func.sum(case((good, LLMCall.latency_ms), else_=0)), 0).label("ms"),
+        )
+        .where(
+            LLMCall.provider_id.in_(list(by_provider)),
+            LLMCall.ts >= datetime.now(UTC) - timedelta(hours=hours),
+            LLMCall.workspace_id == principal.workspace_id,
+        )
+        .group_by(LLMCall.provider_id, LLMCall.model)
+    )
+    totals: dict[tuple[str, str], list[int]] = {k: [0, 0, 0] for k in members}
+    for r in await db.execute(q):
+        mids = by_provider.get(r.provider_id, [])
+        # Errors are logged under the member's model id; good answers under the model the
+        # provider says it served (an Azure deployment answers "gpt-4.1-mini-2025-04-14").
+        mid = (
+            r.model
+            if r.model in mids
+            else mids[0]
+            if len(mids) == 1
+            else next((m for m in mids if r.model.startswith(m) or m.startswith(r.model)), None)
+        )
+        if mid is None:
+            continue
+        t = totals[(r.provider_id, mid)]
+        t[0] += int(r.calls)
+        t[1] += int(r.ok)
+        t[2] += int(r.ms)
+    return [
+        MemberStatsOut(
+            provider_id=pid,
+            model_id=mid,
+            calls=calls,
+            ok=ok,
+            success_rate=round(ok / calls, 3) if calls else None,
+            avg_ms=round(ms / ok) if ok else None,
+        )
+        for (pid, mid), (calls, ok, ms) in totals.items()
+    ]
 
 
 # ------------------------------------------------------------------ playground

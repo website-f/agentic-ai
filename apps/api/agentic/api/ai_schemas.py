@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_serializer
 
 Tier = Literal["free", "paid", "local"]
 
@@ -194,6 +194,16 @@ class ModelUpdateIn(BaseModel):
 class GroupMember(BaseModel):
     provider_id: str
     model_id: str = Field(min_length=1, max_length=200)
+    # P105: "Share the work between these": shared members sit at the top and take turns.
+    shared: bool = False
+
+    @model_serializer(mode="wrap")
+    def _tidy(self, handler: Any) -> dict[str, Any]:
+        # Only a shared member says so: older readers see the members they always saw.
+        out = handler(self)
+        if not out.get("shared"):
+            out.pop("shared", None)
+        return out
 
 
 class GroupOut(BaseModel):
@@ -210,6 +220,17 @@ class GroupOut(BaseModel):
 
 class GroupUpdateIn(BaseModel):
     members: list[GroupMember] = Field(max_length=20)
+
+
+class MemberStatsOut(BaseModel):
+    """P105: how one group member answered lately (from llm_calls)."""
+
+    provider_id: str
+    model_id: str
+    calls: int
+    ok: int
+    success_rate: float | None  # 0..1; None without calls
+    avg_ms: int | None  # average time of the good answers
 
 
 class PlaygroundIn(BaseModel):

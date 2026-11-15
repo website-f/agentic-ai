@@ -89,6 +89,12 @@ class Settings(BaseSettings):
     # http://ollama:11434/v1. Empty = none. Registered in every workspace as "Local backup".
     local_llm_url: str = ""
     local_llm_model: str = "qwen3:0.6b"
+    # P105: a person waiting on an answer (chat, the playground): a model that has not answered
+    # in this many seconds is left and the next model in the group is asked. Background work
+    # keeps the long timeout. And such a chat waits at most this long for a resting model
+    # before the backup answers.
+    ai_answer_timeout: float = Field(default=25.0, ge=3, le=120)
+    ai_chat_max_wait: float = Field(default=20.0, ge=0, le=60)
 
     # Where people open the app (P16): Google sign-in returns here, links in messages point here.
     public_url: str = "http://localhost:8500"

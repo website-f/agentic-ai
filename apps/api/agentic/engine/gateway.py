@@ -5,6 +5,11 @@ group's members in order and skips providers that are disabled, keyless or cooli
 down. On 401/402/5xx/timeouts it cools the provider and moves on; a failure that belongs to
 one model (403 "not allowed", a per-model 429) cools only that model (P29); a model the
 provider no longer has is marked stale and skipped. Every attempt is logged to llm_calls.
+
+P105: members marked "shared" take turns at the top of the list (rotation.py: weighted by
+recent speed and failures, sticky per agent or task for the prompt cache). A request too big
+for one model skips it without cooling it for anyone; a person's chat leaves a model that has
+not answered in settings.ai_answer_timeout when another one could answer.
 """
 
 import asyncio
@@ -19,10 +24,11 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ..core.config import settings
 from ..core.db import release_idle
 from ..models import AIModel, AIProvider, ModelGroup
 from ..obs import langfuse
-from . import client, compliance, media, privacy, store
+from . import client, compliance, media, privacy, rotation, store
 from .client import Usage
 from .errors import Failure
 
@@ -82,6 +88,16 @@ MODEL_SCOPED = frozenset({"forbidden", "rate_limited", "model_not_found"})
 
 # The only jobs the tiny local backup model may do when reached through another group.
 TINY_TASKS = frozenset({"colleague.memory", "file.understand", "browser.digest"})
+
+# P105: a person is waiting on these. A model that has not answered within
+# settings.ai_answer_timeout is left for the next one (when there is a next one), and resting
+# models are waited for at most settings.ai_chat_max_wait before the work fails over.
+INTERACTIVE_TASKS = frozenset({"agent.chat", "agent.api", "playground", "help.ask", "meeting.turn"})
+# P105: the local backup is not asked while a cloud member is free again within this many
+# seconds: the gateway waits for the cloud model instead.
+SHORT_REST = 20
+# P105: failures that say nothing about the model's health (this one request was too big).
+NOT_HEALTH = frozenset({"too_large"})
 
 
 @dataclass
@@ -197,7 +213,11 @@ async def _chat(
     attempts: list[dict[str, Any]] = []
     waits: list[int] = []  # seconds until a cooling or rate-limited member is usable again
     failed: set[tuple[str, str]] = set()  # failed for good: waiting will not change them
-    for member in g.members:
+    interactive = task in INTERACTIVE_TASKS
+    cap = min(MAX_WAIT, settings.ai_chat_max_wait) if interactive else MAX_WAIT
+    # P105: shared members take turns (sticky per agent or task), then the rest in order.
+    members = await rotation.order(g.id, g.members, agent_id, task_id)
+    for i, member in enumerate(members):
         p = providers.get(member["provider_id"])
         model_id = member["model_id"]
         label = f"{p.name if p else 'removed provider'} / {model_id}"
@@ -235,6 +255,18 @@ async def _chat(
             # The tiny backup model never writes skills, facts or judgements (P17).
             attempts.append({"member": label, "skipped": "too small for this job"})
             continue
+        if (
+            p.name == store.LOCAL_PROVIDER
+            and group != "local"
+            and waits
+            and min(waits) <= SHORT_REST
+            and _waited + min(waits) <= cap
+        ):
+            # P105: a main model is only resting a few seconds: wait for it, not the backup.
+            attempts.append(
+                {"member": label, "skipped": f"a main model is free again in {min(waits)} s"}
+            )
+            continue
         model_row = await store.model_row(db, p.id, model_id)
         if model_row is not None and model_row.stale:
             attempts.append({"member": label, "skipped": "model no longer offered"})
@@ -248,7 +280,14 @@ async def _chat(
         # P33: a cloud member sees placeholders, never the real values.
         sent, masker = guard.masked(p, messages)
         await release_idle(db)  # P96: inside a task step, no connection held while it thinks
-        r = await client.chat(
+        # P105: a person is waiting and another model could answer: do not wait on a slow one.
+        deadline = (
+            settings.ai_answer_timeout
+            if interactive
+            and await _another(members[i + 1 :], providers, _skip | failed, guard, group, task)
+            else None
+        )
+        pending = client.chat(
             p.base_url,
             key,
             model_id,
@@ -263,6 +302,22 @@ async def _chat(
             else None,
             extra_body=privacy.zdr_body() if p.require_zdr else None,
         )
+        if deadline is None:
+            r = await pending
+        else:
+            try:
+                r = await asyncio.wait_for(pending, deadline)
+            except TimeoutError:
+                r = client.ChatResult(
+                    call=client.CallResult(
+                        ok=False,
+                        latency_ms=int(deadline * 1000),
+                        failure=Failure(
+                            "slow",
+                            f"No answer within {deadline:g} s, so the next model was asked.",
+                        ),
+                    )
+                )
         if masker is not None:
             privacy.unmask_result(r, masker.mapping, json_mode=json_mode)
         if r.quirks - known:
@@ -307,6 +362,17 @@ async def _chat(
             branch_id=guard.branch_id,
             data_level=guard.level,
         )
+        if error_class not in NOT_HEALTH:
+            # P105: how this model answers, for the turns; a good answer keeps the agent here.
+            await rotation.note(
+                p.id,
+                model_id,
+                ok=usable,
+                latency_ms=r.call.latency_ms if usable or error_class == "slow" else None,
+                group_id=g.id if member.get("shared") else None,
+                agent_id=agent_id,
+                task_id=task_id,
+            )
         langfuse.generation(
             workspace_id=workspace_id,
             kind=task,
@@ -369,7 +435,7 @@ async def _chat(
     # Some members only need a short wait (a per-minute rate limit, a brief cooldown): wait
     # for them instead of failing the work, up to MAX_WAIT in total. Members that failed for
     # good (a 400, a bad reply) used to stop this wait; now they are just not asked again.
-    if waits and _waited + min(waits) <= MAX_WAIT:
+    if waits and _waited + min(waits) <= cap:
         # P96: a little random spread (a tenth of the wait, 2 s at most), so 50 steps cooled
         # by the same rate limit do not all ask again in the same instant.
         spread = random.uniform(0, min(2.0, min(waits) / 10))  # noqa: S311 - not security
@@ -399,6 +465,33 @@ async def _chat(
         attempts,
         retry_in=int(min(waits)) + 1 if waits else None,
     )
+
+
+async def _another(
+    later: list[dict[str, Any]],
+    providers: dict[str, AIProvider],
+    skip: frozenset[tuple[str, str]] | set[tuple[str, str]],
+    guard: _Guard,
+    group: str,
+    task: str,
+) -> bool:
+    """P105: some later member could take the work right now (on, keyed, allowed, not
+    resting), so a slow answer may be cut short. The last hope is always waited for."""
+    for m in later:
+        p = providers.get(m["provider_id"])
+        if (
+            p is None
+            or not p.enabled
+            or not p.api_key_enc
+            or (m["provider_id"], m["model_id"]) in skip
+            or not privacy.allowed(p, guard.level)
+            or (p.name == store.LOCAL_PROVIDER and group != "local" and task not in TINY_TASKS)
+        ):
+            continue
+        if await store.cooling_for(p.id) or await store.model_cooling_for(p.id, m["model_id"]):
+            continue
+        return True
+    return False
 
 
 def _bad_reply(r: client.ChatResult) -> str:
