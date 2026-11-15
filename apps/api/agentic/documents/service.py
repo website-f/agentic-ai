@@ -611,6 +611,16 @@ async def understand(db: AsyncSession, f: DocFile, text: str, hint: str = "") ->
     return parse_understanding(r.content or "")
 
 
+# P106: a file an operator put in the Library from a manifest (knowledge/library_import.py)
+# keeps the title, summary, kind and restriction the manifest gave it whenever it is read or
+# re-read (a draft's warning in its summary must not be replaced by the model's summary).
+IMPORT_SOURCE = "library import: "
+
+
+def from_import(f: DocFile) -> bool:
+    return (f.source_path or "").startswith(IMPORT_SOURCE)
+
+
 EXPIRY_WORDS = re.compile(
     r"expir|valid (?:until|till|to|through)|validity"
     r"|tamat|sah (?:sehingga|hingga|sampai)|berakhir|luput",
@@ -673,8 +683,10 @@ async def process_file(
         scan.note(f, found)
     model_text = scan.mask(out.text, found)
     info = await understand(db, f, model_text, hint)
+    pinned = from_import(f)
     if info:
-        f.kind, f.title, f.summary = info["kind"], info["title"], info["summary"]
+        if not pinned:
+            f.kind, f.title, f.summary = info["kind"], info["title"], info["summary"]
         f.fields = info["fields"]
         # Models fill this with any date they see (a report's last day): keep it only when
         # the document itself talks about expiry or validity.
@@ -685,7 +697,7 @@ async def process_file(
         await after(db, f, info)
     # P36: a library document that reads as confidential (pay, personnel, contracts, bank)
     # stays with its department's agents and managers, whoever filed it.
-    if f.library and not f.restricted:
+    if f.library and not f.restricted and not pinned:  # P106: the operator decided
         from ..intake.sort import sensitive_words
 
         f.restricted = sensitive_words(f.kind, f.name, f.folder, f.title)

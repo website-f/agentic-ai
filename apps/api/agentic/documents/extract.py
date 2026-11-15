@@ -286,6 +286,37 @@ def _pdf(data: bytes) -> Extracted:
     return Extracted(joined, total, bool(ocred), note)
 
 
+def _docx_blocks(parent: Any, owner: Any) -> Any:
+    """Body paragraphs and tables in document order, P106: including those inside content
+    controls (w:sdt: the fill-in boxes of company forms and templates), which python-docx's
+    own iteration skips."""
+    from docx.table import Table
+    from docx.text.paragraph import Paragraph
+
+    for el in parent.iterchildren():
+        tag = str(el.tag).rsplit("}", 1)[-1]
+        if tag == "p":
+            yield Paragraph(el, owner)
+        elif tag == "tbl":
+            yield Table(el, owner)
+        elif tag == "sdt":
+            for content in el.iterchildren():
+                if str(content.tag).endswith("}sdtContent"):
+                    yield from _docx_blocks(content, owner)
+
+
+def _docx_row(row: Any) -> list[str]:
+    """A table row's cells, a merged cell once (python-docx repeats it per grid column)."""
+    out: list[str] = []
+    seen: set[int] = set()
+    for c in row.cells:
+        if id(c._tc) in seen:  # noqa: SLF001 - the cell's XML element is its identity
+            continue
+        seen.add(id(c._tc))  # noqa: SLF001
+        out.append(c.text)
+    return out
+
+
 def _docx(data: bytes) -> Extracted:
     from docx import Document as Docx
     from docx.table import Table
@@ -293,39 +324,88 @@ def _docx(data: bytes) -> Extracted:
     check_office_zip(data)  # P29: before python-docx unpacks every part
     doc = Docx(io.BytesIO(data))
     out: list[str] = []
-    for block in doc.iter_inner_content():
+    for block in _docx_blocks(doc.element.body, doc._body):  # noqa: SLF001
         if isinstance(block, Table):
-            out.append(_table_md([[c.text for c in r.cells] for r in block.rows]))
-        else:
-            text = block.text.strip()
+            out.append(_table_md([_docx_row(r) for r in block.rows]))
+            continue
+        text = block.text.strip()
+        if not text:
+            continue
+        try:
             style = (block.style.name or "").lower() if block.style is not None else ""
-            if text and style.startswith("heading"):
-                out.append("## " + text)
-            elif text:
-                out.append(text)
+        except (KeyError, ValueError):  # a style the file names but does not define
+            style = ""
+        if style.startswith("heading") or style == "title":
+            out.append("## " + text)
+        elif style.startswith("list"):  # P106: keep a list item a list item
+            out.append("- " + text)
+        else:
+            out.append(text)
     return Extracted("\n\n".join(x for x in out if x), 0, False)
 
 
+def _cell(v: Any) -> str:
+    """P106: a spreadsheet cell as people read it: a date without a midnight time, a whole
+    number without ".0"."""
+    from datetime import datetime, time
+
+    if v is None:
+        return ""
+    if isinstance(v, datetime):
+        return v.date().isoformat() if v.time() == time(0) else v.isoformat(" ", "minutes")
+    if isinstance(v, date):
+        return v.isoformat()
+    if isinstance(v, time):
+        return v.strftime("%H:%M")
+    if isinstance(v, float) and v.is_integer() and abs(v) < 1e15:
+        return str(int(v))
+    return str(v).strip()
+
+
+MAX_COLS = 30
+
+
+def _sheet_md(rows: list[list[str]]) -> str:
+    """One sheet: title lines above its table (a row with a single filled cell before the
+    first real row, e.g. "SENARAI SEMAK HARIAN"), then the table without empty columns at
+    its right."""
+    lines: list[str] = []
+    while len(rows) > 1 and sum(1 for c in rows[0] if c) == 1:
+        lines.append(next(c for c in rows[0] if c))
+        rows = rows[1:]
+    width = max((max((i + 1 for i, c in enumerate(r) if c), default=0) for r in rows), default=0)
+    table = _table_md([r[:width] for r in rows]) if width else ""
+    return "\n\n".join(x for x in ("\n".join(lines), table) if x)
+
+
 def _xlsx(data: bytes) -> Extracted:
+    """Every sheet as a markdown table. P106: blank rows no longer count toward MAX_ROWS (a
+    sheet with gaps lost its lower half), empty columns at the right are dropped, dates and
+    whole numbers read naturally, and a cut sheet says so."""
     from openpyxl import load_workbook
 
     check_office_zip(data)
     wb = load_workbook(io.BytesIO(data), read_only=True, data_only=True)
     out: list[str] = []
+    cut: list[str] = []
     try:
         for ws in wb.worksheets:
             rows: list[list[str]] = []
             for row in ws.iter_rows(values_only=True):
-                cells = ["" if v is None else str(v) for v in row[:30]]
-                rows.append(cells)
+                cells = [_cell(v) for v in row[:MAX_COLS]]
+                if not any(cells):
+                    continue
                 if len(rows) >= MAX_ROWS:
+                    cut.append(ws.title)
                     break
-            table = _table_md(rows)
-            if table:
-                out.append(f"## {ws.title}\n\n{table}")
+                rows.append(cells)
+            body = _sheet_md(rows)
+            if body:
+                out.append(f"## {ws.title}\n\n{body}")
     finally:
         wb.close()
-    return Extracted("\n\n".join(out), len(wb.sheetnames), False)
+    note = f"Read the first {MAX_ROWS} rows of: {', '.join(cut)}." if cut else ""
+    return Extracted("\n\n".join(out), len(wb.sheetnames), False, note)
 
 
 _SLIDE = re.compile(r"ppt/slides/slide(\d+)\.xml$")
