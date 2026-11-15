@@ -1,4 +1,5 @@
 import { useEffect, useId, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import { useBackClose } from './back-close';
 import {
   ArrowLeftIcon,
@@ -468,24 +469,31 @@ export function AppSwitcher({ menu, current, onSpace, label }: { menu: MenuItem[
   const [open, setOpen] = useState(false);
   const [at, setAt] = useState<CSSProperties>({});
   const root = useRef<HTMLDivElement>(null);
+  const pop = useRef<HTMLDivElement>(null);
   const apps = useMemo(() => appsOf(menu), [menu]);
   // The side menu scrolls (and so would clip it): the pop-over is placed against the window, under the button, or above
   // it when there is no room below.
+  // P106 (Fitri, 15 Nov 2026): a wider panel on the page itself (above the top bar), with a head, two columns of apps
+  // whose names wrap, and a height that fits the window (it scrolls inside, never sideways); on a phone it is a sheet
+  // from the bottom (spaces.css).
   const toggle = () => {
     const r = root.current?.getBoundingClientRect();
-    if (r) {
-      const width = Math.min(340, window.innerWidth - 24);
+    if (r && window.innerWidth > 600) {
+      const width = Math.min(560, window.innerWidth - 24);
       const left = Math.max(12, Math.min(r.left - 8, window.innerWidth - width - 12));
-      const below = window.innerHeight - r.bottom > 380;
-      setAt(below ? { position: 'fixed', left, width, top: r.bottom + 6 } : { position: 'fixed', left, width, bottom: window.innerHeight - r.top + 6 });
-    }
+      const roomBelow = window.innerHeight - r.bottom - 18;
+      const roomAbove = r.top - 18;
+      const below = roomBelow >= 420 || roomBelow >= roomAbove;
+      setAt(below ? { left, width, top: r.bottom + 6, maxHeight: roomBelow } : { left, width, bottom: window.innerHeight - r.top + 6, maxHeight: roomAbove });
+    } else setAt({});
     setOpen((o) => !o);
   };
   useBackClose(open, () => setOpen(false));
   useEffect(() => {
     if (!open) return;
     const away = (e: MouseEvent) => {
-      if (!root.current?.contains(e.target as Node)) setOpen(false);
+      const t = e.target as Node;
+      if (!root.current?.contains(t) && !pop.current?.contains(t)) setOpen(false);
     };
     const esc = (e: KeyboardEvent) => e.key === 'Escape' && setOpen(false);
     document.addEventListener('mousedown', away);
@@ -501,19 +509,47 @@ export function AppSwitcher({ menu, current, onSpace, label }: { menu: MenuItem[
         <SquaresFourIcon size={18} weight="bold" aria-hidden="true" />
         {label && <span>Apps</span>}
       </button>
-      {open && (
-        <div className="sp-pop" role="dialog" aria-label="Apps" style={at}>
-          <AppGrid
-            apps={apps}
-            compact
-            current={current}
-            onOpen={(a) => {
-              setOpen(false);
-              onSpace(a);
-            }}
-          />
-        </div>
-      )}
+      {open &&
+        createPortal(
+          <>
+            <div className="sp-pop-scrim" aria-hidden="true" onClick={() => setOpen(false)} />
+            <div className="sp-pop" role="dialog" aria-label="Apps" style={at} ref={pop}>
+              <div className="sp-pop-head">
+                <strong>Apps</strong>
+                <span className="sp-pop-count num">{apps.length}</span>
+                <button type="button" className="sp-pop-close" aria-label="Close" title="Close" onClick={() => setOpen(false)}>
+                  <XIcon size={18} weight="bold" aria-hidden="true" />
+                </button>
+              </div>
+              <ul className="sp-list" aria-label="Apps">
+                {apps.map((a) => (
+                  <li key={a.id}>
+                    <button
+                      type="button"
+                      className="sp-row"
+                      data-space={a.id}
+                      aria-current={current === a.id ? 'true' : undefined}
+                      onClick={() => {
+                        setOpen(false);
+                        onSpace(a.id as SpaceId);
+                      }}
+                    >
+                      <SpaceIcon id={a.id} size="sm" />
+                      <span className="sp-row-text">
+                        <span className="sp-row-name">{a.title}</span>
+                        <span className="sp-row-meta">
+                          <span className="num">{a.count}</span> <span>{a.count === 1 ? 'screen' : 'screens'}</span>
+                        </span>
+                      </span>
+                      <CaretRightIcon className="sp-row-go" size={14} weight="bold" aria-hidden="true" />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </>,
+          document.body,
+        )}
     </div>
   );
 }

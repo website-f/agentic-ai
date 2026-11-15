@@ -555,14 +555,198 @@
   padding: 0 10px;
   border: 1px dashed var(--line);
 }
+/* P106: the Apps panel, on the page itself (a portal), with its own classes so the side menu's styles never reach it. */
+.sp-pop-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  background: transparent;
+}
 .sp-pop {
   position: fixed;
-  z-index: 60;
-  padding: 10px;
-  border-radius: 16px;
+  z-index: 81;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  max-width: calc(100vw - 24px);
+  padding: 8px 10px 12px;
+  border-radius: 18px;
   border: 1px solid var(--line);
   background: var(--surface);
   box-shadow: 0 22px 50px -20px hsl(152 30% 10% / 0.4), var(--shadow);
+  overflow: hidden;
+  animation: sp-pop-in 0.16s ease-out;
+}
+@keyframes sp-pop-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+}
+.sp-pop-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 4px 12px 10px;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 10px;
+  flex: none;
+}
+.sp-pop-head strong {
+  font-size: 16px;
+  letter-spacing: -0.01em;
+}
+.sp-pop-count {
+  min-width: 24px;
+  height: 22px;
+  padding: 0 7px;
+  display: inline-grid;
+  place-items: center;
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+.sp-pop-close {
+  appearance: none;
+  margin-left: auto;
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.sp-pop-close:hover {
+  background: var(--surface-2);
+  color: var(--ink);
+}
+.sp-list {
+  list-style: none;
+  margin: 0;
+  padding: 2px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  min-height: 0;
+}
+.sp-list > li {
+  min-width: 0;
+}
+.sp-row {
+  appearance: none;
+  position: relative;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 60px;
+  height: 100%;
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid transparent;
+  border-radius: 14px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, transform 0.15s;
+}
+.sp-row:hover {
+  background: hsl(var(--sp-h) var(--sp-s) var(--sp-tint-l) / 0.55);
+  border-color: hsl(var(--sp-h) var(--sp-s) 60% / 0.3);
+}
+.sp-row:active {
+  transform: scale(0.985);
+}
+.sp-row:focus-visible {
+  outline: 2px solid hsl(var(--sp-h) var(--sp-s) 45%);
+  outline-offset: 1px;
+}
+.sp-row[aria-current='true'] {
+  background: hsl(var(--sp-h) var(--sp-s) var(--sp-tint-l) / 0.8);
+  border-color: hsl(var(--sp-h) var(--sp-s) 55% / 0.45);
+}
+.sp-row .sp-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+}
+.sp-row-text {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.sp-row-name {
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.3;
+  overflow-wrap: break-word;
+  text-wrap: balance;
+}
+.sp-row-meta {
+  color: var(--muted);
+  font-size: 12px;
+}
+.sp-row-go {
+  color: var(--muted);
+  opacity: 0.6;
+  transition: transform 0.15s, opacity 0.15s;
+}
+.sp-row:hover .sp-row-go {
+  opacity: 1;
+  transform: translateX(2px);
+}
+/* A narrow window: one column. A phone: a sheet from the bottom over a dimmed page. */
+@media (max-width: 760px) {
+  .sp-list {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+@media (max-width: 600px) {
+  .sp-pop-scrim {
+    background: hsl(150 20% 8% / 0.4);
+  }
+  .sp-pop {
+    left: 0;
+    right: 0;
+    bottom: 0;
+    top: auto;
+    width: auto;
+    max-width: none;
+    max-height: 86dvh;
+    padding: 6px 16px calc(16px + env(safe-area-inset-bottom));
+    border-radius: 22px 22px 0 0;
+    animation-name: sp-sheet-in;
+  }
+  .sp-row {
+    min-height: 64px;
+  }
+}
+@keyframes sp-sheet-in {
+  from {
+    transform: translateY(24px);
+    opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sp-pop,
+  .sp-row,
+  .sp-row-go {
+    animation: none;
+    transition: none;
+  }
 }
 .navm-flat + .navm-flat {
   margin-top: 10px;
@@ -574,15 +758,38 @@
 /* ---------- Phone: the Apps sheet ---------- */
 .sheet.sp-sheet {
   padding-inline: 16px;
-  padding-top: 16px;
+  padding-top: 10px;
+  padding-bottom: calc(20px + env(safe-area-inset-bottom));
   display: grid;
-  gap: 14px;
+  gap: 16px;
   align-content: start;
+  overflow-x: hidden;
 }
 .sp-sheet-head {
-  padding: 2px 4px 0;
+  display: flex;
+  align-items: center;
+  padding: 2px 0 0 4px;
   font-size: 17px;
   letter-spacing: -0.01em;
+}
+/* P106: names wrap inside their own cell (never spill into the next app). */
+.sp-sheet .sp-grid[data-compact] {
+  gap: 12px 6px;
+}
+.sp-sheet .sp-grid[data-compact] > li {
+  min-width: 0;
+}
+.sp-sheet .sp-grid[data-compact] .sp-card {
+  padding: 12px 4px 10px;
+}
+.sp-sheet .sp-grid[data-compact] .sp-card-name {
+  overflow-wrap: break-word;
+  max-width: 100%;
+}
+@media (max-width: 340px) {
+  .sp-sheet .sp-grid[data-compact] {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
 }
 
 /* ---------- Phone: the app's bar under the top bar ---------- */

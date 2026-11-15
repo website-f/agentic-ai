@@ -4,7 +4,7 @@ import { CleanupReceiptRecovery } from './views/ItCleanup';
 import { createContext, lazy, Suspense, useCallback, useContext, useEffect, useMemo, useRef, useState, type ComponentType } from 'react';
 import { type Company, type User, RULES, hasOwnStaffRecord, isActHead, isGroupLeader, isOwnerAdmin, jaOwns, seesArmsDetail, workKpiScope, finRequestInMenu, canSeeJaSwitch } from '@prima/core';
 import { ApiError, api, type Me } from './api';
-import { ArrowLeftIcon, HouseIcon, MagnifyingGlassIcon, SquaresFourIcon } from '@phosphor-icons/react';
+import { ArrowLeftIcon, HouseIcon, MagnifyingGlassIcon, SquaresFourIcon, XIcon } from '@phosphor-icons/react';
 import { publishPage, rulesFor } from './prima-page';
 import { backClosedSheet, useBackClose } from './back-close';
 import { ViewIcon } from './icons';
@@ -1673,6 +1673,9 @@ function Shell({ me, onSignOut, onReset }: { me: Me; onSignOut: () => void; onRe
             <div className="sheet sp-sheet" role="dialog" aria-label="Apps">
               <div className="sp-sheet-head">
                 <strong>Apps</strong>
+                <button type="button" className="sp-pop-close" aria-label="Close" title="Close" onClick={() => setAppsOpen(false)}>
+                  <XIcon size={18} weight="bold" aria-hidden="true" />
+                </button>
               </div>
               <SpotSearch
                 menu={menu}

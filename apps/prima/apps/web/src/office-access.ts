@@ -26,4 +26,11 @@ export const primaOnly = (me: Me) => me.office?.primaOnly === true;
 export const myName = (me: Me): string => me.office?.name?.trim() || me.user.name;
 
 /** P101: they open Prima as its shared top record, so the record's name and title are not theirs. */
+/** Server text that greets the Prima account by name ("Good day, <name>.") speaks to the office person instead when the
+ *  office opens Prima as another account (P106, Fitri 15 Nov 2026: the developer was greeted as the CEO). */
+export const forMe = (me: Me, text: string): string => {
+  const name = myName(me);
+  const as = me.user.name?.trim();
+  return as && name !== as ? text.split(as).join(name) : text;
+};
 export const asTop = (me: Me): boolean => me.office?.asTop === true && !!me.office?.name?.trim();
