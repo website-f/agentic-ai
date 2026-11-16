@@ -87,6 +87,7 @@ def _out(
         microsoft=bool(m.ms_oid),
         access="prima_only" if is_prima_only(m.access, m.role) else "agentic",
         prima_modules=None if m.role == "owner" else m.prima_modules,
+        prima_department=None if m.role == "owner" else m.prima_department,  # type: ignore[arg-type]
     )
 
 
@@ -516,6 +517,7 @@ async def add_one(
     branch_ids: list[str] | None = None,
     access: str = AGENTIC,
     prima_modules: list[str] | None = None,
+    prima_department: str | None = None,
 ) -> tuple[Membership, str | None]:
     """Add one person: the role and place rules, a new account with a one-time password
     (None when they already have an account), and the audit row. One path for the form and
@@ -528,6 +530,9 @@ async def add_one(
     access, prima_modules = check_prima_access(
         principal, role, access, prima_modules, AGENTIC, None
     )
+    if prima_department is not None:  # P106: the same rules as a change
+        _prima_access_editor(principal)
+        prima_department = check_prima_department(role, prima_department)
     email = email.lower()
     user = await db.scalar(select(User).where(User.email == email))
     password: str | None = None
@@ -558,6 +563,7 @@ async def add_one(
         department_id=department_id,
         access=access,
         prima_modules=prima_modules,
+        prima_department=prima_department,
     )
     set_branches(m, branch_id, every)
     db.add(m)
@@ -573,6 +579,8 @@ async def add_one(
         after["access"] = access
     if prima_modules is not None:
         after["prima_modules"] = prima_modules
+    if prima_department is not None:
+        after["prima_department"] = prima_department
     if via:
         after["via"] = via
     if reactivated:
@@ -604,6 +612,7 @@ async def add_member(
         branch_ids=body.branch_ids,
         access=body.access,
         prima_modules=body.prima_modules,
+        prima_department=body.prima_department,
     )
     await db.commit()
     await db.refresh(m)
@@ -620,7 +629,9 @@ async def update_member(
     db: AsyncSession = Depends(get_db),
 ) -> MemberOut:
     org_change = body.heads_department is not None or "reports_to_user_id" in body.model_fields_set
-    prima_change = body.access is not None or "prima_modules" in body.model_fields_set
+    prima_change = body.access is not None or bool(
+        {"prima_modules", "prima_department"} & body.model_fields_set
+    )
     unchanged = body.role is None and body.name is None and body.email is None
     if unchanged and not org_change and not prima_change:
         raise api_error(
@@ -642,6 +653,8 @@ async def update_member(
             body.access,
             body.prima_modules,
             "prima_modules" in body.model_fields_set,
+            body.prima_department,
+            "prima_department" in body.model_fields_set,
         )
     # P92: a name or email typed wrong (in the form or an import) is corrected here. Last:
     # every check runs before anything is saved.
@@ -1243,6 +1256,27 @@ def check_prima_access(
     return new_access, new_chosen
 
 
+def check_prima_department(role: str, department: str | None) -> str | None:
+    """P106: the Prima department this person's own Prima account may get (None: none). HR
+    opens Prima's HR and pay walls and is for central staff only, never a branch manager
+    (admin_exec in Prima; Prima's accounts service refuses it too)."""
+    if department is None:
+        return None
+    if department not in prima_client.PRIMA_DEPARTMENTS:
+        raise api_error(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            "bad_prima_department",
+            "Pick a Prima department from the list.",
+        )
+    if department == "hr" and prima_client.prima_role(role) != "pwvsb_officer":
+        raise api_error(
+            status.HTTP_400_BAD_REQUEST,
+            "prima_hr_central_only",
+            "HR in Prima is for central staff only. A branch manager cannot be in HR.",
+        )
+    return department
+
+
 async def set_prima_access(
     db: AsyncSession,
     principal: Principal,
@@ -1250,8 +1284,11 @@ async def set_prima_access(
     access: str | None,
     chosen: list[str] | None,
     set_chosen: bool,
+    department: str | None = None,
+    set_department: bool = False,
 ) -> Membership:
-    """One person's access and Prima screens, with every rule; the caller commits."""
+    """One person's access and Prima screens (P106: and Prima department), with every rule;
+    the caller commits."""
     _prima_access_editor(principal)
     if user_id == principal.user.id:
         raise api_error(
@@ -1273,9 +1310,16 @@ async def set_prima_access(
     new_access, new_chosen = check_prima_access(
         principal, m.role, access, chosen, m.access, m.prima_modules, set_chosen
     )
-    if new_access == m.access and new_chosen == m.prima_modules:
+    new_dept = check_prima_department(m.role, department) if set_department else m.prima_department
+    if new_dept != m.prima_department:
+        before["prima_department"] = m.prima_department
+    if new_access == m.access and new_chosen == m.prima_modules and new_dept == m.prima_department:
         return m
-    m.access, m.prima_modules = new_access, new_chosen
+    after: dict[str, object] = {"access": new_access, "prima_modules": new_chosen}
+    if new_dept != m.prima_department:
+        # P106: their own Prima account is brought up to date the next time they open Prima.
+        after["prima_department"] = new_dept
+    m.access, m.prima_modules, m.prima_department = new_access, new_chosen, new_dept
     await audit.record(
         db,
         principal.workspace_id,
@@ -1283,7 +1327,7 @@ async def set_prima_access(
         "member.prima_access",
         target=user_id,
         before=before,
-        after={"access": new_access, "prima_modules": new_chosen},
+        after=after,
     )
     await db.flush()
     return m
@@ -1296,8 +1340,10 @@ async def put_prima_access(
     principal: Principal = Depends(require("members.manage")),
     db: AsyncSession = Depends(get_db),
 ) -> MemberOut:
-    """P99: what one member reaches (the office and Prima, or Prima only) and their screens."""
-    if body.access is None and "prima_modules" not in body.model_fields_set:
+    """P99: what one member reaches (the office and Prima, or Prima only) and their screens;
+    P106: and their Prima department."""
+    fields = body.model_fields_set
+    if body.access is None and not {"prima_modules", "prima_department"} & fields:
         raise api_error(
             status.HTTP_422_UNPROCESSABLE_CONTENT, "nothing_to_change", "Nothing to change."
         )
@@ -1307,7 +1353,9 @@ async def put_prima_access(
         user_id,
         body.access,
         body.prima_modules,
-        "prima_modules" in body.model_fields_set,
+        "prima_modules" in fields,
+        body.prima_department,
+        "prima_department" in fields,
     )
     await db.commit()
     return await _one_out(db, principal, user_id)
@@ -1392,6 +1440,12 @@ async def member_prima(
         out["where"] = render(Msg("Prima is not set up on this server."))
         return out
     office_role = render(role_label(m.role))
+    if prima_client.opens_own(m):  # P106: the developer chose their own Prima account
+        out["role"], out["role_label"] = "pwvsb_officer", _prima_role("pwvsb_officer")
+        out["where"] = render(
+            Msg("The developer opens Prima as their own account (set on the Prima page).")
+        )
+        return out
     if prima_client.opens_as_top(m):
         out["role"], out["role_label"] = "director", _prima_role("director")
         out["where"] = render(Msg("Owners open Prima as its top record (the CEO)."))

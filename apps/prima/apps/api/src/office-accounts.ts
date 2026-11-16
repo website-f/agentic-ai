@@ -48,8 +48,16 @@ export const OFFICE_ACCOUNT_PREFIX = 'u-off-';
  *    staff clock, leave or claims.
  */
 export const OFFICE_ROLES: readonly UserRole[] = ['admin_exec', 'pwvsb_officer'];
-/** Departments that open no data wall or company right by themselves (dataWalls, can and the registered walls). */
-export const OFFICE_DEPARTMENTS: readonly NonNullable<User['department']>[] = ['transport', 'procurement'];
+/**
+ * Departments an office account may be in. transport and procurement open no data wall or company right by themselves
+ * (dataWalls, can and the registered walls). P106 (Fitri and Fauzan, 16 Nov 2026): hr, chosen per person by the office
+ * (Members > Access), so the office can prepare the staff directory; it opens the HR and pay walls (staff personal
+ * data, payroll), so it is for central staff only (pwvsb_officer, as Prima's own central HR): never on admin_exec,
+ * whether the office asked admin_exec or the person's own staff record makes them a company's office staff (accessFor).
+ */
+export const OFFICE_DEPARTMENTS: readonly NonNullable<User['department']>[] = ['transport', 'procurement', 'hr'];
+/** P106: departments only central staff may be in (see OFFICE_DEPARTMENTS). */
+export const CENTRAL_ONLY_DEPARTMENTS: readonly NonNullable<User['department']>[] = ['hr'];
 
 const OFFICE_USER_ID = /^[a-z0-9][a-z0-9_-]{2,63}$/;
 const COMPANY_ID = /^[A-Za-z0-9_-]{1,60}$/;
@@ -129,6 +137,8 @@ export function checkAccountInput(raw: unknown): OfficeAccountInput {
   if (o.relink !== undefined && typeof o.relink !== 'boolean') throw new AccountRefused('relink must be true or false.');
   // P81: a central employer's staff are central staff. An admin_exec there would read every central staff record.
   const role = companyIds.some(isCentralEmployer) ? 'pwvsb_officer' : (o.role as UserRole);
+  if (o.department && CENTRAL_ONLY_DEPARTMENTS.includes(o.department as never) && role !== 'pwvsb_officer')
+    throw new AccountRefused(`An office account in ${String(o.department)} must be central staff (pwvsb_officer).`);
   return {
     officeUserId: o.officeUserId as string,
     name: text(o.name, 'The name', 1, 120),
@@ -180,6 +190,9 @@ export async function upsertOfficeAccount(client: PoolClient, raw: unknown, by: 
     const linkedBefore = old?.personId ? await recordCompany(client, old.personId, input) : null;
     const found = old?.personId ? null : await findOwnRecord(client, id, input);
     const access = accessFor(input, linkedBefore ?? found?.companyId ?? null);
+    // P106: the staff record made them a company's office staff (admin_exec): never in a central-only department.
+    if (input.department && CENTRAL_ONLY_DEPARTMENTS.includes(input.department) && access.role !== 'pwvsb_officer')
+      throw new AccountRefused(`An office account in ${input.department} must be central staff (pwvsb_officer); ${access.why}.`);
     let user: User;
     if (old) {
       // Only the allowed fields change; whatever else the record holds (an entraOid IT linked, its sites) stays.

@@ -23,6 +23,8 @@ HEX_COLOR = r"^#[0-9a-fA-F]{6}$"
 Access = Literal["agentic", "prima_only"]
 # P99: Prima screen ids (prima/modules.py); null = all their Prima role allows.
 PrimaModules = list[str] | None
+# P106: the Prima department their own Prima account gets (prima/client.PRIMA_DEPARTMENTS).
+PrimaDepartment = Literal["transport", "procurement", "hr"]
 
 
 class _Password(BaseModel):
@@ -130,6 +132,7 @@ class MemberOut(BaseModel):
     # P99: what they reach: the office and Prima, or Prima only; and their Prima screens.
     access: Access = "agentic"
     prima_modules: PrimaModules = None
+    prima_department: PrimaDepartment | None = None  # P106
 
 
 class MembersSummary(BaseModel):
@@ -191,6 +194,7 @@ class MemberCreateIn(BaseModel):
     # P99: the office and Prima (default), or Prima only; their Prima screens (null = all).
     access: Access = "agentic"
     prima_modules: PrimaModules = Field(default=None, max_length=200)
+    prima_department: PrimaDepartment | None = None  # P106
 
 
 class MemberCreateOut(BaseModel):
@@ -212,6 +216,8 @@ class MemberUpdateIn(BaseModel):
     # P99: what they reach, and their Prima screens (send null for all their role allows).
     access: Access | None = None
     prima_modules: PrimaModules = Field(default=None, max_length=200)
+    # P106: their Prima department (send null for none).
+    prima_department: PrimaDepartment | None = None
 
 
 class MemberTeamIn(BaseModel):
@@ -226,6 +232,8 @@ class PrimaAccessIn(BaseModel):
 
     access: Access | None = None
     prima_modules: PrimaModules = Field(default=None, max_length=200)
+    # P106: the Prima department their own Prima account gets (send null for none).
+    prima_department: PrimaDepartment | None = None
 
 
 class TempPasswordOut(BaseModel):

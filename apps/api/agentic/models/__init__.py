@@ -76,6 +76,11 @@ class Membership(Timestamps, Base):
     __table_args__ = (
         CheckConstraint(_ROLE_CHECK, name="ck_memberships_role"),
         CheckConstraint("access IN ('agentic', 'prima_only')", name="ck_memberships_access"),
+        CheckConstraint("prima_opens_as IN ('top', 'own')", name="ck_memberships_prima_opens_as"),
+        CheckConstraint(
+            "prima_department IS NULL OR prima_department IN ('transport', 'procurement', 'hr')",
+            name="ck_memberships_prima_department",
+        ),
     )
 
     workspace_id: Mapped[str] = mapped_column(
@@ -109,6 +114,11 @@ class Membership(Timestamps, Base):
     # role allows; agentic/prima/modules.py). Set on the Members page (members.set_prima_access).
     access: Mapped[str] = mapped_column(String(16), default="agentic", server_default="agentic")
     prima_modules: Mapped[list[str] | None] = mapped_column(JSONB)
+    # P106 (migration 0066): "top" (owners and the developer open Prima as its top record, the
+    # default) or "own" (the developer only: their own Prima account; prima/client.py); and the
+    # Prima department their own Prima account gets (transport, procurement, hr; None = none).
+    prima_opens_as: Mapped[str] = mapped_column(String(8), default="top", server_default="top")
+    prima_department: Mapped[str | None] = mapped_column(String(20))
 
     user: Mapped[User] = relationship(lazy="joined", foreign_keys=[user_id])
     # P98: every branch this member works in (the home branch_id included; loaded with the
@@ -2290,6 +2300,9 @@ class PrimaLink(Timestamps, Base):
     # P92: their email or Microsoft link was corrected: their own Prima account (how="auto")
     # is brought up to date (relinked) the next time they open Prima (prima/client.link_for).
     relink_needed: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    # P106: the Prima department last given to their own Prima account (how="auto"); when the
+    # member's prima_department differs, link_for brings the account up to date.
+    department: Mapped[str | None] = mapped_column(String(20))
 
 
 # P57: export and erase a workspace (agentic/erasure/models.py).

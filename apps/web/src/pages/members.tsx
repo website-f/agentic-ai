@@ -36,7 +36,7 @@ import { cn, initials, timeAgo } from "@/lib/utils";
 
 import { MemberIdentityDialog, ResetMicrosoftDialog } from "@/components/member-identity";
 
-import { AccessBadges, AccessFields, accessChanges, accessOf, BulkAccessDialog, DEFAULT_ACCESS, setsAccess, type AccessValue } from "./members-access";
+import { AccessBadges, AccessFields, accessChanges, accessOf, BulkAccessDialog, DEFAULT_ACCESS, PrimaOpensAsCard, setsAccess, type AccessValue } from "./members-access";
 import { ImportMembersDialog } from "./members-import";
 import { addsDepartments, BulkManagerDialog, editsOrg, ManagesField, NewDepartment, OrgFields, OrgLine, saveManages, TeamDialog } from "./members-org";
 
@@ -206,7 +206,9 @@ function AddMemberDialog({ open, onOpenChange, me }: { open: boolean; onOpenChan
   const [result, setResult] = useState<{ email: string; password: string | null } | null>(null);
   // P99: what they reach (owners, admins, management and HR set it).
   const [access, setAccess] = useState<AccessValue>(DEFAULT_ACCESS);
-  const accessBody = setsAccess(me) && role !== "owner" ? { access: access.access, prima_modules: access.modules } : {};
+  const accessBody = setsAccess(me) && role !== "owner"
+    ? { access: access.access, prima_modules: access.modules, ...(access.department ? { prima_department: access.department } : {}) }
+    : {};
 
   const add = useMutation({
     mutationFn: () => api<{ temp_password: string | null }>("/api/members", "POST", { email, name, role, ...placementBody(role, orFirst(branchIds, list), departmentId), ...accessBody }),
@@ -757,6 +759,8 @@ export function MembersPage() {
         ) : null}
       />
       {me.permissions.includes("members.manage") ? <SignInEmailsBar isOwner={me.role === "owner"} /> : null}
+      {/* P106: the developer chooses how they open Prima (CEO record or their own account). */}
+      {me.user.is_developer ? <PrimaOpensAsCard /> : null}
       {isLoading ? (
         <div className="grid gap-4">
           <StatGrid>{[0, 1, 2, 3].map((i) => <Skeleton key={i} className="h-[6.5rem] rounded-[var(--radius-md)]" />)}</StatGrid>

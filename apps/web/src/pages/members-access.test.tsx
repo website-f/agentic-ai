@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { Member } from "@/lib/types";
 
-import { AccessBadges, AccessFields, accessChanges, BulkAccessDialog, DEFAULT_ACCESS, moduleOptions, type AccessValue, type PrimaCatalog } from "./members-access";
+import { AccessBadges, AccessFields, accessChanges, accessOf, BulkAccessDialog, DEFAULT_ACCESS, moduleOptions, PrimaOpensAsCard, type AccessValue, type PrimaCatalog } from "./members-access";
 
 vi.mock("@tanstack/react-router", () => ({ useNavigate: () => () => {}, Link: ({ children }: { children: ReactNode }) => <a>{children}</a> }));
 
@@ -118,6 +118,54 @@ describe("Access section", { timeout: 30_000 }, () => {
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
     await waitFor(() => expect(posts).toHaveLength(1));
     expect(posts[0]).toEqual({ path: "/api/members/bulk", body: { user_ids: ["us_1", "us_2"], action: "prima", access: "prima_only", prima_modules: null } });
+  });
+});
+
+describe("P106 Prima department and how the developer opens Prima", { timeout: 30_000 }, () => {
+  it("offers a Prima department, warns plainly for HR, and sends it only when it changed", async () => {
+    wrap(<Fields member={MEMBER} onValue={() => {}} start={{ access: "agentic", modules: null, department: "hr" }} />);
+    expect(await screen.findByTestId("prima-department")).toHaveTextContent("Prima department");
+    expect(screen.getByRole("note")).toHaveTextContent("HR sees staff personal data and payroll in Prima.");
+    expect(accessOf({ ...MEMBER, prima_department: "procurement" })).toEqual({ access: "agentic", modules: null, department: "procurement" });
+    expect(accessOf(MEMBER)).toEqual({ access: "agentic", modules: null });
+    expect(accessChanges(accessOf(MEMBER), { access: "agentic", modules: null, department: "hr" })).toEqual({ prima_department: "hr" });
+    expect(accessChanges({ access: "agentic", modules: null, department: "hr" }, { access: "agentic", modules: null, department: null })).toEqual({ prima_department: null });
+    expect(accessChanges({ access: "agentic", modules: null, department: "hr" }, { access: "agentic", modules: null, department: "hr" })).toEqual({});
+  });
+
+  it("the bulk dialog sets no department", async () => {
+    wrap(<BulkAccessDialog userIds={["us_1"]} open onOpenChange={() => {}} />);
+    await screen.findByRole("radio", { name: /Prima only/ });
+    expect(screen.queryByTestId("prima-department")).toBeNull();
+  });
+
+  it("lets the developer switch to their own Prima account, and shows nothing to anyone else", async () => {
+    const puts: unknown[] = [];
+    let state = { enabled: true, can_choose: true, opens_as: "top", department: null as string | null, account: null as object | null };
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const json = (b: unknown) => new Response(JSON.stringify(b), { status: 200, headers: { "content-type": "application/json" } });
+      if (String(input) === "/api/prima/opens-as" && init?.method === "PUT") {
+        const b = JSON.parse(String(init.body));
+        puts.push(b);
+        state = { ...state, ...b, account: { id: "u-off-us_dev", name: "Fitri", department: b.department } };
+        return json(state);
+      }
+      if (String(input) === "/api/prima/opens-as") return json(state);
+      return json({});
+    }));
+    wrap(<PrimaOpensAsCard />);
+    expect(await screen.findByRole("radio", { name: /The CEO record/ })).toHaveAttribute("aria-checked", "true");
+    expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
+    fireEvent.click(screen.getByRole("radio", { name: /My own Prima account/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(puts).toEqual([{ opens_as: "own", department: null }]));
+    expect(await screen.findByText(/Your own Prima account: Fitri/)).toBeInTheDocument();
+    cleanup();
+
+    state = { ...state, can_choose: false };
+    const { container } = wrap(<PrimaOpensAsCard />);
+    await waitFor(() => expect(vi.mocked(fetch)).toHaveBeenCalled());
+    expect(container.textContent).toBe("");
   });
 });
 

@@ -49,7 +49,7 @@ describe('office accounts: what an office account can be', () => {
     for (const role of ['director', 'company_manager', 'supervisor', 'guard', 'site_device', 'owner']) {
       assert.throws(() => checkAccountInput({ ...GOOD, role }), /role must be one of/, role);
     }
-    for (const department of ['hr', 'finance', 'it', 'audit', 'legal', 'director_office', 'arms_control']) {
+    for (const department of ['finance', 'it', 'audit', 'legal', 'director_office', 'arms_control']) {
       assert.throws(() => checkAccountInput({ ...GOOD, department }), /department must be one of/, department);
     }
     for (const field of ['id', 'leadership', 'opsTier', 'integration', 'entraOid', 'accessClosedFrom', 'siteIds', 'personId', 'actRole']) {
@@ -60,6 +60,14 @@ describe('office accounts: what an office account can be', () => {
     assert.throws(() => checkAccountInput({ ...GOOD, name: '' }), /name/);
     assert.throws(() => checkAccountInput({ ...GOOD, name: 'a\u0000b' }), /name/);
     assert.throws(() => checkAccountInput([GOOD]), /JSON object/);
+  });
+
+  it('P106: hr only for central staff (pwvsb_officer), never on admin_exec', () => {
+    assert.equal(checkAccountInput({ ...GOOD, department: 'hr' }).department, 'hr');
+    assert.throws(() => checkAccountInput({ ...GOOD, role: 'admin_exec', department: 'hr' }), /in hr must be central staff/);
+    // A central employer's account is central staff anyway, so hr is fine there.
+    assert.equal(checkAccountInput({ ...GOOD, role: 'admin_exec', companyIds: ['pwvsb'], department: 'hr' }).role, 'pwvsb_officer');
+    assert.equal(checkAccountInput({ ...GOOD, role: 'admin_exec', department: 'procurement' }).department, 'procurement');
   });
 
   it('P92: takes relink (the office corrected their details) only as true or false', () => {

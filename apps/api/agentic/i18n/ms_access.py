@@ -39,4 +39,22 @@ MS_ACCESS: dict[str, str] = {
     "Their Prima staff record ({name}). Its role is set in Prima, on that record.": (
         "Rekod staf Prima mereka ({name}). Peranannya ditetapkan dalam Prima, pada rekod itu."
     ),
+    # P106: the developer opens Prima as their own account; a Prima department per member
+    "Only the system's developer chooses how they open Prima.": (
+        "Hanya pembangun sistem yang memilih cara mereka membuka Prima."
+    ),
+    "Pick how to open Prima.": "Pilih cara membuka Prima.",
+    "Pick a Prima department from the list.": "Pilih jabatan Prima daripada senarai.",
+    "HR in Prima is for central staff only. A branch manager cannot be in HR.": (
+        "HR dalam Prima hanya untuk staf pusat. Pengurus cawangan tidak boleh berada dalam HR."
+    ),
+    "Someone else must OK what you loaded. You made this with your own Prima account, so another person (the CEO) gives the OK.": (
+        "Orang lain mesti memberi OK untuk apa yang anda muatkan. Anda membuatnya dengan akaun Prima anda sendiri, jadi orang lain (CEO) yang memberi OK."
+    ),
+    "Prima could not check who made this. Try again in a minute.": (
+        "Prima tidak dapat menyemak siapa yang membuat ini. Cuba lagi sebentar lagi."
+    ),
+    "The developer opens Prima as their own account (set on the Prima page).": (
+        "Pembangun membuka Prima sebagai akaun mereka sendiri (ditetapkan di halaman Prima)."
+    ),
 }

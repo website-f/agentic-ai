@@ -10,6 +10,7 @@ with no Prima record of their own gets their own account in that company.
 
 import json
 from difflib import SequenceMatcher
+from typing import Literal
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse, Response
@@ -20,11 +21,18 @@ from sqlalchemy.orm.attributes import flag_modified
 
 from ...core.db import get_db
 from ...i18n import Msg, render, tr
-from ...models import Branch, Membership, Workspace
+from ...models import Branch, Membership, PrimaLink, Workspace
 from ...prima import client, modules, people
 from ...prima.client import PrimaError
 from ...services import audit
-from ..deps import Principal, client_ip, current_principal, require
+from ..deps import (
+    Principal,
+    client_ip,
+    current_principal,
+    is_developer,
+    require,
+    require_developer,
+)
 
 router = APIRouter(prefix="/api/prima", tags=["prima"])
 
@@ -317,6 +325,62 @@ async def companies_save(
     return {"ok": True, "companies": after}
 
 
+# ---------------------------------------------------------------- P106 the developer opens Prima as
+
+
+class OpensAsIn(BaseModel):
+    opens_as: Literal["top", "own"]
+    department: Literal["transport", "procurement", "hr"] | None = None
+
+
+async def _opens_as_out(db: AsyncSession, principal: Principal) -> dict[str, object]:
+    ws = principal.workspace_id
+    m = await db.get(Membership, (ws, principal.user.id))
+    mine = is_developer(principal.user, principal.role)
+    link = await db.get(PrimaLink, (ws, principal.user.id))
+    own = link is not None and link.prima_user_id == client.own_account_id(principal.user.id)
+    return {
+        "enabled": client.enabled(ws),
+        "can_choose": mine,
+        "opens_as": (m.prima_opens_as if m is not None and mine else "top"),
+        "department": m.prima_department if m is not None and mine else None,
+        "departments": list(client.PRIMA_DEPARTMENTS),
+        "account": (
+            {"id": link.prima_user_id, "name": link.prima_name, "department": link.department}
+            if own and link is not None
+            else None
+        ),
+    }
+
+
+@router.get("/opens-as")
+async def opens_as_get(
+    principal: Principal = Depends(require_developer), db: AsyncSession = Depends(get_db)
+) -> dict[str, object]:
+    """P106: how the developer opens Prima (only they choose, so only they ask)."""
+    return await _opens_as_out(db, principal)
+
+
+@router.put("/opens-as")
+async def opens_as_put(
+    body: OpensAsIn,
+    principal: Principal = Depends(require_developer),
+    db: AsyncSession = Depends(get_db),
+) -> object:
+    """P106: the developer opens Prima as its top record (the CEO, the default) or as their
+    own account in a Prima department they pick; switching back works; each change audited."""
+    if not client.enabled(principal.workspace_id):
+        return _refused(PrimaError(404, Msg("Prima is not set up on this server.")))
+    m = await db.get(Membership, (principal.workspace_id, principal.user.id))
+    if m is None:
+        return _refused(PrimaError(404, Msg("Prima is not set up on this server.")))
+    try:
+        await client.set_opens_as(db, m, body.opens_as, body.department, principal.actor)
+    except PrimaError as e:
+        return _refused(e)
+    return await _opens_as_out(db, principal)
+
+
 async def _forward(request: Request, path: str, principal: Principal, db: AsyncSession) -> Response:
     body = await request.body() if request.method == "POST" else b""
     try:
@@ -337,11 +401,12 @@ async def _forward(request: Request, path: str, principal: Principal, db: AsyncS
         headers["content-disposition"] = ans.disposition
     body_out = ans.body
     if request.method == "GET" and path.strip("/") == "api/me" and ans.status == 200:
-        body_out = _with_office(ans, principal)
+        m = await db.get(Membership, (principal.workspace_id, principal.user.id))
+        body_out = _with_office(ans, principal, own=m is not None and client.opens_own(m))
     return Response(body_out, status_code=ans.status, media_type=ans.content_type, headers=headers)
 
 
-def _with_office(ans: client.Answer, principal: Principal) -> bytes:
+def _with_office(ans: client.Answer, principal: Principal, own: bool = False) -> bytes:
     """P99: Prima's "who am I" with what the office gives this person, so Prima's web hides
     the screens not chosen and the way back to the office of someone with Prima only. The
     office refuses those calls anyway (client.check_chosen, core/access.py)."""
@@ -361,7 +426,9 @@ def _with_office(ans: client.Answer, principal: Principal) -> bytes:
         # Owners and the developer (an owner) open Prima as its top record
         # (client.opens_as_top), which several people share, so its name is not theirs.
         "name": principal.user.name,
-        "asTop": principal.role == "owner",
+        # P106: the developer who chose their own Prima account (client.opens_own) is not on
+        # the shared record: Prima's web then shows them as themselves.
+        "asTop": principal.role == "owner" and not own,
     }
     return json.dumps(data, separators=(",", ":"), ensure_ascii=False).encode()
 

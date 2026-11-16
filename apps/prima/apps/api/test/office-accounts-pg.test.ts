@@ -86,7 +86,8 @@ describe('office accounts in the database', () => {
       [{ officeUserId: 'us_01jother', name: 'X', title: '', role: 'pwvsb_officer', companyIds: ['co-sasa'], leadership: 'cos' }, /cannot set leadership/],
       [{ officeUserId: 'us_01jother', name: 'X', title: '', role: 'pwvsb_officer', companyIds: ['co-sasa'], integration: 'ja' }, /cannot set integration/],
       [{ officeUserId: 'us_01jother', name: 'X', title: '', role: 'pwvsb_officer', companyIds: ['co-sasa'], entraOid: OID }, /cannot set entraOid/],
-      [{ officeUserId: 'us_01jother', name: 'X', title: '', role: 'pwvsb_officer', companyIds: ['co-sasa'], department: 'hr' }, /department must be one of/],
+      [{ officeUserId: 'us_01jother', name: 'X', title: '', role: 'pwvsb_officer', companyIds: ['co-sasa'], department: 'finance' }, /department must be one of/],
+      [{ officeUserId: 'us_01jother', name: 'X', title: '', role: 'admin_exec', companyIds: ['co-sasa'], department: 'hr' }, /in hr must be central staff/],
     ];
     for (const [input, why] of tries) await assert.rejects(upsert(input), (e: Error) => e instanceof AccountRefused && why.test(e.message));
     await assert.rejects(upsert({ officeUserId: 'us_01jother', name: 'X', title: '', role: 'pwvsb_officer', companyIds: ['co-sasa'] }, ' '), /who is making/);
@@ -306,6 +307,52 @@ describe('office accounts in the database', () => {
         const leave = await svc.requestLeave(me, { personId: 'pr-p81-hq', kind: 'ANNUAL', from: '2099-01-05', to: '2099-01-05', reason: 'Family matter (synthetic)' } as never);
         assert.equal((leave as { personId: string }).personId, 'pr-p81-hq', 'leave');
       });
+    });
+
+    it('P106: hr for central staff, refused on admin_exec (asked or from the staff record), department changed on relink', async () => {
+      const base = { officeUserId: 'us_p106dev', name: 'Synthetic Developer', title: 'Owner', role: 'pwvsb_officer', companyIds: ['pwvsb'] };
+      // Central staff in procurement first (the Goodwill item import), then hr (the staff directory), then none.
+      const first = await upsert({ ...base, department: 'procurement' });
+      assert.deepEqual([first.id, first.role, first.created], ['u-off-us_p106dev', 'pwvsb_officer', true]);
+      assert.equal((await user('u-off-us_p106dev'))?.department, 'procurement');
+      const hr = await upsert({ ...base, department: 'hr' });
+      assert.deepEqual([hr.id, hr.role, hr.created], ['u-off-us_p106dev', 'pwvsb_officer', false]);
+      assert.equal((await user('u-off-us_p106dev'))?.department, 'hr');
+      // The HR wall is theirs now (the staff directory's preparer).
+      const walls = await db.asUser('u-off-us_p106dev', async (_svc, me) => me.department);
+      assert.equal(walls, 'hr');
+      // Idempotent: the same call again changes nothing on the account.
+      const before = await user('u-off-us_p106dev');
+      await upsert({ ...base, department: 'hr' });
+      assert.deepEqual(await user('u-off-us_p106dev'), before);
+      // A department change on relink (the office corrected their details) is applied too, and none drops it.
+      await add(person('pr-p106-dev', 'pwvsb', 'Synthetic Developer', { email: 'p106.dev@example.test' }));
+      const relinked = await upsert({ ...base, email: 'p106.dev@example.test', relink: true, department: 'transport' });
+      assert.deepEqual([relinked.personId, relinked.relinked, relinked.role], ['pr-p106-dev', true, 'pwvsb_officer']);
+      assert.equal((await user('u-off-us_p106dev'))?.department, 'transport');
+      await upsert({ ...base, email: 'p106.dev@example.test' });
+      assert.equal((await user('u-off-us_p106dev'))?.department, undefined);
+      const a = await audits('u-off-us_p106dev');
+      assert.match(a[0].summary, /created: pwvsb_officer for pwvsb, procurement/);
+      assert.match(a[1].summary, /updated: pwvsb_officer for pwvsb, hr/);
+      assert.ok(a.some((x) => /pwvsb, transport.*relinked/.test(x.summary)), 'the relink names the new department');
+
+      // Never on admin_exec: asked by the office, or because their own staff record makes them a company's office staff.
+      const n = (await pool.query(`SELECT count(*)::int AS n FROM prima.audit`)).rows[0].n as number;
+      await assert.rejects(upsert({ officeUserId: 'us_p106bm', name: 'X', title: '', role: 'admin_exec', companyIds: ['co-sasa'], department: 'hr' }), /in hr must be central staff/);
+      await add(person('pr-p106-inas', 'co-inas', 'Synthetic Inas HR', { email: 'p106.inas@example.test' }));
+      await assert.rejects(
+        upsert({ officeUserId: 'us_p106inas', name: 'Synthetic Inas HR', title: '', role: 'pwvsb_officer', companyIds: ['co-inas'], email: 'p106.inas@example.test', department: 'hr' }),
+        /in hr must be central staff.*co-inas/,
+      );
+      assert.equal(await user('u-off-us_p106bm'), undefined);
+      assert.equal(await user('u-off-us_p106inas'), undefined);
+      assert.equal((await pool.query(`SELECT count(*)::int AS n FROM prima.audit`)).rows[0].n, n, 'a refusal changes nothing');
+      // The same person in procurement is fine (as that company's office staff).
+      const inas = await upsert({ officeUserId: 'us_p106inas', name: 'Synthetic Inas HR', title: '', role: 'pwvsb_officer', companyIds: ['co-inas'], email: 'p106.inas@example.test', department: 'procurement' });
+      assert.deepEqual([inas.role, inas.personId], ['admin_exec', 'pr-p106-inas']);
+      const chain = (await pool.query('SELECT data FROM prima.audit ORDER BY seq')).rows.map((r) => r.data as AuditEntry);
+      assert.equal(verifyChain(chain), null);
     });
   });
 });

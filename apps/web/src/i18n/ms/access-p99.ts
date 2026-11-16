@@ -47,4 +47,26 @@ export const ACCESS_P99: Record<string, string> = {
   "Besides their role, each member has an access: Agentic + Prima (the office and Prima, the default) or Prima only (they sign in on the same page and go straight to Prima). Their Prima modules can be all their Prima role allows, or a chosen list.":
     "Selain peranan, setiap ahli ada akses: Agentic + Prima (pejabat dan Prima, lalai) atau Prima sahaja (mereka log masuk di halaman yang sama dan terus ke Prima). Modul Prima mereka boleh jadi semua yang dibenarkan peranan Prima mereka, atau senarai yang dipilih.",
   "Set it on Members: Change role, place or access.": "Tetapkan di Ahli: Tukar peranan, tempat atau akses.",
+
+  // P106: a Prima department per member; how the developer opens Prima
+  "Prima department": "Jabatan Prima",
+  "Transport": "Pengangkutan",
+  "Procurement and stores": "Perolehan dan stor",
+  "HR": "HR",
+  "For their own Prima account. Procurement can import items; HR can prepare the staff directory. A Prima staff record keeps the department set in Prima.":
+    "Untuk akaun Prima mereka sendiri. Perolehan boleh mengimport item; HR boleh menyediakan direktori staf. Rekod staf Prima kekal dengan jabatan yang ditetapkan dalam Prima.",
+  "HR sees staff personal data and payroll in Prima. Give it only to people who do HR work. Central staff only, not branch managers.":
+    "HR melihat data peribadi staf dan gaji dalam Prima. Berikan hanya kepada orang yang membuat kerja HR. Untuk staf pusat sahaja, bukan pengurus cawangan.",
+  "Open Prima as": "Buka Prima sebagai",
+  "Only you (the developer) see this. Nobody OKs their own load: what your own account loads, the CEO OKs, and the office refuses your own OK on it through the CEO record.":
+    "Hanya anda (pembangun) yang melihat ini. Tiada sesiapa memberi OK untuk muatan sendiri: apa yang dimuatkan oleh akaun anda sendiri, CEO yang memberi OK, dan pejabat menolak OK anda sendiri melalui rekod CEO.",
+  "The CEO record (sees everything)": "Rekod CEO (nampak semua)",
+  "As every owner: Prima's top record. Use it to review and OK.": "Seperti setiap pemilik: rekod teratas Prima. Gunakannya untuk menyemak dan memberi OK.",
+  "My own Prima account": "Akaun Prima saya sendiri",
+  "Central staff in the department below. Use it to prepare loads; someone else OKs them.":
+    "Staf pusat dalam jabatan di bawah. Gunakannya untuk menyediakan muatan; orang lain yang memberi OK.",
+  "Department of my own Prima account": "Jabatan akaun Prima saya sendiri",
+  "Your own Prima account: {name} ({id}).": "Akaun Prima anda sendiri: {name} ({id}).",
+  "Prima now opens as your own account.": "Prima kini dibuka sebagai akaun anda sendiri.",
+  "Prima now opens as the CEO record.": "Prima kini dibuka sebagai rekod CEO.",
 };

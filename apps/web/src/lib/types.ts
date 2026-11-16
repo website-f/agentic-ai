@@ -73,6 +73,8 @@ export interface Member {
   /** P99: the office and Prima, or Prima only; their Prima screens (null or missing: all their Prima role allows). */
   access?: Access;
   prima_modules?: string[] | null;
+  /** P106: the Prima department their own Prima account gets (null or missing: none). */
+  prima_department?: "transport" | "procurement" | "hr" | null;
 }
 
 export interface Department {

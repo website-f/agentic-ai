@@ -27,6 +27,7 @@ import re
 import time
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from urllib.parse import unquote
 
 import httpx
 from sqlalchemy import select
@@ -71,6 +72,13 @@ COMPANIES_KEY = "prima_companies"
 # included, is central staff (pwvsb_officer) with no grant or department: their own record,
 # clock, leave and claims, and no HR or pay wall. The owner opens Prima as its top record.
 PRIMA_ROLES = {"branch_manager": "admin_exec"}
+# P106: the Prima departments an office account may be in (Prima's office-accounts.ts
+# OFFICE_DEPARTMENTS), set per member in Members > Access. "hr" opens Prima's HR and pay walls
+# (staff personal data and payroll) and is for central staff (pwvsb_officer) only.
+PRIMA_DEPARTMENTS = ("transport", "procurement", "hr")
+# P106: how the developer opens Prima: as its top record (the default, as every owner) or as
+# their own Prima account (central staff), so they can prepare loads someone else OKs.
+OPENS_AS = ("top", "own")
 
 
 class PrimaError(Exception):
@@ -140,6 +148,18 @@ class Company:
 
 def prima_role(office_role: str) -> str:
     return PRIMA_ROLES.get(office_role, "pwvsb_officer")
+
+
+def own_account_id(user_id: str) -> str:
+    """The Prima id of an office person's own account (office-accounts.ts officeAccountId)."""
+    return f"{OFFICE_ACCOUNT_PREFIX}{user_id}"
+
+
+def account_department(m: Membership, role: str) -> str | None:
+    """The Prima department to give this person's own account: theirs, and never hr on a role
+    other than central staff (Prima refuses it; a branch manager keeps their account)."""
+    dept = m.prima_department if m.prima_department in PRIMA_DEPARTMENTS else None
+    return None if dept == "hr" and role != "pwvsb_officer" else dept
 
 
 def matchable(records: list[StaffRecord]) -> list[StaffRecord]:
@@ -213,11 +233,13 @@ async def create_account(
     company_ids: list[str],
     email: str = "",
     relink: bool = False,
+    department: str | None = None,
 ) -> str:
     """Make (or bring up to date) this person's own Prima account; its Prima id. A system call
     to Prima's accounts service, signed like every other ("/accounts"). P81: with their sign-in
     email, Prima links the account to their own staff record (the real staff list), so My
-    details, the staff clock and payroll are theirs."""
+    details, the staff clock and payroll are theirs. P106: with their Prima department (none
+    leaves the account in no department)."""
     payload: dict[str, object] = {
         "officeUserId": office_user_id,
         "name": name[:120],
@@ -225,6 +247,8 @@ async def create_account(
         "role": role,
         "companyIds": company_ids,
     }
+    if department:
+        payload["department"] = department
     if email and "@" in email and len(email) <= 254:
         payload["email"] = email.strip().lower()
     if relink:  # P92: find their staff record again from the corrected details
@@ -275,6 +299,7 @@ async def _own_account(db: AsyncSession, m: Membership, name: str, email: str = 
             code="company_needed",
         )
     role = prima_role(m.role)
+    department = account_department(m, role)
     rid = await create_account(
         office_user_id=m.user_id,
         name=name,
@@ -282,6 +307,7 @@ async def _own_account(db: AsyncSession, m: Membership, name: str, email: str = 
         role=role,
         company_ids=[company],
         email=email,
+        department=department,
     )
     link = PrimaLink(
         workspace_id=m.workspace_id,
@@ -290,6 +316,7 @@ async def _own_account(db: AsyncSession, m: Membership, name: str, email: str = 
         prima_name=name[:200],
         how="auto",
         linked_by="auto:account",
+        department=department,
     )
     db.add(link)
     try:
@@ -306,7 +333,8 @@ async def _own_account(db: AsyncSession, m: Membership, name: str, email: str = 
         "system:prima",
         "prima.account",
         target=m.user_id,
-        after={"prima_user_id": rid, "role": role, "company": company},
+        after={"prima_user_id": rid, "role": role, "company": company}
+        | ({"department": department} if department else {}),
         note=f"Own Prima account {rid} made for them ({role} in {company})",
     )
     await db.commit()
@@ -318,17 +346,26 @@ async def _relink(db: AsyncSession, m: Membership, link: PrimaLink) -> PrimaLink
     account keeps its id (and so their Prima history) and is relinked: Prima lets go of the
     staff record the old details found and of any Microsoft account on it, and finds their
     record again from the new email and name (office-accounts.ts, relink)."""
+    return await _refresh(db, m, link, relink=True)
+
+
+async def _refresh(db: AsyncSession, m: Membership, link: PrimaLink, *, relink: bool) -> PrimaLink:
+    """Bring their own Prima account up to date: P92 relink (see _relink), or P106 their Prima
+    department changed in Members > Access (the account keeps its id and its staff record)."""
     from . import people  # late: people builds on this module
 
     me = next((p for p in await people.people(db, m.workspace_id) if p.user_id == m.user_id), None)
     if me is None:
         raise _not_linked()
     if not link.prima_user_id.startswith(OFFICE_ACCOUNT_PREFIX):
-        link.relink_needed = False  # not theirs to remake: kept as the owner set it
+        # Not theirs to remake: a staff record is kept as the owner set it (its department is
+        # set in Prima, on that record).
+        link.relink_needed = False
         await db.commit()
         return link
     company = await _account_company(db, m)
     role = prima_role(m.role)
+    department = account_department(m, role)
     rid = await create_account(
         office_user_id=m.user_id,
         name=me.name,
@@ -336,24 +373,47 @@ async def _relink(db: AsyncSession, m: Membership, link: PrimaLink) -> PrimaLink
         role=role,
         company_ids=[company],
         email=me.email,
-        relink=True,
+        relink=relink,
+        department=department,
     )
-    before = link.prima_user_id
+    before = {"prima_user_id": link.prima_user_id, "department": link.department}
     link.prima_user_id = rid
     link.prima_name = me.name[:200]
-    link.relink_needed = False
-    await audit.record(
-        db,
-        m.workspace_id,
-        "system:prima",
-        "prima.relink",
-        target=m.user_id,
-        before={"prima_user_id": before},
-        after={"prima_user_id": rid, "role": role, "company": company},
-        note=f"Own Prima account {rid} relinked from their corrected details",
-    )
+    if relink:
+        link.relink_needed = False
+    link.department = department
+    after = {"prima_user_id": rid, "role": role, "company": company, "department": department}
+    if relink:
+        await audit.record(
+            db,
+            m.workspace_id,
+            "system:prima",
+            "prima.relink",
+            target=m.user_id,
+            before={"prima_user_id": before["prima_user_id"]},
+            after={k: v for k, v in after.items() if k != "department" or v},
+            note=f"Own Prima account {rid} relinked from their corrected details",
+        )
+    else:
+        await audit.record(
+            db,
+            m.workspace_id,
+            "system:prima",
+            "prima.department",
+            target=m.user_id,
+            before=before,
+            after=after,
+            note=f"Own Prima account {rid} now in department {department or 'none'}",
+        )
     await db.commit()
     return link
+
+
+def _account_due(m: Membership, link: PrimaLink) -> bool:
+    """P106: their own Prima account's department is not the one set for them now."""
+    if not link.prima_user_id.startswith(OFFICE_ACCOUNT_PREFIX):
+        return False
+    return (link.department or None) != account_department(m, prima_role(m.role))
 
 
 async def _account_company(db: AsyncSession, m: Membership) -> str:
@@ -384,6 +444,9 @@ async def link_for(db: AsyncSession, workspace_id: str, user_id: str) -> PrimaLi
     from . import people  # late: people builds on this module
 
     m = await db.get(Membership, (workspace_id, user_id))
+    if m is not None and opens_own(m):
+        # P106: the developer chose to open Prima as their own account (set_opens_as).
+        return await _own_link(db, m)
     if m is not None and opens_as_top(m):
         top = await top_record()
         if top is not None:
@@ -411,6 +474,8 @@ async def link_for(db: AsyncSession, workspace_id: str, user_id: str) -> PrimaLi
     link = await db.get(PrimaLink, (workspace_id, user_id))
     if link is not None and link.relink_needed and m is not None:
         return await _relink(db, m, link)
+    if link is not None and m is not None and _account_due(m, link):
+        return await _refresh(db, m, link, relink=False)  # P106: their department changed
     if link is not None:
         return link
     records = matchable(await staff())
@@ -473,6 +538,169 @@ def opens_as_top(m: Membership) -> bool:
     return m.role == "owner" or is_developer(m.user, m.role)
 
 
+# ---------------------------------------------------------------- P106 the developer's own account
+#
+# Fitri (owner and developer, 16 Nov 2026) loads company data into Prima herself: Goodwill items
+# (an account in procurement) and the staff directory (an account in hr). Prima's two-person
+# rules mean nobody OKs their own load and the preparer never approves their own batch; while
+# she opens Prima as the shared CEO record she can prepare nothing. So the developer may choose
+# to open Prima as their own account (central staff, in a department they pick), and switch
+# back to the CEO record; Fauzan OKs as the CEO record after reviewing. The office refuses an OK
+# given through the shared record on work that same person made with their own account
+# (_check_not_own_work), so the switch is never a way round the rule.
+
+
+def opens_own(m: Membership) -> bool:
+    """The developer chose to open Prima as their own account (set_opens_as)."""
+    from ..api.deps import is_developer  # late: the api builds on this module
+
+    return m.prima_opens_as == "own" and is_developer(m.user, m.role)
+
+
+async def _own_link(db: AsyncSession, m: Membership) -> PrimaLink:
+    """The developer's own Prima account (made the first time, brought up to date when their
+    department changed). A link they had to anything else is let go first."""
+    from . import people  # late: people builds on this module
+
+    link = await db.get(PrimaLink, (m.workspace_id, m.user_id))
+    if link is not None and link.prima_user_id != own_account_id(m.user_id):
+        await db.delete(link)
+        await audit.record(
+            db,
+            m.workspace_id,
+            "system:prima",
+            "prima.unlink",
+            target=m.user_id,
+            before={"prima_user_id": link.prima_user_id},
+            note="The developer opens Prima as their own account",
+        )
+        await db.commit()
+        link = None
+    if link is None:
+        me = next(
+            (p for p in await people.people(db, m.workspace_id) if p.user_id == m.user_id), None
+        )
+        if me is None:
+            raise _not_linked()
+        return await _own_account(db, m, me.name, me.email)
+    if link.relink_needed or _account_due(m, link):
+        return await _refresh(db, m, link, relink=link.relink_needed)
+    return link
+
+
+async def set_opens_as(
+    db: AsyncSession, m: Membership, opens_as: str, department: str | None, actor: str
+) -> PrimaLink | None:
+    """The developer's choice: Prima's top record ("top", the default) or their own account
+    ("own", made or brought up to date now, so a problem shows at once). Saying the same again
+    changes nothing; each change is audited (who, from, to). Their own account (if made) is
+    kept while they open the top record. The caller checks the developer; this checks again."""
+    if not opens_own_allowed(m):
+        raise PrimaError(403, Msg("Only the system's developer chooses how they open Prima."))
+    if opens_as not in OPENS_AS:
+        raise PrimaError(400, Msg("Pick how to open Prima."))
+    if department is not None and department not in PRIMA_DEPARTMENTS:
+        raise PrimaError(400, Msg("Pick a Prima department from the list."))
+    before = {"opens_as": m.prima_opens_as, "department": m.prima_department}
+    after = {"opens_as": opens_as, "department": department}
+    m.prima_opens_as, m.prima_department = opens_as, department
+    link: PrimaLink | None = None
+    try:
+        if opens_as == "own":
+            link = await _own_link(db, m)  # commits the choice with the account
+    except Exception:
+        await db.rollback()
+        raise
+    if before != after:
+        await audit.record(
+            db,
+            m.workspace_id,
+            actor,
+            "prima.opens_as",
+            target=m.user_id,
+            before=before,
+            after=after,
+            note="Opens Prima as their own account"
+            if opens_as == "own"
+            else "Opens Prima as its top record",
+        )
+    await db.commit()
+    return link
+
+
+def opens_own_allowed(m: Membership) -> bool:
+    from ..api.deps import is_developer  # late: the api builds on this module
+
+    return is_developer(m.user, m.role)
+
+
+_OK_LOAD = re.compile(r"^/api/org/import-loads/([A-Za-z0-9_\-.~%]{1,200})/ok$")
+_DECIDE = "/api/staff-directory/decide"
+
+
+async def _check_not_own_work(
+    db: AsyncSession, workspace_id: str, user_id: str, url: str, body: bytes, top_id: str,
+    client_ip: str,
+) -> None:  # fmt: skip
+    """P106: Prima's two-person rules, kept across the switch. Through the shared top record,
+    nobody OKs a bulk load (org-import okLoad) or decides a staff directory batch that they made
+    with their own Prima account. Prima itself sees only the CEO record OK a load someone else
+    made, so the office, which knows who is behind the shared record, refuses."""
+    path = url.split("?", 1)[0]
+    hit = _OK_LOAD.match(path)
+    if hit:
+        kind, item = "load", unquote(hit.group(1))
+    elif path == _DECIDE:
+        kind = "batch"
+        try:
+            data = json.loads(body or b"null")
+        except ValueError:
+            return  # Prima refuses it itself
+        item = str(data.get("batchId") or "") if isinstance(data, dict) else ""
+    else:
+        return
+    own = await db.get(PrimaLink, (workspace_id, user_id))
+    if not item or own is None or own.prima_user_id != own_account_id(user_id):
+        return  # they never had an own account: nothing of theirs to OK
+    if await _made_by_own(kind, item, own, top_id, client_ip):
+        raise PrimaError(
+            403,
+            Msg(
+                "Someone else must OK what you loaded. You made this with your own Prima "
+                "account, so another person (the CEO) gives the OK."
+            ),
+            code="own_work",
+        )
+
+
+def _items(data: object, kind: str) -> list[dict]:
+    key = "loads" if kind == "load" else "batches"
+    rows = data.get(key) if isinstance(data, dict) else None
+    return [r for r in rows if isinstance(r, dict)] if isinstance(rows, list) else []
+
+
+async def _made_by_own(kind: str, item: str, own: PrimaLink, top_id: str, client_ip: str) -> bool:
+    """Whether this load or batch was made by the person's own account: Prima's own list for
+    that account first (a person's loads; their batches marked ownBatch), else the name of who
+    made it on the shared record's list. Prima not answering is a refusal, never a yes."""
+    from .people import name_key  # late: people builds on this module
+
+    path = "/api/org/import-loads" if kind == "load" else "/api/staff-directory"
+    mine = await _send("GET", path, own.prima_user_id, "person", b"", client_ip)
+    if mine.status == 200:
+        row = next((r for r in _items(mine.json(), kind) if r.get("id") == item), None)
+        if row is not None:
+            return kind == "load" or bool(row.get("ownBatch"))
+    seen = await _send("GET", path, top_id, "person", b"", client_ip)
+    if seen.status != 200:
+        raise PrimaError(503, Msg("Prima could not check who made this. Try again in a minute."))
+    row = next((r for r in _items(seen.json(), kind) if r.get("id") == item), None)
+    if row is None:
+        return False  # Prima answers "not found" itself
+    who = str(row.get("by" if kind == "load" else "preparedBy") or "")
+    return bool(who) and name_key(who) == name_key(own.prima_name)
+
+
 def top_of(records: list[StaffRecord]) -> StaffRecord | None:
     """Prima's top record: its CEO, else its COO, else none."""
     tops = sorted((r for r in records if r.top), key=lambda r: 0 if r.top == "ceo" else 1)
@@ -493,7 +721,9 @@ async def _let_go(db: AsyncSession, workspace_id: str, user_id: str) -> None:
     """An owner's own link from before P82 (a staff record by name, or the top record itself)
     is let go once, so that record is free for its own person."""
     old = await db.get(PrimaLink, (workspace_id, user_id))
-    if old is None:
+    if old is None or old.prima_user_id == own_account_id(user_id):
+        # P106: the developer's own account is theirs alone (no staff record to free): kept for
+        # when they open Prima as it again, and for the two-person check (_check_not_own_work).
         return
     await db.delete(old)
     await audit.record(
@@ -617,6 +847,10 @@ async def call(
     url = clean_path(path, query)
     await check_chosen(db, workspace_id, user_id, method, url)
     link = await link_for(db, workspace_id, user_id)
+    if link.linked_by == TOP_LINK and method == "POST":
+        await _check_not_own_work(
+            db, workspace_id, user_id, url, body, link.prima_user_id, client_ip
+        )
     ans = await _send(method, url, link.prima_user_id, via, body, client_ip)
     if link.linked_by == TOP_LINK and method == "POST":
         # P82: several people share the top record, and Prima's office.ts takes only "person"
