@@ -36,6 +36,7 @@ from ...models import (
 from ...skills import store as skills_store
 from .. import paging
 from ..deps import Principal, api_error, require
+from ..table import TableParams, sql_page
 from .agents import can_manage, get_agent
 
 router = APIRouter(prefix="/api", tags=["brain"])
@@ -800,11 +801,15 @@ async def list_facts(
     limit: int = Query(default=100, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
     cursor: str | None = Query(default=None, max_length=400),
+    table: TableParams = Depends(),
     principal: Principal = Depends(require("read")),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """Newest first. `{total, items, next_cursor}`: pass `next_cursor` (also sent as
-    X-Next-Cursor) back as `cursor` for the next page; `offset` still works for old callers."""
+    X-Next-Cursor) back as `cursor` for the next page; `offset` still works for old callers.
+
+    P107 (the facts table): `page` + `size` give numbered pages (next_cursor is then null),
+    `sort` is "learned" (the default, newest first), "used" (recalled most) or "text"."""
     v = await for_person(db, principal.workspace_id, principal.scope)  # P29
     conds = [BrainFact.workspace_id == principal.workspace_id, brain_facts.scope_filter(v, True)]
     if state == "active":
@@ -822,6 +827,17 @@ async def list_facts(
                 BrainFact.source_label.ilike(f"%{q.strip()}%"),
             )
         )
+    if table.paged:
+        key, desc = table.sort_by(("learned", "used", "text"), default="-learned")
+        col = {"used": BrainFact.hits, "text": BrainFact.text}.get(key, BrainFact.valid_from)
+        order = ((col, desc), (BrainFact.id, desc))
+        rows = await sql_page(db, select(BrainFact).where(*conds), order, table, response)
+        total = int(response.headers[paging.TOTAL])
+        return {
+            "total": total,
+            "items": [f.model_dump() for f in await _facts_out(db, rows)],
+            "next_cursor": None,
+        }
     total = await db.scalar(select(func.count()).select_from(BrainFact).where(*conds))
     rows = await paging.paginate(
         db,

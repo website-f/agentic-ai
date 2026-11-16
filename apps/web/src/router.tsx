@@ -380,7 +380,8 @@ const aiEngineRoute = createRoute({
 const agentsRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/agents",
-  validateSearch: (s: Record<string, unknown>): { view?: "org" } => ({ view: s.view === "org" ? "org" : undefined }),
+  // P107: no view = the table; departments = the cards by department.
+  validateSearch: (s: Record<string, unknown>): { view?: "org" | "departments" } => ({ view: s.view === "org" || s.view === "departments" ? s.view : undefined }),
   component: page.agents,
 });
 const agentNewRoute = createRoute({

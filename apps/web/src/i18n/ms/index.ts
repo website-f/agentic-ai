@@ -63,6 +63,7 @@ import { P107_KNOWLEDGE } from "./p107-knowledge";
 import { P107_WORK } from "./p107-work";
 import { P107_ADMIN } from "./p107-admin";
 import { P107_PAGED } from "./p107-paged";
+import { P107_FINISH } from "./p107-finish";
 
 export const MS: Record<string, string> = {
   // P107: lists that became data tables (one file per area so parallel work does not collide);
@@ -72,6 +73,7 @@ export const MS: Record<string, string> = {
   ...P107_WORK,
   ...P107_ADMIN,
   ...P107_PAGED,
+  ...P107_FINISH,
   // P97: first, so an existing translation of the same English wins over these.
   ...TEAM,
   // P98: several branches, searchable selects, Roles and access.

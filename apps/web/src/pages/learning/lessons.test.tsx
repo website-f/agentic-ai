@@ -1,7 +1,8 @@
 /** P92: the Lessons view and the "Noted for next time" note: who may edit, forget and undo,
  * the daily digest, and that Undo calls the server. */
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { createMemoryHistory, createRootRoute, createRouter, RouterProvider } from "@tanstack/react-router";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -41,6 +42,18 @@ function wrap(children: ReactNode) {
   return <QueryClientProvider client={qc}>{children}</QueryClientProvider>;
 }
 
+/** P107: the lessons list is a data table that keeps its place in the address. */
+function routed(children: ReactNode) {
+  const router = createRouter({ routeTree: createRootRoute({ component: () => <>{children}</> }), history: createMemoryHistory({ initialEntries: ["/"] }) });
+  return wrap(<RouterProvider router={router} />);
+}
+
+/** The row's ⋯ menu, opened. */
+async function rowMenu() {
+  fireEvent.keyDown(await screen.findByRole("button", { name: "Options for this lesson" }), { key: "Enter" });
+  return screen.findByRole("menu");
+}
+
 beforeEach(() => {
   // ResponsiveDialog and friends ask whether this is a phone.
   vi.stubGlobal("matchMedia", (q: string) => ({ matches: false, media: q, addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {}, onchange: null, dispatchEvent: () => false }));
@@ -52,23 +65,30 @@ afterEach(() => {
 
 describe("Lessons view", () => {
   it("shows who taught each lesson and when it was used; staff get no Edit or Forget", async () => {
-    vi.stubGlobal("fetch", server({ items: [lesson({ can_undo: true })], topics: [{ key: "eperolehan", label: "ePerolehan", count: 1 }], agents: [{ id: "ag_1", name: "Tina", count: 1 }], can_edit: false }));
-    render(wrap(<LessonsView />));
+    const fetch = server({ items: [lesson({ can_undo: true })], topics: [{ key: "eperolehan", label: "ePerolehan", count: 1 }], agents: [{ id: "ag_1", name: "Tina", count: 1 }], can_edit: false });
+    vi.stubGlobal("fetch", fetch);
+    render(routed(<LessonsView />));
     expect(await screen.findByText("Write the brand and model in Catatan.")).toBeInTheDocument();
-    expect(screen.getByText(/taught by Owner One/)).toBeInTheDocument();
-    expect(screen.getByText(/used 3×/)).toBeInTheDocument();
+    // A data table row: the lesson, who taught it, how often it was used.
+    const table = screen.getByRole("table", { name: "Lessons" });
+    expect(within(table).getByText(/taught by Owner One/)).toBeInTheDocument();
+    expect(within(table).getByText("3×")).toBeInTheDocument();
     expect(screen.getByText("leave only Ya")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /Edit/ })).toBeNull();
-    expect(screen.queryByRole("button", { name: /Forget/ })).toBeNull();
-    expect(screen.getByRole("button", { name: /Undo/ })).toBeInTheDocument();
+    // One numbered page from the server.
+    expect(fetch.mock.calls.some(([p]) => String(p).startsWith("/api/lessons?") && String(p).includes("page=1") && String(p).includes("size=25"))).toBe(true);
+    const menu = await rowMenu();
+    expect(within(menu).queryByRole("menuitem", { name: /Edit/ })).toBeNull();
+    expect(within(menu).queryByRole("menuitem", { name: /Forget/ })).toBeNull();
+    expect(within(menu).getByRole("menuitem", { name: /Undo/ })).toBeInTheDocument();
     expect(await screen.findByText("Getting smarter every day")).toBeInTheDocument();
   });
 
   it("owners and admins can edit and forget", async () => {
     vi.stubGlobal("fetch", server({ items: [lesson({ can_edit: true, can_undo: true })], topics: [], agents: [], can_edit: true }));
-    render(wrap(<LessonsView />));
-    expect(await screen.findByRole("button", { name: /Edit/ })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Forget/ })).toBeInTheDocument();
+    render(routed(<LessonsView />));
+    const menu = await rowMenu();
+    expect(within(menu).getByRole("menuitem", { name: /Edit/ })).toBeInTheDocument();
+    expect(within(menu).getByRole("menuitem", { name: /Forget/ })).toBeInTheDocument();
   });
 
   it("the digest lists the day's lessons and repeated mistakes", async () => {
@@ -78,7 +98,7 @@ describe("Lessons view", () => {
       skills: [{ skill_id: "sk_1", name: "eperolehan-tender", version: 2, note: null, auto: true, at: "2026-11-09T01:00:00Z" }],
       folds: [], totals: { lessons: 1, replaced: 0, repeated: 1, skills: 1 },
     }));
-    render(wrap(<LessonsView />));
+    render(routed(<LessonsView />));
     expect(await screen.findByText("Download every tender document first.")).toBeInTheDocument();
     expect(screen.getByText("taught 2 times")).toBeInTheDocument();
     expect(screen.getByText("eperolehan-tender")).toBeInTheDocument();

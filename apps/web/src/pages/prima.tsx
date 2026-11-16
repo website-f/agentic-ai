@@ -13,11 +13,12 @@ import {
   WarningCircleIcon,
 } from "@phosphor-icons/react";
 import { useMutation, useQuery, useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useSearch } from "@tanstack/react-router";
 
 import { Page, PageHeader, Section } from "@/components/page";
 import { Button } from "@/components/ui/button";
+import { DataTable, filterOf, TableFilter, useTableState, type Column } from "@/components/ui/data-table";
 import { Pill } from "@/components/ui/pill";
 import { Select } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -25,6 +26,7 @@ import { useLang, useT } from "@/i18n";
 import { api, errorMessage } from "@/lib/api";
 import { handPrimaLanguage, primaScreen } from "@/lib/prima-screen";
 import { meQuery } from "@/lib/queries";
+import { ROLE_INFO, type Role } from "@/lib/types";
 
 const APP = "/prima/";
 const PREVIEW = "/prima/demo/";
@@ -149,6 +151,10 @@ interface PeopleData { staff: StaffRow[]; people: PersonRow[]; top?: { id: strin
 
 const NONE = "none";
 
+/** P107: where a person's link stands, as a filter value. */
+const linkState = (p: PersonRow) => (p.opens_as ? "owner" : p.link ? "linked" : p.suggestion ? "suggested" : "unlinked");
+const LINK_ORDER: Record<string, number> = { suggested: 0, unlinked: 1, linked: 2, owner: 3 };
+
 /** The owner links the office's people to Prima's staff records: the likely one is picked,
  * one button links them all, and any row can be changed or cleared. */
 function PeopleSection() {
@@ -167,59 +173,99 @@ function PeopleSection() {
     mutationFn: (v: { user_id: string; prima_user_id: string | null }) => api("/api/prima/people/link", "POST", v),
     onSuccess: done,
   });
+  // P107: a data table (search, where the link stands, office role); "p_" keeps its place in
+  // the address apart from the companies table on the same page.
+  const control = useTableState({ size: 25 }, { prefix: "p_", filters: ["state", "role"] });
+  const [state] = filterOf(control, "state");
+  const [role] = filterOf(control, "role");
   const d = q.data;
+  const people = useMemo(() => d?.people ?? [], [d]);
   const names = new Map((d?.staff ?? []).map((r) => [r.id, r]));
-  const waiting = (d?.people ?? []).filter((p) => !p.link && p.suggestion).length;
-  const error = q.error ?? linkAll.error ?? linkOne.error;
+  const waiting = people.filter((p) => !p.link && p.suggestion).length;
+  const roles = useMemo(() => [...new Set(people.map((p) => p.role).filter(Boolean))].sort(), [people]);
+  const rows = useMemo(() => people.filter((p) => (!state || linkState(p) === state) && (!role || p.role === role)), [people, state, role]);
+  const error = linkAll.error ?? linkOne.error;
+  const roleName = (r: string) => (ROLE_INFO[r as Role] ? t(ROLE_INFO[r as Role].label) : r);
+
+  const linkPill = (p: PersonRow) => p.opens_as
+    ? <Pill tone="ok"><CheckCircleIcon size={13} weight="fill" /> {p.opens_as === "ceo" ? t("Opens Prima as the CEO (owner)") : t("Opens Prima as the COO (owner)")}</Pill>
+    : p.link
+      ? <Pill tone="ok"><CheckCircleIcon size={13} weight="fill" /> {p.link.how === "microsoft" ? t("Linked by Microsoft") : p.link.how === "name" ? t("Linked by name") : p.link.how === "auto" ? t("Own Prima account") : t("Linked")}</Pill>
+      : p.suggestion ? <Pill tone="warn">{t("Suggested")}</Pill> : <Pill>{t("Not linked")}</Pill>;
+
+  const columns: Column<PersonRow>[] = [
+    {
+      id: "name", header: t("Person"), sortValue: (p) => p.name.toLowerCase(), card: "title", exportValue: (p) => p.name,
+      cell: (p) => (
+        <span className="grid min-w-0">
+          <span className="text-[14px] font-medium break-words">{p.name}</span>
+          <span className="text-[12px] break-all text-muted">{p.email}</span>
+        </span>
+      ),
+    },
+    { id: "email", header: t("Email"), exportOnly: true, cell: () => null, exportValue: (p) => p.email },
+    { id: "role", header: t("Role"), sortValue: (p) => roleName(p.role), hideBelow: "lg", cell: (p) => <span className="text-muted">{roleName(p.role)}</span> },
+    {
+      id: "state", header: t("Link"), sortValue: (p) => LINK_ORDER[linkState(p)], kind: "number", cell: linkPill,
+      exportValue: (p) => (p.opens_as ? t("Owners") : p.link ? t("Linked") : p.suggestion ? t("Suggested") : t("Not linked")),
+    },
+    {
+      id: "record", header: t("Prima record"), exportValue: (p) => p.link?.prima_name ?? "",
+      cell: (p) => {
+        if (p.opens_as) return <span className="text-muted">-</span>;
+        const value = p.link?.prima_user_id ?? p.suggestion ?? NONE;
+        const options = [
+          { value: NONE, label: t("Not linked") },
+          ...(d?.staff ?? [])
+            .filter((r) => !r.linked_to || r.linked_to === p.user_id)
+            .map((r) => ({ value: r.id, label: r.name, hint: [r.title, r.can_sign_in ? "" : t("cannot sign in yet")].filter(Boolean).join(" · ") })),
+        ];
+        return (
+          <Select size="sm" className="w-full min-w-48 sm:max-w-72" label={t("Prima record for {name}", { name: p.name })} value={value} options={options}
+            disabled={linkOne.isPending}
+            onValueChange={(v) => linkOne.mutate({ user_id: p.user_id, prima_user_id: v === NONE ? null : v })} />
+        );
+      },
+    },
+  ];
+
   return (
-    <Section title={t("People in Prima")}
-      actions={<Button size="sm" disabled={!waiting || linkAll.isPending} onClick={() => linkAll.mutate()}><LinkIcon size={15} /> {t("Link all suggested ({n})", { n: waiting })}</Button>}>
+    <Section title={t("People in Prima")}>
       <p className="mb-3 text-[13px] text-muted">{t("Who in the office is which Prima staff record. People are linked by themselves when the match is sure (their Microsoft account, or the only record with their exact name); pick the record for anyone else. A link decides whose pay, leave and HR records each person, and their AI, can see.")}</p>
       {error ? <p className="mb-3 text-[13px] text-danger">{errorMessage(error)}</p> : null}
-      {q.isLoading ? <Skeleton className="h-24" /> : (
-        <div className="grid gap-2">
-          {(d?.people ?? []).map((p) => {
-            if (p.opens_as) {
-              return (
-                <div key={p.user_id} className="flex flex-wrap items-center gap-3 rounded-[var(--radius-md)] border border-border bg-surface px-3 py-2">
-                  <div className="min-w-0 flex-1">
-                    <div className="truncate text-[14px] font-medium">{p.name}</div>
-                    <div className="truncate text-[12px] text-muted">{p.email}</div>
-                  </div>
-                  <Pill tone="ok"><CheckCircleIcon size={13} weight="fill" /> {p.opens_as === "ceo" ? t("Opens Prima as the CEO (owner)") : t("Opens Prima as the COO (owner)")}</Pill>
-                </div>
-              );
-            }
-            const value = p.link?.prima_user_id ?? p.suggestion ?? NONE;
-            const options = [
-              { value: NONE, label: t("Not linked") },
-              ...(d?.staff ?? [])
-                .filter((r) => !r.linked_to || r.linked_to === p.user_id)
-                .map((r) => ({ value: r.id, label: r.name, hint: [r.title, r.can_sign_in ? "" : t("cannot sign in yet")].filter(Boolean).join(" · ") })),
-            ];
-            return (
-              <div key={p.user_id} className="flex flex-wrap items-center gap-3 rounded-[var(--radius-md)] border border-border bg-surface px-3 py-2">
-                <div className="min-w-0 flex-1">
-                  <div className="truncate text-[14px] font-medium">{p.name}</div>
-                  <div className="truncate text-[12px] text-muted">{p.email}</div>
-                </div>
-                {p.link
-                  ? <Pill tone="ok"><CheckCircleIcon size={13} weight="fill" /> {p.link.how === "microsoft" ? t("Linked by Microsoft") : p.link.how === "name" ? t("Linked by name") : p.link.how === "auto" ? t("Own Prima account") : t("Linked")}</Pill>
-                  : p.suggestion ? <Pill tone="warn">{t("Suggested")}</Pill> : null}
-                <Select size="sm" className="w-64" label={t("Prima record for {name}", { name: p.name })} value={value} options={options}
-                  disabled={linkOne.isPending}
-                  onValueChange={(v) => linkOne.mutate({ user_id: p.user_id, prima_user_id: v === NONE ? null : v })} />
-                {!p.link && p.suggestion ? (
-                  <Button size="sm" variant="secondary" disabled={linkOne.isPending}
-                    onClick={() => linkOne.mutate({ user_id: p.user_id, prima_user_id: p.suggestion })}>
-                    {t("Link {name}", { name: names.get(p.suggestion)?.name ?? "" })}
-                  </Button>
-                ) : null}
-              </div>
-            );
-          })}
-        </div>
-      )}
+      <DataTable
+        label={t("People in Prima")}
+        columns={columns}
+        rows={rows}
+        rowId={(p) => p.user_id}
+        rowLabel={(p) => p.name}
+        control={control}
+        loading={q.isLoading}
+        error={q.error}
+        onRetry={() => void q.refetch()}
+        searchText={(p) => `${p.name} ${p.email} ${p.link?.prima_name ?? ""} ${p.suggestion ? names.get(p.suggestion)?.name ?? "" : ""}`}
+        searchPlaceholder={t("Search by name or email")}
+        exportName={t("people-in-prima")}
+        filters={
+          <>
+            <TableFilter control={control} id="state" label={t("Link")} allLabel={t("Every link")}
+              options={[
+                { value: "suggested", label: t("Suggested") },
+                { value: "unlinked", label: t("Not linked") },
+                { value: "linked", label: t("Linked") },
+                { value: "owner", label: t("Owners") },
+              ]} />
+            {roles.length > 1 ? <TableFilter control={control} id="role" label={t("Role")} allLabel={t("All roles")} options={roles.map((r) => ({ value: r, label: roleName(r) }))} /> : null}
+          </>
+        }
+        toolbarActions={<Button size="sm" disabled={!waiting || linkAll.isPending} onClick={() => linkAll.mutate()}><LinkIcon size={15} /> {t("Link all suggested ({n})", { n: waiting })}</Button>}
+        actions={(p) => !p.opens_as && !p.link && p.suggestion ? (
+          <Button size="sm" variant="secondary" disabled={linkOne.isPending}
+            onClick={() => linkOne.mutate({ user_id: p.user_id, prima_user_id: p.suggestion })}>
+            {t("Link {name}", { name: names.get(p.suggestion)?.name ?? "" })}
+          </Button>
+        ) : null}
+      />
       <div className="mt-3">
         <Button size="sm" variant="ghost" onClick={() => void navigate({ to: "/prima", search: {} })}>{t("Back to Prima")}</Button>
       </div>
@@ -244,6 +290,10 @@ function CompaniesSection() {
       void qc.invalidateQueries({ queryKey: ["prima"] });
     },
   });
+  // P107: a data table of the branches (search, where each stands); "c_" keeps its place in the
+  // address apart from the people table. Picks wait in `picked` across pages until Save.
+  const control = useTableState({ size: 25 }, { prefix: "c_", filters: ["state"] });
+  const [state] = filterOf(control, "state");
   const d = q.data;
   const valueOf = (b: BranchRow) => picked[b.id] ?? b.company_id ?? b.suggestion ?? NONE;
   const changes: Record<string, string | null> = {};
@@ -256,27 +306,50 @@ function CompaniesSection() {
     { value: NONE, label: t("Not set") },
     ...(d?.companies ?? []).map((c) => ({ value: c.id, label: c.name, hint: c.id })),
   ];
-  const error = q.error ?? save.error;
+  const stateOf = (b: BranchRow) => (b.company_id ? "set" : b.suggestion ? "suggested" : "unset");
+  const rows = (d?.branches ?? []).filter((b) => !state || stateOf(b) === state);
+  const companyName = new Map((d?.companies ?? []).map((c) => [c.id, c.name]));
+  const columns: Column<BranchRow>[] = [
+    { id: "name", header: t("Branch"), sortValue: (b) => b.name.toLowerCase(), card: "title", exportValue: (b) => b.name, cell: (b) => <span className="text-[14px] font-medium break-words">{b.name}</span> },
+    {
+      id: "state", header: t("Status"), sortValue: (b) => ({ unset: 0, suggested: 1, set: 2 })[stateOf(b)], kind: "number",
+      exportValue: (b) => (b.company_id ? t("Company set") : b.suggestion ? t("Suggested") : t("Not set")),
+      cell: (b) => b.company_id
+        ? <Pill tone="ok"><CheckCircleIcon size={13} weight="fill" /> {t("Company set")}</Pill>
+        : b.suggestion ? <Pill tone="warn">{t("Suggested")}</Pill> : <Pill tone="warn">{t("Not set")}</Pill>,
+    },
+    {
+      id: "company", header: t("Prima company"), exportValue: (b) => companyName.get(valueOf(b)) ?? "",
+      cell: (b) => (
+        <Select size="sm" className="w-full min-w-48 sm:max-w-72" label={t("Prima company for {name}", { name: b.name })} value={valueOf(b)} options={options}
+          disabled={save.isPending}
+          onValueChange={(v) => setPicked((x) => ({ ...x, [b.id]: v }))} />
+      ),
+    },
+  ];
   return (
     <Section title={t("Prima companies")}
       actions={<Button size="sm" disabled={!Object.keys(changes).length || save.isPending} onClick={() => save.mutate(changes)}>{t("Save")}</Button>}>
       <p className="mb-3 text-[13px] text-muted">{t("Which Prima company each branch is. Anyone with no Prima record of their own gets their own Prima account in their branch's company the first time they open Prima, with access from their office role.")}</p>
-      {error ? <p className="mb-3 text-[13px] text-danger">{errorMessage(error)}</p> : null}
-      {q.isLoading ? <Skeleton className="h-16" /> : (
-        <div className="grid gap-2">
-          {(d?.branches ?? []).map((b) => (
-            <div key={b.id} className="flex flex-wrap items-center gap-3 rounded-[var(--radius-md)] border border-border bg-surface px-3 py-2">
-              <div className="min-w-0 flex-1 truncate text-[14px] font-medium">{b.name}</div>
-              {b.company_id
-                ? <Pill tone="ok"><CheckCircleIcon size={13} weight="fill" /> {t("Company set")}</Pill>
-                : b.suggestion ? <Pill tone="warn">{t("Suggested")}</Pill> : <Pill tone="warn">{t("Not set")}</Pill>}
-              <Select size="sm" className="w-64" label={t("Prima company for {name}", { name: b.name })} value={valueOf(b)} options={options}
-                disabled={save.isPending}
-                onValueChange={(v) => setPicked((x) => ({ ...x, [b.id]: v }))} />
-            </div>
-          ))}
-        </div>
-      )}
+      {save.error ? <p className="mb-3 text-[13px] text-danger">{errorMessage(save.error)}</p> : null}
+      <DataTable
+        label={t("Prima companies")}
+        columns={columns}
+        rows={rows}
+        rowId={(b) => b.id}
+        rowLabel={(b) => b.name}
+        control={control}
+        loading={q.isLoading}
+        error={q.error}
+        onRetry={() => void q.refetch()}
+        searchText={(b) => `${b.name} ${companyName.get(valueOf(b)) ?? ""}`}
+        searchPlaceholder={t("Search branches")}
+        exportName={t("prima-companies")}
+        filters={
+          <TableFilter control={control} id="state" label={t("Status")} allLabel={t("All statuses")}
+            options={[{ value: "unset", label: t("Not set") }, { value: "suggested", label: t("Suggested") }, { value: "set", label: t("Company set") }]} />
+        }
+      />
     </Section>
   );
 }

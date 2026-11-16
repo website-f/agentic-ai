@@ -187,11 +187,15 @@ async def list_meetings(
     status_: str | None = Query(default=None, alias="status", max_length=80),
     limit: int = Query(default=100, ge=1, le=paging.MAX_LIMIT),
     cursor: str | None = Query(default=None, max_length=400),
+    table: TableParams = Depends(),
     principal: Principal = Depends(require("read")),
     db: AsyncSession = Depends(get_db),
 ) -> list[dict[str, Any]]:
     """Newest first. Pages with `limit` + `cursor` (X-Next-Cursor, X-Total-Count); `status`
-    takes one status or a comma list. Visibility matches _meeting_ok, in SQL."""
+    takes one status or a comma list. Visibility matches _meeting_ok, in SQL.
+
+    P107 (the past meetings table): `q` finds words in the topic, `page` + `size` give
+    numbered pages, `sort` is "created" or "topic" ("-" descending; newest first)."""
     q = select(Meeting).where(Meeting.workspace_id == principal.workspace_id)
     if status_:
         q = q.where(Meeting.status.in_(status_.split(",")))
@@ -201,14 +205,21 @@ async def list_meetings(
         if visible:
             seen.append(Meeting.participant_ids.has_any(array(sorted(visible), type_=String)))
         q = q.where(or_(*seen))
-    rows = await paging.paginate(
-        db,
-        q,
-        ((Meeting.created_at, True), (Meeting.id, True)),
-        limit=limit,
-        cursor=cursor,
-        response=response,
-    )
+    for w in table.words:
+        q = q.where(Meeting.topic.ilike(like(w), escape="\\"))
+    if table.paged:
+        key, desc = table.sort_by(("created", "topic"), default="-created")
+        col = Meeting.topic if key == "topic" else Meeting.created_at
+        rows = await sql_page(db, q, ((col, desc), (Meeting.id, desc)), table, response)
+    else:
+        rows = await paging.paginate(
+            db,
+            q,
+            ((Meeting.created_at, True), (Meeting.id, True)),
+            limit=limit,
+            cursor=cursor,
+            response=response,
+        )
     ids = {i for m in rows for i in m.participant_ids}
     names = {a.id: a for a in (await db.scalars(select(Agent).where(Agent.id.in_(ids))))}
     return [await _meeting_out(db, m, names=names) for m in rows]

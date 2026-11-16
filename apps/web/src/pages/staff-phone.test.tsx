@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { primaScreen } from "@/lib/prima-screen";
 import { ConnectMicrosoft } from "@/pages/prima";
-import { DataTable } from "@/pages/reports";
+import { CsvTable } from "@/pages/reports";
 
 const TABLE = {
   title: "Claims",
@@ -24,7 +24,7 @@ afterEach(() => {
 
 describe("report tables on a phone", () => {
   it("shows each row as a card of label and value, and keeps the table for wider screens", () => {
-    const { container } = render(<DataTable reportId="rp_1" table={TABLE} n={0} />);
+    const { container } = render(<CsvTable reportId="rp_1" table={TABLE} n={0} />);
     const cards = screen.getByTestId("report-cards");
     expect(cards.className).toContain("md:hidden");
     const items = within(cards).getAllByRole("listitem");

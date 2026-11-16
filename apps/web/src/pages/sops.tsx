@@ -5,20 +5,17 @@ import { RadioGroup } from "radix-ui";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 
-import { BulkBar, RowCheck, SelectAll, useSelection } from "@/components/bulk-select";
 import { Markdown } from "@/components/markdown";
 import { EmptyState, IconTile, Page, type Tone } from "@/components/page";
 import { PinButton } from "@/components/pin-button";
 import { Button } from "@/components/ui/button";
-import { ListCard, ListRow, Meta, Toolbar } from "@/components/ui/card";
 import { ConfirmDialog } from "@/components/ui/confirm";
+import { DataTable, filterOf, TableFilter, useTableState, type BulkOutcome, type Column } from "@/components/ui/data-table";
 import { Field, FormError } from "@/components/ui/field";
 import { Pill } from "@/components/ui/pill";
-import { SearchInput } from "@/components/ui/search-input";
 import { Segmented } from "@/components/ui/segmented";
 import { Select } from "@/components/ui/select";
 import { SideSheet } from "@/components/ui/side-sheet";
-import { Skeleton } from "@/components/ui/skeleton";
 import { msg, t as tr, useT } from "@/i18n";
 import { api, errorMessage } from "@/lib/api";
 import { bulkDelete } from "@/lib/bulk";
@@ -28,7 +25,7 @@ import { timeAgo } from "@/lib/utils";
 import { sopsQuery, workKeys, type SOP } from "@/lib/work";
 
 import { LibraryHeader } from "./library-hub/hub";
-import { sopScopeLabel } from "./library-hub/views";
+import { sopScopeLabel, sopsForCompany } from "./library-hub/views";
 
 type Scope = SOP["scope"];
 const SCOPES: { value: Scope; label: string; hint: string }[] = [
@@ -43,6 +40,8 @@ const SCOPE_LOOK: Record<Scope, { icon: typeof FileTextIcon; tone: Tone }> = {
   department: { icon: UsersThreeIcon, tone: "violet" },
   library: { icon: BookBookmarkIcon, tone: "orange" },
 };
+
+const SCOPE_ORDER: Record<Scope, number> = { workspace: 0, branch: 1, department: 2, library: 3 };
 
 const STARTER = `## Purpose
 What this procedure is for, in one sentence.
@@ -193,48 +192,72 @@ export function SopsPage() {
   const t = useT();
   const { data: me } = useSuspenseQuery(meQuery);
   const canManage = me.permissions.includes("org.manage");
-  const { data: sops, isLoading, error } = useQuery(sopsQuery);
+  const { data: sops, isLoading, error, refetch } = useQuery(sopsQuery);
+  const { data: branches = [] } = useQuery(branchesQuery);
   const search = useSearch({ strict: false }) as { sop?: string };
   const navigate = useNavigate();
   const [creating, setCreating] = useState(0);
-  const [filter, setFilter] = useState<Scope | "all" | "draft">("all");
-  const [q, setQ] = useState("");
   const openSop = sops?.find((s) => s.id === search.sop) ?? null;
-
-  const groups = useMemo(() => {
-    const order: Scope[] = ["workspace", "branch", "department", "library"];
-    const needle = q.trim().toLowerCase();
-    return order.filter((scope) => filter === "all" || filter === "draft" || filter === scope).map((scope) => ({
-      scope,
-      label: SCOPES.find((s) => s.value === scope)!.label,
-      hint: SCOPES.find((s) => s.value === scope)!.hint,
-      items: (sops ?? []).filter((s) => s.scope === scope && (filter !== "draft" || s.status === "draft") && (!needle || s.title.toLowerCase().includes(needle) || sopScopeLabel(s).toLowerCase().includes(needle))),
-    })).filter((g) => g.items.length);
-  }, [sops, filter, q]);
-  const count = (scope: Scope) => (sops ?? []).filter((s) => s.scope === scope).length;
-  const drafts = (sops ?? []).filter((s) => s.status === "draft").length;
+  // P107: a data table. Search, who follows it, company and draft filters, sortable columns
+  // and numbered pages; the address keeps them, so closing a SOP returns to the same rows.
+  const control = useTableState({ size: 25, sort: "scope" }, { filters: ["scope", "company", "status"] });
+  const [scope] = filterOf(control, "scope");
+  const [company] = filterOf(control, "company");
+  const [status] = filterOf(control, "status");
+  const all = useMemo(() => sops ?? [], [sops]);
+  const rows = useMemo(() => {
+    const branch = company ? branches.find((b) => b.id === company) ?? null : null;
+    const inCompany = new Set((branch ? sopsForCompany(all, branch) : all).map((s) => s.id));
+    return all.filter((s) => (!scope || s.scope === scope) && (!status || (s.status ?? "active") === status) && inCompany.has(s.id));
+  }, [all, scope, status, company, branches]);
+  const drafts = all.filter((s) => s.status === "draft").length;
+  const open = (s: SOP) => navigate({ to: "/sops", search: ((p: Record<string, unknown>) => ({ ...p, sop: s.id })) as never });
 
   // P81: pick many SOPs (those listed now) and delete them in one go.
   const qc = useQueryClient();
-  const listed = useMemo(() => (canManage ? groups.flatMap((g) => g.items.map((s) => s.id)) : []), [groups, canManage]);
-  const sel = useSelection(listed);
-  const [bulkAsk, setBulkAsk] = useState(false);
-  const picked = sel.selected.length;
-  const deleteSelected = async () => {
+  const [ticked, setTicked] = useState<Set<string>>(new Set());
+  // P107: "Delete ticked" (the table's bulk bar and confirmation) deletes them in one call; what
+  // the server skips comes back as not done, with why.
+  const deleteTicked = async (list: SOP[]): Promise<BulkOutcome> => {
     try {
-      const r = await bulkDelete({ sops: sel.selected });
-      if (r.sops) toast.success(r.sops === 1 ? tr("Deleted 1 item.") : tr("Deleted {n} items.", { n: r.sops }), {
-        description: r.skipped.length ? tr("{n} could not be deleted: not yours to delete, or already gone.", { n: r.skipped.length }) : undefined,
-      });
-      else toast.error(tr("Nothing was deleted: these are not yours to delete, or already gone."));
-      sel.clear();
-    } catch (e) {
-      toast.error(errorMessage(e));
+      const r = await bulkDelete({ sops: list.map((s) => s.id) });
+      return { done: r.sops, failed: r.skipped.map((x) => ({ id: x.id, message: x.reason === "not_found" ? tr("Already gone.") : tr("Not yours to delete.") })) };
     } finally {
-      qc.invalidateQueries({ queryKey: workKeys.sops });
-      qc.invalidateQueries({ queryKey: libraryKeys.all });
+      void qc.invalidateQueries({ queryKey: workKeys.sops });
+      void qc.invalidateQueries({ queryKey: libraryKeys.all });
     }
   };
+
+  const columns: Column<SOP>[] = [
+    {
+      id: "title", header: t("SOP"), card: "title", sortValue: (s) => s.title.toLowerCase(), exportValue: (s) => s.title,
+      cell: (s) => {
+        const look = SCOPE_LOOK[s.scope];
+        return (
+          <span className="flex min-w-0 items-center gap-3">
+            <IconTile icon={look.icon} tone={look.tone} size="sm" />
+            <span className="min-w-0 text-[13.5px] font-medium break-words">{s.title}</span>
+            {s.status === "draft" ? <Pill tone="warn">{t("Draft")}</Pill> : null}
+          </span>
+        );
+      },
+    },
+    {
+      id: "scope", header: t("Who follows it"), sortValue: (s) => `${SCOPE_ORDER[s.scope]} ${sopScopeLabel(s).toLowerCase()}`, exportValue: (s) => sopScopeLabel(s),
+      cell: (s) => (
+        <span className="grid min-w-0">
+          <span className="break-words">{sopScopeLabel(s)}</span>
+          <span className="text-[12px] text-muted">{t(SCOPES.find((x) => x.value === s.scope)!.label)}</span>
+        </span>
+      ),
+    },
+    { id: "status", header: t("Status"), exportOnly: true, cell: () => null, exportValue: (s) => (s.status === "draft" ? t("Draft") : t("In use")) },
+    { id: "version", header: t("Version"), kind: "number", align: "right", hideBelow: "lg", sortValue: (s) => s.version, cell: (s) => `v${s.version}` },
+    {
+      id: "updated", header: t("Updated"), kind: "date", sortValue: (s) => s.updated_at,
+      cell: (s) => <span className="text-muted">{timeAgo(s.updated_at)}</span>,
+    },
+  ];
 
   return (
     <Page>
@@ -244,64 +267,63 @@ export function SopsPage() {
           <Button variant="ghost" asChild><Link to="/explorer">{t("Upload in Browse →")}</Link></Button>
           {canManage ? <Button data-guide="sops.new" onClick={() => setCreating((n) => n + 1)}><PlusIcon size={16} weight="bold" /> {t("New SOP")}</Button> : null}
         </>} />
-      {isLoading ? (
-        <div className="grid gap-px overflow-hidden rounded-[var(--radius-md)] border border-border">
-          {[0, 1, 2, 3].map((i) => <Skeleton key={i} className="h-16 rounded-none" />)}
-        </div>
-      ) : error ? (
-        <p role="alert" className="text-danger">{errorMessage(error)}</p>
-      ) : !sops?.length ? (
+      {!isLoading && !error && !all.length ? (
         <EmptyState icon={FileTextIcon} title={t("No SOPs yet")} body={t("Write down how your company does things once (month-end close, quotation checks, report formats) and every agent in scope follows it.")}
           action={canManage ? <Button onClick={() => setCreating((n) => n + 1)}><PlusIcon size={16} weight="bold" /> {t("Write the first SOP")}</Button> : undefined} />
       ) : (
-        <>
-          <Toolbar>
-            <Segmented<Scope | "all" | "draft"> label={t("Who follows it")} value={filter} onChange={setFilter}
-              options={[
-                { value: "all", label: t("All"), count: sops.length },
-                ...SCOPES.map((sc) => ({ value: sc.value, label: t(sc.label), count: count(sc.value) })),
-                ...(drafts ? [{ value: "draft" as const, label: t("Drafts"), count: drafts }] : []),
-              ]} />
-            <SearchInput value={q} onChange={setQ} placeholder={t("Search SOPs")} className="sm:ml-auto sm:max-w-72" />
-            {listed.length ? <SelectAll sel={sel} total={listed.length} /> : null}
-          </Toolbar>
-          <BulkBar sel={sel} onDelete={() => setBulkAsk(true)} />
-          {!groups.length ? (
-            <EmptyState icon={FileTextIcon} title={t("No SOP matches")} body={t("Try another word, or show every scope.")} />
-          ) : (
-            <div data-guide="sops.list" className="grid grid-cols-[minmax(0,1fr)] gap-6">
-              {groups.map((g) => {
-                const look = SCOPE_LOOK[g.scope];
-                return (
-                  <section key={g.scope} className="grid min-w-0 gap-2.5">
-                    <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5">
-                      <h2 className="text-[15px] font-semibold">{t(g.label)} <span className="font-normal text-muted tabular">{g.items.length}</span></h2>
-                      <p className="text-[12.5px] text-muted">{t(g.hint)}</p>
-                    </div>
-                    <ListCard>
-                      {g.items.map((s) => (
-                        <ListRow key={s.id} onClick={() => navigate({ to: "/sops", search: { sop: s.id } })} active={s.id === search.sop || sel.isOn(s.id)}
-                          selector={canManage ? <RowCheck checked={sel.isOn(s.id)} onChange={() => sel.toggle(s.id)} label={t("Select {name}", { name: s.title })} /> : undefined}
-                          leading={<IconTile icon={look.icon} tone={look.tone} size="sm" />}
-                          title={<span className="block whitespace-normal break-words">{s.title}</span>}
-                          trailing={s.status === "draft" ? <Pill tone="warn">{t("Draft")}</Pill> : undefined}
-                          meta={<Meta items={[sopScopeLabel(s), <span key="v" className="tabular">v{s.version}</span>, t("updated {when}", { when: timeAgo(s.updated_at).toLowerCase() })]} />} />
-                      ))}
-                    </ListCard>
-                  </section>
-                );
-              })}
-            </div>
-          )}
-        </>
+        <div data-guide="sops.list" className="grid min-w-0">
+          <DataTable
+            label={t("SOPs")}
+            columns={columns}
+            rows={rows}
+            rowId={(s) => s.id}
+            rowLabel={(s) => s.title}
+            control={control}
+            loading={isLoading}
+            error={error}
+            onRetry={() => void refetch()}
+            searchText={(s) => `${s.title} ${sopScopeLabel(s)}`}
+            searchPlaceholder={t("Search SOPs")}
+            onOpen={open}
+            rowClassName={(s) => (s.id === search.sop ? "bg-accent-soft/40" : undefined)}
+            filters={
+              <>
+                <TableFilter control={control} id="scope" label={t("Who follows it")} allLabel={t("Every scope")}
+                  options={SCOPES.map((sc) => ({ value: sc.value, label: t(sc.label) }))} />
+                {branches.length > 1 ? (
+                  <TableFilter control={control} id="company" label={t("Company")} allLabel={t("All companies")}
+                    options={branches.map((b) => ({ value: b.id, label: b.name }))} />
+                ) : null}
+                {drafts || status ? (
+                  <TableFilter control={control} id="status" label={t("Status")} allLabel={t("All statuses")}
+                    options={[{ value: "active", label: t("In use") }, { value: "draft", label: t("Drafts") }]} />
+                ) : null}
+              </>
+            }
+            selection={canManage ? { selected: ticked, onChange: setTicked } : undefined}
+            exportName={t("sops")}
+            rowActions={{
+              view: open,
+              ...(canManage ? {
+                remove: async (s: SOP) => {
+                  await api(`/api/sops/${s.id}`, "DELETE");
+                  void qc.invalidateQueries({ queryKey: workKeys.sops });
+                  void qc.invalidateQueries({ queryKey: libraryKeys.all });
+                },
+                removeBody: () => t("Agents stop following it immediately and it is detached from every agent."),
+              } : {}),
+            }}
+            bulkRemove={canManage ? {
+              run: (list) => deleteTicked(list),
+              title: (n) => (n === 1 ? t("Delete 1 SOP?") : t("Delete {n} SOPs?", { n })),
+              body: t("Agents stop following them immediately and they are detached from every agent. This cannot be undone."),
+            } : undefined}
+          />
+        </div>
       )}
-      {openSop ? <Editor key={openSop.id + openSop.version} sop={openSop} open canManage={canManage} onOpenChange={(o) => !o && navigate({ to: "/sops", search: {} })} /> : null}
+      {openSop ? <Editor key={openSop.id + openSop.version} sop={openSop} open canManage={canManage}
+        onOpenChange={(o) => !o && navigate({ to: "/sops", search: ((p: Record<string, unknown>) => ({ ...p, sop: undefined })) as never })} /> : null}
       {creating ? <Editor key={`new-${creating}`} sop={null} open canManage={canManage} onOpenChange={(o) => !o && setCreating(0)} /> : null}
-      <ConfirmDialog open={bulkAsk} onOpenChange={setBulkAsk} danger
-        title={picked === 1 ? t("Delete 1 SOP?") : t("Delete {n} SOPs?", { n: picked })}
-        confirmLabel={picked === 1 ? t("Delete 1 item") : t("Delete {n} items", { n: picked })}
-        body={t("Agents stop following them immediately and they are detached from every agent. This cannot be undone.")}
-        onConfirm={deleteSelected} />
     </Page>
   );
 }

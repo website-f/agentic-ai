@@ -1,6 +1,7 @@
 """P92: the lessons people taught the agents, and the daily "getting smarter" digest.
 
-- GET  /api/lessons                    lessons (filter by topic, agent, state, words)
+- GET  /api/lessons                    lessons (filter by topic, agent, state, words); P107:
+                                       `page`/`size`/`sort` give numbered pages (api/table.py)
 - PATCH /api/lessons/{id}              edit a lesson (owner/admin); the edit is a new lesson
 - POST /api/lessons/{id}/forget        forget a lesson (owner/admin)
 - POST /api/lessons/{id}/undo          take back a lesson just taught (whoever taught it, or
@@ -17,7 +18,7 @@ from dataclasses import replace
 from datetime import date, timedelta
 from typing import Any, Literal
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, Query, Response, status
 from pydantic import BaseModel, Field
 from sqlalchemy import ColumnElement, and_, func, or_, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -30,6 +31,7 @@ from ...core.security import can
 from ...models import Agent, BrainFact, Skill, SkillProposal, SkillVersion, Workspace
 from ...services import audit
 from ..deps import Principal, api_error, require
+from ..table import TableParams, like, sql_page
 
 router = APIRouter(prefix="/api", tags=["learning"])
 
@@ -133,14 +135,19 @@ async def _lesson(
 
 @router.get("/lessons")
 async def list_lessons(
+    response: Response,
     topic: str | None = Query(default=None, max_length=60),
     agent_id: str | None = Query(default=None, max_length=40),
     state: Literal["active", "ended", "all"] = "active",
-    q: str | None = Query(default=None, max_length=200),
     limit: int = Query(default=100, ge=1, le=300),
+    table: TableParams = Depends(),
     principal: Principal = Depends(require("read")),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
+    """Newest first, up to `limit`. P107 (the lessons table): with `page`, one numbered page of
+    `size` and the total in X-Total-Count; every word of `q` must be in the lesson; `sort` is
+    "taught_at" (default "-taught_at"), "uses" or "last_used_at"."""
+    q = table.q
     v = await _viewer(db, principal)
     base = _visible(v, principal)
     conds = [base]
@@ -152,15 +159,29 @@ async def list_lessons(
         conds.append(BrainFact.meta["topic"].astext == topic)
     if agent_id:
         conds.append(BrainFact.meta["agent_id"].astext == agent_id)
-    if q and q.strip():
-        conds.append(BrainFact.text.ilike(f"%{q.strip()}%"))
-    rows = list(
-        (
-            await db.scalars(
-                select(BrainFact).where(*conds).order_by(BrainFact.valid_from.desc()).limit(limit)
-            )
-        ).all()
-    )
+    if table.paged:
+        conds.extend(BrainFact.text.ilike(like(w), escape="\\") for w in table.words)
+        key, desc = table.sort_by(("taught_at", "uses", "last_used_at"), default="-taught_at")
+        col = {"uses": BrainFact.hits, "last_used_at": BrainFact.last_used_at}.get(
+            key, BrainFact.valid_from
+        )
+        # Never-used lessons go last either way.
+        blank = [(BrainFact.last_used_at.is_(None), False)] if key == "last_used_at" else []
+        order = [*blank, (col, desc), (BrainFact.id, desc)]
+        rows = await sql_page(db, select(BrainFact).where(*conds), order, table, response)
+    else:
+        if q:
+            conds.append(BrainFact.text.ilike(f"%{q}%"))
+        rows = list(
+            (
+                await db.scalars(
+                    select(BrainFact)
+                    .where(*conds)
+                    .order_by(BrainFact.valid_from.desc())
+                    .limit(limit)
+                )
+            ).all()
+        )
     names = await _names(db, rows)
     # The filters: every topic and agent with an active lesson this person may see.
     topics = (

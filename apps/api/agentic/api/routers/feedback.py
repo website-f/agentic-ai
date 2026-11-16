@@ -38,6 +38,8 @@ from ..deps import (
     is_developer,
     require_developer,
 )
+from ..table import TableParams, sql_page
+from ..table import like as like_word
 
 router = APIRouter(prefix="/api/feedback", tags=["feedback"])
 
@@ -316,6 +318,15 @@ class FeedbackOut(MineOut):
     resolved_at: datetime | None
 
 
+# P107: the columns the Feedbacks table sorts by (?sort=, "-" first for descending).
+SORTS: dict[str, Any] = {
+    "when": Feedback.created_at,
+    "status": Feedback.status,
+    "kind": Feedback.category,
+    "from": Feedback.author_name,
+}
+
+
 class ListOut(BaseModel):
     items: list[FeedbackOut]
     counts: dict[str, int]
@@ -360,29 +371,31 @@ async def mine(
 
 @router.get("")
 async def list_feedback(
+    response: Response,
     status_: Status | None = Query(default=None, alias="status"),
     category: Category | None = Query(default=None),
-    q: str | None = Query(default=None, max_length=200),
     limit: int = Query(default=200, ge=1, le=500),
+    params: TableParams = Depends(),
     principal: Principal = Depends(require_developer),
     db: AsyncSession = Depends(get_db),
 ) -> ListOut:
+    """Newest first, at most `limit`. P107: with `page` (api/table.py) it answers one numbered
+    page of the same body, sorted by `sort`, with the matching rows in X-Total-Count; `counts`
+    and `total` stay the whole inbox's (for the status tabs)."""
     from ...models import User
 
     size = func.coalesce(func.octet_length(Feedback.screenshot), 0)
     base = [Feedback.workspace_id == principal.workspace_id]
     if category:
         base.append(Feedback.category == category)
-    if q and q.strip():
-        like = f"%{q.strip().replace('%', r'\%').replace('_', r'\_')}%"
-        base.append(
-            or_(
-                Feedback.note.ilike(like),
-                Feedback.page_path.ilike(like),
-                Feedback.page_title.ilike(like),
-                Feedback.author_name.ilike(like),
-            )
-        )
+    fields = (Feedback.note, Feedback.page_path, Feedback.page_title, Feedback.author_name)
+    if params.paged:
+        # Every word is in one of the fields.
+        for w in params.words:
+            base.append(or_(*(c.ilike(like_word(w), escape="\\") for c in fields)))
+    elif params.q:
+        like = f"%{params.q.replace('%', r'\%').replace('_', r'\_')}%"
+        base.append(or_(*(c.ilike(like) for c in fields)))
     counts = {
         s: n
         for s, n in (
@@ -392,15 +405,17 @@ async def list_feedback(
         ).all()
     }
     where = [*base, Feedback.status == status_] if status_ else base
-    rows = (
-        await db.execute(
-            select(Feedback, size, User.email)
-            .outerjoin(User, User.id == Feedback.user_id)
-            .where(*where)
-            .order_by(Feedback.created_at.desc())
-            .limit(limit)
-        )
-    ).all()
+    stmt = (
+        select(Feedback, size, User.email)
+        .outerjoin(User, User.id == Feedback.user_id)
+        .where(*where)
+    )
+    if params.paged:
+        key, desc = params.sort_by(SORTS, "-when")
+        order = [(SORTS[key], desc), (Feedback.created_at, True), (Feedback.id, True)]
+        rows = await sql_page(db, stmt, order, params, response, rows=True)
+    else:
+        rows = (await db.execute(stmt.order_by(Feedback.created_at.desc()).limit(limit))).all()
     items = [
         FeedbackOut(
             **_mine(f, n),

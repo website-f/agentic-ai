@@ -7,10 +7,10 @@ import { toast } from "sonner";
 
 import { canShare } from "@/components/agent-access";
 import { AgentAvatar } from "@/components/agent-avatar";
-import { LoadMore } from "@/components/load-more";
 import { EmptyState, IconTile, Page, PageHeader, Section } from "@/components/page";
 import { Button } from "@/components/ui/button";
-import { Card, CardHeader, ListCard, ListRow, Meta } from "@/components/ui/card";
+import { Card, CardHeader } from "@/components/ui/card";
+import { DataTable, TableFilter, useServerTable, useTableState, type Column } from "@/components/ui/data-table";
 import { FormError } from "@/components/ui/field";
 import { Pill } from "@/components/ui/pill";
 import { SideSheet } from "@/components/ui/side-sheet";
@@ -18,8 +18,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { SwitchField } from "@/components/ui/switch";
 import { useT } from "@/i18n";
 import { api, errorMessage } from "@/lib/api";
-import { usePagedList } from "@/lib/paged";
 import { branchesQuery, meQuery } from "@/lib/queries";
+import { everyRow } from "@/lib/table-export";
 import { cn, timeAgo } from "@/lib/utils";
 import { agentsQuery, broadcastQuery, workKeys, type Audience, type Broadcast } from "@/lib/work";
 
@@ -201,46 +201,87 @@ export function BroadcastsPage() {
   const t = useT();
   const { data: me } = useSuspenseQuery(meQuery);
   const canWrite = me.permissions.includes("work.write");
-  // Sent broadcasts only grow: 50 at a time as you scroll.
-  const list = usePagedList<Broadcast>(workKeys.broadcasts, "/api/broadcasts");
-  const { items: history, isLoading } = list;
-  const sent = list.total ?? history.length;
+  // P107: sent broadcasts only grow: a data table, searched (message, audience), filtered by
+  // kind and paged on the server; the address keeps where you were.
+  const control = useTableState({ size: 25 }, { filters: ["mode"] });
+  const table = useServerTable<Broadcast>(workKeys.broadcasts, "/api/broadcasts", control.state);
   const search = useSearch({ strict: false }) as { b?: string };
   const navigate = useNavigate();
+  const go = (b?: string) => navigate({
+    to: "/broadcasts",
+    search: ((prev: Record<string, unknown>) => {
+      const next = { ...prev };
+      if (b) next.b = b;
+      else delete next.b;
+      return next;
+    }) as never,
+  });
+  const filtered = !!control.state.q || !!control.state.f.mode;
+  const sent = table.total;
+
+  const columns: Column<Broadcast>[] = [
+    {
+      id: "body", header: t("Message"), card: "title", exportValue: (b) => b.body,
+      cell: (b) => (
+        <span className="flex min-w-0 items-start gap-2.5">
+          <IconTile icon={b.mode === "directive" ? ListChecksIcon : MegaphoneIcon} tone={b.mode === "directive" ? "info" : "accent"} size="sm" className="shrink-0" />
+          <span className="line-clamp-2 min-w-0 pt-1 text-[13.5px] font-medium break-words">{b.body}</span>
+        </span>
+      ),
+    },
+    { id: "audience", header: t("Sent to"), exportValue: (b) => b.audience_label, cell: (b) => <span className="break-words">{b.audience_label}</span> },
+    {
+      id: "mode", header: t("Kind"), hideBelow: "lg", exportValue: (b) => (b.mode === "directive" ? t("Tasks") : t("Announcement")),
+      cell: (b) => <Pill tone={b.mode === "directive" ? "info" : "accent"}>{b.mode === "directive" ? t("Tasks") : t("Announcement")}</Pill>,
+    },
+    {
+      id: "acked", header: t("Answers"), align: "right", exportValue: (b) => `${b.acked}/${b.targets}`,
+      cell: (b) => <Pill tone={b.acked >= b.targets ? "ok" : "neutral"} className="tabular">{b.request_reply ? t("{a}/{b} replied", { a: b.acked, b: b.targets }) : t("{a}/{b} received", { a: b.acked, b: b.targets })}</Pill>,
+    },
+    {
+      id: "created", header: t("Sent"), sortable: true, kind: "date", className: "whitespace-nowrap", exportValue: (b) => b.created_at,
+      cell: (b) => <time dateTime={b.created_at} className="text-muted">{timeAgo(b.created_at)}</time>,
+    },
+  ];
+
   return (
     <Page className="max-w-7xl">
       <PageHeader title={t("Broadcasts")} description={t("Message every agent, a whole company, chosen departments, or specific agents. See who received it.")} />
-      <div className="grid grid-cols-[minmax(0,1fr)] items-start gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+      {/* P107: the composer above, the sent table full width below it (a table needs the room). */}
+      <div className="grid max-w-3xl min-w-0 grid-cols-[minmax(0,1fr)]">
         {canWrite ? <Composer /> : (
           <EmptyState icon={LockSimpleIcon} title={t("Read only")} body={t("Your role can read broadcasts but not send them.")} />
         )}
-        <Section title={t("Sent")} description={sent ? (sent === 1 ? t("1 broadcast, newest first") : t("{n} broadcasts, newest first", { n: sent })) : undefined}>
-          {isLoading ? (
-            <div className="grid gap-2">{[0, 1, 2].map((i) => <Skeleton key={i} className="h-20 rounded-[var(--radius-md)]" />)}</div>
-          ) : !history.length ? (
-            <EmptyState icon={MegaphoneIcon} title={t("Nothing sent yet")} body={t("Announcements sit in each agent's context for 30 days. Tasks land in Triage.")} />
-          ) : (
-            <ListCard data-guide="broadcasts.list">
-              {history.map((b) => (
-                <ListRow
-                  key={b.id}
-                  active={search.b === b.id}
-                  onClick={() => navigate({ to: "/broadcasts", search: { b: b.id } })}
-                  leading={<IconTile icon={b.mode === "directive" ? ListChecksIcon : MegaphoneIcon} tone={b.mode === "directive" ? "info" : "accent"} size="sm" />}
-                  title={<span className="block whitespace-normal"><span className="line-clamp-2 break-words">{b.body}</span></span>}
-                  meta={<Meta items={[<span className="truncate">{b.audience_label}</span>, timeAgo(b.created_at)]} />}
-                  trailing={<>
-                    <Pill tone={b.mode === "directive" ? "info" : "accent"}>{b.mode === "directive" ? t("Tasks") : t("Announcement")}</Pill>
-                    <Pill tone={b.acked >= b.targets ? "ok" : "neutral"} className="tabular">{b.request_reply ? t("{a}/{b} replied", { a: b.acked, b: b.targets }) : t("{a}/{b} received", { a: b.acked, b: b.targets })}</Pill>
-                  </>}
-                />
-              ))}
-            </ListCard>
-          )}
-          {history.length ? <LoadMore noun={t("broadcasts")} shown={history.length} total={list.total} hasMore={list.hasMore} loading={list.isFetchingMore} onLoad={list.loadMore} /> : null}
-        </Section>
       </div>
-      {search.b ? <Detail id={search.b} onClose={() => navigate({ to: "/broadcasts", search: {} })} /> : null}
+      <Section title={t("Sent")} description={sent && !filtered ? (sent === 1 ? t("1 broadcast, newest first") : t("{n} broadcasts, newest first", { n: sent })) : undefined}>
+        <div data-guide="broadcasts.list" className="min-w-0">
+          <DataTable<Broadcast>
+            label={t("Sent broadcasts")}
+            columns={columns}
+            rows={table.rows}
+            total={table.total}
+            mode="server"
+            rowId={(b) => b.id}
+            rowLabel={(b) => b.body.slice(0, 60)}
+            control={control}
+            loading={table.loading}
+            fetching={table.fetching}
+            error={table.error}
+            onRetry={table.refetch}
+            onOpen={(b) => go(b.id)}
+            rowClassName={(b) => (search.b === b.id ? "bg-accent-soft/40" : undefined)}
+            searchPlaceholder={t("Search messages or who they went to")}
+            exportName={t("broadcasts")}
+            exportRows={() => everyRow<Broadcast>("/api/broadcasts", control.state)}
+            filters={
+              <TableFilter control={control} id="mode" label={t("Kind")} allLabel={t("Every kind")}
+                options={[{ value: "announcement", label: t("Announcement") }, { value: "directive", label: t("Tasks") }]} />
+            }
+            empty={<EmptyState icon={MegaphoneIcon} title={t("Nothing sent yet")} body={t("Announcements sit in each agent's context for 30 days. Tasks land in Triage.")} />}
+          />
+        </div>
+      </Section>
+      {search.b ? <Detail id={search.b} onClose={() => go()} /> : null}
     </Page>
   );
 }

@@ -7,10 +7,10 @@ import { toast } from "sonner";
 
 import { canShare } from "@/components/agent-access";
 import { AgentAvatar } from "@/components/agent-avatar";
-import { LoadMore } from "@/components/load-more";
 import { EmptyState, IconTile, Page, PageHeader, Section } from "@/components/page";
 import { Button } from "@/components/ui/button";
 import { ListCard, ListRow, Meta } from "@/components/ui/card";
+import { DataTable, TableFilter, useServerTable, useTableState, type Column } from "@/components/ui/data-table";
 import { ResponsiveDialog } from "@/components/ui/dialog";
 import { FormError, TextareaField } from "@/components/ui/field";
 import { Pill } from "@/components/ui/pill";
@@ -22,6 +22,7 @@ import { msg, useT } from "@/i18n";
 import { api, errorMessage } from "@/lib/api";
 import { usePagedList } from "@/lib/paged";
 import { meQuery } from "@/lib/queries";
+import { everyRow } from "@/lib/table-export";
 import { meetingQuery, teamKeys, tokensShort, type Meeting, type MeetingOutcome, type MeetingTurn } from "@/lib/teams";
 import { cn, timeAgo } from "@/lib/utils";
 import { agentsQuery, taskQuery } from "@/lib/work";
@@ -47,6 +48,11 @@ const STATUS: Record<Meeting["status"], { label: string; tone: "accent" | "ok" |
   failed: { label: msg("No outcome"), tone: "danger" },
   cancelled: { label: msg("Cancelled"), tone: "neutral" },
 };
+
+/** Past meetings: every status but running. */
+const PAST = "done,failed,cancelled";
+/** The page's own address keys; everything else belongs to its tables. */
+const PAGE_KEYS = ["m", "new", "task", "tab", "rec"];
 
 const STATUS_ICON: Record<Meeting["status"], Icon> = {
   running: ChatsTeardropIcon,
@@ -262,34 +268,80 @@ export function MeetingsPage() {
   const canWrite = me.permissions.includes("work.write");
   const search = useSearch({ strict: false }) as MeetingsSearch;
   const navigate = useNavigate();
-  // Live meetings are few and stay complete; past ones pile up and load 50 at a time.
+  // Live meetings are few and stay complete; past ones pile up (P107: a data table, searched,
+  // filtered and paged on the server; "p_" keeps its place in the address apart).
   const live = usePagedList<Meeting>(teamKeys.meetings, "/api/meetings", { status: "running" }, { pageSize: 200 });
-  const pastList = usePagedList<Meeting>(teamKeys.meetings, "/api/meetings", { status: "done,failed,cancelled" });
+  const pastCount = usePagedList<Meeting>(teamKeys.meetings, "/api/meetings", { status: PAST }, { pageSize: 1 });
   const doneCount = usePagedList<Meeting>(teamKeys.meetings, "/api/meetings", { status: "done" }, { pageSize: 1 });
-  const isLoading = live.isLoading || pastList.isLoading;
-  const error = live.error ?? pastList.error;
-  const go = (next: MeetingsSearch) => navigate({ to: "/meetings", search: next, replace: true });
+  const control = useTableState({ size: 25 }, { prefix: "p_", filters: ["status"] });
+  const pastTable = useServerTable<Meeting>(teamKeys.meetings, "/api/meetings", control.state, { status: PAST });
+  const isLoading = live.isLoading || pastCount.isLoading;
+  const error = live.error ?? pastCount.error;
+  // The page's own keys change; the tables' places (search, page, sort) stay.
+  const go = (next: MeetingsSearch) => navigate({
+    to: "/meetings",
+    search: ((prev: Record<string, unknown>) => {
+      const kept = Object.fromEntries(Object.entries(prev).filter(([k]) => !PAGE_KEYS.includes(k)));
+      return { ...kept, ...next };
+    }) as never,
+    replace: true,
+  });
   const running = live.items;
-  const past = pastList.items;
-  const pastTotal = pastList.total ?? past.length;
+  const pastTotal = pastCount.total ?? 0;
   const meetings = isLoading || error ? undefined : { length: (live.total ?? running.length) + pastTotal };
 
+  const caller = (m: Meeting) => (m.initiator_agent_id
+    ? t("Called by {name}", { name: m.participants.find((p) => p.id === m.initiator_agent_id)?.name ?? t("an agent") })
+    : t("Called by a person"));
   const row = (m: Meeting) => {
-    const caller = m.initiator_agent_id ? t("Called by {name}", { name: m.participants.find((p) => p.id === m.initiator_agent_id)?.name ?? t("an agent") }) : t("Called by a person");
     return (
       <ListRow
         key={m.id}
         onClick={() => go({ m: m.id })}
         leading={<IconTile icon={STATUS_ICON[m.status]} tone={STATUS[m.status].tone} size="sm" />}
         title={<span className="block whitespace-normal break-words">{m.topic}</span>}
-        meta={<Meta items={[caller, m.task ? <span className="truncate">{m.task.title}</span> : null, timeAgo(m.created_at)]} />}
+        meta={<Meta items={[caller(m), m.task ? <span className="truncate">{m.task.title}</span> : null, timeAgo(m.created_at)]} />}
         trailing={<><Faces m={m} size="sm" /><Pill tone={STATUS[m.status].tone} live={m.status === "running"}>{t(STATUS[m.status].label)}</Pill></>}
       >
         {m.outcome ? <span className="mt-1 line-clamp-2 text-[13px] break-words text-muted">{m.outcome.decision}</span> : null}
       </ListRow>
     );
   };
-  const decided = doneCount.total ?? past.filter((m) => m.status === "done").length;
+  const decided = doneCount.total ?? 0;
+  const columns: Column<Meeting>[] = [
+    {
+      id: "topic", header: t("Topic"), sortable: true, card: "title", exportValue: (m) => m.topic,
+      cell: (m) => (
+        <span className="flex min-w-0 items-start gap-2.5">
+          <IconTile icon={STATUS_ICON[m.status]} tone={STATUS[m.status].tone} size="sm" className="shrink-0" />
+          <span className="grid min-w-0 gap-0.5 pt-0.5">
+            <span className="text-[13.5px] font-medium break-words">{m.topic}</span>
+            {m.outcome ? <span className="line-clamp-2 text-[12.5px] font-normal break-words text-muted">{m.outcome.decision}</span> : null}
+          </span>
+        </span>
+      ),
+    },
+    { id: "decision", header: t("Decision"), exportOnly: true, cell: () => null, exportValue: (m) => m.outcome?.decision ?? "" },
+    { id: "status", header: t("Status"), exportValue: (m) => t(STATUS[m.status].label), cell: (m) => <Pill tone={STATUS[m.status].tone}>{t(STATUS[m.status].label)}</Pill> },
+    { id: "who", header: t("Agents"), hideBelow: "lg", exportValue: (m) => m.participants.map((p) => p.name).join(", "), cell: (m) => <Faces m={m} size="sm" /> },
+    {
+      id: "caller", header: t("Called by"), hideBelow: "xl",
+      exportValue: (m) => (m.initiator_agent_id ? m.participants.find((p) => p.id === m.initiator_agent_id)?.name ?? t("an agent") : t("A person")),
+      cell: (m) => (
+        <span className="break-words text-muted">
+          {m.initiator_agent_id ? m.participants.find((p) => p.id === m.initiator_agent_id)?.name ?? t("an agent") : t("A person")}
+        </span>
+      ),
+    },
+    {
+      id: "task", header: t("Task"), hideBelow: "xl", exportValue: (m) => m.task?.title ?? "",
+      cell: (m) => m.task ? <span className="line-clamp-2 break-words">{m.task.title}</span> : <span className="text-muted">-</span>,
+    },
+    {
+      id: "created", header: t("When"), sortable: true, kind: "date", className: "whitespace-nowrap", exportValue: (m) => m.created_at,
+      cell: (m) => <time dateTime={m.created_at} className="text-muted">{timeAgo(m.created_at)}</time>,
+    },
+  ];
 
   const tabs = <Segmented label={t("Kind of meeting")} value={search.tab === "minutes" ? "minutes" : "agents"} options={TABS.map((x) => ({ ...x, label: t(x.label) }))} onChange={(v) => go(v === "minutes" ? { tab: "minutes" } : {})} className="w-fit" />;
 
@@ -326,11 +378,31 @@ export function MeetingsPage() {
               <ListCard data-guide="meetings.list" className="border-accent/40">{running.map(row)}</ListCard>
             </Section>
           ) : null}
-          {past.length ? (
+          {pastTotal ? (
             <Section title={t("Past meetings")}>
-              <div className="grid gap-3">
-                <ListCard data-guide={running.length ? undefined : "meetings.list"}>{past.map(row)}</ListCard>
-                <LoadMore noun={t("meetings")} shown={past.length} total={pastList.total} hasMore={pastList.hasMore} loading={pastList.isFetchingMore} onLoad={pastList.loadMore} />
+              <div data-guide={running.length ? undefined : "meetings.list"} className="min-w-0">
+                <DataTable<Meeting>
+                  label={t("Past meetings")}
+                  columns={columns}
+                  rows={pastTable.rows}
+                  total={pastTable.total}
+                  mode="server"
+                  rowId={(m) => m.id}
+                  rowLabel={(m) => m.topic}
+                  control={control}
+                  loading={pastTable.loading}
+                  fetching={pastTable.fetching}
+                  error={pastTable.error}
+                  onRetry={pastTable.refetch}
+                  onOpen={(m) => go({ m: m.id })}
+                  searchPlaceholder={t("Search topics")}
+                  exportName={t("meetings")}
+                  exportRows={() => everyRow<Meeting>("/api/meetings", control.state, { status: PAST })}
+                  filters={
+                    <TableFilter control={control} id="status" label={t("Status")} allLabel={t("All statuses")}
+                      options={(["done", "failed", "cancelled"] as const).map((s) => ({ value: s, label: t(STATUS[s].label) }))} />
+                  }
+                />
               </div>
             </Section>
           ) : null}

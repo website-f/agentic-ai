@@ -22,10 +22,11 @@ import { EmptyState, IconTile } from "@/components/page";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { ConfirmDialog } from "@/components/ui/confirm";
+import { DataTable, RowMenu, TableFilter, useServerTable, useTableState, type Column } from "@/components/ui/data-table";
 import { ResponsiveDialog } from "@/components/ui/dialog";
 import { Field, FormError, TextareaField } from "@/components/ui/field";
+import { MenuItem } from "@/components/ui/menu";
 import { Pill } from "@/components/ui/pill";
-import { Select } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Stat, StatGrid } from "@/components/ui/stat";
 import { locale, t as tr, useT } from "@/i18n";
@@ -36,15 +37,15 @@ import {
   forgetLesson,
   lessonKeys,
   lessonsQuery,
+  type LessonList,
   undoLesson,
   VIA_LABEL,
   type Lesson,
   type LessonDigest,
   type LessonEdit,
 } from "@/lib/lessons";
+import { everyRow } from "@/lib/table-export";
 import { timeAgo } from "@/lib/utils";
-
-const ALL = "all";
 
 const dayLabel = (iso: string) =>
   new Date(`${iso}T00:00:00Z`).toLocaleDateString(locale(), { weekday: "short", day: "numeric", month: "short", timeZone: "UTC" });
@@ -213,17 +214,60 @@ function Digest({ day, onDay }: { day?: string; onDay: (d: string | undefined) =
   );
 }
 
+/** The lesson itself in a table row: the rule, its parts and what is special about it. */
+function LessonCell({ l }: { l: Lesson }) {
+  const t = useT();
+  const parts: [string, string | null][] = [
+    [t("When"), l.when],
+    [t("Do"), l.do],
+    [t("Don't"), l.dont],
+    [t("Field"), l.field],
+    [t("Example"), l.example],
+  ];
+  const shown = parts.filter(([, v]) => v && !l.text.toLowerCase().includes(v.toLowerCase()));
+  const flags = [
+    l.taught > 1 ? <Pill key="n" tone="warn">{t("taught {n} times", { n: l.taught })}</Pill> : null,
+    l.private ? <Pill key="p" tone="info">{t("only this AI")}</Pill> : null,
+    l.state === "ended" ? <Pill key="e" tone="neutral">{l.end_reason === "replaced" ? t("Replaced by a newer lesson") : t("Not in use")}</Pill> : null,
+    l.folded_into ? <span key="f" className="text-[12px] text-muted">{t("in skill {name}", { name: l.folded_into })}</span> : null,
+  ].filter(Boolean);
+  return (
+    <span className="grid min-w-0 gap-1">
+      <span className="text-[13.5px] break-words">{l.text}</span>
+      {shown.length ? (
+        <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-2 gap-y-0.5 text-[12.5px]">
+          {shown.map(([k, v]) => (
+            <div key={k} className="contents">
+              <dt className="text-muted">{k}</dt>
+              <dd className="break-words">{v}</dd>
+            </div>
+          ))}
+        </dl>
+      ) : null}
+      {flags.length ? <span className="flex flex-wrap items-center gap-1.5">{flags}</span> : null}
+    </span>
+  );
+}
+
 export function LessonsView() {
   const t = useT();
   const qc = useQueryClient();
   const [day, setDay] = useState<string | undefined>();
-  const [topic, setTopic] = useState(ALL);
-  const [agent, setAgent] = useState(ALL);
-  const [state, setState] = useState<"active" | "all">("active");
   const [editing, setEditing] = useState<Lesson | null>(null);
   const [forgetting, setForgetting] = useState<Lesson | null>(null);
-  const q = useQuery(lessonsQuery({ topic: topic === ALL ? undefined : topic, agent: agent === ALL ? undefined : agent, state }));
-  const list = q.data;
+  // P107: a data table. The server finds words, filters topic / agent / state, sorts and sends
+  // one numbered page (it used to stop at the newest 100); the address keeps where you were.
+  const control = useTableState({ size: 25 }, { filters: ["topic", "agent_id", "state"] });
+  const table = useServerTable<Lesson, LessonList>(lessonKeys.all, "/api/lessons", control.state, {}, { pick: (b) => b.items });
+  const list = table.body;
+  const undo = useMutation({
+    mutationFn: (id: string) => undoLesson(id),
+    onSuccess: (r) => {
+      void qc.invalidateQueries({ queryKey: lessonKeys.all });
+      toast.success(r.restored ? tr("Taken back. The earlier lesson is used again.") : tr("Taken back. It will not be used."));
+    },
+    onError: (e) => toast.error(errorMessage(e)),
+  });
   const forget = async () => {
     if (!forgetting) return;
     try {
@@ -234,6 +278,29 @@ export function LessonsView() {
       toast.error(errorMessage(e));
     }
   };
+  const columns: Column<Lesson>[] = [
+    { id: "text", header: t("Lesson"), card: "title", exportValue: (l) => l.text, cell: (l) => <LessonCell l={l} /> },
+    { id: "topic", header: t("Topic"), exportValue: (l) => l.topic_label, cell: (l) => <Pill tone={l.topic === "eperolehan" ? "accent" : "neutral"}>{l.topic_label}</Pill> },
+    { id: "taught_by", header: t("Taught by"), exportOnly: true, cell: () => null, exportValue: (l) => l.taught_by_name },
+    { id: "agent", header: t("Agent"), hideBelow: "lg", exportValue: (l) => l.agent_name ?? "", cell: (l) => l.agent_name ?? <span className="text-muted">-</span> },
+    {
+      id: "taught_at", header: t("Taught"), sortable: true, kind: "date", exportValue: (l) => l.taught_at,
+      cell: (l) => (
+        <span className="grid min-w-0 text-[12.5px]">
+          <span className="break-words">{t("taught by {name}, {when}", { name: l.taught_by_name, when: timeAgo(l.taught_at) })}</span>
+          {l.via ? <span className="text-muted">{t(VIA_LABEL[l.via])}</span> : null}
+        </span>
+      ),
+    },
+    {
+      id: "uses", header: t("Used"), sortable: true, kind: "number", align: "right", exportValue: (l) => l.uses,
+      cell: (l) => (l.uses ? <span title={t("used {n}×, last {when}", { n: l.uses, when: timeAgo(l.last_used_at) })}>{l.uses.toLocaleString(locale())}×</span> : <span className="text-muted">{t("not used yet")}</span>),
+    },
+    {
+      id: "last_used_at", header: t("Last used"), sortable: true, kind: "date", hideBelow: "xl", exportValue: (l) => l.last_used_at,
+      cell: (l) => (l.last_used_at ? <span className="text-muted">{timeAgo(l.last_used_at)}</span> : <span className="text-muted">-</span>),
+    },
+  ];
   return (
     <div className="grid grid-cols-[minmax(0,1fr)] gap-5">
       <Digest day={day} onDay={setDay} />
@@ -241,24 +308,43 @@ export function LessonsView() {
         <CardHeader icon={<IconTile icon={LightbulbIcon} tone="warn" size="sm" />} title={t("Lessons")}
           description={t("Each time someone corrects an agent, it keeps one short lesson and uses it on that kind of work every time.")} />
         <CardBody className="grid gap-3">
-          <div className="grid gap-2 sm:grid-cols-3">
-            <Select label={t("Topic")} value={topic} onValueChange={setTopic}
-              options={[{ value: ALL, label: t("All topics") }, ...(list?.topics ?? []).map((x) => ({ value: x.key, label: `${x.label} (${x.count})` }))]} />
-            <Select label={t("Agent")} value={agent} onValueChange={setAgent}
-              options={[{ value: ALL, label: t("All agents") }, ...(list?.agents ?? []).map((x) => ({ value: x.id, label: `${x.name} (${x.count})` }))]} />
-            <Select label={t("Show")} value={state} onValueChange={(v) => setState(v === "all" ? "all" : "active")}
-              options={[{ value: "active", label: t("In use") }, { value: "all", label: t("Also replaced and forgotten") }]} />
-          </div>
-          {q.isLoading ? <Skeleton className="h-40 rounded-[var(--radius-md)]" /> : q.error || !list ? (
-            <p role="alert" className="text-[13px] text-danger">{errorMessage(q.error)}</p>
-          ) : list.items.length ? (
-            <ul className="grid grid-cols-[minmax(0,1fr)] divide-y divide-border overflow-hidden rounded-[var(--radius-md)] border border-border bg-surface">
-              {list.items.map((l) => <LessonRow key={l.id} l={l} onEdit={setEditing} onForget={setForgetting} />)}
-            </ul>
-          ) : (
-            <EmptyState icon={LightbulbIcon} title={t("No lessons yet")}
-              body={t("Send work back with what was wrong, answer an agent's question with the rule, or tell it in chat: it keeps the lesson for next time.")} />
-          )}
+          <DataTable
+            mode="server"
+            label={t("Lessons")}
+            columns={columns}
+            rows={table.rows}
+            total={table.total}
+            rowId={(l) => l.id}
+            rowLabel={(l) => l.text}
+            control={control}
+            loading={table.loading}
+            fetching={table.fetching}
+            error={table.error}
+            onRetry={table.refetch}
+            searchPlaceholder={t("Search lessons")}
+            exportName={t("lessons")}
+            exportRows={() => everyRow<Lesson, LessonList>("/api/lessons", control.state, {}, (b) => b.items)}
+            stickyHeader={false}
+            empty={<EmptyState icon={LightbulbIcon} title={t("No lessons yet")}
+              body={t("Send work back with what was wrong, answer an agent's question with the rule, or tell it in chat: it keeps the lesson for next time.")} />}
+            filters={
+              <>
+                <TableFilter control={control} id="topic" label={t("Topic")} allLabel={t("All topics")}
+                  options={(list?.topics ?? []).map((x) => ({ value: x.key, label: `${x.label} (${x.count})` }))} />
+                <TableFilter control={control} id="agent_id" label={t("Agent")} allLabel={t("All agents")}
+                  options={(list?.agents ?? []).map((x) => ({ value: x.id, label: `${x.name} (${x.count})` }))} />
+                <TableFilter control={control} id="state" label={t("Show")} allLabel={t("In use")}
+                  options={[{ value: "all", label: t("Also replaced and forgotten") }]} />
+              </>
+            }
+            actions={(l) => (l.state === "active" && (l.can_edit || l.can_undo) ? (
+              <RowMenu label={t("Options for this lesson")}>
+                {l.can_edit ? <MenuItem icon={<PencilSimpleIcon />} onSelect={() => setEditing(l)}>{t("Edit")}</MenuItem> : null}
+                {l.can_undo ? <MenuItem icon={<ArrowCounterClockwiseIcon />} disabled={undo.isPending} onSelect={() => undo.mutate(l.id)}>{t("Undo")}</MenuItem> : null}
+                {l.can_edit ? <MenuItem icon={<TrashIcon />} danger onSelect={() => setForgetting(l)}>{t("Forget")}</MenuItem> : null}
+              </RowMenu>
+            ) : null)}
+          />
         </CardBody>
       </Card>
       {editing ? <EditLesson key={editing.id} l={editing} onClose={() => setEditing(null)} /> : null}

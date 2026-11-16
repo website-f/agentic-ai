@@ -30,8 +30,9 @@ import { toast } from "sonner";
 import { EmptyState, IconTile, Page, PageHeader } from "@/components/page";
 import { PageTabs } from "@/components/page-tabs";
 import { Button } from "@/components/ui/button";
-import { ListCard, ListRow, Meta } from "@/components/ui/card";
+import { Meta } from "@/components/ui/card";
 import { ConfirmDialog } from "@/components/ui/confirm";
+import { DataTable, filterOf, TableFilter, useLocalTableState, type Column } from "@/components/ui/data-table";
 import { ResponsiveDialog } from "@/components/ui/dialog";
 import { Field, FormError, Input, TextareaField } from "@/components/ui/field";
 import { Menu, MenuContent, MenuItem, MenuTrigger } from "@/components/ui/menu";
@@ -63,6 +64,7 @@ import {
   type CompanyForm,
   type FormFile,
   type FormKind,
+  type Round,
   type Schedule,
   type Submission,
 } from "@/lib/forms";
@@ -459,13 +461,19 @@ function AskAi({ f, onClose, onDone }: { f: CompanyForm; onClose: () => void; on
 
 // ---------------------------------------------------------------- who handed in (managers)
 
+type Hand = Round["people"][number];
+
+/** Who handed in a form's round (managers). P107: a data table in the sheet: search by name,
+ * filter by where each person is, sort, pages; Accept and Return stay on each row. */
 function Hands({ f, onClose }: { f: CompanyForm; onClose: () => void }) {
   const t = useT();
   const qc = useQueryClient();
   const [period, setPeriod] = useState<string | undefined>(undefined);
-  const { data, isLoading } = useQuery(roundQuery(f.id, period));
+  const { data, isLoading, error, refetch } = useQuery(roundQuery(f.id, period));
   const [returning, setReturning] = useState<Submission | null>(null);
   const [why, setWhy] = useState("");
+  const control = useLocalTableState({ size: 25 });
+  const [state] = filterOf(control, "state");
   const review = useMutation({
     mutationFn: ({ id, decision, note }: { id: string; decision: "accept" | "return"; note?: string }) => reviewSubmission(id, decision, note),
     onSuccess: () => {
@@ -475,69 +483,107 @@ function Hands({ f, onClose }: { f: CompanyForm; onClose: () => void }) {
     },
     onError: (e) => toast.error(errorMessage(e)),
   });
-  const people = data?.people ?? [];
+  const people = useMemo(() => data?.people ?? [], [data]);
   const handed = people.filter((p) => p.submission).length;
+  const rows = useMemo(() => people.filter((p) => !state || (state === "missing" ? p.state === "missing" || p.state === "draft" : p.state === state)), [people, state]);
+  const STATE_ORDER: Record<string, number> = { late: 0, returned: 1, submitted: 2, missing: 3, draft: 3, accepted: 4 };
+
+  const columns: Column<Hand>[] = [
+    { id: "name", header: t("Person"), card: "title", sortValue: (p) => (p.name || "").toLowerCase(), exportValue: (p) => p.name, cell: (p) => <span className="font-medium break-words">{p.name || t("Someone")}</span> },
+    {
+      id: "state", header: t("Status"), sortValue: (p) => STATE_ORDER[p.state] ?? 5, exportValue: (p) => t((PERSON[p.state] ?? PERSON.missing!).label),
+      cell: (p) => {
+        const s = PERSON[p.state] ?? PERSON.missing!;
+        return <Pill tone={s.tone}>{t(s.label)}</Pill>;
+      },
+    },
+    ...(data && !data.period ? [{
+      id: "period", header: t("Round"), sortValue: (p: Hand) => p.submission?.period ?? null, exportValue: (p: Hand) => (p.submission ? periodText(p.submission.period) : ""),
+      cell: (p: Hand) => (p.submission ? periodText(p.submission.period) : <span className="text-muted">-</span>),
+    }] : []),
+    {
+      id: "when", header: t("Handed in"), kind: "date", sortValue: (p) => p.submission?.submitted_at ?? null,
+      cell: (p) => {
+        const sub = p.submission;
+        if (!sub?.submitted_at) return <span className="text-muted">-</span>;
+        return (
+          <span className="grid text-[12.5px]">
+            <span>{timeAgo(sub.submitted_at)}</span>
+            {sub.made_by === "agent" ? <span className="text-muted">{t("Filled by AI")}</span> : null}
+          </span>
+        );
+      },
+    },
+    {
+      id: "details", header: t("Details"), card: "full", exportValue: (p) => p.submission?.note ?? "",
+      cell: (p) => {
+        const sub = p.submission;
+        if (!sub) return null;
+        return (
+          <span className="grid min-w-0 gap-1.5">
+            {sub.note ? <span className="text-[12.5px] break-words">{sub.note}</span> : null}
+            {sub.files.length ? <FileChips files={sub.files} /> : null}
+            {sub.review_note && sub.status === "returned" ? <span className="text-[12.5px] break-words text-danger">{t("Returned: {note}", { note: sub.review_note })}</span> : null}
+            {returning?.id === sub.id ? (
+              <span className="grid gap-2 pt-1">
+                <Input autoFocus value={why} onChange={(e) => setWhy(e.target.value)} placeholder={t("What should they fix?")} aria-label={t("What should they fix?")} />
+                <span className="flex gap-2">
+                  <Button size="sm" variant="ghost" onClick={() => setReturning(null)}>{t("Cancel")}</Button>
+                  <Button size="sm" variant="danger" disabled={!why.trim()} loading={review.isPending} onClick={() => review.mutate({ id: sub.id, decision: "return", note: why.trim() })}>{t("Return it")}</Button>
+                </span>
+              </span>
+            ) : null}
+          </span>
+        );
+      },
+    },
+  ];
+
   return (
     <SideSheet
       open
       onOpenChange={(o) => !o && onClose()}
       title={f.name}
       description={data?.period ? t("{a} of {b} handed in for {period}", { a: handed, b: people.length, period: periodText(data.period) }) : t("Everything handed in, newest first")}
-      size="md"
+      size="lg"
     >
       <div className="grid gap-4">
         {data && data.periods.length > 1 ? (
           <Select label={t("Round")} value={data.period ?? ""} onValueChange={setPeriod}
             options={data.periods.map((p) => ({ value: p, label: periodText(p) }))} className="sm:w-64" />
         ) : null}
-        {isLoading ? (
-          <div className="grid gap-2">{[0, 1, 2].map((i) => <Skeleton key={i} className="h-14 rounded-sm" />)}</div>
-        ) : people.length ? (
-          <ListCard>
-            {people.map((p) => {
-              const s = PERSON[p.state] ?? PERSON.missing!;
-              const sub = p.submission;
-              return (
-                <ListRow
-                  key={`${p.user_id}:${sub?.id ?? ""}`}
-                  title={p.name || t("Someone")}
-                  meta={
-                    <>
-                      {sub ? <Meta items={[sub.submitted_at ? timeAgo(sub.submitted_at) : null, sub.made_by === "agent" ? t("Filled by AI") : null, data?.period ? null : periodText(sub.period)]} /> : null}
-                      {sub?.note ? <span className="basis-full text-[12.5px]">{sub.note}</span> : null}
-                      {sub?.files.length ? <span className="basis-full pt-1"><FileChips files={sub.files} /></span> : null}
-                      {sub?.review_note && sub.status === "returned" ? <span className="basis-full text-[12.5px] text-danger">{t("Returned: {note}", { note: sub.review_note })}</span> : null}
-                      {returning?.id === sub?.id && sub ? (
-                        <span className="grid basis-full gap-2 pt-2">
-                          <Input autoFocus value={why} onChange={(e) => setWhy(e.target.value)} placeholder={t("What should they fix?")} aria-label={t("What should they fix?")} />
-                          <span className="flex gap-2">
-                            <Button size="sm" variant="ghost" onClick={() => setReturning(null)}>{t("Cancel")}</Button>
-                            <Button size="sm" variant="danger" disabled={!why.trim()} loading={review.isPending} onClick={() => review.mutate({ id: sub.id, decision: "return", note: why.trim() })}>{t("Return it")}</Button>
-                          </span>
-                        </span>
-                      ) : null}
-                    </>
-                  }
-                  trailing={
-                    <>
-                      <Pill tone={s.tone}>{t(s.label)}</Pill>
-                      {sub && sub.status === "submitted" && returning?.id !== sub.id ? (
-                        <>
-                          <Button size="sm" variant="ghost" onClick={() => { setReturning(sub); setWhy(""); }}>{t("Return")}</Button>
-                          <Button size="sm" variant="outline" loading={review.isPending && review.variables?.id === sub.id} onClick={() => review.mutate({ id: sub.id, decision: "accept" })}>
-                            <CheckCircleIcon size={14} /> {t("Accept")}
-                          </Button>
-                        </>
-                      ) : null}
-                    </>
-                  }
-                />
-              );
-            })}
-          </ListCard>
-        ) : (
-          <p className="text-[13px] text-muted">{t("Nobody is expected to hand this in yet: add people to the company or department first.")}</p>
-        )}
+        <DataTable
+          label={t("Who handed it in")}
+          columns={columns}
+          rows={rows}
+          rowId={(p) => `${p.user_id}:${p.submission?.id ?? ""}`}
+          rowLabel={(p) => p.name || t("Someone")}
+          control={control}
+          loading={isLoading}
+          error={error}
+          onRetry={() => void refetch()}
+          searchText={(p) => `${p.name} ${p.submission?.note ?? ""}`}
+          searchPlaceholder={t("Search by name")}
+          exportName={t("{name} hand-ins", { name: f.name })}
+          stickyHeader={false}
+          empty={<p className="text-[13px] text-muted">{t("Nobody is expected to hand this in yet: add people to the company or department first.")}</p>}
+          filters={
+            <TableFilter control={control} id="state" label={t("Status")} allLabel={t("Everyone")}
+              options={["late", "submitted", "returned", "accepted", "missing"].map((k) => ({ value: k, label: t(PERSON[k]!.label) }))} />
+          }
+          actions={(p) => {
+            const sub = p.submission;
+            if (!sub || sub.status !== "submitted" || returning?.id === sub.id) return null;
+            return (
+              <span className="flex items-center gap-1">
+                <Button size="sm" variant="ghost" onClick={() => { setReturning(sub); setWhy(""); }}>{t("Return")}</Button>
+                <Button size="sm" variant="outline" loading={review.isPending && review.variables?.id === sub.id} onClick={() => review.mutate({ id: sub.id, decision: "accept" })}>
+                  <CheckCircleIcon size={14} /> {t("Accept")}
+                </Button>
+              </span>
+            );
+          }}
+        />
       </div>
     </SideSheet>
   );

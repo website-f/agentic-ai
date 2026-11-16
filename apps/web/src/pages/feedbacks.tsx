@@ -9,7 +9,6 @@ import {
   CameraIcon,
   ChatTeardropTextIcon,
   GavelIcon,
-  MagnifyingGlassIcon,
   PlusIcon,
   TrashIcon,
 } from "@phosphor-icons/react";
@@ -21,9 +20,10 @@ import { toast } from "sonner";
 import { EmptyState, Page, PageHeader } from "@/components/page";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm";
+import { DataTable, filterOf, TableFilter, useServerTable, useTableState, type Column } from "@/components/ui/data-table";
 import { Pill } from "@/components/ui/pill";
-import { Segmented } from "@/components/ui/segmented";
 import { Select } from "@/components/ui/select";
+import { Segmented } from "@/components/ui/segmented";
 import { SideSheet } from "@/components/ui/side-sheet";
 import { Skeleton } from "@/components/ui/skeleton";
 import { SwitchField } from "@/components/ui/switch";
@@ -35,17 +35,18 @@ import {
   deleteFeedback,
   feedbackConfigQuery,
   feedbackKeys,
-  feedbackListQuery,
   saveFeedbackConfig,
   screenshotUrl,
   STATUSES,
   statusOf,
   updateFeedback,
   type FeedbackItem,
+  type FeedbackList,
   type FeedbackStatus,
   type RuleDraft,
 } from "@/lib/feedback";
 import { onLiveEvent } from "@/lib/live";
+import { everyRow } from "@/lib/table-export";
 import { ROLE_INFO, type Role } from "@/lib/types";
 import { cn, timeAgo } from "@/lib/utils";
 import { ALL_NAV } from "@/nav";
@@ -119,74 +120,118 @@ function Inbox() {
   const t = useT();
   const search = useSearch({ from: "/app/feedbacks" });
   const navigate = useNavigate({ from: "/feedbacks" });
-  const [status, setStatus] = useState<FeedbackStatus | "all">("all");
-  const [category, setCategory] = useState<string>("all");
-  const [text, setText] = useState("");
-  const [q, setQ] = useState("");
-  useEffect(() => {
-    const id = setTimeout(() => setQ(text.trim()), 300);
-    return () => clearTimeout(id);
-  }, [text]);
-  const list = useQuery(feedbackListQuery({ status: status === "all" ? undefined : status, category: category === "all" ? undefined : category, q: q || undefined }));
-  const items = list.data?.items ?? [];
-  const counts = list.data?.counts ?? {};
-  const total = list.data?.total ?? 0;
-  const open = items.find((i) => i.id === search.f) ?? null;
-  const select = (id: string | undefined) => void navigate({ search: { f: id }, replace: true });
+  const qc = useQueryClient();
+  // P107: a data table. The server finds words (note, page, person), filters where it stands
+  // and the kind, sorts and sends one numbered page; the address keeps all of it.
+  const control = useTableState({ size: 25 }, { filters: ["status", "category"] });
+  const [statusParam, setStatus] = filterOf(control, "status");
+  const status = (STATUSES.some((s) => s.value === statusParam) ? statusParam : "all") as FeedbackStatus | "all";
+  const table = useServerTable<FeedbackItem, FeedbackList>([...feedbackKeys.all, "list"], "/api/feedback", control.state, {},
+    { pick: (b) => b.items, refetchInterval: 60_000 });
+  const counts = table.body?.counts ?? {};
+  const total = table.body?.total ?? 0;
+  // The open piece stays open when a change moves it off this page (or out of the filter).
+  const found = table.rows.find((i) => i.id === search.f) ?? null;
+  const [held, setHeld] = useState<FeedbackItem | null>(null);
+  if (found && found !== held) setHeld(found);
+  const open = found ?? (held && held.id === search.f ? held : null);
+  const select = (id: string | undefined) => void navigate({ search: (prev) => ({ ...prev, f: id }), replace: true });
+
+  const columns: Column<FeedbackItem>[] = [
+    {
+      id: "note", header: t("Feedback"), card: "title", exportValue: (f) => f.note,
+      cell: (f) => (
+        <span className="flex min-w-0 items-start gap-3">
+          {f.has_screenshot ? (
+            <span className="relative h-12 w-20 shrink-0 overflow-hidden rounded-sm border border-border bg-surface-2">
+              <img src={screenshotUrl(f.id)} alt="" loading="lazy" className="size-full object-cover object-top" />
+              {f.marks ? (
+                <span className="absolute right-0.5 bottom-0.5 rounded-full bg-neutral-900/80 px-1.5 text-[10.5px] font-medium text-white tabular">
+                  {f.marks === 1 ? t("1 mark") : t("{n} marks", { n: f.marks })}
+                </span>
+              ) : null}
+            </span>
+          ) : (
+            <span className="grid h-12 w-20 shrink-0 place-items-center rounded-sm border border-dashed border-border text-muted">
+              <ChatTeardropTextIcon size={18} aria-label={t("Written feedback")} />
+            </span>
+          )}
+          <span className="grid min-w-0 gap-0.5">
+            <span className={cn("line-clamp-2 text-[13px] whitespace-pre-line", !f.note && "text-muted")}>{f.note || t("Screenshot with marks")}</span>
+            {f.dev_note ? <span className="truncate text-[11.5px] text-accent">{t("Answered")}: {f.dev_note}</span> : null}
+          </span>
+        </span>
+      ),
+    },
+    {
+      id: "status", header: t("Where it stands"), sortable: true, exportValue: (f) => t(statusOf(f.status).label),
+      cell: (f) => { const s = statusOf(f.status); return <Pill tone={s.tone}>{t(s.label)}</Pill>; },
+    },
+    {
+      id: "kind", header: t("Kind"), sortable: true, exportValue: (f) => t(categoryOf(f.category).label),
+      cell: (f) => { const c = categoryOf(f.category); return <Pill tone={c.tone === "accent" ? "neutral" : c.tone}>{t(c.label)}</Pill>; },
+    },
+    {
+      id: "from", header: t("From"), sortable: true, hideBelow: "lg", exportValue: (f) => f.author_name,
+      cell: (f) => (
+        <span className="grid min-w-0">
+          <span className="break-words">{f.author_name || t("Someone who left")}</span>
+          <span className="text-[12px] text-muted">{roleLabel(t, f.author_role)}</span>
+        </span>
+      ),
+    },
+    { id: "page", header: t("Page"), hideBelow: "xl", exportValue: (f) => f.page_title || f.page_path, cell: (f) => <span className="break-words text-muted">{f.page_title || f.page_path || "-"}</span> },
+    {
+      id: "when", header: t("When"), sortable: true, kind: "date", className: "whitespace-nowrap", exportValue: (f) => f.created_at,
+      cell: (f) => <time dateTime={f.created_at} className="text-[12.5px] text-muted">{timeAgo(f.created_at)}</time>,
+    },
+  ];
 
   return (
     <>
-      <div className="flex flex-wrap items-center gap-2">
-        <Segmented<FeedbackStatus | "all">
-          value={status}
-          onChange={setStatus}
-          label={t("Where it stands")}
-          size="sm"
-          options={[
-            { value: "all", label: t("All"), count: total },
-            ...STATUSES.map((s) => ({ value: s.value, label: t(s.label), count: counts[s.value] ?? 0 })),
-          ]}
-        />
-        <div className="flex min-w-0 flex-1 flex-wrap items-center justify-end gap-2">
-          <Select
-            size="sm"
-            value={category}
-            onValueChange={setCategory}
-            label={t("Kind")}
-            options={[{ value: "all", label: t("Every kind") }, ...CATEGORIES.map((c) => ({ value: c.value, label: t(c.label) }))]}
-          />
-          <label className="relative flex min-w-[12rem] flex-1 sm:max-w-xs">
-            <MagnifyingGlassIcon size={15} className="pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2 text-muted" />
-            <input
-              value={text}
-              onChange={(e) => setText(e.target.value)}
-              placeholder={t("Search notes, pages, people")}
-              aria-label={t("Search notes, pages, people")}
-              className="h-8 w-full rounded-sm border border-border bg-surface pr-2.5 pl-8 text-[13px] outline-none focus:border-accent pointer-coarse:h-10"
-            />
-          </label>
-        </div>
-      </div>
-
-      {list.isPending ? (
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">{[0, 1, 2, 3, 4, 5].map((i) => <Skeleton key={i} className="h-56" />)}</div>
-      ) : list.isError ? (
-        <p className="text-[13px] text-danger">{errorMessage(list.error)}</p>
-      ) : !items.length ? (
-        <EmptyState
-          icon={ChatTeardropTextIcon}
-          title={total ? t("Nothing matches") : t("No feedback yet")}
-          body={total ? t("Try another filter or other words.") : t("Once the button is on, what people send shows up here, newest first.")}
-        />
-      ) : (
-        <ul className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-          {items.map((f) => (
-            <li key={f.id}>
-              <Card f={f} onOpen={() => select(f.id)} />
-            </li>
-          ))}
-        </ul>
-      )}
+      <Segmented<FeedbackStatus | "all">
+        value={status}
+        onChange={(v) => setStatus(v === "all" ? "" : v)}
+        label={t("Where it stands")}
+        size="sm"
+        options={[
+          { value: "all", label: t("All"), count: total },
+          ...STATUSES.map((s) => ({ value: s.value, label: t(s.label), count: counts[s.value] ?? 0 })),
+        ]}
+      />
+      <DataTable
+        label={t("Feedback")}
+        mode="server"
+        columns={columns}
+        rows={table.rows}
+        total={table.total}
+        rowId={(f) => f.id}
+        rowLabel={(f) => f.note || f.author_name}
+        control={control}
+        loading={table.loading}
+        fetching={table.fetching}
+        error={table.error}
+        onRetry={table.refetch}
+        searchPlaceholder={t("Search notes, pages, people")}
+        filters={
+          <TableFilter control={control} id="category" label={t("Kind")} allLabel={t("Every kind")}
+            options={CATEGORIES.map((c) => ({ value: c.value, label: t(c.label) }))} />
+        }
+        onOpen={(f) => select(f.id)}
+        exportName={t("feedback")}
+        exportRows={() => everyRow<FeedbackItem, FeedbackList>("/api/feedback", control.state, {}, (b) => b.items)}
+        rowActions={{
+          view: (f) => select(f.id),
+          remove: async (f) => {
+            await deleteFeedback(f.id);
+            if (f.id === search.f) select(undefined);
+            void qc.invalidateQueries({ queryKey: feedbackKeys.all });
+          },
+          removeBody: () => t("It is gone for good, screenshot included. The sender no longer sees it."),
+        }}
+        rowClassName={(f) => (f.id === search.f ? "bg-accent-soft/40" : undefined)}
+        empty={<EmptyState icon={ChatTeardropTextIcon} title={t("No feedback yet")} body={t("Once the button is on, what people send shows up here, newest first.")} />}
+      />
       <Detail item={open} onClose={() => select(undefined)} />
     </>
   );
@@ -195,44 +240,6 @@ function Inbox() {
 function roleLabel(t: (s: string) => string, role: string): string {
   const info = ROLE_INFO[role as Role];
   return info ? t(info.label) : role;
-}
-
-function Card({ f, onOpen }: { f: FeedbackItem; onOpen: () => void }) {
-  const t = useT();
-  const s = statusOf(f.status);
-  const c = categoryOf(f.category);
-  return (
-    <button
-      type="button"
-      onClick={onOpen}
-      className="group grid h-full w-full content-start overflow-hidden rounded-[var(--radius-md)] border border-border bg-surface text-left transition-[border-color,box-shadow] hover:border-accent/40 hover:shadow-[var(--shadow-soft)]"
-    >
-      {f.has_screenshot ? (
-        <div className="relative aspect-[16/9] overflow-hidden border-b border-border bg-surface-2">
-          <img src={screenshotUrl(f.id)} alt="" loading="lazy" className="size-full object-cover object-top transition-transform duration-300 group-hover:scale-[1.03]" />
-          {f.marks ? (
-            <span className="absolute right-2 bottom-2 rounded-full bg-neutral-900/80 px-2 py-0.5 text-[11px] font-medium text-white">
-              {f.marks === 1 ? t("1 mark") : t("{n} marks", { n: f.marks })}
-            </span>
-          ) : null}
-        </div>
-      ) : null}
-      <div className="grid gap-2 px-3.5 py-3">
-        <div className="flex flex-wrap items-center gap-1.5">
-          <Pill tone={s.tone}>{t(s.label)}</Pill>
-          <Pill tone={c.tone === "accent" ? "neutral" : c.tone}>{t(c.label)}</Pill>
-          {!f.has_screenshot ? <ChatTeardropTextIcon size={14} className="text-muted" aria-label={t("Written feedback")} /> : null}
-          <span className="ml-auto text-[11.5px] text-muted">{timeAgo(f.created_at)}</span>
-        </div>
-        <p className={cn("line-clamp-3 text-[13px] whitespace-pre-line", !f.note && "text-muted")}>{f.note || t("Screenshot with marks")}</p>
-        <p className="truncate text-[11.5px] text-muted">
-          {f.author_name || t("Someone who left")} · {roleLabel(t, f.author_role)}
-          {f.page_title || f.page_path ? ` · ${f.page_title || f.page_path}` : ""}
-        </p>
-        {f.dev_note ? <p className="truncate text-[11.5px] text-accent">{t("Answered")}: {f.dev_note}</p> : null}
-      </div>
-    </button>
-  );
 }
 
 function Detail({ item, onClose }: { item: FeedbackItem | null; onClose: () => void }) {

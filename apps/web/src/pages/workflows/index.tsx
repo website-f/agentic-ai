@@ -10,18 +10,16 @@ import { EmptyState, IconTile, Page, PageHeader } from "@/components/page";
 import { PinButton } from "@/components/pin-button";
 import { clearWorkflowDraft, peekWorkflowDraft } from "@/components/task-composer/store";
 import { Button } from "@/components/ui/button";
-import { Card, Toolbar } from "@/components/ui/card";
+import { DataTable, TableFilter, useTableState, type Column } from "@/components/ui/data-table";
 import { ResponsiveDialog } from "@/components/ui/dialog";
 import { FormError, TextareaField } from "@/components/ui/field";
 import { Pill } from "@/components/ui/pill";
-import { SearchInput } from "@/components/ui/search-input";
 import { Segmented } from "@/components/ui/segmented";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Stat, StatGrid } from "@/components/ui/stat";
-import { msg, useT } from "@/i18n";
+import { locale, msg, useT } from "@/i18n";
 import { api, errorMessage } from "@/lib/api";
 import { meQuery } from "@/lib/queries";
-import { cn } from "@/lib/utils";
 import { runsQuery, workflowsQuery, type Graph, type Workflow } from "@/lib/workflows";
 
 import { WorkflowEditor, type Draft } from "./editor";
@@ -136,33 +134,52 @@ function NewWorkflowDialog({ onClose, onStart }: { onClose: () => void; onStart:
 
 // ---------------------------------------------------------------- list
 
-function WorkflowCard({ wf, onOpen }: { wf: Workflow; onOpen: () => void }) {
-  const t = useT();
-  return (
-    <Card interactive className="relative p-0">
-      <button type="button" onClick={onOpen} className="grid h-full w-full min-w-0 grid-cols-[minmax(0,1fr)] content-start gap-3 p-4 pb-12 text-left">
-        <div className="flex items-start gap-3">
-          <IconTile icon={FlowArrowIcon} tone={wf.status === "active" ? "accent" : "neutral"} />
-          <span className="min-w-0 flex-1">
-            <span className="block text-[14.5px] leading-snug font-semibold break-words">{wf.name}</span>
-            <span className="mt-0.5 block text-[12.5px] text-muted">{wf.steps === 1 ? t("1 step") : t("{n} steps", { n: wf.steps })}</span>
+/** What a workflow was made from, for the Source column and filter. */
+const sourceOf = (wf: Workflow): "documents" | "ai" | "manual" =>
+  wf.source_file_ids?.length ? "documents" : wf.source === "analyst" ? "ai" : "manual";
+
+function workflowColumns(t: ReturnType<typeof useT>): Column<Workflow>[] {
+  return [
+    {
+      id: "name", header: t("Workflow"), card: "title", sortValue: (wf) => wf.name.toLowerCase(), exportValue: (wf) => wf.name,
+      cell: (wf) => (
+        <span className="flex min-w-0 items-start gap-3">
+          <IconTile icon={FlowArrowIcon} tone={wf.status === "active" ? "accent" : "neutral"} size="sm" className="mt-0.5" />
+          <span className="grid min-w-0 gap-0.5">
+            <span className="text-[13.5px] font-semibold break-words">{wf.name}</span>
+            {wf.description ? <span className="line-clamp-2 text-[12.5px] break-words text-muted">{wf.description}</span> : null}
           </span>
-          <Pill tone={wf.status === "active" ? "ok" : "neutral"}>{wf.status === "active" ? t("Active") : t("Draft")}</Pill>
-        </div>
-        {wf.description ? <span className="line-clamp-2 text-[13px] break-words text-muted">{wf.description}</span> : null}
-        <StepStrip graph={wf.graph} />
-        {wf.agent_ids.length || wf.source === "analyst" ? (
-          <div className="flex flex-wrap gap-1.5">
-            {wf.agent_ids.length ? <Pill tone="accent">{wf.agent_ids.length === 1 ? t("1 agent follows") : t("{n} agents follow", { n: wf.agent_ids.length })}</Pill> : null}
-            {wf.source_file_ids?.length ? (
-              <Pill tone="info" title={wf.source_files?.map((f) => f.name).join(", ")}>{t("Built from documents")}</Pill>
-            ) : wf.source === "analyst" ? <Pill tone="info">{t("AI-drafted")}</Pill> : null}
-          </div>
-        ) : null}
-      </button>
-      <PinButton kind="workflow" refId={wf.id} title={wf.name} className="absolute right-2.5 bottom-2.5" />
-    </Card>
-  );
+        </span>
+      ),
+    },
+    {
+      id: "status", header: t("Status"), sortValue: (wf) => (wf.status === "active" ? 0 : 1), exportValue: (wf) => (wf.status === "active" ? t("Active") : t("Draft")),
+      cell: (wf) => <Pill tone={wf.status === "active" ? "ok" : "neutral"}>{wf.status === "active" ? t("Active") : t("Draft")}</Pill>,
+    },
+    {
+      id: "steps", header: t("Steps"), kind: "number", align: "right", sortValue: (wf) => wf.steps,
+      cell: (wf) => (
+        <span className="inline-flex items-center justify-end gap-2">
+          <span className="hidden xl:inline-flex"><StepStrip graph={wf.graph} max={5} /></span>
+          <span className="tabular">{wf.steps}</span>
+        </span>
+      ),
+    },
+    {
+      id: "agents", header: t("Followed by"), kind: "number", align: "right", hideBelow: "lg", sortValue: (wf) => wf.agent_ids.length,
+      cell: (wf) => (wf.agent_ids.length ? (wf.agent_ids.length === 1 ? t("1 agent follows") : t("{n} agents follow", { n: wf.agent_ids.length })) : <span className="text-muted">-</span>),
+    },
+    {
+      id: "source", header: t("Source"), hideBelow: "lg", sortValue: sourceOf,
+      exportValue: (wf) => (sourceOf(wf) === "documents" ? t("Built from documents") : sourceOf(wf) === "ai" ? t("AI-drafted") : t("Drawn by hand")),
+      cell: (wf) => (sourceOf(wf) === "documents" ? <Pill tone="info" title={wf.source_files?.map((f) => f.name).join(", ")}>{t("Built from documents")}</Pill>
+        : sourceOf(wf) === "ai" ? <Pill tone="info">{t("AI-drafted")}</Pill> : <span className="text-muted">{t("Drawn by hand")}</span>),
+    },
+    {
+      id: "created", header: t("Created"), kind: "date", hideBelow: "xl", sortValue: (wf) => wf.created_at,
+      cell: (wf) => <span className="text-muted tabular">{new Date(wf.created_at).toLocaleDateString(locale(), { day: "numeric", month: "short", year: "numeric" })}</span>,
+    },
+  ];
 }
 
 export function WorkflowsPage() {
@@ -177,10 +194,22 @@ export function WorkflowsPage() {
   // "Turn into a workflow" on a task hands its drafted graph over: opened for review, then saved.
   const [draft, setDraft] = useState<Draft | null>(() => peekWorkflowDraft());
   useEffect(() => clearWorkflowDraft(), []);
-  const [q, setQ] = useState("");
-  const [show, setShow] = useState<"all" | "active" | "draft">("all");
+  // P107: the list is a data table; its search, filters and page stay in the address while a
+  // workflow is open, so closing it returns to the same rows.
+  const control = useTableState({ size: 25 }, { filters: ["status", "source"] });
+  const { status: show, source } = control.state.f;
+  const columns = workflowColumns(t);
 
-  const open = (id?: string) => navigate({ to: "/workflows", search: id ? { w: id } : {}, replace: true });
+  const open = (id?: string) => navigate({
+    to: "/workflows",
+    search: ((prev: Record<string, unknown>) => {
+      const next: Record<string, unknown> = { ...prev, w: id };
+      if (!id) delete next.w;
+      delete next.run;
+      return next;
+    }) as never,
+    replace: true,
+  });
   const openRun = (id: string) => navigate({ to: "/workflows", search: { run: id } });
   const editing = search.w ? workflows.find((w) => w.id === search.w) ?? null : null;
 
@@ -197,8 +226,7 @@ export function WorkflowsPage() {
     );
   }
 
-  const needle = q.trim().toLowerCase();
-  const shown = workflows.filter((w) => (show === "all" || w.status === show) && (!needle || `${w.name} ${w.description}`.toLowerCase().includes(needle)));
+  const shown = workflows.filter((w) => (!show || w.status === show) && (!source || sourceOf(w) === source));
   return (
     <Page>
       <PageHeader title={t("Workflows")}
@@ -212,29 +240,37 @@ export function WorkflowsPage() {
           <Stat label={t("Needs you")} value={runs.reduce((n, r) => n + r.needs_you, 0)} icon={HandIcon} tone={runs.some((r) => r.needs_you) ? "warn" : "neutral"} hint={t("Decisions, answers, reviews")} />
         </StatGrid>
       ) : null}
-      {workflows.length ? (
-        <Toolbar>
-          <Segmented label={t("Show")} value={show} onChange={setShow} options={[
-            { value: "all", label: t("All"), count: workflows.length },
-            { value: "active", label: t("Active"), count: workflows.filter((w) => w.status === "active").length },
-            { value: "draft", label: t("Drafts"), count: workflows.filter((w) => w.status === "draft").length },
-          ]} />
-          <SearchInput value={q} onChange={setQ} placeholder={t("Search workflows")} />
-        </Toolbar>
-      ) : null}
-      {isLoading ? <div className="grid grid-cols-[minmax(0,1fr)] gap-3 sm:grid-cols-2 lg:grid-cols-3">{[0, 1, 2].map((i) => <Skeleton key={i} className="h-40 rounded-[var(--radius-md)]" />)}</div>
-        : error ? <p role="alert" className="text-danger">{errorMessage(error)}</p>
-        : !workflows.length ? (
-          <EmptyState icon={FlowArrowIcon} title={t("No workflows yet")}
-            body={t("A workflow is a map of how a job gets done: each step, who does it, where it branches and who approves. Start from one of the templates, describe it for AI, or draw it.")}
-            action={canManage ? <Button onClick={() => setChoosing(true)}><PlusIcon size={16} weight="bold" /> {t("Create the first one")}</Button> : undefined} />
-        ) : !shown.length ? (
-          <p className="rounded-[var(--radius-md)] border border-dashed border-border px-4 py-8 text-center text-[13px] text-muted">{t("Nothing matches.")}</p>
-        ) : (
-          <div data-guide="workflows.list" className={cn("grid grid-cols-[minmax(0,1fr)] gap-3 sm:grid-cols-2 lg:grid-cols-3")}>
-            {shown.map((wf) => <WorkflowCard key={wf.id} wf={wf} onOpen={() => open(wf.id)} />)}
-          </div>
-        )}
+      {!isLoading && !error && !workflows.length ? (
+        <EmptyState icon={FlowArrowIcon} title={t("No workflows yet")}
+          body={t("A workflow is a map of how a job gets done: each step, who does it, where it branches and who approves. Start from one of the templates, describe it for AI, or draw it.")}
+          action={canManage ? <Button onClick={() => setChoosing(true)}><PlusIcon size={16} weight="bold" /> {t("Create the first one")}</Button> : undefined} />
+      ) : (
+        <div data-guide="workflows.list" className="min-w-0">
+          <DataTable
+            label={t("Workflows")}
+            columns={columns}
+            rows={shown}
+            rowId={(wf) => wf.id}
+            rowLabel={(wf) => wf.name}
+            control={control}
+            loading={isLoading}
+            error={error}
+            onOpen={(wf) => void open(wf.id)}
+            searchText={(wf) => `${wf.name} ${wf.description}`}
+            searchPlaceholder={t("Search workflows")}
+            exportName={t("workflows")}
+            filters={
+              <>
+                <TableFilter control={control} id="status" label={t("Status")} allLabel={t("All statuses")}
+                  options={[{ value: "active", label: t("Active") }, { value: "draft", label: t("Drafts") }]} />
+                <TableFilter control={control} id="source" label={t("Source")} allLabel={t("All sources")}
+                  options={[{ value: "documents", label: t("Built from documents") }, { value: "ai", label: t("AI-drafted") }, { value: "manual", label: t("Drawn by hand") }]} />
+              </>
+            }
+            actions={(wf) => <PinButton kind="workflow" refId={wf.id} title={wf.name} />}
+          />
+        </div>
+      )}
       <RecentRuns onOpen={openRun} />
       {choosing ? <NewWorkflowDialog onClose={() => setChoosing(false)} onStart={(d) => { setChoosing(false); setDraft(d); }} /> : null}
     </Page>

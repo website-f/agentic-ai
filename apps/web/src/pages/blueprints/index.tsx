@@ -1,5 +1,5 @@
 import {
-  BlueprintIcon, CheckCircleIcon, DotsThreeIcon, PencilSimpleIcon, PlusIcon, RobotIcon, SparkleIcon, TrashIcon, UserPlusIcon,
+  BlueprintIcon, CheckCircleIcon, PlusIcon, RobotIcon, SparkleIcon, UserPlusIcon,
 } from "@phosphor-icons/react";
 import { useMutation, useQuery, useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
@@ -7,14 +7,12 @@ import { toast } from "sonner";
 
 import { EmptyState, Page, PageHeader } from "@/components/page";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
-import { ConfirmDialog } from "@/components/ui/confirm";
 import { ResponsiveDialog } from "@/components/ui/dialog";
 import { Field, FormError, TextareaField } from "@/components/ui/field";
-import { Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger } from "@/components/ui/menu";
+import { DataTable, TableFilter, useTableState, type Column } from "@/components/ui/data-table";
+import { MenuItem } from "@/components/ui/menu";
 import { Pill } from "@/components/ui/pill";
 import { Select } from "@/components/ui/select";
-import { SearchInput } from "@/components/ui/search-input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Stat, StatGrid } from "@/components/ui/stat";
 import { msg, useLang, useT } from "@/i18n";
@@ -216,61 +214,17 @@ function ApplyDialog({ bp, open, onOpenChange }: { bp: Blueprint; open: boolean;
   );
 }
 
-function BlueprintCard({ bp, canManage, toolCount, guideApply }: { bp: Blueprint; canManage: boolean; toolCount: number | null; guideApply?: string }) {
+/** P107: a row's Apply button and ⋯ menu (apply, edit, delete), with their dialogs. */
+function ApplyButton({ bp, guideApply }: { bp: Blueprint; guideApply?: string }) {
   const t = useT();
-  const qc = useQueryClient();
-  const [editing, setEditing] = useState(false);
   const [applying, setApplying] = useState(false);
-  const [removing, setRemoving] = useState(false);
-  const del = useMutation({
-    mutationFn: () => api(`/api/blueprints/${bp.id}`, "DELETE"),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: blueprintKeys.all }); toast.success(t("{name} deleted.", { name: bp.name })); },
-    onError: (e) => toast.error(errorMessage(e)),
-  });
   return (
-    <Card className="flex flex-col">
-      <div className="grid flex-1 grid-cols-[minmax(0,1fr)] content-start gap-3 p-4">
-        <div className="flex items-start gap-3">
-          <span aria-hidden className="grid size-10 shrink-0 place-items-center rounded-[var(--radius-sm)] text-white shadow-[inset_0_0_0_1px_rgb(0_0_0/0.08)]" style={{ background: bp.color }}>
-            <BlueprintIcon size={20} weight="duotone" />
-          </span>
-          <div className="min-w-0 flex-1">
-            <p className="text-[14.5px] leading-snug font-semibold break-words">{bp.name}</p>
-            <p className="text-[12.5px] break-words text-muted">{bp.role || t("No job title")}</p>
-          </div>
-          {canManage ? (
-            <Menu>
-              <MenuTrigger asChild><Button variant="ghost" size="icon-sm" className="-mt-1 -mr-1 max-sm:size-9" aria-label={t("Options for {name}", { name: bp.name })}><DotsThreeIcon size={20} weight="bold" /></Button></MenuTrigger>
-              <MenuContent>
-                <MenuItem icon={<UserPlusIcon />} onSelect={() => setApplying(true)}>{t("Apply to an agent")}</MenuItem>
-                <MenuItem icon={<PencilSimpleIcon />} onSelect={() => setEditing(true)}>{t("Edit")}</MenuItem>
-                <MenuSeparator />
-                <MenuItem icon={<TrashIcon />} danger onSelect={() => setRemoving(true)}>{t("Delete")}</MenuItem>
-              </MenuContent>
-            </Menu>
-          ) : null}
-        </div>
-        {bp.description ? <p className="line-clamp-3 text-[13px] break-words text-muted">{bp.description}</p> : null}
-        <div className="flex flex-wrap gap-1.5">
-          {toolCount !== null ? <Pill>{toolCount === 1 ? t("1 tool") : t("{n} tools", { n: toolCount })}</Pill> : null}
-          {bp.sop_ids.length ? <Pill>{bp.sop_ids.length === 1 ? t("1 SOP") : t("{n} SOPs", { n: bp.sop_ids.length })}</Pill> : null}
-          {bp.skill_ids.length ? <Pill>{bp.skill_ids.length === 1 ? t("1 skill") : t("{n} skills", { n: bp.skill_ids.length })}</Pill> : null}
-          <Pill tone={bp.autonomy === "auto" ? "warn" : "neutral"}>{bp.autonomy === "auto" ? t("Acts on its own") : t("Asks first")}</Pill>
-          {bp.used_by ? <Pill tone="accent">{t("{n} using", { n: bp.used_by })}</Pill> : null}
-          {bp.source === "analyst" ? <Pill tone="info">{t("AI-drafted")}</Pill> : null}
-        </div>
-      </div>
-      {canManage ? (
-        <div className="border-t border-border px-4 py-3">
-          <Button data-guide={guideApply} size="sm" variant="outline" className="w-full max-sm:h-9" onClick={() => setApplying(true)}><UserPlusIcon size={14} /> {t("Apply to an agent")}</Button>
-        </div>
-      ) : null}
-      {editing ? <BlueprintDialog editing={bp} open onOpenChange={setEditing} /> : null}
+    <>
+      <Button data-guide={guideApply} size="sm" variant="outline" className="max-sm:hidden" onClick={() => setApplying(true)}>
+        <UserPlusIcon size={14} /> {t("Apply to an agent")}
+      </Button>
       {applying ? <ApplyDialog bp={bp} open onOpenChange={setApplying} /> : null}
-      <ConfirmDialog open={removing} onOpenChange={setRemoving} title={t("Delete {name}?", { name: bp.name })}
-        body={t("Agents already created from it keep their settings; you just can't apply it again.")} confirmLabel={t("Delete")} danger
-        onConfirm={async () => { await del.mutateAsync(); }} />
-    </Card>
+    </>
   );
 }
 
@@ -281,13 +235,66 @@ export function BlueprintsPage() {
   const { data: blueprints = [], isLoading, error } = useQuery(blueprintsQuery);
   const { data: registry } = useQuery(toolsQuery);
   const [creating, setCreating] = useState(0);
-  const [q, setQ] = useState("");
+  // P107: the row menu's Edit and Apply open these; Delete is the table's own confirmation.
+  const [editing, setEditing] = useState<Blueprint | null>(null);
+  const [applying, setApplying] = useState<Blueprint | null>(null);
+  const qc = useQueryClient();
+  const remove = async (bp: Blueprint) => {
+    await api(`/api/blueprints/${bp.id}`, "DELETE");
+    void qc.invalidateQueries({ queryKey: blueprintKeys.all });
+  };
   // Same rule as the scope editor: a tool is allowed unless this blueprint (or the tool's default) says never.
   const toolsFor = (bp: Blueprint) => registry ? registry.filter((tool) => (bp.tools[tool.name] ?? tool.default_mode) !== "deny").length : null;
-  const shown = useMemo(() => {
-    const needle = q.trim().toLowerCase();
-    return blueprints.filter((b) => !needle || `${b.name} ${b.role} ${b.description}`.toLowerCase().includes(needle));
-  }, [blueprints, q]);
+  // P107: a data table; search, filters and page live in the address.
+  const control = useTableState({ size: 25 }, { filters: ["use", "model", "autonomy"] });
+  const { use, model, autonomy } = control.state.f;
+  const models = useMemo(() => [...new Set(blueprints.map((b) => b.model_group))].sort().map((m) => ({ value: m, label: m })), [blueprints]);
+  const shown = useMemo(() => blueprints.filter((b) =>
+    (!use || (use === "used" ? b.used_by > 0 : !b.used_by))
+    && (!model || b.model_group === model)
+    && (!autonomy || b.autonomy === autonomy)), [blueprints, use, model, autonomy]);
+  const firstId = shown[0]?.id;
+  const columns: Column<Blueprint>[] = [
+    {
+      id: "name", header: t("Blueprint"), card: "title", sortValue: (bp) => bp.name.toLowerCase(), exportValue: (bp) => bp.name,
+      cell: (bp) => (
+        <span className="flex min-w-0 items-start gap-3">
+          <span aria-hidden className="mt-0.5 grid size-8 shrink-0 place-items-center rounded-[var(--radius-sm)] text-white shadow-[inset_0_0_0_1px_rgb(0_0_0/0.08)]" style={{ background: bp.color }}>
+            <BlueprintIcon size={16} weight="duotone" />
+          </span>
+          <span className="grid min-w-0 gap-0.5">
+            <span className="text-[13.5px] font-semibold break-words">{bp.name}</span>
+            <span className="text-[12.5px] break-words text-muted">{bp.role || t("No job title")}</span>
+            {bp.description ? <span className="line-clamp-2 text-[12px] break-words text-muted">{bp.description}</span> : null}
+          </span>
+        </span>
+      ),
+    },
+    { id: "model", header: t("Model"), sortValue: (bp) => bp.model_group, cell: (bp) => <Pill className="font-mono">{bp.model_group}</Pill> },
+    {
+      id: "autonomy", header: t("Autonomy"), sortValue: (bp) => bp.autonomy,
+      exportValue: (bp) => (bp.autonomy === "auto" ? t("Acts on its own") : t("Asks first")),
+      cell: (bp) => <Pill tone={bp.autonomy === "auto" ? "warn" : "neutral"}>{bp.autonomy === "auto" ? t("Acts on its own") : t("Asks first")}</Pill>,
+    },
+    {
+      id: "contents", header: t("Includes"), hideBelow: "xl",
+      cell: (bp) => {
+        const tools = toolsFor(bp);
+        return (
+          <span className="flex flex-wrap gap-1 text-[11.5px]">
+            {tools !== null ? <Pill>{tools === 1 ? t("1 tool") : t("{n} tools", { n: tools })}</Pill> : null}
+            {bp.sop_ids.length ? <Pill>{bp.sop_ids.length === 1 ? t("1 SOP") : t("{n} SOPs", { n: bp.sop_ids.length })}</Pill> : null}
+            {bp.skill_ids.length ? <Pill>{bp.skill_ids.length === 1 ? t("1 skill") : t("{n} skills", { n: bp.skill_ids.length })}</Pill> : null}
+            {bp.source === "analyst" ? <Pill tone="info">{t("AI-drafted")}</Pill> : null}
+          </span>
+        );
+      },
+    },
+    {
+      id: "used", header: t("Agents using it"), kind: "number", align: "right", sortValue: (bp) => bp.used_by,
+      cell: (bp) => (bp.used_by ? <span className="font-medium text-accent">{bp.used_by}</span> : <span className="text-muted">0</span>),
+    },
+  ];
   return (
     <Page>
       <PageHeader title={t("Blueprints")}
@@ -312,15 +319,38 @@ export function BlueprintsPage() {
               <Stat label={t("Agents using them")} value={blueprints.reduce((n, b) => n + b.used_by, 0)} icon={RobotIcon} tone="info" hint={t("Across all blueprints")} />
               <Stat label={t("AI-drafted")} value={blueprints.filter((b) => b.source === "analyst").length} icon={SparkleIcon} tone="violet" hint={t("Drafted by an analyst agent")} />
             </StatGrid>
-            {blueprints.length > 6 ? <SearchInput value={q} onChange={setQ} placeholder={t("Search blueprints")} className="sm:max-w-80" /> : null}
-            {shown.length ? (
-              <div className="grid grid-cols-[minmax(0,1fr)] gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                {shown.map((bp, i) => <BlueprintCard key={bp.id} bp={bp} canManage={canManage} toolCount={toolsFor(bp)} guideApply={i === 0 ? "blueprints.apply" : undefined} />)}
-              </div>
-            ) : <EmptyState icon={BlueprintIcon} title={t("No blueprint matches")} body={t("Try another word.")} />}
+            <DataTable
+              label={t("Blueprints")}
+              columns={columns}
+              rows={shown}
+              rowId={(bp) => bp.id}
+              rowLabel={(bp) => bp.name}
+              control={control}
+              searchText={(bp) => `${bp.name} ${bp.role} ${bp.description} ${bp.model_group}`}
+              searchPlaceholder={t("Search blueprints")}
+              filters={
+                <>
+                  <TableFilter control={control} id="use" label={t("In use")} allLabel={t("In use or not")}
+                    options={[{ value: "used", label: t("In use") }, { value: "unused", label: t("Not in use") }]} />
+                  {models.length > 1 ? <TableFilter control={control} id="model" label={t("Model")} allLabel={t("All models")} options={models} /> : null}
+                  <TableFilter control={control} id="autonomy" label={t("Autonomy")} allLabel={t("Any autonomy")}
+                    options={[{ value: "ask", label: t("Asks first") }, { value: "auto", label: t("Acts on its own") }]} />
+                </>
+              }
+              exportName={t("blueprints")}
+              actions={canManage ? (bp) => <ApplyButton bp={bp} guideApply={bp.id === firstId ? "blueprints.apply" : undefined} /> : undefined}
+              rowActions={canManage ? {
+                edit: (bp) => setEditing(bp),
+                more: (bp) => <MenuItem icon={<UserPlusIcon />} onSelect={() => setApplying(bp)}>{t("Apply to an agent")}</MenuItem>,
+                remove,
+                removeBody: () => t("Agents already created from it keep their settings; you just can't apply it again."),
+              } : undefined}
+            />
           </>
         )}
       {creating ? <BlueprintDialog key={creating} open onOpenChange={(o) => !o && setCreating(0)} /> : null}
+      {editing ? <BlueprintDialog key={editing.id} editing={editing} open onOpenChange={(o) => !o && setEditing(null)} /> : null}
+      {applying ? <ApplyDialog key={applying.id} bp={applying} open onOpenChange={(o) => !o && setApplying(null)} /> : null}
     </Page>
   );
 }

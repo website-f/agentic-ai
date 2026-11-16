@@ -6,9 +6,9 @@ from datetime import UTC, datetime, timedelta
 from typing import Any, Literal
 from urllib.parse import urlsplit
 
-from fastapi import APIRouter, Depends, Response, status
+from fastapi import APIRouter, Depends, Query, Response, status
 from pydantic import BaseModel, Field
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...agents import decisions
@@ -33,6 +33,7 @@ from ...models import (
 )
 from ...services import prefs
 from ..deps import Principal, api_error, require
+from ..table import TableParams, like, sql_page
 from .tasks import approval_out
 
 router = APIRouter(prefix="/api", tags=["channels"])
@@ -563,24 +564,57 @@ async def delete_binding(
 # ---------------------------------------------------------------- the ledger
 
 
+# P107: the columns the ledger table sorts by (?sort=, "-" first for descending).
+DELIVERY_SORTS: dict[str, Any] = {
+    "when": Delivery.created_at,
+    "state": Delivery.state,
+    "where": Delivery.channel,
+}
+
+
 @router.get("/deliveries")
 async def list_deliveries(
+    response: Response,
     state: Literal["all", "pending", "sent", "failed", "skipped"] = "all",
+    channel: str | None = Query(default=None, max_length=16),
     limit: int = 100,
+    params: TableParams = Depends(),
     principal: Principal = Depends(require("channels.manage")),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
+    """Newest first, at most `limit` (300). P107: with `page` (api/table.py) one numbered page
+    of the same body, searched (`q`: what it said, its kind, channel or error), filtered by
+    `channel`, sorted by `sort`, with the matching rows in X-Total-Count; `counts` stay the
+    whole ledger's (for the state tabs)."""
     conds = [Delivery.workspace_id == principal.workspace_id]
     if state != "all":
         conds.append(Delivery.state == state)
-    rows = (
-        await db.scalars(
-            select(Delivery)
-            .where(*conds)
-            .order_by(Delivery.created_at.desc())
-            .limit(min(limit, 300))
-        )
-    ).all()
+    if params.paged:
+        if channel:
+            conds.append(Delivery.channel == channel)
+        said = func.coalesce(Delivery.payload["title"].astext, Delivery.payload["text"].astext, "")
+        for w in params.words:
+            pat = like(w)
+            conds.append(
+                or_(
+                    said.ilike(pat, escape="\\"),
+                    Delivery.kind.ilike(pat, escape="\\"),
+                    Delivery.channel.ilike(pat, escape="\\"),
+                    Delivery.last_error.ilike(pat, escape="\\"),
+                )
+            )
+        key, desc = params.sort_by(DELIVERY_SORTS, "-when")
+        order = [(DELIVERY_SORTS[key], desc), (Delivery.created_at, True), (Delivery.id, True)]
+        rows = await sql_page(db, select(Delivery).where(*conds), order, params, response)
+    else:
+        rows = (
+            await db.scalars(
+                select(Delivery)
+                .where(*conds)
+                .order_by(Delivery.created_at.desc())
+                .limit(min(limit, 300))
+            )
+        ).all()
     counts = dict(
         (
             await db.execute(

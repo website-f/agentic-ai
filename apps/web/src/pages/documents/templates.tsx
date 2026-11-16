@@ -1,4 +1,4 @@
-import { DotsThreeIcon, FileDocIcon, FilePlusIcon, PencilSimpleIcon, PlusIcon, StackIcon, TrashIcon, UploadSimpleIcon } from "@phosphor-icons/react";
+import { FileDocIcon, FilePlusIcon, PlusIcon, StackIcon, UploadSimpleIcon } from "@phosphor-icons/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
@@ -7,20 +7,15 @@ import { toast } from "sonner";
 import { FilePicker } from "@/components/file-drop";
 import { EmptyState, IconTile, Page } from "@/components/page";
 import { Button } from "@/components/ui/button";
-import { Card, Toolbar } from "@/components/ui/card";
-import { ConfirmDialog } from "@/components/ui/confirm";
+import { DataTable, TableFilter, useTableState, type Column } from "@/components/ui/data-table";
 import { ResponsiveDialog } from "@/components/ui/dialog";
 import { Field, FormError, Input } from "@/components/ui/field";
-import { Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger } from "@/components/ui/menu";
+import { MenuItem } from "@/components/ui/menu";
 import { Pill } from "@/components/ui/pill";
-import { SearchInput } from "@/components/ui/search-input";
-import { Segmented } from "@/components/ui/segmented";
 import { Select } from "@/components/ui/select";
-import { Skeleton } from "@/components/ui/skeleton";
 import { msg, t as tr, useT } from "@/i18n";
 import { api, errorMessage } from "@/lib/api";
 import { BUILTIN_PLACEHOLDERS, docKeys, FIELD_TYPES, templatesQuery, type DocTemplate, type FieldType, type TemplateField } from "@/lib/documents";
-import { cn } from "@/lib/utils";
 import { NewDocumentDialog } from "./new-document";
 import { LibraryHeader } from "../library-hub/hub";
 import { KindTile } from "./visuals";
@@ -171,79 +166,6 @@ function WordDialog({ onClose }: { onClose: () => void }) {
   );
 }
 
-/** A miniature of the page the template makes: its heading and a few text lines. */
-function PaperThumb({ t }: { t: DocTemplate }) {
-  const raw = (t.body.match(/^#{1,3}\s+(.+)$/m)?.[1] ?? "").replace(/\{\{[^}]+\}\}/g, "").replace(/[*_`:]/g, "").trim();
-  const heading = raw.length > 2 ? raw : t.name;
-  const rows = t.kind === "quotation" || t.kind === "invoice" || t.kind === "delivery";
-  return (
-    <div aria-hidden className="relative h-28 overflow-hidden rounded-t-[var(--radius-md)] border-b border-border bg-[linear-gradient(180deg,var(--surface-2),var(--surface))] px-8 pt-4">
-      <div className="mx-auto h-full max-w-56 rounded-t-[6px] bg-white px-3.5 pt-3 shadow-[0_2px_10px_-4px_rgb(0_0_0/0.25)] ring-1 ring-black/5 transition-transform duration-300 group-hover:-translate-y-1">
-        <div className="flex items-center justify-between">
-          <div className="h-1 w-8 rounded-full bg-[var(--accent)]" />
-          <div className="h-1 w-5 rounded-full bg-[#e3e3e3]" />
-        </div>
-        <p className="mt-2 truncate text-[9.5px] font-semibold text-[#1d1d1d]">{heading}</p>
-        <div className="mt-1.5 grid gap-1">
-          {rows ? (
-            <div className="grid grid-cols-[3fr_1fr_1fr] gap-0.5">
-              {Array.from({ length: 9 }, (_, i) => <div key={i} className={cn("h-1.5 rounded-[1px]", i < 3 ? "bg-[#d9e9e1]" : "bg-[#efefef]")} />)}
-            </div>
-          ) : null}
-          {[92, 78, 86, 64].slice(0, rows ? 2 : 4).map((w) => <div key={w} className="h-1 rounded-full bg-[#ececec]" style={{ width: `${w}%` }} />)}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function TemplateCard({ t: tpl, onUse }: { t: DocTemplate; onUse: () => void }) {
-  const t = useT();
-  const qc = useQueryClient();
-  const [editing, setEditing] = useState(false);
-  const [removing, setRemoving] = useState(false);
-  const del = useMutation({
-    mutationFn: () => api(`/api/doc-templates/${tpl.id}`, "DELETE"),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: docKeys.templates }); toast.success(tr("{name} deleted.", { name: tpl.name })); },
-    onError: (e) => toast.error(errorMessage(e)),
-  });
-  return (
-    <Card interactive className="group flex flex-col">
-      <button type="button" onClick={onUse} className="text-left" aria-label={t("New document from {name}", { name: tpl.name })}>
-        <PaperThumb t={tpl} />
-      </button>
-      <div className="flex flex-1 flex-col gap-3 p-4">
-        <div className="flex items-start gap-3">
-          {tpl.docx_file_id ? <IconTile icon={FileDocIcon} tone="info" size="sm" /> : <KindTile kind={tpl.kind} size="sm" />}
-          <div className="min-w-0 flex-1">
-            <p className="text-[14px] font-semibold break-words">{tpl.name}</p>
-            <p className="line-clamp-2 text-[12.5px] text-muted">{tpl.description || t("No description")}</p>
-          </div>
-          <Menu>
-            <MenuTrigger asChild><Button variant="ghost" size="icon-sm" aria-label={t("Options for {name}", { name: tpl.name })}><DotsThreeIcon size={20} weight="bold" /></Button></MenuTrigger>
-            <MenuContent>
-              <MenuItem icon={<FilePlusIcon />} onSelect={onUse}>{t("New document from it")}</MenuItem>
-              <MenuItem icon={<PencilSimpleIcon />} onSelect={() => setEditing(true)}>{t("Edit")}</MenuItem>
-              <MenuSeparator />
-              <MenuItem icon={<TrashIcon />} danger onSelect={() => setRemoving(true)}>{t("Delete")}</MenuItem>
-            </MenuContent>
-          </Menu>
-        </div>
-        <div className="mt-auto flex flex-wrap items-center gap-1.5">
-          {tpl.builtin ? <Pill>{t("Starter")}</Pill> : <Pill tone="accent">{t("Yours")}</Pill>}
-          {tpl.docx_file_id ? <Pill tone="info">{t("Word layout")}</Pill> : null}
-          <Pill>{t("{n} fields", { n: tpl.fields.length })}</Pill>
-          {tpl.used ? <Pill tone="ok">{t("used {n}×", { n: tpl.used })}</Pill> : null}
-          <Button size="sm" variant="outline" className="ml-auto" onClick={onUse}><FilePlusIcon size={14} /> {t("Use it")}</Button>
-        </div>
-      </div>
-      {editing ? <TemplateDialog editing={tpl} onClose={() => setEditing(false)} /> : null}
-      <ConfirmDialog open={removing} onOpenChange={setRemoving} title={t("Delete {name}?", { name: tpl.name })} danger confirmLabel={t("Delete")}
-        body={t("Documents already made from it keep their text.")} onConfirm={async () => { await del.mutateAsync(); }} />
-    </Card>
-  );
-}
-
 type Show = "all" | "starter" | "yours" | "word";
 
 export function TemplatesPage() {
@@ -253,12 +175,48 @@ export function TemplatesPage() {
   const [creating, setCreating] = useState(false);
   const [word, setWord] = useState(false);
   const [using, setUsing] = useState<DocTemplate | null>(null);
-  const [show, setShow] = useState<Show>("all");
-  const [q, setQ] = useState("");
-  const needle = q.trim().toLowerCase();
+  // P107: the row menu's Edit opens this; Delete is the table's own confirmation.
+  const [editing, setEditing] = useState<DocTemplate | null>(null);
+  const qc = useQueryClient();
+  // P107: a data table; search, filters and page live in the address.
+  const control = useTableState({ size: 25 }, { filters: ["kind", "show"] });
+  const kind = control.state.f.kind ?? "";
+  const show = (control.state.f.show ?? "") as Show | "";
   const shown = templates.filter((x) =>
-    (show === "all" || (show === "starter" ? x.builtin : show === "word" ? !!x.docx_file_id : !x.builtin)) &&
-    (!needle || `${x.name} ${x.kind} ${x.description}`.toLowerCase().includes(needle)));
+    (!show || show === "all" || (show === "starter" ? x.builtin : show === "word" ? !!x.docx_file_id : !x.builtin))
+    && (!kind || x.kind === kind));
+  const kinds = [...new Set(templates.map((x) => x.kind))].map((k) => ({ value: k, label: KIND_LABEL[k] ? t(KIND_LABEL[k]) : k }))
+    .sort((a, b) => a.label.localeCompare(b.label));
+  const columns: Column<DocTemplate>[] = [
+    {
+      id: "name", header: t("Template"), card: "title", sortValue: (x) => x.name.toLowerCase(), exportValue: (x) => x.name,
+      cell: (x) => (
+        <span className="flex min-w-0 items-start gap-3">
+          {x.docx_file_id ? <IconTile icon={FileDocIcon} tone="info" size="sm" /> : <KindTile kind={x.kind} size="sm" />}
+          <span className="grid min-w-0 gap-0.5">
+            <span className="text-[13.5px] font-semibold break-words">{x.name}</span>
+            <span className="line-clamp-2 text-[12.5px] text-muted">{x.description || t("No description")}</span>
+          </span>
+        </span>
+      ),
+    },
+    { id: "kind", header: t("Kind"), sortValue: (x) => (KIND_LABEL[x.kind] ? t(KIND_LABEL[x.kind]!) : x.kind), cell: (x) => (KIND_LABEL[x.kind] ? t(KIND_LABEL[x.kind]!) : x.kind) },
+    {
+      id: "origin", header: t("Type"), sortValue: (x) => (x.builtin ? 1 : 0),
+      exportValue: (x) => [x.builtin ? t("Starter") : t("Yours"), x.docx_file_id ? t("Word layout") : ""].filter(Boolean).join(", "),
+      cell: (x) => (
+        <span className="flex flex-wrap gap-1">
+          {x.builtin ? <Pill>{t("Starter")}</Pill> : <Pill tone="accent">{t("Yours")}</Pill>}
+          {x.docx_file_id ? <Pill tone="info">{t("Word layout")}</Pill> : null}
+        </span>
+      ),
+    },
+    { id: "fields", header: t("Fields"), kind: "number", align: "right", hideBelow: "lg", sortValue: (x) => x.fields.length, cell: (x) => x.fields.length },
+    {
+      id: "used", header: t("Used"), kind: "number", align: "right", sortValue: (x) => x.used,
+      cell: (x) => (x.used ? <span className="text-ok">{t("used {n}×", { n: x.used })}</span> : <span className="text-muted">0</span>),
+    },
+  ];
   return (
     <Page>
       <LibraryHeader tab="/templates"
@@ -266,20 +224,45 @@ export function TemplatesPage() {
           <Button variant="outline" onClick={() => setWord(true)}><UploadSimpleIcon size={16} /> {t("Word template")}</Button>
           <Button data-guide="templates.new" onClick={() => setCreating(true)}><PlusIcon size={16} weight="bold" /> {t("New template")}</Button>
         </>} />
-      <Toolbar>
-        <Segmented<Show> label={t("Show")} value={show} onChange={setShow} options={[
-          { value: "all", label: t("All"), count: templates.length },
-          { value: "starter", label: t("Starters"), count: templates.filter((x) => x.builtin).length },
-          { value: "yours", label: t("Yours"), count: templates.filter((x) => !x.builtin).length },
-          { value: "word", label: "Word", count: templates.filter((x) => x.docx_file_id).length },
-        ]} />
-        <SearchInput value={q} onChange={setQ} placeholder={t("Search templates")} />
-      </Toolbar>
-      {isLoading ? <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{[0, 1, 2].map((i) => <Skeleton key={i} className="h-60" />)}</div>
-        : error ? <p role="alert" className="text-danger">{errorMessage(error)}</p>
-        : !shown.length ? <EmptyState icon={StackIcon} title={templates.length ? t("Nothing matches") : t("No templates")} body={t("Create one, or upload a Word file with {{placeholders}}.")} />
-        : <div data-guide="templates.list" className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">{shown.map((x) => <TemplateCard key={x.id} t={x} onUse={() => setUsing(x)} />)}</div>}
+      {!isLoading && !error && !templates.length ? (
+        <EmptyState icon={StackIcon} title={t("No templates")} body={t("Create one, or upload a Word file with {{placeholders}}.")} />
+      ) : (
+        <div data-guide="templates.list" className="min-w-0">
+          <DataTable
+            label={t("Templates")}
+            columns={columns}
+            rows={shown}
+            rowId={(x) => x.id}
+            rowLabel={(x) => x.name}
+            control={control}
+            loading={isLoading}
+            error={error}
+            onOpen={(x) => setUsing(x)}
+            searchText={(x) => `${x.name} ${x.kind} ${KIND_LABEL[x.kind] ? t(KIND_LABEL[x.kind]!) : ""} ${x.description}`}
+            searchPlaceholder={t("Search templates")}
+            filters={
+              <>
+                {kinds.length > 1 ? <TableFilter control={control} id="kind" label={t("Kind")} allLabel={t("All kinds")} options={kinds} /> : null}
+                <TableFilter control={control} id="show" label={t("Type")} allLabel={t("All types")}
+                  options={[{ value: "starter", label: t("Starters") }, { value: "yours", label: t("Yours") }, { value: "word", label: t("Word layout") }]} />
+              </>
+            }
+            exportName={t("templates")}
+            actions={(x) => <Button size="sm" variant="outline" className="max-sm:hidden" onClick={() => setUsing(x)}><FilePlusIcon size={14} /> {t("Use it")}</Button>}
+            rowActions={{
+              edit: (x) => setEditing(x),
+              more: (x) => <MenuItem icon={<FilePlusIcon />} onSelect={() => setUsing(x)}>{t("New document from it")}</MenuItem>,
+              remove: async (x) => {
+                await api(`/api/doc-templates/${x.id}`, "DELETE");
+                void qc.invalidateQueries({ queryKey: docKeys.templates });
+              },
+              removeBody: () => t("Documents already made from it keep their text."),
+            }}
+          />
+        </div>
+      )}
       {creating ? <TemplateDialog onClose={() => setCreating(false)} /> : null}
+      {editing ? <TemplateDialog key={editing.id} editing={editing} onClose={() => setEditing(null)} /> : null}
       {word ? <WordDialog onClose={() => setWord(false)} /> : null}
       {using ? <NewDocumentDialog template={using} onClose={() => setUsing(null)}
         onCreated={(id) => navigate({ to: "/documents", search: { d: id } })} /> : null}

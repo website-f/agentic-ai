@@ -9,16 +9,15 @@ import { toast } from "sonner";
 
 import { EmptyState, IconTile, Page, PageHeader, type Tone } from "@/components/page";
 import { Button } from "@/components/ui/button";
-import { ListCard, Meta, Toolbar } from "@/components/ui/card";
+import { ListCard, Meta } from "@/components/ui/card";
+import { DataTable, filterOf, TableFilter, useTableState, type Column } from "@/components/ui/data-table";
 import { ResponsiveDialog } from "@/components/ui/dialog";
 import { Field, FormError } from "@/components/ui/field";
 import { Pill } from "@/components/ui/pill";
-import { SearchInput } from "@/components/ui/search-input";
 import { LoadMore } from "@/components/load-more";
 import { Segmented } from "@/components/ui/segmented";
-import { Skeleton } from "@/components/ui/skeleton";
 import { Stat, StatGrid } from "@/components/ui/stat";
-import { msg, t as tr, useT } from "@/i18n";
+import { locale, msg, t as tr, useT } from "@/i18n";
 import { api, errorMessage } from "@/lib/api";
 import { isAutoApproved } from "@/lib/learning";
 import { keys, meQuery } from "@/lib/queries";
@@ -53,14 +52,6 @@ const KIND_LOOK: Record<ProposalKind, { icon: typeof LightningIcon; tone: Tone }
   merge: { icon: ArrowsMergeIcon, tone: "violet" },
   retire: { icon: ArchiveIcon, tone: "neutral" },
 };
-
-function ListSkeleton() {
-  return (
-    <div className="grid gap-px overflow-hidden rounded-[var(--radius-md)] border border-border">
-      {[0, 1, 2].map((i) => <Skeleton key={i} className="h-24 rounded-none" />)}
-    </div>
-  );
-}
 
 const STARTER = `## When to use
 The situation this procedure is for.
@@ -109,37 +100,91 @@ function NewSkill({ open, onOpenChange, canDecide }: { open: boolean; onOpenChan
   );
 }
 
-function SkillRow({ s, onOpen }: { s: Skill; onOpen: () => void }) {
-  const t = useT();
+/** A skill sent back often enough to need a look (5+ judged, under 70% accepted). */
+function lowRate(s: Skill): boolean {
   const judged = s.stats.accepted + s.stats.sent_back + s.stats.failed;
-  const low = s.stats.success_rate !== null && judged >= 5 && s.stats.success_rate < 0.7;
-  return (
-    <li>
-      <button type="button" onClick={onOpen}
-        className="grid w-full grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-3 px-4 py-3.5 text-left transition-colors hover:bg-surface-2/60 md:grid-cols-[auto_minmax(0,1fr)_auto] md:items-center md:gap-x-6">
-        <IconTile icon={LightningIcon} tone={s.status === "retired" ? "neutral" : low ? "danger" : "accent"} size="sm" className="md:size-10" />
-        <span className="grid min-w-0 gap-1">
-          <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
-            <span className="min-w-0 font-mono text-[13.5px] font-medium break-all">{s.name}</span>
-            <Pill tone={TRUST_TONE[s.trust]}>{t(TRUST_LABEL[s.trust])}</Pill>
-            <span className="text-[12px] text-muted tabular">v{s.version}</span>
-            {s.pending ? <Pill tone="warn">{t("{n} to review", { n: s.pending })}</Pill> : null}
-            {low ? <Pill tone="danger">{t("Often sent back")}</Pill> : null}
-          </span>
-          <span className="line-clamp-2 text-[13px] break-words text-muted">{s.description}</span>
-        </span>
-        <span className="col-span-2 grid grid-cols-3 gap-2 rounded-[var(--radius-sm)] bg-surface-2/60 px-3 py-2 text-[11.5px] text-muted md:col-span-1 md:w-72 md:bg-transparent md:p-0">
-          <span><span className="block text-[15px] font-semibold text-fg tabular">{s.stats.uses}</span>{t("uses")}</span>
-          <span><span className="block text-[15px] font-semibold text-fg tabular">{pct(s.stats.success_rate)}</span>{t("accepted")}</span>
-          <span>
-            <span className={cn("block text-[15px] font-semibold tabular", s.saved_pct && s.saved_pct > 0 ? "text-ok" : "text-fg")}>
-              {s.saved_pct !== null ? `−${pct(s.saved_pct)}` : compact(s.stats.avg_tokens)}
+  return s.stats.success_rate !== null && judged >= 5 && s.stats.success_rate < 0.7;
+}
+
+/** P107: the skill library as a data table: search, which skills / trust / needs-a-look
+ * filters, sortable numbers, numbered pages. A row opens the skill's sheet. */
+function SkillsTable({ onOpen }: { onOpen: (s: Skill) => void }) {
+  const t = useT();
+  const control = useTableState({ size: 25 }, { filters: ["state", "trust", "look"] });
+  const [stateParam] = filterOf(control, "state");
+  const state: "active" | "retired" = stateParam === "retired" ? "retired" : "active";
+  const [trust] = filterOf(control, "trust");
+  const [look] = filterOf(control, "look");
+  const { data: skills, isLoading, error, refetch } = useQuery(skillsQuery(state));
+  const rows = useMemo(() => (skills ?? []).filter((s) =>
+    (!trust || s.trust === trust)
+    && (!look || (look === "review" ? s.pending > 0 : lowRate(s)))), [skills, trust, look]);
+
+  const columns: Column<Skill>[] = [
+    {
+      id: "name", header: t("Skill"), card: "title", sortValue: (s) => s.name.toLowerCase(), exportValue: (s) => s.name,
+      cell: (s) => (
+        <span className="flex min-w-0 items-start gap-3">
+          <IconTile icon={LightningIcon} tone={s.status === "retired" ? "neutral" : lowRate(s) ? "danger" : "accent"} size="sm" />
+          <span className="grid min-w-0 gap-0.5">
+            <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+              <span className="min-w-0 font-mono text-[13.5px] font-medium break-all">{s.name}</span>
+              {s.pending ? <Pill tone="warn">{t("{n} to review", { n: s.pending })}</Pill> : null}
+              {lowRate(s) ? <Pill tone="danger">{t("Often sent back")}</Pill> : null}
             </span>
-            {s.saved_pct !== null ? t("tokens") : t("tokens/task")}
+            <span className="line-clamp-2 text-[12.5px] break-words text-muted">{s.description}</span>
           </span>
         </span>
-      </button>
-    </li>
+      ),
+    },
+    { id: "description", header: t("Description"), exportOnly: true, cell: () => null, exportValue: (s) => s.description },
+    { id: "trust", header: t("Kind"), sortValue: (s) => t(TRUST_LABEL[s.trust]), hideBelow: "lg", cell: (s) => <Pill tone={TRUST_TONE[s.trust]}>{t(TRUST_LABEL[s.trust])}</Pill> },
+    { id: "version", header: t("Version"), kind: "number", align: "right", hideBelow: "xl", sortValue: (s) => s.version, cell: (s) => `v${s.version}` },
+    { id: "uses", header: t("Uses"), kind: "number", align: "right", sortValue: (s) => s.stats.uses, cell: (s) => s.stats.uses.toLocaleString(locale()) },
+    { id: "accepted", header: t("Accepted"), kind: "number", align: "right", sortValue: (s) => s.stats.success_rate, exportValue: (s) => pct(s.stats.success_rate), cell: (s) => pct(s.stats.success_rate) },
+    {
+      id: "tokens", header: t("Tokens"), kind: "number", align: "right", hideBelow: "lg",
+      sortValue: (s) => (s.saved_pct !== null ? s.saved_pct : null), exportValue: (s) => s.stats.avg_tokens,
+      cell: (s) => (s.saved_pct !== null ? (
+        <span className={cn(s.saved_pct > 0 && "text-ok")} title={t("tokens")}>−{pct(s.saved_pct)}</span>
+      ) : <span title={t("tokens/task")}>{compact(s.stats.avg_tokens)}</span>),
+    },
+    {
+      id: "used", header: t("Last used"), kind: "date", hideBelow: "xl", sortValue: (s) => s.last_used_at,
+      cell: (s) => (s.last_used_at ? <span className="text-muted">{timeAgo(s.last_used_at)}</span> : <span className="text-muted">-</span>),
+    },
+  ];
+
+  return (
+    <div data-guide="skills.list" className="grid min-w-0">
+      <DataTable
+        label={t("Skills")}
+        columns={columns}
+        rows={rows}
+        rowId={(s) => s.id}
+        rowLabel={(s) => s.name}
+        control={control}
+        loading={isLoading}
+        error={error}
+        onRetry={() => void refetch()}
+        searchText={(s) => `${s.name} ${s.description}`}
+        searchPlaceholder={t("Search skills")}
+        exportName={t("skills")}
+        onOpen={onOpen}
+        empty={<EmptyState icon={LightningIcon} title={state === "retired" ? t("Nothing retired") : t("No skills yet")}
+          body={state === "retired" ? t("Retired skills land here and can be restored.") : t("When an agent finishes long or repeated work, it proposes a skill. You can also write one yourself.")} />}
+        filters={
+          <>
+            <TableFilter control={control} id="state" label={t("Which skills")} allLabel={t("Active")}
+              options={[{ value: "retired", label: t("Retired") }]} />
+            <TableFilter control={control} id="trust" label={t("Kind")} allLabel={t("Every kind")}
+              options={(Object.keys(TRUST_LABEL) as Skill["trust"][]).map((k) => ({ value: k, label: t(TRUST_LABEL[k]) }))} />
+            <TableFilter control={control} id="look" label={t("Needs a look")} allLabel={t("Every skill")}
+              options={[{ value: "review", label: t("Has changes to review") }, { value: "low", label: t("Often sent back") }]} />
+          </>
+        }
+      />
+    </div>
   );
 }
 
@@ -195,23 +240,19 @@ export function SkillsPage() {
   const search = useSearch({ strict: false }) as SkillsSearch;
   const navigate = useNavigate();
   const tab: SkillTab = search.tab && SKILL_TABS.includes(search.tab) ? search.tab : "library";
-  const [state, setState] = useState<"active" | "retired">("active");
   const [creating, setCreating] = useState(0);
   const [teaching, setTeaching] = useState(0);
   const [importing, setImporting] = useState(false);
-  const { data: skills, isLoading, error } = useQuery(skillsQuery(state));
+  // The library tab's own table asks for active or retired skills; these feed the counts.
+  const { data: skills } = useQuery(skillsQuery("active"));
   // Proposals only grow (the review queue and every past decision): both load 50 at a time.
   const pendingList = usePagedList<Proposal>(skillKeys.proposals("pending"), "/api/skill-proposals", { state: "pending" });
   const decidedList = usePagedList<Proposal>(skillKeys.proposals("decided"), "/api/skill-proposals", { state: "decided" }, { enabled: tab === "history" });
   const pending = pendingList.items;
   const decided = decidedList.items;
   const pendingCount = pendingList.total ?? pending.length;
-  const go = (next: SkillsSearch) => navigate({ to: "/skills", search: { tab, ...next }, replace: true });
-  const [q, setQ] = useState("");
-  const shown = useMemo(() => {
-    const needle = q.trim().toLowerCase();
-    return (skills ?? []).filter((s) => !needle || s.name.toLowerCase().includes(needle) || s.description.toLowerCase().includes(needle));
-  }, [skills, q]);
+  // Opening and closing a sheet keeps the table's search, filters and page in the address.
+  const go = (next: SkillsSearch) => navigate({ to: "/skills", search: ((p: Record<string, unknown>) => ({ ...p, tab, ...next })) as never, replace: true });
   const totals = useMemo(() => {
     const list = skills ?? [];
     const accepted = list.reduce((n, s) => n + s.stats.accepted, 0);
@@ -232,7 +273,7 @@ export function SkillsPage() {
           </>
         ) : null}
       />
-      {skills && state === "active" ? (
+      {skills ? (
         <StatGrid>
           <Stat label={t("Active skills")} value={skills.length} icon={LightningIcon} tone="accent" hint={t("Agents load these when a task matches")} onClick={() => go({ tab: "library" })} active={tab === "library"} />
           <Stat guide="skills.proposals" label={t("To review")} value={pendingCount} icon={SealQuestionIcon} tone={pendingCount ? "warn" : "neutral"}
@@ -247,25 +288,7 @@ export function SkillsPage() {
 
       <div role="tabpanel" aria-label={t(TAB_LABEL[tab])} className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-4">
         {tab === "library" ? (
-          <>
-            <Toolbar>
-              <Segmented<"active" | "retired"> label={t("Which skills")} size="sm" value={state} onChange={setState}
-                options={[{ value: "active", label: t("Active") }, { value: "retired", label: t("Retired") }]} />
-              <SearchInput value={q} onChange={setQ} placeholder={t("Search skills")} className="sm:ml-auto sm:max-w-72" />
-            </Toolbar>
-            {isLoading ? <ListSkeleton /> : error || !skills ? (
-              <p role="alert" className="text-danger">{errorMessage(error)}</p>
-            ) : !skills.length ? (
-              <EmptyState icon={LightningIcon} title={state === "retired" ? t("Nothing retired") : t("No skills yet")}
-                body={state === "retired" ? t("Retired skills land here and can be restored.") : t("When an agent finishes long or repeated work, it proposes a skill. You can also write one yourself.")} />
-            ) : !shown.length ? (
-              <EmptyState icon={LightningIcon} title={t("No skill matches")} body={t("Try another word.")} />
-            ) : (
-              <ListCard data-guide="skills.list">
-                {shown.map((s) => <SkillRow key={s.id} s={s} onOpen={() => go({ skill: s.id })} />)}
-              </ListCard>
-            )}
-          </>
+          <SkillsTable onOpen={(s) => go({ skill: s.id })} />
         ) : tab === "routines" ? (
           <RoutinesPanel />
         ) : tab === "proposals" ? (

@@ -15,8 +15,9 @@ import { parseScope, scopeOptions, ScopeSelect, WHOLE } from "@/components/libra
 import { Markdown } from "@/components/markdown";
 import { EmptyState, IconTile, Section, type Tone } from "@/components/page";
 import { Button } from "@/components/ui/button";
-import { Card, CardBody, CardHeader, ListCard, ListRow, Meta } from "@/components/ui/card";
+import { Card, CardBody, CardHeader, Meta } from "@/components/ui/card";
 import { ConfirmDialog } from "@/components/ui/confirm";
+import { DataTable, TableFilter, useServerTable, useTableState, type Column } from "@/components/ui/data-table";
 import { ResponsiveDialog } from "@/components/ui/dialog";
 import { Field, FormError, Input } from "@/components/ui/field";
 import { Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger } from "@/components/ui/menu";
@@ -37,6 +38,7 @@ import {
   type MinutesLanguage, type Recording, type RecordingDetail, type Speaker, type Stage,
 } from "@/lib/minutes";
 import { branchesQuery, meQuery, membersQuery } from "@/lib/queries";
+import { everyRow } from "@/lib/table-export";
 import { cn, timeAgo } from "@/lib/utils";
 import { agentsQuery } from "@/lib/work";
 
@@ -774,20 +776,40 @@ export function PeopleMeetings({ canWrite, rec, onOpen }: { canWrite: boolean; r
   const ready = data.filter((r) => r.status === "ready");
   const openActions = ready.reduce((n, r) => n + r.open_actions, 0);
   const decisions = ready.reduce((n, r) => n + r.decision_count, 0);
+  // P107: the recordings as a data table, searched, filtered, sorted and paged on the server
+  // (it used to stop at the latest 200); "m_" keeps its place in the address apart.
+  const control = useTableState({ size: 25 }, { prefix: "m_", filters: ["status"] });
+  const table = useServerTable<Recording>(minutesKeys.list, "/api/minutes", control.state, {}, { refetchInterval: busy ? 4000 : undefined });
+  const qc = useQueryClient();
 
-  const row = (r: Recording) => (
-    <ListRow key={r.id} onClick={() => onOpen(r.id)} active={r.id === rec}
-      leading={<IconTile icon={STATUS[r.status].icon} tone={STATUS[r.status].tile} size="sm" />}
-      title={<span className="block whitespace-normal break-words">{r.title}</span>}
-      meta={<Meta items={[duration(r.duration_seconds), r.scope_label, r.created_by_name, timeAgo(r.created_at)]} />}
-      trailing={<>
-        {r.status === "ready" && r.open_actions ? <Pill tone="warn">{t("{n} to assign", { n: r.open_actions })}</Pill> : null}
-        <Pill tone={STATUS[r.status].tone} live={isActive(r.status)}>{statusLabel(r)}</Pill>
-      </>}>
-      {r.status === "ready" && r.summary ? <span className="mt-1 line-clamp-2 text-[13px] break-words text-muted">{r.summary}</span> : null}
-      {r.status === "failed" && r.error ? <span className="mt-1 line-clamp-2 text-[13px] break-words text-danger">{r.error}</span> : null}
-    </ListRow>
-  );
+  const columns: Column<Recording>[] = [
+    {
+      id: "title", header: t("Meeting"), card: "title", sortable: true, exportValue: (r) => r.title,
+      cell: (r) => (
+        <span className="flex min-w-0 items-start gap-3">
+          <IconTile icon={STATUS[r.status].icon} tone={STATUS[r.status].tile} size="sm" />
+          <span className="grid min-w-0 gap-0.5">
+            <span className="text-[13.5px] font-medium break-words">{r.title}</span>
+            {r.status === "ready" && r.summary ? <span className="line-clamp-2 text-[12.5px] break-words text-muted">{r.summary}</span> : null}
+            {r.status === "failed" && r.error ? <span className="line-clamp-2 text-[12.5px] break-words text-danger">{r.error}</span> : null}
+          </span>
+        </span>
+      ),
+    },
+    {
+      id: "status", header: t("Status"), exportValue: (r) => statusLabel(r),
+      cell: (r) => (
+        <span className="flex flex-wrap items-center gap-1">
+          <Pill tone={STATUS[r.status].tone} live={isActive(r.status)}>{statusLabel(r)}</Pill>
+          {r.status === "ready" && r.open_actions ? <Pill tone="warn">{t("{n} to assign", { n: r.open_actions })}</Pill> : null}
+        </span>
+      ),
+    },
+    { id: "duration", header: t("Length"), sortable: true, kind: "number", align: "right", exportValue: (r) => duration(r.duration_seconds), cell: (r) => duration(r.duration_seconds) || <span className="text-muted">-</span> },
+    { id: "scope", header: t("Who can read it"), hideBelow: "lg", exportValue: (r) => r.scope_label, cell: (r) => <span className="break-words">{r.scope_label}</span> },
+    { id: "by", header: t("Recorded by"), hideBelow: "xl", exportValue: (r) => r.created_by_name, cell: (r) => <span className="break-words">{r.created_by_name}</span> },
+    { id: "created_at", header: t("Uploaded"), sortable: true, kind: "date", exportValue: (r) => r.created_at, cell: (r) => <span className="text-muted">{timeAgo(r.created_at)}</span> },
+  ];
 
   return (
     <>
@@ -806,7 +828,41 @@ export function PeopleMeetings({ canWrite, rec, onOpen }: { canWrite: boolean; r
           <Section title={t("Recorded meetings")}
             description={limits ? (limits.audio_days ? t("Audio is kept for {n} days; transcripts and minutes stay.", { n: limits.audio_days }) : t("Audio is kept only until the minutes are written; transcripts and minutes stay.")) : undefined}
             actions={admin ? <Button size="sm" variant="ghost" onClick={() => setSettings(true)}><GearSixIcon size={14} /> {t("Settings")}</Button> : undefined}>
-            <ListCard data-guide="minutes.list">{data.map(row)}</ListCard>
+            <div data-guide="minutes.list" className="grid min-w-0">
+              <DataTable
+                mode="server"
+                label={t("Recorded meetings")}
+                columns={columns}
+                rows={table.rows}
+                total={table.total}
+                rowId={(r) => r.id}
+                rowLabel={(r) => r.title}
+                control={control}
+                loading={table.loading}
+                fetching={table.fetching}
+                error={table.error}
+                onRetry={table.refetch}
+                searchPlaceholder={t("Search by title or file name")}
+                onOpen={(r) => onOpen(r.id)}
+                exportName={t("meeting-minutes")}
+                exportRows={() => everyRow<Recording>("/api/minutes", control.state)}
+                rowActions={{
+                  view: (r) => onOpen(r.id),
+                  remove: async (r) => {
+                    await api(`/api/minutes/${r.id}`, "DELETE");
+                    if (r.id === rec) onOpen(undefined);
+                    invalidate(qc);
+                  },
+                  canRemove: (r) => r.can_edit && !isActive(r.status),
+                  removeBody: () => t("The recording, transcript, minutes document and the library copy are all deleted. Tasks already made stay."),
+                }}
+                rowClassName={(r) => (r.id === rec ? "bg-accent-soft/40" : undefined)}
+                filters={
+                  <TableFilter control={control} id="status" label={t("Status")} allLabel={t("All statuses")}
+                    options={[{ value: "ready", label: t("Minutes ready") }, { value: "processing", label: t("Processing") }, { value: "failed", label: t(STATUS.failed.label) }]} />
+                }
+              />
+            </div>
           </Section>
         </>
       )}

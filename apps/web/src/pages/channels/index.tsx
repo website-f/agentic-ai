@@ -39,6 +39,7 @@ import { IconTile, Page, PageHeader } from "@/components/page";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody, CardHeader, Meta } from "@/components/ui/card";
 import { ConfirmDialog } from "@/components/ui/confirm";
+import { DataTable, filterOf, TableFilter, useServerTable, useTableState, type Column } from "@/components/ui/data-table";
 import { ResponsiveDialog } from "@/components/ui/dialog";
 import { Field, FormError, Input } from "@/components/ui/field";
 import { Pill } from "@/components/ui/pill";
@@ -62,6 +63,7 @@ import {
 } from "@/lib/integrations";
 import { canInstall, disablePush, enablePush, install, isIOS, onInstallChange, pushState, type PushState } from "@/lib/push";
 import { meQuery } from "@/lib/queries";
+import { everyRow } from "@/lib/table-export";
 import { useMedia } from "@/lib/use-media";
 import { cn, timeAgo } from "@/lib/utils";
 import { agentsQuery } from "@/lib/work";
@@ -1129,10 +1131,21 @@ function tokenState(tok: TokenOut): { label: string; tone: "neutral" | "warn" | 
   return { label: msg("Active"), tone: "ok" };
 }
 
+/** P107: a token's state as a filter value. */
+function tokenKey(tok: TokenOut): "active" | "expired" | "revoked" {
+  if (tok.revoked) return "revoked";
+  if (tok.expires_at && new Date(tok.expires_at) < new Date()) return "expired";
+  return "active";
+}
+
 function Tokens() {
   const t = useT();
   const qc = useQueryClient();
-  const { data: tokens = [] } = useQuery({ queryKey: ["tokens"], queryFn: () => api<TokenOut[]>("/api/tokens") });
+  const tokensQ = useQuery({ queryKey: ["tokens"], queryFn: () => api<TokenOut[]>("/api/tokens") });
+  // P107: the tokens as a data table (search, state); "t_" keeps its place in the address.
+  const control = useTableState({ size: 10 }, { prefix: "t_", filters: ["state"] });
+  const [tokenFilter] = filterOf(control, "state");
+  const tokenRows = (tokensQ.data ?? []).filter((tok) => !tokenFilter || tokenKey(tok) === tokenFilter);
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
   const [days, setDays] = useState("90");
@@ -1151,6 +1164,29 @@ function Tokens() {
     }
   };
   const base = `${window.location.origin}/api/v1`;
+  const tokenColumns: Column<TokenOut>[] = [
+    {
+      id: "name", header: t("Token"), sortValue: (tok) => tok.name.toLowerCase(), card: "title", exportValue: (tok) => `${tok.name} (${tok.prefix}…)`,
+      cell: (tok) => (
+        <span className="flex min-w-0 items-center gap-3">
+          <IconTile icon={KeyIcon} size="sm" tone={tokenState(tok).tone === "ok" ? "accent" : "neutral"} />
+          <span className="grid min-w-0">
+            <span className="font-medium break-words">{tok.name}</span>
+            <span className="font-mono text-[12px] text-muted">{tok.prefix}…</span>
+          </span>
+        </span>
+      ),
+    },
+    { id: "state", header: t("State"), sortValue: tokenKey, exportValue: (tok) => t(tokenState(tok).label), cell: (tok) => { const st = tokenState(tok); return <Pill tone={st.tone}>{t(st.label)}</Pill>; } },
+    {
+      id: "used", header: t("Last used"), kind: "date", sortValue: (tok) => tok.last_used_at ?? null,
+      cell: (tok) => <span className="text-muted">{tok.last_used_at ? t("Used {ago}", { ago: timeAgo(tok.last_used_at).toLowerCase() }) : t("Never used")}</span>,
+    },
+    {
+      id: "expires", header: t("Expires"), kind: "date", sortValue: (tok) => tok.expires_at ?? null, hideBelow: "lg",
+      cell: (tok) => <span className="text-muted">{tok.expires_at ? t("Expires {date}", { date: new Date(tok.expires_at).toLocaleDateString(locale()) }) : t("No expiry")}</span>,
+    },
+  ];
   const copyBase = () => void navigator.clipboard.writeText(base).then(() => toast.success(t("Copied.")), () => toast.error(t("Copy blocked by the browser.")));
   return (
     <Card>
@@ -1178,32 +1214,26 @@ function Tokens() {
             <dd className="font-mono text-[12.5px]">GET /models</dd>
           </div>
         </dl>
-        {tokens.length ? (
-          <ul className="grid grid-cols-[minmax(0,1fr)] divide-y divide-border overflow-hidden rounded-sm border border-border">
-            {tokens.map((tok) => {
-              const st = tokenState(tok);
-              return (
-                <li key={tok.id} className="flex items-center gap-3 px-3 py-2.5 text-[13px]">
-                  <IconTile icon={KeyIcon} size="sm" tone={st.tone === "ok" ? "accent" : "neutral"} />
-                  <div className="min-w-0 flex-1">
-                    <p className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                      <span className="min-w-0 font-medium break-words">{tok.name}</span>
-                      <span className="font-mono text-[12px] text-muted">{tok.prefix}…</span>
-                      <Pill tone={st.tone}>{t(st.label)}</Pill>
-                    </p>
-                    <p className="flex flex-wrap items-center gap-x-1.5 text-[12px] text-muted">
-                      <Meta items={[
-                        tok.last_used_at ? t("Used {ago}", { ago: timeAgo(tok.last_used_at).toLowerCase() }) : t("Never used"),
-                        tok.expires_at ? t("Expires {date}", { date: new Date(tok.expires_at).toLocaleDateString(locale()) }) : t("No expiry"),
-                      ]} />
-                    </p>
-                  </div>
-                  {!tok.revoked ? <Button size="sm" variant="ghost" className="shrink-0 text-danger" onClick={() => revoke(tok.id)}>{t("Revoke")}</Button> : null}
-                </li>
-              );
-            })}
-          </ul>
-        ) : <p className="rounded-sm border border-dashed border-border px-4 py-5 text-center text-[13px] text-muted">{t("No tokens yet. Create one for each app that should talk to your agents.")}</p>}
+        <DataTable
+          label={t("API tokens")}
+          columns={tokenColumns}
+          rows={tokenRows}
+          rowId={(tok) => tok.id}
+          rowLabel={(tok) => tok.name}
+          control={control}
+          loading={tokensQ.isLoading}
+          error={tokensQ.error}
+          onRetry={() => void tokensQ.refetch()}
+          searchText={(tok) => `${tok.name} ${tok.prefix} ${tok.created_by_name ?? ""}`}
+          searchPlaceholder={t("Search tokens")}
+          exportName={t("api-tokens")}
+          filters={
+            <TableFilter control={control} id="state" label={t("State")} allLabel={t("Every token")}
+              options={[{ value: "active", label: t("Active") }, { value: "expired", label: t("Expired") }, { value: "revoked", label: t("Revoked") }]} />
+          }
+          actions={(tok) => !tok.revoked ? <Button size="sm" variant="ghost" className="shrink-0 text-danger" onClick={() => revoke(tok.id)}>{t("Revoke")}</Button> : null}
+          empty={<p className="rounded-sm border border-dashed border-border px-4 py-5 text-center text-[13px] text-muted">{t("No tokens yet. Create one for each app that should talk to your agents.")}</p>}
+        />
       </CardBody>
       <ResponsiveDialog open={open} onOpenChange={setOpen} title={made ? t("Copy your token now") : t("New API token")}
         description={made ? t("It is shown once. Store it in the app that will use it.") : t("Lets an app chat with your agents. It cannot change settings.")}
@@ -1237,22 +1267,43 @@ function Tokens() {
 
 // ---------------------------------------------------------------- ledger
 
+type LedgerItem = Ledger["items"][number];
+
 function DeliveryLedger() {
   const t = useT();
   const qc = useQueryClient();
-  const [state, setState] = useState<(typeof STATES)[number]>("all");
-  const { data } = useQuery({ queryKey: ["deliveries", state], queryFn: () => api<Ledger>(`/api/deliveries?state=${state}`), refetchInterval: 15_000 });
+  // P107: a data table. The server finds words (what it said, kind, channel, error), filters the
+  // state and channel, sorts and sends one numbered page; "d_" keeps its place in the address.
+  const control = useTableState({ size: 25 }, { prefix: "d_", filters: ["state", "channel"] });
+  const [stateParam, setState] = filterOf(control, "state");
+  const state = ((STATES as readonly string[]).includes(stateParam) ? stateParam : "all") as (typeof STATES)[number];
+  const table = useServerTable<LedgerItem, Ledger>(["deliveries"], "/api/deliveries", control.state, {}, { pick: (b) => b.items, refetchInterval: 15_000 });
   const retry = useMutation({
     mutationFn: (id: string) => api(`/api/deliveries/${id}/retry`, "POST"),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["deliveries"] }),
     onError: (e) => toast.error(errorMessage(e)),
   });
-  const counts = data?.counts ?? {};
+  const counts = table.body?.counts ?? {};
   const total = Object.values(counts).reduce((n, c) => n + c, 0);
   const stateText = (state: string, attempts: number) => {
     const word = t(STATE_LABEL[state] ?? state);
     return attempts > 1 ? t("{state} ({n} tries)", { state: word, n: attempts }) : word;
   };
+  const columns: Column<LedgerItem>[] = [
+    {
+      id: "what", header: t("What"), card: "title", exportValue: (d) => d.summary || d.kind,
+      cell: (d) => (
+        <span className="grid min-w-0 max-w-[32rem]">
+          <span className="line-clamp-2 font-medium break-words">{d.summary || d.kind}</span>
+          {d.last_error ? <span className="line-clamp-2 text-[12px] break-words text-danger" title={d.last_error}>{d.last_error}</span> : null}
+        </span>
+      ),
+    },
+    { id: "where", header: t("Where"), sortable: true, className: "whitespace-nowrap", exportValue: (d) => `${channelLabel(d.channel)} · ${d.kind}`, cell: (d) => <span className="text-muted">{channelLabel(d.channel)} · {d.kind}</span> },
+    { id: "state", header: t("State"), sortable: true, exportValue: (d) => stateText(d.state, d.attempts), cell: (d) => <Pill tone={STATE_TONE[d.state as keyof typeof STATE_TONE] ?? "neutral"}>{stateText(d.state, d.attempts)}</Pill> },
+    { id: "error", header: t("Error"), exportOnly: true, cell: () => null, exportValue: (d) => d.last_error ?? "" },
+    { id: "when", header: t("When"), sortable: true, kind: "date", className: "whitespace-nowrap", exportValue: (d) => d.created_at, cell: (d) => <time dateTime={d.created_at} className="text-muted">{timeAgo(d.created_at)}</time> },
+  ];
   return (
     <Card className="overflow-hidden">
       <CardHeader
@@ -1260,60 +1311,44 @@ function DeliveryLedger() {
         title={t("Delivery ledger")}
         description={t("Every notification and reply, so nothing is lost or sent twice.")}
       />
-      <div className="border-b border-border px-4 py-2.5 sm:px-5">
+      <CardBody className="grid grid-cols-[minmax(0,1fr)] gap-3">
         <Segmented
           size="sm"
           label={t("Which deliveries")}
           value={state}
-          onChange={setState}
+          onChange={(v) => setState(v === "all" ? "" : v)}
           options={STATES.map((s) => ({
             value: s,
             label: s === "all" ? t("All") : t(STATE_LABEL[s] ?? s),
-            count: data ? (s === "all" ? total : counts[s] ?? 0) : undefined,
+            count: table.body ? (s === "all" ? total : counts[s] ?? 0) : undefined,
           }))}
         />
-      </div>
-      {data?.items.length ? (
-        <>
-          <ul className="grid grid-cols-[minmax(0,1fr)] divide-y divide-border md:hidden">
-            {data.items.map((d) => (
-              <li key={d.id} className="grid gap-1 px-4 py-3">
-                <div className="flex items-start gap-2">
-                  <p className="min-w-0 flex-1 text-[13px] font-medium break-words">{d.summary || d.kind}</p>
-                  <Pill tone={STATE_TONE[d.state as keyof typeof STATE_TONE] ?? "neutral"}>{stateText(d.state, d.attempts)}</Pill>
-                </div>
-                <p className="flex flex-wrap items-center gap-x-1.5 text-[12px] text-muted">
-                  <Meta items={[channelLabel(d.channel), d.kind, timeAgo(d.created_at)]} />
-                </p>
-                {d.last_error ? <p className="text-[12px] break-words text-danger">{d.last_error}</p> : null}
-                {d.state === "failed" ? <Button size="sm" variant="outline" className="mt-1 w-fit" onClick={() => retry.mutate(d.id)}><ArrowClockwiseIcon size={14} /> {t("Retry")}</Button> : null}
-              </li>
-            ))}
-          </ul>
-          <div className="overflow-x-auto max-md:hidden">
-            <table className="w-full min-w-[40rem] text-left text-[13px]">
-              <thead className="border-b border-border bg-surface-2/60 text-[12px] text-muted">
-                <tr><th className="px-5 py-2 font-medium">{t("What")}</th><th className="px-4 py-2 font-medium">{t("Where")}</th><th className="px-4 py-2 font-medium">{t("State")}</th><th className="px-4 py-2 font-medium">{t("When")}</th><th /></tr>
-              </thead>
-              <tbody className="divide-y divide-border">
-                {data.items.map((d) => (
-                  <tr key={d.id} className="transition-colors hover:bg-surface-2/40">
-                    <td className="max-w-96 px-5 py-2.5"><span className="line-clamp-2 break-words">{d.summary || d.kind}</span>{d.last_error ? <span className="block truncate text-[12px] text-danger" title={d.last_error}>{d.last_error}</span> : null}</td>
-                    <td className="px-4 py-2.5 whitespace-nowrap text-muted">{channelLabel(d.channel)} · {d.kind}</td>
-                    <td className="px-4 py-2.5"><Pill tone={STATE_TONE[d.state as keyof typeof STATE_TONE] ?? "neutral"}>{stateText(d.state, d.attempts)}</Pill></td>
-                    <td className="px-4 py-2.5 whitespace-nowrap text-muted">{timeAgo(d.created_at)}</td>
-                    <td className="px-4 py-2.5 text-right">{d.state === "failed" ? <Button size="sm" variant="ghost" onClick={() => retry.mutate(d.id)}>{t("Retry")}</Button> : null}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </>
-      ) : data ? (
-        <p className="px-4 py-8 text-center text-[13px] text-muted">{state === "all" ? t("Nothing sent yet.") : t("No {state} deliveries.", { state: t(STATE_LABEL[state] ?? state).toLowerCase() })}</p>
-      ) : (
-        <div className="grid gap-2 p-4">{[0, 1, 2].map((i) => <Skeleton key={i} className="h-10" />)}</div>
-      )}
+        <DataTable
+          label={t("Delivery ledger")}
+          mode="server"
+          columns={columns}
+          rows={table.rows}
+          total={table.total}
+          rowId={(d) => d.id}
+          rowLabel={(d) => d.summary || d.kind}
+          control={control}
+          loading={table.loading}
+          fetching={table.fetching}
+          error={table.error}
+          onRetry={table.refetch}
+          searchPlaceholder={t("Search what was sent")}
+          exportName={t("deliveries")}
+          exportRows={() => everyRow<LedgerItem, Ledger>("/api/deliveries", control.state, {}, (b) => b.items)}
+          filters={
+            <TableFilter control={control} id="channel" label={t("Channel")} allLabel={t("Every channel")}
+              options={Object.entries(CHANNEL_LABEL).map(([value, label]) => ({ value, label }))} />
+          }
+          actions={(d) => d.state === "failed" ? (
+            <Button size="sm" variant="outline" onClick={() => retry.mutate(d.id)}><ArrowClockwiseIcon size={14} /> {t("Retry")}</Button>
+          ) : null}
+          empty={<p className="rounded-[var(--radius-md)] border border-dashed border-border px-4 py-8 text-center text-[13px] text-muted">{t("Nothing sent yet.")}</p>}
+        />
+      </CardBody>
     </Card>
   );
 }

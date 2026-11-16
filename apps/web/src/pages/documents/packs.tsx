@@ -10,7 +10,8 @@ import { toast } from "sonner";
 import { FilePicker } from "@/components/file-drop";
 import { EmptyState, IconTile, Page } from "@/components/page";
 import { Button } from "@/components/ui/button";
-import { Card, Meta } from "@/components/ui/card";
+import { Meta } from "@/components/ui/card";
+import { DataTable, TableFilter, useTableState, type Column } from "@/components/ui/data-table";
 import { ConfirmDialog } from "@/components/ui/confirm";
 import { ResponsiveDialog } from "@/components/ui/dialog";
 import { Field, FormError, Input, TextareaField } from "@/components/ui/field";
@@ -19,7 +20,7 @@ import { Pill } from "@/components/ui/pill";
 import { Select } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Stat, StatGrid } from "@/components/ui/stat";
-import { t as tr, useLang, useT } from "@/i18n";
+import { locale, t as tr, useLang, useT } from "@/i18n";
 import { api, errorMessage } from "@/lib/api";
 import { openUrl } from "@/lib/native";
 import { useCompanies } from "@/lib/company";
@@ -413,7 +414,52 @@ export function PacksPage() {
   const navigate = useNavigate({ from: "/packs" });
   const { data: packs = [], isLoading, error } = useQuery({ ...packsQuery, enabled: !search.p });
   const [creating, setCreating] = useState(false);
+  // P107: a data table; search, filters and page live in the address.
+  const control = useTableState({ size: 25, sort: "updated", dir: "desc" }, { filters: ["company", "state"] });
+  const { company, state } = control.state.f;
+  const qc = useQueryClient();
   if (search.p) return <Page><PackDetail key={search.p} id={search.p} /></Page>;
+  const companies = [...new Set(packs.map((p) => p.branch_name ?? ""))].sort((a, b) => a.localeCompare(b))
+    .map((c) => (c ? { value: c, label: c } : { value: "none", label: t("No company") }));
+  const rows = packs.filter((p) =>
+    (!company || (p.branch_name ?? "") === (company === "none" ? "" : company))
+    && (!state || (state === "missing" ? p.progress.missing > 0 : state === "ready" ? !p.progress.missing && p.status !== "compiled" : p.status === "compiled")));
+  const pctOf = (p: Pack) => (p.progress.required ? Math.round(((p.progress.required - p.progress.missing) / p.progress.required) * 100) : 100);
+  const columns: Column<Pack>[] = [
+    {
+      id: "title", header: t("Pack"), card: "title", sortValue: (p) => p.title.toLowerCase(), exportValue: (p) => p.title,
+      cell: (p) => (
+        <span className="flex min-w-0 items-start gap-3">
+          <IconTile icon={PackageIcon} size="sm" />
+          <span className="grid min-w-0 gap-0.5">
+            <span className="line-clamp-2 text-[13.5px] font-semibold break-words">{p.title}</span>
+            <span className="text-[12px] text-muted">{t("{n} items", { n: p.progress.total })}</span>
+          </span>
+        </span>
+      ),
+    },
+    { id: "company", header: t("Company"), sortValue: (p) => p.branch_name?.toLowerCase() ?? null, exportValue: (p) => p.branch_name ?? "", cell: (p) => p.branch_name ?? <span className="text-muted">{t("No company")}</span> },
+    {
+      id: "ready", header: t("Ready"), kind: "number", align: "right", sortValue: pctOf, exportValue: (p) => `${pctOf(p)}%`,
+      cell: (p) => <span className="inline-flex justify-end"><Ring p={p.progress} size={34} /></span>,
+    },
+    {
+      id: "state", header: t("Status"), sortValue: (p) => (p.status === "compiled" ? 2 : p.progress.missing ? 0 : 1),
+      exportValue: (p) => (p.status === "compiled" ? t("Compiled") : p.progress.missing ? t("{n} missing", { n: p.progress.missing }) : t("Everything required is ready")),
+      cell: (p) => (
+        <span className="flex flex-wrap gap-1">
+          {p.progress.missing ? <Pill tone="warn">{t("{n} missing", { n: p.progress.missing })}</Pill> : <Pill tone="ok">{t("Everything required is ready")}</Pill>}
+          {p.status === "compiled" ? <Pill tone="ok"><SealCheckIcon size={12} weight="fill" /> {t("Compiled")}</Pill> : null}
+          {p.task_id ? <Pill tone="info"><RobotIcon size={12} /> {t("Agent on it")}</Pill> : null}
+        </span>
+      ),
+    },
+    {
+      id: "updated", header: t("Updated"), kind: "date", hideBelow: "lg", sortValue: (p) => p.updated_at,
+      cell: (p) => <time className="text-muted" dateTime={p.updated_at} title={new Date(p.updated_at).toLocaleString(locale())}>{timeAgo(p.updated_at)}</time>,
+    },
+  ];
+  const open = (id: string) => navigate({ search: ((prev: Record<string, unknown>) => ({ ...prev, p: id })) as never });
   return (
     <Page>
       <LibraryHeader tab="/packs"
@@ -426,37 +472,43 @@ export function PacksPage() {
           <Stat label={t("Compiled")} value={packs.filter((p) => p.status === "compiled").length} icon={SealCheckIcon} tone="ok" hint={t("PDF ready to check")} className="max-lg:col-span-2" />
         </StatGrid>
       ) : null}
-      {isLoading ? <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">{[0, 1].map((i) => <Skeleton key={i} className="h-36" />)}</div>
-        : error ? <p role="alert" className="text-danger">{errorMessage(error)}</p>
-        : !packs.length ? (
-          <EmptyState icon={PackageIcon} title={t("No packs yet")}
-            body={t("A pack is a checklist (registration certificate, bank statements, profile, quotation, cover letter) matched to real files and compiled into one PDF.")}
-            action={<Button onClick={() => setCreating(true)}><PlusIcon size={16} weight="bold" /> {t("New pack")}</Button>} />
-        ) : (
-          <div data-guide="packs.list" className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {packs.map((p) => (
-              <Card key={p.id} interactive className="p-0">
-                <button type="button" onClick={() => navigate({ search: { p: p.id } })} className="grid h-full w-full content-start gap-4 p-4 text-left">
-                  <div className="flex items-start gap-3">
-                    <IconTile icon={PackageIcon} size="sm" />
-                    <span className="min-w-0 flex-1">
-                      <span className="line-clamp-2 text-[14px] font-semibold break-words">{p.title}</span>
-                      <span className="mt-0.5 flex flex-wrap items-center gap-x-1.5 text-[12.5px] text-muted">
-                        <Meta items={[p.branch_name, t("{n} items", { n: p.progress.total }), timeAgo(p.updated_at)]} />
-                      </span>
-                    </span>
-                    <Ring p={p.progress} />
-                  </div>
-                  <div className="flex flex-wrap items-center gap-1.5">
-                    {p.progress.missing ? <Pill tone="warn">{t("{n} missing", { n: p.progress.missing })}</Pill> : <Pill tone="ok">{t("Everything required is ready")}</Pill>}
-                    {p.status === "compiled" ? <Pill tone="ok"><SealCheckIcon size={12} weight="fill" /> {t("Compiled")}</Pill> : null}
-                    {p.task_id ? <Pill tone="info"><RobotIcon size={12} /> {t("Agent on it")}</Pill> : null}
-                  </div>
-                </button>
-              </Card>
-            ))}
-          </div>
-        )}
+      {!isLoading && !error && !packs.length ? (
+        <EmptyState icon={PackageIcon} title={t("No packs yet")}
+          body={t("A pack is a checklist (registration certificate, bank statements, profile, quotation, cover letter) matched to real files and compiled into one PDF.")}
+          action={<Button onClick={() => setCreating(true)}><PlusIcon size={16} weight="bold" /> {t("New pack")}</Button>} />
+      ) : (
+        <div data-guide="packs.list" className="min-w-0">
+          <DataTable
+            label={t("Packs")}
+            columns={columns}
+            rows={rows}
+            rowId={(p) => p.id}
+            rowLabel={(p) => p.title}
+            control={control}
+            loading={isLoading}
+            error={error}
+            onOpen={(p) => void open(p.id)}
+            searchText={(p) => `${p.title} ${p.description} ${p.branch_name ?? ""}`}
+            searchPlaceholder={t("Search packs")}
+            exportName={t("packs")}
+            rowActions={{
+              view: (p) => void open(p.id),
+              remove: async (p) => {
+                await api(`/api/packs/${p.id}`, "DELETE");
+                void qc.invalidateQueries({ queryKey: docKeys.packs });
+              },
+              removeBody: () => t("The checklist goes; the files, documents and any compiled PDF stay."),
+            }}
+            filters={
+              <>
+                {companies.length > 1 ? <TableFilter control={control} id="company" label={t("Company")} allLabel={t("All companies")} options={companies} /> : null}
+                <TableFilter control={control} id="state" label={t("Status")} allLabel={t("All statuses")}
+                  options={[{ value: "missing", label: t("Items missing") }, { value: "ready", label: t("Ready to compile") }, { value: "compiled", label: t("Compiled") }]} />
+              </>
+            }
+          />
+        </div>
+      )}
       {creating ? <NewPackDialog onClose={() => setCreating(false)} onCreated={(id) => navigate({ search: { p: id } })} /> : null}
     </Page>
   );

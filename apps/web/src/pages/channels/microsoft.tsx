@@ -12,13 +12,11 @@ import {
   KanbanIcon,
   MicrosoftOutlookLogoIcon,
   PauseIcon,
-  PencilSimpleIcon,
   PlayIcon,
   PlugsConnectedIcon,
   PlusIcon,
   ShieldCheckIcon,
   TimerIcon,
-  TrashIcon,
   UsersFourIcon,
   WarningCircleIcon,
 } from "@phosphor-icons/react";
@@ -31,9 +29,10 @@ import { IconTile } from "@/components/page";
 import { Trans } from "@/components/trans";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody, CardHeader, Meta } from "@/components/ui/card";
-import { ConfirmDialog } from "@/components/ui/confirm";
+import { DataTable, filterOf, TableFilter, useTableState, type Column } from "@/components/ui/data-table";
 import { ResponsiveDialog } from "@/components/ui/dialog";
 import { Field, FormError, Input } from "@/components/ui/field";
+import { MenuItem } from "@/components/ui/menu";
 import { Pill } from "@/components/ui/pill";
 import { Segmented } from "@/components/ui/segmented";
 import { Select } from "@/components/ui/select";
@@ -351,9 +350,18 @@ const STATUS_PILL: Record<string, { label: string; tone: "ok" | "danger" | "info
 function SharedMailboxes({ cfg }: { cfg: MicrosoftConfig }) {
   const t = useT();
   const qc = useQueryClient();
-  const { data: boxes = [], isLoading, error } = useQuery(mailboxesQuery);
+  const { data: boxes = [], isLoading, error, refetch } = useQuery(mailboxesQuery);
+  // P107: a data table (search, company, agent, status); "m_" keeps its place in the address
+  // apart from the other lists on Channels.
+  const control = useTableState({ size: 10 }, { prefix: "m_", filters: ["company", "agent", "status"] });
+  const [company] = filterOf(control, "company");
+  const [agent] = filterOf(control, "agent");
+  const [boxStatus] = filterOf(control, "status");
+  const statusKey = (b: SharedMailbox) => (b.status === "paused" ? "paused" : b.status === "error" ? "error" : "working");
+  const rows = boxes.filter((b) => (!company || b.branch_id === company) && (!agent || (b.agent_id ?? "none") === agent) && (!boxStatus || statusKey(b) === boxStatus));
+  const companies = [...new Map(boxes.map((b) => [b.branch_id, b.branch_name])).entries()].map(([value, label]) => ({ value, label })).sort((x, y) => x.label.localeCompare(y.label));
+  const agentOptions = [...new Map(boxes.map((b) => [b.agent_id ?? "none", b.agent_name ?? t("No agent")])).entries()].map(([value, label]) => ({ value, label })).sort((x, y) => x.label.localeCompare(y.label));
   const [dialog, setDialog] = useState<SharedMailbox | "new" | null>(null);
-  const [removing, setRemoving] = useState<SharedMailbox | null>(null);
   const [results, setResults] = useState<Record<string, { ok: boolean; message: string }>>({});
   const consent = useMutation({
     mutationFn: startAdminConsent,
@@ -382,6 +390,24 @@ function SharedMailboxes({ cfg }: { cfg: MicrosoftConfig }) {
     },
   });
 
+  const columns: Column<SharedMailbox>[] = [
+    {
+      id: "address", header: t("Address"), sortValue: (b) => b.address.toLowerCase(), exportValue: (b) => b.address, card: "title",
+      cell: (b) => (
+        <span className="grid min-w-0 max-w-72">
+          <span className="font-medium break-all">{b.address}</span>
+          {b.display_name && b.display_name !== b.address ? <span className="text-[12px] text-muted">{b.display_name}</span> : null}
+          <TestResult r={results[b.id] ?? lastError(b)} />
+        </span>
+      ),
+    },
+    { id: "company", header: t("Company"), sortValue: (b) => b.branch_name, cell: (b) => b.branch_name },
+    { id: "agent", header: t("Agent"), sortValue: (b) => b.agent_name ?? null, cell: (b) => b.agent_name ?? <span className="text-muted">{t("No agent")}</span> },
+    { id: "rules", header: t("Rules"), hideBelow: "xl", cell: (b) => <span className="block max-w-72 text-[12.5px] text-muted">{rulesSummary(b.rules, t).join(" · ")}</span> },
+    { id: "status", header: t("Status"), sortValue: statusKey, exportValue: (b) => b.status, cell: (b) => <MailboxStatus b={b} /> },
+    { id: "sync", header: t("Last sync"), kind: "date", sortValue: (b) => b.last_sync_at ?? null, hideBelow: "lg", cell: (b) => <span className="whitespace-nowrap text-muted">{b.last_sync_at ? timeAgo(b.last_sync_at) : t("Not yet")}</span> },
+  ];
+
   return (
     <div className="grid gap-3 border-t border-border pt-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -403,77 +429,46 @@ function SharedMailboxes({ cfg }: { cfg: MicrosoftConfig }) {
         </p>
       ) : null}
 
-      {isLoading ? <Skeleton className="h-24" />
-        : error ? (isMissingApi(error) ? <MissingServer /> : <p role="alert" className="text-[13px] text-danger">{errorMessage(error)}</p>)
-        : !boxes.length ? (
-          <p className="rounded-sm border border-dashed border-border px-3 py-5 text-center text-[12.5px] text-muted">{t("No shared mailboxes yet. Add one and pick the company and the agent that handles it.")}</p>
-        ) : (
-          <>
-            <ul className="grid grid-cols-[minmax(0,1fr)] divide-y divide-border overflow-hidden rounded-sm border border-border lg:hidden">
-              {boxes.map((b) => (
-                <li key={b.id} className="grid gap-2 px-3 py-3 text-[13px]">
-                  <div className="flex items-start gap-2">
-                    <span className="min-w-0 flex-1 font-medium break-all">{b.address}</span>
-                    <MailboxStatus b={b} />
-                  </div>
-                  <p className="flex flex-wrap items-center gap-x-2.5 gap-y-0.5 text-[12px] text-muted"><Meta items={[b.branch_name, b.agent_name ?? t("No agent"), b.last_sync_at ? t("Synced {ago}", { ago: timeAgo(b.last_sync_at).toLowerCase() }) : t("Not checked yet")]} /></p>
-                  <p className="text-[12px] text-muted">{rulesSummary(b.rules, t).join(" · ")}</p>
-                  <RowActions b={b} testing={test.isPending && test.variables === b.id} onTest={() => test.mutate(b.id)} onEdit={() => setDialog(b)} onRemove={() => setRemoving(b)}
-                    onPause={() => pause.mutate(b)} pausing={pause.isPending && pause.variables?.id === b.id} />
-                  <TestResult r={results[b.id] ?? lastError(b)} />
-                </li>
-              ))}
-            </ul>
-            <div className="overflow-x-auto rounded-sm border border-border max-lg:hidden">
-              <table className="w-full min-w-[56rem] text-left text-[13px]">
-                <thead className="border-b border-border bg-surface-2/60 text-[12px] text-muted">
-                  <tr>
-                    <th className="px-3 py-2 font-medium">{t("Address")}</th>
-                    <th className="px-3 py-2 font-medium">{t("Company")}</th>
-                    <th className="px-3 py-2 font-medium">{t("Agent")}</th>
-                    <th className="px-3 py-2 font-medium">{t("Rules")}</th>
-                    <th className="px-3 py-2 font-medium">{t("Status")}</th>
-                    <th className="px-3 py-2 font-medium">{t("Last sync")}</th>
-                    <th />
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border">
-                  {boxes.map((b) => (
-                    <tr key={b.id} className="align-top">
-                      <td className="max-w-64 px-3 py-2.5">
-                        <span className="block font-medium break-all">{b.address}</span>
-                        {b.display_name && b.display_name !== b.address ? <span className="block text-[12px] text-muted">{b.display_name}</span> : null}
-                        <TestResult r={results[b.id] ?? lastError(b)} />
-                      </td>
-                      <td className="px-3 py-2.5">{b.branch_name}</td>
-                      <td className="px-3 py-2.5">{b.agent_name ?? <span className="text-muted">{t("No agent")}</span>}</td>
-                      <td className="max-w-72 px-3 py-2.5 text-[12.5px] text-muted">{rulesSummary(b.rules, t).join(" · ")}</td>
-                      <td className="px-3 py-2.5"><MailboxStatus b={b} /></td>
-                      <td className="px-3 py-2.5 whitespace-nowrap text-muted">{b.last_sync_at ? timeAgo(b.last_sync_at) : t("Not yet")}</td>
-                      <td className="px-3 py-2.5"><RowActions b={b} testing={test.isPending && test.variables === b.id} onTest={() => test.mutate(b.id)} onEdit={() => setDialog(b)} onRemove={() => setRemoving(b)}
-                        onPause={() => pause.mutate(b)} pausing={pause.isPending && pause.variables?.id === b.id} /></td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </>
-        )}
+      {error && isMissingApi(error) ? <MissingServer /> : (
+        <DataTable
+          label={t("Shared mailboxes")}
+          columns={columns}
+          rows={rows}
+          rowId={(b) => b.id}
+          rowLabel={(b) => b.address}
+          control={control}
+          loading={isLoading}
+          error={error}
+          onRetry={() => void refetch()}
+          searchText={(b) => `${b.address} ${b.display_name ?? ""} ${b.branch_name} ${b.agent_name ?? ""}`}
+          searchPlaceholder={t("Search by address, company or agent")}
+          filters={boxes.length > 1 ? (
+            <>
+              {companies.length > 1 ? <TableFilter control={control} id="company" label={t("Company")} allLabel={t("All companies")} options={companies} /> : null}
+              {agentOptions.length ? <TableFilter control={control} id="agent" label={t("Agent")} allLabel={t("All agents")} options={agentOptions} /> : null}
+              <TableFilter control={control} id="status" label={t("Status")} allLabel={t("All statuses")}
+                options={[{ value: "working", label: t("Working") }, { value: "paused", label: t("Paused") }, { value: "error", label: t("Needs attention") }]} />
+            </>
+          ) : undefined}
+          exportName={t("shared-mailboxes")}
+          actions={(b) => <Button size="sm" variant="outline" loading={test.isPending && test.variables === b.id} onClick={() => test.mutate(b.id)}><PlugsConnectedIcon size={14} /> {t("Test")}</Button>}
+          rowActions={{
+            edit: (b) => setDialog(b),
+            more: (b) => (
+              <MenuItem icon={b.status === "paused" ? <PlayIcon /> : <PauseIcon />} onSelect={() => pause.mutate(b)}>{b.status === "paused" ? t("Resume") : t("Pause")}</MenuItem>
+            ),
+            verb: "remove",
+            remove: async (b) => {
+              await removeMailbox(b.id);
+              await qc.invalidateQueries({ queryKey: microsoftKeys.mailboxes });
+            },
+            removeBody: () => t("The office stops reading this mailbox. Tasks and files it already made stay. The mailbox itself is not touched."),
+          }}
+          empty={<p className="rounded-sm border border-dashed border-border px-3 py-5 text-center text-[12.5px] text-muted">{t("No shared mailboxes yet. Add one and pick the company and the agent that handles it.")}</p>}
+        />
+      )}
 
       {dialog ? <MailboxDialog box={dialog === "new" ? null : dialog} onClose={() => setDialog(null)} /> : null}
-      <ConfirmDialog open={!!removing} onOpenChange={(o) => !o && setRemoving(null)} danger confirmLabel={t("Remove")}
-        title={t("Remove {address}?", { address: removing?.address ?? "" })}
-        body={t("The office stops reading this mailbox. Tasks and files it already made stay. The mailbox itself is not touched.")}
-        onConfirm={async () => {
-          if (!removing) return;
-          try {
-            await removeMailbox(removing.id);
-            await qc.invalidateQueries({ queryKey: microsoftKeys.mailboxes });
-            toast.success(t("Mailbox removed."));
-          } catch (e) {
-            toast.error(errorMessage(e));
-          }
-        }} />
     </div>
   );
 }
@@ -491,23 +486,6 @@ function MailboxStatus({ b }: { b: SharedMailbox }) {
 
 /** The last thing Microsoft said about the mailbox (e.g. the RBAC hint), until a new test. */
 const lastError = (b: SharedMailbox) => (b.status === "error" && b.last_error ? { ok: false, message: b.last_error } : undefined);
-
-function RowActions({ b, testing, onTest, onEdit, onRemove, onPause, pausing }: {
-  b: SharedMailbox; testing: boolean; onTest: () => void; onEdit: () => void; onRemove: () => void; onPause: () => void; pausing: boolean;
-}) {
-  const t = useT();
-  const paused = b.status === "paused";
-  return (
-    <span className="flex flex-wrap items-center justify-end gap-1 max-lg:justify-start">
-      <Button size="sm" variant="outline" loading={testing} onClick={onTest}><PlugsConnectedIcon size={14} /> {t("Test")}</Button>
-      <Button size="icon-sm" variant="ghost" loading={pausing} aria-label={paused ? t("Resume {name}", { name: b.address }) : t("Pause {name}", { name: b.address })} title={paused ? t("Resume") : t("Pause")} onClick={onPause}>
-        {paused ? <PlayIcon size={15} /> : <PauseIcon size={15} />}
-      </Button>
-      <Button size="icon-sm" variant="ghost" aria-label={t("Edit {name}", { name: b.address })} onClick={onEdit}><PencilSimpleIcon size={15} /></Button>
-      <Button size="icon-sm" variant="ghost" className="hover:text-danger" aria-label={t("Remove {name}", { name: b.address })} onClick={onRemove}><TrashIcon size={15} /></Button>
-    </span>
-  );
-}
 
 function TestResult({ r }: { r?: { ok: boolean; message: string } }) {
   if (!r) return null;

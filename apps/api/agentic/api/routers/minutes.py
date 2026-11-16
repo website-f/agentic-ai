@@ -43,6 +43,7 @@ from ...models import (
 )
 from ...services import audit, events
 from ..deps import Principal, api_error, ensure_allowance, require
+from ..table import TableParams, like, sql_page
 from .library import Names
 
 router = APIRouter(prefix="/api/minutes", tags=["minutes"])
@@ -510,17 +511,43 @@ def _too_big() -> Exception:
 
 @router.get("")
 async def list_recordings(
+    response: Response,
+    status_is: Literal["ready", "failed", "processing"] | None = Query(
+        default=None, alias="status"
+    ),
+    table: TableParams = Depends(),
     principal: Principal = Depends(require("read")),
     db: AsyncSession = Depends(get_db),
 ) -> list[RecordingOut]:
-    rows = (
-        await db.scalars(
-            select(MeetingRecording)
-            .where(MeetingRecording.workspace_id == principal.workspace_id, _read_where(principal))
-            .order_by(MeetingRecording.created_at.desc())
-            .limit(200)
+    """Newest first, the latest 200. P107 (the recordings table): with `page`, one numbered page
+    of `size` and the total in X-Total-Count; every word of `q` is in the title or file name;
+    `status` ready / failed / processing; `sort` "created_at" (default "-created_at"), "title"
+    or "duration"."""
+    q = select(MeetingRecording).where(
+        MeetingRecording.workspace_id == principal.workspace_id, _read_where(principal)
+    )
+    if status_is == "processing":
+        q = q.where(MeetingRecording.status.in_(service.ACTIVE))
+    elif status_is:
+        q = q.where(MeetingRecording.status == status_is)
+    if table.paged:
+        for w in table.words:
+            q = q.where(
+                or_(
+                    MeetingRecording.title.ilike(like(w), escape="\\"),
+                    MeetingRecording.original_name.ilike(like(w), escape="\\"),
+                )
+            )
+        key, desc = table.sort_by(("created_at", "title", "duration"), default="-created_at")
+        col = {"title": MeetingRecording.title, "duration": MeetingRecording.duration_seconds}.get(
+            key, MeetingRecording.created_at
         )
-    ).all()
+        # Rows without a length (still uploading) go last either way.
+        blank = [(col.is_(None), False)] if key != "created_at" else []
+        order = [*blank, (col, desc), (MeetingRecording.id, desc)]
+        rows = await sql_page(db, q, order, table, response)
+    else:
+        rows = (await db.scalars(q.order_by(MeetingRecording.created_at.desc()).limit(200))).all()
     names = await Names.load(db, principal.workspace_id)
     return [RecordingOut(**await recording_out(db, principal, r, names)) for r in rows]
 

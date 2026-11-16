@@ -17,6 +17,7 @@ from ...models import Agent, Branch, Report, SharedMailbox, Task
 from ...services.text import csv_safe
 from .. import paging
 from ..deps import Principal, api_error, require
+from ..table import TableParams, sql_page
 
 router = APIRouter(prefix="/api/reports", tags=["reports"])
 
@@ -111,10 +112,14 @@ async def list_reports(
     q_: str = Query(default="", alias="q", max_length=120),
     limit: int = Query(default=100, ge=1, le=300),
     cursor: str | None = Query(default=None, max_length=400),
+    table: TableParams = Depends(),
     principal: Principal = Depends(require("read")),
     db: AsyncSession = Depends(get_db),
 ) -> list[ReportOut]:
-    """Newest first. Pages with `limit` + `cursor` (X-Next-Cursor, X-Total-Count)."""
+    """Newest first. Pages with `limit` + `cursor` (X-Next-Cursor, X-Total-Count).
+
+    P107 (the reports table): `page` + `size` for numbered pages (X-Total-Count), `sort`
+    "created" or "title" ("-" descending; newest first by default). `q` searches the same."""
     q = _scoped(select(Report).where(Report.workspace_id == principal.workspace_id), principal)
     if branch_id:
         q = q.where(Report.branch_id == branch_id)
@@ -137,14 +142,19 @@ async def list_reports(
                 Report.agent_id.in_(named),
             )
         )
-    rows = await paging.paginate(
-        db,
-        q,
-        ((Report.created_at, True), (Report.id, True)),
-        limit=limit,
-        cursor=cursor,
-        response=response,
-    )
+    if table.paged:
+        key, desc = table.sort_by(("created", "title"), default="-created")
+        col = Report.title if key == "title" else Report.created_at
+        rows = await sql_page(db, q, ((col, desc), (Report.id, desc)), table, response)
+    else:
+        rows = await paging.paginate(
+            db,
+            q,
+            ((Report.created_at, True), (Report.id, True)),
+            limit=limit,
+            cursor=cursor,
+            response=response,
+        )
     return [await _out(db, r, False) for r in rows]
 
 

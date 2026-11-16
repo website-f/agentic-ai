@@ -15,6 +15,7 @@ from ...services import audit, events
 from .. import paging
 from ..agent_schemas import BroadcastIn, BroadcastOut, ReceiptOut
 from ..deps import Principal, api_error, require
+from ..table import TableParams, like, sql_page
 
 router = APIRouter(prefix="/api/broadcasts", tags=["broadcasts"])
 log = logging.getLogger("agentic.broadcasts")
@@ -262,22 +263,43 @@ async def history(
     response: Response,
     limit: int = Query(default=100, ge=1, le=paging.MAX_LIMIT),
     cursor: str | None = Query(default=None, max_length=400),
+    mode: str | None = Query(default=None, pattern="^(announcement|directive)$"),
+    table: TableParams = Depends(),
     principal: Principal = Depends(require("read")),
     db: AsyncSession = Depends(get_db),
 ) -> list[BroadcastOut]:
     """Newest first. Pages with `limit` + `cursor` (X-Next-Cursor, X-Total-Count). A scoped
-    person sees what they sent and what reached an agent they can see."""
+    person sees what they sent and what reached an agent they can see.
+
+    P107 (the sent table): `mode` keeps announcements or tasks, `q` finds words in the message
+    or its audience, `page` + `size` give numbered pages, `sort` is "created" ("-" newest
+    first, the default)."""
     q = select(Broadcast).where(
         Broadcast.workspace_id == principal.workspace_id, _visible(principal)
     )
-    rows = await paging.paginate(
-        db,
-        q,
-        ((Broadcast.created_at, True), (Broadcast.id, True)),
-        limit=limit,
-        cursor=cursor,
-        response=response,
-    )
+    if mode:
+        q = q.where(Broadcast.mode == mode)
+    for w in table.words:
+        pat = like(w)
+        q = q.where(
+            or_(
+                Broadcast.body.ilike(pat, escape="\\"),
+                Broadcast.audience_label.ilike(pat, escape="\\"),
+            )
+        )
+    if table.paged:
+        _, desc = table.sort_by(("created",), default="-created")
+        order = ((Broadcast.created_at, desc), (Broadcast.id, desc))
+        rows = await sql_page(db, q, order, table, response)
+    else:
+        rows = await paging.paginate(
+            db,
+            q,
+            ((Broadcast.created_at, True), (Broadcast.id, True)),
+            limit=limit,
+            cursor=cursor,
+            response=response,
+        )
     return [await _out(db, b) for b in rows]
 
 

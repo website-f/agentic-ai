@@ -1,17 +1,18 @@
 import { ArrowsClockwiseIcon, CheckCircleIcon, CoinsIcon, PauseIcon, PlayIcon, TrashIcon } from "@phosphor-icons/react";
 import { useMutation, useQuery, useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import { EmptyState } from "@/components/page";
 import { Button } from "@/components/ui/button";
-import { ListCard, Meta } from "@/components/ui/card";
 import { ConfirmDialog } from "@/components/ui/confirm";
+import { DataTable, filterOf, RowMenu, TableFilter, useTableState, type Column } from "@/components/ui/data-table";
+import { ResponsiveDialog } from "@/components/ui/dialog";
+import { MenuItem } from "@/components/ui/menu";
 import { Pill } from "@/components/ui/pill";
-import { Skeleton } from "@/components/ui/skeleton";
 import { Stat, StatGrid } from "@/components/ui/stat";
 import { SwitchField } from "@/components/ui/switch";
-import { msg, useT } from "@/i18n";
+import { locale, msg, useT } from "@/i18n";
 import { tokens } from "@/lib/allowance";
 import { api, errorMessage } from "@/lib/api";
 import { meQuery } from "@/lib/queries";
@@ -59,76 +60,27 @@ const STATUS: Record<Routine["status"], { label: string; tone: "ok" | "info" | "
   retired: { label: msg("Retired"), tone: "neutral" },
 };
 
-function RoutineRow({ r, canManage }: { r: Routine; canManage: boolean }) {
+/** What a routine does, step by step (opened from its row). */
+function RoutineDetail({ r }: { r: Routine }) {
   const t = useT();
-  const qc = useQueryClient();
-  const [open, setOpen] = useState(false);
-  const [forget, setForget] = useState(false);
-  const act = useMutation({
-    mutationFn: (action: "trust" | "pause" | "resume" | "retire") => api<Routine>(`/api/routines/${r.id}/${action}`, "POST", {}),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: routineKeys.list });
-      toast.success(t("Saved."));
-    },
-    onError: (e) => toast.error(errorMessage(e)),
-  });
-  const remove = useMutation({
-    mutationFn: () => api(`/api/routines/${r.id}`, "DELETE"),
-    onSuccess: () => qc.invalidateQueries({ queryKey: routineKeys.list }),
-    onError: (e) => toast.error(errorMessage(e)),
-  });
-  const s = STATUS[r.status];
   return (
-    <li className="grid min-w-0 gap-2 px-4 py-3.5 sm:px-5">
-      <div className="flex min-w-0 flex-wrap items-start justify-between gap-2">
-        <button type="button" onClick={() => setOpen((o) => !o)} className="min-w-0 text-left" aria-expanded={open}>
-          <span className="block text-[14px] font-semibold break-words hover:text-accent">{r.name}</span>
-          {r.description ? <span className="block text-[12.5px] break-words text-muted">{r.description}</span> : null}
-        </button>
-        <Pill tone={s.tone} className="shrink-0">{t(s.label)}</Pill>
-      </div>
-      <div className="flex min-w-0 flex-wrap gap-x-2 gap-y-1 text-[12px] text-muted"><Meta items={[
-        r.agent_name ? t("Learned by {name}", { name: r.agent_name }) : null,
-        r.status === "candidate" ? t("Seen done this way {n} of {needed} times", { n: r.confirmations, needed: r.needed }) : t("{n} runs", { n: r.uses }),
-        r.successes || r.failures ? t("{ok} accepted, {bad} sent back or failed", { ok: r.successes, bad: r.failures }) : null,
-        r.tokens_saved ? t("{n} tokens saved", { n: tokens(r.tokens_saved) }) : null,
-        r.last_used_at ? t("last used {when}", { when: timeAgo(r.last_used_at).toLowerCase() }) : null,
-      ]} /></div>
-      {r.note ? <p className="text-[12.5px] text-warn">{r.note}</p> : null}
-      {open ? (
-        <div className="grid gap-2 rounded-sm border border-border bg-surface-2/40 p-3 text-[12.5px]">
-          {r.example ? <p className="break-words"><span className="font-medium">{t("Learned from:")}</span> {r.example.slice(0, 300)}</p> : null}
-          {r.slots.length ? (
-            <p className="break-words"><span className="font-medium">{t("Changes each time:")}</span> {r.slots.map((x) => x.description || x.name).join(", ")}</p>
-          ) : <p>{t("Exactly the same every time.")}</p>}
-          <ol className="grid list-decimal gap-1 pl-5">
-            {r.steps.map((st, i) => (
-              <li key={i} className="font-mono text-[12px] break-all">{st.tool}({JSON.stringify(st.args).slice(0, 160)})</li>
-            ))}
-          </ol>
-          <p className="break-words">
-            <span className="font-medium">{t("The answer:")}</span>{" "}
-            {r.answer.mode === "template" ? t("a fixed reply, no AI needed") : t("written by the cheapest AI from the results: {how}", { how: r.answer.text ?? "" })}
-          </p>
-        </div>
-      ) : null}
-      {canManage ? (
-        <div className="flex flex-wrap gap-2">
-          {r.status === "candidate" || r.status === "paused" ? (
-            <Button size="sm" variant="outline" loading={act.isPending} onClick={() => act.mutate(r.status === "paused" ? "resume" : "trust")}>
-              {r.status === "paused" ? <PlayIcon size={14} /> : <CheckCircleIcon size={14} />} {r.status === "paused" ? t("Resume") : t("Trust it now")}
-            </Button>
-          ) : null}
-          {r.status === "active" || r.status === "candidate" ? (
-            <Button size="sm" variant="ghost" disabled={act.isPending} onClick={() => act.mutate("pause")}><PauseIcon size={14} /> {t("Pause")}</Button>
-          ) : null}
-          <Button size="sm" variant="ghost" disabled={remove.isPending} onClick={() => setForget(true)}><TrashIcon size={14} /> {t("Forget")}</Button>
-        </div>
-      ) : null}
-      <ConfirmDialog open={forget} onOpenChange={setForget} title={t("Forget {name}?", { name: r.name })}
-        body={t("Agents will do this job with the AI again, and may learn it again.")} confirmLabel={t("Forget")} danger
-        onConfirm={() => remove.mutate()} />
-    </li>
+    <div className="grid gap-2 text-[12.5px]">
+      {r.description ? <p className="text-[13px] break-words text-muted">{r.description}</p> : null}
+      {r.note ? <p className="text-warn">{r.note}</p> : null}
+      {r.example ? <p className="break-words"><span className="font-medium">{t("Learned from:")}</span> {r.example.slice(0, 300)}</p> : null}
+      {r.slots.length ? (
+        <p className="break-words"><span className="font-medium">{t("Changes each time:")}</span> {r.slots.map((x) => x.description || x.name).join(", ")}</p>
+      ) : <p>{t("Exactly the same every time.")}</p>}
+      <ol className="grid list-decimal gap-1 rounded-sm border border-border bg-surface-2/40 p-3 pl-8">
+        {r.steps.map((st, i) => (
+          <li key={i} className="font-mono text-[12px] break-all">{st.tool}({JSON.stringify(st.args).slice(0, 160)})</li>
+        ))}
+      </ol>
+      <p className="break-words">
+        <span className="font-medium">{t("The answer:")}</span>{" "}
+        {r.answer.mode === "template" ? t("a fixed reply, no AI needed") : t("written by the cheapest AI from the results: {how}", { how: r.answer.text ?? "" })}
+      </p>
+    </div>
   );
 }
 
@@ -145,7 +97,75 @@ export function RoutinesPanel() {
     onSuccess: () => qc.invalidateQueries({ queryKey: routineKeys.summary }),
     onError: (e) => toast.error(errorMessage(e)),
   });
+  const act = useMutation({
+    mutationFn: ({ id, action }: { id: string; action: "trust" | "pause" | "resume" | "retire" }) => api<Routine>(`/api/routines/${id}/${action}`, "POST", {}),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: routineKeys.list });
+      toast.success(t("Saved."));
+    },
+    onError: (e) => toast.error(errorMessage(e)),
+  });
+  const remove = useMutation({
+    mutationFn: (id: string) => api(`/api/routines/${id}`, "DELETE"),
+    onSuccess: () => qc.invalidateQueries({ queryKey: routineKeys.list }),
+    onError: (e) => toast.error(errorMessage(e)),
+  });
+  const [forget, setForget] = useState<Routine | null>(null);
+  const [openId, setOpenId] = useState<string | null>(null);
+  // P107: a data table (its address keys start with r_, beside the skills table's).
+  const control = useTableState({ size: 25 }, { prefix: "r_", filters: ["status", "agent"] });
+  const [status] = filterOf(control, "status");
+  const [agent] = filterOf(control, "agent");
+  const all = useMemo(() => list.data ?? [], [list.data]);
+  const agents = useMemo(() => [...new Set(all.map((r) => r.agent_name ?? ""))].filter(Boolean).sort((a, b) => a.localeCompare(b)), [all]);
+  const rows = useMemo(() => all.filter((r) => (!status || r.status === status) && (!agent || (r.agent_name ?? "") === agent)), [all, status, agent]);
+  const opened = all.find((r) => r.id === openId) ?? null;
   const sm = summary.data;
+
+  const buttons = (r: Routine) => (
+    <>
+      {r.status === "candidate" || r.status === "paused" ? (
+        <Button size="sm" variant="outline" loading={act.isPending} onClick={() => act.mutate({ id: r.id, action: r.status === "paused" ? "resume" : "trust" })}>
+          {r.status === "paused" ? <PlayIcon size={14} /> : <CheckCircleIcon size={14} />} {r.status === "paused" ? t("Resume") : t("Trust it now")}
+        </Button>
+      ) : null}
+      {r.status === "active" || r.status === "candidate" ? (
+        <Button size="sm" variant="ghost" disabled={act.isPending} onClick={() => act.mutate({ id: r.id, action: "pause" })}><PauseIcon size={14} /> {t("Pause")}</Button>
+      ) : null}
+      <Button size="sm" variant="ghost" disabled={remove.isPending} onClick={() => setForget(r)}><TrashIcon size={14} /> {t("Forget")}</Button>
+    </>
+  );
+
+  const columns: Column<Routine>[] = [
+    {
+      id: "name", header: t("Routine"), card: "title", sortValue: (r) => r.name.toLowerCase(), exportValue: (r) => r.name,
+      cell: (r) => (
+        <span className="grid min-w-0 gap-0.5">
+          <span className="text-[13.5px] font-semibold break-words">{r.name}</span>
+          {r.description ? <span className="line-clamp-2 text-[12.5px] break-words text-muted">{r.description}</span> : null}
+          {r.note ? <span className="text-[12px] text-warn">{r.note}</span> : null}
+        </span>
+      ),
+    },
+    { id: "status", header: t("Status"), sortValue: (r) => r.status, exportValue: (r) => t(STATUS[r.status].label), cell: (r) => <Pill tone={STATUS[r.status].tone}>{t(STATUS[r.status].label)}</Pill> },
+    { id: "agent", header: t("Learned by"), hideBelow: "lg", sortValue: (r) => r.agent_name, cell: (r) => r.agent_name ?? <span className="text-muted">-</span> },
+    {
+      id: "uses", header: t("Runs"), kind: "number", align: "right", sortValue: (r) => r.uses,
+      cell: (r) => (r.status === "candidate"
+        ? <span className="text-muted">{t("Seen {n} of {needed}", { n: r.confirmations, needed: r.needed })}</span>
+        : r.uses.toLocaleString(locale())),
+    },
+    {
+      id: "results", header: t("Accepted"), kind: "number", align: "right", hideBelow: "xl", sortValue: (r) => r.successes, exportValue: (r) => `${r.successes}/${r.successes + r.failures}`,
+      cell: (r) => (r.successes || r.failures ? t("{ok} of {all}", { ok: r.successes, all: r.successes + r.failures }) : <span className="text-muted">-</span>),
+    },
+    { id: "saved", header: t("Tokens saved"), kind: "number", align: "right", sortValue: (r) => r.tokens_saved, cell: (r) => (r.tokens_saved ? tokens(r.tokens_saved) : <span className="text-muted">-</span>) },
+    {
+      id: "used", header: t("Last used"), kind: "date", hideBelow: "lg", sortValue: (r) => r.last_used_at,
+      cell: (r) => (r.last_used_at ? <span className="text-muted">{timeAgo(r.last_used_at)}</span> : <span className="text-muted">-</span>),
+    },
+  ];
+
   return (
     <>
       <p className="text-[13px] text-muted">
@@ -163,14 +183,63 @@ export function RoutinesPanel() {
         <SwitchField checked={sm.enabled} disabled={toggle.isPending} onCheckedChange={(v) => toggle.mutate(v)}
           label={t("Let agents repeat learned jobs without the AI")} hint={t("Off: agents still learn routines, but always work with the AI.")} />
       ) : null}
-      {list.isLoading ? <Skeleton className="h-32" /> : list.error ? (
-        <p role="alert" className="text-danger">{errorMessage(list.error)}</p>
-      ) : !list.data?.length ? (
+      {!list.isLoading && !list.error && !all.length ? (
         <EmptyState icon={ArrowsClockwiseIcon} title={t("No routines yet")}
           body={t("They appear after agents finish work that used tools and could be repeated, such as a monthly report or a regular check. Give the same kind of task twice and accept the results.")} />
       ) : (
-        <ListCard>{list.data.map((r) => <RoutineRow key={r.id} r={r} canManage={canManage} />)}</ListCard>
+        <DataTable
+          label={t("Routines")}
+          columns={columns}
+          rows={rows}
+          rowId={(r) => r.id}
+          rowLabel={(r) => r.name}
+          control={control}
+          loading={list.isLoading}
+          error={list.error}
+          onRetry={() => void list.refetch()}
+          searchText={(r) => `${r.name} ${r.description} ${r.agent_name ?? ""} ${r.tools.join(" ")}`}
+          searchPlaceholder={t("Search routines")}
+          exportName={t("routines")}
+          onOpen={(r) => setOpenId(r.id)}
+          filters={
+            <>
+              <TableFilter control={control} id="status" label={t("Status")} allLabel={t("All statuses")}
+                options={(Object.keys(STATUS) as Routine["status"][]).map((k) => ({ value: k, label: t(STATUS[k].label) }))} />
+              {agents.length > 1 ? (
+                <TableFilter control={control} id="agent" label={t("Learned by")} allLabel={t("Every agent")} options={agents.map((a) => ({ value: a, label: a }))} />
+              ) : null}
+            </>
+          }
+          actions={canManage ? (r) => (
+            <RowMenu label={t("Options for {name}", { name: r.name })}>
+              {r.status === "candidate" || r.status === "paused" ? (
+                <MenuItem icon={r.status === "paused" ? <PlayIcon /> : <CheckCircleIcon />} disabled={act.isPending}
+                  onSelect={() => act.mutate({ id: r.id, action: r.status === "paused" ? "resume" : "trust" })}>
+                  {r.status === "paused" ? t("Resume") : t("Trust it now")}
+                </MenuItem>
+              ) : null}
+              {r.status === "active" || r.status === "candidate" ? (
+                <MenuItem icon={<PauseIcon />} disabled={act.isPending} onSelect={() => act.mutate({ id: r.id, action: "pause" })}>{t("Pause")}</MenuItem>
+              ) : null}
+              <MenuItem icon={<TrashIcon />} danger disabled={remove.isPending} onSelect={() => setForget(r)}>{t("Forget")}</MenuItem>
+            </RowMenu>
+          ) : undefined}
+        />
       )}
+      {opened ? (
+        <ResponsiveDialog open onOpenChange={(o) => !o && setOpenId(null)} title={opened.name}
+          description={`${t(STATUS[opened.status].label)}${opened.agent_name ? ` · ${t("Learned by {name}", { name: opened.agent_name })}` : ""}`}
+          footer={canManage ? buttons(opened) : undefined}>
+          <RoutineDetail r={opened} />
+        </ResponsiveDialog>
+      ) : null}
+      <ConfirmDialog open={!!forget} onOpenChange={(o) => !o && setForget(null)} title={t("Forget {name}?", { name: forget?.name ?? "" })}
+        body={t("Agents will do this job with the AI again, and may learn it again.")} confirmLabel={t("Forget")} danger
+        onConfirm={() => {
+          if (!forget) return;
+          remove.mutate(forget.id);
+          if (forget.id === openId) setOpenId(null);
+        }} />
     </>
   );
 }

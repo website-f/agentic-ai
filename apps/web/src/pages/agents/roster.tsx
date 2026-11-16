@@ -7,6 +7,7 @@ import { AgentAccessPills } from "@/components/agent-access";
 import { AgentAvatar } from "@/components/agent-avatar";
 import { EmptyState, Page, PageHeader } from "@/components/page";
 import { Button } from "@/components/ui/button";
+import { DataTable, TableFilter, useTableState, type Column } from "@/components/ui/data-table";
 import { Pill } from "@/components/ui/pill";
 import { Segmented } from "@/components/ui/segmented";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -66,6 +67,119 @@ function AgentCard({ agent, guide }: { agent: Agent; guide?: string }) {
   );
 }
 
+type StateKey = "working" | "waiting" | "available" | "paused";
+/** The status filter's value for an agent's state label. */
+const stateKey = (label: string): StateKey =>
+  label === "Working" || label === "In a meeting" ? "working" : label === "Paused" ? "paused" : label === "Available" ? "available" : "waiting";
+
+/** P107: every agent in one searchable, sortable table (the default view). */
+export function AgentsTable({ agents, statuses, many, guideId }: {
+  agents: Agent[];
+  statuses: Record<string, { status: string } | undefined>;
+  /** More than one company is listed: show the Company column and filter. */
+  many: boolean;
+  guideId?: string;
+}) {
+  const t = useT();
+  const navigate = useNavigate();
+  const control = useTableState({ size: 25 }, { filters: ["company", "department", "status"] });
+  const { company, department, status } = control.state.f;
+  const stateOf = (a: Agent) => agentState(a, statuses[a.id]);
+  const companies = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const a of agents) m.set(a.branch_id, a.branch_name);
+    return [...m].map(([value, label]) => ({ value, label })).sort((a, b) => a.label.localeCompare(b.label));
+  }, [agents]);
+  const departments = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const a of agents) {
+      if (company && a.branch_id !== company) continue;
+      if (a.department_id) m.set(a.department_id, many && !company ? `${a.department_name ?? ""} · ${a.branch_name}` : a.department_name ?? "");
+    }
+    const out = [...m].map(([value, label]) => ({ value, label })).sort((a, b) => a.label.localeCompare(b.label));
+    return agents.some((a) => !a.department_id) ? [...out, { value: "none", label: t("No department") }] : out;
+  }, [agents, company, many, t]);
+  const rows = useMemo(() => agents.filter((a) =>
+    (!company || a.branch_id === company)
+    && (!department || (department === "none" ? !a.department_id : a.department_id === department))
+    && (!status || stateKey(agentState(a, statuses[a.id]).label) === status)), [agents, company, department, status, statuses]);
+
+  const columns: Column<Agent>[] = [
+    {
+      id: "name", header: t("Agent"), card: "title", sortValue: (a) => a.name.toLowerCase(), exportValue: (a) => a.name,
+      cell: (a) => (
+        <span data-guide={a.id === guideId ? "agents.card" : undefined} className="flex min-w-0 items-center gap-3">
+          <AgentAvatar name={a.name} color={a.color} size="sm" working={stateOf(a).label === "Working"} />
+          <span className="grid min-w-0">
+            <span className="text-[13.5px] font-semibold break-words">{a.name}</span>
+            <span className="text-[12px] break-words text-muted">{a.role}</span>
+          </span>
+        </span>
+      ),
+    },
+    {
+      id: "status", header: t("Status"), sortValue: (a) => ["working", "waiting", "available", "paused"].indexOf(stateKey(stateOf(a).label)),
+      exportValue: (a) => t(stateOf(a).label),
+      cell: (a) => <Pill tone={stateOf(a).tone}>{t(stateOf(a).label)}</Pill>,
+    },
+    ...(many ? [{ id: "company", header: t("Company"), sortValue: (a: Agent) => a.branch_name.toLowerCase(), exportValue: (a: Agent) => a.branch_name, cell: (a: Agent) => a.branch_name }] : []),
+    {
+      id: "department", header: t("Department"), sortValue: (a) => a.department_name?.toLowerCase() ?? null, exportValue: (a) => a.department_name ?? "",
+      cell: (a) => a.department_name ?? <span className="text-muted">{t("No department")}</span>,
+    },
+    {
+      id: "work", header: t("Work"), hideBelow: "lg", kind: "number", sortValue: (a) => (a.current_task ? 1000 + a.open_tasks : a.open_tasks),
+      exportValue: (a) => a.current_task?.title ?? a.open_tasks,
+      cell: (a) => (
+        <span className="line-clamp-2 text-[12.5px] text-muted">
+          {a.current_task ? <>{t("On:")} <span className="text-fg">{a.current_task.title}</span></> : a.open_tasks ? (a.open_tasks === 1 ? t("1 open task") : t("{n} open tasks", { n: a.open_tasks })) : t("No open tasks")}
+        </span>
+      ),
+    },
+    {
+      id: "setup", header: t("Setup"), hideBelow: "xl", sortValue: (a) => a.model_group,
+      cell: (a) => (
+        <span className="flex flex-wrap gap-1 text-[11.5px]">
+          <Pill className="font-mono">{a.model_group}</Pill>
+          <AgentAccessPills agent={a} />
+          {a.clone_of ? <Pill tone="info">{t("Helper")}</Pill> : null}
+          {a.autonomy === "auto" ? <Pill tone="accent">{t("Auto")}</Pill> : null}
+          {a.role_kind === "orchestrator" ? <Pill tone="accent">{t("Leads")}</Pill> : null}
+          {a.budget_daily_tokens || a.budget_monthly_usd ? <Pill>{t("Budget")}</Pill> : null}
+          {a.sop_ids.length ? <Pill>{t("{n} SOPs", { n: a.sop_ids.length })}</Pill> : null}
+        </span>
+      ),
+    },
+    {
+      id: "owner", header: t("Owner"), hideBelow: "xl", sortValue: (a) => a.owner_name?.toLowerCase() ?? null, exportValue: (a) => a.owner_name ?? "",
+      cell: (a) => a.owner_name ?? <span className="text-muted">-</span>,
+    },
+  ];
+
+  return (
+    <DataTable
+      label={t("Agents")}
+      columns={columns}
+      rows={rows}
+      rowId={(a) => a.id}
+      rowLabel={(a) => a.name}
+      control={control}
+      onOpen={(a) => void navigate({ to: "/agents/$agentId", params: { agentId: a.id } })}
+      searchText={(a) => `${a.name} ${a.role} ${a.branch_name} ${a.department_name ?? ""} ${a.owner_name ?? ""} ${a.model_group} ${a.current_task?.title ?? ""}`}
+      searchPlaceholder={t("Search by name, role or department")}
+      exportName={t("agents")}
+      filters={
+        <>
+          {many && companies.length > 1 ? <TableFilter control={control} id="company" label={t("Company")} allLabel={t("All companies")} options={companies} /> : null}
+          {departments.length > 1 ? <TableFilter control={control} id="department" label={t("Department")} allLabel={t("All departments")} options={departments} /> : null}
+          <TableFilter control={control} id="status" label={t("Status")} allLabel={t("All statuses")}
+            options={[{ value: "working", label: t("Working") }, { value: "waiting", label: t("Waiting") }, { value: "available", label: t("Available") }, { value: "paused", label: t("Paused") }]} />
+        </>
+      }
+    />
+  );
+}
+
 export function AgentsPage() {
   const t = useT();
   const { data: me } = useSuspenseQuery(meQuery);
@@ -78,7 +192,8 @@ export function AgentsPage() {
   const { branches: visible, isAll, selected, isLoading: loadingCompanies } = useCompanies();
   const shown = useMemo(() => (isAll ? visible : selected ? [selected] : []), [isAll, visible, selected]);
   const branch = shown[0];
-  const { view } = useSearch({ strict: false }) as { view?: "org" };
+  // P107: the table is the usual view; ?view=departments shows the cards by department.
+  const { view } = useSearch({ strict: false }) as { view?: "org" | "departments" };
   const navigate = useNavigate();
 
   // Staff also see colleagues' agents (view only). When the list mixes both, offer Mine / Office.
@@ -165,10 +280,11 @@ export function AgentsPage() {
             <Segmented
               guide="agents.org"
               label={t("Show agents by")}
-              value={view === "org" ? "org" : "departments"}
-              onChange={(v) => navigate({ to: "/agents", search: { view: v === "org" ? "org" : undefined }, replace: true })}
+              value={view ?? "list"}
+              onChange={(v) => navigate({ to: "/agents", search: { view: v === "org" || v === "departments" ? v : undefined }, replace: true })}
               options={[
-                { value: "departments", label: t("By department"), count: total },
+                { value: "list", label: t("List"), count: total },
+                { value: "departments", label: t("By department") },
                 { value: "org", label: t("Org chart") },
               ]}
               className="w-fit max-w-full"
@@ -187,7 +303,9 @@ export function AgentsPage() {
               />
             ) : null}
           </div>
-          {view === "org" ? <OrgChart agents={inBranch.filter((a) => a.status !== "retired")} manage={me.permissions.includes("agents.manage")} /> : (
+          {view === "org" ? <OrgChart agents={inBranch.filter((a) => a.status !== "retired")} manage={me.permissions.includes("agents.manage")} /> : view !== "departments" ? (
+            <AgentsTable agents={sections.flatMap((s) => s.agents)} statuses={statuses} many={isAll && shown.length > 1} guideId={firstAgentId} />
+          ) : (
             <div className="grid grid-cols-[minmax(0,1fr)] gap-10">
               {companies.map(({ company, sections: depts }) => {
                 const H = isAll ? "h3" : "h2";

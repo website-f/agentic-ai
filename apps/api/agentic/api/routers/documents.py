@@ -37,6 +37,7 @@ from ...models import (
 from ...services import audit, events
 from .. import paging
 from ..deps import Principal, api_error, ensure_allowance, require
+from ..table import TableParams, like, page_of, sql_page
 from .files import check_branch, check_task, get_file
 
 router = APIRouter(prefix="/api", tags=["documents"])
@@ -676,14 +677,32 @@ async def list_documents(
     review: str | None = Query(default=None, pattern="^(draft|waiting|sent_back|approved)$"),
     limit: int = Query(default=300, ge=1, le=300),
     cursor: str | None = Query(default=None, max_length=400),
+    table: TableParams = Depends(),
     principal: Principal = Depends(require("read")),
     db: AsyncSession = Depends(get_db),
 ) -> list[DocOut]:
     """Most recently changed first. Pages with `limit` + `cursor` (X-Next-Cursor,
     X-Total-Count); filters and search apply to every page. `fix` keeps only documents that
     fail a check (pages can be short; follow X-Next-Cursor until it stops). P25: `origin`
-    (made by a person or an agent), `agent_id` (that agent and its helpers), `review`."""
+    (made by a person or an agent), `agent_id` (that agent and its helpers), `review`.
+
+    P107 (the documents table): `page` + `size` give numbered pages with X-Total-Count,
+    `sort` is "updated" (the default, newest first), "title" or "number" ("-" descending).
+    With `fix` the pages come from the failing documents among the latest FIX_SCAN."""
     query = _doc_query(principal, status_, branch_id, task_id, q, origin, agent_id, review)
+    if table.paged:
+        key, desc = table.sort_by(("updated", "title", "number"), default="-updated")
+        if fix:
+            found, _ = await _failing(db, query, None, FIX_SCAN)
+            sort_key = {
+                "title": lambda d: d.title.lower(),
+                "number": lambda d: d.number or None,
+                "updated": lambda d: d.updated_at,
+            }[key]
+            return page_of(found, table, response, sort_key, desc)
+        col = {"title": Document.title, "number": Document.number}.get(key, Document.updated_at)
+        rows = await sql_page(db, query, ((col, desc), (Document.id, desc)), table, response)
+        return [DocOut(**await _base(db, d, (await service.render(db, d)).checks)) for d in rows]
     if fix:
         found, nxt = await _failing(db, query, cursor, limit)
         if nxt:
@@ -758,17 +777,29 @@ async def review_queue(
     agent_id: str | None = Query(default=None, max_length=40),
     limit: int = Query(default=100, ge=1, le=300),
     cursor: str | None = Query(default=None, max_length=400),
+    table: TableParams = Depends(),
     principal: Principal = Depends(require("read")),
     db: AsyncSession = Depends(get_db),
 ) -> list[DocOut]:
     """Documents agents made that wait for a person (status review), most recent first.
-    Pages like the list; scoped like it."""
+    Pages like the list; scoped like it. P107: `page` + `size` for numbered pages, `q` finds
+    words in the title or number, `sort` "updated" (the default, newest first) or "title"."""
     query = review_queue_query(principal, branch_id)
     if agent_id:
         query = query.where(agent_and_helpers(principal.workspace_id, agent_id))
-    rows = await paging.paginate(
-        db, query, DOC_ORDER, limit=limit, cursor=cursor, response=response
-    )
+    for w in table.words:
+        pat = like(w)
+        query = query.where(
+            or_(Document.title.ilike(pat, escape="\\"), Document.number.ilike(pat, escape="\\"))
+        )
+    if table.paged:
+        key, desc = table.sort_by(("updated", "title"), default="-updated")
+        col = Document.title if key == "title" else Document.updated_at
+        rows = await sql_page(db, query, ((col, desc), (Document.id, desc)), table, response)
+    else:
+        rows = await paging.paginate(
+            db, query, DOC_ORDER, limit=limit, cursor=cursor, response=response
+        )
     out = []
     for d in rows:
         r = await service.render(db, d)

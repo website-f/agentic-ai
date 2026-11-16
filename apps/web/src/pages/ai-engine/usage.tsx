@@ -5,6 +5,7 @@ import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxi
 
 import { EmptyState } from "@/components/page";
 import { Meta } from "@/components/ui/card";
+import { DataTable, useLocalTableState, type Column } from "@/components/ui/data-table";
 import { Pill } from "@/components/ui/pill";
 import { Segmented } from "@/components/ui/segmented";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -101,83 +102,57 @@ function Swatch({ color }: { color: string }) {
   return <span aria-hidden className="mt-1.5 size-2.5 shrink-0 rounded-full" style={{ background: color }} />;
 }
 
+interface UsageItem { r: UsageRow; i: number }
+
+/** P107: the breakdown as a data table (search, sort by any number, pages), in memory: it
+ * lives in a tab beside the chart. */
 function UsageTable({ rows, colors, label }: { rows: UsageRow[]; colors: Map<string, string>; label: RowLabel }) {
   const t = useT();
+  const control = useLocalTableState({ size: 25 });
+  const items = useMemo(() => rows.map((r, i) => ({ r, i })), [rows]);
   const avg = (r: UsageRow) => (r.avg_latency ? `${(r.avg_latency / 1000).toFixed(1)} s` : "-");
   const cost = (r: UsageRow) => (r.unpriced && !r.cost ? t("Unpriced") : usd(r.cost));
+  const num = (v: string | number, danger?: boolean) => <span className={cn("font-mono tabular", danger && "text-danger")}>{v}</span>;
+  const columns: Column<UsageItem>[] = [
+    {
+      id: "name", header: t("Name"), card: "title", sortValue: ({ r }) => label(r).main.toLowerCase(),
+      exportValue: ({ r }) => { const l = label(r); return l.sub ? `${l.main} (${l.sub})` : l.main; },
+      cell: ({ r }) => {
+        const l = label(r);
+        return (
+          <span className="flex min-w-0 items-start gap-2">
+            {l.swatch ? <Swatch color={colors.get(l.swatch) ?? "var(--series-other)"} /> : null}
+            <span className="min-w-0">
+              <span className="block font-medium break-words">{l.main}</span>
+              {l.sub ? <span className="block font-mono text-[11.5px] break-all text-muted">{l.sub}</span> : null}
+            </span>
+          </span>
+        );
+      },
+    },
+    { id: "calls", header: t("Calls"), kind: "number", align: "right", sortValue: ({ r }) => r.calls, cell: ({ r }) => num(compact(r.calls)) },
+    { id: "tokens", header: t("Tokens"), kind: "number", align: "right", sortValue: ({ r }) => r.prompt + r.completion, cell: ({ r }) => num(compact(r.prompt + r.completion)) },
+    { id: "cache", header: t("From cache"), kind: "number", align: "right", hideBelow: "lg", sortValue: ({ r }) => (r.prompt ? r.cached / r.prompt : null), cell: ({ r }) => num(pct(r.cached, r.prompt)) },
+    { id: "cost", header: t("Cost"), kind: "number", align: "right", sortValue: ({ r }) => r.cost, cell: ({ r }) => num(cost(r)) },
+    { id: "errors", header: t("Errors"), kind: "number", align: "right", sortValue: ({ r }) => r.errors, cell: ({ r }) => num(r.errors, r.errors > 0) },
+    { id: "avg", header: t("Avg time"), kind: "number", align: "right", hideBelow: "lg", sortValue: ({ r }) => r.avg_latency || null, cell: ({ r }) => num(avg(r)) },
+  ];
   return (
-    <>
-      {/* Phones: one compact row each, headline numbers on the right, the rest underneath. */}
-      <ul className="grid grid-cols-[minmax(0,1fr)] divide-y divide-border sm:hidden">
-        {rows.map((r, i) => {
-          const l = label(r);
-          return (
-            <li key={i} className="grid gap-1 px-4 py-3">
-              <div className="flex min-w-0 items-start gap-2">
-                {l.swatch ? <Swatch color={colors.get(l.swatch) ?? "var(--series-other)"} /> : null}
-                <span className="min-w-0 flex-1">
-                  <span className="block text-[13.5px] font-medium break-words">{l.main}</span>
-                  {l.sub ? <span className="block font-mono text-[11.5px] break-all text-muted">{l.sub}</span> : null}
-                </span>
-                <span className="shrink-0 text-right">
-                  <span className="block font-mono text-[13px] font-medium tabular">{compact(r.prompt + r.completion)}</span>
-                  <span className="block font-mono text-[11.5px] text-muted tabular">{cost(r)}</span>
-                </span>
-              </div>
-              <p className={cn("flex flex-wrap gap-x-1.5 text-[12px] text-muted tabular", l.swatch && "pl-[18px]")}>
-                <Meta
-                  items={[
-                    r.calls === 1 ? t("1 call") : t("{n} calls", { n: compact(r.calls) }),
-                    t("{pct} cached", { pct: pct(r.cached, r.prompt) }),
-                    r.errors > 0 ? <span className="text-danger">{t("{n} failed", { n: r.errors })}</span> : t("no errors"),
-                    t("avg {time}", { time: avg(r) }),
-                  ]}
-                />
-              </p>
-            </li>
-          );
-        })}
-      </ul>
-      <div className="overflow-x-auto max-sm:hidden">
-        <table className="w-full min-w-[40rem] text-left text-[13px]">
-          <thead className="border-b border-border bg-surface-2/60 text-[12px] text-muted">
-            <tr>
-              <th className="px-4 py-2 font-medium">{t("Name")}</th>
-              <th className="px-3 py-2 text-right font-medium">{t("Calls")}</th>
-              <th className="px-3 py-2 text-right font-medium">{t("Tokens")}</th>
-              <th className="px-3 py-2 text-right font-medium">{t("From cache")}</th>
-              <th className="px-3 py-2 text-right font-medium">{t("Cost")}</th>
-              <th className="px-3 py-2 text-right font-medium">{t("Errors")}</th>
-              <th className="px-4 py-2 text-right font-medium">{t("Avg time")}</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-border">
-            {rows.map((r, i) => {
-              const l = label(r);
-              return (
-                <tr key={i} className="transition-colors hover:bg-surface-2/40">
-                  <td className="px-4 py-2.5">
-                    <span className="flex min-w-0 items-start gap-2">
-                      {l.swatch ? <Swatch color={colors.get(l.swatch) ?? "var(--series-other)"} /> : null}
-                      <span className="min-w-0">
-                        <span className="block font-medium break-words">{l.main}</span>
-                        {l.sub ? <span className="block font-mono text-[11.5px] break-all text-muted">{l.sub}</span> : null}
-                      </span>
-                    </span>
-                  </td>
-                  <td className="px-3 py-2.5 text-right font-mono tabular">{compact(r.calls)}</td>
-                  <td className="px-3 py-2.5 text-right font-mono tabular">{compact(r.prompt + r.completion)}</td>
-                  <td className="px-3 py-2.5 text-right font-mono tabular">{pct(r.cached, r.prompt)}</td>
-                  <td className="px-3 py-2.5 text-right font-mono tabular">{cost(r)}</td>
-                  <td className={cn("px-3 py-2.5 text-right font-mono tabular", r.errors > 0 && "text-danger")}>{r.errors}</td>
-                  <td className="px-4 py-2.5 text-right font-mono tabular">{avg(r)}</td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
-    </>
+    <div className="p-3 sm:p-4">
+      <DataTable
+        label={t("Breakdown")}
+        columns={columns}
+        rows={items}
+        rowId={({ i }) => String(i)}
+        rowLabel={({ r }) => label(r).main}
+        control={control}
+        searchText={({ r }) => { const l = label(r); return `${l.main} ${l.sub ?? ""}`; }}
+        searchPlaceholder={t("Search names")}
+        exportName={t("AI usage")}
+        noSearch={rows.length <= 10}
+        stickyHeader={false}
+      />
+    </div>
   );
 }
 
@@ -214,7 +189,7 @@ function UsageBreakdown({
           options={keys.map((k) => ({ value: k, label: sets[k].label, count: sets[k].rows.length }))}
         />
       </div>
-      <UsageTable rows={set.rows} colors={colors} label={set.row} />
+      <UsageTable key={current} rows={set.rows} colors={colors} label={set.row} />
     </section>
   );
 }

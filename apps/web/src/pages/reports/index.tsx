@@ -4,22 +4,24 @@ import { Link, useNavigate, useSearch } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 
 import { AgentAvatar } from "@/components/agent-avatar";
-import { LoadMore } from "@/components/load-more";
 import { Markdown } from "@/components/markdown";
 import { EmptyState, IconTile, Page, PageHeader } from "@/components/page";
 import { Button } from "@/components/ui/button";
 import { Meta } from "@/components/ui/card";
+import { DataTable, TableFilter, useServerTable, useTableState, type Column } from "@/components/ui/data-table";
 import { Pill } from "@/components/ui/pill";
-import { SearchInput } from "@/components/ui/search-input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { locale, useT } from "@/i18n";
 import { errorMessage } from "@/lib/api";
 import { onLiveEvent } from "@/lib/live";
 import { officeKeys, reportQuery, type Report, type ReportTable } from "@/lib/office-data";
-import { useDebounced, usePagedList } from "@/lib/paged";
+import { branchesQuery } from "@/lib/queries";
+import { everyRow } from "@/lib/table-export";
 import { cn, timeAgo } from "@/lib/utils";
+import { agentsQuery } from "@/lib/work";
 
-export function DataTable({ reportId, table, n }: { reportId: string; table: ReportTable; n: number }) {
+/** One table of a report: sortable, filterable, a CSV download; cards on a phone. */
+export function CsvTable({ reportId, table, n }: { reportId: string; table: ReportTable; n: number }) {
   const t = useT();
   const [sort, setSort] = useState<{ col: number; desc: boolean } | null>(null);
   const [q, setQ] = useState("");
@@ -104,7 +106,7 @@ export function DataTable({ reportId, table, n }: { reportId: string; table: Rep
   );
 }
 
-function Reader({ id, onBack }: { id: string; onBack: () => void }) {
+function Reader({ id }: { id: string }) {
   const t = useT();
   const { data: r, isLoading, error } = useQuery(reportQuery(id));
   if (isLoading) {
@@ -120,7 +122,6 @@ function Reader({ id, onBack }: { id: string; onBack: () => void }) {
   if (error || !r) return <p role="alert" className="text-danger">{errorMessage(error)}</p>;
   return (
     <article className="grid min-w-0 grid-cols-[minmax(0,1fr)] content-start gap-4">
-      <Button variant="ghost" size="sm" onClick={onBack} className="-ml-2 w-fit lg:hidden"><ArrowLeftIcon size={14} /> {t("All reports")}</Button>
       <header className="grid min-w-0 gap-2.5">
         <h2 className="text-[19px] leading-snug font-semibold tracking-tight break-words sm:text-[21px]">{r.title}</h2>
         <p className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-1 text-[12.5px] text-muted">
@@ -144,31 +145,9 @@ function Reader({ id, onBack }: { id: string; onBack: () => void }) {
           </div>
         </section>
       ) : null}
-      {(r.tables ?? []).map((tb, n) => <DataTable key={n} reportId={r.id} table={tb} n={n} />)}
+      {(r.tables ?? []).map((tb, n) => <CsvTable key={n} reportId={r.id} table={tb} n={n} />)}
       {r.body ? <Markdown className="rounded-[var(--radius-md)] border border-border bg-surface px-4 py-4 sm:px-5">{r.body}</Markdown> : null}
     </article>
-  );
-}
-
-function Row({ r, active, onOpen }: { r: Report; active: boolean; onOpen: () => void }) {
-  const t = useT();
-  return (
-    <li>
-      <button onClick={onOpen} aria-current={active} className={cn("relative grid w-full grid-cols-[minmax(0,1fr)] gap-1 px-4 py-3 text-left transition-colors hover:bg-surface-2/60", active && "bg-accent-soft/50 hover:bg-accent-soft/60")}>
-        {active ? <span aria-hidden className="absolute inset-y-2 left-0 w-0.5 rounded-full bg-accent" /> : null}
-        <span className="line-clamp-2 text-[13.5px] leading-snug font-medium break-words">{r.title}</span>
-        {r.summary ? <span className="line-clamp-2 text-[12.5px] text-muted">{r.summary}</span> : null}
-        <span className="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-1 text-[11.5px] text-muted">
-          <Meta items={[r.agent_name, r.branch_name ?? t("Office"), timeAgo(r.created_at)]} />
-        </span>
-        {r.row_count || r.labels.length ? (
-          <span className="mt-1 flex flex-wrap gap-1">
-            {r.row_count ? <Pill tone="info"><TableIcon size={11} weight="bold" /> {r.row_count === 1 ? t("1 row") : t("{n} rows", { n: r.row_count })}</Pill> : null}
-            {r.labels.slice(0, 2).map((l) => <Pill key={l}>{l}</Pill>)}
-          </span>
-        ) : null}
-      </button>
-    </li>
   );
 }
 
@@ -177,45 +156,101 @@ export function ReportsPage() {
   const qc = useQueryClient();
   const search = useSearch({ strict: false }) as { r?: string };
   const navigate = useNavigate();
-  const [q, setQ] = useState("");
-  // Search runs on the server (title, summary, agent, label) and the list loads 50 at a time.
-  const needle = useDebounced(q.trim());
-  const list = usePagedList<Report>(officeKeys.reports, "/api/reports", { q: needle });
-  const { items: shown, isLoading, error } = list;
+  const { data: branches = [] } = useQuery(branchesQuery);
+  const { data: agents = [] } = useQuery(agentsQuery);
+  // P107: a data table. The server searches (title, summary, agent, label), filters by company
+  // and agent, sorts and sends one numbered page; the address keeps where you were.
+  const control = useTableState({ size: 25 }, { filters: ["branch_id", "agent_id"] });
+  const table = useServerTable<Report>(officeKeys.reports, "/api/reports", control.state);
   useEffect(() => onLiveEvent((ev) => {
     if (ev.type === "report.created") qc.invalidateQueries({ queryKey: officeKeys.reports });
   }), [qc]);
-  const open = (id?: string) => navigate({ to: "/reports", search: id ? { r: id } : {}, replace: true });
-  const current = search.r ?? (typeof window !== "undefined" && window.matchMedia?.("(min-width: 1024px)").matches ? shown[0]?.id : undefined);
+  // Opening a report keeps the table's place in the address, so "All reports" returns to it.
+  const open = (id?: string) => navigate({
+    to: "/reports",
+    search: ((prev: Record<string, unknown>) => {
+      const next = { ...prev };
+      if (id) next.r = id;
+      else delete next.r;
+      return next;
+    }) as never,
+    replace: true,
+  });
+
+  const columns: Column<Report>[] = [
+    {
+      id: "title", header: t("Report"), sortable: true, card: "title", exportValue: (r) => r.title,
+      cell: (r) => (
+        <span className="grid min-w-0 gap-0.5">
+          <span className="line-clamp-2 text-[13.5px] leading-snug font-medium break-words">{r.title}</span>
+          {r.summary ? <span className="line-clamp-2 text-[12.5px] font-normal text-muted">{r.summary}</span> : null}
+          {r.labels.length ? (
+            <span className="mt-1 flex flex-wrap gap-1">{r.labels.slice(0, 3).map((l) => <Pill key={l}>{l}</Pill>)}</span>
+          ) : null}
+        </span>
+      ),
+    },
+    {
+      id: "agent", header: t("Agent"), exportValue: (r) => r.agent_name ?? "",
+      cell: (r) => r.agent_name ? (
+        <span className="inline-flex min-w-0 items-center gap-1.5"><AgentAvatar name={r.agent_name} color={r.agent_color ?? "#888"} size="xs" /><span className="break-words">{r.agent_name}</span></span>
+      ) : <span className="text-muted">-</span>,
+    },
+    { id: "summary", header: t("Summary"), exportOnly: true, cell: () => null, exportValue: (r) => r.summary ?? "" },
+    { id: "company", header: t("Company"), hideBelow: "lg", exportValue: (r) => r.branch_name ?? t("Office"), cell: (r) => r.branch_name ?? <span className="text-muted">{t("Office")}</span> },
+    {
+      id: "rows", header: t("Rows"), kind: "number", align: "right", hideBelow: "xl", exportValue: (r) => r.row_count ?? null,
+      cell: (r) => r.row_count ? (
+        <span className="inline-flex items-center gap-1"><TableIcon size={12} className="text-muted" />{r.row_count.toLocaleString(locale())}</span>
+      ) : <span className="text-muted">-</span>,
+    },
+    {
+      id: "created", header: t("Published"), sortable: true, kind: "date", className: "whitespace-nowrap", exportValue: (r) => r.created_at,
+      cell: (r) => <time dateTime={r.created_at} className="text-muted" title={new Date(r.created_at).toLocaleString(locale())}>{timeAgo(r.created_at)}</time>,
+    },
+  ];
 
   return (
     <Page className="max-w-7xl">
       <PageHeader title={t("Reports")} description={t("What agents wrote up for you: a summary first, then tables you can sort, filter and download as CSV.")} />
-      {isLoading ? (
-        <div className="grid grid-cols-[minmax(0,1fr)] gap-6 lg:grid-cols-[21rem_minmax(0,1fr)]">
-          <div className="grid content-start gap-2">{[0, 1, 2, 3].map((i) => <Skeleton key={i} className="h-24 rounded-[var(--radius-md)]" />)}</div>
-          <Skeleton className="h-96 rounded-[var(--radius-md)] max-lg:hidden" />
+      {search.r ? (
+        <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] content-start gap-3">
+          <Button variant="ghost" size="sm" onClick={() => open()} className="-ml-2 w-fit"><ArrowLeftIcon size={14} /> {t("All reports")}</Button>
+          <Reader key={search.r} id={search.r} />
         </div>
-      ) : error ? (
-        <p role="alert" className="text-danger">{errorMessage(error)}</p>
-      ) : !shown.length && !needle && !list.hasMore ? (
-        <EmptyState icon={ClipboardTextIcon} title={t("No reports yet")} body={t("Ask an agent for a report (for example, a summary of an inbox) and it publishes one here.")} />
       ) : (
-        <div className="grid grid-cols-[minmax(0,1fr)] items-start gap-6 lg:grid-cols-[21rem_minmax(0,1fr)]">
-          <div className={cn("grid min-w-0 grid-cols-[minmax(0,1fr)] content-start gap-3 lg:sticky lg:top-20 lg:max-h-[calc(100dvh-6.5rem)] lg:grid-rows-[auto_minmax(0,1fr)]", current && "hidden lg:grid")}>
-            <SearchInput guide="reports.search" value={q} onChange={setQ} placeholder={t("Search reports")} className="flex-none basis-auto" />
-            <div data-guide="reports.list" className="min-h-0 overflow-hidden rounded-[var(--radius-md)] border border-border bg-surface">
-              <p className="border-b border-border px-4 py-2 text-[12px] text-muted tabular">
-                {needle ? t("{n} matching", { n: list.total ?? shown.length }) : (list.total ?? shown.length) === 1 ? t("1 report") : t("{n} reports", { n: list.total ?? shown.length })}
-              </p>
-              <ul className="grid grid-cols-[minmax(0,1fr)] divide-y divide-border lg:max-h-[calc(100dvh-12rem)] lg:overflow-y-auto lg:overscroll-contain">
-                {shown.map((r) => <Row key={r.id} r={r} active={r.id === current} onOpen={() => open(r.id)} />)}
-                {!shown.length ? <li className="px-4 py-8 text-center text-[13px] text-muted">{t("No report matches.")}</li> : null}
-                {list.hasMore || shown.length > 50 ? <li className="p-3"><LoadMore compact noun="reports" shown={shown.length} total={list.total} hasMore={list.hasMore} loading={list.isFetchingMore} onLoad={list.loadMore} /></li> : null}
-              </ul>
-            </div>
-          </div>
-          {current ? <Reader key={current} id={current} onBack={() => open()} /> : null}
+        <div data-guide="reports.list" className="min-w-0">
+          <DataTable<Report>
+            label={t("Reports")}
+            columns={columns}
+            rows={table.rows}
+            total={table.total}
+            mode="server"
+            rowId={(r) => r.id}
+            rowLabel={(r) => r.title}
+            control={control}
+            loading={table.loading}
+            fetching={table.fetching}
+            error={table.error}
+            onRetry={table.refetch}
+            onOpen={(r) => open(r.id)}
+            searchPlaceholder={t("Search reports")}
+            exportName={t("reports")}
+            exportRows={() => everyRow<Report>("/api/reports", control.state)}
+            filters={
+              <>
+                {branches.length > 1 ? (
+                  <TableFilter control={control} id="branch_id" label={t("Company")} allLabel={t("All companies")}
+                    options={branches.map((b) => ({ value: b.id, label: b.name }))} />
+                ) : null}
+                {agents.length ? (
+                  <TableFilter control={control} id="agent_id" label={t("Agent")} allLabel={t("Any agent")}
+                    options={agents.filter((a) => !a.clone_of).map((a) => ({ value: a.id, label: a.name }))} />
+                ) : null}
+              </>
+            }
+            empty={<EmptyState icon={ClipboardTextIcon} title={t("No reports yet")} body={t("Ask an agent for a report (for example, a summary of an inbox) and it publishes one here.")} />}
+          />
         </div>
       )}
     </Page>
