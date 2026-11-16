@@ -1,7 +1,8 @@
 import { Select } from '../SearchSelect';
 import { useState } from 'react';
 import { api, type SiteHoursBoard } from '../api';
-import { Chip, ErrorNotice, Loading, dateTimeLabel, useAction, useLoad } from '../ui';
+import { Chip, Drawer, ErrorNotice, Loading, dateTimeLabel, useAction, useLoad } from '../ui';
+import { DataTable, useTableState } from '../DataTable';
 import { PublicHolidaysPanel } from './PublicHolidays';
 
 /**
@@ -48,7 +49,8 @@ export function SiteHoursView() {
 
 function SiteHoursBoardView({ companyId, setCompanyId, tabs }: { companyId: string | null; setCompanyId: (id: string) => void; tabs: JSX.Element }) {
   const [month, setMonth] = useState<string | null>(null);
-  const [showAll, setShowAll] = useState(false);
+  const table = useTableState('sitehours.sites', { f: { show: 'flagged' } });
+  const [open, setOpen] = useState<string | null>(null);
   const { data, error } = useLoad(() => api.siteHoursBoard({ companyId, month }), [companyId, month]);
   if (error)
     return (
@@ -59,7 +61,7 @@ function SiteHoursBoardView({ companyId, setCompanyId, tabs }: { companyId: stri
     );
   if (!data) return <Loading what="site man-hours" />;
   const flagged = data.rows.filter((r) => r.check.status !== 'within');
-  const rows = showAll ? data.rows : flagged;
+  const openRow = open ? data.rows.find((r) => r.siteId === open) : undefined;
   return (
     <div className="page">
       <div className="page-head">
@@ -109,20 +111,74 @@ function SiteHoursBoardView({ companyId, setCompanyId, tabs }: { companyId: stri
         <Kpi label="Heading over" value={String(data.totals.pace)} tone={data.totals.pace ? 'warn' : undefined} />
       </div>
 
+      {/* P107: the sites as a data table. "Sites to look at" is the Show filter's first choice (flagged), "All sites"
+          the other; a site opens its old card (hours, approvals, posts, approval form) in a drawer. */}
       <section className="panel">
         <div className="panel-head">
-          <h2>{showAll ? 'All sites' : 'Sites to look at'}</h2>
-          <button className="btn btn-sm btn-ghost" onClick={() => setShowAll(!showAll)}>
-            {showAll ? 'Show only flagged sites' : `Show all ${data.rows.length} sites`}
-          </button>
+          <h2>{table.state.f.show === 'flagged' ? 'Sites to look at' : 'All sites'}</h2>
         </div>
-        <div className="list">
-          {rows.length === 0 && <div className="empty">Every site is within its total man-hours.</div>}
-          {rows.map((r) => (
-            <SiteRow key={r.siteId} r={r} month={data.month} causes={data.causes} />
-          ))}
+        <div className="panel-body">
+          {data.rows.length > 0 && flagged.length === 0 && table.state.f.show === 'flagged' ? (
+            <div className="empty">
+              Every site is within its total man-hours.{' '}
+              <button className="btn btn-sm btn-ghost" onClick={() => table.set({ f: { show: '' } })}>
+                All sites
+              </button>
+            </div>
+          ) : (
+          <DataTable
+            label="Site man-hours"
+            control={table}
+            rows={data.rows}
+            rowKey={(r) => r.siteId}
+            onView={(r) => setOpen(r.siteId)}
+            actions={(r) => [{ label: 'Approve extra hours', onClick: () => setOpen(r.siteId), hidden: !(r.canApprove && r.check.needsApproval > 0) }]}
+            rowTone={(r) => (STATUS[r.check.status][1] === 'crit' ? 'crit' : STATUS[r.check.status][1] === 'warn' ? 'warn' : undefined)}
+            searchPlaceholder="Find a site or code"
+            searchText={(r) => r.siteCode}
+            empty={<div className="empty">No sites.</div>}
+            columns={[
+              {
+                id: 'site',
+                label: 'Site',
+                value: (r) => r.siteName,
+                phone: 'title',
+                render: (r) => (
+                  <span style={{ fontWeight: 600 }}>
+                    {r.siteName} <span className="muted small">({r.siteCode}, {r.sector === 'government' ? 'government' : 'private'})</span>
+                  </span>
+                ),
+              },
+              { id: 'status', label: 'Check', value: (r) => STATUS[r.check.status][0], translate: true, render: (r) => <Chip tone={STATUS[r.check.status][1]}>{STATUS[r.check.status][0]}</Chip> },
+              { id: 'allowed', label: 'Allowed', value: (r) => r.check.allowedHours + r.check.approvedExtra, sort: 'number', render: (r) => `${h(r.check.allowedHours)}${r.check.approvedExtra ? ` + ${h(r.check.approvedExtra)}` : ''}` },
+              { id: 'rostered', label: 'Rostered', value: (r) => r.check.rosteredHours, sort: 'number', render: (r) => h(r.check.rosteredHours), hideBelow: 1000 },
+              { id: 'worked', label: 'Worked', value: (r) => r.check.workedHours, sort: 'number', render: (r) => h(r.check.workedHours) },
+              { id: 'over', label: 'Over', value: (r) => r.check.needsApproval, sort: 'number', render: (r) => (r.check.needsApproval > 0 ? <strong>{h(r.check.needsApproval)}</strong> : '–') },
+              { id: 'approver', label: 'Approves', value: (r) => (r.check.needsApproval > 0 ? r.approver : ''), hideBelow: 1200, phone: 'hidden' },
+            ]}
+            filters={[
+              {
+                id: 'show',
+                label: 'Show',
+                value: (r) => (r.check.status !== 'within' ? 'flagged' : 'within'),
+                allLabel: 'All sites',
+                options: [
+                  { value: 'flagged', label: 'Sites to look at' },
+                  { value: 'within', label: 'Within the total' },
+                ],
+              },
+              { id: 'status', label: 'Check', value: (r) => r.check.status, optionLabel: (v) => STATUS[v as Row['check']['status']]?.[0] ?? v },
+              { id: 'sector', label: 'Sector', value: (r) => r.sector, optionLabel: (v) => (v === 'government' ? 'Government' : 'Private') },
+            ]}
+          />
+          )}
         </div>
       </section>
+      {openRow && (
+        <Drawer title={openRow.siteName} sub={`${openRow.siteCode} · ${data.month}`} onClose={() => setOpen(null)}>
+          <SiteRow r={openRow} month={data.month} causes={data.causes} />
+        </Drawer>
+      )}
       <p className="muted small">
         Rule {data.rule.id}: {data.rule.source}
       </p>

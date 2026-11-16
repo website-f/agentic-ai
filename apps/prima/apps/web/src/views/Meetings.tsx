@@ -10,6 +10,7 @@ import { saveFile } from '../save';
 import { tr, useLang } from '../i18n';
 import { Chip, notify, Drawer, ErrorNotice, Loading, dateLabel, dateTimeLabel, hhmm, useAction, useLoad, type Tone } from '../ui';
 import { Card, Empty, Facts, PageHead, Person, Stat, Stats } from '../kit';
+import { DataTable, type DtColumn, type DtFilter } from '../DataTable';
 import '../styles/leadership.css';
 
 type Row = Meetings['rows'][number];
@@ -257,7 +258,17 @@ export function MeetingsView() {
             </Card>
             {past.length > 0 && (
               <Card title="Past meetings" sub="Minutes, summaries and action items" actions={<Chip tone="neutral">{past.length}</Chip>} flush>
-                <ul className="ld-rows">{past.map(meetingRow)}</ul>
+                {/* P107: hundreds over time: one data table (search, filters, sort, pages; cards on a phone), latest first as before. */}
+                <DataTable
+                  label="Past meetings"
+                  stateKey="meetings.past"
+                  rows={past}
+                  rowKey={(r) => r.meeting.id}
+                  columns={PAST_COLUMNS}
+                  filters={PAST_FILTERS}
+                  searchText={(r) => `${r.meeting.location} ${r.meeting.organiser}`}
+                  onView={(r) => setOpen(r.meeting.id)}
+                />
               </Card>
             )}
           </>
@@ -428,37 +439,60 @@ function Plan({ plan, onOpen, onSet }: { plan: PlanRow[]; onOpen: (id: string) =
 function MyActions({ data, onOpen }: { data: Meetings; onOpen: (id: string) => void }) {
   return (
     <Card title="Action items given to you" actions={<Chip tone={data.myActions.length ? 'warn' : 'ok'}>{data.myActions.length}</Chip>} flush>
-      {data.myActions.length === 0 ? (
-        <Empty title="No open action items for you." />
-      ) : (
-        <ul className="ld-rows">
-          {data.myActions.map((a) => (
-            <li key={`${a.meetingId}-${a.index}`}>
-              <button type="button" className="ld-row" data-tone={a.overdue ? 'crit' : undefined} onClick={() => onOpen(a.meetingId)}>
-                <span className="ld-row-main">
-                  <span className="ld-row-title">{a.text}</span>
-                  <span className="ld-row-meta">
-                    From {a.meeting}
-                    {a.due ? ` · by ${dateLabel(a.due)}` : ''}
-                  </span>
-                </span>
-                <span className="ld-row-aside">
-                  <Chip tone={a.overdue ? 'crit' : 'warn'}>{a.overdue ? 'Overdue' : 'Open'}</Chip>
-                </span>
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
+      {/* P107: a data table (search, Status filter, sort, pages; cards on a phone); a row opens its meeting as before. */}
+      <DataTable
+        label="Action items given to you"
+        stateKey="meetings.myActions"
+        rows={data.myActions}
+        rowKey={(a) => `${a.meetingId}-${a.index}`}
+        columns={ACTION_COLUMNS}
+        filters={ACTION_FILTERS}
+        onView={(a) => onOpen(a.meetingId)}
+        rowTone={(a) => (a.overdue ? 'crit' : undefined)}
+        empty={<Empty title="No open action items for you." />}
+      />
     </Card>
   );
 }
+
+type MyAction = Meetings['myActions'][number];
+const ACTION_STATE = [
+  { value: 'overdue', label: 'Overdue' },
+  { value: 'open', label: 'Open' },
+];
+const ACTION_COLUMNS: DtColumn<MyAction>[] = [
+  { id: 'text', label: 'Action items', value: (a) => a.text, render: (a) => <strong>{a.text}</strong>, phone: 'title' },
+  { id: 'meeting', label: 'From', value: (a) => a.meeting, phone: 'sub' },
+  { id: 'due', label: 'Due', value: (a) => a.due, sort: 'date' },
+  {
+    id: 'status',
+    label: 'Status',
+    value: (a) => (a.overdue ? 'Overdue' : 'Open'),
+    translate: true,
+    render: (a) => <Chip tone={a.overdue ? 'crit' : 'warn'}>{a.overdue ? 'Overdue' : 'Open'}</Chip>,
+  },
+];
+const ACTION_FILTERS: DtFilter<MyAction>[] = [{ id: 'status', label: 'Status', value: (a) => (a.overdue ? 'overdue' : 'open'), options: ACTION_STATE }];
 
 const COMPANY_STATE: Record<Meetings['companyMeetings'][number]['state'], [Tone, string]> = {
   held: ['ok', 'Held, minutes in'],
   scheduled: ['info', 'Set, coming up'],
   none: ['neutral', 'Not set'],
 };
+type CompanyMeeting = Meetings['companyMeetings'][number];
+const COMPANY_COLUMNS: DtColumn<CompanyMeeting>[] = [
+  { id: 'company', label: 'Company', value: (c) => c.companyName, render: (c) => <strong>{c.companyName}</strong>, phone: 'title' },
+  {
+    id: 'state',
+    label: 'Status',
+    value: (c) => COMPANY_STATE[c.state][1],
+    translate: true,
+    render: (c) => <Chip tone={COMPANY_STATE[c.state][0]}>{COMPANY_STATE[c.state][1]}</Chip>,
+  },
+];
+const COMPANY_FILTERS: DtFilter<CompanyMeeting>[] = [
+  { id: 'state', label: 'Status', value: (c) => c.state, options: Object.entries(COMPANY_STATE).map(([value, [, label]]) => ({ value, label })) },
+];
 
 function Sections({
   companies,
@@ -511,23 +545,17 @@ function Sections({
       </Card>
       {companies.length > 0 && (
         <Card title="Each company's operations" sub="The company office sets its own monthly operations meeting (kind Operations) in Meetings." flush>
-          <ul className="ld-rows">
-            {companies.map((c) => (
-              <li key={c.companyId} className="ld-row">
-                <span className="ld-row-main">
-                  <span className="ld-row-title">{c.companyName}</span>
-                </span>
-                <span className="ld-row-aside">
-                  <Chip tone={COMPANY_STATE[c.state][0]}>{COMPANY_STATE[c.state][1]}</Chip>
-                  {c.meetingId && (
-                    <button className="btn btn-sm" onClick={() => onOpen(c.meetingId!)}>
-                      Open
-                    </button>
-                  )}
-                </span>
-              </li>
-            ))}
-          </ul>
+          {/* P107: 20-40 companies: a data table (search, Status filter, sort, pages; cards on a phone); Open stays on the row. */}
+          <DataTable
+            details
+            label="Each company's operations"
+            stateKey="meetings.companyOps"
+            rows={companies}
+            rowKey={(c) => c.companyId}
+            columns={COMPANY_COLUMNS}
+            filters={COMPANY_FILTERS}
+            actions={(c) => [{ label: 'Open', onClick: () => onOpen(c.meetingId!), hidden: !c.meetingId }]}
+          />
         </Card>
       )}
     </>
@@ -546,6 +574,67 @@ function MeetingChip({ r }: { r: Row }) {
   if (m.summary && !m.summary.checkedBy) return <Chip tone="warn">Summary to check</Chip>;
   return <Chip tone="ok">Minutes in</Chip>;
 }
+
+/** P107: where a held meeting stands (the same steps as MeetingChip after the meeting), for the Past meetings filter. */
+const PAST_STATE = [
+  { value: 'cancelled', label: 'Cancelled' },
+  { value: 'late', label: 'Held, minutes late' },
+  { value: 'due', label: 'Minutes due' },
+  { value: 'check', label: 'Summary to check' },
+  { value: 'in', label: 'Minutes in' },
+];
+function pastState(r: Row): string {
+  const m = r.meeting;
+  if (m.status === 'cancelled') return 'cancelled';
+  if (!m.minutes) return r.minutesLateDays ? 'late' : 'due';
+  if (m.summary && !m.summary.checkedBy) return 'check';
+  return 'in';
+}
+const pastStateLabel = (r: Row) => PAST_STATE.find((s) => s.value === pastState(r))?.label ?? '';
+/** My answer to the invitation, as the chip reads ('Answer the invitation' while it still stands open). */
+const answerLabel = (r: Row): string | null => {
+  if (!r.myInvite) return null;
+  if (r.myInvite.answer) return ANSWER[r.myInvite.answer][1];
+  return r.meeting.status === 'scheduled' ? 'Answer the invitation' : null;
+};
+
+const PAST_COLUMNS: DtColumn<Row>[] = [
+  { id: 'title', label: 'Title', value: (r) => r.meeting.title, render: (r) => <strong>{r.meeting.title}</strong>, phone: 'title' },
+  {
+    id: 'start',
+    label: 'Date',
+    value: (r) => r.meeting.start,
+    sort: 'date',
+    render: (r) => `${dateLabel(r.meeting.start.slice(0, 10))} ${hhmm(r.meeting.start)}`,
+    phone: 'sub',
+  },
+  { id: 'for', label: 'For', value: (r) => r.sectionLabel ?? r.companyName, hideBelow: 1100 },
+  { id: 'kind', label: 'Kind', value: (r) => MEETING_KIND[r.meeting.kind], translate: true, hideBelow: 1200 },
+  { id: 'status', label: 'Status', value: pastStateLabel, translate: true, render: (r) => <MeetingChip r={r} /> },
+  { id: 'late', label: 'Days late', value: (r) => r.minutesLateDays || null, sort: 'number', hideBelow: 1280, phone: 'hidden' },
+  {
+    id: 'answer',
+    label: 'Answer',
+    value: answerLabel,
+    translate: true,
+    hideBelow: 1100,
+    render: (r) =>
+      r.myInvite?.answer ? (
+        <Chip tone={ANSWER[r.myInvite.answer][0]}>{ANSWER[r.myInvite.answer][1]}</Chip>
+      ) : r.myInvite && r.meeting.status === 'scheduled' ? (
+        <Chip tone="warn">Answer the invitation</Chip>
+      ) : (
+        '–'
+      ),
+  },
+];
+const PAST_FILTERS: DtFilter<Row>[] = [
+  { id: 'kind', label: 'Kind', value: (r) => r.meeting.kind, optionLabel: (k) => MEETING_KIND[k as keyof typeof MEETING_KIND] ?? k, allLabel: 'All kinds' },
+  { id: 'for', label: 'For', value: (r) => r.sectionLabel ?? r.companyName },
+  { id: 'status', label: 'Status', value: pastState, options: PAST_STATE },
+  // The month as the date column reads it ("Nov 2026"; the page shows it in Malay).
+  { id: 'month', label: 'Month', value: (r) => r.meeting.start.slice(0, 7), optionLabel: (ym) => `${MON[Number(ym.slice(5, 7)) - 1] ?? ''} ${ym.slice(0, 4)}` },
+];
 
 function MeetingDrawer({ r, people, onClose }: { r: Row; people: StaffPick[]; onClose: () => void }) {
   const m = r.meeting;

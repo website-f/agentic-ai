@@ -5,6 +5,7 @@ import { Chip, Loading, useAction, useLoad } from '../ui';
 import { OpForm, type Field } from './ItPolicyPanel';
 import { personField, scopeName, type PickPerson } from './Toolbox';
 import { useApp } from '../App';
+import { DataTable, type DtColumn, type DtFilter } from '../DataTable';
 
 /**
  * Mesyuarat bulanan JA Group (Part Y, Fauzan's answers 14 Nov 2026): each company reports on the 14-item template and
@@ -176,26 +177,39 @@ function BoardTab({ board, period, onPick }: { board: { data: Board | null; erro
         </div>
       )}
       {data.minutes && <pre className="small" style={{ whiteSpace: 'pre-wrap' }}>{data.minutes}</pre>}
-      <div className="list">
-        {data.rows.map((r) => (
-          <div key={r.scope} className="item">
-            <div className="item-main">
-              <span className="row" style={{ gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
-                <button className="btn btn-sm" onClick={() => onPick(r.scope)}>
-                  {scopeName(r.name)}
-                </button>
-                <Chip tone={STATUS_BM[r.status]?.[1] ?? 'neutral'}>{STATUS_BM[r.status]?.[0] ?? r.status}</Chip>
-                {r.late && <Chip tone="warn">Lewat</Chip>}
-                {r.red && <Chip tone="crit">Tiada pada hari mesyuarat</Chip>}
-                {r.verifiedBy && <span className="muted small">disahkan oleh {r.verifiedBy}</span>}
-              </span>
-            </div>
-          </div>
-        ))}
-      </div>
+      {/* P107: 40-60 companies and units: a data table (search, Status / Lewat filters, sort, pages; cards on a phone).
+          A row opens that company's or unit's monthly report, as its name button did. */}
+      <DataTable label="Siapa sudah hantar" stateKey="gm.board" rows={data.rows} rowKey={(r) => r.scope} columns={BOARD_COLUMNS} filters={BOARD_FILTERS} onView={(r) => onPick(r.scope)} />
     </section>
   );
 }
+
+type BoardRow = Board['rows'][number];
+const statusBm = (s: string) => STATUS_BM[s]?.[0] ?? s;
+const BOARD_COLUMNS: DtColumn<BoardRow>[] = [
+  { id: 'name', label: 'Syarikat / unit', value: (r) => scopeName(r.name), render: (r) => <strong>{scopeName(r.name)}</strong>, phone: 'title' },
+  { id: 'status', label: 'Status', value: (r) => statusBm(r.status), render: (r) => <Chip tone={STATUS_BM[r.status]?.[1] ?? 'neutral'}>{statusBm(r.status)}</Chip> },
+  { id: 'late', label: 'Lewat', value: (r) => (r.late ? 'Lewat' : null), render: (r) => (r.late ? <Chip tone="warn">Lewat</Chip> : '–') },
+  {
+    id: 'red',
+    label: 'Hari mesyuarat',
+    value: (r) => (r.red ? 'Tiada pada hari mesyuarat' : null),
+    render: (r) => (r.red ? <Chip tone="crit">Tiada pada hari mesyuarat</Chip> : '–'),
+  },
+  { id: 'verifiedBy', label: 'Disahkan oleh', value: (r) => r.verifiedBy, hideBelow: 1100 },
+];
+const BOARD_FILTERS: DtFilter<BoardRow>[] = [
+  { id: 'status', label: 'Status', value: (r) => r.status, optionLabel: statusBm },
+  {
+    id: 'late',
+    label: 'Lewat',
+    value: (r) => (r.late ? 'yes' : 'no'),
+    options: [
+      { value: 'yes', label: 'Lewat' },
+      { value: 'no', label: 'Tidak lewat' },
+    ],
+  },
+];
 
 function ReportTab({ scope, period }: { scope: string; period: string }) {
   const { data, error } = useLoad(() => send('reportView')({ scope, period }) as Promise<Report>, [scope, period]);
@@ -371,30 +385,29 @@ function DutiesTab({ scope, period, people }: { scope: string; period: string; p
           />
         </div>
       )}
-      <div className="list">
-        {data.lines.map((l) => (
-          <div key={l.id} className="item">
-            <div className="item-main">
-              <strong>
-                {l.no}. {l.text}
-              </strong>{' '}
-              <Chip tone="neutral">{l.window}</Chip> <Chip tone={DUTY_TONE[l.status] ?? 'neutral'}>{l.status}</Chip>
-              <div className="muted small">
-                PIC {l.picName}
-                {l.backupName ? ` · ganti ${l.backupName}` : ''}
-                {l.checkerName ? ` · penyemak ${l.checkerName}` : ''}
-                {l.sopRef ? ` · SOP ${l.sopRef}` : ''}
-              </div>
-              <div className="muted small">
-                Sasaran {l.target ?? '-'} · siap {l.doneOn ?? '-'}
-                {l.checkedBy ? ` · disemak oleh ${l.checkedBy}` : ''}
-              </div>
-              {data.can.keep && <OpForm title="Buang baris" op="dutyEdit" send={send('dutyEdit')} fixed={{ id: l.id, remove: true }} fields={[{ k: 'reason', l: 'Sebab' }]} />}
-            </div>
-          </div>
-        ))}
-        {!data.lines.length && <p className="muted">Tiada senarai tugas lagi: pelan peranan draf masih digunakan.</p>}
-      </div>
+      {/* P107: tens of duty lines: a data table (search, Status / Tempoh / PIC filters, sort, pages; cards on a phone).
+          "Buang baris" stays on each row for those who keep the list. */}
+      <DataTable
+        details
+        label="Senarai tugas"
+        stateKey="gm.duties"
+        rows={data.lines}
+        rowKey={(l) => l.id}
+        columns={DUTY_COLUMNS}
+        filters={DUTY_FILTERS}
+        searchText={(l) => `${l.backupName ?? ''} ${l.checkerName ?? ''} ${l.sopRef} ${l.checkedBy ?? ''}`}
+        phoneFacts={5}
+        rowEnd={
+          data.can.keep
+            ? (l) => (
+                <div style={{ display: 'inline-block', whiteSpace: 'normal', textAlign: 'left' }}>
+                  <OpForm title="Buang baris" op="dutyEdit" send={send('dutyEdit')} fixed={{ id: l.id, remove: true }} fields={[{ k: 'reason', l: 'Sebab' }]} />
+                </div>
+              )
+            : undefined
+        }
+        empty={<p className="muted">Tiada senarai tugas lagi: pelan peranan draf masih digunakan.</p>}
+      />
       <CalendarBox cal={data.calendar} />
       {kpi.data && kpi.data.people.length > 0 && (
         <div className="list">
@@ -411,6 +424,38 @@ function DutiesTab({ scope, period, people }: { scope: string; period: string; p
 }
 
 const DUTY_TONE: Record<string, 'ok' | 'warn' | 'crit' | 'neutral' | 'info'> = { disemak: 'ok', 'menunggu semakan': 'info', dikembalikan: 'warn', lewat: 'crit', terbuka: 'info', 'belum dibuka': 'neutral' };
+type DutyLine = Duties['lines'][number];
+const DUTY_COLUMNS: DtColumn<DutyLine>[] = [
+  { id: 'no', label: 'No.', value: (l) => l.no, sort: 'number', width: '3.5rem', phone: 'hidden' },
+  {
+    id: 'text',
+    label: 'Tugas',
+    value: (l) => l.text,
+    phone: 'title',
+    render: (l) => (
+      <span style={{ display: 'grid', gap: 2 }}>
+        <strong>{l.text}</strong>
+        {(l.backupName || l.checkerName || l.sopRef || l.checkedBy) && (
+          <span className="muted small">
+            {[l.backupName ? `ganti ${l.backupName}` : '', l.checkerName ? `penyemak ${l.checkerName}` : '', l.sopRef ? `SOP ${l.sopRef}` : '', l.checkedBy ? `disemak oleh ${l.checkedBy}` : '']
+              .filter(Boolean)
+              .join(' · ')}
+          </span>
+        )}
+      </span>
+    ),
+  },
+  { id: 'window', label: 'Tempoh', value: (l) => l.window, render: (l) => <Chip tone="neutral">{l.window}</Chip> },
+  { id: 'status', label: 'Status', value: (l) => l.status, render: (l) => <Chip tone={DUTY_TONE[l.status] ?? 'neutral'}>{l.status}</Chip> },
+  { id: 'pic', label: 'PIC', value: (l) => l.picName },
+  { id: 'target', label: 'Sasaran', value: (l) => l.target, render: (l) => l.target ?? '-', hideBelow: 1100 },
+  { id: 'done', label: 'Siap', value: (l) => l.doneOn, render: (l) => l.doneOn ?? '-', hideBelow: 1100 },
+];
+const DUTY_FILTERS: DtFilter<DutyLine>[] = [
+  { id: 'status', label: 'Status', value: (l) => l.status },
+  { id: 'window', label: 'Tempoh', value: (l) => l.window },
+  { id: 'pic', label: 'PIC', value: (l) => l.picName },
+];
 const EVERY_BM: Record<string, string> = { monthly: 'setiap bulan', bimonthly: 'setiap 2 bulan', twice: 'dua kali sebulan', weekly: 'setiap minggu' };
 
 /** Part Z2: the group monthly calendar. Unit HR or the Director Office changes it with a reason (one line each: text; from; to; every; weekday). */
@@ -521,29 +566,63 @@ function RegisterList({ kind, companyId }: { kind: string; companyId: string }) 
   if (!data) return <Loading what="register" />;
   const fields: Field[] = data.spec.fields.map((f) => ({ k: f.k, l: `${f.l}${f.req ? ' *' : ''}`, t: f.t ?? 'text', o: f.o }) as Field);
   const fixed = { kind, ...(data.spec.scope === 'company' ? { companyId } : {}) };
+  // P107: the register's own fields are the columns (as the server's spec lists them), then status and who prepared
+  // and checked it. Values show as typed, as before; a blank shows a dash.
+  const shown = (v: unknown) => (v == null || v === '' ? '–' : String(v));
+  const fieldCols: DtColumn<RegRow>[] = data.spec.fields.map(
+    (f, i): DtColumn<RegRow> => ({
+      id: `f:${f.k}`,
+      label: f.l,
+      value: (r) => (r[f.k] == null || r[f.k] === '' ? null : f.t === 'number' && Number.isFinite(Number(r[f.k])) ? Number(r[f.k]) : String(r[f.k])),
+      sort: f.t === 'number' ? 'number' : f.t === 'date' ? 'date' : 'text',
+      render: (r) => shown(r[f.k]),
+      phone: i === 0 ? 'title' : 'fact',
+      hideBelow: i >= 4 ? 1200 : undefined,
+    }),
+  );
+  const statusCol: DtColumn<RegRow> = {
+    id: 'status',
+    label: 'Status',
+    value: (r) => REG_STATUS[r.status]?.[0] ?? r.status,
+    render: (r) => {
+      const [label, tone] = REG_STATUS[r.status] ?? [r.status, 'neutral'];
+      return <Chip tone={tone}>{label}</Chip>;
+    },
+  };
+  const columns: DtColumn<RegRow>[] = [
+    ...fieldCols.slice(0, 1),
+    statusCol,
+    ...fieldCols.slice(1),
+    { id: 'preparedBy', label: 'Disediakan oleh', value: (r) => shown(r.preparedBy), hideBelow: 1100 },
+    {
+      id: 'checkedBy',
+      label: 'Disemak oleh',
+      value: (r) => (r.checkedBy ? String(r.checkedBy) : null),
+      render: (r) => (r.checkedBy ? `${String(r.checkedBy)} (${String(r.checkedOn ?? '')})` : '–'),
+      hideBelow: 1100,
+    },
+  ];
+  const filters: DtFilter<RegRow>[] = [{ id: 'status', label: 'Status', value: (r) => r.status, optionLabel: (s) => REG_STATUS[s]?.[0] ?? s }];
   return (
-    <div className="list">
+    <div className="list" style={{ gap: 8 }}>
       <strong>
         {data.spec.label}
         {data.spec.confidential ? ' (SULIT)' : ''}
       </strong>
       {data.can.add && <OpForm title="Tambah rekod" op="put" send={reg('put')} fixed={fixed} fields={fields} />}
-      {data.rows.map((r) => {
-        const [label, tone] = REG_STATUS[r.status] ?? [r.status, 'neutral'];
-        return (
-          <div key={r.id} className="item">
-            <div className="item-main">
-              <Chip tone={tone}>{label}</Chip>{' '}
-              <span className="small">
-                {data.spec.fields
-                  .map((f) => (r[f.k] == null || r[f.k] === '' ? null : `${f.l}: ${String(r[f.k])}`))
-                  .filter(Boolean)
-                  .join(' · ')}
-              </span>
-              <div className="muted small">
-                Disediakan oleh {String(r.preparedBy ?? '-')}
-                {r.checkedBy ? ` · disemak oleh ${String(r.checkedBy)} (${String(r.checkedOn ?? '')})` : ''}
-              </div>
+      {/* P107: tens to hundreds of records: a data table (search, Status filter, sort, pages; cards on a phone). The fix,
+          check and return forms sit under their row, as they did inside it. */}
+      <DataTable
+        details
+        label={data.spec.label}
+        stateKey={`gm.register.${kind}`}
+        rows={data.rows}
+        rowKey={(r) => r.id}
+        columns={columns}
+        filters={filters}
+        rowDetail={(r) =>
+          (data.can.add && r.status === 'returned') || r.canCheck ? (
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'flex-start' }}>
               {data.can.add && r.status === 'returned' && <OpForm title="Betulkan dan hantar semula" op="put" send={reg('put')} fixed={{ ...fixed, id: r.id }} fields={fields} />}
               {r.canCheck && (
                 <span style={{ display: 'inline-flex', gap: 6 }}>
@@ -552,10 +631,11 @@ function RegisterList({ kind, companyId }: { kind: string; companyId: string }) 
                 </span>
               )}
             </div>
-          </div>
-        );
-      })}
-      {!data.rows.length && <p className="muted small">Tiada rekod lagi.</p>}
+          ) : null
+        }
+        empty={<p className="muted small">Tiada rekod lagi.</p>}
+      />
     </div>
   );
 }
+type RegRow = RegList['rows'][number];

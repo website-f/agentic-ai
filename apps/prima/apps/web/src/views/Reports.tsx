@@ -1,10 +1,11 @@
 import { Select } from '../SearchSelect';
 import { useState } from 'react';
-import { CaretDownIcon, FileTextIcon, WarningIcon } from '@phosphor-icons/react';
+import { FileTextIcon, WarningIcon } from '@phosphor-icons/react';
 import type { ProofInput } from '@prima/core';
 import { api, type Reports } from '../api';
 import { Chip, Drawer, ErrorNotice, Loading, dateLabel, dateTimeLabel, useAction, useLoad, type Tone } from '../ui';
-import { Card, Empty, PageHead, Search, Stat, Stats, Toolbar } from '../kit';
+import { Card, Empty, PageHead, Stat, Stats } from '../kit';
+import { DataTable, useTableState, type DtColumn, type DtFilter } from '../DataTable';
 import { ProofPicker } from './Proof';
 import '../styles/leadership.css';
 
@@ -191,29 +192,59 @@ function MineRow({ m }: { m: Reports['mine'][number] }) {
   );
 }
 
-type BoardShow = 'all' | 'missing' | 'late' | 'company' | 'department';
-const BOARD_SHOW: [BoardShow, string][] = [
-  ['all', 'All'],
-  ['missing', 'Not sent'],
-  ['late', 'Late'],
-  ['company', 'From companies'],
-  ['department', 'From departments'],
+type BoardRow = NonNullable<Reports['board']>[number];
+const boardFrom = (b: BoardRow) => (b.def.from === 'company' ? 'Every company' : (b.rows[0]?.name ?? ''));
+
+/** P107: the board as a data table; a row opens who has sent under it, as the old folded rows did. */
+const BOARD_COLUMNS: DtColumn<BoardRow>[] = [
+  { id: 'name', label: 'Report', value: (b) => b.def.name, phone: 'title', render: (b) => <span className="ld-row-title">{b.def.name}</span> },
+  { id: 'period', label: 'Period', value: (b) => b.period.label, sort: false, phone: 'sub' },
+  { id: 'due', label: 'Due', value: (b) => b.period.due, sort: 'date' },
+  { id: 'from', label: 'From', value: boardFrom, translate: true, hideBelow: 1100 },
+  {
+    id: 'status',
+    label: 'Status',
+    // Sorted by how many have not sent.
+    value: (b) => b.totals.missing,
+    sort: 'number',
+    search: false,
+    align: 'left',
+    render: (b) => (
+      <span className="ld-chips">
+        {b.totals.onTime > 0 && <Chip tone="ok">{b.totals.onTime} on time</Chip>}
+        {b.totals.late > 0 && <Chip tone="warn">{b.totals.late} late</Chip>}
+        {b.totals.missing > 0 && <Chip tone="crit">{b.totals.missing} not sent</Chip>}
+        {b.totals.notDue > 0 && <Chip tone="neutral">{b.totals.notDue} not due</Chip>}
+        {b.totals.unknown > 0 && <Chip tone="unknown">{b.totals.unknown} unknown</Chip>}
+      </span>
+    ),
+  },
+];
+const BOARD_FILTERS: DtFilter<BoardRow>[] = [
+  {
+    id: 'show',
+    label: 'Show',
+    value: (b) => [...(b.totals.missing > 0 ? ['missing'] : []), ...(b.totals.late > 0 ? ['late'] : [])],
+    options: [
+      { value: 'missing', label: 'Not sent' },
+      { value: 'late', label: 'Late' },
+    ],
+  },
+  {
+    id: 'from',
+    label: 'From',
+    value: (b) => (b.def.from === 'company' ? 'company' : 'department'),
+    options: [
+      { value: 'company', label: 'From companies' },
+      { value: 'department', label: 'From departments' },
+    ],
+  },
 ];
 
 function Board({ board }: { board: NonNullable<Reports['board']> }) {
   const [open, setOpen] = useState<string | null>(null);
-  const [q, setQ] = useState('');
-  const [show, setShow] = useState<BoardShow>('all');
-  const needle = q.trim().toLowerCase();
-  const rows = board.filter(
-    (b) =>
-      (!needle || `${b.def.name} ${b.rows[0]?.name ?? ''}`.toLowerCase().includes(needle)) &&
-      (show === 'all' ||
-        (show === 'missing' && b.totals.missing > 0) ||
-        (show === 'late' && b.totals.late > 0) ||
-        (show === 'company' && b.def.from === 'company') ||
-        (show === 'department' && b.def.from !== 'company')),
-  );
+  // The tiles pick a filter in the table, as they picked the old "Show" buttons.
+  const table = useTableState('reports.board');
   const missing = board.reduce((s, b) => s + b.totals.missing, 0);
   const late = board.reduce((s, b) => s + b.totals.late, 0);
   const onTime = board.reduce((s, b) => s + b.totals.onTime, 0);
@@ -224,93 +255,67 @@ function Board({ board }: { board: NonNullable<Reports['board']> }) {
         <span className="muted small">Latest period due for each report</span>
       </div>
       <Stats>
-        <Stat label="Reports on the list" value={board.length} icon={<FileTextIcon />} tone="info" onClick={() => setShow('all')} />
+        <Stat label="Reports on the list" value={board.length} icon={<FileTextIcon />} tone="info" onClick={() => table.set({ f: { show: '', from: '' } })} />
         <Stat label="Sent on time" value={onTime} tone="ok" />
-        <Stat label="Sent late" value={late} tone={late ? 'warn' : 'ok'} onClick={() => setShow('late')} />
-        <Stat label="Not sent" value={missing} tone={missing ? 'crit' : 'ok'} onClick={() => setShow('missing')} />
+        <Stat label="Sent late" value={late} tone={late ? 'warn' : 'ok'} onClick={() => table.set({ f: { show: 'late' } })} />
+        <Stat label="Not sent" value={missing} tone={missing ? 'crit' : 'ok'} onClick={() => table.set({ f: { show: 'missing' } })} />
       </Stats>
-      <Toolbar
-        end={
-          <div className="seg ld-seg" role="group" aria-label="Show reports">
-            {BOARD_SHOW.map(([k, label]) => (
-              <button key={k} type="button" aria-pressed={show === k} onClick={() => setShow(k)}>
-                {label}
-              </button>
-            ))}
-          </div>
-        }
-      >
-        <Search value={q} onChange={setQ} placeholder="Search reports" />
-      </Toolbar>
-      <div className="k-card">
-        {rows.length === 0 && <Empty title="No report matches." />}
-        <ul className="ld-rows">
-          {rows.map((b) => {
-            const isOpen = open === b.def.id;
-            return (
-              <li key={b.def.id} className="ld-cat" data-open={isOpen}>
-                <button type="button" className="ld-cat-head" aria-expanded={isOpen} onClick={() => setOpen(isOpen ? null : b.def.id)}>
-                  <span className="ld-row-main">
-                    <span className="ld-row-title">{b.def.name}</span>
-                    <span className="ld-row-meta">
-                      {b.period.label}, due {dateLabel(b.period.due)} · from {b.def.from === 'company' ? 'every company' : b.rows[0]?.name}
-                    </span>
-                  </span>
-                  <span className="ld-chips ld-cat-chips">
-                    {b.totals.onTime > 0 && <Chip tone="ok">{b.totals.onTime} on time</Chip>}
-                    {b.totals.late > 0 && <Chip tone="warn">{b.totals.late} late</Chip>}
-                    {b.totals.missing > 0 && <Chip tone="crit">{b.totals.missing} not sent</Chip>}
-                    {b.totals.notDue > 0 && <Chip tone="neutral">{b.totals.notDue} not due</Chip>}
-                    {b.totals.unknown > 0 && <Chip tone="unknown">{b.totals.unknown} unknown</Chip>}
-                  </span>
-                  <CaretDownIcon className="ld-cat-caret" size={16} aria-hidden="true" />
-                </button>
-                {isOpen && (
-                  <div className="ld-cat-body">
-                    <div className="table-wrap">
-                      <table>
-                        <thead>
-                          <tr>
-                            <th>From</th>
-                            <th>Sent</th>
-                            <th>Status</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {b.rows
-                            .filter((r) => r.status !== 'unknown')
-                            .map((r) => (
-                              <tr key={r.key}>
-                                <td>{r.name}</td>
-                                <td className="muted">
-                                  {r.sent ? (
-                                    <>
-                                      {r.sent.by}, {dateTimeLabel(r.sent.at)}
-                                      {r.sent.note ? ` · ${r.sent.note}` : ''}
-                                    </>
-                                  ) : (
-                                    '–'
-                                  )}
-                                </td>
-                                <td>
-                                  <Chip tone={STATUS[r.status].tone}>{STATUS[r.status].label}</Chip>
-                                </td>
-                              </tr>
-                            ))}
-                        </tbody>
-                      </table>
-                    </div>
-                    {b.totals.unknown > 0 && (
-                      <p className="muted small ld-pad">{b.totals.unknown} companies are not on the app yet, so their reports are Unknown.</p>
-                    )}
-                  </div>
-                )}
-              </li>
-            );
-          })}
-        </ul>
-      </div>
+      <DataTable
+        label="Who has sent"
+        control={table}
+        rows={board}
+        rowKey={(b) => b.def.id}
+        columns={BOARD_COLUMNS}
+        filters={BOARD_FILTERS}
+        searchPlaceholder="Search reports"
+        searchText={(b) => b.rows[0]?.name ?? ''}
+        onRowClick={(b) => setOpen(open === b.def.id ? null : b.def.id)}
+        rowDetail={(b) => (open === b.def.id ? <BoardDetail b={b} /> : undefined)}
+        empty={<Empty title="No report matches." />}
+      />
     </section>
+  );
+}
+
+/** Who has sent one report: the nested table stays as it was. */
+function BoardDetail({ b }: { b: BoardRow }) {
+  return (
+    <div className="ld-cat-body">
+      <div className="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>From</th>
+              <th>Sent</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {b.rows
+              .filter((r) => r.status !== 'unknown')
+              .map((r) => (
+                <tr key={r.key}>
+                  <td>{r.name}</td>
+                  <td className="muted">
+                    {r.sent ? (
+                      <>
+                        {r.sent.by}, {dateTimeLabel(r.sent.at)}
+                        {r.sent.note ? ` · ${r.sent.note}` : ''}
+                      </>
+                    ) : (
+                      '–'
+                    )}
+                  </td>
+                  <td>
+                    <Chip tone={STATUS[r.status].tone}>{STATUS[r.status].label}</Chip>
+                  </td>
+                </tr>
+              ))}
+          </tbody>
+        </table>
+      </div>
+      {b.totals.unknown > 0 && <p className="muted small ld-pad">{b.totals.unknown} companies are not on the app yet, so their reports are Unknown.</p>}
+    </div>
   );
 }
 

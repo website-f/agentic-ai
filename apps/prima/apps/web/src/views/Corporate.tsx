@@ -8,7 +8,8 @@ import { CompanyFilePanel } from './CompanyFile';
 import { PanelFirmsPanel } from './PanelFirms';
 import { DelegationsPanel } from './Delegations';
 import { LegalHoldsPanel } from './LegalHolds';
-import { Card, Empty, PageHead, Stat, Stats, Steps, Toolbar, type StepState } from '../kit';
+import { Card, Empty, PageHead, Stat, Stats, Steps, type StepState } from '../kit';
+import { DataTable, type DtColumn, type DtFilter } from '../DataTable';
 import { Chip, Drawer, ErrorNotice, Loading, dateLabel, dateTimeLabel, useAction, useLoad } from '../ui';
 import { CentralAdminGuide } from './CentralAdminGuide';
 import { ImportButton } from './ImportDrawer';
@@ -50,7 +51,6 @@ const FILING_KIND: Record<CorpFilingKind, string> = {
   SHARE_CHANGE: 'Change of shares',
   OTHER: 'Other SSM lodgement',
 };
-const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 export function CorporateView() {
@@ -230,48 +230,25 @@ function AuditLegalOnly({ data }: { data: NonNullable<Awaited<ReturnType<typeof 
   );
 }
 
-/** The filings calendar: grouped by the month they fall due, with each company's filings filterable. */
+/** The filings list (P107: a searchable table; the steps and forms open in a drawer). Open filings first, by due date. */
 function Filings({ data, onAdd }: { data: CorpBoard; onAdd: () => void }) {
-  const [all, setAll] = useState(false);
-  const [company, setCompany] = useState('');
-  const companies = [...new Set(data.filings.map((f) => f.companyName))].sort((a, b) => a.localeCompare(b));
-  const rows = data.filings
-    .filter((f) => all || f.tone !== 'ok')
-    .filter((f) => !company || f.companyName === company)
-    .slice(0, 100)
-    .sort((a, b) => a.filing.dueOn.localeCompare(b.filing.dueOn));
-  const months: [string, FilingRow[]][] = [];
-  for (const r of rows) {
-    const m = r.filing.dueOn.slice(0, 7);
-    const last = months[months.length - 1];
-    if (last && last[0] === m) last[1].push(r);
-    else months.push([m, [r]]);
-  }
+  const [openId, setOpenId] = useState<string | null>(null);
+  const open = data.filings.find((f) => f.filing.id === openId);
   return (
-    <div className="gv-stack-sm">
-      <Toolbar
-        end={
-          <div className="seg" role="group" aria-label="Which filings">
-            <button aria-pressed={!all} onClick={() => setAll(false)}>
-              Open
-            </button>
-            <button aria-pressed={all} onClick={() => setAll(true)}>
-              All, with completed
-            </button>
-          </div>
-        }
-      >
-        <Select className="select gv-filter" aria-label="Company" value={company} onChange={(e) => setCompany(e.target.value)}>
-          <option value="">All companies</option>
-          {companies.map((c) => (
-            <option key={c} value={c}>
-              {c}
-            </option>
-          ))}
-        </Select>
-      </Toolbar>
-      <Card title="SSM filings" sub={`${rows.length} filing${rows.length === 1 ? '' : 's'}${all ? '' : ' still open'}, by the month they fall due`} flush>
-        {!rows.length && (
+    <Card title="SSM filings" sub="Every filing with the date it falls due. Open one to record its next step." flush>
+      <DataTable
+        label="SSM filings"
+        stateKey="board.corporate.filings"
+        defaults={{ sort: 'due', dir: 'asc', f: { show: 'open' } }}
+        rows={data.filings}
+        rowKey={(r) => r.filing.id}
+        columns={FILING_COLUMNS}
+        filters={FILING_FILTERS}
+        searchText={(r) => r.filing.basis}
+        onView={(r) => setOpenId(r.filing.id)}
+        rowTone={(r) => (r.tone === 'crit' ? 'crit' : r.tone === 'warn' ? 'warn' : undefined)}
+        actions={(r) => [{ label: r.canWork && r.filing.status !== 'acknowledged' ? 'Next step' : 'Open', onClick: () => setOpenId(r.filing.id) }]}
+        empty={
           <Empty
             title="Nothing open."
             action={
@@ -284,32 +261,44 @@ function Filings({ data, onAdd }: { data: CorpBoard; onAdd: () => void }) {
           >
             {data.canFile.length > 0 ? 'Add each annual return, set of financial statements or other SSM lodgement with its due date.' : undefined}
           </Empty>
-        )}
-        <ul className="gv-list">
-          {months.map(([m, list]) => (
-            <li key={m} className="gv-group-li">
-              <div className="gv-group">
-                <span>
-                  {MONTHS[Number(m.slice(5, 7)) - 1]} {m.slice(0, 4)}
-                </span>
-                <span>
-                  {list.length} filing{list.length === 1 ? '' : 's'}
-                </span>
-              </div>
-              <ul className="gv-list">
-                {list.map((f) => (
-                  <li key={f.filing.id}>
-                    <FilingLine f={f} />
-                  </li>
-                ))}
-              </ul>
-            </li>
-          ))}
-        </ul>
-      </Card>
-    </div>
+        }
+      />
+      {open && (
+        <Drawer title={open.filing.title} sub={open.companyName} onClose={() => setOpenId(null)}>
+          <FilingLine f={open} />
+        </Drawer>
+      )}
+    </Card>
   );
 }
+
+const FILING_COLUMNS: DtColumn<FilingRow>[] = [
+  { id: 'due', label: 'Due', value: (r) => r.filing.dueOn, sort: 'date', width: '8rem' },
+  { id: 'company', label: 'Company', value: (r) => r.companyName, phone: 'sub' },
+  { id: 'title', label: 'Filing', value: (r) => r.filing.title, render: (r) => <strong>{r.filing.title}</strong>, phone: 'title' },
+  { id: 'kind', label: 'Type', value: (r) => FILING_KIND[r.filing.kind], translate: true, hideBelow: 1280 },
+  {
+    id: 'progress',
+    label: 'Progress',
+    value: (r) =>
+      [
+        r.filing.prepared && !r.filing.lodged ? `prepared by ${r.filing.prepared.by}` : '',
+        r.filing.lodged ? `lodged ${dateLabel(r.filing.lodged.on)} (${r.filing.lodged.ref})${r.lodgedLate ? ', late' : ''}` : '',
+        r.filing.receipt ? `receipt ${r.filing.receipt.ref}` : '',
+      ]
+        .filter(Boolean)
+        .join(' · '),
+    sort: false,
+    hideBelow: 1100,
+  },
+  { id: 'status', label: 'Status', value: (r) => r.label, translate: true, render: (r) => <Chip tone={r.tone}>{r.label}</Chip> },
+];
+const FILING_FILTERS: DtFilter<FilingRow>[] = [
+  { id: 'show', label: 'Show', value: (r) => (r.tone === 'ok' ? 'done' : 'open'), options: [{ value: 'open', label: 'Open' }, { value: 'done', label: 'Completed' }] },
+  { id: 'company', label: 'Company', value: (r) => r.companyName },
+  { id: 'status', label: 'Status', value: (r) => r.label },
+  { id: 'kind', label: 'Type', value: (r) => r.filing.kind, optionLabel: (k) => FILING_KIND[k as CorpFilingKind] ?? k },
+];
 
 function FilingLine({ f: row }: { f: FilingRow }) {
   const act = useAction();
@@ -394,8 +383,32 @@ function FilingLine({ f: row }: { f: FilingRow }) {
   );
 }
 
+const CHANGE_COLUMNS: DtColumn<ChangeRow>[] = [
+  { id: 'at', label: 'Asked', value: (r) => r.change.at, sort: 'date', width: '8rem' },
+  { id: 'company', label: 'Company', value: (r) => r.companyName, phone: 'sub' },
+  { id: 'title', label: 'Change', value: (r) => r.change.title, render: (r) => <strong>{r.change.title}</strong>, phone: 'title' },
+  { id: 'kind', label: 'What changes', value: (r) => CHANGE[r.change.kind], translate: true, hideBelow: 1200 },
+  { id: 'by', label: 'Asked by', value: (r) => r.change.raisedBy, hideBelow: 1100 },
+  { id: 'pwvsb', label: 'PWVSB', value: (r) => r.change.pwvsb?.by, hideBelow: 1280 },
+  { id: 'board', label: 'Board resolution', value: (r) => r.change.board?.resolutionRef, hideBelow: 1280 },
+  {
+    id: 'status',
+    label: 'Status',
+    value: (r) => CHANGE_STATUS[r.change.status][1],
+    translate: true,
+    render: (r) => <Chip tone={CHANGE_STATUS[r.change.status][0]}>{CHANGE_STATUS[r.change.status][1]}</Chip>,
+  },
+];
+const CHANGE_FILTERS: DtFilter<ChangeRow>[] = [
+  { id: 'status', label: 'Status', value: (r) => r.change.status, optionLabel: (v) => CHANGE_STATUS[v as ChangeRow['change']['status']]?.[1] ?? v },
+  { id: 'kind', label: 'What changes', value: (r) => r.change.kind, optionLabel: (v) => CHANGE[v as CorpChangeKind] ?? v },
+  { id: 'company', label: 'Company', value: (r) => r.companyName },
+];
+
 function Changes({ data, onAdd }: { data: CorpBoard; onAdd: () => void }) {
   const can = data.canRaise.length > 0;
+  const [openId, setOpenId] = useState<string | null>(null);
+  const open = data.changes.find((c) => c.change.id === openId);
   return (
     <Card
       title="Corporate changes"
@@ -428,13 +441,25 @@ function Changes({ data, onAdd }: { data: CorpBoard; onAdd: () => void }) {
           {can ? 'A new director, a share transfer or a change of owner starts here.' : undefined}
         </Empty>
       )}
-      <ul className="gv-list">
-        {data.changes.map((c) => (
-          <li key={c.change.id}>
-            <ChangeLine c={c} />
-          </li>
-        ))}
-      </ul>
+      {data.changes.length > 0 && (
+        <DataTable
+          label="Corporate changes"
+          stateKey="board.corporate.changes"
+          rows={data.changes}
+          rowKey={(r) => r.change.id}
+          columns={CHANGE_COLUMNS}
+          filters={CHANGE_FILTERS}
+          searchText={(r) => `${r.change.detail} ${r.change.pwvsb?.by ?? ''} ${r.change.board?.resolutionRef ?? ''}`}
+          onView={(r) => setOpenId(r.change.id)}
+          rowTone={(r) => (r.change.status === 'rejected' ? 'crit' : r.change.status === 'awaiting_pwvsb' ? 'warn' : undefined)}
+          actions={(r) => [{ label: r.canDecide ? 'Decide' : r.canRecordBoard ? 'Record resolution' : 'Open', onClick: () => setOpenId(r.change.id) }]}
+        />
+      )}
+      {open && (
+        <Drawer title={open.change.title} sub={open.companyName} onClose={() => setOpenId(null)}>
+          <ChangeLine c={open} />
+        </Drawer>
+      )}
     </Card>
   );
 }
@@ -690,45 +715,28 @@ function FilingForm({ companies, onDone }: { companies: CorpBoard['canFile']; on
   );
 }
 
+type CompanyRow = CorpBoard['companies'][number];
+const COMPANY_COLUMNS: DtColumn<CompanyRow>[] = [
+  { id: 'name', label: 'Company', value: (c) => c.companyName, render: (c) => <strong>{c.companyName}</strong>, phone: 'title' },
+  { id: 'reg', label: 'Registration', value: (c) => c.profile.regNo, render: (c) => <span className="mono small">{c.profile.regNo}</span>, phone: 'sub' },
+  { id: 'inc', label: 'Incorporated', value: (c) => c.profile.incorporatedOn, sort: 'date', hideBelow: 1100 },
+  { id: 'fye', label: 'Year end month', value: (c) => c.profile.fyeMonth, hideBelow: 1200 },
+  { id: 'sec', label: 'Secretary', value: (c) => c.profile.secretaryFirm },
+  { id: 'aud', label: 'Auditor', value: (c) => c.profile.auditor },
+  { id: 'dir', label: 'Directors', value: (c) => c.profile.directors.length, sort: 'number' },
+  { id: 'open', label: 'Filings', value: (c) => c.open, sort: 'number', align: 'left', render: (c) => <Chip tone={c.worst}>{c.open ? `${c.open} open` : 'In order'}</Chip> },
+];
+const COMPANY_FILTERS: DtFilter<CompanyRow>[] = [
+  { id: 'filings', label: 'Filings', value: (c) => (c.open ? 'open' : 'ok'), options: [{ value: 'open', label: 'Open filings' }, { value: 'ok', label: 'In order' }] },
+  { id: 'auditor', label: 'Auditor', value: (c) => c.profile.auditor },
+];
+
 function Companies({ data }: { data: CorpBoard }) {
   return (
     <Card title="Companies" sub={`${data.companies.length} compan${data.companies.length === 1 ? 'y' : 'ies'}`} flush>
       {!data.companies.length && <Empty title="No companies." />}
       {data.companies.length > 0 && (
-        <div className="table-wrap">
-          <table className="table">
-            <thead>
-              <tr>
-                <th>Company</th>
-                <th>Registration</th>
-                <th>Incorporated</th>
-                <th>Year end month</th>
-                <th>Secretary</th>
-                <th>Auditor</th>
-                <th className="num">Directors</th>
-                <th>Filings</th>
-              </tr>
-            </thead>
-            <tbody>
-              {data.companies.map((c) => (
-                <tr key={c.profile.id}>
-                  <td>
-                    <strong>{c.companyName}</strong>
-                  </td>
-                  <td className="mono small">{c.profile.regNo}</td>
-                  <td className="small">{dateLabel(c.profile.incorporatedOn)}</td>
-                  <td className="small">{c.profile.fyeMonth}</td>
-                  <td className="small">{c.profile.secretaryFirm}</td>
-                  <td className="small">{c.profile.auditor}</td>
-                  <td className="num">{c.profile.directors.length}</td>
-                  <td>
-                    <Chip tone={c.worst}>{c.open ? `${c.open} open` : 'In order'}</Chip>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <DataTable details label="Companies" stateKey="board.corporate.companies" rows={data.companies} rowKey={(c) => c.profile.id} columns={COMPANY_COLUMNS} filters={COMPANY_FILTERS} />
       )}
     </Card>
   );

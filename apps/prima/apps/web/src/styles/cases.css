@@ -378,3 +378,8 @@
 .cs-row-main {
   grid-template-columns: minmax(0, 1fr);
 }
+
+/* P107: the cases board as a data table: the card keeps its inner margin. */
+.cs-dt {
+  padding: 12px 16px 14px;
+}

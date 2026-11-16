@@ -6,6 +6,7 @@ import {WebTicketReview,WebTicketHistory} from './WebTicketReview';
 import{RentalCorrections}from'./RentalCorrections';
 import { ItOnboardingStep } from './ItOnboardingStep';
 import { useState } from 'react';
+import { DataTable, useTableState, type DtColumn, type DtFilter } from '../DataTable';
 import { BookOpenTextIcon, ClockCountdownIcon, DesktopIcon, LifebuoyIcon, PlusIcon, ShoppingCartIcon, StethoscopeIcon, UserSwitchIcon } from '@phosphor-icons/react';
 import { arishaLeader } from '@prima/core';
 import { api, type ItBoard } from '../api';
@@ -278,17 +279,58 @@ function assetFlags(r: AssetRow) {
   return [r.checkLate ? 'health inspection due or initial check needed' : '', r.serviceDue ? 'service due' : '', r.warrantySoon ? 'warranty ending' : ''].filter(Boolean);
 }
 
+/** P107: the asset register's columns and filters (DataTable). */
+const ASSET_COLUMNS: DtColumn<AssetRow>[] = [
+  {
+    id: 'asset',
+    label: 'Asset',
+    value: (r) => `${r.asset.tag} ${r.asset.model}`,
+    render: (r) => (
+      <span className="it-asset-main">
+        <span className="it-row-title">
+          <span className="it-ref">{r.asset.tag}</span> {r.asset.model}
+        </span>
+      </span>
+    ),
+    phone: 'title',
+  },
+  { id: 'kind', label: 'Kind', value: (r) => KIND[r.asset.kind], translate: true, phone: 'sub' },
+  { id: 'with', label: 'With', value: (r) => r.asset.assignedTo ?? r.asset.location },
+  { id: 'owner', label: 'Owner and record', value: (r) => assetProvenance(r), translate: true, hideBelow: 1100 },
+  {
+    id: 'status',
+    label: 'Status',
+    value: (r) => STATUS[r.asset.status][1],
+    translate: true,
+    render: (r) => (
+      <span className="it-asset-state">
+        <Chip tone={STATUS[r.asset.status][0]}>{STATUS[r.asset.status][1]}</Chip>
+        {assetFlags(r).map((f) => (
+          <span key={f} className="it-flag">
+            {f}
+          </span>
+        ))}
+      </span>
+    ),
+  },
+];
+const ASSET_FLAGS = [
+  { value: 'check', label: 'Health inspection due or initial check needed' },
+  { value: 'service', label: 'Service due' },
+  { value: 'warranty', label: 'Warranty ending' },
+];
+const ASSET_FILTERS: DtFilter<AssetRow>[] = [
+  { id: 'kind', label: 'Kind', value: (r) => r.asset.kind, options: (Object.keys(KIND) as Asset['kind'][]).map((x) => ({ value: x, label: KIND[x] })) },
+  { id: 'status', label: 'Status', value: (r) => r.asset.status, options: (Object.keys(STATUS) as Asset['status'][]).map((s) => ({ value: s, label: STATUS[s][1] })) },
+  { id: 'company', label: 'Company', value: (r) => r.ownerName },
+  { id: 'flag', label: 'Needs attention', value: (r) => [r.checkLate ? 'check' : '', r.serviceDue ? 'service' : '', r.warrantySoon ? 'warranty' : ''], options: ASSET_FLAGS },
+];
+
 function Assets({ data, staff }: { data: ItBoard; staff: boolean }) {
-  const [kind, setKind] = useState<Asset['kind'] | 'ALL'>('ALL');
-  const [status, setStatus] = useState<Asset['status'] | 'ALL'>('ALL');
-  const [q, setQ] = useState('');
+  // P107: the register is a data table; the kind tiles pick its Kind filter.
+  const table = useTableState('it.assets');
+  const kind = table.state.f.kind ?? '';
   const [open, setOpen] = useState<string | null>(null);
-  const rows = (data.assets ?? []).filter(
-    (r) =>
-      (kind === 'ALL' || r.asset.kind === kind) &&
-      (status === 'ALL' || r.asset.status === status) &&
-      (!q.trim() || `${r.asset.tag} ${r.asset.model} ${r.asset.assignedTo ?? ''} ${r.ownerName}`.toLowerCase().includes(q.trim().toLowerCase())),
-  );
   const row = (data.assets ?? []).find((r) => r.asset.id === open) ?? null;
   return (
     <>
@@ -300,7 +342,7 @@ function Assets({ data, staff }: { data: ItBoard; staff: boolean }) {
               type="button"
               className="it-kind"
               aria-pressed={kind === b.kind}
-              onClick={() => setKind(kind === b.kind ? 'ALL' : b.kind)}
+              onClick={() => table.set({ f: { kind: kind === b.kind ? '' : b.kind } })}
             >
               <span className="it-kind-name">{KIND[b.kind]}</span>
               <span className="it-kind-total">{b.total}</span>
@@ -311,67 +353,20 @@ function Assets({ data, staff }: { data: ItBoard; staff: boolean }) {
           ))}
         </div>
       </Card>
-      <Card title="Register" sub={`${rows.length} shown`} flush>
-        <div className="it-card-bar">
-          <Toolbar>
-            <Search value={q} onChange={setQ} placeholder="Tag, model, holder or company" label="Search" />
-            <Select className="select it-filter" aria-label="Kind" value={kind} onChange={(e) => setKind(e.target.value as Asset['kind'] | 'ALL')}>
-              <option value="ALL">Every kind</option>
-              {(Object.keys(KIND) as Asset['kind'][]).map((x) => (
-                <option key={x} value={x}>
-                  {KIND[x]}
-                </option>
-              ))}
-            </Select>
-            <Select className="select it-filter" aria-label="Status" value={status} onChange={(e) => setStatus(e.target.value as Asset['status'] | 'ALL')}>
-              <option value="ALL">Every status</option>
-              {(Object.keys(STATUS) as Asset['status'][])
-                .filter((s) => s !== 'disposed')
-                .map((s) => (
-                  <option key={s} value={s}>
-                    {STATUS[s][1]}
-                  </option>
-                ))}
-            </Select>
-          </Toolbar>
-        </div>
-        {rows.length > 0 && (
-          <div className="it-asset it-asset-head" aria-hidden="true">
-            <span>Asset</span>
-            <span>With</span>
-            <span>Owner and record</span>
-            <span>Status</span>
-          </div>
-        )}
-        <ul className="it-rows">
-          {rows.slice(0, 80).map((r) => {
-            const flags = assetFlags(r);
-            return (
-              <li key={r.asset.id}>
-                <button className="it-asset" data-flag={flags.length ? 'yes' : undefined} onClick={() => setOpen(r.asset.id)}>
-                  <span className="it-asset-main">
-                    <span className="it-row-title">
-                      <span className="it-ref">{r.asset.tag}</span> {r.asset.model}
-                    </span>
-                    <span className="it-row-meta">{KIND[r.asset.kind]}</span>
-                  </span>
-                  <span className="it-asset-with">{r.asset.assignedTo ?? r.asset.location}</span>
-                  <span className="it-asset-owner">{assetProvenance(r)}</span>
-                  <span className="it-asset-state">
-                    <Chip tone={STATUS[r.asset.status][0]}>{STATUS[r.asset.status][1]}</Chip>
-                    {flags.map((f) => (
-                      <span key={f} className="it-flag">
-                        {f}
-                      </span>
-                    ))}
-                  </span>
-                </button>
-              </li>
-            );
-          })}
-        </ul>
-        {rows.length > 80 && <p className="it-more">Showing 80 of {rows.length}. Search or filter to narrow.</p>}
-        {!rows.length && <Empty title="Nothing matches.">Change the search or the filters.</Empty>}
+      <Card title="Register">
+        <DataTable
+          label="Asset register"
+          control={table}
+          rows={data.assets ?? []}
+          rowKey={(r) => r.asset.id}
+          columns={ASSET_COLUMNS}
+          filters={ASSET_FILTERS}
+          searchPlaceholder="Tag, model, holder or company"
+          searchText={(r) => `${r.asset.assignedTo ?? ''} ${r.ownerName}`}
+          onView={(r) => setOpen(r.asset.id)}
+          rowTone={(r) => (assetFlags(r).length ? 'warn' : undefined)}
+          empty={<Empty title="Nothing matches.">Change the search or the filters.</Empty>}
+        />
       </Card>
       {row && <AssetDrawer row={row} staff={staff} manager={data.role === 'manager'} onClose={() => setOpen(null)} />}
     </>
@@ -511,14 +506,49 @@ function AssetDrawer({ row: r, staff, manager, onClose }: { row: AssetRow; staff
   );
 }
 
+type PurchaseRow = NonNullable<ItBoard['purchases']>[number];
+const purchaseWaits = (r: PurchaseRow) => !!(r.canApprove || r.canDecide);
+/** A purchase's state chip: its tone and words (the list and the purchase drawer). */
+function purchaseState(row: PurchaseRow): [Parameters<typeof Chip>[0]['tone'], string] {
+  const p = row.purchase;
+  const tone = p.status === 'rejected' ? 'crit' : p.status === 'received' ? 'ok' : purchaseWaits(row) ? 'warn' : 'info';
+  return [tone, p.status === 'rejected' ? 'Rejected' : p.status === 'received' ? 'Received' : `With ${row.waitingOn}`];
+}
+/** P107: the purchases list's columns and filters (DataTable). */
+const PURCHASE_COLUMNS: DtColumn<PurchaseRow>[] = [
+  { id: 'ref', label: 'Reference', value: (r) => r.purchase.ref, render: (r) => <span className="it-ref">{r.purchase.ref}</span>, phone: 'title' },
+  { id: 'items', label: 'Items', value: (r) => r.purchase.items.map((i) => `${i.qty} × ${i.description}`).join(', '), phone: 'sub' },
+  { id: 'total', label: 'Total', value: (r) => r.purchase.total, sort: 'money' },
+  { id: 'company', label: 'For', value: (r) => r.ownerName },
+  { id: 'reason', label: 'Reason', value: (r) => r.purchase.reason, hideBelow: 1300, phone: 'hidden' },
+  { id: 'by', label: 'Asked by', value: (r) => r.purchase.requestedBy, hideBelow: 1100 },
+  { id: 'at', label: 'Asked on', value: (r) => r.purchase.at, sort: 'date', hideBelow: 1200 },
+  { id: 'status', label: 'Status', value: (r) => purchaseState(r)[1], translate: true, render: (r) => <Chip tone={purchaseState(r)[0]}>{purchaseState(r)[1]}</Chip> },
+];
+const PURCHASE_FILTERS: DtFilter<PurchaseRow>[] = [
+  {
+    id: 'mine',
+    label: 'Your decision',
+    value: (r) => (purchaseWaits(r) ? 'yes' : 'no'),
+    options: [
+      { value: 'yes', label: 'Waiting for your decision' },
+      { value: 'no', label: 'Other purchases' },
+    ],
+  },
+  { id: 'status', label: 'Status', value: (r) => purchaseState(r)[1] },
+  { id: 'company', label: 'For', value: (r) => r.ownerName },
+];
+
 function Purchases({ data, staff }: { data: ItBoard; staff: boolean }) {
   const [form, setForm] = useState(false);
+  const [openId, setOpenId] = useState<string | null>(null);
   // IT asks to buy; so may the owner (P78). The IT Manager still agrees the need.
   const canAsk = staff || !!data.canRaisePurchase;
   const all = data.purchases ?? [];
   // The approval inbox: what waits for this person's decision comes first, then everything else in the same order.
-  const mine = all.filter((p) => p.canApprove || p.canDecide);
-  const rest = all.filter((p) => !(p.canApprove || p.canDecide));
+  const mine = all.filter((p) => purchaseWaits(p));
+  const rest = all.filter((p) => !purchaseWaits(p));
+  const chosen = all.find((p) => p.purchase.id === openId) ?? null;
   return (
     <Card
       title="Purchases"
@@ -531,7 +561,6 @@ function Purchases({ data, staff }: { data: ItBoard; staff: boolean }) {
           </button>
         )
       }
-      flush
     >
       <p className="it-rule">
         {data.pilot?.on
@@ -543,23 +572,25 @@ function Purchases({ data, staff }: { data: ItBoard; staff: boolean }) {
           <PurchaseForm onDone={() => setForm(false)} />
         </div>
       )}
-      {mine.length > 0 && (
-        <>
-          <h3 className="it-group">Waiting for your decision</h3>
+      <DataTable
+        label="Purchases"
+        stateKey="it.purchases"
+        rows={[...mine, ...rest]}
+        rowKey={(r) => r.purchase.id}
+        columns={PURCHASE_COLUMNS}
+        filters={PURCHASE_FILTERS}
+        searchPlaceholder="Reference, item, company or person"
+        onView={(r) => setOpenId(r.purchase.id)}
+        rowTone={(r) => (purchaseWaits(r) ? 'warn' : r.purchase.status === 'rejected' ? 'crit' : undefined)}
+        empty={<Empty title="No purchases yet.">{canAsk ? 'Use Ask to buy to start one.' : 'Purchases IT asks for appear here.'}</Empty>}
+      />
+      {chosen && (
+        <Drawer title={`${chosen.purchase.ref} ${rm(chosen.purchase.total)}`} sub={chosen.ownerName} onClose={() => setOpenId(null)}>
           <ul className="it-rows">
-            {mine.map((p) => (
-              <PurchaseLine key={p.purchase.id} p={p} staff={staff} data={data} />
-            ))}
+            <PurchaseLine key={chosen.purchase.id} p={chosen} staff={staff} data={data} />
           </ul>
-        </>
+        </Drawer>
       )}
-      {mine.length > 0 && rest.length > 0 && <h3 className="it-group">Other purchases</h3>}
-      <ul className="it-rows">
-        {rest.map((p) => (
-          <PurchaseLine key={p.purchase.id} p={p} staff={staff} data={data} />
-        ))}
-      </ul>
-      {!all.length && <Empty title="No purchases yet.">{canAsk ? 'Use Ask to buy to start one.' : 'Purchases IT asks for appear here.'}</Empty>}
     </Card>
   );
 }
@@ -682,83 +713,166 @@ function PurchaseForm({ onDone }: { onDone: () => void }) {
   );
 }
 
+type MaintLine = { key: string; r: AssetRow; group: 'Service' | 'Repair' | 'IT Manager'; groupLabel: string; detail: string; due: string | null; tone: Parameters<typeof Chip>[0]['tone'] };
+/** P107: service due, in repair and disposal asked in one table (DataTable); the group is a column and a filter. */
+const MAINT_COLUMNS: DtColumn<MaintLine>[] = [
+  {
+    id: 'asset',
+    label: 'Asset',
+    value: (l) => `${l.r.asset.tag} ${l.r.asset.model}`,
+    render: (l) => (
+      <span className="it-row-title">
+        <span className="it-ref">{l.r.asset.tag}</span> {l.r.asset.model}
+      </span>
+    ),
+    phone: 'title',
+  },
+  { id: 'group', label: 'List', value: (l) => l.groupLabel, translate: true, render: (l) => <Chip tone={l.tone}>{l.group}</Chip> },
+  { id: 'kind', label: 'Kind', value: (l) => KIND[l.r.asset.kind], translate: true, hideBelow: 1100 },
+  { id: 'company', label: 'Company', value: (l) => l.r.ownerName, phone: 'sub' },
+  { id: 'detail', label: 'Detail', value: (l) => l.detail },
+  { id: 'due', label: 'Service due', value: (l) => l.due, sort: 'date' },
+];
+const MAINT_FILTERS: DtFilter<MaintLine>[] = [
+  { id: 'group', label: 'List', value: (l) => l.groupLabel },
+  { id: 'kind', label: 'Kind', value: (l) => l.r.asset.kind, optionLabel: (k) => KIND[k as Asset['kind']] ?? k },
+  { id: 'company', label: 'Company', value: (l) => l.r.ownerName },
+];
+
 function Maintenance({ data, staff }: { data: ItBoard; staff: boolean }) {
   const [open, setOpen] = useState<string | null>(null);
+  const today = new Date().toISOString().slice(0, 10);
   const due = (data.assets ?? []).filter((r) => r.serviceDue).sort((a, b) => (a.asset.nextServiceOn ?? '').localeCompare(b.asset.nextServiceOn ?? ''));
   const repair = (data.assets ?? []).filter((r) => r.asset.status === 'repair');
   const disposal = (data.assets ?? []).filter((r) => r.asset.status === 'disposal_pending');
   const row = (data.assets ?? []).find((r) => r.asset.id === open) ?? null;
-  const line = (r: AssetRow, detail: string, tone: Parameters<typeof Chip>[0]['tone'], chip: string) => (
-    <li key={r.asset.id}>
-      <button className="it-line" onClick={() => setOpen(r.asset.id)}>
-        <span className="it-line-main">
-          <span className="it-row-title">
-            <span className="it-ref">{r.asset.tag}</span> {r.asset.model}
-          </span>
-          <span className="it-row-meta">
-            {r.ownerName} · {detail}
-          </span>
-        </span>
-        <Chip tone={tone}>{chip}</Chip>
-      </button>
-    </li>
-  );
+  const lines: MaintLine[] = [
+    ...due.map((r): MaintLine => ({ key: `due:${r.asset.id}`, r, group: 'Service', groupLabel: 'Service due', detail: `due ${dateLabel(r.asset.nextServiceOn!)}`, due: r.asset.nextServiceOn ?? null, tone: r.asset.nextServiceOn! < today ? 'crit' : 'warn' })),
+    ...repair.map((r): MaintLine => ({ key: `repair:${r.asset.id}`, r, group: 'Repair', groupLabel: 'In repair', detail: r.asset.maintenance?.at(-1)?.note ?? 'No note', due: null, tone: 'warn' })),
+    ...disposal.map((r): MaintLine => ({ key: `disposal:${r.asset.id}`, r, group: 'IT Manager', groupLabel: 'Disposal asked', detail: r.asset.disposal?.reason ?? '', due: null, tone: 'warn' })),
+  ];
   return (
     <>
-      <div className="it-trio">
-        <Card title="Service due (CCTV, network, printers)" sub={`${due.length} in the next 14 days`} flush>
-          {!due.length && <p className="it-none it-pad">Nothing due in the next 14 days.</p>}
-          <ul className="it-rows">
-            {due.map((r) =>
-              line(r, `due ${dateLabel(r.asset.nextServiceOn!)}`, r.asset.nextServiceOn! < new Date().toISOString().slice(0, 10) ? 'crit' : 'warn', 'Service'),
-            )}
-          </ul>
-        </Card>
-        <Card title="In repair" sub={`${repair.length} away`} flush>
-          {!repair.length && <p className="it-none it-pad">None.</p>}
-          <ul className="it-rows">{repair.map((r) => line(r, r.asset.maintenance?.at(-1)?.note ?? 'No note', 'warn', 'Repair'))}</ul>
-        </Card>
-        <Card title="Disposal asked" sub={`${disposal.length} waiting for the IT Manager`} flush>
-          {!disposal.length && <p className="it-none it-pad">None.</p>}
-          <ul className="it-rows">{disposal.map((r) => line(r, r.asset.disposal?.reason ?? '', 'warn', 'IT Manager'))}</ul>
-        </Card>
-      </div>
+      <Card
+        title="Service, repair and disposal"
+        sub={`Service due (CCTV, network, printers): ${due.length} in the next 14 days · In repair: ${repair.length} away · Disposal asked: ${disposal.length} waiting for the IT Manager`}
+      >
+        <DataTable
+          label="Service, repair and disposal"
+          stateKey="it.maintenance"
+          rows={lines}
+          rowKey={(l) => l.key}
+          columns={MAINT_COLUMNS}
+          filters={MAINT_FILTERS}
+          searchPlaceholder="Tag, model or company"
+          onView={(l) => setOpen(l.r.asset.id)}
+          rowTone={(l) => (l.tone === 'crit' ? 'crit' : undefined)}
+          empty={<p className="it-none">Nothing due in the next 14 days, nothing in repair and no disposal asked.</p>}
+        />
+      </Card>
       {row && <AssetDrawer row={row} staff={staff} manager={data.role === 'manager'} onClose={() => setOpen(null)} />}
     </>
   );
 }
 
 /** The domain and website register moved to its own Websites screen (Fauzan, 27 Oct 2026), so there is one register. */
+type TicketRow = NonNullable<ItBoard['tickets']>[number];
+/** A request's state chip: its tone and words (the queue and the request drawer). */
+function ticketState(row: TicketRow): [Parameters<typeof Chip>[0]['tone'], string] {
+  const t = row.ticket;
+  const done = t.status === 'resolved';
+  const tone = row.breached && !done ? 'crit' : done ? 'ok' : t.status === 'in_progress' ? 'info' : 'warn';
+  const label = row.webPolicy && done ? (t.confirmedAt ? 'Fix confirmed' : 'Resolved; confirmation pending') : row.breached ? (done ? 'Resolved; response was late' : row.response.respondedAt ? 'Response was late' : 'No response yet, late') : done ? 'Resolved' : t.status === 'in_progress' ? 'Being worked' : 'Open';
+  return [tone, label];
+}
+/** P107: the help request queue's columns and filters (DataTable). */
+const TICKET_COLUMNS: DtColumn<TicketRow>[] = [
+  { id: 'priority', label: 'Priority', value: (r) => r.ticket.priority, render: (r) => <span className="it-pri" data-pri={r.ticket.priority}>{r.ticket.priority}</span>, width: '6rem' },
+  {
+    id: 'request',
+    label: 'Request',
+    value: (r) => `${r.ticket.ref} ${r.ticket.title}`,
+    render: (r) => (
+      <span className="it-row-title">
+        <span className="it-ref">{r.ticket.ref}</span> {r.ticket.title}
+      </span>
+    ),
+    phone: 'title',
+  },
+  { id: 'category', label: 'Category', value: (r) => CATEGORY[r.ticket.category], translate: true, hideBelow: 1200 },
+  {
+    id: 'raisedBy',
+    label: 'Raised by',
+    value: (r) => r.ticket.raisedBy,
+    render: (r) => (
+      <>
+        {r.ticket.raisedBy}
+        {r.ticket.raisedFor ? ` (logged by IT, via ${r.ticket.channel === 'in_person' ? 'in person' : r.ticket.channel})` : ''}
+      </>
+    ),
+    phone: 'sub',
+  },
+  { id: 'at', label: 'Raised', value: (r) => r.ticket.at, sort: 'date', render: (r) => dateTimeLabel(r.ticket.at), hideBelow: 1300, phone: 'hidden' },
+  { id: 'owner', label: 'Owner', value: (r) => r.ticket.assignedTo ?? '', render: (r) => (r.ticket.assignedTo ? `with ${r.ticket.assignedTo}` : <span className="it-faint">Nobody yet</span>) },
+  {
+    id: 'due',
+    label: 'Due',
+    value: (r) => String(r.due ?? ''),
+    sort: 'date',
+    render: (r) => (r.response.respondedAt ? r.response.responseLabel : `${r.response.responseLabel} (by ${dateTimeLabel(r.due)})`),
+  },
+  { id: 'status', label: 'Status', value: (r) => ticketState(r)[1], translate: true, render: (r) => <Chip tone={ticketState(r)[0]}>{ticketState(r)[1]}</Chip> },
+];
+const TICKET_FILTERS: DtFilter<TicketRow>[] = [
+  {
+    id: 'open',
+    label: 'Show',
+    value: (r) => (r.ticket.status === 'resolved' ? 'resolved' : 'open'),
+    options: [
+      { value: 'open', label: 'Open' },
+      { value: 'resolved', label: 'Resolved' },
+    ],
+    allLabel: 'Open and resolved',
+  },
+  { id: 'status', label: 'Status', value: (r) => ticketState(r)[1] },
+  { id: 'priority', label: 'Priority', value: (r) => r.ticket.priority },
+  { id: 'category', label: 'Category', value: (r) => r.ticket.category, optionLabel: (c) => CATEGORY[c as keyof typeof CATEGORY] ?? c },
+  { id: 'owner', label: 'Owner', value: (r) => r.ticket.assignedTo ?? 'Nobody yet' },
+  {
+    id: 'late',
+    label: 'Time limit',
+    value: (r) => (r.breached && r.ticket.status !== 'resolved' ? 'late' : 'ok'),
+    options: [
+      { value: 'late', label: 'Past the time limit' },
+      { value: 'ok', label: 'Within the time limit' },
+    ],
+  },
+];
+
 function Tickets({ data, staff }: { data: ItBoard; staff: boolean }) {
-  const [showDone, setShowDone] = useState(false);
   const [log, setLog] = useState(false);
+  const [openId, setOpenId] = useState<string | null>(null);
   const all = data.tickets ?? [];
-  // The queue: open requests first, the nearest time limit at the top (resolved ones follow when shown).
+  // The queue: open requests first, the nearest time limit at the top. P107: "Show" (open at first) replaces Show resolved.
   const rows = all
-    .filter((t) => showDone || t.ticket.status !== 'resolved')
     .slice()
     .sort((a, b) => Number(a.ticket.status === 'resolved') - Number(b.ticket.status === 'resolved') || String(a.due).localeCompare(String(b.due)));
   const open = all.filter((t) => t.ticket.status !== 'resolved');
   const late = open.filter((t) => t.breached).length;
   const nobody = open.filter((t) => !t.ticket.assignedTo).length;
+  const chosen = all.find((t) => t.ticket.id === openId) ?? null;
   return (
     <Card
       title="Help requests"
       sub={`Response targets (Merdeka ticket policy): P1 ${data.rule.responseMinutes.P1} minutes, P2 ${data.rule.responseMinutes.P2 / 60} hour, P3 ${data.rule.responseMinutes.P3 / 60} hours, P4 ${data.rule.p4ResponseWorkingDays} working day (${data.rule.officeHours.start}-${data.rule.officeHours.end}, Monday to Friday). The resolved time is shown for information only. A request closes only when the person confirms.`}
       actions={
-        <>
-          <button className="btn btn-sm" aria-pressed={showDone} onClick={() => setShowDone(!showDone)}>
-            {showDone ? 'Hide resolved' : 'Show resolved'}
+        (staff || !!data.canLogTicket) && (
+          <button className={log ? 'btn btn-sm' : 'btn btn-sm btn-primary'} aria-expanded={log} onClick={() => setLog(!log)}>
+            {!log && <PlusIcon size={14} weight="bold" aria-hidden="true" />}
+            Log a request
           </button>
-          {(staff || !!data.canLogTicket) && (
-            <button className={log ? 'btn btn-sm' : 'btn btn-sm btn-primary'} aria-expanded={log} onClick={() => setLog(!log)}>
-              {!log && <PlusIcon size={14} weight="bold" aria-hidden="true" />}
-              Log a request
-            </button>
-          )}
-        </>
+        )
       }
-      flush
     >
       <div className="it-queue-sum">
         <span>
@@ -776,23 +890,29 @@ function Tickets({ data, staff }: { data: ItBoard; staff: boolean }) {
           <LogTicket onDone={() => setLog(false)} />
         </div>
       )}
-      {!rows.length && <Empty title="Nothing open.">{staff || data.canLogTicket ? 'Use Log a request when someone reaches IT by Teams, email, phone or in person.' : 'New help requests appear here with their time limit.'}</Empty>}
-      {rows.length > 0 && (
-        <div className="it-ticket it-ticket-head" aria-hidden="true">
-          <span>Priority</span>
-          <span>Request</span>
-          <span>Owner</span>
-          <span>Due</span>
-          <span>Status</span>
-        </div>
-      )}
       {!data.holidaysSet && <p className="muted small">Public holidays are not entered yet, so the P4 working day counts every weekday.</p>}
       <ServiceReport role={data.role} />
-      <ul className="it-rows">
-        {rows.map((t) => (
-          <TicketLine key={t.ticket.id} t={t} staff={staff} data={data} />
-        ))}
-      </ul>
+      <DataTable
+        label="Help requests"
+        stateKey="it.tickets"
+        defaults={{ f: { open: 'open' } }}
+        rows={rows}
+        rowKey={(r) => r.ticket.id}
+        columns={TICKET_COLUMNS}
+        filters={TICKET_FILTERS}
+        searchPlaceholder="Reference, request, person or owner"
+        searchText={(r) => `${r.ticket.channel} ${r.ticket.resolution ?? ''} ${r.ticket.resolvedBy ?? ''}`}
+        onView={(r) => setOpenId(r.ticket.id)}
+        rowTone={(r) => (r.breached && r.ticket.status !== 'resolved' ? 'crit' : undefined)}
+        empty={<Empty title="Nothing open.">{staff || data.canLogTicket ? 'Use Log a request when someone reaches IT by Teams, email, phone or in person.' : 'New help requests appear here with their time limit.'}</Empty>}
+      />
+      {chosen && (
+        <Drawer title={`${chosen.ticket.ref} ${chosen.ticket.title}`} sub={`${CATEGORY[chosen.ticket.category]} · ${chosen.ticket.raisedBy} · ${dateTimeLabel(chosen.ticket.at)}`} onClose={() => setOpenId(null)}>
+          <ul className="it-rows">
+            <TicketLine key={chosen.ticket.id} t={chosen} staff={staff} data={data} />
+          </ul>
+        </Drawer>
+      )}
     </Card>
   );
 }
@@ -835,9 +955,7 @@ function TicketLine({ t: row, staff, data }: { t: NonNullable<ItBoard['tickets']
           {row.response.respondedAt ? row.response.responseLabel : `${row.response.responseLabel} (by ${dateTimeLabel(row.due)})`}
         </span>
         <span className="it-ticket-state">
-          <Chip tone={row.breached && !done ? 'crit' : done ? 'ok' : t.status === 'in_progress' ? 'info' : 'warn'}>
-            {row.webPolicy&&done?(t.confirmedAt?'Fix confirmed':'Resolved; confirmation pending'):row.breached ? (done ? 'Resolved; response was late' : row.response.respondedAt ? 'Response was late' : 'No response yet, late') : done ? 'Resolved' : t.status === 'in_progress' ? 'Being worked' : 'Open'}
-          </Chip>
+          <Chip tone={ticketState(row)[0]}>{ticketState(row)[1]}</Chip>
         </span>
       </div>
       <TicketPolicyFacts ticket={t} />
@@ -876,33 +994,105 @@ function TicketLine({ t: row, staff, data }: { t: NonNullable<ItBoard['tickets']
   );
 }
 
+type OnboardRow = NonNullable<ItBoard['onboarding']>[number];
+const onboardOrg = (o: OnboardRow) => (manualRecord(o.item) && !manualRecord(o.item)?.companyId ? `${manualRecord(o.item)?.unitLabel || 'Unlinked organization'} (not verified)` : o.ownerName);
+/** A joiner's or leaver's state chip: its tone and words. */
+function onboardState(o: OnboardRow): [Parameters<typeof Chip>[0]['tone'], string] {
+  return [o.late ? 'crit' : o.soon ? 'warn' : o.open ? 'info' : 'ok', o.open ? (o.late ? `${o.open} late` : `${o.open} to do`) : 'All steps recorded — not independently checked'];
+}
+/** P107: joining and leaving as a table (DataTable); a row opens its checklist. */
+const ONBOARD_COLUMNS: DtColumn<OnboardRow>[] = [
+  {
+    id: 'person',
+    label: 'Person',
+    value: (o) => o.item.personName,
+    render: (o) => (
+      <span className="it-person-name">
+        {o.item.personName}
+        {manualRecord(o.item) && !manualRecord(o.item)?.personUserId && <Chip tone="unknown">Unlinked identity</Chip>}
+      </span>
+    ),
+    phone: 'title',
+  },
+  { id: 'kind', label: 'Joins or leaves', value: (o) => (o.item.kind === 'join' ? 'Joins' : 'Leaves'), translate: true },
+  { id: 'on', label: 'Date', value: (o) => o.item.on, sort: 'date' },
+  { id: 'job', label: 'Job title', value: (o) => o.item.jobTitle, phone: 'sub', hideBelow: 1100 },
+  { id: 'company', label: 'Company', value: (o) => onboardOrg(o), hideBelow: 1200 },
+  { id: 'owner', label: 'Owner', value: (o) => o.staffName ?? 'not given to anyone', hideBelow: 1300 },
+  {
+    id: 'steps',
+    label: 'Steps recorded',
+    value: (o) => (o.item.steps.length ? o.item.steps.filter((s) => s.doneAt).length / o.item.steps.length : null),
+    sort: 'number',
+    render: (o) => `${o.item.steps.filter((s) => s.doneAt).length} of ${o.item.steps.length}`,
+  },
+  { id: 'state', label: 'Status', value: (o) => onboardState(o)[1], translate: true, render: (o) => <Chip tone={onboardState(o)[0]}>{onboardState(o)[1]}</Chip> },
+];
+const ONBOARD_FILTERS: DtFilter<OnboardRow>[] = [
+  {
+    id: 'kind',
+    label: 'Joins or leaves',
+    value: (o) => o.item.kind,
+    options: [
+      { value: 'join', label: 'Joins' },
+      { value: 'leave', label: 'Leaves' },
+    ],
+  },
+  {
+    id: 'state',
+    label: 'Status',
+    value: (o) => (o.late ? 'late' : o.open ? 'open' : 'done'),
+    options: [
+      { value: 'late', label: 'Late' },
+      { value: 'open', label: 'Steps to do' },
+      { value: 'done', label: 'All steps recorded' },
+    ],
+  },
+  { id: 'company', label: 'Company', value: (o) => onboardOrg(o) },
+];
+
 function Onboarding({ data, staff }: { data: ItBoard; staff: boolean }) {
   const act = useAction();
   const list = data.onboarding ?? [];
+  const [openId, setOpenId] = useState<string | null>(null);
+  const o = list.find((x) => x.item.id === openId) ?? null;
+
   return (
     <Card
       title="Joining and leaving"
       sub="Track the work needed for joiners and leavers. These checklists record staff-reported completion with evidence, not independent checking or certification. They do not create accounts, revoke access or prove changes in Microsoft."
     >
       <ErrorNotice error={act.error} />
-      {!list.length && <Empty title="No joiners or leavers.">People joining or leaving appear here with their IT steps. Use Add joining / leaving request above to record one.</Empty>}
-      <div className="it-people">
-        {list.map((o) => {
-          const total = o.item.steps.length;
-          const recorded = o.item.steps.filter((s) => s.doneAt).length;
-          return (
-            <article key={o.item.id} className="it-person" data-late={o.late ? 'yes' : undefined}>
+      <DataTable
+        label="Joining and leaving"
+        stateKey="it.onboarding"
+        rows={list}
+        rowKey={(x) => x.item.id}
+        columns={ONBOARD_COLUMNS}
+        filters={ONBOARD_FILTERS}
+        searchPlaceholder="Person, job title or company"
+        onView={(x) => setOpenId(x.item.id)}
+        rowTone={(x) => (x.late ? 'crit' : undefined)}
+        empty={<Empty title="No joiners or leavers.">People joining or leaving appear here with their IT steps. Use Add joining / leaving request above to record one.</Empty>}
+      />
+      {o && (() => {
+        const total = o.item.steps.length;
+        const recorded = o.item.steps.filter((s) => s.doneAt).length;
+        return (
+          <Drawer
+            title={o.item.personName}
+            sub={`${o.item.kind === 'join' ? 'Joins' : 'Leaves'} ${dateLabel(o.item.on)} · ${o.item.jobTitle} · ${onboardOrg(o)} · ${o.staffName ?? 'not given to anyone'}`}
+            onClose={() => setOpenId(null)}
+          >
+            <article className="it-person" data-late={o.late ? 'yes' : undefined}>
               <div className="it-item-head">
                 <div className="it-item-main">
                   <span className="it-person-name">
                     {o.item.personName}
                     {manualRecord(o.item)&&!manualRecord(o.item)?.personUserId&&<Chip tone="unknown">Unlinked identity</Chip>}
                   </span>
-                  <span className="it-row-meta">
-                    {o.item.kind === 'join' ? 'Joins' : 'Leaves'} {dateLabel(o.item.on)} · {o.item.jobTitle} · {manualRecord(o.item)&&!manualRecord(o.item)?.companyId?`${manualRecord(o.item)?.unitLabel||'Unlinked organization'} (not verified)`:o.ownerName} · {o.staffName ?? 'not given to anyone'}
-                  </span>
                 </div>
-                <Chip tone={o.late ? 'crit' : o.soon ? 'warn' : o.open ? 'info' : 'ok'}>{o.open ? (o.late ? `${o.open} late` : `${o.open} to do`) : 'All steps recorded — not independently checked'}</Chip>
+                <Chip tone={onboardState(o)[0]}>{onboardState(o)[1]}</Chip>
               </div>
               {total > 0 && (
                 <div className="it-progress" aria-label={`${recorded} of ${total} steps recorded`}>
@@ -928,10 +1118,11 @@ function Onboarding({ data, staff }: { data: ItBoard; staff: boolean }) {
               <div className="it-steps">
                 {o.item.steps.map((s) => <ItOnboardingStep key={s.key} step={s} canTick={o.canTick} busy={act.busy} onSave={(done,evidence,version)=>void act.run(()=>api.setItOnboardingStep(o.item.id,s.key,done,evidence,version))}/>)}
               </div>
+              <ErrorNotice error={act.error} />
             </article>
-          );
-        })}
-      </div>
+          </Drawer>
+        );
+      })()}
     </Card>
   );
 }

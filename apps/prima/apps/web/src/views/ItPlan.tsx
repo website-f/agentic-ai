@@ -4,7 +4,8 @@ import { LANG_RULE, Rich, sampleProblem, useSample } from '../Arisha';
 import { arishaPilotAllowed } from '@prima/core';
 import { useApp } from '../App';
 import { useLang } from '../i18n';
-import { Chip, ErrorNotice, Loading, dateLabel, useLoad } from '../ui';
+import { Chip, Drawer, ErrorNotice, Loading, dateLabel, useLoad } from '../ui';
+import { DataTable } from '../DataTable';
 import { Card, Empty, Stat, Stats } from '../kit';
 import { GiveJob, type JobPreset } from './ItWork';
 
@@ -30,13 +31,17 @@ export function ItPlanView({ board }: { board: ItBoard }) {
   const [from, setFrom] = useState<string | undefined>(undefined);
   const { data, error } = useLoad(() => api.itPlan(span, from), [span, from]);
   const [giving, setGiving] = useState<Due | null>(null);
-  const [show, setShow] = useState<'open' | 'all'>('open');
   if (error) return <ErrorNotice error={error} />;
   if (!data) return <Loading what="the plan" />;
   const open = data.dues.filter((d) => !d.jobId);
-  const shown = show === 'open' ? open : data.dues;
   const r = data.readiness;
   const bucketOf = (d: string) => data.buckets.findIndex((b) => d >= b.from && d <= b.to);
+  // The regular work in this period, period by period (as the grouped list showed it).
+  const inPeriod = data.dues
+    .filter((d) => bucketOf(d.dueOn) >= 0)
+    .map((d, i) => ({ d, i, b: bucketOf(d.dueOn) }))
+    .sort((x, y) => x.b - y.b || x.i - y.i)
+    .map((x) => x.d);
   const overdueOpen = open.filter((d) => d.overdue).length;
   return (
     <>
@@ -134,67 +139,69 @@ export function ItPlanView({ board }: { board: ItBoard }) {
 
       {data.canPlan && <PlanHelperGate data={data} />}
 
-      <Card
-        title="Regular work"
-        actions={
-          <div className="seg">
-            <button aria-pressed={show === 'open'} onClick={() => setShow('open')}>
-              Not given ({open.length})
-            </button>
-            <button aria-pressed={show === 'all'} onClick={() => setShow('all')}>
-              All ({data.dues.length})
-            </button>
-          </div>
-        }
-        flush
-      >
-        {shown.length === 0 && <Empty title="Everything in this period is given to someone." />}
-        {data.buckets.map((b, i) => {
-          const items = shown.filter((d) => bucketOf(d.dueOn) === i);
-          if (!items.length) return null;
-          return (
-            <div key={b.from}>
-              <h3 className="it-group">{b.label}</h3>
-              <ul className="it-rows">
-                {items.map((d) => (
-                  <li key={d.key} className="it-item" data-late={d.overdue && !d.jobId ? 'yes' : undefined}>
-                    <div className="it-item-head">
-                      <div className="it-item-main">
-                        <span className="it-row-title">{d.title}</span>
-                        <span className="it-row-meta">
-                          {WHAT[d.what]} · due {dateLabel(d.dueOn)} · {d.detail}
-                        </span>
-                      </div>
-                      <div className="it-actions">
-                        {d.overdue && <Chip tone="crit">Overdue</Chip>}
-                        {d.jobId ? (
-                          <Chip tone="ok">{d.assignee}</Chip>
-                        ) : d.what === 'tender' ? (
-                          <Chip tone="warn">No owner</Chip>
-                        ) : data.canPlan ? (
-                          <button className={giving?.key === d.key ? 'btn btn-sm' : 'btn btn-sm btn-primary'} onClick={() => setGiving(giving?.key === d.key ? null : d)}>
-                            {giving?.key === d.key ? 'Cancel' : 'Plan it'}
-                          </button>
-                        ) : (
-                          <Chip tone="warn">Not given</Chip>
-                        )}
-                      </div>
-                    </div>
-                    {giving?.key === d.key && (
-                      <div className="it-plan-give">
-                        <GiveJob
-                          data={board}
-                          preset={{ kind: d.jobKind, title: d.title, detail: d.detail, dueOn: d.dueOn, technical: d.technical, planKey: d.key } as JobPreset}
-                          onDone={() => setGiving(null)}
-                        />
-                      </div>
-                    )}
-                  </li>
-                ))}
-              </ul>
+      <Card title="Regular work">
+        {/* P107: one data table; "Show" (not given first) replaces the Not given / All buttons, the period is a column and a filter. */}
+        <DataTable
+          details
+          label="Regular work"
+          stateKey="it.plan.dues"
+          defaults={{ f: { given: 'no' } }}
+          rows={inPeriod}
+          rowKey={(d) => d.key}
+          columns={[
+            { id: 'title', label: 'Work', value: (d) => d.title, render: (d) => <span className="it-row-title">{d.title}</span>, phone: 'title' },
+            { id: 'what', label: 'Kind', value: (d) => WHAT[d.what], translate: true, phone: 'sub' },
+            { id: 'period', label: 'Period', value: (d) => data.buckets[bucketOf(d.dueOn)]?.label ?? '', sort: false, hideBelow: 1200 },
+            { id: 'due', label: 'Due', value: (d) => d.dueOn, sort: 'date' },
+            { id: 'detail', label: 'Detail', value: (d) => d.detail, hideBelow: 1100 },
+            {
+              id: 'given',
+              label: 'Given to',
+              value: (d) => d.assignee ?? '',
+              render: (d) => (
+                <span className="row" style={{ gap: 4, flexWrap: 'wrap' }}>
+                  {d.overdue && <Chip tone="crit">Overdue</Chip>}
+                  {d.jobId ? <Chip tone="ok">{d.assignee}</Chip> : d.what === 'tender' ? <Chip tone="warn">No owner</Chip> : !data.canPlan ? <Chip tone="warn">Not given</Chip> : '–'}
+                </span>
+              ),
+            },
+          ]}
+          filters={[
+            {
+              id: 'given',
+              label: 'Show',
+              value: (d) => (d.jobId ? 'yes' : 'no'),
+              options: [
+                { value: 'no', label: 'Not given' },
+                { value: 'yes', label: 'Given' },
+              ],
+            },
+            { id: 'what', label: 'Kind', value: (d) => d.what, optionLabel: (w) => WHAT[w as Due['what']] ?? w },
+            { id: 'period', label: 'Period', value: (d) => String(bucketOf(d.dueOn)), options: data.buckets.map((b, i) => ({ value: String(i), label: b.label })) },
+            { id: 'overdue', label: 'Overdue', value: (d) => (d.overdue ? 'yes' : 'no'), options: [{ value: 'yes', label: 'Overdue' }, { value: 'no', label: 'Not overdue' }] },
+          ]}
+          searchPlaceholder="Work, kind or detail"
+          rowTone={(d) => (d.overdue && !d.jobId ? 'crit' : undefined)}
+          rowEnd={(d) =>
+            !d.jobId && d.what !== 'tender' && data.canPlan ? (
+              <button className={giving?.key === d.key ? 'btn btn-sm' : 'btn btn-sm btn-primary'} onClick={() => setGiving(giving?.key === d.key ? null : d)}>
+                {giving?.key === d.key ? 'Cancel' : 'Plan it'}
+              </button>
+            ) : null
+          }
+          empty={<Empty title="Everything in this period is given to someone." />}
+        />
+        {giving && (
+          <Drawer title={`Plan it: ${giving.title}`} sub={`${WHAT[giving.what]} · due ${dateLabel(giving.dueOn)}`} onClose={() => setGiving(null)}>
+            <div className="it-plan-give">
+              <GiveJob
+                data={board}
+                preset={{ kind: giving.jobKind, title: giving.title, detail: giving.detail, dueOn: giving.dueOn, technical: giving.technical, planKey: giving.key } as JobPreset}
+                onDone={() => setGiving(null)}
+              />
             </div>
-          );
-        })}
+          </Drawer>
+        )}
       </Card>
     </>
   );

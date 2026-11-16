@@ -4,6 +4,7 @@ import { RULES, SURVEY_RISKS, SURVEY_RISK_LABEL, SURVEY_SITE_TYPES, SURVEY_SITE_
 import { api, type SiteSurveyBoard, type SiteSurveySetup } from '../api';
 import { Chip, Drawer, ErrorNotice, dateTimeLabel, useAction, useLoad, type Tone } from '../ui';
 import { Empty, PageHead } from '../kit';
+import { DataTable } from '../DataTable';
 import { EvidenceCamera, gps } from './Camera';
 import {
   NUMBER_LABEL,
@@ -270,22 +271,34 @@ function ServerList({ decide, onRedo }: { decide: boolean; onRedo: (f: SurveyFor
   return (
     <>
       {decide && !data.isProjectDirector && <div className="notice">Only the Project Director (COO, Operations General Manager, Operations Director) decides surveys.</div>}
-      <div className="list">
-        {rows.length === 0 && <Empty title={decide ? 'No surveys waiting for you.' : 'No surveys sent yet.'} />}
-        {rows.map((r: SiteSurveyBoard['rows'][number]) => (
-          <button key={r.survey.id} className="list-item" style={{ textAlign: 'left', width: '100%', cursor: 'pointer' }} onClick={() => setOpen(r.survey.id)}>
-            <div style={{ flex: 1 }}>
-              <div style={{ fontWeight: 600 }}>
-                {r.survey.ref} · {r.survey.place}
-              </div>
-              <div className="muted small">
-                {r.company} · {r.survey.surveyorName} · received {dateTimeLabel(r.survey.receivedAt)} · {r.survey.guardsPerDay} guard{r.survey.guardsPerDay === 1 ? '' : 's'} a day
-              </div>
-            </div>
-            <Chip tone={SERVER_TONE[r.survey.status] ?? 'neutral'}>{SURVEY_STATUS_LABEL[r.survey.status]}</Chip>
-          </button>
-        ))}
-      </div>
+      {/* P107: the sent surveys as a data table: find a ref, place or surveyor; by status and company. */}
+      <DataTable<SiteSurveyBoard['rows'][number]>
+        label={decide ? 'To decide' : 'Sent surveys'}
+        stateKey={decide ? 'surveys.decide' : 'surveys.sent'}
+        rows={rows}
+        rowKey={(r) => r.survey.id}
+        onView={(r) => setOpen(r.survey.id)}
+        searchPlaceholder="Find a ref, place or surveyor"
+        empty={<Empty title={decide ? 'No surveys waiting for you.' : 'No surveys sent yet.'} />}
+        columns={[
+          { id: 'ref', label: 'Survey', value: (r) => `${r.survey.ref} · ${r.survey.place}`, phone: 'title', render: (r) => <span style={{ fontWeight: 600 }}>{r.survey.ref} · {r.survey.place}</span> },
+          { id: 'company', label: 'Company', value: (r) => r.company, phone: 'sub' },
+          { id: 'by', label: 'Surveyor', value: (r) => r.survey.surveyorName, hideBelow: 1000 },
+          { id: 'received', label: 'Received', value: (r) => r.survey.receivedAt, sort: 'date', render: (r) => dateTimeLabel(r.survey.receivedAt) },
+          { id: 'guards', label: 'Guards a day', value: (r) => r.survey.guardsPerDay, sort: 'number' },
+          {
+            id: 'status',
+            label: 'Status',
+            value: (r) => SURVEY_STATUS_LABEL[r.survey.status],
+            translate: true,
+            render: (r) => <Chip tone={SERVER_TONE[r.survey.status] ?? 'neutral'}>{SURVEY_STATUS_LABEL[r.survey.status]}</Chip>,
+          },
+        ]}
+        filters={[
+          { id: 'status', label: 'Status', value: (r) => r.survey.status, optionLabel: (v) => SURVEY_STATUS_LABEL[v as keyof typeof SURVEY_STATUS_LABEL] ?? v },
+          { id: 'company', label: 'Company', value: (r) => r.company },
+        ]}
+      />
       {open && <SurveyDrawer id={open} onClose={() => setOpen(null)} onRedo={onRedo} />}
     </>
   );

@@ -2,7 +2,8 @@ import { Select } from '../SearchSelect';
 import { useState } from 'react';
 import { api } from '../api';
 import { Card, Empty, Steps, type StepState } from '../kit';
-import { Chip, ErrorNotice, Loading, dateLabel, useAction, useLoad } from '../ui';
+import { Chip, Drawer, ErrorNotice, Loading, dateLabel, useAction, useLoad } from '../ui';
+import { DataTable, type DtColumn, type DtFilter } from '../DataTable';
 import '../styles/gov.css';
 
 /**
@@ -26,6 +27,47 @@ const STATE = {
   ended: ['Ended', 'neutral'],
 } as const;
 
+type DelegationBoard = NonNullable<Awaited<ReturnType<typeof api.delegationBoard>>>;
+type CritRow = DelegationBoard['criticalRoles'][number];
+type DelegRow = DelegationBoard['rows'][number];
+const CRIT_COLUMNS: DtColumn<CritRow>[] = [
+  { id: 'post', label: 'Post', value: (c) => c.role.post, render: (c) => <strong>{c.role.post}</strong>, phone: 'title' },
+  { id: 'holder', label: 'Holder', value: (c) => c.role.holderName, phone: 'sub' },
+  { id: 'why', label: 'Why critical', value: (c) => c.role.whyCritical, sort: false, hideBelow: 1200 },
+  { id: 'successors', label: 'Successors', value: (c) => c.role.successors.map((x) => x.name).join(', '), hideBelow: 1100 },
+  { id: 'review', label: 'Review by', value: (c) => c.role.reviewOn, sort: 'date' },
+  {
+    id: 'covered',
+    label: 'Cover',
+    value: (c) => (c.covered ? 'Covered' : 'No cover'),
+    translate: true,
+    render: (c) => (
+      <span className="row" style={{ gap: 4, flexWrap: 'wrap' }}>
+        {c.reviewDue && <Chip tone="warn">Review due</Chip>}
+        <Chip tone={c.covered ? 'ok' : 'warn'}>{c.covered ? 'Covered' : 'No cover'}</Chip>
+      </span>
+    ),
+  },
+];
+const CRIT_FILTERS: DtFilter<CritRow>[] = [
+  { id: 'covered', label: 'Cover', value: (c) => (c.covered ? 'yes' : 'no'), options: [{ value: 'yes', label: 'Covered' }, { value: 'no', label: 'No cover' }] },
+  { id: 'review', label: 'Review', value: (c) => (c.reviewDue ? 'due' : 'ok'), options: [{ value: 'due', label: 'Review due' }, { value: 'ok', label: 'Not due' }] },
+];
+const DELEG_COLUMNS: DtColumn<DelegRow>[] = [
+  { id: 'post', label: 'Post', value: (r) => r.delegation.post, render: (r) => <strong>{r.delegation.post}</strong>, phone: 'title' },
+  { id: 'delegate', label: 'Acts', value: (r) => r.delegation.delegateName, render: (r) => `${r.delegation.delegateName} acts for ${r.delegation.holderName}`, phone: 'sub' },
+  { id: 'kind', label: 'Kind', value: (r) => KIND[r.delegation.kind as Kind], translate: true },
+  { id: 'scope', label: 'Scope', value: (r) => r.delegation.scope, sort: false, hideBelow: 1300 },
+  { id: 'from', label: 'From', value: (r) => r.delegation.from, sort: 'date' },
+  { id: 'to', label: 'To', value: (r) => r.delegation.to, sort: 'date', render: (r) => (r.delegation.to ? dateLabel(r.delegation.to) : 'until ended'), hideBelow: 1100 },
+  { id: 'by', label: 'Recorded by', value: (r) => r.delegation.by, hideBelow: 1400 },
+  { id: 'state', label: 'Status', value: (r) => STATE[r.state][0], translate: true, render: (r) => <Chip tone={STATE[r.state][1]}>{STATE[r.state][0]}</Chip> },
+];
+const DELEG_FILTERS: DtFilter<DelegRow>[] = [
+  { id: 'state', label: 'Status', value: (r) => r.state, optionLabel: (v) => STATE[v as DelegRow['state']]?.[0] ?? v },
+  { id: 'kind', label: 'Kind', value: (r) => r.delegation.kind, optionLabel: (v) => KIND[v as Kind] ?? v },
+];
+
 export function DelegationsPanel() {
   const { data, error, reload } = useLoad(() => api.delegationBoard(), []);
   const act = useAction();
@@ -48,6 +90,8 @@ export function DelegationsPanel() {
   const [ev, setEv] = useState<Record<string, { kind: keyof typeof EVIDENCE; ref: string; boardRef: string; boardOn: string }>>({});
   const [acc, setAcc] = useState<Record<string, { systems: string; until: string }>>({});
   const [pick, setPick] = useState<Record<string, string[]>>({});
+  const [openCrit, setOpenCrit] = useState<string | null>(null);
+  const [openLine, setOpenLine] = useState<string | null>(null);
   if (error) return <ErrorNotice error={error} />;
   if (!data) return <Loading what="delegation register" />;
   const companyId = f.companyId || data.canRecordFor[0]?.id || '';
@@ -174,8 +218,23 @@ export function DelegationsPanel() {
           </div>
         )}
         {!data.criticalRoles.length && <Empty title="No critical posts listed yet." />}
+        {data.criticalRoles.length > 0 && (
+          <DataTable
+            label="Critical posts"
+            stateKey="board.corporate.critical"
+            rows={data.criticalRoles}
+            rowKey={(c) => c.role.id}
+            columns={CRIT_COLUMNS}
+            filters={CRIT_FILTERS}
+            onView={(c) => setOpenCrit(c.role.id)}
+            rowTone={(c) => (c.covered ? undefined : 'warn')}
+            actions={(c) => [{ label: c.canKeep && c.reviewDue ? 'Review' : 'Open', onClick: () => setOpenCrit(c.role.id) }]}
+          />
+        )}
+        {openCrit && data.criticalRoles.some((c) => c.role.id === openCrit) && (
+          <Drawer title={data.criticalRoles.find((c) => c.role.id === openCrit)!.role.post} onClose={() => setOpenCrit(null)}>
         <ul className="gv-list" aria-label="Critical posts">
-          {data.criticalRoles.map(({ role: r, covered, leftSuccessors, reviewDue, canKeep }) => (
+          {data.criticalRoles.filter((c) => c.role.id === openCrit).map(({ role: r, covered, leftSuccessors, reviewDue, canKeep }) => (
             <li className="gv-item item" key={r.id} data-tone={covered ? undefined : 'warn'}>
               <div className="gv-item-head">
                 <div className="gv-item-main">
@@ -224,6 +283,8 @@ export function DelegationsPanel() {
             </li>
           ))}
         </ul>
+          </Drawer>
+        )}
       </Card>
 
       {canRecord && (
@@ -361,8 +422,24 @@ export function DelegationsPanel() {
 
       <Card title="Delegation lines" sub={`${data.rows.length} on the register`} flush>
         {!data.rows.length && <Empty title="No delegation lines yet." />}
+        {data.rows.length > 0 && (
+          <DataTable
+            label="Delegation lines"
+            stateKey="board.corporate.delegations"
+            rows={data.rows}
+            rowKey={(r) => r.delegation.id}
+            columns={DELEG_COLUMNS}
+            filters={DELEG_FILTERS}
+            searchText={(r) => `${r.delegation.holderName} ${r.delegation.reason}`}
+            onView={(r) => setOpenLine(r.delegation.id)}
+            rowTone={(r) => (r.state === 'pending' ? 'warn' : undefined)}
+            actions={(r) => [{ label: r.state === 'pending' && r.canApprove ? 'Approve' : 'Open', onClick: () => setOpenLine(r.delegation.id) }]}
+          />
+        )}
+        {openLine && data.rows.some((r) => r.delegation.id === openLine) && (
+          <Drawer title={data.rows.find((r) => r.delegation.id === openLine)!.delegation.post} onClose={() => setOpenLine(null)}>
         <ul className="gv-list">
-          {data.rows.map((row) => {
+          {data.rows.filter((r) => r.delegation.id === openLine).map((row) => {
             const d = row.delegation;
             const e = ev[d.id] ?? { kind: 'hr_training' as const, ref: '', boardRef: '', boardOn: '' };
             const a = acc[d.id] ?? { systems: '', until: '' };
@@ -598,6 +675,8 @@ export function DelegationsPanel() {
             );
           })}
         </ul>
+          </Drawer>
+        )}
       </Card>
     </section>
   );

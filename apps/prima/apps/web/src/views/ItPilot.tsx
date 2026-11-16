@@ -5,7 +5,8 @@ import { api, type ItBoard } from '../api';
 import { useApp } from '../App';
 import { ProofPicker } from './Proof';
 import { openProofItem } from '../save';
-import { Chip, notify, ErrorNotice, dateLabel, dateTimeLabel, useAction } from '../ui';
+import { Chip, Drawer, notify, ErrorNotice, dateLabel, dateTimeLabel, useAction } from '../ui';
+import { DataTable, type DtColumn, type DtFilter } from '../DataTable';
 
 /**
  * The pilot additions to the IT screen (Fauzan, 28 Oct 2026): buying with three quotes, one online comparison and COO then CEO
@@ -421,19 +422,61 @@ export function TenderStepsMine({ data, openTab }: { data: ItBoard; openTab: () 
  * IT tenders from eP or other government channels (Fauzan, 28 Oct 2026). The IT Manager finds them and deals with the
  * company holding the IT codes; the paired IT Executive does every IT tender; the IT Lead checks the technical part.
  */
+const tenderClosed = (t: TenderRow) => ['won', 'lost', 'dropped'].includes(t.task.stage ?? '');
+const tenderStage = (t: TenderRow) => STAGE[t.task.stage ?? 'preparing'] ?? STAGE.preparing;
+/** P107: the IT tenders as an index table (DataTable); a row opens its card (timeline, parts and papers) in a drawer. */
+const TENDER_COLUMNS: DtColumn<TenderRow>[] = [
+  { id: 'title', label: 'Tender', value: (t) => t.task.title, render: (t) => <strong>{t.task.title}</strong>, phone: 'title' },
+  { id: 'kind', label: 'Kind', value: (t) => (t.task.kind === 'quotation' ? 'Quotation' : 'Open tender'), translate: true, hideBelow: 1200 },
+  { id: 'buyer', label: 'Buyer', value: (t) => t.task.buyer, phone: 'sub' },
+  { id: 'company', label: 'Company', value: (t) => t.companyName, hideBelow: 1100 },
+  { id: 'codes', label: 'Codes', value: (t) => (t.task.codes ?? []).join(', '), hideBelow: 1300, phone: 'hidden' },
+  { id: 'closes', label: 'Closes', value: (t) => t.task.closesOn, sort: 'date', render: (t) => `${dateLabel(t.task.closesOn)} (${t.daysLeft} days)` },
+  { id: 'steps', label: 'Steps done', value: (t) => (t.clock.rows.length ? t.clock.rows.filter((r) => r.step.doneAt).length / t.clock.rows.length : null), sort: 'number', render: (t) => `${t.clock.rows.filter((r) => r.step.doneAt).length} of ${t.clock.rows.length}`, hideBelow: 1100 },
+  {
+    id: 'stage',
+    label: 'Stage',
+    value: (t) => tenderStage(t)[1],
+    translate: true,
+    render: (t) => (
+      <span className="row" style={{ gap: 4, flexWrap: 'wrap' }}>
+        {t.clock.late > 0 && <Chip tone="crit">{t.clock.late} late</Chip>}
+        <Chip tone={tenderStage(t)[0]}>{tenderStage(t)[1]}</Chip>
+      </span>
+    ),
+  },
+];
+const TENDER_FILTERS: DtFilter<TenderRow>[] = [
+  {
+    id: 'show',
+    label: 'Show',
+    value: (t) => (tenderClosed(t) ? 'closed' : 'running'),
+    options: [
+      { value: 'running', label: 'Running' },
+      { value: 'closed', label: 'Won, lost and dropped' },
+    ],
+  },
+  { id: 'stage', label: 'Stage', value: (t) => tenderStage(t)[1] },
+  { id: 'kind', label: 'Kind', value: (t) => (t.task.kind === 'quotation' ? 'Quotation' : 'Open tender') },
+  { id: 'company', label: 'Company', value: (t) => t.companyName },
+  { id: 'late', label: 'Late', value: (t) => (t.clock.late > 0 ? 'late' : 'on time'), options: [{ value: 'late', label: 'Late steps' }, { value: 'on time', label: 'On time' }] },
+];
+
 export function ItTenders({ data }: { data: ItBoard }) {
   const act = useAction();
   const [form, setForm] = useState(false);
-  const [showClosed, setShowClosed] = useState(false);
+  const [openId, setOpenId] = useState<string | null>(null);
   const manager = data.role === 'manager';
   const execs = (data.team ?? []).filter((t) => t.itRole === 'executive');
-  const rows = (data.tenders ?? []).filter((t) => t.task.steps && (showClosed || !['won', 'lost', 'dropped'].includes(t.task.stage ?? '')));
+  const rows = (data.tenders ?? []).filter((t) => t.task.steps);
+  const running = rows.filter((t) => !tenderClosed(t)).length;
   const old = (data.tenders ?? []).filter((t) => !t.task.steps);
+  const chosen = rows.find((t) => t.task.id === openId) ?? null;
   return (
     <>
       <Box
         title="IT tenders (eP and government)"
-        sub={`${rows.length} ${showClosed ? 'shown' : 'running'}`}
+        sub={`${running} running`}
         actions={
           (manager || data.lead || data.canAddTender) && (
             <button className="btn btn-sm btn-primary" aria-expanded={form} onClick={() => setForm(!form)} disabled={!data.tenderExec} title={data.tenderExec ? undefined : 'The IT Manager names the tender executive first'}>
@@ -469,28 +512,69 @@ export function ItTenders({ data }: { data: ItBoard }) {
         </div>
         <ErrorNotice error={act.error} />
         {form && <AddTender data={data} onDone={() => setForm(false)} />}
-      </Box>
-      <CodeHolders data={data} />
-      {rows.map((t) => (
-        <TenderCard key={t.task.id} t={t} data={data} />
-      ))}
-      {!rows.length && (
-        <div className="k-card">
-          <div className="k-empty">
-            <span className="k-empty-mark" aria-hidden="true" />
-            <strong>No IT tenders running.</strong>
-          </div>
-        </div>
-      )}
-      <div className="iw-tender-foot">
-        <button className="btn btn-sm btn-ghost" aria-pressed={showClosed} onClick={() => setShowClosed(!showClosed)}>
-          {showClosed ? 'Hide won, lost and dropped' : 'Show won, lost and dropped'}
-        </button>
+        <DataTable
+          label="IT tenders"
+          stateKey="it.tenders"
+          defaults={{ f: { show: 'running' } }}
+          rows={rows}
+          rowKey={(t) => t.task.id}
+          columns={TENDER_COLUMNS}
+          filters={TENDER_FILTERS}
+          searchPlaceholder="Tender, buyer, company or code"
+          searchText={(t) => `${t.task.source} ${(t.task.codes ?? []).join(' ')}`}
+          onView={(t) => setOpenId(t.task.id)}
+          rowTone={(t) => (t.clock.late > 0 ? 'crit' : undefined)}
+          empty={
+            <div className="k-empty">
+              <span className="k-empty-mark" aria-hidden="true" />
+              <strong>No IT tenders running.</strong>
+            </div>
+          }
+        />
         {old.length > 0 && <p className="iw-muted">{old.length} older tender parts without a timeline are kept in the record.</p>}
-      </div>
+      </Box>
+      {chosen && (
+        <Drawer title={chosen.task.title} sub={`${chosen.task.buyer} · ${chosen.companyName}`} onClose={() => setOpenId(null)}>
+          <TenderCard key={chosen.task.id} t={chosen} data={data} />
+        </Drawer>
+      )}
+      <CodeHolders data={data} />
     </>
   );
 }
+
+type CodeHolderRow = NonNullable<ItBoard['codeHolders']>[number];
+const mofState = (h: CodeHolderRow): ['crit' | 'ok' | 'unknown', string] =>
+  h.holder.codes.length ? [h.expired ? 'crit' : 'ok', h.holder.expiresOn ? `MOF ${h.expired ? 'ended' : 'to'} ${dateLabel(h.holder.expiresOn)}` : 'MOF date unknown'] : ['unknown', 'No IT code'];
+/** P107: the IT code holders as a data table; the certificate buttons stay on each row. */
+const CODE_COLUMNS: DtColumn<CodeHolderRow>[] = [
+  { id: 'company', label: 'Company', value: (h) => h.companyName, render: (h) => <span className="iw-row-title">{h.companyName}</span>, phone: 'title' },
+  { id: 'codes', label: 'Codes', value: (h) => (h.holder.codes.length ? h.holder.codes.map((c) => `${c.code} ${c.label}`).join(' · ') : `no IT code${h.holder.note ? ` (${h.holder.note})` : ''}`), phone: 'sub' },
+  { id: 'cert', label: 'Certificate', value: (h) => h.holder.certNo ?? '', hideBelow: 1100 },
+  { id: 'checked', label: 'Checked by', value: (h) => (h.holder.checkedBy ? `${h.holder.checkedBy}${h.holder.checkedAt ? `, ${dateLabel(h.holder.checkedAt.slice(0, 10))}` : ''}` : ''), hideBelow: 1200 },
+  { id: 'mof', label: 'MOF', value: (h) => h.holder.expiresOn ?? '', sort: 'date', render: (h) => <Chip tone={mofState(h)[0]}>{mofState(h)[1]}</Chip> },
+];
+const CODE_FILTERS: DtFilter<CodeHolderRow>[] = [
+  {
+    id: 'codes',
+    label: 'IT codes',
+    value: (h) => (h.holder.codes.length ? 'yes' : 'no'),
+    options: [
+      { value: 'yes', label: 'Holds IT codes' },
+      { value: 'no', label: 'No IT code' },
+    ],
+  },
+  {
+    id: 'mof',
+    label: 'MOF',
+    value: (h) => (!h.holder.codes.length ? '' : h.expired ? 'ended' : h.holder.expiresOn ? 'in force' : 'unknown'),
+    options: [
+      { value: 'in force', label: 'In force' },
+      { value: 'ended', label: 'Ended' },
+      { value: 'unknown', label: 'MOF date unknown' },
+    ],
+  },
+];
 
 function CodeHolders({ data }: { data: ItBoard }) {
   const act = useAction();
@@ -503,7 +587,6 @@ function CodeHolders({ data }: { data: ItBoard }) {
     <Box
       title="Which companies hold IT codes"
       sub={check ? `${check.checked} of ${check.companies.length} companies checked` : undefined}
-      flush
       actions={
         manager && (
           <button className="btn btn-sm" aria-expanded={form} onClick={() => setForm(!form)}>
@@ -522,33 +605,29 @@ function CodeHolders({ data }: { data: ItBoard }) {
         </div>
       )}
       <ErrorNotice error={act.error} />
-      <ul className="iw-rows">
-        {rows.map((h) => (
-          <li key={h.holder.id} className="iw-row">
-            <div className="iw-row-main">
-              <span className="iw-row-title">{h.companyName}</span>
-              <span className="iw-row-meta">
-                {h.holder.codes.length ? h.holder.codes.map((c) => `${c.code} ${c.label}`).join(' · ') : `no IT code${h.holder.note ? ` (${h.holder.note})` : ''}`}
-                {h.holder.certNo ? ` · ${h.holder.certNo}` : ''}
-                {h.holder.checkedBy ? ` · checked by ${h.holder.checkedBy}${h.holder.checkedAt ? `, ${dateLabel(h.holder.checkedAt.slice(0, 10))}` : ''}` : ''}
-              </span>
-            </div>
-            <div className="iw-row-side">
+      <DataTable
+        details
+        label="Which companies hold IT codes"
+        stateKey="it.codeHolders"
+        rows={rows}
+        rowKey={(h) => h.holder.id}
+        columns={CODE_COLUMNS}
+        filters={CODE_FILTERS}
+        searchPlaceholder="Company, code or certificate"
+        rowTone={(h) => (h.holder.codes.length && h.expired ? 'crit' : undefined)}
+        rowEnd={(h) =>
+          (h.holder.proof ?? []).length ? (
+            <>
               {(h.holder.proof ?? []).map((f) => (
                 <button key={f.sha256} className="btn btn-sm" disabled={act.busy} onClick={() => void openProof(act, h.holder.id, f)}>
                   Certificate
                 </button>
               ))}
-              {h.holder.codes.length ? (
-                <Chip tone={h.expired ? 'crit' : 'ok'}>{h.holder.expiresOn ? `MOF ${h.expired ? 'ended' : 'to'} ${dateLabel(h.holder.expiresOn)}` : 'MOF date unknown'}</Chip>
-              ) : (
-                <Chip tone="unknown">No IT code</Chip>
-              )}
-            </div>
-          </li>
-        ))}
-        {left.length > 0 && <li className="iw-row iw-row-note">Still to check: {left.map((c) => c.name).join(', ')}</li>}
-      </ul>
+            </>
+          ) : null
+        }
+      />
+      {left.length > 0 && <p className="iw-row iw-row-note">Still to check: {left.map((c) => c.name).join(', ')}</p>}
     </Box>
   );
 }
@@ -1065,15 +1144,39 @@ function Tile({ label, value, note, tone }: { label: string; value: number; note
   );
 }
 
+type AuditBoard = NonNullable<ItBoard['audit']>;
+type AuditException = AuditBoard['exceptions'][number] & { k: number };
+type AuditEntry = AuditBoard['trail'][number] & { k: number };
+const exceptionTone = (e: AuditException): ['crit' | 'warn' | 'info', string] => (e.tone === 'crit' ? ['crit', 'Act now'] : e.tone === 'warn' ? ['warn', 'Check'] : ['info', 'Note']);
+/** P107: exceptions and the IT action trail as data tables (search, filters, pages instead of the 200-row cap). */
+const EXCEPTION_COLUMNS: DtColumn<AuditException>[] = [
+  { id: 'area', label: 'Area', value: (e) => e.area, phone: 'sub' },
+  { id: 'ref', label: 'Reference', value: (e) => e.ref, render: (e) => <span className="iw-row-title">{e.ref}</span> },
+  { id: 'what', label: 'What', value: (e) => e.what, phone: 'title' },
+  { id: 'who', label: 'Who', value: (e) => e.who ?? '', hideBelow: 1100 },
+  { id: 'at', label: 'When', value: (e) => e.at ?? '', sort: 'date', render: (e) => (e.at ? dateTimeLabel(e.at) : '–'), hideBelow: 1200 },
+  { id: 'tone', label: 'Level', value: (e) => exceptionTone(e)[1], translate: true, render: (e) => <Chip tone={exceptionTone(e)[0]}>{exceptionTone(e)[1]}</Chip> },
+];
+const EXCEPTION_FILTERS: DtFilter<AuditException>[] = [
+  { id: 'area', label: 'Area', value: (e) => e.area, allLabel: 'All areas' },
+  { id: 'tone', label: 'Level', value: (e) => exceptionTone(e)[1] },
+];
+const TRAIL_COLUMNS: DtColumn<AuditEntry>[] = [
+  { id: 'at', label: 'When', value: (e) => e.at, sort: 'date', render: (e) => <span className="iw-trail-when">{dateTimeLabel(e.at)}</span>, width: '11rem', phone: 'sub' },
+  { id: 'actor', label: 'Who', value: (e) => e.actor, render: (e) => <strong>{e.actor}</strong>, width: '14rem' },
+  { id: 'summary', label: 'What', value: (e) => e.summary, phone: 'title' },
+];
+const TRAIL_FILTERS: DtFilter<AuditEntry>[] = [
+  { id: 'actor', label: 'Who', value: (e) => e.actor, allLabel: 'Everyone' },
+  { id: 'month', label: 'Month', value: (e) => e.at.slice(0, 7), optionLabel: (m) => dateLabel(`${m}-01`).replace(/^1 /, '') },
+];
+
 /** What ACT checks in the IT pilot: the controls that must hold, the exceptions found, and every IT action. */
 export function ItAudit({ data }: { data: ItBoard }) {
-  const [area, setArea] = useState('all');
-  const [who, setWho] = useState('');
   const a = data.audit;
   if (!a) return null;
-  const areas = [...new Set(a.exceptions.map((e) => e.area))];
-  const rows = a.exceptions.filter((e) => area === 'all' || e.area === area);
-  const trail = a.trail.filter((e) => !who || e.actor.toLowerCase().includes(who.toLowerCase()) || e.summary.toLowerCase().includes(who.toLowerCase()));
+  const exceptions: AuditException[] = a.exceptions.map((e, k) => ({ ...e, k }));
+  const trail: AuditEntry[] = a.trail.map((e, k) => ({ ...e, k }));
   const broken = a.controls.filter((c) => c.breaks).length;
   const actNow = a.exceptions.filter((e) => e.tone === 'crit').length;
   return (
@@ -1099,60 +1202,34 @@ export function ItAudit({ data }: { data: ItBoard }) {
         </ul>
       </Box>
       <Box
-        title={`Exceptions to check (${rows.length})`}
+        title="Exceptions to check"
         sub="Found in the records: late or returned work, choices that needed a reason, approvals recorded from Teams, and settings to fix. Open the record's proof from its own tab."
-        flush
-        actions={
-          <Select className="select iw-assign" aria-label="Area" value={area} onChange={(e) => setArea(e.target.value)}>
-            <option value="all">All areas</option>
-            {areas.map((x) => (
-              <option key={x} value={x}>
-                {x}
-              </option>
-            ))}
-          </Select>
-        }
       >
-        {!rows.length && <div className="empty">Nothing found.</div>}
-        <ul className="iw-rows">
-          {rows.map((e, k) => (
-            <li key={k} className="iw-row">
-              <div className="iw-row-main">
-                <span className="iw-row-title">
-                  {e.area} · {e.ref}
-                </span>
-                <span className="iw-row-meta">
-                  {e.what}
-                  {e.who ? ` · ${e.who}` : ''}
-                  {e.at ? ` · ${dateTimeLabel(e.at)}` : ''}
-                </span>
-              </div>
-              <div className="iw-row-side">
-                <Chip tone={e.tone === 'crit' ? 'crit' : e.tone === 'warn' ? 'warn' : 'info'}>{e.tone === 'crit' ? 'Act now' : e.tone === 'warn' ? 'Check' : 'Note'}</Chip>
-              </div>
-            </li>
-          ))}
-        </ul>
+        <DataTable
+          details
+          label="Exceptions to check"
+          stateKey="it.audit.exceptions"
+          rows={exceptions}
+          rowKey={(e) => String(e.k)}
+          columns={EXCEPTION_COLUMNS}
+          filters={EXCEPTION_FILTERS}
+          searchPlaceholder="Reference, what or person"
+          rowTone={(e) => (e.tone === 'crit' ? 'crit' : undefined)}
+          empty={<div className="empty">Nothing found.</div>}
+        />
       </Box>
-      <Box
-        title="Every IT action"
-        sub="From the audit trail, newest first. Entries cannot be edited or removed."
-        flush
-        actions={<input className="input iw-assign" type="search" aria-label="Find" placeholder="Person or reference" value={who} onChange={(e) => setWho(e.target.value)} />}
-      >
-        {!trail.length && <div className="empty">No IT actions yet in this test.</div>}
-        <ul className="iw-rows iw-trail">
-          {trail.slice(0, 200).map((e, k) => (
-            <li key={k} className="iw-row">
-              <span className="iw-trail-when">{dateTimeLabel(e.at)}</span>
-              <div className="iw-row-main">
-                <span>
-                  <strong>{e.actor}</strong> · {e.summary}
-                </span>
-              </div>
-            </li>
-          ))}
-        </ul>
+      <Box title="Every IT action" sub="From the audit trail, newest first. Entries cannot be edited or removed.">
+        <DataTable
+          details
+          label="Every IT action"
+          stateKey="it.audit.trail"
+          rows={trail}
+          rowKey={(e) => String(e.k)}
+          columns={TRAIL_COLUMNS}
+          filters={TRAIL_FILTERS}
+          searchPlaceholder="Person or reference"
+          empty={<div className="empty">No IT actions yet in this test.</div>}
+        />
       </Box>
     </>
   );

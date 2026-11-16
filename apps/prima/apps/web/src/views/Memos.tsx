@@ -1,8 +1,9 @@
 import { Select } from '../SearchSelect';
 import { useState } from 'react';
-import { CaretDownIcon, CaretUpIcon, PlusIcon } from '@phosphor-icons/react';
+import { PlusIcon } from '@phosphor-icons/react';
 import { api, type Memos } from '../api';
-import { Card, PageHead, Search } from '../kit';
+import { Card, Empty, PageHead } from '../kit';
+import { DataTable, type DtColumn, type DtFilter } from '../DataTable';
 import { Chip, Drawer, ErrorNotice, Loading, dateLabel, dateTimeLabel, useAction, useLoad } from '../ui';
 import '../styles/selfservice.css';
 
@@ -29,9 +30,9 @@ const PAGE_SUB =
 
 export function MemosView() {
   const { data, error } = useLoad(() => api.memos(), []);
-  const [filter, setFilter] = useState<'all' | 'unread'>('all');
-  const [q, setQ] = useState('');
   const [writing, setWriting] = useState(false);
+  // Several memos may be open at once, as before.
+  const [open, setOpen] = useState<ReadonlySet<string>>(new Set());
   if (error)
     return (
       <div className="page ss">
@@ -46,10 +47,13 @@ export function MemosView() {
         <Loading what="memos" />
       </div>
     );
-  const needle = q.trim().toLowerCase();
-  const shown = data.memos
-    .filter((m) => filter === 'all' || (m.forMe && !m.myRead && m.status === 'active'))
-    .filter((m) => !needle || [m.title, m.body, m.publishedBy, m.ref ?? ''].some((x) => x.toLowerCase().includes(needle)));
+  const toggle = (id: string) =>
+    setOpen((o) => {
+      const next = new Set(o);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
   return (
     <div className="page ss">
       <PageHead
@@ -69,38 +73,33 @@ export function MemosView() {
         </div>
       )}
       <div>
-        <Card title="Memos" flush>
-          <div className="ss-tools">
-            <div className="seg" role="group" aria-label="Which memos">
-              <button aria-pressed={filter === 'all'} onClick={() => setFilter('all')}>
-                All
-                <span className="ss-count">{data.memos.length}</span>
-              </button>
-              <button aria-pressed={filter === 'unread'} onClick={() => setFilter('unread')}>
-                Not read
-                <span className="ss-count">{data.unread}</span>
-              </button>
-            </div>
-            <Search value={q} onChange={setQ} placeholder="Search memos" />
-          </div>
-          <ul className="ss-rows">
-            {data.memos.length === 0 && (
-              <li className="empty">
-                No memos yet.{' '}
-                {data.canPublish.length > 0 && (
-                  <button className="btn btn-sm" onClick={() => setWriting(true)}>
-                    Write the first memo
-                  </button>
-                )}
-              </li>
-            )}
-            {data.memos.length > 0 && shown.length === 0 && <li className="empty">Nothing here.</li>}
-            {shown.map((m) => (
-              <li key={m.id}>
-                <MemoLine m={m} />
-              </li>
-            ))}
-          </ul>
+        <Card title="Memos">
+          {/* P107: one data table (search, filters, sort, pages; cards on a phone); a memo opens under its row, as before. */}
+          <DataTable
+            label="Memos"
+            stateKey="home.memos"
+            rows={data.memos}
+            rowKey={(m) => m.id}
+            columns={MEMO_COLUMNS}
+            filters={MEMO_FILTERS}
+            searchPlaceholder="Search memos"
+            searchText={(m) => m.body}
+            onRowClick={(m) => toggle(m.id)}
+            rowTone={(m) => (isUnread(m) ? (m.lateForMe ? 'crit' : 'warn') : undefined)}
+            rowDetail={(m) => (open.has(m.id) ? <MemoBody m={m} /> : undefined)}
+            empty={
+              <Empty
+                title="No memos yet."
+                action={
+                  data.canPublish.length > 0 && (
+                    <button className="btn btn-sm" onClick={() => setWriting(true)}>
+                      Write the first memo
+                    </button>
+                  )
+                }
+              />
+            }
+          />
         </Card>
       </div>
       {writing && (
@@ -118,6 +117,60 @@ export function MemosView() {
     </div>
   );
 }
+
+const isUnread = (m: Memo) => m.forMe && !m.myRead && m.status === 'active';
+/** A memo's state in words, as its chip says it (the search and the sort use it). */
+const statusText = (m: Memo) =>
+  m.status === 'withdrawn' ? 'Withdrawn' : m.status === 'replaced' ? 'Replaced' : m.forMe ? (m.myRead ? 'Read' : m.lateForMe ? 'Not read, late' : 'Not read') : '';
+
+const MEMO_COLUMNS: DtColumn<Memo>[] = [
+  {
+    id: 'title',
+    label: 'Title',
+    value: (m) => m.title,
+    phone: 'title',
+    render: (m) => <span style={{ fontWeight: 600, textDecoration: m.status === 'active' ? undefined : 'line-through' }}>{m.title}</span>,
+  },
+  { id: 'ref', label: 'Reference', value: (m) => m.ref, hideBelow: 1200, phone: 'hidden' },
+  {
+    id: 'audience',
+    label: 'Sent to',
+    value: (m) => `${audienceLabel(m)} ${whereLabel(m)}`.trim(),
+    phone: 'sub',
+    hideBelow: 1100,
+    render: (m) => (
+      <>
+        {audienceLabel(m)} {whereLabel(m)}
+      </>
+    ),
+  },
+  { id: 'by', label: 'Published by', value: (m) => m.publishedBy, phone: 'hidden', hideBelow: 1300 },
+  { id: 'at', label: 'Published', value: (m) => m.publishedAt, sort: 'date', render: (m) => dateTimeLabel(m.publishedAt) },
+  { id: 'readBy', label: 'Read by', value: (m) => m.readBy, sort: 'date' },
+  { id: 'status', label: 'Status', value: statusText, translate: true, render: (m) => <StatusChip m={m} /> },
+];
+const MEMO_FILTERS: DtFilter<Memo>[] = [
+  {
+    id: 'read',
+    label: 'Show',
+    value: (m) => (isUnread(m) ? 'unread' : m.forMe && m.myRead ? 'read' : null),
+    options: [
+      { value: 'unread', label: 'Not read' },
+      { value: 'read', label: 'Read' },
+    ],
+  },
+  {
+    id: 'status',
+    label: 'Status',
+    value: (m) => m.status,
+    options: [
+      { value: 'active', label: 'Active' },
+      { value: 'withdrawn', label: 'Withdrawn' },
+      { value: 'replaced', label: 'Replaced' },
+    ],
+  },
+  { id: 'audience', label: 'Sent to', value: (m) => m.audience, optionLabel: (a) => AUDIENCE_LABEL[a as Memo['audience']] ?? a },
+];
 
 function plusDays(days: number): string {
   return new Date(Date.now() + 8 * 3_600_000 + days * 86_400_000).toISOString().slice(0, 10);
@@ -273,113 +326,92 @@ function StatusChip({ m }: { m: Memo }) {
   return <Chip tone="info">{m.readCount} read</Chip>;
 }
 
-function MemoLine({ m }: { m: Memo }) {
-  const [open, setOpen] = useState(false);
+/** An open memo, under its row: the text, "I have read this", who has read it, and Remind / Withdraw for its publisher. */
+function MemoBody({ m }: { m: Memo }) {
   const [withdraw, setWithdraw] = useState(false);
   const [why, setWhy] = useState('');
   const act = useAction();
-  const unread = m.forMe && !m.myRead && m.status === 'active';
   return (
-    <div className="ss-memo" data-unread={unread ? '' : undefined}>
-      <button className="ss-row" data-tone={unread ? (m.lateForMe ? 'crit' : 'warn') : undefined} aria-expanded={open} onClick={() => setOpen(!open)}>
-        <span className="ss-row-main">
-          <span className="ss-row-title" style={{ textDecoration: m.status === 'active' ? undefined : 'line-through' }}>
-            {m.title}
-          </span>
-          <span className="ss-meta">
-            {m.ref ? `${m.ref} · ` : ''}
-            {audienceLabel(m)} {whereLabel(m)} · {m.publishedBy} · {dateTimeLabel(m.publishedAt)}
-            {m.readBy ? ` · read by ${dateLabel(m.readBy)}` : ''}
-          </span>
-        </span>
-        <span className="ss-actions">
-          <StatusChip m={m} />
-          {open ? <CaretUpIcon size={16} className="ss-chev" aria-hidden="true" /> : <CaretDownIcon size={16} className="ss-chev" aria-hidden="true" />}
-        </span>
-      </button>
-      {open && (
-        <div className="ss-memo-body">
-          {m.status === 'withdrawn' && m.withdrawn && (
-            <div className="notice" data-tone="warn">
-              Withdrawn by {m.withdrawn.by}, {dateTimeLabel(m.withdrawn.at)}: {m.withdrawn.reason}
-            </div>
-          )}
-          {m.status === 'replaced' && (
-            <div className="notice" data-tone="warn">
-              Replaced by {m.replacedByRef ?? 'a newer memo'}. Read the newer memo.
-            </div>
-          )}
-          {m.replacesRef && <div className="ss-note">This memo replaces {m.replacesRef}.</div>}
-          <div className="ss-memo-text">{m.body}</div>
-          {m.forMe && !m.myRead && m.status === 'active' && (
-            <div className="ss-actions">
-              <button className="btn btn-primary" disabled={act.busy} onClick={() => act.run(() => api.readMemo(m.id), 'Marked read.')}>
-                I have read this
-              </button>
-            </div>
-          )}
-          {m.tracker && (
-            <div className="small">
-              <div>
-                Read by {m.readCount}
-                {m.expectedCount != null ? ` of ${m.expectedCount}` : ''}.
-                {(m.reminders ?? []).length > 0 &&
-                  ` Reminded ${m.reminders!.length} time${m.reminders!.length === 1 ? '' : 's'}, last ${dateTimeLabel(m.reminders!.at(-1)!.at)}.`}
-              </div>
-              {m.notRead.length > 0 && (
-                <details>
-                  <summary>Not read yet ({m.notReadCount})</summary>
-                  <div className="muted">
-                    {m.notRead.map((u) => u.name).join(', ')}
-                    {(m.notReadCount ?? 0) > m.notRead.length ? ` and ${(m.notReadCount ?? 0) - m.notRead.length} more` : ''}
-                  </div>
-                </details>
-              )}
-              {m.reads.length > 0 && (
-                <details>
-                  <summary>Read ({m.reads.length})</summary>
-                  <div className="muted">{m.reads.map((r) => r.name).join(', ')}</div>
-                </details>
-              )}
-            </div>
-          )}
-          {m.canManage && (
-            <div className="ss-actions">
-              <button className="btn btn-sm" disabled={act.busy || !m.notReadCount} onClick={() => act.run(() => api.remindMemo(m.id), 'Reminder recorded.')}>
-                Remind those who have not read
-              </button>
-              <button className="btn btn-sm" onClick={() => setWithdraw(!withdraw)}>
-                Withdraw
-              </button>
-            </div>
-          )}
-          {withdraw && (
-            <div className="ss-actions">
-              <input
-                className="input"
-                aria-label="Reason for withdrawing"
-                placeholder="Why it is withdrawn"
-                value={why}
-                onChange={(e) => setWhy(e.target.value)}
-              />
-              <button
-                className="btn btn-sm btn-primary"
-                disabled={act.busy || why.trim().length < 5}
-                onClick={() =>
-                  act
-                    .run(() => api.withdrawMemo(m.id, why), 'Memo withdrawn.')
-                    .then((r) => {
-                      if (r) setWithdraw(false);
-                    })
-                }
-              >
-                Withdraw the memo
-              </button>
-            </div>
-          )}
-          <ErrorNotice error={act.error} />
+    <div className="ss-memo-body">
+      {m.status === 'withdrawn' && m.withdrawn && (
+        <div className="notice" data-tone="warn">
+          Withdrawn by {m.withdrawn.by}, {dateTimeLabel(m.withdrawn.at)}: {m.withdrawn.reason}
         </div>
       )}
+      {m.status === 'replaced' && (
+        <div className="notice" data-tone="warn">
+          Replaced by {m.replacedByRef ?? 'a newer memo'}. Read the newer memo.
+        </div>
+      )}
+      {m.replacesRef && <div className="ss-note">This memo replaces {m.replacesRef}.</div>}
+      <div className="ss-memo-text">{m.body}</div>
+      {m.forMe && !m.myRead && m.status === 'active' && (
+        <div className="ss-actions">
+          <button className="btn btn-primary" disabled={act.busy} onClick={() => act.run(() => api.readMemo(m.id), 'Marked read.')}>
+            I have read this
+          </button>
+        </div>
+      )}
+      {m.tracker && (
+        <div className="small">
+          <div>
+            Read by {m.readCount}
+            {m.expectedCount != null ? ` of ${m.expectedCount}` : ''}.
+            {(m.reminders ?? []).length > 0 &&
+              ` Reminded ${m.reminders!.length} time${m.reminders!.length === 1 ? '' : 's'}, last ${dateTimeLabel(m.reminders!.at(-1)!.at)}.`}
+          </div>
+          {m.notRead.length > 0 && (
+            <details>
+              <summary>Not read yet ({m.notReadCount})</summary>
+              <div className="muted">
+                {m.notRead.map((u) => u.name).join(', ')}
+                {(m.notReadCount ?? 0) > m.notRead.length ? ` and ${(m.notReadCount ?? 0) - m.notRead.length} more` : ''}
+              </div>
+            </details>
+          )}
+          {m.reads.length > 0 && (
+            <details>
+              <summary>Read ({m.reads.length})</summary>
+              <div className="muted">{m.reads.map((r) => r.name).join(', ')}</div>
+            </details>
+          )}
+        </div>
+      )}
+      {m.canManage && (
+        <div className="ss-actions">
+          <button className="btn btn-sm" disabled={act.busy || !m.notReadCount} onClick={() => act.run(() => api.remindMemo(m.id), 'Reminder recorded.')}>
+            Remind those who have not read
+          </button>
+          <button className="btn btn-sm" onClick={() => setWithdraw(!withdraw)}>
+            Withdraw
+          </button>
+        </div>
+      )}
+      {withdraw && (
+        <div className="ss-actions">
+          <input
+            className="input"
+            aria-label="Reason for withdrawing"
+            placeholder="Why it is withdrawn"
+            value={why}
+            onChange={(e) => setWhy(e.target.value)}
+          />
+          <button
+            className="btn btn-sm btn-primary"
+            disabled={act.busy || why.trim().length < 5}
+            onClick={() =>
+              act
+                .run(() => api.withdrawMemo(m.id, why), 'Memo withdrawn.')
+                .then((r) => {
+                  if (r) setWithdraw(false);
+                })
+            }
+          >
+            Withdraw the memo
+          </button>
+        </div>
+      )}
+      <ErrorNotice error={act.error} />
     </div>
   );
 }

@@ -5,6 +5,7 @@ import { api, type CompanyFileInput, type CompanyFiles } from '../api';
 import { useApp } from '../App';
 import { Empty } from '../kit';
 import { Chip, Drawer, ErrorNotice, Loading, dateLabel, useAction, useLoad } from '../ui';
+import { DataTable, type DtColumn, type DtFilter } from '../DataTable';
 
 /**
  * Company file (Central Admin 5B, Fauzan 2 Nov 2026). One corporate record per company: directors, shareholders,
@@ -20,6 +21,70 @@ const STATUS: Record<File['status'], ['ok' | 'warn' | 'info' | 'crit' | 'neutral
   checked: ['ok', 'Checked against SSM'],
   mismatch: ['crit', 'Differs from SSM'],
 };
+
+const attention = (f: File) => f.boLate.length + f.boDue.length + f.stale.length + (f.regNoMismatch ? 1 : 0);
+const FILE_COLUMNS: DtColumn<File>[] = [
+  { id: 'company', label: 'Company', value: (f) => f.companyName, render: (f) => <strong>{f.companyName}</strong>, phone: 'title' },
+  { id: 'reg', label: 'Registration', value: (f) => f.regNo, render: (f) => <span className="mono small">{f.regNo}</span>, phone: 'sub' },
+  { id: 'directors', label: 'Directors', value: (f) => f.profile.directors.length, sort: 'number' },
+  { id: 'holders', label: 'Shareholders', value: (f) => (f.profile.shareholders ?? []).length, sort: 'number', hideBelow: 1100 },
+  { id: 'owners', label: 'Beneficial owners', value: (f) => (f.profile.beneficialOwners ?? []).length, sort: 'number', hideBelow: 1100 },
+  { id: 'draft', label: 'Saved by', value: (f) => f.profile.file?.draftBy, hideBelow: 1300 },
+  { id: 'checked', label: 'Checked by', value: (f) => f.profile.file?.checkedBy, hideBelow: 1300 },
+  { id: 'todo', label: 'To fix', value: (f) => attention(f), sort: 'number', render: (f) => (attention(f) ? <Chip tone={f.boLate.length ? 'crit' : 'warn'}>{attention(f)}</Chip> : '–') },
+  { id: 'status', label: 'Status', value: (f) => STATUS[f.status][1], translate: true, render: (f) => <Chip tone={STATUS[f.status][0]}>{STATUS[f.status][1]}</Chip> },
+];
+const FILE_FILTERS: DtFilter<File>[] = [{ id: 'status', label: 'Status', value: (f) => f.status, optionLabel: (v) => STATUS[v as File['status']]?.[1] ?? v }];
+
+/** What needs doing on one company file (the list's old notes), shown above the file when it is opened. */
+function FileNotes({ f }: { f: File }) {
+  return (
+    <div className="item-main" style={{ marginBottom: 8 }}>
+      <div className="muted small">
+        {f.regNo} · {f.profile.directors.length} directors · {(f.profile.shareholders ?? []).length} shareholders ·{' '}
+        {(f.profile.beneficialOwners ?? []).length} beneficial owners
+        {f.profile.file ? ` · saved by ${f.profile.file.draftBy}` : ''}
+        {f.profile.file?.checkedBy ? ` · checked by ${f.profile.file.checkedBy} (${f.profile.file.ssmRef})` : ''}
+      </div>
+      {f.regNoMismatch && <p className="error small">The SSM number here differs from the company record.</p>}
+      {f.boLate.map((b) => (
+        <p key={b.name} className="error small">
+          {b.name}: SSM not notified, was due {dateLabel(b.dueOn)} (directors' legal flag)
+        </p>
+      ))}
+      {f.boDue.map((b) => (
+        <p key={b.name} className="small">
+          {b.name}: notify SSM by {dateLabel(b.dueOn)}
+        </p>
+      ))}
+      {f.stale.map((s) => (
+        <p key={s.id} className="small">
+          Update the file after: {s.title} (effective {dateLabel(s.effectiveOn)})
+        </p>
+      ))}
+      {f.status === 'mismatch' && (
+        <p className="small">
+          Sent back by {f.profile.file?.checkedBy}: {(f.profile.file?.mismatches ?? []).join('; ')}
+          {f.profile.file?.note ? ` (${f.profile.file.note})` : ''}. {f.can.edit ? 'Open, fix and resubmit for the check.' : ''}
+        </p>
+      )}
+      {(f.profile.file?.history ?? []).length > 0 && (
+        <details className="small">
+          <summary>Earlier checks ({(f.profile.file?.history ?? []).length})</summary>
+          <ul>
+            {(f.profile.file?.history ?? []).map((h, i) => (
+              <li key={i}>
+                {h.at.slice(0, 16).replace('T', ' ')} · {h.by} · {h.status === 'mismatch' ? `sent back: ${h.mismatches.join('; ')}` : 'checked'} ·{' '}
+                {h.ssmRef}
+                {h.note ? ` · ${h.note}` : ''}
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
+    </div>
+  );
+}
 
 export function CompanyFilePanel() {
   const { data, error, reload } = useLoad(() => api.companyFiles(), []);
@@ -37,6 +102,7 @@ export function CompanyFilePanel() {
   const withFile = new Set(data.map((f) => f.profile.companyId));
   const noFile = me.companies.filter((c) => !withFile.has(c.id) && (u.role !== 'company_manager' || u.companyIds.includes(c.id)));
   const canStart = keeps && noFile.length > 0;
+  const openFile = data.find((f) => f.profile.companyId === open);
   return (
     <section className="panel">
       <div className="panel-head">
@@ -66,62 +132,23 @@ export function CompanyFilePanel() {
         The company secretary lodges with SSM; this file keeps the record. A file sent back by the Deputy Chief of Staff shows the differences: fix them and
         resubmit for the check.
       </p>
-      <div className="list">
-        {rows.map((f) => (
-          <div className="item" key={f.profile.companyId}>
-            <div className="item-main">
-              <strong>{f.companyName}</strong>
-              <div className="muted small">
-                {f.regNo} · {f.profile.directors.length} directors · {(f.profile.shareholders ?? []).length} shareholders ·{' '}
-                {(f.profile.beneficialOwners ?? []).length} beneficial owners
-                {f.profile.file ? ` · saved by ${f.profile.file.draftBy}` : ''}
-                {f.profile.file?.checkedBy ? ` · checked by ${f.profile.file.checkedBy} (${f.profile.file.ssmRef})` : ''}
-              </div>
-              {f.regNoMismatch && <p className="error small">The SSM number here differs from the company record.</p>}
-              {f.boLate.map((b) => (
-                <p key={b.name} className="error small">
-                  {b.name}: SSM not notified, was due {dateLabel(b.dueOn)} (directors' legal flag)
-                </p>
-              ))}
-              {f.boDue.map((b) => (
-                <p key={b.name} className="small">
-                  {b.name}: notify SSM by {dateLabel(b.dueOn)}
-                </p>
-              ))}
-              {f.stale.map((s) => (
-                <p key={s.id} className="small">
-                  Update the file after: {s.title} (effective {dateLabel(s.effectiveOn)})
-                </p>
-              ))}
-              {f.status === 'mismatch' && (
-                <p className="small">
-                  Sent back by {f.profile.file?.checkedBy}: {(f.profile.file?.mismatches ?? []).join('; ')}
-                  {f.profile.file?.note ? ` (${f.profile.file.note})` : ''}. {f.can.edit ? 'Open, fix and resubmit for the check.' : ''}
-                </p>
-              )}
-              {(f.profile.file?.history ?? []).length > 0 && (
-                <details className="small">
-                  <summary>Earlier checks ({(f.profile.file?.history ?? []).length})</summary>
-                  <ul>
-                    {(f.profile.file?.history ?? []).map((h, i) => (
-                      <li key={i}>
-                        {h.at.slice(0, 16).replace('T', ' ')} · {h.by} · {h.status === 'mismatch' ? `sent back: ${h.mismatches.join('; ')}` : 'checked'} ·{' '}
-                        {h.ssmRef}
-                        {h.note ? ` · ${h.note}` : ''}
-                      </li>
-                    ))}
-                  </ul>
-                </details>
-              )}
-              <button className="btn btn-sm" onClick={() => setOpen(open === f.profile.companyId ? '' : f.profile.companyId)}>
-                {open === f.profile.companyId ? 'Close' : f.can.edit ? (f.status === 'mismatch' ? 'Fix and resubmit' : 'Open and edit') : 'Open'}
-              </button>
-              {open === f.profile.companyId && <FileDetail f={f} onDone={reload} />}
-            </div>
-            <Chip tone={STATUS[f.status][0]}>{STATUS[f.status][1]}</Chip>
-          </div>
-        ))}
-      </div>
+      <DataTable
+        label="Company files"
+        stateKey="board.corporate.files"
+        rows={rows}
+        rowKey={(f) => f.profile.companyId}
+        columns={FILE_COLUMNS}
+        filters={FILE_FILTERS}
+        onView={(f) => setOpen(f.profile.companyId)}
+        rowTone={(f) => (f.boLate.length || f.status === 'mismatch' ? 'crit' : f.stale.length || f.boDue.length ? 'warn' : undefined)}
+        actions={(f) => [{ label: f.can.edit ? (f.status === 'mismatch' ? 'Fix and resubmit' : 'Open and edit') : 'Open', onClick: () => setOpen(f.profile.companyId) }]}
+      />
+      {openFile && (
+        <Drawer title={openFile.companyName} sub={<Chip tone={STATUS[openFile.status][0]}>{STATUS[openFile.status][1]}</Chip>} onClose={() => setOpen('')}>
+          <FileNotes f={openFile} />
+          <FileDetail f={openFile} onDone={reload} />
+        </Drawer>
+      )}
     </section>
   );
 }

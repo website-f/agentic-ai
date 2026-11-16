@@ -28,6 +28,12 @@ import { useApp } from '../App';
 import { PlusIcon } from '@phosphor-icons/react';
 import { jumpTo } from './AddImportMenu';
 import { Chip, Drawer, ErrorNotice, Kpi, Loading, dateLabel, useAction, useLoad, type Tone } from '../ui';
+import { DataTable } from '../DataTable';
+
+/** P107: a cleaning site's plan for the day, in words (the board's chip). */
+function cleaningPlanState(r: { working: boolean; day: { status: string } | null }): string {
+  return !r.working ? 'Rest day' : !r.day ? 'No plan yet' : r.day.status === 'draft' ? 'Draft, not published' : 'Published';
+}
 
 const MAX_PHOTO = 700_000;
 const MAX_MAP = 2_000_000;
@@ -150,41 +156,85 @@ export function CleaningView() {
               <h2>Sites with cleaning</h2>
               <Chip tone="neutral">{b.rows.length}</Chip>
             </div>
-            {!b.rows.length && <div className="empty">No cleaning sites you can see yet.</div>}
-            <div className="list">
-              {b.rows.map((r) => (
-                <button key={r.siteId} className="list-item link-button" style={{ width: '100%', textAlign: 'left' }} onClick={() => setSiteId(r.siteId)}>
-                  <div>
-                    <div style={{ fontWeight: 600 }}>{r.siteName}</div>
-                    <div className="small muted">
-                      {r.companyName} · {r.client}
-                    </div>
-                  </div>
-                  <div className="row" style={{ justifyContent: 'flex-end' }}>
-                    {!r.working ? (
-                      <Chip tone="neutral">Rest day</Chip>
-                    ) : !r.day ? (
-                      <Chip tone="warn">No plan yet</Chip>
-                    ) : r.day.status === 'draft' ? (
-                      <Chip tone="warn">Draft, not published</Chip>
-                    ) : (
-                      <Chip tone="ok">Published</Chip>
-                    )}
-                    {r.day && (
-                      <Chip tone={r.tasks.missed ? 'crit' : r.tasks.redo ? 'warn' : 'neutral'}>
-                        {r.tasks.done}/{r.tasks.total} done · {r.tasks.checked} checked
-                      </Chip>
-                    )}
-                    {r.day && r.day.summary.headcountShort > 0 && <Chip tone="crit">{r.day.summary.headcountShort} short of contract</Chip>}
-                    {r.day && r.day.uncovered > 0 && <Chip tone="warn">{r.day.uncovered} jobs not covered</Chip>}
-                    {r.stockFlags > 0 && <Chip tone="warn">{r.stockFlags} stock flags</Chip>}
-                    {r.noStockCheck && <Chip tone="unknown">No stock check</Chip>}
-                    {r.slipsOutstanding > 0 && <Chip tone="warn">{r.slipsOutstanding} work days waiting for the client's slip</Chip>}
-                    {r.problems > 0 && <Chip tone="warn">{r.problems} set-up gaps</Chip>}
-                    <Chip tone={r.access === 'manage' ? 'info' : 'neutral'}>{r.access === 'manage' ? 'You manage' : 'View only'}</Chip>
-                  </div>
-                </button>
-              ))}
+            {/* P107: the cleaning sites as a data table: find a site or client, by company and plan state; a site opens its plan. */}
+            <div className="panel-body">
+              <DataTable
+                label="Sites with cleaning"
+                stateKey="cleaning.sites"
+                rows={b.rows}
+                rowKey={(r) => r.siteId}
+                onView={(r) => setSiteId(r.siteId)}
+                searchPlaceholder="Find a site, company or client"
+                empty={<div className="empty">No cleaning sites you can see yet.</div>}
+                rowTone={(r) => (r.tasks.missed || (r.day && r.day.summary.headcountShort > 0) ? 'crit' : undefined)}
+                columns={[
+                  {
+                    id: 'site',
+                    label: 'Site',
+                    value: (r) => r.siteName,
+                    phone: 'title',
+                    render: (r) => <span style={{ fontWeight: 600 }}>{r.siteName}</span>,
+                  },
+                  { id: 'company', label: 'Company and client', value: (r) => `${r.companyName} · ${r.client}`, phone: 'sub' },
+                  {
+                    id: 'plan',
+                    label: 'Plan',
+                    value: (r) => cleaningPlanState(r),
+                    translate: true,
+                    render: (r) =>
+                      !r.working ? <Chip tone="neutral">Rest day</Chip> : !r.day ? <Chip tone="warn">No plan yet</Chip> : r.day.status === 'draft' ? <Chip tone="warn">Draft, not published</Chip> : <Chip tone="ok">Published</Chip>,
+                  },
+                  {
+                    id: 'tasks',
+                    label: 'Tasks',
+                    value: (r) => (r.day ? r.tasks.done : null),
+                    sort: 'number',
+                    align: 'left',
+                    render: (r) =>
+                      r.day ? (
+                        <Chip tone={r.tasks.missed ? 'crit' : r.tasks.redo ? 'warn' : 'neutral'}>
+                          {r.tasks.done}/{r.tasks.total} done · {r.tasks.checked} checked
+                        </Chip>
+                      ) : (
+                        '–'
+                      ),
+                  },
+                  {
+                    id: 'flags',
+                    label: 'To look at',
+                    sort: false,
+                    render: (r) => (
+                      <div className="row" style={{ gap: 4, flexWrap: 'wrap' }}>
+                        {r.day && r.day.summary.headcountShort > 0 && <Chip tone="crit">{r.day.summary.headcountShort} short of contract</Chip>}
+                        {r.day && r.day.uncovered > 0 && <Chip tone="warn">{r.day.uncovered} jobs not covered</Chip>}
+                        {r.stockFlags > 0 && <Chip tone="warn">{r.stockFlags} stock flags</Chip>}
+                        {r.noStockCheck && <Chip tone="unknown">No stock check</Chip>}
+                        {r.slipsOutstanding > 0 && <Chip tone="warn">{r.slipsOutstanding} work days waiting for the client's slip</Chip>}
+                        {r.problems > 0 && <Chip tone="warn">{r.problems} set-up gaps</Chip>}
+                        <Chip tone={r.access === 'manage' ? 'info' : 'neutral'}>{r.access === 'manage' ? 'You manage' : 'View only'}</Chip>
+                      </div>
+                    ),
+                  },
+                ]}
+                filters={[
+                  { id: 'company', label: 'Company', value: (r) => r.companyName },
+                  { id: 'plan', label: 'Plan', value: (r) => cleaningPlanState(r) },
+                  {
+                    id: 'needs',
+                    label: 'Show',
+                    value: (r) => [
+                      ...(r.day && (r.day.summary.headcountShort > 0 || r.day.uncovered > 0) ? ['cover'] : []),
+                      ...(r.stockFlags > 0 || r.noStockCheck ? ['stock'] : []),
+                      ...(r.slipsOutstanding > 0 ? ['slips'] : []),
+                    ],
+                    options: [
+                      { value: 'cover', label: 'Short or not covered' },
+                      { value: 'stock', label: 'Stock to check' },
+                      { value: 'slips', label: "Waiting for the client's slip" },
+                    ],
+                  },
+                ]}
+              />
             </div>
           </section>
           {b.startable.length > 0 && (
@@ -1094,37 +1144,65 @@ function Stock({ d }: { d: CleaningSiteView }) {
             </div>
           )}
         </div>
-        {!d.entries.length && <div className="empty">Nothing recorded yet.</div>}
-        <div className="list">
-          {d.entries.map((e) => (
-            <div key={e.id} className="list-item">
-              <div>
-                <div style={{ fontWeight: 600 }}>
-                  {e.kind === 'delivery' ? 'Delivery' : 'Stock check'} · {dateLabel(e.date)}
-                </div>
-                <div className="small muted">
-                  {e.supplies
+        {/* P107: deliveries and stock checks as a data table: by kind and date, find a supply. */}
+        <div className="panel-body">
+          <DataTable
+            details
+            label="Deliveries and checks"
+            stateKey={`cleaning.stock.${d.site.id}`}
+            rows={d.entries}
+            rowKey={(e) => e.id}
+            searchPlaceholder="Find a supply or person"
+            empty={<div className="empty">Nothing recorded yet.</div>}
+            actions={(e) => [{ label: 'Record receipt', onClick: () => setForm({ receive: e.id }), hidden: !(e.kind === 'delivery' && !e.received && manage) }]}
+            columns={[
+              {
+                id: 'what',
+                label: 'Record',
+                value: (e) => (e.kind === 'delivery' ? 'Delivery' : 'Stock check'),
+                translate: true,
+                phone: 'title',
+                render: (e) => (
+                  <span style={{ fontWeight: 600 }}>
+                    {e.kind === 'delivery' ? 'Delivery' : 'Stock check'} · {dateLabel(e.date)}
+                  </span>
+                ),
+              },
+              { id: 'date', label: 'Date', value: (e) => e.date, sort: 'date', phone: 'hidden' },
+              {
+                id: 'supplies',
+                label: 'Supplies',
+                sort: false,
+                value: (e) =>
+                  e.supplies
                     .map((x) => {
                       const s = setup.supplies.find((y) => y.id === x.supplyId);
                       return `${s?.name ?? x.supplyId}: ${e.kind === 'delivery' ? `sent ${x.sent ?? '–'}${x.counted != null ? `, arrived ${x.counted}` : ''}` : `${x.counted}`}`;
                     })
-                    .join(' · ')}
-                </div>
-                <div className="small muted">
-                  By {e.by}
-                  {e.note ? ` · ${e.note}` : ''}
-                </div>
-              </div>
-              <div className="row">
-                {e.kind === 'delivery' && (e.received ? <Chip tone="ok">Received</Chip> : <Chip tone="warn">Waiting for supervisor</Chip>)}
-                {e.kind === 'delivery' && !e.received && manage && (
-                  <button className="btn btn-sm" onClick={() => setForm({ receive: e.id })}>
-                    Record receipt
-                  </button>
-                )}
-              </div>
-            </div>
-          ))}
+                    .join(' · '),
+                phone: 'sub',
+                render: (e) => (
+                  <span className="small muted">
+                    {e.supplies
+                      .map((x) => {
+                        const s = setup.supplies.find((y) => y.id === x.supplyId);
+                        return `${s?.name ?? x.supplyId}: ${e.kind === 'delivery' ? `sent ${x.sent ?? '–'}${x.counted != null ? `, arrived ${x.counted}` : ''}` : `${x.counted}`}`;
+                      })
+                      .join(' · ')}
+                  </span>
+                ),
+              },
+              { id: 'by', label: 'By', value: (e) => `${e.by}${e.note ? ` · ${e.note}` : ''}` },
+              {
+                id: 'state',
+                label: 'Status',
+                value: (e) => (e.kind === 'delivery' ? (e.received ? 'Received' : 'Waiting for supervisor') : ''),
+                translate: true,
+                render: (e) => (e.kind === 'delivery' ? e.received ? <Chip tone="ok">Received</Chip> : <Chip tone="warn">Waiting for supervisor</Chip> : '–'),
+              },
+            ]}
+            filters={[{ id: 'kind', label: 'Kind', value: (e) => e.kind, options: [{ value: 'delivery', label: 'Delivery' }, { value: 'check', label: 'Stock check' }] }]}
+          />
         </div>
       </section>
       {form && <StockForm d={d} mode={form} onClose={() => setForm(null)} />}
@@ -1384,24 +1462,51 @@ function ClientSlips({ d }: { d: CleaningSiteView }) {
           <h2>Slips received</h2>
           <Chip tone="neutral">{d.slips.length}</Chip>
         </div>
-        {!d.slips.length && <div className="empty">No client slip uploaded yet.</div>}
-        <div className="list">
-          {d.slips.map((e) => (
-            <div key={e.id} className="list-item" style={{ display: 'block' }}>
-              <Chip tone={e.ack?.outcome === 'accepted' ? 'ok' : 'crit'}>{e.ack?.outcome === 'accepted' ? 'Accepted' : 'Not accepted'}</Chip> Signed {dateLabel(e.date)} by {e.ack?.signer} ·{' '}
-              {(e.ack?.areaIds ?? []).map(areaName).join(', ')} · work {dateLabel(e.ack?.from ?? e.date)} to {dateLabel(e.ack?.to ?? e.date)}
-              {e.ack?.comment && <div className="small">Client's comment: “{e.ack.comment}”</div>}
-              {e.ack?.action && <div className="small muted">Action: {e.ack.action}</div>}
-              <div className="small muted">
-                Uploaded by {e.by}{' '}
-                {e.proofIds[0] && (
-                  <button className="btn btn-ghost btn-sm" onClick={() => setView(e.proofIds[0])}>
-                    View slip
-                  </button>
-                )}
-              </div>
-            </div>
-          ))}
+        {/* P107: the slips as a data table: accepted or not, by area, newest first by date. */}
+        <div className="panel-body">
+          <DataTable
+            details
+            label="Slips received"
+            stateKey={`cleaning.slips.${d.site.id}`}
+            rows={d.slips}
+            rowKey={(e) => e.id}
+            searchPlaceholder="Find an area, signer or comment"
+            empty={<div className="empty">No client slip uploaded yet.</div>}
+            actions={(e) => [{ label: 'View slip', onClick: () => setView(e.proofIds[0]), hidden: !e.proofIds[0] }]}
+            rowTone={(e) => (e.ack?.outcome === 'accepted' ? undefined : 'crit')}
+            columns={[
+              {
+                id: 'outcome',
+                label: 'Outcome',
+                value: (e) => (e.ack?.outcome === 'accepted' ? 'Accepted' : 'Not accepted'),
+                translate: true,
+                phone: 'title',
+                render: (e) => <Chip tone={e.ack?.outcome === 'accepted' ? 'ok' : 'crit'}>{e.ack?.outcome === 'accepted' ? 'Accepted' : 'Not accepted'}</Chip>,
+              },
+              { id: 'date', label: 'Signed', value: (e) => e.date, sort: 'date', render: (e) => `${dateLabel(e.date)} by ${e.ack?.signer ?? '–'}` },
+              { id: 'areas', label: 'Areas', value: (e) => (e.ack?.areaIds ?? []).map(areaName).join(', '), phone: 'sub' },
+              { id: 'work', label: 'Work', value: (e) => e.ack?.from ?? e.date, sort: 'date', render: (e) => `${dateLabel(e.ack?.from ?? e.date)} to ${dateLabel(e.ack?.to ?? e.date)}` },
+              {
+                id: 'comment',
+                label: "Client's comment",
+                value: (e) => e.ack?.comment ?? '',
+                sort: false,
+                hideBelow: 1100,
+                render: (e) => (
+                  <>
+                    {e.ack?.comment && <div className="small">“{e.ack.comment}”</div>}
+                    {e.ack?.action && <div className="small muted">Action: {e.ack.action}</div>}
+                    {!e.ack?.comment && !e.ack?.action && '–'}
+                  </>
+                ),
+              },
+              { id: 'by', label: 'Uploaded by', value: (e) => e.by, hideBelow: 1200, phone: 'hidden' },
+            ]}
+            filters={[
+              { id: 'outcome', label: 'Outcome', value: (e) => (e.ack?.outcome === 'accepted' ? 'accepted' : 'rejected'), options: [{ value: 'accepted', label: 'Accepted' }, { value: 'rejected', label: 'Not accepted' }] },
+              { id: 'area', label: 'Area', value: (e) => e.ack?.areaIds ?? [], optionLabel: areaName },
+            ]}
+          />
         </div>
       </section>
       {open && <SlipForm d={d} onClose={() => setOpen(false)} />}

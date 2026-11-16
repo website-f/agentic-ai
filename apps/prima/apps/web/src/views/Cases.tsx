@@ -4,7 +4,8 @@ import { CheckIcon, ClockCountdownIcon, PlusIcon, SirenIcon, UserFocusIcon, Warn
 import { jaOwns, type CaseType, type EscalationLevel, type ProofInput, type Severity } from '@prima/core';
 import { api, type CaseDetail, type CaseList, type SignOffOutcome } from '../api';
 import { useApp } from '../App';
-import { Empty, Facts, PageHead, Search, Stat, Stats, Toolbar } from '../kit';
+import { Empty, Facts, PageHead, Stat, Stats } from '../kit';
+import { DataTable, useTableState, type DtColumn } from '../DataTable';
 import { Chip, Drawer, ErrorNotice, Loading, Sev, dateLabel, dateTimeLabel, hhmm, useAction, useLoad } from '../ui';
 import { EvidenceCamera, PhotoCard } from './Camera';
 import { VideoCard } from './SiteDispatch';
@@ -60,9 +61,9 @@ export function Cases({ openCaseId }: { openCaseId?: string }) {
   const [scope, setScope] = useState<'company' | 'all'>(isGroup ? 'all' : 'company');
   const [open, setOpen] = useState<string | undefined>(openCaseId);
   const [creating, setCreating] = useState(false);
-  const [q, setQ] = useState('');
-  const [sev, setSev] = useState<Severity | ''>('');
-  const [site, setSite] = useState('');
+  const table = useTableState('cases.board');
+  const sev = table.state.f.sev ?? '';
+  const setSev = (v: Severity | '') => table.set({ f: { sev: v } });
   const { data: all, error } = useLoad(() => api.cases({ companyId: scope === 'company' ? companyId : undefined, status }), [status, scope, companyId]);
   const mineCount = all?.filter((c) => c.mine === 'own').length ?? 0;
   const data = all && waiting ? all.filter((c) => c.mine) : all;
@@ -85,14 +86,6 @@ export function Cases({ openCaseId }: { openCaseId?: string }) {
     return [...m].sort((a, b) => a[1].localeCompare(b[1]));
   }, [all]);
 
-  const needle = q.trim().toLowerCase();
-  const shown = (data ?? []).filter(
-    (c) =>
-      (!sev || c.severity === sev) &&
-      (!site || (site === NO_SITE ? !c.siteId : c.siteId === site)) &&
-      (!needle || [c.title, c.ref, c.companyName, c.siteName ?? 'Company-wide', TYPE_LABEL[c.type]].some((v) => v.toLowerCase().includes(needle))),
-  );
-  const filtered = !!(needle || sev || site);
 
   return (
     <div className="page cs-page">
@@ -144,71 +137,65 @@ export function Cases({ openCaseId }: { openCaseId?: string }) {
         </Stats>
       )}
 
-      <Toolbar
-        end={
-          <>
-            {isGroup && (
-              <div className="seg" role="group" aria-label="Companies">
-                <button aria-pressed={scope === 'all'} onClick={() => setScope('all')}>
-                  All companies
-                </button>
-                <button aria-pressed={scope === 'company'} onClick={() => setScope('company')}>
-                  Selected company
-                </button>
-              </div>
-            )}
-            <button className="btn" aria-pressed={waiting} onClick={() => setWaiting(!waiting)}>
-              Waiting for me{mineCount ? ` (${mineCount})` : ''}
-            </button>
-            <div className="seg" role="group" aria-label="Status">
-              <button aria-pressed={status === 'active'} onClick={() => setStatus('active')}>
-                Open
-              </button>
-              <button aria-pressed={status === 'all'} onClick={() => setStatus('all')}>
-                All
-              </button>
-            </div>
-          </>
-        }
-      >
-        <Search value={q} onChange={setQ} placeholder="Search title, reference, site or company" label="Search cases" />
-        <Select className="select cs-filter" aria-label="Severity" value={sev} onChange={(e) => setSev(e.target.value as Severity | '')}>
-          <option value="">All severities</option>
-          {SEVERITIES.map((s) => (
-            <option key={s} value={s}>
-              {s}: {SLA_TEXT[s]}
-            </option>
-          ))}
-        </Select>
-        <Select className="select cs-filter" aria-label="Site" value={site} onChange={(e) => setSite(e.target.value)}>
-          <option value="">All sites</option>
-          <option value={NO_SITE}>Company-wide (no site)</option>
-          {sites.map(([id, name]) => (
-            <option key={id} value={id}>
-              {name}
-            </option>
-          ))}
-        </Select>
-      </Toolbar>
-
+      {/* P107: the cases board as a data table. The old search, severity and site picks are its search and filters (the
+          P1 tile still picks P1); the company scope, Waiting for me and Open / All change what is loaded, so they stay
+          as buttons beside the filters. */}
       <section className="k-card cs-board" aria-label="Cases">
-        {!data && !error && <Loading what="cases" />}
-        {data && (
-          <>
-            <div className="cs-board-head">
-              <h2>{waiting ? 'Waiting for me' : status === 'active' ? 'Open cases' : 'All cases'}</h2>
-              <span className="muted small">{filtered ? `${shown.length} of ${data.length}` : `${data.length} case${data.length === 1 ? '' : 's'}`}</span>
-            </div>
-            {shown.length > 0 && (
-              <ul className="cs-rows">
-                {shown.map((c) => (
-                  <li key={c.id}>
-                    <CaseRowButton c={c} onOpen={() => setOpen(c.id)} />
-                  </li>
-                ))}
-              </ul>
-            )}
-            {data.length === 0 && (
+        <div className="cs-board-head">
+          <h2>{waiting ? 'Waiting for me' : status === 'active' ? 'Open cases' : 'All cases'}</h2>
+          {data && <span className="muted small">{`${data.length} case${data.length === 1 ? '' : 's'}`}</span>}
+        </div>
+        <div className="cs-dt">
+          <DataTable
+            label="Cases"
+            control={table}
+            rows={data}
+            loading={!data && !error}
+            loadingWhat="cases"
+            rowKey={(c) => c.id}
+            onView={(c) => setOpen(c.id)}
+            rowTone={(c) => (c.severity === 'P1' ? 'crit' : c.severity === 'P2' || c.mine === 'own' ? 'warn' : undefined)}
+            searchPlaceholder="Search title, reference, site or company"
+            columns={CASE_COLUMNS}
+            filters={[
+              { id: 'sev', label: 'Severity', value: (c) => c.severity, allLabel: 'All severities', options: SEVERITIES.map((s) => ({ value: s, label: `${s}: ${SLA_TEXT[s]}` })) },
+              {
+                id: 'site',
+                label: 'Site',
+                value: (c) => c.siteId ?? NO_SITE,
+                allLabel: 'All sites',
+                options: [{ value: NO_SITE, label: 'Company-wide (no site)' }, ...sites.map(([id, name]) => ({ value: id, label: name }))],
+              },
+              { id: 'type', label: 'Type', value: (c) => c.type, optionLabel: (v) => TYPE_LABEL[v as CaseType] ?? v },
+              { id: 'status', label: 'Status', value: (c) => c.status },
+              { id: 'company', label: 'Company', value: (c) => c.companyName },
+            ]}
+            toolbar={
+              <>
+                {isGroup && (
+                  <div className="seg" role="group" aria-label="Companies">
+                    <button aria-pressed={scope === 'all'} onClick={() => setScope('all')}>
+                      All companies
+                    </button>
+                    <button aria-pressed={scope === 'company'} onClick={() => setScope('company')}>
+                      Selected company
+                    </button>
+                  </div>
+                )}
+                <button className="btn" aria-pressed={waiting} onClick={() => setWaiting(!waiting)}>
+                  Waiting for me{mineCount ? ` (${mineCount})` : ''}
+                </button>
+                <div className="seg" role="group" aria-label="Status">
+                  <button aria-pressed={status === 'active'} onClick={() => setStatus('active')}>
+                    Open
+                  </button>
+                  <button aria-pressed={status === 'all'} onClick={() => setStatus('all')}>
+                    All
+                  </button>
+                </div>
+              </>
+            }
+            empty={
               <Empty
                 title="No cases."
                 action={
@@ -219,28 +206,9 @@ export function Cases({ openCaseId }: { openCaseId?: string }) {
               >
                 An incident, complaint or alert at a site goes here, with its proof.
               </Empty>
-            )}
-            {data.length > 0 && shown.length === 0 && (
-              <Empty
-                title="No cases."
-                action={
-                  <button
-                    className="btn btn-sm"
-                    onClick={() => {
-                      setQ('');
-                      setSev('');
-                      setSite('');
-                    }}
-                  >
-                    Clear search and filters
-                  </button>
-                }
-              >
-                Nothing matches the search or filters.
-              </Empty>
-            )}
-          </>
-        )}
+            }
+          />
+        </div>
       </section>
       {open && <CaseDrawer caseId={open} onClose={() => setOpen(undefined)} />}
       {creating && <NewCase onClose={() => setCreating(false)} />}
@@ -248,23 +216,33 @@ export function Cases({ openCaseId }: { openCaseId?: string }) {
   );
 }
 
-/** One case on the board: severity first, then what and where, who has it, and how long ago it opened. */
-function CaseRowButton({ c, onOpen }: { c: CaseRow; onOpen: () => void }) {
-  return (
-    <button type="button" className="cs-row" data-sev={c.severity} data-mine={c.mine ?? undefined} onClick={onOpen}>
-      <span className="cs-row-sev">
-        <Sev s={c.severity} />
-      </span>
+/** P107: one case on the board (the old row): severity first, then what and where, who has it, and how long ago it opened. */
+const CASE_COLUMNS: DtColumn<CaseRow>[] = [
+  { id: 'sev', label: 'Severity', value: (c) => c.severity, render: (c) => <Sev s={c.severity} />, width: '6rem' },
+  {
+    id: 'title',
+    label: 'Case',
+    value: (c) => c.title,
+    phone: 'title',
+    render: (c) => (
       <span className="cs-row-main">
-        <span className="cs-row-title">{c.title}</span>
+        <span className="cs-row-title">
+          {c.title}
+        </span>
         <span className="cs-row-meta">
           <span className="mono">{c.ref}</span> · {TYPE_LABEL[c.type]}
         </span>
-        <span className="cs-row-where">
-          {c.companyName} · {c.siteName ?? 'Company-wide'}
-        </span>
       </span>
-      <span className="cs-row-state">
+    ),
+  },
+  { id: 'where', label: 'Company and site', value: (c) => `${c.companyName} · ${c.siteName ?? 'Company-wide'}`, phone: 'sub', hideBelow: 1000 },
+  {
+    id: 'state',
+    label: 'Status',
+    value: (c) => c.status,
+    translate: true,
+    render: (c) => (
+      <span className="row" style={{ gap: 4, flexWrap: 'wrap' }}>
         <Chip tone={statusTone(c.status)}>{c.status}</Chip>
         {c.sla === 'breached' && <Chip tone="crit">Response late</Chip>}
         {c.ladder && c.ladder.level !== 'DONE' && (
@@ -276,13 +254,21 @@ function CaseRowButton({ c, onOpen }: { c: CaseRow; onOpen: () => void }) {
         {c.mine === 'own' && <Chip tone="warn">Your turn</Chip>}
         {c.mine === 'step_in' && <Chip tone="neutral">You may step in</Chip>}
       </span>
+    ),
+  },
+  {
+    id: 'opened',
+    label: 'Opened',
+    value: (c) => c.openedAt,
+    sort: 'date',
+    render: (c) => (
       <span className="cs-row-when">
         <span className="cs-row-age">{age(c.openedAt)}</span>
         <span className="mono">{dateTimeLabel(c.openedAt)}</span>
       </span>
-    </button>
-  );
-}
+    ),
+  },
+];
 
 function CaseDrawer({ caseId, onClose }: { caseId: string; onClose: () => void }) {
   const { data, error } = useLoad(() => api.caseDetail(caseId), [caseId]);

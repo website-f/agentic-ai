@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { api } from '../api';
+import { DataTable, type DtColumn, type DtFilter } from '../DataTable';
 import { saveFile } from '../save';
 import { Chip, Loading, dateLabel, useAction, useLoad } from '../ui';
 import { CentralAdminGuide } from './CentralAdminGuide';
@@ -78,16 +79,93 @@ export function personField(k: string, l: string, people: PickPerson[]): Field {
   return { k, l, t: 'select', o: people.map((p) => p.id), labels: Object.fromEntries(people.map((p) => [p.id, p.title ? `${p.name} (${p.title})` : p.name])) };
 }
 
-export function ToolboxPanel({ meetings, people = [] }: { meetings: { id: string; title: string; start: string; kind: string; seriesKey?: string | null }[]; people?: PickPerson[] }) {
+type BoardRow = Board['rows'][number];
+type TalkRow = Talks['rows'][number];
+type MineRow = { id: string; title: string; start: string; kind: string; seriesKey?: string | null };
+
+/**
+ * P107: the three toolbox lists as data tables (search, filters, sort, pages; cards on a phone). This screen is written
+ * in Bahasa Melayu, so the column and filter names are too (the table's own words are translated as everywhere).
+ */
+const BOARD_COLUMNS: DtColumn<BoardRow>[] = [
+  { id: 'name', label: 'Syarikat atau jabatan', value: (r) => scopeName(r.name), render: (r) => <strong>{scopeName(r.name)}</strong>, phone: 'title' },
+  {
+    id: 'status',
+    label: 'Status',
+    value: (r) => (r.late ? 'Belum disahkan dalam 2 minggu' : 'Terkini'),
+    render: (r) => (r.late ? <Chip tone="warn">Belum disahkan dalam 2 minggu</Chip> : <Chip tone="ok">Terkini</Chip>),
+  },
+  { id: 'last', label: 'Terakhir', value: (r) => r.lastMeeting, sort: 'date', render: (r) => (r.lastMeeting ? dateLabel(r.lastMeeting) : 'tiada') },
+  { id: 'open', label: 'Baris terbuka', value: (r) => r.openLines, sort: 'number' },
+  { id: 'stale', label: 'Tiada perubahan (mesyuarat)', value: (r) => r.staleMax, sort: 'number', hideBelow: 1500, phone: 'hidden' },
+  { id: 'red', label: 'Merah', value: (r) => r.red, sort: 'number' },
+  { id: 'director', label: 'Pengarah', value: (r) => r.director, render: (r) => r.director ?? 'belum ditetapkan', hideBelow: 1440 },
+  {
+    id: 'visit',
+    label: 'Lawatan pengarah pusat',
+    value: (r) => (r.directorMissed ? 'Tiada' : r.directorVisit === 'ada' ? 'Ada' : 'Belum'),
+    render: (r) => (r.directorMissed ? <Chip tone="crit">Lawatan pengarah pusat: tiada</Chip> : r.directorVisit === 'ada' ? 'Ada' : 'Belum'),
+  },
+  { id: 'tell', label: 'Dimaklumkan kepada', value: (r) => r.tell, hideBelow: 1600, phone: 'hidden' },
+];
+const BOARD_FILTERS: DtFilter<BoardRow>[] = [
+  {
+    id: 'late',
+    label: 'Status',
+    value: (r) => (r.late ? 'late' : 'ok'),
+    options: [
+      { value: 'late', label: 'Belum disahkan dalam 2 minggu' },
+      { value: 'ok', label: 'Terkini' },
+    ],
+  },
+  {
+    id: 'visit',
+    label: 'Lawatan pengarah pusat',
+    value: (r) => (r.directorMissed ? 'missed' : 'ok'),
+    options: [
+      { value: 'missed', label: 'Tiada lawatan' },
+      { value: 'ok', label: 'Ada atau belum tiba masanya' },
+    ],
+  },
+];
+const BULAN = ['Jan', 'Feb', 'Mac', 'Apr', 'Mei', 'Jun', 'Jul', 'Ogo', 'Sep', 'Okt', 'Nov', 'Dis'];
+const monthName = (ym: string) => `${BULAN[Number(ym.slice(5, 7)) - 1] ?? ym.slice(5, 7)} ${ym.slice(0, 4)}`;
+const MINE_COLUMNS: DtColumn<MineRow>[] = [
+  { id: 'title', label: 'Mesyuarat', value: (m) => m.title, phone: 'title' },
+  { id: 'start', label: 'Tarikh', value: (m) => m.start.slice(0, 10), sort: 'date' },
+];
+const MINE_FILTERS: DtFilter<MineRow>[] = [{ id: 'month', label: 'Bulan', value: (m) => m.start.slice(0, 7), optionLabel: monthName }];
+const TALK_COLUMNS: DtColumn<TalkRow>[] = [
+  { id: 'site', label: 'Tapak', value: (r) => r.siteName, phone: 'title' },
+  { id: 'state', label: 'Negeri', value: (r) => r.state, hideBelow: 1000 },
+  {
+    id: 'last',
+    label: 'Taklimat terakhir',
+    value: (r) => r.last,
+    sort: 'date',
+    render: (r) => (r.due ? <Chip tone="warn">Belum ada taklimat</Chip> : <Chip tone="ok">{dateLabel(r.last!)}</Chip>),
+  },
+];
+const TALK_FILTERS: DtFilter<TalkRow>[] = [
+  {
+    id: 'due',
+    label: 'Status',
+    value: (r) => (r.due ? 'due' : 'done'),
+    options: [
+      { value: 'due', label: 'Belum ada taklimat' },
+      { value: 'done', label: 'Sudah ada taklimat' },
+    ],
+  },
+  { id: 'state', label: 'Negeri', value: (r) => r.state },
+];
+
+export function ToolboxPanel({ meetings, people = [] }: { meetings: MineRow[]; people?: PickPerson[] }) {
   const { data } = useLoad(() => api.toolboxAct('board', {}) as Promise<Board>, []);
   const talks = useLoad(() => api.toolboxAct('siteTalks', {}) as Promise<Talks>, []);
   const [open, setOpen] = useState<string | null>(null);
-  const [siteQ, setSiteQ] = useState('');
   const mine = meetings.filter((m) => m.kind === 'toolbox' || m.seriesKey?.startsWith('co-office:') || m.seriesKey?.startsWith('dept-toolbox:'));
-  // Sites with no talk in the period first, then by name; a search box because an OM area can hold many sites.
-  const siteRows = (talks.data?.rows ?? [])
-    .filter((r) => !siteQ || r.siteName.toLowerCase().includes(siteQ.toLowerCase()))
-    .sort((a, b) => Number(b.due) - Number(a.due) || a.siteName.localeCompare(b.siteName));
+  // Sites with no talk in the period first, then by name (the table's usual order; it searches and pages them).
+  const siteRows = [...(talks.data?.rows ?? [])].sort((a, b) => Number(b.due) - Number(a.due) || a.siteName.localeCompare(b.siteName));
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
       <CentralAdminGuide view="meetings" />
@@ -97,43 +175,45 @@ export function ToolboxPanel({ meetings, people = [] }: { meetings: { id: string
             <h3>Mesyuarat Toolbox: syarikat dan jabatan</h3>
             <span className="muted small">Setiap 2 minggu; pengarah pusat hadir sekali setiap 2 bulan</span>
           </div>
-          <div className="list">
-            {data.rows.map((r) => (
-              <div key={r.scope} className="item">
-                <div className="item-main">
-                  <strong>{scopeName(r.name)}</strong>
-                  <span className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
-                    {r.late ? <Chip tone="warn">Belum disahkan dalam 2 minggu</Chip> : <Chip tone="ok">Terkini</Chip>}
-                    {r.directorMissed && <Chip tone="crit">Lawatan pengarah pusat: tiada</Chip>}
-                  </span>
-                  <div className="muted small">
-                    Terakhir {r.lastMeeting ? dateLabel(r.lastMeeting) : 'tiada'} · baris terbuka {r.openLines}
-                    {r.staleMax ? ` · tiada perubahan ${r.staleMax} mesyuarat` : ''}
-                    {r.tell ? ` · dimaklumkan kepada ${r.tell}` : ''} · merah {r.red} · pengarah {r.director ?? 'belum ditetapkan'}
-                  </div>
-                  {data.can.rotation && (
+          {/* P107: a data table; the central director form (when allowed) sits under each row, as it did in the list. */}
+          <DataTable
+            details
+            label="Mesyuarat Toolbox: syarikat dan jabatan"
+            stateKey="meetings.toolbox.board"
+            rows={data.rows}
+            rowKey={(r) => r.scope}
+            columns={BOARD_COLUMNS}
+            filters={BOARD_FILTERS}
+            searchPlaceholder="Cari syarikat atau jabatan"
+            rowTone={(r) => (r.directorMissed ? 'crit' : r.late ? 'warn' : undefined)}
+            rowDetail={
+              data.can.rotation
+                ? (r) => (
                     <OpForm title="Tetapkan pengarah pusat" op="rotation" send={send('rotation')} fixed={{ scope: r.scope }} fields={[personField('directorId', 'Pengarah pusat', people), { k: 'reason', l: 'Sebab' }]} />
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
+                  )
+                : undefined
+            }
+            empty={<p className="muted">Tiada syarikat atau jabatan.</p>}
+          />
         </section>
       )}
       <section className="panel">
         <div className="panel-head">
           <h3>Mesyuarat toolbox saya</h3>
         </div>
-        <div className="list">
-          {mine.length === 0 && <p className="muted">Tiada mesyuarat toolbox lagi. Tetapkannya dari tab "Mesyuarat berkala".</p>}
-          {mine.map((m) => (
-            <button key={m.id} className="list-item list-button" onClick={() => setOpen(open === m.id ? null : m.id)}>
-              <span>
-                {m.title} · {dateLabel(m.start.slice(0, 10))}
-              </span>
-            </button>
-          ))}
-        </div>
+        {/* P107: a data table; clicking a meeting opens (or closes) it below, as before. */}
+        <DataTable
+          label="Mesyuarat toolbox saya"
+          stateKey="meetings.toolbox.mine"
+          rows={mine}
+          rowKey={(m) => m.id}
+          columns={MINE_COLUMNS}
+          filters={MINE_FILTERS}
+          searchPlaceholder="Cari mesyuarat"
+          onView={(m) => setOpen(open === m.id ? null : m.id)}
+          rowTone={(m) => (m.id === open ? 'info' : undefined)}
+          empty={<p className="muted">Tiada mesyuarat toolbox lagi. Tetapkannya dari tab "Mesyuarat berkala".</p>}
+        />
         {open && <ToolboxMeeting id={open} people={people} />}
       </section>
       {talks.data && (
@@ -144,33 +224,34 @@ export function ToolboxPanel({ meetings, people = [] }: { meetings: { id: string
               Setiap tapak sekurang-kurangnya sekali dalam {talks.data.days} hari · {talks.data.rows.filter((r) => r.due).length} belum ada taklimat
             </span>
           </div>
-          {talks.data.rows.length > 8 && (
-            <input className="input" type="search" aria-label="Cari tapak" placeholder="Cari tapak" value={siteQ} onChange={(e) => setSiteQ(e.target.value)} style={{ margin: '8px 0' }} />
-          )}
-          <div className="list">
-            {siteRows.length === 0 && <p className="muted">{siteQ ? 'Tiada tapak sepadan.' : 'Tiada tapak dalam kawasan anda.'}</p>}
-            {siteRows.slice(0, 40).map((r) => (
-              <div key={r.siteId} className="item">
-                <div className="item-main">
-                  {r.siteName} {r.due ? <Chip tone="warn">Belum ada taklimat</Chip> : <Chip tone="ok">{dateLabel(r.last!)}</Chip>}
-                  <OpForm
-                    title="Rekod taklimat"
-                    op="siteTalk"
-                    send={send('siteTalk')}
-                    fixed={{ siteId: r.siteId }}
-                    fields={[
-                      { k: 'safety', l: 'Topik keselamatan' },
-                      { k: 'ops', l: 'Perkara operasi (pisah dengan koma)', t: 'list' },
-                      { k: 'headcount', l: 'Bilangan pengawal hadir', t: 'number' },
-                      { k: 'photos', l: 'Foto di tapak (masa dan GPS)', t: 'photos' },
-                      { k: 'issues', l: 'Isu dibangkitkan (pisah dengan koma)', t: 'list' },
-                    ]}
-                  />
-                </div>
-              </div>
-            ))}
-            {siteRows.length > 40 && <p className="muted small">40 daripada {siteRows.length} tapak ditunjukkan; cari untuk tapak lain.</p>}
-          </div>
+          {/* P107: a data table in place of the search box and the 40-site cap; "Rekod taklimat" sits under each site. */}
+          <DataTable
+            details
+            label="Taklimat toolbox tapak (OM)"
+            stateKey="meetings.toolbox.sites"
+            rows={siteRows}
+            rowKey={(r) => r.siteId}
+            columns={TALK_COLUMNS}
+            filters={TALK_FILTERS}
+            searchPlaceholder="Cari tapak"
+            rowTone={(r) => (r.due ? 'warn' : undefined)}
+            rowDetail={(r) => (
+              <OpForm
+                title="Rekod taklimat"
+                op="siteTalk"
+                send={send('siteTalk')}
+                fixed={{ siteId: r.siteId }}
+                fields={[
+                  { k: 'safety', l: 'Topik keselamatan' },
+                  { k: 'ops', l: 'Perkara operasi (pisah dengan koma)', t: 'list' },
+                  { k: 'headcount', l: 'Bilangan pengawal hadir', t: 'number' },
+                  { k: 'photos', l: 'Foto di tapak (masa dan GPS)', t: 'photos' },
+                  { k: 'issues', l: 'Isu dibangkitkan (pisah dengan koma)', t: 'list' },
+                ]}
+              />
+            )}
+            empty={<p className="muted">Tiada tapak dalam kawasan anda.</p>}
+          />
         </section>
       )}
     </div>

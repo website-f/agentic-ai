@@ -5,6 +5,7 @@ import { api, type CorpAuditLegal, type LegalMatterInput } from '../api';
 import { Card, Empty, Stat, Stats, Steps, type StepState } from '../kit';
 import { Chip, Drawer, ErrorNotice, dateLabel, dateTimeLabel, useAction } from '../ui';
 import { ImportButton } from './ImportDrawer';
+import { DataTable, type DtColumn, type DtFilter } from '../DataTable';
 import '../styles/gov.css';
 
 /**
@@ -56,10 +57,28 @@ export function AuditLegalKpis({ data }: { data: CorpAuditLegal }) {
   );
 }
 
+const auditLabel = (r: AuditRow) =>
+  r.audit.signed ? `${OPINION[r.audit.signed.opinion]} opinion` : r.daysLeft < 0 ? `${-r.daysLeft} days past sign-by` : `${STAGE[r.stage]}, ${r.daysLeft} days left`;
+const AUDIT_COLUMNS: DtColumn<AuditRow>[] = [
+  { id: 'company', label: 'Company', value: (r) => r.companyName, render: (r) => <strong>{r.companyName}</strong>, phone: 'title' },
+  { id: 'fy', label: 'Year ended', value: (r) => r.audit.fyEnd, sort: 'date', phone: 'sub' },
+  { id: 'firm', label: 'Audit firm', value: (r) => `${r.audit.auditorFirm}${r.onPanel ? '' : ' (not on the panel)'}` },
+  { id: 'fee', label: 'Fee', value: (r) => r.audit.fee, sort: 'money', hideBelow: 1200 },
+  { id: 'signBy', label: 'Sign by', value: (r) => r.signBy, sort: 'date' },
+  { id: 'stage', label: 'Stage', value: (r) => STAGE[r.stage], translate: true, hideBelow: 1100 },
+  { id: 'status', label: 'Status', value: auditLabel, translate: true, render: (r) => <Chip tone={r.tone}>{auditLabel(r)}</Chip> },
+];
+const AUDIT_FILTERS: DtFilter<AuditRow>[] = [
+  { id: 'show', label: 'Show', value: (r) => (!r.audit.signed || r.tone !== 'ok' ? 'open' : 'clean'), options: [{ value: 'open', label: 'Outstanding' }, { value: 'clean', label: 'Clean signed' }] },
+  { id: 'stage', label: 'Stage', value: (r) => r.stage, optionLabel: (v) => STAGE[v as AuditRow['stage']] ?? v },
+  { id: 'company', label: 'Company', value: (r) => r.companyName },
+  { id: 'signed', label: 'Signed', value: (r) => (r.audit.signed ? 'yes' : 'no'), options: [{ value: 'yes', label: 'Signed' }, { value: 'no', label: 'Not signed yet' }] },
+];
+
 export function AuditPanel({ data }: { data: CorpAuditLegal }) {
-  const [all, setAll] = useState(false);
   const [form, setForm] = useState(false);
-  const rows = data.audits.filter((a) => all || !a.audit.signed || a.tone !== 'ok');
+  const [openId, setOpenId] = useState<string | null>(null);
+  const open = data.audits.find((a) => a.audit.id === openId);
   const canAdd = data.auditCompanies.length > 0;
   return (
     <Card
@@ -67,9 +86,6 @@ export function AuditPanel({ data }: { data: CorpAuditLegal }) {
       flush
       actions={
         <>
-          <button className="btn btn-sm" aria-pressed={all} onClick={() => setAll(!all)}>
-            {all ? 'Hide clean signed' : 'Show all'}
-          </button>
           {canAdd && (
             <button className="btn btn-sm btn-primary" onClick={() => setForm(true)}>
               <PlusIcon size={16} /> Register an audit
@@ -89,14 +105,24 @@ export function AuditPanel({ data }: { data: CorpAuditLegal }) {
         2016 s.258 and s.259). The company hands over each document, the manager agrees each adjustment, then the auditor signs. A qualified, adverse or
         disclaimer opinion is red.
       </p>
-      {!rows.length && <Empty title="Nothing outstanding.">{canAdd ? 'Register the audit for a year end with "Register an audit".' : undefined}</Empty>}
-      <ul className="gv-list">
-        {rows.map((r) => (
-          <li key={r.audit.id}>
-            <AuditLine r={r} />
-          </li>
-        ))}
-      </ul>
+      <DataTable
+        label="Statutory audit"
+        stateKey="board.corporate.audits"
+        defaults={{ f: { show: 'open' } }}
+        rows={data.audits}
+        rowKey={(r) => r.audit.id}
+        columns={AUDIT_COLUMNS}
+        filters={AUDIT_FILTERS}
+        onView={(r) => setOpenId(r.audit.id)}
+        rowTone={(r) => toneOf(r.tone)}
+        actions={(r) => [{ label: r.canWork && !r.audit.signed ? 'Next step' : 'Open', onClick: () => setOpenId(r.audit.id) }]}
+        empty={<Empty title="Nothing outstanding.">{canAdd ? 'Register the audit for a year end with "Register an audit".' : undefined}</Empty>}
+      />
+      {open && (
+        <Drawer title={`${open.companyName}: year ended ${dateLabel(open.audit.fyEnd)}`} sub={open.audit.auditorFirm} onClose={() => setOpenId(null)}>
+          <AuditLine r={open} />
+        </Drawer>
+      )}
     </Card>
   );
 }
@@ -289,20 +315,42 @@ function AuditLine({ r }: { r: AuditRow }) {
   );
 }
 
+const matterLabel = (r: MatterRow) =>
+  r.matter.status === 'closed' ? 'Closed' : r.missed ? 'Date missed' : r.soon ? `Due ${dateLabel(r.matter.nextDate!.on)}` : r.stale ? 'No recent update' : 'Open';
+const MATTER_COLUMNS: DtColumn<MatterRow>[] = [
+  { id: 'ref', label: 'Reference', value: (r) => r.matter.ref, render: (r) => <span className="mono small">{r.matter.ref}</span>, hideBelow: 1100 },
+  { id: 'title', label: 'Matter', value: (r) => r.matter.title, render: (r) => <strong>{r.matter.title}</strong>, phone: 'title' },
+  { id: 'company', label: 'Company', value: (r) => r.companyName, phone: 'sub' },
+  { id: 'kind', label: 'Kind', value: (r) => KIND[r.matter.kind], translate: true, hideBelow: 1200 },
+  {
+    id: 'counterparty',
+    label: 'Other side',
+    value: (r) => `${r.matter.side === 'respondent' ? 'claim against us by' : 'our claim against'} ${r.matter.counterparty}`,
+    hideBelow: 1300,
+  },
+  { id: 'exposure', label: 'Amount', value: (r) => r.matter.exposure, sort: 'money', hideBelow: 1200 },
+  { id: 'lawyer', label: 'Lawyers', value: (r) => r.matter.lawyer, hideBelow: 1400 },
+  { id: 'next', label: 'Next date', value: (r) => r.matter.nextDate?.on, sort: 'date' },
+  { id: 'status', label: 'Status', value: matterLabel, translate: true, render: (r) => <Chip tone={r.tone}>{matterLabel(r)}</Chip> },
+];
+const MATTER_FILTERS: DtFilter<MatterRow>[] = [
+  { id: 'show', label: 'Show', value: (r) => (r.matter.status === 'open' ? 'open' : 'closed'), options: [{ value: 'open', label: 'Open' }, { value: 'closed', label: 'Closed' }] },
+  { id: 'kind', label: 'Kind', value: (r) => r.matter.kind, optionLabel: (v) => KIND[v as LegalMatterInput['kind']] ?? v },
+  { id: 'company', label: 'Company', value: (r) => r.companyName },
+  { id: 'lawyer', label: 'Lawyers', value: (r) => r.matter.lawyer },
+];
+
 export function LegalPanel({ data }: { data: CorpAuditLegal }) {
   const [form, setForm] = useState(false);
-  const [all, setAll] = useState(false);
+  const [openId, setOpenId] = useState<string | null>(null);
   const canOpen = data.matterCompanies.length > 0;
-  const rows = data.matters.filter((m) => all || m.matter.status === 'open');
+  const open = data.matters.find((m) => m.matter.id === openId);
   return (
     <Card
       title="Legal matters"
       flush
       actions={
         <>
-          <button className="btn btn-sm" aria-pressed={all} onClick={() => setAll(!all)}>
-            {all ? 'Hide closed' : 'Show closed'}
-          </button>
           {canOpen && (
             <button className="btn btn-sm btn-primary" onClick={() => setForm(true)}>
               <PlusIcon size={16} /> Open a matter
@@ -323,14 +371,25 @@ export function LegalPanel({ data }: { data: CorpAuditLegal }) {
           <NewMatter data={data} onDone={() => setForm(false)} />
         </Drawer>
       )}
-      {!rows.length && <Empty title="No open matters.">{canOpen ? 'Record a new claim or demand with "Open a matter".' : undefined}</Empty>}
-      <ul className="gv-list">
-        {rows.map((m) => (
-          <li key={m.matter.id}>
-            <MatterLine r={m} />
-          </li>
-        ))}
-      </ul>
+      <DataTable
+        label="Legal matters"
+        stateKey="board.corporate.matters"
+        defaults={{ f: { show: 'open' } }}
+        rows={data.matters}
+        rowKey={(r) => r.matter.id}
+        columns={MATTER_COLUMNS}
+        filters={MATTER_FILTERS}
+        searchText={(r) => r.matter.updates.map((u) => u.text).join(' ')}
+        onView={(r) => setOpenId(r.matter.id)}
+        rowTone={(r) => toneOf(r.tone)}
+        actions={(r) => [{ label: r.canWork && r.matter.status === 'open' ? 'Update' : 'Open', onClick: () => setOpenId(r.matter.id) }]}
+        empty={<Empty title="No open matters.">{canOpen ? 'Record a new claim or demand with "Open a matter".' : undefined}</Empty>}
+      />
+      {open && (
+        <Drawer title={`${open.matter.ref}: ${open.matter.title}`} sub={open.companyName} onClose={() => setOpenId(null)}>
+          <MatterLine r={open} />
+        </Drawer>
+      )}
     </Card>
   );
 }

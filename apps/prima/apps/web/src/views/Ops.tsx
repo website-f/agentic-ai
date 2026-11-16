@@ -12,8 +12,11 @@ import { ImportButton } from './ImportDrawer';
 import { Chip, ErrorNotice, Loading, dayLabel, hhmm, money, useLoad } from '../ui';
 import '../styles/ops.css';
 import { VacanciesPanel } from './HrJoinLeave';
+import { DataTable, type DtColumn, type DtFilter } from '../DataTable';
 
 type Item = RegionalOps['attention'][number];
+type CompanyRow = RegionalOps['rows'][number];
+type Officer = RegionalOps['patrolOfficers'][number];
 
 const KIND_LABEL: Record<Item['kind'], string> = { no_show: 'No-show', unfilled: 'No guard', patrol: 'Patrol', case: 'Case' };
 
@@ -124,27 +127,19 @@ export function OpsView() {
         actions={<Chip tone={crit ? 'crit' : data.attention.length ? 'warn' : 'ok'}>{data.attention.length}</Chip>}
         flush
       >
-        {data.attention.length === 0 && <Empty title="Nothing needs follow-up in this region right now." />}
-        <ul className="op-list">
-          {data.attention.slice(0, 30).map((a, i) => (
-            <li key={i}>
-              <button className="op-item ro-row" data-tone={a.tone} onClick={() => openItem(a)}>
-                <span className="ro-kind">
-                  <Chip tone={a.tone}>{KIND_LABEL[a.kind]}</Chip>
-                </span>
-                <span className="op-main">
-                  <span className="op-title">{a.title}</span>
-                  <span className="op-meta">
-                    {a.siteName ? `${a.siteName} · ` : ''}
-                    {a.detail}
-                  </span>
-                  <span className="op-co">{a.companyName}</span>
-                </span>
-                <span className="ro-when op-time">{a.kind !== 'patrol' ? hhmm(a.at) : ''}</span>
-              </button>
-            </li>
-          ))}
-        </ul>
+        {/* P107: the follow-up list as a data table: every item (no first-30 cap), most urgent first, by kind, company or urgency. */}
+        <DataTable
+          label="Needs follow-up now"
+          stateKey="ops.attention"
+          rows={data.attention}
+          rowKey={(a) => `${a.kind}:${a.caseId ?? ''}:${a.siteId ?? ''}:${a.at}:${a.title}`}
+          columns={ATTENTION_COLUMNS}
+          filters={ATTENTION_FILTERS}
+          rowTone={(a) => (a.tone === 'crit' ? 'crit' : a.tone === 'warn' ? 'warn' : undefined)}
+          onView={openItem}
+          searchPlaceholder="Find a site, company or item"
+          empty={<Empty title="Nothing needs follow-up in this region right now." />}
+        />
       </Card>
 
       <Card
@@ -153,41 +148,16 @@ export function OpsView() {
         actions={t.unknownCompanies > 0 && <Chip tone="neutral">{t.unknownCompanies} without data yet</Chip>}
         flush
       >
-        <div className="table-wrap">
-          <table className="op-sticky-first">
-            <thead>
-              <tr>
-                <th>Company</th>
-                <th className="num hide-sm">Sites</th>
-                <th className="num">On duty</th>
-                <th className="num">No-show</th>
-                <th className="num">No guard</th>
-                <th className="num hide-sm">Patrol gaps</th>
-                <th className="num hide-sm">Open cases</th>
-                <th className="num hide-sm">Not allowed to work (7 days)</th>
-              </tr>
-            </thead>
-            <tbody>
-              {detailed.map((r) => (
-                <tr key={r.company.id} className="clickable" onClick={() => openSite(r.company.id, null)}>
-                  <td>
-                    <div className="op-company">
-                      {r.company.name}
-                      <span>{r.sites} sites in region</span>
-                    </div>
-                  </td>
-                  <td className="num hide-sm">{r.sites}</td>
-                  <td className="num">{r.onDuty}</td>
-                  <Num v={r.noShow} tone="crit" />
-                  <Num v={r.unfilledToday} tone="warn" />
-                  <Num v={r.patrolMissedSites} tone="warn" hide />
-                  <Num v={r.openCases} tone={r.p1Open ? 'crit' : 'warn'} hide />
-                  <Num v={r.blockedNext7} tone="crit" hide />
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        {/* P107: the companies as a data table: sort by any figure, find a company, pages when the region grows. */}
+        <DataTable
+          label="Companies in the region"
+          stateKey="ops.companies"
+          rows={detailed}
+          rowKey={(r) => r.company.id}
+          columns={COMPANY_COLUMNS}
+          onView={(r) => openSite(r.company.id, null)}
+          searchPlaceholder="Find a company"
+        />
         {/* P80: the companies with no data by name, not by code (C04, C05), below the table so a phone does not
             scroll sideways to read them; the list opens on request. */}
         {t.unknownCompanies > 0 && (
@@ -236,31 +206,19 @@ export function OpsView() {
         </Card>
 
         <Card title="Patrolling officers" sub={`At most ${data.patrolSpanMax} guards each; the company changes the patrol areas`} flush>
-          {data.patrolOfficers.length === 0 && <Empty title="No patrolling officers set up for this region." />}
-          <ul className="op-list">
-            {data.patrolOfficers.map((p) => (
-              <li key={p.userId} className="op-item">
-                <div className="op-line">
-                  <div className="op-main">
-                    <span className="op-title">{p.name}</span>
-                    <span className="op-meta">
-                      {p.employer}
-                      {p.alsoFor.length ? `, also works for ${p.alsoFor.join(', ')}` : ''} · {p.sites} sites
-                    </span>
-                    {p.shares.length > 0 && (
-                      <span className="op-co">
-                        Salary shared by guards:{' '}
-                        {p.shares.map((x) => `${x.company.split(' ')[0]} ${x.pct}%${x.amount != null ? ` (${money(x.amount)})` : ''}`).join(', ')}
-                      </span>
-                    )}
-                  </div>
-                  <Chip tone={p.over ? 'warn' : 'ok'}>
-                    {p.guards} / {p.max} guards{p.over ? ', over limit' : ''}
-                  </Chip>
-                </div>
-              </li>
-            ))}
-          </ul>
+          {/* P107: the officers as a data table: find one, see who is over the limit, by employer. */}
+          <DataTable
+            details
+            label="Patrolling officers"
+            stateKey="ops.officers"
+            rows={data.patrolOfficers}
+            rowKey={(p) => p.userId}
+            columns={OFFICER_COLUMNS}
+            filters={OFFICER_FILTERS}
+            rowTone={(p) => (p.over ? 'warn' : undefined)}
+            searchPlaceholder="Find an officer"
+            empty={<Empty title="No patrolling officers set up for this region." />}
+          />
         </Card>
       </div>
 
@@ -273,6 +231,91 @@ export function OpsView() {
     </div>
   );
 }
+
+const TONE_LABEL: Record<string, string> = { crit: 'Urgent', warn: 'Follow up', ok: 'Fine', info: 'For information', neutral: 'For information' };
+
+/** P107: the follow-up items' columns (the old row: kind chip, title, site and detail, company, time). */
+const ATTENTION_COLUMNS: DtColumn<Item>[] = [
+  { id: 'kind', label: 'Kind', value: (a) => KIND_LABEL[a.kind], translate: true, render: (a) => <Chip tone={a.tone}>{KIND_LABEL[a.kind]}</Chip>, phone: 'hidden', width: '7rem' },
+  { id: 'title', label: 'What', value: (a) => a.title, phone: 'title', render: (a) => <span className="op-title">{a.title}</span> },
+  { id: 'detail', label: 'Site and detail', value: (a) => `${a.siteName ? `${a.siteName} · ` : ''}${a.detail}`, phone: 'sub' },
+  { id: 'company', label: 'Company', value: (a) => a.companyName, hideBelow: 1100 },
+  { id: 'at', label: 'Time', value: (a) => (a.kind !== 'patrol' ? a.at : ''), sort: 'date', render: (a) => (a.kind !== 'patrol' ? hhmm(a.at) : '–'), width: '6rem' },
+];
+const ATTENTION_FILTERS: DtFilter<Item>[] = [
+  { id: 'kind', label: 'Kind', value: (a) => a.kind, options: Object.entries(KIND_LABEL).map(([value, label]) => ({ value, label })) },
+  { id: 'company', label: 'Company', value: (a) => a.companyName },
+  { id: 'tone', label: 'Urgency', value: (a) => a.tone, optionLabel: (v) => TONE_LABEL[v] ?? v },
+];
+
+type Fig = (r: CompanyRow) => number;
+type Detailed = Extract<CompanyRow, { hasDetail: true }>;
+const n = (get: (r: Detailed) => number): Fig => (r) => (r.hasDetail ? get(r) : 0);
+/** A figure cell coloured when it is not zero (the old <Num>). */
+const fig = (id: string, label: string, get: Fig, tone: (r: CompanyRow) => 'crit' | 'warn', hideBelow?: number): DtColumn<CompanyRow> => ({
+  id,
+  label,
+  value: get,
+  sort: 'number',
+  hideBelow,
+  render: (r) => (
+    <span className="op-num" data-tone={get(r) ? tone(r) : undefined}>
+      {get(r)}
+    </span>
+  ),
+});
+/** P107: the companies' columns: the old eight; the less urgent ones leave narrower screens first. */
+const COMPANY_COLUMNS: DtColumn<CompanyRow>[] = [
+  {
+    id: 'company',
+    label: 'Company',
+    value: (r) => r.company.name,
+    phone: 'title',
+    render: (r) => (
+      <div className="op-company">
+        {r.company.name}
+        <span>{n((x) => x.sites)(r)} sites in region</span>
+      </div>
+    ),
+  },
+  { id: 'sites', label: 'Sites', value: n((r) => r.sites), sort: 'number', hideBelow: 900, phone: 'hidden' },
+  { id: 'onDuty', label: 'On duty', value: n((r) => r.onDuty), sort: 'number' },
+  fig('noShow', 'No-show', n((r) => r.noShow), () => 'crit'),
+  fig('unfilled', 'No guard', n((r) => r.unfilledToday), () => 'warn'),
+  fig('patrol', 'Patrol gaps', n((r) => r.patrolMissedSites), () => 'warn', 900),
+  fig('cases', 'Open cases', n((r) => r.openCases), (r) => (r.hasDetail && r.p1Open ? 'crit' : 'warn'), 900),
+  fig('blocked', 'Not allowed to work (7 days)', n((r) => r.blockedNext7), () => 'crit', 900),
+];
+
+/** P107: the patrolling officers' columns (the old row: name, employer and sites, salary shares, guards chip). */
+const OFFICER_COLUMNS: DtColumn<Officer>[] = [
+  { id: 'name', label: 'Name', value: (p) => p.name, phone: 'title', render: (p) => <span className="op-title">{p.name}</span> },
+  { id: 'employer', label: 'Employer', value: (p) => `${p.employer}${p.alsoFor.length ? `, also works for ${p.alsoFor.join(', ')}` : ''}`, phone: 'sub' },
+  { id: 'sites', label: 'Sites', value: (p) => p.sites, sort: 'number' },
+  {
+    id: 'guards',
+    label: 'Guards',
+    value: (p) => p.guards,
+    sort: 'number',
+    align: 'left',
+    render: (p) => (
+      <Chip tone={p.over ? 'warn' : 'ok'}>
+        {p.guards} / {p.max} guards{p.over ? ', over limit' : ''}
+      </Chip>
+    ),
+  },
+  {
+    id: 'shares',
+    label: 'Salary shared by guards',
+    value: (p) => p.shares.map((x) => `${x.company.split(' ')[0]} ${x.pct}%${x.amount != null ? ` (${money(x.amount)})` : ''}`).join(', '),
+    sort: false,
+    hideBelow: 1100,
+  },
+];
+const OFFICER_FILTERS: DtFilter<Officer>[] = [
+  { id: 'over', label: 'Limit', value: (p) => (p.over ? 'over' : 'within'), options: [{ value: 'over', label: 'Over the limit' }, { value: 'within', label: 'Within the limit' }] },
+  { id: 'employer', label: 'Employer', value: (p) => p.employer },
+];
 
 function Num({ v, tone, hide }: { v: number; tone: 'crit' | 'warn'; hide?: boolean }) {
   return (

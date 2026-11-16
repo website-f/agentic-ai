@@ -1,7 +1,8 @@
 import { Select } from '../SearchSelect';
 import { useState } from 'react';
 import { api } from '../api';
-import { Chip, ErrorNotice, Loading, dateLabel, useAction, useLoad } from '../ui';
+import { Chip, Drawer, ErrorNotice, Loading, dateLabel, useAction, useLoad } from '../ui';
+import { DataTable, type DtColumn, type DtFilter } from '../DataTable';
 
 /**
  * Panel firms (Central Admin 5D, Fauzan 2 Nov 2026: keyed in by staff). Central Admin keeps the audit and secretary
@@ -14,6 +15,30 @@ const KIND: Record<Kind, string> = {
   SECRETARY: 'Secretary firm',
 };
 
+const firmState = (r: FirmRow) => (r.firm.status === 'removed' ? 'Off the panel' : r.reviewDue ? 'Review due' : 'On the panel');
+const FIRM_COLUMNS: DtColumn<FirmRow>[] = [
+  { id: 'name', label: 'Firm', value: (r) => r.firm.name, render: (r) => <strong>{r.firm.name}</strong>, phone: 'title' },
+  { id: 'kind', label: 'Kind', value: (r) => KIND[r.firm.kind], translate: true, phone: 'sub' },
+  { id: 'reg', label: 'Registration', value: (r) => r.firm.regNo, hideBelow: 1200 },
+  { id: 'contact', label: 'Contact', value: (r) => r.firm.contact, hideBelow: 1300 },
+  { id: 'fee', label: 'How they charge', value: (r) => r.firm.feeBasis, sort: false, hideBelow: 1400 },
+  { id: 'appointed', label: 'Appointed', value: (r) => r.firm.appointedOn, sort: 'date', hideBelow: 1100 },
+  { id: 'review', label: 'Review', value: (r) => r.firm.reviewOn, sort: 'date' },
+  { id: 'matters', label: 'Open matters', value: (r) => (r.firm.kind === 'LAW' ? r.openMatters : null), sort: 'number', hideBelow: 1200 },
+  { id: 'fees', label: 'Fees this year', value: (r) => (r.firm.kind === 'LAW' ? r.feesThisYear : null), sort: 'money', hideBelow: 1200 },
+  {
+    id: 'status',
+    label: 'Status',
+    value: firmState,
+    translate: true,
+    render: (r) => <Chip tone={r.firm.status === 'removed' ? 'neutral' : r.reviewDue ? 'warn' : 'ok'}>{firmState(r)}</Chip>,
+  },
+];
+const FIRM_FILTERS: DtFilter<FirmRow>[] = [
+  { id: 'kind', label: 'Kind', value: (r) => r.firm.kind, optionLabel: (v) => KIND[v as Kind] ?? v },
+  { id: 'status', label: 'Status', value: firmState },
+];
+
 export function PanelFirmsPanel() {
   const { data, error, reload } = useLoad(() => api.panelBoard(), []);
   const act = useAction();
@@ -24,9 +49,11 @@ export function PanelFirmsPanel() {
   const [feeBasis, setFeeBasis] = useState('');
   const [on, setOn] = useState('');
   const [note, setNote] = useState('');
+  const [openId, setOpenId] = useState<string | null>(null);
   if (error) return <ErrorNotice error={error} />;
   if (!data) return <Loading what="panel firms" />;
   const kinds = (Object.keys(KIND) as Kind[]).filter((k) => data.canKeep[k]);
+  const r = data.firms.find((x) => x.firm.id === openId);
   return (
     <section className="panel">
       <div className="panel-head">
@@ -97,46 +124,52 @@ export function PanelFirmsPanel() {
         </p>
       )}
       {act.error && <p className="error small">{act.error.message}</p>}
-      <div className="list">
-        {!data.firms.length && <div className="empty">No firms keyed in yet.</div>}
-        {data.firms.map((r) => (
-          <div className="item" key={r.firm.id}>
-            <div className="item-main">
-              <strong>{r.firm.name}</strong>
-              <div className="muted small">
-                {KIND[r.firm.kind]} · {r.firm.regNo}
-                {r.firm.contact ? ` · ${r.firm.contact}` : ''}
-                {r.firm.feeBasis ? ` · ${r.firm.feeBasis}` : ''} · appointed {dateLabel(r.firm.appointedOn)} · review {dateLabel(r.firm.reviewOn)}
-                {r.firm.kind === 'LAW' ? ` · ${r.openMatters} open matters · fees this year RM${r.feesThisYear}` : ''}
-              </div>
-              {r.firm.removed && <div className="small">Taken off: {r.firm.removed.note}</div>}
-              <AdviserMoney r={r} year={data.year} canAgree={data.canAgreeBudget} reload={reload} />
-              {r.canKeep && r.firm.status === 'active' && (
-                <div className="row">
-                  <input aria-label="Note" placeholder="Review note or reason" value={note} onChange={(e) => setNote(e.target.value)} />
-                  <button
-                    className="btn btn-sm"
-                    disabled={act.busy}
-                    onClick={() => act.run(() => api.panelFirmStep(r.firm.id, 'review', note).then(reload), 'Reviewed.')}
-                  >
-                    Record review
-                  </button>
-                  <button
-                    className="btn btn-sm"
-                    disabled={act.busy}
-                    onClick={() => act.run(() => api.panelFirmStep(r.firm.id, 'remove', note).then(reload), 'Taken off.')}
-                  >
-                    Take off the panel
-                  </button>
-                </div>
-              )}
+      <DataTable
+        label="Panel firms"
+        stateKey="board.corporate.panel"
+        rows={data.firms}
+        rowKey={(r) => r.firm.id}
+        columns={FIRM_COLUMNS}
+        filters={FIRM_FILTERS}
+        onView={(r) => setOpenId(r.firm.id)}
+        rowTone={(r) => (r.firm.status !== 'removed' && r.reviewDue ? 'warn' : undefined)}
+        actions={(r) => [{ label: r.canKeep && r.firm.status === 'active' ? 'Review' : 'Open', onClick: () => setOpenId(r.firm.id) }]}
+        empty={<div className="empty">No firms keyed in yet.</div>}
+      />
+      {r && (
+        <Drawer title={r.firm.name} sub={`${KIND[r.firm.kind]} · ${firmState(r)}`} onClose={() => setOpenId(null)}>
+          <div className="item-main">
+            <div className="muted small">
+              {KIND[r.firm.kind]} · {r.firm.regNo}
+              {r.firm.contact ? ` · ${r.firm.contact}` : ''}
+              {r.firm.feeBasis ? ` · ${r.firm.feeBasis}` : ''} · appointed {dateLabel(r.firm.appointedOn)} · review {dateLabel(r.firm.reviewOn)}
+              {r.firm.kind === 'LAW' ? ` · ${r.openMatters} open matters · fees this year RM${r.feesThisYear}` : ''}
             </div>
-            <Chip tone={r.firm.status === 'removed' ? 'neutral' : r.reviewDue ? 'warn' : 'ok'}>
-              {r.firm.status === 'removed' ? 'Off the panel' : r.reviewDue ? 'Review due' : 'On the panel'}
-            </Chip>
+            {r.firm.removed && <div className="small">Taken off: {r.firm.removed.note}</div>}
+            <AdviserMoney r={r} year={data.year} canAgree={data.canAgreeBudget} reload={reload} />
+            {r.canKeep && r.firm.status === 'active' && (
+              <div className="row">
+                <input aria-label="Note" placeholder="Review note or reason" value={note} onChange={(e) => setNote(e.target.value)} />
+                <button
+                  className="btn btn-sm"
+                  disabled={act.busy}
+                  onClick={() => act.run(() => api.panelFirmStep(r.firm.id, 'review', note).then(reload), 'Reviewed.')}
+                >
+                  Record review
+                </button>
+                <button
+                  className="btn btn-sm"
+                  disabled={act.busy}
+                  onClick={() => act.run(() => api.panelFirmStep(r.firm.id, 'remove', note).then(reload), 'Taken off.')}
+                >
+                  Take off the panel
+                </button>
+              </div>
+            )}
           </div>
-        ))}
-      </div>
+          {act.error && <p className="error small">{act.error.message}</p>}
+        </Drawer>
+      )}
     </section>
   );
 }

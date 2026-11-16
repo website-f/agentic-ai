@@ -1,7 +1,8 @@
 import { useMemo, useState, type ReactNode } from 'react';
+import { DataTable, useTableState, type DtColumn, type DtFilter } from '../DataTable';
 import { ClockCountdownIcon, QuestionIcon, SealCheckIcon, WarningOctagonIcon } from '@phosphor-icons/react';
 import { api } from '../api';
-import { Empty, PageHead, Search, Stat, Stats, Toolbar } from '../kit';
+import { Empty, PageHead, Stat, Stats } from '../kit';
 import { Chip, ErrorNotice, ExpiryChip, Loading, dateLabel, useLoad } from '../ui';
 import { RecordButton } from './RecordForm';
 import { ImportButton } from './ImportDrawer';
@@ -52,22 +53,46 @@ export function CalendarGroup({ title, count, tone, children }: { title: ReactNo
   );
 }
 
+type Licence = Awaited<ReturnType<typeof api.compliance>>['licences'][number];
+const urgencyOf = (s: Status) => URGENCY.findIndex((u) => u.status === s);
+
+/** P107: the licences as one table (was groups by urgency or by company): search, status / company / licence filters. */
+const LICENCE_COLUMNS: DtColumn<Licence>[] = [
+  {
+    id: 'company',
+    label: 'Company',
+    value: (l) => l.companyName,
+    render: (l) => (
+      <span className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
+        <strong>{l.companyName}</strong>
+        {l.isPilot && <Chip tone="neutral">Pilot</Chip>}
+      </span>
+    ),
+    phone: 'title',
+  },
+  { id: 'licence', label: 'Licence', value: (l) => l.label, translate: true, phone: 'sub' },
+  { id: 'expires', label: 'Expires', value: (l) => l.expiresOn, sort: 'date', render: (l) => (l.expiresOn ? dateLabel(l.expiresOn) : 'No record') },
+  { id: 'days', label: 'Days left', value: (l) => l.daysLeft, sort: 'number', hideBelow: 900 },
+  { id: 'status', label: 'Status', value: (l) => urgencyOf(l.status), sort: 'number', search: false, render: (l) => <ExpiryChip status={l.status} daysLeft={l.daysLeft} /> },
+];
+const LICENCE_FILTERS: DtFilter<Licence>[] = [
+  { id: 'status', label: 'Status', value: (l) => l.status, options: URGENCY.map((u) => ({ value: u.status, label: u.title })) },
+  { id: 'company', label: 'Company', value: (l) => l.companyName },
+  { id: 'licence', label: 'Licence', value: (l) => l.label },
+];
+
 export function ComplianceView() {
   const { data, error } = useLoad(() => api.compliance(), []);
   const [show, setShow] = useState<'problems' | 'all'>('problems');
-  const [by, setBy] = useState<'urgency' | 'company'>('urgency');
-  const [q, setQ] = useState('');
-  const [status, setStatus] = useState<Status | ''>('');
-  const needle = q.trim().toLowerCase();
+  const table = useTableState('gov.compliance.licences');
+  const status = (table.state.f.status ?? '') as Status | '';
+  // Most urgent first (expired, no record, due, valid), then the soonest expiry: the table's usual order.
   const rows = useMemo(
     () =>
-      (data?.licences ?? []).filter(
-        (l) =>
-          (show === 'all' || l.status !== 'OK') &&
-          (!status || l.status === status) &&
-          (!needle || `${l.companyName} ${l.label}`.toLowerCase().includes(needle)),
-      ),
-    [data, show, status, needle],
+      (data?.licences ?? [])
+        .filter((l) => show === 'all' || l.status !== 'OK' || status === 'OK')
+        .sort((x, y) => urgencyOf(x.status) - urgencyOf(y.status) || (x.daysLeft ?? 1e9) - (y.daysLeft ?? 1e9)),
+    [data, show, status],
   );
   if (error)
     return (
@@ -82,17 +107,9 @@ export function ComplianceView() {
       </div>
     );
   const pick = (s: Status) => {
-    setStatus(status === s ? '' : s);
+    table.set({ f: { status: status === s ? '' : s } });
     if (s === 'OK') setShow('all');
   };
-  const groups =
-    by === 'urgency'
-      ? URGENCY.map((u) => ({ key: u.status, title: u.title, tone: u.tone as string | undefined, rows: rows.filter((l) => l.status === u.status) }))
-      : [...new Set(rows.map((l) => l.companyId))].map((id) => {
-          const mine = rows.filter((l) => l.companyId === id);
-          const worst = URGENCY.find((u) => mine.some((l) => l.status === u.status));
-          return { key: id, title: mine[0].companyName, tone: worst?.tone as string | undefined, rows: mine };
-        });
   return (
     <div className="page">
       <PageHead
@@ -147,61 +164,23 @@ export function ComplianceView() {
           onClick={() => pick('OK')}
         />
       </Stats>
-      <Toolbar
-        end={
-          <div className="seg" role="group" aria-label="Group by">
-            <button aria-pressed={by === 'urgency'} onClick={() => setBy('urgency')}>
-              By urgency
-            </button>
-            <button aria-pressed={by === 'company'} onClick={() => setBy('company')}>
-              By company
-            </button>
-          </div>
-        }
-      >
-        <Search value={q} onChange={setQ} placeholder="Search company or licence" label="Search licences" />
-        {status && (
-          <button className="btn btn-sm" onClick={() => setStatus('')}>
-            Clear filter: {URGENCY.find((u) => u.status === status)?.title}
-          </button>
-        )}
-      </Toolbar>
-      {rows.length === 0 && (
-        <section className="k-card">
-          <Empty title="Nothing needs action.">{needle || status ? 'No licence matches the search or filter.' : undefined}</Empty>
-        </section>
-      )}
-      {groups
-        .filter((g) => g.rows.length > 0)
-        .map((g) => (
-          <CalendarGroup key={g.key} title={g.title} count={g.rows.length} tone={g.tone}>
-            {g.rows.map((l) => {
-              const tone = URGENCY.find((u) => u.status === l.status)?.tone;
-              return (
-                <li key={`${l.companyId}-${l.type}`} className="hx-row rn-row" data-tone={l.status === 'OK' ? undefined : tone}>
-                  <DateLeaf date={l.expiresOn} tone={tone} />
-                  <div className="hx-row-main">
-                    <span className="hx-row-title">{by === 'company' ? l.label : l.companyName}</span>
-                    <span className="hx-row-meta">
-                      {by === 'company' ? l.companyName : l.label}
-                      {' · '}
-                      {l.expiresOn ? `expires ${dateLabel(l.expiresOn)}` : 'No record'}
-                    </span>
-                  </div>
-                  <div className="hx-row-side">
-                    {l.isPilot && <Chip tone="neutral">Pilot</Chip>}
-                    <ExpiryChip status={l.status} daysLeft={l.daysLeft} />
-                    {l.id ? (
-                      <RecordButton kind="licence" id={l.id} label="Update" />
-                    ) : (
-                      <RecordButton kind="licence" companyId={l.companyId} label="Add record" />
-                    )}
-                  </div>
-                </li>
-              );
-            })}
-          </CalendarGroup>
-        ))}
+      <section className="k-card">
+        <DataTable
+          details
+          label="Company licences"
+          control={table}
+          rows={rows}
+          rowKey={(l) => `${l.companyId}-${l.type}`}
+          columns={LICENCE_COLUMNS}
+          filters={LICENCE_FILTERS}
+          searchPlaceholder="Search company or licence"
+          rowTone={(l) => (l.status === 'OVERDUE' ? 'crit' : l.status === 'DUE' || l.status === 'UNKNOWN' ? 'warn' : undefined)}
+          rowEnd={(l) =>
+            l.id ? <RecordButton kind="licence" id={l.id} label="Update" /> : <RecordButton kind="licence" companyId={l.companyId} label="Add record" />
+          }
+          empty={<Empty title="Nothing needs action." />}
+        />
+      </section>
     </div>
   );
 }

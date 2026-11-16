@@ -19,6 +19,12 @@ import { PoliceHelpPanel } from './PoliceHelp';
 import { Card, Empty, Stat, Stats } from '../kit';
 import { Chip, ErrorNotice, Loading, dateLabel, hhmm, useAction, useLoad, type Tone } from '../ui';
 import '../styles/ops.css';
+import { DataTable } from '../DataTable';
+
+/** P107: a row's coloured edge from the list's old tone. */
+const edge = (t: string | undefined): 'crit' | 'warn' | 'info' | undefined => (t === 'crit' ? 'crit' : t === 'warn' ? 'warn' : undefined);
+/** P107: the words for a tone, for the filters. */
+const TONE_WORD: Record<string, string> = { crit: 'Urgent', warn: 'Follow up', ok: 'Fine', info: 'For information', neutral: 'For information', unknown: 'Unknown' };
 
 export type ArmsTab =
   | 'alerts'
@@ -190,22 +196,28 @@ function Alerts({ data }: { data: ArmsControl }) {
   const { setCompanyId } = useApp();
   return (
     <Card title="CMS arms alerts" sub="What the CMS arms desk is watching now. Open one to switch to that company." flush>
-      {data.alerts.length === 0 && <Empty title="No arms alerts." />}
-      <ul className="op-list">
-        {data.alerts.map((a, i) => (
-          <li key={i}>
-            <button className="op-item cm-q" data-tone={a.tone} onClick={() => setCompanyId(a.companyId)}>
-              <span className="cm-q-bar" aria-hidden="true" />
-              <span className="op-main">
-                <span className="op-title">{a.title}</span>
-                <span className="op-meta">{a.detail}</span>
-                <span className="op-co">{a.companyName}</span>
-              </span>
-              <Chip tone={a.tone}>{a.kind}</Chip>
-            </button>
-          </li>
-        ))}
-      </ul>
+      {/* P107: the alerts as a data table: by kind, company and urgency; a row switches to its company. */}
+      <DataTable
+        label="CMS arms alerts"
+        stateKey="arms.alerts"
+        rows={data.alerts}
+        rowKey={(a) => `${a.kind}:${a.companyId}:${a.title}:${a.detail}`}
+        onView={(a) => setCompanyId(a.companyId)}
+        rowTone={(a) => edge(a.tone)}
+        searchPlaceholder="Find an alert or company"
+        empty={<Empty title="No arms alerts." />}
+        columns={[
+          { id: 'title', label: 'Alert', value: (a) => a.title, phone: 'title', render: (a) => <span className="op-title">{a.title}</span> },
+          { id: 'detail', label: 'Detail', value: (a) => a.detail, phone: 'sub', sort: false },
+          { id: 'company', label: 'Company', value: (a) => a.companyName, hideBelow: 1000 },
+          { id: 'kind', label: 'Kind', value: (a) => a.kind, translate: true, render: (a) => <Chip tone={a.tone}>{a.kind}</Chip> },
+        ]}
+        filters={[
+          { id: 'kind', label: 'Kind', value: (a) => a.kind },
+          { id: 'company', label: 'Company', value: (a) => a.companyName },
+          { id: 'tone', label: 'Urgency', value: (a) => a.tone, optionLabel: (v) => TONE_WORD[v] ?? v },
+        ]}
+      />
     </Card>
   );
 }
@@ -223,6 +235,8 @@ const WATCH_STATE: Record<ArmsControl['vaults'][number]['watchState'], { label: 
   no_watcher: { label: 'Nobody on watch', tone: 'crit' },
   none: { label: 'No watch now', tone: 'neutral' },
 };
+
+const doorWord = (k: string) => (k === 'DOOR_FORCED' ? 'door forced' : k === 'ACCESS_DENIED' ? 'access refused' : 'door opened');
 
 function Vaults({ data }: { data: ArmsControl }) {
   return (
@@ -328,60 +342,96 @@ function Vaults({ data }: { data: ArmsControl }) {
         </div>
       </Card>
       <Card title="Vault door events, last 24 hours" sub={`Each opening should match an issue, return or count within ${data.doorMatchMin} minutes`} flush>
-        {data.doors.length === 0 && <Empty title="No door events from the vault access systems." />}
-        <ul className="op-list">
-          {data.doors.map((d) => (
-            <li key={d.event.id} className="op-item ar-log" data-tone={d.matched ? undefined : d.event.kind === 'ACCESS_DENIED' ? 'warn' : 'crit'}>
-              <span className="op-time">{hhmm(d.event.at)}</span>
-              <span className="op-main">
+        {/* P107: the door events as a data table: matched or not, by company and vault. */}
+        <DataTable
+          details
+          label="Vault door events, last 24 hours"
+          stateKey="arms.doors"
+          rows={data.doors}
+          rowKey={(d) => d.event.id}
+          rowTone={(d) => (d.matched ? undefined : d.event.kind === 'ACCESS_DENIED' ? 'warn' : 'crit')}
+          searchPlaceholder="Find a vault, person or company"
+          empty={<Empty title="No door events from the vault access systems." />}
+          columns={[
+            { id: 'at', label: 'Time', value: (d) => d.event.at, sort: 'date', render: (d) => <span className="op-time">{hhmm(d.event.at)}</span>, width: '5rem' },
+            {
+              id: 'what',
+              label: 'Event',
+              value: (d) => `${d.vaultName}: ${doorWord(d.event.kind)}`,
+              phone: 'title',
+              render: (d) => (
                 <span className="op-title">
-                  {d.vaultName}: {d.event.kind === 'DOOR_FORCED' ? 'door forced' : d.event.kind === 'ACCESS_DENIED' ? 'access refused' : 'door opened'}
+                  {d.vaultName}: {doorWord(d.event.kind)}
                 </span>
-                <span className="op-meta">{d.event.by ?? 'Person not identified'}</span>
-                <span className="op-co">{d.companyName}</span>
-              </span>
-              <Chip tone={d.matched ? 'ok' : d.event.kind === 'ACCESS_DENIED' ? 'warn' : 'crit'}>
-                {d.matched ? 'Matches a movement' : 'No matching record'}
-              </Chip>
-            </li>
-          ))}
-        </ul>
+              ),
+            },
+            { id: 'by', label: 'By', value: (d) => d.event.by ?? 'Person not identified', phone: 'sub' },
+            { id: 'company', label: 'Company', value: (d) => d.companyName, hideBelow: 1000 },
+            {
+              id: 'matched',
+              label: 'Check',
+              value: (d) => (d.matched ? 'Matches a movement' : 'No matching record'),
+              translate: true,
+              render: (d) => <Chip tone={d.matched ? 'ok' : d.event.kind === 'ACCESS_DENIED' ? 'warn' : 'crit'}>{d.matched ? 'Matches a movement' : 'No matching record'}</Chip>,
+            },
+          ]}
+          filters={[
+            { id: 'matched', label: 'Check', value: (d) => (d.matched ? 'yes' : 'no'), options: [{ value: 'no', label: 'No matching record' }, { value: 'yes', label: 'Matches a movement' }] },
+            { id: 'vault', label: 'Vault', value: (d) => d.vaultName },
+            { id: 'company', label: 'Company', value: (d) => d.companyName },
+          ]}
+        />
       </Card>
     </>
   );
 }
 
+const logState = (l: { dir: string; state: string }) => (l.dir !== 'out' ? 'In' : l.state === 'returned' ? 'Out, back' : l.state === 'out' ? 'Out' : 'Overdue');
+
 /** The custody log: every firearm out and back, newest first, with who holds it and who witnessed. */
 function Log({ data }: { data: ArmsControl }) {
   return (
     <Card title="Firearms in and out, last 24 hours" sub="All companies, newest first" flush>
-      {data.log.length === 0 && <Empty title="No movements in the last 24 hours." />}
-      <ul className="op-list">
-        {data.log.map((l, i) => {
-          const late = l.dir === 'out' && l.state !== 'out' && l.state !== 'returned';
-          return (
-            <li key={i} className="op-item ar-log" data-tone={late ? 'crit' : undefined}>
-              <span className="op-time">{hhmm(l.at)}</span>
-              <span className="op-main">
-                <span className="op-title">
-                  <span className="mono">{l.tag}</span> {l.dir === 'out' ? 'out to' : 'back from'} {l.person}
-                </span>
-                <span className="op-meta">
-                  {l.place} · witness {l.witness || 'none'}
-                </span>
-                <span className="op-co">{l.companyName}</span>
+      {/* P107: the custody log as a data table: out or in, overdue, by company; newest first as before. */}
+      <DataTable
+        details
+        label="Firearms in and out, last 24 hours"
+        stateKey="arms.log"
+        rows={data.log.map((l, i) => ({ ...l, key: i, late: l.dir === 'out' && l.state !== 'out' && l.state !== 'returned' }))}
+        rowKey={(l) => String(l.key)}
+        rowTone={(l) => (l.late ? 'crit' : undefined)}
+        searchPlaceholder="Find a tag, person or place"
+        empty={<Empty title="No movements in the last 24 hours." />}
+        columns={[
+          { id: 'at', label: 'Time', value: (l) => l.at, sort: 'date', render: (l) => <span className="op-time">{hhmm(l.at)}</span>, width: '5rem' },
+          {
+            id: 'what',
+            label: 'Movement',
+            value: (l) => `${l.tag} ${l.dir === 'out' ? 'out to' : 'back from'} ${l.person}`,
+            phone: 'title',
+            render: (l) => (
+              <span className="op-title">
+                <span className="mono">{l.tag}</span> {l.dir === 'out' ? 'out to' : 'back from'} {l.person}
               </span>
-              {l.dir === 'out' ? (
-                <Chip tone={l.state === 'out' || l.state === 'returned' ? 'info' : 'crit'}>
-                  {l.state === 'returned' ? 'Out, back' : l.state === 'out' ? 'Out' : 'Overdue'}
-                </Chip>
-              ) : (
-                <Chip tone="ok">In</Chip>
-              )}
-            </li>
-          );
-        })}
-      </ul>
+            ),
+          },
+          { id: 'place', label: 'Place and witness', value: (l) => `${l.place} · witness ${l.witness || 'none'}`, phone: 'sub' },
+          { id: 'company', label: 'Company', value: (l) => l.companyName, hideBelow: 1000 },
+          {
+            id: 'state',
+            label: 'Status',
+            value: (l) => logState(l),
+            translate: true,
+            render: (l) =>
+              l.dir === 'out' ? <Chip tone={l.state === 'out' || l.state === 'returned' ? 'info' : 'crit'}>{logState(l)}</Chip> : <Chip tone="ok">In</Chip>,
+          },
+        ]}
+        filters={[
+          { id: 'dir', label: 'Direction', value: (l) => l.dir, options: [{ value: 'out', label: 'Out' }, { value: 'in', label: 'In' }] },
+          { id: 'state', label: 'Status', value: (l) => logState(l) },
+          { id: 'company', label: 'Company', value: (l) => l.companyName },
+        ]}
+      />
     </Card>
   );
 }
@@ -389,26 +439,56 @@ function Log({ data }: { data: ArmsControl }) {
 function Jobs({ data }: { data: ArmsControl }) {
   return (
     <Card title="Armed jobs, today and next 24 hours" sub="Close protection, cash-in-transit, cash deposit machines, cash vaulting" flush>
-      {data.jobs.length === 0 && <Empty title="No armed jobs." />}
-      <ul className="op-list">
-        {data.jobs.map(({ job, companyName, crew, firearms, police }) => (
-          <li key={job.id} className="op-item" data-tone={JOB_STATUS[job.status].tone}>
-            <div className="op-line">
-              <div className="op-main">
+      {/* P107: the armed jobs as a data table: by kind, status and company. */}
+      <DataTable
+        details
+        label="Armed jobs"
+        stateKey="arms.jobs"
+        rows={data.jobs}
+        rowKey={(j) => j.job.id}
+        rowTone={(j) => edge(JOB_STATUS[j.job.status].tone)}
+        searchPlaceholder="Find a job, client, crew or firearm"
+        searchText={(j) => `${j.crew.join(' ')} ${j.firearms.join(' ')} ${j.job.vehicle ?? ''}`}
+        empty={<Empty title="No armed jobs." />}
+        columns={[
+          {
+            id: 'job',
+            label: 'Job',
+            value: (j) => `${JOB_LABEL[j.job.kind]} · ${j.job.client}`,
+            phone: 'title',
+            render: ({ job, crew, firearms }) => (
+              <span className="op-main">
                 <span className="op-title">
                   {JOB_LABEL[job.kind]} · {job.client}
                 </span>
                 <span className="op-meta">
-                  {job.ref} · {hhmm(job.start)}–{hhmm(job.end)} · {job.detail}
+                  {job.ref} · {job.detail}
                 </span>
                 <span className="op-meta">
                   Crew {crew.join(', ') || 'not named'} · firearms {firearms.join(', ') || 'none out'}
                   {job.vehicle ? ` · ${job.vehicle}` : ''}
                 </span>
-                <span className="op-co">
-                  {companyName} · {job.lastUpdate} ({hhmm(job.lastUpdateAt)})
-                </span>
-              </div>
+              </span>
+            ),
+          },
+          { id: 'start', label: 'Time', value: (j) => j.job.start, sort: 'date', render: (j) => `${hhmm(j.job.start)}–${hhmm(j.job.end)}` },
+          {
+            id: 'company',
+            label: 'Company',
+            value: (j) => j.companyName,
+            hideBelow: 1100,
+            render: (j) => (
+              <span className="op-co">
+                {j.companyName} · {j.job.lastUpdate} ({hhmm(j.job.lastUpdateAt)})
+              </span>
+            ),
+          },
+          {
+            id: 'status',
+            label: 'Status',
+            value: (j) => JOB_STATUS[j.job.status].label,
+            translate: true,
+            render: ({ job, police }) => (
               <div className="op-side">
                 <Chip tone={JOB_STATUS[job.status].tone}>{JOB_STATUS[job.status].label}</Chip>
                 {/* The police reference is a task to record here; whether it is legally in order is for the directors' view. */}
@@ -419,10 +499,15 @@ function Jobs({ data }: { data: ArmsControl }) {
                   </Chip>
                 )}
               </div>
-            </div>
-          </li>
-        ))}
-      </ul>
+            ),
+          },
+        ]}
+        filters={[
+          { id: 'kind', label: 'Kind', value: (j) => j.job.kind, optionLabel: (v) => JOB_LABEL[v as keyof typeof JOB_LABEL] ?? v },
+          { id: 'status', label: 'Status', value: (j) => j.job.status, optionLabel: (v) => JOB_STATUS[v as keyof typeof JOB_STATUS]?.label ?? v },
+          { id: 'company', label: 'Company', value: (j) => j.companyName },
+        ]}
+      />
     </Card>
   );
 }
@@ -430,43 +515,71 @@ function Jobs({ data }: { data: ArmsControl }) {
 function Renewals({ data }: { data: ArmsControl }) {
   return (
     <Card title="Renewals and servicing" sub="Firearm licences run to 30 June. Unknown is never counted as fine." flush>
-      {data.renewals.length === 0 && <Empty title="Nothing due." />}
-      <ul className="op-list">
-        {data.renewals.map((r, i) => (
-          <li key={i} className="op-item" data-tone={r.tone}>
-            <div className="op-line">
-              <div className="op-main">
-                <span className="op-title">{r.what}</span>
-                <span className="op-meta">{r.item}</span>
-                <span className="op-co">{r.companyName}</span>
-              </div>
+      {/* P107: renewals and servicing as a data table: sort by days left, by what, company and urgency. */}
+      <DataTable
+        details
+        label="Renewals and servicing"
+        stateKey="arms.renewals"
+        rows={data.renewals.map((r, i) => ({ ...r, key: i }))}
+        rowKey={(r) => String(r.key)}
+        rowTone={(r) => edge(r.tone)}
+        searchPlaceholder="Find an item or company"
+        empty={<Empty title="Nothing due." />}
+        columns={[
+          { id: 'what', label: 'What', value: (r) => r.what, phone: 'title', render: (r) => <span className="op-title">{r.what}</span> },
+          { id: 'item', label: 'Item', value: (r) => r.item, phone: 'sub' },
+          { id: 'company', label: 'Company', value: (r) => r.companyName, hideBelow: 1000 },
+          {
+            id: 'days',
+            label: 'Due',
+            value: (r) => r.daysLeft,
+            sort: 'number',
+            align: 'left',
+            render: (r) => (
               <Chip tone={r.tone}>
                 {r.due === null ? 'No record' : (r.daysLeft ?? 0) < 0 ? `${-(r.daysLeft ?? 0)} days late` : `${r.daysLeft} days · ${dateLabel(r.due)}`}
               </Chip>
-            </div>
-          </li>
-        ))}
-      </ul>
+            ),
+          },
+        ]}
+        filters={[
+          { id: 'tone', label: 'Urgency', value: (r) => r.tone, optionLabel: (v) => TONE_WORD[v] ?? v },
+          { id: 'what', label: 'What', value: (r) => r.what },
+          { id: 'company', label: 'Company', value: (r) => r.companyName },
+        ]}
+      />
     </Card>
   );
 }
 
-function TenderList({ rows, empty }: { rows: ArmsControl['tenders']; empty: string }) {
+function TenderList({ rows, empty, label }: { rows: ArmsControl['tenders']; empty: string; label: string }) {
   return (
     <>
-      {rows.length === 0 && <Empty title={empty} />}
-      <ul className="op-list">
-        {rows.map((t) => {
-          const blocked = t.findings.filter((f) => f.level === 'block');
-          const supply = t.tender.kind === 'ARMS_SUPPLY';
-          return (
-            <li key={t.tender.id} className="op-item" data-tone={blocked.length ? 'crit' : undefined}>
-              <div className="op-line">
-                <div className="op-main">
+      {/* P107: the tenders as a data table: soonest closing, blocked ones marked. */}
+      <DataTable
+        details
+        label={label}
+        stateKey={`arms.tenders.${label}`}
+        rows={rows}
+        rowKey={(t) => t.tender.id}
+        rowTone={(t) => (t.findings.some((f) => f.level === 'block') ? 'crit' : undefined)}
+        searchPlaceholder="Find a tender, ref or buyer"
+        empty={<Empty title={empty} />}
+        columns={[
+          {
+            id: 'title',
+            label: 'Tender',
+            value: (t) => t.tender.title,
+            phone: 'title',
+            render: (t) => {
+              const blocked = t.findings.filter((f) => f.level === 'block');
+              const supply = t.tender.kind === 'ARMS_SUPPLY';
+              return (
+                <span className="op-main">
                   <span className="op-title">{t.tender.title}</span>
                   <span className="op-meta">
                     {t.tender.ref} · {t.tender.buyer}
-                    {supply ? '' : ` · ${t.tender.guards} guards`} · closes {dateLabel(t.tender.closesOn)}
+                    {supply ? '' : ` · ${t.tender.guards} guards`}
                   </span>
                   {!supply && (
                     <span className="op-meta">
@@ -474,16 +587,33 @@ function TenderList({ rows, empty }: { rows: ArmsControl['tenders']; empty: stri
                     </span>
                   )}
                   {blocked.length > 0 && <span className="small op-crit">{blocked.map((f) => f.message).join(' ')}</span>}
-                  <span className="op-co">{t.companyName}</span>
-                </div>
-                <Chip tone={blocked.length ? 'crit' : t.tender.status === 'submitted' ? 'ok' : t.daysLeft <= 7 ? 'warn' : 'neutral'}>
+                </span>
+              );
+            },
+          },
+          { id: 'company', label: 'Company', value: (t) => t.companyName, phone: 'sub' },
+          { id: 'closes', label: 'Closes', value: (t) => t.tender.closesOn, sort: 'date' },
+          {
+            id: 'left',
+            label: 'Status',
+            value: (t) => (t.tender.status === 'submitted' ? -1 : t.daysLeft),
+            sort: 'number',
+            align: 'left',
+            render: (t) => {
+              const blocked = t.findings.some((f) => f.level === 'block');
+              return (
+                <Chip tone={blocked ? 'crit' : t.tender.status === 'submitted' ? 'ok' : t.daysLeft <= 7 ? 'warn' : 'neutral'}>
                   {t.tender.status === 'submitted' ? 'Submitted' : `${t.daysLeft} days left`}
                 </Chip>
-              </div>
-            </li>
-          );
-        })}
-      </ul>
+              );
+            },
+          },
+        ]}
+        filters={[
+          { id: 'blocked', label: 'Show', value: (t) => (t.findings.some((f) => f.level === 'block') ? 'blocked' : 'clear'), options: [{ value: 'blocked', label: 'Blocked' }, { value: 'clear', label: 'Not blocked' }] },
+          { id: 'company', label: 'Company', value: (t) => t.companyName },
+        ]}
+      />
     </>
   );
 }
@@ -494,10 +624,10 @@ function Tenders({ data }: { data: ArmsControl }) {
   return (
     <div className="op-grid-2">
       <Card title="Tenders to supply arms-related items" sub="Bid under an arms dealer licence, priced from the supplier catalogue" flush>
-        <TenderList rows={supply} empty="No supply tenders open." />
+        <TenderList rows={supply} empty="No supply tenders open." label="Tenders to supply arms-related items" />
       </Card>
       <Card title="Guarding tenders that need arms" sub="Only armed work is shown. The company bids in its own name." flush>
-        <TenderList rows={guarding} empty="No armed guarding tenders open." />
+        <TenderList rows={guarding} empty="No armed guarding tenders open." label="Guarding tenders that need arms" />
       </Card>
     </div>
   );

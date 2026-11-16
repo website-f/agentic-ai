@@ -3,8 +3,11 @@ import { useState } from 'react';
 import { api, type GovOpsMonitor } from '../api';
 import { useApp } from '../App';
 import { Chip, ErrorNotice, Kpi, Loading, dateLabel, useLoad } from '../ui';
+import { DataTable } from '../DataTable';
 
 type Tab = 'pnl' | 'pay' | 'leave' | 'clients';
+const PNL_STATUS: Record<string, string> = { crit: 'Loss', unknown: 'Unknown', ok: 'Profit' };
+const CLIENT_TONE: Record<string, string> = { crit: 'Needs attention', warn: 'Follow up', unknown: 'Unknown', ok: 'In order' };
 const rm = (n: number | null) => (n == null ? 'Unknown' : `RM${n.toLocaleString('en-MY', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`);
 const LEAVE_KIND: Record<string, string> = {
   ANNUAL: 'Annual',
@@ -143,179 +146,303 @@ function Body({
           </button>
         ))}
       </div>
+      {/* P107: each tab is a data table: search, filters, sort by any figure, pages. Cells keep their old notes. */}
       {tab === 'pnl' && (
-        <div className="table-wrap">
-          <table className="table">
-            <thead>
-              <tr>
-                <th>Site</th>
-                <th className="num">Income</th>
-                <th className="num hide-sm">Guard pay</th>
-                <th className="num">Salary cost – cash payment</th>
-                <th className="num hide-sm">EPF, SOCSO, EIS, levy</th>
-                <th className="num hide-sm">Hostel</th>
-                <th className="num hide-sm">Goodwill items</th>
-                <th className="num hide-sm">Management fee</th>
-                <th className="num">Margin</th>
-                <th>Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {d.sites.map((x) => (
-                <tr key={x.siteId}>
-                  <td>
-                    <button style={LINK} onClick={() => openSite(x.companyId, x.siteId)}>
-                      {x.siteName}
-                    </button>
-                    <div className="muted small">
-                      {x.companyName} · {x.guards} guards · {x.clockedHours} of {x.contractedHours} contract hours clocked
+        <DataTable
+          details
+          label="Site profit and loss"
+          stateKey={`govops.${label}.pnl`}
+          rows={d.sites}
+          rowKey={(x) => x.siteId}
+          searchPlaceholder="Find a site or company"
+          columns={[
+            {
+              id: 'site',
+              label: 'Site',
+              value: (x) => x.siteName,
+              phone: 'title',
+              render: (x) => (
+                <>
+                  <button style={LINK} onClick={() => openSite(x.companyId, x.siteId)}>
+                    {x.siteName}
+                  </button>
+                  <div className="muted small">
+                    {x.companyName} · {x.guards} guards · {x.clockedHours} of {x.contractedHours} contract hours clocked
+                  </div>
+                  {x.notes.map((n) => (
+                    <div key={n} className="muted small">
+                      {n}
                     </div>
-                    {x.notes.map((n) => (
-                      <div key={n} className="muted small">
-                        {n}
-                      </div>
-                    ))}
-                  </td>
-                  <td className="num">
-                    {rm(x.revenue)}
-                    {x.revenueBasis ? <div className="muted small">{x.revenueBasis === 'invoice' ? 'invoiced' : 'contract value'}</div> : null}
-                  </td>
-                  <td className="num hide-sm">{rm(x.guardCost)}</td>
-                  <td className="num">{rm(x.cashPayroll)}{x.cashPayrollPending > 0 && <div className="muted small">{rm(x.cashPayrollPending)} awaiting accounting</div>}<div className="muted small">{x.cashPayrollTrace.map(r => `${r.id}: ${r.journalRef}`).join("; ")}</div></td>
-                  <td className="num hide-sm">{rm(x.statutory)}</td>
-                  <td className="num hide-sm">{rm(x.hostel)}</td>
-                  <td className="num hide-sm">{rm(x.itemCharges)}</td>
-                  <td className="num hide-sm">{rm(x.managementFee)}</td>
-                  <td className="num">
-                    {rm(x.margin)}
-                    {x.marginPct != null ? <div className="muted small">{x.marginPct}%</div> : null}
-                  </td>
-                  <td>
-                    {x.tone === 'crit' ? (
-                      <Chip tone="crit">Loss</Chip>
-                    ) : x.tone === 'unknown' ? (
-                      <Chip tone="neutral">Unknown</Chip>
-                    ) : (
-                      <Chip tone="ok">Profit</Chip>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+                  ))}
+                </>
+              ),
+            },
+            {
+              id: 'revenue',
+              label: 'Income',
+              value: (x) => x.revenue,
+              sort: 'money',
+              render: (x) => (
+                <>
+                  {rm(x.revenue)}
+                  {x.revenueBasis ? <div className="muted small">{x.revenueBasis === 'invoice' ? 'invoiced' : 'contract value'}</div> : null}
+                </>
+              ),
+            },
+            { id: 'guardCost', label: 'Guard pay', value: (x) => x.guardCost, sort: 'money', render: (x) => rm(x.guardCost), hideBelow: 1280, phone: 'hidden' },
+            {
+              id: 'cash',
+              label: 'Salary cost – cash payment',
+              value: (x) => x.cashPayroll,
+              sort: 'money',
+              hideBelow: 1100,
+              phone: 'hidden',
+              render: (x) => (
+                <>
+                  {rm(x.cashPayroll)}
+                  {x.cashPayrollPending > 0 && <div className="muted small">{rm(x.cashPayrollPending)} awaiting accounting</div>}
+                  <div className="muted small">{x.cashPayrollTrace.map((r) => `${r.id}: ${r.journalRef}`).join('; ')}</div>
+                </>
+              ),
+            },
+            { id: 'statutory', label: 'EPF, SOCSO, EIS, levy', value: (x) => x.statutory, sort: 'money', render: (x) => rm(x.statutory), hideBelow: 1366, phone: 'hidden' },
+            { id: 'hostel', label: 'Hostel', value: (x) => x.hostel, sort: 'money', render: (x) => rm(x.hostel), hideBelow: 1366, phone: 'hidden' },
+            { id: 'items', label: 'Goodwill items', value: (x) => x.itemCharges, sort: 'money', render: (x) => rm(x.itemCharges), hideBelow: 1366, phone: 'hidden' },
+            { id: 'fee', label: 'Management fee', value: (x) => x.managementFee, sort: 'money', render: (x) => rm(x.managementFee), hideBelow: 1366, phone: 'hidden' },
+            {
+              id: 'margin',
+              label: 'Margin',
+              value: (x) => x.margin,
+              sort: 'money',
+              render: (x) => (
+                <>
+                  {rm(x.margin)}
+                  {x.marginPct != null ? <div className="muted small">{x.marginPct}%</div> : null}
+                </>
+              ),
+            },
+            {
+              id: 'status',
+              label: 'Status',
+              value: (x) => PNL_STATUS[x.tone === 'crit' ? 'crit' : x.tone === 'unknown' ? 'unknown' : 'ok'],
+              translate: true,
+              render: (x) =>
+                x.tone === 'crit' ? <Chip tone="crit">Loss</Chip> : x.tone === 'unknown' ? <Chip tone="neutral">Unknown</Chip> : <Chip tone="ok">Profit</Chip>,
+            },
+          ]}
+          filters={[
+            { id: 'company', label: 'Company', value: (x) => x.companyName },
+            { id: 'status', label: 'Status', value: (x) => (x.tone === 'crit' ? 'crit' : x.tone === 'unknown' ? 'unknown' : 'ok'), optionLabel: (v) => PNL_STATUS[v] ?? v },
+          ]}
+        />
       )}
       {tab === 'pay' && (
-        <div className="table-wrap">
-          <table className="table">
-            <thead>
-              <tr>
-                <th>Guard</th>
-                <th className="num">Days</th>
-                <th className="num hide-sm">Hours / OT</th>
-                <th className="num">Expected pay</th>
-                <th className="num hide-sm">JA pay</th>
-                <th>Check</th>
-              </tr>
-            </thead>
-            <tbody>
-              {d.pay.map((p) => (
-                <tr key={p.personId}>
-                  <td>
-                    <button style={LINK} onClick={() => openPerson(p.companyId, p.personId)}>
-                      {p.name}
-                    </button>
-                    <div className="muted small">
-                      {p.staffNo} · {p.companyName} · {p.siteName}
+        <DataTable
+          details
+          label="Salary check"
+          stateKey={`govops.${label}.pay`}
+          rows={d.pay}
+          rowKey={(p) => p.personId}
+          searchPlaceholder="Find a guard, staff no. or site"
+          searchText={(p) => p.staffNo ?? ''}
+          columns={[
+            {
+              id: 'name',
+              label: 'Guard',
+              value: (p) => p.name,
+              phone: 'title',
+              render: (p) => (
+                <>
+                  <button style={LINK} onClick={() => openPerson(p.companyId, p.personId)}>
+                    {p.name}
+                  </button>
+                  <div className="muted small">
+                    {p.staffNo} · {p.companyName} · {p.siteName}
+                  </div>
+                </>
+              ),
+            },
+            { id: 'days', label: 'Days', value: (p) => p.days, sort: 'number' },
+            {
+              id: 'hours',
+              label: 'Hours / OT',
+              value: (p) => p.normalHours,
+              sort: 'number',
+              hideBelow: 1100,
+              phone: 'hidden',
+              render: (p) => (
+                <>
+                  {p.normalHours} / {p.overtimeHours}
+                  {p.otherSitesHours > 0 ? <div className="muted small">{p.hoursHere} h at these sites</div> : null}
+                </>
+              ),
+            },
+            {
+              id: 'expected',
+              label: 'Expected pay',
+              value: (p) => p.expectedGross,
+              sort: 'money',
+              render: (p) => (
+                <>
+                  {rm(p.expectedGross)}
+                  {p.overtimePay != null ? <div className="muted small">incl. OT {rm(p.overtimePay)}</div> : null}
+                </>
+              ),
+            },
+            {
+              id: 'ja',
+              label: 'JA pay',
+              value: (p) => p.jaGross,
+              sort: 'money',
+              hideBelow: 1100,
+              render: (p) => (
+                <>
+                  {p.jaGross == null ? <span className="muted">Not sent yet</span> : rm(p.jaGross)}
+                  {p.jaOtHours != null ? <div className="muted small">OT {p.jaOtHours} h</div> : null}
+                </>
+              ),
+            },
+            {
+              id: 'check',
+              label: 'Check',
+              value: (p) => (p.flags.length ? p.flags.join(' · ') : 'No issue in the hours'),
+              translate: true,
+              render: (p) =>
+                p.flags.length ? (
+                  p.flags.map((f) => (
+                    <div key={f} className="small">
+                      <Chip tone={p.tone === 'unknown' ? 'neutral' : 'warn'}>{f}</Chip>
                     </div>
-                  </td>
-                  <td className="num">{p.days}</td>
-                  <td className="num hide-sm">
-                    {p.normalHours} / {p.overtimeHours}
-                    {p.otherSitesHours > 0 ? <div className="muted small">{p.hoursHere} h at these sites</div> : null}
-                  </td>
-                  <td className="num">
-                    {rm(p.expectedGross)}
-                    {p.overtimePay != null ? <div className="muted small">incl. OT {rm(p.overtimePay)}</div> : null}
-                  </td>
-                  <td className="num hide-sm">
-                    {p.jaGross == null ? <span className="muted">Not sent yet</span> : rm(p.jaGross)}
-                    {p.jaOtHours != null ? <div className="muted small">OT {p.jaOtHours} h</div> : null}
-                  </td>
-                  <td>
-                    {p.flags.length ? (
-                      p.flags.map((f) => (
-                        <div key={f} className="small">
-                          <Chip tone={p.tone === 'unknown' ? 'neutral' : 'warn'}>{f}</Chip>
-                        </div>
-                      ))
-                    ) : (
-                      <Chip tone="ok">No issue in the hours</Chip>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+                  ))
+                ) : (
+                  <Chip tone="ok">No issue in the hours</Chip>
+                ),
+            },
+          ]}
+          filters={[
+            { id: 'company', label: 'Company', value: (p) => p.companyName },
+            { id: 'site', label: 'Site', value: (p) => p.siteName },
+            { id: 'flag', label: 'Check', value: (p) => (p.flags.length ? p.flags : ['No issue in the hours']) },
+          ]}
+        />
       )}
       {tab === 'leave' && (
-        <div className="list">
-          {d.leave.length === 0 && <p className="muted small">Nobody on leave this month.</p>}
-          {d.leave.map((l) => (
-            <div key={l.id} className="list-item" style={{ justifyContent: 'space-between', gap: 6, flexWrap: 'wrap' }}>
-              <div style={{ minWidth: 0 }}>
-                <button style={LINK} onClick={() => openPerson(l.companyId, l.personId)}>
-                  {l.name}
-                </button>
-                <div className="muted small">
-                  {l.staffNo} · {l.companyName} · {LEAVE_KIND[l.kind] ?? l.kind} · {dateLabel(l.from)} to {dateLabel(l.to)} ({l.days} days)
-                </div>
-              </div>
-              {l.onLeaveToday ? (
-                <Chip tone="info">On leave today</Chip>
-              ) : l.status === 'pending' ? (
-                <Chip tone="warn">Waiting for a decision</Chip>
-              ) : (
-                <Chip tone="neutral">Approved</Chip>
-              )}
-            </div>
-          ))}
-        </div>
+        <DataTable
+          details
+          label="Guards on leave"
+          stateKey={`govops.${label}.leave`}
+          rows={d.leave}
+          rowKey={(l) => l.id}
+          searchPlaceholder="Find a guard or staff no."
+          searchText={(l) => l.staffNo ?? ''}
+          empty={<p className="muted small">Nobody on leave this month.</p>}
+          columns={[
+            {
+              id: 'name',
+              label: 'Guard',
+              value: (l) => l.name,
+              phone: 'title',
+              render: (l) => (
+                <>
+                  <button style={LINK} onClick={() => openPerson(l.companyId, l.personId)}>
+                    {l.name}
+                  </button>
+                  <div className="muted small">{l.staffNo}</div>
+                </>
+              ),
+            },
+            { id: 'company', label: 'Company', value: (l) => l.companyName, hideBelow: 1100 },
+            { id: 'kind', label: 'Kind', value: (l) => LEAVE_KIND[l.kind] ?? l.kind, translate: true },
+            { id: 'from', label: 'From', value: (l) => l.from, sort: 'date' },
+            { id: 'to', label: 'To', value: (l) => l.to, sort: 'date', phone: 'hidden' },
+            { id: 'days', label: 'Days', value: (l) => l.days, sort: 'number' },
+            {
+              id: 'status',
+              label: 'Status',
+              value: (l) => (l.onLeaveToday ? 'On leave today' : l.status === 'pending' ? 'Waiting for a decision' : 'Approved'),
+              translate: true,
+              render: (l) =>
+                l.onLeaveToday ? <Chip tone="info">On leave today</Chip> : l.status === 'pending' ? <Chip tone="warn">Waiting for a decision</Chip> : <Chip tone="neutral">Approved</Chip>,
+            },
+          ]}
+          filters={[
+            { id: 'kind', label: 'Kind', value: (l) => l.kind, optionLabel: (v) => LEAVE_KIND[v] ?? v },
+            { id: 'status', label: 'Status', value: (l) => (l.onLeaveToday ? 'On leave today' : l.status === 'pending' ? 'Waiting for a decision' : 'Approved') },
+            { id: 'company', label: 'Company', value: (l) => l.companyName },
+          ]}
+        />
       )}
       {tab === 'clients' && (
-        <div className="list">
-          {d.clients.length === 0 && <p className="muted small">No clients recorded for these sites.</p>}
-          {d.clients.map((c) => (
-            <div key={c.id} className="list-item" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 4 }}>
-              <div className="row" style={{ justifyContent: 'space-between', gap: 6, flexWrap: 'wrap' }}>
-                <div style={{ minWidth: 0 }}>
-                  <div style={{ fontWeight: 600 }}>{c.name}</div>
-                  <div className="muted small">
-                    {c.companyName} · {c.sites.join(', ')}
-                  </div>
-                </div>
-                <div className="row" style={{ gap: 6 }}>
+        <>
+          <DataTable
+            details
+            label="Client satisfaction"
+            stateKey={`govops.${label}.clients`}
+            rows={d.clients}
+            rowKey={(c) => c.id}
+            searchPlaceholder="Find a client or site"
+            searchText={(c) => c.sites.join(' ')}
+            empty={<p className="muted small">No clients recorded for these sites.</p>}
+            rowTone={(c) => (c.tone === 'crit' ? 'crit' : c.tone === 'warn' ? 'warn' : undefined)}
+            columns={[
+              {
+                id: 'name',
+                label: 'Client',
+                value: (c) => c.name,
+                phone: 'title',
+                render: (c) => (
+                  <>
+                    <div style={{ fontWeight: 600 }}>{c.name}</div>
+                    <div className="muted small">{c.sites.join(', ')}</div>
+                  </>
+                ),
+              },
+              { id: 'company', label: 'Company', value: (c) => c.companyName, hideBelow: 1100 },
+              {
+                id: 'score',
+                label: 'Score',
+                value: (c) => c.score,
+                sort: 'number',
+                render: (c) => (
                   <span className="small">
                     {c.score != null ? `${c.score} of 5` : 'Not rated'}
                     {c.previous != null && c.score != null && c.previous !== c.score ? ` (was ${c.previous})` : ''}
                   </span>
-                  <Chip tone={c.tone === 'crit' ? 'crit' : c.tone === 'warn' ? 'warn' : c.tone === 'unknown' ? 'neutral' : 'ok'}>
-                    {c.tone === 'crit' ? 'Needs attention' : c.tone === 'warn' ? 'Follow up' : c.tone === 'unknown' ? 'Unknown' : 'In order'}
-                  </Chip>
-                </div>
-              </div>
-              {c.ratedOn && (
-                <div className="muted small">
-                  Last rated {dateLabel(c.ratedOn)}
-                  {c.ratedFrom ? ` by ${c.ratedFrom}` : ' (who at the client not recorded)'}
-                </div>
-              )}
-              {c.issues.length > 0 && <div className="small">{c.issues.map((i) => i.what).join(' · ')}</div>}
-            </div>
-          ))}
+                ),
+              },
+              {
+                id: 'rated',
+                label: 'Last rated',
+                value: (c) => c.ratedOn,
+                sort: 'date',
+                render: (c) =>
+                  c.ratedOn ? (
+                    <span className="muted small">
+                      {dateLabel(c.ratedOn)}
+                      {c.ratedFrom ? ` by ${c.ratedFrom}` : ' (who at the client not recorded)'}
+                    </span>
+                  ) : (
+                    '–'
+                  ),
+              },
+              { id: 'issues', label: 'Issues', value: (c) => c.issues.map((i) => i.what).join(' · '), sort: false, hideBelow: 1280 },
+              {
+                id: 'tone',
+                label: 'Status',
+                value: (c) => CLIENT_TONE[c.tone] ?? 'In order',
+                translate: true,
+                render: (c) => (
+                  <Chip tone={c.tone === 'crit' ? 'crit' : c.tone === 'warn' ? 'warn' : c.tone === 'unknown' ? 'neutral' : 'ok'}>{CLIENT_TONE[c.tone] ?? 'In order'}</Chip>
+                ),
+              },
+            ]}
+            filters={[
+              { id: 'company', label: 'Company', value: (c) => c.companyName },
+              { id: 'tone', label: 'Status', value: (c) => c.tone, optionLabel: (v) => CLIENT_TONE[v] ?? 'In order' },
+            ]}
+          />
           <p className="muted small">Ratings and complaints are recorded on the Clients screen by the Operations Managers, the Operations Director and officers.</p>
-        </div>
+        </>
       )}
       {d.notes.map((n) => (
         <p key={n} className="muted small">

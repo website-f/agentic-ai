@@ -3,8 +3,9 @@ import { useState } from 'react';
 import { CaretDownIcon, CaretUpIcon, HourglassIcon, PlusIcon, ReceiptIcon } from '@phosphor-icons/react';
 import type { ProofInput } from '@prima/core';
 import { api, type ExpenseBoard, type ExpenseInput } from '../api';
-import { Card, PageHead, Stat, Stats, Steps, type StepState } from '../kit';
+import { Card, Empty, PageHead, Stat, Stats, Steps, type StepState } from '../kit';
 import { Chip, ErrorNotice, Loading, dateTimeLabel, useAction, useLoad, type Tone } from '../ui';
+import { DataTable, type DtColumn, type DtFilter } from '../DataTable';
 import { DocList, ProofPicker } from './Proof';
 import '../styles/selfservice.css';
 import { StayRequestPanel } from './ShortStays';
@@ -42,10 +43,39 @@ const PAGE_SUB =
 
 type Filter = 'all' | 'mine' | 'open';
 
+const KIND: Record<Row['kind'], string> = { OPS_CLAIM: 'Operation claim', OFFICE: 'Office request' };
+const whatOf = (r: Row) => `${r.kind === 'OPS_CLAIM' ? 'Operation claim' : CATEGORY[r.category!]} ${r.period}`;
+
+/** P107: the requests as a data table: what and month, company, who asked, who it waits on, total, status. */
+const REQUEST_COLUMNS: DtColumn<Row>[] = [
+  { id: 'what', label: 'Request', value: whatOf, render: (r) => <strong>{whatOf(r)}</strong>, phone: 'title' },
+  { id: 'company', label: 'Company', value: (r) => r.companyName, phone: 'sub' },
+  { id: 'by', label: 'Requested by', value: (r) => r.requestedBy, hideBelow: 1200 },
+  { id: 'waiting', label: 'Waiting on', value: (r) => r.waitingOn ?? '', hideBelow: 1100 },
+  { id: 'total', label: 'Total', value: (r) => r.total, sort: 'money', render: (r) => rm(r.total) },
+  { id: 'status', label: 'Status', value: (r) => STATUS[r.status][1], translate: true, render: (r) => <Chip tone={STATUS[r.status][0]}>{STATUS[r.status][1]}</Chip> },
+];
+const REQUEST_FILTERS: DtFilter<Row>[] = [
+  { id: 'kind', label: 'Kind', value: (r) => r.kind, options: (Object.keys(KIND) as Row['kind'][]).map((k) => ({ value: k, label: KIND[k] })) },
+  { id: 'category', label: 'Category', value: (r) => r.category, options: (Object.keys(CATEGORY) as NonNullable<Row['category']>[]).map((k) => ({ value: k, label: CATEGORY[k] })) },
+  { id: 'status', label: 'Status', value: (r) => r.status, options: (Object.keys(STATUS) as Row['status'][]).map((k) => ({ value: k, label: STATUS[k][1] })) },
+  { id: 'company', label: 'Company', value: (r) => r.companyName },
+  { id: 'month', label: 'Month', value: (r) => r.period },
+];
+
 export function RequestsView() {
   const { data, error } = useLoad(() => api.expenseBoard(), []);
   const [adding, setAdding] = useState<'OPS_CLAIM' | 'OFFICE' | null>(null);
   const [filter, setFilter] = useState<Filter>('all');
+  // P107: which rows are opened to act on (kept here so a row stays open when the table re-draws).
+  const [opened, setOpened] = useState<ReadonlySet<string>>(new Set());
+  const toggle = (id: string) =>
+    setOpened((o) => {
+      const next = new Set(o);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
   if (error)
     return (
       <div className="page ss">
@@ -103,31 +133,53 @@ export function RequestsView() {
       )}
       {adding && <ExpenseForm kind={adding} companies={data.companies} onDone={() => setAdding(null)} />}
       <Card title="Requests" flush>
-        <div className="ss-tools">
-          <div className="seg" role="group" aria-label="Which requests">
-            {(
-              [
-                ['all', 'All', data.requests.length],
-                ['mine', 'Waiting for me', forMe.length],
-                ['open', 'Open', open.length],
-              ] as [Filter, string, number][]
-            ).map(([k, l, n]) => (
-              <button key={k} aria-pressed={filter === k} onClick={() => setFilter(k)}>
-                {l}
-                <span className="ss-count">{n}</span>
+        {/* P107: a data table (search, filters, sort, pages; cards on a phone); All / Waiting for me / Open stays as the first choice. */}
+        <DataTable
+          label="Requests"
+          stateKey="requests.list"
+          rows={shown}
+          rowKey={(r) => r.id}
+          columns={REQUEST_COLUMNS}
+          filters={REQUEST_FILTERS}
+          searchText={(r) => r.lines.map((l) => l.item).join(' ')}
+          onRowClick={(r) => toggle(r.id)}
+          rowTone={(r) => (r.canCos || r.canCoo ? 'warn' : STATUS[r.status][0] === 'crit' ? 'crit' : undefined)}
+          rowEnd={(r) => {
+            const decide = r.canCos || r.canCoo;
+            const isOpen = opened.has(r.id);
+            return (
+              <button className={decide && !isOpen ? 'btn btn-primary btn-sm' : 'btn btn-ghost btn-sm'} aria-expanded={isOpen} onClick={() => toggle(r.id)}>
+                {isOpen ? 'Hide' : decide || r.canEdit ? 'Act' : 'Details'}
+                {isOpen ? <CaretUpIcon size={14} aria-hidden="true" /> : <CaretDownIcon size={14} aria-hidden="true" />}
               </button>
-            ))}
-          </div>
-        </div>
-        <ul className="ss-rows ss-req">
-          {data.requests.length === 0 && <li className="empty">Nothing yet.</li>}
-          {data.requests.length > 0 && shown.length === 0 && <li className="empty">Nothing here.</li>}
-          {shown.map((r) => (
-            <li key={r.id}>
-              <RequestLine r={r} companies={data.companies} />
-            </li>
-          ))}
-        </ul>
+            );
+          }}
+          rowDetail={(r) =>
+            opened.has(r.id) ? (
+              // data-no-row-click: a click inside the opened part (a phone card) does not close it.
+              <div data-no-row-click>
+                <RequestDetail r={r} companies={data.companies} />
+              </div>
+            ) : null
+          }
+          empty={<Empty title={data.requests.length === 0 ? 'Nothing yet.' : 'Nothing here.'} />}
+          toolbar={
+            <div className="seg" role="group" aria-label="Which requests">
+              {(
+                [
+                  ['all', 'All', data.requests.length],
+                  ['mine', 'Waiting for me', forMe.length],
+                  ['open', 'Open', open.length],
+                ] as [Filter, string, number][]
+              ).map(([k, l, n]) => (
+                <button key={k} aria-pressed={filter === k} onClick={() => setFilter(k)}>
+                  {l}
+                  <span className="ss-count">{n}</span>
+                </button>
+              ))}
+            </div>
+          }
+        />
       </Card>
     </div>
   );
@@ -155,128 +207,104 @@ function requestSteps(r: Row): { label: string; state: StepState; note?: string 
   return steps;
 }
 
-function RequestLine({ r, companies }: { r: Row; companies: ExpenseBoard['companies'] }) {
-  const [open, setOpen] = useState(false);
+/** A request opened to act on: its steps, items, notes, papers, edit and submit, and the decision box. */
+function RequestDetail({ r, companies }: { r: Row; companies: ExpenseBoard['companies'] }) {
   const [editing, setEditing] = useState(false);
   const [note, setNote] = useState('');
   const act = useAction();
-  const docs = useLoad(() => (open ? api.expenseDocs(r.id) : Promise.resolve([])), [open, r.docIds.length]);
+  const docs = useLoad(() => api.expenseDocs(r.id), [r.docIds.length]);
   const decide = r.canCos || r.canCoo;
-  const tone = STATUS[r.status][0];
   return (
-    <>
-      <div className="ss-row" data-tone={decide ? 'warn' : tone === 'crit' ? 'crit' : undefined}>
-        <div className="ss-row-main">
-          <span className="ss-row-title">
-            {r.kind === 'OPS_CLAIM' ? 'Operation claim' : CATEGORY[r.category!]} {r.period}
-          </span>
-          <span className="ss-meta">
-            {r.companyName} · {r.requestedBy}
-            {r.waitingOn ? ` · waiting on ${r.waitingOn}` : ''}
-          </span>
-        </div>
-        <div className="ss-actions">
-          <span className="ss-amount">{rm(r.total)}</span>
-          <Chip tone={tone}>{STATUS[r.status][1]}</Chip>
-          <button className={decide && !open ? 'btn btn-primary btn-sm' : 'btn btn-ghost btn-sm'} aria-expanded={open} onClick={() => setOpen(!open)}>
-            {open ? 'Hide' : decide || r.canEdit ? 'Act' : 'Details'}
-            {open ? <CaretUpIcon size={14} aria-hidden="true" /> : <CaretDownIcon size={14} aria-hidden="true" />}
-          </button>
+    <div className="ss-req-detail small">
+      <Steps steps={requestSteps(r)} />
+      <div className="ss-lines">
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Item</th>
+                <th className="num">Amount</th>
+                <th>Note</th>
+              </tr>
+            </thead>
+            <tbody>
+              {r.lines.map((l, i) => (
+                <tr key={i}>
+                  <td>{l.item}</td>
+                  <td className="num">{rm(l.amount)}</td>
+                  <td className="muted">{l.note}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       </div>
-      {open && (
-        <div className="ss-req-detail small">
-          <Steps steps={requestSteps(r)} />
-          <div className="ss-lines">
-            <div className="table-wrap">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Item</th>
-                    <th className="num">Amount</th>
-                    <th>Note</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {r.lines.map((l, i) => (
-                    <tr key={i}>
-                      <td>{l.item}</td>
-                      <td className="num">{rm(l.amount)}</td>
-                      <td className="muted">{l.note}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-          {r.returned && r.status === 'returned' && (
-            <div className="notice small" data-tone="warn">
-              Sent back by {r.returned.by}: {r.returned.note}
-            </div>
-          )}
-          {(r.cosApproval || r.cooDecision) && (
-            <div className="ss-meta">
-              {r.cosApproval && (
-                <span>
-                  Chief of Staff: {r.cosApproval.by}, {dateTimeLabel(r.cosApproval.at)}
-                </span>
-              )}
-              {r.cooDecision && (
-                <span>
-                  COO: {r.cooDecision.by}, {dateTimeLabel(r.cooDecision.at)}
-                </span>
-              )}
-            </div>
-          )}
-          {docs.data && <DocList docs={docs.data} />}
-          {r.canEdit && (
-            <div className="ss-actions">
-              <button className="btn btn-sm" onClick={() => setEditing(!editing)}>
-                {editing ? 'Cancel edit' : 'Edit items'}
-              </button>
-              <button className="btn btn-primary btn-sm" disabled={act.busy} onClick={() => act.run(() => api.submitExpense(r.id), 'Submitted.')}>
-                Submit
-              </button>
-            </div>
-          )}
-          {editing && <ExpenseForm kind={r.kind} companies={companies} row={r} onDone={() => setEditing(false)} />}
-          {decide && (
-            <div className="ss-decide">
-              <label className="field">
-                <span className="label">Your decision</span>
-                <input
-                  className="input"
-                  aria-label="Note"
-                  placeholder="Reason (always required; at least 3 letters to send back or reject)"
-                  value={note}
-                  onChange={(e) => setNote(e.target.value)}
-                />
-              </label>
-              <div className="ss-actions">
-                <button
-                  className="btn btn-primary btn-sm"
-                  disabled={act.busy || !note.trim()}
-                  onClick={() => act.run(() => api.decideExpense(r.id, 'approve', note), r.canCos ? 'Approved, sent to the COO.' : 'Approved.')}
-                >
-                  Approve
-                </button>
-                <button className="btn btn-sm" disabled={act.busy || note.trim().length < 3} onClick={() => act.run(() => api.decideExpense(r.id, 'return', note), 'Sent back.')}>
-                  Send back
-                </button>
-                <button
-                  className="btn btn-sm btn-danger"
-                  disabled={act.busy || note.trim().length < 3}
-                  onClick={() => act.run(() => api.decideExpense(r.id, 'reject', note), 'Rejected.')}
-                >
-                  Reject
-                </button>
-              </div>
-            </div>
-          )}
-          <ErrorNotice error={act.error} />
+      {r.returned && r.status === 'returned' && (
+        <div className="notice small" data-tone="warn">
+          Sent back by {r.returned.by}: {r.returned.note}
         </div>
       )}
-    </>
+      {(r.cosApproval || r.cooDecision) && (
+        <div className="ss-meta">
+          {r.cosApproval && (
+            <span>
+              Chief of Staff: {r.cosApproval.by}, {dateTimeLabel(r.cosApproval.at)}
+            </span>
+          )}
+          {r.cooDecision && (
+            <span>
+              COO: {r.cooDecision.by}, {dateTimeLabel(r.cooDecision.at)}
+            </span>
+          )}
+        </div>
+      )}
+      {docs.data && <DocList docs={docs.data} />}
+      {r.canEdit && (
+        <div className="ss-actions">
+          <button className="btn btn-sm" onClick={() => setEditing(!editing)}>
+            {editing ? 'Cancel edit' : 'Edit items'}
+          </button>
+          <button className="btn btn-primary btn-sm" disabled={act.busy} onClick={() => act.run(() => api.submitExpense(r.id), 'Submitted.')}>
+            Submit
+          </button>
+        </div>
+      )}
+      {editing && <ExpenseForm kind={r.kind} companies={companies} row={r} onDone={() => setEditing(false)} />}
+      {decide && (
+        <div className="ss-decide">
+          <label className="field">
+            <span className="label">Your decision</span>
+            <input
+              className="input"
+              aria-label="Note"
+              placeholder="Reason (always required; at least 3 letters to send back or reject)"
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+            />
+          </label>
+          <div className="ss-actions">
+            <button
+              className="btn btn-primary btn-sm"
+              disabled={act.busy || !note.trim()}
+              onClick={() => act.run(() => api.decideExpense(r.id, 'approve', note), r.canCos ? 'Approved, sent to the COO.' : 'Approved.')}
+            >
+              Approve
+            </button>
+            <button className="btn btn-sm" disabled={act.busy || note.trim().length < 3} onClick={() => act.run(() => api.decideExpense(r.id, 'return', note), 'Sent back.')}>
+              Send back
+            </button>
+            <button
+              className="btn btn-sm btn-danger"
+              disabled={act.busy || note.trim().length < 3}
+              onClick={() => act.run(() => api.decideExpense(r.id, 'reject', note), 'Rejected.')}
+            >
+              Reject
+            </button>
+          </div>
+        </div>
+      )}
+      <ErrorNotice error={act.error} />
+    </div>
   );
 }
 

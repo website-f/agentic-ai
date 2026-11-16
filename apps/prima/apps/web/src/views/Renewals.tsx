@@ -1,11 +1,11 @@
-import { Select } from '../SearchSelect';
 import { useMemo, useState } from 'react';
+import { DataTable, useTableState, type DtColumn, type DtFilter } from '../DataTable';
 import { ArrowsClockwiseIcon, ClockCountdownIcon, QuestionIcon, WarningOctagonIcon } from '@phosphor-icons/react';
 import { api, type RenewalAction, type RenewalBoard, type RenewalBody } from '../api';
-import { Empty, PageHead, Search, Stat, Stats, Steps, Toolbar, type StepState } from '../kit';
-import { Chip, ErrorNotice, Loading, dateLabel, useAction, useLoad } from '../ui';
+import { Empty, PageHead, Stat, Stats, Steps, type StepState } from '../kit';
+import { Chip, Drawer, ErrorNotice, Loading, dateLabel, useAction, useLoad } from '../ui';
 import { CentralAdminGuide } from './CentralAdminGuide';
-import { CalendarGroup, DateLeaf } from './Compliance';
+import { DateLeaf } from './Compliance';
 import { RecordButton } from './RecordForm';
 import { ImportButton } from './ImportDrawer';
 import '../styles/hrx.css';
@@ -56,33 +56,86 @@ function bucketOf(r: Row): Bucket {
   return r.licence.renewal && r.stage !== 'ok' ? 'progress' : 'ok';
 }
 
+type Focus = 'overdue' | 'due' | 'unknown' | 'inProgress';
+const FOCUS: { value: Focus; label: string }[] = [
+  { value: 'overdue', label: 'Expired' },
+  { value: 'due', label: 'Due' },
+  { value: 'unknown', label: 'No expiry on file' },
+  { value: 'inProgress', label: 'Being renewed' },
+];
+/** What a tile picks: its status, plus "being renewed" when a renewal is open. */
+const focusOf = (r: Row): Focus[] => {
+  const out: Focus[] = [];
+  if (r.status === 'OVERDUE') out.push('overdue');
+  else if (r.status === 'DUE') out.push('due');
+  else if (r.status === 'UNKNOWN') out.push('unknown');
+  if (r.licence.renewal) out.push('inProgress');
+  return out;
+};
+const stageOf = (r: Row) => (r.status === 'OVERDUE' ? (['crit', 'Expired'] as const) : STAGE[r.stage]);
+const bucketRank = (r: Row) => BUCKETS.findIndex((x) => x.key === bucketOf(r));
+
+/** P107: renewals as one table (was groups by urgency or by company); a row opens its renewal steps in a drawer. */
+const RENEWAL_COLUMNS: DtColumn<Row>[] = [
+  { id: 'licence', label: 'Licence', value: (r) => `${r.label}${r.licence.title ? `: ${r.licence.title}` : ''}`, phone: 'title' },
+  { id: 'company', label: 'Company', value: (r) => r.companyName, phone: 'sub' },
+  {
+    id: 'ref',
+    label: 'Reference',
+    value: (r) => r.licence.reference,
+    render: (r) => (
+      <span className="small">
+        {r.licence.reference}
+        {r.licence.issuer ? <span className="muted"> · {r.licence.issuer}</span> : null}
+      </span>
+    ),
+    hideBelow: 1100,
+  },
+  { id: 'expires', label: 'Expires', value: (r) => r.licence.expiresOn, sort: 'date', render: (r) => (r.licence.expiresOn ? dateLabel(r.licence.expiresOn) : 'No expiry on file') },
+  { id: 'days', label: 'Days left', value: (r) => r.daysLeft, sort: 'number', hideBelow: 900 },
+  {
+    id: 'stage',
+    label: 'Stage',
+    value: bucketRank,
+    sort: 'number',
+    search: false,
+    render: (r) => {
+      const [tone, label] = stageOf(r);
+      return (
+        <span className="row" style={{ gap: 4, flexWrap: 'wrap' }}>
+          {r.escalatedTo && <Chip tone="crit">Now with the {r.escalatedTo}</Chip>}
+          <Chip tone={tone}>{label}</Chip>
+        </span>
+      );
+    },
+  },
+];
+
 export function RenewalsView() {
   const { data, error } = useLoad(() => api.renewalBoard(), []);
   const [all, setAll] = useState(false);
-  const [company, setCompany] = useState('');
-  const [q, setQ] = useState('');
-  const [by, setBy] = useState<'urgency' | 'company'>('urgency');
-  const [focus, setFocus] = useState<'overdue' | 'due' | 'unknown' | 'inProgress' | ''>('');
-  const needle = q.trim().toLowerCase();
+  const [openId, setOpenId] = useState<string | null>(null);
+  const table = useTableState('gov.renewals.list');
+  const focus = (table.state.f.focus ?? '') as Focus | '';
+  const companies = useMemo(() => new Map((data?.companies ?? []).map((c) => [c.id, c.name])), [data]);
+  const filters: DtFilter<Row>[] = useMemo(
+    () => [
+      { id: 'focus', label: 'Show', value: focusOf, options: FOCUS },
+      { id: 'company', label: 'Company', value: (r) => r.licence.companyId, optionLabel: (id) => companies.get(id) ?? id, allLabel: 'All companies' },
+      { id: 'stage', label: 'Stage', value: (r) => stageOf(r)[1] },
+    ],
+    [companies],
+  );
+  // Most urgent first (expired, due, no expiry, being renewed, in date), then the board's own order.
   const rows = useMemo(
     () =>
-      (data?.rows ?? []).filter(
-        (r) =>
-          // The KDN licence is worked on the KDN panel above (Part W).
-          r.licence.type !== 'KDN_LICENCE' &&
-          (all || r.stage !== 'ok') &&
-          (!company || r.licence.companyId === company) &&
-          (!focus ||
-            (focus === 'inProgress'
-              ? !!r.licence.renewal
-              : focus === 'overdue'
-                ? r.status === 'OVERDUE'
-                : focus === 'due'
-                  ? r.status === 'DUE'
-                  : r.status === 'UNKNOWN')) &&
-          (!needle || `${r.label} ${r.licence.title ?? ''} ${r.companyName} ${r.licence.reference} ${r.licence.issuer ?? ''}`.toLowerCase().includes(needle)),
-      ),
-    [data, all, company, focus, needle],
+      (data?.rows ?? [])
+        // The KDN licence is worked on the KDN panel above (Part W).
+        .filter((r) => r.licence.type !== 'KDN_LICENCE' && (all || r.stage !== 'ok'))
+        .map((r, i) => ({ r, i, b: bucketRank(r) }))
+        .sort((x, y) => x.b - y.b || x.i - y.i)
+        .map((x) => x.r),
+    [data, all],
   );
   if (error)
     return (
@@ -98,15 +151,8 @@ export function RenewalsView() {
     );
   const sum = (k: 'overdue' | 'due' | 'unknown' | 'inProgress') => data.companies.reduce((n, c) => n + c[k], 0);
   const expired = data.companies.filter((c) => c.kdnExpired);
-  const pick = (k: typeof focus) => setFocus(focus === k ? '' : k);
-  const groups =
-    by === 'urgency'
-      ? BUCKETS.map((b) => ({ key: b.key, title: b.title, tone: b.tone, rows: rows.filter((r) => bucketOf(r) === b.key) }))
-      : [...new Set(rows.map((r) => r.licence.companyId))].map((id) => {
-          const mine = rows.filter((r) => r.licence.companyId === id);
-          const worst = BUCKETS.find((b) => mine.some((r) => bucketOf(r) === b.key));
-          return { key: id, title: mine[0].companyName, tone: worst?.tone, rows: mine };
-        });
+  const pick = (k: Focus) => table.set({ f: { focus: focus === k ? '' : k } });
+  const opened = openId ? data.rows.find((r) => r.licence.id === openId) : undefined;
   return (
     <div className="page">
       <PageHead
@@ -164,61 +210,51 @@ export function RenewalsView() {
           KDN licence past its expiry, renewal is urgent: {expired.map((c) => c.name).join(', ')}.
         </p>
       )}
-      <Toolbar
-        end={
-          <>
-            <div className="seg" role="group" aria-label="Group by">
-              <button aria-pressed={by === 'urgency'} onClick={() => setBy('urgency')}>
-                By urgency
-              </button>
-              <button aria-pressed={by === 'company'} onClick={() => setBy('company')}>
-                By company
-              </button>
-            </div>
+      <section className="k-card">
+        <DataTable
+          label="Renewals"
+          control={table}
+          rows={rows}
+          rowKey={(r) => r.licence.id}
+          columns={RENEWAL_COLUMNS}
+          filters={filters}
+          searchText={(r) => r.licence.issuer ?? ''}
+          searchPlaceholder="Search licence, company or reference"
+          onView={(r) => setOpenId(r.licence.id)}
+          rowTone={(r) => (r.status === 'OVERDUE' ? 'crit' : r.status === 'DUE' || r.status === 'UNKNOWN' ? 'warn' : undefined)}
+          rowEnd={(r) => (r.can.open ? <OpenRenewal r={r} /> : null)}
+          toolbar={
             <button className="btn btn-sm" aria-pressed={all} onClick={() => setAll(!all)}>
               {all ? 'Hide in date' : 'Show in date'}
             </button>
-          </>
-        }
-      >
-        <Search value={q} onChange={setQ} placeholder="Search licence, company or reference" label="Search renewals" />
-        {data.companies.length > 1 && (
-          <Select className="select hx-filter" aria-label="Company" value={company} onChange={(e) => setCompany(e.target.value)}>
-            <option value="">All companies</option>
-            {data.companies.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </Select>
-        )}
-        {focus && (
-          <button className="btn btn-sm" onClick={() => setFocus('')}>
-            Clear filter
-          </button>
-        )}
-      </Toolbar>
-      {rows.length === 0 && (
-        <section className="k-card">
-          <Empty title="Nothing due." action={needle || focus || company ? undefined : <RecordButton kind="licence" primary label="Add licence" />}>
-            {needle || focus || company ? 'No renewal matches the search or filter.' : 'Add each licence, registration or certificate with its expiry date; its renewal opens here when it falls due.'}
-          </Empty>
-        </section>
+          }
+          empty={
+            <Empty title="Nothing due." action={<RecordButton kind="licence" primary label="Add licence" />}>
+              Add each licence, registration or certificate with its expiry date; its renewal opens here when it falls due.
+            </Empty>
+          }
+        />
+      </section>
+      {opened && (
+        <Drawer title={`${opened.label}${opened.licence.title ? `: ${opened.licence.title}` : ''}`} sub={opened.companyName} onClose={() => setOpenId(null)}>
+          <RenewalRow r={opened} />
+        </Drawer>
       )}
-      {groups
-        .filter((g) => g.rows.length > 0)
-        .map((g) => (
-          <CalendarGroup key={g.key} title={g.title} count={g.rows.length} tone={g.tone}>
-            {g.rows.map((r) => (
-              <RenewalRow key={r.licence.id} r={r} byCompany={by === 'company'} />
-            ))}
-          </CalendarGroup>
-        ))}
     </div>
   );
 }
 
-function RenewalRow({ r, byCompany }: { r: Row; byCompany: boolean }) {
+/** The "Open renewal" button on a row (the same step its drawer offers). */
+function OpenRenewal({ r }: { r: Row }) {
+  const act = useAction();
+  return (
+    <button className="btn btn-primary btn-sm" disabled={act.busy} title={act.error?.message} onClick={() => act.run(() => api.renewalStep(r.licence.id, 'open', {}), 'Renewal opened.')}>
+      Open renewal
+    </button>
+  );
+}
+
+function RenewalRow({ r }: { r: Row }) {
   const act = useAction();
   const [ref, setRef] = useState('');
   const [note, setNote] = useState('');
@@ -239,7 +275,7 @@ function RenewalRow({ r, byCompany }: { r: Row; byCompany: boolean }) {
   const needsNote = c.agency || c.returnIt || c.confirm;
   const anyForm = c.papers || needsRef || c.sign;
   return (
-    <li className="hx-row rn-row" data-tone={r.status === 'OVERDUE' ? 'crit' : r.status === 'DUE' ? 'warn' : r.status === 'UNKNOWN' ? 'unknown' : undefined}>
+    <div className="hx-row rn-row" data-tone={r.status === 'OVERDUE' ? 'crit' : r.status === 'DUE' ? 'warn' : r.status === 'UNKNOWN' ? 'unknown' : undefined}>
       <DateLeaf date={r.licence.expiresOn} tone={leafTone} />
       <div className="hx-row-main">
         <span className="hx-row-title">
@@ -247,7 +283,7 @@ function RenewalRow({ r, byCompany }: { r: Row; byCompany: boolean }) {
           {r.licence.title ? `: ${r.licence.title}` : ''}
         </span>
         <span className="hx-row-meta">
-          {byCompany ? '' : `${r.companyName} · `}
+          {`${r.companyName} · `}
           {r.licence.reference}
           {r.licence.issuer ? ` · ${r.licence.issuer}` : ''}
         </span>
@@ -427,6 +463,6 @@ function RenewalRow({ r, byCompany }: { r: Row; byCompany: boolean }) {
           </div>
         )}
       </div>
-    </li>
+    </div>
   );
 }

@@ -2,7 +2,8 @@ import { Select } from '../SearchSelect';
 import { createContext, useContext, useState } from 'react';
 import type { ProofInput } from '@prima/core';
 import { api } from '../api';
-import { ErrorNotice, Loading, humanize, useAction, useLoad } from '../ui';
+import { Drawer, ErrorNotice, Loading, humanize, useAction, useLoad } from '../ui';
+import { DataTable, type DtColumn, type DtFilter } from '../DataTable';
 import { useApp } from '../App';
 import { ProofPicker } from './Proof';
 
@@ -460,76 +461,126 @@ function AgreementPrint({ r }: { r: Rec }) {
   );
 }
 
-function PurchasesSection({ b }: { b: Board }) {
+/** One IT purchase file: timing, quotes compared, budget, documents and the forms that move it on. */
+function PurchaseFile({ p, b }: { p: PurchaseRow; b: Board }) {
   const it = b.role === 'manager' || b.role === 'it';
+  return (
+    <div style={{ padding: '6px 0' }}>
+      <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
+        <strong>{p.ref}</strong>
+        {p.stage && (
+          <span className="chip" data-tone={p.late ? 'crit' : 'ok'}>
+            {p.stage}: {p.daysInStage} working day(s){p.late ? ' · lewat' : ''}
+          </span>
+        )}
+        <span className="chip" data-tone={p.quotes.ok ? 'ok' : 'warn'}>
+          {p.quotes.physical} physical + {p.quotes.online} online quote(s)
+        </span>
+        {p.route === 'b' && <span className="chip" data-tone={p.paidFirstUndelivered ? 'crit' : 'warn'}>bayaran dahulu{p.paidFirstUndelivered ? ' · not delivered yet' : ''}</span>}
+        {p.budgetMissing && <span className="chip" data-tone="warn">no budget check</span>}
+        {p.budget && <span className="chip">bajet {p.budget.available}</span>}
+      </div>
+      {p.comparison.length > 0 && (
+        <div className="table-wrap">
+          <table className="table small">
+            <thead>
+              <tr>
+                <th>Supplier</th>
+                <th>Type</th>
+                <th>RM</th>
+                <th>Warranty (mo)</th>
+                <th>Lead (days)</th>
+                <th>Technical fit</th>
+                <th>Capability</th>
+              </tr>
+            </thead>
+            <tbody>
+              {p.comparison.map((q) => (
+                <tr key={q.supplier + q.type}>
+                  <td>
+                    {q.supplier}
+                    {p.recommendation?.supplier === q.supplier ? ' (recommended)' : ''}
+                    {q.expired ? ' · expired' : ''}
+                    {q.payFirst ? ' · pay first' : ''}
+                  </td>
+                  <td>{q.type}</td>
+                  <td>{q.price.toFixed(2)}</td>
+                  <td>{q.warrantyMonths}</td>
+                  <td>{q.leadDays}</td>
+                  <td>{q.technicalFit}</td>
+                  <td>{q.capability}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      {p.docsMissing.length > 0 && <div className="muted small">Documents still missing: {p.docsMissing.map(docLabel).join(', ')} · keep until {p.keepUntil}</div>}
+      <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
+        {it && (
+          <>
+            <OpForm title="Technical assessment" op="assess" fixed={{ purchaseId: p.purchaseId }} fields={[{ k: 'brandModel', l: 'Recommended brand or model' }, { k: 'spec', l: 'Specification', t: 'area' }, { k: 'compatible', l: 'Compatible with our systems', t: 'yn' }, { k: 'compatibleNote', l: 'Compatibility note' }, { k: 'estCost', l: 'Estimated cost (RM)', t: 'number' }, { k: 'alternatives', l: 'Alternatives' }, { k: 'leadTime', l: 'Lead time' }, { k: 'security', l: 'Security notes' }, { k: 'buyAnywayReason', l: 'Reason to buy although spares exist' }]} />
+            <QuotesForm purchaseId={p.purchaseId} />
+            {p.comparison.length > 0 && <OpForm title="Recommend a supplier" op="recommend" fixed={{ purchaseId: p.purchaseId }} fields={[{ k: 'supplier', l: 'Supplier', t: 'select', o: [...new Set(p.comparison.map((q) => q.supplier))] }, { k: 'reason', l: 'Reason for the recommendation' }]} />}
+            <OpForm title="Receive and inspect (GRN)" op="grn" fixed={{ purchaseId: p.purchaseId }} fields={[{ k: 'doNo', l: 'Delivery order number' }, { k: 'invoiceNo', l: 'Tax invoice number' }, { k: 'qty', l: 'Quantity received', t: 'number' }, { k: 'inspectedOn', l: 'Inspected on', t: 'date' }, { k: 'packageOk', l: 'Packaging intact', t: 'yn' }, { k: 'specOk', l: 'Matches the specification', t: 'yn' }, { k: 'physicalOk', l: 'No physical damage', t: 'yn' }, { k: 'functionOk', l: 'Works (function test)', t: 'yn' }, { k: 'accessoriesOk', l: 'Accessories complete', t: 'yn' }, { k: 'failedAssetIds', l: 'Asset ids that failed', t: 'list' }, { k: 'warrantyCert', l: 'Warranty certificate reference' }, { k: 'note', l: 'What does not match' }]} />
+          </>
+        )}
+        {b.role === 'party' && <OpForm title="Budget check (Finance)" op="budget" fixed={{ purchaseId: p.purchaseId }} fields={[{ k: 'available', l: 'Budget available', t: 'select', o: ['yes', 'no'] }, { k: 'allocation', l: 'Budget line or allocation' }, { k: 'comment', l: 'Comment' }]} />}
+      </div>
+    </div>
+  );
+}
+
+/** P107: the IT purchase files as a data table (stage, timing, quotes, budget); a row opens its file in a drawer. */
+const POLICY_PURCHASE_COLUMNS: DtColumn<PurchaseRow>[] = [
+  { id: 'ref', label: 'Reference', value: (p) => p.ref, render: (p) => <strong>{p.ref}</strong>, phone: 'title' },
+  { id: 'stage', label: 'Stage', value: (p) => p.stage ?? '', phone: 'sub' },
+  { id: 'days', label: 'Working days in stage', value: (p) => (p.stage ? p.daysInStage : null), sort: 'number', render: (p) => (p.stage ? <span className="chip" data-tone={p.late ? 'crit' : 'ok'}>{`${p.daysInStage}${p.late ? ' · lewat' : ''}`}</span> : '–') },
+  { id: 'quotes', label: 'Quotes', value: (p) => p.quotes.physical + p.quotes.online, sort: 'number', render: (p) => <span className="chip" data-tone={p.quotes.ok ? 'ok' : 'warn'}>{`${p.quotes.physical} physical + ${p.quotes.online} online quote(s)`}</span> },
+  {
+    id: 'budget',
+    label: 'Budget',
+    value: (p) => (p.budgetMissing ? 'no budget check' : p.budget ? `bajet ${p.budget.available}` : ''),
+    render: (p) => (
+      <span className="row" style={{ gap: 4, flexWrap: 'wrap' }}>
+        {p.route === 'b' && <span className="chip" data-tone={p.paidFirstUndelivered ? 'crit' : 'warn'}>bayaran dahulu{p.paidFirstUndelivered ? ' · not delivered yet' : ''}</span>}
+        {p.budgetMissing && <span className="chip" data-tone="warn">no budget check</span>}
+        {p.budget && <span className="chip">bajet {p.budget.available}</span>}
+      </span>
+    ),
+  },
+  { id: 'docs', label: 'Documents missing', value: (p) => p.docsMissing.length, sort: 'number', hideBelow: 1100 },
+];
+const POLICY_PURCHASE_FILTERS: DtFilter<PurchaseRow>[] = [
+  { id: 'stage', label: 'Stage', value: (p) => p.stage ?? '' },
+  { id: 'late', label: 'Late', value: (p) => (p.late ? 'yes' : 'no'), options: [{ value: 'yes', label: 'Late' }, { value: 'no', label: 'On time' }] },
+  { id: 'budget', label: 'Budget', value: (p) => (p.budgetMissing ? 'missing' : 'ok'), options: [{ value: 'missing', label: 'No budget check' }, { value: 'ok', label: 'Budget checked' }] },
+];
+
+function PurchasesSection({ b }: { b: Board }) {
+  const [openId, setOpenId] = useState<string | null>(null);
   const rows = b.purchases ?? [];
   if (!rows.length) return null;
+  const p = rows.find((x) => x.purchaseId === openId) ?? null;
   return (
     <div className="panel">
       <h3>Pembelian IT: tempoh, sebut harga, bajet dan dokumen</h3>
-      {rows.map((p) => (
-        <div key={p.purchaseId} style={{ borderTop: '1px solid var(--line, #ddd)', padding: '6px 0' }}>
-          <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
-            <strong>{p.ref}</strong>
-            {p.stage && (
-              <span className="chip" data-tone={p.late ? 'crit' : 'ok'}>
-                {p.stage}: {p.daysInStage} working day(s){p.late ? ' · lewat' : ''}
-              </span>
-            )}
-            <span className="chip" data-tone={p.quotes.ok ? 'ok' : 'warn'}>
-              {p.quotes.physical} physical + {p.quotes.online} online quote(s)
-            </span>
-            {p.route === 'b' && <span className="chip" data-tone={p.paidFirstUndelivered ? 'crit' : 'warn'}>bayaran dahulu{p.paidFirstUndelivered ? ' · not delivered yet' : ''}</span>}
-            {p.budgetMissing && <span className="chip" data-tone="warn">no budget check</span>}
-            {p.budget && <span className="chip">bajet {p.budget.available}</span>}
-          </div>
-          {p.comparison.length > 0 && (
-            <table className="table small">
-              <thead>
-                <tr>
-                  <th>Supplier</th>
-                  <th>Type</th>
-                  <th>RM</th>
-                  <th>Warranty (mo)</th>
-                  <th>Lead (days)</th>
-                  <th>Technical fit</th>
-                  <th>Capability</th>
-                </tr>
-              </thead>
-              <tbody>
-                {p.comparison.map((q) => (
-                  <tr key={q.supplier + q.type}>
-                    <td>
-                      {q.supplier}
-                      {p.recommendation?.supplier === q.supplier ? ' (recommended)' : ''}
-                      {q.expired ? ' · expired' : ''}
-                      {q.payFirst ? ' · pay first' : ''}
-                    </td>
-                    <td>{q.type}</td>
-                    <td>{q.price.toFixed(2)}</td>
-                    <td>{q.warrantyMonths}</td>
-                    <td>{q.leadDays}</td>
-                    <td>{q.technicalFit}</td>
-                    <td>{q.capability}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-          {p.docsMissing.length > 0 && <div className="muted small">Documents still missing: {p.docsMissing.map(docLabel).join(', ')} · keep until {p.keepUntil}</div>}
-          <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
-            {it && (
-              <>
-                <OpForm title="Technical assessment" op="assess" fixed={{ purchaseId: p.purchaseId }} fields={[{ k: 'brandModel', l: 'Recommended brand or model' }, { k: 'spec', l: 'Specification', t: 'area' }, { k: 'compatible', l: 'Compatible with our systems', t: 'yn' }, { k: 'compatibleNote', l: 'Compatibility note' }, { k: 'estCost', l: 'Estimated cost (RM)', t: 'number' }, { k: 'alternatives', l: 'Alternatives' }, { k: 'leadTime', l: 'Lead time' }, { k: 'security', l: 'Security notes' }, { k: 'buyAnywayReason', l: 'Reason to buy although spares exist' }]} />
-                <QuotesForm purchaseId={p.purchaseId} />
-                {p.comparison.length > 0 && <OpForm title="Recommend a supplier" op="recommend" fixed={{ purchaseId: p.purchaseId }} fields={[{ k: 'supplier', l: 'Supplier', t: 'select', o: [...new Set(p.comparison.map((q) => q.supplier))] }, { k: 'reason', l: 'Reason for the recommendation' }]} />}
-                <OpForm title="Receive and inspect (GRN)" op="grn" fixed={{ purchaseId: p.purchaseId }} fields={[{ k: 'doNo', l: 'Delivery order number' }, { k: 'invoiceNo', l: 'Tax invoice number' }, { k: 'qty', l: 'Quantity received', t: 'number' }, { k: 'inspectedOn', l: 'Inspected on', t: 'date' }, { k: 'packageOk', l: 'Packaging intact', t: 'yn' }, { k: 'specOk', l: 'Matches the specification', t: 'yn' }, { k: 'physicalOk', l: 'No physical damage', t: 'yn' }, { k: 'functionOk', l: 'Works (function test)', t: 'yn' }, { k: 'accessoriesOk', l: 'Accessories complete', t: 'yn' }, { k: 'failedAssetIds', l: 'Asset ids that failed', t: 'list' }, { k: 'warrantyCert', l: 'Warranty certificate reference' }, { k: 'note', l: 'What does not match' }]} />
-              </>
-            )}
-            {b.role === 'party' && <OpForm title="Budget check (Finance)" op="budget" fixed={{ purchaseId: p.purchaseId }} fields={[{ k: 'available', l: 'Budget available', t: 'select', o: ['yes', 'no'] }, { k: 'allocation', l: 'Budget line or allocation' }, { k: 'comment', l: 'Comment' }]} />}
-          </div>
-        </div>
-      ))}
+      <DataTable
+        label="IT purchases: timing, quotes, budget and documents"
+        stateKey="it.policy.purchases"
+        rows={rows}
+        rowKey={(x) => x.purchaseId}
+        columns={POLICY_PURCHASE_COLUMNS}
+        filters={POLICY_PURCHASE_FILTERS}
+        searchPlaceholder="Reference or stage"
+        onView={(x) => setOpenId(x.purchaseId)}
+        rowTone={(x) => (x.late || x.paidFirstUndelivered ? 'crit' : x.budgetMissing ? 'warn' : undefined)}
+      />
+      {p && (
+        <Drawer title={p.ref} sub={p.stage ?? undefined} onClose={() => setOpenId(null)}>
+          <PurchaseFile p={p} b={b} />
+        </Drawer>
+      )}
     </div>
   );
 }
@@ -712,40 +763,38 @@ const DOC_LABEL: Record<string, string> = {
 };
 const docLabel = (k: string) => DOC_LABEL[k] ?? humanize(k);
 
-/** P105: the periodic asset work, searchable by tag, a few rows at first (a large register lists hundreds). */
+type DueRow = NonNullable<Board['dues']>[number];
+type DomainRow = NonNullable<Board['domainSecurity']>[number];
+type M365Row = NonNullable<Board['m365Review']>[number];
+
+/** P105: the periodic asset work, searchable by tag. P107: a data table (search, kind filter, pages). */
 function DuesSection({ dues }: { dues: NonNullable<Board['dues']> }) {
-  const [q, setQ] = useState('');
-  const [all, setAll] = useState(false);
-  const hit = dues.filter((d) => !q.trim() || `${d.tag} ${d.label}`.toLowerCase().includes(q.trim().toLowerCase()));
-  const shown = all ? hit : hit.slice(0, 8);
   return (
     <div className="panel">
-      <div className="row" style={{ gap: 8, flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between' }}>
-        <h3>Kerja berkala aset ({dues.length})</h3>
-        <input className="input" style={{ maxWidth: 260 }} aria-label="Search by asset tag" placeholder="Search by asset tag" value={q} onChange={(e) => setQ(e.target.value)} />
-      </div>
-      <ul className="small">
-        {shown.map((d) => (
-          <li key={d.assetId + d.what}>
-            {d.tag}: {d.label}
-          </li>
-        ))}
-      </ul>
-      {!hit.length && <p className="muted small">No asset matches.</p>}
-      {hit.length > 8 && (
-        <button className="btn btn-sm" onClick={() => setAll(!all)}>
-          {all ? 'Show fewer' : <>Show all <span className="muted">{hit.length}</span></>}
-        </button>
-      )}
+      <h3>Kerja berkala aset ({dues.length})</h3>
+      <DataTable
+        details
+        label="Periodic asset work"
+        stateKey="it.policy.dues"
+        rows={dues}
+        rowKey={(d) => d.assetId + d.what}
+        columns={[
+          { id: 'tag', label: 'Asset tag', value: (d: DueRow) => d.tag, render: (d: DueRow) => <strong>{d.tag}</strong>, phone: 'title' },
+          { id: 'label', label: 'Work', value: (d: DueRow) => d.label, phone: 'sub' },
+          { id: 'what', label: 'Kind', value: (d: DueRow) => humanize(d.what), translate: true },
+        ]}
+        filters={[{ id: 'what', label: 'Kind', value: (d: DueRow) => d.what, optionLabel: humanize }]}
+        searchPlaceholder="Search by asset tag"
+        defaults={{ size: 10 }}
+        empty={<p className="muted small">No asset matches.</p>}
+      />
     </div>
   );
 }
 
-/** P105: domain security, the ones to fix first; the rest folded away. */
+/** P105: domain security, the ones to fix first. P107: a data table with a "Show" filter (to fix first). */
 function DomainSecuritySection({ rows }: { rows: NonNullable<Board['domainSecurity']> }) {
-  const [all, setAll] = useState(false);
   const todo = rows.filter((d) => d.tone !== 'ok');
-  const shown = all ? rows : todo.slice(0, 6);
   return (
     <div className="panel">
       <h3>Keselamatan domain</h3>
@@ -758,19 +807,65 @@ function DomainSecuritySection({ rows }: { rows: NonNullable<Board['domainSecuri
           'Registrar lock and 2FA confirmed on every domain.'
         )}
       </p>
-      <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
-        {shown.map((d) => (
-          <span key={d.domain} className="chip" data-tone={d.tone}>
-            {d.domain}: lock {d.lock}, 2FA {d.twoFa}
-          </span>
-        ))}
-      </div>
-      {(rows.length > shown.length || all) && (
-        <button className="btn btn-sm" style={{ marginTop: 6 }} onClick={() => setAll(!all)}>
-          {all ? 'Show fewer' : <>Show all <span className="muted">{rows.length}</span></>}
-        </button>
-      )}
+      <DataTable
+        details
+        label="Domain security"
+        stateKey="it.policy.domains"
+        defaults={{ size: 10, f: { state: todo.length ? 'fix' : '' } }}
+        rows={rows}
+        rowKey={(d) => d.domain}
+        columns={[
+          { id: 'domain', label: 'Domain', value: (d: DomainRow) => d.domain, render: (d: DomainRow) => <strong>{d.domain}</strong>, phone: 'title' },
+          { id: 'lock', label: 'Registrar lock', value: (d: DomainRow) => d.lock },
+          { id: 'twoFa', label: 'Registrar 2FA', value: (d: DomainRow) => d.twoFa },
+          {
+            id: 'state',
+            label: 'Status',
+            value: (d: DomainRow) => (d.tone === 'ok' ? 'Confirmed' : 'To fix'),
+            translate: true,
+            render: (d: DomainRow) => (
+              <span className="chip" data-tone={d.tone}>
+                {d.tone === 'ok' ? 'Confirmed' : 'To fix'}
+              </span>
+            ),
+          },
+        ]}
+        filters={[
+          {
+            id: 'state',
+            label: 'Show',
+            value: (d: DomainRow) => (d.tone === 'ok' ? 'ok' : 'fix'),
+            options: [
+              { value: 'fix', label: 'To fix' },
+              { value: 'ok', label: 'Confirmed' },
+            ],
+          },
+        ]}
+        searchPlaceholder="Domain"
+        rowTone={(d) => (d.tone === 'crit' ? 'crit' : d.tone === 'warn' ? 'warn' : undefined)}
+      />
     </div>
+  );
+}
+
+/** P107: the M365 accounts with problems as a data table (search, type filter, pages). */
+function M365ReviewTable({ rows }: { rows: M365Row[] }) {
+  return (
+    <DataTable
+      details
+      label="M365 account review"
+      stateKey="it.policy.m365"
+      rows={rows}
+      rowKey={(r) => r.id}
+      columns={[
+        { id: 'email', label: 'Email', value: (r: M365Row) => r.email, phone: 'title' },
+        { id: 'type', label: 'Type', value: (r: M365Row) => r.type, phone: 'sub' },
+        { id: 'problems', label: 'Problems', value: (r: M365Row) => r.problems.join(', '), sort: false },
+      ]}
+      filters={[{ id: 'type', label: 'Type', value: (r: M365Row) => r.type }]}
+      searchPlaceholder="Email or problem"
+      defaults={{ size: 10 }}
+    />
   );
 }
 
@@ -778,11 +873,10 @@ function DomainSecuritySection({ rows }: { rows: NonNullable<Board['domainSecuri
 export function ItPolicyPanel({ assets = [], companyNames = {} }: { assets?: { id: string; label: string }[]; companyNames?: Record<string, string> }) {
   const { data: b, error } = useLoad(() => api.itAct('policyAct', { op: 'board' }) as Promise<Board>, []);
   const { me } = useApp();
-  const [kind, setKind] = useState('ALL');
   if (error) return <ErrorNotice error={error} />;
   if (!b) return <Loading what="IT policies" />;
   const it = b.role === 'manager' || b.role === 'it';
-  const recs = (b.records ?? []).filter((r) => r.kind !== 'settings' && (kind === 'ALL' || r.kind === kind));
+  const recs = (b.records ?? []).filter((r) => r.kind !== 'settings');
   const coName = (id: string) => me?.companies.find((c) => c.id === id)?.name ?? companyNames[id] ?? id;
   return (
     <ItAssetChoices.Provider value={assets}>
@@ -828,13 +922,7 @@ export function ItPolicyPanel({ assets = [], companyNames = {} }: { assets?: { i
             {(b.m365Review?.some((r) => r.problems.length) ?? false) && (
               <div className="panel">
                 <h3>Semakan akaun M365</h3>
-                <ul className="small">
-                  {b.m365Review!.filter((r) => r.problems.length).map((r) => (
-                    <li key={r.id}>
-                      {r.email} ({r.type}): {r.problems.join(', ')}
-                    </li>
-                  ))}
-                </ul>
+                <M365ReviewTable rows={b.m365Review!.filter((r) => r.problems.length)} />
                 {(b.licenceUse ?? []).map((l) => (
                   <div key={l.licence} className="muted small">
                     {l.licence}: {l.used} used{l.bought != null ? ` of ${l.bought} bought` : ''}
@@ -844,46 +932,30 @@ export function ItPolicyPanel({ assets = [], companyNames = {} }: { assets?: { i
             )}
             {(b.domainSecurity?.length ?? 0) > 0 && <DomainSecuritySection rows={b.domainSecurity!} />}
             <div className="panel">
-              <div className="row" style={{ gap: 6 }}>
-                <h3>Rekod</h3>
-                <Select className="select" aria-label="Record kind" value={kind} onChange={(e) => setKind(e.target.value)}>
-                  <option value="ALL">All</option>
-                  {Object.entries(KIND_BM)
-                    .filter(([k]) => k !== 'settings')
-                    .map(([k, l]) => (
-                      <option key={k} value={k}>
-                        {l}
-                      </option>
-                    ))}
-                </Select>
-              </div>
+              <h3>Rekod</h3>
               {b.wipeReadOnly && <p className="muted small">PDPA officer: the data wipe log, read only.</p>}
-              {recs.length ? (
-                <table className="table small">
-                  <thead>
-                    <tr>
-                      <th>Reference</th>
-                      <th>Record</th>
-                      <th>Status</th>
-                      <th>Details</th>
-                      <th>Next step</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {recs.slice(0, 200).map((r) => (
-                      <tr key={r.id}>
-                        <td>{r.ref}</td>
-                        <td>{KIND_BM[r.kind] ?? r.kind}</td>
-                        <td>{statusLabel(r)}</td>
-                        <td>{summary(r)}</td>
-                        <td>{!b.wipeReadOnly && <RecordActions r={r} b={b} />}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              ) : (
-                <p className="muted small">No records.</p>
-              )}
+              {/* P107: the records as a data table (search, record kind and status filters, pages instead of the 200-row cap). */}
+              <DataTable
+                details
+                label="Records"
+                stateKey="it.policy.records"
+                rows={recs}
+                rowKey={(r) => r.id}
+                columns={[
+                  { id: 'ref', label: 'Reference', value: (r: Rec) => r.ref, phone: 'title' },
+                  { id: 'kind', label: 'Record', value: (r: Rec) => KIND_BM[r.kind] ?? r.kind, phone: 'sub' },
+                  { id: 'status', label: 'Status', value: (r: Rec) => statusLabel(r), translate: true },
+                  { id: 'at', label: 'Date', value: (r: Rec) => r.at, sort: 'date', hideBelow: 1200 },
+                  { id: 'summary', label: 'Details', value: (r: Rec) => summary(r), sort: false },
+                ]}
+                filters={[
+                  { id: 'kind', label: 'Record kind', value: (r: Rec) => r.kind, options: Object.entries(KIND_BM).filter(([k]) => k !== 'settings').map(([k, l]) => ({ value: k, label: l })) },
+                  { id: 'status', label: 'Status', value: (r: Rec) => statusLabel(r) },
+                ]}
+                searchPlaceholder="Reference, record or detail"
+                rowEnd={b.wipeReadOnly ? undefined : (r) => <RecordActions r={r} b={b} />}
+                empty={<p className="muted small">No records.</p>}
+              />
             </div>
           </>
         )}

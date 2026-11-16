@@ -2,6 +2,7 @@ import { Select } from '../SearchSelect';
 import { useState } from 'react';
 import { api, type ManagementFeeBills, type ManagementFees } from '../api';
 import { Chip, ErrorNotice, Kpi, Loading, dateLabel, useAction, useLoad } from '../ui';
+import { DataTable } from '../DataTable';
 
 /** Today in Malaysia, whatever the device's clock zone (the app keeps Malaysian dates). */
 const mytNow = () => new Date(Date.now() + 8 * 3_600_000).toISOString();
@@ -262,24 +263,26 @@ function Bills({ d }: { d: ManagementFeeBills }) {
           />
         ))}
       </div>
-      <div className="table-wrap">
-        <table className="table">
-          <thead>
-            <tr>
-              <th>Company</th>
-              <th className="hide-sm">Billed by</th>
-              <th className="num hide-sm">Billing</th>
-              <th className="num">Fee</th>
-            </tr>
-          </thead>
-          <tbody>
-            {d.bills.map((b) => (
-              <tr key={`${b.chargedById}-${b.companyId}`}>
-                <td>
+      {/* P107: the month's bills as a data table: find a company, filter by who bills, sort by billing or fee. */}
+      <div className="panel-body">
+        <DataTable
+          details
+          label="Management fee bills (draft)"
+          stateKey="ops.feebills"
+          rows={d.bills}
+          rowKey={(b) => `${b.chargedById}-${b.companyId}`}
+          searchPlaceholder="Find a company"
+          columns={[
+            {
+              id: 'company',
+              label: 'Company',
+              value: (b) => b.companyName,
+              phone: 'title',
+              render: (b) => (
+                <>
                   {b.companyName}
                   <div className="muted small">
-                    {b.sites} site{b.sites === 1 ? '' : 's'} ·{' '}
-                    {b.fee ? feeText(b.fee) : 'fee not entered'}
+                    {b.sites} site{b.sites === 1 ? '' : 's'} · {b.fee ? feeText(b.fee) : 'fee not entered'}
                   </div>
                   {b.fee && b.unknownSites.length > 0 && (
                     <div className="muted small">
@@ -287,17 +290,28 @@ function Bills({ d }: { d: ManagementFeeBills }) {
                       {b.unknownSites.length > 3 ? ` and ${b.unknownSites.length - 3} more` : ''}
                     </div>
                   )}
-                </td>
-                <td className="hide-sm">
+                </>
+              ),
+            },
+            {
+              id: 'by',
+              label: 'Billed by',
+              value: (b) => b.chargedByName,
+              render: (b) => (
+                <>
                   {b.chargedByName}
                   <div className="muted small">on {basisText(b.basis)}</div>
-                </td>
-                <td className="num hide-sm">{rm(b.billing)}</td>
-                <td className="num">{b.amount == null ? <Chip tone="neutral">Unknown</Chip> : rm(b.amount)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+                </>
+              ),
+            },
+            { id: 'billing', label: 'Billing', value: (b) => b.billing, sort: 'money', render: (b) => rm(b.billing) },
+            { id: 'fee', label: 'Fee', value: (b) => b.amount, sort: 'money', render: (b) => (b.amount == null ? <Chip tone="neutral">Unknown</Chip> : rm(b.amount)) },
+          ]}
+          filters={[
+            { id: 'by', label: 'Billed by', value: (b) => b.chargedByName },
+            { id: 'known', label: 'Fee', value: (b) => (b.amount == null ? 'unknown' : 'known'), options: [{ value: 'known', label: 'Known' }, { value: 'unknown', label: 'Unknown' }] },
+          ]}
+        />
       </div>
       <div className="panel-body">
         {d.notes.map((n) => (

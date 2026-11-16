@@ -25,6 +25,7 @@ import {
   type Tone,
 } from "../ui";
 import { ProofPicker } from "./Proof";
+import { DataTable, type DtColumn } from "../DataTable";
 
 // Police call or visit help (Fauzan, 3 Nov 2026). The company asks, Arms Control sends someone and records what
 // happened with proof, the company confirms. CMS and arms leaders watch read-only. The guide is read-only text.
@@ -38,6 +39,77 @@ const STEP_TONE: Record<PoliceHelpStep, Tone> = {
   confirmed: "ok",
   withdrawn: "neutral",
 };
+
+const isOpen = (r: Row) => r.help.step === "asked" || r.help.step === "assigned" || r.help.step === "helped";
+
+/** P107: the requests' columns (the old table: severity, request with its notes, helper, step). */
+const POLICE_COLUMNS: DtColumn<Row>[] = [
+  { id: "sev", label: "Sev", value: (r) => r.severity, render: (r) => <Sev s={r.severity} />, width: "4.5rem" },
+  {
+    id: "request",
+    label: "Request",
+    value: (r) => `${POLICE_HELP_KIND_LABEL[r.help.kind].en} · ${POLICE_HELP_REASON_LABEL[r.help.reason].en}`,
+    phone: "title",
+    sort: false,
+    render: (r) => (
+      <>
+        <div style={{ fontWeight: 600 }}>
+          {POLICE_HELP_KIND_LABEL[r.help.kind].en} · {POLICE_HELP_REASON_LABEL[r.help.reason].en}
+        </div>
+        <div className="muted small">
+          <span className="mono">{r.ref}</span> · {r.companyName} · {r.help.policeUnit}
+          {r.help.expectedAt ? ` · visit ${dateTimeLabel(r.help.expectedAt)}` : ""}
+        </div>
+        <div className="small">{r.help.asked}</div>
+        <div className="muted small">
+          Asked by {r.askedBy}, {dateTimeLabel(r.openedAt)}. Call {r.help.contactName} on {r.help.contactPhone}.
+        </div>
+        {r.help.outcome && (
+          <div className="small">
+            Outcome: {r.help.outcome.note}
+            {r.help.outcome.followUp ? ` Follow-up: ${r.help.outcome.followUp}` : ""}
+          </div>
+        )}
+        {r.help.returns.length > 0 && (
+          <div className="muted small">
+            Sent back {r.help.returns.length}×: {r.help.returns.at(-1)!.note}
+          </div>
+        )}
+      </>
+    ),
+  },
+  {
+    id: "helper",
+    label: "Helper",
+    value: (r) => r.help.helper?.name ?? "",
+    hideBelow: 900,
+    render: (r) =>
+      r.help.helper ? (
+        <>
+          <div>{r.help.helper.name}</div>
+          <div className="muted small">
+            {r.help.helper.phone} · {r.help.helper.how === "ON_SITE" ? "going there" : "by phone"}
+            {r.help.helper.eta ? `, by ${dateTimeLabel(r.help.helper.eta)}` : ""}
+          </div>
+        </>
+      ) : (
+        <span className="muted small">Helper by {dateTimeLabel(r.assignBy)}</span>
+      ),
+  },
+  {
+    id: "step",
+    label: "Step",
+    value: (r) => POLICE_HELP_STEP_LABEL[r.help.step],
+    translate: true,
+    render: (r) => (
+      <div className="row" style={{ gap: 4, flexWrap: "wrap" }}>
+        <Chip tone={STEP_TONE[r.help.step]}>{POLICE_HELP_STEP_LABEL[r.help.step]}</Chip>
+        {r.late && <Chip tone="crit">Late</Chip>}
+      </div>
+    ),
+  },
+  { id: "opened", label: "Asked", value: (r) => r.openedAt, sort: "date", phone: "hidden", hideBelow: 1200, render: (r) => dateTimeLabel(r.openedAt) },
+];
 
 /** "2026-11-05T10:00" from a datetime-local input, as Malaysian time. */
 const fromLocal = (v: string) => (v ? `${v}:00+08:00` : null);
@@ -59,16 +131,8 @@ export function PoliceHelpPanel({ title = true }: { title?: boolean }) {
     row: Row;
     what: "assign" | "outcome" | "answer" | "withdraw";
   } | null>(null);
-  const [all, setAll] = useState(false);
   if (error) return <ErrorNotice error={error} />;
   if (!data) return <Loading what="police help" />;
-  const active = data.rows.filter(
-    (r) =>
-      r.help.step === "asked" ||
-      r.help.step === "assigned" ||
-      r.help.step === "helped",
-  );
-  const rows = all ? data.rows : active;
   return (
     <section className="panel" aria-label="Police call or visit help">
       {title && (
@@ -96,14 +160,6 @@ export function PoliceHelpPanel({ title = true }: { title?: boolean }) {
           >
             {guide ? "Hide guide" : "What to say and show · Panduan"}
           </button>
-          <div className="seg">
-            <button aria-pressed={!all} onClick={() => setAll(false)}>
-              Open{active.length ? ` (${active.length})` : ""}
-            </button>
-            <button aria-pressed={all} onClick={() => setAll(true)}>
-              All
-            </button>
-          </div>
           {data.counts.late > 0 && (
             <Chip tone="crit">
               {data.counts.late} waiting past the time for a helper
@@ -112,128 +168,41 @@ export function PoliceHelpPanel({ title = true }: { title?: boolean }) {
         </div>
         {guide && <GuideCard />}
       </div>
-      <div className="table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th>Sev</th>
-              <th>Request</th>
-              <th className="hide-sm">Helper</th>
-              <th>Step</th>
-              <th />
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((r) => (
-              <tr key={r.id}>
-                <td>
-                  <Sev s={r.severity} />
-                </td>
-                <td>
-                  <div style={{ fontWeight: 600 }}>
-                    {POLICE_HELP_KIND_LABEL[r.help.kind].en} ·{" "}
-                    {POLICE_HELP_REASON_LABEL[r.help.reason].en}
-                  </div>
-                  <div className="muted small">
-                    <span className="mono">{r.ref}</span> · {r.companyName} ·{" "}
-                    {r.help.policeUnit}
-                    {r.help.expectedAt
-                      ? ` · visit ${dateTimeLabel(r.help.expectedAt)}`
-                      : ""}
-                  </div>
-                  <div className="small">{r.help.asked}</div>
-                  <div className="muted small">
-                    Asked by {r.askedBy}, {dateTimeLabel(r.openedAt)}. Call{" "}
-                    {r.help.contactName} on {r.help.contactPhone}.
-                  </div>
-                  {r.help.outcome && (
-                    <div className="small">
-                      Outcome: {r.help.outcome.note}
-                      {r.help.outcome.followUp
-                        ? ` Follow-up: ${r.help.outcome.followUp}`
-                        : ""}
-                    </div>
-                  )}
-                  {r.help.returns.length > 0 && (
-                    <div className="muted small">
-                      Sent back {r.help.returns.length}×:{" "}
-                      {r.help.returns.at(-1)!.note}
-                    </div>
-                  )}
-                </td>
-                <td className="hide-sm">
-                  {r.help.helper ? (
-                    <>
-                      <div>{r.help.helper.name}</div>
-                      <div className="muted small">
-                        {r.help.helper.phone} ·{" "}
-                        {r.help.helper.how === "ON_SITE"
-                          ? "going there"
-                          : "by phone"}
-                        {r.help.helper.eta
-                          ? `, by ${dateTimeLabel(r.help.helper.eta)}`
-                          : ""}
-                      </div>
-                    </>
-                  ) : (
-                    <span className="muted small">
-                      Helper by {dateTimeLabel(r.assignBy)}
-                    </span>
-                  )}
-                </td>
-                <td>
-                  <div className="row" style={{ gap: 4, flexWrap: "wrap" }}>
-                    <Chip tone={STEP_TONE[r.help.step]}>
-                      {POLICE_HELP_STEP_LABEL[r.help.step]}
-                    </Chip>
-                    {r.late && <Chip tone="crit">Late</Chip>}
-                  </div>
-                </td>
-                <td>
-                  <div className="row" style={{ gap: 4, flexWrap: "wrap" }}>
-                    {r.can.assign && (
-                      <button
-                        className="btn"
-                        onClick={() => setOpen({ row: r, what: "assign" })}
-                      >
-                        {r.help.helper ? "Change helper" : "Assign helper"}
-                      </button>
-                    )}
-                    {r.can.outcome && (
-                      <button
-                        className="btn"
-                        onClick={() => setOpen({ row: r, what: "outcome" })}
-                      >
-                        Record help given
-                      </button>
-                    )}
-                    {r.can.confirm && (
-                      <button
-                        className="btn btn-primary"
-                        onClick={() => setOpen({ row: r, what: "answer" })}
-                      >
-                        Confirm or send back
-                      </button>
-                    )}
-                    {r.can.withdraw && (
-                      <button
-                        className="btn btn-ghost"
-                        onClick={() => setOpen({ row: r, what: "withdraw" })}
-                      >
-                        Withdraw
-                      </button>
-                    )}
-                  </div>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        {rows.length === 0 && (
-          <div className="empty">
-            No police help requests{all ? "" : " open"}.
-          </div>
-        )}
+      {/* P107: the requests as a data table: Open (the first choice) or all, by severity, kind and company; each row's
+          buttons are its actions. */}
+      <div className="panel-body">
+        <DataTable
+          details
+          label="Police call or visit help"
+          stateKey="police.help"
+          defaults={{ f: { open: "open" } }}
+          rows={data.rows}
+          rowKey={(r) => r.id}
+          searchPlaceholder="Find a ref, company or police unit"
+          rowTone={(r) => (r.late ? "crit" : undefined)}
+          empty={<div className="empty">No police help requests.</div>}
+          columns={POLICE_COLUMNS}
+          filters={[
+            {
+              id: "open",
+              label: "Show",
+              value: (r) => (isOpen(r) ? "open" : "done"),
+              options: [
+                { value: "open", label: "Open" },
+                { value: "done", label: "Done or withdrawn" },
+              ],
+            },
+            { id: "sev", label: "Severity", value: (r) => r.severity },
+            { id: "kind", label: "Kind", value: (r) => r.help.kind, optionLabel: (v) => POLICE_HELP_KIND_LABEL[v as PoliceHelpKind]?.en ?? v },
+            { id: "company", label: "Company", value: (r) => r.companyName },
+          ]}
+          actions={(r) => [
+            { label: r.help.helper ? "Change helper" : "Assign helper", onClick: () => setOpen({ row: r, what: "assign" }), hidden: !r.can.assign },
+            { label: "Record help given", onClick: () => setOpen({ row: r, what: "outcome" }), hidden: !r.can.outcome },
+            { label: "Confirm or send back", onClick: () => setOpen({ row: r, what: "answer" }), hidden: !r.can.confirm },
+            { label: "Withdraw", onClick: () => setOpen({ row: r, what: "withdraw" }), hidden: !r.can.withdraw },
+          ]}
+        />
       </div>
       <p className="muted small panel-body" style={{ margin: 0 }}>
         Rule {data.rule.id} ({data.rule.label}): a helper within{" "}

@@ -11,6 +11,7 @@ import { ImportButton } from './ImportDrawer';
 import { RecordButton } from './RecordForm';
 import { ArrowsClockwiseIcon, BuildingsIcon, CalendarCheckIcon, CheckSquareIcon, GlobeIcon, SealCheckIcon, WarningIcon } from '@phosphor-icons/react';
 import { printPage } from '../native';
+import { DataTable, type DtColumn, type DtFilter } from '../DataTable';
 
 
 /**
@@ -201,6 +202,19 @@ function Pill({ map, k }: { map: Record<string, [Tone, string]>; k: string }) {
   const [tone, label] = map[k] ?? ['unknown', k];
   return <Chip tone={tone}>{label}</Chip>;
 }
+
+/** P107: a status's words (what the table sorts, searches and filters by). */
+const pillLabel = (map: Record<string, [Tone, string]>, k: string) => (map[k] ?? ['unknown', k])[1];
+/** P107: a filter's choices from one of the status maps, in the map's order. */
+const pillOptions = (map: Record<string, [Tone, string]>, keys?: string[]) => (keys ?? Object.keys(map)).map((k) => ({ value: k, label: map[k][1] }));
+function ChipRow({ children }: { children: ReactNode }) {
+  return (
+    <span className="row" style={{ gap: 4, flexWrap: 'wrap' }}>
+      {children}
+    </span>
+  );
+}
+const muted = (s: ReactNode) => <span className="muted small">{s}</span>;
 
 /** Days to a domain's expiry at a glance: expired or within 30 days red, within 60 amber. Nothing when no date is recorded. */
 function ExpiryChip({ days }: { days: number | null | undefined }) {
@@ -474,11 +488,43 @@ function Overview({ data, go, drill, setTab }: { data: B; go: (k: NonNullable<Op
 
 // ---------- Companies ----------
 
+type CompanyRow = B['companies'][number];
+/** P107: the company register as a table: who heads it, its IT administrator, what it holds and where it stands. */
+const COMPANY_COLUMNS: DtColumn<CompanyRow>[] = [
+  {
+    id: 'name',
+    label: 'Company',
+    value: (c) => c.company.name,
+    render: (c) => (
+      <span>
+        <strong>{c.company.name}</strong>
+        {(c.missing.length > 0 || c.mainIssue) && (
+          <span className="muted small" style={{ display: 'block' }}>
+            {[c.missing.length ? `missing: ${c.missing.join(', ')}` : '', c.mainIssue ?? ''].filter(Boolean).join(' · ')}
+          </span>
+        )}
+      </span>
+    ),
+    phone: 'title',
+  },
+  { id: 'head', label: 'Head of Company', value: (c) => c.head, phone: 'sub' },
+  { id: 'it', label: 'IT administrator', value: (c) => c.itAdmin ?? '', render: (c) => c.itAdmin ?? muted('not assigned') },
+  { id: 'domains', label: 'Domains', value: (c) => c.domainCount, sort: 'number', hideBelow: 1100 },
+  { id: 'sites', label: 'Websites', value: (c) => c.siteCount, sort: 'number', hideBelow: 1100 },
+  { id: 'review', label: 'Last review', value: (c) => c.lastReview?.quarter ?? '', hideBelow: 1250 },
+  { id: 'website', label: 'Website', value: (c) => pillLabel(SITE_STATUS, c.websiteStatus), translate: true, render: (c) => <Pill map={SITE_STATUS} k={c.websiteStatus} /> },
+  { id: 'domain', label: 'Domain', value: (c) => pillLabel(DOMAIN_STATUS, c.domainStatus), translate: true, render: (c) => <Pill map={DOMAIN_STATUS} k={c.domainStatus} /> },
+  { id: 'quarter', label: 'This quarter', value: (c) => pillLabel(Q_STATUS, c.quarterStatus), translate: true, render: (c) => <Pill map={Q_STATUS} k={c.quarterStatus} /> },
+];
+const COMPANY_FILTERS: DtFilter<CompanyRow>[] = [
+  { id: 'website', label: 'Website', value: (c) => c.websiteStatus, optionLabel: (k) => pillLabel(SITE_STATUS, k) },
+  { id: 'domain', label: 'Domain', value: (c) => c.domainStatus, optionLabel: (k) => pillLabel(DOMAIN_STATUS, k) },
+  { id: 'quarter', label: 'This quarter', value: (c) => c.quarterStatus, optionLabel: (k) => pillLabel(Q_STATUS, k) },
+  { id: 'it', label: 'IT administrator', value: (c) => c.itAdmin ?? '' },
+];
+
 function Companies({ data, go, filter, clearFilter }: { data: B; go: (k: NonNullable<Open>['kind'], id: string) => void; filter: { label: string; ids: string[] } | null; clearFilter: () => void }) {
-  const [q, setQ] = useState('');
-  const rows = data.companies.filter(
-    (c) => (!filter || filter.ids.includes(c.company.id)) && (!q.trim() || `${c.company.name} ${c.head} ${c.itAdmin ?? ''}`.toLowerCase().includes(q.trim().toLowerCase())),
-  );
+  const rows = data.companies.filter((c) => !filter || filter.ids.includes(c.company.id));
   return (
     <Panel title="Company register" note={`${rows.length} of ${data.companies.length}`}>
       {filter && (
@@ -489,34 +535,18 @@ function Companies({ data, go, filter, clearFilter }: { data: B; go: (k: NonNull
           </button>
         </div>
       )}
-      <div className="ws-toolbar">
-        <input className="input ws-search" type="search" aria-label="Search" placeholder="Company, Head of Company or IT administrator" value={q} onChange={(e) => setQ(e.target.value)} />
-      </div>
-      <div className="list">
-        {rows.map((c) => (
-          <RowButton
-            key={c.company.id}
-            onClick={() => go('company', c.company.id)}
-            title={c.company.name}
-            sub={
-              <>
-                Head: {c.head} · IT: {c.itAdmin ?? 'not assigned'} · {c.domainCount} domain{c.domainCount === 1 ? '' : 's'}, {c.siteCount} website{c.siteCount === 1 ? '' : 's'}
-                {c.lastReview ? ` · last review ${c.lastReview.quarter}` : ''}
-                {c.missing.length ? ` · missing: ${c.missing.join(', ')}` : ''}
-                {c.mainIssue ? ` · ${c.mainIssue}` : ''}
-              </>
-            }
-            right={
-              <>
-                <Pill map={SITE_STATUS} k={c.websiteStatus} />
-                <Pill map={DOMAIN_STATUS} k={c.domainStatus} />
-                <Pill map={Q_STATUS} k={c.quarterStatus} />
-              </>
-            }
-          />
-        ))}
-        {!rows.length && <div className="empty">No company matches.</div>}
-      </div>
+      <DataTable
+        label="Company register"
+        stateKey="it.websites.companies"
+        rows={rows}
+        rowKey={(c) => c.company.id}
+        columns={COMPANY_COLUMNS}
+        filters={COMPANY_FILTERS}
+        searchPlaceholder="Company, Head of Company or IT administrator"
+        searchText={(c) => `${c.missing.join(' ')} ${c.mainIssue ?? ''}`}
+        onView={(c) => go('company', c.company.id)}
+        empty={<div className="empty">No company matches.</div>}
+      />
     </Panel>
   );
 }
@@ -630,14 +660,61 @@ function CompanyDrawer({ data, id, go, onClose }: { data: B; id: string; go: (k:
 // ---------- Websites ----------
 
 function Sites({ data, go }: { data: B; go: (k: NonNullable<Open>['kind'], id: string) => void }) {
-  const [status, setStatus] = useState('ALL');
   const [adding, setAdding] = useState(false);
-  const rows = data.sites.filter((s) => status === 'ALL' || s.site.status === status);
+  type Row = B['sites'][number];
+  const columns: DtColumn<Row>[] = [
+    {
+      id: 'site',
+      label: 'Website',
+      value: (s) => s.site.name,
+      render: (s) => (
+        <span>
+          <strong>{s.site.name}</strong>
+          <span className="muted small" style={{ display: 'block', overflowWrap: 'anywhere' }}>{s.site.url}</span>
+        </span>
+      ),
+      phone: 'title',
+    },
+    { id: 'company', label: 'Company', value: (s) => s.companyName, phone: 'sub' },
+    {
+      id: 'host',
+      label: 'Hosting',
+      value: (s) => s.site.hosting.provider || '',
+      render: (s) => (
+        <>
+          {s.site.hosting.provider || muted('host unknown')}
+          {s.site.hosting.free ? ' (free plan)' : ''}
+          {s.missing.length > 0 && <span className="muted small" style={{ display: 'block' }}>{`missing ${s.missing.join(', ')}`}</span>}
+        </>
+      ),
+      hideBelow: 1200,
+    },
+    { id: 'it', label: 'IT administrator', value: (s) => s.owners.itAdmin ?? '', render: (s) => s.owners.itAdmin ?? muted('not assigned') },
+    { id: 'checked', label: 'Last checked', value: (s) => s.lastCheckOn ?? '', sort: 'date', hideBelow: 1100 },
+    {
+      id: 'status',
+      label: 'Status',
+      value: (s) => pillLabel(SITE_STATUS, s.site.status),
+      translate: true,
+      render: (s) => (
+        <ChipRow>
+          <Pill map={SITE_STATUS} k={s.site.status} />
+          {s.currentReview && <Pill map={Q_STATUS} k={s.currentReview.label} />}
+          {s.critical && <Chip tone="crit">Critical issue</Chip>}
+        </ChipRow>
+      ),
+    },
+  ];
+  const filters: DtFilter<Row>[] = [
+    { id: 'status', label: 'Status', value: (s) => s.site.status, options: pillOptions(SITE_STATUS, ['live', 'development', 'offline', 'retired']) },
+    { id: 'company', label: 'Company', value: (s) => s.companyName },
+    { id: 'it', label: 'IT administrator', value: (s) => s.owners.itAdmin ?? '' },
+  ];
   return (
     <>
       <Panel
         title="Website register"
-        note={`${rows.length} shown`}
+        note={`${data.sites.length} websites`}
         actions={
           (data.role.itHead || data.role.admin) && (
             <button className="btn btn-sm btn-primary" onClick={() => setAdding(true)}>
@@ -646,41 +723,18 @@ function Sites({ data, go }: { data: B; go: (k: NonNullable<Open>['kind'], id: s
           )
         }
       >
-        <div className="ws-toolbar">
-          <Select className="select ws-filter" aria-label="Status" value={status} onChange={(e) => setStatus(e.target.value)}>
-            <option value="ALL">Every status</option>
-            {['live', 'development', 'offline', 'retired'].map((s) => (
-              <option key={s} value={s}>
-                {SITE_STATUS[s][1]}
-              </option>
-            ))}
-          </Select>
-        </div>
-        <div className="list">
-          {rows.map((s) => (
-            <RowButton
-              key={s.site.id}
-              onClick={() => go('site', s.site.id)}
-              title={`${s.companyName} · ${s.site.name}`}
-              sub={
-                <>
-                  {s.site.url} · {s.site.hosting.provider || 'host unknown'}
-                  {s.site.hosting.free ? ' (free plan)' : ''} · IT {s.owners.itAdmin ?? 'not assigned'}
-                  {s.lastCheckOn ? ` · checked ${dateLabel(s.lastCheckOn)}` : ''}
-                  {s.missing.length ? ` · missing ${s.missing.join(', ')}` : ''}
-                </>
-              }
-              right={
-                <>
-                  <Pill map={SITE_STATUS} k={s.site.status} />
-                  {s.currentReview && <Pill map={Q_STATUS} k={s.currentReview.label} />}
-                  {s.critical && <Chip tone="crit">Critical issue</Chip>}
-                </>
-              }
-            />
-          ))}
-          {!rows.length && <div className="empty">No website matches.</div>}
-        </div>
+        <DataTable
+          label="Website register"
+          stateKey="it.websites.sites"
+          rows={data.sites}
+          rowKey={(s) => s.site.id}
+          columns={columns}
+          filters={filters}
+          searchText={(s) => `${s.site.url} ${s.site.hosting.free ? 'free plan' : ''} ${s.missing.join(' ')}`}
+          rowTone={(s) => (s.critical ? 'crit' : undefined)}
+          onView={(s) => go('site', s.site.id)}
+          empty={<div className="empty">No website matches.</div>}
+        />
       </Panel>
       {adding && (
         <Drawer title="Add website" onClose={() => setAdding(false)}>
@@ -963,6 +1017,73 @@ function SiteForm({ data, site, onDone }: { data: B; site?: B['sites'][number]['
 
 // ---------- Domains ----------
 
+type DomainRow = B['domains'][number];
+const expiryWindow = (days: number | null | undefined) => (days == null ? 'unknown' : days < 0 ? 'expired' : days <= 30 ? '30' : days <= 60 ? '60' : 'later');
+/** P107: the domain register as a table, soonest expiry first as before (the list's own order). */
+const DOMAIN_COLUMNS: DtColumn<DomainRow>[] = [
+  {
+    id: 'name',
+    label: 'Domain',
+    value: (d) => d.domain.name,
+    render: (d) => (
+      <span>
+        <strong>{d.domain.name}</strong>
+        {(d.dnsDrift || d.expiryMismatch) && (
+          <span className="muted small" style={{ display: 'block' }}>
+            {[d.dnsDrift ? 'DNS changed outside an approved change' : '', d.expiryMismatch ? 'registry date differs' : ''].filter(Boolean).join(' · ')}
+          </span>
+        )}
+      </span>
+    ),
+    phone: 'title',
+  },
+  { id: 'company', label: 'Company', value: (d) => d.companyNames.join(' + '), phone: 'sub' },
+  { id: 'registrar', label: 'Registrar', value: (d) => d.domain.registrar || '', render: (d) => d.domain.registrar || muted('registrar unknown'), hideBelow: 1200 },
+  {
+    id: 'expires',
+    label: 'Expires',
+    value: (d) => d.domain.expiresOn ?? '',
+    sort: 'date',
+    render: (d) => (
+      <ChipRow>
+        {d.domain.expiresOn ? dateLabel(d.domain.expiresOn) : muted('expiry not recorded')}
+        <ExpiryChip days={d.days} />
+      </ChipRow>
+    ),
+  },
+  { id: 'mail', label: 'Microsoft 365 email', value: (d) => (d.domain.m365Email ? 'Yes' : 'No'), translate: true, hideBelow: 1300 },
+  { id: 'renewal', label: 'Renewal owner', value: (d) => d.renewalOwner ?? '', render: (d) => d.renewalOwner ?? muted('no owner'), hideBelow: 1100 },
+  {
+    id: 'status',
+    label: 'Status',
+    value: (d) => pillLabel(DOMAIN_STATUS, d.status),
+    translate: true,
+    render: (d) => (
+      <ChipRow>
+        <Pill map={DOMAIN_STATUS} k={d.status} />
+        {d.escalate && <Chip tone="crit">Renewal not confirmed</Chip>}
+      </ChipRow>
+    ),
+  },
+];
+const DOMAIN_FILTERS: DtFilter<DomainRow>[] = [
+  { id: 'status', label: 'Status', value: (d) => d.status, optionLabel: (k) => pillLabel(DOMAIN_STATUS, k) },
+  {
+    id: 'expiry',
+    label: 'Expires',
+    value: (d) => expiryWindow(d.days),
+    options: [
+      { value: 'expired', label: 'Expired' },
+      { value: '30', label: 'Within 30 days' },
+      { value: '60', label: 'In 31 to 60 days' },
+      { value: 'later', label: 'Later' },
+      { value: 'unknown', label: 'Not recorded' },
+    ],
+  },
+  { id: 'company', label: 'Company', value: (d) => d.companyNames },
+  { id: 'registrar', label: 'Registrar', value: (d) => d.domain.registrar || '' },
+];
+
 function Domains({ data, go }: { data: B; go: (k: NonNullable<Open>['kind'], id: string) => void }) {
   const [adding, setAdding] = useState(false);
   return (
@@ -978,31 +1099,17 @@ function Domains({ data, go }: { data: B; go: (k: NonNullable<Open>['kind'], id:
           )
         }
       >
-        <div className="list">
-          {data.domains.map((d) => (
-            <RowButton
-              key={d.domain.id}
-              onClick={() => go('domain', d.domain.id)}
-              title={d.domain.name}
-              sub={
-                <>
-                  {d.companyNames.join(' + ')} · {d.domain.registrar || 'registrar unknown'} ·{' '}
-                  {d.days == null ? 'expiry not recorded' : d.days < 0 ? `expired ${-d.days} days ago` : `expires in ${d.days} days (${dateLabel(d.domain.expiresOn)})`}
-                  {d.domain.m365Email ? ' · Microsoft 365 email' : ''} · renewal: {d.renewalOwner ?? 'no owner'}
-                  {d.dnsDrift ? ' · DNS changed outside an approved change' : ''}
-                  {d.expiryMismatch ? ' · registry date differs' : ''}
-                </>
-              }
-              right={
-                <>
-                  <ExpiryChip days={d.days} />
-                  <Pill map={DOMAIN_STATUS} k={d.status} />
-                  {d.escalate && <Chip tone="crit">Renewal not confirmed</Chip>}
-                </>
-              }
-            />
-          ))}
-        </div>
+        <DataTable
+          label="Domain register"
+          stateKey="it.websites.domains"
+          rows={data.domains}
+          rowKey={(d) => d.domain.id}
+          columns={DOMAIN_COLUMNS}
+          filters={DOMAIN_FILTERS}
+          searchText={(d) => `${d.domain.m365Email ? 'Microsoft 365 email' : ''} ${d.dnsDrift ? 'DNS changed' : ''}`}
+          rowTone={(d) => (d.escalate ? 'crit' : undefined)}
+          onView={(d) => go('domain', d.domain.id)}
+        />
       </Panel>
       {adding && (
         <Drawer title="Add domain" onClose={() => setAdding(false)}>
@@ -1298,41 +1405,61 @@ function DomainForm({ data, domain, onDone }: { data: B; domain?: B['domains'][n
 
 // ---------- Quarterly reviews ----------
 
+type ReviewRow = B['reviews'][number];
+const myTurn = (r: ReviewRow) => Object.values(r.can).some(Boolean);
+/** P107: quarterly reviews as a table; "Waiting on me" is its own filter now, beside the status. */
+const REVIEW_COLUMNS: DtColumn<ReviewRow>[] = [
+  { id: 'site', label: 'Website', value: (r) => r.siteName, render: (r) => <strong>{r.siteName}</strong>, phone: 'title' },
+  { id: 'company', label: 'Company', value: (r) => r.companyName, phone: 'sub' },
+  { id: 'quarter', label: 'Quarter', value: (r) => r.review.quarter },
+  {
+    id: 'stage',
+    label: 'Stage',
+    value: (r) => r.stageLabel,
+    translate: true,
+    render: (r) => (
+      <span>
+        {r.stageLabel}
+        {r.review.needsHelp && <span className="muted small" style={{ display: 'block' }}>company asked for help</span>}
+      </span>
+    ),
+    hideBelow: 1100,
+  },
+  { id: 'due', label: 'Company answers by', value: (r) => r.review.responseDue, sort: 'date' },
+  {
+    id: 'status',
+    label: 'Status',
+    value: (r) => pillLabel(Q_STATUS, r.label),
+    translate: true,
+    render: (r) => (
+      <ChipRow>
+        <Pill map={Q_STATUS} k={r.label} />
+        {myTurn(r) && <Chip tone="warn">Your turn</Chip>}
+      </ChipRow>
+    ),
+  },
+];
+const REVIEW_FILTERS: DtFilter<ReviewRow>[] = [
+  { id: 'status', label: 'Status', value: (r) => r.label, options: pillOptions(Q_STATUS, Object.keys(Q_STATUS).filter((k) => k !== 'not_applicable')) },
+  { id: 'mine', label: 'Waiting on me', value: (r) => (myTurn(r) ? 'yes' : 'no'), options: [{ value: 'yes', label: 'Your turn' }, { value: 'no', label: 'Not your turn' }] },
+  { id: 'quarter', label: 'Quarter', value: (r) => r.review.quarter },
+  { id: 'company', label: 'Company', value: (r) => r.companyName },
+];
+
 function Reviews({ data, go }: { data: B; go: (k: NonNullable<Open>['kind'], id: string) => void }) {
-  const [state, setState] = useState('ALL');
-  const rows = data.reviews.filter((r) => state === 'ALL' || r.label === state || (state === 'mine' && Object.values(r.can).some(Boolean)));
   return (
     <Panel title="Quarterly reviews" note={`${data.quarter.key} and anything still open`}>
-      <div className="ws-toolbar">
-      <Select className="select ws-filter" aria-label="Filter" value={state} onChange={(e) => setState(e.target.value)}>
-        <option value="ALL">All</option>
-        <option value="mine">Waiting on me</option>
-        {Object.entries(Q_STATUS)
-          .filter(([k]) => k !== 'not_applicable')
-          .map(([k, [, l]]) => (
-            <option key={k} value={k}>
-              {l}
-            </option>
-          ))}
-      </Select>
-      </div>
-      <div className="list">
-        {rows.map((r) => (
-          <RowButton
-            key={r.review.id}
-            onClick={() => go('review', r.review.id)}
-            title={`${r.companyName} · ${r.siteName}`}
-            sub={`${r.review.quarter} · ${r.stageLabel} · company answers by ${dateLabel(r.review.responseDue)}${r.review.needsHelp ? ' · company asked for help' : ''}`}
-            right={
-              <>
-                <Pill map={Q_STATUS} k={r.label} />
-                {Object.values(r.can).some(Boolean) && <Chip tone="warn">Your turn</Chip>}
-              </>
-            }
-          />
-        ))}
-        {!rows.length && <div className="empty">No review matches.</div>}
-      </div>
+      <DataTable
+        label="Quarterly reviews"
+        stateKey="it.websites.reviews"
+        rows={data.reviews}
+        rowKey={(r) => r.review.id}
+        columns={REVIEW_COLUMNS}
+        filters={REVIEW_FILTERS}
+        rowTone={(r) => (myTurn(r) ? 'warn' : undefined)}
+        onView={(r) => go('review', r.review.id)}
+        empty={<div className="empty">No review matches.</div>}
+      />
     </Panel>
   );
 }
@@ -1742,6 +1869,36 @@ function TestForm({ row, lists, act }: { row: B['reviews'][number]; lists: B['li
 
 // ---------- Monthly checks ----------
 
+type CheckRow = B['checks'][number];
+const checkKind = (c: CheckRow) => (c.kind === 'social' ? 'Social media' : c.kind === 'mail' ? 'Email' : 'Website');
+/** P107: the month's checks as a table: what was checked, by whom, when, and where it stands. */
+const CHECK_COLUMNS: DtColumn<CheckRow>[] = [
+  { id: 'site', label: 'Checked', value: (c) => c.siteName, render: (c) => <strong>{c.siteName}</strong>, phone: 'title' },
+  { id: 'company', label: 'Company', value: (c) => c.companyName, phone: 'sub' },
+  { id: 'kind', label: 'Kind', value: checkKind, translate: true },
+  { id: 'month', label: 'Month', value: (c) => c.check.month, hideBelow: 1100 },
+  { id: 'who', label: 'Assigned to', value: (c) => c.assignedTo ?? '', render: (c) => c.assignedTo ?? muted('no one assigned') },
+  { id: 'done', label: 'Done', value: (c) => c.check.doneAt ?? '', sort: 'date', render: (c) => (c.check.doneAt ? dateTimeLabel(c.check.doneAt) : '–'), hideBelow: 1100 },
+  {
+    id: 'status',
+    label: 'Status',
+    value: (c) => pillLabel(CHECK_STATUS, c.status),
+    translate: true,
+    render: (c) => (
+      <ChipRow>
+        <Pill map={CHECK_STATUS} k={c.status} />
+        <Manual />
+      </ChipRow>
+    ),
+  },
+];
+const CHECK_FILTERS: DtFilter<CheckRow>[] = [
+  { id: 'status', label: 'Status', value: (c) => c.status, optionLabel: (k) => pillLabel(CHECK_STATUS, k) },
+  { id: 'kind', label: 'Kind', value: checkKind },
+  { id: 'who', label: 'Assigned to', value: (c) => c.assignedTo ?? '' },
+  { id: 'company', label: 'Company', value: (c) => c.companyName },
+];
+
 function Checks({ data, go }: { data: B; go: (k: NonNullable<Open>['kind'], id: string) => void }) {
   const act = useAction();
   const [assignTo, setAssignTo] = useState('');
@@ -1766,23 +1923,16 @@ function Checks({ data, go }: { data: B; go: (k: NonNullable<Open>['kind'], id: 
         </Panel>
       )}
       <Panel title="Monthly checks" note="Confirmed by a person; automated checks are not connected">
-        <div className="list">
-          {data.checks.map((c) => (
-            <RowButton
-              key={c.check.id}
-              onClick={() => go('check', c.check.id)}
-              title={`${c.companyName} · ${c.siteName}`}
-              sub={`${c.kind === 'social' ? 'Social media · ' : c.kind === 'mail' ? 'Email · ' : ''}${c.check.month} · ${c.assignedTo ?? 'no one assigned'}${c.check.doneAt ? ` · done ${dateTimeLabel(c.check.doneAt)}` : ''}`}
-              right={
-                <>
-                  <Pill map={CHECK_STATUS} k={c.status} />
-                  <Manual />
-                </>
-              }
-            />
-          ))}
-          {!data.checks.length && <div className="empty">No checks open for this month.</div>}
-        </div>
+        <DataTable
+          label="Monthly checks"
+          stateKey="it.websites.checks"
+          rows={data.checks}
+          rowKey={(c) => c.check.id}
+          columns={CHECK_COLUMNS}
+          filters={CHECK_FILTERS}
+          onView={(c) => go('check', c.check.id)}
+          empty={<div className="empty">No checks open for this month.</div>}
+        />
       </Panel>
     </>
   );
@@ -1861,10 +2011,38 @@ function CheckDrawer({ data, id, go, onClose }: { data: B; id: string; go: (k: N
 
 // ---------- Issues ----------
 
+type IssueRow = B['issues'][number];
+const isOpenIssue = (i: IssueRow) => i.issue.status === 'open' || i.issue.status === 'in_progress';
+const SEV_ORDER: Record<string, number> = { critical: 4, high: 3, normal: 2, low: 1 };
+/** P107: issues as a table; "Show resolved and closed" is now the Open / Resolved filter (open first, as before). */
+const ISSUE_COLUMNS: DtColumn<IssueRow>[] = [
+  {
+    id: 'ref',
+    label: 'Issue',
+    value: (i) => i.issue.ref,
+    render: (i) => (
+      <span>
+        <strong>{i.issue.ref}</strong>
+        <span className="small" style={{ display: 'block' }}>{i.issue.description}</span>
+      </span>
+    ),
+    phone: 'title',
+  },
+  { id: 'company', label: 'Company', value: (i) => `${i.companyName}${i.siteName ? ` · ${i.siteName}` : ''}`, phone: 'sub' },
+  { id: 'owner', label: 'Owner', value: (i) => i.owner ?? '', render: (i) => i.owner ?? muted('no owner') },
+  { id: 'due', label: 'Due', value: (i) => i.issue.targetOn, sort: 'date', render: (i) => `${dateLabel(i.issue.targetOn)}${i.late ? ' (late)' : ''}` },
+  { id: 'severity', label: 'Severity', value: (i) => SEV_ORDER[i.issue.severity] ?? 0, sort: 'number', search: false, align: 'left', render: (i) => <Chip tone={SEV[i.issue.severity]}>{i.issue.severity}</Chip> },
+  { id: 'status', label: 'Status', value: (i) => i.issue.status.replace('_', ' '), translate: true, render: (i) => <Chip tone="neutral">{i.issue.status.replace('_', ' ')}</Chip> },
+];
+const ISSUE_FILTERS: DtFilter<IssueRow>[] = [
+  { id: 'open', label: 'Show', value: (i) => (isOpenIssue(i) ? 'open' : 'closed'), options: [{ value: 'open', label: 'Open and in progress' }, { value: 'closed', label: 'Resolved and closed' }] },
+  { id: 'severity', label: 'Severity', value: (i) => i.issue.severity },
+  { id: 'late', label: 'Late', value: (i) => (i.late ? 'yes' : 'no'), options: [{ value: 'yes', label: 'Late' }, { value: 'no', label: 'On time' }] },
+  { id: 'company', label: 'Company', value: (i) => i.companyName },
+];
+
 function Issues({ data, go }: { data: B; go: (k: NonNullable<Open>['kind'], id: string) => void }) {
   const [raising, setRaising] = useState(false);
-  const [showClosed, setShowClosed] = useState(false);
-  const rows = data.issues.filter((i) => showClosed || i.issue.status === 'open' || i.issue.status === 'in_progress');
   return (
     <>
       <Panel
@@ -1876,29 +2054,18 @@ function Issues({ data, go }: { data: B; go: (k: NonNullable<Open>['kind'], id: 
           </button>
         }
       >
-        <div className="ws-toolbar">
-          <label className="ws-check">
-            <input type="checkbox" checked={showClosed} onChange={(e) => setShowClosed(e.target.checked)} />
-            Show resolved and closed
-          </label>
-        </div>
-        <div className="list">
-          {rows.map((i) => (
-            <RowButton
-              key={i.issue.id}
-              onClick={() => go('issue', i.issue.id)}
-              title={`${i.issue.ref} · ${i.companyName}${i.siteName ? ` · ${i.siteName}` : ''}`}
-              sub={`${i.issue.description} · ${i.owner ?? 'no owner'} · due ${dateLabel(i.issue.targetOn)}${i.late ? ' (late)' : ''}`}
-              right={
-                <>
-                  <Chip tone={SEV[i.issue.severity]}>{i.issue.severity}</Chip>
-                  <Chip tone="neutral">{i.issue.status.replace('_', ' ')}</Chip>
-                </>
-              }
-            />
-          ))}
-          {!rows.length && <div className="empty">No open issues.</div>}
-        </div>
+        <DataTable
+          label="Issues and urgent changes"
+          stateKey="it.websites.issues"
+          defaults={{ f: { open: 'open' } }}
+          rows={data.issues}
+          rowKey={(i) => i.issue.id}
+          columns={ISSUE_COLUMNS}
+          filters={ISSUE_FILTERS}
+          rowTone={(i) => (i.late && isOpenIssue(i) ? 'crit' : undefined)}
+          onView={(i) => go('issue', i.issue.id)}
+          empty={<div className="empty">No open issues.</div>}
+        />
       </Panel>
       {raising && (
         <Drawer title="Report a website issue" onClose={() => setRaising(false)}>
@@ -2131,22 +2298,43 @@ function DnsWarning() {
   );
 }
 
+/** P107: DNS changes as a table. */
+const DNS_COLUMNS: DtColumn<B['dns'][number]>[] = [
+  { id: 'ref', label: 'Change', value: (c) => c.change.ref, render: (c) => <strong>{c.change.ref}</strong>, phone: 'title' },
+  { id: 'domain', label: 'Domain', value: (c) => c.domainName, phone: 'sub' },
+  {
+    id: 'reason',
+    label: 'Reason',
+    value: (c) => c.change.reason,
+    render: (c) => (
+      <span>
+        {c.change.reason}
+        {c.m365 && <span className="muted small" style={{ display: 'block' }}>Microsoft 365 email on this domain</span>}
+      </span>
+    ),
+  },
+  { id: 'window', label: 'Window', value: (c) => c.change.windowFrom, sort: 'date', render: (c) => dateTimeLabel(c.change.windowFrom) },
+  { id: 'owner', label: 'Owner', value: (c) => c.owner ?? '', hideBelow: 1100 },
+  { id: 'status', label: 'Status', value: (c) => c.change.status, translate: true, render: (c) => <Chip tone={c.change.status === 'done' ? 'ok' : c.change.status === 'draft' ? 'warn' : 'info'}>{c.change.status}</Chip> },
+];
+
 function DnsList({ data, go }: { data: B; go: (k: NonNullable<Open>['kind'], id: string) => void }) {
   return (
     <Panel title="DNS and nameserver changes" note="Raise one from the domain">
       <DnsWarning />
-      <div className="list">
-        {data.dns.map((c) => (
-          <RowButton
-            key={c.change.id}
-            onClick={() => go('dns', c.change.id)}
-            title={`${c.change.ref} · ${c.domainName}`}
-            sub={`${c.change.reason} · window ${dateTimeLabel(c.change.windowFrom)} · ${c.owner ?? ''}${c.m365 ? ' · Microsoft 365 email on this domain' : ''}`}
-            right={<Chip tone={c.change.status === 'done' ? 'ok' : c.change.status === 'draft' ? 'warn' : 'info'}>{c.change.status}</Chip>}
-          />
-        ))}
-        {!data.dns.length && <div className="empty">No DNS changes recorded.</div>}
-      </div>
+      <DataTable
+        label="DNS and nameserver changes"
+        stateKey="it.websites.dns"
+        rows={data.dns}
+        rowKey={(c) => c.change.id}
+        columns={DNS_COLUMNS}
+        filters={[
+          { id: 'status', label: 'Status', value: (c) => c.change.status },
+          { id: 'domain', label: 'Domain', value: (c) => c.domainName },
+        ]}
+        onView={(c) => go('dns', c.change.id)}
+        empty={<div className="empty">No DNS changes recorded.</div>}
+      />
     </Panel>
   );
 }
@@ -2640,6 +2828,17 @@ function Flags({ flags }: { flags: string[] }) {
   return <Chip tone="warn">{flags.length === 1 ? flags[0] : `${flags.length} to fix`}</Chip>;
 }
 
+/** P107: social media accounts as a table. */
+const SOCIAL_COLUMNS: DtColumn<B['social'][number]>[] = [
+  { id: 'name', label: 'Account', value: (a) => a.account.name, render: (a) => <strong>{a.account.name}</strong>, phone: 'title' },
+  { id: 'platform', label: 'Platform', value: (a) => a.platform, phone: 'sub' },
+  { id: 'company', label: 'Company', value: (a) => a.companyName },
+  { id: 'admins', label: 'Admins', value: (a) => a.account.admins.length, sort: 'number', hideBelow: 1100 },
+  { id: 'it', label: 'IT administrator', value: (a) => a.itAdmin ?? '', render: (a) => a.itAdmin ?? muted('none'), hideBelow: 1200 },
+  { id: 'post', label: 'Last post', value: (a) => a.account.lastPostOn ?? '', sort: 'date' },
+  { id: 'flags', label: 'Needs fix', value: (a) => a.flags.length, sort: 'number', search: false, align: 'left', render: (a) => <Flags flags={a.flags} /> },
+];
+
 function Social({ data, go }: { data: B; go: (k: NonNullable<Open>['kind'], id: string) => void }) {
   const [adding, setAdding] = useState(false);
   return (
@@ -2655,18 +2854,21 @@ function Social({ data, go }: { data: B; go: (k: NonNullable<Open>['kind'], id: 
           )
         }
       >
-        <div className="list">
-          {data.social.map((a) => (
-            <RowButton
-              key={a.account.id}
-              onClick={() => go('social', a.account.id)}
-              title={`${a.platform}: ${a.account.name}`}
-              sub={`${a.companyName} · ${a.account.admins.length} admin${a.account.admins.length === 1 ? '' : 's'} · IT: ${a.itAdmin ?? 'none'}${a.account.lastPostOn ? ` · last post ${dateLabel(a.account.lastPostOn)}` : ''}`}
-              right={<Flags flags={a.flags} />}
-            />
-          ))}
-          {!data.social.length && <div className="empty">No social media accounts recorded yet.</div>}
-        </div>
+        <DataTable
+          label="Social media and online listings"
+          stateKey="it.websites.social"
+          rows={data.social}
+          rowKey={(a) => a.account.id}
+          columns={SOCIAL_COLUMNS}
+          filters={[
+            { id: 'platform', label: 'Platform', value: (a) => a.platform },
+            { id: 'company', label: 'Company', value: (a) => a.companyName },
+            { id: 'flags', label: 'Needs fix', value: (a) => (a.flags.length ? 'yes' : 'no'), options: [{ value: 'yes', label: 'To fix' }, { value: 'no', label: 'In order' }] },
+          ]}
+          searchText={(a) => a.flags.join(' ')}
+          onView={(a) => go('social', a.account.id)}
+          empty={<div className="empty">No social media accounts recorded yet.</div>}
+        />
       </Panel>
       {adding && <SocialForm data={data} onDone={() => setAdding(false)} />}
     </>
@@ -2869,6 +3071,84 @@ const MAIL_LABEL: Record<string, string> = {
   unknown: 'Not checked',
 };
 
+type MailRow = B['mail'][number];
+/** P107: the email checks that fail for a domain (spf, dkim, dmarc, mx), for the "Failing check" filter. */
+const mailFailing = (m: MailRow): string[] => {
+  const h = m.health;
+  if (!h) return [];
+  return [
+    h.spf === 'missing' || h.spf === 'too_many_lookups' ? 'spf' : '',
+    h.dkim === 'off' ? 'dkim' : '',
+    h.dmarc === 'missing' ? 'dmarc' : '',
+    h.mx === 'missing' ? 'mx' : '',
+  ].filter(Boolean);
+};
+const mailCell = (k: 'spf' | 'dkim' | 'dmarc' | 'mx', label: string): DtColumn<MailRow> => ({
+  id: k,
+  label,
+  value: (m) => (m.health ? MAIL_LABEL[m.health[k]] : ''),
+  translate: true,
+  render: (m) => (m.health ? MAIL_LABEL[m.health[k]] : muted('Not checked')),
+});
+/** P107: email health per domain as a table (the hand-entry form opens under it). */
+const MAIL_COLUMNS: DtColumn<MailRow>[] = [
+  { id: 'name', label: 'Domain', value: (m) => m.name, render: (m) => <strong>{m.name}</strong>, phone: 'title' },
+  mailCell('spf', 'SPF'),
+  mailCell('dkim', 'DKIM'),
+  mailCell('dmarc', 'DMARC'),
+  mailCell('mx', 'MX'),
+  {
+    id: 'checked',
+    label: 'Checked',
+    value: (m) => m.health?.checkedAt ?? '',
+    sort: 'date',
+    render: (m) =>
+      m.health ? (
+        <span className="small">
+          {m.health.source === 'dns' ? 'read from DNS' : `by ${m.health.checkedBy ?? 'IT'}`} {m.health.checkedAt ? dateTimeLabel(m.health.checkedAt) : ''}
+        </span>
+      ) : (
+        '–'
+      ),
+    hideBelow: 1200,
+  },
+  {
+    id: 'flags',
+    label: 'Needs fix',
+    value: (m) => m.flags.length,
+    sort: 'number',
+    search: false,
+    align: 'left',
+    render: (m) => (
+      <span>
+        <Flags flags={m.flags} />
+        {m.flags.length > 1 && <span className="muted small" style={{ display: 'block' }}>{m.flags.join(' · ')}</span>}
+      </span>
+    ),
+  },
+];
+/** P107: the 90-day mailbox review per company as a table (the review form opens under it). */
+const MAILBOX_COLUMNS: DtColumn<B['mailboxes'][number]>[] = [
+  { id: 'company', label: 'Company', value: (m) => m.companyName, render: (m) => <strong>{m.companyName}</strong>, phone: 'title' },
+  { id: 'licensed', label: 'Licensed', value: (m) => m.mailboxes?.licensed ?? null, sort: 'number' },
+  { id: 'shared', label: 'Shared', value: (m) => m.mailboxes?.shared ?? null, sort: 'number' },
+  { id: 'reviewed', label: 'Reviewed', value: (m) => m.mailboxes?.reviewedAt ?? '', sort: 'date', render: (m) => (m.mailboxes?.reviewedAt ? dateTimeLabel(m.mailboxes.reviewedAt) : m.mailboxes ? 'never' : muted('Not reviewed')) },
+  {
+    id: 'flags',
+    label: 'Needs fix',
+    value: (m) => m.flags.length,
+    sort: 'number',
+    search: false,
+    align: 'left',
+    render: (m) => (
+      <span>
+        <Flags flags={m.flags} />
+        {m.flags.length > 1 && <span className="muted small" style={{ display: 'block' }}>{m.flags.join(' · ')}</span>}
+      </span>
+    ),
+  },
+];
+
 function Email({ data }: { data: B; go: (k: NonNullable<Open>['kind'], id: string) => void }) {
   const act = useAction();
   const [editDomain, setEditDomain] = useState<string | null>(null);
@@ -2896,27 +3176,36 @@ function Email({ data }: { data: B; go: (k: NonNullable<Open>['kind'], id: strin
       </Panel>
       <Panel title="Email health per domain" note="SPF, DKIM and DMARC keep company email delivered and stop others sending as the company">
         <ErrorNotice error={act.error} />
-        <div className="list">
-          {data.mail.map((m) => (
+        <DataTable
+          details
+          label="Email health per domain"
+          stateKey="it.websites.mail"
+          rows={data.mail}
+          rowKey={(m) => m.domainId}
+          columns={MAIL_COLUMNS}
+          filters={[
+            { id: 'failing', label: 'Failing check', value: (m) => mailFailing(m), optionLabel: (k) => k.toUpperCase() },
+            { id: 'flags', label: 'Needs fix', value: (m) => (m.flags.length ? 'yes' : 'no'), options: [{ value: 'yes', label: 'To fix' }, { value: 'no', label: 'In order' }] },
+          ]}
+          searchText={(m) => m.flags.join(' ')}
+          rowEnd={(m) =>
+            m.canEdit && editDomain !== m.domainId ? (
+              <button className="btn btn-sm" disabled={act.busy} onClick={() => (setEditDomain(m.domainId), setF({ spf: m.health?.spf ?? 'unknown', dkim: m.health?.dkim ?? 'unknown', dmarc: m.health?.dmarc ?? 'unknown', mx: m.health?.mx ?? 'unknown', dmarcReports: m.health?.dmarcReports == null ? 'unknown' : m.health.dmarcReports ? 'yes' : 'no' }))}>
+                Record by hand
+              </button>
+            ) : null
+          }
+          empty={<div className="empty">No domains with Microsoft 365 email recorded.</div>}
+        />
+        {data.mail
+          .filter((m) => editDomain === m.domainId)
+          .map((m) => (
             <div key={m.domainId} className="ws-item">
               <Line k={m.name}>
-                {m.health ? (
-                  <span className="small">
-                    SPF {MAIL_LABEL[m.health.spf]} · DKIM {MAIL_LABEL[m.health.dkim]} · DMARC {MAIL_LABEL[m.health.dmarc]} · MX {MAIL_LABEL[m.health.mx]} ·{' '}
-                    {m.health.source === 'dns' ? 'read from DNS' : `by ${m.health.checkedBy ?? 'IT'}`} {m.health.checkedAt ? dateTimeLabel(m.health.checkedAt) : ''}
-                  </span>
-                ) : (
-                  <span className="muted small">Not checked</span>
-                )}{' '}
                 <Flags flags={m.flags} />
               </Line>
               {m.flags.length > 0 && <div className="muted small">{m.flags.join(' · ')}</div>}
-              {m.canEdit && editDomain !== m.domainId && (
-                <button className="btn btn-sm" disabled={act.busy} onClick={() => (setEditDomain(m.domainId), setF({ spf: m.health?.spf ?? 'unknown', dkim: m.health?.dkim ?? 'unknown', dmarc: m.health?.dmarc ?? 'unknown', mx: m.health?.mx ?? 'unknown', dmarcReports: m.health?.dmarcReports == null ? 'unknown' : m.health.dmarcReports ? 'yes' : 'no' }))}>
-                  Record by hand
-                </button>
-              )}
-              {editDomain === m.domainId && (
+              {(
                 <div className="ws-form ws-gap-top">
                   {sel('spf', ['pass', 'missing', 'too_many_lookups', 'unknown'])}
                   {sel('dkim', ['on', 'off', 'unknown'])}
@@ -2948,30 +3237,35 @@ function Email({ data }: { data: B; go: (k: NonNullable<Open>['kind'], id: strin
               )}
             </div>
           ))}
-          {!data.mail.length && <div className="empty">No domains with Microsoft 365 email recorded.</div>}
-        </div>
       </Panel>
       <Panel title="Mailbox review per company" note="Every 90 days in the Microsoft 365 admin centre: leavers, forwarding outside, full mailboxes">
-        <div className="list">
-          {data.mailboxes.map((m) => (
+        <DataTable
+          details
+          label="Mailbox review per company"
+          stateKey="it.websites.mailboxes"
+          rows={data.mailboxes}
+          rowKey={(m) => m.companyId}
+          columns={MAILBOX_COLUMNS}
+          filters={[{ id: 'flags', label: 'Needs fix', value: (m) => (m.flags.length ? 'yes' : 'no'), options: [{ value: 'yes', label: 'To fix' }, { value: 'no', label: 'In order' }] }]}
+          searchText={(m) => m.flags.join(' ')}
+          rowEnd={(m) =>
+            m.canEdit && editCo !== m.companyId ? (
+              <button className="btn btn-sm" disabled={act.busy} onClick={() => (setEditCo(m.companyId), setMailboxForm({}))}>
+                Record review
+              </button>
+            ) : null
+          }
+          empty={<div className="empty">No company with Microsoft 365 email recorded.</div>}
+        />
+        {data.mailboxes
+          .filter((m) => editCo === m.companyId)
+          .map((m) => (
             <div key={m.companyId} className="ws-item">
               <Line k={m.companyName}>
-                {m.mailboxes ? (
-                  <span className="small">
-                    {m.mailboxes.licensed ?? '?'} licensed · {m.mailboxes.shared ?? '?'} shared · reviewed {m.mailboxes.reviewedAt ? dateTimeLabel(m.mailboxes.reviewedAt) : 'never'}
-                  </span>
-                ) : (
-                  <span className="muted small">Not reviewed</span>
-                )}{' '}
                 <Flags flags={m.flags} />
               </Line>
               {m.flags.length > 0 && <div className="muted small">{m.flags.join(' · ')}</div>}
-              {m.canEdit && editCo !== m.companyId && (
-                <button className="btn btn-sm" disabled={act.busy} onClick={() => (setEditCo(m.companyId), setMailboxForm({}))}>
-                  Record review
-                </button>
-              )}
-              {editCo === m.companyId && (
+              {(
                 <div className="ws-form ws-gap-top">
                   <Text label="Licensed mailboxes" value={mailboxForm.licensed ?? ''} onChange={setMailbox('licensed')} />
                   <Text label="Shared mailboxes" value={mailboxForm.shared ?? ''} onChange={setMailbox('shared')} />
@@ -2998,8 +3292,6 @@ function Email({ data }: { data: B; go: (k: NonNullable<Open>['kind'], id: strin
               )}
             </div>
           ))}
-          {!data.mailboxes.length && <div className="empty">No company with Microsoft 365 email recorded.</div>}
-        </div>
       </Panel>
     </>
   );

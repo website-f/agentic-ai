@@ -15,8 +15,10 @@ import {
 } from "@prima/core";
 import { api, type RegBoard } from "../api";
 import { ImportButton } from "./ImportDrawer";
+import { DataTable, type DtColumn, type DtFilter } from "../DataTable";
 import {
   Chip,
+  Drawer,
   ErrorNotice,
   Kpi,
   Loading,
@@ -233,10 +235,41 @@ function CompanyPick({
 
 // ---------- Related-party deals ----------
 
+const tone4 = (t: string) => (t === "crit" ? "crit" : t === "warn" ? "warn" : undefined);
+
+const DEAL_COLUMNS: DtColumn<DealRow>[] = [
+  { id: "start", label: "From", value: (r) => r.deal.startOn, sort: "date", width: "8rem", hideBelow: 1100 },
+  { id: "company", label: "Company", value: (r) => r.companyName, phone: "sub" },
+  { id: "counterparty", label: "Counterparty", value: (r) => r.deal.counterparty, render: (r) => <strong>{r.deal.counterparty}</strong>, phone: "title" },
+  { id: "nature", label: "Deal", value: (r) => RPT_NATURE_LABEL[r.deal.nature], translate: true },
+  { id: "party", label: "Related party", value: (r) => `${RPT_PARTY_LABEL[r.deal.party]} (${r.deal.relationship})`, hideBelow: 1200 },
+  { id: "amount", label: "Amount", value: (r) => r.deal.amount, sort: "money" },
+  { id: "by", label: "Recorded by", value: (r) => r.deal.recordedBy, hideBelow: 1300 },
+  {
+    id: "status",
+    label: "Status",
+    value: (r) => DEAL_STATUS[r.deal.status][1],
+    translate: true,
+    render: (r) => (
+      <span className="row" style={{ gap: 4, flexWrap: "wrap" }}>
+        {r.needsBoard && <Chip tone="info">Board decides</Chip>}
+        <Chip tone={DEAL_STATUS[r.deal.status][0]}>{DEAL_STATUS[r.deal.status][1]}</Chip>
+      </span>
+    ),
+  },
+];
+const DEAL_FILTERS: DtFilter<DealRow>[] = [
+  { id: "show", label: "Show", value: (r) => (r.deal.status === "done" ? "done" : "open"), options: [{ value: "open", label: "Open" }, { value: "done", label: "Finished" }] },
+  { id: "status", label: "Status", value: (r) => r.deal.status, optionLabel: (v) => DEAL_STATUS[v as RptStatus]?.[1] ?? v },
+  { id: "company", label: "Company", value: (r) => r.companyName },
+  { id: "nature", label: "Deal", value: (r) => r.deal.nature, optionLabel: (v) => RPT_NATURE_LABEL[v as RptNature] ?? v },
+  { id: "party", label: "Related party", value: (r) => r.deal.party, optionLabel: (v) => RPT_PARTY_LABEL[v as RptParty] ?? v },
+];
+
 function DealsPanel({ d }: { d: Deals }) {
   const [form, setForm] = useState(false);
-  const [all, setAll] = useState(false);
-  const rows = d.rows.filter((r) => all || r.deal.status !== "done");
+  const [openId, setOpenId] = useState<string | null>(null);
+  const open = d.rows.find((r) => r.deal.id === openId);
   return (
     <section className="panel">
       <div className="panel-head">
@@ -247,9 +280,6 @@ function DealsPanel({ d }: { d: Deals }) {
               Record a deal
             </button>
           )}
-          <button className="btn btn-sm" onClick={() => setAll(!all)}>
-            {all ? "Hide finished" : "Show finished"}
-          </button>
         </div>
       </div>
       <p className="muted small">
@@ -267,12 +297,25 @@ function DealsPanel({ d }: { d: Deals }) {
       {form && (
         <DealForm companies={d.companies} onDone={() => setForm(false)} />
       )}
-      <div className="list">
-        {!rows.length && <div className="empty">Nothing open.</div>}
-        {rows.map((r) => (
-          <DealLine key={r.deal.id} row={r} />
-        ))}
-      </div>
+      <DataTable
+        label="Related-party deals"
+        stateKey="board.registers.deals"
+        defaults={{ f: { show: "open" } }}
+        rows={d.rows}
+        rowKey={(r) => r.deal.id}
+        columns={DEAL_COLUMNS}
+        filters={DEAL_FILTERS}
+        searchText={(r) => `${r.deal.fairPriceBasis} ${r.deal.interestedDirectors.join(" ")}`}
+        onView={(r) => setOpenId(r.deal.id)}
+        rowTone={(r) => tone4(DEAL_STATUS[r.deal.status][0])}
+        actions={(r) => [{ label: r.canReview ? "Review" : r.canAnswer ? "Answer" : r.canRecordBoard ? "Record board" : "Open", onClick: () => setOpenId(r.deal.id) }]}
+        empty={<div className="empty">Nothing open.</div>}
+      />
+      {open && (
+        <Drawer title={`${RPT_NATURE_LABEL[open.deal.nature]} · ${open.deal.counterparty}`} sub={open.companyName} onClose={() => setOpenId(null)}>
+          <DealLine row={open} />
+        </Drawer>
+      )}
     </section>
   );
 }
@@ -686,8 +729,43 @@ function DealForm({
 
 // ---------- Directors' interests ----------
 
+type InterestRow = Interests["rows"][number];
+const INTEREST_COLUMNS: DtColumn<InterestRow>[] = [
+  { id: "director", label: "Director", value: (r) => r.declaration.directorName, render: (r) => <strong>{r.declaration.directorName}</strong>, phone: "title" },
+  { id: "company", label: "Company", value: (r) => r.companyName, phone: "sub" },
+  { id: "declared", label: "Declared", value: (r) => r.declaration.declaredOn, sort: "date" },
+  { id: "form", label: "Form", value: (r) => r.declaration.formRef, hideBelow: 1200 },
+  {
+    id: "interests",
+    label: "Interests",
+    value: (r) => (r.declaration.nothingToDeclare ? "Nothing to declare" : r.declaration.interests.length),
+    sort: false,
+    render: (r) => (r.declaration.nothingToDeclare ? "Nothing to declare" : `${r.declaration.interests.length}`),
+    hideBelow: 1100,
+  },
+  { id: "due", label: "Next by", value: (r) => r.dueOn, sort: "date" },
+  {
+    id: "state",
+    label: "Status",
+    value: (r) => STATE[r.state][1],
+    translate: true,
+    render: (r) => (
+      <span className="row" style={{ gap: 4, flexWrap: "wrap" }}>
+        {r.doneThisYear && <Chip tone="ok">Done this year</Chip>}
+        <Chip tone={STATE[r.state][0]}>{STATE[r.state][1]}</Chip>
+      </span>
+    ),
+  },
+];
+const INTEREST_FILTERS: DtFilter<InterestRow>[] = [
+  { id: "state", label: "Status", value: (r) => r.state, optionLabel: (v) => STATE[v as InterestRow["state"]]?.[1] ?? v },
+  { id: "company", label: "Company", value: (r) => r.companyName },
+];
+
 function InterestsPanel({ d, rule }: { d: Interests; rule: RegBoard["rule"] }) {
   const [form, setForm] = useState<string | null>(null);
+  const [openId, setOpenId] = useState<string | null>(null);
+  const open = d.rows.find((r) => r.declaration.id === openId);
   return (
     <section className="panel">
       <div className="panel-head">
@@ -720,14 +798,31 @@ function InterestsPanel({ d, rule }: { d: Interests; rule: RegBoard["rule"] }) {
             <Chip tone="warn">Unknown</Chip>
           </div>
         ))}
-        {d.rows.map((r) => (
-          <InterestLine
-            key={r.declaration.id}
-            row={r}
-            onRenew={() => setForm(r.declaration.directorName)}
-          />
-        ))}
       </div>
+      <DataTable
+        label="Directors' interests"
+        stateKey="board.registers.interests"
+        rows={d.rows}
+        rowKey={(r) => r.declaration.id}
+        columns={INTEREST_COLUMNS}
+        filters={INTEREST_FILTERS}
+        searchText={(r) => r.declaration.interests.map((i) => i.detail).join(" ")}
+        onView={(r) => setOpenId(r.declaration.id)}
+        rowTone={(r) => tone4(STATE[r.state][0])}
+        actions={(r) => [{ label: r.canSee ? "Read" : "Open", onClick: () => setOpenId(r.declaration.id) }]}
+        empty={d.noDeclarations.length ? <span /> : undefined}
+      />
+      {open && (
+        <Drawer title={open.declaration.directorName} sub={open.companyName} onClose={() => setOpenId(null)}>
+          <InterestLine
+            row={open}
+            onRenew={() => {
+              setOpenId(null);
+              setForm(open.declaration.directorName);
+            }}
+          />
+        </Drawer>
+      )}
     </section>
   );
 }
@@ -947,8 +1042,27 @@ function InterestForm({
 
 // ---------- Committees ----------
 
+type CommitteeRow = Committees["rows"][number];
+const COMMITTEE_COLUMNS: DtColumn<CommitteeRow>[] = [
+  { id: "name", label: "Committee", value: (r) => r.committee.name, render: (r) => <strong>{r.committee.name}</strong>, phone: "title" },
+  { id: "company", label: "Company", value: (r) => r.companyName, phone: "sub" },
+  { id: "kind", label: "Kind", value: (r) => COMMITTEE_KIND_LABEL[r.committee.kind], translate: true, hideBelow: 1100 },
+  { id: "every", label: "Meets every (months)", value: (r) => r.committee.meetEveryMonths, sort: "number", hideBelow: 1200 },
+  { id: "members", label: "Members", value: (r) => r.committee.members.length, sort: "number", hideBelow: 1200 },
+  { id: "last", label: "Last met", value: (r) => r.last?.on, sort: "date" },
+  { id: "next", label: "Next by", value: (r) => r.nextDue, sort: "date" },
+  { id: "state", label: "Status", value: (r) => STATE[r.state][1], translate: true, render: (r) => <Chip tone={STATE[r.state][0]}>{STATE[r.state][1]}</Chip> },
+];
+const COMMITTEE_FILTERS: DtFilter<CommitteeRow>[] = [
+  { id: "state", label: "Status", value: (r) => r.state, optionLabel: (v) => STATE[v as CommitteeRow["state"]]?.[1] ?? v },
+  { id: "company", label: "Company", value: (r) => r.companyName },
+  { id: "kind", label: "Kind", value: (r) => r.committee.kind, optionLabel: (v) => COMMITTEE_KIND_LABEL[v as CommitteeKind] ?? v },
+];
+
 function CommitteesPanel({ d }: { d: Committees }) {
   const [form, setForm] = useState(false);
+  const [openId, setOpenId] = useState<string | null>(null);
+  const open = d.rows.find((r) => r.committee.id === openId);
   return (
     <section className="panel">
       <div className="panel-head">
@@ -966,12 +1080,24 @@ function CommitteesPanel({ d }: { d: Committees }) {
       {form && (
         <CommitteeForm companies={d.companies} onDone={() => setForm(false)} />
       )}
-      <div className="list">
-        {!d.rows.length && <div className="empty">No committees recorded.</div>}
-        {d.rows.map((c) => (
-          <CommitteeLine key={c.committee.id} row={c} />
-        ))}
-      </div>
+      <DataTable
+        label="Board committees"
+        stateKey="board.registers.committees"
+        rows={d.rows}
+        rowKey={(r) => r.committee.id}
+        columns={COMMITTEE_COLUMNS}
+        filters={COMMITTEE_FILTERS}
+        searchText={(r) => `${r.committee.termsRef} ${r.committee.members.map((m) => m.name).join(" ")}`}
+        onView={(r) => setOpenId(r.committee.id)}
+        rowTone={(r) => tone4(STATE[r.state][0])}
+        actions={(r) => [{ label: r.canRecord ? "Record a meeting" : "Open", onClick: () => setOpenId(r.committee.id) }]}
+        empty={<div className="empty">No committees recorded.</div>}
+      />
+      {open && (
+        <Drawer title={open.committee.name} sub={open.companyName} onClose={() => setOpenId(null)}>
+          <CommitteeLine row={open} />
+        </Drawer>
+      )}
     </section>
   );
 }
@@ -1216,10 +1342,42 @@ function CommitteeForm({
 
 // ---------- Risks ----------
 
+const riskLevel = (r: RiskRow) => (r.risk.status === "closed" ? "Closed" : LEVEL[r.level][1]);
+const RISK_COLUMNS: DtColumn<RiskRow>[] = [
+  { id: "title", label: "Risk", value: (r) => r.risk.title, render: (r) => <strong>{r.risk.title}</strong>, phone: "title" },
+  { id: "company", label: "Company", value: (r) => r.companyName, phone: "sub" },
+  { id: "category", label: "Category", value: (r) => RISK_CATEGORY_LABEL[r.risk.category], translate: true, hideBelow: 1200 },
+  { id: "owner", label: "Owner", value: (r) => r.risk.ownerName, hideBelow: 1100 },
+  { id: "score", label: "Score", value: (r) => r.score, sort: "number", render: (r) => `${r.risk.likelihood} × ${r.risk.impact} = ${r.score}` },
+  { id: "action", label: "Action by", value: (r) => r.risk.actionDueOn, sort: "date", render: (r) => (r.risk.actionDueOn ? `${dateLabel(r.risk.actionDueOn)}${r.actionLate ? " (late)" : ""}` : "–"), hideBelow: 1300 },
+  { id: "review", label: "Review by", value: (r) => r.reviewDue, sort: "date" },
+  { id: "given", label: "Given to", value: (r) => r.risk.assignedTo, hideBelow: 1300 },
+  {
+    id: "level",
+    label: "Level",
+    value: riskLevel,
+    translate: true,
+    render: (r) => (
+      <span className="row" style={{ gap: 4, flexWrap: "wrap" }}>
+        {r.mine && <Chip tone="info">Given to you</Chip>}
+        {r.reviewLate && <Chip tone="warn">Review late</Chip>}
+        <Chip tone={r.risk.status === "closed" ? "info" : LEVEL[r.level][0]}>{riskLevel(r)}</Chip>
+      </span>
+    ),
+  },
+];
+const RISK_FILTERS: DtFilter<RiskRow>[] = [
+  { id: "show", label: "Show", value: (r) => r.risk.status, options: [{ value: "open", label: "Open" }, { value: "closed", label: "Closed" }] },
+  { id: "level", label: "Level", value: (r) => r.level, optionLabel: (v) => LEVEL[v as RiskRow["level"]]?.[1] ?? v },
+  { id: "company", label: "Company", value: (r) => r.companyName },
+  { id: "category", label: "Category", value: (r) => r.risk.category, optionLabel: (v) => RISK_CATEGORY_LABEL[v as RiskCategory] ?? v },
+  { id: "mine", label: "Given to", value: (r) => (r.mine ? "mine" : "others"), options: [{ value: "mine", label: "Given to you" }, { value: "others", label: "Others" }] },
+];
+
 function RisksPanel({ d, rule }: { d: Risks; rule: RegBoard["rule"] }) {
   const [form, setForm] = useState(false);
-  const [all, setAll] = useState(false);
-  const rows = d.rows.filter((r) => all || r.risk.status === "open");
+  const [openId, setOpenId] = useState<string | null>(null);
+  const open = d.rows.find((r) => r.risk.id === openId);
   return (
     <section className="panel">
       <div className="panel-head">
@@ -1233,9 +1391,6 @@ function RisksPanel({ d, rule }: { d: Risks; rule: RegBoard["rule"] }) {
           {d.canAdd && (
             <ImportButton kind="regRisk" choices={d.companies.map((c): [string, string] => [c.id, c.name])} />
           )}
-          <button className="btn btn-sm" onClick={() => setAll(!all)}>
-            {all ? "Hide closed" : "Show closed"}
-          </button>
         </div>
       </div>
       <p className="muted small">
@@ -1245,12 +1400,25 @@ function RisksPanel({ d, rule }: { d: Risks; rule: RegBoard["rule"] }) {
       {form && (
         <RiskForm companies={d.companies} onDone={() => setForm(false)} />
       )}
-      <div className="list">
-        {!rows.length && <div className="empty">No risks recorded.</div>}
-        {rows.map((r) => (
-          <RiskLine key={r.risk.id} row={r} team={d.team} />
-        ))}
-      </div>
+      <DataTable
+        label="Risk register"
+        stateKey="board.registers.risks"
+        defaults={{ f: { show: "open" }, sort: "score", dir: "desc" }}
+        rows={d.rows}
+        rowKey={(r) => r.risk.id}
+        columns={RISK_COLUMNS}
+        filters={RISK_FILTERS}
+        searchText={(r) => `${r.risk.controls} ${r.risk.action ?? ""}`}
+        onView={(r) => setOpenId(r.risk.id)}
+        rowTone={(r) => (r.risk.status === "closed" ? undefined : tone4(LEVEL[r.level][0]))}
+        actions={(r) => [{ label: r.canUpdate || r.canAssign || r.canClose ? "Review" : "Open", onClick: () => setOpenId(r.risk.id) }]}
+        empty={<div className="empty">No risks recorded.</div>}
+      />
+      {open && (
+        <Drawer title={open.risk.title} sub={open.companyName} onClose={() => setOpenId(null)}>
+          <RiskLine row={open} team={d.team} />
+        </Drawer>
+      )}
     </section>
   );
 }

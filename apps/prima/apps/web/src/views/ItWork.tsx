@@ -11,6 +11,7 @@ import { useApp } from '../App';
 import { JobEmails } from '../connections/mail/job-emails';
 import { jobEmailClient } from '../connections/mail/job-emails-client';
 import { TenderStepsMine } from './ItPilot';
+import { DataTable, type DtColumn, type DtFilter } from '../DataTable';
 
 /**
  * The IT pilot (Fauzan, 28 Oct 2026): "how to edit what to do, how to make sure they do the job given", with the COO
@@ -131,21 +132,90 @@ const inFilter = (r: JobRow, f: JobFilter) =>
   (f === 'check' && (r.job.status === 'submitted' || r.job.status === 'checked')) ||
   (f === 'done' && r.job.status === 'accepted');
 
+/** P107: the IT jobs queue's columns (DataTable): priority, the job, its owner, due date and where it is. */
+const JOB_COLUMNS: DtColumn<JobRow>[] = [
+  {
+    id: 'priority',
+    label: 'Priority',
+    value: (r) => r.job.priority,
+    render: (r) => (
+      <span className="iw-pri" data-pri={r.job.priority}>
+        {r.job.priority}
+      </span>
+    ),
+    width: '6rem',
+  },
+  {
+    id: 'job',
+    label: 'Job',
+    value: (r) => `${r.job.ref} ${r.job.title}`,
+    render: (r) => (
+      <span className="iw-job-title">
+        <span className="iw-ref">{r.job.ref}</span> {r.job.title}
+      </span>
+    ),
+    phone: 'title',
+  },
+  {
+    id: 'kind',
+    label: 'Kind',
+    value: (r) => JOB_KIND[r.job.kind],
+    translate: true,
+    render: (r) => `${JOB_KIND[r.job.kind]}${r.job.technical ? ' · technical' : ''}${r.job.returns ? ` · sent back ${r.job.returns}×` : ''}`,
+    hideBelow: 1200,
+    phone: 'sub',
+  },
+  {
+    id: 'owner',
+    label: 'Owner',
+    value: (r) => r.job.assignee,
+    render: (r) => (
+      <span className="iw-job-owner">
+        <Avatar name={r.job.assignee} size={26} />
+        <span title={r.job.assignee}>{r.job.assignee}</span>
+      </span>
+    ),
+  },
+  { id: 'due', label: 'Due', value: (r) => r.job.dueOn, sort: 'date' },
+  { id: 'late', label: 'Days late', value: (r) => r.lateDays || null, sort: 'number', render: (r) => lateChip(r) ?? '–', hideBelow: 1100 },
+  {
+    id: 'status',
+    label: 'Status',
+    value: (r) => JOB_STATUS[r.job.status][1],
+    translate: true,
+    render: (r) => (
+      <span title={waitingText(r)}>
+        <Chip tone={JOB_STATUS[r.job.status][0]}>{JOB_STATUS[r.job.status][1]}</Chip>
+      </span>
+    ),
+  },
+];
+
 /** Jobs: give a job, follow every job, filter by what needs attention. */
 export function Jobs({ data }: { data: ItBoard }) {
-  const [filter, setFilter] = useState<JobFilter>('open');
-  const [who, setWho] = useState('');
   const [form, setForm] = useState(false);
   const [open, setOpen] = useState<string | null>(null);
-  const mine = (data.jobs ?? []).filter((r) => !who || r.job.assigneeId === who);
-  const rows = mine.filter((r) => inFilter(r, filter));
-  const row = (data.jobs ?? []).find((r) => r.job.id === open) ?? null;
+  const all = data.jobs ?? [];
+  const row = all.find((r) => r.job.id === open) ?? null;
+  const people = new Map((data.team ?? []).map((t) => [t.id, t.name]));
+  // P107: the Show buttons, the person pick-list and the queue are one data table ("Open" first, as before).
+  const filters: DtFilter<JobRow>[] = [
+    {
+      id: 'show',
+      label: 'Show',
+      value: (r) => FILTERS.filter(([f]) => f !== 'all' && inFilter(r, f)).map(([f]) => f),
+      options: FILTERS.filter(([f]) => f !== 'all').map(([f, label]) => ({ value: f, label })),
+      allLabel: 'All',
+    },
+    { id: 'person', label: 'Person', value: (r) => r.job.assigneeId, optionLabel: (id) => people.get(id) ?? id, allLabel: 'Everyone' },
+    { id: 'kind', label: 'Kind', value: (r) => r.job.kind, optionLabel: (k) => JOB_KIND[k as Job['kind']] ?? k },
+    { id: 'priority', label: 'Priority', value: (r) => r.job.priority },
+    { id: 'status', label: 'Status', value: (r) => r.job.status, optionLabel: (s) => JOB_STATUS[s as Job['status']]?.[1] ?? s },
+  ];
   return (
     <>
       <Card
         title="IT jobs"
-        sub={`${rows.length} shown`}
-        flush
         actions={
           (data.assigner || data.canGiveJob) && (
             <button className="btn btn-sm btn-primary" aria-expanded={form} onClick={() => setForm(!form)}>
@@ -160,27 +230,20 @@ export function Jobs({ data }: { data: ItBoard }) {
             <GiveJob data={data} onDone={() => setForm(false)} />
           </div>
         )}
-        <div className="iw-bar">
-          <div className="seg iw-seg" role="group" aria-label="Show">
-            {FILTERS.map(([f, label]) => (
-              <button key={f} type="button" aria-pressed={filter === f} onClick={() => setFilter(f)}>
-                {label}
-                <span className="iw-count">{mine.filter((r) => inFilter(r, f)).length}</span>
-              </button>
-            ))}
-          </div>
-          <Select className="select iw-bar-select" aria-label="Person" value={who} onChange={(e) => setWho(e.target.value)}>
-            <option value="">Everyone</option>
-            {(data.team ?? [])
-              .filter((t) => t.itRole !== 'manager')
-              .map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.name}
-                </option>
-              ))}
-          </Select>
-        </div>
-        {rows.length ? <JobQueue rows={rows} onOpen={setOpen} /> : <Empty title="Nothing here." />}
+        <DataTable
+          label="IT jobs"
+          stateKey="it.jobs"
+          defaults={{ f: { show: 'open' } }}
+          rows={all}
+          rowKey={(r) => r.job.id}
+          columns={JOB_COLUMNS}
+          filters={filters}
+          searchPlaceholder="Reference, job or person"
+          searchText={(r) => waitingText(r)}
+          onView={(r) => setOpen(r.job.id)}
+          rowTone={(r) => (r.lateDays > 0 ? (r.level === 'manager' ? 'warn' : 'crit') : undefined)}
+          empty={<Empty title="Nothing here." />}
+        />
         <p className="iw-rule">
           Every job has one named person and a due date. It is finished only when it is submitted with proof and accepted by the IT Manager; a
           technical job is checked by the IT Lead first, and the IT Manager checks the proof of the IT Lead’s own technical jobs. Nobody checks or accepts their own work. The COO may accept or return any job, and whoever was in charge of checking it is told. A job {data.jobRule.cooAfterDays} days late goes to the COO,
@@ -801,6 +864,85 @@ export function Team({ data }: { data: ItBoard }) {
   );
 }
 
+type AccessRow = NonNullable<ItBoard['accessRequests']>[number];
+type AccountRow = NonNullable<ItBoard['accounts']>[number];
+const accessAsk = (r: AccessRow) => (r.request.action === 'grant' ? `Give ${r.request.name} ${r.request.level} access` : `Remove ${r.request.name}`);
+function accessState(r: AccessRow): [Parameters<typeof Chip>[0]['tone'], string] {
+  return r.request.status === 'waiting' ? ['warn', 'With the CEO'] : r.request.status === 'approved' ? ['ok', 'Approved'] : ['crit', 'Rejected'];
+}
+const mfaText = (a: AccountRow) => (a.account.mfa == null ? 'unknown' : a.account.mfa ? 'on' : 'OFF');
+/** P107: access requests and the systems register as data tables; a row opens its decision or review in a drawer. */
+const ACCESS_COLUMNS: DtColumn<AccessRow>[] = [
+  { id: 'ref', label: 'Reference', value: (r) => r.request.ref, render: (r) => <span className="iw-ref">{r.request.ref}</span>, width: '8rem' },
+  { id: 'ask', label: 'Request', value: (r) => accessAsk(r), phone: 'title' },
+  { id: 'system', label: 'System', value: (r) => r.system, phone: 'sub' },
+  { id: 'by', label: 'Asked by', value: (r) => r.request.askedBy, hideBelow: 1100 },
+  { id: 'at', label: 'Asked on', value: (r) => r.request.at, sort: 'date', hideBelow: 1200 },
+  { id: 'status', label: 'Status', value: (r) => accessState(r)[1], translate: true, render: (r) => <Chip tone={accessState(r)[0]}>{accessState(r)[1]}</Chip> },
+];
+const ACCESS_FILTERS: DtFilter<AccessRow>[] = [
+  { id: 'status', label: 'Status', value: (r) => accessState(r)[1] },
+  { id: 'system', label: 'System', value: (r) => r.system },
+  {
+    id: 'action',
+    label: 'Request',
+    value: (r) => r.request.action,
+    options: [
+      { value: 'grant', label: 'Give access' },
+      { value: 'remove', label: 'Remove access' },
+    ],
+  },
+];
+const ACCOUNT_COLUMNS: DtColumn<AccountRow>[] = [
+  { id: 'name', label: 'System', value: (a) => a.account.name, render: (a) => <span className="iw-row-title">{a.account.name}</span>, phone: 'title' },
+  { id: 'owner', label: 'Owner', value: (a) => a.account.owner, phone: 'sub' },
+  { id: 'mfa', label: 'Two-step sign-in', value: (a) => mfaText(a), render: (a) => (a.account.mfa === false ? <Chip tone="crit">Two-step sign-in off</Chip> : mfaText(a)) },
+  { id: 'access', label: 'Recorded access', value: (a) => a.account.access.length, sort: 'number' },
+  { id: 'reviewed', label: 'Reviewed', value: (a) => a.account.reviewedOn ?? '', sort: 'date', hideBelow: 1100 },
+  {
+    id: 'state',
+    label: 'Status',
+    value: (a) => (a.reviewDue ? 'Review due' : 'Reviewed'),
+    translate: true,
+    render: (a) => (
+      <span className="iw-sys-state">
+        {a.notOwnedByCeo && <Chip tone="crit">Not owned by the CEO</Chip>}
+        <Chip tone={a.reviewDue ? 'warn' : 'ok'}>{a.reviewDue ? 'Review due' : `Reviewed ${dateLabel(a.account.reviewedOn!)}`}</Chip>
+      </span>
+    ),
+  },
+];
+const ACCOUNT_FILTERS: DtFilter<AccountRow>[] = [
+  {
+    id: 'mfa',
+    label: 'Two-step sign-in',
+    value: (a) => (a.account.mfa == null ? 'unknown' : a.account.mfa ? 'on' : 'off'),
+    options: [
+      { value: 'on', label: 'On' },
+      { value: 'off', label: 'Off' },
+      { value: 'unknown', label: 'Unknown' },
+    ],
+  },
+  {
+    id: 'review',
+    label: 'Review',
+    value: (a) => (a.reviewDue ? 'due' : 'done'),
+    options: [
+      { value: 'due', label: 'Review due' },
+      { value: 'done', label: 'Reviewed' },
+    ],
+  },
+  {
+    id: 'owner',
+    label: 'Owner',
+    value: (a) => (a.notOwnedByCeo ? 'other' : 'ceo'),
+    options: [
+      { value: 'ceo', label: 'Owned by the CEO' },
+      { value: 'other', label: 'Not owned by the CEO' },
+    ],
+  },
+];
+
 /** Every system the group runs: the CEO owns it and decides who may sign in; IT only operates (Fauzan, 28 Oct 2026). */
 export function Systems({ data }: { data: ItBoard }) {
   const act = useAction();
@@ -808,12 +950,16 @@ export function Systems({ data }: { data: ItBoard }) {
   const [ask, setAsk] = useState<string | null>(null);
   const [notes, setNotes] = useState<Record<string, string>>({});
   const [reviewNote, setReviewNote] = useState<Record<string, string>>({});
+  const [openReq, setOpenReq] = useState<string | null>(null);
+  const [openSys, setOpenSys] = useState<string | null>(null);
   const requests = data.accessRequests ?? [];
   const accounts = data.accounts ?? [];
   const waiting = requests.filter((r) => r.request.status === 'waiting').length;
   const reviewDue = accounts.filter((a) => a.reviewDue).length;
   const mfaOff = accounts.filter((a) => a.account.mfa === false).length;
   const notCeo = accounts.filter((a) => a.notOwnedByCeo).length;
+  const r = requests.find((x) => x.request.id === openReq) ?? null;
+  const a = accounts.find((x) => x.account.id === openSys) ?? null;
   return (
     <>
       <Stats>
@@ -822,113 +968,137 @@ export function Systems({ data }: { data: ItBoard }) {
         <Stat label="Review due" value={reviewDue} tone={reviewDue ? 'warn' : undefined} icon={<ClockCountdownIcon size={16} />} />
         <Stat label="Two-step sign-in off" value={mfaOff} note={notCeo ? `${notCeo} not owned by the CEO` : undefined} tone={mfaOff || notCeo ? 'crit' : undefined} icon={<WarningIcon size={16} />} />
       </Stats>
-      <Card title="Recorded access requests for the CEO" sub={waiting ? `${waiting} waiting for a decision` : `${requests.length} recorded`} flush>
+      <Card title="Recorded access requests for the CEO" sub={waiting ? `${waiting} waiting for a decision` : `${requests.length} recorded`}>
         <ErrorNotice error={act.error} />
-        {!requests.length && <Empty title="None." />}
-        <ul className="iw-rows">
-          {requests.map((r) => (
-            <li key={r.request.id} className="iw-row iw-row-stack">
-              <div className="iw-row-main">
-                <span className="iw-row-title">
-                  <span className="iw-ref">{r.request.ref}</span> {r.request.action === 'grant' ? `Give ${r.request.name} ${r.request.level} access` : `Remove ${r.request.name}`} · {r.system}
-                </span>
-                <span className="iw-row-meta">
-                  Asked by {r.request.askedBy}, {dateTimeLabel(r.request.at)} · {r.request.reason}
-                  {r.request.decidedBy ? ` · ${r.request.decidedBy}${r.request.decisionNote ? `: ${r.request.decisionNote}` : ''}` : ''}
-                </span>
-              </div>
-              <div className="iw-row-side">
-                <Chip tone={r.request.status === 'waiting' ? 'warn' : r.request.status === 'approved' ? 'ok' : 'crit'}>
-                  {r.request.status === 'waiting' ? 'With the CEO' : r.request.status === 'approved' ? 'Approved' : 'Rejected'}
-                </Chip>
-              </div>
-              {r.canDecide && (
-                <div className="iw-row-extra iw-decide">
-                  <input className="input" aria-label="Note" placeholder="Comment (needed to approve or reject)" value={notes[r.request.id] ?? ''} onChange={(e) => setNotes({ ...notes, [r.request.id]: e.target.value })} />
-                  <div className="iw-actions">
-                    <button className="btn btn-sm btn-primary" disabled={act.busy || !(notes[r.request.id] ?? '').trim()} onClick={() => void act.run(() => api.itAct('decideAccess', { id: r.request.id, approve: true, note: notes[r.request.id] ?? '' }), 'Approval recorded. Apply and verify external access separately.')}>
-                      Approve
-                    </button>
-                    <button
-                      className="btn btn-sm"
-                      disabled={act.busy || !(notes[r.request.id] ?? '').trim()}
-                      onClick={() => void act.run(() => api.itAct('decideAccess', { id: r.request.id, approve: false, note: notes[r.request.id] ?? '' }), 'Rejected.')}
-                    >
-                      Reject
-                    </button>
-                  </div>
-                </div>
-              )}
-            </li>
-          ))}
-        </ul>
+        <DataTable
+          label="Recorded access requests for the CEO"
+          stateKey="it.accessRequests"
+          rows={requests}
+          rowKey={(x) => x.request.id}
+          columns={ACCESS_COLUMNS}
+          filters={ACCESS_FILTERS}
+          searchPlaceholder="Reference, person or system"
+          searchText={(x) => `${x.request.reason} ${x.request.decidedBy ?? ''} ${x.request.decisionNote ?? ''}`}
+          onView={(x) => setOpenReq(x.request.id)}
+          rowTone={(x) => (x.canDecide ? 'warn' : undefined)}
+          empty={<Empty title="None." />}
+        />
       </Card>
-      <Card title="Systems and recorded access" sub={`${accounts.length} systems · the CEO confirms each list every ${data.jobRule.accessReviewDays} days`} flush>
+      {r && (
+        <Drawer title={`${r.request.ref} ${accessAsk(r)}`} sub={r.system} onClose={() => setOpenReq(null)}>
+          <div className="iw-row iw-row-stack">
+            <div className="iw-row-main">
+              <span className="iw-row-title">
+                <span className="iw-ref">{r.request.ref}</span> {accessAsk(r)} · {r.system}
+              </span>
+              <span className="iw-row-meta">
+                Asked by {r.request.askedBy}, {dateTimeLabel(r.request.at)} · {r.request.reason}
+                {r.request.decidedBy ? ` · ${r.request.decidedBy}${r.request.decisionNote ? `: ${r.request.decisionNote}` : ''}` : ''}
+              </span>
+            </div>
+            <div className="iw-row-side">
+              <Chip tone={accessState(r)[0]}>{accessState(r)[1]}</Chip>
+            </div>
+            {r.canDecide && (
+              <div className="iw-row-extra iw-decide">
+                <input className="input" aria-label="Note" placeholder="Comment (needed to approve or reject)" value={notes[r.request.id] ?? ''} onChange={(e) => setNotes({ ...notes, [r.request.id]: e.target.value })} />
+                <div className="iw-actions">
+                  <button className="btn btn-sm btn-primary" disabled={act.busy || !(notes[r.request.id] ?? '').trim()} onClick={() => void act.run(() => api.itAct('decideAccess', { id: r.request.id, approve: true, note: notes[r.request.id] ?? '' }), 'Approval recorded. Apply and verify external access separately.')}>
+                    Approve
+                  </button>
+                  <button
+                    className="btn btn-sm"
+                    disabled={act.busy || !(notes[r.request.id] ?? '').trim()}
+                    onClick={() => void act.run(() => api.itAct('decideAccess', { id: r.request.id, approve: false, note: notes[r.request.id] ?? '' }), 'Rejected.')}
+                  >
+                    Reject
+                  </button>
+                </div>
+              </div>
+            )}
+            <ErrorNotice error={act.error} />
+          </div>
+        </Drawer>
+      )}
+      <Card title="Systems and recorded access" sub={`${accounts.length} systems · the CEO confirms each list every ${data.jobRule.accessReviewDays} days`}>
         <p className="iw-rule iw-rule-top">
           The CEO is the owner and master administrator of every system, domain and account. IT staff only operate them with approved access. This register records decisions; it does not grant or revoke access in Microsoft or other systems.
           Passwords are never kept here; only where the CEO’s master sign-in and recovery codes are kept. The CEO confirms each list every{' '}
           {data.jobRule.accessReviewDays} days.
         </p>
-        <ul className="iw-rows">
-          {accounts.map((a) => (
-            <li key={a.account.id} className="iw-sys">
-              <div className="iw-sys-main">
-                <span className="iw-row-title">{a.account.name}</span>
-                <span className="iw-row-meta">
-                  Owner {a.account.owner} · master sign-in kept: {a.account.masterKeptAt} · two-step sign-in{' '}
-                  {a.account.mfa == null ? 'unknown' : a.account.mfa ? 'on' : 'OFF'}
-                  {a.account.note ? ` · ${a.account.note}` : ''}
+        <DataTable
+          label="Systems and recorded access"
+          stateKey="it.systems"
+          rows={accounts}
+          rowKey={(x) => x.account.id}
+          columns={ACCOUNT_COLUMNS}
+          filters={ACCOUNT_FILTERS}
+          searchPlaceholder="System, owner or person with access"
+          searchText={(x) => `${x.account.masterKeptAt} ${x.account.note ?? ''} ${x.account.access.map((y) => y.name).join(' ')}`}
+          onView={(x) => setOpenSys(x.account.id)}
+          rowTone={(x) => (x.notOwnedByCeo || x.account.mfa === false ? 'crit' : x.reviewDue ? 'warn' : undefined)}
+        />
+      </Card>
+      {a && (
+        <Drawer title={a.account.name} sub={`Owner ${a.account.owner}`} onClose={() => setOpenSys(null)}>
+          <div className="iw-sys">
+            <div className="iw-sys-main">
+              <span className="iw-row-title">{a.account.name}</span>
+              <span className="iw-row-meta">
+                Owner {a.account.owner} · master sign-in kept: {a.account.masterKeptAt} · two-step sign-in{' '}
+                {mfaText(a)}
+                {a.account.note ? ` · ${a.account.note}` : ''}
+              </span>
+            </div>
+            <div className="iw-sys-access">
+              <span className="iw-mini-label">Recorded access</span>
+              {a.account.access.length ? (
+                <span className="iw-tags">
+                  {a.account.access.map((x) => (
+                    <span key={x.name + x.level} className="iw-tag">{`${x.name} (${x.level})`}</span>
+                  ))}
                 </span>
-              </div>
-              <div className="iw-sys-access">
-                <span className="iw-mini-label">Recorded access</span>
-                {a.account.access.length ? (
-                  <span className="iw-tags">
-                    {a.account.access.map((x) => (
-                      <span key={x.name + x.level} className="iw-tag">{`${x.name} (${x.level})`}</span>
-                    ))}
-                  </span>
-                ) : (
-                  <span className="muted small">No IT access recorded; external permissions are not verified</span>
+              ) : (
+                <span className="muted small">No IT access recorded; external permissions are not verified</span>
+              )}
+            </div>
+            <div className="iw-sys-state">
+              {a.notOwnedByCeo && <Chip tone="crit">Not owned by the CEO</Chip>}
+              {a.account.mfa === false && <Chip tone="crit">Two-step sign-in off</Chip>}
+              <Chip tone={a.reviewDue ? 'warn' : 'ok'}>{a.reviewDue ? 'Review due' : `Reviewed ${dateLabel(a.account.reviewedOn!)}`}</Chip>
+            </div>
+            {(data.ceo || staff) && (
+              <div className="iw-sys-actions">
+                {data.ceo && (
+                  <input
+                    className="input"
+                    aria-label={`Review comment for ${a.account.name}`}
+                    placeholder="Comment to confirm"
+                    value={reviewNote[a.account.id] ?? ''}
+                    onChange={(e) => setReviewNote({ ...reviewNote, [a.account.id]: e.target.value })}
+                  />
+                )}
+                {data.ceo && (
+                  <button className="btn btn-sm" disabled={act.busy || !(reviewNote[a.account.id] ?? '').trim()} onClick={() => void act.run(() => api.itAct('reviewAccount', { id: a.account.id, note: reviewNote[a.account.id] ?? '' }), 'Recorded access list reviewed; external permissions still require verification.')}>
+                    Confirm the recorded list
+                  </button>
+                )}
+                {staff && (
+                  <button className="btn btn-sm" aria-expanded={ask === a.account.id} onClick={() => setAsk(ask === a.account.id ? null : a.account.id)}>
+                    Ask the CEO to change access
+                  </button>
                 )}
               </div>
-              <div className="iw-sys-state">
-                {a.notOwnedByCeo && <Chip tone="crit">Not owned by the CEO</Chip>}
-                {a.account.mfa === false && <Chip tone="crit">Two-step sign-in off</Chip>}
-                <Chip tone={a.reviewDue ? 'warn' : 'ok'}>{a.reviewDue ? 'Review due' : `Reviewed ${dateLabel(a.account.reviewedOn!)}`}</Chip>
+            )}
+            {ask === a.account.id && (
+              <div className="iw-sys-ask">
+                <AskAccess data={data} accountId={a.account.id} onDone={() => setAsk(null)} />
               </div>
-              {(data.ceo || staff) && (
-                <div className="iw-sys-actions">
-                  {data.ceo && (
-                    <input
-                      className="input"
-                      aria-label={`Review comment for ${a.account.name}`}
-                      placeholder="Comment to confirm"
-                      value={reviewNote[a.account.id] ?? ''}
-                      onChange={(e) => setReviewNote({ ...reviewNote, [a.account.id]: e.target.value })}
-                    />
-                  )}
-                  {data.ceo && (
-                    <button className="btn btn-sm" disabled={act.busy || !(reviewNote[a.account.id] ?? '').trim()} onClick={() => void act.run(() => api.itAct('reviewAccount', { id: a.account.id, note: reviewNote[a.account.id] ?? '' }), 'Recorded access list reviewed; external permissions still require verification.')}>
-                      Confirm the recorded list
-                    </button>
-                  )}
-                  {staff && (
-                    <button className="btn btn-sm" aria-expanded={ask === a.account.id} onClick={() => setAsk(ask === a.account.id ? null : a.account.id)}>
-                      Ask the CEO to change access
-                    </button>
-                  )}
-                </div>
-              )}
-              {ask === a.account.id && (
-                <div className="iw-sys-ask">
-                  <AskAccess data={data} accountId={a.account.id} onDone={() => setAsk(null)} />
-                </div>
-              )}
-            </li>
-          ))}
-        </ul>
-      </Card>
+            )}
+            <ErrorNotice error={act.error} />
+          </div>
+        </Drawer>
+      )}
     </>
   );
 }
