@@ -14,7 +14,7 @@ import { LeaveForm } from './Leave';
 import { SocsoTab } from './Socso';
 import { ClaimsPolicy, DisciplinePolicy, HiringChecklist, HospitalClaims, MedicalHistory, Sec } from './HrFile';
 import { SHIFT_STATE } from './shared';
-import { RecordButton } from './RecordForm';
+import { RecordButton, RecordDrawer, useRecordKinds } from './RecordForm';
 import { ImportButton } from './ImportDrawer';
 import { GuardTrainingPanel } from './HrDevelop';
 import { jumpTo } from './AddImportMenu';
@@ -36,6 +36,9 @@ export function People({ openPersonId }: { openPersonId?: string }) {
   // P107: the company's list is loaded once; the data table searches, filters, sorts and pages it on this device.
   const { data, error } = useLoad(() => api.people(companyId), [companyId]);
   const table = useTableState('people.list');
+  // P107b: Add office staff and Edit staff details open the existing office staff form, for HR as before.
+  const mayKeepStaff = useRecordKinds().has('officeStaff');
+  const [record, setRecord] = useState<{ id: string | null } | null>(null);
 
   if (error)
     return (
@@ -60,8 +63,6 @@ export function People({ openPersonId }: { openPersonId?: string }) {
         }
         actions={
           <>
-            <ImportButton kind="officeStaff" companyId={companyId} label="Import office staff" />
-            <RecordButton kind="officeStaff" companyId={companyId} label="Add office staff" primary />
             {companyId !== GROUP_EMPLOYER_ID && <GuardPhoneBulkCodes companyId={companyId} />}
             {me.user.department === 'hr' && <OpeningBalancesButton companyId={companyId} />}
             {me.user.role === 'pwvsb_officer' && (me.user.department === 'hr' || me.user.leadership === 'cos' || me.user.leadership === 'deputy_cos') && <HrListsButton />}
@@ -97,7 +98,11 @@ export function People({ openPersonId }: { openPersonId?: string }) {
       {hireCheck && <HistoryLookupPanel />}
 
       <Card>
-        {/* P107: the data table (search, filters, sort, pages; one card per person on a phone). */}
+        {/* P107: the data table (search, filters, sort, pages; one card per person on a phone).
+            P107b: View (the profile drawer), Edit staff details for office staff (HR's existing form), ticks and Export;
+            Add office staff and Import office staff moved from the page head into the toolbar. No Delete: Prima removes
+            nobody; an office staff member leaves through the form's Status and Leaving fields, and guards come from
+            the JA app. */}
         <DataTable
           label={hr ? 'People' : 'Guards'}
           control={table}
@@ -107,7 +112,17 @@ export function People({ openPersonId }: { openPersonId?: string }) {
           rowKey={(r) => r.person.id}
           searchPlaceholder="Search name or staff number"
           searchText={(r) => r.person.staffNo}
-          onRowClick={(r) => setOpen(r.person.id)}
+          onView={(r) => setOpen(r.person.id)}
+          onEdit={mayKeepStaff ? (r) => setRecord({ id: r.person.id }) : undefined}
+          canEdit={(r) => r.person.role === 'office'}
+          editLabel="Edit staff details"
+          onAdd={mayKeepStaff ? () => setRecord({ id: null }) : undefined}
+          addLabel="Add office staff"
+          importKind="officeStaff"
+          importCompanyId={companyId}
+          importLabel="Import office staff"
+          selectable
+          exportName={hr ? 'people' : 'guards'}
           columns={PEOPLE_COLUMNS}
           filters={PEOPLE_FILTERS}
           empty={<div className="empty">Nobody matches.</div>}
@@ -130,6 +145,7 @@ export function People({ openPersonId }: { openPersonId?: string }) {
         <GuardTrainingPanel />
       </div>
       {open && <PersonDrawer personId={open} onClose={() => setOpen(undefined)} />}
+      {record && <RecordDrawer kind="officeStaff" id={record.id} companyId={record.id ? null : companyId} onClose={() => setRecord(null)} />}
     </div>
   );
 }
@@ -141,6 +157,8 @@ const CAN_WORK: Record<'ok' | 'due' | 'no', [string, 'ok' | 'warn' | 'crit']> = 
 /** P107: the people list's columns and filters. */
 const PEOPLE_COLUMNS: DtColumn<PeopleRow>[] = [
   { id: 'name', label: 'Name', value: (r) => r.person.name, render: (r) => <Person name={r.person.name} sub={<span className="mono">{r.person.staffNo}</span>} size={34} />, phone: 'title' },
+  // P107b: the staff number has its own column for Export and the details (the table shows it under the name).
+  { id: 'staffNo', label: 'Staff number', value: (r) => r.person.staffNo, hideBelow: 100000, phone: 'hidden' },
   { id: 'role', label: 'Role', value: (r) => r.person.role.replace('_', ' '), translate: true, render: (r) => <span className="pp-cap">{r.person.role.replace('_', ' ')}</span> },
   { id: 'from', label: 'From', value: (r) => nationalityLabel(r.person.nationality), translate: true },
   {

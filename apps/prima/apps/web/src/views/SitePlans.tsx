@@ -21,6 +21,7 @@ export function SiteStockView() {
   const [mode, setMode] = useState<'board' | 'fittings'>('board');
   const board = useLoad(() => api.inventorySites(), []);
   const b = board.data;
+  const mayAddFittings = p91MayImport(me.user, 'siteKitItem');
   return (
     <div className="page">
       <div className="page-head">
@@ -29,8 +30,9 @@ export function SiteStockView() {
           <p>Cleaning supplies and equipment, guard uniforms and site fittings at every site you can see. Inventory monitors; the OM who covers the site records.</p>
         </div>
         <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
-          {/* P91: the OM adds a site's fittings, or loads them from the old list, from the top of the screen. */}
-          {p91MayImport(me.user, 'siteKitItem') && (
+          {/* P91: the OM adds a site's fittings, or loads them from the old list, from the top of the screen.
+              P107b: on the All sites board the same two buttons sit in the table's toolbar. */}
+          {mayAddFittings && mode === 'fittings' && (
             <>
               <button className="btn btn-primary" onClick={() => setMode('fittings')}>
                 <PlusIcon size={16} weight="bold" aria-hidden="true" /> Add fittings
@@ -79,6 +81,16 @@ export function SiteStockView() {
                     rowKey={(r) => r.siteId}
                     searchPlaceholder="Find a site or company"
                     empty={<div className="empty">Nothing to show.</div>}
+                    // P107b: View opens every column read only (the board has no site card of its own); Fittings stays
+                    // the row's own action (the OM edits the plan there). Ticks, Export; Add fittings and Import
+                    // fittings for the people the page head showed them to. No Delete: a site's stock row is a summary.
+                    details
+                    selectable
+                    exportName="site-stock"
+                    onAdd={mayAddFittings ? () => setMode('fittings') : undefined}
+                    addLabel="Add fittings"
+                    importKind={mayAddFittings ? 'siteKitItem' : undefined}
+                    importLabel="Import fittings"
                     actions={(r) => [
                       {
                         label: 'Fittings',
@@ -96,6 +108,15 @@ export function SiteStockView() {
                         id: 'cleaning',
                         label: 'Cleaning',
                         value: (r) => r.cleaning?.flagged.length ?? null,
+                        exportValue: (r) =>
+                          r.cleaning
+                            ? [
+                                ...r.cleaning.flagged.map((f) => `${f.name}: ${f.flags.map((x) => x.replace('_', ' ')).join(', ')}${f.usePct != null ? ` (${f.usePct}%)` : ''}`),
+                                ...r.cleaning.equipmentShort.map((e) => `${e.name}: ${e.working ?? '–'} of ${e.required} working${e.broken ? `, ${e.broken} broken` : ''}`),
+                                ...(r.cleaning.pendingDeliveries ? [`${r.cleaning.pendingDeliveries} deliveries not yet received`] : []),
+                                `Last check ${r.cleaning.lastCheck ?? 'none'}`,
+                              ].join('; ')
+                            : '',
                         sort: 'number',
                         align: 'left',
                         render: (r) =>
@@ -124,6 +145,17 @@ export function SiteStockView() {
                         id: 'guards',
                         label: 'Guards',
                         value: (r) => r.security?.guards ?? null,
+                        exportValue: (r) =>
+                          r.security
+                            ? [
+                                `${r.security.guards} guards`,
+                                ...(r.security.noUniform.length ? [`${r.security.noUniform.length} with no uniform on record`] : []),
+                                ...(r.security.unconfirmed ? [`${r.security.unconfirmed} not confirmed by the guard`] : []),
+                                ...(r.security.disputed ? [`${r.security.disputed} disputed`] : []),
+                                ...(r.security.lostWaiting ? [`${r.security.lostWaiting} lost or damaged waiting`] : []),
+                                ...r.security.held.map((h) => `${h.qty} x ${h.name}`),
+                              ].join('; ')
+                            : '',
                         sort: 'number',
                         align: 'left',
                         render: (r) =>
@@ -152,6 +184,14 @@ export function SiteStockView() {
                         id: 'fittings',
                         label: 'Fittings',
                         value: (r) => r.fittings?.items.length ?? null,
+                        exportValue: (r) =>
+                          r.fittings
+                            ? [
+                                ...r.fittings.items.map((i) => `${i.name}: ${i.working ?? 'not recorded'} of ${i.required}${i.broken ? `, ${i.broken} broken` : ''}`),
+                                ...(r.fittings.checkDue ? ['Monthly check due'] : []),
+                                ...(r.fittings.notRecovered ? [`${r.fittings.notRecovered} not recovered`] : []),
+                              ].join('; ') || 'All in place'
+                            : '',
                         sort: 'number',
                         align: 'left',
                         render: (r) =>

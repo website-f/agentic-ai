@@ -29,7 +29,9 @@ function load(file, modules = {}) {
   return module.exports;
 }
 
-const M = load('datatable-model.ts');
+// The model writes CSV with core's own toCsv (the same as the importer's templates).
+const core = { toCsv: load('../../../packages/core/src/import-align.ts').toCsv };
+const M = load('datatable-model.ts', { '@prima/core': core });
 
 const people = [
   { id: '1', name: 'Aminah binti Ali', company: 'pwvsb', status: 'Active', joined: '2024-03-01', pay: 2500, companies: ['pwvsb', 'act'] },
@@ -162,7 +164,13 @@ const stubs = {
     Loading: ({ what }) => React.createElement('div', { className: 'empty is-loading' }, `Loading ${what}…`),
     money: (v) => (v == null || !Number.isFinite(v) ? '–' : `RM${v.toLocaleString('en-MY', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`),
     dateLabel: (d) => d,
+    Drawer: ({ title, children }) => React.createElement('aside', { className: 'drawer' }, React.createElement('h2', null, title), children),
+    RefreshContext: React.createContext({ version: 0, bump() {} }),
+    notify() {},
   },
+  './drawer-focus': { activateDrawer: () => () => {} },
+  './back-close': { useBackClose() {} },
+  '@prima/core': core,
   './SearchSelect': {
     SearchSelect: ({ value, options, ...rest }) =>
       React.createElement('select', { value, 'aria-label': rest['aria-label'], onChange() {} }, options.map((o) => React.createElement('option', { key: o.value, value: o.value }, o.label))),
@@ -263,4 +271,168 @@ test('loading, error and empty states; row ticks only with a selection', () => {
   assert.equal((ticks.match(/type="checkbox"/g) ?? []).length, 4);
   assert.match(ticks, />1 ticked</);
   assert.match(ticks, /Approve ticked/);
+});
+
+// ---------- P107b: export, the standard row actions, delete with confirmation ----------
+
+const { DeleteDialog } = load('DataTable.tsx', stubs);
+
+test('export: plain values per column (money with two decimals, dates as typed), opt-outs, headings and statuses in the screen language', () => {
+  const ex = [
+    { id: 'name', label: 'Name', value: (r) => r.name },
+    { id: 'status', label: 'Status', value: (r) => r.status, translate: true },
+    { id: 'joined', label: 'Joined', value: (r) => r.joined, sort: 'date' },
+    { id: 'pay', label: 'Basic pay', value: (r) => r.pay, sort: 'money' },
+    { id: 'chips', label: 'Chips', render: () => 'x' },
+    { id: 'secret', label: 'IC', value: () => '900101-01-1234', exportValue: false },
+    { id: 'count', label: 'Units', exportValue: (r) => r.companies.length, render: () => 'n' },
+  ];
+  const grid = M.exportGrid(people, ex);
+  assert.deepEqual(grid[0], ['Name', 'Status', 'Joined', 'Basic pay', 'Units']);
+  assert.deepEqual(grid[1], ['Aminah binti Ali', 'Active', '2024-03-01', '2500.00', '2']);
+  assert.deepEqual(grid[3], ['Chong Wei', 'Active', '2025-07-20', '', '1']);
+  const bm = M.exportGrid(people, ex, (s) => ({ Name: 'Nama', 'Basic pay': 'Gaji pokok', ...BM })[s] ?? s);
+  assert.deepEqual(bm[0].slice(0, 4), ['Nama', 'Status', 'Joined', 'Gaji pokok']);
+  assert.equal(bm[4][1], 'Bercuti');
+  // Names are never translated, only columns marked translate.
+  assert.equal(bm[1][0], 'Aminah binti Ali');
+  assert.equal(M.exportCell(0, 'number'), '0');
+  assert.equal(M.exportCell(NaN, 'money'), '');
+});
+
+test('export: CSV with a byte-order mark for Excel, quotes, commas, new lines and Malay text kept', () => {
+  const text = M.csvText([
+    ['Nama', 'Nota'],
+    ['Siti "Ana" binti Ahmad', 'Tapak A, Shah Alam'],
+    ['Pengawal', 'baris 1\nbaris 2'],
+    ['Kedai Mamak Ré', ' ruang '],
+  ]);
+  assert.equal(text.charCodeAt(0), 0xfeff);
+  assert.equal(
+    text.slice(1),
+    'Nama,Nota\r\n"Siti ""Ana"" binti Ahmad","Tapak A, Shah Alam"\r\nPengawal,"baris 1\nbaris 2"\r\nKedai Mamak Ré," ruang "\r\n',
+  );
+  assert.equal(M.csvName('Site list', new Date(2026, 10, 16)), 'site-list-2026-11-16.csv');
+  assert.equal(M.csvName('Stock by owner, holder and condition', new Date(2026, 0, 5)), 'stock-by-owner-holder-and-condition-2026-01-05.csv');
+  assert.equal(M.csvName('***', new Date(2026, 0, 5)), 'list-2026-01-05.csv');
+});
+
+test('export rows: every row found (all pages, in the order shown); only the ticked ones when some are ticked', () => {
+  const many = Array.from({ length: 60 }, (_, i) => ({ id: String(i + 1), name: `Guard ${i + 1}`, status: i % 2 ? 'Active' : 'Left' }));
+  const c = [{ id: 'name', value: (r) => r.name }];
+  const f = [{ id: 'status', value: (r) => r.status }];
+  const v = M.viewRows(many, c, f, { ...M.DEFAULT_STATE, f: { status: 'Active' }, size: 10, page: 2 }, (r) => M.haystack(r, c, null));
+  assert.equal(v.rows.length, 10);
+  const key = (r) => r.id;
+  assert.equal(M.exportRows(v.all, many, null, key).length, 30);
+  assert.equal(M.exportRows(v.all, many, new Set(), key).length, 30);
+  // Ticked: the found ones in their order, then a ticked row the filter now hides.
+  assert.deepEqual(M.exportRows(v.all, many, new Set(['6', '2', '1']), key).map(key), ['2', '6', '1']);
+});
+
+test("row actions: View, Edit, the screen's own, then Delete last; Edit and Delete only where the row allows", () => {
+  const calls = [];
+  const opts = {
+    view: (r) => calls.push(['view', r.id]),
+    edit: (r) => calls.push(['edit', r.id]),
+    editLabel: 'Edit site',
+    canEdit: (r) => r.status !== 'Left',
+    remove: (r) => calls.push(['del', r.id]),
+    deleteLabel: 'Close site',
+    canDelete: (r) => r.id === '1',
+    extra: [{ label: 'Fittings', onClick() {} }, { label: 'Hidden', onClick() {}, hidden: true }],
+  };
+  const a1 = M.standardActions(people[0], opts);
+  assert.deepEqual(a1.map((a) => a.label), ['View', 'Edit site', 'Fittings', 'Close site']);
+  assert.equal(a1.at(-1).tone, 'danger');
+  a1[0].onClick();
+  a1[3].onClick();
+  assert.deepEqual(calls, [['view', '1'], ['del', '1']]);
+  assert.deepEqual(M.standardActions(people[1], opts).map((a) => a.label), ['View', 'Fittings']);
+  assert.deepEqual(M.standardActions(people[0], {}), []);
+  // Drawn: one allowed action is a plain button (Delete in red); several make the menu.
+  const html = draw({ layout: 'table', exportable: false, onEdit() {}, canEdit: (r) => r.id === '3', onDelete: async () => {}, canDelete: (r) => r.id === '2' });
+  const rowsHtml = html.match(/<tbody>.*<\/tbody>/s)[0].split('<tr').slice(1);
+  assert.match(rowsHtml.find((r) => r.includes('Badrul')), /class="btn btn-sm dt-act dt-danger"[^>]*>Delete</);
+  assert.match(rowsHtml.find((r) => r.includes('Chong')), />Edit<\/button>/);
+  assert.doesNotMatch(rowsHtml.find((r) => r.includes('Aminah')), /class="btn btn-sm dt-act|More actions/);
+  const both = draw({ layout: 'cards', onView() {}, onEdit() {}, onDelete: async () => {} });
+  assert.equal((both.match(/aria-label="More actions"/g) ?? []).length, 4);
+  // A screen with no detail view gets the read-only drawer: the row opens it (clickable), View is the one action.
+  const det = draw({ layout: 'table', details: true });
+  assert.match(det, /<tr class="clickable" tabindex="0">/);
+  assert.match(det, /class="btn btn-sm dt-act"[^>]*>View</);
+});
+
+test('toolbar: Export on by default (off with exportable={false}), Add and Import when the screen gives them; ticks show Export ticked and Delete ticked', () => {
+  const plain = draw({ layout: 'table' });
+  assert.match(plain, /class="btn dt-export"[^>]*>Export<\/button>/);
+  assert.doesNotMatch(draw({ layout: 'table', exportable: false }), /dt-export/);
+  assert.doesNotMatch(draw({ rows: [] }), /dt-export/);
+  const tools = draw({ layout: 'table', onAdd() {}, addLabel: 'Add site', onImport() {}, importLabel: 'Import item list (Excel, CSV, PDF)' });
+  assert.match(tools, /class="btn btn-primary"[^>]*>Add site<\/button>/);
+  assert.match(tools, />Import item list \(Excel, CSV, PDF\)<\/button>/);
+  // Add shows even on an empty list (the first record).
+  assert.match(draw({ rows: [], onAdd() {}, addLabel: 'Add site' }), />Add site</);
+  const ticked = draw({ layout: 'table', selection: { selected: new Set(['1', '2']), onChange() {} }, onDelete: async () => {}, canDelete: (r) => r.id !== '2' });
+  assert.match(ticked, />2 ticked</);
+  assert.match(ticked, />Export ticked</);
+  assert.match(ticked, />Delete ticked</);
+  assert.match(ticked, />Untick all</);
+  // Selectable without a delete: the table keeps its own ticks (none yet, so no bar), boxes are drawn.
+  const own = draw({ layout: 'table', selectable: true });
+  assert.equal((own.match(/type="checkbox"/g) ?? []).length, 5);
+  assert.doesNotMatch(own, /dt-bulk/);
+});
+
+test('delete dialog: names the record, asks for a reason when the screen needs one, the confirm waits for it; several say how many', () => {
+  const one = renderToStaticMarkup(React.createElement(DeleteDialog, { names: ['Tapak Bangsar'], label: 'Close site', reasonRequired: true, run: async () => ({ done: [], failed: [] }), onClose() {} }));
+  assert.match(one, /role="alertdialog"/);
+  assert.match(one, /<span>Close site<\/span> <q data-no-translate="true">Tapak Bangsar<\/q>\?/);
+  assert.match(one, /Reason \(needed, 5 characters or more\)/);
+  assert.match(one, /<button type="button" class="btn btn-danger" disabled=""/);
+  const many = renderToStaticMarkup(
+    React.createElement(DeleteDialog, { names: Array.from({ length: 12 }, (_, i) => `Item ${i + 1}`), label: 'Delete', reasonRequired: false, run: async () => ({ done: [], failed: [] }), onClose() {} }),
+  );
+  assert.match(many, /Delete 12 records\?/);
+  assert.equal((many.match(/<li>Item/g) ?? []).length, 5);
+  assert.match(many, /and 7 more/);
+  assert.doesNotMatch(many, /Reason/);
+  assert.match(many, /<button type="button" class="btn btn-danger">/);
+  assert.equal(M.reasonOk('ok', true), false);
+  assert.equal(M.reasonOk('  wrong site  ', true), true);
+  assert.equal(M.reasonOk('', false), true);
+});
+
+test("bulk delete: each row through the screen's own action, refusals counted and named, one refusal does not stop the rest", async () => {
+  const seen = [];
+  const out = await M.runEach(
+    people,
+    async (r) => {
+      seen.push(r.id);
+      if (r.status === 'Active') throw new Error(`${r.name} has open shifts`);
+    },
+    (r) => r.id,
+    (r) => r.name,
+  );
+  assert.deepEqual(seen, ['1', '2', '3', '4']);
+  assert.deepEqual(out.done, ['2', '4']);
+  assert.deepEqual(out.failed, [
+    { key: '1', name: 'Aminah binti Ali', error: 'Aminah binti Ali has open shifts' },
+    { key: '3', name: 'Chong Wei', error: 'Chong Wei has open shifts' },
+  ]);
+  // The screen's own call for many: its { done, failed }, nothing (all done), or a refusal of the lot.
+  const key = (r) => r.id;
+  const name = (r) => r.name;
+  assert.deepEqual(await M.runBulk(people, async () => ({ done: ['1', '2', '3'], failed: [{ key: '4', error: 'Locked' }] }), key, name), {
+    done: ['1', '2', '3'],
+    failed: [{ key: '4', name: 'Dewi Sartika', error: 'Locked' }],
+  });
+  assert.deepEqual((await M.runBulk(people, async () => undefined, key, name)).done, ['1', '2', '3', '4']);
+  const refused = await M.runBulk(people, async () => {
+    throw new Error('Not allowed');
+  }, key, name);
+  assert.equal(refused.done.length, 0);
+  assert.equal(refused.failed.length, 4);
+  assert.equal(refused.failed[2].error, 'Not allowed');
 });

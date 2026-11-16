@@ -85,18 +85,7 @@ export function Catalogue({ data, onAdd, onImport }: { data: ItemBoard; onAdd?: 
   const trackWord = (s: ItemBoard['skus'][number]) => (s.tracking === 'BULK' ? (s.consumable ? 'Quantity, used up' : 'Quantity') : s.tracking === 'KIT' ? 'Set' : 'Each unit');
   return (
     <div className="it-stack">
-      {mayAdd && (
-        <div className="it-tabbar-add">
-          <button className="btn btn-primary" type="button" aria-expanded={form} onClick={() => (onAdd ? onAdd() : setForm(!form))}>
-            <PlusIcon size={16} weight="bold" aria-hidden="true" /> New item type
-          </button>
-          {onImport && (
-            <button className="btn" type="button" onClick={onImport}>
-              <UploadSimpleIcon size={16} weight="bold" aria-hidden="true" /> Import item list (Excel, CSV, PDF)
-            </button>
-          )}
-        </div>
-      )}
+      {/* P107b: New item type and Import item list moved into the table's toolbar (same people, same forms). */}
       {form && (
         <Card title="New item type" sub="The item type says what it is, its size and unit. How a type is tracked is set once." actions={<button className="btn" type="button" onClick={() => setForm(false)}>Cancel</button>}>
           <SkuForm onDone={() => setForm(false)} />
@@ -112,7 +101,10 @@ export function Catalogue({ data, onAdd, onImport }: { data: ItemBoard; onAdd?: 
         flush
       >
         {/* P107: the item types as a data table: search name, code or barcode; category, stock group and tracking
-            filters; ticks print many QR labels at once; a type opens its card. No "show more": pages instead. */}
+            filters; ticks print many QR labels at once; a type opens its card. No "show more": pages instead.
+            P107b: View (the type's card), Export (and Export ticked), New item type and Import in the toolbar. No Edit:
+            Prima has no form to change an item type (the API's sku.update has no screen); no Delete: item types are
+            never deleted or retired (the API has no such action). */}
         <div className="it-pad">
           <DataTable
             label="Item types"
@@ -120,7 +112,12 @@ export function Catalogue({ data, onAdd, onImport }: { data: ItemBoard; onAdd?: 
             defaults={{ sort: 'name', dir: 'asc' }}
             rows={data.skus}
             rowKey={(s) => s.id}
-            onRowClick={(s) => setOpen(s.id)}
+            onView={(s) => setOpen(s.id)}
+            exportName="item-types"
+            onAdd={mayAdd ? () => (onAdd ? onAdd() : setForm(!form)) : undefined}
+            addLabel="New item type"
+            onImport={mayAdd ? onImport : undefined}
+            importLabel="Import item list (Excel, CSV, PDF)"
             searchPlaceholder="Search name, code or barcode"
             searchText={(s) => `${s.sourceCode ?? ''} ${s.supplierBarcodes.join(' ')}`}
             selection={{ selected: sel, onChange: setSel }}

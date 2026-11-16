@@ -4743,6 +4743,16 @@ const ROWS: Row[] = [
   ['Previous page', 'Halaman sebelumnya', 'Page sebelum'],
   ['Next page', 'Halaman seterusnya', 'Page seterusnya'],
   ['Loading list…', 'Memuatkan senarai…', null],
+  // P107b: View, Edit, Delete (with its dialog), Export, Add and Import on the data table
+  ['View', 'Lihat', null],
+  ['Export ticked', 'Eksport yang ditanda', 'Export yang di-tick'],
+  ['Delete ticked', 'Padam yang ditanda', 'Delete yang di-tick'],
+  ['Download the rows found as a CSV file (opens in Excel)', 'Muat turun baris yang ditemui sebagai fail CSV (dibuka dalam Excel)', 'Download baris yang dijumpai sebagai fail CSV (buka dalam Excel)'],
+  ['records?', 'rekod?', null],
+  ['Working…', 'Sedang diproses…', 'Sedang proses…'],
+  ['Edit site', 'Ubah tapak', 'Edit site'],
+  ['Edit staff details', 'Ubah butiran staf', 'Edit butiran staf'],
+  ['Add office staff', 'Tambah staf pejabat', null],
   // P107: HR and people screens on the data table (People, Staff directory, HR monitor, Staff clock, Accounts, Claims,
   // SOCSO, Hand-overs, Staff payroll, Leave, Attendance, Attendance reports, Time slips, Check-in places)
   ['Loading guards…', 'Memuatkan pengawal…', 'Loading guard…'],
@@ -5367,6 +5377,10 @@ const PATTERNS: Pat[] = [
   [/^([\d,]+)–([\d,]+) of ([\d,]+)$/, (m) => `${m[1]}–${m[2]} daripada ${m[3]}`],
   [/^([\d,]+) ticked$/, (m, x) => `${m[1]} ${x ? 'di-tick' : 'ditanda'}`],
   [/^Tick all ([\d,]+)$/, (m, x) => (x ? `Tick semua ${m[1]}` : `Tanda semua ${m[1]}`)],
+  // P107b: the data table's delete dialog
+  [/^Delete ([\d,]+) records\?$/, (m, x) => (x ? `Delete ${m[1]} rekod?` : `Padam ${m[1]} rekod?`)],
+  [/^([\d,]+) of ([\d,]+) done\.$/, (m) => `${m[1]} daripada ${m[2]} selesai.`],
+  [/^([\d,]+) could not be done:$/, (m) => `${m[1]} tidak dapat dibuat:`],
 ];
 
 /** One piece of screen text in the chosen language; text not in the table is returned as it is. */

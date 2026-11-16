@@ -267,6 +267,121 @@ th[data-align='right'] .dt-sort {
   gap: 8px;
 }
 
+/* ---------- P107b: Export, red Delete, the confirm dialog and the read-only details ---------- */
+.dt-danger-btn {
+  color: var(--crit);
+  border-color: color-mix(in srgb, var(--crit) 45%, var(--line));
+}
+.dt-danger-btn:hover:not(:disabled) {
+  background: var(--crit-soft);
+  border-color: var(--crit);
+}
+.dt-dialog-scrim {
+  z-index: 50;
+}
+.dt-dialog {
+  position: fixed;
+  z-index: 51;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: min(460px, calc(100% - 32px));
+  max-height: calc(100% - 32px);
+  overflow-y: auto;
+  display: grid;
+  gap: 12px;
+  padding: 20px;
+  background: var(--surface);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-top: 3px solid var(--crit);
+  border-radius: var(--r-md, var(--r));
+  box-shadow: var(--shadow), 0 24px 60px -20px rgba(0, 0, 0, 0.35);
+}
+.dt-dialog:focus {
+  outline: none;
+}
+.dt-dialog-title {
+  margin: 0;
+  color: var(--ink);
+  text-transform: none;
+  letter-spacing: normal;
+  font-size: 1.1rem;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+.dt-dialog-title q {
+  font-weight: 700;
+}
+.dt-dialog-names {
+  margin: 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 2px;
+  font-size: 0.9rem;
+  overflow-wrap: anywhere;
+}
+.dt-dialog-outcome p {
+  margin: 0 0 4px;
+}
+.dt-dialog-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.dt-details {
+  margin: 0;
+  display: grid;
+  gap: 0;
+}
+.dt-details > div {
+  display: grid;
+  grid-template-columns: minmax(110px, 38%) minmax(0, 1fr);
+  gap: 12px;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--line);
+  min-width: 0;
+}
+.dt-details dt {
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 550;
+}
+.dt-details dd {
+  margin: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-variant-numeric: tabular-nums;
+}
+.dt-details-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+@media (max-width: 767px) {
+  .dt-dialog {
+    left: 0;
+    right: 0;
+    top: auto;
+    bottom: 0;
+    transform: none;
+    width: auto;
+    max-height: 90%;
+    border-radius: 14px 14px 0 0;
+    padding-bottom: max(16px, env(safe-area-inset-bottom, 0px));
+  }
+  .dt-dialog-actions .btn,
+  .dt-details-actions .btn {
+    min-height: 44px;
+    flex: 1 1 auto;
+  }
+  .dt-details > div {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 2px;
+  }
+}
+
 /* ---------- Counts and pages ---------- */
 .dt-foot {
   display: flex;

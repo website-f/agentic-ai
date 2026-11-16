@@ -46,11 +46,47 @@
  *   row a coloured left edge (warn / crit / info) where the old list had one.
  * - Row ticks (`selection` + `bulk`) only where the screen already has bulk actions.
  * - Never change what a screen loads, who may see it or what its buttons do: the table only arranges the rows.
+ *
+ * P107b (Fitri, 16 Nov 2026: View, Edit, Delete with confirmation, ticks with bulk delete, Export, Add and Import on
+ * every table). All optional; a screen gives only what Prima already lets that person do:
+ *
+ *   <DataTable ...
+ *     onView={(s) => setOpen(s.id)}            // the screen's own drawer or card; or `details` for a read-only drawer of
+ *                                              // every column when the screen has none. A row click opens it too.
+ *     onEdit={(s) => setEditing(s.id)} editLabel="Edit site" canEdit={(s) => mayEdit}  // the EXISTING edit form
+ *     onDelete={(s, reason) => api.closeX(s.id, reason)} deleteLabel="Close site" deleteReason canDelete={...}
+ *                                              // only when the API already has the action; asks first (a dialog,
+ *                                              // with a reason box when `deleteReason`), ticks get "Delete ticked"
+ *     onDeleteMany={(rows, reason) => api.closeMany(...)}   // optional one call for many; default one by one
+ *     exportable={false}                       // Export (CSV of the rows found, or the ticked ones) is on by default
+ *     exportName="site-list"                   // file "site-list-2026-11-16.csv"; columns: `exportValue` or `false`
+ *     selectable                               // ticks kept by the table (for Export ticked) when the screen has none
+ *     onAdd={() => setAdding(true)} addLabel="Add site"          // the EXISTING create form
+ *     importKind="site" importCompanyId={companyId}              // the universal importer (ImportDrawer), or
+ *     onImport={() => setImporting(true)} importLabel="Import item list (Excel, CSV, PDF)"   // the screen's own
+ *   />
+ * - The row menu reads View, Edit, the screen's own `actions`, then Delete in red. Phone cards get the same menu.
+ * - No new API route, permission or rule comes with these: the server still checks every call.
  */
-import { Fragment, useEffect, useId, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent, type ReactNode } from 'react';
-import { CaretDownIcon, CaretLeftIcon, CaretRightIcon, CaretUpDownIcon, CaretUpIcon, DotsThreeVerticalIcon, XIcon } from '@phosphor-icons/react';
+import { Fragment, Suspense, lazy, useContext, useEffect, useId, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent, type ReactNode } from 'react';
+import {
+  CaretDownIcon,
+  CaretLeftIcon,
+  CaretRightIcon,
+  CaretUpDownIcon,
+  CaretUpIcon,
+  DotsThreeVerticalIcon,
+  DownloadSimpleIcon,
+  PlusIcon,
+  TrashIcon,
+  UploadSimpleIcon,
+  XIcon,
+} from '@phosphor-icons/react';
+import type { ImportKind } from '@prima/core';
 import { Empty, Search } from './kit';
-import { ErrorNotice, Loading, dateLabel, money } from './ui';
+import { Drawer, ErrorNotice, Loading, RefreshContext, dateLabel, money, notify } from './ui';
+import { activateDrawer } from './drawer-focus';
+import { useBackClose } from './back-close';
 import { SearchSelect } from './SearchSelect';
 import { tr, useLang } from './i18n';
 import {
@@ -58,21 +94,33 @@ import {
   PAGE_SIZES,
   changeState,
   countLine,
+  csvName,
+  csvText,
   deriveOptions,
+  exportGrid,
+  exportRows,
   haystack,
   loadState,
   nextSort,
   pageButtons,
+  reasonOk,
+  runBulk,
+  runEach,
   saveState,
+  standardActions,
   viewRows,
   type Cell,
   type ColumnRule,
   type FilterRule,
+  type ManyOutcome,
   type SortDir,
   type SortKind,
   type TableState,
 } from './datatable-model';
 import './styles/datatable.css';
+
+// The universal importer (P81) loads only when a table offers it.
+const ImportButton = lazy(() => import('./views/ImportDrawer').then((m) => ({ default: m.ImportButton })));
 
 export type { SortKind, SortDir, TableState } from './datatable-model';
 
@@ -155,6 +203,45 @@ export interface DataTableProps<T> {
   className?: string;
   /** The table's state held by the screen (`useTableState`), when something outside the table sets a filter (a tile). */
   control?: TableControl;
+
+  // ---------- P107b: the standard tools (see the how-to at the top) ----------
+  /** Export (CSV) of the rows found, or of the ticked rows when some are ticked. Default on. */
+  exportable?: boolean;
+  /** The file's name before the date; default: the label ("Site list" gives site-list-2026-11-16.csv). */
+  exportName?: string;
+  /** The screen's own detail view (drawer or card). Shown as View in the row menu; a row click opens it too. */
+  onView?: (row: T) => void;
+  /** A screen with no detail view: View and a row click open a read-only drawer with every column. */
+  details?: boolean;
+  viewLabel?: string;
+  /** The record's name in the confirm dialog and the details drawer; default: the first column's value. */
+  recordName?: (row: T) => string;
+  /** The screen's EXISTING edit form for the row. */
+  onEdit?: (row: T) => void;
+  editLabel?: string;
+  canEdit?: (row: T) => boolean;
+  /** The API's own delete / close / remove for one row. The table asks first; the server checks and may refuse. */
+  onDelete?: (row: T, reason: string) => Promise<unknown>;
+  /** One call for several ticked rows (returns `{ done, failed }` keys, or nothing for all done); default: `onDelete` one by one. */
+  onDeleteMany?: (rows: T[], reason: string) => Promise<unknown>;
+  /** Says truthfully what happens: "Close site", "Remove from directory". Default "Delete". */
+  deleteLabel?: string;
+  canDelete?: (row: T) => boolean;
+  /** The dialog asks for a reason (Prima: a change says why); the reason goes to `onDelete`. */
+  deleteReason?: boolean;
+  /** A line under the question: what happens to the record ("It stays in the history, closed."). */
+  deleteNote?: string;
+  /** Row ticks kept by the table (Export ticked) on a screen without its own `selection`. On with `onDelete`. */
+  selectable?: boolean;
+  /** The screen's EXISTING create form. */
+  onAdd?: () => void;
+  addLabel?: string;
+  /** The screen's own importer (e.g. Items' SmartImport). */
+  onImport?: () => void;
+  importLabel?: string;
+  /** The universal importer for this kind of record (ImportDrawer); it shows only for those who may import it. */
+  importKind?: ImportKind;
+  importCompanyId?: string | null;
 }
 
 export interface TableControl {
@@ -319,8 +406,11 @@ function Tick({ checked, mixed, onChange, label }: { checked: boolean; mixed?: b
 export function DataTable<T>(props: DataTableProps<T>) {
   const {
     label, rows: given, rowKey, columns, filters = [], stateKey, defaults, searchText, searchPlaceholder = 'Search', noSearch,
-    onRowClick, actions, rowEnd, rowClass, rowTone, rowDetail, selection, bulk, toolbar, loading, loadingWhat = 'list', error, empty,
+    onRowClick, actions, rowEnd, rowClass, rowTone, rowDetail, bulk, toolbar, loading, loadingWhat = 'list', error, empty,
     pageSizes = PAGE_SIZES, phoneFacts = 4, layout = 'auto', className, control,
+    exportable = true, exportName, onView, details, viewLabel, recordName, onEdit, editLabel, canEdit, onDelete, onDeleteMany,
+    deleteLabel = 'Delete', canDelete, deleteReason, deleteNote, selectable, onAdd, addLabel = 'Add', onImport, importLabel,
+    importKind, importCompanyId,
   } = props;
   const { lang } = useLang();
   const width = useWidth();
@@ -330,6 +420,40 @@ export function DataTable<T>(props: DataTableProps<T>) {
 
   const own = useTableState(control ? undefined : stateKey, defaults);
   const { state, set } = control ?? own;
+  const { bump } = useContext(RefreshContext);
+
+  // P107b: ticks kept by the table itself (Export ticked, Delete ticked) when the screen has no selection of its own.
+  const [ownTicks, setOwnTicks] = useState<Set<string>>(() => new Set());
+  const selection: DataTableProps<T>['selection'] = props.selection ?? (selectable || onDelete ? { selected: ownTicks, onChange: setOwnTicks } : undefined);
+  // The details drawer (by key, so a reload shows the new values) and the delete dialog.
+  const [shownKey, setShownKey] = useState<string | null>(null);
+  const [shownRow, setShownRow] = useState<T | null>(null);
+  const [deleting, setDeleting] = useState<T[] | null>(null);
+  const nameOf = (row: T): string => {
+    if (recordName) return recordName(row);
+    const c = columns.find((x) => x.value);
+    const v = c?.value?.(row);
+    return v == null || v === '' ? label : String(v);
+  };
+  const openDetails = (row: T) => {
+    setShownKey(rowKey(row));
+    setShownRow(row);
+  };
+  const viewOf = onView ?? (details ? openDetails : undefined);
+  const rowClick = onRowClick ?? viewOf;
+  const mayDelete = (row: T) => !!onDelete && (canDelete?.(row) ?? true);
+  const menuOf = (row: T): DtAction[] =>
+    standardActions(row, {
+      view: viewOf,
+      viewLabel,
+      edit: onEdit,
+      editLabel,
+      canEdit,
+      remove: onDelete ? (r: T) => setDeleting([r]) : undefined,
+      deleteLabel,
+      canDelete,
+      extra: actions?.(row),
+    }) as DtAction[];
 
   // Each row's search text, once per load and language (the BM wording of statuses is looked up here, not per key press).
   const latest = useRef({ columns, searchText });
@@ -364,7 +488,8 @@ export function DataTable<T>(props: DataTableProps<T>) {
   const searched = !!state.q.trim() || Object.values(state.f).some(Boolean);
 
   const visible = cards ? columns : columns.filter((c) => !c.hideBelow || width >= c.hideBelow);
-  const hasActions = !!actions || !!rowEnd;
+  const hasMenu = !!actions || !!viewOf || !!onEdit || !!onDelete;
+  const hasActions = hasMenu || !!rowEnd;
 
   // Ticks on this page.
   const tickable = selection ? view.rows.filter((r) => selection.canSelect?.(r) ?? true) : [];
@@ -395,24 +520,52 @@ export function DataTable<T>(props: DataTableProps<T>) {
   };
 
   const open = (e: MouseEvent, row: T) => {
-    if (!onRowClick) return;
+    if (!rowClick) return;
     if ((e.target as HTMLElement).closest(INTERACTIVE)) return;
-    onRowClick(row);
+    rowClick(row);
   };
   const openKey = (e: KeyboardEvent, row: T) => {
-    if (!onRowClick || e.target !== e.currentTarget) return;
+    if (!rowClick || e.target !== e.currentTarget) return;
     if (e.key === 'Enter' || e.key === ' ') {
       e.preventDefault();
-      onRowClick(row);
+      rowClick(row);
     }
   };
   const rowActions = (row: T) =>
     hasActions ? (
       <>
         {rowEnd?.(row)}
-        {actions && <RowActions items={actions(row)} />}
+        {hasMenu && <RowActions items={menuOf(row)} />}
       </>
     ) : null;
+
+  // ---------- P107b: export, ticked rows, delete ----------
+  const canExport = exportable && rows.length > 0;
+  const tickedRows = selection && selection.selected.size > 0 ? rows.filter((r) => selection.selected.has(rowKey(r))) : [];
+  const deletableTicked = onDelete ? tickedRows.filter(mayDelete) : [];
+  const doExport = (ticked: boolean) => {
+    const t = lang === 'en' ? (x: string) => x : (x: string) => tr(x, lang);
+    const out = exportRows(view.all, rows, ticked && selection ? selection.selected : null, rowKey);
+    download(csvText(exportGrid(out, columns, t)), csvName(exportName ?? label));
+  };
+  const runDelete = async (list: T[], reason: string): Promise<ManyOutcome> => {
+    const outcome =
+      list.length > 1 && onDeleteMany
+        ? await runBulk(list, (rs) => onDeleteMany(rs, reason), rowKey, nameOf)
+        : await runEach(list, (r) => onDelete!(r, reason), rowKey, nameOf);
+    if (outcome.done.length) {
+      if (selection) {
+        const next = new Set(selection.selected);
+        for (const k of outcome.done) next.delete(k);
+        if (next.size !== selection.selected.size) selection.onChange(next);
+      }
+      if (shownKey && outcome.done.includes(shownKey)) setShownKey(null);
+      bump();
+    }
+    return outcome;
+  };
+  const shown = shownKey == null ? null : (rows.find((r) => rowKey(r) === shownKey) ?? shownRow);
+  const hasTools = !!toolbar || canExport || !!onAdd || !!onImport || !!importKind;
 
   // ---------- body ----------
   let body: ReactNode;
@@ -442,12 +595,12 @@ export function DataTable<T>(props: DataTableProps<T>) {
           const canTick = !!selection && (selection.canSelect?.(row) ?? true);
           const on = canTick && selection!.selected.has(id);
           return (
-            <li key={id} className={['dt-card', rowClass?.(row)].filter(Boolean).join(' ')} data-click={onRowClick ? '' : undefined} data-on={on || undefined} data-tone={rowTone?.(row)} onClick={(e) => open(e, row)}>
+            <li key={id} className={['dt-card', rowClass?.(row)].filter(Boolean).join(' ')} data-click={rowClick ? '' : undefined} data-on={on || undefined} data-tone={rowTone?.(row)} onClick={(e) => open(e, row)}>
               <div className="dt-card-head">
                 {canTick && <Tick checked={on} onChange={() => tick(id)} label="Select this row" />}
                 <div className="dt-card-title">
-                  {onRowClick ? (
-                    <button type="button" className="dt-card-open" onClick={() => onRowClick(row)}>
+                  {rowClick ? (
+                    <button type="button" className="dt-card-open" onClick={() => rowClick(row)}>
                       {heads.map((c) => (
                         <span key={c.id} className="dt-card-line">{draw(c, row)}</span>
                       ))}
@@ -461,7 +614,7 @@ export function DataTable<T>(props: DataTableProps<T>) {
                     <span key={c.id} className="dt-card-sub">{draw(c, row)}</span>
                   ))}
                 </div>
-                {actions && <div className="dt-card-menu"><RowActions items={actions(row)} /></div>}
+                {hasMenu && <div className="dt-card-menu"><RowActions items={menuOf(row)} /></div>}
               </div>
               {facts.length > 0 && (
                 <dl className="dt-card-facts">
@@ -524,10 +677,10 @@ export function DataTable<T>(props: DataTableProps<T>) {
                 <Fragment key={id}>
                 <tr
                   data-has-detail={detail ? '' : undefined}
-                  className={[onRowClick ? 'clickable' : '', rowClass?.(row) ?? ''].filter(Boolean).join(' ') || undefined}
+                  className={[rowClick ? 'clickable' : '', rowClass?.(row) ?? ''].filter(Boolean).join(' ') || undefined}
                   data-on={on || undefined}
                   data-tone={rowTone?.(row)}
-                  tabIndex={onRowClick ? 0 : undefined}
+                  tabIndex={rowClick ? 0 : undefined}
                   onClick={(e) => open(e, row)}
                   onKeyDown={(e) => openKey(e, row)}
                 >
@@ -559,7 +712,7 @@ export function DataTable<T>(props: DataTableProps<T>) {
 
   return (
     <div className={['dt', className].filter(Boolean).join(' ')} data-layout={cards ? 'cards' : 'table'}>
-      {(rows.length > 0 || toolbar) && (!noSearch || filterChoices.length > 0 || toolbar || (cards && sortChoices.length > 0)) && (
+      {(rows.length > 0 || hasTools) && (!noSearch || filterChoices.length > 0 || hasTools || (cards && sortChoices.length > 0)) && (
         <div className="dt-bar">
           {!noSearch && rows.length > 0 && (
             <div className="dt-search">
@@ -610,14 +763,58 @@ export function DataTable<T>(props: DataTableProps<T>) {
               Clear
             </button>
           )}
-          {toolbar && <div className="dt-tools">{toolbar}</div>}
+          {hasTools && (
+            <div className="dt-tools">
+              {toolbar}
+              {importKind && (
+                <Suspense fallback={null}>
+                  <ImportButton kind={importKind} companyId={importCompanyId ?? null} label={importLabel} />
+                </Suspense>
+              )}
+              {onImport && (
+                <button type="button" className="btn" onClick={onImport}>
+                  <UploadSimpleIcon size={16} weight="bold" aria-hidden="true" />
+                  {importLabel ?? 'Import from file'}
+                </button>
+              )}
+              {canExport && (
+                <button type="button" className="btn dt-export" onClick={() => doExport(tickedRows.length > 0)} title="Download the rows found as a CSV file (opens in Excel)">
+                  <DownloadSimpleIcon size={16} weight="bold" aria-hidden="true" />
+                  Export
+                </button>
+              )}
+              {onAdd && (
+                <button type="button" className="btn btn-primary" onClick={onAdd}>
+                  <PlusIcon size={16} weight="bold" aria-hidden="true" />
+                  {addLabel}
+                </button>
+              )}
+            </div>
+          )}
         </div>
       )}
       {error && <ErrorNotice error={error} />}
-      {selection && bulk && selection.selected.size > 0 && (
+      {selection && selection.selected.size > 0 && (bulk || canExport || deletableTicked.length > 0) && (
         <div className="dt-bulk" role="region" aria-label="Ticked rows">
           <span className="dt-bulk-count">{`${selection.selected.size} ticked`}</span>
           {bulk}
+          {canExport && (
+            <button type="button" className="btn" onClick={() => doExport(true)}>
+              <DownloadSimpleIcon size={16} weight="bold" aria-hidden="true" />
+              Export ticked
+            </button>
+          )}
+          {deletableTicked.length > 0 && (
+            <button type="button" className="btn dt-danger-btn" onClick={() => setDeleting(deletableTicked)}>
+              <TrashIcon size={16} weight="bold" aria-hidden="true" />
+              {deleteLabel === 'Delete' ? 'Delete ticked' : deleteLabel}
+            </button>
+          )}
+          {!bulk && (
+            <button type="button" className="btn btn-ghost" onClick={() => selection.onChange(new Set())}>
+              Untick all
+            </button>
+          )}
         </div>
       )}
       {selection && (cards || view.page.pages > 1) && foundIds.length > 0 && (
@@ -663,6 +860,205 @@ export function DataTable<T>(props: DataTableProps<T>) {
           )}
         </nav>
       )}
+      {shown && (
+        <DetailsDrawer
+          title={nameOf(shown)}
+          sub={label}
+          columns={columns}
+          row={shown}
+          onClose={() => setShownKey(null)}
+          edit={onEdit && (canEdit?.(shown) ?? true) ? { label: editLabel ?? 'Edit', run: () => (setShownKey(null), onEdit(shown)) } : undefined}
+          remove={mayDelete(shown) ? { label: deleteLabel, run: () => setDeleting([shown]) } : undefined}
+        />
+      )}
+      {deleting && (
+        <DeleteDialog
+          names={deleting.map(nameOf)}
+          label={deleteLabel}
+          note={deleteNote}
+          reasonRequired={!!deleteReason}
+          run={(reason) => runDelete(deleting, reason)}
+          onClose={() => setDeleting(null)}
+        />
+      )}
     </div>
+  );
+}
+
+/** Saves the CSV through the browser's own download. */
+function download(text: string, name: string) {
+  const blob = new Blob([text], { type: 'text/csv;charset=utf-8' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = name;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+
+/** P107b: a row's details, read only, for a screen with no detail view of its own: every column, label and value. */
+export function DetailsDrawer<T>({
+  title,
+  sub,
+  columns,
+  row,
+  onClose,
+  edit,
+  remove,
+}: {
+  title: string;
+  sub?: string;
+  columns: DtColumn<T>[];
+  row: T;
+  onClose: () => void;
+  edit?: { label: string; run: () => void };
+  remove?: { label: string; run: () => void };
+}) {
+  return (
+    <Drawer title={title} sub={sub} onClose={onClose}>
+      <dl className="dt-details">
+        {columns.map((c) => (
+          <div key={c.id}>
+            <dt>{c.label}</dt>
+            <dd>{draw(c, row)}</dd>
+          </div>
+        ))}
+      </dl>
+      {(edit || remove) && (
+        <div className="dt-details-actions">
+          {edit && (
+            <button type="button" className="btn btn-primary" onClick={edit.run}>
+              {edit.label}
+            </button>
+          )}
+          {remove && (
+            <button type="button" className="btn dt-danger-btn" onClick={remove.run}>
+              <TrashIcon size={16} weight="bold" aria-hidden="true" />
+              {remove.label}
+            </button>
+          )}
+        </div>
+      )}
+    </Drawer>
+  );
+}
+
+/**
+ * P107b: "Delete this?" in the kit's look (not the browser's confirm box): names the record (or how many), asks for a
+ * reason when the screen needs one, shows the server's refusal in place, and after several says how many went through.
+ */
+export function DeleteDialog({
+  names,
+  label,
+  note,
+  reasonRequired,
+  run,
+  onClose,
+}: {
+  names: string[];
+  label: string;
+  note?: string;
+  reasonRequired: boolean;
+  run: (reason: string) => Promise<ManyOutcome>;
+  onClose: () => void;
+}) {
+  const titleId = useId();
+  const box = useRef<HTMLDivElement>(null);
+  const [reason, setReason] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [outcome, setOutcome] = useState<ManyOutcome | null>(null);
+  // Escape, the scrim and the phone's Back close it, but not while the server is working.
+  const busyRef = useRef(false);
+  busyRef.current = busy;
+  const close = useRef(onClose);
+  close.current = () => {
+    if (!busyRef.current) onClose();
+  };
+  useEffect(() => (box.current ? activateDrawer(box.current, () => close.current()) : undefined), []);
+  useBackClose(true, () => close.current());
+  const many = names.length > 1;
+  const go = async () => {
+    setBusy(true);
+    setError(null);
+    const o = await run(reason.trim());
+    setBusy(false);
+    if (!o.failed.length) {
+      notify(many ? `${o.done.length} of ${names.length} done.` : 'Done.');
+      onClose();
+      return;
+    }
+    if (!many) setError(o.failed[0].error);
+    else setOutcome(o);
+  };
+  const shownNames = names.slice(0, 5);
+  return (
+    <>
+      <div className="scrim dt-dialog-scrim" onClick={() => close.current()} />
+      <div ref={box} className="dt-dialog" role="alertdialog" aria-modal="true" aria-labelledby={titleId} tabIndex={-1}>
+        <h2 id={titleId} className="dt-dialog-title">
+          {many ? (
+            <>
+              {label} {names.length} {'records?'}
+            </>
+          ) : (
+            <>
+              <span>{label}</span> <q data-no-translate>{names[0]}</q>?
+            </>
+          )}
+        </h2>
+        {many && !outcome && (
+          <ul className="dt-dialog-names" data-no-translate>
+            {shownNames.map((n, i) => (
+              <li key={i}>{n}</li>
+            ))}
+            {names.length > shownNames.length && <li className="muted">{`and ${names.length - shownNames.length} more`}</li>}
+          </ul>
+        )}
+        {note && <p className="muted small">{note}</p>}
+        {outcome ? (
+          <div className="dt-dialog-outcome" role="status">
+            <p>
+              <strong>{`${outcome.done.length} of ${names.length} done.`}</strong>
+            </p>
+            <p>{`${outcome.failed.length} could not be done:`}</p>
+            <ul className="dt-dialog-names">
+              {outcome.failed.slice(0, 8).map((f) => (
+                <li key={f.key}>
+                  <span data-no-translate>{f.name}</span>: {f.error}
+                </li>
+              ))}
+              {outcome.failed.length > 8 && <li className="muted">{`and ${outcome.failed.length - 8} more`}</li>}
+            </ul>
+          </div>
+        ) : (
+          reasonRequired && (
+            <label className="field">
+              <span className="label">Reason (needed, 5 characters or more)</span>
+              <textarea className="textarea" rows={3} value={reason} disabled={busy} onChange={(e) => setReason(e.target.value)} />
+            </label>
+          )
+        )}
+        {error && <ErrorNotice error={error} />}
+        <div className="dt-dialog-actions">
+          {outcome ? (
+            <button type="button" className="btn btn-primary" onClick={onClose}>
+              Close
+            </button>
+          ) : (
+            <>
+              <button type="button" className="btn" disabled={busy} onClick={onClose}>
+                Cancel
+              </button>
+              <button type="button" className="btn btn-danger" disabled={busy || !reasonOk(reason, reasonRequired)} aria-busy={busy || undefined} onClick={() => void go()}>
+                <TrashIcon size={16} weight="bold" aria-hidden="true" />
+                {busy ? 'Working…' : label}
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+    </>
   );
 }

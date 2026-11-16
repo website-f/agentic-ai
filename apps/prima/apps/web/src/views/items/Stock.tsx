@@ -2,7 +2,7 @@
 // printed and scanned back (paper 3.1), and the labels still to print or to scan back.
 import { Select } from '../../SearchSelect';
 import { useState } from 'react';
-import { PlusIcon, PrinterIcon, TagIcon, UploadSimpleIcon } from '@phosphor-icons/react';
+import { PrinterIcon, TagIcon, UploadSimpleIcon } from '@phosphor-icons/react';
 import { ITEM_CATEGORIES, STATE_LABEL, labelDisplay, type PhysicalItem } from '@prima/core';
 import type { ItemBoard } from '../../api';
 import { Card, Empty } from '../../kit';
@@ -20,19 +20,8 @@ export function Stock({ data, onImport, onType }: { data: ItemBoard; onImport?: 
   const mayRegister = mayRegisterOf(data);
   return (
     <div className="it-stack">
-      {mayRegister && !reg && (
-        <div className="it-tabbar-add">
-          <button className="btn btn-primary" type="button" onClick={() => setReg(true)}>
-            <PlusIcon size={16} weight="bold" aria-hidden="true" /> Register items or add stock
-          </button>
-          {onImport && (
-            <button className="btn" type="button" onClick={onImport}>
-              <UploadSimpleIcon size={16} weight="bold" aria-hidden="true" /> Import stock list (Excel, CSV, PDF)
-            </button>
-          )}
-          <ItemImport data={data} kinds={['itemUnit']} label="Import units with labels" />
-        </div>
-      )}
+      {/* P107b: Register items or add stock, Import stock list and Import units with labels moved into the table's
+          toolbar (same people, same forms). */}
       {mayRegister && (reg ? <RegisterPrint data={data} onClose={() => setReg(false)} /> : null)}
       {mayRegister && !reg && <LabelsToPrint data={data} />}
       <Card
@@ -41,13 +30,26 @@ export function Stock({ data, onImport, onType }: { data: ItemBoard; onImport?: 
         flush
       >
         {/* P107: the stock as a data table: search item, code or group; company (owner or holder), kind, state and
-            condition filters; sort by quantity. No "show more": pages instead. */}
+            condition filters; sort by quantity. No "show more": pages instead.
+            P107b: View (every column, read only: a stock line has no card of its own; Item type opens the type's card),
+            ticks and Export. No Edit or Delete: a stock line is a sum of units; units change only through register,
+            issue, return, count and disposal steps (Prima rule), never by editing or deleting the line. */}
         <div className="it-pad">
           <DataTable
             label="Stock by owner, holder and condition"
             stateKey="items.stock"
             rows={rows}
             rowKey={(r) => String(r.key)}
+            details
+            recordName={(r) => skuName(data, r.skuId)}
+            actions={onType ? (r) => [{ label: 'Item type', onClick: () => onType(r.skuId) }] : undefined}
+            selectable
+            exportName="stock"
+            onAdd={mayRegister && !reg ? () => setReg(true) : undefined}
+            addLabel="Register items or add stock"
+            onImport={mayRegister && !reg ? onImport : undefined}
+            importLabel="Import stock list (Excel, CSV, PDF)"
+            toolbar={mayRegister && !reg ? <ItemImport data={data} kinds={['itemUnit']} label="Import units with labels" /> : undefined}
             searchPlaceholder="Search item, code or group"
             searchText={(r) => {
               const s = skuOf.get(r.skuId);
@@ -59,14 +61,9 @@ export function Stock({ data, onImport, onType }: { data: ItemBoard; onImport?: 
                 label: 'Item',
                 value: (r) => skuName(data, r.skuId),
                 phone: 'title',
-                render: (r) =>
-                  onType ? (
-                    <button type="button" className="it-link" onClick={() => onType(r.skuId)}>
-                      {skuName(data, r.skuId)}
-                    </button>
-                  ) : (
-                    <strong>{skuName(data, r.skuId)}</strong>
-                  ),
+                // P107b: the row opens its details now, so the item's own card moved from a link in the name to the
+                // row menu (Item type), as a link inside the row's open button would be a button in a button.
+                render: (r) => <strong>{skuName(data, r.skuId)}</strong>,
               },
               { id: 'owner', label: 'Owner', value: (r) => partyName(data, r.ownerPartyId) },
               { id: 'holder', label: 'Held by', value: (r) => `${partyName(data, r.holderPartyId)}: ${r.where}`, phone: 'sub' },

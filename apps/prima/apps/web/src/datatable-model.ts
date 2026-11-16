@@ -3,6 +3,7 @@
  * (scripts/datatable.test.mjs): search, filters, sort, pages, and the per-screen state kept in sessionStorage.
  * Everything here is client-side: the screen loads its records as before and the table only arranges them.
  */
+import { toCsv } from '@prima/core';
 
 export type SortKind = 'text' | 'number' | 'date' | 'money';
 export type SortDir = 'asc' | 'desc';
@@ -19,6 +20,11 @@ export interface ColumnRule<T> {
   search?: boolean;
   /** The search also matches the value as it reads on screen (Malay), e.g. a status "Active" found by "aktif". */
   translate?: boolean;
+  /**
+   * P107b: what the CSV export writes for this column. Default: `value` (money as 1234.50, dates as 2026-11-16).
+   * `false` leaves the column out of the file (a column of buttons, or something not to be copied out).
+   */
+  exportValue?: ((row: T) => Cell) | false;
 }
 
 export interface FilterRule<T> {
@@ -242,4 +248,149 @@ function safeSession(): Storage | null {
   } catch {
     return null;
   }
+}
+
+// ---------- P107b: export, the standard row actions and deleting several rows ----------
+// (Fitri, 16 Nov 2026: "when clicked it didn't show details or features like delete (with confirmation), edit, view,
+// or multi select bulk and multi remove or even export function on each datatable.")
+
+/** A value as the CSV file holds it: plain numbers (money with two decimals, no "RM"), dates as typed (ISO). */
+export function exportCell(v: Cell, kind: SortKind | false | undefined): string {
+  if (v == null) return '';
+  if (typeof v === 'number') {
+    if (!Number.isFinite(v)) return '';
+    return kind === 'money' ? v.toFixed(2) : String(v);
+  }
+  return String(v);
+}
+
+/** The columns a file gets: each with a value or an export value, unless the column opted out. */
+export function exportColumns<C extends ColumnRule<never>>(columns: C[]): C[] {
+  return columns.filter((c) => c.exportValue !== false && !!(c.exportValue || c.value));
+}
+
+/**
+ * The rows and columns of an export: a heading row (each column's label, in the screen's language) and one row per
+ * record. `tr` turns English into the screen's language; it is used for the headings and for columns marked `translate`
+ * (statuses, kinds), so the file reads like the screen. Names and numbers are written as they are.
+ */
+export function exportGrid<T>(rows: readonly T[], columns: (ColumnRule<T> & { label: string })[], tr: (s: string) => string = (s) => s): string[][] {
+  const cols = exportColumns(columns as ColumnRule<never>[]) as unknown as (ColumnRule<T> & { label: string })[];
+  const head = cols.map((c) => tr(c.label));
+  const body = rows.map((r) =>
+    cols.map((c) => {
+      const get = c.exportValue || c.value!;
+      const s = exportCell(get(r), c.sort);
+      return c.translate && s ? tr(s) : s;
+    }),
+  );
+  return [head, ...body];
+}
+
+/** Which rows an export writes: the ticked ones when some are ticked, otherwise every row the search and filters found (all pages). */
+export function exportRows<T>(found: readonly T[], all: readonly T[], ticked: ReadonlySet<string> | null | undefined, rowKey: (row: T) => string): T[] {
+  if (!ticked || ticked.size === 0) return [...found];
+  // Ticked rows in the order shown; a ticked row the search now hides still goes in (it is ticked), after the rest.
+  const shown = found.filter((r) => ticked.has(rowKey(r)));
+  const seen = new Set(shown.map(rowKey));
+  return [...shown, ...all.filter((r) => ticked.has(rowKey(r)) && !seen.has(rowKey(r)))];
+}
+
+/** The CSV text: a UTF-8 byte-order mark first, so Excel shows Malay words and names with accents correctly. */
+export function csvText(grid: string[][]): string {
+  return '﻿' + toCsv(grid);
+}
+
+/** "site-list-2026-11-16.csv": the screen's name in plain letters, then the day (on this device's calendar). */
+export function csvName(stem: string, on: Date = new Date()): string {
+  const slug = fold(stem).replace(/ /g, '-').slice(0, 60) || 'list';
+  const d = `${on.getFullYear()}-${String(on.getMonth() + 1).padStart(2, '0')}-${String(on.getDate()).padStart(2, '0')}`;
+  return `${slug}-${d}.csv`;
+}
+
+/** One row action, as the table draws it (DataTable's DtAction has the same shape). */
+export interface ActionRule {
+  label: string;
+  onClick: () => void;
+  tone?: 'danger';
+  disabled?: boolean;
+  hidden?: boolean;
+  icon?: unknown;
+}
+
+/**
+ * The row menu in its standard order: View, Edit, the screen's own actions, then Delete (red, last). Edit and Delete
+ * show only for rows the screen allows (`canEdit`, `canDelete`); View only when the screen has something to show.
+ */
+export function standardActions<T, A extends ActionRule>(
+  row: T,
+  o: {
+    view?: (row: T) => void;
+    viewLabel?: string;
+    edit?: (row: T) => void;
+    editLabel?: string;
+    canEdit?: (row: T) => boolean;
+    remove?: (row: T) => void;
+    deleteLabel?: string;
+    canDelete?: (row: T) => boolean;
+    extra?: A[];
+  },
+): (A | ActionRule)[] {
+  const out: (A | ActionRule)[] = [];
+  if (o.view) out.push({ label: o.viewLabel ?? 'View', onClick: () => o.view!(row) });
+  if (o.edit && (o.canEdit?.(row) ?? true)) out.push({ label: o.editLabel ?? 'Edit', onClick: () => o.edit!(row) });
+  for (const a of o.extra ?? []) if (!a.hidden) out.push(a);
+  if (o.remove && (o.canDelete?.(row) ?? true)) out.push({ label: o.deleteLabel ?? 'Delete', tone: 'danger', onClick: () => o.remove!(row) });
+  return out;
+}
+
+export interface ManyOutcome {
+  /** The keys of the rows done. */
+  done: string[];
+  /** The rows refused, by name, with the server's words. */
+  failed: { key: string; name: string; error: string }[];
+}
+
+/**
+ * Deletes several rows one after another with the screen's own one-row action (so each keeps the server's checks,
+ * locks and reason), and says how many went through. One refusal does not stop the rest.
+ */
+export async function runEach<T>(rows: readonly T[], one: (row: T) => Promise<unknown>, rowKey: (row: T) => string, nameOf: (row: T) => string): Promise<ManyOutcome> {
+  const out: ManyOutcome = { done: [], failed: [] };
+  for (const r of rows) {
+    try {
+      await one(r);
+      out.done.push(rowKey(r));
+    } catch (e) {
+      out.failed.push({ key: rowKey(r), name: nameOf(r), error: e instanceof Error ? e.message : String(e ?? 'Refused') });
+    }
+  }
+  return out;
+}
+
+/**
+ * The outcome of a screen's own bulk call: `{ done, failed }` keys as returned, or (nothing returned) all done. A call
+ * that throws refuses them all with its message.
+ */
+export async function runBulk<T>(rows: readonly T[], many: (rows: T[]) => Promise<unknown>, rowKey: (row: T) => string, nameOf: (row: T) => string): Promise<ManyOutcome> {
+  try {
+    const r = (await many([...rows])) as Partial<{ done: string[]; failed: { key: string; error: string }[] }> | undefined | null;
+    if (r && Array.isArray(r.done)) {
+      const byKey = new Map(rows.map((x) => [rowKey(x), x]));
+      return {
+        done: r.done,
+        failed: (r.failed ?? []).map((f) => ({ key: f.key, name: byKey.has(f.key) ? nameOf(byKey.get(f.key)!) : f.key, error: f.error })),
+      };
+    }
+    return { done: rows.map(rowKey), failed: [] };
+  } catch (e) {
+    const error = e instanceof Error ? e.message : String(e ?? 'Refused');
+    return { done: [], failed: rows.map((x) => ({ key: rowKey(x), name: nameOf(x), error })) };
+  }
+}
+
+/** The reason box: required screens need this many letters (Prima: every change says why). */
+export const REASON_MIN = 5;
+export function reasonOk(reason: string, required: boolean): boolean {
+  return !required || reason.trim().length >= REASON_MIN;
 }

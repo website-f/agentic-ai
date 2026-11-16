@@ -9,7 +9,6 @@ import {
 import { api } from "../api";
 import { Chip, ErrorNotice, Kpi, Loading, useAction, useLoad } from "../ui";
 import { Empty, PageHead } from "../kit";
-import { PlusIcon, UploadSimpleIcon } from "@phosphor-icons/react";
 import { jumpTo } from "./AddImportMenu";
 
 /**
@@ -115,21 +114,8 @@ function Directory() {
   const waiting = b.batches.filter((x) => x.status === "waiting");
   return (
     <>
-      {/* P91: the two ways to add, at the top: the whole list from a file (approved as a batch) or one person. */}
-      {(b.can.prepare || b.can.addOne) && (
-        <div className="p91-actions" style={{ marginBottom: 12 }}>
-          {b.can.addOne && (
-            <button className="btn btn-primary" onClick={() => jumpTo("sd-add-one")}>
-              <PlusIcon size={16} weight="bold" aria-hidden="true" /> Add one person
-            </button>
-          )}
-          {b.can.prepare && (
-            <button className="btn" onClick={() => jumpTo("sd-import")}>
-              <UploadSimpleIcon size={16} weight="bold" aria-hidden="true" /> Load the staff list (CSV)
-            </button>
-          )}
-        </div>
-      )}
+      {/* P91: the two ways to add (the whole list from a file, approved as a batch, or one person) now sit in the
+          table's toolbar below (P107b), for the same people. */}
       <div className="kpis">
         <Kpi label="People listed" value={b.entries.length} />
         <Kpi
@@ -169,7 +155,10 @@ function Directory() {
           <h3>Everyone listed</h3>
         </div>
         <div className="panel-body">
-          {/* P107: one data table (search, filters, sort, pages; cards on a phone) in place of the hand-drawn list. */}
+          {/* P107: one data table (search, filters, sort, pages; cards on a phone) in place of the hand-drawn list.
+              P107b: View shows an entry's details (read only); Add one person and Load the staff list (CSV) jump to
+              their forms. No Export: the page says this personal data is not copied out of Prima. No Edit or Delete:
+              the API keeps entries by batch and add-one only (no change or removal action). */}
           <DataTable
             label="Everyone listed"
             stateKey="staff-directory.entries"
@@ -179,6 +168,12 @@ function Directory() {
             searchText={(e) => `${e.orgUnit} ${e.email}`}
             columns={DIRECTORY_COLUMNS}
             filters={DIRECTORY_FILTERS}
+            details
+            exportable={false}
+            onAdd={b.can.addOne ? () => jumpTo("sd-add-one") : undefined}
+            addLabel="Add one person"
+            onImport={b.can.prepare ? () => jumpTo("sd-import") : undefined}
+            importLabel="Load the staff list (CSV)"
             empty={<Empty title="Nobody listed yet." />}
           />
         </div>

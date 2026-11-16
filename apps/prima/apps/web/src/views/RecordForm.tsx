@@ -66,7 +66,7 @@ export function RecordButton({
   );
 }
 
-function RecordDrawer({ kind, id, companyId: given, onClose }: { kind: RecordKind; id: string | null; companyId: string | null; onClose: () => void }) {
+export function RecordDrawer({ kind, id, companyId: given, onClose }: { kind: RecordKind; id: string | null; companyId: string | null; onClose: () => void }) {
   const [companyId, setCompanyId] = useState(given);
   const [form, setForm] = useState<RecordFormData | null>(null);
   const [loadError, setLoadError] = useState<Error | null>(null);

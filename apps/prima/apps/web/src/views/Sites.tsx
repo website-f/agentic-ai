@@ -8,7 +8,7 @@ import { DataTable, useTableState, type DtColumn, type DtFilter } from '../DataT
 import { SiteVisitsSection } from './Visits';
 import { SiteDutyLogView } from './DutyDevice';
 import { SiteTasksView } from './SiteTasks';
-import { RecordButton } from './RecordForm';
+import { RecordButton, RecordDrawer, useRecordKinds } from './RecordForm';
 import { ImportButton } from './ImportDrawer';
 import { Chip, Drawer, ErrorNotice, Loading, Sev, hhmm, useAction, useLoad } from '../ui';
 import { SHIFT_STATE } from './shared';
@@ -80,6 +80,9 @@ export function Sites({ openSiteId }: { openSiteId?: string }) {
   const { companyId } = useApp();
   const table = useTableState('sites.list');
   const [open, setOpen] = useState<string | undefined>(openSiteId);
+  // P107b: Add site and Edit site open the existing site form, for the people who keep site records (as before).
+  const mayKeep = useRecordKinds().has('site');
+  const [record, setRecord] = useState<{ id: string | null } | null>(null);
   const { data, error } = useLoad(() => api.sites(companyId), [companyId]);
   if (error)
     return (
@@ -104,12 +107,6 @@ export function Sites({ openSiteId }: { openSiteId?: string }) {
       <PageHead
         title="Sites"
         sub={`${data.length} sites. Problems counts no-shows, late guards and unfilled shifts today.`}
-        actions={
-          <>
-            <ImportButton kind="site" companyId={companyId} />
-            <RecordButton kind="site" companyId={companyId} label="Add site" primary />
-          </>
-        }
       />
       <Stats>
         <Stat label="Sites" value={data.length} note={`${sum('posts')} posts${armed ? `, ${armed} armed sites` : ''}`} icon={<BuildingsIcon size={16} />} tone="info" />
@@ -126,26 +123,37 @@ export function Sites({ openSiteId }: { openSiteId?: string }) {
       </Stats>
 
       {/* P107: the site list as a data table; the old search and All / Needs attention / Armed buttons are its search
-          and Show filter (the Problems tile still picks Needs attention). */}
+          and Show filter (the Problems tile still picks Needs attention). P107b: View (the site drawer), Edit site, ticks
+          and Export; Add site and Import from file moved from the page head into the table's toolbar. No Delete: Prima
+          has no close or remove action for a site (sites are kept; the API has none). */}
       <Card title="Site list" sub={`${data.length} sites`} flush>
         <DataTable
           label="Site list"
           control={table}
           rows={data}
           rowKey={(r) => r.site.id}
-          onRowClick={(r) => setOpen(r.site.id)}
+          onView={(r) => setOpen(r.site.id)}
+          onEdit={mayKeep ? (r) => setRecord({ id: r.site.id }) : undefined}
+          editLabel="Edit site"
+          onAdd={mayKeep ? () => setRecord({ id: null }) : undefined}
+          addLabel="Add site"
+          importKind="site"
+          importCompanyId={companyId}
+          selectable
+          exportName="sites"
           rowTone={(r) => (r.problems > 0 ? 'crit' : undefined)}
           searchPlaceholder="Search name, code or town"
           columns={SITE_COLUMNS}
           filters={SITE_FILTERS}
           empty={
-            <Empty title="No site to show." action={<RecordButton kind="site" companyId={companyId} label="Add site" primary />}>
+            <Empty title="No site to show.">
               Add the site, then its posts and patrol checkpoints. Its roster opens from here.
             </Empty>
           }
         />
       </Card>
       {open && <SiteDrawer siteId={open} onClose={() => setOpen(undefined)} />}
+      {record && <RecordDrawer kind="site" id={record.id} companyId={record.id ? null : companyId} onClose={() => setRecord(null)} />}
     </div>
   );
 }
