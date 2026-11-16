@@ -18,6 +18,7 @@ import {
 import { api, type GateInInput, type PhotoInput } from '../api';
 import { Chip, ErrorNotice, Loading, hhmm, useAction, useLoad, type Tone } from '../ui';
 import { EvidenceCamera, PhotoCard } from './Camera';
+import { DataTable } from '../DataTable';
 import { OUTBOX_CHANGED, deviceNow, flush, isTestOffline, loadDuty, outbox, removeRefused, setTestOffline, startOutbox, submit, type OutboxItem } from '../duty/offline';
 import { canReadText, readIdNumber, sampleCardImage, shrinkImage } from '../duty/idphoto';
 
@@ -855,10 +856,13 @@ export function GateOutForm({ id, label, onDone }: { id: string; label: string; 
 }
 
 /** The site's duty log for the company and CMS: post log and gate log with photos. Read only. */
-export function SiteDutyLogView({ siteId }: { siteId: string }) {
+export function SiteDutyLogView({ siteId, layout }: { siteId: string; /** P107: 'cards' inside a narrow drawer. */ layout?: 'auto' | 'cards' }) {
   const { data, error } = useLoad(() => api.siteDutyLog(siteId, 2), [siteId]);
   if (error) return <ErrorNotice error={error} />;
   if (!data) return <Loading what="duty log" />;
+  type Gate = (typeof data.gates)[number];
+  const gateWho = (g: Gate) =>
+    g.paper ? `Written book page for ${g.paper.coversDate}, ${g.paper.lines} lines` : g.visitor ? `${g.visitor.name} (${VISITOR_ID_LABEL[g.visitor.idKind]} …${g.visitor.idLast4})` : 'Vehicle';
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
       <section className="panel">
@@ -868,56 +872,135 @@ export function SiteDutyLogView({ siteId }: { siteId: string }) {
             Kept {data.rule.value.keepYears} years for police. Full ID, IC picture and book pages are locked for the in-house server; only the last 4 show here.
           </span>
         </div>
-        <div className="list">
-          {data.gates.length === 0 && <div className="empty">No gate entries.</div>}
-          {data.gates.map((g) => (
-            <div key={g.id} className="list-item" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 6 }}>
-              <div style={{ fontWeight: 600 }}>
-                {g.ref} · {g.paper ? `Written book page for ${g.paper.coversDate}, ${g.paper.lines} lines` : g.visitor ? `${g.visitor.name} (${VISITOR_ID_LABEL[g.visitor.idKind]} …${g.visitor.idLast4})` : 'Vehicle'}
-                {g.vehicle ? ` · ${g.vehicle.plate}` : ''}
-              </div>
-              <div className="muted small">
-                {g.paper ? `Sent by ${g.inBy.name}${g.paper.note ? ` · ${g.paper.note}` : ''}` : `In ${hhmm(g.inAt)} by ${g.inBy.name}`}
-                {g.paper ? '' : g.outAt ? ` · out ${hhmm(g.outAt)}` : ' · inside now'}
-                {g.visitor ? ` · ${g.visitor.company ? `${g.visitor.company}, ` : ''}visiting ${g.visitor.host}: ${g.visitor.purpose}` : ''}
-              </div>
-              <div className="row" style={{ gap: 4, flexWrap: 'wrap' }}>
-                {g.sealedContents.length > 0 && (
-                  <Chip tone={g.inhouse.status === 'delivered' ? 'ok' : 'warn'}>
-                    {g.inhouse.status === 'delivered' ? 'Held by in-house server' : 'Locked, waiting for in-house server'}
-                  </Chip>
-                )}
-                {g.visitor && <Chip tone={g.visitor.faceCheck === 'match' ? 'ok' : g.visitor.faceCheck === 'no_match' ? 'crit' : 'warn'}>Face {g.visitor.faceCheck.replace('_', ' ')}</Chip>}
-                {g.flags.map((f) => (
-                  <Chip key={f} tone={FLAG_TONE(f)}>
-                    {GATE_FLAG_LABEL[f]}
-                  </Chip>
-                ))}
-              </div>
-              {g.photos.length > 0 && (
-                <div style={{ maxWidth: 260 }}>
-                  <PhotoCard p={g.photos[0]} />
-                </div>
-              )}
-            </div>
-          ))}
+        {/* P107: the gate log as a data table: find a name, plate or ref; who is inside now; flags and face check. */}
+        <div className="panel-body">
+          <DataTable
+            label="Gate log"
+            stateKey={`duty.gates.${siteId}`}
+            rows={data.gates}
+            rowKey={(g) => g.id}
+            layout={layout}
+            searchPlaceholder="Find a name, plate, host or ref"
+            empty={<div className="empty">No gate entries.</div>}
+            rowTone={(g) => (g.flags.some((f) => FLAG_TONE(f) === 'crit') ? 'crit' : g.flags.length ? 'warn' : undefined)}
+            columns={[
+              {
+                id: 'entry',
+                label: 'Entry',
+                value: (g) => `${g.ref} · ${gateWho(g)}${g.vehicle ? ` · ${g.vehicle.plate}` : ''}`,
+                phone: 'title',
+                render: (g) => (
+                  <span style={{ fontWeight: 600 }}>
+                    {g.ref} · {gateWho(g)}
+                    {g.vehicle ? ` · ${g.vehicle.plate}` : ''}
+                  </span>
+                ),
+              },
+              {
+                id: 'detail',
+                label: 'Detail',
+                value: (g) =>
+                  `${g.paper ? `Sent by ${g.inBy.name}${g.paper.note ? ` · ${g.paper.note}` : ''}` : `By ${g.inBy.name}`}${g.visitor ? ` · ${g.visitor.company ? `${g.visitor.company}, ` : ''}visiting ${g.visitor.host}: ${g.visitor.purpose}` : ''}`,
+                phone: 'sub',
+                sort: false,
+                render: (g) => (
+                  <span className="muted small">
+                    {g.paper ? `Sent by ${g.inBy.name}${g.paper.note ? ` · ${g.paper.note}` : ''}` : `In ${hhmm(g.inAt)} by ${g.inBy.name}`}
+                    {g.paper ? '' : g.outAt ? ` · out ${hhmm(g.outAt)}` : ' · inside now'}
+                    {g.visitor ? ` · ${g.visitor.company ? `${g.visitor.company}, ` : ''}visiting ${g.visitor.host}: ${g.visitor.purpose}` : ''}
+                  </span>
+                ),
+              },
+              { id: 'in', label: 'In', value: (g) => g.inAt, sort: 'date', render: (g) => (g.paper ? '–' : hhmm(g.inAt)), width: '5rem' },
+              { id: 'out', label: 'Out', value: (g) => (g.paper ? null : g.outAt), sort: 'date', render: (g) => (g.paper ? '–' : g.outAt ? hhmm(g.outAt) : 'Inside now'), width: '6rem' },
+              {
+                id: 'checks',
+                label: 'Checks',
+                value: (g) => g.flags.map((f) => GATE_FLAG_LABEL[f]).join(' · '),
+                translate: true,
+                sort: false,
+                render: (g) => (
+                  <div className="row" style={{ gap: 4, flexWrap: 'wrap' }}>
+                    {g.sealedContents.length > 0 && (
+                      <Chip tone={g.inhouse.status === 'delivered' ? 'ok' : 'warn'}>
+                        {g.inhouse.status === 'delivered' ? 'Held by in-house server' : 'Locked, waiting for in-house server'}
+                      </Chip>
+                    )}
+                    {g.visitor && <Chip tone={g.visitor.faceCheck === 'match' ? 'ok' : g.visitor.faceCheck === 'no_match' ? 'crit' : 'warn'}>Face {g.visitor.faceCheck.replace('_', ' ')}</Chip>}
+                    {g.flags.map((f) => (
+                      <Chip key={f} tone={FLAG_TONE(f)}>
+                        {GATE_FLAG_LABEL[f]}
+                      </Chip>
+                    ))}
+                  </div>
+                ),
+              },
+              {
+                id: 'photo',
+                label: 'Photo',
+                sort: false,
+                render: (g) =>
+                  g.photos.length > 0 ? (
+                    <div style={{ maxWidth: 200 }}>
+                      <PhotoCard p={g.photos[0]} />
+                    </div>
+                  ) : (
+                    '–'
+                  ),
+              },
+            ]}
+            filters={[
+              {
+                id: 'where',
+                label: 'Show',
+                value: (g) => (g.paper ? 'paper' : g.outAt ? 'left' : 'inside'),
+                options: [
+                  { value: 'inside', label: 'Inside now' },
+                  { value: 'left', label: 'Left' },
+                  { value: 'paper', label: 'Written book pages' },
+                ],
+              },
+              { id: 'flag', label: 'Flag', value: (g) => g.flags, optionLabel: (v) => GATE_FLAG_LABEL[v as GateFlag] ?? v },
+              { id: 'face', label: 'Face check', value: (g) => (g.visitor ? g.visitor.faceCheck : null), optionLabel: (v) => `Face ${v.replace('_', ' ')}` },
+            ]}
+          />
         </div>
       </section>
       <section className="panel">
         <div className="panel-head">
           <h3>Post log</h3>
         </div>
-        <div className="list">
-          {data.postLog.length === 0 && <div className="empty">No entries.</div>}
-          {data.postLog.map((l) => (
-            <div key={l.id} className="list-item" style={{ flexDirection: 'column', alignItems: 'stretch' }}>
-              <div className="small">{l.text}</div>
-              <div className="muted small">
-                {l.at.slice(0, 10)} {hhmm(l.at)} · {POST_LOG_LABEL[l.kind]} · {l.name} ({l.staffNo}){l.correctsId ? ' · correction of an earlier line' : ''}
-                {l.receivedAt && Date.parse(l.receivedAt) - Date.parse(l.at) > RULES.siteGate.value.sentLaterMin * 60_000 ? ` · written offline, received ${l.receivedAt.slice(0, 10)} ${hhmm(l.receivedAt)}` : ''}
-              </div>
-            </div>
-          ))}
+        {/* P107: the post log as a data table: find a line or a guard, by kind, newest first by default. */}
+        <div className="panel-body">
+          <DataTable
+            label="Post log"
+            stateKey={`duty.postlog.${siteId}`}
+            rows={data.postLog}
+            rowKey={(l) => l.id}
+            layout={layout}
+            searchPlaceholder="Find a line, guard or staff no."
+            empty={<div className="empty">No entries.</div>}
+            columns={[
+              { id: 'text', label: 'Entry', value: (l) => l.text, phone: 'title', sort: false, render: (l) => <span className="small">{l.text}</span> },
+              {
+                id: 'at',
+                label: 'Time',
+                value: (l) => l.at,
+                sort: 'date',
+                render: (l) => (
+                  <span className="small">
+                    {l.at.slice(0, 10)} {hhmm(l.at)}
+                    {l.receivedAt && Date.parse(l.receivedAt) - Date.parse(l.at) > RULES.siteGate.value.sentLaterMin * 60_000 ? (
+                      <span className="muted"> · written offline, received {l.receivedAt.slice(0, 10)} {hhmm(l.receivedAt)}</span>
+                    ) : null}
+                  </span>
+                ),
+              },
+              { id: 'kind', label: 'Kind', value: (l) => POST_LOG_LABEL[l.kind], translate: true },
+              { id: 'by', label: 'By', value: (l) => `${l.name} (${l.staffNo})${l.correctsId ? ' · correction of an earlier line' : ''}` },
+            ]}
+            filters={[{ id: 'kind', label: 'Kind', value: (l) => l.kind, optionLabel: (v) => POST_LOG_LABEL[v as keyof typeof POST_LOG_LABEL] ?? v }]}
+          />
         </div>
       </section>
       <section className="panel">
@@ -925,21 +1008,29 @@ export function SiteDutyLogView({ siteId }: { siteId: string }) {
           <h3>Site vehicle list</h3>
           <span className="muted small">Vehicle system link is a test connection</span>
         </div>
-        <div className="list">
-          {data.vehicles.map((v) => (
-            <div key={v.id} className="list-item">
-              <div>
-                <div className="mono" style={{ fontWeight: 600 }}>
-                  {v.plate}
-                </div>
-                <div className="muted small">
-                  {v.label}
-                  {v.source === 'vehicle_system_mock' ? ' · from vehicle system (test)' : ''}
-                </div>
-              </div>
-              <Chip tone={v.status === 'watch' ? 'crit' : 'ok'}>{v.status === 'watch' ? 'On watch' : 'Allowed'}</Chip>
-            </div>
-          ))}
+        {/* P107: the site's vehicles as a data table: find a plate, on watch or allowed. */}
+        <div className="panel-body">
+          <DataTable
+            label="Site vehicle list"
+            stateKey={`duty.vehicles.${siteId}`}
+            rows={data.vehicles}
+            rowKey={(v) => v.id}
+            layout={layout}
+            searchPlaceholder="Find a plate"
+            rowTone={(v) => (v.status === 'watch' ? 'crit' : undefined)}
+            columns={[
+              { id: 'plate', label: 'Plate', value: (v) => v.plate, phone: 'title', render: (v) => <span className="mono" style={{ fontWeight: 600 }}>{v.plate}</span> },
+              { id: 'label', label: 'Vehicle', value: (v) => `${v.label}${v.source === 'vehicle_system_mock' ? ' · from vehicle system (test)' : ''}`, phone: 'sub' },
+              {
+                id: 'status',
+                label: 'Status',
+                value: (v) => (v.status === 'watch' ? 'On watch' : 'Allowed'),
+                translate: true,
+                render: (v) => <Chip tone={v.status === 'watch' ? 'crit' : 'ok'}>{v.status === 'watch' ? 'On watch' : 'Allowed'}</Chip>,
+              },
+            ]}
+            filters={[{ id: 'status', label: 'Status', value: (v) => (v.status === 'watch' ? 'On watch' : 'Allowed') }]}
+          />
         </div>
       </section>
     </div>

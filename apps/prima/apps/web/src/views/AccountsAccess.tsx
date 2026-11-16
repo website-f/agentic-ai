@@ -1,8 +1,9 @@
 import { Select } from '../SearchSelect';
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { api } from '../api';
 import { Card, Empty, PageHead, Search, Stat, Stats } from '../kit';
-import { Chip, ErrorNotice, Loading, dateLabel, dateTimeLabel, useAction, useLoad } from '../ui';
+import { Chip, Drawer, ErrorNotice, Loading, dateLabel, dateTimeLabel, useAction, useLoad } from '../ui';
+import { DataTable } from '../DataTable';
 
 /**
  * Accounts and Access (Fauzan, 15 Nov 2026). IT or central HR prepares sign-ins and company access as one request; the
@@ -17,7 +18,6 @@ type Access = { companyId: string; scope: 'act' | 'monitor' };
 
 const SCOPE: Record<Access['scope'], string> = { act: 'acts on', monitor: 'monitors only' };
 const STATUS: Record<string, string> = { waiting: 'Waiting for approval', approved: 'Approved', returned: 'Returned' };
-const SHOW = 200;
 
 export function AccountsAccess() {
   const board = useLoad(() => api.accounts(), []);
@@ -36,18 +36,14 @@ export function AccountsAccess() {
 
 function Screen({ b }: { b: Board }) {
   const [lines, setLines] = useState<Line[]>([]);
-  const [find, setFind] = useState('');
   const [changing, setChanging] = useState<string | null>(null);
   const company = (id: string) => b.companies.find((c) => c.id === id)?.name ?? id;
-  const matching = useMemo(() => {
-    const q = find.trim().toLowerCase();
-    return b.accounts.filter((a) => !q || `${a.name} ${a.title} ${a.kind}`.toLowerCase().includes(q));
-  }, [b, find]);
-  const shown = matching.slice(0, SHOW);
   const waiting = b.requests.filter((r) => r.status === 'waiting');
   const notLinked = b.accounts.filter((a) => !a.linked && !a.closedFrom).length;
   const add = (l: Line) => setLines((x) => [...x, l]);
-  const count = find.trim() ? `${matching.length} of ${b.accounts.length}` : `${b.accounts.length} accounts`;
+  const count = `${b.accounts.length} accounts`;
+  const inRequest = (id: string) => lines.some((l) => l.userId === id);
+  const changingAccount = changing ? b.accounts.find((a) => a.id === changing) : undefined;
   return (
     <div className="page">
       <PageHead
@@ -69,67 +65,93 @@ function Screen({ b }: { b: Board }) {
         </>
       )}
       <Card title="Everyone with an account" actions={<span className="hx-count">{count}</span>}>
-        <div className="hx-stack-tight">
-          <Search value={find} onChange={setFind} placeholder="Find a name, title or kind" label="Find" />
-          {shown.length === 0 ? (
-            <Empty title={find.trim() ? 'Nobody matches.' : 'No accounts yet.'} />
-          ) : (
-            <ul className="hx-rows">
-              {shown.map((a) => (
-                <li key={a.id} className="hx-row" data-tone={a.closedFrom ? 'crit' : undefined}>
-                  <div className="hx-row-main">
-                    <span className="hx-row-title">{a.name}</span>
-                    <span className="hx-row-meta">
-                      {a.title}
-                      {a.kind ? ` · ${a.kind}` : ''}
-                    </span>
-                    {(a.companyIds.length > 0 || a.access.length > 0) && (
-                      <span className="hx-row-meta">
-                        {a.companyIds.length ? `Company: ${a.companyIds.map(company).join(', ')}` : ''}
-                        {a.access.length > 4
-                          ? `${a.companyIds.length ? ' · ' : ''}Sees ${a.access.length} companies (acts on ${a.access.filter((g) => g.scope === 'act').length}, monitors ${a.access.filter((g) => g.scope === 'monitor').length})`
-                          : a.access.length
-                            ? `${a.companyIds.length ? ' · ' : ''}Sees ${a.access.map((g) => `${company(g.companyId)} (${SCOPE[g.scope as Access['scope']] ?? g.scope})`).join(', ')}`
-                            : ''}
-                      </span>
-                    )}
-                  </div>
-                  <div className="hx-row-side">
-                    {a.linked ? <Chip tone="ok">Microsoft linked</Chip> : <Chip tone="warn">Not linked</Chip>}
-                    {!a.hrRecord && <Chip tone="neutral">No HR record</Chip>}
-                    {a.closedFrom && <Chip tone="crit">Closed from {dateLabel(a.closedFrom)}</Chip>}
-                  </div>
-                  {b.me.prepare && a.mayChange && !a.closedFrom && (
-                    <div className="hx-row-body">
-                      {changing === a.id ? (
-                        <ChangeAccount
-                          b={b}
-                          a={a}
-                          onAdd={(l) => {
-                            add(l);
-                            setChanging(null);
-                          }}
-                          onCancel={() => setChanging(null)}
-                        />
-                      ) : (
-                        <div className="hx-row-actions">
-                          <button className="btn btn-sm" disabled={lines.some((l) => l.userId === a.id)} onClick={() => setChanging(a.id)}>
-                            Change name, link or access
-                          </button>
-                          {lines.some((l) => l.userId === a.id) && <span className="small muted">In your request</span>}
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </li>
-              ))}
-            </ul>
-          )}
-          {matching.length > SHOW && <p className="hx-source">Showing the first {SHOW} of {matching.length}. Search to find someone else.</p>}
-        </div>
+        {/* P107: the data table (search, filters, sort, pages; a card per account on a phone). A change opens in a drawer. */}
+        <DataTable
+          label="Everyone with an account"
+          stateKey="accounts.everyone"
+          rows={b.accounts}
+          rowKey={(a) => a.id}
+          searchPlaceholder="Find a name, title or kind"
+          rowTone={(a) => (a.closedFrom ? 'crit' : undefined)}
+          empty={<Empty title="No accounts yet." />}
+          columns={[
+            { id: 'name', label: 'Name', value: (a) => a.name, render: (a) => <strong>{a.name}</strong>, phone: 'title' },
+            { id: 'title', label: 'Job title', value: (a) => `${a.title}${a.kind ? ` · ${a.kind}` : ''}`, phone: 'sub' },
+            {
+              id: 'access',
+              label: 'Company and access',
+              value: (a) => [...a.companyIds.map(company), ...a.access.map((g) => company(g.companyId))].join(', '),
+              sort: false,
+              render: (a) => <span className="small">{accessText(a, company) || '–'}</span>,
+            },
+            {
+              id: 'state',
+              label: 'Sign-in',
+              value: (a) => (a.closedFrom ? 'Closed' : a.linked ? 'Microsoft linked' : 'Not linked'),
+              translate: true,
+              render: (a) => (
+                <span className="row" style={{ gap: 4, flexWrap: 'wrap' }}>
+                  {a.linked ? <Chip tone="ok">Microsoft linked</Chip> : <Chip tone="warn">Not linked</Chip>}
+                  {!a.hrRecord && <Chip tone="neutral">No HR record</Chip>}
+                  {a.closedFrom && <Chip tone="crit">Closed from {dateLabel(a.closedFrom)}</Chip>}
+                </span>
+              ),
+            },
+          ]}
+          filters={[
+            { id: 'kind', label: 'Kind', value: (a) => a.kind },
+            { id: 'company', label: 'Company', value: (a) => [...new Set([...a.companyIds, ...a.access.map((g) => g.companyId)])], optionLabel: company },
+            {
+              id: 'link',
+              label: 'Sign-in',
+              value: (a) => [a.closedFrom ? 'closed' : a.linked ? 'linked' : 'not_linked', ...(a.hrRecord ? [] : ['no_hr'])],
+              options: [
+                { value: 'linked', label: 'Microsoft linked' },
+                { value: 'not_linked', label: 'Not linked' },
+                { value: 'no_hr', label: 'No HR record' },
+                { value: 'closed', label: 'Closed' },
+              ],
+            },
+          ]}
+          rowEnd={(a) =>
+            b.me.prepare && a.mayChange && !a.closedFrom ? (
+              inRequest(a.id) ? (
+                <span className="small muted">In your request</span>
+              ) : (
+                <button className="btn btn-sm" onClick={() => setChanging(a.id)}>
+                  Change name, link or access
+                </button>
+              )
+            ) : null
+          }
+        />
+        {changingAccount && (
+          <Drawer title="Change name, link or access" sub={changingAccount.name} onClose={() => setChanging(null)}>
+            <ChangeAccount
+              b={b}
+              a={changingAccount}
+              onAdd={(l) => {
+                add(l);
+                setChanging(null);
+              }}
+              onCancel={() => setChanging(null)}
+            />
+          </Drawer>
+        )}
       </Card>
     </div>
   );
+}
+
+/** Where an account belongs and which companies it sees, in one line. */
+function accessText(a: Board['accounts'][number], company: (id: string) => string): string {
+  return `${a.companyIds.length ? `Company: ${a.companyIds.map(company).join(', ')}` : ''}${
+    a.access.length > 4
+      ? `${a.companyIds.length ? ' · ' : ''}Sees ${a.access.length} companies (acts on ${a.access.filter((g) => g.scope === 'act').length}, monitors ${a.access.filter((g) => g.scope === 'monitor').length})`
+      : a.access.length
+        ? `${a.companyIds.length ? ' · ' : ''}Sees ${a.access.map((g) => `${company(g.companyId)} (${SCOPE[g.scope as Access['scope']] ?? g.scope})`).join(', ')}`
+        : ''
+  }`;
 }
 
 function Requests({ b, company }: { b: Board; company: (id: string) => string }) {
@@ -142,74 +164,96 @@ function Requests({ b, company }: { b: Board; company: (id: string) => string })
   return (
     <Card title="Requests" sub="Approve or return each request with a comment. Nobody decides their own request." actions={<span className="hx-count">{waiting} waiting</span>}>
       <ErrorNotice error={act.error} />
-      <ul className="hx-rows">
-        {b.requests.slice(0, 30).map((r) => (
-          <li key={r.id} className="hx-row" data-tone={r.status === 'returned' ? 'warn' : undefined}>
-            <div className="hx-row-main">
-              <span className="hx-row-title">{r.reason}</span>
-              <span className="hx-row-meta">
-                {r.preparedBy}, {dateTimeLabel(r.preparedAt)}
-                {r.decidedBy ? ` · ${r.status} by ${r.decidedBy}: ${r.comment}` : ''}
-              </span>
-            </div>
-            <div className="hx-row-side">
-              <Chip tone={r.status === 'waiting' ? 'info' : r.status === 'approved' ? 'ok' : 'warn'}>{STATUS[r.status] ?? r.status}</Chip>
-            </div>
-            <div className="hx-row-body">
-              <ul className="hx-row-text" style={{ margin: 0, paddingLeft: 18 }}>
-                {r.items.map((i, n) =>
-                  i.op === 'create' ? (
-                    <li key={n}>
-                      New: {i.name} ({i.title}), {b.templates.find((t) => t.key === i.template)?.label}
-                      {i.companyId ? `, ${company(i.companyId)}` : ''}
-                      {i.access.length ? `, sees ${i.access.map((a) => `${company(a.companyId)} (${SCOPE[a.scope as Access['scope']] ?? a.scope})`).join(', ')}` : ''}
-                      {i.entraOid ? ', Microsoft account given' : ''}
-                    </li>
-                  ) : (
-                    <li key={n}>
-                      Change {i.before.name}
-                      {i.name ? `: name to ${i.name}` : ''}
-                      {i.title ? `, title to ${i.title}` : ''}
-                      {i.entraOid ? ', link Microsoft account' : ''}
-                      {i.personId ? ', join HR record' : ''}
-                      {i.addAccess.length ? `, add ${i.addAccess.map((a) => `${company(a.companyId)} (${SCOPE[a.scope as Access['scope']] ?? a.scope})`).join(', ')}` : ''}
-                      {i.endAccess.length ? `, end ${i.endAccess.length} access` : ''}
-                    </li>
-                  ),
-                )}
-              </ul>
-              {r.status === 'waiting' && r.items.some((i) => (i.op === 'create' ? i.access.length : i.addAccess.length) > 0) && (
-                <span className="small muted">Company access added runs to {dateLabel(r.accessUntil)}.</span>
+      {/* P107: every request (no longer only the first 30), searchable, by status, in pages. */}
+      <DataTable
+        label="Requests"
+        stateKey="accounts.requests"
+        rows={b.requests}
+        rowKey={(r) => r.id}
+        searchPlaceholder="Find a request"
+        searchText={(r) => `${r.preparedBy} ${r.decidedBy ?? ''} ${r.items.map((i) => (i.op === 'create' ? i.name : i.before.name)).join(' ')}`}
+        rowTone={(r) => (r.status === 'returned' ? 'warn' : undefined)}
+        filters={[{ id: 'status', label: 'Status', value: (r) => r.status, optionLabel: (v) => STATUS[v] ?? v }]}
+        columns={[
+          {
+            id: 'request',
+            label: 'Request',
+            value: (r) => r.reason,
+            phone: 'title',
+            render: (r) => (
+              <div className="hx-row-main">
+                <span className="hx-row-title">{r.reason}</span>
+                <span className="hx-row-meta">
+                  {r.preparedBy}, {dateTimeLabel(r.preparedAt)}
+                  {r.decidedBy ? ` · ${r.status} by ${r.decidedBy}: ${r.comment}` : ''}
+                </span>
+              </div>
+            ),
+          },
+          {
+            id: 'status',
+            label: 'Status',
+            value: (r) => STATUS[r.status] ?? r.status,
+            translate: true,
+            render: (r) => <Chip tone={r.status === 'waiting' ? 'info' : r.status === 'approved' ? 'ok' : 'warn'}>{STATUS[r.status] ?? r.status}</Chip>,
+          },
+          { id: 'prepared', label: 'Prepared', value: (r) => r.preparedAt, sort: 'date', phone: 'hidden', hideBelow: 1200, render: (r) => dateLabel(r.preparedAt) },
+        ]}
+        rowDetail={(r) => (
+          <div className="hx-row-body hx-dt-body">
+            <ul className="hx-row-text" style={{ margin: 0, paddingLeft: 18 }}>
+              {r.items.map((i, n) =>
+                i.op === 'create' ? (
+                  <li key={n}>
+                    New: {i.name} ({i.title}), {b.templates.find((t) => t.key === i.template)?.label}
+                    {i.companyId ? `, ${company(i.companyId)}` : ''}
+                    {i.access.length ? `, sees ${i.access.map((a) => `${company(a.companyId)} (${SCOPE[a.scope as Access['scope']] ?? a.scope})`).join(', ')}` : ''}
+                    {i.entraOid ? ', Microsoft account given' : ''}
+                  </li>
+                ) : (
+                  <li key={n}>
+                    Change {i.before.name}
+                    {i.name ? `: name to ${i.name}` : ''}
+                    {i.title ? `, title to ${i.title}` : ''}
+                    {i.entraOid ? ', link Microsoft account' : ''}
+                    {i.personId ? ', join HR record' : ''}
+                    {i.addAccess.length ? `, add ${i.addAccess.map((a) => `${company(a.companyId)} (${SCOPE[a.scope as Access['scope']] ?? a.scope})`).join(', ')}` : ''}
+                    {i.endAccess.length ? `, end ${i.endAccess.length} access` : ''}
+                  </li>
+                ),
               )}
-              {r.mayDecide && (
-                <div className="hx-form">
-                  <label className="field">
-                    <span className="label">Your comment (needed, 3 characters or more)</span>
-                    <input
-                      className="input"
-                      aria-label="Comment"
-                      placeholder="Comment (needed)"
-                      value={comment[r.id] ?? ''}
-                      onChange={(e) => setComment({ ...comment, [r.id]: e.target.value })}
-                    />
-                  </label>
-                  <div className="hx-form-actions">
-                    <button className="btn btn-primary" disabled={act.busy} onClick={() => decide(r.id, true)}>
-                      Approve
-                    </button>
-                    <button className="btn" disabled={act.busy} onClick={() => decide(r.id, false)}>
-                      Return
-                    </button>
-                  </div>
+            </ul>
+            {r.status === 'waiting' && r.items.some((i) => (i.op === 'create' ? i.access.length : i.addAccess.length) > 0) && (
+              <span className="small muted">Company access added runs to {dateLabel(r.accessUntil)}.</span>
+            )}
+            {r.mayDecide && (
+              <div className="hx-form">
+                <label className="field">
+                  <span className="label">Your comment (needed, 3 characters or more)</span>
+                  <input
+                    className="input"
+                    aria-label="Comment"
+                    placeholder="Comment (needed)"
+                    value={comment[r.id] ?? ''}
+                    onChange={(e) => setComment({ ...comment, [r.id]: e.target.value })}
+                  />
+                </label>
+                <div className="hx-form-actions">
+                  <button className="btn btn-primary" disabled={act.busy} onClick={() => decide(r.id, true)}>
+                    Approve
+                  </button>
+                  <button className="btn" disabled={act.busy} onClick={() => decide(r.id, false)}>
+                    Return
+                  </button>
                 </div>
-              )}
-              {r.status === 'waiting' && !r.mayDecide && b.me.approve && <span className="small muted">Someone else decides this request (yours, about you, or a leader's account).</span>}
-              {r.status === 'waiting' && !b.me.approve && <span className="small muted">Waiting for the HR Director or the CEO.</span>}
-              {r.applied && <span className="small muted">Accounts made: {r.applied.users.map(name).join(', ') || 'none'}.</span>}
-            </div>
-          </li>
-        ))}
-      </ul>
+              </div>
+            )}
+            {r.status === 'waiting' && !r.mayDecide && b.me.approve && <span className="small muted">Someone else decides this request (yours, about you, or a leader's account).</span>}
+            {r.status === 'waiting' && !b.me.approve && <span className="small muted">Waiting for the HR Director or the CEO.</span>}
+            {r.applied && <span className="small muted">Accounts made: {r.applied.users.map(name).join(', ') || 'none'}.</span>}
+          </div>
+        )}
+      />
     </Card>
   );
 }
@@ -457,16 +501,23 @@ function FromDirectory({ b, onAdd, taken }: { b: Board; onAdd: (l: Line[]) => vo
       {matched.length === 0 ? (
         <Empty title="Everyone in the directory is in your request or has an account." />
       ) : (
-        <ul className="hx-rows">
-          {matched.slice(0, 300).map((d) => (
-            <li key={d.id} className="hx-row">
-              <div className="hx-row-main">
-                <span className="hx-row-title">{d.name}</span>
-                <span className="hx-row-meta">
-                  {d.title || 'no title'} · {d.orgUnit}
-                </span>
-              </div>
-              <div className="hx-row-body">
+        <DataTable
+          label="From the staff directory"
+          stateKey="accounts.directory"
+          rows={matched}
+          rowKey={(d) => d.id}
+          searchPlaceholder="Find a name, title or unit"
+          columns={[
+            { id: 'name', label: 'Name', value: (d) => d.name, render: (d) => <strong>{d.name}</strong>, phone: 'title' },
+            { id: 'title', label: 'Job title', value: (d) => d.title, render: (d) => d.title || <span className="muted">no title</span>, phone: 'sub' },
+            { id: 'unit', label: 'Unit', value: (d) => d.orgUnit },
+            {
+              id: 'kind',
+              label: 'Kind of account',
+              value: (d) => pick[d.id] ?? '',
+              sort: false,
+              search: false,
+              render: (d) => (
                 <Select className="select hx-filter" aria-label={`Kind for ${d.name}`} value={pick[d.id] ?? ''} onChange={(e) => setPick({ ...pick, [d.id]: e.target.value })}>
                   <option value="">Skip</option>
                   {office.map((t) => (
@@ -475,10 +526,14 @@ function FromDirectory({ b, onAdd, taken }: { b: Board; onAdd: (l: Line[]) => vo
                     </option>
                   ))}
                 </Select>
-              </div>
-            </li>
-          ))}
-        </ul>
+              ),
+            },
+          ]}
+          filters={[
+            { id: 'unit', label: 'Unit', value: (d) => d.orgUnit },
+            { id: 'company', label: 'Company', value: (d) => d.companyId ?? '', optionLabel: (id) => b.companies.find((c) => c.id === id)?.name ?? id },
+          ]}
+        />
       )}
       {free.some((d) => !d.companyId) && <p className="hx-source">{free.filter((d) => !d.companyId).length} line(s) are not matched to a company; add them by hand above.</p>}
       <div className="hx-form-actions" style={{ marginTop: 12 }}>

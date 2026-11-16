@@ -7,7 +7,8 @@ import { MyGuide } from './GuideCard';
 import { ImportButton } from './ImportDrawer';
 import { api, type OrgImportPreview, type OrgInbox } from '../api';
 import { GROUP_EMPLOYER_ID, JOINING_SAY, JOINING_SAY_HR, joiningAllows, type ImportKind, type RecordKind } from '@prima/core';
-import { Card, Empty, PageHead, Search, Stat, Stats, Toolbar } from '../kit';
+import { Card, Empty, PageHead, Stat, Stats } from '../kit';
+import { DataTable } from '../DataTable';
 import { Chip, ErrorNotice, Loading, dateLabel, dateTimeLabel, useAction, useLoad } from '../ui';
 import '../styles/hrx.css';
 
@@ -99,7 +100,6 @@ export function HandoversView() {
 
 function Mine() {
   const { data, error } = useLoad(() => api.org.inbox(), []);
-  const [showClosed, setShowClosed] = useState(false);
   // Further pages, loaded on request; the counts above always cover every hand-over (data.total).
   const [more, setMore] = useState<Item[]>([]);
   const [next, setNext] = useState<number | null | undefined>(undefined);
@@ -108,7 +108,6 @@ function Mine() {
   if (!data) return <Loading what="your hand-overs" />;
   const nextOffset = next === undefined ? data.nextOffset : next;
   const loaded = [...data.items, ...more];
-  const rows = loaded.filter((r) => showClosed || r.task.status === 'open');
   const loadMore = async () => {
     if (nextOffset == null) return;
     setLoadingMore(true);
@@ -130,11 +129,6 @@ function Mine() {
       {data.off && <p className="notice" data-tone="warn">Hand-overs are switched off here: other departments are not told automatically yet.</p>}
       <Card
         title="From other departments"
-        actions={
-          <label className="ho-toggle">
-            <input type="checkbox" checked={showClosed} onChange={(e) => setShowClosed(e.target.checked)} /> Show closed
-          </label>
-        }
         footer={
           <div className="ho-foot">
             <span className="muted small">
@@ -149,15 +143,80 @@ function Mine() {
         }
         flush
       >
-        {!data.off && !rows.length && <Empty title="Nothing waiting for you from other departments." />}
-        {rows.length > 0 && (
-          <ul className="hx-rows">
-            {rows.map((r) => (
-              <li key={r.task.id}>
-                <HandOver row={r} />
-              </li>
-            ))}
-          </ul>
+        {/* P107: the loaded hand-overs as a data table: search, open / closed, kind and department filters, sort and
+            pages; each one's link and Done / Not needed box sit under its row. "Show more" still loads further pages. */}
+        {data.off && !loaded.length ? null : (
+          <DataTable
+            label="From other departments"
+            stateKey="handovers.mine"
+            defaults={{ f: { state: 'open' } }}
+            rows={loaded}
+            rowKey={(r) => r.task.id}
+            searchPlaceholder="Search a hand-over, department or record"
+            searchText={(r) => `${r.task.task} ${r.task.entity} ${r.task.entityId}`}
+            rowTone={(r) => (r.task.status === 'open' && r.overdueDays ? 'crit' : undefined)}
+            empty={<Empty title="Nothing waiting for you from other departments." />}
+            filters={[
+              {
+                id: 'state',
+                label: 'Show',
+                value: (r) => (r.task.status === 'open' ? 'open' : 'closed'),
+                options: [
+                  { value: 'open', label: 'Open' },
+                  { value: 'closed', label: 'Closed' },
+                ],
+              },
+              {
+                id: 'kind',
+                label: 'Kind',
+                value: (r) => r.task.kind,
+                options: [
+                  { value: 'todo', label: 'To do' },
+                  { value: 'info', label: 'For your information' },
+                ],
+              },
+              { id: 'from', label: 'From', value: (r) => r.task.from },
+            ]}
+            columns={[
+              {
+                id: 'title',
+                label: 'Hand-over',
+                value: (r) => r.task.title,
+                phone: 'title',
+                render: (r) => (
+                  <span className="hx-row-main">
+                    <span className="hx-row-title">{r.task.title}</span>
+                    <span className="hx-row-text">{r.task.task}</span>
+                  </span>
+                ),
+              },
+              {
+                id: 'from',
+                label: 'From',
+                value: (r) => r.task.at,
+                sort: 'date',
+                render: (r) => (
+                  <span className="hx-row-meta">
+                    {r.task.from}, {dateTimeLabel(r.task.at)}
+                  </span>
+                ),
+              },
+              { id: 'due', label: 'Due', value: (r) => r.task.dueOn ?? '', sort: 'date', hideBelow: 1200 },
+              {
+                id: 'status',
+                label: 'Status',
+                value: (r) => handoverState(r),
+                translate: true,
+                render: (r) => (
+                  <span className="row" style={{ gap: 4, flexWrap: 'wrap' }}>
+                    {r.unread && <Chip tone="info">New</Chip>}
+                    <Chip tone={r.tone}>{handoverState(r)}</Chip>
+                  </span>
+                ),
+              },
+            ]}
+            rowDetail={(r) => <HandOver row={r} />}
+          />
         )}
       </Card>
     </div>
@@ -171,22 +230,13 @@ function HandOver({ row }: { row: Item }) {
   const { run, busy, error } = useAction();
   const [note, setNote] = useState('');
   const open = t.status === 'open';
+  // P107: the hand-over's record, link, joining state and Done / Not needed box, under its row in the table.
   return (
-    <div className="hx-row" data-tone={open && row.overdueDays ? 'crit' : undefined}>
-      <div className="hx-row-main">
-        <span className="hx-row-title">{t.title}</span>
-        <span className="hx-row-text">{t.task}</span>
-        <span className="hx-row-meta">
-          From {t.from}, {dateTimeLabel(t.at)}
-          {t.dueOn ? `. Due ${dateLabel(t.dueOn)}` : ''}. Record: {t.entity} {t.entityId}
-        </span>
-      </div>
-      <div className="hx-row-side">
-        {row.unread && <Chip tone="info">New</Chip>}
-        <Chip tone={row.tone}>
-          {!open ? (t.status === 'done' ? 'Done' : 'Not needed') : row.overdueDays ? `${row.overdueDays} day(s) late` : t.kind === 'todo' ? 'To do' : 'For your information'}
-        </Chip>
-      </div>
+    <div className="hx-dt-body">
+      <span className="hx-row-meta">
+        Record: {t.entity} {t.entityId}
+        {t.dueOn ? `. Due ${dateLabel(t.dueOn)}` : ''}
+      </span>
       <div className="hx-row-body">
         <div className="ho-link">
           {'refused' in link ? (
@@ -278,15 +328,17 @@ function HandOver({ row }: { row: Item }) {
   );
 }
 
+/** A hand-over's state in words (the chip). */
+function handoverState(row: Item): string {
+  const t = row.task;
+  if (t.status !== 'open') return t.status === 'done' ? 'Done' : 'Not needed';
+  return row.overdueDays ? `${row.overdueDays} day(s) late` : t.kind === 'todo' ? 'To do' : 'For your information';
+}
+
 function OrgMapView() {
   const { data, error } = useLoad(() => api.org.map(), []);
-  const [q, setQ] = useState('');
   if (error) return <ErrorNotice error={error} />;
   if (!data) return <Loading what="the department map" />;
-  const needle = q.trim().toLowerCase();
-  const flows = data.flows.filter(
-    (f) => !needle || [f.name, f.keyedBy, f.record, ...f.targets.flatMap((t) => [t.desk, t.task])].some((v) => v.toLowerCase().includes(needle)),
-  );
   return (
     <div className="hx-stack">
       {data.oversee && data.late.length > 0 && (
@@ -295,28 +347,54 @@ function OrgMapView() {
           sub={data.lateTotal > data.late.length ? `The ${data.late.length} latest are listed; the counts per link above include all ${data.lateTotal}.` : undefined}
           flush
         >
-          <ul className="hx-rows">
-            {data.late.map((r) => (
-              <li key={r.task.id} className="hx-row" data-tone="crit">
-                <div className="hx-row-main">
-                  <span className="hx-row-title">
-                    {r.task.title}: {r.task.desk}
-                  </span>
-                  <span className="hx-row-meta">
-                    {r.task.unassigned ? 'Nobody in this desk has an account yet.' : `${r.overdueDays} day(s) late.`} From {r.task.from}.
-                  </span>
-                </div>
-              </li>
-            ))}
-          </ul>
+          <div className="hx-dt-pad">
+            <DataTable
+              label="Late or with nobody to receive"
+              stateKey="handovers.late"
+              rows={data.late}
+              rowKey={(r) => r.task.id}
+              searchPlaceholder="Search a hand-over or department"
+              rowTone={() => 'crit'}
+              filters={[
+                { id: 'desk', label: 'Department', value: (r) => r.task.desk },
+                {
+                  id: 'why',
+                  label: 'Why',
+                  value: (r) => (r.task.unassigned ? 'nobody' : 'late'),
+                  options: [
+                    { value: 'late', label: 'Late' },
+                    { value: 'nobody', label: 'Nobody to receive' },
+                  ],
+                },
+              ]}
+              columns={[
+                {
+                  id: 'title',
+                  label: 'Hand-over',
+                  value: (r) => `${r.task.title}: ${r.task.desk}`,
+                  phone: 'title',
+                  render: (r) => (
+                    <span className="hx-row-title">
+                      {r.task.title}: {r.task.desk}
+                    </span>
+                  ),
+                },
+                { id: 'from', label: 'From', value: (r) => r.task.from },
+                {
+                  id: 'late',
+                  label: 'Late',
+                  value: (r) => (r.task.unassigned ? null : r.overdueDays),
+                  sort: 'number',
+                  render: (r) => <span className="hx-row-meta">{r.task.unassigned ? 'Nobody in this desk has an account yet.' : `${r.overdueDays} day(s) late.`}</span>,
+                },
+              ]}
+            />
+          </div>
         </Card>
       )}
-      <Toolbar>
-        <Search value={q} onChange={setQ} placeholder="Search a link, department or record" label="Search links between departments" />
-      </Toolbar>
       <Card
         title="Every link between departments"
-        actions={<span className="hx-count">{flows.length === data.flows.length ? data.flows.length : `${flows.length} of ${data.flows.length}`}</span>}
+        actions={<span className="hx-count">{data.flows.length}</span>}
         footer={
           <p className="hx-source ho-foot-note">
             Never passed between departments: speak-up reports, arms detail, discipline and harassment cases, PDPA cases, face data.
@@ -324,38 +402,53 @@ function OrgMapView() {
         }
         flush
       >
-        {flows.length === 0 && <Empty title="No link matches the search." />}
-        <ul className="hx-rows">
-          {flows.map((f) => (
-            <li key={f.id} className="hx-row">
-              <div className="hx-row-main">
-                <span className="hx-row-title">{f.name}</span>
-                <span className="hx-row-text">
-                  Keyed once by <strong>{f.keyedBy}</strong>: {f.record}.
-                </span>
-              </div>
-              <div className="hx-row-side">
-                <Chip tone={STATUS_TONE[f.status]}>{STATUS[f.status]}</Chip>
-                {f.counts && (
-                  <span className="hx-count">
-                    {f.counts.open} open, {f.counts.overdue} late, {f.counts.total} in all
+        {/* P107: every link as a data table (search, status filter, sort, pages); who is told sits under each row. */}
+        <DataTable
+          label="Every link between departments"
+          stateKey="handovers.links"
+          rows={data.flows}
+          rowKey={(f) => f.id}
+          searchPlaceholder="Search a link, department or record"
+          searchText={(f) => f.targets.map((t) => `${t.desk} ${t.task}`).join(' ')}
+          empty={<Empty title="No link matches the search." />}
+          filters={[
+            { id: 'status', label: 'Status', value: (f) => f.status, optionLabel: (v) => STATUS[v as keyof typeof STATUS] ?? v },
+            { id: 'keyedBy', label: 'Keyed by', value: (f) => f.keyedBy },
+          ]}
+          columns={[
+            {
+              id: 'name',
+              label: 'Link',
+              value: (f) => f.name,
+              phone: 'title',
+              render: (f) => (
+                <span className="hx-row-main">
+                  <span className="hx-row-title">{f.name}</span>
+                  <span className="hx-row-text">
+                    Keyed once by <strong>{f.keyedBy}</strong>: {f.record}.
                   </span>
-                )}
-              </div>
-              <div className="hx-row-body">
-                <ul className="ho-targets">
-                  {f.targets.map((t, i) => (
-                    <li key={i}>
-                      <strong>{t.desk}</strong>{' '}
-                      {t.kind === 'todo' ? `to do${t.dueDays ? ` within ${t.dueDays} day${t.dueDays === 1 ? '' : 's'}` : ''}` : 'is told'}: {t.task}
-                    </li>
-                  ))}
-                </ul>
-                {f.note && <span className="hx-row-meta">{f.note}</span>}
-              </div>
-            </li>
-          ))}
-        </ul>
+                </span>
+              ),
+            },
+            { id: 'status', label: 'Status', value: (f) => STATUS[f.status], translate: true, render: (f) => <Chip tone={STATUS_TONE[f.status]}>{STATUS[f.status]}</Chip> },
+            { id: 'open', label: 'Open', value: (f) => f.counts?.open ?? null, sort: 'number' },
+            { id: 'late', label: 'Late', value: (f) => f.counts?.overdue ?? null, sort: 'number' },
+            { id: 'total', label: 'In all', value: (f) => f.counts?.total ?? null, sort: 'number', hideBelow: 1200 },
+          ]}
+          rowDetail={(f) => (
+            <div className="hx-dt-body">
+              <ul className="ho-targets">
+                {f.targets.map((t, i) => (
+                  <li key={i}>
+                    <strong>{t.desk}</strong>{' '}
+                    {t.kind === 'todo' ? `to do${t.dueDays ? ` within ${t.dueDays} day${t.dueDays === 1 ? '' : 's'}` : ''}` : 'is told'}: {t.task}
+                  </li>
+                ))}
+              </ul>
+              {f.note && <span className="hx-row-meta">{f.note}</span>}
+            </div>
+          )}
+        />
       </Card>
     </div>
   );
@@ -512,17 +605,42 @@ function ImportLoads() {
       </div>
       {!v.data.gate && <p className="muted small">The CEO's OK step is not installed in this database yet; loads work as before.</p>}
       <ErrorNotice error={error} />
-      <div className="list">
-        {v.data.loads.map((l) => (
-          <div key={l.id} className="list-item" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 4 }}>
-            <div style={{ fontWeight: 600 }}>
-              {l.label}: {l.counts.loaded} loaded of {l.counts.inFile} in the file, {l.counts.refused} refused
-            </div>
-            <div className="muted small">
-              {l.by} · {dateTimeLabel(l.at)}
-              {l.backup ? ` · backup: ${l.backup}` : ''}
-              {l.counts.ignoredColumns.length ? ` · columns not used: ${l.counts.ignoredColumns.join(', ')}` : ''}
-            </div>
+      {/* P107: the loads as a data table (search, kind and OK filters, sort, pages); the OK box sits under its row. */}
+      <DataTable
+        label="Loads and the CEO's OK"
+        stateKey="handovers.loads"
+        rows={v.data.loads}
+        rowKey={(l) => l.id}
+        searchPlaceholder="Search a load or who loaded it"
+        searchText={(l) => l.by}
+        filters={[
+          { id: 'kind', label: 'Kind', value: (l) => l.label },
+          {
+            id: 'ok',
+            label: "CEO's OK",
+            value: (l) => (l.ok ? 'ok' : 'waiting'),
+            options: [
+              { value: 'waiting', label: 'Waiting' },
+              { value: 'ok', label: 'OK given' },
+            ],
+          },
+        ]}
+        columns={[
+          { id: 'label', label: 'Load', value: (l) => l.label, phone: 'title', render: (l) => <strong>{l.label}</strong> },
+          { id: 'loaded', label: 'Loaded', value: (l) => l.counts.loaded, sort: 'number' },
+          { id: 'inFile', label: 'In the file', value: (l) => l.counts.inFile, sort: 'number' },
+          { id: 'refused', label: 'Refused', value: (l) => l.counts.refused, sort: 'number' },
+          { id: 'at', label: 'Loaded on', value: (l) => l.at, sort: 'date', render: (l) => `${l.by} · ${dateTimeLabel(l.at)}` },
+        ]}
+        rowDetail={(l) => (
+          <div className="hx-dt-body small">
+            {(l.backup || l.counts.ignoredColumns.length > 0) && (
+              <div className="muted small">
+                {l.backup ? `Backup: ${l.backup}` : ''}
+                {l.backup && l.counts.ignoredColumns.length ? ' · ' : ''}
+                {l.counts.ignoredColumns.length ? `Columns not used: ${l.counts.ignoredColumns.join(', ')}` : ''}
+              </div>
+            )}
             {l.ok ? (
               <div className="small">OK by {l.ok.by}: {l.ok.comment}</div>
             ) : l.mayOk ? (
@@ -536,8 +654,8 @@ function ImportLoads() {
               v.data!.gate && <div className="muted small">Waiting for the CEO's OK before the next load.</div>
             )}
           </div>
-        ))}
-      </div>
+        )}
+      />
     </section>
   );
 }

@@ -1,9 +1,10 @@
 import { Select } from '../SearchSelect';
 import { useState } from 'react';
-import { BuildingsIcon, CaretRightIcon, SirenIcon, UserCheckIcon, WarningIcon } from '@phosphor-icons/react';
+import { BuildingsIcon, SirenIcon, UserCheckIcon, WarningIcon } from '@phosphor-icons/react';
 import { api } from '../api';
 import { useApp } from '../App';
-import { Card, Empty, Facts, PageHead, Search, Stat, Stats, Toolbar } from '../kit';
+import { Card, Empty, Facts, PageHead, Stat, Stats } from '../kit';
+import { DataTable, useTableState, type DtColumn, type DtFilter } from '../DataTable';
 import { SiteVisitsSection } from './Visits';
 import { SiteDutyLogView } from './DutyDevice';
 import { SiteTasksView } from './SiteTasks';
@@ -13,12 +14,71 @@ import { Chip, Drawer, ErrorNotice, Loading, Sev, hhmm, useAction, useLoad } fro
 import { SHIFT_STATE } from './shared';
 import '../styles/ops.css';
 
-type Show = 'all' | 'problems' | 'armed';
+type SiteRow = Awaited<ReturnType<typeof api.sites>>[number];
+const RISK: Record<string, string> = { high: 'High', medium: 'Medium', low: 'Low' };
+
+/** P107: the site list's columns: the old row (name with risk and armed chips, code and address, branch, figures). */
+const SITE_COLUMNS: DtColumn<SiteRow>[] = [
+  {
+    id: 'name',
+    label: 'Site',
+    value: (r) => r.site.name,
+    phone: 'title',
+    render: (r) => (
+      <span className="st-main">
+        <span className="st-name">
+          {r.site.name}
+          <Chip tone={r.site.risk === 'high' ? 'crit' : r.site.risk === 'medium' ? 'warn' : 'neutral'}>{r.site.risk}</Chip>
+          {r.site.armed && <Chip tone="crit">Armed</Chip>}
+        </span>
+      </span>
+    ),
+  },
+  {
+    id: 'code',
+    label: 'Code and address',
+    value: (r) => `${r.site.code} · ${r.site.address}`,
+    phone: 'sub',
+    hideBelow: 1100,
+    render: (r) => (
+      <span className="st-sub">
+        <span className="mono">{r.site.code}</span> · {r.site.address}
+      </span>
+    ),
+  },
+  { id: 'branch', label: 'Branch', value: (r) => r.branchName, hideBelow: 900 },
+  { id: 'posts', label: 'Posts', value: (r) => r.posts, sort: 'number' },
+  { id: 'onDuty', label: 'On duty', value: (r) => r.onDuty, sort: 'number', render: (r) => `${r.onDuty} / ${r.shiftsToday}` },
+  {
+    id: 'problems',
+    label: 'Problems',
+    value: (r) => r.problems,
+    sort: 'number',
+    render: (r) => (
+      <span className="op-num" data-tone={r.problems ? 'crit' : undefined}>
+        {r.problems}
+      </span>
+    ),
+  },
+  { id: 'cases', label: 'Cases', value: (r) => r.openCases, sort: 'number' },
+];
+const SITE_FILTERS: DtFilter<SiteRow>[] = [
+  {
+    id: 'show',
+    label: 'Show',
+    value: (r) => [...(r.problems > 0 ? ['problems'] : []), ...(r.site.armed ? ['armed'] : [])],
+    options: [
+      { value: 'problems', label: 'Needs attention' },
+      { value: 'armed', label: 'Armed' },
+    ],
+  },
+  { id: 'risk', label: 'Risk', value: (r) => r.site.risk, optionLabel: (v) => RISK[v] ?? v },
+  { id: 'branch', label: 'Branch', value: (r) => r.branchName },
+];
 
 export function Sites({ openSiteId }: { openSiteId?: string }) {
   const { companyId } = useApp();
-  const [q, setQ] = useState('');
-  const [show, setShow] = useState<Show>('all');
+  const table = useTableState('sites.list');
   const [open, setOpen] = useState<string | undefined>(openSiteId);
   const { data, error } = useLoad(() => api.sites(companyId), [companyId]);
   if (error)
@@ -33,16 +93,11 @@ export function Sites({ openSiteId }: { openSiteId?: string }) {
         <Loading what="sites" />
       </div>
     );
-  const ql = q.trim().toLowerCase();
-  const rows = data.filter(
-    (r) =>
-      (show === 'all' || (show === 'problems' ? r.problems > 0 : r.site.armed)) &&
-      (!ql || r.site.name.toLowerCase().includes(ql) || r.site.code.toLowerCase().includes(ql) || r.site.address.toLowerCase().includes(ql)),
-  );
+  const show = table.state.f.show ?? '';
+  const setShow = (v: '' | 'problems') => table.set({ f: { show: v } });
   const sum = (k: 'posts' | 'onDuty' | 'shiftsToday' | 'problems' | 'openCases') => data.reduce((n, r) => n + r[k], 0);
   const problemSites = data.filter((r) => r.problems > 0).length;
   const armed = data.filter((r) => r.site.armed).length;
-  const filtered = !!ql || show !== 'all';
 
   return (
     <div className="page">
@@ -65,83 +120,30 @@ export function Sites({ openSiteId }: { openSiteId?: string }) {
           note={problemSites ? `At ${problemSites} site${problemSites === 1 ? '' : 's'}${show === 'problems' ? ', showing only these' : ''}` : 'No-shows, late, unfilled'}
           tone={sum('problems') ? 'crit' : 'ok'}
           icon={<WarningIcon size={16} />}
-          onClick={() => setShow(show === 'problems' ? 'all' : 'problems')}
+          onClick={() => setShow(show === 'problems' ? '' : 'problems')}
         />
         <Stat label="Open cases" value={sum('openCases')} note="At these sites" tone={sum('openCases') ? 'warn' : undefined} icon={<SirenIcon size={16} />} />
       </Stats>
 
-      <Toolbar
-        end={
-          <div className="seg" role="group" aria-label="Show">
-            <button aria-pressed={show === 'all'} onClick={() => setShow('all')}>
-              All
-            </button>
-            <button aria-pressed={show === 'problems'} onClick={() => setShow('problems')}>
-              Needs attention
-            </button>
-            <button aria-pressed={show === 'armed'} onClick={() => setShow('armed')}>
-              Armed
-            </button>
-          </div>
-        }
-      >
-        <Search value={q} onChange={setQ} placeholder="Search name, code or town" label="Search sites" />
-      </Toolbar>
-
-      <Card title="Site list" sub={filtered ? `${rows.length} of ${data.length}` : `${data.length} sites`} flush>
-        <div className="st-head" aria-hidden="true">
-          <span>Site</span>
-          <span className="st-col-branch">Branch</span>
-          <span className="num">Posts</span>
-          <span className="num">On duty</span>
-          <span className="num">Problems</span>
-          <span className="num">Cases</span>
-          <span />
-        </div>
-        <ul className="op-list">
-          {rows.map((r) => (
-            <li key={r.site.id}>
-              <button className="st-row" data-problem={r.problems > 0} onClick={() => setOpen(r.site.id)}>
-                <span className="st-main">
-                  <span className="st-name">
-                    {r.site.name}
-                    <Chip tone={r.site.risk === 'high' ? 'crit' : r.site.risk === 'medium' ? 'warn' : 'neutral'}>{r.site.risk}</Chip>
-                    {r.site.armed && <Chip tone="crit">Armed</Chip>}
-                  </span>
-                  <span className="st-sub">
-                    <span className="mono">{r.site.code}</span> · {r.site.address}
-                  </span>
-                </span>
-                <span className="st-branch">{r.branchName}</span>
-                <span className="st-fig num">
-                  <small>Posts</small>
-                  {r.posts}
-                </span>
-                <span className="st-fig num">
-                  <small>On duty</small>
-                  {r.onDuty} / {r.shiftsToday}
-                </span>
-                <span className="st-fig num" data-tone={r.problems ? 'crit' : 'zero'}>
-                  <small>Problems</small>
-                  {r.problems}
-                </span>
-                <span className="st-fig num" data-tone={r.openCases ? undefined : 'zero'}>
-                  <small>Cases</small>
-                  {r.openCases}
-                </span>
-                <CaretRightIcon className="st-go" size={16} aria-hidden="true" />
-              </button>
-            </li>
-          ))}
-        </ul>
-        {rows.length === 0 &&
-          (q ? (
-            <Empty title={`No site matches “${q}”.`}>Clear the search or show all sites.</Empty>
-          ) : (
+      {/* P107: the site list as a data table; the old search and All / Needs attention / Armed buttons are its search
+          and Show filter (the Problems tile still picks Needs attention). */}
+      <Card title="Site list" sub={`${data.length} sites`} flush>
+        <DataTable
+          label="Site list"
+          control={table}
+          rows={data}
+          rowKey={(r) => r.site.id}
+          onRowClick={(r) => setOpen(r.site.id)}
+          rowTone={(r) => (r.problems > 0 ? 'crit' : undefined)}
+          searchPlaceholder="Search name, code or town"
+          columns={SITE_COLUMNS}
+          filters={SITE_FILTERS}
+          empty={
             <Empty title="No site to show." action={<RecordButton kind="site" companyId={companyId} label="Add site" primary />}>
               Add the site, then its posts and patrol checkpoints. Its roster opens from here.
             </Empty>
-          ))}
+          }
+        />
       </Card>
       {open && <SiteDrawer siteId={open} onClose={() => setOpen(undefined)} />}
     </div>
@@ -191,7 +193,7 @@ export function SiteDrawer({ siteId, onClose }: { siteId: string; onClose: () =>
             <summary className="op-sec-head" style={{ cursor: 'pointer' }}>
               <h3>Duty log: post log and gate</h3>
             </summary>
-            <SiteDutyLogView siteId={siteId} />
+            <SiteDutyLogView siteId={siteId} layout="cards" />
           </details>
 
           <section className="op-sec">

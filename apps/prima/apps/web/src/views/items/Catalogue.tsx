@@ -6,7 +6,8 @@ import { Chip, Drawer, ErrorNotice, Kpi, Loading, dateLabel, dateTimeLabel, useA
 import { act, CAT_LABEL, partyName, readFile, rolesOf, skuName, STATE_TONE } from './shared';
 import { CareSettings } from './Care';
 import { PlusIcon, PrinterIcon, UploadSimpleIcon } from '@phosphor-icons/react';
-import { Card, Empty, Search, Toolbar } from '../../kit';
+import { Card, Empty } from '../../kit';
+import { DataTable } from '../../DataTable';
 import { mayAddTypes } from './AddMenu';
 import { TypeCard, TypeLabelPrint } from './TypeLabels';
 
@@ -70,14 +71,9 @@ export function SkuForm({ onDone }: { onDone: () => void }) {
 export function Catalogue({ data, onAdd, onImport }: { data: ItemBoard; onAdd?: () => void; onImport?: () => void }) {
   const a = useAction();
   const [form, setForm] = useState(false);
-  const [q, setQ] = useState('');
-  const [cat, setCat] = useState('');
-  const [group, setGroup] = useState('');
-  const [track, setTrack] = useState('');
   const [sel, setSel] = useState<Set<string>>(new Set());
   const [open, setOpen] = useState<string | null>(null);
   const [print, setPrint] = useState<string[] | null>(null);
-  const [shown, setShown] = useState(80);
   const [map, setMap] = useState<Record<string, { party: string; code: string }>>({});
   const financeParties = data.roles.filter((r) => r.roles.includes('finance')).map((r) => r.partyId);
   const mayAdd = mayAddTypes(data);
@@ -86,25 +82,7 @@ export function Catalogue({ data, onAdd, onImport }: { data: ItemBoard; onAdd?: 
     for (const b of data.balance) m.set(b.skuId, (m.get(b.skuId) ?? 0) + b.qty);
     return m;
   }, [data.balance]);
-  const groups = useMemo(() => [...new Set(data.skus.map((s) => s.group).filter((g): g is string => !!g))].sort(), [data.skus]);
-  const list = data.skus
-    .filter((s) => {
-      if (cat && s.category !== cat) return false;
-      if (group && s.group !== group) return false;
-      if (track && s.tracking !== track) return false;
-      if (!q) return true;
-      const t = q.toUpperCase();
-      return s.code.includes(t) || s.name.toUpperCase().includes(t) || (s.sourceCode ?? '').includes(t) || (s.group ?? '').toUpperCase().includes(t) || s.supplierBarcodes.some((b) => b.toUpperCase() === t);
-    })
-    .sort((x, y) => x.name.localeCompare(y.name));
-  const allShown = list.length > 0 && list.every((s) => sel.has(s.id));
-  const tick = (id: string, on: boolean) =>
-    setSel((cur) => {
-      const n = new Set(cur);
-      if (on) n.add(id);
-      else n.delete(id);
-      return n;
-    });
+  const trackWord = (s: ItemBoard['skus'][number]) => (s.tracking === 'BULK' ? (s.consumable ? 'Quantity, used up' : 'Quantity') : s.tracking === 'KIT' ? 'Set' : 'Each unit');
   return (
     <div className="it-stack">
       {mayAdd && (
@@ -133,42 +111,20 @@ export function Catalogue({ data, onAdd, onImport }: { data: ItemBoard; onAdd?: 
         sub="What each item is, its unit and how it is tracked. Each type has its own QR code from its code: tick several to print their labels at once."
         flush
       >
+        {/* P107: the item types as a data table: search name, code or barcode; category, stock group and tracking
+            filters; ticks print many QR labels at once; a type opens its card. No "show more": pages instead. */}
         <div className="it-pad">
-          <Toolbar>
-            <Search value={q} onChange={(v) => (setQ(v), setShown(80))} placeholder="Search name, code or barcode" />
-            <Select className="input" aria-label="Category" value={cat} onChange={(e) => setCat(e.target.value)}>
-              <option value="">All categories</option>
-              {ITEM_CATEGORIES.map((c) => (
-                <option key={c} value={c}>
-                  {CAT_LABEL[c]}
-                </option>
-              ))}
-            </Select>
-            {groups.length > 0 && (
-              <Select className="input" aria-label="Stock group" value={group} onChange={(e) => setGroup(e.target.value)} searchable>
-                <option value="">All stock groups</option>
-                {groups.map((g) => (
-                  <option key={g} value={g}>
-                    {g}
-                  </option>
-                ))}
-              </Select>
-            )}
-            <Select className="input" aria-label="Tracked" value={track} onChange={(e) => setTrack(e.target.value)}>
-              <option value="">Any tracking</option>
-              <option value="BULK">By quantity</option>
-              <option value="SERIALIZED">Each unit has its own label</option>
-              <option value="KIT">Sets</option>
-            </Select>
-          </Toolbar>
-        </div>
-        {list.length > 0 && (
-          <div className="it-bulk" data-on={sel.size > 0 || undefined}>
-            <label className="it-check">
-              <input type="checkbox" checked={allShown} onChange={(e) => setSel(e.target.checked ? new Set([...sel, ...list.map((s) => s.id)]) : new Set([...sel].filter((id) => !list.some((s) => s.id === id))))} />
-              <span>{sel.size ? <><span>{sel.size}</span> ticked</> : 'Tick all shown'}</span>
-            </label>
-            {sel.size > 0 && (
+          <DataTable
+            label="Item types"
+            stateKey="items.types"
+            defaults={{ sort: 'name', dir: 'asc' }}
+            rows={data.skus}
+            rowKey={(s) => s.id}
+            onRowClick={(s) => setOpen(s.id)}
+            searchPlaceholder="Search name, code or barcode"
+            searchText={(s) => `${s.sourceCode ?? ''} ${s.supplierBarcodes.join(' ')}`}
+            selection={{ selected: sel, onChange: setSel }}
+            bulk={
               <>
                 <button className="btn btn-primary" type="button" onClick={() => setPrint([...sel])}>
                   <PrinterIcon size={16} aria-hidden="true" /> Print QR labels
@@ -177,64 +133,54 @@ export function Catalogue({ data, onAdd, onImport }: { data: ItemBoard; onAdd?: 
                   Clear
                 </button>
               </>
-            )}
-          </div>
-        )}
-        {!data.skus.length ? (
-          <Empty
-            title="No item types yet."
-            action={
-              mayAdd ? (
-                <div className="row" style={{ gap: 8, flexWrap: 'wrap', justifyContent: 'center' }}>
-                  {onImport && (
-                    <button className="btn btn-primary" type="button" onClick={onImport}>
-                      <UploadSimpleIcon size={16} aria-hidden="true" /> Import your item list
-                    </button>
-                  )}
-                  <button className="btn" type="button" onClick={() => (onAdd ? onAdd() : setForm(true))}>
-                    <PlusIcon size={16} aria-hidden="true" /> Add one by hand
-                  </button>
-                </div>
-              ) : undefined
             }
-          >
-            {mayAdd ? 'Load the list you already have (Excel, CSV or the PDF report from the old system), or add the first item type by hand.' : 'Store staff and managers add item types.'}
-          </Empty>
-        ) : !list.length ? (
-          <Empty title="Nothing matches.">Change the search or the filters.</Empty>
-        ) : (
-          <ul className="it-rows it-cat">
-            {list.slice(0, shown).map((s) => (
-              <li key={s.id} className="it-cat-row" data-ticked={sel.has(s.id) || undefined}>
-                <label className="it-check" aria-label={`Tick ${s.name}`}>
-                  <input type="checkbox" checked={sel.has(s.id)} onChange={(e) => tick(s.id, e.target.checked)} />
-                </label>
-                <button type="button" className="it-cat-main" onClick={() => setOpen(s.id)}>
-                  <strong>{s.name}</strong>
-                  <span className="mono small muted">{s.code}</span>
-                  <span className="small muted">
-                    {CAT_LABEL[s.category]}
-                    {s.group ? ` · ${s.group}` : ''}
-                  </span>
-                </button>
-                <span className="it-cat-side">
-                  <Chip tone="neutral">{s.tracking === 'BULK' ? (s.consumable ? 'Quantity, used up' : 'Quantity') : s.tracking === 'KIT' ? 'Set' : 'Each unit'}</Chip>
-                  <span className="it-qty" title="In stock">
-                    {stockOf.get(s.id) ?? 0}
-                  </span>
-                  <span className="muted small">{s.uomLabel ?? s.uom}</span>
-                </span>
-              </li>
-            ))}
-          </ul>
-        )}
-        {list.length > shown && (
-          <div className="it-pad">
-            <button className="btn" type="button" onClick={() => setShown(shown + 200)}>
-              Show more (<span>{list.length - shown}</span> more)
-            </button>
-          </div>
-        )}
+            columns={[
+              { id: 'name', label: 'Name', value: (s) => s.name, phone: 'title', render: (s) => <strong>{s.name}</strong> },
+              { id: 'code', label: 'Code', value: (s) => s.code, phone: 'sub', render: (s) => <span className="mono small">{s.code}</span> },
+              { id: 'category', label: 'Category', value: (s) => CAT_LABEL[s.category], translate: true },
+              { id: 'group', label: 'Stock group', value: (s) => s.group ?? '', hideBelow: 1000 },
+              { id: 'tracking', label: 'Tracked', value: (s) => trackWord(s), translate: true, hideBelow: 1100, render: (s) => <Chip tone="neutral">{trackWord(s)}</Chip> },
+              { id: 'stock', label: 'In stock', value: (s) => stockOf.get(s.id) ?? 0, sort: 'number' },
+              { id: 'uom', label: 'Unit', value: (s) => s.uomLabel ?? s.uom, hideBelow: 900 },
+            ]}
+            filters={[
+              { id: 'cat', label: 'Category', value: (s) => s.category, allLabel: 'All categories', options: ITEM_CATEGORIES.map((c) => ({ value: c, label: CAT_LABEL[c] })) },
+              { id: 'group', label: 'Stock group', value: (s) => s.group ?? null, allLabel: 'All stock groups' },
+              {
+                id: 'track',
+                label: 'Tracked',
+                value: (s) => s.tracking,
+                allLabel: 'Any tracking',
+                options: [
+                  { value: 'BULK', label: 'By quantity' },
+                  { value: 'SERIALIZED', label: 'Each unit has its own label' },
+                  { value: 'KIT', label: 'Sets' },
+                ],
+              },
+            ]}
+            empty={
+              <Empty
+                title="No item types yet."
+                action={
+                  mayAdd ? (
+                    <div className="row" style={{ gap: 8, flexWrap: 'wrap', justifyContent: 'center' }}>
+                      {onImport && (
+                        <button className="btn btn-primary" type="button" onClick={onImport}>
+                          <UploadSimpleIcon size={16} aria-hidden="true" /> Import your item list
+                        </button>
+                      )}
+                      <button className="btn" type="button" onClick={() => (onAdd ? onAdd() : setForm(true))}>
+                        <PlusIcon size={16} aria-hidden="true" /> Add one by hand
+                      </button>
+                    </div>
+                  ) : undefined
+                }
+              >
+                {mayAdd ? 'Load the list you already have (Excel, CSV or the PDF report from the old system), or add the first item type by hand.' : 'Store staff and managers add item types.'}
+              </Empty>
+            }
+          />
+        </div>
       </Card>
       {financeParties.length > 0 && data.skus.length > 0 && (
         <details className="panel">

@@ -4,6 +4,7 @@
 // department breakdowns, who is often late, and each person's month as a calendar.
 import { Select } from '../SearchSelect';
 import { useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react';
+import { DataTable } from '../DataTable';
 import {
   ArrowsClockwiseIcon,
   CalendarCheckIcon,
@@ -182,7 +183,6 @@ export function AttendanceReports({ compact = false }: { compact?: boolean }) {
 
 function Dashboard({ o, busy, compact, onOpen }: { o: AttendanceOverviewView; busy: boolean; compact: boolean; onOpen: (x: { importId: string; key: string }) => void }) {
   const k = o.kpi;
-  const [shown, setShown] = useState(60);
   const ot = otSum(k.ot);
   return (
     <div className="ar-dash" data-busy={busy || undefined}>
@@ -250,71 +250,75 @@ function Dashboard({ o, busy, compact, onOpen }: { o: AttendanceOverviewView; bu
         actions={<Legend />}
         flush
       >
-        {o.rows.length === 0 ? (
-          <div className="empty">Nobody matches these filters.</div>
-        ) : (
-          <div className="table-wrap ar-table">
-            <table>
-              <thead>
-                <tr>
-                  <th>Person</th>
-                  <th className="hide-sm">Month</th>
-                  <th className="num">Present</th>
-                  <th className="num">Late</th>
-                  <th className="num hide-sm">Absent</th>
-                  <th className="num hide-sm">OT h</th>
-                  <th className="num hide-sm">Allowances</th>
-                </tr>
-              </thead>
-              <tbody>
-                {o.rows.slice(0, shown).map((r) => (
-                  <tr key={r.importId + r.key} className="clickable" onClick={() => onOpen({ importId: r.importId, key: r.key })}>
-                    <td>
-                      <button type="button" className="ar-who" onClick={(e) => (e.stopPropagation(), onOpen({ importId: r.importId, key: r.key }))}>
-                        <Person
-                          name={r.personName ?? r.name}
-                          size={30}
-                          sub={
-                            <>
-                              {r.empCode && <span className="mono">{r.empCode}</span>}
-                              {r.empCode && ' · '}
-                              {r.department}
-                              {!r.personId && (
-                                <>
-                                  {' · '}
-                                  <span className="ar-unmatched">not matched</span>
-                                </>
-                              )}
-                            </>
-                          }
-                        />
-                      </button>
-                    </td>
-                    <td className="hide-sm ar-strip-cell">
-                      <Strip strip={r.strip} />
-                    </td>
-                    <td className="num">{r.totals.present}</td>
-                    <td className="num" data-tone={r.totals.lateCount ? 'warn' : undefined}>
-                      {r.totals.lateCount}
-                    </td>
-                    <td className="num hide-sm" data-tone={r.totals.absent ? 'crit' : undefined}>
-                      {r.totals.absent}
-                    </td>
-                    <td className="num hide-sm">{nf(otSum(r.totals.ot), 1)}</td>
-                    <td className="num hide-sm">{nf(r.allowances, 2)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            {o.rows.length > shown && (
-              <div className="ar-more">
-                <button type="button" className="btn btn-sm" onClick={() => setShown((n) => n + 120)}>
-                  Show more ({o.rows.length - shown} left)
-                </button>
-              </div>
-            )}
-          </div>
-        )}
+        {/* P107: a data table in place of "Show more": sort by any figure, pages, matched / not matched. The month,
+            company, department and name search above still ask the server, so the figures above follow them. */}
+        <div className="ar-dt">
+          <DataTable
+            label="Everyone this month"
+            stateKey="attendance.reports.people"
+            rows={o.rows}
+            rowKey={(r) => r.importId + r.key}
+            noSearch
+            onRowClick={(r) => onOpen({ importId: r.importId, key: r.key })}
+            empty={<div className="empty">Nobody matches these filters.</div>}
+            filters={[
+              {
+                id: 'matched',
+                label: 'Staff record',
+                value: (r) => (r.personId ? 'matched' : 'unmatched'),
+                options: [
+                  { value: 'matched', label: 'Matched' },
+                  { value: 'unmatched', label: 'Not matched' },
+                ],
+              },
+            ]}
+            columns={[
+              {
+                id: 'person',
+                label: 'Person',
+                value: (r) => r.personName ?? r.name,
+                phone: 'title',
+                render: (r) => (
+                  <Person
+                    name={r.personName ?? r.name}
+                    size={30}
+                    sub={
+                      <>
+                        {r.empCode && <span className="mono">{r.empCode}</span>}
+                        {r.empCode && ' · '}
+                        {r.department}
+                        {!r.personId && (
+                          <>
+                            {' · '}
+                            <span className="ar-unmatched">not matched</span>
+                          </>
+                        )}
+                      </>
+                    }
+                  />
+                ),
+              },
+              { id: 'month', label: 'Month', phone: 'hidden', hideBelow: 1100, render: (r) => <span className="ar-strip-cell"><Strip strip={r.strip} /></span> },
+              { id: 'present', label: 'Present', value: (r) => r.totals.present, sort: 'number' },
+              {
+                id: 'late',
+                label: 'Late',
+                value: (r) => r.totals.lateCount,
+                sort: 'number',
+                render: (r) => <span className="ar-fig" data-tone={r.totals.lateCount ? 'warn' : undefined}>{r.totals.lateCount}</span>,
+              },
+              {
+                id: 'absent',
+                label: 'Absent',
+                value: (r) => r.totals.absent,
+                sort: 'number',
+                render: (r) => <span className="ar-fig" data-tone={r.totals.absent ? 'crit' : undefined}>{r.totals.absent}</span>,
+              },
+              { id: 'ot', label: 'OT h', value: (r) => otSum(r.totals.ot), sort: 'number', hideBelow: 1200, render: (r) => nf(otSum(r.totals.ot), 1) },
+              { id: 'allowances', label: 'Allowances', value: (r) => r.allowances, sort: 'number', hideBelow: 1280, render: (r) => nf(r.allowances, 2) },
+            ]}
+          />
+        </div>
       </Card>
 
       {!compact && <ImportsCard imports={o.imports} />}
@@ -326,31 +330,65 @@ function ImportsCard({ imports }: { imports: AttendanceOverviewView['imports'] }
   if (!imports.length) return null;
   return (
     <Card title="Reports this month" sub="Each saved file, with any pages the reader could not read" flush>
-      <div className="list">
-        {imports.map((i) => (
-          <details key={i.id} className="list-item ar-import">
-            <summary>
-              <FilePdfIcon size={18} aria-hidden="true" />
+      {/* P107: the month's files as a data table (search, company and "pages unreadable" filters, sort, pages). */}
+      <DataTable
+        label="Reports this month"
+        stateKey="attendance.reports.files"
+        rows={imports}
+        rowKey={(i) => i.id}
+        searchPlaceholder="Search a file, company or who saved it"
+        searchText={(i) => i.by}
+        filters={[
+          { id: 'company', label: 'Company', value: (i) => i.companyName },
+          {
+            id: 'read',
+            label: 'Pages',
+            value: (i) => (i.counts.unreadablePages > 0 ? 'unreadable' : 'read'),
+            options: [
+              { value: 'unreadable', label: 'Some pages unreadable' },
+              { value: 'read', label: 'Every page read' },
+            ],
+          },
+        ]}
+        columns={[
+          {
+            id: 'file',
+            label: 'File',
+            value: (i) => i.fileName,
+            phone: 'title',
+            render: (i) => (
               <span className="ar-import-main">
-                <strong>{i.fileName}</strong>
-                <span className="muted small">
-                  {i.companyName} · {i.counts.employees} people, {nf(i.counts.days)} days · {i.counts.matched} matched · by {i.by}, {dateTimeLabel(i.at)}
-                </span>
+                <strong>
+                  <FilePdfIcon size={16} aria-hidden="true" /> {i.fileName}
+                </strong>
+                <span className="muted small">{i.companyName}</span>
               </span>
-              {i.counts.unreadablePages > 0 ? <Chip tone="warn">{i.counts.unreadablePages} pages unreadable</Chip> : <Chip tone="ok">Every page read</Chip>}
-            </summary>
-            {i.unreadable.length > 0 && (
-              <ul className="ar-pages">
-                {i.unreadable.map((u) => (
-                  <li key={u.page}>
-                    <span className="mono">Page {u.page}</span> {u.reason}
-                  </li>
-                ))}
-              </ul>
-            )}
-          </details>
-        ))}
-      </div>
+            ),
+          },
+          { id: 'people', label: 'People', value: (i) => i.counts.employees, sort: 'number' },
+          { id: 'days', label: 'Days', value: (i) => i.counts.days, sort: 'number', render: (i) => nf(i.counts.days) },
+          { id: 'matched', label: 'Matched', value: (i) => i.counts.matched, sort: 'number', hideBelow: 1100 },
+          { id: 'at', label: 'Saved', value: (i) => i.at, sort: 'date', hideBelow: 1200, render: (i) => `${i.by}, ${dateTimeLabel(i.at)}` },
+          {
+            id: 'read',
+            label: 'Pages',
+            value: (i) => i.counts.unreadablePages,
+            sort: 'number',
+            render: (i) => (i.counts.unreadablePages > 0 ? <Chip tone="warn">{i.counts.unreadablePages} pages unreadable</Chip> : <Chip tone="ok">Every page read</Chip>),
+          },
+        ]}
+        rowDetail={(i) =>
+          i.unreadable.length > 0 ? (
+            <ul className="ar-pages">
+              {i.unreadable.map((u) => (
+                <li key={u.page}>
+                  <span className="mono">Page {u.page}</span> {u.reason}
+                </li>
+              ))}
+            </ul>
+          ) : null
+        }
+      />
     </Card>
   );
 }

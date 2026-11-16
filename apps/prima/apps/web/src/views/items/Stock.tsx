@@ -5,27 +5,18 @@ import { useState } from 'react';
 import { PlusIcon, PrinterIcon, TagIcon, UploadSimpleIcon } from '@phosphor-icons/react';
 import { ITEM_CATEGORIES, STATE_LABEL, labelDisplay, type PhysicalItem } from '@prima/core';
 import type { ItemBoard } from '../../api';
-import { Card, Empty, Search, Toolbar } from '../../kit';
+import { Card, Empty } from '../../kit';
+import { DataTable } from '../../DataTable';
 import { Chip, ErrorNotice, useAction } from '../../ui';
 import { PrintRun, type PrintResult } from './PrintRun';
 import { ItemImport, addParties, mayRegister as mayRegisterOf } from './AddMenu';
 import { CAT_LABEL, STATE_TONE, act, handles, partyName, skuName } from './shared';
 
 export function Stock({ data, onImport, onType }: { data: ItemBoard; onImport?: () => void; onType?: (skuId: string) => void }) {
-  const [party, setParty] = useState('');
-  const [cat, setCat] = useState('');
-  const [q, setQ] = useState('');
   const [reg, setReg] = useState(false);
-  const [shown, setShown] = useState(100);
   const skuOf = new Map(data.skus.map((s) => [s.id, s]));
-  const rows = data.balance.filter((r) => {
-    const s = skuOf.get(r.skuId);
-    if (party && r.ownerPartyId !== party && r.holderPartyId !== party) return false;
-    if (cat && s?.category !== cat) return false;
-    if (!q) return true;
-    const t = q.toUpperCase();
-    return !!s && (s.name.toUpperCase().includes(t) || s.code.includes(t) || (s.group ?? '').toUpperCase().includes(t));
-  });
+  const rows = data.balance.map((r, k) => ({ ...r, key: k }));
+  const stateWord = (r: ItemBoard['balance'][number]) => (r.state === 'bulk' ? 'By quantity' : STATE_LABEL[r.state as keyof typeof STATE_LABEL]);
   const mayRegister = mayRegisterOf(data);
   return (
     <div className="it-stack">
@@ -49,72 +40,62 @@ export function Stock({ data, onImport, onType }: { data: ItemBoard; onImport?: 
         sub="A set counts once, by its parts. Owner and holder are kept apart: a company can hold items another owns."
         flush
       >
+        {/* P107: the stock as a data table: search item, code or group; company (owner or holder), kind, state and
+            condition filters; sort by quantity. No "show more": pages instead. */}
         <div className="it-pad">
-          <Toolbar>
-            <Search value={q} onChange={(v) => (setQ(v), setShown(100))} placeholder="Search item, code or group" />
-            <Select className="input" aria-label="Company" value={party} onChange={(e) => setParty(e.target.value)}>
-              <option value="">All companies I can see</option>
-              {data.parties.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
-                </option>
-              ))}
-            </Select>
-            <Select className="input" aria-label="Category" value={cat} onChange={(e) => setCat(e.target.value)}>
-              <option value="">All kinds</option>
-              {ITEM_CATEGORIES.map((c) => (
-                <option key={c} value={c}>
-                  {CAT_LABEL[c]}
-                </option>
-              ))}
-            </Select>
-          </Toolbar>
-        </div>
-        {!rows.length ? (
-          <Empty
-            title={data.balance.length ? 'Nothing matches.' : 'No stock yet.'}
-            action={
-              !data.balance.length && onImport ? (
-                <button className="btn btn-primary" type="button" onClick={onImport}>
-                  <UploadSimpleIcon size={16} aria-hidden="true" /> Import the stock balance
-                </button>
-              ) : undefined
-            }
-          >
-            {data.balance.length ? 'Change the search, company or kind.' : "Import the old system's stock balance or stock card, or register items and add stock."}
-          </Empty>
-        ) : (
-          <ul className="it-rows">
-            {rows.slice(0, shown).map((r, k) => (
-              <li key={k} className="it-row">
-                <span className="it-row-main">
-                  {onType ? (
+          <DataTable
+            label="Stock by owner, holder and condition"
+            stateKey="items.stock"
+            rows={rows}
+            rowKey={(r) => String(r.key)}
+            searchPlaceholder="Search item, code or group"
+            searchText={(r) => {
+              const s = skuOf.get(r.skuId);
+              return s ? `${s.code} ${s.group ?? ''}` : '';
+            }}
+            columns={[
+              {
+                id: 'item',
+                label: 'Item',
+                value: (r) => skuName(data, r.skuId),
+                phone: 'title',
+                render: (r) =>
+                  onType ? (
                     <button type="button" className="it-link" onClick={() => onType(r.skuId)}>
                       {skuName(data, r.skuId)}
                     </button>
                   ) : (
                     <strong>{skuName(data, r.skuId)}</strong>
-                  )}
-                  <span className="muted">
-                    Owner {partyName(data, r.ownerPartyId)} · held by {partyName(data, r.holderPartyId)}: {r.where}
-                  </span>
-                </span>
-                <span className="it-row-side">
-                  <Chip tone={STATE_TONE[r.state] ?? 'neutral'}>{r.state === 'bulk' ? 'By quantity' : STATE_LABEL[r.state as keyof typeof STATE_LABEL]}</Chip>
-                  <span className="muted">{r.condition}</span>
-                  <span className="it-qty">{r.qty}</span>
-                </span>
-              </li>
-            ))}
-          </ul>
-        )}
-        {rows.length > shown && (
-          <div className="it-pad">
-            <button className="btn" type="button" onClick={() => setShown(shown + 300)}>
-              Show more (<span>{rows.length - shown}</span> more)
-            </button>
-          </div>
-        )}
+                  ),
+              },
+              { id: 'owner', label: 'Owner', value: (r) => partyName(data, r.ownerPartyId) },
+              { id: 'holder', label: 'Held by', value: (r) => `${partyName(data, r.holderPartyId)}: ${r.where}`, phone: 'sub' },
+              { id: 'state', label: 'Status', value: (r) => stateWord(r), translate: true, render: (r) => <Chip tone={STATE_TONE[r.state] ?? 'neutral'}>{stateWord(r)}</Chip> },
+              { id: 'condition', label: 'Condition', value: (r) => r.condition, translate: true, hideBelow: 1000 },
+              { id: 'qty', label: 'Quantity', value: (r) => r.qty, sort: 'number' },
+            ]}
+            filters={[
+              { id: 'party', label: 'Company', value: (r) => [r.ownerPartyId, r.holderPartyId], allLabel: 'All companies I can see', optionLabel: (v) => partyName(data, v) },
+              { id: 'cat', label: 'Kind', value: (r) => skuOf.get(r.skuId)?.category ?? null, allLabel: 'All kinds', options: ITEM_CATEGORIES.map((c) => ({ value: c, label: CAT_LABEL[c] })) },
+              { id: 'state', label: 'Status', value: (r) => stateWord(r) },
+              { id: 'condition', label: 'Condition', value: (r) => r.condition },
+            ]}
+            empty={
+              <Empty
+                title="No stock yet."
+                action={
+                  onImport ? (
+                    <button className="btn btn-primary" type="button" onClick={onImport}>
+                      <UploadSimpleIcon size={16} aria-hidden="true" /> Import the stock balance
+                    </button>
+                  ) : undefined
+                }
+              >
+                Import the old system's stock balance or stock card, or register items and add stock.
+              </Empty>
+            }
+          />
+        </div>
       </Card>
     </div>
   );

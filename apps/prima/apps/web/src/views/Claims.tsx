@@ -16,7 +16,8 @@ import {
 import type { ClaimVehicle, ProofInput, StaffClaimKind } from '@prima/core';
 import { api, type MyReceipts, type StaffClaims, type StaffClaimInput } from '../api';
 import { Chip, ErrorNotice, Loading, dateLabel, useAction, useLoad } from '../ui';
-import { Avatar, Card, Empty, Facts, PageHead, Search, Stat, Stats, Steps, Toolbar, type StepState } from '../kit';
+import { Card, Empty, Facts, PageHead, Person, Stat, Stats, Steps, type StepState } from '../kit';
+import { DataTable, type DtColumn } from '../DataTable';
 import { ProofPicker, readAsDataUrl, shrinkImage } from './Proof';
 import { readReceiptOnPhone } from '../ocr';
 import '../styles/leave.css';
@@ -172,12 +173,22 @@ function Mine({ data }: { data: StaffClaims }) {
               <NewClaim data={data} onDone={done} fromWallet={fromWallet} key={fromWallet?.walletIds.join() ?? 'new'} />
             </div>
           )}
-          <div className="lv-rows">
-            {data.mine.length === 0 && <Empty title="No claims yet.">Keep a receipt in your wallet, or start a new claim.</Empty>}
-            {data.mine.map((c) => (
-              <ClaimLine key={c.id} c={c} self />
-            ))}
-          </div>
+          <DataTable
+            label="My claims"
+            stateKey="claims.mine"
+            rows={data.mine}
+            rowKey={(c) => c.id}
+            searchPlaceholder="Search kind, place or note"
+            searchText={(c) => `${c.note} ${c.travel?.destination ?? ''}`}
+            empty={<Empty title="No claims yet.">Keep a receipt in your wallet, or start a new claim.</Empty>}
+            filters={[
+              { id: 'kind', label: 'Kind', value: (c) => c.kind, optionLabel: (k) => KIND_LABEL[k as StaffClaimKind] ?? k },
+              { id: 'status', label: 'Status', value: statusText },
+            ]}
+            columns={claimColumns<Claim>((c) => c, true)}
+            rowDetail={(c) => <ClaimDetail c={c} self />}
+            phoneFacts={3}
+          />
         </Card>
       </div>
       <div className="lv-col">
@@ -292,77 +303,131 @@ const FILTERS: [Filter, string][] = [
 const mayAct = (r: QueueRow) => r.canCos || r.canHr || r.canCoo || r.canPay || r.canHead;
 const isClosed = (c: Claim) => c.status === 'approved' || c.status === 'rejected';
 
-/** The claims and trips this person decides on: filters and search above, one card per request. */
+/** Which "Show" choices a claim in the queue falls under: waiting for me, in progress or decided. */
+const claimShow = (r: QueueRow): Filter[] => [...(mayAct(r) ? (['waiting'] as Filter[]) : []), isClosed(r.claim) ? 'done' : 'open'];
+const tripShow = (t: Trip): Filter[] => (t.status === 'pending' ? ['waiting', 'open'] : ['done']);
+const SHOW_OPTIONS = FILTERS.filter(([f]) => f !== 'all').map(([value, label]) => ({ value, label }));
+
+/**
+ * The claims and trips this person decides on. P107: each list is a data table (search, "Show", kind and status filters,
+ * sort, pages); a claim's details, steps and the one decision this person can make sit under its row.
+ */
 function Inbox({ data }: { data: StaffClaims }) {
   const waitingCount = data.queue.filter(mayAct).length + data.tripQueue.filter((t) => t.status === 'pending').length;
-  const [filter, setFilter] = useState<Filter>(waitingCount ? 'waiting' : 'all');
-  const [q, setQ] = useState('');
-  const needle = q.trim().toLowerCase();
-  const claimHit = (c: Claim) =>
-    !needle || `${c.personName} ${KIND_LABEL[c.kind]} ${c.note} ${c.travel?.destination ?? ''}`.toLowerCase().includes(needle);
-  const tripHit = (t: Trip) => !needle || `${t.personName} ${t.destination} ${t.purpose}`.toLowerCase().includes(needle);
-  const rows = data.queue.filter(
-    (r) =>
-      claimHit(r.claim) &&
-      (filter === 'all' || (filter === 'waiting' ? mayAct(r) : filter === 'open' ? !isClosed(r.claim) : isClosed(r.claim))),
-  );
-  const trips = data.tripQueue.filter(
-    (t) => tripHit(t) && (filter === 'all' || (filter === 'done' ? t.status !== 'pending' : t.status === 'pending')),
-  );
-  const count = (f: Filter) =>
-    f === 'all'
-      ? data.queue.length + data.tripQueue.length
-      : f === 'waiting'
-        ? waitingCount
-        : f === 'open'
-          ? data.queue.filter((r) => !isClosed(r.claim)).length + data.tripQueue.filter((t) => t.status === 'pending').length
-          : data.queue.filter((r) => isClosed(r.claim)).length + data.tripQueue.filter((t) => t.status !== 'pending').length;
+  const show = { f: { show: waitingCount ? 'waiting' : '' } };
   return (
     <div className="lv-inbox">
-      <Toolbar end={<span className="muted small">{rows.length + trips.length} shown</span>}>
-        <div className="seg lv-seg" role="group" aria-label="Show">
-          {FILTERS.map(([f, label]) => (
-            <button key={f} type="button" aria-pressed={filter === f} onClick={() => setFilter(f)}>
-              {label} <span className="lv-seg-n">{count(f)}</span>
-            </button>
-          ))}
-        </div>
-        <Search value={q} onChange={setQ} placeholder="Search name, kind or place" />
-      </Toolbar>
-      {data.tripQueue.length > 0 && trips.length > 0 && <TripQueue trips={trips} />}
-      <Queue rows={rows} total={data.queue.length} />
+      {data.tripQueue.length > 0 && (
+        <section className="lv-group" aria-label="Trips asked before they are made">
+          <h2 className="lv-group-title">Trips asked before they are made</h2>
+          <DataTable
+            label="Trips asked before they are made"
+            stateKey="claims.trips"
+            defaults={show}
+            rows={data.tripQueue}
+            rowKey={(t) => t.id}
+            searchPlaceholder="Search name or place"
+            searchText={(t) => t.purpose}
+            filters={[{ id: 'show', label: 'Show', value: tripShow, options: SHOW_OPTIONS }]}
+            columns={[
+              { id: 'name', label: 'Name', value: (t) => t.personName, render: (t) => <Person name={t.personName} size={32} />, phone: 'title' },
+              { id: 'trip', label: 'Trip to', value: (t) => t.destination },
+              { id: 'date', label: 'Date', value: (t) => t.date, sort: 'date' },
+              { id: 'status', label: 'Status', value: (t) => (t.claimId ? 'Claimed' : t.status), translate: true, render: (t) => tripChip(t) },
+            ]}
+            rowDetail={(t) => <TripLine t={t} />}
+          />
+        </section>
+      )}
+      <section className="lv-group" aria-label="Claims">
+        {data.queue.length > 0 && <h2 className="lv-group-title">Claims</h2>}
+        <DataTable
+          label="Claims"
+          stateKey="claims.queue"
+          defaults={show}
+          rows={data.queue}
+          rowKey={(r) => r.claim.id}
+          searchPlaceholder="Search name, kind or place"
+          searchText={(r) => `${r.claim.note} ${r.claim.travel?.destination ?? ''}`}
+          empty={
+            <Card>
+              <Empty title="No claims." />
+            </Card>
+          }
+          filters={[
+            { id: 'show', label: 'Show', value: claimShow, options: SHOW_OPTIONS },
+            { id: 'kind', label: 'Kind', value: (r) => r.claim.kind, optionLabel: (k) => KIND_LABEL[k as StaffClaimKind] ?? k },
+          ]}
+          columns={claimColumns<QueueRow>((r) => r.claim, false)}
+          rowDetail={(r) => (
+            <ClaimDetail c={r.claim}>
+              {r.itPoNote && r.claim.status !== 'rejected' && r.claim.status !== 'approved' && <p className="notice" data-tone="crit"><span>{r.itPoNote}: this IT claim cannot be approved; it can only be rejected.</span></p>}
+              {(r as { softwareNote?: string | null }).softwareNote && r.claim.status !== 'rejected' && r.claim.status !== 'approved' && <p className="notice" data-tone="warn"><span>{(r as { softwareNote?: string | null }).softwareNote}</span></p>}
+              {r.canHead && <HeadVerify r={r} />}
+              {(r.canCos || r.canHr || r.canCoo) && <Decide r={r} />}
+              {r.canPay && <Pay r={r} />}
+            </ClaimDetail>
+          )}
+        />
+      </section>
     </div>
   );
 }
 
-function TripQueue({ trips }: { trips: Trip[] }) {
-  return (
-    <section className="lv-group" aria-label="Trips asked before they are made">
-      <h2 className="lv-group-title">Trips asked before they are made</h2>
-      <div className="lv-stack">
-        {trips.map((t) => (
-          <TripLine key={t.id} t={t} />
-        ))}
-      </div>
-    </section>
-  );
+/** A claim's status in words, for search, sort and the status filter (the chip says the same). */
+function statusText(c: Claim): string {
+  if (c.status === 'approved') return c.paid ? 'Paid' : 'Approved, Finance to pay';
+  if (c.status === 'rejected') return 'Rejected';
+  if (c.travel?.cosReasons.length && !c.cosApproval) return 'Chief of Staff to approve';
+  const headWaits = !!c.headIds?.length && !c.headCheck;
+  if (c.status === 'hr_checked') return headWaits ? 'Company head to verify' : 'COO to approve';
+  return headWaits ? 'HR and company head to check' : 'HR to decide';
+}
+
+/** P107: the claim columns: who (or what, on one's own list), when, how much, where it is. */
+function claimColumns<R>(get: (r: R) => Claim, self: boolean): DtColumn<R>[] {
+  const who: DtColumn<R> = self
+    ? {
+        id: 'kind',
+        label: 'Claim',
+        value: (r) => KIND_LABEL[get(r).kind],
+        translate: true,
+        phone: 'title',
+        render: (r) => (
+          <span className="lv-dt-kind">
+            <span className="lv-kind" aria-hidden="true">
+              {KIND_ICON[get(r).kind]}
+            </span>
+            <strong>{KIND_LABEL[get(r).kind]}</strong>
+          </span>
+        ),
+      }
+    : { id: 'name', label: 'Name', value: (r) => get(r).personName, phone: 'title', render: (r) => <Person name={get(r).personName} sub={KIND_LABEL[get(r).kind]} size={32} /> };
+  return [
+    who,
+    { id: 'date', label: 'Date', value: (r) => get(r).date, sort: 'date' },
+    {
+      id: 'amount',
+      label: 'Amount',
+      value: (r) => get(r).allowed,
+      sort: 'money',
+      render: (r) => (
+        <span className="lv-dt-amt">
+          <strong>{rm(get(r).allowed)}</strong>
+          {get(r).allowed < get(r).amount ? <span className="muted small"> of {rm(get(r).amount)}</span> : null}
+        </span>
+      ),
+    },
+    { id: 'status', label: 'Status', value: (r) => statusText(get(r)), translate: true, render: (r) => statusChip(get(r)) },
+  ];
 }
 
 function TripLine({ t }: { t: Trip }) {
   const [note, setNote] = useState('');
   const act = useAction();
   return (
-    <article className="lv-req">
-      <header className="lv-req-head">
-        <Avatar name={t.personName} size={40} />
-        <div className="lv-req-who">
-          <div className="lv-req-title">{t.personName}</div>
-          <div className="lv-req-sub">
-            Trip to {t.destination} · {dateLabel(t.date)}
-          </div>
-        </div>
-        <div className="lv-req-status">{tripChip(t)}</div>
-      </header>
+    // P107: the trip's purpose, decision and the Approve / Reject box, under its row in the trips table.
+    <div className="lv-dt-detail">
       <p className="lv-req-text">{t.purpose}</p>
       {t.decision && (
         <div className="lv-trail">
@@ -390,7 +455,7 @@ function TripLine({ t }: { t: Trip }) {
           <ErrorNotice error={act.error} />
         </div>
       )}
-    </article>
+    </div>
   );
 }
 
@@ -431,7 +496,8 @@ function claimSteps(c: Claim): { label: string; state: StepState; note?: string 
   ];
 }
 
-function ClaimLine({ c, children, self }: { c: Claim; children?: ReactNode; self?: boolean }) {
+/** P107: what a claim row opens to: notes, the trip, the steps, the trail and the decision this person can make. */
+function ClaimDetail({ c, children, self }: { c: Claim; children?: ReactNode; self?: boolean }) {
   const t = c.travel;
   const meta = [c.note, c.enteredBy ? `entered by HR (${c.enteredBy.by})` : '', c.paid ? `paid by ${c.paid.by}, ${c.paid.ref}` : '', c.kind === 'IT_EQUIPMENT' ? `IT purchase ${c.itPurchaseRef ?? 'none'}` : ''].filter(Boolean);
   const trail = [
@@ -451,25 +517,7 @@ function ClaimLine({ c, children, self }: { c: Claim; children?: ReactNode; self
       ]
     : [];
   return (
-    <article className="lv-req">
-      <header className="lv-req-head">
-        {self ? (
-          <span className="lv-kind lv-kind-lg" aria-hidden="true">
-            {KIND_ICON[c.kind]}
-          </span>
-        ) : (
-          <Avatar name={c.personName} size={40} />
-        )}
-        <div className="lv-req-who">
-          <div className="lv-req-title">{self ? KIND_LABEL[c.kind] : c.personName}</div>
-          <div className="lv-req-sub">{self ? `${c.personName} · ${dateLabel(c.date)}` : `${KIND_LABEL[c.kind]} · ${dateLabel(c.date)}`}</div>
-        </div>
-        <div className="lv-req-amt">
-          <strong>{rm(c.allowed)}</strong>
-          {c.allowed < c.amount ? <span className="muted small">of {rm(c.amount)}</span> : null}
-        </div>
-        <div className="lv-req-status">{statusChip(c)}</div>
-      </header>
+    <div className="lv-dt-detail">
       {meta.length > 0 && <p className="lv-req-text">{meta.join(' · ')}</p>}
       {t && (
         <div className="lv-trip">
@@ -492,7 +540,7 @@ function ClaimLine({ c, children, self }: { c: Claim; children?: ReactNode; self
         </ul>
       )}
       {children && <div className="lv-req-act">{children}</div>}
-    </article>
+    </div>
   );
 }
 
@@ -793,35 +841,6 @@ function NewClaim({ data, onDone, forPersonId, fromWallet }: { data: StaffClaims
   );
 }
 
-function Queue({ rows, total }: { rows: QueueRow[]; total: number }) {
-  return (
-    <section className="lv-group" aria-label="Claims">
-      {rows.length > 0 && <h2 className="lv-group-title">Claims</h2>}
-      <div className="lv-stack">
-        {total === 0 && (
-          <Card>
-            <Empty title="No claims." />
-          </Card>
-        )}
-        {total > 0 && rows.length === 0 && (
-          <Card>
-            <Empty title="No claims match">Try another filter or search.</Empty>
-          </Card>
-        )}
-        {rows.map((r) => (
-          <ClaimLine key={r.claim.id} c={r.claim}>
-            {r.itPoNote && r.claim.status !== 'rejected' && r.claim.status !== 'approved' && <p className="notice" data-tone="crit"><span>{r.itPoNote}: this IT claim cannot be approved; it can only be rejected.</span></p>}
-            {(r as { softwareNote?: string | null }).softwareNote && r.claim.status !== 'rejected' && r.claim.status !== 'approved' && <p className="notice" data-tone="warn"><span>{(r as { softwareNote?: string | null }).softwareNote}</span></p>}
-            {r.canHead && <HeadVerify r={r} />}
-            {(r.canCos || r.canHr || r.canCoo) && <Decide r={r} />}
-            {r.canPay && <Pay r={r} />}
-          </ClaimLine>
-        ))}
-      </div>
-    </section>
-  );
-}
-
 function Decide({ r }: { r: QueueRow }) {
   const [note, setNote] = useState('');
   const act = useAction();
@@ -959,26 +978,22 @@ function Rates({ data }: { data: StaffClaims }) {
         {data.rates.length === 0 ? (
           <Empty title="No rates published yet." />
         ) : (
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Month</th>
-                  <th>Vehicle</th>
-                  <th className="num">Rate</th>
-                </tr>
-              </thead>
-              <tbody>
-                {data.rates.map((r) => (
-                  <tr key={r.id}>
-                    <td>{r.month}</td>
-                    <td>{VEHICLE_LABEL[r.vehicle]}</td>
-                    <td className="num">{rm(r.perKm)} a km</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <DataTable
+            label="Mileage rates"
+            stateKey="claims.rates"
+            rows={data.rates}
+            rowKey={(r) => r.id}
+            noSearch
+            filters={[
+              { id: 'month', label: 'Month', value: (r) => r.month },
+              { id: 'vehicle', label: 'Vehicle', value: (r) => r.vehicle, optionLabel: (v) => VEHICLE_LABEL[v as ClaimVehicle] ?? v },
+            ]}
+            columns={[
+              { id: 'month', label: 'Month', value: (r) => r.month, sort: 'date', phone: 'title', render: (r) => r.month },
+              { id: 'vehicle', label: 'Vehicle', value: (r) => VEHICLE_LABEL[r.vehicle], translate: true },
+              { id: 'rate', label: 'Rate', value: (r) => r.perKm, sort: 'money', render: (r) => `${rm(r.perKm)} a km` },
+            ]}
+          />
         )}
       </Card>
     </div>

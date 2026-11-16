@@ -2,13 +2,14 @@ import { OpeningBalancesButton } from './OpeningBalances';
 import { HrListsButton } from './HrLists';
 import { FileHelper } from './BulkHelper';
 import { Select } from '../SearchSelect';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
+import { DataTable, useTableState, type DtColumn, type DtFilter } from '../DataTable';
 import { CheckCircleIcon, PhoneIcon, ProhibitIcon, UsersThreeIcon, WarningIcon } from '@phosphor-icons/react';
 import { ATTENDANCE_ISSUE_LABEL, GROUP_EMPLOYER_ID, LEAVE_LABEL, isGroupLeader, jaOwns, missingStaffFacts, p91MayImport, staffHistoryRole } from '@prima/core';
 import { api, type GuardProfile, type PersonDetail } from '../api';
 import { useApp } from '../App';
 import { Chip, Drawer, ErrorNotice, ExpiryChip, Findings, Kpi, Loading, dateLabel, dayLabel, hhmm, useAction, useLoad } from '../ui';
-import { Avatar, Card, Facts, PageHead, Person, Search, Stat, Stats, Toolbar } from '../kit';
+import { Avatar, Card, Facts, PageHead, Person, Stat, Stats } from '../kit';
 import { LeaveForm } from './Leave';
 import { SocsoTab } from './Socso';
 import { ClaimsPolicy, DisciplinePolicy, HiringChecklist, HospitalClaims, MedicalHistory, Sec } from './HrFile';
@@ -28,19 +29,13 @@ export function People({ openPersonId }: { openPersonId?: string }) {
   const hr = me.user.department === 'hr' || isGroupLeader(me.user);
   const [central, setCentral] = useState(false);
   const companyId = hr && central ? GROUP_EMPLOYER_ID : chosen;
-  const [q, setQ] = useState('');
-  const [filter, setFilter] = useState<'all' | 'blocked' | 'np'>('all');
   const [open, setOpen] = useState<string | undefined>(openPersonId);
   const [hireCheck, setHireCheck] = useState(false);
   const historyRole = staffHistoryRole(me.user);
   const papers = p91MayImport(me.user, 'guardPaper');
-  // P90: the list is asked for once typing pauses, not on every key (each ask reads the company's guards).
-  const [query, setQuery] = useState(q);
-  useEffect(() => {
-    const t = setTimeout(() => setQuery(q), 300);
-    return () => clearTimeout(t);
-  }, [q]);
-  const { data, error } = useLoad(() => api.people(companyId, query), [companyId, query]);
+  // P107: the company's list is loaded once; the data table searches, filters, sorts and pages it on this device.
+  const { data, error } = useLoad(() => api.people(companyId), [companyId]);
+  const table = useTableState('people.list');
 
   if (error)
     return (
@@ -48,7 +43,6 @@ export function People({ openPersonId }: { openPersonId?: string }) {
         <ErrorNotice error={error} />
       </div>
     );
-  const rows = (data ?? []).filter((r) => (filter === 'blocked' ? !r.deployable : filter === 'np' ? r.person.nationality === 'NP' : true));
   const blockedCount = (data ?? []).filter((r) => !r.deployable).length;
   const dueCount = (data ?? []).filter((r) => r.deployable && r.warnings).length;
   const okCount = (data ?? []).filter((r) => r.deployable && !r.warnings).length;
@@ -93,78 +87,43 @@ export function People({ openPersonId }: { openPersonId?: string }) {
 
       {data && (
         <Stats>
-          <Stat label={q ? 'Found' : 'On the list'} value={data.length} icon={<UsersThreeIcon />} tone="info" onClick={() => setFilter('all')} />
+          <Stat label="On the list" value={data.length} icon={<UsersThreeIcon />} tone="info" onClick={() => table.set({ q: '', f: { work: '' } })} />
           <Stat label="Allowed to work" value={okCount} icon={<CheckCircleIcon />} tone={okCount ? 'ok' : 'neutral'} />
           <Stat label="Allowed, papers due" value={dueCount} icon={<WarningIcon />} tone={dueCount ? 'warn' : 'neutral'} />
-          <Stat label="Not allowed" value={blockedCount} icon={<ProhibitIcon />} tone={blockedCount ? 'crit' : 'ok'} onClick={() => setFilter('blocked')} />
+          <Stat label="Not allowed" value={blockedCount} icon={<ProhibitIcon />} tone={blockedCount ? 'crit' : 'ok'} onClick={() => table.set({ f: { work: 'no' } })} />
         </Stats>
       )}
 
       {hireCheck && <HistoryLookupPanel />}
 
-      <Card flush>
-        <div className="pp-toolbar">
-          <Toolbar
-            end={
-              hr && (
-                <div className="seg" role="group" aria-label="Employer">
-                  <button aria-pressed={!central} onClick={() => setCentral(false)}>
-                    Chosen company
-                  </button>
-                  <button aria-pressed={central} onClick={() => setCentral(true)}>
-                    PWVSB central staff
-                  </button>
-                </div>
-              )
-            }
-          >
-            <Search value={q} onChange={setQ} placeholder="Search name or staff number" />
-            <div className="seg" role="group" aria-label="Filter">
-              <button aria-pressed={filter === 'all'} onClick={() => setFilter('all')}>
-                All
-              </button>
-              <button aria-pressed={filter === 'blocked'} onClick={() => setFilter('blocked')}>
-                Not allowed ({blockedCount})
-              </button>
-              {me.user.department !== 'hr' && (
-                <button aria-pressed={filter === 'np'} onClick={() => setFilter('np')}>
-                  Nepali
+      <Card>
+        {/* P107: the data table (search, filters, sort, pages; one card per person on a phone). */}
+        <DataTable
+          label={hr ? 'People' : 'Guards'}
+          control={table}
+          rows={data}
+          loading={!data}
+          loadingWhat="guards"
+          rowKey={(r) => r.person.id}
+          searchPlaceholder="Search name or staff number"
+          searchText={(r) => r.person.staffNo}
+          onRowClick={(r) => setOpen(r.person.id)}
+          columns={PEOPLE_COLUMNS}
+          filters={PEOPLE_FILTERS}
+          empty={<div className="empty">Nobody matches.</div>}
+          toolbar={
+            hr && (
+              <div className="seg" role="group" aria-label="Employer">
+                <button aria-pressed={!central} onClick={() => setCentral(false)}>
+                  Chosen company
                 </button>
-              )}
-            </div>
-          </Toolbar>
-        </div>
-        {!data && <Loading what="guards" />}
-        {data && (
-          <div className="table-wrap pp-table">
-            <table>
-              <thead>
-                <tr>
-                  <th>Name</th>
-                  <th className="hide-sm">Role</th>
-                  <th className="hide-sm">From</th>
-                  <th>Can work</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.slice(0, 300).map((r) => (
-                  <tr key={r.person.id} className="clickable" onClick={() => setOpen(r.person.id)}>
-                    <td>
-                      <button type="button" className="pp-row-open" onClick={(e) => (e.stopPropagation(), setOpen(r.person.id))}>
-                        <Person name={r.person.name} sub={<span className="mono">{r.person.staffNo}</span>} size={34} />
-                      </button>
-                    </td>
-                    <td className="hide-sm pp-cap">{r.person.role.replace('_', ' ')}</td>
-                    <td className="hide-sm">{nationalityLabel(r.person.nationality)}</td>
-                    <td>{r.deployable ? r.warnings ? <Chip tone="warn">Yes, papers due</Chip> : <Chip tone="ok">Yes</Chip> : <Chip tone="crit">No</Chip>}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            {rows.length > 300 && <div className="empty">Showing 300 of {rows.length}. Search to narrow down.</div>}
-            {rows.length === 0 && <div className="empty">Nobody matches.</div>}
-          </div>
-        )}
+                <button aria-pressed={central} onClick={() => setCentral(true)}>
+                  PWVSB central staff
+                </button>
+              </div>
+            )
+          }
+        />
       </Card>
 
       <div id="pp-guard-papers">
@@ -174,6 +133,29 @@ export function People({ openPersonId }: { openPersonId?: string }) {
     </div>
   );
 }
+
+type PeopleRow = Awaited<ReturnType<typeof api.people>>[number];
+const canWork = (r: PeopleRow) => (r.deployable ? (r.warnings ? 'due' : 'ok') : 'no');
+const CAN_WORK: Record<'ok' | 'due' | 'no', [string, 'ok' | 'warn' | 'crit']> = { ok: ['Yes', 'ok'], due: ['Yes, papers due', 'warn'], no: ['No', 'crit'] };
+
+/** P107: the people list's columns and filters. */
+const PEOPLE_COLUMNS: DtColumn<PeopleRow>[] = [
+  { id: 'name', label: 'Name', value: (r) => r.person.name, render: (r) => <Person name={r.person.name} sub={<span className="mono">{r.person.staffNo}</span>} size={34} />, phone: 'title' },
+  { id: 'role', label: 'Role', value: (r) => r.person.role.replace('_', ' '), translate: true, render: (r) => <span className="pp-cap">{r.person.role.replace('_', ' ')}</span> },
+  { id: 'from', label: 'From', value: (r) => nationalityLabel(r.person.nationality), translate: true },
+  {
+    id: 'work',
+    label: 'Can work',
+    value: (r) => CAN_WORK[canWork(r)][0],
+    translate: true,
+    render: (r) => <Chip tone={CAN_WORK[canWork(r)][1]}>{CAN_WORK[canWork(r)][0]}</Chip>,
+  },
+];
+const PEOPLE_FILTERS: DtFilter<PeopleRow>[] = [
+  { id: 'work', label: 'Can work', value: canWork, options: (['ok', 'due', 'no'] as const).map((k) => ({ value: k, label: CAN_WORK[k][0] })) },
+  { id: 'from', label: 'From', value: (r) => r.person.nationality ?? '', optionLabel: (v) => nationalityLabel(v) },
+  { id: 'role', label: 'Role', value: (r) => r.person.role, optionLabel: (v) => v.replace('_', ' ') },
+];
 
 type Tab = 'work' | 'training' | 'hours' | 'leave' | 'socso' | 'warnings' | 'benefits' | 'history';
 

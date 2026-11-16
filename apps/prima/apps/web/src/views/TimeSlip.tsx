@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { DataTable } from '../DataTable';
 import { api, type MyTimeSlips, type TimeSlipBoard } from '../api';
 import { Chip, ErrorNotice, Kpi, Loading, dateLabel, useAction, useLoad, type Tone } from '../ui';
 
@@ -248,18 +249,14 @@ function ApproverSetting({ b }: { b: TimeSlipBoard }) {
 export function TimeSlipBoardView() {
   const { data, error } = useLoad(() => api.timeSlipBoard(), []);
   const act = useAction();
-  const [filter, setFilter] = useState<'all' | 'owing' | 'leave' | 'new'>('all');
   if (error) return <ErrorNotice error={error} />;
   if (!data) return <Loading what="time slips" />;
-  const rows = data.rows.filter((v) =>
-    filter === 'owing'
-      ? v.slip.status === 'approved' && !v.slip.settlement && (v.makeUp?.leftMin ?? 0) > 0
-      : filter === 'leave'
-        ? (v.slip.settlement?.shortfallMin ?? 0) > 0
-        : filter === 'new'
-          ? v.unseen
-          : true,
-  );
+  // P107: the old "All / Still to work back / Taken from leave / New for HR" buttons are the table's Show filter.
+  const show = (v: (typeof data.rows)[number]): string[] => [
+    ...(v.slip.status === 'approved' && !v.slip.settlement && (v.makeUp?.leftMin ?? 0) > 0 ? ['owing'] : []),
+    ...((v.slip.settlement?.shortfallMin ?? 0) > 0 ? ['leave'] : []),
+    ...(data.canSet && v.unseen ? ['new'] : []),
+  ];
   return (
     <>
       <div className="kpis">
@@ -281,40 +278,66 @@ export function TimeSlipBoardView() {
         </section>
       )}
       <section className="panel">
-        <div className="seg" style={{ marginBottom: 8, alignSelf: 'flex-start', flexWrap: 'wrap' }}>
-          <button aria-pressed={filter === 'all'} onClick={() => setFilter('all')}>
-            All
-          </button>
-          <button aria-pressed={filter === 'owing'} onClick={() => setFilter('owing')}>
-            Still to work back
-          </button>
-          <button aria-pressed={filter === 'leave'} onClick={() => setFilter('leave')}>
-            Taken from leave
-          </button>
-          {data.canSet && (
-            <button aria-pressed={filter === 'new'} onClick={() => setFilter('new')}>
-              New for HR
-            </button>
-          )}
-        </div>
-        <div className="list">
-          {rows.length === 0 && <div className="empty">No time slips here.</div>}
-          {data.total > data.rows.length && (
-            <div className="muted" style={{ fontSize: 12 }}>
-              Showing every open slip and the newest closed ones ({data.rows.length} of {data.total}). The totals above count all {data.total}.
-            </div>
-          )}
-          {rows.map((v) => (
-            <div key={v.slip.id}>
-              <SlipLine r={v} who />
+        {data.total > data.rows.length && (
+          <div className="muted" style={{ fontSize: 12 }}>
+            Showing every open slip and the newest closed ones ({data.rows.length} of {data.total}). The totals above count all {data.total}.
+          </div>
+        )}
+        <DataTable
+          label="Time slips"
+          stateKey="staffclock.slips"
+          rows={data.rows}
+          rowKey={(v) => v.slip.id}
+          searchPlaceholder="Search name or reason"
+          searchText={(v) => v.slip.reason}
+          rowTone={(v) => (v.unseen ? 'info' : undefined)}
+          empty={<div className="empty">No time slips here.</div>}
+          filters={[
+            {
+              id: 'show',
+              label: 'Show',
+              value: show,
+              options: [
+                { value: 'owing', label: 'Still to work back' },
+                { value: 'leave', label: 'Taken from leave' },
+                ...(data.canSet ? [{ value: 'new', label: 'New for HR' }] : []),
+              ],
+            },
+            { id: 'status', label: 'Status', value: (v) => v.slip.status, optionLabel: (k) => STATUS[k as keyof typeof STATUS]?.label ?? k },
+          ]}
+          columns={[
+            { id: 'name', label: 'Name', value: (v) => v.slip.userName, phone: 'title', render: (v) => <strong>{v.slip.userName}</strong> },
+            { id: 'date', label: 'Date', value: (v) => v.slip.date, sort: 'date' },
+            { id: 'time', label: 'Time', value: (v) => `${v.slip.from} to ${v.slip.to}`, sort: false, search: false },
+            { id: 'minutes', label: 'Hours', value: (v) => v.slip.minutes, sort: 'number', render: (v) => hm(v.slip.minutes) },
+            {
+              id: 'status',
+              label: 'Status',
+              value: (v) => STATUS[v.slip.status].label,
+              translate: true,
+              render: (v) => <Chip tone={STATUS[v.slip.status].tone}>{STATUS[v.slip.status].label}</Chip>,
+            },
+          ]}
+          rowDetail={(v) => (
+            <div className="hx-dt-body">
+              <div className="small">{v.slip.reason}</div>
+              {v.slip.decidedBy && (
+                <div className="muted small">
+                  {v.slip.status === 'approved' ? 'Approved' : 'Refused'} by {v.slip.decidedBy}
+                  {v.slip.decisionNote ? `: “${v.slip.decisionNote}”` : ''}
+                </div>
+              )}
+              <MakeUp r={v} />
               {v.unseen && (
-                <button className="btn btn-sm" style={{ margin: '0 0 8px' }} disabled={act.busy} onClick={() => act.run(() => api.seenTimeSlip(v.slip.id))}>
-                  Mark seen
-                </button>
+                <div>
+                  <button className="btn btn-sm" disabled={act.busy} onClick={() => act.run(() => api.seenTimeSlip(v.slip.id))}>
+                    Mark seen
+                  </button>
+                </div>
               )}
             </div>
-          ))}
-        </div>
+          )}
+        />
         <ErrorNotice error={act.error} />
       </section>
     </>

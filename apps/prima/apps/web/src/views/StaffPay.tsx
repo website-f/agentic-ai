@@ -1,5 +1,6 @@
 import { Select } from '../SearchSelect';
 import { useEffect, useRef, useState } from "react";
+import { DataTable } from "../DataTable";
 import {
   CaretRightIcon,
   DownloadSimpleIcon,
@@ -267,7 +268,6 @@ function Runs({
   // This month's runs show on the employer cards; every other run is listed by month underneath.
   const onCards = new Set(data.employers.map((e) => e.current?.id).filter(Boolean));
   const others = data.runs.filter((r) => !onCards.has(r.id));
-  const periods = [...new Set(others.map((r) => r.period))];
   const runOf = (id: string) => data.runs.find((r) => r.id === id) ?? null;
   // Exceptions first: the runs waiting for you, then late ones, then those with staff to check.
   const rank = (e: StaffPayBoard["employers"][number]) => {
@@ -421,46 +421,67 @@ function Runs({
               </div>
             )}
           </section>
-          {periods.map((p) => (
-            <Card key={p} title={monthLabel(p)} flush>
-              <div className="pay-hist">
-                {others
-                  .filter((r) => r.period === p)
-                  .sort((a, b) => Number(b.mineToAct) - Number(a.mineToAct))
-                  .map((r) => (
-                    <button
-                      key={r.id}
-                      className="pay-hist-row"
-                      data-turn={r.mineToAct ? "yes" : undefined}
-                      onClick={() => onOpen(r.id)}
-                    >
+          {others.length > 0 && (
+            <Card title="Earlier months" flush>
+              {/* P107: every other payroll month in one data table (search, month, employer and stage filters, sort,
+                  pages) in place of a card per month. Opening a row opens the same run drawer. */}
+              <DataTable
+                label="Earlier months"
+                stateKey="staffpay.history"
+                rows={others}
+                rowKey={(r) => r.id}
+                searchPlaceholder="Search an employer or month"
+                searchText={(r) => monthLabel(r.period)}
+                onRowClick={(r) => onOpen(r.id)}
+                rowTone={(r) => (r.mineToAct ? "warn" : r.late ? "crit" : undefined)}
+                defaults={{ sort: "period", dir: "desc" }}
+                filters={[
+                  { id: "period", label: "Month", value: (r) => r.period, optionLabel: monthLabel },
+                  { id: "company", label: "Employer", value: (r) => r.companyName },
+                  {
+                    id: "stage",
+                    label: "Stage",
+                    value: (r) => [r.late ? "late" : r.stage, ...(r.mineToAct ? ["mine"] : [])],
+                    options: [
+                      { value: "mine", label: "Your turn" },
+                      { value: "late", label: "Late" },
+                      ...(Object.keys(STAGE) as StaffPayStage[]).map((k) => ({ value: k, label: STAGE[k][1] })),
+                    ],
+                  },
+                ]}
+                columns={[
+                  {
+                    id: "company",
+                    label: "Employer",
+                    value: (r) => r.companyName,
+                    phone: "title",
+                    render: (r) => (
                       <span className="pay-hist-name">
                         <strong>{r.companyName}</strong>
                         <span className="muted small">{r.totals.headcount} staff</span>
                       </span>
-                      <span className="pay-hist-figs">
-                        <span>
-                          <span className="pay-hist-k">Gross</span> {rm(r.totals.gross)}
-                        </span>
-                        <span>
-                          <span className="pay-hist-k">Net</span> {rm(r.totals.net)}
-                        </span>
-                        <span>
-                          <span className="pay-hist-k">Employer cost</span> {rm(r.totals.cost)}
-                        </span>
-                      </span>
+                    ),
+                  },
+                  { id: "period", label: "Month", value: (r) => r.period, sort: "date", render: (r) => monthLabel(r.period) },
+                  { id: "gross", label: "Gross", value: (r) => r.totals.gross, sort: "money", render: (r) => rm(r.totals.gross), hideBelow: 1200 },
+                  { id: "net", label: "Net", value: (r) => r.totals.net, sort: "money", render: (r) => rm(r.totals.net) },
+                  { id: "cost", label: "Employer cost", value: (r) => r.totals.cost, sort: "money", render: (r) => rm(r.totals.cost), hideBelow: 1280 },
+                  {
+                    id: "stage",
+                    label: "Stage",
+                    value: (r) => (r.late ? "Late" : STAGE[r.stage][1]),
+                    translate: true,
+                    render: (r) => (
                       <span className="pay-hist-tags">
                         {r.mineToAct && <Chip tone="warn">Your turn</Chip>}
-                        <Chip tone={r.late ? "crit" : STAGE[r.stage][0]}>
-                          {r.late ? "Late" : STAGE[r.stage][1]}
-                        </Chip>
-                        <CaretRightIcon size={14} aria-hidden="true" className="pay-caret" />
+                        <Chip tone={r.late ? "crit" : STAGE[r.stage][0]}>{r.late ? "Late" : STAGE[r.stage][1]}</Chip>
                       </span>
-                    </button>
-                  ))}
-              </div>
+                    ),
+                  },
+                ]}
+              />
             </Card>
-          ))}
+          )}
         </div>
       </div>
     </>

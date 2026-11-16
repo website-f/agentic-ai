@@ -1,0 +1,528 @@
+/* P107: Prima's DataTable (DataTable.tsx). The app's own tokens only (styles.css :root), light and dark alike. A computer
+   gets a table with a held heading row; a phone (< 768 px, set by the component) gets one card per row, no sideways
+   scrolling, 44 px touch targets. */
+.dt {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
+  min-width: 0;
+}
+.dt-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* ---------- Toolbar: search, filters, sort (phone), clear, the screen's own tools ---------- */
+.dt-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 10px;
+}
+.dt-search {
+  flex: 1 1 260px;
+  min-width: 0;
+  display: flex;
+}
+.dt-search .k-search {
+  max-width: 440px;
+}
+.dt-filter {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  flex: 0 1 200px;
+}
+.dt-filter-label {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--muted);
+  letter-spacing: 0.01em;
+}
+.dt-filter .select,
+.dt-filter .ksel-trigger {
+  width: 100%;
+}
+.dt-filter[data-on] .select,
+.dt-filter[data-on] .ksel-trigger {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent-soft) 55%, var(--surface));
+}
+.dt-clear {
+  align-self: flex-end;
+}
+.dt-tools {
+  margin-left: auto;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: flex-end;
+}
+
+/* ---------- The computer table ---------- */
+.dt-scroll {
+  overflow: auto;
+  max-height: min(72vh, 900px);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md, var(--r));
+  background: var(--surface);
+  overscroll-behavior: contain;
+}
+/* Inside a card drawn edge to edge (Card flush) the table keeps the card's own inner margin. */
+.k-card-body.k-flush .dt {
+  padding: 12px 16px 14px;
+}
+.dt-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-variant-numeric: tabular-nums;
+}
+.dt-table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--line);
+  vertical-align: bottom;
+}
+.dt-table td {
+  vertical-align: middle;
+}
+.dt-table :is(th, td)[data-align='right'] {
+  text-align: right;
+}
+.dt-table :is(th, td)[data-align='center'] {
+  text-align: center;
+}
+.dt-table td[data-align='right'] {
+  white-space: nowrap;
+}
+.dt-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+.dt-table tbody tr[data-on] td {
+  background: color-mix(in srgb, var(--accent-soft) 60%, transparent);
+}
+.dt-table tbody tr[data-tone] > td:first-child {
+  box-shadow: inset 3px 0 0 var(--warn);
+}
+.dt-table tbody tr[data-tone='crit'] > td:first-child {
+  box-shadow: inset 3px 0 0 var(--crit);
+}
+.dt-table tbody tr[data-tone='info'] > td:first-child {
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+.dt-table tbody tr[data-has-detail] > td {
+  border-bottom: 0;
+  padding-bottom: 4px;
+}
+.dt-table tbody tr.dt-detail > td {
+  padding-top: 0;
+  white-space: normal;
+}
+.dt-table tbody tr.dt-detail:hover > td,
+.dt-table tbody tr[data-has-detail]:hover > td {
+  background: none;
+}
+.dt-table tbody tr.clickable:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: -2px;
+}
+.dt-sort {
+  all: unset;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  border-radius: 4px;
+  color: inherit;
+  font: inherit;
+}
+.dt-sort:hover,
+.dt-sort[data-on] {
+  color: var(--ink);
+}
+.dt-sort:focus-visible {
+  box-shadow: var(--ring, 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent));
+}
+th[data-align='right'] .dt-sort {
+  flex-direction: row-reverse;
+}
+.dt-sort-idle {
+  opacity: 0.45;
+}
+.dt-tick-col {
+  width: 40px;
+  min-width: 40px !important;
+  padding-right: 0 !important;
+}
+.dt-act-col {
+  width: 1%;
+  min-width: 0 !important;
+  white-space: nowrap;
+  text-align: right !important;
+}
+.dt-act-col > * + * {
+  margin-left: 6px;
+}
+.dt-tick {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+.dt-tick input {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+.dt-danger {
+  color: var(--crit);
+}
+
+/* ---------- Row actions menu ---------- */
+.dt-menu {
+  position: relative;
+  display: inline-flex;
+}
+.dt-menu-btn {
+  padding: 4px 8px;
+}
+.dt-menu-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+}
+.dt-menu-list {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 4px);
+  z-index: 41;
+  min-width: 190px;
+  max-width: 280px;
+  display: flex;
+  flex-direction: column;
+  padding: 4px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  box-shadow: var(--shadow);
+  text-align: left;
+}
+.dt-menu-item {
+  all: unset;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.875rem;
+  white-space: normal;
+  color: var(--ink);
+}
+.dt-menu-item:hover:not(:disabled),
+.dt-menu-item:focus-visible {
+  background: var(--surface-2);
+}
+.dt-menu-item[data-tone='danger'] {
+  color: var(--crit);
+}
+.dt-menu-item:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ---------- Ticked rows ---------- */
+.dt-bulk {
+  position: sticky;
+  top: 8px;
+  z-index: 3;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border: 1px solid color-mix(in srgb, var(--accent) 40%, var(--line));
+  border-radius: var(--r);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+.dt-bulk-count {
+  font-weight: 600;
+  font-size: 0.85rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.dt-ticks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* ---------- Counts and pages ---------- */
+.dt-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 14px;
+}
+.dt-count {
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-variant-numeric: tabular-nums;
+}
+.dt-pager {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+}
+.dt-size {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-right: 8px;
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+.dt-size .select,
+.dt-size .ksel-trigger {
+  width: 76px;
+}
+.dt-page {
+  min-width: 34px;
+  padding-left: 8px;
+  padding-right: 8px;
+  font-variant-numeric: tabular-nums;
+}
+.dt-page[data-on] {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--on-primary);
+}
+.dt-gap {
+  padding: 0 4px;
+  color: var(--muted);
+}
+
+/* ---------- Phone cards ---------- */
+.dt-cards {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+.dt-card {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md, var(--r));
+  background: var(--surface);
+  overflow-wrap: anywhere;
+}
+.dt-card[data-tone] {
+  box-shadow: inset 3px 0 0 var(--warn);
+}
+.dt-card[data-tone='crit'] {
+  box-shadow: inset 3px 0 0 var(--crit);
+}
+.dt-card[data-tone='info'] {
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+.dt-card[data-click] {
+  cursor: pointer;
+}
+.dt-card[data-on] {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent-soft) 45%, var(--surface));
+}
+.dt-card-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  min-width: 0;
+}
+.dt-card-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.dt-card-open {
+  all: unset;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-height: 44px;
+  justify-content: center;
+  cursor: pointer;
+  border-radius: 6px;
+}
+.dt-card-open:focus-visible {
+  box-shadow: var(--ring, 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent));
+}
+.dt-card-line {
+  font-weight: 600;
+  font-size: 0.95rem;
+  min-width: 0;
+}
+.dt-card-sub {
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+.dt-card-menu {
+  flex: none;
+}
+.dt-card-facts {
+  margin: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 8px 14px;
+}
+.dt-card-facts > div {
+  min-width: 0;
+}
+.dt-card-facts dt {
+  color: var(--muted);
+  font-size: 0.74rem;
+  font-weight: 550;
+  line-height: 1.3;
+}
+.dt-card-facts dd {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+  min-width: 0;
+}
+.dt-card-detail {
+  min-width: 0;
+}
+.dt-card-end {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* Phone: bigger targets, the toolbar two to a row, the menu as a sheet from the bottom. */
+.dt[data-layout='cards'] .dt-bar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  align-items: end;
+}
+.dt[data-layout='cards'] .dt-search,
+.dt[data-layout='cards'] .dt-tools {
+  grid-column: 1 / -1;
+}
+.dt[data-layout='cards'] .dt-search .k-search {
+  max-width: none;
+}
+.dt[data-layout='cards'] .dt-tools {
+  margin-left: 0;
+}
+.dt[data-layout='cards'] :is(.btn, .select, .ksel-trigger, .k-search input) {
+  min-height: 44px;
+}
+.dt[data-layout='cards'] .dt-page {
+  min-width: 44px;
+}
+.dt[data-layout='cards'] .dt-menu-btn {
+  min-width: 44px;
+}
+.dt[data-layout='cards'] .dt-tick input {
+  width: 22px;
+  height: 22px;
+}
+.dt[data-layout='cards'] .dt-tick {
+  min-width: 44px;
+  min-height: 44px;
+  margin: -10px -6px -10px -12px;
+}
+.dt[data-layout='cards'] .dt-foot {
+  flex-direction: column;
+  align-items: stretch;
+}
+.dt[data-layout='cards'] .dt-pager {
+  justify-content: center;
+}
+.dt[data-layout='cards'] .dt-size {
+  width: 100%;
+  justify-content: center;
+  margin: 0 0 4px;
+}
+@media (max-width: 767px) {
+  .dt-menu-scrim {
+    background: color-mix(in srgb, #000 35%, transparent);
+  }
+  .dt-menu-list {
+    position: fixed;
+    left: 0;
+    right: 0;
+    top: auto;
+    bottom: 0;
+    max-width: none;
+    min-width: 0;
+    padding: 10px 10px max(10px, env(safe-area-inset-bottom, 0px));
+    border-radius: 14px 14px 0 0;
+  }
+  .dt-menu-item {
+    min-height: 44px;
+    padding: 0 14px;
+    font-size: 0.95rem;
+  }
+}
+
+/* ---------- HR and people screens converted in P107 (the blocks they draw inside table cells) ---------- */
+.lv-dt-detail {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  padding: 2px 0 6px;
+}
+.lv-dt-kind {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+.lv-dt-amt {
+  white-space: nowrap;
+}
+.hx-dt-body {
+  display: grid;
+  gap: 8px;
+  padding: 0 0 6px;
+}
+.lv-dt-pad {
+  padding: 8px 12px 4px;
+}
+/* Attendance day sheet: a replacement sits indented under the post it covers. */
+.att-dt .dt-table tr.att-sub > td {
+  background: var(--surface-2);
+}
+.att-dt .dt-table tr.att-sub > td:first-child {
+  padding-left: 32px;
+}
+.att-dt .dt-card.att-sub {
+  margin-left: 16px;
+  background: var(--surface-2);
+}
+/* Attendance reports: late and absent figures keep their colour. */
+.ar-dt .ar-fig[data-tone='warn'] {
+  color: var(--warn);
+  font-weight: 600;
+}
+.ar-dt .ar-fig[data-tone='crit'] {
+  color: var(--crit);
+  font-weight: 600;
+}

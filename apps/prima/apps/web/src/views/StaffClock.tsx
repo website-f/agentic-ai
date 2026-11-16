@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { DataTable, useTableState } from '../DataTable';
 import {
   BroadcastIcon,
   ClockIcon,
@@ -299,8 +300,8 @@ export function StaffClockBoardView() {
   const reviews = useLoad(() => (places ? api.checkinReviews().catch(() => null) : Promise.resolve(null)), [places]);
   const [open, setOpen] = useState<string | null>(null);
   const [tab, setTab] = useState<'clock' | 'home' | 'slips' | 'places' | 'review'>('clock');
-  const [filter, setFilter] = useState<Filter>('all');
-  const [q, setQ] = useState('');
+  // P107: the team list's search, "who to show" and company filters live in its data table.
+  const team = useTableState('staffclock.team');
   if (error)
     return (
       <div className="page ss">
@@ -324,10 +325,8 @@ export function StaffClockBoardView() {
     (r.status === 'in' && r.door.left) ||
     r.review.length > 0 ||
     (r.clock?.flags ?? []).some((f) => f !== 'PHOTO_ONLY');
-  const needle = q.trim().toLowerCase();
+  // The list's own order: clocked in first, then clocked out, then not in.
   const rows = data.rows
-    .filter((r) => filter === 'all' || (filter === 'in' ? r.status === 'in' : filter === 'not_in' ? r.status === 'not_in' : problem(r)))
-    .filter((r) => !needle || [r.name, r.title, r.company].some((x) => x.toLowerCase().includes(needle)))
     .map((r, i) => ({ r, i }))
     .sort((a, b) => STATUS_ORDER[a.r.status] - STATUS_ORDER[b.r.status] || a.i - b.i)
     .map((x) => x.r);
@@ -339,7 +338,7 @@ export function StaffClockBoardView() {
   const outOfStation = data.reviews.filter((x) => x.kind === 'out_of_station').length;
   const pick = (f: Filter) => () => {
     setTab('clock');
-    setFilter(f);
+    team.set({ f: { show: f === 'all' ? '' : f } });
   };
   return (
     <div className="page ss">
@@ -436,32 +435,55 @@ export function StaffClockBoardView() {
             </Card>
           )}
           <Card title="Team today" sub="Clocked in first, then clocked out, then not in. Open a person for their clock record." flush>
-            <div className="ss-tools">
-              <div className="seg" role="group" aria-label="Who to show">
-                {(
-                  [
-                    ['all', 'All', data.rows.length],
-                    ['in', 'Clocked in', inNow],
-                    ['problem', 'Needs a look', problems],
-                    ['not_in', 'Not clocked in', notIn],
-                  ] as const
-                ).map(([k, l, n]) => (
-                  <button key={k} aria-pressed={filter === k} onClick={() => setFilter(k)}>
-                    {l}
-                    <span className="ss-count">{n}</span>
-                  </button>
-                ))}
-              </div>
-              <Search value={q} onChange={setQ} placeholder="Search name, title or company" />
-            </div>
-            <ul className="ss-rows">
-              {rows.length === 0 && <li className="empty">Nobody here.</li>}
-              {rows.map((r) => (
-                <li key={r.userId}>
-                  <BoardRow r={r} problem={problem(r)} checkins={day.data?.events.filter((e) => e.userId === r.userId) ?? []} onOpen={() => r.clock && setOpen(r.clock.id)} />
-                </li>
-              ))}
-            </ul>
+            <DataTable
+              label="Team today"
+              control={team}
+              rows={rows}
+              rowKey={(r) => r.userId}
+              searchPlaceholder="Search name, title or company"
+              searchText={(r) => `${r.title} ${r.company}`}
+              onRowClick={(r) => r.clock && setOpen(r.clock.id)}
+              rowTone={(r) => (problem(r) ? 'warn' : undefined)}
+              empty={<div className="empty">Nobody here.</div>}
+              filters={[
+                {
+                  id: 'show',
+                  label: 'Who to show',
+                  value: (r) => [r.status, ...(problem(r) ? ['problem'] : [])],
+                  options: [
+                    { value: 'in', label: 'Clocked in' },
+                    { value: 'problem', label: 'Needs a look' },
+                    { value: 'not_in', label: 'Not clocked in' },
+                  ],
+                },
+                { id: 'company', label: 'Company', value: (r) => r.company },
+              ]}
+              columns={[
+                {
+                  id: 'name',
+                  label: 'Name',
+                  value: (r) => r.name,
+                  phone: 'title',
+                  render: (r) => <Person name={r.name} sub={r.title.includes(r.company.split(' ')[0]) ? r.title : `${r.title} · ${r.company}`} />,
+                },
+                {
+                  id: 'in',
+                  label: 'Today',
+                  value: (r) => r.clock?.in.receivedAt ?? '',
+                  sort: 'date',
+                  search: false,
+                  render: (r) => <BoardTimes r={r} checkins={day.data?.events.filter((e) => e.userId === r.userId) ?? []} />,
+                },
+                {
+                  id: 'status',
+                  label: 'Status',
+                  value: (r) => boardStatus(r).label,
+                  translate: true,
+                  align: 'right',
+                  render: (r) => <Chip tone={boardStatus(r).tone}>{boardStatus(r).label}</Chip>,
+                },
+              ]}
+            />
             <p className="ss-note ss-foot">
               Location and face are personal data, and face is biometric data under the PDPA. Staff must be told in writing what is recorded and why before this
               goes live.
@@ -474,87 +496,84 @@ export function StaffClockBoardView() {
   );
 }
 
-function BoardRow({ r, problem, onOpen, checkins = [] }: { r: Row; problem: boolean; onOpen: () => void; checkins?: CheckinEvent[] }) {
+function boardStatus(r: Row): { label: string; tone: Tone } {
+  return r.status === 'in' ? LOCATION[r.location] : r.status === 'out' ? { label: 'Clocked out', tone: 'neutral' } : { label: 'Not in', tone: 'neutral' };
+}
+
+/** P107: one person's day on the team list (clock times, hours, readings, check-ins, door, flags), as a table cell. */
+function BoardTimes({ r, checkins = [] }: { r: Row; checkins?: CheckinEvent[] }) {
   const flags = r.clock ? r.clock.flags.filter((f) => f !== 'PHOTO_ONLY') : [];
-  const status =
-    r.status === 'in' ? LOCATION[r.location] : r.status === 'out' ? { label: 'Clocked out', tone: 'neutral' as Tone } : { label: 'Not in', tone: 'neutral' as Tone };
   return (
-    <button className="ss-row ss-board-row" data-status={r.status} data-tone={problem ? 'warn' : undefined} disabled={!r.clock} onClick={onOpen}>
-      <Person name={r.name} sub={r.title.includes(r.company.split(' ')[0]) ? r.title : `${r.title} · ${r.company}`} />
-      <span className="ss-board-times">
-        {r.clock ? (
-          <span className="ss-times-line">
+    <span className="ss-board-times">
+      {r.clock ? (
+        <span className="ss-times-line">
+          <span>
+            <SignInIcon size={14} aria-hidden="true" />
+            In {time(r.clock.in.receivedAt)}
+          </span>
+          {r.clock.out && (
             <span>
-              <SignInIcon size={14} aria-hidden="true" />
-              In {time(r.clock.in.receivedAt)}
+              <SignOutIcon size={14} aria-hidden="true" />
+              out {time(r.clock.out.receivedAt)}
             </span>
-            {r.clock.out && (
-              <span>
-                <SignOutIcon size={14} aria-hidden="true" />
-                out {time(r.clock.out.receivedAt)}
-              </span>
-            )}
+          )}
+        </span>
+      ) : (
+        <span className="muted">Not clocked in today</span>
+      )}
+      {r.hours && (
+        <span className="ss-times-line ss-meta">
+          <span>
+            First in {time(r.hours.firstIn)}
+            {r.hours.lastOut && r.status === 'out' ? `, last out ${time(r.hours.lastOut)}` : ''}
           </span>
-        ) : (
-          <span className="muted">Not clocked in today</span>
-        )}
-        {r.hours && (
-          <span className="ss-times-line ss-meta">
-            <span>
-              First in {time(r.hours.firstIn)}
-              {r.hours.lastOut && r.status === 'out' ? `, last out ${time(r.hours.lastOut)}` : ''}
-            </span>
-            <span>
-              <ClockIcon size={14} aria-hidden="true" />
-              worked {dur(r.hours.workedMin)}
-            </span>
-            <span>
-              <CoffeeIcon size={14} aria-hidden="true" />
-              break {dur(r.hours.breakMin)}
-            </span>
+          <span>
+            <ClockIcon size={14} aria-hidden="true" />
+            worked {dur(r.hours.workedMin)}
           </span>
-        )}
-        {r.last && (
-          <span className="ss-meta">
-            Last reading {time(r.last.at)}
-            {r.last.distanceM !== null ? `, ${fmtDistance(r.last.distanceM)} from base` : ''}
+          <span>
+            <CoffeeIcon size={14} aria-hidden="true" />
+            break {dur(r.hours.breakMin)}
           </span>
-        )}
-        {r.status !== 'not_in' && <MovementChips m={r.movement} />}
-        {checkins.length > 0 && (
-          <span className="ci-board-line">
-            {checkins.map((e) => (
-              <Chip key={e.id} tone={e.outcome === 'accepted' ? VERDICT[e.verdict].tone : OUTCOME[e.outcome].tone}>
-                {e.kind === 'in' ? 'In' : 'Out'} {time(e.at)} · {e.outcome === 'blocked' ? 'refused, ' : ''}
-                {whereText(e)}
-              </Chip>
-            ))}
-          </span>
-        )}
-        {(r.door.firstIn || r.door.lastOut) && (
-          <span className="ss-meta">
-            Door: {r.door.firstIn ? `in ${time(r.door.firstIn)}` : 'no entry'}
-            {r.door.lastOut ? `, left ${time(r.door.lastOut)}` : ''}
-          </span>
-        )}
-        {((r.hours && (r.hours.late || (r.hours.early && r.status === 'out') || r.hours.longBreak)) || (r.status === 'in' && r.door.left) || flags.length > 0) && (
-          <span className="ss-chips">
-            {r.hours?.late && <Chip tone="warn">Late {dur(r.hours.lateMin)}</Chip>}
-            {r.hours?.early && r.status === 'out' && <Chip tone="warn">Left before {hm(r.hours.end)}</Chip>}
-            {r.hours?.longBreak && <Chip tone="warn">Break over 1 hour</Chip>}
-            {r.status === 'in' && r.door.left && <Chip tone="warn">Left the office, still signed in</Chip>}
-            {flags.map((f) => (
-              <Chip key={f} tone={FLAG_TONE[f] ?? 'crit'}>
-                {FLAG_LABEL[f]}
-              </Chip>
-            ))}
-          </span>
-        )}
-      </span>
-      <span className="ss-row-side">
-        <Chip tone={status.tone}>{status.label}</Chip>
-      </span>
-    </button>
+        </span>
+      )}
+      {r.last && (
+        <span className="ss-meta">
+          Last reading {time(r.last.at)}
+          {r.last.distanceM !== null ? `, ${fmtDistance(r.last.distanceM)} from base` : ''}
+        </span>
+      )}
+      {r.status !== 'not_in' && <MovementChips m={r.movement} />}
+      {checkins.length > 0 && (
+        <span className="ci-board-line">
+          {checkins.map((e) => (
+            <Chip key={e.id} tone={e.outcome === 'accepted' ? VERDICT[e.verdict].tone : OUTCOME[e.outcome].tone}>
+              {e.kind === 'in' ? 'In' : 'Out'} {time(e.at)} · {e.outcome === 'blocked' ? 'refused, ' : ''}
+              {whereText(e)}
+            </Chip>
+          ))}
+        </span>
+      )}
+      {(r.door.firstIn || r.door.lastOut) && (
+        <span className="ss-meta">
+          Door: {r.door.firstIn ? `in ${time(r.door.firstIn)}` : 'no entry'}
+          {r.door.lastOut ? `, left ${time(r.door.lastOut)}` : ''}
+        </span>
+      )}
+      {((r.hours && (r.hours.late || (r.hours.early && r.status === 'out') || r.hours.longBreak)) || (r.status === 'in' && r.door.left) || flags.length > 0) && (
+        <span className="ss-chips">
+          {r.hours?.late && <Chip tone="warn">Late {dur(r.hours.lateMin)}</Chip>}
+          {r.hours?.early && r.status === 'out' && <Chip tone="warn">Left before {hm(r.hours.end)}</Chip>}
+          {r.hours?.longBreak && <Chip tone="warn">Break over 1 hour</Chip>}
+          {r.status === 'in' && r.door.left && <Chip tone="warn">Left the office, still signed in</Chip>}
+          {flags.map((f) => (
+            <Chip key={f} tone={FLAG_TONE[f] ?? 'crit'}>
+              {FLAG_LABEL[f]}
+            </Chip>
+          ))}
+        </span>
+      )}
+    </span>
   );
 }
 

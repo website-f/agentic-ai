@@ -18,6 +18,8 @@ import {
 import { api, type SocsoClaimDetail } from '../api';
 import { Chip, ErrorNotice, Loading, dateLabel, dateTimeLabel, useAction, useLoad } from '../ui';
 import { DocList, ProofPicker } from './Proof';
+import { Person } from '../kit';
+import { DataTable } from '../DataTable';
 
 /**
  * The parts of a SOCSO claim built on 5 Nov 2026 (Fauzan: "Build all that still not build"): LINDUNG 24 Jam claims,
@@ -714,26 +716,67 @@ export function DoshRegisterPanel() {
             <Chip tone={data.notAssessed ? 'warn' : 'ok'}>{data.notAssessed} not assessed</Chip>
             <Chip tone={data.overdue ? 'crit' : 'ok'}>{data.overdue} overdue to DOSH</Chip>
           </div>
-          <div className="list">
-            {data.rows.length === 0 && <div className="empty">No workplace accident on a SOCSO claim this year.</div>}
-            {data.rows.map((r) => (
-              <div key={r.claimId} className="list-item small" style={{ flexDirection: 'column', alignItems: 'stretch' }}>
-                <div style={{ fontWeight: 600 }}>
-                  {dateTimeLabel(r.incidentAt)} · {r.person?.name ?? 'Unknown'} ({r.person?.staffNo}) · {r.companyName}
-                </div>
-                <div className="muted">
-                  {r.typeLabel} · {r.place || 'place not given'} · {r.kindLabel}
-                  {r.form ? ` · ${r.form.form === 'JKKP6' ? 'JKKP 6' : 'JKKP 7'} sent ${dateLabel(r.form.on)}` : ''}
-                </div>
-                {r.clock && r.clock.owed.length > 0 && (
-                  <div style={{ color: r.clock.overdue ? 'var(--crit)' : undefined }}>
-                    Owed: {r.clock.owed.join('; ')}
-                    {r.clock.formDue && !r.clock.formDone ? ` (form due ${dateLabel(r.clock.formDue)})` : ''}
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
+          {/* P107: the register as a data table: search, company, kind and "owed" filters, sort and pages. */}
+          <DataTable
+            label="DOSH accident register (JKKP 8)"
+            stateKey="socso.dosh"
+            rows={data.rows}
+            rowKey={(r) => r.claimId}
+            searchPlaceholder="Search name, staff no. or place"
+            searchText={(r) => `${r.person?.staffNo ?? ''} ${r.place}`}
+            rowTone={(r) => (r.clock?.overdue ? 'crit' : undefined)}
+            empty={<div className="empty">No workplace accident on a SOCSO claim this year.</div>}
+            filters={[
+              { id: 'company', label: 'Company', value: (r) => r.companyName },
+              { id: 'kind', label: 'Kind', value: (r) => r.kindLabel },
+              {
+                id: 'owed',
+                label: 'Owed to DOSH',
+                value: (r) => (r.clock?.overdue ? 'overdue' : r.clock && r.clock.owed.length > 0 ? 'owed' : 'none'),
+                options: [
+                  { value: 'overdue', label: 'Overdue' },
+                  { value: 'owed', label: 'Owed, not late' },
+                  { value: 'none', label: 'Nothing owed' },
+                ],
+              },
+            ]}
+            columns={[
+              {
+                id: 'name',
+                label: 'Name',
+                value: (r) => r.person?.name ?? 'Unknown',
+                phone: 'title',
+                render: (r) => <Person name={r.person?.name ?? 'Unknown'} sub={[r.person?.staffNo, r.companyName].filter(Boolean).join(' · ')} size={32} />,
+              },
+              { id: 'when', label: 'Incident', value: (r) => r.incidentAt, sort: 'date', render: (r) => dateTimeLabel(r.incidentAt) },
+              {
+                id: 'what',
+                label: 'What happened',
+                value: (r) => `${r.typeLabel} · ${r.place || 'place not given'} · ${r.kindLabel}`,
+                render: (r) => (
+                  <span className="small">
+                    {r.typeLabel} · {r.place || 'place not given'} · {r.kindLabel}
+                    {r.form ? ` · ${r.form.form === 'JKKP6' ? 'JKKP 6' : 'JKKP 7'} sent ${dateLabel(r.form.on)}` : ''}
+                  </span>
+                ),
+              },
+              {
+                id: 'owed',
+                label: 'Owed',
+                value: (r) => (r.clock ? r.clock.owed.join('; ') : ''),
+                sort: false,
+                render: (r) =>
+                  r.clock && r.clock.owed.length > 0 ? (
+                    <span className="small" style={{ color: r.clock.overdue ? 'var(--crit)' : undefined }}>
+                      {r.clock.owed.join('; ')}
+                      {r.clock.formDue && !r.clock.formDone ? ` (form due ${dateLabel(r.clock.formDue)})` : ''}
+                    </span>
+                  ) : (
+                    '–'
+                  ),
+              },
+            ]}
+          />
         </>
       )}
     </section>

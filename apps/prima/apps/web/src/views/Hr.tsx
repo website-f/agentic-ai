@@ -4,6 +4,7 @@ import { api } from '../api';
 import { useApp } from '../App';
 import { Chip, ErrorNotice, Loading, useLoad } from '../ui';
 import { Card, PageHead, Stat, Stats } from '../kit';
+import { DataTable, type DtColumn, type DtFilter } from '../DataTable';
 import { CmsHoursPanel } from './CmsHours';
 import { LeavePanel } from './Leave';
 import { FlexPanel, HolidaysPanel, HrLeaveSettingsPanel } from './HrLeave';
@@ -51,6 +52,60 @@ function Group({ id, title, sub, children }: { id: string; title: string; sub: s
   );
 }
 
+type MonitorRow = Awaited<ReturnType<typeof api.hrMonitor>>['rows'][number];
+type CountKey = 'staff' | 'nepali' | 'blocked' | 'kdnMissing' | 'kdnPending' | 'csgDue' | 'csgPast' | 'foreignPermits' | 'overAge' | 'faceNotEnrolled';
+const count = (r: MonitorRow, k: CountKey): number => (r.hasDetail ? r[k] : 0);
+/** A figure column; `tone` colours it when it is not zero. */
+const fig = (id: CountKey, label: string, opts: { tone?: 'crit'; hideBelow?: number; phone?: 'hidden' } = {}): DtColumn<MonitorRow> => ({
+  id,
+  label,
+  value: (r) => count(r, id),
+  sort: 'number',
+  hideBelow: opts.hideBelow,
+  phone: opts.phone,
+  render: (r) => (
+    <span className="hr-num" data-tone={opts.tone && count(r, id) ? opts.tone : undefined}>
+      {count(r, id)}
+    </span>
+  ),
+});
+/** P107: the workforce papers table: the old eleven columns; the less urgent ones leave narrower screens first. */
+const PAPER_COLUMNS: DtColumn<MonitorRow>[] = [
+  {
+    id: 'company',
+    label: 'Company',
+    value: (r) => r.company.name,
+    phone: 'title',
+    render: (r) => (
+      <span className="hr-company">
+        <span className="hr-company-name">{r.company.name}</span>
+        {r.company.isPilot && <span className="muted small">Pilot</span>}
+      </span>
+    ),
+  },
+  fig('staff', 'Staff'),
+  fig('nepali', 'Nepali', { hideBelow: 1280, phone: 'hidden' }),
+  fig('blocked', 'Cannot work', { tone: 'crit' }),
+  fig('kdnMissing', 'No KDN', { hideBelow: 1100 }),
+  fig('kdnPending', 'KDN vetting pending', { hideBelow: 1280, phone: 'hidden' }),
+  fig('csgDue', 'CSG due (year 1)', { hideBelow: 1280, phone: 'hidden' }),
+  fig('csgPast', 'CSG overdue', { tone: 'crit' }),
+  fig('foreignPermits', 'Foreign papers', { hideBelow: 1100, phone: 'hidden' }),
+  fig('overAge', 'Over 60', { hideBelow: 1366, phone: 'hidden' }),
+  fig('faceNotEnrolled', 'Face not enrolled', { hideBelow: 1366, phone: 'hidden' }),
+];
+const PAPER_FILTERS: DtFilter<MonitorRow>[] = [
+  {
+    id: 'needs',
+    label: 'Show',
+    value: (r) => (count(r, 'blocked') || count(r, 'csgPast') ? 'act' : 'fine'),
+    options: [
+      { value: 'act', label: 'Cannot work or CSG overdue' },
+      { value: 'fine', label: 'Nothing urgent' },
+    ],
+  },
+];
+
 /** PWVSB central HR monitors every company's workforce papers; each company stays the employer and acts (V7 s.89). */
 export function HrView() {
   const { setCompanyId, go } = useApp();
@@ -70,11 +125,6 @@ export function HrView() {
   const detail = data.rows.filter((r) => r.hasDetail);
   const unknown = data.rows.filter((r) => !r.hasDetail);
   const sum = (k: 'staff' | 'blocked' | 'kdnMissing' | 'kdnPending' | 'csgPast' | 'foreignPermits') => detail.reduce((n, r) => n + (r.hasDetail ? r[k] : 0), 0);
-  const cell = (v: number, tone: 'crit' | 'warn') => (
-    <td className="num hr-num" data-tone={v ? tone : undefined}>
-      {v}
-    </td>
-  );
   const openCompany = (id: string) => {
     setCompanyId(id);
     go({ view: 'people' });
@@ -113,48 +163,19 @@ export function HrView() {
 
       <section className="hr-group" id="hr-g-papers" aria-label="Workforce papers by company">
         <Card flush title="Workforce papers by company" sub="Select a company to see its guards and their papers.">
-          <div className="table-wrap hr-table">
-            <table>
-              <thead>
-                <tr>
-                  <th>Company</th>
-                  <th className="num">Staff</th>
-                  <th className="num hide-sm">Nepali</th>
-                  <th className="num">Cannot work</th>
-                  <th className="num hide-sm">No KDN</th>
-                  <th className="num hide-sm">KDN vetting pending</th>
-                  <th className="num hide-sm">CSG due (year 1)</th>
-                  <th className="num">CSG overdue</th>
-                  <th className="num hide-sm">Foreign papers</th>
-                  <th className="num hide-sm">Over 60</th>
-                  <th className="num hide-sm">Face not enrolled</th>
-                </tr>
-              </thead>
-              <tbody>
-                {detail.map((r) =>
-                  r.hasDetail && (
-                    <tr key={r.company.id} className="clickable" onClick={() => openCompany(r.company.id)}>
-                      <td>
-                        <button type="button" className="hr-company" onClick={(e) => (e.stopPropagation(), openCompany(r.company.id))}>
-                          <span className="hr-company-name">{r.company.name}</span>
-                          {r.company.isPilot && <span className="muted small">Pilot</span>}
-                        </button>
-                      </td>
-                      <td className="num">{r.staff}</td>
-                      <td className="num hide-sm">{r.nepali}</td>
-                      {cell(r.blocked, 'crit')}
-                      <td className="num hide-sm">{r.kdnMissing}</td>
-                      <td className="num hide-sm">{r.kdnPending}</td>
-                      <td className="num hide-sm">{r.csgDue}</td>
-                      {cell(r.csgPast, 'crit')}
-                      <td className="num hide-sm">{r.foreignPermits}</td>
-                      <td className="num hide-sm">{r.overAge}</td>
-                      <td className="num hide-sm">{r.faceNotEnrolled}</td>
-                    </tr>
-                  ),
-                )}
-              </tbody>
-            </table>
+          {/* P107: the data table: sort by any figure, search a company, pages when the group grows. */}
+          <div className="hr-dt">
+            <DataTable
+              label="Workforce papers by company"
+              stateKey="hr.papers"
+              rows={detail}
+              rowKey={(r) => r.company.id}
+              searchPlaceholder="Find a company"
+              onRowClick={(r) => openCompany(r.company.id)}
+              columns={PAPER_COLUMNS}
+              filters={PAPER_FILTERS}
+              phoneFacts={4}
+            />
           </div>
           {unknown.length > 0 && (
             <div className="hr-unknown">

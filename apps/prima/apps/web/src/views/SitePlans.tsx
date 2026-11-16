@@ -11,6 +11,7 @@ import { ReturnSpec, TimeMarkedPhoto } from './Cleaning';
 import { p91MayImport } from '@prima/core';
 import { PlusIcon } from '@phosphor-icons/react';
 import { ImportButton } from './ImportDrawer';
+import { DataTable } from '../DataTable';
 
 // ---------- Site stock and fittings ----------
 
@@ -68,79 +69,127 @@ export function SiteStockView() {
                     Supplies over {b.rule.value.overUsePct}% or under {b.rule.value.underUsePct}% of budget are flagged
                   </Chip>
                 </div>
-                {!b.rows.length && <div className="empty">Nothing to show.</div>}
-                <div className="list">
-                  {b.rows.map((r) => (
-                    <div key={r.siteId} className="list-item" style={{ flexDirection: 'column' }}>
-                      <div className="row" style={{ justifyContent: 'space-between', width: '100%' }}>
-                        <div>
-                          <div style={{ fontWeight: 600 }}>{r.siteName}</div>
-                          <div className="small muted">{r.companyName}</div>
-                        </div>
-                        <button
-                          className="btn btn-sm"
-                          onClick={() => {
-                            setCompanyId(r.companyId);
-                            setSiteId(r.siteId);
-                            setMode('fittings');
-                          }}
-                        >
-                          Fittings
-                        </button>
-                      </div>
-                      {r.cleaning && (
-                        <div className="row small" style={{ gap: 4 }}>
-                          <span className="label">Cleaning</span>
-                          {r.cleaning.flagged.map((f) => (
-                            <Chip key={f.name} tone={f.flags.includes('over_use') || f.flags.includes('short_delivery') ? 'crit' : f.flags.includes('no_check') ? 'unknown' : 'warn'}>
-                              {f.name}: {f.flags.map((x) => x.replace('_', ' ')).join(', ')}
-                              {f.usePct != null ? ` (${f.usePct}%)` : ''}
-                            </Chip>
-                          ))}
-                          {r.cleaning.equipmentShort.map((e) => (
-                            <Chip key={e.name} tone="warn">
-                              {e.name}: {e.working ?? '–'}/{e.required} working
-                              {e.broken ? `, ${e.broken} broken` : ''}
-                            </Chip>
-                          ))}
-                          {r.cleaning.pendingDeliveries > 0 && <Chip tone="info">{r.cleaning.pendingDeliveries} deliveries not yet received</Chip>}
-                          <span className="muted">Last check {r.cleaning.lastCheck ? dateLabel(r.cleaning.lastCheck) : 'none'}</span>
-                        </div>
-                      )}
-                      {r.security && (
-                        <div className="row small" style={{ gap: 4 }}>
-                          <span className="label">Guards ({r.security.guards})</span>
-                          {r.security.noUniform.length > 0 && (
-                            <Chip tone="crit" title={r.security.noUniform.map((p) => p.name).join(', ')}>
-                              {r.security.noUniform.length} with no uniform on record
-                            </Chip>
-                          )}
-                          {r.security.unconfirmed > 0 && <Chip tone="warn">{r.security.unconfirmed} not confirmed by the guard</Chip>}
-                          {r.security.disputed > 0 && <Chip tone="warn">{r.security.disputed} disputed</Chip>}
-                          {r.security.lostWaiting > 0 && <Chip tone="warn">{r.security.lostWaiting} lost or damaged waiting</Chip>}
-                          {r.security.held.slice(0, 5).map((h) => (
-                            <Chip key={h.kind + h.name} tone="neutral">
-                              {h.qty} × {h.name}
-                            </Chip>
-                          ))}
-                        </div>
-                      )}
-                      {r.fittings && (
-                        <div className="row small" style={{ gap: 4 }}>
-                          <span className="label">Fittings</span>
-                          {r.fittings.items.map((i) => (
-                            <Chip key={i.name} tone={i.working == null ? 'unknown' : 'warn'}>
-                              {i.name}: {i.working ?? 'not recorded'}/{i.required}
-                              {i.broken ? `, ${i.broken} broken` : ''}
-                            </Chip>
-                          ))}
-                          {r.fittings.checkDue && <Chip tone="warn">Monthly check due</Chip>}
-                          {r.fittings.notRecovered > 0 && <Chip tone="crit">{r.fittings.notRecovered} not recovered</Chip>}
-                          {!r.fittings.items.length && !r.fittings.checkDue && <Chip tone="ok">All in place</Chip>}
-                        </div>
-                      )}
-                    </div>
-                  ))}
+                {/* P107: the sites as a data table: find a site or company; filter by company and what needs a look;
+                    each row keeps its cleaning, guard and fittings chips and its Fittings button. */}
+                <div className="panel-body">
+                  <DataTable
+                    label="Sites"
+                    stateKey="sitestock.sites"
+                    rows={b.rows}
+                    rowKey={(r) => r.siteId}
+                    searchPlaceholder="Find a site or company"
+                    empty={<div className="empty">Nothing to show.</div>}
+                    actions={(r) => [
+                      {
+                        label: 'Fittings',
+                        onClick: () => {
+                          setCompanyId(r.companyId);
+                          setSiteId(r.siteId);
+                          setMode('fittings');
+                        },
+                      },
+                    ]}
+                    columns={[
+                      { id: 'site', label: 'Site', value: (r) => r.siteName, phone: 'title', render: (r) => <span style={{ fontWeight: 600 }}>{r.siteName}</span> },
+                      { id: 'company', label: 'Company', value: (r) => r.companyName, phone: 'sub' },
+                      {
+                        id: 'cleaning',
+                        label: 'Cleaning',
+                        value: (r) => r.cleaning?.flagged.length ?? null,
+                        sort: 'number',
+                        align: 'left',
+                        render: (r) =>
+                          r.cleaning ? (
+                            <div className="row small" style={{ gap: 4, flexWrap: 'wrap' }}>
+                              {r.cleaning.flagged.map((f) => (
+                                <Chip key={f.name} tone={f.flags.includes('over_use') || f.flags.includes('short_delivery') ? 'crit' : f.flags.includes('no_check') ? 'unknown' : 'warn'}>
+                                  {f.name}: {f.flags.map((x) => x.replace('_', ' ')).join(', ')}
+                                  {f.usePct != null ? ` (${f.usePct}%)` : ''}
+                                </Chip>
+                              ))}
+                              {r.cleaning.equipmentShort.map((e) => (
+                                <Chip key={e.name} tone="warn">
+                                  {e.name}: {e.working ?? '–'}/{e.required} working
+                                  {e.broken ? `, ${e.broken} broken` : ''}
+                                </Chip>
+                              ))}
+                              {r.cleaning.pendingDeliveries > 0 && <Chip tone="info">{r.cleaning.pendingDeliveries} deliveries not yet received</Chip>}
+                              <span className="muted">Last check {r.cleaning.lastCheck ? dateLabel(r.cleaning.lastCheck) : 'none'}</span>
+                            </div>
+                          ) : (
+                            '–'
+                          ),
+                      },
+                      {
+                        id: 'guards',
+                        label: 'Guards',
+                        value: (r) => r.security?.guards ?? null,
+                        sort: 'number',
+                        align: 'left',
+                        render: (r) =>
+                          r.security ? (
+                            <div className="row small" style={{ gap: 4, flexWrap: 'wrap' }}>
+                              <span className="label">Guards ({r.security.guards})</span>
+                              {r.security.noUniform.length > 0 && (
+                                <Chip tone="crit" title={r.security.noUniform.map((p) => p.name).join(', ')}>
+                                  {r.security.noUniform.length} with no uniform on record
+                                </Chip>
+                              )}
+                              {r.security.unconfirmed > 0 && <Chip tone="warn">{r.security.unconfirmed} not confirmed by the guard</Chip>}
+                              {r.security.disputed > 0 && <Chip tone="warn">{r.security.disputed} disputed</Chip>}
+                              {r.security.lostWaiting > 0 && <Chip tone="warn">{r.security.lostWaiting} lost or damaged waiting</Chip>}
+                              {r.security.held.slice(0, 5).map((h) => (
+                                <Chip key={h.kind + h.name} tone="neutral">
+                                  {h.qty} × {h.name}
+                                </Chip>
+                              ))}
+                            </div>
+                          ) : (
+                            '–'
+                          ),
+                      },
+                      {
+                        id: 'fittings',
+                        label: 'Fittings',
+                        value: (r) => r.fittings?.items.length ?? null,
+                        sort: 'number',
+                        align: 'left',
+                        render: (r) =>
+                          r.fittings ? (
+                            <div className="row small" style={{ gap: 4, flexWrap: 'wrap' }}>
+                              {r.fittings.items.map((i) => (
+                                <Chip key={i.name} tone={i.working == null ? 'unknown' : 'warn'}>
+                                  {i.name}: {i.working ?? 'not recorded'}/{i.required}
+                                  {i.broken ? `, ${i.broken} broken` : ''}
+                                </Chip>
+                              ))}
+                              {r.fittings.checkDue && <Chip tone="warn">Monthly check due</Chip>}
+                              {r.fittings.notRecovered > 0 && <Chip tone="crit">{r.fittings.notRecovered} not recovered</Chip>}
+                              {!r.fittings.items.length && !r.fittings.checkDue && <Chip tone="ok">All in place</Chip>}
+                            </div>
+                          ) : (
+                            '–'
+                          ),
+                      },
+                    ]}
+                    filters={[
+                      { id: 'company', label: 'Company', value: (r) => r.companyName },
+                      {
+                        id: 'needs',
+                        label: 'Show',
+                        value: (r) => [
+                          ...(r.cleaning && (r.cleaning.flagged.length || r.cleaning.equipmentShort.length) ? ['cleaning'] : []),
+                          ...(r.security && r.security.noUniform.length ? ['uniform'] : []),
+                          ...(r.fittings && (r.fittings.items.length || r.fittings.checkDue || r.fittings.notRecovered) ? ['fittings'] : []),
+                        ],
+                        options: [
+                          { value: 'cleaning', label: 'Cleaning stock flags' },
+                          { value: 'uniform', label: 'Guards with no uniform on record' },
+                          { value: 'fittings', label: 'Fittings short or broken' },
+                        ],
+                      },
+                    ]}
+                  />
                 </div>
               </section>
             </>

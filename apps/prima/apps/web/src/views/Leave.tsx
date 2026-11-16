@@ -4,6 +4,8 @@ import { LEAVE_LABEL, type LeaveKind, type ProofInput } from '@prima/core';
 import { api, type LeaveList } from '../api';
 import { Chip, ErrorNotice, Loading, dateLabel, dateTimeLabel, useAction, useLoad } from '../ui';
 import { ProofPicker } from './Proof';
+import { Person } from '../kit';
+import { DataTable } from '../DataTable';
 
 
 
@@ -45,13 +47,72 @@ export function LeavePanel({
           {mine ? `${mine} for you` : `${data.rows.length} waiting`}
         </Chip>
       </div>
-      <div className="list">
-        {data.rows.length === 0 && (
-          <div className="empty">No request is waiting.</div>
-        )}
-        {data.rows.map((r) => (
-          <LeaveRow key={r.request.id} r={r} />
-        ))}
+      {/* P107: the requests as a data table (search, kind / company / "for me" filters, sort, pages); the reason, who
+          decided so far and the Decide box sit under each row. */}
+      <div className="lv-dt-pad">
+        <DataTable
+          label={title}
+          stateKey={`leave.requests.${companyId ?? "all"}`}
+          rows={data.rows}
+          rowKey={(r) => r.request.id}
+          searchPlaceholder="Search name, staff no. or reason"
+          searchText={(r) => `${r.person.staffNo} ${r.request.reason}`}
+          rowTone={(r) => (r.canDecide ? "info" : undefined)}
+          empty={<div className="empty">No request is waiting.</div>}
+          filters={[
+            {
+              id: "mine",
+              label: "Show",
+              value: (r) => (r.canDecide ? "mine" : "others"),
+              options: [
+                { value: "mine", label: "For me to decide" },
+                { value: "others", label: "With someone else" },
+              ],
+            },
+            { id: "kind", label: "Kind", value: (r) => r.request.kind, optionLabel: (k) => LEAVE_LABEL[k as LeaveKind] ?? k },
+            { id: "company", label: "Company", value: (r) => r.companyName },
+            { id: "with", label: "Waiting with", value: (r) => r.waitingWith?.label ?? "" },
+          ]}
+          columns={[
+            {
+              id: "name",
+              label: "Name",
+              value: (r) => r.person.name,
+              phone: "title",
+              render: (r) => <Person name={r.person.name} sub={`${r.person.staffNo} · ${r.companyName}`} size={32} />,
+            },
+            { id: "kind", label: "Kind", value: (r) => LEAVE_LABEL[r.request.kind], translate: true },
+            {
+              id: "from",
+              label: "Dates",
+              value: (r) => r.request.from,
+              sort: "date",
+              render: (r) => (
+                <span>
+                  {dateLabel(r.request.from)}
+                  {r.request.to !== r.request.from ? ` to ${dateLabel(r.request.to)}` : ""}
+                </span>
+              ),
+            },
+            { id: "days", label: "Days", value: (r) => r.request.days, sort: "number", hideBelow: 1100 },
+            { id: "asked", label: "Asked", value: (r) => r.request.requestedAt, sort: "date", hideBelow: 1280, render: (r) => dateTimeLabel(r.request.requestedAt) },
+            {
+              id: "with",
+              label: "Waiting with",
+              value: (r) => r.waitingWith?.label ?? "",
+              render: (r) =>
+                r.waitingWith ? (
+                  <Chip tone={r.waitingWith.level === "OM" || r.waitingWith.level === "HR" ? "info" : "warn"}>
+                    With {r.waitingWith.label}
+                    {r.waitingWith.person !== "Not assigned" ? ` (${r.waitingWith.person})` : ""}
+                  </Chip>
+                ) : (
+                  "–"
+                ),
+            },
+          ]}
+          rowDetail={(r) => <LeaveRow r={r} />}
+        />
       </div>
       <div className="muted small" style={{ padding: "8px 12px" }}>
         Moves up a level after every {data.rule.value} hours without a decision
@@ -84,23 +145,16 @@ function LeaveRow({ r }: { r: LeaveList["rows"][number] }) {
           ? "Consent refused. The leave is rejected."
           : "Rejected.",
     );
+  // P107: the request's reason, who asked and decided so far, and the Decide box, under its row in the table.
   return (
-    <div
-      className="list-item"
-      style={{ flexDirection: "column", alignItems: "stretch", gap: 6 }}
-    >
+    <div className="lv-dt-detail">
       <div
         className="row"
         style={{ justifyContent: "space-between", flexWrap: "wrap", gap: 6 }}
       >
         <div>
-          <div style={{ fontWeight: 600 }}>
-            {r.person.name} · {LEAVE_LABEL[q.kind]}
-          </div>
           <div className="muted small">
-            {r.person.staffNo} · {r.companyName} · {dateLabel(q.from)}
-            {q.to !== q.from ? ` to ${dateLabel(q.to)}` : ""} ({q.days} day
-            {q.days === 1 ? "" : "s"})
+            {q.days} day{q.days === 1 ? "" : "s"}
           </div>
           <div className="small">{q.reason}</div>
           <div className="muted small">
@@ -122,20 +176,6 @@ function LeaveRow({ r }: { r: LeaveList["rows"][number] }) {
             </div>
           )}
         </div>
-        {r.waitingWith && (
-          <Chip
-            tone={
-              r.waitingWith.level === "OM" || r.waitingWith.level === "HR"
-                ? "info"
-                : "warn"
-            }
-          >
-            With {r.waitingWith.label}
-            {r.waitingWith.person !== "Not assigned"
-              ? ` (${r.waitingWith.person})`
-              : ""}
-          </Chip>
-        )}
       </div>
       {r.canDecide && !open && (
         <div>

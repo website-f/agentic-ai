@@ -5,6 +5,7 @@
  */
 import { Select } from '../SearchSelect';
 import { lazy, Suspense, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
+import { DataTable } from '../DataTable';
 import { AirplaneTiltIcon, ArchiveIcon, BuildingsIcon, CrosshairIcon, MagnifyingGlassIcon, MapPinIcon, PlusIcon, TrashIcon, UsersThreeIcon } from '@phosphor-icons/react';
 import { STATE_CAPITALS, type CheckinPlace, type CheckinRuleKind, type CheckinZone } from '@prima/core';
 import { api, type CheckinReviews, type CheckinSetup, type CheckinSites, type GeoResult } from '../api';
@@ -354,76 +355,61 @@ function PlaceEditor({
 }
 
 /** Who checks in where: search, filter by department, pick people (or a whole department), then set their rule. */
+/** The kinds of check-in rule, for the table's filter. */
+const RULE_KIND: Record<string, string> = { office: 'Company office', place: 'One place', field: 'Field' };
+
 function StaffRules({ company, staff, onChanged }: { company: Company; staff: Staff[]; onChanged: () => void }) {
-  const [q, setQ] = useState('');
-  const [dept, setDept] = useState('all');
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const [editing, setEditing] = useState(false);
-  const depts = useMemo(() => [...new Set(staff.map((s) => s.department ?? ''))].sort(), [staff]);
-  const needle = q.trim().toLowerCase();
-  const shown = staff.filter((s) => (dept === 'all' || (s.department ?? '') === dept) && (!needle || `${s.name} ${s.title}`.toLowerCase().includes(needle)));
-  const pickable = shown.filter((s) => !s.own);
-  const allPicked = pickable.length > 0 && pickable.every((s) => picked.has(s.userId));
-  const toggle = (id: string) => setPicked((p) => (p.has(id) ? (p.delete(id), new Set(p)) : new Set(p.add(id))));
   const chosen = staff.filter((s) => picked.has(s.userId));
   return (
     <Card title="Who checks in where" sub="Everyone checks in at their company's offices unless you set otherwise. Pick people, or a whole department, and set their rule." flush>
-      <div className="ss-tools ci-tools">
-        <Search value={q} onChange={setQ} placeholder="Search name or title" />
-        <Select className="select" value={dept} onChange={(e) => setDept(e.target.value)} aria-label="Department">
-          <option value="all">All departments</option>
-          {depts.map((d) => (
-            <option key={d} value={d}>
-              {deptLabel(d || null)}
-            </option>
-          ))}
-        </Select>
-        <label className="ci-check">
-          <input
-            type="checkbox"
-            checked={allPicked}
-            disabled={!pickable.length}
-            onChange={() =>
-              setPicked((p) => {
-                const n = new Set(p);
-                for (const s of pickable) allPicked ? n.delete(s.userId) : n.add(s.userId);
-                return n;
-              })
-            }
-          />
-          Select all shown ({pickable.length})
-        </label>
-      </div>
-      <ul className="ss-rows ci-staff">
-        {shown.length === 0 && <li className="empty">Nobody here.</li>}
-        {shown.map((s) => {
-          const r = ruleText(s, company.places);
-          return (
-            <li key={s.userId} className="ss-row" data-picked={picked.has(s.userId) ? '' : undefined}>
-              <label className="ci-staff-pick">
-                <input type="checkbox" checked={picked.has(s.userId)} disabled={s.own} onChange={() => toggle(s.userId)} aria-label={`Choose ${s.name}`} />
-                <Person name={s.name} sub={`${s.title}${s.department ? ` · ${deptLabel(s.department)}` : ''}`} />
-              </label>
-              <span className="ss-row-side">
-                {s.own ? <Chip tone="neutral">Yours: set by someone else</Chip> : <Chip tone={r.tone}>{r.text}</Chip>}
-              </span>
-            </li>
-          );
-        })}
-      </ul>
-      {chosen.length > 0 && (
-        <div className="ci-pickbar" role="region" aria-label="Chosen staff">
-          <span>
-            <UsersThreeIcon size={18} aria-hidden="true" /> {chosen.length} chosen
-          </span>
-          <button type="button" className="btn btn-ghost btn-sm" onClick={() => setPicked(new Set())}>
-            Clear
-          </button>
-          <button type="button" className="btn btn-primary btn-sm" onClick={() => setEditing(true)}>
-            Set where they check in
-          </button>
-        </div>
-      )}
+      {/* P107: a data table with row ticks: search, department and rule filters, pages; "Tick all" picks everyone the
+          filters found (a whole department), as "Select all shown" did. Your own rule stays set by someone else. */}
+      <DataTable
+        label="Who checks in where"
+        stateKey={`staffclock.places.${company.id}`}
+        rows={staff}
+        rowKey={(s) => s.userId}
+        searchPlaceholder="Search name or title"
+        searchText={(s) => s.title}
+        empty={<div className="empty">Nobody here.</div>}
+        selection={{ selected: picked, onChange: setPicked, canSelect: (s) => !s.own }}
+        bulk={
+          <>
+            <button type="button" className="btn btn-ghost btn-sm" onClick={() => setPicked(new Set())}>
+              Clear
+            </button>
+            <button type="button" className="btn btn-primary btn-sm" onClick={() => setEditing(true)}>
+              <UsersThreeIcon size={16} aria-hidden="true" /> Set where they check in
+            </button>
+          </>
+        }
+        filters={[
+          { id: 'dept', label: 'Department', value: (s) => s.department ?? '', optionLabel: (d) => deptLabel(d || null) },
+          { id: 'rule', label: 'Checks in', value: (s) => s.rule?.kind ?? 'office', optionLabel: (k) => RULE_KIND[k] ?? k },
+        ]}
+        columns={[
+          {
+            id: 'name',
+            label: 'Name',
+            value: (s) => s.name,
+            phone: 'title',
+            render: (s) => <Person name={s.name} sub={`${s.title}${s.department ? ` · ${deptLabel(s.department)}` : ''}`} />,
+          },
+          { id: 'dept', label: 'Department', value: (s) => deptLabel(s.department ?? null), translate: true, hideBelow: 1200 },
+          {
+            id: 'rule',
+            label: 'Checks in',
+            value: (s) => (s.own ? 'Yours: set by someone else' : ruleText(s, company.places).text),
+            translate: true,
+            render: (s) => {
+              const r = ruleText(s, company.places);
+              return s.own ? <Chip tone="neutral">Yours: set by someone else</Chip> : <Chip tone={r.tone}>{r.text}</Chip>;
+            },
+          },
+        ]}
+      />
       {editing && (
         <RuleEditor
           company={company}

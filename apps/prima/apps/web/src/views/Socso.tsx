@@ -17,6 +17,7 @@ import {
 } from '@prima/core';
 import { api, type GuardProfile, type SocsoClaimDetail, type SocsoClaims } from '../api';
 import { Card, Empty, Facts, PageHead, Person, Search, Stat, Stats, Steps, Toolbar, type StepState } from '../kit';
+import { DataTable } from '../DataTable';
 import { Chip, Drawer, ErrorNotice, Loading, dateLabel, dateTimeLabel, hhmm, useAction, useLoad, type Tone } from '../ui';
 import { DocList, ProofPicker } from './Proof';
 import { DoshPanel, DoshRegisterPanel, FamilyPanel, LindungPanel } from './SocsoMore';
@@ -91,9 +92,6 @@ function ClaimSteps({ status, form34, perkesoRef }: { status: SocsoStatus; form3
 export function SocsoView() {
   const { data, error } = useLoad(() => api.socsoClaims(), []);
   const [open, setOpen] = useState<string | null>(null);
-  const [filter, setFilter] = useState<'open' | 'all'>('open');
-  const [q, setQ] = useState('');
-  const [status, setStatus] = useState<SocsoStatus | ''>('');
   const [starting, setStarting] = useState(false);
   if (error)
     return (
@@ -107,19 +105,10 @@ export function SocsoView() {
         <Loading what="SOCSO claims" />
       </div>
     );
-  const rows = data.rows.filter((r) => filter === 'all' || r.claim.status !== 'CLOSED');
   const due = data.rows.filter((r) => r.form34.state === 'reminder' || r.form34.state === 'overdue').length;
   const missing = data.rows.filter((r) => r.claim.status !== 'CLOSED' && r.missing > 0).length;
   const checkIns = data.rows.filter((r) => r.checkIn?.overdue).length;
-  const needle = q.trim().toLowerCase();
-  const shown = rows.filter(
-    (r) =>
-      (!status || r.claim.status === status) &&
-      (!needle ||
-        [r.person?.name ?? '', r.person?.staffNo ?? '', r.companyName, r.typeLabel, r.claim.perkesoRef ?? ''].some((v) => v.toLowerCase().includes(needle))),
-  );
-  const statuses = [...new Set(data.rows.map((r) => r.claim.status))];
-  const count = shown.length === rows.length ? `${rows.length} claim${rows.length === 1 ? '' : 's'}` : `${shown.length} of ${rows.length}`;
+  const count = `${data.rows.length} claim${data.rows.length === 1 ? '' : 's'}`;
   return (
     <div className="page">
       <PageHead
@@ -153,51 +142,80 @@ export function SocsoView() {
       </Stats>
       <div className="sx-layout">
         <div className="hx-stack-tight">
-          <Toolbar
-            end={
-              <div className="seg" role="group" aria-label="Which claims">
-                <button aria-pressed={filter === 'open'} onClick={() => setFilter('open')}>
-                  Open
-                </button>
-                <button aria-pressed={filter === 'all'} onClick={() => setFilter('all')}>
-                  All
-                </button>
-              </div>
-            }
-          >
-            <Search value={q} onChange={setQ} placeholder="Search name, staff no. or PERKESO ref" label="Search claims" />
-            <Select className="select hx-filter" aria-label="Status" value={status} onChange={(e) => setStatus(e.target.value as SocsoStatus | '')}>
-              <option value="">Every status</option>
-              {statuses.map((s) => (
-                <option key={s} value={s}>
-                  {SOCSO_STATUS_LABEL[s]}
-                </option>
-              ))}
-            </Select>
-          </Toolbar>
           <Card title="Claims" actions={<span className="hx-count">{count}</span>} flush>
-            {rows.length === 0 ? (
-              <Empty
-                title={data.canSeeAny ? 'No claim.' : 'You do not follow SOCSO claims for any company.'}
-                action={
-                  data.canStart ? (
-                    <button className="btn btn-sm" onClick={() => setStarting(true)}>
-                      Start a claim
-                    </button>
-                  ) : undefined
-                }
-              />
-            ) : shown.length === 0 ? (
-              <Empty title="No claim matches the search." />
-            ) : (
-              <ul className="hx-rows">
-                {shown.map((r) => (
-                  <li key={r.claim.id}>
-                    <ClaimButton r={r} onOpen={() => setOpen(r.claim.id)} />
-                  </li>
-                ))}
-              </ul>
-            )}
+            {/* P107: the data table: search, open / all, status, company and kind filters, sort and pages. */}
+            <DataTable
+              label="Claims"
+              stateKey="socso.claims"
+              defaults={{ f: { which: 'open' } }}
+              rows={data.rows}
+              rowKey={(r) => r.claim.id}
+              searchPlaceholder="Search name, staff no. or PERKESO ref"
+              searchText={(r) => `${r.person?.staffNo ?? ''} ${r.claim.perkesoRef ?? ''}`}
+              onRowClick={(r) => setOpen(r.claim.id)}
+              rowTone={claimTone}
+              empty={
+                <Empty
+                  title={data.canSeeAny ? 'No claim.' : 'You do not follow SOCSO claims for any company.'}
+                  action={
+                    data.canStart ? (
+                      <button className="btn btn-sm" onClick={() => setStarting(true)}>
+                        Start a claim
+                      </button>
+                    ) : undefined
+                  }
+                />
+              }
+              filters={[
+                {
+                  id: 'which',
+                  label: 'Which claims',
+                  value: (r) => (r.claim.status === 'CLOSED' ? 'closed' : 'open'),
+                  options: [
+                    { value: 'open', label: 'Open' },
+                    { value: 'closed', label: 'Closed' },
+                  ],
+                },
+                { id: 'status', label: 'Status', value: (r) => r.claim.status, optionLabel: (v) => SOCSO_STATUS_LABEL[v as SocsoStatus] ?? v },
+                { id: 'company', label: 'Company', value: (r) => r.companyName },
+                { id: 'type', label: 'Kind', value: (r) => r.typeLabel },
+              ]}
+              columns={[
+                {
+                  id: 'name',
+                  label: 'Name',
+                  value: (r) => r.person?.name ?? 'Unknown person',
+                  phone: 'title',
+                  render: (r) => <Person name={r.person?.name ?? 'Unknown person'} sub={[r.person?.staffNo, r.companyName].filter(Boolean).join(' · ')} />,
+                },
+                {
+                  id: 'case',
+                  label: 'Claim',
+                  value: (r) => r.typeLabel,
+                  render: (r) => (
+                    <span className="sx-claim-case">
+                      <span className="hx-row-title">{r.typeLabel}</span>
+                      {r.claim.perkesoRef && <span className="hx-row-meta">PERKESO {r.claim.perkesoRef}</span>}
+                    </span>
+                  ),
+                },
+                { id: 'when', label: 'Incident', value: (r) => r.claim.incidentAt, sort: 'date', render: (r) => dateTimeLabel(r.claim.incidentAt) },
+                {
+                  id: 'status',
+                  label: 'Status',
+                  value: (r) => r.statusLabel,
+                  translate: true,
+                  render: (r) => (
+                    <span className="sx-claim-chips">
+                      {r.claim.status === 'DRAFT' && <Form34Chip f={r.form34} />}
+                      <Chip tone={STATUS_TONE[r.claim.status]}>{r.statusLabel}</Chip>
+                      {r.missing > 0 && <Chip tone={r.claim.status !== 'CLOSED' ? 'warn' : 'neutral'}>{r.missing} paper(s) missing</Chip>}
+                      {r.checkIn?.overdue && <Chip tone="warn">Check-in overdue</Chip>}
+                    </span>
+                  ),
+                },
+              ]}
+            />
           </Card>
         </div>
         <SocsoSop />
@@ -282,6 +300,12 @@ function StartClaimDrawer({ onClose, onStarted }: { onClose: () => void; onStart
 }
 
 /** One claim in the register: the person, the case and its deadlines. */
+/** The row's edge: a late Form 34 in red, a draft or missing papers in amber (as the old claim button). */
+function claimTone(r: ClaimRow): 'crit' | 'warn' | undefined {
+  const open = r.claim.status !== 'CLOSED';
+  return r.claim.status === 'DRAFT' && r.form34.state === 'overdue' ? 'crit' : open && (r.claim.status === 'DRAFT' || r.missing > 0) ? 'warn' : undefined;
+}
+
 function ClaimButton({ r, onOpen }: { r: ClaimRow; onOpen: () => void }) {
   const open = r.claim.status !== 'CLOSED';
   const tone = r.claim.status === 'DRAFT' && r.form34.state === 'overdue' ? 'crit' : open && (r.claim.status === 'DRAFT' || r.missing > 0) ? 'warn' : undefined;

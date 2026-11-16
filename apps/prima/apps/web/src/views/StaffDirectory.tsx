@@ -1,5 +1,6 @@
 import { Select } from '../SearchSelect';
-import { useMemo, useRef, useState } from "react";
+import { useRef, useState } from "react";
+import { DataTable, type DtColumn, type DtFilter } from "../DataTable";
 import {
   STAFF_DIRECTORY_ISSUE_LABELS,
   type StaffDirectoryIssue,
@@ -54,22 +55,61 @@ export function StaffDirectory() {
   );
 }
 
+type DirectoryEntry = Awaited<ReturnType<typeof api.staffDirectory>>["entries"][number];
+const issueText = (i: StaffDirectoryIssue) => STAFF_DIRECTORY_ISSUE_LABELS[i].split(":")[0];
+
+/** P107: the directory's columns: who, their job, where they sit, their mailbox and what needs fixing. */
+const DIRECTORY_COLUMNS: DtColumn<DirectoryEntry>[] = [
+  { id: "name", label: "Name", value: (e) => e.name, render: (e) => <strong>{e.name}</strong>, phone: "title" },
+  { id: "title", label: "Job title", value: (e) => e.title, render: (e) => e.title || <span className="muted">no title</span>, phone: "sub" },
+  { id: "group", label: "Group", value: (e) => groupLabel(e.group), translate: true, hideBelow: 1200 },
+  { id: "company", label: "Company or unit", value: (e) => e.companyName ?? e.orgUnit },
+  {
+    id: "mailbox",
+    label: "Mailbox",
+    value: (e) => e.email,
+    render: (e) => (
+      <span className="small">
+        {e.email || "no mailbox"}
+        {e.accountType ? ` · ${e.accountType}` : ""}
+        {e.accountStatus ? ` · ${e.accountStatus}` : ""}
+      </span>
+    ),
+  },
+  {
+    id: "issues",
+    label: "Needs fix",
+    value: (e) => e.issues.map(issueText).join(", "),
+    translate: true,
+    sort: false,
+    render: (e) =>
+      e.issues.length ? (
+        <span className="row" style={{ gap: 4, flexWrap: "wrap" }}>
+          {e.issues.map((i) => (
+            <Chip key={i} tone="warn" title={STAFF_DIRECTORY_ISSUE_LABELS[i]}>
+              {issueText(i)}
+            </Chip>
+          ))}
+        </span>
+      ) : (
+        "–"
+      ),
+  },
+];
+const DIRECTORY_FILTERS: DtFilter<DirectoryEntry>[] = [
+  {
+    id: "issue",
+    label: "Needs fix",
+    value: (e) => e.issues,
+    options: (Object.keys(STAFF_DIRECTORY_ISSUE_LABELS) as StaffDirectoryIssue[]).map((k) => ({ value: k, label: issueText(k) })),
+  },
+  { id: "group", label: "Group", value: (e) => e.group, optionLabel: groupLabel },
+  { id: "company", label: "Company or unit", value: (e) => e.companyName ?? e.orgUnit },
+];
+
 function Directory() {
   const board = useLoad(() => api.staffDirectory(), []);
-  const [issue, setIssue] = useState<StaffDirectoryIssue | "">("");
-  const [find, setFind] = useState("");
   const b = board.data;
-  const shown = useMemo(() => {
-    const q = find.trim().toLowerCase();
-    return (b?.entries ?? []).filter(
-      (e) =>
-        (!issue || e.issues.includes(issue)) &&
-        (!q ||
-          `${e.name} ${e.orgUnit} ${e.email} ${e.title}`
-            .toLowerCase()
-            .includes(q)),
-    );
-  }, [b, issue, find]);
   if (board.loading && !b) return <Loading what="staff directory" />;
   if (board.error || !b) return <ErrorNotice error={board.error} />;
   const waiting = b.batches.filter((x) => x.status === "waiting");
@@ -129,82 +169,18 @@ function Directory() {
           <h3>Everyone listed</h3>
         </div>
         <div className="panel-body">
-          <div
-            className="row"
-            style={{ gap: 6, flexWrap: "wrap", marginBottom: 6 }}
-          >
-            <input
-              className="input"
-              style={{ flex: "1 1 260px" }}
-              aria-label="Find"
-              placeholder="Find a name, company, unit or mailbox"
-              value={find}
-              onChange={(e) => setFind(e.target.value)}
-            />
-            <Select
-              className="select"
-              aria-label="Show only"
-              value={issue}
-              onChange={(e) =>
-                setIssue(e.target.value as StaffDirectoryIssue | "")
-              }
-            >
-              <option value="">All entries</option>
-              {(
-                Object.keys(
-                  STAFF_DIRECTORY_ISSUE_LABELS,
-                ) as StaffDirectoryIssue[]
-              ).map((k) => (
-                <option key={k} value={k}>
-                  Needs fix: {STAFF_DIRECTORY_ISSUE_LABELS[k].split(":")[0]} (
-                  {b.issueCounts[k] ?? 0})
-                </option>
-              ))}
-            </Select>
-          </div>
-          {shown.length === 0 ? (
-            <Empty title={`Nobody listed${issue || find ? " for this filter" : " yet"}.`} />
-          ) : (
-            <div className="list">
-              {shown.map((e) => (
-                <div
-                  key={e.id}
-                  className="list-item"
-                  style={{
-                    flexDirection: "column",
-                    alignItems: "stretch",
-                    gap: 4,
-                  }}
-                >
-                  <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
-                    <strong>{e.name}</strong>
-                    <span className="muted small">{e.title || "no title"}</span>
-                    <span className="small">
-                      {groupLabel(e.group)} · {e.companyName ?? e.orgUnit}
-                    </span>
-                  </div>
-                  <span className="small">
-                    {e.email || "no mailbox"}
-                    {e.accountType ? ` · ${e.accountType}` : ""}
-                    {e.accountStatus ? ` · ${e.accountStatus}` : ""}
-                  </span>
-                  {e.issues.length > 0 && (
-                    <div className="row" style={{ gap: 4, flexWrap: "wrap" }}>
-                      {e.issues.map((i) => (
-                        <Chip
-                          key={i}
-                          tone="warn"
-                          title={STAFF_DIRECTORY_ISSUE_LABELS[i]}
-                        >
-                          {STAFF_DIRECTORY_ISSUE_LABELS[i].split(":")[0]}
-                        </Chip>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
+          {/* P107: one data table (search, filters, sort, pages; cards on a phone) in place of the hand-drawn list. */}
+          <DataTable
+            label="Everyone listed"
+            stateKey="staff-directory.entries"
+            rows={b.entries}
+            rowKey={(e) => e.id}
+            searchPlaceholder="Find a name, company, unit or mailbox"
+            searchText={(e) => `${e.orgUnit} ${e.email}`}
+            columns={DIRECTORY_COLUMNS}
+            filters={DIRECTORY_FILTERS}
+            empty={<Empty title="Nobody listed yet." />}
+          />
         </div>
       </section>
     </>
