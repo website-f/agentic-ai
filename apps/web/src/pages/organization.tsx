@@ -1,34 +1,34 @@
 import {
   BuildingsIcon,
-  DotsThreeIcon,
   LockSimpleIcon,
   PencilSimpleIcon,
   PlusIcon,
   ShieldCheckIcon,
-  TrashIcon,
   TreeStructureIcon,
+  UsersIcon,
   UsersThreeIcon,
   XIcon,
 } from "@phosphor-icons/react";
 import { useMutation, useQuery, useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
-import { useNavigate, useSearch } from "@tanstack/react-router";
-import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import { useState } from "react";
+import { useNavigate, useRouterState, useSearch } from "@tanstack/react-router";
+import { useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { EmptyState, Page, PageHeader } from "@/components/page";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
-import { ConfirmDialog } from "@/components/ui/confirm";
+import { DataTable, eachRow, filterOf, TableFilter, useTableState, type Column } from "@/components/ui/data-table";
 import { ResponsiveDialog } from "@/components/ui/dialog";
 import { Field, FormError } from "@/components/ui/field";
-import { Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger } from "@/components/ui/menu";
+import { MenuItem } from "@/components/ui/menu";
 import { Pill } from "@/components/ui/pill";
+import { SearchSelect } from "@/components/ui/search-select";
+import { Segmented } from "@/components/ui/segmented";
 import { Select } from "@/components/ui/select";
+import { SideSheet } from "@/components/ui/side-sheet";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Stat, StatGrid } from "@/components/ui/stat";
 import { SwitchField } from "@/components/ui/switch";
-import { msg, t as tr, useLang, useT } from "@/i18n";
+import { locale, msg, t as tr, useLang, useT } from "@/i18n";
 import { api, ApiError, errorMessage } from "@/lib/api";
 import {
   DATA_LEVELS,
@@ -40,10 +40,11 @@ import {
   privacyKeys,
   type DataLevel,
 } from "@/lib/privacy";
-import { branchesQuery, keys, meQuery } from "@/lib/queries";
-import type { Branch, Department } from "@/lib/types";
+import { branchesQuery, keys, meQuery, membersQuery } from "@/lib/queries";
+import type { Branch, Department, Me } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { workKeys } from "@/lib/work";
+import { branchIdsOf, MEMBER_FILTERS, MembersTable } from "@/pages/members";
 import { StarterTeamDialog, StarterTeamFields, teamToast, type StarterResult } from "@/pages/org-starter";
 import { DepartmentReviewDialog } from "@/pages/tasks/accountable";
 
@@ -302,105 +303,430 @@ function DataProtection({ branch, canManage }: { branch: Branch & { data_level?:
   );
 }
 
-function BranchCard({ branch, canManage, guide }: { branch: Branch; canManage: boolean; guide?: string }) {
-  const t = useT();
-  const [edit, setEdit] = useState(false);
-  const [editKey, setEditKey] = useState(0);
-  const [confirm, setConfirm] = useState(false);
-  const [team, setTeam] = useState(false);
-  const [teamKey, setTeamKey] = useState(0);
-  const [review, setReview] = useState(0); // P21: review stages dialog (0 = closed)
-  const qc = useQueryClient();
+
+function CompanyTile({ branch, size = "md" }: { branch: Branch; size?: "sm" | "md" }) {
   return (
-    <Card data-guide={guide} className="overflow-hidden">
-      <header className="flex items-start gap-3 border-b border-border px-4 py-3.5 sm:px-5">
-        <span
-          aria-hidden
-          className="grid size-10 shrink-0 place-items-center rounded-[var(--radius-sm)] text-white shadow-[inset_0_0_0_1px_hsl(0_0%_100%/0.15)]"
-          style={{ background: branch.color }}
-        >
-          <BuildingsIcon size={20} weight="duotone" />
-        </span>
-        <div className="min-w-0 flex-1">
-          <h2 className="text-[15px] font-semibold break-words">{branch.name}</h2>
-          <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[12.5px] text-muted">
-            <span>{branch.departments.length === 1 ? t("1 department") : t("{n} departments", { n: branch.departments.length })}</span>
-            {industryOf(branch) ? <Pill tone="accent" className="max-w-full"><span className="truncate">{industryLabel(industryOf(branch))}</span></Pill> : null}
-            {branch.isolated ? (
-              <Pill tone="info">
-                <LockSimpleIcon size={12} weight="bold" /> {t("Private knowledge")}
-              </Pill>
-            ) : (
-              <Pill>{t("Shared knowledge")}</Pill>
-            )}
-            {dataLevelOf(branch) !== "standard" ? (
-              <Pill tone={dataLevelOf(branch) === "local_only" ? "warn" : "info"}>
-                <ShieldCheckIcon size={12} weight="bold" /> {t(LEVEL_LABEL[dataLevelOf(branch)])}
-              </Pill>
-            ) : null}
-          </div>
-        </div>
-        {canManage ? (
-          <Menu>
-            <MenuTrigger asChild>
-              <Button variant="ghost" size="icon" aria-label={t("Options for {name}", { name: branch.name })} className="-mt-1 -mr-2">
-                <DotsThreeIcon size={20} weight="bold" />
-              </Button>
-            </MenuTrigger>
-            <MenuContent>
-              <MenuItem icon={<PencilSimpleIcon />} onSelect={() => { setEditKey((k) => k + 1); setEdit(true); }}>{t("Edit branch")}</MenuItem>
-              <MenuItem icon={<UsersThreeIcon />} onSelect={() => { setTeamKey((k) => k + 1); setTeam(true); }}>{t("Add ready-made AI team")}</MenuItem>
-              <MenuItem icon={<ShieldCheckIcon />} onSelect={() => setReview((k) => k + 1)}>{t("Review stages")}</MenuItem>
-              <MenuSeparator />
-              <MenuItem icon={<TrashIcon />} danger onSelect={() => setConfirm(true)}>{t("Delete branch")}</MenuItem>
-            </MenuContent>
-          </Menu>
-        ) : null}
-      </header>
-      <div className="flex flex-wrap gap-2 bg-surface-2/30 px-4 py-4 sm:px-5">
-        {branch.departments.map((d) => (
-          <DepartmentChip key={d.id} dept={d} canManage={canManage} />
-        ))}
-        {canManage ? <AddDepartment branchId={branch.id} /> : null}
-        {!branch.departments.length && !canManage ? <p className="text-[13px] text-muted">{t("No departments yet.")}</p> : null}
-      </div>
-      <DataProtection branch={branch} canManage={canManage} />
-      {canManage ? (
-        <p className="border-t border-border px-4 py-2 text-[12px] text-muted sm:px-5">
-          <span className="[@media(hover:hover)]:hidden">{t("Tap the pencil to rename a department.")}</span>
-          <span className="hidden [@media(hover:hover)]:inline">{t("Hover a department to rename or remove it.")}</span>
-        </p>
-      ) : null}
-      <BranchDialog key={editKey} open={edit} onOpenChange={setEdit} branch={branch} />
-      {review ? <DepartmentReviewDialog key={review} departments={branch.departments} open onOpenChange={(o) => !o && setReview(0)} /> : null}
-      <StarterTeamDialog
-        key={`team-${teamKey}`}
-        open={team}
-        onOpenChange={setTeam}
-        branchId={branch.id}
-        branchName={branch.name}
-        initialIndustry={industryOf(branch)}
-      />
-      <ConfirmDialog
-        open={confirm}
-        onOpenChange={setConfirm}
-        title={t("Delete {name}?", { name: branch.name })}
-        body={t("This removes the branch and its {n} departments. It cannot be undone.", { n: branch.departments.length })}
-        confirmLabel={t("Delete branch")}
-        danger
-        onConfirm={async () => {
-          try {
-            await api(`/api/branches/${branch.id}`, "DELETE");
-            toast.success(t("{name} deleted.", { name: branch.name }));
-            qc.invalidateQueries({ queryKey: keys.branches });
-            qc.invalidateQueries({ queryKey: keys.status });
-          } catch (e) {
-            toast.error(errorMessage(e));
-          }
-        }}
-      />
-    </Card>
+    <span
+      aria-hidden
+      className={cn("grid shrink-0 place-items-center rounded-[var(--radius-sm)] text-white shadow-[inset_0_0_0_1px_hsl(0_0%_100%/0.15)]", size === "sm" ? "size-3 rounded-full" : "size-9")}
+      style={{ background: branch.color }}
+    >
+      {size === "md" ? <BuildingsIcon size={18} weight="duotone" /> : null}
+    </span>
   );
+}
+
+/** The pills that say how a company keeps its knowledge and data. */
+function CompanyPills({ branch }: { branch: Branch }) {
+  const t = useT();
+  const level = dataLevelOf(branch);
+  return (
+    <span className="flex flex-wrap items-center gap-1">
+      {branch.isolated ? (
+        <Pill tone="info"><LockSimpleIcon size={12} weight="bold" /> {t("Private knowledge")}</Pill>
+      ) : (
+        <Pill>{t("Shared knowledge")}</Pill>
+      )}
+      {level !== "standard" ? (
+        <Pill tone={level === "local_only" ? "warn" : "info"}><ShieldCheckIcon size={12} weight="bold" /> {t(LEVEL_LABEL[level])}</Pill>
+      ) : null}
+    </span>
+  );
+}
+
+/** P107: where Organization's tables point each other (a count opens the list it counts). */
+type View = "companies" | "departments" | "members";
+type Go = (view: View, filters?: Record<string, string>) => void;
+
+/** P107: counts of people per company and per department, from the plain members list (the
+ * one the people pickers read). Null while it loads or when this person does not manage people. */
+interface Counts { byBranch: Map<string, number>; byDept: Map<string, number>; total: number }
+
+function useCounts(enabled: boolean): Counts | null {
+  const { data } = useQuery({ ...membersQuery, enabled });
+  return useMemo(() => {
+    if (!enabled || !data) return null;
+    const byBranch = new Map<string, number>();
+    const byDept = new Map<string, number>();
+    for (const m of data) {
+      for (const id of branchIdsOf(m)) byBranch.set(id, (byBranch.get(id) ?? 0) + 1);
+      if (m.department_id) byDept.set(m.department_id, (byDept.get(m.department_id) ?? 0) + 1);
+    }
+    return { byBranch, byDept, total: data.length };
+  }, [enabled, data]);
+}
+
+/** P107: the Prima company each branch is linked to (Prima > Prima companies; owners and
+ * admins only). Null when Prima is not set up here or cannot be reached. */
+function usePrimaLinks(enabled: boolean): Map<string, string | null> | null {
+  const { data } = useQuery({
+    queryKey: ["prima", "companies"],
+    queryFn: () => api<{ companies: { id: string; name: string }[]; branches: { id: string; company_id: string | null }[] }>("/api/prima/companies"),
+    enabled,
+    retry: false,
+    staleTime: 5 * 60_000,
+  });
+  return useMemo(() => {
+    if (!enabled || !data?.branches) return null;
+    const names = new Map(data.companies.map((c) => [c.id, c.name]));
+    return new Map(data.branches.map((b) => [b.id, b.company_id ? (names.get(b.company_id) ?? b.company_id) : null]));
+  }, [enabled, data]);
+}
+
+/** A count that opens the list it counts. */
+function CountLink({ n, label, onClick }: { n: number | undefined; label: string; onClick?: () => void }) {
+  if (n === undefined) return <span className="text-muted">-</span>;
+  if (!onClick || !n) return <span className={cn("tabular", !n && "text-muted")}>{n}</span>;
+  return (
+    <button type="button" onClick={onClick} aria-label={label}
+      className="hit rounded-sm font-medium text-accent tabular hover:underline focus-visible:ring-3 focus-visible:ring-accent/30 focus-visible:outline-none">
+      {n}
+    </button>
+  );
+}
+
+/** P107: one company opened from the table: its departments (add, rename, remove), its data
+ * protection, and a way to its people. */
+function CompanySheet({ branch, canManage, seesMembers, people, onEdit, go, onClose }: {
+  branch: Branch;
+  canManage: boolean;
+  seesMembers: boolean;
+  people: number | undefined;
+  onEdit: () => void;
+  go: Go;
+  onClose: () => void;
+}) {
+  const t = useT();
+  return (
+    <SideSheet open onOpenChange={(o) => !o && onClose()} size="md"
+      title={<span className="flex min-w-0 items-center gap-3"><CompanyTile branch={branch} /><span className="min-w-0 break-words">{branch.name}</span></span>}
+      description={
+        <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
+          <span>{branch.departments.length === 1 ? t("1 department") : t("{n} departments", { n: branch.departments.length })}</span>
+          {industryOf(branch) ? <Pill tone="accent">{industryLabel(industryOf(branch))}</Pill> : null}
+          <CompanyPills branch={branch} />
+        </span>
+      }
+      actions={canManage ? <Button variant="outline" size="sm" onClick={onEdit}><PencilSimpleIcon size={14} /> {t("Edit")}</Button> : undefined}>
+      <div className="grid gap-5">
+        <section className="grid gap-2">
+          <h3 className="text-[13.5px] font-semibold">{t("Departments")}</h3>
+          <div className="flex flex-wrap gap-2 rounded-[var(--radius-md)] border border-border bg-surface-2/30 p-3">
+            {branch.departments.map((d) => <DepartmentChip key={d.id} dept={d} canManage={canManage} />)}
+            {canManage ? <AddDepartment branchId={branch.id} /> : null}
+            {!branch.departments.length && !canManage ? <p className="text-[13px] text-muted">{t("No departments yet.")}</p> : null}
+          </div>
+          {canManage ? (
+            <p className="text-[12px] text-muted">
+              <span className="[@media(hover:hover)]:hidden">{t("Tap the pencil to rename a department.")}</span>
+              <span className="hidden [@media(hover:hover)]:inline">{t("Hover a department to rename or remove it.")}</span>
+            </p>
+          ) : null}
+        </section>
+        <div className="overflow-hidden rounded-[var(--radius-md)] border border-border [&>div]:border-t-0">
+          <DataProtection branch={branch} canManage={canManage} />
+        </div>
+        {seesMembers ? (
+          <div>
+            <Button variant="outline" onClick={() => { onClose(); go("members", { m_company: branch.id }); }}>
+              <UsersIcon size={16} /> {people === undefined ? t("See its members") : people === 1 ? t("See its 1 member") : t("See its {n} members", { n: people })}
+            </Button>
+          </div>
+        ) : null}
+      </div>
+    </SideSheet>
+  );
+}
+
+/** P107: rename a department from the departments table. */
+function RenameDepartmentDialog({ dept, onClose }: { dept: Department; onClose: () => void }) {
+  const t = useT();
+  const [name, setName] = useState(dept.name);
+  const rename = useOrgMutation(() => api(`/api/departments/${dept.id}`, "PATCH", { name }));
+  const save = () => {
+    if (!name.trim() || name === dept.name) return onClose();
+    rename.mutate(undefined, { onSuccess: onClose });
+  };
+  return (
+    <ResponsiveDialog open onOpenChange={(o) => !o && onClose()} title={t("Rename {name}", { name: dept.name })}
+      footer={<><Button variant="outline" onClick={onClose}>{t("Cancel")}</Button><Button loading={rename.isPending} disabled={!name.trim()} onClick={save}>{t("Save")}</Button></>}>
+      <form className="grid gap-4" onSubmit={(e) => { e.preventDefault(); save(); }}>
+        <Field label={t("Department name")} value={name} onChange={(e) => setName(e.target.value)} autoFocus />
+        <FormError message={rename.error ? errorMessage(rename.error) : null} />
+      </form>
+    </ResponsiveDialog>
+  );
+}
+
+/** P107: add a department to any company from the departments table. */
+function AddDepartmentDialog({ branches, initialBranch, onClose }: { branches: Branch[]; initialBranch: string; onClose: () => void }) {
+  const t = useT();
+  const [branchId, setBranchId] = useState(initialBranch || branches[0]?.id || "");
+  const [name, setName] = useState("");
+  const add = useOrgMutation(() => api(`/api/branches/${branchId}/departments`, "POST", { name }), t("Department added."));
+  const save = () => {
+    if (!name.trim() || !branchId) return;
+    add.mutate(undefined, { onSuccess: onClose });
+  };
+  return (
+    <ResponsiveDialog open onOpenChange={(o) => !o && onClose()} title={t("New department")}
+      footer={<><Button variant="outline" onClick={onClose}>{t("Cancel")}</Button><Button loading={add.isPending} disabled={!name.trim() || !branchId} onClick={save}>{t("Add department")}</Button></>}>
+      <form className="grid gap-4" onSubmit={(e) => { e.preventDefault(); save(); }}>
+        <div className="grid gap-1.5">
+          <span className="text-[13px] font-medium">{t("Company")}</span>
+          <SearchSelect label={t("Company")} value={branchId} onValueChange={setBranchId} searchPlaceholder={t("Search companies")}
+            options={branches.map((b) => ({ value: b.id, label: b.name }))} />
+        </div>
+        <Field label={t("Department name")} value={name} onChange={(e) => setName(e.target.value)} placeholder={t("Legal")} autoFocus />
+        <FormError message={add.error ? errorMessage(add.error) : null} />
+      </form>
+    </ResponsiveDialog>
+  );
+}
+
+function useRefreshOrg() {
+  const qc = useQueryClient();
+  return () => {
+    void qc.invalidateQueries({ queryKey: keys.branches });
+    void qc.invalidateQueries({ queryKey: keys.status });
+  };
+}
+
+const date = (iso: string) => new Date(iso).toLocaleDateString(locale(), { day: "numeric", month: "short", year: "numeric" });
+
+/** P107: every company as a table row; a row opens its sheet. */
+function CompaniesTable({ branches, canManage, seesMembers, counts, prima, go }: {
+  branches: Branch[];
+  canManage: boolean;
+  seesMembers: boolean;
+  counts: Counts | null;
+  prima: Map<string, string | null> | null;
+  go: Go;
+}) {
+  const t = useT();
+  const refresh = useRefreshOrg();
+  const control = useTableState({ size: 25 }, { filters: ["prima", "people", "industry", "knowledge"] });
+  const [linked] = filterOf(control, "prima");
+  const [people] = filterOf(control, "people");
+  const [industry] = filterOf(control, "industry");
+  const [knowledge] = filterOf(control, "knowledge");
+  const [open, setOpen] = useState<string | null>(null);
+  const [editing, setEditing] = useState<{ branch: Branch; key: number } | null>(null);
+  const [team, setTeam] = useState<{ branch: Branch; key: number } | null>(null);
+  const [review, setReview] = useState<{ branch: Branch; key: number } | null>(null);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const nth = useRef(0);
+  const next = () => (nth.current += 1);
+  const peopleOf = (b: Branch) => counts?.byBranch.get(b.id) ?? (counts ? 0 : undefined);
+  const primaOf = (b: Branch) => prima?.get(b.id) ?? null;
+  const industries = [...new Set(branches.map(industryOf).filter(Boolean))].sort((a, b) => industryLabel(a).localeCompare(industryLabel(b)));
+  const rows = branches.filter((b) =>
+    (!linked || !prima || (linked === "yes") === !!primaOf(b))
+    && (!people || !counts || (people === "yes") === !!peopleOf(b))
+    && (!industry || industryOf(b) === industry)
+    && (!knowledge || (knowledge === "private") === b.isolated));
+  const first = branches[0]?.id;
+  const opened = branches.find((b) => b.id === open);
+  const remove = (b: Branch) => api(`/api/branches/${b.id}`, "DELETE");
+
+  const columns: Column<Branch>[] = [
+    {
+      id: "name", header: t("Company"), sortValue: (b) => b.name, card: "title",
+      cell: (b) => (
+        <span data-guide={b.id === first ? "organization.company" : undefined} className="flex min-w-0 items-center gap-3">
+          <CompanyTile branch={b} />
+          <span className="min-w-0 text-[13.5px] font-semibold break-words">{b.name}</span>
+        </span>
+      ),
+    },
+    {
+      id: "code", header: t("Short name"), sortValue: (b) => b.slug, hideBelow: "lg", card: "hide",
+      cell: (b) => <span className="font-mono text-[12.5px] break-all text-muted">{b.slug}</span>,
+    },
+    ...(prima ? [{
+      id: "prima", header: t("Prima company"), sortValue: (b: Branch) => primaOf(b), exportValue: (b: Branch) => primaOf(b) ?? "",
+      cell: (b: Branch) => (primaOf(b) ? <Pill tone="ok" className="max-w-full"><span className="truncate">{primaOf(b)}</span></Pill> : <span className="text-muted">{t("Not linked")}</span>),
+    } satisfies Column<Branch>] : []),
+    {
+      id: "departments", header: t("Departments"), kind: "number", align: "right", sortValue: (b) => b.departments.length,
+      cell: (b) => <CountLink n={b.departments.length} label={t("Departments of {name}", { name: b.name })} onClick={() => go("departments", { d_company: b.id })} />,
+    },
+    ...(counts ? [{
+      id: "members", header: t("Members"), kind: "number", align: "right", sortValue: (b: Branch) => peopleOf(b),
+      cell: (b: Branch) => <CountLink n={peopleOf(b)} label={t("Members of {name}", { name: b.name })} onClick={() => go("members", { m_company: b.id })} />,
+    } satisfies Column<Branch>] : []),
+    {
+      id: "industry", header: t("What it does"), sortValue: (b) => (industryOf(b) ? industryLabel(industryOf(b)) : null), hideBelow: "2xl", card: "hide",
+      cell: (b) => (industryOf(b) ? <Pill tone="accent" className="max-w-full"><span className="truncate">{industryLabel(industryOf(b))}</span></Pill> : <span className="text-muted">-</span>),
+    },
+    {
+      id: "knowledge", header: t("Knowledge and data"), hideBelow: "xl", card: "hide",
+      sortValue: (b) => (b.isolated ? 1 : 0) + DATA_LEVELS.indexOf(dataLevelOf(b)) * 2,
+      exportValue: (b) => [b.isolated ? t("Private knowledge") : t("Shared knowledge"), t(LEVEL_LABEL[dataLevelOf(b)])].join("; "),
+      cell: (b) => <CompanyPills branch={b} />,
+    },
+    {
+      id: "created", header: t("Added"), kind: "date", sortValue: (b) => b.created_at, hideBelow: "2xl", card: "hide",
+      cell: (b) => <span className="text-muted tabular">{date(b.created_at)}</span>,
+    },
+  ];
+
+  return (
+    <>
+      <DataTable
+        label={t("Companies")}
+        columns={columns}
+        rows={rows}
+        rowId={(b) => b.id}
+        rowLabel={(b) => b.name}
+        control={control}
+        searchText={(b) => `${b.name} ${b.slug} ${primaOf(b) ?? ""} ${industryOf(b) ? industryLabel(industryOf(b)) : ""} ${b.departments.map((d) => d.name).join(" ")}`}
+        searchPlaceholder={t("Search companies or departments")}
+        onOpen={(b) => setOpen(b.id)}
+        filters={
+          <>
+            {prima ? (
+              <TableFilter control={control} id="prima" label={t("Prima link")} allLabel={t("Linked or not")}
+                options={[{ value: "yes", label: t("Linked to Prima") }, { value: "no", label: t("Not linked to Prima") }]} />
+            ) : null}
+            {counts ? (
+              <TableFilter control={control} id="people" label={t("Members")} allLabel={t("With or without members")}
+                options={[{ value: "yes", label: t("Has members") }, { value: "no", label: t("No members") }]} />
+            ) : null}
+            {industries.length > 1 ? (
+              <TableFilter control={control} id="industry" label={t("What it does")} allLabel={t("Every kind of business")}
+                options={industries.map((k) => ({ value: k, label: industryLabel(k) }))} />
+            ) : null}
+            <TableFilter control={control} id="knowledge" label={t("Knowledge")} allLabel={t("Shared or private")}
+              options={[{ value: "shared", label: t("Shared knowledge") }, { value: "private", label: t("Private knowledge") }]} />
+          </>
+        }
+        exportName={t("companies")}
+        rowActions={{
+          view: (b) => setOpen(b.id),
+          ...(canManage ? {
+            edit: (b: Branch) => setEditing({ branch: b, key: next() }),
+            more: (b: Branch) => (
+              <>
+                <MenuItem icon={<UsersThreeIcon />} onSelect={() => setTeam({ branch: b, key: next() })}>{t("Add ready-made AI team")}</MenuItem>
+                <MenuItem icon={<ShieldCheckIcon />} onSelect={() => setReview({ branch: b, key: next() })}>{t("Review stages")}</MenuItem>
+              </>
+            ),
+            remove: async (b: Branch) => {
+              await remove(b);
+              refresh();
+            },
+            removeBody: (b: Branch) => t("This removes the branch and its {n} departments. It cannot be undone.", { n: b.departments.length }),
+          } : {}),
+        }}
+        selection={canManage ? { selected, onChange: setSelected } : undefined}
+        bulkRemove={canManage ? {
+          run: async (list) => {
+            const out = await eachRow(list, (b) => b.id, remove);
+            refresh();
+            return out;
+          },
+          title: (n) => (n === 1 ? t("Delete 1 company?") : t("Delete {n} companies?", { n })),
+          body: t("Each goes with its departments. It cannot be undone."),
+        } : undefined}
+      />
+      {opened ? (
+        <CompanySheet branch={opened} canManage={canManage} seesMembers={seesMembers} people={peopleOf(opened)} go={go}
+          onEdit={() => setEditing({ branch: opened, key: next() })} onClose={() => setOpen(null)} />
+      ) : null}
+      {editing ? <BranchDialog key={editing.key} open onOpenChange={(o) => !o && setEditing(null)} branch={editing.branch} /> : null}
+      {review ? <DepartmentReviewDialog key={review.key} departments={review.branch.departments} open onOpenChange={(o) => !o && setReview(null)} /> : null}
+      {team ? (
+        <StarterTeamDialog key={`team-${team.key}`} open onOpenChange={(o) => !o && setTeam(null)}
+          branchId={team.branch.id} branchName={team.branch.name} initialIndustry={industryOf(team.branch)} />
+      ) : null}
+    </>
+  );
+}
+
+type DeptRow = Department & { branch: Branch };
+
+/** P107: every department of every company as one table. */
+function DepartmentsTable({ branches, canManage, counts, go, onOpenCompany }: {
+  branches: Branch[];
+  canManage: boolean;
+  counts: Counts | null;
+  go: Go;
+  onOpenCompany: (id: string) => void;
+}) {
+  const t = useT();
+  const refresh = useRefreshOrg();
+  const control = useTableState({ size: 25, sort: "company" }, { prefix: "d_", filters: ["company"] });
+  const [company] = filterOf(control, "company");
+  const [adding, setAdding] = useState(false);
+  const [renaming, setRenaming] = useState<Department | null>(null);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const all = useMemo(() => branches.flatMap((b) => b.departments.map((d): DeptRow => ({ ...d, branch: b }))), [branches]);
+  const rows = company ? all.filter((d) => d.branch_id === company) : all;
+  const peopleOf = (d: DeptRow) => counts?.byDept.get(d.id) ?? (counts ? 0 : undefined);
+  const remove = (d: DeptRow) => api(`/api/departments/${d.id}`, "DELETE");
+  const columns: Column<DeptRow>[] = [
+    { id: "name", header: t("Department"), sortValue: (d) => d.name, card: "title", cell: (d) => <span className="text-[13.5px] font-medium break-words">{d.name}</span> },
+    {
+      id: "company", header: t("Company"), sortValue: (d) => `${d.branch.name}\u0000${String(d.position).padStart(4, "0")}`, exportValue: (d) => d.branch.name,
+      cell: (d) => <span className="flex min-w-0 items-center gap-2"><CompanyTile branch={d.branch} size="sm" /><span className="min-w-0 break-words">{d.branch.name}</span></span>,
+    },
+    ...(counts ? [{
+      id: "members", header: t("Members"), kind: "number", align: "right", sortValue: (d: DeptRow) => peopleOf(d),
+      cell: (d: DeptRow) => <CountLink n={peopleOf(d)} label={t("Members of {name}", { name: d.name })} onClick={() => go("members", { m_company: d.branch_id, m_department: d.id })} />,
+    } satisfies Column<DeptRow>] : []),
+  ];
+  return (
+    <>
+      <DataTable
+        label={t("Departments")}
+        columns={columns}
+        rows={rows}
+        rowId={(d) => d.id}
+        rowLabel={(d) => d.name}
+        control={control}
+        searchText={(d) => `${d.name} ${d.branch.name}`}
+        searchPlaceholder={t("Search departments")}
+        filters={branches.length > 1 ? (
+          <TableFilter control={control} id="company" label={t("Company")} allLabel={t("All companies")} searchable
+            options={branches.map((b) => ({ value: b.id, label: b.name }))} />
+        ) : null}
+        exportName={t("departments")}
+        onAdd={canManage ? () => setAdding(true) : undefined}
+        addLabel={t("Add department")}
+        rowActions={{
+          view: (d) => onOpenCompany(d.branch_id),
+          ...(canManage ? {
+            edit: (d: DeptRow) => setRenaming(d),
+            remove: async (d: DeptRow) => {
+              await remove(d);
+              refresh();
+            },
+            removeBody: () => t("Its people, agents and SOPs stay in the company without a department. It cannot be undone."),
+          } : {}),
+        }}
+        selection={canManage ? { selected, onChange: setSelected } : undefined}
+        bulkRemove={canManage ? {
+          run: async (list) => {
+            const out = await eachRow(list, (d) => d.id, remove);
+            refresh();
+            return out;
+          },
+          title: (n) => (n === 1 ? t("Delete 1 department?") : t("Delete {n} departments?", { n })),
+          body: t("Their people, agents and SOPs stay in their companies without a department. It cannot be undone."),
+        } : undefined}
+        empty={<p className="rounded-[var(--radius-md)] border border-dashed border-border px-6 py-10 text-center text-[13.5px] text-muted">{t("No departments yet.")}</p>}
+      />
+      {adding ? <AddDepartmentDialog branches={branches} initialBranch={company} onClose={() => setAdding(false)} /> : null}
+      {renaming ? <RenameDepartmentDialog dept={renaming} onClose={() => setRenaming(null)} /> : null}
+    </>
+  );
+}
+
+/** P107: everyone in the workspace (or one company), the same table as Settings > Members. */
+function OrgMembers({ me }: { me: Me }) {
+  const control = useTableState({ size: 25, sort: "name" }, { prefix: "m_", filters: MEMBER_FILTERS });
+  return <MembersTable control={control} me={me} withAddImport />;
 }
 
 export function OrganizationPage() {
@@ -409,12 +735,21 @@ export function OrganizationPage() {
   const lang = useLang((s) => s.lang);
   const { data: me } = useSuspenseQuery(meQuery);
   const canManage = me.permissions.includes("org.manage");
+  const seesMembers = me.permissions.includes("members.manage") || me.permissions.includes("team.manage");
   const { data: branches, isLoading, error } = useQuery(branchesQuery);
+  const counts = useCounts(seesMembers);
+  const prima = usePrimaLinks(canManage);
   const search = useSearch({ strict: false }) as { new?: number };
   const navigate = useNavigate();
   const [creating, setCreating] = useState(false);
   const [createKey, setCreateKey] = useState(0);
-  const reduce = useReducedMotion();
+  const [openCompany, setOpenCompany] = useState<string | null>(null);
+  const [editBranch, setEditBranch] = useState<{ branch: Branch; key: number } | null>(null);
+  // P107: companies, departments and members are three tables; the address keeps which one shows.
+  const raw = useRouterState({ select: (s) => (s.location.search as { view?: string }).view });
+  const view: View = raw === "departments" ? "departments" : raw === "members" && seesMembers ? "members" : "companies";
+  const go: Go = (v, filters = {}) =>
+    void navigate({ to: ".", search: ((prev: Record<string, unknown>) => ({ ...prev, ...filters, view: v === "companies" ? undefined : v })) as never, resetScroll: false });
   // "New branch" from the palette or switcher arrives as ?new=1.
   const createOpen = creating || (!!search.new && canManage);
   const openCreate = () => { setCreateKey((k) => k + 1); setCreating(true); };
@@ -422,9 +757,11 @@ export function OrganizationPage() {
     setCreating(o);
     if (!o && search.new) navigate({ to: "/organization", search: {}, replace: true });
   };
+  const departments = branches?.reduce((n, b) => n + b.departments.length, 0) ?? 0;
+  const opened = branches?.find((b) => b.id === openCompany);
 
   return (
-    <Page>
+    <Page wide>
       <PageHeader
         title={t("Organization")}
         description={t("Each company you run is a branch. Departments inside a branch hold its agents and SOPs.")}
@@ -438,7 +775,7 @@ export function OrganizationPage() {
       {isLoading ? (
         <div className="grid gap-4">
           <StatGrid className="lg:grid-cols-3">{[0, 1, 2].map((i) => <Skeleton key={i} className="h-[6.5rem] rounded-[var(--radius-md)]" />)}</StatGrid>
-          {[0, 1].map((i) => <Skeleton key={i} className="h-36 rounded-[var(--radius-md)]" />)}
+          <Skeleton className="h-72 rounded-[var(--radius-md)]" />
         </div>
       ) : error ? (
         <div role="alert" className="rounded-[var(--radius-md)] border border-danger/30 bg-danger/8 p-4 text-[13.5px] text-danger">
@@ -447,31 +784,32 @@ export function OrganizationPage() {
       ) : branches && branches.length ? (
         <div className="grid grid-cols-[minmax(0,1fr)] gap-4">
           <StatGrid className="lg:grid-cols-3">
-            <Stat label={lang === "ms" ? t("Branches (companies)") : t("Branches")} value={branches.length} icon={BuildingsIcon} hint={t("One per company")} />
-            <Stat label={t("Departments")} value={branches.reduce((n, b) => n + b.departments.length, 0)} icon={TreeStructureIcon} tone="info" hint={t("Across every branch")} />
-            <Stat
-              label={t("Private knowledge")}
-              value={branches.filter((b) => b.isolated).length}
-              icon={LockSimpleIcon}
-              tone="violet"
-              hint={t("Branches that keep SOPs and facts to themselves")}
-              className="max-lg:col-span-2"
-            />
+            <Stat label={lang === "ms" ? t("Branches (companies)") : t("Branches")} value={branches.length} icon={BuildingsIcon} hint={t("One per company")}
+              onClick={() => go("companies")} active={view === "companies"} />
+            <Stat label={t("Departments")} value={departments} icon={TreeStructureIcon} tone="info" hint={t("Across every branch")}
+              onClick={() => go("departments")} active={view === "departments"} />
+            {seesMembers ? (
+              <Stat label={t("Members")} value={counts?.total ?? "-"} icon={UsersIcon} tone="violet" hint={t("People who can sign in")}
+                onClick={() => go("members")} active={view === "members"} className="max-lg:col-span-2" />
+            ) : (
+              <Stat label={t("Private knowledge")} value={branches.filter((b) => b.isolated).length} icon={LockSimpleIcon} tone="violet"
+                hint={t("Branches that keep SOPs and facts to themselves")} className="max-lg:col-span-2" />
+            )}
           </StatGrid>
-          <AnimatePresence initial={false}>
-            {branches.map((b, i) => (
-              <motion.div
-                key={b.id}
-                layout={!reduce}
-                initial={reduce ? false : { opacity: 0, y: 8 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={reduce ? undefined : { opacity: 0, scale: 0.98 }}
-                transition={{ type: "spring", stiffness: 300, damping: 30 }}
-              >
-                <BranchCard branch={b} canManage={canManage} guide={i === 0 ? "organization.company" : undefined} />
-              </motion.div>
-            ))}
-          </AnimatePresence>
+          <Segmented<View> label={t("Show")} value={view} onChange={(v) => go(v)} className="justify-self-start"
+            options={[
+              { value: "companies", label: t("Companies"), count: branches.length },
+              { value: "departments", label: t("Departments"), count: departments },
+              ...(seesMembers ? [{ value: "members" as const, label: t("Members"), count: counts?.total }] : []),
+            ]} />
+          {view === "members" ? <OrgMembers me={me} />
+            : view === "departments" ? <DepartmentsTable branches={branches} canManage={canManage} counts={counts} go={go} onOpenCompany={setOpenCompany} />
+              : <CompaniesTable branches={branches} canManage={canManage} seesMembers={seesMembers} counts={counts} prima={prima} go={go} />}
+          {opened && view === "departments" ? (
+            <CompanySheet branch={opened} canManage={canManage} seesMembers={seesMembers} people={counts ? (counts.byBranch.get(opened.id) ?? 0) : undefined} go={go}
+              onEdit={() => setEditBranch({ branch: opened, key: Date.now() })} onClose={() => setOpenCompany(null)} />
+          ) : null}
+          {editBranch ? <BranchDialog key={editBranch.key} open onOpenChange={(o) => !o && setEditBranch(null)} branch={editBranch.branch} /> : null}
         </div>
       ) : (
         <EmptyState

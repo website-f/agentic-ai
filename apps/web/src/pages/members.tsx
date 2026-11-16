@@ -1,34 +1,33 @@
 import {
-  CaretDownIcon, CaretLeftIcon, CaretRightIcon, CaretUpIcon, CopyIcon, CrownSimpleIcon, DotsThreeIcon, EnvelopeSimpleIcon, FileXlsIcon, IdentificationCardIcon, KeyIcon, MicrosoftOutlookLogoIcon,
+  CopyIcon, CrownSimpleIcon, DotsThreeIcon, EnvelopeSimpleIcon, EyeIcon, FileXlsIcon, IdentificationCardIcon, KeyIcon, MicrosoftOutlookLogoIcon,
   PencilSimpleIcon, ShieldCheckIcon, ShieldSlashIcon, TrashIcon, TreeStructureIcon, UserGearIcon, UserPlusIcon, UsersIcon, UsersThreeIcon, XIcon,
 } from "@phosphor-icons/react";
 import { Link } from "@tanstack/react-router";
 import { keepPreviousData, useMutation, useQuery, useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
 import { useNavigate, useSearch } from "@tanstack/react-router";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { toast } from "sonner";
 
-import { EmptyState, Page, PageHeader, Section } from "@/components/page";
+import { Page, PageHeader, Section } from "@/components/page";
 import { SignInEmailsBar, useEmailMember } from "@/components/sign-in-emails";
 import { ResetTwoFactorDialog, TwoFactorPill, useMemberTwoFactor } from "@/components/two-factor";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm";
+import { DataTable, RowMenu, TableFilter, useTableState, type BulkOutcome, type Column, type TableControl, type TableState } from "@/components/ui/data-table";
 import { ResponsiveDialog } from "@/components/ui/dialog";
 import { Field, FormError } from "@/components/ui/field";
 import { Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger } from "@/components/ui/menu";
 import { Pill } from "@/components/ui/pill";
-import { SearchInput } from "@/components/ui/search-input";
+import { SideSheet } from "@/components/ui/side-sheet";
 import { MultiSelect, SearchSelect } from "@/components/ui/search-select";
-import { Select } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Stat, StatGrid } from "@/components/ui/stat";
-import { msg, t as tr, useT } from "@/i18n";
+import { locale, msg, t as tr, useT } from "@/i18n";
 import { api, ApiError, errorMessage } from "@/lib/api";
 import {
-  FIRST_PAGE, memberStatus, membersPageUrl, nextSort, PAGE_SIZES, pageRange, toggleAll, withFilter,
+  memberStatus, membersPageUrl, PAGE_SIZES,
   type MemberSort, type MembersFilters, type MembersPage, type MemberStatus, type PageSize,
 } from "@/lib/members";
-import { useDebounced } from "@/lib/paged";
 import { MANAGER_ROLES } from "@/lib/people";
 import { branchesQuery, keys, meQuery, membersQuery } from "@/lib/queries";
 import { hasAny, ROLE_INFO, SCOPED_ROLES, type Branch, type Me, type Member, type Role } from "@/lib/types";
@@ -418,15 +417,8 @@ function Avatar({ member, isMe }: { member: Member; isMe: boolean }) {
   );
 }
 
-function Tick({ checked, onChange, label }: { checked: boolean; onChange: () => void; label: string }) {
-  return (
-    <input type="checkbox" checked={checked} onChange={onChange} aria-label={label}
-      className="size-4 shrink-0 cursor-pointer accent-[var(--accent)]" />
-  );
-}
-
-/** The ⋯ menu of one member: role and place, password, two-step sign-in, remove. */
-function MemberActions({ member, me }: { member: Member; me: Me }) {
+/** The ⋯ menu of one member: view, role and place, password, two-step sign-in, remove. */
+function MemberActions({ member, me, onView }: { member: Member; me: Me; onView?: () => void }) {
   const t = useT();
   const qc = useQueryClient();
   const isMe = member.user_id === me.user.id;
@@ -455,7 +447,14 @@ function MemberActions({ member, me }: { member: Member; me: Me }) {
   });
   // P92: a temporary password by email (owners and admins; the server checks).
   const emailPw = useEmailMember(member.user_id, member.name);
-  if (!editable) return <span aria-hidden className="block size-10" />;
+  if (!editable) {
+    // P107: everyone may still open the details.
+    return onView ? (
+      <RowMenu label={t("Options for {name}", { name: member.name })}>
+        <MenuItem icon={<EyeIcon />} onSelect={onView}>{t("View|verb")}</MenuItem>
+      </RowMenu>
+    ) : <span aria-hidden className="block size-10" />;
+  }
   return (
     <>
       <Menu>
@@ -465,6 +464,7 @@ function MemberActions({ member, me }: { member: Member; me: Me }) {
           </Button>
         </MenuTrigger>
         <MenuContent>
+          {onView ? <MenuItem icon={<EyeIcon />} onSelect={onView}>{t("View|verb")}</MenuItem> : null}
           <MenuItem icon={<PencilSimpleIcon />} onSelect={() => setEditing(true)}>{fixesPeople ? t("Change role, place or access") : t("Change role or place")}</MenuItem>
           {managesPeople ? <MenuItem icon={<UsersThreeIcon />} onSelect={() => setTeam(true)}>{t("Who they manage")}</MenuItem> : null}
           {fixesPeople ? <MenuItem icon={<IdentificationCardIcon />} onSelect={() => setIdentity(true)}>{t("Change name or email")}</MenuItem> : null}
@@ -490,13 +490,10 @@ function MemberActions({ member, me }: { member: Member; me: Me }) {
         confirmLabel={t("Remove")}
         danger
         onConfirm={async () => {
-          try {
-            await api(`/api/members/${member.user_id}`, "DELETE");
-            refresh();
-            toast.success(t("{name} removed.", { name: member.name }));
-          } catch (e) {
-            toast.error(errorMessage(e));
-          }
+          // P107: a refusal (the last owner, not yours to change) shows inside the dialog.
+          await api(`/api/members/${member.user_id}`, "DELETE");
+          refresh();
+          toast.success(t("{name} removed.", { name: member.name }));
         }}
       />
       <ResetTwoFactorDialog member={member} open={resetting2fa} onOpenChange={setResetting2fa} />
@@ -533,163 +530,232 @@ function NameCell({ member, me, seesTwoFactor }: { member: Member; me: Me; seesT
   );
 }
 
-const COLUMNS: { key: MemberSort | null; label: string }[] = [
-  { key: "name", label: msg("Name") },
-  { key: "role", label: msg("Role") },
-  { key: "company", label: msg("Company") },
-  { key: "department", label: msg("Department") },
-  { key: "last_seen", label: msg("Sign-in") },
-  { key: null, label: msg("Status") },
-];
+export const MEMBER_FILTERS = ["company", "role", "status", "department"] as const;
 
-function SortHeading({ col, f, onSort }: { col: (typeof COLUMNS)[number]; f: MembersFilters; onSort: (k: MemberSort) => void }) {
+/** P107: the table's state (in the address) as the members API reads it. */
+function membersFilters(s: TableState): MembersFilters {
+  const sort = (["name", "email", "role", "company", "department", "last_seen", "joined"] as MemberSort[]).find((k) => k === s.sort) ?? "name";
+  return {
+    q: s.q.trim(),
+    company: s.f.company ?? "",
+    role: (s.f.role ?? "") as Role | "",
+    status: (s.f.status ?? "") as MemberStatus | "",
+    department: s.f.department ?? "",
+    sort,
+    dir: s.sort ? s.dir : "asc",
+    page: s.page,
+    pageSize: (PAGE_SIZES as readonly number[]).includes(s.size) ? (s.size as PageSize) : 25,
+  };
+}
+
+/** P107: one page of members for a table's state (the Members page and Organization share it). */
+export function useMembersPage(control: TableControl) {
+  const filters = membersFilters(control.state);
+  const query = useQuery({
+    queryKey: [...keys.members, "page", filters],
+    queryFn: () => api<MembersPage>(membersPageUrl(filters)),
+    placeholderData: keepPreviousData,
+  });
+  return { filters, ...query };
+}
+
+/** Every member matching the filters (Export): the API's largest pages, one after another. */
+async function everyMember(f: MembersFilters): Promise<Member[]> {
+  const out: Member[] = [];
+  for (let page = 1; page <= 1000; page++) {
+    const r = await api<MembersPage>(membersPageUrl({ ...f, page, pageSize: 100 }));
+    out.push(...r.items);
+    if (!r.items.length || out.length >= r.total) break;
+  }
+  return out;
+}
+
+/** P107: one member's details (a row's View). */
+function MemberSheet({ member, me, onClose }: { member: Member; me: Me; onClose: () => void }) {
   const t = useT();
-  const key = col.key;
-  const on = key !== null && f.sort === key;
+  const isMe = member.user_id === me.user.id;
+  const when = (iso: string) => new Date(iso).toLocaleDateString(locale(), { day: "numeric", month: "short", year: "numeric" });
+  const line = (label: string, value: ReactNode) => (
+    <div className="contents">
+      <dt className="text-muted">{label}</dt>
+      <dd className="min-w-0 break-words">{value}</dd>
+    </div>
+  );
   return (
-    <th scope="col" aria-sort={on ? (f.dir === "asc" ? "ascending" : "descending") : undefined}
-      className="px-3 py-2.5 text-left text-[12px] font-medium tracking-wide text-muted uppercase">
-      {key ? (
-        <button type="button" onClick={() => onSort(key)} className={cn("inline-flex items-center gap-1 hover:text-fg", on && "text-fg")}>
-          {t(col.label)}
-          {on ? (f.dir === "asc" ? <CaretUpIcon size={12} weight="bold" /> : <CaretDownIcon size={12} weight="bold" />) : null}
-        </button>
-      ) : t(col.label)}
-    </th>
+    <SideSheet open onOpenChange={(o) => !o && onClose()} size="md"
+      title={<span className="flex min-w-0 items-center gap-3"><Avatar member={member} isMe={isMe} /><span className="min-w-0 break-words">{member.name}</span></span>}
+      description={<span className="break-all">{member.email}</span>}>
+      <dl className="grid grid-cols-[minmax(0,auto)_minmax(0,1fr)] gap-x-4 gap-y-3 text-[13.5px]">
+        {line(t("Role"), <span className="flex flex-wrap items-center gap-1"><RolePill role={member.role} /><AccessBadges member={member} /></span>)}
+        {line(t("Status"), <StatusPill member={member} />)}
+        {line(t("Company"), <Branches member={member} />)}
+        {line(t("Department"), member.department_name ?? <span className="text-muted">-</span>)}
+        {member.reports_to_name ? line(t("Reports to"), member.reports_to_name) : null}
+        {member.manages ? line(t("Manages"), member.manages === 1 ? t("Manages 1 person") : t("Manages {n} people", { n: member.manages })) : null}
+        {line(t("Sign-in"), <SignIn member={member} />)}
+        {line(t("Joined"), <span className="tabular">{when(member.joined_at)}</span>)}
+        {member.agents ? line(t("Personal agents"), <span className="tabular">{member.agents}</span>) : null}
+      </dl>
+    </SideSheet>
   );
 }
 
-function MembersTable({ rows, me, f, onSort, selected, onTick, onTickPage, canBulk }: {
-  rows: Member[];
-  me: Me;
-  f: MembersFilters;
-  onSort: (k: MemberSort) => void;
-  selected: Set<string>;
-  onTick: (id: string) => void;
-  onTickPage: () => void;
-  canBulk: boolean;
-}) {
+/** P107: the members data table (Settings > Members and Organization): the server searches,
+ * filters, sorts and pages; each row has its ⋯ menu (View, change role or place, remove...);
+ * ticked people get the bulk changes, Export and Remove. `withAddImport` adds the Add and
+ * Import buttons to the table's toolbar (the Members page has them in its header). */
+export function MembersTable({ control, me, withAddImport }: { control: TableControl; me: Me; withAddImport?: boolean }) {
   const t = useT();
+  const qc = useQueryClient();
+  const canAdd = hasAny(me, "members.manage", "team.manage") && assignable(me).length > 0;
+  const { data: branches = [] } = useQuery(branchesQuery);
+  const { filters, data, isLoading, error, isFetching, refetch } = useMembersPage(control);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  // Ticks follow the search and filters (not the page or its size).
+  const tickKey = JSON.stringify([filters.q, filters.company, filters.role, filters.status, filters.department]);
+  const [tickedFor, setTickedFor] = useState(tickKey);
+  if (tickedFor !== tickKey) {
+    setTickedFor(tickKey);
+    if (selected.size) setSelected(new Set());
+  }
+  const [bulkAccess, setBulkAccess] = useState(false);
+  const [bulkManager, setBulkManager] = useState(false);
+  const [bulkPrima, setBulkPrima] = useState(false);
+  const [viewing, setViewing] = useState<Member | null>(null);
+  const [adding, setAdding] = useState(false);
+  const [addKey, setAddKey] = useState(0);
+  const [importing, setImporting] = useState(false);
+  const rows = data?.items ?? [];
+  const total = data?.total ?? 0;
+  // The ticked people this page shows (the role dialog needs their names and roles).
+  const ticked = rows.filter((m) => selected.has(m.user_id));
   const seesTwoFactor = me.permissions.includes("members.manage");
-  const others = rows.filter((m) => m.user_id !== me.user.id);
-  const all = others.length > 0 && others.every((m) => selected.has(m.user_id));
+  // Departments to filter by: the picked company's, else every company's (grouped).
+  const deptPool = filters.company && filters.company !== NONE ? branches.filter((b) => b.id === filters.company) : branches;
+  const deptOptions = deptPool.flatMap((b) => b.departments.map((d) => ({ value: d.id, label: d.name, hint: deptPool.length > 1 ? b.name : undefined })));
+  const statusLabel = (m: Member) => t(STATUS_INFO[memberStatus(m)].label);
+  const roleLabel = (r: Role) => (ROLE_INFO[r] ? t(ROLE_INFO[r].label) : r);
+  const removeTicked = async (_rows: Member[], ids: string[]): Promise<BulkOutcome> => {
+    const r = await api<BulkOut>("/api/members/bulk", "POST", { user_ids: ids, action: "remove" });
+    qc.invalidateQueries({ queryKey: keys.members });
+    qc.invalidateQueries({ queryKey: keys.status });
+    return { done: r.done, failed: r.results.filter((x) => !x.ok).map((x) => ({ id: x.user_id, message: x.message ?? t("Something went wrong.") })) };
+  };
+
+  const columns: Column<Member>[] = [
+    { id: "name", header: t("Name"), sortable: true, card: "title", className: "max-w-[22rem]", exportValue: (m) => m.name, cell: (m) => <NameCell member={m} me={me} seesTwoFactor={seesTwoFactor} /> },
+    { id: "email", header: t("Email"), exportOnly: true, exportValue: (m) => m.email, cell: (m) => m.email },
+    {
+      id: "role", header: t("Role"), sortable: true, exportValue: (m) => roleLabel(m.role),
+      cell: (m) => <span className="flex flex-wrap items-center gap-1"><RolePill role={m.role} /><AccessBadges member={m} /></span>,
+    },
+    { id: "company", header: t("Company"), sortable: true, exportValue: (m) => branchNamesOf(m).join("; "), cell: (m) => <Branches member={m} /> },
+    { id: "department", header: t("Department"), sortable: true, exportValue: (m) => m.department_name ?? "", cell: (m) => m.department_name ?? <span className="text-muted">-</span> },
+    { id: "last_seen", header: t("Sign-in"), sortable: true, kind: "date", hideBelow: "lg", exportValue: (m) => m.last_login_at ?? "", cell: (m) => <SignIn member={m} /> },
+    {
+      id: "joined", header: t("Joined"), sortable: true, kind: "date", hideBelow: "xl", exportValue: (m) => m.joined_at,
+      cell: (m) => <span className="text-muted tabular">{new Date(m.joined_at).toLocaleDateString(locale(), { day: "numeric", month: "short", year: "numeric" })}</span>,
+    },
+    { id: "status", header: t("Status"), exportValue: statusLabel, cell: (m) => <StatusPill member={m} /> },
+  ];
+
   return (
-    <div className="hidden overflow-x-auto rounded-[var(--radius-md)] border border-border bg-surface md:block">
-      <table className="w-full min-w-[56rem] border-collapse text-[13px]">
-        <thead className="border-b border-border bg-surface-2/60">
-          <tr>
-            {canBulk ? (
-              <th scope="col" className="w-10 px-3 py-2.5"><Tick checked={all} onChange={onTickPage} label={t("Select everyone on this page")} /></th>
+    <>
+      <DataTable
+        label={t("Members")}
+        mode="server"
+        columns={columns}
+        rows={rows}
+        total={total}
+        rowId={(m) => m.user_id}
+        rowLabel={(m) => m.name}
+        control={control}
+        pageSizes={PAGE_SIZES}
+        loading={isLoading}
+        fetching={isFetching && !isLoading}
+        error={error}
+        onRetry={() => void refetch()}
+        searchPlaceholder={t("Search by name or email")}
+        filters={
+          <>
+            <TableFilter control={control} id="company" label={t("Company")} allLabel={t("All companies")} searchable
+              options={[{ value: NONE, label: t("No company") }, ...branches.map((b) => ({ value: b.id, label: b.name }))]} />
+            {deptOptions.length ? (
+              <TableFilter control={control} id="department" label={t("Department")} allLabel={t("All departments")} searchable options={deptOptions} />
             ) : null}
-            {COLUMNS.map((c) => <SortHeading key={c.label} col={c} f={f} onSort={onSort} />)}
-            <th scope="col" className="w-12 px-3 py-2.5"><span className="sr-only">{t("Actions")}</span></th>
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-border">
-          {rows.map((m) => (
-            <tr key={m.user_id} className={cn("align-middle", selected.has(m.user_id) && "bg-accent-soft/40")}>
-              {canBulk ? (
-                <td className="px-3 py-2.5">
-                  {m.user_id === me.user.id ? null : <Tick checked={selected.has(m.user_id)} onChange={() => onTick(m.user_id)} label={t("Select {name}", { name: m.name })} />}
-                </td>
-              ) : null}
-              <td className="max-w-[20rem] px-3 py-2.5"><NameCell member={m} me={me} seesTwoFactor={seesTwoFactor} /></td>
-              <td className="px-3 py-2.5"><span className="flex flex-wrap items-center gap-1"><RolePill role={m.role} /><AccessBadges member={m} /></span></td>
-              <td className="px-3 py-2.5 break-words"><Branches member={m} /></td>
-              <td className="px-3 py-2.5 break-words">{m.department_name ?? <span className="text-muted">-</span>}</td>
-              <td className="px-3 py-2.5"><SignIn member={m} /></td>
-              <td className="px-3 py-2.5"><StatusPill member={m} /></td>
-              <td className="px-1 py-1.5 text-right"><MemberActions member={m} me={me} /></td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
-/** Phones: one card per member instead of the table. */
-function MemberCards({ rows, me, selected, onTick, canBulk }: {
-  rows: Member[];
-  me: Me;
-  selected: Set<string>;
-  onTick: (id: string) => void;
-  canBulk: boolean;
-}) {
-  const t = useT();
-  const seesTwoFactor = me.permissions.includes("members.manage");
-  return (
-    <ul className="grid gap-2 md:hidden">
-      {rows.map((m) => {
-        const place = [m.department_name, ...branchNamesOf(m)].filter(Boolean).join(", ");
-        return (
-          <li key={m.user_id} className={cn("grid gap-2 rounded-[var(--radius-md)] border border-border bg-surface p-3", selected.has(m.user_id) && "border-accent/40 bg-accent-soft/40")}>
-            <div className="flex items-start gap-2">
-              {canBulk && m.user_id !== me.user.id ? (
-                <span className="pt-2.5"><Tick checked={selected.has(m.user_id)} onChange={() => onTick(m.user_id)} label={t("Select {name}", { name: m.name })} /></span>
-              ) : null}
-              <div className="min-w-0 flex-1"><NameCell member={m} me={me} seesTwoFactor={seesTwoFactor} /></div>
-              <MemberActions member={m} me={me} />
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-              <RolePill role={m.role} />
-              <AccessBadges member={m} />
-              <StatusPill member={m} />
-              {place ? <span className="text-[12px] break-words text-muted">{place}</span> : null}
-            </div>
-            <SignIn member={m} />
-          </li>
-        );
-      })}
-    </ul>
-  );
-}
-
-function Pager({ f, total, onChange }: { f: MembersFilters; total: number; onChange: (c: Partial<MembersFilters>) => void }) {
-  const t = useT();
-  const { pages, from, to } = pageRange(f.page, f.pageSize, total);
-  return (
-    <div className="flex flex-wrap items-center justify-between gap-3">
-      <p className="text-[13px] text-muted tabular">{total ? t("Showing {from} to {to} of {total}", { from, to, total }) : null}</p>
-      <div className="flex flex-wrap items-center gap-2">
-        <Select size="sm" className="w-36" label={t("Rows per page")} value={String(f.pageSize)}
-          options={PAGE_SIZES.map((n) => ({ value: String(n), label: t("{n} a page", { n }) }))}
-          onValueChange={(v) => onChange({ pageSize: Number(v) as PageSize })} />
-        <Button size="sm" variant="outline" disabled={f.page <= 1} onClick={() => onChange({ page: f.page - 1 })} aria-label={t("Previous page")}>
-          <CaretLeftIcon size={14} />
-        </Button>
-        <span className="text-[13px] tabular">{t("Page {page} of {pages}", { page: Math.min(f.page, pages), pages })}</span>
-        <Button size="sm" variant="outline" disabled={f.page >= pages} onClick={() => onChange({ page: f.page + 1 })} aria-label={t("Next page")}>
-          <CaretRightIcon size={14} />
-        </Button>
-      </div>
-    </div>
+            <TableFilter control={control} id="role" label={t("Role")} allLabel={t("All roles")} searchable
+              options={ROLES.map((r) => ({ value: r, label: t(ROLE_INFO[r].label) }))} />
+            <TableFilter control={control} id="status" label={t("Status")} allLabel={t("All statuses")}
+              options={(Object.keys(STATUS_INFO) as MemberStatus[]).map((s) => ({ value: s, label: t(STATUS_INFO[s].label) }))} />
+          </>
+        }
+        exportName={t("members")}
+        exportRows={() => everyMember(filters)}
+        onOpen={setViewing}
+        onAdd={withAddImport && canAdd ? () => { setAddKey((k) => k + 1); setAdding(true); } : undefined}
+        addLabel={t("Add member")}
+        onImport={withAddImport && canAdd ? () => setImporting(true) : undefined}
+        importLabel={t("Import from Excel")}
+        actions={(m) => <MemberActions member={m} me={me} onView={() => setViewing(m)} />}
+        selection={canAdd ? { selected, onChange: setSelected, canSelect: (m) => m.user_id !== me.user.id } : undefined}
+        bulkRemove={canAdd ? {
+          run: removeTicked,
+          verb: "remove",
+          title: (n) => (n === 1 ? t("Remove 1 person?") : t("Remove {n} people?", { n })),
+          body: t("They lose access to this workspace immediately and are signed out. Their personal agents stay, without an owner."),
+        } : undefined}
+        bulk={() => (
+          <>
+            <Button size="sm" variant="secondary" disabled={!ticked.length} onClick={() => setBulkAccess(true)}>
+              <PencilSimpleIcon size={14} /> {t("Change role or place")}
+            </Button>
+            {setsAccess(me) ? (
+              <Button size="sm" variant="secondary" onClick={() => setBulkPrima(true)}>
+                <ShieldCheckIcon size={14} /> {t("Access")}
+              </Button>
+            ) : null}
+            {editsOrg(me) ? (
+              <Button size="sm" variant="secondary" onClick={() => setBulkManager(true)}>
+                <TreeStructureIcon size={14} /> {t("Reports to")}
+              </Button>
+            ) : null}
+            <Button size="sm" variant="ghost" onClick={() => setSelected(new Set())}>
+              <XIcon size={14} /> {t("Clear")}
+            </Button>
+            {ticked.length < selected.size ? (
+              <span className="text-[12px] text-muted">{t("A role change applies to the ticked people on this page.")}</span>
+            ) : null}
+          </>
+        )}
+      />
+      {viewing ? <MemberSheet member={viewing} me={me} onClose={() => setViewing(null)} /> : null}
+      {withAddImport ? <AddMemberDialog key={addKey} open={adding} onOpenChange={setAdding} me={me} /> : null}
+      {importing ? (
+        <ImportMembersDialog open onOpenChange={setImporting} roles={assignable(me)} lockBranch={allowedBranches(me)} />
+      ) : null}
+      {bulkAccess ? (
+        <AccessDialog members={ticked} me={me} open={bulkAccess} onOpenChange={setBulkAccess} onDone={() => setSelected(new Set())} />
+      ) : null}
+      {bulkPrima ? (
+        <BulkAccessDialog userIds={[...selected]} open={bulkPrima} onOpenChange={setBulkPrima} onDone={() => setSelected(new Set())} />
+      ) : null}
+      {bulkManager ? (
+        <BulkManagerDialog userIds={[...selected]} open={bulkManager} onOpenChange={setBulkManager} onDone={() => setSelected(new Set())} />
+      ) : null}
+    </>
   );
 }
 
 export function MembersPage() {
   const t = useT();
-  const qc = useQueryClient();
   const { data: me } = useSuspenseQuery(meQuery);
   const canAdd = hasAny(me, "members.manage", "team.manage") && assignable(me).length > 0;
   // P98: the owner changes what each role may do (Settings > Roles and access).
   const editsRoles = me.permissions.includes("roles.manage");
-  const { data: branches = [] } = useQuery(branchesQuery);
-  const [f, setF] = useState<MembersFilters>(FIRST_PAGE);
-  const [typed, setTyped] = useState("");
-  // The search box asks the server once typing settles; a new search starts on page 1.
-  const q = useDebounced(typed, 300);
-  const filters = q.trim() === f.q ? f : withFilter(f, { q: q.trim() });
-  const { data, isLoading, error, isFetching } = useQuery({
-    queryKey: [...keys.members, "page", filters],
-    queryFn: () => api<MembersPage>(membersPageUrl(filters)),
-    placeholderData: keepPreviousData,
-  });
-  const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [bulkAccess, setBulkAccess] = useState(false);
-  const [bulkRemove, setBulkRemove] = useState(false);
-  const [bulkManager, setBulkManager] = useState(false);
-  const [bulkPrima, setBulkPrima] = useState(false);
+  // P107: the shared data table; the server searches, filters, sorts and pages, and the address
+  // keeps where you were (?company= and the other filters).
+  const control = useTableState({ size: 25, sort: "name" }, { filters: MEMBER_FILTERS });
+  const { filters, data, isLoading, error } = useMembersPage(control);
   const search = useSearch({ strict: false }) as { add?: number };
   const navigate = useNavigate();
   const [adding, setAdding] = useState(false);
@@ -703,42 +769,13 @@ export function MembersPage() {
     if (!o && search.add) navigate({ to: "/settings/members", search: {}, replace: true });
   };
   const scoped = me.scope && me.scope.kind !== "all";
-  const change = (c: Partial<MembersFilters>) => {
-    setF(withFilter(filters, c));
-    if (!("page" in c) && !("pageSize" in c)) setSelected(new Set()); // ticks follow the filters
-  };
-  const clearAll = () => {
-    setTyped("");
-    setF(FIRST_PAGE);
-    setSelected(new Set());
-  };
-  const rows = data?.items ?? [];
+  const clearAll = () => control.set({ q: "", f: Object.fromEntries(MEMBER_FILTERS.map((k) => [k, ""])) });
   const summary = data?.summary;
   const total = data?.total ?? 0;
-  const pageIds = rows.filter((m) => m.user_id !== me.user.id).map((m) => m.user_id);
-  const tick = (id: string) => setSelected((s) => {
-    const n = new Set(s);
-    if (n.has(id)) n.delete(id);
-    else n.add(id);
-    return n;
-  });
-  // The ticked people this page shows (the role dialog needs their names and roles).
-  const ticked = rows.filter((m) => selected.has(m.user_id));
-  const filtered = !!(filters.q || filters.company || filters.role || filters.status);
-  const removeTicked = async () => {
-    try {
-      const r = await api<BulkOut>("/api/members/bulk", "POST", { user_ids: [...selected], action: "remove" });
-      setSelected(new Set());
-      qc.invalidateQueries({ queryKey: keys.members });
-      qc.invalidateQueries({ queryKey: keys.status });
-      bulkToast(r.done, r.skipped, r.results.find((x) => !x.ok)?.message ?? null);
-    } catch (e) {
-      toast.error(errorMessage(e));
-    }
-  };
+  const filtered = !!(filters.q || filters.company || filters.role || filters.status || filters.department);
 
   return (
-    <Page>
+    <Page wide>
       <PageHeader
         title={t("Members")}
         description={scoped ? t("People in {place}, and what their role lets them do.", { place: me.scope?.label ?? "" }) : t("People who can sign in to this workspace, where they sit, and what their role lets them do.")}
@@ -776,7 +813,7 @@ export function MembersPage() {
             <Stat label={t("Members")} value={summary.members} icon={UsersIcon} hint={t("Can sign in here")} onClick={clearAll} active={!filtered} />
             <Stat label={t("Owners and admins")} value={summary.owners_admins} icon={CrownSimpleIcon} tone="violet" hint={t("Full workspace access")} />
             <Stat label={t("Temporary password")} value={summary.temp_password} icon={KeyIcon} tone={summary.temp_password ? "warn" : "neutral"} hint={t("Yet to pick their own")}
-              onClick={() => change({ status: filters.status === "pending" ? "" : "pending" })} active={filters.status === "pending"} />
+              onClick={() => control.set({ f: { status: filters.status === "pending" ? "" : "pending" } })} active={filters.status === "pending"} />
             <Stat label={t("Signed in with Microsoft")} value={summary.microsoft} icon={MicrosoftOutlookLogoIcon} tone="info" hint={t("Their work account is connected")} />
           </StatGrid>
 
@@ -787,76 +824,7 @@ export function MembersPage() {
               </h2>
               {filtered ? <p className="text-[13px] text-muted tabular">{t("{n} match the filters", { n: total })}</p> : null}
             </div>
-            <div className="grid grid-cols-[minmax(0,1fr)] gap-2 sm:grid-cols-2 lg:grid-cols-[minmax(0,2fr)_repeat(3,minmax(0,1fr))]">
-              <SearchInput value={typed} onChange={setTyped} placeholder={t("Search by name or email")} className="sm:col-span-2 lg:col-span-1" />
-              <SearchSelect label={t("Company")} value={filters.company || "all"} onValueChange={(v) => change({ company: v === "all" ? "" : v })} searchPlaceholder={t("Search companies")}
-                options={[{ value: "all", label: t("All companies") }, { value: "none", label: t("No company") }, ...branches.map((b) => ({ value: b.id, label: b.name }))]} />
-              <SearchSelect label={t("Role")} value={filters.role || "all"} onValueChange={(v) => change({ role: v === "all" ? "" : (v as Role) })} searchPlaceholder={t("Search roles")}
-                options={[{ value: "all", label: t("All roles") }, ...ROLES.map((r) => ({ value: r, label: t(ROLE_INFO[r].label) }))]} />
-              <Select label={t("Status")} value={filters.status || "all"} onValueChange={(v) => change({ status: v === "all" ? "" : (v as MemberStatus) })}
-                options={[{ value: "all", label: t("All statuses") }, ...(Object.keys(STATUS_INFO) as MemberStatus[]).map((s) => ({ value: s, label: t(STATUS_INFO[s].label) }))]} />
-            </div>
-            <div className="flex flex-wrap items-center gap-2 md:hidden">
-              <Select size="sm" className="w-56" label={t("Sort by")} value={`${filters.sort}:${filters.dir}`}
-                onValueChange={(v) => {
-                  const [sort, dir] = v.split(":") as [MemberSort, "asc" | "desc"];
-                  change({ sort, dir });
-                }}
-                options={[
-                  { value: "name:asc", label: t("Name, A to Z") },
-                  { value: "name:desc", label: t("Name, Z to A") },
-                  { value: "company:asc", label: t("Company") },
-                  { value: "role:asc", label: t("Role") },
-                  { value: "last_seen:desc", label: t("Signed in most recently") },
-                  { value: "joined:desc", label: t("Joined most recently") },
-                ]} />
-              {canAdd && pageIds.length ? (
-                <Button size="sm" variant="outline" onClick={() => setSelected(toggleAll(selected, pageIds))}>
-                  {pageIds.every((id) => selected.has(id)) ? t("Untick this page") : t("Tick this page")}
-                </Button>
-              ) : null}
-            </div>
-
-            {canAdd && selected.size ? (
-              <div role="region" aria-label={t("Ticked members")}
-                className="sticky top-2 z-10 flex flex-wrap items-center gap-2 rounded-[var(--radius-md)] border border-accent/30 bg-surface px-3 py-2 shadow-sm">
-                <span className="text-[13px] font-medium tabular">{selected.size === 1 ? t("1 ticked") : t("{n} ticked", { n: selected.size })}</span>
-                <Button size="sm" variant="secondary" disabled={!ticked.length} onClick={() => setBulkAccess(true)}>
-                  <PencilSimpleIcon size={14} /> {t("Change role or place")}
-                </Button>
-                {setsAccess(me) ? (
-                  <Button size="sm" variant="secondary" onClick={() => setBulkPrima(true)}>
-                    <ShieldCheckIcon size={14} /> {t("Access")}
-                  </Button>
-                ) : null}
-                {editsOrg(me) ? (
-                  <Button size="sm" variant="secondary" onClick={() => setBulkManager(true)}>
-                    <TreeStructureIcon size={14} /> {t("Reports to")}
-                  </Button>
-                ) : null}
-                <Button size="sm" variant="outline" onClick={() => setBulkRemove(true)}>
-                  <TrashIcon size={14} /> {t("Remove")}
-                </Button>
-                <Button size="sm" variant="ghost" onClick={() => setSelected(new Set())}>
-                  <XIcon size={14} /> {t("Clear")}
-                </Button>
-                {ticked.length < selected.size ? (
-                  <span className="text-[12px] text-muted">{t("A role change applies to the ticked people on this page.")}</span>
-                ) : null}
-              </div>
-            ) : null}
-
-            {rows.length ? (
-              <div className={cn("grid gap-3 transition-opacity", isFetching && "opacity-70")}>
-                <MembersTable rows={rows} me={me} f={filters} canBulk={canAdd} selected={selected}
-                  onSort={(k) => change(nextSort(filters, k))} onTick={tick} onTickPage={() => setSelected(toggleAll(selected, pageIds))} />
-                <MemberCards rows={rows} me={me} canBulk={canAdd} selected={selected} onTick={tick} />
-                <Pager f={filters} total={total} onChange={change} />
-              </div>
-            ) : (
-              <EmptyState icon={UsersIcon} title={t("Nobody matches")} body={t("Try another name or email, or clear the filters.")}
-                action={<Button variant="outline" onClick={clearAll}>{t("Clear the filters")}</Button>} />
-            )}
+            <MembersTable control={control} me={me} />
           </div>
         </>
       ) : null}
@@ -887,24 +855,6 @@ export function MembersPage() {
       {importing ? (
         <ImportMembersDialog open onOpenChange={setImporting} roles={assignable(me)} lockBranch={allowedBranches(me)} />
       ) : null}
-      {bulkAccess ? (
-        <AccessDialog members={ticked} me={me} open={bulkAccess} onOpenChange={setBulkAccess} onDone={() => setSelected(new Set())} />
-      ) : null}
-      {bulkPrima ? (
-        <BulkAccessDialog userIds={[...selected]} open={bulkPrima} onOpenChange={setBulkPrima} onDone={() => setSelected(new Set())} />
-      ) : null}
-      {bulkManager ? (
-        <BulkManagerDialog userIds={[...selected]} open={bulkManager} onOpenChange={setBulkManager} onDone={() => setSelected(new Set())} />
-      ) : null}
-      <ConfirmDialog
-        open={bulkRemove}
-        onOpenChange={setBulkRemove}
-        title={selected.size === 1 ? t("Remove 1 person?") : t("Remove {n} people?", { n: selected.size })}
-        body={t("They lose access to this workspace immediately and are signed out. Their personal agents stay, without an owner.")}
-        confirmLabel={t("Remove")}
-        danger
-        onConfirm={removeTicked}
-      />
     </Page>
   );
 }

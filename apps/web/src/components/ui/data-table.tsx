@@ -15,19 +15,27 @@
  *   `?q=&page=&size=&sort=` (sort "-col" is descending), see `useServerTable` and
  *   apps/api/agentic/api/table.py.
  */
-import { CaretDownIcon, CaretLeftIcon, CaretRightIcon, CaretUpDownIcon, CaretUpIcon, MagnifyingGlassIcon, WarningCircleIcon } from "@phosphor-icons/react";
+import {
+  CaretDownIcon, CaretLeftIcon, CaretRightIcon, CaretUpDownIcon, CaretUpIcon, DotsThreeIcon, DownloadSimpleIcon, EyeIcon, FileArrowUpIcon,
+  MagnifyingGlassIcon, PencilSimpleIcon, PlusIcon, TrashIcon, WarningCircleIcon, XIcon,
+} from "@phosphor-icons/react";
 import { keepPreviousData, useQuery, type QueryKey } from "@tanstack/react-query";
 import { useNavigate, useRouterState } from "@tanstack/react-router";
 import { useEffect, useId, useMemo, useRef, useState, type MouseEvent, type ReactNode } from "react";
+import { toast } from "sonner";
 
 import { useT } from "@/i18n";
 import { apiWithHeaders, errorMessage } from "@/lib/api";
+import { saveFile } from "@/lib/native";
 import { useDebounced } from "@/lib/paged";
 import { useIsPhone } from "@/lib/use-media";
 import { cn } from "@/lib/utils";
 
 import { Button } from "./button";
+import { ConfirmDialog } from "./confirm";
+import { Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger } from "./menu";
 import { SearchInput } from "./search-input";
+import { SearchSelect } from "./search-select";
 import { Select } from "./select";
 import { Skeleton } from "./skeleton";
 
@@ -60,6 +68,50 @@ export function filterOf(control: TableControl, key: string): [string, (v: strin
   return [control.state.f[key] ?? "", (v: string) => control.set({ f: { [key]: v } })];
 }
 
+const ALL = "__all";
+
+/** P107: one filter as a chip-like select beside the search box, kept in the table's state
+ * (`useTableState(..., { filters: [id] })`). "" is "all"; a set filter stands out in the
+ * accent colour. Long lists (more than 8 options) get a searchable picker. */
+export function TableFilter({ control, id, label, allLabel, options, searchable, className }: {
+  control: TableControl;
+  id: string;
+  /** The filter's name (the select's accessible name), already translated. */
+  label: string;
+  /** "All companies", already translated. */
+  allLabel: string;
+  options: { value: string; label: string; hint?: string }[];
+  searchable?: boolean;
+  className?: string;
+}) {
+  const t = useT();
+  const [value, setValue] = filterOf(control, id);
+  const on = !!value;
+  const all = [{ value: ALL, label: allLabel }, ...options];
+  const style = cn("w-full sm:w-auto sm:max-w-60 sm:min-w-36", on && "border-accent/50 bg-accent-soft/50 font-medium text-fg", className);
+  const pick = (v: string) => setValue(v === ALL ? "" : v);
+  return searchable ?? options.length > 8 ? (
+    <SearchSelect size="md" label={label} value={value || ALL} onValueChange={pick} options={all} className={style}
+      searchPlaceholder={t("Search {list}", { list: label.toLowerCase() })} />
+  ) : (
+    <Select size="md" label={label} value={value || ALL} onValueChange={pick} options={all} className={style} />
+  );
+}
+
+/** P107: a row's ⋯ menu (give it MenuItems). */
+export function RowMenu({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <Menu>
+      <MenuTrigger asChild>
+        <Button variant="ghost" size="icon" aria-label={label}>
+          <DotsThreeIcon size={20} weight="bold" />
+        </Button>
+      </MenuTrigger>
+      <MenuContent>{children}</MenuContent>
+    </Menu>
+  );
+}
+
 export interface Column<T> {
   id: string;
   /** Already translated. */
@@ -72,13 +124,106 @@ export interface Column<T> {
   /** What kind of value it is, for the phone's sort menu wording and the first direction. */
   kind?: "text" | "number" | "date";
   /** Hide the column on narrower desktops (it still shows on phone cards unless `card: "hide"`). */
-  hideBelow?: "lg" | "xl";
+  hideBelow?: "lg" | "xl" | "2xl";
   /** On phone cards: "title" lines lead the card, "full" spans the card without a label,
    * "hide" leaves it out; the default is a "label: value" line. */
   card?: "title" | "full" | "hide" | "field";
   align?: "left" | "right";
   /** Extra classes for the column's cells (e.g. a width). */
   className?: string;
+  /** P107: the value Export writes for this column (default: `sortValue`; a column with
+   * neither is left out of the file). */
+  exportValue?: (row: T) => string | number | null | undefined;
+  /** P107: leave this column out of Export. */
+  noExport?: boolean;
+  /** P107: only in the exported file, never on screen (e.g. an email shown inside the name cell). */
+  exportOnly?: boolean;
+}
+
+/** P107: the standard ⋯ menu of a row: View, Edit, the screen's own items, Delete. */
+export interface RowActions<T> {
+  /** "View": opens the row's details. */
+  view?: (row: T) => void;
+  edit?: (row: T) => void;
+  /** Rows this person may edit (default: every row). */
+  canEdit?: (row: T) => boolean;
+  /** Delete one row; the table asks first, naming it. Throwing keeps the dialog open with the
+   * reason inside it. */
+  remove?: (row: T) => Promise<unknown>;
+  /** Rows this person may delete (default: every row). */
+  canRemove?: (row: T) => boolean;
+  /** "delete" (gone for good, the default) or "remove" (people leave, the record stays). */
+  verb?: "delete" | "remove";
+  /** The dialog's text under its title: what goes with the row, whether it can be undone. */
+  removeBody?: (row: T) => ReactNode;
+  /** The screen's own MenuItems, between Edit and Delete. */
+  more?: (row: T) => ReactNode;
+}
+
+/** P107: what a bulk delete did: how many went, and which did not (with why). */
+export interface BulkOutcome {
+  done: number;
+  failed: { id: string; message: string }[];
+}
+
+/** P107: one call per row, one after another; a refusal never stops the rest. */
+export async function eachRow<T>(rows: T[], rowId: (row: T) => string, run: (row: T) => Promise<unknown>): Promise<BulkOutcome> {
+  const out: BulkOutcome = { done: 0, failed: [] };
+  for (const row of rows) {
+    try {
+      await run(row);
+      out.done += 1;
+    } catch (e) {
+      out.failed.push({ id: rowId(row), message: errorMessage(e) });
+    }
+  }
+  return out;
+}
+
+// ---------------------------------------------------------------- export (P107)
+
+/** One CSV cell, always quoted; text starting = + - @ is kept as text (Excel would run it). */
+export function csvCell(v: unknown): string {
+  if (v === null || v === undefined) return '""';
+  if (typeof v === "number") return Number.isFinite(v) ? `"${v}"` : '""';
+  const s = String(v);
+  const safe = /^[=+\-@\t\r]/.test(s) ? `'${s}` : s;
+  return `"${safe.replace(/"/g, '""')}"`;
+}
+
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}T/;
+
+function exportCell<T>(c: Column<T>, row: T): string | number | null | undefined {
+  const v = (c.exportValue ?? c.sortValue)?.(row);
+  // A date column's ISO time reads as "2026-11-16 09:30" (local time).
+  if (c.kind === "date" && typeof v === "string" && ISO_DATE.test(v)) {
+    const d = new Date(v);
+    if (!Number.isNaN(d.getTime())) {
+      const p = (n: number) => String(n).padStart(2, "0");
+      return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+    }
+  }
+  return v;
+}
+
+/** The columns Export writes. */
+export function exportColumns<T>(columns: Column<T>[]): Column<T>[] {
+  return columns.filter((c) => !c.noExport && (c.exportValue || c.sortValue));
+}
+
+/** Rows as CSV text: the headings, then a line a row, with a byte-order mark first so Excel
+ * reads the UTF-8 (Malay names, "–", "RM") right. */
+export function toCsv<T>(columns: Column<T>[], rows: T[]): string {
+  const cols = exportColumns(columns);
+  const lines = [cols.map((c) => csvCell(c.header)).join(","), ...rows.map((r) => cols.map((c) => csvCell(exportCell(c, r))).join(","))];
+  return "﻿" + lines.join("\r\n");
+}
+
+/** "companies-2026-11-16.csv" */
+export function csvName(base: string, when = new Date()): string {
+  const p = (n: number) => String(n).padStart(2, "0");
+  const safe = base.trim().replace(/[\\/:*?"<>|]+/g, "-").replace(/\s+/g, "-").toLowerCase() || "export";
+  return `${safe}-${when.getFullYear()}-${p(when.getMonth() + 1)}-${p(when.getDate())}.csv`;
 }
 
 export interface Selection {
@@ -127,6 +272,34 @@ export interface DataTableProps<T> {
   pageSizes?: readonly number[];
   /** Forces the phone or desktop layout (tests, embedded uses). */
   layout?: "auto" | "cards" | "table";
+  /** P107: desktop rows scroll under a sticky heading inside the viewport's height (default);
+   * false lets a short or embedded table grow with the page. */
+  stickyHeader?: boolean;
+  /** P107: a file name (without ".csv", e.g. "companies") turns on Export: the toolbar's button
+   * writes every row matching the search and filters, the bulk bar's the ticked rows. */
+  exportName?: string;
+  /** P107, server mode: every row matching the search and filters, for Export (without it
+   * Export writes the page shown). */
+  exportRows?: () => Promise<T[]>;
+  /** P107: the standard ⋯ menu (View, Edit, Delete with its confirmation). Shown after `actions`. */
+  rowActions?: RowActions<T>;
+  /** P107: "Delete ticked" in the bulk bar, with a confirmation that counts them and says what
+   * did not go. `run` gets the ticked rows this table has seen (`canRemove` ones only). */
+  bulkRemove?: {
+    run: (rows: T[], ids: string[]) => Promise<BulkOutcome>;
+    canRemove?: (row: T) => boolean;
+    /** "delete" (default) or "remove", as RowActions. */
+    verb?: "delete" | "remove";
+    /** The dialog's text under its title. */
+    body?: ReactNode;
+    /** The dialog's title for n rows (default "Delete n ticked rows?"). */
+    title?: (n: number) => string;
+  };
+  /** P107: the toolbar's Add (the screen's own form) and Import buttons; labels already translated. */
+  onAdd?: () => void;
+  addLabel?: string;
+  onImport?: () => void;
+  importLabel?: string;
   className?: string;
 }
 
@@ -347,6 +520,7 @@ export function pageRange(page: number, size: number, total: number): { pages: n
 const HIDE: Record<NonNullable<Column<unknown>["hideBelow"]>, string> = {
   lg: "hidden lg:table-cell",
   xl: "hidden xl:table-cell",
+  "2xl": "hidden 2xl:table-cell",
 };
 
 function isSortable<T>(c: Column<T>, mode: "client" | "server"): boolean {
@@ -413,21 +587,53 @@ function SortMenu<T>({ columns, control, mode }: { columns: Column<T>[]; control
   );
 }
 
+/** P107: the numbered pages to show: the first, the last, and the current one with a
+ * neighbour each side; gaps are "…" ([1, "…", 4, 5, 6, "…", 12]). */
+export function pageNumbers(page: number, pages: number): (number | "…")[] {
+  if (pages <= 7) return Array.from({ length: pages }, (_, i) => i + 1);
+  let lo = Math.max(2, Math.min(page - 1, pages - 4));
+  let hi = Math.min(pages - 1, Math.max(page + 1, 5));
+  // A gap of one page shows that page instead of "…".
+  if (lo === 3) lo = 2;
+  if (hi === pages - 2) hi = pages - 1;
+  const out: (number | "…")[] = [1];
+  if (lo > 2) out.push("…");
+  for (let p = lo; p <= hi; p++) out.push(p);
+  if (hi < pages - 1) out.push("…");
+  out.push(pages);
+  return out;
+}
+
 function Pager({ control, total, sizes, noun }: { control: TableControl; total: number; sizes: readonly number[]; noun: string }) {
   const t = useT();
   const { state, set } = control;
   const { pages, page, from, to } = pageRange(state.page, state.size, total);
   return (
     <nav aria-label={t("Pages of {list}", { list: noun })} className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
-      <p className="text-[13px] text-muted tabular">{total ? t("Showing {from} to {to} of {total}", { from, to, total }) : null}</p>
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+        <p className="text-[13px] text-muted tabular">{total ? t("Showing {from} to {to} of {total}", { from, to, total }) : null}</p>
         <Select size="sm" className="w-32" label={t("Rows per page")} value={String(state.size)}
           options={[...new Set([...sizes, state.size])].sort((a, b) => a - b).map((n) => ({ value: String(n), label: t("{n} a page", { n }) }))}
           onValueChange={(v) => set({ size: Number(v) })} />
+      </div>
+      <div className="flex items-center gap-1">
         <Button size="icon-sm" variant="outline" disabled={page <= 1} onClick={() => set({ page: page - 1 })} aria-label={t("Previous page")}>
           <CaretLeftIcon size={14} />
         </Button>
-        <span className="min-w-24 text-center text-[13px] tabular" aria-current="page">{t("Page {page} of {pages}", { page, pages })}</span>
+        {/* Phones: "Page 2 of 9"; wider screens: the numbered pages. */}
+        <span className="min-w-24 text-center text-[13px] tabular sm:sr-only">{t("Page {page} of {pages}", { page, pages })}</span>
+        <span className="hidden items-center gap-1 sm:flex">
+          {pageNumbers(page, pages).map((p, i) => p === "…" ? (
+            <span key={`gap${i}`} aria-hidden className="w-6 text-center text-[13px] text-muted">…</span>
+          ) : (
+            <button key={p} type="button" onClick={() => set({ page: p })} aria-label={t("Page {page}", { page: p })}
+              aria-current={p === page ? "page" : undefined}
+              className={cn("hit h-8 min-w-8 rounded-sm px-2 text-[13px] tabular transition-colors focus-visible:ring-3 focus-visible:ring-accent/30 focus-visible:outline-none",
+                p === page ? "bg-accent font-semibold text-accent-fg" : "text-fg hover:bg-surface-2")}>
+              {p}
+            </button>
+          ))}
+        </span>
         <Button size="icon-sm" variant="outline" disabled={page >= pages} onClick={() => set({ page: page + 1 })} aria-label={t("Next page")}>
           <CaretRightIcon size={14} />
         </Button>
@@ -441,22 +647,131 @@ const INTERACTIVE = "a,button,input,select,textarea,label,[role=button],[role=co
 // ---------------------------------------------------------------- the table
 
 export function DataTable<T>({
-  label, columns, rows, rowId, rowLabel, control, mode = "client", total: serverTotal, searchText, searchPlaceholder, noSearch,
+  label, columns: allColumns, rows, rowId, rowLabel, control, mode = "client", total: serverTotal, searchText, searchPlaceholder, noSearch,
   loading, fetching, error, onRetry, filters, toolbarActions, actions, onOpen, selection, bulk, empty, rowClassName,
-  pageSizes = PAGE_SIZES, layout = "auto", className,
+  pageSizes = PAGE_SIZES, layout = "auto", stickyHeader = true, exportName, exportRows, rowActions, bulkRemove,
+  onAdd, addLabel, onImport, importLabel, className,
 }: DataTableProps<T>) {
   const t = useT();
   const phone = useIsPhone();
   const cards = layout === "cards" || (layout === "auto" && phone);
   const captionId = useId();
   const { state, set } = control;
+  // P107: export-only columns are searched and written to the file, never shown.
+  const columns = allColumns.some((c) => c.exportOnly) ? allColumns.filter((c) => !c.exportOnly) : allColumns;
 
   const view = useMemo(
-    () => (mode === "client" ? clientRows(rows, columns, state, searchText) : { rows, total: serverTotal ?? rows.length }),
-    [mode, rows, columns, state, searchText, serverTotal],
+    () => (mode === "client" ? clientRows(rows, allColumns, state, searchText) : { rows, total: serverTotal ?? rows.length }),
+    [mode, rows, allColumns, state, searchText, serverTotal],
   );
   const pageRows = view.rows;
   const total = view.total;
+
+  // P107: every row this table has shown, so Export and Delete of rows ticked on another page
+  // (server mode) still know them.
+  // Rows are matched by id (a screen may hand over fresh objects each render); the rows in hand
+  // win over remembered ones.
+  const [known, setKnown] = useState<ReadonlyMap<string, T>>(() => new Map());
+  if (mode === "server" && pageRows.some((r) => !known.has(rowId(r)))) {
+    const next = new Map(known);
+    for (const r of pageRows) next.set(rowId(r), r);
+    setKnown(next);
+  }
+  const tickedRows = (): T[] => {
+    if (!selection?.selected.size) return [];
+    const inHand = new Map((mode === "client" ? rows : pageRows).map((r) => [rowId(r), r] as const));
+    return [...selection.selected].flatMap((id) => {
+      const r = inHand.get(id) ?? known.get(id);
+      return r === undefined ? [] : [r];
+    });
+  };
+  const nameOf = (row: T) => rowLabel?.(row) ?? rowId(row);
+
+  // ---- Export (P107)
+  const [exporting, setExporting] = useState(false);
+  const download = async (list: T[]) => {
+    await saveFile(new Blob([toCsv(allColumns, list)], { type: "text/csv;charset=utf-8" }), csvName(exportName ?? label));
+    toast.success(list.length === 1 ? t("1 row exported.") : t("{n} rows exported.", { n: list.length }));
+  };
+  const exportFiltered = async () => {
+    setExporting(true);
+    try {
+      const list = mode === "client"
+        ? clientRows(rows, allColumns, { ...state, page: 1, size: Number.MAX_SAFE_INTEGER }, searchText).rows
+        : exportRows ? await exportRows() : pageRows;
+      await download(list);
+    } catch (e) {
+      toast.error(errorMessage(e));
+    } finally {
+      setExporting(false);
+    }
+  };
+  const exportTicked = () => void download(tickedRows()).catch((e: unknown) => toast.error(errorMessage(e)));
+
+  // ---- Delete one row, and the ticked rows (P107)
+  const verb = rowActions?.verb ?? "delete";
+  const [target, setTarget] = useState<T | null>(null);
+  const [asking, setAsking] = useState(false);
+  const untick = (ids: string[]) => {
+    if (!selection || !ids.some((id) => selection.selected.has(id))) return;
+    const next = new Set(selection.selected);
+    for (const id of ids) next.delete(id);
+    selection.onChange(next);
+  };
+  const removeOne = async () => {
+    if (!target || !rowActions?.remove) return;
+    await rowActions.remove(target);
+    const name = nameOf(target);
+    toast.success(verb === "remove" ? t("{name} removed.", { name }) : t("{name} deleted.", { name }));
+    untick([rowId(target)]);
+  };
+  const bulkVerb = bulkRemove?.verb ?? "delete";
+  const [bulkAsking, setBulkAsking] = useState(false);
+  const removable = bulkRemove ? tickedRows().filter((r) => bulkRemove.canRemove?.(r) ?? true) : [];
+  const keptBack = (selection?.selected.size ?? 0) - removable.length;
+  const removeTicked = async () => {
+    if (!bulkRemove || !removable.length) return;
+    const ids = removable.map(rowId);
+    const out = await bulkRemove.run(removable, ids);
+    if (out.done) {
+      toast.success(bulkVerb === "remove"
+        ? (out.done === 1 ? t("1 removed.") : t("{n} removed.", { n: out.done }))
+        : (out.done === 1 ? t("1 deleted.") : t("{n} deleted.", { n: out.done })));
+    }
+    const failed = new Set(out.failed.map((f) => f.id));
+    untick(ids.filter((id) => !failed.has(id)));
+    if (out.failed.length) {
+      throw new Error(t("{done} done, {failed} not done: {reason}", { done: out.done, failed: out.failed.length, reason: out.failed[0]!.message }));
+    }
+  };
+
+  /** The standard ⋯ menu of one row (View, Edit, the screen's items, Delete). */
+  const standardMenu = (row: T): ReactNode => {
+    if (!rowActions) return null;
+    const { view: onView, edit, canEdit, remove, canRemove, more } = rowActions;
+    const edits = !!edit && (canEdit?.(row) ?? true);
+    const removes = !!remove && (canRemove?.(row) ?? true);
+    const extra = more?.(row);
+    if (!onView && !edits && !removes && !extra) return <span aria-hidden className="inline-block size-10 align-middle" />;
+    return (
+      <RowMenu label={t("Options for {name}", { name: nameOf(row) })}>
+        {onView ? <MenuItem icon={<EyeIcon />} onSelect={() => onView(row)}>{t("View|verb")}</MenuItem> : null}
+        {edits ? <MenuItem icon={<PencilSimpleIcon />} onSelect={() => edit!(row)}>{t("Edit")}</MenuItem> : null}
+        {extra}
+        {removes ? (
+          <>
+            {onView || edits || extra ? <MenuSeparator /> : null}
+            <MenuItem icon={<TrashIcon />} danger onSelect={() => { setTarget(row); setAsking(true); }}>
+              {verb === "remove" ? t("Remove") : t("Delete")}
+            </MenuItem>
+          </>
+        ) : null}
+      </RowMenu>
+    );
+  };
+  const rowButtons = actions || rowActions
+    ? (row: T) => (actions && rowActions ? <span className="inline-flex items-center gap-1">{actions(row)}{standardMenu(row)}</span> : actions ? actions(row) : standardMenu(row))
+    : undefined;
 
   const selectable = selection ? pageRows.filter((r) => selection.canSelect?.(r) ?? true) : [];
   const pageIds = selectable.map(rowId);
@@ -483,6 +798,8 @@ export function DataTable<T>({
   const firstTitle = titleCols[0]?.id ?? columns[0]?.id;
   const openRow = (e: MouseEvent, row: T) => {
     if (!onOpen) return;
+    // A click inside a dialog a row action opened (a portal) bubbles here through React: not a row click.
+    if (!(e.currentTarget as HTMLElement).contains(e.target as Node)) return;
     if ((e.target as HTMLElement).closest(INTERACTIVE)) return;
     onOpen(row);
   };
@@ -498,7 +815,10 @@ export function DataTable<T>({
   };
 
   const searched = !!state.q.trim();
-  const hasToolbar = !noSearch || filters || toolbarActions || cards;
+  const filtered = Object.values(state.f).some(Boolean);
+  const clearAll = () => set({ q: "", f: Object.fromEntries(Object.keys(state.f).map((k) => [k, ""])) });
+  const tools = !!(toolbarActions || exportName || onImport || onAdd);
+  const hasToolbar = !noSearch || filters || tools || cards;
 
   let content: ReactNode;
   if (loading) {
@@ -516,13 +836,14 @@ export function DataTable<T>({
       </div>
     );
   } else if (!pageRows.length) {
-    content = searched || !empty ? (
+    content = searched || filtered || !empty ? (
       <div className="grid justify-items-center gap-3 rounded-[var(--radius-md)] border border-dashed border-border bg-surface/60 px-6 py-10 text-center">
         <MagnifyingGlassIcon size={22} className="text-muted" />
         <p className="text-[13.5px] text-muted">
-          {searched ? t("Nothing matches “{q}”.", { q: state.q.trim() }) : t("Nothing to show here yet.")}
+          {searched ? t("Nothing matches “{q}”.", { q: state.q.trim() }) : filtered ? t("Nothing matches these filters.") : t("Nothing to show here yet.")}
         </p>
-        {searched ? <Button size="sm" variant="outline" onClick={() => set({ q: "" })}>{t("Clear search")}</Button> : null}
+        {searched ? <Button size="sm" variant="outline" onClick={() => set({ q: "" })}>{t("Clear search")}</Button>
+          : filtered ? <Button size="sm" variant="outline" onClick={clearAll}>{t("Clear filters")}</Button> : null}
       </div>
     ) : empty;
   } else if (cards) {
@@ -537,21 +858,21 @@ export function DataTable<T>({
           const heads = titleCols.length ? titleCols : columns.slice(0, 1);
           return (
             <li key={id} onClick={(e) => openRow(e, row)}
-              className={cn("grid min-w-0 gap-2 rounded-[var(--radius-md)] border border-border bg-surface p-3",
-                onOpen && "cursor-pointer", on && "border-accent/40 bg-accent-soft/40", rowClassName?.(row))}>
+              className={cn("grid min-w-0 gap-2 rounded-[var(--radius-md)] border border-border bg-surface p-3 shadow-[var(--shadow-soft)]",
+                onOpen && "cursor-pointer active:bg-surface-2/60", on && "border-accent/40 bg-accent-soft/40", rowClassName?.(row))}>
               <div className="flex min-w-0 items-start gap-2">
                 {canTick ? <span className="pt-1"><Tick checked={on} onChange={() => tick(id)} label={t("Select {name}", { name: rowLabel?.(row) ?? id })} /></span> : null}
                 <div className="grid min-w-0 flex-1 gap-0.5 break-words">
                   {heads.map((c) => <div key={c.id} className="min-w-0">{titleCell(c, row)}</div>)}
                 </div>
-                {actions ? <div className="flex shrink-0 items-center gap-1">{actions(row)}</div> : null}
+                {rowButtons ? <div className="-my-1 -mr-1 flex shrink-0 items-center gap-1">{rowButtons(row)}</div> : null}
               </div>
               {fields.length ? (
-                <dl className="grid grid-cols-[minmax(0,auto)_minmax(0,1fr)] gap-x-3 gap-y-1 text-[13px]">
+                <dl className="grid grid-cols-[minmax(0,auto)_minmax(0,1fr)] gap-x-3 gap-y-1.5 border-t border-border/70 pt-2 text-[13px]">
                   {fields.map((c) => (
                     <div key={c.id} className="contents">
                       <dt className="text-muted">{c.header}</dt>
-                      <dd className="min-w-0 break-words">{c.cell(row)}</dd>
+                      <dd className={cn("min-w-0 break-words", c.align === "right" && "tabular")}>{c.cell(row)}</dd>
                     </div>
                   ))}
                 </dl>
@@ -564,13 +885,15 @@ export function DataTable<T>({
     );
   } else {
     content = (
-      <div className="overflow-x-auto rounded-[var(--radius-md)] border border-border bg-surface">
-        <table aria-labelledby={captionId} className="w-full border-collapse text-[13px]">
+      // A scroll box no taller than the screen, so the heading stays in sight (sticky) on long pages.
+      <div className={cn("overflow-auto overscroll-contain rounded-[var(--radius-md)] border border-border bg-surface shadow-[var(--shadow-soft)] [scrollbar-width:thin]",
+        stickyHeader && "max-h-[max(26rem,calc(100dvh-9rem))]")}>
+        <table aria-labelledby={captionId} className="w-full border-separate border-spacing-0 text-[13px]">
           <caption id={captionId} className="sr-only">{label}</caption>
-          <thead className="border-b border-border bg-surface-2/60">
+          <thead className="sticky top-0 z-[1] bg-surface-2 [&_th]:border-b [&_th]:border-border">
             <tr>
               {selection ? (
-                <th scope="col" className="w-10 px-3 py-2.5 text-left">
+                <th scope="col" className="w-10 bg-surface-2 px-3 py-2.5 text-left">
                   <Tick checked={pageIds.length > 0 && ticked === pageIds.length} indeterminate={ticked > 0 && ticked < pageIds.length}
                     onChange={tickPage} label={t("Select every row on this page")} />
                 </th>
@@ -580,11 +903,12 @@ export function DataTable<T>({
                 const on = sortable && state.sort === c.id;
                 return (
                   <th key={c.id} scope="col" aria-sort={on ? (state.dir === "asc" ? "ascending" : "descending") : undefined}
-                    className={cn("px-3 py-2.5 text-[12px] font-medium tracking-wide whitespace-nowrap text-muted uppercase",
+                    className={cn("bg-surface-2 px-3 py-2.5 text-[11.5px] font-semibold tracking-[0.04em] whitespace-nowrap text-muted uppercase",
                       c.align === "right" ? "text-right" : "text-left", c.hideBelow && HIDE[c.hideBelow])}>
                     {sortable ? (
                       <button type="button" onClick={() => set(nextSort(state, c.id, c.kind))}
-                        className={cn("inline-flex items-center gap-1 rounded-sm uppercase hover:text-fg focus-visible:ring-3 focus-visible:ring-accent/30 focus-visible:outline-none", on && "text-fg")}>
+                        className={cn("inline-flex items-center gap-1 rounded-sm uppercase hover:text-fg focus-visible:ring-3 focus-visible:ring-accent/30 focus-visible:outline-none",
+                          c.align === "right" && "flex-row-reverse", on && "text-fg")}>
                         {c.header}
                         {on ? (state.dir === "asc" ? <CaretUpIcon size={12} weight="bold" /> : <CaretDownIcon size={12} weight="bold" />)
                           : <CaretUpDownIcon size={12} className="opacity-50" />}
@@ -593,17 +917,17 @@ export function DataTable<T>({
                   </th>
                 );
               })}
-              {actions ? <th scope="col" className="w-12 px-3 py-2.5"><span className="sr-only">{t("Actions")}</span></th> : null}
+              {rowButtons ? <th scope="col" className="w-12 bg-surface-2 px-3 py-2.5"><span className="sr-only">{t("Actions")}</span></th> : null}
             </tr>
           </thead>
-          <tbody className="divide-y divide-border">
+          <tbody className="[&>tr:not(:last-child)>td]:border-b [&>tr>td]:border-border/70">
             {pageRows.map((row) => {
               const id = rowId(row);
               const canTick = !!selection && (selection.canSelect?.(row) ?? true);
               const on = canTick && selection!.selected.has(id);
               return (
                 <tr key={id} onClick={(e) => openRow(e, row)}
-                  className={cn("align-middle", onOpen && "cursor-pointer hover:bg-surface-2/50", on && "bg-accent-soft/40", rowClassName?.(row))}>
+                  className={cn("align-middle transition-colors hover:bg-surface-2/45", onOpen && "cursor-pointer", on && "bg-accent-soft/40 hover:bg-accent-soft/55", rowClassName?.(row))}>
                   {selection ? (
                     <td className="px-3 py-2.5">{canTick ? <Tick checked={on} onChange={() => tick(id)} label={t("Select {name}", { name: rowLabel?.(row) ?? id })} /> : null}</td>
                   ) : null}
@@ -612,7 +936,7 @@ export function DataTable<T>({
                       {titleCell(c, row)}
                     </td>
                   ))}
-                  {actions ? <td className="px-1 py-1.5 text-right whitespace-nowrap">{actions(row)}</td> : null}
+                  {rowButtons ? <td className="px-1 py-1.5 text-right whitespace-nowrap">{rowButtons(row)}</td> : null}
                 </tr>
               );
             })}
@@ -634,14 +958,43 @@ export function DataTable<T>({
           )}
           {filters}
           {cards ? <div className="min-w-0 sm:w-56"><SortMenu columns={columns} control={control} mode={mode} /></div> : null}
-          {toolbarActions ? <div className="col-span-2 flex flex-wrap items-center gap-2 sm:ml-auto">{toolbarActions}</div> : null}
+          {filters && filtered ? (
+            <Button variant="ghost" className="justify-start sm:justify-center" onClick={clearAll}>
+              <XIcon size={14} /> {t("Clear filters")}
+            </Button>
+          ) : null}
+          {tools ? (
+            <div className="col-span-2 flex flex-wrap items-center gap-2 sm:ml-auto">
+              {toolbarActions}
+              {exportName ? (
+                <Button variant="outline" loading={exporting} disabled={loading || !total} onClick={() => void exportFiltered()}
+                  title={total === 1 ? t("Save the 1 row shown as a CSV file") : t("Save the {n} rows shown as a CSV file", { n: total })}>
+                  <DownloadSimpleIcon size={16} /> {t("Export")}
+                </Button>
+              ) : null}
+              {onImport ? <Button variant="outline" onClick={onImport}><FileArrowUpIcon size={16} /> {importLabel ?? t("Import")}</Button> : null}
+              {onAdd ? <Button onClick={onAdd}><PlusIcon size={16} weight="bold" /> {addLabel ?? t("Add")}</Button> : null}
+            </div>
+          ) : null}
         </div>
       ) : null}
-      {selection && bulk && selection.selected.size ? (
+      {selection && (bulk || exportName || bulkRemove) && selection.selected.size ? (
         <div role="region" aria-label={t("Ticked rows")}
           className="sticky top-2 z-10 flex flex-wrap items-center gap-2 rounded-[var(--radius-md)] border border-accent/30 bg-surface px-3 py-2 shadow-sm">
           <span className="text-[13px] font-medium tabular">{selection.selected.size === 1 ? t("1 ticked") : t("{n} ticked", { n: selection.selected.size })}</span>
-          {bulk(selection.selected)}
+          {bulk?.(selection.selected)}
+          {exportName ? (
+            <Button size="sm" variant="outline" onClick={exportTicked}><DownloadSimpleIcon size={14} /> {t("Export ticked")}</Button>
+          ) : null}
+          {bulkRemove ? (
+            <Button size="sm" variant="outline" disabled={!removable.length} onClick={() => setBulkAsking(true)}
+              className="text-danger hover:border-danger/40 hover:bg-danger/8">
+              <TrashIcon size={14} /> {bulkVerb === "remove" ? t("Remove ticked") : t("Delete ticked")}
+            </Button>
+          ) : null}
+          {bulk ? null : (
+            <Button size="sm" variant="ghost" onClick={() => selection.onChange(new Set())}><XIcon size={14} /> {t("Clear")}</Button>
+          )}
         </div>
       ) : null}
       {cards && selection && pageIds.length ? (
@@ -652,6 +1005,35 @@ export function DataTable<T>({
       <div className={cn("grid min-w-0 gap-3 transition-opacity", fetching && "opacity-70")}>{content}</div>
       <p className="sr-only" aria-live="polite">{loading ? "" : total === 1 ? t("1 row") : t("{n} rows", { n: total })}</p>
       {!loading && total > Math.min(...pageSizes) ? <Pager control={control} total={total} sizes={pageSizes} noun={label} /> : null}
+      {rowActions?.remove ? (
+        <ConfirmDialog
+          open={asking}
+          onOpenChange={setAsking}
+          title={target ? (verb === "remove" ? t("Remove {name}?", { name: nameOf(target) }) : t("Delete {name}?", { name: nameOf(target) })) : ""}
+          body={target ? (rowActions.removeBody?.(target) ?? t("This cannot be undone.")) : null}
+          confirmLabel={verb === "remove" ? t("Remove") : t("Delete")}
+          danger
+          onConfirm={removeOne}
+        />
+      ) : null}
+      {bulkRemove ? (
+        <ConfirmDialog
+          open={bulkAsking}
+          onOpenChange={setBulkAsking}
+          title={bulkRemove.title ? bulkRemove.title(removable.length) : bulkVerb === "remove"
+            ? (removable.length === 1 ? t("Remove 1 ticked row?") : t("Remove {n} ticked rows?", { n: removable.length }))
+            : (removable.length === 1 ? t("Delete 1 ticked row?") : t("Delete {n} ticked rows?", { n: removable.length }))}
+          body={
+            <span className="grid gap-2">
+              <span>{bulkRemove.body ?? t("This cannot be undone.")}</span>
+              {keptBack > 0 ? <span>{keptBack === 1 ? t("1 ticked row is not yours to change and stays.") : t("{n} ticked rows are not yours to change and stay.", { n: keptBack })}</span> : null}
+            </span>
+          }
+          confirmLabel={bulkVerb === "remove" ? t("Remove") : t("Delete")}
+          danger
+          onConfirm={removeTicked}
+        />
+      ) : null}
     </div>
   );
 }
