@@ -21,7 +21,7 @@ import re
 from typing import Any, Literal
 from urllib.parse import quote
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request, status
 from fastapi.responses import Response
 from pydantic import BaseModel, EmailStr, Field, TypeAdapter, ValidationError
 from sqlalchemy import select
@@ -33,6 +33,7 @@ from ...core.security import ROLES, SCOPED_ROLES, can
 from ...i18n import MS, current_lang, render, tr
 from ...i18n import labels as i18n_labels
 from ...models import Branch, Department, Membership, User
+from ...prima import autolink
 from ...services import audit
 from ..deps import Principal, api_error, require
 from . import members
@@ -1039,6 +1040,7 @@ async def check(
 @router.post("")
 async def import_members(
     body: RowsIn,
+    background: BackgroundTasks,
     principal: Principal = Depends(members.people_manager()),
     db: AsyncSession = Depends(get_db),
 ) -> ImportOut:
@@ -1046,6 +1048,9 @@ async def import_members(
     gets a one-time password, shown here only; existing accounts keep their own."""
     out = await import_rows(db, principal, _rows_out(body.rows))
     await db.commit()
+    # P109: everyone added is linked to Prima, once the answer has gone.
+    added = [r.user_id for r in out.results if r.status == "added" and r.user_id]
+    autolink.later(background, principal.workspace_id, added)
     return out
 
 

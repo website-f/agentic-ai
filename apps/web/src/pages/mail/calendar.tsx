@@ -49,6 +49,7 @@ import { useMedia } from "@/lib/use-media";
 import { cn } from "@/lib/utils";
 
 import { AiAnswer, useAskAi } from "./ai";
+import { MeetingRecord, useMeetingComposer } from "./meeting";
 
 const RESPONSE: Record<string, string> = {
   accepted: msg("Accepted"),
@@ -67,6 +68,7 @@ export function OutlookCalendar() {
   const [anchor, setAnchor] = useState(() => weekStart(new Date()));
   const [openId, setOpenId] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
+  const openMeeting = useMeetingComposer((s) => s.open);
   const end = addDaysTo(anchor, 7);
   const q = useQuery(calendarQuery(anchor.toISOString(), end.toISOString()));
   const days = useMemo(() => Array.from({ length: 7 }, (_, i) => addDaysTo(anchor, i)), [anchor]);
@@ -92,7 +94,11 @@ export function OutlookCalendar() {
           <Button size="icon-sm" variant="outline" aria-label={t("Next week")} onClick={() => setAnchor((a) => addDaysTo(a, 7))}><CaretRightIcon size={15} /></Button>
         </div>
         <h3 className="min-w-0 flex-1 text-[14.5px] font-semibold tabular">{range}</h3>
-        <Button size="sm" onClick={() => setCreating(true)} className="max-sm:w-full"><CalendarPlusIcon size={15} /> {t("New event")}</Button>
+        <div className="flex gap-2 max-sm:w-full [&>button]:max-sm:flex-1">
+          <Button size="sm" variant="outline" onClick={() => setCreating(true)}><CalendarPlusIcon size={15} /> {t("New event")}</Button>
+          {/* P109b: a Teams meeting the AI fills in; Outlook sends the invitations. */}
+          <Button size="sm" onClick={() => openMeeting()}><VideoCameraIcon size={15} /> {t("New Teams meeting")}</Button>
+        </div>
       </div>
       {q.isLoading ? <Skeleton className="h-72 rounded-[var(--radius-md)]" />
         : q.error ? <p role="alert" className="text-[13.5px] text-danger">{errorMessage(q.error)}</p>
@@ -197,6 +203,8 @@ function EventSheet({ id, onClose }: { id: string; onClose: () => void }) {
                 ))}
               </ul>
             </section>
+            {/* P109b: made from the office: its join link, Prima record, Change and Cancel. */}
+            {e.is_organizer ? <MeetingRecord eventId={id} onCancelled={onClose} /> : null}
             {e.body_html.trim() ? (
               <iframe title={t("Event details")} sandbox="allow-popups allow-popups-to-escape-sandbox" srcDoc={mailDocument(e.body_html, "", { images: false, dark })}
                 className="h-72 w-full rounded-sm border border-border" />

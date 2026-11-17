@@ -35,6 +35,7 @@ import {
   GlobeIcon,
   KanbanIcon,
   MagnifyingGlassIcon,
+  MicrosoftOutlookLogoIcon,
   NotepadIcon,
   PencilSimpleIcon,
   PlayIcon,
@@ -116,6 +117,7 @@ import { LazyStartRunDialog as StartRunDialog } from "@/pages/workflows/start-ru
 import { whenText } from "@/pages/forms/words";
 
 import { AskPanel } from "./ask";
+import { M365Tile, useM365Tile } from "./m365-tile";
 import { DeskShortcuts, HowDoI } from "./hub";
 import type { DeskTab } from "./index";
 
@@ -209,6 +211,7 @@ function useOpenPin() {
 
 const SECTION_TEXT: Record<DeskSectionId, { title: string; hint: string; icon: Icon }> = {
   today: { title: msg("Today"), hint: msg("What needs you now, your tasks and today's meetings."), icon: SunHorizonIcon },
+  m365: { title: msg("Microsoft 365"), hint: msg("Unread mail, your next meeting, Teams chats and approvals; opens full screen."), icon: MicrosoftOutlookLogoIcon },
   pinned: { title: msg("Pinned"), hint: msg("Anything you keep close, in your own folders."), icon: PushPinIcon },
   recent: { title: msg("Recent"), hint: msg("What you and your AI worked on lately."), icon: ClockCounterClockwiseIcon },
   ai: { title: msg("My AI"), hint: msg("Give your AI a task and see today's allowance."), icon: SparkleIcon },
@@ -225,8 +228,11 @@ export function DeskHome({ desk, onTab, customizing, onCustomize }: {
 }) {
   const t = useT();
   const layout = layoutOf(desk);
+  // P109b: the Microsoft 365 tile only for people who use it here, once it is set up.
+  const m365 = useM365Tile();
   const blocks: Record<DeskSectionId, ReactNode> = {
     today: <Today desk={desk} onTab={onTab} />,
+    m365: m365 ? <M365Tile /> : null,
     pinned: <Pinned desk={desk} folders={layout.folders} />,
     recent: <Recent desk={desk} onTab={onTab} />,
     ai: <MyAi desk={desk} />,
@@ -236,7 +242,7 @@ export function DeskHome({ desk, onTab, customizing, onCustomize }: {
   return (
     <div className="grid min-w-0 gap-6 sm:gap-7">
       <CommandBar desk={desk} />
-      {layout.sections.filter((s) => !s.hidden).map((s) => (
+      {layout.sections.filter((s) => !s.hidden && blocks[s.id] != null).map((s) => (
         <div key={s.id} className="min-w-0" data-desk-section={s.id}>{blocks[s.id]}</div>
       ))}
       <div className="flex justify-center pt-1">
@@ -244,7 +250,7 @@ export function DeskHome({ desk, onTab, customizing, onCustomize }: {
           <SlidersHorizontalIcon size={15} /> {t("Customize my desk")}
         </Button>
       </div>
-      <CustomizeDialog open={customizing} onOpenChange={onCustomize} layout={layout} />
+      <CustomizeDialog open={customizing} onOpenChange={onCustomize} layout={layout} offers={(id) => id !== "m365" || m365} />
     </div>
   );
 }
@@ -1023,7 +1029,13 @@ function GoTo({ desk, onTab }: { desk: Desk; onTab: (tab: DeskTab) => void }) {
 
 // ---------------------------------------------------------------- customize
 
-function CustomizeDialog({ open, onOpenChange, layout }: { open: boolean; onOpenChange: (o: boolean) => void; layout: DeskLayout }) {
+function CustomizeDialog({ open, onOpenChange, layout, offers }: {
+  open: boolean;
+  onOpenChange: (o: boolean) => void;
+  layout: DeskLayout;
+  /** P109b: whether this person has the section at all (the Microsoft 365 tile). */
+  offers: (id: DeskSectionId) => boolean;
+}) {
   const t = useT();
   const qc = useQueryClient();
   const save = useMutation({
@@ -1033,13 +1045,22 @@ function CustomizeDialog({ open, onOpenChange, layout }: { open: boolean; onOpen
     onError: (e) => toast.error(errorMessage(e)),
   });
   const list = layout.sections;
+  const rows = list.filter((s) => offers(s.id));
   const set = (next: DeskLayout["sections"]) => save.mutate(next);
+  // Move among the sections shown here; ones this person does not have keep their place.
+  const move = (i: number, by: -1 | 1) => {
+    const a = list.indexOf(rows[i]!);
+    const b = list.indexOf(rows[i + by]!);
+    const next = [...list];
+    [next[a], next[b]] = [next[b]!, next[a]!];
+    set(next);
+  };
   return (
     <ResponsiveDialog open={open} onOpenChange={onOpenChange} title={t("Customize my desk")}
       description={t("Show what you use, hide the rest, and put the most important first. Kept for you on every device.")}
       footer={<Button variant="ghost" onClick={() => set([...list].sort((a, b) => DESK_ORDER(a.id) - DESK_ORDER(b.id)).map((s) => ({ ...s, hidden: false })))}>{t("Back to the first layout")}</Button>}>
       <ol className="grid gap-2">
-        {list.map((s, i) => {
+        {rows.map((s, i) => {
           const txt = SECTION_TEXT[s.id];
           return (
             <li key={s.id} className={cn("flex min-w-0 items-center gap-3 rounded-[var(--radius-md)] border border-border px-3 py-2.5", s.hidden && "bg-surface-2/50")}>
@@ -1048,8 +1069,8 @@ function CustomizeDialog({ open, onOpenChange, layout }: { open: boolean; onOpen
                 <span className={cn("truncate text-[14px] font-medium", s.hidden && "text-muted")}>{t(txt.title)}</span>
                 <span className="line-clamp-2 text-[12px] text-muted">{t(txt.hint)}</span>
               </span>
-              <Button size="icon-sm" variant="ghost" disabled={i === 0} aria-label={t("Move {name} up", { name: t(txt.title) })} onClick={() => set(arrayMove(list, i, i - 1))}><ArrowUpIcon size={15} /></Button>
-              <Button size="icon-sm" variant="ghost" disabled={i === list.length - 1} aria-label={t("Move {name} down", { name: t(txt.title) })} onClick={() => set(arrayMove(list, i, i + 1))}><ArrowDownIcon size={15} /></Button>
+              <Button size="icon-sm" variant="ghost" disabled={i === 0} aria-label={t("Move {name} up", { name: t(txt.title) })} onClick={() => move(i, -1)}><ArrowUpIcon size={15} /></Button>
+              <Button size="icon-sm" variant="ghost" disabled={i === rows.length - 1} aria-label={t("Move {name} down", { name: t(txt.title) })} onClick={() => move(i, 1)}><ArrowDownIcon size={15} /></Button>
               <label className="hit relative inline-flex shrink-0 cursor-pointer items-center">
                 <input type="checkbox" className="peer sr-only" checked={!s.hidden} aria-label={t("Show {name}", { name: t(txt.title) })}
                   onChange={(e) => set(list.map((x) => (x.id === s.id ? { ...x, hidden: !e.target.checked } : x)))} />
@@ -1064,7 +1085,7 @@ function CustomizeDialog({ open, onOpenChange, layout }: { open: boolean; onOpen
   );
 }
 
-const DESK_ORDER = (id: DeskSectionId) => ["today", "pinned", "recent", "ai", "howto", "goto"].indexOf(id);
+const DESK_ORDER = (id: DeskSectionId) => ["today", "m365", "pinned", "recent", "ai", "howto", "goto"].indexOf(id);
 
 /** "Good morning" and so on, by the person's own clock. */
 export function greeting(hour: number): string {

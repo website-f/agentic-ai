@@ -34,8 +34,9 @@ export interface Pin {
 }
 
 /** P97: the blocks of the desk's overview, in the person's order, and their folders. */
-export type DeskSectionId = "today" | "pinned" | "recent" | "ai" | "howto" | "goto";
-export const DESK_SECTIONS: DeskSectionId[] = ["today", "pinned", "recent", "ai", "howto", "goto"];
+// P109b: "m365", the Microsoft 365 tile (shown only to people who use Microsoft 365 here).
+export type DeskSectionId = "today" | "m365" | "pinned" | "recent" | "ai" | "howto" | "goto";
+export const DESK_SECTIONS: DeskSectionId[] = ["today", "m365", "pinned", "recent", "ai", "howto", "goto"];
 export interface DeskLayout {
   sections: { id: DeskSectionId; hidden: boolean }[];
   folders: string[];
@@ -201,11 +202,20 @@ export const saveLayout = (body: { sections?: DeskLayout["sections"]; folders?: 
 export const renameFolder = (name: string, to: string | null) =>
   api<DeskLayout>("/api/desk/folders/rename", "POST", { name, to });
 
-/** The layout to show: the saved one, or every section in the first order. */
+/** P109b: a block added after people saved their desk goes right after this one (else last). */
+const AFTER: Partial<Record<DeskSectionId, DeskSectionId>> = { m365: "today" };
+
+/** The layout to show: the saved one, or every section in the first order. Same rule as the
+ * server (desk.layout_of): sections added since go last, or after their AFTER block. */
 export function layoutOf(desk: Pick<Desk, "layout"> | undefined): DeskLayout {
   const saved = desk?.layout?.sections ?? [];
   const sections = saved.filter((s) => DESK_SECTIONS.includes(s.id));
-  for (const id of DESK_SECTIONS) if (!sections.some((s) => s.id === id)) sections.push({ id, hidden: false });
+  for (const id of DESK_SECTIONS) {
+    if (sections.some((s) => s.id === id)) continue;
+    const after = AFTER[id];
+    const at = after ? sections.findIndex((s) => s.id === after) : -1;
+    sections.splice(at >= 0 ? at + 1 : sections.length, 0, { id, hidden: false });
+  }
   return { sections, folders: desk?.layout?.folders ?? [] };
 }
 

@@ -67,8 +67,11 @@ import { P107_FINISH } from "./p107-finish";
 import { M365 } from "./m365";
 import { TASKS_P109 } from "./tasks-p109";
 import { ORG_P109 } from "./org-p109";
+import { TOURS } from "./tours";
 
 export const MS: Record<string, string> = {
+  // P109: Getting started and the guided tours; first, so an existing translation wins.
+  ...TOURS,
   // P109: the Microsoft 365 page and other email accounts; first, so an existing translation
   // of the same English wins.
   ...M365,

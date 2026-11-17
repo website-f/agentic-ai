@@ -17,6 +17,14 @@ they open Prima, made by Prima's accounts service (office-accounts.ts, settings.
 prima_accounts_url) with access from their office role (prima_role) in the Prima company the
 owner set for their branch (workspace settings "prima_companies"). Linked with how="auto".
 
+P109 (Fitri, 17 Nov 2026): "whatever members are added in the Agentic Office, make them auto
+linked". A signed-in office member is enough: no Microsoft step first (P70 is gone). They are
+linked when added (prima/autolink.py, in the background) or on their first Prima open, and
+everyone already in the office by `python -m agentic.prima.link_all`. "Staff: own records only":
+the office decides each own account's Prima level (prima_role), and an account made at an
+earlier level is brought to it on their next open (_account_due). Admins (high management) open
+Prima as its top record like owners (opens_as_top).
+
 Tests swap in a fake Prima: `client.transport = httpx.MockTransport(handler)`.
 """
 
@@ -72,6 +80,12 @@ COMPANIES_KEY = "prima_companies"
 # included, is central staff (pwvsb_officer) with no grant or department: their own record,
 # clock, leave and claims, and no HR or pay wall. The owner opens Prima as its top record.
 PRIMA_ROLES = {"branch_manager": "admin_exec"}
+# P109: the office roles that open Prima as its top record (the CEO, else the COO), with no link
+# of their own: owners (the developer is one) and admins (high management, Fitri 17 Nov 2026).
+TOP_ROLES = frozenset({"owner", "admin"})
+# P109: linked_by of an own account, with the Prima role it was last given ("auto:account:<role>"),
+# so an account given an earlier level (P75/P81) is brought to the office's level once.
+ACCOUNT_LINK = "auto:account"
 # P106: the Prima departments an office account may be in (Prima's office-accounts.ts
 # OFFICE_DEPARTMENTS), set per member in Members > Access. "hr" opens Prima's HR and pay walls
 # (staff personal data and payroll) and is for central staff (pwvsb_officer) only.
@@ -88,7 +102,9 @@ class PrimaError(Exception):
         super().__init__(str(message))
         self.status = status
         self.message = message
-        self.code = code  # "microsoft_needed": the screen offers Connect Microsoft
+        # "company_needed": their branch has no Prima company; "account_refused": Prima's
+        # accounts service refused their account; "module_not_chosen", "own_work" (P99, P106).
+        self.code = code
 
 
 @dataclass(frozen=True)
@@ -148,6 +164,11 @@ class Company:
 
 def prima_role(office_role: str) -> str:
     return PRIMA_ROLES.get(office_role, "pwvsb_officer")
+
+
+def account_link(role: str) -> str:
+    """linked_by of an own account given this Prima role (P109)."""
+    return f"{ACCOUNT_LINK}:{role}"
 
 
 def own_account_id(user_id: str) -> str:
@@ -261,43 +282,16 @@ async def create_account(
         return rid
     if ans.status == 400:
         raise PrimaError(
-            403, Msg("Prima could not make your account. Ask the office owner to check it.")
+            403,
+            Msg("Prima could not make your account. Ask the office owner to check it."),
+            code="account_refused",
         )
     raise PrimaError(503, Msg("Prima is not answering right now. Try again in a minute."))
 
 
 async def _own_account(db: AsyncSession, m: Membership, name: str, email: str = "") -> PrimaLink:
     """P75: the person's own Prima account, in the Prima company of their branch."""
-    branch_id = m.branch_id
-    if branch_id is None:
-        # Someone with no branch in an office of one branch works in that branch.
-        only = (
-            await db.scalars(
-                select(Branch.id).where(Branch.workspace_id == m.workspace_id).limit(2)
-            )
-        ).all()
-        branch_id = only[0] if len(only) == 1 else None
-    if branch_id is None:
-        raise PrimaError(
-            403,
-            Msg(
-                "Prima does not know which company you work in yet. Ask the office owner to give "
-                "you a branch."
-            ),
-            code="company_needed",
-        )
-    company = company_map(await db.get(Workspace, m.workspace_id)).get(branch_id)
-    if not company:
-        branch = await db.get(Branch, branch_id)
-        raise PrimaError(
-            403,
-            Msg(
-                "Prima does not know which company {branch} is yet. The office owner sets "
-                '"which Prima company {branch} is" on the Prima page.',
-                branch=branch.name if branch else "",
-            ),
-            code="company_needed",
-        )
+    company = await _account_company(db, m)
     role = prima_role(m.role)
     department = account_department(m, role)
     rid = await create_account(
@@ -315,7 +309,7 @@ async def _own_account(db: AsyncSession, m: Membership, name: str, email: str = 
         prima_user_id=rid,
         prima_name=name[:200],
         how="auto",
-        linked_by="auto:account",
+        linked_by=account_link(role),
         department=department,
     )
     db.add(link)
@@ -377,11 +371,13 @@ async def _refresh(db: AsyncSession, m: Membership, link: PrimaLink, *, relink: 
         department=department,
     )
     before = {"prima_user_id": link.prima_user_id, "department": link.department}
+    level_before = link.linked_by
     link.prima_user_id = rid
     link.prima_name = me.name[:200]
     if relink:
         link.relink_needed = False
     link.department = department
+    link.linked_by = account_link(role)
     after = {"prima_user_id": rid, "role": role, "company": company, "department": department}
     if relink:
         await audit.record(
@@ -393,6 +389,17 @@ async def _refresh(db: AsyncSession, m: Membership, link: PrimaLink, *, relink: 
             before={"prima_user_id": before["prima_user_id"]},
             after={k: v for k, v in after.items() if k != "department" or v},
             note=f"Own Prima account {rid} relinked from their corrected details",
+        )
+    elif level_before != link.linked_by:
+        await audit.record(
+            db,
+            m.workspace_id,
+            "system:prima",
+            "prima.level",
+            target=m.user_id,
+            before={"linked_by": level_before},
+            after=after,
+            note=f"Own Prima account {rid} brought to {role} (the office's level for their role)",
         )
     else:
         await audit.record(
@@ -410,20 +417,28 @@ async def _refresh(db: AsyncSession, m: Membership, link: PrimaLink, *, relink: 
 
 
 def _account_due(m: Membership, link: PrimaLink) -> bool:
-    """P106: their own Prima account's department is not the one set for them now."""
+    """Their own Prima account is not as the office sets it now: P106 its department, or P109
+    its level (made before P109, or their office role changed since)."""
     if not link.prima_user_id.startswith(OFFICE_ACCOUNT_PREFIX):
         return False
-    return (link.department or None) != account_department(m, prima_role(m.role))
+    role = prima_role(m.role)
+    return (link.department or None) != account_department(
+        m, role
+    ) or link.linked_by != account_link(role)
 
 
 async def _account_company(db: AsyncSession, m: Membership) -> str:
-    """The Prima company of a person's branch (as _own_account finds it), or PrimaError."""
-    only = (
-        await db.scalars(select(Branch.id).where(Branch.workspace_id == m.workspace_id).limit(2))
-    ).all()
-    branch_id = m.branch_id or (only[0] if len(only) == 1 else None)
-    company = company_map(await db.get(Workspace, m.workspace_id)).get(branch_id or "")
-    if not company:
+    """The Prima company of a person's branch, or PrimaError (code "company_needed"). Someone
+    with no branch in an office of one branch works in that branch."""
+    branch_id = m.branch_id
+    if branch_id is None:
+        only = (
+            await db.scalars(
+                select(Branch.id).where(Branch.workspace_id == m.workspace_id).limit(2)
+            )
+        ).all()
+        branch_id = only[0] if len(only) == 1 else None
+    if branch_id is None:
         raise PrimaError(
             403,
             Msg(
@@ -432,25 +447,64 @@ async def _account_company(db: AsyncSession, m: Membership) -> str:
             ),
             code="company_needed",
         )
+    company = company_map(await db.get(Workspace, m.workspace_id)).get(branch_id)
+    if not company:
+        branch = await db.get(Branch, branch_id)
+        raise PrimaError(
+            403,
+            Msg(
+                "Prima does not know which company {branch} is yet. The office owner sets "
+                '"which Prima company {branch} is" on the Prima page.',
+                branch=branch.name if branch else "",
+            ),
+            code="company_needed",
+        )
     return company
 
 
 async def link_for(db: AsyncSession, workspace_id: str, user_id: str) -> PrimaLink:
-    """This person's Prima record. Made here, the first time they open Prima, when the match is
-    sure (people.suggestions): the record IT gave their verified Microsoft account, else the
-    only record with exactly their name while nobody else in the office has it. The owner sees
-    and can change every link on the Prima page. P82: every owner, and the developer, opens
+    """This person's Prima record. Made here, the first time they open Prima (or when they are
+    added, P109 autolink), when the match is sure (people.suggestions): the record IT gave their
+    verified Microsoft account, else the only record with exactly their name while nobody else
+    in the office has it; else their own Prima account (P75). The owner sees and can change
+    every link on the Prima page. P82: every owner, the developer and (P109) every admin opens
     Prima as its top record with no link (opens_as_top)."""
+    link, _ = await ensure(db, workspace_id, user_id)
+    assert link is not None
+    return link
+
+
+# What ensure() did (or, dry, would do), for link_all's counts.
+OUTCOMES = ("top", "already", "refreshed", "microsoft", "name", "account")
+
+
+async def ensure(
+    db: AsyncSession,
+    workspace_id: str,
+    user_id: str,
+    *,
+    records: list[StaffRecord] | None = None,
+    dry: bool = False,
+) -> tuple[PrimaLink | None, str]:
+    """link_for, saying what it did (OUTCOMES), for link_all: `records` is Prima's matchable
+    staff list asked once for everyone; `dry` changes nothing (no link, no Prima account, no
+    audit) and hands back no link, only what would happen; a refusal is the same PrimaError
+    either way. P109: a signed-in office member is enough, with no Microsoft step (P70)."""
     from . import people  # late: people builds on this module
 
     m = await db.get(Membership, (workspace_id, user_id))
-    if m is not None and opens_own(m):
+    if m is None:
+        raise _not_linked()
+    if opens_own(m):
         # P106: the developer chose to open Prima as their own account (set_opens_as).
-        return await _own_link(db, m)
-    if m is not None and opens_as_top(m):
+        if dry:
+            return None, "top"
+        return await _own_link(db, m), "top"
+    if opens_as_top(m):
         top = await top_record()
         if top is not None:
-            await _let_go(db, workspace_id, user_id)
+            if not dry:
+                await _let_go(db, workspace_id, user_id)
             return PrimaLink(
                 workspace_id=workspace_id,
                 user_id=user_id,
@@ -458,40 +512,38 @@ async def link_for(db: AsyncSession, workspace_id: str, user_id: str) -> PrimaLi
                 prima_name=top.name[:200],
                 how="owner",
                 linked_by=TOP_LINK,
-            )
-        # Prima has no top record: the owner opens it by their own link, as anyone else.
-    elif m is None or not m.ms_oid:
-        # P70: Prima and the office are one system, and Prima knows people by their Microsoft
-        # work account: no way in (screens or the AI) until the person has connected it here.
-        raise PrimaError(
-            403,
-            Msg(
-                "Connect your Microsoft work account to the office to open Prima. It takes one "
-                "sign-in with Microsoft."
-            ),
-            code="microsoft_needed",
-        )
+            ), "top"
+        # Prima has no top record: they open it by their own link, as anyone else.
     link = await db.get(PrimaLink, (workspace_id, user_id))
-    if link is not None and link.relink_needed and m is not None:
-        return await _relink(db, m, link)
-    if link is not None and m is not None and _account_due(m, link):
-        return await _refresh(db, m, link, relink=False)  # P106: their department changed
+    if link is not None and (link.relink_needed or _account_due(m, link)):
+        if dry:
+            if link.prima_user_id.startswith(OFFICE_ACCOUNT_PREFIX):
+                await _account_company(db, m)  # the refusal a real run would meet
+            return None, "refreshed"
+        # P92 their details were corrected; P106 their department or P109 their level changed.
+        return await _refresh(db, m, link, relink=link.relink_needed), "refreshed"
     if link is not None:
-        return link
-    records = matchable(await staff())
+        return link, "already"
+    if records is None:
+        records = matchable(await staff())
     persons = await people.people(db, workspace_id)
     rid = people.suggestions(persons, records).get(user_id)
     record = next((r for r in records if r.id == rid), None)
     me = next((p for p in persons if p.user_id == user_id), None)
-    if me is None or m is None:
-        raise _not_linked()
+    if me is None:
+        raise _not_linked()  # their account is switched off: they cannot sign in either
     if record is None:
         # P75: no record of their own in Prima: they get one, from their office role. An
-        # owner opens Prima as its top record (P74), never as a made account.
-        if me.role == "owner":
+        # owner or admin opens Prima as its top record (P74), never as a made account.
+        if me.role in TOP_ROLES:
             raise _not_linked()
-        return await _own_account(db, m, me.name, me.email)
+        if dry:
+            await _account_company(db, m)
+            return None, "account"
+        return await _own_account(db, m, me.name, me.email), "account"
     how = "microsoft" if me.ms_oid and record.entra_oid == me.ms_oid else "name"
+    if dry:
+        return None, how
     link = PrimaLink(
         workspace_id=workspace_id,
         user_id=user_id,
@@ -508,7 +560,7 @@ async def link_for(db: AsyncSession, workspace_id: str, user_id: str) -> PrimaLi
         link = await db.get(PrimaLink, (workspace_id, user_id))
         if link is None:
             raise _not_linked() from None
-        return link
+        return link, "already"
     await audit.record(
         db,
         workspace_id,
@@ -519,7 +571,7 @@ async def link_for(db: AsyncSession, workspace_id: str, user_id: str) -> PrimaLi
         + ("Microsoft account" if how == "microsoft" else "name"),
     )
     await db.commit()
-    return link
+    return link, how
 
 
 # P82: every office owner, and the system's developer, opens Prima as its top record (the CEO,
@@ -532,7 +584,17 @@ _TOP: dict[str, tuple[float, StaffRecord | None]] = {}
 
 
 def opens_as_top(m: Membership) -> bool:
-    """An owner, or the developer (deps.is_developer: an owner the operator marked)."""
+    """An owner, the developer (deps.is_developer: an owner the operator marked) or, P109, an
+    admin (high management; Fitri, 17 Nov 2026). Admins are not developers: the own-account
+    switch (opens_own) stays the developer's."""
+    from ..api.deps import is_developer  # late: the api builds on this module
+
+    return m.role in TOP_ROLES or is_developer(m.user, m.role)
+
+
+def all_of_prima(m: Membership) -> bool:
+    """Every Prima screen whatever was chosen (P99): owners and the developer. An admin opens
+    Prima as its top record too, but keeps the screens the owner chose for them, if any."""
     from ..api.deps import is_developer  # late: the api builds on this module
 
     return m.role == "owner" or is_developer(m.user, m.role)
@@ -745,7 +807,7 @@ async def check_chosen(
     their screens and their AI alike. Nothing chosen (None) is all their Prima role allows;
     owners always have all of Prima. Prima's own role checks come after, either way."""
     m = await db.get(Membership, (workspace_id, user_id))
-    if m is None or m.prima_modules is None or opens_as_top(m):
+    if m is None or m.prima_modules is None or all_of_prima(m):
         return
     path = url.split("?", 1)[0]
     if modules.allows(method, path, m.prima_modules):

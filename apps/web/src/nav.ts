@@ -87,6 +87,7 @@ export type AppPath =
   | "/approvals"
   | "/mail"
   | "/start"
+  | "/getting-started"
   | "/chat"
   | "/meetings"
   | "/broadcasts"
@@ -264,7 +265,9 @@ export const NAV: NavSection[] = [
     hint: msg("Learn the app: ask how, a tutorial for your role, and the full guide."),
     open: "all",
     items: [
-      { to: "/start", label: msg("Setting up"), icon: ListChecksIcon, blurb: msg("The few steps that make the office work for you, ticked off as you do them.") },
+      // P109: the steps for the person's role and a guided tour of every page (/start, the
+      // P49 setting-up list, now opens it).
+      { to: "/getting-started", label: msg("Getting started"), icon: ListChecksIcon, also: ["/start"], blurb: msg("The steps for your role, ticked off as you do them, and a guided tour of every page.") },
       { to: "/tutorial", label: msg("Tutorial"), icon: BookOpenTextIcon, blurb: msg("Learn the whole system for your role, step by step: from your first agent to giving tasks and seeing results.") },
       { to: "/guide", label: msg("Guide"), icon: BookBookmarkIcon, blurb: msg("The user guide: every page explained with annotated screenshots, how-to steps and short videos.") },
       { to: "/present", label: msg("Present"), icon: PresentationIcon, blurb: msg("A ready-made presentation of Agentic Office for clients and colleagues, full screen, built from real screenshots.") },

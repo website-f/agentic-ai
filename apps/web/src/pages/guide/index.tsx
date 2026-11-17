@@ -21,6 +21,7 @@ import {
   DesktopIcon,
   DeviceMobileIcon,
   FilmStripIcon,
+  HandPointingIcon,
   LightbulbIcon,
   ListBulletsIcon,
   ListNumbersIcon,
@@ -32,6 +33,7 @@ import {
   TargetIcon,
   UsersIcon,
 } from "@phosphor-icons/react";
+import { useQuery } from "@tanstack/react-query";
 import { Link, useNavigate, useParams, useRouter, useSearch } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Drawer } from "vaul";
@@ -54,6 +56,9 @@ import type { GuidePage as GuidePageInfo } from "@/guide/targets";
 import { whereOf } from "@/guide/where";
 import { locale, useT } from "@/i18n";
 import { useBackClose } from "@/lib/back-close";
+import { meQuery } from "@/lib/queries";
+import { startTour } from "@/tours/store";
+import { tourFor } from "@/tours/tours";
 import { useTheme } from "@/lib/stores";
 import { useIsPhone } from "@/lib/use-media";
 import { cn } from "@/lib/utils";
@@ -460,6 +465,10 @@ function splitLead(text: string): [string, string] {
 function WhereBox({ page }: { page: GuidePageInfo }) {
   const t = useT();
   const where = whereOf(page.route);
+  // P109: the page's guided tour, on the real page.
+  const navigate = useNavigate();
+  const { data: me } = useQuery(meQuery);
+  const tour = me ? tourFor(page.route, me.permissions) : undefined;
   return (
     <section aria-labelledby="guide-where" className="grid gap-3 rounded-[var(--radius-md)] border border-border bg-surface p-4 sm:p-5">
       <h2 id="guide-where" className="flex items-center gap-2 text-[13px] font-semibold tracking-[0.06em] text-muted uppercase">
@@ -484,12 +493,18 @@ function WhereBox({ page }: { page: GuidePageInfo }) {
         {where?.folded ? <li>{t("This group of the sidebar starts folded: click its name to open it.")}</li> : null}
         <li>{t("On a phone, the same list is under More at the bottom of the screen.")}</li>
       </ul>
-      <div>
+      <div className="flex flex-wrap gap-2">
         <Button asChild className="h-11 px-4 text-[14.5px]">
           <Link to={page.route}>
             {t("Open this page")} <ArrowSquareOutIcon size={17} />
           </Link>
         </Button>
+        {tour && me ? (
+          <Button variant="outline" className="h-11 px-4 text-[14.5px]"
+            onClick={() => { startTour(tour.id, me.user.id); void navigate({ to: (tour.stay ? "/workspace" : tour.route) as never }); }}>
+            <HandPointingIcon size={17} /> {t("Show me on the page")}
+          </Button>
+        ) : null}
       </div>
     </section>
   );

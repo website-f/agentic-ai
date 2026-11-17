@@ -52,7 +52,7 @@ const page = {
   aiUse: lazyRouteComponent(() => import("@/pages/ai-use"), "AiUsePage"),
   storage: lazyRouteComponent(() => import("@/pages/storage"), "StoragePage"),
   timetable: lazyRouteComponent(() => import("@/pages/timetable"), "TimetablePage"),
-  start: lazyRouteComponent(() => import("@/pages/start"), "StartPage"),
+  gettingStarted: lazyRouteComponent(() => import("@/pages/getting-started"), "GettingStartedPage"),
   activity: lazyRouteComponent(() => import("@/pages/activity"), "ActivityPage"),
   aiEngine: lazyRouteComponent(() => import("@/pages/ai-engine"), "AIEnginePage"),
   agents: lazyRouteComponent(() => import("@/pages/agents/roster"), "AgentsPage"),
@@ -357,8 +357,16 @@ const timetableRoute = createRoute({
   }),
   component: page.timetable,
 });
-// P49: the few steps that make the office work, ticked from real data.
-const startRoute = createRoute({ getParentRoute: () => appRoute, path: "/start", component: page.start });
+// P49: the few steps that make the office work, ticked from real data. P109: Getting started
+// (the steps for the person's role and a guided tour of every page) took its place.
+const startRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/start",
+  beforeLoad: () => {
+    throw redirect({ to: "/getting-started", replace: true });
+  },
+});
+const gettingStartedRoute = createRoute({ getParentRoute: () => appRoute, path: "/getting-started", component: page.gettingStarted });
 
 const activityRoute = createRoute({
   getParentRoute: () => appRoute,
@@ -800,17 +808,38 @@ const webConnectionsRoute = createRoute({
 });
 
 // P34: mail that reached the person's Outlook and the shared mailboxes, and what the AI did with it.
+// `mailbox` is what the server's follow-up notices link with; same as `box`.
+// P109: the tabs (Teams, Calendar, Approvals, Other email accounts); none is Outlook mail.
+type M365App = "teams" | "calendar" | "approvals" | "accounts";
+interface M365Search { box?: string; ms?: string; msg?: string; app?: M365App; from?: string; new?: "meeting" }
+const m365Search = (s: Record<string, unknown>): M365Search => ({
+  box: str(s.box) ?? str(s.mailbox), ms: str(s.ms), msg: str(s.msg),
+  app: s.app === "teams" || s.app === "calendar" || s.app === "approvals" || s.app === "accounts" ? s.app : undefined,
+  from: safeFrom(s.from),
+  new: s.new === "meeting" ? "meeting" : undefined,
+});
+// P109b: /mail (the nav, notices, Microsoft's way back) opens the full-screen workspace.
 const mailRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/mail",
-  // `mailbox` is what the server's follow-up notices link with; same as `box`.
-  // P109: the tabs (Teams, Calendar, Approvals, Other email accounts); none is Outlook mail.
-  validateSearch: (s: Record<string, unknown>): { box?: string; ms?: string; msg?: string; app?: "teams" | "calendar" | "approvals" | "accounts" } => ({
-    box: str(s.box) ?? str(s.mailbox), ms: str(s.ms), msg: str(s.msg),
-    app: s.app === "teams" || s.app === "calendar" || s.app === "approvals" || s.app === "accounts" ? s.app : undefined,
-  }),
-  beforeLoad: ({ context }) => {
-    if (!["agents.own", "assistants.use", "channels.manage"].some((p) => context.me.permissions.includes(p))) throw redirect({ to: "/workspace" });
+  validateSearch: m365Search,
+  beforeLoad: ({ search }) => {
+    throw redirect({ to: "/m365", search, replace: true });
+  },
+});
+// P109b: the Microsoft 365 workspace, full screen without the app shell (its own Back and tabs),
+// signed in and allowed like /mail was.
+const m365Route = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/m365",
+  validateSearch: m365Search,
+  beforeLoad: async ({ context, location }) => {
+    const me = await loadMe(context.queryClient, location);
+    if (me.user.must_change_password) throw redirect({ to: "/change-password" });
+    if (me.user.two_factor_setup_required) throw redirect({ to: "/two-step-setup" });
+    if (me.access === "prima_only") throw redirect({ to: "/prima-only" });
+    if (!["agents.own", "assistants.use", "channels.manage"].some((p) => me.permissions.includes(p))) throw redirect({ to: "/workspace" });
+    return { me };
   },
   loaderDeps: ({ search }) => ({ box: search.box }),
   loader: ({ context, preload, deps }) => prefetch((p) => p.warmMail(context.queryClient, preload, deps.box)),
@@ -909,6 +938,7 @@ const routeTree = rootRoute.addChildren([
   welcomeRoute,
   presentRoute,
   chatFullRoute,
+  m365Route,
   guideFrameRoute.addChildren([guideRoute, guidePageRoute]),
   libraryFrameRoute.addChildren([
     explorerRoute,
@@ -933,6 +963,7 @@ const routeTree = rootRoute.addChildren([
     storageRoute,
     timetableRoute,
     startRoute,
+    gettingStartedRoute,
     activityRoute,
     aiEngineRoute,
     agentsRoute,

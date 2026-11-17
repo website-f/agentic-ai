@@ -39,4 +39,8 @@ MS_ORG: dict[str, str] = {
     ),
     "{name} mentioned you on feedback": "{name} menyebut anda dalam maklum balas",
     "{name}: {text}": "{name}: {text}",
+    # P109 getting started (api/routers/getting_started.py)
+    "That step cannot be ticked by hand: {steps}.": (
+        "Langkah itu tidak boleh ditanda selesai sendiri: {steps}."
+    ),
 }

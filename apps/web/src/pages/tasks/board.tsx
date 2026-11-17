@@ -981,7 +981,7 @@ function ViewSwitch({ view, onChange }: { view: View; onChange: (v: View) => voi
     { value: "gantt", label: t("Timeline"), icon: ChartBarHorizontalIcon },
   ];
   return (
-    <div role="radiogroup" aria-label={t("View")} className="inline-flex shrink-0 gap-0.5 rounded-[var(--radius-sm)] border border-border bg-surface-2/60 p-0.5">
+    <div role="radiogroup" aria-label={t("View")} data-tour="tasks.views" className="inline-flex shrink-0 gap-0.5 rounded-[var(--radius-sm)] border border-border bg-surface-2/60 p-0.5">
       {opts.map((o) => (
         <button key={o.value} type="button" role="radio" aria-checked={view === o.value} onClick={() => onChange(o.value)}
           className={cn("inline-flex h-8 items-center gap-1.5 rounded-[calc(var(--radius-sm)-2px)] px-2.5 text-[12.5px] font-medium transition-colors pointer-coarse:h-10",

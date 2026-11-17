@@ -129,6 +129,10 @@ class Membership(Timestamps, Base):
         String(12), default="company", server_default="company"
     )
     uploads_for_others: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    # P109 (migration 0071): this person's Getting started progress here: steps ticked by hand,
+    # page tours seen, the welcome tour's state and where to resume it (api/routers/
+    # getting_started.py). None until they first save something.
+    getting_started: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
 
     user: Mapped[User] = relationship(lazy="joined", foreign_keys=[user_id])
     # P98: every branch this member works in (the home branch_id included; loaded with the
@@ -2328,6 +2332,9 @@ from ..feedback.models import Feedback, FeedbackComment  # noqa: E402, F401
 
 # P109: other email accounts and their attachment backups (agentic/mailbox/models.py).
 from ..mailbox.models import ExternalMailAccount, MailBackupJob  # noqa: E402, F401
+
+# P109b: Teams meetings made from the Microsoft 365 workspace and their Prima record.
+from ..microsoft.meeting_models import TeamsMeeting  # noqa: E402, F401
 
 # P109: who heads which departments, and files uploaded for other companies (org/models.py).
 from ..org.models import DepartmentHead, FileHandoff  # noqa: E402, F401

@@ -17,6 +17,7 @@ import {
   SparkleIcon,
   TextAlignLeftIcon,
   UsersThreeIcon,
+  VideoCameraIcon,
 } from "@phosphor-icons/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
@@ -61,6 +62,7 @@ import { cn, timeAgo } from "@/lib/utils";
 import { useAskMyAi } from "@/pages/desk/hub";
 
 import { AiAnswer, ToneSelect, useAskAi } from "./ai";
+import { useMeetingComposer } from "./meeting";
 import { Body, clock, Conversation, MessageComposer, Reactions, ReplyLink, useStickToBottom } from "./teams-ui";
 
 type View = "chats" | "channels";
@@ -196,8 +198,11 @@ function ChatsView({ newChats }: { newChats: boolean }) {
                 c.id === activeId && "bg-[#e8ebfa]/70 hover:bg-[#e8ebfa] dark:bg-[#2f2f4a]/70 dark:hover:bg-[#2f2f4a]")}>
               <ChatFace chat={c} />
               <span className="grid min-w-0">
-                <span className="truncate text-[13.5px] font-medium">{c.title}</span>
-                <span className="truncate text-[12.5px] text-muted">{c.last_mine ? t("You: {text}", { text: c.last_text }) : c.last_text || (c.kind === "oneOnOne" ? "" : t("{n} people", { n: c.people }))}</span>
+                <span className={cn("truncate text-[13.5px]", c.unread ? "font-semibold" : "font-medium")}>
+                  {c.unread ? <span aria-label={t("Unread")} className="mr-1.5 inline-block size-2 rounded-full bg-[#5b5fc7] align-middle" /> : null}
+                  {c.title}
+                </span>
+                <span className={cn("truncate text-[12.5px]", c.unread ? "text-fg" : "text-muted")}>{c.last_mine ? t("You: {text}", { text: c.last_text }) : c.last_text || (c.kind === "oneOnOne" ? "" : t("{n} people", { n: c.people }))}</span>
               </span>
               <span className="self-start pt-0.5 text-[11.5px] text-muted tabular">{c.last_at ? shortWhen(c.last_at) : ""}</span>
             </button>
@@ -266,6 +271,7 @@ function ChatWindow({ chat, bare }: { chat: ChatRow; bare?: boolean }) {
     },
     onError: (e) => toast.error(errorMessage(e)),
   });
+  const openMeeting = useMeetingComposer((st) => st.open);
   const ai = useAskAi((r) => {
     if (r.action === "chat_about") setAbout(r.text ?? "");
     if (r.action === "chat_reply") { setText(r.body ?? ""); setDrafting(false); }
@@ -279,6 +285,7 @@ function ChatWindow({ chat, bare }: { chat: ChatRow; bare?: boolean }) {
         <MenuContent>
           <MenuItem icon={<TextAlignLeftIcon />} onSelect={() => ai.mutate({ action: "chat_about", chat_id: chat.id })}>{t("What is this chat about?")}</MenuItem>
           <MenuItem icon={<PencilSimpleLineIcon />} onSelect={() => setDrafting(true)}>{t("Draft a reply…")}</MenuItem>
+          <MenuItem icon={<VideoCameraIcon />} onSelect={() => openMeeting({ chat_id: chat.id, about: chat.title, instructions: t("Set up a Teams meeting about this chat with the people in it.") })}>{t("Set up a meeting about this")}</MenuItem>
         </MenuContent>
       </Menu>
       {chat.url ? <Button size="sm" variant="ghost" asChild><a href={chat.url} target="_blank" rel="noreferrer noopener"><ArrowSquareOutIcon size={15} /> {t("Open in Teams")}</a></Button> : null}

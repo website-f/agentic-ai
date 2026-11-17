@@ -2101,25 +2101,25 @@ export const PAGE_DOCS: Record<string, PageDoc> = {
   },
 
   start: {
-    purpose: "A short checklist of what makes the office work for you. Each step ticks itself when it is done.",
+    purpose: "The steps for your role, in order, and a guided tour of every page. Each step ticks itself when it is done.",
     can: [
-      "Do the step marked **Next** first. Each step has its own button.",
-      "Ask how on any step: the help assistant explains it.",
-      "Staff get their own steps: hire your AI worker, set its hours and link your phone.",
+      "Do the step marked **Next** first. Its button opens the page; **Show me** walks you through it.",
+      "Take the welcome tour again, or a short tour of any page.",
+      "Owners set up the system mail, the workspace, the Library, companies, people and the AI engine. Staff set up their email, their workspace and their own AI.",
     ],
     spots: {},
     howto: [
       {
         title: "Finish your setup",
         steps: [
-          s("Open the setting-up checklist under **Help** in the sidebar."),
+          s("Open **Getting started** under **Help** in the sidebar."),
           s("Find the step marked **Next** and click its button."),
-          s("Do the step on the page that opens."),
+          s("Not sure how? Click **Show me** for a guided tour of that page."),
           s("Come back. The step now has a green tick."),
         ],
       },
     ],
-    tips: ["The steps you see depend on your role. Staff and owners see different lists."],
+    tips: ["Every page has a **Show me how** button next to its title: a short tour of that page."],
     who: EVERYONE,
     related: ["home", "tutorial", "workspace"],
   },

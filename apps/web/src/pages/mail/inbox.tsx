@@ -22,6 +22,7 @@ import {
   SparkleIcon,
   TextAlignLeftIcon,
   TrayIcon,
+  VideoCameraIcon,
   WarningIcon,
 } from "@phosphor-icons/react";
 import { useMutation, useQuery, useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
@@ -60,6 +61,7 @@ import { workKeys } from "@/lib/work";
 
 import { AiAnswer, DraftWithAi, useAskAi } from "./ai";
 import { Composer, type ComposeStart } from "./compose";
+import { useMeetingComposer } from "./meeting";
 
 const FOLDER_LABEL: Record<MailFolder, string> = {
   inbox: msg("Inbox"),
@@ -217,6 +219,7 @@ function Reader({ id, onCompose, onClose }: { id: string; onCompose: (c: Compose
       markRead(m.id).then(() => void qc.invalidateQueries({ queryKey: ["mail", "m365", "list"] })).catch(() => undefined);
     }
   }, [m, qc]);
+  const openMeeting = useMeetingComposer((st) => st.open);
   const ai = useAskAi((r) => {
     if (r.action === "mail_summary") setSummary(r.text ?? "");
     if (r.action === "mail_tasks") setTasks(r.tasks ?? []);
@@ -259,6 +262,7 @@ function Reader({ id, onCompose, onClose }: { id: string; onCompose: (c: Compose
               <MenuItem icon={<TextAlignLeftIcon />} onSelect={() => ai.mutate({ action: "mail_summary", message_id: m.id })}>{t("Summarise this email")}</MenuItem>
               <MenuItem icon={<PencilSimpleLineIcon />} onSelect={() => setDrafting(true)}>{t("Draft a reply…")}</MenuItem>
               <MenuItem icon={<ListChecksIcon />} onSelect={() => ai.mutate({ action: "mail_tasks", message_id: m.id })}>{t("Find the tasks in it")}</MenuItem>
+              <MenuItem icon={<VideoCameraIcon />} onSelect={() => openMeeting({ message_id: m.id, about: m.subject || t("(no subject)"), instructions: t("Set up a Teams meeting about this email with the people in it.") })}>{t("Set up a meeting about this")}</MenuItem>
             </MenuContent>
           </Menu>
           {m.web_link ? <Button size="sm" variant="ghost" asChild><a href={m.web_link} target="_blank" rel="noreferrer noopener"><ArrowSquareOutIcon size={15} /> {t("Open in Outlook")}</a></Button> : null}

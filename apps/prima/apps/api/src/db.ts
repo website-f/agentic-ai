@@ -3,6 +3,7 @@ import { AccessClosed, DEMO_PIN_KEY, PrimaService, accessClosed, dataWalls, date
 import { Pool } from 'pg';
 import { PgStore, TABLE } from './pg-store';
 import { withReadSnapshots } from './read-cache';
+import { ownRecordCompanyIds } from './office-accounts';
 import { FileStore, fileBackendFromEnv } from './file-store';
 import { migrationSha } from './schema';
 
@@ -106,7 +107,8 @@ export class Db implements OnModuleDestroy {
       await client.query('SET LOCAL ROLE prima_app');
       const pgStore = new PgStore(client);
       const user = withRunCompanies(stored, await pgStore.list('companyRunLinks'));
-      const companies = tenantCompanyIds(user, grants, dateOf(clock()));
+      // P109: an office account of central staff also reaches its own staff record in a licensed company (office-accounts.ts).
+      const companies = [...new Set([...tenantCompanyIds(user, grants, dateOf(clock())), ...ownRecordCompanyIds(user)])];
       await client.query(`SELECT set_config('app.company_ids', $1, true)`, [companies.join(',')]);
       await client.query(`SELECT set_config('app.user_id', $1, true)`, [user.id]);
       await client.query(`SELECT set_config('app.user_role', $1, true)`, [user.role]);

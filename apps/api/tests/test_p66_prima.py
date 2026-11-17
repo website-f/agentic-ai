@@ -21,8 +21,8 @@ from agentic.agents.tools import TOOLS, ToolContext
 from agentic.core.config import settings
 from agentic.core.db import SessionLocal
 from agentic.models import Agent, Membership, PrimaLink, Task, User, Workspace
+from agentic.prima import autolink, modules, routes
 from agentic.prima import client as prima
-from agentic.prima import modules, routes
 from agentic.prima.client import PrimaError, StaffRecord
 from agentic.prima.people import Person, name_key, suggestions
 
@@ -119,6 +119,9 @@ def prima_on(monkeypatch):
 
     monkeypatch.setattr(prima, "transport", httpx.MockTransport(handler))
     monkeypatch.setattr(prima, "_TOP", {})  # P82: the top record is cached per process
+    # P109: these tests check the link made on the first Prima open; linking on add has its
+    # own tests (test_p109_prima_autolink), which switch it back on.
+    monkeypatch.setattr(autolink, "on", False)
     return seen
 
 
@@ -253,20 +256,21 @@ async def test_people_link_themselves_by_microsoft_or_the_owner_links_them(clien
     assert rows[owner_id]["suggestion"] == "u-owner" and rows[aina_id]["suggestion"] is None
     assert {r["id"] for r in d["staff"]} == {s["id"] for s in STAFF}
 
-    # P70: Prima and the office are one: staff not connected to Microsoft yet are asked for
-    # that first, and nothing is sent as anyone.
+    # P109: no Microsoft step first (P70 is gone): Aina has no Prima record of her own, so she
+    # gets her own account, but her branch has no Prima company yet: she is told so, and no
+    # account is made and nothing is sent as anyone.
     from .test_office_roles import signed_in
 
-    n = len(prima_on)
     c = await signed_in("aina@example.com", aina["temp_password"])
     try:
         s = (await c.get("/api/prima/status")).json()
-        assert s["needs_microsoft"] and not s["linked"] and "Connect your Microsoft" in s["problem"]
+        assert not s["needs_microsoft"] and not s["linked"] and s["code"] == "company_needed"
         r = await c.get("/api/prima/api/me")
-        assert r.status_code == 403 and r.json()["code"] == "microsoft_needed"
+        assert r.status_code == 403 and r.json()["code"] == "company_needed"
     finally:
         await c.aclose()
-    assert len(prima_on) == n
+    assert _accounts(prima_on) == []
+    assert not [r for r in prima_on if r.headers["x-office-user"]]
 
     # P82: the owner is never asked to connect Microsoft first. This Prima has no top record,
     # so the owner opens it by their own link: the only record with their exact name, with no
@@ -280,11 +284,11 @@ async def test_people_link_themselves_by_microsoft_or_the_owner_links_them(clien
     assert prima_on[-1].headers["x-office-via"] == "person"
     assert prima_on[-1].headers["x-forwarded-for"]
 
-    # Aina has not connected Microsoft: asked to, before anything else.
+    # Aina's branch still has no Prima company: the same clear refusal, never "not linked".
     async with SessionLocal() as db:
         with pytest.raises(PrimaError) as e:
             await prima.link_for(db, ws, aina_id)
-        assert e.value.code == "microsoft_needed"
+        assert e.value.code == "company_needed"
     r = await client.post("/api/prima/people/link-suggested", json={}, headers=csrf(client))
     assert r.json() == {"linked": 0}
 
@@ -706,7 +710,8 @@ async def test_owners_and_the_developer_open_prima_as_the_ceo(client, prima_on, 
     assert rows[0].target == "u-ceo" and rows[0].after["path"] == "/api/leave/approve"
     assert rows[1].after == {"path": "/api/claims", "via": "person", "status": 200}
 
-    # Staff are unchanged: Aina by her Microsoft account; Rani is asked to connect it first.
+    # Staff are unchanged: Aina by her Microsoft account; Rani (no record, her branch has no
+    # Prima company yet) is told the company is needed (P109: no Microsoft step first).
     c = await signed_in("aina@example.com", aina["temp_password"])
     try:
         assert (await c.get("/api/prima/api/me")).json()["user"]["id"] == "u-aina"
@@ -715,7 +720,7 @@ async def test_owners_and_the_developer_open_prima_as_the_ceo(client, prima_on, 
     c = await signed_in("rani@example.com", rani["temp_password"])
     try:
         r = await c.get("/api/prima/api/me")
-        assert r.status_code == 403 and r.json()["code"] == "microsoft_needed"
+        assert r.status_code == 403 and r.json()["code"] == "company_needed"
     finally:
         await c.aclose()
 
@@ -734,7 +739,7 @@ async def test_owners_and_the_developer_open_prima_as_the_ceo(client, prima_on, 
     assert bad.status_code == 409 and "need no link" in bad.json()["message"]
 
 
-async def test_an_owner_made_staff_needs_microsoft_again(client, prima_on, monkeypatch):
+async def test_an_owner_made_staff_opens_prima_as_staff(client, prima_on, monkeypatch):
     """P82: the top record goes with the owner role, not with the person."""
     monkeypatch.setattr(sys.modules[__name__], "STAFF", [*STAFF, CEO])
     o = await office(client)
@@ -749,6 +754,6 @@ async def test_an_owner_made_staff_needs_microsoft_again(client, prima_on, monke
     )
     assert r.status_code == 200, r.text
     async with SessionLocal() as db:
-        with pytest.raises(PrimaError) as e:
+        with pytest.raises(PrimaError) as e:  # P109: as staff, in a branch with no company yet
             await prima.link_for(db, ws, uid)
-        assert e.value.code == "microsoft_needed"
+        assert e.value.code == "company_needed"

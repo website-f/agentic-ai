@@ -1,5 +1,5 @@
 import {
-  ArrowElbowDownLeftIcon, ArrowsDownUpIcon, ClipboardTextIcon, FileMagnifyingGlassIcon, FileTextIcon, KanbanIcon, MagnifyingGlassIcon, MonitorIcon, MoonIcon, PlusIcon,
+  ArrowElbowDownLeftIcon, ArrowsDownUpIcon, ClipboardTextIcon, HandPointingIcon, FileMagnifyingGlassIcon, FileTextIcon, KanbanIcon, MagnifyingGlassIcon, MonitorIcon, MoonIcon, PlusIcon,
   PushPinIcon, SignOutIcon, SparkleIcon, SunIcon, TextAlignLeftIcon, UserFocusIcon, UserGearIcon, UserIcon, UserPlusIcon, type Icon,
 } from "@phosphor-icons/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -20,6 +20,9 @@ import { usePalette, useTheme } from "@/lib/stores";
 import { NAV, navItemFor } from "@/nav";
 
 import { useSignOut } from "@/lib/use-sign-out";
+import { gettingStartedQuery } from "@/lib/getting-started";
+import { startTour } from "@/tours/store";
+import { pageTours, tourFor, welcomeTour } from "@/tours/tours";
 
 import { typeLabel, useOpenTarget } from "./search-box";
 import { openTaskComposer } from "./task-composer/store";
@@ -67,6 +70,9 @@ export function CommandPalette() {
   const { data: found } = useQuery(findQuery(typed, open));
   const qc = useQueryClient();
   const where = useRouterState({ select: (s) => s.location });
+  // P109: guided tours: this page's, the welcome tour, and every page's.
+  const { data: gs } = useQuery({ ...gettingStartedQuery, enabled: false });
+  const hereTour = me ? tourFor(where.pathname, me.permissions) : undefined;
   const here = `${where.pathname}${where.searchStr ?? ""}${where.hash ? `#${where.hash}` : ""}`;
   const pinHere = useMutation({
     mutationFn: () => {
@@ -165,6 +171,27 @@ export function CommandPalette() {
                   })}
                 </Command.Group>
               ))}
+              {me ? (
+                <Command.Group heading={t("Guided tours")} className={GROUP}>
+                  {hereTour ? (
+                    <Item icon={<HandPointingIcon />} keywords={["show me how", "tour", "help", "tunjuk", "panduan", "lawatan"]}
+                      onSelect={() => run(() => startTour(hereTour.id, me.user.id))}>
+                      {t("Show me how this page works")}
+                    </Item>
+                  ) : null}
+                  <Item icon={<HandPointingIcon />} keywords={["welcome", "tour", "getting started", "selamat datang", "mula"]}
+                    onSelect={() => run(() => startTour(welcomeTour(gs?.group).id, me.user.id))}>
+                    {t("Take the welcome tour")}
+                  </Item>
+                  {/* Every page's tour, once something is typed (the list stays short otherwise). */}
+                  {q.trim() ? pageTours(me.permissions).map((tour) => (
+                    <Item key={tour.id} value={`tour ${tour.id} ${t(tour.title)} ${tour.title}`} icon={<HandPointingIcon />} keywords={["tour", "show me how", "lawatan"]}
+                      onSelect={() => run(() => startTour(tour.id, me.user.id))}>
+                      {t("Tour: {page}", { page: t(tour.title) })}
+                    </Item>
+                  )) : null}
+                </Command.Group>
+              ) : null}
               <Command.Group heading={t("Actions")} className={GROUP}>
                 {q.trim().length >= 3 && me?.permissions.includes("work.write") ? (
                   <Item value={`ask-my-ai ${q}`} keywords={[q]} icon={<SparkleIcon />} onSelect={() => { const text = q.trim(); run(() => ask.mutate(text)); }}>

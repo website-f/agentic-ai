@@ -14,6 +14,8 @@ import { useComposerStore } from "./task-composer/store";
 const Palette = lazy(() => import("./command-palette").then((m) => ({ default: m.CommandPalette })));
 const Composer = lazy(() => import("./task-composer/task-composer").then((m) => ({ default: m.TaskComposerHost })));
 const Help = lazy(() => import("./help-ask").then((m) => ({ default: m.HelpAskSheet })));
+// P109: the guided tours (the welcome tour starts by itself the first time someone signs in).
+const Tours = lazy(() => import("@/tours/host").then((m) => ({ default: m.TourHost })));
 
 /** True from the first time `open` is true on. */
 function useOpenedOnce(open: boolean): boolean {
@@ -48,4 +50,14 @@ export function LazyHelpAskSheet() {
       <Help />
     </Suspense>
   ) : null;
+}
+
+/** P109: the guided tours' host; its code loads after the first page, the spotlight only when
+ * a tour runs. */
+export function LazyTourHost() {
+  return (
+    <Suspense fallback={null}>
+      <Tours />
+    </Suspense>
+  );
 }

@@ -104,7 +104,8 @@ function show(d: Desk = desk()) {
 describe("the desk's rules", () => {
   it("shows every block once, in the person's order, new ones last", () => {
     const l = layoutOf({ layout: { sections: [{ id: "goto", hidden: true }, { id: "today", hidden: false }], folders: [] } });
-    expect(l.sections.map((s) => s.id)).toEqual(["goto", "today", "pinned", "recent", "ai", "howto"]);
+    // P109b: the Microsoft 365 tile, added later, comes right after Today.
+    expect(l.sections.map((s) => s.id)).toEqual(["goto", "today", "m365", "pinned", "recent", "ai", "howto"]);
     expect(l.sections.filter((s) => s.hidden).map((s) => s.id)).toEqual(["goto"]);
     expect(layoutOf(undefined).sections.every((s) => !s.hidden)).toBe(true);
   });
@@ -220,7 +221,7 @@ describe("Customize", { timeout: 30_000 }, () => {
     const put = calls.find((c) => c.path === "/api/desk/layout")!;
     expect(put.method).toBe("PUT");
     const sections = (put.body as { sections: { id: string; hidden: boolean }[] }).sections;
-    expect(sections.map((s) => s.id)).toEqual(["pinned", "today", "recent", "ai", "howto", "goto"]);
+    expect(sections.map((s) => s.id)).toEqual(["pinned", "today", "m365", "recent", "ai", "howto", "goto"]);
     expect(sections.find((s) => s.id === "today")!.hidden).toBe(true);
     fireEvent.click(screen.getByRole("button", { name: "Move Pinned down" }));
     await waitFor(() => expect(calls.filter((c) => c.path === "/api/desk/layout")).toHaveLength(2));

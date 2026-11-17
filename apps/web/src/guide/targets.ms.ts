@@ -258,7 +258,7 @@ export const GUIDE_PAGES_MS: GuidePage[] = [
   },
   // ---------------------------------------------------------------- Help
   {
-    id: "start", route: "/start", title: "Persediaan", group: "Help", states: [],
+    id: "start", route: "/getting-started", title: "Langkah permulaan", group: "Help", states: [],
     targets: [],
   },
   {

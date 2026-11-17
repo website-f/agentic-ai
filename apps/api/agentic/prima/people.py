@@ -1,9 +1,9 @@
 """P67/P68: who in the office is which Prima staff record (models.PrimaLink).
 
-Nobody runs a script or signs in twice. The first time someone opens Prima, the office links
-them when the match is sure (client.link_for): the record IT gave their verified Microsoft
-account, else the only Prima record with exactly their name while nobody else in the office has
-that name. Anyone without a sure match is listed on the owner's Prima page beside Prima's
+Nobody runs a script or signs in twice. When someone is added (P109) or first opens Prima, the
+office links them when the match is sure (client.link_for): the record IT gave their verified
+Microsoft account, else the only Prima record with exactly their name while nobody else in the
+office has that name. Anyone without a sure match is listed on the owner's Prima page beside Prima's
 records; the owner picks their record there, and can change or clear any link, including the
 automatic ones.
 """
@@ -18,7 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..i18n import Msg
 from ..models import Membership, PrimaLink, User
 from ..services import audit
-from .client import PrimaError, StaffRecord
+from .client import TOP_ROLES, PrimaError, StaffRecord
 
 
 @dataclass(frozen=True)
@@ -68,8 +68,8 @@ async def people(db: AsyncSession, workspace_id: str) -> list[Person]:
 def suggestions(persons: list[Person], staff: list[StaffRecord]) -> dict[str, str]:
     """user_id -> Prima record id, for unlinked people and records only: the record IT gave
     the person's Microsoft account, else the only record with the same name (and nobody else
-    in the office with that name). P82: owners open Prima as its top record (its CEO, else its
-    COO) with no link, so they get no suggestion while Prima has one."""
+    in the office with that name). P82: owners (P109: and admins) open Prima as its top record
+    (its CEO, else its COO) with no link, so they get no suggestion while Prima has one."""
     taken = {p.link.prima_user_id for p in persons if p.link}
     has_top = any(r.top for r in staff)
     free = [r for r in staff if r.id not in taken]
@@ -82,7 +82,7 @@ def suggestions(persons: list[Person], staff: list[StaffRecord]) -> dict[str, st
         office_names[name_key(p.name)] = office_names.get(name_key(p.name), 0) + 1
     out: dict[str, str] = {}
     for p in persons:
-        if p.link or (p.role == "owner" and has_top):
+        if p.link or (p.role in TOP_ROLES and has_top):
             continue
         if p.ms_oid and p.ms_oid in by_oid:
             out[p.user_id] = by_oid[p.ms_oid]

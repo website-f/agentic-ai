@@ -18,6 +18,8 @@ Members > Import from Excel). Inside the api container:
 - --yes adds the people and writes each new account's one-time sign-in details to the
   --signins-out CSV (the web download's columns); it prints counts only, never a password.
 - It acts as the workspace's first owner; the audit log names it `system:members-import-cli`.
+- P109: with Prima set up, the people added are linked to Prima at once (prima/autolink.py);
+  it prints counts by how, never names.
 """
 
 import argparse
@@ -358,7 +360,22 @@ async def run(args: argparse.Namespace, data: bytes, out: Path | None) -> int:
         _print("  of them accounts from another workspace", result.added - new)
         _print("skipped while adding", result.skipped)
         _print(f"sign-in details written ({written} rows)", out)
+        await _link_prima(ws, result.results)
     return 0
+
+
+async def _link_prima(ws: Workspace, results: list[member_import.ResultOut]) -> None:
+    """P109: the people added are linked to Prima now (as the web import does in the background);
+    counts only. Anyone not linked is tried again when they first open Prima."""
+    from .prima import autolink, client
+
+    added = [r.user_id for r in results if r.status == "added" and r.user_id]
+    if not added or not client.enabled(ws.id):
+        return
+    counts = await autolink.link_now(ws.id, added)
+    print("Linked to Prima:")
+    for how, n in sorted(counts.items()):
+        _print(how, n)
 
 
 def parser() -> argparse.ArgumentParser:

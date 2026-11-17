@@ -4,26 +4,34 @@
  * P109: the Microsoft 365 page: Outlook (read, reply, forward, new email, Ask AI), Teams chats
  * and channels shown like Teams, the calendar, Teams Approvals, and other email accounts
  * (Connections: back up their attachments, then disconnect). Tabs: ?app=teams|calendar|
- * approvals|accounts (none: mail). */
+ * approvals|accounts (none: mail).
+ * P109b: full screen at /m365 (./frame.tsx) with a Back to where the person came from (?from=),
+ * its own tabs (bottom tabs on a phone) and "New Teams meeting" (./meeting.tsx; ?new=meeting
+ * opens it, as the desk's tile does). */
 import {
   AlarmIcon,
   ArrowsClockwiseIcon,
+  CalendarBlankIcon,
   EnvelopeSimpleIcon,
   KanbanIcon,
   MicrosoftOutlookLogoIcon,
+  MicrosoftTeamsLogoIcon,
   NewspaperIcon,
   PaperclipIcon,
   PencilSimpleLineIcon,
+  SealCheckIcon,
   TrayIcon,
   UsersFourIcon,
+  VideoCameraIcon,
   type Icon,
 } from "@phosphor-icons/react";
-import { useMutation, useQuery, useSuspenseQuery } from "@tanstack/react-query";
-import { Link, useNavigate, useSearch } from "@tanstack/react-router";
-import { lazy, Suspense, useCallback, useMemo, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Link, useNavigate, useRouter, useSearch } from "@tanstack/react-router";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
-import { EmptyState, IconTile, Page, PageHeader, Section } from "@/components/page";
+import { safeFrom } from "@/components/chat/links";
+import { EmptyState, IconTile, Section } from "@/components/page";
 import { Button } from "@/components/ui/button";
 import { ListCard, Meta } from "@/components/ui/card";
 import { Pill } from "@/components/ui/pill";
@@ -33,6 +41,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { locale, useT } from "@/i18n";
 import { errorMessage } from "@/lib/api";
 import { calendarDraftsQuery, draftsQuery } from "@/lib/assistants";
+import { m365Keys, m365SummaryQuery, summaryKey } from "@/lib/m365";
 import {
   actionLink,
   CATEGORY_CHIP,
@@ -40,6 +49,7 @@ import {
   isMissingApi,
   mailActivityQuery,
   mailboxesQuery,
+  mailKeys,
   microsoftAccountQuery,
   microsoftConfigQuery,
   providerOf,
@@ -59,7 +69,9 @@ import { meQuery } from "@/lib/queries";
 import { cn, timeAgo } from "@/lib/utils";
 import { CalendarDraftCard, DraftCard } from "@/pages/assistants";
 
+import { M365Frame, type FrameTab } from "./frame";
 import { OutlookInbox } from "./inbox";
+import { MeetingComposerHost, useMeetingComposer } from "./meeting";
 import { MicrosoftAbilities, MissingServer, OutlookConnection, useMsReturn } from "./outlook";
 import { TeamsPanel } from "./teams";
 
@@ -83,19 +95,36 @@ const ACTION_ICON: Record<MailActionKind, Icon> = {
 type Filter = "all" | MailStatus;
 const FILTERS: Filter[] = ["all", "new", "pending", "processed", "ignored", "failed"];
 
+/** Back: to where the workspace was opened from (?from=), else one step back, else My workspace. */
+function useBack(from: string | undefined) {
+  const router = useRouter();
+  const navigate = useNavigate();
+  return useCallback(() => {
+    const to = safeFrom(from);
+    if (to) void navigate({ href: to, replace: true });
+    else if (router.history.canGoBack()) router.history.back();
+    else void navigate({ to: "/workspace" });
+  }, [from, navigate, router]);
+}
+
 export function MailPage() {
   const t = useT();
-  const search = useSearch({ from: "/app/mail" });
-  const navigate = useNavigate({ from: "/mail" });
-  const { data: me } = useSuspenseQuery(meQuery);
-  const assist = canAssist(me.permissions);
-  const canManage = me.permissions.includes("channels.manage");
+  const qc = useQueryClient();
+  const search = useSearch({ from: "/m365" });
+  const navigate = useNavigate({ from: "/m365" });
+  const { data: me } = useQuery(meQuery);
+  const perms = me?.permissions ?? [];
+  const assist = canAssist(perms);
+  const canManage = perms.includes("channels.manage");
+  const back = useBack(search.from);
   const clearMs = useCallback(() => void navigate({ search: (s) => ({ ...s, ms: undefined, msg: undefined }), replace: true }), [navigate]);
   useMsReturn(search, clearMs);
 
   const config = useQuery(microsoftConfigQuery);
   const configured = !!config.data?.configured;
   const account = useQuery({ ...microsoftAccountQuery, enabled: configured });
+  const connected = !!account.data?.connected && account.data.status !== "reconnect_needed";
+  const summary = useQuery(m365SummaryQuery(connected));
   // Shared mailboxes this person may see (the server scopes the list); none when not allowed.
   const boxes = useQuery({ ...mailboxesQuery, enabled: configured });
   const shared = useMemo(() => (boxes.error ? [] : boxes.data ?? []), [boxes.data, boxes.error]);
@@ -119,46 +148,57 @@ export function MailPage() {
   const setApp = (v: M365App) => void navigate({ search: (s) => ({ ...s, app: v === "mail" ? undefined : v }), replace: true });
   // P109: Outlook itself (live from Microsoft), or what the AI did with each mail.
   const [mailView, setMailView] = useState<"inbox" | "activity">("inbox");
-  const personalOk = box === "personal" && !!account.data?.connected && account.data.status !== "reconnect_needed";
-  const tabs: { value: M365App; label: string }[] = [
-    { value: "mail", label: t("Outlook") },
-    { value: "teams", label: "Teams" },
-    { value: "calendar", label: t("Calendar") },
-    { value: "approvals", label: t("Approvals") },
-    { value: "accounts", label: t("Other email") },
+  const personalOk = box === "personal" && connected;
+  const sum = summary.data;
+  const tabs: FrameTab<M365App>[] = [
+    { value: "mail", label: t("Outlook"), icon: EnvelopeSimpleIcon, count: sum?.unread_mail },
+    { value: "teams", label: "Teams", icon: MicrosoftTeamsLogoIcon, count: sum?.unread_chats },
+    { value: "calendar", label: t("Calendar"), icon: CalendarBlankIcon },
+    { value: "approvals", label: t("Approvals"), icon: SealCheckIcon, count: sum?.approvals_pending },
+    { value: "accounts", label: t("Other email"), icon: TrayIcon },
   ];
 
-  return (
-    <Page>
-      <PageHeader
-        title={t("Microsoft 365")}
-        description={t("Your own Outlook mail, calendar and Teams chats, and the company's shared mailboxes: what reached you and what your AI did with each. Your connection is yours alone.")}
-        actions={ready ? (
-          <Button variant="outline" size="sm" loading={activity.isFetching && !activity.isLoading} onClick={() => void activity.refetch()}>
-            <ArrowsClockwiseIcon size={15} /> {t("Refresh")}
-          </Button>
-        ) : null}
-      />
+  // P109b: "New Teams meeting" from the desk's tile (?new=meeting) opens the composer once.
+  const openMeeting = useMeetingComposer((st) => st.open);
+  useEffect(() => {
+    if (search.new !== "meeting" || !connected) return;
+    openMeeting();
+    void navigate({ search: (x) => ({ ...x, new: undefined }), replace: true });
+  }, [search.new, connected, openMeeting, navigate]);
 
+  const refresh = () => {
+    void qc.invalidateQueries({ queryKey: m365Keys.all });
+    void qc.invalidateQueries({ queryKey: mailKeys.all });
+    void qc.invalidateQueries({ queryKey: summaryKey });
+  };
+
+  const actions = connected ? (
+    <>
+      <Button size="sm" onClick={() => openMeeting()} className="max-sm:size-11 max-sm:px-0" aria-label={t("New Teams meeting")} title={t("New Teams meeting")}>
+        <VideoCameraIcon size={16} /> <span className="max-sm:sr-only">{t("New Teams meeting")}</span>
+      </Button>
+      <Button size="icon" variant="ghost" aria-label={t("Refresh")} title={t("Refresh")} onClick={refresh}><ArrowsClockwiseIcon size={17} /></Button>
+    </>
+  ) : null;
+
+  return (
+    <M365Frame title={t("Microsoft 365")} tabs={tabs} value={app} onChange={setApp} onBack={back} actions={actions}>
       {config.isLoading ? <Skeleton className="h-64 rounded-[var(--radius-md)]" />
-        : config.error ? (isMissingApi(config.error) ? <MissingServer /> : <p role="alert" className="text-[13.5px] text-danger">{errorMessage(config.error)}</p>)
+        : config.error ? (isMissingApi(config.error) ? <MissingServer /> : <ErrorLine error={config.error} onRetry={() => void config.refetch()} />)
         : !configured ? (
-          <>
+          app === "accounts" ? <Suspense fallback={tabFallback}><OtherEmailAccounts /></Suspense> : (
             <EmptyState icon={MicrosoftOutlookLogoIcon} title={t("Microsoft 365 is not set up yet")}
               body={config.data?.can_configure
                 ? t("Register the office's app in Microsoft Entra once (Channels > Microsoft 365). Then everyone connects their own Outlook, and you can add shared mailboxes like accounts@ or tender@.")
                 : t("Ask an admin to set up Microsoft 365. Then you can connect your Outlook here and see what your AI does with your mail.")}
               action={config.data?.can_configure ? <Button asChild><Link to="/channels">{t("Open Channels")}</Link></Button> : undefined} />
-            {/* P109: other email accounts work without Microsoft 365. */}
-            <Section title={t("Other email accounts")}><Suspense fallback={tabFallback}><OtherEmailAccounts /></Suspense></Section>
-          </>
+          )
         ) : (
           <>
             {/* P102: what is connected and what the AI may do, then what waits for a yes. */}
-            {account.data?.connected && account.data.status !== "reconnect_needed" ? <MicrosoftAbilities account={account.data} /> : null}
-            <WaitingDrafts assist={assist} />
-            <Segmented<M365App> label={t("Microsoft 365")} value={app} onChange={setApp} className="w-full sm:w-fit [&>button]:flex-1" options={tabs} />
-            {app === "teams" ? <TeamsPanel />
+            {app === "mail" && connected && account.data ? <MicrosoftAbilities account={account.data} /> : null}
+            {app === "mail" || app === "teams" ? <WaitingDrafts assist={assist} /> : null}
+            {app === "teams" ? <NeedsOutlook><TeamsPanel /></NeedsOutlook>
               : app === "calendar" ? <NeedsOutlook><Suspense fallback={tabFallback}><OutlookCalendar /></Suspense></NeedsOutlook>
               : app === "approvals" ? <NeedsOutlook><Suspense fallback={tabFallback}><TeamsApprovals /></Suspense></NeedsOutlook>
               : app === "accounts" ? <Suspense fallback={tabFallback}><OtherEmailAccounts /></Suspense>
@@ -189,7 +229,7 @@ export function MailPage() {
                 {activity.isLoading ? (
                   <div className="grid gap-2">{[0, 1, 2, 3].map((i) => <Skeleton key={i} className="h-16 rounded-[var(--radius-md)]" />)}</div>
                 ) : activity.error ? (
-                  isMissingApi(activity.error) ? <MissingServer /> : <p role="alert" className="text-[13.5px] text-danger">{errorMessage(activity.error)}</p>
+                  isMissingApi(activity.error) ? <MissingServer /> : <ErrorLine error={activity.error} onRetry={() => void activity.refetch()} />
                 ) : !items.length ? (
                   <EmptyState icon={TrayIcon} title={t("No mail yet")}
                     body={box === "personal"
@@ -212,7 +252,19 @@ export function MailPage() {
             ) : null}
           </>
         )}
-    </Page>
+      <MeetingComposerHost />
+    </M365Frame>
+  );
+}
+
+/** An error with a way to try again. */
+function ErrorLine({ error, onRetry }: { error: unknown; onRetry: () => void }) {
+  const t = useT();
+  return (
+    <div role="alert" className="flex flex-wrap items-center gap-3 rounded-[var(--radius-md)] border border-danger/30 bg-danger/6 px-4 py-3 text-[13.5px] text-danger">
+      <span className="min-w-0 flex-1 break-words">{errorMessage(error)}</span>
+      <Button size="sm" variant="outline" onClick={onRetry}>{t("Try again")}</Button>
+    </div>
   );
 }
 

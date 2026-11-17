@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Response, status
 from sqlalchemy import ColumnElement, Select, and_, delete, func, or_, select, true
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
@@ -28,8 +28,8 @@ from ...models import (
     User,
 )
 from ...org import heads as dept_heads
+from ...prima import autolink, modules
 from ...prima import client as prima_client
-from ...prima import modules
 from ...prima.client import PrimaError
 from ...services import audit, identity
 from ...teams import people
@@ -631,6 +631,7 @@ async def add_one(
 async def add_member(
     body: MemberCreateIn,
     response: Response,
+    background: BackgroundTasks,
     principal: Principal = Depends(people_manager()),
     db: AsyncSession = Depends(get_db),
 ) -> MemberCreateOut:
@@ -651,6 +652,7 @@ async def add_member(
     )
     await db.commit()
     await db.refresh(m)
+    autolink.later(background, principal.workspace_id, [m.user_id])  # P109: linked to Prima
     return MemberCreateOut(
         member=_out(m, await _names(db, principal.workspace_id)), temp_password=password
     )
@@ -1585,7 +1587,11 @@ async def member_prima(
         return out
     if prima_client.opens_as_top(m):
         out["role"], out["role_label"] = "director", _prima_role("director")
-        out["where"] = render(Msg("Owners open Prima as its top record (the CEO)."))
+        out["where"] = render(
+            Msg("Admins open Prima as its top record (the CEO).")
+            if m.role == "admin"
+            else Msg("Owners open Prima as its top record (the CEO).")
+        )
         return out
     link = await db.get(PrimaLink, (principal.workspace_id, user_id))
     auto = prima_client.prima_role(m.role)

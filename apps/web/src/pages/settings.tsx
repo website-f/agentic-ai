@@ -146,7 +146,7 @@ export function SettingsPage() {
         </RadioGroup.Root>
       </Section>
 
-      {me.role === "owner" ? <SignInEmailsSection /> : null}
+      {me.role === "owner" ? <div data-tour="settings.system-mail" className="grid min-w-0"><SignInEmailsSection /></div> : null}
 
       {me.role === "owner" ? <DataPrivacySection /> : null}
     </Page>

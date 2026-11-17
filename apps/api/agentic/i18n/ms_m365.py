@@ -68,4 +68,13 @@ MS_M365: dict[str, str] = {
     "Could not reach {host} on port {port}. Check the server and port.": "Tidak dapat menghubungi {host} pada port {port}. Semak pelayan dan port.",
     "The mail server refused the sign-in. Check the user name and use an app password if the provider asks for one.": "Pelayan e-mel menolak log masuk. Semak nama pengguna dan guna kata laluan aplikasi jika penyedia memintanya.",
     "That server is not allowed.": "Pelayan itu tidak dibenarkan.",
+    # ------------------------------------------------------------ P109b Teams meetings made with AI (api/routers/m365_meetings, microsoft/meetings)
+    "A meeting can be up to 12 hours long.": "Mesyuarat boleh berlangsung sehingga 12 jam.",
+    "Microsoft did not make the meeting.": "Microsoft tidak membuat mesyuarat itu.",
+    "This meeting was not made from the office.": "Mesyuarat ini tidak dibuat dari pejabat.",
+    "This meeting was cancelled.": "Mesyuarat ini telah dibatalkan.",
+    "Nothing has changed.": "Tiada apa-apa yang berubah.",
+    "Changed in Microsoft 365 from the office": "Diubah dalam Microsoft 365 dari pejabat",
+    "Cancelled in Microsoft 365 from the office": "Dibatalkan dalam Microsoft 365 dari pejabat",
+    "Prima answered {status}.": "Prima menjawab {status}.",
 }

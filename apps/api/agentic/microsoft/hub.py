@@ -387,7 +387,22 @@ def chat_row(c: dict[str, Any], me_name: str, me_id: str) -> dict[str, Any]:
         "last_mine": bool(me_id) and last_from["id"] == me_id,
         "last_text": plain((last.get("body") or {}).get("content"))[:200],
         "url": c.get("webUrl"),
+        "unread": chat_unread(c, me_id),
     }
+
+
+def chat_unread(c: dict[str, Any], me_id: str) -> bool:
+    """P109b: a chat whose last message (someone else's) came after the person last read it."""
+    from .graph import parse_time
+
+    last = c.get("lastMessagePreview") or {}
+    sender = ((last.get("from") or {}).get("user") or {}).get("id")
+    at = parse_time(last.get("createdDateTime"))
+    view = c.get("viewpoint")
+    if at is None or not isinstance(view, dict) or (me_id and sender == me_id):
+        return False  # no viewpoint from Microsoft: not known, so not counted
+    read = parse_time(view.get("lastMessageReadDateTime"))
+    return read is None or at > read
 
 
 # ---------------------------------------------------------------- mail

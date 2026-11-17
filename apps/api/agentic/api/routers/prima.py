@@ -131,7 +131,7 @@ async def people_list(
     persons = await people.people(db, principal.workspace_id)
     guess = people.suggestions(persons, client.matchable(staff))
     linked = {p.link.prima_user_id: p.user_id for p in persons if p.link}
-    # P82: owners (the developer is one) open Prima as its top record, with no link.
+    # P82: owners (the developer is one) and, P109, admins open Prima as its top record.
     top = client.top_of(staff)
     return {
         "staff": [_staff_row(r, linked.get(r.id)) for r in staff],
@@ -145,7 +145,7 @@ async def people_list(
                 "email": p.email,
                 "role": p.role,
                 "microsoft": bool(p.ms_oid),
-                "opens_as": top.top if top and p.role == "owner" else None,
+                "opens_as": top.top if top and p.role in client.TOP_ROLES else None,
                 "link": (
                     {"prima_user_id": p.link.prima_user_id, "prima_name": p.link.prima_name,
                      "how": p.link.how}
@@ -171,7 +171,7 @@ async def people_link(
         if body.prima_user_id:
             staff = await client.staff()
             m = await db.get(Membership, (principal.workspace_id, body.user_id))
-            if m is not None and m.role == "owner" and client.top_of(staff):
+            if m is not None and m.role in client.TOP_ROLES and client.top_of(staff):
                 raise PrimaError(
                     409,
                     Msg("Owners open Prima as its top record. They need no link of their own."),
@@ -428,7 +428,7 @@ def _with_office(ans: client.Answer, principal: Principal, own: bool = False) ->
         "name": principal.user.name,
         # P106: the developer who chose their own Prima account (client.opens_own) is not on
         # the shared record: Prima's web then shows them as themselves.
-        "asTop": principal.role == "owner" and not own,
+        "asTop": principal.role in client.TOP_ROLES and not own,
     }
     return json.dumps(data, separators=(",", ":"), ensure_ascii=False).encode()
 

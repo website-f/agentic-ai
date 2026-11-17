@@ -689,10 +689,7 @@ async def test_prima_follows_a_corrected_email(client, prima_on):
     try:
         r = await c.post("/api/auth/login", json={"email": "hr.fixed@example.com", "password": PW})
         assert r.status_code == 200, r.text
-        # No way into Prima until they sign in with Microsoft again.
-        s = (await c.get("/api/prima/status")).json()
-        assert not s["linked"] and s["code"] == "microsoft_needed", s
-        await _microsoft("hr.fixed@example.com", "0a0a0a0a-0000-4000-8000-0000000000c2")
+        # P109: no Microsoft step first: their next open relinks their account from the new email.
         s = (await c.get("/api/prima/status")).json()
         assert s["linked"], s
     finally:

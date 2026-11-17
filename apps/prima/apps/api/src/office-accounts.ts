@@ -17,11 +17,15 @@
 // a guess between two. The central employers (PWVSB, Merdeka Network, Goodwill Empire, Sasa Team) have no company
 // record but employ staff, so an account may be made there; it is always central staff (pwvsb_officer), never a
 // company's admin role over the central employer's own staff.
-// The role follows the linked record (the lead's decision, 6 Nov 2026): a licensed company's own office staff are that
-// company's office, as Prima models it (one Company Manager or GM plus admin executives, Fauzan 2 Nov 2026), so an
-// account linked to a record in a licensed company is admin_exec for exactly that one company, which must be the
-// company the office mapped the person's branch to. A record in a central employer is reached only by central staff
-// (pwvsb_officer). Worked out again on every call from the record, so it is idempotent and audited.
+// P109 (Fitri, 17 Nov 2026: "Staff: own records only"): the office decides the level, not the linked record. Office
+// staff, HODs and the like are asked as pwvsb_officer with no grant: their own staff record (kept linked, in whichever
+// company it is), their own clock, leave and claims, and no company screen. Only an office branch manager is asked as
+// admin_exec (a company's manager view). Before P109 (P81, the lead's decision of 6 Nov 2026) an account linked to a
+// record in a licensed company was made admin_exec whatever the office asked; such an account is brought to what the
+// office asks on its next call (audited "was admin_exec"). A record in a central employer is reached only by central
+// staff (pwvsb_officer), and a licensed company's own staff are never in a central-only department (hr). Worked out
+// again on every call, so it is idempotent and audited. ownRecordCompanyIds() lets the database show a grant-less
+// account its own record in a licensed company (db.ts), as a guard's sign-in reaches its own.
 //
 // Why a separate service: Prima's API login (prima_api) may only read prima.users, by design. Writing sign-in accounts
 // needs the schema owner, which never runs inside the API. So this small program holds the owner connection, listens
@@ -189,10 +193,12 @@ export async function upsertOfficeAccount(client: PoolClient, raw: unknown, by: 
     // the role (see the top of this file), every time, so a second call changes nothing.
     const linkedBefore = old?.personId ? await recordCompany(client, old.personId, input) : null;
     const found = old?.personId ? null : await findOwnRecord(client, id, input);
-    const access = accessFor(input, linkedBefore ?? found?.companyId ?? null);
-    // P106: the staff record made them a company's office staff (admin_exec): never in a central-only department.
-    if (input.department && CENTRAL_ONLY_DEPARTMENTS.includes(input.department) && access.role !== 'pwvsb_officer')
-      throw new AccountRefused(`An office account in ${input.department} must be central staff (pwvsb_officer); ${access.why}.`);
+    const recordCo = linkedBefore ?? found?.companyId ?? null;
+    const access = accessFor(input, recordCo);
+    // P106: a licensed company's own office staff (their own staff record is there) are never in a central-only
+    // department, whatever level the office asked.
+    if (input.department && CENTRAL_ONLY_DEPARTMENTS.includes(input.department) && (access.role !== 'pwvsb_officer' || (recordCo && !isCentralEmployer(recordCo))))
+      throw new AccountRefused(`An office account in ${input.department} must be central staff (pwvsb_officer); their own staff record is in ${recordCo}, so they are its office staff.`);
     let user: User;
     if (old) {
       // Only the allowed fields change; whatever else the record holds (an entraOid IT linked, its sites) stays.
@@ -240,18 +246,29 @@ export async function upsertOfficeAccount(client: PoolClient, raw: unknown, by: 
 }
 
 /**
- * P81: the role and companies an account gets from its own staff record. A record in a licensed company the office
- * mapped the person to makes them that company's office staff: admin_exec for that one company, never more. Anything
- * else keeps what the office asked (central staff stay pwvsb_officer; checkAccountInput already made a central
- * employer's account central staff).
+ * The role and companies an account gets. P109: the office decides the level (see the top of this file): the role is
+ * always the one the office asked (checkAccountInput already made a central employer's account central staff). An
+ * admin_exec whose own staff record is in one of its licensed companies is that company's manager view only, never
+ * wider; central staff (pwvsb_officer) keep their companies, which open no company screen without a grant.
  */
 export function accessFor(
   input: Pick<OfficeAccountInput, 'role' | 'companyIds'>,
   recordCompanyId: string | null,
 ): { role: UserRole; companyIds: string[]; why: string } {
-  if (recordCompanyId && !isCentralEmployer(recordCompanyId) && input.companyIds.includes(recordCompanyId))
-    return { role: 'admin_exec', companyIds: [recordCompanyId], why: `their own staff record is in ${recordCompanyId}, so they are its office staff` };
+  if (input.role === 'admin_exec' && recordCompanyId && !isCentralEmployer(recordCompanyId) && input.companyIds.includes(recordCompanyId) && input.companyIds.length > 1)
+    return { role: 'admin_exec', companyIds: [recordCompanyId], why: `their own staff record is in ${recordCompanyId}, so they manage only that company` };
   return { role: input.role, companyIds: input.companyIds, why: '' };
+}
+
+/**
+ * P109: the licensed companies whose rows the database opens to an office account of central staff (pwvsb_officer) so
+ * it reaches its own staff record there (My details, staff clock, leave, claims), as a guard's sign-in reaches its own
+ * company: the account has no grant, so visibleCompanyIds() and can() still open no company screen, and the service
+ * shows it only its own record (isOwnRecord). Only an office account (u-off-) with a linked record; never a feed.
+ */
+export function ownRecordCompanyIds(user: Pick<User, 'id' | 'role' | 'personId' | 'companyIds' | 'integration'>): string[] {
+  if (!user.id.startsWith(OFFICE_ACCOUNT_PREFIX) || user.role !== 'pwvsb_officer' || !user.personId || user.integration) return [];
+  return user.companyIds.filter((c) => !isCentralEmployer(c));
 }
 
 /**

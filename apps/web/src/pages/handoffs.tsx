@@ -85,6 +85,7 @@ function UploadPanel({ companies, onDone }: { companies: { id: string; name: str
   return (
     <div className="grid gap-4">
       <div
+        data-tour="handoffs.upload"
         onDragOver={(e) => { e.preventDefault(); setOver(true); }}
         onDragLeave={() => setOver(false)}
         onDrop={(e) => { e.preventDefault(); setOver(false); add(e.dataTransfer.files); }}
@@ -301,7 +302,7 @@ export function HandoffsPage() {
       ) : (
         <div className="grid gap-4">
           {tabs.length > 1 ? (
-            <Segmented value={tab} onChange={go} label={t("For other companies")}
+            <Segmented value={tab} onChange={go} label={t("For other companies")} guide="handoffs.tabs"
               options={tabs.map((x) => ({ value: x, label: labels[x], ...(counts[x] ? { count: counts[x] } : {}) }))} />
           ) : null}
           {tab === "upload" ? <UploadPanel companies={companies} onDone={() => go("check")} /> : null}

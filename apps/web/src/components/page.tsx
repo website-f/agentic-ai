@@ -9,6 +9,7 @@ import { PinPageButton } from "@/components/pin-button";
 import { useT } from "@/i18n";
 import { cn } from "@/lib/utils";
 import { hubOf, NAV, navItemFor } from "@/nav";
+import { TourButton } from "@/tours/tour-button";
 
 import { IconTile } from "./page-parts";
 
@@ -63,10 +64,12 @@ export function PageHeader({
             <p className="text-[11.5px] font-medium tracking-[0.06em] text-accent uppercase">{kicker}</p>
           ) : null}
           <div className="flex min-w-0 items-start gap-2">
-            <h1 className="min-w-0 text-[22px] leading-tight font-semibold tracking-tight text-balance break-words sm:text-[26px]">
+            <h1 data-tour="page.title" className="min-w-0 text-[22px] leading-tight font-semibold tracking-tight text-balance break-words sm:text-[26px]">
               {title}
             </h1>
             {entry ? <ShowTipsButton path={entry.to} /> : null}
+            {/* P109: a short guided tour of this page */}
+            <TourButton />
             {/* P97: pin this page to the person's desk */}
             <PinPageButton title={typeof title === "string" ? title : entry ? t(navItemFor(entry.to)?.label ?? "") : ""}
               className="mt-0.5 size-7 rounded-full border border-border bg-surface pointer-coarse:size-9 sm:mt-1" />
@@ -85,7 +88,7 @@ export function PageHeader({
           {description ? <p className="mt-1 max-w-[68ch] text-[13.5px] text-muted">{description}</p> : null}
         </div>
       </div>
-      {actions ? <div className="flex shrink-0 flex-wrap gap-2 max-sm:[&>*]:flex-1">{actions}</div> : null}
+      {actions ? <div data-tour="page.actions" className="flex shrink-0 flex-wrap gap-2 max-sm:[&>*]:flex-1">{actions}</div> : null}
     </div>
     {/* P52: the other pages of this page's hub, as tabs */}
     <HubTabs />

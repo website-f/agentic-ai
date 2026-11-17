@@ -152,6 +152,8 @@ export interface ChatRow {
   last_mine: boolean;
   last_text: string;
   url: string | null;
+  /** P109b: someone else wrote after the person last read it. */
+  unread?: boolean;
 }
 
 export interface Reaction { emoji: string; count: number; mine: boolean }
@@ -444,4 +446,126 @@ export function backupPercent(j: BackupJob): number | null {
   if (j.status === "done") return 100;
   if (!j.messages_total) return null;
   return Math.min(99, Math.round((j.messages_seen / j.messages_total) * 100));
+}
+
+// ------------------------------------------------------------------------------------- P109b the tile and Teams meetings
+
+/** The Microsoft 365 tile on My workspace (GET /api/m365/summary). A number is null when
+ * Microsoft did not answer it (or, for approvals, when they are not turned on). */
+export interface M365Summary {
+  configured: boolean;
+  connected: boolean;
+  status: string;
+  address: string | null;
+  unread_mail: number | null;
+  unread_chats: number | null;
+  next_meeting: CalEvent | null;
+  approvals_pending: number | null;
+  /** Prima runs here: offer "Also record in Prima Meetings". */
+  prima: boolean;
+}
+
+export const summaryKey = ["mail", "m365", "summary"] as const;
+
+export const m365SummaryQuery = (enabled = true) =>
+  queryOptions({
+    queryKey: summaryKey,
+    queryFn: () => api<M365Summary>("/api/m365/summary"),
+    retry: false,
+    enabled,
+    staleTime: 30_000,
+    refetchInterval: 60_000,
+  });
+
+/** Someone to invite: an office member, someone from the person's own Outlook or Teams. */
+export interface Invitee { name: string; email: string; source?: "office" | "outlook" | "teams" | string }
+
+/** A person the AI named: "ok" (address known), "choose" (several: options) or "unknown". */
+export interface DraftPerson extends Invitee { status: "ok" | "choose" | "unknown"; options: Invitee[] }
+
+export const searchPeople = (q: string) => api<Invitee[]>(`/api/m365/people?q=${enc(q)}`);
+
+export const MEETING_KINDS = ["management", "department", "operations", "client", "board", "toolbox", "other"] as const;
+export type MeetingKind = (typeof MEETING_KINDS)[number];
+
+export interface MeetingDraft {
+  title: string;
+  start: string;
+  end: string;
+  minutes: number;
+  attendees: DraftPerson[];
+  agenda: string;
+  kind: MeetingKind;
+  time_zone: string;
+}
+
+export const draftMeeting = (body: { instructions: string; message_id?: string; chat_id?: string }) =>
+  api<MeetingDraft>("/api/m365/meetings/draft", "POST", body);
+
+export interface PrimaRecord { status: "none" | "added" | "failed" | "skipped" | "cancelled"; meeting_id: string | null; reason: string | null }
+
+export interface TeamsMeeting {
+  id: string;
+  event_id: string;
+  title: string;
+  start: string;
+  end: string;
+  attendees: Invitee[];
+  agenda: string;
+  join_url: string | null;
+  web_link: string | null;
+  kind: MeetingKind;
+  cancelled: boolean;
+  prima: PrimaRecord;
+  prima_warning?: string | null;
+}
+
+export interface MeetingIn {
+  title: string;
+  start: string;
+  end: string;
+  attendees: Invitee[];
+  agenda: string;
+  kind: MeetingKind;
+  prima: boolean;
+}
+
+export const createMeeting = (m: MeetingIn) => api<TeamsMeeting>("/api/m365/meetings", "POST", m);
+
+export const meetingLinkKey = (eventId: string) => ["mail", "m365", "meeting-link", eventId] as const;
+
+export const meetingLinkQuery = (eventId: string) =>
+  queryOptions({
+    queryKey: meetingLinkKey(eventId),
+    queryFn: () => api<({ linked: false }) | ({ linked: true } & TeamsMeeting)>(`/api/m365/meetings/link?event_id=${enc(eventId)}`),
+    retry: false,
+  });
+
+export const addToPrima = (eventId: string, kind?: MeetingKind) => api<TeamsMeeting>("/api/m365/meetings/prima", "POST", { event_id: eventId, kind });
+
+export const changeMeeting = (eventId: string, changes: Partial<Omit<MeetingIn, "prima" | "kind">> & { reason?: string }) =>
+  api<TeamsMeeting>("/api/m365/meetings/change", "POST", { event_id: eventId, ...changes });
+
+export const cancelMeeting = (eventId: string, reason: string) => api<TeamsMeeting>("/api/m365/meetings/cancel", "POST", { event_id: eventId, reason });
+
+/** Minutes between two ISO times (0 when either is missing or the end is not after the start). */
+export function minutesBetween(start: string, end: string): number {
+  const a = Date.parse(start);
+  const b = Date.parse(end);
+  return Number.isFinite(a) && Number.isFinite(b) && b > a ? Math.round((b - a) / 60_000) : 0;
+}
+
+/** The people the meeting may be sent to: every one has an address, none twice. */
+export function readyPeople(people: DraftPerson[]): { ok: Invitee[]; missing: DraftPerson[] } {
+  const seen = new Set<string>();
+  const ok: Invitee[] = [];
+  const missing: DraftPerson[] = [];
+  for (const p of people) {
+    const e = p.email.trim().toLowerCase();
+    if (!e || !allEmails([e])) { missing.push(p); continue; }
+    if (seen.has(e)) continue;
+    seen.add(e);
+    ok.push({ name: p.name, email: e });
+  }
+  return { ok, missing };
 }

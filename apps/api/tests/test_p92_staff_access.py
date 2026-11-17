@@ -285,9 +285,11 @@ STAFF_OK = {
     "/api/email-drafts", "/api/feedback/config", "/api/feedback/mine", "/api/files",
     "/api/files/by-task", "/api/files/labels", "/api/files/stats", "/api/files/tree",
     "/api/forms", "/api/forms/starters", "/api/intake", "/api/integrations/google",
+    "/api/getting-started",  # P109: their own checklist and tours (test_p109_getting_started)
     "/api/integrations/microsoft", "/api/integrations/microsoft/account", "/api/library",
     "/api/library/linked", "/api/mail/activity", "/api/me/allowance", "/api/me/needs",
     "/api/mail-accounts",  # P109: their own other email accounts only (test_p109_mail_accounts)
+    "/api/m365/summary",  # P109b: their own Microsoft 365 tile ("not connected" until they are)
     "/api/me/prefs", "/api/me/staff", "/api/me/twin", "/api/me/worker", "/api/meetings",
     "/api/members", "/api/minutes", "/api/minutes/settings", "/api/monitor/wall",
     "/api/objectives", "/api/packs", "/api/pings",
@@ -496,6 +498,7 @@ STAFF_WRITE_OK = {
     ("PUT", "/api/me/prefs"),  # their own preferences
     ("PUT", "/api/desk/items/order"),  # their own desk
     ("POST", "/api/tutorial/progress"),  # their own tutorial
+    ("PUT", "/api/getting-started"),  # P109: their own checklist and tours
     ("POST", "/api/auth/logout"),  # signs themselves out (walked last)
     ("POST", "/api/auth/2fa/setup"),  # their own two-step sign-in
     ("DELETE", "/api/integrations/google/account"),  # their own Google connection

@@ -30,6 +30,7 @@ MS_ACCESS: dict[str, str] = {
     "Guard": "Pengawal",
     "Site device": "Peranti tapak",
     "Owners open Prima as its top record (the CEO).": "Pemilik membuka Prima sebagai rekod teratasnya (CEO).",
+    "Admins open Prima as its top record (the CEO).": "Pentadbir membuka Prima sebagai rekod teratasnya (CEO).",
     "Not opened Prima yet. Prima uses their staff record if it has one; else they get {prima_role} from their office role ({role}).": (
         "Belum membuka Prima. Prima menggunakan rekod staf mereka jika ada; jika tiada, mereka mendapat {prima_role} daripada peranan pejabat mereka ({role})."
     ),

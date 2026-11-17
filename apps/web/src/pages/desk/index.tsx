@@ -32,6 +32,7 @@ import { toast } from "sonner";
 import { EmptyState, IconTile, Page, PageHeader } from "@/components/page";
 import { PageTabs } from "@/components/page-tabs";
 import { TutorialBanner } from "@/pages/tutorial/banner";
+import { GettingStartedCard } from "@/components/getting-started-chip";
 import { PinButton } from "@/components/pin-button";
 import { MadeBy, ReviewPill } from "@/components/provenance";
 import { Button } from "@/components/ui/button";
@@ -107,13 +108,15 @@ function DeskView({ desk }: { desk: Desk }) {
         icon={DeskIcon}
         eyebrow={[today, where].filter(Boolean).join(" · ")}
         actions={tab === "overview" && !phone ? (
-          <Button variant="outline" size="sm" onClick={() => setCustomizing(true)}>
+          <Button variant="outline" size="sm" data-tour="desk.customize" onClick={() => setCustomizing(true)}>
             <SlidersHorizontalIcon size={15} /> {t("Customize")}
           </Button>
         ) : undefined}
       />
       {/* P48: staff never open the Command center, so the tutorial nudge lives here too. */}
       <TutorialBanner />
+      {/* P109: the person's Getting started steps, until they are done */}
+      <GettingStartedCard />
       <PageTabs
         label={t("My workspace")}
         guide="desk.tabs"

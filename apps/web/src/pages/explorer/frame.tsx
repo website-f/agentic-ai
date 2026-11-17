@@ -11,7 +11,7 @@ import { Outlet, useNavigate, useRouter, useRouterState } from "@tanstack/react-
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { safeFrom } from "@/components/chat/links";
-import { LazyCommandPalette as CommandPalette, LazyTaskComposerHost as TaskComposerHost } from "@/components/lazy-hosts";
+import { LazyCommandPalette as CommandPalette, LazyTaskComposerHost as TaskComposerHost, LazyTourHost } from "@/components/lazy-hosts";
 import { NeedsBell } from "@/components/needs-bell";
 import { IconTile } from "@/components/page";
 import { SearchField } from "@/components/search-box";
@@ -26,6 +26,7 @@ import { useLiveEvents } from "@/lib/live";
 import { meQuery } from "@/lib/queries";
 import { useBranch, usePalette } from "@/lib/stores";
 import { cn } from "@/lib/utils";
+import { TourButton } from "@/tours/tour-button";
 
 import { LibraryTabs, type BrowseSearch } from "../library-hub/hub";
 import { InLibraryFrame, type LibraryFrame as FrameValue } from "./frame-context";
@@ -202,6 +203,8 @@ export function LibraryFrame() {
             </a>
           </Button>
         ) : null}
+        {/* P109: Browse has no page title of its own: its "Show me how" sits here. */}
+        {browsing ? <TourButton className="mt-0 sm:mt-0" /> : null}
         <div className="flex shrink-0 items-center gap-0.5 pointer-coarse:*:size-11">
           <NeedsBell />
           <UserMenu />
@@ -227,6 +230,7 @@ export function LibraryFrame() {
 
       <CommandPalette />
       <TaskComposerHost />
+      <LazyTourHost />
     </div>
   );
 }

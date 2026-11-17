@@ -206,6 +206,7 @@ async def test_desk_sections_per_person(client, llm, temporal):
         lay = (await staff.get("/api/desk")).json()["layout"]
         assert [s["id"] for s in lay["sections"]] == [
             "today",
+            "m365",  # P109b: the Microsoft 365 tile (the web shows it to those who use it)
             "pinned",
             "recent",
             "ai",
@@ -220,8 +221,11 @@ async def test_desk_sections_per_person(client, llm, temporal):
         )
         assert r.status_code == 200, r.text
         got = r.json()["sections"]
-        # The ones left out keep showing, after the person's order.
-        assert [s["id"] for s in got] == ["pinned", "today", "goto", "recent", "ai", "howto"]
+        # The ones left out keep showing, after the person's order (P109b: the Microsoft 365
+        # tile right after Today).
+        assert [s["id"] for s in got] == [
+            "pinned", "today", "m365", "goto", "recent", "ai", "howto",
+        ]  # fmt: skip
         assert [s["id"] for s in got if s["hidden"]] == ["goto"]
         assert (await staff.get("/api/desk")).json()["layout"]["sections"] == got
         # Each section once; only known sections.

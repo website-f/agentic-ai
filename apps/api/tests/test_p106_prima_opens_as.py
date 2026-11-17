@@ -18,6 +18,7 @@ from sqlalchemy import select
 from agentic.core.config import settings
 from agentic.core.db import SessionLocal
 from agentic.models import AuditLog, Membership, PrimaLink, User
+from agentic.prima import autolink
 from agentic.prima import client as prima
 
 from .conftest import csrf
@@ -116,6 +117,7 @@ def fake(monkeypatch):
     f = FakePrima()
     monkeypatch.setattr(prima, "transport", httpx.MockTransport(f.handler))
     monkeypatch.setattr(prima, "_TOP", {})
+    monkeypatch.setattr(autolink, "on", False)  # P109: these check the link made on first open
     return f
 
 

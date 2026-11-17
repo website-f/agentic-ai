@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { after, before, describe, it } from 'node:test';
-import { AccountRefused, accessFor, accountsHandler, checkAccountInput, officeAccountId } from '../src/office-accounts';
+import { AccountRefused, accessFor, accountsHandler, checkAccountInput, officeAccountId, ownRecordCompanyIds } from '../src/office-accounts';
 import { officePayload, officeSign, type OfficeCall } from '../src/office';
 
 const SECRET = 'o'.repeat(40);
@@ -34,15 +34,25 @@ describe('office accounts: what an office account can be', () => {
     assert.equal(checkAccountInput({ ...GOOD, role: 'admin_exec' }).role, 'admin_exec');
   });
 
-  it('P81: the role follows the linked staff record: a licensed company record makes its office staff, one company only', () => {
+  it('P109: the office decides the level; a branch manager (admin_exec) manages only the company of its own record', () => {
     const staff = { role: 'pwvsb_officer' as const, companyIds: ['co-sasa'] };
-    assert.deepEqual(accessFor(staff, 'co-sasa').role, 'admin_exec');
-    assert.deepEqual(accessFor(staff, 'co-sasa').companyIds, ['co-sasa']);
-    assert.deepEqual(accessFor({ role: 'admin_exec', companyIds: ['co-sasa', 'co-arsh'] }, 'co-arsh').companyIds, ['co-arsh'], 'never wider than the one company');
-    assert.deepEqual(accessFor(staff, 'co-inas'), { role: 'pwvsb_officer', companyIds: ['co-sasa'], why: '' }, 'a company the office did not name: nothing changes');
+    // "Staff: own records only" (Fitri, 17 Nov 2026): a licensed company record no longer makes them its office staff.
+    assert.deepEqual(accessFor(staff, 'co-sasa'), { role: 'pwvsb_officer', companyIds: ['co-sasa'], why: '' });
+    assert.deepEqual(accessFor(staff, 'co-inas'), { role: 'pwvsb_officer', companyIds: ['co-sasa'], why: '' });
+    assert.deepEqual(accessFor(staff, null), { role: 'pwvsb_officer', companyIds: ['co-sasa'], why: '' });
     assert.deepEqual(accessFor({ role: 'pwvsb_officer', companyIds: ['pwvsb'] }, 'pwvsb'), { role: 'pwvsb_officer', companyIds: ['pwvsb'], why: '' });
-    assert.deepEqual(accessFor({ role: 'admin_exec', companyIds: ['co-sasa'] }, null), { role: 'admin_exec', companyIds: ['co-sasa'], why: '' }, 'a branch manager stays admin_exec');
-    assert.deepEqual(accessFor(staff, null).role, 'pwvsb_officer');
+    assert.deepEqual(accessFor({ role: 'admin_exec', companyIds: ['co-sasa'] }, 'co-sasa'), { role: 'admin_exec', companyIds: ['co-sasa'], why: '' }, 'a branch manager stays admin_exec');
+    assert.deepEqual(accessFor({ role: 'admin_exec', companyIds: ['co-sasa'] }, null), { role: 'admin_exec', companyIds: ['co-sasa'], why: '' });
+    assert.deepEqual(accessFor({ role: 'admin_exec', companyIds: ['co-sasa', 'co-arsh'] }, 'co-arsh').companyIds, ['co-arsh'], 'never wider than the one company');
+  });
+
+  it('P109: the database opens a licensed company only to an office account of central staff with its own record there', () => {
+    const acc = { id: 'u-off-us_01jabc', role: 'pwvsb_officer' as const, personId: 'pr-1', companyIds: ['co-sasa', 'pwvsb'] };
+    assert.deepEqual(ownRecordCompanyIds(acc), ['co-sasa'], 'central employers are open to central staff already');
+    assert.deepEqual(ownRecordCompanyIds({ ...acc, personId: undefined }), [], 'no own record: nothing');
+    assert.deepEqual(ownRecordCompanyIds({ ...acc, id: 'u-fauzan' }), [], 'only an office account');
+    assert.deepEqual(ownRecordCompanyIds({ ...acc, role: 'admin_exec' }), [], 'a manager view has its companies anyway');
+    assert.deepEqual(ownRecordCompanyIds({ ...acc, integration: 'ja' }), [], 'never a feed');
   });
 
   it('refuses a role, department or field it never sets, and another record id', () => {

@@ -2061,25 +2061,25 @@ export const PAGE_DOCS_MS: Record<string, PageDoc> = {
   },
 
   start: {
-    purpose: "Senarai semak pendek tentang apa yang menjadikan pejabat berfungsi untuk anda. Setiap langkah ditanda sendiri apabila selesai.",
+    purpose: "Langkah untuk peranan anda, mengikut urutan, dan lawatan berpandu bagi setiap halaman. Setiap langkah ditanda sendiri apabila selesai.",
     can: [
-      "Buat langkah bertanda **Seterusnya** dahulu. Setiap langkah ada butangnya sendiri.",
-      "Tanya cara bagi mana-mana langkah: pembantu bantuan menerangkannya.",
-      "Staf mendapat langkah sendiri: ambil pekerja AI anda, tetapkan waktunya dan pautkan telefon anda.",
+      "Buat langkah bertanda **Seterusnya** dahulu. Butangnya membuka halaman itu; **Tunjukkan** membawa anda melaluinya.",
+      "Ambil lawatan selamat datang sekali lagi, atau lawatan ringkas mana-mana halaman.",
+      "Pemilik menyediakan e-mel sistem, ruang kerja, Perpustakaan, syarikat, orang dan enjin AI. Kakitangan menyediakan e-mel, ruang kerja dan AI mereka sendiri.",
     ],
     spots: {},
     howto: [
       {
         title: "Selesaikan persediaan anda",
         steps: [
-          s("Buka senarai semak persediaan di bawah **Bantuan** di bar sisi."),
+          s("Buka **Langkah permulaan** di bawah **Bantuan** di bar sisi."),
           s("Cari langkah bertanda **Seterusnya** dan klik butangnya."),
-          s("Buat langkah itu pada halaman yang dibuka."),
+          s("Tidak pasti caranya? Klik **Tunjukkan** untuk lawatan berpandu halaman itu."),
           s("Kembali. Langkah itu kini ada tanda hijau."),
         ],
       },
     ],
-    tips: ["Langkah yang anda nampak bergantung pada peranan anda. Staf dan pemilik nampak senarai berbeza."],
+    tips: ["Setiap halaman ada butang **Tunjukkan caranya** di sebelah tajuknya: lawatan ringkas halaman itu."],
     who: EVERYONE,
     related: ["home", "tutorial", "workspace"],
   },

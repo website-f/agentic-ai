@@ -26,7 +26,7 @@ import { Drawer } from "vaul";
 import { create } from "zustand";
 
 import { ALL_COMPANIES, useCompanies } from "@/lib/company";
-import { SetupCard } from "@/pages/start";
+import { GettingStartedChip } from "@/components/getting-started-chip";
 import { useBackClose } from "@/lib/back-close";
 import { useLiveEvents } from "@/lib/live";
 import { meQuery, systemStatusQuery } from "@/lib/queries";
@@ -45,7 +45,7 @@ import { openTaskComposer } from "./task-composer/store";
 import { HeaderSearch } from "./search-box";
 import { LogoMark, Wordmark } from "./logo";
 import { useHelpAsk } from "./help-ask-store";
-import { LazyCommandPalette, LazyHelpAskSheet, LazyTaskComposerHost } from "./lazy-hosts";
+import { LazyCommandPalette, LazyHelpAskSheet, LazyTaskComposerHost, LazyTourHost } from "./lazy-hosts";
 import { InstallApp } from "./install-app";
 import { NeedsBell } from "./needs-bell";
 import { NavProgress } from "./nav-progress";
@@ -277,7 +277,7 @@ function Sidebar() {
         </Link>
       </div>
       <NavSearch />
-      <SetupCard />
+      <GettingStartedChip />
       <nav className="flex-1 overflow-y-auto overscroll-contain px-3 pb-4" aria-label={t("Main")}>
         {sections.map((section) => {
           const here = section.items.some((i) => isActive(pathname, i.to));
@@ -751,7 +751,7 @@ function MobileTabBar() {
               className="mb-3 flex min-h-12 w-full items-center gap-2.5 rounded-[var(--radius-md)] bg-accent-soft/60 px-3.5 text-left text-[14px] font-medium text-accent">
               <ChatCircleDotsIcon size={20} weight="fill" /> {t("Ask how to do something")}
             </button>
-            <div onClick={() => setMore(false)} className="mb-3 empty:hidden"><SetupCard always /></div>
+            <div onClick={() => setMore(false)} className="mb-3 empty:hidden"><GettingStartedChip always /></div>
             <div className="mb-4 grid grid-cols-3 gap-2" role="list" aria-label={t("Help")}>
               {helpItems.map((item) => {
                 const IconCmp = item.icon;
@@ -858,6 +858,7 @@ export function AppShell() {
       <LazyCommandPalette />
       <LazyTaskComposerHost />
       <LazyHelpAskSheet />
+      <LazyTourHost />
       <OfflineBanner />
       <NavProgress />
       <InstallApp />

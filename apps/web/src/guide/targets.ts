@@ -271,7 +271,7 @@ export const GUIDE_PAGES: GuidePage[] = [
   },
   // ---------------------------------------------------------------- Help
   {
-    id: "start", route: "/start", title: "Setting up", group: "Help", states: [],
+    id: "start", route: "/getting-started", title: "Getting started", group: "Help", states: [],
     targets: [],
   },
   {

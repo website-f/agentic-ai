@@ -38,6 +38,7 @@ from .routers import (
     documents,
     events_stream,
     files,
+    getting_started,
     impact,
     learning,
     lessons,
@@ -333,6 +334,7 @@ for r in (
     library.router,
     prefs.router,
     tutorial.router,
+    getting_started.router,  # P109: each person's checklist and guided tours
     staff.router,
     impact.router,
 ):
@@ -442,8 +444,10 @@ app.include_router(microsoft_router.router)
 # P109: the Microsoft 365 page (own mail, Teams, calendar, approvals, Ask AI) and a person's
 # other email accounts with their attachment backups.
 from .routers import m365 as m365_router  # noqa: E402
+from .routers import m365_meetings as m365_meetings_router  # noqa: E402
 from .routers import mail_accounts as mail_accounts_router  # noqa: E402
 
+app.include_router(m365_meetings_router.router)  # P109b: the tile, people, Teams meetings
 app.include_router(m365_router.router)
 app.include_router(mail_accounts_router.router)
 

@@ -103,8 +103,11 @@ PinKind = Literal[
 MAX_PINS = 60
 MAX_FOLDERS = 20
 # P97: the blocks of the desk's overview, in their first order. A person may hide or reorder
-# them (users.prefs["desk"]); a block added later shows up at the end for everyone.
-SECTIONS = ("today", "pinned", "recent", "ai", "howto", "goto")
+# them (users.prefs["desk"]); a block added later shows up at the end for everyone, or right
+# after the block named in AFTER. P109b: "m365", the Microsoft 365 tile, after Today (the web
+# shows it only to people who use Microsoft 365 here).
+SECTIONS = ("today", "m365", "pinned", "recent", "ai", "howto", "goto")
+AFTER = {"m365": "today"}
 OPEN = ("triage", "ready", "running", "blocked", "review")
 URLS = {
     "file": "/files?f={id}",
@@ -508,17 +511,20 @@ async def reorder(
 
 def layout_of(user: User | None, pins: list[DeskItem] | None = None) -> dict[str, Any]:
     """The person's desk layout (users.prefs["desk"]): every section once, in their order
-    (sections added since go last, shown), and their folders in order (with any folder a pin
-    names that the list lacks)."""
+    (sections added since go last, or after their AFTER block, shown), and their folders in
+    order (with any folder a pin names that the list lacks)."""
     saved = ((user.prefs if user else None) or {}).get("desk") or {}
     sections: list[dict[str, Any]] = []
     for s in saved.get("sections") or []:
         if isinstance(s, dict) and s.get("id") in SECTIONS:
             if s["id"] not in [x["id"] for x in sections]:
                 sections.append({"id": s["id"], "hidden": bool(s.get("hidden"))})
-    sections += [
-        {"id": s, "hidden": False} for s in SECTIONS if s not in [x["id"] for x in sections]
-    ]
+    for sid in SECTIONS:
+        ids = [x["id"] for x in sections]
+        if sid not in ids:
+            after = AFTER.get(sid)
+            at = ids.index(after) + 1 if after in ids else len(ids)
+            sections.insert(at, {"id": sid, "hidden": False})
     folders = [f for f in saved.get("folders") or [] if isinstance(f, str) and f]
     for it in pins or []:
         if it.folder and it.folder not in folders:
@@ -527,7 +533,7 @@ def layout_of(user: User | None, pins: list[DeskItem] | None = None) -> dict[str
 
 
 class SectionIn(BaseModel):
-    id: Literal["today", "pinned", "recent", "ai", "howto", "goto"]
+    id: Literal["today", "m365", "pinned", "recent", "ai", "howto", "goto"]
     hidden: bool = False
 
 

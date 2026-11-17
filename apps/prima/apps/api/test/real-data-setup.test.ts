@@ -172,9 +172,10 @@ describe('PRIMA_REAL_DATA: setting up an empty database', () => {
       assert.equal(got.personId, person);
       assert.ok(CENTRAL_EMPLOYER_IDS.includes(got.companyIds[0]));
       assert.equal(got.role, 'pwvsb_officer');
-      // A licensed company's own office staff: that company's admin_exec, through the wall as the non-superuser owner.
+      // A licensed company's own office staff: linked through the wall as the non-superuser owner, at the level the office
+      // asked (P109, "Staff: own records only": central staff with no grant; a branch manager would be asked admin_exec).
       const alpha = await upsertOfficeAccount(client, { officeUserId: 'us_p81alpha', name: 'Alpha Three', title: 'Staff', role: 'pwvsb_officer', companyIds: ['co-alpha-guard'], email: 'alpha.three@example.test' }, 'Agentic Office');
-      assert.deepEqual([alpha.role, alpha.companyIds, !!alpha.personId], ['admin_exec', ['co-alpha-guard'], true]);
+      assert.deepEqual([alpha.role, alpha.companyIds, !!alpha.personId], ['pwvsb_officer', ['co-alpha-guard'], true]);
     } finally {
       client.release();
       await pool.end();
