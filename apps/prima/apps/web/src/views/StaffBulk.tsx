@@ -1,11 +1,14 @@
 import { useContext, useEffect, useId, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { ArrowsLeftRightIcon, IdentificationBadgeIcon } from '@phosphor-icons/react';
+import { hrKeeps, isOwnerAdmin } from '@prima/core';
 import { api, type StaffMovements } from '../api';
-import { Chip, RefreshContext, notify } from '../ui';
+import { useApp } from '../App';
+import { Chip, RefreshContext, notify, useLoad } from '../ui';
 import { Select } from '../SearchSelect';
 import { activateDrawer } from '../drawer-focus';
 import { useBackClose } from '../back-close';
+import { useRecordKinds } from './RecordForm';
 import '../styles/staff-bulk.css';
 
 /**
@@ -29,10 +32,30 @@ export interface BulkPerson {
   leaving: boolean;
   companyId: string;
   jobTitle: string | null;
+  /** P112: the company's name, shown in one person's dialog. */
+  companyName?: string | null;
 }
 
 type Mode = 'title' | 'company';
 type Prep = NonNullable<StaffMovements['prep']>;
+
+/**
+ * P112: who may change a designation or a company, as the server says: Change designation for whoever may keep office
+ * staff records (the office staff form, HR), Change company for whoever may prepare a staff movement (HR, the owner).
+ * The staff list's bulk bar and each person's details (People, Attendance) ask the same, so they never differ.
+ */
+export interface StaffChangeRights {
+  canTitle: boolean;
+  prep: Prep | null;
+}
+
+export function useStaffChangeRights(): StaffChangeRights {
+  const { me } = useApp();
+  const canTitle = useRecordKinds().has('officeStaff');
+  const hrMakes = hrKeeps(me.user) || isOwnerAdmin(me.user);
+  const moves = useLoad(() => (hrMakes ? api.staffMovements().catch(() => null) : Promise.resolve(null)), [hrMakes]);
+  return { canTitle, prep: moves.data?.canPrepare ? (moves.data.prep ?? null) : null };
+}
 type Outcome = { id: string; name: string; kind: 'done' | 'sent' | 'refused'; message?: string };
 
 /** Today in Malaysia (the server's day), for the date a transfer takes effect. */
@@ -85,7 +108,7 @@ export function StaffBulkBar({
         Untick all
       </button>
       {mode && (
-        <StaffBulkDialog
+        <StaffChangeDialog
           mode={mode}
           people={ticked}
           prep={prep}
@@ -99,7 +122,51 @@ export function StaffBulkBar({
   );
 }
 
-function StaffBulkDialog({
+/**
+ * P112: Change designation and Change company for one person, in their details (the People record and the Attendance
+ * details). The same dialog and the same server calls as the bulk bar, for a list of one; each button shows only when
+ * the server allows it and the person can be changed here.
+ */
+export function StaffPersonActions({ person, rights, titles = [], onDone }: { person: BulkPerson; rights: StaffChangeRights; titles?: string[]; onDone?: () => void }) {
+  const [mode, setMode] = useState<Mode | null>(null);
+  const title = rights.canTitle && !leftOutWhy(person, 'title');
+  const company = !!rights.prep && !leftOutWhy(person, 'company');
+  if (!rights.canTitle && !rights.prep) return null;
+  if (!title && !company) {
+    const why = leftOutWhy(person, 'title') ?? leftOutWhy(person, 'company');
+    return why ? <p className="muted small sb-person-note">{why}</p> : null;
+  }
+  return (
+    <div className="sb-person-actions">
+      {title && (
+        <button type="button" className="btn btn-sm" onClick={() => setMode('title')}>
+          <IdentificationBadgeIcon size={16} weight="bold" aria-hidden="true" />
+          Change designation
+        </button>
+      )}
+      {company && (
+        <button type="button" className="btn btn-sm" onClick={() => setMode('company')}>
+          <ArrowsLeftRightIcon size={16} weight="bold" aria-hidden="true" />
+          Change company
+        </button>
+      )}
+      {mode && (
+        <StaffChangeDialog
+          mode={mode}
+          people={[person]}
+          prep={rights.prep}
+          companyId={person.companyId}
+          titles={titles}
+          onClose={() => setMode(null)}
+          onDone={() => onDone?.()}
+        />
+      )}
+    </div>
+  );
+}
+
+/** The dialog behind both: the form, a confirmation, then each person's outcome. One person or many. */
+export function StaffChangeDialog({
   mode,
   people,
   prep,
@@ -200,6 +267,8 @@ function StaffBulkDialog({
   };
 
   const count = (k: Outcome['kind']) => outcomes.filter((o) => o.kind === k).length;
+  // P112: one person (from their details) reads as one, not as a ticked list.
+  const one = people.length === 1 ? people[0] : null;
   const heading = mode === 'title' ? 'Change designation' : 'Change company';
 
   // On the document's body, so the phone's tab bar never sits over the sheet (the page's own layers stay below it).
@@ -213,16 +282,29 @@ function StaffBulkDialog({
 
         {step === 'form' && (
           <>
-            <dl className="sb-facts">
-              <div>
-                <dt>Ticked</dt>
-                <dd className="num">{people.length}</dd>
-              </div>
-              <div>
-                <dt>{mode === 'title' ? 'Will change' : 'Will be sent'}</dt>
-                <dd className="num">{go.length}</dd>
-              </div>
-            </dl>
+            {one ? (
+              <dl className="sb-facts sb-facts-wide">
+                <div>
+                  <dt>Staff</dt>
+                  <dd data-no-translate>{one.name}</dd>
+                </div>
+                <div>
+                  <dt>{mode === 'title' ? 'Job title now' : 'Company now'}</dt>
+                  <dd data-no-translate>{mode === 'title' ? (one.jobTitle ?? '–') : (one.companyName ?? prep?.employers.find((c) => c.id === one.companyId)?.name ?? '–')}</dd>
+                </div>
+              </dl>
+            ) : (
+              <dl className="sb-facts">
+                <div>
+                  <dt>Ticked</dt>
+                  <dd className="num">{people.length}</dd>
+                </div>
+                <div>
+                  <dt>{mode === 'title' ? 'Will change' : 'Will be sent'}</dt>
+                  <dd className="num">{go.length}</dd>
+                </div>
+              </dl>
+            )}
             {out.length > 0 && <LeftOut rows={out.map((x) => ({ name: x.p.name, why: x.why! }))} />}
             {go.length > 0 && mode === 'title' && (
               <>
@@ -299,7 +381,15 @@ function StaffBulkDialog({
 
         {step === 'confirm' && (
           <>
-            <p className="sb-ask">{mode === 'title' ? 'Change the job title of these people?' : 'Send these transfers for approval?'}</p>
+            <p className="sb-ask">
+              {one
+                ? mode === 'title'
+                  ? 'Change the job title of this person?'
+                  : 'Send this transfer for approval?'
+                : mode === 'title'
+                  ? 'Change the job title of these people?'
+                  : 'Send these transfers for approval?'}
+            </p>
             <dl className="sb-facts sb-facts-wide">
               <div>
                 <dt>People</dt>
@@ -349,7 +439,7 @@ function StaffBulkDialog({
                 Back
               </button>
               <button type="button" className="btn btn-primary" onClick={() => void run()}>
-                {mode === 'title' ? 'Yes, change them' : 'Yes, send for approval'}
+                {mode === 'title' ? (one ? 'Yes, change it' : 'Yes, change them') : 'Yes, send for approval'}
               </button>
             </div>
           </>

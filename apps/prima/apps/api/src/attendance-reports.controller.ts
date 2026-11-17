@@ -251,12 +251,38 @@ export class AttendanceReportsController {
 
   /** Past attendance from the monthly reports: tiles, monthly trend, company and department breakdowns, who is often late. */
   @Get()
-  overview(@UserId() uid: string, @Query('month') month?: string, @Query('companyId') companyId?: string, @Query('department') department?: string, @Query('q') q?: string) {
+  overview(
+    @UserId() uid: string,
+    @Query('month') month?: string,
+    @Query('companyId') companyId?: string,
+    @Query('department') department?: string,
+    @Query('q') q?: string,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+  ) {
     const m = str(month, 7);
     if (m && !/^\d{4}-\d{2}$/.test(m)) refuse('The month is written YYYY-MM.');
+    // P112: a period of whole months (from, to: YYYY-MM) adds each person's months up; the service checks the order.
+    const f = str(from, 7);
+    const t = str(to, 7);
+    if ((f && !/^\d{4}-\d{2}$/.test(f)) || (t && !/^\d{4}-\d{2}$/.test(t))) refuse('The month is written YYYY-MM.');
     return mapped(
-      this.db.asUser(uid, (svc, u) => svc.attendanceReports.overview(u, { month: m || null, companyId: str(companyId, 100) || null, department: str(department, 200) || null, q: str(q, 100) })),
+      this.db.asUser(uid, (svc, u) =>
+        svc.attendanceReports.overview(u, { month: m || null, from: f || null, to: t || null, companyId: str(companyId, 100) || null, department: str(department, 200) || null, q: str(q, 100) }),
+      ),
     );
+  }
+
+  /**
+   * P112: one person's attendance over a period of days (from, to: YYYY-MM-DD, two years at most): figures, month by
+   * month, and each day. The same people see it as see that person's month (the service checks the import's company).
+   */
+  @Get('person-period')
+  personPeriod(@UserId() uid: string, @Query('importId') importId?: string, @Query('key') key?: string, @Query('from') from?: string, @Query('to') to?: string) {
+    const f = str(from, 10);
+    const t = str(to, 10);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(f) || !/^\d{4}-\d{2}-\d{2}$/.test(t)) refuse('The days are written YYYY-MM-DD.');
+    return mapped(this.db.asUser(uid, (svc, u) => svc.attendanceReports.personPeriod(u, str(importId, 100), str(key, 200), f, t)));
   }
 
   /** One person's month from a report, day by day, with their other months. */

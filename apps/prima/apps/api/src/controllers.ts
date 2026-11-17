@@ -452,6 +452,8 @@ export class OfficeController {
         // P74: the office opens Prima for its owner as Prima's top record (CEO, else COO).
         top: u.opsTier === 'ceo' ? 'ceo' : u.opsTier === 'coo' ? 'coo' : null,
         canSignIn: !accessClosed(u, today) && (!pilotSignInOnly() || pilotAdmits(u)),
+        // P112: the staff record this account belongs to, so the office can say which member a Prima person is.
+        personId: u.personId ?? null,
       };
     });
   }

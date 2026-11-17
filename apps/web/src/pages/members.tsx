@@ -4,7 +4,7 @@ import {
 } from "@phosphor-icons/react";
 import { Link } from "@tanstack/react-router";
 import { keepPreviousData, useMutation, useQuery, useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
-import { useNavigate, useSearch } from "@tanstack/react-router";
+import { useNavigate, useRouterState, useSearch } from "@tanstack/react-router";
 import { useState, type ReactNode } from "react";
 import { toast } from "sonner";
 
@@ -666,6 +666,21 @@ export function MembersTable({ control, me, withAddImport }: { control: TableCon
   const [importing, setImporting] = useState(false);
   const rows = data?.items ?? [];
   const total = data?.total ?? 0;
+  // P112: Members?q=<email>&focus=<user_id> (Prima's "Open in Members") opens that member once.
+  const focusId = useRouterState({
+    select: (s) => {
+      const f = (s.location.search as { focus?: unknown }).focus;
+      return s.location.pathname === "/settings/members" && typeof f === "string" ? f : "";
+    },
+  });
+  const [focused, setFocused] = useState("");
+  if (focusId && focused !== focusId) {
+    const hit = rows.find((m) => m.user_id === focusId);
+    if (hit) {
+      setFocused(focusId);
+      setViewing(hit);
+    }
+  }
   // The ticked people this page shows (the role dialog needs their names and roles).
   const ticked = rows.filter((m) => selected.has(m.user_id));
   const seesTwoFactor = me.permissions.includes("members.manage");

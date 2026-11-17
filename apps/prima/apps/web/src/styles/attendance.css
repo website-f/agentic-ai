@@ -662,3 +662,9 @@
     overflow-wrap: anywhere;
   }
 }
+
+/* P112: the day sheet's rules, under its figures. */
+.att-rules {
+  margin: 0;
+  max-width: 110ch;
+}

@@ -315,6 +315,131 @@ export function allowancesOf(t: AttendanceTotals): number {
   return round2(t.dayAllowances + (t.monthlyAllowances ?? 0));
 }
 
+// ---------------------------------------------------------------- P112: periods and rates
+
+/**
+ * P112 (Fitri, 17 Nov 2026: "can filter either this month, this year, KPI attendance and so on"): how the attendance
+ * figures are rated, the same on the page, in each person's details and in the tests.
+ *  - Working days: days the person was due at work, i.e. present, absent or on leave (rest days, public holidays and
+ *    days the report printed nothing for are not working days).
+ *  - Attendance rate: present days out of present plus absent days. Approved leave and MC do not count against anyone.
+ *  - Punctuality: present days without a late clock-in, out of present days.
+ * Rates are whole-number-and-one-decimal percentages; null when there is nothing to rate.
+ */
+export function attendanceRates(t: { present: number; absent: number; leave: number; lateCount: number }): { workingDays: number; rate: number | null; punctuality: number | null } {
+  const due = t.present + t.absent;
+  return {
+    workingDays: t.present + t.absent + t.leave,
+    rate: due > 0 ? Math.round((t.present / due) * 1000) / 10 : null,
+    punctuality: t.present > 0 ? Math.round(((t.present - Math.min(t.lateCount, t.present)) / t.present) * 1000) / 10 : null,
+  };
+}
+
+export type AttendancePeriodKind = 'this_month' | 'last_month' | 'this_year' | 'last_12' | 'custom';
+
+/** The first and last day of a period chip, from today (Malaysia's date). A custom period is given as it is. */
+export function attendancePeriod(kind: AttendancePeriodKind, today: IsoDate, custom?: { from: IsoDate; to: IsoDate }): { from: IsoDate; to: IsoDate } {
+  const y = Number(today.slice(0, 4));
+  const m = Number(today.slice(5, 7));
+  const first = (yy: number, mm: number) => {
+    const d = new Date(Date.UTC(yy, mm - 1, 1));
+    return d.toISOString().slice(0, 10);
+  };
+  const last = (yy: number, mm: number) => new Date(Date.UTC(yy, mm, 0)).toISOString().slice(0, 10);
+  if (kind === 'this_month') return { from: first(y, m), to: last(y, m) };
+  if (kind === 'last_month') return { from: first(y, m - 1), to: last(y, m - 1) };
+  if (kind === 'this_year') return { from: `${y}-01-01`, to: `${y}-12-31` };
+  if (kind === 'last_12') return { from: first(y, m - 11), to: last(y, m) };
+  if (!custom) throw new AttendanceReportError('Choose the first and the last day of the period.', 400, 'bad_period');
+  return custom;
+}
+
+/** The longest period one person's details cover (two years of day rows). */
+export const ATTENDANCE_PERIOD_MAX_DAYS = 731;
+
+/** Two people's (or two months') totals added together. */
+export function addTotals(a: AttendanceTotals, b: AttendanceTotals): AttendanceTotals {
+  return {
+    days: a.days + b.days,
+    present: a.present + b.present,
+    absent: a.absent + b.absent,
+    rest: a.rest + b.rest,
+    leave: a.leave + b.leave,
+    holiday: a.holiday + b.holiday,
+    lateCount: a.lateCount + b.lateCount,
+    lateMin: a.lateMin + b.lateMin,
+    earlyCount: a.earlyCount + b.earlyCount,
+    earlyMin: a.earlyMin + b.earlyMin,
+    ot: a.ot.map((h, i) => round2(h + b.ot[i])) as OtHours,
+    dayAllowances: round2(a.dayAllowances + b.dayAllowances),
+    monthlyAllowances: a.monthlyAllowances === null && b.monthlyAllowances === null ? null : round2((a.monthlyAllowances ?? 0) + (b.monthlyAllowances ?? 0)),
+    normalH: round2(a.normalH + b.normalH),
+    actualH: round2(a.actualH + b.actualH),
+  };
+}
+
+/** Leave codes that are medical (MC): medical and hospitalisation leave. */
+const MC_CODES = new Set(['ML', 'MC', 'HOSP']);
+
+/** What one saved day row was, for the day list and its filter. */
+export type AttendanceDayStatus = 'present' | 'late' | 'early' | 'absent' | 'leave' | 'mc' | 'rest' | 'holiday' | 'none';
+
+export function dayStatus(d: Pick<AttendanceDayRow, 'kind' | 'lateMin' | 'earlyMin' | 'reason'>): AttendanceDayStatus {
+  if (d.kind === 'present') return d.lateMin > 0 ? 'late' : d.earlyMin > 0 ? 'early' : 'present';
+  if (d.kind === 'leave') return MC_CODES.has((d.reason ?? '').toUpperCase().replace(/\s+/g, '')) ? 'mc' : 'leave';
+  return d.kind;
+}
+
+/** P112: one person's figures over a period, from the saved day rows (what the details drawer shows as tiles). */
+export interface AttendancePeriodKpi {
+  /** Day rows in the period. */
+  days: number;
+  workingDays: number;
+  present: number;
+  absent: number;
+  lateCount: number;
+  lateMin: number;
+  earlyCount: number;
+  earlyMin: number;
+  /** Leave other than MC. */
+  leave: number;
+  /** Medical and hospitalisation leave. */
+  mc: number;
+  rest: number;
+  holiday: number;
+  ot: OtHours;
+  otHours: number;
+  normalH: number;
+  actualH: number;
+  rate: number | null;
+  punctuality: number | null;
+}
+
+export function periodKpi(rows: Pick<AttendanceDayRow, 'kind' | 'lateMin' | 'earlyMin' | 'reason' | 'ot' | 'normalH' | 'actualH'>[]): AttendancePeriodKpi {
+  const k = { days: 0, present: 0, absent: 0, lateCount: 0, lateMin: 0, earlyCount: 0, earlyMin: 0, leave: 0, mc: 0, rest: 0, holiday: 0, ot: [0, 0, 0, 0] as OtHours, normalH: 0, actualH: 0 };
+  for (const d of rows) {
+    k.days++;
+    const st = dayStatus(d);
+    if (d.kind === 'present') {
+      k.present++;
+      if (d.lateMin > 0) {
+        k.lateCount++;
+        k.lateMin += d.lateMin;
+      }
+      if (d.earlyMin > 0) {
+        k.earlyCount++;
+        k.earlyMin += d.earlyMin;
+      }
+    } else if (st === 'absent' || st === 'leave' || st === 'mc' || st === 'rest' || st === 'holiday') k[st]++;
+    d.ot.forEach((h, i) => (k.ot[i] += h));
+    k.normalH += d.normalH;
+    k.actualH += d.actualH;
+  }
+  const ot = k.ot.map(round2) as OtHours;
+  const r = attendanceRates({ present: k.present, absent: k.absent, leave: k.leave + k.mc, lateCount: k.lateCount });
+  return { ...k, ot, otHours: round2(ot.reduce((a, b) => a + b, 0)), normalH: round2(k.normalH), actualH: round2(k.actualH), ...r };
+}
+
 /** Whether the printed totals equal the day rows (to the cent); null when none were printed. */
 export function totalsAddUp(e: Pick<ReportEmployee, 'days' | 'totals'>): boolean | null {
   if (!e.totals) return null;
@@ -434,6 +559,12 @@ export interface AttendanceKpi {
   monthlyAllowances: number;
   /** Employees whose monthly allowance block was not printed (their allowance total is the day rows only). */
   noMonthlyBlock: number;
+  /** P112: the days the people were due at work (present, absent or on leave); rest days and public holidays are not. */
+  workingDays: number;
+  /** P112: present days out of present plus absent days, in %; null when there were none (attendanceRates). */
+  rate: number | null;
+  /** P112: present days with no late clock-in, out of present days, in %; null when nobody was present. */
+  punctuality: number | null;
 }
 
 export interface AttendancePreviewCompany {
@@ -491,7 +622,7 @@ export interface AttendancePreview {
 }
 
 function kpiOf(rows: { t: AttendanceTotals }[]): AttendanceKpi {
-  const k: AttendanceKpi = { employees: rows.length, present: 0, absent: 0, leave: 0, lateCount: 0, lateMin: 0, earlyCount: 0, earlyMin: 0, ot: [0, 0, 0, 0], allowances: 0, dayAllowances: 0, monthlyAllowances: 0, noMonthlyBlock: 0 };
+  const k: AttendanceKpi = { employees: rows.length, present: 0, absent: 0, leave: 0, lateCount: 0, lateMin: 0, earlyCount: 0, earlyMin: 0, ot: [0, 0, 0, 0], allowances: 0, dayAllowances: 0, monthlyAllowances: 0, noMonthlyBlock: 0, workingDays: 0, rate: null, punctuality: null };
   for (const { t } of rows) {
     k.dayAllowances += t.dayAllowances;
     k.monthlyAllowances += t.monthlyAllowances ?? 0;
@@ -510,7 +641,7 @@ function kpiOf(rows: { t: AttendanceTotals }[]): AttendanceKpi {
   k.allowances = round2(k.allowances);
   k.dayAllowances = round2(k.dayAllowances);
   k.monthlyAllowances = round2(k.monthlyAllowances);
-  return k;
+  return { ...k, ...attendanceRates(k) };
 }
 
 /** One person's month, as the attendance view lists it. */
@@ -526,18 +657,30 @@ export interface AttendanceListRow {
   department: string;
   personId: Id | null;
   personName: string | null;
+  /** P112: the staff record's number, else the code printed on the report. */
+  staffNo: string | null;
+  /** P112: the staff record's job title, else the designation printed on the report. */
+  jobTitle: string | null;
   totals: AttendanceTotals;
   allowances: number;
+  /** One month's strip; empty when the row adds up several months (a period). */
   strip: string;
   totalsMatch: boolean | null;
+  /** P112: how many monthly reports this row adds up (1 for one month). */
+  months: number;
+  /** P112: attendance rate and punctuality, in % (attendanceRates). */
+  rate: number | null;
+  punctuality: number | null;
 }
 
 export interface AttendanceOverview {
   months: string[];
   month: string | null;
+  /** P112: the months the figures cover (from and to, YYYY-MM); null shows one month (month). */
+  period: { from: string; to: string } | null;
   companies: { id: Id; name: string }[];
   departments: string[];
-  filters: { companyId: Id | null; department: string | null; q: string };
+  filters: { companyId: Id | null; department: string | null; q: string; from: string | null; to: string | null };
   kpi: AttendanceKpi;
   trend: ({ month: string } & AttendanceKpi)[];
   byCompany: ({ id: Id; name: string } & AttendanceKpi)[];
@@ -561,6 +704,38 @@ export interface AttendanceOverview {
 }
 
 const NO_DEPARTMENT = 'Not recorded';
+
+const rateOf = (t: AttendanceTotals) => {
+  const r = attendanceRates(t);
+  return { rate: r.rate, punctuality: r.punctuality };
+};
+
+/**
+ * P112: the months of a period added up per person (the staff record, else the employee on the report), newest month
+ * first for the name, designation and the import the details open from.
+ */
+function byPerson(rows: AttendanceListRow[]): AttendanceListRow[] {
+  const out = new Map<string, AttendanceListRow>();
+  for (const r of [...rows].sort((a, b) => b.month.localeCompare(a.month))) {
+    const k = `${r.companyId}|${r.personId ?? `key:${r.key}`}`;
+    const had = out.get(k);
+    if (!had) {
+      out.set(k, { ...r });
+      continue;
+    }
+    const totals = addTotals(had.totals, r.totals);
+    out.set(k, {
+      ...had,
+      totals,
+      allowances: allowancesOf(totals),
+      strip: '',
+      totalsMatch: had.totalsMatch === false || r.totalsMatch === false ? false : had.totalsMatch ?? r.totalsMatch,
+      months: had.months + 1,
+      ...rateOf(totals),
+    });
+  }
+  return [...out.values()];
+}
 
 // ---------------------------------------------------------------- the service
 
@@ -885,7 +1060,19 @@ export class AttendanceReportService {
   }
 
   /** Every month's rows for the companies this person sees, with matches resolved and filters applied. */
-  async overview(user: User, f: { month?: string | null; companyId?: Id | null; department?: string | null; q?: string | null } = {}): Promise<AttendanceOverview> {
+  async overview(
+    user: User,
+    f: { month?: string | null; from?: string | null; to?: string | null; companyId?: Id | null; department?: string | null; q?: string | null } = {},
+  ): Promise<AttendanceOverview> {
+    // P112: a period of whole months (from and to, YYYY-MM) adds each person's months up; without one, one month as before.
+    let period: { from: string; to: string } | null = null;
+    if (f.from || f.to) {
+      const from = f.from || f.to!;
+      const to = f.to || f.from!;
+      if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(from) || !/^\d{4}-(0[1-9]|1[0-2])$/.test(to) || from > to)
+        throw new AttendanceReportError('Choose the period by its first and last month, the first one not after the last.', 400, 'bad_period');
+      period = { from, to };
+    }
     const companies = await this.viewCompanies(user);
     const importCompanies = await this.importCompanies(user);
     const nameOf = new Map(companies.map((c) => [c.id, c.name]));
@@ -918,10 +1105,14 @@ export class AttendanceReportService {
           department: p?.department || e.department || e.designation || NO_DEPARTMENT,
           personId: pid,
           personName: p?.name ?? null,
+          staffNo: p?.staffNo || e.empCode,
+          jobTitle: p?.jobTitle || e.designation,
           totals: e.totals,
           allowances: allowancesOf(e.totals),
           strip: e.strip,
           totalsMatch: e.totalsMatch,
+          months: 1,
+          ...rateOf(e.totals),
         });
       }
     const q = (f.q ?? '').trim().toUpperCase();
@@ -931,8 +1122,10 @@ export class AttendanceReportService {
         (!q || r.name.toUpperCase().includes(q) || (r.personName ?? '').toUpperCase().includes(q) || (r.empCode ?? '').toUpperCase().includes(q)),
     );
     const months = [...new Set(all.map((r) => r.month))].sort().reverse();
-    const month = f.month && months.includes(f.month) ? f.month : (months[0] ?? null);
-    const inMonth = filtered.filter((r) => r.month === month);
+    const inPeriod = (m: string) => !!period && m >= period.from && m <= period.to;
+    const month = period ? (months.find(inPeriod) ?? null) : f.month && months.includes(f.month) ? f.month : (months[0] ?? null);
+    const covers = (m: string) => (period ? inPeriod(m) : m === month);
+    const inMonth = period ? byPerson(filtered.filter((r) => covers(r.month))) : filtered.filter((r) => r.month === month);
     const withT = (rs: AttendanceListRow[]) => rs.map((r) => ({ t: r.totals }));
     const group = <K extends string>(rs: AttendanceListRow[], by: (r: AttendanceListRow) => K) => {
       const m = new Map<K, AttendanceListRow[]>();
@@ -949,14 +1142,15 @@ export class AttendanceReportService {
       .sort((a, b) => b.totals.lateCount - a.totals.lateCount || b.totals.lateMin - a.totals.lateMin)
       .slice(0, 15);
     const unmatched = imports
-      .filter((i) => !month || i.month === month)
+      .filter((i) => (period ? covers(i.month) : !month || i.month === month))
       .reduce((n, i) => n + i.employees.filter((e) => !e.personId && !memory.has(`${i.companyId}|${e.key}`)).length, 0);
     return {
       months,
       month,
+      period,
       companies: companies.filter((c) => imports.some((i) => i.companyId === c.id) || f.companyId === c.id).map((c) => ({ id: c.id, name: c.name })),
-      departments: [...new Set(all.filter((r) => r.month === month).map((r) => r.department))].sort(),
-      filters: { companyId: f.companyId ?? null, department: f.department ?? null, q: f.q ?? '' },
+      departments: [...new Set(all.filter((r) => covers(r.month)).map((r) => r.department))].sort(),
+      filters: { companyId: f.companyId ?? null, department: f.department ?? null, q: f.q ?? '', from: period?.from ?? null, to: period?.to ?? null },
       kpi: kpiOf(withT(inMonth)),
       trend,
       byCompany,
@@ -964,7 +1158,7 @@ export class AttendanceReportService {
       oftenLate,
       rows: inMonth.sort((a, b) => a.name.localeCompare(b.name)).slice(0, 3000),
       imports: imports
-        .filter((i) => !month || i.month === month)
+        .filter((i) => (period ? covers(i.month) : !month || i.month === month))
         .map((i) => ({ id: i.id, companyId: i.companyId, companyName: nameOf.get(i.companyId) ?? i.companyId, month: i.month, fileName: i.fileName, at: i.at, by: i.by, counts: i.counts, unreadable: i.unreadable })),
       unmatched,
       canImport: importCompanies.length > 0,
@@ -1004,6 +1198,80 @@ export class AttendanceReportService {
       person: person ? { id: person.id, name: person.name, staffNo: person.staffNo, department: person.department ?? null, jobTitle: person.jobTitle ?? null } : null,
       days: days.map((d) => ({ ...d, reasonLabel: reasonLabel(d.reason) })),
       history,
+    };
+  }
+
+  /**
+   * P112 (Fitri, 17 Nov 2026: "i click any user and saw its details, can you make it seamless, can filter either this
+   * month, this year, KPI attendance and so on"): one person's attendance over a period of days, from every monthly
+   * report of their company that covers it: the figures as tiles, month by month, and each day. Who may see it is who
+   * may see that report (the same check as one month's details: importers and whoever sees the company's pay), and
+   * only the import's own company is read, so the company wall holds.
+   */
+  async personPeriod(user: User, importId: Id, key: string, from: IsoDate, to: IsoDate) {
+    const iso = /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/;
+    if (!iso.test(from) || !iso.test(to) || from > to)
+      throw new AttendanceReportError('Choose the period by its first and last day, the first one not after the last.', 400, 'bad_period');
+    if ((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86_400_000 + 1 > ATTENDANCE_PERIOD_MAX_DAYS)
+      throw new AttendanceReportError('Choose a period of two years or less.', 400, 'bad_period');
+    const i = await this.importFor(user, importId);
+    const e = i.employees.find((x) => x.key === key);
+    if (!e) throw new AttendanceReportError('That employee is not on this import.', 404, 'not_found');
+    const memory = new Map((await this.store.list('attendanceMatches', { companyId: i.companyId })).map((m) => [m.key, m.personId]));
+    const personId = e.personId ?? memory.get(key) ?? null;
+    const [person, company] = await Promise.all([personId ? this.store.get('people', personId) : Promise.resolve(undefined), this.store.get('companies', i.companyId)]);
+    // Every month of this person at this company: the same employee on the report, or the same staff record.
+    const theirs = (await this.activeImports([i.companyId]))
+      .map((x) => ({ x, emp: x.employees.find((y) => y.key === key || (!!personId && (y.personId ?? memory.get(y.key)) === personId)) }))
+      .filter((h): h is { x: AttendanceImport; emp: AttendanceEmployee } => !!h.emp)
+      .sort((a, b) => a.x.month.localeCompare(b.x.month));
+    const ids: Id[] = [];
+    for (const { x, emp } of theirs)
+      for (const d of datesOfMonth(x.month)) if (d >= from && d <= to) for (let q = 0; q < (emp.seqs || 1); q++) ids.push(dayRowId(x.id, emp.idx, d, q));
+    const rows = ids.length
+      ? (await this.store.list('attendanceDays', { id: ids, companyId: i.companyId })).sort((a, b) => a.date.localeCompare(b.date) || a.seq - b.seq)
+      : [];
+    const monthsIn = [...new Set(rows.map((d) => d.month))].sort();
+    return {
+      importId: i.id,
+      key,
+      companyId: i.companyId,
+      companyName: company?.name ?? i.companyId,
+      period: { from, to },
+      employee: { name: e.name, empCode: e.empCode, designation: e.designation, department: e.department },
+      person: person
+        ? {
+            id: person.id,
+            name: person.name,
+            staffNo: person.staffNo,
+            jobTitle: person.jobTitle ?? null,
+            department: person.department ?? null,
+            companyId: person.companyId,
+            role: person.role,
+            status: person.status,
+            leaving: !!person.leaving,
+          }
+        : null,
+      /** Every month the reports have for this person (for the period picker's hint). */
+      reportMonths: theirs.map((t) => t.x.month),
+      kpi: periodKpi(rows),
+      months: monthsIn.map((m) => ({ month: m, ...periodKpi(rows.filter((d) => d.month === m)) })),
+      days: rows.map((d) => ({
+        id: d.id,
+        date: d.date,
+        status: dayStatus(d),
+        in: d.in,
+        out: d.out,
+        clocks: d.clocks ?? [],
+        shift: d.shift,
+        normalH: d.normalH,
+        actualH: d.actualH,
+        lateMin: d.lateMin,
+        earlyMin: d.earlyMin,
+        otHours: round2(d.ot.reduce((a, b) => a + b, 0)),
+        reason: d.reason,
+        reasonLabel: reasonLabel(d.reason),
+      })),
     };
   }
 

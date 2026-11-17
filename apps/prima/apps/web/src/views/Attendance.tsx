@@ -57,14 +57,10 @@ export function AttendanceView() {
 
   return (
     <div className="page att">
+      {/* P112: a short header; the rules each section follows are shown in that section. */}
       <PageHead
         title="Attendance"
-        sub={
-          <>
-            The PIC is alerted when a guard is absent or a clock-in fails a check, every {a?.repeatMin ?? 5} minutes until someone acts. Lock each day after
-            checking it. Nothing here pays, deducts or disciplines anyone automatically. Clock-ins come only from the site device with a face check; they are not typed in here. Shifts are added on the Roster.
-          </>
-        }
+        sub="Who came, who was late and who was absent: the day sheet from the site devices, absences, leave, and each person's attendance from the monthly reports."
         actions={<ImportTimesheetButton onDone={() => setTab('reports')} />}
       />
 
@@ -80,7 +76,7 @@ export function AttendanceView() {
           Leave requests
         </button>
         <button role="tab" aria-selected={tab === 'reports'} onClick={() => setTab('reports')}>
-          Monthly reports
+          Staff attendance
         </button>
       </div>
 
@@ -89,6 +85,7 @@ export function AttendanceView() {
       {tab === 'day' && (
         <DaySheet
           onOpen={setOpen}
+          repeatMin={a?.repeatMin ?? 5}
           alerting={a && a.open.length > 0 ? <AlertingNow items={a.open} every={a.repeatMin} onOpen={setOpen} /> : null}
         />
       )}
@@ -192,7 +189,7 @@ function Guard({ name, staffNo, children }: { name: string | null | undefined; s
   );
 }
 
-function DaySheet({ onOpen, alerting }: { onOpen: (i: AttendanceIssueView) => void; alerting: ReactNode }) {
+function DaySheet({ onOpen, alerting, repeatMin }: { onOpen: (i: AttendanceIssueView) => void; alerting: ReactNode; repeatMin: number }) {
   const { companyId, me } = useApp();
   const today = dateOf(me.now);
   const [date, setDate] = useState(today);
@@ -237,6 +234,10 @@ function DaySheet({ onOpen, alerting }: { onOpen: (i: AttendanceIssueView) => vo
       )}
 
       {alerting}
+      <p className="muted small att-rules">
+        The PIC is alerted when a guard is absent or a clock-in fails a check, every {repeatMin} minutes until someone acts. Lock each day after
+        checking it. Nothing here pays, deducts or disciplines anyone automatically. Clock-ins come only from the site device with a face check; they are not typed in here. Shifts are added on the Roster.
+      </p>
 
       <Toolbar
         end={

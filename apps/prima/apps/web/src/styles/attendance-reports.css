@@ -864,3 +864,54 @@
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   }
 }
+
+/* P112: the bar above the figures: company and department, the import buttons, then the period chips. */
+.ar-filters {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  background: var(--surface);
+  min-width: 0;
+}
+.ar-filters-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 12px;
+}
+.ar-filters-field {
+  flex: 0 1 260px;
+  min-width: 180px;
+}
+.ar-filters-end {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-left: auto;
+}
+.ar-filters-note {
+  margin: 0;
+}
+@media (max-width: 640px) {
+  .ar-filters {
+    padding: 12px;
+  }
+  .ar-filters-field {
+    flex: 1 1 100%;
+  }
+  .ar-filters-end {
+    margin-left: 0;
+  }
+}
+/* P112: the period's seven figures on one row on a computer. */
+.ar-dash > .k-stats {
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+}
+@media (max-width: 640px) {
+  .ar-dash > .k-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

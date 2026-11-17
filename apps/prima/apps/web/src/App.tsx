@@ -938,7 +938,7 @@ function Shell({ me, onSignOut, onReset }: { me: Me; onSignOut: () => void; onRe
       'clock',
       'surveys', 'quality'
     ],
-    hr: ['hr', 'ja', 'people', 'socso', 'staffclock', 'hostels', 'claims', 'staffpay', 'sitehours', 'guardpay', 'advances', 'arrivalcash', 'loans', 'statutory', 'items', 'reports', 'meetings', 'clock', 'quality'],
+    hr: ['hr', 'ja', 'people', 'attendance', 'socso', 'staffclock', 'hostels', 'claims', 'staffpay', 'sitehours', 'guardpay', 'advances', 'arrivalcash', 'loans', 'statutory', 'items', 'reports', 'meetings', 'clock', 'quality'],
     // Arms Control sees arms matters only (Fauzan, 25 Oct 2026).
     arms_control: ['arms', 'cms', 'cases', 'audit', 'reports', 'meetings', 'clock', 'cmsready'],
     cms: ['cms', 'ja', 'arms', 'fleet', 'clock', 'cmsready'],

@@ -4,7 +4,7 @@
 // department breakdowns, who is often late, and each person's month as a calendar.
 import { Select } from '../SearchSelect';
 import { useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react';
-import { DataTable } from '../DataTable';
+import { DataTable, type DtColumn } from '../DataTable';
 import {
   ArrowsClockwiseIcon,
   CalendarCheckIcon,
@@ -15,21 +15,23 @@ import {
   HourglassMediumIcon,
   SignOutIcon,
   UploadSimpleIcon,
+  GaugeIcon,
   UserMinusIcon,
   UserSwitchIcon,
+  UsersThreeIcon,
 } from '@phosphor-icons/react';
-import { ATTENDANCE_CHECK_LABEL, attendanceFromTable, cleanGrid, parseCsv, readXlsx, reasonLabel, timesheetColumns, type AttendanceCheckKind } from '@prima/core';
+import { ATTENDANCE_CHECK_LABEL, attendanceFromTable, cleanGrid, parseCsv, readXlsx, timesheetColumns, type AttendanceCheckKind } from '@prima/core';
 import { api } from '../api';
 import type {
   AttendanceOverviewView,
-  AttendancePersonView,
   AttendancePreview,
   AttendanceStaffHit,
   AttendanceUnmatched,
   AttendanceUploadView,
 } from '../api/attendance-reports';
-import { Card, Empty, Person, Search, Stat, Stats, Toolbar } from '../kit';
+import { Card, Empty, Person, Search, Stat, Stats } from '../kit';
 import { Chip, Drawer, ErrorNotice, Loading, RefreshContext, dateLabel, dateTimeLabel, useLoad } from '../ui';
+import { AttendancePersonDrawer, PeriodPicker, pct, type PeriodChoice } from './AttendancePerson';
 import '../styles/attendance-reports.css';
 
 const client = api.attendanceReports;
@@ -80,18 +82,24 @@ function useWidth<T extends HTMLElement>(): [RefObject<T>, number] {
 
 // ---------------------------------------------------------------- the screen
 
+/**
+ * P112 (Fitri, 17 Nov 2026: "organize the attendance page to be more nicer and readable"): one bar to choose the company,
+ * department and period (whole months), the period's figures as tiles, then everyone as a data table (search, sort,
+ * filters, pages) that opens each person's details; the trend, breakdowns and files follow.
+ */
 export function AttendanceReports({ compact = false }: { compact?: boolean }) {
-  const [month, setMonth] = useState<string | null>(null);
+  const [period, setPeriod] = useState<PeriodChoice>({ kind: 'latest', from: '', to: '' });
   const [companyId, setCompanyId] = useState<string | null>(null);
   const [department, setDepartment] = useState<string | null>(null);
-  const [q, setQ] = useState('');
-  const query = useDebounced(q, 300);
   const [importing, setImporting] = useState(false);
   const [matching, setMatching] = useState(false);
   const [open, setOpen] = useState<{ importId: string; key: string } | null>(null);
   const { data, error, loading } = useLoad(
-    () => (client ? client.overview({ month, companyId, department, q: query }) : Promise.resolve(null)),
-    [month, companyId, department, query],
+    () =>
+      client
+        ? client.overview(period.kind === 'latest' ? { month: null, companyId, department } : { from: period.from, to: period.to, companyId, department })
+        : Promise.resolve(null),
+    [period.kind, period.from, period.to, companyId, department],
   );
 
   if (!client)
@@ -102,55 +110,61 @@ export function AttendanceReports({ compact = false }: { compact?: boolean }) {
     );
 
   const o = data;
+  // The period the page shows, in months: the chip's own, or the latest month the reports have.
+  const shown: PeriodChoice = period.kind === 'latest' ? { kind: 'latest', from: o?.month ?? '', to: o?.month ?? '' } : period;
+  const latest = o?.months[0] ?? null;
   return (
     <div className="ar" data-compact={compact || undefined}>
-      <Toolbar
-        end={
-          o && (
+      <section className="ar-filters" aria-label="What to show">
+        <div className="ar-filters-row">
+          {o && o.months.length > 0 && (
             <>
+              <label className="field ar-filters-field">
+                <span className="label">Company</span>
+                <Select className="select" aria-label="Company" value={companyId ?? ''} onChange={(e) => (setCompanyId(e.target.value || null), setDepartment(null))}>
+                  <option value="">All companies</option>
+                  {o.companies.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+                </Select>
+              </label>
+              <label className="field ar-filters-field">
+                <span className="label">Department</span>
+                <Select className="select" aria-label="Department" value={department ?? ''} onChange={(e) => setDepartment(e.target.value || null)}>
+                  <option value="">All departments</option>
+                  {o.departments.map((d) => (
+                    <option key={d} value={d}>
+                      {d}
+                    </option>
+                  ))}
+                </Select>
+              </label>
+            </>
+          )}
+          {o && (
+            <span className="ar-filters-end">
               {o.unmatched > 0 && o.canImport && (
                 <button type="button" className="btn btn-sm" onClick={() => setMatching(true)}>
                   <UserSwitchIcon size={16} /> Match to staff <span className="ar-count">{o.unmatched}</span>
                 </button>
               )}
-              {o.canImport && (
-                <button type="button" className="btn btn-primary btn-sm" onClick={() => setImporting(true)}>
-                  <UploadSimpleIcon size={16} /> Import timesheet (PDF, Excel, CSV)
-                </button>
-              )}
-            </>
-          )
-        }
-      >
+              {/* The page head has Import timesheet; the bar keeps only matching. */}
+            </span>
+          )}
+        </div>
         {o && o.months.length > 0 && (
           <>
-            <Select className="select" aria-label="Month" value={o.month ?? ''} onChange={(e) => setMonth(e.target.value || null)}>
-              {o.months.map((m) => (
-                <option key={m} value={m}>
-                  {monthLabel(m, true)}
-                </option>
-              ))}
-            </Select>
-            <Select className="select" aria-label="Company" value={companyId ?? ''} onChange={(e) => (setCompanyId(e.target.value || null), setDepartment(null))}>
-              <option value="">All companies</option>
-              {o.companies.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
-            </Select>
-            <Select className="select" aria-label="Department" value={department ?? ''} onChange={(e) => setDepartment(e.target.value || null)}>
-              <option value="">All departments</option>
-              {o.departments.map((d) => (
-                <option key={d} value={d}>
-                  {d}
-                </option>
-              ))}
-            </Select>
-            <Search value={q} onChange={setQ} placeholder="Search name or staff no" />
+            <PeriodPicker key={period.kind} value={shown} onChange={setPeriod} unit="month" latest={latest} withLatest />
+            <p className="muted small ar-filters-note">
+              <span>Showing</span> <strong>{periodText(shown)}</strong>
+              {' · '}
+              <span>Reports cover</span> {monthLabel(o.months[o.months.length - 1])} – {monthLabel(o.months[0])}
+            </p>
           </>
         )}
-      </Toolbar>
+      </section>
 
       {error && <ErrorNotice error={error} />}
       {!o && !error && <Loading what="attendance reports" />}
@@ -176,28 +190,109 @@ export function AttendanceReports({ compact = false }: { compact?: boolean }) {
 
       {importing && <ImportDrawer onClose={() => setImporting(false)} />}
       {matching && <MatchDrawer onClose={() => setMatching(false)} />}
-      {open && <PersonDrawer importId={open.importId} k={open.key} onClose={() => setOpen(null)} />}
+      {open && (
+        <AttendancePersonDrawer
+          importId={open.importId}
+          k={open.key}
+          initial={shown.from ? shown : { kind: 'latest', from: latest ?? '', to: latest ?? '' }}
+          latest={latest}
+          onClose={() => setOpen(null)}
+        />
+      )}
     </div>
   );
 }
 
+/** "October 2026", or "Jan 2026 – Oct 2026" for a period of months. */
+function periodText(p: { from: string; to: string }): string {
+  if (!p.from) return '';
+  return p.from === p.to ? monthLabel(p.from, true) : `${monthLabel(p.from)} – ${monthLabel(p.to)}`;
+}
+
+type Row = AttendanceOverviewView['rows'][number];
+/** The Attendance filter: a row is in every group it belongs to. */
+const ATT_GROUPS = [
+  { value: 'absent', label: 'Absent at least once' },
+  { value: 'late', label: 'Late at least once' },
+  { value: 'clean', label: 'No absence or lateness' },
+];
+const attGroups = (r: Row): string[] => {
+  const g: string[] = [];
+  if (r.totals.absent > 0) g.push('absent');
+  if (r.totals.lateCount > 0) g.push('late');
+  if (!g.length) g.push('clean');
+  return g;
+};
+
 function Dashboard({ o, busy, compact, onOpen }: { o: AttendanceOverviewView; busy: boolean; compact: boolean; onOpen: (x: { importId: string; key: string }) => void }) {
   const k = o.kpi;
   const ot = otSum(k.ot);
+  const multi = !!o.period && o.period.from !== o.period.to;
+  const when = o.period ? periodText(o.period) : o.month ? monthLabel(o.month, true) : '';
+  const columns: DtColumn<Row>[] = [
+    {
+      id: 'person',
+      label: 'Name',
+      value: (r) => r.personName ?? r.name,
+      phone: 'title',
+      render: (r) => (
+        <Person
+          name={r.personName ?? r.name}
+          size={30}
+          sub={
+            <>
+              {r.staffNo && <span className="mono">{r.staffNo}</span>}
+              {!r.personId && (
+                <>
+                  {r.staffNo && ' · '}
+                  <span className="ar-unmatched">not matched</span>
+                </>
+              )}
+            </>
+          }
+        />
+      ),
+    },
+    // The staff number has its own column for Export and sorting (the table shows it under the name).
+    { id: 'staffNo', label: 'Staff no', value: (r) => r.staffNo ?? '', hideBelow: 100000, phone: 'hidden' },
+    { id: 'title', label: 'Designation', value: (r) => r.jobTitle ?? '', phone: 'sub', hideBelow: 900 },
+    // The reports name the company only; the site is not on them.
+    { id: 'company', label: 'Company', value: (r) => r.companyName, hideBelow: 1100 },
+    ...(multi ? [] : [{ id: 'month', label: 'Month', phone: 'hidden' as const, hideBelow: 1500, render: (r: Row) => <span className="ar-strip-cell"><Strip strip={r.strip} /></span> }]),
+    { id: 'present', label: 'Present', value: (r) => r.totals.present, sort: 'number' },
+    {
+      id: 'absent',
+      label: 'Absent',
+      value: (r) => r.totals.absent,
+      sort: 'number',
+      render: (r) => <span className="ar-fig" data-tone={r.totals.absent ? 'crit' : undefined}>{r.totals.absent}</span>,
+    },
+    {
+      id: 'late',
+      label: 'Late',
+      value: (r) => r.totals.lateCount,
+      sort: 'number',
+      render: (r) => <span className="ar-fig" data-tone={r.totals.lateCount ? 'warn' : undefined}>{r.totals.lateCount}</span>,
+    },
+    { id: 'rate', label: 'Rate', value: (r) => r.rate, sort: 'number', render: (r) => <span className="ar-fig">{pct(r.rate)}</span> },
+    { id: 'ot', label: 'OT h', value: (r) => otSum(r.totals.ot), sort: 'number', hideBelow: 1280, render: (r) => nf(otSum(r.totals.ot), 1) },
+    { id: 'allowances', label: 'Allowances', value: (r) => r.allowances, sort: 'number', hideBelow: 1440, render: (r) => nf(r.allowances, 2) },
+  ];
   return (
     <div className="ar-dash" data-busy={busy || undefined}>
       <Stats>
-        <Stat label="Present days" value={nf(k.present)} icon={<CalendarCheckIcon size={16} />} tone="ok" note={`${nf(k.employees)} people · ${o.month ? monthLabel(o.month) : ''}`} />
-        <Stat label="Late" value={nf(k.lateCount)} icon={<ClockCountdownIcon size={16} />} tone={k.lateCount ? 'warn' : 'ok'} note={k.lateMin ? `${hm(k.lateMin)} in all` : 'Nobody late'} />
-        <Stat label="Early outs" value={nf(k.earlyCount)} icon={<SignOutIcon size={16} />} tone={k.earlyCount ? 'warn' : 'ok'} note={k.earlyMin ? `${hm(k.earlyMin)} in all` : undefined} />
-        <Stat
-          label="Overtime hours"
-          value={nf(ot, 1)}
-          icon={<HourglassMediumIcon size={16} />}
-          tone="info"
-          note={k.ot.map((h, i) => `${RATES[i]}×: ${nf(h, 1)}`).join(' · ')}
-        />
+        <Stat label="People" value={nf(k.employees)} icon={<UsersThreeIcon size={16} />} tone="neutral" note={`${nf(k.workingDays)} working days`} />
+        <Stat label="Present days" value={nf(k.present)} icon={<CalendarCheckIcon size={16} />} tone="ok" />
         <Stat label="Absences" value={nf(k.absent)} icon={<UserMinusIcon size={16} />} tone={k.absent ? 'crit' : 'ok'} note={k.leave ? `${nf(k.leave)} leave days besides` : undefined} />
+        <Stat
+          label="Late"
+          value={nf(k.lateCount)}
+          icon={<ClockCountdownIcon size={16} />}
+          tone={k.lateCount ? 'warn' : 'ok'}
+          note={[k.lateMin ? `${hm(k.lateMin)} in all` : 'Nobody late', k.earlyCount ? `${nf(k.earlyCount)} early outs` : ''].filter(Boolean).join(' · ')}
+        />
+        <Stat label="Attendance rate" value={pct(k.rate)} icon={<GaugeIcon size={16} />} tone={k.rate === null ? 'neutral' : 'info'} note={`Punctuality ${pct(k.punctuality)}`} />
+        <Stat label="Overtime hours" value={nf(ot, 1)} icon={<HourglassMediumIcon size={16} />} tone="info" note={k.ot.map((h, i) => `${RATES[i]}×: ${nf(h, 1)}`).join(' · ')} />
         <Stat
           label="Allowances"
           value={rm(k.allowances)}
@@ -207,13 +302,45 @@ function Dashboard({ o, busy, compact, onOpen }: { o: AttendanceOverviewView; bu
         />
       </Stats>
 
+      <Card title="Staff attendance" sub={`${when} · select a person for their details`} actions={multi ? undefined : <Legend />} flush>
+        {/* P112: everyone in the period as a data table: search, sort by any figure, filters, pages; a row opens the
+            person's details with their own period chips. */}
+        <div className="ar-dt">
+          <DataTable
+            label="Staff attendance"
+            stateKey="attendance.reports.people"
+            rows={o.rows}
+            rowKey={(r) => r.importId + r.key}
+            searchPlaceholder="Search name, staff no or designation"
+            searchText={(r) => `${r.name} ${r.personName ?? ''} ${r.staffNo ?? ''} ${r.empCode ?? ''} ${r.jobTitle ?? ''}`}
+            onRowClick={(r) => onOpen({ importId: r.importId, key: r.key })}
+            empty={<div className="empty">Nobody matches these filters.</div>}
+            filters={[
+              { id: 'att', label: 'Attendance', value: attGroups, options: ATT_GROUPS },
+              { id: 'company', label: 'Company', value: (r) => r.companyName },
+              { id: 'title', label: 'Designation', value: (r) => r.jobTitle ?? '' },
+              {
+                id: 'matched',
+                label: 'Staff record',
+                value: (r) => (r.personId ? 'matched' : 'unmatched'),
+                options: [
+                  { value: 'matched', label: 'Matched' },
+                  { value: 'unmatched', label: 'Not matched' },
+                ],
+              },
+            ]}
+            columns={columns}
+          />
+        </div>
+      </Card>
+
       <div className="ar-grid">
-        <Card title="Month by month" sub={o.filters.companyId || o.filters.department || o.filters.q ? 'For the filters chosen' : 'Every company you see'}>
+        <Card title="Month by month" sub={o.filters.companyId || o.filters.department ? 'For the company and department chosen' : 'Every company you see'}>
           <TrendCharts trend={o.trend} current={o.month} />
         </Card>
-        <Card title="Who is often late" sub={o.month ? monthLabel(o.month, true) : undefined} flush>
+        <Card title="Who is often late" sub={when} flush>
           {o.oftenLate.length === 0 ? (
-            <div className="empty">Nobody was late this month.</div>
+            <div className="empty">Nobody was late in this period.</div>
           ) : (
             <ol className="ar-late">
               {o.oftenLate.slice(0, compact ? 6 : 15).map((r, i) => (
@@ -224,7 +351,7 @@ function Dashboard({ o, busy, compact, onOpen }: { o: AttendanceOverviewView; bu
                       <strong>{r.totals.lateCount}×</strong>
                       <span className="muted small">{hm(r.totals.lateMin)}</span>
                     </span>
-                    <Strip strip={r.strip} />
+                    {r.strip && <Strip strip={r.strip} />}
                   </button>
                 </li>
               ))}
@@ -244,95 +371,18 @@ function Dashboard({ o, busy, compact, onOpen }: { o: AttendanceOverviewView; bu
         </div>
       )}
 
-      <Card
-        title="Everyone this month"
-        sub={`${o.rows.length} ${o.rows.length === 1 ? 'person' : 'people'} · select one for their calendar`}
-        actions={<Legend />}
-        flush
-      >
-        {/* P107: a data table in place of "Show more": sort by any figure, pages, matched / not matched. The month,
-            company, department and name search above still ask the server, so the figures above follow them. */}
-        <div className="ar-dt">
-          <DataTable
-            label="Everyone this month"
-            stateKey="attendance.reports.people"
-            rows={o.rows}
-            rowKey={(r) => r.importId + r.key}
-            noSearch
-            onRowClick={(r) => onOpen({ importId: r.importId, key: r.key })}
-            empty={<div className="empty">Nobody matches these filters.</div>}
-            filters={[
-              {
-                id: 'matched',
-                label: 'Staff record',
-                value: (r) => (r.personId ? 'matched' : 'unmatched'),
-                options: [
-                  { value: 'matched', label: 'Matched' },
-                  { value: 'unmatched', label: 'Not matched' },
-                ],
-              },
-            ]}
-            columns={[
-              {
-                id: 'person',
-                label: 'Person',
-                value: (r) => r.personName ?? r.name,
-                phone: 'title',
-                render: (r) => (
-                  <Person
-                    name={r.personName ?? r.name}
-                    size={30}
-                    sub={
-                      <>
-                        {r.empCode && <span className="mono">{r.empCode}</span>}
-                        {r.empCode && ' · '}
-                        {r.department}
-                        {!r.personId && (
-                          <>
-                            {' · '}
-                            <span className="ar-unmatched">not matched</span>
-                          </>
-                        )}
-                      </>
-                    }
-                  />
-                ),
-              },
-              { id: 'month', label: 'Month', phone: 'hidden', hideBelow: 1100, render: (r) => <span className="ar-strip-cell"><Strip strip={r.strip} /></span> },
-              { id: 'present', label: 'Present', value: (r) => r.totals.present, sort: 'number' },
-              {
-                id: 'late',
-                label: 'Late',
-                value: (r) => r.totals.lateCount,
-                sort: 'number',
-                render: (r) => <span className="ar-fig" data-tone={r.totals.lateCount ? 'warn' : undefined}>{r.totals.lateCount}</span>,
-              },
-              {
-                id: 'absent',
-                label: 'Absent',
-                value: (r) => r.totals.absent,
-                sort: 'number',
-                render: (r) => <span className="ar-fig" data-tone={r.totals.absent ? 'crit' : undefined}>{r.totals.absent}</span>,
-              },
-              { id: 'ot', label: 'OT h', value: (r) => otSum(r.totals.ot), sort: 'number', hideBelow: 1200, render: (r) => nf(otSum(r.totals.ot), 1) },
-              { id: 'allowances', label: 'Allowances', value: (r) => r.allowances, sort: 'number', hideBelow: 1280, render: (r) => nf(r.allowances, 2) },
-            ]}
-          />
-        </div>
-      </Card>
-
-      {!compact && <ImportsCard imports={o.imports} />}
+      {!compact && <ImportsCard imports={o.imports} multi={multi} />}
     </div>
   );
 }
 
-function ImportsCard({ imports }: { imports: AttendanceOverviewView['imports'] }) {
+function ImportsCard({ imports, multi }: { imports: AttendanceOverviewView['imports']; multi: boolean }) {
   if (!imports.length) return null;
   return (
-    <Card title="Reports this month" sub="Each saved file, with any pages the reader could not read" flush>
+    <Card title={multi ? 'Reports in this period' : 'Reports this month'} sub="Each saved file, with any pages the reader could not read" flush>
       {/* P107: the month's files as a data table (search, company and "pages unreadable" filters, sort, pages). */}
       <DataTable
-        label="Reports this month"
+        label="Reports"
         stateKey="attendance.reports.files"
         rows={imports}
         rowKey={(i) => i.id}
@@ -598,163 +648,6 @@ function OtBars({ trend, current }: { trend: AttendanceOverviewView['trend']; cu
           </span>
         )}
       </div>
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------- one person's month
-
-function PersonDrawer({ importId, k, onClose }: { importId: string; k: string; onClose: () => void }) {
-  const { data, error } = useLoad(() => client!.person(importId, k), [importId, k]);
-  const p = data;
-  return (
-    <Drawer
-      title={p ? (p.person?.name ?? p.employee.name) : 'Attendance'}
-      sub={p ? `${monthLabel(p.month, true)}${p.employee.empCode ? ` · ${p.employee.empCode}` : ''}${p.employee.designation ? ` · ${p.employee.designation}` : ''}` : undefined}
-      onClose={onClose}
-    >
-      {error && <ErrorNotice error={error} />}
-      {!p && !error && <Loading what="the month" />}
-      {p && <PersonMonth p={p} />}
-    </Drawer>
-  );
-}
-
-function PersonMonth({ p }: { p: AttendancePersonView }) {
-  const t = p.employee.totals;
-  const [day, setDay] = useState<string | null>(null);
-  const first = new Date(`${p.month}-01T00:00:00Z`).getUTCDay();
-  const len = p.employee.strip.length;
-  const byDate = new Map<string, AttendancePersonView['days']>();
-  for (const d of p.days) byDate.set(d.date, [...(byDate.get(d.date) ?? []), d]);
-  const chosen = day ? (byDate.get(day) ?? []) : [];
-  return (
-    <div className="ar-person">
-      {!p.person && <div className="notice" data-tone="warn">Not matched to a staff record yet. HR matches it under “Match to staff”.</div>}
-      <div className="ar-mini-stats">
-        <span>
-          <strong>{t.present}</strong> present
-        </span>
-        <span data-tone={t.lateCount ? 'warn' : undefined}>
-          <strong>{t.lateCount}</strong> late · {hm(t.lateMin)}
-        </span>
-        <span data-tone={t.absent ? 'crit' : undefined}>
-          <strong>{t.absent}</strong> absent
-        </span>
-        <span>
-          <strong>{t.leave}</strong> leave
-        </span>
-        <span>
-          <strong>{nf(otSum(t.ot), 1)}</strong> OT h
-        </span>
-        <span>
-          <strong>{rm(p.employee.allowances)}</strong>
-        </span>
-      </div>
-      {p.employee.totalsMatch === false && (
-        <div className="notice" data-tone="warn">
-          The totals printed on the report do not equal its day rows. Check the original report before relying on these figures.
-        </div>
-      )}
-      <div className="ar-cal" role="grid" aria-label={`${monthLabel(p.month, true)} calendar`}>
-        {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((d) => (
-          <span key={d} className="ar-cal-head" role="columnheader">
-            {d}
-          </span>
-        ))}
-        {Array.from({ length: first }, (_, i) => (
-          <span key={`pad${i}`} />
-        ))}
-        {Array.from({ length: len }, (_, i) => {
-          const date = `${p.month}-${String(i + 1).padStart(2, '0')}`;
-          const c = p.employee.strip[i];
-          const rows = byDate.get(date) ?? [];
-          const r = rows[0];
-          return (
-            <button
-              key={date}
-              type="button"
-              role="gridcell"
-              className="ar-cal-day"
-              data-k={KIND[c]?.k ?? 'none'}
-              aria-pressed={day === date}
-              style={{ ['--i' as string]: i }}
-              onClick={() => setDay(day === date ? null : date)}
-              aria-label={`${i + 1}: ${KIND[c]?.label ?? ''}${r?.reason ? `, ${reasonLabel(r.reason)}` : ''}`}
-            >
-              <span className="ar-cal-n">{i + 1}</span>
-              {r?.in && <span className="ar-cal-t">{r.in}</span>}
-              {r?.reason && !r.in && <span className="ar-cal-t">{r.reason}</span>}
-            </button>
-          );
-        })}
-      </div>
-      <Legend />
-      {day && (
-        <Card title={dateLabel(day)}>
-          {chosen.length === 0 && <div className="muted">Nothing printed for this day.</div>}
-          {chosen.map((d) => (
-            <dl key={d.id} className="k-facts">
-              <div>
-                <dt>In / out</dt>
-                <dd className="mono">
-                  {d.in ?? '–'} / {d.out ?? '–'}
-                </dd>
-              </div>
-              {d.clocks && d.clocks.length > 0 && (
-                <div>
-                  <dt>Clock punches</dt>
-                  <dd className="mono">{d.clocks.join(', ')}</dd>
-                </div>
-              )}
-              <div>
-                <dt>Shift</dt>
-                <dd className="mono">{d.shift ?? '–'}</dd>
-              </div>
-              <div>
-                <dt>Hours (normal / actual)</dt>
-                <dd>
-                  {nf(d.normalH, 2)} / {nf(d.actualH, 2)}
-                </dd>
-              </div>
-              <div>
-                <dt>Late / early out</dt>
-                <dd>
-                  {d.lateMin ? hm(d.lateMin) : '–'} / {d.earlyMin ? hm(d.earlyMin) : '–'}
-                </dd>
-              </div>
-              <div>
-                <dt>Overtime</dt>
-                <dd>{otSum(d.ot) ? d.ot.map((h, i) => (h ? `${RATES[i]}× ${nf(h, 2)} h` : '')).filter(Boolean).join(', ') : '–'}</dd>
-              </div>
-              <div>
-                <dt>Reason</dt>
-                <dd>{d.reasonLabel ?? '–'}</dd>
-              </div>
-              <div>
-                <dt>Report page</dt>
-                <dd>{d.page}</dd>
-              </div>
-            </dl>
-          ))}
-        </Card>
-      )}
-      {p.history.length > 1 && (
-        <Card title="Other months" flush>
-          <ul className="ar-history">
-            {p.history.map((h) => (
-              <li key={h.importId} data-on={h.importId === p.importId || undefined}>
-                <span className="ar-history-m">{monthLabel(h.month)}</span>
-                <Strip strip={h.strip} />
-                <span className="small muted">
-                  {h.totals.lateCount} late · {h.totals.absent} absent
-                </span>
-              </li>
-            ))}
-          </ul>
-        </Card>
-      )}
-      <p className="muted small">From {p.fileName}. Figures are as the attendance system printed them; nothing here pays, deducts or disciplines anyone.</p>
     </div>
   );
 }

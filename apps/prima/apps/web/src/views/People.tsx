@@ -5,7 +5,7 @@ import { Select } from '../SearchSelect';
 import { useEffect, useMemo, useState } from 'react';
 import { DataTable, useTableState, type DtColumn, type DtFilter } from '../DataTable';
 import { CheckCircleIcon, PhoneIcon, ProhibitIcon, UsersThreeIcon, WarningIcon } from '@phosphor-icons/react';
-import { ATTENDANCE_ISSUE_LABEL, GROUP_EMPLOYER_ID, LEAVE_LABEL, hrKeeps, isGroupLeader, isOwnerAdmin, jaOwns, missingStaffFacts, p91MayImport, staffHistoryRole } from '@prima/core';
+import { ATTENDANCE_ISSUE_LABEL, GROUP_EMPLOYER_ID, LEAVE_LABEL, isGroupLeader, jaOwns, missingStaffFacts, p91MayImport, staffHistoryRole } from '@prima/core';
 import { api, type GuardProfile, type PersonDetail } from '../api';
 import { useApp } from '../App';
 import { Chip, Drawer, ErrorNotice, ExpiryChip, Findings, Kpi, Loading, dateLabel, dayLabel, hhmm, useAction, useLoad } from '../ui';
@@ -21,7 +21,8 @@ import { jumpTo } from './AddImportMenu';
 import { FaceCapture } from './FaceCheck';
 import { GroupHistoryTab, HistoryLookupPanel } from './StaffHistory';
 import { GuardPhoneBulkCodes, GuardPhoneCard } from './GuardPhoneOffice';
-import { StaffBulkBar, type BulkPerson } from './StaffBulk';
+import { StaffBulkBar, StaffPersonActions, useStaffChangeRights, type BulkPerson, type StaffChangeRights } from './StaffBulk';
+import { OfficeMemberCard } from './OfficeMemberCard';
 import '../styles/people.css';
 
 export function People({ openPersonId }: { openPersonId?: string }) {
@@ -44,9 +45,9 @@ export function People({ openPersonId }: { openPersonId?: string }) {
   // ticks are kept here (for the bulk bar); Change company needs HR's Staff movement form data, loaded for HR only.
   const [ticked, setTicked] = useState<Set<string>>(() => new Set());
   useEffect(() => setTicked(new Set()), [companyId]);
-  const hrMakes = hrKeeps(me.user) || isOwnerAdmin(me.user);
-  const moves = useLoad(() => (hrMakes ? api.staffMovements().catch(() => null) : Promise.resolve(null)), [hrMakes]);
-  const prep = moves.data?.canPrepare ? (moves.data.prep ?? null) : null;
+  // P112: the same rights for the bulk bar and for one person's details (StaffBulk.tsx useStaffChangeRights).
+  const rights = useStaffChangeRights();
+  const prep = rights.prep;
   const titles = useMemo(() => [...new Set((data ?? []).map((r) => r.person.jobTitle?.trim()).filter((t): t is string => !!t))].sort(), [data]);
   const tickedPeople: BulkPerson[] = (data ?? [])
     .filter((r) => ticked.has(r.person.id))
@@ -185,7 +186,7 @@ export function People({ openPersonId }: { openPersonId?: string }) {
       <div id="pp-guard-papers">
         <GuardTrainingPanel />
       </div>
-      {open && <PersonDrawer personId={open} onClose={() => setOpen(undefined)} />}
+      {open && <PersonDrawer personId={open} rights={rights} titles={titles} onClose={() => setOpen(undefined)} />}
       {record && <RecordDrawer kind="officeStaff" id={record.id} companyId={record.id ? null : companyId} onClose={() => setRecord(null)} />}
     </div>
   );
@@ -235,7 +236,7 @@ const STATUS_LABEL: Record<string, [string, 'ok' | 'warn' | 'neutral']> = {
  * warnings, chances to upgrade, leave and sick-day balances, and pay and benefits for the company and HR only.
  * Users who may not open the profile see the basic record.
  */
-function PersonDrawer({ personId, onClose }: { personId: string; onClose: () => void }) {
+function PersonDrawer({ personId, rights, titles, onClose }: { personId: string; rights: StaffChangeRights; titles: string[]; onClose: () => void }) {
   const prof = useLoad(() => api.guardProfile(personId), [personId]);
   const basic = useLoad(() => (prof.error ? api.person(personId) : Promise.resolve(null)), [personId, !!prof.error]);
   const data = prof.data ?? basic.data;
@@ -301,6 +302,24 @@ function PersonDrawer({ personId, onClose }: { personId: string; onClose: () => 
               {p.role === 'office' && <RecordButton kind="officeStaff" id={p.id} label="Edit staff details" />}
             </div>
           </div>
+          {/* P112 (Fitri, 17 Nov 2026): Change designation and Change company for this one person, the same dialog and
+              rules as the staff list's bulk bar (StaffBulk.tsx), shown only to those the server allows. */}
+          <StaffPersonActions
+            person={{
+              id: p.id,
+              name: p.name,
+              staffNo: p.staffNo,
+              role: p.role,
+              status: p.status,
+              leaving: !!p.leaving,
+              companyId: p.companyId,
+              jobTitle: p.jobTitle ?? null,
+            }}
+            rights={rights}
+            titles={titles}
+            onDone={() => (prof.data ? prof.reload() : basic.reload())}
+          />
+          <OfficeMemberCard person={{ id: p.id, name: p.name, jobTitle: p.jobTitle ?? null, companyId: p.companyId, staffNo: p.staffNo ?? null }} />
           {tabs.length > 0 && (
             <div className="tabbar pp-tabs" role="tablist" aria-label="Profile sections">
               {tabs.map(([k, label]) => (

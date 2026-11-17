@@ -1,0 +1,91 @@
+/* P112: the Agentic Office card on a person's details (views/OfficeMemberCard.tsx). */
+.om-card .k-card-body {
+  display: grid;
+  gap: 14px;
+}
+.om-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+.om-head .k-person {
+  flex: 1 1 220px;
+  min-width: 0;
+}
+.om-head a.btn {
+  text-decoration: none;
+}
+.om-note {
+  margin: 0;
+}
+.om-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px 18px;
+}
+.om-form .om-wide {
+  grid-column: 1 / -1;
+}
+.om-form .input,
+.om-form .select,
+.om-form select,
+.om-form input {
+  width: 100%;
+  min-width: 0;
+}
+.om-readonly {
+  padding: 8px 0;
+  font-size: 0.9rem;
+  overflow-wrap: anywhere;
+}
+.om-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  align-items: center;
+}
+.om-confirm {
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--surface-2);
+  padding: 14px 16px;
+  display: grid;
+  gap: 12px;
+}
+.om-confirm p {
+  margin: 0;
+}
+.om-secret {
+  font-family: var(--font-mono);
+  font-size: 1rem;
+  letter-spacing: 0.04em;
+  padding: 8px 12px;
+  border: 1px dashed var(--line);
+  border-radius: var(--r-sm);
+  background: var(--surface);
+  overflow-wrap: anywhere;
+}
+.om-check {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  font-size: 0.86rem;
+  cursor: pointer;
+}
+@media (max-width: 640px) {
+  .om-form {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .om-actions {
+    justify-content: stretch;
+  }
+  .om-actions .btn {
+    flex: 1 1 auto;
+  }
+  .om-actions .om-hint {
+    flex-basis: 100%;
+  }
+}

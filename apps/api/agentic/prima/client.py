@@ -151,6 +151,9 @@ class StaffRecord:
     # P74: "ceo" / "coo" for Prima's top leadership records (the office's owner opens Prima
     # as one of them), else None.
     top: str | None = None
+    # P112: the Prima person (staff record) this account belongs to, when Prima says (an
+    # older Prima sends none): which office member is a Prima person (prima/person_member).
+    person_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -219,6 +222,7 @@ async def staff() -> list[StaffRecord]:
             entra_oid=(str(r["entraOid"]).lower() if r.get("entraOid") else None),
             can_sign_in=bool(r.get("canSignIn")),
             top=(str(r["top"]) if r.get("top") in ("ceo", "coo") else None),
+            person_id=(str(r["personId"])[:120] if r.get("personId") else None),
         )
         for r in (rows if isinstance(rows, list) else [])
         if isinstance(r, dict) and r.get("id")

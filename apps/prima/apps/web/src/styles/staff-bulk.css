@@ -122,3 +122,13 @@
   position: relative;
   z-index: 60;
 }
+
+/* P112: Change designation and Change company for one person, in their details (People and Attendance). */
+.sb-person-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.sb-person-note {
+  margin: 0;
+}

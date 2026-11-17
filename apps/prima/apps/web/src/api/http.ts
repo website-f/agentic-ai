@@ -197,6 +197,9 @@ export class HttpApi implements Api {
     overview: (f) => {
       const p = new URLSearchParams();
       if (f.month) p.set('month', f.month);
+      // P112: a period of whole months.
+      if (f.from) p.set('from', f.from);
+      if (f.to) p.set('to', f.to);
       if (f.companyId) p.set('companyId', f.companyId);
       if (f.department) p.set('department', f.department);
       if (f.q?.trim()) p.set('q', f.q.trim());
@@ -204,6 +207,8 @@ export class HttpApi implements Api {
       return this.call('GET', `/attendance-reports${qs ? `?${qs}` : ''}`);
     },
     person: (importId, key) => this.call('GET', `/attendance-reports/person?importId=${encodeURIComponent(importId)}&key=${encodeURIComponent(key)}`),
+    personPeriod: (importId, key, from, to) =>
+      this.call('GET', `/attendance-reports/person-period?importId=${encodeURIComponent(importId)}&key=${encodeURIComponent(key)}&from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`),
     unmatched: () => this.call('GET', '/attendance-reports/unmatched'),
     staff: (companyId, q) => this.call('GET', `/attendance-reports/staff?companyId=${encodeURIComponent(companyId)}&q=${encodeURIComponent(q)}`),
     match: (companyId, key, personId) => this.call('POST', '/attendance-reports/match', { companyId, key, personId }),

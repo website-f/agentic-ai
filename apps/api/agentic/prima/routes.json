@@ -848,7 +848,9 @@
    "month",
    "companyId",
    "department",
-   "q"
+   "q",
+   "from",
+   "to"
   ]
  },
  {
@@ -866,6 +868,18 @@
   "query": [
    "importId",
    "key"
+  ]
+ },
+ {
+  "method": "GET",
+  "path": "api/attendance-reports/person-period",
+  "name": "personPeriod",
+  "doc": "P112: one person's attendance over a period of days (from, to: YYYY-MM-DD, two years at most): figures, month by month, and each day. The same people see it as see that person's month (the service checks the import's company).",
+  "query": [
+   "importId",
+   "key",
+   "from",
+   "to"
   ]
  },
  {

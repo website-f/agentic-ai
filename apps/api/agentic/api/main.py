@@ -557,6 +557,11 @@ from .routers import role_access as role_access_router  # noqa: E402
 app.include_router(role_access_router.router)
 app.include_router(account_router.router)
 
+# P112: a Prima person and the office's members (who they are here, or add them).
+from .routers import prima_members as prima_members_router  # noqa: E402
+
+app.include_router(prima_members_router.router)
+
 # P94: only the API process holds the PC sockets (devices/hub.py); the worker reaches them
 # through /internal/devices/*. Set here, not when a module is imported.
 from ..devices import bridge as _devices_bridge  # noqa: E402

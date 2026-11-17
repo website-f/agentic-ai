@@ -2044,3 +2044,8 @@ MS.update({k: v for k, v in MS_HIERARCHY.items() if k not in MS})
 from .ms_prima_org import MS_PRIMA_ORG  # noqa: E402
 
 MS.update({k: v for k, v in MS_PRIMA_ORG.items() if k not in MS})
+
+# P112: a Prima person and the office's members (who they are here, or add them).
+from .ms_prima_members import MS_PRIMA_MEMBERS  # noqa: E402
+
+MS.update({k: v for k, v in MS_PRIMA_MEMBERS.items() if k not in MS})

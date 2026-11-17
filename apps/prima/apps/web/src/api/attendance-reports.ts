@@ -4,6 +4,8 @@ import type { AttendancePreview, AttendanceReportService, Id } from '@prima/core
 
 export type AttendanceOverviewView = Awaited<ReturnType<AttendanceReportService['overview']>>;
 export type AttendancePersonView = Awaited<ReturnType<AttendanceReportService['person']>>;
+/** P112: one person's attendance over a period of days. */
+export type AttendancePersonPeriodView = Awaited<ReturnType<AttendanceReportService['personPeriod']>>;
 export type AttendanceUnmatched = Awaited<ReturnType<AttendanceReportService['unmatched']>>;
 export type AttendanceStaffHit = Awaited<ReturnType<AttendanceReportService['staffSearch']>>[number];
 export type { AttendancePreview };
@@ -33,8 +35,10 @@ export type AttendanceSaveResult =
   | { saved: false; needsReplace: string };
 
 export interface AttendanceReportsClient {
-  overview(f: { month?: string | null; companyId?: string | null; department?: string | null; q?: string }): Promise<AttendanceOverviewView>;
+  overview(f: { month?: string | null; from?: string | null; to?: string | null; companyId?: string | null; department?: string | null; q?: string }): Promise<AttendanceOverviewView>;
   person(importId: string, key: string): Promise<AttendancePersonView>;
+  /** P112: GET /attendance-reports/person-period (from, to: YYYY-MM-DD). */
+  personPeriod(importId: string, key: string, from: string, to: string): Promise<AttendancePersonPeriodView>;
   unmatched(): Promise<AttendanceUnmatched>;
   staff(companyId: string, q: string): Promise<AttendanceStaffHit[]>;
   match(companyId: string, key: string, personId: string): Promise<{ ok: boolean }>;
@@ -51,6 +55,8 @@ export interface AttendanceReportsClient {
 export function overviewQuery(f: Parameters<AttendanceReportsClient['overview']>[0]): string {
   const p = new URLSearchParams();
   if (f.month) p.set('month', f.month);
+  if (f.from) p.set('from', f.from);
+  if (f.to) p.set('to', f.to);
   if (f.companyId) p.set('companyId', f.companyId);
   if (f.department) p.set('department', f.department);
   if (f.q?.trim()) p.set('q', f.q.trim());

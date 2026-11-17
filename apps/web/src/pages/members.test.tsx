@@ -129,4 +129,11 @@ describe("Members", { timeout: 30_000 }, () => {
     expect(within(sheet).getByText("p3@example.com")).toBeInTheDocument();
     expect(within(sheet).getByText("Finance")).toBeInTheDocument();
   });
+
+  it("opens the member Prima's \"Open in Members\" points at (?focus=)", async () => {
+    show("/settings/members?q=p4%40example.com&focus=u4");
+    const sheet = await screen.findByRole("dialog");
+    expect(within(sheet).getByText("p4@example.com")).toBeInTheDocument();
+    expect(calls.at(-1)?.searchParams.get("q")).toBe("p4@example.com");
+  });
 });

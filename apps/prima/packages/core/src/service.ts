@@ -3690,7 +3690,10 @@ export class PrimaService {
   // ---------- Attendance ----------
 
   async attendance(user: User, companyId: Id, date: IsoDate) {
-    this.inLineOf(user, ['operations']);
+    // Fitri, 17 Nov 2026: HR gets the Attendance day sheet ("yes HR should get it as well"). HR department officers (the
+    // HR Administrator's line) may open it, for the companies their grants show (this.company below), read-only: locking,
+    // follow-up, discipline and replacements still follow can() below, which gives HR none of them.
+    this.inLineOf(user, ['operations', 'hr']);
     this.notArmsOnly(user);
     await this.company(user, companyId);
     const shifts = await this.store.list('shifts', { companyId, date });
@@ -3863,7 +3866,9 @@ export class PrimaService {
 
   /** The absence and discipline list for one company: open alerts, then what was done (Shahirah, 25 Oct 2026). */
   async attendanceAlerts(user: User, companyId: Id, days = 14) {
-    this.inLineOf(user, ['operations']);
+    // Fitri, 17 Nov 2026: HR gets the Attendance day sheet, with its alerts and absence list (the s.15 list is HR's to
+    // check), read-only as above.
+    this.inLineOf(user, ['operations', 'hr']);
     this.notArmsOnly(user);
     await this.company(user, companyId);
     const today = this.today();

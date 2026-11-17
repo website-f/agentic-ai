@@ -1,0 +1,160 @@
+/* P112: one person's attendance over a period (views/AttendancePerson.tsx) and the period chips the Attendance page
+   shares with it. Prima's tokens only; the drawer is wider on a computer for the tiles and the day table. */
+.drawer:has(.ap) {
+  width: min(820px, 100%);
+}
+.ap {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+  transition: opacity 0.2s;
+}
+.ap[data-busy] {
+  opacity: 0.65;
+}
+.ap-head {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.ap-span {
+  margin: -6px 0 0;
+}
+
+/* Period chips: one row that wraps; a custom range opens under them. */
+.ap-period {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+.ap-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.ap-chip {
+  min-height: 34px;
+  padding: 6px 12px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.875rem;
+  font-weight: 550;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.ap-chip:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+.ap-chip[aria-pressed='true'] {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.ap-chip:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.ap-chip:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+.ap-custom {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 10px;
+}
+.ap-custom .field {
+  min-width: 150px;
+  flex: 0 1 190px;
+}
+
+/* KPI tiles: three across in the drawer, two on a phone. */
+.ap-tiles {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+@media (max-width: 640px) {
+  .ap-tiles {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* Month by month: name, a bar for the rate, the rate, then the figures (wrapping under on a phone). */
+.ap-months {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.ap-months li {
+  display: grid;
+  grid-template-columns: 80px minmax(80px, 1fr) 64px minmax(0, 2.2fr);
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  border-top: 1px solid var(--line);
+}
+.ap-months li:first-child {
+  border-top: 0;
+}
+.ap-m-name {
+  font-weight: 600;
+  white-space: nowrap;
+}
+.ap-m-bar {
+  position: relative;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--line);
+  overflow: hidden;
+}
+.ap-m-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: var(--w);
+  border-radius: inherit;
+  background: var(--accent);
+}
+.ap-m-rate {
+  text-align: right;
+  font-weight: 650;
+}
+.ap-m-figs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  color: var(--muted);
+}
+.ap-m-figs strong {
+  color: var(--ink);
+}
+.ap-m-figs [data-tone='crit'] strong {
+  color: var(--crit);
+}
+.ap-m-figs [data-tone='warn'] strong {
+  color: var(--warn);
+}
+@media (max-width: 640px) {
+  .ap-months li {
+    grid-template-columns: 72px minmax(0, 1fr) 56px;
+    gap: 8px 10px;
+  }
+  .ap-m-figs {
+    grid-column: 1 / -1;
+  }
+}
+.ap-nowrap {
+  white-space: nowrap;
+}
+.ap-status-cell {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+}
