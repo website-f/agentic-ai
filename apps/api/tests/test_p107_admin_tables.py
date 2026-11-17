@@ -94,8 +94,9 @@ async def test_feedback_inbox_pages_on_the_server(client):
 
 async def test_feedback_table_stays_the_developers(client):
     await setup_owner(client)
-    # An owner who is not the developer cannot page through it either.
-    assert (await client.get("/api/feedback", params={"page": 1})).status_code == 403
+    # P109: owners (and management) read and page through it too; staff never do
+    # (tests/test_p109_org_library_feedback.py).
+    assert (await client.get("/api/feedback", params={"page": 1})).status_code == 200
 
 
 async def _deliveries(n: int) -> list[str]:

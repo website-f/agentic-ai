@@ -21,6 +21,10 @@ export type ComposerResult =
   | { kind: "schedule"; id: string; name: string };
 
 export interface ComposerPrefill {
+  /** P109: open on a task for people or for AI (else the last one used here). */
+  target?: ComposerTarget;
+  /** P109: a task for people: who it is for, picked already. */
+  assigneeUserIds?: string[];
   agentId?: string;
   title?: string;
   brief?: string;
@@ -67,6 +71,26 @@ export function useTaskComposer() {
 }
 
 // ---------------------------------------------------------------- remembered on this device
+
+/** P109: who the task is for: people (a general task) or AI (an agent does it). */
+export type ComposerTarget = "people" | "ai";
+const LAST_TARGET = "agentic.composer.target";
+
+export function lastTarget(): ComposerTarget {
+  try {
+    return localStorage.getItem(LAST_TARGET) === "people" ? "people" : "ai";
+  } catch {
+    return "ai";
+  }
+}
+
+export function rememberTarget(v: ComposerTarget) {
+  try {
+    localStorage.setItem(LAST_TARGET, v);
+  } catch {
+    /* storage blocked: not remembered */
+  }
+}
 
 const LAST_AGENT = "agentic.composer.agent";
 

@@ -16,6 +16,8 @@ export interface MembersFilters {
   status: MemberStatus | "";
   /** P107: a department id, or "" for every department. */
   department?: string;
+  /** P109: "heads", "managers", "unplaced" or a manager's id (the people under them). */
+  team?: string;
   sort: MemberSort;
   dir: SortDir;
   page: number;
@@ -49,6 +51,7 @@ export function membersPageUrl(f: MembersFilters): string {
   if (f.role) q.set("role", f.role);
   if (f.status) q.set("status", f.status);
   if (f.department) q.set("department", f.department);
+  if (f.team) q.set("team", f.team);
   if (f.sort !== "name") q.set("sort", f.sort);
   if (f.dir !== "asc") q.set("dir", f.dir);
   return `/api/members?${q}`;

@@ -13,7 +13,7 @@ export const GROUP_LABELS_MS: Record<string, string> = {
   Library: "Perpustakaan",
   "AI team": "Pasukan AI",
   Settings: "Tetapan",
-  Developer: "Pembangun",
+  Feedback: "Maklum balas",
   Help: "Bantuan",
 };
 
@@ -253,7 +253,7 @@ export const GUIDE_PAGES_MS: GuidePage[] = [
   },
   // ---------------------------------------------------------------- Developer
   {
-    id: "feedbacks", route: "/feedbacks", title: "Maklum balas", group: "Developer", who: "Pembangun sistem", states: [],
+    id: "feedbacks", route: "/feedbacks", title: "Maklum balas", group: "Feedback", who: "Pemilik, pengurusan dan pembangun sistem", states: [],
     targets: [],
   },
   // ---------------------------------------------------------------- Help

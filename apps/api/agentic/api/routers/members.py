@@ -21,11 +21,13 @@ from ...models import (
     AuthSession,
     Branch,
     Department,
+    DepartmentHead,
     Membership,
     PrimaLink,
     PushSubscription,
     User,
 )
+from ...org import heads as dept_heads
 from ...prima import client as prima_client
 from ...prima import modules
 from ...prima.client import PrimaError
@@ -35,6 +37,8 @@ from ...teams.branches import member_in_branches, ordered, set_branches
 from ..deps import Principal, api_error, current_principal, is_developer, require
 from ..schemas import (
     BranchRef,
+    DepartmentRef,
+    LibraryAccessIn,
     MemberCreateIn,
     MemberCreateOut,
     MemberOut,
@@ -88,6 +92,12 @@ def _out(
         access="prima_only" if is_prima_only(m.access, m.role) else "agentic",
         prima_modules=None if m.role == "owner" else m.prima_modules,
         prima_department=None if m.role == "owner" else m.prima_department,  # type: ignore[arg-type]
+        head_of=[
+            DepartmentRef(id=d, name=dn, branch_id=b, branch_name=bn)
+            for d, dn, b, bn in org.heads.get(u.id, [])
+        ],
+        library_scope=m.library_scope or "company",  # type: ignore[arg-type]
+        uploads_for_others=bool(m.uploads_for_others),
     )
 
 
@@ -95,10 +105,14 @@ class Org:
     """P97: managers' names and how many report to each, for member rows (two queries)."""
 
     def __init__(
-        self, people_: dict[str, str] | None = None, manages: dict[str, int] | None = None
+        self,
+        people_: dict[str, str] | None = None,
+        manages: dict[str, int] | None = None,
+        heads: dict[str, list] | None = None,
     ):
         self.people = people_ or {}
         self.manages = manages or {}
+        self.heads = heads or {}  # P109: the departments each heads
 
     @classmethod
     async def load(cls, db: AsyncSession, ws: str, rows: list[Membership]) -> "Org":
@@ -120,7 +134,7 @@ class Org:
             if ids
             else {}
         )
-        return cls(await people.names(db, bosses), manages)
+        return cls(await people.names(db, bosses), manages, await dept_heads.heads_of(db, ws, ids))
 
 
 async def _membership(db: AsyncSession, workspace_id: str, user_id: str) -> Membership:
@@ -328,6 +342,24 @@ def _scope_where(principal: Principal) -> ColumnElement[bool]:
     return me
 
 
+def _team_where(ws: str, team: str) -> ColumnElement[bool]:
+    """P109: heads (head a department), managers (people report to them), unplaced (report to
+    no one), or a manager's id (the people who report to them)."""
+    if team == "heads":
+        return Membership.user_id.in_(
+            select(DepartmentHead.user_id).where(DepartmentHead.workspace_id == ws)
+        )
+    if team == "managers":
+        return Membership.user_id.in_(
+            select(Membership.reports_to_user_id).where(
+                Membership.workspace_id == ws, Membership.reports_to_user_id.is_not(None)
+            )
+        )
+    if team == "unplaced":
+        return Membership.reports_to_user_id.is_(None)
+    return Membership.reports_to_user_id == team
+
+
 def _agent_counts(principal: Principal, user_ids: list[str] | None = None) -> Select:
     q = select(Agent.owner_user_id, func.count()).where(
         Agent.workspace_id == principal.workspace_id,
@@ -405,6 +437,7 @@ async def list_members(
     department: str = Query(default="", max_length=40),
     role: str = Query(default="", max_length=20),
     manager: str = Query(default="", max_length=40),
+    team: str = Query(default="", max_length=40),
     status_: str = Query(default="", alias="status", max_length=20),
     sort: str = Query(default="name", max_length=20),
     dir: str = Query(default="asc", max_length=4),
@@ -456,6 +489,8 @@ async def list_members(
         where.append(Membership.reports_to_user_id.is_(None))
     elif manager:
         where.append(Membership.reports_to_user_id == manager)
+    if team:  # P109: the "Team" filter
+        where.append(_team_where(ws, team))
     if status_ in STATUSES:
         where.append(_status_where(status_))
     branch = aliased(Branch)
@@ -628,7 +663,11 @@ async def update_member(
     principal: Principal = Depends(people_manager()),
     db: AsyncSession = Depends(get_db),
 ) -> MemberOut:
-    org_change = body.heads_department is not None or "reports_to_user_id" in body.model_fields_set
+    org_change = (
+        body.heads_department is not None
+        or body.head_of is not None
+        or "reports_to_user_id" in body.model_fields_set
+    )
     prima_change = body.access is not None or bool(
         {"prima_modules", "prima_department"} & body.model_fields_set
     )
@@ -643,7 +682,9 @@ async def update_member(
         )
     if "reports_to_user_id" in body.model_fields_set:
         await set_manager(db, principal, user_id, body.reports_to_user_id)
-    if body.heads_department is not None:
+    if body.head_of is not None:  # P109: every department they head
+        await set_head_of(db, principal, user_id, body.head_of)
+    elif body.heads_department is not None:
         await set_head(db, principal, user_id, body.heads_department)
     if prima_change:  # P99: after the role, so an owner's access is checked against it
         await set_prima_access(
@@ -744,7 +785,8 @@ async def set_manager(
 
 
 async def set_head(db: AsyncSession, principal: Principal, user_id: str, on: bool) -> Membership:
-    """P97: this person heads the department they sit in (a department may have several)."""
+    """P97: this person heads the department they sit in (a department may have several).
+    P109: the other departments they head stay as they are."""
     _org_editor(principal)
     m = await _membership(db, principal.workspace_id, user_id)
     if not _member_in_scope(principal, m):
@@ -756,18 +798,104 @@ async def set_head(db: AsyncSession, principal: Principal, user_id: str, on: boo
             "no_department",
             "Put them in a department first: they head the department they sit in.",
         )
-    if bool(m.heads_department) != on:
-        m.heads_department = on
+    now = await dept_heads.headed_ids(db, principal.workspace_id, user_id)
+    others = [d for d in now if d != m.department_id]
+    want = [*others, m.department_id] if on and m.department_id else others
+    await _apply_heads(db, principal, m, now, want)
+    return m
+
+
+async def set_head_of(
+    db: AsyncSession, principal: Principal, user_id: str, department_ids: list[str]
+) -> Membership:
+    """P109: exactly these departments (any company here) are headed by this person."""
+    _org_editor(principal)
+    m = await _membership(db, principal.workspace_id, user_id)
+    if not _member_in_scope(principal, m):
+        raise api_error(status.HTTP_404_NOT_FOUND, "member_not_found", "That member is not here.")
+    _check_can_touch(principal, m.role)
+    try:
+        want = await dept_heads.check_departments(db, principal.workspace_id, department_ids)
+    except ValueError:
+        raise api_error(
+            status.HTTP_400_BAD_REQUEST, "bad_department", "Pick a department from here."
+        ) from None
+    if want and not m.user.is_active:
+        raise api_error(
+            status.HTTP_400_BAD_REQUEST,
+            "inactive",
+            "This account is switched off, so it cannot head a department.",
+        )
+    now = await dept_heads.headed_ids(db, principal.workspace_id, user_id)
+    await _apply_heads(db, principal, m, now, want)
+    return m
+
+
+async def _apply_heads(
+    db: AsyncSession, principal: Principal, m: Membership, now: list[str], want: list[str]
+) -> None:
+    if await dept_heads.set_heads(db, m, want):
         await audit.record(
             db,
             principal.workspace_id,
             principal.actor,
             "member.head_changed",
-            target=user_id,
-            after={"heads_department": on, "department_id": m.department_id},
+            target=m.user_id,
+            before={"head_of": sorted(now)},
+            after={
+                "head_of": sorted(want),
+                "heads_department": bool(want),
+                "department_id": m.department_id,
+            },
         )
-        await db.flush()
-    return m
+
+
+@router.put("/{user_id}/library")
+async def set_library_access(
+    user_id: str,
+    body: LibraryAccessIn,
+    principal: Principal = Depends(current_principal),
+    db: AsyncSession = Depends(get_db),
+) -> MemberOut:
+    """P109: what of the Library this member reads (their whole company, or only their own
+    department's files, for them and their agents) and whether they may upload files for
+    other companies. Whoever manages all members (members.manage), or the manager they report
+    to (with team.manage: a HOD or branch manager), sets it; never for themselves."""
+    m = await _membership(db, principal.workspace_id, user_id)
+    if not _member_in_scope(principal, m):
+        raise api_error(status.HTTP_404_NOT_FOUND, "member_not_found", "That member is not here.")
+    manager = can(principal.role, "team.manage") and m.reports_to_user_id == principal.user.id
+    if not (can(principal.role, "members.manage") or manager):
+        raise api_error(
+            status.HTTP_403_FORBIDDEN,
+            "forbidden",
+            "Only owners, admins, management, HR or their own manager change this.",
+        )
+    if user_id == principal.user.id:
+        raise api_error(
+            status.HTTP_400_BAD_REQUEST,
+            "self_change",
+            "Ask another owner or admin to change your own access.",
+        )
+    _check_can_touch(principal, m.role)
+    before = {"library_scope": m.library_scope, "uploads_for_others": m.uploads_for_others}
+    if body.library_scope is not None:
+        m.library_scope = body.library_scope
+    if body.uploads_for_others is not None:
+        m.uploads_for_others = body.uploads_for_others
+    after = {"library_scope": m.library_scope, "uploads_for_others": m.uploads_for_others}
+    if after != before:
+        await audit.record(
+            db,
+            principal.workspace_id,
+            principal.actor,
+            "member.library_access_changed",
+            target=user_id,
+            before=before,
+            after=after,
+        )
+    await db.commit()
+    return await _one_out(db, principal, user_id)
 
 
 @router.get("/{user_id}/team")
@@ -993,8 +1121,11 @@ async def change_access(
         "department_id": m.department_id,
         "branch_ids": m.branch_ids,
     }
-    if department_id != m.department_id:
-        m.heads_department = False  # P97: they headed the department they left
+    if department_id != m.department_id and m.department_id:
+        # P97: they headed the department they left (P109: the others they head stay).
+        now = await dept_heads.headed_ids(db, principal.workspace_id, user_id)
+        if m.department_id in now:
+            await dept_heads.set_heads(db, m, [d for d in now if d != m.department_id])
     if role not in people.MANAGER_ROLES and m.role in people.MANAGER_ROLES:
         # P97: a role that manages no one: the people who reported to them report to no one.
         for r in await db.scalars(
@@ -1053,6 +1184,12 @@ async def remove_one(db: AsyncSession, principal: Principal, user_id: str) -> No
     ):
         r.reports_to_user_id = None
     await db.delete(m)
+    await db.execute(  # P109: nor do they head any department here
+        delete(DepartmentHead).where(
+            DepartmentHead.workspace_id == principal.workspace_id,
+            DepartmentHead.user_id == user_id,
+        )
+    )
     await db.execute(
         delete(AuthSession).where(
             AuthSession.user_id == user_id, AuthSession.workspace_id == principal.workspace_id

@@ -64,8 +64,19 @@ import { P107_WORK } from "./p107-work";
 import { P107_ADMIN } from "./p107-admin";
 import { P107_PAGED } from "./p107-paged";
 import { P107_FINISH } from "./p107-finish";
+import { M365 } from "./m365";
+import { TASKS_P109 } from "./tasks-p109";
+import { ORG_P109 } from "./org-p109";
 
 export const MS: Record<string, string> = {
+  // P109: the Microsoft 365 page and other email accounts; first, so an existing translation
+  // of the same English wins.
+  ...M365,
+  // P109: tasks for people (Trello-like), calendar and timeline; first, so an existing
+  // translation of the same English wins.
+  ...TASKS_P109,
+  // P109: HOD and teams, Library by department, files for other companies, feedback comments.
+  ...ORG_P109,
   // P107: lists that became data tables (one file per area so parallel work does not collide);
   // first, so an existing translation of the same English wins.
   ...TABLES_P107,

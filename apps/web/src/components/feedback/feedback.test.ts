@@ -8,11 +8,12 @@ import { composeNote, type Mark } from "./annotator";
 const OWNER = ["read", "office.view", "org.read", "members.manage", "org.manage", "audit.read", "work.write", "approvals.decide", "agents.manage"];
 
 describe("P73 feedback", () => {
-  it("keeps the Feedbacks page to the developer", () => {
-    expect(navItemFor("/feedbacks")?.perm).toBe("feedback.manage");
+  it("keeps the Feedbacks page to the developer and (P109) owners and management", () => {
+    expect(navItemFor("/feedbacks")?.perm).toEqual(["feedback.manage", "feedback.read"]);
     expect(pathAllowed("/feedbacks", OWNER)).toBe(false);
     expect(pathAllowed("/feedbacks", ["read", "work.write"])).toBe(false);
     expect(pathAllowed("/feedbacks", [...OWNER, "feedback.manage"])).toBe(true);
+    expect(pathAllowed("/feedbacks", [...OWNER, "feedback.read"])).toBe(true);
   });
 
   it("folds each mark's note under the general note, numbered like the picture", () => {

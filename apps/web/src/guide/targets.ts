@@ -266,7 +266,7 @@ export const GUIDE_PAGES: GuidePage[] = [
   },
   // ---------------------------------------------------------------- Developer
   {
-    id: "feedbacks", route: "/feedbacks", title: "Feedbacks", group: "Developer", who: "The system's developer", states: [],
+    id: "feedbacks", route: "/feedbacks", title: "Feedbacks", group: "Feedback", who: "Owners, management and the system's developer", states: [],
     targets: [],
   },
   // ---------------------------------------------------------------- Help

@@ -22,11 +22,11 @@ import {
 } from "@dnd-kit/core";
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy, type SortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { ArrowClockwiseIcon, ArrowLeftIcon, ArrowRightIcon, CalendarBlankIcon, CaretRightIcon, EyeIcon, KanbanIcon, ListBulletsIcon, PlusIcon, PushPinIcon, SealCheckIcon, WarningIcon, XIcon } from "@phosphor-icons/react";
+import { ArrowClockwiseIcon, ArrowLeftIcon, ArrowRightIcon, CalendarBlankIcon, CalendarDotsIcon, CaretRightIcon, ChartBarHorizontalIcon, EyeIcon, KanbanIcon, ListBulletsIcon, PaperclipIcon, PlusIcon, PushPinIcon, SealCheckIcon, TreeStructureIcon, WarningIcon, XIcon } from "@phosphor-icons/react";
 import { useMutation, useQuery, useQueryClient, useSuspenseQuery, type QueryKey } from "@tanstack/react-query";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import { motion, useReducedMotion } from "motion/react";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { lazy, Suspense, useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { toast } from "sonner";
 
@@ -57,10 +57,16 @@ import { cn, shortAge, timeAgo } from "@/lib/utils";
 import { PRIORITY_INFO, STATUS_INFO, VISIBILITY, workKeys, type RetryFailedResult, type Task, type TaskStatus } from "@/lib/work";
 
 import { ReviewRoundPill, waitingPath, WaitingChip, type TaskX } from "./accountable";
+import { AssigneeStack, ChecklistBar } from "./people-detail";
 import { PeopleStrip } from "./people-strip";
 import { QuickAdd } from "./quick-add";
+import { NO_EXTRA, TaskFilters, type ExtraFilters } from "./task-filters";
 import { TaskSheet } from "./task-sheet";
-import { DueChip, DueView, ListView } from "./team-views";
+import { DueChip, DueView, filterParams, ListView } from "./team-views";
+
+// P109: the calendar and the timeline load only when opened.
+const CalendarView = lazy(() => import("./calendar-view").then((m) => ({ default: m.CalendarView })));
+const GanttView = lazy(() => import("./gantt-view").then((m) => ({ default: m.GanttView })));
 
 // P97: one board for people and AI. Columns keep their states; "Running" reads "In progress"
 // here, since people work on cards too.
@@ -185,8 +191,25 @@ function CardContent({ task, company }: { task: Task; company?: Branch }) {
           {task.labels?.slice(0, 3).map((l) => <Pill key={l} className="max-w-full truncate">{l}</Pill>)}
         </span>
       ) : null}
+      {/* P109: a people task's progress at a glance: checklist, sub-tasks, files. */}
+      {task.checklist_total || task.subtasks_total || task.files_count ? (
+        <span className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-[11.5px] text-muted">
+          <ChecklistBar done={task.checklist_done ?? 0} total={task.checklist_total ?? 0} />
+          {task.subtasks_total ? (
+            <span className="inline-flex items-center gap-1 tabular" title={t("Sub-tasks done")}><TreeStructureIcon size={12} /> {task.subtasks_done ?? 0}/{task.subtasks_total}</span>
+          ) : null}
+          {task.files_count ? (
+            <span className="inline-flex items-center gap-1 tabular" title={t("Files")}><PaperclipIcon size={12} /> {task.files_count}</span>
+          ) : null}
+        </span>
+      ) : null}
       <div className="flex min-w-0 items-center gap-2 border-t border-border/70 pt-2">
-        {assigneeName(task) ? (
+        {(task.assignees?.length ?? 0) > 1 ? (
+          <span className="flex min-w-0 items-center gap-1.5 text-[12px] text-muted">
+            <AssigneeStack task={task} />
+            <span className="truncate">{task.assignees!.map((a) => a.name.split(" ")[0]).join(", ")}</span>
+          </span>
+        ) : assigneeName(task) ? (
           <span className="flex min-w-0 items-center gap-1.5 text-[12px] text-muted">
             <AssigneeFace task={task} />
             <span className="truncate">{assigneeName(task)}</span>
@@ -267,11 +290,12 @@ function LiftedCard({ task, company, reduce }: { task: Task; company?: Branch; r
  * loads 50 cards at a time as you scroll it while the short working columns stay complete. */
 const BOARD_KEY: QueryKey = [...workKeys.tasks, "board"];
 type BoardStatus = "triage" | "ready" | "running" | "blocked" | "review" | "done";
-type Who = "all" | "mine" | "team" | "assigned" | "pinned";
-type View = "board" | "list" | "due";
-const WHO: Who[] = ["all", "mine", "team", "assigned", "pinned"];
-const useColumn = (status: string, q: string, branch: string | undefined, who: Who, assignee: string, enabled = true) =>
-  usePagedList<Task>(BOARD_KEY, "/api/tasks", { status, q, branch_id: branch, who: who === "all" ? undefined : who, assignee: assignee || undefined }, { enabled });
+type Who = "all" | "mine" | "team" | "assigned" | "pinned" | "created" | "watching";
+type View = "board" | "list" | "due" | "calendar" | "gantt";
+const WHO: Who[] = ["all", "mine", "team", "assigned", "pinned", "created", "watching"];
+const VIEWS: View[] = ["board", "list", "due", "calendar", "gantt"];
+const useColumn = (status: string, q: string, branch: string | undefined, who: Who, assignee: string, extra: Record<string, string>, enabled = true) =>
+  usePagedList<Task>(BOARD_KEY, "/api/tasks", { ...extra, status, q, branch_id: branch, who: who === "all" ? undefined : who, assignee: assignee || undefined }, { enabled });
 
 /** A setting remembered on this device (private mode: until reload). */
 function useStored<T extends string>(key: string, allowed: readonly T[], fallback: T): [T, (v: T) => void] {
@@ -466,7 +490,10 @@ export function TasksPage() {
   // workspace. Remembered on this device, as is the view (board, list, due dates).
   const [storedWho, setWho] = useStored<Who>("agentic.tasks.who", WHO, "all");
   const who: Who = search.who && WHO.includes(search.who as Who) ? (search.who as Who) : storedWho;
-  const [view, setView] = useStored<View>("agentic.tasks.view", ["board", "list", "due"], "board");
+  const [view, setView] = useStored<View>("agentic.tasks.view", VIEWS, "board");
+  // P109: filters every view shares (people or AI, label, states, due range).
+  const [extra, setExtra] = useState<ExtraFilters>(NO_EXTRA);
+  const colExtra = filterParams({ q: "", kind: extra.kind, label: extra.label.trim(), dueFrom: extra.dueFrom, dueTo: extra.dueTo });
   // P97: one person or agent ("user:<id>" / "agent:<id>"), or people / agents only.
   const [assignee, setAssignee] = useState("");
   const { data: teamPeople = [] } = useQuery(teamPeopleQuery);
@@ -506,15 +533,15 @@ export function TasksPage() {
   // filtered and the counts are the true counts.
   const needle = useDebounced(q.trim());
   const onBoard = companiesReady && view === "board";
-  const triage = useColumn("triage", needle, branchFilter, who, assignee, onBoard);
-  const ready = useColumn("ready", needle, branchFilter, who, assignee, onBoard);
-  const running = useColumn("running", needle, branchFilter, who, assignee, onBoard);
-  const blocked = useColumn("blocked", needle, branchFilter, who, assignee, onBoard);
-  const review = useColumn("review", needle, branchFilter, who, assignee, onBoard);
-  const done = useColumn("done", needle, branchFilter, who, assignee, onBoard);
+  const triage = useColumn("triage", needle, branchFilter, who, assignee, colExtra, onBoard);
+  const ready = useColumn("ready", needle, branchFilter, who, assignee, colExtra, onBoard);
+  const running = useColumn("running", needle, branchFilter, who, assignee, colExtra, onBoard);
+  const blocked = useColumn("blocked", needle, branchFilter, who, assignee, colExtra, onBoard);
+  const review = useColumn("review", needle, branchFilter, who, assignee, colExtra, onBoard);
+  const done = useColumn("done", needle, branchFilter, who, assignee, colExtra, onBoard);
   const cols: Record<BoardStatus, PagedList<Task>> = { triage, ready, running, blocked, review, done };
-  const closedList = useColumn("failed,cancelled", needle, branchFilter, who, assignee, onBoard);
-  const failedList = useColumn("failed", needle, branchFilter, who, assignee, onBoard && canWrite);
+  const closedList = useColumn("failed,cancelled", needle, branchFilter, who, assignee, colExtra, onBoard);
+  const failedList = useColumn("failed", needle, branchFilter, who, assignee, colExtra, onBoard && canWrite);
   const counts = new Map<TaskStatus, number>(Object.entries(cols).map(([s, l]) => [s as TaskStatus, l.total ?? l.items.length]));
   const lists = [...Object.values(cols), closedList];
   const isLoading = companiesLoading || (view === "board" && lists.some((l) => l.isLoading));
@@ -527,7 +554,7 @@ export function TasksPage() {
   // The API sends board positions: cards can be re-ordered and dropped into a chosen slot.
   const sortable = Object.values(cols).some((l) => l.items.some((t) => typeof t.position === "number"));
 
-  const filtering = !!needle || who !== "all" || !!assignee;
+  const filtering = !!needle || who !== "all" || !!assignee || Object.keys(colExtra).length > 0;
   const showBoard = view === "board" && !isLoading && !error && (anyTasks || filtering);
   useFillHeight(board, { min: phone ? 272 : 384, gap: phone ? 12 : 20, enabled: showBoard });
 
@@ -781,7 +808,7 @@ export function TasksPage() {
   let overlay: ReactNode = null;
   if (active) overlay = <LiftedCard task={active} company={company} reduce={reduce} />;
 
-  const filters = { q: needle, who, assignee, branch: branchFilter };
+  const filters = { q: needle, who, assignee, branch: branchFilter, kind: extra.kind, label: extra.label.trim(), status: extra.status, dueFrom: extra.dueFrom, dueTo: extra.dueTo };
   const newTask = () => (phone ? setAdding(true) : openTaskComposer());
   return (
     <Page wide>
@@ -833,9 +860,12 @@ export function TasksPage() {
                 ...(leads ? [{ value: "team" as Who, label: t("My team") }] : []),
                 { value: "assigned", label: t("For me") },
                 { value: "mine", label: t("Mine") },
+                { value: "created", label: t("Created by me") },
+                { value: "watching", label: t("Watching") },
                 { value: "pinned", label: t("Pinned") },
               ]} />
             <ViewSwitch view={view} onChange={setView} />
+            <TaskFilters value={extra} onChange={setExtra} showStatus={view !== "board"} />
             {branchFilter && selected ? (
               <button type="button" onClick={() => select(ALL_COMPANIES)} title={t("Show every company's tasks")}
                 className="inline-flex h-10 max-w-full min-w-0 shrink-0 items-center gap-2 rounded-sm border border-border bg-surface px-3 text-[12.5px] text-muted hover:border-accent/40 hover:text-fg pointer-coarse:h-11">
@@ -859,7 +889,9 @@ export function TasksPage() {
           </Toolbar>
           <PeopleStrip value={assignee} onChange={setAssignee} teamOnly={who === "team"} />
           {canWrite && !phone ? <QuickAdd defaultAssignee={assignee.startsWith("user:") || assignee.startsWith("agent:") ? (assignee as `user:${string}`) : ""} key={assignee} /> : null}
-          {view === "list" ? <ListView f={filters} onOpen={openTask} /> : view === "due" ? <DueView f={filters} meId={me.user.id} onOpen={openTask} /> : (<>
+          {view === "list" ? <ListView f={filters} onOpen={openTask} /> : view === "due" ? <DueView f={filters} meId={me.user.id} onOpen={openTask} />
+            : view === "calendar" ? <Suspense fallback={<Skeleton className="h-96 rounded-[var(--radius-md)]" />}><CalendarView f={filters} onOpen={openTask} canWrite={canWrite} /></Suspense>
+            : view === "gantt" ? <Suspense fallback={<Skeleton className="h-80 rounded-[var(--radius-md)]" />}><GanttView f={filters} onOpen={openTask} /></Suspense> : (<>
           <div className="relative -mx-4 sm:-mx-6 lg:-mx-8">
           {edges.right ? (
             <p className="pointer-events-none absolute -top-6 right-4 hidden items-center gap-1 text-[12px] text-muted sm:right-6 md:flex lg:right-8">
@@ -945,6 +977,8 @@ function ViewSwitch({ view, onChange }: { view: View; onChange: (v: View) => voi
     { value: "board", label: t("Board"), icon: KanbanIcon },
     { value: "list", label: t("List"), icon: ListBulletsIcon },
     { value: "due", label: t("Due"), icon: CalendarBlankIcon },
+    { value: "calendar", label: t("Calendar"), icon: CalendarDotsIcon },
+    { value: "gantt", label: t("Timeline"), icon: ChartBarHorizontalIcon },
   ];
   return (
     <div role="radiogroup" aria-label={t("View")} className="inline-flex shrink-0 gap-0.5 rounded-[var(--radius-sm)] border border-border bg-surface-2/60 p-0.5">

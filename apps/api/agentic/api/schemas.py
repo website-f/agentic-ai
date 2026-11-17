@@ -25,6 +25,8 @@ Access = Literal["agentic", "prima_only"]
 PrimaModules = list[str] | None
 # P106: the Prima department their own Prima account gets (prima/client.PRIMA_DEPARTMENTS).
 PrimaDepartment = Literal["transport", "procurement", "hr"]
+# P109: what of the Library a member reads (knowledge/dept_scope.py).
+LibraryScope = Literal["company", "department"]
 
 
 class _Password(BaseModel):
@@ -107,6 +109,15 @@ class MeOut(BaseModel):
     prima_modules: PrimaModules = None
 
 
+class DepartmentRef(BaseModel):
+    """P109: a department and its company (a head may head departments of several)."""
+
+    id: str
+    name: str
+    branch_id: str | None = None
+    branch_name: str | None = None
+
+
 class MemberOut(BaseModel):
     user_id: str
     email: str
@@ -133,6 +144,11 @@ class MemberOut(BaseModel):
     access: Access = "agentic"
     prima_modules: PrimaModules = None
     prima_department: PrimaDepartment | None = None  # P106
+    # P109: the departments they head (any company), what of the Library they read, and
+    # whether they may upload files for other companies.
+    head_of: list[DepartmentRef] = []
+    library_scope: LibraryScope = "company"
+    uploads_for_others: bool = False
 
 
 class MembersSummary(BaseModel):
@@ -213,6 +229,8 @@ class MemberUpdateIn(BaseModel):
     # P97: heads their department; reports to this manager (send null to clear).
     heads_department: bool | None = None
     reports_to_user_id: str | None = Field(default=None, max_length=40)
+    # P109: every department they head (any company; [] = none). Replaces heads_department.
+    head_of: list[str] | None = Field(default=None, max_length=50)
     # P99: what they reach, and their Prima screens (send null for all their role allows).
     access: Access | None = None
     prima_modules: PrimaModules = Field(default=None, max_length=200)
@@ -234,6 +252,14 @@ class PrimaAccessIn(BaseModel):
     prima_modules: PrimaModules = Field(default=None, max_length=200)
     # P106: the Prima department their own Prima account gets (send null for none).
     prima_department: PrimaDepartment | None = None
+
+
+class LibraryAccessIn(BaseModel):
+    """P109: what of the Library one member reads, and whether they may upload files for
+    other companies. Leave out what does not change."""
+
+    library_scope: LibraryScope | None = None
+    uploads_for_others: bool | None = None
 
 
 class TempPasswordOut(BaseModel):

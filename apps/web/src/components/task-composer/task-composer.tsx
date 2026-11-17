@@ -38,7 +38,8 @@ import { TaskPicker, type TaskRef } from "@/pages/tasks/accountable";
 import { AgentPicker, NOBODY } from "./agent-picker";
 import { BrowseWhere, canBrowseOn, ON_SERVER, useMyDevicesFor } from "./browse-where";
 import { researchBrief, titleFrom } from "./briefs";
-import { lastAgent, rememberAgent, useComposerStore, type ComposerKind, type ComposerPrefill, type ComposerResult } from "./store";
+import { PeopleTaskForm } from "./people-task-form";
+import { lastAgent, lastTarget, rememberAgent, rememberTarget, useComposerStore, type ComposerKind, type ComposerPrefill, type ComposerResult, type ComposerTarget } from "./store";
 
 const NONE = "none";
 const EPEROLEHAN = "https://www.eperolehan.gov.my/";
@@ -98,6 +99,14 @@ export function TaskComposer({ prefill, onClose }: { prefill: ComposerPrefill; o
   const usable = agents.filter((a) => a.status === "active" && !a.clone_of && !a.view_only);
   const twin = usable.find((a) => a.is_twin && a.owner_user_id === me.user.id) ?? null;
   const canShare = canShareTasks(me.permissions);
+  // P109: a task for people (a general task, Trello-like) or for AI (the flow below, unchanged).
+  // Anything that only an agent does opens on AI; otherwise the last one used here.
+  const aiOnly = !!(prefill.agentId || prefill.kind || prefill.url || prefill.workflowId || prefill.fromTask || prefill.repeat || prefill.pickFile);
+  const [target, setTargetRaw] = useState<ComposerTarget>(prefill.target ?? (prefill.assigneeUserIds?.length ? "people" : aiOnly ? "ai" : lastTarget()));
+  const setTarget = (v: ComposerTarget) => {
+    setTargetRaw(v);
+    rememberTarget(v);
+  };
 
   // ---- what
   const [text, setText] = useState(prefill.brief ?? "");
@@ -299,7 +308,7 @@ export function TaskComposer({ prefill, onClose }: { prefill: ComposerPrefill; o
         <Dialog.Overlay className="fixed inset-0 z-40 bg-black/40 data-[state=open]:animate-[fade-in_150ms_ease-out]" />
         <Dialog.Content
           onKeyDown={(e) => {
-            if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
+            if (target === "ai" && (e.ctrlKey || e.metaKey) && e.key === "Enter") {
               e.preventDefault();
               send();
             }
@@ -315,13 +324,22 @@ export function TaskComposer({ prefill, onClose }: { prefill: ComposerPrefill; o
             <div className="min-w-0">
               <Dialog.Title className="text-[17px] font-semibold">{prefill.fromTask ? t("Repeat on a schedule") : t("Give a task")}</Dialog.Title>
               <Dialog.Description className="mt-0.5 text-[13px] text-muted">
-                {t("Say what you need. Pick how, who and when; the agent follows its SOPs and asks you before anything risky.")}
+                {target === "people"
+                  ? t("A task for people: who does it, by when, a checklist, sub-tasks and files. Everyone you assign is told, with a link.")
+                  : t("Say what you need. Pick how, who and when; the agent follows its SOPs and asks you before anything risky.")}
               </Dialog.Description>
             </div>
             <Dialog.Close className="grid size-10 shrink-0 place-items-center rounded-sm text-muted hover:bg-surface-2 hover:text-fg" aria-label={t("Close")}>
               <XIcon size={18} />
             </Dialog.Close>
           </div>
+          {prefill.fromTask ? null : (
+            <div className="shrink-0 border-b border-border px-4 py-2.5 sm:px-6">
+              <Segmented label={t("Who is it for")} value={target} onChange={setTarget} className="w-full sm:w-fit [&>button]:flex-1 [&>button]:justify-center"
+                options={[{ value: "people", label: t("For people") }, { value: "ai", label: t("For my AI or an agent") }]} />
+            </div>
+          )}
+          {target === "people" && !prefill.fromTask ? <PeopleTaskForm prefill={prefill} onClose={onClose} /> : (<>
 
           <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-5 sm:px-6">
             <div className="grid grid-cols-[minmax(0,1fr)] gap-6">
@@ -551,6 +569,7 @@ export function TaskComposer({ prefill, onClose }: { prefill: ComposerPrefill; o
               </Button>
             </div>
           </div>
+          </>)}
         </Dialog.Content>
       </Dialog.Portal>
       <FilePicker open={picking} onOpenChange={setPicking} branchId={branchId} title={t("Files for this task")}

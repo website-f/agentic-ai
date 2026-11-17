@@ -422,6 +422,8 @@ async def test_connect_is_bound_to_the_starting_session(client, llm, temporal, m
         "channels_ok": False,  # P63: only once an admin turned on Teams channel posts
         "files_ok": False,  # P80: SharePoint reading (GRANTED has no Files.Read.All)
         "new_chats_ok": False,  # P102: new Teams chats (GRANTED has no Chat.Create)
+        "channel_send_ok": False,  # P109: posting in channels (admin turns it on first)
+        "approvals_ok": False,  # P109: Teams Approvals (admin consent first)
         "last_sync_at": None,
         "webhooks": "polling",
         "last_error": None,

@@ -4,7 +4,7 @@
 import {
   CalendarBlankIcon, CalendarCheckIcon, CalendarPlusIcon, CalendarXIcon, ChartLineUpIcon, CheckCircleIcon, ChatCircleDotsIcon,
   EnvelopeSimpleIcon, GearSixIcon, VideoCameraIcon, LockSimpleIcon, MicrosoftOutlookLogoIcon, PaperPlaneRightIcon, PlusIcon, SparkleIcon, TrashIcon,
-  WarningCircleIcon, WhatsappLogoIcon, ArrowBendUpLeftIcon, MicrosoftTeamsLogoIcon, ShareFatIcon, type Icon,
+  WarningCircleIcon, WhatsappLogoIcon, ArrowBendUpLeftIcon, MicrosoftTeamsLogoIcon, ShareFatIcon, CloudArrowUpIcon, type Icon,
 } from "@phosphor-icons/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate, useSearch } from "@tanstack/react-router";
@@ -420,6 +420,9 @@ function Connections({ home }: { home: AssistantsHome }) {
           ) : g.configured ? <Button size="sm" loading={connect.isPending} onClick={() => connect.mutate()}>{t("Connect Google")}</Button>
             : g.can_configure ? <Button size="sm" variant="outline" asChild><Link to="/channels">{t("Set up")}</Link></Button> : null)}
         <OutlookRow />
+        {/* P109: other email accounts: back up their attachments into Files, then disconnect. */}
+        {row(CloudArrowUpIcon, "neutral", t("Other email accounts"), t("Gmail, Yahoo or your hosting mailbox: copy every attachment into your Files, then move to Microsoft."),
+          <Button size="sm" variant="outline" asChild><Link to="/mail" search={{ app: "accounts" }}>{t("Manage")}</Link></Button>)}
         {row(CalendarBlankIcon, "accent", t("Calendar"),
           g.account?.calendar ? t("Your Google Calendar. Assistants read it and find free time; events they propose wait for you.")
             : g.account ? t("Connected before calendar access was added. Reconnect Google and tick the calendar box.")

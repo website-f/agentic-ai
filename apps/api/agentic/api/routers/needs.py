@@ -36,6 +36,7 @@ from ...models import (
 )
 from ...services import prefs
 from ...services.clock import now
+from ...teams.task_parts import assigned_to
 from ..deps import Principal, current_principal
 from .desk import _mine, my_agents
 
@@ -116,12 +117,13 @@ async def needs(
         {"status": "blocked"},
         lambda i: {"task": i},
     )
-    # P97: tasks a person gave me that I have not taken yet, and my overdue ones.
+    # P97: tasks a person gave me that I have not taken yet, and my overdue ones (P109: as
+    # any one of its assignees).
     await add(
         "assigned",
         select(Task.id).where(
             Task.workspace_id == ws,
-            Task.assignee_user_id == principal.user.id,
+            assigned_to([principal.user.id]),
             or_(
                 Task.status == "triage",
                 and_(Task.status.in_(("ready", "running", "blocked")), Task.due_at < now()),
@@ -181,6 +183,19 @@ async def needs(
         (EmailDraft.id, EmailDraft.subject, EmailDraft.created_at),
         "/mail",
     )
+    # P109: another email account whose attachments are all backed up: disconnect it and use
+    # Microsoft 365 (shown until the person disconnects it).
+    from ...mailbox.models import ExternalMailAccount as Xm
+
+    await add(
+        "mail_backup",
+        select(Xm.id).where(
+            Xm.workspace_id == ws, Xm.user_id == principal.user.id, Xm.backup_done_at.is_not(None)
+        ),
+        (Xm.id, Xm.email, Xm.backup_done_at),
+        "/mail",
+        {"app": "accounts"},
+    )
 
     if any(can(role, p) for p in ("brain.manage", "agents.manage", "team.manage")):
         await add(
@@ -222,6 +237,7 @@ async def needs(
                         "search": {},
                     }
                 )
+    await _p109_needs(db, principal, add)
     seen = _seen_at(principal)
     entries.sort(key=lambda e: e["at"] or datetime.min.replace(tzinfo=UTC), reverse=True)
     for e in entries:
@@ -248,3 +264,52 @@ async def needs_seen(
     await prefs.update(db, principal.user.id, {"needs": {"seen_at": at.isoformat()}})
     await db.commit()
     return {"seen_at": at}
+
+
+async def _p109_needs(db: AsyncSession, principal: Principal, add: Any) -> None:
+    """P109: files I uploaded for other companies that wait for my check; files uploaded for
+    my company that I was told about and have not opened; feedback comments mentioning me."""
+    from ...feedback.models import Feedback, FeedbackComment
+    from ...org.models import FileHandoff
+
+    ws, me = principal.workspace_id, principal.user.id
+    await add(
+        "handoffs_check",
+        select(FileHandoff.id).where(
+            FileHandoff.workspace_id == ws,
+            FileHandoff.uploader_user_id == me,
+            FileHandoff.status == "pending",
+        ),
+        (FileHandoff.id, FileHandoff.file_name, FileHandoff.created_at),
+        "/handoffs",
+        {"tab": "check"},
+    )
+    await add(
+        "handoffs_in",
+        select(FileHandoff.id).where(
+            FileHandoff.workspace_id == ws,
+            FileHandoff.notified.contains([me]),
+            ~FileHandoff.seen_by.contains([me]),
+        ),
+        (FileHandoff.id, FileHandoff.file_name, FileHandoff.created_at),
+        "/handoffs",
+        {"tab": "received"},
+    )
+    await add(
+        "mentions",
+        select(FeedbackComment.id)
+        .join(Feedback, Feedback.id == FeedbackComment.feedback_id)
+        .where(
+            FeedbackComment.workspace_id == ws,
+            FeedbackComment.mentions.contains([me]),
+            ~FeedbackComment.seen_by.contains([me]),
+        ),
+        (
+            func.concat(FeedbackComment.feedback_id, ":", FeedbackComment.id),
+            FeedbackComment.body,
+            FeedbackComment.created_at,
+        ),
+        "/feedbacks",
+        None,
+        lambda i: {"f": i.split(":")[0]},
+    )

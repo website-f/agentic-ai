@@ -12,6 +12,7 @@ from sqlalchemy import (
     LargeBinary,
     String,
     Text,
+    func,
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, deferred, mapped_column
@@ -67,3 +68,24 @@ class Feedback(Timestamps, Base):
     dev_note: Mapped[str] = mapped_column(Text, default="")  # the developer's answer
     handled_by: Mapped[str | None] = mapped_column(String(40))  # user id
     resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class FeedbackComment(Base):
+    """P109: a comment on a piece of feedback by someone who reads the Feedbacks page (the
+    developer, owners, management). `mentions` are the readers it @mentions (each is told: in-app
+    and by email); `seen_by` the mentioned people who have opened it since (their bell stops)."""
+
+    __tablename__ = "feedback_comments"
+    __table_args__ = (Index("ix_feedback_comments_feedback", "feedback_id", "created_at"),)
+
+    id: Mapped[str] = mapped_column(String(40), primary_key=True, default=lambda: new_id("fc"))
+    workspace_id: Mapped[str] = mapped_column(ForeignKey("workspaces.id", ondelete="CASCADE"))
+    feedback_id: Mapped[str] = mapped_column(ForeignKey("feedback.id", ondelete="CASCADE"))
+    user_id: Mapped[str | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
+    author_name: Mapped[str] = mapped_column(String(120), default="")
+    body: Mapped[str] = mapped_column(Text, default="")
+    mentions: Mapped[list[str]] = mapped_column(JSONB, default=list, server_default="[]")
+    seen_by: Mapped[list[str]] = mapped_column(JSONB, default=list, server_default="[]")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )

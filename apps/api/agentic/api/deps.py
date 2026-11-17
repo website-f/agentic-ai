@@ -16,6 +16,7 @@ from ..core.security import can, new_token, role_permissions, token_hash, use_se
 from ..engine import acting
 from ..i18n import Msg, explicit_lang, lookup, normalize, set_lang
 from ..i18n.labels import role_label
+from ..knowledge import dept_scope
 from ..models import AuthSession, Membership, User, Workspace
 from ..services import two_factor
 from .scope import Scope
@@ -66,6 +67,8 @@ class Principal:
     # (None: all their Prima role allows; prima/modules.py).
     access: str = "agentic"
     prima_modules: tuple[str, ...] | None = None
+    # P109: reads only their own department's files in the Library (knowledge/dept_scope.py).
+    library_dept_only: bool = False
 
     @property
     def actor(self) -> str:
@@ -268,6 +271,7 @@ async def _load_principal(request: Request, db: AsyncSession) -> Principal:
         branch_ids=tuple(m.branch_ids),
         access="prima_only" if prima_only else "agentic",
         prima_modules=tuple(m.prima_modules) if m.prima_modules is not None else None,
+        library_dept_only=dept_scope.applies(m.role, m.library_scope),
     )
 
 

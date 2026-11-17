@@ -2018,3 +2018,19 @@ MS.update({k: v for k, v in MS_BRANCHES.items() if k not in MS})
 from .ms_access import MS_ACCESS  # noqa: E402
 
 MS.update({k: v for k, v in MS_ACCESS.items() if k not in MS})
+
+# P109: tasks for people, Trello-like (assignees, watchers, checklist, sub-tasks).
+from .ms_tasks import MS_TASKS  # noqa: E402
+
+MS.update({k: v for k, v in MS_TASKS.items() if k not in MS})
+
+# P109: the Microsoft 365 page and other email accounts with their attachment backups.
+from .ms_m365 import MS_M365  # noqa: E402
+
+MS.update({k: v for k, v in MS_M365.items() if k not in MS})
+
+# P109: heads of several departments, the Library by department, files for other companies,
+# comments on feedback.
+from .ms_org import MS_ORG  # noqa: E402
+
+MS.update({k: v for k, v in MS_ORG.items() if k not in MS})

@@ -271,6 +271,11 @@ STAFF_OK = {
     "/api/desk/meetings",  # P97: today's meetings from their own calendar
     # P97: the tasks given to them, and the people they may give a task to (themselves)
     "/api/me/assigned-tasks", "/api/team/people",
+    # P109: who they may add as a watcher (themselves and the people they report to; no emails)
+    "/api/team/watchable",
+    # P109: files for other companies: their own uploads, what came in for them (none for
+    # staff) and the companies they may upload for (none until switched on)
+    "/api/handoffs/mine", "/api/handoffs/incoming", "/api/handoffs/targets",
     "/api/branches/starter-teams", "/api/broadcasts", "/api/budgets", "/api/calendar-drafts",
     "/api/channels", "/api/channels/{channel_id}/whatsapp", "/api/chat/recent",
     "/api/company-kits",
@@ -282,6 +287,7 @@ STAFF_OK = {
     "/api/forms", "/api/forms/starters", "/api/intake", "/api/integrations/google",
     "/api/integrations/microsoft", "/api/integrations/microsoft/account", "/api/library",
     "/api/library/linked", "/api/mail/activity", "/api/me/allowance", "/api/me/needs",
+    "/api/mail-accounts",  # P109: their own other email accounts only (test_p109_mail_accounts)
     "/api/me/prefs", "/api/me/staff", "/api/me/twin", "/api/me/worker", "/api/meetings",
     "/api/members", "/api/minutes", "/api/minutes/settings", "/api/monitor/wall",
     "/api/objectives", "/api/packs", "/api/pings",

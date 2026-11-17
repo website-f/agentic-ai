@@ -25,16 +25,38 @@ export interface ViewFilters {
   who?: string;
   assignee?: string;
   branch?: string;
+  /** P109: shared by every view: people or AI, one label, a status list, a due range (days). */
+  kind?: "" | "people" | "ai";
+  label?: string;
+  status?: string;
+  dueFrom?: string | null;
+  dueTo?: string | null;
 }
 
-const OPEN = "triage,ready,running,blocked,review";
+export const OPEN = "triage,ready,running,blocked,review";
 
-function url(f: ViewFilters, extra: Record<string, string>): string {
-  const p = new URLSearchParams({ limit: "500", ...extra });
-  if (f.q) p.set("q", f.q);
-  if (f.who && f.who !== "all") p.set("who", f.who);
-  if (f.assignee) p.set("assignee", f.assignee);
-  if (f.branch) p.set("branch_id", f.branch);
+/** The filters as /api/tasks query parameters (the board adds its column's status). */
+export function filterParams(f: ViewFilters): Record<string, string> {
+  const p: Record<string, string> = {};
+  if (f.q) p.q = f.q;
+  if (f.who && f.who !== "all") p.who = f.who;
+  if (f.assignee) p.assignee = f.assignee;
+  if (f.branch) p.branch_id = f.branch;
+  if (f.kind) p.kind = f.kind;
+  if (f.label) p.label = f.label;
+  if (f.dueFrom) p.due_from = new Date(`${f.dueFrom}T00:00:00`).toISOString();
+  if (f.dueTo) p.due_to = new Date(`${f.dueTo}T23:59:59`).toISOString();
+  return p;
+}
+
+export function url(f: ViewFilters, extra: Record<string, string>): string {
+  const p = new URLSearchParams({ limit: "500", ...filterParams(f), ...extra });
+  if (f.status && !extra.status) p.set("status", f.status);
+  else if (f.status && extra.status) {
+    const want = new Set(f.status.split(","));
+    const both = extra.status.split(",").filter((s) => want.has(s));
+    p.set("status", both.join(",") || "none");
+  }
   return `/api/tasks?${p}`;
 }
 

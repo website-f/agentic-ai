@@ -81,6 +81,9 @@ class Membership(Timestamps, Base):
             "prima_department IS NULL OR prima_department IN ('transport', 'procurement', 'hr')",
             name="ck_memberships_prima_department",
         ),
+        CheckConstraint(
+            "library_scope IN ('company', 'department')", name="ck_memberships_library_scope"
+        ),
     )
 
     workspace_id: Mapped[str] = mapped_column(
@@ -119,6 +122,13 @@ class Membership(Timestamps, Base):
     # Prima department their own Prima account gets (transport, procurement, hr; None = none).
     prima_opens_as: Mapped[str] = mapped_column(String(8), default="top", server_default="top")
     prima_department: Mapped[str | None] = mapped_column(String(20))
+    # P109 (migration 0068): what of the Library this person reads: "company" (as before) or
+    # "department" (only their own department's files: knowledge/dept_scope.py), and whether
+    # they may upload files for other companies (org/handoffs.py).
+    library_scope: Mapped[str] = mapped_column(
+        String(12), default="company", server_default="company"
+    )
+    uploads_for_others: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
 
     user: Mapped[User] = relationship(lazy="joined", foreign_keys=[user_id])
     # P98: every branch this member works in (the home branch_id included; loaded with the
@@ -487,6 +497,7 @@ class Task(Timestamps, Base):
         Index("ix_tasks_ws_status", "workspace_id", "status"),
         Index("ix_tasks_assignee_status", "assignee_agent_id", "status"),  # P96
         Index("ix_tasks_assignee_user_status", "assignee_user_id", "status"),  # P97
+        Index("ix_tasks_ws_due", "workspace_id", "due_at"),  # P109 calendar and Gantt
     )
 
     id: Mapped[str] = mapped_column(String(40), primary_key=True, default=lambda: new_id("tk"))
@@ -556,6 +567,10 @@ class Task(Timestamps, Base):
         ForeignKey("users.id", ondelete="SET NULL")
     )
     due_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # P109: when the work starts (calendar spans, Gantt bars) and what kind of work it is.
+    # Its assignees and watchers, checklist and linked files: agentic/teams/task_models.py.
+    start_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    category: Mapped[str | None] = mapped_column(String(40))
 
 
 class AgentMessage(Base):
@@ -2309,7 +2324,16 @@ class PrimaLink(Timestamps, Base):
 from ..erasure.models import ErasureRecord, WorkspaceExport  # noqa: E402, F401
 
 # P73: feedback from the floating button, read by the developer (agentic/feedback/models.py).
-from ..feedback.models import Feedback  # noqa: E402, F401
+from ..feedback.models import Feedback, FeedbackComment  # noqa: E402, F401
+
+# P109: other email accounts and their attachment backups (agentic/mailbox/models.py).
+from ..mailbox.models import ExternalMailAccount, MailBackupJob  # noqa: E402, F401
+
+# P109: who heads which departments, and files uploaded for other companies (org/models.py).
+from ..org.models import DepartmentHead, FileHandoff  # noqa: E402, F401
 
 # P80: SharePoint and OneDrive folders in the Library (agentic/sharepoint/models.py).
 from ..sharepoint.models import LinkedFile, LinkedSource  # noqa: E402, F401
+
+# P109: tasks for people: assignees and watchers, checklists, linked files (teams/task_models.py).
+from ..teams.task_models import TaskAttachment, TaskChecklistItem, TaskPerson  # noqa: E402, F401

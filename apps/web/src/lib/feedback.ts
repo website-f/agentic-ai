@@ -47,7 +47,26 @@ export interface FeedbackItem extends MyFeedback {
   screenshot_bytes: number;
   handled_by: string | null;
   resolved_at: string | null;
+  /** P109: how many comments it has. */
+  comments?: number;
 }
+
+/** P109: someone who reads the Feedbacks page (owners, management, the developer). */
+export interface FeedbackReader { user_id: string; name: string; role: string }
+
+export interface FeedbackComment {
+  id: string;
+  user_id: string | null;
+  author_name: string;
+  body: string;
+  mentions: FeedbackReader[];
+  created_at: string;
+  mine: boolean;
+}
+
+export const feedbackReadersQuery = { queryKey: ["feedback", "readers"], queryFn: () => api<FeedbackReader[]>("/api/feedback/readers"), staleTime: 5 * 60_000 };
+export const commentsQuery = (id: string) => ({ queryKey: ["feedback", "comments", id], queryFn: () => api<FeedbackComment[]>(`/api/feedback/${id}/comments`) });
+export const addComment = (id: string, body: string, mentions: string[]) => api<FeedbackComment>(`/api/feedback/${id}/comments`, "POST", { body, mentions });
 
 export interface FeedbackList {
   items: FeedbackItem[];

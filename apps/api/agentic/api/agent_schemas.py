@@ -171,6 +171,14 @@ class ChatOut(BaseModel):
     tools_used: list[str]
 
 
+class SubtaskIn(BaseModel):
+    """P109: a sub-task of a person's task: its own title, person and due date."""
+
+    title: str = Field(min_length=1, max_length=200)
+    assignee_user_id: str | None = Field(default=None, max_length=40)
+    due_at: datetime | None = None
+
+
 class TaskIn(BaseModel):
     title: str = Field(min_length=1, max_length=200)
     brief: str = Field(default="", max_length=20_000)
@@ -193,6 +201,15 @@ class TaskIn(BaseModel):
     # P97: a task for a person (a member) instead of an agent (never both), and its due time.
     assignee_user_id: str | None = Field(default=None, max_length=40)
     due_at: datetime | None = None
+    # P109: a task for people: one or many assignees (assignee_user_id, if set, is the
+    # first), watchers who follow it, when it starts, what kind of work it is, its checklist
+    # and its sub-tasks (each its own person's task).
+    assignee_user_ids: list[str] = Field(default_factory=list, max_length=25)
+    watcher_user_ids: list[str] = Field(default_factory=list, max_length=25)
+    start_at: datetime | None = None
+    category: str | None = Field(default=None, max_length=40)
+    checklist: list[str] = Field(default_factory=list, max_length=50)
+    subtasks: list[SubtaskIn] = Field(default_factory=list, max_length=20)
 
 
 class TaskUpdateIn(BaseModel):
@@ -212,6 +229,9 @@ class TaskUpdateIn(BaseModel):
     # P97: give it to a person (null takes it back) and when it is due (null clears it).
     assignee_user_id: str | None = Field(default=None, max_length=40)
     due_at: datetime | None = None
+    # P109: when it starts (null clears it) and what kind of work it is.
+    start_at: datetime | None = None
+    category: str | None = Field(default=None, max_length=40)
 
 
 class TaskOut(BaseModel):
@@ -270,6 +290,17 @@ class TaskOut(BaseModel):
     assignee_user_name: str | None = None
     created_by_name: str | None = None
     due_at: datetime | None = None
+    # P109: a task for people: when it starts, its kind of work, everyone it is for and who
+    # follows it ([{user_id, name}], the first assignee first), and the card's counts.
+    start_at: datetime | None = None
+    category: str | None = None
+    assignees: list[dict[str, str]] = []
+    watchers: list[dict[str, str]] = []
+    checklist_done: int = 0
+    checklist_total: int = 0
+    subtasks_done: int = 0
+    subtasks_total: int = 0
+    files_count: int = 0
 
 
 class TaskEventOut(BaseModel):
@@ -337,6 +368,8 @@ class TaskDetailOut(BaseModel):
     blocking: list[dict[str, Any]] = []
     reviews: list[dict[str, Any]] = []
     review_policy: dict[str, Any] | None = None
+    # P109: the checklist [{id, text, done, position, done_by_name, done_at}].
+    checklist: list[dict[str, Any]] = []
 
 
 class Audience(BaseModel):

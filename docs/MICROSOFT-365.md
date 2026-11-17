@@ -284,3 +284,42 @@ What it reads: only the teams and channels the person is a member of (Microsoft 
 through their own connection, and only for their own AI when they are the one asking. Posts are
 read live when asked (there is no background sync of channels); what the AI quotes stays in that
 conversation like any other answer, and it treats the posts as outside text.
+
+## The Microsoft 365 page and two more permissions (P109)
+
+The Microsoft 365 page now shows each person's own Outlook (read, Reply, Reply all, Forward,
+New email, attachments), Teams chats and channels laid out like Teams (answer from the page),
+their calendar (week, details, Accept / Maybe / Decline, new events) and Teams Approvals, with
+**Ask AI** (summaries and drafts only: the person edits and presses Send). Everything uses the
+person's own connection; an owner or admin cannot open anyone else's mail, chats or calendar.
+
+Mail, chats, calendar and new events need nothing new (`Mail.ReadWrite`, `Mail.Send`,
+`Calendars.ReadWrite`, `Chat.Read`, `ChatMessage.Send` are already asked for). Two optional
+features need one more delegated Microsoft Graph permission each. They are asked for only once
+an admin turns them on (Channels > Microsoft 365), so existing sign-ins keep working:
+
+| Switch on Channels > Microsoft 365 | Delegated permission to add in Entra | Admin consent |
+|---|---|---|
+| **Post and reply in Teams channels** | `ChannelMessage.Send` | Not required (grant it anyway so nobody is asked) |
+| **Teams Approvals** | `ApprovalSolution.ReadWrite` | **Required** |
+
+Reading channel posts still needs `ChannelMessage.Read.All` (above). Steps for each:
+
+1. **Entra > App registrations > the app > API permissions > Add a permission > Microsoft Graph
+   > Delegated permissions**: add the permission.
+2. Press **Grant admin consent for <your organisation>**.
+3. In the office, **Channels > Microsoft 365**: turn the switch on.
+4. Each person reconnects Microsoft 365 once (or signs in with Microsoft again).
+
+Teams Approvals are read from Microsoft Graph's beta `/solutions/approval` endpoint (Microsoft
+offers them only there). If the tenant never opened the Approvals app in Teams, the page says so.
+
+## Other email accounts (P109)
+
+On the Microsoft 365 page (**Other email**) and from My assistants > Connections, a person can
+connect other mailboxes (Gmail, Yahoo, Outlook.com, a cPanel or other IMAP mailbox) with an app
+password, back up every attachment into their own Files (**My workspace > Email backup >
+account > month**; same file kept once; inline pictures and files over 20 MB skipped), and then
+disconnect it (the stored password is deleted). Only TLS IMAP (993 SSL or 143 STARTTLS); private
+addresses are refused. Gmail through Google sign-in is offered only when the office has Google
+sign-in set up (Channels > Gmail); otherwise Gmail needs 2-Step Verification and an app password.

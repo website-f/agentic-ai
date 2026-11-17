@@ -81,6 +81,14 @@ def with_new_chats(scopes: str) -> str:
 # before would stop everyone's sign-in at "needs admin approval").
 CHANNEL_SCOPE = "ChannelMessage.Read.All"
 APP_SCOPE = "https://graph.microsoft.com/.default"  # app-only: whatever the admin granted
+# P109: replying and posting in Teams channel threads from the Microsoft 365 page. A person may
+# consent to it themselves, but asking for it makes every existing connection's token refresh
+# ask for it too, so it is asked for only once an admin turns it on (Channels > Microsoft 365).
+CHANNEL_SEND_SCOPE = "ChannelMessage.Send"
+# P109: the Teams Approvals app (Graph beta /solutions/approval): list the approvals a person
+# is asked for and approve or reject them. Only an admin may consent to it (Entra: grant admin
+# consent), so it is asked for only once an admin turns it on.
+APPROVALS_SCOPE = "ApprovalSolution.ReadWrite"
 
 CALLBACK_PATH = "/api/integrations/microsoft/callback"
 NOTIFY_PATH = "/api/integrations/microsoft/notify"
@@ -112,6 +120,10 @@ class AppConfig:
     sign_in: bool = True
     # P63: an admin granted ChannelMessage.Read.All, so it is asked for (Teams channel posts).
     teams_channels: bool = False
+    # P109: post and reply in Teams channels (ChannelMessage.Send), and Teams Approvals
+    # (ApprovalSolution.ReadWrite, admin consent): asked for only once an admin turns them on.
+    teams_channel_send: bool = False
+    teams_approvals: bool = False
 
     @property
     def configured(self) -> bool:
@@ -120,7 +132,10 @@ class AppConfig:
     @property
     def scopes(self) -> str:
         """The delegated scopes a person's sign-in asks for."""
-        return DELEGATED_SCOPES + (f" {CHANNEL_SCOPE}" if self.teams_channels else "")
+        extra = [CHANNEL_SCOPE] if self.teams_channels else []
+        extra += [CHANNEL_SEND_SCOPE] if self.teams_channel_send else []
+        extra += [APPROVALS_SCOPE] if self.teams_approvals else []
+        return " ".join([DELEGATED_SCOPES, *extra])
 
     @property
     def multi_tenant(self) -> bool:
@@ -160,6 +175,8 @@ async def load(db: AsyncSession, workspace_id: str) -> AppConfig:
         public_base=str(data.get("public_base") or ""),
         sign_in=data.get("sign_in") is not False,
         teams_channels=data.get("teams_channels") is True,
+        teams_channel_send=data.get("teams_channel_send") is True,
+        teams_approvals=data.get("teams_approvals") is True,
     )
     if data.get("client_id") and data.get("client_secret"):
         cfg.client_id, cfg.client_secret = data["client_id"], data["client_secret"]

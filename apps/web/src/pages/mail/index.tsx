@@ -1,6 +1,10 @@
 /** Mail (P34): what reached the person's Outlook and the company's shared mailboxes, and what
  * the AI did with each one (the task it made, the attachment it saved, the reply it drafted).
- * Live: the `mail.new` event refreshes the list at once, and it re-checks every minute. */
+ * Live: the `mail.new` event refreshes the list at once, and it re-checks every minute.
+ * P109: the Microsoft 365 page: Outlook (read, reply, forward, new email, Ask AI), Teams chats
+ * and channels shown like Teams, the calendar, Teams Approvals, and other email accounts
+ * (Connections: back up their attachments, then disconnect). Tabs: ?app=teams|calendar|
+ * approvals|accounts (none: mail). */
 import {
   AlarmIcon,
   ArrowsClockwiseIcon,
@@ -16,7 +20,7 @@ import {
 } from "@phosphor-icons/react";
 import { useMutation, useQuery, useSuspenseQuery } from "@tanstack/react-query";
 import { Link, useNavigate, useSearch } from "@tanstack/react-router";
-import { useCallback, useMemo, useState } from "react";
+import { lazy, Suspense, useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import { EmptyState, IconTile, Page, PageHeader, Section } from "@/components/page";
@@ -55,8 +59,18 @@ import { meQuery } from "@/lib/queries";
 import { cn, timeAgo } from "@/lib/utils";
 import { CalendarDraftCard, DraftCard } from "@/pages/assistants";
 
+import { OutlookInbox } from "./inbox";
 import { MicrosoftAbilities, MissingServer, OutlookConnection, useMsReturn } from "./outlook";
 import { TeamsPanel } from "./teams";
+
+// P109: the heavier tabs load when opened.
+const OutlookCalendar = lazy(() => import("./calendar").then((m) => ({ default: m.OutlookCalendar })));
+const TeamsApprovals = lazy(() => import("./approvals").then((m) => ({ default: m.TeamsApprovals })));
+const OtherEmailAccounts = lazy(() => import("./accounts").then((m) => ({ default: m.OtherEmailAccounts })));
+
+type M365App = "mail" | "teams" | "calendar" | "approvals" | "accounts";
+const APPS: M365App[] = ["mail", "teams", "calendar", "approvals", "accounts"];
+const tabFallback = <Skeleton className="h-64 rounded-[var(--radius-md)]" />;
 
 const ACTION_ICON: Record<MailActionKind, Icon> = {
   task: KanbanIcon,
@@ -101,8 +115,18 @@ export function MailPage() {
   const shown = filter === "all" ? items : items.filter((m) => m.status === filter);
 
   const options = [{ value: "personal", label: t("My Outlook") }, ...shared.map((b) => ({ value: b.id, label: b.display_name || b.address }))];
-  const app = search.app === "teams" ? "teams" : "mail";
-  const setApp = (v: "mail" | "teams") => void navigate({ search: (s) => ({ ...s, app: v === "teams" ? "teams" : undefined }), replace: true });
+  const app: M365App = APPS.includes(search.app as M365App) ? (search.app as M365App) : "mail";
+  const setApp = (v: M365App) => void navigate({ search: (s) => ({ ...s, app: v === "mail" ? undefined : v }), replace: true });
+  // P109: Outlook itself (live from Microsoft), or what the AI did with each mail.
+  const [mailView, setMailView] = useState<"inbox" | "activity">("inbox");
+  const personalOk = box === "personal" && !!account.data?.connected && account.data.status !== "reconnect_needed";
+  const tabs: { value: M365App; label: string }[] = [
+    { value: "mail", label: t("Outlook") },
+    { value: "teams", label: "Teams" },
+    { value: "calendar", label: t("Calendar") },
+    { value: "approvals", label: t("Approvals") },
+    { value: "accounts", label: t("Other email") },
+  ];
 
   return (
     <Page>
@@ -119,19 +143,26 @@ export function MailPage() {
       {config.isLoading ? <Skeleton className="h-64 rounded-[var(--radius-md)]" />
         : config.error ? (isMissingApi(config.error) ? <MissingServer /> : <p role="alert" className="text-[13.5px] text-danger">{errorMessage(config.error)}</p>)
         : !configured ? (
-          <EmptyState icon={MicrosoftOutlookLogoIcon} title={t("Microsoft 365 is not set up yet")}
-            body={config.data?.can_configure
-              ? t("Register the office's app in Microsoft Entra once (Channels > Microsoft 365). Then everyone connects their own Outlook, and you can add shared mailboxes like accounts@ or tender@.")
-              : t("Ask an admin to set up Microsoft 365. Then you can connect your Outlook here and see what your AI does with your mail.")}
-            action={config.data?.can_configure ? <Button asChild><Link to="/channels">{t("Open Channels")}</Link></Button> : undefined} />
+          <>
+            <EmptyState icon={MicrosoftOutlookLogoIcon} title={t("Microsoft 365 is not set up yet")}
+              body={config.data?.can_configure
+                ? t("Register the office's app in Microsoft Entra once (Channels > Microsoft 365). Then everyone connects their own Outlook, and you can add shared mailboxes like accounts@ or tender@.")
+                : t("Ask an admin to set up Microsoft 365. Then you can connect your Outlook here and see what your AI does with your mail.")}
+              action={config.data?.can_configure ? <Button asChild><Link to="/channels">{t("Open Channels")}</Link></Button> : undefined} />
+            {/* P109: other email accounts work without Microsoft 365. */}
+            <Section title={t("Other email accounts")}><Suspense fallback={tabFallback}><OtherEmailAccounts /></Suspense></Section>
+          </>
         ) : (
           <>
             {/* P102: what is connected and what the AI may do, then what waits for a yes. */}
             {account.data?.connected && account.data.status !== "reconnect_needed" ? <MicrosoftAbilities account={account.data} /> : null}
             <WaitingDrafts assist={assist} />
-            <Segmented label={t("Microsoft 365")} value={app} onChange={setApp} className="w-full sm:w-fit [&>button]:flex-1"
-              options={[{ value: "mail", label: t("Outlook mail") }, { value: "teams", label: "Teams" }]} />
-            {app === "teams" ? <TeamsPanel /> : <>
+            <Segmented<M365App> label={t("Microsoft 365")} value={app} onChange={setApp} className="w-full sm:w-fit [&>button]:flex-1" options={tabs} />
+            {app === "teams" ? <TeamsPanel />
+              : app === "calendar" ? <NeedsOutlook><Suspense fallback={tabFallback}><OutlookCalendar /></Suspense></NeedsOutlook>
+              : app === "approvals" ? <NeedsOutlook><Suspense fallback={tabFallback}><TeamsApprovals /></Suspense></NeedsOutlook>
+              : app === "accounts" ? <Suspense fallback={tabFallback}><OtherEmailAccounts /></Suspense>
+              : <>
             {options.length > 1 ? (
               options.length <= 4 ? (
                 <Segmented label={t("Mailbox")} value={box} onChange={setBox} className="w-full sm:w-fit" options={options} />
@@ -145,7 +176,11 @@ export function MailPage() {
 
             {box === "personal" ? <PersonalMailbox /> : current ? <SharedStatus box={current} /> : null}
 
-            {!ready ? null : (
+            {personalOk ? (
+              <Segmented<"inbox" | "activity"> size="sm" label={t("View")} value={mailView} onChange={setMailView} className="w-full sm:w-fit [&>button]:flex-1"
+                options={[{ value: "inbox", label: t("My mail") }, { value: "activity", label: t("What my AI did") }]} />
+            ) : null}
+            {personalOk && mailView === "inbox" ? <OutlookInbox /> : !ready ? null : (
               <Section title={t("Recent mail")} description={t("Newest first. Chips show what the AI did; open one to see the task, the file or the draft.")}
                 actions={items.length ? (
                   <Segmented<Filter> size="sm" label={t("Which mail")} value={filter} onChange={setFilter} className="w-full sm:w-fit"
@@ -179,6 +214,15 @@ export function MailPage() {
         )}
     </Page>
   );
+}
+
+/** P109: a tab that reads the person's own Outlook: connect it first. */
+function NeedsOutlook({ children }: { children: React.ReactNode }) {
+  const config = useQuery(microsoftConfigQuery);
+  const account = useQuery({ ...microsoftAccountQuery, enabled: !!config.data?.configured });
+  if (account.isLoading) return tabFallback;
+  if (!account.data?.connected || account.data.status === "reconnect_needed") return <PersonalMailbox />;
+  return <>{children}</>;
 }
 
 /** My Outlook: connect it (empty state), or its status line when connected. */

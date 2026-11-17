@@ -36,10 +36,14 @@ export interface MicrosoftConfig {
   sign_in?: boolean;
   /** P63: Teams channel posts are asked for (an admin granted ChannelMessage.Read.All). */
   teams_channels?: boolean;
+  /** P109: posting and replying in Teams channels is asked for (ChannelMessage.Send). */
+  teams_channel_send?: boolean;
+  /** P109: Teams Approvals are asked for (ApprovalSolution.ReadWrite, admin consent first). */
+  teams_approvals?: boolean;
 }
 
 /** P63: the admin switches on Channels > Microsoft 365. */
-export const setMicrosoftOptions = (body: { sign_in?: boolean; teams_channels?: boolean }) =>
+export const setMicrosoftOptions = (body: { sign_in?: boolean; teams_channels?: boolean; teams_channel_send?: boolean; teams_approvals?: boolean }) =>
   api<MicrosoftConfig>("/api/integrations/microsoft/options", "PUT", body);
 
 export interface MicrosoftConfigIn {
@@ -68,6 +72,10 @@ export interface MicrosoftAccount {
   /** P102: may start a new Teams chat with anyone in the organisation (after "Allow new Teams
    * chats" once). Replying in chats that already exist never needs it. */
   new_chats_ok?: boolean;
+  /** P109: may post and reply in Teams channels from the Microsoft 365 page. */
+  channel_send_ok?: boolean;
+  /** P109: may read and answer Teams Approvals. */
+  approvals_ok?: boolean;
   last_sync_at: string | null;
   webhooks: WebhookMode;
   /** What Microsoft last said, when something went wrong (already in the UI language). */

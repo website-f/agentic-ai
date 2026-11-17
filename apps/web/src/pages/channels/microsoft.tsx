@@ -231,6 +231,13 @@ function SignInOptions({ cfg }: { cfg: MicrosoftConfig }) {
         <SwitchField checked={!!cfg.teams_channels} disabled={save.isPending} onCheckedChange={(v) => save.mutate({ teams_channels: v })}
           label={t("Teams channel posts")}
           hint={t("Lets each person's own AI read the posts in the Teams channels they belong to. First, in Microsoft Entra, add the delegated Microsoft Graph permission ChannelMessage.Read.All to the app and grant admin consent; then turn this on. People sign in with Microsoft again (or reconnect) to pick it up.")} />
+        {/* P109: answering in channel threads and Teams Approvals on the Microsoft 365 page. */}
+        <SwitchField checked={!!cfg.teams_channel_send} disabled={save.isPending} onCheckedChange={(v) => save.mutate({ teams_channel_send: v })}
+          label={t("Post and reply in Teams channels")}
+          hint={t("People reply in channel threads and start posts from the Microsoft 365 page. First, in Microsoft Entra, add the delegated Microsoft Graph permission ChannelMessage.Send to the app (grant admin consent so nobody is asked); then turn this on. People reconnect Microsoft once to pick it up.")} />
+        <SwitchField checked={!!cfg.teams_approvals} disabled={save.isPending} onCheckedChange={(v) => save.mutate({ teams_approvals: v })}
+          label={t("Teams Approvals")}
+          hint={t("People see the approvals waiting for them in the Teams Approvals app and approve or reject them on the Microsoft 365 page. First, in Microsoft Entra, add the delegated Microsoft Graph permission ApprovalSolution.ReadWrite and grant admin consent (only an admin can); then turn this on. People reconnect Microsoft once.")} />
         <Button size="sm" variant="outline" className="w-fit" loading={consent.isPending} onClick={() => consent.mutate()}>
           {t("Grant admin consent")}
         </Button>

@@ -1,5 +1,6 @@
 import {
   UserGearIcon,
+  ArrowsLeftRightIcon,
   GlobeIcon,
   ShieldCheckIcon,
   ListChecksIcon,
@@ -111,7 +112,8 @@ export type AppPath =
   | "/tutorial"
   | "/guide"
   | "/present"
-  | "/feedbacks";
+  | "/feedbacks"
+  | "/handoffs";
 
 export interface NavItem {
   to: AppPath;
@@ -204,6 +206,7 @@ export const NAV: NavSection[] = [
       { to: "/packs", label: msg("Packs"), icon: PackageIcon, hidden: true, blurb: msg("Submission packs: a checklist matched to real files and documents, compiled into one PDF with a cover and contents.") },
       { to: "/company-kit", label: msg("Company kit"), icon: IdentificationCardIcon, hidden: true, blurb: msg("Each company's facts every document reuses: legal name, registration, address, bank, signatory, logo.") },
       { to: "/search", label: msg("Search inside files"), icon: FileMagnifyingGlassIcon, hidden: true, blurb: msg("Search inside every document: a phrase on page 23 of a handbook, an amount, a form or a job title. Opens the file at the page.") },
+      { to: "/handoffs", label: msg("For other companies"), icon: ArrowsLeftRightIcon, hidden: true, blurb: msg("Upload files for other companies, check them and hand them over; see what others uploaded for your company.") },
     ],
   },
   {
@@ -246,13 +249,14 @@ export const NAV: NavSection[] = [
       { to: "/activity", advanced: true, label: msg("Activity"), icon: ClockCounterClockwiseIcon, perm: "audit.read", blurb: msg("Every change made by people and agents, in a tamper-evident log.") },
     ],
   },
-  // P73: only the system's developer (feedback.manage) sees this group.
+  // P73: only the system's developer (feedback.manage) sees this group. P109: and owners and
+  // management (feedback.read), who read it and comment.
   {
-    title: msg("Developer"),
+    title: msg("Feedback"),
     hint: msg("What people say about the system, from the feedback button on every page."),
     open: "all",
     items: [
-      { to: "/feedbacks", label: msg("Feedbacks"), icon: ChatTeardropTextIcon, perm: "feedback.manage", blurb: msg("Everything people sent from the feedback button: notes and marked-up screenshots of any page. Move each along, answer it, switch the button on or off and write the house rules.") },
+      { to: "/feedbacks", label: msg("Feedbacks"), icon: ChatTeardropTextIcon, perm: ["feedback.manage", "feedback.read"], blurb: msg("Everything people sent from the feedback button: notes and marked-up screenshots of any page. Move each along, answer it, switch the button on or off and write the house rules.") },
     ],
   },
   {

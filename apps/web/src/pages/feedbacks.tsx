@@ -3,9 +3,14 @@
  * or words; open one to see it full size, who sent it from which page and screen, move it along
  * (new, planned, in progress, done, won't do) and answer (the sender sees the answer under My
  * feedback). Also the switch that shows the button to everyone, and the house rules everyone
- * reads under Rules & guide. */
+ * reads under Rules & guide.
+ * P109: owners and management (feedback.read) read every piece too and talk about it in
+ * comments, @mentioning each other (the mentioned person is told in the app and by email);
+ * moving a piece along, answering, deleting, the switch and the house rules stay the
+ * developer's (feedback.manage). */
 import {
   ArrowSquareOutIcon,
+  AtIcon,
   CameraIcon,
   ChatTeardropTextIcon,
   GavelIcon,
@@ -22,6 +27,7 @@ import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm";
 import { DataTable, filterOf, TableFilter, useServerTable, useTableState, type Column } from "@/components/ui/data-table";
 import { Pill } from "@/components/ui/pill";
+import { MultiSelect } from "@/components/ui/search-select";
 import { Select } from "@/components/ui/select";
 import { Segmented } from "@/components/ui/segmented";
 import { SideSheet } from "@/components/ui/side-sheet";
@@ -30,8 +36,11 @@ import { SwitchField } from "@/components/ui/switch";
 import { useT } from "@/i18n";
 import { errorMessage } from "@/lib/api";
 import {
+  addComment,
   CATEGORIES,
   categoryOf,
+  commentsQuery,
+  feedbackReadersQuery,
   deleteFeedback,
   feedbackConfigQuery,
   feedbackKeys,
@@ -46,6 +55,7 @@ import {
   type RuleDraft,
 } from "@/lib/feedback";
 import { onLiveEvent } from "@/lib/live";
+import { meQuery } from "@/lib/queries";
 import { everyRow } from "@/lib/table-export";
 import { ROLE_INFO, type Role } from "@/lib/types";
 import { cn, timeAgo } from "@/lib/utils";
@@ -53,11 +63,18 @@ import { ALL_NAV } from "@/nav";
 
 type Tab = "inbox" | "rules";
 
+/** P109: the developer manages feedback; owners and management read it and comment. */
+function useIsDeveloper() {
+  const { data: me } = useQuery(meQuery);
+  return !!me?.permissions.includes("feedback.manage");
+}
+
 export function FeedbacksPage() {
   const t = useT();
   const qc = useQueryClient();
   const [tab, setTab] = useState<Tab>("inbox");
-  const cfg = useQuery(feedbackConfigQuery);
+  const dev = useIsDeveloper();
+  const cfg = useQuery({ ...feedbackConfigQuery, enabled: dev });
 
   // New and changed feedback shows up without reloading.
   useEffect(
@@ -81,8 +98,11 @@ export function FeedbacksPage() {
     <Page wide>
       <PageHeader
         title={t("Feedbacks")}
-        description={t("What people say about the system, sent from the feedback button on every page. Read it, move it along, answer.")}
+        description={dev
+          ? t("What people say about the system, sent from the feedback button on every page. Read it, move it along, answer.")
+          : t("What people say about the system, sent from the feedback button on every page. Read it and talk about it in comments; mention someone with @ to bring them in.")}
       />
+      {dev ? <>
       <div>
         <div className="rounded-[var(--radius-md)] border border-border bg-surface px-4 py-3.5">
           {cfg.isPending ? (
@@ -109,7 +129,8 @@ export function FeedbacksPage() {
           { value: "rules", label: t("House rules"), count: cfg.data?.rules.length },
         ]}
       />
-      {tab === "inbox" ? <Inbox /> : <RulesEditor />}
+      </> : null}
+      {tab === "inbox" || !dev ? <Inbox /> : <RulesEditor />}
     </Page>
   );
 }
@@ -118,6 +139,7 @@ export function FeedbacksPage() {
 
 function Inbox() {
   const t = useT();
+  const dev = useIsDeveloper();
   const search = useSearch({ from: "/app/feedbacks" });
   const navigate = useNavigate({ from: "/feedbacks" });
   const qc = useQueryClient();
@@ -159,6 +181,7 @@ function Inbox() {
           <span className="grid min-w-0 gap-0.5">
             <span className={cn("line-clamp-2 text-[13px] whitespace-pre-line", !f.note && "text-muted")}>{f.note || t("Screenshot with marks")}</span>
             {f.dev_note ? <span className="truncate text-[11.5px] text-accent">{t("Answered")}: {f.dev_note}</span> : null}
+            {f.comments ? <span className="text-[11.5px] text-muted">{f.comments === 1 ? t("1 comment") : t("{n} comments", { n: f.comments })}</span> : null}
           </span>
         </span>
       ),
@@ -220,7 +243,7 @@ function Inbox() {
         onOpen={(f) => select(f.id)}
         exportName={t("feedback")}
         exportRows={() => everyRow<FeedbackItem, FeedbackList>("/api/feedback", control.state, {}, (b) => b.items)}
-        rowActions={{
+        rowActions={dev ? {
           view: (f) => select(f.id),
           remove: async (f) => {
             await deleteFeedback(f.id);
@@ -228,7 +251,7 @@ function Inbox() {
             void qc.invalidateQueries({ queryKey: feedbackKeys.all });
           },
           removeBody: () => t("It is gone for good, screenshot included. The sender no longer sees it."),
-        }}
+        } : { view: (f) => select(f.id) }}
         rowClassName={(f) => (f.id === search.f ? "bg-accent-soft/40" : undefined)}
         empty={<EmptyState icon={ChatTeardropTextIcon} title={t("No feedback yet")} body={t("Once the button is on, what people send shows up here, newest first.")} />}
       />
@@ -245,6 +268,7 @@ function roleLabel(t: (s: string) => string, role: string): string {
 function Detail({ item, onClose }: { item: FeedbackItem | null; onClose: () => void }) {
   const t = useT();
   const qc = useQueryClient();
+  const dev = useIsDeveloper();
   const [answer, setAnswer] = useState(item?.dev_note ?? "");
   const [confirm, setConfirm] = useState(false);
   const saved = item?.dev_note ?? "";
@@ -315,9 +339,11 @@ function Detail({ item, onClose }: { item: FeedbackItem | null; onClose: () => v
                 </Link>
               </Button>
             ) : null}
-            <Button variant="ghost" size="sm" onClick={() => setConfirm(true)}>
-              <TrashIcon size={15} /> {t("Delete")}
-            </Button>
+            {dev ? (
+              <Button variant="ghost" size="sm" onClick={() => setConfirm(true)}>
+                <TrashIcon size={15} /> {t("Delete")}
+              </Button>
+            ) : null}
           </>
         ) : undefined}
       >
@@ -334,15 +360,24 @@ function Detail({ item, onClose }: { item: FeedbackItem | null; onClose: () => v
             </div>
             <div className="grid gap-2">
               <p className="text-[12px] font-semibold tracking-[0.06em] text-muted uppercase">{t("Where it stands")}</p>
-              <Segmented<FeedbackStatus>
-                value={item.status}
-                onChange={(s) => patch.mutate({ status: s })}
-                label={t("Where it stands")}
-                size="sm"
-                options={STATUSES.map((s) => ({ value: s.value, label: t(s.label) }))}
-              />
+              {dev ? (
+                <Segmented<FeedbackStatus>
+                  value={item.status}
+                  onChange={(s) => patch.mutate({ status: s })}
+                  label={t("Where it stands")}
+                  size="sm"
+                  options={STATUSES.map((s) => ({ value: s.value, label: t(s.label) }))}
+                />
+              ) : <span><Pill tone={statusOf(item.status).tone}>{t(statusOf(item.status).label)}</Pill></span>}
             </div>
-            <label className="grid gap-2">
+            {!dev ? (
+              item.dev_note ? (
+                <div className="grid gap-1.5">
+                  <p className="text-[12px] font-semibold tracking-[0.06em] text-muted uppercase">{t("The developer's answer")}</p>
+                  <p className="text-[13.5px] whitespace-pre-line">{item.dev_note}</p>
+                </div>
+              ) : null
+            ) : <label className="grid gap-2">
               <span className="text-[12px] font-semibold tracking-[0.06em] text-muted uppercase">{t("Your answer")}</span>
               <textarea
                 value={answer}
@@ -357,7 +392,8 @@ function Detail({ item, onClose }: { item: FeedbackItem | null; onClose: () => v
                   {t("Save answer")}
                 </Button>
               </div>
-            </label>
+            </label>}
+            <Comments feedbackId={item.id} />
             <dl className="grid gap-x-4 gap-y-2 rounded-[var(--radius-md)] border border-border px-4 py-3 text-[12.5px] sm:grid-cols-[8rem_1fr]">
               {facts.map(([k, v]) => (
                 <div key={k} className="contents">
@@ -468,5 +504,76 @@ function RulesEditor() {
         <CameraIcon size={13} /> {t("Tip: open Rules & guide from the feedback button on any page to see what people read there.")}
       </p>
     </div>
+  );
+}
+
+// ------------------------------------------------------------------ P109 comments
+
+
+/** Comments on one piece, oldest first, and a box to add one, @mentioning other readers. */
+function Comments({ feedbackId }: { feedbackId: string }) {
+  const t = useT();
+  const qc = useQueryClient();
+  const { data: me } = useQuery(meQuery);
+  const list = useQuery(commentsQuery(feedbackId));
+  const readers = useQuery(feedbackReadersQuery);
+  const [body, setBody] = useState("");
+  const [mentions, setMentions] = useState<string[]>([]);
+  const others = (readers.data ?? []).filter((r) => r.user_id !== me?.user.id);
+  const send = useMutation({
+    mutationFn: () => addComment(feedbackId, body.trim(), mentions),
+    onSuccess: (c) => {
+      setBody("");
+      setMentions([]);
+      void qc.invalidateQueries({ queryKey: ["feedback", "comments", feedbackId] });
+      void qc.invalidateQueries({ queryKey: feedbackKeys.all });
+      toast.success(c.mentions.length ? t("Comment added. The people you mentioned are told.") : t("Comment added."));
+    },
+    onError: (e) => toast.error(errorMessage(e)),
+  });
+  // Picking someone also puts "@Name" in the text, where it reads naturally.
+  const pick = (ids: string[]) => {
+    const added = ids.filter((id) => !mentions.includes(id));
+    const names = added.map((id) => others.find((r) => r.user_id === id)?.name).filter(Boolean);
+    if (names.length) setBody((b) => `${b}${b && !b.endsWith(" ") ? " " : ""}${names.map((n) => `@${n}`).join(" ")} `);
+    setMentions(ids);
+  };
+  return (
+    <section className="grid gap-3" aria-label={t("Comments")}>
+      <p className="text-[12px] font-semibold tracking-[0.06em] text-muted uppercase">{t("Comments")}</p>
+      {list.isLoading ? <Skeleton className="h-16" /> : list.data?.length ? (
+        <ul className="grid gap-2">
+          {list.data.map((c) => (
+            <li key={c.id} className={cn("grid gap-1 rounded-[var(--radius-md)] border border-border px-3 py-2.5", c.mine && "bg-accent-soft/30")}>
+              <p className="flex flex-wrap items-baseline justify-between gap-x-2 text-[12.5px]">
+                <span className="font-medium">{c.author_name || t("Someone who left")}</span>
+                <time dateTime={c.created_at} className="text-muted">{timeAgo(c.created_at)}</time>
+              </p>
+              <p className="text-[13.5px] break-words whitespace-pre-line">{c.body}</p>
+              {c.mentions.length ? (
+                <p className="flex flex-wrap items-center gap-1 text-[12px] text-muted">
+                  <AtIcon size={12} /> {c.mentions.map((m) => m.name).join(", ")}
+                </p>
+              ) : null}
+            </li>
+          ))}
+        </ul>
+      ) : <p className="text-[13px] text-muted">{t("No comments yet. Start the conversation.")}</p>}
+      <div className="grid gap-2 rounded-[var(--radius-md)] border border-border p-3">
+        <textarea value={body} onChange={(e) => setBody(e.target.value)} rows={3} maxLength={4000} aria-label={t("Write a comment")}
+          placeholder={t("Write a comment")}
+          className="w-full resize-y rounded-[var(--radius-sm)] border border-border bg-surface px-3 py-2 text-[13.5px] outline-none focus:border-accent" />
+        <div className="grid gap-1.5">
+          <span className="text-[12.5px] font-medium">{t("Mention")}</span>
+          <MultiSelect value={mentions} onValueChange={pick} label={t("Mention")} placeholder={t("Pick people to tell")}
+            searchPlaceholder={t("Search people")}
+            options={others.map((r) => ({ value: r.user_id, label: r.name, hint: roleLabel(t, r.role) }))} />
+          <p className="text-[12px] text-muted">{t("They are told in the app and by email, with a link to this feedback.")}</p>
+        </div>
+        <div className="flex justify-end">
+          <Button size="sm" className="pointer-coarse:h-11" disabled={!body.trim()} loading={send.isPending} onClick={() => send.mutate()}>{t("Comment")}</Button>
+        </div>
+      </div>
+    </section>
   );
 }

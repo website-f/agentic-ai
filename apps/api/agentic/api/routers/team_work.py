@@ -27,7 +27,7 @@ from ...core.db import get_db
 from ...i18n import Msg
 from ...models import Agent, Branch, Department, Membership, Task, User
 from ...services import audit
-from ...teams import people
+from ...teams import people, task_parts
 from ..deps import Principal, api_error, ensure_work_scope, require
 from .tasks import _task, people_error, start, task_out, tasks_out, team_ids
 
@@ -44,7 +44,7 @@ async def my_assigned_tasks(
     """The open tasks given to me (new ones first, then due soonest) and counts: open, new
     (not yet taken), overdue, due today. Done ones of the last week come in `done`."""
     ws, me = principal.workspace_id, principal.user.id
-    mine = (Task.workspace_id == ws, Task.assignee_user_id == me)
+    mine = (Task.workspace_id == ws, task_parts.assigned_to([me]))  # P109: any assignee
     now = datetime.now(UTC)
     new_first = case((Task.status == "triage", 0), else_=1)
     rows = list(
@@ -178,16 +178,19 @@ async def comment(
     if not text:
         raise api_error(status.HTTP_422_UNPROCESSABLE_CONTENT, "empty", "Type a comment.")
     await runtime.task_event(db, t, "comment", principal.actor, text)
-    to = t.assignee_user_id if principal.user.id != t.assignee_user_id else people.giver_id(t)
-    if to and to != principal.user.id:
-        await people.notify(
-            db,
-            t,
-            to,
-            Msg("New comment: {title}", title=t.title[:100]),
-            Msg("{name}: {text}", name=principal.user.name, text=text[:200]),
-            f"comment:{t.id}:{datetime.now(UTC).isoformat()}",
-        )
+    # P109: everyone on it hears (its assignees, watchers and whoever gave it), not the writer.
+    on = [r.user_id for r in (await task_parts.people_of(db, [t.id])).get(t.id, [])]
+    told = [u for u in dict.fromkeys([t.assignee_user_id, *on, people.giver_id(t)]) if u]
+    for to in told:
+        if to != principal.user.id:
+            await people.notify(
+                db,
+                t,
+                to,
+                Msg("New comment: {title}", title=t.title[:100]),
+                Msg("{name}: {text}", name=principal.user.name, text=text[:200]),
+                f"comment:{t.id}:{to}:{datetime.now(UTC).isoformat()}",
+            )
     return {"ok": True}
 
 
@@ -208,7 +211,7 @@ async def hand_to_ai(
     assigned to an agent they own, that runs like any agent task (the engine is unchanged).
     The person's task itself never runs."""
     t = await _task(db, principal, task_id)
-    if t.assignee_user_id != principal.user.id:
+    if principal.user.id not in await task_parts.assignee_ids(db, t):  # P109: any assignee
         raise api_error(
             status.HTTP_403_FORBIDDEN,
             "not_your_task",

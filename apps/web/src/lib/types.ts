@@ -75,6 +75,11 @@ export interface Member {
   prima_modules?: string[] | null;
   /** P106: the Prima department their own Prima account gets (null or missing: none). */
   prima_department?: "transport" | "procurement" | "hr" | null;
+  /** P109: the departments they head (any company), what of the Library they read, and
+   * whether they may upload files for other companies. */
+  head_of?: { id: string; name: string; branch_id?: string | null; branch_name?: string | null }[];
+  library_scope?: "company" | "department";
+  uploads_for_others?: boolean;
 }
 
 export interface Department {

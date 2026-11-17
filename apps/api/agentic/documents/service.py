@@ -88,6 +88,18 @@ def scoped(q: Any, model: Any, principal: Any) -> Any:
     cond = sc.agent_where()
     agents = select(Agent.id).where(Agent.workspace_id == principal.workspace_id, cond)
     parts: list[ColumnElement[bool]] = [model.created_by == principal.actor]
+    if model is DocFile:
+        # P109: a file someone uploaded for another company leaves their view once they
+        # approved it (org/handoffs.py); the target company sees it from then on.
+        from ..org.models import FileHandoff
+
+        handed = select(FileHandoff.file_id).where(
+            FileHandoff.workspace_id == principal.workspace_id,
+            FileHandoff.uploader_user_id == sc.user_id,
+            FileHandoff.status == "approved",
+            FileHandoff.file_id.is_not(None),
+        )
+        parts[0] = and_(parts[0], DocFile.id.not_in(handed))
     if hasattr(model, "agent_id"):
         parts.append(model.agent_id.in_(agents))
     if hasattr(model, "task_id"):
@@ -124,6 +136,11 @@ def visible_files(query: Any, principal: Any) -> Any:
         DocFile.quarantined.is_(False),
         library_scope(library.for_person(principal)),
     )
+    from ..knowledge import dept_scope
+
+    narrow = dept_scope.person_files(principal)  # P109: own department only
+    if narrow is not None:
+        shared = and_(shared, narrow)
     return query.where(or_(DocFile.id.in_(mine), shared))
 
 
@@ -181,6 +198,11 @@ def agent_files(agent: Any, task_id: str | None = None) -> ColumnElement[bool]:
         mine.append(DocFile.owner_user_id == agent.owner_user_id)
     not_personal = or_(~personal_file(), *mine)
     cond = and_(DocFile.workspace_id == agent.workspace_id, branch, dept, not_private, not_personal)
+    from ..knowledge import dept_scope
+
+    narrow = dept_scope.agent_files(agent)  # P109: its owner reads their department only
+    if narrow is not None:
+        cond = and_(cond, narrow)
     if task_id:
         cond = or_(
             cond, and_(DocFile.workspace_id == agent.workspace_id, DocFile.task_id == task_id)
@@ -693,6 +715,11 @@ async def process_file(
         f.expires_on = info["expires_on"] if EXPIRY_WORDS.search(out.text) else None
     elif not f.title:
         f.title = re.sub(r"\.[A-Za-z0-9]{2,5}$", "", f.name)[:200]
+    from ..org import handoffs
+
+    typed = await handoffs.typed_title(db, f.id)  # P109: the title the uploader typed stays
+    if typed:
+        f.title = typed
     if after is not None:
         await after(db, f, info)
     # P36: a library document that reads as confidential (pay, personnel, contracts, bank)

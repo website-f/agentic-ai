@@ -349,6 +349,9 @@ async def access_token(db: AsyncSession, acct: MicrosoftAccount, force: bool = F
     # scopes they still have.
     for drop in (
         {app.CHANNEL_SCOPE} if cfg.teams_channels else set(),
+        # P109: the same for channel posting and Teams Approvals, until the person signs in again.
+        {app.CHANNEL_SEND_SCOPE} if cfg.teams_channel_send else set(),
+        {app.APPROVALS_SCOPE} if cfg.teams_approvals else set(),
         set(app.FILES_SCOPES),
         {app.CHAT_CREATE},
     ):

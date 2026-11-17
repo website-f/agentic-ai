@@ -37,6 +37,8 @@ from . import app, auth, http
 from .errors import GraphError, MicrosoftError, NotConfigured, Throttled, Unauthorized, for_status
 
 GRAPH = "https://graph.microsoft.com/v1.0"
+# P109: Teams Approvals live only in Graph's beta (/solutions/approval).
+GRAPH_BETA = "https://graph.microsoft.com/beta"
 MAX_RETRIES = 3
 MAX_WAIT = 30.0
 RETRY_STATUSES = frozenset({429, 503, 504})
@@ -109,7 +111,7 @@ class Graph:
 
     def _url(self, path: str) -> str:
         if path.startswith("https://"):
-            if not path.startswith(GRAPH + "/"):
+            if not path.startswith((GRAPH + "/", GRAPH_BETA + "/")):
                 raise GraphError(Msg("Refused a link that is not Microsoft Graph."), 0)
             return path
         return GRAPH + (path if path.startswith("/") else "/" + path)
@@ -514,6 +516,156 @@ class Graph:
             if e.status != 400:
                 raise
             await self.request("DELETE", f"{self.root}/events/{_q(event_id)}")
+
+    # ------------------------------------------------------------ P109: the Microsoft 365 page
+
+    async def folder_messages(
+        self,
+        folder: str = "inbox",
+        *,
+        top: int = 25,
+        skip: int = 0,
+        unread_only: bool = False,
+        query: str = "",
+    ) -> list[dict[str, Any]]:
+        """A mail folder's messages, newest first, metadata and preview only. With `query`:
+        Graph's full-text search in that folder (no ordering or skipping with $search)."""
+        params: dict[str, Any] = {
+            "$top": max(1, min(top, 50)),
+            "$select": MESSAGE_META + ",flag,sentDateTime",
+        }
+        if query:
+            params["$search"] = f'"{query.replace(chr(34), " ")}"'
+        else:
+            params["$orderby"] = "receivedDateTime desc"
+            if skip:
+                params["$skip"] = max(0, skip)
+            if unread_only:
+                params["$filter"] = "isRead eq false"
+        body = await self.request(
+            "GET", f"{self.root}/mailFolders/{urllib.parse.quote(folder)}/messages", params=params
+        )
+        return list(body.get("value") or [])
+
+    async def send_mail(
+        self,
+        to: list[str] | str,
+        subject: str,
+        body_html: str,
+        *,
+        cc: list[str] | str = "",
+        bcc: list[str] | str = "",
+    ) -> None:
+        """Send a new email at once (a person pressed Send). Kept in Sent Items."""
+        await self.request(
+            "POST",
+            f"{self.root}/sendMail",
+            json={
+                "message": {
+                    "subject": subject,
+                    "body": {"contentType": "HTML", "content": body_html},
+                    "toRecipients": recipients(to),
+                    "ccRecipients": recipients(cc),
+                    "bccRecipients": recipients(bcc),
+                },
+                "saveToSentItems": True,
+            },
+        )
+
+    async def chat(self, chat_id: str) -> dict[str, Any]:
+        """One of the person's chats, with its members."""
+        return await self._get(f"/me/chats/{_q(chat_id)}", **{"$expand": "members"})
+
+    async def chat_page(
+        self, chat_id: str, top: int = 30, next_link: str | None = None
+    ) -> tuple[list[dict[str, Any]], str | None]:
+        """A page of a chat's messages, newest first, and the link to older ones."""
+        if next_link:
+            body = await self.request("GET", next_link)
+        else:
+            body = await self._get(
+                f"/me/chats/{_q(chat_id)}/messages",
+                **{"$top": max(1, min(top, 50)), "$orderby": "createdDateTime desc"},
+            )
+        return list(body.get("value") or []), body.get("@odata.nextLink")
+
+    async def send_chat_html(self, chat_id: str, html_body: str) -> dict[str, Any]:
+        """Post a message a person wrote and sent themselves (HTML)."""
+        return await self.request(
+            "POST",
+            f"/chats/{_q(chat_id)}/messages",
+            json={"body": {"contentType": "html", "content": html_body}},
+        )
+
+    async def channel_post(
+        self,
+        team_id: str,
+        channel_id: str,
+        html_body: str,
+        *,
+        reply_to: str = "",
+        subject: str = "",
+    ) -> dict[str, Any]:
+        """A new channel post, or a reply in a post's thread (`reply_to`). Needs
+        ChannelMessage.Send (app.CHANNEL_SEND_SCOPE). Only after a person pressed Send."""
+        path = f"/teams/{_q(team_id)}/channels/{_q(channel_id)}/messages"
+        if reply_to:
+            path += f"/{_q(reply_to)}/replies"
+        body: dict[str, Any] = {"body": {"contentType": "html", "content": html_body}}
+        if subject and not reply_to:
+            body["subject"] = subject[:250]
+        return await self.request("POST", path, json=body)
+
+    async def hosted_content(self, path: str, max_bytes: int = 15 * 1024 * 1024) -> bytes:
+        """The bytes of a Teams message's hosted content (an inline picture). `path` is a
+        Graph path the caller checked (hub.hosted_path)."""
+        data = await self.request("GET", path, raw=True)
+        if len(data) > max_bytes:
+            raise GraphError(Msg("That picture is too big to show."), 413)
+        return data
+
+    async def event_detail(self, event_id: str, *, tz: str | None = None) -> dict[str, Any]:
+        """One event with its description (HTML) and the person's own answer."""
+        return await self.request(
+            "GET",
+            f"{self.root}/events/{_q(event_id)}",
+            params={
+                "$select": "id,subject,start,end,location,attendees,organizer,isAllDay,"
+                "isCancelled,isOrganizer,onlineMeeting,webLink,body,bodyPreview,responseStatus,"
+                "showAs,importance,type"
+            },
+            prefer=[*self._tz(tz), 'outlook.body-content-type="html"'],
+        )
+
+    async def respond_event(self, event_id: str, answer: str, comment: str = "") -> None:
+        """Accept, tentatively accept or decline a meeting invitation (the organiser is told)."""
+        action = {"accept": "accept", "tentative": "tentativelyAccept", "decline": "decline"}
+        await self.request(
+            "POST",
+            f"{self.root}/events/{_q(event_id)}/{action[answer]}",
+            json={"comment": comment, "sendResponse": True},
+        )
+
+    async def approvals(self, top: int = 50) -> list[dict[str, Any]]:
+        """Teams Approvals the person created or is asked for (Graph beta, needs
+        ApprovalSolution.ReadWrite: app.APPROVALS_SCOPE), newest first."""
+        body = await self.request(
+            "GET",
+            f"{GRAPH_BETA}/solutions/approval/approvalItems",
+            params={"$top": max(1, min(top, 100))},
+        )
+        items = list(body.get("value") or [])
+        items.sort(key=lambda a: str(a.get("createdDateTime") or ""), reverse=True)
+        return items
+
+    async def respond_approval(self, approval_id: str, response: str, comment: str = "") -> None:
+        """Approve or reject (one of the item's responseOptions) with an optional comment.
+        Only after the person pressed the button."""
+        await self.request(
+            "POST",
+            f"{GRAPH_BETA}/solutions/approval/approvalItems/{_q(approval_id)}/responses",
+            json={"response": response, "comments": comment},
+        )
 
     # ------------------------------------------------------------ change notifications
 

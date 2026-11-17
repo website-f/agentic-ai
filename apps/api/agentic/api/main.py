@@ -439,6 +439,14 @@ from .routers import microsoft as microsoft_router  # noqa: E402
 
 app.include_router(microsoft_router.router)
 
+# P109: the Microsoft 365 page (own mail, Teams, calendar, approvals, Ask AI) and a person's
+# other email accounts with their attachment backups.
+from .routers import m365 as m365_router  # noqa: E402
+from .routers import mail_accounts as mail_accounts_router  # noqa: E402
+
+app.include_router(m365_router.router)
+app.include_router(mail_accounts_router.router)
+
 # P36: each person's daily AI allowance and the work-scope guard (the owner's controls).
 from .routers import allowances as allowances_router  # noqa: E402
 
@@ -513,10 +521,21 @@ from .routers import feedback as feedback_router  # noqa: E402
 
 app.include_router(feedback_router.router)
 
+# P109: files uploaded for other companies, checked by the uploader, then handed over.
+from .routers import handoffs as handoffs_router  # noqa: E402
+
+app.include_router(handoffs_router.router)
+RAW_UPLOAD_PATHS.add("/api/handoffs")  # the file is the body
+
 # P97: tasks given to people, the people I may give work to, comments, a step to my AI.
 from .routers import team_work as team_work_router  # noqa: E402
 
 app.include_router(team_work_router.router)
+
+# P109: tasks for people, Trello-like: assignees and watchers, checklist, sub-tasks, files.
+from .routers import people_tasks as people_tasks_router  # noqa: E402
+
+app.include_router(people_tasks_router.router)
 
 # P81: delete many files and SOPs at once (Library, Browse, SOPs).
 from .routers import bulk_delete as bulk_delete_router  # noqa: E402

@@ -72,7 +72,7 @@ describe("Who a head of department manages", { timeout: 30_000 }, () => {
 
   it("shows who heads, manages and reports to whom under a name", () => {
     wrap(<><OrgLine member={HANA} onTeam={() => {}} /><OrgLine member={ALL[1]!} /></>);
-    expect(screen.getByText("Head of Finance")).toBeInTheDocument();
+    expect(screen.getByText("HOD: Finance")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Manages 1 person" })).toBeInTheDocument();
     expect(screen.getByText("Reports to Hana")).toBeInTheDocument();
   });
@@ -89,7 +89,7 @@ describe("A new department from the member editor", { timeout: 30_000 }, () => {
   });
 });
 
-describe("P98: staff they manage, in the member editor", { timeout: 30_000 }, () => {
+describe("P98/P109: the people under them, in the member editor", { timeout: 30_000 }, () => {
   function Field() {
     const [v, setV] = useState<string[] | null>(null);
     return (
@@ -102,10 +102,10 @@ describe("P98: staff they manage, in the member editor", { timeout: 30_000 }, ()
 
   it("starts from who reports to them now, finds people by search and adds a whole department", async () => {
     wrap(<Field />);
-    const group = await screen.findByRole("group", { name: "Staff they manage" });
+    const group = await screen.findByRole("group", { name: "People under them" });
     await waitFor(() => expect(within(group).getByText("Sara")).toBeInTheDocument());
     expect(screen.getByTestId("picked")).toHaveTextContent("untouched");
-    fireEvent.click(within(group).getByRole("button", { name: "Staff they manage: 1 picked. Change" }));
+    fireEvent.click(within(group).getByRole("button", { name: "People under them: 1 picked. Change" }));
     fireEvent.change(await screen.findByRole("combobox"), { target: { value: "omar@" } });
     fireEvent.click(screen.getByRole("option", { name: /Omar/ }));
     expect(screen.getByTestId("picked")).toHaveTextContent("u_sara,u_omar");

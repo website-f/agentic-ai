@@ -107,6 +107,8 @@ const INVALIDATE: Record<string, readonly (readonly string[])[]> = {
   // Sorted / turned into a task / a draft or follow-up added; the daily report was written.
   "mail.updated": [mailKeys.all, ["email-drafts"], ["calendar-drafts"], workKeys.tasks],
   "mail.digest": [mailKeys.all, ["reports"]],
+  // P109: a backup of another email account moved on or finished (Microsoft 365 > Other email).
+  "mail.backup": [["mail-accounts"], ["me", "needs"], ["files"]],
 };
 
 /** P96: invalidations are batched: each key once, 250 ms after the last event, but never later

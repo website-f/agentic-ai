@@ -10,6 +10,12 @@ reads from the same button, next to what each page is for.
 
 The switch and the rules live in the workspace settings: settings["feedback"] =
 {"enabled": bool, "rules": [{"id", "title", "body", "page"}]}.
+
+P109: the Feedbacks page is open to high management too: the owners and the members in the
+management role read every piece (and its screenshot) and comment on it, @mentioning the
+others who read it (each mentioned person is told in the app, on their phone and by email).
+Staff and every other role still see only their own pieces. Moving a piece along, answering it,
+deleting it, the switch and the rules stay the developer's.
 """
 
 import base64
@@ -28,9 +34,10 @@ from sqlalchemy.orm.attributes import flag_modified
 from ...core.db import get_db
 from ...core.ids import new_id
 from ...core.valkey import valkey
-from ...feedback.models import Feedback
-from ...models import Workspace
-from ...services import audit, events
+from ...feedback.models import Feedback, FeedbackComment
+from ...i18n import Msg
+from ...models import Membership, User, Workspace
+from ...services import audit, events, notices
 from ..deps import (
     Principal,
     api_error,
@@ -42,6 +49,25 @@ from ..table import TableParams, sql_page
 from ..table import like as like_word
 
 router = APIRouter(prefix="/api/feedback", tags=["feedback"])
+
+# P109: who reads every piece of feedback besides the developer (feedback.read in /me).
+READER_ROLES = frozenset({"owner", "admin", "management"})  # Fitri, 17 Nov 2026: + admins
+READ_PERMISSION = "feedback.read"
+
+
+def reads_feedback(user: Any, role: str) -> bool:
+    return is_developer(user, role) or role in READER_ROLES
+
+
+async def require_reader(principal: Principal = Depends(current_principal)) -> Principal:
+    if not reads_feedback(principal.user, principal.role):
+        raise api_error(
+            status.HTTP_403_FORBIDDEN,
+            "forbidden",
+            "Only owners, admins, management and the system's developer read feedback.",
+        )
+    return principal
+
 
 Kind = Literal["screenshot", "general"]
 Category = Literal["bug", "confusing", "not_needed", "idea", "praise", "other"]
@@ -316,6 +342,7 @@ class FeedbackOut(MineOut):
     screenshot_bytes: int
     handled_by: str | None
     resolved_at: datetime | None
+    comments: int = 0  # P109
 
 
 # P107: the columns the Feedbacks table sorts by (?sort=, "-" first for descending).
@@ -376,7 +403,7 @@ async def list_feedback(
     category: Category | None = Query(default=None),
     limit: int = Query(default=200, ge=1, le=500),
     params: TableParams = Depends(),
-    principal: Principal = Depends(require_developer),
+    principal: Principal = Depends(require_reader),
     db: AsyncSession = Depends(get_db),
 ) -> ListOut:
     """Newest first, at most `limit`. P107: with `page` (api/table.py) it answers one numbered
@@ -416,9 +443,24 @@ async def list_feedback(
         rows = await sql_page(db, stmt, order, params, response, rows=True)
     else:
         rows = (await db.execute(stmt.order_by(Feedback.created_at.desc()).limit(limit))).all()
+    ids = [r[0].id for r in rows]
+    talk = (
+        dict(
+            (
+                await db.execute(
+                    select(FeedbackComment.feedback_id, func.count())
+                    .where(FeedbackComment.feedback_id.in_(ids))
+                    .group_by(FeedbackComment.feedback_id)
+                )
+            ).all()
+        )
+        if ids
+        else {}
+    )
     items = [
         FeedbackOut(
             **_mine(f, n),
+            comments=talk.get(f.id, 0),
             user_id=f.user_id,
             author_name=f.author_name,
             author_email=email,
@@ -452,9 +494,10 @@ async def screenshot(
     principal: Principal = Depends(current_principal),
     db: AsyncSession = Depends(get_db),
 ) -> Response:
-    """The developer sees every screenshot; a sender sees their own."""
+    """The developer (P109: and the owners and management) sees every screenshot; a sender
+    sees their own."""
     fb = await _one(db, principal, fid, shot=True)
-    if not is_developer(principal.user, principal.role) and fb.user_id != principal.user.id:
+    if not reads_feedback(principal.user, principal.role) and fb.user_id != principal.user.id:
         raise api_error(status.HTTP_404_NOT_FOUND, "not_found", "That feedback is not here.")
     if not fb.screenshot:
         raise api_error(status.HTTP_404_NOT_FOUND, "not_found", "That feedback has no screenshot.")
@@ -527,3 +570,181 @@ async def remove(
     await db.delete(fb)
     await db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+# ------------------------------------------------------------------ P109 comments and mentions
+
+
+class ReaderOut(BaseModel):
+    user_id: str
+    name: str
+    role: str
+
+
+class CommentIn(BaseModel):
+    body: str = Field(min_length=1, max_length=4000)
+    mentions: list[str] = Field(default_factory=list, max_length=20)
+
+
+class CommentOut(BaseModel):
+    id: str
+    user_id: str | None
+    author_name: str
+    body: str
+    mentions: list[ReaderOut]
+    created_at: datetime
+    mine: bool
+
+
+async def readers(db: AsyncSession, workspace_id: str) -> list[ReaderOut]:
+    """Everyone who reads the Feedbacks page here (active): who may be @mentioned."""
+    rows = (
+        await db.execute(
+            select(User, Membership.role)
+            .join(Membership, Membership.user_id == User.id)
+            .where(Membership.workspace_id == workspace_id, User.is_active.is_(True))
+            .order_by(func.lower(User.name))
+        )
+    ).all()
+    return [
+        ReaderOut(user_id=u.id, name=u.name, role=role)
+        for u, role in rows
+        if reads_feedback(u, role)
+    ]
+
+
+@router.get("/readers")
+async def list_readers(
+    principal: Principal = Depends(require_reader), db: AsyncSession = Depends(get_db)
+) -> list[ReaderOut]:
+    return await readers(db, principal.workspace_id)
+
+
+def _comment_out(c: FeedbackComment, who: dict[str, ReaderOut], me: str) -> CommentOut:
+    return CommentOut(
+        id=c.id,
+        user_id=c.user_id,
+        author_name=c.author_name,
+        body=c.body,
+        mentions=[who[u] for u in (c.mentions or []) if u in who],
+        created_at=c.created_at,
+        mine=c.user_id == me,
+    )
+
+
+@router.get("/{fid}/comments")
+async def list_comments(
+    fid: str,
+    principal: Principal = Depends(require_reader),
+    db: AsyncSession = Depends(get_db),
+) -> list[CommentOut]:
+    """Oldest first. Opening them marks this person's mentions seen (their bell stops)."""
+    await _one(db, principal, fid)
+    rows = list(
+        (
+            await db.scalars(
+                select(FeedbackComment)
+                .where(
+                    FeedbackComment.feedback_id == fid,
+                    FeedbackComment.workspace_id == principal.workspace_id,
+                )
+                .order_by(FeedbackComment.created_at, FeedbackComment.id)
+            )
+        ).all()
+    )
+    me = principal.user.id
+    changed = False
+    for c in rows:
+        if me in (c.mentions or []) and me not in (c.seen_by or []):
+            c.seen_by = [*(c.seen_by or []), me]
+            flag_modified(c, "seen_by")
+            changed = True
+    if changed:
+        await db.commit()
+    who = {r.user_id: r for r in await _everyone(db, principal.workspace_id, rows)}
+    return [_comment_out(c, who, me) for c in rows]
+
+
+async def _everyone(
+    db: AsyncSession, workspace_id: str, rows: list[FeedbackComment]
+) -> list[ReaderOut]:
+    """Names for every person mentioned (even one who no longer reads feedback)."""
+    ids = {u for c in rows for u in (c.mentions or [])}
+    if not ids:
+        return []
+    got = (
+        await db.execute(
+            select(User.id, User.name, Membership.role)
+            .join(Membership, Membership.user_id == User.id)
+            .where(Membership.workspace_id == workspace_id, User.id.in_(ids))
+        )
+    ).all()
+    return [ReaderOut(user_id=i, name=n, role=r) for i, n, r in got]
+
+
+@router.post("/{fid}/comments", status_code=status.HTTP_201_CREATED)
+async def add_comment(
+    fid: str,
+    body: CommentIn,
+    principal: Principal = Depends(require_reader),
+    db: AsyncSession = Depends(get_db),
+) -> CommentOut:
+    """A comment; each @mentioned reader is told (in the app, phone and email)."""
+    fb = await _one(db, principal, fid)
+    text = body.body.strip()
+    if not text:
+        raise api_error(status.HTTP_422_UNPROCESSABLE_CONTENT, "empty", "Write a comment first.")
+    allowed = {r.user_id: r for r in await readers(db, principal.workspace_id)}
+    want = list(dict.fromkeys(body.mentions))
+    bad = [u for u in want if u not in allowed]
+    if bad:
+        raise api_error(
+            status.HTTP_400_BAD_REQUEST,
+            "bad_mention",
+            "You can mention only people who read feedback here.",
+        )
+    me = principal.user.id
+    c = FeedbackComment(
+        id=new_id("fc"),
+        workspace_id=principal.workspace_id,
+        feedback_id=fb.id,
+        user_id=me,
+        author_name=principal.user.name,
+        body=text,
+        mentions=want,
+        seen_by=[me] if me in want else [],
+    )
+    db.add(c)
+    await audit.record(
+        db,
+        principal.workspace_id,
+        principal.actor,
+        "feedback.comment",
+        target=fb.id,
+        after={"comment_id": c.id, "mentions": want},
+    )
+    await db.commit()
+    await db.refresh(c)
+    told = [u for u in want if u != me]
+    if told:
+        about = (fb.note or fb.page_title or fb.page_path or "").strip().splitlines()
+        what = (about[0] if about else "")[:120]
+        who = principal.user.name
+        await notices.tell(
+            db,
+            principal.workspace_id,
+            told,
+            title=Msg("{name} mentioned you on feedback", name=who),
+            body=Msg("{name}: {text}", name=who, text=text[:200]),
+            path=f"/feedbacks?f={fb.id}",
+            subject=f"{who} mentioned you on feedback / {who} menyebut anda dalam maklum balas",
+            en=[f"{who} mentioned you in a comment on feedback: {what}", f'"{text[:500]}"'],
+            ms=[
+                f"{who} menyebut anda dalam komen pada maklum balas: {what}",
+                f'"{text[:500]}"',
+            ],
+            dedupe=f"feedback-mention:{c.id}",
+            actor=principal.actor,
+        )
+    await events.publish(principal.workspace_id, "feedback.updated", {"id": fb.id})
+    return _comment_out(c, allowed, me)

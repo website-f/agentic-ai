@@ -28,7 +28,7 @@ from ...core.db import get_db
 from ...core.ids import new_id
 from ...core.security import can
 from ...documents import service as doc_service
-from ...knowledge import indexer
+from ...knowledge import dept_scope, indexer
 from ...knowledge import search as library
 from ...minutes import audio, service
 from ...models import (
@@ -138,6 +138,9 @@ def _read_where(principal: Principal) -> Any:
     conds = [or_(b.is_(None), b == r.branch_id) if r.branch_id else b.is_(None)]
     if not r.all_departments:
         conds.append(or_(d.is_(None), d == r.department_id) if r.department_id else d.is_(None))
+    narrow = dept_scope.recordings_cond(r.dept_only is True, r.department_id, d)
+    if narrow is not None:  # P109: own department only
+        conds.append(narrow)
     return or_(MeetingRecording.created_by == principal.actor, and_(*conds))
 
 

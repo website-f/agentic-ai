@@ -46,6 +46,7 @@ from sqlalchemy import ColumnElement, and_, false, or_, select
 from ..core.security import SCOPED_ROLES
 from ..i18n import Msg
 from ..models import Agent, Approval, Task
+from ..teams.task_models import ASSIGNEE, TaskPerson
 
 
 @dataclass(frozen=True)
@@ -206,7 +207,17 @@ class Scope:
             Task.assignee_agent_id.in_(self._visible_agent_ids()),
             Task.created_by == self.actor,
             Task.assignee_user_id.in_([self.user_id, *sorted(self.team)]),  # P97
+            # P109: a task they are on (another assignee, or a watcher), and their people's.
+            Task.id.in_(select(TaskPerson.task_id).where(TaskPerson.user_id == self.user_id)),
         ]
+        if self.team:
+            parts.append(
+                Task.id.in_(
+                    select(TaskPerson.task_id).where(
+                        TaskPerson.user_id.in_(sorted(self.team)), TaskPerson.role == ASSIGNEE
+                    )
+                )
+            )
         if self.kind == "branch" and self.branch_ids:
             parts.append(self.branch_col(Task.branch_id))  # unassigned work in their branches
         return or_(*parts)
@@ -285,10 +296,16 @@ class Scope:
             return self.everything or self.in_branch(data.get("branch_id"))
         person = data.get("assignee_user_id")  # P97: a person's task: them and their managers
         if person and not (data.get("agent_id") or data.get("assignee_agent_id")):
+            # P109: everyone on it (assignees and watchers) and the managers of its assignees.
+            on = data.get("people") if isinstance(data.get("people"), list) else []
+            doers = data.get("assignees") if isinstance(data.get("assignees"), list) else []
             return (
                 self.everything
                 or person == self.user_id
                 or person in self.team
+                or self.user_id in on
+                or any(d in self.team for d in doers)
+                or data.get("giver") == self.user_id
                 or data.get("by") == self.actor
                 or (self.kind == "branch" and self.in_branch(data.get("branch_id")))
             )

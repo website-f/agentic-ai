@@ -126,7 +126,8 @@ async def list_library(
     out: list[LibrarySource] = []
     for f in (await db.scalars(q.order_by(DocFile.created_at.desc()))).all():
         # P36: a department is a filing label; only a restricted file is kept to it.
-        if not library.sees(reader, f.branch_id, f.department_id if f.restricted else None):
+        # P109: and own-department-only readers keep to their department's files.
+        if not library.sees_file(reader, f):
             continue
         n, _ = counts.get(("file", f.id), (0, None))
         scope, label = names.scope(f.branch_id, f.department_id)

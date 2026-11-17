@@ -146,6 +146,33 @@ export interface Task {
   assignee_user_name?: string | null;
   created_by_name?: string | null;
   due_at?: string | null;
+  /** P109: a task for people: when it starts, its kind of work, everyone it is for (first
+   * assignee first) and who follows it, and the card's counts. */
+  start_at?: string | null;
+  category?: string | null;
+  assignees?: PersonRef[];
+  watchers?: PersonRef[];
+  checklist_done?: number;
+  checklist_total?: number;
+  subtasks_done?: number;
+  subtasks_total?: number;
+  files_count?: number;
+}
+
+/** P109: a person on a task (an assignee or a watcher). */
+export interface PersonRef {
+  user_id: string;
+  name: string;
+}
+
+/** P109: one tick of a task's checklist. */
+export interface ChecklistItem {
+  id: string;
+  text: string;
+  done: boolean;
+  position: number;
+  done_by_name: string | null;
+  done_at: string | null;
 }
 
 /** POST /api/tasks/retry-failed */
@@ -217,6 +244,8 @@ export interface TaskDetail {
   /** P21: the objective it serves, and what its whole request cost so far. */
   objective?: import("./objectives").TaskObjective | null;
   request?: import("./objectives").RequestCost | null;
+  /** P109: the checklist, in order. */
+  checklist?: ChecklistItem[];
 }
 
 export interface Audience {

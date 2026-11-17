@@ -60,6 +60,7 @@ import { keys, meQuery } from "@/lib/queries";
 import { cn, timeAgo } from "@/lib/utils";
 import { canShareTasks, PRIORITY_INFO, STATUS_INFO, taskQuery, VISIBILITY, workKeys, type Task, type TaskEvent, type Visibility } from "@/lib/work";
 
+import { AssigneeStack, Checklist, PeopleTaskDetail } from "./people-detail";
 import { PersonTaskPanel } from "./person-task";
 import { TaskFiles } from "./task-files";
 import { RescueActions } from "./rescue";
@@ -327,9 +328,12 @@ export function TaskSheet({ taskId, onClose }: { taskId: string; onClose: () => 
   // "Part of {title}": the title is styled, so the sentence is split around it (Malay keeps the order).
   const [partBefore = "", partAfter = ""] = t("Part of {title}").split("{title}");
 
+  // P109: a task for people opens Trello-like: everything editable in place, wider.
+  const forPeople = !!task && isPersonTask(task);
   return (
     <SideSheet
       open
+      size={forPeople ? "lg" : undefined}
       onOpenChange={(o) => !o && onClose()}
       title={task ? <span className="line-clamp-3 break-words">{task.title}</span> : t("Task")}
       description={task ? (
@@ -338,7 +342,9 @@ export function TaskSheet({ taskId, onClose }: { taskId: string; onClose: () => 
           <QuietBadge minutes={task.quiet_minutes} />
           <ReviewRoundPill task={task} />
           {task.priority !== "normal" ? <Pill tone={PRIORITY_INFO[task.priority].tone}>{t(PRIORITY_INFO[task.priority].label)}</Pill> : null}
-          {assigneeName(task) ? (
+          {forPeople && (task.assignees?.length ?? 0) > 1 ? (
+            <span className="inline-flex min-w-0 items-center gap-1.5 text-fg"><AssigneeStack task={task} /> <span className="truncate">{task.assignees!.map((a) => a.name).join(", ")}</span></span>
+          ) : assigneeName(task) ? (
             <span className="inline-flex min-w-0 items-center gap-1.5 text-fg"><AssigneeFace task={task} /> <span className="truncate">{assigneeName(task)}</span></span>
           ) : <span>{t("Unassigned")}</span>}
           {task.run_count > 1 ? <span className="tabular">{t("Run {n}", { n: task.run_count })}</span> : null}
@@ -373,7 +379,8 @@ export function TaskSheet({ taskId, onClose }: { taskId: string; onClose: () => 
               {pending.map((a) => <ApprovalCard key={a.id} approval={a} canDecide={me.permissions.includes("approvals.decide")} showTask={false} />)}
             </SheetSection>
           ) : null}
-          {isPersonTask(task) && !data.read_only ? <PersonTaskPanel task={task} meId={me.user.id} canWrite={canWrite} /> : null}
+          {isPersonTask(task) && !data.read_only ? <PersonTaskPanel task={task} meId={me.user.id} canWrite={canWrite} slim /> : null}
+          {forPeople ? <PeopleTaskDetail key={task.id} task={task} detail={data} canWrite={canWrite} /> : null}
           <RestBanner task={task} events={data.events} canWrite={canWrite} />
           {task.error ? (
             <p role="alert" className="flex items-start gap-2.5 rounded-[var(--radius-md)] border border-danger/30 bg-danger/8 px-3.5 py-3 text-[13px] break-words text-danger">
@@ -422,8 +429,10 @@ export function TaskSheet({ taskId, onClose }: { taskId: string; onClose: () => 
           ) : null}
           <TaskDocuments taskId={task.id} icon={<FileTextIcon size={15} weight="duotone" className="text-muted" />}
             title={(n) => <>{t("Documents made in this task")} <span className="font-normal text-muted tabular">{n}</span></>} />
-          {data.read_only ? null : <TaskFiles taskId={task.id} canWrite={canWrite} />}
-          {data.children.length ? (
+          {/* P109: a checklist on any task (an agent's too). */}
+          {forPeople || data.read_only ? null : <Checklist taskId={task.id} items={data.checklist ?? []} canWrite={canWrite} />}
+          {data.read_only || forPeople ? null : <TaskFiles taskId={task.id} canWrite={canWrite} />}
+          {data.children.length && !forPeople ? (
             <SheetSection icon={TreeStructureIcon} title={t("Handed out")} note={t("{done} of {total} done", { done: childrenDone, total: data.children.length })}>
               <div className="h-1.5 overflow-hidden rounded-full bg-surface-2" role="progressbar" aria-label={t("Sub-tasks done")} aria-valuemin={0} aria-valuemax={data.children.length} aria-valuenow={childrenDone}>
                 <div className="h-full rounded-full bg-ok transition-[width]" style={{ width: `${(childrenDone / data.children.length) * 100}%` }} />
@@ -448,7 +457,7 @@ export function TaskSheet({ taskId, onClose }: { taskId: string; onClose: () => 
               </ul>
             </SheetSection>
           ) : null}
-          {task.brief ? (
+          {task.brief && !forPeople ? (
             <SheetSection icon={NoteIcon} title={t("Brief")}>
               <Markdown className="text-[13.5px] text-muted">{task.brief}</Markdown>
             </SheetSection>

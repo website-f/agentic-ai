@@ -210,7 +210,7 @@ async def _one(db: AsyncSession, principal: Principal, source_id: str) -> Linked
     if (
         s is None
         or s.workspace_id != principal.workspace_id
-        or not library.sees(library.for_person(principal), s.branch_id, None)
+        or not library.sees_linked(library.for_person(principal), s.branch_id)
     ):
         raise api_error(
             status.HTTP_404_NOT_FOUND, "linked_not_found", "That SharePoint folder is not here."
@@ -316,7 +316,7 @@ async def list_linked(
         sources=[
             _out(principal, s, names, counts.get(s.id, {}))
             for s in rows
-            if library.sees(reader, s.branch_id, None)
+            if library.sees_linked(reader, s.branch_id)
         ],
         can_connect=may_connect(principal),
         can_draft_sops=can(principal.role, "org.manage"),

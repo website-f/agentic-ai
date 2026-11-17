@@ -32,10 +32,12 @@ function useTaskCall(task: Task) {
 
 const TEXTAREA = "w-full rounded-sm border border-border bg-surface px-3 py-2 text-[13.5px] placeholder:text-muted/80 focus-visible:border-accent focus-visible:outline-none";
 
-export function PersonTaskPanel({ task, meId, canWrite }: { task: Task; meId: string; canWrite: boolean }) {
+/** `slim` (P109): who, when and reassigning are in the task's detail (people-detail.tsx). */
+export function PersonTaskPanel({ task, meId, canWrite, slim }: { task: Task; meId: string; canWrite: boolean; slim?: boolean }) {
   const t = useT();
   const refresh = useTaskCall(task);
-  const mine = task.assignee_user_id === meId;
+  // P109: any of its assignees works it.
+  const mine = task.assignee_user_id === meId || !!task.assignees?.some((a) => a.user_id === meId);
   const gave = task.created_by === `user:${meId}`;
   const [comment, setComment] = useState("");
   const [waiting, setWaiting] = useState(false);
@@ -69,7 +71,7 @@ export function PersonTaskPanel({ task, meId, canWrite }: { task: Task; meId: st
   const busy = move.isPending || accept.isPending || say.isPending;
   return (
     <section aria-label={t("Work for a person")} className="grid min-w-0 gap-3 rounded-[var(--radius-md)] border border-border bg-surface-2/30 p-3.5">
-      <div className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2 text-[13px]">
+      <div className={cn("flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2 text-[13px]", slim && "hidden")}>
         <span className="inline-flex min-w-0 items-center gap-2">
           <PersonAvatar name={task.assignee_user_name ?? "?"} id={task.assignee_user_id ?? undefined} size="sm" />
           <span className="grid min-w-0">
@@ -106,7 +108,7 @@ export function PersonTaskPanel({ task, meId, canWrite }: { task: Task; meId: st
           {mine && s !== "done" && s !== "cancelled" ? (
             <Button size="sm" variant="ghost" disabled={busy} onClick={() => setHanding((v) => !v)}><RobotIcon size={14} /> {t("Hand a step to my AI")}</Button>
           ) : null}
-          {!mine && (s === "triage" || s === "ready" || s === "running" || s === "blocked") ? (
+          {!slim && !mine && (s === "triage" || s === "ready" || s === "running" || s === "blocked") ? (
             <span className="inline-flex min-w-0 items-center gap-1.5 text-[12.5px] text-muted">
               <UserSwitchIcon size={14} className="shrink-0" />
               <AssigneePicker compact allowNobody={false} label={t("Give it to")} value={`user:${task.assignee_user_id}`}

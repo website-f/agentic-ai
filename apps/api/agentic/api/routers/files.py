@@ -232,13 +232,18 @@ async def check_task(db: AsyncSession, principal: Principal, task_id: str | None
     if task_id is None:
         return None
     from ...models import Agent
+    from ...teams import task_parts
 
     t = await db.get(Task, task_id)
     agent = await db.get(Agent, t.assignee_agent_id) if t and t.assignee_agent_id else None
     if (
         t is None
         or t.workspace_id != principal.workspace_id
-        or not principal.scope.sees_task(t, agent)
+        or not (
+            principal.scope.sees_task(t, agent)
+            # P109: a person's task they are on (or follow down their reporting line)
+            or (t.assignee_agent_id is None and await task_parts.sees_by_chain(db, principal, t))
+        )
     ):
         raise api_error(status.HTTP_400_BAD_REQUEST, "bad_task", "That task is not here.")
     return t

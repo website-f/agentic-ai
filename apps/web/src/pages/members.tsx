@@ -35,9 +35,9 @@ import { cn, initials, timeAgo } from "@/lib/utils";
 
 import { MemberIdentityDialog, ResetMicrosoftDialog } from "@/components/member-identity";
 
-import { AccessBadges, AccessFields, accessChanges, accessOf, BulkAccessDialog, DEFAULT_ACCESS, PrimaOpensAsCard, setsAccess, type AccessValue } from "./members-access";
+import { AccessBadges, AccessFields, accessChanges, accessOf, BulkAccessDialog, DEFAULT_ACCESS, LibraryAccessFields, libraryChanges, libraryOf, PrimaOpensAsCard, setsAccess, type AccessValue, type LibraryValue } from "./members-access";
 import { ImportMembersDialog } from "./members-import";
-import { addsDepartments, BulkManagerDialog, editsOrg, ManagesField, NewDepartment, OrgFields, OrgLine, saveManages, TeamDialog } from "./members-org";
+import { addsDepartments, BulkManagerDialog, editsOrg, HodBadge, ManagesField, NewDepartment, OrgFields, OrgLine, saveManages, TeamDialog } from "./members-org";
 
 const ROLES: Role[] = ["owner", "admin", "branch_manager", "hod", "supervisor", "staff", "operator", "approver", "viewer", "management", "hr"];
 // What a branch manager or HOD may hand out (mirrors api/routers/members.py TEAM_ROLES).
@@ -282,7 +282,12 @@ function AccessDialog({ members, me, open, onOpenChange, onDone }: {
   const org = !!one && editsOrg(me);
   const { data: everyone = [] } = useQuery({ ...membersQuery, enabled: org });
   const [reportsTo, setReportsTo] = useState(one?.reports_to_user_id ?? "");
-  const [heads, setHeads] = useState(!!one?.heads_department);
+  // P109: the departments they head (any company); older answers only say "heads their own".
+  const headOfStart = one ? (one.head_of?.length ? one.head_of.map((d) => d.id) : one.heads_department && one.department_id ? [one.department_id] : []) : [];
+  const [headOf, setHeadOf] = useState<string[]>(headOfStart);
+  // P109: what of the Library they read, and whether they may upload for other companies.
+  const editsLibrary = !!one && me.permissions.includes("members.manage") && one.user_id !== me.user.id;
+  const [libraryValue, setLibraryValue] = useState<LibraryValue>(one ? libraryOf(one) : libraryOf(null));
   // P98: the people they manage, many at once (sets those people's "reports to").
   const [manages, setManages] = useState<string[] | null>(null);
   // P99: what they reach (one person; the ticked people have their own Access button).
@@ -295,11 +300,13 @@ function AccessDialog({ members, me, open, onOpenChange, onDone }: {
         const orgBody = org
           ? {
               ...(reportsTo !== (one.reports_to_user_id ?? "") ? { reports_to_user_id: reportsTo || null } : {}),
-              ...(heads !== !!one.heads_department || (heads && place.department_id !== one.department_id) ? { heads_department: heads && !!place.department_id } : {}),
+              ...(headOf.slice().sort().join() !== headOfStart.slice().sort().join() ? { head_of: headOf } : {}),
             }
           : {};
         const accessBody = editsAccess && role !== "owner" ? accessChanges(accessOf(one), access) : {};
         await api(`/api/members/${one.user_id}`, "PATCH", { role, ...place, ...orgBody, ...accessBody });
+        const lib = editsLibrary ? libraryChanges(libraryOf(one), libraryValue) : null;
+        if (lib) await api(`/api/members/${one.user_id}/library`, "PUT", lib);
         if (org && manages && MANAGER_ROLES.includes(role)) {
           const r = await saveManages(one.user_id, manages);
           return { done: 1, skipped: r.skipped, first: r.results.find((x) => !x.ok)?.message ?? null };
@@ -334,13 +341,14 @@ function AccessDialog({ members, me, open, onOpenChange, onDone }: {
         <Placement role={role} branches={branches} branchIds={orFirst(branchIds, list)} departmentId={departmentId} allowed={allowed} canAddDept={addsDepartments(me)}
           onChange={(b, d) => { setBranchIds(b); setDepartmentId(d); }} />
         {org && one ? (
-          <OrgFields member={one} members={everyone} reportsTo={reportsTo} onReportsTo={setReportsTo} heads={heads} onHeads={setHeads}
-            hasDepartment={!!placementBody(role, orFirst(branchIds, list), departmentId).department_id} />
+          <OrgFields member={{ ...one, role }} members={everyone} reportsTo={reportsTo} onReportsTo={setReportsTo} headOf={headOf} onHeadOf={setHeadOf}
+            departmentId={placementBody(role, orFirst(branchIds, list), departmentId).department_id ?? ""} />
         ) : null}
         {org && one && MANAGER_ROLES.includes(role) ? (
           <ManagesField member={one} members={everyone} value={manages} onChange={setManages} />
         ) : null}
         {editsAccess && one ? <AccessFields value={access} onChange={setAccess} member={one} ownerTarget={role === "owner" || one.role === "owner"} /> : null}
+        {editsLibrary ? <LibraryAccessFields value={libraryValue} onChange={setLibraryValue} role={role} /> : null}
         <FormError message={save.error ? errorMessage(save.error) : null} />
       </div>
     </ResponsiveDialog>
@@ -380,6 +388,22 @@ function Branches({ member }: { member: Member }) {
       {names.length > 1 ? (
         <span className="text-[12px] text-muted" title={names.slice(1).join(", ")}>
           {names.length > 3 ? t("also {names} +{n} more", { names: names.slice(1, 3).join(", "), n: names.length - 3 }) : t("also {names}", { names: names.slice(1).join(", ") })}
+        </span>
+      ) : null}
+    </span>
+  );
+}
+
+/** P109: HOD badge and how many people are under them. */
+function TeamCell({ member }: { member: Member }) {
+  const t = useT();
+  if (!member.heads_department && !member.manages) return <span className="text-muted">-</span>;
+  return (
+    <span className="grid justify-items-start gap-1">
+      {member.heads_department ? <HodBadge member={member} /> : null}
+      {member.manages ? (
+        <span className="inline-flex items-center gap-1 text-[12.5px] text-muted tabular">
+          <UsersThreeIcon size={12} /> {member.manages === 1 ? t("1 person") : t("{n} people", { n: member.manages })}
         </span>
       ) : null}
     </span>
@@ -530,7 +554,7 @@ function NameCell({ member, me, seesTwoFactor }: { member: Member; me: Me; seesT
   );
 }
 
-export const MEMBER_FILTERS = ["company", "role", "status", "department"] as const;
+export const MEMBER_FILTERS = ["company", "role", "status", "department", "team"] as const;
 
 /** P107: the table's state (in the address) as the members API reads it. */
 function membersFilters(s: TableState): MembersFilters {
@@ -541,6 +565,7 @@ function membersFilters(s: TableState): MembersFilters {
     role: (s.f.role ?? "") as Role | "",
     status: (s.f.status ?? "") as MemberStatus | "",
     department: s.f.department ?? "",
+    team: s.f.team ?? "",
     sort,
     dir: s.sort ? s.dir : "asc",
     page: s.page,
@@ -592,6 +617,9 @@ function MemberSheet({ member, me, onClose }: { member: Member; me: Me; onClose:
         {line(t("Department"), member.department_name ?? <span className="text-muted">-</span>)}
         {member.reports_to_name ? line(t("Reports to"), member.reports_to_name) : null}
         {member.manages ? line(t("Manages"), member.manages === 1 ? t("Manages 1 person") : t("Manages {n} people", { n: member.manages })) : null}
+        {member.heads_department ? line(t("Head of department (HOD)"), <HodBadge member={member} />) : null}
+        {member.library_scope === "department" ? line(t("Library"), t("Own department only")) : null}
+        {member.uploads_for_others ? line(t("Uploads"), t("May upload files for other companies")) : null}
         {line(t("Sign-in"), <SignIn member={member} />)}
         {line(t("Joined"), <span className="tabular">{when(member.joined_at)}</span>)}
         {member.agents ? line(t("Personal agents"), <span className="tabular">{member.agents}</span>) : null}
@@ -612,7 +640,7 @@ export function MembersTable({ control, me, withAddImport }: { control: TableCon
   const { filters, data, isLoading, error, isFetching, refetch } = useMembersPage(control);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   // Ticks follow the search and filters (not the page or its size).
-  const tickKey = JSON.stringify([filters.q, filters.company, filters.role, filters.status, filters.department]);
+  const tickKey = JSON.stringify([filters.q, filters.company, filters.role, filters.status, filters.department, filters.team]);
   const [tickedFor, setTickedFor] = useState(tickKey);
   if (tickedFor !== tickKey) {
     setTickedFor(tickKey);
@@ -634,6 +662,15 @@ export function MembersTable({ control, me, withAddImport }: { control: TableCon
   const deptPool = filters.company && filters.company !== NONE ? branches.filter((b) => b.id === filters.company) : branches;
   const deptOptions = deptPool.flatMap((b) => b.departments.map((d) => ({ value: d.id, label: d.name, hint: deptPool.length > 1 ? b.name : undefined })));
   const statusLabel = (m: Member) => t(STATUS_INFO[memberStatus(m)].label);
+  // P109: the Team filter: heads, managers, people under no one, or one manager's team.
+  const { data: everyone = [] } = useQuery(membersQuery);
+  const teamOptions = [
+    { value: "heads", label: t("Heads of department (HOD)") },
+    { value: "managers", label: t("Have people under them") },
+    { value: "unplaced", label: t("Report to no one") },
+    ...everyone.filter((m) => m.manages).sort((a, b) => a.name.localeCompare(b.name))
+      .map((m) => ({ value: m.user_id, label: t("Team of {name}", { name: m.name }), hint: m.manages === 1 ? t("1 person") : t("{n} people", { n: m.manages ?? 0 }) })),
+  ];
   const roleLabel = (r: Role) => (ROLE_INFO[r] ? t(ROLE_INFO[r].label) : r);
   const removeTicked = async (_rows: Member[], ids: string[]): Promise<BulkOutcome> => {
     const r = await api<BulkOut>("/api/members/bulk", "POST", { user_ids: ids, action: "remove" });
@@ -651,6 +688,11 @@ export function MembersTable({ control, me, withAddImport }: { control: TableCon
     },
     { id: "company", header: t("Company"), sortable: true, exportValue: (m) => branchNamesOf(m).join("; "), cell: (m) => <Branches member={m} /> },
     { id: "department", header: t("Department"), sortable: true, exportValue: (m) => m.department_name ?? "", cell: (m) => m.department_name ?? <span className="text-muted">-</span> },
+    {
+      id: "team", header: t("Team"), hideBelow: "lg",
+      exportValue: (m) => [(m.head_of ?? []).map((d) => d.name).join("; "), m.manages ? String(m.manages) : ""].filter(Boolean).join(" / "),
+      cell: (m) => <TeamCell member={m} />,
+    },
     { id: "last_seen", header: t("Sign-in"), sortable: true, kind: "date", hideBelow: "lg", exportValue: (m) => m.last_login_at ?? "", cell: (m) => <SignIn member={m} /> },
     {
       id: "joined", header: t("Joined"), sortable: true, kind: "date", hideBelow: "xl", exportValue: (m) => m.joined_at,
@@ -685,6 +727,7 @@ export function MembersTable({ control, me, withAddImport }: { control: TableCon
             ) : null}
             <TableFilter control={control} id="role" label={t("Role")} allLabel={t("All roles")} searchable
               options={ROLES.map((r) => ({ value: r, label: t(ROLE_INFO[r].label) }))} />
+            <TableFilter control={control} id="team" label={t("Team")} allLabel={t("Everyone")} searchable options={teamOptions} />
             <TableFilter control={control} id="status" label={t("Status")} allLabel={t("All statuses")}
               options={(Object.keys(STATUS_INFO) as MemberStatus[]).map((s) => ({ value: s, label: t(STATUS_INFO[s].label) }))} />
           </>
@@ -772,7 +815,7 @@ export function MembersPage() {
   const clearAll = () => control.set({ q: "", f: Object.fromEntries(MEMBER_FILTERS.map((k) => [k, ""])) });
   const summary = data?.summary;
   const total = data?.total ?? 0;
-  const filtered = !!(filters.q || filters.company || filters.role || filters.status || filters.department);
+  const filtered = !!(filters.q || filters.company || filters.role || filters.status || filters.department || filters.team);
 
   return (
     <Page wide>

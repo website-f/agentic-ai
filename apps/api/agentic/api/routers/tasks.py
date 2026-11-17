@@ -13,7 +13,7 @@ from ...agents import decisions, dispatch, launch, runtime
 from ...agents.tools import TOOLS
 from ...core.db import get_db
 from ...core.security import can
-from ...i18n import render, tr
+from ...i18n import Msg, render, tr
 from ...i18n.labels import task_status_label
 from ...models import (
     Agent,
@@ -28,14 +28,16 @@ from ...models import (
     User,
     WorkflowRun,
 )
-from ...services import audit, events
+from ...services import audit, events, task_mail
 from ...skills import store as skills_store
-from ...teams import blockers, objectives, people, reconcile, review
+from ...teams import blockers, objectives, people, reconcile, review, task_parts
+from ...teams.task_models import ASSIGNEE, WATCHER, TaskAttachment, TaskChecklistItem
 from .. import paging
 from ..agent_schemas import (
     ApprovalOut,
     DecisionIn,
     ReviseIn,
+    SubtaskIn,
     TaskDetailOut,
     TaskEventOut,
     TaskIn,
@@ -155,6 +157,8 @@ async def task_out(
         visibility=t.visibility or "private",
         assignee_user_id=t.assignee_user_id,
         due_at=t.due_at,
+        start_at=t.start_at,
+        category=t.category,
     )
     if fill:
         await fill_accountable(db, [t], [out])
@@ -166,14 +170,187 @@ async def fill_people(db: AsyncSession, rows: list[Task], outs: list[TaskOut]) -
     """P97: the person each task is for and who gave it, by name (one query)."""
     ids = {t.assignee_user_id for t in rows if t.assignee_user_id}
     ids |= {g for t in rows if (g := people.giver_id(t))}
+    # P109: everyone each task is for and who follows it, and the card's counts (3 queries).
+    on = await task_parts.people_of(db, [t.id for t in rows])
+    ids |= {r.user_id for rs in on.values() for r in rs}
+    counts = await task_parts.card_counts(db, [t.id for t in rows])
     known = await people.names(db, ids)
     for t, out in zip(rows, outs, strict=True):
         out.assignee_user_name = known.get(t.assignee_user_id or "")
         out.created_by_name = known.get(people.giver_id(t) or "")
+        rs = on.get(t.id, [])
+        doers = task_parts.by_role(rs, ASSIGNEE)
+        if t.assignee_user_id:
+            doers = [t.assignee_user_id, *[u for u in doers if u != t.assignee_user_id]]
+        out.assignees = [{"user_id": u, "name": known.get(u, "")} for u in doers]
+        out.watchers = [
+            {"user_id": u, "name": known.get(u, "")} for u in task_parts.by_role(rs, WATCHER)
+        ]
+        c = counts.get(t.id, {})
+        out.checklist_done, out.checklist_total = c.get("check_done", 0), c.get("check_total", 0)
+        out.subtasks_done, out.subtasks_total = c.get("sub_done", 0), c.get("sub_total", 0)
+        out.files_count = c.get("files", 0)
 
 
 def people_error(e: people.PeopleError) -> HTTPException:
     return api_error(e.status, e.code, e.message)
+
+
+async def people_event(db: AsyncSession, t: Task, actor: str, **extra: Any) -> dict[str, Any]:
+    """P109: a live event about a person's task that reaches everyone on it (assignees and
+    watchers), whoever gave it and the managers of its assignees (scope.event_visible)."""
+    rows = (await task_parts.people_of(db, [t.id])).get(t.id, [])
+    return people.event_data(
+        t,
+        actor,
+        people=[r.user_id for r in rows],
+        assignees=task_parts.by_role(rows, ASSIGNEE),
+        giver=people.giver_id(t),
+        **extra,
+    )
+
+
+async def tell_assigned(
+    db: AsyncSession, principal: Principal, t: Task, user_ids: list[str]
+) -> None:
+    """P109: each new assignee hears of the task (the bell and their phone, people.notify)
+    and gets an email with the link when the office's system mail is set up. Never the
+    person who gave it."""
+    me = principal.user.id
+    for uid in dict.fromkeys(user_ids):
+        if uid and uid != me:
+            await people.notify(
+                db,
+                t,
+                uid,
+                Msg("New task for you: {title}", title=t.title[:100]),
+                Msg("{name} gave you a task. Open it to accept it.", name=principal.user.name),
+                f"assigned:{t.id}:{uid}",
+            )
+    task_mail.tell_by_email(principal.workspace_id, t.id, user_ids, me)
+
+
+async def link_files(db: AsyncSession, principal: Principal, t: Task, ids: list[str]) -> None:
+    """P109: files for a person's task. A file of the person's own (no task yet) moves onto
+    the task, so everyone on it can open it; a Library guideline or another task's file is
+    only linked (it stays where it is)."""
+    from ...documents import service as doc_service
+    from ...models import DocFile
+
+    have = set(
+        (
+            await db.scalars(select(TaskAttachment.file_id).where(TaskAttachment.task_id == t.id))
+        ).all()
+    )
+    for fid in dict.fromkeys(ids):
+        f = await db.scalar(
+            doc_service.visible_files(
+                select(DocFile).where(
+                    DocFile.id == fid, DocFile.workspace_id == principal.workspace_id
+                ),
+                principal,
+            )
+        )
+        if f is None:
+            raise api_error(status.HTTP_400_BAD_REQUEST, "bad_file", "Pick files you can see.")
+        if not f.task_id and not f.library:
+            f.task_id = t.id
+            if f.branch_id is None:
+                f.branch_id = t.branch_id
+        if fid not in have:
+            db.add(TaskAttachment(task_id=t.id, file_id=fid, added_by=principal.actor))
+            have.add(fid)
+    await db.flush()
+
+
+async def checklist_out(db: AsyncSession, t: Task) -> list[dict[str, Any]]:
+    """P109: the task's checklist in order, with who ticked each item."""
+    items = (
+        await db.scalars(
+            select(TaskChecklistItem)
+            .where(TaskChecklistItem.task_id == t.id)
+            .order_by(TaskChecklistItem.position, TaskChecklistItem.created_at)
+        )
+    ).all()
+    names = await _names(db, {i.done_by for i in items if i.done_by})
+    return [
+        {
+            "id": i.id,
+            "text": i.text,
+            "done": i.done,
+            "position": i.position,
+            "done_by_name": names.get(i.done_by or ""),
+            "done_at": i.done_at.isoformat() if i.done_at else None,
+        }
+        for i in items
+    ]
+
+
+def _check_dates(start_at: datetime | None, due_at: datetime | None) -> None:
+    if start_at and due_at and start_at > due_at:
+        raise api_error(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            "start_after_due",
+            "The start is after the due date.",
+        )
+
+
+async def _add_checklist(db: AsyncSession, t: Task, items: list[str], actor: str) -> None:
+    """P109: checklist items in the order given (blank ones skipped)."""
+    last = await db.scalar(
+        select(func.max(TaskChecklistItem.position)).where(TaskChecklistItem.task_id == t.id)
+    )
+    pos = float(last or 0)
+    for raw in items:
+        text = " ".join(str(raw).split())[:300]
+        if text:
+            pos += 1
+            db.add(TaskChecklistItem(task_id=t.id, text=text, position=pos, created_by=actor))
+    await db.flush()
+
+
+async def new_subtask(db: AsyncSession, principal: Principal, parent: Task, s: SubtaskIn) -> Task:
+    """P109: a sub-task of a person's task: its own person's task under it (same company,
+    labels and visibility). Its person: the one named (who the actor may give work to), else
+    the parent's first assignee when the actor may give them work, else the actor."""
+    who = s.assignee_user_id
+    if not who:
+        who = principal.user.id
+        if parent.assignee_user_id and parent.assignee_user_id != who:
+            with contextlib.suppress(people.PeopleError):
+                await people.may_assign(db, people.actor_of(principal), parent.assignee_user_id)
+                who = parent.assignee_user_id
+    person = await _person(db, principal, who)
+    if person is None:  # never: `who` is always someone
+        raise api_error(
+            status.HTTP_400_BAD_REQUEST, "bad_person", "Pick someone who is a member here."
+        )
+    _check_dates(None, s.due_at)
+    kid = Task(
+        workspace_id=principal.workspace_id,
+        title=s.title.strip()[:200],
+        brief="",
+        priority=parent.priority,
+        assignee_user_id=person.user_id,
+        branch_id=parent.branch_id or person.branch_id,
+        requires_review=parent.requires_review,
+        labels=list(parent.labels or []),
+        created_by=principal.actor,
+        source="subtask",
+        status="ready" if person.user_id == principal.user.id else "triage",
+        parent_task_id=parent.id,
+        depth=(parent.depth or 0) + 1,
+        root_task_id=parent.root_task_id or parent.id,
+        objective_id=parent.objective_id,
+        visibility=parent.visibility or "private",
+        due_at=s.due_at,
+        category=parent.category,
+        position=float(parent.position or 0),
+    )
+    db.add(kid)
+    await db.flush()
+    await task_parts.set_people(db, kid, [person.user_id], None, principal.actor)
+    return kid
 
 
 async def fill_accountable(db: AsyncSession, rows: list[Task], outs: list[TaskOut]) -> None:
@@ -230,7 +407,11 @@ async def _task(db: AsyncSession, principal: Principal, task_id: str) -> Task:
     if (
         t is None
         or t.workspace_id != principal.workspace_id
-        or not principal.scope.sees_task(t, agent)
+        or not (
+            principal.scope.sees_task(t, agent)
+            # P109: a person's task they are on (assignee or watcher) or follow down their line
+            or (t.assignee_agent_id is None and await task_parts.sees_by_chain(db, principal, t))
+        )
     ):
         raise api_error(status.HTTP_404_NOT_FOUND, "task_not_found", "That task is not here.")
     return t
@@ -358,9 +539,16 @@ async def list_tasks(
     cursor: str | None = Query(default=None, max_length=400),
     q_: str = Query(default="", alias="q", max_length=120),
     full: bool = False,
-    who: str | None = Query(default=None, pattern="^(mine|pinned|assigned|team)$"),
+    who: str | None = Query(default=None, pattern="^(mine|pinned|assigned|team|created|watching)$"),
     assignee: str | None = Query(default=None, max_length=60),
     has_due: bool = False,
+    kind: str | None = Query(default=None, pattern="^(people|ai)$"),
+    label: str | None = Query(default=None, max_length=32),
+    due_from: datetime | None = None,
+    due_to: datetime | None = None,
+    span_from: datetime | None = None,
+    span_to: datetime | None = None,
+    top: bool = False,
     principal: Principal = Depends(require("read")),
     db: AsyncSession = Depends(get_db),
 ) -> list[TaskOut]:
@@ -372,12 +560,16 @@ async def list_tasks(
     (the cards pinned to their workspace). P97: `who` assigned (tasks given to the person
     themselves) or team (their people's tasks and their people's and department's agents'
     tasks); `assignee` one person (user:<id>) or agent (agent:<id>), or people / agents /
-    none; `has_due` only tasks with a due date, soonest first."""
+    none; `has_due` only tasks with a due date, soonest first. P109: `who` created (tasks
+    they gave) or watching (tasks they follow); `kind` people or ai; `label` one label;
+    `due_from`/`due_to` a due range; `span_from`/`span_to` tasks whose start-to-due span
+    touches that range (calendar, Gantt); `top` leaves sub-tasks out."""
     q = select(Task).where(Task.workspace_id == principal.workspace_id)
     cond = principal.scope.task_where()
     if cond is not None:
         shared = principal.scope.shared_task_where()
-        q = q.where(or_(cond, shared) if shared is not None else cond)
+        chain = await task_parts.chain_where(db, principal)  # P109: down a manager's line
+        q = q.where(or_(*[c for c in (cond, shared, chain) if c is not None]))
     if status_:
         q = q.where(Task.status.in_(status_.split(",")))
     if agent_id:
@@ -400,7 +592,11 @@ async def list_tasks(
             )
         )
     elif who == "assigned":
-        q = q.where(Task.assignee_user_id == principal.user.id)
+        q = q.where(task_parts.assigned_to([principal.user.id]))
+    elif who == "created":
+        q = q.where(Task.created_by == principal.actor)
+    elif who == "watching":
+        q = q.where(Task.id.in_(task_parts.people_task_ids([principal.user.id], WATCHER)))
     elif who == "team":
         q = q.where(await _team_where(db, principal))
     elif who == "pinned":
@@ -414,6 +610,20 @@ async def list_tasks(
         q = q.where(_assignee_where(assignee))
     if has_due:
         q = q.where(Task.due_at.is_not(None))
+    if kind == "people":
+        q = q.where(Task.assignee_agent_id.is_(None), Task.assignee_user_id.is_not(None))
+    elif kind == "ai":
+        q = q.where(Task.assignee_agent_id.is_not(None))
+    if label and label.strip():
+        q = q.where(Task.labels.contains([clean_labels([label])[0]]))
+    if due_from:
+        q = q.where(Task.due_at >= due_from)
+    if due_to:
+        q = q.where(Task.due_at <= due_to)
+    if span_from and span_to:
+        q = q.where(task_parts.overlapping(span_from, span_to))
+    if top:
+        q = q.where(Task.parent_task_id.is_(None))
     if q_.strip():
         like = f"%{q_.strip()}%"
         named = select(Agent.id).where(
@@ -456,7 +666,7 @@ def _assignee_where(value: str) -> Any:
         return and_(Task.assignee_user_id.is_(None), Task.assignee_agent_id.is_(None))
     kind, _, ref = value.partition(":")
     if kind == "user" and ref:
-        return Task.assignee_user_id == ref
+        return task_parts.assigned_to([ref])  # P109: any of its assignees
     if kind == "agent" and ref:
         return Task.assignee_agent_id == ref
     raise api_error(status.HTTP_400_BAD_REQUEST, "bad_assignee", "That filter is not known.")
@@ -486,7 +696,7 @@ async def _team_where(db: AsyncSession, principal: Principal) -> Any:
         ),
     )
     return or_(
-        Task.assignee_user_id.in_(ids),
+        task_parts.assigned_to(ids),  # P109: any of its assignees
         Task.assignee_agent_id.in_(agents),
         and_(Task.created_by == principal.actor, Task.parent_task_id.is_(None)),
     )
@@ -549,14 +759,35 @@ async def create_task(
     db: AsyncSession = Depends(get_db),
 ) -> TaskOut:
     _check_share(principal, body.visibility)
-    if body.assignee_agent_id and body.assignee_user_id:
+    # P109: one or many people (assignee_user_id, if set, first).
+    doers = list(
+        dict.fromkeys(
+            [*([body.assignee_user_id] if body.assignee_user_id else []), *body.assignee_user_ids]
+        )
+    )
+    if body.assignee_agent_id and doers:
         raise api_error(
             status.HTTP_422_UNPROCESSABLE_CONTENT,
             "two_assignees",
             "Give it to a person or an agent, not both.",
         )
+    if not doers and (body.watcher_user_ids or body.subtasks):
+        raise api_error(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            "people_only",
+            "Watchers and sub-tasks are for tasks given to people.",
+        )
+    _check_dates(body.start_at, body.due_at)
     agent = await _assignee(db, principal, body.assignee_agent_id)
-    person = await _person(db, principal, body.assignee_user_id)
+    person = await _person(db, principal, doers[0] if doers else None)
+    watchers: list[str] = []
+    if doers:
+        try:
+            _, watchers = await task_parts.check_people(
+                db, people.actor_of(principal), doers, body.watcher_user_ids
+            )
+        except people.PeopleError as e:
+            raise people_error(e) from e
     if person is None:  # P36 checks work given to an AI; a person's task uses no AI
         await ensure_work_scope(db, principal, f"{body.title}\n{body.brief}")
     brief, labels = body.brief, list(body.labels)
@@ -589,17 +820,26 @@ async def create_task(
         labels=clean_labels(labels),
         created_by=principal.actor,
         # P97: a task someone gives a person waits for them to take it (triage); one a person
-        # gives themselves is on their list straight away (ready).
-        status="ready" if agent or (person and person.user_id == principal.user.id) else "triage",
+        # gives themselves (only themselves) is on their list straight away (ready).
+        status="ready" if agent or doers == [principal.user.id] else "triage",
         position=float(lowest) - 1,
         objective_id=objective_id,
         visibility=body.visibility,
         due_at=body.due_at,
+        start_at=body.start_at,
+        category=task_parts.clean_category(body.category),
     )
     db.add(t)
     await db.flush()
     t.root_task_id = t.id  # P21: a person's task starts its own request
-    await _attach_files(db, principal, t, body.file_ids)
+    told: list[str] = []
+    if doers:  # P109: everyone it is for and who follows it, its checklist and sub-tasks
+        told, _ = await task_parts.set_people(db, t, doers, watchers, principal.actor)
+        await link_files(db, principal, t, body.file_ids)
+    else:
+        await _attach_files(db, principal, t, body.file_ids)
+    await _add_checklist(db, t, body.checklist, principal.actor)
+    kids = [await new_subtask(db, principal, t, s) for s in body.subtasks]
     if body.review_policy is not None:  # P21: this task's own review stages
         t.review_policy = await _policy(db, principal, body.review_policy, empty_is_off=True)
     if body.blocked_by:  # P21: start only when these are done
@@ -610,19 +850,25 @@ async def create_task(
         principal.actor,
         "task.created",
         target=t.id,
-        after={"title": t.title, "assignee": t.assignee_agent_id or t.assignee_user_id},
+        after={
+            "title": t.title,
+            "assignee": t.assignee_agent_id or t.assignee_user_id,
+            **({"assignees": doers} if len(doers) > 1 else {}),
+        },
     )
     await db.commit()
     await runtime.task_event(db, t, "created", principal.actor, "created the task")
     await events.publish(
         principal.workspace_id,
         "task.created",
-        people.event_data(t, principal.actor)
+        await people_event(db, t, principal.actor)
         if person
         else {"task_id": t.id, "agent_id": t.assignee_agent_id},
     )
     if person:
-        await people.told_assigned(db, t, people.actor_of(principal), principal.user.name)
+        await tell_assigned(db, principal, t, told)
+        for kid in kids:
+            await tell_assigned(db, principal, kid, [kid.assignee_user_id or ""])
     if body.blocked_by:
         await blockers.refresh(db, t, principal.actor, start=bool(body.start and agent))
     elif body.start and agent:
@@ -659,6 +905,7 @@ async def _shared_detail(db: AsyncSession, t: Task) -> TaskDetailOut:
         approvals=[],
         transcript=[],
         read_only=True,
+        checklist=await checklist_out(db, t),
     )
 
 
@@ -754,6 +1001,7 @@ async def task_detail(
         objective=await _objective_brief(db, t),
         request=await objectives.request_cost(db, t),
         **(await _accountable_detail(db, t, list(evs))),
+        checklist=await checklist_out(db, t),
     )
     detail.task.quiet_minutes = await reconcile.quiet_minutes(db, t)  # P21: a silent run
     return detail
@@ -826,14 +1074,26 @@ async def update_task(
         t.branch_id = agent.branch_id if agent else t.branch_id
         if agent:
             t.assignee_user_id = None
+            await task_parts.set_people(db, t, [], [], principal.actor)  # P109: AI work now
+    told: list[str] = []
     if "assignee_user_id" in changes and changes["assignee_user_id"] != t.assignee_user_id:
         person = await _person(db, principal, changes["assignee_user_id"])
+        # P109: the new person takes the first one's place; the other assignees stay.
+        rest = [u for u in await task_parts.assignee_ids(db, t) if u != before_person]
         t.assignee_user_id = person.user_id if person else None
         if person:
             t.assignee_agent_id = None
             t.branch_id = person.branch_id or t.branch_id
+        new_list = [person.user_id, *rest] if person else rest
+        told, _ = await task_parts.set_people(db, t, new_list, None, principal.actor)
     if "due_at" in changes:
         t.due_at = changes["due_at"]
+    if "start_at" in changes:  # P109
+        t.start_at = changes["start_at"]
+    if "category" in changes:
+        t.category = task_parts.clean_category(changes["category"])
+    if {"due_at", "start_at"} & changes.keys():
+        _check_dates(t.start_at, t.due_at)
     for k in ("title", "brief", "priority", "position"):
         if k in changes and changes[k] is not None:
             setattr(t, k, changes[k])
@@ -845,7 +1105,9 @@ async def update_task(
     before = t.status
     if new_status and new_status != t.status and people.is_person_task(t):
         try:  # P97: a person's task moves by its own rules and never starts a run
-            new_status = people.land(t, new_status, people.actor_of(principal))
+            new_status = people.land(
+                t, new_status, people.actor_of(principal), await task_parts.assignee_ids(db, t)
+            )
         except people.PeopleError as e:
             raise people_error(e) from e
         await runtime.set_task_status(
@@ -889,11 +1151,11 @@ async def update_task(
         await events.publish(
             principal.workspace_id,
             "task.updated",
-            people.event_data(t, principal.actor, was=before_person),
+            await people_event(db, t, principal.actor, was=before_person),
         )
         who = people.actor_of(principal)
-        if t.assignee_user_id and t.assignee_user_id != before_person:
-            await people.told_assigned(db, t, who, principal.user.name)
+        if told:
+            await tell_assigned(db, principal, t, told)
         elif t.status != before:
             await people.told_moved(db, t, who, principal.user.name, before)
     else:
@@ -965,8 +1227,11 @@ async def attach_files(
 
     t = await _task(db, principal, task_id)
     ids = list(dict.fromkeys(body.file_ids))
-    await _attach_files(db, principal, t, ids)
-    await _files_note(db, t, ids)
+    if people.is_person_task(t):  # P109: linked (a Library file stays in the Library)
+        await link_files(db, principal, t, ids)
+    else:
+        await _attach_files(db, principal, t, ids)
+        await _files_note(db, t, ids)
     await audit.record(
         db,
         principal.workspace_id,

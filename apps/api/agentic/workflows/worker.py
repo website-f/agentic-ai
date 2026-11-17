@@ -57,6 +57,7 @@ from .knowledge_activities import knowledge_index
 from .knowledge_workflows import KnowledgeIndexWorkflow
 from .linked_workflows import LinkedSyncTickWorkflow, LinkedSyncWorkflow, linked_sync, linked_tick
 from .mail_workflows import MailPendingWorkflow, MailSyncTickWorkflow, mail_pending, mail_tick
+from .mailbackup_workflows import MailBackupWorkflow, mail_backup_round  # P109
 from .minutes_activities import (
     minutes_fail,
     minutes_prepare,
@@ -116,6 +117,7 @@ WORKFLOWS = [
     EraseWorkspaceWorkflow,
     LinkedSyncWorkflow,
     LinkedSyncTickWorkflow,
+    MailBackupWorkflow,
 ]
 ACTIVITIES = [
     pong,
@@ -168,6 +170,7 @@ ACTIVITIES = [
     erase_failed,
     linked_sync,
     linked_tick,
+    mail_backup_round,
 ]
 
 

@@ -372,3 +372,57 @@ export function PrimaOpensAsCard() {
     </section>
   );
 }
+
+// ---------------------------------------------------------------- P109 Library by department
+
+/** P109: what of the Library a member reads, and whether they may upload for other companies. */
+export interface LibraryValue { scope: "company" | "department"; forOthers: boolean }
+
+export const libraryOf = (m: Member | null): LibraryValue => ({
+  scope: m?.library_scope ?? "company",
+  forOthers: !!m?.uploads_for_others,
+});
+
+/** The body for PUT /api/members/{id}/library: only what changed (null: nothing). */
+export function libraryChanges(before: LibraryValue, after: LibraryValue): { library_scope?: string; uploads_for_others?: boolean } | null {
+  const out = {
+    ...(after.scope !== before.scope ? { library_scope: after.scope } : {}),
+    ...(after.forOthers !== before.forOthers ? { uploads_for_others: after.forOthers } : {}),
+  };
+  return Object.keys(out).length ? out : null;
+}
+
+// The roles the "own department only" choice narrows (api/knowledge/dept_scope.LIMITABLE_ROLES).
+const LIMITABLE: string[] = ["hod", "supervisor", "staff"];
+
+/** "Library: whole company / own department only" and "May upload for other companies". */
+export function LibraryAccessFields({ value, onChange, role }: { value: LibraryValue; onChange: (v: LibraryValue) => void; role: string }) {
+  const t = useT();
+  const limitable = LIMITABLE.includes(role);
+  return (
+    <fieldset className="grid gap-3 rounded-[var(--radius-md)] border border-border p-3">
+      <legend className="px-1 text-[13px] font-medium">{t("Library")}</legend>
+      <div className="grid gap-1.5">
+        <span className="text-[13px] font-medium">{t("Files they can see")}</span>
+        <Select value={value.scope} onValueChange={(v) => onChange({ ...value, scope: v as LibraryValue["scope"] })} label={t("Files they can see")}
+          options={[
+            { value: "company", label: t("Whole company") },
+            { value: "department", label: t("Own department only") },
+          ]} />
+        <p className="text-[12.5px] text-muted">
+          {!limitable ? t("Their role sees more than one department, so this applies only to heads of department, supervisors and staff.")
+            : value.scope === "department" ? t("They and their AI see only their department's files, plus their own files and the work they are part of.")
+            : t("They and their AI see their company's files, as before.")}
+        </p>
+      </div>
+      <label className="flex min-h-11 cursor-pointer items-start gap-3">
+        <input type="checkbox" checked={value.forOthers} onChange={(e) => onChange({ ...value, forOthers: e.target.checked })}
+          className="mt-1 size-4 shrink-0 accent-[var(--accent)]" />
+        <span className="grid gap-0.5">
+          <span className="text-[13.5px] font-medium">{t("May upload files for other companies")}</span>
+          <span className="text-[12.5px] text-muted">{t("They upload in Library > For other companies; each file waits for their check, then goes to that company. Its heads of department are told.")}</span>
+        </span>
+      </label>
+    </fieldset>
+  );
+}

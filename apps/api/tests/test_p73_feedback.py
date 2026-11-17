@@ -42,10 +42,11 @@ async def test_only_the_developer_has_the_feedbacks_page(client):
     me = (await client.get("/api/auth/me")).json()
     assert me["user"]["is_developer"] is False
     assert "feedback.manage" not in me["permissions"]
-    # A plain owner can neither switch it on nor read anyone's feedback.
+    # A plain owner cannot switch it on; P109: they read everyone's feedback (feedback.read).
     r = await client.put("/api/feedback/config", json={"enabled": True}, headers=csrf(client))
     assert r.status_code == 403
-    assert (await client.get("/api/feedback")).status_code == 403
+    assert "feedback.read" in me["permissions"]
+    assert (await client.get("/api/feedback")).status_code == 200
 
     await make_dev()
     me = (await client.get("/api/auth/me")).json()

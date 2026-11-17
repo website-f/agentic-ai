@@ -27,7 +27,7 @@ from ..core import threats
 from ..core.config import settings
 from ..core.fence import fence
 from ..models import Agent, DocFile, KnowledgeChunk
-from . import indexer
+from . import dept_scope, indexer
 
 RRF_K = 60
 POOL = 40
@@ -51,6 +51,11 @@ class Reader:
     # P36: a staff member, or a staff member's AI twin: never restricted documents (only
     # restricted passages carry a department, see knowledge.indexer.index_file).
     personal: bool = False
+    # P109 Library by department (knowledge/dept_scope.py): whose setting applies (the person,
+    # or an agent's owner) and whether it narrows them (True / False; None: an agent's owner,
+    # read in SQL).
+    limit_user: str | None = None
+    dept_only: bool | None = False
 
     @property
     def branch_ids(self) -> list[str]:
@@ -64,6 +69,8 @@ def for_agent(agent: Agent) -> Reader:
         branch_id=agent.branch_id,
         department_id=agent.department_id,
         personal=bool(getattr(agent, "is_twin", False)),
+        limit_user=agent.owner_user_id,
+        dept_only=None if agent.owner_user_id else False,
     )
 
 
@@ -84,6 +91,8 @@ def for_person(principal: Any) -> Reader:
         department_id=sc.department_id,
         personal=sc.kind == "own",
         more_branches=tuple(sorted(sc.branch_ids - {sc.branch_id})),
+        limit_user=principal.user.id,
+        dept_only=bool(getattr(principal, "library_dept_only", False)),
     )
 
 
@@ -91,6 +100,9 @@ def scope_where(r: Reader) -> Any:
     conds = [KnowledgeChunk.workspace_id == r.workspace_id]
     if r.everything:
         return and_(*conds)
+    narrow = dept_scope.chunk_cond(r.workspace_id, r.limit_user, r.dept_only)
+    if narrow is not None:  # P109: own department only
+        conds.append(narrow)
     branch = KnowledgeChunk.branch_id
     mine = sorted({b for b in (r.branch_id, *r.more_branches) if b})
     conds.append(or_(branch.is_(None), branch.in_(mine)) if mine else branch.is_(None))
@@ -102,6 +114,19 @@ def scope_where(r: Reader) -> Any:
             else dept.is_(None)
         )
     return and_(*conds)
+
+
+def sees_file(r: Reader, f: DocFile) -> bool:
+    """P109: `sees` for one library file, with the own-department-only rule."""
+    restricted_dept = f.department_id if f.restricted else None
+    return sees(r, f.branch_id, restricted_dept) and (
+        r.everything or dept_scope.file_ok(r.dept_only is True, r.limit_user, r.department_id, f)
+    )
+
+
+def sees_linked(r: Reader, branch_id: str | None) -> bool:
+    """P109: a linked SharePoint folder (no department): not for own-department-only readers."""
+    return sees(r, branch_id, None) and (r.everything or r.dept_only is not True)
 
 
 def sees(r: Reader, branch_id: str | None, department_id: str | None) -> bool:

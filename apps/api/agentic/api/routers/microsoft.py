@@ -80,6 +80,9 @@ async def _status(db: AsyncSession, principal: Principal, base: str) -> dict[str
         # P63: Sign in with Microsoft, and Teams channel posts (after an admin's consent).
         "sign_in": cfg.sign_in,
         "teams_channels": cfg.teams_channels,
+        # P109: posting in Teams channels, and Teams Approvals (after an admin's consent).
+        "teams_channel_send": cfg.teams_channel_send,
+        "teams_approvals": cfg.teams_approvals,
     }
 
 
@@ -95,6 +98,8 @@ async def microsoft_status(
 class MicrosoftOptionsIn(BaseModel):
     sign_in: bool | None = None
     teams_channels: bool | None = None
+    teams_channel_send: bool | None = None  # P109
+    teams_approvals: bool | None = None  # P109
 
 
 @router.put(f"{BASE}/options")
@@ -121,7 +126,9 @@ async def microsoft_options(
         "integration.updated",
         target=row.id,
         before={"kind": "microsoft", "sign_in": before.sign_in,
-                "teams_channels": before.teams_channels},
+                "teams_channels": before.teams_channels,
+                "teams_channel_send": before.teams_channel_send,
+                "teams_approvals": before.teams_approvals},
         after={"kind": "microsoft", **changes},
     )  # fmt: skip
     await db.commit()
@@ -382,6 +389,8 @@ async def microsoft_account(
             "channels_ok": False,
             "files_ok": False,
             "new_chats_ok": False,
+            "channel_send_ok": False,
+            "approvals_ok": False,
             "last_sync_at": None,
             "webhooks": "off",
             "last_error": None,
@@ -402,6 +411,9 @@ async def microsoft_account(
         # P102: may start a new Teams chat with anyone (a first message), after "Allow new
         # Teams chats" once. Replying in existing chats never needs it.
         "new_chats_ok": auth.has_scope(acct.scopes, app.CHAT_CREATE),
+        # P109: may post and reply in Teams channels, and see Teams Approvals.
+        "channel_send_ok": auth.has_scope(acct.scopes, app.CHANNEL_SEND_SCOPE),
+        "approvals_ok": auth.has_scope(acct.scopes, app.APPROVALS_SCOPE),
         "last_sync_at": acct.last_sync_at,
         "webhooks": await sync.webhooks_state(db, acct),
         "last_error": render(acct.last_error) if acct.last_error else None,

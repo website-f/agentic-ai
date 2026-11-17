@@ -94,11 +94,15 @@ async def _extra_permissions(
     db: AsyncSession, workspace_id: str, user_id: str, role: str
 ) -> set[str]:
     """P92: only an owner edits what each role may do (Settings > Roles and access).
-    P73: the developer (an owner marked by the operator) also manages feedback."""
+    P73: the developer (an owner marked by the operator) also manages feedback.
+    P109: owners, admins and management read it (feedback.read: the Feedbacks page, comments)."""
+    if role in ("management", "admin"):  # Fitri, 17 Nov 2026: admins read feedback too
+        return {"feedback.read"}
     if role != "owner":
         return set()
     user = await db.get(User, user_id)
-    return {"roles.manage"} | ({DEVELOPER_PERMISSION} if is_developer(user, role) else set())
+    dev = {DEVELOPER_PERMISSION} if is_developer(user, role) else set()
+    return {"roles.manage", "feedback.read"} | dev
 
 
 @router.get("/setup-status")

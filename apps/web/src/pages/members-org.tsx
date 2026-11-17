@@ -20,7 +20,7 @@ import { t as tr, useT } from "@/i18n";
 import { api, errorMessage } from "@/lib/api";
 import { MANAGER_ROLES } from "@/lib/people";
 import { branchesQuery, keys, membersQuery } from "@/lib/queries";
-import { ROLE_INFO, type Department, type Me, type Member } from "@/lib/types";
+import { ROLE_INFO, type Branch, type Department, type Me, type Member } from "@/lib/types";
 
 export const NEW_DEPT = "__new__";
 
@@ -65,17 +65,27 @@ export function managerOptions(members: Member[], exceptId?: string) {
 
 const NO_ONE = "none";
 
-/** Reports to (a manager) and heads their department: part of the member editor. */
-export function OrgFields({ member, members, reportsTo, onReportsTo, heads, onHeads, hasDepartment }: {
+/** P109: every department of every company, grouped by company (the departments a head heads). */
+export function headOfOptions(branches: Branch[]) {
+  return branches.flatMap((b) => b.departments.map((d) => ({ value: d.id, label: d.name, group: b.name, keywords: [b.name] })));
+}
+
+/** Reports to (a manager), and (P109) Head of department (HOD): on or off, and which
+ * departments of any company they head. Part of the member editor. */
+export function OrgFields({ member, members, reportsTo, onReportsTo, headOf, onHeadOf, departmentId }: {
   member: Member;
   members: Member[];
   reportsTo: string;
   onReportsTo: (v: string) => void;
-  heads: boolean;
-  onHeads: (v: boolean) => void;
-  hasDepartment: boolean;
+  headOf: string[];
+  onHeadOf: (v: string[]) => void;
+  /** The department picked for them above ("" none): turning HOD on starts with it. */
+  departmentId: string;
 }) {
   const t = useT();
+  const { data: branches = [] } = useBranches();
+  const isHead = headOf.length > 0;
+  const options = headOfOptions(branches);
   return (
     <fieldset className="grid gap-3 rounded-[var(--radius-md)] border border-border p-3">
       <legend className="px-1 text-[13px] font-medium">{t("Team")}</legend>
@@ -86,13 +96,24 @@ export function OrgFields({ member, members, reportsTo, onReportsTo, heads, onHe
         <p className="text-[12.5px] text-muted">{t("Their manager can give them tasks and follows their work.")}</p>
       </div>
       <label className="flex min-h-11 cursor-pointer items-start gap-3">
-        <input type="checkbox" checked={heads} disabled={!hasDepartment} onChange={(e) => onHeads(e.target.checked)}
+        <input type="checkbox" checked={isHead} disabled={!isHead && !departmentId && !options.length}
+          onChange={(e) => onHeadOf(e.target.checked ? (departmentId ? [departmentId] : options.slice(0, 1).map((o) => o.value)) : [])}
           className="mt-1 size-4 shrink-0 accent-[var(--accent)]" />
         <span className="grid gap-0.5">
-          <span className="text-[13.5px] font-medium">{t("Heads this department")}</span>
-          <span className="text-[12.5px] text-muted">{hasDepartment ? t("A department can have more than one head.") : t("Pick a department first.")}</span>
+          <span className="text-[13.5px] font-medium">{t("Head of department (HOD)")}</span>
+          <span className="text-[12.5px] text-muted">{t("Heads of a company's departments are told when files are uploaded for it. A department can have more than one head.")}</span>
         </span>
       </label>
+      {isHead ? (
+        <div className="grid gap-1.5">
+          <span className="text-[13px] font-medium">{t("Departments they head")}</span>
+          <MultiSelect value={headOf} onValueChange={onHeadOf} label={t("Departments they head")} placeholder={t("Pick one or more departments")}
+            searchPlaceholder={t("Search departments or companies")} options={options} />
+          {member.role !== "hod" && !MANAGER_ROLES.includes(member.role) ? (
+            <p className="text-[12.5px] text-muted">{t("To give tasks to the people under them, give them a manager role too, such as Head of department.")}</p>
+          ) : null}
+        </div>
+      ) : null}
     </fieldset>
   );
 }
@@ -115,27 +136,33 @@ export function ManagesField({ member, members, value, onChange }: {
   const team = useQuery({ queryKey: [...keys.members, "team", member.user_id], queryFn: () => api<Member[]>(`/api/members/${member.user_id}/team`) });
   const now = (team.data ?? []).map((m) => m.user_id);
   const none = t("No department");
+  // P109: grouped by company, then department; their own companies first.
+  const home = new Set((member.branches ?? []).map((b) => b.name).concat(member.branch_name ? [member.branch_name] : []));
+  const where = (m: Member) => [m.branch_name, m.department_name ?? none].filter(Boolean).join(" · ");
   const options = members
     .filter((m) => m.user_id !== member.user_id && m.is_active)
-    .sort((a, b) => a.name.localeCompare(b.name))
+    .sort((a, b) => Number(!home.has(a.branch_name ?? "")) - Number(!home.has(b.branch_name ?? "")) || a.name.localeCompare(b.name))
     .map((m) => ({
       value: m.user_id,
       label: m.name,
-      keywords: [m.email],
-      group: m.department_name ?? none,
+      keywords: [m.email, m.branch_name ?? "", m.department_name ?? ""],
+      group: where(m),
       hint: [tr(ROLE_INFO[m.role].label), m.department_name, m.reports_to_user_id && m.reports_to_user_id !== member.user_id && m.reports_to_name ? t("now reports to {name}", { name: m.reports_to_name }) : null].filter(Boolean).join(" · "),
     }))
-    // Grouped by department (A to Z), people with none last; by name inside each.
-    .sort((a, b) => Number(a.group === none) - Number(b.group === none) || a.group.localeCompare(b.group));
+    // Their companies first, then A to Z; people with no department last; by name inside each.
+    .sort((a, b) => Number(!home.has(a.group.split(" · ")[0] ?? "")) - Number(!home.has(b.group.split(" · ")[0] ?? "")) || Number(a.group.endsWith(none)) - Number(b.group.endsWith(none)) || a.group.localeCompare(b.group));
   const sameDept = member.department_id ? members.filter((m) => m.department_id === member.department_id && m.user_id !== member.user_id && m.is_active).map((m) => m.user_id) : [];
   const current = value ?? now;
   return (
     <div className="grid gap-1.5">
-      <span className="text-[13px] font-medium">{t("Staff they manage")}</span>
+      <span className="text-[13px] font-medium">{t("People under them")}</span>
       {team.isLoading ? <Skeleton className="h-10" /> : (
-        <MultiSelect value={current} onValueChange={onChange} label={t("Staff they manage")} placeholder={t("Pick the people who report to them")}
-          searchPlaceholder={t("Search by name, email or department")} options={options} />
+        <MultiSelect value={current} onValueChange={onChange} label={t("People under them")} placeholder={t("Pick the people who report to them")}
+          searchPlaceholder={t("Search by name, email, company or department")} options={options} maxChips={8} />
       )}
+      {now.length ? (
+        <p className="text-[12.5px] text-muted">{now.length === 1 ? t("Their team now: 1 person.") : t("Their team now: {n} people.", { n: now.length })}</p>
+      ) : null}
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
         <p className="min-w-0 flex-1 text-[12.5px] text-muted">{t("They can give these people tasks and follow their work. Someone who reports to another manager moves to them.")}</p>
         {member.department_name && sameDept.some((id) => !current.includes(id)) ? (
@@ -155,9 +182,7 @@ export function OrgLine({ member, onTeam }: { member: Member; onTeam?: () => voi
   if (!member.heads_department && !member.reports_to_name && !member.manages) return null;
   return (
     <p className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[12px] text-muted">
-      {member.heads_department ? (
-        <Pill tone="accent"><CrownSimpleIcon size={11} weight="fill" /> {t("Head of {department}", { department: member.department_name ?? t("department") })}</Pill>
-      ) : null}
+      {member.heads_department ? <HodBadge member={member} /> : null}
       {member.manages ? (
         onTeam ? (
           <button type="button" onClick={onTeam} className="inline-flex min-h-6 items-center gap-1 font-medium text-accent hover:underline">
@@ -167,6 +192,21 @@ export function OrgLine({ member, onTeam }: { member: Member; onTeam?: () => voi
       ) : null}
       {member.reports_to_name ? <span className="inline-flex items-center gap-1"><TreeStructureIcon size={12} /> {t("Reports to {name}", { name: member.reports_to_name })}</span> : null}
     </p>
+  );
+}
+
+/** P109: "HOD" and the departments they head (any company). */
+export function HodBadge({ member }: { member: Member }) {
+  const t = useT();
+  const heads = member.head_of ?? [];
+  const names = heads.length ? heads.map((d) => d.name) : member.department_name ? [member.department_name] : [];
+  const title = heads.map((d) => (d.branch_name ? `${d.name} (${d.branch_name})` : d.name)).join(", ");
+  return (
+    <Pill tone="accent" title={title || undefined}>
+      <CrownSimpleIcon size={11} weight="fill" />{" "}
+      {names.length > 2 ? t("HOD: {names} +{n} more", { names: names.slice(0, 2).join(", "), n: names.length - 2 })
+        : names.length ? t("HOD: {names}", { names: names.join(", ") }) : t("HOD")}
+    </Pill>
   );
 }
 

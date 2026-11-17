@@ -21,6 +21,7 @@ else over it) accepts it.
 """
 
 import logging
+from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import Any
 
@@ -164,12 +165,14 @@ async def names(db: AsyncSession, user_ids: set[str]) -> dict[str, str]:
     return dict((await db.execute(select(User.id, User.name).where(User.id.in_(ids)))).all())
 
 
-def land(t: Task, new_status: str, a: Actor) -> str:
-    """Where a person's move lands, or PeopleError. Done by the assignee on someone else's
-    task that asks for a check goes to review; only the giver side accepts it."""
+def land(t: Task, new_status: str, a: Actor, assignees: Iterable[str] = ()) -> str:
+    """Where a person's move lands, or PeopleError. Done by an assignee on someone else's
+    task that asks for a check goes to review; only the giver side accepts it. `assignees`:
+    all of the task's assignees (P109; the first one, assignee_user_id, always counts)."""
     if new_status not in PERSON_MOVES.get(t.status, set()):
         raise PeopleError(409, "bad_move", "That move is not possible for this task.")
-    doer = t.assignee_user_id == a.user_id and t.created_by != a.actor
+    doing = t.assignee_user_id == a.user_id or a.user_id in set(assignees)
+    doer = doing and t.created_by != a.actor
     if new_status == "done" and doer and t.requires_review and t.status != "review":
         return "review"
     if new_status == "done" and doer and t.status == "review":

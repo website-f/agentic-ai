@@ -5,9 +5,12 @@
  * filter it; "Mark all as read" makes the badge count only what comes after. */
 import {
   ArrowRightIcon,
+  ArrowsLeftRightIcon,
+  AtIcon,
   BellIcon,
   CheckCircleIcon,
   ChecksIcon,
+  CloudCheckIcon,
   EnvelopeSimpleIcon,
   FileTextIcon,
   GraduationCapIcon,
@@ -31,7 +34,7 @@ import { api } from "@/lib/api";
 import { cn, timeAgo } from "@/lib/utils";
 
 export interface NeedItem {
-  key: "approvals" | "assigned" | "blocked" | "reviews" | "documents" | "failed" | "drafts" | "skills" | "routines" | "services";
+  key: "approvals" | "assigned" | "blocked" | "reviews" | "documents" | "failed" | "drafts" | "skills" | "routines" | "services" | "mail_backup" | "handoffs_check" | "handoffs_in" | "mentions";
   count: number;
   to: string;
   search: Record<string, string>;
@@ -67,6 +70,12 @@ const LOOK: Record<NeedItem["key"], { icon: Icon; label: string; one: string; to
   skills: { icon: SparkleIcon, label: msg("{n} skill proposals to decide"), one: msg("Skill proposal"), tone: "text-accent" },
   routines: { icon: GraduationCapIcon, label: msg("{n} learned routines to trust"), one: msg("Learned routine"), tone: "text-accent" },
   services: { icon: ShieldCheckIcon, label: msg("{n} outside services wait for approval"), one: msg("Service to approve"), tone: "text-warn" },
+  // P109: another email account fully backed up: disconnect it and use Microsoft 365.
+  mail_backup: { icon: CloudCheckIcon, label: msg("{n} email accounts backed up: you can disconnect them"), one: msg("Email backed up: disconnect it"), tone: "text-ok" },
+  // P109: files I uploaded for other companies to check; files uploaded for my company; mentions.
+  handoffs_check: { icon: ArrowsLeftRightIcon, label: msg("{n} files you uploaded for other companies to check"), one: msg("File to check and hand over"), tone: "text-info" },
+  handoffs_in: { icon: TrayArrowDownIcon, label: msg("{n} files uploaded for your company"), one: msg("File uploaded for your company"), tone: "text-accent" },
+  mentions: { icon: AtIcon, label: msg("{n} mentions in feedback comments"), one: msg("Mentioned in feedback"), tone: "text-accent" },
 };
 
 const chip = "inline-flex shrink-0 items-center gap-1 rounded-full border px-2.5 py-1 text-[12px] tabular";

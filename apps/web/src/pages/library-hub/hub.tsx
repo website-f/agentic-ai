@@ -4,8 +4,8 @@
  * (../explorer/frame.tsx) whose header carries Back, the company, the search and these tabs;
  * each tab page starts with <LibraryHeader>: the tab's own title, description and actions. */
 import {
-  BooksIcon, CloudIcon, FileMagnifyingGlassIcon, FileTextIcon, FilesIcon, FolderOpenIcon, IdentificationCardIcon, PackageIcon, StackIcon,
-  type Icon,
+  ArrowsLeftRightIcon, BooksIcon, CloudIcon, FileMagnifyingGlassIcon, FileTextIcon, FilesIcon, FolderOpenIcon, IdentificationCardIcon, PackageIcon,
+  StackIcon, type Icon,
 } from "@phosphor-icons/react";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useRouterState } from "@tanstack/react-router";
@@ -16,6 +16,7 @@ import { Button } from "@/components/ui/button";
 import { SearchField } from "@/components/search-box";
 import { msg, useT } from "@/i18n";
 import type { StoreView } from "@/lib/file-store";
+import { targetsQuery } from "@/lib/handoffs";
 import { linkedQuery } from "@/lib/linked-sources";
 import { meQuery } from "@/lib/queries";
 import { cn } from "@/lib/utils";
@@ -23,7 +24,7 @@ import { ALL_NAV } from "@/nav";
 
 import { useLibraryFrame } from "../explorer/frame-context";
 
-export type LibraryPath = "/files" | "/documents" | "/sops" | "/library" | "/templates" | "/packs" | "/company-kit" | "/search";
+export type LibraryPath = "/files" | "/documents" | "/sops" | "/library" | "/templates" | "/packs" | "/company-kit" | "/search" | "/handoffs";
 
 export interface LibraryTab {
   to: LibraryPath;
@@ -66,6 +67,10 @@ export const LIBRARY_TABS: LibraryTab[] = [
     to: "/search", label: msg("Search"), icon: FileMagnifyingGlassIcon,
     description: msg("Search inside every document your company has: files page by page, SOPs, prepared documents, templates and wiki pages."),
   },
+  {
+    to: "/handoffs", label: msg("For other companies"), icon: ArrowsLeftRightIcon,
+    description: msg("Upload files for other companies: pick the companies each file is for, check it, then approve it. Their heads of department are told, and the files they receive show here."),
+  },
 ];
 
 export function libraryTab(to: LibraryPath): LibraryTab {
@@ -75,7 +80,12 @@ export function libraryTab(to: LibraryPath): LibraryTab {
 /** The tabs this person may open: the same permissions the navigation uses for each address. */
 export function useLibraryTabs(): LibraryTab[] {
   const { data: me } = useQuery(meQuery);
+  // P109: "For other companies" for the people who upload for others or receive files (the
+  // workspace roles and managers); staff only once it is switched on for them.
+  const receives = !!me && (me.scope?.kind === "all" || ["hod", "branch_manager", "supervisor"].includes(me.role));
+  const { data: targets } = useQuery({ ...targetsQuery, enabled: !!me && !receives });
   return LIBRARY_TABS.filter((tab) => {
+    if (tab.to === "/handoffs" && !receives && !targets?.allowed) return false;
     const item = ALL_NAV.find((n) => n.to === tab.to);
     if (!item?.perm) return true;
     return !!me && [item.perm].flat().some((p) => me.permissions.includes(p));

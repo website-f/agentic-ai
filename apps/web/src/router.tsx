@@ -105,6 +105,7 @@ const page = {
   prima: lazyRouteComponent(() => import("@/pages/prima"), "PrimaPage"),
   mail: lazyRouteComponent(() => import("@/pages/mail"), "MailPage"),
   feedbacks: lazyRouteComponent(() => import("@/pages/feedbacks"), "FeedbacksPage"),
+  handoffs: lazyRouteComponent(() => import("@/pages/handoffs"), "HandoffsPage"),
   primaOnly: lazyRouteComponent(() => import("@/pages/prima-only"), "PrimaOnlyPage"),
 };
 
@@ -803,7 +804,11 @@ const mailRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/mail",
   // `mailbox` is what the server's follow-up notices link with; same as `box`.
-  validateSearch: (s: Record<string, unknown>): { box?: string; ms?: string; msg?: string; app?: "teams" } => ({ box: str(s.box) ?? str(s.mailbox), ms: str(s.ms), msg: str(s.msg), app: s.app === "teams" ? "teams" : undefined }),
+  // P109: the tabs (Teams, Calendar, Approvals, Other email accounts); none is Outlook mail.
+  validateSearch: (s: Record<string, unknown>): { box?: string; ms?: string; msg?: string; app?: "teams" | "calendar" | "approvals" | "accounts" } => ({
+    box: str(s.box) ?? str(s.mailbox), ms: str(s.ms), msg: str(s.msg),
+    app: s.app === "teams" || s.app === "calendar" || s.app === "approvals" || s.app === "accounts" ? s.app : undefined,
+  }),
   beforeLoad: ({ context }) => {
     if (!["agents.own", "assistants.use", "channels.manage"].some((p) => context.me.permissions.includes(p))) throw redirect({ to: "/workspace" });
   },
@@ -855,14 +860,25 @@ const explorerRoute = createRoute({
 });
 
 // P73: what people sent from the feedback button; the developer's page (feedback.manage).
+// P109: owners and management read it too (feedback.read), and comment on it.
 const feedbacksRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/feedbacks",
   validateSearch: (s: Record<string, unknown>): { f?: string } => ({ f: str(s.f) }),
   beforeLoad: ({ context }) => {
-    if (!context.me.permissions.includes("feedback.manage")) throw redirect({ to: "/" });
+    const p = context.me.permissions;
+    if (!p.includes("feedback.manage") && !p.includes("feedback.read")) throw redirect({ to: "/" });
   },
   component: page.feedbacks,
+});
+
+// P109: Library > For other companies (upload for them, check, hand over; what came in).
+const HANDOFF_TABS = ["upload", "check", "done", "received"] as const;
+const handoffsRoute = createRoute({
+  getParentRoute: () => libraryFrameRoute,
+  path: "/handoffs",
+  validateSearch: (s: Record<string, unknown>): { tab?: (typeof HANDOFF_TABS)[number] } => ({ tab: HANDOFF_TABS.find((x) => x === s.tab) }),
+  component: page.handoffs,
 });
 
 // Kept for pages that have not shipped yet (none right now).
@@ -904,6 +920,7 @@ const routeTree = rootRoute.addChildren([
     packsRoute,
     companyKitRoute,
     searchRoute,
+    handoffsRoute,
   ]),
   appRoute.addChildren([
     homeRoute,
