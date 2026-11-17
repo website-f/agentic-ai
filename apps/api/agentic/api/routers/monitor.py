@@ -14,7 +14,7 @@ from ...core.valkey import valkey, valkey_bytes
 from ...models import Agent, Event, LLMCall, Task
 from ...teams import reconcile
 from ..deps import Principal, api_error, require
-from ..scope import WATCH_EVENTS
+from ..scope import WATCH_EVENTS, watch_view
 
 router = APIRouter(prefix="/api", tags=["monitor"])
 
@@ -113,6 +113,9 @@ async def activity(
                 )
             ).all()
         ],
+        # P108: a watcher gets neither the task it is on nor what it spent, and each step only
+        # as the live stream gives it to them (scope.watch_view: the kind of step, no task
+        # title, text, tool arguments, results, model or cost).
         "task": {
             "id": current.id,
             "title": current.title,
@@ -121,12 +124,20 @@ async def activity(
             "quiet_minutes": await reconcile.quiet_minutes(db, current),
             **(task_spent or {}),
         }
-        if current
+        if current and not watching
         else None,
-        "today": {"calls": int(spent[0]), "tokens": int(spent[1]), "usd": float(spent[2] or 0)},
+        "today": None
+        if watching
+        else {"calls": int(spent[0]), "tokens": int(spent[1]), "usd": float(spent[2] or 0)},
         "browser": {"session": sid} if sid else None,
         "events": [
-            {"seq": e.seq, "ts": e.ts, "type": e.type, "data": e.data} for e in reversed(rows)
+            {
+                "seq": e.seq,
+                "ts": e.ts,
+                "type": e.type,
+                "data": watch_view(e.type, e.data or {}, set()) if watching else e.data,
+            }
+            for e in reversed(rows)
         ],
     }
 

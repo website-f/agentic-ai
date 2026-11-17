@@ -109,7 +109,7 @@ async def agent_out(
     now, counts = work if work is not None else await _work(db, [a.id])
     current = now.get(a.id)
     open_tasks = counts.get(a.id, 0)
-    return AgentOut(
+    out = AgentOut(
         id=a.id,
         slug=a.slug,
         name=a.name,
@@ -154,6 +154,20 @@ async def agent_out(
         hours_label=work_hours.describe(a.work_hours) if a.work_hours else None,
         duty=work_hours.duty(datetime.now(UTC), a.work_hours) if a.work_hours else None,
     )
+    # P108: a colleague's agent that staff only watch (view_only): who it is and whether it
+    # works, as the live stream trims it (scope.WATCH_FIELDS), not its instructions, tools,
+    # SOPs, budgets or the title of the task it is on.
+    return out.model_copy(update=WATCHED_HIDDEN) if out.view_only else out
+
+
+WATCHED_HIDDEN: dict[str, Any] = {
+    "soul": "",
+    "tools": {},
+    "sop_ids": [],
+    "budget_daily_tokens": None,
+    "budget_monthly_usd": None,
+    "current_task": None,
+}
 
 
 async def clean_hours(db: AsyncSession, ws_id: str, raw: dict | None) -> dict | None:

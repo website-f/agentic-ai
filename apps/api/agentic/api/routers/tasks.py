@@ -1587,6 +1587,12 @@ async def get_department_review_policy(
     db: AsyncSession = Depends(get_db),
 ) -> ReviewPolicyIn:
     d = await _department(db, principal, dept_id)
+    sc = principal.scope
+    if not sc.everything and not sc.in_branch(d.branch_id):
+        # P108: an office role reads only its own companies' departments.
+        raise api_error(
+            status.HTTP_404_NOT_FOUND, "department_not_found", "That department is not here."
+        )
     return ReviewPolicyIn(review_policy=review.normalize(d.review_policy))
 
 

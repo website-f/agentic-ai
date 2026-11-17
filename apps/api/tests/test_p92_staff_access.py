@@ -24,7 +24,7 @@ from agentic.channels import whatsapp
 from agentic.core import crypto
 from agentic.core.db import SessionLocal
 from agentic.core.ids import new_id
-from agentic.models import Agent, AIProvider, Approval, Channel, User, Workspace
+from agentic.models import Agent, AIProvider, Approval, Channel, Event, Task, User, Workspace
 
 from .conftest import csrf
 from .test_agents import llm, new_agent, new_task, office, temporal  # noqa: F401
@@ -405,6 +405,80 @@ async def test_staff_see_a_working_office_number_and_own_company_sops(client, ll
     kits = (await staff.get("/api/company-kits")).json()
     assert [k["branch_id"] for k in kits] == [s["o"]["branch"]["id"]]
     assert (await staff.get(f"/api/company-kits/{s['b2']['id']}")).status_code == 404
+    await staff.aclose()
+
+
+async def test_staff_watch_colleague_agents_not_their_work(client, llm, temporal):  # noqa: F811
+    """P108: staff watch the other agents of their company (that it works, as the office floor
+    and the live stream show it), never what it works on: no task title, instructions, tools,
+    budgets, step text, tool arguments, results, model or cost. And another company's
+    department settings stay out of reach."""
+    s = await seed(client)
+    async with SessionLocal() as db:
+        helper = await db.scalar(select(Agent).where(Agent.name == "Branch Helper"))
+        ws = helper.workspace_id
+        task = await db.scalar(select(Task).where(Task.title == "BranchTaskCanary"))
+        await db.execute(update(Task).where(Task.id == task.id).values(status="running"))
+        db.add(
+            Event(
+                workspace_id=ws,
+                ts=datetime.now(UTC),
+                type="agent.activity",
+                data={
+                    "agent_id": helper.id,
+                    "agent_name": helper.name,
+                    "task_id": task.id,
+                    "task_title": "BranchTaskCanary",
+                    "kind": "tool",
+                    "tool": "web_search",
+                    "args": {"q": "ArgsCanaryZ"},
+                    "preview": "PreviewCanaryZ",
+                    "text": "ThoughtCanaryZ",
+                    "provider": "ProvCanaryZ",
+                    "cost_usd": 0.25,
+                },
+            )
+        )
+        await db.commit()
+        helper_id = helper.id
+    staff = await as_role(client, "watch.p108@example.com", "staff", **s["where"])
+    secrets = ("BranchTaskCanary", "I am Branch Helper", "ArgsCanaryZ", "PreviewCanaryZ")
+    secrets += ("ThoughtCanaryZ", "ProvCanaryZ", "cost_usd")
+
+    r = await staff.get("/api/agents")
+    assert r.status_code == 200
+    [a] = [x for x in r.json() if x["id"] == helper_id]
+    assert a["view_only"] and a["name"] == "Branch Helper" and a["status"] == "active"
+    assert a["soul"] == "" and a["tools"] == {} and a["sop_ids"] == []
+    assert a["current_task"] is None and a["budget_monthly_usd"] is None
+    r = await staff.get(f"/api/agents/{helper_id}")
+    assert r.status_code == 200 and r.json()["view_only"] and r.json()["soul"] == ""
+    r = await staff.get(f"/api/agents/{helper_id}/activity")
+    assert r.status_code == 200
+    act = r.json()
+    assert act["task"] is None and act["today"] is None and act["browser"] is None
+    [ev] = act["events"]
+    watched = {"agent_id": helper_id, "agent_name": "Branch Helper", "kind": "tool"}
+    assert ev["data"] == {**watched, "tool": "web_search"}
+    for path in ("/api/agents", f"/api/agents/{helper_id}", f"/api/agents/{helper_id}/activity"):
+        body = (await staff.get(path)).text
+        assert not [c for c in secrets if c in body], (path, [c for c in secrets if c in body])
+
+    # The owner (who sees the agent) still gets all of it.
+    a = (await client.get(f"/api/agents/{helper_id}")).json()
+    assert not a["view_only"] and a["soul"] == "I am Branch Helper."
+    assert a["current_task"]["title"] == "BranchTaskCanary"
+    act = (await client.get(f"/api/agents/{helper_id}/activity")).json()
+    assert act["task"]["title"] == "BranchTaskCanary" and act["today"] is not None
+    [ev] = [e for e in act["events"] if e["type"] == "agent.activity"]
+    assert ev["data"]["args"] == {"q": "ArgsCanaryZ"} and ev["data"]["task_title"]
+
+    # Their own company's department settings, not another company's.
+    own = s["o"]["depts"]["Finance"]
+    far = s["b2"]["departments"][0]["id"]
+    assert (await staff.get(f"/api/departments/{own}/review-policy")).status_code == 200
+    assert (await staff.get(f"/api/departments/{far}/review-policy")).status_code == 404
+    assert (await client.get(f"/api/departments/{far}/review-policy")).status_code == 200
     await staff.aclose()
 
 
