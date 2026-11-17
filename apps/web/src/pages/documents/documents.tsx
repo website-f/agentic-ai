@@ -9,8 +9,8 @@ import { Button } from "@/components/ui/button";
 import { ListRow, Meta } from "@/components/ui/card";
 import { DataTable, TableFilter, useServerTable, useTableState, type Column } from "@/components/ui/data-table";
 import { Pill } from "@/components/ui/pill";
+import { SearchSelect } from "@/components/ui/search-select";
 import { Segmented } from "@/components/ui/segmented";
-import { Select } from "@/components/ui/select";
 import { Stat, StatGrid } from "@/components/ui/stat";
 import { useT } from "@/i18n";
 import { useCompanies } from "@/lib/company";
@@ -34,7 +34,7 @@ type View = "all" | "review";
 function CompanyFilter({ value, on, onChange, options }: { value: string; on: boolean; onChange: (v: string) => void; options: { value: string; label: string }[] }) {
   const t = useT();
   return (
-    <Select size="md" label={t("Company")} value={value} onValueChange={onChange}
+    <SearchSelect size="md" label={t("Company")} value={value} onValueChange={onChange} searchPlaceholder={t("Search companies")}
       className={cn("w-full sm:w-auto sm:max-w-60 sm:min-w-36", on && "border-accent/50 bg-accent-soft/50 font-medium text-fg")}
       options={[{ value: ALL, label: t("All companies") }, ...options]} />
   );

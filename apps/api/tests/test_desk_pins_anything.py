@@ -210,6 +210,7 @@ async def test_desk_sections_per_person(client, llm, temporal):
             "pinned",
             "recent",
             "ai",
+            "hierarchy",  # P111: my line of managers and the people under me
             "howto",
             "goto",
         ]
@@ -224,7 +225,7 @@ async def test_desk_sections_per_person(client, llm, temporal):
         # The ones left out keep showing, after the person's order (P109b: the Microsoft 365
         # tile right after Today).
         assert [s["id"] for s in got] == [
-            "pinned", "today", "m365", "goto", "recent", "ai", "howto",
+            "pinned", "today", "m365", "goto", "recent", "ai", "hierarchy", "howto",
         ]  # fmt: skip
         assert [s["id"] for s in got if s["hidden"]] == ["goto"]
         assert (await staff.get("/api/desk")).json()["layout"]["sections"] == got

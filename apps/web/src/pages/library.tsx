@@ -17,14 +17,15 @@ import { useMemo, useState, type FormEvent } from "react";
 import { toast } from "sonner";
 
 import { FileDrop } from "@/components/file-drop";
-import { LibraryStatusPill, parseScope, ScopeSelect, scopeOptions, WHOLE } from "@/components/library-toggle";
+import { LibraryStatusPill, parseScope, scopeOptions, WHOLE } from "@/components/library-toggle";
 import { EmptyState, IconTile, Page } from "@/components/page";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { ConfirmDialog } from "@/components/ui/confirm";
-import { DataTable, filterOf, RowMenu, TableFilter, useTableState, type BulkOutcome, type Column } from "@/components/ui/data-table";
+import { DataTable, filterOf, filterValues, RowMenu, TableFilter, useTableState, type BulkOutcome, type Column } from "@/components/ui/data-table";
 import { Input } from "@/components/ui/field";
 import { MenuItem } from "@/components/ui/menu";
+import { MultiSelect, type PickOption } from "@/components/ui/search-select";
 import { Pill } from "@/components/ui/pill";
 import { Stat, StatGrid } from "@/components/ui/stat";
 import { locale, msg, t as tr, useT } from "@/i18n";
@@ -137,21 +138,33 @@ function TrySearch() {
   );
 }
 
+/** P111: the guidelines go to one or more places at once (the whole office, companies,
+ * departments): picked with search, each file is uploaded once for each place. Only the places
+ * the person may use are offered (scopeOptions), as before. */
 function AddGuidelines() {
   const t = useT();
   const qc = useQueryClient();
   const { data: me } = useQuery(meQuery);
   const { data: branches = [] } = useQuery(branchesQuery);
-  const options = scopeOptions(me, branches);
-  const [picked, setPicked] = useState<string | null>(null);
-  const scope = picked && options.some((o) => o.value === picked) ? picked : (options[0]?.value ?? WHOLE);
-  const target = parseScope(scope, branches);
+  const options = useMemo<PickOption[]>(() => scopeOptions(me, branches).map((o) => ({
+    ...o,
+    group: o.value.startsWith("d:") ? tr("Departments") : o.value.startsWith("b:") ? tr("Companies") : undefined,
+  })), [me, branches]);
+  const [picked, setPicked] = useState<string[] | null>(null);
+  const valid = (picked ?? []).filter((v) => options.some((o) => o.value === v));
+  const scopes = valid.length ? valid : options[0] ? [options[0].value] : [];
+  const targets = scopes.map((v) => parseScope(v, branches));
+  // The whole office covers every company: picking it alone, picking another drops it.
+  const pick = (next: string[]) => {
+    const added = next.filter((v) => !scopes.includes(v));
+    setPicked(added.includes(WHOLE) ? [WHOLE] : next.length > 1 ? next.filter((v) => v !== WHOLE) : next);
+  };
 
-  const onUploaded = async (files: { id: string; name: string }[]) => {
+  const onUploaded = async (files: { id: string; name: string }[], at: number[]) => {
     let added = 0;
-    for (const f of files) {
+    for (const [i, f] of files.entries()) {
       try {
-        await setLibrary(f.id, true, target);
+        await setLibrary(f.id, true, targets[at[i] ?? 0] ?? targets[0]);
         added += 1;
       } catch (e) {
         toast.error(`${f.name}: ${errorMessage(e)}`);
@@ -167,11 +180,13 @@ function AddGuidelines() {
       <CardHeader icon={<IconTile icon={BooksIcon} size="sm" />} title={t("Add guidelines")}
         description={t("SOPs, policies, manuals, price rules. Pick who they are for, then drop the files.")} />
       <CardBody className="grid gap-3">
-        <label className="grid gap-1.5">
-          <span className="text-[12.5px] font-medium text-muted">{t("Who it is for")}</span>
-          <ScopeSelect value={scope} onChange={setPicked} className="w-full" />
-        </label>
-        <FileDrop compact branchId={target.branch_id} onUploaded={(fs) => void onUploaded(fs)} />
+        <div className="grid gap-1.5">
+          <span className="text-[12.5px] font-medium text-muted" aria-hidden>{t("Who it is for")}</span>
+          <MultiSelect label={t("Who it is for")} value={scopes} onValueChange={pick} options={options}
+            placeholder={t("Pick companies or departments")} searchPlaceholder={t("Search companies or departments")} />
+          {scopes.length > 1 ? <p className="text-[12px] text-muted">{t("Each file is added once for each of the {n} places picked.", { n: scopes.length })}</p> : null}
+        </div>
+        <FileDrop compact branchIds={targets.map((x) => x.branch_id)} onUploaded={(fs, at) => void onUploaded(fs, at)} />
       </CardBody>
     </Card>
   );
@@ -190,13 +205,13 @@ export function LibraryPage() {
   const control = useTableState({ size: 25 }, { filters: ["kind", "status", "company", "restricted"] });
   const [kind] = filterOf(control, "kind");
   const [status] = filterOf(control, "status");
-  const [company] = filterOf(control, "company");
+  const [companies] = filterValues(control, "company"); // P111: several at once
   const [restricted] = filterOf(control, "restricted");
   const rows = useMemo(() => sources.filter((s) =>
     (!kind || s.kind === kind)
     && (!status || s.status === status)
-    && (!company || (company === "none" ? !s.branch_id : s.branch_id === company))
-    && (!restricted || !!s.restricted === (restricted === "yes"))), [sources, kind, status, company, restricted]);
+    && (!companies.length || companies.includes(s.branch_id ?? "none"))
+    && (!restricted || !!s.restricted === (restricted === "yes"))), [sources, kind, status, companies, restricted]);
 
   const reindex = useMutation({
     mutationFn: reindexLibrary,
@@ -338,7 +353,7 @@ export function LibraryPage() {
               <TableFilter control={control} id="status" label={t("Status")} allLabel={t("All statuses")}
                 options={STATUSES.map((x) => ({ value: x.value, label: t(x.label) }))} />
               {branches.length > 1 ? (
-                <TableFilter control={control} id="company" label={t("Company")} allLabel={t("All companies")}
+                <TableFilter control={control} id="company" label={t("Company")} allLabel={t("All companies")} multiple
                   options={[{ value: "none", label: t("Every company") }, ...branches.map((b) => ({ value: b.id, label: b.name }))]} />
               ) : null}
               {sources.some((s) => s.restricted) ? (

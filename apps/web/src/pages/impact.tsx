@@ -30,10 +30,10 @@ import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxi
 import { EmptyState, IconTile, Page, PageHeader, Section, type Tone } from "@/components/page";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody, CardHeader, ListCard, ListRow, Meta } from "@/components/ui/card";
+import { CompanyPicker } from "@/components/ui/company-picker";
 import { Input } from "@/components/ui/field";
 import { Pill } from "@/components/ui/pill";
 import { Segmented } from "@/components/ui/segmented";
-import { Select } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Stat, StatGrid } from "@/components/ui/stat";
 import { locale, msg, t as tr, useT } from "@/i18n";
@@ -846,13 +846,14 @@ function Capabilities({ branches, canManage }: { branches: BranchImpact[]; canMa
       description={t("Try it opens a new task with an example brief for the right agent. Nothing runs until you create the task, and it waits for your review when done.")}
       actions={
         branches.length > 1 ? (
-          <Select
+          <CompanyPicker
             label={t("Company for Try it")}
             size="sm"
             value={company}
             onValueChange={setCompany}
-            className="max-sm:w-full"
-            options={[{ value: "any", label: t("Any company") }, ...branches.map((b) => ({ value: b.id, label: b.name }))]}
+            className="max-sm:w-full sm:w-56"
+            before={[{ value: "any", label: t("Any company") }]}
+            companies={branches}
           />
         ) : undefined
       }

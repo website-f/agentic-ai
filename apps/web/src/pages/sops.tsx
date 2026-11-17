@@ -9,8 +9,9 @@ import { Markdown } from "@/components/markdown";
 import { EmptyState, IconTile, Page, type Tone } from "@/components/page";
 import { PinButton } from "@/components/pin-button";
 import { Button } from "@/components/ui/button";
+import { CompanyPicker } from "@/components/ui/company-picker";
 import { ConfirmDialog } from "@/components/ui/confirm";
-import { DataTable, filterOf, TableFilter, useTableState, type BulkOutcome, type Column } from "@/components/ui/data-table";
+import { DataTable, filterOf, filterValues, TableFilter, useTableState, type BulkOutcome, type Column } from "@/components/ui/data-table";
 import { Field, FormError } from "@/components/ui/field";
 import { Pill } from "@/components/ui/pill";
 import { Segmented } from "@/components/ui/segmented";
@@ -146,7 +147,7 @@ function Editor({ sop, open, onOpenChange, canManage }: { sop: SOP | null; open:
               </RadioGroup.Root>
             </fieldset>
             {scope === "branch" ? (
-              <Select value={scopeId ?? ""} onValueChange={setScopeId} label={t("Branch")} placeholder={t("Pick a company")} options={branches.map((b) => ({ value: b.id, label: b.name }))} />
+              <CompanyPicker value={scopeId ?? ""} onValueChange={setScopeId} label={t("Branch")} placeholder={t("Pick a company")} companies={branches} />
             ) : scope === "department" ? (
               <Select value={scopeId ?? ""} onValueChange={setScopeId} label={t("Department")} placeholder={t("Pick a department")} options={departments} />
             ) : null}
@@ -202,14 +203,14 @@ export function SopsPage() {
   // and numbered pages; the address keeps them, so closing a SOP returns to the same rows.
   const control = useTableState({ size: 25, sort: "scope" }, { filters: ["scope", "company", "status"] });
   const [scope] = filterOf(control, "scope");
-  const [company] = filterOf(control, "company");
+  const [companies] = filterValues(control, "company"); // P111: several at once
   const [status] = filterOf(control, "status");
   const all = useMemo(() => sops ?? [], [sops]);
   const rows = useMemo(() => {
-    const branch = company ? branches.find((b) => b.id === company) ?? null : null;
-    const inCompany = new Set((branch ? sopsForCompany(all, branch) : all).map((s) => s.id));
+    const picked = branches.filter((b) => companies.includes(b.id));
+    const inCompany = new Set((picked.length ? picked.flatMap((b) => sopsForCompany(all, b)) : all).map((s) => s.id));
     return all.filter((s) => (!scope || s.scope === scope) && (!status || (s.status ?? "active") === status) && inCompany.has(s.id));
-  }, [all, scope, status, company, branches]);
+  }, [all, scope, status, companies, branches]);
   const drafts = all.filter((s) => s.status === "draft").length;
   const open = (s: SOP) => navigate({ to: "/sops", search: ((p: Record<string, unknown>) => ({ ...p, sop: s.id })) as never });
 
@@ -291,7 +292,7 @@ export function SopsPage() {
                 <TableFilter control={control} id="scope" label={t("Who follows it")} allLabel={t("Every scope")}
                   options={SCOPES.map((sc) => ({ value: sc.value, label: t(sc.label) }))} />
                 {branches.length > 1 ? (
-                  <TableFilter control={control} id="company" label={t("Company")} allLabel={t("All companies")}
+                  <TableFilter control={control} id="company" label={t("Company")} allLabel={t("All companies")} multiple
                     options={branches.map((b) => ({ value: b.id, label: b.name }))} />
                 ) : null}
                 {drafts || status ? (

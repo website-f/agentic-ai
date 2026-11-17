@@ -35,7 +35,7 @@ import { Button } from "./button";
 import { ConfirmDialog } from "./confirm";
 import { Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger } from "./menu";
 import { SearchInput } from "./search-input";
-import { SearchSelect } from "./search-select";
+import { MultiFilter, SearchSelect } from "./search-select";
 import { Select } from "./select";
 import { Skeleton } from "./skeleton";
 
@@ -68,12 +68,18 @@ export function filterOf(control: TableControl, key: string): [string, (v: strin
   return [control.state.f[key] ?? "", (v: string) => control.set({ f: { [key]: v } })];
 }
 
+/** P111: a filter that holds several values (kept as "a,b" in the address); [] = all. */
+export function filterValues(control: TableControl, key: string): [string[], (v: string[]) => void] {
+  const raw = control.state.f[key] ?? "";
+  return [raw ? raw.split(",").filter(Boolean) : [], (v: string[]) => control.set({ f: { [key]: v.join(",") } })];
+}
+
 const ALL = "__all";
 
 /** P107: one filter as a chip-like select beside the search box, kept in the table's state
  * (`useTableState(..., { filters: [id] })`). "" is "all"; a set filter stands out in the
  * accent colour. Long lists (more than 8 options) get a searchable picker. */
-export function TableFilter({ control, id, label, allLabel, options, searchable, className }: {
+export function TableFilter({ control, id, label, allLabel, options, searchable, multiple, className }: {
   control: TableControl;
   id: string;
   /** The filter's name (the select's accessible name), already translated. */
@@ -82,14 +88,23 @@ export function TableFilter({ control, id, label, allLabel, options, searchable,
   allLabel: string;
   options: { value: string; label: string; hint?: string }[];
   searchable?: boolean;
+  /** P111: pick several (read them with `filterValues`); always searchable. */
+  multiple?: boolean;
   className?: string;
 }) {
   const t = useT();
   const [value, setValue] = filterOf(control, id);
+  const [many, setMany] = filterValues(control, id);
   const on = !!value;
   const all = [{ value: ALL, label: allLabel }, ...options];
   const style = cn("w-full sm:w-auto sm:max-w-60 sm:min-w-36", on && "border-accent/50 bg-accent-soft/50 font-medium text-fg", className);
   const pick = (v: string) => setValue(v === ALL ? "" : v);
+  if (multiple) {
+    return (
+      <MultiFilter label={label} allLabel={allLabel} value={many} onValueChange={setMany} options={options}
+        className={cn("w-full sm:w-auto sm:max-w-60 sm:min-w-36", className)} searchPlaceholder={t("Search {list}", { list: label.toLowerCase() })} />
+    );
+  }
   return searchable ?? options.length > 8 ? (
     <SearchSelect size="md" label={label} value={value || ALL} onValueChange={pick} options={all} className={style}
       searchPlaceholder={t("Search {list}", { list: label.toLowerCase() })} />

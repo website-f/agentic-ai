@@ -7,6 +7,7 @@ import { procedureSummaryQuery, useReplaySwitch, type AgentSavings } from "@/com
 import { EmptyState, IconTile, Page, PageHeader } from "@/components/page";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
+import { CompanyPicker } from "@/components/ui/company-picker";
 import { DataTable, filterOf, useLocalTableState, useServerTable, useTableState, type Column } from "@/components/ui/data-table";
 import { FormError, Input } from "@/components/ui/field";
 import { Pill } from "@/components/ui/pill";
@@ -338,8 +339,8 @@ function PeopleTable({ canSet, canOwnerRows, meId }: { canSet: boolean; canOwner
                 <Select className="w-full sm:w-40" label={t("Role")} value={role || ALL} onValueChange={(v) => setRole(v === ALL ? "" : v)}
                   options={[{ value: ALL, label: t("All roles") }, ...ALL_ROLES.map((r) => ({ value: r, label: t(ROLE_INFO[r].label) }))]} />
                 {branches.length > 1 ? (
-                  <Select className="w-full sm:w-44" label={t("Company")} value={branch || ALL} onValueChange={(v) => setBranch(v === ALL ? "" : v)}
-                    options={[{ value: ALL, label: t("All companies") }, { value: "none", label: t("No company") }, ...branches.map((b) => ({ value: b.id, label: b.name }))]} />
+                  <CompanyPicker className="w-full sm:w-44" label={t("Company")} value={branch || ALL} onValueChange={(v) => setBranch(v === ALL ? "" : v)}
+                    before={[{ value: ALL, label: t("All companies") }, { value: "none", label: t("No company") }]} companies={branches} />
                 ) : null}
                 <Select className="w-full sm:w-40" label={t("Status")} value={status || ALL} onValueChange={(v) => setStatus(v === ALL ? "" : v)}
                   options={[{ value: ALL, label: t("All statuses") }, ...(Object.keys(STATUS) as AllowanceStatus[]).map((s) => ({ value: s, label: t(STATUS[s].label) }))]} />

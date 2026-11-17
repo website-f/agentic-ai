@@ -370,7 +370,7 @@ async def test_preview_import_scope_and_search(client, llm, temporal, drive):
     r = await link(client, branch_id=b1)
     assert r.status_code == 201, r.text
     src = r.json()
-    assert src["scope_label"] == "Maju Sdn Bhd" and src["connected_by_me"]
+    assert src["scope_label"] == "MAJU SDN BHD" and src["connected_by_me"]
     listed = (await client.get("/api/library/linked")).json()
     s = listed["sources"][0]
     assert listed["can_connect"] and s["status"] == "ready" and s["last_sync_at"]

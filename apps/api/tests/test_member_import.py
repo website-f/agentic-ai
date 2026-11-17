@@ -108,7 +108,7 @@ async def test_preview_finds_a_lower_header_row_and_matches_places(client):
     assert a["email"] == "aminah@example.com" and a["status"] == "ok", texts(a)
     assert (a["role"], a["branch_name"], a["department_name"]) == (
         "staff",
-        "Maju Sdn Bhd",
+        "MAJU SDN BHD",
         "Finance",  # "Kewangan" read in English
     )
     assert a["phone"] == "123456789"
@@ -143,7 +143,7 @@ async def test_csv_with_semicolons_and_one_company_by_default(client):
     assert rows["hana@example.com"]["role"] == "viewer"
     assert rows["hana@example.com"]["branch_id"] is None  # workspace roles sit nowhere
     ian = rows["ian@example.com"]
-    assert ian["role"] == "staff" and ian["branch_name"] == "Maju Sdn Bhd"  # the only company
+    assert ian["role"] == "staff" and ian["branch_name"] == "MAJU SDN BHD"  # the only company
     assert ian["status"] == "ok"
 
 
@@ -174,7 +174,7 @@ async def test_unclear_columns_ask_the_ai_and_say_so_when_it_cannot(client, monk
     p = r.json()
     assert p["mapped_by"] == "ai" and p["header_row"] == 0
     assert [x["email"] for x in p["rows"]] == ["joe@example.com", "kim@example.com"]
-    assert p["rows"][0]["branch_name"] == "Maju Sdn Bhd"
+    assert p["rows"][0]["branch_name"] == "MAJU SDN BHD"
 
 
 async def test_bad_files(client):
@@ -248,7 +248,7 @@ async def test_a_branch_manager_adds_only_inside_their_branch(client):
         assert r.status_code == 200
         wb = load_workbook(io.BytesIO(r.content))
         lists = [c for row in wb.worksheets[1].iter_rows(values_only=True) for c in row if c]
-        assert "Maju Sdn Bhd" in lists and "Jaya Bhd" not in lists
+        assert "MAJU SDN BHD" in lists and "JAYA BHD" not in lists
         assert "Staff" in lists and "Admin" not in lists
     finally:
         await bm.aclose()
@@ -308,7 +308,7 @@ async def test_fix_rows_then_import_with_one_time_passwords(client):
     out = {x["email"]: x for x in body["results"]}
     quinn = out["quinn@example.com"]
     assert quinn["status"] == "added" and quinn["temp_password"]
-    assert quinn["branch_name"] == "Maju Sdn Bhd" and quinn["department_name"] == "Finance"
+    assert quinn["branch_name"] == "MAJU SDN BHD" and quinn["department_name"] == "Finance"
     assert out["pat@example.com"]["status"] == "added"
     assert out["pat@example.com"]["temp_password"] is None  # an existing account
     assert out["rani@example.com"]["temp_password"]
@@ -345,7 +345,7 @@ async def test_template_download(client):
     wb = load_workbook(io.BytesIO(r.content))
     first = list(wb.worksheets[0].iter_rows(values_only=True))
     assert first[0] == ("Name", "Email", "Role", "Company", "Department", "Phone", "Notes")
-    assert first[1][1] == "siti@example.com" and first[1][3] == "Maju Sdn Bhd"
+    assert first[1][1] == "siti@example.com" and first[1][3] == "MAJU SDN BHD"
     lists = [c for row in wb.worksheets[1].iter_rows(values_only=True) for c in row if c]
     assert "Finance" in lists and "Branch manager" in lists and "Owner" in lists
 
@@ -386,8 +386,8 @@ async def test_companies_the_sheet_names_can_be_added_from_the_preview(client):
     )
     assert r.status_code == 200, r.text
     assert r.json() == {
-        "created": ["Arrow Shield Security Services"],
-        "existing": ["Maju Sdn Bhd"],  # never a second company with the same name
+        "created": ["ARROW SHIELD SECURITY SERVICES"],
+        "existing": ["MAJU SDN BHD"],  # never a second company with the same name
     }
     async with SessionLocal() as db:
         logged = await db.scalar(select(AuditLog).where(AuditLog.action == "branch.created"))
@@ -396,8 +396,8 @@ async def test_companies_the_sheet_names_can_be_added_from_the_preview(client):
     p = (await preview(client, data)).json()
     assert p["missing_companies"] == [] and p["counts"]["error"] == 0
     assert {x["branch_name"] for x in p["rows"]} == {
-        "Arrow Shield Security Services",
-        "Maju Sdn Bhd",
+        "ARROW SHIELD SECURITY SERVICES",
+        "MAJU SDN BHD",
     }
 
 

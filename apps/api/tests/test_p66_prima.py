@@ -21,7 +21,7 @@ from agentic.agents.tools import TOOLS, ToolContext
 from agentic.core.config import settings
 from agentic.core.db import SessionLocal
 from agentic.models import Agent, Membership, PrimaLink, Task, User, Workspace
-from agentic.prima import autolink, modules, routes
+from agentic.prima import autolink, modules, org_link, routes
 from agentic.prima import client as prima
 from agentic.prima.client import PrimaError, StaffRecord
 from agentic.prima.people import Person, name_key, suggestions
@@ -122,6 +122,7 @@ def prima_on(monkeypatch):
     # P109: these tests check the link made on the first Prima open; linking on add has its
     # own tests (test_p109_prima_autolink), which switch it back on.
     monkeypatch.setattr(autolink, "on", False)
+    monkeypatch.setattr(org_link, "on", False)  # P111: these set the company map by hand
     return seen
 
 
@@ -522,7 +523,7 @@ async def test_an_unmapped_branch_asks_the_owner_for_its_company(client, prima_o
     try:
         s = (await c.get("/api/prima/status")).json()
         assert not s["linked"] and s["code"] == "company_needed"
-        assert "which Prima company Maju Sdn Bhd is" in s["problem"]
+        assert "which Prima company MAJU SDN BHD is" in s["problem"]
         r = await c.get("/api/prima/api/me")
         assert r.status_code == 403 and r.json()["code"] == "company_needed"
     finally:
@@ -630,7 +631,7 @@ def test_branch_suggestion_knows_the_companies_other_names():
     assert _suggest("OPERASI JOHOR", cos) == "goodwill"
     assert _suggest("OPERASI KL/ SELANGOR", cos) == "goodwill"
     assert _suggest("ARROW SHIELD SECURITY SDN BHD", cos) == "co-arrow"
-    assert _suggest("Maju Sdn Bhd", cos) == "co-maju"
+    assert _suggest("MAJU SDN BHD", cos) == "co-maju"
     assert _suggest("Something Else Entirely", cos) is None
     # Two companies answering to one name: the owner picks.
     twin = [*cos, prima.Company("co-other", "Other Sdn Bhd", ("Unit HR",))]

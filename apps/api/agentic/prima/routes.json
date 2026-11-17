@@ -4537,6 +4537,16 @@
  },
  {
   "method": "POST",
+  "path": "api/hr/people/:personId/job-title",
+  "name": "changeStaffJobTitle",
+  "doc": "P111: HR changes one office staff member's job title (designation) with a reason; the staff list's bulk action calls it once per person.",
+  "params": [
+   "personId"
+  ],
+  "body": "Record<string, unknown>"
+ },
+ {
+  "method": "POST",
   "path": "api/hr/people/:personId/leave-days",
   "name": "setLeaveOverride",
   "params": [

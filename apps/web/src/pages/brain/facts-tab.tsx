@@ -6,13 +6,13 @@ import { toast } from "sonner";
 
 import { EmptyState, IconTile } from "@/components/page";
 import { Button } from "@/components/ui/button";
+import { CompanyPicker } from "@/components/ui/company-picker";
 import { DataTable, filterOf, RowMenu, TableFilter, useServerTable, useTableState, type Column } from "@/components/ui/data-table";
 import { ResponsiveDialog } from "@/components/ui/dialog";
 import { FormError, Input } from "@/components/ui/field";
 import { MenuItem } from "@/components/ui/menu";
 import { Pill } from "@/components/ui/pill";
 import { Segmented } from "@/components/ui/segmented";
-import { Select } from "@/components/ui/select";
 import { t as tr, useT } from "@/i18n";
 import { api, errorMessage } from "@/lib/api";
 import { brainKeys, END_REASON, factScope, type Fact } from "@/lib/brain";
@@ -96,8 +96,8 @@ function AddFact({ branches }: { branches: { id: string; name: string }[] }) {
       <p className="flex items-center gap-2 text-[13px] font-medium"><PlusIcon size={14} weight="bold" className="text-accent" /> {t("Teach the office a fact")}</p>
       <div className="flex flex-col gap-2 md:flex-row">
         <Input value={text} onChange={(e) => setText(e.target.value)} placeholder={t("e.g. Maju Trading invoices on net-30 terms")} aria-label={t("New fact")} className="min-w-0 md:flex-1" />
-        <Select value={scope} onValueChange={setScope} label={t("Who knows it")} className="md:w-56"
-          options={[{ value: "all", label: t("Every company") }, ...branches.map((b) => ({ value: b.id, label: b.name }))]} />
+        <CompanyPicker value={scope} onValueChange={setScope} label={t("Who knows it")} className="md:w-56"
+          before={[{ value: "all", label: t("Every company") }]} companies={branches} />
         <Button type="submit" loading={add.isPending} disabled={text.trim().length < 3}><PlusIcon size={15} weight="bold" /> {t("Add")}</Button>
       </div>
       <FormError message={add.error ? errorMessage(add.error) : null} />

@@ -48,10 +48,10 @@ export const NAV_SECTIONS: NavSection[] = [
   {
     id: 'ops',
     title: 'Operations',
-    blurb: 'Sites, guards, rosters and attendance.',
+    blurb: 'Sites, guards, rosters and duty plans.',
     groups: [
       { title: 'Sites and areas', views: ['ops', 'sites', 'branchwork', 'surveys', 'sitehours'] },
-      { title: 'Guards and duty', views: ['people', 'roster', 'guardroster', 'duty', 'attendance', 'cleaning'] },
+      { title: 'Guards and duty', views: ['people', 'roster', 'guardroster', 'duty', 'cleaning'] },
     ],
   },
   {
@@ -69,9 +69,13 @@ export const NAV_SECTIONS: NavSection[] = [
   {
     id: 'hr',
     title: 'HR',
-    blurb: 'Staff, leave, claims and hand-overs.',
+    blurb: 'Staff, attendance, leave and claims.',
     groups: [
-      { title: 'Staff', views: ['hr', 'staff-directory', 'staffclock', 'work-kpi', 'handovers'] },
+      { title: 'Staff', views: ['hr', 'staff-directory', 'work-kpi', 'handovers'] },
+      // P111 (Fitri, 17 Nov 2026: "the attendance should be in HR not operation"): the attendance screens sit under HR.
+      // Only their place in the menu moved: the screen names (#attendance, #staffclock), who may open them and the data
+      // are as before, so old links and bookmarks still open them.
+      { title: 'Attendance', views: ['attendance', 'staffclock'] },
       { title: 'Claims and welfare', views: ['claims', 'socso'] },
     ],
   },

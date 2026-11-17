@@ -28,7 +28,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core.fence import fence
 from ..i18n import Msg, render
-from ..models import Membership, User
+from ..models import Branch, Department, Membership, User
 from .meeting_models import PRIMA_KINDS, TeamsMeeting
 
 DEFAULT_KIND = "management"
@@ -158,15 +158,28 @@ async def office_people(
         people.actor_of(principal), sorted(set(team) - {principal.user.id})
     )
     stmt = (
-        select(User.name, User.email)
+        select(User.name, User.email, Branch.name, Department.name)
         .join(Membership, Membership.user_id == User.id)
+        .outerjoin(Branch, Branch.id == Membership.branch_id)
+        .outerjoin(Department, Department.id == Membership.department_id)
         .where(Membership.workspace_id == principal.workspace_id, User.is_active.is_(True), where)
     )
     for w in _words(q)[:4]:
         like = f"%{w.replace('%', '').replace('_', '').replace(chr(92), '')}%"
         stmt = stmt.where(or_(func.lower(User.name).like(like), func.lower(User.email).like(like)))
     rows = (await db.execute(stmt.order_by(func.lower(User.name)).limit(limit))).all()
-    return [{"name": n or e, "email": (e or "").lower(), "source": "office"} for n, e in rows if e]
+    # P111: their company and department too, so a picker can tell two Faizes apart.
+    return [
+        {
+            "name": n or e,
+            "email": (e or "").lower(),
+            "source": "office",
+            "company": b or "",
+            "department": d or "",
+        }
+        for n, e, b, d in rows
+        if e
+    ]
 
 
 def _people_of_mail(m: dict[str, Any]) -> list[dict[str, str]]:

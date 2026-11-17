@@ -80,6 +80,8 @@ export interface Member {
   head_of?: { id: string; name: string; branch_id?: string | null; branch_name?: string | null }[];
   library_scope?: "company" | "department";
   uploads_for_others?: boolean;
+  /** P111: their job title (designation) on the organization chart. */
+  job_title?: string | null;
 }
 
 export interface Department {

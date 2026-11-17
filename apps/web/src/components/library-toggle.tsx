@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
 import { Pill } from "@/components/ui/pill";
-import { Select } from "@/components/ui/select";
+import { SearchSelect } from "@/components/ui/search-select";
 import { SwitchField } from "@/components/ui/switch";
 import { t as tr, useT } from "@/i18n";
 import { errorMessage } from "@/lib/api";
@@ -56,7 +56,7 @@ export function ScopeSelect({ value, onChange, className }: { value: string; onC
   const { data: branches = [] } = useQuery(branchesQuery);
   const options = scopeOptions(me, branches);
   const current = options.some((o) => o.value === value) ? value : (options[0]?.value ?? WHOLE);
-  return <Select value={current} onValueChange={onChange} options={options} label={t("Who it is for")} className={className} />;
+  return <SearchSelect value={current} onValueChange={onChange} options={options} label={t("Who it is for")} searchPlaceholder={t("Search companies or departments")} className={className} />;
 }
 
 export function LibraryStatusPill({ status, passages }: { status: LibraryStatus; passages: number }) {

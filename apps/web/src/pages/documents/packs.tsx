@@ -11,6 +11,7 @@ import { FilePicker } from "@/components/file-drop";
 import { EmptyState, IconTile, Page } from "@/components/page";
 import { Button } from "@/components/ui/button";
 import { Meta } from "@/components/ui/card";
+import { CompanyPicker } from "@/components/ui/company-picker";
 import { DataTable, TableFilter, useTableState, type Column } from "@/components/ui/data-table";
 import { ConfirmDialog } from "@/components/ui/confirm";
 import { ResponsiveDialog } from "@/components/ui/dialog";
@@ -119,7 +120,7 @@ function NewPackDialog({ onClose, onCreated }: { onClose: () => void; onCreated:
           <Field label={t("Title")} value={title} onChange={(e) => setTitle(e.target.value)} placeholder={t("e.g. Cleaning services proposal — Agency X")} autoFocus />
           <div className="grid gap-1.5">
             <span className="text-[13px] font-medium">{t("Company")}</span>
-            <Select value={company} onValueChange={setBranch} label={t("Company")} options={branches.map((b) => ({ value: b.id, label: b.name }))} />
+            <CompanyPicker value={company} onValueChange={setBranch} label={t("Company")} companies={branches} />
           </div>
         </div>
         <TextareaField label={t("What is it for?")} rows={3} value={description} onChange={(e) => setDescription(e.target.value)}
@@ -419,10 +420,11 @@ export function PacksPage() {
   const { company, state } = control.state.f;
   const qc = useQueryClient();
   if (search.p) return <Page><PackDetail key={search.p} id={search.p} /></Page>;
-  const companies = [...new Set(packs.map((p) => p.branch_name ?? ""))].sort((a, b) => a.localeCompare(b))
-    .map((c) => (c ? { value: c, label: c } : { value: "none", label: t("No company") }));
+  const companies = [...new Map(packs.map((p) => [p.branch_id ?? "none", p.branch_name ?? ""])).entries()]
+    .map(([value, label]) => ({ value, label: label || t("No company") })).sort((a, b) => a.label.localeCompare(b.label));
+  const picked = company ? company.split(",") : []; // P111: several at once
   const rows = packs.filter((p) =>
-    (!company || (p.branch_name ?? "") === (company === "none" ? "" : company))
+    (!picked.length || picked.includes(p.branch_id ?? "none"))
     && (!state || (state === "missing" ? p.progress.missing > 0 : state === "ready" ? !p.progress.missing && p.status !== "compiled" : p.status === "compiled")));
   const pctOf = (p: Pack) => (p.progress.required ? Math.round(((p.progress.required - p.progress.missing) / p.progress.required) * 100) : 100);
   const columns: Column<Pack>[] = [
@@ -501,7 +503,7 @@ export function PacksPage() {
             }}
             filters={
               <>
-                {companies.length > 1 ? <TableFilter control={control} id="company" label={t("Company")} allLabel={t("All companies")} options={companies} /> : null}
+                {companies.length > 1 ? <TableFilter control={control} id="company" label={t("Company")} allLabel={t("All companies")} options={companies} multiple /> : null}
                 <TableFilter control={control} id="state" label={t("Status")} allLabel={t("All statuses")}
                   options={[{ value: "missing", label: t("Items missing") }, { value: "ready", label: t("Ready to compile") }, { value: "compiled", label: t("Compiled") }]} />
               </>

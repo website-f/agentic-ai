@@ -5556,6 +5556,12 @@ export class AppController {
     return this.db.asUser(uid, (svc, u) => svc.cancelStaffMovement(u, id.slice(0, 120), str(b.note ?? '', 'note', 500)));
   }
 
+  /** P111: HR changes one office staff member's job title (designation) with a reason; the staff list's bulk action calls it once per person. */
+  @Post('hr/people/:personId/job-title')
+  changeStaffJobTitle(@UserId() uid: string, @Param('personId') personId: string, @Body() b: Record<string, unknown>) {
+    return this.db.asUser(uid, (svc, u) => svc.changeStaffJobTitle(u, personId.slice(0, 80), { jobTitle: str(b.jobTitle, 'jobTitle', 80), reason: str(b.reason, 'reason', 500) }));
+  }
+
   @Get('vacancies')
   vacancies(@UserId() uid: string) {
     return this.db.asUser(uid, (svc, u) => svc.vacancies(u));

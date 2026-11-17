@@ -2,9 +2,10 @@
 task moves on the board.
 
 Managing (memberships.reports_to_user_id): a member reports to at most one manager in a
-workspace. A manager "manages" their direct reports (not the reports of their reports). Only
-the roles in MANAGER_ROLES can have people reporting to them. Nobody is placed under anyone
-automatically: imported members report to no one until a person with members.manage sets it.
+workspace. A manager "manages" their direct reports (not the reports of their reports). P111:
+anyone may have people reporting to them on the organization chart, but only the roles in
+MANAGER_ROLES give those people tasks (may_assign) or follow their work. Nobody is placed under
+anyone automatically: imported members report to no one until a person with members.manage sets it.
 
 Who may give a person a task (`may_assign`), the rule the API enforces:
 - anyone who may write work (work.write) gives themselves a task;

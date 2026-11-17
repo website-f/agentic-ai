@@ -177,18 +177,29 @@ def _last_post(msgs: list[dict[str, Any]], me: str) -> dict[str, Any] | None:
 async def _send(ctx: ToolContext, args: dict[str, Any]) -> str:
     """P102: a Teams message for the person to approve (never sent here)."""
     chat_id = str(args.get("chat_id") or "").strip()
-    to = str(args.get("to") or "").strip().strip("<>").lower()
+    # P111: one address, or several (comma separated) for one new group chat.
+    people = approvals.teams_addresses(str(args.get("to") or ""))
+    to = ", ".join(people)
     text = str(args.get("text") or "").strip()
     if not text or not (chat_id or to):
         return (
             "Error: give the message text, and either chat_id (from teams_chats) to reply in a "
             "chat, or to (a work email address in your person's organisation) for a new message."
         )
-    if to and not chat_id and not EMAIL.match(to):
-        return f"Error: {to!r} is not an email address. Ask your person for the work email."
+    if to and not chat_id:
+        bad = next((a for a in people if not EMAIL.match(a)), None)
+        if bad is not None:
+            return f"Error: {bad!r} is not an email address. Ask your person for the work email."
+        if len(people) > approvals.TEAMS_GROUP_MAX:
+            return f"Error: a group chat here takes up to {approvals.TEAMS_GROUP_MAX} people."
     acct = await access.teams_account(ctx.db, ctx.agent)
     if acct is None:
         return await _graph(ctx)  # the same "no connection" answer
+    if len(people) > 1 and not chat_id:
+        # A group chat without the person themselves in the list (they are always in it).
+        mine = (acct.email or "").lower()
+        people = [a for a in people if a != mine] or people
+        to = ", ".join(people)
     g = await graph.for_account(ctx.db, acct)
     me = acct.display_name or ""
     title, last = "", None
@@ -203,7 +214,7 @@ async def _send(ctx: ToolContext, args: dict[str, Any]) -> str:
             title = (
                 title if title and title != "(no name)" else (sender(last or {}) or "Teams chat")
             )
-        else:
+        elif len(people) == 1:
             for c in chats:
                 if c.get("chatType") == "oneOnOne" and any(
                     _email(m) == to for m in c.get("members") or []
@@ -212,6 +223,9 @@ async def _send(ctx: ToolContext, args: dict[str, Any]) -> str:
                     break
             if not chat_id and not auth.has_scope(acct.scopes or "", app.CHAT_CREATE):
                 return NEW_CHATS_OFF.format(to=to)
+        elif not auth.has_scope(acct.scopes or "", app.CHAT_CREATE):
+            # P111: several people: always a new group chat (as in Teams), which needs it.
+            return NEW_CHATS_OFF.format(to=to)
     except MicrosoftError as e:
         return _err(e)
     row = await approvals.record_teams_draft(
@@ -225,7 +239,13 @@ async def _send(ctx: ToolContext, args: dict[str, Any]) -> str:
         last_from=sender(last) if last else "",
         last_text=plain((last.get("body") or {}).get("content"))[:1000] if last else "",
     )
-    where = f"the chat with {title}" if chat_id else f"a new chat with {to}"
+    where = (
+        f"the chat with {title}"
+        if chat_id
+        else f"a new group chat with {to}"
+        if len(people) > 1
+        else f"a new chat with {to}"
+    )
     return (
         f"Teams message to {where} drafted (draft {row.id}), waiting for your person to approve "
         "it on the Microsoft 365 page. They were notified; NOTHING is sent until they press Send."
@@ -340,14 +360,16 @@ TEAMS_TOOLS: list[Tool] = [
         "Draft a Teams message",
         "Write a Microsoft Teams message as your person: a reply in one of their chats "
         "(chat_id from teams_chats), or a first message to anyone in their organisation (to = "
-        "that person's work email). It is NOT sent: your person sees the full text and approves "
-        "it first, and is notified. Write the whole message.",
+        "that person's work email, or several emails for a group chat). It is NOT sent: your "
+        "person sees the full text and approves it first, and is notified. Write the whole "
+        "message.",
         _p(
             {
                 "chat_id": {"type": "string", "description": "Reply in this chat (teams_chats)"},
                 "to": {
                     "type": "string",
-                    "description": "Or: the work email of someone in the organisation",
+                    "description": "Or: the work email of someone in the organisation; "
+                    "several, comma separated, for one new group chat with all of them",
                 },
                 "text": {"type": "string"},
             },

@@ -75,7 +75,7 @@ async def test_new_company_with_its_starter_team(client):
     assert fin.name.endswith("(Finance)") and fin.department_id == depts["Finance"]
     assert fin.tools["finance_calc"] == "allow" and fin.tools["forecast"] == "allow"
     assert fin.tools["run_python"] == "ask"
-    assert "Merdeka Network Sdn Bhd" in fin.soul and "cash-flow-forecast" in fin.soul
+    assert "MERDEKA NETWORK SDN BHD" in fin.soul and "cash-flow-forecast" in fin.soul
     noc = next(a for a in rows if a.role.startswith("Network Operations"))
     assert noc.department_id == depts["Network Operations"]
 
@@ -252,8 +252,8 @@ async def test_impact_counts_real_work_by_company_and_department(client):
     assert sum(d["count"] for d in out["done_by_day"]) == 3 and len(out["done_by_day"]) == 30
 
     by = {x["name"]: x for x in out["branches"]}
-    assert set(by) == {"Merdeka Network Sdn Bhd", "Quiet Sdn Bhd"}
-    m = by["Merdeka Network Sdn Bhd"]
+    assert set(by) == {"MERDEKA NETWORK SDN BHD", "QUIET SDN BHD"}
+    m = by["MERDEKA NETWORK SDN BHD"]
     assert m["tasks_done"] == 3 and m["usd"] == 0.3 and m["industry"] == "network"
     depts = {d["name"]: d for d in m["departments"]}
     assert depts["Finance"]["tasks_done"] == 2 and depts["Finance"]["coverage"] == "working"
@@ -261,7 +261,7 @@ async def test_impact_counts_real_work_by_company_and_department(client):
     assert depts["Customer Service"]["coverage"] == "ready"  # an agent, nothing done yet
     assert depts["Research"]["coverage"] == "none"  # a standard department nobody staffs
     assert m["departments"][0]["name"] == "Finance"  # busiest first
-    assert by["Quiet Sdn Bhd"]["tasks_done"] == 0 and other["id"] == by["Quiet Sdn Bhd"]["id"]
+    assert by["QUIET SDN BHD"]["tasks_done"] == 0 and other["id"] == by["QUIET SDN BHD"]["id"]
 
     ap = out["approvals"]
     assert (ap["decided"], ap["approved"], ap["denied"], ap["pending"]) == (2, 1, 1, 1)
@@ -287,7 +287,7 @@ async def test_impact_follows_the_viewers_scope(client):
         out = (await hod.get("/api/impact?days=30")).json()
         assert out["scope"]["kind"] == "department"
         assert out["totals"]["tasks_done"] == 2 and out["totals"]["usd"] == 0.25
-        assert [x["name"] for x in out["branches"]] == ["Merdeka Network Sdn Bhd"]
+        assert [x["name"] for x in out["branches"]] == ["MERDEKA NETWORK SDN BHD"]
         assert [d["name"] for d in out["branches"][0]["departments"]] == ["Finance"]
         r = await staff.get("/api/impact")
         assert r.status_code == 403

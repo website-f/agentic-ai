@@ -26,6 +26,7 @@ import { LoadMore } from "@/components/load-more";
 import { EmptyState, IconTile, Page, PageHeader, type Tone } from "@/components/page";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody, CardHeader, Meta, Toolbar } from "@/components/ui/card";
+import { CompanyPicker } from "@/components/ui/company-picker";
 import { ConfirmDialog } from "@/components/ui/confirm";
 import { ResponsiveDialog } from "@/components/ui/dialog";
 import { Field, FormError, TextareaField } from "@/components/ui/field";
@@ -295,9 +296,10 @@ function ObjectiveDialog({
         <div className="grid grid-cols-[minmax(0,1fr)] gap-4 sm:grid-cols-2">
           <div className="grid min-w-0 gap-1.5">
             <span className="text-[13px] font-medium">{t("Company")}</span>
-            <Select value={branch} label={t("Company")} disabled={!!lockBranch} className="w-full min-w-0"
+            <CompanyPicker value={branch} label={t("Company")} disabled={!!lockBranch} className="w-full min-w-0"
               onValueChange={(v) => { setBranch(v); setDept(NONE); }}
-              options={[...(isAdmin ? [{ value: EVERY, label: t("Every company") }] : []), ...branches.filter((b) => !lockBranch || b.id === lockBranch).map((b) => ({ value: b.id, label: b.name }))]} />
+              before={isAdmin ? [{ value: EVERY, label: t("Every company") }] : undefined}
+              companies={branches.filter((b) => !lockBranch || b.id === lockBranch)} />
           </div>
           <div className="grid min-w-0 gap-1.5">
             <span className="text-[13px] font-medium">{t("Department")}</span>

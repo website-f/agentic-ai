@@ -29,7 +29,8 @@ import { IconTile } from "@/components/page";
 import { Trans } from "@/components/trans";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody, CardHeader, Meta } from "@/components/ui/card";
-import { DataTable, filterOf, TableFilter, useTableState, type Column } from "@/components/ui/data-table";
+import { CompanyPicker } from "@/components/ui/company-picker";
+import { DataTable, filterOf, filterValues, TableFilter, useTableState, type Column } from "@/components/ui/data-table";
 import { ResponsiveDialog } from "@/components/ui/dialog";
 import { Field, FormError, Input } from "@/components/ui/field";
 import { MenuItem } from "@/components/ui/menu";
@@ -361,11 +362,11 @@ function SharedMailboxes({ cfg }: { cfg: MicrosoftConfig }) {
   // P107: a data table (search, company, agent, status); "m_" keeps its place in the address
   // apart from the other lists on Channels.
   const control = useTableState({ size: 10 }, { prefix: "m_", filters: ["company", "agent", "status"] });
-  const [company] = filterOf(control, "company");
+  const [companiesPicked] = filterValues(control, "company"); // P111: several at once
   const [agent] = filterOf(control, "agent");
   const [boxStatus] = filterOf(control, "status");
   const statusKey = (b: SharedMailbox) => (b.status === "paused" ? "paused" : b.status === "error" ? "error" : "working");
-  const rows = boxes.filter((b) => (!company || b.branch_id === company) && (!agent || (b.agent_id ?? "none") === agent) && (!boxStatus || statusKey(b) === boxStatus));
+  const rows = boxes.filter((b) => (!companiesPicked.length || companiesPicked.includes(b.branch_id)) && (!agent || (b.agent_id ?? "none") === agent) && (!boxStatus || statusKey(b) === boxStatus));
   const companies = [...new Map(boxes.map((b) => [b.branch_id, b.branch_name])).entries()].map(([value, label]) => ({ value, label })).sort((x, y) => x.label.localeCompare(y.label));
   const agentOptions = [...new Map(boxes.map((b) => [b.agent_id ?? "none", b.agent_name ?? t("No agent")])).entries()].map(([value, label]) => ({ value, label })).sort((x, y) => x.label.localeCompare(y.label));
   const [dialog, setDialog] = useState<SharedMailbox | "new" | null>(null);
@@ -451,7 +452,7 @@ function SharedMailboxes({ cfg }: { cfg: MicrosoftConfig }) {
           searchPlaceholder={t("Search by address, company or agent")}
           filters={boxes.length > 1 ? (
             <>
-              {companies.length > 1 ? <TableFilter control={control} id="company" label={t("Company")} allLabel={t("All companies")} options={companies} /> : null}
+              {companies.length > 1 ? <TableFilter control={control} id="company" label={t("Company")} allLabel={t("All companies")} options={companies} multiple /> : null}
               {agentOptions.length ? <TableFilter control={control} id="agent" label={t("Agent")} allLabel={t("All agents")} options={agentOptions} /> : null}
               <TableFilter control={control} id="status" label={t("Status")} allLabel={t("All statuses")}
                 options={[{ value: "working", label: t("Working") }, { value: "paused", label: t("Paused") }, { value: "error", label: t("Needs attention") }]} />
@@ -541,8 +542,8 @@ function MailboxDialog({ box, onClose }: { box: SharedMailbox | null; onClose: (
         <div className="grid grid-cols-[minmax(0,1fr)] gap-3 sm:grid-cols-2">
           <div className="grid gap-1.5">
             <span className="text-[13px] font-medium">{t("Company")}</span>
-            <Select value={branch} onValueChange={(v) => { setBranchId(v); setAgentId("none"); }} label={t("Company")} placeholder={t("Pick a company")} className="w-full"
-              options={branches.map((b) => ({ value: b.id, label: b.name }))} />
+            <CompanyPicker value={branch} onValueChange={(v) => { setBranchId(v); setAgentId("none"); }} label={t("Company")} placeholder={t("Pick a company")} className="w-full"
+              companies={branches} />
           </div>
           <div className="grid gap-1.5">
             <span className="text-[13px] font-medium">{t("Agent that handles it")}</span>

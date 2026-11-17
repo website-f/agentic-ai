@@ -9,6 +9,7 @@ import { toast } from "sonner";
 import { EmptyState, IconTile, Page, PageHeader } from "@/components/page";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody, CardHeader, ListCard } from "@/components/ui/card";
+import { CompanyPicker } from "@/components/ui/company-picker";
 import { ConfirmDialog } from "@/components/ui/confirm";
 import { ResponsiveDialog } from "@/components/ui/dialog";
 import { Field, FormError } from "@/components/ui/field";
@@ -138,8 +139,7 @@ function ImportCard({ target }: { target: Target }) {
         hint={t("SOPs, policies and documents kept here are read in place (not copied) and every agent of the company can search them. Checked again every hour.")} />
       {enabled ? (
         <div className="grid gap-3 sm:grid-cols-3">
-          <Select value={branch} onValueChange={setBranch} label={t("Company")} className="w-full"
-            options={branches.map((b) => ({ value: b.id, label: b.name }))} />
+          <CompanyPicker value={branch} onValueChange={setBranch} label={t("Company")} className="w-full" companies={branches} />
           <Field label={t("Only this folder (optional)")} value={prefix} onChange={(e) => setPrefix(e.target.value)} placeholder="SOP/" />
           <Field label={t("Library folder")} value={folder} onChange={(e) => setFolder(e.target.value)} placeholder={target.name} />
         </div>

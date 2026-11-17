@@ -654,6 +654,8 @@ export interface Api extends ConnectionsClient, ExtractionClient, DraftHelpClien
   prepareStaffMovement(input: Parameters<PrimaService['prepareStaffMovement']>[1]): Promise<unknown>;
   staffMovementStep(id: string, approve: boolean, note: string): Promise<unknown>;
   cancelStaffMovement(id: string, note: string): Promise<unknown>;
+  /** P111: HR changes one office staff member's job title with a reason (the staff list's bulk action, once per person). */
+  changeStaffJobTitle(personId: string, jobTitle: string, reason: string): Promise<unknown>;
   applyStaffMovement(id: string): Promise<unknown>;
   authoriseMovementLogin(id: string, approve: boolean, note: string): Promise<unknown>;
   confirmMovementLogin(id: string, note: string): Promise<unknown>;

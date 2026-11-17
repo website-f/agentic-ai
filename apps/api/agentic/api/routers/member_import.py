@@ -33,7 +33,8 @@ from ...core.security import ROLES, SCOPED_ROLES, can
 from ...i18n import MS, current_lang, render, tr
 from ...i18n import labels as i18n_labels
 from ...models import Branch, Department, Membership, User
-from ...prima import autolink
+from ...org.names import org_name
+from ...prima import autolink, org_link
 from ...services import audit
 from ..deps import Principal, api_error, require
 from . import members
@@ -956,14 +957,9 @@ async def read_sheet(db: AsyncSession, principal: Principal, data: bytes, name: 
 
 
 def _company_name(text: str) -> str:
-    """A sheet's "ARROW SHIELD SECURITY SERVICES" as "Arrow Shield Security Services"; names
-    already in mixed case are kept as written."""
-    name = " ".join(text.split())[:120]
-    if name.isupper():
-        # Short all-letter words that are not Malay or English words stay as written (IT, HQ, KL).
-        keep = {"IT", "HQ", "KL", "HR", "PKK", "KBK", "JA", "PWVSB", "FWM"}
-        name = " ".join(w if w in keep else w.capitalize() for w in name.split())
-    return name
+    """P111: a company named in a sheet, in the standard form: capitals, single spaces
+    ("Arrow Shield  Security" is "ARROW SHIELD SECURITY"; org/names.py)."""
+    return org_name(text)
 
 
 @router.post("/companies")
@@ -980,6 +976,7 @@ async def add_companies(
     await db.commit()
     if out.created:
         privacy.invalidate(principal.workspace_id)  # the new companies' names are masked at once
+        await org_link.link_new(db, principal, out.created)  # P111: to their Prima companies
     return out
 
 

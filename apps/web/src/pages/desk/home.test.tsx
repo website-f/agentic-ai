@@ -29,6 +29,18 @@ vi.mock("./ask", () => ({ AskPanel: () => <div>ask-panel</div> }));
 const STAFF = ["read", "work.write", "approvals.decide", "agents.own", "vault.own"];
 const ME = { user: { id: "u_me", name: "Nur Aisyah", email: "nur@example.com" }, role: "staff", permissions: STAFF };
 
+// P111: my line of managers (by name and title) and nobody under me.
+const person = (id: string, name: string, job_title: string | null, reports_to: string | null) => ({
+  user_id: id, name, job_title, role: null, branch_id: "b1", branch_name: "Maju", branch_ids: [], department_id: null, department_name: null,
+  reports_to_user_id: reports_to, reports_to_name: null, direct_reports: null, heads_department: false, is_active: true, limited: true,
+});
+const MINE = {
+  me: { ...person("u_me", "Nur Aisyah", "Clerk", "u_boss"), limited: false, role: "staff" },
+  chain: [person("u_boss", "Hana Ismail", "Finance Manager", "u_top"), person("u_top", "Ahmad Bakar", "General Manager", null)],
+  reports: [],
+  below: 0,
+};
+
 const pin = (id: string, extra: Partial<Pin>): Pin => ({
   id, kind: "sop", ref: `r_${id}`, title: id, sub: "", status: null, mime: null, url: `/sops?sop=r_${id}`, missing: false, folder: null, label: null, ...extra,
 });
@@ -80,6 +92,7 @@ beforeEach(() => {
     if (url.pathname === "/api/desk/items" && method === "GET") return json([]);
     if (url.pathname.startsWith("/api/desk/items/")) return json(pin("p1", {}));
     if (url.pathname === "/api/desk/layout") return json(layoutOf(undefined));
+    if (url.pathname === "/api/members/hierarchy/mine") return json(MINE); // P111
     return json({});
   }));
 });
@@ -105,7 +118,8 @@ describe("the desk's rules", () => {
   it("shows every block once, in the person's order, new ones last", () => {
     const l = layoutOf({ layout: { sections: [{ id: "goto", hidden: true }, { id: "today", hidden: false }], folders: [] } });
     // P109b: the Microsoft 365 tile, added later, comes right after Today.
-    expect(l.sections.map((s) => s.id)).toEqual(["goto", "today", "m365", "pinned", "recent", "ai", "howto"]);
+    // P111: My hierarchy, added later, comes right after My AI.
+    expect(l.sections.map((s) => s.id)).toEqual(["goto", "today", "m365", "pinned", "recent", "ai", "hierarchy", "howto"]);
     expect(l.sections.filter((s) => s.hidden).map((s) => s.id)).toEqual(["goto"]);
     expect(layoutOf(undefined).sections.every((s) => !s.hidden)).toBe(true);
   });
@@ -132,8 +146,20 @@ describe("DeskHome", { timeout: 30_000 }, () => {
     show();
     await screen.findByRole("region", { name: "Pinned" });
     const order = [...container.querySelectorAll("[data-desk-section]")].map((e) => e.getAttribute("data-desk-section"));
-    expect(order).toEqual(["pinned", "today", "ai", "howto", "goto"]); // recent is hidden
+    expect(order).toEqual(["pinned", "today", "ai", "hierarchy", "howto", "goto"]); // recent is hidden
     expect(screen.getByRole("button", { name: /Search or jump to anything/ })).toBeInTheDocument();
+  });
+
+  it("shows my manager, and everyone above me up to the top when opened (P111)", async () => {
+    show();
+    const block = await screen.findByRole("region", { name: "My hierarchy" });
+    expect(await within(block).findByText("Hana Ismail")).toBeInTheDocument();
+    expect(within(block).getByText("Finance Manager")).toBeInTheDocument();
+    expect(within(block).queryByText("Ahmad Bakar")).toBeNull();
+    fireEvent.click(within(block).getByRole("button", { name: /Show everyone above me \(1\)/ }));
+    expect(within(block).getByText("Ahmad Bakar")).toBeInTheDocument();
+    // Staff do not open the Organization page: the chart opens in a dialog instead.
+    expect(within(block).getByRole("button", { name: /View as chart/ })).toBeInTheDocument();
   });
 
   it("puts what needs the person first, next to the work on their plate", async () => {
@@ -221,7 +247,7 @@ describe("Customize", { timeout: 30_000 }, () => {
     const put = calls.find((c) => c.path === "/api/desk/layout")!;
     expect(put.method).toBe("PUT");
     const sections = (put.body as { sections: { id: string; hidden: boolean }[] }).sections;
-    expect(sections.map((s) => s.id)).toEqual(["pinned", "today", "m365", "recent", "ai", "howto", "goto"]);
+    expect(sections.map((s) => s.id)).toEqual(["pinned", "today", "m365", "recent", "ai", "hierarchy", "howto", "goto"]);
     expect(sections.find((s) => s.id === "today")!.hidden).toBe(true);
     fireEvent.click(screen.getByRole("button", { name: "Move Pinned down" }));
     await waitFor(() => expect(calls.filter((c) => c.path === "/api/desk/layout")).toHaveLength(2));

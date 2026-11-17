@@ -317,8 +317,8 @@ async def test_import_command_adds_once_and_writes_the_sign_ins(client, tmp_path
         "newco@example.com",
     }  # fmt: skip
     assert by_email["else@example.com"][2] == "Their own password"
-    assert by_email["aminah@example.com"][4:6] == ["Maju Sdn Bhd", "Finance"]
-    assert by_email["newco@example.com"][4] == "Kilang Baru Sdn Bhd"
+    assert by_email["aminah@example.com"][4:6] == ["MAJU SDN BHD", "Finance"]
+    assert by_email["newco@example.com"][4] == "KILANG BARU SDN BHD"
     for email in ("aminah@example.com", "newco@example.com"):
         pw = by_email[email][2]
         assert len(pw) >= 10 and pw not in printed
@@ -331,7 +331,7 @@ async def test_import_command_adds_once_and_writes_the_sign_ins(client, tmp_path
         added = (await db.scalars(select(AuditLog).where(AuditLog.action == "member.added"))).all()
         assert {a.actor for a in added} == {members_import.ACTOR} and len(added) == 5
         made = (await db.scalars(select(AuditLog).where(AuditLog.action == "branch.created"))).all()
-        assert [a.actor for a in made if a.after["name"] == "Kilang Baru Sdn Bhd"] == [
+        assert [a.actor for a in made if a.after["name"] == "KILANG BARU SDN BHD"] == [
             members_import.ACTOR
         ]
         dept = await db.scalar(select(Department).where(Department.name == "Finance"))

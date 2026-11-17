@@ -295,7 +295,7 @@ async def test_insight_reports_come_from_real_records(client, llm, temporal):
         pulse = await insights.company_pulse(db, ws, sc, 7)
         team = await insights.team_performance(db, ws, sc, 14)
         slack = await insights.slacking_report(db, ws, sc, 7)
-    assert "1 done, 2 failed" in pulse and "Portal timed out" in pulse and "Maju Sdn Bhd" in pulse
+    assert "1 done, 2 failed" in pulse and "Portal timed out" in pulse and "MAJU SDN BHD" in pulse
     assert "| Faiz |" in team and "Faiz failed 2 of 3 finished tasks." in team
     assert "Idle Ida did no work" in team
     assert "Job 3 blocked" in slack and "Stuck work" in slack

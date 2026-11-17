@@ -55,12 +55,18 @@ export function NewDepartment({ branchId, onMade, onCancel }: { branchId: string
   );
 }
 
-/** The people who may be someone's manager (a role that manages people), but not themselves. */
+/** The people who may be someone's manager: P111 anyone active here (the organization chart),
+ * but not themselves. What a manager may do for them still comes from the manager's role. */
 export function managerOptions(members: Member[], exceptId?: string) {
   return members
-    .filter((m) => MANAGER_ROLES.includes(m.role) && m.user_id !== exceptId && m.is_active)
+    .filter((m) => m.user_id !== exceptId && m.is_active)
     .sort((a, b) => a.name.localeCompare(b.name))
-    .map((m) => ({ value: m.user_id, label: m.name, hint: [tr(ROLE_INFO[m.role].label), m.department_name].filter(Boolean).join(", ") }));
+    .map((m) => ({
+      value: m.user_id,
+      label: m.name,
+      hint: [m.job_title || tr(ROLE_INFO[m.role].label), m.department_name, m.branch_name].filter(Boolean).join(", "),
+      keywords: [m.email, m.job_title ?? "", m.branch_name ?? "", m.department_name ?? ""],
+    }));
 }
 
 const NO_ONE = "none";
@@ -72,11 +78,14 @@ export function headOfOptions(branches: Branch[]) {
 
 /** Reports to (a manager), and (P109) Head of department (HOD): on or off, and which
  * departments of any company they head. Part of the member editor. */
-export function OrgFields({ member, members, reportsTo, onReportsTo, headOf, onHeadOf, departmentId }: {
+export function OrgFields({ member, members, reportsTo, onReportsTo, headOf, onHeadOf, departmentId, jobTitle, onJobTitle }: {
   member: Member;
   members: Member[];
   reportsTo: string;
   onReportsTo: (v: string) => void;
+  /** P111: their job title on the organization chart. */
+  jobTitle?: string;
+  onJobTitle?: (v: string) => void;
   headOf: string[];
   onHeadOf: (v: string[]) => void;
   /** The department picked for them above ("" none): turning HOD on starts with it. */
@@ -89,11 +98,15 @@ export function OrgFields({ member, members, reportsTo, onReportsTo, headOf, onH
   return (
     <fieldset className="grid gap-3 rounded-[var(--radius-md)] border border-border p-3">
       <legend className="px-1 text-[13px] font-medium">{t("Team")}</legend>
+      {onJobTitle ? (
+        <Field label={t("Job title")} value={jobTitle ?? ""} onChange={(e) => onJobTitle(e.target.value)} maxLength={120}
+          placeholder={t("For example: Operations Manager")} hint={t("Shown on the organization chart.")} />
+      ) : null}
       <div className="grid gap-1.5">
         <span className="text-[13px] font-medium">{t("Reports to")}</span>
         <SearchSelect value={reportsTo || NO_ONE} onValueChange={(v) => onReportsTo(v === NO_ONE ? "" : v)} label={t("Reports to")}
-          searchPlaceholder={t("Search people")} options={[{ value: NO_ONE, label: t("No one") }, ...managerOptions(members, member.user_id)]} />
-        <p className="text-[12.5px] text-muted">{t("Their manager can give them tasks and follows their work.")}</p>
+          searchPlaceholder={t("Search by name, title, company or department")} options={[{ value: NO_ONE, label: t("No one") }, ...managerOptions(members, member.user_id)]} />
+        <p className="text-[12.5px] text-muted">{t("Their manager on the organization chart. A manager in a managing role (such as Head of department) can also give them tasks.")}</p>
       </div>
       <label className="flex min-h-11 cursor-pointer items-start gap-3">
         <input type="checkbox" checked={isHead} disabled={!isHead && !departmentId && !options.length}
@@ -214,7 +227,8 @@ export function HodBadge({ member }: { member: Member }) {
 export function TeamDialog({ member, me, open, onOpenChange }: { member: Member; me: Me; open: boolean; onOpenChange: (o: boolean) => void }) {
   const t = useT();
   const qc = useQueryClient();
-  const canEdit = editsOrg(me) && MANAGER_ROLES.includes(member.role);
+  // P111: anyone may have people under them on the organization chart.
+  const canEdit = editsOrg(me);
   const team = useQuery({ queryKey: [...keys.members, "team", member.user_id], queryFn: () => api<Member[]>(`/api/members/${member.user_id}/team`), enabled: open });
   const all = useQuery({ ...membersQuery, enabled: open && canEdit });
   const [picked, setPicked] = useState<Set<string> | null>(null);

@@ -2034,3 +2034,13 @@ MS.update({k: v for k, v in MS_M365.items() if k not in MS})
 from .ms_org import MS_ORG  # noqa: E402
 
 MS.update({k: v for k, v in MS_ORG.items() if k not in MS})
+
+# P111: the organization chart (who reports to whom, job titles).
+from .ms_hierarchy import MS_HIERARCHY  # noqa: E402
+
+MS.update({k: v for k, v in MS_HIERARCHY.items() if k not in MS})
+
+# P111: organization names in capitals; every organization in Prima too.
+from .ms_prima_org import MS_PRIMA_ORG  # noqa: E402
+
+MS.update({k: v for k, v in MS_PRIMA_ORG.items() if k not in MS})

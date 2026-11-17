@@ -84,6 +84,7 @@ export function AgentsTable({ agents, statuses, many, guideId }: {
   const navigate = useNavigate();
   const control = useTableState({ size: 25 }, { filters: ["company", "department", "status"] });
   const { company, department, status } = control.state.f;
+  const picked = useMemo(() => (company ? company.split(",") : []), [company]); // P111: several at once
   const stateOf = (a: Agent) => agentState(a, statuses[a.id]);
   const companies = useMemo(() => {
     const m = new Map<string, string>();
@@ -93,16 +94,16 @@ export function AgentsTable({ agents, statuses, many, guideId }: {
   const departments = useMemo(() => {
     const m = new Map<string, string>();
     for (const a of agents) {
-      if (company && a.branch_id !== company) continue;
-      if (a.department_id) m.set(a.department_id, many && !company ? `${a.department_name ?? ""} · ${a.branch_name}` : a.department_name ?? "");
+      if (picked.length && !picked.includes(a.branch_id)) continue;
+      if (a.department_id) m.set(a.department_id, many && picked.length !== 1 ? `${a.department_name ?? ""} · ${a.branch_name}` : a.department_name ?? "");
     }
     const out = [...m].map(([value, label]) => ({ value, label })).sort((a, b) => a.label.localeCompare(b.label));
     return agents.some((a) => !a.department_id) ? [...out, { value: "none", label: t("No department") }] : out;
-  }, [agents, company, many, t]);
+  }, [agents, picked, many, t]);
   const rows = useMemo(() => agents.filter((a) =>
-    (!company || a.branch_id === company)
+    (!picked.length || picked.includes(a.branch_id))
     && (!department || (department === "none" ? !a.department_id : a.department_id === department))
-    && (!status || stateKey(agentState(a, statuses[a.id]).label) === status)), [agents, company, department, status, statuses]);
+    && (!status || stateKey(agentState(a, statuses[a.id]).label) === status)), [agents, picked, department, status, statuses]);
 
   const columns: Column<Agent>[] = [
     {
@@ -170,7 +171,7 @@ export function AgentsTable({ agents, statuses, many, guideId }: {
       exportName={t("agents")}
       filters={
         <>
-          {many && companies.length > 1 ? <TableFilter control={control} id="company" label={t("Company")} allLabel={t("All companies")} options={companies} /> : null}
+          {many && companies.length > 1 ? <TableFilter control={control} id="company" label={t("Company")} allLabel={t("All companies")} options={companies} multiple /> : null}
           {departments.length > 1 ? <TableFilter control={control} id="department" label={t("Department")} allLabel={t("All departments")} options={departments} /> : null}
           <TableFilter control={control} id="status" label={t("Status")} allLabel={t("All statuses")}
             options={[{ value: "working", label: t("Working") }, { value: "waiting", label: t("Waiting") }, { value: "available", label: t("Available") }, { value: "paused", label: t("Paused") }]} />

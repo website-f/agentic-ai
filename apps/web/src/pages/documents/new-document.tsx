@@ -6,9 +6,9 @@ import { toast } from "sonner";
 import { FilePicker } from "@/components/file-drop";
 import { IconTile } from "@/components/page";
 import { Button } from "@/components/ui/button";
+import { CompanyPicker } from "@/components/ui/company-picker";
 import { ResponsiveDialog } from "@/components/ui/dialog";
 import { Field, FormError, TextareaField } from "@/components/ui/field";
-import { Select } from "@/components/ui/select";
 import { t as tr, useT } from "@/i18n";
 import { api, errorMessage } from "@/lib/api";
 import { useCompanies } from "@/lib/company";
@@ -84,7 +84,7 @@ export function NewDocumentDialog({ template, branchId, onClose, onCreated }: {
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="grid gap-1.5">
               <span className="text-[13px] font-medium">{t("Company")}</span>
-              <Select value={company} onValueChange={setBranch} label={t("Company")} options={branches.map((b) => ({ value: b.id, label: b.name }))} />
+              <CompanyPicker value={company} onValueChange={setBranch} label={t("Company")} companies={branches} />
             </div>
             <Field label={t("Title (optional)")} value={title} onChange={(e) => setTitle(e.target.value)} placeholder={tpl ? t("{name} for …", { name: tpl.name }) : t("e.g. Proposal for Bina")} />
           </div>

@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import { AgentAvatar } from "@/components/agent-avatar";
 import { Page, PageHeader } from "@/components/page";
 import { Button } from "@/components/ui/button";
+import { CompanyPicker } from "@/components/ui/company-picker";
 import { Field, FormError, TextareaField } from "@/components/ui/field";
 import { Select } from "@/components/ui/select";
 import { locale, msg, useT } from "@/i18n";
@@ -180,7 +181,7 @@ export function AgentBuilderPage() {
           <section className="grid gap-5">
             <div className="grid gap-1.5">
               <span className="text-[13px] font-medium">{t("Company (branch)")}</span>
-              <Select value={d.branch_id} onValueChange={(v) => set({ branch_id: v, department_id: null })} label={t("Branch")} options={branches.map((b) => ({ value: b.id, label: b.name }))} />
+              <CompanyPicker value={d.branch_id} onValueChange={(v) => set({ branch_id: v, department_id: null })} label={t("Branch")} companies={branches} />
             </div>
             <fieldset className="grid gap-2">
               <legend className="mb-2 text-[13px] font-medium">{t("Department")}</legend>

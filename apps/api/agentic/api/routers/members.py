@@ -28,6 +28,7 @@ from ...models import (
     User,
 )
 from ...org import heads as dept_heads
+from ...org import hierarchy as org_chart
 from ...prima import autolink, modules
 from ...prima import client as prima_client
 from ...prima.client import PrimaError
@@ -38,6 +39,8 @@ from ..deps import Principal, api_error, current_principal, is_developer, requir
 from ..schemas import (
     BranchRef,
     DepartmentRef,
+    HierarchyOut,
+    HierarchyPerson,
     LibraryAccessIn,
     MemberCreateIn,
     MemberCreateOut,
@@ -49,6 +52,7 @@ from ..schemas import (
     MembersSummary,
     MemberTeamIn,
     MemberUpdateIn,
+    MyHierarchyOut,
     PrimaAccessIn,
     TempPasswordOut,
 )
@@ -98,6 +102,7 @@ def _out(
         ],
         library_scope=m.library_scope or "company",  # type: ignore[arg-type]
         uploads_for_others=bool(m.uploads_for_others),
+        job_title=m.job_title,
     )
 
 
@@ -539,6 +544,111 @@ async def list_members(
     )
 
 
+# ---------------------------------------------------------------- P111 the organization chart
+
+
+class _Chart:
+    """Everyone here with who they report to, loaded once (org/hierarchy.py)."""
+
+    def __init__(self, rows: list[Membership], names: dict[str, str]):
+        self.by = {m.user_id: m for m in rows}
+        self.parent = {m.user_id: m.reports_to_user_id for m in rows}
+        self.children = org_chart.children_of(self.parent)
+        self.names = names
+
+    @classmethod
+    async def load(cls, db: AsyncSession, ws: str) -> "_Chart":
+        rows = (
+            await db.scalars(
+                select(Membership)
+                .join(User, User.id == Membership.user_id)
+                .where(Membership.workspace_id == ws)
+                .order_by(func.lower(User.name), User.id)
+            )
+        ).all()
+        return cls(list(rows), await _names(db, ws))
+
+    def person(self, uid: str, limited: bool, shown: set[str] | None = None) -> HierarchyPerson:
+        m = self.by[uid]
+        boss = m.reports_to_user_id if m.reports_to_user_id in self.by else None
+        place = {
+            "branch_id": m.branch_id,
+            "branch_name": self.names.get(m.branch_id or ""),
+            "department_id": m.department_id,
+            "department_name": self.names.get(m.department_id or ""),
+        }
+        if limited:
+            return HierarchyPerson(
+                user_id=uid,
+                name=m.user.name,
+                job_title=m.job_title,
+                reports_to_user_id=boss,
+                is_active=m.user.is_active,
+                limited=True,
+                **place,
+            )
+        unseen = shown is not None and boss is not None and boss not in shown
+        return HierarchyPerson(
+            user_id=uid,
+            name=m.user.name,
+            job_title=m.job_title,
+            role=m.role,  # type: ignore[arg-type]
+            branch_ids=m.branch_ids,
+            reports_to_user_id=boss,
+            reports_to_name=self.by[boss].user.name if unseen and boss else None,
+            direct_reports=len(self.children.get(uid, [])),
+            heads_department=bool(m.heads_department),
+            is_active=m.user.is_active,
+            **place,
+        )
+
+    def visible(self, principal: Principal) -> tuple[set[str], set[str]]:
+        in_scope = [uid for uid, m in self.by.items() if _member_in_scope(principal, m)]
+        full, limited = org_chart.visible(self.parent, in_scope, principal.user.id)
+        return full & self.by.keys(), limited & self.by.keys()
+
+
+@router.get("/hierarchy")
+async def hierarchy(
+    principal: Principal = Depends(require("read")),
+    db: AsyncSession = Depends(get_db),
+) -> HierarchyOut:
+    """P111: the organization chart the reader may see (org/hierarchy.py): their scope, the
+    people under them and their own managers up to the top (by name and title only)."""
+    chart = await _Chart.load(db, principal.workspace_id)
+    full, limited = chart.visible(principal)
+    shown = full | limited
+    people_ = [chart.person(uid, uid in limited, shown) for uid in chart.by if uid in shown]
+    return HierarchyOut(
+        people=people_,
+        me=principal.user.id,
+        can_edit=can(principal.role, "members.manage"),
+        whole=principal.scope.everything,
+    )
+
+
+@router.get("/hierarchy/mine")
+async def my_hierarchy(
+    principal: Principal = Depends(require("read")),
+    db: AsyncSession = Depends(get_db),
+) -> MyHierarchyOut:
+    """P111: My workspace: my managers up to the top (my own manager first; name, title,
+    company and department only) and the people who report to me."""
+    chart = await _Chart.load(db, principal.workspace_id)
+    me = principal.user.id
+    if me not in chart.by:
+        raise api_error(status.HTTP_404_NOT_FOUND, "member_not_found", "That member is not here.")
+    full, _ = chart.visible(principal)
+    chain = org_chart.chain_up(chart.parent, me)
+    reports = chart.children.get(me, [])
+    return MyHierarchyOut(
+        me=chart.person(me, False),
+        chain=[chart.person(uid, uid not in full) for uid in chain],
+        reports=[chart.person(uid, False) for uid in reports],
+        below=len(org_chart.below(chart.children, me)),
+    )
+
+
 async def add_one(
     db: AsyncSession,
     principal: Principal,
@@ -668,7 +778,7 @@ async def update_member(
     org_change = (
         body.heads_department is not None
         or body.head_of is not None
-        or "reports_to_user_id" in body.model_fields_set
+        or bool({"reports_to_user_id", "job_title"} & body.model_fields_set)
     )
     prima_change = body.access is not None or bool(
         {"prima_modules", "prima_department"} & body.model_fields_set
@@ -684,6 +794,8 @@ async def update_member(
         )
     if "reports_to_user_id" in body.model_fields_set:
         await set_manager(db, principal, user_id, body.reports_to_user_id)
+    if "job_title" in body.model_fields_set:  # P111
+        await set_title(db, principal, user_id, body.job_title)
     if body.head_of is not None:  # P109: every department they head
         await set_head_of(db, principal, user_id, body.head_of)
     elif body.heads_department is not None:
@@ -732,7 +844,10 @@ async def set_manager(
     db: AsyncSession, principal: Principal, user_id: str, manager_id: str | None
 ) -> Membership:
     """One person reports to `manager_id` (None: to no one), with every rule; the caller
-    commits. The manager is a member in a role that manages people; no loops."""
+    commits. P111: the manager is any active member here (the organization chart: a store head
+    in the staff role has storekeepers under them); what a manager may do for the people
+    under them still comes from their role (teams/people.py MANAGER_ROLES, api/deps.py). No
+    one reports to themselves, no loops, and nobody changes who they report to themselves."""
     _org_editor(principal)
     m = await _membership(db, principal.workspace_id, user_id)
     if not _member_in_scope(principal, m):
@@ -740,6 +855,12 @@ async def set_manager(
     _check_can_touch(principal, m.role)
     if manager_id == m.reports_to_user_id:
         return m
+    if user_id == principal.user.id:
+        raise api_error(
+            status.HTTP_400_BAD_REQUEST,
+            "self_change",
+            "You cannot change who you report to. Ask another owner or admin.",
+        )
     if manager_id is not None:
         if manager_id == user_id:
             raise api_error(
@@ -749,15 +870,6 @@ async def set_manager(
         if boss is None or not boss.user.is_active:
             raise api_error(
                 status.HTTP_400_BAD_REQUEST, "bad_manager", "Pick a manager who is a member here."
-            )
-        if boss.role not in people.MANAGER_ROLES:
-            raise api_error(
-                status.HTTP_400_BAD_REQUEST,
-                "not_a_manager",
-                "{name} is {role}, a role that does not manage people. Make them a head of "
-                "department, supervisor or manager first.",
-                name=boss.user.name,
-                role=role_label(boss.role),
             )
         up, seen = boss, set()
         while up is not None and up.reports_to_user_id and up.user_id not in seen:
@@ -781,6 +893,42 @@ async def set_manager(
         target=user_id,
         before={"reports_to": before},
         after={"reports_to": manager_id},
+    )
+    await db.flush()
+    return m
+
+
+def clean_title(text: str | None) -> str | None:
+    """P111: a job title as kept: one line, trimmed, at most 120 characters; empty is none."""
+    if text is None:
+        return None
+    out = " ".join("".join(ch for ch in text if ch.isprintable()).split())[:120]
+    return out or None
+
+
+async def set_title(
+    db: AsyncSession, principal: Principal, user_id: str, title: str | None
+) -> Membership:
+    """P111: this person's job title on the organization chart (None or "": none). Set by
+    whoever sets who reports to whom; the caller commits."""
+    _org_editor(principal)
+    m = await _membership(db, principal.workspace_id, user_id)
+    if not _member_in_scope(principal, m):
+        raise api_error(status.HTTP_404_NOT_FOUND, "member_not_found", "That member is not here.")
+    _check_can_touch(principal, m.role)
+    want = clean_title(title)
+    if want == m.job_title:
+        return m
+    before = m.job_title
+    m.job_title = want
+    await audit.record(
+        db,
+        principal.workspace_id,
+        principal.actor,
+        "member.title_changed",
+        target=user_id,
+        before={"job_title": before},
+        after={"job_title": want},
     )
     await db.flush()
     return m

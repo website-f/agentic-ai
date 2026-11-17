@@ -30106,6 +30106,49 @@ export class PrimaService {
   }
 
   /**
+   * P111 (Fitri, 17 Nov 2026: "re-sorting the data ... by multi select and change their designation"): HR corrects one
+   * office staff member's job title (designation) with a reason. The same right as Edit staff details (saveRecord
+   * officeStaff: HR for the person's company, or the owner), narrowed to the one field and logged with the reason. A
+   * promotion with new pay stays a Staff movement; a person with a movement waiting or approved is left to it. The staff
+   * list's bulk action calls this once per person, so every rule here holds for each of them.
+   */
+  async changeStaffJobTitle(user: User, personId: Id, input: { jobTitle: string; reason: string }) {
+    const p = await this.store.get('people', personId);
+    if (!p) throw new NotFound('Staff member');
+    if (!this.recordCan(user, 'officeStaff', p.companyId)) throw new AccessDenied('view', '(HR keeps this)');
+    if (p.role !== 'office') throw new BadRequest('Guards and officers come from the JA Group app.');
+    if (p.status === 'left') throw new BadRequest('This person has left.');
+    if (!!user.personId && user.personId === p.id) throw new BadRequest('Someone else in HR changes your own job title.');
+    const jobTitle = String(input.jobTitle ?? '').trim().replace(/\s+/g, ' ').slice(0, 80);
+    if (jobTitle.length < 2) throw new BadRequest('Give the new job title.');
+    const reason = String(input.reason ?? '').trim().slice(0, 500);
+    if (reason.length < 5) throw new BadRequest('Give the reason, e.g. the org chart or the appointment letter.');
+    const at = this.now();
+    return this.store.transaction(async (tx) => {
+      await tx.lock?.('people', p.id);
+      const cur = await tx.get('people', p.id);
+      if (!cur) throw new NotFound('Staff member');
+      const from = (cur.jobTitle ?? '').trim();
+      if (from === jobTitle) throw new BadRequest('That is already their job title.');
+      if ((await tx.list('staffMovements', {})).some((m) => m.personId === p.id && (m.status === 'waiting' || m.status === 'approved')))
+        throw new BadRequest('This person has a staff movement waiting or approved. Finish or cancel it first.');
+      await tx.update('people', p.id, { jobTitle });
+      // The group employment summary carries the current post (as after Edit staff details).
+      await this.historyAfterWrite(tx, user, p.id, null, at);
+      await tx.audit({
+        at,
+        actor: user.name,
+        companyId: isCentralEmployer(p.companyId) ? null : p.companyId,
+        action: 'hr.job_title_change',
+        entity: 'person',
+        entityId: p.id,
+        summary: `Job title for ${p.name} from "${from || 'none'}" to "${jobTitle}": ${reason}`,
+      });
+      return { personId: p.id, jobTitle };
+    });
+  }
+
+  /**
    * The next step approves or refuses with a comment. The last approval only agrees the movement: if the effective date
    * has come it is applied in the same unit, otherwise it waits as approved and nothing on the staff record changes until
    * that date (Arisha main review, 3 Nov 2026).

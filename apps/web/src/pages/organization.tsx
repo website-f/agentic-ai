@@ -46,7 +46,9 @@ import { cn } from "@/lib/utils";
 import { workKeys } from "@/lib/work";
 import { branchIdsOf, MEMBER_FILTERS, MembersTable } from "@/pages/members";
 import { StarterTeamDialog, StarterTeamFields, teamToast, type StarterResult } from "@/pages/org-starter";
+import { addToPrimaAfterCreate, draftReady, emptyDraft, NewCompanyPrima, PRIMA_COMPANIES_KEY, PrimaLinkCell } from "@/pages/org-prima";
 import { DepartmentReviewDialog } from "@/pages/tasks/accountable";
+import { OrgChartView } from "@/pages/org-chart";
 
 const INDUSTRY_LABELS: Record<string, string> = {
   general: msg("General business"),
@@ -90,6 +92,9 @@ function BranchDialog({ open, onOpenChange, branch }: { open: boolean; onOpenCha
   // P19: what the company does, and a ready-made AI team for it (on by default).
   const [industry, setIndustry] = useState("general");
   const [team, setTeam] = useState(true);
+  // P111: add it to Prima now, with its SSM details (else it is linked by name, or later).
+  const [toPrima, setToPrima] = useState(false);
+  const [primaDraft, setPrimaDraft] = useState(emptyDraft);
   const qc = useQueryClient();
 
   const save = useOrgMutation(
@@ -110,8 +115,12 @@ function BranchDialog({ open, onOpenChange, branch }: { open: boolean; onOpenCha
     save.mutate(undefined, {
       onSuccess: (r) => {
         onOpenChange(false);
-        if (editing) return;
+        // P111: the Prima link (linked by name, added, or a rename that followed) changed too.
+        const primaLinks = () => void qc.invalidateQueries({ queryKey: PRIMA_COMPANIES_KEY });
         const made = r as Branch & { starter?: StarterResult | null };
+        if (!editing && toPrima && draftReady(primaDraft)) void addToPrimaAfterCreate(made.id, made.name, primaDraft, primaLinks);
+        else primaLinks();
+        if (editing) return;
         if (made.starter) {
           qc.invalidateQueries({ queryKey: workKeys.agents });
           toast.success(t("{name} created. {team}", { name: made.name, team: teamToast(made.starter, made.name) }));
@@ -133,7 +142,7 @@ function BranchDialog({ open, onOpenChange, branch }: { open: boolean; onOpenCha
           </Button>
           <Button
             loading={save.isPending}
-            disabled={!name.trim()}
+            disabled={!name.trim() || (!editing && toPrima && !draftReady(primaDraft))}
             onClick={create}
           >
             {editing ? t("Save") : t("Create company")}
@@ -142,7 +151,9 @@ function BranchDialog({ open, onOpenChange, branch }: { open: boolean; onOpenCha
       }
     >
       <div className="grid grid-cols-[minmax(0,1fr)] gap-5">
-        <Field label={t("Company name")} value={name} onChange={(e) => setName(e.target.value)} placeholder={t("e.g. Syarikat Maju Sdn Bhd")} error={fieldError} autoFocus />
+        {/* P111: organization names are in capitals (the API saves them so). */}
+        <Field label={t("Company name")} value={name} onChange={(e) => setName(e.target.value)} placeholder={t("e.g. Syarikat Maju Sdn Bhd")} error={fieldError} autoFocus
+          hint={t("Saved in capital letters.")} className="[&_input]:uppercase [&_input]:placeholder:normal-case" />
         <fieldset className="grid gap-2">
           <legend className="mb-2 text-[13px] font-medium">{t("Color")}</legend>
           <div className="flex flex-wrap gap-2">
@@ -163,6 +174,7 @@ function BranchDialog({ open, onOpenChange, branch }: { open: boolean; onOpenCha
           <SwitchField checked={seed} onCheckedChange={setSeed} label={t("Also add the standard departments")} hint={t("Management, Finance, Research, Operations, Data and Writing. Not needed with a ready-made team: it brings its own departments.")} />
         ) : null}
         {!editing ? <StarterTeamFields industry={industry} onIndustry={setIndustry} enabled={team} onEnabled={setTeam} /> : null}
+        {!editing ? <NewCompanyPrima name={name} on={toPrima} onOn={setToPrima} draft={primaDraft} onDraft={setPrimaDraft} /> : null}
         <SwitchField checked={isolated} onCheckedChange={setIsolated} label={t("Keep this company's knowledge private")} hint={t("Agents in other branches will not see this branch's SOPs, facts or notes.")} />
         <FormError message={save.error && !fieldError ? errorMessage(save.error) : null} />
       </div>
@@ -335,7 +347,7 @@ function CompanyPills({ branch }: { branch: Branch }) {
 }
 
 /** P107: where Organization's tables point each other (a count opens the list it counts). */
-type View = "companies" | "departments" | "members";
+type View = "companies" | "departments" | "members" | "hierarchy"; // P111: the chart
 type Go = (view: View, filters?: Record<string, string>) => void;
 
 /** P107: counts of people per company and per department, from the plain members list (the
@@ -545,7 +557,7 @@ function CompaniesTable({ branches, canManage, seesMembers, counts, prima, go }:
     },
     ...(prima ? [{
       id: "prima", header: t("Prima company"), sortValue: (b: Branch) => primaOf(b), exportValue: (b: Branch) => primaOf(b) ?? "",
-      cell: (b: Branch) => (primaOf(b) ? <Pill tone="ok" className="max-w-full"><span className="truncate">{primaOf(b)}</span></Pill> : <span className="text-muted">{t("Not linked")}</span>),
+      cell: (b: Branch) => <PrimaLinkCell branchId={b.id} name={primaOf(b)} canManage={canManage} />, // P111
     } satisfies Column<Branch>] : []),
     {
       id: "departments", header: t("Departments"), kind: "number", align: "right", sortValue: (b) => b.departments.length,
@@ -747,7 +759,8 @@ export function OrganizationPage() {
   const [editBranch, setEditBranch] = useState<{ branch: Branch; key: number } | null>(null);
   // P107: companies, departments and members are three tables; the address keeps which one shows.
   const raw = useRouterState({ select: (s) => (s.location.search as { view?: string }).view });
-  const view: View = raw === "departments" ? "departments" : raw === "members" && seesMembers ? "members" : "companies";
+  const view: View = raw === "departments" ? "departments" : raw === "members" && seesMembers ? "members" : raw === "hierarchy" ? "hierarchy" : "companies";
+  const focus = useRouterState({ select: (s) => (s.location.search as { focus?: string }).focus });
   const go: Go = (v, filters = {}) =>
     void navigate({ to: ".", search: ((prev: Record<string, unknown>) => ({ ...prev, ...filters, view: v === "companies" ? undefined : v })) as never, resetScroll: false });
   // "New branch" from the palette or switcher arrives as ?new=1.
@@ -801,8 +814,10 @@ export function OrganizationPage() {
               { value: "companies", label: t("Companies"), count: branches.length },
               { value: "departments", label: t("Departments"), count: departments },
               ...(seesMembers ? [{ value: "members" as const, label: t("Members"), count: counts?.total }] : []),
+              { value: "hierarchy", label: t("Hierarchy") },
             ]} />
-          {view === "members" ? <OrgMembers me={me} />
+          {view === "hierarchy" ? <OrgChartView key={focus ?? ""} me={me} initialFocus={focus} />
+            : view === "members" ? <OrgMembers me={me} />
             : view === "departments" ? <DepartmentsTable branches={branches} canManage={canManage} counts={counts} go={go} onOpenCompany={setOpenCompany} />
               : <CompaniesTable branches={branches} canManage={canManage} seesMembers={seesMembers} counts={counts} prima={prima} go={go} />}
           {opened && view === "departments" ? (

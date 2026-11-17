@@ -478,7 +478,14 @@ export const m365SummaryQuery = (enabled = true) =>
   });
 
 /** Someone to invite: an office member, someone from the person's own Outlook or Teams. */
-export interface Invitee { name: string; email: string; source?: "office" | "outlook" | "teams" | string }
+export interface Invitee {
+  name: string;
+  email: string;
+  source?: "office" | "outlook" | "teams" | string;
+  /** P111: an office member's company and department (empty for others). */
+  company?: string;
+  department?: string;
+}
 
 /** A person the AI named: "ok" (address known), "choose" (several: options) or "unknown". */
 export interface DraftPerson extends Invitee { status: "ok" | "choose" | "unknown"; options: Invitee[] }

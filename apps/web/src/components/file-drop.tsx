@@ -37,10 +37,13 @@ export function FileStatus({ f }: { f: Pick<DocFile, "status" | "expired" | "exp
   return null;
 }
 
-export function FileDrop({ branchId, taskId, onUploaded, compact, className, guide }: {
+export function FileDrop({ branchId, branchIds, taskId, onUploaded, compact, className, guide }: {
   branchId?: string | null;
+  /** P111: upload each file once per company here (null: no company); `onUploaded` then
+   * also gets, for each uploaded file, the index of its company in this list. */
+  branchIds?: (string | null)[];
   taskId?: string | null;
-  onUploaded?: (files: DocFile[]) => void;
+  onUploaded?: (files: DocFile[], targets: number[]) => void;
   compact?: boolean;
   className?: string;
   /** data-guide id for the Guide's screenshots. */
@@ -55,20 +58,25 @@ export function FileDrop({ branchId, taskId, onUploaded, compact, className, gui
   const send = async (list: FileList | File[]) => {
     const files = Array.from(list);
     if (!files.length) return;
-    setBusy(files.length);
+    const places = branchIds?.length ? branchIds : [branchId ?? null];
+    setBusy(files.length * places.length);
     const done: DocFile[] = [];
+    const targets: number[] = [];
     for (const f of files) {
-      try {
-        done.push(await uploadFile(f, { branch_id: branchId, task_id: taskId }));
-      } catch (e) {
-        toast.error(`${f.name}: ${errorMessage(e)}`);
+      for (const [i, b] of places.entries()) {
+        try {
+          done.push(await uploadFile(f, { branch_id: b, task_id: taskId }));
+          targets.push(i);
+        } catch (e) {
+          toast.error(`${f.name}: ${errorMessage(e)}`);
+        }
+        setBusy((n) => n - 1);
       }
-      setBusy((n) => n - 1);
     }
     qc.invalidateQueries({ queryKey: docKeys.files });
     if (done.length) {
       toast.success(done.length === 1 ? t("{name} uploaded. Reading it now.", { name: done[0]!.name }) : t("{n} files uploaded. Reading them now.", { n: done.length }));
-      onUploaded?.(done);
+      onUploaded?.(done, targets);
     }
   };
 

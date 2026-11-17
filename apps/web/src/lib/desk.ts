@@ -35,8 +35,9 @@ export interface Pin {
 
 /** P97: the blocks of the desk's overview, in the person's order, and their folders. */
 // P109b: "m365", the Microsoft 365 tile (shown only to people who use Microsoft 365 here).
-export type DeskSectionId = "today" | "m365" | "pinned" | "recent" | "ai" | "howto" | "goto";
-export const DESK_SECTIONS: DeskSectionId[] = ["today", "m365", "pinned", "recent", "ai", "howto", "goto"];
+// P111: "hierarchy", my line of managers and the people under me.
+export type DeskSectionId = "today" | "m365" | "pinned" | "recent" | "ai" | "hierarchy" | "howto" | "goto";
+export const DESK_SECTIONS: DeskSectionId[] = ["today", "m365", "pinned", "recent", "ai", "hierarchy", "howto", "goto"];
 export interface DeskLayout {
   sections: { id: DeskSectionId; hidden: boolean }[];
   folders: string[];
@@ -203,7 +204,7 @@ export const renameFolder = (name: string, to: string | null) =>
   api<DeskLayout>("/api/desk/folders/rename", "POST", { name, to });
 
 /** P109b: a block added after people saved their desk goes right after this one (else last). */
-const AFTER: Partial<Record<DeskSectionId, DeskSectionId>> = { m365: "today" };
+const AFTER: Partial<Record<DeskSectionId, DeskSectionId>> = { m365: "today", hierarchy: "ai" };
 
 /** The layout to show: the saved one, or every section in the first order. Same rule as the
  * server (desk.layout_of): sections added since go last, or after their AFTER block. */

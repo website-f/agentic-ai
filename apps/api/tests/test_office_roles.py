@@ -258,7 +258,7 @@ async def test_branch_manager_manages_their_people(client, llm, temporal):
             json={"email": "s1@example.com", "name": "S1", "role": "staff", "branch_id": a},
             headers=csrf(bm),
         )
-        assert r.status_code == 201 and r.json()["member"]["branch_name"] == "Maju Sdn Bhd"
+        assert r.status_code == 201 and r.json()["member"]["branch_name"] == "MAJU SDN BHD"
         r = await bm.post(
             "/api/members",
             json={
@@ -520,12 +520,12 @@ async def test_reports_and_the_company_overview(client, llm, temporal):
     try:
         assert (await hod2.get("/api/reports")).json() == []  # another branch's report
         ov2 = (await hod2.get("/api/overview?days=7")).json()
-        assert [b["name"] for b in ov2["branches"]] == ["Jaya Bhd"]
+        assert [b["name"] for b in ov2["branches"]] == ["JAYA BHD"]
     finally:
         await hod2.aclose()
 
     ov = (await client.get("/api/overview?days=7")).json()
-    maju = next(b for b in ov["branches"] if b["name"] == "Maju Sdn Bhd")
+    maju = next(b for b in ov["branches"] if b["name"] == "MAJU SDN BHD")
     assert maju["tasks_created"] == 1 and maju["reports"] == 1
     assert maju["tasks_done"] == 0  # still in review: not done yet
     assert maju["labels"] == [{"label": "tender", "count": 1}]
@@ -540,7 +540,7 @@ async def test_reports_and_the_company_overview(client, llm, temporal):
     assert "tender 1" in prompt and "HYPERLINK" not in prompt
     # P33: the cloud model gets the company as a placeholder (one of our own: OURCO); the
     # summary comes back real.
-    assert "Maju Sdn Bhd" not in prompt and "[OURCO_" in prompt
+    assert "MAJU SDN BHD" not in prompt and "[OURCO_" in prompt
     again = (
         await client.post("/api/overview/summary?days=7", json={}, headers=csrf(client))
     ).json()

@@ -558,7 +558,7 @@ async def test_admin_consent_then_shared_mailbox_rbac_403(client, llm, temporal,
     )
     assert r.status_code == 201, r.text
     mb = r.json()
-    assert mb["address"] == "info@example.com" and mb["branch_name"] == "Maju Sdn Bhd"
+    assert mb["address"] == "info@example.com" and mb["branch_name"] == "MAJU SDN BHD"
     assert mb["rules"] == {
         "create_tasks_for": ["invoice", "customer_request", "tender", "complaint"],
         "save_attachments": True,

@@ -474,7 +474,7 @@ async def test_privacy_settings_preview_and_permissions(client):
     }
     assert body["companies"][0] == {
         "branch_id": o["branch"]["id"],
-        "name": BRANCH,
+        "name": BRANCH.upper(),  # P111: organization names in capitals
         "data_level": "standard",
         "providers_30d": [],
     }

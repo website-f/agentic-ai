@@ -149,6 +149,8 @@ class MemberOut(BaseModel):
     head_of: list[DepartmentRef] = []
     library_scope: LibraryScope = "company"
     uploads_for_others: bool = False
+    # P111: their job title (designation) on the organization chart.
+    job_title: str | None = None
 
 
 class MembersSummary(BaseModel):
@@ -236,12 +238,54 @@ class MemberUpdateIn(BaseModel):
     prima_modules: PrimaModules = Field(default=None, max_length=200)
     # P106: their Prima department (send null for none).
     prima_department: PrimaDepartment | None = None
+    # P111: their job title on the organization chart (send "" or null to clear).
+    job_title: str | None = Field(default=None, max_length=120)
 
 
 class MemberTeamIn(BaseModel):
     """P97: the people who report to a manager (the whole list; others are let go)."""
 
     user_ids: list[str] = Field(default_factory=list, max_length=500)
+
+
+class HierarchyPerson(BaseModel):
+    """P111: one box of the organization chart (org/hierarchy.py). `limited`: a manager above
+    the reader they would not otherwise see: name, job title, company and department only."""
+
+    user_id: str
+    name: str
+    job_title: str | None = None
+    role: Role | None = None
+    branch_id: str | None = None
+    branch_name: str | None = None
+    branch_ids: list[str] = []
+    department_id: str | None = None
+    department_name: str | None = None
+    reports_to_user_id: str | None = None
+    # Their manager's name when the reader does not see the manager's own box.
+    reports_to_name: str | None = None
+    direct_reports: int | None = None
+    heads_department: bool = False
+    is_active: bool = True
+    limited: bool = False
+
+
+class HierarchyOut(BaseModel):
+    """P111: everyone on the chart the reader may see, and whether they may change it."""
+
+    people: list[HierarchyPerson]
+    me: str
+    can_edit: bool
+    whole: bool  # sees the whole workspace (else their part of it)
+
+
+class MyHierarchyOut(BaseModel):
+    """P111: My workspace: my managers up to the top (mine first) and the people under me."""
+
+    me: HierarchyPerson
+    chain: list[HierarchyPerson]
+    reports: list[HierarchyPerson]
+    below: int  # everyone under me, down every line
 
 
 class PrimaAccessIn(BaseModel):

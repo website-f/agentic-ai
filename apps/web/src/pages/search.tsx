@@ -11,6 +11,7 @@ import { Marked, SearchField, TYPE_ICON, useOpenTarget } from "@/components/sear
 import { Button } from "@/components/ui/button";
 import { ListCard } from "@/components/ui/card";
 import { Pill } from "@/components/ui/pill";
+import { SearchSelect } from "@/components/ui/search-select";
 import { Segmented } from "@/components/ui/segmented";
 import { Select } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -178,7 +179,7 @@ export function SearchPage() {
         <SearchField variant="page" initial={q} autoFocus={!q && !phone} />
         <div data-guide="search.filters" className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center">
           {co.branches.length > 1 || co.canAll ? (
-            <Select size="sm" value={branch?.id ?? ALL_COMPANIES} onValueChange={co.select} label={t("Company")} options={companyOptions} className="col-span-2 min-w-0 sm:w-56" />
+            <SearchSelect size="sm" value={branch?.id ?? ALL_COMPANIES} onValueChange={co.select} label={t("Company")} options={companyOptions} searchPlaceholder={t("Search companies")} className="col-span-2 min-w-0 sm:w-56" />
           ) : null}
           <Select size="sm" value={search.kind ?? ANY} onValueChange={(v) => set({ kind: v === ANY ? undefined : v })} label={t("Kind")} options={kindOptions} className="min-w-0 sm:w-40" />
           <Select size="sm" value={search.dept ?? ANY} onValueChange={(v) => set({ dept: v === ANY ? undefined : v })} label={t("Department")} options={deptOptions}

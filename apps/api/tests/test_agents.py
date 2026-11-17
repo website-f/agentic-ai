@@ -536,7 +536,7 @@ async def test_department_broadcast_reaches_exactly_that_department(
     assert sent.status_code == 201, sent.text
     b = sent.json()
     assert {x["agent_name"] for x in b["receipts"]} == {"Aina", "Badrul"}
-    assert b["audience_label"] == "Finance (Maju Sdn Bhd)" and b["acked"] == 2
+    assert b["audience_label"] == "Finance (MAJU SDN BHD)" and b["acked"] == 2
 
     # It now sits in their context, and only theirs.
     prompt = (

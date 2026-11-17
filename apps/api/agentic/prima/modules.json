@@ -202,8 +202,8 @@
     "ms": "Operasi"
    },
    "blurb": {
-    "en": "Sites, guards, rosters and attendance.",
-    "ms": "Tapak, pengawal, jadual tugas dan kehadiran."
+    "en": "Sites, guards, rosters and duty plans.",
+    "ms": "Tapak, pengawal, jadual tugas dan pelan tugas."
    },
    "groups": [
     {
@@ -317,17 +317,6 @@
        "blurb": {
         "en": "Duty plans for each guard post.",
         "ms": "Pelan tugas untuk setiap pos pengawal."
-       }
-      },
-      {
-       "id": "attendance",
-       "title": {
-        "en": "Attendance",
-        "ms": "Kehadiran"
-       },
-       "blurb": {
-        "en": "Who came, who was late and who was absent.",
-        "ms": "Siapa hadir, siapa lewat dan siapa tidak hadir."
        }
       },
       {
@@ -493,8 +482,8 @@
     "ms": "Sumber manusia"
    },
    "blurb": {
-    "en": "Staff, leave, claims and hand-overs.",
-    "ms": "Kakitangan, cuti, tuntutan dan serahan tugas."
+    "en": "Staff, attendance, leave and claims.",
+    "ms": "Kakitangan, kehadiran, cuti dan tuntutan."
    },
    "groups": [
     {
@@ -526,17 +515,6 @@
        }
       },
       {
-       "id": "staffclock",
-       "title": {
-        "en": "Staff clock",
-        "ms": "Jam kerja staf"
-       },
-       "blurb": {
-        "en": "Office staff clock-in times.",
-        "ms": "Waktu daftar masuk staf pejabat."
-       }
-      },
-      {
        "id": "work-kpi",
        "title": {
         "en": "Work KPIs",
@@ -556,6 +534,36 @@
        "blurb": {
         "en": "Hand over your work before leave or a move.",
         "ms": "Serahkan kerja anda sebelum bercuti atau bertukar."
+       }
+      }
+     ]
+    },
+    {
+     "title": {
+      "en": "Attendance",
+      "ms": "Kehadiran"
+     },
+     "modules": [
+      {
+       "id": "attendance",
+       "title": {
+        "en": "Attendance",
+        "ms": "Kehadiran"
+       },
+       "blurb": {
+        "en": "Who came, who was late and who was absent.",
+        "ms": "Siapa hadir, siapa lewat dan siapa tidak hadir."
+       }
+      },
+      {
+       "id": "staffclock",
+       "title": {
+        "en": "Staff clock",
+        "ms": "Jam kerja staf"
+       },
+       "blurb": {
+        "en": "Office staff clock-in times.",
+        "ms": "Waktu daftar masuk staf pejabat."
        }
       }
      ]
@@ -2353,6 +2361,7 @@
    "POST hr/overtime",
    "POST hr/overtime/preview",
    "POST hr/people/:/final-pay",
+   "POST hr/people/:/job-title",
    "POST hr/people/:/leave-days",
    "POST hr/people/:/mother-tongue",
    "POST hr/people/:/opening-balance",
@@ -2544,6 +2553,7 @@
    "GET hr/history/person/:",
    "GET hr/legal",
    "GET hr/lists",
+   "GET hr/movements",
    "GET hr/opening-balances",
    "GET hr/overtime",
    "GET hr/policies",
@@ -2597,9 +2607,11 @@
    "POST hr/history/separate",
    "POST hr/legal/:",
    "POST hr/lists/:",
+   "POST hr/movements",
    "POST hr/opening-balances/load",
    "POST hr/overtime",
    "POST hr/overtime/preview",
+   "POST hr/people/:/job-title",
    "POST hr/people/:/mother-tongue",
    "POST hr/people/:/opening-balance",
    "POST hr/people/:/opening-balance/check",
@@ -2757,6 +2769,7 @@
    "GET hr/history/person/:",
    "GET hr/legal",
    "GET hr/lists",
+   "GET hr/movements",
    "GET hr/opening-balances",
    "GET hr/overtime",
    "GET hr/policies",
@@ -2789,9 +2802,11 @@
    "POST hr/history/separate",
    "POST hr/legal/:",
    "POST hr/lists/:",
+   "POST hr/movements",
    "POST hr/opening-balances/load",
    "POST hr/overtime",
    "POST hr/overtime/preview",
+   "POST hr/people/:/job-title",
    "POST hr/people/:/mother-tongue",
    "POST hr/people/:/opening-balance",
    "POST hr/people/:/opening-balance/check",

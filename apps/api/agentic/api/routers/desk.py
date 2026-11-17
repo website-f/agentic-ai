@@ -105,9 +105,10 @@ MAX_FOLDERS = 20
 # P97: the blocks of the desk's overview, in their first order. A person may hide or reorder
 # them (users.prefs["desk"]); a block added later shows up at the end for everyone, or right
 # after the block named in AFTER. P109b: "m365", the Microsoft 365 tile, after Today (the web
-# shows it only to people who use Microsoft 365 here).
-SECTIONS = ("today", "m365", "pinned", "recent", "ai", "howto", "goto")
-AFTER = {"m365": "today"}
+# shows it only to people who use Microsoft 365 here). P111: "hierarchy", my line of managers
+# and the people under me, after My AI.
+SECTIONS = ("today", "m365", "pinned", "recent", "ai", "hierarchy", "howto", "goto")
+AFTER = {"m365": "today", "hierarchy": "ai"}
 OPEN = ("triage", "ready", "running", "blocked", "review")
 URLS = {
     "file": "/files?f={id}",
@@ -533,7 +534,7 @@ def layout_of(user: User | None, pins: list[DeskItem] | None = None) -> dict[str
 
 
 class SectionIn(BaseModel):
-    id: Literal["today", "m365", "pinned", "recent", "ai", "howto", "goto"]
+    id: Literal["today", "m365", "pinned", "recent", "ai", "hierarchy", "howto", "goto"]
     hidden: bool = False
 
 

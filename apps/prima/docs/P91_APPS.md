@@ -24,10 +24,10 @@ home sidebar is only the everyday things."
 | Space | Screens |
 |---|---|
 | Home (side menu on the home screen) | Home, Group, Company today, Reports; Clock, Work, Meetings, Memos, My details |
-| Operations | Regional ops, Sites, Far branches, Site survey, Site man-hours; Guards, Roster, Duty plans, Attendance, Cleaning |
+| Operations | Regional ops, Sites, Far branches, Site survey, Site man-hours; Guards, Roster, Duty plans, Cleaning |
 | Security | Cases, Arms control, CMS, CMS readiness, Site device |
 | Equipment | Items, Site stock, Vehicles, Asset Management |
-| HR | HR monitor, Staff directory, Staff clock, Work KPIs, Hand-overs; Claims, SOCSO claims |
+| HR | HR monitor, Staff directory, Work KPIs, Hand-overs; Attendance, Staff clock (P111, 17 Nov 2026: moved from Operations; same screens, links and access); Claims, SOCSO claims |
 | Payroll | Staff payroll, Guard pay; Pay formulas, Salary calculator, Statutory rates; Wage advances, Advances and loans |
 | Foreign workers | FWM, Recruitment cost, Nepali EPF/SOCSO, Hostels, Arrival cash |
 | Clients and sales | Tenders and quotes, Clients, Contracts |

@@ -133,6 +133,8 @@ class Membership(Timestamps, Base):
     # page tours seen, the welcome tour's state and where to resume it (api/routers/
     # getting_started.py). None until they first save something.
     getting_started: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    # P111 (migration 0072): their job title (designation) on the organization chart.
+    job_title: Mapped[str | None] = mapped_column(String(120))
 
     user: Mapped[User] = relationship(lazy="joined", foreign_keys=[user_id])
     # P98: every branch this member works in (the home branch_id included; loaded with the

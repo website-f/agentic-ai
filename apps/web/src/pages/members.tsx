@@ -28,7 +28,6 @@ import {
   memberStatus, membersPageUrl, PAGE_SIZES,
   type MemberSort, type MembersFilters, type MembersPage, type MemberStatus, type PageSize,
 } from "@/lib/members";
-import { MANAGER_ROLES } from "@/lib/people";
 import { branchesQuery, keys, meQuery, membersQuery } from "@/lib/queries";
 import { hasAny, ROLE_INFO, SCOPED_ROLES, type Branch, type Me, type Member, type Role } from "@/lib/types";
 import { cn, initials, timeAgo } from "@/lib/utils";
@@ -282,6 +281,8 @@ function AccessDialog({ members, me, open, onOpenChange, onDone }: {
   const org = !!one && editsOrg(me);
   const { data: everyone = [] } = useQuery({ ...membersQuery, enabled: org });
   const [reportsTo, setReportsTo] = useState(one?.reports_to_user_id ?? "");
+  // P111: their job title on the organization chart.
+  const [jobTitle, setJobTitle] = useState(one?.job_title ?? "");
   // P109: the departments they head (any company); older answers only say "heads their own".
   const headOfStart = one ? (one.head_of?.length ? one.head_of.map((d) => d.id) : one.heads_department && one.department_id ? [one.department_id] : []) : [];
   const [headOf, setHeadOf] = useState<string[]>(headOfStart);
@@ -300,6 +301,7 @@ function AccessDialog({ members, me, open, onOpenChange, onDone }: {
         const orgBody = org
           ? {
               ...(reportsTo !== (one.reports_to_user_id ?? "") ? { reports_to_user_id: reportsTo || null } : {}),
+              ...(jobTitle.trim() !== (one.job_title ?? "") ? { job_title: jobTitle.trim() || null } : {}),
               ...(headOf.slice().sort().join() !== headOfStart.slice().sort().join() ? { head_of: headOf } : {}),
             }
           : {};
@@ -307,7 +309,7 @@ function AccessDialog({ members, me, open, onOpenChange, onDone }: {
         await api(`/api/members/${one.user_id}`, "PATCH", { role, ...place, ...orgBody, ...accessBody });
         const lib = editsLibrary ? libraryChanges(libraryOf(one), libraryValue) : null;
         if (lib) await api(`/api/members/${one.user_id}/library`, "PUT", lib);
-        if (org && manages && MANAGER_ROLES.includes(role)) {
+        if (org && manages) {
           const r = await saveManages(one.user_id, manages);
           return { done: 1, skipped: r.skipped, first: r.results.find((x) => !x.ok)?.message ?? null };
         }
@@ -342,9 +344,10 @@ function AccessDialog({ members, me, open, onOpenChange, onDone }: {
           onChange={(b, d) => { setBranchIds(b); setDepartmentId(d); }} />
         {org && one ? (
           <OrgFields member={{ ...one, role }} members={everyone} reportsTo={reportsTo} onReportsTo={setReportsTo} headOf={headOf} onHeadOf={setHeadOf}
+            jobTitle={jobTitle} onJobTitle={setJobTitle}
             departmentId={placementBody(role, orFirst(branchIds, list), departmentId).department_id ?? ""} />
         ) : null}
-        {org && one && MANAGER_ROLES.includes(role) ? (
+        {org && one ? (
           <ManagesField member={one} members={everyone} value={manages} onChange={setManages} />
         ) : null}
         {editsAccess && one ? <AccessFields value={access} onChange={setAccess} member={one} ownerTarget={role === "owner" || one.role === "owner"} /> : null}
@@ -458,7 +461,7 @@ function MemberActions({ member, me, onView }: { member: Member; me: Me; onView?
   const [resettingMs, setResettingMs] = useState(false);
   // P97: who this member manages (owners, admins, management, HR).
   const [team, setTeam] = useState(false);
-  const managesPeople = editsOrg(me) && MANAGER_ROLES.includes(member.role);
+  const managesPeople = editsOrg(me); // P111: anyone may have people under them on the chart
   const fixesPeople = me.permissions.includes("members.manage");
   const refresh = () => {
     qc.invalidateQueries({ queryKey: keys.members });
@@ -543,6 +546,7 @@ function NameCell({ member, me, seesTwoFactor }: { member: Member; me: Me; seesT
           {isMe ? <Pill tone="accent">{t("You")}</Pill> : null}
           <TwoFactorPill userId={member.user_id} enabled={seesTwoFactor} />
         </p>
+        {member.job_title ? <p className="text-[12.5px] font-medium text-accent">{member.job_title}</p> : null}
         <p className="text-[12.5px] break-all text-muted">{member.email}</p>
         {member.agents ? (
           <p className="text-[12px] text-muted">{member.agents === 1 ? t("1 personal agent") : t("{n} personal agents", { n: member.agents })}</p>
@@ -615,6 +619,7 @@ function MemberSheet({ member, me, onClose }: { member: Member; me: Me; onClose:
         {line(t("Status"), <StatusPill member={member} />)}
         {line(t("Company"), <Branches member={member} />)}
         {line(t("Department"), member.department_name ?? <span className="text-muted">-</span>)}
+        {member.job_title ? line(t("Job title"), member.job_title) : null}
         {member.reports_to_name ? line(t("Reports to"), member.reports_to_name) : null}
         {member.manages ? line(t("Manages"), member.manages === 1 ? t("Manages 1 person") : t("Manages {n} people", { n: member.manages })) : null}
         {member.heads_department ? line(t("Head of department (HOD)"), <HodBadge member={member} />) : null}
@@ -624,6 +629,12 @@ function MemberSheet({ member, me, onClose }: { member: Member; me: Me; onClose:
         {line(t("Joined"), <span className="tabular">{when(member.joined_at)}</span>)}
         {member.agents ? line(t("Personal agents"), <span className="tabular">{member.agents}</span>) : null}
       </dl>
+      {me.permissions.includes("office.view") ? (
+        <Link to="/organization" search={{ view: "hierarchy", focus: member.user_id } as never} onClick={onClose}
+          className="hit mt-5 inline-flex items-center gap-1.5 text-[13px] font-medium text-accent hover:underline">
+          <TreeStructureIcon size={15} /> {t("Show on the organization chart")}
+        </Link>
+      ) : null}
     </SideSheet>
   );
 }

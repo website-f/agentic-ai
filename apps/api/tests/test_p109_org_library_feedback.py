@@ -84,7 +84,7 @@ async def test_head_of_several_departments_team_and_filters(client):
     m = r.json()
     assert m["heads_department"] is True
     assert {d["id"] for d in m["head_of"]} == {fin, far_fin}
-    assert {d["branch_name"] for d in m["head_of"]} == {"Maju Sdn Bhd", "Jaya Bhd"}
+    assert {d["branch_name"] for d in m["head_of"]} == {"MAJU SDN BHD", "JAYA BHD"}
 
     # People under them: searchable multi-select sets their "reports to".
     r = await client.put(
@@ -329,7 +329,7 @@ async def test_upload_for_other_companies_check_and_hand_over(
     )
     assert r.status_code == 200 and r.json()["uploads_for_others"] is True
     t = (await staff.get("/api/handoffs/targets")).json()
-    assert t["allowed"] and {c["name"] for c in t["companies"]} == {"Maju Sdn Bhd", "Jaya Bhd"}
+    assert t["allowed"] and {c["name"] for c in t["companies"]} == {"MAJU SDN BHD", "JAYA BHD"}
 
     # One file for both companies, with a typed title; one for Jaya with the AI's.
     r = await staff.post(

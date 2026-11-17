@@ -10,7 +10,7 @@ import { Field, FormError } from "@/components/ui/field";
 import { DataTable, filterOf, TableFilter, useTableState, type Column } from "@/components/ui/data-table";
 import { MenuItem } from "@/components/ui/menu";
 import { Pill } from "@/components/ui/pill";
-import { Select } from "@/components/ui/select";
+import { SearchSelect } from "@/components/ui/search-select";
 import { api, ApiError, errorMessage } from "@/lib/api";
 import { loginsQuery, officeKeys, type SavedLogin } from "@/lib/office-data";
 import { branchesQuery, meQuery } from "@/lib/queries";
@@ -78,7 +78,7 @@ function LoginDialog({ open, onOpenChange, editing }: { open: boolean; onOpenCha
             {!personal && everything ? (
               <div className="grid gap-1.5">
                 <span className="text-[13px] font-medium">{t("Who may use it")}</span>
-                <Select value={branch} onValueChange={setBranch} label={t("Branch")} options={[{ value: WHOLE, label: t("Agents in every branch") }, ...branches.map((b) => ({ value: b.id, label: t("Agents in {branch}", { branch: b.name }) }))]} />
+                <SearchSelect value={branch} onValueChange={setBranch} label={t("Branch")} searchPlaceholder={t("Search companies")} options={[{ value: WHOLE, label: t("Agents in every branch") }, ...branches.map((b) => ({ value: b.id, label: t("Agents in {branch}", { branch: b.name }), keywords: [b.name] }))]} />
               </div>
             ) : null}
           </div>

@@ -290,7 +290,7 @@ async def test_phrases_pages_amounts_dates_prefixes_and_typos(client):
     assert top["snippet"].startswith("<mark>Kelayakan advance</mark>: pekerja tetap")
     assert "memohon <mark>advance</mark> gaji" in top["snippet"]
     assert top["heading"] == "BAB 7 <mark>KELAYAKAN ADVANCE</mark> GAJI"
-    assert top["company"] == "Contoh Niaga Sdn Bhd" and top["folder"] == "HR"
+    assert top["company"] == "CONTOH NIAGA SDN BHD" and top["folder"] == "HR"
     assert o["held"] not in ids(res)  # held back: never, not even for the owner
     assert o["sop"] in ids(res) and o["guide_b"] in ids(res)  # the owner sees every company
 

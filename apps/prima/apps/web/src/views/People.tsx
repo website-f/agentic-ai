@@ -2,10 +2,10 @@ import { OpeningBalancesButton } from './OpeningBalances';
 import { HrListsButton } from './HrLists';
 import { FileHelper } from './BulkHelper';
 import { Select } from '../SearchSelect';
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { DataTable, useTableState, type DtColumn, type DtFilter } from '../DataTable';
 import { CheckCircleIcon, PhoneIcon, ProhibitIcon, UsersThreeIcon, WarningIcon } from '@phosphor-icons/react';
-import { ATTENDANCE_ISSUE_LABEL, GROUP_EMPLOYER_ID, LEAVE_LABEL, isGroupLeader, jaOwns, missingStaffFacts, p91MayImport, staffHistoryRole } from '@prima/core';
+import { ATTENDANCE_ISSUE_LABEL, GROUP_EMPLOYER_ID, LEAVE_LABEL, hrKeeps, isGroupLeader, isOwnerAdmin, jaOwns, missingStaffFacts, p91MayImport, staffHistoryRole } from '@prima/core';
 import { api, type GuardProfile, type PersonDetail } from '../api';
 import { useApp } from '../App';
 import { Chip, Drawer, ErrorNotice, ExpiryChip, Findings, Kpi, Loading, dateLabel, dayLabel, hhmm, useAction, useLoad } from '../ui';
@@ -21,6 +21,7 @@ import { jumpTo } from './AddImportMenu';
 import { FaceCapture } from './FaceCheck';
 import { GroupHistoryTab, HistoryLookupPanel } from './StaffHistory';
 import { GuardPhoneBulkCodes, GuardPhoneCard } from './GuardPhoneOffice';
+import { StaffBulkBar, type BulkPerson } from './StaffBulk';
 import '../styles/people.css';
 
 export function People({ openPersonId }: { openPersonId?: string }) {
@@ -39,6 +40,44 @@ export function People({ openPersonId }: { openPersonId?: string }) {
   // P107b: Add office staff and Edit staff details open the existing office staff form, for HR as before.
   const mayKeepStaff = useRecordKinds().has('officeStaff');
   const [record, setRecord] = useState<{ id: string | null } | null>(null);
+  // P111 (Fitri, 17 Nov 2026): HR ticks staff and changes their designation or company in one go (StaffBulk.tsx). The
+  // ticks are kept here (for the bulk bar); Change company needs HR's Staff movement form data, loaded for HR only.
+  const [ticked, setTicked] = useState<Set<string>>(() => new Set());
+  useEffect(() => setTicked(new Set()), [companyId]);
+  const hrMakes = hrKeeps(me.user) || isOwnerAdmin(me.user);
+  const moves = useLoad(() => (hrMakes ? api.staffMovements().catch(() => null) : Promise.resolve(null)), [hrMakes]);
+  const prep = moves.data?.canPrepare ? (moves.data.prep ?? null) : null;
+  const titles = useMemo(() => [...new Set((data ?? []).map((r) => r.person.jobTitle?.trim()).filter((t): t is string => !!t))].sort(), [data]);
+  const tickedPeople: BulkPerson[] = (data ?? [])
+    .filter((r) => ticked.has(r.person.id))
+    .map((r) => ({
+      id: r.person.id,
+      name: r.person.name,
+      staffNo: r.person.staffNo,
+      role: r.person.role,
+      status: r.person.status,
+      leaving: !!r.person.leaving,
+      companyId: r.person.companyId,
+      jobTitle: r.person.jobTitle ?? null,
+    }));
+  const bulk =
+    mayKeepStaff || prep ? (
+      <StaffBulkBar
+        ticked={tickedPeople}
+        canTitle={mayKeepStaff}
+        prep={prep}
+        companyId={companyId}
+        titles={titles}
+        onUntick={() => setTicked(new Set())}
+        onDone={(ids) =>
+          setTicked((t) => {
+            const next = new Set(t);
+            ids.forEach((id) => next.delete(id));
+            return next;
+          })
+        }
+      />
+    ) : undefined;
 
   if (error)
     return (
@@ -122,6 +161,8 @@ export function People({ openPersonId }: { openPersonId?: string }) {
           importCompanyId={companyId}
           importLabel="Import office staff"
           selectable
+          selection={{ selected: ticked, onChange: setTicked }}
+          bulk={bulk}
           exportName={hr ? 'people' : 'guards'}
           columns={PEOPLE_COLUMNS}
           filters={PEOPLE_FILTERS}
@@ -151,6 +192,7 @@ export function People({ openPersonId }: { openPersonId?: string }) {
 }
 
 type PeopleRow = Awaited<ReturnType<typeof api.people>>[number];
+const NO_TITLE = 'No job title';
 const canWork = (r: PeopleRow) => (r.deployable ? (r.warnings ? 'due' : 'ok') : 'no');
 const CAN_WORK: Record<'ok' | 'due' | 'no', [string, 'ok' | 'warn' | 'crit']> = { ok: ['Yes', 'ok'], due: ['Yes, papers due', 'warn'], no: ['No', 'crit'] };
 
@@ -159,6 +201,9 @@ const PEOPLE_COLUMNS: DtColumn<PeopleRow>[] = [
   { id: 'name', label: 'Name', value: (r) => r.person.name, render: (r) => <Person name={r.person.name} sub={<span className="mono">{r.person.staffNo}</span>} size={34} />, phone: 'title' },
   // P107b: the staff number has its own column for Export and the details (the table shows it under the name).
   { id: 'staffNo', label: 'Staff number', value: (r) => r.person.staffNo, hideBelow: 100000, phone: 'hidden' },
+  // P111: the job title (designation) and department, so HR can sort and filter the list before changing it.
+  { id: 'jobTitle', label: 'Job title', value: (r) => r.person.jobTitle?.trim() || '', phone: 'sub' },
+  { id: 'department', label: 'Department', value: (r) => r.person.department?.trim() || '', hideBelow: 1440 },
   { id: 'role', label: 'Role', value: (r) => r.person.role.replace('_', ' '), translate: true, render: (r) => <span className="pp-cap">{r.person.role.replace('_', ' ')}</span> },
   { id: 'from', label: 'From', value: (r) => nationalityLabel(r.person.nationality), translate: true },
   {
@@ -173,6 +218,8 @@ const PEOPLE_FILTERS: DtFilter<PeopleRow>[] = [
   { id: 'work', label: 'Can work', value: canWork, options: (['ok', 'due', 'no'] as const).map((k) => ({ value: k, label: CAN_WORK[k][0] })) },
   { id: 'from', label: 'From', value: (r) => r.person.nationality ?? '', optionLabel: (v) => nationalityLabel(v) },
   { id: 'role', label: 'Role', value: (r) => r.person.role, optionLabel: (v) => v.replace('_', ' ') },
+  { id: 'jobTitle', label: 'Job title', value: (r) => r.person.jobTitle?.trim() || NO_TITLE },
+  { id: 'department', label: 'Department', value: (r) => r.person.department?.trim() || '' },
 ];
 
 type Tab = 'work' | 'training' | 'hours' | 'leave' | 'socso' | 'warnings' | 'benefits' | 'history';

@@ -718,6 +718,24 @@ class Graph:
             json={"chatType": "oneOnOne", "members": [member(my_id), member(address)]},
         )
 
+    async def group_chat(self, my_id: str, addresses: list[str]) -> dict[str, Any]:
+        """P111: a new group chat between the signed-in person and several people in their
+        organisation (each by sign-in address or id). Microsoft starts a new one each time,
+        as Teams does. Needs Chat.Create; call only after the person approved the message."""
+
+        def member(who: str) -> dict[str, Any]:
+            return {
+                "@odata.type": "#microsoft.graph.aadUserConversationMember",
+                "roles": ["owner"],
+                "user@odata.bind": f"{GRAPH}/users('{who.replace(chr(39), '')}')",
+            }
+
+        return await self.request(
+            "POST",
+            "/chats",
+            json={"chatType": "group", "members": [member(my_id), *map(member, addresses)]},
+        )
+
     async def joined_teams(self) -> list[dict[str, Any]]:
         """The teams the person is a member of (Team.ReadBasic.All)."""
         return await self._pages(

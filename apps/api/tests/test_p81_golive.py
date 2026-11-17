@@ -155,9 +155,9 @@ async def test_overview_counts_and_reset_keeps_owners_and_moves_what_outlives_a_
     assert ov["workspace"]["name"] == "Acme Group"
     assert ov["members"] == {"total": 5, "owners": 2, "to_remove": 3}
     by_name = {c["name"]: c for c in ov["companies"]}
-    assert by_name["Sample Co (mock)"]["agents"] == 1
-    assert by_name["Sample Co (mock)"]["files"] == 1
-    assert by_name["Sample Co (mock)"]["departments"] == len(s["sdepts"]) > 0
+    assert by_name["SAMPLE CO (MOCK)"]["agents"] == 1
+    assert by_name["SAMPLE CO (MOCK)"]["files"] == 1
+    assert by_name["SAMPLE CO (MOCK)"]["departments"] == len(s["sdepts"]) > 0
     assert ov["sops"] == 4 and ov["files"] == 2
     assert ov["backup"]["last_success"] is None  # not mounted here: unknown, never invented
     assert "agentic-backup backup" in ov["backup"]["command"]
@@ -233,7 +233,7 @@ async def test_overview_counts_and_reset_keeps_owners_and_moves_what_outlives_a_
         # The file moved into a folder named after its old company; its passages followed.
         f = await db.get(DocFile, s["sample_file"])
         assert f is not None and f.branch_id == s["branch"]["id"]
-        assert f.folder == "Sample Co (mock)/HR"
+        assert f.folder == "SAMPLE CO (MOCK)/HR"
         fchunks = {
             b
             for (b,) in (
@@ -413,7 +413,7 @@ async def test_cli_move_to_makes_the_home_company_when_every_company_goes(
     assert code == 0
     async with SessionLocal() as db:
         names = (await db.scalars(select(Branch.name))).all()
-        assert names == ["Pw Venture Sdn Bhd"]
+        assert names == ["PW VENTURE SDN BHD"]
         moved = await db.get(Agent, s["moved_agent"]["id"])
         home = await db.scalar(select(Branch.id))
         assert moved is not None and moved.branch_id == home
@@ -480,7 +480,7 @@ async def test_reset_then_import_the_staff_sheet_end_to_end(client, temporal):
         headers=csrf(client),
     )
     assert r.status_code == 200, r.text
-    assert sorted(r.json()["created"]) == ["Alfa Guard Sdn Bhd", "Unit HR"]
+    assert sorted(r.json()["created"]) == ["ALFA GUARD SDN BHD", "UNIT HR"]
     p = await preview()
     assert p["missing_companies"] == []
     assert p["counts"]["error"] == 0, p["rows"]

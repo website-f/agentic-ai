@@ -31,6 +31,7 @@ import { EmptyState, IconTile, Page, PageHeader } from "@/components/page";
 import { PageTabs } from "@/components/page-tabs";
 import { Button } from "@/components/ui/button";
 import { Meta } from "@/components/ui/card";
+import { CompanyPicker } from "@/components/ui/company-picker";
 import { ConfirmDialog } from "@/components/ui/confirm";
 import { DataTable, filterOf, TableFilter, useLocalTableState, type Column } from "@/components/ui/data-table";
 import { ResponsiveDialog } from "@/components/ui/dialog";
@@ -614,8 +615,8 @@ function WhereFields({ branchId, setBranchId, deptId, setDeptId, lockCompany }: 
     <div className="grid gap-3 sm:grid-cols-2">
       <label className="grid gap-1.5">
         <span className="text-[13px] font-medium">{t("Company")}</span>
-        <Select label={t("Company")} value={branchId} disabled={lockCompany} onValueChange={(v) => { setBranchId(v); setDeptId(ANY); }}
-          options={companies.map((b) => ({ value: b.id, label: b.name }))} />
+        <CompanyPicker label={t("Company")} value={branchId} disabled={lockCompany} onValueChange={(v) => { setBranchId(v); setDeptId(ANY); }}
+          companies={companies} />
       </label>
       <label className="grid gap-1.5">
         <span className="text-[13px] font-medium">{t("Who fills it in")}</span>

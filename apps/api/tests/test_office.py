@@ -32,7 +32,7 @@ async def test_snapshot_states(client: httpx.AsyncClient, llm, temporal):
     )
 
     snap = (await client.get(f"/api/office/{o['branch']['id']}")).json()
-    assert snap["branch"]["name"] == "Maju Sdn Bhd"
+    assert snap["branch"]["name"] == "MAJU SDN BHD"
     assert [d["name"] for d in snap["departments"]][:2] == ["Management", "Finance"]
     states = {a["name"]: a["state"] for a in snap["agents"]}
     assert states == {

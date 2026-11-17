@@ -228,14 +228,14 @@ async def test_the_import_reads_several_companies_in_one_cell(client, llm, tempo
     body = r.json()
     rows = by_email(body["rows"])
     assert rows["ana@example.com"]["branch_ids"] == [a, b]
-    assert rows["ana@example.com"]["branch_names"] == ["Maju Sdn Bhd", "Jaya Bhd"]
+    assert rows["ana@example.com"]["branch_names"] == ["MAJU SDN BHD", "JAYA BHD"]
     assert rows["ben@example.com"]["branch_ids"] == [a, b]
     assert rows["cik@example.com"]["status"] == "error"
     assert body["missing_companies"] == ["Nowhere Bhd"]
     sent = [rows["ana@example.com"]]
     r = await client.post("/api/members/import", json={"rows": sent}, headers=csrf(client))
     assert r.status_code == 200 and r.json()["added"] == 1, r.text
-    assert r.json()["results"][0]["branch_names"] == ["Maju Sdn Bhd", "Jaya Bhd"]
+    assert r.json()["results"][0]["branch_names"] == ["MAJU SDN BHD", "JAYA BHD"]
     listed = {m["email"]: m for m in (await client.get("/api/members")).json()}
     assert branch_ids(listed["ana@example.com"]) == [a, b]
 

@@ -656,6 +656,9 @@ export class HttpApi implements Api {
   cancelStaffMovement(id: string, note: string) {
     return this.call('POST', `/hr/movements/${encodeURIComponent(id)}/cancel`, { note });
   }
+  changeStaffJobTitle(personId: string, jobTitle: string, reason: string) {
+    return this.call('POST', `/hr/people/${encodeURIComponent(personId)}/job-title`, { jobTitle, reason });
+  }
   authoriseMovementLogin(id: string, approve: boolean, note: string) {
     return this.call('POST', `/hr/movements/${encodeURIComponent(id)}/login/authorise`, { approve, note });
   }

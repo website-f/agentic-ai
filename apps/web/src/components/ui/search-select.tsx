@@ -4,6 +4,8 @@
  * - `SearchSelect`: pick one. A button that opens a list with a search box on top.
  * - `MultiSelect`: pick many. The picked ones show as chips (each with its own remove button);
  *   the list stays open while you tick, with "Pick all shown" / "Clear" and a count.
+ * - `MultiFilter` (P111): pick many as a list filter: one compact button ("All companies",
+ *   the one picked, or "3 picked") with the same list.
  *
  * Both type to filter (name, hint and keywords; accents and case ignored), move with the arrow
  * keys, pick with Enter, close with Escape, and open as a bottom sheet on a phone. Built on cmdk
@@ -273,8 +275,6 @@ export function MultiSelect({ value, onValueChange, options, label, placeholder,
     if (locked?.[v] && picked.has(v)) return;
     onValueChange(picked.has(v) ? value.filter((x) => x !== v) : [...value, v]);
   };
-  const shown = filterOptions(options, query).filter((o) => !o.disabled);
-  const allShownOn = shown.length > 0 && shown.every((o) => picked.has(o.value));
   const chips = value.slice(0, maxChips);
   const more = value.length - chips.length;
   const nameOf = (v: string) => byValue.get(v)?.label ?? v;
@@ -310,36 +310,98 @@ export function MultiSelect({ value, onValueChange, options, label, placeholder,
         <PickList label={label} options={options} query={query} onQuery={setQuery} searchPlaceholder={searchPlaceholder} emptyText={emptyText}
           isPicked={(v) => picked.has(v)} onPick={(o) => toggle(o.value)}
           action={action ? { label: action.label, onSelect: (typed) => { setOpen(false); action.onSelect(typed); } } : undefined}
-          header={
-            <div className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1 border-b border-border px-3 py-1.5 text-[12.5px]">
-              <span className="text-muted tabular" aria-live="polite">{value.length === 1 ? t("1 picked") : t("{n} picked", { n: value.length })}</span>
-              {shown.length ? (
-                <button type="button" className="font-medium text-accent hover:underline"
-                  onClick={() => {
-                    const ids = shown.map((o) => o.value);
-                    if (allShownOn) onValueChange(value.filter((v) => !ids.includes(v) || !!locked?.[v]));
-                    else onValueChange([...value, ...ids.filter((v) => !picked.has(v))]);
-                  }}>
-                  {allShownOn ? t("Unpick these") : query ? t("Pick these {n}", { n: shown.length }) : t("Pick all")}
-                </button>
-              ) : null}
-              {value.length ? (
-                <button type="button" className="font-medium text-muted hover:text-fg hover:underline"
-                  onClick={() => onValueChange(value.filter((v) => !!locked?.[v]))}>
-                  {t("Clear")}
-                </button>
-              ) : null}
-            </div>
-          }
-          footer={
-            <div className="flex shrink-0 justify-end border-t border-border px-3 py-2">
-              <button type="button" onClick={() => setOpen(false)}
-                className="inline-flex h-9 items-center rounded-sm bg-accent px-4 text-[13px] font-medium text-accent-fg hover:opacity-90">
-                {t("Done")}
-              </button>
-            </div>
-          } />
+          header={<ManyHeader value={value} onValueChange={onValueChange} options={options} query={query} locked={locked} />}
+          footer={<DoneFooter onDone={() => setOpen(false)} />} />
       </Popup>
     </div>
+  );
+}
+
+/** The count, "Pick all" (or "Pick these N" while searching, "Unpick these") and "Clear". */
+function ManyHeader({ value, onValueChange, options, query, locked }: {
+  value: string[];
+  onValueChange: (value: string[]) => void;
+  options: PickOption[];
+  query: string;
+  locked?: Record<string, string>;
+}) {
+  const t = useT();
+  const picked = new Set(value);
+  const shown = filterOptions(options, query).filter((o) => !o.disabled);
+  const allShownOn = shown.length > 0 && shown.every((o) => picked.has(o.value));
+  return (
+    <div className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1 border-b border-border px-3 py-1.5 text-[12.5px]">
+      <span className="text-muted tabular" aria-live="polite">{value.length === 1 ? t("1 picked") : t("{n} picked", { n: value.length })}</span>
+      {shown.length ? (
+        <button type="button" className="font-medium text-accent hover:underline"
+          onClick={() => {
+            const ids = shown.map((o) => o.value);
+            if (allShownOn) onValueChange(value.filter((v) => !ids.includes(v) || !!locked?.[v]));
+            else onValueChange([...value, ...ids.filter((v) => !picked.has(v))]);
+          }}>
+          {allShownOn ? t("Unpick these") : query ? t("Pick these {n}", { n: shown.length }) : t("Pick all")}
+        </button>
+      ) : null}
+      {value.length ? (
+        <button type="button" className="font-medium text-muted hover:text-fg hover:underline"
+          onClick={() => onValueChange(value.filter((v) => !!locked?.[v]))}>
+          {t("Clear")}
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
+function DoneFooter({ onDone }: { onDone: () => void }) {
+  const t = useT();
+  return (
+    <div className="flex shrink-0 justify-end border-t border-border px-3 py-2">
+      <button type="button" onClick={onDone}
+        className="inline-flex h-9 items-center rounded-sm bg-accent px-4 text-[13px] font-medium text-accent-fg hover:opacity-90">
+        {t("Done")}
+      </button>
+    </div>
+  );
+}
+
+/**
+ * P111: pick many as a filter, beside a search box: one compact button that reads "All
+ * companies" (nothing picked means all), the one picked, or "3 picked"; the list ticks with
+ * search, "Pick all" / "Clear" and Done, like MultiSelect. A bottom sheet on a phone.
+ */
+export function MultiFilter({ value, onValueChange, options, label, allLabel, searchPlaceholder, emptyText, disabled, size = "md", className, id }: Omit<BaseProps, "action" | "placeholder"> & {
+  value: string[];
+  onValueChange: (value: string[]) => void;
+  /** What the button reads with nothing picked, e.g. "All companies". */
+  allLabel: string;
+}) {
+  const t = useT();
+  const [open, setOpenRaw] = useState(false);
+  const [query, setQuery] = useState("");
+  const setOpen = (o: boolean) => {
+    setOpenRaw(o);
+    if (!o) setQuery("");
+  };
+  const picked = new Set(value);
+  const first = value.length === 1 ? options.find((o) => o.value === value[0]) : undefined;
+  const text = !value.length ? allLabel : first ? first.label : t("{n} picked", { n: value.length });
+  const trigger = (
+    <button type="button" id={id} disabled={disabled} aria-haspopup="listbox" aria-expanded={open}
+      aria-label={t("{label}: {value}. Change", { label, value: text })}
+      onKeyDown={openKeys(setOpen, setQuery)}
+      className={cn(TRIGGER, size === "sm" ? "h-8 text-[13px]" : "h-10 text-sm", value.length > 0 && "border-accent/50 bg-accent-soft/50 font-medium", className)}>
+      <span className="min-w-0 flex-1 truncate">{text}</span>
+      {value.length > 1 ? <span className="shrink-0 rounded-full bg-accent px-1.5 text-[11px] leading-[18px] font-semibold text-accent-fg tabular">{value.length}</span> : null}
+      <CaretDownIcon size={14} className="shrink-0 text-muted" aria-hidden />
+    </button>
+  );
+  const toggle = (v: string) => onValueChange(picked.has(v) ? value.filter((x) => x !== v) : [...value, v]);
+  return (
+    <Popup open={open} onOpenChange={setOpen} label={label} trigger={trigger}>
+      <PickList label={label} options={options} query={query} onQuery={setQuery} searchPlaceholder={searchPlaceholder} emptyText={emptyText}
+        isPicked={(v) => picked.has(v)} onPick={(o) => toggle(o.value)}
+        header={<ManyHeader value={value} onValueChange={onValueChange} options={options} query={query} />}
+        footer={<DoneFooter onDone={() => setOpen(false)} />} />
+    </Popup>
   );
 }

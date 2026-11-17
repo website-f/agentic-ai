@@ -11,6 +11,7 @@ import { EmptyState, IconTile, Page, type Tone } from "@/components/page";
 import { Button } from "@/components/ui/button";
 import { ActionBar, Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Field, Input, TextareaField } from "@/components/ui/field";
+import { SearchSelect } from "@/components/ui/search-select";
 import { Select } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { msg, t as tr, useT } from "@/i18n";
@@ -231,7 +232,7 @@ export function CompanyKitPage() {
               </div>
             ) : null}
             {kits.length > 12 ? (
-              <Select value={current ?? ""} onValueChange={(b) => navigate({ search: { b } })} label={t("Company")} className="sm:w-72"
+              <SearchSelect value={current ?? ""} onValueChange={(b) => navigate({ search: { b } })} label={t("Company")} searchPlaceholder={t("Search companies")} className="sm:w-72"
                 options={kits.map((k) => ({ value: k.branch_id, label: k.branch_name, hint: `${k.filled}/${k.total}` }))} />
             ) : null}
             {kit ? <KitForm key={kit.branch_id + (kit.updated_at ?? "")} kit={kit} /> : <Skeleton className="h-64" />}

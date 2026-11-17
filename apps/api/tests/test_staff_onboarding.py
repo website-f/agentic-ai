@@ -53,7 +53,7 @@ async def test_staff_pick_their_company_once(client, llm, hire_temporal):
         s = (await staff.get("/api/me/staff")).json()
         assert s["eligible"] and s["placement"]["can_choose"]
         assert not s["placement"]["branch_locked"] and s["onboarding"] == {}
-        assert {c["name"] for c in s["companies"]} == {"Maju Sdn Bhd", "Jaya Bhd"}
+        assert {c["name"] for c in s["companies"]} == {"MAJU SDN BHD", "JAYA BHD"}
         assert s["default_hours"]["tz"] == "Asia/Kuala_Lumpur"
         assert s["default_hours"]["breaks"] == [{"start": "13:00", "end": "14:00"}]
 
@@ -64,7 +64,7 @@ async def test_staff_pick_their_company_once(client, llm, hire_temporal):
         )
         assert r.status_code == 200, r.text
         p = r.json()["placement"]
-        assert p["branch_name"] == "Maju Sdn Bhd" and p["department_name"] == "Finance"
+        assert p["branch_name"] == "MAJU SDN BHD" and p["department_name"] == "Finance"
         assert p["branch_locked"] and p["department_locked"] and not p["can_choose"]
         [row] = await audit_actions("member.placement")
         assert row.after == {"branch_id": o["branch"]["id"], "department_id": o["depts"]["Finance"]}

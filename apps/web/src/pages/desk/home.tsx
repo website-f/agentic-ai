@@ -49,6 +49,7 @@ import {
   SpinnerGapIcon,
   StackIcon,
   SunHorizonIcon,
+  TreeStructureIcon,
   UserFocusIcon,
   VideoCameraIcon,
   type Icon,
@@ -115,6 +116,8 @@ import type { Workflow } from "@/lib/workflows";
 import { ALL_NAV, navItemFor, pathAllowed } from "@/nav";
 import { LazyStartRunDialog as StartRunDialog } from "@/pages/workflows/start-run-lazy";
 import { whenText } from "@/pages/forms/words";
+
+import { MyHierarchy, MyHierarchyLink } from "@/components/my-hierarchy";
 
 import { AskPanel } from "./ask";
 import { M365Tile, useM365Tile } from "./m365-tile";
@@ -215,6 +218,7 @@ const SECTION_TEXT: Record<DeskSectionId, { title: string; hint: string; icon: I
   pinned: { title: msg("Pinned"), hint: msg("Anything you keep close, in your own folders."), icon: PushPinIcon },
   recent: { title: msg("Recent"), hint: msg("What you and your AI worked on lately."), icon: ClockCounterClockwiseIcon },
   ai: { title: msg("My AI"), hint: msg("Give your AI a task and see today's allowance."), icon: SparkleIcon },
+  hierarchy: { title: msg("My hierarchy"), hint: msg("Who you report to, up to the top, and the people under you."), icon: TreeStructureIcon },
   howto: { title: msg("How do I…?"), hint: msg("Find how a job is done here, step by step."), icon: FlowArrowIcon },
   goto: { title: msg("Go to"), hint: msg("Every page you use, one tap away."), icon: AppWindowIcon },
 };
@@ -236,6 +240,7 @@ export function DeskHome({ desk, onTab, customizing, onCustomize }: {
     pinned: <Pinned desk={desk} folders={layout.folders} />,
     recent: <Recent desk={desk} onTab={onTab} />,
     ai: <MyAi desk={desk} />,
+    hierarchy: <MyHierarchySection />,
     howto: <section aria-label={t("How do I…?")}><SectionHead id="howto" /><HowDoI desk={desk} headless /></section>,
     goto: <GoTo desk={desk} onTab={onTab} />,
   };
@@ -252,6 +257,18 @@ export function DeskHome({ desk, onTab, customizing, onCustomize }: {
       </div>
       <CustomizeDialog open={customizing} onOpenChange={onCustomize} layout={layout} offers={(id) => id !== "m365" || m365} />
     </div>
+  );
+}
+
+/** P111: my line of managers and the people under me. */
+function MyHierarchySection() {
+  const t = useT();
+  const { data: me } = useQuery(meQuery);
+  return (
+    <section aria-label={t("My hierarchy")} data-guide="desk.hierarchy">
+      <SectionHead id="hierarchy" actions={me ? <MyHierarchyLink me={me} /> : null} />
+      <MyHierarchy />
+    </section>
   );
 }
 
@@ -1085,7 +1102,7 @@ function CustomizeDialog({ open, onOpenChange, layout, offers }: {
   );
 }
 
-const DESK_ORDER = (id: DeskSectionId) => ["today", "m365", "pinned", "recent", "ai", "howto", "goto"].indexOf(id);
+const DESK_ORDER = (id: DeskSectionId) => ["today", "m365", "pinned", "recent", "ai", "hierarchy", "howto", "goto"].indexOf(id);
 
 /** "Good morning" and so on, by the person's own clock. */
 export function greeting(hour: number): string {

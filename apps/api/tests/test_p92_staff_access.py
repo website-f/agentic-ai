@@ -292,6 +292,8 @@ STAFF_OK = {
     "/api/m365/summary",  # P109b: their own Microsoft 365 tile ("not connected" until they are)
     "/api/me/prefs", "/api/me/staff", "/api/me/twin", "/api/me/worker", "/api/meetings",
     "/api/members", "/api/minutes", "/api/minutes/settings", "/api/monitor/wall",
+    # P111: their own reporting chain upward and the people under them only (test_p111_hierarchy)
+    "/api/members/hierarchy", "/api/members/hierarchy/mine",
     "/api/objectives", "/api/packs", "/api/pings",
     "/api/prima/status", "/api/push/devices", "/api/push/key", "/api/reports", "/api/runs",
     "/api/schedules", "/api/search/suggest", "/api/sops", "/api/system/status",

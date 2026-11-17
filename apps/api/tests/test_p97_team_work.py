@@ -87,11 +87,16 @@ async def test_who_reports_to_whom_and_heads(client):
     team = {m["name"] for m in (await client.get(f"/api/members/{ids['hana']}/team")).json()}
     assert team == {"Sara", "Omar"}
 
-    # A staff member manages no one; nobody reports to themselves; no loops.
+    # P111: a staff member may have people under them on the chart (their role still gives
+    # them no tasks to hand out: test_p111_hierarchy); nobody reports to themselves; no loops.
     r = await client.patch(
         f"/api/members/{ids['tom']}", json={"reports_to_user_id": ids["omar"]}, headers=h
     )
-    assert r.status_code == 400 and r.json()["code"] == "not_a_manager"
+    assert r.status_code == 200
+    r = await client.patch(
+        f"/api/members/{ids['tom']}", json={"reports_to_user_id": None}, headers=h
+    )
+    assert r.status_code == 200
     r = await client.patch(
         f"/api/members/{ids['hana']}", json={"reports_to_user_id": ids["hana"]}, headers=h
     )

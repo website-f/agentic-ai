@@ -17,6 +17,7 @@ import { Section } from "@/components/page";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Pill } from "@/components/ui/pill";
+import { SearchSelect } from "@/components/ui/search-select";
 import { Select } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { SwitchField } from "@/components/ui/switch";
@@ -232,9 +233,10 @@ function PreviewCard({ settings, canRun }: { settings: PrivacySettings; canRun: 
         />
         <div className="flex flex-wrap items-center gap-2">
           {settings.companies.length ? (
-            <Select
+            <SearchSelect
               size="sm"
               label={t("Company")}
+              searchPlaceholder={t("Search companies")}
               value={branch || "any"}
               onValueChange={(v) => setBranch(v === "any" ? "" : v)}
               options={[

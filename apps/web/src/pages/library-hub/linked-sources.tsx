@@ -23,7 +23,7 @@ import { Card, CardBody, CardHeader, Meta } from "@/components/ui/card";
 import { ConfirmDialog } from "@/components/ui/confirm";
 import { Input } from "@/components/ui/field";
 import { Pill } from "@/components/ui/pill";
-import { Select } from "@/components/ui/select";
+import { SearchSelect } from "@/components/ui/search-select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { t as tr, useT } from "@/i18n";
 import { ApiError, errorMessage } from "@/lib/api";
@@ -167,7 +167,7 @@ function ConnectForm({ maxFiles }: { maxFiles: number }) {
           <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
             <label className="grid gap-1.5">
               <span className="text-[12.5px] font-medium text-muted">{t("Who it is for")}</span>
-              <Select value={scope} onValueChange={setPicked} options={options} label={t("Who it is for")} className="w-full" />
+              <SearchSelect value={scope} onValueChange={setPicked} options={options} label={t("Who it is for")} searchPlaceholder={t("Search companies")} className="w-full" />
             </label>
             <div className="flex flex-wrap gap-2 max-sm:[&>*]:flex-1">
               <Button variant="ghost" onClick={() => setPreview(null)}>{t("Cancel")}</Button>

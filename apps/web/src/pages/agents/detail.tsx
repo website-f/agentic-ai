@@ -28,6 +28,7 @@ import { AgentLive, AgentOutcome } from "@/components/agent-live";
 import { IconTile, Page, Section } from "@/components/page";
 import { Button } from "@/components/ui/button";
 import { ActionBar, Card, CardBody, CardHeader, ListCard, Meta } from "@/components/ui/card";
+import { CompanyPicker } from "@/components/ui/company-picker";
 import { ConfirmDialog } from "@/components/ui/confirm";
 import { Field, TextareaField } from "@/components/ui/field";
 import { Pill } from "@/components/ui/pill";
@@ -167,12 +168,12 @@ function Profile({ agent, canManage }: { agent: Agent; canManage: boolean }) {
       <div className="grid grid-cols-[minmax(0,1fr)] gap-4 sm:grid-cols-3">
         <div className="grid gap-1.5">
           <span className="text-[13px] font-medium">{t("Branch")}</span>
-          <Select
+          <CompanyPicker
             value={d.branch_id}
             disabled={!canManage}
             onValueChange={(v) => setD({ ...d, branch_id: v, department_id: null })}
             label={t("Branch")}
-            options={branches.map((b) => ({ value: b.id, label: b.name }))}
+            companies={branches}
           />
         </div>
         <div className="grid gap-1.5">

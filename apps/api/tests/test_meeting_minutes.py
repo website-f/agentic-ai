@@ -515,7 +515,7 @@ async def test_who_sees_and_changes_minutes(client, net, ff, started, llm):  # n
     r = await client.patch(
         f"/api/minutes/{rec['id']}", json={"branch_id": o["branch"]["id"]}, headers=csrf(client)
     )
-    assert r.status_code == 200 and r.json()["scope_label"] == "Maju Sdn Bhd"
+    assert r.status_code == 200 and r.json()["scope_label"] == "MAJU SDN BHD"
 
     viewer = await as_role(client, "viewer@example.com", "viewer")
     far = await as_role(client, "far@example.com", "staff", branch_id=b2["id"])

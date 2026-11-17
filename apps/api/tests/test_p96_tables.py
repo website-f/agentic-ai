@@ -89,7 +89,7 @@ async def test_ai_use_is_a_searchable_sortable_paged_table(client):
     assert total == 36 and first["total"] == 36 and len(first["people"]) == 10
     top = first["people"][0]
     assert top["user_id"] == ids[0] and top["status"] == "over" and top["pct"] == 120
-    assert top["cost_usd"] == 0.5 and top["branch_name"] == "Maju Sdn Bhd"
+    assert top["cost_usd"] == 0.5 and top["branch_name"] == "MAJU SDN BHD"
     assert first["people"][1]["status"] == "near"
     last, _ = await _table(client, page=4)
     assert len(last["people"]) == 6

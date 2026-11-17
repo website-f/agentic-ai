@@ -17,7 +17,7 @@ import { IconTile } from "@/components/page";
 import { SearchField } from "@/components/search-box";
 import { useDeviceSync, UserMenu } from "@/components/shell";
 import { Button } from "@/components/ui/button";
-import { Select } from "@/components/ui/select";
+import { SearchSelect } from "@/components/ui/search-select";
 import { useT } from "@/i18n";
 import { ALL_COMPANIES, useCompanies } from "@/lib/company";
 import { STORE_VIEWS } from "@/lib/file-store";
@@ -181,7 +181,7 @@ export function LibraryFrame() {
         <h1 className={cn("shrink-0 text-[15.5px] font-semibold tracking-[-0.01em]", many && "max-[520px]:sr-only")}>{t("Library")}</h1>
         {many ? (
           <div data-guide="files.company" className="min-w-0 sm:ml-1">
-            <Select size="sm" value={branch?.id ?? ALL_COMPANIES} onValueChange={pickCompany} label={t("Company")} options={options}
+            <SearchSelect size="sm" value={branch?.id ?? ALL_COMPANIES} onValueChange={pickCompany} label={t("Company")} options={options} searchPlaceholder={t("Search companies")}
               placeholder={t("Pick a company")} className="w-44 sm:w-56 pointer-coarse:h-11" />
           </div>
         ) : null}

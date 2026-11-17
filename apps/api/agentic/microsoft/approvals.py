@@ -8,9 +8,9 @@ The AI never sends mail or changes a calendar by itself:
   person's "confirm" creates, updates or cancels it in Outlook;
 - P102: a Teams message (a reply in a chat, or a first message to anyone in the
   organisation) is an EmailDraft(provider="teams") kept in the office only (Teams has no
-  drafts); it is posted (graph.send_chat_message, after graph.one_on_one_chat for a new chat)
-  only when the person approves it. Only the connection's own person approves it: never a
-  manager, never anyone else.
+  drafts); it is posted (graph.send_chat_message, after graph.one_on_one_chat for a new chat,
+  or P111 graph.group_chat when it is for several people) only when the person approves it.
+  Only the connection's own person approves it: never a manager, never anyone else.
 
 Who approves: a personal mailbox's are its owner's; a shared mailbox's are approved by its
 viewers who manage it (owner/admin, the branch managers of its company). Every send,
@@ -19,6 +19,7 @@ discard and confirm is audited.
 
 import html
 import json
+import re
 from collections.abc import Iterable
 from datetime import UTC, datetime
 from typing import Any, TypeGuard
@@ -268,6 +269,19 @@ async def discard_draft(db: AsyncSession, d: EmailDraft, box: Box | None, actor:
 
 TEAMS = "teams"
 TEAMS_MAX = 4000  # characters in one message
+TEAMS_GROUP_MAX = 20  # P111: people in one new group chat (besides the person)
+_SPLIT = re.compile(r"[,;\s]+")
+
+
+def teams_addresses(to: str) -> list[str]:
+    """P111: the addresses of a Teams draft's `to` ("a@x.my" or "a@x.my, b@x.my" for a group
+    chat), lower case, each once, in order."""
+    out: list[str] = []
+    for part in _SPLIT.split(to or ""):
+        a = part.strip().strip("<>").lower()
+        if a and a not in out:
+            out.append(a)
+    return out
 
 
 async def record_teams_draft(
@@ -349,7 +363,13 @@ async def _send_teams(db: AsyncSession, d: EmailDraft, box: Box) -> None:
         chat_id = d.thread_id
         if not chat_id:
             me = box.ms_user_id or str((await g.me()).get("id") or "")
-            chat_id = str((await g.one_on_one_chat(me, d.to)).get("id") or "")
+            people = teams_addresses(d.to)
+            chat = (
+                await g.group_chat(me, people)
+                if len(people) > 1
+                else await g.one_on_one_chat(me, d.to)
+            )
+            chat_id = str(chat.get("id") or "")
             if not chat_id:
                 raise graph.GraphError(Msg("Microsoft did not start the Teams chat."), 502)
             d.thread_id = chat_id[:400]

@@ -16,6 +16,7 @@ import { ObjectivePicker, RunObjectiveLink } from "@/components/objective-bits";
 import { IconTile, type Tone } from "@/components/page";
 import { Button } from "@/components/ui/button";
 import { ListCard, ListRow, Meta } from "@/components/ui/card";
+import { CompanyPicker } from "@/components/ui/company-picker";
 import { ConfirmDialog } from "@/components/ui/confirm";
 import { ResponsiveDialog } from "@/components/ui/dialog";
 import { Field, FormError, Input, TextareaField } from "@/components/ui/field";
@@ -97,8 +98,8 @@ export function StartRunDialog({ wf, onClose }: { wf: Workflow; onClose: () => v
             <Field label={t("Name this job (optional)")} value={title} onChange={(e) => setTitle(e.target.value)} placeholder={t("e.g. Bina Jaya enquiry")} autoFocus />
             <div className="grid gap-1.5">
               <span className="text-[13px] font-medium">{t("Company")}</span>
-              <Select value={branch} onValueChange={setBranch} label={t("Company")}
-                options={[{ value: ANY, label: t("Any company") }, ...branches.map((b) => ({ value: b.id, label: b.name }))]} />
+              <CompanyPicker value={branch} onValueChange={setBranch} label={t("Company")}
+                before={[{ value: ANY, label: t("Any company") }]} companies={branches} />
             </div>
           </div>
           <TextareaField label={t("What's the job?")} rows={4} value={job} onChange={(e) => setJob(e.target.value)}

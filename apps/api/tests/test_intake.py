@@ -752,7 +752,7 @@ async def test_held_back_files_preview_archive_release_and_hold_again(
         r = await client.get("/api/files/archive", params={"branch_id": b})
         assert r.status_code == 200 and r.headers["content-type"] == "application/zip"
         assert r.headers["x-held-back"] == "0"
-        assert "Maju%20Sdn%20Bhd%20-%20All%20files.zip" in r.headers["content-disposition"]
+        assert "MAJU%20SDN%20BHD%20-%20All%20files.zip" in r.headers["content-disposition"]
         names = set(zipfile.ZipFile(io.BytesIO(r.content)).namelist())
         assert "OPERASI/SOP/SOP Kawalan Pintu Masuk.pdf" in names
         assert "TENDER/CARTA ALIR/Carta Alir Tender.png" in names
@@ -846,7 +846,7 @@ async def test_agents_see_a_catalog_and_never_held_back_files(
         cat = await _company_documents(ctx, {})
         # P36: the catalog is what read_file may open: the bank statement is restricted to
         # Finance, so an Operations agent does not even see its name.
-        assert "Company documents of Maju Sdn Bhd: 7 file(s)" in cat and "2 held back" in cat
+        assert "Company documents of MAJU SDN BHD: 7 file(s)" in cat and "2 held back" in cat
         assert "Penyata Bank" not in cat
         assert "- OPERASI/SOP — 1: sop 1" in cat
         assert f"[{sop['id']}] OPERASI/SOP/SOP Kawalan Pintu Masuk.pdf — sop · Operations" in cat

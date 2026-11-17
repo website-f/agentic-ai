@@ -76,7 +76,7 @@ async def test_crud_nesting_progress_and_delete(client, llm, temporal):
         due_on="2026-12-31",
         budget_usd=10,
     )
-    assert child["branch_name"] == "Maju Sdn Bhd" and child["parent_id"] == top["id"]
+    assert child["branch_name"] == "MAJU SDN BHD" and child["parent_id"] == top["id"]
 
     t1 = await linked_task(client, aina, child["id"], "Draft the pack")
     assert t1["objective_id"] == child["id"] and t1["root_task_id"] == t1["id"]

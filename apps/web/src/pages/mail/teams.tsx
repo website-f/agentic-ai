@@ -27,7 +27,7 @@ import { EmptyState } from "@/components/page";
 import { PersonAvatar } from "@/components/person-avatar";
 import { Button } from "@/components/ui/button";
 import { ResponsiveDialog } from "@/components/ui/dialog";
-import { Field, Input, TextareaField } from "@/components/ui/field";
+import { Input, TextareaField } from "@/components/ui/field";
 import { Menu, MenuContent, MenuItem, MenuTrigger } from "@/components/ui/menu";
 import { Segmented } from "@/components/ui/segmented";
 import { Select } from "@/components/ui/select";
@@ -44,6 +44,7 @@ import {
   sendChat,
   sendPost,
   type ChatRow,
+  type Invitee,
   type TeamsMsg,
   type TeamsPostThread,
   type Tone,
@@ -63,6 +64,7 @@ import { useAskMyAi } from "@/pages/desk/hub";
 
 import { AiAnswer, ToneSelect, useAskAi } from "./ai";
 import { useMeetingComposer } from "./meeting";
+import { RecipientPicker } from "./recipients";
 import { Body, clock, Conversation, MessageComposer, Reactions, ReplyLink, useStickToBottom } from "./teams-ui";
 
 type View = "chats" | "channels";
@@ -115,7 +117,9 @@ export function TeamsPanel() {
 // ---------------------------------------------------------------- chats
 
 /** P102: ask your AI for a first Teams message to someone (by work email). The draft waits for
- * you under Waiting for your approval; nothing is sent before you press Send in Teams. */
+ * you under Waiting for your approval; nothing is sent before you press Send in Teams.
+ * P111: pick the people from a search (office members you may see, your Outlook) or type a
+ * new address; several make one new group chat. */
 function NewMessage({ newChats, onClose }: { newChats: boolean; onClose: () => void }) {
   const t = useT();
   const ask = useAskMyAi();
@@ -124,11 +128,17 @@ function NewMessage({ newChats, onClose }: { newChats: boolean; onClose: () => v
     onSuccess: (r) => { window.location.href = r.url; },
     onError: (e) => toast.error(errorMessage(e)),
   });
-  const [to, setTo] = useState("");
+  // P111: several people (searched or typed); several make one new group chat.
+  const [to, setTo] = useState<Invitee[]>([]);
   const [what, setWhat] = useState("");
-  const email = /^[^@\s<>]+@[^@\s<>]+\.[^@\s<>]+$/.test(to.trim());
+  const emails = to.map((p) => p.email);
+  const group = emails.length > 1;
   const go = () => ask.mutate(
-    { text: t("Draft a Teams message to {to} with teams_send (to = {to}). What it should say: {what}. Do not send it: I read and approve it first on the Microsoft 365 page.", { to: to.trim(), what: what.trim() }) },
+    {
+      text: group
+        ? t("Draft one Teams message to a new group chat with {to} with teams_send (to = {to}, all of them in one group chat). What it should say: {what}. Do not send it: I read and approve it first on the Microsoft 365 page.", { to: emails.join(", "), what: what.trim() })
+        : t("Draft a Teams message to {to} with teams_send (to = {to}). What it should say: {what}. Do not send it: I read and approve it first on the Microsoft 365 page.", { to: emails[0] ?? "", what: what.trim() }),
+    },
     { onSuccess: onClose },
   );
   return (
@@ -136,15 +146,18 @@ function NewMessage({ newChats, onClose }: { newChats: boolean; onClose: () => v
       description={t("Your AI writes the message. You read it and press Send in Teams under Waiting for your approval. Nothing is sent before that.")}
       footer={<>
         <Button variant="ghost" onClick={onClose}>{t("Cancel")}</Button>
-        <Button disabled={!email || !what.trim()} loading={ask.isPending} onClick={go}><SparkleIcon size={15} /> {t("Ask my AI to draft it")}</Button>
+        <Button disabled={!emails.length || !what.trim() || (group && !newChats)} loading={ask.isPending} onClick={go}><SparkleIcon size={15} /> {t("Ask my AI to draft it")}</Button>
       </>}>
       <div className="grid gap-3">
-        <Field label={t("To (work email)")} type="email" autoComplete="off" placeholder="ali@company.com" value={to} onChange={(e) => setTo(e.target.value)} />
+        <RecipientPicker label={t("To")} value={to} onChange={setTo} autoFocus
+          hint={group ? t("{n} people: one new group chat with all of them.", { n: emails.length }) : t("Search your office and Outlook by name or email, or type a new email address.")} />
         <TextareaField label={t("What should it say?")} rows={3} value={what} onChange={(e) => setWhat(e.target.value)}
           placeholder={t("e.g. The tender pack is ready, I will bring it at 3pm.")} />
         {!newChats ? (
           <div className="grid gap-2 rounded-[var(--radius-md)] border border-dashed border-warn/40 bg-warn/5 px-3 py-2.5 text-[12.5px]">
-            <p>{t("For someone you have never chatted with in Teams, allow new Teams chats first (one more Microsoft sign-in). Replying in chats you already have works now.")}</p>
+            <p>{group
+              ? t("A chat with several people is always a new Teams chat, so allow new Teams chats first (one more Microsoft sign-in).")
+              : t("For someone you have never chatted with in Teams, allow new Teams chats first (one more Microsoft sign-in). Replying in chats you already have works now.")}</p>
             <Button size="sm" variant="outline" className="w-fit" loading={allow.isPending} onClick={() => allow.mutate()}>{t("Allow new Teams chats")}</Button>
           </div>
         ) : null}

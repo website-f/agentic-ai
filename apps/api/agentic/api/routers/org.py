@@ -7,8 +7,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...core.db import get_db
 from ...engine import privacy
-from ...models import Branch, Department
+from ...models import Branch, Department, Workspace
 from ...org import starter
+from ...org.names import org_name, spaced
+from ...prima import client as prima_client
+from ...prima import org_link
 from ...services import audit, events
 from ...services.text import slugify
 from ..deps import Principal, api_error, require
@@ -90,6 +93,24 @@ async def _department(db: AsyncSession, workspace_id: str, dept_id: str) -> Depa
     return d
 
 
+def _name(raw: str) -> str:
+    """P111: an organization's name in capitals, trimmed, single spaces (org/names.py)."""
+    name = org_name(raw)
+    if not name:
+        raise api_error(status.HTTP_400_BAD_REQUEST, "name_required", "Give the company a name.")
+    return name
+
+
+async def _prima_link(principal: Principal, db: AsyncSession, b: Branch) -> None:
+    """P111: a new organization is linked to its Prima company of the same name (the owner
+    adds it to Prima with its SSM details from the Organization page otherwise). Never fails
+    the create: Prima's answer is saved as the organization's Prima link state."""
+    if org_link.on and prima_client.enabled(principal.workspace_id):
+        await org_link.link(
+            db, principal.workspace_id, b, actor=principal.actor, actor_user_id=principal.user.id
+        )
+
+
 async def _unique_slug(
     db: AsyncSession, model, scope_col, scope_val: str, name: str, fallback: str
 ) -> str:
@@ -147,7 +168,7 @@ async def create_branch(
     db: AsyncSession = Depends(get_db),
 ) -> BranchOut:
     industry = _industry(body.industry) if body.industry or body.starter_team else ""
-    name = body.name.strip()
+    name = _name(body.name)
     slug = await _unique_slug(
         db, Branch, Branch.workspace_id, principal.workspace_id, name, "branch"
     )
@@ -178,13 +199,15 @@ async def create_branch(
     )
     await db.commit()
     privacy.invalidate(principal.workspace_id)  # the new company's name is masked at once
+    bid = b.id  # kept: a Prima refusal rolls back, which expires `b`
+    await _prima_link(principal, db, await _reload(db, bid))
     if not body.starter_team:
-        return _branch_out(await _reload(db, b.id))
+        return _branch_out(await _reload(db, bid))
     # The team goes in after the branch is saved, so the departments it reuses exist.
-    res = await starter.add_starter_team(db, await _reload(db, b.id), industry, principal.actor)
+    res = await starter.add_starter_team(db, await _reload(db, bid), industry, principal.actor)
     await db.commit()
     await _publish_team(principal.workspace_id, res)
-    out = _branch_out(await _reload(db, b.id))
+    out = _branch_out(await _reload(db, bid))
     out.starter = res.public()
     return out
 
@@ -204,7 +227,7 @@ async def update_branch(
         "data_level": b.data_level,
     }
     if body.name is not None:
-        b.name = body.name.strip()
+        b.name = _name(body.name)
     if body.color is not None:
         b.color = body.color
     if body.isolated is not None:
@@ -223,7 +246,18 @@ async def update_branch(
     )
     await db.commit()
     privacy.invalidate(principal.workspace_id)  # a renamed company is masked by its new name
-    return _branch_out(await _reload(db, b.id))
+    if b.name != before["name"] and org_link.on and prima_client.enabled(principal.workspace_id):
+        # P111: its Prima company follows when it is this organization by name; an
+        # organization not linked yet is linked when its new name is a Prima company's.
+        fresh = await _reload(db, branch_id)
+        if prima_client.company_map(await db.get(Workspace, principal.workspace_id)).get(branch_id):
+            await org_link.follow_rename(
+                db, principal.workspace_id, fresh, before["name"],
+                actor=principal.actor, actor_user_id=principal.user.id,
+            )  # fmt: skip
+        else:
+            await _prima_link(principal, db, fresh)
+    return _branch_out(await _reload(db, branch_id))
 
 
 @router.delete("/branches/{branch_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -255,7 +289,7 @@ async def create_department(
     db: AsyncSession = Depends(get_db),
 ) -> DepartmentOut:
     b = await _branch(db, principal.workspace_id, branch_id)
-    name = body.name.strip()
+    name = spaced(body.name)  # P111: departments keep their case (org/names.py)
     slug = await _unique_slug(db, Department, Department.branch_id, b.id, name, "department")
     position = (max((d.position for d in b.departments), default=-1)) + 1
     d = Department(
@@ -294,7 +328,7 @@ async def update_department(
     d = await _department(db, principal.workspace_id, dept_id)
     before = {"name": d.name, "position": d.position}
     if body.name is not None:
-        d.name = body.name.strip()
+        d.name = spaced(body.name)
     if body.position is not None:
         d.position = body.position
     await audit.record(

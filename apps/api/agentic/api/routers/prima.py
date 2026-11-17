@@ -22,7 +22,7 @@ from sqlalchemy.orm.attributes import flag_modified
 from ...core.db import get_db
 from ...i18n import Msg, render, tr
 from ...models import Branch, Membership, PrimaLink, Workspace
-from ...prima import client, modules, people
+from ...prima import client, modules, org_link, people
 from ...prima.client import PrimaError
 from ...services import audit
 from ..deps import (
@@ -272,20 +272,31 @@ async def companies_list(
         found = await client.companies()
     except PrimaError as e:
         return _refused(e)
-    saved = client.company_map(await db.get(Workspace, ws_id))
-    known = {c.id for c in found}
-    return {
-        "companies": [{"id": c.id, "name": c.name} for c in found],
-        "branches": [
+    ws = await db.get(Workspace, ws_id)
+    saved = client.company_map(ws)
+    # P111: the companies the office added to Prima count, though Prima lists them only once
+    # someone there holds a grant on them (org_link).
+    listed = {c.id for c in found}
+    made = [
+        client.Company(id=i, name=n)
+        for i, n in org_link.made_companies(ws).items()
+        if i not in listed
+    ]  # fmt: skip
+    known = listed | {c.id for c in made}
+    rows = []
+    for b in await _branches(db, ws_id):
+        cid = saved.get(b.id) if saved.get(b.id) in known else None
+        rows.append(
             {
                 "id": b.id,
                 "name": b.name,
-                "company_id": saved.get(b.id) if saved.get(b.id) in known else None,
-                "suggestion": None if saved.get(b.id) in known else _suggest(b.name, found),
+                "company_id": cid,
+                "suggestion": None if cid else _suggest(b.name, found),
+                "link": org_link.shown(ws, b.id, cid),  # P111
+                "code_hint": None if cid else org_link.company_code(b.name),
             }
-            for b in await _branches(db, ws_id)
-        ],
-    }
+        )
+    return {"companies": [{"id": c.id, "name": c.name} for c in [*found, *made]], "branches": rows}
 
 
 @router.put("/companies")
@@ -301,6 +312,7 @@ async def companies_save(
         known = {c.id for c in await client.companies()}
     except PrimaError as e:
         return _refused(e)
+    known |= set(org_link.made_companies(await db.get(Workspace, ws_id)))  # P111
     branches = {b.id for b in await _branches(db, ws_id)}
     for branch_id, company_id in body.companies.items():
         if branch_id not in branches:
@@ -316,13 +328,81 @@ async def companies_save(
             after[branch_id] = company_id
         else:
             after.pop(branch_id, None)
-    ws.settings = {**(ws.settings or {}), client.COMPANIES_KEY: after}
+    # P111: a company set by hand replaces what the office found or was told by Prima.
+    states = {k: v for k, v in org_link.states(ws).items() if k not in body.companies}
+    ws.settings = {**(ws.settings or {}), client.COMPANIES_KEY: after, org_link.STATE_KEY: states}
     flag_modified(ws, "settings")
     await audit.record(
         db, ws_id, principal.actor, "prima.companies", target=ws_id, before=before, after=after
     )
     await db.commit()
     return {"ok": True, "companies": after}
+
+
+# ---------------------------------------------------------------- P111 organizations in Prima
+
+
+class PrimaCompanyIn(BaseModel):
+    """What Prima needs to add a company (Part N4), from the company's SSM profile."""
+
+    ssm_no: str = Field(min_length=5, max_length=40)
+    state: str = Field(min_length=3, max_length=60)
+    source_ref: str = Field(min_length=3, max_length=200)
+    reason: str = Field(min_length=3, max_length=500)
+    code: str = Field(default="", max_length=12, pattern=r"^[A-Za-z0-9-]*$")
+    head_of_company: str = Field(default="", max_length=120)
+
+
+class SyncIn(BaseModel):
+    details: PrimaCompanyIn | None = None
+
+
+@router.post("/companies/{branch_id}/sync")
+async def companies_sync(
+    branch_id: str,
+    body: SyncIn,
+    principal: Principal = Depends(require("org.manage")),
+    db: AsyncSession = Depends(get_db),
+) -> object:
+    """P111: link this organization to its Prima company, or add it to Prima (with its SSM
+    details, as the CEO record); for one whose Prima name differs, try the rename again."""
+    ws_id = principal.workspace_id
+    if not client.enabled(ws_id):
+        return _refused(PrimaError(404, Msg("Prima is not set up on this server.")))
+    b = await db.get(Branch, branch_id)
+    if b is None or b.workspace_id != ws_id:
+        return _refused(PrimaError(404, Msg("That branch is not in this office.")))
+    ws = await db.get(Workspace, ws_id)
+    state = org_link.states(ws).get(b.id) or {}
+    if client.company_map(ws).get(b.id):
+        if state.get("state") == org_link.NAME_DIFFERS:
+            outcome = await org_link.follow_rename(
+                db, ws_id, b, str(state.get("was") or ""),
+                actor=principal.actor, actor_user_id=principal.user.id,
+            )  # fmt: skip
+        else:
+            outcome = "already"
+    else:
+        d = body.details
+        details = (
+            org_link.Details(
+                ssm_no=" ".join(d.ssm_no.split()),
+                state=" ".join(d.state.split()),
+                source_ref=" ".join(d.source_ref.split()),
+                reason=" ".join(d.reason.split()),
+                code=d.code.strip().upper(),
+                head_of_company=" ".join(d.head_of_company.split()),
+            )
+            if d
+            else None
+        )
+        outcome = await org_link.link(
+            db, ws_id, b, actor=principal.actor, actor_user_id=principal.user.id,
+            details=details,
+        )  # fmt: skip
+    ws = await db.get(Workspace, ws_id, populate_existing=True)
+    cid = client.company_map(ws).get(branch_id)
+    return {"outcome": outcome, "company_id": cid, "link": org_link.shown(ws, branch_id, cid)}
 
 
 # ---------------------------------------------------------------- P106 the developer opens Prima as

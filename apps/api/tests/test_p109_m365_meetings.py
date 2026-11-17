@@ -215,7 +215,8 @@ async def test_ai_fills_the_form_and_nothing_is_sent(client, llm, temporal, ms, 
 
     # The people picker: office members this person may see, then their Outlook.
     found = (await client.get("/api/m365/people", params={"q": "faiz"})).json()
-    assert found[0] == {"name": "Faiz Rahman", "email": "faiz@maju.example.com", "source": "office"}
+    assert {k: found[0][k] for k in ("name", "email", "source")} == {"name": "Faiz Rahman", "email": "faiz@maju.example.com", "source": "office"}
+    assert {"company", "department"} <= found[0].keys()  # P111: shown in the pickers
 
 
 async def test_create_sends_invitations_and_records_in_prima(client, llm, temporal, ms, prima_fake):
