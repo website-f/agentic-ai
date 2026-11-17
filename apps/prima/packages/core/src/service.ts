@@ -12047,7 +12047,9 @@ export class PrimaService {
       await tx.audit({
         at,
         actor: user.name,
-        companyId: user.companyIds[0] ?? GROUP_EMPLOYER_ID,
+        // P110: central staff are the group's own staff (staffCompany), so their acceptance is filed under the group. An
+        // office account of central staff may be mapped to a licensed company it cannot open; filing it there was refused.
+        companyId: isGroupRole(user) ? GROUP_EMPLOYER_ID : (user.companyIds[0] ?? GROUP_EMPLOYER_ID),
         action: 'confidentiality.accept',
         entity: 'user',
         entityId: user.id,

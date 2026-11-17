@@ -152,6 +152,17 @@ describe('office accounts in the database', () => {
     assert.equal(u.id, 'u-off-us_01jhttp');
   });
 
+  it('P110: central staff mapped to a licensed company without a record accept the confidentiality rule (filed under the group)', async () => {
+    // pwvsb_officer for co-sasa with no staff record, so co-sasa is not open to it at the database.
+    const got = await upsert({ officeUserId: 'us_p110conf', name: 'Synthetic Demo Staff', title: 'Staff', role: 'pwvsb_officer', companyIds: ['co-sasa'] });
+    assert.deepEqual([got.role, got.personId], ['pwvsb_officer', undefined]);
+    const row = await db.asUser('u-off-us_p110conf', async (svc, me) => svc.acceptConfidentiality(me));
+    assert.equal(row.userId, 'u-off-us_p110conf');
+    assert.equal((await db.asUser('u-off-us_p110conf', async (svc, me) => svc.confidentiality(me))).accepted, true);
+    const a = (await pool.query(`SELECT company_id FROM prima.audit WHERE data->>'action' = 'confidentiality.accept' AND data->>'entityId' = $1`, ['u-off-us_p110conf'])).rows;
+    assert.deepEqual(a, [{ company_id: 'pwvsb' }]);
+  });
+
 
   // P81: the real staff are loaded as office staff records; a sign-in the office makes is linked to its own record.
   describe('linking the account to the person', () => {
